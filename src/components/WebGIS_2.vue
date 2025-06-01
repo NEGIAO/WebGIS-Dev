@@ -329,7 +329,6 @@ export default {
 /* 图层切换器样式 */
 #layer-switcher {
     position: absolute;
-    /* 设置为相对于整个网页的位置，而不是地图容器 */
     top: 10px;
     right: 10px;
     background: white;
@@ -370,7 +369,7 @@ url选择器样式
     text-align: center;
 }
 /* ========================================================================================
-    这是右侧文本的演示
+    这是右侧文本新闻
 */
 .top{
     display:flex;
@@ -395,6 +394,7 @@ url选择器样式
     font-size: 32px;
     color: #1f5eac;
 }
+
 #title {
     text-decoration: none;
     color: #1f5eac;
