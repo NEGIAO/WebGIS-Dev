@@ -24,8 +24,9 @@
             <div id="mouse-position"></div>
         </div>
         <!--
-        =====================================================================================
-        右侧信息容器
+        =====================================================================================================
+        右侧信息容器，以模板形式呈现，便于后续在js中动态更新内容
+        ======================================================================================================
         -->
         <div class="info-container">
             <div class="top">
@@ -145,8 +146,8 @@ export default {
             const img = document.createElement('img');
             img.src = imageSrc;
             img.style.marginRight = '5px';
-            img.style.maxWidth = '50px';
-            img.style.maxHeight = '50px';
+            img.style.maxWidth = '100px';
+            img.style.maxHeight = '100px';
 
             if (index === images.length - 1) {
                 img.style.marginRight = '0';
@@ -243,7 +244,7 @@ export default {
             // 根据判断结果更新文本内容
             if (isInDihuan) {
                 document.getElementById('header').innerHTML = "地环院新闻";
-                document.getElementById('text').innerHTML = "请点击图片查看大图，或点击按钮查看下一条新闻";
+                document.getElementById('text').innerHTML = "请点击图片查看大图<br>或点击按钮查看下一条新闻<h2>4.22地球日</h2><h2>首届大会召开</h2><h2>23级年级大会召开</h2>";
             }
              else {
                 document.getElementById('header').innerHTML = "";
@@ -257,6 +258,7 @@ export default {
     },
     data() {
         return {
+            //三个数组存储新闻信息和图片的url地址，初始化数组索引为0
             currentNewsIndex: 0,
             news_title: [
                 "4.22地球日，地环院开展系列活动",
@@ -282,14 +284,11 @@ export default {
     },
     methods: {
         changeNews(){
-            this.currentNewsIndex = (this.currentNewsIndex + 1) % this.news_title.length;
-            const nexthref = this.new_title_href[this.currentNewsIndex];
-
-            const nextHref = this.new_title_href[this.currentNewsIndex];
+            this.currentNewsIndex = (this.currentNewsIndex + 1) % this.news_title.length;//数组元素索引
+            const nextHref = this.new_title_href[this.currentNewsIndex];//图片元素索引
 
             // 更新标题链接
-            document.getElementById('header').innerHTML = 
-                `<a href="${nextHref}">${this.news_title[this.currentNewsIndex]}</a>`;
+            document.getElementById('header').innerHTML = `<a href="${nextHref}">${this.news_title[this.currentNewsIndex]}</a>`;
             
             // 更新文本内容
             document.getElementById('text').textContent = this.news_text[this.currentNewsIndex];
