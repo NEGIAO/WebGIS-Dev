@@ -2,7 +2,9 @@
 #我的真正意义上的第一个项目
 
 This template should help get you started developing with Vue 3 in Vite.
-![QQ_1748364694629](https://github.com/user-attachments/assets/4e071430-07d7-43df-b843-f7935c13863a)
+![1748780157090](https://github.com/user-attachments/assets/7f52eeb9-ab18-4d38-b9f4-396c14e307d6)
+
+
 
 
 ## Recommended IDE Setup
