@@ -1,54 +1,26 @@
 <template>
-    <div class="content-row"> 
-        <div class="map-container">
-            <div id="map"></div>
-            <!-- 图片集合容器 -->
-            <div class="imageset" id="dihuan_imageset"></div>
-            <!-- 大图片展示 -->
-            <img id="large-image" src="" alt="Large Image">
+    <div class="map-container">
+        <div id="map"></div>
+        <!-- 图片集合容器 -->
+        <div class="imageset" id="dihuan_imageset"></div>
+        <!-- 大图片展示 -->
+        <img id="large-image" src="" alt="Large Image">
 
-            <!-- 图层选择器 -->
-            <div id="layer-switcher">
-                <select id="layer-select">
-                    <option value="local">本地瓦片</option>
-                    <option value="tianDiTu_vec">天地图矢量</option>
-                    <option value="tianDiTu">天地图影像</option>
-                    <option value="google">Google</option>
-                    <option value="esri">ESRI</option>
-                    <option value="osm">OSM</option>
-                    <option value="amap">高德地图</option>
-                    <option value="tengxun">腾讯地图</option>
-                </select>
-            </div>
-            <!-- 坐标信息显示 -->
-            <div id="mouse-position"></div>
+        <!-- 图层选择器 -->
+        <div id="layer-switcher">
+            <select id="layer-select">
+                <option value="local">本地瓦片</option>
+                <option value="tianDiTu_vec">天地图矢量</option>
+                <option value="tianDiTu">天地图影像</option>
+                <option value="google">Google</option>
+                <option value="esri">ESRI</option>
+                <option value="osm">OSM</option>
+                <option value="amap">高德地图</option>
+                <option value="tengxun">腾讯地图</option>
+            </select>
         </div>
-        <!--
-        =====================================================================================================
-        右侧信息容器，以模板形式呈现，便于后续在js中动态更新内容
-        ======================================================================================================
-        -->
-        <div class="info-container">
-            <div class="top">
-                <img src='/images/院徽.png' class="logo" alt="Image">
-                <div id="Title">
-                    <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" id="title">地科院新闻 </a>
-                </div>
-            </div>
-            <div id="header" class="header">
-                <a href="https://cep.henu.edu.cn/info/1022/14001.htm">新闻一</a>
-            </div>
-            <img src=""  id ="News" class="News" alt="">
-            <div id="text" class="text">
-                请将移动到地图中
-            </div>
-            <button id="button" class="button" @click="changeNews">
-                点击，新闻++
-            </button>
-            <div id="footer" class="footer">
-                <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm">河南大学地理科学学院！</a>
-            </div>
-        </div>
+        <!-- 坐标信息显示 -->
+        <div id="mouse-position"></div>
     </div>
 </template>
 
@@ -66,6 +38,21 @@ import ScaleLine from 'ol/control/ScaleLine';
 import { defaults as defaultControls } from 'ol/control';
 
 export default {
+    emits: ['location-change', 'update-news-image'],
+    data() {
+        return {
+            currentMousePosition: { x: 0, y: 0 },
+            // 图片集合
+            images: [
+                'images/地理与环境学院标志牌.jpg',
+                'images/地理与环境学院入口.jpg',
+                'images/地学楼.jpg',
+                'images/教育部重点实验室.jpg',
+                'images/四楼逃生图.jpg',
+                'images/学院楼单侧.jpg',
+            ]
+        };
+    },
     mounted() {
         // 1. 定义图层源
         const sources = {
@@ -130,34 +117,27 @@ export default {
         const mapContainer = document.getElementById('map');
         let currentMousePosition = { x: 0, y: 0 };
 
-        // 6. 设置图片集合
-        const images = [
-            'images/地理与环境学院标志牌.jpg',
-            'images/地理与环境学院入口.jpg',
-            'images/地学楼.jpg',
-            'images/教育部重点实验室.jpg',
-            'images/四楼逃生图.jpg',
-            'images/学院楼单侧.jpg',
-        ];
-
         // 7. 渲染图片缩略图
         dihuan_imageset.innerHTML = '';
-        images.forEach(function (imageSrc, index) {
+        this.images.forEach((imageSrc, index) => {
             const img = document.createElement('img');
             img.src = imageSrc;
             img.style.marginRight = '5px';
             img.style.maxWidth = '100px';
             img.style.maxHeight = '100px';
 
-            if (index === images.length - 1) {
+            if (index === this.images.length - 1) {
                 img.style.marginRight = '0';
             }
 
-            img.addEventListener('click', function (event) {
-                largeImage.src = this.src;
+            img.addEventListener('click', (event) => {
+                largeImage.src = img.src;
                 largeImage.style.display = 'block';
                 largeImage.style.left = event.clientX + 'px';
                 largeImage.style.top = event.clientY + 'px';
+                
+                // 将图片信息传递给父组件
+                this.$emit('update-news-image', img.src);
             });
 
             dihuan_imageset.appendChild(img);
@@ -188,7 +168,7 @@ export default {
         });
 
         // 9. 地图交互处理函数
-        function startListening() {
+        const startListening = () => {
             const zoom = map.getView().getZoom();
             if (zoom >= 18) {
                 dihuan_imageset.style.display = 'block';
@@ -198,7 +178,7 @@ export default {
                 dihuan_imageset.style.display = 'none';
                 largeImage.style.display = 'none';
             }
-        }
+        };
 
         // 10. 注册地图事件
         // 地图缩放事件
@@ -211,20 +191,16 @@ export default {
         });
         
         // 鼠标移动事件
-        mapContainer.addEventListener('mousemove', function (e) {
+        mapContainer.addEventListener('mousemove', (e) => {
             currentMousePosition.x = e.clientX;
             currentMousePosition.y = e.clientY;
         });
         
         // 11. 监听地图鼠标移动，判断是否在指定范围内
-        map.on('pointermove', function(evt) {
+        map.on('pointermove', (evt) => {
             // 获取鼠标当前位置的经纬度坐标
             const coordinate = evt.coordinate;
             const lonLat = toLonLat(coordinate);
-            
-            // 获取文本元素
-            const textElement = document.getElementById('text');
-            if (!textElement) return;
             
             // 定义地环院的经纬度范围
             const dihuanBounds = {
@@ -241,62 +217,16 @@ export default {
                 lonLat[1] >= dihuanBounds.minLat && 
                 lonLat[1] <= dihuanBounds.maxLat;
             
-            // 根据判断结果更新文本内容
-            if (isInDihuan) {
-                document.getElementById('header').innerHTML = "地环院新闻";
-                document.getElementById('text').innerHTML = "请点击图片查看大图<br>或点击按钮查看下一条新闻<h2>4.22地球日</h2><h2>首届大会召开</h2><h2>23级年级大会召开</h2>";
-            }
-             else {
-                document.getElementById('header').innerHTML = "";
-                document.getElementById('text').innerHTML = "请将鼠标移动到地环院区域<br>放大可以查看图片<br>点击下方按钮查看新闻内容";
-                document.getElementById('News').src = "";
-            }
+            // 通过事件向父组件发送位置信息
+            this.$emit('location-change', { 
+                isInDihuan,
+                lonLat
+            });
         });
 
         // 初始化地图状态
         startListening();
     },
-    data() {
-        return {
-            //三个数组存储新闻信息和图片的url地址，初始化数组索引为0
-            currentNewsIndex: 0,
-            news_title: [
-                "4.22地球日，地环院开展系列活动",
-                "地理科学与工程学部首届大会召开",
-                "2023级本科生年级大会召开",
-            ],
-            news_text: [
-                "春风拂绿野，万物竞芳华。在第56个世界地球日来临之际，4月21日上午，由河南大学相关单位主办，在金明校区马可广场举行。学校相关职能部门领导，地理科学与工程学部委员，地理科学学院全体班子成员和师生代表，河南省环保联合会工作人员，河南大学附属小学（金明校区）部分师生参加活动。开幕式由学院党委副书记徐小军主持......",
-                 "2025年2月23日，河南大学地理科学与工程学部首届大会在河南大学金明校区锥形报告厅顺利召开。中国工程院院士、空间基准全国重点实验室学术带头人王家耀等职能部门有关领导，地理科学与工程学部委员，地理科学学院负责人，以及地理科学与工程学部全体教师和部分学生代表参会。开幕式由傅声雷主持......",
-                "为助力我院2023级本科生厘清学术培养路径，系统提升科研素养与安全防范能力，树立科学的学术发展与职业规划意识，5月29日下午，我院于金明校区综合教学楼2306教室召开2023级本科生年级大会。学院2023级全体本科生积极参加，会议由2023级辅导员屈利铭主持......",
-            ],
-            news_image: [
-                "images/地球日活动.jpg",
-                "/images/学部大会.png",
-                "images/年级大会.jpg",
-            ],
-            new_title_href: [
-                "https://cep.henu.edu.cn/info/1022/13421.htm",
-                "https://cep.henu.edu.cn/info/1022/12491.htm",
-                "https://cep.henu.edu.cn/info/1022/14001.htm",
-            ],   
-        };
-    },
-    methods: {
-        changeNews(){
-            this.currentNewsIndex = (this.currentNewsIndex + 1) % this.news_title.length;//数组元素索引
-            const nextHref = this.new_title_href[this.currentNewsIndex];//图片元素索引
-
-            // 更新标题链接
-            document.getElementById('header').innerHTML = `<a href="${nextHref}">${this.news_title[this.currentNewsIndex]}</a>`;
-            
-            // 更新文本内容
-            document.getElementById('text').textContent = this.news_text[this.currentNewsIndex];
-            
-            // 更新图片
-            document.getElementById('News').src = this.news_image[this.currentNewsIndex];
-        }
-    }
 }
 </script>
 
@@ -367,76 +297,5 @@ url选择器样式
     min-width: 150px;
     min-height: 15px;
     text-align: center;
-}
-/* ========================================================================================
-    这是右侧文本新闻
-*/
-.top{
-    display:flex;
-    align-items: center;
-    margin-bottom: 1px;
-}
-.logo {
-    width: 80px;
-    height: 80px;
-    object-fit: contain;
-    margin-bottom: 20px;
-}
-#Title {
-    position: relative;
-    top: -10px;
-    left: 10px;
-    bottom: 0px;
-    background-color: rgba(255, 255, 255, 0);
-    padding: 1px;
-    border-radius: 5px;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 32px;
-    color: #1f5eac;
-}
-
-#title {
-    text-decoration: none;
-    color: #1f5eac;
-}
-#text {
-    font-size: 20px;
-    color: #000000;
-}
-.header {
-    font-size: 22px;
-    color: #333333;
-    margin-top: 10px;
-    font-weight: bold;
-}
-.text {
-    font-size: 16px;
-    color: #666666;
-    margin-top: 5px;
-    line-height: 1.5;
-}
-.button {
-    background-color: #4CAF50; /* 绿色背景 */
-    border: none;
-    color: white; /* 白色文字 */
-    padding: 10px 20px;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 16px;
-    margin-top: 10px;
-    cursor: pointer;
-    border-radius: 5px; /* 圆角按钮 */
-}
-.footer {
-    position: absolute;
-
-    color: rgb(34, 159, 231);
-    font-size: 14px;
-    bottom: 10px;
-}
-.footer a {
-    color: rgb(28, 138, 228);
-    text-decoration: underline;
 }
 </style>
