@@ -246,8 +246,8 @@ export default {
     background-color: white;
     border: 1px solid #ccc;
     padding: 5px;
-    width: 325px;
-    height: 40px;
+    width: 315px;
+    height: 150px;
     z-index: 1000;
 }
 #large-image {

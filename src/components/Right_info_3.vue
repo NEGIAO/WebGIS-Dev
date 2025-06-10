@@ -40,7 +40,7 @@ export default {
             type: String,
             default: ''
         }
-    },//props:接受父组件传来的数据
+    },//props属性:接受父组件传来的数据
     data() {
         return {
             currentNewsIndex: 0,
@@ -64,12 +64,11 @@ export default {
                 "https://cep.henu.edu.cn/info/1022/12491.htm",
                 "https://cep.henu.edu.cn/info/1022/14001.htm",
             ],
-            defaultText: "请将鼠标移动到地科院区域查看新闻内容",
+            defaultText: "请将鼠标移动到地科院区域<br>查看新闻内容<br><br>在左侧地图中放大<br>可以查看地科院的照片！<br><br>下方还有内容哦！<br>请鼠标下滑",
             dihuanText: "请点击图片查看大图<br>或点击按钮查看下一条新闻<h2>4.22地球日</h2><h2>首届大会召开</h2><h2>23级年级大会召开</h2>"
         };
     },//新闻的标题，内容，图片都用数组来存储，方便动态更新
     computed: {
-        // 保持计算属性不变
         currentNewsTitle() {
             return this.news_title[this.currentNewsIndex];
         },
@@ -80,13 +79,17 @@ export default {
             return this.selectedImage || this.news_image[this.currentNewsIndex];
         },
         currentDisplayText() {
-            if (this.locationInfo.isInDihuan) {
+            if (this.locationInfo.isInDihuan)
+            {
                 return this.news_text[this.currentNewsIndex];
-            } else {
+            } 
+            else 
+            {
                 return this.defaultText;
             }
         }
     },
+    //计算属性：根据当前新闻索引动态获取标题、链接和图片
     methods: {
         changeNews() {
             // 更新索引
@@ -151,7 +154,7 @@ export default {
         if (textElement) {
             textElement.innerHTML = this.defaultText;
         }
-    }
+    }//初始化相关组件与内容
 }
 </script>
 
@@ -160,6 +163,8 @@ export default {
     display: flex;
     align-items: center;
     margin-bottom: 1px;
+    padding: 10px;
+    height: 50px;
 }
 
 .logo {
@@ -193,7 +198,7 @@ export default {
     color: #666666;
     margin-top: 5px;
     line-height: 1.5;
-    min-height: 150px; /* 添加最小高度，避免内容变化导致布局跳动 */
+    min-height: 300px; /* 添加最小高度，避免内容变化导致布局跳动 */
 }
 
 #text {
@@ -241,13 +246,10 @@ export default {
 
 /* 页脚样式 */
 .footer {
-    position: absolute;
+    /* position: absolute; */
     color: rgb(172, 178, 181);
     font-size: 17px;
-    bottom: 10px;
-    right: 80px;      /* 靠右 */
-    width: auto;      /* 不要设置100%宽度 */
-    text-align: center; /* 文字居中对齐 */
+    text-align: center; 
 }
 
 .footer a {
@@ -261,9 +263,9 @@ export default {
     height: auto;
     margin-top: 10px;
     margin-bottom: 10px;
-    border-radius: 5px;
+    border-radius: 10px;/* 圆角效果 */
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    min-height: 200px; /* 添加最小高度，避免图片加载前布局跳动 */
+    min-height: 220px; /* 添加最小高度，避免图片加载前布局跳动 */
     object-fit: contain;
 }
 </style>

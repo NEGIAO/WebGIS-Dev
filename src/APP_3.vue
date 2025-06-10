@@ -51,7 +51,7 @@
 
                 
                 <template v-slot:extra-content>
-                    <h3>父组件传递到子组件的内容</h3>
+                    <h3>请将网页缩放到80%以下，获得最佳效果</h3>
                     <select>
                         <option> 84</option>
                         <option> 85</option>
@@ -73,8 +73,6 @@ html, body {
     background: #ffffff;
     height: 100%;
     zoom: 1;
-    -ms-zoom: 1;
-    -webkit-text-size-adjust: 80%;
     overflow-x: hidden;
 }
 
@@ -89,7 +87,7 @@ html, body {
 }
 
 .top-container {
-    height: 64px;
+    height: 9vh;
     width: 100%;
     background: #f5f5f5;
     display: flex;
@@ -102,12 +100,14 @@ html, body {
     box-sizing: border-box;
     margin-bottom: 8px;
     position: relative;
+    z-index: 50;
 }
 .content-row {
     display: flex;
     flex: 1;
     width: 100%;
     gap: 10px;
+    height: 80%;
 }
 
 .map-container {
@@ -121,7 +121,7 @@ html, body {
 }
 
 .info-container {
-    width: 380px;
+    width: 25vw;
     background: #f5f5f5;
     padding: 24px 16px;
     box-sizing: border-box;
