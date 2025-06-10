@@ -4,61 +4,59 @@
     import Top_info from './components/Top_info_3.vue';
     import WebGIS from './components/WebGIS_3.vue';
     import Right_info from './components/Right_info_3.vue';
+    //三个子组件导入其中
 
-    // 共享状态
     const locationInfo = reactive({
         isInDihuan: false,
         lonLat: [0, 0]
     });
     const selectedImage = ref('');
     const currentNewsIndex = ref(0);
+    //vue3的响应式API，使用ref和reactive来创建响应式数据，用于组件间的数据共享
 
-    // 处理地图位置变化
     function handleLocationChange(locationData) {
         Object.assign(locationInfo, locationData);
     }
-
-    // 处理新闻图片更新
     function handleUpdateNewsImage(imageSrc) {
         selectedImage.value = imageSrc;
     }
-
-    // 处理新闻索引变化
     function handleNewsChanged(newsIndex) {
         currentNewsIndex.value = newsIndex;
         console.log('News changed to index:', newsIndex);
     }
+    //三个事件响应函数，处理地图位置变化、新闻图片更新和新闻索引变化
 </script>
 
 <template>
     <div class="main-container">
-        <!-- 顶部导航 -->
+       
         <div class="top-container">
             <Top_info />
         </div>
-        
+         <!-- 顶部导航 -->
+
         <!-- 设置一个div,实现地图和信息栏的水平组合 -->
         <div class="content-row">
-            <!-- 地图 -->
+            
             <WebGIS 
                 @location-change="handleLocationChange"
                 @update-news-image="handleUpdateNewsImage"
-            />
+            /><!-- 地图 -->
             
-            <!-- 右侧信息组件 -->
             <Right_info
                 :locationInfo="locationInfo"
                 :selectedImage="selectedImage"
                 @news-changed="handleNewsChanged"
-            >
-                <!-- 使用具名插槽传递额外内容 -->
+            ><!-- 右侧信息组件 -->
+
+                
                 <template v-slot:extra-content>
-                    <h3>最新新闻</h3>
+                    <h3>父组件传递到子组件的内容</h3>
                     <select>
                         <option> 84</option>
                         <option> 85</option>
                     </select>
-                </template>
+                </template><!-- 使用具名插槽传递额外内容 -->
             </Right_info>
         </div>
     </div>
@@ -91,7 +89,7 @@ html, body {
 }
 
 .top-container {
-    height: 56px;
+    height: 64px;
     width: 100%;
     background: #f5f5f5;
     display: flex;

@@ -1,12 +1,12 @@
 <template>
     <div class="map-container">
         <div id="map"></div>
-        <!-- 图片集合容器 -->
+        
         <div class="imageset" id="dihuan_imageset"></div>
-        <!-- 大图片展示 -->
+        <!-- 图片集合容器 -->
         <img id="large-image" src="" alt="Large Image">
-
-        <!-- 图层选择器 -->
+        <!-- 大图片展示 -->
+        
         <div id="layer-switcher">
             <select id="layer-select">
                 <option value="local">本地瓦片</option>
@@ -19,9 +19,11 @@
                 <option value="tengxun">腾讯地图</option>
             </select>
         </div>
-        <!-- 坐标信息显示 -->
-        <div id="mouse-position"></div>
+        <!-- 图层选择器 -->
+
+        <div id="mouse-position"></div><!-- 坐标信息显示 -->
     </div>
+    <!-- 地图组件，实现了展示图片、经纬度信息、比例尺、切换图源、动态显示新闻内容等功能 -->
 </template>
 
 <script>
@@ -110,7 +112,7 @@ export default {
             ])
         });
 
-        // 5. 获取DOM元素
+        // 5. 获取DOM元素，使用getelementById方法，响应事件，填充图片和图层切换功能
         const layerSelect = document.getElementById('layer-select');
         const dihuan_imageset = document.getElementById('dihuan_imageset');
         const largeImage = document.getElementById('large-image');
@@ -136,7 +138,7 @@ export default {
                 largeImage.style.left = event.clientX + 'px';
                 largeImage.style.top = event.clientY + 'px';
                 
-                // 将图片信息传递给父组件
+                // 将图片信息传递给父组件，$emit自定义事件
                 this.$emit('update-news-image', img.src);
             });
 

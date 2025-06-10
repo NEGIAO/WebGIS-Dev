@@ -6,7 +6,7 @@
             <div id="Title">
                 <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" id="title">地科院新闻</a>
             </div>
-        </div>
+        </div><!-- 头部信息 -->
 
         <div id="header" class="header">
             <!-- 预留空间，动态放置标题 -->
@@ -21,8 +21,7 @@
             点击，新闻++
         </button>
 
-        <!-- 使用插槽，放置父类的内容 -->
-        <slot name="extra-content"></slot>
+        <slot name="extra-content"></slot><!-- 使用插槽，放置父类的内容 -->
 
         <div  class="footer">
             <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm">河南大学地理科学学院！</a>
@@ -33,7 +32,6 @@
 <script>
 export default {
     props: {
-        // 保持原有props不变
         locationInfo: {
             type: Object,
             default: () => ({ isInDihuan: false, lonLat: [0, 0] })
@@ -69,7 +67,7 @@ export default {
             defaultText: "请将鼠标移动到地科院区域查看新闻内容",
             dihuanText: "请点击图片查看大图<br>或点击按钮查看下一条新闻<h2>4.22地球日</h2><h2>首届大会召开</h2><h2>23级年级大会召开</h2>"
         };
-    },
+    },//新闻的标题，内容，图片都用数组来存储，方便动态更新
     computed: {
         // 保持计算属性不变
         currentNewsTitle() {
@@ -168,7 +166,7 @@ export default {
     width: 100px;
     height: 100px;
     object-fit: contain;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
 }
 
 #Title {
