@@ -41,6 +41,7 @@ import { defaults as defaultControls } from 'ol/control';
 
 export default {
     emits: ['location-change', 'update-news-image'],
+    // emits属性:定义组件可以触发的事件，供父组件监听
     data() {
         return {
             currentMousePosition: { x: 0, y: 0 },

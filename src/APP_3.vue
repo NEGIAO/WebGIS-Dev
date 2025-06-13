@@ -1,27 +1,27 @@
 <script setup>
     import { ref, reactive } from 'vue';
-
+    //引入vue3的响应式API
     import Top_info from './components/Top_info_3.vue';
     import WebGIS from './components/WebGIS_3.vue';
     import Right_info from './components/Right_info_3.vue';
     //三个子组件导入其中
 
-    const locationInfo = reactive({
+    const locationInfo_father = reactive({
         isInDihuan: false,
         lonLat: [0, 0]
     });
-    const selectedImage = ref('');
-    const currentNewsIndex = ref(0);
+    const selectedImage_father = ref('');
+    const currentNewsIndex_father = ref(0);
     //vue3的响应式API，使用ref和reactive来创建响应式数据，用于组件间的数据共享
 
     function handleLocationChange(locationData) {
-        Object.assign(locationInfo, locationData);
+        Object.assign(locationInfo_father, locationData);
     }
     function handleUpdateNewsImage(imageSrc) {
-        selectedImage.value = imageSrc;
+        selectedImage_father.value = imageSrc;
     }
     function handleNewsChanged(newsIndex) {
-        currentNewsIndex.value = newsIndex;
+        currentNewsIndex_father.value = newsIndex;
         console.log('News changed to index:', newsIndex);
     }
     //三个事件响应函数，处理地图位置变化、新闻图片更新和新闻索引变化
@@ -44,11 +44,10 @@
             /><!-- 地图 -->
             
             <Right_info
-                :locationInfo="locationInfo"
-                :selectedImage="selectedImage"
+                :locationInfo="locationInfo_father"
+                :selectedImage="selectedImage_father"
                 @news-changed="handleNewsChanged"
             ><!-- 右侧信息组件 -->
-
                 
                 <template v-slot:extra-content>
                     <h3>请将网页缩放到80%以下，获得最佳效果</h3>

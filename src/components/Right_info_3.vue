@@ -20,6 +20,8 @@
         <button id="button" class="button" @click="changeNews">
             点击，新闻++
         </button>
+        <!-- 由按钮点击这一事件，触发changeNews函数，函数又主动触发事件new-changed，
+         父组件的事件监听器检测，执行相应的响应函数 -->
 
         <slot name="extra-content"></slot><!-- 使用插槽，放置父类的内容 -->
 
@@ -98,7 +100,7 @@ export default {
             // 1. 更新图片
             document.getElementById('News').src = this.news_image[this.currentNewsIndex];
             
-            // 2. 更新标题（包括超链接）
+            // 2. 更新标题
             const nextHref = this.new_title_href[this.currentNewsIndex];
             document.getElementById('header').innerHTML = 
                 `<a href="${nextHref}">${this.news_title[this.currentNewsIndex]}</a>`;
@@ -108,7 +110,7 @@ export default {
                 document.getElementById('text').innerHTML = this.news_text[this.currentNewsIndex];
             }
             
-            //自定义事件，子组件将事件信息传递给父组件，父组件绑定响应函数来处理
+            //主动触发事件，子组件将事件信息传递给父组件，父组件绑定响应函数来处理
             this.$emit('news-changed', this.currentNewsIndex);
         }
     },
@@ -117,12 +119,12 @@ export default {
         locationInfo: {
             handler(newInfo) {
                 if (newInfo.isInDihuan) {
-                    // 只在进入地环院范围时才更新文本内容
+                    // 进入地环院范围时更新文本内容
                     document.getElementById('header').innerHTML = 
                         `<a href="${this.currentNewsHref}">${this.currentNewsTitle}</a>`;
                     document.getElementById('text').innerHTML = this.news_text[this.currentNewsIndex];
                 } else {
-                    // 离开地环院区域时，清除或显示默认信息
+                    // 离开，清除或信息
                     document.getElementById('text').innerHTML = this.defaultText;
                 }
             },
@@ -136,20 +138,15 @@ export default {
         }
     },
     mounted() {
-        // 初始化标题（包括超链接）
         const headerElement = document.getElementById('header');
         if (headerElement) {
             headerElement.innerHTML = 
                 `<a href="${this.currentNewsHref}">${this.currentNewsTitle}</a>`;
         }
-        
-        // 初始化图片
         const newsImage = document.getElementById('News');
         if (newsImage && !newsImage.src) {
             newsImage.src = this.news_image[0];
         }
-        
-        // 初始化文本
         const textElement = document.getElementById('text');
         if (textElement) {
             textElement.innerHTML = this.defaultText;
