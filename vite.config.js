@@ -1,18 +1,21 @@
-import { fileURLToPath, URL } from 'node:url'
+import { fileURLToPath, URL } from 'node:url';
 
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import vueDevTools from 'vite-plugin-vue-devtools'
+import { defineConfig } from 'vite';
+import vue from '@vitejs/plugin-vue';
+import vueDevTools from 'vite-plugin-vue-devtools';
 
-// https://vite.dev/config/
+const isProduction = process.env.NODE_ENV === 'production';
+const baseFromEnv = process.env.VITE_APP_BASE_URL;
+
 export default defineConfig({
+  base: baseFromEnv ?? '/',
   plugins: [
     vue(),
-    vueDevTools(),
-  ],
+    !isProduction && vueDevTools()
+  ].filter(Boolean),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
-    },
-  },
-})
+    }
+  }
+});
