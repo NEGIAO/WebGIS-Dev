@@ -1,4 +1,9 @@
 import { createApp } from 'vue'
-import App from './APP_3.vue'
-// 导入APP.vue
-createApp(App).mount('#app')
+import App from './App.vue'
+import router from './router'
+import 'ol/ol.css' // Import OpenLayers CSS
+
+const app = createApp(App)
+
+app.use(router)
+app.mount('#app')
