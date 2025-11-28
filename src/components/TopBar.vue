@@ -53,10 +53,20 @@ const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
     font-weight: bold;
 }
 
+/* Mobile adjustments */
 @media (max-width: 768px) {
+    .top-bar {
+        padding: 0 10px;
+    }
+
+    .top-bar h1 {
+        font-size: 1.2rem;
+    }
+
     .title-text {
         font-size: 18px;
     }
+
     .logo-icon {
         height: 30px;
     }
