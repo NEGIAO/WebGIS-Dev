@@ -85,18 +85,18 @@ const currentMousePosition = ref({ x: 0, y: 0 });
 const initialCenter = [114.302, 34.8146];
 const initialZoom = 17;
 
-const images = [
-    '/images/地理与环境学院标志牌.jpg',
-    '/images/地理与环境学院入口.jpg',
-    '/images/地学楼.jpg',
-    '/images/教育部重点实验室.jpg',
-    '/images/四楼逃生图.jpg',
-    '/images/学院楼单侧.jpg',
-];
-
 // Sources definition
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+const images = [
+    `${normalizedBase}images/地理与环境学院标志牌.jpg`,
+    `${normalizedBase}images/地理与环境学院入口.jpg`,
+    `${normalizedBase}images/地学楼.jpg`,
+    `${normalizedBase}images/教育部重点实验室.jpg`,
+    `${normalizedBase}images/四楼逃生图.jpg`,
+    `${normalizedBase}images/学院楼单侧.jpg`,
+];
 
 const sources = {
     local: new XYZ({

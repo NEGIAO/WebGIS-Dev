@@ -1,7 +1,7 @@
 <template>
     <div class="info-container">
         <div class="top">
-            <img src='/images/院徽.png' class="logo" alt="Logo">
+            <img :src="`${normalizedBase}images/院徽.png`" class="logo" alt="Logo">
             <div class="title-container">
                 <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" class="main-title">地科院新闻</a>
             </div>
@@ -44,6 +44,8 @@ const props = defineProps({
 const emit = defineEmits(['news-changed']);
 
 const currentNewsIndex = ref(0);
+const baseUrl = import.meta.env.BASE_URL || '/';
+const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
 const newsData = {
     titles: [
@@ -57,9 +59,9 @@ const newsData = {
         "为助力我院2023级本科生厘清学术培养路径，系统提升科研素养与安全防范能力，树立科学的学术发展与职业规划意识，5月29日下午，我院于金明校区综合教学楼2306教室召开2023级本科生年级大会。学院2023级全体本科生积极参加，会议由2023级辅导员屈利铭主持......",
     ],
     images: [
-        "/images/地球日活动.jpg",
-        "/images/学部大会.png",
-        "/images/年级大会.jpg",
+        `${normalizedBase}images/地球日活动.jpg`,
+        `${normalizedBase}images/学部大会.png`,
+        `${normalizedBase}images/年级大会.jpg`,
     ],
     hrefs: [
         "https://cep.henu.edu.cn/info/1022/13421.htm",
