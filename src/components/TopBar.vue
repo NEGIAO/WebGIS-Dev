@@ -2,12 +2,17 @@
     <div class="top-bar">
         <h1>
             <a href="#">
-                <img src="/images/icon.png" alt="Icon" class="logo-icon">
+                <img :src="`${normalizedBase}images/icon.png`" alt="Icon" class="logo-icon">
                 <span class="title-text">The science of where!</span>
             </a>
         </h1>
     </div>
 </template>
+
+<script setup>
+const baseUrl = import.meta.env.BASE_URL || '/';
+const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+</script>
 
 <style scoped>
 .top-bar {

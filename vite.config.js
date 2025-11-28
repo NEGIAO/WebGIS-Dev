@@ -5,10 +5,9 @@ import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 
 const isProduction = process.env.NODE_ENV === 'production';
-const baseFromEnv = process.env.VITE_APP_BASE_URL;
 
 export default defineConfig({
-  base: baseFromEnv ?? '/',
+  base: './',
   plugins: [
     vue(),
     !isProduction && vueDevTools()
