@@ -206,4 +206,21 @@ function changeNews() {
 .footer a {
     color: #1c8ae4;
 }
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .info-container {
+        padding: 15px;
+    }
+
+    .main-title {
+        font-size: 20px;
+    }
+
+    .logo {
+        width: 50px;
+        height: 50px;
+        margin-right: 10px;
+    }
+}
 </style>

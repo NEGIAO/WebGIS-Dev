@@ -61,8 +61,8 @@ function handleNewsChanged(newsIndex) {
 .home-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    width: 100vw;
+    height: 100%;
+    width: 100%;
     box-sizing: border-box;
     background: #368a3a9e;
     overflow: hidden;
