@@ -144,6 +144,10 @@ const handleRegister = () => {
 
 <style scoped>
 /* Scoped styles from Register.html */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 :root {
     --primary-color: #4CAF50;
     --primary-hover: #45a049;
@@ -165,6 +169,7 @@ const handleRegister = () => {
     min-height: 100vh;
     padding: 20px;
     width: 100%;
+    box-sizing: border-box;
 }
 
 .container {
@@ -355,5 +360,30 @@ input:focus {
     color: #fff;
     display: inline-block;
     border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 768px) {
+    .register-container {
+        padding: 10px;
+        align-items: flex-start; /* Allow scrolling on small screens if content is tall */
+        padding-top: 20px;
+    }
+
+    .container {
+        max-width: 100%;
+        border-radius: 8px;
+    }
+
+    .form-body {
+        padding: 20px;
+    }
+
+    .form-header {
+        padding: 20px;
+    }
+
+    .form-title {
+        font-size: 24px;
+    }
 }
 </style>
