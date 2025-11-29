@@ -13,6 +13,20 @@ import * as Cesium from 'cesium';
 
 let viewer = null;
 
+// 天地图 Token
+const token = '4267820f43926eaf808d61dc07269beb';
+
+// 动态加载脚本函数
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
 onMounted(async () => {
   // 如果你有 Cesium Ion Token，可以在这里设置
   // Cesium.Ion.defaultAccessToken = 'YOUR_TOKEN_HERE';
@@ -48,6 +62,22 @@ onMounted(async () => {
 
   // 隐藏版权信息（仅用于开发演示，生产环境请保留）
   viewer._cesiumWidget._creditContainer.style.display = "none";
+
+  // --- 天地图集成 ---
+  // 暴露 Cesium 到全局，供天地图插件使用 (使用解构复制以允许扩展，因为 import * as Cesium 得到的对象是不可变的)
+  window.Cesium = { ...Cesium };
+
+  try {
+    // 按顺序加载天地图插件
+    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/Cesium_ext_min.js');
+    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/long.min.js');
+    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/bytebuffer.min.js');
+    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/protobuf.min.js');
+
+    addTiandituLayers();
+  } catch (e) {
+    console.error('加载天地图插件失败', e);
+  }
 });
 
 onUnmounted(() => {
@@ -56,6 +86,80 @@ onUnmounted(() => {
     viewer = null;
   }
 });
+
+// 3. 添加天地图图层
+function addTiandituLayers() {
+    // 服务域名
+    var tdtUrl = 'https://t{s}.tianditu.gov.cn/';
+    // 服务负载子域
+    var subdomains=['0','1','2','3','4','5','6','7'];
+
+    // 叠加三维地名服务
+    // 注意：这里使用 window.Cesium 因为插件挂载在全局对象上
+    var wtfs = new window.Cesium.GeoWTFS({
+        viewer,
+        //三维地名服务，使用wtfs服务
+        subdomains:subdomains,
+        metadata:{
+            boundBox: {
+                minX: -180,
+                minY: -90,
+                maxX: 180,
+                maxY: 90
+            },
+            minLevel: 1,
+            maxLevel: 20
+        },
+        depthTestOptimization: true,
+        dTOElevation: 15000,
+        dTOPitch: window.Cesium.Math.toRadians(-70),
+        aotuCollide: true, //是否开启避让
+        collisionPadding: [5, 10, 8, 5], //开启避让时，标注碰撞增加内边距，上、右、下、左
+        serverFirstStyle: true, //服务端样式优先
+        labelGraphics: {
+            font:"28px sans-serif",
+            fontSize: 28,
+            fillColor:window.Cesium.Color.WHITE,
+            scale: 0.5,
+            outlineColor:window.Cesium.Color.BLACK,
+            outlineWidth: 2,
+            style:window.Cesium.LabelStyle.FILL_AND_OUTLINE,
+            showBackground:false,
+            backgroundColor:window.Cesium.Color.RED,
+            backgroundPadding:new window.Cesium.Cartesian2(10, 10),
+            horizontalOrigin:window.Cesium.HorizontalOrigin.LEFT,
+            verticalOrigin:window.Cesium.VerticalOrigin.TOP,
+            eyeOffset:window.Cesium.Cartesian3.ZERO,
+            pixelOffset: new window.Cesium.Cartesian2(5, 5),
+            disableDepthTestDistance:undefined
+        },
+        billboardGraphics: {
+            horizontalOrigin:window.Cesium.HorizontalOrigin.CENTER,
+            verticalOrigin:window.Cesium.VerticalOrigin.CENTER,
+            eyeOffset:window.Cesium.Cartesian3.ZERO,
+            pixelOffset:window.Cesium.Cartesian2.ZERO,
+            alignedAxis:window.Cesium.Cartesian3.ZERO,
+            color:window.Cesium.Color.WHITE,
+            rotation:0,
+            scale:1,
+            width:18,
+            height:18,
+            disableDepthTestDistance:undefined
+        }
+    });
+
+    //三维地名服务，使用wtfs服务
+    wtfs.getTileUrl = function(){
+        return tdtUrl + 'mapservice/GetTiles?lxys={z},{x},{y}&VERSION=1.0.0&tk='+ token; 
+    }
+
+    // 三维图标服务
+    wtfs.getIcoUrl = function(){
+        return tdtUrl + 'mapservice/GetIcon?id={id}&tk='+ token;
+    }
+
+    wtfs.initTDT([{"x":6,"y":1,"level":2,"boundBox":{"minX":90,"minY":0,"maxX":135,"maxY":45}},{"x":7,"y":1,"level":2,"boundBox":{"minX":135,"minY":0,"maxX":180,"maxY":45}},{"x":6,"y":0,"level":2,"boundBox":{"minX":90,"minY":45,"maxX":135,"maxY":90}},{"x":7,"y":0,"level":2,"boundBox":{"minX":135,"minY":45,"maxX":180,"maxY":90}},{"x":5,"y":1,"level":2,"boundBox":{"minX":45,"minY":0,"maxX":90,"maxY":45}},{"x":4,"y":1,"level":2,"boundBox":{"minX":0,"minY":0,"maxX":45,"maxY":45}},{"x":5,"y":0,"level":2,"boundBox":{"minX":45,"minY":45,"maxX":90,"maxY":90}},{"x":4,"y":0,"level":2,"boundBox":{"minX":0,"minY":45,"maxX":45,"maxY":90}},{"x":6,"y":2,"level":2,"boundBox":{"minX":90,"minY":-45,"maxX":135,"maxY":0}},{"x":6,"y":3,"level":2,"boundBox":{"minX":90,"minY":-90,"maxX":135,"maxY":-45}},{"x":7,"y":2,"level":2,"boundBox":{"minX":135,"minY":-45,"maxX":180,"maxY":0}},{"x":5,"y":2,"level":2,"boundBox":{"minX":45,"minY":-45,"maxX":90,"maxY":0}},{"x":4,"y":2,"level":2,"boundBox":{"minX":0,"minY":-45,"maxX":45,"maxY":0}},{"x":3,"y":1,"level":2,"boundBox":{"minX":-45,"minY":0,"maxX":0,"maxY":45}},{"x":3,"y":0,"level":2,"boundBox":{"minX":-45,"minY":45,"maxX":0,"maxY":90}},{"x":2,"y":0,"level":2,"boundBox":{"minX":-90,"minY":45,"maxX":-45,"maxY":90}},{"x":0,"y":1,"level":2,"boundBox":{"minX":-180,"minY":0,"maxX":-135,"maxY":45}},{"x":1,"y":0,"level":2,"boundBox":{"minX":-135,"minY":45,"maxX":-90,"maxY":90}},{"x":0,"y":0,"level":2,"boundBox":{"minX":-180,"minY":45,"maxX":-135,"maxY":90}}]);
+}
 
 // 3. 添加自定义3D图源的方法
 async function loadCustomTileset() {
