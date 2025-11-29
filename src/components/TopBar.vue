@@ -6,10 +6,19 @@
                 <span class="title-text">The science of where!</span>
             </a>
         </h1>
+        <div class="controls">
+            <button class="nav-btn" @click="$emit('toggle-3d')">
+                🌍 3D地球
+            </button>
+            <button class="nav-btn" @click="$emit('toggle-magic')">
+                ✨ 魔法特效
+            </button>
+        </div>
     </div>
 </template>
 
 <script setup>
+defineEmits(['toggle-magic', 'toggle-3d']);
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 </script>
@@ -22,9 +31,33 @@ const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
     color: white;
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     padding: 0 20px;
     box-sizing: border-box;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+}
+
+.nav-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(1.05);
 }
 
 .top-bar h1 {
