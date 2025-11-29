@@ -63,8 +63,8 @@ onMounted(async () => {
     }
   });
 
-  // 2. 开启地形夸张 (2.5倍)
-  viewer.scene.globe.terrainExaggeration = 2.5;
+  // 2. 开启地形夸张 (1倍)
+  viewer.scene.globe.terrainExaggeration = 1;
   viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
 
   // 隐藏版权信息（仅用于开发演示，生产环境请保留）
