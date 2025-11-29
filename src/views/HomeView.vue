@@ -3,6 +3,8 @@ import { ref, reactive } from 'vue';
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import SidePanel from '../components/SidePanel.vue';
+import CesiumContainer from '../components/CesiumContainer.vue';
+import MagicCursor from '../components/MagicCursor.vue';
 
 const locationInfo = reactive({
     isInDihuan: false,
@@ -10,6 +12,8 @@ const locationInfo = reactive({
 });
 const selectedImage = ref('');
 const currentNewsIndex = ref(0);
+const is3DMode = ref(false);
+const isMagicMode = ref(false);
 
 function handleLocationChange(locationData) {
     Object.assign(locationInfo, locationData);
@@ -23,20 +27,31 @@ function handleNewsChanged(newsIndex) {
     currentNewsIndex.value = newsIndex;
     console.log('News changed to index:', newsIndex);
 }
+
+function toggle3D() {
+    is3DMode.value = !is3DMode.value;
+}
+
+function toggleMagic() {
+    isMagicMode.value = !isMagicMode.value;
+}
 </script>
 
 <template>
     <div class="home-container">
+        <MagicCursor :active="isMagicMode" />
         <div class="top-section">
-            <TopBar />
+            <TopBar @toggle-magic="toggleMagic" @toggle-3d="toggle3D" />
         </div>
 
         <div class="content-section">
             <div class="map-wrapper">
                 <MapContainer 
+                    v-show="!is3DMode"
                     @location-change="handleLocationChange"
                     @update-news-image="handleUpdateNewsImage"
                 />
+                <CesiumContainer v-if="is3DMode" />
             </div>
             
             <div class="side-panel-wrapper">
