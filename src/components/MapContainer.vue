@@ -100,7 +100,7 @@ const images = [
 
 const sources = {
     local: new XYZ({
-        url: `${normalizedBase}tiles/{z}/{x}/{y}.png`,
+        url: `${normalizedBase}public/tiles/{z}/{x}/{y}.png`,
         crossOrigin: 'anonymous'
     }),
     osm: new OSM(),
