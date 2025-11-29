@@ -32,7 +32,14 @@ onMounted(async () => {
   // Cesium.Ion.defaultAccessToken = 'YOUR_TOKEN_HERE';
 
   viewer = new Cesium.Viewer('cesiumContainer', {
-    terrain: Cesium.Terrain.fromWorldTerrain(), // 开启世界地形
+    // terrain: Cesium.Terrain.fromWorldTerrain(), // 移除默认地形，避免 401 错误
+    // imageryProvider: false, // 移除默认影像，避免 401 错误
+    // 使用 Google Maps 影像作为基础图层，防止 Cesium 加载默认的 Ion 影像导致 401
+    imageryProvider: new Cesium.UrlTemplateImageryProvider({
+        url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+        tilingScheme : new Cesium.WebMercatorTilingScheme(),
+        maximumLevel : 20
+    }),
     infoBox: false,
     selectionIndicator: false,
     shadows: true,
@@ -67,16 +74,39 @@ onMounted(async () => {
   // 暴露 Cesium 到全局，供天地图插件使用 (使用解构复制以允许扩展，因为 import * as Cesium 得到的对象是不可变的)
   window.Cesium = { ...Cesium };
 
+  // 猴子补丁：拦截 Object.defineProperty
+  // 即使降级了 Cesium 版本，为了防止插件重复加载或潜在的兼容性问题，保留此拦截是安全的。
+  const originalDefineProperty = Object.defineProperty;
+  Object.defineProperty = function(obj, prop, descriptor) {
+    if (prop === 'primitiveAdded' || prop === 'primitiveRemoved' || prop === 'primitiveMoved') {
+      // 只有当属性不可配置时才拦截，或者直接拦截以防万一
+      try {
+         return originalDefineProperty.call(this, obj, prop, descriptor);
+      } catch (e) {
+         console.warn(`已拦截并忽略 ${prop} 属性定义 [defineProperty] (天地图插件兼容性处理)`);
+         return obj;
+      }
+    }
+    return originalDefineProperty.call(this, obj, prop, descriptor);
+  };
+
   try {
     // 按顺序加载天地图插件
-    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/Cesium_ext_min.js');
-    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/long.min.js');
-    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/bytebuffer.min.js');
-    await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/protobuf.min.js');
+    // 检查是否已经加载过，避免重复加载导致报错
+    if (!window.Cesium.GeoWTFS) {
+        await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/Cesium_ext_min.js');
+        await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/long.min.js');
+        await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/bytebuffer.min.js');
+        await loadScript('https://api.tianditu.gov.cn/cdn/plugins/cesium/protobuf.min.js');
+    }
+
+    // 恢复原始方法
+    Object.defineProperty = originalDefineProperty;
 
     addTiandituLayers();
   } catch (e) {
     console.error('加载天地图插件失败', e);
+    Object.defineProperty = originalDefineProperty;
   }
 });
 
@@ -93,6 +123,38 @@ function addTiandituLayers() {
     var tdtUrl = 'https://t{s}.tianditu.gov.cn/';
     // 服务负载子域
     var subdomains=['0','1','2','3','4','5','6','7'];
+
+    // 叠加影像服务 (Google Maps)
+    // https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={col}&y={row}&z={level}
+    // Cesium UrlTemplateImageryProvider 使用 {x}, {y}, {z} 占位符
+    var imgMap = new window.Cesium.UrlTemplateImageryProvider({
+        url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+        tilingScheme : new window.Cesium.WebMercatorTilingScheme(),
+        maximumLevel : 20
+    });
+    viewer.imageryLayers.addImageryProvider(imgMap); 
+
+    // 叠加国界服务 (天地图)
+    var iboMap = new window.Cesium.UrlTemplateImageryProvider({
+        url: 'https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cia&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+        tilingScheme : new window.Cesium.WebMercatorTilingScheme(),
+        maximumLevel : 20
+    });
+    viewer.imageryLayers.addImageryProvider(iboMap);
+
+    // 叠加地形服务
+    var terrainUrls = new Array();
+
+    for (var i = 0; i < subdomains.length; i++){
+        var url = tdtUrl.replace('{s}', subdomains[i]) + 'mapservice/swdx?T=elv_c&tk=' + token;
+        terrainUrls.push(url);
+    }
+
+    var provider = new window.Cesium.GeoTerrainProvider({
+        urls: terrainUrls
+    });
+
+    viewer.terrainProvider = provider;
 
     // 叠加三维地名服务
     // 注意：这里使用 window.Cesium 因为插件挂载在全局对象上
