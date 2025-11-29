@@ -1,17 +1,31 @@
 <template>
   <div id="cesiumContainer" class="cesium-container"></div>
+  
+  <!-- 坐标显示面板 (仿照 MapContainer 样式) -->
+  <div class="map-controls-group">
+      <div class="mouse-position-content">{{ coordinateDisplay }}</div>
+      <div class="divider"></div>
+      <button class="home-btn" @click="flyToHome" title="回到初始位置">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+          </svg>
+      </button>
+  </div>
+
   <div class="cesium-controls">
     <button @click="flyToEverest" class="fly-btn">🏔️ 飞越珠穆朗玛峰</button>
-    <button @click="flyToHome" class="fly-btn">🏠 回到初始位置</button>
     <button @click="loadCustomTileset" class="fly-btn">🏢 加载3D模型</button>
   </div>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import * as Cesium from 'cesium';
 
 let viewer = null;
+let handler = null;
+
+const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 
 // 天地图 Token
 const token = '4267820f43926eaf808d61dc07269beb';
@@ -70,6 +84,21 @@ onMounted(async () => {
   // 隐藏版权信息（仅用于开发演示，生产环境请保留）
   viewer._cesiumWidget._creditContainer.style.display = "none";
 
+  // 添加鼠标移动事件监听，显示经纬度
+  handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+  handler.setInputAction((movement) => {
+      const ray = viewer.camera.getPickRay(movement.endPosition);
+      if (!ray) return;
+      const position = viewer.scene.globe.pick(ray, viewer.scene);
+      if (position) {
+          const cartographic = Cesium.Cartographic.fromCartesian(position);
+          const longitude = Cesium.Math.toDegrees(cartographic.longitude).toFixed(6);
+          const latitude = Cesium.Math.toDegrees(cartographic.latitude).toFixed(6);
+          const height = cartographic.height.toFixed(2);
+          coordinateDisplay.value = `经度: ${longitude}, 纬度: ${latitude}, 海拔: ${height}米`;
+      }
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
   // --- 天地图集成 ---
   // 暴露 Cesium 到全局，供天地图插件使用 (使用解构复制以允许扩展，因为 import * as Cesium 得到的对象是不可变的)
   window.Cesium = { ...Cesium };
@@ -111,6 +140,10 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  if (handler) {
+    handler.destroy();
+    handler = null;
+  }
   if (viewer) {
     viewer.destroy();
     viewer = null;
@@ -305,5 +338,55 @@ function flyToHome() {
 .fly-btn:hover {
   background: rgba(66, 185, 131, 0.9);
   transform: translateY(-2px);
+}
+
+/* 坐标面板样式 (仿照 MapContainer) */
+.map-controls-group {
+    position: absolute;
+    bottom: 20px;
+    right: 10px;
+    background: linear-gradient(to right, rgba(10, 121, 51, 0.9), rgba(8, 96, 41, 0.9));
+    color: white;
+    padding: 5px 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    z-index: 1000;
+    border: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mouse-position-content {
+    font-size: 14px;
+    font-weight: bold;
+    min-width: 120px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.divider {
+    width: 1px;
+    height: 20px;
+    background-color: rgba(255, 255, 255, 0.4);
+}
+
+.home-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.home-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
 }
 </style>
