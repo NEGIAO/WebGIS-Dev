@@ -1,4 +1,5 @@
 # 校园 WebGIS（HENU 地理科学学院）
+[查看部署效果](https://negiao.github.io/WebGIS_henu_trials_5_28_vue3/#/home)
 
 基于 Vue 3 + Vite + OpenLayers 构建的校园 WebGIS 项目，聚焦河南大学地理科学学院教学区。通过互动地图与新闻侧栏联动，帮助访客快速了解地环院的空间位置、校园风貌与最新资讯。
 
