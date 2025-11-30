@@ -7,6 +7,7 @@
 
 ## 主要特性
 
+- 🌍 **三维地球**：集成 CesiumJS，支持高精度地形渲染与智能地形源切换（境内天地图/境外 World Terrain）。
 - 📌 **多底图切换**：支持本地瓦片、天地图影像/矢量、ESRI 影像、OpenStreetMap、高德地图等服务。
 - 🛰️ **实时坐标**：显示鼠标经纬度，进入地环院范围时自动高亮并推送相关新闻。
 - 🖼️ **缩略图预览**：放大到指定级别即可查看校园缩略图，点击可放大查看并同步侧栏展示。
@@ -34,9 +35,10 @@ WebGIS_henu_trials_5_28_vue3/
 ├── src/
 │   ├── assets/          # 全局样式
 │   ├── components/      # Vue 组件
-│   │   ├── MapContainer.vue  # 地图核心逻辑组件
-│   │   ├── SidePanel.vue     # 右侧信息面板组件
-│   │   └── TopBar.vue        # 顶部导航栏组件
+│   │   ├── CesiumContainer.vue # 3D 地球组件 (CesiumJS)
+│   │   ├── MapContainer.vue    # 2D 地图组件 (OpenLayers)
+│   │   ├── SidePanel.vue       # 右侧信息面板组件
+│   │   └── TopBar.vue          # 顶部导航栏组件
 │   ├── router/          # Vue Router 路由配置
 │   ├── views/           # 页面视图
 │   │   ├── HomeView.vue      # 主页（地图页）
@@ -49,6 +51,14 @@ WebGIS_henu_trials_5_28_vue3/
 ```
 
 ## 版本记录
+
+### V2.1.0 (2025-11-30)
+- **3D 地图集成**：引入 CesiumJS 实现三维地球展示，支持二三维视图切换。
+- **智能地形切换**：实现基于视点位置的动态地形加载策略——中国境内加载天地图地形，境外自动切换为 Cesium World Terrain。
+- **UI 统一**：统一了 2D/3D 视图下的坐标显示面板样式与交互体验。
+- **体验优化**：
+    - 修复了本地瓦片加载路径问题。
+    - 优化了鼠标位置追踪与坐标实时显示功能。
 
 ### V2.0.0 (2025-11-28)
 - **架构重构**：迁移至 Vue 3 + Vite + Vue Router 的 SPA 架构。
