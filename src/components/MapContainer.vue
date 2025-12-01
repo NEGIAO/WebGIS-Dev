@@ -30,7 +30,7 @@
         <!-- Layer Switcher -->
         <div class="layer-switcher">
             <select v-model="selectedLayer" class="layer-select">
-                <option value="local">本地瓦片</option>
+                <option value="local">自定义瓦片</option>
                 <option value="tianDiTu_vec">天地图矢量</option>
                 <option value="tianDiTu">天地图影像</option>
                 <option value="google">Google</option>
