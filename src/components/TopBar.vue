@@ -1,7 +1,7 @@
 <template>
     <div class="top-bar">
         <h1>
-            <a href="#">
+            <a href="https://negiao.github.io">
                 <img :src="`${normalizedBase}images/icon.png`" alt="Icon" class="logo-icon">
                 <span class="title-text">The science of where!</span>
             </a>
