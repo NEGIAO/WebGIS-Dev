@@ -81,6 +81,7 @@ const showLargeImg = ref(false);
 const largeImageSrc = ref('');
 const largeImagePosition = ref({ x: 0, y: 0 });
 const currentMousePosition = ref({ x: 0, y: 0 });
+const isInTargetArea = ref(false);
 
 const initialCenter = [114.302, 34.8146];
 const initialZoom = 17;
@@ -123,9 +124,6 @@ onMounted(() => {
     if (mapContainerRef.value) {
         mapContainerRef.value.addEventListener('mousemove', (e) => {
             currentMousePosition.value = { x: e.clientX, y: e.clientY };
-            // If image set is visible, update its position (optional, or keep it fixed where it appeared)
-            // The original code updated it on zoom check, but here we might want it to follow or stay put.
-            // Let's keep the original logic: it appears based on zoom.
         });
         
         mapContainerRef.value.addEventListener('click', () => {
@@ -193,6 +191,9 @@ function initMap() {
             lonLat[1] >= dihuanBounds.minLat && 
             lonLat[1] <= dihuanBounds.maxLat;
         
+        isInTargetArea.value = isInDihuan;
+        checkZoomLevel();
+
         emit('location-change', { 
             isInDihuan,
             lonLat
@@ -216,33 +217,10 @@ function checkZoomLevel() {
     if (!mapInstance.value) return;
     const zoom = mapInstance.value.getView().getZoom();
     
-    if (zoom >= 18) {
+    if (zoom >= 18 && isInTargetArea.value) {
         showImageSet.value = true;
-        // Position it near the mouse or center? Original code used mouse position.
-        // But mouse position might be 0,0 if not moved yet.
-        // Let's use a fixed position relative to map or last mouse position.
-        // Since we are inside map-container with relative positioning, we need relative coordinates.
-        // For simplicity, let's just center it or put it in a corner if mouse isn't available.
-        // But to match original behavior:
-        // Note: original code used clientX/Y which is screen coordinates.
-        // If we use absolute positioning inside relative container, we need offset coordinates.
-        // Let's just put it in the center for now if we can't track mouse perfectly, 
-        // or use the last known mouse position.
-        
-        // Actually, let's just fix it to a specific location on the screen for better UX
-        // or keep it following the mouse (which is annoying).
-        // The original code: dihuan_imageset.style.left = currentMousePosition.x + 'px';
-        // This implies it follows the mouse? No, `startListening` is called on zoom change.
-        // So it pops up at the LAST mouse position when zoom threshold is crossed.
-        
-        // We'll use a safe default if 0,0
         const x = currentMousePosition.value.x || 100;
         const y = currentMousePosition.value.y || 100;
-        
-        // We need to convert client coordinates to relative coordinates if the container is relative.
-        // But the original code used fixed/absolute positioning likely relative to body or map container.
-        // If map-container is relative, absolute children are relative to it.
-        // clientX is viewport. We need to subtract container offset.
         if (mapContainerRef.value) {
             const rect = mapContainerRef.value.getBoundingClientRect();
             imageSetPosition.value = {

@@ -175,7 +175,8 @@ function addTiandituLayers() {
     });
     viewer.imageryLayers.addImageryProvider(iboMap);
 
-    // 叠加地形服务
+    // 叠加地形服务 
+    //注意：天地图的服务不稳定，控制台会报错401，可以忽略
     var terrainUrls = new Array();
 
     for (var i = 0; i < subdomains.length; i++){
