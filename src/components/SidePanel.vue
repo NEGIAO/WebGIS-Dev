@@ -1,6 +1,10 @@
 <template>
-    <div class="info-container">
-        <div class="top">
+    <div class="info-container" :class="{ 'collapsed': isCollapsed }">
+        <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开' : '收起'">
+            <span class="handle-icon">{{ isCollapsed ? '◀' : '▶' }}</span>
+        </div>
+        <div class="panel-content" v-show="!isCollapsed">
+            <div class="top">
             <img :src="`${normalizedBase}images/院徽.png`" class="logo" alt="Logo">
             <div class="title-container">
                 <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" class="main-title">地科院新闻</a>
@@ -24,6 +28,7 @@
         <div class="footer">
             <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" target="_blank">河南大学地理科学学院！</a>
         </div>
+        </div>
     </div>
 </template>
 
@@ -38,10 +43,14 @@ const props = defineProps({
     selectedImage: {
         type: String,
         default: ''
+    },
+    isCollapsed: {
+        type: Boolean,
+        default: false
     }
 });
 
-const emit = defineEmits(['news-changed']);
+const emit = defineEmits(['news-changed', 'toggle-panel']);
 
 const currentNewsIndex = ref(0);
 const baseUrl = import.meta.env.BASE_URL || '/';
@@ -107,12 +116,47 @@ function changeNews() {
 <style scoped>
 .info-container {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: 100%;
-    padding: 20px;
+    padding: 0;
     box-sizing: border-box;
-    overflow-y: auto;
     background: #fff;
+    overflow: hidden;
+}
+
+.toggle-handle {
+    width: 20px;
+    height: 60px;
+    align-self: center;
+    background: #14c259;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid #095d1e;
+    border-right: none;
+    border-radius: 12px 0 0 12px;
+    flex-shrink: 0;
+    transition: background-color 0.3s;
+}
+
+.toggle-handle:hover {
+    background: #e0e0e0;
+}
+
+.handle-icon {
+    font-size: 12px;
+    color: #666;
+    user-select: none;
+}
+
+.panel-content {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .top {
@@ -210,6 +254,23 @@ function changeNews() {
 /* Mobile adjustments */
 @media (max-width: 768px) {
     .info-container {
+        flex-direction: column;
+    }
+
+    .toggle-handle {
+        width: 60px;
+        height: 20px;
+        align-self: center;
+        border: 1px solid #ddd;
+        border-bottom: none;
+        border-radius: 12px 12px 0 0;
+    }
+
+    .handle-icon {
+        transform: rotate(90deg);
+    }
+
+    .panel-content {
         padding: 15px;
     }
 

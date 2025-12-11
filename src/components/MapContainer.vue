@@ -291,17 +291,29 @@ function initMap() {
     checkZoomLevel();
 }
 
+let homeClickTimer = null;
+
 function resetView() {
-    if (mapInstance.value) {
-        mapInstance.value.getView().animate({
-            center: fromLonLat(initialCenter),
-            zoom: initialZoom,
-            duration: 1000
-        });
-    }
+    if (homeClickTimer) clearTimeout(homeClickTimer);
+    
+    homeClickTimer = setTimeout(() => {
+        if (mapInstance.value) {
+            mapInstance.value.getView().animate({
+                center: fromLonLat(initialCenter),
+                zoom: initialZoom,
+                duration: 1000
+            });
+        }
+        homeClickTimer = null;
+    }, 300);
 }
 
 function zoomToChina() {
+    if (homeClickTimer) {
+        clearTimeout(homeClickTimer);
+        homeClickTimer = null;
+    }
+
     if (mapInstance.value) {
         mapInstance.value.getView().animate({
             center: fromLonLat([104.1954, 35.8617]),

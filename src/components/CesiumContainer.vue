@@ -316,7 +316,7 @@ function flyToHome() {
 
 .cesium-controls {
   position: absolute;
-  bottom: 30px;
+  bottom: 60px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
@@ -345,7 +345,7 @@ function flyToHome() {
 .map-controls-group {
     position: absolute;
     bottom: 20px;
-    right: 10px;
+    right: 70px;
     background: linear-gradient(to right, rgba(10, 121, 51, 0.9), rgba(8, 96, 41, 0.9));
     color: white;
     padding: 5px 10px;
