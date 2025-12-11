@@ -57,7 +57,7 @@
             </div>
 
             <button class="nav-btn" @click="$emit('toggle-3d')">
-                🌍 3D地球
+                🌍 3D/2D地球
             </button>
             <button class="nav-btn" @click="$emit('toggle-magic')">
                 ✨ 魔法特效

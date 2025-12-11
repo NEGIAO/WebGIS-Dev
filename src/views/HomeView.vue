@@ -15,6 +15,7 @@ const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
 const isMagicMode = ref(false);
 const mapContainerRef = ref(null);
+const isSidePanelCollapsed = ref(false);
 
 function handleLocationChange(locationData) {
     Object.assign(locationInfo, locationData);
@@ -27,6 +28,10 @@ function handleUpdateNewsImage(imageSrc) {
 function handleNewsChanged(newsIndex) {
     currentNewsIndex.value = newsIndex;
     console.log('News changed to index:', newsIndex);
+}
+
+function toggleSidePanel() {
+    isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
 }
 
 function toggle3D() {
@@ -103,11 +108,13 @@ function handleFeatureSelected(properties) {
                 <CesiumContainer v-if="is3DMode" />
             </div>
             
-            <div class="side-panel-wrapper">
+            <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed }">
                 <SidePanel
                     :locationInfo="locationInfo"
                     :selectedImage="selectedImage"
+                    :isCollapsed="isSidePanelCollapsed"
                     @news-changed="handleNewsChanged"
+                    @toggle-panel="toggleSidePanel"
                 >
                     <template v-slot:extra-content>
                         <div class="extra-info">
@@ -170,6 +177,11 @@ function handleFeatureSelected(properties) {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    transition: width 0.3s ease, height 0.3s ease;
+}
+
+.side-panel-wrapper.collapsed {
+    width: 20px;
 }
 
 /* Mobile Responsiveness */
@@ -189,6 +201,11 @@ function handleFeatureSelected(properties) {
         width: 100%;
         height: 40vh; /* Fixed height for bottom panel on mobile */
         flex: none;
+    }
+
+    .side-panel-wrapper.collapsed {
+        height: 24px;
+        width: 100%;
     }
 }
 

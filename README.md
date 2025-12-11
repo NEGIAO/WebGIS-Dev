@@ -35,7 +35,9 @@ WebGIS_henu_trials_5_28_vue3/
 ├── src/
 │   ├── assets/          # 全局样式
 │   ├── components/      # Vue 组件
+│   │   ├── icons/              # 图标组件
 │   │   ├── CesiumContainer.vue # 3D 地球组件 (CesiumJS)
+│   │   ├── MagicCursor.vue     # 鼠标特效组件
 │   │   ├── MapContainer.vue    # 2D 地图组件 (OpenLayers)
 │   │   ├── SidePanel.vue       # 右侧信息面板组件
 │   │   └── TopBar.vue          # 顶部导航栏组件
@@ -51,6 +53,16 @@ WebGIS_henu_trials_5_28_vue3/
 ```
 
 ## 版本记录
+
+### V2.2.0 (2025-12-12)
+- **侧边栏优化**：
+    - 新增侧边栏折叠/展开功能，支持点击按钮快速切换。
+    - 优化侧边栏在移动端的显示效果，折叠时自动吸底。
+    - 调整折叠按钮样式，支持垂直/水平居中显示。
+- **地图交互增强**：
+    - 优化复位按钮交互：单击复位视图，双击跳转至中国全图。
+    - 新增 `MagicCursor` 鼠标特效组件。
+- **文档更新**：更新项目目录结构说明。
 
 ### V2.1.0 (2025-11-30)
 - **3D 地图集成**：引入 CesiumJS 实现三维地球展示，支持二三维视图切换。
@@ -78,19 +90,12 @@ WebGIS_henu_trials_5_28_vue3/
     - OpenLayers 地图展示与底图切换。
     - 简单的图文联动功能。
     - 基础的 HTML/CSS/JS 结构。
-                    │  ├─ components/        # 顶栏、地图、右侧信息栏等组件
-                    │  └─ APP_3.vue          # 主布局容器
-                    ├─ index.html            # 入口文件
-                    ├─ package.json
-                    ├─ vite.config.js
-                    └─ .github/workflows/    # GitHub Pages 自动部署脚本
-                    ```
 
-                    ## 开发建议
+## 开发建议
 
-                    - 建议使用 VS Code + Volar 插件，配合 ESLint 保持代码风格一致。
-                    - 大比例尺时请求的瓦片较多，可按需控制缩放阈值或裁剪瓦片范围。
-                    - 如需新增 API Key，请通过 `.env` 配置，并在 `vite.config.js` 中读取 `VITE_` 前缀变量。
+- 建议使用 VS Code + Volar 插件，配合 ESLint 保持代码风格一致。
+- 大比例尺时请求的瓦片较多，可按需控制缩放阈值或裁剪瓦片范围。
+- 如需新增 API Key，请通过 `.env` 配置，并在 `vite.config.js` 中读取 `VITE_` 前缀变量。
 
-                    欢迎继续扩展功能，例如添加更多兴趣点、天气信息或 3D 建筑模型。若遇到问题，欢迎提 Issue 讨论。祝学习顺利！
+欢迎继续扩展功能，例如添加更多兴趣点、天气信息或 3D 建筑模型。若遇到问题，欢迎提 Issue 讨论。祝学习顺利！
 ```
