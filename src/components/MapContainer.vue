@@ -114,7 +114,7 @@ const vector = new VectorLayer({
     zIndex: 999
 });
 
-const selectedLayer = ref('local');
+const selectedLayer = ref('google');
 const showImageSet = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
@@ -175,7 +175,7 @@ onMounted(() => {
 
 function initMap() {
     baseLayer = new TileLayer({
-        source: sources['local']
+        source: sources['google']
     });
     
     labelLayer = new TileLayer({
