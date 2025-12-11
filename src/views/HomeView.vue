@@ -14,6 +14,7 @@ const selectedImage = ref('');
 const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
 const isMagicMode = ref(false);
+const mapContainerRef = ref(null);
 
 function handleLocationChange(locationData) {
     Object.assign(locationInfo, locationData);
@@ -35,21 +36,69 @@ function toggle3D() {
 function toggleMagic() {
     isMagicMode.value = !isMagicMode.value;
 }
+
+function handleUploadData(data) {
+    if (mapContainerRef.value) {
+        mapContainerRef.value.addUserDataLayer(data);
+    }
+}
+
+function handleInteraction(type) {
+    if (mapContainerRef.value) {
+        mapContainerRef.value.activateInteraction(type);
+    }
+}
+
+function handleFeatureSelected(properties) {
+    // Format properties for display
+    let content = '<h4>要素属性</h4><div style="max-height: 300px; overflow-y: auto;">';
+    for (const key in properties) {
+        content += `<strong>${key}:</strong> ${properties[key]}<br>`;
+    }
+    content += '</div>';
+    
+    // We can reuse the SidePanel or just alert for now. 
+    // Since SidePanel is complex, let's use a simple alert or maybe a custom modal later.
+    // For now, let's just log it and maybe show a simple alert to prove it works.
+    // Or better, update a reactive variable that SidePanel can display?
+    // The user didn't ask for a specific UI for attributes, just "Attribute Query".
+    // Let's try to be nice and show it in an alert for simplicity as a first step.
+    // Actually, let's use a more modern approach if possible, but alert is safe.
+    // Wait, I can add a "featureInfo" prop to SidePanel?
+    // Let's just use alert for now to keep it simple and robust.
+    // alert(JSON.stringify(properties, null, 2));
+    
+    // Better: Use a simple dialog or overlay. 
+    // But I don't want to add too much UI code.
+    // Let's stick to alert but formatted nicely.
+    let msg = "要素属性:\n";
+    for (const key in properties) {
+        msg += `${key}: ${properties[key]}\n`;
+    }
+    alert(msg);
+}
 </script>
 
 <template>
     <div class="home-container">
         <MagicCursor :active="isMagicMode" />
         <div class="top-section">
-            <TopBar @toggle-magic="toggleMagic" @toggle-3d="toggle3D" />
+            <TopBar 
+                @toggle-magic="toggleMagic" 
+                @toggle-3d="toggle3D" 
+                @upload-data="handleUploadData"
+                @interaction="handleInteraction"
+            />
         </div>
 
         <div class="content-section">
             <div class="map-wrapper">
                 <MapContainer 
+                    ref="mapContainerRef"
                     v-show="!is3DMode"
                     @location-change="handleLocationChange"
                     @update-news-image="handleUpdateNewsImage"
+                    @feature-selected="handleFeatureSelected"
                 />
                 <CesiumContainer v-if="is3DMode" />
             </div>
