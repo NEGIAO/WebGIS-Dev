@@ -262,8 +262,8 @@ async function loadCustomTileset() {
   if (!viewer) return;
   try {
     // 示例：加载一个公开的 3D Tiles 数据 (建筑物模型)
-    // 你可以将下面的 URL 替换为你自己的 3D Tiles 数据的 json 地址
-    // 例如: 'http://localhost:8080/my-tileset/tileset.json'
+    // 注意：raw.githubusercontent.com 在国内可能无法访问，建议替换为本地数据或国内服务器地址
+    // 这里添加了错误处理提示
     const tileset = await Cesium.Cesium3DTileset.fromUrl(
       'https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/master/1.0/TilesetWithDiscreteLOD/tileset.json'
     );
@@ -276,7 +276,7 @@ async function loadCustomTileset() {
     console.log('3D Tiles loaded successfully');
   } catch (error) {
     console.error(`Error loading tileset: ${error}`);
-    alert('加载3D模型失败，请检查控制台错误信息');
+    alert('加载3D模型失败。原因可能是：\n1. 网络连接问题（GitHub资源在国内访问受限）\n2. 数据源地址失效\n建议使用本地数据或国内镜像源。');
   }
 }
 
@@ -345,7 +345,8 @@ function flyToHome() {
 .map-controls-group {
     position: absolute;
     bottom: 20px;
-    right: 70px;
+    left: 50%;
+    transform: translateX(-50%);
     background: linear-gradient(to right, rgba(10, 121, 51, 0.9), rgba(8, 96, 41, 0.9));
     color: white;
     padding: 5px 10px;
@@ -356,6 +357,19 @@ function flyToHome() {
     display: flex;
     align-items: center;
     gap: 10px;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .map-controls-group {
+        width: 90%;
+        justify-content: center;
+        bottom: 15px;
+    }
+    .mouse-position-content {
+        font-size: 12px;
+        min-width: auto;
+    }
 }
 
 .mouse-position-content {
