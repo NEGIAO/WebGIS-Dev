@@ -50,7 +50,8 @@ onMounted(async () => {
     // imageryProvider: false, // 移除默认影像，避免 401 错误
     // 使用 Google Maps 影像作为基础图层，防止 Cesium 加载默认的 Ion 影像导致 401
     imageryProvider: new Cesium.UrlTemplateImageryProvider({
-        url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+        // url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+        url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
         tilingScheme : new Cesium.WebMercatorTilingScheme(),
         maximumLevel : 20
     }),
@@ -161,7 +162,8 @@ function addTiandituLayers() {
     // https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={col}&y={row}&z={level}
     // Cesium UrlTemplateImageryProvider 使用 {x}, {y}, {z} 占位符
     var imgMap = new window.Cesium.UrlTemplateImageryProvider({
-        url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+        // url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+        url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
         tilingScheme : new window.Cesium.WebMercatorTilingScheme(),
         maximumLevel : 20
     });
