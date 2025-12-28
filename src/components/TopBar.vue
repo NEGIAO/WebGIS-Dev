@@ -1,7 +1,8 @@
 <template>
     <div class="top-bar">
         <h1>
-            <a href="https://negiao.github.io">
+            <!-- 返回上一级，因为该项目部署在子目录下 -->
+            <a href="../index.html">
                 <img :src="`${normalizedBase}images/icon.png`" alt="Icon" class="logo-icon">
                 <span class="title-text">The science of where!</span>
             </a>
