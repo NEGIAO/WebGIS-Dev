@@ -129,6 +129,7 @@ let helpTooltipEl, helpTooltipOverlay;
 let sketchFeature;
 let geolocationWatchId = null;
 let homeClickTimer = null; // 用于处理单击双击冲突
+let ipDetectTimer = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -157,6 +158,10 @@ const styles = {
 onMounted(async () => {
     // 先尝试通过 IP 判断用户是否在国内（影响搜索服务选择）
     await detectIPLocale();
+    // 每 30 秒刷新一次 IP 定位（以应对用户网络/IP 变化）
+    ipDetectTimer = setInterval(() => {
+        detectIPLocale().catch(e => console.warn('detectIPLocale periodic failed', e));
+    }, 30000);
     initMap();
     // 初始尝试定位并将默认视图设置为用户位置（若允许）
     getCurrentLocation(false).then((pos) => {
@@ -165,6 +170,27 @@ onMounted(async () => {
             mapInstance.value.getView().animate({ center: coord, zoom: 18, duration: 800 });
         }
     }).catch(() => console.log('Initial location check skipped'));
+
+    // 使用 watchPosition 订阅位置变更（适用于所有支持 geolocation 的设备）
+    if (navigator.geolocation) {
+        try {
+            // 立即尝试一次获取并显示位置（高精度）
+            getCurrentLocation(true).then(pos => updateUserPosition(pos, false)).catch(() => { });
+
+            // 启动 watchPosition，浏览器会按需推送位置更新
+            geolocationWatchId = navigator.geolocation.watchPosition(
+                (p) => {
+                    updateUserPosition({ lon: p.coords.longitude, lat: p.coords.latitude, accuracy: p.coords.accuracy }, false);
+                },
+                (err) => {
+                    console.warn('geolocation watch error', err);
+                },
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+        } catch (e) {
+            console.warn('geolocation watch setup failed', e);
+        }
+    }
 });
 
 // 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
@@ -189,6 +215,14 @@ async function detectIPLocale() {
 onUnmounted(() => {
     if (geolocationWatchId) navigator.geolocation.clearWatch(geolocationWatchId);
     if (mapInstance.value) mapInstance.value.setTarget(null);
+    if (ipDetectTimer) {
+        clearInterval(ipDetectTimer);
+        ipDetectTimer = null;
+    }
+    if (mobileGeoTimer) {
+        clearInterval(mobileGeoTimer);
+        mobileGeoTimer = null;
+    }
 });
 
 // --- 1. 地图核心逻辑 ---
@@ -397,42 +431,127 @@ function getCurrentLocation(enableHighAccuracy = true) {
 async function zoomToUser() {
     try {
         const pos = await getCurrentLocation();
-        const coord = fromLonLat([pos.lon, pos.lat]);
-
-        // 更新用户位置图层
-        userLocationSource.clear();
-        userLocationSource.addFeature(new Feature({
-            geometry: new CircleGeom(coord, pos.accuracy),
-            type: 'accuracy'
-        }));
-        userLocationSource.addFeature(new Feature({
-            geometry: new Point(coord),
-            type: 'position'
-        }));
-
-        // 缩放跳转
-        if (mapInstance.value) {
-            mapInstance.value.getView().animate({
-                center: coord,
-                zoom: 18,
-                duration: 1000
-            });
-        }
+        updateUserPosition(pos, true);
     } catch (err) {
         console.warn('定位失败:', err.message);
         alert('无法获取您的位置，请确保允许定位权限。');
     }
 }
 
-// --- 5. 地名搜索功能 ---
+// 将位置写入用户图层；animate 为 true 时会平滑缩放到该位置
+function updateUserPosition(pos, animate = false) {
+    if (!pos || !mapInstance.value) return;
+    const coord = fromLonLat([pos.lon, pos.lat]);
+
+    userLocationSource.clear();
+    userLocationSource.addFeature(new Feature({
+        geometry: new CircleGeom(coord, pos.accuracy || 30),
+        type: 'accuracy'
+    }));
+    userLocationSource.addFeature(new Feature({
+        geometry: new Point(coord),
+        type: 'position'
+    }));
+
+    if (animate && mapInstance.value) {
+        mapInstance.value.getView().animate({ center: coord, zoom: 18, duration: 1000 });
+    }
+}
+
+//地名搜索
+// --- 辅助函数：标准化单个天地图数据项 ---
+// 天地图 API 返回的字段非常不统一（lon/lng/x, name/title/address），这里统一清洗为标准格式
+function normalizeTiandituItem(item) {
+    if (!item) return null;
+
+    // 1. 解析名称
+    const name = item.name || item.poiName || item.areaName || item.displayName || item.title || item.address || item.keyWord || '未知地点';
+
+    // 2. 解析坐标
+    let lon = item.lon || item.lng || item.x;
+    let lat = item.lat || item.latit || item.y;
+
+    // 处理 "113.5,34.5" 这种字符串格式的 lonlat
+    if ((!lon || !lat) && item.lonlat) {
+        const parts = String(item.lonlat).split(',');
+        if (parts.length >= 2) {
+            lon = parts[0];
+            lat = parts[1];
+        }
+    }
+
+    // 3. 确保坐标有效
+    if (!lon || !lat || isNaN(parseFloat(lon)) || isNaN(parseFloat(lat))) {
+        return null;
+    }
+
+    return {
+        display_name: name,
+        lon: parseFloat(lon),
+        lat: parseFloat(lat),
+        original: item // 保留原始数据以备不时之需
+    };
+}
+
+// --- 核心封装：解析天地图复杂的 JSON 响应 ---
+function parseTiandituResponse(data) {
+    if (!data) return [];
+
+    let rawList = [];
+
+    // 优先级 1: 行政区划 (精确匹配) - resultType 可能为 3
+    if (data.area) {
+        rawList = [data.area];
+    }
+    // 优先级 2: 行政区划列表
+    else if (Array.isArray(data.areas)) {
+        rawList = data.areas;
+    }
+    // 优先级 3: POI 列表 (最常见) - resultType 可能为 1
+    else if (Array.isArray(data.pois)) {
+        rawList = data.pois;
+    }
+    // 优先级 4: 统计结果中的详细列表
+    else if (data.queryResults && Array.isArray(data.queryResults.results)) {
+        rawList = data.queryResults.results;
+    }
+    // 优先级 5: 通用结果列表
+    else if (Array.isArray(data.results)) {
+        rawList = data.results;
+    }
+    // 优先级 6: data 字段
+    else if (Array.isArray(data.data)) {
+        rawList = data.data;
+    }
+    // 兜底：如果 data 本身就是数组
+    else if (Array.isArray(data)) {
+        rawList = data;
+    }
+    // 最后的兜底：如果上面都没命中，且 data 看起来不像是一个错误信息，可以考虑打印日志
+    else {
+        // 如果需要调试，可以取消注释
+        // console.warn('未识别的天地图响应结构', data); 
+        return [];
+    }
+
+    // 统一清洗数据，并过滤掉无效坐标
+    return rawList
+        .map(normalizeTiandituItem)
+        .filter(item => item !== null);
+}
+
+// --- 5. 地名搜索功能 (主逻辑) ---
 async function searchPlaces() {
     const q = (searchQuery.value || '').trim();
     if (!q) return;
-    // 根据用户所在区域选择搜索服务：国内 -> 天地图 V2.0；国外 -> Nominatim
+
+    // 清空旧结果
+    searchResults.value = [];
+
+    // 分支 A: 国内搜索 (天地图)
     if (isDomestic.value) {
-        // 天地图 V2.0 示例：GET 参数 postStr 是一个 JSON 字符串
-        // 构造 postStr，尽量带上当前地图视图范围（mapBound），部分 queryType 需要 mapBound
-        let mapBoundStr = '';
+        // 1. 计算视野范围 (提取为独立逻辑块)
+        let mapBoundStr = undefined;
         try {
             if (mapInstance.value) {
                 const view = mapInstance.value.getView();
@@ -441,6 +560,7 @@ async function searchPlaces() {
                     const ext = view.calculateExtent(size);
                     const sw = toLonLat([ext[0], ext[1]]);
                     const ne = toLonLat([ext[2], ext[3]]);
+                    // 保留6位小数即可
                     mapBoundStr = `${sw[0].toFixed(6)},${sw[1].toFixed(6)},${ne[0].toFixed(6)},${ne[1].toFixed(6)}`;
                 }
             }
@@ -448,108 +568,61 @@ async function searchPlaces() {
             console.warn('计算 mapBound 失败，使用默认范围', e);
         }
 
+        // 2. 构造请求
         const postObj = {
             keyWord: q,
             level: 12,
-            mapBound: mapBoundStr || undefined,
-            queryType: 1,
+            mapBound: mapBoundStr,
+            queryType: 1, // 1:普通搜索, 7:视野内搜索(如果需要严格限制在视野内改为7)
             start: 0,
             count: 6
         };
-        const postStr = JSON.stringify(postObj);
-        const url = `http://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(postStr)}&type=query&tk=${TIANDITU_TK}`;
+
+        // 建议使用 https 避免混合内容警告
+        const url = `https://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(JSON.stringify(postObj))}&type=query&tk=${TIANDITU_TK}`;
+
         try {
-            // 带上详细日志，便于排查 400 错误
-            console.debug('Tianditu request URL:', url);
-            const res = await fetch(url, { method: 'GET' });
-            if (!res.ok) {
-                const body = await res.text();
-                console.warn('Tianditu response not ok', res.status, body);
-                throw new Error(`天地图搜索请求失败: ${res.status}`);
-            }
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`API Error: ${res.status}`);
+
             const data = await res.json();
-            console.debug('Tianditu response', data);
 
-            //此处需要分装成一个函数，解析不同响应结构
-            // 解析常见结果字段（适配不同响应结构）
-            let items = [];
-            // 处理 area / areas（例如 resultType=3 返回的行政区/范围）
-            if (data && data.area) {
-                const a = data.area;
-                let lon = a.lon || a.x;
-                let lat = a.lat || a.y;
-                if ((!lon || !lat) && a.lonlat) {
-                    const parts = String(a.lonlat).split(',');
-                    if (parts.length >= 2) { lon = parts[0]; lat = parts[1]; }
-                }
-                items = [{ display_name: a.name || a.areaName || a.keyWord || '', lon, lat }];
-            } else if (data && Array.isArray(data.areas)) {
-                items = data.areas.map(a => {
-                    let lon = a.lon || a.x;
-                    let lat = a.lat || a.y;
-                    if ((!lon || !lat) && a.lonlat) {
-                        const parts = String(a.lonlat).split(',');
-                        if (parts.length >= 2) { lon = parts[0]; lat = parts[1]; }
-                    }
-                    return { display_name: a.name || a.areaName || a.keyWord || '', lon, lat };
-                });
-            }
-            // 若未填充，再尝试其它字段
+            // 3. 调用封装函数解析数据
+            const items = parseTiandituResponse(data);
+
+            // 4. 处理无结果的情况 (天地图有时返回 suggests 建议词，这里简单处理为无结果)
             if (items.length === 0) {
-                // Tianditu V2 常见 POI 列表字段
-                if (data && Array.isArray(data.pois)) {
-                    items = data.pois.map(r => {
-                        // 有些条目使用 lonlat 字符串 "lng,lat"
-                        let lon = r.lon || r.lng || r.x;
-                        let lat = r.lat || r.y || r.latit;
-                        if ((!lon || !lat) && r.lonlat) {
-                            const parts = String(r.lonlat).split(',');
-                            if (parts.length >= 2) {
-                                lon = lon || parts[0];
-                                lat = lat || parts[1];
-                            }
-                        }
-                        return {
-                            display_name: r.name || r.poiName || r.displayName || r.title || r.address || '',
-                            lon,
-                            lat
-                        };
-                    });
-                } else if (data && data.queryResults && Array.isArray(data.queryResults.results)) {
-                    items = data.queryResults.results.map(r => ({
-                        display_name: r.name || r.poiName || r.displayName || r.title || r.address || '',
-                        lon: r.lon || r.lng || r.x,
-                        lat: r.lat || r.latit || r.y
-                    }));
-                } else if (data && Array.isArray(data.results)) {
-                    items = data.results.map(r => ({ display_name: r.name || r.pname || '', lon: r.lon, lat: r.lat }));
-                } else if (data && Array.isArray(data.data)) {
-                    items = data.data.map(r => ({ display_name: r.name || r.displayName || '', lon: r.lon || r.x, lat: r.lat || r.y }));
-                } else {
-                    // 兜底：将整个响应转为单条显示
-                    items = [{ display_name: JSON.stringify(data), lon: null, lat: null }];
+                if (data.suggests) {
+                    // 可选：如果想显示建议词，可以在这里处理
+                    console.log('仅找到建议词:', data.suggests);
                 }
+                // 这里可以赋值一个特定的状态，或者保持空数组
             }
 
-            // 过滤并赋值
-            // 打印解析后的条目便于调试
-            console.debug('parsed Tianditu items', items);
-            searchResults.value = items.filter(it => it && it.display_name);
+            searchResults.value = items;
+
         } catch (e) {
             console.warn('Tianditu search error', e);
-            alert('天地图搜索失败（可能被 CORS/Referer 限制），请稍后重试或使用后端代理。');
+            alert('搜索服务请求失败，请检查网络或Token。');
         }
-    } else {
-        // 使用 Nominatim
+    }
+    // 分支 B: 国外搜索 (Nominatim)
+    else {
         const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
         try {
-            const res = await fetch(url, { method: 'GET' });
-            if (!res.ok) throw new Error('搜索请求失败');
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Nominatim Error');
             const data = await res.json();
-            searchResults.value = Array.isArray(data) ? data : [];
+
+            // Nominatim 的结构比较标准，直接映射
+            searchResults.value = Array.isArray(data) ? data.map(item => ({
+                display_name: item.display_name,
+                lon: parseFloat(item.lon),
+                lat: parseFloat(item.lat)
+            })) : [];
         } catch (e) {
-            console.warn('Search error', e);
-            alert('搜索失败，请稍后重试');
+            console.warn('Nominatim search error', e);
+            alert('国际搜索服务暂时不可用');
         }
     }
 }
@@ -835,8 +908,10 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
     border: 1px solid #ccc;
     border-radius: 4px;
     outline: none;
-    display: inline-block; /* 与 label 同行 */
-    margin: 0 0 0 6px; /* 与文字保持间距 */
+    display: inline-block;
+    /* 与 label 同行 */
+    margin: 0 0 0 6px;
+    /* 与文字保持间距 */
     vertical-align: middle;
 }
 

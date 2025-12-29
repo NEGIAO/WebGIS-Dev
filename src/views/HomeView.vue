@@ -1,11 +1,18 @@
 <script setup>
-import { ref, reactive } from 'vue';
+import { ref, reactive, defineAsyncComponent } from 'vue';
+
+// 1. 同步导入核心 2D 地图及 UI 组件 (保证首屏速度和 SEO)
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import SidePanel from '../components/SidePanel.vue';
-import CesiumContainer from '../components/CesiumContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 
+// 2. 异步导入 Cesium 组件 (优化：只有在 toggle 到 3D 模式时才去加载巨大的 Cesium 库)
+const CesiumContainer = defineAsyncComponent(() =>
+    import('../components/CesiumContainer.vue')
+);
+
+// --- 状态管理 ---
 const locationInfo = reactive({
     isInDihuan: false,
     lonLat: [0, 0]
@@ -15,7 +22,9 @@ const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
 const isMagicMode = ref(false);
 const mapContainerRef = ref(null);
-const isSidePanelCollapsed = ref(false);
+const isSidePanelCollapsed = ref(true);
+
+// --- 事件处理函数 ---
 
 function handleLocationChange(locationData) {
     Object.assign(locationInfo, locationData);
@@ -27,9 +36,10 @@ function handleUpdateNewsImage(imageSrc) {
 
 function handleNewsChanged(newsIndex) {
     currentNewsIndex.value = newsIndex;
-    console.log('News changed to index:', newsIndex);
+    // console.log('News changed to index:', newsIndex);
 }
 
+// 简单的开关逻辑简化
 function toggleSidePanel() {
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
 }
@@ -43,79 +53,61 @@ function toggleMagic() {
 }
 
 function handleUploadData(data) {
-    if (mapContainerRef.value) {
-        mapContainerRef.value.addUserDataLayer(data);
-    }
+    // 使用可选链 ?. 防止组件未加载时报错
+    mapContainerRef.value?.addUserDataLayer(data);
 }
 
 function handleInteraction(type) {
-    if (mapContainerRef.value) {
-        mapContainerRef.value.activateInteraction(type);
-    }
+    mapContainerRef.value?.activateInteraction(type);
 }
 
 function handleFeatureSelected(properties) {
-    // Format properties for display
-    let content = '<h4>要素属性</h4><div style="max-height: 300px; overflow-y: auto;">';
-    for (const key in properties) {
-        content += `<strong>${key}:</strong> ${properties[key]}<br>`;
+    if (!properties) return;
+
+    // 优化：使用 Object.entries 更优雅地处理对象遍历
+    let msg = "要素属性详情:\n----------------\n";
+    const entries = Object.entries(properties);
+
+    if (entries.length === 0) {
+        msg += "无属性数据";
+    } else {
+        msg += entries.map(([key, val]) => `${key}: ${val}`).join('\n');
     }
-    content += '</div>';
-    
-    // We can reuse the SidePanel or just alert for now. 
-    // Since SidePanel is complex, let's use a simple alert or maybe a custom modal later.
-    // For now, let's just log it and maybe show a simple alert to prove it works.
-    // Or better, update a reactive variable that SidePanel can display?
-    // The user didn't ask for a specific UI for attributes, just "Attribute Query".
-    // Let's try to be nice and show it in an alert for simplicity as a first step.
-    // Actually, let's use a more modern approach if possible, but alert is safe.
-    // Wait, I can add a "featureInfo" prop to SidePanel?
-    // Let's just use alert for now to keep it simple and robust.
-    // alert(JSON.stringify(properties, null, 2));
-    
-    // Better: Use a simple dialog or overlay. 
-    // But I don't want to add too much UI code.
-    // Let's stick to alert but formatted nicely.
-    let msg = "要素属性:\n";
-    for (const key in properties) {
-        msg += `${key}: ${properties[key]}\n`;
-    }
+
+    // 保持原来的 alert 逻辑，简单直接
     alert(msg);
 }
 </script>
 
 <template>
     <div class="home-container">
+        <!-- 特效光标 -->
         <MagicCursor :active="isMagicMode" />
+
+        <!-- 顶部控制栏 -->
         <div class="top-section">
-            <TopBar 
-                @toggle-magic="toggleMagic" 
-                @toggle-3d="toggle3D" 
-                @upload-data="handleUploadData"
-                @interaction="handleInteraction"
-            />
+            <TopBar @toggle-magic="toggleMagic" @toggle-3d="toggle3D" @upload-data="handleUploadData"
+                @interaction="handleInteraction" />
         </div>
 
         <div class="content-section">
             <div class="map-wrapper">
-                <MapContainer 
-                    ref="mapContainerRef"
-                    v-show="!is3DMode"
-                    @location-change="handleLocationChange"
-                    @update-news-image="handleUpdateNewsImage"
-                    @feature-selected="handleFeatureSelected"
-                />
+                <!-- 
+                  优化点：
+                  1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
+                  2. CesiumContainer 使用 v-if。3D地图很重，只有需要时才渲染 DOM。
+                -->
+                <MapContainer ref="mapContainerRef" v-show="!is3DMode" @location-change="handleLocationChange"
+                    @update-news-image="handleUpdateNewsImage" @feature-selected="handleFeatureSelected" />
+
+                <!-- 异步加载的 Cesium 组件 -->
                 <CesiumContainer v-if="is3DMode" />
             </div>
-            
+
             <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed }">
-                <SidePanel
-                    :locationInfo="locationInfo"
-                    :selectedImage="selectedImage"
-                    :isCollapsed="isSidePanelCollapsed"
-                    @news-changed="handleNewsChanged"
-                    @toggle-panel="toggleSidePanel"
-                >
+                <SidePanel :locationInfo="locationInfo" :selectedImage="selectedImage"
+                    :isCollapsed="isSidePanelCollapsed" @news-changed="handleNewsChanged"
+                    @toggle-panel="toggleSidePanel">
                     <template v-slot:extra-content>
                         <div class="extra-info">
                             <h3>提示</h3>
@@ -129,6 +121,9 @@ function handleFeatureSelected(properties) {
 </template>
 
 <style scoped>
+/* 
+   CSS 样式 
+*/
 .home-container {
     display: flex;
     flex-direction: column;
@@ -140,12 +135,13 @@ function handleFeatureSelected(properties) {
 }
 
 .top-section {
-    height: 60px; /* Fixed height for top bar */
+    height: 60px;
+    /* Fixed height for top bar */
     flex-shrink: 0;
     width: 100%;
     background: #f5f5f5;
     z-index: 50;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .content-section {
@@ -166,7 +162,8 @@ function handleFeatureSelected(properties) {
     position: relative;
     overflow: hidden;
     display: flex;
-    min-width: 0; /* Important for flex items to shrink */
+    min-width: 0;
+    /* Important for flex items to shrink */
 }
 
 .side-panel-wrapper {
@@ -193,13 +190,16 @@ function handleFeatureSelected(properties) {
     }
 
     .map-wrapper {
-        flex: 1; /* Map takes available space */
-        min-height: 50vh; /* Ensure map has height */
+        flex: 1;
+        /* Map takes available space */
+        min-height: 50vh;
+        /* Ensure map has height */
     }
 
     .side-panel-wrapper {
         width: 100%;
-        height: 40vh; /* Fixed height for bottom panel on mobile */
+        height: 40vh;
+        /* Fixed height for bottom panel on mobile */
         flex: none;
     }
 
