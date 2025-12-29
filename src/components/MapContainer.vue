@@ -127,9 +127,7 @@ let drawInteraction, snapInteraction;
 let measureTooltipEl, measureTooltipOverlay;
 let helpTooltipEl, helpTooltipOverlay;
 let sketchFeature;
-let geolocationWatchId = null;
 let homeClickTimer = null; // 用于处理单击双击冲突
-let ipDetectTimer = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -156,39 +154,24 @@ const styles = {
 
 // --- 初始化 ---
 onMounted(async () => {
-    // 先尝试通过 IP 判断用户是否在国内（影响搜索服务选择）
-    await detectIPLocale();
-    // 每 30 秒刷新一次 IP 定位（以应对用户网络/IP 变化）
-    ipDetectTimer = setInterval(() => {
-        detectIPLocale().catch(e => console.warn('detectIPLocale periodic failed', e));
-    }, 30000);
+    // 先通过 IP 判断用户是否在国内并尝试获取 IP 定位（仅调用一次）
+    const ipInfo = await detectIPLocale();
     initMap();
-    // 初始尝试定位并将默认视图设置为用户位置（若允许）
-    getCurrentLocation(false).then((pos) => {
-        if (mapInstance.value) {
-            const coord = fromLonLat([pos.lon, pos.lat]);
-            mapInstance.value.getView().animate({ center: coord, zoom: 18, duration: 800 });
+
+    // 简单 UA 判定移动端（用于选择 GPS vs IP）；用户只需允许一次定位
+    const ua = navigator.userAgent || '';
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+
+    if (isMobile) {
+        // 移动端：请求一次高精度 GPS 定位并将位置写入图层（不循环）
+        if (navigator.geolocation) {
+            getCurrentLocation(true).then(pos => updateUserPosition(pos, true)).catch(() => {});
         }
-    }).catch(() => console.log('Initial location check skipped'));
-
-    // 使用 watchPosition 订阅位置变更（适用于所有支持 geolocation 的设备）
-    if (navigator.geolocation) {
-        try {
-            // 立即尝试一次获取并显示位置（高精度）
-            getCurrentLocation(true).then(pos => updateUserPosition(pos, false)).catch(() => { });
-
-            // 启动 watchPosition，浏览器会按需推送位置更新
-            geolocationWatchId = navigator.geolocation.watchPosition(
-                (p) => {
-                    updateUserPosition({ lon: p.coords.longitude, lat: p.coords.latitude, accuracy: p.coords.accuracy }, false);
-                },
-                (err) => {
-                    console.warn('geolocation watch error', err);
-                },
-                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-            );
-        } catch (e) {
-            console.warn('geolocation watch setup failed', e);
+    } else {
+        // 桌面端：使用 IP 定位（如果 ipInfo 返回了坐标）
+        if (ipInfo && ipInfo.lat && ipInfo.lon && mapInstance.value) {
+            const coord = fromLonLat([ipInfo.lon, ipInfo.lat]);
+            mapInstance.value.getView().animate({ center: coord, zoom: 12, duration: 800 });
         }
     }
 });
@@ -197,32 +180,29 @@ onMounted(async () => {
 async function detectIPLocale() {
     try {
         const res = await fetch('https://ipapi.co/json/');
-        if (!res.ok) return;
+        if (!res.ok) return { isDomestic: false };
         const data = await res.json();
         // ipapi 返回 country / country_code 或 country_name
         const cc = data.country || data.country_code || data.country_name;
-        if (typeof cc === 'string') {
-            // 有时候返回 'CN' 或 'China'
-            isDomestic.value = cc.toString().toUpperCase().includes('CN') || cc.toString().toLowerCase().includes('china');
+        const isDom = typeof cc === 'string' && (cc.toString().toUpperCase().includes('CN') || cc.toString().toLowerCase().includes('china'));
+        isDomestic.value = isDom;
+
+        // 如果服务返回经纬度，则一并返回，供桌面端粗定位使用
+        const lat = data.latitude ?? data.lat ?? data.latitude;
+        const lon = data.longitude ?? data.lon ?? data.longitude;
+        if (lat != null && lon != null) {
+            return { isDomestic: isDom, lat: parseFloat(lat), lon: parseFloat(lon) };
         }
+        return { isDomestic: isDom };
     } catch (e) {
-        // 失败则默认按国外处理（更稳妥），并记录控制台
         console.warn('IP locale detect failed', e);
         isDomestic.value = false;
+        return { isDomestic: false };
     }
 }
 
 onUnmounted(() => {
-    if (geolocationWatchId) navigator.geolocation.clearWatch(geolocationWatchId);
     if (mapInstance.value) mapInstance.value.setTarget(null);
-    if (ipDetectTimer) {
-        clearInterval(ipDetectTimer);
-        ipDetectTimer = null;
-    }
-    if (mobileGeoTimer) {
-        clearInterval(mobileGeoTimer);
-        mobileGeoTimer = null;
-    }
 });
 
 // --- 1. 地图核心逻辑 ---
