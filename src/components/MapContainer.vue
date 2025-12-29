@@ -1,32 +1,22 @@
 <template>
     <div class="map-container" ref="mapContainerRef">
         <div id="map" ref="mapRef"></div>
-        
-        <!-- 图片集覆盖层 -->
-        <div 
-            class="imageset" 
-            v-show="showImageSet"
-            :style="{ left: imageSetPosition.x + 'px', top: imageSetPosition.y + 'px' }"
-        >
-            <img 
-                v-for="(img, index) in images" 
-                :key="index"
-                :src="img"
-                class="thumbnail"
-                @click.stop="showLargeImage(img, $event)"
-            />
+
+        <!-- 图片集覆盖层 (特定区域显示) -->
+        <transition name="fade">
+            <div class="imageset" v-show="showImageSet"
+                :style="{ left: imageSetPosition.x + 'px', top: imageSetPosition.y + 'px' }">
+                <img v-for="(img, index) in images" :key="index" :src="img" class="thumbnail"
+                    @click.stop="showLargeImage(img)" />
+            </div>
+        </transition>
+
+        <!-- 大图覆盖层 (改为全屏遮罩模式，体验更好) -->
+        <div v-if="showLargeImg" class="lightbox" @click="closeLargeImage">
+            <img :src="largeImageSrc" class="large-image" @click.stop />
+            <button class="close-btn" @click="closeLargeImage">×</button>
         </div>
 
-        <!-- 大图覆盖层 -->
-        <img 
-            v-if="largeImageSrc"
-            v-show="showLargeImg"
-            :src="largeImageSrc" 
-            class="large-image"
-            :style="{ left: largeImagePosition.x + 'px', top: largeImagePosition.y + 'px' }"
-            alt="Large Image"
-        >
-        
         <!-- 图层切换器 -->
         <div class="layer-switcher">
             <select v-model="selectedLayer" class="layer-select">
@@ -41,13 +31,14 @@
             </select>
         </div>
 
-        <!-- 鼠标位置与主页按钮组 -->
+        <!-- 底部控制栏 -->
         <div class="map-controls-group">
             <div ref="mousePositionRef" class="mouse-position-content"></div>
             <div class="divider"></div>
-            <button class="home-btn" @click="resetView" @dblclick="zoomToUser" title="单击复位 / 双击定位">
+            <!-- 核心修改：移除 @dblclick，统一用 @click 处理 -->
+            <button class="home-btn" @click="handleHomeInteract" title="单击复位 / 双击定位">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
                 </svg>
             </button>
         </div>
@@ -55,755 +46,448 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, shallowRef, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+
+// OpenLayers 核心库
 import Map from 'ol/Map';
 import View from 'ol/View';
+import Feature from 'ol/Feature';
+import Overlay from 'ol/Overlay';
+import { fromLonLat, toLonLat } from 'ol/proj';
+import { defaults as defaultControls, ScaleLine, MousePosition } from 'ol/control';
+import { createStringXY } from 'ol/coordinate';
+import { unByKey } from 'ol/Observable';
+import { getArea, getLength } from 'ol/sphere';
+
+// 图层与数据源
 import TileLayer from 'ol/layer/Tile';
+import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';
-import { fromLonLat, toLonLat } from 'ol/proj';
-import MousePosition from 'ol/control/MousePosition';
-import { createStringXY } from 'ol/coordinate';
-import ScaleLine from 'ol/control/ScaleLine';
-import { defaults as defaultControls } from 'ol/control';
-import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import Feature from 'ol/Feature';
-import Point from 'ol/geom/Point';
-import CircleGeom from 'ol/geom/Circle';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
-import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
-import { Draw, Modify, Snap } from 'ol/interaction';
-import { getArea, getLength } from 'ol/sphere';
-import Overlay from 'ol/Overlay';
-import { unByKey } from 'ol/Observable';
+
+// 几何与交互
+import Point from 'ol/geom/Point';
+import CircleGeom from 'ol/geom/Circle';
 import { LineString, Polygon } from 'ol/geom';
+import { Draw, Snap } from 'ol/interaction';
+import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 
-const emit = defineEmits(['location-change', 'update-news-image', 'feature-selected']);
+// --- 配置常量 ---
+const BASE_URL = import.meta.env.BASE_URL || '/';
+const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
+const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
+const CHINA_CENTER = [104.1954, 35.8617];
 
+const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
+const IMAGES = [
+    '地理与环境学院标志牌.jpg', '地理与环境学院入口.jpg', '地学楼.jpg',
+    '教育部重点实验室.jpg', '四楼逃生图.jpg', '学院楼单侧.jpg'
+].map(img => `${NORM_BASE}images/${img}`);
+
+// --- Refs ---
 const mapRef = ref(null);
-const mousePositionRef = ref(null);
 const mapContainerRef = ref(null);
-const mapInstance = shallowRef(null);
-
-// 交互状态
-let draw; // global so we can remove it later
-let snap;
-let measureTooltipElement;
-let measureTooltip;
-let helpTooltipElement;
-let helpTooltip;
-let sketch;
-let listener;
-const source = new VectorSource(); // 绘制与测量的矢量源
-const vector = new VectorLayer({
-    source: source,
-    style: new Style({
-        fill: new Fill({
-            color: 'rgba(255, 255, 255, 0.2)',
-        }),
-        stroke: new Stroke({
-            color: '#ffcc33',
-            width: 2,
-        }),
-        image: new CircleStyle({
-            radius: 7,
-            fill: new Fill({
-                color: '#ffcc33',
-            }),
-        }),
-    }),
-    zIndex: 999
-});
-
-// 用户位置图层（标记 + 精度圈）
-const userLocationSource = new VectorSource();
-const userPointStyle = new Style({
-    image: new CircleStyle({
-        radius: 8,
-        fill: new Fill({ color: '#1E90FF' }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 })
-    })
-});
-const accuracyStyle = new Style({
-    fill: new Fill({ color: 'rgba(30,144,255,0.12)' }),
-    stroke: new Stroke({ color: 'rgba(30,144,255,0.3)', width: 1 })
-});
-const userLocationLayer = new VectorLayer({
-    source: userLocationSource,
-    style: function (feature) {
-        return feature.get('type') === 'accuracy' ? accuracyStyle : userPointStyle;
-    },
-    zIndex: 1000
-});
-
-// 保存最后已知用户位置（地图坐标与经纬度）
-const lastUserCoord = ref(null);
-const lastUserLonLat = ref(null);
+const mousePositionRef = ref(null);
+const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
 const selectedLayer = ref('google');
 const showImageSet = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
-const largeImagePosition = ref({ x: 0, y: 0 });
-const currentMousePosition = ref({ x: 0, y: 0 });
-const isInTargetArea = ref(false);
+const images = ref(IMAGES);
 
-const initialCenter = [114.302, 34.8146];
-const initialZoom = 17;
+// --- 全局变量 (非响应式) ---
+let drawInteraction, snapInteraction;
+let measureTooltipEl, measureTooltipOverlay;
+let helpTooltipEl, helpTooltipOverlay;
+let sketchFeature;
+let geolocationWatchId = null;
+let homeClickTimer = null; // 用于处理单击双击冲突
 
-// 底图源定义
-const baseUrl = import.meta.env.BASE_URL || '/';
-const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+// 图层引用
+let baseLayer, labelLayer;
+const drawSource = new VectorSource();
+const userLocationSource = new VectorSource();
 
-const images = [
-    `${normalizedBase}images/地理与环境学院标志牌.jpg`,
-    `${normalizedBase}images/地理与环境学院入口.jpg`,
-    `${normalizedBase}images/地学楼.jpg`,
-    `${normalizedBase}images/教育部重点实验室.jpg`,
-    `${normalizedBase}images/四楼逃生图.jpg`,
-    `${normalizedBase}images/学院楼单侧.jpg`,
-];
+const emit = defineEmits(['location-change', 'update-news-image', 'feature-selected']);
 
-const sources = {
-    local: new XYZ({
-        url: `${normalizedBase}tiles/{z}/{x}/{y}.png`,
-        crossOrigin: 'anonymous'
+// --- 样式定义 ---
+const styles = {
+    draw: new Style({
+        fill: new Fill({ color: 'rgba(255, 255, 255, 0.2)' }),
+        stroke: new Stroke({ color: '#ffcc33', width: 2 }),
+        image: new CircleStyle({ radius: 7, fill: new Fill({ color: '#ffcc33' }) }),
     }),
-    osm: new OSM(),
-    amap: new XYZ({ url: 'https://webrd0{1-4}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', maxZoom: 20 }),
-    // 这个图源按年收费，一年500，已经过期了，暂时切换gggis的图源。
-    // google: new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }),
-    google: new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }),
-    esri: new XYZ({ url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 20 }),
-    tengxun: new XYZ({ url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0', maxZoom: 20 }),
-    tianDiTu: new XYZ({ url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb', maxZoom: 20 }),
-    tianDiTu_vec: new XYZ({ url: 'https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb', maxZoom: 20 }),
-    label_tianditu: new XYZ({ url: 'https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb', maxZoom: 20 }),
+    userPoint: new Style({
+        image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#1E90FF' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
+    }),
+    userAccuracy: new Style({
+        fill: new Fill({ color: 'rgba(30,144,255,0.12)' }),
+        stroke: new Stroke({ color: 'rgba(30,144,255,0.3)', width: 1 })
+    })
 };
 
-let baseLayer;
-let labelLayer;
-
+// --- 初始化 ---
 onMounted(() => {
     initMap();
-    
-    // 鼠标移动监听用于弹窗定位
-    if (mapContainerRef.value) {
-        mapContainerRef.value.addEventListener('mousemove', (e) => {
-            currentMousePosition.value = { x: e.clientX, y: e.clientY };
-        });
-        
-        mapContainerRef.value.addEventListener('click', () => {
-            showLargeImg.value = false;
-            showImageSet.value = false;
-        });
-    }
+    // 初始尝试定位并将默认视图设置为用户位置（若允许）
+    getCurrentLocation(false).then((pos) => {
+        if (mapInstance.value) {
+            const coord = fromLonLat([pos.lon, pos.lat]);
+            mapInstance.value.getView().animate({ center: coord, zoom: 18, duration: 800 });
+        }
+    }).catch(() => console.log('Initial location check skipped'));
 });
-
-function initMap() {
-    baseLayer = new TileLayer({
-        source: sources['google']
-    });
-    
-    labelLayer = new TileLayer({
-        source: null,
-        zIndex: 1,
-        visible: false
-    });
-
-    const mousePositionControl = new MousePosition({
-        coordinateFormat: createStringXY(4),
-        projection: 'EPSG:4326',
-        target: mousePositionRef.value,
-        undefinedHTML: '&nbsp;'
-    });
-
-    const scaleLineControl = new ScaleLine({
-        units: 'metric',
-        bar: true,
-        steps: 4,
-        minWidth: 140
-    });
-
-    mapInstance.value = new Map({
-        target: mapRef.value,
-        layers: [baseLayer, labelLayer, vector, userLocationLayer],
-        view: new View({
-            center: fromLonLat(initialCenter),
-            zoom: initialZoom
-        }),
-        controls: defaultControls().extend([
-            mousePositionControl,
-            scaleLineControl
-        ])
-    });
-
-    // 地图事件
-    mapInstance.value.getView().on('change:resolution', checkZoomLevel);
-    
-    mapInstance.value.on('pointermove', (evt) => {
-        if (evt.dragging) {
-            return;
-        }
-        
-        // 帮助提示逻辑
-        if (helpTooltipElement) {
-            let helpMsg = 'Click to start drawing';
-            if (sketch) {
-                const geom = sketch.getGeometry();
-                if (geom instanceof Polygon) {
-                    helpMsg = 'Click to continue polygon, double click to finish';
-                } else if (geom instanceof LineString) {
-                    helpMsg = 'Click to continue line, double click to finish';
-                }
-            }
-            helpTooltipElement.innerHTML = helpMsg;
-            helpTooltip.setPosition(evt.coordinate);
-            helpTooltipElement.classList.remove('hidden');
-        }
-
-        const coordinate = evt.coordinate;
-        const lonLat = toLonLat(coordinate);
-        
-        const dihuanBounds = {
-            minLon: 114.3020,
-            maxLon: 114.3030,
-            minLat: 34.8149,
-            maxLat: 34.8154,
-        };
-        
-        const isInDihuan = 
-            lonLat[0] >= dihuanBounds.minLon && 
-            lonLat[0] <= dihuanBounds.maxLon &&
-            lonLat[1] >= dihuanBounds.minLat && 
-            lonLat[1] <= dihuanBounds.maxLat;
-        
-        isInTargetArea.value = isInDihuan;
-        checkZoomLevel();
-
-        emit('location-change', { 
-            isInDihuan,
-            lonLat
-        });
-    });
-
-    mapInstance.value.getViewport().addEventListener('mouseout', function () {
-        if (helpTooltipElement) {
-            helpTooltipElement.classList.add('hidden');
-        }
-    });
-
-    // 属性查询单击监听器
-    mapInstance.value.on('singleclick', (evt) => {
-        // 仅当未处于绘制模式时
-        if (draw && draw.getActive()) return;
-
-        const feature = mapInstance.value.forEachFeatureAtPixel(evt.pixel, (feature) => feature);
-        if (feature) {
-            const properties = feature.getProperties();
-            // 过滤掉 geometry 和 style 属性
-            const displayProps = {};
-            for (const key in properties) {
-                if (key !== 'geometry' && key !== 'style') {
-                    displayProps[key] = properties[key];
-                }
-            }
-            
-            // 目前简单触发事件或弹窗
-            // alert(JSON.stringify(displayProps, null, 2));
-            emit('feature-selected', displayProps);
-        }
-    });
-    
-    checkZoomLevel();
-
-
-// 地理定位辅助函数
-let geolocationWatchId = null;
-
-function clearUserLocation() {
-    if (!userLocationSource) return;
-    userLocationSource.clear(true);
-}
-
-function updateUserLocation(lon, lat, accuracy) {
-    if (!mapInstance.value) return;
-    const coord = fromLonLat([lon, lat]);
-
-    // 清除之前的位置要素
-    clearUserLocation();
-
-    // 精度圈（地图单位，EPSG:3857，单位为米）
-    const accuracyFeature = new Feature({
-        geometry: new CircleGeom(coord, accuracy || 0),
-        type: 'accuracy'
-    });
-
-    const pointFeature = new Feature({
-        geometry: new Point(coord),
-        type: 'position'
-    });
-
-    userLocationSource.addFeature(accuracyFeature);
-    userLocationSource.addFeature(pointFeature);
-
-    // 存储最后已知位置
-    lastUserCoord.value = coord;
-    lastUserLonLat.value = [lon, lat];
-
-    // 平滑居中视图
-    try {
-        mapInstance.value.getView().animate({ center: coord, duration: 800 });
-    } catch (e) {
-        console.warn('Failed to animate view to user location', e);
-    }
-
-    emit('location-change', { lonLat: [lon, lat], accuracy });
-}
-
-function locateOnce() {
-    return new Promise((resolve, reject) => {
-        if (!navigator || !navigator.geolocation) return reject(new Error('Geolocation not available'));
-        navigator.geolocation.getCurrentPosition((pos) => {
-            const lon = pos.coords.longitude;
-            const lat = pos.coords.latitude;
-            const accuracy = pos.coords.accuracy;
-            updateUserLocation(lon, lat, accuracy);
-            resolve({ lon, lat, accuracy });
-        }, (err) => {
-            console.warn('Geolocation error:', err.message);
-            reject(err);
-        }, { enableHighAccuracy: true, timeout: 10000 });
-    });
-}
-
-function startWatchPosition() {
-    if (!navigator || !navigator.geolocation) return;
-    if (geolocationWatchId !== null) return;
-    geolocationWatchId = navigator.geolocation.watchPosition((pos) => {
-        updateUserLocation(pos.coords.longitude, pos.coords.latitude, pos.coords.accuracy);
-    }, (err) => {
-        console.warn('Geolocation watch error:', err.message);
-    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
-}
-
-// 将视图缩放到用户最后已知位置（若未知则请求定位）
-async function zoomToUser() {
-    try {
-        if (!mapInstance.value) return;
-        // 如果存在单击定时器，清除它以避免双击后执行 resetView
-        if (homeClickTimer) {
-            clearTimeout(homeClickTimer);
-            homeClickTimer = null;
-        }
-        if (!lastUserCoord.value) {
-            // Request a one-shot location and then zoom
-            const res = await locateOnce();
-            const coord = fromLonLat([res.lon, res.lat]);
-            mapInstance.value.getView().animate({ center: coord, zoom: Math.max(mapInstance.value.getView().getZoom(), 17), duration: 800 });
-            return;
-        }
-
-        const targetZoom = Math.max(mapInstance.value.getView().getZoom(), 17);
-        mapInstance.value.getView().animate({ center: lastUserCoord.value, zoom: targetZoom, duration: 800 });
-    } catch (e) {
-        console.warn('zoomToUser failed', e);
-    }
-}
-
-// 处理双击：主动请求当前位置并居中地图
-function doubleClickLocate() {
-    // prevent single-click reset from firing
-    if (homeClickTimer) {
-        clearTimeout(homeClickTimer);
-        homeClickTimer = null;
-    }
-
-    // Actively request a fresh position and center when received
-    locateOnce().catch((err) => {
-        console.warn('doubleClickLocate: locateOnce failed', err);
-    });
-}
-
-function stopWatchPosition() {
-    if (geolocationWatchId !== null && navigator && navigator.geolocation) {
-        navigator.geolocation.clearWatch(geolocationWatchId);
-        geolocationWatchId = null;
-    }
-}
 
 onUnmounted(() => {
-    stopWatchPosition();
+    if (geolocationWatchId) navigator.geolocation.clearWatch(geolocationWatchId);
+    if (mapInstance.value) mapInstance.value.setTarget(null);
 });
-    // 地图就绪后请求并显示一次用户位置
-    if (navigator && navigator.geolocation) {
-        locateOnce();
-        // Optionally start watching position updates
-        // startWatchPosition();
-    } else {
-        console.warn('Geolocation API not available in this browser');
-    }
+
+// --- 1. 地图核心逻辑 ---
+function initMap() {
+    // 1.1 源定义
+    const sources = {
+        local: new XYZ({ url: `${NORM_BASE}tiles/{z}/{x}/{y}.png` }),
+        osm: new OSM(),
+        amap: new XYZ({ url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}' }),
+        google: new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }),
+        esri: new XYZ({ url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 20 }),
+        tengxun: new XYZ({ url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0' }),
+        tianDiTu: new XYZ({ url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
+        tianDiTu_vec: new XYZ({ url: 'https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
+        label: new XYZ({ url: 'https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
+    };
+
+    // 1.2 图层初始化
+    baseLayer = new TileLayer({ source: sources['google'] });
+    labelLayer = new TileLayer({ source: null, visible: false, zIndex: 1 });
+    const drawLayer = new VectorLayer({ source: drawSource, style: styles.draw, zIndex: 999 });
+    const userLayer = new VectorLayer({
+        source: userLocationSource,
+        zIndex: 1000,
+        style: (feature) => feature.get('type') === 'accuracy' ? styles.userAccuracy : styles.userPoint
+    });
+
+    // 1.3 控件
+    const controls = defaultControls({ zoom: false }).extend([
+        new ScaleLine({ units: 'metric', bar: true, minWidth: 100 }),
+        new MousePosition({
+            coordinateFormat: createStringXY(4),
+            projection: 'EPSG:4326',
+            target: mousePositionRef.value,
+            undefinedHTML: '&nbsp;'
+        })
+    ]);
+
+    // 1.4 实例化地图
+    mapInstance.value = new Map({
+        target: mapRef.value,
+        layers: [baseLayer, labelLayer, drawLayer, userLayer],
+        view: new View({
+            center: fromLonLat(INITIAL_VIEW.center),
+            zoom: INITIAL_VIEW.zoom,
+            maxZoom: 22
+        }),
+        controls
+    });
+
+    // 1.5 事件监听
+    bindEvents();
+
+    // 1.6 监听底图切换
+    watch(selectedLayer, (val) => {
+        const needsLabel = ['tianDiTu_vec', 'tianDiTu', 'google', 'esri'].includes(val);
+        labelLayer.setVisible(needsLabel);
+        if (needsLabel) labelLayer.setSource(sources.label);
+        baseLayer.setSource(sources[val] || sources.osm);
+    });
 }
 
-let homeClickTimer = null;
+function bindEvents() {
+    const map = mapInstance.value;
 
-function resetView() {
-    if (homeClickTimer) clearTimeout(homeClickTimer);
-    
-    homeClickTimer = setTimeout(() => {
-        if (mapInstance.value) {
-            mapInstance.value.getView().animate({
-                center: fromLonLat(initialCenter),
-                zoom: initialZoom,
-                duration: 1000
-            });
+    // 统一处理鼠标移动：包括业务区域检测和工具提示
+    map.on('pointermove', (evt) => {
+        if (evt.dragging) return;
+
+        const coordinate = evt.coordinate;
+        const pixel = evt.pixel;
+
+        // A. 测量提示逻辑
+        if (helpTooltipEl) {
+            helpTooltipEl.innerHTML = sketchFeature ?
+                (sketchFeature.getGeometry() instanceof Polygon ? '双击结束多边形' : '双击结束测距') :
+                '单击开始绘制';
+            helpTooltipOverlay.setPosition(coordinate);
+            helpTooltipEl.classList.remove('hidden');
         }
-        homeClickTimer = null;
-    }, 300);
+
+        // B. 特定区域图片显示逻辑
+        checkAreaLogic(coordinate, pixel);
+    });
+
+    map.getViewport().addEventListener('mouseout', () => {
+        if (helpTooltipEl) helpTooltipEl.classList.add('hidden');
+    });
+
+    map.on('singleclick', (evt) => {
+        if (drawInteraction && drawInteraction.getActive()) return;
+
+        // 属性查询
+        const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
+        if (feature) {
+            const { geometry, style, ...props } = feature.getProperties();
+            emit('feature-selected', props);
+        }
+    });
+
+    // 缩放监听
+    map.getView().on('change:resolution', () => checkAreaLogic());
 }
 
-function zoomToChina() {
-    if (homeClickTimer) {
-        clearTimeout(homeClickTimer);
-        homeClickTimer = null;
-    }
-
-    if (mapInstance.value) {
-        mapInstance.value.getView().animate({
-            center: fromLonLat([104.1954, 35.8617]),
-            zoom: 4,
-            duration: 1000
-        });
-    }
-}
-
-function checkZoomLevel() {
+// --- 2. 业务逻辑 (区域图片) ---
+function checkAreaLogic(coord, pixel) {
     if (!mapInstance.value) return;
-    const zoom = mapInstance.value.getView().getZoom();
-    
-    if (zoom >= 18 && isInTargetArea.value) {
+    const view = mapInstance.value.getView();
+
+    // 如果没有传入坐标（例如只是缩放触发），获取中心点或鼠标最后位置，这里简化处理
+    if (!coord) return;
+
+    const zoom = view.getZoom();
+    const lonLat = toLonLat(coord);
+    const [lon, lat] = lonLat;
+
+    const isInArea =
+        lon >= DIHUAN_BOUNDS.minLon && lon <= DIHUAN_BOUNDS.maxLon &&
+        lat >= DIHUAN_BOUNDS.minLat && lat <= DIHUAN_BOUNDS.maxLat;
+
+    // 只有在特定区域且层级够大时才显示
+    if (zoom >= 17 && isInArea) {
         showImageSet.value = true;
-        const x = currentMousePosition.value.x || 100;
-        const y = currentMousePosition.value.y || 100;
-        if (mapContainerRef.value) {
-            const rect = mapContainerRef.value.getBoundingClientRect();
-            imageSetPosition.value = {
-                x: x - rect.left,
-                y: y - rect.top
-            };
+        // 使用 OpenLayers 的像素位置，比 clientX 更准，且相对于地图容器
+        if (pixel) {
+            imageSetPosition.value = { x: pixel[0] + 15, y: pixel[1] + 15 };
         }
     } else {
         showImageSet.value = false;
-        showLargeImg.value = false;
+        if (!showLargeImg.value) showImageSet.value = false;
     }
+
+    emit('location-change', { isInDihuan: isInArea, lonLat });
 }
 
-function showLargeImage(src, event) {
+function showLargeImage(src) {
     largeImageSrc.value = src;
     showLargeImg.value = true;
-    
-    // Position near the click
-    // Again, convert to relative
-    if (mapContainerRef.value) {
-        const rect = mapContainerRef.value.getBoundingClientRect();
-        largeImagePosition.value = {
-            x: event.clientX - rect.left + 20, // Offset a bit
-            y: event.clientY - rect.top + 20
-        };
-    }
-    
     emit('update-news-image', src);
 }
 
-function addUserDataLayer(fileData) {
-    if (!mapInstance.value) return;
+function closeLargeImage() {
+    showLargeImg.value = false;
+    largeImageSrc.value = '';
+}
 
-    const { content, type, name } = fileData;
-    let format;
+// --- 3. 关键修复：复位与定位逻辑 ---
 
+/**
+ * 统一处理按钮点击交互
+ * 逻辑：单击启动300ms定时器，如果期间再次点击，则取消定时器并执行双击逻辑(定位)
+ * 否则执行单击逻辑(复位)
+ */
+function handleHomeInteract() {
+    if (homeClickTimer) {
+        // --- 双击逻辑 (Double Click) ---
+        clearTimeout(homeClickTimer);
+        homeClickTimer = null;
+        zoomToUser();
+    } else {
+        // --- 单击逻辑 (Single Click) ---
+        homeClickTimer = setTimeout(() => {
+            resetView();
+            homeClickTimer = null;
+        }, 300);
+    }
+}
+
+function resetView() {
+    mapInstance.value?.getView().animate({
+        center: fromLonLat(INITIAL_VIEW.center),
+        zoom: INITIAL_VIEW.zoom,
+        duration: 800
+    });
+}
+
+// Promise 化获取当前位置
+function getCurrentLocation(enableHighAccuracy = true) {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+
+        navigator.geolocation.getCurrentPosition(
+            (pos) => resolve({
+                lon: pos.coords.longitude,
+                lat: pos.coords.latitude,
+                accuracy: pos.coords.accuracy
+            }),
+            (err) => reject(err),
+            { enableHighAccuracy, timeout: 5000 }
+        );
+    });
+}
+
+async function zoomToUser() {
     try {
-        if (type === 'geojson' || type === 'json') {
-            format = new GeoJSON();
-        } else if (type === 'kml') {
-            format = new KML({ extractStyles: true });
-        } else {
-            console.warn('Unsupported file type:', type);
-            alert('不支持的文件格式: ' + type);
-            return;
-        }
+        const pos = await getCurrentLocation();
+        const coord = fromLonLat([pos.lon, pos.lat]);
 
-        // 先不做投影读取要素以检查原始坐标
-        let features = format.readFeatures(content);
-        
-        if (features.length === 0) {
-            alert('文件中没有找到有效的地理要素');
-            return;
-        }
+        // 更新用户位置图层
+        userLocationSource.clear();
+        userLocationSource.addFeature(new Feature({
+            geometry: new CircleGeom(coord, pos.accuracy),
+            type: 'accuracy'
+        }));
+        userLocationSource.addFeature(new Feature({
+            geometry: new Point(coord),
+            type: 'position'
+        }));
 
-        // 检查要素是否需要投影转换
-        // 如果第一个要素的坐标在典型经纬度范围内 (-180 到 180)，
-        // 且地图使用 Web Mercator (EPSG:3857)，则需要转换
-        // If they are large numbers, they might already be in 3857.
-        
-        const extent = features[0].getGeometry().getExtent();
-        const isLatLon = extent[0] >= -180 && extent[0] <= 180 && extent[1] >= -90 && extent[1] <= 90;
-        
-        if (isLatLon) {
-            // Re-read with featureProjection to transform automatically
-            features = format.readFeatures(content, {
-                dataProjection: 'EPSG:4326',
-                featureProjection: 'EPSG:3857'
-            });
-        } else {
-            // Assume they are already in the target projection (likely 3857) or unknown
-            // If they are 3857, we don't need to do anything as the view is 3857.
-            // If they are something else, we can't help much without proj4.
-            console.log('Features appear to be already projected or outside lat/lon range.');
-        }
-
-        const vectorSource = new VectorSource({
-            features: features
-        });
-
-        // 随机颜色用于区分多个上传图层
-        const color = '#' + Math.floor(Math.random()*16777215).toString(16);
-
-        const vectorLayer = new VectorLayer({
-            source: vectorSource,
-            zIndex: 100, // Ensure it's on top
-            style: function(feature) {
-                // Use feature style if available (e.g. from KML), otherwise use default
-                // Note: KML styles are automatically handled if extractStyles is true, 
-                // but we can provide a fallback or override if needed.
-                // For simplicity, we'll use a default style for GeoJSON or unstyled features.
-                return new Style({
-                    fill: new Fill({
-                        color: 'rgba(255, 255, 255, 0.2)'
-                    }),
-                    stroke: new Stroke({
-                        color: color,
-                        width: 2
-                    }),
-                    image: new CircleStyle({
-                        radius: 5,
-                        fill: new Fill({
-                            color: color
-                        })
-                    })
-                });
-            },
-            properties: {
-                name: name
-            }
-        });
-
-        mapInstance.value.addLayer(vectorLayer);
-
-        // 缩放到要素范围
-        const sourceExtent = vectorSource.getExtent();
-        if (sourceExtent && !vectorSource.isEmpty()) {
-            mapInstance.value.getView().fit(sourceExtent, {
-                padding: [50, 50, 50, 50],
+        // 缩放跳转
+        if (mapInstance.value) {
+            mapInstance.value.getView().animate({
+                center: coord,
+                zoom: 18,
                 duration: 1000
             });
         }
-    } catch (error) {
-        console.error('Error adding user data layer:', error);
-        alert('解析文件时出错: ' + error.message);
+    } catch (err) {
+        console.warn('定位失败:', err.message);
+        alert('无法获取您的位置，请确保允许定位权限。');
     }
 }
 
-defineExpose({
-    addUserDataLayer,
-    activateInteraction,
-    clearInteractions
-});
+// --- 4. 外部接口 (文件导入/绘图) ---
 
-// --- 交互逻辑 ---
+function addUserDataLayer({ content, type, name }) {
+    if (!mapInstance.value) return;
+    try {
+        const format = type === 'kml' ? new KML({ extractStyles: true }) : new GeoJSON();
+        // 自动转换坐标系 EPSG:4326 -> EPSG:3857
+        const features = format.readFeatures(content, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
 
-function clearInteractions() {
-    if (mapInstance.value) {
-        mapInstance.value.removeInteraction(draw);
-        mapInstance.value.removeInteraction(snap);
-        
-        // Remove tooltips
-        if (helpTooltipElement) {
-            if (helpTooltipElement.parentNode) helpTooltipElement.parentNode.removeChild(helpTooltipElement);
-            helpTooltipElement = null;
-        }
-        if (measureTooltipElement) {
-            // Don't remove finished measure tooltips, only the current one if incomplete?
-            // Actually, let's keep finished ones.
-            if (sketch) {
-                 if (measureTooltipElement.parentNode) measureTooltipElement.parentNode.removeChild(measureTooltipElement);
-            }
-            measureTooltipElement = null;
-        }
-        
-        sketch = null;
-        draw = null;
-        snap = null;
+        if (!features.length) throw new Error('无有效数据');
+
+        const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
+        const layer = new VectorLayer({
+            source: new VectorSource({ features }),
+            zIndex: 100,
+            style: new Style({
+                stroke: new Stroke({ color: randomColor, width: 2 }),
+                fill: new Fill({ color: 'rgba(255,255,255,0.2)' }),
+                image: new CircleStyle({ radius: 5, fill: new Fill({ color: randomColor }) })
+            }),
+            properties: { name }
+        });
+
+        mapInstance.value.addLayer(layer);
+        mapInstance.value.getView().fit(layer.getSource().getExtent(), { padding: [50, 50, 50, 50], duration: 1000 });
+    } catch (e) {
+        alert('文件解析失败: ' + e.message);
     }
 }
 
+// --- 交互工具 (Draw/Measure) ---
 function activateInteraction(type) {
     clearInteractions();
     if (!mapInstance.value) return;
-
     if (type === 'Clear') {
-        source.clear();
-        // 也移除所有覆盖物（提示框）
+        drawSource.clear();
         mapInstance.value.getOverlays().clear();
         return;
     }
 
-    if (type === 'MeasureDistance' || type === 'MeasureArea') {
-        addInteraction(type === 'MeasureArea' ? 'Polygon' : 'LineString', true);
-    } else if (type === 'Point' || type === 'LineString' || type === 'Polygon') {
-        addInteraction(type, false);
-    }
-}
+    const isMeasure = ['MeasureDistance', 'MeasureArea'].includes(type);
+    const drawType = type === 'MeasureDistance' ? 'LineString' : (type === 'MeasureArea' ? 'Polygon' : type);
 
-function addInteraction(type, isMeasure) {
-    draw = new Draw({
-        source: source,
-        type: type,
-        style: new Style({
-            fill: new Fill({
-                color: 'rgba(255, 255, 255, 0.2)',
-            }),
-            stroke: new Stroke({
-                color: 'rgba(0, 0, 0, 0.5)',
-                lineDash: [10, 10],
-                width: 2,
-            }),
-            image: new CircleStyle({
-                radius: 5,
-                stroke: new Stroke({
-                    color: 'rgba(0, 0, 0, 0.7)',
-                }),
-                fill: new Fill({
-                    color: 'rgba(255, 255, 255, 0.2)',
-                }),
-            }),
-        }),
+    drawInteraction = new Draw({
+        source: drawSource,
+        type: drawType,
+        style: styles.draw
     });
-    
-    mapInstance.value.addInteraction(draw);
 
-    snap = new Snap({ source: source });
-    mapInstance.value.addInteraction(snap);
+    mapInstance.value.addInteraction(drawInteraction);
+    snapInteraction = new Snap({ source: drawSource });
+    mapInstance.value.addInteraction(snapInteraction);
 
     if (isMeasure) {
-        createMeasureTooltip();
-        createHelpTooltip();
-
-        draw.on('drawstart', function (evt) {
-            sketch = evt.feature;
-            let tooltipCoord = evt.coordinate;
-
-            // 监听草图几何变化以更新测量提示
-            listener = sketch.getGeometry().on('change', function (evt) {
-                const geom = evt.target;
-                let output;
+        createTooltips();
+        drawInteraction.on('drawstart', (evt) => {
+            sketchFeature = evt.feature;
+            sketchFeature.getGeometry().on('change', (e) => {
+                const geom = e.target;
+                let output, tooltipCoord;
                 if (geom instanceof Polygon) {
                     output = formatArea(geom);
                     tooltipCoord = geom.getInteriorPoint().getCoordinates();
-                } else if (geom instanceof LineString) {
+                } else {
                     output = formatLength(geom);
                     tooltipCoord = geom.getLastCoordinate();
                 }
-                measureTooltipElement.innerHTML = output;
-                measureTooltip.setPosition(tooltipCoord);
+                measureTooltipEl.innerHTML = output;
+                measureTooltipOverlay.setPosition(tooltipCoord);
             });
         });
-
-        draw.on('drawend', function () {
-            measureTooltipElement.className = 'ol-tooltip ol-tooltip-static';
-            measureTooltip.setOffset([0, -7]);
-            sketch = null;
-            measureTooltipElement = null;
-            createMeasureTooltip();
-            unByKey(listener);
+        drawInteraction.on('drawend', () => {
+            measureTooltipEl.className = 'ol-tooltip ol-tooltip-static';
+            measureTooltipOverlay.setOffset([0, -7]);
+            sketchFeature = null;
+            measureTooltipEl = null;
+            createTooltips(); // 为下一次做准备
         });
     }
 }
 
-function createHelpTooltip() {
-    if (helpTooltipElement) {
-        helpTooltipElement.parentNode.removeChild(helpTooltipElement);
-    }
-    helpTooltipElement = document.createElement('div');
-    helpTooltipElement.className = 'ol-tooltip hidden';
-    helpTooltip = new Overlay({
-        element: helpTooltipElement,
-        offset: [15, 0],
-        positioning: 'center-left',
-    });
-    mapInstance.value.addOverlay(helpTooltip);
+function clearInteractions() {
+    if (!mapInstance.value) return;
+    if (drawInteraction) mapInstance.value.removeInteraction(drawInteraction);
+    if (snapInteraction) mapInstance.value.removeInteraction(snapInteraction);
+    if (helpTooltipOverlay) mapInstance.value.removeOverlay(helpTooltipOverlay);
+    drawInteraction = null;
+    snapInteraction = null;
+    helpTooltipEl = null;
 }
 
-function createMeasureTooltip() {
-    if (measureTooltipElement) {
-        measureTooltipElement.parentNode.removeChild(measureTooltipElement);
-    }
-    measureTooltipElement = document.createElement('div');
-    measureTooltipElement.className = 'ol-tooltip ol-tooltip-measure';
-    measureTooltip = new Overlay({
-        element: measureTooltipElement,
-        offset: [0, -15],
-        positioning: 'bottom-center',
-        stopEvent: false,
-        insertFirst: false,
-    });
-    mapInstance.value.addOverlay(measureTooltip);
+function createTooltips() {
+    if (measureTooltipEl) measureTooltipEl.remove();
+    if (helpTooltipEl) helpTooltipEl.remove();
+
+    helpTooltipEl = document.createElement('div');
+    helpTooltipEl.className = 'ol-tooltip hidden';
+    helpTooltipOverlay = new Overlay({ element: helpTooltipEl, offset: [15, 0], positioning: 'center-left' });
+    mapInstance.value.addOverlay(helpTooltipOverlay);
+
+    measureTooltipEl = document.createElement('div');
+    measureTooltipEl.className = 'ol-tooltip ol-tooltip-measure';
+    measureTooltipOverlay = new Overlay({ element: measureTooltipEl, offset: [0, -15], positioning: 'bottom-center', stopEvent: false });
+    mapInstance.value.addOverlay(measureTooltipOverlay);
 }
 
-const formatLength = function (line) {
-    const length = getLength(line);
-    let output;
-    if (length > 100) {
-        output = Math.round((length / 1000) * 100) / 100 + ' ' + 'km';
-    } else {
-        output = Math.round(length * 100) / 100 + ' ' + 'm';
-    }
-    return output;
+const formatLength = (line) => {
+    const len = getLength(line);
+    return len > 100 ? `${(len / 1000).toFixed(2)} km` : `${len.toFixed(2)} m`;
+};
+const formatArea = (poly) => {
+    const area = getArea(poly);
+    return area > 10000 ? `${(area / 1000000).toFixed(2)} km²` : `${area.toFixed(2)} m²`;
 };
 
-const formatArea = function (polygon) {
-    const area = getArea(polygon);
-    let output;
-    if (area > 10000) {
-        output = Math.round((area / 1000000) * 100) / 100 + ' ' + 'km<sup>2</sup>';
-    } else {
-        output = Math.round(area * 100) / 100 + ' ' + 'm<sup>2</sup>';
-    }
-    return output;
-};
-
-watch(selectedLayer, (newVal) => {
-    if (!baseLayer || !labelLayer) return;
-    
-    labelLayer.setVisible(false);
-    labelLayer.setSource(null);
-    
-    switch(newVal) {
-        case 'tianDiTu_vec':
-        case 'tianDiTu':
-        case 'google':
-        case 'esri':
-            baseLayer.setSource(sources[newVal]);
-            labelLayer.setSource(sources['label_tianditu']);
-            labelLayer.setVisible(true);
-            break;
-        default:
-            baseLayer.setSource(sources[newVal]);
-            break;
-    }
-});
+defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
 </script>
 
 <style scoped>
@@ -812,6 +496,7 @@ watch(selectedLayer, (newVal) => {
     height: 100%;
     position: relative;
     overflow: hidden;
+    background: #f0f2f5;
 }
 
 #map {
@@ -819,106 +504,153 @@ watch(selectedLayer, (newVal) => {
     height: 100%;
 }
 
+/* 图片集弹窗 */
 .imageset {
     position: absolute;
-    background-color: white;
-    border: 1px solid #ccc;
-    padding: 5px;
-    width: 320px; /* Slightly wider to fit */
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #ddd;
+    padding: 6px;
+    width: 310px;
     z-index: 1000;
     display: flex;
     flex-wrap: wrap;
-    gap: 5px;
-    border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    gap: 6px;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    pointer-events: auto;
+    /* 允许点击 */
 }
 
 .thumbnail {
-    width: 100px;
-    height: 70px;
+    width: 96px;
+    height: 64px;
     object-fit: cover;
-    cursor: pointer;
-    border-radius: 2px;
-    transition: transform 0.2s;
+    cursor: zoom-in;
+    border-radius: 4px;
+    transition: all 0.2s;
 }
 
 .thumbnail:hover {
     transform: scale(1.05);
 }
 
-.large-image {
-    position: absolute;
-    width: 400px; /* Reduced from 600px for better fit */
-    height: auto;
-    max-height: 400px;
-    border: 2px solid white;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    z-index: 1001;
-    object-fit: contain;
-    background: black;
+/* 全屏大图 Lightbox */
+.lightbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
+.large-image {
+    max-width: 90%;
+    max-height: 90%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.close-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 40px;
+    cursor: pointer;
+}
+
+/* 控件样式 */
 .layer-switcher {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    background: white;
-    padding: 5px;
+    top: 15px;
+    right: 15px;
+    background: #309441;
+    padding: 4px;
     border-radius: 4px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     z-index: 10;
 }
 
 .layer-select {
-    padding: 5px;
-    border: 2px solid #2cab54;
-    border-radius: 3px;
-    font-size: 14px;
-    width: 150px;
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
     outline: none;
 }
 
+/* --- 底部控制栏容器 --- */
 .map-controls-group {
     position: absolute;
-    bottom: 20px;
-    right: 10px;
-    background: linear-gradient(to right, rgba(10, 121, 51, 0.9), rgba(8, 96, 41, 0.9));
+    bottom: 25px;
+    right: 15px;
+    background: #3a873e;
+    /* 深绿色半透明背景 */
+    backdrop-filter: blur(4px);
+    /* 毛玻璃效果 */
     color: white;
-    padding: 5px 10px;
-    border-radius: 6px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    padding: 6px 12px;
+    border-radius: 20px;
+    /* 圆角加大，像胶囊 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     z-index: 1000;
-    border: 1px solid rgba(255,255,255,0.2);
+
+    /* 核心布局：Flex 使得内部元素横向排列，垂直居中 */
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
+    /* 元素之间的间距 */
+    white-space: nowrap;
+    /* 防止内容换行 */
 }
 
+/* --- 经纬度文本容器 --- */
 .mouse-position-content {
-    font-size: 14px;
-    font-weight: bold;
-    min-width: 120px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    /* 使用等宽字体，数字不跳动 */
+    font-size: 15px;
+    color: #e0e0e0;
+    /* 关键：不需要固定 min-width，让内容撑开，或者给一个基础宽度 */
+    min-width: 140px;
     text-align: center;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-/* Override OpenLayers default absolute positioning */
+/* --- 强制覆盖 OpenLayers 默认生成的样式 (核心修复) --- */
+/* OpenLayers 默认会给这个类加 position: absolute，必须覆盖掉 */
 :deep(.ol-mouse-position) {
     position: static !important;
+    /* 强制改为静态定位，遵循 Flex 流 */
     top: auto !important;
     right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
     background: transparent !important;
     padding: 0 !important;
+    margin: 0 !important;
+    color: inherit !important;
+    /* 继承父级文字颜色 */
+    font-size: inherit !important;
 }
 
+/* --- 分隔符 --- */
 .divider {
     width: 1px;
-    height: 20px;
+    height: 18px;
     background-color: rgba(255, 255, 255, 0.4);
+    flex-shrink: 0;
+    /* 防止分隔符被挤压没了 */
 }
 
+/* --- Home 按钮 --- */
 .home-btn {
     background: transparent;
     border: none;
@@ -928,52 +660,62 @@ watch(selectedLayer, (newVal) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    border-radius: 50%;
+    /* 圆形按钮体验更好 */
+    transition: background-color 0.2s, transform 0.2s;
+    flex-shrink: 0;
+    /* 防止按钮被挤压 */
 }
 
 .home-btn:hover {
     background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
 }
 
-/* Mobile adjustments */
+.home-btn:active {
+    transform: scale(0.95);
+}
+
+/* --- 移动端适配 --- */
 @media (max-width: 768px) {
-    .large-image {
-        width: 90%;
-        left: 5% !important;
-        top: 50% !important;
-        transform: translateY(-50%);
+    /* .mouse-position-content { */
+        /* display: none; */
+        /* 手机屏幕太小，建议直接隐藏经纬度，只保留按钮 */
+    /* } */
+
+    .divider {
+        display: none;
     }
-    
-    .imageset {
-        width: 90%;
-        left: 5% !important;
-        top: 10% !important;
-    }
-    
+
     .map-controls-group {
-        font-size: 12px;
-        padding: 3px 8px;
-        bottom: 35px; /* Make room for attribution/scale */
-    }
-    
-    .mouse-position-content {
-        min-width: 100px;
+        padding: 8px;
+        /* 缩小内边距 */
+        bottom: 40px;
+        /* 避开可能存在的底部导航或Logo */
     }
 }
 
-/* Tooltip Styles */
+/* 动画 */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+/* OpenLayers Tooltips Override */
 :deep(.ol-tooltip) {
     position: relative;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     border-radius: 4px;
     color: white;
     padding: 4px 8px;
-    opacity: 0.7;
-    white-space: nowrap;
     font-size: 12px;
-    cursor: default;
-    user-select: none;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
 :deep(.ol-tooltip-measure) {
@@ -985,21 +727,5 @@ watch(selectedLayer, (newVal) => {
     background-color: #ffcc33;
     color: black;
     border: 1px solid white;
-}
-
-:deep(.ol-tooltip-measure:before),
-:deep(.ol-tooltip-static:before) {
-    border-top: 6px solid rgba(0, 0, 0, 0.5);
-    border-right: 6px solid transparent;
-    border-left: 6px solid transparent;
-    content: "";
-    position: absolute;
-    bottom: -6px;
-    margin-left: -7px;
-    left: 50%;
-}
-
-:deep(.ol-tooltip-static:before) {
-    border-top-color: #ffcc33;
 }
 </style>
