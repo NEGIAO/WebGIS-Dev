@@ -1,40 +1,60 @@
 <template>
-    <div class="info-container" :class="{ 'collapsed': isCollapsed }">
-        <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开' : '收起'">
+    <div class="info-panel" :class="{ 'collapsed': isCollapsed }">
+        <!-- 折叠开关 -->
+        <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开面板' : '收起面板'">
             <span class="handle-icon">{{ isCollapsed ? '◀' : '▶' }}</span>
         </div>
+
+        <!-- 面板内容区域 -->
         <div class="panel-content" v-show="!isCollapsed">
-            <div class="top">
-            <img :src="`${normalizedBase}images/院徽.png`" class="logo" alt="Logo">
-            <div class="title-container">
-                <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" class="main-title">地科院新闻</a>
+            <!-- 顶部 Logo 栏 -->
+            <div class="panel-header">
+                <img :src="resolvePath('images/院徽.png')" class="logo" alt="河南大学地理科学学院Logo">
+                <div class="title-wrapper">
+                    <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
+                </div>
             </div>
-        </div>
 
-        <div class="header">
-            <a :href="currentNewsHref" target="_blank">{{ currentNewsTitle }}</a>
-        </div>
+            <!-- 新闻标题 -->
+            <div class="news-header">
+                <a :href="displayData.href" :target="displayData.isExternal ? '_blank' : '_self'">
+                    {{ displayData.title }}
+                </a>
+            </div>
 
-        <img :src="currentNewsImage" class="news-image" alt="News Image">
+            <!-- 图片展示区 -->
+            <div class="image-container">
+                <img :src="displayData.image" class="news-image" :alt="displayData.title">
+            </div>
 
-        <div class="text-content" v-html="currentDisplayText"></div>
+            <!-- 文本内容 -->
+            <div class="text-content" v-html="displayData.text"></div>
 
-        <button class="action-button" @click="changeNews">
-            点击，新闻++
-        </button>
+            <!-- 交互按钮 -->
+            <button class="action-button" @click="nextNews" title="切换下一条新闻">
+                点击，新闻++
+            </button>
 
-        <slot name="extra-content"></slot>
+            <!-- 插槽：允许父组件插入额外内容 -->
+            <slot name="extra-content"></slot>
 
-        <div class="footer">
-            <a href="https://cep.henu.edu.cn/zhxw/xyxw.htm" target="_blank">河南大学地理科学学院！</a>
-        </div>
+            <!-- 底部链接 -->
+            <div class="panel-footer">
+                <a :href="LINKS.MAIN_NEWS" target="_blank">河南大学地理科学学院！</a>
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 
+// --- 1. 常量定义 ---
+const LINKS = {
+    MAIN_NEWS: "https://cep.henu.edu.cn/zhxw/xyxw.htm"
+};
+
+// --- 2. Props & Emits ---
 const props = defineProps({
     locationInfo: {
         type: Object,
@@ -52,80 +72,94 @@ const props = defineProps({
 
 const emit = defineEmits(['news-changed', 'toggle-panel']);
 
-const currentNewsIndex = ref(0);
+// --- 3. 工具函数：路径处理 ---
 const baseUrl = import.meta.env.BASE_URL || '/';
-const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-
-const newsData = {
-    titles: [
-        "4.22地球日，地环院开展系列活动",
-        "地理科学与工程学部首届大会召开",
-        "2023级本科生年级大会召开",
-    ],
-    texts: [
-        "春风拂绿野，万物竞芳华。在第56个世界地球日来临之际，4月21日上午，由河南大学相关单位主办，在金明校区马可广场举行。学校相关职能部门领导，地理科学与工程学部委员，地理科学学院全体班子成员和师生代表，河南省环保联合会工作人员，河南大学附属小学（金明校区）部分师生参加活动。开幕式由学院党委副书记徐小军主持......",
-        "2025年2月23日，河南大学地理科学与工程学部首届大会在河南大学金明校区锥形报告厅顺利召开。中国工程院院士、空间基准全国重点实验室学术带头人王家耀等职能部门有关领导，地理科学与工程学部委员，地理科学学院负责人，以及地理科学与工程学部全体教师和部分学生代表参会。开幕式由傅声雷主持......",
-        "为助力我院2023级本科生厘清学术培养路径，系统提升科研素养与安全防范能力，树立科学的学术发展与职业规划意识，5月29日下午，我院于金明校区综合教学楼2306教室召开2023级本科生年级大会。学院2023级全体本科生积极参加，会议由2023级辅导员屈利铭主持......",
-    ],
-    images: [
-        `${normalizedBase}images/地球日活动.jpg`,
-        `${normalizedBase}images/学部大会.png`,
-        `${normalizedBase}images/年级大会.jpg`,
-    ],
-    hrefs: [
-        "https://cep.henu.edu.cn/info/1022/13421.htm",
-        "https://cep.henu.edu.cn/info/1022/12491.htm",
-        "https://cep.henu.edu.cn/info/1022/14001.htm",
-    ]
+const resolvePath = (path) => {
+    const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    return `${base}${path}`;
 };
 
-const defaultText = "请将鼠标移动到地科院区域<br>查看新闻内容<br><br>在左侧地图中放大<br>可以查看地科院的照片！<br><br>下方还有内容哦！<br>请鼠标下滑";
+// --- 4. 数据源 (合并为对象数组) ---
+const NEWS_LIST = [
+    {
+        title: "4.22地球日，地环院开展系列活动",
+        text: "春风拂绿野，万物竞芳华。在第56个世界地球日来临之际，4月21日上午，由河南大学相关单位主办，在金明校区马可广场举行。学校相关职能部门领导，地理科学与工程学部委员，地理科学学院全体班子成员和师生代表...",
+        image: "images/地球日活动.jpg",
+        href: "https://cep.henu.edu.cn/info/1022/13421.htm"
+    },
+    {
+        title: "地理科学与工程学部首届大会召开",
+        text: "2025年2月23日，河南大学地理科学与工程学部首届大会在河南大学金明校区锥形报告厅顺利召开。中国工程院院士、空间基准全国重点实验室学术带头人王家耀等职能部门有关领导...",
+        image: "images/学部大会.png",
+        href: "https://cep.henu.edu.cn/info/1022/12491.htm"
+    },
+    {
+        title: "2023级本科生年级大会召开",
+        text: "为助力我院2023级本科生厘清学术培养路径，系统提升科研素养与安全防范能力，树立科学的学术发展与职业规划意识，5月29日下午，我院于金明校区综合教学楼2306教室召开...",
+        image: "images/年级大会.jpg",
+        href: "https://cep.henu.edu.cn/info/1022/14001.htm"
+    },
+];
 
-const currentNewsTitle = computed(() => {
-    if (props.locationInfo.isInDihuan) {
-        return newsData.titles[currentNewsIndex.value];
+const DEFAULT_STATE = {
+    title: "地科院新闻",
+    text: "请将鼠标移动到地科院区域<br>查看新闻内容<br><br>在左侧地图中放大<br>可以查看地科院的照片！<br><br>下方还有内容哦！<br>请鼠标下滑",
+    image: "images/院徽.png", // 可以在此设置一个默认占位图
+    href: LINKS.MAIN_NEWS,
+    isExternal: true
+};
+
+// --- 5. 状态管理 ---
+const currentNewsIndex = ref(0);
+
+// --- 6. 计算逻辑 ---
+// 核心逻辑：统一决定当前应该显示什么数据
+const displayData = computed(() => {
+    // 如果不在指定区域，显示默认提示
+    if (!props.locationInfo.isInDihuan) {
+        // 这里如果需要默认图片不同，可以修改 DEFAULT_STATE
+        // 逻辑修正：原代码在默认状态下，图片使用的是当前新闻索引的图片，这比较奇怪。
+        // 如果你想保留原逻辑（默认状态也显示新闻图），用下面的写法：
+        return {
+            ...DEFAULT_STATE,
+            image: props.selectedImage || resolvePath(NEWS_LIST[currentNewsIndex.value].image)
+        };
     }
-    return "地科院新闻"; // Default title when not in area
+
+    // 如果在区域内，显示当前新闻
+    const currentItem = NEWS_LIST[currentNewsIndex.value];
+    return {
+        title: currentItem.title,
+        text: currentItem.text,
+        // 优先显示 props 传入的选中图片，否则显示新闻图片
+        image: props.selectedImage || resolvePath(currentItem.image),
+        href: currentItem.href,
+        isExternal: true
+    };
 });
 
-const currentNewsHref = computed(() => {
-    if (props.locationInfo.isInDihuan) {
-        return newsData.hrefs[currentNewsIndex.value];
-    }
-    return "https://cep.henu.edu.cn/zhxw/xyxw.htm";
-});
-
-const currentNewsImage = computed(() => {
-    return props.selectedImage || newsData.images[currentNewsIndex.value];
-});
-
-const currentDisplayText = computed(() => {
-    if (props.locationInfo.isInDihuan) {
-        return newsData.texts[currentNewsIndex.value];
-    } else {
-        return defaultText;
-    }
-});
-
-function changeNews() {
-    currentNewsIndex.value = (currentNewsIndex.value + 1) % newsData.titles.length;
+// --- 7. 事件处理 ---
+function nextNews() {
+    currentNewsIndex.value = (currentNewsIndex.value + 1) % NEWS_LIST.length;
     emit('news-changed', currentNewsIndex.value);
 }
 </script>
 
 <style scoped>
-.info-container {
+/* 布局容器 */
+.info-panel {
     display: flex;
     flex-direction: row;
     height: 100%;
-    padding: 0;
-    box-sizing: border-box;
     background: #fff;
     overflow: hidden;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    transition: width 0.3s ease;
 }
 
+/* 折叠手柄 */
 .toggle-handle {
-    width: 20px;
+    width: 24px;
     height: 60px;
     align-self: center;
     background: #14c259;
@@ -133,155 +167,198 @@ function changeNews() {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border: 1px solid #095d1e;
-    border-right: none;
     border-radius: 12px 0 0 12px;
-    flex-shrink: 0;
-    transition: background-color 0.3s;
+    transition: all 0.2s ease;
+    z-index: 10;
 }
 
 .toggle-handle:hover {
-    background: #e0e0e0;
+    background: #10a049;
+    width: 28px;
 }
 
 .handle-icon {
     font-size: 12px;
-    color: #666;
-    user-select: none;
+    color: #fff;
+    font-weight: bold;
 }
 
+/* 内容区域 */
 .panel-content {
     flex: 1;
     padding: 20px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    min-width: 0;
+    min-width: 300px;
+    /* 防止内容过度挤压 */
 }
 
-.top {
+/* 头部 */
+.panel-header {
     display: flex;
     align-items: center;
     margin-bottom: 15px;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 10px;
 }
 
 .logo {
-    width: 60px;
-    height: 60px;
+    width: 50px;
+    height: 50px;
     object-fit: contain;
     margin-right: 15px;
 }
 
-.title-container {
-    flex: 1;
-}
-
 .main-title {
     font-family: 'Courier New', Courier, monospace;
-    font-size: 24px;
+    font-size: 25px;
     color: #1f5eac;
     text-decoration: none;
-    font-weight: bold;
+    font-weight: 700;
 }
 
-.header {
+/* 新闻标题 */
+.news-header {
     font-size: 18px;
     margin: 10px 0;
     font-weight: bold;
-    min-height: 24px;
+    line-height: 1.4;
+    min-height: 50px;
+    /* 保持高度稳定，防止跳动 */
 }
 
-.header a {
+.news-header a {
     color: #2746ae;
     text-decoration: none;
+    transition: color 0.2s;
 }
 
-.header a:hover {
+.news-header a:hover {
+    color: #1a2f75;
     text-decoration: underline;
+}
+
+/* 图片 */
+.image-container {
+    width: 100%;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 15px;
 }
 
 .news-image {
     width: 100%;
-    height: auto;
-    max-height: 250px;
+    height: 200px;
+    /* 固定高度，优化排版 */
     object-fit: cover;
-    border-radius: 8px;
-    margin: 10px 0;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: block;
+    transition: transform 0.3s;
 }
 
+.news-image:hover {
+    transform: scale(1.02);
+}
+
+/* 文本 */
 .text-content {
     font-size: 14px;
-    color: #333;
+    color: #444;
     line-height: 1.6;
-    margin: 10px 0;
-    flex: 1; /* Allow text to take available space */
+    margin-bottom: 15px;
+    flex-grow: 1;
 }
 
+/* 按钮 */
 .action-button {
     background-color: #4CAF50;
-    border: none;
     color: white;
+    border: none;
     padding: 12px;
-    text-align: center;
-    text-decoration: none;
-    display: block;
-    width: 100%;
     font-size: 16px;
-    margin: 15px 0;
     cursor: pointer;
-    border-radius: 5px;
-    transition: background-color 0.3s;
+    border-radius: 6px;
+    transition: background-color 0.2s, transform 0.1s;
+    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
 }
 
 .action-button:hover {
-    background-color: #45a049;
+    background-color: #43a047;
 }
 
-.footer {
+.action-button:active {
+    transform: translateY(1px);
+}
+
+/* 底部 */
+.panel-footer {
     margin-top: auto;
     text-align: center;
     padding-top: 15px;
     border-top: 1px solid #eee;
     font-size: 12px;
-    color: #999;
 }
 
-.footer a {
+.panel-footer a {
+    color: #999;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.panel-footer a:hover {
     color: #1c8ae4;
 }
 
-/* Mobile adjustments */
+/* 移动端适配 */
 @media (max-width: 768px) {
-    .info-container {
+    .info-panel {
         flex-direction: column;
+        /* 垂直排列 */
+        width: 100% !important;
+        transition: transform 0.3s ease;
+        /* 改为 transform 动画更流畅 */
+        /* 关键修复：移动端允许内容溢出，防止按钮被切掉 */
+        overflow: visible;
+    }
+
+    /* 收起状态下的特殊处理 */
+    .info-panel.collapsed {
+        /* 这里假设你的面板是在底部，收起时往下移，只保留按钮高度 */
+        /* 如果你的面板是根据高度变化的，请保留 height: auto */
+        height: auto;
     }
 
     .toggle-handle {
-        width: 60px;
-        height: 20px;
+        width: 80px;
+        /* 加宽一点，方便手指点击 */
+        height: 30px;
+        /*稍微增高 */
         align-self: center;
-        border: 1px solid #ddd;
-        border-bottom: none;
-        border-radius: 12px 12px 0 0;
+        /* 水平居中 */
+        border-radius: 15px 15px 0 0;
+        /* 上圆角 */
+
+        /* 关键修复：去掉之前的 margin-top: -24px */
+        margin-top: 0;
+        margin-bottom: 0;
+
+        /* 确保按钮在 flex 布局的最上方 */
+        order: -1;
     }
 
     .handle-icon {
+        /* 旋转箭头方向，使其指向合适的方向 */
         transform: rotate(90deg);
+        font-size: 14px;
     }
 
     .panel-content {
+        min-width: unset;
         padding: 15px;
-    }
-
-    .main-title {
-        font-size: 20px;
-    }
-
-    .logo {
-        width: 50px;
-        height: 50px;
-        margin-right: 10px;
+        /* 移动端内容区可以设个最大高度，允许内部滚动 */
+        max-height: 60vh;
+        overflow-y: auto;
     }
 }
 </style>
