@@ -19,6 +19,18 @@
 
         <!-- 图层切换器 -->
         <div class="layer-switcher">
+            <!-- 地名搜索功能     -->
+            <div class="search-box">
+                <input v-model="searchQuery" @keyup.enter="searchPlaces" placeholder="搜索地名，例如：郑州"
+                    class="search-input" />
+                <button class="search-btn" @click="searchPlaces">搜索</button>
+                <ul v-if="searchResults.length" class="search-results">
+                    <li v-for="(r, i) in searchResults" :key="i" @click="selectResult(r)">
+                        {{ r.display_name }}
+                    </li>
+                </ul>
+            </div>
+            <div class="layer-label">选择底图</div>
             <select v-model="selectedLayer" class="layer-select">
                 <option value="local">自定义瓦片</option>
                 <option value="tianDiTu_vec">天地图矢量</option>
@@ -81,6 +93,9 @@ const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
 const CHINA_CENTER = [104.1954, 35.8617];
 
+// 天地图 Token (来自文件示例)
+const TIANDITU_TK = '4267820f43926eaf808d61dc07269beb';
+
 const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
 const IMAGES = [
     '地理与环境学院标志牌.jpg', '地理与环境学院入口.jpg', '地学楼.jpg',
@@ -99,6 +114,13 @@ const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
 const images = ref(IMAGES);
+
+// 搜索相关
+const searchQuery = ref('');
+const searchResults = ref([]);
+const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
+
+let searchSource, searchLayer;
 
 // --- 全局变量 (非响应式) ---
 let drawInteraction, snapInteraction;
@@ -132,7 +154,9 @@ const styles = {
 };
 
 // --- 初始化 ---
-onMounted(() => {
+onMounted(async () => {
+    // 先尝试通过 IP 判断用户是否在国内（影响搜索服务选择）
+    await detectIPLocale();
     initMap();
     // 初始尝试定位并将默认视图设置为用户位置（若允许）
     getCurrentLocation(false).then((pos) => {
@@ -142,6 +166,25 @@ onMounted(() => {
         }
     }).catch(() => console.log('Initial location check skipped'));
 });
+
+// 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
+async function detectIPLocale() {
+    try {
+        const res = await fetch('https://ipapi.co/json/');
+        if (!res.ok) return;
+        const data = await res.json();
+        // ipapi 返回 country / country_code 或 country_name
+        const cc = data.country || data.country_code || data.country_name;
+        if (typeof cc === 'string') {
+            // 有时候返回 'CN' 或 'China'
+            isDomestic.value = cc.toString().toUpperCase().includes('CN') || cc.toString().toLowerCase().includes('china');
+        }
+    } catch (e) {
+        // 失败则默认按国外处理（更稳妥），并记录控制台
+        console.warn('IP locale detect failed', e);
+        isDomestic.value = false;
+    }
+}
 
 onUnmounted(() => {
     if (geolocationWatchId) navigator.geolocation.clearWatch(geolocationWatchId);
@@ -156,6 +199,8 @@ function initMap() {
         osm: new OSM(),
         amap: new XYZ({ url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}' }),
         google: new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }),
+        // Google另外一个图源
+        // google: new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={col}&y={row}&z={level}', maxZoom: 20 }),
         esri: new XYZ({ url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 20 }),
         tengxun: new XYZ({ url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0' }),
         tianDiTu: new XYZ({ url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
@@ -173,6 +218,16 @@ function initMap() {
         style: (feature) => feature.get('type') === 'accuracy' ? styles.userAccuracy : styles.userPoint
     });
 
+    // 搜索结果图层（点）
+    searchSource = new VectorSource();
+    searchLayer = new VectorLayer({
+        source: searchSource,
+        zIndex: 1100,
+        style: new Style({
+            image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#ff4444' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
+        })
+    });
+
     // 1.3 控件
     const controls = defaultControls({ zoom: false }).extend([
         new ScaleLine({ units: 'metric', bar: true, minWidth: 100 }),
@@ -187,7 +242,7 @@ function initMap() {
     // 1.4 实例化地图
     mapInstance.value = new Map({
         target: mapRef.value,
-        layers: [baseLayer, labelLayer, drawLayer, userLayer],
+        layers: [baseLayer, labelLayer, drawLayer, userLayer, searchLayer],
         view: new View({
             center: fromLonLat(INITIAL_VIEW.center),
             zoom: INITIAL_VIEW.zoom,
@@ -367,6 +422,161 @@ async function zoomToUser() {
         console.warn('定位失败:', err.message);
         alert('无法获取您的位置，请确保允许定位权限。');
     }
+}
+
+// --- 5. 地名搜索功能 ---
+async function searchPlaces() {
+    const q = (searchQuery.value || '').trim();
+    if (!q) return;
+    // 根据用户所在区域选择搜索服务：国内 -> 天地图 V2.0；国外 -> Nominatim
+    if (isDomestic.value) {
+        // 天地图 V2.0 示例：GET 参数 postStr 是一个 JSON 字符串
+        // 构造 postStr，尽量带上当前地图视图范围（mapBound），部分 queryType 需要 mapBound
+        let mapBoundStr = '';
+        try {
+            if (mapInstance.value) {
+                const view = mapInstance.value.getView();
+                const size = mapInstance.value.getSize();
+                if (size) {
+                    const ext = view.calculateExtent(size);
+                    const sw = toLonLat([ext[0], ext[1]]);
+                    const ne = toLonLat([ext[2], ext[3]]);
+                    mapBoundStr = `${sw[0].toFixed(6)},${sw[1].toFixed(6)},${ne[0].toFixed(6)},${ne[1].toFixed(6)}`;
+                }
+            }
+        } catch (e) {
+            console.warn('计算 mapBound 失败，使用默认范围', e);
+        }
+
+        const postObj = {
+            keyWord: q,
+            level: 12,
+            mapBound: mapBoundStr || undefined,
+            queryType: 1,
+            start: 0,
+            count: 6
+        };
+        const postStr = JSON.stringify(postObj);
+        const url = `http://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(postStr)}&type=query&tk=${TIANDITU_TK}`;
+        try {
+            // 带上详细日志，便于排查 400 错误
+            console.debug('Tianditu request URL:', url);
+            const res = await fetch(url, { method: 'GET' });
+            if (!res.ok) {
+                const body = await res.text();
+                console.warn('Tianditu response not ok', res.status, body);
+                throw new Error(`天地图搜索请求失败: ${res.status}`);
+            }
+            const data = await res.json();
+            console.debug('Tianditu response', data);
+
+            //此处需要分装成一个函数，解析不同响应结构
+            // 解析常见结果字段（适配不同响应结构）
+            let items = [];
+            // 处理 area / areas（例如 resultType=3 返回的行政区/范围）
+            if (data && data.area) {
+                const a = data.area;
+                let lon = a.lon || a.x;
+                let lat = a.lat || a.y;
+                if ((!lon || !lat) && a.lonlat) {
+                    const parts = String(a.lonlat).split(',');
+                    if (parts.length >= 2) { lon = parts[0]; lat = parts[1]; }
+                }
+                items = [{ display_name: a.name || a.areaName || a.keyWord || '', lon, lat }];
+            } else if (data && Array.isArray(data.areas)) {
+                items = data.areas.map(a => {
+                    let lon = a.lon || a.x;
+                    let lat = a.lat || a.y;
+                    if ((!lon || !lat) && a.lonlat) {
+                        const parts = String(a.lonlat).split(',');
+                        if (parts.length >= 2) { lon = parts[0]; lat = parts[1]; }
+                    }
+                    return { display_name: a.name || a.areaName || a.keyWord || '', lon, lat };
+                });
+            }
+            // 若未填充，再尝试其它字段
+            if (items.length === 0) {
+                // Tianditu V2 常见 POI 列表字段
+                if (data && Array.isArray(data.pois)) {
+                    items = data.pois.map(r => {
+                        // 有些条目使用 lonlat 字符串 "lng,lat"
+                        let lon = r.lon || r.lng || r.x;
+                        let lat = r.lat || r.y || r.latit;
+                        if ((!lon || !lat) && r.lonlat) {
+                            const parts = String(r.lonlat).split(',');
+                            if (parts.length >= 2) {
+                                lon = lon || parts[0];
+                                lat = lat || parts[1];
+                            }
+                        }
+                        return {
+                            display_name: r.name || r.poiName || r.displayName || r.title || r.address || '',
+                            lon,
+                            lat
+                        };
+                    });
+                } else if (data && data.queryResults && Array.isArray(data.queryResults.results)) {
+                    items = data.queryResults.results.map(r => ({
+                        display_name: r.name || r.poiName || r.displayName || r.title || r.address || '',
+                        lon: r.lon || r.lng || r.x,
+                        lat: r.lat || r.latit || r.y
+                    }));
+                } else if (data && Array.isArray(data.results)) {
+                    items = data.results.map(r => ({ display_name: r.name || r.pname || '', lon: r.lon, lat: r.lat }));
+                } else if (data && Array.isArray(data.data)) {
+                    items = data.data.map(r => ({ display_name: r.name || r.displayName || '', lon: r.lon || r.x, lat: r.lat || r.y }));
+                } else {
+                    // 兜底：将整个响应转为单条显示
+                    items = [{ display_name: JSON.stringify(data), lon: null, lat: null }];
+                }
+            }
+
+            // 过滤并赋值
+            // 打印解析后的条目便于调试
+            console.debug('parsed Tianditu items', items);
+            searchResults.value = items.filter(it => it && it.display_name);
+        } catch (e) {
+            console.warn('Tianditu search error', e);
+            alert('天地图搜索失败（可能被 CORS/Referer 限制），请稍后重试或使用后端代理。');
+        }
+    } else {
+        // 使用 Nominatim
+        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
+        try {
+            const res = await fetch(url, { method: 'GET' });
+            if (!res.ok) throw new Error('搜索请求失败');
+            const data = await res.json();
+            searchResults.value = Array.isArray(data) ? data : [];
+        } catch (e) {
+            console.warn('Search error', e);
+            alert('搜索失败，请稍后重试');
+        }
+    }
+}
+
+function selectResult(item) {
+    if (!mapInstance.value || !item) return;
+    // 支持不同来源字段（Nominatim 返回 lon/lat；天地图可能返回 lon/lat 或 x/y）
+    const lonVal = item.lon ?? item.x ?? item.lng ?? item.lonlat?.split?.(',')?.[0];
+    const latVal = item.lat ?? item.y ?? item.latit ?? item.lonlat?.split?.(',')?.[1];
+    const lon = lonVal != null ? parseFloat(lonVal) : NaN;
+    const lat = latVal != null ? parseFloat(latVal) : NaN;
+    if (Number.isNaN(lon) || Number.isNaN(lat)) {
+        alert('无法解析该结果的坐标');
+        return;
+    }
+    const coord = fromLonLat([lon, lat]);
+
+    // 清除旧结果并添加新点
+    searchSource.clear();
+    const f = new Feature({ geometry: new Point(coord), type: 'search' });
+    searchSource.addFeature(f);
+
+    // 动画缩放到位置
+    mapInstance.value.getView().animate({ center: coord, zoom: 16, duration: 700 });
+
+    // 清空列表 (UX)
+    searchResults.value = [];
 }
 
 // --- 4. 外部接口 (文件导入/绘图) ---
@@ -578,11 +788,64 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
     z-index: 10;
 }
 
+.search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.search-input {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    width: 200px;
+}
+
+.search-btn {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: none;
+    background: #fff;
+    cursor: pointer;
+}
+
+.search-results {
+    list-style: none;
+    margin: 6px 0 0 0;
+    padding: 6px;
+    max-height: 180px;
+    overflow: auto;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+}
+
+.search-results li {
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.search-results li:hover {
+    background: #f2f2f2;
+}
+
 .layer-select {
     padding: 4px 8px;
     border: 1px solid #ccc;
     border-radius: 4px;
     outline: none;
+    display: inline-block; /* 与 label 同行 */
+    margin: 0 0 0 6px; /* 与文字保持间距 */
+    vertical-align: middle;
+}
+
+.layer-label {
+    color: #fff;
+    font-size: 13px;
+    display: inline-block;
+    margin: 0;
+    vertical-align: middle;
 }
 
 /* --- 底部控制栏容器 --- */
@@ -679,8 +942,8 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
 /* --- 移动端适配 --- */
 @media (max-width: 768px) {
     /* .mouse-position-content { */
-        /* display: none; */
-        /* 手机屏幕太小，建议直接隐藏经纬度，只保留按钮 */
+    /* display: none; */
+    /* 手机屏幕太小，建议直接隐藏经纬度，只保留按钮 */
     /* } */
 
     .divider {
