@@ -2,7 +2,7 @@
     <div class="map-container" ref="mapContainerRef">
         <div id="map" ref="mapRef"></div>
         
-        <!-- Image Set Overlay -->
+        <!-- 图片集覆盖层 -->
         <div 
             class="imageset" 
             v-show="showImageSet"
@@ -17,7 +17,7 @@
             />
         </div>
 
-        <!-- Large Image Overlay -->
+        <!-- 大图覆盖层 -->
         <img 
             v-if="largeImageSrc"
             v-show="showLargeImg"
@@ -27,7 +27,7 @@
             alt="Large Image"
         >
         
-        <!-- Layer Switcher -->
+        <!-- 图层切换器 -->
         <div class="layer-switcher">
             <select v-model="selectedLayer" class="layer-select">
                 <option value="local">自定义瓦片</option>
@@ -41,11 +41,11 @@
             </select>
         </div>
 
-        <!-- Mouse Position and Home Button Group -->
+        <!-- 鼠标位置与主页按钮组 -->
         <div class="map-controls-group">
             <div ref="mousePositionRef" class="mouse-position-content"></div>
             <div class="divider"></div>
-            <button class="home-btn" @click="resetView" @dblclick="zoomToChina" title="单击复位 / 双击全图">
+            <button class="home-btn" @click="resetView" @dblclick="zoomToUser" title="单击复位 / 双击定位">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
                     <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
                 </svg>
@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, shallowRef } from 'vue';
+import { ref, onMounted, watch, shallowRef, onUnmounted } from 'vue';
 import Map from 'ol/Map';
 import View from 'ol/View';
 import TileLayer from 'ol/layer/Tile';
@@ -68,6 +68,9 @@ import ScaleLine from 'ol/control/ScaleLine';
 import { defaults as defaultControls } from 'ol/control';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import Feature from 'ol/Feature';
+import Point from 'ol/geom/Point';
+import CircleGeom from 'ol/geom/Circle';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
@@ -84,7 +87,7 @@ const mousePositionRef = ref(null);
 const mapContainerRef = ref(null);
 const mapInstance = shallowRef(null);
 
-// Interaction State
+// 交互状态
 let draw; // global so we can remove it later
 let snap;
 let measureTooltipElement;
@@ -93,7 +96,7 @@ let helpTooltipElement;
 let helpTooltip;
 let sketch;
 let listener;
-const source = new VectorSource(); // Source for drawings and measurements
+const source = new VectorSource(); // 绘制与测量的矢量源
 const vector = new VectorLayer({
     source: source,
     style: new Style({
@@ -114,6 +117,31 @@ const vector = new VectorLayer({
     zIndex: 999
 });
 
+// 用户位置图层（标记 + 精度圈）
+const userLocationSource = new VectorSource();
+const userPointStyle = new Style({
+    image: new CircleStyle({
+        radius: 8,
+        fill: new Fill({ color: '#1E90FF' }),
+        stroke: new Stroke({ color: '#ffffff', width: 2 })
+    })
+});
+const accuracyStyle = new Style({
+    fill: new Fill({ color: 'rgba(30,144,255,0.12)' }),
+    stroke: new Stroke({ color: 'rgba(30,144,255,0.3)', width: 1 })
+});
+const userLocationLayer = new VectorLayer({
+    source: userLocationSource,
+    style: function (feature) {
+        return feature.get('type') === 'accuracy' ? accuracyStyle : userPointStyle;
+    },
+    zIndex: 1000
+});
+
+// 保存最后已知用户位置（地图坐标与经纬度）
+const lastUserCoord = ref(null);
+const lastUserLonLat = ref(null);
+
 const selectedLayer = ref('google');
 const showImageSet = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
@@ -126,7 +154,7 @@ const isInTargetArea = ref(false);
 const initialCenter = [114.302, 34.8146];
 const initialZoom = 17;
 
-// Sources definition
+// 底图源定义
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
@@ -162,7 +190,7 @@ let labelLayer;
 onMounted(() => {
     initMap();
     
-    // Mouse move listener for popup positioning
+    // 鼠标移动监听用于弹窗定位
     if (mapContainerRef.value) {
         mapContainerRef.value.addEventListener('mousemove', (e) => {
             currentMousePosition.value = { x: e.clientX, y: e.clientY };
@@ -202,7 +230,7 @@ function initMap() {
 
     mapInstance.value = new Map({
         target: mapRef.value,
-        layers: [baseLayer, labelLayer, vector],
+        layers: [baseLayer, labelLayer, vector, userLocationLayer],
         view: new View({
             center: fromLonLat(initialCenter),
             zoom: initialZoom
@@ -213,7 +241,7 @@ function initMap() {
         ])
     });
 
-    // Map events
+    // 地图事件
     mapInstance.value.getView().on('change:resolution', checkZoomLevel);
     
     mapInstance.value.on('pointermove', (evt) => {
@@ -221,7 +249,7 @@ function initMap() {
             return;
         }
         
-        // Help tooltip logic
+        // 帮助提示逻辑
         if (helpTooltipElement) {
             let helpMsg = 'Click to start drawing';
             if (sketch) {
@@ -268,15 +296,15 @@ function initMap() {
         }
     });
 
-    // Attribute Query Click Listener
+    // 属性查询单击监听器
     mapInstance.value.on('singleclick', (evt) => {
-        // Only if not drawing
+        // 仅当未处于绘制模式时
         if (draw && draw.getActive()) return;
 
         const feature = mapInstance.value.forEachFeatureAtPixel(evt.pixel, (feature) => feature);
         if (feature) {
             const properties = feature.getProperties();
-            // Filter out geometry and style
+            // 过滤掉 geometry 和 style 属性
             const displayProps = {};
             for (const key in properties) {
                 if (key !== 'geometry' && key !== 'style') {
@@ -284,13 +312,140 @@ function initMap() {
                 }
             }
             
-            // Simple alert for now, or emit event
+            // 目前简单触发事件或弹窗
             // alert(JSON.stringify(displayProps, null, 2));
             emit('feature-selected', displayProps);
         }
     });
     
     checkZoomLevel();
+
+
+// 地理定位辅助函数
+let geolocationWatchId = null;
+
+function clearUserLocation() {
+    if (!userLocationSource) return;
+    userLocationSource.clear(true);
+}
+
+function updateUserLocation(lon, lat, accuracy) {
+    if (!mapInstance.value) return;
+    const coord = fromLonLat([lon, lat]);
+
+    // 清除之前的位置要素
+    clearUserLocation();
+
+    // 精度圈（地图单位，EPSG:3857，单位为米）
+    const accuracyFeature = new Feature({
+        geometry: new CircleGeom(coord, accuracy || 0),
+        type: 'accuracy'
+    });
+
+    const pointFeature = new Feature({
+        geometry: new Point(coord),
+        type: 'position'
+    });
+
+    userLocationSource.addFeature(accuracyFeature);
+    userLocationSource.addFeature(pointFeature);
+
+    // 存储最后已知位置
+    lastUserCoord.value = coord;
+    lastUserLonLat.value = [lon, lat];
+
+    // 平滑居中视图
+    try {
+        mapInstance.value.getView().animate({ center: coord, duration: 800 });
+    } catch (e) {
+        console.warn('Failed to animate view to user location', e);
+    }
+
+    emit('location-change', { lonLat: [lon, lat], accuracy });
+}
+
+function locateOnce() {
+    return new Promise((resolve, reject) => {
+        if (!navigator || !navigator.geolocation) return reject(new Error('Geolocation not available'));
+        navigator.geolocation.getCurrentPosition((pos) => {
+            const lon = pos.coords.longitude;
+            const lat = pos.coords.latitude;
+            const accuracy = pos.coords.accuracy;
+            updateUserLocation(lon, lat, accuracy);
+            resolve({ lon, lat, accuracy });
+        }, (err) => {
+            console.warn('Geolocation error:', err.message);
+            reject(err);
+        }, { enableHighAccuracy: true, timeout: 10000 });
+    });
+}
+
+function startWatchPosition() {
+    if (!navigator || !navigator.geolocation) return;
+    if (geolocationWatchId !== null) return;
+    geolocationWatchId = navigator.geolocation.watchPosition((pos) => {
+        updateUserLocation(pos.coords.longitude, pos.coords.latitude, pos.coords.accuracy);
+    }, (err) => {
+        console.warn('Geolocation watch error:', err.message);
+    }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
+}
+
+// 将视图缩放到用户最后已知位置（若未知则请求定位）
+async function zoomToUser() {
+    try {
+        if (!mapInstance.value) return;
+        // 如果存在单击定时器，清除它以避免双击后执行 resetView
+        if (homeClickTimer) {
+            clearTimeout(homeClickTimer);
+            homeClickTimer = null;
+        }
+        if (!lastUserCoord.value) {
+            // Request a one-shot location and then zoom
+            const res = await locateOnce();
+            const coord = fromLonLat([res.lon, res.lat]);
+            mapInstance.value.getView().animate({ center: coord, zoom: Math.max(mapInstance.value.getView().getZoom(), 17), duration: 800 });
+            return;
+        }
+
+        const targetZoom = Math.max(mapInstance.value.getView().getZoom(), 17);
+        mapInstance.value.getView().animate({ center: lastUserCoord.value, zoom: targetZoom, duration: 800 });
+    } catch (e) {
+        console.warn('zoomToUser failed', e);
+    }
+}
+
+// 处理双击：主动请求当前位置并居中地图
+function doubleClickLocate() {
+    // prevent single-click reset from firing
+    if (homeClickTimer) {
+        clearTimeout(homeClickTimer);
+        homeClickTimer = null;
+    }
+
+    // Actively request a fresh position and center when received
+    locateOnce().catch((err) => {
+        console.warn('doubleClickLocate: locateOnce failed', err);
+    });
+}
+
+function stopWatchPosition() {
+    if (geolocationWatchId !== null && navigator && navigator.geolocation) {
+        navigator.geolocation.clearWatch(geolocationWatchId);
+        geolocationWatchId = null;
+    }
+}
+
+onUnmounted(() => {
+    stopWatchPosition();
+});
+    // 地图就绪后请求并显示一次用户位置
+    if (navigator && navigator.geolocation) {
+        locateOnce();
+        // Optionally start watching position updates
+        // startWatchPosition();
+    } else {
+        console.warn('Geolocation API not available in this browser');
+    }
 }
 
 let homeClickTimer = null;
@@ -380,7 +535,7 @@ function addUserDataLayer(fileData) {
             return;
         }
 
-        // Try to read features without projection first to check their raw coordinates
+        // 先不做投影读取要素以检查原始坐标
         let features = format.readFeatures(content);
         
         if (features.length === 0) {
@@ -388,9 +543,9 @@ function addUserDataLayer(fileData) {
             return;
         }
 
-        // Check if features need projection transform
-        // If the first feature's coordinates are within typical lat/lon range (-180 to 180),
-        // and the map is in Web Mercator (EPSG:3857), we need to transform.
+        // 检查要素是否需要投影转换
+        // 如果第一个要素的坐标在典型经纬度范围内 (-180 到 180)，
+        // 且地图使用 Web Mercator (EPSG:3857)，则需要转换
         // If they are large numbers, they might already be in 3857.
         
         const extent = features[0].getGeometry().getExtent();
@@ -413,7 +568,7 @@ function addUserDataLayer(fileData) {
             features: features
         });
 
-        // Random color for the layer to distinguish multiple uploads
+        // 随机颜色用于区分多个上传图层
         const color = '#' + Math.floor(Math.random()*16777215).toString(16);
 
         const vectorLayer = new VectorLayer({
@@ -447,7 +602,7 @@ function addUserDataLayer(fileData) {
 
         mapInstance.value.addLayer(vectorLayer);
 
-        // Zoom to extent
+        // 缩放到要素范围
         const sourceExtent = vectorSource.getExtent();
         if (sourceExtent && !vectorSource.isEmpty()) {
             mapInstance.value.getView().fit(sourceExtent, {
@@ -467,7 +622,7 @@ defineExpose({
     clearInteractions
 });
 
-// --- Interaction Logic ---
+// --- 交互逻辑 ---
 
 function clearInteractions() {
     if (mapInstance.value) {
@@ -500,7 +655,7 @@ function activateInteraction(type) {
 
     if (type === 'Clear') {
         source.clear();
-        // Also remove all overlays (tooltips)
+        // 也移除所有覆盖物（提示框）
         mapInstance.value.getOverlays().clear();
         return;
     }
@@ -550,6 +705,7 @@ function addInteraction(type, isMeasure) {
             sketch = evt.feature;
             let tooltipCoord = evt.coordinate;
 
+            // 监听草图几何变化以更新测量提示
             listener = sketch.getGeometry().on('change', function (evt) {
                 const geom = evt.target;
                 let output;
