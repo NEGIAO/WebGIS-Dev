@@ -1,5 +1,5 @@
 <template>
-    <div class="info-panel" :class="{ 'collapsed': isCollapsed }">
+    <div class="info-panel" :class="{ 'collapsed': isCollapsed, 'in-dihuan': props.locationInfo.isInDihuan }">
         <!-- 折叠开关 -->
         <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开面板' : '收起面板'">
             <span class="handle-icon">{{ isCollapsed ? '◀' : '▶' }}</span>
@@ -243,22 +243,27 @@ function nextNews() {
 .image-container {
     width: 100%;
     border-radius: 8px;
-    overflow: hidden;
+    /* 不裁剪图片，改为居中显示完整图片 */
+    overflow: visible;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .news-image {
     width: 100%;
-    height: 200px;
-    /* 固定高度，优化排版 */
-    object-fit: cover;
+    height: auto;
+    /* 始终完整显示（不裁剪） */
+    object-fit: contain;
     display: block;
-    transition: transform 0.3s;
+    transition: transform 0.25s ease, max-height 0.25s ease;
+    max-height: 60vh;
 }
 
 .news-image:hover {
-    transform: scale(1.02);
+    transform: scale(1.01);
 }
 
 /* 文本 */
