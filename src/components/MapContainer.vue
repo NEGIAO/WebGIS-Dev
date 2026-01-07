@@ -36,11 +36,53 @@
                 <option value="tianDiTu_vec">天地图矢量</option>
                 <option value="tianDiTu">天地图影像</option>
                 <option value="google">Google</option>
+                <option value="google_standard">Google标准</option>
+                <option value="google_clean">Google简洁</option>
                 <option value="esri">ESRI</option>
                 <option value="osm">OSM</option>
                 <option value="amap">高德地图</option>
                 <option value="tengxun">腾讯地图</option>
+                <option value="esri_ocean">Esri海洋</option>
+                <option value="esri_terrain">Esri地形</option>
+                <option value="esri_physical">Esri物理</option>
+                <option value="esri_hillshade">Esri山影</option>
+                <option value="esri_gray">Esri灰度</option>
+                <option value="gggis_time">谷谷地球最新</option>
+                <option value="yandex_sat">Yandex卫星</option>
+                <option value="geoq_gray">GeoQ灰色</option>
+                <option value="geoq_hydro">GeoQ水系</option>
+                <option value="custom">自定义URL</option>
             </select>
+            <!-- 新增图层管理按钮 -->
+             <button class="layer-manage-btn" @click="showLayerManager = !showLayerManager" title="图层管理">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z"/>
+                </svg>
+            </button>
+            <div v-if="selectedLayer === 'custom'" class="custom-url-wrapper">
+                <input v-model="customMapUrl" class="custom-url-input" placeholder="输入 https://.../{z}/{x}/{y}.png" />
+                <button class="custom-url-btn" @click="loadCustomMap" title="加载">ok</button>
+            </div>
+             <!-- 图层管理面板 -->
+             <div v-if="showLayerManager" class="layer-manager-panel">
+                <div class="panel-header">
+                    <span>图层排序与显示</span>
+                    <span class="close-panel-btn" @click="showLayerManager = false">×</span>
+                </div>
+                <div class="layer-list">
+                    <div v-for="(layer, index) in layerList" :key="layer.id" 
+                        class="layer-item"
+                        draggable="true"
+                        @dragstart="onDragStart($event, index)"
+                        @dragover.prevent
+                        @drop="onDrop($event, index)"
+                        :class="{'dragging': draggingIndex === index}">
+                        <div class="drag-handle">⋮⋮</div>
+                        <input type="checkbox" v-model="layer.visible" @change="updateLayerVisibility(layer)">
+                        <span class="layer-name">{{ layer.name }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 底部控制栏 -->
@@ -109,7 +151,9 @@ const mousePositionRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
 const selectedLayer = ref('google');
+const customMapUrl = ref('');
 const showImageSet = ref(false);
+const showLayerManager = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
@@ -121,6 +165,104 @@ const searchResults = ref([]);
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 
 let searchSource, searchLayer;
+let customSource = null;
+
+// 图层配置 (集中管理 id, name, source创建逻辑)
+const LAYER_CONFIGS = [
+    { 
+        id: 'label', name: '天地图注记', visible: false,
+        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+    },
+    { 
+        id: 'label_vector', name: '天地图矢量注记', visible: false,
+        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+    },
+    { 
+        id: 'google', name: 'Google', visible: true,
+        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }) 
+    },
+    { 
+        id: 'custom', name: '自定义', visible: false,
+        createSource: () => null 
+    },
+    { 
+        id: 'local', name: '自定义瓦片', visible: false,
+        createSource: () => new XYZ({ url: `${NORM_BASE}tiles/{z}/{x}/{y}.png` }) 
+    },
+    { 
+        id: 'tianDiTu_vec', name: '天地图矢量', visible: false,
+        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+    },
+    { 
+        id: 'tianDiTu', name: '天地图影像', visible: false,
+        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+    },
+    { 
+        id: 'google_standard', name: 'Google标准', visible: false,
+        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt/lyrs=m&x={x}&y={y}&z={z}' }) 
+    },
+    { 
+        id: 'google_clean', name: 'Google简洁', visible: false,
+        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off' }) 
+    },
+    { 
+        id: 'esri', name: 'ESRI', visible: false,
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 20 }) 
+    },
+    { 
+        id: 'osm', name: 'OSM', visible: false,
+        createSource: () => new OSM() 
+    },
+    { 
+        id: 'amap', name: '高德地图', visible: false,
+        createSource: () => new XYZ({ url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}' }) 
+    },
+    { 
+        id: 'tengxun', name: '腾讯地图', visible: false,
+        createSource: () => new XYZ({ url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0' }) 
+    },
+    {
+        id: 'esri_ocean', name: 'Esri海洋', visible: false,
+        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'esri_terrain', name: 'Esri地形', visible: false,
+        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'esri_physical', name: 'Esri物理', visible: false,
+        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'esri_hillshade', name: 'Esri山影', visible: false,
+        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'esri_gray', name: 'Esri灰度', visible: false,
+        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'yandex_sat', name: 'Yandex卫星', visible: false,
+        createSource: () => new XYZ({ url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}' })
+    },
+    {
+        id: 'geoq_gray', name: 'GeoQ灰色', visible: false,
+        createSource: () => new XYZ({ url: 'https://thematic.geoq.cn/arcgis/rest/services/ChinaOnlineStreetGray/MapServer/WMTS/tile/1.0.0/ChinaOnlineStreetGray/default/GoogleMapsCompatible/{z}/{y}/{x}.png' })
+    },
+    {
+        id: 'geoq_hydro', name: 'GeoQ水系', visible: false,
+        createSource: () => new XYZ({ url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldHydroMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldHydroMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png' })
+    }
+];
+
+// 初始化图层列表状态 (从配置生成)
+const layerList = ref(LAYER_CONFIGS.map(cfg => ({ 
+    id: cfg.id, 
+    name: cfg.name, 
+    visible: cfg.visible 
+})));
+const draggingIndex = ref(-1);
+const layerInstances = {}; // 存储所有 TileLayer 实例
 
 // --- 全局变量 (非响应式) ---
 let drawInteraction, snapInteraction;
@@ -207,24 +349,24 @@ onUnmounted(() => {
 
 // --- 1. 地图核心逻辑 ---
 function initMap() {
-    // 1.1 源定义
-    const sources = {
-        local: new XYZ({ url: `${NORM_BASE}tiles/{z}/{x}/{y}.png` }),
-        osm: new OSM(),
-        amap: new XYZ({ url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}' }),
-        google: new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }),
-        // Google另外一个图源
-        // google: new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={col}&y={row}&z={level}', maxZoom: 20 }),
-        esri: new XYZ({ url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 20 }),
-        tengxun: new XYZ({ url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0' }),
-        tianDiTu: new XYZ({ url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
-        tianDiTu_vec: new XYZ({ url: 'https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
-        label: new XYZ({ url: 'https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb' }),
-    };
+    // 1.1 源定义与图层初始化 (由 LAYER_CONFIGS 动态驱动，不再硬编码 sources 对象)
+    
+    // 初始化所有底图层
+    layerList.value.forEach((item, index) => {
+        // 根据 id 查找配置并创建 source
+        const config = LAYER_CONFIGS.find(cfg => cfg.id === item.id);
+        const source = config ? config.createSource() : null;
 
-    // 1.2 图层初始化
-    baseLayer = new TileLayer({ source: sources['google'] });
-    labelLayer = new TileLayer({ source: null, visible: false, zIndex: 1 });
+        const layer = new TileLayer({
+            source: source,
+            visible: item.visible,
+            zIndex: index // 初始层级通过列表顺序决定（0最底层）
+        });
+        layerInstances[item.id] = layer;
+    });
+
+    const layersToAdd = layerList.value.map(item => layerInstances[item.id]);
+
     const drawLayer = new VectorLayer({ source: drawSource, style: styles.draw, zIndex: 999 });
     const userLayer = new VectorLayer({
         source: userLocationSource,
@@ -256,7 +398,7 @@ function initMap() {
     // 1.4 实例化地图
     mapInstance.value = new Map({
         target: mapRef.value,
-        layers: [baseLayer, labelLayer, drawLayer, userLayer, searchLayer],
+        layers: [...layersToAdd, drawLayer, userLayer, searchLayer],
         view: new View({
             center: fromLonLat(INITIAL_VIEW.center),
             zoom: INITIAL_VIEW.zoom,
@@ -268,13 +410,66 @@ function initMap() {
     // 1.5 事件监听
     bindEvents();
 
-    // 1.6 监听底图切换
+    // 1.6 监听底图切换 (保留原Select功能，但改为操作 layerList)
     watch(selectedLayer, (val) => {
-        const needsLabel = ['tianDiTu_vec', 'tianDiTu', 'google', 'esri'].includes(val);
-        labelLayer.setVisible(needsLabel);
-        if (needsLabel) labelLayer.setSource(sources.label);
-        baseLayer.setSource(sources[val] || sources.osm);
+        // 关闭所有（独占模式），除了注记层可能需要保留？
+        // 按照原逻辑，Select 是互斥选择
+        layerList.value.forEach(l => {
+            if (l.id === 'label' || l.id === 'label_vector') return; // 注记层独立控制，或根据原逻辑联动
+            l.visible = (l.id === val);
+        });
+
+        // 修正：区分卫星注记和矢量注记，互不混淆
+        // 1. 卫星/影像底图 -> 配对 卫星注记 (label / cia)
+        const needsSatelliteLabel = ['tianDiTu', 'google', 'esri'].includes(val);
+        const labelItem = layerList.value.find(l => l.id === 'label');
+        if (labelItem) labelItem.visible = needsSatelliteLabel;
+
+        // 2. 矢量底图 -> 配对 矢量注记 (label_vector / cva)
+        const needsVectorLabel = ['tianDiTu_vec'].includes(val);
+        const vectorLabelItem = layerList.value.find(l => l.id === 'label_vector');
+        if (vectorLabelItem) vectorLabelItem.visible = needsVectorLabel;
+        
+        // 强制刷新所有层状态
+        refreshLayersState();
     });
+}
+
+function refreshLayersState() {
+     layerList.value.forEach((item, index) => {
+        const layer = layerInstances[item.id];
+        if (layer) {
+            layer.setVisible(item.visible);
+            layer.setZIndex(index); // 列表越靠后，ZIndex越大（显示在越上层），符合"图层叠加"直觉
+            // 或者是列表上面的是顶层？通常Layer Manager是上面遮盖下面。
+            // 修正：通常UI上列表第一个元素在最上面（覆盖下面）。
+            // 所以 ZIndex 应该 = total - index
+            layer.setZIndex(layerList.value.length - index);
+        }
+    });
+}
+
+// 拖拽相关逻辑
+function onDragStart(evt, index) {
+    draggingIndex.value = index;
+    evt.dataTransfer.effectAllowed = 'move';
+}
+
+function onDrop(evt, dropIndex) {
+    const dragIndex = draggingIndex.value;
+    if (dragIndex === dropIndex) return;
+    
+    // 移动数组元素
+    const item = layerList.value.splice(dragIndex, 1)[0];
+    layerList.value.splice(dropIndex, 0, item);
+    
+    draggingIndex.value = -1;
+    refreshLayersState();
+}
+
+function updateLayerVisibility(layer) {
+    // 只是触发刷新
+    refreshLayersState();
 }
 
 function bindEvents() {
@@ -389,6 +584,27 @@ function resetView() {
         zoom: INITIAL_VIEW.zoom,
         duration: 800
     });
+}
+
+function loadCustomMap() {
+    if (!customMapUrl.value) return;
+    try {
+        customSource = new XYZ({
+            url: customMapUrl.value
+        });
+        // 更新 custom 层的 source
+        if (layerInstances['custom']) {
+            layerInstances['custom'].setSource(customSource);
+            // 自动开启
+            const item = layerList.value.find(l => l.id === 'custom');
+            if (item) {
+                item.visible = true;
+                refreshLayersState();
+            }
+        }
+    } catch (e) {
+        alert('URL格式错误或无法解析');
+    }
 }
 
 // Promise 化获取当前位置
@@ -1045,5 +1261,112 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
     background-color: #ffcc33;
     color: black;
     border: 1px solid white;
+}
+
+.custom-url-wrapper {
+    margin-top: 6px;
+    display: flex;
+    gap: 4px;
+}
+
+.custom-url-input {
+    flex: 1;
+    width: 160px;
+    padding: 4px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 12px;
+}
+
+.custom-url-btn {
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: none;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+/* 图层管理样式 */
+.layer-manage-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: white;
+    padding: 4px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+.layer-manage-btn:hover {
+    color: #eee;
+}
+.layer-manager-panel {
+    position: absolute;
+    top: 100%; /* 改为 100% 确保显示在父容器下方，不遮挡内容 */
+    right: 0;
+    margin-top: 6px;
+    width: 200px;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    padding: 0; /* padding 移到内部或具体元素 */
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 2000;
+}
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+    border-radius: 4px 4px 0 0;
+    font-size: 13px;
+    font-weight: bold;
+    color: #333;
+}
+.close-panel-btn {
+    cursor: pointer;
+    font-size: 16px;
+    color: #999;
+    line-height: 1;
+}
+.close-panel-btn:hover {
+    color: #ff4444;
+}
+.layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+}
+.layer-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px;
+    background: #f9f9f9;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    cursor: move;
+    font-size: 13px;
+    user-select: none;
+}
+.layer-item:hover {
+    background: #f0f0f0;
+}
+.layer-item.dragging {
+    opacity: 0.5;
+    background: #e0e0e0;
+}
+.drag-handle {
+    cursor: grab;
+    color: #999;
+    font-weight: bold;
+    padding-right: 4px;
+}
+.layer-name {
+    flex: 1;
 }
 </style>
