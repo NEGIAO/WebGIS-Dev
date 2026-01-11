@@ -108,7 +108,7 @@ import View from 'ol/View';
 import Feature from 'ol/Feature';
 import Overlay from 'ol/Overlay';
 import { fromLonLat, toLonLat } from 'ol/proj';
-import { defaults as defaultControls, ScaleLine, MousePosition } from 'ol/control';
+import { defaults as defaultControls, ScaleLine, MousePosition, OverviewMap } from 'ol/control';
 import { createStringXY } from 'ol/coordinate';
 import { unByKey } from 'ol/Observable';
 import { getArea, getLength } from 'ol/sphere';
@@ -392,6 +392,21 @@ function initMap() {
             projection: 'EPSG:4326',
             target: mousePositionRef.value,
             undefinedHTML: '&nbsp;'
+        }),
+        // 鹰眼视图控件
+        new OverviewMap({
+            className: 'ol-overviewmap ol-custom-overviewmap',
+            layers: [
+                new TileLayer({
+                    source: new XYZ({
+                        url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+                        maxZoom: 20
+                    })
+                })
+            ],
+            collapseLabel: '«',
+            label: '»',
+            collapsed: false
         })
     ]);
 
@@ -1368,5 +1383,54 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
 }
 .layer-name {
     flex: 1;
+}
+
+/* 鹰眼视图样式 */
+:deep(.ol-custom-overviewmap) {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    right: auto;
+    bottom: auto;
+}
+
+:deep(.ol-custom-overviewmap:not(.ol-collapsed)) {
+    border: 2px solid rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+:deep(.ol-custom-overviewmap .ol-overviewmap-map) {
+    border: none;
+    width: 200px;
+    height: 200px;
+}
+
+:deep(.ol-custom-overviewmap .ol-overviewmap-box) {
+    border: 2px solid #00aaff;
+    background: rgba(0, 170, 255, 0.2);
+}
+
+:deep(.ol-custom-overviewmap button) {
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    padding: 2px 6px;
+}
+
+:deep(.ol-custom-overviewmap button:hover) {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* 移动端适配鹰眼视图 */
+@media (max-width: 768px) {
+    :deep(.ol-custom-overviewmap .ol-overviewmap-map) {
+        width: 120px;
+        height: 120px;
+    }
 }
 </style>
