@@ -1,4 +1,4 @@
-# 校园 WebGIS（HENU 地理科学学院）
+﻿# 校园 WebGIS（HENU 地理科学学院）
 [查看部署效果（个人主页）](https://negiao.github.io/WebGIS_henu_trials_5_28_vue3/#/home)
 [查看部署效果（国内访问快）](https://negiao-pages.share.connect.posit.cloud/WebGIS/index.html)
 
@@ -11,9 +11,11 @@
 
 - 🌍 **三维地球**：集成 CesiumJS，支持高精度地形渲染与智能地形源切换（境内天地图/境外 World Terrain）。
 - 📌 **多底图切换**：支持本地瓦片、天地图影像/矢量、ESRI 影像、OpenStreetMap、高德地图等服务。
+- �️ **鹰眼视图**：左上角实时显示当前视图范围，支持展开/折叠，提供全局视野。
 - 🛰️ **实时坐标**：显示鼠标经纬度，进入地环院范围时自动高亮并推送相关新闻。
 - 🖼️ **缩略图预览**：放大到指定级别即可查看校园缩略图，点击可放大查看并同步侧栏展示。
 - 📰 **动态资讯**：新闻标题、配图、摘要与外链均可一键获取，便于追踪学院动态。
+- 🎨 **图层管理**：支持拖拽排序、多图层叠加、自定义底图 URL。
 - 📱 **自适应布局**：响应式设计，桌面与移动端都有良好体验。
 - 🔐 **用户系统**：包含简单的注册/登录页面（演示用）。
 
@@ -34,16 +36,21 @@ npm run build
 ```
 WebGIS_henu_trials_5_28_vue3/
 ├── public/              # 静态资源（包括 icon、瓦片、图片）
+│   ├── images/          # 校园图片资源
+│   ├── tiles/           # 本地瓦片资源 {z}/{x}/{y}.png
+│   ├── min-enhanced.js  # 延迟统计脚本
+│   └── ol.js / ol.css   # OpenLayers 库文件
 ├── src/
-│   ├── assets/          # 全局样式
+│   ├── assets/          # 全局样式与静态资源
 │   ├── components/      # Vue 组件
 │   │   ├── icons/              # 图标组件
 │   │   ├── CesiumContainer.vue # 3D 地球组件 (CesiumJS)
 │   │   ├── MagicCursor.vue     # 鼠标特效组件
-│   │   ├── MapContainer.vue    # 2D 地图组件 (OpenLayers)
+│   │   ├── MapContainer.vue    # 2D 地图组件 (OpenLayers + 鹰眼视图)
 │   │   ├── SidePanel.vue       # 右侧信息面板组件
 │   │   └── TopBar.vue          # 顶部导航栏组件
 │   ├── router/          # Vue Router 路由配置
+│   │   └── index.js     # 路由定义（Home、Register）
 │   ├── views/           # 页面视图
 │   │   ├── HomeView.vue      # 主页（地图页）
 │   │   └── RegisterView.vue  # 注册/登录页
@@ -51,26 +58,19 @@ WebGIS_henu_trials_5_28_vue3/
 │   └── main.js          # 入口文件
 ├── index.html           # HTML 入口
 ├── package.json         # 项目依赖配置
-└── vite.config.js       # Vite 构建配置
+├── vite.config.js       # Vite 构建配置
+├── eslint.config.js     # ESLint 代码规范配置
+└── README.md            # 项目说明文档
 ```
 
 ## 版本记录
 
-### V2.2.1 (2025-12-12)
-- **性能优化**：
-    - 将 Font Awesome 的 CDN 源从 `bootcdn` 切换至 `cdnjs.loli.net`，提升国内访问速度与稳定性。
-
-### V2.2.2 (2025-12-29)
-- **重大 UI 更新：**
-    - 适配移动端，代码组织重新优化，
-    - 增加获取用户定位/IP的功能，显示用户的位置 
-    - 初始视图改为优先尝试获取并居中到用户定位（若用户允许，缩放到 18）。
-    - 底部“主页”按钮交互重构为统一处理：单击复位视图，双击（快速两次点击）请求定位并缩放到用户位置（内部使用 300ms 防抖）。
-    - 优化 `zoomToUser` 行为：优先使用最后已知位置，若无则执行一次定位并居中。
-    - 大图预览改为 Lightbox（全屏遮罩）模式，点击遮罩或关闭按钮收起，改善移动端体验。
-    - 鼠标位置显示控件样式调整为 flex 居中，更好地垂直对齐显示内容。
-    - 清理与合并定位相关逻辑（`doubleClickLocate` 被评估并可选合并到主交互处理），并加入调试日志便于排查交互问题。
-    - 测试提示：刷新页面并允许定位权限以验证初始视图；在浏览器控制台可查看定位与交互日志。
+### V2.3.1 (2026-01-11)
+- **鹰眼视图**：
+    - 新增 OverviewMap 控件，位于地图左上角，实时显示当前视图范围。
+    - 支持展开/折叠，提供全局视野导航。
+    - 桌面端尺寸 200x200px，移动端自适应为 120x120px。
+    - 当前视图范围用蓝色半透明框高亮显示。
 
 ### V2.3.0 (2026-01-07)
 - **图层管理增强**：
@@ -88,11 +88,22 @@ WebGIS_henu_trials_5_28_vue3/
 
 ### V2.2.3 (2025-12-29)
 - **延迟统计脚本集成（min-enhanced.js）：**
-    - 将第三方统计/展示脚本集中到 `public/min-enhanced.js`，在 `index.html` 以延迟方式引入（示例：`<script src="/min-enhanced.js" defer></script>`）。
+    - 将第三方统计/展示脚本集中到 `public/min-enhanced.js`，在 `index.html` 以延迟方式引入。
     - 脚本在 `window.load` 后延时执行（默认 3s），再按顺序加载 Supabase、MapMyVisitors、Google Analytics、51.la（国内/国际）等 SDK，并对目标 DOM 元素存在性做检查。
-    - 注意：确保页面包含脚本依赖的 DOM 元素（如 `#mapmyvisitors-container`、`#total-pv-val`、`#today-personal-val`），并在生产环境确认是否允许加载这些第三方域（CSP），以及不要在前端暴露敏感私钥。
-    - 可控策略：推荐在部署时决定是否包含该脚本或添加开关（例如通过服务器渲染/构建时注入），以便在测试/生产间灵活启用或禁用统计功能。
 
+### V2.2.2 (2025-12-29)
+- **重大 UI 更新：**
+    - 适配移动端，代码组织重新优化。
+    - 增加获取用户定位/IP的功能，显示用户的位置。
+    - 初始视图改为优先尝试获取并居中到用户定位（若用户允许，缩放到 18）。
+    - 底部"主页"按钮交互重构为统一处理：单击复位视图，双击（快速两次点击）请求定位并缩放到用户位置（内部使用 300ms 防抖）。
+    - 优化 `zoomToUser` 行为：优先使用最后已知位置，若无则执行一次定位并居中。
+    - 大图预览改为 Lightbox（全屏遮罩）模式，点击遮罩或关闭按钮收起，改善移动端体验。
+    - 鼠标位置显示控件样式调整为 flex 居中，更好地垂直对齐显示内容。
+
+### V2.2.1 (2025-12-12)
+- **性能优化**：
+    - 将 Font Awesome 的 CDN 源从 `bootcdn` 切换至 `cdnjs.loli.net`，提升国内访问速度与稳定性。
 
 ### V2.2.0 (2025-12-12)
 - **侧边栏优化**：
