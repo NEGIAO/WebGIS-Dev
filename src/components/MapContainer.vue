@@ -88,6 +88,7 @@
         <!-- 底部控制栏 -->
         <div class="map-controls-group">
             <div ref="mousePositionRef" class="mouse-position-content"></div>
+            <div class="zoom-level-display">{{ currentZoom }}</div>
             <div class="divider"></div>
             <!-- 核心修改：移除 @dblclick，统一用 @click 处理 -->
             <button class="home-btn" @click="handleHomeInteract" title="单击复位 / 双击定位">
@@ -158,6 +159,7 @@ const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
 const images = ref(IMAGES);
+const currentZoom = ref(17); // 当前缩放级别
 
 // 搜索相关
 const searchQuery = ref('');
@@ -170,12 +172,16 @@ let customSource = null;
 // 图层配置 (集中管理 id, name, source创建逻辑)
 const LAYER_CONFIGS = [
     { 
-        id: 'label', name: '天地图注记', visible: false,
+        id: 'label', name: '天地图注记', visible: true,
         createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
     },
     { 
         id: 'label_vector', name: '天地图矢量注记', visible: false,
         createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+    },
+    { 
+        id: 'Water', name: '水系', visible: false,
+        createSource: () => new XYZ({ url: `https://idataapi.geovisearth.com/tiles/{z}/{x}/{-y}.png` }) 
     },
     { 
         id: 'google', name: 'Google', visible: true,
@@ -417,6 +423,7 @@ function initMap() {
         view: new View({
             center: fromLonLat(INITIAL_VIEW.center),
             zoom: INITIAL_VIEW.zoom,
+            minZoom: 0,  // 允许缩放到最低级别
             maxZoom: 22
         }),
         controls
@@ -448,6 +455,9 @@ function initMap() {
         // 强制刷新所有层状态
         refreshLayersState();
     });
+
+    // 1.7 初始化时也要刷新一次图层状态，确保初始配置正确应用
+    refreshLayersState();
 }
 
 function refreshLayersState() {
@@ -526,7 +536,14 @@ function bindEvents() {
     });
 
     // 缩放监听
-    map.getView().on('change:resolution', () => checkAreaLogic());
+    map.getView().on('change:resolution', () => {
+        checkAreaLogic();
+        // 更新缩放级别显示
+        const zoom = map.getView().getZoom();
+        if (zoom !== undefined) {
+            currentZoom.value = Math.round(zoom);
+        }
+    });
 }
 
 // --- 2. 业务逻辑 (区域图片) ---
@@ -1173,6 +1190,22 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
     justify-content: center;
 }
 
+/* --- 缩放级别显示 --- */
+.zoom-level-display {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.15);
+    padding: 2px 10px;
+    border-radius: 12px;
+    min-width: 28px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 /* --- 强制覆盖 OpenLayers 默认生成的样式 (核心修复) --- */
 /* OpenLayers 默认会给这个类加 position: absolute，必须覆盖掉 */
 :deep(.ol-mouse-position) {
@@ -1395,7 +1428,7 @@ defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
 }
 
 :deep(.ol-custom-overviewmap:not(.ol-collapsed)) {
-    border: 2px solid rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(20, 156, 49, 0.729);
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.9);
 }
