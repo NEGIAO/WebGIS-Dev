@@ -4,12 +4,16 @@ import { ref, reactive, defineAsyncComponent } from 'vue';
 // 1. 同步导入核心 2D 地图及 UI 组件 (保证首屏速度和 SEO)
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
-import SidePanel from '../components/SidePanel.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 
 // 2. 异步导入 Cesium 组件 (优化：只有在 toggle 到 3D 模式时才去加载巨大的 Cesium 库)
 const CesiumContainer = defineAsyncComponent(() =>
     import('../components/CesiumContainer.vue')
+);
+
+// 3. 异步导入 SidePanel 组件 (优化：延迟加载，避免初始化时加载大量图片资源)
+const SidePanel = defineAsyncComponent(() =>
+    import('../components/SidePanel.vue')
 );
 
 // --- 状态管理 ---
@@ -23,6 +27,7 @@ const is3DMode = ref(false);
 const isMagicMode = ref(false);
 const mapContainerRef = ref(null);
 const isSidePanelCollapsed = ref(true);
+const shouldLoadSidePanel = ref(false); // 控制SidePanel是否加载
 
 // --- 事件处理函数 ---
 
@@ -41,6 +46,10 @@ function handleNewsChanged(newsIndex) {
 
 // 简单的开关逻辑简化
 function toggleSidePanel() {
+    // 首次展开时才加载SidePanel组件及其资源
+    if (isSidePanelCollapsed.value && !shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
 }
 
@@ -105,7 +114,8 @@ function handleFeatureSelected(properties) {
             </div>
 
             <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed }">
-                <SidePanel :locationInfo="locationInfo" :selectedImage="selectedImage"
+                <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
+                <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
                     :isCollapsed="isSidePanelCollapsed" @news-changed="handleNewsChanged"
                     @toggle-panel="toggleSidePanel">
                     <template v-slot:extra-content>
@@ -115,6 +125,15 @@ function handleFeatureSelected(properties) {
                         </div>
                     </template>
                 </SidePanel>
+                <!-- 未加载时显示展开提示 -->
+                <div v-else class="panel-placeholder" @click="toggleSidePanel">
+                    <div class="placeholder-content">
+                        <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                        <span class="placeholder-text">展开</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -181,6 +200,83 @@ function handleFeatureSelected(properties) {
     width: 20px;
 }
 
+/* 侧边栏占位符样式 */
+.panel-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: linear-gradient(135deg, rgba(24, 144, 255, 0.05) 0%, rgba(24, 144, 255, 0.15) 100%);
+    border-left: 3px solid rgba(24, 144, 255, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.panel-placeholder::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.6s ease;
+}
+
+.panel-placeholder:hover {
+    background: linear-gradient(135deg, rgba(24, 144, 255, 0.1) 0%, rgba(24, 144, 255, 0.25) 100%);
+    border-left-color: rgba(24, 144, 255, 0.6);
+    box-shadow: inset 0 0 20px rgba(24, 144, 255, 0.1);
+}
+
+.panel-placeholder:hover::before {
+    left: 100%;
+}
+
+.panel-placeholder:active {
+    transform: scale(0.98);
+}
+
+.placeholder-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 6px;
+}
+
+.placeholder-icon {
+    width: 28px;
+    height: 28px;
+    color: #1890ff;
+    transition: all 0.3s ease;
+    filter: drop-shadow(0 2px 4px rgba(24, 144, 255, 0.2));
+}
+
+.panel-placeholder:hover .placeholder-icon {
+    color: #096dd9;
+    transform: translateX(-3px);
+    filter: drop-shadow(0 3px 6px rgba(24, 144, 255, 0.4));
+}
+
+.placeholder-text {
+    writing-mode: vertical-rl;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1890ff;
+    letter-spacing: 2px;
+    text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
+    transition: all 0.3s ease;
+}
+
+.panel-placeholder:hover .placeholder-text {
+    color: #096dd9;
+    text-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
     .content-section {
@@ -204,8 +300,31 @@ function handleFeatureSelected(properties) {
     }
 
     .side-panel-wrapper.collapsed {
-        height: 24px;
+        height: 40px;
         width: 100%;
+    }
+
+    /* 移动端占位符横向布局 */
+    .placeholder-content {
+        flex-direction: row;
+        padding: 8px 16px;
+        justify-content: center;
+    }
+
+    .placeholder-icon {
+        width: 24px;
+        height: 24px;
+        transform: rotate(90deg);
+    }
+
+    .panel-placeholder:hover .placeholder-icon {
+        transform: rotate(90deg) translateY(-3px);
+    }
+
+    .placeholder-text {
+        writing-mode: horizontal-tb;
+        font-size: 14px;
+        letter-spacing: 1px;
     }
 }
 
