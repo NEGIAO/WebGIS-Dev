@@ -20,8 +20,17 @@
         <input v-model="apiKey" type="password" placeholder="sk-..." />
       </div>
       <div class="form-group">
-        <label>Model:</label>
-        <input v-model="modelName" placeholder="deepseek-chat" />
+        <label>Model:
+          <button @click="fetchModels" class="refresh-btn" :disabled="isFetchingModels" title="刷新模型列表">
+            {{ isFetchingModels ? '⏳' : '🔄' }}
+          </button>
+        </label>
+        <select v-model="modelName" class="model-select">
+          <option v-for="model in availableModels" :key="model.id" :value="model.id">
+            {{ model.name || model.id }}
+          </option>
+        </select>
+        <small class="hint">{{ modelHint }}</small>
       </div>
       <button @click="showSettings = false" class="save-btn">保存并返回</button>
     </div>
@@ -58,10 +67,15 @@ const showSettings = ref(false);
 const inputMessage = ref('');
 const isLoading = ref(false);
 const chatBody = ref(null);
+const isFetchingModels = ref(false);
+const availableModels = ref([
+  { id: 'deepseek-ai/DeepSeek-V2.5', name: 'DeepSeek V2.5 (默认)' }
+]);
+const modelHint = ref('点击🔄可获取更多模型');
 
 // 默认配置，实际使用中可以使用 localStorage 持久化
 const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v3') || 'https://api.siliconflow.cn/v1/chat/completions');
-const apiKey = ref(localStorage.getItem('llm_apikey_v3') || 'sk-rjdyktuhvtwoirqjzgwxfxbbwykymtgyloqduqkuotakdaxb');
+const apiKey = ref(localStorage.getItem('llm_apikey_v3') || 'sk-cieoxpimltrmqybxfnqqkrafetvfvxspmpvycggvxsmkboul');
 const modelName = ref(localStorage.getItem('llm_model_v3') || 'deepseek-ai/DeepSeek-V2.5');
 
 const messages = ref([
@@ -85,6 +99,58 @@ const scrollToBottom = () => {
 const clearHistory = () => {
   if (confirm('确定要清除聊天历史吗？')) {
     messages.value = [{ role: 'assistant', content: '您好！我是您的 AI 助手，有什么可以帮您？' }];
+  }
+};
+
+const fetchModels = async () => {
+  if (!apiKey.value) {
+    modelHint.value = '❌ 请先填写 API Key';
+    return;
+  }
+
+  isFetchingModels.value = true;
+  modelHint.value = '正在获取模型列表...';
+
+  try {
+    // 构建 models 端点 URL
+    const baseUrl = apiEndpoint.value.replace(/\/chat\/completions$/, '');
+    const modelsUrl = `${baseUrl}/models`;
+
+    const response = await fetch(modelsUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey.value}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    if (data.data && Array.isArray(data.data)) {
+      availableModels.value = data.data
+        .filter(m => m.id) // 过滤掉没有 id 的
+        .map(m => ({
+          id: m.id,
+          name: m.name || m.id
+        }));
+      
+      modelHint.value = `✅ 已加载 ${availableModels.value.length} 个模型`;
+      
+      // 如果当前选中的模型不在列表中，自动选择第一个
+      if (!availableModels.value.some(m => m.id === modelName.value) && availableModels.value.length > 0) {
+        modelName.value = availableModels.value[0].id;
+      }
+    } else {
+      throw new Error('返回数据格式异常');
+    }
+  } catch (error) {
+    modelHint.value = `❌ 获取失败: ${error.message}`;
+    console.error('获取模型列表失败:', error);
+  } finally {
+    isFetchingModels.value = false;
   }
 };
 
@@ -116,11 +182,11 @@ const sendMessage = async () => {
         messages: [
           { 
             role: "system", 
-            content: "你是一个专业的WebGIS开发助手，精通Vue3, OpenLayers, Cesium等技术。请用简洁明了的语言回答用户问题。如果涉及代码，请尽量提供完整的代码片段。" 
+            content: "你是一个专业的WebGIS开发助手，精通Vue3, OpenLayers, Cesium等技术，将被我嵌入到网页中，请你给我的网页使用者提供帮助。请用简洁明了的语言回答用户问题。你将被我在WebGIS的部署中调用，我（开发者）的信息如下：NEGIAO,GIS专业；我的联系方式是：1482918576@qq.com；请基于这些信息提供对用户有针对性的帮助。注意，接下来的对话都是用户发起的：" 
           },
           ...messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
         ],
-        stream: true // 开启流式传输
+        stream: true
       })
     });
 
@@ -323,16 +389,50 @@ textarea:focus {
   color: #444;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   outline: none;
   border-color: #4CAF50;
+}
+
+.model-select {
+  width: 100%;
+  cursor: pointer;
+}
+
+.refresh-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1em;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.hint {
+  color: #666;
+  font-size: 0.85em;
+  margin-top: 4px;
+  display: block;
 }
 
 .save-btn {
