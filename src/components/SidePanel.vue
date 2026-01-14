@@ -6,41 +6,48 @@
         </div>
 
         <!-- 面板内容区域 -->
-        <div class="panel-content" v-show="!isCollapsed">
-            <!-- 顶部 Logo 栏 -->
-            <div class="panel-header">
-                <img :src="resolvePath('images/院徽.png')" class="logo" alt="河南大学地理科学学院Logo">
-                <div class="title-wrapper">
-                    <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
+        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' }">
+            
+            <!-- 模式 1: AI 聊天 -->
+            <ChatPanelContent v-if="activeTab === 'chat'" @close-chat="$emit('close-chat')" />
+
+            <!-- 模式 2: 新闻展示 (默认) -->
+            <div v-else class="info-content">
+                <!-- 顶部 Logo 栏 -->
+                <div class="panel-header">
+                    <img :src="resolvePath('images/院徽.png')" class="logo" alt="河南大学地理科学学院Logo">
+                    <div class="title-wrapper">
+                        <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
+                    </div>
                 </div>
-            </div>
 
-            <!-- 新闻标题 -->
-            <div class="news-header">
-                <a :href="displayData.href" :target="displayData.isExternal ? '_blank' : '_self'">
-                    {{ displayData.title }}
-                </a>
-            </div>
+                <!-- 新闻标题 -->
+                <div class="news-header">
+                    <a :href="displayData.href" :target="displayData.isExternal ? '_blank' : '_self'">
+                        {{ displayData.title }}
+                    </a>
+                </div>
 
-            <!-- 图片展示区 -->
-            <div class="image-container">
-                <img :src="displayData.image" class="news-image" :alt="displayData.title">
-            </div>
+                <!-- 图片展示区 -->
+                <div class="image-container">
+                    <img :src="displayData.image" class="news-image" :alt="displayData.title">
+                </div>
 
-            <!-- 文本内容 -->
-            <div class="text-content" v-html="displayData.text"></div>
+                <!-- 文本内容 -->
+                <div class="text-content" v-html="displayData.text"></div>
 
-            <!-- 交互按钮 -->
-            <button class="action-button" @click="nextNews" title="切换下一条新闻">
-                点击，新闻++
-            </button>
+                <!-- 交互按钮 -->
+                <button class="action-button" @click="nextNews" title="切换下一条新闻">
+                    点击，新闻++
+                </button>
 
-            <!-- 插槽：允许父组件插入额外内容 -->
-            <slot name="extra-content"></slot>
+                <!-- 插槽：允许父组件插入额外内容 -->
+                <slot name="extra-content"></slot>
 
-            <!-- 底部链接 -->
-            <div class="panel-footer">
-                <a :href="LINKS.MAIN_NEWS" target="_blank">河南大学地理科学学院！</a>
+                <!-- 底部链接 -->
+                <div class="panel-footer">
+                    <a :href="LINKS.MAIN_NEWS" target="_blank">河南大学地理科学学院！</a>
+                </div>
             </div>
         </div>
     </div>
@@ -48,6 +55,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import ChatPanelContent from './ChatPanelContent.vue'; // 引入聊天内容组件
 
 // --- 1. 常量定义 ---
 const LINKS = {
@@ -64,13 +72,13 @@ const props = defineProps({
         type: String,
         default: ''
     },
-    isCollapsed: {
-        type: Boolean,
-        default: false
+    activeTab: {
+        type: String,
+        default: 'info' // 'info' or 'chat'
     }
 });
 
-const emit = defineEmits(['news-changed', 'toggle-panel']);
+const emit = defineEmits(['news-changed', 'toggle-panel', 'close-chat']);
 
 // --- 3. 工具函数：路径处理 ---
 const baseUrl = import.meta.env.BASE_URL || '/';
@@ -186,12 +194,25 @@ function nextNews() {
 /* 内容区域 */
 .panel-content {
     flex: 1;
+    /* padding: 20px;  Removed: Moved to .info-content */
+    /* overflow-y: auto; Removed: Moved to .info-content */
+    display: flex;
+    flex-direction: column;
+    min-width: 300px;
+    height: 100%;
+    overflow: hidden;
+}
+
+.panel-content.no-padding {
+    padding: 0;
+}
+
+.info-content {
+    flex: 1;
     padding: 20px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    min-width: 300px;
-    /* 防止内容过度挤压 */
 }
 
 /* 头部 */
@@ -360,9 +381,13 @@ function nextNews() {
 
     .panel-content {
         min-width: unset;
-        padding: 15px;
-        /* 移动端内容区可以设个最大高度，允许内部滚动 */
+        /* padding: 15px; Removed */
         max-height: 60vh;
+        /* overflow-y: auto; Removed */
+    }
+
+    .info-content {
+        padding: 15px;
         overflow-y: auto;
     }
 }

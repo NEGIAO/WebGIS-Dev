@@ -9,6 +9,7 @@
 
 ## 主要特性
 
+- 🤖 **AI 助手**：集成大语言模型（SiliconFlow API），提供智能 GIS 问答服务，支持流式对话与历史记录清除。
 - 🌍 **三维地球**：集成 CesiumJS，支持高精度地形渲染与智能地形源切换（境内天地图/境外 World Terrain）。
 - 📌 **多底图切换**：支持本地瓦片、天地图影像/矢量、ESRI 影像、OpenStreetMap、高德地图等服务。
 - 🗺️ **鹰眼视图**：左上角实时显示当前视图范围，支持展开/折叠，提供全局视野。
@@ -45,12 +46,13 @@ WebGIS_henu_trials_5_28_vue3/
 ├── src/
 │   ├── assets/          # 全局样式与静态资源
 │   ├── components/      # Vue 组件
-│   │   ├── icons/              # 图标组件
-│   │   ├── CesiumContainer.vue # 3D 地球组件 (CesiumJS)
-│   │   ├── MagicCursor.vue     # 鼠标特效组件
-│   │   ├── MapContainer.vue    # 2D 地图组件 (OpenLayers + 鹰眼视图)
-│   │   ├── SidePanel.vue       # 右侧信息面板组件
-│   │   └── TopBar.vue          # 顶部导航栏组件
+│   │   ├── icons/               # 图标组件
+│   │   ├── CesiumContainer.vue  # 3D 地球组件 (CesiumJS)
+│   │   ├── ChatPanelContent.vue # AI 聊天内容组件 (New!)
+│   │   ├── MagicCursor.vue      # 鼠标特效组件
+│   │   ├── MapContainer.vue     # 2D 地图组件 (OpenLayers + 鹰眼视图)
+│   │   ├── SidePanel.vue        # 右侧侧边栏组件 (Info/Chat Mode)
+│   │   └── TopBar.vue           # 顶部导航栏组件
 │   ├── router/          # Vue Router 路由配置
 │   │   └── index.js     # 路由定义（Home、Register）
 │   ├── views/           # 页面视图
@@ -66,6 +68,17 @@ WebGIS_henu_trials_5_28_vue3/
 ```
 
 ## 版本记录
+
+### V2.4.0 (2026-01-14)
+- **🤖 AI 智能助手**：
+    - **集成 DeepSeek V2.5**：通过 SiliconFlow API 接入先进的 GIS 领域大语言模型，提供实时、准确的专业问答服务。
+    - **流式响应**：实现在线打字机效果，大幅提升对话流畅度与用户体验。
+    - **无缝集成**：AI 面板内置于 `SidePanel`，通过顶部导航栏一键唤起，不遮挡地图主界面，支持与新闻面板快速切换。
+    - **个性化设置**：支持自定义 API Endpoint、Key 和模型名称，且能在本地自动持久化保存。
+    - **历史管理**：支持一键清除聊天记录。
+- **UI/UX 优化**：
+    - **侧边栏重构**：升级 `SidePanel` 组件，使其支持多 Tab 模式（信息/聊天），在保持原有新闻展示功能的同时扩展了 AI 交互能力，避免了弹窗遮挡问题。
+    - **TopBar 升级**：新增 AI 助手入口按钮，优化了按钮布局。
 
 ### V2.3.2 (2026-01-12)
 - **性能优化**：

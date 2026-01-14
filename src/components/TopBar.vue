@@ -71,6 +71,11 @@
                 </transition>
             </div>
 
+            <button class="nav-btn" @click="$emit('open-chat')" title="AI 助手">
+                <span class="btn-icon">🤖</span>
+                <span class="btn-text">AI 助手</span>
+            </button>
+
             <!-- 2. 独立功能按钮 -->
             <button class="nav-btn" @click="$emit('toggle-3d')" title="切换2D/3D视图">
                 <span class="btn-icon">🌍</span>
@@ -88,7 +93,7 @@
 <script setup>
 import { ref } from 'vue';
 
-const emit = defineEmits(['toggle-magic', 'toggle-3d', 'upload-data', 'interaction']);
+const emit = defineEmits(['toggle-magic', 'toggle-3d', 'upload-data', 'interaction', 'open-chat']);
 
 // 路径处理
 const baseUrl = import.meta.env.BASE_URL || '/';

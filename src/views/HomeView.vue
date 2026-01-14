@@ -28,6 +28,7 @@ const isMagicMode = ref(false);
 const mapContainerRef = ref(null);
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false); // 控制SidePanel是否加载
+const activeSidePanelTab = ref('info'); // 'info' 或 'chat'
 
 // --- 事件处理函数 ---
 
@@ -51,6 +52,23 @@ function toggleSidePanel() {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
+    
+    // 如果是关闭操作，或者手动切换面板，重置为 info 模式可选
+    // 但通常保留上次的状态比较好，或者如果用户手动关闭面板，下次打开默认是 info？
+    // 这里暂时不重置
+}
+
+function openChat() {
+    activeSidePanelTab.value = 'chat';
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
+function handleCloseChat() {
+    // 聊天切换回新闻，或者关闭面板？通常是切回默认 info 模式
+    activeSidePanelTab.value = 'info';
 }
 
 function toggle3D() {
@@ -96,7 +114,7 @@ function handleFeatureSelected(properties) {
         <!-- 顶部控制栏 -->
         <div class="top-section">
             <TopBar @toggle-magic="toggleMagic" @toggle-3d="toggle3D" @upload-data="handleUploadData"
-                @interaction="handleInteraction" />
+                @interaction="handleInteraction" @open-chat="openChat" />
         </div>
 
         <div class="content-section">
@@ -116,8 +134,9 @@ function handleFeatureSelected(properties) {
             <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed }">
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
-                    :isCollapsed="isSidePanelCollapsed" @news-changed="handleNewsChanged"
-                    @toggle-panel="toggleSidePanel">
+                    :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
+                    @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
+                    @close-chat="handleCloseChat">
                     <template v-slot:extra-content>
                         <div class="extra-info">
                             <h3>提示</h3>
