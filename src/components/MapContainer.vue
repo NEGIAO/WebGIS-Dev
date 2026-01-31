@@ -134,10 +134,10 @@ import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
-const CHINA_CENTER = [104.1954, 35.8617];
 
-// 天地图 Token (来自文件示例)
-const TIANDITU_TK = '4267820f43926eaf808d61dc07269beb';
+// 天地图 Token：优先使用环境变量，否则使用默认值
+// 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
+const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
 const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
 const IMAGES = [

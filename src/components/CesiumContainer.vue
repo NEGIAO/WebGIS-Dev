@@ -23,7 +23,8 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import * as Cesium from 'cesium';
 
 // --- 配置常量区域 ---
-const TDT_TOKEN = '4267820f43926eaf808d61dc07269beb';
+// 天地图 Token：优先使用环境变量
+const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 // const GOOGLE_MAP_URL = 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
 const GOOGLE_MAP_URL = 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
 
