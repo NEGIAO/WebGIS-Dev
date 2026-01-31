@@ -54,15 +54,24 @@
 </template>
 
 <script setup>
+/**
+ * SidePanel.vue - 可折叠侧边栏组件
+ * 
+ * 功能：
+ * - 新闻展示模式 (info)
+ * - AI 聊天模式 (chat)
+ * - 支持折叠/展开
+ * - 移动端自适应
+ */
 import { ref, computed } from 'vue';
-import ChatPanelContent from './ChatPanelContent.vue'; // 引入聊天内容组件
+import ChatPanelContent from './ChatPanelContent.vue';
 
-// --- 1. 常量定义 ---
+// ========== 1. 常量定义 ==========
 const LINKS = {
     MAIN_NEWS: "https://cep.henu.edu.cn/zhxw/xyxw.htm"
 };
 
-// --- 2. Props & Emits ---
+// ========== 2. Props & Emits ==========
 const props = defineProps({
     locationInfo: {
         type: Object,
@@ -80,14 +89,14 @@ const props = defineProps({
 
 const emit = defineEmits(['news-changed', 'toggle-panel', 'close-chat']);
 
-// --- 3. 工具函数：路径处理 ---
+// ========== 3. 工具函数 ==========
 const baseUrl = import.meta.env.BASE_URL || '/';
 const resolvePath = (path) => {
     const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
     return `${base}${path}`;
 };
 
-// --- 4. 数据源 (合并为对象数组) ---
+// ========== 4. 新闻数据源 ==========
 const NEWS_LIST = [
     {
         title: "4.22地球日，地环院开展系列活动",
@@ -112,41 +121,40 @@ const NEWS_LIST = [
 const DEFAULT_STATE = {
     title: "地科院新闻",
     text: "请将鼠标移动到地科院区域<br>查看新闻内容<br><br>在左侧地图中放大<br>可以查看地科院的照片！<br><br>下方还有内容哦！<br>请鼠标下滑",
-    image: "images/院徽.png", // 可以在此设置一个默认占位图
+    image: "images/院徽.png",
     href: LINKS.MAIN_NEWS,
     isExternal: true
 };
 
-// --- 5. 状态管理 ---
+// ========== 5. 状态管理 ==========
 const currentNewsIndex = ref(0);
 
-// --- 6. 计算逻辑 ---
-// 核心逻辑：统一决定当前应该显示什么数据
+// ========== 6. 计算属性 ==========
+/**
+ * 核心逻辑：统一决定当前应该显示什么数据
+ * - 如果不在指定区域，显示默认提示
+ * - 如果在区域内，显示当前新闻
+ */
 const displayData = computed(() => {
-    // 如果不在指定区域，显示默认提示
     if (!props.locationInfo.isInDihuan) {
-        // 这里如果需要默认图片不同，可以修改 DEFAULT_STATE
-        // 逻辑修正：原代码在默认状态下，图片使用的是当前新闻索引的图片，这比较奇怪。
-        // 如果你想保留原逻辑（默认状态也显示新闻图），用下面的写法：
         return {
             ...DEFAULT_STATE,
             image: props.selectedImage || resolvePath(NEWS_LIST[currentNewsIndex.value].image)
         };
     }
 
-    // 如果在区域内，显示当前新闻
     const currentItem = NEWS_LIST[currentNewsIndex.value];
     return {
         title: currentItem.title,
         text: currentItem.text,
-        // 优先显示 props 传入的选中图片，否则显示新闻图片
         image: props.selectedImage || resolvePath(currentItem.image),
         href: currentItem.href,
         isExternal: true
     };
 });
 
-// --- 7. 事件处理 ---
+// ========== 7. 事件处理 ==========
+/** 切换到下一条新闻 */
 function nextNews() {
     currentNewsIndex.value = (currentNewsIndex.value + 1) % NEWS_LIST.length;
     emit('news-changed', currentNewsIndex.value);

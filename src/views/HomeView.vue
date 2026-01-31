@@ -1,63 +1,77 @@
 <script setup>
+/**
+ * HomeView.vue - 主页面组件
+ * 
+ * 功能：
+ * - 2D/3D 地图切换
+ * - AI 助手集成
+ * - 新闻侧边栏展示
+ * - 鼠标特效
+ */
 import { ref, reactive, defineAsyncComponent } from 'vue';
 
-// 1. 同步导入核心 2D 地图及 UI 组件 (保证首屏速度和 SEO)
+// ========== 1. 组件导入 ==========
+// 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 
-// 2. 异步导入 Cesium 组件 (优化：只有在 toggle 到 3D 模式时才去加载巨大的 Cesium 库)
+// 异步导入：Cesium 组件 (优化：只有切换到 3D 模式时才加载库)
 const CesiumContainer = defineAsyncComponent(() =>
     import('../components/CesiumContainer.vue')
 );
 
-// 3. 异步导入 SidePanel 组件 (优化：延迟加载，避免初始化时加载大量图片资源)
+// 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
 const SidePanel = defineAsyncComponent(() =>
     import('../components/SidePanel.vue')
 );
 
-// --- 状态管理 ---
+// ========== 2. 响应式状态 ==========
+// 地图位置信息
 const locationInfo = reactive({
     isInDihuan: false,
     lonLat: [0, 0]
 });
+
+// UI 状态
 const selectedImage = ref('');
 const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
 const isMagicMode = ref(false);
-const mapContainerRef = ref(null);
 const isSidePanelCollapsed = ref(true);
-const shouldLoadSidePanel = ref(false); // 控制SidePanel是否加载
-const activeSidePanelTab = ref('info'); // 'info' 或 'chat'
+const shouldLoadSidePanel = ref(false);
+const activeSidePanelTab = ref('info'); // 'info' | 'chat'
 
-// --- 事件处理函数 ---
+// 组件引用
+const mapContainerRef = ref(null);
 
+// ========== 3. 事件处理函数 ==========
+
+/** 地图位置变化处理 */
 function handleLocationChange(locationData) {
     Object.assign(locationInfo, locationData);
 }
 
+/** 更新新闻图片 */
 function handleUpdateNewsImage(imageSrc) {
     selectedImage.value = imageSrc;
 }
 
+/** 新闻切换处理 */
 function handleNewsChanged(newsIndex) {
     currentNewsIndex.value = newsIndex;
-    // console.log('News changed to index:', newsIndex);
 }
 
-// 简单的开关逻辑简化
+/** 切换侧边栏展开/收起 */
 function toggleSidePanel() {
     // 首次展开时才加载SidePanel组件及其资源
     if (isSidePanelCollapsed.value && !shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
-    
-    // 如果是关闭操作，或者手动切换面板，重置为 info 模式可选
-    // 但通常保留上次的状态比较好，或者如果用户手动关闭面板，下次打开默认是 info？
-    // 这里暂时不重置
 }
 
+/** 打开 AI 聊天面板 */
 function openChat() {
     activeSidePanelTab.value = 'chat';
     if (!shouldLoadSidePanel.value) {
@@ -66,28 +80,32 @@ function openChat() {
     isSidePanelCollapsed.value = false;
 }
 
+/** 关闭 AI 聊天，切换回新闻模式 */
 function handleCloseChat() {
-    // 聊天切换回新闻，或者关闭面板？通常是切回默认 info 模式
     activeSidePanelTab.value = 'info';
 }
 
+/** 切换 2D/3D 视图 */
 function toggle3D() {
     is3DMode.value = !is3DMode.value;
 }
 
+/** 切换鼠标特效 */
 function toggleMagic() {
     isMagicMode.value = !isMagicMode.value;
 }
 
+/** 处理文件上传 */
 function handleUploadData(data) {
-    // 使用可选链 ?. 防止组件未加载时报错
     mapContainerRef.value?.addUserDataLayer(data);
 }
 
+/** 处理地图交互工具 */
 function handleInteraction(type) {
     mapContainerRef.value?.activateInteraction(type);
 }
 
+/** 处理要素选中事件 */
 function handleFeatureSelected(properties) {
     if (!properties) return;
 

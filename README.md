@@ -24,6 +24,23 @@
 
 ## 快速开始
 
+### 环境变量配置
+
+复制 `.env.example` 为 `.env` 并配置必要的环境变量：
+
+```bash
+cp .env.example .env
+```
+
+| 变量名 | 说明 | 必填 |
+|--------|------|------|
+| `VITE_TIANDITU_TK` | 天地图 API Token，[申请地址](https://console.tianditu.gov.cn/) | 推荐 |
+| `VITE_LLM_API_KEY` | AI 助手 API Key，[申请地址](https://cloud.siliconflow.cn/) | 推荐 |
+| `VITE_LLM_ENDPOINT` | LLM API 端点 (默认 SiliconFlow) | 可选 |
+| `VITE_LLM_MODEL` | LLM 模型名称 (默认 DeepSeek-V2.5) | 可选 |
+
+### 安装与运行
+
 ```bash
 npm install
 npm run dev
@@ -38,17 +55,21 @@ npm run build
 
 ```
 WebGIS_henu_trials_5_28_vue3/
+├── .github/
+│   └── workflows/       # GitHub Actions 工作流配置
 ├── public/              # 静态资源（包括 icon、瓦片、图片）
 │   ├── images/          # 校园图片资源
 │   ├── tiles/           # 本地瓦片资源 {z}/{x}/{y}.png
+│   ├── favicon.ico      # 网站图标
 │   ├── min-enhanced.js  # 延迟统计脚本
-│   └── ol.js / ol.css   # OpenLayers 库文件
+│   ├── ol.js            # OpenLayers 库文件
+│   └── ol.css           # OpenLayers 样式文件
 ├── src/
 │   ├── assets/          # 全局样式与静态资源
 │   ├── components/      # Vue 组件
 │   │   ├── icons/               # 图标组件
 │   │   ├── CesiumContainer.vue  # 3D 地球组件 (CesiumJS)
-│   │   ├── ChatPanelContent.vue # AI 聊天内容组件 (New!)
+│   │   ├── ChatPanelContent.vue # AI 聊天内容组件
 │   │   ├── MagicCursor.vue      # 鼠标特效组件
 │   │   ├── MapContainer.vue     # 2D 地图组件 (OpenLayers + 鹰眼视图)
 │   │   ├── SidePanel.vue        # 右侧侧边栏组件 (Info/Chat Mode)
@@ -60,14 +81,35 @@ WebGIS_henu_trials_5_28_vue3/
 │   │   └── RegisterView.vue  # 注册/登录页
 │   ├── App.vue          # 根组件
 │   └── main.js          # 入口文件
+├── .env                 # 环境变量配置（本地，不提交）
+├── .env.example         # 环境变量配置示例
+├── .gitignore           # Git 忽略配置
+├── eslint.config.js     # ESLint 代码规范配置
 ├── index.html           # HTML 入口
+├── jsconfig.json        # JavaScript 配置
 ├── package.json         # 项目依赖配置
 ├── vite.config.js       # Vite 构建配置
-├── eslint.config.js     # ESLint 代码规范配置
 └── README.md            # 项目说明文档
 ```
 
 ## 版本记录
+
+### V2.4.1 (2026-02-01)
+- **🔒 安全性优化**：
+    - 移除代码中硬编码的 API Key，改为环境变量配置。
+    - 天地图 Token 和 AI API Key 现在通过 `.env` 文件配置。
+    - 新增 `.env.example` 环境变量配置模板。
+- **📝 代码质量优化**：
+    - 为所有主要组件添加 JSDoc 文档注释。
+    - 统一代码区域标记格式，提升可读性。
+    - 移除未使用的常量和冗余注释。
+- **🤖 AI 助手优化**：
+    - 未配置 API Key 时显示友好提示，引导用户前往设置。
+    - 优化欢迎消息初始化逻辑。
+- **📖 文档更新**：
+    - README 新增环境变量配置表格说明。
+    - 更新目录结构，添加 `.env.example` 文件说明。
+    - 完善开发建议，强调环境变量安全实践。
 
 ### V2.4.0 (2026-01-14)
 - **🤖 AI 智能助手**：
@@ -173,7 +215,9 @@ WebGIS_henu_trials_5_28_vue3/
 
 - 建议使用 VS Code + Volar 插件，配合 ESLint 保持代码风格一致。
 - 大比例尺时请求的瓦片较多，可按需控制缩放阈值或裁剪瓦片范围。
-- 如需新增 API Key，请通过 `.env` 配置，并在 `vite.config.js` 中读取 `VITE_` 前缀变量。
+- **环境变量配置**：复制 `.env.example` 为 `.env`，配置你的 API Key，不要将 `.env` 提交到版本控制。
+- **新增 API Key**：在 `.env` 文件中配置 `VITE_` 前缀变量，使用 `import.meta.env.VITE_XXX` 读取。
+- **生产部署**：确保配置天地图 Token 和 AI API Key，否则相关功能将不可用。
 
 欢迎继续扩展功能，例如添加更多兴趣点、天气信息或 3D 建筑模型。若遇到问题，欢迎提 Issue 讨论。祝学习顺利！
 ```

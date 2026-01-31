@@ -73,14 +73,31 @@ const availableModels = ref([
 ]);
 const modelHint = ref('点击🔄可获取更多模型');
 
-// 默认配置，实际使用中可以使用 localStorage 持久化
-const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v3') || 'https://api.siliconflow.cn/v1/chat/completions');
-const apiKey = ref(localStorage.getItem('llm_apikey_v3') || 'sk-cieoxpimltrmqybxfnqqkrafetvfvxspmpvycggvxsmkboul');
-const modelName = ref(localStorage.getItem('llm_model_v3') || 'deepseek-ai/DeepSeek-V2.5');
+// API 配置：优先使用 localStorage，其次使用环境变量，最后使用默认值
+// 注意：API Key 不应硬编码在代码中，请在 .env 文件中配置 VITE_LLM_API_KEY
+const DEFAULT_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || 'https://api.siliconflow.cn/v1/chat/completions';
+const DEFAULT_API_KEY = import.meta.env.VITE_LLM_API_KEY || '';
+const DEFAULT_MODEL = import.meta.env.VITE_LLM_MODEL || 'deepseek-ai/DeepSeek-V2.5';
 
-const messages = ref([
-  { role: 'assistant', content: '您好！我是您的 AI 助手，有什么可以帮您？' }
-]);
+const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v3') || DEFAULT_ENDPOINT);
+const apiKey = ref(localStorage.getItem('llm_apikey_v3') || DEFAULT_API_KEY);
+const modelName = ref(localStorage.getItem('llm_model_v3') || DEFAULT_MODEL);
+
+const messages = ref([]);
+
+// 初始化欢迎消息，根据 API Key 是否配置显示不同内容
+const initWelcomeMessage = () => {
+  if (!apiKey.value) {
+    return { 
+      role: 'assistant', 
+      content: '您好！我是 AI 助手。\n\n⚠️ 注意：尚未配置 API Key。\n请点击右上角 ⚙️ 设置您的 API Key 后开始使用。' 
+    };
+  }
+  return { role: 'assistant', content: '您好！我是您的 AI 助手，有什么可以帮您？' };
+};
+
+// 初始化消息列表
+messages.value = [initWelcomeMessage()];
 
 watch([apiEndpoint, apiKey, modelName], () => {
   localStorage.setItem('llm_endpoint_v3', apiEndpoint.value);
@@ -98,7 +115,7 @@ const scrollToBottom = () => {
 
 const clearHistory = () => {
   if (confirm('确定要清除聊天历史吗？')) {
-    messages.value = [{ role: 'assistant', content: '您好！我是您的 AI 助手，有什么可以帮您？' }];
+    messages.value = [initWelcomeMessage()];
   }
 };
 
