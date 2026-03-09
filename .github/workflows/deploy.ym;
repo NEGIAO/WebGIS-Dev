@@ -1,0 +1,132 @@
+name: Build Vue & Sync to Main Pages Repo
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 权限设置：允许读取仓库内容，允许写 Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  # ==========================================
+  # 第一步：构建 (Build)
+  # ==========================================
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Vue Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Project
+        run: npm run build
+        # 此时生成了 dist 文件夹
+
+      # 1. 为“自己”的 GitHub Pages 准备 artifact
+      - name: Upload pages artifact (for self)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      # 2. 为“外部”的 Pages 仓库准备 artifact (普通文件)
+      - name: Upload dist artifact (for external sync)
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-files
+          path: dist
+
+  # ==========================================
+  # 第二步：部署到 Vue 仓库自己的 Pages (可选)
+  # ==========================================
+  deploy-to-self:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  # ==========================================
+  # 第三步：同步到 NEGIAO.github.io 
+  # ==========================================
+  sync-to-main-repo:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 下载构建好的 Vue 文件
+      - name: Download built files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+          path: dist-for-sync
+
+      # 2. 这里的逻辑是：克隆主仓库 -> 删除原子目录 -> 放入新文件 -> 推送
+      - name: Push to NEGIAO.github.io
+        env:
+          # Vue 仓库的 Secrets 里配置这个 Token
+          DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+        run: |
+          # --- 配置变量 ---
+          TARGET_REPO="NEGIAO/NEGIAO.github.io"   # 主页仓库 (三件套)
+          TARGET_BRANCH="main"                    # 主页仓库的分支
+          TARGET_DIR="WebGIS"                 # Vue 项目在主页仓库里名字
+                                                  # 最终访问路径会是: https://NEGIAO.github.io/WebGIS/
+
+          # --- 设置 Git 用户 ---
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "actions@github.com"
+
+          # --- 克隆主仓库 ---
+          echo "Cloning target repo..."
+          git clone --depth 1 --branch $TARGET_BRANCH "https://x-access-token:${DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" target_repo
+          
+          cd target_repo
+
+          # --- 替换文件 ---
+          echo "Updating subdirectory: ${TARGET_DIR}"
+          
+          # 如果目标目录存在，先清空 (保留目录结构，删除内容)
+          # 这样可以确保旧版本的文件被清理掉
+          if [ -d "$TARGET_DIR" ]; then
+            rm -rf "$TARGET_DIR"
+          fi
+          
+          mkdir -p "$TARGET_DIR"
+
+          # 将下载的 dist 文件复制进去
+          # ../dist-for-sync 是我们在上一步下载 artifact 的路径
+          cp -R ../dist-for-sync/. "$TARGET_DIR/"
+
+          # 创建 .nojekyll 防止下划线文件丢失
+          touch "$TARGET_DIR/.nojekyll"
+
+          # --- 提交并推送 ---
+          echo "Committing changes..."
+          git add --all
+          
+          if git diff --staged --quiet; then
+            echo "No changes detected. Skipping push."
+          else
+            git commit -m "Update Vue app from source repo: ${GITHUB_SHA::7}"
+            echo "Pushing to ${TARGET_REPO}..."
+            git push "https://x-access-token:${DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" $TARGET_BRANCH
+          fi
