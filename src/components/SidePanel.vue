@@ -43,7 +43,12 @@
 
                 <!-- 插槽：允许父组件插入额外内容 -->
                 <slot name="extra-content"></slot>
-
+                
+                <!-- 访问统计，2026.3.9开始 -->
+                <div style="height: 20px; display: flex; justify-content: center; align-items: center;">
+                    <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge"/>
+                </div>
+                
                 <!-- 底部链接 -->
                 <div class="panel-footer">
                     <a :href="LINKS.MAIN_NEWS" target="_blank">河南大学地理科学学院！</a>
