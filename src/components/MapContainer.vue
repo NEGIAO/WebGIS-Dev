@@ -391,6 +391,8 @@ function initMap() {
     });
 
     // 1.3 控件
+    // 从 LAYER_CONFIGS 中获取 Google 配置，使鹰眼视图与坐标系保持一致
+    const googleConfig = LAYER_CONFIGS.find(cfg => cfg.id === 'google');
     const controls = defaultControls({ zoom: false }).extend([
         new ScaleLine({ units: 'metric', bar: true, minWidth: 100 }),
         new MousePosition({
@@ -399,13 +401,13 @@ function initMap() {
             target: mousePositionRef.value,
             undefinedHTML: '&nbsp;'
         }),
-        // 鹰眼视图控件
+        // 鹰眼视图控件 - 使用 googleConfig 动态引用，保持 URL 一致
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
             layers: [
                 new TileLayer({
-                    source: new XYZ({
-                        url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+                    source: googleConfig ? googleConfig.createSource() : new XYZ({
+                        url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
                         maxZoom: 20
                     })
                 })
