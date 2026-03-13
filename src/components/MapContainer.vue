@@ -185,7 +185,7 @@ const LAYER_CONFIGS = [
     },
     { 
         id: 'google', name: 'Google', visible: true,
-        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }) 
+        createSource: () => new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }) 
     },
     { 
         id: 'custom', name: '自定义', visible: false,
@@ -205,11 +205,11 @@ const LAYER_CONFIGS = [
     },
     { 
         id: 'google_standard', name: 'Google标准', visible: false,
-        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt/lyrs=m&x={x}&y={y}&z={z}' }) 
+        createSource: () => new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt/lyrs=m&x={x}&y={y}&z={z}' }) 
     },
     { 
         id: 'google_clean', name: 'Google简洁', visible: false,
-        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off' }) 
+        createSource: () => new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off' }) 
     },
     { 
         id: 'esri', name: 'ESRI', visible: false,
