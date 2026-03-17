@@ -59,6 +59,17 @@
                     <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z"/>
                 </svg>
             </button>
+
+            <!-- 经纬度直线动态分割当前视图，并标注经纬度 -->
+            <button
+                class="graticule-btn"
+                :class="{ active: showDynamicSplitLines }"
+                @click="toggleDynamicSplitLines"
+                title="经纬度分割线"
+            >
+                经纬线
+            </button>
+
             <div v-if="selectedLayer === 'custom'" class="custom-url-wrapper">
                 <input v-model="customMapUrl" class="custom-url-input" placeholder="输入 https://.../{z}/{x}/{y}.png" />
                 <button class="custom-url-btn" @click="loadCustomMap" title="加载">ok</button>
@@ -108,7 +119,7 @@ import Map from 'ol/Map';
 import View from 'ol/View';
 import Feature from 'ol/Feature';
 import Overlay from 'ol/Overlay';
-import { fromLonLat, toLonLat } from 'ol/proj';
+import { equivalent, fromLonLat, toLonLat, transform, transformExtent } from 'ol/proj';
 import { defaults as defaultControls, ScaleLine, MousePosition, OverviewMap } from 'ol/control';
 import { createStringXY } from 'ol/coordinate';
 import { unByKey } from 'ol/Observable';
@@ -117,20 +128,25 @@ import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'o
 
 // 图层与数据源
 import TileLayer from 'ol/layer/Tile';
+import WebGLTileLayer from 'ol/layer/WebGLTile';
+import ImageLayer from 'ol/layer/Image';
 import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';
 import VectorSource from 'ol/source/Vector';
+import GeoTIFFSource from 'ol/source/GeoTIFF';
+import ImageStatic from 'ol/source/ImageStatic';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import shp from 'shpjs';
+import { fromBlob as geotiffFromBlob } from 'geotiff';
 
 // 几何与交互
 import Point from 'ol/geom/Point';
 import CircleGeom from 'ol/geom/Circle';
 import { LineString, Polygon } from 'ol/geom';
 import { Draw, Snap } from 'ol/interaction';
-import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
+import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -157,6 +173,7 @@ const selectedLayer = ref('google');
 const customMapUrl = ref('');
 const showImageSet = ref(false);
 const showLayerManager = ref(false);
+const showDynamicSplitLines = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
@@ -285,6 +302,8 @@ let measureTooltipEl, measureTooltipOverlay;
 let helpTooltipEl, helpTooltipOverlay;
 let sketchFeature;
 let homeClickTimer = null; // 用于处理单击双击冲突
+let dynamicSplitLinesLayer = null;
+let dynamicSplitMoveKey = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -437,6 +456,10 @@ async function detectIPLocale() {
 }
 
 onUnmounted(() => {
+    if (dynamicSplitMoveKey) {
+        unByKey(dynamicSplitMoveKey);
+        dynamicSplitMoveKey = null;
+    }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
 
@@ -545,6 +568,632 @@ function createManagedVectorLayer({
     }
 
     return id;
+}
+
+function getBandMinMax(data) {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < data.length; i++) {
+        const v = data[i];
+        if (!Number.isFinite(v)) continue;
+        if (v < min) min = v;
+        if (v > max) max = v;
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
+        return { min: 0, max: 1 };
+    }
+    return { min, max };
+}
+
+function stretchToByte(value, min, max) {
+    if (!Number.isFinite(value)) return 0;
+    const n = (value - min) / (max - min);
+    return Math.max(0, Math.min(255, Math.round(n * 255)));
+}
+
+function isNoDataValue(value, nodataValue) {
+    if (nodataValue === null || nodataValue === undefined || !Number.isFinite(value)) return false;
+    const eps = Math.max(1e-9, Math.abs(nodataValue) * 1e-9);
+    return Math.abs(value - nodataValue) <= eps;
+}
+
+function computePercentileStretch(data, nodataValue, lowPct = 2, highPct = 98) {
+    if (!data?.length) return { min: 0, max: 1 };
+
+    const maxSamples = 200000;
+    const step = Math.max(1, Math.floor(data.length / maxSamples));
+    const values = [];
+
+    for (let i = 0; i < data.length; i += step) {
+        const v = data[i];
+        if (!Number.isFinite(v) || isNoDataValue(v, nodataValue)) continue;
+        values.push(v);
+    }
+
+    if (!values.length) return { min: 0, max: 1 };
+
+    values.sort((a, b) => a - b);
+    const lowIndex = Math.max(0, Math.floor((values.length - 1) * (lowPct / 100)));
+    const highIndex = Math.max(0, Math.floor((values.length - 1) * (highPct / 100)));
+
+    let min = values[lowIndex];
+    let max = values[highIndex];
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
+        min = values[0];
+        max = values[values.length - 1];
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
+        return { min: 0, max: 1 };
+    }
+    return { min, max };
+}
+
+function addManagedLayerRecord({ name, type, sourceType, layer, featureCount = 1, styleConfig = null, metadata = null }) {
+    const id = `layer_${userLayerSeed++}`;
+    userDataLayers.push({
+        id,
+        name,
+        type,
+        sourceType,
+        order: userDataLayers.length,
+        visible: true,
+        opacity: 1,
+        featureCount,
+        styleConfig,
+        metadata,
+        layer
+    });
+    refreshUserLayerZIndex();
+    emitUserLayersChange();
+    emitGraphicsOverview();
+    return id;
+}
+
+function isRasterUploadLayer(item) {
+    const t = String(item?.type || '').toLowerCase();
+    return item?.sourceType === 'upload' && (t === 'tif' || t === 'tiff');
+}
+
+function createGeoTiffSampler({ image, projection, nodataValue = null }) {
+    if (!image) return null;
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const bbox = image.getBoundingBox();
+    if (!bbox || bbox.length < 4) return null;
+
+    return async (mapCoordinate, mapProjection) => {
+        let coord = mapCoordinate;
+        if (projection && mapProjection && !equivalent(projection, mapProjection)) {
+            coord = transform(mapCoordinate, mapProjection, projection);
+        }
+
+        const minX = bbox[0];
+        const minY = bbox[1];
+        const maxX = bbox[2];
+        const maxY = bbox[3];
+        if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) {
+            return null;
+        }
+
+        const xNorm = (coord[0] - minX) / Math.max(1e-12, maxX - minX);
+        const yNorm = (maxY - coord[1]) / Math.max(1e-12, maxY - minY);
+        const px = Math.min(width - 1, Math.max(0, Math.floor(xNorm * width)));
+        const py = Math.min(height - 1, Math.max(0, Math.floor(yNorm * height)));
+
+        const raster = await image.readRasters({ window: [px, py, px + 1, py + 1] });
+        const bands = Array.isArray(raster) ? raster : [raster];
+        const values = bands.map((band) => band?.[0]);
+        const allNoData = nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue));
+
+        return {
+            values,
+            pixel: [px, py],
+            nodataValue,
+            allNoData
+        };
+    };
+}
+
+function formatLongitude(lon) {
+    const abs = Math.abs(lon).toFixed(4);
+    return `${abs}°${lon >= 0 ? 'E' : 'W'}`;
+}
+
+function formatLatitude(lat) {
+    const abs = Math.abs(lat).toFixed(4);
+    return `${abs}°${lat >= 0 ? 'N' : 'S'}`;
+}
+
+function createDynamicSplitStyle(textLabel = '', textOptions = {}) {
+    return new Style({
+        stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 2 }),
+        text: textLabel
+            ? new Text({
+                text: textLabel,
+                font: 'bold 12px Consolas, Monaco, monospace',
+                fill: new Fill({ color: '#124e28' }),
+                backgroundFill: new Fill({ color: 'rgba(255,255,255,0.9)' }),
+                padding: [2, 4, 2, 4],
+                offsetX: textOptions.offsetX ?? 0,
+                offsetY: textOptions.offsetY ?? -10,
+                textAlign: textOptions.textAlign ?? 'center'
+            })
+            : undefined
+    });
+}
+
+function ensureDynamicSplitLayer() {
+    if (!mapInstance.value) return null;
+    if (dynamicSplitLinesLayer) return dynamicSplitLinesLayer;
+
+    dynamicSplitLinesLayer = new VectorLayer({
+        source: new VectorSource(),
+        zIndex: 1080
+    });
+    mapInstance.value.addLayer(dynamicSplitLinesLayer);
+    return dynamicSplitLinesLayer;
+}
+
+function updateDynamicSplitLines() {
+    if (!mapInstance.value) return;
+    const layer = ensureDynamicSplitLayer();
+    const source = layer?.getSource?.();
+    if (!source) return;
+
+    source.clear();
+    if (!showDynamicSplitLines.value) {
+        layer.setVisible(false);
+        return;
+    }
+
+    layer.setVisible(true);
+    const view = mapInstance.value.getView();
+    const size = mapInstance.value.getSize();
+    if (!size) return;
+
+    const extent = view.calculateExtent(size);
+    const sw = toLonLat([extent[0], extent[1]]);
+    const ne = toLonLat([extent[2], extent[3]]);
+
+    const lonStep = (ne[0] - sw[0]) / 3;
+    const latStep = (ne[1] - sw[1]) / 3;
+    const lonList = [sw[0] + lonStep, sw[0] + lonStep * 2];
+    const latList = [sw[1] + latStep, sw[1] + latStep * 2];
+    const centerLon = (sw[0] + ne[0]) / 2;
+    const centerLat = (sw[1] + ne[1]) / 2;
+
+    const features = [];
+
+    lonList.forEach((lon) => {
+        const start = fromLonLat([lon, sw[1]]);
+        const end = fromLonLat([lon, ne[1]]);
+        const line = new Feature({ geometry: new LineString([start, end]) });
+        line.setStyle(createDynamicSplitStyle());
+        features.push(line);
+
+        const topLabel = new Feature({ geometry: new Point(end) });
+        topLabel.setStyle(createDynamicSplitStyle(formatLongitude(lon), { offsetY: 12 }));
+        const bottomLabel = new Feature({ geometry: new Point(start) });
+        bottomLabel.setStyle(createDynamicSplitStyle(formatLongitude(lon), { offsetY: -12 }));
+        features.push(topLabel, bottomLabel);
+    });
+
+    latList.forEach((lat) => {
+        const start = fromLonLat([sw[0], lat]);
+        const end = fromLonLat([ne[0], lat]);
+        const line = new Feature({ geometry: new LineString([start, end]) });
+        line.setStyle(createDynamicSplitStyle());
+        features.push(line);
+
+        const leftLabel = new Feature({ geometry: new Point(start) });
+        leftLabel.setStyle(createDynamicSplitStyle(formatLatitude(lat), { offsetX: 42, textAlign: 'left' }));
+        const rightLabel = new Feature({ geometry: new Point(end) });
+        rightLabel.setStyle(createDynamicSplitStyle(formatLatitude(lat), { offsetX: -42, textAlign: 'right' }));
+        features.push(leftLabel, rightLabel);
+    });
+
+    // 中心标记：使用“+”符号，避免过长中心线干扰视图。
+    const centerCoord = fromLonLat([centerLon, centerLat]);
+    const centerPlus = new Feature({ geometry: new Point(centerCoord) });
+    centerPlus.setStyle(new Style({
+        text: new Text({
+            text: '+',
+            font: '700 26px "Segoe UI", "Arial", sans-serif',
+            fill: new Fill({ color: 'rgba(255, 235, 130, 0.98)' }),
+            stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.78)', width: 3 }),
+            textAlign: 'center',
+            textBaseline: 'middle'
+        })
+    }));
+
+    features.push(centerPlus);
+
+    source.addFeatures(features);
+}
+
+function toggleDynamicSplitLines() {
+    showDynamicSplitLines.value = !showDynamicSplitLines.value;
+    if (!mapInstance.value) return;
+
+    if (!dynamicSplitMoveKey) {
+        dynamicSplitMoveKey = mapInstance.value.on('moveend', () => {
+            if (showDynamicSplitLines.value) {
+                updateDynamicSplitLines();
+            }
+        });
+    }
+
+    updateDynamicSplitLines();
+}
+
+function createExtentRasterSampler({ bands, width, height, extent, projection, nodataValue = null }) {
+    if (!bands?.length || !width || !height || !extent) return null;
+
+    return async (mapCoordinate, mapProjection) => {
+        let coord = mapCoordinate;
+        if (projection && mapProjection && !equivalent(projection, mapProjection)) {
+            coord = transform(mapCoordinate, mapProjection, projection);
+        }
+
+        const [minX, minY, maxX, maxY] = extent;
+        if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) {
+            return null;
+        }
+
+        const xNorm = (coord[0] - minX) / Math.max(1e-12, maxX - minX);
+        const yNorm = (maxY - coord[1]) / Math.max(1e-12, maxY - minY);
+        const px = Math.min(width - 1, Math.max(0, Math.floor(xNorm * width)));
+        const py = Math.min(height - 1, Math.max(0, Math.floor(yNorm * height)));
+        const idx = py * width + px;
+        const values = bands.map((band) => band?.[idx]);
+        const allNoData = nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue));
+
+        return {
+            values,
+            pixel: [px, py],
+            nodataValue,
+            allNoData
+        };
+    };
+}
+
+async function queryRasterValueAtCoordinate(mapCoordinate) {
+    if (!mapInstance.value) return null;
+    const mapProjection = mapInstance.value.getView().getProjection();
+    const rasterLayers = [...userDataLayers]
+        .filter(item => item.visible && isRasterUploadLayer(item) && typeof item.metadata?.rasterSampler === 'function')
+        .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
+
+    for (const item of rasterLayers) {
+        try {
+            const sampled = await item.metadata.rasterSampler(mapCoordinate, mapProjection);
+            if (!sampled) continue;
+
+            const lonlat = toLonLat(mapCoordinate);
+            const payload = {
+                图层名称: item.name,
+                图层类型: '栅格',
+                像元列行: `${sampled.pixel[0]}, ${sampled.pixel[1]}`,
+                点击经度: Number(lonlat[0].toFixed(6)),
+                点击纬度: Number(lonlat[1].toFixed(6))
+            };
+
+            sampled.values.forEach((v, idx) => {
+                const key = `波段${idx + 1}`;
+                payload[key] = sampled.nodataValue !== null && isNoDataValue(v, sampled.nodataValue)
+                    ? 'NoData'
+                    : (Number.isFinite(v) ? Number(v.toFixed(6)) : String(v));
+            });
+
+            return payload;
+        } catch (err) {
+            console.warn('Raster sample failed', err);
+        }
+    }
+
+    return null;
+}
+
+function projectExtentToMapView(extent, sourceProjection) {
+    if (!mapInstance.value || !extent || extent.some(v => !Number.isFinite(v))) return null;
+    const viewProjection = mapInstance.value.getView().getProjection();
+    if (!sourceProjection || equivalent(sourceProjection, viewProjection)) {
+        return extent;
+    }
+    try {
+        return transformExtent(extent, sourceProjection, viewProjection);
+    } catch (err) {
+        console.warn('Extent projection transform failed, fallback to original extent', err);
+        return extent;
+    }
+}
+
+async function createNonGeorefTiffLayer({
+    blob,
+    name,
+    type,
+    sourceType,
+    fitView = false,
+    imageExtent = null,
+    projection = null,
+    alertMessage = '该 TIF 未检测到坐标参考，已按当前视图中心临时加载。',
+    metadata = { noGeorefFallback: true },
+    nodataValue = null,
+    stretchRange = null
+}) {
+    if (!mapInstance.value) return null;
+
+    const tiff = await geotiffFromBlob(blob);
+    const image = await tiff.getImage();
+    const width = image.getWidth();
+    const height = image.getHeight();
+    const rasters = await image.readRasters();
+
+    const bands = Array.isArray(rasters) ? rasters : [rasters];
+    const bandStats = bands.slice(0, 3).map(getBandMinMax);
+    const alphaStats = bands.length >= 4 ? getBandMinMax(bands[3]) : null;
+    const isSingleBand = bands.length === 1;
+    const singleBandStretch = stretchRange && Number.isFinite(stretchRange.min) && Number.isFinite(stretchRange.max)
+        ? stretchRange
+        : (isSingleBand ? computePercentileStretch(bands[0], nodataValue) : null);
+
+    const pixelCount = width * height;
+    const rgba = new Uint8ClampedArray(pixelCount * 4);
+
+    for (let i = 0; i < pixelCount; i++) {
+        const hasRgb = bands.length >= 3;
+        const rSrc = hasRgb ? bands[0][i] : bands[0]?.[i];
+        const gSrc = hasRgb ? bands[1][i] : bands[0]?.[i];
+        const bSrc = hasRgb ? bands[2][i] : bands[0]?.[i];
+
+        let r;
+        let g;
+        let b;
+        if (isSingleBand) {
+            if (isNoDataValue(rSrc, nodataValue)) {
+                const p = i * 4;
+                rgba[p] = 0;
+                rgba[p + 1] = 0;
+                rgba[p + 2] = 0;
+                rgba[p + 3] = 0;
+                continue;
+            }
+            const v = stretchToByte(rSrc, singleBandStretch?.min ?? 0, singleBandStretch?.max ?? 1);
+            // 单波段红绿拉伸：低值偏绿，高值偏红。
+            r = v;
+            g = 255 - v;
+            b = 0;
+        } else {
+            r = stretchToByte(rSrc, bandStats[0]?.min ?? 0, bandStats[0]?.max ?? 1);
+            g = stretchToByte(gSrc, bandStats[Math.min(1, bandStats.length - 1)]?.min ?? 0, bandStats[Math.min(1, bandStats.length - 1)]?.max ?? 1);
+            b = stretchToByte(bSrc, bandStats[Math.min(2, bandStats.length - 1)]?.min ?? 0, bandStats[Math.min(2, bandStats.length - 1)]?.max ?? 1);
+        }
+        const a = bands.length >= 4
+            ? stretchToByte(bands[3][i], alphaStats.min, alphaStats.max)
+            : 255;
+
+        const p = i * 4;
+        rgba[p] = r;
+        rgba[p + 1] = g;
+        rgba[p + 2] = b;
+        rgba[p + 3] = a;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('无法创建画布渲染上下文');
+    ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
+
+    const pngBlob = await new Promise((resolve, reject) => {
+        canvas.toBlob((out) => {
+            if (out) resolve(out);
+            else reject(new Error('无法生成影像预览')); 
+        }, 'image/png');
+    });
+    const pngUrl = URL.createObjectURL(pngBlob);
+
+    const view = mapInstance.value.getView();
+    const layerProjection = projection || view.getProjection();
+    const center = view.getCenter() || fromLonLat(INITIAL_VIEW.center);
+    const resolution = view.getResolution() || 1;
+    const extent = imageExtent && imageExtent.every(v => Number.isFinite(v))
+        ? imageExtent
+        : [
+            center[0] - (width * resolution) / 2,
+            center[1] - (height * resolution) / 2,
+            center[0] + (width * resolution) / 2,
+            center[1] + (height * resolution) / 2
+        ];
+
+    const layer = new ImageLayer({
+        source: new ImageStatic({
+            url: pngUrl,
+            imageExtent: extent,
+            projection: layerProjection
+        }),
+        zIndex: 120,
+        properties: { name }
+    });
+
+    mapInstance.value.addLayer(layer);
+    const rasterSampler = createExtentRasterSampler({
+        bands,
+        width,
+        height,
+        extent,
+        projection: layerProjection,
+        nodataValue
+    });
+    const id = addManagedLayerRecord({
+        name,
+        type,
+        sourceType,
+        featureCount: 1,
+        styleConfig: null,
+        metadata: {
+            ...(metadata || {}),
+            rasterSampler,
+            rasterBandCount: bands.length,
+            sourceProjection: layerProjection,
+            sourceExtent: extent
+        },
+        layer
+    });
+
+    if (fitView) {
+        const fitExtent = projectExtentToMapView(extent, layerProjection) || extent;
+        mapInstance.value.getView().fit(fitExtent, {
+            padding: [50, 50, 50, 50],
+            duration: 700,
+            maxZoom: 18
+        });
+    }
+
+    if (alertMessage) {
+        alert(alertMessage);
+    }
+    return id;
+}
+
+async function createManagedRasterLayer({
+    name,
+    type,
+    sourceType,
+    data,
+    fitView = false
+}) {
+    if (!mapInstance.value || !(data instanceof ArrayBuffer)) return null;
+
+    const blob = new Blob([data], { type: 'image/tiff' });
+
+    let sampleBandCount = 0;
+    let nodataValue = null;
+    let singleBandStretch = null;
+    let firstImageRef = null;
+    try {
+        const tiff = await geotiffFromBlob(blob);
+        const firstImage = await tiff.getImage();
+        firstImageRef = firstImage;
+        sampleBandCount = Number(
+            firstImage?.getSamplesPerPixel?.() ?? firstImage?.fileDirectory?.SamplesPerPixel ?? 0
+        );
+        const nd = firstImage?.getGDALNoData?.();
+        nodataValue = Number.isFinite(nd) ? nd : null;
+
+        if (sampleBandCount === 1) {
+            const singleBandData = await firstImage.readRasters({ samples: [0], interleave: true });
+            singleBandStretch = computePercentileStretch(singleBandData, nodataValue, 2, 98);
+        }
+    } catch (e) {
+        sampleBandCount = 0;
+        nodataValue = null;
+        singleBandStretch = null;
+    }
+
+    const sourceInfo = { blob };
+    if (sampleBandCount === 1 && nodataValue !== null) {
+        sourceInfo.nodata = nodataValue;
+    }
+    const source = new GeoTIFFSource({
+        convertToRGB: 'auto',
+        normalize: sampleBandCount === 1 ? false : undefined,
+        sources: [sourceInfo]
+    });
+
+    let viewCfg = null;
+    let hasGeorefExtent = false;
+    try {
+        viewCfg = await source.getView();
+        hasGeorefExtent = !!(viewCfg?.extent && viewCfg.extent.every(v => Number.isFinite(v)));
+    } catch (e) {
+        hasGeorefExtent = false;
+    }
+
+    if (!hasGeorefExtent) {
+        return createNonGeorefTiffLayer({
+            blob,
+            name,
+            type,
+            sourceType,
+            fitView,
+            alertMessage: sampleBandCount === 1
+                ? '该 TIF 为单波段且未检测到坐标参考，已按当前视图中心临时加载。'
+                : '该 TIF 未检测到坐标参考，已按当前视图中心临时加载。',
+            metadata: {
+                noGeorefFallback: true,
+                singleBandRendered: sampleBandCount === 1
+            },
+            nodataValue,
+            stretchRange: singleBandStretch
+        });
+    }
+
+    const layerOptions = {
+        source,
+        zIndex: 120,
+        properties: { name }
+    };
+    if (sampleBandCount === 1) {
+        // 单波段红绿拉伸：低值绿，高值红；保持 GeoTIFF 原生地理参考定位。
+        const minVal = Number.isFinite(singleBandStretch?.min) ? singleBandStretch.min : 0;
+        const maxVal = Number.isFinite(singleBandStretch?.max) ? singleBandStretch.max : 1;
+        const midVal = (minVal + maxVal) / 2;
+        const baseColorExpr = [
+            'interpolate',
+            ['linear'],
+            ['band', 1],
+            minVal, ['color', 32, 164, 72, 1],
+            midVal, ['color', 254, 224, 139, 1],
+            maxVal, ['color', 215, 25, 28, 1]
+        ];
+        layerOptions.style = {
+            color: nodataValue !== null
+                ? ['case', ['==', ['band', 1], nodataValue], ['color', 0, 0, 0, 0], baseColorExpr]
+                : baseColorExpr
+        };
+    }
+
+    const layer = new WebGLTileLayer(layerOptions);
+
+    mapInstance.value.addLayer(layer);
+    const rasterSampler = createGeoTiffSampler({
+        image: firstImageRef,
+        projection: viewCfg?.projection,
+        nodataValue
+    });
+    const id = addManagedLayerRecord({
+        name,
+        type,
+        sourceType,
+        featureCount: 1,
+        styleConfig: null,
+        metadata: {
+            rasterSampler,
+            rasterBandCount: sampleBandCount,
+            nodataValue,
+            sourceProjection: viewCfg?.projection,
+            sourceExtent: viewCfg?.extent
+        },
+        layer
+    });
+
+    if (fitView && mapInstance.value) {
+        const fitExtent = projectExtentToMapView(viewCfg.extent, viewCfg.projection) || viewCfg.extent;
+        mapInstance.value.getView().fit(fitExtent, {
+            padding: [50, 50, 50, 50],
+            duration: 900,
+            maxZoom: 18
+        });
+    }
+
+    return id;
+}
+
+function isTiffType(type) {
+    const normalized = String(type || '').toLowerCase();
+    return normalized === 'tif' || normalized === 'tiff';
 }
 
 // --- 1. 地图核心逻辑 ---
@@ -724,7 +1373,7 @@ function bindEvents() {
         if (helpTooltipEl) helpTooltipEl.classList.add('hidden');
     });
 
-    map.on('singleclick', (evt) => {
+    map.on('singleclick', async (evt) => {
         if (!isAttributeQueryEnabled.value) return;
         if (drawInteraction && drawInteraction.getActive()) return;
 
@@ -733,6 +1382,12 @@ function bindEvents() {
         if (feature) {
             const { geometry, style, ...props } = feature.getProperties();
             emit('feature-selected', props);
+            return;
+        }
+
+        const rasterInfo = await queryRasterValueAtCoordinate(evt.coordinate);
+        if (rasterInfo) {
+            emit('feature-selected', rasterInfo);
         }
     });
 
@@ -1146,6 +1801,21 @@ async function parseUploadedFeatures({ content, type }) {
 async function addUserDataLayer({ content, type, name }) {
     if (!mapInstance.value) return;
     try {
+        if (isTiffType(type)) {
+            const tifName = name || `栅格_${Date.now()}.tif`;
+            const buffer = content instanceof ArrayBuffer ? content : null;
+            if (!buffer) throw new Error('TIF 数据读取失败');
+
+            await createManagedRasterLayer({
+                name: tifName,
+                type,
+                sourceType: 'upload',
+                data: buffer,
+                fitView: true
+            });
+            return;
+        }
+
         const features = await parseUploadedFeatures({ content, type });
 
         if (!features.length) throw new Error('无有效数据');
@@ -1197,6 +1867,10 @@ function setDrawStyle(styleCfg) {
 function setUserLayerStyle({ layerId, styleConfig }) {
     const target = userDataLayers.find(item => item.id === layerId);
     if (!target) return;
+    if (typeof target.layer?.setStyle !== 'function') {
+        alert('当前图层类型不支持矢量样式编辑');
+        return;
+    }
     target.styleConfig = mergeStyleConfig(target.styleConfig, styleConfig);
     const features = target.layer.getSource()?.getFeatures?.() || [];
     features.forEach(feature => {
@@ -1237,14 +1911,31 @@ function zoomToUserLayer(layerId) {
 
     const target = userDataLayers.find(item => item.id === layerId);
     if (!target) return;
-    const extent = target.layer.getSource()?.getExtent();
-    if (!extent || extent.some(v => !Number.isFinite(v))) return;
+    const source = target.layer.getSource?.();
+    const fitExtent = (extent) => {
+        if (!extent || extent.some(v => !Number.isFinite(v))) return;
+        const projected = projectExtentToMapView(extent, target.metadata?.sourceProjection) || extent;
+        mapInstance.value.getView().fit(projected, {
+            padding: [80, 80, 80, 80],
+            duration: 800,
+            maxZoom: 18
+        });
+    };
 
-    mapInstance.value.getView().fit(extent, {
-        padding: [80, 80, 80, 80],
-        duration: 800,
-        maxZoom: 18
-    });
+    const extent = source?.getExtent?.();
+    if (extent && extent.every(v => Number.isFinite(v))) {
+        fitExtent(extent);
+        return;
+    }
+
+    if (typeof source?.getView === 'function') {
+        source.getView().then((viewCfg) => {
+            if (viewCfg?.projection) {
+                target.metadata = { ...(target.metadata || {}), sourceProjection: viewCfg.projection };
+            }
+            fitExtent(viewCfg?.extent);
+        }).catch(() => {});
+    }
 }
 
 function removeUserLayer(layerId) {
@@ -1818,6 +2509,30 @@ defineExpose({
 .layer-manage-btn:hover {
     color: #eee;
 }
+
+.graticule-btn {
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 3px 8px;
+    margin-left: 4px;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.graticule-btn:hover {
+    background: rgba(255, 255, 255, 0.24);
+}
+
+.graticule-btn.active {
+    background: #f6fff8;
+    color: #1e6f34;
+    border-color: #f6fff8;
+    font-weight: 700;
+}
+
 .layer-manager-panel {
     position: absolute;
     top: 100%; /* 改为 100% 确保显示在父容器下方，不遮挡内容 */

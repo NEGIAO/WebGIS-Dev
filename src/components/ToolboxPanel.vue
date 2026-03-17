@@ -1,6 +1,6 @@
 <template>
     <div class="toolbox-panel">
-        <input ref="fileInputRef" type="file" class="hidden-input" accept=".geojson,.json,.kml,.zip,.shp" @change="handleFileUpload" />
+        <input ref="fileInputRef" type="file" class="hidden-input" accept=".geojson,.json,.kml,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
 
         <div class="header">
             <div>
@@ -71,8 +71,9 @@
             <div class="card">
                 <div class="card-top">
                     <div class="card-title">上传图层</div>
-                    <button class="small-btn" @click="triggerFileUpload">上传 (GeoJSON/KML/SHP)</button>
+                    <button class="small-btn" @click="triggerFileUpload">上传 (GeoJSON/KML/SHP/TIF)</button>
                 </div>
+                <div class="upload-tip">建议 <= 50 MB，最大 <= 200 MB（超大文件可能无法显示）</div>
 
                 <div v-if="uploadLayers.length" class="layer-list">
                     <div
@@ -95,7 +96,7 @@
                         </div>
 
                         <div class="layer-actions">
-                            <button class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
+                            <button v-if="!isRasterLayer(layer)" class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
                             <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
                             <button class="mini btn-danger" @click.stop="emit('remove-layer', layer.id)">移除</button>
                         </div>
@@ -203,6 +204,9 @@ const fileInputRef = ref(null);
 const activeTab = ref('layers');
 const draggingLayerId = ref('');
 const selectedEditLayerId = ref('draw');
+const MB = 1024 * 1024;
+const WARN_FILE_SIZE_MB = 50;
+const MAX_FILE_SIZE_MB = 200;
 
 const styleTemplates = [
     { id: 'classic', name: '经典绿' },
@@ -222,11 +226,17 @@ const sortedUserLayers = computed(() => [...props.userLayers].sort((a, b) => (a.
 const drawLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'draw'));
 const uploadLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'upload'));
 const searchLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'search'));
+
+function isRasterLayer(layer) {
+    const t = String(layer?.type || '').toLowerCase();
+    return t === 'tif' || t === 'tiff';
+}
+
 const editableLayers = computed(() => [
     { id: 'draw', name: `绘制图形 (${props.overview.drawCount || 0})` },
     ...searchLayers.value.map(layer => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` })),
     ...sortedUserLayers.value
-        .filter(layer => layer.sourceType !== 'search')
+        .filter(layer => layer.sourceType !== 'search' && !isRasterLayer(layer))
         .map(layer => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` }))
 ]);
 
@@ -244,9 +254,33 @@ function triggerFileUpload() {
     fileInputRef.value?.click();
 }
 
+function formatFileSize(fileSizeInBytes) {
+    if (!Number.isFinite(fileSizeInBytes) || fileSizeInBytes < 0) return '未知';
+    if (fileSizeInBytes < 1024) return `${fileSizeInBytes} B`;
+    if (fileSizeInBytes < MB) return `${(fileSizeInBytes / 1024).toFixed(1)} KB`;
+    return `${(fileSizeInBytes / MB).toFixed(1)} MB`;
+}
+
 function handleFileUpload(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    const fileSizeMb = file.size / MB;
+    const sizeText = formatFileSize(file.size);
+    if (fileSizeMb > MAX_FILE_SIZE_MB) {
+        alert(`文件过大（${sizeText}），请控制在 ${MAX_FILE_SIZE_MB} MB 以内后再上传。`);
+        event.target.value = '';
+        return;
+    }
+    if (fileSizeMb > WARN_FILE_SIZE_MB) {
+        const proceed = window.confirm(
+            `当前文件大小为 ${sizeText}，超过建议值 ${WARN_FILE_SIZE_MB} MB。\n继续上传可能导致页面卡顿或无法显示，是否继续？`
+        );
+        if (!proceed) {
+            event.target.value = '';
+            return;
+        }
+    }
 
     const extension = file.name.split('.').pop().toLowerCase();
     const reader = new FileReader();
@@ -260,7 +294,7 @@ function handleFileUpload(event) {
     };
 
     try {
-        if (extension === 'zip' || extension === 'shp') {
+        if (extension === 'zip' || extension === 'shp' || extension === 'tif' || extension === 'tiff') {
             reader.readAsArrayBuffer(file);
         } else {
             reader.readAsText(file);
@@ -386,6 +420,16 @@ function applyStyle() {
     font-weight: 700;
     color: #2e4b3a;
     margin-bottom: 6px;
+}
+
+.upload-tip {
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #8a6520;
+    background: #fff7e8;
+    border: 1px solid #f0d7aa;
+    border-radius: 6px;
+    padding: 6px 8px;
 }
 
 .row-label {
