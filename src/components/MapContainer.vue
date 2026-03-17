@@ -113,6 +113,7 @@ import { defaults as defaultControls, ScaleLine, MousePosition, OverviewMap } fr
 import { createStringXY } from 'ol/coordinate';
 import { unByKey } from 'ol/Observable';
 import { getArea, getLength } from 'ol/sphere';
+import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
 
 // 图层与数据源
 import TileLayer from 'ol/layer/Tile';
@@ -122,6 +123,7 @@ import OSM from 'ol/source/OSM';
 import VectorSource from 'ol/source/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
+import shp from 'shpjs';
 
 // 几何与交互
 import Point from 'ol/geom/Point';
@@ -168,6 +170,13 @@ const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 
 let searchSource, searchLayer;
 let customSource = null;
+const SEARCH_RESULT_STYLE = {
+    fillColor: '#ef4444',
+    fillOpacity: 0.9,
+    strokeColor: '#ffffff',
+    strokeWidth: 2,
+    pointRadius: 8
+};
 
 // 图层配置 (集中管理 id, name, source创建逻辑)
 const LAYER_CONFIGS = [
@@ -282,7 +291,85 @@ let baseLayer, labelLayer;
 const drawSource = new VectorSource();
 const userLocationSource = new VectorSource();
 
-const emit = defineEmits(['location-change', 'update-news-image', 'feature-selected']);
+const emit = defineEmits([
+    'location-change',
+    'update-news-image',
+    'feature-selected',
+    'user-layers-change',
+    'graphics-overview',
+    'base-layers-change'
+]);
+
+const isAttributeQueryEnabled = ref(true);
+const userDataLayers = [];
+let userLayerSeed = 1;
+let drawGraphicSeed = 1;
+let drawLayerInstance = null;
+
+const STYLE_TEMPLATES = {
+    classic: {
+        fillColor: '#5fbf7a',
+        fillOpacity: 0.24,
+        strokeColor: '#2f7d3c',
+        strokeWidth: 2,
+        pointRadius: 6
+    },
+    warning: {
+        fillColor: '#f59e0b',
+        fillOpacity: 0.2,
+        strokeColor: '#b45309',
+        strokeWidth: 2.5,
+        pointRadius: 6
+    },
+    water: {
+        fillColor: '#3b82f6',
+        fillOpacity: 0.2,
+        strokeColor: '#1d4ed8',
+        strokeWidth: 2,
+        pointRadius: 6
+    },
+    magenta: {
+        fillColor: '#ec4899',
+        fillOpacity: 0.18,
+        strokeColor: '#be185d',
+        strokeWidth: 2,
+        pointRadius: 6
+    }
+};
+
+const drawStyleConfig = ref({ ...STYLE_TEMPLATES.classic });
+
+function normalizeStyleConfig(styleCfg = {}) {
+    const base = { ...STYLE_TEMPLATES.classic, ...(styleCfg || {}) };
+    return {
+        fillColor: base.fillColor,
+        fillOpacity: Math.min(1, Math.max(0, Number(base.fillOpacity ?? 0.2))),
+        strokeColor: base.strokeColor,
+        strokeWidth: Math.max(0.5, Number(base.strokeWidth ?? 2)),
+        pointRadius: Math.max(3, Number(base.pointRadius ?? 6))
+    };
+}
+
+function createStyleFromConfig(styleCfg) {
+    const cfg = normalizeStyleConfig(styleCfg);
+    const hex = cfg.fillColor?.replace('#', '') || '5fbf7a';
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return new Style({
+        stroke: new Stroke({ color: cfg.strokeColor, width: cfg.strokeWidth }),
+        fill: new Fill({ color: `rgba(${r}, ${g}, ${b}, ${cfg.fillOpacity})` }),
+        image: new CircleStyle({
+            radius: cfg.pointRadius,
+            fill: new Fill({ color: cfg.fillColor }),
+            stroke: new Stroke({ color: cfg.strokeColor, width: Math.max(1, cfg.strokeWidth / 2) })
+        })
+    });
+}
+
+function mergeStyleConfig(prevCfg, newCfg) {
+    return normalizeStyleConfig({ ...(prevCfg || {}), ...(newCfg || {}) });
+}
 
 // --- 样式定义 ---
 const styles = {
@@ -353,6 +440,113 @@ onUnmounted(() => {
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
 
+function emitUserLayersChange() {
+    emit('user-layers-change', userDataLayers.map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        sourceType: item.sourceType || 'upload',
+        order: item.order ?? 0,
+        visible: item.visible,
+        featureCount: item.featureCount,
+        opacity: item.opacity ?? 1,
+        styleConfig: item.styleConfig || { ...STYLE_TEMPLATES.classic }
+    })));
+}
+
+function emitGraphicsOverview() {
+    emit('graphics-overview', {
+        drawCount: drawSource.getFeatures().length,
+        uploadCount: userDataLayers.length,
+        layers: userDataLayers.map(item => ({
+            id: item.id,
+            name: item.name,
+            visible: item.visible,
+            featureCount: item.featureCount
+        }))
+    });
+}
+
+function getLayerCategory(layerId) {
+    if (['google', 'google_standard', 'google_clean', 'tianDiTu', 'tianDiTu_vec', 'esri', 'osm', 'amap', 'tengxun', 'esri_ocean', 'esri_terrain', 'esri_physical', 'esri_hillshade', 'esri_gray', 'yandex_sat', 'geoq_gray', 'geoq_hydro', 'local', 'custom'].includes(layerId)) {
+        return 'base';
+    }
+    return 'overlay';
+}
+
+function getLayerGroup(layerId) {
+    if (['google', 'tianDiTu', 'esri', 'yandex_sat'].includes(layerId)) return '影像';
+    if (['google_standard', 'google_clean', 'tianDiTu_vec', 'osm', 'amap', 'tengxun', 'geoq_gray', 'geoq_hydro'].includes(layerId)) return '矢量';
+    if (['esri_ocean', 'esri_terrain', 'esri_physical', 'esri_hillshade', 'esri_gray', 'local', 'custom'].includes(layerId)) return '专题';
+    return '注记';
+}
+
+function emitBaseLayersChange() {
+    emit('base-layers-change', layerList.value.map(item => ({
+        id: item.id,
+        name: item.name,
+        visible: item.visible,
+        category: getLayerCategory(item.id),
+        group: getLayerGroup(item.id),
+        active: selectedLayer.value === item.id
+    })));
+}
+
+function refreshUserLayerZIndex() {
+    userDataLayers.forEach((item, index) => {
+        item.order = index;
+        item.layer.setZIndex(120 + index);
+    });
+}
+
+function createManagedVectorLayer({
+    name,
+    type,
+    sourceType,
+    features,
+    styleConfig,
+    fitView = false
+}) {
+    if (!mapInstance.value || !features?.length) return null;
+
+    const normalizedStyle = normalizeStyleConfig(styleConfig || STYLE_TEMPLATES.classic);
+    const layer = new VectorLayer({
+        source: new VectorSource({ features }),
+        zIndex: 120,
+        style: createStyleFromConfig(normalizedStyle),
+        properties: { name }
+    });
+
+    mapInstance.value.addLayer(layer);
+
+    const id = `layer_${userLayerSeed++}`;
+    userDataLayers.push({
+        id,
+        name,
+        type,
+        sourceType,
+        order: userDataLayers.length,
+        visible: true,
+        opacity: 1,
+        featureCount: features.length,
+        styleConfig: normalizedStyle,
+        layer
+    });
+
+    refreshUserLayerZIndex();
+    emitUserLayersChange();
+    emitGraphicsOverview();
+
+    if (fitView) {
+        mapInstance.value.getView().fit(layer.getSource().getExtent(), {
+            padding: [50, 50, 50, 50],
+            duration: 1000
+        });
+    }
+
+    return id;
+}
+
 // --- 1. 地图核心逻辑 ---
 function initMap() {
     // 1.1 源定义与图层初始化 (由 LAYER_CONFIGS 动态驱动，不再硬编码 sources 对象)
@@ -373,7 +567,11 @@ function initMap() {
 
     const layersToAdd = layerList.value.map(item => layerInstances[item.id]);
 
-    const drawLayer = new VectorLayer({ source: drawSource, style: styles.draw, zIndex: 999 });
+    drawLayerInstance = new VectorLayer({
+        source: drawSource,
+        style: createStyleFromConfig(drawStyleConfig.value),
+        zIndex: 999
+    });
     const userLayer = new VectorLayer({
         source: userLocationSource,
         zIndex: 1000,
@@ -385,9 +583,7 @@ function initMap() {
     searchLayer = new VectorLayer({
         source: searchSource,
         zIndex: 1100,
-        style: new Style({
-            image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#ff4444' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
-        })
+        style: createStyleFromConfig(SEARCH_RESULT_STYLE)
     });
 
     // 1.3 控件
@@ -421,7 +617,7 @@ function initMap() {
     // 1.4 实例化地图
     mapInstance.value = new Map({
         target: mapRef.value,
-        layers: [...layersToAdd, drawLayer, userLayer, searchLayer],
+        layers: [...layersToAdd, drawLayerInstance, userLayer, searchLayer],
         view: new View({
             center: fromLonLat(INITIAL_VIEW.center),
             zoom: INITIAL_VIEW.zoom,
@@ -460,6 +656,7 @@ function initMap() {
 
     // 1.7 初始化时也要刷新一次图层状态，确保初始配置正确应用
     refreshLayersState();
+    emitUserLayersChange();
 }
 
 function refreshLayersState() {
@@ -474,6 +671,7 @@ function refreshLayersState() {
             layer.setZIndex(layerList.value.length - index);
         }
     });
+    emitBaseLayersChange();
 }
 
 // 拖拽相关逻辑
@@ -527,6 +725,7 @@ function bindEvents() {
     });
 
     map.on('singleclick', (evt) => {
+        if (!isAttributeQueryEnabled.value) return;
         if (drawInteraction && drawInteraction.getActive()) return;
 
         // 属性查询
@@ -535,6 +734,19 @@ function bindEvents() {
             const { geometry, style, ...props } = feature.getProperties();
             emit('feature-selected', props);
         }
+    });
+
+    map.getViewport().addEventListener('contextmenu', (e) => {
+        if (!isAttributeQueryEnabled.value) return;
+        e.preventDefault();
+        const pixel = map.getEventPixel(e);
+        const feature = map.forEachFeatureAtPixel(pixel, f => f);
+        if (!feature) return;
+        const { geometry, style, ...props } = feature.getProperties();
+        emit('feature-selected', {
+            ...props,
+            操作提示: '右键选择，可在工具箱中编辑样式'
+        });
     });
 
     // 缩放监听
@@ -870,10 +1082,16 @@ function selectResult(item) {
     }
     const coord = fromLonLat([lon, lat]);
 
-    // 清除旧结果并添加新点
-    searchSource.clear();
+    const layerName = (item.display_name || item.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
     const f = new Feature({ geometry: new Point(coord), type: 'search' });
-    searchSource.addFeature(f);
+    createManagedVectorLayer({
+        name: layerName,
+        type: 'search',
+        sourceType: 'search',
+        features: [f],
+        styleConfig: SEARCH_RESULT_STYLE,
+        fitView: false
+    });
 
     // 动画缩放到位置
     mapInstance.value.getView().animate({ center: coord, zoom: 16, duration: 700 });
@@ -884,44 +1102,259 @@ function selectResult(item) {
 
 // --- 4. 外部接口 (文件导入/绘图) ---
 
-function addUserDataLayer({ content, type, name }) {
-    if (!mapInstance.value) return;
-    try {
-        const format = type === 'kml' ? new KML({ extractStyles: true }) : new GeoJSON();
-        // 自动转换坐标系 EPSG:4326 -> EPSG:3857
-        const features = format.readFeatures(content, {
+async function parseUploadedFeatures({ content, type }) {
+    if (type === 'kml') {
+        const kmlFormat = new KML({ extractStyles: false });
+        return kmlFormat.readFeatures(content, {
             dataProjection: 'EPSG:4326',
             featureProjection: 'EPSG:3857'
         });
+    }
+
+    if (type === 'geojson' || type === 'json') {
+        const gjFormat = new GeoJSON();
+        return gjFormat.readFeatures(content, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
+    }
+
+    if (type === 'zip') {
+        const geojson = await shp(content);
+        const gjFormat = new GeoJSON();
+        const featureCollection = Array.isArray(geojson)
+            ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
+            : geojson;
+        return gjFormat.readFeatures(featureCollection, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
+    }
+
+    if (type === 'shp') {
+        const geojson = await shp({ shp: content });
+        const gjFormat = new GeoJSON();
+        return gjFormat.readFeatures(geojson, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
+    }
+
+    throw new Error(`不支持的文件类型: ${type}`);
+}
+
+async function addUserDataLayer({ content, type, name }) {
+    if (!mapInstance.value) return;
+    try {
+        const features = await parseUploadedFeatures({ content, type });
 
         if (!features.length) throw new Error('无有效数据');
 
-        const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16);
-        const layer = new VectorLayer({
-            source: new VectorSource({ features }),
-            zIndex: 100,
-            style: new Style({
-                stroke: new Stroke({ color: randomColor, width: 2 }),
-                fill: new Fill({ color: 'rgba(255,255,255,0.2)' }),
-                image: new CircleStyle({ radius: 5, fill: new Fill({ color: randomColor }) })
-            }),
-            properties: { name }
+        createManagedVectorLayer({
+            name,
+            type,
+            sourceType: 'upload',
+            features,
+            styleConfig: STYLE_TEMPLATES.classic,
+            fitView: true
         });
-
-        mapInstance.value.addLayer(layer);
-        mapInstance.value.getView().fit(layer.getSource().getExtent(), { padding: [50, 50, 50, 50], duration: 1000 });
     } catch (e) {
         alert('文件解析失败: ' + e.message);
     }
+}
+
+function setUserLayerVisibility(layerId, visible) {
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target) return;
+    target.visible = !!visible;
+    target.layer.setVisible(target.visible);
+    emitUserLayersChange();
+}
+
+function setUserLayerOpacity(layerId, opacity) {
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target) return;
+    const val = Math.min(1, Math.max(0, Number(opacity)));
+    target.opacity = Number.isFinite(val) ? val : 1;
+    target.layer.setOpacity(target.opacity);
+    emitUserLayersChange();
+}
+
+function setDrawStyle(styleCfg) {
+    drawStyleConfig.value = mergeStyleConfig(drawStyleConfig.value, styleCfg);
+    if (drawLayerInstance) {
+        drawLayerInstance.setStyle(createStyleFromConfig(drawStyleConfig.value));
+    }
+    userDataLayers
+        .filter(item => item.sourceType === 'draw')
+        .forEach(item => {
+            item.styleConfig = mergeStyleConfig(item.styleConfig, styleCfg);
+            item.layer.setStyle(createStyleFromConfig(item.styleConfig));
+        });
+    emitUserLayersChange();
+}
+
+function setUserLayerStyle({ layerId, styleConfig }) {
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target) return;
+    target.styleConfig = mergeStyleConfig(target.styleConfig, styleConfig);
+    const features = target.layer.getSource()?.getFeatures?.() || [];
+    features.forEach(feature => {
+        feature.setStyle(undefined);
+    });
+    target.layer.setStyle(createStyleFromConfig(target.styleConfig));
+    emitUserLayersChange();
+}
+
+function applyStyleTemplate({ target, layerId, templateId }) {
+    const tpl = STYLE_TEMPLATES[templateId];
+    if (!tpl) return;
+    if (target === 'draw') {
+        setDrawStyle(tpl);
+        return;
+    }
+    if (target === 'layer' && layerId) {
+        setUserLayerStyle({ layerId, styleConfig: tpl });
+    }
+}
+
+function setBaseLayerActive(layerId) {
+    const target = layerList.value.find(item => item.id === layerId);
+    if (!target) return;
+    if (getLayerCategory(layerId) !== 'base') return;
+    selectedLayer.value = layerId;
+}
+
+function setLayerVisibility(layerId, visible) {
+    const target = layerList.value.find(item => item.id === layerId);
+    if (!target) return;
+    target.visible = !!visible;
+    refreshLayersState();
+}
+
+function zoomToUserLayer(layerId) {
+    if (!mapInstance.value) return;
+
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target) return;
+    const extent = target.layer.getSource()?.getExtent();
+    if (!extent || extent.some(v => !Number.isFinite(v))) return;
+
+    mapInstance.value.getView().fit(extent, {
+        padding: [80, 80, 80, 80],
+        duration: 800,
+        maxZoom: 18
+    });
+}
+
+function removeUserLayer(layerId) {
+    if (!mapInstance.value) return;
+
+    const idx = userDataLayers.findIndex(item => item.id === layerId);
+    if (idx < 0) return;
+    mapInstance.value.removeLayer(userDataLayers[idx].layer);
+    userDataLayers.splice(idx, 1);
+    refreshUserLayerZIndex();
+    emitUserLayersChange();
+    emitGraphicsOverview();
+}
+
+function reorderUserLayers({ fromId, toId }) {
+    const fromIndex = userDataLayers.findIndex(item => item.id === fromId);
+    const toIndex = userDataLayers.findIndex(item => item.id === toId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    const moved = userDataLayers.splice(fromIndex, 1)[0];
+    userDataLayers.splice(toIndex, 0, moved);
+    refreshUserLayerZIndex();
+    emitUserLayersChange();
+}
+
+function soloUserLayer(layerId) {
+    userDataLayers.forEach(item => {
+        item.visible = item.id === layerId;
+        item.layer.setVisible(item.visible);
+    });
+    emitUserLayersChange();
+}
+
+function viewUserLayer(layerId) {
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target) return;
+    emit('feature-selected', {
+        图层名称: target.name,
+        图层类型: target.type,
+        可见状态: target.visible ? '显示' : '隐藏',
+        要素数量: target.featureCount
+    });
+}
+
+function zoomToGraphics() {
+    if (!mapInstance.value) return;
+    const unionExtent = createEmpty();
+
+    const drawExtent = drawSource.getExtent();
+    if (drawExtent && drawExtent.every(v => Number.isFinite(v))) {
+        extendExtent(unionExtent, drawExtent);
+    }
+
+    userDataLayers.forEach(item => {
+        const ext = item.layer.getSource()?.getExtent();
+        if (ext && ext.every(v => Number.isFinite(v))) {
+            extendExtent(unionExtent, ext);
+        }
+    });
+
+    if (isExtentEmpty(unionExtent)) return;
+
+    mapInstance.value.getView().fit(unionExtent, {
+        padding: [80, 80, 80, 80],
+        duration: 900,
+        maxZoom: 18
+    });
 }
 
 // --- 交互工具 (Draw/Measure) ---
 function activateInteraction(type) {
     clearInteractions();
     if (!mapInstance.value) return;
+
+    if (type === 'AttributeQuery') {
+        isAttributeQueryEnabled.value = true;
+        return;
+    }
+
+    if (type === 'CloseTools') {
+        isAttributeQueryEnabled.value = false;
+        return;
+    }
+
+    if (type === 'ZoomToGraphics') {
+        zoomToGraphics();
+        return;
+    }
+
+    if (type === 'ViewGraphics') {
+        emitGraphicsOverview();
+        emit('feature-selected', {
+            绘制图形数量: drawSource.getFeatures().length,
+            上传图层数量: userDataLayers.length,
+            上传图层名称: userDataLayers.map(item => item.name).join('、') || '无'
+        });
+        return;
+    }
+
     if (type === 'Clear') {
         drawSource.clear();
+        for (let i = userDataLayers.length - 1; i >= 0; i--) {
+            if (userDataLayers[i].sourceType === 'draw') {
+                mapInstance.value.removeLayer(userDataLayers[i].layer);
+                userDataLayers.splice(i, 1);
+            }
+        }
+        refreshUserLayerZIndex();
+        emitUserLayersChange();
         mapInstance.value.getOverlays().clear();
+        emitGraphicsOverview();
         return;
     }
 
@@ -931,7 +1364,7 @@ function activateInteraction(type) {
     drawInteraction = new Draw({
         source: drawSource,
         type: drawType,
-        style: styles.draw
+        style: createStyleFromConfig(drawStyleConfig.value)
     });
 
     mapInstance.value.addInteraction(drawInteraction);
@@ -962,6 +1395,24 @@ function activateInteraction(type) {
             sketchFeature = null;
             measureTooltipEl = null;
             createTooltips(); // 为下一次做准备
+            emitGraphicsOverview();
+        });
+    } else {
+        drawInteraction.on('drawend', (evt) => {
+            const feature = evt.feature;
+            const geom = feature.getGeometry();
+            const geomType = geom?.getType?.() || drawType;
+            drawSource.removeFeature(feature);
+
+            createManagedVectorLayer({
+                name: `绘制_${geomType}_${drawGraphicSeed++}`,
+                type: geomType,
+                sourceType: 'draw',
+                features: [feature],
+                styleConfig: drawStyleConfig.value,
+                fitView: false
+            });
+            emitGraphicsOverview();
         });
     }
 }
@@ -1000,7 +1451,24 @@ const formatArea = (poly) => {
     return area > 10000 ? `${(area / 1000000).toFixed(2)} km²` : `${area.toFixed(2)} m²`;
 };
 
-defineExpose({ addUserDataLayer, activateInteraction, clearInteractions });
+defineExpose({
+    addUserDataLayer,
+    activateInteraction,
+    clearInteractions,
+    setDrawStyle,
+    setUserLayerStyle,
+    applyStyleTemplate,
+    setUserLayerVisibility,
+    setUserLayerOpacity,
+    setBaseLayerActive,
+    setLayerVisibility,
+    zoomToUserLayer,
+    removeUserLayer,
+    reorderUserLayers,
+    soloUserLayer,
+    viewUserLayer,
+    zoomToGraphics
+});
 </script>
 
 <style scoped>

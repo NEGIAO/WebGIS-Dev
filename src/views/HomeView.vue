@@ -40,7 +40,13 @@ const is3DMode = ref(false);
 const isMagicMode = ref(false);
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
-const activeSidePanelTab = ref('info'); // 'info' | 'chat'
+const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox'
+const userLayers = ref([]);
+const featureQueryResult = ref(null);
+const showQueryPanel = ref(false);
+const toolboxOverview = ref({ drawCount: 0, uploadCount: 0, layers: [] });
+const baseLayers = ref([]);
+const activeFeature = ref({ key: 'info', label: '新闻' });
 
 // 组件引用
 const mapContainerRef = ref(null);
@@ -80,9 +86,26 @@ function openChat() {
     isSidePanelCollapsed.value = false;
 }
 
+function openToolbox() {
+    activeSidePanelTab.value = 'toolbox';
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
+function handleActivateFeature(feature) {
+    activeFeature.value = feature || { key: 'info', label: '新闻' };
+}
+
+function handleSwitchSidePanelTab(tab) {
+    activeSidePanelTab.value = tab;
+}
+
 /** 关闭 AI 聊天，切换回新闻模式 */
 function handleCloseChat() {
     activeSidePanelTab.value = 'info';
+    activeFeature.value = { key: 'info', label: '新闻' };
 }
 
 /** 切换 2D/3D 视图 */
@@ -105,22 +128,75 @@ function handleInteraction(type) {
     mapContainerRef.value?.activateInteraction(type);
 }
 
+function handleToggleLayerVisibility({ layerId, visible }) {
+    mapContainerRef.value?.setUserLayerVisibility(layerId, visible);
+}
+
+function handleChangeLayerOpacity({ layerId, opacity }) {
+    mapContainerRef.value?.setUserLayerOpacity(layerId, opacity);
+}
+
+function handleSetBaseLayer(layerId) {
+    mapContainerRef.value?.setBaseLayerActive(layerId);
+}
+
+function handleToggleBaseLayerVisibility({ layerId, visible }) {
+    mapContainerRef.value?.setLayerVisibility(layerId, visible);
+}
+
+function handleZoomLayer(layerId) {
+    mapContainerRef.value?.zoomToUserLayer(layerId);
+}
+
+function handleViewLayer(layerId) {
+    mapContainerRef.value?.viewUserLayer(layerId);
+}
+
+function handleRemoveLayer(layerId) {
+    mapContainerRef.value?.removeUserLayer(layerId);
+}
+
+function handleReorderUserLayers(payload) {
+    mapContainerRef.value?.reorderUserLayers(payload);
+}
+
+function handleSoloLayer(layerId) {
+    mapContainerRef.value?.soloUserLayer(layerId);
+}
+
+function handleApplyStyleTemplate(payload) {
+    mapContainerRef.value?.applyStyleTemplate(payload);
+}
+
+function handleUpdateDrawStyle(styleConfig) {
+    mapContainerRef.value?.setDrawStyle(styleConfig);
+}
+
+function handleUpdateLayerStyle(payload) {
+    mapContainerRef.value?.setUserLayerStyle(payload);
+}
+
+function handleUserLayersChange(layers) {
+    userLayers.value = layers || [];
+}
+
+function handleGraphicsOverview(data) {
+    toolboxOverview.value = data || { drawCount: 0, uploadCount: 0, layers: [] };
+}
+
+function handleBaseLayersChange(layers) {
+    baseLayers.value = layers || [];
+}
+
+function closeQueryPanel() {
+    showQueryPanel.value = false;
+}
+
 /** 处理要素选中事件 */
 function handleFeatureSelected(properties) {
     if (!properties) return;
-
-    // 优化：使用 Object.entries 更优雅地处理对象遍历
-    let msg = "要素属性详情:\n----------------\n";
-    const entries = Object.entries(properties);
-
-    if (entries.length === 0) {
-        msg += "无属性数据";
-    } else {
-        msg += entries.map(([key, val]) => `${key}: ${val}`).join('\n');
-    }
-
-    // 保持原来的 alert 逻辑，简单直接
-    alert(msg);
+    featureQueryResult.value = properties;
+    showQueryPanel.value = true;
 }
 </script>
 
@@ -131,8 +207,13 @@ function handleFeatureSelected(properties) {
 
         <!-- 顶部控制栏 -->
         <div class="top-section">
-            <TopBar @toggle-magic="toggleMagic" @toggle-3d="toggle3D" @upload-data="handleUploadData"
-                @interaction="handleInteraction" @open-chat="openChat" />
+            <TopBar
+                @toggle-magic="toggleMagic"
+                @toggle-3d="toggle3D"
+                @open-chat="openChat"
+                @open-toolbox="openToolbox"
+                @activate-feature="handleActivateFeature"
+            />
         </div>
 
         <div class="content-section">
@@ -142,8 +223,43 @@ function handleFeatureSelected(properties) {
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
                   2. CesiumContainer 使用 v-if。3D地图很重，只有需要时才渲染 DOM。
                 -->
-                <MapContainer ref="mapContainerRef" v-show="!is3DMode" @location-change="handleLocationChange"
-                    @update-news-image="handleUpdateNewsImage" @feature-selected="handleFeatureSelected" />
+                <MapContainer
+                    ref="mapContainerRef"
+                    v-show="!is3DMode"
+                    @location-change="handleLocationChange"
+                    @update-news-image="handleUpdateNewsImage"
+                    @feature-selected="handleFeatureSelected"
+                    @user-layers-change="handleUserLayersChange"
+                    @graphics-overview="handleGraphicsOverview"
+                    @base-layers-change="handleBaseLayersChange"
+                />
+
+                <transition name="query-panel-fade">
+                    <div v-if="showQueryPanel && !is3DMode" class="query-panel">
+                        <div class="query-panel-header">
+                            <div>
+                                <div class="query-title">属性查询结果</div>
+                                <div class="query-subtitle">
+                                    绘制 {{ toolboxOverview.drawCount }} | 上传 {{ toolboxOverview.uploadCount }}
+                                </div>
+                            </div>
+                            <button class="query-close" @click="closeQueryPanel">×</button>
+                        </div>
+                        <div class="query-panel-body">
+                            <div
+                                v-for="([key, value], idx) in Object.entries(featureQueryResult || {})"
+                                :key="`${key}_${idx}`"
+                                class="query-row"
+                            >
+                                <span class="query-key">{{ key }}</span>
+                                <span class="query-val">{{ value }}</span>
+                            </div>
+                            <div v-if="Object.keys(featureQueryResult || {}).length === 0" class="query-empty">
+                                当前要素没有可展示属性
+                            </div>
+                        </div>
+                    </div>
+                </transition>
 
                 <!-- 异步加载的 Cesium 组件 -->
                 <CesiumContainer v-if="is3DMode" />
@@ -153,6 +269,17 @@ function handleFeatureSelected(properties) {
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
                     :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
+                    :activeFeature="activeFeature" :userLayers="userLayers" :baseLayers="baseLayers"
+                    :toolboxOverview="toolboxOverview"
+                    @upload-data="handleUploadData" @interaction="handleInteraction"
+                    @toggle-layer-visibility="handleToggleLayerVisibility"
+                    @change-layer-opacity="handleChangeLayerOpacity" @set-base-layer="handleSetBaseLayer"
+                    @toggle-base-layer-visibility="handleToggleBaseLayerVisibility"
+                    @zoom-layer="handleZoomLayer" @view-layer="handleViewLayer"
+                    @remove-layer="handleRemoveLayer" @reorder-user-layers="handleReorderUserLayers"
+                    @solo-layer="handleSoloLayer" @apply-style-template="handleApplyStyleTemplate"
+                    @update-draw-style="handleUpdateDrawStyle" @update-layer-style="handleUpdateLayerStyle"
+                    @switch-tab="handleSwitchSidePanelTab"
                     @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat">
                     <template v-slot:extra-content>
@@ -220,6 +347,104 @@ function handleFeatureSelected(properties) {
     display: flex;
     min-width: 0;
     /* Important for flex items to shrink */
+}
+
+.query-panel {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    width: 320px;
+    max-height: 42vh;
+    background: rgba(30, 120, 56, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    color: #fff;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+}
+
+.query-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.query-title {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.query-subtitle {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    margin-top: 2px;
+}
+
+.query-close {
+    border: none;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 18px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.query-close:hover {
+    background: rgba(255, 255, 255, 0.24);
+}
+
+.query-panel-body {
+    padding: 10px 12px 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.query-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 7px 8px;
+}
+
+.query-key {
+    color: rgba(255, 255, 255, 0.84);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.query-val {
+    color: #fff;
+    font-size: 12px;
+    word-break: break-word;
+}
+
+.query-empty {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.8);
+    padding: 8px 0;
+}
+
+.query-panel-fade-enter-active,
+.query-panel-fade-leave-active {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.query-panel-fade-enter-from,
+.query-panel-fade-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
 }
 
 .side-panel-wrapper {
@@ -327,6 +552,17 @@ function handleFeatureSelected(properties) {
         /* Map takes available space */
         min-height: 50vh;
         /* Ensure map has height */
+    }
+
+    .query-panel {
+        width: calc(100% - 20px);
+        left: 10px;
+        bottom: 10px;
+        max-height: 36vh;
+    }
+
+    .query-row {
+        grid-template-columns: 90px 1fr;
     }
 
     .side-panel-wrapper {
