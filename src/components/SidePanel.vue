@@ -6,12 +6,39 @@
         </div>
 
         <!-- 面板内容区域 -->
-        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' }">
+        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' }">
+            <div class="active-feature-banner" v-if="activeFeature?.label">
+                当前激活功能：{{ activeFeature.label }}
+            </div>
             
             <!-- 模式 1: AI 聊天 -->
             <ChatPanelContent v-if="activeTab === 'chat'" @close-chat="$emit('close-chat')" />
 
-            <!-- 模式 2: 新闻展示 (默认) -->
+            <!-- 模式 2: 工具箱 -->
+            <div v-else-if="activeTab === 'toolbox'" class="toolbox-content">
+                <ToolboxPanel
+                    :userLayers="userLayers"
+                    :baseLayers="baseLayers"
+                    :overview="toolboxOverview"
+                    @close="$emit('switch-tab', 'info')"
+                    @upload-data="$emit('upload-data', $event)"
+                    @interaction="$emit('interaction', $event)"
+                    @toggle-layer-visibility="$emit('toggle-layer-visibility', $event)"
+                    @change-layer-opacity="$emit('change-layer-opacity', $event)"
+                    @set-base-layer="$emit('set-base-layer', $event)"
+                    @toggle-base-layer-visibility="$emit('toggle-base-layer-visibility', $event)"
+                    @zoom-layer="$emit('zoom-layer', $event)"
+                    @view-layer="$emit('view-layer', $event)"
+                    @remove-layer="$emit('remove-layer', $event)"
+                    @reorder-user-layers="$emit('reorder-user-layers', $event)"
+                    @solo-layer="$emit('solo-layer', $event)"
+                    @apply-style-template="$emit('apply-style-template', $event)"
+                    @update-draw-style="$emit('update-draw-style', $event)"
+                    @update-layer-style="$emit('update-layer-style', $event)"
+                />
+            </div>
+
+            <!-- 模式 3: 新闻展示 (默认) -->
             <div v-else class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
@@ -70,6 +97,7 @@
  */
 import { ref, computed } from 'vue';
 import ChatPanelContent from './ChatPanelContent.vue';
+import ToolboxPanel from './ToolboxPanel.vue';
 
 // ========== 1. 常量定义 ==========
 const LINKS = {
@@ -89,10 +117,49 @@ const props = defineProps({
     activeTab: {
         type: String,
         default: 'info' // 'info' or 'chat'
+    },
+    isCollapsed: {
+        type: Boolean,
+        default: false
+    },
+    userLayers: {
+        type: Array,
+        default: () => []
+    },
+    baseLayers: {
+        type: Array,
+        default: () => []
+    },
+    toolboxOverview: {
+        type: Object,
+        default: () => ({ drawCount: 0, uploadCount: 0, layers: [] })
+    },
+    activeFeature: {
+        type: Object,
+        default: () => ({ key: 'info', label: '新闻' })
     }
 });
 
-const emit = defineEmits(['news-changed', 'toggle-panel', 'close-chat']);
+const emit = defineEmits([
+    'news-changed',
+    'toggle-panel',
+    'close-chat',
+    'switch-tab',
+    'upload-data',
+    'interaction',
+    'toggle-layer-visibility',
+    'change-layer-opacity',
+    'set-base-layer',
+    'toggle-base-layer-visibility',
+    'zoom-layer',
+    'view-layer',
+    'remove-layer',
+    'reorder-user-layers',
+    'solo-layer',
+    'apply-style-template',
+    'update-draw-style',
+    'update-layer-style'
+]);
 
 // ========== 3. 工具函数 ==========
 const baseUrl = import.meta.env.BASE_URL || '/';
@@ -214,6 +281,20 @@ function nextNews() {
     min-width: 300px;
     height: 100%;
     overflow: hidden;
+}
+
+.active-feature-banner {
+    padding: 8px 14px;
+    background: linear-gradient(30deg, rgba(235, 222, 222, 0), #26bd58a3);
+    color: #239c42;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.toolbox-content {
+    flex: 1;
+    overflow-y: auto;
+    background: #fff;
 }
 
 .panel-content.no-padding {
