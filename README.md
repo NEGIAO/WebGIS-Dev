@@ -75,8 +75,9 @@ WebGIS_henu_trials_5_28_vue3/
 │   │   ├── ChatPanelContent.vue # AI 聊天内容组件
 │   │   ├── MagicCursor.vue      # 鼠标特效组件
 │   │   ├── MapContainer.vue     # 2D 地图组件 (OpenLayers + 鹰眼视图)
-│   │   ├── SidePanel.vue        # 右侧侧边栏组件 (Info/Chat Mode)
-│   │   └── TopBar.vue           # 顶部导航栏组件
+│   │   ├── SidePanel.vue        # 右侧侧边栏组件 (Info+Chat+ToolBox)
+│   │   ├── TopBar.vue           # 顶部导航栏组件
+|   |   └── ToolboxPanel.vue     # 工具箱
 │   ├── router/          # Vue Router 路由配置
 │   │   └── index.js     # 路由定义（Home、Register）
 │   ├── views/           # 页面视图
