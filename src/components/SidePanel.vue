@@ -27,6 +27,7 @@
                     @change-layer-opacity="$emit('change-layer-opacity', $event)"
                     @set-base-layer="$emit('set-base-layer', $event)"
                     @toggle-base-layer-visibility="$emit('toggle-base-layer-visibility', $event)"
+                    @toggle-layer-label-visibility="$emit('toggle-layer-label-visibility', $event)"
                     @zoom-layer="$emit('zoom-layer', $event)"
                     @view-layer="$emit('view-layer', $event)"
                     @remove-layer="$emit('remove-layer', $event)"
@@ -151,6 +152,7 @@ const emit = defineEmits([
     'change-layer-opacity',
     'set-base-layer',
     'toggle-base-layer-visibility',
+    'toggle-layer-label-visibility',
     'zoom-layer',
     'view-layer',
     'remove-layer',

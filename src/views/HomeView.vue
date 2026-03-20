@@ -176,6 +176,10 @@ function handleUpdateLayerStyle(payload) {
     mapContainerRef.value?.setUserLayerStyle(payload);
 }
 
+function handleToggleLayerLabelVisibility(payload) {
+    mapContainerRef.value?.setUserLayerLabelVisibility(payload);
+}
+
 function handleUserLayersChange(layers) {
     userLayers.value = layers || [];
 }
@@ -275,6 +279,7 @@ function handleFeatureSelected(properties) {
                     @toggle-layer-visibility="handleToggleLayerVisibility"
                     @change-layer-opacity="handleChangeLayerOpacity" @set-base-layer="handleSetBaseLayer"
                     @toggle-base-layer-visibility="handleToggleBaseLayerVisibility"
+                    @toggle-layer-label-visibility="handleToggleLayerLabelVisibility"
                     @zoom-layer="handleZoomLayer" @view-layer="handleViewLayer"
                     @remove-layer="handleRemoveLayer" @reorder-user-layers="handleReorderUserLayers"
                     @solo-layer="handleSoloLayer" @apply-style-template="handleApplyStyleTemplate"
