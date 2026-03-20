@@ -139,6 +139,7 @@ import ImageStatic from 'ol/source/ImageStatic';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import shp from 'shpjs';
+import JSZip from 'jszip';
 import { fromBlob as geotiffFromBlob } from 'geotiff';
 
 // 几何与交互
@@ -369,12 +370,13 @@ function normalizeStyleConfig(styleCfg = {}) {
     };
 }
 
-function createStyleFromConfig(styleCfg) {
+function createStyleFromConfig(styleCfg, options = {}) {
     const cfg = normalizeStyleConfig(styleCfg);
     const hex = cfg.fillColor?.replace('#', '') || '5fbf7a';
     const r = parseInt(hex.substring(0, 2), 16);
     const g = parseInt(hex.substring(2, 4), 16);
     const b = parseInt(hex.substring(4, 6), 16);
+    const labelText = String(options.labelText || '').trim();
     return new Style({
         stroke: new Stroke({ color: cfg.strokeColor, width: cfg.strokeWidth }),
         fill: new Fill({ color: `rgba(${r}, ${g}, ${b}, ${cfg.fillOpacity})` }),
@@ -382,12 +384,37 @@ function createStyleFromConfig(styleCfg) {
             radius: cfg.pointRadius,
             fill: new Fill({ color: cfg.fillColor }),
             stroke: new Stroke({ color: cfg.strokeColor, width: Math.max(1, cfg.strokeWidth / 2) })
-        })
+        }),
+        text: labelText
+            ? new Text({
+                text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
+                font: '600 12px "Segoe UI", "Microsoft YaHei", sans-serif',
+                fill: new Fill({ color: '#183a2a' }),
+                stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 }),
+                backgroundFill: new Fill({ color: 'rgba(255,255,255,0.82)' }),
+                padding: [2, 6, 2, 6],
+                offsetY: -14,
+                textAlign: 'center'
+            })
+            : undefined
     });
 }
 
 function mergeStyleConfig(prevCfg, newCfg) {
     return normalizeStyleConfig({ ...(prevCfg || {}), ...(newCfg || {}) });
+}
+
+function getLayerLabelText(layerItem) {
+    if (!layerItem?.autoLabel) return '';
+    if (!layerItem?.labelVisible) return '';
+    return String(layerItem.name || '').trim();
+}
+
+function applyManagedLayerStyle(layerItem) {
+    if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
+    layerItem.layer.setStyle(createStyleFromConfig(layerItem.styleConfig, {
+        labelText: getLayerLabelText(layerItem)
+    }));
 }
 
 // --- 样式定义 ---
@@ -473,6 +500,8 @@ function emitUserLayersChange() {
         visible: item.visible,
         featureCount: item.featureCount,
         opacity: item.opacity ?? 1,
+        autoLabel: !!item.autoLabel,
+        labelVisible: item.labelVisible !== false,
         styleConfig: item.styleConfig || { ...STYLE_TEMPLATES.classic }
     })));
 }
@@ -528,15 +557,18 @@ function createManagedVectorLayer({
     sourceType,
     features,
     styleConfig,
+    autoLabel = false,
     fitView = false
 }) {
     if (!mapInstance.value || !features?.length) return null;
 
     const normalizedStyle = normalizeStyleConfig(styleConfig || STYLE_TEMPLATES.classic);
+    const labelVisible = !!autoLabel;
+    const layerLabel = labelVisible ? name : '';
     const layer = new VectorLayer({
         source: new VectorSource({ features }),
         zIndex: 120,
-        style: createStyleFromConfig(normalizedStyle),
+        style: createStyleFromConfig(normalizedStyle, { labelText: layerLabel }),
         properties: { name }
     });
 
@@ -552,6 +584,8 @@ function createManagedVectorLayer({
         visible: true,
         opacity: 1,
         featureCount: features.length,
+        autoLabel: !!autoLabel,
+        labelVisible,
         styleConfig: normalizedStyle,
         layer
     });
@@ -1745,6 +1779,7 @@ function selectResult(item) {
         sourceType: 'search',
         features: [f],
         styleConfig: SEARCH_RESULT_STYLE,
+        autoLabel: true,
         fitView: false
     });
 
@@ -1761,6 +1796,38 @@ async function parseUploadedFeatures({ content, type }) {
     if (type === 'kml') {
         const kmlFormat = new KML({ extractStyles: false });
         return kmlFormat.readFeatures(content, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857'
+        });
+    }
+
+    if (type === 'kmz') {
+        const kmzBuffer = content instanceof ArrayBuffer ? content : null;
+        if (!kmzBuffer) throw new Error('KMZ 数据读取失败');
+
+        const zip = await JSZip.loadAsync(new Uint8Array(kmzBuffer));
+        const kmlEntries = Object.values(zip.files).filter(
+            (entry) => !entry.dir && entry.name.toLowerCase().endsWith('.kml')
+        );
+        const kmlEntry = kmlEntries.find((entry) => entry.name.split('/').pop()?.toLowerCase() === 'doc.kml')
+            || kmlEntries.sort((a, b) => a.name.length - b.name.length)[0];
+        if (!kmlEntry) throw new Error('KMZ 中未找到 KML 文件');
+
+        const kmlBuffer = await kmlEntry.async('arraybuffer');
+        const utf8Text = new TextDecoder('utf-8', { fatal: false }).decode(kmlBuffer);
+        const hasReplacementChar = utf8Text.includes('\uFFFD');
+        const kmlText = hasReplacementChar
+            ? (() => {
+                try {
+                    return new TextDecoder('gbk', { fatal: false }).decode(kmlBuffer);
+                } catch {
+                    return utf8Text;
+                }
+            })()
+            : utf8Text;
+
+        const kmlFormat = new KML({ extractStyles: false });
+        return kmlFormat.readFeatures(kmlText, {
             dataProjection: 'EPSG:4326',
             featureProjection: 'EPSG:3857'
         });
@@ -1826,10 +1893,14 @@ async function addUserDataLayer({ content, type, name }) {
             sourceType: 'upload',
             features,
             styleConfig: STYLE_TEMPLATES.classic,
+            autoLabel: true,
             fitView: true
         });
     } catch (e) {
-        alert('文件解析失败: ' + e.message);
+        const kmzHint = String(type || '').toLowerCase() === 'kmz'
+            ? '\n提示：请将 KMZ 文件解压为 KML 后再上传。'
+            : '';
+        alert('文件解析失败: ' + e.message + kmzHint);
     }
 }
 
@@ -1859,7 +1930,7 @@ function setDrawStyle(styleCfg) {
         .filter(item => item.sourceType === 'draw')
         .forEach(item => {
             item.styleConfig = mergeStyleConfig(item.styleConfig, styleCfg);
-            item.layer.setStyle(createStyleFromConfig(item.styleConfig));
+            applyManagedLayerStyle(item);
         });
     emitUserLayersChange();
 }
@@ -1876,7 +1947,15 @@ function setUserLayerStyle({ layerId, styleConfig }) {
     features.forEach(feature => {
         feature.setStyle(undefined);
     });
-    target.layer.setStyle(createStyleFromConfig(target.styleConfig));
+    applyManagedLayerStyle(target);
+    emitUserLayersChange();
+}
+
+function setUserLayerLabelVisibility({ layerId, visible }) {
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target || !target.autoLabel) return;
+    target.labelVisible = !!visible;
+    applyManagedLayerStyle(target);
     emitUserLayersChange();
 }
 
@@ -2151,6 +2230,7 @@ defineExpose({
     applyStyleTemplate,
     setUserLayerVisibility,
     setUserLayerOpacity,
+    setUserLayerLabelVisibility,
     setBaseLayerActive,
     setLayerVisibility,
     zoomToUserLayer,

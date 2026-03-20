@@ -1,6 +1,6 @@
 <template>
     <div class="toolbox-panel">
-        <input ref="fileInputRef" type="file" class="hidden-input" accept=".geojson,.json,.kml,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
+        <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
 
         <div class="header">
             <div>
@@ -61,6 +61,9 @@
                     </div>
                     <div class="layer-actions">
                         <button class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
+                        <button class="mini" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">
+                            {{ layer.labelVisible ? '标注关' : '标注开' }}
+                        </button>
                         <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
                         <button class="mini btn-warning" @click.stop="emit('remove-layer', layer.id)">清空</button>
                     </div>
@@ -69,11 +72,20 @@
             </div>
 
             <div class="card">
-                <div class="card-top">
-                    <div class="card-title">上传图层</div>
-                    <button class="small-btn" @click="triggerFileUpload">上传 (GeoJSON/KML/SHP/TIF)</button>
+                <div
+                    class="upload-entry"
+                    :class="{ dragging: isUploadDragging }"
+                    @dragenter.prevent="handleUploadDragEnter"
+                    @dragover.prevent="handleUploadDragOver"
+                    @dragleave.prevent="handleUploadDragLeave"
+                    @drop.prevent="handleUploadDrop"
+                >
+                    <div class="card-top">
+                        <div class="card-title">上传图层</div>
+                        <button class="small-btn" @click="triggerFileUpload">上传 (GeoJSON/KML/KMZ/SHP/TIF)</button>
+                    </div>
+                    <div class="upload-tip">点击上传，或将文件拖到此区域（支持多选）</div>
                 </div>
-                <div class="upload-tip">建议 <= 50 MB，最大 <= 200 MB（超大文件可能无法显示）</div>
 
                 <div v-if="uploadLayers.length" class="layer-list">
                     <div
@@ -97,6 +109,9 @@
 
                         <div class="layer-actions">
                             <button v-if="!isRasterLayer(layer)" class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
+                            <button v-if="canToggleLabel(layer)" class="mini" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">
+                                {{ layer.labelVisible ? '标注关' : '标注开' }}
+                            </button>
                             <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
                             <button class="mini btn-danger" @click.stop="emit('remove-layer', layer.id)">移除</button>
                         </div>
@@ -195,6 +210,7 @@ const emit = defineEmits([
     'solo-layer',
     'set-base-layer',
     'toggle-base-layer-visibility',
+    'toggle-layer-label-visibility',
     'apply-style-template',
     'update-draw-style',
     'update-layer-style'
@@ -203,10 +219,12 @@ const emit = defineEmits([
 const fileInputRef = ref(null);
 const activeTab = ref('layers');
 const draggingLayerId = ref('');
+const isUploadDragging = ref(false);
 const selectedEditLayerId = ref('draw');
 const MB = 1024 * 1024;
 const WARN_FILE_SIZE_MB = 50;
 const MAX_FILE_SIZE_MB = 200;
+const SUPPORTED_UPLOAD_TYPES = new Set(['geojson', 'json', 'kml', 'kmz', 'zip', 'shp', 'tif', 'tiff']);
 
 const styleTemplates = [
     { id: 'classic', name: '经典绿' },
@@ -226,6 +244,10 @@ const sortedUserLayers = computed(() => [...props.userLayers].sort((a, b) => (a.
 const drawLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'draw'));
 const uploadLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'upload'));
 const searchLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'search'));
+
+function canToggleLabel(layer) {
+    return !!layer?.autoLabel;
+}
 
 function isRasterLayer(layer) {
     const t = String(layer?.type || '').toLowerCase();
@@ -262,14 +284,19 @@ function formatFileSize(fileSizeInBytes) {
 }
 
 function handleFileUpload(event) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    files.forEach(file => processUploadFile(file));
+    event.target.value = '';
+}
+
+function processUploadFile(file) {
     if (!file) return;
 
     const fileSizeMb = file.size / MB;
     const sizeText = formatFileSize(file.size);
     if (fileSizeMb > MAX_FILE_SIZE_MB) {
         alert(`文件过大（${sizeText}），请控制在 ${MAX_FILE_SIZE_MB} MB 以内后再上传。`);
-        event.target.value = '';
         return;
     }
     if (fileSizeMb > WARN_FILE_SIZE_MB) {
@@ -277,12 +304,16 @@ function handleFileUpload(event) {
             `当前文件大小为 ${sizeText}，超过建议值 ${WARN_FILE_SIZE_MB} MB。\n继续上传可能导致页面卡顿或无法显示，是否继续？`
         );
         if (!proceed) {
-            event.target.value = '';
             return;
         }
     }
 
     const extension = file.name.split('.').pop().toLowerCase();
+    if (!SUPPORTED_UPLOAD_TYPES.has(extension)) {
+        alert(`暂不支持该文件类型：.${extension || '未知'}`);
+        return;
+    }
+
     const reader = new FileReader();
     reader.onload = (e) => {
         emit('upload-data', {
@@ -290,11 +321,10 @@ function handleFileUpload(event) {
             type: extension,
             name: file.name
         });
-        event.target.value = '';
     };
 
     try {
-        if (extension === 'zip' || extension === 'shp' || extension === 'tif' || extension === 'tiff') {
+        if (extension === 'zip' || extension === 'shp' || extension === 'kmz' || extension === 'tif' || extension === 'tiff') {
             reader.readAsArrayBuffer(file);
         } else {
             reader.readAsText(file);
@@ -303,6 +333,27 @@ function handleFileUpload(event) {
         console.error('File read error', err);
         alert('文件读取失败');
     }
+}
+
+function handleUploadDragEnter() {
+    isUploadDragging.value = true;
+}
+
+function handleUploadDragOver() {
+    isUploadDragging.value = true;
+}
+
+function handleUploadDragLeave(event) {
+    if (event.currentTarget === event.target) {
+        isUploadDragging.value = false;
+    }
+}
+
+function handleUploadDrop(event) {
+    isUploadDragging.value = false;
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (!files.length) return;
+    files.forEach(file => processUploadFile(file));
 }
 
 function onDragStart(layerId) {
@@ -425,11 +476,26 @@ function applyStyle() {
 .upload-tip {
     margin-bottom: 8px;
     font-size: 12px;
-    color: #8a6520;
-    background: #fff7e8;
-    border: 1px solid #f0d7aa;
+    color: #6b7f72;
+    background: #f8fbf9;
+    border: 1px solid #d9e8df;
     border-radius: 6px;
     padding: 6px 8px;
+}
+
+.upload-entry {
+    margin-bottom: 10px;
+    border: 1.5px dashed #c8ded0;
+    border-radius: 8px;
+    background: #fbfefd;
+    padding: 8px;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.upload-entry.dragging {
+    border-color: #5aa97a;
+    background: #eaf7f0;
+    box-shadow: 0 0 0 3px rgba(90, 169, 122, 0.15);
 }
 
 .row-label {
