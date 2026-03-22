@@ -113,6 +113,7 @@
 import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import LocationSearch from './LocationSearch.vue';
 import { searchAmapPlaces } from '../api/map';
+import { buildRouteRenderData, fitExtentToCoverage } from '../utils/transitRouteBuilder';
 
 // OpenLayers 核心库
 import Map from 'ol/Map';
@@ -393,6 +394,10 @@ let dynamicSplitMoveKey = null;
 let pendingBusPick = null;
 let busRouteLayerRef = null;
 let busRouteManagedLayerId = null;
+let busActiveStepIndex = -1;
+let busHoverStepIndex = -1;
+let driveActiveStepIndex = -1;
+let driveHoverStepIndex = -1;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -400,6 +405,7 @@ const drawSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const busPickSource = new VectorSource();
 const busRouteSource = new VectorSource();
+const busStepStyleCache = new globalThis.Map();
 
 const emit = defineEmits([
     'location-change',
@@ -538,6 +544,127 @@ const styles = {
     })
 };
 
+const BUS_STEP_COLOR_PALETTE = [
+    '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4'
+];
+const DRIVE_STEP_COLOR_PALETTE = [
+    '#10B981', '#0EA5E9', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6'
+];
+
+function hexToRgba(hexColor, alpha = 1) {
+    const hex = String(hexColor || '').replace('#', '').trim();
+    if (hex.length !== 6) return `rgba(59, 130, 246, ${alpha})`;
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getBusStepColor(stepIndex) {
+    const idx = Math.abs(Number(stepIndex || 0)) % BUS_STEP_COLOR_PALETTE.length;
+    return BUS_STEP_COLOR_PALETTE[idx];
+}
+
+function getDriveStepColor(stepIndex) {
+    const idx = Math.abs(Number(stepIndex || 0)) % DRIVE_STEP_COLOR_PALETTE.length;
+    return DRIVE_STEP_COLOR_PALETTE[idx];
+}
+
+function getBusStepStyle(stepIndex, isWalk = false, isActive = false) {
+    const normalizedStep = Number.isFinite(Number(stepIndex)) ? Number(stepIndex) : 0;
+    const key = `${normalizedStep}_${isWalk ? 'walk' : 'transit'}_${isActive ? 'active' : 'normal'}`;
+    if (busStepStyleCache.has(key)) return busStepStyleCache.get(key);
+
+    const baseColor = getBusStepColor(normalizedStep);
+    const color = isWalk
+        ? hexToRgba(baseColor, isActive ? 0.9 : 0.6)
+        : hexToRgba(baseColor, isActive ? 1 : 0.88);
+
+    const style = new Style({
+        stroke: new Stroke({
+            color,
+            width: isActive ? (isWalk ? 6 : 7) : (isWalk ? 4 : 5),
+            lineDash: isWalk ? [8, 6] : undefined,
+            lineCap: 'round',
+            lineJoin: 'round'
+        })
+    });
+    busStepStyleCache.set(key, style);
+    return style;
+}
+
+function getBusStepPointStyle(stepIndex, markerRole = 'segment-start', isActive = false, stationName = '') {
+    const normalizedStep = Number.isFinite(Number(stepIndex)) ? Number(stepIndex) : 0;
+    const role = markerRole === 'segment-end' ? 'segment-end' : 'segment-start';
+
+    const baseColor = getBusStepColor(normalizedStep);
+    const fillColor = role === 'segment-end'
+        ? hexToRgba(baseColor, isActive ? 1 : 0.88)
+        : hexToRgba(baseColor, isActive ? 0.9 : 0.72);
+
+    const labelText = String(stationName || '').trim();
+
+    const style = new Style({
+        image: new CircleStyle({
+            radius: isActive ? 7 : 5,
+            fill: new Fill({ color: fillColor }),
+            stroke: new Stroke({ color: '#ffffff', width: 2 })
+        }),
+        text: labelText
+            ? new Text({
+                text: labelText,
+                offsetY: role === 'segment-end' ? -14 : 14,
+                font: isActive ? '600 12px "Microsoft YaHei", sans-serif' : '500 11px "Microsoft YaHei", sans-serif',
+                fill: new Fill({ color: '#111827' }),
+                stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 })
+            })
+            : undefined
+    });
+    return style;
+}
+
+function getDriveStepStyle(stepIndex = 0, isActive = false, isStepSegment = false) {
+    if (!isStepSegment) {
+        const key = 'drive_overview';
+        if (busStepStyleCache.has(key)) return busStepStyleCache.get(key);
+        const style = new Style({
+            stroke: new Stroke({
+                color: 'rgba(5, 150, 105, 0.35)',
+                width: 4,
+                lineCap: 'round',
+                lineJoin: 'round'
+            })
+        });
+        busStepStyleCache.set(key, style);
+        return style;
+    }
+
+    const normalizedStep = Number.isFinite(Number(stepIndex)) ? Number(stepIndex) : 0;
+    const key = `drive_step_${normalizedStep}_${isActive ? 'active' : 'normal'}`;
+    if (busStepStyleCache.has(key)) return busStepStyleCache.get(key);
+
+    const color = hexToRgba(getDriveStepColor(normalizedStep), isActive ? 0.98 : 0.9);
+
+    const style = new Style({
+        stroke: new Stroke({
+            color,
+            width: isActive ? 8 : 6,
+            lineCap: 'round',
+            lineJoin: 'round'
+        })
+    });
+    busStepStyleCache.set(key, style);
+    return style;
+}
+
+function getCurrentBusStepIndex() {
+    return busHoverStepIndex >= 0 ? busHoverStepIndex : busActiveStepIndex;
+}
+
+function getCurrentDriveStepIndex() {
+    return driveHoverStepIndex >= 0 ? driveHoverStepIndex : driveActiveStepIndex;
+}
+
 // --- 初始化 ---
 onMounted(async () => {
     initMap();
@@ -619,6 +746,7 @@ function emitUserLayersChange() {
         opacity: item.opacity ?? 1,
         autoLabel: !!item.autoLabel,
         labelVisible: item.labelVisible !== false,
+        category: item.metadata?.category,
         longitude: Number.isFinite(item.metadata?.longitude) ? item.metadata.longitude : undefined,
         latitude: Number.isFinite(item.metadata?.latitude) ? item.metadata.latitude : undefined,
         styleConfig: item.styleConfig || { ...STYLE_TEMPLATES.classic }
@@ -1403,8 +1531,31 @@ function initMap() {
         source: busRouteSource,
         zIndex: 1080,
         style: (feature) => {
-            if (feature.get('routeMode') === 'drive') return styles.driveRoute;
-            return feature.get('segmentType') === 1 ? styles.busRouteWalk : styles.busRouteTransit;
+            if (feature.get('routeMode') === 'drive') {
+                const stepIndex = Number(feature.get('stepIndex'));
+                const isStepSegment = Number.isFinite(stepIndex) && stepIndex >= 0;
+                const activeDriveStep = getCurrentDriveStepIndex();
+                const isActive = activeDriveStep >= 0 && stepIndex === activeDriveStep;
+                return getDriveStepStyle(stepIndex, isActive, isStepSegment);
+            }
+            if (feature.getGeometry()?.getType?.() === 'Point') {
+                const stepIndex = Number(feature.get('stepIndex') ?? 0);
+                const stepIndices = feature.get('stepIndices');
+                const markerRole = String(feature.get('markerRole') || 'segment-start');
+                const stationName = String(feature.get('stationName') || '');
+                const activeBusStep = getCurrentBusStepIndex();
+                const isActive = activeBusStep >= 0 && (
+                    Array.isArray(stepIndices)
+                        ? stepIndices.map((v) => Number(v)).includes(activeBusStep)
+                        : activeBusStep === stepIndex
+                );
+                return getBusStepPointStyle(stepIndex, markerRole, isActive, stationName);
+            }
+            const segmentType = Number(feature.get('segmentType') ?? 0);
+            const stepIndex = Number(feature.get('stepIndex') ?? 0);
+            const activeBusStep = getCurrentBusStepIndex();
+            const isActive = activeBusStep >= 0 && activeBusStep === stepIndex;
+            return getBusStepStyle(stepIndex, segmentType === 1, isActive);
         }
     });
     busRouteLayerRef = busRouteLayer;
@@ -1729,6 +1880,104 @@ function startBusPointPick(type) {
     });
 }
 
+/**
+ * 统一清理路线交互状态（选中步骤 + 悬停预览）。
+ * 说明：公交与驾车共用一套路由图层，切换路线时必须同步复位状态，避免残留高亮。
+ */
+function resetRouteStepStates() {
+    busActiveStepIndex = -1;
+    busHoverStepIndex = -1;
+    driveActiveStepIndex = -1;
+    driveHoverStepIndex = -1;
+}
+
+/**
+ * 按模式获取指定步骤对应要素。
+ */
+function getRouteStepFeatures(routeMode, stepIndex) {
+    const targetStepIndex = Number(stepIndex);
+    if (!Number.isFinite(targetStepIndex) || targetStepIndex < 0) return [];
+
+    return busRouteSource.getFeatures().filter((feature) => (
+        feature.get('routeMode') === routeMode && Number(feature.get('stepIndex')) === targetStepIndex
+    ));
+}
+
+/**
+ * 统一执行步骤缩放逻辑（公交/驾车复用）。
+ */
+function zoomToRouteStep(routeMode, stepIndex, options = {}) {
+    if (!mapInstance.value) {
+        throw new Error('地图尚未初始化');
+    }
+
+    const targetStepIndex = Number(stepIndex);
+    if (!Number.isFinite(targetStepIndex) || targetStepIndex < 0) {
+        throw new Error('步骤索引无效');
+    }
+
+    const stepFeatures = getRouteStepFeatures(routeMode, targetStepIndex);
+    if (!stepFeatures.length) {
+        const routeLabel = routeMode === 'drive' ? '驾车' : '公交';
+        throw new Error(`未找到${routeLabel}步骤 ${targetStepIndex + 1} 对应路段`);
+    }
+
+    if (routeMode === 'drive') {
+        driveActiveStepIndex = targetStepIndex;
+        driveHoverStepIndex = -1;
+    } else {
+        busActiveStepIndex = targetStepIndex;
+        busHoverStepIndex = -1;
+        driveActiveStepIndex = -1;
+        driveHoverStepIndex = -1;
+    }
+    busRouteLayerRef?.changed?.();
+
+    const stepExtent = createEmpty();
+    stepFeatures.forEach((feature) => {
+        const geometry = feature.getGeometry();
+        if (!geometry) return;
+        extendExtent(stepExtent, geometry.getExtent());
+    });
+
+    if (!isExtentEmpty(stepExtent)) {
+        fitExtentToCoverage(mapInstance.value, stepExtent, {
+            targetCoverage: options.targetCoverage ?? 0.84,
+            bufferRatio: options.bufferRatio ?? 0.16,
+            minBufferMeters: options.minBufferMeters ?? 120,
+            maxBufferMeters: options.maxBufferMeters ?? 1200,
+            padding: options.padding ?? [72, 72, 72, 72],
+            duration: options.duration ?? 650,
+            minZoom: options.minZoom ?? 10,
+            maxZoom: options.maxZoom ?? 19
+        });
+    }
+}
+
+/**
+ * 统一处理步骤悬停预览（公交/驾车复用）。
+ */
+function previewRouteStep(routeMode, stepIndex) {
+    const targetStepIndex = Number(stepIndex);
+    const normalized = Number.isFinite(targetStepIndex) && targetStepIndex >= 0 ? targetStepIndex : -1;
+
+    if (routeMode === 'drive') {
+        driveHoverStepIndex = normalized;
+    } else {
+        busHoverStepIndex = normalized;
+    }
+    busRouteLayerRef?.changed?.();
+}
+
+function clearRouteStepPreview(routeMode) {
+    if (routeMode === 'drive') {
+        driveHoverStepIndex = -1;
+    } else {
+        busHoverStepIndex = -1;
+    }
+    busRouteLayerRef?.changed?.();
+}
+
 function drawRouteOnMap(route) {
     if (!mapInstance.value) {
         throw new Error('地图尚未初始化');
@@ -1740,64 +1989,40 @@ function drawRouteOnMap(route) {
 
     // 只清理旧线路，保留起终点 marker。
     busRouteSource.clear();
+    resetRouteStepStates();
 
-    const segments = Array.isArray(route?.segments) ? route.segments : [];
-    if (!segments.length) return;
+    const { features, fitExtent, featureCount, hasGeometry } = buildRouteRenderData('bus', route);
+    if (!featureCount) {
+        throw new Error('公交方案中未找到分段信息（segments 为空）');
+    }
 
-    const fitExtent = createEmpty();
-    let hasPoint = false;
+    busRouteSource.addFeatures(features);
 
-    segments.forEach((segment) => {
-        // 兼容真实结构：segment.segmentLine 是数组，坐标串在 segmentLine[i].linePoint。
-        const segmentLineItems = Array.isArray(segment?.segmentLine)
-            ? segment.segmentLine
-            : (segment?.segmentLine ? [{ linePoint: String(segment.segmentLine) }] : []);
+    const routeFeatureCount = busRouteSource.getFeatures().length;
+    if (!routeFeatureCount || !hasGeometry || isExtentEmpty(fitExtent)) {
+        throw new Error('公交方案存在，但未解析到可绘制的有效坐标点');
+    }
 
-        segmentLineItems.forEach((lineItem) => {
-            const linePoint = String(lineItem?.linePoint || '').trim();
-            if (!linePoint) return;
-
-            const points = linePoint
-                .split(';')
-                .map((pair) => pair.trim())
-                .filter(Boolean)
-                .map((pair) => {
-                    const [lngStr, latStr] = pair.split(',');
-                    const lng = Number(lngStr);
-                    const lat = Number(latStr);
-                    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-                    return fromLonLat([lng, lat]);
-                })
-                .filter(Boolean);
-
-            if (points.length < 2) return;
-
-            busRouteSource.addFeature(new Feature({
-                geometry: new LineString(points),
-                segmentType: Number(segment?.segmentType ?? 0),
-                routeMode: 'bus'
-            }));
-
-            points.forEach((coord) => {
-                extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]);
-                hasPoint = true;
-            });
-        });
-    });
-
-    if (hasPoint && !isExtentEmpty(fitExtent)) {
-        mapInstance.value.getView().fit(fitExtent, {
+    if (!isExtentEmpty(fitExtent)) {
+        fitExtentToCoverage(mapInstance.value, fitExtent, {
+            targetCoverage: 0.72,
+            bufferRatio: 0.08,
+            minBufferMeters: 120,
+            maxBufferMeters: 1800,
             padding: [80, 80, 80, 80],
             duration: 700,
-            maxZoom: 18
+            minZoom: 6,
+            maxZoom: 19
         });
     }
+
+    busRouteLayerRef?.changed?.();
 
     syncRouteManagedLayer({
         name: '公交规划路线',
         type: 'bus_route',
         category: 'route',
-        featureCount: busRouteSource.getFeatures().length
+        featureCount: routeFeatureCount
     });
 }
 
@@ -1812,44 +2037,61 @@ function drawDriveRouteOnMap(routeLatLonStr) {
 
     // 清理旧路线，保留起终点 marker。
     busRouteSource.clear();
+    resetRouteStepStates();
 
-    const points = String(routeLatLonStr || '')
-        .split(';')
-        .map((pair) => pair.trim())
-        .filter(Boolean)
-        .map((pair) => {
-            const [lngStr, latStr] = pair.split(',');
-            const lng = Number(lngStr);
-            const lat = Number(latStr);
-            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-            return fromLonLat([lng, lat]);
-        })
-        .filter(Boolean);
-
-    if (points.length < 2) {
+    const { features, fitExtent, hasGeometry } = buildRouteRenderData('drive', routeLatLonStr);
+    if (!hasGeometry || !features.length) {
         throw new Error('驾车路线坐标不足，无法绘制');
     }
 
-    busRouteSource.addFeature(new Feature({
-        geometry: new LineString(points),
-        routeMode: 'drive'
-    }));
+    busRouteSource.addFeatures(features);
 
-    const fitExtent = createEmpty();
-    points.forEach((coord) => extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]));
     if (!isExtentEmpty(fitExtent)) {
-        mapInstance.value.getView().fit(fitExtent, {
+        fitExtentToCoverage(mapInstance.value, fitExtent, {
+            targetCoverage: 0.72,
+            bufferRatio: 0.08,
+            minBufferMeters: 120,
+            maxBufferMeters: 1800,
             padding: [80, 80, 80, 80],
             duration: 700,
-            maxZoom: 18
+            minZoom: 6,
+            maxZoom: 19
         });
     }
+
+    busRouteLayerRef?.changed?.();
 
     syncRouteManagedLayer({
         name: '驾车规划路线',
         type: 'drive_route',
         category: 'route',
-        featureCount: 1
+        featureCount: busRouteSource.getFeatures().length
+    });
+}
+
+function zoomToDriveRouteStep(stepIndex) {
+    zoomToRouteStep('drive', stepIndex, {
+        targetCoverage: 0.84,
+        bufferRatio: 0.16,
+        minBufferMeters: 120,
+        maxBufferMeters: 1200,
+        padding: [72, 72, 72, 72],
+        duration: 650,
+        minZoom: 10,
+        maxZoom: 19
+    });
+}
+
+function zoomToBusRouteStep(stepIndex) {
+    zoomToRouteStep('bus', stepIndex, {
+        targetCoverage: 0.84,
+        bufferRatio: 0.16,
+        minBufferMeters: 120,
+        maxBufferMeters: 1200,
+        padding: [72, 72, 72, 72],
+        duration: 650,
+        minZoom: 10,
+        maxZoom: 19
     });
 }
 
@@ -1882,6 +2124,22 @@ function syncRouteManagedLayer({ name, type, category, featureCount }) {
         emitUserLayersChange();
         emitGraphicsOverview();
     }
+}
+
+function previewBusRouteStep(stepIndex) {
+    previewRouteStep('bus', stepIndex);
+}
+
+function clearBusRouteStepPreview() {
+    clearRouteStepPreview('bus');
+}
+
+function previewDriveRouteStep(stepIndex) {
+    previewRouteStep('drive', stepIndex);
+}
+
+function clearDriveRouteStepPreview() {
+    clearRouteStepPreview('drive');
 }
 
 // Promise 化获取当前位置
@@ -2451,6 +2709,7 @@ function removeUserLayer(layerId) {
         || removed?.metadata?.category === 'route'
     ) {
         busRouteManagedLayerId = null;
+        resetRouteStepStates();
         busRouteSource.clear();
     }
 
@@ -2663,7 +2922,13 @@ defineExpose({
     getCurrentLocation,
     startBusPointPick,
     drawRouteOnMap,
+    zoomToBusRouteStep,
+    previewBusRouteStep,
+    clearBusRouteStepPreview,
     drawDriveRouteOnMap,
+    zoomToDriveRouteStep,
+    previewDriveRouteStep,
+    clearDriveRouteStepPreview,
     setDrawStyle,
     setUserLayerStyle,
     applyStyleTemplate,

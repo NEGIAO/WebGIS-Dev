@@ -88,6 +88,8 @@
                     type="button"
                     class="step-card"
                     :class="selectedStepIndex === stepIndex ? 'step-card-active' : ''"
+                    @mouseenter="handlePreviewStep(stepIndex)"
+                    @mouseleave="clearStepPreview"
                     @click="handleSelectStep(stepIndex)"
                 >
                     <div class="step-head">
@@ -175,6 +177,8 @@ const props = defineProps<{
     startBusPointPick?: (type: 'start' | 'end') => Promise<{ lng: number; lat: number } | null>;
     drawRouteOnMap?: (route: RouteCandidate) => Promise<void> | void;
     zoomToBusRouteStep?: (stepIndex: number) => Promise<void> | void;
+    previewBusRouteStep?: (stepIndex: number) => Promise<void> | void;
+    clearBusRouteStepPreview?: () => Promise<void> | void;
 }>();
 
 defineEmits(['close']);
@@ -332,12 +336,33 @@ async function handleSelectRoute(route: RouteCandidate, idx: number) {
 
 async function handleSelectStep(stepIndex: number) {
     selectedStepIndex.value = stepIndex;
-    if (!props.zoomToBusRouteStep) return;
 
     try {
+        if (props.drawRouteOnMap && selectedRoute.value) {
+            await props.drawRouteOnMap(selectedRoute.value);
+        }
+        if (!props.zoomToBusRouteStep) return;
         await props.zoomToBusRouteStep(stepIndex);
     } catch (err: any) {
         errorMsg.value = err?.message || `无法定位步骤 ${stepIndex + 1}`;
+    }
+}
+
+async function handlePreviewStep(stepIndex: number) {
+    try {
+        if (!props.previewBusRouteStep) return;
+        await props.previewBusRouteStep(stepIndex);
+    } catch {
+        // 预览失败不影响主流程
+    }
+}
+
+async function clearStepPreview() {
+    try {
+        if (!props.clearBusRouteStepPreview) return;
+        await props.clearBusRouteStepPreview();
+    } catch {
+        // 预览失败不影响主流程
     }
 }
 
@@ -368,7 +393,7 @@ async function startTransitPlan() {
         };
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
-        const requestUrl = `http://api.tianditu.gov.cn/transit?tk=${encodeURIComponent(props.token)}&type=busplan&postStr=${encodedPostStr}`;
+        const requestUrl = `https://api.tianditu.gov.cn/transit?tk=${encodeURIComponent(props.token)}&type=busplan&postStr=${encodedPostStr}`;
         debugInfo.value.requestUrl = requestUrl;
 
         const res = await fetch(requestUrl, { method: 'GET' });
@@ -393,6 +418,10 @@ async function startTransitPlan() {
         selectedRouteIndex.value = normalized.length ? 0 : -1;
         selectedStepIndex.value = -1;
 
+        if (normalized.length && props.drawRouteOnMap) {
+            await props.drawRouteOnMap(normalized[0]);
+        }
+
         if (!normalized.length) {
             errorMsg.value = '未查询到可用公交方案';
             debugInfo.value.status = 'empty';
@@ -401,12 +430,17 @@ async function startTransitPlan() {
             }
         }
     } catch (err: any) {
-        errorMsg.value = err?.message || '公交规划失败';
+        const rawMessage = err?.message || '';
+        const likelyNetworkBlocked = err instanceof TypeError || /failed\s+to\s+fetch/i.test(String(rawMessage));
+        const hint = likelyNetworkBlocked
+            ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
+            : '';
+        errorMsg.value = hint || rawMessage || '公交规划失败';
         routes.value = [];
         selectedRouteIndex.value = -1;
         selectedStepIndex.value = -1;
         debugInfo.value.status = 'error';
-        debugInfo.value.message = err?.message || '公交规划失败';
+        debugInfo.value.message = hint || rawMessage || '公交规划失败';
         console.error('[BusPlanner Debug] 规划失败:', err);
     } finally {
         planning.value = false;

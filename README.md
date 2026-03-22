@@ -62,32 +62,42 @@ npm run build
 ```
 WebGIS_henu_trials_5_28_vue3/
 ├── .github/
-│   └── workflows/       # GitHub Actions 工作流配置
-├── public/              # 静态资源（包括 icon、瓦片、图片）
-│   ├── images/          # 校园图片资源
-│   ├── tiles/           # 本地瓦片资源 {z}/{x}/{y}.png
-│   ├── favicon.ico      # 网站图标
-│   ├── min-enhanced.js  # 延迟统计脚本
-│   ├── ol.js            # OpenLayers 库文件
-│   └── ol.css           # OpenLayers 样式文件
+│   └── workflows/                # GitHub Actions 工作流
+├── public/                       # 纯静态资源（构建时原样拷贝）
+│   ├── images/                   # 校园图片资源
+│   ├── tiles/                    # 本地瓦片 {z}/{x}/{y}.png
+│   ├── min-enhanced.js           # 延迟统计脚本
+│   ├── ol.js / ol.css            # OpenLayers 备用静态资源
+│   └── favicon.ico
 ├── src/
-│   ├── assets/          # 全局样式与静态资源
-│   ├── components/      # Vue 组件
-│   │   ├── icons/               # 图标组件
-│   │   ├── CesiumContainer.vue  # 3D 地球组件 (CesiumJS)
-│   │   ├── ChatPanelContent.vue # AI 聊天内容组件
-│   │   ├── MagicCursor.vue      # 鼠标特效组件
-│   │   ├── MapContainer.vue     # 2D 地图组件 (OpenLayers + 鹰眼视图)
-│   │   ├── SidePanel.vue        # 右侧侧边栏组件 (Info+Chat+ToolBox)
-│   │   ├── TopBar.vue           # 顶部导航栏组件
-|   |   └── ToolboxPanel.vue     # 工具箱
-│   ├── router/          # Vue Router 路由配置
-│   │   └── index.js     # 路由定义（Home、Register）
-│   ├── views/           # 页面视图
-│   │   ├── HomeView.vue      # 主页（地图页）
-│   │   └── RegisterView.vue  # 注册/登录页
-│   ├── App.vue          # 根组件
-│   └── main.js          # 入口文件
+│   ├── api/
+│   │   └── map.js                # 地图检索 API 封装（如高德检索）
+│   ├── assets/                   # 全局样式与静态资源
+│   ├── components/
+│   │   ├── MapContainer.vue      # 2D 地图核心容器（底图/图层/绘制/路线交互总入口）
+│   │   ├── SidePanel.vue         # 右侧面板容器（资讯/工具箱/公交/驾车）
+│   │   ├── ToolboxPanel.vue      # 图层与工具管理
+│   │   ├── BusPlannerPanel.vue   # 公交规划 UI 与步骤交互
+│   │   ├── DrivingPlannerPanel.vue # 驾车规划 UI 与步骤交互
+│   │   ├── MapPointPickerCard.vue # 公交/驾车通用选点卡片
+│   │   ├── LocationSearch.vue    # 地名搜索组件
+│   │   ├── ChatPanelContent.vue  # AI 对话内容
+│   │   ├── CesiumContainer.vue   # 3D 地球组件
+│   │   ├── TopBar.vue            # 顶部导航栏
+│   │   ├── MagicCursor.vue       # 鼠标特效
+│   │   └── icons/                # 图标组件
+│   ├── router/
+│   │   └── index.js              # 路由定义（Home、Register）
+│   ├── utils/
+│   │   ├── loadTiandituSdk.js    # 天地图 SDK 动态加载
+│   │   ├── drawTransitRoute.ts   # 交通路线绘制辅助（独立工具）
+│   │   ├── transitRouteBuilder.js # 公交/驾车路线几何构建与动态覆盖缩放
+│   │   └── driveXmlParser.ts     # 驾车 XML 解析与天地图原生绘制工具
+│   ├── views/
+│   │   ├── HomeView.vue          # 主页面编排（地图 + 侧边栏 + 交互透传）
+│   │   └── RegisterView.vue      # 注册/登录页
+│   ├── App.vue
+│   └── main.js
 ├── .env                 # 环境变量配置（本地，不提交）
 ├── .env.example         # 环境变量配置示例
 ├── .gitignore           # Git 忽略配置
@@ -100,6 +110,18 @@ WebGIS_henu_trials_5_28_vue3/
 ```
 
 ## 版本记录
+
+### V2.5.2 (2026-03-22)
+- **🧩 地图主文件可维护性整合（MapContainer）**：
+    - 将公交/驾车的步骤交互核心抽为统一函数：步骤状态复位、步骤要素检索、步骤缩放、步骤预览。
+    - 保持现有功能不变的前提下，减少重复逻辑，降低后续拆分风险。
+    - 为关键交互函数补充功能注释，便于团队协作与后续重构。
+- **🧭 公交+驾车步骤交互统一**：
+    - 两类规划均支持步骤悬停预览高亮 + 点击定位缩放。
+    - 驾车分段颜色区分与步骤列表颜色保持一致，提升步骤-线路映射可读性。
+- **📘 结构文档更新**：
+    - README 目录结构补充并细化到关键文件职责。
+    - 新增路线解析与构建工具文件说明（transitRouteBuilder、driveXmlParser）。
 
 ### V2.5.1 (2026-03-22)
 - **🚀 性能优化（首屏与交互）**：

@@ -50,6 +50,24 @@
             </div>
 
             <div class="card">
+                <div class="card-title">路线图层</div>
+                <div class="layer-item" v-if="routeLayers.length" v-for="layer in routeLayers" :key="layer.id" @click.left="emit('view-layer', layer.id)">
+                    <div class="layer-line">
+                        <label class="row-label">
+                            <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
+                            <span class="name">{{ layer.name }}</span>
+                        </label>
+                        <span class="meta">{{ layer.featureCount || 0 }}</span>
+                    </div>
+                    <div class="layer-actions">
+                        <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
+                        <button class="mini btn-danger" @click.stop="emit('remove-layer', layer.id)">移除</button>
+                    </div>
+                </div>
+                <div class="empty" v-else>暂无路线图层</div>
+            </div>
+
+            <div class="card">
                 <div class="card-title">搜索结果图层</div>
                 <div class="layer-item" v-if="searchLayers.length" v-for="layer in searchLayers" :key="layer.id" @click.left="emit('view-layer', layer.id)">
                     <div class="layer-line">
@@ -244,7 +262,16 @@ const styleForm = ref({
 const sortedUserLayers = computed(() => [...props.userLayers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
 const drawLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'draw'));
 const uploadLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'upload'));
-const searchLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'search'));
+const routeLayers = computed(() => sortedUserLayers.value.filter((layer) => {
+    if (layer.sourceType !== 'search') return false;
+    if (layer.category === 'route') return true;
+    return /_route$/i.test(String(layer.type || ''));
+}));
+const searchLayers = computed(() => sortedUserLayers.value.filter((layer) => {
+    if (layer.sourceType !== 'search') return false;
+    if (layer.category === 'route') return false;
+    return !/_route$/i.test(String(layer.type || ''));
+}));
 
 function canToggleLabel(layer) {
     return !!layer?.autoLabel;

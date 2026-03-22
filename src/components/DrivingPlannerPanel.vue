@@ -70,12 +70,17 @@
                 <div class="route-title route-title-steps">导航步骤</div>
                 <div
                     v-for="(step, index) in routeResult.steps"
-                    :key="`${index}_${step.slice(0, 20)}`"
+                    :key="`${index}_${step.text.slice(0, 20)}`"
                     class="route-card"
+                    :class="selectedStepIndex === index ? 'route-card-active' : ''"
+                    :style="{ borderLeftColor: getStepColor(index), borderLeftWidth: '4px', borderLeftStyle: 'solid' }"
+                    @mouseenter="handlePreviewDriveStep(index)"
+                    @mouseleave="clearDriveStepPreview"
+                    @click="handleSelectDriveStep(index)"
                 >
                     <div class="route-head">
                         <span class="route-tag">{{ index + 1 }}</span>
-                        <div class="route-name">{{ step }}</div>
+                        <div class="route-name">{{ step.text }}</div>
                     </div>
                 </div>
 
@@ -90,19 +95,23 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
+import { parseDriveRouteXml } from '../utils/driveXmlParser';
 
 interface ParsedRouteResult {
     distanceKm: string;
     durationText: string;
     routelatlon: string;
-    steps: string[];
+    steps: Array<{ text: string; linePoint: string }>;
 }
 
 const YOUR_TIANDITU_TK = 'YOUR_TIANDITU_TK';
 
 const props = defineProps<{
     token?: string;
-    drawDriveRouteOnMap?: (routeLatLonStr: string) => Promise<void> | void;
+    drawDriveRouteOnMap?: (payload: { routeLatLonStr: string; stepLinePoints: string[] }) => Promise<void> | void;
+    zoomToDriveRouteStep?: (stepIndex: number) => Promise<void> | void;
+    previewDriveRouteStep?: (stepIndex: number) => Promise<void> | void;
+    clearDriveRouteStepPreview?: () => Promise<void> | void;
     startMapPointPick?: (type: 'start' | 'end') => Promise<{ lng: number; lat: number }>;
 }>();
 
@@ -118,6 +127,7 @@ const pickMode = ref<'' | 'start' | 'end'>('');
 const isLoading = ref(false);
 const error = ref('');
 const routeResult = ref<ParsedRouteResult | null>(null);
+const selectedStepIndex = ref(-1);
 
 const debug = reactive({
     status: 'idle',
@@ -127,6 +137,13 @@ const debug = reactive({
     stepCount: 0,
     message: ''
 });
+
+const DRIVE_STEP_COLOR_PALETTE = ['#10B981', '#0EA5E9', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6'];
+
+function getStepColor(stepIndex: number): string {
+    const idx = Math.abs(Number(stepIndex || 0)) % DRIVE_STEP_COLOR_PALETTE.length;
+    return DRIVE_STEP_COLOR_PALETTE[idx];
+}
 
 function parseCoord(value: string): number {
     const n = Number(value.trim());
@@ -177,15 +194,49 @@ function formatDuration(seconds: number): string {
     return `${hours}小时${minutes}分钟`;
 }
 
-function textFromTag(parent: Element | null | undefined, tagName: string): string {
-    if (!parent) return '';
-    const node = parent.getElementsByTagName(tagName)?.[0];
-    return (node?.textContent || '').trim();
+async function handleSelectDriveStep(stepIndex: number): Promise<void> {
+    selectedStepIndex.value = stepIndex;
+
+    try {
+        if (!routeResult.value) return;
+
+        if (props.drawDriveRouteOnMap) {
+            await props.drawDriveRouteOnMap({
+                routeLatLonStr: routeResult.value.routelatlon,
+                // 不过滤空项，保留步骤索引与分段索引的一一对应关系。
+                stepLinePoints: routeResult.value.steps.map((step) => step.linePoint)
+            });
+        }
+
+        if (!props.zoomToDriveRouteStep) return;
+        await props.zoomToDriveRouteStep(stepIndex);
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : '步骤定位失败';
+    }
+}
+
+async function handlePreviewDriveStep(stepIndex: number): Promise<void> {
+    try {
+        if (!props.previewDriveRouteStep) return;
+        await props.previewDriveRouteStep(stepIndex);
+    } catch {
+        // 预览失败不影响主流程
+    }
+}
+
+async function clearDriveStepPreview(): Promise<void> {
+    try {
+        if (!props.clearDriveRouteStepPreview) return;
+        await props.clearDriveRouteStepPreview();
+    } catch {
+        // 预览失败不影响主流程
+    }
 }
 
 async function startDriveSearch(): Promise<void> {
     error.value = '';
     routeResult.value = null;
+    selectedStepIndex.value = -1;
 
     const oLng = parseCoord(origPoint.lng);
     const oLat = parseCoord(origPoint.lat);
@@ -214,7 +265,7 @@ async function startDriveSearch(): Promise<void> {
         };
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
-        const requestUrl = `http://api.tianditu.gov.cn/drive?tk=${encodeURIComponent(token)}&type=search&postStr=${encodedPostStr}`;
+        const requestUrl = `https://api.tianditu.gov.cn/drive?tk=${encodeURIComponent(token)}&type=search&postStr=${encodedPostStr}`;
         debug.requestUrl = requestUrl;
 
         const response = await fetch(requestUrl, { method: 'GET' });
@@ -224,41 +275,49 @@ async function startDriveSearch(): Promise<void> {
             throw new Error(`请求失败(${response.status})`);
         }
 
-        // 关键：天地图 drive API 返回 XML，必须以 text 读取。
+        // 天地图 drive API 返回 XML，交给独立解析器处理。
         const xmlString = await response.text();
-        const xmlDoc = new DOMParser().parseFromString(xmlString, 'text/xml');
-
-        const parserError = xmlDoc.getElementsByTagName('parsererror')?.[0];
-        if (parserError) {
-            throw new Error('XML 解析失败');
-        }
-
-        const distanceRaw = textFromTag(xmlDoc.documentElement, 'distance');
-        const durationRaw = textFromTag(xmlDoc.documentElement, 'duration');
-        const routelatlon = textFromTag(xmlDoc.documentElement, 'routelatlon');
-
-        const routesNode = xmlDoc.getElementsByTagName('routes')?.[0] || null;
-        const items = routesNode ? Array.from(routesNode.getElementsByTagName('item')) : [];
-        const steps = items
-            .map((item) => textFromTag(item, 'strguide'))
-            .filter(Boolean);
-
-        const durationSeconds = Number(durationRaw);
-        const distanceKm = Number(distanceRaw);
+        const parsed = parseDriveRouteXml(xmlString);
+        const steps = parsed.segments.map((seg) => ({
+            text: seg.guide,
+            linePoint: seg.streetLatLon
+        })).filter((step) => step.text);
 
         routeResult.value = {
-            distanceKm: Number.isFinite(distanceKm) ? distanceKm.toFixed(2) : '0.00',
-            durationText: formatDuration(durationSeconds),
-            routelatlon,
+            distanceKm: Number.isFinite(parsed.distanceKm) ? parsed.distanceKm.toFixed(2) : '0.00',
+            durationText: parsed.durationText || formatDuration(parsed.durationSec),
+            routelatlon: parsed.routeLatLon,
             steps
         };
 
-        if (routelatlon && props.drawDriveRouteOnMap) {
-            await props.drawDriveRouteOnMap(routelatlon);
+        // 若 XML 返回了参数里的起终点，回填到输入框，便于核对。
+        const parseInputCoord = (text: string) => {
+            const [lngText, latText] = String(text || '').split(',');
+            const lng = Number(lngText);
+            const lat = Number(latText);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+            return { lng, lat };
+        };
+        const xmlOrig = parseInputCoord(parsed.origText);
+        const xmlDest = parseInputCoord(parsed.destText);
+        if (xmlOrig) {
+            origPoint.lng = xmlOrig.lng.toFixed(6);
+            origPoint.lat = xmlOrig.lat.toFixed(6);
+        }
+        if (xmlDest) {
+            destPoint.lng = xmlDest.lng.toFixed(6);
+            destPoint.lat = xmlDest.lat.toFixed(6);
         }
 
-        debug.rawDistance = distanceRaw;
-        debug.rawDuration = durationRaw;
+        if (parsed.routeLatLon && props.drawDriveRouteOnMap) {
+            await props.drawDriveRouteOnMap({
+                routeLatLonStr: parsed.routeLatLon,
+                stepLinePoints: steps.map((step) => step.linePoint)
+            });
+        }
+
+        debug.rawDistance = String(parsed.distanceKm || 0);
+        debug.rawDuration = String(parsed.durationSec || 0);
         debug.stepCount = steps.length;
         debug.status = 'success';
 
@@ -266,7 +325,11 @@ async function startDriveSearch(): Promise<void> {
             debug.message = '未解析到 steps，可检查 routes/item/strguide 是否存在';
         }
     } catch (e) {
-        const message = e instanceof Error ? e.message : '导航失败';
+        const rawMessage = e instanceof Error ? e.message : String(e || '');
+        const likelyNetworkBlocked = e instanceof TypeError || /failed\s+to\s+fetch/i.test(rawMessage);
+        const message = likelyNetworkBlocked
+            ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
+            : (rawMessage || '导航失败');
         error.value = message;
         debug.status = 'error';
         debug.message = message;
