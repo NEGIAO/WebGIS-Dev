@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 const amapClient = axios.create({
-    baseURL: '/amap-api',
+    // Static deployment mode: call AMap REST API directly (no Vite proxy).
+    baseURL: 'https://restapi.amap.com',
     timeout: 8000
 });
 
