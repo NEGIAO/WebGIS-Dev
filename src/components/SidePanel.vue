@@ -6,7 +6,7 @@
         </div>
 
         <!-- 面板内容区域 -->
-        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' }">
+        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' }">
             <div class="active-feature-banner" v-if="activeFeature?.label">
                 当前激活功能：{{ activeFeature.label }}
             </div>
@@ -39,7 +39,27 @@
                 />
             </div>
 
-            <!-- 模式 3: 新闻展示 (默认) -->
+            <!-- 模式 3: 公交规划 -->
+            <div v-else-if="activeTab === 'bus'" class="toolbox-content">
+                <BusPlannerPanel
+                    :token="tiandituToken"
+                    :start-bus-point-pick="startBusPointPick"
+                    :draw-route-on-map="drawRouteOnMap"
+                    @close="$emit('switch-tab', 'info')"
+                />
+            </div>
+
+            <!-- 模式 4: 驾车规划 -->
+            <div v-else-if="activeTab === 'drive'" class="toolbox-content">
+                <DrivingPlannerPanel
+                    :token="tiandituToken"
+                    :start-map-point-pick="startBusPointPick"
+                    :draw-drive-route-on-map="drawDriveRouteOnMap"
+                    @close="$emit('switch-tab', 'info')"
+                />
+            </div>
+
+            <!-- 模式 5: 新闻展示 (默认) -->
             <div v-else class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
@@ -99,6 +119,8 @@
 import { ref, computed } from 'vue';
 import ChatPanelContent from './ChatPanelContent.vue';
 import ToolboxPanel from './ToolboxPanel.vue';
+import BusPlannerPanel from './BusPlannerPanel.vue';
+import DrivingPlannerPanel from './DrivingPlannerPanel.vue';
 
 // ========== 1. 常量定义 ==========
 const LINKS = {
@@ -117,7 +139,7 @@ const props = defineProps({
     },
     activeTab: {
         type: String,
-        default: 'info' // 'info' or 'chat'
+        default: 'info' // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
     },
     isCollapsed: {
         type: Boolean,
@@ -138,8 +160,26 @@ const props = defineProps({
     activeFeature: {
         type: Object,
         default: () => ({ key: 'info', label: '新闻' })
+    },
+    getUserLocation: {
+        type: Function,
+        default: null
+    },
+    startBusPointPick: {
+        type: Function,
+        default: null
+    },
+    drawRouteOnMap: {
+        type: Function,
+        default: null
+    },
+    drawDriveRouteOnMap: {
+        type: Function,
+        default: null
     }
 });
+
+const tiandituToken = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
 const emit = defineEmits([
     'news-changed',

@@ -40,7 +40,7 @@ const is3DMode = ref(false);
 const isMagicMode = ref(false);
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
-const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox'
+const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
 const showQueryPanel = ref(false);
@@ -92,6 +92,38 @@ function openToolbox() {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = false;
+}
+
+function openBusPlanner() {
+    activeSidePanelTab.value = 'bus';
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
+function openDrivePlanner() {
+    activeSidePanelTab.value = 'drive';
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
+function getMapUserLocation(enableHighAccuracy = true) {
+    return mapContainerRef.value?.getCurrentLocation?.(enableHighAccuracy);
+}
+
+function startBusPointPick(type) {
+    return mapContainerRef.value?.startBusPointPick?.(type);
+}
+
+function drawRouteOnMap(route) {
+    return mapContainerRef.value?.drawRouteOnMap?.(route);
+}
+
+function drawDriveRouteOnMap(routeLatLonStr) {
+    return mapContainerRef.value?.drawDriveRouteOnMap?.(routeLatLonStr);
 }
 
 function handleActivateFeature(feature) {
@@ -216,6 +248,8 @@ function handleFeatureSelected(properties) {
                 @toggle-3d="toggle3D"
                 @open-chat="openChat"
                 @open-toolbox="openToolbox"
+                @open-bus="openBusPlanner"
+                @open-drive="openDrivePlanner"
                 @activate-feature="handleActivateFeature"
             />
         </div>
@@ -274,7 +308,10 @@ function handleFeatureSelected(properties) {
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
                     :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
                     :activeFeature="activeFeature" :userLayers="userLayers" :baseLayers="baseLayers"
-                    :toolboxOverview="toolboxOverview"
+                    :toolboxOverview="toolboxOverview" :get-user-location="getMapUserLocation"
+                    :start-bus-point-pick="startBusPointPick"
+                    :draw-route-on-map="drawRouteOnMap"
+                    :draw-drive-route-on-map="drawDriveRouteOnMap"
                     @upload-data="handleUploadData" @interaction="handleInteraction"
                     @toggle-layer-visibility="handleToggleLayerVisibility"
                     @change-layer-opacity="handleChangeLayerOpacity" @set-base-layer="handleSetBaseLayer"
