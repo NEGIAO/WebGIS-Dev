@@ -205,6 +205,7 @@ const TILE_HOSTS = {
 const GOOGLE_HOST_STRATEGY = 'fastest';
 const GOOGLE_MANUAL_HOST = TILE_HOSTS.googleCandidates[0];
 const GOOGLE_PROBE_TIMEOUT_MS = 1200;
+const CRITICAL_TILE_READY_TIMEOUT_MS = 1400;
 const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
 
 const buildGoogleTileUrl = (pathAndQuery) => `https://${activeGoogleTileHost.value}${pathAndQuery}`;
@@ -389,6 +390,7 @@ let measureTooltipEl, measureTooltipOverlay;
 let helpTooltipEl, helpTooltipOverlay;
 let sketchFeature;
 let homeClickTimer = null; // 用于处理单击双击冲突
+let componentUnmounted = false;
 let dynamicSplitLinesLayer = null;
 let dynamicSplitMoveKey = null;
 let pendingBusPick = null;
@@ -667,35 +669,70 @@ function getCurrentDriveStepIndex() {
 
 // --- 初始化 ---
 onMounted(async () => {
+    componentUnmounted = false;
     initMap();
 
+    // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
+    await waitForCriticalTileReady();
+    runDeferredStartupTasks();
+
+});
+
+function waitForCriticalTileReady(timeoutMs = CRITICAL_TILE_READY_TIMEOUT_MS) {
+    return new Promise((resolve) => {
+        const map = mapInstance.value;
+        if (!map) {
+            resolve();
+            return;
+        }
+
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            if (renderCompleteKey) unByKey(renderCompleteKey);
+            clearTimeout(timer);
+            resolve();
+        };
+
+        const renderCompleteKey = map.on('rendercomplete', finish);
+        const timer = setTimeout(finish, timeoutMs);
+    });
+}
+
+async function runDeferredStartupTasks() {
+    if (componentUnmounted) return;
+
+    // 1) Google 主机测速切换（非关键，延后执行）。
     resolvePreferredGoogleHost().then((host) => {
+        if (componentUnmounted) return;
         if (!host || host === activeGoogleTileHost.value) return;
         activeGoogleTileHost.value = host;
         refreshGoogleLayerSources();
     }).catch(() => {});
 
-    // 异步判断 IP 区域，不阻塞地图首屏初始化
+    // 2) 位置相关逻辑（非关键，延后执行）。
     const ipInfo = await detectIPLocale();
+    if (componentUnmounted) return;
 
-    // 简单 UA 判定移动端（用于选择 GPS vs IP）；用户只需允许一次定位
     const ua = navigator.userAgent || '';
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
 
     if (isMobile) {
-        // 移动端：请求一次高精度 GPS 定位并将位置写入图层（不循环）
         if (navigator.geolocation) {
-            getCurrentLocation(true).then(pos => updateUserPosition(pos, true)).catch(() => {});
+            getCurrentLocation(true).then((pos) => {
+                if (componentUnmounted) return;
+                updateUserPosition(pos, true);
+            }).catch(() => {});
         }
-    } else {
-        // 桌面端：使用 IP 定位（如果 ipInfo 返回了坐标）
-        if (ipInfo && ipInfo.lat && ipInfo.lon && mapInstance.value) {
-            const coord = fromLonLat([ipInfo.lon, ipInfo.lat]);
-            mapInstance.value.getView().animate({ center: coord, zoom: 12, duration: 800 });
-        }
+        return;
     }
 
-});
+    if (ipInfo && ipInfo.lat && ipInfo.lon && mapInstance.value) {
+        const coord = fromLonLat([ipInfo.lon, ipInfo.lat]);
+        mapInstance.value.getView().animate({ center: coord, zoom: 12, duration: 800 });
+    }
+}
 
 // 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
 async function detectIPLocale() {
@@ -723,6 +760,7 @@ async function detectIPLocale() {
 }
 
 onUnmounted(() => {
+    componentUnmounted = true;
     if (pendingBusPick?.reject) {
         pendingBusPick.reject(new Error('地图已卸载'));
         pendingBusPick = null;
@@ -1500,7 +1538,8 @@ function initMap() {
     layerList.value.forEach((item, index) => {
         // 根据 id 查找配置并创建 source
         const config = LAYER_CONFIGS.find(cfg => cfg.id === item.id);
-        const source = config ? config.createSource() : null;
+        // 首屏优先：仅为当前可见图层创建 source，其他图层按需懒创建。
+        const source = (config && item.visible) ? config.createSource() : null;
 
         const layer = new TileLayer({
             source: source,
@@ -1592,7 +1631,7 @@ function initMap() {
             ],
             collapseLabel: '«',
             label: '»',
-            collapsed: false
+            collapsed: true
         })
     ]);
 
@@ -1645,6 +1684,12 @@ function refreshLayersState() {
      layerList.value.forEach((item, index) => {
         const layer = layerInstances[item.id];
         if (layer) {
+            if (item.visible && !layer.getSource()) {
+                const cfg = LAYER_CONFIGS.find(c => c.id === item.id);
+                if (cfg) {
+                    layer.setSource(cfg.createSource());
+                }
+            }
             layer.setVisible(item.visible);
             layer.setZIndex(index); // 列表越靠后，ZIndex越大（显示在越上层），符合"图层叠加"直觉
             // 或者是列表上面的是顶层？通常Layer Manager是上面遮盖下面。
