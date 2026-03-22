@@ -20,26 +20,14 @@
         <!-- 图层切换器 -->
         <div class="layer-switcher">
             <!-- 地名搜索功能     -->
-            <div class="search-box" ref="searchBoxRef">
-                <input v-model="searchQuery" @keyup.enter="searchPlaces" placeholder="搜索地名，例如：郑州"
-                    class="search-input" />
-                <div class="search-action">
-                    <button class="search-btn" @click="toggleSearchServiceMenu">搜索</button>
-                    <ul v-if="showSearchServiceMenu" class="search-service-menu">
-                        <li @click="searchPlacesByService('tianditu')">
-                            {{ isDomestic ? '天地图搜索（推荐）' : '天地图搜索' }}
-                        </li>
-                        <li @click="searchPlacesByService('nominatim')">
-                            {{ !isDomestic ? '国际搜索（推荐）' : '国际搜索（Nominatim）' }}
-                        </li>
-                    </ul>
-                </div>
-                <ul v-if="searchResults.length" class="search-results">
-                    <li v-for="(r, i) in searchResults" :key="i" @click="selectResult(r)">
-                        {{ r.display_name }}
-                    </li>
-                </ul>
-            </div>
+            <LocationSearch
+                :fetcher="fetchLocationResults"
+                :amapKey="AMAP_WEB_SERVICE_KEY"
+                :services="searchServiceOptions"
+                storageKey="map_search_selected_service"
+                @select-result="selectResult"
+            />
+            
             <div class="layer-label">选择底图</div>
             <select v-model="selectedLayer" class="layer-select">
                 <option value="local">自定义瓦片</option>
@@ -122,7 +110,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import LocationSearch from './LocationSearch.vue';
+import { searchAmapPlaces } from '../api/map';
 
 // OpenLayers 核心库
 import Map from 'ol/Map';
@@ -159,6 +149,7 @@ import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
+const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51';
 
 // 天地图 Token：优先使用环境变量，否则使用默认值
 // 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
@@ -174,7 +165,6 @@ const IMAGES = [
 const mapRef = ref(null);
 const mapContainerRef = ref(null);
 const mousePositionRef = ref(null);
-const searchBoxRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
 const selectedLayer = ref('google');
@@ -188,13 +178,12 @@ const largeImageSrc = ref('');
 const images = ref(IMAGES);
 const currentZoom = ref(17); // 当前缩放级别
 
-// 搜索相关
-const searchQuery = ref('');
-const searchResults = ref([]);
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
-const SEARCH_SERVICE_STORAGE_KEY = 'map_search_selected_service';
-const showSearchServiceMenu = ref(false);
-const selectedSearchService = ref('tianditu');
+const searchServiceOptions = computed(() => ([
+    { value: 'tianditu', label: isDomestic.value ? '天地图（推荐）' : '天地图' },
+    { value: 'nominatim', label: !isDomestic.value ? '国际（推荐）' : '国际（Nominatim）' },
+    { value: 'amap', label: '高德（Amap）' }
+]));
 
 let searchSource, searchLayer;
 let customSource = null;
@@ -291,13 +280,6 @@ async function getGeoTIFFSourceCtor() {
     }
     return cachedGeoTIFFSourceCtor;
 }
-
-try {
-    const storedMode = window.localStorage.getItem(SEARCH_SERVICE_STORAGE_KEY);
-    if (storedMode && ['tianditu', 'nominatim'].includes(storedMode)) {
-        selectedSearchService.value = storedMode;
-    }
-} catch {}
 
 // 图层配置 (集中管理 id, name, source创建逻辑)
 const LAYER_CONFIGS = [
@@ -566,7 +548,6 @@ onMounted(async () => {
         }
     }
 
-    document.addEventListener('click', handleDocumentClick);
 });
 
 // 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
@@ -595,7 +576,6 @@ async function detectIPLocale() {
 }
 
 onUnmounted(() => {
-    document.removeEventListener('click', handleDocumentClick);
     if (dynamicSplitMoveKey) {
         unByKey(dynamicSplitMoveKey);
         dynamicSplitMoveKey = null;
@@ -1754,6 +1734,47 @@ function normalizeTiandituItem(item) {
     };
 }
 
+// 高德返回的坐标是 GCJ-02，这里转换为 WGS84 后再用于绘制。
+const PI = Math.PI;
+const A = 6378245.0;
+const EE = 0.00669342162296594323;
+
+function outOfChina(lon, lat) {
+    return lon < 72.004 || lon > 137.8347 || lat < 0.8293 || lat > 55.8271;
+}
+
+function transformLat(lon, lat) {
+    let ret = -100.0 + 2.0 * lon + 3.0 * lat + 0.2 * lat * lat + 0.1 * lon * lat + 0.2 * Math.sqrt(Math.abs(lon));
+    ret += (20.0 * Math.sin(6.0 * lon * PI) + 20.0 * Math.sin(2.0 * lon * PI)) * 2.0 / 3.0;
+    ret += (20.0 * Math.sin(lat * PI) + 40.0 * Math.sin(lat / 3.0 * PI)) * 2.0 / 3.0;
+    ret += (160.0 * Math.sin(lat / 12.0 * PI) + 320 * Math.sin(lat * PI / 30.0)) * 2.0 / 3.0;
+    return ret;
+}
+
+function transformLon(lon, lat) {
+    let ret = 300.0 + lon + 2.0 * lat + 0.1 * lon * lon + 0.1 * lon * lat + 0.1 * Math.sqrt(Math.abs(lon));
+    ret += (20.0 * Math.sin(6.0 * lon * PI) + 20.0 * Math.sin(2.0 * lon * PI)) * 2.0 / 3.0;
+    ret += (20.0 * Math.sin(lon * PI) + 40.0 * Math.sin(lon / 3.0 * PI)) * 2.0 / 3.0;
+    ret += (150.0 * Math.sin(lon / 12.0 * PI) + 300.0 * Math.sin(lon / 30.0 * PI)) * 2.0 / 3.0;
+    return ret;
+}
+
+function gcj02ToWgs84(lon, lat) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [lon, lat];
+    if (outOfChina(lon, lat)) return [lon, lat];
+    let dLat = transformLat(lon - 105.0, lat - 35.0);
+    let dLon = transformLon(lon - 105.0, lat - 35.0);
+    const radLat = lat / 180.0 * PI;
+    let magic = Math.sin(radLat);
+    magic = 1 - EE * magic * magic;
+    const sqrtMagic = Math.sqrt(magic);
+    dLat = (dLat * 180.0) / ((A * (1 - EE)) / (magic * sqrtMagic) * PI);
+    dLon = (dLon * 180.0) / (A / sqrtMagic * Math.cos(radLat) * PI);
+    const mgLat = lat + dLat;
+    const mgLon = lon + dLon;
+    return [lon * 2 - mgLon, lat * 2 - mgLat];
+}
+
 // --- 核心封装：解析天地图复杂的 JSON 响应 ---
 function parseTiandituResponse(data) {
     if (!data) return [];
@@ -1802,46 +1823,12 @@ function parseTiandituResponse(data) {
 }
 
 // --- 5. 地名搜索功能 (主逻辑) ---
-async function searchPlaces() {
-    await searchPlacesByService(selectedSearchService.value);
-}
-
-function toggleSearchServiceMenu() {
-    const q = (searchQuery.value || '').trim();
-    if (!q) {
-        alert('请输入地名关键词');
-        return;
+async function fetchLocationResults({ service, keywords, page = 1, pageSize = 10, amapKey = '' }) {
+    if (!keywords) {
+        return { items: [], total: 0 };
     }
-    showSearchServiceMenu.value = !showSearchServiceMenu.value;
-}
 
-function handleDocumentClick(event) {
-    if (!showSearchServiceMenu.value) return;
-    const rootEl = searchBoxRef.value;
-    if (!rootEl) return;
-    if (rootEl.contains(event.target)) return;
-    showSearchServiceMenu.value = false;
-}
-
-async function searchPlacesByService(service) {
-    const q = (searchQuery.value || '').trim();
-    if (!q) return;
-
-    showSearchServiceMenu.value = false;
-    // 清空旧结果
-    searchResults.value = [];
-    selectedSearchService.value = service;
-    try {
-        window.localStorage.setItem(SEARCH_SERVICE_STORAGE_KEY, service);
-    } catch {}
-
-    try {
-        const items = await searchByService(service, q);
-        searchResults.value = items;
-    } catch (error) {
-        console.warn(`搜索服务 ${service} 失败`, error);
-        alert(`${service === 'tianditu' ? '天地图' : '国际（Nominatim）'}搜索暂时不可用，请切换后重试。`);
-    }
+    return searchByService(service, keywords, page, pageSize, amapKey);
 }
 
 function getCurrentMapBound() {
@@ -1860,43 +1847,88 @@ function getCurrentMapBound() {
     }
 }
 
-async function searchWithTianditu(q) {
+async function searchWithTianditu(q, page = 1, pageSize = 10) {
     const postObj = {
         keyWord: q,
         level: 12,
         mapBound: getCurrentMapBound(),
         queryType: 1,
-        start: 0,
-        count: 6
+        start: Math.max(0, (page - 1) * pageSize),
+        count: pageSize
     };
 
     const url = `https://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(JSON.stringify(postObj))}&type=query&tk=${TIANDITU_TK}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`API Error: ${res.status}`);
     const data = await res.json();
-    return parseTiandituResponse(data);
+    const items = parseTiandituResponse(data);
+    const total = Number(data?.count ?? items.length);
+    return { items, total: Number.isFinite(total) ? total : items.length };
 }
 
-async function searchWithNominatim(q) {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
+async function searchWithNominatim(q, page = 1, pageSize = 10) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=${pageSize}&q=${encodeURIComponent(q)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Nominatim Error: ${res.status}`);
     const data = await res.json();
-    return Array.isArray(data)
+    const items = Array.isArray(data)
         ? data.map(item => ({
+            name: item.display_name,
+            address: item.display_name,
             display_name: item.display_name,
             lon: parseFloat(item.lon),
             lat: parseFloat(item.lat)
         }))
         : [];
+    const total = page === 1 ? items.length : Math.max(items.length + (page - 1) * pageSize, items.length);
+    return { items, total };
 }
 
-async function searchByService(service, q) {
+async function searchWithAmap(q, page = 1, pageSize = 10, amapKey = '') {
+    const apiKey = String(amapKey || '').trim();
+    if (!apiKey) {
+        throw new Error('高德 Web 服务 Key 未配置');
+    }
+
+    const data = await searchAmapPlaces({
+        key: apiKey,
+        keywords: q,
+        page,
+        offset: pageSize
+    });
+
+    const pois = Array.isArray(data?.pois) ? data.pois : [];
+    const items = pois.map((poi) => {
+        const location = String(poi.location || '').split(',');
+        const gcjLon = Number.parseFloat(location[0]);
+        const gcjLat = Number.parseFloat(location[1]);
+        const [wgsLon, wgsLat] = gcj02ToWgs84(gcjLon, gcjLat);
+        return {
+            id: poi.id,
+            name: poi.name,
+            address: poi.address || poi.pname || '',
+            display_name: `${poi.name}${poi.address ? ` - ${poi.address}` : ''}`,
+            lon: Number.isFinite(wgsLon) ? wgsLon : undefined,
+            lat: Number.isFinite(wgsLat) ? wgsLat : undefined,
+            gcjLon: Number.isFinite(gcjLon) ? gcjLon : undefined,
+            gcjLat: Number.isFinite(gcjLat) ? gcjLat : undefined,
+            coordSystem: 'wgs84'
+        };
+    });
+
+    const total = Number(data?.count ?? items.length);
+    return { items, total: Number.isFinite(total) ? total : items.length };
+}
+
+async function searchByService(service, q, page = 1, pageSize = 10, amapKey = '') {
     if (service === 'tianditu') {
-        return searchWithTianditu(q);
+        return searchWithTianditu(q, page, pageSize);
     }
     if (service === 'nominatim') {
-        return searchWithNominatim(q);
+        return searchWithNominatim(q, page, pageSize);
+    }
+    if (service === 'amap') {
+        return searchWithAmap(q, page, pageSize, amapKey);
     }
     throw new Error(`未知搜索服务: ${service}`);
 }
@@ -1939,8 +1971,6 @@ function selectResult(item) {
     // 动画缩放到位置
     mapInstance.value.getView().animate({ center: coord, zoom: 16, duration: 700 });
 
-    // 清空列表 (UX)
-    searchResults.value = [];
 }
 
 // --- 4. 外部接口 (文件导入/绘图) ---
