@@ -2,13 +2,12 @@
     <div class="toolbox-panel">
         <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
 
-        <div class="header">
+        <!-- <div class="header">
             <div>
                 <div class="title">工具箱</div>
-                <div class="subtitle">左键查看，右键仅显</div>
             </div>
             <button class="ghost-btn" @click="emit('close')">关闭</button>
-        </div>
+        </div> -->
 
         <div class="tabs">
             <button class="tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
