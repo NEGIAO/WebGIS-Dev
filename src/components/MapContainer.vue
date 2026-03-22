@@ -20,10 +20,20 @@
         <!-- 图层切换器 -->
         <div class="layer-switcher">
             <!-- 地名搜索功能     -->
-            <div class="search-box">
+            <div class="search-box" ref="searchBoxRef">
                 <input v-model="searchQuery" @keyup.enter="searchPlaces" placeholder="搜索地名，例如：郑州"
                     class="search-input" />
-                <button class="search-btn" @click="searchPlaces">搜索</button>
+                <div class="search-action">
+                    <button class="search-btn" @click="toggleSearchServiceMenu">搜索</button>
+                    <ul v-if="showSearchServiceMenu" class="search-service-menu">
+                        <li @click="searchPlacesByService('tianditu')">
+                            {{ isDomestic ? '天地图搜索（推荐）' : '天地图搜索' }}
+                        </li>
+                        <li @click="searchPlacesByService('nominatim')">
+                            {{ !isDomestic ? '国际搜索（推荐）' : '国际搜索（Nominatim）' }}
+                        </li>
+                    </ul>
+                </div>
                 <ul v-if="searchResults.length" class="search-results">
                     <li v-for="(r, i) in searchResults" :key="i" @click="selectResult(r)">
                         {{ r.display_name }}
@@ -134,13 +144,9 @@ import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';
 import VectorSource from 'ol/source/Vector';
-import GeoTIFFSource from 'ol/source/GeoTIFF';
 import ImageStatic from 'ol/source/ImageStatic';
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
-import shp from 'shpjs';
-import JSZip from 'jszip';
-import { fromBlob as geotiffFromBlob } from 'geotiff';
 
 // 几何与交互
 import Point from 'ol/geom/Point';
@@ -168,6 +174,7 @@ const IMAGES = [
 const mapRef = ref(null);
 const mapContainerRef = ref(null);
 const mousePositionRef = ref(null);
+const searchBoxRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
 const selectedLayer = ref('google');
@@ -185,6 +192,9 @@ const currentZoom = ref(17); // 当前缩放级别
 const searchQuery = ref('');
 const searchResults = ref([]);
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
+const SEARCH_SERVICE_STORAGE_KEY = 'map_search_selected_service';
+const showSearchServiceMenu = ref(false);
+const selectedSearchService = ref('tianditu');
 
 let searchSource, searchLayer;
 let customSource = null;
@@ -195,6 +205,50 @@ const SEARCH_RESULT_STYLE = {
     strokeWidth: 2,
     pointRadius: 8
 };
+
+let cachedShpParser = null;
+let cachedJSZip = null;
+let cachedGeotiffFromBlob = null;
+let cachedGeoTIFFSourceCtor = null;
+
+async function getShpParser() {
+    if (!cachedShpParser) {
+        const mod = await import('shpjs');
+        cachedShpParser = mod.default || mod;
+    }
+    return cachedShpParser;
+}
+
+async function getJSZipCtor() {
+    if (!cachedJSZip) {
+        const mod = await import('jszip');
+        cachedJSZip = mod.default || mod;
+    }
+    return cachedJSZip;
+}
+
+async function getGeotiffFromBlob() {
+    if (!cachedGeotiffFromBlob) {
+        const mod = await import('geotiff');
+        cachedGeotiffFromBlob = mod.fromBlob;
+    }
+    return cachedGeotiffFromBlob;
+}
+
+async function getGeoTIFFSourceCtor() {
+    if (!cachedGeoTIFFSourceCtor) {
+        const mod = await import('ol/source/GeoTIFF');
+        cachedGeoTIFFSourceCtor = mod.default;
+    }
+    return cachedGeoTIFFSourceCtor;
+}
+
+try {
+    const storedMode = window.localStorage.getItem(SEARCH_SERVICE_STORAGE_KEY);
+    if (storedMode && ['tianditu', 'nominatim'].includes(storedMode)) {
+        selectedSearchService.value = storedMode;
+    }
+} catch {}
 
 // 图层配置 (集中管理 id, name, source创建逻辑)
 const LAYER_CONFIGS = [
@@ -435,9 +489,10 @@ const styles = {
 
 // --- 初始化 ---
 onMounted(async () => {
-    // 先通过 IP 判断用户是否在国内并尝试获取 IP 定位（仅调用一次）
-    const ipInfo = await detectIPLocale();
     initMap();
+
+    // 异步判断 IP 区域，不阻塞地图首屏初始化
+    const ipInfo = await detectIPLocale();
 
     // 简单 UA 判定移动端（用于选择 GPS vs IP）；用户只需允许一次定位
     const ua = navigator.userAgent || '';
@@ -455,6 +510,8 @@ onMounted(async () => {
             mapInstance.value.getView().animate({ center: coord, zoom: 12, duration: 800 });
         }
     }
+
+    document.addEventListener('click', handleDocumentClick);
 });
 
 // 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
@@ -483,6 +540,7 @@ async function detectIPLocale() {
 }
 
 onUnmounted(() => {
+    document.removeEventListener('click', handleDocumentClick);
     if (dynamicSplitMoveKey) {
         unByKey(dynamicSplitMoveKey);
         dynamicSplitMoveKey = null;
@@ -502,6 +560,8 @@ function emitUserLayersChange() {
         opacity: item.opacity ?? 1,
         autoLabel: !!item.autoLabel,
         labelVisible: item.labelVisible !== false,
+        longitude: Number.isFinite(item.metadata?.longitude) ? item.metadata.longitude : undefined,
+        latitude: Number.isFinite(item.metadata?.latitude) ? item.metadata.latitude : undefined,
         styleConfig: item.styleConfig || { ...STYLE_TEMPLATES.classic }
     })));
 }
@@ -558,6 +618,7 @@ function createManagedVectorLayer({
     features,
     styleConfig,
     autoLabel = false,
+    metadata = null,
     fitView = false
 }) {
     if (!mapInstance.value || !features?.length) return null;
@@ -586,6 +647,7 @@ function createManagedVectorLayer({
         featureCount: features.length,
         autoLabel: !!autoLabel,
         labelVisible,
+        metadata: metadata || null,
         styleConfig: normalizedStyle,
         layer
     });
@@ -957,6 +1019,7 @@ async function createNonGeorefTiffLayer({
 }) {
     if (!mapInstance.value) return null;
 
+    const geotiffFromBlob = await getGeotiffFromBlob();
     const tiff = await geotiffFromBlob(blob);
     const image = await tiff.getImage();
     const width = image.getWidth();
@@ -1101,6 +1164,8 @@ async function createManagedRasterLayer({
     if (!mapInstance.value || !(data instanceof ArrayBuffer)) return null;
 
     const blob = new Blob([data], { type: 'image/tiff' });
+    const geotiffFromBlob = await getGeotiffFromBlob();
+    const GeoTIFFSource = await getGeoTIFFSourceCtor();
 
     let sampleBandCount = 0;
     let nodataValue = null;
@@ -1673,89 +1738,102 @@ function parseTiandituResponse(data) {
 
 // --- 5. 地名搜索功能 (主逻辑) ---
 async function searchPlaces() {
+    await searchPlacesByService(selectedSearchService.value);
+}
+
+function toggleSearchServiceMenu() {
+    const q = (searchQuery.value || '').trim();
+    if (!q) {
+        alert('请输入地名关键词');
+        return;
+    }
+    showSearchServiceMenu.value = !showSearchServiceMenu.value;
+}
+
+function handleDocumentClick(event) {
+    if (!showSearchServiceMenu.value) return;
+    const rootEl = searchBoxRef.value;
+    if (!rootEl) return;
+    if (rootEl.contains(event.target)) return;
+    showSearchServiceMenu.value = false;
+}
+
+async function searchPlacesByService(service) {
     const q = (searchQuery.value || '').trim();
     if (!q) return;
 
+    showSearchServiceMenu.value = false;
     // 清空旧结果
     searchResults.value = [];
+    selectedSearchService.value = service;
+    try {
+        window.localStorage.setItem(SEARCH_SERVICE_STORAGE_KEY, service);
+    } catch {}
 
-    // 分支 A: 国内搜索 (天地图)
-    if (isDomestic.value) {
-        // 1. 计算视野范围 (提取为独立逻辑块)
-        let mapBoundStr = undefined;
-        try {
-            if (mapInstance.value) {
-                const view = mapInstance.value.getView();
-                const size = mapInstance.value.getSize();
-                if (size) {
-                    const ext = view.calculateExtent(size);
-                    const sw = toLonLat([ext[0], ext[1]]);
-                    const ne = toLonLat([ext[2], ext[3]]);
-                    // 保留6位小数即可
-                    mapBoundStr = `${sw[0].toFixed(6)},${sw[1].toFixed(6)},${ne[0].toFixed(6)},${ne[1].toFixed(6)}`;
-                }
-            }
-        } catch (e) {
-            console.warn('计算 mapBound 失败，使用默认范围', e);
-        }
-
-        // 2. 构造请求
-        const postObj = {
-            keyWord: q,
-            level: 12,
-            mapBound: mapBoundStr,
-            queryType: 1, // 1:普通搜索, 7:视野内搜索(如果需要严格限制在视野内改为7)
-            start: 0,
-            count: 6
-        };
-
-        // 建议使用 https 避免混合内容警告
-        const url = `https://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(JSON.stringify(postObj))}&type=query&tk=${TIANDITU_TK}`;
-
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`API Error: ${res.status}`);
-
-            const data = await res.json();
-
-            // 3. 调用封装函数解析数据
-            const items = parseTiandituResponse(data);
-
-            // 4. 处理无结果的情况 (天地图有时返回 suggests 建议词，这里简单处理为无结果)
-            if (items.length === 0) {
-                if (data.suggests) {
-                    // 可选：如果想显示建议词，可以在这里处理
-                    console.log('仅找到建议词:', data.suggests);
-                }
-                // 这里可以赋值一个特定的状态，或者保持空数组
-            }
-
-            searchResults.value = items;
-
-        } catch (e) {
-            console.warn('Tianditu search error', e);
-            alert('搜索服务请求失败，请检查网络或Token。');
-        }
+    try {
+        const items = await searchByService(service, q);
+        searchResults.value = items;
+    } catch (error) {
+        console.warn(`搜索服务 ${service} 失败`, error);
+        alert(`${service === 'tianditu' ? '天地图' : '国际（Nominatim）'}搜索暂时不可用，请切换后重试。`);
     }
-    // 分支 B: 国外搜索 (Nominatim)
-    else {
-        const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
-        try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('Nominatim Error');
-            const data = await res.json();
+}
 
-            // Nominatim 的结构比较标准，直接映射
-            searchResults.value = Array.isArray(data) ? data.map(item => ({
-                display_name: item.display_name,
-                lon: parseFloat(item.lon),
-                lat: parseFloat(item.lat)
-            })) : [];
-        } catch (e) {
-            console.warn('Nominatim search error', e);
-            alert('国际搜索服务暂时不可用');
-        }
+function getCurrentMapBound() {
+    try {
+        if (!mapInstance.value) return undefined;
+        const view = mapInstance.value.getView();
+        const size = mapInstance.value.getSize();
+        if (!size) return undefined;
+        const ext = view.calculateExtent(size);
+        const sw = toLonLat([ext[0], ext[1]]);
+        const ne = toLonLat([ext[2], ext[3]]);
+        return `${sw[0].toFixed(6)},${sw[1].toFixed(6)},${ne[0].toFixed(6)},${ne[1].toFixed(6)}`;
+    } catch (e) {
+        console.warn('计算 mapBound 失败，使用默认范围', e);
+        return undefined;
     }
+}
+
+async function searchWithTianditu(q) {
+    const postObj = {
+        keyWord: q,
+        level: 12,
+        mapBound: getCurrentMapBound(),
+        queryType: 1,
+        start: 0,
+        count: 6
+    };
+
+    const url = `https://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(JSON.stringify(postObj))}&type=query&tk=${TIANDITU_TK}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    const data = await res.json();
+    return parseTiandituResponse(data);
+}
+
+async function searchWithNominatim(q) {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Nominatim Error: ${res.status}`);
+    const data = await res.json();
+    return Array.isArray(data)
+        ? data.map(item => ({
+            display_name: item.display_name,
+            lon: parseFloat(item.lon),
+            lat: parseFloat(item.lat)
+        }))
+        : [];
+}
+
+async function searchByService(service, q) {
+    if (service === 'tianditu') {
+        return searchWithTianditu(q);
+    }
+    if (service === 'nominatim') {
+        return searchWithNominatim(q);
+    }
+    throw new Error(`未知搜索服务: ${service}`);
 }
 
 function selectResult(item) {
@@ -1772,7 +1850,13 @@ function selectResult(item) {
     const coord = fromLonLat([lon, lat]);
 
     const layerName = (item.display_name || item.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
-    const f = new Feature({ geometry: new Point(coord), type: 'search' });
+    const f = new Feature({
+        geometry: new Point(coord),
+        type: 'search',
+        名称: layerName,
+        经度: Number(lon.toFixed(6)),
+        纬度: Number(lat.toFixed(6))
+    });
     createManagedVectorLayer({
         name: layerName,
         type: 'search',
@@ -1780,6 +1864,10 @@ function selectResult(item) {
         features: [f],
         styleConfig: SEARCH_RESULT_STYLE,
         autoLabel: true,
+        metadata: {
+            longitude: Number(lon.toFixed(6)),
+            latitude: Number(lat.toFixed(6))
+        },
         fitView: false
     });
 
@@ -1805,7 +1893,8 @@ async function parseUploadedFeatures({ content, type }) {
         const kmzBuffer = content instanceof ArrayBuffer ? content : null;
         if (!kmzBuffer) throw new Error('KMZ 数据读取失败');
 
-        const zip = await JSZip.loadAsync(new Uint8Array(kmzBuffer));
+        const JSZipCtor = await getJSZipCtor();
+        const zip = await JSZipCtor.loadAsync(new Uint8Array(kmzBuffer));
         const kmlEntries = Object.values(zip.files).filter(
             (entry) => !entry.dir && entry.name.toLowerCase().endsWith('.kml')
         );
@@ -1842,6 +1931,7 @@ async function parseUploadedFeatures({ content, type }) {
     }
 
     if (type === 'zip') {
+        const shp = await getShpParser();
         const geojson = await shp(content);
         const gjFormat = new GeoJSON();
         const featureCollection = Array.isArray(geojson)
@@ -1854,6 +1944,7 @@ async function parseUploadedFeatures({ content, type }) {
     }
 
     if (type === 'shp') {
+        const shp = await getShpParser();
         const geojson = await shp({ shp: content });
         const gjFormat = new GeoJSON();
         return gjFormat.readFeatures(geojson, {
@@ -2050,12 +2141,17 @@ function soloUserLayer(layerId) {
 function viewUserLayer(layerId) {
     const target = userDataLayers.find(item => item.id === layerId);
     if (!target) return;
-    emit('feature-selected', {
+    const payload = {
         图层名称: target.name,
         图层类型: target.type,
         可见状态: target.visible ? '显示' : '隐藏',
         要素数量: target.featureCount
-    });
+    };
+    if (Number.isFinite(target.metadata?.longitude) && Number.isFinite(target.metadata?.latitude)) {
+        payload.经度 = Number(target.metadata.longitude).toFixed(6);
+        payload.纬度 = Number(target.metadata.latitude).toFixed(6);
+    }
+    emit('feature-selected', payload);
 }
 
 function zoomToGraphics() {
@@ -2332,9 +2428,11 @@ defineExpose({
 
 .search-box {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
     margin-bottom: 6px;
+    position: relative;
 }
 
 .search-input {
@@ -2352,10 +2450,16 @@ defineExpose({
     cursor: pointer;
 }
 
+.search-action {
+    position: relative;
+}
+
+.search-service-menu,
 .search-results {
     list-style: none;
     margin: 6px 0 0 0;
     padding: 6px;
+    width: 100%;
     max-height: 180px;
     overflow: auto;
     background: #fff;
@@ -2363,11 +2467,22 @@ defineExpose({
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
 }
 
+.search-service-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 176px;
+    margin: 0;
+    z-index: 20;
+}
+
+.search-service-menu li,
 .search-results li {
     padding: 6px 8px;
     cursor: pointer;
 }
 
+.search-service-menu li:hover,
 .search-results li:hover {
     background: #f2f2f2;
 }

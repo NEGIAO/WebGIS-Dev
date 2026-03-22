@@ -64,6 +64,7 @@
                         <button class="mini" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">
                             {{ layer.labelVisible ? '标注关' : '标注开' }}
                         </button>
+                        <button v-if="layerHasCoordinates(layer)" class="mini" @click.stop="copyLayerCoordinates(layer)">复制坐标</button>
                         <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
                         <button class="mini btn-warning" @click.stop="emit('remove-layer', layer.id)">清空</button>
                     </div>
@@ -247,6 +248,40 @@ const searchLayers = computed(() => sortedUserLayers.value.filter(layer => layer
 
 function canToggleLabel(layer) {
     return !!layer?.autoLabel;
+}
+
+function layerHasCoordinates(layer) {
+    return Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude);
+}
+
+async function copyLayerCoordinates(layer) {
+    if (!layerHasCoordinates(layer)) {
+        alert('当前图层未提供可复制的经纬度信息');
+        return;
+    }
+    const lon = Number(layer.longitude).toFixed(6);
+    const lat = Number(layer.latitude).toFixed(6);
+    const text = `${lon},${lat}`;
+
+    try {
+        if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+        alert(`已复制经纬度：${text}`);
+    } catch (error) {
+        console.error('copy coordinates failed', error);
+        alert('复制失败，请稍后重试');
+    }
 }
 
 function isRasterLayer(layer) {
