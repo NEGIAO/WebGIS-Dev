@@ -19,6 +19,16 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  server: {
+    proxy: {
+      '/amap-api': {
+        target: 'https://restapi.amap.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/amap-api/, '')
+      }
+    }
+  },
   build: {
     sourcemap: !isProduction,
     minify:"esbuild"
