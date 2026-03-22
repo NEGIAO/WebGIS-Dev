@@ -8,10 +8,17 @@
         </div>
 
         <div class="controls">
-            <button class="nav-btn" @click="handleOpenToolbox" title="工具箱">
-                <span class="btn-icon">🛠️</span>
-                <span class="btn-text">工具箱</span>
-            </button>
+            <div class="menu-host" ref="menuHostRef">
+                <button class="nav-btn" @click="toggleToolMenu" title="菜单项">
+                    <span class="btn-icon">📋</span>
+                    <span class="btn-text">菜单</span>
+                </button>
+                <div v-if="showToolMenu" class="floating-menu">
+                    <button class="menu-item" @click="handleOpenToolbox">🛠️ 工具箱</button>
+                    <button class="menu-item" @click="handleOpenBusPlanner">🚌 公交规划</button>
+                    <button class="menu-item" @click="handleOpenDrivePlanner">🚗 驾车规划</button>
+                </div>
+            </div>
 
             <button class="nav-btn" @click="handleOpenChat" title="AI 助手">
                 <span class="btn-icon">🤖</span>
@@ -32,20 +39,40 @@
 </template>
 
 <script setup>
+import { onBeforeUnmount, onMounted, ref } from 'vue';
+
 const emit = defineEmits([
     'toggle-magic',
     'toggle-3d',
     'open-chat',
     'open-toolbox',
+    'open-bus',
+    'open-drive',
     'activate-feature'
 ]);
+
+const showToolMenu = ref(false);
+const menuHostRef = ref(null);
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
 function handleOpenToolbox() {
+    showToolMenu.value = false;
     emit('activate-feature', { key: 'toolbox', label: '工具箱' });
     emit('open-toolbox');
+}
+
+function handleOpenBusPlanner() {
+    showToolMenu.value = false;
+    emit('activate-feature', { key: 'bus', label: '公交规划' });
+    emit('open-bus');
+}
+
+function handleOpenDrivePlanner() {
+    showToolMenu.value = false;
+    emit('activate-feature', { key: 'drive', label: '驾车规划' });
+    emit('open-drive');
 }
 
 function handleOpenChat() {
@@ -62,6 +89,24 @@ function handleToggleMagic() {
     emit('activate-feature', { key: 'magic', label: '特效' });
     emit('toggle-magic');
 }
+
+function toggleToolMenu() {
+    showToolMenu.value = !showToolMenu.value;
+}
+
+function handleDocumentClick(event) {
+    if (!showToolMenu.value) return;
+    if (menuHostRef.value?.contains(event.target)) return;
+    showToolMenu.value = false;
+}
+
+onMounted(() => {
+    document.addEventListener('click', handleDocumentClick);
+});
+
+onBeforeUnmount(() => {
+    document.removeEventListener('click', handleDocumentClick);
+});
 </script>
 
 <style scoped>
@@ -121,6 +166,39 @@ function handleToggleMagic() {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+.menu-host {
+    position: relative;
+}
+
+.floating-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 140px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 6px;
+    z-index: 2200;
+}
+
+.menu-item {
+    width: 100%;
+    border: none;
+    text-align: left;
+    background: transparent;
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: #263d30;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.menu-item:hover {
+    background: #eff8f2;
 }
 
 .nav-btn {

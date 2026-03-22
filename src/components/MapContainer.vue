@@ -390,11 +390,16 @@ let sketchFeature;
 let homeClickTimer = null; // 用于处理单击双击冲突
 let dynamicSplitLinesLayer = null;
 let dynamicSplitMoveKey = null;
+let pendingBusPick = null;
+let busRouteLayerRef = null;
+let busRouteManagedLayerId = null;
 
 // 图层引用
 let baseLayer, labelLayer;
 const drawSource = new VectorSource();
 const userLocationSource = new VectorSource();
+const busPickSource = new VectorSource();
+const busRouteSource = new VectorSource();
 
 const emit = defineEmits([
     'location-change',
@@ -515,6 +520,21 @@ const styles = {
     userAccuracy: new Style({
         fill: new Fill({ color: 'rgba(30,144,255,0.12)' }),
         stroke: new Stroke({ color: 'rgba(30,144,255,0.3)', width: 1 })
+    }),
+    busStart: new Style({
+        image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#22c55e' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
+    }),
+    busEnd: new Style({
+        image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#ef4444' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
+    }),
+    busRouteTransit: new Style({
+        stroke: new Stroke({ color: '#2563eb', width: 4, lineCap: 'round', lineJoin: 'round' })
+    }),
+    busRouteWalk: new Style({
+        stroke: new Stroke({ color: '#6b7280', width: 3, lineDash: [8, 6], lineCap: 'round', lineJoin: 'round' })
+    }),
+    driveRoute: new Style({
+        stroke: new Stroke({ color: 'rgba(34, 197, 94, 0.8)', width: 6, lineCap: 'round', lineJoin: 'round' })
     })
 };
 
@@ -576,6 +596,10 @@ async function detectIPLocale() {
 }
 
 onUnmounted(() => {
+    if (pendingBusPick?.reject) {
+        pendingBusPick.reject(new Error('地图已卸载'));
+        pendingBusPick = null;
+    }
     if (dynamicSplitMoveKey) {
         unByKey(dynamicSplitMoveKey);
         dynamicSplitMoveKey = null;
@@ -1370,6 +1394,20 @@ function initMap() {
         zIndex: 1000,
         style: (feature) => feature.get('type') === 'accuracy' ? styles.userAccuracy : styles.userPoint
     });
+    const busPickLayer = new VectorLayer({
+        source: busPickSource,
+        zIndex: 1085,
+        style: (feature) => feature.get('busPickType') === 'end' ? styles.busEnd : styles.busStart
+    });
+    const busRouteLayer = new VectorLayer({
+        source: busRouteSource,
+        zIndex: 1080,
+        style: (feature) => {
+            if (feature.get('routeMode') === 'drive') return styles.driveRoute;
+            return feature.get('segmentType') === 1 ? styles.busRouteWalk : styles.busRouteTransit;
+        }
+    });
+    busRouteLayerRef = busRouteLayer;
 
     // 搜索结果图层（点）
     searchSource = new VectorSource();
@@ -1410,7 +1448,7 @@ function initMap() {
     // 1.4 实例化地图
     mapInstance.value = new Map({
         target: mapRef.value,
-        layers: [...layersToAdd, drawLayerInstance, userLayer, searchLayer],
+        layers: [...layersToAdd, drawLayerInstance, userLayer, busRouteLayer, busPickLayer, searchLayer],
         view: new View({
             center: fromLonLat(INITIAL_VIEW.center),
             zoom: INITIAL_VIEW.zoom,
@@ -1518,6 +1556,29 @@ function bindEvents() {
     });
 
     map.on('singleclick', async (evt) => {
+        if (pendingBusPick) {
+            const lonLat = toLonLat(evt.coordinate);
+            const pickType = pendingBusPick.type;
+
+            busPickSource.getFeatures().forEach((feature) => {
+                if (feature.get('busPickType') === pickType) {
+                    busPickSource.removeFeature(feature);
+                }
+            });
+
+            busPickSource.addFeature(new Feature({
+                geometry: new Point(evt.coordinate),
+                busPickType: pickType
+            }));
+
+            pendingBusPick.resolve({
+                lng: Number(lonLat[0].toFixed(6)),
+                lat: Number(lonLat[1].toFixed(6))
+            });
+            pendingBusPick = null;
+            return;
+        }
+
         if (!isAttributeQueryEnabled.value) return;
         if (drawInteraction && drawInteraction.getActive()) return;
 
@@ -1649,6 +1710,177 @@ function loadCustomMap() {
         }
     } catch (e) {
         alert('URL格式错误或无法解析');
+    }
+}
+
+function startBusPointPick(type) {
+    if (!mapInstance.value) {
+        return Promise.reject(new Error('地图尚未初始化'));
+    }
+
+    const pickType = type === 'end' ? 'end' : 'start';
+
+    if (pendingBusPick?.reject) {
+        pendingBusPick.reject(new Error('上一次选点已取消'));
+    }
+
+    return new Promise((resolve, reject) => {
+        pendingBusPick = { type: pickType, resolve, reject };
+    });
+}
+
+function drawRouteOnMap(route) {
+    if (!mapInstance.value) {
+        throw new Error('地图尚未初始化');
+    }
+
+    if (busRouteLayerRef && !mapInstance.value.getLayers().getArray().includes(busRouteLayerRef)) {
+        mapInstance.value.addLayer(busRouteLayerRef);
+    }
+
+    // 只清理旧线路，保留起终点 marker。
+    busRouteSource.clear();
+
+    const segments = Array.isArray(route?.segments) ? route.segments : [];
+    if (!segments.length) return;
+
+    const fitExtent = createEmpty();
+    let hasPoint = false;
+
+    segments.forEach((segment) => {
+        // 兼容真实结构：segment.segmentLine 是数组，坐标串在 segmentLine[i].linePoint。
+        const segmentLineItems = Array.isArray(segment?.segmentLine)
+            ? segment.segmentLine
+            : (segment?.segmentLine ? [{ linePoint: String(segment.segmentLine) }] : []);
+
+        segmentLineItems.forEach((lineItem) => {
+            const linePoint = String(lineItem?.linePoint || '').trim();
+            if (!linePoint) return;
+
+            const points = linePoint
+                .split(';')
+                .map((pair) => pair.trim())
+                .filter(Boolean)
+                .map((pair) => {
+                    const [lngStr, latStr] = pair.split(',');
+                    const lng = Number(lngStr);
+                    const lat = Number(latStr);
+                    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+                    return fromLonLat([lng, lat]);
+                })
+                .filter(Boolean);
+
+            if (points.length < 2) return;
+
+            busRouteSource.addFeature(new Feature({
+                geometry: new LineString(points),
+                segmentType: Number(segment?.segmentType ?? 0),
+                routeMode: 'bus'
+            }));
+
+            points.forEach((coord) => {
+                extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]);
+                hasPoint = true;
+            });
+        });
+    });
+
+    if (hasPoint && !isExtentEmpty(fitExtent)) {
+        mapInstance.value.getView().fit(fitExtent, {
+            padding: [80, 80, 80, 80],
+            duration: 700,
+            maxZoom: 18
+        });
+    }
+
+    syncRouteManagedLayer({
+        name: '公交规划路线',
+        type: 'bus_route',
+        category: 'route',
+        featureCount: busRouteSource.getFeatures().length
+    });
+}
+
+function drawDriveRouteOnMap(routeLatLonStr) {
+    if (!mapInstance.value) {
+        throw new Error('地图尚未初始化');
+    }
+
+    if (busRouteLayerRef && !mapInstance.value.getLayers().getArray().includes(busRouteLayerRef)) {
+        mapInstance.value.addLayer(busRouteLayerRef);
+    }
+
+    // 清理旧路线，保留起终点 marker。
+    busRouteSource.clear();
+
+    const points = String(routeLatLonStr || '')
+        .split(';')
+        .map((pair) => pair.trim())
+        .filter(Boolean)
+        .map((pair) => {
+            const [lngStr, latStr] = pair.split(',');
+            const lng = Number(lngStr);
+            const lat = Number(latStr);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+            return fromLonLat([lng, lat]);
+        })
+        .filter(Boolean);
+
+    if (points.length < 2) {
+        throw new Error('驾车路线坐标不足，无法绘制');
+    }
+
+    busRouteSource.addFeature(new Feature({
+        geometry: new LineString(points),
+        routeMode: 'drive'
+    }));
+
+    const fitExtent = createEmpty();
+    points.forEach((coord) => extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]));
+    if (!isExtentEmpty(fitExtent)) {
+        mapInstance.value.getView().fit(fitExtent, {
+            padding: [80, 80, 80, 80],
+            duration: 700,
+            maxZoom: 18
+        });
+    }
+
+    syncRouteManagedLayer({
+        name: '驾车规划路线',
+        type: 'drive_route',
+        category: 'route',
+        featureCount: 1
+    });
+}
+
+function syncRouteManagedLayer({ name, type, category, featureCount }) {
+    const routeFeatureCount = Number(featureCount || 0);
+    let managedItem = busRouteManagedLayerId
+        ? userDataLayers.find(item => item.id === busRouteManagedLayerId)
+        : null;
+
+    if (!managedItem && busRouteLayerRef) {
+        busRouteManagedLayerId = addManagedLayerRecord({
+            name,
+            type,
+            sourceType: 'search',
+            layer: busRouteLayerRef,
+            featureCount: routeFeatureCount,
+            styleConfig: null,
+            metadata: { category }
+        });
+        managedItem = userDataLayers.find(item => item.id === busRouteManagedLayerId) || null;
+    }
+
+    if (managedItem) {
+        managedItem.name = name;
+        managedItem.type = type;
+        managedItem.metadata = { ...(managedItem.metadata || {}), category };
+        managedItem.featureCount = routeFeatureCount;
+        managedItem.visible = true;
+        managedItem.layer?.setVisible?.(true);
+        emitUserLayersChange();
+        emitGraphicsOverview();
     }
 }
 
@@ -2208,8 +2440,20 @@ function removeUserLayer(layerId) {
 
     const idx = userDataLayers.findIndex(item => item.id === layerId);
     if (idx < 0) return;
+    const removed = userDataLayers[idx];
     mapInstance.value.removeLayer(userDataLayers[idx].layer);
     userDataLayers.splice(idx, 1);
+
+    if (
+        layerId === busRouteManagedLayerId
+        || removed?.metadata?.category === 'bus-route'
+        || removed?.metadata?.category === 'drive-route'
+        || removed?.metadata?.category === 'route'
+    ) {
+        busRouteManagedLayerId = null;
+        busRouteSource.clear();
+    }
+
     refreshUserLayerZIndex();
     emitUserLayersChange();
     emitGraphicsOverview();
@@ -2416,6 +2660,10 @@ defineExpose({
     addUserDataLayer,
     activateInteraction,
     clearInteractions,
+    getCurrentLocation,
+    startBusPointPick,
+    drawRouteOnMap,
+    drawDriveRouteOnMap,
     setDrawStyle,
     setUserLayerStyle,
     applyStyleTemplate,
