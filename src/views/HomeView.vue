@@ -122,8 +122,32 @@ function drawRouteOnMap(route) {
     return mapContainerRef.value?.drawRouteOnMap?.(route);
 }
 
+function zoomToBusRouteStep(stepIndex) {
+    return mapContainerRef.value?.zoomToBusRouteStep?.(stepIndex);
+}
+
+function previewBusRouteStep(stepIndex) {
+    return mapContainerRef.value?.previewBusRouteStep?.(stepIndex);
+}
+
+function clearBusRouteStepPreview() {
+    return mapContainerRef.value?.clearBusRouteStepPreview?.();
+}
+
 function drawDriveRouteOnMap(routeLatLonStr) {
     return mapContainerRef.value?.drawDriveRouteOnMap?.(routeLatLonStr);
+}
+
+function zoomToDriveRouteStep(stepIndex) {
+    return mapContainerRef.value?.zoomToDriveRouteStep?.(stepIndex);
+}
+
+function previewDriveRouteStep(stepIndex) {
+    return mapContainerRef.value?.previewDriveRouteStep?.(stepIndex);
+}
+
+function clearDriveRouteStepPreview() {
+    return mapContainerRef.value?.clearDriveRouteStepPreview?.();
 }
 
 function handleActivateFeature(feature) {
@@ -311,7 +335,13 @@ function handleFeatureSelected(properties) {
                     :toolboxOverview="toolboxOverview" :get-user-location="getMapUserLocation"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
+                    :zoom-to-bus-route-step="zoomToBusRouteStep"
+                    :preview-bus-route-step="previewBusRouteStep"
+                    :clear-bus-route-step-preview="clearBusRouteStepPreview"
                     :draw-drive-route-on-map="drawDriveRouteOnMap"
+                    :zoom-to-drive-route-step="zoomToDriveRouteStep"
+                    :preview-drive-route-step="previewDriveRouteStep"
+                    :clear-drive-route-step-preview="clearDriveRouteStepPreview"
                     @upload-data="handleUploadData" @interaction="handleInteraction"
                     @toggle-layer-visibility="handleToggleLayerVisibility"
                     @change-layer-opacity="handleChangeLayerOpacity" @set-base-layer="handleSetBaseLayer"

@@ -45,6 +45,9 @@
                     :token="tiandituToken"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
+                    :zoom-to-bus-route-step="zoomToBusRouteStep"
+                    :preview-bus-route-step="previewBusRouteStep"
+                    :clear-bus-route-step-preview="clearBusRouteStepPreview"
                     @close="$emit('switch-tab', 'info')"
                 />
             </div>
@@ -55,6 +58,9 @@
                     :token="tiandituToken"
                     :start-map-point-pick="startBusPointPick"
                     :draw-drive-route-on-map="drawDriveRouteOnMap"
+                    :zoom-to-drive-route-step="zoomToDriveRouteStep"
+                    :preview-drive-route-step="previewDriveRouteStep"
+                    :clear-drive-route-step-preview="clearDriveRouteStepPreview"
                     @close="$emit('switch-tab', 'info')"
                 />
             </div>
@@ -173,7 +179,31 @@ const props = defineProps({
         type: Function,
         default: null
     },
+    zoomToBusRouteStep: {
+        type: Function,
+        default: null
+    },
+    previewBusRouteStep: {
+        type: Function,
+        default: null
+    },
+    clearBusRouteStepPreview: {
+        type: Function,
+        default: null
+    },
     drawDriveRouteOnMap: {
+        type: Function,
+        default: null
+    },
+    zoomToDriveRouteStep: {
+        type: Function,
+        default: null
+    },
+    previewDriveRouteStep: {
+        type: Function,
+        default: null
+    },
+    clearDriveRouteStepPreview: {
         type: Function,
         default: null
     }
