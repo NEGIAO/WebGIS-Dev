@@ -206,6 +206,55 @@ const SEARCH_RESULT_STYLE = {
     pointRadius: 8
 };
 
+// 统一主机配置：在这里切换相关地图服务主机名。
+const TILE_HOSTS = {
+    tianditu: 't0.tianditu.gov.cn',
+    googleCandidates: ['mt3v.gggis.com', 'gac-geo.googlecnapps.club']
+};
+// 可选：'manual' 固定主机；'fastest' 启动后测速并自动切换最快主机。
+const GOOGLE_HOST_STRATEGY = 'fastest';
+const GOOGLE_MANUAL_HOST = TILE_HOSTS.googleCandidates[0];
+const GOOGLE_PROBE_TIMEOUT_MS = 1200;
+const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
+
+const buildGoogleTileUrl = (pathAndQuery) => `https://${activeGoogleTileHost.value}${pathAndQuery}`;
+const buildTiandituUrl = (pathAndQuery) => `https://${TILE_HOSTS.tianditu}${pathAndQuery}`;
+
+function probeGoogleHostLatency(host, timeoutMs = GOOGLE_PROBE_TIMEOUT_MS) {
+    return new Promise((resolve) => {
+        const start = performance.now();
+        const img = new Image();
+        let settled = false;
+        const end = (latency) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            img.onload = null;
+            img.onerror = null;
+            resolve(latency);
+        };
+        const timer = setTimeout(() => end(Number.POSITIVE_INFINITY), timeoutMs);
+        img.onload = () => end(performance.now() - start);
+        img.onerror = () => end(Number.POSITIVE_INFINITY);
+        img.src = `https://${host}/maps/vt?lyrs=s&x=0&y=0&z=1&_probe=${Date.now()}`;
+    });
+}
+
+async function resolvePreferredGoogleHost() {
+    if (GOOGLE_HOST_STRATEGY !== 'fastest') return GOOGLE_MANUAL_HOST;
+    const candidates = TILE_HOSTS.googleCandidates || [];
+    if (!candidates.length) return GOOGLE_MANUAL_HOST;
+
+    const measured = await Promise.all(candidates.map(async (host) => ({
+        host,
+        latency: await probeGoogleHostLatency(host)
+    })));
+
+    measured.sort((a, b) => a.latency - b.latency);
+    const best = measured[0];
+    return Number.isFinite(best?.latency) ? best.host : GOOGLE_MANUAL_HOST;
+}
+
 let cachedShpParser = null;
 let cachedJSZip = null;
 let cachedGeotiffFromBlob = null;
@@ -254,11 +303,11 @@ try {
 const LAYER_CONFIGS = [
     { 
         id: 'label', name: '天地图注记', visible: true,
-        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+        createSource: () => new XYZ({ url: `${buildTiandituUrl('/cia_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
     },
     { 
         id: 'label_vector', name: '天地图矢量注记', visible: false,
-        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+        createSource: () => new XYZ({ url: `${buildTiandituUrl('/cva_w/wmts')}?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
     },
     { 
         id: 'Water', name: '水系', visible: false,
@@ -266,7 +315,7 @@ const LAYER_CONFIGS = [
     },
     { 
         id: 'google', name: 'Google', visible: true,
-        createSource: () => new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }) 
+        createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
     },
     { 
         id: 'custom', name: '自定义', visible: false,
@@ -278,19 +327,19 @@ const LAYER_CONFIGS = [
     },
     { 
         id: 'tianDiTu_vec', name: '天地图矢量', visible: false,
-        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+        createSource: () => new XYZ({ url: `${buildTiandituUrl('/vec_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
     },
     { 
         id: 'tianDiTu', name: '天地图影像', visible: false,
-        createSource: () => new XYZ({ url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
+        createSource: () => new XYZ({ url: `${buildTiandituUrl('/img_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
     },
     { 
         id: 'google_standard', name: 'Google标准', visible: false,
-        createSource: () => new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt/lyrs=m&x={x}&y={y}&z={z}' }) 
+        createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt/lyrs=m&x={x}&y={y}&z={z}') }) 
     },
     { 
         id: 'google_clean', name: 'Google简洁', visible: false,
-        createSource: () => new XYZ({ url: 'https://gac-geo.googlecnapps.club/maps/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off' }) 
+        createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off') }) 
     },
     { 
         id: 'esri', name: 'ESRI', visible: false,
@@ -491,6 +540,12 @@ const styles = {
 onMounted(async () => {
     initMap();
 
+    resolvePreferredGoogleHost().then((host) => {
+        if (!host || host === activeGoogleTileHost.value) return;
+        activeGoogleTileHost.value = host;
+        refreshGoogleLayerSources();
+    }).catch(() => {});
+
     // 异步判断 IP 区域，不阻塞地图首屏初始化
     const ipInfo = await detectIPLocale();
 
@@ -602,6 +657,16 @@ function emitBaseLayersChange() {
         group: getLayerGroup(item.id),
         active: selectedLayer.value === item.id
     })));
+}
+
+function refreshGoogleLayerSources() {
+    const googleLayerIds = ['google', 'google_standard', 'google_clean'];
+    googleLayerIds.forEach((id) => {
+        const cfg = LAYER_CONFIGS.find(item => item.id === id);
+        const layer = layerInstances[id];
+        if (!cfg || !layer) return;
+        layer.setSource(cfg.createSource());
+    });
 }
 
 function refreshUserLayerZIndex() {
@@ -1351,7 +1416,7 @@ function initMap() {
             layers: [
                 new TileLayer({
                     source: googleConfig ? googleConfig.createSource() : new XYZ({
-                        url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
+                        url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
                         maxZoom: 20
                     })
                 })
