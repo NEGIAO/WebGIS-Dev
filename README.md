@@ -71,7 +71,8 @@ WebGIS_henu_trials_5_28_vue3/
 │   └── favicon.ico
 ├── src/
 │   ├── api/
-│   │   └── map.js                # 地图检索 API 封装（如高德检索）
+│   │   ├── locationSearch.js     # 多服务地名搜索封装（天地图/Nominatim/高德）
+│   │   └── map.js                # 地图 API 封装（如逆地理编码）
 │   ├── assets/                   # 全局样式与静态资源
 │   ├── components/
 │   │   ├── MapContainer.vue      # 2D 地图核心容器（底图/图层/绘制/路线交互总入口）
@@ -86,13 +87,21 @@ WebGIS_henu_trials_5_28_vue3/
 │   │   ├── TopBar.vue            # 顶部导航栏
 │   │   ├── MagicCursor.vue       # 鼠标特效
 │   │   └── icons/                # 图标组件
+│   ├── composables/
+│   │   ├── useAreaImageOverlay.js    # 校园区域图片覆盖层逻辑
+│   │   ├── useLayerDataImport.js     # 矢量/栅格数据导入与解析
+│   │   ├── useManagedLayerRegistry.js # 托管图层注册与同步
+│   │   ├── useUserLayerActions.js    # 图层管理动作集（显隐/排序/样式）
+│   │   └── useUserLocation.js        # 定位、IP 兜底与位置更新
 │   ├── router/
 │   │   └── index.js              # 路由定义（Home、Register）
 │   ├── utils/
 │   │   ├── loadTiandituSdk.js    # 天地图 SDK 动态加载
 │   │   ├── drawTransitRoute.ts   # 交通路线绘制辅助（独立工具）
 │   │   ├── transitRouteBuilder.js # 公交/驾车路线几何构建与动态覆盖缩放
-│   │   └── driveXmlParser.ts     # 驾车 XML 解析与天地图原生绘制工具
+│   │   ├── driveXmlParser.ts     # 驾车 XML 解析与天地图原生绘制工具
+│   │   ├── coordTransform.js     # 坐标系转换工具（如 GCJ-02/WGS84）
+│   │   └── userPositionCache.js  # 用户位置缓存工具
 │   ├── views/
 │   │   ├── HomeView.vue          # 主页面编排（地图 + 侧边栏 + 交互透传）
 │   │   └── RegisterView.vue      # 注册/登录页
@@ -105,6 +114,7 @@ WebGIS_henu_trials_5_28_vue3/
 ├── index.html           # HTML 入口
 ├── jsconfig.json        # JavaScript 配置
 ├── package.json         # 项目依赖配置
+├── start_server.bat      # 本地静态服务启动脚本
 ├── vite.config.js       # Vite 构建配置
 └── README.md            # 项目说明文档
 ```

@@ -110,20 +110,20 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
-import LocationSearch from './LocationSearch.vue';
+import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { fetchLocationResultsByService } from '../api/locationSearch';
-import { buildRouteRenderData, fitExtentToCoverage } from '../utils/transitRouteBuilder';
-import { saveUserPositionToCache } from '../utils/userPositionCache';
-import { useUserLayerActions } from '../composables/useUserLayerActions';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
+import { useUserLocation } from '../composables/useUserLocation';
+import { useAreaImageOverlay } from '../composables/useAreaImageOverlay';
+
+const LocationSearch = defineAsyncComponent(() => import('./LocationSearch.vue'));
 
 // OpenLayers 核心库
 import Map from 'ol/Map';
 import View from 'ol/View';
 import Feature from 'ol/Feature';
 import Overlay from 'ol/Overlay';
-import { equivalent, fromLonLat, toLonLat, transform, transformExtent } from 'ol/proj';
+import { fromLonLat, toLonLat } from 'ol/proj';
 import { defaults as defaultControls, ScaleLine, MousePosition, OverviewMap } from 'ol/control';
 import { createStringXY } from 'ol/coordinate';
 import { unByKey } from 'ol/Observable';
@@ -132,15 +132,10 @@ import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'o
 
 // 图层与数据源
 import TileLayer from 'ol/layer/Tile';
-import WebGLTileLayer from 'ol/layer/WebGLTile';
-import ImageLayer from 'ol/layer/Image';
 import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import OSM from 'ol/source/OSM';
 import VectorSource from 'ol/source/Vector';
-import ImageStatic from 'ol/source/ImageStatic';
-import GeoJSON from 'ol/format/GeoJSON';
-import KML from 'ol/format/KML';
 
 // 几何与交互
 import Point from 'ol/geom/Point';
@@ -259,55 +254,6 @@ async function resolvePreferredGoogleHost() {
     measured.sort((a, b) => a.latency - b.latency);
     const best = measured[0];
     return Number.isFinite(best?.latency) ? best.host : GOOGLE_MANUAL_HOST;
-}
-
-let cachedShpParser = null;
-let cachedJSZip = null;
-let cachedGeotiffFromBlob = null;
-let cachedGeoTIFFSourceCtor = null;
-
-// [隶属] 外部数据导入-解析器懒加载
-// [作用] 懒加载 shp 解析器并缓存。
-// [交互] 被 parseUploadedFeatures 调用。
-async function getShpParser() {
-    if (!cachedShpParser) {
-        const mod = await import('shpjs');
-        cachedShpParser = mod.default || mod;
-    }
-    return cachedShpParser;
-}
-
-// [隶属] 外部数据导入-解析器懒加载
-// [作用] 懒加载 JSZip 构造器并缓存。
-// [交互] 被 parseUploadedFeatures 调用。
-async function getJSZipCtor() {
-    if (!cachedJSZip) {
-        const mod = await import('jszip');
-        cachedJSZip = mod.default || mod;
-    }
-    return cachedJSZip;
-}
-
-// [隶属] 栅格上传-依赖懒加载
-// [作用] 懒加载 geotiff 的 fromBlob 方法。
-// [交互] 被 createManagedRasterLayer / createNonGeorefTiffLayer 调用。
-async function getGeotiffFromBlob() {
-    if (!cachedGeotiffFromBlob) {
-        const mod = await import('geotiff');
-        cachedGeotiffFromBlob = mod.fromBlob;
-    }
-    return cachedGeotiffFromBlob;
-}
-
-// [隶属] 栅格上传-依赖懒加载
-// [作用] 懒加载 OpenLayers GeoTIFF 数据源构造器。
-// [交互] 被 createManagedRasterLayer 调用。
-async function getGeoTIFFSourceCtor() {
-    if (!cachedGeoTIFFSourceCtor) {
-        const mod = await import('ol/source/GeoTIFF');
-        cachedGeoTIFFSourceCtor = mod.default;
-    }
-    return cachedGeoTIFFSourceCtor;
 }
 
 // 图层配置 (集中管理 id, name, source创建逻辑)
@@ -444,6 +390,32 @@ const emit = defineEmits([
     'graphics-overview',
     'base-layers-change'
 ]);
+
+const {
+    isCoordinateInChina,
+    detectIPLocale,
+    getCurrentLocation,
+    zoomToUser,
+    updateUserPosition
+} = useUserLocation({
+    mapInstance,
+    userLocationSource,
+    isDomestic
+});
+
+const {
+    checkAreaLogic,
+    showLargeImage,
+    closeLargeImage
+} = useAreaImageOverlay({
+    mapInstance,
+    showImageSet,
+    imageSetPosition,
+    showLargeImg,
+    largeImageSrc,
+    bounds: DIHUAN_BOUNDS,
+    emit
+});
 
 const isAttributeQueryEnabled = ref(true);
 const userDataLayers = [];
@@ -766,7 +738,9 @@ function waitForCriticalTileReady(timeoutMs = CRITICAL_TILE_READY_TIMEOUT_MS) {
             resolve();
             return;
         }
-
+        scheduleLowPriorityTask(() => {
+            runDeferredStartupTasks().catch(() => {});
+        });
         let settled = false;
         const finish = () => {
             if (settled) return;
@@ -791,6 +765,18 @@ async function runDeferredStartupTasks() {
     resolvePreferredGoogleHost().then((host) => {
         if (componentUnmounted) return;
         if (!host || host === activeGoogleTileHost.value) return;
+
+    function scheduleLowPriorityTask(task) {
+        if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+            window.requestIdleCallback(() => {
+                if (!componentUnmounted) task();
+            }, { timeout: 1500 });
+            return;
+        }
+        setTimeout(() => {
+            if (!componentUnmounted) task();
+        }, 0);
+    }
         activeGoogleTileHost.value = host;
         refreshGoogleLayerSources();
     }).catch(() => {});
@@ -812,35 +798,6 @@ async function runDeferredStartupTasks() {
     }
 
     await detectIPLocale();
-}
-
-// [隶属] 定位与地区判定
-// [作用] 基于经纬度粗略判断是否位于中国范围。
-// [交互] 被 runDeferredStartupTasks 调用。
-function isCoordinateInChina(lon, lat) {
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
-    return lon >= 73.0 && lon <= 135.0 && lat >= 18.0 && lat <= 54.0;
-}
-
-// 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
-// [隶属] 定位与地区判定
-// [作用] 使用 IP 服务兜底判断国内外。
-// [交互] 更新 isDomestic，影响搜索服务推荐文案。
-async function detectIPLocale() {
-    try {
-        const res = await fetch('https://ipapi.co/json/');
-        if (!res.ok) return { isDomestic: false };
-        const data = await res.json();
-        // ipapi 返回 country / country_code 或 country_name
-        const cc = data.country || data.country_code || data.country_name;
-        const isDom = typeof cc === 'string' && (cc.toString().toUpperCase().includes('CN') || cc.toString().toLowerCase().includes('china'));
-        isDomestic.value = isDom;
-        return { isDomestic: isDom };
-    } catch (e) {
-        console.warn('IP locale detect failed', e);
-        isDomestic.value = false;
-        return { isDomestic: false };
-    }
 }
 
 onUnmounted(() => {
@@ -959,127 +916,6 @@ function createManagedVectorLayer({
     }
 
     return id;
-}
-
-// [隶属] 栅格处理-统计工具
-// [作用] 计算波段最小值/最大值。
-// [交互] 被栅格渲染与拉伸计算调用。
-function getBandMinMax(data) {
-    let min = Number.POSITIVE_INFINITY;
-    let max = Number.NEGATIVE_INFINITY;
-    for (let i = 0; i < data.length; i++) {
-        const v = data[i];
-        if (!Number.isFinite(v)) continue;
-        if (v < min) min = v;
-        if (v > max) max = v;
-    }
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-        return { min: 0, max: 1 };
-    }
-    return { min, max };
-}
-
-// [隶属] 栅格处理-像元拉伸
-// [作用] 将数值拉伸到 0~255 字节范围。
-// [交互] 被栅格渲染流程调用。
-function stretchToByte(value, min, max) {
-    if (!Number.isFinite(value)) return 0;
-    const n = (value - min) / (max - min);
-    return Math.max(0, Math.min(255, Math.round(n * 255)));
-}
-
-// [隶属] 栅格处理-NoData 判定
-// [作用] 判断像元是否等于 NoData（带容差）。
-// [交互] 被采样与渲染流程复用。
-function isNoDataValue(value, nodataValue) {
-    if (nodataValue === null || nodataValue === undefined || !Number.isFinite(value)) return false;
-    const eps = Math.max(1e-9, Math.abs(nodataValue) * 1e-9);
-    return Math.abs(value - nodataValue) <= eps;
-}
-
-// [隶属] 栅格处理-单波段增强
-// [作用] 计算分位数拉伸区间，避免异常值影响显示。
-// [交互] 被 createManagedRasterLayer / createNonGeorefTiffLayer 调用。
-function computePercentileStretch(data, nodataValue, lowPct = 2, highPct = 98) {
-    if (!data?.length) return { min: 0, max: 1 };
-
-    const maxSamples = 200000;
-    const step = Math.max(1, Math.floor(data.length / maxSamples));
-    const values = [];
-
-    for (let i = 0; i < data.length; i += step) {
-        const v = data[i];
-        if (!Number.isFinite(v) || isNoDataValue(v, nodataValue)) continue;
-        values.push(v);
-    }
-
-    if (!values.length) return { min: 0, max: 1 };
-
-    values.sort((a, b) => a - b);
-    const lowIndex = Math.max(0, Math.floor((values.length - 1) * (lowPct / 100)));
-    const highIndex = Math.max(0, Math.floor((values.length - 1) * (highPct / 100)));
-
-    let min = values[lowIndex];
-    let max = values[highIndex];
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-        min = values[0];
-        max = values[values.length - 1];
-    }
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-        return { min: 0, max: 1 };
-    }
-    return { min, max };
-}
-
-// [隶属] 图层管理-栅格图层识别
-// [作用] 判断图层是否为上传的 TIF/TIFF。
-// [交互] 被 queryRasterValueAtCoordinate 调用。
-function isRasterUploadLayer(item) {
-    const t = String(item?.type || '').toLowerCase();
-    return item?.sourceType === 'upload' && (t === 'tif' || t === 'tiff');
-}
-
-// [隶属] 栅格查询-地理采样
-// [作用] 生成基于 GeoTIFF 原始范围的采样函数。
-// [交互] 被 createManagedRasterLayer 写入 metadata.rasterSampler。
-function createGeoTiffSampler({ image, projection, nodataValue = null }) {
-    if (!image) return null;
-    const width = image.getWidth();
-    const height = image.getHeight();
-    const bbox = image.getBoundingBox();
-    if (!bbox || bbox.length < 4) return null;
-
-    return async (mapCoordinate, mapProjection) => {
-        let coord = mapCoordinate;
-        if (projection && mapProjection && !equivalent(projection, mapProjection)) {
-            coord = transform(mapCoordinate, mapProjection, projection);
-        }
-
-        const minX = bbox[0];
-        const minY = bbox[1];
-        const maxX = bbox[2];
-        const maxY = bbox[3];
-        if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) {
-            return null;
-        }
-
-        const xNorm = (coord[0] - minX) / Math.max(1e-12, maxX - minX);
-        const yNorm = (maxY - coord[1]) / Math.max(1e-12, maxY - minY);
-        const px = Math.min(width - 1, Math.max(0, Math.floor(xNorm * width)));
-        const py = Math.min(height - 1, Math.max(0, Math.floor(yNorm * height)));
-
-        const raster = await image.readRasters({ window: [px, py, px + 1, py + 1] });
-        const bands = Array.isArray(raster) ? raster : [raster];
-        const values = bands.map((band) => band?.[0]);
-        const allNoData = nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue));
-
-        return {
-            values,
-            pixel: [px, py],
-            nodataValue,
-            allNoData
-        };
-    };
 }
 
 // [隶属] 图片覆盖-经纬线标注
@@ -1232,395 +1068,141 @@ function toggleDynamicSplitLines() {
     updateDynamicSplitLines();
 }
 
-// [隶属] 栅格查询-地理采样
-// [作用] 生成基于已知 extent 的快速采样函数。
-// [交互] 被 createNonGeorefTiffLayer 写入 metadata.rasterSampler。
-function createExtentRasterSampler({ bands, width, height, extent, projection, nodataValue = null }) {
-    if (!bands?.length || !width || !height || !extent) return null;
+// [隶属] 外部数据导入-动作集接入
+// [作用] 从 useLayerDataImport 注入上传入口与解析动作。
+// [交互] addUserDataLayer 由 defineExpose 对外提供给父组件调用。
+let layerDataImportApiPromise = null;
+let userLayerActionsApiPromise = null;
+let routeBuilderApiPromise = null;
 
-    return async (mapCoordinate, mapProjection) => {
-        let coord = mapCoordinate;
-        if (projection && mapProjection && !equivalent(projection, mapProjection)) {
-            coord = transform(mapCoordinate, mapProjection, projection);
-        }
-
-        const [minX, minY, maxX, maxY] = extent;
-        if (coord[0] < minX || coord[0] > maxX || coord[1] < minY || coord[1] > maxY) {
-            return null;
-        }
-
-        const xNorm = (coord[0] - minX) / Math.max(1e-12, maxX - minX);
-        const yNorm = (maxY - coord[1]) / Math.max(1e-12, maxY - minY);
-        const px = Math.min(width - 1, Math.max(0, Math.floor(xNorm * width)));
-        const py = Math.min(height - 1, Math.max(0, Math.floor(yNorm * height)));
-        const idx = py * width + px;
-        const values = bands.map((band) => band?.[idx]);
-        const allNoData = nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue));
-
-        return {
-            values,
-            pixel: [px, py],
-            nodataValue,
-            allNoData
-        };
-    };
+async function ensureLayerDataImportApi() {
+    if (!layerDataImportApiPromise) {
+        layerDataImportApiPromise = import('../composables/useLayerDataImport').then(({ useLayerDataImport }) => (
+            useLayerDataImport({
+                mapInstance,
+                initialView: INITIAL_VIEW,
+                userDataLayers,
+                addManagedLayerRecord,
+                createManagedVectorLayer,
+                styleTemplates: STYLE_TEMPLATES
+            })
+        ));
+    }
+    return layerDataImportApiPromise;
 }
 
-// [隶属] 栅格查询-属性拾取
-// [作用] 在点击坐标处查询最上层可见栅格像元值。
-// [交互] 被 bindEvents 的 singleclick 属性查询调用，并通过 emit(feature-selected) 输出。
-async function queryRasterValueAtCoordinate(mapCoordinate) {
-    if (!mapInstance.value) return null;
-    const mapProjection = mapInstance.value.getView().getProjection();
-    const rasterLayers = [...userDataLayers]
-        .filter(item => item.visible && isRasterUploadLayer(item) && typeof item.metadata?.rasterSampler === 'function')
-        .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
-
-    for (const item of rasterLayers) {
-        try {
-            const sampled = await item.metadata.rasterSampler(mapCoordinate, mapProjection);
-            if (!sampled) continue;
-
-            const lonlat = toLonLat(mapCoordinate);
-            const payload = {
-                图层名称: item.name,
-                图层类型: '栅格',
-                像元列行: `${sampled.pixel[0]}, ${sampled.pixel[1]}`,
-                点击经度: Number(lonlat[0].toFixed(6)),
-                点击纬度: Number(lonlat[1].toFixed(6))
-            };
-
-            sampled.values.forEach((v, idx) => {
-                const key = `波段${idx + 1}`;
-                payload[key] = sampled.nodataValue !== null && isNoDataValue(v, sampled.nodataValue)
-                    ? 'NoData'
-                    : (Number.isFinite(v) ? Number(v.toFixed(6)) : String(v));
-            });
-
-            return payload;
-        } catch (err) {
-            console.warn('Raster sample failed', err);
-        }
-    }
-
-    return null;
-}
-
-// [隶属] 栅格处理-坐标系转换
-// [作用] 将源 extent 转到当前地图投影。
-// [交互] 被栅格加载后 fitView 调用。
-function projectExtentToMapView(extent, sourceProjection) {
-    if (!mapInstance.value || !extent || extent.some(v => !Number.isFinite(v))) return null;
-    const viewProjection = mapInstance.value.getView().getProjection();
-    if (!sourceProjection || equivalent(sourceProjection, viewProjection)) {
-        return extent;
-    }
-    try {
-        return transformExtent(extent, sourceProjection, viewProjection);
-    } catch (err) {
-        console.warn('Extent projection transform failed, fallback to original extent', err);
-        return extent;
-    }
-}
-
-// [隶属] 外部数据导入-栅格兜底
-// [作用] 在缺少地理参考时将 TIF 临时投放到当前视图中心。
-// [交互] 调用 addManagedLayerRecord，并触发图层列表同步。
-async function createNonGeorefTiffLayer({
-    blob,
-    name,
-    type,
-    sourceType,
-    fitView = false,
-    imageExtent = null,
-    projection = null,
-    alertMessage = '该 TIF 未检测到坐标参考，已按当前视图中心临时加载。',
-    metadata = { noGeorefFallback: true },
-    nodataValue = null,
-    stretchRange = null
-}) {
-    if (!mapInstance.value) return null;
-
-    const geotiffFromBlob = await getGeotiffFromBlob();
-    const tiff = await geotiffFromBlob(blob);
-    const image = await tiff.getImage();
-    const width = image.getWidth();
-    const height = image.getHeight();
-    const rasters = await image.readRasters();
-
-    const bands = Array.isArray(rasters) ? rasters : [rasters];
-    const bandStats = bands.slice(0, 3).map(getBandMinMax);
-    const alphaStats = bands.length >= 4 ? getBandMinMax(bands[3]) : null;
-    const isSingleBand = bands.length === 1;
-    const singleBandStretch = stretchRange && Number.isFinite(stretchRange.min) && Number.isFinite(stretchRange.max)
-        ? stretchRange
-        : (isSingleBand ? computePercentileStretch(bands[0], nodataValue) : null);
-
-    const pixelCount = width * height;
-    const rgba = new Uint8ClampedArray(pixelCount * 4);
-
-    for (let i = 0; i < pixelCount; i++) {
-        const hasRgb = bands.length >= 3;
-        const rSrc = hasRgb ? bands[0][i] : bands[0]?.[i];
-        const gSrc = hasRgb ? bands[1][i] : bands[0]?.[i];
-        const bSrc = hasRgb ? bands[2][i] : bands[0]?.[i];
-
-        let r;
-        let g;
-        let b;
-        if (isSingleBand) {
-            if (isNoDataValue(rSrc, nodataValue)) {
-                const p = i * 4;
-                rgba[p] = 0;
-                rgba[p + 1] = 0;
-                rgba[p + 2] = 0;
-                rgba[p + 3] = 0;
-                continue;
+async function ensureUserLayerActionsApi() {
+    if (!userLayerActionsApiPromise) {
+        userLayerActionsApiPromise = Promise.all([
+            import('../composables/useUserLayerActions'),
+            ensureLayerDataImportApi()
+        ]).then(([actionsMod, dataImportApi]) => actionsMod.useUserLayerActions({
+            mapInstance,
+            userDataLayers,
+            refreshUserLayerZIndex,
+            emitUserLayersChange,
+            emitGraphicsOverview,
+            mergeStyleConfig,
+            applyManagedLayerStyle,
+            styleTemplates: STYLE_TEMPLATES,
+            setDrawStyle,
+            layerList,
+            selectedLayer,
+            getLayerCategory,
+            refreshLayersState,
+            projectExtentToMapView: dataImportApi.projectExtentToMapView,
+            emitFeatureSelected: (payload) => emit('feature-selected', payload),
+            isRouteManagedLayer: ({ layerId, removed }) => (
+                layerId === busRouteManagedLayerId
+                || removed?.metadata?.category === 'bus-route'
+                || removed?.metadata?.category === 'drive-route'
+                || removed?.metadata?.category === 'route'
+            ),
+            onRouteManagedLayerRemoved: () => {
+                busRouteManagedLayerId = null;
+                resetRouteStepStates();
+                busRouteSource.clear();
             }
-            const v = stretchToByte(rSrc, singleBandStretch?.min ?? 0, singleBandStretch?.max ?? 1);
-            // 单波段红绿拉伸：低值偏绿，高值偏红。
-            r = v;
-            g = 255 - v;
-            b = 0;
-        } else {
-            r = stretchToByte(rSrc, bandStats[0]?.min ?? 0, bandStats[0]?.max ?? 1);
-            g = stretchToByte(gSrc, bandStats[Math.min(1, bandStats.length - 1)]?.min ?? 0, bandStats[Math.min(1, bandStats.length - 1)]?.max ?? 1);
-            b = stretchToByte(bSrc, bandStats[Math.min(2, bandStats.length - 1)]?.min ?? 0, bandStats[Math.min(2, bandStats.length - 1)]?.max ?? 1);
-        }
-        const a = bands.length >= 4
-            ? stretchToByte(bands[3][i], alphaStats.min, alphaStats.max)
-            : 255;
-
-        const p = i * 4;
-        rgba[p] = r;
-        rgba[p + 1] = g;
-        rgba[p + 2] = b;
-        rgba[p + 3] = a;
+        }));
     }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('无法创建画布渲染上下文');
-    ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
-
-    const pngBlob = await new Promise((resolve, reject) => {
-        canvas.toBlob((out) => {
-            if (out) resolve(out);
-            else reject(new Error('无法生成影像预览')); 
-        }, 'image/png');
-    });
-    const pngUrl = URL.createObjectURL(pngBlob);
-
-    const view = mapInstance.value.getView();
-    const layerProjection = projection || view.getProjection();
-    const center = view.getCenter() || fromLonLat(INITIAL_VIEW.center);
-    const resolution = view.getResolution() || 1;
-    const extent = imageExtent && imageExtent.every(v => Number.isFinite(v))
-        ? imageExtent
-        : [
-            center[0] - (width * resolution) / 2,
-            center[1] - (height * resolution) / 2,
-            center[0] + (width * resolution) / 2,
-            center[1] + (height * resolution) / 2
-        ];
-
-    const layer = new ImageLayer({
-        source: new ImageStatic({
-            url: pngUrl,
-            imageExtent: extent,
-            projection: layerProjection
-        }),
-        zIndex: 120,
-        properties: { name }
-    });
-
-    mapInstance.value.addLayer(layer);
-    const rasterSampler = createExtentRasterSampler({
-        bands,
-        width,
-        height,
-        extent,
-        projection: layerProjection,
-        nodataValue
-    });
-    const id = addManagedLayerRecord({
-        name,
-        type,
-        sourceType,
-        featureCount: 1,
-        styleConfig: null,
-        metadata: {
-            ...(metadata || {}),
-            rasterSampler,
-            rasterBandCount: bands.length,
-            sourceProjection: layerProjection,
-            sourceExtent: extent
-        },
-        layer
-    });
-
-    if (fitView) {
-        const fitExtent = projectExtentToMapView(extent, layerProjection) || extent;
-        mapInstance.value.getView().fit(fitExtent, {
-            padding: [50, 50, 50, 50],
-            duration: 700,
-            maxZoom: 18
-        });
-    }
-
-    if (alertMessage) {
-        alert(alertMessage);
-    }
-    return id;
+    return userLayerActionsApiPromise;
 }
 
-// [隶属] 外部数据导入-栅格主流程
-// [作用] 解析并加载 GeoTIFF，必要时回退到无地理参考方案。
-// [交互] 被 addUserDataLayer 调用，向图层管理模块登记结果。
-async function createManagedRasterLayer({
-    name,
-    type,
-    sourceType,
-    data,
-    fitView = false
-}) {
-    if (!mapInstance.value || !(data instanceof ArrayBuffer)) return null;
-
-    const blob = new Blob([data], { type: 'image/tiff' });
-    const geotiffFromBlob = await getGeotiffFromBlob();
-    const GeoTIFFSource = await getGeoTIFFSourceCtor();
-
-    let sampleBandCount = 0;
-    let nodataValue = null;
-    let singleBandStretch = null;
-    let firstImageRef = null;
-    try {
-        const tiff = await geotiffFromBlob(blob);
-        const firstImage = await tiff.getImage();
-        firstImageRef = firstImage;
-        sampleBandCount = Number(
-            firstImage?.getSamplesPerPixel?.() ?? firstImage?.fileDirectory?.SamplesPerPixel ?? 0
-        );
-        const nd = firstImage?.getGDALNoData?.();
-        nodataValue = Number.isFinite(nd) ? nd : null;
-
-        if (sampleBandCount === 1) {
-            const singleBandData = await firstImage.readRasters({ samples: [0], interleave: true });
-            singleBandStretch = computePercentileStretch(singleBandData, nodataValue, 2, 98);
-        }
-    } catch (e) {
-        sampleBandCount = 0;
-        nodataValue = null;
-        singleBandStretch = null;
+async function ensureRouteBuilderApi() {
+    if (!routeBuilderApiPromise) {
+        routeBuilderApiPromise = import('../utils/transitRouteBuilder');
     }
-
-    const sourceInfo = { blob };
-    if (sampleBandCount === 1 && nodataValue !== null) {
-        sourceInfo.nodata = nodataValue;
-    }
-    const source = new GeoTIFFSource({
-        convertToRGB: 'auto',
-        normalize: sampleBandCount === 1 ? false : undefined,
-        sources: [sourceInfo]
-    });
-
-    let viewCfg = null;
-    let hasGeorefExtent = false;
-    try {
-        viewCfg = await source.getView();
-        hasGeorefExtent = !!(viewCfg?.extent && viewCfg.extent.every(v => Number.isFinite(v)));
-    } catch (e) {
-        hasGeorefExtent = false;
-    }
-
-    if (!hasGeorefExtent) {
-        return createNonGeorefTiffLayer({
-            blob,
-            name,
-            type,
-            sourceType,
-            fitView,
-            alertMessage: sampleBandCount === 1
-                ? '该 TIF 为单波段且未检测到坐标参考，已按当前视图中心临时加载。'
-                : '该 TIF 未检测到坐标参考，已按当前视图中心临时加载。',
-            metadata: {
-                noGeorefFallback: true,
-                singleBandRendered: sampleBandCount === 1
-            },
-            nodataValue,
-            stretchRange: singleBandStretch
-        });
-    }
-
-    const layerOptions = {
-        source,
-        zIndex: 120,
-        properties: { name }
-    };
-    if (sampleBandCount === 1) {
-        // 单波段红绿拉伸：低值绿，高值红；保持 GeoTIFF 原生地理参考定位。
-        const minVal = Number.isFinite(singleBandStretch?.min) ? singleBandStretch.min : 0;
-        const maxVal = Number.isFinite(singleBandStretch?.max) ? singleBandStretch.max : 1;
-        const midVal = (minVal + maxVal) / 2;
-        const baseColorExpr = [
-            'interpolate',
-            ['linear'],
-            ['band', 1],
-            minVal, ['color', 32, 164, 72, 1],
-            midVal, ['color', 254, 224, 139, 1],
-            maxVal, ['color', 215, 25, 28, 1]
-        ];
-        layerOptions.style = {
-            color: nodataValue !== null
-                ? ['case', ['==', ['band', 1], nodataValue], ['color', 0, 0, 0, 0], baseColorExpr]
-                : baseColorExpr
-        };
-    }
-
-    const layer = new WebGLTileLayer(layerOptions);
-
-    mapInstance.value.addLayer(layer);
-    const rasterSampler = createGeoTiffSampler({
-        image: firstImageRef,
-        projection: viewCfg?.projection,
-        nodataValue
-    });
-    const id = addManagedLayerRecord({
-        name,
-        type,
-        sourceType,
-        featureCount: 1,
-        styleConfig: null,
-        metadata: {
-            rasterSampler,
-            rasterBandCount: sampleBandCount,
-            nodataValue,
-            sourceProjection: viewCfg?.projection,
-            sourceExtent: viewCfg?.extent
-        },
-        layer
-    });
-
-    if (fitView && mapInstance.value) {
-        const fitExtent = projectExtentToMapView(viewCfg.extent, viewCfg.projection) || viewCfg.extent;
-        mapInstance.value.getView().fit(fitExtent, {
-            padding: [50, 50, 50, 50],
-            duration: 900,
-            maxZoom: 18
-        });
-    }
-
-    return id;
+    return routeBuilderApiPromise;
 }
 
-// [隶属] 外部数据导入-文件类型识别
-// [作用] 判断上传类型是否为 TIF/TIFF。
-// [交互] 被 addUserDataLayer 调用。
-function isTiffType(type) {
-    const normalized = String(type || '').toLowerCase();
-    return normalized === 'tif' || normalized === 'tiff';
+async function addUserDataLayer(payload) {
+    const api = await ensureLayerDataImportApi();
+    return api.addUserDataLayer(payload);
+}
+
+async function queryRasterValueAtCoordinate(coordinate) {
+    const api = await ensureLayerDataImportApi();
+    return api.queryRasterValueAtCoordinate(coordinate);
+}
+
+async function setUserLayerVisibility(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.setUserLayerVisibility(...args);
+}
+
+async function setUserLayerOpacity(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.setUserLayerOpacity(...args);
+}
+
+async function removeUserLayer(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.removeUserLayer(...args);
+}
+
+async function reorderUserLayers(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.reorderUserLayers(...args);
+}
+
+async function soloUserLayer(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.soloUserLayer(...args);
+}
+
+async function setUserLayerStyle(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.setUserLayerStyle(...args);
+}
+
+async function setUserLayerLabelVisibility(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.setUserLayerLabelVisibility(...args);
+}
+
+async function applyStyleTemplate(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.applyStyleTemplate(...args);
+}
+
+async function setBaseLayerActive(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.setBaseLayerActive(...args);
+}
+
+async function setLayerVisibility(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.setLayerVisibility(...args);
+}
+
+async function zoomToUserLayer(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.zoomToUserLayer(...args);
+}
+
+async function viewUserLayer(...args) {
+    const api = await ensureUserLayerActionsApi();
+    return api.viewUserLayer(...args);
 }
 
 // --- 1. 地图核心逻辑 ---
@@ -1928,55 +1510,6 @@ function bindEvents() {
 }
 
 // --- 2. 业务逻辑 (区域图片) ---
-// [隶属] 图片覆盖-区域检测
-// [作用] 判断是否在地环区域并控制图片缩略层显示位置。
-// [交互] emit: location-change。
-function checkAreaLogic(coord, pixel) {
-    if (!mapInstance.value) return;
-    const view = mapInstance.value.getView();
-
-    // 如果没有传入坐标（例如只是缩放触发），获取中心点或鼠标最后位置，这里简化处理
-    if (!coord) return;
-
-    const zoom = view.getZoom();
-    const lonLat = toLonLat(coord);
-    const [lon, lat] = lonLat;
-
-    const isInArea =
-        lon >= DIHUAN_BOUNDS.minLon && lon <= DIHUAN_BOUNDS.maxLon &&
-        lat >= DIHUAN_BOUNDS.minLat && lat <= DIHUAN_BOUNDS.maxLat;
-
-    // 只有在特定区域且层级够大时才显示
-    if (zoom >= 17 && isInArea) {
-        showImageSet.value = true;
-        // 使用 OpenLayers 的像素位置，比 clientX 更准，且相对于地图容器
-        if (pixel) {
-            imageSetPosition.value = { x: pixel[0] + 15, y: pixel[1] + 15 };
-        }
-    } else {
-        showImageSet.value = false;
-        if (!showLargeImg.value) showImageSet.value = false;
-    }
-
-    emit('location-change', { isInDihuan: isInArea, lonLat });
-}
-
-// [隶属] 图片覆盖-大图查看
-// [作用] 打开大图预览并同步给外部新闻区。
-// [交互] emit: update-news-image。
-function showLargeImage(src) {
-    largeImageSrc.value = src;
-    showLargeImg.value = true;
-    emit('update-news-image', src);
-}
-
-// [隶属] 图片覆盖-大图查看
-// [作用] 关闭大图预览。
-// [交互] 仅更新本组件状态。
-function closeLargeImage() {
-    showLargeImg.value = false;
-    largeImageSrc.value = '';
-}
 
 // --- 3. 关键修复：复位与定位逻辑 ---
 
@@ -2083,10 +1616,12 @@ function getRouteStepFeatures(routeMode, stepIndex) {
 /**
  * 统一执行步骤缩放逻辑（公交/驾车复用）。
  */
-function zoomToRouteStep(routeMode, stepIndex, options = {}) {
+async function zoomToRouteStep(routeMode, stepIndex, options = {}) {
     if (!mapInstance.value) {
         throw new Error('地图尚未初始化');
     }
+
+    const { fitExtentToCoverage } = await ensureRouteBuilderApi();
 
     const targetStepIndex = Number(stepIndex);
     if (!Number.isFinite(targetStepIndex) || targetStepIndex < 0) {
@@ -2161,7 +1696,7 @@ function clearRouteStepPreview(routeMode) {
 // [隶属] 路线规划-公交渲染
 // [作用] 将公交方案绘制到路线图层并自动缩放。
 // [交互] 更新托管图层信息，影响外部图层管理面板。
-function drawRouteOnMap(route) {
+async function drawRouteOnMap(route) {
     if (!mapInstance.value) {
         throw new Error('地图尚未初始化');
     }
@@ -2174,6 +1709,7 @@ function drawRouteOnMap(route) {
     busRouteSource.clear();
     resetRouteStepStates();
 
+    const { buildRouteRenderData, fitExtentToCoverage } = await ensureRouteBuilderApi();
     const { features, fitExtent, featureCount, hasGeometry } = buildRouteRenderData('bus', route);
     if (!featureCount) {
         throw new Error('公交方案中未找到分段信息（segments 为空）');
@@ -2212,7 +1748,7 @@ function drawRouteOnMap(route) {
 // [隶属] 路线规划-驾车渲染
 // [作用] 将驾车路径绘制到路线图层并自动缩放。
 // [交互] 更新托管图层信息，影响外部图层管理面板。
-function drawDriveRouteOnMap(routeLatLonStr) {
+async function drawDriveRouteOnMap(routeLatLonStr) {
     if (!mapInstance.value) {
         throw new Error('地图尚未初始化');
     }
@@ -2225,6 +1761,7 @@ function drawDriveRouteOnMap(routeLatLonStr) {
     busRouteSource.clear();
     resetRouteStepStates();
 
+    const { buildRouteRenderData, fitExtentToCoverage } = await ensureRouteBuilderApi();
     const { features, fitExtent, hasGeometry } = buildRouteRenderData('drive', routeLatLonStr);
     if (!hasGeometry || !features.length) {
         throw new Error('驾车路线坐标不足，无法绘制');
@@ -2258,8 +1795,8 @@ function drawDriveRouteOnMap(routeLatLonStr) {
 // [隶属] 路线规划-驾车步骤定位
 // [作用] 聚焦到指定驾车步骤范围。
 // [交互] 由外部步骤列表交互触发。
-function zoomToDriveRouteStep(stepIndex) {
-    zoomToRouteStep('drive', stepIndex, {
+async function zoomToDriveRouteStep(stepIndex) {
+    return zoomToRouteStep('drive', stepIndex, {
         targetCoverage: 0.84,
         bufferRatio: 0.16,
         minBufferMeters: 120,
@@ -2274,8 +1811,8 @@ function zoomToDriveRouteStep(stepIndex) {
 // [隶属] 路线规划-公交步骤定位
 // [作用] 聚焦到指定公交步骤范围。
 // [交互] 由外部步骤列表交互触发。
-function zoomToBusRouteStep(stepIndex) {
-    zoomToRouteStep('bus', stepIndex, {
+async function zoomToBusRouteStep(stepIndex) {
+    return zoomToRouteStep('bus', stepIndex, {
         targetCoverage: 0.84,
         bufferRatio: 0.16,
         minBufferMeters: 120,
@@ -2347,65 +1884,6 @@ function previewDriveRouteStep(stepIndex) {
 // [交互] 由外部组件调用。
 function clearDriveRouteStepPreview() {
     clearRouteStepPreview('drive');
-}
-
-// Promise 化获取当前位置
-// [隶属] 底部控制-定位能力
-// [作用] Promise 化浏览器地理定位。
-// [交互] 被 zoomToUser / 启动流程调用。
-function getCurrentLocation(enableHighAccuracy = true) {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
-
-        navigator.geolocation.getCurrentPosition(
-            (pos) => resolve({
-                lon: pos.coords.longitude,
-                lat: pos.coords.latitude,
-                accuracy: pos.coords.accuracy
-            }),
-            (err) => reject(err),
-            { enableHighAccuracy, timeout: 5000 }
-        );
-    });
-}
-
-// [隶属] 底部控制-用户定位
-// [作用] 执行用户定位并更新地图位置。
-// [交互] 被 Home 双击调用，失败时弹窗提示。
-async function zoomToUser() {
-    try {
-        const pos = await getCurrentLocation();
-        updateUserPosition(pos, true);
-    } catch (err) {
-        console.warn('定位失败:', err.message);
-        alert('无法获取您的位置，请确保允许定位权限。');
-    }
-}
-
-// 将位置写入用户图层；animate 为 true 时会平滑缩放到该位置
-// [隶属] 底部控制-用户定位
-// [作用] 更新定位图层与地图视图，并缓存坐标供聊天模块读取。
-// [交互] 调用 saveUserPositionToCache，与 ChatPanelContent 形成跨组件共享。
-function updateUserPosition(pos, animate = true) {
-    if (!pos || !mapInstance.value) return;
-    const coord = fromLonLat([pos.lon, pos.lat]);
-
-    // 供聊天面板读取：缓存最近一次地图定位结果
-    saveUserPositionToCache(pos);
-
-    userLocationSource.clear();
-    userLocationSource.addFeature(new Feature({
-        geometry: new CircleGeom(coord, pos.accuracy || 30),
-        type: 'accuracy'
-    }));
-    userLocationSource.addFeature(new Feature({
-        geometry: new Point(coord),
-        type: 'position'
-    }));
-
-    if (animate && mapInstance.value) {
-        mapInstance.value.getView().animate({ center: coord, zoom: 18, duration: 1000 });
-    }
 }
 
 //地名搜索
@@ -2488,169 +1966,6 @@ function selectResult(item) {
 }
 
 // --- 4. 外部接口 (文件导入/绘图) ---
-
-async function parseUploadedFeatures({ content, type }) {
-    if (type === 'kml') {
-        const kmlFormat = new KML({ extractStyles: false });
-        return kmlFormat.readFeatures(content, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-    }
-
-    if (type === 'kmz') {
-        const kmzBuffer = content instanceof ArrayBuffer ? content : null;
-        if (!kmzBuffer) throw new Error('KMZ 数据读取失败');
-
-        const JSZipCtor = await getJSZipCtor();
-        const zip = await JSZipCtor.loadAsync(new Uint8Array(kmzBuffer));
-        const kmlEntries = Object.values(zip.files).filter(
-            (entry) => !entry.dir && entry.name.toLowerCase().endsWith('.kml')
-        );
-        const kmlEntry = kmlEntries.find((entry) => entry.name.split('/').pop()?.toLowerCase() === 'doc.kml')
-            || kmlEntries.sort((a, b) => a.name.length - b.name.length)[0];
-        if (!kmlEntry) throw new Error('KMZ 中未找到 KML 文件');
-
-        const kmlBuffer = await kmlEntry.async('arraybuffer');
-        const utf8Text = new TextDecoder('utf-8', { fatal: false }).decode(kmlBuffer);
-        const hasReplacementChar = utf8Text.includes('\uFFFD');
-        const kmlText = hasReplacementChar
-            ? (() => {
-                try {
-                    return new TextDecoder('gbk', { fatal: false }).decode(kmlBuffer);
-                } catch {
-                    return utf8Text;
-                }
-            })()
-            : utf8Text;
-
-        const kmlFormat = new KML({ extractStyles: false });
-        return kmlFormat.readFeatures(kmlText, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-    }
-
-    if (type === 'geojson' || type === 'json') {
-        const gjFormat = new GeoJSON();
-        return gjFormat.readFeatures(content, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-    }
-
-    if (type === 'zip') {
-        const shp = await getShpParser();
-        const geojson = await shp(content);
-        const gjFormat = new GeoJSON();
-        const featureCollection = Array.isArray(geojson)
-            ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
-            : geojson;
-        return gjFormat.readFeatures(featureCollection, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-    }
-
-    if (type === 'shp') {
-        const shp = await getShpParser();
-        const geojson = await shp({ shp: content });
-        const gjFormat = new GeoJSON();
-        return gjFormat.readFeatures(geojson, {
-            dataProjection: 'EPSG:4326',
-            featureProjection: 'EPSG:3857'
-        });
-    }
-
-    throw new Error(`不支持的文件类型: ${type}`);
-}
-
-// [隶属] 组件交互-文件导入
-// [作用] 统一处理上传数据入口（矢量/栅格）。
-// [交互] 由外部组件通过 defineExpose 调用。
-async function addUserDataLayer({ content, type, name }) {
-    if (!mapInstance.value) return;
-    try {
-        if (isTiffType(type)) {
-            const tifName = name || `栅格_${Date.now()}.tif`;
-            const buffer = content instanceof ArrayBuffer ? content : null;
-            if (!buffer) throw new Error('TIF 数据读取失败');
-
-            await createManagedRasterLayer({
-                name: tifName,
-                type,
-                sourceType: 'upload',
-                data: buffer,
-                fitView: true
-            });
-            return;
-        }
-
-        const features = await parseUploadedFeatures({ content, type });
-
-        if (!features.length) throw new Error('无有效数据');
-
-        createManagedVectorLayer({
-            name,
-            type,
-            sourceType: 'upload',
-            features,
-            styleConfig: STYLE_TEMPLATES.classic,
-            autoLabel: true,
-            fitView: true
-        });
-    } catch (e) {
-        const kmzHint = String(type || '').toLowerCase() === 'kmz'
-            ? '\n提示：请将 KMZ 文件解压为 KML 后再上传。'
-            : '';
-        alert('文件解析失败: ' + e.message + kmzHint);
-    }
-}
-
-// [隶属] 图层管理-动作集接入
-// [作用] 从 useUserLayerActions 注入图层管理动作。
-// [交互] 这些函数由 defineExpose 对外提供给父组件调用。
-const {
-    setUserLayerVisibility,
-    setUserLayerOpacity,
-    removeUserLayer,
-    reorderUserLayers,
-    soloUserLayer,
-    setUserLayerStyle,
-    setUserLayerLabelVisibility,
-    applyStyleTemplate,
-    setBaseLayerActive,
-    setLayerVisibility,
-    zoomToUserLayer,
-    viewUserLayer
-} = useUserLayerActions({
-    mapInstance,
-    userDataLayers,
-    refreshUserLayerZIndex,
-    emitUserLayersChange,
-    emitGraphicsOverview,
-    mergeStyleConfig,
-    applyManagedLayerStyle,
-    styleTemplates: STYLE_TEMPLATES,
-    setDrawStyle,
-    layerList,
-    selectedLayer,
-    getLayerCategory,
-    refreshLayersState,
-    projectExtentToMapView,
-    emitFeatureSelected: (payload) => emit('feature-selected', payload),
-    isRouteManagedLayer: ({ layerId, removed }) => (
-        layerId === busRouteManagedLayerId
-        || removed?.metadata?.category === 'bus-route'
-        || removed?.metadata?.category === 'drive-route'
-        || removed?.metadata?.category === 'route'
-    ),
-    onRouteManagedLayerRemoved: () => {
-        busRouteManagedLayerId = null;
-        resetRouteStepStates();
-        busRouteSource.clear();
-    }
-});
 
 // [隶属] 图层管理-绘图样式
 // [作用] 更新绘图图层及历史绘制图层的样式。
