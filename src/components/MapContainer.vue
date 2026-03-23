@@ -724,9 +724,23 @@ onMounted(async () => {
 
     // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
     await waitForCriticalTileReady();
-    runDeferredStartupTasks();
+    scheduleLowPriorityTask(() => {
+        runDeferredStartupTasks().catch(() => {});
+    });
 
 });
+
+function scheduleLowPriorityTask(task) {
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => {
+            if (!componentUnmounted) task();
+        }, { timeout: 1500 });
+        return;
+    }
+    setTimeout(() => {
+        if (!componentUnmounted) task();
+    }, 0);
+}
 
 // [隶属] 启动流程-首屏优先
 // [作用] 等待关键瓦片完成首次渲染，避免阻塞后续非关键任务。
@@ -738,9 +752,6 @@ function waitForCriticalTileReady(timeoutMs = CRITICAL_TILE_READY_TIMEOUT_MS) {
             resolve();
             return;
         }
-        scheduleLowPriorityTask(() => {
-            runDeferredStartupTasks().catch(() => {});
-        });
         let settled = false;
         const finish = () => {
             if (settled) return;
@@ -765,18 +776,6 @@ async function runDeferredStartupTasks() {
     resolvePreferredGoogleHost().then((host) => {
         if (componentUnmounted) return;
         if (!host || host === activeGoogleTileHost.value) return;
-
-    function scheduleLowPriorityTask(task) {
-        if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(() => {
-                if (!componentUnmounted) task();
-            }, { timeout: 1500 });
-            return;
-        }
-        setTimeout(() => {
-            if (!componentUnmounted) task();
-        }, 0);
-    }
         activeGoogleTileHost.value = host;
         refreshGoogleLayerSources();
     }).catch(() => {});
