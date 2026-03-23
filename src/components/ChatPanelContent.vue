@@ -511,6 +511,7 @@ const sendMessage = async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
   font-family: 'Segoe UI', sans-serif;
 }
@@ -665,6 +666,9 @@ textarea:focus {
 
 .settings-panel {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 20px;
   display: flex;
   flex-direction: column;
