@@ -114,6 +114,7 @@ import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import LocationSearch from './LocationSearch.vue';
 import { searchAmapPlaces } from '../api/map';
 import { buildRouteRenderData, fitExtentToCoverage } from '../utils/transitRouteBuilder';
+import { gcj02ToWgs84 } from '../utils/coordTransform';
 
 // OpenLayers 核心库
 import Map from 'ol/Map';
@@ -712,26 +713,27 @@ async function runDeferredStartupTasks() {
     }).catch(() => {});
 
     // 2) 位置相关逻辑（非关键，延后执行）。
-    const ipInfo = await detectIPLocale();
-    if (componentUnmounted) return;
+    // 优先使用浏览器真实定位；IP 仅用于国内外判定兜底，不再用于地图中心定位。
+    if (navigator.geolocation) {
+        try {
+            const pos = await getCurrentLocation(true);
+            if (componentUnmounted) return;
+            updateUserPosition(pos, true);
 
-    const ua = navigator.userAgent || '';
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
-
-    if (isMobile) {
-        if (navigator.geolocation) {
-            getCurrentLocation(true).then((pos) => {
-                if (componentUnmounted) return;
-                updateUserPosition(pos, true);
-            }).catch(() => {});
+            // 有真实坐标时，可直接基于坐标更新国内外判定，避免依赖第三方 IP 误差。
+            isDomestic.value = isCoordinateInChina(pos.lon, pos.lat);
+            return;
+        } catch (e) {
+            // 定位失败后再使用 IP 做兜底判定。
         }
-        return;
     }
 
-    if (ipInfo && ipInfo.lat && ipInfo.lon && mapInstance.value) {
-        const coord = fromLonLat([ipInfo.lon, ipInfo.lat]);
-        mapInstance.value.getView().animate({ center: coord, zoom: 12, duration: 800 });
-    }
+    await detectIPLocale();
+}
+
+function isCoordinateInChina(lon, lat) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
+    return lon >= 73.0 && lon <= 135.0 && lat >= 18.0 && lat <= 54.0;
 }
 
 // 简单的 IP 判定：调用第三方 IP->位置 服务（前端调用可能受 CORS 限制）
@@ -744,13 +746,6 @@ async function detectIPLocale() {
         const cc = data.country || data.country_code || data.country_name;
         const isDom = typeof cc === 'string' && (cc.toString().toUpperCase().includes('CN') || cc.toString().toLowerCase().includes('china'));
         isDomestic.value = isDom;
-
-        // 如果服务返回经纬度，则一并返回，供桌面端粗定位使用
-        const lat = data.latitude ?? data.lat ?? data.latitude;
-        const lon = data.longitude ?? data.lon ?? data.longitude;
-        if (lat != null && lon != null) {
-            return { isDomestic: isDom, lat: parseFloat(lat), lon: parseFloat(lon) };
-        }
         return { isDomestic: isDom };
     } catch (e) {
         console.warn('IP locale detect failed', e);
@@ -2215,9 +2210,21 @@ async function zoomToUser() {
 }
 
 // 将位置写入用户图层；animate 为 true 时会平滑缩放到该位置
-function updateUserPosition(pos, animate = false) {
+function updateUserPosition(pos, animate = true) {
     if (!pos || !mapInstance.value) return;
     const coord = fromLonLat([pos.lon, pos.lat]);
+
+    // 供聊天面板读取：缓存最近一次地图定位结果
+    try {
+        localStorage.setItem('map_user_position_v1', JSON.stringify({
+            lon: Number(pos.lon),
+            lat: Number(pos.lat),
+            accuracy: Number(pos.accuracy || 0),
+            timestamp: Date.now()
+        }));
+    } catch (e) {
+        // 本地缓存失败不影响地图定位主流程
+    }
 
     userLocationSource.clear();
     userLocationSource.addFeature(new Feature({
@@ -2267,47 +2274,6 @@ function normalizeTiandituItem(item) {
         lat: parseFloat(lat),
         original: item // 保留原始数据以备不时之需
     };
-}
-
-// 高德返回的坐标是 GCJ-02，这里转换为 WGS84 后再用于绘制。
-const PI = Math.PI;
-const A = 6378245.0;
-const EE = 0.00669342162296594323;
-
-function outOfChina(lon, lat) {
-    return lon < 72.004 || lon > 137.8347 || lat < 0.8293 || lat > 55.8271;
-}
-
-function transformLat(lon, lat) {
-    let ret = -100.0 + 2.0 * lon + 3.0 * lat + 0.2 * lat * lat + 0.1 * lon * lat + 0.2 * Math.sqrt(Math.abs(lon));
-    ret += (20.0 * Math.sin(6.0 * lon * PI) + 20.0 * Math.sin(2.0 * lon * PI)) * 2.0 / 3.0;
-    ret += (20.0 * Math.sin(lat * PI) + 40.0 * Math.sin(lat / 3.0 * PI)) * 2.0 / 3.0;
-    ret += (160.0 * Math.sin(lat / 12.0 * PI) + 320 * Math.sin(lat * PI / 30.0)) * 2.0 / 3.0;
-    return ret;
-}
-
-function transformLon(lon, lat) {
-    let ret = 300.0 + lon + 2.0 * lat + 0.1 * lon * lon + 0.1 * lon * lat + 0.1 * Math.sqrt(Math.abs(lon));
-    ret += (20.0 * Math.sin(6.0 * lon * PI) + 20.0 * Math.sin(2.0 * lon * PI)) * 2.0 / 3.0;
-    ret += (20.0 * Math.sin(lon * PI) + 40.0 * Math.sin(lon / 3.0 * PI)) * 2.0 / 3.0;
-    ret += (150.0 * Math.sin(lon / 12.0 * PI) + 300.0 * Math.sin(lon / 30.0 * PI)) * 2.0 / 3.0;
-    return ret;
-}
-
-function gcj02ToWgs84(lon, lat) {
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [lon, lat];
-    if (outOfChina(lon, lat)) return [lon, lat];
-    let dLat = transformLat(lon - 105.0, lat - 35.0);
-    let dLon = transformLon(lon - 105.0, lat - 35.0);
-    const radLat = lat / 180.0 * PI;
-    let magic = Math.sin(radLat);
-    magic = 1 - EE * magic * magic;
-    const sqrtMagic = Math.sqrt(magic);
-    dLat = (dLat * 180.0) / ((A * (1 - EE)) / (magic * sqrtMagic) * PI);
-    dLon = (dLon * 180.0) / (A / sqrtMagic * Math.cos(radLat) * PI);
-    const mgLat = lat + dLat;
-    const mgLon = lon + dLon;
-    return [lon * 2 - mgLon, lat * 2 - mgLat];
 }
 
 // --- 核心封装：解析天地图复杂的 JSON 响应 ---

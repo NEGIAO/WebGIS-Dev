@@ -38,7 +38,14 @@
     <!-- 聊天内容 -->
     <div v-else class="chat-body" ref="chatBody">
       <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.role]">
-        <div class="message-content">{{ msg.content }}</div>
+        <template v-if="msg.role === 'assistant'">
+          <div class="message-content">{{ getAnswerContent(msg.content) }}</div>
+          <details v-if="hasThinkContent(msg.content)" class="think-panel">
+            <summary>展开思考过程</summary>
+            <pre class="think-content">{{ getThinkContent(msg.content) }}</pre>
+          </details>
+        </template>
+        <div v-else class="message-content">{{ msg.content }}</div>
       </div>
       <div v-if="isLoading" class="message assistant">
         <div class="message-content typing">正在思考...</div>
@@ -60,6 +67,7 @@
 
 <script setup>
 import { ref, nextTick, watch } from 'vue';
+import { reverseGeocodeTianditu } from '../api/map';
 
 const emit = defineEmits(['close-chat']);
 
@@ -69,7 +77,7 @@ const isLoading = ref(false);
 const chatBody = ref(null);
 const isFetchingModels = ref(false);
 const availableModels = ref([
-  { id: 'deepseek-ai/DeepSeek-V2.5', name: 'DeepSeek V2.5 (默认)' }
+  { id: 'deepseek-V3-0324', name: 'DeepSeek V3-0324 (默认)' }
 ]);
 const modelHint = ref('点击🔄可获取更多模型');
 
@@ -77,13 +85,23 @@ const modelHint = ref('点击🔄可获取更多模型');
 // 注意：API Key 不应硬编码在代码中，请在 .env 文件中配置 VITE_LLM_API_KEY
 const DEFAULT_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || 'https://api.qnaigc.com/v1';
 const DEFAULT_API_KEY = import.meta.env.VITE_LLM_API_KEY || 'sk-af0fdab305019a96c669b9fdf6038317e499d43be5f7946b251eac1e8fe04914';
-const DEFAULT_MODEL = import.meta.env.VITE_LLM_MODEL || 'deepseek-ai/DeepSeek-V2.5';
+const DEFAULT_MODEL = import.meta.env.VITE_LLM_MODEL || 'deepseek-V3-0324';
+const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
-const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v3') || DEFAULT_ENDPOINT);
-const apiKey = ref(localStorage.getItem('llm_apikey_v3') || DEFAULT_API_KEY);
-const modelName = ref(localStorage.getItem('llm_model_v3') || DEFAULT_MODEL);
+const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v4') || DEFAULT_ENDPOINT);
+const apiKey = ref(localStorage.getItem('llm_apikey_v4') || DEFAULT_API_KEY);
+const modelName = ref(localStorage.getItem('llm_model_v4') || DEFAULT_MODEL);
 
 const messages = ref([]);
+const firstMessageLocationInjected = ref(false);
+
+// 经济模式：限制上下文和回答长度，尽量降低 token 消耗
+const ECONOMY_SYSTEM_PROMPT = '你是 WebGIS 助手。默认用中文，回答控制在3-5句内，除非用户明确要求详细；优先给简短、可执行步骤；代码只给最小可运行片段。';
+const MAX_CONTEXT_MESSAGES = 6;
+const MAX_CHARS_PER_MESSAGE = 600;
+const MAX_OUTPUT_TOKENS = 280;
+const LOW_TEMPERATURE = 0.2;
+const AUTO_PRUNE_AFTER_TURNS = 12;
 
 // 初始化欢迎消息，根据 API Key 是否配置显示不同内容
 const initWelcomeMessage = () => {
@@ -100,10 +118,177 @@ const initWelcomeMessage = () => {
 messages.value = [initWelcomeMessage()];
 
 watch([apiEndpoint, apiKey, modelName], () => {
-  localStorage.setItem('llm_endpoint_v3', apiEndpoint.value);
-  localStorage.setItem('llm_apikey_v3', apiKey.value);
-  localStorage.setItem('llm_model_v3', modelName.value);
+  localStorage.setItem('llm_endpoint_v4', apiEndpoint.value);
+  localStorage.setItem('llm_apikey_v4', apiKey.value);
+  localStorage.setItem('llm_model_v4', modelName.value);
 });
+
+const getChatCompletionsUrl = () => {
+  const endpoint = apiEndpoint.value.trim().replace(/\/$/, '');
+  if (/\/chat\/completions$/i.test(endpoint)) return endpoint;
+  return `${endpoint}/chat/completions`;
+};
+
+const getCachedMapPosition = () => {
+  try {
+    const raw = localStorage.getItem('map_user_position_v1');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Number.isFinite(parsed?.lon) || !Number.isFinite(parsed?.lat)) return null;
+    return {
+      lon: Number(parsed.lon),
+      lat: Number(parsed.lat),
+      accuracy: Number(parsed.accuracy || 0),
+      timestamp: Number(parsed.timestamp || 0)
+    };
+  } catch (e) {
+    return null;
+  }
+};
+
+const buildFirstMessageLocationContext = async () => {
+  if (firstMessageLocationInjected.value) return '';
+
+  const baseLocation = getCachedMapPosition();
+
+  if (baseLocation) {
+    try {
+      const geocode = await reverseGeocodeTianditu({
+        lon: baseLocation.lon,
+        lat: baseLocation.lat,
+        tk: TIANDITU_TK
+      });
+
+      const ac = geocode.addressComponent || {};
+      const province = ac.province || ac.address || '';
+      const city = ac.city || ac.citycode || '';
+      const county = ac.county || ac.county_code || '';
+
+      firstMessageLocationInjected.value = true;
+      return `用户位置上下文（首次附带）：省=${province || '未知'}，市=${city || '未知'}，区县=${county || '未知'}，地址=${geocode.formattedAddress || '未知'}。`;
+    } catch (e) {
+      firstMessageLocationInjected.value = true;
+      return `用户位置上下文（首次附带）：经度=${baseLocation.lon.toFixed(4)}，纬度=${baseLocation.lat.toFixed(4)}。`;
+    }
+  }
+
+  return '';
+};
+
+const compactText = (text, maxChars = MAX_CHARS_PER_MESSAGE) => {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}...`;
+};
+
+const buildEconomyContext = () => {
+  return messages.value
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .filter(m => m.content && m.content.trim())
+    .slice(-MAX_CONTEXT_MESSAGES)
+    .map(m => ({ role: m.role, content: compactText(m.content) }));
+};
+
+const parseThinkAndAnswer = (rawContent) => {
+  const text = String(rawContent || '');
+  const startTag = '<think>';
+  const endTag = '</think>';
+  const start = text.indexOf(startTag);
+
+  if (start === -1) {
+    return {
+      answer: text,
+      think: ''
+    };
+  }
+
+  const end = text.indexOf(endTag, start + startTag.length);
+
+  if (end === -1) {
+    return {
+      answer: text.slice(0, start).trim(),
+      think: text.slice(start + startTag.length).trim()
+    };
+  }
+
+  return {
+    answer: `${text.slice(0, start)}${text.slice(end + endTag.length)}`.trim(),
+    think: text.slice(start + startTag.length, end).trim()
+  };
+};
+
+const getAnswerContent = (rawContent) => {
+  const answer = parseThinkAndAnswer(rawContent).answer;
+  return answer || '（正在组织回答...）';
+};
+
+const getThinkContent = (rawContent) => parseThinkAndAnswer(rawContent).think;
+
+const hasThinkContent = (rawContent) => !!getThinkContent(rawContent);
+
+const getUserTurnsCount = () => messages.value.filter(m => m.role === 'user').length;
+
+const pruneHistoryIfNeeded = () => {
+  if (getUserTurnsCount() < AUTO_PRUNE_AFTER_TURNS) return;
+
+  const welcome = messages.value[0]?.role === 'assistant'
+    ? messages.value[0]
+    : initWelcomeMessage();
+
+  const recentDialogue = messages.value
+    .filter((m, idx) => idx !== 0)
+    .filter(m => (m.role === 'user' || m.role === 'assistant') && m.content && m.content.trim())
+    .slice(-2);
+
+  messages.value = [welcome, ...recentDialogue];
+  modelHint.value = '🧹 已自动精简历史，仅保留最近一轮对话以节省 token';
+};
+
+const pickEconomyModel = (models) => {
+  if (!Array.isArray(models) || models.length === 0) return null;
+
+  const isLikelyChatModel = (id) => {
+    const name = String(id || '').toLowerCase();
+    if (!name) return false;
+
+    const blockedKeywords = ['embedding', 'rerank', 'tts', 'asr', 'whisper', 'vision', 'image', 'moderation'];
+    if (blockedKeywords.some(k => name.includes(k))) return false;
+
+    return true;
+  };
+
+  const scoreModel = (id) => {
+    const name = String(id || '').toLowerCase();
+    let score = 100;
+
+    if (name.includes('free')) score -= 40;
+    if (name.includes('mini') || name.includes('lite') || name.includes('small')) score -= 25;
+    if (name.includes('chat')) score -= 10;
+    if (name.includes('7b') || name.includes('8b') || name.includes('1.5b') || name.includes('3b')) score -= 20;
+
+    if (name.includes('reasoner') || name.includes('r1')) score += 25;
+    if (name.includes('32b') || name.includes('70b') || name.includes('671b')) score += 30;
+    if (name.includes('v3')) score += 15;
+
+    return score;
+  };
+
+  const candidates = models.filter(m => isLikelyChatModel(m.id));
+  const target = candidates.length ? candidates : models;
+  return [...target].sort((a, b) => scoreModel(a.id) - scoreModel(b.id))[0] || null;
+};
+
+const refreshAndChooseEconomyModel = async () => {
+  await fetchModels();
+
+  if (!availableModels.value.length) return;
+
+  const selected = pickEconomyModel(availableModels.value);
+  if (selected && selected.id !== modelName.value) {
+    modelName.value = selected.id;
+    modelHint.value = `💡 已切换到更省 token 的可用模型：${selected.name || selected.id}`;
+  }
+};
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -130,7 +315,7 @@ const fetchModels = async () => {
 
   try {
     // 构建 models 端点 URL
-    const baseUrl = apiEndpoint.value.replace(/\/chat\/completions$/, '');
+    const baseUrl = apiEndpoint.value.trim().replace(/\/$/, '').replace(/\/chat\/completions$/i, '');
     const modelsUrl = `${baseUrl}/models`;
 
     const response = await fetch(modelsUrl, {
@@ -174,6 +359,8 @@ const fetchModels = async () => {
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return;
 
+  pruneHistoryIfNeeded();
+
   const userMsg = inputMessage.value.trim();
   messages.value.push({ role: 'user', content: userMsg });
   inputMessage.value = '';
@@ -188,60 +375,140 @@ const sendMessage = async () => {
       throw new Error('请先在设置中配置 API Key');
     }
 
-    const response = await fetch(apiEndpoint.value, {
+    // 每次发送前先刷新模型并优先选择可用且更经济的模型
+    await refreshAndChooseEconomyModel();
+
+    const locationContextText = await buildFirstMessageLocationContext();
+
+    const chatCompletionsUrl = getChatCompletionsUrl();
+
+    const systemPrompt = locationContextText
+      ? `${ECONOMY_SYSTEM_PROMPT} ${locationContextText}`
+      : ECONOMY_SYSTEM_PROMPT;
+
+    const requestMessages = [
+      { role: 'system', content: systemPrompt },
+      ...buildEconomyContext()
+    ];
+
+    const requestHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey.value}`
+    };
+
+    const fullPayload = {
+      model: modelName.value,
+      messages: requestMessages,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      temperature: LOW_TEMPERATURE,
+      stream: true
+    };
+
+    let response = await fetch(chatCompletionsUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey.value}`
-      },
-      body: JSON.stringify({
-        model: modelName.value,
-        messages: [
-          { 
-            role: "system", 
-            content: "你是一个专业的WebGIS开发助手，精通Vue3, OpenLayers, Cesium等技术，将被我嵌入到网页中，请你给我的网页使用者提供帮助。请用简洁明了的语言回答用户问题。你将被我在WebGIS的部署中调用，我（开发者）的信息如下：NEGIAO,GIS专业；我的联系方式是：1482918576@qq.com；请基于这些信息提供对用户有针对性的帮助。注意，接下来的对话都是用户发起的：" 
-          },
-          ...messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
-        ],
-        stream: true
-      })
+      headers: requestHeaders,
+      body: JSON.stringify(fullPayload)
     });
+    let useStream = true;
+
+    if (!response.ok) {
+      let errData = {};
+      try {
+        errData = await response.json();
+      } catch (e) {
+        errData = {};
+      }
+
+      const message = errData.error?.message || '请求失败';
+      const isInvalidChatSetting = message.includes('invalid chat setting') || message.includes('(2013)');
+
+      // 某些渠道不支持 max_tokens/temperature 等设置时，自动降级为最小参数重试
+      if (isInvalidChatSetting) {
+        modelHint.value = '⚠️ 当前渠道不支持部分参数，已自动降级重试';
+        response = await fetch(chatCompletionsUrl, {
+          method: 'POST',
+          headers: requestHeaders,
+          body: JSON.stringify({
+            model: modelName.value,
+            messages: requestMessages,
+            stream: true
+          })
+        });
+
+        // 若仍是 2013，则进一步降级为非流式，兼容只接受最小 chat 设置的渠道
+        if (!response.ok) {
+          let retryErr = {};
+          try {
+            retryErr = await response.json();
+          } catch (e) {
+            retryErr = {};
+          }
+          const retryMessage = retryErr.error?.message || '请求失败';
+          const stillInvalid = retryMessage.includes('invalid chat setting') || retryMessage.includes('(2013)');
+          if (stillInvalid) {
+            modelHint.value = '⚠️ 已切换兼容模式（非流式）';
+            response = await fetch(chatCompletionsUrl, {
+              method: 'POST',
+              headers: requestHeaders,
+              body: JSON.stringify({
+                model: modelName.value,
+                messages: requestMessages,
+                stream: false
+              })
+            });
+            useStream = false;
+          }
+        }
+      }
+    }
 
     if (!response.ok) {
       const errData = await response.json();
-      throw new Error(errData.error?.message || '请求失败');
+      const message = errData.error?.message || '请求失败';
+      if (message.includes('no available channels for model')) {
+        throw new Error(`当前模型不可用：${modelName.value}。请点击设置中的🔄刷新模型列表并切换到可用模型。`);
+      }
+      throw new Error(message);
     }
 
-    // 处理流式响应
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let done = false;
-    let fullContent = "";
+    if (useStream) {
+      // 处理流式响应
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let done = false;
+      let fullContent = "";
 
-    while (!done) {
-      const { value, done: readerDone } = await reader.read();
-      done = readerDone;
-      if (value) {
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (line.trim().startsWith('data: ')) {
-            const jsonStr = line.trim().substring(6);
-            if (jsonStr === '[DONE]') break;
-            
-            try {
-              const json = JSON.parse(jsonStr);
-              const content = json.choices[0]?.delta?.content || "";
-              fullContent += content;
-              messages.value[assistantMsgIndex].content = fullContent;
-              scrollToBottom();
-            } catch (e) {
-              console.warn("Parse error", e);
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.trim().startsWith('data: ')) {
+              const jsonStr = line.trim().substring(6);
+              if (jsonStr === '[DONE]') break;
+
+              try {
+                const json = JSON.parse(jsonStr);
+                const content = json.choices[0]?.delta?.content || "";
+                fullContent += content;
+                messages.value[assistantMsgIndex].content = fullContent;
+                scrollToBottom();
+              } catch (e) {
+                console.warn("Parse error", e);
+              }
             }
           }
         }
       }
+    } else {
+      // 处理非流式响应
+      const json = await response.json();
+      const content = json?.choices?.[0]?.message?.content || '';
+      messages.value[assistantMsgIndex].content = content || '（未返回有效内容）';
+      scrollToBottom();
     }
 
   } catch (error) {
@@ -337,6 +604,31 @@ const sendMessage = async () => {
   color: #333;
   border-bottom-left-radius: 2px;
   border: 1px solid #e0e0e0;
+}
+
+.think-panel {
+  max-width: 90%;
+  margin-top: 6px;
+  border: 1px dashed #c7d7cc;
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: #f7fbf8;
+  color: #4f5b53;
+  font-size: 0.85em;
+}
+
+.think-panel summary {
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+
+.think-content {
+  margin: 8px 0 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+  font-family: inherit;
 }
 
 .chat-footer {
