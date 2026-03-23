@@ -319,7 +319,8 @@ function nextNews() {
 
 /* 折叠手柄 */
 .toggle-handle {
-    width: 24px;
+    background-color: transparent;
+    width: 15px;
     height: 60px;
     align-self: center;
     background: #14c259;
@@ -334,7 +335,7 @@ function nextNews() {
 
 .toggle-handle:hover {
     background: #10a049;
-    width: 28px;
+    width: 20px;
 }
 
 .handle-icon {
@@ -342,6 +343,7 @@ function nextNews() {
     color: #fff;
     font-weight: bold;
 }
+
 
 /* 内容区域 */
 .panel-content {
@@ -524,7 +526,7 @@ function nextNews() {
     .toggle-handle {
         width: 80px;
         /* 加宽一点，方便手指点击 */
-        height: 30px;
+        height: 15px;
         /*稍微增高 */
         align-self: center;
         /* 水平居中 */
