@@ -645,7 +645,7 @@ function handleFeatureSelected(properties) {
     }
 
     .side-panel-wrapper.collapsed {
-        height: 40px;
+        height: 20px;
         width: 100%;
     }
 
