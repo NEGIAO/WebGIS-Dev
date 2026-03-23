@@ -68,6 +68,7 @@
 <script setup>
 import { ref, nextTick, watch } from 'vue';
 import { reverseGeocodeTianditu } from '../api/map';
+import { readUserPositionFromCache } from '../utils/userPositionCache';
 
 const emit = defineEmits(['close-chat']);
 
@@ -129,22 +130,7 @@ const getChatCompletionsUrl = () => {
   return `${endpoint}/chat/completions`;
 };
 
-const getCachedMapPosition = () => {
-  try {
-    const raw = localStorage.getItem('map_user_position_v1');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Number.isFinite(parsed?.lon) || !Number.isFinite(parsed?.lat)) return null;
-    return {
-      lon: Number(parsed.lon),
-      lat: Number(parsed.lat),
-      accuracy: Number(parsed.accuracy || 0),
-      timestamp: Number(parsed.timestamp || 0)
-    };
-  } catch (e) {
-    return null;
-  }
-};
+const getCachedMapPosition = () => readUserPositionFromCache();
 
 const buildFirstMessageLocationContext = async () => {
   if (firstMessageLocationInjected.value) return '';
