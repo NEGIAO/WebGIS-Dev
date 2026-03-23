@@ -13,7 +13,7 @@
     <div v-if="showSettings" class="settings-panel">
       <div class="form-group">
         <label>API Endpoint:</label>
-        <input v-model="apiEndpoint" placeholder="https://api.deepseek.com/chat/completions" />
+        <input v-model="apiEndpoint" placeholder="https://api.qnaigc.com/v1" />
       </div>
       <div class="form-group">
         <label>API Key:</label>
@@ -75,8 +75,8 @@ const modelHint = ref('点击🔄可获取更多模型');
 
 // API 配置：优先使用 localStorage，其次使用环境变量，最后使用默认值
 // 注意：API Key 不应硬编码在代码中，请在 .env 文件中配置 VITE_LLM_API_KEY
-const DEFAULT_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || 'https://api.siliconflow.cn/v1/chat/completions';
-const DEFAULT_API_KEY = import.meta.env.VITE_LLM_API_KEY || '';
+const DEFAULT_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || 'https://api.qnaigc.com/v1';
+const DEFAULT_API_KEY = import.meta.env.VITE_LLM_API_KEY || 'sk-af0fdab305019a96c669b9fdf6038317e499d43be5f7946b251eac1e8fe04914';
 const DEFAULT_MODEL = import.meta.env.VITE_LLM_MODEL || 'deepseek-ai/DeepSeek-V2.5';
 
 const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v3') || DEFAULT_ENDPOINT);
