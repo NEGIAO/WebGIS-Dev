@@ -9,7 +9,7 @@ const amapClient = axios.create({
 const tiandituClient = axios.create({
     // 按天地图接口文档使用 geocoder 端点。
     // 若页面为 https 且遇到混合内容限制，可改为 https://api.tianditu.gov.cn
-    baseURL: 'http://api.tianditu.gov.cn',
+    baseURL: 'https://api.tianditu.gov.cn',
     timeout: 8000
 });
 
@@ -35,7 +35,7 @@ const tiandituClient = axios.create({
  * 天地图逆地理编码（Vue3 可直接 await 调用）
  *
  * API:
- * - Endpoint: http://api.tianditu.gov.cn/geocoder
+ * - Endpoint: https://api.tianditu.gov.cn/geocoder
  * - Method: GET
  * - Query: tk, type=geocode, postStr(JSON字符串)
  * - 约束: status === '0' 才视为成功
