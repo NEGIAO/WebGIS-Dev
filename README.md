@@ -60,63 +60,72 @@ npm run build
 ## 目录结构
 
 ```
-WebGIS_henu_trials_5_28_vue3/
+WebGIS_Dev/
 ├── .github/
-│   └── workflows/                # GitHub Actions 工作流
-├── public/                       # 纯静态资源（构建时原样拷贝）
-│   ├── images/                   # 校园图片资源
-│   ├── tiles/                    # 本地瓦片 {z}/{x}/{y}.png
-│   ├── min-enhanced.js           # 延迟统计脚本
-│   ├── ol.js / ol.css            # OpenLayers 备用静态资源
+│   └── workflows/
+│       └── deploy.yml                 # 构建并同步到 Pages
+├── .vscode/
+│   └── extensions.json                # 推荐扩展
+├── public/                            # 构建时原样拷贝的静态资源
+│   ├── images/                        # 校园图片与图标
+│   ├── tiles/                         # 本地瓦片 {z}/{x}/{y}.png
+│   ├── min-enhanced.js                # 延迟注入统计脚本
+│   ├── ol.js / ol.css                 # OpenLayers 备用静态资源
 │   └── favicon.ico
 ├── src/
 │   ├── api/
-│   │   ├── locationSearch.js     # 多服务地名搜索封装（天地图/Nominatim/高德）
-│   │   └── map.js                # 地图 API 封装（如逆地理编码）
-│   ├── assets/                   # 全局样式与静态资源
+│   │   ├── locationSearch.js          # 多服务地名搜索封装
+│   │   └── map.js                     # 地图相关 API 封装
+│   ├── assets/
+│   │   ├── base.css
+│   │   ├── main.css
+│   │   └── logo.svg
 │   ├── components/
-│   │   ├── MapContainer.vue      # 2D 地图核心容器（底图/图层/绘制/路线交互总入口）
-│   │   ├── SidePanel.vue         # 右侧面板容器（资讯/工具箱/公交/驾车）
-│   │   ├── ToolboxPanel.vue      # 图层与工具管理
-│   │   ├── BusPlannerPanel.vue   # 公交规划 UI 与步骤交互
-│   │   ├── DrivingPlannerPanel.vue # 驾车规划 UI 与步骤交互
-│   │   ├── MapPointPickerCard.vue # 公交/驾车通用选点卡片
-│   │   ├── LocationSearch.vue    # 地名搜索组件
-│   │   ├── ChatPanelContent.vue  # AI 对话内容
-│   │   ├── CesiumContainer.vue   # 3D 地球组件
-│   │   ├── TopBar.vue            # 顶部导航栏
-│   │   ├── MagicCursor.vue       # 鼠标特效
-│   │   └── icons/                # 图标组件
+│   │   ├── MapContainer.vue
+│   │   ├── SidePanel.vue
+│   │   ├── ToolboxPanel.vue
+│   │   ├── BusPlannerPanel.vue
+│   │   ├── DrivingPlannerPanel.vue
+│   │   ├── MapPointPickerCard.vue
+│   │   ├── LocationSearch.vue
+│   │   ├── ChatPanelContent.vue
+│   │   ├── CesiumContainer.vue
+│   │   ├── TopBar.vue
+│   │   ├── MagicCursor.vue
+│   │   └── icons/
 │   ├── composables/
-│   │   ├── useAreaImageOverlay.js    # 校园区域图片覆盖层逻辑
-│   │   ├── useLayerDataImport.js     # 矢量/栅格数据导入与解析
-│   │   ├── useManagedLayerRegistry.js # 托管图层注册与同步
-│   │   ├── useUserLayerActions.js    # 图层管理动作集（显隐/排序/样式）
-│   │   └── useUserLocation.js        # 定位、IP 兜底与位置更新
+│   │   ├── useAreaImageOverlay.js
+│   │   ├── useLayerDataImport.js      # 矢量/栅格导入（含 CRS 识别与转换）
+│   │   ├── useManagedLayerRegistry.js
+│   │   ├── useUserLayerActions.js
+│   │   └── useUserLocation.js
 │   ├── router/
-│   │   └── index.js              # 路由定义（Home、Register）
+│   │   └── index.js
 │   ├── utils/
-│   │   ├── loadTiandituSdk.js    # 天地图 SDK 动态加载
-│   │   ├── drawTransitRoute.ts   # 交通路线绘制辅助（独立工具）
-│   │   ├── transitRouteBuilder.js # 公交/驾车路线几何构建与动态覆盖缩放
-│   │   ├── driveXmlParser.ts     # 驾车 XML 解析与天地图原生绘制工具
-│   │   ├── coordTransform.js     # 坐标系转换工具（如 GCJ-02/WGS84）
-│   │   └── userPositionCache.js  # 用户位置缓存工具
+│   │   ├── loadTiandituSdk.js
+│   │   ├── drawTransitRoute.ts
+│   │   ├── transitRouteBuilder.js
+│   │   ├── driveXmlParser.ts
+│   │   ├── coordTransform.js
+│   │   ├── crsUtils.js                # 投影标准化/识别/注册工具
+│   │   └── userPositionCache.js
+│   │   └── crsUtils.js                # 判断数据坐标并进行转换
 │   ├── views/
-│   │   ├── HomeView.vue          # 主页面编排（地图 + 侧边栏 + 交互透传）
-│   │   └── RegisterView.vue      # 注册/登录页
+│   │   ├── HomeView.vue
+│   │   └── RegisterView.vue
 │   ├── App.vue
 │   └── main.js
-├── .env                 # 环境变量配置（本地，不提交）
-├── .env.example         # 环境变量配置示例
-├── .gitignore           # Git 忽略配置
-├── eslint.config.js     # ESLint 代码规范配置
-├── index.html           # HTML 入口
-├── jsconfig.json        # JavaScript 配置
-├── package.json         # 项目依赖配置
-├── start_server.bat      # 本地静态服务启动脚本
-├── vite.config.js       # Vite 构建配置
-└── README.md            # 项目说明文档
+├── .env                                # 本地环境变量（不提交）
+├── .env.example                        # 环境变量模板
+├── .gitignore
+├── eslint.config.js
+├── index.html
+├── jsconfig.json
+├── package.json
+├── package-lock.json
+├── start_server.bat
+├── vite.config.js                      # Vite + Cesium 部署路径配置
+└── README.md
 ```
 
 ## 版本记录
