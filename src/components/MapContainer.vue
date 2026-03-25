@@ -539,14 +539,72 @@ function getLayerLabelText(layerItem) {
     return String(layerItem.name || '').trim();
 }
 
+function getFeatureLabelText(feature, layerItem) {
+    if (!layerItem?.autoLabel || !layerItem?.labelVisible) return '';
+
+    const props = typeof feature?.getProperties === 'function' ? feature.getProperties() : null;
+    if (!props) return getLayerLabelText(layerItem);
+
+    const preferredField = String(layerItem?.metadata?.labelField || '').trim();
+    if (preferredField) {
+        const preferredValue = props[preferredField];
+        if (preferredValue !== null && preferredValue !== undefined && String(preferredValue).trim()) {
+            return String(preferredValue).trim();
+        }
+    }
+
+    const candidateKeys = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
+    for (const key of candidateKeys) {
+        const value = props[key];
+        if (value !== null && value !== undefined && String(value).trim()) {
+            return String(value).trim();
+        }
+    }
+
+    const firstUsableEntry = Object.entries(props).find(([key, value]) => (
+        key !== 'geometry'
+        && key !== 'style'
+        && !String(key).startsWith('_')
+        && value !== null
+        && value !== undefined
+        && String(value).trim()
+    ));
+    if (firstUsableEntry) {
+        return String(firstUsableEntry[1]).trim();
+    }
+
+    return getLayerLabelText(layerItem);
+}
+
+function buildManagedLayerStyle(layerItem) {
+    const baseStyleConfig = layerItem?.styleConfig || STYLE_TEMPLATES.classic;
+    if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
+        return createStyleFromConfig(baseStyleConfig, {
+            labelText: ''
+        });
+    }
+
+    layerItem.labelStyleCache = layerItem.labelStyleCache || new globalThis.Map();
+    return (feature) => {
+        const rawLabel = getFeatureLabelText(feature, layerItem);
+        const labelText = String(rawLabel || '').trim();
+        const cacheKey = labelText || '__empty__';
+        if (layerItem.labelStyleCache.has(cacheKey)) {
+            return layerItem.labelStyleCache.get(cacheKey);
+        }
+        const style = createStyleFromConfig(baseStyleConfig, { labelText });
+        layerItem.labelStyleCache.set(cacheKey, style);
+        return style;
+    };
+}
+
 // [隶属] 图层管理-样式系统
 // [作用] 将当前样式配置应用到目标托管图层。
 // [交互] 被 setDrawStyle / setUserLayerStyle / setUserLayerLabelVisibility 间接调用。
 function applyManagedLayerStyle(layerItem) {
     if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
-    layerItem.layer.setStyle(createStyleFromConfig(layerItem.styleConfig, {
-        labelText: getLayerLabelText(layerItem)
-    }));
+    layerItem.labelStyleCache = new globalThis.Map();
+    layerItem.layer.setStyle(buildManagedLayerStyle(layerItem));
 }
 
 // --- 样式定义 ---
@@ -884,11 +942,18 @@ function createManagedVectorLayer({
 
     const normalizedStyle = normalizeStyleConfig(styleConfig || STYLE_TEMPLATES.classic);
     const labelVisible = !!autoLabel;
-    const layerLabel = labelVisible ? name : '';
+    const managedLayerState = {
+        name,
+        autoLabel: !!autoLabel,
+        labelVisible,
+        metadata: metadata || null,
+        styleConfig: normalizedStyle,
+        labelStyleCache: new globalThis.Map()
+    };
     const layer = new VectorLayer({
         source: new VectorSource({ features }),
         zIndex: 120,
-        style: createStyleFromConfig(normalizedStyle, { labelText: layerLabel }),
+        style: buildManagedLayerStyle(managedLayerState),
         properties: { name }
     });
 
@@ -904,10 +969,11 @@ function createManagedVectorLayer({
         visible: true,
         opacity: 1,
         featureCount: features.length,
-        autoLabel: !!autoLabel,
+        autoLabel: managedLayerState.autoLabel,
         labelVisible,
-        metadata: metadata || null,
+        metadata: managedLayerState.metadata,
         styleConfig: normalizedStyle,
+        labelStyleCache: managedLayerState.labelStyleCache,
         layer
     });
 
@@ -1316,7 +1382,7 @@ function initMap() {
             ],
             collapseLabel: '«',
             label: '»',
-            collapsed: true
+            collapsed: false
         })
     ]);
 
