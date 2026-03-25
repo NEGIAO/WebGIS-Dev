@@ -10,6 +10,8 @@ import {
     ensureProjectionAvailable,
     normalizeProjectionCode
 } from '../utils/crsUtils';
+import { extractArchiveVectorPayload } from '../utils/archiveVectorParser';
+import { extractKmlFromKmz } from './useKmzLoader';
 
 export function useLayerDataImport({
     mapInstance,
@@ -23,6 +25,7 @@ export function useLayerDataImport({
     let cachedJSZip = null;
     let cachedGeotiffFromBlob = null;
     let cachedGeoTIFFSourceCtor = null;
+    const LABEL_FIELD_CANDIDATES = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
 
     async function getShpParser() {
         if (!cachedShpParser) {
@@ -633,54 +636,87 @@ export function useLayerDataImport({
         return String(content || '');
     }
 
-    async function parseUploadedFeatures({ content, type }) {
-        if (type === 'kml') {
-            const kmlText = decodeTextContent(content);
-            const detectedProjection = detectProjectionFromKmlText(kmlText);
-            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'KML');
-            const kmlFormat = new KML({ extractStyles: false });
-            return kmlFormat.readFeatures(kmlText, {
+    function getNormalizedUploadType(type, name = '') {
+        const normalizedType = String(type || '').toLowerCase();
+        const filename = String(name || '').trim().toLowerCase();
+        const ext = filename.includes('.') ? filename.split('.').pop() : '';
+
+        if (ext === 'kmz') return 'kmz';
+        if (ext === 'kml') return 'kml';
+        if (ext === 'geojson' || ext === 'json') return ext;
+        if (ext === 'tif' || ext === 'tiff') return ext;
+        if (ext === 'zip' || ext === 'shp') return ext;
+        return normalizedType;
+    }
+
+    function pickFeatureLabelField(features = []) {
+        if (!Array.isArray(features) || !features.length) return null;
+
+        for (const key of LABEL_FIELD_CANDIDATES) {
+            const hasValue = features.some((feature) => {
+                const v = feature?.get?.(key);
+                return v !== null && v !== undefined && String(v).trim();
+            });
+            if (hasValue) return key;
+        }
+
+        const firstFeature = features[0];
+        const props = typeof firstFeature?.getProperties === 'function' ? firstFeature.getProperties() : null;
+        if (!props) return null;
+
+        const firstUsableKey = Object.keys(props).find((key) => {
+            if (key === 'geometry' || key === 'style' || String(key).startsWith('_')) return false;
+            const value = props[key];
+            return value !== null && value !== undefined && String(value).trim();
+        });
+
+        return firstUsableKey || null;
+    }
+
+    async function parseKmlTextToFeatures(kmlText, label = 'KML') {
+        const detectedProjection = detectProjectionFromKmlText(kmlText);
+        const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', label);
+        const kmlFormat = new KML({ extractStyles: false });
+        let features = kmlFormat.readFeatures(kmlText, {
+            dataProjection,
+            featureProjection: 'EPSG:3857'
+        });
+
+        // 兼容部分导出工具：全量使用 kml: 前缀时，OpenLayers 可能出现空解析。
+        if ((!features || !features.length) && /<\s*\/?\s*kml:/i.test(kmlText)) {
+            const normalizedKmlText = String(kmlText)
+                .replace(/<(\/?)(\s*)kml:/gi, '<$1$2')
+                .replace(/\s+xmlns:kml\s*=\s*(['"]).*?\1/gi, '');
+
+            features = kmlFormat.readFeatures(normalizedKmlText, {
                 dataProjection,
                 featureProjection: 'EPSG:3857'
             });
         }
 
-        if (type === 'kmz') {
+        return features;
+    }
+
+    async function parseUploadedFeatures({ content, type, name = '' }) {
+        const normalizedType = getNormalizedUploadType(type, name);
+
+        if (normalizedType === 'kml') {
+            const kmlText = decodeTextContent(content);
+            return parseKmlTextToFeatures(kmlText, 'KML');
+        }
+
+        if (normalizedType === 'kmz') {
             const kmzBuffer = content instanceof ArrayBuffer ? content : null;
             if (!kmzBuffer) throw new Error('KMZ 数据读取失败');
 
-            const JSZipCtor = await getJSZipCtor();
-            const zip = await JSZipCtor.loadAsync(new Uint8Array(kmzBuffer));
-            const kmlEntries = Object.values(zip.files).filter(
-                (entry) => !entry.dir && entry.name.toLowerCase().endsWith('.kml')
-            );
-            const kmlEntry = kmlEntries.find((entry) => entry.name.split('/').pop()?.toLowerCase() === 'doc.kml')
-                || kmlEntries.sort((a, b) => a.name.length - b.name.length)[0];
-            if (!kmlEntry) throw new Error('KMZ 中未找到 KML 文件');
-
-            const kmlBuffer = await kmlEntry.async('arraybuffer');
-            const utf8Text = new TextDecoder('utf-8', { fatal: false }).decode(kmlBuffer);
-            const hasReplacementChar = utf8Text.includes('\uFFFD');
-            const kmlText = hasReplacementChar
-                ? (() => {
-                    try {
-                        return new TextDecoder('gbk', { fatal: false }).decode(kmlBuffer);
-                    } catch {
-                        return utf8Text;
-                    }
-                })()
-                : utf8Text;
-
-            const kmlFormat = new KML({ extractStyles: false });
-            const detectedProjection = detectProjectionFromKmlText(kmlText);
-            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'KMZ/KML');
-            return kmlFormat.readFeatures(kmlText, {
-                dataProjection,
-                featureProjection: 'EPSG:3857'
+            const { kmlString } = await extractKmlFromKmz(kmzBuffer, {
+                rewriteResourceBlobUrls: false,
+                debug: import.meta.env.DEV
             });
+            return parseKmlTextToFeatures(kmlString, 'KMZ/KML');
         }
 
-        if (type === 'geojson' || type === 'json') {
+        if (normalizedType === 'geojson' || normalizedType === 'json') {
             const geojsonData = typeof content === 'string' ? JSON.parse(content) : content;
             const detectedProjection = detectGeoJSONProjection(geojsonData);
             const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'GeoJSON');
@@ -691,9 +727,23 @@ export function useLayerDataImport({
             });
         }
 
-        if (type === 'zip') {
+        if (normalizedType === 'zip') {
+            const zipBuffer = content instanceof ArrayBuffer ? content : null;
+            if (!zipBuffer) throw new Error('ZIP 数据读取失败');
+
+            const JSZipCtor = await getJSZipCtor();
+            const archivePayload = await extractArchiveVectorPayload(zipBuffer, JSZipCtor);
+
+            if (archivePayload.kind === 'kml') {
+                return parseKmlTextToFeatures(archivePayload.kmlText, 'ZIP/KML');
+            }
+
+            if (archivePayload.kind !== 'shp') {
+                throw new Error('ZIP 中未找到可解析的 KML 或 SHP 数据');
+            }
+
             const shp = await getShpParser();
-            const geojson = await shp(content);
+            const geojson = await shp(archivePayload.shpParts);
             const gjFormat = new GeoJSON();
             const featureCollection = Array.isArray(geojson)
                 ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
@@ -706,7 +756,7 @@ export function useLayerDataImport({
             });
         }
 
-        if (type === 'shp') {
+        if (normalizedType === 'shp') {
             const shp = await getShpParser();
             const geojson = await shp({ shp: content });
             const gjFormat = new GeoJSON();
@@ -718,20 +768,22 @@ export function useLayerDataImport({
             });
         }
 
-        throw new Error(`不支持的文件类型: ${type}`);
+        throw new Error(`不支持的文件类型: ${normalizedType || type}`);
     }
 
     async function addUserDataLayer({ content, type, name }) {
         if (!mapInstance.value) return;
         try {
-            if (isTiffType(type)) {
+            const normalizedType = getNormalizedUploadType(type, name);
+
+            if (isTiffType(normalizedType)) {
                 const tifName = name || `栅格_${Date.now()}.tif`;
                 const buffer = content instanceof ArrayBuffer ? content : null;
                 if (!buffer) throw new Error('TIF 数据读取失败');
 
                 await createManagedRasterLayer({
                     name: tifName,
-                    type,
+                    type: normalizedType,
                     sourceType: 'upload',
                     data: buffer,
                     fitView: true
@@ -739,23 +791,24 @@ export function useLayerDataImport({
                 return;
             }
 
-            const features = await parseUploadedFeatures({ content, type });
+            const features = await parseUploadedFeatures({ content, type: normalizedType, name });
             if (!features.length) throw new Error('无有效数据');
+            const labelField = pickFeatureLabelField(features);
 
             createManagedVectorLayer({
                 name,
-                type,
+                type: normalizedType,
                 sourceType: 'upload',
                 features,
                 styleConfig: styleTemplates.classic,
                 autoLabel: true,
+                metadata: {
+                    labelField
+                },
                 fitView: true
             });
         } catch (e) {
-            const kmzHint = String(type || '').toLowerCase() === 'kmz'
-                ? '\n提示：请将 KMZ 文件解压为 KML 后再上传。'
-                : '';
-            alert('文件解析失败: ' + e.message + kmzHint);
+            alert('文件解析失败: ' + e.message);
         }
     }
 
