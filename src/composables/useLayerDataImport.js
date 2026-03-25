@@ -1,9 +1,15 @@
 import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
-import { equivalent, fromLonLat, toLonLat, transform, transformExtent } from 'ol/proj';
+import { equivalent, fromLonLat, get as getProjection, toLonLat, transform, transformExtent } from 'ol/proj';
 import WebGLTileLayer from 'ol/layer/WebGLTile';
 import ImageLayer from 'ol/layer/Image';
 import ImageStatic from 'ol/source/ImageStatic';
+import {
+    detectGeoJSONProjection,
+    detectProjectionFromKmlText,
+    ensureProjectionAvailable,
+    normalizeProjectionCode
+} from '../utils/crsUtils';
 
 export function useLayerDataImport({
     mapInstance,
@@ -108,12 +114,61 @@ export function useLayerDataImport({
         return { min, max };
     }
 
+    function inferFallbackNoDataValue(data, explicitNoDataValue) {
+        if (Number.isFinite(explicitNoDataValue)) return explicitNoDataValue;
+        if (!data?.length) return null;
+
+        const sentinelCandidates = [0, -9999, -32768, 32767, 65535];
+        const counts = new Map(sentinelCandidates.map((v) => [v, 0]));
+
+        const maxSamples = 200000;
+        const step = Math.max(1, Math.floor(data.length / maxSamples));
+        let sampled = 0;
+
+        for (let i = 0; i < data.length; i += step) {
+            const v = data[i];
+            if (!Number.isFinite(v)) continue;
+            sampled += 1;
+            if (counts.has(v)) {
+                counts.set(v, counts.get(v) + 1);
+            }
+        }
+
+        if (!sampled) return null;
+
+        let bestValue = null;
+        let bestCount = 0;
+        for (const [value, count] of counts.entries()) {
+            if (count > bestCount) {
+                bestValue = value;
+                bestCount = count;
+            }
+        }
+
+        return bestCount / sampled >= 0.05 ? bestValue : null;
+    }
+
     function isRasterUploadLayer(item) {
         const t = String(item?.type || '').toLowerCase();
         return item?.sourceType === 'upload' && (t === 'tif' || t === 'tiff');
     }
 
-    function createGeoTiffSampler({ image, projection, nodataValue = null }) {
+    function toProjectionObject(input) {
+        if (!input) return null;
+        if (typeof input?.getUnits === 'function') return input;
+        if (typeof input === 'string') return getProjection(input);
+        const normalized = normalizeProjectionCode(input);
+        return normalized ? getProjection(normalized) : null;
+    }
+
+    function isEquivalentProjection(a, b) {
+        const pa = toProjectionObject(a);
+        const pb = toProjectionObject(b);
+        if (!pa || !pb) return false;
+        return equivalent(pa, pb);
+    }
+
+    function createGeoTiffSampler({ image, projection, nodataValue = null, stretchRange = null }) {
         if (!image) return null;
         const width = image.getWidth();
         const height = image.getHeight();
@@ -122,7 +177,7 @@ export function useLayerDataImport({
 
         return async (mapCoordinate, mapProjection) => {
             let coord = mapCoordinate;
-            if (projection && mapProjection && !equivalent(projection, mapProjection)) {
+            if (projection && mapProjection && !isEquivalentProjection(projection, mapProjection)) {
                 coord = transform(mapCoordinate, mapProjection, projection);
             }
 
@@ -142,7 +197,14 @@ export function useLayerDataImport({
             const raster = await image.readRasters({ window: [px, py, px + 1, py + 1] });
             const bands = Array.isArray(raster) ? raster : [raster];
             const values = bands.map((band) => band?.[0]);
-            const allNoData = nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue));
+            const stretchMin = Number.isFinite(stretchRange?.min) ? stretchRange.min : null;
+            const stretchMax = Number.isFinite(stretchRange?.max) ? stretchRange.max : null;
+            const outOfStretch = values.length === 1
+                && Number.isFinite(stretchMin)
+                && Number.isFinite(stretchMax)
+                && Number.isFinite(values[0])
+                && (values[0] < stretchMin || values[0] > stretchMax);
+            const allNoData = (nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue))) || outOfStretch;
 
             return {
                 values,
@@ -153,12 +215,12 @@ export function useLayerDataImport({
         };
     }
 
-    function createExtentRasterSampler({ bands, width, height, extent, projection, nodataValue = null }) {
+    function createExtentRasterSampler({ bands, width, height, extent, projection, nodataValue = null, stretchRange = null }) {
         if (!bands?.length || !width || !height || !extent) return null;
 
         return async (mapCoordinate, mapProjection) => {
             let coord = mapCoordinate;
-            if (projection && mapProjection && !equivalent(projection, mapProjection)) {
+            if (projection && mapProjection && !isEquivalentProjection(projection, mapProjection)) {
                 coord = transform(mapCoordinate, mapProjection, projection);
             }
 
@@ -173,7 +235,14 @@ export function useLayerDataImport({
             const py = Math.min(height - 1, Math.max(0, Math.floor(yNorm * height)));
             const idx = py * width + px;
             const values = bands.map((band) => band?.[idx]);
-            const allNoData = nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue));
+            const stretchMin = Number.isFinite(stretchRange?.min) ? stretchRange.min : null;
+            const stretchMax = Number.isFinite(stretchRange?.max) ? stretchRange.max : null;
+            const outOfStretch = values.length === 1
+                && Number.isFinite(stretchMin)
+                && Number.isFinite(stretchMax)
+                && Number.isFinite(values[0])
+                && (values[0] < stretchMin || values[0] > stretchMax);
+            const allNoData = (nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue))) || outOfStretch;
 
             return {
                 values,
@@ -195,6 +264,7 @@ export function useLayerDataImport({
             try {
                 const sampled = await item.metadata.rasterSampler(mapCoordinate, mapProjection);
                 if (!sampled) continue;
+                if (sampled.allNoData) continue;
 
                 const lonlat = toLonLat(mapCoordinate);
                 const payload = {
@@ -224,7 +294,7 @@ export function useLayerDataImport({
     function projectExtentToMapView(extent, sourceProjection) {
         if (!mapInstance.value || !extent || extent.some(v => !Number.isFinite(v))) return null;
         const viewProjection = mapInstance.value.getView().getProjection();
-        if (!sourceProjection || equivalent(sourceProjection, viewProjection)) {
+        if (!sourceProjection || isEquivalentProjection(sourceProjection, viewProjection)) {
             return extent;
         }
         try {
@@ -264,6 +334,8 @@ export function useLayerDataImport({
         const singleBandStretch = stretchRange && Number.isFinite(stretchRange.min) && Number.isFinite(stretchRange.max)
             ? stretchRange
             : (isSingleBand ? computePercentileStretch(bands[0], nodataValue) : null);
+        const stretchMin = Number.isFinite(singleBandStretch?.min) ? singleBandStretch.min : null;
+        const stretchMax = Number.isFinite(singleBandStretch?.max) ? singleBandStretch.max : null;
 
         const pixelCount = width * height;
         const rgba = new Uint8ClampedArray(pixelCount * 4);
@@ -278,7 +350,9 @@ export function useLayerDataImport({
             let g;
             let b;
             if (isSingleBand) {
-                if (isNoDataValue(rSrc, nodataValue)) {
+                const outsideStretch = Number.isFinite(stretchMin) && Number.isFinite(stretchMax)
+                    && (rSrc < stretchMin || rSrc > stretchMax);
+                if (!Number.isFinite(rSrc) || isNoDataValue(rSrc, nodataValue) || outsideStretch) {
                     const p = i * 4;
                     rgba[p] = 0;
                     rgba[p + 1] = 0;
@@ -351,7 +425,8 @@ export function useLayerDataImport({
             height,
             extent,
             projection: layerProjection,
-            nodataValue
+            nodataValue,
+            stretchRange: isSingleBand ? singleBandStretch : null
         });
         const id = addManagedLayerRecord({
             name,
@@ -363,6 +438,7 @@ export function useLayerDataImport({
                 ...(metadata || {}),
                 rasterSampler,
                 rasterBandCount: bands.length,
+                stretchRange: isSingleBand ? singleBandStretch : null,
                 sourceProjection: layerProjection,
                 sourceExtent: extent
             },
@@ -413,6 +489,7 @@ export function useLayerDataImport({
 
             if (sampleBandCount === 1) {
                 const singleBandData = await firstImage.readRasters({ samples: [0], interleave: true });
+                nodataValue = inferFallbackNoDataValue(singleBandData, nodataValue);
                 singleBandStretch = computePercentileStretch(singleBandData, nodataValue, 2, 98);
             }
         } catch (e) {
@@ -459,6 +536,12 @@ export function useLayerDataImport({
             });
         }
 
+        const sourceProjection = await resolveSupportedProjection(
+            viewCfg?.projection,
+            'EPSG:4326',
+            'GeoTIFF'
+        );
+
         const layerOptions = {
             source,
             zIndex: 120,
@@ -476,10 +559,16 @@ export function useLayerDataImport({
                 midVal, ['color', 254, 224, 139, 1],
                 maxVal, ['color', 215, 25, 28, 1]
             ];
+            const transparentExpr = ['color', 0, 0, 0, 0];
+            const maskedConditions = [
+                ['<', ['band', 1], minVal],
+                ['>', ['band', 1], maxVal]
+            ];
+            if (nodataValue !== null) {
+                maskedConditions.unshift(['==', ['band', 1], nodataValue]);
+            }
             layerOptions.style = {
-                color: nodataValue !== null
-                    ? ['case', ['==', ['band', 1], nodataValue], ['color', 0, 0, 0, 0], baseColorExpr]
-                    : baseColorExpr
+                color: ['case', ['any', ...maskedConditions], transparentExpr, baseColorExpr]
             };
         }
 
@@ -488,8 +577,9 @@ export function useLayerDataImport({
         mapInstance.value.addLayer(layer);
         const rasterSampler = createGeoTiffSampler({
             image: firstImageRef,
-            projection: viewCfg?.projection,
-            nodataValue
+            projection: sourceProjection,
+            nodataValue,
+            stretchRange: sampleBandCount === 1 ? singleBandStretch : null
         });
         const id = addManagedLayerRecord({
             name,
@@ -501,14 +591,15 @@ export function useLayerDataImport({
                 rasterSampler,
                 rasterBandCount: sampleBandCount,
                 nodataValue,
-                sourceProjection: viewCfg?.projection,
+                stretchRange: sampleBandCount === 1 ? singleBandStretch : null,
+                sourceProjection,
                 sourceExtent: viewCfg?.extent
             },
             layer
         });
 
         if (fitView && mapInstance.value) {
-            const fitExtent = projectExtentToMapView(viewCfg.extent, viewCfg.projection) || viewCfg.extent;
+            const fitExtent = projectExtentToMapView(viewCfg.extent, sourceProjection) || viewCfg.extent;
             mapInstance.value.getView().fit(fitExtent, {
                 padding: [50, 50, 50, 50],
                 duration: 900,
@@ -524,11 +615,32 @@ export function useLayerDataImport({
         return normalized === 'tif' || normalized === 'tiff';
     }
 
+    async function resolveSupportedProjection(rawProjection, fallbackProjection = 'EPSG:4326', label = '数据') {
+        const normalized = normalizeProjectionCode(rawProjection);
+        if (!normalized) return fallbackProjection;
+
+        const supported = await ensureProjectionAvailable(normalized);
+        if (supported) return supported;
+
+        throw new Error(`${label}坐标系 ${normalized} 当前不支持，请提供可识别 EPSG 定义或先转换为 EPSG:4326 / EPSG:3857。`);
+    }
+
+    function decodeTextContent(content) {
+        if (typeof content === 'string') return content;
+        if (content instanceof ArrayBuffer) {
+            return new TextDecoder('utf-8', { fatal: false }).decode(content);
+        }
+        return String(content || '');
+    }
+
     async function parseUploadedFeatures({ content, type }) {
         if (type === 'kml') {
+            const kmlText = decodeTextContent(content);
+            const detectedProjection = detectProjectionFromKmlText(kmlText);
+            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'KML');
             const kmlFormat = new KML({ extractStyles: false });
-            return kmlFormat.readFeatures(content, {
-                dataProjection: 'EPSG:4326',
+            return kmlFormat.readFeatures(kmlText, {
+                dataProjection,
                 featureProjection: 'EPSG:3857'
             });
         }
@@ -560,16 +672,21 @@ export function useLayerDataImport({
                 : utf8Text;
 
             const kmlFormat = new KML({ extractStyles: false });
+            const detectedProjection = detectProjectionFromKmlText(kmlText);
+            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'KMZ/KML');
             return kmlFormat.readFeatures(kmlText, {
-                dataProjection: 'EPSG:4326',
+                dataProjection,
                 featureProjection: 'EPSG:3857'
             });
         }
 
         if (type === 'geojson' || type === 'json') {
+            const geojsonData = typeof content === 'string' ? JSON.parse(content) : content;
+            const detectedProjection = detectGeoJSONProjection(geojsonData);
+            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'GeoJSON');
             const gjFormat = new GeoJSON();
-            return gjFormat.readFeatures(content, {
-                dataProjection: 'EPSG:4326',
+            return gjFormat.readFeatures(geojsonData, {
+                dataProjection,
                 featureProjection: 'EPSG:3857'
             });
         }
@@ -581,8 +698,10 @@ export function useLayerDataImport({
             const featureCollection = Array.isArray(geojson)
                 ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
                 : geojson;
+            const detectedProjection = detectGeoJSONProjection(featureCollection);
+            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'SHP/ZIP');
             return gjFormat.readFeatures(featureCollection, {
-                dataProjection: 'EPSG:4326',
+                dataProjection,
                 featureProjection: 'EPSG:3857'
             });
         }
@@ -591,8 +710,10 @@ export function useLayerDataImport({
             const shp = await getShpParser();
             const geojson = await shp({ shp: content });
             const gjFormat = new GeoJSON();
+            const detectedProjection = detectGeoJSONProjection(geojson);
+            const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'SHP');
             return gjFormat.readFeatures(geojson, {
-                dataProjection: 'EPSG:4326',
+                dataProjection,
                 featureProjection: 'EPSG:3857'
             });
         }
