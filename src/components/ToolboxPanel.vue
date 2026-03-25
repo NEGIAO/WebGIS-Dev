@@ -16,80 +16,80 @@
         </div>
 
         <div v-if="activeTab === 'layers'" class="panel-scroll">
-            <div class="card">
+            <div v-if="hasDrawCard" class="card">
                 <div class="card-title">绘制图层</div>
                 <div class="layer-item" v-if="drawLayers.length" v-for="layer in drawLayers" :key="layer.id"
                     @click.left="emit('view-layer', layer.id)" @contextmenu.prevent="emit('solo-layer', layer.id)">
-                    <div class="layer-line">
-                        <label class="row-label">
+                    <div class="layer-main">
+                        <label class="row-label layer-title-wrap">
                             <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                            <span class="name">{{ layer.name }}</span>
+                            <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
                         </label>
-                        <span class="meta">{{ layer.featureCount || 0 }}</span>
-                    </div>
-                    <div class="layer-actions">
-                        <button class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
-                        <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
-                        <button class="mini btn-danger" @click.stop="emit('remove-layer', layer.id)">移除</button>
+                        <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
+
+                        <div class="layer-actions icon-row">
+                            <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
+                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
+                            <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
+                        </div>
                     </div>
                 </div>
                 <div class="layer-item" v-else @click.left="emit('interaction', 'ViewGraphics')" @contextmenu.prevent="emit('interaction', 'ZoomToGraphics')">
-                    <div class="layer-line">
-                        <div class="row-label">
+                    <div class="layer-main">
+                        <div class="row-label layer-title-wrap">
                             <span class="name">绘制图形集合</span>
                         </div>
-                        <span class="meta">{{ overview.drawCount || 0 }}</span>
-                    </div>
-                    <div class="layer-actions">
-                        <button class="mini btn-accent" @click.stop="setStyleTarget('draw')">样式</button>
-                        <button class="mini btn-primary" @click.stop="emit('interaction', 'ZoomToGraphics')">缩放</button>
-                        <button class="mini btn-warning" @click.stop="emit('interaction', 'Clear')">清空</button>
+                        <span class="feature-badge">{{ overview.drawCount || 0 }}</span>
+
+                        <div class="layer-actions icon-row">
+                            <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget('draw')">✦</button>
+                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('interaction', 'ZoomToGraphics')">◎</button>
+                            <button class="action-icon-btn danger" data-tip="清空" @click.stop="emit('interaction', 'Clear')">✕</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card">
+            <div v-if="routeLayers.length" class="card">
                 <div class="card-title">路线图层</div>
                 <div class="layer-item" v-if="routeLayers.length" v-for="layer in routeLayers" :key="layer.id" @click.left="emit('view-layer', layer.id)">
-                    <div class="layer-line">
-                        <label class="row-label">
+                    <div class="layer-main">
+                        <label class="row-label layer-title-wrap">
                             <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                            <span class="name">{{ layer.name }}</span>
+                            <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
                         </label>
-                        <span class="meta">{{ layer.featureCount || 0 }}</span>
-                    </div>
-                    <div class="layer-actions">
-                        <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
-                        <button class="mini btn-danger" @click.stop="emit('remove-layer', layer.id)">移除</button>
+                        <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
+
+                        <div class="layer-actions icon-row">
+                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
+                            <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
+                        </div>
                     </div>
                 </div>
-                <div class="empty" v-else>暂无路线图层</div>
             </div>
 
-            <div class="card">
+            <div v-if="searchLayers.length" class="card">
                 <div class="card-title">搜索结果图层</div>
                 <div class="layer-item" v-if="searchLayers.length" v-for="layer in searchLayers" :key="layer.id" @click.left="emit('view-layer', layer.id)">
-                    <div class="layer-line">
-                        <label class="row-label">
+                    <div class="layer-main">
+                        <label class="row-label layer-title-wrap">
                             <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                            <span class="name">{{ layer.name }}</span>
+                            <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
                         </label>
-                        <span class="meta">{{ layer.featureCount || 0 }}</span>
-                    </div>
-                    <div class="layer-actions">
-                        <button class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
-                        <button class="mini" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">
-                            {{ layer.labelVisible ? '标注关' : '标注开' }}
-                        </button>
-                        <button v-if="layerHasCoordinates(layer)" class="mini" @click.stop="copyLayerCoordinates(layer)">复制坐标</button>
-                        <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
-                        <button class="mini btn-warning" @click.stop="emit('remove-layer', layer.id)">清空</button>
+                        <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
+
+                        <div class="layer-actions icon-row">
+                            <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
+                            <button class="action-icon-btn" :data-tip="layer.labelVisible ? '标注关' : '标注开'" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">🏷</button>
+                            <button v-if="layerHasCoordinates(layer)" class="action-icon-btn" data-tip="复制坐标" @click.stop="copyLayerCoordinates(layer)">⌖</button>
+                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
+                            <button class="action-icon-btn danger" data-tip="清空" @click.stop="emit('remove-layer', layer.id)">✕</button>
+                        </div>
                     </div>
                 </div>
-                <div class="empty" v-else>暂无搜索结果图层</div>
             </div>
 
-            <div class="card">
+            <div class="upload-zone-wrap">
                 <div
                     class="upload-entry"
                     :class="{ dragging: isUploadDragging }"
@@ -99,10 +99,35 @@
                     @drop.prevent="handleUploadDrop"
                 >
                     <div class="card-top">
-                        <div class="card-title">上传图层</div>
+                        <div class="card-title upload-title">
+                            <span class="upload-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 16V5"></path>
+                                    <path d="m8 9 4-4 4 4"></path>
+                                    <path d="M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5"></path>
+                                </svg>
+                            </span>
+                            上传图层
+                        </div>
                         <button class="small-btn" @click="triggerFileUpload">上传 (GeoJSON/KML/KMZ/SHP/TIF)</button>
                     </div>
                     <div class="upload-tip">点击上传，或将文件拖到此区域（支持多选）</div>
+                    <div v-if="shouldShowUploadProgress" class="upload-progress" :class="`phase-${uploadProgressView.phase}`">
+                        <div class="upload-progress-head">
+                            <span>导入状态：{{ uploadProgressView.current }}/{{ uploadProgressView.total || 1 }}</span>
+                            <span>{{ uploadProgressLabel }}</span>
+                        </div>
+                        <div class="upload-progress-bar">
+                            <div class="upload-progress-fill" :style="{ width: `${uploadProgressPercent}%` }"></div>
+                        </div>
+                        <div class="upload-progress-meta">
+                            <span>成功 {{ uploadProgressView.success }}</span>
+                            <span>失败 {{ uploadProgressView.failed }}</span>
+                            <span v-if="uploadProgressView.warnings">警告 {{ uploadProgressView.warnings }}</span>
+                            <span v-if="uploadProgressView.errors">错误 {{ uploadProgressView.errors }}</span>
+                        </div>
+                        <div v-if="uploadProgressView.message" class="upload-progress-message">{{ uploadProgressView.message }}</div>
+                    </div>
                 </div>
 
                 <div v-if="uploadLayers.length" class="layer-list">
@@ -117,21 +142,19 @@
                         @click.left="emit('view-layer', layer.id)"
                         @contextmenu.prevent="emit('solo-layer', layer.id)"
                     >
-                        <div class="layer-line">
-                            <label class="row-label">
+                        <div class="layer-main">
+                            <label class="row-label layer-title-wrap">
                                 <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                                <span class="name">{{ layer.name }}</span>
+                                <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
                             </label>
-                            <span class="meta">{{ layer.featureCount || 0 }}</span>
-                        </div>
+                            <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
 
-                        <div class="layer-actions">
-                            <button v-if="!isRasterLayer(layer)" class="mini btn-accent" @click.stop="setStyleTarget(layer.id)">样式</button>
-                            <button v-if="canToggleLabel(layer)" class="mini" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">
-                                {{ layer.labelVisible ? '标注关' : '标注开' }}
-                            </button>
-                            <button class="mini btn-primary" @click.stop="emit('zoom-layer', layer.id)">缩放</button>
-                            <button class="mini btn-danger" @click.stop="emit('remove-layer', layer.id)">移除</button>
+                            <div class="layer-actions icon-row">
+                                <button v-if="!isRasterLayer(layer)" class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
+                                <button v-if="canToggleLabel(layer)" class="action-icon-btn" :data-tip="layer.labelVisible ? '标注关' : '标注开'" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">🏷</button>
+                                <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
+                                <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -140,23 +163,26 @@
         </div>
 
         <div v-else-if="activeTab === 'draw'" class="panel-scroll">
-            <div class="card">
+            <div class="card draw-card">
                 <div class="card-title">绘制工具</div>
-                <div class="tool-grid">
-                    <button class="tool-btn" @click="emit('interaction', 'AttributeQuery')">属性查询</button>
-                    <button class="tool-btn" @click="emit('interaction', 'Point')">点</button>
-                    <button class="tool-btn" @click="emit('interaction', 'LineString')">线</button>
-                    <button class="tool-btn" @click="emit('interaction', 'Polygon')">面</button>
-                    <button class="tool-btn" @click="emit('interaction', 'MeasureDistance')">测距</button>
-                    <button class="tool-btn" @click="emit('interaction', 'MeasureArea')">测面</button>
+                <div class="draw-grid">
+                    <button
+                        v-for="tool in drawTools"
+                        :key="tool.value"
+                        class="draw-tool-btn"
+                        :class="{ active: selectedDrawTool === tool.value }"
+                        @click="activateDrawTool(tool.value)"
+                    >
+                        {{ tool.label }}
+                    </button>
                 </div>
                 <div class="actions-row">
-                    <button class="small-btn btn-primary" @click="emit('interaction', 'ZoomToGraphics')">缩放图形</button>
-                    <button class="small-btn btn-warning" @click="emit('interaction', 'Clear')">清空</button>
+                    <button class="draw-op-btn draw-op-primary" @click="emit('interaction', 'ZoomToGraphics')">缩放图形</button>
+                    <button class="draw-op-btn draw-op-warning" @click="emit('interaction', 'Clear')">清空</button>
                 </div>
             </div>
 
-            <div class="card hint">
+            <div class="hint draw-hint">
                 <div>鼠标事件</div>
                 <div>左键：选中/查看图层</div>
                 <div>右键：仅显示当前图层</div>
@@ -164,43 +190,54 @@
             </div>
         </div>
 
-        <div v-else class="panel-scroll">
-            <div class="card">
+        <div v-else class="panel-scroll style-scroll">
+            <div class="style-panel">
                 <div class="card-title">样式模板</div>
-                <div class="template-row">
-                    <button class="template" v-for="t in styleTemplates" :key="t.id" @click="applyTemplate(t.id)">{{ t.name }}</button>
+                <div class="template-chip-row">
+                    <button class="template-chip" v-for="t in styleTemplates" :key="t.id" @click="applyTemplate(t.id)">
+                        <span class="chip-dot" :style="{ backgroundColor: t.color }"></span>
+                        <span>{{ t.name }}</span>
+                    </button>
                 </div>
-            </div>
 
-            <div class="card">
+                <div class="style-divider"></div>
+
                 <div class="card-title">样式编辑</div>
                 <div class="field">
                     <label>编辑目标</label>
-                    <select v-model="selectedEditLayerId">
-                        <option v-for="layer in editableLayers" :key="layer.id" :value="layer.id">{{ layer.name }}</option>
-                    </select>
+                    <div class="select-wrap">
+                        <select v-model="selectedEditLayerId" class="style-select">
+                            <option v-for="layer in editableLayers" :key="layer.id" :value="layer.id">{{ layer.name }}</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="field-grid">
                     <div class="field">
                         <label>填充色</label>
-                        <input type="color" v-model="styleForm.fillColor" />
+                        <input type="color" class="style-color" v-model="styleForm.fillColor" />
                     </div>
                     <div class="field">
                         <label>边框色</label>
-                        <input type="color" v-model="styleForm.strokeColor" />
+                        <input type="color" class="style-color" v-model="styleForm.strokeColor" />
                     </div>
                 </div>
                 <div class="field-grid">
                     <div class="field">
-                        <label>填充透明度</label>
-                        <input type="range" min="0" max="100" v-model.number="styleForm.fillOpacityPct" />
+                        <div class="slider-head">
+                            <label>填充透明度</label>
+                            <span>{{ styleForm.fillOpacityPct }}%</span>
+                        </div>
+                        <input class="style-slider" type="range" min="0" max="100" v-model.number="styleForm.fillOpacityPct" />
                     </div>
                     <div class="field">
-                        <label>边框宽度</label>
-                        <input type="range" min="1" max="8" step="0.5" v-model.number="styleForm.strokeWidth" />
+                        <div class="slider-head">
+                            <label>边框宽度</label>
+                            <span>{{ styleForm.strokeWidth }}</span>
+                        </div>
+                        <input class="style-slider" type="range" min="1" max="8" step="0.5" v-model.number="styleForm.strokeWidth" />
                     </div>
                 </div>
-                <button class="small-btn" @click="applyStyle">应用样式</button>
+                <button class="small-btn style-apply-btn" @click="applyStyle">应用样式</button>
             </div>
         </div>
     </div>
@@ -208,11 +245,13 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { useMessage } from '../composables/useMessage';
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
     baseLayers: { type: Array, default: () => [] },
-    overview: { type: Object, default: () => ({ drawCount: 0, uploadCount: 0, layers: [] }) }
+    overview: { type: Object, default: () => ({ drawCount: 0, uploadCount: 0, layers: [] }) },
+    uploadProgress: { type: Object, default: () => ({ phase: 'idle' }) }
 });
 
 const emit = defineEmits([
@@ -235,7 +274,9 @@ const emit = defineEmits([
 ]);
 
 const fileInputRef = ref(null);
+const message = useMessage();
 const activeTab = ref('layers');
+const selectedDrawTool = ref('AttributeQuery');
 const draggingLayerId = ref('');
 const isUploadDragging = ref(false);
 const selectedEditLayerId = ref('draw');
@@ -245,10 +286,19 @@ const MAX_FILE_SIZE_MB = 200;
 const SUPPORTED_UPLOAD_TYPES = new Set(['geojson', 'json', 'kml', 'kmz', 'zip', 'shp', 'tif', 'tiff']);
 
 const styleTemplates = [
-    { id: 'classic', name: '经典绿' },
-    { id: 'warning', name: '警示橙' },
-    { id: 'water', name: '水系蓝' },
-    { id: 'magenta', name: '品红' }
+    { id: 'classic', name: '经典绿', color: '#2f9a57' },
+    { id: 'warning', name: '警示橙', color: '#e39a28' },
+    { id: 'water', name: '水系蓝', color: '#3d88e6' },
+    { id: 'magenta', name: '品红', color: '#cd4f9f' }
+];
+
+const drawTools = [
+    { value: 'AttributeQuery', label: '属性查询' },
+    { value: 'Point', label: '点' },
+    { value: 'LineString', label: '线' },
+    { value: 'Polygon', label: '面' },
+    { value: 'MeasureDistance', label: '测距' },
+    { value: 'MeasureArea', label: '测面' }
 ];
 
 const styleForm = ref({
@@ -271,6 +321,44 @@ const searchLayers = computed(() => sortedUserLayers.value.filter((layer) => {
     if (layer.category === 'route') return false;
     return !/_route$/i.test(String(layer.type || ''));
 }));
+const hasDrawCard = computed(() => drawLayers.value.length > 0 || Number(props.overview?.drawCount || 0) > 0);
+
+const uploadProgressView = computed(() => {
+    const raw = props.uploadProgress || {};
+    return {
+        phase: String(raw.phase || 'idle'),
+        total: Math.max(0, Number(raw.total) || 0),
+        current: Math.max(0, Number(raw.current) || 0),
+        success: Math.max(0, Number(raw.success) || 0),
+        failed: Math.max(0, Number(raw.failed) || 0),
+        warnings: Math.max(0, Number(raw.warnings) || 0),
+        errors: Math.max(0, Number(raw.errors) || 0),
+        message: String(raw.message || '')
+    };
+});
+
+const shouldShowUploadProgress = computed(() => uploadProgressView.value.phase !== 'idle');
+
+const uploadProgressPercent = computed(() => {
+    const total = uploadProgressView.value.total;
+    const current = uploadProgressView.value.current;
+    if (!total) {
+        if (uploadProgressView.value.phase === 'done') return 100;
+        if (uploadProgressView.value.phase === 'error') return 100;
+        return 12;
+    }
+    return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+});
+
+const uploadProgressLabel = computed(() => {
+    const phase = uploadProgressView.value.phase;
+    if (phase === 'validating') return '文件校验中';
+    if (phase === 'dispatching') return '容器解析中';
+    if (phase === 'importing') return '数据导入中';
+    if (phase === 'done') return '导入已完成';
+    if (phase === 'error') return '导入失败';
+    return '等待导入';
+});
 
 function canToggleLabel(layer) {
     return !!layer?.autoLabel;
@@ -282,7 +370,7 @@ function layerHasCoordinates(layer) {
 
 async function copyLayerCoordinates(layer) {
     if (!layerHasCoordinates(layer)) {
-        alert('当前图层未提供可复制的经纬度信息');
+        message.warning('当前图层未提供可复制的经纬度信息');
         return;
     }
     const lon = Number(layer.longitude).toFixed(6);
@@ -303,16 +391,26 @@ async function copyLayerCoordinates(layer) {
             document.execCommand('copy');
             document.body.removeChild(textarea);
         }
-        alert(`已复制经纬度：${text}`);
+        message.success(`已复制经纬度：${text}`);
     } catch (error) {
         console.error('copy coordinates failed', error);
-        alert('复制失败，请稍后重试');
+        message.error('复制失败，请稍后重试');
     }
 }
 
 function isRasterLayer(layer) {
     const t = String(layer?.type || '').toLowerCase();
     return t === 'tif' || t === 'tiff';
+}
+
+function formatLayerDisplayName(name) {
+    const raw = String(name || '').trim();
+    if (!raw) return '未命名图层';
+    try {
+        return decodeURIComponent(raw.replace(/\+/g, '%20'));
+    } catch {
+        return raw;
+    }
 }
 
 const editableLayers = computed(() => [
@@ -357,21 +455,16 @@ function processUploadFile(file) {
     const fileSizeMb = file.size / MB;
     const sizeText = formatFileSize(file.size);
     if (fileSizeMb > MAX_FILE_SIZE_MB) {
-        alert(`文件过大（${sizeText}），请控制在 ${MAX_FILE_SIZE_MB} MB 以内后再上传。`);
+        message.error(`文件过大（${sizeText}），请控制在 ${MAX_FILE_SIZE_MB} MB 以内后再上传。`, { closable: true, duration: 5500 });
         return;
     }
     if (fileSizeMb > WARN_FILE_SIZE_MB) {
-        const proceed = window.confirm(
-            `当前文件大小为 ${sizeText}，超过建议值 ${WARN_FILE_SIZE_MB} MB。\n继续上传可能导致页面卡顿或无法显示，是否继续？`
-        );
-        if (!proceed) {
-            return;
-        }
+        message.warning(`当前文件大小为 ${sizeText}，超过建议值 ${WARN_FILE_SIZE_MB} MB，继续上传可能导致页面卡顿。`, { duration: 5200 });
     }
 
     const extension = file.name.split('.').pop().toLowerCase();
     if (!SUPPORTED_UPLOAD_TYPES.has(extension)) {
-        alert(`暂不支持该文件类型：.${extension || '未知'}`);
+        message.warning(`暂不支持该文件类型：.${extension || '未知'}`);
         return;
     }
 
@@ -392,7 +485,7 @@ function processUploadFile(file) {
         }
     } catch (err) {
         console.error('File read error', err);
-        alert('文件读取失败');
+        message.error('文件读取失败');
     }
 }
 
@@ -430,6 +523,11 @@ function onDrop(targetLayerId) {
 function setStyleTarget(layerId) {
     selectedEditLayerId.value = layerId || 'draw';
     activeTab.value = 'style';
+}
+
+function activateDrawTool(tool) {
+    selectedDrawTool.value = tool;
+    emit('interaction', tool);
 }
 
 function applyTemplate(templateId) {
@@ -487,21 +585,25 @@ function applyStyle() {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
+    padding: 2px;
+    border-radius: 10px;
+    background: #eff4f0;
 }
 
 .tab {
-    border: 1px solid #deebe3;
-    background: #f8fcfa;
+    border: 1px solid transparent;
+    background: #eef3ef;
     border-radius: 8px;
     padding: 8px 4px;
     font-size: 12px;
     cursor: pointer;
+    color: #657266;
 }
 
 .tab.active {
-    border-color: #81c79b;
-    background: linear-gradient(180deg, #eef9f2, #e4f3ea);
-    color: #1f7a44;
+    border-color: #2f9a57;
+    background: #2f9a57;
+    color: #ffffff;
     font-weight: 600;
 }
 
@@ -527,6 +629,12 @@ function applyStyle() {
     margin-bottom: 8px;
 }
 
+.upload-zone-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .card-title {
     font-size: 13px;
     font-weight: 700;
@@ -536,27 +644,100 @@ function applyStyle() {
 
 .upload-tip {
     margin-bottom: 8px;
-    font-size: 12px;
+    font-size: 11px;
     color: #6b7f72;
-    background: #f8fbf9;
-    border: 1px solid #d9e8df;
-    border-radius: 6px;
-    padding: 6px 8px;
+    padding: 0 2px;
 }
 
 .upload-entry {
-    margin-bottom: 10px;
-    border: 1.5px dashed #c8ded0;
+    border: 1.5px dashed #b7dcc7;
     border-radius: 8px;
-    background: #fbfefd;
-    padding: 8px;
+    background: #f9fdfb;
+    padding: 10px;
     transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .upload-entry.dragging {
-    border-color: #5aa97a;
+    border-color: #3f9f67;
     background: #eaf7f0;
     box-shadow: 0 0 0 3px rgba(90, 169, 122, 0.15);
+}
+
+.upload-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.upload-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    color: #2f8e58;
+    background: #eaf7f0;
+}
+
+.upload-progress {
+    border: 1px solid #d8e9df;
+    background: #f8fcfa;
+    border-radius: 8px;
+    padding: 7px;
+}
+
+.upload-progress.phase-error {
+    border-color: #e8bbbb;
+    background: #fff4f4;
+}
+
+.upload-progress.phase-done {
+    border-color: #b8dec7;
+    background: #f0fbf4;
+}
+
+.upload-progress-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: #2d4f3a;
+    margin-bottom: 5px;
+}
+
+.upload-progress-bar {
+    height: 8px;
+    background: #e3efe8;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.upload-progress-fill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, #68c282 0%, #31a05b 100%);
+    transition: width 0.24s ease;
+}
+
+.upload-progress.phase-error .upload-progress-fill {
+    background: linear-gradient(90deg, #f1a2a2 0%, #ca4d4d 100%);
+}
+
+.upload-progress-meta {
+    margin-top: 5px;
+    font-size: 10px;
+    color: #7e8d83;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.upload-progress-message {
+    margin-top: 3px;
+    font-size: 10px;
+    color: #54705f;
+    word-break: break-word;
 }
 
 .row-label {
@@ -573,49 +754,113 @@ function applyStyle() {
 }
 
 .layer-item {
-    border: 1px solid #e2ece6;
-    border-radius: 8px;
-    padding: 8px;
-    background: #f8fcf9;
+    border-bottom: 1px solid #e8efe9;
+    padding: 8px 4px;
+    background: transparent;
     cursor: pointer;
-    transition: background-color 0.15s ease, border-color 0.15s ease;
+    transition: background-color 0.15s ease;
 }
 
 .layer-item:hover {
-    background: #f0f8f3;
-    border-color: #cfe4d8;
+    background: #f4faf6;
 }
 
-.layer-line {
+.layer-main {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
 }
 
+.layer-title-wrap {
+    min-width: 0;
+    flex: 1;
+}
+
 .name {
-    max-width: 150px;
+    display: inline-block;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.meta {
-    font-size: 11px;
-    color: #78907f;
+.feature-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #486353;
+    border: 1px solid #d4e6db;
+    background: #f2f8f4;
+    border-radius: 999px;
+    padding: 1px 7px;
+    line-height: 1.5;
 }
 
 .layer-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    margin-top: 6px;
+    margin-left: auto;
 }
 
-.tool-grid {
+.icon-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.action-icon-btn {
+    position: relative;
+    border: 1px solid #d6e5dc;
+    background: #f7fcf9;
+    color: #2f6046;
+    border-radius: 7px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.action-icon-btn:hover {
+    background: #ebf7f0;
+    border-color: #87bf9d;
+    color: #1f7b49;
+}
+
+.action-icon-btn.danger {
+    border-color: #ebc8c8;
+    background: #fff5f5;
+    color: #ae4a4a;
+}
+
+.action-icon-btn.danger:hover {
+    border-color: #df9d9d;
+    background: #ffecec;
+    color: #9f2f2f;
+}
+
+.action-icon-btn[data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: #fff;
+    background: rgba(35, 49, 42, 0.92);
+    padding: 3px 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.draw-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
 }
 
 .actions-row,
@@ -641,8 +886,6 @@ function applyStyle() {
 
 .ghost-btn,
 .small-btn,
-.tool-btn,
-.mini,
 .template {
     border: 1px solid #d5e4db;
     background: #f6fbf8;
@@ -653,7 +896,41 @@ function applyStyle() {
     cursor: pointer;
 }
 
-.btn-primary {
+.draw-tool-btn {
+    min-height: 34px;
+    border: 1px solid #7fbe98;
+    background: #fbfefd;
+    color: #2f6147;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.draw-tool-btn:hover {
+    background: #f1f9f4;
+}
+
+.draw-tool-btn.active {
+    border-color: #2f9a57;
+    background: #2f9a57;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.draw-op-btn {
+    border: 1px solid transparent;
+    border-radius: 8px;
+    min-height: 34px;
+    background: #f6fbf8;
+    padding: 6px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.draw-op-primary {
     border-color: #7eaed8;
     background: #edf5fc;
     color: #245f95;
@@ -665,7 +942,7 @@ function applyStyle() {
     color: #1d7541;
 }
 
-.btn-warning {
+.draw-op-warning {
     border-color: #e8c080;
     background: #fff7e8;
     color: #9a5a02;
@@ -679,18 +956,119 @@ function applyStyle() {
 
 .ghost-btn:hover,
 .small-btn:hover,
-.tool-btn:hover,
-.mini:hover,
 .template:hover {
     background: #ebf7f0;
     border-color: #7fc397;
     color: #1d7541;
 }
 
+.style-scroll {
+    padding-top: 2px;
+}
+
+.style-panel {
+    padding: 2px 2px 4px;
+}
+
+.template-chip-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.template-chip {
+    border: 1px solid #d9e8df;
+    background: #fbfdfc;
+    color: #2f4f3e;
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+}
+
+.template-chip:hover {
+    border-color: #8bc3a3;
+    background: #f1f9f4;
+}
+
+.chip-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
+
+.style-divider {
+    height: 1px;
+    background: #deebe3;
+    margin: 12px 0;
+}
+
+.select-wrap {
+    position: relative;
+}
+
+.select-wrap::after {
+    content: '▾';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #56806a;
+    pointer-events: none;
+    font-size: 11px;
+}
+
+.style-select {
+    width: 100%;
+    appearance: none;
+    border: 1px solid #8ec6a5;
+    background: #fbfefc;
+    color: #2d4a3a;
+    border-radius: 8px;
+    padding: 8px 30px 8px 10px;
+}
+
+.style-color {
+    border: 1px solid #d2e5da;
+    border-radius: 8px;
+    padding: 2px;
+    background: #ffffff;
+    height: 34px;
+}
+
+.slider-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: #4d6154;
+}
+
+.style-slider {
+    accent-color: #2f9a57;
+}
+
+.style-apply-btn {
+    margin-top: 8px;
+    border-color: #7cbf95;
+    background: #edf9f1;
+    color: #1f7a44;
+}
+
 .hint {
     font-size: 12px;
-    color: #5e7565;
-    line-height: 1.7;
+    color: #4a555e;
+    line-height: 1.9;
+    padding: 2px 2px 0;
+}
+
+.draw-hint {
+    border: none;
+    background: transparent;
 }
 
 .empty {
@@ -703,14 +1081,31 @@ function applyStyle() {
         padding: 10px;
     }
 
-    .tool-grid {
+    .draw-grid {
         grid-template-columns: 1fr 1fr;
     }
 
     .actions-row,
-    .template-row,
     .field-grid {
         grid-template-columns: 1fr;
+    }
+
+    .template-chip-row {
+        grid-template-columns: 1fr;
+    }
+
+    .name {
+        max-width: 120px;
+    }
+
+    .feature-badge {
+        padding: 1px 6px;
+    }
+
+    .action-icon-btn {
+        width: 22px;
+        height: 22px;
+        font-size: 11px;
     }
 }
 </style>

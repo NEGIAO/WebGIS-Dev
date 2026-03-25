@@ -71,8 +71,10 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import { useMessage } from '../composables/useMessage';
 
 const router = useRouter();
+const message = useMessage();
 const username = ref('');
 const password = ref('');
 const usernameMessage = ref('');
@@ -136,7 +138,7 @@ const handleRegister = () => {
 
     if (isValid) {
         localStorage.setItem('username', username.value);
-        alert('注册成功！即将跳转...');
+        message.success('注册成功！即将跳转...');
         router.push('/home');
     }
 };

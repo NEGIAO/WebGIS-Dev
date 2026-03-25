@@ -19,6 +19,7 @@
 - 📰 **动态资讯**：新闻标题、配图、摘要与外链均可一键获取，便于追踪学院动态。
 - 🎨 **图层管理**：支持 TOC 分组管理（绘制/上传/搜索结果）、拖拽排序、多图层叠加、自定义底图 URL。
 - 🧩 **矢量数据导入**：支持 GeoJSON/KML/KMZ/SHP（含 ZIP）导入与样式编辑。
+- 📦 **容器批处理导入**：支持 Zip/KMZ 容器内多格式、多数据集全量扫描与批量导入，单数据集失败不影响其余数据继续加载。
 - 🛰️ **栅格数据导入**：支持 TIFF/GeoTIFF（单波段与多波段）加载、NoData 透明处理与单波段色带拉伸。
 - 🧲 **拖拽上传**：上传入口支持点击与拖拽一体化上传，且支持多文件批量导入。
 - 🏷️ **自动标注**：上传图层与搜索结果图层默认显示名称标注，便于快速识别数据来源。
@@ -77,58 +78,91 @@ WebGIS_Dev/
 │   │   ├── locationSearch.js          # 多服务地名搜索封装
 │   │   └── map.js                     # 地图相关 API 封装
 │   ├── assets/
-│   │   ├── base.css
-│   │   ├── main.css
-│   │   └── logo.svg
+│   │   ├── base.css                   # 全局基础样式（重置、排版与通用变量）
+│   │   ├── main.css                   # 应用入口样式与布局补充
+│   │   └── logo.svg                   # 项目 Logo 资源
 │   ├── components/
-│   │   ├── MapContainer.vue
-│   │   ├── SidePanel.vue
-│   │   ├── ToolboxPanel.vue
-│   │   ├── BusPlannerPanel.vue
-│   │   ├── DrivingPlannerPanel.vue
-│   │   ├── MapPointPickerCard.vue
-│   │   ├── LocationSearch.vue
-│   │   ├── ChatPanelContent.vue
-│   │   ├── CesiumContainer.vue
-│   │   ├── TopBar.vue
-│   │   ├── MagicCursor.vue
-│   │   └── icons/
+│   │   ├── MapContainer.vue           # OpenLayers 主地图容器与地图交互入口
+│   │   ├── SidePanel.vue              # 右侧功能面板（新闻/聊天/工具箱/公交/驾车）
+│   │   ├── ToolboxPanel.vue           # 图层管理、上传、绘制、样式编辑面板
+│   │   ├── BusPlannerPanel.vue        # 公交路径规划与步骤面板
+│   │   ├── DrivingPlannerPanel.vue    # 驾车/步行路径规划与步骤面板
+│   │   ├── MapPointPickerCard.vue     # 地图起终点选取卡片（公交/驾车共用）
+│   │   ├── LocationSearch.vue         # 地名搜索输入与服务选择组件
+│   │   ├── ChatPanelContent.vue       # AI 助手对话面板
+│   │   ├── CesiumContainer.vue        # Cesium 3D 地球容器（按需懒加载）
+│   │   ├── TopBar.vue                 # 顶部工具栏与功能入口
+│   │   ├── MagicCursor.vue            # 鼠标特效组件
+│   │   └── icons/                     # 顶栏与功能区图标组件集合
 │   ├── composables/
-│   │   ├── useAreaImageOverlay.js
+│   │   ├── useAreaImageOverlay.js     # 地环院区域缩略图覆盖层与大图联动
 │   │   ├── useLayerDataImport.js      # 矢量/栅格导入（含 CRS 识别与转换）
-│   │   ├── useManagedLayerRegistry.js
-│   │   ├── useUserLayerActions.js
-│   │   └── useUserLocation.js
+│   │   ├── useGisLoader.js            # GISDataInlet 调度入口（CRS-Aware）
+│   │   ├── useKmzLoader.js            # KMZ/KML 提取与内部资源重写
+│   │   ├── useManagedLayerRegistry.js # 统一管理用户图层记录与图层元数据
+│   │   ├── useUserLayerActions.js     # 用户图层操作（显隐/删除/排序/样式）
+│   │   └── useUserLocation.js         # 定位、IP 区域判断与用户位置更新
 │   ├── router/
-│   │   └── index.js
+│   │   └── index.js                   # 路由表与页面跳转配置
 │   ├── utils/
-│   │   ├── loadTiandituSdk.js
-│   │   ├── drawTransitRoute.ts
-│   │   ├── transitRouteBuilder.js
-│   │   ├── driveXmlParser.ts
-│   │   ├── coordTransform.js
+│   │   ├── loadTiandituSdk.js         # 按需加载天地图 SDK
+│   │   ├── drawTransitRoute.ts        # 公交线段渲染与步骤高亮工具
+│   │   ├── transitRouteBuilder.js     # 公交结果构建为地图可渲染数据
+│   │   ├── driveXmlParser.ts          # 天地图驾车 XML 结果解析器
+│   │   ├── coordTransform.js          # 常用坐标转换工具
 │   │   ├── crsUtils.js                # 投影标准化/识别/注册工具
-│   │   └── userPositionCache.js
-│   │   └── crsUtils.js                # 判断数据坐标并进行转换
+│   │   ├── gis/
+│   │   │   ├── decompressFile.js      # 解压层：ZIP/KMZ 文件头校验 + FileEntryMap
+│   │   │   ├── crsAware.js            # CRS 预判：PRJ/KML/GeoJSON 坐标系识别与容错
+│   │   │   ├── batchProcessor.js      # 批处理层：全量扫描、数据集分类、资源池构建
+│   │   │   └── dataDispatcher.js      # 分发层：批处理路由、逐数据集 CRS 检查、错误聚合
+│   │   └── userPositionCache.js       # 用户定位缓存与回读策略
 │   ├── views/
-│   │   ├── HomeView.vue
-│   │   └── RegisterView.vue
-│   ├── App.vue
-│   └── main.js
+│   │   ├── HomeView.vue               # 主页面（地图与侧边栏编排）
+│   │   └── RegisterView.vue           # 注册/登录演示页面
+│   ├── App.vue                        # 根组件与路由出口
+│   └── main.js                        # Vue 应用启动入口
 ├── .env                                # 本地环境变量（不提交）
 ├── .env.example                        # 环境变量模板
-├── .gitignore
-├── eslint.config.js
-├── index.html
-├── jsconfig.json
-├── package.json
-├── package-lock.json
-├── start_server.bat
+├── .gitignore                          # Git 忽略规则
+├── eslint.config.js                    # ESLint 规则配置
+├── index.html                          # 应用 HTML 入口
+├── jsconfig.json                       # JS/TS 编辑器路径与类型配置
+├── package.json                        # 项目脚本与依赖定义
+├── package-lock.json                   # 依赖锁定文件
+├── start_server.bat                    # Windows 本地静态服务启动脚本
 ├── vite.config.js                      # Vite + Cesium 部署路径配置
-└── README.md
+└── README.md                           # 项目说明与版本记录
 ```
 
+### GISDataInlet 数据流（ZIP/KMZ 全量批处理）
+
+1. `src/utils/gis/decompressFile.js`：先做文件头校验（magic number），再统一产出压缩包条目。
+2. `src/utils/gis/batchProcessor.js`：全量遍历容器文件，构建 `Map<path, ArrayBuffer>` 资源池并分类识别所有数据集（KML/KMZ/SHP/TIFF/GeoJSON）。
+3. `src/utils/gis/crsAware.js`：对每个数据集独立执行 CRS 预判（`.prj` / KML 线索 / GeoJSON crs），统一对齐到 EPSG:4326/3857 工作流。
+4. `src/utils/gis/dataDispatcher.js`：按批处理任务逐个分发并聚合结果，输出 `packets + warnings + errors + summary`。
+5. `src/composables/useGisLoader.js`：维护响应式状态与 Blob URL 生命周期。
+6. `src/composables/useLayerDataImport.js`：消费 packet，创建图层并接入样式与交互。
+
+批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
+
 ## 版本记录
+
+### V2.6.0 (2026-03-25)
+#### 🛠️ 交互与 UI 革命 (UX/UI Refactor)
+* **非阻塞通知系统**：全面抛弃原生 `alert()`，上线自研 **Glassmorphism（磨砂玻璃）响应式 Message 系统**。支持消息队列，平滑处理批量导入时的多状态反馈。
+* **侧边栏逻辑重构**：默认激活面板由“资讯”改为“工具箱（Toolbox）”，实现“开箱即用”的图层操作与数据管理体验。
+* **卡片智能显示**：绘制、路线、搜索结果图层采用“数据驱动显示”策略（v-if 逻辑优化），无数据时不占位，确保界面视觉聚焦。
+* **会话状态保活**：路径规划（公交/驾车）面板支持状态保持，关闭或切换后再次打开，历史规划结果与步骤依然留存。
+
+#### 📦 核心引擎升级 (Data Engine)
+* **万能容器层 (Data Inlet)**：
+    * **深度解压**：基于 `JSZip` 实现 ZIP/KMZ 容器的递归扫描，支持多层级嵌套文件夹识别。
+    * **自动化批处理**：突破单一文件限制，支持一次性识别并队列化导入包内所有的 `.shp`, `.kml`, `.tif`, `.json` 资源。
+* **坐标系中心 (CRS Engine)**：
+    * **空间感知**：自动解析 `.prj` 投影文件或 KML 内部元数据定义。
+    * **动态重投影**：集成 `proj4` 算法，实现非标坐标系（如北京54/西安80/CGCS2000）向 `EPSG:4326/3857` 的自动转换。
+* **内存优化管理**：建立 **Blob 资源生命周期管控机制**，自动执行 `revokeObjectURL`，完美适配 **1.4GB+** 级大规模空间数据导入场景。
 
 ### V2.5.2 (2026-03-22)
 - **🧩 地图主文件可维护性整合（MapContainer）**：

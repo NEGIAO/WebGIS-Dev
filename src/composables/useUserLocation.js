@@ -3,12 +3,14 @@ import Point from 'ol/geom/Point';
 import CircleGeom from 'ol/geom/Circle';
 import { fromLonLat } from 'ol/proj';
 import { saveUserPositionToCache } from '../utils/userPositionCache';
+import { useMessage } from './useMessage';
 
 export function useUserLocation({
     mapInstance,
     userLocationSource,
     isDomestic
 }) {
+    const message = useMessage();
     function isCoordinateInChina(lon, lat) {
         if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
         return lon >= 73.0 && lon <= 135.0 && lat >= 18.0 && lat <= 54.0;
@@ -76,7 +78,7 @@ export function useUserLocation({
             updateUserPosition(pos, true);
         } catch (err) {
             console.warn('定位失败:', err.message);
-            alert('无法获取您的位置，请确保允许定位权限。');
+            message.error('无法获取您的位置，请确保允许定位权限。', { closable: true, duration: 6000 });
         }
     }
 

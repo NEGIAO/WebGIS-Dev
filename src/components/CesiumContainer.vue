@@ -20,6 +20,7 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
+import { useMessage } from '../composables/useMessage';
 
 // 动态引入cesium，避免性能问题和401错误，同时保持代码清晰和可维护。
 let Cesium = null;
@@ -49,6 +50,7 @@ const TDT_BOUNDS_DATA = [{ "x": 6, "y": 1, "level": 2, "boundBox": { "minX": 90,
 let viewer = null;
 let handler = null;
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
+const message = useMessage();
 
 // --- 生命周期 ---
 onMounted(() => {
@@ -403,7 +405,7 @@ async function loadCustomTileset() {
 
   } catch (error) {
     console.error(`加载模型失败: ${error}`);
-    alert('加载3D模型失败，可能是网络原因无法访问 GitHub 资源。');
+    message.error('加载3D模型失败，可能是网络原因无法访问 GitHub 资源。', { closable: true, duration: 6500 });
   }
 }
 </script>
