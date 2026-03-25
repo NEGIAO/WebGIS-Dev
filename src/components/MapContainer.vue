@@ -4,9 +4,10 @@
 
         <!-- 图片集覆盖层 (特定区域显示) -->
         <transition name="fade">
-            <div class="imageset" v-show="showImageSet"
+            <div v-if="shouldMountImageSet && showImageSet" class="imageset"
                 :style="{ left: imageSetPosition.x + 'px', top: imageSetPosition.y + 'px' }">
                 <img v-for="(img, index) in images" :key="index" :src="img" class="thumbnail"
+                    loading="lazy" decoding="async"
                     @click.stop="showLargeImage(img)" />
             </div>
         </transition>
@@ -174,7 +175,8 @@ const showDynamicSplitLines = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
-const images = ref(IMAGES);
+const shouldMountImageSet = ref(false);
+const images = ref([]);
 const currentZoom = ref(17); // 当前缩放级别
 
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
@@ -415,6 +417,12 @@ const {
     largeImageSrc,
     bounds: DIHUAN_BOUNDS,
     emit
+});
+
+watch(showImageSet, (visible) => {
+    if (!visible || shouldMountImageSet.value) return;
+    shouldMountImageSet.value = true;
+    images.value = IMAGES;
 });
 
 const isAttributeQueryEnabled = ref(true);

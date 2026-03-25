@@ -45,10 +45,12 @@ let handler = null;
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 
 // --- 生命周期 ---
-onMounted(async () => {
+onMounted(() => {
   initViewer();
   setupInteractions();
-  await loadAndSetupTianditu();
+  // 先保证首屏有地球和影像，再异步加载增强图层。
+  addFastBaseImagery();
+  loadAndSetupTiandituEnhancements();
 });
 
 onUnmounted(() => {
@@ -117,34 +119,42 @@ function setupInteractions() {
 /**
  * 3. 加载并配置天地图 (含插件和图层)
  */
-async function loadAndSetupTianditu() {
+async function loadAndSetupTiandituEnhancements() {
   // 暴露 Cesium 到全局供插件使用
   window.Cesium = { ...Cesium };
 
   try {
     // 使用补丁模式加载脚本，防止插件报错
     await loadScriptsWithPatch(TDT_SCRIPTS);
-    addLayers();
+    addTiandituEnhancements();
   } catch (e) {
     console.error('天地图插件加载或初始化失败', e);
   }
 }
 
 /**
- * 添加所有图层 (影像、国界、地形、三维地名)
+ * 首屏快速影像图层：不依赖天地图插件，尽快出图
  */
-function addLayers() {
+function addFastBaseImagery() {
   const imageryLayers = viewer.imageryLayers;
 
-  // A. 基础底图 (Google Maps)
+  // 基础底图 (Google Maps)
   const googleLayer = new Cesium.UrlTemplateImageryProvider({
     url: GOOGLE_MAP_URL,
     tilingScheme: new Cesium.WebMercatorTilingScheme(),
     maximumLevel: 20
   });
   imageryLayers.addImageryProvider(googleLayer);
+}
 
-  // B. 国界标注 (天地图)
+/**
+ * 增强图层：插件加载完成后再异步补充
+ */
+function addTiandituEnhancements() {
+  if (!viewer) return;
+  const imageryLayers = viewer.imageryLayers;
+
+  // 国界标注 (天地图)
   const borderLayer = new Cesium.UrlTemplateImageryProvider({
     url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cia&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TDT_TOKEN}`,
     tilingScheme: new Cesium.WebMercatorTilingScheme(),
@@ -152,7 +162,7 @@ function addLayers() {
   });
   imageryLayers.addImageryProvider(borderLayer);
 
-  // C. 地形服务 (天地图)
+  // 地形服务 (天地图)
   const subdomains = ['0', '1', '2', '3', '4', '5', '6', '7'];
   const terrainUrls = subdomains.map(s =>
     `https://t${s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=${TDT_TOKEN}`
@@ -163,7 +173,7 @@ function addLayers() {
     viewer.terrainProvider = new window.Cesium.GeoTerrainProvider({ urls: terrainUrls });
   }
 
-  // D. 三维地名服务 (WTFS)
+  // 三维地名服务 (WTFS)
   if (window.Cesium.GeoWTFS) {
     setupWTFS(subdomains);
   }

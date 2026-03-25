@@ -16,10 +16,8 @@ import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 
-// 异步导入：Cesium 组件 (优化：只有切换到 3D 模式时才加载库)
-const CesiumContainer = defineAsyncComponent(() =>
-    import('../components/CesiumContainer.vue')
-);
+// Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
+const CesiumContainer = ref(null);
 
 // 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
 const SidePanel = defineAsyncComponent(() =>
@@ -37,6 +35,8 @@ const locationInfo = reactive({
 const selectedImage = ref('');
 const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
+const isCesiumLoaded = ref(false);
+const isCesiumLoading = ref(false);
 const isMagicMode = ref(false);
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
@@ -165,8 +165,29 @@ function handleCloseChat() {
 }
 
 /** 切换 2D/3D 视图 */
-function toggle3D() {
-    is3DMode.value = !is3DMode.value;
+async function toggle3D() {
+    if (is3DMode.value) {
+        is3DMode.value = false;
+        return;
+    }
+
+    if (!isCesiumLoaded.value && !isCesiumLoading.value) {
+        isCesiumLoading.value = true;
+        try {
+            const module = await import('../components/CesiumContainer.vue');
+            CesiumContainer.value = module.default;
+            isCesiumLoaded.value = true;
+        } catch (error) {
+            console.error('Cesium 组件加载失败', error);
+            return;
+        } finally {
+            isCesiumLoading.value = false;
+        }
+    }
+
+    if (isCesiumLoaded.value) {
+        is3DMode.value = true;
+    }
 }
 
 /** 切换鼠标特效 */
@@ -323,8 +344,11 @@ function handleFeatureSelected(properties) {
                     </div>
                 </transition>
 
-                <!-- 异步加载的 Cesium 组件 -->
-                <CesiumContainer v-if="is3DMode" />
+                <!-- 点击后按需加载的 Cesium 组件 -->
+                <component :is="CesiumContainer" v-if="is3DMode && isCesiumLoaded" />
+                <div v-if="isCesiumLoading" class="cesium-loading">
+                    正在加载 3D 引擎...
+                </div>
             </div>
 
             <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed }">
@@ -419,6 +443,19 @@ function handleFeatureSelected(properties) {
     display: flex;
     min-width: 0;
     /* Important for flex items to shrink */
+}
+
+.cesium-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.35);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
 }
 
 .query-panel {
