@@ -69,8 +69,10 @@
 import { ref, nextTick, watch } from 'vue';
 import { reverseGeocodeTianditu } from '../api/map';
 import { readUserPositionFromCache } from '../utils/userPositionCache';
+import { useMessage } from '../composables/useMessage';
 
 const emit = defineEmits(['close-chat']);
+const message = useMessage();
 
 const showSettings = ref(false);
 const inputMessage = ref('');
@@ -95,6 +97,8 @@ const modelName = ref(localStorage.getItem('llm_model_v4') || DEFAULT_MODEL);
 
 const messages = ref([]);
 const firstMessageLocationInjected = ref(false);
+const clearConfirmArmed = ref(false);
+let clearConfirmTimer = null;
 
 // 经济模式：限制上下文和回答长度，尽量降低 token 消耗
 const ECONOMY_SYSTEM_PROMPT = '你是 WebGIS 助手。默认用中文，回答控制在3-5句内，除非用户明确要求详细；优先给简短、可执行步骤；代码只给最小可运行片段。';
@@ -285,9 +289,26 @@ const scrollToBottom = () => {
 };
 
 const clearHistory = () => {
-  if (confirm('确定要清除聊天历史吗？')) {
-    messages.value = [initWelcomeMessage()];
+  if (!clearConfirmArmed.value) {
+    clearConfirmArmed.value = true;
+    message.warning('再次点击清除按钮可删除聊天历史', { duration: 3000 });
+    if (clearConfirmTimer) {
+      clearTimeout(clearConfirmTimer);
+    }
+    clearConfirmTimer = setTimeout(() => {
+      clearConfirmArmed.value = false;
+      clearConfirmTimer = null;
+    }, 3000);
+    return;
   }
+
+  if (clearConfirmTimer) {
+    clearTimeout(clearConfirmTimer);
+    clearConfirmTimer = null;
+  }
+  clearConfirmArmed.value = false;
+  messages.value = [initWelcomeMessage()];
+  message.success('聊天历史已清除');
 };
 
 const fetchModels = async () => {

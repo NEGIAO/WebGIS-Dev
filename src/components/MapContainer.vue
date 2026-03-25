@@ -116,8 +116,10 @@ import { fetchLocationResultsByService } from '../api/locationSearch';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
 import { useAreaImageOverlay } from '../composables/useAreaImageOverlay';
+import { useMessage } from '../composables/useMessage';
 
 const LocationSearch = defineAsyncComponent(() => import('./LocationSearch.vue'));
+const message = useMessage();
 
 // OpenLayers 核心库
 import Map from 'ol/Map';
@@ -390,7 +392,8 @@ const emit = defineEmits([
     'feature-selected',
     'user-layers-change',
     'graphics-overview',
-    'base-layers-change'
+    'base-layers-change',
+    'upload-progress-change'
 ]);
 
 const {
@@ -1157,7 +1160,8 @@ async function ensureLayerDataImportApi() {
                 userDataLayers,
                 addManagedLayerRecord,
                 createManagedVectorLayer,
-                styleTemplates: STYLE_TEMPLATES
+                styleTemplates: STYLE_TEMPLATES,
+                onImportProgress: (payload) => emit('upload-progress-change', payload)
             })
         ));
     }
@@ -1640,7 +1644,7 @@ function loadCustomMap() {
             }
         }
     } catch (e) {
-        alert('URL格式错误或无法解析');
+        message.error('URL格式错误或无法解析');
     }
 }
 
@@ -2006,7 +2010,7 @@ function selectResult(item) {
     const lon = lonVal != null ? parseFloat(lonVal) : NaN;
     const lat = latVal != null ? parseFloat(latVal) : NaN;
     if (Number.isNaN(lon) || Number.isNaN(lat)) {
-        alert('无法解析该结果的坐标');
+        message.warning('无法解析该结果的坐标');
         return;
     }
     const coord = fromLonLat([lon, lat]);

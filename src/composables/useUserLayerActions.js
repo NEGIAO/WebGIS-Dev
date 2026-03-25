@@ -1,3 +1,5 @@
+import { useMessage } from './useMessage';
+
 export function useUserLayerActions({
     mapInstance,
     userDataLayers,
@@ -17,6 +19,8 @@ export function useUserLayerActions({
     projectExtentToMapView,
     emitFeatureSelected
 }) {
+    const message = useMessage();
+
     function findUserLayer(layerId) {
         return userDataLayers.find(item => item.id === layerId);
     }
@@ -80,7 +84,7 @@ export function useUserLayerActions({
         const target = findUserLayer(layerId);
         if (!target) return;
         if (typeof target.layer?.setStyle !== 'function') {
-            alert('当前图层类型不支持矢量样式编辑');
+            message.warning('当前图层类型不支持矢量样式编辑');
             return;
         }
 

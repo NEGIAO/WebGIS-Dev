@@ -12,14 +12,17 @@
             </div>
             
             <!-- 模式 1: AI 聊天 -->
-            <ChatPanelContent v-if="activeTab === 'chat'" @close-chat="$emit('close-chat')" />
+            <div v-show="activeTab === 'chat'" class="toolbox-content">
+                <ChatPanelContent @close-chat="$emit('close-chat')" />
+            </div>
 
             <!-- 模式 2: 工具箱 -->
-            <div v-else-if="activeTab === 'toolbox'" class="toolbox-content">
+            <div v-show="activeTab === 'toolbox'" class="toolbox-content">
                 <ToolboxPanel
                     :userLayers="userLayers"
                     :baseLayers="baseLayers"
                     :overview="toolboxOverview"
+                    :uploadProgress="uploadProgress"
                     @close="$emit('switch-tab', 'info')"
                     @upload-data="$emit('upload-data', $event)"
                     @interaction="$emit('interaction', $event)"
@@ -40,7 +43,7 @@
             </div>
 
             <!-- 模式 3: 公交规划 -->
-            <div v-else-if="activeTab === 'bus'" class="toolbox-content">
+            <div v-show="activeTab === 'bus'" class="toolbox-content">
                 <BusPlannerPanel
                     :token="tiandituToken"
                     :start-bus-point-pick="startBusPointPick"
@@ -53,7 +56,7 @@
             </div>
 
             <!-- 模式 4: 驾车规划 -->
-            <div v-else-if="activeTab === 'drive'" class="toolbox-content">
+            <div v-show="activeTab === 'drive'" class="toolbox-content">
                 <DrivingPlannerPanel
                     :token="tiandituToken"
                     :start-map-point-pick="startBusPointPick"
@@ -66,7 +69,7 @@
             </div>
 
             <!-- 模式 5: 新闻展示 (默认) -->
-            <div v-else class="info-content">
+            <div v-show="activeTab === 'info'" class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
                     <img :src="resolvePath('images/院徽.png')" class="logo" alt="河南大学地理科学学院Logo">
@@ -162,6 +165,10 @@ const props = defineProps({
     toolboxOverview: {
         type: Object,
         default: () => ({ drawCount: 0, uploadCount: 0, layers: [] })
+    },
+    uploadProgress: {
+        type: Object,
+        default: () => ({ phase: 'idle' })
     },
     activeFeature: {
         type: Object,

@@ -40,12 +40,13 @@ const isCesiumLoading = ref(false);
 const isMagicMode = ref(false);
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
-const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
+const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
 const showQueryPanel = ref(false);
 const toolboxOverview = ref({ drawCount: 0, uploadCount: 0, layers: [] });
 const baseLayers = ref([]);
+const uploadProgress = ref({ phase: 'idle' });
 const activeFeature = ref({ key: 'info', label: '新闻' });
 
 // 组件引用
@@ -269,6 +270,10 @@ function handleBaseLayersChange(layers) {
     baseLayers.value = layers || [];
 }
 
+function handleUploadProgressChange(progress) {
+    uploadProgress.value = progress || { phase: 'idle' };
+}
+
 function closeQueryPanel() {
     showQueryPanel.value = false;
 }
@@ -314,6 +319,7 @@ function handleFeatureSelected(properties) {
                     @feature-selected="handleFeatureSelected"
                     @user-layers-change="handleUserLayersChange"
                     @graphics-overview="handleGraphicsOverview"
+                    @upload-progress-change="handleUploadProgressChange"
                     @base-layers-change="handleBaseLayersChange"
                 />
 
@@ -356,7 +362,7 @@ function handleFeatureSelected(properties) {
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
                     :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
                     :activeFeature="activeFeature" :userLayers="userLayers" :baseLayers="baseLayers"
-                    :toolboxOverview="toolboxOverview" :get-user-location="getMapUserLocation"
+                    :toolboxOverview="toolboxOverview" :uploadProgress="uploadProgress" :get-user-location="getMapUserLocation"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
                     :zoom-to-bus-route-step="zoomToBusRouteStep"
