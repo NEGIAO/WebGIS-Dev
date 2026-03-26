@@ -112,6 +112,8 @@
 
 <script setup>
 import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import debounce from 'lodash/debounce';
 import { fetchLocationResultsByService } from '../api/locationSearch';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
@@ -152,6 +154,9 @@ const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
 const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51';
+
+const route = useRoute();
+const router = useRouter();
 
 // 天地图 Token：优先使用环境变量，否则使用默认值
 // 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
@@ -370,6 +375,7 @@ let homeClickTimer = null; // 用于处理单击双击冲突
 let componentUnmounted = false;
 let dynamicSplitLinesLayer = null;
 let dynamicSplitMoveKey = null;
+let mapMoveEndKey = null;
 let pendingBusPick = null;
 let busRouteLayerRef = null;
 let busRouteManagedLayerId = null;
@@ -787,6 +793,74 @@ function getCurrentDriveStepIndex() {
     return driveHoverStepIndex >= 0 ? driveHoverStepIndex : driveActiveStepIndex;
 }
 
+function getFirstQueryValue(value) {
+    if (Array.isArray(value)) return value[0];
+    return value;
+}
+
+function parseQueryNumber(value) {
+    const raw = Number(getFirstQueryValue(value));
+    return Number.isFinite(raw) ? raw : null;
+}
+
+function readRouteViewState() {
+    const lng = parseQueryNumber(route.query.lng);
+    const lat = parseQueryNumber(route.query.lat);
+    if (lng === null || lat === null) return null;
+
+    const zoom = parseQueryNumber(route.query.z);
+    return {
+        center: [lng, lat],
+        zoom: zoom === null ? INITIAL_VIEW.zoom : zoom
+    };
+}
+
+function getInitialViewState() {
+    return readRouteViewState() || INITIAL_VIEW;
+}
+
+function formatViewQueryValue(value, fractionDigits) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return null;
+    return numberValue.toFixed(fractionDigits);
+}
+
+function buildMapQueryFromView() {
+    const map = mapInstance.value;
+    if (!map) return null;
+
+    const view = map.getView?.();
+    const center = view?.getCenter?.();
+    if (!Array.isArray(center) || center.length < 2) return null;
+
+    const lonLat = toLonLat(center);
+    const zoom = view?.getZoom?.();
+    return {
+        lng: formatViewQueryValue(lonLat[0], 6),
+        lat: formatViewQueryValue(lonLat[1], 6),
+        z: formatViewQueryValue(zoom, 2)
+    };
+}
+
+function isSameMapQuery(nextQuery) {
+    const currentLng = String(getFirstQueryValue(route.query.lng) ?? '');
+    const currentLat = String(getFirstQueryValue(route.query.lat) ?? '');
+    const currentZoom = String(getFirstQueryValue(route.query.z) ?? '');
+    return currentLng === nextQuery.lng && currentLat === nextQuery.lat && currentZoom === nextQuery.z;
+}
+
+const syncMapQueryFromView = debounce(() => {
+    if (componentUnmounted) return;
+    const nextQuery = buildMapQueryFromView();
+    if (!nextQuery || !nextQuery.lng || !nextQuery.lat || !nextQuery.z) return;
+    if (isSameMapQuery(nextQuery)) return;
+
+    void router.replace({
+        path: route.path,
+        query: nextQuery
+    }).catch(() => {});
+}, 500);
+
 // --- 初始化 ---
 onMounted(async () => {
     componentUnmounted = false;
@@ -842,6 +916,12 @@ function waitForCriticalTileReady(timeoutMs = CRITICAL_TILE_READY_TIMEOUT_MS) {
 async function runDeferredStartupTasks() {
     if (componentUnmounted) return;
 
+    const routeViewState = readRouteViewState();
+    if (routeViewState) {
+        message.success('欢迎来到NEGIAO分享的地点'+routeViewState.center.map(c => c.toFixed(6)).join(',')+'，正在加载地图...');
+        return;
+    }
+
     // 1) Google 主机测速切换（非关键，延后执行）。
     resolvePreferredGoogleHost().then((host) => {
         if (componentUnmounted) return;
@@ -871,6 +951,7 @@ async function runDeferredStartupTasks() {
 
 onUnmounted(() => {
     componentUnmounted = true;
+    syncMapQueryFromView.cancel();
     if (pendingBusPick?.reject) {
         pendingBusPick.reject(new Error('地图已卸载'));
         pendingBusPick = null;
@@ -878,6 +959,10 @@ onUnmounted(() => {
     if (dynamicSplitMoveKey) {
         unByKey(dynamicSplitMoveKey);
         dynamicSplitMoveKey = null;
+    }
+    if (mapMoveEndKey) {
+        unByKey(mapMoveEndKey);
+        mapMoveEndKey = null;
     }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
@@ -1499,17 +1584,20 @@ function initMap() {
     ]);
 
     // 1.4 实例化地图
+    const initialViewState = getInitialViewState();
     mapInstance.value = new Map({
         target: mapRef.value,
         layers: [...layersToAdd, drawLayerInstance, userLayer, busRouteLayer, busPickLayer, searchLayer],
         view: new View({
-            center: fromLonLat(INITIAL_VIEW.center),
-            zoom: INITIAL_VIEW.zoom,
+            center: fromLonLat(initialViewState.center),
+            zoom: initialViewState.zoom,
             minZoom: 0,  // 允许缩放到最低级别
             maxZoom: 22
         }),
         controls
     });
+
+    currentZoom.value = Number(mapInstance.value.getView()?.getZoom?.() ?? initialViewState.zoom);
 
     // 1.5 事件监听
     bindEvents();
@@ -1691,6 +1779,10 @@ function bindEvents() {
         if (zoom !== undefined) {
             currentZoom.value = Math.round(zoom);
         }
+    });
+
+    mapMoveEndKey = map.on('moveend', () => {
+        syncMapQueryFromView();
     });
 }
 
