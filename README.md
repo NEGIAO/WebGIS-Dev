@@ -21,7 +21,7 @@
 - 🧩 **矢量数据导入**：支持 GeoJSON/KML/KMZ/SHP（含 ZIP）导入与样式编辑。
 - 📦 **容器批处理导入**：支持 Zip/KMZ 容器内多格式、多数据集全量扫描与批量导入，单数据集失败不影响其余数据继续加载。
 - 🛰️ **栅格数据导入**：支持 TIFF/GeoTIFF（单波段与多波段）加载、NoData 透明处理与单波段色带拉伸。
-- 🧲 **拖拽上传**：上传入口支持点击与拖拽一体化上传，且支持多文件批量导入。
+- 🧲 **拖拽上传**：上传入口支持点击、拖拽、原生文件夹上传（`webkitdirectory`）与递归扫描批量导入。
 - 🏷️ **自动标注**：上传图层与搜索结果图层默认显示名称标注，便于快速识别数据来源。
 - 🧪 **栅格像元查询**：地图单击可返回当前可见栅格图层像元值（按波段展示），用于高程等单波段数据快速判读。
 - 🔎 **地名搜索服务选择**：保留单一搜索按钮，点击后弹出服务菜单，支持在天地图与国际（Nominatim）之间自由选择。
@@ -96,8 +96,10 @@ WebGIS_Dev/
 │   │   └── icons/                     # 顶栏与功能区图标组件集合
 │   ├── composables/
 │   │   ├── useAreaImageOverlay.js     # 地环院区域缩略图覆盖层与大图联动
-│   │   ├── useLayerDataImport.js      # 矢量/栅格导入（含 CRS 识别与转换）
-│   │   ├── useGisLoader.js            # GISDataInlet 调度入口（CRS-Aware）
+│   │   ├── useLayerDataImport.js      # 矢量/栅格导入（消费 packets 并创建图层）
+│   │   ├── useGisLoader.ts            # 调度中心：解压扫描、CRS 预检、解析任务批处理分发
+│   │   ├── useLayerStore.ts           # Pinia 图层状态仓库（显隐/缩放/移除/排序）
+│   │   ├── useStyleEditor.js          # 样式编辑状态与模板构造
 │   │   ├── useKmzLoader.js            # KMZ/KML 提取与内部资源重写
 │   │   ├── useManagedLayerRegistry.js # 统一管理用户图层记录与图层元数据
 │   │   ├── useUserLayerActions.js     # 用户图层操作（显隐/删除/排序/样式）
@@ -112,10 +114,16 @@ WebGIS_Dev/
 │   │   ├── coordTransform.js          # 常用坐标转换工具
 │   │   ├── crsUtils.js                # 投影标准化/识别/注册工具
 │   │   ├── gis/
-│   │   │   ├── decompressFile.js      # 解压层：ZIP/KMZ 文件头校验 + FileEntryMap
-│   │   │   ├── crsAware.js            # CRS 预判：PRJ/KML/GeoJSON 坐标系识别与容错
+│   │   │   ├── decompressor.ts        # 容器层：ZIP/KMZ 解压、目录递归扫描、嵌套压缩包拉平
+│   │   │   ├── crs-engine.ts          # 坐标层：.prj/KML 坐标识别与 proj4 动态重投影
 │   │   │   ├── batchProcessor.js      # 批处理层：全量扫描、数据集分类、资源池构建
-│   │   │   └── dataDispatcher.js      # 分发层：批处理路由、逐数据集 CRS 检查、错误聚合
+│   │   │   ├── dataDispatcher.js      # 分发层：批处理路由、逐数据集 CRS 检查、错误聚合
+│   │   │   ├── decompressFile.js      # 兼容层：原容器解压实现（历史模块）
+│   │   │   ├── crsAware.js            # 兼容层：原 CRS 预判实现（历史模块）
+│   │   │   └── parsers/               # 解析层：按数据格式拆分解析职责
+│   │   │       ├── kmlParser.ts       # KML 文本解析与数据提取
+│   │   │       ├── shpParser.ts       # SHP 组装（同目录同名 sidecar 匹配）
+│   │   │       └── tifLoader.ts       # TIFF/GeoTIFF 原始载入封装
 │   │   └── userPositionCache.js       # 用户定位缓存与回读策略
 │   ├── views/
 │   │   ├── HomeView.vue               # 主页面（地图与侧边栏编排）
@@ -135,14 +143,14 @@ WebGIS_Dev/
 └── README.md                           # 项目说明与版本记录
 ```
 
-### GISDataInlet 数据流（ZIP/KMZ 全量批处理）
+### GISDataInlet 数据流（容器层-解析层-坐标层-调度层）
 
-1. `src/utils/gis/decompressFile.js`：先做文件头校验（magic number），再统一产出压缩包条目。
-2. `src/utils/gis/batchProcessor.js`：全量遍历容器文件，构建 `Map<path, ArrayBuffer>` 资源池并分类识别所有数据集（KML/KMZ/SHP/TIFF/GeoJSON）。
-3. `src/utils/gis/crsAware.js`：对每个数据集独立执行 CRS 预判（`.prj` / KML 线索 / GeoJSON crs），统一对齐到 EPSG:4326/3857 工作流。
-4. `src/utils/gis/dataDispatcher.js`：按批处理任务逐个分发并聚合结果，输出 `packets + warnings + errors + summary`。
-5. `src/composables/useGisLoader.js`：维护响应式状态与 Blob URL 生命周期。
-6. `src/composables/useLayerDataImport.js`：消费 packet，创建图层并接入样式与交互。
+1. `src/utils/gis/decompressor.ts`：递归扫描文件、文件夹、ZIP/KMZ，自动展开“压缩包套压缩包”并拉平资源。
+2. `src/utils/gis/parsers/*.ts`：按格式解析数据（KML/SHP/TIFF），其中 SHP 强制同目录同名 sidecar 关联（A.shp 对应 A.dbf/A.shx）。
+3. `src/utils/gis/crs-engine.ts`：对每个识别数据集执行 CRS 识别与投影策略决策，必要时触发 `proj4` 重投影。
+4. `src/composables/useGisLoader.ts`：统一调度入口，`Promise.all` 批处理解析任务并复用 `dataDispatcher` 聚合 `packets + warnings + errors + summary`。
+5. `src/composables/useLayerDataImport.js`：消费 packet，创建图层并接入样式、标注与交互。
+6. `src/composables/useLayerStore.ts`：维护图层 UI 状态与操作行为（显隐、缩放、移除、排序）。
 
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 

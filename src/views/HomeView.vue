@@ -254,6 +254,14 @@ function handleUpdateLayerStyle(payload) {
     mapContainerRef.value?.setUserLayerStyle(payload);
 }
 
+function handleHighlightAttributeFeature(payload) {
+    mapContainerRef.value?.highlightManagedFeature?.(payload);
+}
+
+function handleZoomAttributeFeature(payload) {
+    mapContainerRef.value?.zoomToManagedFeature?.(payload);
+}
+
 function handleToggleLayerLabelVisibility(payload) {
     mapContainerRef.value?.setUserLayerLabelVisibility(payload);
 }
@@ -381,6 +389,8 @@ function handleFeatureSelected(properties) {
                     @remove-layer="handleRemoveLayer" @reorder-user-layers="handleReorderUserLayers"
                     @solo-layer="handleSoloLayer" @apply-style-template="handleApplyStyleTemplate"
                     @update-draw-style="handleUpdateDrawStyle" @update-layer-style="handleUpdateLayerStyle"
+                    @highlight-attribute-feature="handleHighlightAttributeFeature"
+                    @zoom-attribute-feature="handleZoomAttributeFeature"
                     @switch-tab="handleSwitchSidePanelTab"
                     @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat">

@@ -19,6 +19,7 @@ export function useManagedLayerRegistry({
             order: item.order ?? 0,
             visible: item.visible,
             featureCount: item.featureCount,
+            features: Array.isArray(item.features) ? item.features : [],
             opacity: item.opacity ?? 1,
             autoLabel: !!item.autoLabel,
             labelVisible: item.labelVisible !== false,
@@ -37,7 +38,8 @@ export function useManagedLayerRegistry({
                 id: item.id,
                 name: item.name,
                 visible: item.visible,
-                featureCount: item.featureCount
+                featureCount: item.featureCount,
+                features: Array.isArray(item.features) ? item.features : []
             }))
         });
     }
@@ -49,7 +51,7 @@ export function useManagedLayerRegistry({
         });
     }
 
-    function addManagedLayerRecord({ name, type, sourceType, layer, featureCount = 1, styleConfig = null, metadata = null }) {
+    function addManagedLayerRecord({ name, type, sourceType, layer, featureCount = 1, features = [], styleConfig = null, metadata = null }) {
         const id = createManagedLayerId();
         userDataLayers.push({
             id,
@@ -60,6 +62,7 @@ export function useManagedLayerRegistry({
             visible: true,
             opacity: 1,
             featureCount,
+            features,
             styleConfig,
             metadata,
             layer

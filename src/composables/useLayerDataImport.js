@@ -10,7 +10,7 @@ import {
     ensureProjectionAvailable,
     normalizeProjectionCode
 } from '../utils/crsUtils';
-import { useGisLoader } from './useGisLoader';
+import { useGisLoader } from './useGisLoader.ts';
 import { useMessage } from './useMessage';
 
 export function useLayerDataImport({
@@ -816,184 +816,201 @@ export function useLayerDataImport({
         throw new Error(`不支持的文件类型: ${normalizedType || type}`);
     }
 
-    async function addUserDataLayer({ content, type, name }) {
-        if (!mapInstance.value) return;
-        try {
-            const normalizedType = getNormalizedUploadType(type, name);
-            reportImportProgress({
-                phase: 'validating',
-                message: `正在校验文件：${name || '未命名文件'}`
-            });
+    async function importDispatchedPackets(dispatched, normalizedType, name, batchLabel) {
+        const packets = Array.isArray(dispatched.packets)
+            ? dispatched.packets
+            : (dispatched.packet ? [dispatched.packet] : []);
 
-            if (normalizedType === 'zip' || normalizedType === 'kmz') {
-                reportImportProgress({
-                    phase: 'dispatching',
-                    message: '正在解析压缩包并识别数据集...'
-                });
-                const dispatched = await gisInlet.dispatch({ content, type: normalizedType, name });
+        const detectedCount = Number(dispatched?.summary?.detectedDatasets ?? packets.length);
+        console.info(`已识别到 ${detectedCount} 个数据集，正在同步导入...`);
 
-                const packets = Array.isArray(dispatched.packets)
-                    ? dispatched.packets
-                    : (dispatched.packet ? [dispatched.packet] : []);
+        if (!packets.length) {
+            throw new Error('未找到可用 GIS 数据');
+        }
 
-                const detectedCount = Number(dispatched?.summary?.detectedDatasets ?? packets.length);
-                console.info(`已识别到 ${detectedCount} 个数据集，正在同步导入...`);
+        const importErrors = [];
+        let importedCount = 0;
+        const total = packets.length;
 
-                if (!packets.length) {
-                    throw new Error('压缩包中未找到可用 GIS 数据');
+        reportImportProgress({
+            phase: 'importing',
+            total,
+            current: 0,
+            success: 0,
+            failed: 0,
+            warnings: Array.isArray(dispatched.warnings) ? dispatched.warnings.length : 0,
+            errors: Array.isArray(dispatched.errors) ? dispatched.errors.length : 0,
+            message: `准备导入 ${total} 个数据集...`
+        });
+
+        for (const packet of packets) {
+            try {
+                const layerName = getLayerNameFromEntry(packet.entryName, name || '上传图层');
+
+                if (packet.kind === 'tiff') {
+                    await createManagedRasterLayer({
+                        name: layerName,
+                        type: 'tiff',
+                        sourceType: 'upload',
+                        data: packet.arrayBuffer,
+                        fitView: importedCount === 0
+                    });
+                    importedCount += 1;
+                    continue;
                 }
 
-                const importErrors = [];
-                let importedCount = 0;
-                const total = packets.length;
+                let features = [];
+                let layerType = packet.kind;
 
+                if (packet.kind === 'kml') {
+                    features = await parseKmlTextToFeaturesWithProjection(
+                        packet.kmlString,
+                        packet.dataProjection || 'EPSG:4326',
+                        normalizedType === 'kmz' ? 'KMZ/KML' : 'ZIP/KML'
+                    );
+                    layerType = normalizedType === 'kmz' ? 'kmz' : 'kml';
+                } else if (packet.kind === 'geojson') {
+                    const dataProjection = await resolveSupportedProjection(packet.dataProjection || 'EPSG:4326', 'EPSG:4326', 'GeoJSON');
+                    const gjFormat = new GeoJSON();
+                    features = gjFormat.readFeatures(packet.geojsonData, {
+                        dataProjection,
+                        featureProjection: 'EPSG:3857'
+                    });
+                    layerType = 'geojson';
+                } else if (packet.kind === 'shp') {
+                    const shp = await getShpParser();
+                    const geojson = await shp(packet.shpParts);
+                    const gjFormat = new GeoJSON();
+                    const featureCollection = Array.isArray(geojson)
+                        ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
+                        : geojson;
+                    const dataProjection = await resolveSupportedProjection(packet.dataProjection || 'EPSG:4326', 'EPSG:4326', 'SHP/ZIP');
+                    features = gjFormat.readFeatures(featureCollection, {
+                        dataProjection,
+                        featureProjection: 'EPSG:3857'
+                    });
+                    layerType = 'shp';
+                } else {
+                    throw new Error(`不支持的 packet 类型: ${packet.kind}`);
+                }
+
+                if (!features.length) throw new Error('无有效要素');
+
+                const labelField = pickFeatureLabelField(features);
+                createManagedVectorLayer({
+                    name: layerName,
+                    type: layerType,
+                    sourceType: 'upload',
+                    features,
+                    styleConfig: styleTemplates.classic,
+                    autoLabel: true,
+                    metadata: {
+                        labelField,
+                        dispatchEntry: packet.entryName || ''
+                    },
+                    fitView: importedCount === 0
+                });
+
+                importedCount += 1;
                 reportImportProgress({
                     phase: 'importing',
                     total,
-                    current: 0,
-                    success: 0,
-                    failed: 0,
+                    current: importedCount + importErrors.length,
+                    success: importedCount,
+                    failed: importErrors.length,
                     warnings: Array.isArray(dispatched.warnings) ? dispatched.warnings.length : 0,
-                    errors: Array.isArray(dispatched.errors) ? dispatched.errors.length : 0,
-                    message: `准备导入 ${total} 个数据集...`
+                    errors: (Array.isArray(dispatched.errors) ? dispatched.errors.length : 0) + importErrors.length,
+                    message: `已导入：${layerName}`
                 });
-
-                for (const packet of packets) {
-                    try {
-                        const layerName = getLayerNameFromEntry(packet.entryName, name || '上传图层');
-
-                        if (packet.kind === 'tiff') {
-                            await createManagedRasterLayer({
-                                name: layerName,
-                                type: 'tiff',
-                                sourceType: 'upload',
-                                data: packet.arrayBuffer,
-                                fitView: importedCount === 0
-                            });
-                            importedCount += 1;
-                            continue;
-                        }
-
-                        let features = [];
-                        let layerType = packet.kind;
-
-                        if (packet.kind === 'kml') {
-                            features = await parseKmlTextToFeaturesWithProjection(
-                                packet.kmlString,
-                                packet.dataProjection || 'EPSG:4326',
-                                normalizedType === 'kmz' ? 'KMZ/KML' : 'ZIP/KML'
-                            );
-                            layerType = normalizedType === 'kmz' ? 'kmz' : 'kml';
-                        } else if (packet.kind === 'geojson') {
-                            const dataProjection = await resolveSupportedProjection(packet.dataProjection || 'EPSG:4326', 'EPSG:4326', 'GeoJSON');
-                            const gjFormat = new GeoJSON();
-                            features = gjFormat.readFeatures(packet.geojsonData, {
-                                dataProjection,
-                                featureProjection: 'EPSG:3857'
-                            });
-                            layerType = 'geojson';
-                        } else if (packet.kind === 'shp') {
-                            const shp = await getShpParser();
-                            const geojson = await shp(packet.shpParts);
-                            const gjFormat = new GeoJSON();
-                            const featureCollection = Array.isArray(geojson)
-                                ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
-                                : geojson;
-                            const dataProjection = await resolveSupportedProjection(packet.dataProjection || 'EPSG:4326', 'EPSG:4326', 'SHP/ZIP');
-                            features = gjFormat.readFeatures(featureCollection, {
-                                dataProjection,
-                                featureProjection: 'EPSG:3857'
-                            });
-                            layerType = 'shp';
-                        } else {
-                            throw new Error(`不支持的 packet 类型: ${packet.kind}`);
-                        }
-
-                        if (!features.length) throw new Error('无有效要素');
-
-                        const labelField = pickFeatureLabelField(features);
-                        createManagedVectorLayer({
-                            name: layerName,
-                            type: layerType,
-                            sourceType: 'upload',
-                            features,
-                            styleConfig: styleTemplates.classic,
-                            autoLabel: true,
-                            metadata: {
-                                labelField,
-                                dispatchEntry: packet.entryName || ''
-                            },
-                            fitView: importedCount === 0
-                        });
-
-                        importedCount += 1;
-                        reportImportProgress({
-                            phase: 'importing',
-                            total,
-                            current: importedCount + importErrors.length,
-                            success: importedCount,
-                            failed: importErrors.length,
-                            warnings: Array.isArray(dispatched.warnings) ? dispatched.warnings.length : 0,
-                            errors: (Array.isArray(dispatched.errors) ? dispatched.errors.length : 0) + importErrors.length,
-                            message: `已导入：${layerName}`
-                        });
-                    } catch (err) {
-                        importErrors.push(`${packet.entryName || packet.kind}: ${err.message}`);
-                        reportImportProgress({
-                            phase: 'importing',
-                            total,
-                            current: importedCount + importErrors.length,
-                            success: importedCount,
-                            failed: importErrors.length,
-                            warnings: Array.isArray(dispatched.warnings) ? dispatched.warnings.length : 0,
-                            errors: (Array.isArray(dispatched.errors) ? dispatched.errors.length : 0) + importErrors.length,
-                            message: `导入失败：${packet.entryName || packet.kind}`
-                        });
-                    }
-                }
-
-                const dispatcherErrors = Array.isArray(dispatched.errors)
-                    ? dispatched.errors.map((item) => `${item.entryName || item.kind}: ${item.message}`)
-                    : [];
-
-                const mergedErrors = [...dispatcherErrors, ...importErrors];
-                const warningCount = gisInlet.warnings.value?.length || 0;
-
-                const feedbackLines = [];
-                if (gisInlet.warnings.value?.length) {
-                    feedbackLines.push('警告信息:');
-                    feedbackLines.push(...gisInlet.warnings.value);
-                }
-                if (mergedErrors.length) {
-                    feedbackLines.push(`失败 ${mergedErrors.length} 项（已跳过并继续处理其余数据）:`);
-                    feedbackLines.push(...mergedErrors);
-                }
-
-                if (feedbackLines.length) {
-                    message.warning(feedbackLines.slice(0, 6).join('\n'), { closable: true, duration: 6500 });
-                }
-
-                message.notifyBatch({
-                    label: normalizedType === 'kmz' ? 'KMZ 批量导入' : 'ZIP 批量导入',
-                    success: importedCount,
-                    failed: mergedErrors.length,
-                    warnings: warningCount
-                });
-
-                if (!importedCount) {
-                    throw new Error('所有数据集导入失败');
-                }
-
+            } catch (err) {
+                importErrors.push(`${packet.entryName || packet.kind}: ${err.message}`);
                 reportImportProgress({
-                    phase: 'done',
+                    phase: 'importing',
                     total,
-                    current: total,
+                    current: importedCount + importErrors.length,
                     success: importedCount,
-                    failed: mergedErrors.length,
-                    warnings: warningCount,
-                    errors: mergedErrors.length,
-                    message: `导入完成：成功 ${importedCount}，失败 ${mergedErrors.length}`
+                    failed: importErrors.length,
+                    warnings: Array.isArray(dispatched.warnings) ? dispatched.warnings.length : 0,
+                    errors: (Array.isArray(dispatched.errors) ? dispatched.errors.length : 0) + importErrors.length,
+                    message: `导入失败：${packet.entryName || packet.kind}`
                 });
+            }
+        }
+
+        const dispatcherErrors = Array.isArray(dispatched.errors)
+            ? dispatched.errors.map((item) => `${item.entryName || item.kind}: ${item.message}`)
+            : [];
+
+        const mergedErrors = [...dispatcherErrors, ...importErrors];
+        const warningCount = gisInlet.warnings.value?.length || 0;
+
+        const feedbackLines = [];
+        if (gisInlet.warnings.value?.length) {
+            feedbackLines.push('警告信息:');
+            feedbackLines.push(...gisInlet.warnings.value);
+        }
+        if (mergedErrors.length) {
+            feedbackLines.push(`失败 ${mergedErrors.length} 项（已跳过并继续处理其余数据）:`);
+            feedbackLines.push(...mergedErrors);
+        }
+
+        if (feedbackLines.length) {
+            message.warning(feedbackLines.slice(0, 6).join('\n'), { closable: true, duration: 6500 });
+        }
+
+        message.notifyBatch({
+            label: batchLabel,
+            success: importedCount,
+            failed: mergedErrors.length,
+            warnings: warningCount
+        });
+
+        if (!importedCount) {
+            throw new Error('所有数据集导入失败');
+        }
+
+        reportImportProgress({
+            phase: 'done',
+            total,
+            current: total,
+            success: importedCount,
+            failed: mergedErrors.length,
+            warnings: warningCount,
+            errors: mergedErrors.length,
+            message: `导入完成：成功 ${importedCount}，失败 ${mergedErrors.length}`
+        });
+    }
+
+    async function addUserDataLayer({ content, type, name, resources }) {
+        if (!mapInstance.value) return;
+        try {
+            const isFolderImport = Array.isArray(resources) && resources.length > 0;
+            const normalizedType = isFolderImport ? 'directory' : getNormalizedUploadType(type, name);
+            reportImportProgress({
+                phase: 'validating',
+                message: `正在校验文件：${name || (isFolderImport ? '文件夹导入' : '未命名文件')}`
+            });
+
+            if (isFolderImport || normalizedType === 'zip' || normalizedType === 'kmz') {
+                reportImportProgress({
+                    phase: 'dispatching',
+                    message: isFolderImport ? '正在递归扫描文件夹并识别数据集...' : '正在解析压缩包并识别数据集...'
+                });
+
+                const dispatched = await gisInlet.dispatch(
+                    isFolderImport
+                        ? { resources, type: normalizedType, name }
+                        : { content, type: normalizedType, name }
+                );
+
+                await importDispatchedPackets(
+                    dispatched,
+                    normalizedType,
+                    name,
+                    isFolderImport
+                        ? '文件夹批量导入'
+                        : (normalizedType === 'kmz' ? 'KMZ 批量导入' : 'ZIP 批量导入')
+                );
 
                 return;
             }
