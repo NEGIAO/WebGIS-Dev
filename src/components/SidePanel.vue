@@ -74,7 +74,7 @@
             <div v-show="activeTab === 'info'" class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
-                    <img :src="resolvePath('images/院徽.png')" class="logo" alt="河南大学地理科学学院Logo">
+                    <img :src="resolvePath('images/院徽.webp')" class="logo" alt="河南大学地理科学学院Logo">
                     <div class="title-wrapper">
                         <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
                     </div>
@@ -256,19 +256,19 @@ const NEWS_LIST = [
     {
         title: "4.22地球日，地环院开展系列活动",
         text: "春风拂绿野，万物竞芳华。在第56个世界地球日来临之际，4月21日上午，由河南大学相关单位主办，在金明校区马可广场举行。学校相关职能部门领导，地理科学与工程学部委员，地理科学学院全体班子成员和师生代表...",
-        image: "images/地球日活动.jpg",
+        image: "images/地球日活动.webp",
         href: "https://cep.henu.edu.cn/info/1022/13421.htm"
     },
     {
         title: "地理科学与工程学部首届大会召开",
         text: "2025年2月23日，河南大学地理科学与工程学部首届大会在河南大学金明校区锥形报告厅顺利召开。中国工程院院士、空间基准全国重点实验室学术带头人王家耀等职能部门有关领导...",
-        image: "images/学部大会.png",
+        image: "images/学部大会.webp",
         href: "https://cep.henu.edu.cn/info/1022/12491.htm"
     },
     {
         title: "2023级本科生年级大会召开",
         text: "为助力我院2023级本科生厘清学术培养路径，系统提升科研素养与安全防范能力，树立科学的学术发展与职业规划意识，5月29日下午，我院于金明校区综合教学楼2306教室召开...",
-        image: "images/年级大会.jpg",
+        image: "images/年级大会.webp",
         href: "https://cep.henu.edu.cn/info/1022/14001.htm"
     },
 ];
@@ -276,7 +276,7 @@ const NEWS_LIST = [
 const DEFAULT_STATE = {
     title: "地科院新闻",
     text: "请将鼠标移动到地科院区域<br>查看新闻内容<br><br>在左侧地图中放大<br>可以查看地科院的照片！<br><br>下方还有内容哦！<br>请鼠标下滑",
-    image: "images/院徽.png",
+    image: "images/院徽.webp",
     href: LINKS.MAIN_NEWS,
     isExternal: true
 };

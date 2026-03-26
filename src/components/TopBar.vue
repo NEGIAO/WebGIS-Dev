@@ -2,7 +2,7 @@
     <div class="top-bar">
         <div class="branding">
             <a href="../index.html" class="logo-link">
-                <img :src="`${normalizedBase}images/icon.png`" alt="Icon" class="logo-icon" />
+                <img :src="`${normalizedBase}images/icon.webp`" alt="Icon" class="logo-icon" />
                 <span class="title-text">The Science of Where</span>
             </a>
         </div>
