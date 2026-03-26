@@ -1,6 +1,7 @@
 <template>
     <div class="toolbox-panel">
         <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
+        <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input" @change="handleDirectoryUpload" />
 
         <!-- <div class="header">
             <div>
@@ -15,6 +16,8 @@
             <button class="tab" :class="{ active: activeTab === 'style' }" @click="activeTab = 'style'">样式</button>
         </div>
 
+        <AttributeTable />
+
         <div v-if="activeTab === 'layers'" class="panel-scroll">
             <div v-if="hasDrawCard" class="card">
                 <div class="card-title">绘制图层</div>
@@ -28,6 +31,7 @@
                         <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
 
                         <div class="layer-actions icon-row">
+                            <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
                             <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
                             <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
                             <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
@@ -61,6 +65,7 @@
                         <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
 
                         <div class="layer-actions icon-row">
+                            <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
                             <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
                             <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
                         </div>
@@ -79,6 +84,7 @@
                         <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
 
                         <div class="layer-actions icon-row">
+                            <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
                             <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
                             <button class="action-icon-btn" :data-tip="layer.labelVisible ? '标注关' : '标注开'" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">🏷</button>
                             <button v-if="layerHasCoordinates(layer)" class="action-icon-btn" data-tip="复制坐标" @click.stop="copyLayerCoordinates(layer)">⌖</button>
@@ -109,9 +115,12 @@
                             </span>
                             上传图层
                         </div>
-                        <button class="small-btn" @click="triggerFileUpload">上传 (GeoJSON/KML/KMZ/SHP/TIF)</button>
+                        <div class="upload-btns">
+                            <button class="small-btn" @click="triggerFileUpload">上传文件</button>
+                            <button class="small-btn ghost" @click="triggerFolderUpload">上传文件夹</button>
+                        </div>
                     </div>
-                    <div class="upload-tip">点击上传，或将文件拖到此区域（支持多选）</div>
+                    <div class="upload-tip">支持单文件、多文件、文件夹上传，也可拖拽到此区域</div>
                     <div v-if="shouldShowUploadProgress" class="upload-progress" :class="`phase-${uploadProgressView.phase}`">
                         <div class="upload-progress-head">
                             <span>导入状态：{{ uploadProgressView.current }}/{{ uploadProgressView.total || 1 }}</span>
@@ -150,6 +159,7 @@
                             <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
 
                             <div class="layer-actions icon-row">
+                                <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
                                 <button v-if="!isRasterLayer(layer)" class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
                                 <button v-if="canToggleLabel(layer)" class="action-icon-btn" :data-tip="layer.labelVisible ? '标注关' : '标注开'" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">🏷</button>
                                 <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
@@ -246,6 +256,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { useGisLoader } from '../composables/useGisLoader';
+import { useLayerStore } from '../composables/useLayerStore';
+import { useStyleEditor } from '../composables/useStyleEditor';
+import AttributeTable from './AttributeTable.vue';
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
@@ -274,23 +288,18 @@ const emit = defineEmits([
 ]);
 
 const fileInputRef = ref(null);
+const folderInputRef = ref(null);
 const message = useMessage();
+const gisLoader = useGisLoader();
+const layerStore = useLayerStore();
+const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
-const selectedDrawTool = ref('AttributeQuery');
-const draggingLayerId = ref('');
 const isUploadDragging = ref(false);
-const selectedEditLayerId = ref('draw');
 const MB = 1024 * 1024;
 const WARN_FILE_SIZE_MB = 50;
 const MAX_FILE_SIZE_MB = 200;
-const SUPPORTED_UPLOAD_TYPES = new Set(['geojson', 'json', 'kml', 'kmz', 'zip', 'shp', 'tif', 'tiff']);
 
-const styleTemplates = [
-    { id: 'classic', name: '经典绿', color: '#2f9a57' },
-    { id: 'warning', name: '警示橙', color: '#e39a28' },
-    { id: 'water', name: '水系蓝', color: '#3d88e6' },
-    { id: 'magenta', name: '品红', color: '#cd4f9f' }
-];
+const styleTemplates = styleEditor.styleTemplates;
 
 const drawTools = [
     { value: 'AttributeQuery', label: '属性查询' },
@@ -301,27 +310,20 @@ const drawTools = [
     { value: 'MeasureArea', label: '测面' }
 ];
 
-const styleForm = ref({
-    fillColor: '#5fbf7a',
-    strokeColor: '#2f7d3c',
-    fillOpacityPct: 24,
-    strokeWidth: 2
+const styleForm = styleEditor.styleForm;
+const selectedDrawTool = computed(() => layerStore.selectedDrawTool);
+const selectedEditLayerId = computed({
+    get: () => layerStore.selectedEditLayerId,
+    set: (value) => {
+        layerStore.selectedEditLayerId = value;
+    }
 });
-
-const sortedUserLayers = computed(() => [...props.userLayers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-const drawLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'draw'));
-const uploadLayers = computed(() => sortedUserLayers.value.filter(layer => layer.sourceType === 'upload'));
-const routeLayers = computed(() => sortedUserLayers.value.filter((layer) => {
-    if (layer.sourceType !== 'search') return false;
-    if (layer.category === 'route') return true;
-    return /_route$/i.test(String(layer.type || ''));
-}));
-const searchLayers = computed(() => sortedUserLayers.value.filter((layer) => {
-    if (layer.sourceType !== 'search') return false;
-    if (layer.category === 'route') return false;
-    return !/_route$/i.test(String(layer.type || ''));
-}));
-const hasDrawCard = computed(() => drawLayers.value.length > 0 || Number(props.overview?.drawCount || 0) > 0);
+const drawLayers = computed(() => layerStore.drawLayers);
+const uploadLayers = computed(() => layerStore.uploadLayers);
+const routeLayers = computed(() => layerStore.routeLayers);
+const searchLayers = computed(() => layerStore.searchLayers);
+const hasDrawCard = computed(() => layerStore.hasDrawCard);
+const editableLayers = computed(() => layerStore.editableLayers);
 
 const uploadProgressView = computed(() => {
     const raw = props.uploadProgress || {};
@@ -399,40 +401,42 @@ async function copyLayerCoordinates(layer) {
 }
 
 function isRasterLayer(layer) {
-    const t = String(layer?.type || '').toLowerCase();
-    return t === 'tif' || t === 'tiff';
+    return layerStore.isRasterLayer(layer);
 }
 
 function formatLayerDisplayName(name) {
-    const raw = String(name || '').trim();
-    if (!raw) return '未命名图层';
-    try {
-        return decodeURIComponent(raw.replace(/\+/g, '%20'));
-    } catch {
-        return raw;
-    }
+    return layerStore.formatLayerDisplayName(name);
 }
 
-const editableLayers = computed(() => [
-    { id: 'draw', name: `绘制图形 (${props.overview.drawCount || 0})` },
-    ...searchLayers.value.map(layer => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` })),
-    ...sortedUserLayers.value
-        .filter(layer => layer.sourceType !== 'search' && !isRasterLayer(layer))
-        .map(layer => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` }))
-]);
+watch(
+    () => props.userLayers,
+    (layers) => {
+        layerStore.syncLayers(layers || [], props.overview || {});
+    },
+    { immediate: true, deep: true }
+);
 
-watch(editableLayers, (list) => {
-    if (!list.length) {
-        selectedEditLayerId.value = 'draw';
-        return;
-    }
-    if (!list.find(item => item.id === selectedEditLayerId.value)) {
-        selectedEditLayerId.value = list[0].id;
-    }
-}, { immediate: true });
+watch(
+    () => props.overview,
+    (overview) => {
+        layerStore.syncLayers(props.userLayers || [], overview || {});
+    },
+    { immediate: true, deep: true }
+);
+
+layerStore.bindHandlers({
+    onReorder: (payload) => emit('reorder-user-layers', payload),
+    onHighlightFeature: (payload) => emit('highlight-attribute-feature', payload),
+    onZoomFeature: (payload) => emit('zoom-attribute-feature', payload),
+    onViewFeature: (payload) => emit('zoom-attribute-feature', payload)
+});
 
 function triggerFileUpload() {
     fileInputRef.value?.click();
+}
+
+function triggerFolderUpload() {
+    folderInputRef.value?.click();
 }
 
 function formatFileSize(fileSizeInBytes) {
@@ -442,51 +446,37 @@ function formatFileSize(fileSizeInBytes) {
     return `${(fileSizeInBytes / MB).toFixed(1)} MB`;
 }
 
+function hasAttributeFeatures(layer) {
+    return Array.isArray(layer?.features) && layer.features.length > 0;
+}
+
+function openAttributeTable(layerId) {
+    layerStore.showAttributeTable(layerId);
+    activeTab.value = 'layers';
+}
+
 function handleFileUpload(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
-    files.forEach(file => processUploadFile(file));
+
+    const payloads = gisLoader.createUploadPayloadsFromFiles(files);
+    payloads.forEach((payload) => emit('upload-data', payload));
+
     event.target.value = '';
 }
 
-function processUploadFile(file) {
-    if (!file) return;
+function handleDirectoryUpload(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
 
-    const fileSizeMb = file.size / MB;
-    const sizeText = formatFileSize(file.size);
-    if (fileSizeMb > MAX_FILE_SIZE_MB) {
-        message.error(`文件过大（${sizeText}），请控制在 ${MAX_FILE_SIZE_MB} MB 以内后再上传。`, { closable: true, duration: 5500 });
-        return;
-    }
-    if (fileSizeMb > WARN_FILE_SIZE_MB) {
-        message.warning(`当前文件大小为 ${sizeText}，超过建议值 ${WARN_FILE_SIZE_MB} MB，继续上传可能导致页面卡顿。`, { duration: 5200 });
+    const oversized = files.filter(file => (file.size / MB) > MAX_FILE_SIZE_MB);
+    if (oversized.length) {
+        message.warning(`文件夹中有 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB，将在导入阶段按规则处理。`, { duration: 5200 });
     }
 
-    const extension = file.name.split('.').pop().toLowerCase();
-    if (!SUPPORTED_UPLOAD_TYPES.has(extension)) {
-        message.warning(`暂不支持该文件类型：.${extension || '未知'}`);
-        return;
-    }
+    emit('upload-data', gisLoader.createUploadPayloadFromFolder(files));
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        emit('upload-data', {
-            content: e.target.result,
-            type: extension,
-            name: file.name
-        });
-    };
-
-    try {
-        if (extension === 'zip' || extension === 'shp' || extension === 'kmz' || extension === 'tif' || extension === 'tiff') {
-            reader.readAsArrayBuffer(file);
-        } else {
-            reader.readAsText(file);
-        }
-    } catch (err) {
-        console.error('File read error', err);
-        message.error('文件读取失败');
-    }
+    event.target.value = '';
 }
 
 function handleUploadDragEnter() {
@@ -505,28 +495,37 @@ function handleUploadDragLeave(event) {
 
 function handleUploadDrop(event) {
     isUploadDragging.value = false;
+    const items = Array.from(event.dataTransfer?.items || []);
+
+    const entryItems = items
+        .map(item => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+        .filter(Boolean);
+
+    if (entryItems.length) {
+        emit('upload-data', gisLoader.createUploadPayloadFromEntries(entryItems));
+        return;
+    }
+
     const files = Array.from(event.dataTransfer?.files || []);
     if (!files.length) return;
-    files.forEach(file => processUploadFile(file));
+    gisLoader.createUploadPayloadsFromFiles(files).forEach((payload) => emit('upload-data', payload));
 }
 
 function onDragStart(layerId) {
-    draggingLayerId.value = layerId;
+    layerStore.onDragStart(layerId);
 }
 
 function onDrop(targetLayerId) {
-    if (!draggingLayerId.value || draggingLayerId.value === targetLayerId) return;
-    emit('reorder-user-layers', { fromId: draggingLayerId.value, toId: targetLayerId });
-    draggingLayerId.value = '';
+    layerStore.onDrop(targetLayerId);
 }
 
 function setStyleTarget(layerId) {
-    selectedEditLayerId.value = layerId || 'draw';
+    layerStore.setStyleTarget(layerId);
     activeTab.value = 'style';
 }
 
 function activateDrawTool(tool) {
-    selectedDrawTool.value = tool;
+    layerStore.setDrawTool(tool);
     emit('interaction', tool);
 }
 
@@ -541,12 +540,7 @@ function applyTemplate(templateId) {
 }
 
 function applyStyle() {
-    const payload = {
-        fillColor: styleForm.value.fillColor,
-        strokeColor: styleForm.value.strokeColor,
-        fillOpacity: styleForm.value.fillOpacityPct / 100,
-        strokeWidth: styleForm.value.strokeWidth
-    };
+    const payload = styleEditor.buildStylePayload();
     if (selectedEditLayerId.value === 'draw') {
         emit('update-draw-style', payload);
         return;
@@ -585,26 +579,36 @@ function applyStyle() {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    padding: 2px;
-    border-radius: 10px;
-    background: #eff4f0;
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid rgba(121, 174, 141, 0.32);
+    background: rgba(235, 246, 240, 0.58);
+    backdrop-filter: blur(10px);
 }
 
 .tab {
-    border: 1px solid transparent;
-    background: #eef3ef;
-    border-radius: 8px;
+    border: 1px solid rgba(130, 176, 146, 0.18);
+    background: rgba(255, 255, 255, 0.42);
+    border-radius: 10px;
     padding: 8px 4px;
     font-size: 12px;
     cursor: pointer;
-    color: #657266;
+    color: #4e6656;
+    transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.tab:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(77, 150, 103, 0.3);
 }
 
 .tab.active {
-    border-color: #2f9a57;
-    background: #2f9a57;
+    border-color: rgba(33, 128, 72, 0.84);
+    background: linear-gradient(135deg, rgba(48, 157, 88, 0.92) 0%, rgba(44, 133, 76, 0.92) 100%);
     color: #ffffff;
     font-weight: 600;
+    box-shadow: 0 8px 20px rgba(36, 125, 72, 0.24);
 }
 
 .panel-scroll {
@@ -615,11 +619,12 @@ function applyStyle() {
 }
 
 .card {
-    border: 1px solid #e2ece6;
+    border: 1px solid rgba(153, 195, 170, 0.38);
     border-radius: 10px;
     padding: 11px;
-    background: #ffffff;
-    box-shadow: 0 2px 6px rgba(58, 91, 67, 0.04);
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 20px rgba(58, 91, 67, 0.08);
 }
 
 .card-top {
@@ -884,6 +889,11 @@ function applyStyle() {
     width: 100%;
 }
 
+.upload-btns {
+    display: inline-flex;
+    gap: 6px;
+}
+
 .ghost-btn,
 .small-btn,
 .template {
@@ -960,6 +970,12 @@ function applyStyle() {
     background: #ebf7f0;
     border-color: #7fc397;
     color: #1d7541;
+}
+
+.small-btn.ghost {
+    background: #ffffff;
+    border-color: #d7e6dd;
+    color: #3e6851;
 }
 
 .style-scroll {

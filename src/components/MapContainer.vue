@@ -204,8 +204,8 @@ const TILE_HOSTS = {
     googleCandidates: ['mt3v.gggis.com', 'gac-geo.googlecnapps.club']
 };
 // 可选：'manual' 固定主机；'fastest' 启动后测速并自动切换最快主机。
-const GOOGLE_HOST_STRATEGY = 'fastest';
-const GOOGLE_MANUAL_HOST = TILE_HOSTS.googleCandidates[0];
+const GOOGLE_HOST_STRATEGY = 'manual';
+const GOOGLE_MANUAL_HOST = TILE_HOSTS.googleCandidates[1];
 const GOOGLE_PROBE_TIMEOUT_MS = 1200;
 const CRITICAL_TILE_READY_TIMEOUT_MS = 1400;
 const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
@@ -432,6 +432,7 @@ const isAttributeQueryEnabled = ref(true);
 const userDataLayers = [];
 let drawGraphicSeed = 1;
 let drawLayerInstance = null;
+let currentManagedFeatureHighlight = null;
 
 const STYLE_TEMPLATES = {
     classic: {
@@ -928,6 +929,84 @@ function refreshGoogleLayerSources() {
     });
 }
 
+function ensureFeatureId(feature, layerName, index) {
+    const existingId = feature?.getId?.() || feature?.get?.('_gid') || feature?.get?.('id');
+    const featureId = String(existingId || `${layerName || 'layer'}_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    if (typeof feature?.setId === 'function') {
+        feature.setId(featureId);
+    }
+    if (typeof feature?.set === 'function') {
+        feature.set('_gid', featureId);
+    }
+    return featureId;
+}
+
+function serializeManagedFeature(feature, layerName, index) {
+    const featureId = ensureFeatureId(feature, layerName, index);
+    const geometry = feature?.getGeometry?.();
+    const properties = { ...(feature?.getProperties?.() || {}) };
+    delete properties.geometry;
+    delete properties.style;
+
+    const serializedGeometry = geometry
+        ? {
+            type: geometry.getType?.() || 'Geometry',
+            coordinates: geometry.getCoordinates?.()
+        }
+        : null;
+
+    properties._gid = featureId;
+
+    return {
+        type: 'Feature',
+        id: featureId,
+        _gid: featureId,
+        properties,
+        geometry: serializedGeometry
+    };
+}
+
+function serializeManagedFeatures(features = [], layerName = '') {
+    return (features || []).map((feature, index) => serializeManagedFeature(feature, layerName, index));
+}
+
+function findManagedFeature(layerId, featureId) {
+    const target = userDataLayers.find(item => item.id === layerId);
+    if (!target) return null;
+    const source = target.layer?.getSource?.();
+    const normalizedId = String(featureId || '');
+    const sourceFeature = source?.getFeatureById?.(normalizedId)
+        || source?.getFeatures?.()?.find((feature) => String(feature?.getId?.() || feature?.get?.('_gid') || '') === normalizedId);
+    return sourceFeature || null;
+}
+
+function createManagedFeatureHighlightStyle(feature) {
+    const geometryType = feature?.getGeometry?.()?.getType?.() || '';
+    const isPointLike = /Point$/i.test(geometryType);
+
+    if (isPointLike) {
+        return new Style({
+            image: new CircleStyle({
+                radius: 8,
+                fill: new Fill({ color: 'rgba(52, 211, 153, 0.95)' }),
+                stroke: new Stroke({ color: '#ffffff', width: 2 })
+            })
+        });
+    }
+
+    return new Style({
+        fill: new Fill({ color: 'rgba(48, 157, 88, 0.18)' }),
+        stroke: new Stroke({ color: '#1f8a4c', width: 4 })
+    });
+}
+
+function clearManagedFeatureHighlight(feature) {
+    if (!feature) return;
+    if (typeof feature.setStyle === 'function') {
+        feature.setStyle(undefined);
+    }
+}
+
 // [隶属] 图层管理-托管图层创建
 // [作用] 将矢量要素创建为托管图层并登记到 userDataLayers。
 // [交互] 调用 emitUserLayersChange / emitGraphicsOverview，与外部面板同步。
@@ -960,6 +1039,9 @@ function createManagedVectorLayer({
         properties: { name }
     });
 
+    const serializedFeatures = serializeManagedFeatures(features, name);
+    features.forEach((feature, index) => ensureFeatureId(feature, name, index));
+
     mapInstance.value.addLayer(layer);
 
     const id = createManagedLayerId();
@@ -972,6 +1054,7 @@ function createManagedVectorLayer({
         visible: true,
         opacity: 1,
         featureCount: features.length,
+        features: serializedFeatures,
         autoLabel: managedLayerState.autoLabel,
         labelVisible,
         metadata: managedLayerState.metadata,
@@ -992,6 +1075,31 @@ function createManagedVectorLayer({
     }
 
     return id;
+}
+
+function zoomToManagedFeature({ layerId, featureId }) {
+    if (!mapInstance.value) return;
+    const feature = findManagedFeature(layerId, featureId);
+    if (!feature) return;
+    const geometry = feature.getGeometry?.();
+    const extent = geometry?.getExtent?.();
+    if (!extent || extent.some(v => !Number.isFinite(v))) return;
+    mapInstance.value.getView().fit(extent, {
+        padding: [80, 80, 80, 80],
+        duration: 800,
+        maxZoom: 18
+    });
+    clearManagedFeatureHighlight(currentManagedFeatureHighlight);
+    currentManagedFeatureHighlight = feature;
+    feature.setStyle(createManagedFeatureHighlightStyle(feature));
+}
+
+function highlightManagedFeature({ layerId, featureId }) {
+    const feature = findManagedFeature(layerId, featureId);
+    if (!feature) return;
+    clearManagedFeatureHighlight(currentManagedFeatureHighlight);
+    currentManagedFeatureHighlight = feature;
+    feature.setStyle(createManagedFeatureHighlightStyle(feature));
 }
 
 // [隶属] 图片覆盖-经纬线标注
@@ -2268,6 +2376,8 @@ defineExpose({
     setBaseLayerActive,
     setLayerVisibility,
     zoomToUserLayer,
+    zoomToManagedFeature,
+    highlightManagedFeature,
     removeUserLayer,
     reorderUserLayers,
     soloUserLayer,

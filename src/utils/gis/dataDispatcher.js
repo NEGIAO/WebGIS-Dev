@@ -58,6 +58,9 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
 
     const resourcePool = buildResourcePool(archive.entries);
     const tasks = classifyArchiveDatasets(archive.entries);
+    if (Array.isArray(tasks.shpWarnings) && tasks.shpWarnings.length) {
+        warnings.push(...tasks.shpWarnings);
+    }
     const resources = buildResourceBlobUrls(archive.entries);
     blobUrls.push(...resources.urls);
 
@@ -100,14 +103,6 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
 
     for (const task of tasks.shpTasks) {
         try {
-            if (!task.shxEntry || !task.dbfEntry) {
-                const missingParts = [
-                    task.shxEntry ? null : '.shx',
-                    task.dbfEntry ? null : '.dbf'
-                ].filter(Boolean);
-                throw new Error(`Shapefile 缺少 ${missingParts.join(' 和 ')}`);
-            }
-
             const prjText = task.prjEntry ? decodeBufferToText(task.prjEntry.buffer) : '';
             const cpgText = task.cpgEntry ? decodeBufferToText(task.cpgEntry.buffer) : '';
             const projectionResolved = await detectShpProjectionFromPrj(prjText);
@@ -127,10 +122,10 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                 needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase()),
                 shpParts: {
                     shp: task.shpEntry.buffer,
-                    shx: task.shxEntry.buffer,
-                    dbf: task.dbfEntry.buffer,
-                    prj: prjText || undefined,
-                    cpg: cpgText || undefined
+                    shx: task.shxEntry?.buffer,
+                    dbf: task.dbfEntry?.buffer,
+                    prj: task.prjEntry?.buffer,
+                    cpg: task.cpgEntry?.buffer
                 },
                 resourcePool,
                 resources: resources.resources
@@ -294,6 +289,9 @@ export async function dispatchGisData(input = {}) {
     }
 
     if (normalizedType === 'shp') {
+        if (!(content instanceof ArrayBuffer)) {
+            throw new Error('SHP 单文件导入失败：缺少关联组件，请上传 ZIP 或完整文件夹（.shp/.dbf/.shx）');
+        }
         const packet = {
             kind: 'shp',
             sourceType: normalizedType,
