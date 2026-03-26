@@ -20,6 +20,19 @@
                 </div>
             </div>
 
+            <button class="nav-btn" @click="handleShareView" title="分享当前视角">
+                <span class="btn-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="6" cy="6" r="2" />
+                        <circle cx="18" cy="12" r="2" />
+                        <circle cx="6" cy="18" r="2" />
+                        <path d="M8.5 7.3 15.5 10.3" />
+                        <path d="M8.5 16.7 15.5 13.7" />
+                    </svg>
+                </span>
+                <span class="btn-text">分享</span>
+            </button>
+
             <button class="nav-btn" @click="handleOpenChat" title="AI 助手">
                 <span class="btn-icon">🤖</span>
                 <span class="btn-text">AI 助手</span>
@@ -40,6 +53,7 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { useMessage } from '../composables/useMessage';
 
 const emit = defineEmits([
     'toggle-magic',
@@ -56,6 +70,8 @@ const menuHostRef = ref(null);
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+const message = useMessage();
 
 function handleOpenToolbox() {
     showToolMenu.value = false;
@@ -98,6 +114,77 @@ function handleDocumentClick(event) {
     if (!showToolMenu.value) return;
     if (menuHostRef.value?.contains(event.target)) return;
     showToolMenu.value = false;
+}
+
+function canUseNativeShare() {
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
+    const ua = navigator.userAgent || '';
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua);
+}
+
+function fallbackCopyViaExecCommand(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'absolute';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+
+    const selection = window.getSelection();
+    const originalRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    textarea.select();
+
+    let succeeded = false;
+    try {
+        succeeded = document.execCommand('copy');
+    } catch (e) {
+        succeeded = false;
+    }
+
+    document.body.removeChild(textarea);
+
+    if (originalRange && selection) {
+        selection.removeAllRanges();
+        selection.addRange(originalRange);
+    }
+
+    if (!succeeded) {
+        throw new Error('execCommand copy failed');
+    }
+}
+
+async function handleShareView() {
+    const url = window.location.href;
+
+    try {
+        if (canUseNativeShare()) {
+            await navigator.share({
+                title: 'NEGIAO WebGIS 视角',
+                text: '分享当前地图视角链接',
+                url
+            });
+            message.success('已唤起系统分享面板');
+            return;
+        }
+    } catch (error) {
+        if (error && (error.name === 'AbortError' || error.name === 'NotAllowedError')) {
+            return;
+        }
+        // 其他错误则回退到剪贴板逻辑
+    }
+
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(url);
+        } else {
+            fallbackCopyViaExecCommand(url);
+        }
+        message.success('✅ 视角链接已复制，快去分享吧！');
+    } catch (error) {
+        console.error('分享链接复制失败', error);
+        message.error('复制失败，请手动从地址栏复制链接');
+    }
 }
 
 onMounted(() => {
@@ -166,6 +253,12 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .menu-host {
