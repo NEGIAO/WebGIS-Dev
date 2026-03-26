@@ -17,6 +17,18 @@
                     <button class="menu-item" @click="handleOpenToolbox">🛠️ 工具箱</button>
                     <button class="menu-item" @click="handleOpenBusPlanner">🚌 公交规划</button>
                     <button class="menu-item" @click="handleOpenDrivePlanner">🚗 驾车规划</button>
+
+                    <div class="menu-divider"></div>
+                    <div class="menu-group-title">常用地点</div>
+                    <button
+                        v-for="loc in quickLocations"
+                        :key="loc.key"
+                        class="menu-item menu-item-quick"
+                        @click="handleJump(loc)"
+                    >
+                        <span class="menu-item-icon">❤️</span>
+                        <span class="menu-item-label">{{ loc.label }}</span>
+                    </button>
                 </div>
             </div>
 
@@ -53,6 +65,7 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
 
 const emit = defineEmits([
@@ -72,6 +85,15 @@ const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
 const message = useMessage();
+const route = useRoute();
+const router = useRouter();
+
+//地点迁移
+const quickLocations = [
+    { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
+    { key: 'hedu', label: '河大', lng: 114.307960, lat: 34.813566, z: 11.83, layer: 0 },
+    { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 }
+];
 
 function handleOpenToolbox() {
     showToolMenu.value = false;
@@ -108,6 +130,37 @@ function handleToggleMagic() {
 
 function toggleToolMenu() {
     showToolMenu.value = !showToolMenu.value;
+}
+
+function formatViewQueryValue(value, fractionDigits) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return null;
+    return numberValue.toFixed(fractionDigits);
+}
+
+function handleJump(location) {
+    const lng = formatViewQueryValue(location.lng, 6);
+    const lat = formatViewQueryValue(location.lat, 6);
+    const z = formatViewQueryValue(location.z, 2);
+    const layerIndexRaw = Number(location.layer);
+    const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : 0;
+
+    if (!lng || !lat || !z) return;
+
+    const nextQuery = {
+        ...route.query,
+        lng,
+        lat,
+        z,
+        l: String(layerIndex)
+    };
+
+    showToolMenu.value = false;
+    // 利用现有的 URL 同步 / 解析机制，只更新查询参数
+    void router.push({
+        path: route.path,
+        query: nextQuery
+    });
 }
 
 function handleDocumentClick(event) {
@@ -269,13 +322,29 @@ onBeforeUnmount(() => {
     position: absolute;
     right: 0;
     top: calc(100% + 8px);
-    min-width: 140px;
-    background: #fff;
+    min-width: 168px;
+    background: rgba(37, 117, 67, 0.88);
     border-radius: 10px;
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 6px;
     z-index: 2200;
+}
+
+.menu-divider {
+    height: 1px;
+    margin: 6px 4px;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.menu-group-title {
+    padding: 4px 10px 6px;
+    color: rgba(232, 250, 236, 0.9);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
 }
 
 .menu-item {
@@ -285,13 +354,27 @@ onBeforeUnmount(() => {
     background: transparent;
     border-radius: 8px;
     padding: 8px 10px;
-    color: #263d30;
+    color: #f3fff4;
     cursor: pointer;
     font-size: 13px;
 }
 
 .menu-item:hover {
-    background: #eff8f2;
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.menu-item-quick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.menu-item-icon {
+    opacity: 0.95;
+}
+
+.menu-item-label {
+    min-width: 0;
 }
 
 .nav-btn {

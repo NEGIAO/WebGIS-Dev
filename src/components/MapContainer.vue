@@ -158,6 +158,29 @@ const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51';
 const route = useRoute();
 const router = useRouter();
 
+const URL_LAYER_OPTIONS = [
+    'local',
+    'tianDiTu_vec',
+    'tianDiTu',
+    'google',
+    'google_standard',
+    'google_clean',
+    'esri',
+    'osm',
+    'amap',
+    'tengxun',
+    'esri_ocean',
+    'esri_terrain',
+    'esri_physical',
+    'esri_hillshade',
+    'esri_gray',
+    'gggis_time',
+    'yandex_sat',
+    'geoq_gray',
+    'geoq_hydro',
+    'custom'
+];
+
 // 天地图 Token：优先使用环境变量，否则使用默认值
 // 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
@@ -815,6 +838,31 @@ function readRouteViewState() {
     };
 }
 
+function getLayerIdByIndex(index) {
+    const normalizedIndex = Number(index);
+    if (!Number.isInteger(normalizedIndex)) return null;
+    if (normalizedIndex < 0 || normalizedIndex >= URL_LAYER_OPTIONS.length) return null;
+    return URL_LAYER_OPTIONS[normalizedIndex] || null;
+}
+
+function getLayerIndexById(layerId) {
+    const idx = URL_LAYER_OPTIONS.indexOf(String(layerId || ''));
+    return idx >= 0 ? idx : null;
+}
+
+function readRouteLayerIndex() {
+    const raw = parseQueryNumber(route.query.l ?? route.query.layer);
+    if (raw === null || !Number.isInteger(raw)) return null;
+    if (raw < 0 || raw >= URL_LAYER_OPTIONS.length) return null;
+    return raw;
+}
+
+function readRouteLayerId() {
+    const layerIndex = readRouteLayerIndex();
+    if (layerIndex === null) return null;
+    return getLayerIdByIndex(layerIndex);
+}
+
 function getInitialViewState() {
     return readRouteViewState() || INITIAL_VIEW;
 }
@@ -835,10 +883,14 @@ function buildMapQueryFromView() {
 
     const lonLat = toLonLat(center);
     const zoom = view?.getZoom?.();
+    const activeLayerIndex = getLayerIndexById(selectedLayer.value);
+    if (activeLayerIndex === null) return null;
+
     return {
         lng: formatViewQueryValue(lonLat[0], 6),
         lat: formatViewQueryValue(lonLat[1], 6),
-        z: formatViewQueryValue(zoom, 2)
+        z: formatViewQueryValue(zoom, 2),
+        l: String(activeLayerIndex)
     };
 }
 
@@ -846,24 +898,88 @@ function isSameMapQuery(nextQuery) {
     const currentLng = String(getFirstQueryValue(route.query.lng) ?? '');
     const currentLat = String(getFirstQueryValue(route.query.lat) ?? '');
     const currentZoom = String(getFirstQueryValue(route.query.z) ?? '');
-    return currentLng === nextQuery.lng && currentLat === nextQuery.lat && currentZoom === nextQuery.z;
+    const currentLayer = String(getFirstQueryValue(route.query.l) ?? '');
+    return currentLng === nextQuery.lng
+        && currentLat === nextQuery.lat
+        && currentZoom === nextQuery.z
+        && currentLayer === nextQuery.l;
 }
 
-const syncMapQueryFromView = debounce(() => {
-    if (componentUnmounted) return;
+function replaceRouteQueryFromMapState() {
     const nextQuery = buildMapQueryFromView();
-    if (!nextQuery || !nextQuery.lng || !nextQuery.lat || !nextQuery.z) return;
+    if (!nextQuery || !nextQuery.lng || !nextQuery.lat || !nextQuery.z || !nextQuery.l) return;
     if (isSameMapQuery(nextQuery)) return;
 
     void router.replace({
         path: route.path,
         query: nextQuery
     }).catch(() => {});
+}
+
+const syncMapQueryFromView = debounce(() => {
+    if (componentUnmounted) return;
+    replaceRouteQueryFromMapState();
 }, 500);
+
+function applyRouteLayerStateToUI() {
+    const routeLayerId = readRouteLayerId();
+    if (!routeLayerId) return;
+    if (selectedLayer.value === routeLayerId) return;
+    selectedLayer.value = routeLayerId;
+}
+
+function applyRouteViewStateToMap() {
+    const map = mapInstance.value;
+    if (!map) return;
+
+    const routeViewState = readRouteViewState();
+    if (!routeViewState) return;
+
+    const view = map.getView?.();
+    if (!view) return;
+
+    const targetCenter = fromLonLat(routeViewState.center);
+    const targetZoom = routeViewState.zoom;
+
+    const currentCenter = view.getCenter?.();
+    const currentZoom = view.getZoom?.();
+
+    const isSameCenter = Array.isArray(currentCenter)
+        && currentCenter.length >= 2
+        && Math.abs(currentCenter[0] - targetCenter[0]) < 1e-6
+        && Math.abs(currentCenter[1] - targetCenter[1]) < 1e-6;
+
+    const isSameZoom = Number(currentZoom ?? 0) === Number(targetZoom ?? 0);
+
+    if (isSameCenter && isSameZoom) return;
+
+    if (typeof view.animate === 'function') {
+        view.animate({ center: targetCenter, zoom: targetZoom, duration: 600 });
+    } else {
+        view.setCenter?.(targetCenter);
+        view.setZoom?.(targetZoom);
+    }
+}
+
+watch(
+    () => [
+        getFirstQueryValue(route.query.lng),
+        getFirstQueryValue(route.query.lat),
+        getFirstQueryValue(route.query.z),
+        getFirstQueryValue(route.query.l),
+        getFirstQueryValue(route.query.layer)
+    ],
+    () => {
+        if (componentUnmounted) return;
+        applyRouteLayerStateToUI();
+        applyRouteViewStateToMap();
+    }
+);
 
 // --- 初始化 ---
 onMounted(async () => {
     componentUnmounted = false;
+    applyRouteLayerStateToUI();
     initMap();
 
     // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
@@ -1603,7 +1719,7 @@ function initMap() {
     bindEvents();
 
     // 1.6 监听底图切换 (保留原Select功能，但改为操作 layerList)
-    watch(selectedLayer, (val) => {
+    watch(selectedLayer, (val, prevVal) => {
         // 关闭所有（独占模式），除了注记层可能需要保留？
         // 按照原逻辑，Select 是互斥选择
         layerList.value.forEach(l => {
@@ -1624,7 +1740,10 @@ function initMap() {
         
         // 强制刷新所有层状态
         refreshLayersState();
-    });
+        if (prevVal !== undefined) {
+            replaceRouteQueryFromMapState();
+        }
+    }, { immediate: true });
 
     // 1.7 初始化时也要刷新一次图层状态，确保初始配置正确应用
     refreshLayersState();
