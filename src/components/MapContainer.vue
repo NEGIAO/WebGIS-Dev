@@ -159,8 +159,8 @@ const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61d
 
 const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
 const IMAGES = [
-    '地理与环境学院标志牌.jpg', '地理与环境学院入口.jpg', '地学楼.jpg',
-    '教育部重点实验室.jpg', '四楼逃生图.jpg', '学院楼单侧.jpg'
+    '地理与环境学院标志牌.webp', '地理与环境学院入口.webp', '地学楼.webp',
+    '教育部重点实验室.webp', '四楼逃生图.webp', '学院楼单侧.webp'
 ].map(img => `${NORM_BASE}images/${img}`);
 
 // --- Refs ---
