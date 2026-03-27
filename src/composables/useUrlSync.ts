@@ -7,12 +7,35 @@ type UseUrlSyncOptions = {
 };
 
 const QUERY_KEYS = {
-    lon: 'lon',
-    lat: 'lat',
-    zoom: 'zoom',
-    basemap: 'basemap',
-    mode: 'mode'
+    lon: ['lon', 'lng'] as const,
+    lat: ['lat'] as const,
+    zoom: ['zoom', 'z'] as const,
+    basemap: ['basemap', 'l'] as const,
+    mode: ['mode'] as const
 } as const;
+
+const LEGACY_LAYER_OPTIONS = [
+    'local',
+    'tianDiTu_vec',
+    'tianDiTu',
+    'google',
+    'google_standard',
+    'google_clean',
+    'esri',
+    'osm',
+    'amap',
+    'tengxun',
+    'esri_ocean',
+    'esri_terrain',
+    'esri_physical',
+    'esri_hillshade',
+    'esri_gray',
+    'gggis_time',
+    'yandex_sat',
+    'geoq_gray',
+    'geoq_hydro',
+    'custom'
+] as const;
 
 const LON_LAT_DIGITS = 6;
 const ZOOM_DIGITS = 2;
@@ -24,6 +47,16 @@ function parseFiniteNumber(raw: string | null): number | null {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
+function readFirstValue(params: URLSearchParams, keys: readonly string[]): string | null {
+    for (const key of keys) {
+        const value = params.get(key);
+        if (value !== null && String(value).trim() !== '') {
+            return value;
+        }
+    }
+    return null;
+}
+
 function formatNumber(value: number, digits: number): string {
     return Number(value).toFixed(digits);
 }
@@ -31,6 +64,18 @@ function formatNumber(value: number, digits: number): string {
 function normalizeViewMode(raw: string | null): '2D' | '3D' | null {
     if (!raw) return null;
     return String(raw).trim().toUpperCase() === '3D' ? '3D' : '2D';
+}
+
+function normalizeBasemapQueryValue(raw: string | null): string {
+    const text = String(raw || '').trim();
+    if (!text) return '';
+
+    const maybeIndex = Number(text);
+    if (Number.isInteger(maybeIndex) && maybeIndex >= 0 && maybeIndex < LEGACY_LAYER_OPTIONS.length) {
+        return LEGACY_LAYER_OPTIONS[maybeIndex];
+    }
+
+    return text;
 }
 
 export function useUrlSync(options: UseUrlSyncOptions = {}) {
@@ -51,11 +96,11 @@ export function useUrlSync(options: UseUrlSyncOptions = {}) {
         if (typeof window === 'undefined') return;
 
         const params = new URLSearchParams(window.location.search);
-        const lon = parseFiniteNumber(params.get(QUERY_KEYS.lon));
-        const lat = parseFiniteNumber(params.get(QUERY_KEYS.lat));
-        const nextZoom = parseFiniteNumber(params.get(QUERY_KEYS.zoom));
-        const nextBasemap = String(params.get(QUERY_KEYS.basemap) || '').trim();
-        const nextMode = normalizeViewMode(params.get(QUERY_KEYS.mode));
+        const lon = parseFiniteNumber(readFirstValue(params, QUERY_KEYS.lon));
+        const lat = parseFiniteNumber(readFirstValue(params, QUERY_KEYS.lat));
+        const nextZoom = parseFiniteNumber(readFirstValue(params, QUERY_KEYS.zoom));
+        const nextBasemap = normalizeBasemapQueryValue(readFirstValue(params, QUERY_KEYS.basemap));
+        const nextMode = normalizeViewMode(readFirstValue(params, QUERY_KEYS.mode));
 
         isApplyingUrlState = true;
 
@@ -88,17 +133,32 @@ export function useUrlSync(options: UseUrlSyncOptions = {}) {
         const basemapValue = String(basemap.value || '').trim();
         const modeValue = String(viewMode.value || '').trim().toUpperCase() === '3D' ? '3D' : '2D';
 
-        if (Number.isFinite(lon)) params.set(QUERY_KEYS.lon, formatNumber(lon, LON_LAT_DIGITS));
-        if (Number.isFinite(lat)) params.set(QUERY_KEYS.lat, formatNumber(lat, LON_LAT_DIGITS));
-        if (Number.isFinite(zoomValue)) params.set(QUERY_KEYS.zoom, formatNumber(zoomValue, ZOOM_DIGITS));
-
-        if (basemapValue) {
-            params.set(QUERY_KEYS.basemap, basemapValue);
-        } else {
-            params.delete(QUERY_KEYS.basemap);
+        if (Number.isFinite(lon)) {
+            const lonText = formatNumber(lon, LON_LAT_DIGITS);
+            params.set('lon', lonText);
+            params.set('lng', lonText);
         }
 
-        params.set(QUERY_KEYS.mode, modeValue);
+        if (Number.isFinite(lat)) {
+            params.set('lat', formatNumber(lat, LON_LAT_DIGITS));
+        }
+
+        if (Number.isFinite(zoomValue)) {
+            const zoomText = formatNumber(zoomValue, ZOOM_DIGITS);
+            params.set('zoom', zoomText);
+            params.set('z', zoomText);
+        }
+
+        if (basemapValue) {
+            params.set('basemap', basemapValue);
+            const layerIndex = LEGACY_LAYER_OPTIONS.indexOf(basemapValue as typeof LEGACY_LAYER_OPTIONS[number]);
+            params.set('l', layerIndex >= 0 ? String(layerIndex) : basemapValue);
+        } else {
+            params.delete('basemap');
+            params.delete('l');
+        }
+
+        params.set('mode', modeValue);
 
         const queryString = params.toString();
         const nextUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ''}${window.location.hash}`;

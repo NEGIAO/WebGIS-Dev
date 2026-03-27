@@ -84,10 +84,12 @@ function closePanel() {
 .side-panel {
     width: 360px;
     height: 100%;
-    background: #ffffff;
-    border-radius: 12px;
+    background: linear-gradient(165deg, rgba(249, 253, 250, 0.95), rgba(239, 249, 243, 0.9));
+    border: 1px solid rgba(21, 94, 54, 0.2);
+    border-radius: 14px;
     overflow: hidden;
-    box-shadow: -6px 0 18px rgba(15, 23, 42, 0.16);
+    box-shadow: -8px 0 22px rgba(8, 35, 25, 0.2);
+    backdrop-filter: blur(10px);
     display: flex;
     flex-direction: column;
 }
@@ -97,14 +99,14 @@ function closePanel() {
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.1);
-    background: #f8fafc;
+    border-bottom: 1px solid rgba(21, 94, 54, 0.14);
+    background: linear-gradient(180deg, rgba(230, 248, 237, 0.96), rgba(244, 251, 247, 0.9));
 }
 
 .panel-title {
     font-size: 14px;
     font-weight: 700;
-    color: #111827;
+    color: #113725;
 }
 
 .close-btn {
@@ -112,14 +114,14 @@ function closePanel() {
     height: 28px;
     border: 0;
     border-radius: 6px;
-    background: rgba(17, 24, 39, 0.08);
-    color: #111827;
+    background: rgba(21, 94, 54, 0.1);
+    color: #113725;
     font-size: 18px;
     cursor: pointer;
 }
 
 .close-btn:hover {
-    background: rgba(17, 24, 39, 0.14);
+    background: rgba(21, 94, 54, 0.16);
 }
 
 .panel-body {

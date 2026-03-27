@@ -8,9 +8,9 @@ import MapContainer from '../components/MapContainer.vue';
 import CesiumContainer from '../components/CesiumContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 import BasemapPicker from '../components/map-ui/BasemapPicker.vue';
-import CoordinateBar from '../components/map-ui/CoordinateBar.vue';
 import MapSearchBox from '../components/map-ui/MapSearchBox.vue';
 import ScaleDisplay from '../components/map-ui/ScaleDisplay.vue';
+import MapBottomControls from '../components/map-ui/MapBottomControls.vue';
 
 import { useUrlSync } from '../composables/useUrlSync';
 import { useAppStore } from '../stores/appStore';
@@ -74,8 +74,8 @@ onBeforeUnmount(() => {
                     <div class="scale-slot">
                         <ScaleDisplay />
                     </div>
-                    <div class="coord-slot">
-                        <CoordinateBar />
+                    <div class="bottom-controls-slot">
+                        <MapBottomControls />
                     </div>
                 </div>
             </div>
@@ -94,7 +94,10 @@ onBeforeUnmount(() => {
     height: 100%;
     width: 100%;
     overflow: hidden;
-    background: linear-gradient(165deg, #0f3b2e 0%, #125f49 45%, #1f7a46 100%);
+    background:
+        radial-gradient(circle at 12% 8%, rgba(108, 228, 158, 0.24), transparent 36%),
+        radial-gradient(circle at 88% 90%, rgba(50, 125, 90, 0.35), transparent 42%),
+        linear-gradient(165deg, #0c3327 0%, #115842 46%, #1a6f43 100%);
 }
 
 .top-section {
@@ -108,8 +111,8 @@ onBeforeUnmount(() => {
     display: flex;
     flex: 1;
     min-height: 0;
-    gap: 10px;
-    padding: 10px;
+    gap: 12px;
+    padding: 12px;
     box-sizing: border-box;
 }
 
@@ -117,9 +120,11 @@ onBeforeUnmount(() => {
     flex: 1;
     min-width: 0;
     position: relative;
-    border-radius: 12px;
+    border-radius: 14px;
     overflow: hidden;
     background: #dbeafe;
+    border: 1px solid rgba(199, 251, 220, 0.22);
+    box-shadow: 0 16px 34px rgba(4, 26, 19, 0.36);
 }
 
 .map-ui-overlay {
@@ -137,7 +142,7 @@ onBeforeUnmount(() => {
 .search-slot {
     left: 14px;
     top: 14px;
-    width: min(460px, calc(100% - 28px));
+    width: min(540px, calc(100% - 28px));
 }
 
 .basemap-slot {
@@ -151,15 +156,15 @@ onBeforeUnmount(() => {
     bottom: 58px;
 }
 
-.coord-slot {
-    left: 14px;
+.bottom-controls-slot {
+    right: 14px;
     bottom: 14px;
 }
 
 .side-panel-wrapper {
     width: 360px;
     flex-shrink: 0;
-    transition: width 0.22s ease;
+    transition: width 0.26s ease, transform 0.26s ease;
 }
 
 .side-panel-wrapper.collapsed {
@@ -201,9 +206,11 @@ onBeforeUnmount(() => {
         width: 180px;
     }
 
-    .coord-slot {
+    .bottom-controls-slot {
         left: 10px;
         right: 10px;
+        display: flex;
+        justify-content: flex-end;
     }
 }
 </style>

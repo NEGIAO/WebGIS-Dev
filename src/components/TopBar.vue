@@ -16,8 +16,8 @@
 
                 <div v-if="showToolMenu" class="floating-menu">
                     <button class="menu-item" @click="openLayerPanel">🛠️ 工具箱</button>
-                    <button class="menu-item" @click="openRoutePanel">🚌 公交规划</button>
-                    <button class="menu-item" @click="openRoutePanel">🚗 驾车规划</button>
+                    <button class="menu-item" @click="openRoutePanel('bus')">🚌 公交规划</button>
+                    <button class="menu-item" @click="openRoutePanel('drive')">🚗 驾车规划</button>
 
                     <div class="menu-divider"></div>
                     <div class="menu-group-title">常用地点</div>
@@ -45,7 +45,7 @@
 
             <button class="nav-btn" @click="handleToggle3D" title="切换 2D/3D 视图">
                 <span class="btn-icon">🌍</span>
-                <span class="btn-text">3D视图</span>
+                <span class="btn-text">{{ mapStateStore.viewMode === '3D' ? '2D视图' : '3D视图' }}</span>
             </button>
 
             <button class="nav-btn magic-btn" @click="emit('toggle-magic')" title="开启魔法特效">
@@ -61,11 +61,13 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useAppStore } from '../stores/appStore';
 import { useMapStateStore } from '../stores/mapStateStore';
+import { useRouteStore } from '../stores/routeStore';
 
 const emit = defineEmits(['toggle-magic', 'toggle-3d']);
 
 const appStore = useAppStore();
 const mapStateStore = useMapStateStore();
+const routeStore = useRouteStore();
 
 const showToolMenu = ref(false);
 const menuHostRef = ref(null);
@@ -87,16 +89,21 @@ function toggleToolMenu() {
 
 function openLayerPanel() {
     showToolMenu.value = false;
-    appStore.togglePanel('layer');
+    if (appStore.activePanel !== 'layer' || !appStore.isSideBarOpen) {
+        appStore.togglePanel('layer');
+    }
 }
 
 function openAiPanel() {
     appStore.togglePanel('ai');
 }
 
-function openRoutePanel() {
+function openRoutePanel(mode = 'bus') {
+    routeStore.setMode(mode === 'drive' ? 'drive' : 'bus');
     showToolMenu.value = false;
-    appStore.togglePanel('route');
+    if (appStore.activePanel !== 'route' || !appStore.isSideBarOpen) {
+        appStore.togglePanel('route');
+    }
 }
 
 function handleToggle3D() {
@@ -189,9 +196,12 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     box-sizing: border-box;
-    background: #1f7a46;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    background:
+        radial-gradient(circle at 15% 22%, rgba(125, 231, 168, 0.2), transparent 45%),
+        linear-gradient(135deg, rgba(20, 88, 57, 0.92), rgba(24, 116, 70, 0.9));
+    border-bottom: 1px solid rgba(210, 250, 226, 0.26);
+    box-shadow: 0 6px 18px rgba(5, 30, 20, 0.28);
+    backdrop-filter: blur(12px);
     position: relative;
 }
 
@@ -222,10 +232,10 @@ onBeforeUnmount(() => {
 }
 
 .nav-btn {
-    border: 0;
+    border: 1px solid rgba(221, 251, 233, 0.16);
     border-radius: 10px;
     padding: 7px 10px;
-    background: rgba(255, 255, 255, 0.16);
+    background: linear-gradient(140deg, rgba(221, 251, 233, 0.16), rgba(187, 247, 208, 0.08));
     color: #fff;
     display: inline-flex;
     align-items: center;
@@ -235,7 +245,7 @@ onBeforeUnmount(() => {
 }
 
 .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.26);
+    background: linear-gradient(140deg, rgba(221, 251, 233, 0.24), rgba(187, 247, 208, 0.14));
 }
 
 .menu-host {
@@ -247,10 +257,10 @@ onBeforeUnmount(() => {
     top: 42px;
     right: 0;
     min-width: 210px;
-    background: #ffffff;
-    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: linear-gradient(160deg, rgba(248, 253, 250, 0.98), rgba(236, 248, 241, 0.96));
+    border: 1px solid rgba(22, 101, 52, 0.2);
     border-radius: 12px;
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.22);
+    box-shadow: 0 16px 30px rgba(8, 35, 25, 0.24);
     padding: 8px;
     z-index: 1300;
 }
@@ -268,7 +278,7 @@ onBeforeUnmount(() => {
 }
 
 .menu-item:hover {
-    background: rgba(37, 99, 235, 0.08);
+    background: rgba(217, 247, 227, 0.9);
 }
 
 .menu-divider {

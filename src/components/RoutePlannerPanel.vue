@@ -30,8 +30,18 @@ defineProps({
     }
 });
 
-const mode = ref('bus');
 const routeStore = useRouteStore();
+const mode = ref(routeStore.mode === 'drive' ? 'drive' : 'bus');
+
+watch(
+    () => routeStore.mode,
+    (nextMode) => {
+        const normalized = nextMode === 'drive' ? 'drive' : 'bus';
+        if (mode.value !== normalized) {
+            mode.value = normalized;
+        }
+    }
+);
 
 watch(
     () => mode.value,

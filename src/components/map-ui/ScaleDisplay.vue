@@ -23,24 +23,25 @@ const formattedScale = computed(() => {
 
 <style scoped>
 .scale-display {
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid rgba(31, 41, 55, 0.12);
+    background: linear-gradient(145deg, rgba(248, 253, 250, 0.95), rgba(235, 247, 240, 0.88));
+    border: 1px solid rgba(21, 94, 54, 0.18);
     border-radius: 10px;
     padding: 8px 12px;
-    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.16);
+    box-shadow: 0 12px 24px rgba(8, 35, 25, 0.2);
     display: inline-flex;
     gap: 8px;
     align-items: center;
     font-size: 12px;
+    backdrop-filter: blur(8px);
 }
 
 .scale-title {
-    color: #6b7280;
+    color: #35614a;
     font-weight: 700;
 }
 
 .scale-value {
-    color: #111827;
+    color: #153a28;
     font-weight: 700;
 }
 </style>

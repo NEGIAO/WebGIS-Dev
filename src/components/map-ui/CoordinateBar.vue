@@ -24,13 +24,14 @@ const zoomText = computed(() => Number(mapStateStore.zoom ?? 0).toFixed(2));
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: rgba(17, 24, 39, 0.78);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #f9fafb;
+    background: linear-gradient(145deg, rgba(12, 44, 31, 0.82), rgba(20, 77, 52, 0.76));
+    border: 1px solid rgba(187, 247, 208, 0.26);
+    color: #eefcf3;
     border-radius: 10px;
     padding: 8px 12px;
     font-size: 12px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+    box-shadow: 0 10px 24px rgba(5, 30, 20, 0.3);
+    backdrop-filter: blur(8px);
 }
 
 .coord-item {
@@ -38,6 +39,6 @@ const zoomText = computed(() => Number(mapStateStore.zoom ?? 0).toFixed(2));
 }
 
 .coord-divider {
-    color: rgba(249, 250, 251, 0.65);
+    color: rgba(220, 252, 231, 0.7);
 }
 </style>
