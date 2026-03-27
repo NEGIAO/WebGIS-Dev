@@ -31,25 +31,39 @@
             
             <div class="layer-label">选择底图</div>
             <select v-model="selectedLayer" class="layer-select">
+                <!-- 更新此处，需要同步更新161处的索引顺序 -->
                 <option value="local">自定义瓦片</option>
                 <option value="tianDiTu_vec">天地图矢量</option>
                 <option value="tianDiTu">天地图影像</option>
-                <option value="google">Google</option>
+                <option value="google">Google(不稳定gac-geo)</option>
+                <option value="gggis">GOogle(不稳定gggis)</option>
                 <option value="google_standard">Google标准</option>
                 <option value="google_clean">Google简洁</option>
-                <option value="esri">ESRI</option>
-                <option value="osm">OSM</option>
-                <option value="amap">高德地图</option>
-                <option value="tengxun">腾讯地图</option>
-                <option value="esri_ocean">Esri海洋</option>
+                <option value="osm">OSM(需梯子)</option>
+                <option value="yandex_sat">Yandex卫星(未知偏移)</option>
+                <option value="geoq_gray">GeoQ灰色(GCJ-02)</option>
+                <option value="geoq_hydro">GeoQ水系(GCJ-02)</option>
+                <option value="amap">高德地图(GCJ-02)</option>
+                <option value="amap_image">高德影像(GCJ-02)</option>
+                <option value="tengxun">腾讯地图(GCJ-02)</option>
+                <option value="topo">地形图</option>
+                <option value="opentopomap">OpenTopoMap</option>
+                <option value="esa_topo">欧空局地形</option>
+                <option value="windy">windy</option>
+                <option value="windy2">windy2</option>
+                <option value="windy_outer">windy轮廓</option>
+                <option value="windy_greenland">windy Grayland</option>
+                <option value="carton_light">CartoDB Positron</option>
+                <option value="carton_dark">CartoDB Dark Matter</option>
+                <option value="wikepedia">Wikipedia</option>
+                <option value="toner">Stamen Toner</option>
+                <option value="alidade">Alidade Smooth</option>
+                <!-- <option value="esri_ocean">Esri海洋</option>
                 <option value="esri_terrain">Esri地形</option>
                 <option value="esri_physical">Esri物理</option>
                 <option value="esri_hillshade">Esri山影</option>
                 <option value="esri_gray">Esri灰度</option>
-                <option value="gggis_time">谷谷地球最新</option>
-                <option value="yandex_sat">Yandex卫星</option>
-                <option value="geoq_gray">GeoQ灰色</option>
-                <option value="geoq_hydro">GeoQ水系</option>
+                <option value="esri">ESRI</option> -->
                 <option value="custom">自定义URL</option>
             </select>
             <!-- 新增图层管理按钮 -->
@@ -163,21 +177,35 @@ const URL_LAYER_OPTIONS = [
     'tianDiTu_vec',
     'tianDiTu',
     'google',
+    'gggis',
     'google_standard',
     'google_clean',
-    'esri',
     'osm',
-    'amap',
-    'tengxun',
-    'esri_ocean',
-    'esri_terrain',
-    'esri_physical',
-    'esri_hillshade',
-    'esri_gray',
-    'gggis_time',
     'yandex_sat',
     'geoq_gray',
     'geoq_hydro',
+    'amap',
+    'amap_image',
+    'tengxun',
+    'topo',
+    'opentopomap',
+    'esa_topo',
+    'windy',
+    'windy2',
+    'windy_outer',
+    'windy_greenland',
+    'carton_light',
+    'carton_dark',
+    'wikepedia',
+    'toner',
+    'alidade',
+
+    // 'esri_ocean',
+    // 'esri_terrain',
+    // 'esri_physical',
+    // 'esri_hillshade',
+    // 'esri_gray',
+    // 'esri',
     'custom'
 ];
 
@@ -307,6 +335,18 @@ const LAYER_CONFIGS = [
         id: 'google', name: 'Google', visible: true,
         createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
     },
+    // { 
+    //     id: 'gggis', name: '谷谷', visible: true,
+    //     createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
+    // },
+    { 
+        id: 'gggis', name: '谷谷', visible: true,
+        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}' }) 
+    },
+    { 
+        id: 'opentopomap', name: 'OpenTopoMap', visible: false,
+        createSource: () => new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' }) 
+    },
     { 
         id: 'custom', name: '自定义', visible: false,
         createSource: () => null 
@@ -372,8 +412,56 @@ const LAYER_CONFIGS = [
         createSource: () => new XYZ({ url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}' })
     },
     {
+        id: 'amap_image', name: '高德影像', visible: false,
+        createSource: () => new XYZ({ url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}' })
+    },
+    {
+        id: 'topo', name: '地形图', visible: false,
+        createSource: () => new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' })
+    },
+    {
+        id: 'esa_topo', name: '欧空局地形', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png' })
+    },
+    {
         id: 'geoq_gray', name: 'GeoQ灰色', visible: false,
-        createSource: () => new XYZ({ url: 'https://thematic.geoq.cn/arcgis/rest/services/ChinaOnlineStreetGray/MapServer/WMTS/tile/1.0.0/ChinaOnlineStreetGray/default/GoogleMapsCompatible/{z}/{y}/{x}.png' })
+        createSource: () => new XYZ({ url: 'https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png' })
+    },
+    {
+        id: 'windy', name: 'Windy', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.windy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}/?lang=en' })
+    },
+    {
+        id: 'windy2', name: 'Windy2', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.windy.com/v1/maptiles/winter/256/{z}/{x}/{y}/?lang=en' })
+    },
+    {
+        id:'windy_outer', name: 'Windy轮廓', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/darkmap-retina/{z}/{x}/{y}.png' })
+    },
+    {
+        id:'windy_greenland', name: 'Windy Greenland', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png' })
+    },
+    {
+        id:'carton_light', name: 'CartoDB Positron', visible: false,
+        createSource: () => new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png' })
+    },
+    {
+        id:'carton_dark', name: 'CartoDB Dark Matter', visible: false,
+        createSource: () => new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png' })
+    },
+    {
+        id:'wikepedia', name: 'Wikipedia', visible: false,
+        createSource: () => new XYZ({ url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png' })
+    },
+    {
+        id:'toner', name: 'Stamen Toner', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png' })
+    },
+    {
+        id:'alidade', name: 'Alidade Smooth', visible: false,
+        createSource: () => new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png' })   
     },
     {
         id: 'geoq_hydro', name: 'GeoQ水系', visible: false,
