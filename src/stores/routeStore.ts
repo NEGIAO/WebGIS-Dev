@@ -142,6 +142,43 @@ export const useRouteStore = defineStore('routeStore', () => {
         activeStepIndex.value = normalized;
     }
 
+    function setActiveRouteById(routeId: string): void {
+        const normalized = String(routeId || '').trim();
+        if (!normalized) {
+            setActiveRouteIndex(-1);
+            return;
+        }
+
+        const index = routes.value.findIndex((item) => item.id === normalized);
+        setActiveRouteIndex(index);
+    }
+
+    function removeRouteById(routeId: string): void {
+        const normalized = String(routeId || '').trim();
+        if (!normalized) return;
+
+        const index = routes.value.findIndex((item) => item.id === normalized);
+        if (index < 0) return;
+
+        routes.value.splice(index, 1);
+
+        if (!routes.value.length) {
+            activeRouteIndex.value = -1;
+            activeStepIndex.value = -1;
+            return;
+        }
+
+        if (activeRouteIndex.value === index) {
+            activeRouteIndex.value = Math.min(index, routes.value.length - 1);
+            activeStepIndex.value = -1;
+            return;
+        }
+
+        if (activeRouteIndex.value > index) {
+            activeRouteIndex.value -= 1;
+        }
+    }
+
     return {
         mode,
         startPoint,
@@ -158,6 +195,8 @@ export const useRouteStore = defineStore('routeStore', () => {
         clearRoutes,
         setRoutes,
         setActiveRouteIndex,
-        setActiveStepIndex
+        setActiveStepIndex,
+        setActiveRouteById,
+        removeRouteById
     };
 });

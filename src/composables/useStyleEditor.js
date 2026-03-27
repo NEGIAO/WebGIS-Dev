@@ -12,7 +12,8 @@ export function useStyleEditor() {
         fillColor: '#5fbf7a',
         strokeColor: '#2f7d3c',
         fillOpacityPct: 24,
-        strokeWidth: 2
+        strokeWidth: 2,
+        pointRadius: 6
     });
 
     function buildStylePayload() {
@@ -20,7 +21,8 @@ export function useStyleEditor() {
             fillColor: styleForm.value.fillColor,
             strokeColor: styleForm.value.strokeColor,
             fillOpacity: styleForm.value.fillOpacityPct / 100,
-            strokeWidth: styleForm.value.strokeWidth
+            strokeWidth: styleForm.value.strokeWidth,
+            pointRadius: styleForm.value.pointRadius
         };
     }
 

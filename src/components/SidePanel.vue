@@ -12,11 +12,12 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, defineAsyncComponent } from 'vue';
 import { useAppStore } from '../stores/appStore';
-import ChatPanelContent from './ChatPanelContent.vue';
-import LayerToolbox from './LayerToolbox.vue';
-import RoutePlannerPanel from './RoutePlannerPanel.vue';
+
+const ChatPanelContent = defineAsyncComponent(() => import('./ChatPanelContent.vue'));
+const LayerToolbox = defineAsyncComponent(() => import('./LayerToolbox.vue'));
+const RoutePlannerPanel = defineAsyncComponent(() => import('./RoutePlannerPanel.vue'));
 
 const props = defineProps({
     userLayers: {

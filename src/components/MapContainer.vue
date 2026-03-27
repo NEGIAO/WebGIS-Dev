@@ -3,6 +3,14 @@
         <div id="ol-map" ref="mapDom"></div>
 
         <transition name="fade">
+            <div v-if="!isBaseMapReady" class="map-skeleton" aria-live="polite">
+                <div class="skeleton-spinner" aria-hidden="true"></div>
+                <div class="skeleton-title">地图加载中</div>
+                <div class="skeleton-subtitle">正在连接默认底图服务...</div>
+            </div>
+        </transition>
+
+        <transition name="fade">
             <div
                 v-if="shouldMountImageSet && showImageSet"
                 class="imageset"
@@ -57,6 +65,8 @@ const images = ref<string[]>([]);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
 const largeImageSrc = ref('');
+const isBaseMapReady = ref(false);
+let mapReadyFallbackTimer: number | null = null;
 
 watch(showImageSet, (visible) => {
     if (!visible || shouldMountImageSet.value) return;
@@ -72,6 +82,16 @@ function showLargeImage(src: string): void {
 function closeLargeImage(): void {
     showLargeImg.value = false;
     largeImageSrc.value = '';
+}
+
+function markBaseMapReady(): void {
+    if (isBaseMapReady.value) return;
+    isBaseMapReady.value = true;
+
+    if (mapReadyFallbackTimer !== null) {
+        window.clearTimeout(mapReadyFallbackTimer);
+        mapReadyFallbackTimer = null;
+    }
 }
 
 function bindAreaImageOverlay(): void {
@@ -110,7 +130,12 @@ function bindAreaImageOverlay(): void {
 
 onMounted(() => {
     if (!mapDom.value) return;
-    manager = new Map2DManager(mapDom.value);
+    manager = new Map2DManager(mapDom.value, {
+        onFirstBasemapTile: () => markBaseMapReady()
+    });
+    mapReadyFallbackTimer = window.setTimeout(() => {
+        markBaseMapReady();
+    }, 7000);
     bindAreaImageOverlay();
 });
 
@@ -126,6 +151,11 @@ onBeforeUnmount(() => {
     }
     viewportMouseOutHandler = null;
 
+    if (mapReadyFallbackTimer !== null) {
+        window.clearTimeout(mapReadyFallbackTimer);
+        mapReadyFallbackTimer = null;
+    }
+
     manager?.destroy();
     manager = null;
 });
@@ -136,6 +166,7 @@ onBeforeUnmount(() => {
     width: 100%;
     height: 100%;
     position: relative;
+    z-index: var(--z-map, 1);
     overflow: hidden;
     background: #f0f2f5;
 }
@@ -143,6 +174,45 @@ onBeforeUnmount(() => {
 #ol-map {
     width: 100%;
     height: 100%;
+    position: relative;
+    z-index: var(--z-map, 1);
+}
+
+.map-skeleton {
+    position: absolute;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background:
+        radial-gradient(circle at 22% 20%, rgba(112, 228, 154, 0.24), transparent 46%),
+        radial-gradient(circle at 82% 76%, rgba(18, 104, 72, 0.34), transparent 54%),
+        linear-gradient(160deg, rgba(242, 252, 247, 0.96), rgba(229, 244, 236, 0.94));
+    color: #143a2a;
+    pointer-events: none;
+}
+
+.skeleton-spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid rgba(20, 90, 64, 0.2);
+    border-top-color: #1f8f57;
+    animation: spin 0.9s linear infinite;
+}
+
+.skeleton-title {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.skeleton-subtitle {
+    font-size: 12px;
+    color: rgba(20, 58, 42, 0.8);
 }
 
 .imageset {
@@ -211,6 +281,16 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
     opacity: 0;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 :deep(.ol-custom-overviewmap) {

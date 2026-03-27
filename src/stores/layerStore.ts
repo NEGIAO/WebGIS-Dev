@@ -16,6 +16,7 @@ export type LayerRecord = {
     id: string;
     name: string;
     type: LayerKind;
+    isRequested: boolean;
     visible: boolean;
     opacity: number;
     olFeatures?: unknown;
@@ -24,7 +25,7 @@ export type LayerRecord = {
     meta?: Record<string, unknown>;
 };
 
-export type AddLayerInput = Omit<LayerRecord, 'id'> & { id?: string };
+export type AddLayerInput = Omit<LayerRecord, 'id' | 'isRequested'> & { id?: string; isRequested?: boolean };
 
 type ReorderPayload =
     | { fromId: string; toId: string }
@@ -59,6 +60,7 @@ export const useLayerStore = defineStore('layerDataStore', () => {
             id,
             name: String(payload?.name || id),
             type: payload?.type === 'raster' ? 'raster' : 'vector',
+            isRequested: payload?.isRequested ?? payload?.visible !== false,
             visible: payload?.visible !== false,
             opacity: normalizeOpacity(payload?.opacity ?? 1),
             olFeatures: payload?.olFeatures,
@@ -89,10 +91,22 @@ export const useLayerStore = defineStore('layerDataStore', () => {
 
         if (typeof visible === 'boolean') {
             target.visible = visible;
+            if (visible) {
+                target.isRequested = true;
+            }
             return;
         }
 
         target.visible = !target.visible;
+        if (target.visible) {
+            target.isRequested = true;
+        }
+    }
+
+    function setLayerRequested(layerId: string, requested = true): void {
+        const target = layers.value.find((item) => item.id === layerId);
+        if (!target) return;
+        target.isRequested = !!requested;
     }
 
     function updateLayerStyle(layerId: string, stylePatch: LayerStyleConfig): void {
@@ -124,6 +138,7 @@ export const useLayerStore = defineStore('layerDataStore', () => {
         addLayer,
         removeLayer,
         toggleLayerVisibility,
+        setLayerRequested,
         updateLayerStyle,
         reorderLayers
     };

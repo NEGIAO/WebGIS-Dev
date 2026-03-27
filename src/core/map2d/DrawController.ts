@@ -123,6 +123,7 @@ export class DrawController {
                 id: `draw_polygon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                 name: `绘制面 ${new Date().toLocaleTimeString()}`,
                 type: 'vector',
+                isRequested: true,
                 visible: true,
                 opacity: 1,
                 olFeatures: [feature.clone()],
@@ -133,7 +134,7 @@ export class DrawController {
                     fillOpacity: 0.25,
                     pointRadius: 5
                 },
-                meta: { source: 'draw-controller', geometry: 'polygon' }
+                meta: { source: 'draw-controller', sourceType: 'draw', geometry: 'polygon' }
             });
 
             this.toolStore.setTool('none');

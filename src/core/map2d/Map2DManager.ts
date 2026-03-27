@@ -1,5 +1,6 @@
 import Map from 'ol/Map';
 import View from 'ol/View';
+import type BaseLayer from 'ol/layer/Base';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import OSM from 'ol/source/OSM';
@@ -15,7 +16,7 @@ import { unByKey } from 'ol/Observable';
 import type { EventsKey } from 'ol/events';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 import { watch, type WatchStopHandle } from 'vue';
-import { useMapStateStore } from '../../stores/mapStateStore';
+import { useMapStateStore, type BasemapState } from '../../stores/mapStateStore';
 import { LayerRenderer } from './LayerRenderer';
 import { RouteRenderer } from './RouteRenderer';
 import { DrawController } from './DrawController';
@@ -49,6 +50,10 @@ type BasemapId =
     | 'geoq_hydro'
     | 'custom'
     | 'local';
+
+type Map2DManagerOptions = {
+    onFirstBasemapTile?: () => void;
+};
 
 const SUPPORTED_BASEMAPS: BasemapId[] = [
     'google',
@@ -271,9 +276,11 @@ function buildLocalSource() {
 
 export class Map2DManager {
     private readonly mapStateStore = useMapStateStore();
+    private readonly options: Map2DManagerOptions;
     private readonly map: Map;
-    private readonly baseLayer: TileLayer<XYZ | OSM>;
-    private readonly labelLayer: TileLayer<XYZ>;
+    private readonly basemapLayerMap = new globalThis.Map<BasemapId, { base: TileLayer<XYZ | OSM>; label: TileLayer<XYZ> | null }>();
+    private readonly basemapTileEventKeys: EventsKey[] = [];
+    private readonly managedDataLayers = new globalThis.Map<string, BaseLayer>();
     private readonly dynamicSplitSource: VectorSource;
     private readonly dynamicSplitLayer: VectorLayer<VectorSource>;
     private readonly searchHighlightSource: VectorSource;
@@ -288,23 +295,18 @@ export class Map2DManager {
     private stopHandles: WatchStopHandle[] = [];
     private isWritingFromMap = false;
     private isApplyingStoreView = false;
+    private hasFirstBasemapTileReady = false;
 
-    constructor(target: HTMLDivElement | string) {
+    constructor(target: HTMLDivElement | string, options: Map2DManagerOptions = {}) {
         const targetElement = typeof target === 'string' ? document.getElementById(target) : target;
         if (!targetElement) {
             throw new Error('Map2DManager 初始化失败: 未找到地图挂载容器');
         }
 
-        this.baseLayer = new TileLayer({
-            source: buildGoogleSource(),
-            zIndex: 0
-        });
+        this.options = options;
+        this.mapStateStore.ensureSingleBasemapVisible(this.mapStateStore.basemap);
 
-        this.labelLayer = new TileLayer({
-            source: null,
-            visible: false,
-            zIndex: 10
-        });
+        const basemapLayers = this.initBasemapLayers();
 
         this.dynamicSplitSource = new VectorSource();
         this.dynamicSplitLayer = new VectorLayer({
@@ -329,7 +331,7 @@ export class Map2DManager {
 
         this.map = new Map({
             target: targetElement,
-            layers: [this.baseLayer, this.labelLayer, this.dynamicSplitLayer, this.userLocationLayer, this.searchHighlightLayer],
+            layers: [...basemapLayers, this.dynamicSplitLayer, this.userLocationLayer, this.searchHighlightLayer],
             view: new View({
                 center: fromLonLat(this.mapStateStore.center),
                 zoom: this.mapStateStore.zoom,
@@ -347,10 +349,14 @@ export class Map2DManager {
             ])
         });
 
-        this.layerRenderer = new LayerRenderer(this.map);
+        this.layerRenderer = new LayerRenderer(this.map, {
+            addLayer: (layerId, layer) => this.addDataLayer(layerId, layer),
+            removeLayer: (layerId) => this.removeDataLayer(layerId)
+        });
         this.routeRenderer = new RouteRenderer(this.map);
         this.drawController = new DrawController(this.map);
 
+        this.bindBasemapTileReadySignals();
         this.bindStoreWatchers();
         this.bindMapEvents();
         this.syncExtentToStore();
@@ -369,9 +375,26 @@ export class Map2DManager {
             this.moveEndKey = null;
         }
 
+        this.basemapTileEventKeys.forEach((key) => unByKey(key));
+        this.basemapTileEventKeys.length = 0;
+
         this.layerRenderer.destroy();
         this.routeRenderer.destroy();
         this.drawController.destroy();
+
+        Array.from(this.basemapLayerMap.values()).forEach((pair) => {
+            this.map.removeLayer(pair.base);
+            if (pair.label) {
+                this.map.removeLayer(pair.label);
+            }
+        });
+        this.basemapLayerMap.clear();
+
+        Array.from(this.managedDataLayers.values()).forEach((layer) => {
+            this.map.removeLayer(layer);
+        });
+        this.managedDataLayers.clear();
+
         this.dynamicSplitSource.clear();
         this.searchHighlightSource.clear();
         this.userLocationSource.clear();
@@ -382,13 +405,46 @@ export class Map2DManager {
         this.map.setTarget(undefined);
     }
 
+    private bindBasemapTileReadySignals(): void {
+        this.basemapLayerMap.forEach((pair) => {
+            const source = pair.base.getSource();
+            if (!source || typeof (source as any).on !== 'function') return;
+
+            const onTileSettled = () => {
+                if (this.hasFirstBasemapTileReady) return;
+                if (!pair.base.getVisible()) return;
+                this.markFirstBasemapTileReady();
+            };
+
+            this.basemapTileEventKeys.push((source as any).on('tileloadend', onTileSettled));
+            this.basemapTileEventKeys.push((source as any).on('tileloaderror', onTileSettled));
+        });
+    }
+
+    private markFirstBasemapTileReady(): void {
+        if (this.hasFirstBasemapTileReady) return;
+        this.hasFirstBasemapTileReady = true;
+        if (typeof this.options.onFirstBasemapTile === 'function') {
+            this.options.onFirstBasemapTile();
+        }
+    }
+
     private bindStoreWatchers(): void {
         const stopBasemapWatch = watch(
             () => this.mapStateStore.basemap,
             (nextBasemap) => {
-                this.applyBasemap(nextBasemap);
+                this.mapStateStore.setBasemap(nextBasemap);
+                this.applyBasemapStack();
             },
             { immediate: true }
+        );
+
+        const stopBasemapStackWatch = watch(
+            () => this.mapStateStore.basemaps,
+            () => {
+                this.applyBasemapStack();
+            },
+            { immediate: true, deep: true }
         );
 
         const stopViewWatch = watch(
@@ -458,14 +514,14 @@ export class Map2DManager {
         const stopCustomBasemapWatch = watch(
             () => this.mapStateStore.customBasemapUrl,
             () => {
-                if (this.mapStateStore.basemap === 'custom') {
-                    this.applyBasemap('custom');
-                }
+                this.refreshCustomBasemapSource();
+                this.applyBasemapStack();
             }
         );
 
         this.stopHandles.push(
             stopBasemapWatch,
+            stopBasemapStackWatch,
             stopViewWatch,
             stopSearchHighlightWatch,
             stopDynamicSplitWatch,
@@ -516,6 +572,146 @@ export class Map2DManager {
                 this.updateDynamicSplitLines();
             }
         });
+    }
+
+    private initBasemapLayers(): BaseLayer[] {
+        const mapLayers: BaseLayer[] = [];
+
+        SUPPORTED_BASEMAPS.forEach((id) => {
+            const pair = this.createBasemapLayerPair(id);
+            this.basemapLayerMap.set(id, pair);
+            mapLayers.push(pair.base);
+            if (pair.label) {
+                mapLayers.push(pair.label);
+            }
+        });
+
+        return mapLayers;
+    }
+
+    private createBasemapLayerPair(id: BasemapId): { base: TileLayer<XYZ | OSM>; label: TileLayer<XYZ> | null } {
+        let baseSource: XYZ | OSM;
+        let labelSource: XYZ | null = null;
+
+        switch (id) {
+            case 'google':
+                baseSource = buildGoogleSource();
+                break;
+            case 'google_standard':
+                baseSource = buildGoogleStandardSource();
+                break;
+            case 'google_clean':
+                baseSource = buildGoogleCleanSource();
+                break;
+            case 'tianDiTu':
+                baseSource = buildTiandituImageSource();
+                labelSource = buildTiandituImageLabelSource();
+                break;
+            case 'tianDiTu_vec':
+                baseSource = buildTiandituVectorSource();
+                labelSource = buildTiandituVectorLabelSource();
+                break;
+            case 'esri':
+                baseSource = buildEsriSource();
+                break;
+            case 'osm':
+                baseSource = new OSM();
+                break;
+            case 'amap':
+                baseSource = buildAmapSource();
+                break;
+            case 'tengxun':
+                baseSource = buildTengxunSource();
+                break;
+            case 'esri_ocean':
+                baseSource = buildEsriOceanSource();
+                break;
+            case 'esri_terrain':
+                baseSource = buildEsriTerrainSource();
+                break;
+            case 'esri_physical':
+                baseSource = buildEsriPhysicalSource();
+                break;
+            case 'esri_hillshade':
+                baseSource = buildEsriHillshadeSource();
+                break;
+            case 'esri_gray':
+                baseSource = buildEsriGraySource();
+                break;
+            case 'gggis_time':
+                baseSource = buildGggisTimeSource();
+                break;
+            case 'yandex_sat':
+                baseSource = buildYandexSatSource();
+                break;
+            case 'geoq_gray':
+                baseSource = buildGeoQGraySource();
+                break;
+            case 'geoq_hydro':
+                baseSource = buildGeoQHydroSource();
+                break;
+            case 'custom':
+                baseSource = buildCustomSource(this.mapStateStore.customBasemapUrl) || buildGoogleSource();
+                break;
+            case 'local':
+                baseSource = buildLocalSource();
+                break;
+            default:
+                baseSource = buildGoogleSource();
+                break;
+        }
+
+        const base = new TileLayer({
+            source: baseSource,
+            visible: false,
+            zIndex: 1
+        });
+
+        const label = labelSource
+            ? new TileLayer({ source: labelSource, visible: false, zIndex: 2 })
+            : null;
+
+        return { base, label };
+    }
+
+    private refreshCustomBasemapSource(): void {
+        const pair = this.basemapLayerMap.get('custom');
+        if (!pair) return;
+        pair.base.setSource(buildCustomSource(this.mapStateStore.customBasemapUrl) || buildGoogleSource());
+    }
+
+    private applyBasemapStack(): void {
+        const stack = this.mapStateStore.basemaps.filter((item) => SUPPORTED_BASEMAPS.includes(item.id as BasemapId));
+        const activeId = normalizeBasemapId(this.mapStateStore.basemap);
+        const fallbackVisible = stack.find((item) => item.visible)?.id || activeId;
+
+        stack.forEach((item: BasemapState, index: number) => {
+            const id = normalizeBasemapId(item.id);
+            const pair = this.basemapLayerMap.get(id);
+            if (!pair) return;
+
+            const visible = item.visible || id === activeId || id === fallbackVisible;
+            const baseZ = 1 + index * 2;
+            pair.base.setVisible(visible);
+            pair.base.setZIndex(baseZ);
+
+            if (pair.label) {
+                pair.label.setVisible(visible);
+                pair.label.setZIndex(baseZ + 1);
+            }
+        });
+    }
+
+    private addDataLayer(layerId: string, layer: BaseLayer): void {
+        this.managedDataLayers.set(layerId, layer);
+        this.map.addLayer(layer);
+    }
+
+    private removeDataLayer(layerId: string): void {
+        const layer = this.managedDataLayers.get(layerId);
+        if (!layer) return;
+        this.map.removeLayer(layer);
+        this.managedDataLayers.delete(layerId);
     }
 
     private applyDynamicSplitVisibility(visible: boolean): void {
@@ -665,98 +861,4 @@ export class Map2DManager {
         }
     }
 
-    private applyBasemap(rawBasemapId: string): void {
-        const basemapId = normalizeBasemapId(rawBasemapId);
-
-        switch (basemapId) {
-            case 'google':
-                this.baseLayer.setSource(buildGoogleSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'google_standard':
-                this.baseLayer.setSource(buildGoogleStandardSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'google_clean':
-                this.baseLayer.setSource(buildGoogleCleanSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'tianDiTu':
-                this.baseLayer.setSource(buildTiandituImageSource());
-                this.labelLayer.setSource(buildTiandituImageLabelSource());
-                this.labelLayer.setVisible(true);
-                break;
-            case 'tianDiTu_vec':
-                this.baseLayer.setSource(buildTiandituVectorSource());
-                this.labelLayer.setSource(buildTiandituVectorLabelSource());
-                this.labelLayer.setVisible(true);
-                break;
-            case 'esri':
-                this.baseLayer.setSource(buildEsriSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'osm':
-                this.baseLayer.setSource(new OSM());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'amap':
-                this.baseLayer.setSource(buildAmapSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'tengxun':
-                this.baseLayer.setSource(buildTengxunSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'esri_ocean':
-                this.baseLayer.setSource(buildEsriOceanSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'esri_terrain':
-                this.baseLayer.setSource(buildEsriTerrainSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'esri_physical':
-                this.baseLayer.setSource(buildEsriPhysicalSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'esri_hillshade':
-                this.baseLayer.setSource(buildEsriHillshadeSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'esri_gray':
-                this.baseLayer.setSource(buildEsriGraySource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'gggis_time':
-                this.baseLayer.setSource(buildGggisTimeSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'yandex_sat':
-                this.baseLayer.setSource(buildYandexSatSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'geoq_gray':
-                this.baseLayer.setSource(buildGeoQGraySource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'geoq_hydro':
-                this.baseLayer.setSource(buildGeoQHydroSource());
-                this.labelLayer.setVisible(false);
-                break;
-            case 'custom': {
-                const source = buildCustomSource(this.mapStateStore.customBasemapUrl);
-                this.baseLayer.setSource(source || buildGoogleSource());
-                this.labelLayer.setVisible(false);
-                break;
-            }
-            case 'local':
-                this.baseLayer.setSource(buildLocalSource());
-                this.labelLayer.setVisible(false);
-                break;
-            default:
-                this.baseLayer.setSource(buildGoogleSource());
-                this.labelLayer.setVisible(false);
-                break;
-        }
-    }
 }

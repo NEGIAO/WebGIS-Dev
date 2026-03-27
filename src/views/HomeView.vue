@@ -7,7 +7,6 @@ import SidePanel from '../components/SidePanel.vue';
 import MapContainer from '../components/MapContainer.vue';
 import CesiumContainer from '../components/CesiumContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
-import BasemapPicker from '../components/map-ui/BasemapPicker.vue';
 import MapSearchBox from '../components/map-ui/MapSearchBox.vue';
 import ScaleDisplay from '../components/map-ui/ScaleDisplay.vue';
 import MapBottomControls from '../components/map-ui/MapBottomControls.vue';
@@ -68,9 +67,6 @@ onBeforeUnmount(() => {
                     <div class="search-slot">
                         <MapSearchBox />
                     </div>
-                    <div class="basemap-slot">
-                        <BasemapPicker />
-                    </div>
                     <div class="scale-slot">
                         <ScaleDisplay />
                     </div>
@@ -104,7 +100,8 @@ onBeforeUnmount(() => {
     height: 60px;
     flex-shrink: 0;
     width: 100%;
-    z-index: 50;
+    position: relative;
+    z-index: var(--z-topbar, 2000);
 }
 
 .content-section {
@@ -120,6 +117,7 @@ onBeforeUnmount(() => {
     flex: 1;
     min-width: 0;
     position: relative;
+    z-index: var(--z-map, 1);
     border-radius: 14px;
     overflow: hidden;
     background: #dbeafe;
@@ -131,7 +129,7 @@ onBeforeUnmount(() => {
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 1100;
+    z-index: var(--z-floating-ui, 1000);
 }
 
 .map-ui-overlay > div {
@@ -140,15 +138,9 @@ onBeforeUnmount(() => {
 }
 
 .search-slot {
-    left: 14px;
-    top: 14px;
-    width: min(540px, calc(100% - 28px));
-}
-
-.basemap-slot {
     right: 14px;
     top: 14px;
-    width: 220px;
+    width: min(560px, calc(100% - 28px));
 }
 
 .scale-slot {
@@ -202,8 +194,10 @@ onBeforeUnmount(() => {
         max-height: 0;
     }
 
-    .basemap-slot {
-        width: 180px;
+    .search-slot {
+        left: 10px;
+        right: 10px;
+        width: auto;
     }
 
     .bottom-controls-slot {

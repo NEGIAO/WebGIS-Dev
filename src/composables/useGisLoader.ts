@@ -83,6 +83,42 @@ function packetToLayerName(packet: any, index: number): string {
     return dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
 }
 
+function normalizeProjectionCode(rawProjection: unknown): string {
+    const normalized = String(rawProjection || '').trim().toUpperCase();
+    if (!normalized) return '';
+    if (/^EPSG:\d+$/.test(normalized)) return normalized;
+    if (/^\d+$/.test(normalized)) return `EPSG:${normalized}`;
+    return normalized;
+}
+
+function resolveRenderDataProjection(rawProjection: unknown): 'EPSG:4326' | 'EPSG:3857' {
+    const normalized = normalizeProjectionCode(rawProjection);
+    if (normalized === 'EPSG:3857') return 'EPSG:3857';
+    return 'EPSG:4326';
+}
+
+function pickGeojsonLabelField(geojsonData: any): string {
+    const feature = Array.isArray(geojsonData?.features) ? geojsonData.features[0] : null;
+    const props = feature?.properties;
+    if (!props || typeof props !== 'object') return '';
+
+    const candidates = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
+    for (const key of candidates) {
+        const value = (props as Record<string, unknown>)[key];
+        if (value !== null && value !== undefined && String(value).trim()) {
+            return key;
+        }
+    }
+
+    const fallback = Object.keys(props).find((key) => {
+        if (key === 'geometry' || key === 'style' || key.startsWith('_')) return false;
+        const value = (props as Record<string, unknown>)[key];
+        return value !== null && value !== undefined && String(value).trim();
+    });
+
+    return fallback || '';
+}
+
 async function normalizePacketToLayer(packet: any, index: number): Promise<AddLayerInput | null> {
     const id = packetToLayerId(packet, index);
     const name = packetToLayerName(packet, index);
@@ -100,30 +136,45 @@ async function normalizePacketToLayer(packet: any, index: number): Promise<AddLa
             id,
             name,
             type: 'raster',
+            isRequested: true,
             visible: true,
             opacity: 1,
             olSource: sourceUrl ? { url: sourceUrl } : packet,
             style,
             meta: {
                 kind: packet.kind,
+                source: 'upload',
+                sourceType: 'upload',
                 entryName: packet.entryName
             }
         };
     }
 
     if (packet?.kind === 'geojson') {
+        const sourceProjection = normalizeProjectionCode(packet.dataProjection || 'EPSG:4326');
+        const needsReproject = !!sourceProjection && !['EPSG:4326', 'EPSG:3857'].includes(sourceProjection);
+        const geojsonData = needsReproject
+            ? reprojectGeoJSON(packet.geojsonData, sourceProjection, 'EPSG:4326')
+            : packet.geojsonData;
+        const labelField = pickGeojsonLabelField(geojsonData);
+
         return {
             id,
             name,
             type: 'vector',
+            isRequested: true,
             visible: true,
             opacity: 1,
-            olFeatures: packet.geojsonData,
+            olFeatures: geojsonData,
             style,
             meta: {
                 kind: packet.kind,
                 format: 'geojson',
-                dataProjection: packet.dataProjection
+                source: 'upload',
+                sourceType: 'upload',
+                autoLabel: true,
+                labelField,
+                dataProjection: needsReproject ? 'EPSG:4326' : resolveRenderDataProjection(sourceProjection)
             }
         };
     }
@@ -133,6 +184,7 @@ async function normalizePacketToLayer(packet: any, index: number): Promise<AddLa
             id,
             name,
             type: 'vector',
+            isRequested: true,
             visible: true,
             opacity: 1,
             olFeatures: packet.kmlString,
@@ -140,7 +192,10 @@ async function normalizePacketToLayer(packet: any, index: number): Promise<AddLa
             meta: {
                 kind: packet.kind,
                 format: 'kml',
-                dataProjection: packet.dataProjection
+                source: 'upload',
+                sourceType: 'upload',
+                autoLabel: true,
+                dataProjection: normalizeProjectionCode(packet.dataProjection || 'EPSG:4326') || 'EPSG:4326'
             }
         };
     }
@@ -157,11 +212,13 @@ async function normalizePacketToLayer(packet: any, index: number): Promise<AddLa
             shx: shpParts.shx,
             prj: shpParts.prj
         });
+        const labelField = pickGeojsonLabelField(geojsonData);
 
         return {
             id,
             name,
             type: 'vector',
+            isRequested: true,
             visible: true,
             opacity: 1,
             olFeatures: geojsonData,
@@ -169,7 +226,11 @@ async function normalizePacketToLayer(packet: any, index: number): Promise<AddLa
             meta: {
                 kind: packet.kind,
                 format: 'geojson',
-                dataProjection: packet.dataProjection
+                source: 'upload',
+                sourceType: 'upload',
+                autoLabel: true,
+                labelField,
+                dataProjection: resolveRenderDataProjection(packet.dataProjection)
             }
         };
     }

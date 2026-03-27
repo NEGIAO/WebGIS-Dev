@@ -197,12 +197,15 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     box-sizing: border-box;
     background:
-        radial-gradient(circle at 15% 22%, rgba(125, 231, 168, 0.2), transparent 45%),
-        linear-gradient(135deg, rgba(20, 88, 57, 0.92), rgba(24, 116, 70, 0.9));
-    border-bottom: 1px solid rgba(210, 250, 226, 0.26);
+        radial-gradient(circle at 15% 22%, color-mix(in srgb, var(--gis-primary-green, #166534) 28%, transparent), transparent 45%),
+        linear-gradient(135deg, color-mix(in srgb, var(--gis-primary-green, #166534) 88%, #0b1720), color-mix(in srgb, var(--gis-primary-green-strong, #14532d) 86%, #0b1720));
+    border-bottom: 1px solid color-mix(in srgb, var(--glass-border, rgba(210, 250, 226, 0.26)) 90%, transparent);
     box-shadow: 0 6px 18px rgba(5, 30, 20, 0.28);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(var(--glass-blur-strong, 12px));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong, 12px));
     position: relative;
+    z-index: 3000;
+    isolation: isolate;
 }
 
 .logo-link {
@@ -262,7 +265,7 @@ onBeforeUnmount(() => {
     border-radius: 12px;
     box-shadow: 0 16px 30px rgba(8, 35, 25, 0.24);
     padding: 8px;
-    z-index: 1300;
+    z-index: 3000;
 }
 
 .menu-item {
