@@ -1,11 +1,12 @@
 import { ref, shallowRef } from 'vue';
 import JSZip from 'jszip';
-import { dispatchGisData } from '../utils/gis/dataDispatcher';
-import { flattenUploadInput, type FlattenedResource } from '../utils/gis/decompressor';
-import { parseKmlBuffer } from '../utils/gis/parsers/kmlParser';
-import { groupShpDatasets } from '../utils/gis/parsers/shpParser';
-import { loadTifBuffer } from '../utils/gis/parsers/tifLoader';
-import { reprojectGeoJSON, resolveDatasetProjection } from '../utils/gis/crs-engine';
+import { dispatchGisData } from '../core/gis-parser/dataDispatcher';
+import { flattenUploadInput, type FlattenedResource } from '../core/gis-parser/decompressor';
+import { parseKmlBuffer } from '../core/gis-parser/parsers/kmlParser';
+import { groupShpDatasets, parseShpPartsToGeoJSON } from '../core/gis-parser/parsers/shpParser';
+import { loadTifBuffer } from '../core/gis-parser/parsers/tifLoader';
+import { reprojectGeoJSON, resolveDatasetProjection } from '../core/gis-parser/crs-engine';
+import { useLayerStore, type AddLayerInput } from '../stores/layerStore';
 
 type GisDispatchInput = {
     resources?: Array<File | Blob | any>;
@@ -65,6 +66,115 @@ function summarizePackets(packets: any[], errors: any[]): PacketSummary {
         failedDatasets: errors.length,
         byType
     };
+}
+
+function packetToLayerId(packet: any, index: number): string {
+    const raw = String(packet?.entryName || packet?.sourceName || packet?.kind || `layer_${index}`);
+    const safe = raw.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 64);
+    return `${safe}_${Date.now()}_${index}`;
+}
+
+function packetToLayerName(packet: any, index: number): string {
+    const raw = String(packet?.entryName || packet?.sourceName || '').trim();
+    if (!raw) return `导入图层_${index + 1}`;
+    const slashIdx = Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\'));
+    const filename = slashIdx >= 0 ? raw.slice(slashIdx + 1) : raw;
+    const dotIdx = filename.lastIndexOf('.');
+    return dotIdx > 0 ? filename.slice(0, dotIdx) : filename;
+}
+
+async function normalizePacketToLayer(packet: any, index: number): Promise<AddLayerInput | null> {
+    const id = packetToLayerId(packet, index);
+    const name = packetToLayerName(packet, index);
+    const style = {
+        strokeColor: '#2f7d3c',
+        strokeWidth: 2,
+        fillColor: '#5fbf7a',
+        fillOpacity: 0.2,
+        pointRadius: 6
+    };
+
+    if (packet?.kind === 'tiff') {
+        const sourceUrl = String(packet?.blobUrl || '').trim();
+        return {
+            id,
+            name,
+            type: 'raster',
+            visible: true,
+            opacity: 1,
+            olSource: sourceUrl ? { url: sourceUrl } : packet,
+            style,
+            meta: {
+                kind: packet.kind,
+                entryName: packet.entryName
+            }
+        };
+    }
+
+    if (packet?.kind === 'geojson') {
+        return {
+            id,
+            name,
+            type: 'vector',
+            visible: true,
+            opacity: 1,
+            olFeatures: packet.geojsonData,
+            style,
+            meta: {
+                kind: packet.kind,
+                format: 'geojson',
+                dataProjection: packet.dataProjection
+            }
+        };
+    }
+
+    if (packet?.kind === 'kml') {
+        return {
+            id,
+            name,
+            type: 'vector',
+            visible: true,
+            opacity: 1,
+            olFeatures: packet.kmlString,
+            style,
+            meta: {
+                kind: packet.kind,
+                format: 'kml',
+                dataProjection: packet.dataProjection
+            }
+        };
+    }
+
+    if (packet?.kind === 'shp') {
+        const shpParts = packet?.shpParts || {};
+        if (!(shpParts.shp instanceof ArrayBuffer) || !(shpParts.dbf instanceof ArrayBuffer)) {
+            return null;
+        }
+
+        const geojsonData = await parseShpPartsToGeoJSON({
+            shp: shpParts.shp,
+            dbf: shpParts.dbf,
+            shx: shpParts.shx,
+            prj: shpParts.prj
+        });
+
+        return {
+            id,
+            name,
+            type: 'vector',
+            visible: true,
+            opacity: 1,
+            olFeatures: geojsonData,
+            style,
+            meta: {
+                kind: packet.kind,
+                format: 'geojson',
+                dataProjection: packet.dataProjection
+            }
+        };
+    }
+
+    return null;
 }
 
 function buildSingleUploadPayload(resource: FlattenedResource): { content: unknown; type: string; name: string } | null {
@@ -149,6 +259,7 @@ function createUploadPayloadFromEntries(entries: any[]): GisDispatchInput {
 }
 
 export function useGisLoader() {
+    const layerStore = useLayerStore();
     const isLoading = ref(false);
     const lastError = ref<unknown>(null);
     const warnings = ref<string[]>([]);
@@ -242,6 +353,14 @@ export function useGisLoader() {
                 if (Array.isArray(dispatched?.blobUrls)) mergedBlobUrls.push(...dispatched.blobUrls);
             });
 
+            const normalizedLayers = (await Promise.all(
+                mergedPackets.map((packet, index) => normalizePacketToLayer(packet, index))
+            )).filter(Boolean) as AddLayerInput[];
+
+            normalizedLayers.forEach((layer) => {
+                layerStore.addLayer(layer);
+            });
+
             warnings.value = mergedWarnings;
             errors.value = mergedErrors;
             blobUrls.value = mergedBlobUrls;
@@ -252,6 +371,7 @@ export function useGisLoader() {
             return {
                 packet: lastPacket.value,
                 packets: mergedPackets,
+                layers: normalizedLayers,
                 warnings: warnings.value,
                 errors: errors.value,
                 summary: summary.value,

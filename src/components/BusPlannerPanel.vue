@@ -65,12 +65,12 @@
                     @click="handleSelectRoute(route, idx)"
                 >
                     <div class="route-head">
-                        <div class="route-name">{{ route.lineName }}</div>
+                        <div class="route-name">{{ route.name }}</div>
                         <span class="route-tag">方案 {{ idx + 1 }}</span>
                     </div>
                     <div class="route-meta">
-                        <span>时长：{{ route.time }} 分钟</span>
-                        <span>里程：{{ route.distanceKm }} km</span>
+                        <span>时长：{{ route.summary?.durationText || '-' }}</span>
+                        <span>里程：{{ route.summary?.distanceKm || '-' }} km</span>
                     </div>
                 </button>
             </aside>
@@ -94,13 +94,13 @@
                 >
                     <div class="step-head">
                         <span class="step-tag">步骤 {{ stepIndex + 1 }}</span>
-                        <span class="step-distance">{{ step.distanceKm }} km</span>
+                        <span class="step-distance">{{ stepMeta(step).distanceKm || '-' }} km</span>
                     </div>
-                    <div class="step-line">{{ step.segmentName }}</div>
-                    <div class="step-stations">{{ step.startName }} -> {{ step.endName }}</div>
+                    <div class="step-line">{{ step.name }}</div>
+                    <div class="step-stations">{{ stepMeta(step).startName || '起点' }} -> {{ stepMeta(step).endName || '终点' }}</div>
                     <div class="step-meta">
-                        <span>{{ step.modeText }}</span>
-                        <span>{{ step.time }} 分钟</span>
+                        <span>{{ step.modeText || '-' }}</span>
+                        <span>{{ stepMeta(step).time || 0 }} 分钟</span>
                     </div>
                 </button>
 
@@ -115,6 +115,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
+import { useRouteStore, type LngLat, type RouteRecord, type RouteStepRecord } from '../stores/routeStore';
+import { useToolStore } from '../stores/toolStore';
 
 interface TransitStation {
     name: string;
@@ -152,46 +154,28 @@ interface TransitResponse {
     results?: TransitResultGroup[];
 }
 
-interface StepInfo {
-    index: number;
-    segmentType: number;
-    modeText: string;
-    segmentName: string;
+type RouteStepMeta = {
     startName: string;
     endName: string;
-    time: number;
     distanceKm: string;
-}
-
-interface RouteCandidate {
-    id: string;
-    lineName: string;
     time: number;
-    distanceKm: string;
-    segments: TransitSegment[];
-    steps: StepInfo[];
-}
+    linePoint: string;
+};
 
 const props = defineProps<{
     token: string;
-    startBusPointPick?: (type: 'start' | 'end') => Promise<{ lng: number; lat: number } | null>;
-    drawRouteOnMap?: (route: RouteCandidate) => Promise<void> | void;
-    zoomToBusRouteStep?: (stepIndex: number) => Promise<void> | void;
-    previewBusRouteStep?: (stepIndex: number) => Promise<void> | void;
-    clearBusRouteStepPreview?: () => Promise<void> | void;
 }>();
 
 defineEmits(['close']);
 
+const routeStore = useRouteStore();
+const toolStore = useToolStore();
+
 const errorMsg = ref('');
 const pickMode = ref<'start' | 'end' | ''>('');
-const startPoint = ref<{ lng: number; lat: number } | null>(null);
-const endPoint = ref<{ lng: number; lat: number } | null>(null);
 const lineType = ref('1');
 const planning = ref(false);
-const routes = ref<RouteCandidate[]>([]);
-const selectedRouteIndex = ref(-1);
-const selectedStepIndex = ref(-1);
+const committedStepIndex = ref(-1);
 const debugInfo = ref({
     status: 'idle',
     requestUrl: '',
@@ -203,11 +187,59 @@ const debugInfo = ref({
     lineCount: 0
 });
 
-const selectedRoute = computed<RouteCandidate | null>(() => {
-    const idx = Number(selectedRouteIndex.value);
-    if (idx < 0 || idx >= routes.value.length) return null;
-    return routes.value[idx] || null;
+const startPoint = computed<{ lng: number; lat: number } | null>(() => {
+    const point = routeStore.startPoint;
+    if (!point) return null;
+    return { lng: point[0], lat: point[1] };
 });
+
+const endPoint = computed<{ lng: number; lat: number } | null>(() => {
+    const point = routeStore.endPoint;
+    if (!point) return null;
+    return { lng: point[0], lat: point[1] };
+});
+
+const routes = computed(() => routeStore.routes);
+
+const selectedRouteIndex = computed({
+    get: () => routeStore.activeRouteIndex,
+    set: (value: number) => routeStore.setActiveRouteIndex(value)
+});
+
+const selectedStepIndex = computed({
+    get: () => routeStore.activeStepIndex,
+    set: (value: number) => routeStore.setActiveStepIndex(value)
+});
+
+const selectedRoute = computed<RouteRecord | null>(() => routeStore.activeRoute);
+
+function parseLonLatPair(value: string): LngLat | null {
+    const [lngStr, latStr] = String(value || '').split(',');
+    const lng = Number(lngStr);
+    const lat = Number(latStr);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    return [lng, lat];
+}
+
+function parseLinePointToCoords(value: string): LngLat[] {
+    return String(value || '')
+        .split(';')
+        .filter(Boolean)
+        .map((pair) => parseLonLatPair(pair))
+        .filter(Boolean) as LngLat[];
+}
+
+function mergeStepPaths(paths: LngLat[][]): LngLat[] {
+    const result: LngLat[] = [];
+    for (const path of paths) {
+        for (const point of path) {
+            const prev = result[result.length - 1];
+            if (prev && prev[0] === point[0] && prev[1] === point[1]) continue;
+            result.push(point);
+        }
+    }
+    return result;
+}
 
 function parseSegmentMetrics(segment: TransitSegment) {
     const firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
@@ -237,7 +269,7 @@ function getSegmentDisplayName(segment: TransitSegment, stepIndex: number): stri
     return lineName || `公交段 ${stepIndex + 1}`;
 }
 
-function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
+function normalizeTransitResults(raw: TransitLine[]): RouteRecord[] {
     if (!Array.isArray(raw)) return [];
 
     return raw.map((item, idx) => {
@@ -251,33 +283,54 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
         }, { time: 0, distance: 0 });
 
         const lineName = String(item?.lineName || '').replace(/\s*\|\s*$/, '').trim() || `方案 ${idx + 1}`;
-        const steps: StepInfo[] = segmentList.map((segment, segmentIndex) => {
+        const steps: RouteStepRecord[] = segmentList.map((segment, segmentIndex) => {
             const firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
             const metrics = parseSegmentMetrics(segment);
             const segmentType = Number(segment?.segmentType ?? 0);
             const startName = resolveStationName(segment?.stationStart?.name, 'start', segmentIndex, segmentList.length);
             const endName = resolveStationName(segment?.stationEnd?.name, 'end', segmentIndex, segmentList.length);
             const segmentName = getSegmentDisplayName(segment, segmentIndex);
+            const linePoint = String(firstLine?.linePoint || '');
+            const coordinates = parseLinePointToCoords(linePoint);
 
             return {
-                index: segmentIndex,
-                segmentType,
+                id: `bus_step_${idx}_${segmentIndex}`,
+                name: segmentName,
                 modeText: segmentType === 1 ? '步行' : '公交',
-                segmentName,
-                startName,
-                endName,
-                time: Math.round(metrics.time),
-                distanceKm: (metrics.distance / 1000).toFixed(2)
+                distanceText: `${(metrics.distance / 1000).toFixed(2)} km`,
+                durationText: `${Math.round(metrics.time)} 分钟`,
+                coordinates,
+                meta: {
+                    startName,
+                    endName,
+                    distanceKm: (metrics.distance / 1000).toFixed(2),
+                    time: Math.round(metrics.time),
+                    linePoint
+                } as RouteStepMeta
             };
         });
 
+        const mergedPath = mergeStepPaths(steps.map((step) => step.coordinates));
+        const start = parseLonLatPair(String(segmentList[0]?.stationStart?.lonlat || ''));
+        const end = parseLonLatPair(String(segmentList[segmentList.length - 1]?.stationEnd?.lonlat || ''));
+
         return {
-            id: `${idx}_${lineName}`,
-            lineName,
-            time: Math.round(total.time),
-            distanceKm: (total.distance / 1000).toFixed(2),
-            segments: segmentList,
-            steps
+            id: `bus_route_${idx}_${Date.now()}`,
+            name: lineName,
+            mode: 'bus',
+            start,
+            end,
+            coordinates: mergedPath,
+            steps,
+            summary: {
+                distanceKm: (total.distance / 1000).toFixed(2),
+                durationText: `${Math.round(total.time)} 分钟`
+            },
+            meta: {
+                lineName,
+                time: Math.round(total.time),
+                distanceKm: (total.distance / 1000).toFixed(2)
+            }
         };
     });
 }
@@ -298,21 +351,16 @@ function extractLinesFromTransitResponse(data: TransitResponse) {
 }
 
 async function enablePick(type: 'start' | 'end') {
-    if (!props.startBusPointPick) {
-        errorMsg.value = '主地图未就绪，无法选点';
-        return;
-    }
-
     pickMode.value = type;
     errorMsg.value = '';
 
     try {
-        const point = await props.startBusPointPick(type);
+        const point = await toolStore.requestPickPoint(type);
         if (!point) return;
         if (type === 'start') {
-            startPoint.value = point;
+            routeStore.setStartPoint([point.lng, point.lat]);
         } else {
-            endPoint.value = point;
+            routeStore.setEndPoint([point.lng, point.lat]);
         }
     } catch (err: any) {
         errorMsg.value = err?.message || '地图选点失败';
@@ -321,49 +369,23 @@ async function enablePick(type: 'start' | 'end') {
     }
 }
 
-async function handleSelectRoute(route: RouteCandidate, idx: number) {
+async function handleSelectRoute(_route: RouteRecord, idx: number) {
     selectedRouteIndex.value = idx;
+    committedStepIndex.value = -1;
     selectedStepIndex.value = -1;
-
-    if (!props.drawRouteOnMap) return;
-
-    try {
-        await props.drawRouteOnMap(route);
-    } catch (err: any) {
-        errorMsg.value = err?.message || '路线绘制失败';
-    }
 }
 
 async function handleSelectStep(stepIndex: number) {
+    committedStepIndex.value = stepIndex;
     selectedStepIndex.value = stepIndex;
-
-    try {
-        if (props.drawRouteOnMap && selectedRoute.value) {
-            await props.drawRouteOnMap(selectedRoute.value);
-        }
-        if (!props.zoomToBusRouteStep) return;
-        await props.zoomToBusRouteStep(stepIndex);
-    } catch (err: any) {
-        errorMsg.value = err?.message || `无法定位步骤 ${stepIndex + 1}`;
-    }
 }
 
 async function handlePreviewStep(stepIndex: number) {
-    try {
-        if (!props.previewBusRouteStep) return;
-        await props.previewBusRouteStep(stepIndex);
-    } catch {
-        // 预览失败不影响主流程
-    }
+    selectedStepIndex.value = stepIndex;
 }
 
 async function clearStepPreview() {
-    try {
-        if (!props.clearBusRouteStepPreview) return;
-        await props.clearBusRouteStepPreview();
-    } catch {
-        // 预览失败不影响主流程
-    }
+    selectedStepIndex.value = committedStepIndex.value;
 }
 
 async function startTransitPlan() {
@@ -414,13 +436,11 @@ async function startTransitPlan() {
         debugInfo.value.groupCount = extracted.groups.length;
         debugInfo.value.lineCount = extracted.lines.length;
 
-        routes.value = normalized;
+        routeStore.setMode('bus');
+        routeStore.setRoutes(normalized, 'bus');
         selectedRouteIndex.value = normalized.length ? 0 : -1;
         selectedStepIndex.value = -1;
-
-        if (normalized.length && props.drawRouteOnMap) {
-            await props.drawRouteOnMap(normalized[0]);
-        }
+        committedStepIndex.value = -1;
 
         if (!normalized.length) {
             errorMsg.value = '未查询到可用公交方案';
@@ -436,15 +456,20 @@ async function startTransitPlan() {
             ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
             : '';
         errorMsg.value = hint || rawMessage || '公交规划失败';
-        routes.value = [];
+        routeStore.clearRoutes();
         selectedRouteIndex.value = -1;
         selectedStepIndex.value = -1;
+        committedStepIndex.value = -1;
         debugInfo.value.status = 'error';
         debugInfo.value.message = hint || rawMessage || '公交规划失败';
         console.error('[BusPlanner Debug] 规划失败:', err);
     } finally {
         planning.value = false;
     }
+}
+
+function stepMeta(step: RouteStepRecord): RouteStepMeta {
+    return (step.meta || {}) as RouteStepMeta;
 }
 </script>
 

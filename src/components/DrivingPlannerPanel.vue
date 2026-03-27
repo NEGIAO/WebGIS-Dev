@@ -96,23 +96,20 @@
 import { reactive, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../utils/driveXmlParser';
+import { useRouteStore, type LngLat, type RouteRecord } from '../stores/routeStore';
+import { useToolStore } from '../stores/toolStore';
 
 interface ParsedRouteResult {
     distanceKm: string;
     durationText: string;
     routelatlon: string;
-    steps: Array<{ text: string; linePoint: string }>;
+    steps: Array<{ text: string; linePoint: string; coordinates: LngLat[] }>;
 }
 
 const YOUR_TIANDITU_TK = 'YOUR_TIANDITU_TK';
 
 const props = defineProps<{
     token?: string;
-    drawDriveRouteOnMap?: (payload: { routeLatLonStr: string; stepLinePoints: string[] }) => Promise<void> | void;
-    zoomToDriveRouteStep?: (stepIndex: number) => Promise<void> | void;
-    previewDriveRouteStep?: (stepIndex: number) => Promise<void> | void;
-    clearDriveRouteStepPreview?: () => Promise<void> | void;
-    startMapPointPick?: (type: 'start' | 'end') => Promise<{ lng: number; lat: number }>;
 }>();
 
 defineEmits<{
@@ -123,11 +120,15 @@ const origPoint = reactive({ lng: '', lat: '' });
 const destPoint = reactive({ lng: '', lat: '' });
 const routeStyle = ref('0');
 const pickMode = ref<'' | 'start' | 'end'>('');
+const committedStepIndex = ref(-1);
 
 const isLoading = ref(false);
 const error = ref('');
 const routeResult = ref<ParsedRouteResult | null>(null);
 const selectedStepIndex = ref(-1);
+
+const routeStore = useRouteStore();
+const toolStore = useToolStore();
 
 const debug = reactive({
     status: 'idle',
@@ -150,16 +151,37 @@ function parseCoord(value: string): number {
     return Number.isFinite(n) ? n : NaN;
 }
 
-async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
-    if (!props.startMapPointPick) {
-        error.value = '主地图未就绪，无法选点';
-        return;
-    }
+function parseLinePointToCoords(value: string): LngLat[] {
+    return String(value || '')
+        .split(';')
+        .filter(Boolean)
+        .map((pair) => {
+            const [lngText, latText] = pair.split(',');
+            const lng = Number(lngText);
+            const lat = Number(latText);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+            return [lng, lat] as LngLat;
+        })
+        .filter(Boolean) as LngLat[];
+}
 
+function mergePaths(paths: LngLat[][]): LngLat[] {
+    const merged: LngLat[] = [];
+    for (const path of paths) {
+        for (const point of path) {
+            const prev = merged[merged.length - 1];
+            if (prev && prev[0] === point[0] && prev[1] === point[1]) continue;
+            merged.push(point);
+        }
+    }
+    return merged;
+}
+
+async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
     error.value = '';
     pickMode.value = type;
     try {
-        const point = await props.startMapPointPick(type);
+        const point = await toolStore.requestPickPoint(type);
         const lng = Number(point?.lng);
         const lat = Number(point?.lat);
         if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
@@ -169,9 +191,11 @@ async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
         if (type === 'start') {
             origPoint.lng = lng.toFixed(6);
             origPoint.lat = lat.toFixed(6);
+            routeStore.setStartPoint([lng, lat]);
         } else {
             destPoint.lng = lng.toFixed(6);
             destPoint.lat = lat.toFixed(6);
+            routeStore.setEndPoint([lng, lat]);
         }
     } catch (e) {
         error.value = e instanceof Error ? e.message : '地图选点失败';
@@ -195,48 +219,24 @@ function formatDuration(seconds: number): string {
 }
 
 async function handleSelectDriveStep(stepIndex: number): Promise<void> {
+    committedStepIndex.value = stepIndex;
     selectedStepIndex.value = stepIndex;
-
-    try {
-        if (!routeResult.value) return;
-
-        if (props.drawDriveRouteOnMap) {
-            await props.drawDriveRouteOnMap({
-                routeLatLonStr: routeResult.value.routelatlon,
-                // 不过滤空项，保留步骤索引与分段索引的一一对应关系。
-                stepLinePoints: routeResult.value.steps.map((step) => step.linePoint)
-            });
-        }
-
-        if (!props.zoomToDriveRouteStep) return;
-        await props.zoomToDriveRouteStep(stepIndex);
-    } catch (e) {
-        error.value = e instanceof Error ? e.message : '步骤定位失败';
-    }
+    routeStore.setActiveStepIndex(stepIndex);
 }
 
 async function handlePreviewDriveStep(stepIndex: number): Promise<void> {
-    try {
-        if (!props.previewDriveRouteStep) return;
-        await props.previewDriveRouteStep(stepIndex);
-    } catch {
-        // 预览失败不影响主流程
-    }
+    routeStore.setActiveStepIndex(stepIndex);
 }
 
 async function clearDriveStepPreview(): Promise<void> {
-    try {
-        if (!props.clearDriveRouteStepPreview) return;
-        await props.clearDriveRouteStepPreview();
-    } catch {
-        // 预览失败不影响主流程
-    }
+    routeStore.setActiveStepIndex(committedStepIndex.value);
 }
 
 async function startDriveSearch(): Promise<void> {
     error.value = '';
     routeResult.value = null;
     selectedStepIndex.value = -1;
+    committedStepIndex.value = -1;
 
     const oLng = parseCoord(origPoint.lng);
     const oLat = parseCoord(origPoint.lat);
@@ -280,7 +280,8 @@ async function startDriveSearch(): Promise<void> {
         const parsed = parseDriveRouteXml(xmlString);
         const steps = parsed.segments.map((seg) => ({
             text: seg.guide,
-            linePoint: seg.streetLatLon
+            linePoint: seg.streetLatLon,
+            coordinates: parseLinePointToCoords(seg.streetLatLon)
         })).filter((step) => step.text);
 
         routeResult.value = {
@@ -289,6 +290,35 @@ async function startDriveSearch(): Promise<void> {
             routelatlon: parsed.routeLatLon,
             steps
         };
+
+        const fullRoutePath = parseLinePointToCoords(parsed.routeLatLon);
+        const routeRecord: RouteRecord = {
+            id: `drive_route_${Date.now()}`,
+            name: '驾车路线',
+            mode: 'drive',
+            start: [oLng, oLat],
+            end: [dLng, dLat],
+            coordinates: fullRoutePath.length ? fullRoutePath : mergePaths(steps.map((step) => step.coordinates)),
+            steps: steps.map((step, index) => ({
+                id: `drive_step_${index}`,
+                name: step.text,
+                modeText: routeStyle.value === '3' ? '步行' : '驾车',
+                coordinates: step.coordinates,
+                meta: {
+                    linePoint: step.linePoint,
+                    order: index + 1
+                }
+            })),
+            summary: {
+                distanceKm: Number.isFinite(parsed.distanceKm) ? parsed.distanceKm.toFixed(2) : '0.00',
+                durationText: parsed.durationText || formatDuration(parsed.durationSec)
+            }
+        };
+
+        routeStore.setMode('drive');
+        routeStore.setStartPoint([oLng, oLat]);
+        routeStore.setEndPoint([dLng, dLat]);
+        routeStore.setRoutes([routeRecord], 'drive');
 
         // 若 XML 返回了参数里的起终点，回填到输入框，便于核对。
         const parseInputCoord = (text: string) => {
@@ -309,13 +339,6 @@ async function startDriveSearch(): Promise<void> {
             destPoint.lat = xmlDest.lat.toFixed(6);
         }
 
-        if (parsed.routeLatLon && props.drawDriveRouteOnMap) {
-            await props.drawDriveRouteOnMap({
-                routeLatLonStr: parsed.routeLatLon,
-                stepLinePoints: steps.map((step) => step.linePoint)
-            });
-        }
-
         debug.rawDistance = String(parsed.distanceKm || 0);
         debug.rawDuration = String(parsed.durationSec || 0);
         debug.stepCount = steps.length;
@@ -333,6 +356,7 @@ async function startDriveSearch(): Promise<void> {
         error.value = message;
         debug.status = 'error';
         debug.message = message;
+        routeStore.clearRoutes();
     } finally {
         isLoading.value = false;
     }

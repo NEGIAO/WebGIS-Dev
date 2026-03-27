@@ -21,6 +21,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { useMapStateStore } from '../stores/mapStateStore';
 
 // 动态引入cesium，避免性能问题和401错误，同时保持代码清晰和可维护。
 let Cesium = null;
@@ -53,6 +54,7 @@ let viewer = null;
 let handler = null;
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 const message = useMessage();
+const mapStateStore = useMapStateStore();
 
 // --- 生命周期 ---
 onMounted(() => {
@@ -123,7 +125,7 @@ function initViewer() {
   });
 
   // 默认位置：中国
-  flyToHome(0); // 0 duration for instant set
+  flyToStoreView(0);
 
   // 隐藏版权信息
   viewer._cesiumWidget._creditContainer.style.display = "none";
@@ -368,6 +370,34 @@ function flyToHome(param) {
       roll: 0.0
     },
     duration: duration
+  });
+}
+
+function zoomToCameraHeight(zoom) {
+  const parsed = Number(zoom);
+  if (!Number.isFinite(parsed)) return 15000000;
+  const clamped = Math.max(1, Math.min(20, parsed));
+  return 591657550.5 / Math.pow(2, clamped);
+}
+
+function flyToStoreView(duration = 0) {
+  if (!viewer || !Cesium) return;
+
+  const center = Array.isArray(mapStateStore.center) ? mapStateStore.center : [104.1954, 35.8617];
+  const lng = Number(center[0]);
+  const lat = Number(center[1]);
+  const validLng = Number.isFinite(lng) ? lng : 104.1954;
+  const validLat = Number.isFinite(lat) ? lat : 35.8617;
+  const height = zoomToCameraHeight(mapStateStore.zoom);
+
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(validLng, validLat, height),
+    orientation: {
+      heading: 0.0,
+      pitch: -Cesium.Math.PI_OVER_FOUR,
+      roll: 0.0
+    },
+    duration: Number(duration) || 0
   });
 }
 
