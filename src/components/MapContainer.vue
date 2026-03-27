@@ -1680,6 +1680,53 @@ async function viewUserLayer(...args) {
     return api.viewUserLayer(...args);
 }
 
+//检测地图加载超时：2s内未加载完成则自动切换到天地图
+/**
+ * 监测图层加载超时并自动降级
+ * @param {TileLayer} layer - 需要监测的 OpenLayers 图层实例
+ * @param {number} timeout - 超时阈值（毫秒），默认 2000ms
+ */
+const monitorLayerTimeout = (layer, timeout = 2000) => {
+    let timer = null;
+    const source = layer.getSource();
+    
+    if (!source) return;
+
+    // 天地图备用源
+    const backupSource = new XYZ({
+        url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+        crossOrigin: 'anonymous'
+    });
+
+    // 当切片开始加载时启动计时器
+    source.on('tileloadstart', () => {
+        if (!timer) {
+            timer = setTimeout(() => {
+                console.warn(`图层加载超过 ${timeout/1000}s，正在切换至天地图备用源...`);
+                layer.setSource(backupSource);
+                // 切换后清除所有相关事件监听，防止循环触发
+                source.un('tileloadstart', () => {});
+                source.un('tileloadend', () => {});
+            }, timeout);
+        }
+    });
+
+    // 如果切片在规定时间内加载成功，清除计时器
+    source.on('tileloadend', () => {
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
+        }
+    });
+
+    // 如果加载直接失败，也立即切换
+    source.on('tileloaderror', () => {
+        message.info(`图层加载超时2s，已切换至天地图备用源。`);
+        layer.setSource(backupSource);
+    });
+};
+
+
 // --- 1. 地图核心逻辑 ---
 // [隶属] 图层切换-地图初始化
 // [作用] 初始化地图实例、底图层、业务图层与控件。
@@ -1699,6 +1746,14 @@ function initMap() {
             visible: item.visible,
             zIndex: index // 初始层级通过列表顺序决定（0最底层）
         });
+
+    //超时检测调用替换tianditu
+    if (item.visible && source) 
+    {
+        monitorLayerTimeout(layer, 2000); 
+    }
+
+    layerInstances[item.id] = layer;
         layerInstances[item.id] = layer;
     });
 
@@ -1772,13 +1827,23 @@ function initMap() {
             undefinedHTML: '&nbsp;'
         }),
         // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
-        //bug：待修复
+        //bug：待修复,临时使用
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
+            //原始逻辑，直接使用Google，但是不稳定，容易崩
+            //切换为稳定的天地图
+            // layers: [
+            //     new TileLayer({
+            //         source: googleConfig ? googleConfig.createSource() : new XYZ({
+            //             url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
+            //             maxZoom: 20
+            //         })
+            //     })
+            // ],
             layers: [
                 new TileLayer({
-                    source: googleConfig ? googleConfig.createSource() : new XYZ({
-                        url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
+                    source: new XYZ({
+                        url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
                         maxZoom: 20
                     })
                 })
@@ -1809,6 +1874,8 @@ function initMap() {
     bindEvents();
 
     // 1.6 监听底图切换 (保留原Select功能，但改为操作 layerList)
+    //bug，此处需要监听变化后的图层并加上monitorLayerTimeout，超时替换
+    // 增强完备性，防止图源不可用，用天地图兜底
     watch(selectedLayer, (val, prevVal) => {
         // 关闭所有（独占模式），除了注记层可能需要保留？
         // 按照原逻辑，Select 是互斥选择
