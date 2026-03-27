@@ -197,6 +197,7 @@ const mapContainerRef = ref(null);
 const mousePositionRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
+//默认底图的设置，还需修改293行的可见性
 const selectedLayer = ref('google');
 const customMapUrl = ref('');
 const showImageSet = ref(false);
@@ -1682,7 +1683,8 @@ function initMap() {
             target: mousePositionRef.value,
             undefinedHTML: '&nbsp;'
         }),
-        // 鹰眼视图控件 - 使用 googleConfig 动态引用，保持 URL 一致
+        // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
+        //bug：待修复
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
             layers: [
