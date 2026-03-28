@@ -53,7 +53,7 @@ const props = defineProps({
     },
     placeholder: {
         type: String,
-        default: '搜索地名，例如：郑州'
+        default: '搜索地名，如：郑州'
     },
     pageSize: {
         type: Number,

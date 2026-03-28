@@ -35,29 +35,29 @@
                 <option value="local">自定义瓦片</option>
                 <option value="tianDiTu_vec">天地图矢量</option>
                 <option value="tianDiTu">天地图影像</option>
-                <option value="google">Google(不稳定gac-geo)</option>
-                <option value="gggis">GOogle(不稳定gggis)</option>
+                <option value="google">Google</option>
+                <option value="gggis">Google(gg)</option>
                 <option value="google_standard">Google标准</option>
                 <option value="google_clean">Google简洁</option>
                 <option value="osm">OSM(需梯子)</option>
-                <option value="yandex_sat">Yandex卫星(未知偏移)</option>
-                <option value="geoq_gray">GeoQ灰色(GCJ-02)</option>
-                <option value="geoq_hydro">GeoQ水系(GCJ-02)</option>
-                <option value="amap">高德地图(GCJ-02)</option>
-                <option value="amap_image">高德影像(GCJ-02)</option>
-                <option value="tengxun">腾讯地图(GCJ-02)</option>
+                <option value="yandex_sat">Yandex卫星</option>
+                <option value="geoq_gray">GeoQ灰(GCJ)</option>
+                <option value="geoq_hydro">GeoQ水(GCJ)</option>
+                <option value="amap">高德地图(GCJ)</option>
+                <option value="amap_image">高德影像(GCJ)</option>
+                <option value="tengxun">腾讯地图(GCJ)</option>
                 <option value="topo">地形图</option>
                 <option value="opentopomap">OpenTopoMap</option>
                 <option value="esa_topo">欧空局地形</option>
                 <option value="windy">windy</option>
                 <option value="windy2">windy2</option>
                 <option value="windy_outer">windy轮廓</option>
-                <option value="windy_greenland">windy Grayland</option>
-                <option value="carton_light">CartoDB Positron</option>
-                <option value="carton_dark">CartoDB Dark Matter</option>
+                <option value="windy_greenland">windy Gray</option>
+                <option value="carton_light">CartoDB</option>
+                <option value="carton_dark">CartoDB Dark</option>
                 <option value="wikepedia">Wikipedia</option>
                 <option value="toner">Stamen Toner</option>
-                <option value="alidade">Alidade Smooth</option>
+                <option value="alidade">Alidade Sm</option>
                 <!-- <option value="esri_ocean">Esri海洋</option>
                 <option value="esri_terrain">Esri地形</option>
                 <option value="esri_physical">Esri物理</option>
@@ -1680,6 +1680,7 @@ async function viewUserLayer(...args) {
     return api.viewUserLayer(...args);
 }
 
+// bug：未应用到所有的图层检测，且切换后未清除事件监听，可能导致循环触发。
 //检测地图加载超时：2s内未加载完成则自动切换到天地图
 /**
  * 监测图层加载超时并自动降级
@@ -1830,24 +1831,26 @@ function initMap() {
         //bug：待修复,临时使用
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
+
             //原始逻辑，直接使用Google，但是不稳定，容易崩
             //切换为稳定的天地图
+
+            layers: [
+                new TileLayer({
+                    source: googleConfig ? googleConfig.createSource() : new XYZ({
+                        url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
+                        maxZoom: 20
+                    })
+            })
+            ],
             // layers: [
             //     new TileLayer({
-            //         source: googleConfig ? googleConfig.createSource() : new XYZ({
-            //             url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
+            //         source: new XYZ({
+            //             url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
             //             maxZoom: 20
             //         })
             //     })
             // ],
-            layers: [
-                new TileLayer({
-                    source: new XYZ({
-                        url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
-                        maxZoom: 20
-                    })
-                })
-            ],
             collapseLabel: '«',
             label: '»',
             collapsed: false
