@@ -35,8 +35,8 @@
                 <option value="local">自定义瓦片</option>
                 <option value="tianDiTu_vec">天地图矢量</option>
                 <option value="tianDiTu">天地图影像</option>
-                <option value="google">Google</option>
-                <option value="gggis">Google(gg)</option>
+                <option value="google">Google(gac)</option>
+                <option value="Google">Google原版</option>
                 <option value="google_standard">Google标准</option>
                 <option value="google_clean">Google简洁</option>
                 <option value="osm">OSM(需梯子)</option>
@@ -177,7 +177,7 @@ const URL_LAYER_OPTIONS = [
     'tianDiTu_vec',
     'tianDiTu',
     'google',
-    'gggis',
+    'Google',
     'google_standard',
     'google_clean',
     'osm',
@@ -340,8 +340,8 @@ const LAYER_CONFIGS = [
     //     createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
     // },
     { 
-        id: 'gggis', name: '谷谷', visible: true,
-        createSource: () => new XYZ({ url: 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}' }) 
+        id: 'Google', name: 'Google原版', visible: true,
+        createSource: () => new XYZ({ url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}' }) 
     },
     { 
         id: 'opentopomap', name: 'OpenTopoMap', visible: false,
@@ -363,6 +363,7 @@ const LAYER_CONFIGS = [
         id: 'tianDiTu', name: '天地图影像', visible: false,
         createSource: () => new XYZ({ url: `${buildTiandituUrl('/img_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
     },
+    // 谷歌请求图层配置参考：https://liuxs.pro/blog/%E8%87%AA%E5%AE%9A%E4%B9%89%E8%B0%B7%E6%AD%8Cxyz%E7%93%A6%E7%89%87%E5%9C%B0%E5%9B%BE%E6%A0%B7%E5%BC%8F/#user-content-fn-1
     { 
         id: 'google_standard', name: 'Google标准', visible: false,
         createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt/lyrs=m&x={x}&y={y}&z={z}') }) 
@@ -1722,7 +1723,7 @@ const monitorLayerTimeout = (layer, timeout = 2000) => {
 
     // 如果加载直接失败，也立即切换
     source.on('tileloaderror', () => {
-        message.info(`图层加载超时2s，已切换至天地图备用源。`);
+        // message.info(`图层加载超时2s，已切换至天地图备用源。`);
         layer.setSource(backupSource);
     });
 };
@@ -1748,10 +1749,12 @@ function initMap() {
             zIndex: index // 初始层级通过列表顺序决定（0最底层）
         });
 
-    //超时检测调用替换tianditu
+    // bug：多次重复加载，不稳定
+    // 超时检测调用替换tianditu
     if (item.visible && source) 
     {
         monitorLayerTimeout(layer, 2000); 
+        message.info(`图层加载超时2s，已切换至天地图备用源。`);
     }
 
     layerInstances[item.id] = layer;
@@ -1835,22 +1838,23 @@ function initMap() {
             //原始逻辑，直接使用Google，但是不稳定，容易崩
             //切换为稳定的天地图
 
-            layers: [
-                new TileLayer({
-                    source: googleConfig ? googleConfig.createSource() : new XYZ({
-                        url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
-                        maxZoom: 20
-                    })
-            })
-            ],
             // layers: [
             //     new TileLayer({
-            //         source: new XYZ({
-            //             url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+            //         source: googleConfig ? googleConfig.createSource() : new XYZ({
+            //             url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
             //             maxZoom: 20
             //         })
-            //     })
+            // })
             // ],
+
+            layers: [
+                new TileLayer({
+                    source: new XYZ({
+                        url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+                        maxZoom: 20
+                    })
+                })
+            ],
             collapseLabel: '«',
             label: '»',
             collapsed: false
@@ -1889,7 +1893,7 @@ function initMap() {
 
         // 修正：区分卫星注记和矢量注记，互不混淆
         // 1. 卫星/影像底图 -> 配对 卫星注记 (label / cia)
-        const needsSatelliteLabel = ['tianDiTu', 'google', 'esri'].includes(val);
+        const needsSatelliteLabel = ['tianDiTu', 'Google', 'esri','google'].includes(val);
         const labelItem = layerList.value.find(l => l.id === 'label');
         if (labelItem) labelItem.visible = needsSatelliteLabel;
 
