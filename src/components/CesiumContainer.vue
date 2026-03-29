@@ -33,9 +33,9 @@ const CESIUM_CSS_URL = `${CESIUM_BASE_CDN}/Widgets/widgets.css`;
 // 天地图 Token：优先使用环境变量
 const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 //三个图源，俩不稳定
-const GOOGLE_MAP_URL = 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
+// const GOOGLE_MAP_URL = 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
 // const GOOGLE_MAP_URL = 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
-// const GooGLE_MAP_URL = 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb';
+const GOOGLE_MAP_URL = 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb';
 
 // 天地图插件脚本列表
 const TDT_SCRIPTS = [
