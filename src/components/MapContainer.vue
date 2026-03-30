@@ -112,6 +112,11 @@
         <!-- 底部控制栏 -->
         <div class="map-controls-group">
             <div ref="mousePositionRef" class="mouse-position-content"></div>
+            <!-- bug:待增加功能
+             点击文本，可以将坐标复制到剪贴板 
+             双击文本可键入经纬度坐标，回车后即跳转到该位置
+             并增设鼠标hover的提示文本
+             -->
             <div class="zoom-level-display">{{ currentZoom }}</div>
             <div class="divider"></div>
             <!-- 核心修改：移除 @dblclick，统一用 @click 处理 -->
@@ -162,6 +167,7 @@ import CircleGeom from 'ol/geom/Circle';
 import { LineString, Polygon } from 'ol/geom';
 import { Draw, Snap } from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
+import Message from './Message.vue';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -1681,7 +1687,12 @@ async function viewUserLayer(...args) {
     return api.viewUserLayer(...args);
 }
 
+//标识图层加载是否成功
+let layerLoadSuccess = true;
+
 // bug：未应用到所有的图层检测，且切换后未清除事件监听，可能导致循环触发。
+// 初始化阶段，该函数被频繁调用，需优化
+
 //检测地图加载超时：2s内未加载完成则自动切换到天地图
 /**
  * 监测图层加载超时并自动降级
@@ -1718,13 +1729,17 @@ const monitorLayerTimeout = (layer, timeout = 2000) => {
         if (timer) {
             clearTimeout(timer);
             timer = null;
+            // message.info(`默认图层加载成功。`);
         }
     });
 
     // 如果加载直接失败，也立即切换
     source.on('tileloaderror', () => {
-        // message.info(`图层加载超时2s，已切换至天地图备用源。`);
-        layer.setSource(backupSource);
+        // message.info(`图层加载超时2s，建议切换至天地图备用源。`);
+        layerLoadSuccess = false;
+        // bug:直接切换有风险，这里的逻辑有问题，暂时改为信息提示
+        // layer.setSource(backupSource);
+        // 
     });
 };
 
@@ -1733,6 +1748,11 @@ const monitorLayerTimeout = (layer, timeout = 2000) => {
 // [隶属] 图层切换-地图初始化
 // [作用] 初始化地图实例、底图层、业务图层与控件。
 // [交互] 触发 bindEvents，并在 watch(selectedLayer) 中联动底图切换。
+
+// bug
+// 初始化阶段被频繁调用，需优化避免重复加载和事件监听。
+// 图层成功加载处被调用三次，导致多次重复加载和提示，需优化。
+
 function initMap() {
     // 1.1 源定义与图层初始化 (由 LAYER_CONFIGS 动态驱动，不再硬编码 sources 对象)
     
@@ -1754,7 +1774,14 @@ function initMap() {
     if (item.visible && source) 
     {
         monitorLayerTimeout(layer, 2000); 
-        message.info(`图层加载超时2s，已切换至天地图备用源。`);
+        if(!layerLoadSuccess){
+            message.info(`图层加载超时2s，建议切换图源为天地图。`);
+        }
+        else
+        {
+            message.success(`默认图层加载成功。`);
+        }
+        // message.info(`图层加载超时2s，建议切换图源为天地图。`);
     }
 
     layerInstances[item.id] = layer;
@@ -1831,7 +1858,9 @@ function initMap() {
             undefinedHTML: '&nbsp;'
         }),
         // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
+
         //bug：待修复,临时使用
+
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
 

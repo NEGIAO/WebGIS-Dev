@@ -6,6 +6,8 @@
         :key="item.id"
         class="toast-item"
         :class="`toast-${item.type}`"
+        @mouseenter="pauseTimer(item.id)"
+        @mouseleave="resumeTimer(item)"
       >
         <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
         <div class="toast-content">
@@ -13,7 +15,7 @@
           <div class="toast-text">{{ item.text }}</div>
         </div>
         <button
-          v-if="item.closable"
+          v-if="item.closable !== false" 
           type="button"
           class="toast-close"
           aria-label="关闭"
@@ -27,6 +29,8 @@
 </template>
 
 <script setup>
+import { watch, onUnmounted } from 'vue';
+
 const props = defineProps({
   messages: {
     type: Array,
@@ -35,15 +39,87 @@ const props = defineProps({
   position: {
     type: String,
     default: 'top-right'
+  },
+  // 新增：默认自动关闭的时间（毫秒）。设置为 0 则不自动关闭
+  duration: {
+    type: Number,
+    default: 3000 
   }
 });
 
 const emit = defineEmits(['close']);
 
+// 用于存储每个 message 的定时器
+const timers = new Map();
+
+// 启动自动关闭定时器
+function startTimer(item, customTime) {
+  // 支持在单个 item 上覆盖全局的 duration，例如 item.duration = 5000
+  const itemDuration = item.duration !== undefined ? item.duration : props.duration;
+  
+  // 如果时间 <= 0，则说明该提示框不自动关闭
+  if (itemDuration <= 0) return;
+
+  // 如果已经有定时器，先清除
+  if (timers.has(item.id)) {
+    clearTimeout(timers.get(item.id));
+  }
+
+  // 使用传入的时间(鼠标移出时的短时间) 或 默认设定的时间
+  const timeToClose = customTime !== undefined ? customTime : itemDuration;
+
+  const timer = setTimeout(() => {
+    emitClose(item.id);
+  }, timeToClose);
+
+  timers.set(item.id, timer);
+}
+
+// 鼠标移入：暂停（清除）定时器
+function pauseTimer(id) {
+  if (timers.has(id)) {
+    clearTimeout(timers.get(id));
+    timers.delete(id);
+  }
+}
+
+// 鼠标移出：很快平滑消失（设置为 800ms 后关闭）
+function resumeTimer(item) {
+  const itemDuration = item.duration !== undefined ? item.duration : props.duration;
+  if (itemDuration <= 0) return; // 如果本身设为不自动关闭，移出后也不关闭
+
+  // 鼠标离开后，让它在很短的时间内（如 800ms）自动关闭
+  startTimer(item, 800);
+}
+
+// 触发关闭事件并清理定时器
 function emitClose(id) {
+  pauseTimer(id); // 清理内部定时器
   emit('close', id);
 }
 
+// 监听 messages 数组的变化，为新加入的消息启动定时器
+watch(
+  () => props.messages,
+  (newMessages, oldMessages) => {
+    const oldIds = new Set((oldMessages || []).map(m => m.id));
+    newMessages.forEach(msg => {
+      // 发现新进入的消息
+      if (!oldIds.has(msg.id)) {
+        startTimer(msg);
+      }
+    });
+  },
+  { immediate: true, deep: true }
+);
+
+// 组件卸载时，清理所有正在运行的定时器以防内存泄漏
+onUnmounted(() => {
+  timers.forEach(timer => clearTimeout(timer));
+  timers.clear();
+});
+
+// --- 原有逻辑 ---
 function getTypeIcon(type) {
   if (type === 'success') return '✓';
   if (type === 'error') return '!';
@@ -97,6 +173,14 @@ function getTypeTitle(type) {
   box-shadow: 0 10px 24px rgba(20, 30, 60, 0.18);
   background: rgba(255, 255, 255, 0.58);
   color: #203247;
+  /* 新增：增加基础的过渡动画，让 hover 和尺寸变化更平滑 */
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* 新增：鼠标悬浮时轻微上浮，增加交互平滑感 */
+.toast-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(20, 30, 60, 0.25);
 }
 
 .toast-success {
@@ -158,15 +242,17 @@ function getTypeTitle(type) {
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
+  transition: color 0.2s ease; /* 关闭按钮颜色平滑过渡 */
 }
 
 .toast-close:hover {
   color: rgba(21, 34, 48, 0.95);
 }
 
+/* 进出场动画保持不变，由于使用了较慢的过渡效果看起来已经很平滑了 */
 .toast-enter-active,
 .toast-leave-active {
-  transition: all 0.28s ease;
+  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .toast-enter-from,
