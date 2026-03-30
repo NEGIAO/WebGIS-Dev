@@ -2,7 +2,16 @@
     <div class="info-panel" :class="{ 'collapsed': isCollapsed, 'in-dihuan': props.locationInfo.isInDihuan }">
         <!-- 折叠开关 -->
         <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开面板' : '收起面板'">
-            <span class="handle-icon">{{ isCollapsed ? '◀' : '▶' }}</span>
+            <!-- 只用一个向左的箭头，通过动态 class 控制旋转 -->
+            <svg 
+                class="handle-icon" 
+                :class="{ 'is-flipped': !isCollapsed }" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor"
+            >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
         </div>
 
         <!-- 面板内容区域 -->
@@ -132,6 +141,7 @@ import ChatPanelContent from './ChatPanelContent.vue';
 import ToolboxPanel from './ToolboxPanel.vue';
 import BusPlannerPanel from './BusPlannerPanel.vue';
 import DrivingPlannerPanel from './DrivingPlannerPanel.vue';
+import Message from './Message.vue';
 
 // ========== 1. 常量定义 ==========
 const LINKS = {
@@ -353,8 +363,15 @@ function nextNews() {
     font-size: 12px;
     color: #fff;
     font-weight: bold;
+    width: 20px;
+    height: 20px;
+    /* 增加平滑的过渡动画 */
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
 }
 
+.handle-icon.is-flipped {
+    transform: rotate(180deg);
+}
 
 /* 内容区域 */
 .panel-content {
@@ -556,6 +573,9 @@ function nextNews() {
         /* 旋转箭头方向，使其指向合适的方向 */
         transform: rotate(90deg);
         font-size: 14px;
+    }
+    .handle-icon.is-flipped {
+        transform: rotate(-90deg);
     }
 
     .panel-content {
