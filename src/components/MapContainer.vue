@@ -1687,15 +1687,13 @@ async function viewUserLayer(...args) {
     return api.viewUserLayer(...args);
 }
 
-
-//可迁移代码进行复用
+//BUG：本函数的作用主要是监测默认瓦片的状态，给出兜底行为，超时则切换底图
 /**
- * 监测图层加载超时并自动降级
+ * 监测图层加载状态并自动降级（智能防抖抗网络波动版）
  * @param {TileLayer} layer - 需要监测的图层实例
- * @param {number} timeout - 超时阈值
  * @param {Object} callbacks - 回调函数对象 { onTimeout, onSuccess, onError }
  */
-const monitorLayerTimeout = (layer, timeout = 2000, callbacks = {}) => {
+const monitorLayerTimeout = (layer, callbacks = {}) => {
     // 1. 防重复初始化
     if (layer.get('_isTimeoutMonitored')) return;
     layer.set('_isTimeoutMonitored', true);
@@ -1703,19 +1701,22 @@ const monitorLayerTimeout = (layer, timeout = 2000, callbacks = {}) => {
     const source = layer.getSource();
     if (!source) return;
 
-    let timer = null;
+    // --- 核心配置参数 ---
+    const MAX_ERRORS = 3;        // 容忍的最大连续报错瓦片数
+    const ACTIVITY_TIMEOUT = 10000; // 绝对静默超时：10秒内没有任何瓦片加载成功，视为假死
+
+    let activityTimer = null;
     let loadingTilesCount = 0; 
+    let consecutiveErrors = 0; // 连续错误计数器
     let isSwitched = false;   
-    
-    // 新增：保证“加载成功”的提示只在首次加载完成时触发一次
     let hasNotifiedSuccess = false; 
 
-    // 降级逻辑
+    // 降级执行函数
     const switchToBackup = (reason, triggerCallback) => {
         if (isSwitched) return;
         isSwitched = true;
 
-        console.warn(`[降级触发] ${reason}`);
+        console.warn(`[底图降级触发] 原因: ${reason}`);
         const backupSource = new XYZ({
             url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
             crossOrigin: 'anonymous'
@@ -1723,53 +1724,71 @@ const monitorLayerTimeout = (layer, timeout = 2000, callbacks = {}) => {
 
         layer.setSource(backupSource);
         
-        // 触发外部传入的回调 (失败或超时)
         if (triggerCallback) triggerCallback();
-
         cleanUp(); 
+    };
+
+    // 重置“绝对静默”定时器
+    const resetActivityTimer = () => {
+        if (activityTimer) clearTimeout(activityTimer);
+        // 只有在还有瓦片未加载完时，才需要开启超时检测
+        if (loadingTilesCount > 0) {
+            activityTimer = setTimeout(() => {
+                switchToBackup(`服务无响应（超过 ${ACTIVITY_TIMEOUT/1000} 秒没有任何瓦片加载进度）`, callbacks.onTimeout);
+            }, ACTIVITY_TIMEOUT);
+        }
     };
 
     const onTileLoadStart = () => {
         if (isSwitched) return;
         loadingTilesCount++; 
         
-        if (!timer) {
-            timer = setTimeout(() => {
-                // 触发超时降级，并调用传入的 onTimeout 回调
-                switchToBackup('超时', callbacks.onTimeout);
-            }, timeout);
-        }
+        // 有新请求发起，重置静默定时器
+        resetActivityTimer();
     };
 
     const onTileLoadEnd = () => {
         if (isSwitched) return;
         loadingTilesCount--; 
-        
-        if (loadingTilesCount <= 0) {
-            loadingTilesCount = 0; 
-            
-            // 清理定时器
-            if (timer) {
-                clearTimeout(timer);
-                timer = null;
-            }
+        consecutiveErrors = 0; // 只要有一个瓦片成功了，就说明服务活着，清零错误计数！
 
-            // 新增：如果当前批次全部加载完，且之前没弹过成功提示，则触发成功回调
+        if (loadingTilesCount <= 0) {
+            // 这一波全部加载完了
+            loadingTilesCount = 0; 
+            if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
+
             if (!hasNotifiedSuccess) {
                 hasNotifiedSuccess = true;
                 if (callbacks.onSuccess) callbacks.onSuccess();
             }
+        } else {
+            // 还有瓦片在加载，说明进度在往前走，重置定时器续命
+            resetActivityTimer();
         }
     };
 
     const onTileLoadError = () => {
         if (isSwitched) return;
-        // 触发错误降级，并调用传入的 onError 回调
-        switchToBackup('瓦片报错', callbacks.onError);
+        loadingTilesCount--;
+        consecutiveErrors++; // 记录报错次数
+
+        // 策略1：错误次数达到阈值，判定服务不可用
+        if (consecutiveErrors >= MAX_ERRORS) {
+            switchToBackup(`底图服务异常（连续 ${consecutiveErrors} 个瓦片请求失败）`, callbacks.onError);
+            return;
+        }
+
+        // 哪怕有错误，只要整体还没加载完，继续监控剩下的
+        if (loadingTilesCount <= 0) {
+            loadingTilesCount = 0;
+            if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
+        } else {
+            resetActivityTimer();
+        }
     };
 
     const cleanUp = () => {
-        if (timer) { clearTimeout(timer); timer = null; }
+        if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
         source.un('tileloadstart', onTileLoadStart);
         source.un('tileloadend', onTileLoadEnd);
         source.un('tileloaderror', onTileLoadError);
@@ -1779,7 +1798,6 @@ const monitorLayerTimeout = (layer, timeout = 2000, callbacks = {}) => {
     source.on('tileloadend', onTileLoadEnd);
     source.on('tileloaderror', onTileLoadError);
 };
-
 
 
 // --- 1. 地图核心逻辑 ---
@@ -1810,17 +1828,11 @@ function initMap() {
     // bug：多次重复加载，不稳定
     // 超时检测调用替换tianditu
     if (item.visible && source) {
-        monitorLayerTimeout(layer, 5000, {
-            onTimeout: () => {
-                message.warning(`图层加载超时5s，已自动降级为天地图备用源。`);
-            },
-            onSuccess: () => {
-                message.success(`默认图层加载成功。`);
-            },
-            onError: () => {
-                message.error(`图层加载失败，已触发降级方案。`);
-            }
-        }); 
+        monitorLayerTimeout(layer, {
+            onTimeout: () => message.warning(`底图响应过慢，已自动切换天地图。`),
+            onError: () => message.error(`底图服务异常，已自动切换天地图。`),
+            onSuccess: () => message.success(`底图加载成功。`)
+        });
     }
 
     layerInstances[item.id] = layer;
