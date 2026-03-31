@@ -1687,61 +1687,99 @@ async function viewUserLayer(...args) {
     return api.viewUserLayer(...args);
 }
 
-//标识图层加载是否成功
-let layerLoadSuccess = true;
 
-// bug：未应用到所有的图层检测，且切换后未清除事件监听，可能导致循环触发。
-// 初始化阶段，该函数被频繁调用，需优化
-
-//检测地图加载超时：2s内未加载完成则自动切换到天地图
+//可迁移代码进行复用
 /**
  * 监测图层加载超时并自动降级
- * @param {TileLayer} layer - 需要监测的 OpenLayers 图层实例
- * @param {number} timeout - 超时阈值（毫秒），默认 2000ms
+ * @param {TileLayer} layer - 需要监测的图层实例
+ * @param {number} timeout - 超时阈值
+ * @param {Object} callbacks - 回调函数对象 { onTimeout, onSuccess, onError }
  */
-const monitorLayerTimeout = (layer, timeout = 2000) => {
-    let timer = null;
+const monitorLayerTimeout = (layer, timeout = 2000, callbacks = {}) => {
+    // 1. 防重复初始化
+    if (layer.get('_isTimeoutMonitored')) return;
+    layer.set('_isTimeoutMonitored', true);
+
     const source = layer.getSource();
-    
     if (!source) return;
 
-    // 天地图备用源
-    const backupSource = new XYZ({
-        url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
-        crossOrigin: 'anonymous'
-    });
+    let timer = null;
+    let loadingTilesCount = 0; 
+    let isSwitched = false;   
+    
+    // 新增：保证“加载成功”的提示只在首次加载完成时触发一次
+    let hasNotifiedSuccess = false; 
 
-    // 当切片开始加载时启动计时器
-    source.on('tileloadstart', () => {
+    // 降级逻辑
+    const switchToBackup = (reason, triggerCallback) => {
+        if (isSwitched) return;
+        isSwitched = true;
+
+        console.warn(`[降级触发] ${reason}`);
+        const backupSource = new XYZ({
+            url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+            crossOrigin: 'anonymous'
+        });
+
+        layer.setSource(backupSource);
+        
+        // 触发外部传入的回调 (失败或超时)
+        if (triggerCallback) triggerCallback();
+
+        cleanUp(); 
+    };
+
+    const onTileLoadStart = () => {
+        if (isSwitched) return;
+        loadingTilesCount++; 
+        
         if (!timer) {
             timer = setTimeout(() => {
-                console.warn(`图层加载超过 ${timeout/1000}s，正在切换至天地图备用源...`);
-                layer.setSource(backupSource);
-                // 切换后清除所有相关事件监听，防止循环触发
-                source.un('tileloadstart', () => {});
-                source.un('tileloadend', () => {});
+                // 触发超时降级，并调用传入的 onTimeout 回调
+                switchToBackup('超时', callbacks.onTimeout);
             }, timeout);
         }
-    });
+    };
 
-    // 如果切片在规定时间内加载成功，清除计时器
-    source.on('tileloadend', () => {
-        if (timer) {
-            clearTimeout(timer);
-            timer = null;
-            // message.info(`默认图层加载成功。`);
+    const onTileLoadEnd = () => {
+        if (isSwitched) return;
+        loadingTilesCount--; 
+        
+        if (loadingTilesCount <= 0) {
+            loadingTilesCount = 0; 
+            
+            // 清理定时器
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+
+            // 新增：如果当前批次全部加载完，且之前没弹过成功提示，则触发成功回调
+            if (!hasNotifiedSuccess) {
+                hasNotifiedSuccess = true;
+                if (callbacks.onSuccess) callbacks.onSuccess();
+            }
         }
-    });
+    };
 
-    // 如果加载直接失败，也立即切换
-    source.on('tileloaderror', () => {
-        // message.info(`图层加载超时2s，建议切换至天地图备用源。`);
-        layerLoadSuccess = false;
-        // bug:直接切换有风险，这里的逻辑有问题，暂时改为信息提示
-        // layer.setSource(backupSource);
-        // 
-    });
+    const onTileLoadError = () => {
+        if (isSwitched) return;
+        // 触发错误降级，并调用传入的 onError 回调
+        switchToBackup('瓦片报错', callbacks.onError);
+    };
+
+    const cleanUp = () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+        source.un('tileloadstart', onTileLoadStart);
+        source.un('tileloadend', onTileLoadEnd);
+        source.un('tileloaderror', onTileLoadError);
+    };
+
+    source.on('tileloadstart', onTileLoadStart);
+    source.on('tileloadend', onTileLoadEnd);
+    source.on('tileloaderror', onTileLoadError);
 };
+
 
 
 // --- 1. 地图核心逻辑 ---
@@ -1771,17 +1809,18 @@ function initMap() {
 
     // bug：多次重复加载，不稳定
     // 超时检测调用替换tianditu
-    if (item.visible && source) 
-    {
-        monitorLayerTimeout(layer, 2000); 
-        if(!layerLoadSuccess){
-            message.info(`图层加载超时2s，建议切换图源为天地图。`);
-        }
-        else
-        {
-            message.success(`默认图层加载成功。`);
-        }
-        // message.info(`图层加载超时2s，建议切换图源为天地图。`);
+    if (item.visible && source) {
+        monitorLayerTimeout(layer, 5000, {
+            onTimeout: () => {
+                message.warning(`图层加载超时5s，已自动降级为天地图备用源。`);
+            },
+            onSuccess: () => {
+                message.success(`默认图层加载成功。`);
+            },
+            onError: () => {
+                message.error(`图层加载失败，已触发降级方案。`);
+            }
+        }); 
     }
 
     layerInstances[item.id] = layer;
