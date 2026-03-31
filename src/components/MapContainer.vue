@@ -1827,13 +1827,13 @@ function initMap() {
 
     // bug：多次重复加载，不稳定
     // 超时检测调用替换tianditu
-    if (item.visible && source) {
-        monitorLayerTimeout(layer, {
-            onTimeout: () => message.warning(`底图响应过慢，已自动切换天地图。`),
-            onError: () => message.error(`底图服务异常，已自动切换天地图。`),
-            onSuccess: () => message.success(`底图加载成功。`)
-        });
-    }
+    // if (item.visible && source) {
+    //     monitorLayerTimeout(layer, {
+    //         onTimeout: () => message.warning(`底图响应过慢，已自动切换天地图。`),
+    //         onError: () => message.error(`底图服务异常，已自动切换天地图。`),
+    //         onSuccess: () => message.success(`底图加载成功。`)
+    //     });
+    // }
 
     layerInstances[item.id] = layer;
         layerInstances[item.id] = layer;
