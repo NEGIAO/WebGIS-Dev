@@ -2,7 +2,8 @@ import { h, reactive, render, readonly } from 'vue';
 import Message from '../components/Message.vue';
 
 const MAX_VISIBLE = 3;
-const DEFAULT_DURATION_MS = 2000;
+//默认持续时间，单位毫秒
+const DEFAULT_DURATION_MS = 3000;
 
 const state = reactive({
   messages: [],

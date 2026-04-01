@@ -9,7 +9,7 @@ const app = createApp(App)
 const pinia = createPinia()
 const message = useMessage()
 
-message.ensureMessageHost('top-right')
+message.ensureMessageHost('top-center')
 
 app.use(pinia)
 app.use(router)

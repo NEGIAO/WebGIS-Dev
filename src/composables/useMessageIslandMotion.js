@@ -14,7 +14,21 @@ export function useMessageIslandMotion({ messagesRef, durationRef, onClose }) {
   }
 
   function resolveDuration(item) {
-    return item?.duration ?? durationRef?.value ?? 0;
+    const raw = item?.duration ?? durationRef?.value ?? 0;
+    if (!Number.isFinite(raw)) return 0;
+    return Math.max(0, raw);
+  }
+
+  function getLatestRunningCloseAt() {
+    let latest = 0;
+
+    for (const meta of autoCloseMeta.values()) {
+      if (meta?.startedAt > 0 && Number.isFinite(meta?.closeAt) && meta.closeAt > latest) {
+        latest = meta.closeAt;
+      }
+    }
+
+    return latest;
   }
 
   function clearAutoCloseTimer(id) {
@@ -56,20 +70,40 @@ export function useMessageIslandMotion({ messagesRef, durationRef, onClose }) {
     if (id == null) return;
     if (collapsingIds.value.has(id)) return;
 
-    const cachedRemaining = autoCloseMeta.get(id)?.remainingMs;
-    const duration = customDelayMs ?? cachedRemaining ?? resolveDuration(item);
-    if (!Number.isFinite(duration) || duration <= 0) {
+    const now = Date.now();
+    const baseDuration = resolveDuration(item);
+
+    let finalDelay = customDelayMs;
+
+    if (finalDelay === undefined) {
+      if (baseDuration <= 0) {
+        clearAutoCloseState(id);
+        return;
+      }
+
+      const latestRunningCloseAt = getLatestRunningCloseAt();
+      const earliestCloseAt = now + baseDuration;
+      const scheduledCloseAt = latestRunningCloseAt > now
+        ? Math.max(earliestCloseAt, latestRunningCloseAt + baseDuration)
+        : earliestCloseAt;
+
+      finalDelay = scheduledCloseAt - now;
+    }
+
+    if (!Number.isFinite(finalDelay) || finalDelay <= 0) {
       clearAutoCloseState(id);
+      requestClose(id, { animated: false });
       return;
     }
 
-    const finalDelay = Math.max(MIN_TIMER_MS, duration);
+    finalDelay = Math.max(MIN_TIMER_MS, finalDelay);
 
     clearAutoCloseTimer(id);
 
     autoCloseMeta.set(id, {
       remainingMs: finalDelay,
-      startedAt: Date.now()
+      startedAt: now,
+      closeAt: now + finalDelay
     });
 
     const timer = globalThis.setTimeout(() => {
@@ -84,12 +118,15 @@ export function useMessageIslandMotion({ messagesRef, durationRef, onClose }) {
     if (id == null) return;
 
     const currentMeta = autoCloseMeta.get(id);
-    if (currentMeta != null) {
-      const elapsed = Date.now() - (currentMeta.startedAt ?? Date.now());
-      const remainingMs = Math.max(0, (currentMeta.remainingMs ?? 0) - elapsed);
+    if (currentMeta != null && currentMeta.startedAt > 0) {
+      const elapsed = Date.now() - currentMeta.startedAt;
+      const remainingMs = Math.max(0, currentMeta.remainingMs - elapsed);
+
       autoCloseMeta.set(id, {
+        ...currentMeta,
         remainingMs,
-        startedAt: 0
+        startedAt: 0,
+        closeAt: 0
       });
     }
 
@@ -100,12 +137,16 @@ export function useMessageIslandMotion({ messagesRef, durationRef, onClose }) {
     const id = item?.id ?? null;
     if (id == null) return;
 
-    const duration = resolveDuration(item);
-    if (!Number.isFinite(duration) || duration <= 0) return;
+    const currentMeta = autoCloseMeta.get(id);
 
-    const remainingMs = autoCloseMeta.get(id)?.remainingMs ?? duration;
+    if (currentMeta == null) {
+      startAutoCloseTimer(item);
+      return;
+    }
 
-    if (remainingMs <= 0) {
+    const remainingMs = currentMeta.remainingMs ?? resolveDuration(item);
+
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
       clearAutoCloseState(id);
       requestClose(id, { animated: false });
       return;
@@ -166,7 +207,7 @@ export function useMessageIslandMotion({ messagesRef, durationRef, onClose }) {
 
   watch(
     messagesRef,
-    (newMessages, oldMessages) => {
+    (newMessages) => {
       const currentMessages = newMessages ?? [];
       const activeIds = new Set(
         currentMessages
@@ -192,17 +233,12 @@ export function useMessageIslandMotion({ messagesRef, durationRef, onClose }) {
         }
       }
 
-      const oldIds = new Set(
-        (oldMessages ?? [])
-          .map((msg) => msg?.id)
-          .filter((id) => id != null)
-      );
-
       currentMessages.forEach((msg) => {
         const msgId = msg?.id ?? null;
-        if (msgId == null || oldIds.has(msgId)) return;
+        if (msgId == null) return;
+        if (collapsingIds.value.has(msgId)) return;
+        if (autoCloseTimers.has(msgId) || autoCloseMeta.has(msgId)) return;
 
-        clearAutoCloseState(msgId);
         startAutoCloseTimer(msg);
       });
     },
