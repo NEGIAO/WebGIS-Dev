@@ -91,7 +91,7 @@ WebGIS_Dev/
 │   │   ├── MapEasterEgg.vue            # 彩蛋图片模块：区域判定、像素定位、缩略图和 Lightbox（Teleport）
 │   │   ├── MapControlsBar.vue          # 底部地图控制条，显示实时坐标、缩放级别、修改坐标与主页按钮
 │   │   ├── MapPointPickerCard.vue      # 地图起终点拾取状态卡片与操作引导
-│   │   ├── Message.vue                 # 全局 Toast/Message 消息组件（队列显示）
+│   │   ├── Message.vue                 # 全局 Toast/Message 消息组件（默认 2s 自动关闭，悬停暂停计时，点击立即关闭）
 │   │   ├── SidePanel.vue               # 右侧侧栏总控容器（资讯/聊天/工具箱/公交/驾车）
 │   │   ├── ToolboxPanel.vue            # 图层管理、数据导入、绘制工具与样式编辑面板
 │   │   ├── TopBar.vue                  # 顶部导航栏，负责菜单、分享、快捷跳转与功能入口
@@ -111,7 +111,8 @@ WebGIS_Dev/
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
-│   │   ├── useMessage.js               # 全局消息系统（队列、超时、宿主挂载）
+│   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
+│   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
 │   │   ├── useStyleEditor.js           # 图层样式编辑器状态与模板控制
 │   │   ├── useUserLayerActions.js      # 用户图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   └── useUserLocation.js          # 用户定位、国内外判定与定位更新策略

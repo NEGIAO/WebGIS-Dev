@@ -1,13 +1,26 @@
 <template>
-  <div class="message-host" :class="`message-host-${position}`" role="status" aria-live="polite">
+  <div
+    class="message-host"
+    :class="`message-host-${position}`"
+    :style="cssVars"
+    role="status"
+    aria-live="polite"
+  >
     <TransitionGroup name="toast" tag="div" class="toast-list">
       <div
         v-for="item in messages"
         :key="item.id"
         class="toast-item"
-        :class="`toast-${item.type}`"
+        :class="[
+          `toast-${item.type}`,
+          {
+            clickable: item.closable !== false,
+            'toast-item-collapsing': isCollapsing(item.id)
+          }
+        ]"
         @mouseenter="pauseTimer(item.id)"
         @mouseleave="resumeTimer(item)"
+        @click="handleItemClick(item)"
       >
         <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
         <div class="toast-content">
@@ -15,11 +28,11 @@
           <div class="toast-text">{{ item.text }}</div>
         </div>
         <button
-          v-if="item.closable !== false" 
+          v-if="item.closable !== false"
           type="button"
           class="toast-close"
           aria-label="关闭"
-          @click="emitClose(item.id)"
+          @click.stop="handleCloseButtonClick(item.id)"
         >
           ×
         </button>
@@ -29,7 +42,8 @@
 </template>
 
 <script setup>
-import { watch, onUnmounted } from 'vue';
+import { toRef } from 'vue';
+import { useMessageIslandMotion } from '../composables/useMessageIslandMotion';
 
 const props = defineProps({
   messages: {
@@ -43,81 +57,33 @@ const props = defineProps({
   // 新增：默认自动关闭的时间（毫秒）。设置为 0 则不自动关闭
   duration: {
     type: Number,
-    default: 3000 
+    default: 2000 
   }
 });
 
 const emit = defineEmits(['close']);
 
-// 用于存储每个 message 的定时器
-const timers = new Map();
+const messagesRef = toRef(props, 'messages');
+const durationRef = toRef(props, 'duration');
 
-// 启动自动关闭定时器
-function startTimer(item, customTime) {
-  // 支持在单个 item 上覆盖全局的 duration，例如 item.duration = 5000
-  const itemDuration = item.duration !== undefined ? item.duration : props.duration;
-  
-  // 如果时间 <= 0，则说明该提示框不自动关闭
-  if (itemDuration <= 0) return;
-
-  // 如果已经有定时器，先清除
-  if (timers.has(item.id)) {
-    clearTimeout(timers.get(item.id));
-  }
-
-  // 使用传入的时间(鼠标移出时的短时间) 或 默认设定的时间
-  const timeToClose = customTime !== undefined ? customTime : itemDuration;
-
-  const timer = setTimeout(() => {
-    emitClose(item.id);
-  }, timeToClose);
-
-  timers.set(item.id, timer);
-}
-
-// 鼠标移入：暂停（清除）定时器
-function pauseTimer(id) {
-  if (timers.has(id)) {
-    clearTimeout(timers.get(id));
-    timers.delete(id);
-  }
-}
-
-// 鼠标移出：很快平滑消失（设置为 800ms 后关闭）
-function resumeTimer(item) {
-  const itemDuration = item.duration !== undefined ? item.duration : props.duration;
-  if (itemDuration <= 0) return; // 如果本身设为不自动关闭，移出后也不关闭
-
-  // 鼠标离开后，让它在很短的时间内（如 800ms）自动关闭
-  startTimer(item, 800);
-}
-
-// 触发关闭事件并清理定时器
-function emitClose(id) {
-  pauseTimer(id); // 清理内部定时器
-  emit('close', id);
-}
-
-// 监听 messages 数组的变化，为新加入的消息启动定时器
-watch(
-  () => props.messages,
-  (newMessages, oldMessages) => {
-    const oldIds = new Set((oldMessages || []).map(m => m.id));
-    newMessages.forEach(msg => {
-      // 发现新进入的消息
-      if (!oldIds.has(msg.id)) {
-        startTimer(msg);
-      }
-    });
-  },
-  { immediate: true, deep: true }
-);
-
-// 组件卸载时，清理所有正在运行的定时器以防内存泄漏
-onUnmounted(() => {
-  timers.forEach(timer => clearTimeout(timer));
-  timers.clear();
+// 将自动关闭、hover 暂停恢复、点击收缩消失统一封装，避免组件中重复计时器逻辑。
+const {
+  clickCollapseMs,
+  handleCloseButtonClick,
+  handleItemClick,
+  isCollapsing,
+  pauseTimer,
+  resumeTimer
+} = useMessageIslandMotion({
+  messagesRef,
+  durationRef,
+  onClose: (id) => emit('close', id)
 });
+
+// 动画时长通过 CSS 变量暴露，便于后续在主题层统一调参。
+const cssVars = {
+  '--toast-collapse-duration': `${clickCollapseMs}ms`
+};
 
 // --- 原有逻辑 ---
 function getTypeIcon(type) {
@@ -136,16 +102,27 @@ function getTypeTitle(type) {
 </script>
 
 <style scoped>
+
 .message-host {
   position: fixed;
   z-index: 9999;
   pointer-events: none;
   width: min(420px, calc(100vw - 24px));
+  --toast-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --toast-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --toast-collapse-duration: 280ms;
 }
 
-.message-host-top-right {
-  top: 14px;
-  right: 14px;
+.message-host-top-right{
+  top: 75px;         /* 保持你原本的顶部距离 */
+  left: 50%;          /* 移至水平方向 50% 的位置 */
+  right: auto;        /* 重置掉原本的 right 属性 */
+  transform: translateX(-50%); /* 向左偏移自身宽度的 50%，达到真正的居中 */
+  
+  /* 确保 Flex 列表内部也是居中对齐（可选） */
+  display: flex;
+  flex-direction: column;
+  align-items: center; 
 }
 
 .message-host-top-center {
@@ -157,50 +134,69 @@ function getTypeTitle(type) {
 .toast-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 10px 32px rgba(20, 30, 60, 0.18);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.58);
+  max-width: 100%;
 }
 
 .toast-item {
   pointer-events: auto;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  border-radius: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 10px 24px rgba(20, 30, 60, 0.18);
-  background: rgba(255, 255, 255, 0.58);
+  gap: 12px;
+  padding: 12px 14px;
   color: #203247;
-  /* 新增：增加基础的过渡动画，让 hover 和尺寸变化更平滑 */
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  cursor: default;
+  user-select: none;
+  transform-origin: center center;
+  max-height: 150px;
+  box-sizing: border-box;
+  will-change: transform, opacity, filter, max-height, padding, margin;
 }
 
-/* 新增：鼠标悬浮时轻微上浮，增加交互平滑感 */
-.toast-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(20, 30, 60, 0.25);
+.toast-item:not(:last-child) {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.toast-item.clickable {
+  cursor: pointer;
+}
+
+.toast-item.clickable:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.toast-item.clickable:active {
+  background-color: rgba(200, 200, 200, 0.1);
+  transform: scale(0.98);
+}
+
+/* 灵动岛式收缩：先压缩、再轻微回弹、最终向中心消失。 */
+.toast-item-collapsing {
+  pointer-events: none;
+  animation: island-collapse var(--toast-collapse-duration) var(--toast-ease-spring) forwards;
 }
 
 .toast-success {
-  border-color: rgba(59, 170, 105, 0.35);
-  background: linear-gradient(145deg, rgba(214, 245, 224, 0.7), rgba(244, 255, 248, 0.55));
+  background: rgba(234, 250, 238, 0.4);
 }
 
 .toast-error {
-  border-color: rgba(223, 79, 79, 0.35);
-  background: linear-gradient(145deg, rgba(255, 225, 225, 0.75), rgba(255, 247, 247, 0.56));
+  background: rgba(255, 235, 235, 0.4);
 }
 
 .toast-warning {
-  border-color: rgba(214, 145, 34, 0.35);
-  background: linear-gradient(145deg, rgba(255, 239, 207, 0.78), rgba(255, 248, 234, 0.55));
+  background: rgba(255, 245, 225, 0.4);
 }
 
 .toast-info {
-  border-color: rgba(58, 120, 214, 0.35);
-  background: linear-gradient(145deg, rgba(219, 236, 255, 0.78), rgba(245, 250, 255, 0.55));
+  background: rgba(235, 245, 255, 0.4);
 }
 
 .toast-icon {
@@ -249,16 +245,110 @@ function getTypeTitle(type) {
   color: rgba(21, 34, 48, 0.95);
 }
 
-/* 进出场动画保持不变，由于使用了较慢的过渡效果看起来已经很平滑了 */
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+.toast-enter-active {
+  transition:
+    transform 0.42s var(--toast-ease-out),
+    opacity 0.34s var(--toast-ease-out),
+    filter 0.42s var(--toast-ease-out),
+    max-height 0.42s var(--toast-ease-out),
+    padding 0.42s var(--toast-ease-out),
+    border-width 0.42s var(--toast-ease-out);
 }
 
-.toast-enter-from,
+.toast-leave-active {
+  transition:
+    transform 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease-out,
+    filter 0.24s ease-out,
+    max-height 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+    padding 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+    border-width 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 优先级动画：成功更轻快 */
+.toast-success.toast-enter-active,
+.toast-success.toast-leave-active {
+  transition:
+    transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.2s ease-out,
+    filter 0.3s ease-out,
+    max-height 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    padding 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 优先级动画：错误更慢更稳 */
+.toast-error.toast-enter-active,
+.toast-error.toast-leave-active {
+  transition:
+    transform 0.6s cubic-bezier(0.2, 0, 0.2, 1),
+    opacity 0.5s ease-out,
+    filter 0.6s ease-out,
+    max-height 0.6s cubic-bezier(0.2, 0, 0.2, 1),
+    padding 0.6s cubic-bezier(0.2, 0, 0.2, 1),
+    border-width 0.6s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(-14px) scale(0.9);
+  filter: blur(6px);
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+}
+
+.toast-leave-from {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+  max-height: 150px;
+}
+
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(24px) translateY(-4px);
+  transform: scale(0.82);
+  filter: blur(5px);
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+}
+
+.toast-move {
+  transition: transform 0.38s var(--toast-ease-out), max-height 0.38s var(--toast-ease-out);
+}
+
+@keyframes island-collapse {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    filter: blur(0);
+  }
+  38% {
+    transform: translate3d(0, 0, 0) scale3d(0.82, 0.82, 1);
+  }
+  60% {
+    transform: translate3d(0, 0, 0) scale3d(0.88, 0.88, 1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -1px, 0) scale3d(0.5, 0.5, 1);
+    filter: blur(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-item,
+  .toast-enter-active,
+  .toast-leave-active,
+  .toast-move,
+  .toast-item-collapsing {
+    animation: none !important;
+    transition: none !important;
+    filter: none !important;
+  }
 }
 
 @media (max-width: 768px) {
@@ -268,7 +358,9 @@ function getTypeTitle(type) {
 
   .message-host-top-right {
     top: 10px;
-    right: 8px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
   }
 
   .toast-item {
