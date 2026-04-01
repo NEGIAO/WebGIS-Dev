@@ -1722,6 +1722,36 @@ function bindEvents() {
 // --- 2. 业务逻辑 (区域图片) ---
 
 // --- 3. 关键修复：复位与定位逻辑 ---
+// 函数: updateViewByParams(lng, lat, z, layer)
+// 职责: 统一执行视图飞行、图层索引切换、并通过现有 flyToView 逻辑 replace URL（不再分散在多个组件手动改 query）
+// [隶属] 视图更新-统一入口
+// [作用] 统一处理经纬度、缩放、图层参数，执行飞行并 replace URL。
+function updateViewByParams(lng, lat, z, layer) {
+    const nextLng = Number(lng);
+    const nextLat = Number(lat);
+    if (!Number.isFinite(nextLng) || !Number.isFinite(nextLat)) return;
+
+    const map = mapInstance.value;
+    const currentMapZoom = Number(map?.getView?.()?.getZoom?.() ?? INITIAL_VIEW.zoom);
+    const targetZoomRaw = Number(z);
+    const targetZoom = Number.isFinite(targetZoomRaw) ? targetZoomRaw : currentMapZoom;
+
+    const targetLayerRaw = Number(layer);
+    const targetLayerIndex = Number.isInteger(targetLayerRaw)
+        ? targetLayerRaw
+        : getLayerIndexById(selectedLayer.value);
+
+    flyToView({
+        lng: nextLng,
+        lat: nextLat,
+        zoom: targetZoom,
+        layerIndex: targetLayerIndex
+    });
+
+    currentCoordinate.value = { lng: nextLng, lat: nextLat };
+    emit('location-change', { lon: nextLng, lat: nextLat, source: 'view-param-update' });
+    emit('coordinate-jump', { lng: nextLng, lat: nextLat });
+}
 
 // [隶属] 底部控制-坐标跳转
 // [作用] 接收 MapControlsBar 的 jump-to 事件，统一飞行并同步 URL。
@@ -1731,28 +1761,19 @@ function handleJumpToCoordinates({ lng, lat }) {
     const currentMapZoom = Number(map?.getView?.()?.getZoom?.() ?? INITIAL_VIEW.zoom);
     const nextZoom = Math.max(currentMapZoom, 12);
 
-    flyToView({
-        lng,
-        lat,
-        zoom: nextZoom,
-        layerIndex: getLayerIndexById(selectedLayer.value)
-    });
-
-    currentCoordinate.value = { lng: Number(lng), lat: Number(lat) };
-    emit('location-change', { lon: lng, lat, source: 'coordinate-input' });
-    emit('coordinate-jump', { lng, lat });
+    updateViewByParams(lng, lat, nextZoom, getLayerIndexById(selectedLayer.value));
 }
 
 // [隶属] 底部控制-Home 单击
 // [作用] 地图复位到初始中心和缩放。
 // [交互] 由 MapControlsBar 的 reset-view 事件触发。
 function resetView() {
-    flyToView({
-        lng: INITIAL_VIEW.center[0],
-        lat: INITIAL_VIEW.center[1],
-        zoom: INITIAL_VIEW.zoom,
-        layerIndex: getLayerIndexById(selectedLayer.value)
-    });
+    updateViewByParams(
+        INITIAL_VIEW.center[0],
+        INITIAL_VIEW.center[1],
+        INITIAL_VIEW.zoom,
+        getLayerIndexById(selectedLayer.value)
+    );
 }
 
 // [隶属] 图层切换-自定义底图
@@ -2344,6 +2365,7 @@ const formatArea = (poly) => {
 // [作用] 向父组件公开地图核心动作（导入、绘制、路线、图层管理等）。
 // [交互] HomeView 等父组件通过 ref 调用这些方法。
 defineExpose({
+    updateViewByParams,
     addUserDataLayer,
     activateInteraction,
     clearInteractions,

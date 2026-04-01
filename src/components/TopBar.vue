@@ -65,7 +65,6 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
 
 const emit = defineEmits([
@@ -75,7 +74,8 @@ const emit = defineEmits([
     'open-toolbox',
     'open-bus',
     'open-drive',
-    'activate-feature'
+    'activate-feature',
+    'jump-view'
 ]);
 
 const showToolMenu = ref(false);
@@ -85,8 +85,6 @@ const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
 const message = useMessage();
-const route = useRoute();
-const router = useRouter();
 
 //地点迁移
 const quickLocations = [
@@ -133,35 +131,19 @@ function toggleToolMenu() {
     showToolMenu.value = !showToolMenu.value;
 }
 
-function formatViewQueryValue(value, fractionDigits) {
-    const numberValue = Number(value);
-    if (!Number.isFinite(numberValue)) return null;
-    return numberValue.toFixed(fractionDigits);
-}
-
 function handleJump(location) {
-    const lng = formatViewQueryValue(location.lng, 6);
-    const lat = formatViewQueryValue(location.lat, 6);
-    const z = formatViewQueryValue(location.z, 2);
+    const lng = Number(location.lng);
+    const lat = Number(location.lat);
+    const z = Number(location.z);
     const layerIndexRaw = Number(location.layer);
     const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : 0;
 
-    if (!lng || !lat || !z) return;
-
-    const nextQuery = {
-        ...route.query,
-        lng,
-        lat,
-        z,
-        l: String(layerIndex)
-    };
+    if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(z)) return;
 
     showToolMenu.value = false;
-    // 利用现有的 URL 同步 / 解析机制，只更新查询参数
-    void router.push({
-        path: route.path,
-        query: nextQuery
-    });
+
+    // 统一交给 MapContainer 的视图更新入口处理：飞行 + URL replace。
+    emit('jump-view', lng, lat, z, layerIndex);
 }
 
 function handleDocumentClick(event) {
