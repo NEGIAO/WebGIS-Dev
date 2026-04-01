@@ -2,6 +2,7 @@ import { h, reactive, render, readonly } from 'vue';
 import Message from '../components/Message.vue';
 
 const MAX_VISIBLE = 3;
+const DEFAULT_DURATION_MS = 2000;
 
 const state = reactive({
   messages: [],
@@ -19,19 +20,13 @@ function nextId() {
 
 function getDefaultDuration(type, inputDuration) {
   if (Number.isFinite(inputDuration) && inputDuration >= 0) return inputDuration;
-  if (type === 'error') return 0;
-  return 4000;
+  return DEFAULT_DURATION_MS;
 }
 
 function flushQueue() {
   while (state.messages.length < MAX_VISIBLE && state.queue.length > 0) {
     const next = state.queue.shift();
     state.messages.push(next);
-    if (next.duration > 0) {
-      next.timer = setTimeout(() => {
-        remove(next.id);
-      }, next.duration);
-    }
   }
 }
 
@@ -41,19 +36,13 @@ function createMessage(type, text, options = {}) {
     type,
     text: String(text || ''),
     duration: getDefaultDuration(type, options.duration),
-    closable: options.closable ?? (type === 'error'),
-    timer: null
+    closable: options.closable ?? true
   };
 
   if (state.messages.length >= MAX_VISIBLE) {
     state.queue.push(payload);
   } else {
     state.messages.push(payload);
-    if (payload.duration > 0) {
-      payload.timer = setTimeout(() => {
-        remove(payload.id);
-      }, payload.duration);
-    }
   }
 
   return payload.id;
@@ -63,18 +52,11 @@ function remove(id) {
   const idx = state.messages.findIndex((m) => m.id === id);
   if (idx < 0) return;
 
-  const target = state.messages[idx];
-  if (target?.timer) {
-    clearTimeout(target.timer);
-  }
   state.messages.splice(idx, 1);
   flushQueue();
 }
 
 function clearAll() {
-  state.messages.forEach((item) => {
-    if (item.timer) clearTimeout(item.timer);
-  });
   state.messages = [];
   state.queue = [];
 }
