@@ -1,9 +1,9 @@
 <template>
     <div class="layer-switcher">
         <LocationSearch
-            :fetcher="fetcher"
+            :fetcher="fetchLocationResults"
             :amapKey="amapKey"
-            :services="services"
+            :services="serviceOptions"
             storageKey="map_search_selected_service"
             @select-result="handleSearchJump"
         />
@@ -19,7 +19,12 @@
             </option>
         </select>
 
-        <button class="layer-manage-btn" @click="showLayerManager = !showLayerManager" title="图层管理">
+        <button
+            ref="layerManageButtonRef"
+            class="layer-manage-btn"
+            @click="toggleLayerManager"
+            title="图层管理"
+        >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z"/>
             </svg>
@@ -43,77 +48,49 @@
             <button class="custom-url-btn" @click="submitCustomUrl" title="加载">ok</button>
         </div>
 
-        <div v-if="showLayerManager" class="layer-manager-panel">
-            <div class="panel-header">
-                <span>图层排序与显示</span>
-                <span class="close-panel-btn" @click="showLayerManager = false">×</span>
-            </div>
-            <div class="layer-list">
-                <div
-                    v-for="(layer, index) in layerList"
-                    :key="layer.id"
-                    class="layer-item"
-                    draggable="true"
-                    @dragstart="onDragStart($event, index)"
-                    @dragover.prevent
-                    @drop="onDrop($event, index)"
-                    :class="{ dragging: draggingIndex === index }"
-                >
-                    <div class="drag-handle">⋮⋮</div>
-                    <input
-                        type="checkbox"
-                        :checked="layer.visible"
-                        @change="updateLayerVisibility(layer, $event)"
+        <Teleport to="body">
+            <div v-if="showLayerManager" class="layer-manager-panel" :style="layerManagerPanelStyle">
+                <div class="panel-header">
+                    <span>图层排序与显示</span>
+                    <span class="close-panel-btn" @click="showLayerManager = false">×</span>
+                </div>
+                <div class="layer-list">
+                    <div
+                        v-for="(layer, index) in layerList"
+                        :key="layer.id"
+                        class="layer-item"
+                        draggable="true"
+                        @dragstart="onDragStart($event, index)"
+                        @dragend="onDragEnd"
+                        @dragover.prevent
+                        @drop="onDrop($event, index)"
+                        :class="{ dragging: draggingIndex === index }"
                     >
-                    <span class="layer-name">{{ layer.name }}</span>
+                        <div class="drag-handle">⋮⋮</div>
+                        <input
+                            type="checkbox"
+                            :checked="layer.visible"
+                            @change="updateLayerVisibility(layer, $event)"
+                        >
+                        <span class="layer-name">{{ layer.name }}</span>
+                    </div>
                 </div>
             </div>
-        </div>
+        </Teleport>
     </div>
 </template>
 
 <script setup>
-import { defineAsyncComponent, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { toLonLat } from 'ol/proj';
+import { fetchLocationResultsByService } from '../api/locationSearch';
+import { BASEMAP_OPTIONS } from '../composables/useBasemapManager';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
 const LocationSearch = defineAsyncComponent(() => import('./LocationSearch.vue'));
 
-// ========== 底图供应商配置 (共 27 种) ==========
-/**
- * 预设底图选项列表
- * 包含本地瓦片、天地图、Google、OSM、高德、腾讯、Yandex 等全球服务
- * 支持自定义 URL 底图输入
- */
-const BASEMAP_OPTIONS = [
-    { value: 'local', label: '自定义瓦片' },
-    { value: 'tianDiTu_vec', label: '天地图矢量' },
-    { value: 'tianDiTu', label: '天地图影像' },
-    { value: 'google', label: 'Google(gac)' },
-    { value: 'Google', label: 'Google原版' },
-    { value: 'google_standard', label: 'Google标准' },
-    { value: 'google_clean', label: 'Google简洁' },
-    { value: 'osm', label: 'OSM(需梯子)' },
-    { value: 'yandex_sat', label: 'Yandex卫星' },
-    { value: 'geoq_gray', label: 'GeoQ灰(GCJ)' },
-    { value: 'geoq_hydro', label: 'GeoQ水(GCJ)' },
-    { value: 'amap', label: '高德地图(GCJ)' },
-    { value: 'amap_image', label: '高德影像(GCJ)' },
-    { value: 'tengxun', label: '腾讯地图(GCJ)' },
-    { value: 'topo', label: '地形图' },
-    { value: 'opentopomap', label: 'OpenTopoMap' },
-    { value: 'esa_topo', label: '欧空局地形' },
-    { value: 'windy', label: 'windy' },
-    { value: 'windy2', label: 'windy2' },
-    { value: 'windy_outer', label: 'windy轮廓' },
-    { value: 'windy_greenland', label: 'windy Gray' },
-    { value: 'carton_light', label: 'CartoDB' },
-    { value: 'carton_dark', label: 'CartoDB Dark' },
-    { value: 'wikepedia', label: 'Wikipedia' },
-    { value: 'toner', label: 'Stamen Toner' },
-    { value: 'alidade', label: 'Alidade Sm' },
-    { value: 'custom', label: '自定义URL' }
-];
+// BASEMAP_OPTIONS 已从 useBasemapManager 导入，无需本地重新定义
 
 // ========== 组件 Props 定义 ==========
 /**
@@ -122,8 +99,9 @@ const BASEMAP_OPTIONS = [
  * @prop {Boolean} activeGraticule - 经纬网是否激活对象常用
  * @prop {String} selectedLayer - 当前选中底图的 ID
  * @prop {String} customMapUrl - 自定义 XYZ 底图 URL
- * @prop {Function} fetcher - 地名检索请求函数（由父组件 MapContainer 提供）
  * @prop {String} amapKey - 高德地图 API Key（用于逆地理编码等服务）
+ * @prop {String} tiandituTk - 天地图 Token
+ * @prop {Boolean} isDomestic - 是否国内访问环境（用于服务推荐排序）
  * @prop {Array} services - 启用的地名检索服务列表（如 ['tianditu', 'nominatim']）
  */
 const props = defineProps({
@@ -147,13 +125,17 @@ const props = defineProps({
         type: String,
         default: ''
     },
-    fetcher: {
-        type: Function,
-        required: true
-    },
     amapKey: {
         type: String,
         default: ''
+    },
+    tiandituTk: {
+        type: String,
+        default: ''
+    },
+    isDomestic: {
+        type: Boolean,
+        default: true
     },
     services: {
         type: Array,
@@ -161,6 +143,12 @@ const props = defineProps({
     }
 });
 
+/**
+ * @event change-layer 触发底图切换，payload: { layerId, source, customUrl? }
+ * @event update-order 触发图层排序/显隐更新，payload: { type, dragIndex?, dropIndex?, layerId?, visible? }
+ * @event toggle-graticule 触发经纬网开关
+ * @event search-jump 触发搜索结果定位，payload: { lng, lat, zoom, name, raw }
+ */
 const emit = defineEmits([
     'change-layer',
     'update-order',
@@ -168,9 +156,27 @@ const emit = defineEmits([
     'search-jump'
 ]);
 
+const layerManageButtonRef = ref(null);
 const showLayerManager = ref(false);
 const draggingIndex = ref(-1);
 const customUrlInput = ref(props.customMapUrl || '');
+const layerManagerAnchor = ref({ top: 0, left: 0 });
+
+const PANEL_WIDTH = 200;
+
+const serviceOptions = computed(() => {
+    if (Array.isArray(props.services) && props.services.length) return props.services;
+    return [
+        { value: 'tianditu', label: props.isDomestic ? '天地图（推荐）' : '天地图' },
+        { value: 'nominatim', label: props.isDomestic ? '国际（Nominatim）' : '国际（推荐）' },
+        { value: 'amap', label: '高德（Amap）' }
+    ];
+});
+
+const layerManagerPanelStyle = computed(() => ({
+    top: `${layerManagerAnchor.value.top}px`,
+    left: `${layerManagerAnchor.value.left}px`
+}));
 
 watch(
     () => props.customMapUrl,
@@ -183,6 +189,42 @@ function handleLayerChange(event) {
     emit('change-layer', {
         layerId: event.target.value,
         source: 'dropdown'
+    });
+}
+
+/**
+ * 获取当前地图范围（SW,NE）用于后端搜索裁剪。
+ * @returns {string|undefined} 形如 "minLon,minLat,maxLon,maxLat"
+ */
+function getCurrentMapBound() {
+    try {
+        const map = props.mapInstance?.value;
+        if (!map) return undefined;
+        const view = map.getView?.();
+        const size = map.getSize?.();
+        if (!view || !size) return undefined;
+
+        const extent = view.calculateExtent(size);
+        const sw = toLonLat([extent[0], extent[1]]);
+        const ne = toLonLat([extent[2], extent[3]]);
+        return `${sw[0].toFixed(6)},${sw[1].toFixed(6)},${ne[0].toFixed(6)},${ne[1].toFixed(6)}`;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * 面板内部接管地名检索请求，统一接入天地图/高德/Nominatim。
+ */
+function fetchLocationResults({ service, keywords, page = 1, pageSize = 10, amapKey = '' }) {
+    return fetchLocationResultsByService({
+        service,
+        keywords,
+        page,
+        pageSize,
+        amapKey: amapKey || props.amapKey,
+        tiandituTk: props.tiandituTk,
+        mapBound: getCurrentMapBound()
     });
 }
 
@@ -199,7 +241,12 @@ function onDragStart(evt, index) {
     evt.dataTransfer.effectAllowed = 'move';
 }
 
+function onDragEnd() {
+    draggingIndex.value = -1;
+}
+
 function onDrop(evt, dropIndex) {
+    if (draggingIndex.value < 0) return;
     emit('update-order', {
         type: 'reorder',
         dragIndex: draggingIndex.value,
@@ -216,9 +263,65 @@ function updateLayerVisibility(layer, event) {
     });
 }
 
+/**
+ * 将 LocationSearch 原始结果解析成标准地图定位载荷。
+ * 支持 lon/lat、x/y、lng/lat、lonlat 字符串等多来源字段。
+ */
 function handleSearchJump(payload) {
-    emit('search-jump', payload);
+    const lonVal = payload?.lon ?? payload?.x ?? payload?.lng ?? payload?.lonlat?.split?.(',')?.[0];
+    const latVal = payload?.lat ?? payload?.y ?? payload?.latit ?? payload?.lonlat?.split?.(',')?.[1];
+
+    const lng = lonVal != null ? Number.parseFloat(lonVal) : NaN;
+    const lat = latVal != null ? Number.parseFloat(latVal) : NaN;
+
+    emit('search-jump', {
+        lng,
+        lat,
+        zoom: 16,
+        name: String(payload?.display_name || payload?.name || '').trim(),
+        raw: payload
+    });
 }
+
+function updateLayerManagerAnchor() {
+    const buttonEl = layerManageButtonRef.value;
+    if (!buttonEl) return;
+    const rect = buttonEl.getBoundingClientRect();
+    layerManagerAnchor.value = {
+        top: Math.round(rect.bottom + 6),
+        left: Math.round(Math.max(8, rect.right - PANEL_WIDTH))
+    };
+}
+
+function toggleLayerManager() {
+    showLayerManager.value = !showLayerManager.value;
+}
+
+function bindAnchorListeners() {
+    window.addEventListener('resize', updateLayerManagerAnchor);
+    window.addEventListener('scroll', updateLayerManagerAnchor, true);
+}
+
+function unbindAnchorListeners() {
+    window.removeEventListener('resize', updateLayerManagerAnchor);
+    window.removeEventListener('scroll', updateLayerManagerAnchor, true);
+}
+
+watch(showLayerManager, async (visible) => {
+    if (!visible) {
+        unbindAnchorListeners();
+        draggingIndex.value = -1;
+        return;
+    }
+
+    await nextTick();
+    updateLayerManagerAnchor();
+    bindAnchorListeners();
+});
+
+onBeforeUnmount(() => {
+    unbindAnchorListeners();
+});
 </script>
 
 <style scoped>
@@ -329,10 +432,7 @@ function handleSearchJump(payload) {
 }
 
 .layer-manager-panel {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 6px;
+    position: fixed;
     width: 200px;
     background: rgba(255, 255, 255, 0.96);
     border-radius: 4px;
