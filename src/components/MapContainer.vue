@@ -1334,6 +1334,11 @@ function initMap() {
 
     currentZoom.value = Number(mapInstance.value.getView()?.getZoom?.() ?? initialViewState.zoom);
 
+    // 1.4.5 初始化坐标显示 - 从视图中心获取坐标，处理移动端初始化
+    const initialCenter = mapInstance.value.getView().getCenter();
+    const initialLonLat = toLonLat(initialCenter);
+    currentCoordinate.value = { lng: initialLonLat[0], lat: initialLonLat[1] };
+
     // 1.5 事件监听
     bindEvents();
 
@@ -1495,7 +1500,7 @@ function bindEvents() {
         });
     });
 
-    // 缩放监听
+    // 缩放监听 & 视图变化坐标更新
     map.getView().on('change:resolution', () => {
         // 更新缩放级别显示
         const zoom = map.getView().getZoom();
@@ -1503,6 +1508,33 @@ function bindEvents() {
             currentZoom.value = Math.round(zoom);
         }
     });
+
+    // 地图中心变化监听 - 用于移动端和平移/缩放时实时更新坐标
+    map.getView().on('change:center', () => {
+        const center = map.getView().getCenter();
+        if (center) {
+            const lonLat = toLonLat(center);
+            currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
+        }
+    });
+
+    // 移动完成事件 - 确保坐标为最终视图中心
+    map.on('moveend', () => {
+        const center = map.getView().getCenter();
+        if (center) {
+            const lonLat = toLonLat(center);
+            currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
+        }
+    });
+
+    // 触摸事件处理 - 移动端支持
+    map.getViewport().addEventListener('touchmove', () => {
+        const center = map.getView().getCenter();
+        if (center) {
+            const lonLat = toLonLat(center);
+            currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
+        }
+    }, false);
 }
 
 // --- 2. 业务逻辑 (区域图片) ---
