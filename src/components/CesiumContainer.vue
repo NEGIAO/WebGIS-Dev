@@ -22,31 +22,22 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
 
-// 动态引入cesium，避免性能问题和401错误，同时保持代码清晰和可维护。
 let Cesium = null;
-const CESIUM_VERSION = '1.117';
-const CESIUM_BASE_CDN = `https://unpkg.com/cesium@${CESIUM_VERSION}/Build/Cesium`;
-const CESIUM_JS_URL = `${CESIUM_BASE_CDN}/Cesium.js`;
-const CESIUM_CSS_URL = `${CESIUM_BASE_CDN}/Widgets/widgets.css`;
 
 // --- 配置常量区域 ---
-// 天地图 Token：优先使用环境变量
 const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
-//三个图源，俩不稳定
-// const GOOGLE_MAP_URL = 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
-// const GOOGLE_MAP_URL = 'https://mt3v.gggis.com/maps/vt?lyrs=s&x={x}&y={y}&z={z}';
-const GOOGLE_MAP_URL = 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb';
+const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
+const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 
-// 天地图插件脚本列表
-const TDT_SCRIPTS = [
+// 参考天地图官方三维示例资源地址
+const TDT_CESIUM_JS_URL = 'https://api.tianditu.gov.cn/cdn/demo/sanwei/static/cesium/Cesium.js';
+const TDT_CESIUM_CSS_URL = 'https://api.tianditu.gov.cn/cdn/demo/sanwei/static/cesium/Widgets/widgets.css';
+const TDT_PLUGIN_URLS = [
   'https://api.tianditu.gov.cn/cdn/plugins/cesium/Cesium_ext_min.js',
   'https://api.tianditu.gov.cn/cdn/plugins/cesium/long.min.js',
   'https://api.tianditu.gov.cn/cdn/plugins/cesium/bytebuffer.min.js',
   'https://api.tianditu.gov.cn/cdn/plugins/cesium/protobuf.min.js'
 ];
-
-// 三维地名初始Grid数据 (提取出来以保持代码整洁)
-const TDT_BOUNDS_DATA = [{ "x": 6, "y": 1, "level": 2, "boundBox": { "minX": 90, "minY": 0, "maxX": 135, "maxY": 45 } }, { "x": 7, "y": 1, "level": 2, "boundBox": { "minX": 135, "minY": 0, "maxX": 180, "maxY": 45 } }, { "x": 6, "y": 0, "level": 2, "boundBox": { "minX": 90, "minY": 45, "maxX": 135, "maxY": 90 } }, { "x": 7, "y": 0, "level": 2, "boundBox": { "minX": 135, "minY": 45, "maxX": 180, "maxY": 90 } }, { "x": 5, "y": 1, "level": 2, "boundBox": { "minX": 45, "minY": 0, "maxX": 90, "maxY": 45 } }, { "x": 4, "y": 1, "level": 2, "boundBox": { "minX": 0, "minY": 0, "maxX": 45, "maxY": 45 } }, { "x": 5, "y": 0, "level": 2, "boundBox": { "minX": 45, "minY": 45, "maxX": 90, "maxY": 90 } }, { "x": 4, "y": 0, "level": 2, "boundBox": { "minX": 0, "minY": 45, "maxX": 45, "maxY": 90 } }, { "x": 6, "y": 2, "level": 2, "boundBox": { "minX": 90, "minY": -45, "maxX": 135, "maxY": 0 } }, { "x": 6, "y": 3, "level": 2, "boundBox": { "minX": 90, "minY": -90, "maxX": 135, "maxY": -45 } }, { "x": 7, "y": 2, "level": 2, "boundBox": { "minX": 135, "minY": -45, "maxX": 180, "maxY": 0 } }, { "x": 5, "y": 2, "level": 2, "boundBox": { "minX": 45, "minY": -45, "maxX": 90, "maxY": 0 } }, { "x": 4, "y": 2, "level": 2, "boundBox": { "minX": 0, "minY": -45, "maxX": 45, "maxY": 0 } }, { "x": 3, "y": 1, "level": 2, "boundBox": { "minX": -45, "minY": 0, "maxX": 0, "maxY": 45 } }, { "x": 3, "y": 0, "level": 2, "boundBox": { "minX": -45, "minY": 45, "maxX": 0, "maxY": 90 } }, { "x": 2, "y": 0, "level": 2, "boundBox": { "minX": -90, "minY": 45, "maxX": -45, "maxY": 90 } }, { "x": 0, "y": 1, "level": 2, "boundBox": { "minX": -180, "minY": 0, "maxX": -135, "maxY": 45 } }, { "x": 1, "y": 0, "level": 2, "boundBox": { "minX": -135, "minY": 45, "maxX": -90, "maxY": 90 } }, { "x": 0, "y": 0, "level": 2, "boundBox": { "minX": -180, "minY": 45, "maxX": -135, "maxY": 90 } }];
 
 // --- 响应式变量 ---
 let viewer = null;
@@ -74,40 +65,45 @@ onUnmounted(() => {
 
 async function bootCesium() {
   try {
-    await loadCesiumRuntime();
+    await loadOfficialCesiumRuntime();
     if (!Cesium || !document.getElementById('cesiumContainer')) return;
 
     initViewer();
     setupInteractions();
-    // 先保证首屏有地球和影像，再异步加载增强图层。
-    addFastBaseImagery();
-    loadAndSetupTiandituEnhancements();
+    // 只做最基础能力：影像 + 地形
+    addBaseImageryLayers();
+
+    const terrainReady = initOfficialTerrain();
+    if (terrainReady) {
+      message.success('天地图基础影像与地形加载成功。');
+    } else {
+      message.error('天地图地形加载失败，请检查 token 或网络。', { closable: true });
+    }
   } catch (error) {
     console.error('Cesium 运行时加载失败', error);
+    message.error('Cesium 初始化失败，请检查网络环境。', { closable: true });
   }
 }
 
-async function loadCesiumRuntime() {
-  if (window.Cesium) {
-    Cesium = window.Cesium;
-    return;
-  }
+async function loadOfficialCesiumRuntime() {
+  await loadStyleOnce(TDT_CESIUM_CSS_URL, 'tdt-cesium-widgets-style');
 
-  await loadStyleOnce(CESIUM_CSS_URL, 'cesium-widgets-style');
-  await loadScriptOnce(CESIUM_JS_URL, 'cesium-runtime-script');
+  await loadScriptOnce(TDT_CESIUM_JS_URL, 'tdt-cesium-runtime-script');
+  for (let i = 0; i < TDT_PLUGIN_URLS.length; i++) {
+    await loadScriptOnce(TDT_PLUGIN_URLS[i], `tdt-plugin-${i}`);
+  }
 
   Cesium = window.Cesium;
-  if (!Cesium) {
-    throw new Error('Cesium global 未找到');
-  }
+  if (!Cesium) throw new Error('Cesium global 未找到');
 }
 
 /**
  * 1. 初始化 Cesium Viewer
  */
 function initViewer() {
-  viewer = new Cesium.Viewer('cesiumContainer', {
-    // 移除默认图层和地形，完全由自定义逻辑控制，避免401错误
+  const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
+
+  viewer = new mapCtor('cesiumContainer', {
     imageryProvider: false,
     terrainProvider: undefined,
     baseLayerPicker: false,
@@ -122,15 +118,16 @@ function initViewer() {
     shouldAnimate: true,
   });
 
-  // 默认位置：中国
-  flyToHome(0); // 0 duration for instant set
+  flyToHome(0);
 
-  // 隐藏版权信息
-  viewer._cesiumWidget._creditContainer.style.display = "none";
+  if (viewer._cesiumWidget?._creditContainer) {
+    viewer._cesiumWidget._creditContainer.style.display = 'none';
+  }
 
-  // 开启地形夸张
   viewer.scene.globe.terrainExaggeration = 1;
   viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
+  viewer.scene.globe.showGroundAtmosphere = true;
+  viewer.scene.globe.depthTestAgainstTerrain = true;
 }
 
 /**
@@ -153,165 +150,59 @@ function setupInteractions() {
 }
 
 /**
- * 3. 加载并配置天地图 (含插件和图层)
+ * 最基础影像图层：影像 + 国界注记
+ * 参考官方调用：DataServer?T=img_w / ibo_w
  */
-async function loadAndSetupTiandituEnhancements() {
-  // 暴露 Cesium 到全局供插件使用
-  window.Cesium = Cesium;
+function addBaseImageryLayers() {
+  const imageryLayers = viewer.imageryLayers;
 
-  try {
-    // 使用补丁模式加载脚本，防止插件报错
-    await loadScriptsWithPatch(TDT_SCRIPTS);
-    addTiandituEnhancements();
-  } catch (e) {
-    console.error('天地图插件加载或初始化失败', e);
-  }
+  const imgLayer = new Cesium.UrlTemplateImageryProvider({
+    url: `${TDT_SERVICE_ROOT}DataServer?T=img_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
+    subdomains: TDT_SUBDOMAINS,
+    tilingScheme: new Cesium.WebMercatorTilingScheme(),
+    maximumLevel: 18
+  });
+  imageryLayers.addImageryProvider(imgLayer);
+
+  const iboLayer = new Cesium.UrlTemplateImageryProvider({
+    url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
+    subdomains: TDT_SUBDOMAINS,
+    tilingScheme: new Cesium.WebMercatorTilingScheme(),
+    maximumLevel: 10
+  });
+  imageryLayers.addImageryProvider(iboLayer);
 }
 
 /**
- * 首屏快速影像图层：不依赖天地图插件，尽快出图
+ * 地形初始化：官方 GeoTerrainProvider。
  */
-function addFastBaseImagery() {
-  const imageryLayers = viewer.imageryLayers;
-
-  // 基础底图 (Google Maps)
-  const googleLayer = new Cesium.UrlTemplateImageryProvider({
-    url: GOOGLE_MAP_URL,
-    tilingScheme: new Cesium.WebMercatorTilingScheme(),
-    maximumLevel: 20
-  });
-  imageryLayers.addImageryProvider(googleLayer);
-}
-
-/**
- * 增强图层：插件加载完成后再异步补充
- */
-function addTiandituEnhancements() {
-  if (!viewer) return;
-  const imageryLayers = viewer.imageryLayers;
-
-  // 国界标注 (天地图)
-  const borderLayer = new Cesium.UrlTemplateImageryProvider({
-    url: `https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cia&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TDT_TOKEN}`,
-    tilingScheme: new Cesium.WebMercatorTilingScheme(),
-    maximumLevel: 20
-  });
-  imageryLayers.addImageryProvider(borderLayer);
-
-  // 地形服务 (天地图)
-  const subdomains = ['0', '1', '2', '3', '4', '5', '6', '7'];
-  const terrainUrls = subdomains.map(s =>
-    `https://t${s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=${TDT_TOKEN}`
+function initOfficialTerrain() {
+  const terrainUrls = TDT_SUBDOMAINS.map(
+    (s) => `https://t${s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=${TDT_TOKEN}`
   );
 
-  // 使用插件提供的 GeoTerrainProvider
-  if (window.Cesium.GeoTerrainProvider) {
+  if (!window.Cesium?.GeoTerrainProvider) {
+    console.error('GeoTerrainProvider 不存在，插件未正确加载。');
+    return false;
+  }
+
+  try {
     viewer.terrainProvider = new window.Cesium.GeoTerrainProvider({ urls: terrainUrls });
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+    return true;
+  } catch (error) {
+    console.error('GeoTerrainProvider 初始化失败', error);
+    return false;
   }
-
-  // 三维地名服务 (WTFS)
-  if (window.Cesium.GeoWTFS) {
-    setupWTFS(subdomains);
-  }
-}
-
-/**
- * 配置三维地名服务 (GeoWTFS)
- */
-function setupWTFS(subdomains) {
-  const tdtUrl = 'https://t{s}.tianditu.gov.cn/';
-
-  const wtfs = new window.Cesium.GeoWTFS({
-    viewer,
-    subdomains: subdomains,
-    metadata: {
-      boundBox: { minX: -180, minY: -90, maxX: 180, maxY: 90 },
-      minLevel: 1,
-      maxLevel: 20
-    },
-    depthTestOptimization: true,
-    dTOElevation: 15000,
-    dTOPitch: Cesium.Math.toRadians(-70),
-    aotuCollide: true,
-    collisionPadding: [5, 10, 8, 5],
-    serverFirstStyle: true,
-    labelGraphics: {
-      font: "28px sans-serif",
-      fontSize: 28,
-      fillColor: Cesium.Color.WHITE,
-      scale: 0.5,
-      outlineColor: Cesium.Color.BLACK,
-      outlineWidth: 2,
-      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-      showBackground: false,
-      pixelOffset: new Cesium.Cartesian2(5, 5)
-    },
-    billboardGraphics: {
-      width: 18,
-      height: 18
-    }
-  });
-
-  // 重写 URL 获取方法
-  wtfs.getTileUrl = function () {
-    return `https://t0.tianditu.gov.cn/mapservice/GetTiles?lxys={z},{x},{y}&VERSION=1.0.0&tk=${TDT_TOKEN}`;
-  };
-  wtfs.getIcoUrl = function () {
-    return `https://t0.tianditu.gov.cn/mapservice/GetIcon?id={id}&tk=${TDT_TOKEN}`;
-  };
-
-  wtfs.initTDT(TDT_BOUNDS_DATA);
 }
 
 // --- 辅助工具函数 ---
-
-/**
- * 带有兼容性补丁的脚本加载器
- * 拦截 Object.defineProperty 以兼容旧版/特定版天地图插件
- */
-async function loadScriptsWithPatch(urls) {
-  if (window.Cesium.GeoWTFS) return; // 避免重复加载
-
-  const originalDefineProperty = Object.defineProperty;
-
-  // 猴子补丁：拦截 Cesium 内部属性定义，防止插件崩溃
-  Object.defineProperty = function (obj, prop, descriptor) {
-    if (['primitiveAdded', 'primitiveRemoved', 'primitiveMoved'].includes(prop)) {
-      try {
-        return originalDefineProperty.call(this, obj, prop, descriptor);
-      } catch (e) {
-        return obj;
-      }
-    }
-    return originalDefineProperty.call(this, obj, prop, descriptor);
-  };
-
-  try {
-    for (const url of urls) {
-      await loadScript(url);
-    }
-  } finally {
-    // 无论成功失败，恢复原始方法
-    Object.defineProperty = originalDefineProperty;
-  }
-}
-
-function loadScript(url) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
 
 function loadScriptOnce(url, id) {
   return new Promise((resolve, reject) => {
     const existing = document.getElementById(id);
     if (existing) {
-      if (window.Cesium) {
+      if (existing.getAttribute('data-loaded') === 'true') {
         resolve();
         return;
       }
@@ -324,7 +215,10 @@ function loadScriptOnce(url, id) {
     script.id = id;
     script.src = url;
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      script.setAttribute('data-loaded', 'true');
+      resolve();
+    };
     script.onerror = () => reject(new Error(`脚本加载失败: ${url}`));
     document.head.appendChild(script);
   });

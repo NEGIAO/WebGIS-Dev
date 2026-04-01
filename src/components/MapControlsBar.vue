@@ -341,7 +341,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 10px;
+    /* padding: 8px 10px; */
     border-radius: 9999px;
     color: var(--glass-text);
     white-space: nowrap;
@@ -441,8 +441,8 @@ onUnmounted(() => {
 }
 
 .zoom-level-display {
-    width: 38px;
-    height: 38px;
+    width: 30px;
+    height: 30px;
     border-radius: 50%;
     background: var(--glass-chip-bg);
     color: #ffffff;

@@ -119,6 +119,9 @@ const showDynamicSplitLines = ref(false);
 const currentZoom = ref(17); // 当前缩放级别
 const currentCoordinate = ref(null);
 
+// 底图切换状态标志（用于防止自动切换时重复验证）
+let isAutoSwitchingLayer = false;
+
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 
 let searchSource, searchLayer;
@@ -1071,82 +1074,199 @@ async function viewUserLayer(...args) {
     return api.viewUserLayer(...args);
 }
 
+/**
+ * 底图切换验证器：检测新切换底图的加载状态
+ * 
+ * @param {string} layerId - 切换到的底图ID
+ * @param {TileLayer} layer - 底图对应的图层实例
+ * @param {number} checkTimeoutMs - 检测时长（毫秒）
+ * @returns {Promise<{success: boolean, reason: string}>}
+ */
+async function validateBaseLayerSwitch(layerId, layer, checkTimeoutMs = 3000) {
+    return new Promise((resolve) => {
+        if (!layer) {
+            resolve({ success: false, reason: '底图图层实例不存在' });
+            return;
+        }
+
+        const source = layer.getSource();
+        if (!source) {
+            resolve({ success: false, reason: '底图数据源不可用' });
+            return;
+        }
+
+        let hasSuccessfulLoad = false;
+        let hasError = false;
+        let errorCount = 0;
+        let checkTimer = null;
+
+        const onTileLoadEnd = () => {
+            hasSuccessfulLoad = true;
+        };
+
+        const onTileLoadError = () => {
+            errorCount++;
+            if (errorCount >= 3) {
+                hasError = true;
+            }
+        };
+
+        // 添加事件监听
+        source.on('tileloadend', onTileLoadEnd);
+        source.on('tileloaderror', onTileLoadError);
+
+        // 设定检测时间
+        checkTimer = setTimeout(() => {
+            // 移除监听
+            source.un('tileloadend', onTileLoadEnd);
+            source.un('tileloaderror', onTileLoadError);
+
+            if (hasSuccessfulLoad) {
+                resolve({ success: true, reason: '切换成功' });
+            } else if (hasError) {
+                resolve({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
+            } else {
+                resolve({ success: false, reason: '未能获取底图数据（网络无响应或超时）' });
+            }
+        }, checkTimeoutMs);
+    });
+}
+
+//优化：支持多层次智能兜底的底图监测管理器
+/**
+ * 底图兜底管理器：支持多层次降级策略
+ */
+const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
+    // 兜底候选选项按优先级排序：仅天地图和自定义（不使用OSM）
+    const FALLBACK_OPTIONS = ['tianDiTu', 'local'];
+    
+    let fallbackAttempts = 0;
+    const maxFallbackAttempts = FALLBACK_OPTIONS.length;
+    let lastFallbackKey = null;
+    
+    return {
+        // 获取下一个兜底选项（仅用于自动切换，默认底图适用）
+        getNextFallbackOption: () => {
+            if (fallbackAttempts >= maxFallbackAttempts) {
+                message.warn(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
+                return null;
+            }
+            
+            const nextOption = FALLBACK_OPTIONS[fallbackAttempts];
+            lastFallbackKey = nextOption;
+            fallbackAttempts++;
+            return nextOption;
+        },
+        
+        // 获取当前兜底选项
+        getCurrentFallback: () => lastFallbackKey,
+        
+        // 是否仅限于提醒（非默认底图不自动切换）
+        isNotifyOnly: () => !isDefaultBaseLayer,
+        
+        // 重置兜底计数器
+        reset: () => {
+            fallbackAttempts = 0;
+            lastFallbackKey = null;
+        }
+    };
+};
+
 //BUG：本函数的作用主要是监测默认瓦片的状态，给出兜底行为，超时则切换底图
 /**
  * 监测图层加载状态并自动降级（智能防抖抗网络波动版）
  * @param {TileLayer} layer - 需要监测的图层实例
  * @param {Object} callbacks - 回调函数对象 { onTimeout, onSuccess, onError }
  */
-const monitorLayerTimeout = (layer, callbacks = {}) => {
-    // 1. 防重复初始化
-    if (layer.get('_isTimeoutMonitored')) return;
-    layer.set('_isTimeoutMonitored', true);
+const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {}) => {
+    // 防重复初始化
+    const monitorKey = `_isTimeoutMonitored_${layerId}`;
+    if (layer.get(monitorKey)) return;
+    layer.set(monitorKey, true);
 
     const source = layer.getSource();
     if (!source) return;
 
-    // --- 核心配置参数 ---
-    const MAX_ERRORS = 3;        // 容忍的最大连续报错瓦片数
-    const ACTIVITY_TIMEOUT = 10000; // 绝对静默超时：10秒内没有任何瓦片加载成功，视为假死
+    // 核心配置参数（可根据需要调整）
+    const MAX_ERRORS = 3;           // 容忍的最大连续报错瓦片数
+    const ACTIVITY_TIMEOUT = 10000; // 绝对静默超时10秒
+    const WARNING_THRESHOLD = 5;    // 累计错误数达到此值时发出警告
 
     let activityTimer = null;
-    let loadingTilesCount = 0; 
-    let consecutiveErrors = 0; // 连续错误计数器
-    let isSwitched = false;   
-    let hasNotifiedSuccess = false; 
+    let loadingTilesCount = 0;
+    let consecutiveErrors = 0;      // 连续错误计数
+    let totalErrors = 0;            // 累计错误总数
+    let isSwitched = false;
+    let hasNotifiedSuccess = false;
+    
+    // 初始化兜底管理器
+    const fallbackManager = createBaseLayerFallbackManager(layerId, isDefaultBaseLayer); 
 
-    // 降级执行函数
+    // 执行降级逻辑
     const switchToBackup = (reason, triggerCallback) => {
         if (isSwitched) return;
         isSwitched = true;
 
-        console.warn(`[底图降级触发] 原因: ${reason}`);
-        const backupSource = new XYZ({
-            url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
-            crossOrigin: 'anonymous'
-        });
-
-        layer.setSource(backupSource);
+        message.warn(`[底图降级] ${layerId} - ${reason}`);
+        
+        // 如果仅限于提醒（非默认底图），则不切换，仅通知
+        if (fallbackManager.isNotifyOnly()) {
+            message.warn(`[底图监测] ${layerId} 非默认底图，仅提醒用户: ${reason}`);
+            if (triggerCallback) triggerCallback();
+            cleanUp();
+            return;
+        }
+        
+        // 仅默认底图才自动切换
+        const nextOption = fallbackManager.getNextFallbackOption();
+        if (!nextOption) {
+            message.error(`[底图降级] ${layerId} 所有兜底选项已尝试`);
+            if (triggerCallback) triggerCallback();
+            cleanUp();
+            return;
+        }
+        
+        message.warn(`[底图降级] ${layerId} 已切换至 ${nextOption}`);
+        
+        // 通知调用方需要切换底图
+        if (callbacks.onLayerSwitchRequired) {
+            callbacks.onLayerSwitchRequired(nextOption, reason);
+        }
         
         if (triggerCallback) triggerCallback();
-        cleanUp(); 
+        cleanUp();
     };
 
     // 重置“绝对静默”定时器
     const resetActivityTimer = () => {
         if (activityTimer) clearTimeout(activityTimer);
-        // 只有在还有瓦片未加载完时，才需要开启超时检测
         if (loadingTilesCount > 0) {
             activityTimer = setTimeout(() => {
-                switchToBackup(`服务无响应（超过 ${ACTIVITY_TIMEOUT/1000} 秒没有任何瓦片加载进度）`, callbacks.onTimeout);
+                switchToBackup(`服务无响应（${ACTIVITY_TIMEOUT/1000}秒无瓦片加载）`, callbacks.onTimeout);
             }, ACTIVITY_TIMEOUT);
         }
     };
 
     const onTileLoadStart = () => {
         if (isSwitched) return;
-        loadingTilesCount++; 
-        
-        // 有新请求发起，重置静默定时器
+        loadingTilesCount++;
         resetActivityTimer();
     };
 
     const onTileLoadEnd = () => {
         if (isSwitched) return;
-        loadingTilesCount--; 
-        consecutiveErrors = 0; // 只要有一个瓦片成功了，就说明服务活着，清零错误计数！
+        loadingTilesCount--;
+        consecutiveErrors = 0; // 只要有瓦片成功，清零连续错误计数
 
         if (loadingTilesCount <= 0) {
-            // 这一波全部加载完了
-            loadingTilesCount = 0; 
+            loadingTilesCount = 0;
             if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
-
-            if (!hasNotifiedSuccess) {
+            
+            if (!hasNotifiedSuccess && totalErrors === 0) {
                 hasNotifiedSuccess = true;
                 if (callbacks.onSuccess) callbacks.onSuccess();
             }
         } else {
-            // 还有瓦片在加载，说明进度在往前走，重置定时器续命
             resetActivityTimer();
         }
     };
@@ -1154,15 +1274,20 @@ const monitorLayerTimeout = (layer, callbacks = {}) => {
     const onTileLoadError = () => {
         if (isSwitched) return;
         loadingTilesCount--;
-        consecutiveErrors++; // 记录报错次数
+        consecutiveErrors++;
+        totalErrors++;
 
-        // 策略1：错误次数达到阈值，判定服务不可用
+        // 策略1：连续错误达到阈值，判定服务不可用
         if (consecutiveErrors >= MAX_ERRORS) {
-            switchToBackup(`底图服务异常（连续 ${consecutiveErrors} 个瓦片请求失败）`, callbacks.onError);
+            switchToBackup(`服务异常（连续${consecutiveErrors}个瓦片失败）`, callbacks.onError);
             return;
         }
+        
+        // 策略2：累计错误过多时发出警告
+        if (totalErrors === WARNING_THRESHOLD) {
+            message.warn(`[底图监测] ${layerId} 累计错误${totalErrors}个，建议检查网络`);
+        }
 
-        // 哪怕有错误，只要整体还没加载完，继续监控剩下的
         if (loadingTilesCount <= 0) {
             loadingTilesCount = 0;
             if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
@@ -1209,18 +1334,34 @@ function initMap() {
             zIndex: index // 初始层级通过列表顺序决定（0最底层）
         });
 
-    // bug：多次重复加载，不稳定
-    // 超时检测调用替换tianditu
-    // if (item.visible && source) {
-    //     monitorLayerTimeout(layer, {
-    //         onTimeout: () => message.warning(`底图响应过慢，已自动切换天地图。`),
-    //         onError: () => message.error(`底图服务异常，已自动切换天地图。`),
-    //         onSuccess: () => message.success(`底图加载成功。`)
-    //     });
-    // }
+    // 为可见的图层启用智能兜底监控（仅默认底图自动切换，其他底图仅提醒）
+    if (item.visible && source) {
+        const isDefaultBaseLayer = item.id === 'google'; // 默认底图判断
+        monitorLayerTimeout(layer, item.id, isDefaultBaseLayer, {
+            onTimeout: () => {
+                if (isDefaultBaseLayer) {
+                    message.warning(`${item.id}响应过慢，正在切换备用底图...`);
+                } else {
+                    message.warning(`${item.id}响应过慢，建议手动切换底图。`);
+                }
+            },
+            onError: () => {
+                if (isDefaultBaseLayer) {
+                    message.error(`${item.id}服务异常，正在切换备用底图...`);
+                } else {
+                    message.error(`${item.id}服务异常，建议手动切换底图。`);
+                }
+            },
+            onSuccess: () => message.success(`${item.id}加载成功。`),
+            onLayerSwitchRequired: (nextOption, reason) => {
+                // 仅默认底图会触发此回调
+                selectedLayer.value = nextOption;
+                message.info(`已切换至${nextOption}底图（${reason}）`);
+            }
+        });
+    }
 
     layerInstances[item.id] = layer;
-        layerInstances[item.id] = layer;
     });
 
     const layersToAdd = layerList.value.map(item => layerInstances[item.id]);
@@ -1342,15 +1483,56 @@ function initMap() {
     // 1.5 事件监听
     bindEvents();
 
-    // 1.6 监听底图切换 (保留原Select功能，但改为操作 layerList)
-    //bug，此处需要监听变化后的图层并加上monitorLayerTimeout，超时替换
-    // 增强完备性，防止图源不可用，用天地图兜底
-    watch(selectedLayer, (val, prevVal) => {
+    // 1.6 监听底图切换 并验证切换结果（默认底图异常时自动兜底）
+    watch(selectedLayer, async (val, prevVal) => {
         switchLayerById(val, {
             onUpdated: () => emitBaseLayersChange()
         });
+        
+        // 仅在真正切换时（prevVal不为undefined）进行验证
         if (prevVal !== undefined) {
             syncUrlFromMap();
+            
+            // 如果正在自动切换，则跳过验证，直接完成切换
+            if (isAutoSwitchingLayer) {
+                isAutoSwitchingLayer = false;
+                return;
+            }
+            
+            // 获取切换后的底图图层实例
+            const switchedLayer = layerInstances[val];
+            if (switchedLayer) {
+                // 验证新底图的加载状态
+                const result = await validateBaseLayerSwitch(val, switchedLayer, 3000);
+                
+                if (result.success) {
+                    message.success(`已成功切换到${val}底图`);
+                } else {
+                    // 检查是否为默认底图（google）
+                    const isDefaultBaseLayer = val === 'google';
+                    
+                    if (isDefaultBaseLayer) {
+                        // 默认底图异常时，自动切换到兜底选项
+                        message.error(`${val}底图加载失败（${result.reason}），正在自动切换备用底图...`);
+                        
+                        // 创建兜底管理器获取下一个选项
+                        const fallbackManager = createBaseLayerFallbackManager(val, true);
+                        const nextFallbackOption = fallbackManager.getNextFallbackOption();
+                        
+                        if (nextFallbackOption) {
+                            // 标记正在自动切换，防止无限递归
+                            isAutoSwitchingLayer = true;
+                            selectedLayer.value = nextFallbackOption;
+                            message.info(`已自动切换至${nextFallbackOption}底图`);
+                        } else {
+                            message.error('所有兜底底图均不可用，请检查网络或重新选择底图');
+                        }
+                    } else {
+                        // 非默认底图仅提示用户，不自动切换
+                        message.warning(`切换到${val}底图失败：${result.reason}，请重新选择底图`);
+                    }
+                }
+            }
         }
     }, { immediate: true });
 
