@@ -278,6 +278,10 @@ function handleBaseLayersChange(layers) {
     baseLayers.value = layers || [];
 }
 
+function handleTopBarJumpView(lng, lat, z, layer) {
+    mapContainerRef.value?.updateViewByParams?.(lng, lat, z, layer);
+}
+
 function handleUploadProgressChange(progress) {
     uploadProgress.value = progress || { phase: 'idle' };
 }
@@ -309,6 +313,7 @@ function handleFeatureSelected(properties) {
                 @open-bus="openBusPlanner"
                 @open-drive="openDrivePlanner"
                 @activate-feature="handleActivateFeature"
+                @jump-view="handleTopBarJumpView"
             />
         </div>
 
