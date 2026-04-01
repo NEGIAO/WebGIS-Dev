@@ -674,7 +674,7 @@ async function runDeferredStartupTasks() {
 
     const routeViewState = parseUrlToState();
     if (Number.isFinite(routeViewState?.lng) && Number.isFinite(routeViewState?.lat)) {
-        message.success(`欢迎来到NEGIAO分享的地点${routeViewState.lng.toFixed(6)},${routeViewState.lat.toFixed(6)}，正在加载地图...`);
+        message.success(`欢迎来到NEGIAO分享的地点${routeViewState.lng.toFixed(6)},${routeViewState.lat.toFixed(6)}，正在加载地图...`, { duration: 1000 });
         return;
     }
 

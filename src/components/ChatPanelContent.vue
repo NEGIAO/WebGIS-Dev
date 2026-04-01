@@ -363,6 +363,36 @@ const fetchModels = async () => {
   }
 };
 
+const readJsonSafely = async (response, { useClone = false } = {}) => {
+  const target = useClone ? response?.clone?.() : response;
+  if (!target) return {};
+
+  try {
+    return await target.json();
+  } catch (error) {
+    return {};
+  }
+};
+
+const readErrorMessage = async (response, { useClone = false } = {}) => {
+  const errData = await readJsonSafely(response, { useClone });
+  return {
+    errData,
+    errorMessage: errData?.error?.message || '请求失败'
+  };
+};
+
+const isSseResponse = (response) => {
+  if (!response?.body || typeof response.body.getReader !== 'function') return false;
+
+  const contentType = String(response.headers?.get('content-type') || '').toLowerCase();
+  if (!contentType) return true;
+
+  return contentType.includes('text/event-stream')
+    || contentType.includes('application/x-ndjson')
+    || contentType.includes('text/plain');
+};
+
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isLoading.value) return;
 
@@ -419,15 +449,8 @@ const sendMessage = async () => {
     let useStream = true;
 
     if (!response.ok) {
-      let errData = {};
-      try {
-        errData = await response.json();
-      } catch (e) {
-        errData = {};
-      }
-
-      const message = errData.error?.message || '请求失败';
-      const isInvalidChatSetting = message.includes('invalid chat setting') || message.includes('(2013)');
+      const { errorMessage } = await readErrorMessage(response, { useClone: true });
+      const isInvalidChatSetting = errorMessage.includes('invalid chat setting') || errorMessage.includes('(2013)');
 
       // 某些渠道不支持 max_tokens/temperature 等设置时，自动降级为最小参数重试
       if (isInvalidChatSetting) {
@@ -444,13 +467,7 @@ const sendMessage = async () => {
 
         // 若仍是 2013，则进一步降级为非流式，兼容只接受最小 chat 设置的渠道
         if (!response.ok) {
-          let retryErr = {};
-          try {
-            retryErr = await response.json();
-          } catch (e) {
-            retryErr = {};
-          }
-          const retryMessage = retryErr.error?.message || '请求失败';
+          const { errorMessage: retryMessage } = await readErrorMessage(response, { useClone: true });
           const stillInvalid = retryMessage.includes('invalid chat setting') || retryMessage.includes('(2013)');
           if (stillInvalid) {
             modelHint.value = '⚠️ 已切换兼容模式（非流式）';
@@ -470,18 +487,18 @@ const sendMessage = async () => {
     }
 
     if (!response.ok) {
-      const errData = await response.json();
-      const message = errData.error?.message || '请求失败';
-      if (message.includes('no available channels for model')) {
+      const { errorMessage } = await readErrorMessage(response, { useClone: true });
+      if (errorMessage.includes('no available channels for model')) {
         throw new Error(`当前模型不可用：${modelName.value}。请点击设置中的🔄刷新模型列表并切换到可用模型。`);
       }
-      throw new Error(message);
+      throw new Error(errorMessage);
     }
 
-    if (useStream) {
+    if (useStream && isSseResponse(response)) {
       // 处理流式响应
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
+      let buffer = '';
       let done = false;
       let fullContent = "";
 
@@ -489,8 +506,9 @@ const sendMessage = async () => {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             if (line.trim().startsWith('data: ')) {
