@@ -18,128 +18,43 @@
             <button class="close-btn" @click="closeLargeImage">×</button>
         </div>
 
-        <!-- 图层切换器 -->
-        <div class="layer-switcher">
-            <!-- 地名搜索功能     -->
-            <LocationSearch
-                :fetcher="fetchLocationResults"
-                :amapKey="AMAP_WEB_SERVICE_KEY"
-                :services="searchServiceOptions"
-                storageKey="map_search_selected_service"
-                @select-result="selectResult"
-            />
-            
-            <div class="layer-label">选择底图</div>
-            <select v-model="selectedLayer" class="layer-select">
-                <!-- 更新此处，需要同步更新161处的索引顺序 -->
-                <option value="local">自定义瓦片</option>
-                <option value="tianDiTu_vec">天地图矢量</option>
-                <option value="tianDiTu">天地图影像</option>
-                <option value="google">Google(gac)</option>
-                <option value="Google">Google原版</option>
-                <option value="google_standard">Google标准</option>
-                <option value="google_clean">Google简洁</option>
-                <option value="osm">OSM(需梯子)</option>
-                <option value="yandex_sat">Yandex卫星</option>
-                <option value="geoq_gray">GeoQ灰(GCJ)</option>
-                <option value="geoq_hydro">GeoQ水(GCJ)</option>
-                <option value="amap">高德地图(GCJ)</option>
-                <option value="amap_image">高德影像(GCJ)</option>
-                <option value="tengxun">腾讯地图(GCJ)</option>
-                <option value="topo">地形图</option>
-                <option value="opentopomap">OpenTopoMap</option>
-                <option value="esa_topo">欧空局地形</option>
-                <option value="windy">windy</option>
-                <option value="windy2">windy2</option>
-                <option value="windy_outer">windy轮廓</option>
-                <option value="windy_greenland">windy Gray</option>
-                <option value="carton_light">CartoDB</option>
-                <option value="carton_dark">CartoDB Dark</option>
-                <option value="wikepedia">Wikipedia</option>
-                <option value="toner">Stamen Toner</option>
-                <option value="alidade">Alidade Sm</option>
-                <!-- <option value="esri_ocean">Esri海洋</option>
-                <option value="esri_terrain">Esri地形</option>
-                <option value="esri_physical">Esri物理</option>
-                <option value="esri_hillshade">Esri山影</option>
-                <option value="esri_gray">Esri灰度</option>
-                <option value="esri">ESRI</option> -->
-                <option value="custom">自定义URL</option>
-            </select>
-            <!-- 新增图层管理按钮 -->
-             <button class="layer-manage-btn" @click="showLayerManager = !showLayerManager" title="图层管理">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z"/>
-                </svg>
-            </button>
-
-            <!-- 经纬度直线动态分割当前视图，并标注经纬度 -->
-            <button
-                class="graticule-btn"
-                :class="{ active: showDynamicSplitLines }"
-                @click="toggleDynamicSplitLines"
-                title="经纬度分割线"
-            >
-                经纬线
-            </button>
-
-            <div v-if="selectedLayer === 'custom'" class="custom-url-wrapper">
-                <input v-model="customMapUrl" class="custom-url-input" placeholder="输入 https://.../{z}/{x}/{y}.png" />
-                <button class="custom-url-btn" @click="loadCustomMap" title="加载">ok</button>
-            </div>
-             <!-- 图层管理面板 -->
-             <div v-if="showLayerManager" class="layer-manager-panel">
-                <div class="panel-header">
-                    <span>图层排序与显示</span>
-                    <span class="close-panel-btn" @click="showLayerManager = false">×</span>
-                </div>
-                <div class="layer-list">
-                    <div v-for="(layer, index) in layerList" :key="layer.id" 
-                        class="layer-item"
-                        draggable="true"
-                        @dragstart="onDragStart($event, index)"
-                        @dragover.prevent
-                        @drop="onDrop($event, index)"
-                        :class="{'dragging': draggingIndex === index}">
-                        <div class="drag-handle">⋮⋮</div>
-                        <input type="checkbox" v-model="layer.visible" @change="updateLayerVisibility(layer)">
-                        <span class="layer-name">{{ layer.name }}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <LayerControlPanel
+            :map-instance="mapInstance"
+            :layer-list="layerList"
+            :selected-layer="selectedLayer"
+            :custom-map-url="customMapUrl"
+            :active-graticule="showDynamicSplitLines"
+            :fetcher="fetchLocationResults"
+            :amap-key="AMAP_WEB_SERVICE_KEY"
+            :services="searchServiceOptions"
+            @change-layer="handleLayerChange"
+            @update-order="handleLayerOrderUpdate"
+            @toggle-graticule="handleToggleGraticule"
+            @search-jump="selectResult"
+        />
 
         <!-- 底部控制栏 -->
-        <div class="map-controls-group">
-            <div ref="mousePositionRef" class="mouse-position-content"></div>
-            <!-- bug:待增加功能
-             点击文本，可以将坐标复制到剪贴板 
-             双击文本可键入经纬度坐标，回车后即跳转到该位置
-             并增设鼠标hover的提示文本
-             -->
-            <div class="zoom-level-display">{{ currentZoom }}</div>
-            <div class="divider"></div>
-            <!-- 核心修改：移除 @dblclick，统一用 @click 处理 -->
-            <button class="home-btn" @click="handleHomeInteract" title="单击复位 / 双击定位">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-                </svg>
-            </button>
-        </div>
+        <MapControlsBar
+            :coordinate-text="coordinateDisplayText"
+            :current-zoom="currentZoom"
+            @reset-view="resetView"
+            @locate-me="zoomToUser"
+            @jump-to="handleJumpToCoordinates"
+        />
     </div>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import debounce from 'lodash/debounce';
+import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { fetchLocationResultsByService } from '../api/locationSearch';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
 import { useAreaImageOverlay } from '../composables/useAreaImageOverlay';
 import { useMessage } from '../composables/useMessage';
+import { useMapState } from '../composables/useMapState';
+import LayerControlPanel from './LayerControlPanel.vue';
+import MapControlsBar from './MapControlsBar.vue';
 
-const LocationSearch = defineAsyncComponent(() => import('./LocationSearch.vue'));
 const message = useMessage();
 
 // OpenLayers 核心库
@@ -148,8 +63,7 @@ import View from 'ol/View';
 import Feature from 'ol/Feature';
 import Overlay from 'ol/Overlay';
 import { fromLonLat, toLonLat } from 'ol/proj';
-import { defaults as defaultControls, ScaleLine, MousePosition, OverviewMap } from 'ol/control';
-import { createStringXY } from 'ol/coordinate';
+import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
 import { unByKey } from 'ol/Observable';
 import { getArea, getLength } from 'ol/sphere';
 import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
@@ -167,16 +81,12 @@ import CircleGeom from 'ol/geom/Circle';
 import { LineString, Polygon } from 'ol/geom';
 import { Draw, Snap } from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
-import Message from './Message.vue';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
 const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51';
-
-const route = useRoute();
-const router = useRouter();
 
 const URL_LAYER_OPTIONS = [
     'local',
@@ -228,14 +138,14 @@ const IMAGES = [
 // --- Refs ---
 const mapRef = ref(null);
 const mapContainerRef = ref(null);
-const mousePositionRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
-//默认底图的设置，还需修改293行的可见性
+// ========== 默认底图配置 ==========
+// 当前选中的底图 ID，默认为 'google'（对应图层索引 l=3）
+// 与 useMapState 中的 parseUrlToState 默认值保持一致
 const selectedLayer = ref('google');
 const customMapUrl = ref('');
 const showImageSet = ref(false);
-const showLayerManager = ref(false);
 const showDynamicSplitLines = ref(false);
 const imageSetPosition = ref({ x: 0, y: 0 });
 const showLargeImg = ref(false);
@@ -243,6 +153,8 @@ const largeImageSrc = ref('');
 const shouldMountImageSet = ref(false);
 const images = ref([]);
 const currentZoom = ref(17); // 当前缩放级别
+const COORDINATE_PLACEHOLDER = 'Lon, Lat';
+const coordinateDisplayText = ref(COORDINATE_PLACEHOLDER);
 
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 const searchServiceOptions = computed(() => ([
@@ -482,7 +394,6 @@ const layerList = ref(LAYER_CONFIGS.map(cfg => ({
     name: cfg.name, 
     visible: cfg.visible 
 })));
-const draggingIndex = ref(-1);
 const layerInstances = {}; // 存储所有 TileLayer 实例
 
 // --- 全局变量 (非响应式) ---
@@ -490,11 +401,7 @@ let drawInteraction, snapInteraction;
 let measureTooltipEl, measureTooltipOverlay;
 let helpTooltipEl, helpTooltipOverlay;
 let sketchFeature;
-let homeClickTimer = null; // 用于处理单击双击冲突
 let componentUnmounted = false;
-let dynamicSplitLinesLayer = null;
-let dynamicSplitMoveKey = null;
-let mapMoveEndKey = null;
 let pendingBusPick = null;
 let busRouteLayerRef = null;
 let busRouteManagedLayerId = null;
@@ -513,6 +420,7 @@ const busStepStyleCache = new globalThis.Map();
 
 const emit = defineEmits([
     'location-change',
+    'coordinate-jump',
     'update-news-image',
     'feature-selected',
     'user-layers-change',
@@ -912,28 +820,6 @@ function getCurrentDriveStepIndex() {
     return driveHoverStepIndex >= 0 ? driveHoverStepIndex : driveActiveStepIndex;
 }
 
-function getFirstQueryValue(value) {
-    if (Array.isArray(value)) return value[0];
-    return value;
-}
-
-function parseQueryNumber(value) {
-    const raw = Number(getFirstQueryValue(value));
-    return Number.isFinite(raw) ? raw : null;
-}
-
-function readRouteViewState() {
-    const lng = parseQueryNumber(route.query.lng);
-    const lat = parseQueryNumber(route.query.lat);
-    if (lng === null || lat === null) return null;
-
-    const zoom = parseQueryNumber(route.query.z);
-    return {
-        center: [lng, lat],
-        zoom: zoom === null ? INITIAL_VIEW.zoom : zoom
-    };
-}
-
 function getLayerIdByIndex(index) {
     const normalizedIndex = Number(index);
     if (!Number.isInteger(normalizedIndex)) return null;
@@ -946,137 +832,57 @@ function getLayerIndexById(layerId) {
     return idx >= 0 ? idx : null;
 }
 
-function readRouteLayerIndex() {
-    const raw = parseQueryNumber(route.query.l ?? route.query.layer);
-    if (raw === null || !Number.isInteger(raw)) return null;
-    if (raw < 0 || raw >= URL_LAYER_OPTIONS.length) return null;
-    return raw;
-}
+const {
+    parseUrlToState,
+    flyToView,
+    syncUrlFromMap,
+    bindMapViewSync,
+    stopMapViewSync,
+    refreshLayerInstances,
+    switchLayerById,
+    setGraticuleActive,
+    toggleGraticule,
+    stopGraticule
+} = useMapState(mapInstance, {
+    defaultZoom: INITIAL_VIEW.zoom,
+    layerListRef: layerList,
+    layerInstances,
+    layerConfigs: LAYER_CONFIGS,
+    getLayerIndex: () => getLayerIndexById(selectedLayer.value),
+    onLayerIndexChange: (layerIndex) => {
+        const layerId = getLayerIdByIndex(layerIndex);
+        if (!layerId || selectedLayer.value === layerId) return;
+        selectedLayer.value = layerId;
+    }
+});
 
-function readRouteLayerId() {
-    const layerIndex = readRouteLayerIndex();
-    if (layerIndex === null) return null;
-    return getLayerIdByIndex(layerIndex);
+const initialUrlState = parseUrlToState();
+const initialLayerId = getLayerIdByIndex(initialUrlState?.layerIndex);
+if (initialLayerId) {
+    selectedLayer.value = initialLayerId;
 }
 
 function getInitialViewState() {
-    return readRouteViewState() || INITIAL_VIEW;
-}
-
-function formatViewQueryValue(value, fractionDigits) {
-    const numberValue = Number(value);
-    if (!Number.isFinite(numberValue)) return null;
-    return numberValue.toFixed(fractionDigits);
-}
-
-function buildMapQueryFromView() {
-    const map = mapInstance.value;
-    if (!map) return null;
-
-    const view = map.getView?.();
-    const center = view?.getCenter?.();
-    if (!Array.isArray(center) || center.length < 2) return null;
-
-    const lonLat = toLonLat(center);
-    const zoom = view?.getZoom?.();
-    const activeLayerIndex = getLayerIndexById(selectedLayer.value);
-    if (activeLayerIndex === null) return null;
-
-    return {
-        lng: formatViewQueryValue(lonLat[0], 6),
-        lat: formatViewQueryValue(lonLat[1], 6),
-        z: formatViewQueryValue(zoom, 2),
-        l: String(activeLayerIndex)
-    };
-}
-
-function isSameMapQuery(nextQuery) {
-    const currentLng = String(getFirstQueryValue(route.query.lng) ?? '');
-    const currentLat = String(getFirstQueryValue(route.query.lat) ?? '');
-    const currentZoom = String(getFirstQueryValue(route.query.z) ?? '');
-    const currentLayer = String(getFirstQueryValue(route.query.l) ?? '');
-    return currentLng === nextQuery.lng
-        && currentLat === nextQuery.lat
-        && currentZoom === nextQuery.z
-        && currentLayer === nextQuery.l;
-}
-
-function replaceRouteQueryFromMapState() {
-    const nextQuery = buildMapQueryFromView();
-    if (!nextQuery || !nextQuery.lng || !nextQuery.lat || !nextQuery.z || !nextQuery.l) return;
-    if (isSameMapQuery(nextQuery)) return;
-
-    void router.replace({
-        path: route.path,
-        query: nextQuery
-    }).catch(() => {});
-}
-
-const syncMapQueryFromView = debounce(() => {
-    if (componentUnmounted) return;
-    replaceRouteQueryFromMapState();
-}, 500);
-
-function applyRouteLayerStateToUI() {
-    const routeLayerId = readRouteLayerId();
-    if (!routeLayerId) return;
-    if (selectedLayer.value === routeLayerId) return;
-    selectedLayer.value = routeLayerId;
-}
-
-function applyRouteViewStateToMap() {
-    const map = mapInstance.value;
-    if (!map) return;
-
-    const routeViewState = readRouteViewState();
-    if (!routeViewState) return;
-
-    const view = map.getView?.();
-    if (!view) return;
-
-    const targetCenter = fromLonLat(routeViewState.center);
-    const targetZoom = routeViewState.zoom;
-
-    const currentCenter = view.getCenter?.();
-    const currentZoom = view.getZoom?.();
-
-    const isSameCenter = Array.isArray(currentCenter)
-        && currentCenter.length >= 2
-        && Math.abs(currentCenter[0] - targetCenter[0]) < 1e-6
-        && Math.abs(currentCenter[1] - targetCenter[1]) < 1e-6;
-
-    const isSameZoom = Number(currentZoom ?? 0) === Number(targetZoom ?? 0);
-
-    if (isSameCenter && isSameZoom) return;
-
-    if (typeof view.animate === 'function') {
-        view.animate({ center: targetCenter, zoom: targetZoom, duration: 600 });
-    } else {
-        view.setCenter?.(targetCenter);
-        view.setZoom?.(targetZoom);
+    const routeState = parseUrlToState();
+    if (
+        Number.isFinite(routeState?.lng)
+        && Number.isFinite(routeState?.lat)
+    ) {
+        return {
+            center: [routeState.lng, routeState.lat],
+            zoom: Number.isFinite(routeState.zoom) ? routeState.zoom : INITIAL_VIEW.zoom
+        };
     }
+    return INITIAL_VIEW;
 }
-
-watch(
-    () => [
-        getFirstQueryValue(route.query.lng),
-        getFirstQueryValue(route.query.lat),
-        getFirstQueryValue(route.query.z),
-        getFirstQueryValue(route.query.l),
-        getFirstQueryValue(route.query.layer)
-    ],
-    () => {
-        if (componentUnmounted) return;
-        applyRouteLayerStateToUI();
-        applyRouteViewStateToMap();
-    }
-);
 
 // --- 初始化 ---
 onMounted(async () => {
     componentUnmounted = false;
-    applyRouteLayerStateToUI();
     initMap();
+    bindMapViewSync();
+    setGraticuleActive(showDynamicSplitLines.value);
+    syncUrlFromMap();
 
     // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
     await waitForCriticalTileReady();
@@ -1128,9 +934,9 @@ function waitForCriticalTileReady(timeoutMs = CRITICAL_TILE_READY_TIMEOUT_MS) {
 async function runDeferredStartupTasks() {
     if (componentUnmounted) return;
 
-    const routeViewState = readRouteViewState();
-    if (routeViewState) {
-        message.success('欢迎来到NEGIAO分享的地点'+routeViewState.center.map(c => c.toFixed(6)).join(',')+'，正在加载地图...');
+    const routeViewState = parseUrlToState();
+    if (Number.isFinite(routeViewState?.lng) && Number.isFinite(routeViewState?.lat)) {
+        message.success(`欢迎来到NEGIAO分享的地点${routeViewState.lng.toFixed(6)},${routeViewState.lat.toFixed(6)}，正在加载地图...`);
         return;
     }
 
@@ -1163,18 +969,11 @@ async function runDeferredStartupTasks() {
 
 onUnmounted(() => {
     componentUnmounted = true;
-    syncMapQueryFromView.cancel();
+    stopMapViewSync();
+    stopGraticule();
     if (pendingBusPick?.reject) {
         pendingBusPick.reject(new Error('地图已卸载'));
         pendingBusPick = null;
-    }
-    if (dynamicSplitMoveKey) {
-        unByKey(dynamicSplitMoveKey);
-        dynamicSplitMoveKey = null;
-    }
-    if (mapMoveEndKey) {
-        unByKey(mapMoveEndKey);
-        mapMoveEndKey = null;
     }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
@@ -1397,156 +1196,6 @@ function highlightManagedFeature({ layerId, featureId }) {
     clearManagedFeatureHighlight(currentManagedFeatureHighlight);
     currentManagedFeatureHighlight = feature;
     feature.setStyle(createManagedFeatureHighlightStyle(feature));
-}
-
-// [隶属] 图片覆盖-经纬线标注
-// [作用] 格式化经度文本。
-// [交互] 被 updateDynamicSplitLines 调用。
-function formatLongitude(lon) {
-    const abs = Math.abs(lon).toFixed(4);
-    return `${abs}°${lon >= 0 ? 'E' : 'W'}`;
-}
-
-// [隶属] 图片覆盖-经纬线标注
-// [作用] 格式化纬度文本。
-// [交互] 被 updateDynamicSplitLines 调用。
-function formatLatitude(lat) {
-    const abs = Math.abs(lat).toFixed(4);
-    return `${abs}°${lat >= 0 ? 'N' : 'S'}`;
-}
-
-// [隶属] 图片覆盖-经纬线样式
-// [作用] 生成经纬分割线及标注文本样式。
-// [交互] 被 updateDynamicSplitLines 调用。
-function createDynamicSplitStyle(textLabel = '', textOptions = {}) {
-    return new Style({
-        stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 2 }),
-        text: textLabel
-            ? new Text({
-                text: textLabel,
-                font: 'bold 12px Consolas, Monaco, monospace',
-                fill: new Fill({ color: '#124e28' }),
-                backgroundFill: new Fill({ color: 'rgba(255,255,255,0.9)' }),
-                padding: [2, 4, 2, 4],
-                offsetX: textOptions.offsetX ?? 0,
-                offsetY: textOptions.offsetY ?? -10,
-                textAlign: textOptions.textAlign ?? 'center'
-            })
-            : undefined
-    });
-}
-
-// [隶属] 图片覆盖-经纬线图层
-// [作用] 确保动态经纬分割线图层存在。
-// [交互] 被 updateDynamicSplitLines 调用。
-function ensureDynamicSplitLayer() {
-    if (!mapInstance.value) return null;
-    if (dynamicSplitLinesLayer) return dynamicSplitLinesLayer;
-
-    dynamicSplitLinesLayer = new VectorLayer({
-        source: new VectorSource(),
-        zIndex: 1080
-    });
-    mapInstance.value.addLayer(dynamicSplitLinesLayer);
-    return dynamicSplitLinesLayer;
-}
-
-// [隶属] 图片覆盖-经纬线图层
-// [作用] 按当前视图更新经纬分割线与标签。
-// [交互] 响应 moveend 或按钮触发。
-function updateDynamicSplitLines() {
-    if (!mapInstance.value) return;
-    const layer = ensureDynamicSplitLayer();
-    const source = layer?.getSource?.();
-    if (!source) return;
-
-    source.clear();
-    if (!showDynamicSplitLines.value) {
-        layer.setVisible(false);
-        return;
-    }
-
-    layer.setVisible(true);
-    const view = mapInstance.value.getView();
-    const size = mapInstance.value.getSize();
-    if (!size) return;
-
-    const extent = view.calculateExtent(size);
-    const sw = toLonLat([extent[0], extent[1]]);
-    const ne = toLonLat([extent[2], extent[3]]);
-
-    const lonStep = (ne[0] - sw[0]) / 3;
-    const latStep = (ne[1] - sw[1]) / 3;
-    const lonList = [sw[0] + lonStep, sw[0] + lonStep * 2];
-    const latList = [sw[1] + latStep, sw[1] + latStep * 2];
-    const centerLon = (sw[0] + ne[0]) / 2;
-    const centerLat = (sw[1] + ne[1]) / 2;
-
-    const features = [];
-
-    lonList.forEach((lon) => {
-        const start = fromLonLat([lon, sw[1]]);
-        const end = fromLonLat([lon, ne[1]]);
-        const line = new Feature({ geometry: new LineString([start, end]) });
-        line.setStyle(createDynamicSplitStyle());
-        features.push(line);
-
-        const topLabel = new Feature({ geometry: new Point(end) });
-        topLabel.setStyle(createDynamicSplitStyle(formatLongitude(lon), { offsetY: 12 }));
-        const bottomLabel = new Feature({ geometry: new Point(start) });
-        bottomLabel.setStyle(createDynamicSplitStyle(formatLongitude(lon), { offsetY: -12 }));
-        features.push(topLabel, bottomLabel);
-    });
-
-    latList.forEach((lat) => {
-        const start = fromLonLat([sw[0], lat]);
-        const end = fromLonLat([ne[0], lat]);
-        const line = new Feature({ geometry: new LineString([start, end]) });
-        line.setStyle(createDynamicSplitStyle());
-        features.push(line);
-
-        const leftLabel = new Feature({ geometry: new Point(start) });
-        leftLabel.setStyle(createDynamicSplitStyle(formatLatitude(lat), { offsetX: 42, textAlign: 'left' }));
-        const rightLabel = new Feature({ geometry: new Point(end) });
-        rightLabel.setStyle(createDynamicSplitStyle(formatLatitude(lat), { offsetX: -42, textAlign: 'right' }));
-        features.push(leftLabel, rightLabel);
-    });
-
-    // 中心标记：使用“+”符号，避免过长中心线干扰视图。
-    const centerCoord = fromLonLat([centerLon, centerLat]);
-    const centerPlus = new Feature({ geometry: new Point(centerCoord) });
-    centerPlus.setStyle(new Style({
-        text: new Text({
-            text: '+',
-            font: '700 26px "Segoe UI", "Arial", sans-serif',
-            fill: new Fill({ color: 'rgba(255, 235, 130, 0.98)' }),
-            stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.78)', width: 3 }),
-            textAlign: 'center',
-            textBaseline: 'middle'
-        })
-    }));
-
-    features.push(centerPlus);
-
-    source.addFeatures(features);
-}
-
-// [隶属] 图片覆盖-经纬线控制
-// [作用] 开关经纬分割线，并挂载一次地图移动监听。
-// [交互] 由 UI 按钮触发。
-function toggleDynamicSplitLines() {
-    showDynamicSplitLines.value = !showDynamicSplitLines.value;
-    if (!mapInstance.value) return;
-
-    if (!dynamicSplitMoveKey) {
-        dynamicSplitMoveKey = mapInstance.value.on('moveend', () => {
-            if (showDynamicSplitLines.value) {
-                updateDynamicSplitLines();
-            }
-        });
-    }
-
-    updateDynamicSplitLines();
 }
 
 // [隶属] 外部数据导入-动作集接入
@@ -1899,15 +1548,8 @@ function initMap() {
 
     // 1.3 控件
     // 从 LAYER_CONFIGS 中获取 Google 配置，使鹰眼视图与坐标系保持一致
-    const googleConfig = LAYER_CONFIGS.find(cfg => cfg.id === 'google');
     const controls = defaultControls({ zoom: false }).extend([
         new ScaleLine({ units: 'metric', bar: true, minWidth: 100 }),
-        new MousePosition({
-            coordinateFormat: createStringXY(4),
-            projection: 'EPSG:4326',
-            target: mousePositionRef.value,
-            undefinedHTML: '&nbsp;'
-        }),
         // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
 
         //bug：待修复,临时使用
@@ -1964,28 +1606,11 @@ function initMap() {
     //bug，此处需要监听变化后的图层并加上monitorLayerTimeout，超时替换
     // 增强完备性，防止图源不可用，用天地图兜底
     watch(selectedLayer, (val, prevVal) => {
-        // 关闭所有（独占模式），除了注记层可能需要保留？
-        // 按照原逻辑，Select 是互斥选择
-        layerList.value.forEach(l => {
-            if (l.id === 'label' || l.id === 'label_vector') return; // 注记层独立控制，或根据原逻辑联动
-            l.visible = (l.id === val);
+        switchLayerById(val, {
+            onUpdated: () => emitBaseLayersChange()
         });
-
-        // 修正：区分卫星注记和矢量注记，互不混淆
-        // 1. 卫星/影像底图 -> 配对 卫星注记 (label / cia)
-        const needsSatelliteLabel = ['tianDiTu', 'Google', 'esri','google'].includes(val);
-        const labelItem = layerList.value.find(l => l.id === 'label');
-        if (labelItem) labelItem.visible = needsSatelliteLabel;
-
-        // 2. 矢量底图 -> 配对 矢量注记 (label_vector / cva)
-        const needsVectorLabel = ['tianDiTu_vec'].includes(val);
-        const vectorLabelItem = layerList.value.find(l => l.id === 'label_vector');
-        if (vectorLabelItem) vectorLabelItem.visible = needsVectorLabel;
-        
-        // 强制刷新所有层状态
-        refreshLayersState();
         if (prevVal !== undefined) {
-            replaceRouteQueryFromMapState();
+            syncUrlFromMap();
         }
     }, { immediate: true });
 
@@ -1998,56 +1623,58 @@ function initMap() {
 // [作用] 将 layerList 的可见性与顺序同步到真实图层。
 // [交互] 调用 emitBaseLayersChange，与外部组件同步状态。
 function refreshLayersState() {
-     layerList.value.forEach((item, index) => {
-        const layer = layerInstances[item.id];
-        if (layer) {
-            if (item.visible && !layer.getSource()) {
-                const cfg = LAYER_CONFIGS.find(c => c.id === item.id);
-                if (cfg) {
-                    layer.setSource(cfg.createSource());
-                }
-            }
-            layer.setVisible(item.visible);
-            layer.setZIndex(index); // 列表越靠后，ZIndex越大（显示在越上层），符合"图层叠加"直觉
-            // 或者是列表上面的是顶层？通常Layer Manager是上面遮盖下面。
-            // 修正：通常UI上列表第一个元素在最上面（覆盖下面）。
-            // 所以 ZIndex 应该 = total - index
-            layer.setZIndex(layerList.value.length - index);
-        }
-    });
+    refreshLayerInstances();
     emitBaseLayersChange();
 }
 
-// 拖拽相关逻辑
-// [隶属] 图层切换-拖拽排序
-// [作用] 记录当前被拖拽图层索引。
-// [交互] 与 onDrop 配合使用。
-function onDragStart(evt, index) {
-    draggingIndex.value = index;
-    evt.dataTransfer.effectAllowed = 'move';
+// [隶属] 图层切换-控制面板事件
+// [作用] 统一接收 LayerControlPanel 的图层切换与自定义 URL 加载。
+// [交互] 触发 selectedLayer 更新、loadCustomMap 与 refreshLayersState。
+function handleLayerChange(payload = {}) {
+    const nextLayerId = String(payload.layerId || '').trim();
+    if (nextLayerId) {
+        selectedLayer.value = nextLayerId;
+    }
+
+    if (payload.source === 'custom-url') {
+        customMapUrl.value = String(payload.customUrl || '').trim();
+        if (customMapUrl.value) {
+            loadCustomMap();
+        }
+    }
 }
 
-// [隶属] 图层切换-拖拽排序
-// [作用] 交换图层列表顺序并刷新地图层级。
-// [交互] 由图层管理面板拖拽事件触发。
-function onDrop(evt, dropIndex) {
-    const dragIndex = draggingIndex.value;
-    if (dragIndex === dropIndex) return;
-    
-    // 移动数组元素
-    const item = layerList.value.splice(dragIndex, 1)[0];
-    layerList.value.splice(dropIndex, 0, item);
-    
-    draggingIndex.value = -1;
-    refreshLayersState();
+// [隶属] 图层切换-控制面板事件
+// [作用] 处理图层排序与可见性更新。
+// [交互] 由 LayerControlPanel 的 update-order 事件触发。
+function handleLayerOrderUpdate(payload = {}) {
+    if (payload.type === 'reorder') {
+        const dragIndex = Number(payload.dragIndex);
+        const dropIndex = Number(payload.dropIndex);
+        if (!Number.isInteger(dragIndex) || !Number.isInteger(dropIndex)) return;
+        if (dragIndex < 0 || dropIndex < 0) return;
+        if (dragIndex >= layerList.value.length || dropIndex >= layerList.value.length) return;
+        if (dragIndex === dropIndex) return;
+
+        const moved = layerList.value.splice(dragIndex, 1)[0];
+        layerList.value.splice(dropIndex, 0, moved);
+        refreshLayersState();
+        return;
+    }
+
+    if (payload.type === 'visibility') {
+        const target = layerList.value.find((item) => item.id === payload.layerId);
+        if (!target) return;
+        target.visible = !!payload.visible;
+        refreshLayersState();
+    }
 }
 
-// [隶属] 图层切换-可见性开关
-// [作用] 复选框变更后的统一刷新入口。
-// [交互] 由图层管理面板 checkbox 触发。
-function updateLayerVisibility(layer) {
-    // 只是触发刷新
-    refreshLayersState();
+// [隶属] 图片覆盖-经纬线控制
+// [作用] 由 LayerControlPanel 触发经纬线开关。
+// [交互] 委托 useMapState 的 graticule engine。
+function handleToggleGraticule() {
+    showDynamicSplitLines.value = toggleGraticule();
 }
 
 // [隶属] 组件交互-地图事件绑定
@@ -2062,6 +1689,8 @@ function bindEvents() {
 
         const coordinate = evt.coordinate;
         const pixel = evt.pixel;
+        const lonLat = toLonLat(coordinate);
+        coordinateDisplayText.value = `${lonLat[0].toFixed(6)}, ${lonLat[1].toFixed(6)}`;
 
         // A. 测量提示逻辑
         if (helpTooltipEl) {
@@ -2143,47 +1772,41 @@ function bindEvents() {
             currentZoom.value = Math.round(zoom);
         }
     });
-
-    mapMoveEndKey = map.on('moveend', () => {
-        syncMapQueryFromView();
-    });
 }
 
 // --- 2. 业务逻辑 (区域图片) ---
 
 // --- 3. 关键修复：复位与定位逻辑 ---
 
-/**
- * 统一处理按钮点击交互
- * 逻辑：单击启动300ms定时器，如果期间再次点击，则取消定时器并执行双击逻辑(定位)
- * 否则执行单击逻辑(复位)
- */
-// [隶属] 底部控制-Home 双击/单击识别
-// [作用] 将点击行为分流为复位或定位。
-// [交互] 调用 resetView / zoomToUser。
-function handleHomeInteract() {
-    if (homeClickTimer) {
-        // --- 双击逻辑 (Double Click) ---
-        clearTimeout(homeClickTimer);
-        homeClickTimer = null;
-        zoomToUser();
-    } else {
-        // --- 单击逻辑 (Single Click) ---
-        homeClickTimer = setTimeout(() => {
-            resetView();
-            homeClickTimer = null;
-        }, 300);
-    }
+// [隶属] 底部控制-坐标跳转
+// [作用] 接收 MapControlsBar 的 jump-to 事件，统一飞行并同步 URL。
+// [交互] emit: location-change / coordinate-jump。
+function handleJumpToCoordinates({ lng, lat }) {
+    const map = mapInstance.value;
+    const currentMapZoom = Number(map?.getView?.()?.getZoom?.() ?? INITIAL_VIEW.zoom);
+    const nextZoom = Math.max(currentMapZoom, 12);
+
+    flyToView({
+        lng,
+        lat,
+        zoom: nextZoom,
+        layerIndex: getLayerIndexById(selectedLayer.value)
+    });
+
+    coordinateDisplayText.value = `${Number(lng).toFixed(6)}, ${Number(lat).toFixed(6)}`;
+    emit('location-change', { lon: lng, lat, source: 'coordinate-input' });
+    emit('coordinate-jump', { lng, lat });
 }
 
 // [隶属] 底部控制-Home 单击
 // [作用] 地图复位到初始中心和缩放。
-// [交互] 被 handleHomeInteract 调用。
+// [交互] 由 MapControlsBar 的 reset-view 事件触发。
 function resetView() {
-    mapInstance.value?.getView().animate({
-        center: fromLonLat(INITIAL_VIEW.center),
+    flyToView({
+        lng: INITIAL_VIEW.center[0],
+        lat: INITIAL_VIEW.center[1],
         zoom: INITIAL_VIEW.zoom,
-        duration: 800
+        layerIndex: getLayerIndexById(selectedLayer.value)
     });
 }
 
@@ -2917,225 +2540,6 @@ defineExpose({
     cursor: pointer;
 }
 
-/* 控件样式 */
-.layer-switcher {
-    position: absolute;
-    top: 15px;
-    right: 15px;
-    background: #309441;
-    padding: 4px;
-    border-radius: 4px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    z-index: 10;
-}
-
-.search-box {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 6px;
-    position: relative;
-}
-
-.search-input {
-    padding: 6px 8px;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    width: 200px;
-}
-
-.search-btn {
-    padding: 6px 8px;
-    border-radius: 4px;
-    border: none;
-    background: #fff;
-    cursor: pointer;
-}
-
-.search-action {
-    position: relative;
-}
-
-.search-service-menu,
-.search-results {
-    list-style: none;
-    margin: 6px 0 0 0;
-    padding: 6px;
-    width: 100%;
-    max-height: 180px;
-    overflow: auto;
-    background: #fff;
-    border-radius: 4px;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
-}
-
-.search-service-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
-    width: 176px;
-    margin: 0;
-    z-index: 20;
-}
-
-.search-service-menu li,
-.search-results li {
-    padding: 6px 8px;
-    cursor: pointer;
-}
-
-.search-service-menu li:hover,
-.search-results li:hover {
-    background: #f2f2f2;
-}
-
-.layer-select {
-    padding: 4px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    outline: none;
-    display: inline-block;
-    /* 与 label 同行 */
-    margin: 0 0 0 6px;
-    /* 与文字保持间距 */
-    vertical-align: middle;
-}
-
-.layer-label {
-    color: #fff;
-    font-size: 13px;
-    display: inline-block;
-    margin: 0;
-    vertical-align: middle;
-}
-
-/* --- 底部控制栏容器 --- */
-.map-controls-group {
-    position: absolute;
-    bottom: 25px;
-    right: 15px;
-    background: #3a873e;
-    /* 深绿色半透明背景 */
-    backdrop-filter: blur(4px);
-    /* 毛玻璃效果 */
-    color: white;
-    padding: 6px 12px;
-    border-radius: 20px;
-    /* 圆角加大，像胶囊 */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    z-index: 1000;
-
-    /* 核心布局：Flex 使得内部元素横向排列，垂直居中 */
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    /* 元素之间的间距 */
-    white-space: nowrap;
-    /* 防止内容换行 */
-}
-
-/* --- 经纬度文本容器 --- */
-.mouse-position-content {
-    font-family: 'Consolas', 'Monaco', monospace;
-    /* 使用等宽字体，数字不跳动 */
-    font-size: 15px;
-    color: #e0e0e0;
-    /* 关键：不需要固定 min-width，让内容撑开，或者给一个基础宽度 */
-    min-width: 140px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* --- 缩放级别显示 --- */
-.zoom-level-display {
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 16px;
-    font-weight: bold;
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.15);
-    padding: 2px 10px;
-    border-radius: 12px;
-    min-width: 28px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* --- 强制覆盖 OpenLayers 默认生成的样式 (核心修复) --- */
-/* OpenLayers 默认会给这个类加 position: absolute，必须覆盖掉 */
-:deep(.ol-mouse-position) {
-    position: static !important;
-    /* 强制改为静态定位，遵循 Flex 流 */
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    background: transparent !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    color: inherit !important;
-    /* 继承父级文字颜色 */
-    font-size: inherit !important;
-}
-
-/* --- 分隔符 --- */
-.divider {
-    width: 1px;
-    height: 18px;
-    background-color: rgba(255, 255, 255, 0.4);
-    flex-shrink: 0;
-    /* 防止分隔符被挤压没了 */
-}
-
-/* --- Home 按钮 --- */
-.home-btn {
-    background: transparent;
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    /* 圆形按钮体验更好 */
-    transition: background-color 0.2s, transform 0.2s;
-    flex-shrink: 0;
-    /* 防止按钮被挤压 */
-}
-
-.home-btn:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-    transform: scale(1.1);
-}
-
-.home-btn:active {
-    transform: scale(0.95);
-}
-
-/* --- 移动端适配 --- */
-@media (max-width: 768px) {
-    /* .mouse-position-content { */
-    /* display: none; */
-    /* 手机屏幕太小，建议直接隐藏经纬度，只保留按钮 */
-    /* } */
-
-    .divider {
-        display: none;
-    }
-
-    .map-controls-group {
-        padding: 8px;
-        /* 缩小内边距 */
-        bottom: 40px;
-        /* 避开可能存在的底部导航或Logo */
-    }
-}
-
 /* 动画 */
 .fade-enter-active,
 .fade-leave-active {
@@ -3168,137 +2572,6 @@ defineExpose({
     background-color: #ffcc33;
     color: black;
     border: 1px solid white;
-}
-
-.custom-url-wrapper {
-    margin-top: 6px;
-    display: flex;
-    gap: 4px;
-}
-
-.custom-url-input {
-    flex: 1;
-    width: 160px;
-    padding: 4px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    font-size: 12px;
-}
-
-.custom-url-btn {
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: none;
-    background: #fff;
-    cursor: pointer;
-    font-size: 12px;
-}
-
-/* 图层管理样式 */
-.layer-manage-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: white;
-    padding: 4px;
-    margin-left: 4px;
-    vertical-align: middle;
-}
-.layer-manage-btn:hover {
-    color: #eee;
-}
-
-.graticule-btn {
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    color: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    padding: 3px 8px;
-    margin-left: 4px;
-    font-size: 12px;
-    vertical-align: middle;
-}
-
-.graticule-btn:hover {
-    background: rgba(255, 255, 255, 0.24);
-}
-
-.graticule-btn.active {
-    background: #f6fff8;
-    color: #1e6f34;
-    border-color: #f6fff8;
-    font-weight: 700;
-}
-
-.layer-manager-panel {
-    position: absolute;
-    top: 100%; /* 改为 100% 确保显示在父容器下方，不遮挡内容 */
-    right: 0;
-    margin-top: 6px;
-    width: 200px;
-    background: white;
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    padding: 0; /* padding 移到内部或具体元素 */
-    max-height: 300px;
-    overflow-y: auto;
-    z-index: 2000;
-}
-.panel-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px;
-    background: #f0f0f0;
-    border-bottom: 1px solid #ddd;
-    border-radius: 4px 4px 0 0;
-    font-size: 13px;
-    font-weight: bold;
-    color: #333;
-}
-.close-panel-btn {
-    cursor: pointer;
-    font-size: 16px;
-    color: #999;
-    line-height: 1;
-}
-.close-panel-btn:hover {
-    color: #ff4444;
-}
-.layer-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px;
-}
-.layer-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px;
-    background: #f9f9f9;
-    border: 1px solid #eee;
-    border-radius: 4px;
-    cursor: move;
-    font-size: 13px;
-    user-select: none;
-}
-.layer-item:hover {
-    background: #f0f0f0;
-}
-.layer-item.dragging {
-    opacity: 0.5;
-    background: #e0e0e0;
-}
-.drag-handle {
-    cursor: grab;
-    color: #999;
-    font-weight: bold;
-    padding-right: 4px;
-}
-.layer-name {
-    flex: 1;
 }
 
 /* 鹰眼视图样式 */

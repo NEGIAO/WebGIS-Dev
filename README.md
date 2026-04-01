@@ -82,9 +82,11 @@ WebGIS_Dev/
 │   │   ├── CesiumContainer.vue         # Cesium 三维场景容器与 2D/3D 切换承接组件
 │   │   ├── ChatPanelContent.vue        # AI 助手会话内容、输入与流式响应展示
 │   │   ├── DrivingPlannerPanel.vue     # 驾车/步行路径规划输入、方案展示与步骤联动
+│   │   ├── LayerControlPanel.vue       # 顶部图层控制面板，包含底图切换、TOC 图层管理、拖拽排序与地名搜索功能
 │   │   ├── LocationSearch.vue          # 地名搜索输入框、服务菜单与结果列表组件
 │   │   ├── MagicCursor.vue             # 页面特效鼠标与粒子动画效果组件
-│   │   ├── MapContainer.vue            # 项目核心枢纽，集成了地图初始化、事件监听、各功能模块通信逻辑（待拆分）。
+│   │   ├── MapContainer.vue            # 项目核心枢纽，集成地图初始化、事件监听与各功能模块通信逻辑（已模块化）
+│   │   ├── MapControlsBar.vue          # 底部地图控制条，显示实时坐标、缩放级别、修改坐标与主页按钮
 │   │   ├── MapPointPickerCard.vue      # 地图起终点拾取状态卡片与操作引导
 │   │   ├── Message.vue                 # 全局 Toast/Message 消息组件（队列显示）
 │   │   ├── SidePanel.vue               # 右侧侧栏总控容器（资讯/聊天/工具箱/公交/驾车）
@@ -104,6 +106,7 @@ WebGIS_Dev/
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
+│   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、超时、宿主挂载）
 │   │   ├── useStyleEditor.js           # 图层样式编辑器状态与模板控制
 │   │   ├── useUserLayerActions.js      # 用户图层动作集合（显隐、删除、排序、缩放、样式）
@@ -149,6 +152,34 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.7.0 (2026-04-01)
+#### 🎨 MapContainer 组件架构重构 (Component Decoupling)
+* **顶部面板分离**：
+    * 新增 **LayerControlPanel.vue** 独立组件，封装所有图层控制逻辑（底图切换、TOC 管理、拖拽排序、地名搜索）。
+    * 支持 27 种预设底图供应商，覆盖本地瓦片、天地图、ESRI、OSM、高德等全球服务。
+    * 自动代理 LocationSearch 搜索结果，通过 `search-jump` 事件回传至父组件。
+    * 应用 Glassmorphism（磨砂玻璃）绿色主题（rgba(45,138,78,0.8)）。
+* **底部控制条分离**：
+    * 新增 **MapControlsBar.vue** 独立组件，替代老旧 MapControls.vue，专注于坐标/缩放/主页交互。
+    * 实时显示鼠标坐标与地图缩放级别，支持坐标复制、编辑与跳转功能。
+    * 主页按钮支持单击重置视图、双击快速定位用户（280ms 时间窗口）。
+    * 包含完整生命周期管理（onUnmounted 清理所有计时器，避免内存泄漏）。
+    * 应用绿色主题 Glassmorphism 样式。
+* **状态管理升级**：
+    * 增强 **useMapState.js** 为完整状态引擎，集成 URL 同步、图层切换、地形线渲染与视图动画。
+    * **防抖 URL 同步**：pan/zoom 事件每 500ms 批处理一次，显著降低 hash 更新频率。
+    * **统一图层切换 API**：`switchLayerById(layerId, config)` 集成标注逻辑（卫星图显示标注、矢量图隐藏）。
+    * **地形线渲染引擎**：`setGraticuleActive()` 和 `toggleGraticule()` 统一管理经纬网生命周期。
+    * **延迟图层初始化**：`refreshLayerInstances()` 仅在需要时创建 VectorSource，优化首屏加载。
+* **事件驱动集成**：
+    * MapContainer 新增适配器函数：`handleLayerChange()` 处理图层切换、`handleLayerOrderUpdate()` 处理顺序变化、`handleToggleGraticule()` 同步地形线状态。
+    * 完全移除 MapContainer 中冗余的拖拽、可见性、格线渲染逻辑（减少 ~400 行代码）。
+    * 所有子组件通过 emits 与父组件通信，保证数据流向清晰可控。
+* **性能优化**：
+    * 移除重复的 lng/lat 格式化函数与样式定义（集中在 useMapState 与对应组件）。
+    * 图层源创建延迟至使用时，减少初始化内存占用。
+    * Glassmorphism 样式集中管理，减少跨组件样式修改成本。
 
 ### V2.6.1 (2026-03-26)
 #### 🔗 视角初始化优先级优化
