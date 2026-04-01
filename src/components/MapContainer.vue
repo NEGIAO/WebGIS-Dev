@@ -2,21 +2,13 @@
     <div class="map-container" ref="mapContainerRef">
         <div id="map" ref="mapRef"></div>
 
-        <!-- 图片集覆盖层 (特定区域显示) -->
-        <transition name="fade">
-            <div v-if="shouldMountImageSet && showImageSet" class="imageset"
-                :style="{ left: imageSetPosition.x + 'px', top: imageSetPosition.y + 'px' }">
-                <img v-for="(img, index) in images" :key="index" :src="img" class="thumbnail"
-                    loading="lazy" decoding="async"
-                    @click.stop="showLargeImage(img)" />
-            </div>
-        </transition>
-
-        <!-- 大图覆盖层 (改为全屏遮罩模式，体验更好) -->
-        <div v-if="showLargeImg" class="lightbox" @click="closeLargeImage">
-            <img :src="largeImageSrc" class="large-image" @click.stop />
-            <button class="close-btn" @click="closeLargeImage">×</button>
-        </div>
+        <MapEasterEgg
+            :map-instance="mapInstance"
+            :bounds="DIHUAN_BOUNDS"
+            :images="IMAGES"
+            @open-large-image="handleEasterEggImageOpen"
+            @location-change="handleEasterEggLocationChange"
+        />
 
         <LayerControlPanel
             :map-instance="mapInstance"
@@ -24,18 +16,18 @@
             :selected-layer="selectedLayer"
             :custom-map-url="customMapUrl"
             :active-graticule="showDynamicSplitLines"
-            :fetcher="fetchLocationResults"
             :amap-key="AMAP_WEB_SERVICE_KEY"
-            :services="searchServiceOptions"
+            :tianditu-tk="TIANDITU_TK"
+            :is-domestic="isDomestic"
             @change-layer="handleLayerChange"
             @update-order="handleLayerOrderUpdate"
             @toggle-graticule="handleToggleGraticule"
-            @search-jump="selectResult"
+            @search-jump="handleSearchJump"
         />
 
         <!-- 底部控制栏 -->
         <MapControlsBar
-            :coordinate-text="coordinateDisplayText"
+            :coordinate="currentCoordinate"
             :current-zoom="currentZoom"
             @reset-view="resetView"
             @locate-me="zoomToUser"
@@ -45,17 +37,31 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
-import { fetchLocationResultsByService } from '../api/locationSearch';
+import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
-import { useAreaImageOverlay } from '../composables/useAreaImageOverlay';
 import { useMessage } from '../composables/useMessage';
 import { useMapState } from '../composables/useMapState';
+import { 
+    URL_LAYER_OPTIONS,
+    activeGoogleTileHost as globalActiveGoogleTileHost,
+    resolvePreferredGoogleHost,
+    buildGoogleTileUrl,
+    buildTiandituUrl,
+    createLayerConfigs
+} from '../composables/useBasemapManager';
 import LayerControlPanel from './LayerControlPanel.vue';
+import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 
 const message = useMessage();
+
+// ========== 底图管理 Composable ==========
+// 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
+// URL_LAYER_OPTIONS：用于 URL 参数中的图层索引映射（与 BASEMAP_OPTIONS 对应）
+// createLayerConfigs：工厂函数，根据参数生成 27 种底图配置
+// 使用全局共享的 Google 主机 ref，支持主机切换后的动态更新
+const activeGoogleTileHost = globalActiveGoogleTileHost;
 
 // OpenLayers 核心库
 import Map from 'ol/Map';
@@ -87,43 +93,7 @@ const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
 const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51';
-
-const URL_LAYER_OPTIONS = [
-    'local',
-    'tianDiTu_vec',
-    'tianDiTu',
-    'google',
-    'Google',
-    'google_standard',
-    'google_clean',
-    'osm',
-    'yandex_sat',
-    'geoq_gray',
-    'geoq_hydro',
-    'amap',
-    'amap_image',
-    'tengxun',
-    'topo',
-    'opentopomap',
-    'esa_topo',
-    'windy',
-    'windy2',
-    'windy_outer',
-    'windy_greenland',
-    'carton_light',
-    'carton_dark',
-    'wikepedia',
-    'toner',
-    'alidade',
-
-    // 'esri_ocean',
-    // 'esri_terrain',
-    // 'esri_physical',
-    // 'esri_hillshade',
-    // 'esri_gray',
-    // 'esri',
-    'custom'
-];
+const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 
 // 天地图 Token：优先使用环境变量，否则使用默认值
 // 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
@@ -145,23 +115,11 @@ const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 // 与 useMapState 中的 parseUrlToState 默认值保持一致
 const selectedLayer = ref('google');
 const customMapUrl = ref('');
-const showImageSet = ref(false);
 const showDynamicSplitLines = ref(false);
-const imageSetPosition = ref({ x: 0, y: 0 });
-const showLargeImg = ref(false);
-const largeImageSrc = ref('');
-const shouldMountImageSet = ref(false);
-const images = ref([]);
 const currentZoom = ref(17); // 当前缩放级别
-const COORDINATE_PLACEHOLDER = 'Lon, Lat';
-const coordinateDisplayText = ref(COORDINATE_PLACEHOLDER);
+const currentCoordinate = ref(null);
 
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
-const searchServiceOptions = computed(() => ([
-    { value: 'tianditu', label: isDomestic.value ? '天地图（推荐）' : '天地图' },
-    { value: 'nominatim', label: !isDomestic.value ? '国际（推荐）' : '国际（Nominatim）' },
-    { value: 'amap', label: '高德（Amap）' }
-]));
 
 let searchSource, searchLayer;
 let customSource = null;
@@ -173,220 +131,9 @@ const SEARCH_RESULT_STYLE = {
     pointRadius: 8
 };
 
-// 统一主机配置：在这里切换相关地图服务主机名。
-const TILE_HOSTS = {
-    tianditu: 't0.tianditu.gov.cn',
-    googleCandidates: ['mt3v.gggis.com', 'gac-geo.googlecnapps.club']
-};
-// 可选：'manual' 固定主机；'fastest' 启动后测速并自动切换最快主机。
-const GOOGLE_HOST_STRATEGY = 'manual';
-const GOOGLE_MANUAL_HOST = TILE_HOSTS.googleCandidates[1];
-const GOOGLE_PROBE_TIMEOUT_MS = 1200;
-const CRITICAL_TILE_READY_TIMEOUT_MS = 1400;
-const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
-
-// [隶属] 图层切换-底图源地址构建
-// [作用] 拼接 Google 瓦片服务 URL。
-// [交互] 被 LAYER_CONFIGS 的 createSource 间接调用。
-const buildGoogleTileUrl = (pathAndQuery) => `https://${activeGoogleTileHost.value}${pathAndQuery}`;
-// [隶属] 图层切换-底图源地址构建
-// [作用] 拼接天地图瓦片服务 URL。
-// [交互] 被 LAYER_CONFIGS 的 createSource 间接调用。
-const buildTiandituUrl = (pathAndQuery) => `https://${TILE_HOSTS.tianditu}${pathAndQuery}`;
-
-// [隶属] 图层切换-底图连通性策略
-// [作用] 通过图片探测估算候选 Google 主机延迟。
-// [交互] 供 resolvePreferredGoogleHost 调用。
-function probeGoogleHostLatency(host, timeoutMs = GOOGLE_PROBE_TIMEOUT_MS) {
-    return new Promise((resolve) => {
-        const start = performance.now();
-        const img = new Image();
-        let settled = false;
-        const end = (latency) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            img.onload = null;
-            img.onerror = null;
-            resolve(latency);
-        };
-        const timer = setTimeout(() => end(Number.POSITIVE_INFINITY), timeoutMs);
-        img.onload = () => end(performance.now() - start);
-        img.onerror = () => end(Number.POSITIVE_INFINITY);
-        img.src = `https://${host}/maps/vt?lyrs=s&x=0&y=0&z=1&_probe=${Date.now()}`;
-    });
-}
-
-// [隶属] 图层切换-底图连通性策略
-// [作用] 选择可用且延迟最低的 Google 主机。
-// [交互] 被 runDeferredStartupTasks 调用，随后触发 refreshGoogleLayerSources。
-async function resolvePreferredGoogleHost() {
-    if (GOOGLE_HOST_STRATEGY !== 'fastest') return GOOGLE_MANUAL_HOST;
-    const candidates = TILE_HOSTS.googleCandidates || [];
-    if (!candidates.length) return GOOGLE_MANUAL_HOST;
-
-    const measured = await Promise.all(candidates.map(async (host) => ({
-        host,
-        latency: await probeGoogleHostLatency(host)
-    })));
-
-    measured.sort((a, b) => a.latency - b.latency);
-    const best = measured[0];
-    return Number.isFinite(best?.latency) ? best.host : GOOGLE_MANUAL_HOST;
-}
-
-// 图层配置 (集中管理 id, name, source创建逻辑)
-const LAYER_CONFIGS = [
-    { 
-        id: 'label', name: '天地图注记', visible: true,
-        createSource: () => new XYZ({ url: `${buildTiandituUrl('/cia_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
-    },
-    { 
-        id: 'label_vector', name: '天地图矢量注记', visible: false,
-        createSource: () => new XYZ({ url: `${buildTiandituUrl('/cva_w/wmts')}?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
-    },
-    { 
-        id: 'Water', name: '水系', visible: false,
-        createSource: () => new XYZ({ url: `https://idataapi.geovisearth.com/tiles/{z}/{x}/{-y}.png` }) 
-    },
-    { 
-        id: 'google', name: 'Google', visible: true,
-        createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
-    },
-    // { 
-    //     id: 'gggis', name: '谷谷', visible: true,
-    //     createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
-    // },
-    { 
-        id: 'Google', name: 'Google原版', visible: true,
-        createSource: () => new XYZ({ url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}' }) 
-    },
-    { 
-        id: 'opentopomap', name: 'OpenTopoMap', visible: false,
-        createSource: () => new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' }) 
-    },
-    { 
-        id: 'custom', name: '自定义', visible: false,
-        createSource: () => null 
-    },
-    { 
-        id: 'local', name: '自定义瓦片', visible: false,
-        createSource: () => new XYZ({ url: `${NORM_BASE}tiles/{z}/{x}/{y}.png` }) 
-    },
-    { 
-        id: 'tianDiTu_vec', name: '天地图矢量', visible: false,
-        createSource: () => new XYZ({ url: `${buildTiandituUrl('/vec_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
-    },
-    { 
-        id: 'tianDiTu', name: '天地图影像', visible: false,
-        createSource: () => new XYZ({ url: `${buildTiandituUrl('/img_w/wmts')}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}` }) 
-    },
-    // 谷歌请求图层配置参考：https://liuxs.pro/blog/%E8%87%AA%E5%AE%9A%E4%B9%89%E8%B0%B7%E6%AD%8Cxyz%E7%93%A6%E7%89%87%E5%9C%B0%E5%9B%BE%E6%A0%B7%E5%BC%8F/#user-content-fn-1
-    { 
-        id: 'google_standard', name: 'Google标准', visible: false,
-        createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt/lyrs=m&x={x}&y={y}&z={z}') }) 
-    },
-    { 
-        id: 'google_clean', name: 'Google简洁', visible: false,
-        createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off') }) 
-    },
-    { 
-        id: 'esri', name: 'ESRI', visible: false,
-        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', maxZoom: 20 }) 
-    },
-    { 
-        id: 'osm', name: 'OSM', visible: false,
-        createSource: () => new OSM() 
-    },
-    { 
-        id: 'amap', name: '高德地图', visible: false,
-        createSource: () => new XYZ({ url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}' }) 
-    },
-    { 
-        id: 'tengxun', name: '腾讯地图', visible: false,
-        createSource: () => new XYZ({ url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0' }) 
-    },
-    {
-        id: 'esri_ocean', name: 'Esri海洋', visible: false,
-        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}' })
-    },
-    {
-        id: 'esri_terrain', name: 'Esri地形', visible: false,
-        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}' })
-    },
-    {
-        id: 'esri_physical', name: 'Esri物理', visible: false,
-        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}' })
-    },
-    {
-        id: 'esri_hillshade', name: 'Esri山影', visible: false,
-        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}' })
-    },
-    {
-        id: 'esri_gray', name: 'Esri灰度', visible: false,
-        createSource: () => new XYZ({ url: 'https://server.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}' })
-    },
-    {
-        id: 'yandex_sat', name: 'Yandex卫星', visible: false,
-        createSource: () => new XYZ({ url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}' })
-    },
-    {
-        id: 'amap_image', name: '高德影像', visible: false,
-        createSource: () => new XYZ({ url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}' })
-    },
-    {
-        id: 'topo', name: '地形图', visible: false,
-        createSource: () => new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' })
-    },
-    {
-        id: 'esa_topo', name: '欧空局地形', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png' })
-    },
-    {
-        id: 'geoq_gray', name: 'GeoQ灰色', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png' })
-    },
-    {
-        id: 'windy', name: 'Windy', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.windy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}/?lang=en' })
-    },
-    {
-        id: 'windy2', name: 'Windy2', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.windy.com/v1/maptiles/winter/256/{z}/{x}/{y}/?lang=en' })
-    },
-    {
-        id:'windy_outer', name: 'Windy轮廓', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/darkmap-retina/{z}/{x}/{y}.png' })
-    },
-    {
-        id:'windy_greenland', name: 'Windy Greenland', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png' })
-    },
-    {
-        id:'carton_light', name: 'CartoDB Positron', visible: false,
-        createSource: () => new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png' })
-    },
-    {
-        id:'carton_dark', name: 'CartoDB Dark Matter', visible: false,
-        createSource: () => new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png' })
-    },
-    {
-        id:'wikepedia', name: 'Wikipedia', visible: false,
-        createSource: () => new XYZ({ url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png' })
-    },
-    {
-        id:'toner', name: 'Stamen Toner', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png' })
-    },
-    {
-        id:'alidade', name: 'Alidade Smooth', visible: false,
-        createSource: () => new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png' })   
-    },
-    {
-        id: 'geoq_hydro', name: 'GeoQ水系', visible: false,
-        createSource: () => new XYZ({ url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldHydroMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldHydroMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png' })
-    }
-];
+// ========== 图层配置初始化 ==========
+// 使用 composable 提供的工厂函数而不是直接定义 LAYER_CONFIGS
+const LAYER_CONFIGS = createLayerConfigs(NORM_BASE, TIANDITU_TK);
 
 // 初始化图层列表状态 (从配置生成)
 const layerList = ref(LAYER_CONFIGS.map(cfg => ({ 
@@ -441,25 +188,13 @@ const {
     isDomestic
 });
 
-const {
-    checkAreaLogic,
-    showLargeImage,
-    closeLargeImage
-} = useAreaImageOverlay({
-    mapInstance,
-    showImageSet,
-    imageSetPosition,
-    showLargeImg,
-    largeImageSrc,
-    bounds: DIHUAN_BOUNDS,
-    emit
-});
+function handleEasterEggImageOpen(src) {
+    emit('update-news-image', src);
+}
 
-watch(showImageSet, (visible) => {
-    if (!visible || shouldMountImageSet.value) return;
-    shouldMountImageSet.value = true;
-    images.value = IMAGES;
-});
+function handleEasterEggLocationChange(payload) {
+    emit('location-change', payload);
+}
 
 const isAttributeQueryEnabled = ref(true);
 const userDataLayers = [];
@@ -1688,9 +1423,8 @@ function bindEvents() {
         if (evt.dragging) return;
 
         const coordinate = evt.coordinate;
-        const pixel = evt.pixel;
         const lonLat = toLonLat(coordinate);
-        coordinateDisplayText.value = `${lonLat[0].toFixed(6)}, ${lonLat[1].toFixed(6)}`;
+        currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
 
         // A. 测量提示逻辑
         if (helpTooltipEl) {
@@ -1701,8 +1435,6 @@ function bindEvents() {
             helpTooltipEl.classList.remove('hidden');
         }
 
-        // B. 特定区域图片显示逻辑
-        checkAreaLogic(coordinate, pixel);
     });
 
     map.getViewport().addEventListener('mouseout', () => {
@@ -1765,7 +1497,6 @@ function bindEvents() {
 
     // 缩放监听
     map.getView().on('change:resolution', () => {
-        checkAreaLogic();
         // 更新缩放级别显示
         const zoom = map.getView().getZoom();
         if (zoom !== undefined) {
@@ -1793,7 +1524,7 @@ function handleJumpToCoordinates({ lng, lat }) {
         layerIndex: getLayerIndexById(selectedLayer.value)
     });
 
-    coordinateDisplayText.value = `${Number(lng).toFixed(6)}, ${Number(lat).toFixed(6)}`;
+    currentCoordinate.value = { lng: Number(lng), lat: Number(lat) };
     emit('location-change', { lon: lng, lat, source: 'coordinate-input' });
     emit('coordinate-jump', { lng, lat });
 }
@@ -2149,59 +1880,22 @@ function clearDriveRouteStepPreview() {
     clearRouteStepPreview('drive');
 }
 
-//地名搜索
 // --- 5. 地名搜索功能 (主逻辑) ---
 // [隶属] 组件交互-地名搜索
-// [作用] 统一调用搜索服务并附带当前地图范围。
-// [交互] 传给 LocationSearch 组件作为 fetcher。
-async function fetchLocationResults({ service, keywords, page = 1, pageSize = 10, amapKey = '' }) {
-    return fetchLocationResultsByService({
-        service,
-        keywords,
-        page,
-        pageSize,
-        amapKey,
-        tiandituTk: TIANDITU_TK,
-        mapBound: getCurrentMapBound()
-    });
-}
+// [作用] 接收 LayerControlPanel 解析后的定位载荷并渲染搜索结果图层。
+// [交互] 由 LayerControlPanel 的 search-jump 事件触发。
+function handleSearchJump(payload) {
+    if (!mapInstance.value || !payload) return;
 
-// [隶属] 组件交互-地名搜索
-// [作用] 获取当前地图范围字符串，作为搜索边界条件。
-// [交互] 被 fetchLocationResults 调用。
-function getCurrentMapBound() {
-    try {
-        if (!mapInstance.value) return undefined;
-        const view = mapInstance.value.getView();
-        const size = mapInstance.value.getSize();
-        if (!size) return undefined;
-        const ext = view.calculateExtent(size);
-        const sw = toLonLat([ext[0], ext[1]]);
-        const ne = toLonLat([ext[2], ext[3]]);
-        return `${sw[0].toFixed(6)},${sw[1].toFixed(6)},${ne[0].toFixed(6)},${ne[1].toFixed(6)}`;
-    } catch (e) {
-        console.warn('计算 mapBound 失败，使用默认范围', e);
-        return undefined;
-    }
-}
-
-// [隶属] 组件交互-地名搜索
-// [作用] 将搜索结果定位到地图并生成托管点图层。
-// [交互] 由 LocationSearch 的 select-result 事件触发。
-function selectResult(item) {
-    if (!mapInstance.value || !item) return;
-    // 支持不同来源字段（Nominatim 返回 lon/lat；天地图可能返回 lon/lat 或 x/y）
-    const lonVal = item.lon ?? item.x ?? item.lng ?? item.lonlat?.split?.(',')?.[0];
-    const latVal = item.lat ?? item.y ?? item.latit ?? item.lonlat?.split?.(',')?.[1];
-    const lon = lonVal != null ? parseFloat(lonVal) : NaN;
-    const lat = latVal != null ? parseFloat(latVal) : NaN;
+    const lon = Number(payload.lng);
+    const lat = Number(payload.lat);
     if (Number.isNaN(lon) || Number.isNaN(lat)) {
         message.warning('无法解析该结果的坐标');
         return;
     }
     const coord = fromLonLat([lon, lat]);
 
-    const layerName = (item.display_name || item.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
+    const layerName = (payload.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
     const f = new Feature({
         geometry: new Point(coord),
         type: 'search',
@@ -2224,7 +1918,11 @@ function selectResult(item) {
     });
 
     // 动画缩放到位置
-    mapInstance.value.getView().animate({ center: coord, zoom: 16, duration: 700 });
+    mapInstance.value.getView().animate({
+        center: coord,
+        zoom: Number(payload.zoom) > 0 ? Number(payload.zoom) : 16,
+        duration: 700
+    });
 
 }
 
@@ -2476,79 +2174,6 @@ defineExpose({
 #map {
     width: 100%;
     height: 100%;
-}
-
-/* 图片集弹窗 */
-.imageset {
-    position: absolute;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid #ddd;
-    padding: 6px;
-    width: 310px;
-    z-index: 1000;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    pointer-events: auto;
-    /* 允许点击 */
-}
-
-.thumbnail {
-    width: 96px;
-    height: 64px;
-    object-fit: cover;
-    cursor: zoom-in;
-    border-radius: 4px;
-    transition: all 0.2s;
-}
-
-.thumbnail:hover {
-    transform: scale(1.05);
-}
-
-/* 全屏大图 Lightbox */
-.lightbox {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.85);
-    z-index: 2000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.large-image {
-    max-width: 90%;
-    max-height: 90%;
-    border: 2px solid #fff;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-}
-
-.close-btn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 40px;
-    cursor: pointer;
-}
-
-/* 动画 */
-.fade-enter-active,
-.fade-leave-active {
-    transition: opacity 0.3s;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-    opacity: 0;
 }
 
 /* OpenLayers Tooltips Override */

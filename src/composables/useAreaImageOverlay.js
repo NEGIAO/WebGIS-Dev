@@ -4,8 +4,6 @@ export function useAreaImageOverlay({
     mapInstance,
     showImageSet,
     imageSetPosition,
-    showLargeImg,
-    largeImageSrc,
     bounds,
     emit
 }) {
@@ -30,26 +28,12 @@ export function useAreaImageOverlay({
             }
         } else {
             showImageSet.value = false;
-            if (!showLargeImg.value) showImageSet.value = false;
         }
 
         emit('location-change', { isInDihuan: isInArea, lonLat });
     }
 
-    function showLargeImage(src) {
-        largeImageSrc.value = src;
-        showLargeImg.value = true;
-        emit('update-news-image', src);
-    }
-
-    function closeLargeImage() {
-        showLargeImg.value = false;
-        largeImageSrc.value = '';
-    }
-
     return {
-        checkAreaLogic,
-        showLargeImage,
-        closeLargeImage
+        checkAreaLogic
     };
 }

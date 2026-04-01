@@ -78,9 +78,14 @@ const COORDINATE_PLACEHOLDER = 'Lon, Lat';
 // ========== 组件 Props 定义 ==========
 /**
  * @prop {String} coordinateText - 当前坐标文本（格式："lng, lat"）
+ * @prop {Object|null} coordinate - 原始坐标对象 { lng, lat }，组件内部负责格式化
  * @prop {Number|String} currentZoom - 当前地图缩放级别（0-22）
  */
 const props = defineProps({
+    coordinate: {
+        type: Object,
+        default: null
+    },
     coordinateText: {
         type: String,
         default: COORDINATE_PLACEHOLDER
@@ -120,11 +125,17 @@ let copyTooltipTimer = null;      // 复制提示文本重置计时器
 // ========== 计算属性 ==========
 /** 显示的坐标文本（无效时显示占位符） */
 const displayCoordinateText = computed(() => {
+    const lng = Number(props.coordinate?.lng);
+    const lat = Number(props.coordinate?.lat);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        return `${lng.toFixed(6)}, ${lat.toFixed(6)}`;
+    }
+
     const text = String(props.coordinateText || '').trim();
     return text || COORDINATE_PLACEHOLDER;
 });
 
-/** 是否可以复制坐标（координат有效时） */
+/** 是否可以复制坐标（坐标有效时） */
 const canCopyCoordinate = computed(() => displayCoordinateText.value !== COORDINATE_PLACEHOLDER);
 
 // ========== 坐标编辑函数 ==========
@@ -312,7 +323,7 @@ onUnmounted(() => {
 
 <style scoped>
 .map-controls-group {
-    --brand-color: #4caf50;
+    --brand-color: #309441;
     --brand-color-rgb: 48, 148, 65;
     --glass-bg: linear-gradient(135deg, rgba(var(--brand-color-rgb), 0.85), rgba(var(--brand-color-rgb), 0.85));
     --glass-border: rgba(255, 255, 255, 0.2);

@@ -82,10 +82,11 @@ WebGIS_Dev/
 │   │   ├── CesiumContainer.vue         # Cesium 三维场景容器与 2D/3D 切换承接组件
 │   │   ├── ChatPanelContent.vue        # AI 助手会话内容、输入与流式响应展示
 │   │   ├── DrivingPlannerPanel.vue     # 驾车/步行路径规划输入、方案展示与步骤联动
-│   │   ├── LayerControlPanel.vue       # 顶部图层控制面板，包含底图切换、TOC 图层管理、拖拽排序与地名搜索功能
+│   │   ├── LayerControlPanel.vue       # 顶部 GIS 控制面板：搜索 API、底图切换、TOC 拖拽、经纬网开关（底图选项导入自 useBasemapManager）
 │   │   ├── LocationSearch.vue          # 地名搜索输入框、服务菜单与结果列表组件
 │   │   ├── MagicCursor.vue             # 页面特效鼠标与粒子动画效果组件
-│   │   ├── MapContainer.vue            # 项目核心枢纽，集成地图初始化、事件监听与各功能模块通信逻辑（已模块化）
+│   │   ├── MapContainer.vue            # ⭐ 地图最小外壳（Shell）：地图初始化 + 全局编排 + 组件桥接（底图配置导入自 useBasemapManager）
+│   │   ├── MapEasterEgg.vue            # 彩蛋图片模块：区域判定、像素定位、缩略图和 Lightbox（Teleport）
 │   │   ├── MapControlsBar.vue          # 底部地图控制条，显示实时坐标、缩放级别、修改坐标与主页按钮
 │   │   ├── MapPointPickerCard.vue      # 地图起终点拾取状态卡片与操作引导
 │   │   ├── Message.vue                 # 全局 Toast/Message 消息组件（队列显示）
@@ -99,7 +100,8 @@ WebGIS_Dev/
 │   │       ├── IconSupport.vue         # 支持入口图标组件
 │   │       └── IconTooling.vue         # 工具入口图标组件
 │   ├── composables/
-│   │   ├── useAreaImageOverlay.js      # 地环院区域缩略图覆盖层判定与大图联动逻辑
+│   │   ├── useAreaImageOverlay.js      # 区域图片覆盖逻辑旧入口（已由 MapEasterEgg 组件化承接）
+│   │   ├── useBasemapManager.ts        # ⭐ 底图配置管理集中器：27 种在线底图、URL_LAYER_OPTIONS、BASEMAP_OPTIONS、Google 主机选择
 │   │   ├── useGisLoader.js             # GIS 导入调度兼容入口（JavaScript 版本）
 │   │   ├── useGisLoader.ts             # GIS 导入调度主实现（TypeScript 版本）
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
@@ -140,6 +142,22 @@ WebGIS_Dev/
 └── README.md                           # 项目说明文档
 ```
 
+## 模块化架构（Great Decoupling）
+
+本次重构后，`MapContainer.vue` 采用“最小外壳”模式，主职责仅保留：
+
+1. 地图初始化与 OpenLayers 生命周期管理。
+2. 全局状态编排（底图状态、图层实例、绘图/路线等核心流程）。
+3. 与子组件的事件桥接（Props 下发，Emits 回传）。
+
+### mapInstance 通信技术摘要
+
+1. `MapContainer.vue` 创建唯一 `mapInstance`（`shallowRef`）并向子组件下发。
+2. `LayerControlPanel.vue` 通过 `mapInstance` 读取当前视图范围，拼装 `mapBound`，内部直连天地图/高德/Nominatim 搜索 API。
+3. `MapEasterEgg.vue` 通过 `mapInstance` 订阅 `pointermove`，执行区域命中与像素定位，并通过 `Teleport` 渲染全屏 Lightbox。
+4. `MapControlsBar.vue` 聚焦坐标输入/复制与 Home 交互，仅通过事件指令父组件执行地图动作。
+5. 数据流统一为：父组件持有地图写能力，子组件负责业务输入与 UI 反馈，避免“状态散落 + 地图实例多点写入”。
+
 ### GISDataInlet 数据流（容器层-解析层-坐标层-调度层）
 
 1. `src/utils/gis/decompressor.ts`：递归扫描文件、文件夹、ZIP/KMZ，自动展开“压缩包套压缩包”并拉平资源。
@@ -152,6 +170,25 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.7.1 (2026-04-01)
+#### 🧩 Great Decoupling（深度解耦）
+* **MapContainer 最小化**：将图片彩蛋、搜索 API 集成、图层面板交互进一步外移，父组件回归“地图初始化 + 编排桥接”职责。
+* **底图配置集中管理**：
+    * 新增 **useBasemapManager.ts** 为底图管理单一源，集中 27 种在线底图配置、URL_LAYER_OPTIONS、BASEMAP_OPTIONS、Google 主机选择逻辑。
+    * 消除 MapContainer 与 LayerControlPanel 间底图配置同步问题，简化新增底图的扩展流程（仅需在 useBasemapManager 中修改）。
+    * MapContainer 导入 URL_LAYER_OPTIONS、createLayerConfigs 等方法而无需本地定义，减少代码 ~38 行。
+    * LayerControlPanel 导入 BASEMAP_OPTIONS 而无需本地定义，减少代码 ~45 行，总计删除 ~83 行重复配置。
+    * 新增 JSDoc 清晰标记扩展步骤：新增底图时需同步更新 BASEMAP_OPTIONS、URL_LAYER_OPTIONS、createLayerConfigs。
+* **MapEasterEgg 升级为自驱组件**：
+    * 内聚区域命中、像素定位、缩略图显示、Lightbox 大图预览。
+    * 全屏遮罩层使用 `Teleport to="body"`，避免地图容器层叠上下文干扰。
+* **LayerControlPanel 深迁移**：
+    * 面板内部接管多服务地名搜索 API（天地图/高德/Nominatim）与 `mapBound` 拼装。
+    * 搜索结果在面板内完成坐标解析后再向父组件发出标准化定位事件。
+    * 图层管理面板改为 `Teleport to="body"`，并基于按钮锚点固定定位，提升复杂布局下的稳定性。
+* **MapControlsBar 主题统一**：品牌绿主色统一为 `#309441`，并保持坐标编辑、复制、双击 Home 交互一致。
+* **文档同步**：README 更新文件树注释与 `mapInstance` 组件通信说明，便于后续扩展和团队协作。
 
 ### V2.7.0 (2026-04-01)
 #### 🎨 MapContainer 组件架构重构 (Component Decoupling)
