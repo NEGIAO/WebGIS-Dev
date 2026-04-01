@@ -11,6 +11,7 @@
 
 - 🤖 **AI 助手**：集成大语言模型（SiliconFlow API），提供智能 GIS 问答服务，支持流式对话与历史记录清除。
 - 🌍 **三维地球**：集成 CesiumJS，支持高精度地形渲染与智能地形源切换（境内天地图/境外 World Terrain）。
+- 🎬 **电影级 3D 视觉管线**：3D 模式下按需启用高级后处理（高度雾、HBAO、Tilt-Shift、动态大气 + Bloom）与 ECharts 实时交互图表。
 - 📌 **多底图切换**：支持本地瓦片、天地图影像/矢量、ESRI 影像、OpenStreetMap、高德地图等服务。
 - 🗺️ **鹰眼视图**：左上角实时显示当前视图范围，支持展开/折叠，提供全局视野。
 - 📊 **缩放级别**：底部实时显示当前地图缩放级别（0-22级）。
@@ -79,6 +80,7 @@ WebGIS_Dev/
 │   ├── components/
 │   │   ├── AttributeTable.vue          # 属性查询结果表格展示与字段浏览
 │   │   ├── BusPlannerPanel.vue         # 公交路径规划输入、方案列表与步骤交互面板
+│   │   ├── CesiumAdvancedEffects.vue   # Cesium 电影级视觉后处理与 ECharts 动态图表（仅 3D 启用后懒加载）
 │   │   ├── CesiumContainer.vue         # Cesium 三维场景容器与 2D/3D 切换承接组件
 │   │   ├── ChatPanelContent.vue        # AI 助手会话内容、输入与流式响应展示
 │   │   ├── DrivingPlannerPanel.vue     # 驾车/步行路径规划输入、方案展示与步骤联动
@@ -170,6 +172,13 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.7.2 (2026-04-01)
+#### 🎬 Cesium 高级视觉组件化（按需加载）
+* 新增 **CesiumAdvancedEffects.vue**：封装电影级高度雾（GLSL PostProcessStage）、HBAO 微阴影、低仰角移轴摄影（Tilt-Shift）、动态天空大气与 Bloom 增强。
+* 新增 **ECharts 动态交互图表**：实时展示 3D 相机高度、俯仰角与帧率趋势，支持图例交互与响应式缩放。
+* `CesiumContainer.vue` 保持最小改动：仅增加异步子组件挂载入口，原有飞行、地形、坐标与模型加载能力保持不变。
+* 资源加载策略优化：在 `CesiumContainer` 未启用前，不请求高级特效与图表资源；仅当进入 3D 视角并完成 Viewer 初始化后才按需加载。
 
 ### V2.7.1 (2026-04-01)
 #### 🧩 Great Decoupling（深度解耦）

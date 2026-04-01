@@ -1,6 +1,13 @@
 <template>
   <div id="cesiumContainer" class="cesium-container"></div>
 
+  <component
+    :is="CesiumAdvancedEffects"
+    v-if="shouldLoadAdvancedEffects"
+    :get-viewer="getViewer"
+    :get-cesium="getCesium"
+  />
+
   <!-- 坐标显示面板 -->
   <div class="map-controls-group">
     <div class="mouse-position-content">{{ coordinateDisplay }}</div>
@@ -19,10 +26,11 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue';
+import { defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
 
 let Cesium = null;
+const CesiumAdvancedEffects = defineAsyncComponent(() => import('./CesiumAdvancedEffects.vue'));
 
 // --- 配置常量区域 ---
 const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
@@ -43,6 +51,7 @@ const TDT_PLUGIN_URLS = [
 let viewer = null;
 let handler = null;
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
+const shouldLoadAdvancedEffects = ref(false);
 const message = useMessage();
 
 // --- 生命周期 ---
@@ -51,11 +60,16 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  shouldLoadAdvancedEffects.value = false;
   if (handler) {
     handler.destroy();
     handler = null;
   }
   if (viewer) {
+    // 清理 credit 检查 interval
+    if (viewer._creditCheckInterval) {
+      clearInterval(viewer._creditCheckInterval);
+    }
     viewer.destroy();
     viewer = null;
   }
@@ -74,6 +88,7 @@ async function bootCesium() {
     addBaseImageryLayers();
 
     const terrainReady = initOfficialTerrain();
+    shouldLoadAdvancedEffects.value = true;
     if (terrainReady) {
       message.success('天地图基础影像与地形加载成功。');
     } else {
@@ -83,6 +98,14 @@ async function bootCesium() {
     console.error('Cesium 运行时加载失败', error);
     message.error('Cesium 初始化失败，请检查网络环境。', { closable: true });
   }
+}
+
+function getViewer() {
+  return viewer;
+}
+
+function getCesium() {
+  return Cesium || window.Cesium;
 }
 
 async function loadOfficialCesiumRuntime() {
@@ -128,6 +151,55 @@ function initViewer() {
   viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
   viewer.scene.globe.showGroundAtmosphere = true;
   viewer.scene.globe.depthTestAgainstTerrain = true;
+
+  // 隐藏所有归属信息 (Powered by GeoStar 等)
+  const hideCreditsAggressive = () => {
+    // 方法1：隐藏容器
+    if (viewer._cesiumWidget?._creditContainer) {
+      viewer._cesiumWidget._creditContainer.style.cssText = 'display: none !important; visibility: hidden !important; width: 0 !important; height: 0 !important;';
+      viewer._cesiumWidget._creditContainer.innerHTML = '';
+    }
+
+    // 方法2：查找并移除所有 credit 相关 DOM
+    const creditElems = document.querySelectorAll('[class*="credit"], [class*="geostar"], [class*="GeoStar"]');
+    creditElems.forEach(el => {
+      el.style.cssText = 'display: none !important; visibility: hidden !important;';
+      el.innerHTML = '';
+    });
+
+    // 方法3：禁用 credit 显示逻辑
+    if (viewer.scene && viewer.scene.frameState && viewer.scene.frameState.creditDisplay) {
+      viewer.scene.frameState.creditDisplay.hasCredits = () => false;
+      viewer.scene.frameState.creditDisplay.destroy = () => {};
+    }
+  };
+
+  hideCreditsAggressive();
+
+  // 持续监控并移除 credits (因为 Cesium 可能会动态添加)
+  const creditCheckInterval = setInterval(() => {
+    const creditContainer = document.querySelector('.cesium-credit-container');
+    if (creditContainer && creditContainer.innerHTML.length > 0) {
+      creditContainer.innerHTML = '';
+      creditContainer.style.cssText = 'display: none !important; visibility: hidden !important; width: 0 !important; height: 0 !important;';
+    }
+  }, 500);
+
+  // 存储 interval ID 以便清理
+  viewer._creditCheckInterval = creditCheckInterval;
+
+  // CSS 全局样式隐藏
+  if (!document.getElementById('cesium-credit-override')) {
+    const style = document.createElement('style');
+    style.id = 'cesium-credit-override';
+    style.textContent = `
+      .cesium-credit-container { display: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; }
+      .cesium-credit-text { display: none !important; visibility: hidden !important; }
+      .cesium-credit-logo-link { display: none !important; visibility: hidden !important; }
+      [class*="credit"] { display: none !important; visibility: hidden !important; }
+    `;
+    document.head.appendChild(style);
+  }
 }
 
 /**
