@@ -184,6 +184,14 @@ export function createLayerConfigs(normBase = '/', tiandituTk = '') {
             createSource: () => new XYZ({ url: `${normBase}tiles/{z}/{x}/{y}.png` }) 
         },
         { 
+            id: 'custom', name: '自定义URL', visible: false,
+            createSource: () => null 
+        },
+        { 
+            id: 'Google', name: 'Google原版', visible: true,
+            createSource: () => new XYZ({ url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }) 
+        },
+        { 
             id: 'tianDiTu_vec', name: '天地图矢量', visible: false,
             createSource: () => new XYZ({ url: `${buildTiandituUrl('/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}', tiandituTk)}` }) 
         },
@@ -194,10 +202,6 @@ export function createLayerConfigs(normBase = '/', tiandituTk = '') {
         { 
             id: 'google', name: 'Google(gac)', visible: true,
             createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 }) 
-        },
-        { 
-            id: 'Google', name: 'Google原版', visible: true,
-            createSource: () => new XYZ({ url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 }) 
         },
         { 
             id: 'google_standard', name: 'Google标准', visible: false,
@@ -282,10 +286,6 @@ export function createLayerConfigs(normBase = '/', tiandituTk = '') {
         {
             id: 'alidade', name: 'Alidade Sm', visible: false,
             createSource: () => new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png' })   
-        },
-        { 
-            id: 'custom', name: '自定义URL', visible: false,
-            createSource: () => null 
         }
     ];
 }
