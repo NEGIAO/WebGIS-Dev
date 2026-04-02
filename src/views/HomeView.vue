@@ -38,6 +38,7 @@ const is3DMode = ref(false);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
 const isMagicMode = ref(false);
+const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
 const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
@@ -179,7 +180,7 @@ async function toggle3D() {
             CesiumContainer.value = module.default;
             isCesiumLoaded.value = true;
         } catch (error) {
-            console.error('Cesium 组件加载失败', error);
+            message.error('Cesium 组件加载失败', error);
             return;
         } finally {
             isCesiumLoading.value = false;
@@ -191,9 +192,15 @@ async function toggle3D() {
     }
 }
 
-/** 切换鼠标特效 */
-function toggleMagic() {
-    isMagicMode.value = !isMagicMode.value;
+/** 开启特定魔法特效 */
+function handleActivateMagic(effectName) {
+    if (effectName === 'off') {
+        isMagicMode.value = false;
+        magicEffectData.value = '';
+    } else {
+        isMagicMode.value = true;
+        magicEffectData.value = effectName;
+    }
 }
 
 /** 处理文件上传 */
@@ -301,12 +308,12 @@ function handleFeatureSelected(properties) {
 <template>
     <div class="home-container">
         <!-- 特效光标 -->
-        <MagicCursor :active="isMagicMode" />
+        <MagicCursor :active="isMagicMode" :effect-name="magicEffectData" @toggle-active="(val) => isMagicMode = val" />
 
         <!-- 顶部控制栏 -->
         <div class="top-section">
             <TopBar
-                @toggle-magic="toggleMagic"
+                @activate-magic="handleActivateMagic"
                 @toggle-3d="toggle3D"
                 @open-chat="openChat"
                 @open-toolbox="openToolbox"

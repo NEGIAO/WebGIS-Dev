@@ -357,7 +357,7 @@ const fetchModels = async () => {
     }
   } catch (error) {
     modelHint.value = `❌ 获取失败: ${error.message}`;
-    console.error('获取模型列表失败:', error);
+    message.error('获取模型列表失败:', error);
   } finally {
     isFetchingModels.value = false;
   }
@@ -413,7 +413,7 @@ const sendMessage = async () => {
     }
 
     // 每次发送前先刷新模型并优先选择可用且更经济的模型
-    await refreshAndChooseEconomyModel();
+    //await refreshAndChooseEconomyModel();
 
     const locationContextText = await buildFirstMessageLocationContext();
 
@@ -522,7 +522,7 @@ const sendMessage = async () => {
                 messages.value[assistantMsgIndex].content = fullContent;
                 scrollToBottom();
               } catch (e) {
-                console.warn("Parse error", e);
+                message.warning("Parse error", e);
               }
             }
           }

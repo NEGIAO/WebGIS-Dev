@@ -9,12 +9,14 @@
 
         <div class="controls">
             <div class="menu-host" ref="menuHostRef">
+                <!-- 原有的菜单 -->
                 <button class="nav-btn" @click="toggleToolMenu" title="菜单项">
                     <span class="btn-icon">📋</span>
                     <span class="btn-text">菜单</span>
                 </button>
                 <div v-if="showToolMenu" class="floating-menu">
-                    <button class="menu-item" @click="handleOpenToolbox">🛠️ 工具箱</button>
+                    <!-- ... -->
+                    <button class="menu-item" @click="handleOpenToolbox">🛠️ 图层管理</button>
                     <button class="menu-item" @click="handleOpenBusPlanner">🚌 公交规划</button>
                     <button class="menu-item" @click="handleOpenDrivePlanner">🚗 驾车规划</button>
 
@@ -55,10 +57,34 @@
                 <span class="btn-text">3D视图</span>
             </button>
 
-            <button class="nav-btn magic-btn" @click="handleToggleMagic" title="开启魔法特效">
-                <span class="btn-icon">✨</span>
-                <span class="btn-text">特效</span>
-            </button>
+            <!-- 魔法特效菜单 -->
+            <div class="menu-host" ref="magicMenuHostRef">
+                <button class="nav-btn magic-btn" @click="toggleMagicMenu" title="魔法特效选项">
+                    <span class="btn-icon">✨</span>
+                    <span class="btn-text">特效</span>
+                </button>
+                <div v-if="showMagicMenu" class="floating-menu">
+                    <button class="menu-item" @click="handleActivateMagic('fluid')" title="流体动力学烟雾">
+                        <span class="menu-item-icon">💨</span> 流体烟雾
+                    </button>
+                    <button class="menu-item" @click="handleActivateMagic('gravity')" title="动态引力场网络">
+                        <span class="menu-item-icon">🌌</span> 引力场
+                    </button>
+                    <button class="menu-item" @click="handleActivateMagic('void')" title="时空扭曲维度塌陷">
+                        <span class="menu-item-icon">🌀</span> 维度塌陷
+                    </button>
+                    <button class="menu-item" @click="handleActivateMagic('wave')" title="量子相干与干涉波">
+                        <span class="menu-item-icon">🌊</span> 量子波
+                    </button>
+                    <button class="menu-item highlight-magic" @click="handleActivateMagic('singularity')" title="引力奇点与元球流体">
+                        <span class="menu-item-icon">🌑</span> 黑洞引力
+                    </button>
+                    <div class="menu-divider"></div>
+                    <button class="menu-item magic-close-btn" @click="handleActivateMagic('off')">
+                        <span class="menu-item-icon">❌</span> 关闭特效
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -69,6 +95,7 @@ import { useMessage } from '../composables/useMessage';
 
 const emit = defineEmits([
     'toggle-magic',
+    'activate-magic', // 发送特定的魔法特效
     'toggle-3d',
     'open-chat',
     'open-toolbox',
@@ -79,7 +106,9 @@ const emit = defineEmits([
 ]);
 
 const showToolMenu = ref(false);
+const showMagicMenu = ref(false);
 const menuHostRef = ref(null);
+const magicMenuHostRef = ref(null);
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -122,13 +151,20 @@ function handleToggle3D() {
     emit('toggle-3d');
 }
 
-function handleToggleMagic() {
+function toggleMagicMenu() {
+    showMagicMenu.value = !showMagicMenu.value;
+    showToolMenu.value = false;
+}
+
+function handleActivateMagic(effectName) {
+    showMagicMenu.value = false;
     emit('activate-feature', { key: 'magic', label: '特效' });
-    emit('toggle-magic');
+    emit('activate-magic', effectName);
 }
 
 function toggleToolMenu() {
     showToolMenu.value = !showToolMenu.value;
+    showMagicMenu.value = false;
 }
 
 function handleJump(location) {
@@ -147,9 +183,12 @@ function handleJump(location) {
 }
 
 function handleDocumentClick(event) {
-    if (!showToolMenu.value) return;
-    if (menuHostRef.value?.contains(event.target)) return;
-    showToolMenu.value = false;
+    if (showToolMenu.value && !menuHostRef.value?.contains(event.target)) {
+        showToolMenu.value = false;
+    }
+    if (showMagicMenu.value && !magicMenuHostRef.value?.contains(event.target)) {
+        showMagicMenu.value = false;
+    }
 }
 
 function canUseNativeShare() {
@@ -218,7 +257,7 @@ async function handleShareView() {
         }
         message.success('✅ 视角链接已复制，快去分享吧！');
     } catch (error) {
-        console.error('分享链接复制失败', error);
+        message.error('分享链接复制失败', error);
         message.error('复制失败，请手动从地址栏复制链接');
     }
 }
@@ -306,7 +345,7 @@ onBeforeUnmount(() => {
     right: 0;
     top: calc(100% + 8px);
     min-width: 168px;
-    background: rgba(37, 117, 67, 0.88);
+    background: #438a45d1;
     border-radius: 10px;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
     border: 1px solid rgba(255, 255, 255, 0.18);
@@ -390,6 +429,21 @@ onBeforeUnmount(() => {
     background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 105, 180, 0.2));
     border-color: rgba(255, 215, 0, 0.4);
     text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+}
+
+.highlight-magic {
+    color: #ff9800;
+    font-weight: bold;
+}
+.highlight-magic:hover {
+    background: rgba(255, 152, 0, 0.15) !important;
+}
+
+.magic-close-btn {
+    color: #ff4d4f;
+}
+.magic-close-btn:hover {
+    background: rgba(255, 77, 79, 0.15) !important;
 }
 
 @media (max-width: 768px) {

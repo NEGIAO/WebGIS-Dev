@@ -95,7 +95,7 @@ async function bootCesium() {
       message.error('天地图地形加载失败，请检查 token 或网络。', { closable: true });
     }
   } catch (error) {
-    console.error('Cesium 运行时加载失败', error);
+    message.error('Cesium 运行时加载失败', error);
     message.error('Cesium 初始化失败，请检查网络环境。', { closable: true });
   }
 }
@@ -254,7 +254,7 @@ function initOfficialTerrain() {
   );
 
   if (!window.Cesium?.GeoTerrainProvider) {
-    console.error('GeoTerrainProvider 不存在，插件未正确加载。');
+    message.error('GeoTerrainProvider 不存在，插件未正确加载。');
     return false;
   }
 
@@ -263,7 +263,7 @@ function initOfficialTerrain() {
     viewer.scene.globe.depthTestAgainstTerrain = true;
     return true;
   } catch (error) {
-    console.error('GeoTerrainProvider 初始化失败', error);
+    message.error('GeoTerrainProvider 初始化失败', error);
     return false;
   }
 }
@@ -372,7 +372,7 @@ async function loadCustomTileset() {
     // --- 修改结束 ---
 
   } catch (error) {
-    console.error(`加载模型失败: ${error}`);
+    message.error(`加载模型失败: ${error}`);
     message.error('加载3D模型失败，可能是网络原因无法访问 GitHub 资源。', { closable: true, duration: 6500 });
   }
 }

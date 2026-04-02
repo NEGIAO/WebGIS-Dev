@@ -395,7 +395,7 @@ async function copyLayerCoordinates(layer) {
         }
         message.success(`已复制经纬度：${text}`);
     } catch (error) {
-        console.error('copy coordinates failed', error);
+        message.error('copy coordinates failed', error);
         message.error('复制失败，请稍后重试');
     }
 }

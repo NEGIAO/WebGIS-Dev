@@ -117,7 +117,7 @@ function bootstrapWhenReady() {
         startRealtimeSampling(viewer, Cesium);
         message.success('高级视觉效果已启用。');
       } catch (error) {
-        console.error('高级视觉效果初始化失败', error);
+        message.error('高级视觉效果初始化失败', error);
         message.warning('高级视觉效果部分初始化失败，已自动降级。', { closable: true });
       }
       return;
@@ -176,7 +176,7 @@ function initRenderErrorGuard(viewer) {
 
   scene.rethrowRenderErrors = false;
   renderErrorListener = scene.renderError.addEventListener((_scene, error) => {
-    console.error('Cesium 渲染异常，已触发降级保护', error);
+    message.error('Cesium 渲染异常，已触发降级保护', error);
     degradeEffectsAfterRenderError();
 
     if (!hasRenderErrorNotified) {
