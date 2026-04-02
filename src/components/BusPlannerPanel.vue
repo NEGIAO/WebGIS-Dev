@@ -115,6 +115,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
+import { useMessage } from '../composables/useMessage';
+
+const message = useMessage();
+
 
 interface TransitStation {
     name: string;
@@ -441,7 +445,7 @@ async function startTransitPlan() {
         selectedStepIndex.value = -1;
         debugInfo.value.status = 'error';
         debugInfo.value.message = hint || rawMessage || '公交规划失败';
-        console.error('[BusPlanner Debug] 规划失败:', err);
+        message.error('[BusPlanner Debug] 规划失败:', err);
     } finally {
         planning.value = false;
     }

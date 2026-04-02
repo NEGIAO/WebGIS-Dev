@@ -234,7 +234,7 @@ const copyCurrentCoordinate = async () => {
         try {
             document.execCommand('copy');
         } catch (err) {
-            console.error('无法执行复制命令:', err);
+            message.error('无法执行复制命令:', err);
         }
         
         document.body.removeChild(fallbackInput);

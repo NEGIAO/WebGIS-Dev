@@ -281,7 +281,7 @@ export function useLayerDataImport({
 
                 return payload;
             } catch (err) {
-                console.warn('Raster sample failed', err);
+                message.warn('Raster sample failed', err);
             }
         }
 
@@ -297,7 +297,7 @@ export function useLayerDataImport({
         try {
             return transformExtent(extent, sourceProjection, viewProjection);
         } catch (err) {
-            console.warn('Extent projection transform failed, fallback to original extent', err);
+            message.warn('Extent projection transform failed, fallback to original extent', err);
             return extent;
         }
     }
@@ -822,7 +822,7 @@ export function useLayerDataImport({
             : (dispatched.packet ? [dispatched.packet] : []);
 
         const detectedCount = Number(dispatched?.summary?.detectedDatasets ?? packets.length);
-        console.info(`已识别到 ${detectedCount} 个数据集，正在同步导入...`);
+        message.info(`已识别到 ${detectedCount} 个数据集，正在同步导入...`);
 
         if (!packets.length) {
             throw new Error('未找到可用 GIS 数据');

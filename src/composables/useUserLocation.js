@@ -29,7 +29,7 @@ export function useUserLocation({
             isDomestic.value = isDom;
             return { isDomestic: isDom };
         } catch (e) {
-            console.warn('IP locale detect failed', e);
+            message.warn('IP locale detect failed', e);
             isDomestic.value = false;
             return { isDomestic: false };
         }
@@ -77,7 +77,7 @@ export function useUserLocation({
             const pos = await getCurrentLocation();
             updateUserPosition(pos, true);
         } catch (err) {
-            console.warn('定位失败:', err.message);
+            message.warn('定位失败:', err.message);
             message.error('无法获取您的位置，请确保允许定位权限。', { closable: true, duration: 6000 });
         }
     }
