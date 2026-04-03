@@ -12,7 +12,8 @@
         :key="item.id"
         class="toast-item"
         :class="[
-          `toast-${item.type}`,
+          `toast-${resolveVisualType(item.type)}`,
+          { 'toast-soup': item.type === 'soup' },
           {
             clickable: item.closable !== false,
             'toast-item-collapsing': isCollapsing(item.id)
@@ -24,7 +25,7 @@
       >
         <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
         <div class="toast-content">
-          <div class="toast-title">{{ getTypeTitle(item.type) }}</div>
+          <div v-if="shouldShowTitle(item)" class="toast-title">{{ getTypeTitle(item.type) }}</div>
           <div class="toast-text">{{ item.text }}</div>
         </div>
         <button
@@ -86,10 +87,20 @@ const cssVars = {
 };
 
 // --- 原有逻辑 ---
+function resolveVisualType(type) {
+  if (type === 'soup') return 'info';
+  return type;
+}
+
+function shouldShowTitle(item) {
+  return item?.showTitle !== false && item?.type !== 'soup';
+}
+
 function getTypeIcon(type) {
   if (type === 'success') return '✓';
   if (type === 'error') return '!';
   if (type === 'warning') return '⚠';
+  if (type === 'soup') return '🥣';
   return 'i';
 }
 
@@ -97,6 +108,7 @@ function getTypeTitle(type) {
   if (type === 'success') return '成功';
   if (type === 'error') return '错误';
   if (type === 'warning') return '警告';
+  if (type === 'soup') return '鸡汤';
   return '提示';
 }
 </script>
@@ -221,6 +233,8 @@ function getTypeTitle(type) {
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.7);
   word-break: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .toast-close {
