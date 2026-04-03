@@ -9,6 +9,8 @@
  * - 鼠标特效
  */
 import { ref, reactive, defineAsyncComponent } from 'vue';
+import { useMessage } from '../composables/useMessage';
+const message = useMessage();
 
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
@@ -77,6 +79,7 @@ function toggleSidePanel() {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
+    message.soup();
 }
 
 /** 打开 AI 聊天面板 */
