@@ -138,7 +138,7 @@
  */
 import { ref, computed } from 'vue';
 import ChatPanelContent from './ChatPanelContent.vue';
-import ToolboxPanel from './ToolboxPanel.vue';
+import ToolboxPanel from './TOCPanel.vue';
 import BusPlannerPanel from './BusPlannerPanel.vue';
 import DrivingPlannerPanel from './DrivingPlannerPanel.vue';
 import Message from './Message.vue';

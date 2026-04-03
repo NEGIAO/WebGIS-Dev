@@ -1,16 +1,16 @@
-﻿# 校园 WebGIS（HENU 地理科学学院）
-[查看部署效果（个人主页）](https://negiao.github.io/WebGIS_henu_trials_5_28_vue3/#/home)
-[查看部署效果（国内访问快）](https://negiao-pages.share.connect.posit.cloud/WebGIS/index.html)
+﻿# NEGIAO's WebGIS（HENU 地理科学学院）
+[查看部署效果（个人主页）](https://negiao.github.io/WebGIS-Dev/#/register)
+[查看部署效果（国内）](https://negiao-pages.share.connect.posit.cloud/WebGIS/index.html)
 
 
-基于 Vue 3 + Vite + OpenLayers 构建的校园 WebGIS 项目，聚焦河南大学地理科学学院教学区。通过互动地图与新闻侧栏联动，帮助访客快速了解地环院的空间位置、校园风貌与最新资讯。
+基于 Vue 3 + Vite + OpenLayers 构建的 WebGIS 项目，历经多次优化迭代，现已发展成为一个功能丰富、架构清晰的WebGIS平台。项目采用模块化组件设计，集成了 AI 助手、三维地球、Cesium电影级视觉效果、丰富多样的底图、鹰眼视图、实时坐标显示、视角 URL 同步、图层管理、矢量、栅格数据导入等多项核心功能，满足了从基础地图浏览到数据管理的多样化需求，未来将逐步扩展空间分析等诸多高级功能，坚持每日更新迭代。
 
-> 本项目最初为大二下学期课程作业，开发周期为 5 月 28 日至 6 月 13 日。交付后曾暂时搁置，直至 11 月 28 日在专业知识与实践经验积累之下，再次启动并持续迭代优化。
+> 本项目最初为大二下学期课程作业，开发周期为 5 月 28 日至 6 月 13 日。交付后曾暂时搁置，直至 11 月 28 日在专业知识与实践经验积累之下，再次启动并持续迭代优化，至今（文档撰写日期）已达到 V2.8.0 版本，实用性和美观度均有显著提升。
 
 ## 主要特性
 
 - 🤖 **AI 助手**：集成大语言模型（SiliconFlow API），提供智能 GIS 问答服务，支持流式对话与历史记录清除。
-- 🌍 **三维地球**：集成 CesiumJS，支持高精度地形渲染与智能地形源切换（境内天地图/境外 World Terrain）。
+- 🌍 **三维地球**：集成 CesiumJS，支持高精度地形渲染，仅初步展示三维效果。
 - 🎬 **电影级 3D 视觉管线**：3D 模式下按需启用高级后处理（高度雾、HBAO、Tilt-Shift、动态大气 + Bloom）与 ECharts 实时交互图表。
 - 📌 **多底图切换**：支持本地瓦片、天地图影像/矢量、ESRI 影像、OpenStreetMap、高德地图等服务。
 - 🗺️ **鹰眼视图**：左上角实时显示当前视图范围，支持展开/折叠，提供全局视野。
@@ -59,7 +59,7 @@ npm run build
 
 ### 本地瓦片资源
 
-将离线瓦片放置在 `public/tiles/{z}/{x}/{y}.png` 目录下即可自动读取。如果构建后的站点无法访问本地瓦片，应用会自动回退到在线底图并在界面提示。
+将瓦片放置在 `public/tiles/{z}/{x}/{y}.png` 目录下即可自动读取，可使用QGIS自主制作切片，也可贡献到项目中供他人使用。
 
 ## 目录结构
 
@@ -82,7 +82,7 @@ WebGIS_Dev/
 │   │   ├── BusPlannerPanel.vue         # 公交路径规划
 │   │   ├── CesiumAdvancedEffects.vue   # Cesium 视觉处理与 ECharts 动态图表（3D 启用后懒加载）
 │   │   ├── CesiumContainer.vue         # Cesium 2D/3D 切换承接组件
-│   │   ├── ChatPanelContent.vue        # AI 助手会话
+│   │   ├── ChatPanelContent.vue        # AI 助手会话（API曾被盗用，已禁用，请自行配置API KEY进行使用）
 │   │   ├── DrivingPlannerPanel.vue     # 驾车、步行路径规划
 │   │   ├── LayerControlPanel.vue       # 地图右上控制面板：搜索 API、底图切换、TOC 拖拽、经纬网开关（底图选项导入自 useBasemapManager）
 │   │   ├── LayerPanel.vue              # ⭐TOC构建器：扁平图层→递归树结构、文件夹级联、拖拽排序、标注管理
