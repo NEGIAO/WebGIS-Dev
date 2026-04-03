@@ -20,7 +20,7 @@
 - 🧭 **状态持久化**：支持通过 URL 参数（经纬度、缩放、图层索引）实时共享地图状态，可直接复现同一底图与视角。
 - 🖼️ **缩略图预览**：放大到指定级别即可查看校园缩略图，点击可放大查看并同步侧栏展示。
 - 📰 **动态资讯**：新闻标题、配图、摘要与外链均可一键获取，便于追踪学院动态。
-- 🎨 **图层管理**：支持 TOC 分组管理（绘制/上传/搜索结果）、拖拽排序、多图层叠加、自定义底图 URL。
+- 🎨 **图层管理**：TOC 递归树结构，支持无限深度嵌套、文件夹级联、拖拽排序；ArcGIS 风格右键菜单与悬停按钮，集成查看/仅显示/属性/样式/标注/删除等 8 项操作。
 - 🧩 **矢量数据导入**：支持 GeoJSON/KML/KMZ/SHP（含 ZIP）导入与样式编辑。
 - 📦 **容器批处理导入**：支持 Zip/KMZ 容器内多格式、多数据集全量扫描与批量导入，单数据集失败不影响其余数据继续加载。
 - 🛰️ **栅格数据导入**：支持 TIFF/GeoTIFF（单波段与多波段）加载、NoData 透明处理与单波段色带拉伸。
@@ -66,8 +66,8 @@ npm run build
 ```text
 WebGIS_Dev/
 ├── public/
-│   ├── images/                         # 站点静态图片与图标资源目录
-│   ├── tiles/                          # 本地离线瓦片目录，按 public/tiles/{z}/{x}/{y}.png 组织，供 local 底图直接读取
+│   ├── images/                         # 站点静态资源目录
+│   ├── tiles/                          # QGIS自制瓦片目录，按 public/tiles/{z}/{x}/{y}.png 组织，便于贡献和自用
 │   ├── min-enhanced.js                 # 第三方统计脚本延迟加载入口
 │   ├── ol.js / ol.css                  # OpenLayers 备用静态资源
 │   └── favicon.ico                     # 网站图标
@@ -75,37 +75,39 @@ WebGIS_Dev/
 │   ├── App.vue                         # 根组件，承载 RouterView 输出
 │   ├── main.js                         # Vue 应用启动入口，挂载 Pinia、Router 与全局消息宿主
 │   ├── api/
-│   │   ├── locationSearch.js           # [路由/网络封装] 多服务地名检索封装与结果标准化
+│   │   ├── locationSearch.js           # [路由/网络封装] 3种服务地名检索封装与结果标准化
 │   │   └── map.js                      # [天地图 API] 天地图/高德检索与逆地理编码请求封装
 │   ├── components/
-│   │   ├── AttributeTable.vue          # 属性查询结果表格展示与字段浏览
-│   │   ├── BusPlannerPanel.vue         # 公交路径规划输入、方案列表与步骤交互面板
-│   │   ├── CesiumAdvancedEffects.vue   # Cesium 电影级视觉后处理与 ECharts 动态图表（仅 3D 启用后懒加载）
-│   │   ├── CesiumContainer.vue         # Cesium 三维场景容器与 2D/3D 切换承接组件
-│   │   ├── ChatPanelContent.vue        # AI 助手会话内容、输入与流式响应展示
-│   │   ├── DrivingPlannerPanel.vue     # 驾车/步行路径规划输入、方案展示与步骤联动
-│   │   ├── LayerControlPanel.vue       # 顶部 GIS 控制面板：搜索 API、底图切换、TOC 拖拽、经纬网开关（底图选项导入自 useBasemapManager）
-│   │   ├── LocationSearch.vue          # 地名搜索输入框、服务菜单与结果列表组件
-│   │   ├── MagicCursor.vue             # 页面特效鼠标与粒子动画效果组件
-│   │   ├── MapContainer.vue            # ⭐ 地图最小外壳（Shell）：地图初始化 + 全局编排 + 组件桥接（底图配置导入自 useBasemapManager）
-│   │   ├── MapEasterEgg.vue            # 彩蛋图片模块：区域判定、像素定位、缩略图和 Lightbox（Teleport）
-│   │   ├── MapControlsBar.vue          # 底部地图控制条，显示实时坐标、缩放级别、修改坐标与主页按钮
-│   │   ├── MapPointPickerCard.vue      # 地图起终点拾取状态卡片与操作引导
-│   │   ├── Message.vue                 # 全局 Toast/Message 消息组件（默认 2s 自动关闭，悬停暂停计时，点击立即关闭）
-│   │   ├── SidePanel.vue               # 右侧侧栏总控容器（资讯/聊天/工具箱/公交/驾车）
-│   │   ├── ToolboxPanel.vue            # 图层管理、数据导入、绘制工具与样式编辑面板
-│   │   ├── TopBar.vue                  # 顶部导航栏，负责菜单、分享、快捷跳转与功能入口
+│   │   ├── AttributeTable.vue          # 属性查询结果
+│   │   ├── BusPlannerPanel.vue         # 公交路径规划
+│   │   ├── CesiumAdvancedEffects.vue   # Cesium 视觉处理与 ECharts 动态图表（3D 启用后懒加载）
+│   │   ├── CesiumContainer.vue         # Cesium 2D/3D 切换承接组件
+│   │   ├── ChatPanelContent.vue        # AI 助手会话
+│   │   ├── DrivingPlannerPanel.vue     # 驾车、步行路径规划
+│   │   ├── LayerControlPanel.vue       # 地图右上控制面板：搜索 API、底图切换、TOC 拖拽、经纬网开关（底图选项导入自 useBasemapManager）
+│   │   ├── LayerPanel.vue              # ⭐TOC构建器：扁平图层→递归树结构、文件夹级联、拖拽排序、标注管理
+│   │   ├── LocationSearch.vue          # 地名关键词搜索
+│   │   ├── MagicCursor.vue             # 首屏特效按钮
+│   │   ├── MapContainer.vue            # ⭐ 主地图：地图初始化 + 全局编排 + 组件桥接（底图配置导入自 useBasemapManager）
+│   │   ├── MapEasterEgg.vue            # 彩蛋图片模块：区域判定、像素定位、缩略图和 Lightbox（课上作业）
+│   │   ├── MapControlsBar.vue          # 地图右下控制面板（显示实时坐标、缩放级别、修改坐标与home按钮）
+│   │   ├── MapPointPickerCard.vue      # 地图起终点拾取
+│   │   ├── Message.vue                 # 全局消息通知组件（灵动岛效果）
+│   │   ├── SidePanel.vue               # 右侧总控容器（资讯/聊天/图层管理/公交/驾车）
+│   │   ├── ToolboxPanel.vue            # TOC/绘制/样式面板
+│   │   ├── TOCTreeItem.vue             # ⭐ [V2.8+] 递归树节点组件：右键菜单、悬停按钮、级联可见性、Teleport 固定菜单
+│   │   ├── TopBar.vue                  # 导航栏（菜单、分享、快捷跳转与功能入口）
 │   │   └── icons/
-│   │       ├── IconCommunity.vue       # 社区入口图标组件
-│   │       ├── IconDocumentation.vue   # 文档入口图标组件
-│   │       ├── IconEcosystem.vue       # 生态入口图标组件
-│   │       ├── IconSupport.vue         # 支持入口图标组件
-│   │       └── IconTooling.vue         # 工具入口图标组件
+│   │       ├── IconCommunity.vue       # 社区入口图标组件(未启用)
+│   │       ├── IconDocumentation.vue   # 文档入口图标组件(未启用)
+│   │       ├── IconEcosystem.vue       # 生态入口图标组件(未启用)
+│   │       ├── IconSupport.vue         # 支持入口图标组件(未启用)
+│   │       └── IconTooling.vue         # 工具入口图标组件(未启用)
 │   ├── composables/
 │   │   ├── useAreaImageOverlay.js      # 区域图片覆盖逻辑旧入口（已由 MapEasterEgg 组件化承接）
-│   │   ├── useBasemapManager.ts        # ⭐ 底图配置管理集中器：27 种在线底图、URL_LAYER_OPTIONS、BASEMAP_OPTIONS、Google 主机选择
-│   │   ├── useGisLoader.js             # GIS 导入调度兼容入口（JavaScript 版本）
-│   │   ├── useGisLoader.ts             # GIS 导入调度主实现（TypeScript 版本）
+│   │   ├── useBasemapManager.ts        # ⭐ 底图配置管理集中器,提供底图列表、URL_LAYER_OPTIONS、BASEMAP_OPTIONS 与 Google 主机选择逻辑
+│   │   ├── useGisLoader.js             # 数据导入调度兼容入口（JavaScript 版本）
+│   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
@@ -113,9 +115,11 @@ WebGIS_Dev/
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
-│   │   ├── useStyleEditor.js           # 图层样式编辑器状态与模板控制
-│   │   ├── useUserLayerActions.js      # 用户图层动作集合（显隐、删除、排序、缩放、样式）
+│   │   ├── useStyleEditor.js           # 图层样式模板
+│   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   └── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
+│   ├── constants/
+│   │   ├── goldenSoupQuores.js         # 心灵鸡汤句库，治愈你的伤痛
 │   ├── router/
 │   │   └── index.js                    # Vue Router 路由表与 hash history 配置
 │   ├── utils/
@@ -138,8 +142,8 @@ WebGIS_Dev/
 │   │           ├── shpParser.ts        # [文件解析] SHP/DBF/SHX 同名组装与解析器
 │   │           └── tifLoader.ts        # [文件解析] TIFF/GeoTIFF 栅格载入与波段读取
 │   └── views/
-│       ├── HomeView.vue                # 主页面布局编排与 MapContainer/SidePanel 事件中枢
-│       └── RegisterView.vue            # 注册与登录演示页面
+│       ├── HomeView.vue                # 主页面布局编排与 MapContainer/SidePanel 事件中枢(一分为三)
+│       └── RegisterView.vue            # 登录页面
 ├── package.json                        # 脚本与依赖配置
 ├── vite.config.js                      # Vite 构建与部署配置
 └── README.md                           # 项目说明文档
@@ -173,6 +177,28 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.8.0 (2026-04-03)
+#### 🌳 图层 TOC 升级为递归树结构 + ArcGIS 风格上下文菜单
+* **递归树组件**：
+    * 新增 **TOCTreeItem.vue** 递归树节点组件（294 行），支持无限深度嵌套、文件夹展开/折叠。
+    * 文件夹复选框支持三态（全选/部分选/未选），点击自动级联控制所有子层级可见性。
+    * 完整的生命周期管理（onMounted/onBeforeUnmount）负责全局指针、滚动事件监听与菜单关闭。
+* **树构建容器**：
+    * 新增 **LayerPanel.vue** 树转换逻辑（280 行），自动将扁平的四层图层组（绘制/上传/搜索/未命名）转换为层级结构。
+    * 在线文件夹自动应用特殊标记（如 `[draw_virtual]` 当数据存在但列表为空时自动占位）。
+    * 拖拽排序、标注可见性、图层删除等操作优化为树节点事件驱动模式。
+* **ArcGIS 风格上下文菜单**：
+    * 右键单击或悬停"•••"按钮弹出固定位置菜单，包含 8 项操作（查看/仅显示/属性/样式/标注/复制/缩放/删除）。
+    * 菜单自动贴边（normalizeMenuPosition），点击外部、滚动、窗口 resize 时自动关闭。
+    * 使用 Teleport 避免层叠上下文干扰，完整键盘与鼠标事件处理。
+* **事件契约保持**：
+    * 新增 **handleLayerTreeAction** 派发器（ToolboxPanel 43 行），将树内部事件（toggle-folder-visibility、zoom-layer 等）精确映射到原有 9 种 emit 类型。
+    * 上传面板保持不变，确保下游组件（HomeView、MapContainer）无感知迁移。
+* **性能优化**：
+    * 移除 81 行冗余的扁平卡片模板，替换为 13 行树组件调用，代码减少 68 行。
+    * 移除 4 个重复的格式化辅助函数（formatLayerDisplayName、formatFileSize 等），集中在 LayerPanel。
+    * Pinia 图层状态、事件链路完整保持，无需调整下游存储或控制器。
 
 ### V2.7.2 (2026-04-01)
 #### 🎬 Cesium 高级视觉组件化（按需加载）

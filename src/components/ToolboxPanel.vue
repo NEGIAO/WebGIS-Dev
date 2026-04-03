@@ -3,12 +3,12 @@
         <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
         <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input" @change="handleDirectoryUpload" />
 
-        <!-- <div class="header">
+        <div class="header">
             <div>
                 <div class="title">工具箱</div>
             </div>
             <button class="ghost-btn" @click="emit('close')">关闭</button>
-        </div> -->
+        </div>
 
         <div class="tabs">
             <button class="tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
@@ -19,81 +19,16 @@
         <AttributeTable />
 
         <div v-if="activeTab === 'layers'" class="panel-scroll">
-            <div v-if="hasDrawCard" class="card">
-                <div class="card-title">绘制图层</div>
-                <div class="layer-item" v-if="drawLayers.length" v-for="layer in drawLayers" :key="layer.id"
-                    @click.left="emit('view-layer', layer.id)" @contextmenu.prevent="emit('solo-layer', layer.id)">
-                    <div class="layer-main">
-                        <label class="row-label layer-title-wrap">
-                            <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                            <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
-                        </label>
-                        <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
-
-                        <div class="layer-actions icon-row">
-                            <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
-                            <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
-                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
-                            <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="layer-item" v-else @click.left="emit('interaction', 'ViewGraphics')" @contextmenu.prevent="emit('interaction', 'ZoomToGraphics')">
-                    <div class="layer-main">
-                        <div class="row-label layer-title-wrap">
-                            <span class="name">绘制图形集合</span>
-                        </div>
-                        <span class="feature-badge">{{ overview.drawCount || 0 }}</span>
-
-                        <div class="layer-actions icon-row">
-                            <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget('draw')">✦</button>
-                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('interaction', 'ZoomToGraphics')">◎</button>
-                            <button class="action-icon-btn danger" data-tip="清空" @click.stop="emit('interaction', 'Clear')">✕</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div v-if="routeLayers.length" class="card">
-                <div class="card-title">路线图层</div>
-                <div class="layer-item" v-if="routeLayers.length" v-for="layer in routeLayers" :key="layer.id" @click.left="emit('view-layer', layer.id)">
-                    <div class="layer-main">
-                        <label class="row-label layer-title-wrap">
-                            <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                            <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
-                        </label>
-                        <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
-
-                        <div class="layer-actions icon-row">
-                            <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
-                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
-                            <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div v-if="searchLayers.length" class="card">
-                <div class="card-title">搜索结果图层</div>
-                <div class="layer-item" v-if="searchLayers.length" v-for="layer in searchLayers" :key="layer.id" @click.left="emit('view-layer', layer.id)">
-                    <div class="layer-main">
-                        <label class="row-label layer-title-wrap">
-                            <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                            <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
-                        </label>
-                        <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
-
-                        <div class="layer-actions icon-row">
-                            <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
-                            <button class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
-                            <button class="action-icon-btn" :data-tip="layer.labelVisible ? '标注关' : '标注开'" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">🏷</button>
-                            <button v-if="layerHasCoordinates(layer)" class="action-icon-btn" data-tip="复制坐标" @click.stop="copyLayerCoordinates(layer)">⌖</button>
-                            <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
-                            <button class="action-icon-btn danger" data-tip="清空" @click.stop="emit('remove-layer', layer.id)">✕</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <LayerPanel
+                :draw-layers="drawLayers"
+                :route-layers="routeLayers"
+                :search-layers="searchLayers"
+                :upload-layers="uploadLayers"
+                :has-draw-card="hasDrawCard"
+                :overview="overview"
+                :is-raster-layer="isRasterLayer"
+                @action="handleLayerTreeAction"
+            />
 
             <div class="upload-zone-wrap">
                 <div
@@ -138,37 +73,6 @@
                         <div v-if="uploadProgressView.message" class="upload-progress-message">{{ uploadProgressView.message }}</div>
                     </div>
                 </div>
-
-                <div v-if="uploadLayers.length" class="layer-list">
-                    <div
-                        v-for="layer in uploadLayers"
-                        :key="layer.id"
-                        class="layer-item"
-                        draggable="true"
-                        @dragstart="onDragStart(layer.id)"
-                        @dragover.prevent
-                        @drop="onDrop(layer.id)"
-                        @click.left="emit('view-layer', layer.id)"
-                        @contextmenu.prevent="emit('solo-layer', layer.id)"
-                    >
-                        <div class="layer-main">
-                            <label class="row-label layer-title-wrap">
-                                <input type="checkbox" :checked="layer.visible" @change="emit('toggle-layer-visibility', { layerId: layer.id, visible: $event.target.checked })" />
-                                <span class="name" :title="formatLayerDisplayName(layer.name)">{{ formatLayerDisplayName(layer.name) }}</span>
-                            </label>
-                            <span class="feature-badge">{{ layer.featureCount || 0 }}</span>
-
-                            <div class="layer-actions icon-row">
-                                <button v-if="hasAttributeFeatures(layer)" class="action-icon-btn" data-tip="属性表" @click.stop="openAttributeTable(layer.id)">📊</button>
-                                <button v-if="!isRasterLayer(layer)" class="action-icon-btn" data-tip="样式" @click.stop="setStyleTarget(layer.id)">✦</button>
-                                <button v-if="canToggleLabel(layer)" class="action-icon-btn" :data-tip="layer.labelVisible ? '标注关' : '标注开'" @click.stop="emit('toggle-layer-label-visibility', { layerId: layer.id, visible: !layer.labelVisible })">🏷</button>
-                                <button class="action-icon-btn" data-tip="缩放" @click.stop="emit('zoom-layer', layer.id)">◎</button>
-                                <button class="action-icon-btn danger" data-tip="移除" @click.stop="emit('remove-layer', layer.id)">✕</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div v-else class="empty">暂无上传图层</div>
             </div>
         </div>
 
@@ -260,6 +164,7 @@ import { useGisLoader } from '../composables/useGisLoader';
 import { useLayerStore } from '../composables/useLayerStore';
 import { useStyleEditor } from '../composables/useStyleEditor';
 import AttributeTable from './AttributeTable.vue';
+import LayerPanel from './LayerPanel.vue';
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
@@ -284,7 +189,9 @@ const emit = defineEmits([
     'toggle-layer-label-visibility',
     'apply-style-template',
     'update-draw-style',
-    'update-layer-style'
+    'update-layer-style',
+    'highlight-attribute-feature',
+    'zoom-attribute-feature'
 ]);
 
 const fileInputRef = ref(null);
@@ -296,7 +203,6 @@ const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
 const isUploadDragging = ref(false);
 const MB = 1024 * 1024;
-const WARN_FILE_SIZE_MB = 50;
 const MAX_FILE_SIZE_MB = 200;
 
 const styleTemplates = styleEditor.styleTemplates;
@@ -362,16 +268,8 @@ const uploadProgressLabel = computed(() => {
     return '等待导入';
 });
 
-function canToggleLabel(layer) {
-    return !!layer?.autoLabel;
-}
-
-function layerHasCoordinates(layer) {
-    return Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude);
-}
-
 async function copyLayerCoordinates(layer) {
-    if (!layerHasCoordinates(layer)) {
+    if (!(Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude))) {
         message.warning('当前图层未提供可复制的经纬度信息');
         return;
     }
@@ -404,10 +302,6 @@ function isRasterLayer(layer) {
     return layerStore.isRasterLayer(layer);
 }
 
-function formatLayerDisplayName(name) {
-    return layerStore.formatLayerDisplayName(name);
-}
-
 watch(
     () => props.userLayers,
     (layers) => {
@@ -437,17 +331,6 @@ function triggerFileUpload() {
 
 function triggerFolderUpload() {
     folderInputRef.value?.click();
-}
-
-function formatFileSize(fileSizeInBytes) {
-    if (!Number.isFinite(fileSizeInBytes) || fileSizeInBytes < 0) return '未知';
-    if (fileSizeInBytes < 1024) return `${fileSizeInBytes} B`;
-    if (fileSizeInBytes < MB) return `${(fileSizeInBytes / 1024).toFixed(1)} KB`;
-    return `${(fileSizeInBytes / MB).toFixed(1)} MB`;
-}
-
-function hasAttributeFeatures(layer) {
-    return Array.isArray(layer?.features) && layer.features.length > 0;
 }
 
 function openAttributeTable(layerId) {
@@ -519,6 +402,52 @@ function onDrop(targetLayerId) {
     layerStore.onDrop(targetLayerId);
 }
 
+function handleLayerTreeAction(evt) {
+    const type = evt?.type;
+    if (!type) return;
+
+    if (type === 'layer-selected') {
+        // 图层行被选中，可用于高亮地图上的图层等操作
+        emit('layer-selected', evt.layerId);
+        return;
+    }
+    if (type === 'open-attribute-table') {
+        openAttributeTable(evt.layerId);
+        return;
+    }
+    if (type === 'set-style-target') {
+        setStyleTarget(evt.layerId);
+        return;
+    }
+    if (type === 'copy-layer-coordinates') {
+        copyLayerCoordinates(evt.layer);
+        return;
+    }
+    if (type === 'drag-layer-start') {
+        onDragStart(evt.layerId);
+        return;
+    }
+    if (type === 'drop-layer') {
+        onDrop(evt.layerId);
+        return;
+    }
+    if (type === 'toggle-layer-visibility') {
+        emit('toggle-layer-visibility', { layerId: evt.layerId, visible: !!evt.visible });
+        return;
+    }
+    if (type === 'toggle-layer-label-visibility') {
+        emit('toggle-layer-label-visibility', { layerId: evt.layerId, visible: !!evt.visible });
+        return;
+    }
+    if (type === 'zoom-layer' || type === 'view-layer' || type === 'remove-layer' || type === 'solo-layer') {
+        emit(type, evt.layerId);
+        return;
+    }
+    if (type === 'interaction') {
+        emit('interaction', evt.interaction);
+    }
+}
+
 function setStyleTarget(layerId) {
     layerStore.setStyleTarget(layerId);
     activeTab.value = 'style';
@@ -530,13 +459,28 @@ function activateDrawTool(tool) {
 }
 
 function applyTemplate(templateId) {
-    if (selectedEditLayerId.value === 'draw') {
+    // 1. 获取当前选中的目标 ID
+    const targetId = selectedEditLayerId.value;
+    if (!targetId) return; // 如果没有选中任何图层，直接返回
+
+    // 2. 更新本地 styleForm (让界面底部的颜色选择器实时同步变色)
+    const targetTemplate = styleTemplates.find(t => t.id === templateId);
+    if (targetTemplate) {
+        styleForm.value.fillColor = targetTemplate.color;
+        // 建议：描边色通常可以设为和填充色一致，或者加深一点
+        styleForm.value.strokeColor = targetTemplate.color; 
+    }
+
+    // 3. 执行原有的业务 emit (保持与父组件/地图引擎的通信)
+    if (targetId === 'draw') {
         emit('apply-style-template', { target: 'draw', templateId });
-        return;
+    } else {
+        emit('apply-style-template', { target: 'layer', layerId: targetId, templateId });
     }
-    if (selectedEditLayerId.value) {
-        emit('apply-style-template', { target: 'layer', layerId: selectedEditLayerId.value, templateId });
-    }
+
+    // 4. 【核心修复】关键：立即调用 applyStyle() 触发地图渲染
+    // 这样用户点击模板按钮后，地图会立刻变色，不再需要二次点击“应用样式”
+    applyStyle();
 }
 
 function applyStyle() {
@@ -868,7 +812,12 @@ function applyStyle() {
     gap: 8px;
 }
 
-.actions-row,
+.actions-row{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 20px;
+}
 .template-row,
 .field-grid {
     display: grid;

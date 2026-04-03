@@ -297,6 +297,11 @@ function closeQueryPanel() {
     showQueryPanel.value = false;
 }
 
+/** 处理图层被选中事件 */
+function handleLayerSelected(layerId) {
+    mapContainerRef.value?.highlightUserLayer?.(layerId);
+}
+
 /** 处理要素选中事件 */
 function handleFeatureSelected(properties) {
     if (!properties) return;
@@ -403,6 +408,7 @@ function handleFeatureSelected(properties) {
                     @update-draw-style="handleUpdateDrawStyle" @update-layer-style="handleUpdateLayerStyle"
                     @highlight-attribute-feature="handleHighlightAttributeFeature"
                     @zoom-attribute-feature="handleZoomAttributeFeature"
+                    @layer-selected="handleLayerSelected"
                     @switch-tab="handleSwitchSidePanelTab"
                     @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat">
