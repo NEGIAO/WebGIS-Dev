@@ -674,7 +674,8 @@ async function runDeferredStartupTasks() {
 
     const routeViewState = parseUrlToState();
     if (Number.isFinite(routeViewState?.lng) && Number.isFinite(routeViewState?.lat)) {
-        message.success(`欢迎来到NEGIAO分享的地点${routeViewState.lng.toFixed(6)},${routeViewState.lat.toFixed(6)}，正在加载地图...`, { duration: 1000 });
+        message.success(`欢迎来到NEGIAO分享的地点${routeViewState.lng.toFixed(6)},${routeViewState.lat.toFixed(6)}，正在加载地图...`, { duration: 2000 });
+        message.soup();
         return;
     }
 
@@ -1148,7 +1149,7 @@ const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
         // 获取下一个兜底选项（仅用于自动切换，默认底图适用）
         getNextFallbackOption: () => {
             if (fallbackAttempts >= maxFallbackAttempts) {
-                message.warn(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
+                message.warning(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
                 return null;
             }
             
@@ -1207,11 +1208,11 @@ const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {})
         if (isSwitched) return;
         isSwitched = true;
 
-        message.warn(`[底图降级] ${layerId} - ${reason}`);
+        message.warning(`[底图降级] ${layerId} - ${reason}`);
         
         // 如果仅限于提醒（非默认底图），则不切换，仅通知
         if (fallbackManager.isNotifyOnly()) {
-            message.warn(`[底图监测] ${layerId} 非默认底图，仅提醒用户: ${reason}`);
+            message.warning(`[底图监测] ${layerId} 非默认底图，仅提醒用户: ${reason}`);
             if (triggerCallback) triggerCallback();
             cleanUp();
             return;
@@ -1226,7 +1227,7 @@ const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {})
             return;
         }
         
-        message.warn(`[底图降级] ${layerId} 已切换至 ${nextOption}`);
+        message.warning(`[底图降级] ${layerId} 已切换至 ${nextOption}`);
         
         // 通知调用方需要切换底图
         if (callbacks.onLayerSwitchRequired) {
@@ -1285,7 +1286,7 @@ const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {})
         
         // 策略2：累计错误过多时发出警告
         if (totalErrors === WARNING_THRESHOLD) {
-            message.warn(`[底图监测] ${layerId} 累计错误${totalErrors}个，建议检查网络`);
+            message.warning(`[底图监测] ${layerId} 累计错误${totalErrors}个，建议检查网络`);
         }
 
         if (loadingTilesCount <= 0) {

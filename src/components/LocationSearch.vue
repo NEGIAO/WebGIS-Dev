@@ -127,7 +127,7 @@ async function runSearch(targetPage = 1) {
         items.value = Array.isArray(result?.items) ? result.items : [];
         total.value = Number(result?.total || 0);
     } catch (error) {
-        message.warn('location search failed', error);
+        message.warning('location search failed', error);
         items.value = [];
         total.value = 0;
     } finally {

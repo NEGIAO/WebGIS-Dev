@@ -31,6 +31,10 @@
                         <span class="menu-item-icon">❤️</span>
                         <span class="menu-item-label">{{ loc.label }}</span>
                     </button>
+                    <div class="menu-divider"></div>
+                    <button class="menu-item" @click="handleSoup" title="来点鸡汤">
+                        <span class="menu-item-icon">🥣</span> 鸡汤
+                    </button>
                 </div>
             </div>
 
@@ -180,6 +184,11 @@ function handleJump(location) {
 
     // 统一交给 MapContainer 的视图更新入口处理：飞行 + URL replace。
     emit('jump-view', lng, lat, z, layerIndex);
+}
+
+function handleSoup() {
+    showToolMenu.value = false;
+    message.soup();
 }
 
 function handleDocumentClick(event) {
