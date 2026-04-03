@@ -1127,7 +1127,7 @@ async function validateBaseLayerSwitch(layerId, layer, checkTimeoutMs = 3000) {
             } else if (hasError) {
                 resolve({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
             } else {
-                resolve({ success: false, reason: '未能获取底图数据（网络无响应或超时）' });
+                resolve({ success: false, reason: '未能获取底图数据（需梯子或超时）' });
             }
         }, checkTimeoutMs);
     });
@@ -1212,7 +1212,7 @@ const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {})
         
         // 如果仅限于提醒（非默认底图），则不切换，仅通知
         if (fallbackManager.isNotifyOnly()) {
-            message.warning(`[底图监测] ${layerId} 非默认底图，仅提醒用户: ${reason}`);
+            message.warning(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`);
             if (triggerCallback) triggerCallback();
             cleanUp();
             return;
@@ -1353,7 +1353,11 @@ function initMap() {
                     message.error(`${item.id}服务异常，建议手动切换底图。`);
                 }
             },
-            onSuccess: () => message.success(`${item.id}加载成功。`),
+            onSuccess: () => {
+                    if (isDefaultBaseLayer) {
+                        message.success(`${item.id}加载成功。`)
+                    }
+                },
             onLayerSwitchRequired: (nextOption, reason) => {
                 // 仅默认底图会触发此回调
                 selectedLayer.value = nextOption;
@@ -1426,17 +1430,19 @@ function initMap() {
     // 1.3 控件
     // 从 LAYER_CONFIGS 中获取 Google 配置，使鹰眼视图与坐标系保持一致
     const controls = defaultControls({ zoom: false }).extend([
-        new ScaleLine({ units: 'metric', bar: true, minWidth: 100 }),
+        new ScaleLine({ 
+            units: 'metric',
+            bar: true, 
+            minWidth: 100 ,
+            // className: 'ol-scaleline main-scale'//绑定类名，控制css
+        }),
+
         // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
-
         //bug：待修复,临时使用
-
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
-
             //原始逻辑，直接使用Google，但是不稳定，容易崩
             //切换为稳定的天地图
-
             // layers: [
             //     new TileLayer({
             //         source: googleConfig ? googleConfig.createSource() : new XYZ({
@@ -1445,7 +1451,6 @@ function initMap() {
             //         })
             // })
             // ],
-
             layers: [
                 new TileLayer({
                     source: new XYZ({
@@ -2435,6 +2440,9 @@ defineExpose({
     color: black;
     border: 1px solid white;
 }
+
+/* 比例尺 */
+
 
 /* 鹰眼视图样式 */
 :deep(.ol-custom-overviewmap) {

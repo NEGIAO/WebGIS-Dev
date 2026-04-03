@@ -26,7 +26,7 @@
         <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
         <div class="toast-content">
           <div v-if="shouldShowTitle(item)" class="toast-title">{{ getTypeTitle(item.type) }}</div>
-          <div class="toast-text">{{ item.text }}</div>
+          <div class="toast-text" v-html="formatTextWithFonts(item.text)"></div>
         </div>
         <button
           v-if="item.closable !== false"
@@ -110,6 +110,19 @@ function getTypeTitle(type) {
   if (type === 'warning') return '警告';
   if (type === 'soup') return '鸡汤';
   return '提示';
+}
+
+// 根据字符类型（中英文）分别包装，以便 CSS 中区分字体
+function formatTextWithFonts(text) {
+  return text.replace(/([a-zA-Z]+)|([\u4E00-\u9FFF]+)|(.)/g, (match, en, zh) => {
+    if (en) {
+      return `<span class="toast-text-en">${en}</span>`;
+    }
+    if (zh) {
+      return `<span class="toast-text-zh">${zh}</span>`;
+    }
+    return match; // 保留其他字符（包括换行符、数字、符号等）
+  });
 }
 </script>
 
@@ -222,6 +235,7 @@ function getTypeTitle(type) {
 }
 
 .toast-title {
+  font-family: 'Cinzel', 'Times New Roman', serif;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -229,12 +243,27 @@ function getTypeTitle(type) {
 }
 
 .toast-text {
-  font-size: 13px;
+  font-size: 14px;
+  font-family: 'Cinzel', 'Times New Roman', serif;
   line-height: 1.4;
   color: rgba(255, 255, 255, 0.7);
   word-break: break-word;
   white-space: pre-wrap;
   overflow-wrap: break-word;
+}
+
+/* 中文字体 - 使用思源黑体或微软雅黑等衬线字体 */
+.toast-text-zh {
+  font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', 'PingFang SC', sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* 英文字体 - 使用更现代的无衬线字体 */
+.toast-text-en {
+  font-family: 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .toast-close {
