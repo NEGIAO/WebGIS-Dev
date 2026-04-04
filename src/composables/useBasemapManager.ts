@@ -164,6 +164,39 @@ export const buildTiandituUrl = (pathAndQuery: string, tiandituTk: string): stri
     return `https://${TILE_HOSTS.tianditu}${pathAndQuery}${separator}tk=${tiandituTk}`;
 };
 
+// ========== 非标准切片通用工具 ==========
+export type TileYNormalizeMode = 'auto' | 'direct' | 'invert-tms' | 'ol-negative';
+
+/**
+ * 统一归一化 Y 坐标。
+ * - auto: 若 rawY < 0 视为 OL 负号坐标，按 -rawY-1 转换；否则直接返回
+ * - direct: 直接使用 rawY
+ * - invert-tms: TMS -> XYZ，使用 (2^z - 1 - rawY)
+ * - ol-negative: 强制按 OL 负号坐标转换（-rawY-1）
+ */
+export function normalizeTileY(z: number, rawY: number, mode: TileYNormalizeMode = 'auto'): number {
+    if (!Number.isFinite(rawY)) return rawY;
+
+    if (mode === 'direct') return rawY;
+    if (mode === 'invert-tms') return (1 << z) - 1 - rawY;
+    if (mode === 'ol-negative') return -rawY - 1;
+
+    return rawY < 0 ? (-rawY - 1) : rawY;
+}
+
+/** Bing/QuadTree 常用：将 xyz 转 quadkey。 */
+export function toQuadKey(x: number, y: number, z: number): string {
+    let quadKey = '';
+    for (let i = z; i > 0; i--) {
+        let digit = 0;
+        const mask = 1 << (i - 1);
+        if ((x & mask) !== 0) digit += 1;
+        if ((y & mask) !== 0) digit += 2;
+        quadKey += digit.toString();
+    }
+    return quadKey;
+}
+
 // ========== 非标准 XYZ 图源适配器 ==========
 //配置非标准xyz图源示例文件： NON_STANDARD_XYZ_ADAPTER_EXAMPLES
 /**
@@ -185,14 +218,9 @@ export const NON_STANDARD_XYZ_ADAPTERS = {
             // Maps-for-free 非标准格式: z{z}/row{y}/{z}_{x}-{y}.jpg
             const z = tileCoord[0];
             const x = tileCoord[1];
-            const y = tileCoord[2];
-            
-            // ========== 调试日志 ==========
-            const url = `https://maps-for-free.com/layer/relief/z${z}/row${y}/${z}_${x}-${y}.jpg`;
-            // console.log(`[MFF-Relief] tileCoord=[${tileCoord[0]}, ${tileCoord[1]}, ${tileCoord[2]}] → z=${z}, x=${x}, y=${y}`);
-            // console.log(`[MFF-Relief] URL: ${url}`);
-            
-            return url;
+            // 经验值：MFF 当前环境通常为 direct；若某些运行环境出现负值，auto 会自动归一化。
+            const y = normalizeTileY(z, tileCoord[2], 'auto');
+            return `https://maps-for-free.com/layer/relief/z${z}/row${y}/${z}_${x}-${y}.jpg`;
         }
     },
     // 扩展示例：可继续添加其他非标准格式
@@ -232,12 +260,7 @@ export function createXYZSourceFromUrl(url: string): XYZ {
     const nonStandard = detectNonStandardXYZ(url);
     if (nonStandard) {
         return new XYZ({
-            tileUrlFunction: (tileCoord: number[]) => {
-                const generatedUrl = nonStandard.urlFunction(tileCoord);
-                // 在调用 tileUrlFunction 时也记录日志
-                // console.warn(`[XYZ-Source] 非标准格式 "${nonStandard.name}" - tileCoord:`, tileCoord, '生成的URL:', generatedUrl);
-                return generatedUrl;
-            },
+            tileUrlFunction: nonStandard.urlFunction,
             tilePixelRatio: 1
         });
     }
@@ -392,32 +415,22 @@ export function createLayerConfigs(normBase = '/', tiandituTk = '', customUrl = 
  */
 export function debugMFFCoordinates() {
     console.group('🔍 [调试] Maps-for-Free 坐标转换验证');
-    
+
     // 用户提供的正确坐标示例
     const correctExample = { z: 14, x: 13393, y: 9885 };
     console.log('✓ 已知正确坐标 (来自用户):', correctExample);
-    
-    // 测试当前的转换公式
-    console.log('\n【转换公式】:');
-    console.log('const y_mff = (2^z - 1) - tileCoord[2]');
-    console.log('即: y_mff = (2^' + correctExample.z + ' - 1) - tileCoord[2]');
-    
-    // 如果正确答案是 y_mff = 9885，反推 tileCoord[2]
+
+    // 反推 rawY，用于不同策略比对
     const z = correctExample.z;
     const maxTiles = Math.pow(2, z);
     const tileCoord2 = (maxTiles - 1) - correctExample.y;
-    
-    console.log('\n【反推计算】:');
-    console.log('如果 y_mff = ' + correctExample.y + ' (正确值)');
-    console.log('那么 tileCoord[2] = (' + maxTiles + ' - 1) - ' + correctExample.y + ' = ' + tileCoord2);
-    
-    // 验证：用反推的 tileCoord 再次计算
-    const verifyY = (maxTiles - 1) - tileCoord2;
-    console.log('\n【验证】:');
-    console.log('用 tileCoord[2]=' + tileCoord2 + ' 重新计算:');
-    console.log('y_mff = (' + maxTiles + ' - 1) - ' + tileCoord2 + ' = ' + verifyY);
-    console.log('✓ 验证通过: ' + (verifyY === correctExample.y ? '✅ 公式正确!' : '❌ 公式错误'));
-    
+
+    console.log('\n【策略对比】');
+    console.log('rawY(推算) =', tileCoord2);
+    console.log('direct:', normalizeTileY(z, tileCoord2, 'direct'));
+    console.log('invert-tms:', normalizeTileY(z, tileCoord2, 'invert-tms'));
+    console.log('ol-negative:', normalizeTileY(z, -tileCoord2 - 1, 'ol-negative'));
+
     // 输出标准格式的完整 URL
     const mffUrl = `https://maps-for-free.com/layer/relief/z${correctExample.z}/row${correctExample.y}/${correctExample.z}_${correctExample.x}-${correctExample.y}.jpg`;
     console.log('\n【完整 URL】:');
@@ -444,6 +457,8 @@ export function useBasemapManager() {
         resolvePreferredGoogleHost,
         buildGoogleTileUrl,
         buildTiandituUrl,
+        normalizeTileY,
+        toQuadKey,
         createLayerConfigs,
         createXYZSourceFromUrl,
         detectNonStandardXYZ,
