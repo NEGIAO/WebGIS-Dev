@@ -48,7 +48,9 @@ import {
     resolvePreferredGoogleHost,
     buildGoogleTileUrl,
     buildTiandituUrl,
-    createLayerConfigs
+    createLayerConfigs,
+    createXYZSourceFromUrl,
+    detectNonStandardXYZ
 } from '../composables/useBasemapManager';
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
@@ -1788,9 +1790,15 @@ function resetView() {
 function loadCustomMap() {
     if (!customMapUrl.value) return;
     try {
-        customSource = new XYZ({
-            url: customMapUrl.value
-        });
+        // 使用智能 URL 转换：自动检测非标准格式并应用转换
+        customSource = createXYZSourceFromUrl(customMapUrl.value);
+        
+        // 检测并显示图源类型信息
+        const detected = detectNonStandardXYZ(customMapUrl.value);
+        if (detected) {
+            message.success(`自动识别非标准图源: ${detected.name}`);
+        }
+        
         // 更新 custom 层的 source
         if (layerInstances['custom']) {
             layerInstances['custom'].setSource(customSource);
@@ -1802,7 +1810,7 @@ function loadCustomMap() {
             }
         }
     } catch (e) {
-        message.error('URL格式错误或无法解析');
+        message.error(`加载自定义图源失败: ${e.message || 'URL格式错误或无法解析'}`);
     }
 }
 

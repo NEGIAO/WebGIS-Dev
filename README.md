@@ -105,6 +105,7 @@ WebGIS_Dev/
 │   │       └── IconTooling.vue         # 工具入口图标组件(未启用)
 │   ├── composables/
 │   │   ├── useAreaImageOverlay.js      # 区域图片覆盖逻辑旧入口（已由 MapEasterEgg 组件化承接）
+│   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts        # 非标准xyz切片配置示例文件，供新增非标准图源参考
 │   │   ├── useBasemapManager.ts        # ⭐ 底图配置管理集中器,提供底图列表、URL_LAYER_OPTIONS、BASEMAP_OPTIONS 与 Google 主机选择逻辑
 │   │   ├── useGisLoader.js             # 数据导入调度兼容入口（JavaScript 版本）
 │   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）

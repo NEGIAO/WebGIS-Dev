@@ -46,6 +46,9 @@
                 placeholder="输入 https://.../{z}/{x}/{y}.png"
             />
             <button class="custom-url-btn" @click="submitCustomUrl" title="加载">ok</button>
+            <div v-if="detectedNonStandardInfo" class="detected-format-hint">
+                ✓ 已识别: {{ detectedNonStandardInfo.name }}
+            </div>
         </div>
 
         <Teleport to="body">
@@ -84,7 +87,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { toLonLat } from 'ol/proj';
 import { fetchLocationResultsByService } from '../api/locationSearch';
-import { BASEMAP_OPTIONS } from '../composables/useBasemapManager';
+import { BASEMAP_OPTIONS, detectNonStandardXYZ } from '../composables/useBasemapManager';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
@@ -161,6 +164,7 @@ const showLayerManager = ref(false);
 const draggingIndex = ref(-1);
 const customUrlInput = ref(props.customMapUrl || '');
 const layerManagerAnchor = ref({ top: 0, left: 0 });
+const detectedNonStandardInfo = ref(null); // 检测到的非标准格式信息
 
 const PANEL_WIDTH = 200;
 
@@ -184,6 +188,23 @@ watch(
         customUrlInput.value = value || '';
     }
 );
+
+/**
+ * 监听自定义 URL 输入，实时检测非标准格式
+ */
+watch(customUrlInput, (newUrl) => {
+    if (!newUrl || !newUrl.trim()) {
+        detectedNonStandardInfo.value = null;
+        return;
+    }
+    
+    const detected = detectNonStandardXYZ(newUrl);
+    if (detected) {
+        detectedNonStandardInfo.value = detected;
+    } else {
+        detectedNonStandardInfo.value = null;
+    }
+});
 
 function handleLayerChange(event) {
     emit('change-layer', {
@@ -392,6 +413,19 @@ onBeforeUnmount(() => {
     color: #14532d;
     cursor: pointer;
     font-size: 12px;
+}
+
+.detected-format-hint {
+    margin-top: 4px;
+    padding: 4px 6px;
+    background: rgba(34, 197, 94, 0.15);
+    border-left: 3px solid #22c55e;
+    border-radius: 2px;
+    color: #bbf7d0;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .layer-manage-btn {
