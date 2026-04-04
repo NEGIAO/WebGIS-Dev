@@ -1,13 +1,62 @@
-import { get as getProjection } from 'ol/proj';
-import { register } from 'ol/proj/proj4';
+import { get as getProjection } from 'ol/proj.js';
+import { register } from 'ol/proj/proj4.js';
 import proj4 from 'proj4';
 
 const EPSG_PATTERN = /(EPSG[:/]{1,2})(\d{3,6})/i;
 const URN_EPSG_PATTERN = /urn:ogc:def:crs:EPSG::(\d{3,6})/i;
+const WKT_PATTERN = /\b(PROJCS|PROJCRS|GEOGCS|GEODCRS)\s*\[/i;
+
+const WKT_NAME_TO_EPSG = [
+    { pattern: /WGS[_\s]?84|GCS_WGS_1984/i, epsg: 'EPSG:4326' },
+    { pattern: /WEB[_\s]?MERCATOR|PSEUDO[-_\s]?MERCATOR/i, epsg: 'EPSG:3857' },
+    { pattern: /CGCS[_\s]?2000|GCS_CHINA_GEODETIC_COORDINATE_SYSTEM_2000/i, epsg: 'EPSG:4490' },
+    { pattern: /XI'?AN[_\s]?1980|GCS_XIAN_1980/i, epsg: 'EPSG:4610' },
+    { pattern: /BEIJING[_\s]?1954|GCS_BEIJING_1954/i, epsg: 'EPSG:4214' }
+];
 
 const COMMON_DEFS = {
     'EPSG:4490': '+proj=longlat +ellps=GRS80 +no_defs +type=crs'
 };
+
+function extractWktAuthorityCode(text = '') {
+    const input = String(text || '');
+    if (!input) return null;
+
+    const isProjectedWkt = /\bPROJ(?:CS|CRS)\s*\[/i.test(input);
+    const allMatches = Array.from(input.matchAll(/AUTHORITY\s*\[\s*["']EPSG["']\s*,\s*["']?(\d{3,6})["']?\s*\]/gi));
+    if (!allMatches.length) return null;
+
+    if (isProjectedWkt) {
+        const geographicCodes = new Set([4326, 4490, 4610, 4214]);
+        const projected = allMatches
+            .map((item) => Number(item?.[1]))
+            .find((value) => Number.isFinite(value) && !geographicCodes.has(value));
+        if (Number.isFinite(projected)) return `EPSG:${projected}`;
+    }
+
+    const preferred = allMatches
+        .map((item) => Number(item?.[1]))
+        .find((value) => Number.isFinite(value) && value > 4000 && value !== 4326);
+    if (Number.isFinite(preferred)) return `EPSG:${preferred}`;
+
+    return `EPSG:${allMatches[0][1]}`;
+}
+
+function extractWktProjectionName(text = '') {
+    const input = String(text || '');
+    if (!input) return '';
+    return input.match(/PROJ(?:CS|CRS)\s*\[\s*["']([^"']+)["']/i)?.[1] || '';
+}
+
+function makeProjectionTag(prefix, value) {
+    const normalized = String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    if (!normalized) return null;
+    return `${prefix}:${normalized}`;
+}
 
 export function normalizeProjectionCode(input) {
     if (!input) return null;
@@ -38,6 +87,20 @@ export function normalizeProjectionCode(input) {
 
     const text = String(input).trim();
     if (!text) return null;
+
+    if (WKT_PATTERN.test(text)) {
+        const fromAuthority = extractWktAuthorityCode(text);
+        if (fromAuthority) return fromAuthority;
+
+        for (const entry of WKT_NAME_TO_EPSG) {
+            if (entry.pattern.test(text)) return entry.epsg;
+        }
+
+        const projectionName = extractWktProjectionName(text);
+        if (projectionName) {
+            return makeProjectionTag('PCS', projectionName);
+        }
+    }
 
     const urnMatch = text.match(URN_EPSG_PATTERN);
     if (urnMatch) return `EPSG:${urnMatch[1]}`;
@@ -146,6 +209,10 @@ export function detectProjectionFromKmlText(kmlText) {
 export async function ensureProjectionAvailable(projectionCode) {
     const normalized = normalizeProjectionCode(projectionCode);
     if (!normalized) return null;
+
+    if (normalized.startsWith('PCS:') || normalized.startsWith('GCS:')) {
+        return null;
+    }
 
     if (getProjection(normalized)) {
         return normalized;
