@@ -1,250 +1,190 @@
 /**
- * 非标准 XYZ 图源 - 适配器扩展示例
- * 
- * 本文件演示如何为新的非标准图源格式添加适配器。
- * 实际使用时，应将代码添加到 useBasemapManager.ts 中。
+ * 非标准 XYZ 图源适配示例全集。
+ *
+ * 目标：把“目录分级 / TMS / QuadKey / 百度 / 动态 API / GCJ-02”这类非标准图源
+ * 统一转成可在 OpenLayers tileUrlFunction 中直接调用的方案。
  */
 
-// ============================================================================
-// 示例 1：Maps-for-free 地形浮雕（已实现）
-// ============================================================================
-const example1_mapsForFreeRelief = {
-    'maps-for-free-relief': {
-        pattern: /maps-for-free\.com.*relief/i,
-        name: '地形浮雕(MFF)',
-        urlFunction: (tileCoord: number[]) => {
-            // Maps-for-free 的非标准格式：z{z}/row{y}/{z}_{x}-{y}.jpg
-            // 标准 XYZ 坐标转换：OL内部坐标 → Web Mercator 标准坐标
-            const z = tileCoord[0];    // 缩放级别（保持不变）
-            const x = tileCoord[1];    // 横坐标（保持不变）
-            // 正确的 XYZ 转换公式：y = (2^z - 1) - tileCoord[2]
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            return `https://maps-for-free.com/layer/relief/z${z}/row${y}/${z}_${x}-${y}.jpg`;
-        }
+export type YMode = 'auto' | 'direct' | 'invert-tms' | 'ol-negative';
+
+export interface NormalizedTileContext {
+    z: number;
+    x: number;
+    y: number;
+    rawY: number;
+}
+
+/**
+ * 标准化 tileCoord。
+ * OpenLayers 的 tileUrlFunction 入参是 [z, x, rawY]，rawY 在不同服务里语义可能不同。
+ */
+export function normalizeTileContext(tileCoord: number[], yMode: YMode = 'auto'): NormalizedTileContext {
+    const z = tileCoord[0];
+    const x = tileCoord[1];
+    const rawY = tileCoord[2];
+
+    let y = rawY;
+    if (yMode === 'invert-tms') y = (1 << z) - 1 - rawY;
+    else if (yMode === 'ol-negative') y = -rawY - 1;
+    else if (yMode === 'auto') y = rawY < 0 ? (-rawY - 1) : rawY;
+
+    return { z, x, y, rawY };
+}
+
+/** QuadKey 编码（Bing 常用）。 */
+export function toQuadKey(x: number, y: number, z: number): string {
+    let quadKey = '';
+    for (let i = z; i > 0; i--) {
+        let digit = 0;
+        const mask = 1 << (i - 1);
+        if ((x & mask) !== 0) digit += 1;
+        if ((y & mask) !== 0) digit += 2;
+        quadKey += digit.toString();
+    }
+    return quadKey;
+}
+
+/**
+ * 百度瓦片常见偏移（示意）：
+ * - 以中心为原点，x/y 需要平移到百度内部坐标。
+ * - 不同百度服务参数可能略有差异，需以实际服务文档为准。
+ */
+export function toBaiduTileXY(x: number, y: number, z: number): { x: number; y: number } {
+    const offset = 1 << (z - 1);
+    return {
+        x: x - offset,
+        y: offset - y - 1
+    };
+}
+
+export interface NonStandardRecipe {
+    type: 'directory-structured' | 'tms' | 'quadkey' | 'baidu' | 'dynamic-api' | 'gcj-02';
+    title: string;
+    keyPoints: string[];
+    buildUrl: (tileCoord: number[]) => string;
+}
+
+/**
+ * 1) 目录分级型（Maps-for-free 等）
+ * URL 示例：.../z{z}/row{y}/{z}_{x}-{y}.jpg
+ */
+const directoryStructuredRecipe: NonStandardRecipe = {
+    type: 'directory-structured',
+    title: '目录分级型（Directory Structured）',
+    keyPoints: [
+        '不能依赖 {x}-{y} 模板推断，建议统一用 tileUrlFunction 拼接。',
+        '优先输出日志确认 z/x/y 与请求 URL 一致。',
+        '必要时增加 row 偏移量做局部校正。'
+    ],
+    buildUrl: (tileCoord) => {
+        const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
+        return `https://maps-for-free.com/layer/relief/z${z}/row${y}/${z}_${x}-${y}.jpg`;
     }
 };
 
-// ============================================================================
-// 示例 2：某个虚构的地图服务 - 自定义坐标格式
-// ============================================================================
-const example2_customMapService = {
-    'custom-map-service': {
-        // 匹配规则：包含 "custom-map.io" 且包含 "tiles" 路径
-        pattern: /custom-map\.io.*tiles/i,
-        name: '自定义地图服务',
-        urlFunction: (tileCoord: number[]) => {
-            // 假设这个服务的格式是：/map/layer/z/col/row.jpg
-            // 其中 col 和 row 需要特殊计算
-            const z = tileCoord[0];
-            const x = tileCoord[1];
-            // 使用标准 XYZ 转换公式
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            
-            const col = x;
-            const row = y;
-            
-            return `https://custom-map.io/tiles/map/layer/${z}/${col}/${row}.jpg`;
-        }
+/** 2) TMS 规范型：y 轴反转。 */
+const tmsRecipe: NonStandardRecipe = {
+    type: 'tms',
+    title: 'TMS 规范型（OSGeo Standard）',
+    keyPoints: [
+        '典型现象是地图上下颠倒。',
+        '核心转换：y = (2^z - 1) - y。',
+        '注意先确认当前 rawY 是哪种语义，再决定是否反转。'
+    ],
+    buildUrl: (tileCoord) => {
+        const { z, x, y } = normalizeTileContext(tileCoord, 'invert-tms');
+        return `https://example-tms.server/tiles/${z}/${x}/${y}.png`;
     }
 };
 
-// ============================================================================
-// 示例 3：OpenTopoMap 变体 - 带子域选择
-// ============================================================================
-const example3_openTopoMapVariant = {
-    'opentopomap-variant': {
-        pattern: /opentopomap-custom\.io/i,
-        name: 'OpenTopoMap 变体',
-        urlFunction: (tileCoord: number[]) => {
-            const z = tileCoord[0];
-            const x = tileCoord[1];
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            
-            // 某些服务通过子域选择来负载均衡
-            const subdomains = ['a', 'b', 'c'];
-            const subdomain = subdomains[(x + y) % subdomains.length];
-            
-            return `https://${subdomain}.opentopomap-custom.io/tiles/${z}/${x}/${y}.png`;
-        }
+/** 3) QuadKey 编码型：Bing。 */
+const quadKeyRecipe: NonStandardRecipe = {
+    type: 'quadkey',
+    title: 'QuadKey 编码型（Bing）',
+    keyPoints: [
+        'URL 不再是 z/x/y，而是单一 quadkey。',
+        '必须先拿到标准 xyz，再编码。',
+        '多子域时可用 x+y 做散列。'
+    ],
+    buildUrl: (tileCoord) => {
+        const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
+        const qk = toQuadKey(x, y, z);
+        return `https://t0.tiles.virtualearth.net/tiles/a${qk}.jpeg?g=1`;
     }
 };
 
-// ============================================================================
-// 示例 4：查询参数型 - 参数在 URL 中而非路径中
-// ============================================================================
-const example4_queryParamStyle = {
-    'query-param-tiles': {
-        pattern: /tileserver\.local.*\?.*query/i,
-        name: '参数式切片服务',
-        urlFunction: (tileCoord: number[]) => {
-            const z = tileCoord[0];
-            const x = tileCoord[1];
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            
-            // 某些服务将瓦片索引作为查询参数
-            return `https://tileserver.local/tile?z=${z}&x=${x}&y=${y}&format=png`;
-        }
+/** 4) 百度特殊切片。 */
+const baiduRecipe: NonStandardRecipe = {
+    type: 'baidu',
+    title: '百度地图特殊切片（Baidu Scheme）',
+    keyPoints: [
+        '百度与标准 Web Mercator 网格不兼容。',
+        '通常需自定义 TileGrid 与 resolutions。',
+        'x/y 往往还要做中心偏移。'
+    ],
+    buildUrl: (tileCoord) => {
+        const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
+        const bd = toBaiduTileXY(x, y, z);
+        return `https://online0.map.bdimg.com/onlinelabel/?qt=tile&x=${bd.x}&y=${bd.y}&z=${z}&styles=pl&scaler=1&p=1`;
     }
 };
 
-// ============================================================================
-// 示例 5：复杂坐标转换 - Bing Maps 风格的四叉树编码
-// ============================================================================
-const example5_quadtreeEncoding = {
-    'quadtree-tiles': {
-        pattern: /quadtree-service\.io/i,
-        name: '四叉树编码服务',
-        urlFunction: (tileCoord: number[]) => {
-            const z = tileCoord[0];
-            const x = tileCoord[1];
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            
-            // 某些服务（如 Bing）用四叉树编码代替 x/y
-            // 这里是简化的实现
-            let quadKey = '';
-            for (let i = z; i > 0; i--) {
-                quadKey += ((x >> (i - 1)) & 1) + (((y >> (i - 1)) & 1) << 1);
-            }
-            
-            return `https://quadtree-service.io/tiles/${quadKey}.png`;
-        }
+/** 5) 动态参数/API 请求型。 */
+const dynamicApiRecipe: NonStandardRecipe = {
+    type: 'dynamic-api',
+    title: '动态参数/API 请求型（Amap/GeoQ 等）',
+    keyPoints: [
+        '参数顺序、签名、token 可能影响返回。',
+        '建议统一在 URLSearchParams 中构造。',
+        '必要时加入随机因子或时间戳。'
+    ],
+    buildUrl: (tileCoord) => {
+        const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
+        const params = new URLSearchParams({
+            style: '8',
+            x: String(x),
+            y: String(y),
+            z: String(z)
+        });
+        return `https://webrd01.is.autonavi.com/appmaptile?${params.toString()}`;
     }
 };
 
-// ============================================================================
-// 示例 6：多层次路径 - 包含数据集和风格选择
-// ============================================================================
-const example6_multiLevelPath = {
-    'multi-level-tiles': {
-        pattern: /geo-server\.org\/api\/tiles/i,
-        name: '多层次瓦片服务',
-        urlFunction: (tileCoord: number[]) => {
-            const z = tileCoord[0];
-            const x = tileCoord[1];
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            
-            // 假设 URL 结构为：/api/tiles/dataset/style/z/x/y.pbf
-            // 这里硬编码 dataset 和 style，实际可通过上下文传入
-            const dataset = 'osm';
-            const style = 'default';
-            
-            return `https://geo-server.org/api/tiles/${dataset}/${style}/${z}/${x}/${y}.pbf`;
-        }
+/**
+ * 6) GCJ-02 切片适配（策略型，不是单一 URL 模式）。
+ * 核心问题是坐标基准不一致，而不是路径模板。
+ */
+const gcj02Recipe: NonStandardRecipe = {
+    type: 'gcj-02',
+    title: 'GCJ-02 切片适配（中国偏移系）',
+    keyPoints: [
+        '底图在 GCJ-02，矢量在 WGS84 时会整体错位。',
+        '方案A：矢量实时 WGS84->GCJ-02 再叠加。',
+        '方案B：服务端重切片/纠偏，输出 WGS84 对齐瓦片。',
+        '方案C：全链路统一到 GCJ-02（底图+叠加数据）。'
+    ],
+    buildUrl: (tileCoord) => {
+        const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
+        return `https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=${x}&y=${y}&z=${z}`;
     }
 };
 
-// ============================================================================
-// 示例 7：时间维度 - 动态气象数据
-// ============================================================================
-const example7_timeDynamicTiles = {
-    'weather-tiles': {
-        pattern: /weather-service\.io\/tiles/i,
-        name: '天气瓦片服务',
-        urlFunction: (tileCoord: number[]) => {
-            const z = tileCoord[0];
-            const x = tileCoord[1];
-            const y = (Math.pow(2, z) - 1) - tileCoord[2];
-            
-            // 某些气象服务包含时间戳
-            // 这里用当前小时的时间戳
-            const now = new Date();
-            const timestamp = Math.floor(now.getTime() / (3600000)) * 3600000;
-            
-            return `https://weather-service.io/tiles/${z}/${x}/${y}?time=${timestamp}`;
-        }
-    }
+export const NON_STANDARD_XYZ_SOLUTION_EXAMPLES: Record<string, NonStandardRecipe> = {
+    directoryStructuredRecipe,
+    tmsRecipe,
+    quadKeyRecipe,
+    baiduRecipe,
+    dynamicApiRecipe,
+    gcj02Recipe
 };
 
-// ============================================================================
-// 使用模式：如何集成到项目中
-// ============================================================================
-
-/*
-1. 在 useBasemapManager.ts 中找到 NON_STANDARD_XYZ_ADAPTERS 常量
-
-2. 按照上述示例添加新的适配器：
-
-export const NON_STANDARD_XYZ_ADAPTERS = {
-    'maps-for-free-relief': { ... },
-    
-    // 添加你的新适配器
-    'your-new-format': {
-        pattern: /your-pattern/i,
-        name: '显示名称',
-        urlFunction: (tileCoord) => { ... }
-    }
-};
-
-3. 框架会自动处理：
-   ✓ 自动检测用户输入的 URL
-   ✓ 显示"✓ 已识别"提示
-   ✓ 在加载时应用转换函数
-
-4. 可选：将新适配器添加到预设（BASEMAP_OPTIONS）中
-*/
-
-// ============================================================================
-// 坐标系详解
-// ============================================================================
-
-/*
-OpenLayers 使用内部坐标系统，传入的 tileCoord 格式为：
-  tileCoord = [z, x, y]
-  
-其中：
-  - z: 缩放级别（0-n，与标准相同）
-  - x: 从西向东的横坐标（与标准相同）
-  - y: **OL 内部坐标**，从北到南递增
-
-标准 XYZ Web Mercator 坐标转换：
-  standardY = (2^z - 1) - tileCoord[2]
-  
-原因：OL 的 y 坐标从北到南递增（0在北方），而标准 XYZ 也是这样，
-但 OL 内部 tileCoord[2] 需要通过倒置公式转换。
-
-示例（缩放级别 z=10 时，最多有 2^10 = 1024 行）：
-  OL tileCoord: [10,  512,     0]  →  标准 y: 1023
-  OL tileCoord: [10,  512,   512]  →  标准 y: 512
-  OL tileCoord: [10,  512,  1023]  →  标准 y: 0
-  
-这就是为什么所有非标准格式都有：
-  const y = (Math.pow(2, z) - 1) - tileCoord[2];
-  
-而不是错误的：
-  const y = -tileCoord[2] - 1;  // ❌ 这是错的！
-*/
-
-// ============================================================================
-// 常见错误及解决方案
-// ============================================================================
-
-/*
-❌ 错误 1：忘记转换 Y 坐标
-✅ 正确做法：const y = (Math.pow(2, z) - 1) - tileCoord[2];
-
-❌ 错误 2：正则表达式大小写敏感
-✅ 正确做法：pattern: /example\.com/i  // 加 'i' 标志
-
-❌ 错误 3：URL 中没有正确的占位符
-✅ 正确做法：检查 URL 中是否有 {z}, {x}, {y} 等
-
-❌ 错误 4：函数返回值不是字符串
-✅ 正确做法：确保 urlFunction 总是返回有效的 URL 字符串
-
-❌ 错误 5：CORS 问题
-✅ 解决方案：确认图源服务器允许跨域请求
-*/
-
-// ============================================================================
-// 导出示例集合
-// ============================================================================
-
-export const ADAPTER_EXAMPLES = {
-    example1_mapsForFreeRelief,
-    example2_customMapService,
-    example3_openTopoMapVariant,
-    example4_queryParamStyle,
-    example5_quadtreeEncoding,
-    example6_multiLevelPath,
-    example7_timeDynamicTiles
-};
+/**
+ * 标准 XYZ 基线：
+ * url = https://host/{z}/{x}/{y}.png
+ *
+ * 在 OpenLayers 中：
+ * new XYZ({ url: 'https://host/{z}/{x}/{y}.png' })
+ *
+ * 非标准时：
+ * new XYZ({ tileUrlFunction: (tileCoord) => customUrl })
+ */
