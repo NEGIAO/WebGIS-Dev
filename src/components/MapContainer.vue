@@ -46,11 +46,13 @@ import {
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
     resolvePreferredGoogleHost,
-    buildGoogleTileUrl,
-    buildTiandituUrl,
     createLayerConfigs,
     createXYZSourceFromUrl,
-    detectNonStandardXYZ
+    detectNonStandardXYZ,
+    resolvePresetLayerIds,
+    getBasemapOptionLabel,
+    getLayerCategory as getLayerCategoryById,
+    getLayerGroup as getLayerGroupById
 } from '../composables/useBasemapManager';
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
@@ -61,7 +63,7 @@ const message = useMessage();
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
 // URL_LAYER_OPTIONS：用于 URL 参数中的图层索引映射（与 BASEMAP_OPTIONS 对应）
-// createLayerConfigs：工厂函数，根据参数生成 27 种底图配置
+// createLayerConfigs：工厂函数，根据参数生成全部底图源配置
 // 使用全局共享的 Google 主机 ref，支持主机切换后的动态更新
 const activeGoogleTileHost = globalActiveGoogleTileHost;
 
@@ -588,6 +590,7 @@ const {
     layerListRef: layerList,
     layerInstances,
     layerConfigs: LAYER_CONFIGS,
+    resolveVisibleLayerIds: (layerId) => resolvePresetLayerIds(layerId),
     getLayerIndex: () => getLayerIndexById(selectedLayer.value),
     onLayerIndexChange: (layerIndex) => {
         const layerId = getLayerIdByIndex(layerIndex);
@@ -723,20 +726,14 @@ onUnmounted(() => {
 // [作用] 判断图层属于底图还是覆盖层。
 // [交互] 被 emitBaseLayersChange 与图层动作过滤逻辑调用。
 function getLayerCategory(layerId) {
-    if (['google', 'google_standard', 'google_clean', 'tianDiTu', 'tianDiTu_vec', 'esri', 'osm', 'amap', 'tengxun', 'esri_ocean', 'esri_terrain', 'esri_physical', 'esri_hillshade', 'esri_gray', 'yandex_sat', 'geoq_gray', 'geoq_hydro', 'local', 'custom'].includes(layerId)) {
-        return 'base';
-    }
-    return 'overlay';
+    return getLayerCategoryById(layerId);
 }
 
 // [隶属] 图层切换-底图分组
 // [作用] 为底图面板提供分组标签（影像/矢量/专题/注记）。
 // [交互] 被 emitBaseLayersChange 调用。
 function getLayerGroup(layerId) {
-    if (['google', 'tianDiTu', 'esri', 'yandex_sat'].includes(layerId)) return '影像';
-    if (['google_standard', 'google_clean', 'tianDiTu_vec', 'osm', 'amap', 'tengxun', 'geoq_gray', 'geoq_hydro'].includes(layerId)) return '矢量';
-    if (['esri_ocean', 'esri_terrain', 'esri_physical', 'esri_hillshade', 'esri_gray', 'local', 'custom'].includes(layerId)) return '专题';
-    return '注记';
+    return getLayerGroupById(layerId);
 }
 
 // [隶属] 图层切换-对外状态同步
@@ -1493,6 +1490,8 @@ function initMap() {
 
     // 1.6 监听底图切换 并验证切换结果（默认底图异常时自动兜底）
     watch(selectedLayer, async (val, prevVal) => {
+        const activeStack = resolvePresetLayerIds(val);
+
         switchLayerById(val, {
             onUpdated: () => emitBaseLayersChange()
         });
@@ -1514,7 +1513,12 @@ function initMap() {
                 const result = await validateBaseLayerSwitch(val, switchedLayer, 3000);
                 
                 if (result.success) {
-                    message.success(`已成功切换到${val}底图`);
+                    const optionLabel = getBasemapOptionLabel(val);
+                    if (activeStack.length > 1) {
+                        message.success(`已切换到${optionLabel}组合（${activeStack.join(' + ')}）`);
+                    } else {
+                        message.success(`已成功切换到${optionLabel}底图`);
+                    }
                 } else {
                     // 检查是否为默认底图（google）
                     const isDefaultBaseLayer = val === 'google';

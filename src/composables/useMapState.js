@@ -86,6 +86,7 @@ function parseHashQuery() {
  * @param {Object} [options.layerListRef] - 图层列表的 ref 对象
  * @param {Object} [options.layerInstances] - 图层实例映射表
  * @param {Array} [options.layerConfigs] - 图层配置数组
+ * @param {Function} [options.resolveVisibleLayerIds] - 根据 option id 解析需要显示的图层列表
  * @param {Array} [options.satelliteLayers] - 卫星图层 ID 列表
  * @param {Array} [options.vectorLayers] - 矢量图层 ID 列表
  * @returns {Object} 返回公共 API 集合
@@ -103,6 +104,7 @@ export function useMapState(mapInstance, options = {}) {
         layerListRef = null,
         layerInstances = null,
         layerConfigs = null,
+        resolveVisibleLayerIds = null,
         satelliteLayers = ['tianDiTu', 'Google', 'esri', 'google'],
         vectorLayers = ['tianDiTu_vec']
     } = options;
@@ -397,26 +399,71 @@ export function useMapState(mapInstance, options = {}) {
         layerList = layerListRef?.value,
         instanceMap = layerInstances,
         configs = layerConfigs,
+        visibleLayerResolver = resolveVisibleLayerIds,
         satelliteIds = satelliteLayers,
         vectorIds = vectorLayers,
         onUpdated
     } = {}) {
         if (!Array.isArray(layerList) || !layerId) return;
+        let normalizedResolvedIds = null;
 
-        layerList.forEach((item) => {
-            if (item.id === 'label' || item.id === 'label_vector') return;
-            item.visible = item.id === layerId;
-        });
+        const resolvedIds = typeof visibleLayerResolver === 'function'
+            ? visibleLayerResolver(layerId, { layerList, instanceMap, configs })
+            : null;
 
-        const needsSatelliteLabel = satelliteIds.includes(layerId);
-        const labelItem = layerList.find((item) => item.id === 'label');
-        if (labelItem) labelItem.visible = needsSatelliteLabel;
+        if (Array.isArray(resolvedIds) && resolvedIds.length) {
+            normalizedResolvedIds = resolvedIds.map((id) => String(id));
+            const visibleIdSet = new Set(normalizedResolvedIds);
+            let matchedCount = 0;
 
-        const needsVectorLabel = vectorIds.includes(layerId);
-        const vectorLabelItem = layerList.find((item) => item.id === 'label_vector');
-        if (vectorLabelItem) vectorLabelItem.visible = needsVectorLabel;
+            layerList.forEach((item) => {
+                const visible = visibleIdSet.has(item.id);
+                if (visible) matchedCount += 1;
+                item.visible = visible;
+            });
+
+            // 若解析结果未匹配任何图层，则退回到单图层切换模式。
+            if (matchedCount === 0) {
+                layerList.forEach((item) => {
+                    if (item.id === 'label' || item.id === 'label_vector') return;
+                    item.visible = item.id === layerId;
+                });
+
+                const needsSatelliteLabel = satelliteIds.includes(layerId);
+                const labelItem = layerList.find((item) => item.id === 'label');
+                if (labelItem) labelItem.visible = needsSatelliteLabel;
+
+                const needsVectorLabel = vectorIds.includes(layerId);
+                const vectorLabelItem = layerList.find((item) => item.id === 'label_vector');
+                if (vectorLabelItem) vectorLabelItem.visible = needsVectorLabel;
+            }
+        } else {
+            layerList.forEach((item) => {
+                if (item.id === 'label' || item.id === 'label_vector') return;
+                item.visible = item.id === layerId;
+            });
+
+            const needsSatelliteLabel = satelliteIds.includes(layerId);
+            const labelItem = layerList.find((item) => item.id === 'label');
+            if (labelItem) labelItem.visible = needsSatelliteLabel;
+
+            const needsVectorLabel = vectorIds.includes(layerId);
+            const vectorLabelItem = layerList.find((item) => item.id === 'label_vector');
+            if (vectorLabelItem) vectorLabelItem.visible = needsVectorLabel;
+        }
 
         refreshLayerInstances({ layerList, instanceMap, configs });
+
+        // 组合图层模式下，按配置顺序（从下到上）强制设置层级。
+        if (Array.isArray(normalizedResolvedIds) && normalizedResolvedIds.length && instanceMap) {
+            const zIndexBase = layerList.length + 10;
+            normalizedResolvedIds.forEach((id, index) => {
+                const layer = instanceMap[id];
+                if (!layer || typeof layer.setZIndex !== 'function') return;
+                layer.setZIndex(zIndexBase + index);
+            });
+        }
+
         if (typeof onUpdated === 'function') {
             onUpdated(layerId);
         }
