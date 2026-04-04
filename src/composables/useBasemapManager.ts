@@ -225,6 +225,7 @@ export function createXYZSourceFromUrl(url: string): XYZ {
 }
 
 // ========== 单文件集中配置（图层源 + 选项组合） ==========
+// 图源定义 + 顺序即底图图层管理的顺序
 
 const MFF_RELIEF_URL = 'https://maps-for-free.com/layer/relief/z{z}/row{y}/{z}_{x}-{y}.jpg';
 const createMffLayerTemplateUrl = (layerName: string) =>
@@ -466,13 +467,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () => new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png' })
     },
     {
-        id: 'relief',
-        name: '地形浮雕(MFF)',
-        category: 'base',
-        group: '专题',
-        createSource: () => createXYZSourceFromUrl(MFF_RELIEF_URL)
-    },
-    {
         id: 'mff_water',
         name: 'MFF水体',
         category: 'base',
@@ -548,10 +542,19 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'base',
         group: '专题',
         createSource: () => createXYZSourceFromUrl(createMffLayerTemplateUrl('ice'))
-    }
+    },
+    {
+        id: 'relief',
+        name: '地形浮雕(MFF)',
+        category: 'base',
+        group: '专题',
+        createSource: () => createXYZSourceFromUrl(MFF_RELIEF_URL)
+    },
 ];
 
 // 每个 option 对应一个组合（单层也视为组合）
+// stack 中图层顺序即底图图层管理的顺序（从下到上）
+// option 顺序即显示顺序
 const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'local', label: '自定义瓦片', stack: ['local'] },
     { id: 'tianDiTu_vec', label: '天地图矢量', stack: ['tianDiTu_vec', 'label_vector'] },
