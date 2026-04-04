@@ -10,6 +10,8 @@ import {
     ensureProjectionAvailable,
     normalizeProjectionCode
 } from '../utils/crsUtils';
+import { isUnsupportedProjectedCrsError, UNSUPPORTED_PROJECTED_CRS_MESSAGE } from '../utils/gis/crs-engine';
+import { parseShpPartsToGeoJSON } from '../utils/gis/parsers/shpParser';
 import { useGisLoader } from './useGisLoader.ts';
 import { useMessage } from './useMessage';
 
@@ -22,20 +24,11 @@ export function useLayerDataImport({
     styleTemplates,
     onImportProgress = null
 }) {
-    let cachedShpParser = null;
     let cachedGeotiffFromBlob = null;
     let cachedGeoTIFFSourceCtor = null;
     const LABEL_FIELD_CANDIDATES = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
     const gisInlet = useGisLoader();
     const message = useMessage();
-
-    async function getShpParser() {
-        if (!cachedShpParser) {
-            const mod = await import('shpjs');
-            cachedShpParser = mod.default || mod;
-        }
-        return cachedShpParser;
-    }
 
     async function getGeotiffFromBlob() {
         if (!cachedGeotiffFromBlob) {
@@ -281,7 +274,7 @@ export function useLayerDataImport({
 
                 return payload;
             } catch (err) {
-                message.warn('Raster sample failed', err);
+                message.warning(`Raster sample failed: ${err?.message || err}`, { duration: 3200 });
             }
         }
 
@@ -297,7 +290,7 @@ export function useLayerDataImport({
         try {
             return transformExtent(extent, sourceProjection, viewProjection);
         } catch (err) {
-            message.warn('Extent projection transform failed, fallback to original extent', err);
+            message.warning(`Extent projection transform failed, fallback to original extent: ${err?.message || err}`, { duration: 3200 });
             return extent;
         }
     }
@@ -764,15 +757,13 @@ export function useLayerDataImport({
             }
 
             if (vectorPacket.kind === 'shp') {
-                const shp = await getShpParser();
-                const geojson = await shp(vectorPacket.shpParts);
+                const geojson = await parseShpPartsToGeoJSON(vectorPacket.shpParts);
                 const gjFormat = new GeoJSON();
                 const featureCollection = Array.isArray(geojson)
                     ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
                     : geojson;
-                const dataProjection = await resolveSupportedProjection(vectorPacket.dataProjection || 'EPSG:4326', 'EPSG:4326', 'SHP/ZIP');
                 return gjFormat.readFeatures(featureCollection, {
-                    dataProjection,
+                    dataProjection: 'EPSG:4326',
                     featureProjection: 'EPSG:3857'
                 });
             }
@@ -802,8 +793,7 @@ export function useLayerDataImport({
         }
 
         if (normalizedType === 'shp') {
-            const shp = await getShpParser();
-            const geojson = await shp({ shp: content });
+            const geojson = await parseShpPartsToGeoJSON({ shp: content });
             const gjFormat = new GeoJSON();
             const detectedProjection = detectGeoJSONProjection(geojson);
             const dataProjection = await resolveSupportedProjection(detectedProjection, 'EPSG:4326', 'SHP');
@@ -831,6 +821,7 @@ export function useLayerDataImport({
         const importErrors = [];
         let importedCount = 0;
         const total = packets.length;
+        let unsupportedProjectionDetected = false;
 
         reportImportProgress({
             phase: 'importing',
@@ -878,15 +869,13 @@ export function useLayerDataImport({
                     });
                     layerType = 'geojson';
                 } else if (packet.kind === 'shp') {
-                    const shp = await getShpParser();
-                    const geojson = await shp(packet.shpParts);
+                    const geojson = await parseShpPartsToGeoJSON(packet.shpParts);
                     const gjFormat = new GeoJSON();
                     const featureCollection = Array.isArray(geojson)
                         ? { type: 'FeatureCollection', features: geojson.flatMap(item => item.features || []) }
                         : geojson;
-                    const dataProjection = await resolveSupportedProjection(packet.dataProjection || 'EPSG:4326', 'EPSG:4326', 'SHP/ZIP');
                     features = gjFormat.readFeatures(featureCollection, {
-                        dataProjection,
+                        dataProjection: 'EPSG:4326',
                         featureProjection: 'EPSG:3857'
                     });
                     layerType = 'shp';
@@ -923,6 +912,12 @@ export function useLayerDataImport({
                     message: `已导入：${layerName}`
                 });
             } catch (err) {
+                if (isUnsupportedProjectedCrsError(err) && !unsupportedProjectionDetected) {
+                    unsupportedProjectionDetected = true;
+                    if (!err?.notified) {
+                        message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, { closable: true, duration: 0 });
+                    }
+                }
                 importErrors.push(`${packet.entryName || packet.kind}: ${err.message}`);
                 reportImportProgress({
                     phase: 'importing',
@@ -1069,6 +1064,12 @@ export function useLayerDataImport({
                 phase: 'error',
                 message: `导入失败：${e.message}`
             });
+            if (isUnsupportedProjectedCrsError(e)) {
+                if (!e?.notified) {
+                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, { closable: true, duration: 0 });
+                }
+                return;
+            }
             message.error('文件解析失败: ' + e.message, { closable: true, duration: 0 });
         }
     }

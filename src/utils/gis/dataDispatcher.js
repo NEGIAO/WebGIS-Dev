@@ -1,8 +1,9 @@
-import { decompressBuffer, detectMagicType } from './decompressFile';
-import { detectGeoJsonProjection, detectKmlProjectionHint, detectShpProjectionFromPrj, resolveProjectionOrDefault } from './crsAware';
-import { buildResourcePool, classifyArchiveDatasets } from './batchProcessor';
+import { decompressBuffer, detectMagicType } from './decompressFile.js';
+import { detectGeoJsonProjection, detectKmlProjectionHint, detectShpProjectionFromPrj, resolveProjectionOrDefault } from './crsAware.js';
+import { buildResourcePool, classifyArchiveDatasets } from './batchProcessor.js';
 
 const RESOURCE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'css', 'js', 'html', 'htm']);
+const SHP_EXTENSIONS = new Set(['shp', 'dbf', 'shx', 'prj', 'cpg']);
 
 function normalizeType(type, name = '') {
     const normalizedType = String(type || '').toLowerCase();
@@ -27,6 +28,190 @@ function decodeBufferToText(buffer) {
     } catch {
         return utf8;
     }
+}
+
+function normalizePath(path = '') {
+    return String(path || '').replace(/\\/g, '/').replace(/^\.\/?/, '').trim();
+}
+
+function extOf(path = '') {
+    const normalized = normalizePath(path).toLowerCase();
+    const idx = normalized.lastIndexOf('.');
+    if (idx < 0 || idx === normalized.length - 1) return '';
+    return normalized.slice(idx + 1);
+}
+
+function stemOf(path = '') {
+    const normalized = normalizePath(path);
+    const idx = normalized.lastIndexOf('.');
+    if (idx < 0) return normalized;
+    return normalized.slice(0, idx);
+}
+
+function nameStemOf(path = '') {
+    const normalized = normalizePath(path);
+    const base = normalized.split('/').pop() || normalized;
+    const idx = base.lastIndexOf('.');
+    if (idx < 0) return base;
+    return base.slice(0, idx);
+}
+
+function groupShpEntriesByBaseName(entries = []) {
+    const groups = new Map();
+
+    for (const entry of entries) {
+        const rawPath = normalizePath(entry?.path || entry?.name || '');
+        if (!rawPath) continue;
+
+        const extension = String(entry?.extension || extOf(rawPath)).toLowerCase();
+        if (!SHP_EXTENSIONS.has(extension)) continue;
+
+        const key = stemOf(rawPath).toLowerCase();
+        const current = groups.get(key) || {
+            key,
+            stem: nameStemOf(rawPath),
+            shpEntry: null,
+            dbfEntry: null,
+            shxEntry: null,
+            prjEntry: null,
+            cpgEntry: null
+        };
+
+        const normalizedEntry = {
+            ...entry,
+            path: rawPath,
+            extension
+        };
+
+        if (extension === 'shp') current.shpEntry = normalizedEntry;
+        if (extension === 'dbf') current.dbfEntry = normalizedEntry;
+        if (extension === 'shx') current.shxEntry = normalizedEntry;
+        if (extension === 'prj') current.prjEntry = normalizedEntry;
+        if (extension === 'cpg') current.cpgEntry = normalizedEntry;
+
+        groups.set(key, current);
+    }
+
+    const warnings = [];
+    const tasks = [];
+
+    for (const group of groups.values()) {
+        if (group.shpEntry && !group.dbfEntry) {
+            warnings.push(`${group.shpEntry.path}: 缺少同名 .dbf，将按几何数据继续解析（属性字段可能为空）。`);
+        }
+        if (!group.shpEntry && group.dbfEntry) {
+            warnings.push(`${group.dbfEntry.path}: 检测到单独 .dbf，缺少同名 .shp，已跳过该任务。`);
+            continue;
+        }
+        if (!group.shpEntry) continue;
+
+        if (!group.shxEntry) {
+            warnings.push(`${group.shpEntry.path}: 缺少 .shx，将继续尝试导入。`);
+        }
+        if (!group.prjEntry) {
+            warnings.push(`${group.shpEntry.path}: 缺少 .prj，尝试按 WGS84（EPSG:4326）渲染。`);
+        }
+
+        tasks.push(group);
+    }
+
+    return { tasks, warnings, groups };
+}
+
+function groupBrowserFilesByBaseName(files = []) {
+    const groups = new Map();
+
+    for (const file of files || []) {
+        if (!file) continue;
+        const rawPath = normalizePath(file.webkitRelativePath || file.name || '');
+        if (!rawPath) continue;
+
+        const extension = extOf(rawPath);
+        if (!SHP_EXTENSIONS.has(extension)) continue;
+
+        const key = stemOf(rawPath).toLowerCase();
+        const current = groups.get(key) || {
+            key,
+            stem: nameStemOf(rawPath),
+            shp: null,
+            dbf: null,
+            shx: null,
+            prj: null,
+            cpg: null
+        };
+
+        if (extension === 'shp') current.shp = file;
+        if (extension === 'dbf') current.dbf = file;
+        if (extension === 'shx') current.shx = file;
+        if (extension === 'prj') current.prj = file;
+        if (extension === 'cpg') current.cpg = file;
+
+        groups.set(key, current);
+    }
+
+    return groups;
+}
+
+export async function buildShpPacketsFromBrowserFiles(files = [], options = {}) {
+    const grouped = groupBrowserFilesByBaseName(files);
+    const packets = [];
+    const warnings = [];
+
+    for (const group of grouped.values()) {
+        if (!group.shp) {
+            warnings.push(`${group.stem}: 缺少 .shp，已跳过该任务。`);
+            continue;
+        }
+        if (!group.dbf) {
+            warnings.push(`${group.stem}: 缺少 .dbf，将按几何数据继续解析（属性字段可能为空）。`);
+        }
+
+        // 在解析前先并行读取 buffer/text，确保 PRJ 文本就绪。
+        const [shpBuffer, dbfBuffer, shxBuffer, prjBuffer, cpgBuffer, prjUtf8Text, cpgUtf8Text] = await Promise.all([
+            group.shp.arrayBuffer(),
+            group.dbf?.arrayBuffer?.() ?? Promise.resolve(undefined),
+            group.shx?.arrayBuffer?.() ?? Promise.resolve(undefined),
+            group.prj?.arrayBuffer?.() ?? Promise.resolve(undefined),
+            group.cpg?.arrayBuffer?.() ?? Promise.resolve(undefined),
+            group.prj?.text?.() ?? Promise.resolve(''),
+            group.cpg?.text?.() ?? Promise.resolve('')
+        ]);
+
+        const prjText = prjBuffer ? decodeBufferToText(prjBuffer).trim() : String(prjUtf8Text || '').trim();
+        const cpgText = cpgBuffer ? decodeBufferToText(cpgBuffer).trim() : String(cpgUtf8Text || '').trim();
+        const projectionResolved = await detectShpProjectionFromPrj(prjText);
+        if (!group.prj) {
+            warnings.push(`${group.stem}: 缺少 .prj，尝试按 WGS84（EPSG:4326）渲染。`);
+        } else if (projectionResolved.warning) {
+            warnings.push(`${group.stem}: ${projectionResolved.warning}`);
+        }
+
+        packets.push({
+            kind: 'shp',
+            sourceType: options.sourceType || 'browser-files',
+            sourceName: options.sourceName || 'browser-file-list',
+            entryName: `${group.stem}.shp`,
+            dataProjection: projectionResolved.projection,
+            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase()),
+            shpParts: {
+                shp: shpBuffer,
+                dbf: dbfBuffer,
+                shx: shxBuffer,
+                prj: prjBuffer,
+                cpg: cpgBuffer,
+                prjText,
+                cpgText
+            }
+        });
+    }
+
+    return {
+        grouped,
+        packets,
+        warnings,
+        taskCount: packets.length,
+        groupCount: grouped.size
+    };
 }
 
 function parseGeoJsonContent(content) {
@@ -58,8 +243,9 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
 
     const resourcePool = buildResourcePool(archive.entries);
     const tasks = classifyArchiveDatasets(archive.entries);
-    if (Array.isArray(tasks.shpWarnings) && tasks.shpWarnings.length) {
-        warnings.push(...tasks.shpWarnings);
+    const shpGrouping = groupShpEntriesByBaseName(archive.entries);
+    if (Array.isArray(shpGrouping.warnings) && shpGrouping.warnings.length) {
+        warnings.push(...shpGrouping.warnings);
     }
     const resources = buildResourceBlobUrls(archive.entries);
     blobUrls.push(...resources.urls);
@@ -101,15 +287,13 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
         }
     }
 
-    for (const task of tasks.shpTasks) {
+    for (const task of shpGrouping.tasks) {
         try {
             const prjText = task.prjEntry ? decodeBufferToText(task.prjEntry.buffer) : '';
             const cpgText = task.cpgEntry ? decodeBufferToText(task.cpgEntry.buffer) : '';
             const projectionResolved = await detectShpProjectionFromPrj(prjText);
 
-            if (!task.prjEntry) {
-                warnings.push(`${task.shpEntry.path}: Shapefile 缺少 .prj，尝试按 WGS84（EPSG:4326）渲染。`);
-            } else if (projectionResolved.warning) {
+            if (task.prjEntry && projectionResolved.warning) {
                 warnings.push(`${task.shpEntry.path}: ${projectionResolved.warning}`);
             }
 
@@ -125,7 +309,9 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                     shx: task.shxEntry?.buffer,
                     dbf: task.dbfEntry?.buffer,
                     prj: task.prjEntry?.buffer,
-                    cpg: task.cpgEntry?.buffer
+                    cpg: task.cpgEntry?.buffer,
+                    prjText,
+                    cpgText
                 },
                 resourcePool,
                 resources: resources.resources
@@ -184,7 +370,11 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
         errors,
         blobUrls,
         resourcePool,
-        summary: buildSummary(tasks, packets, errors)
+        summary: buildSummary({
+            ...tasks,
+            shpTasks: shpGrouping.tasks,
+            datasetCount: tasks.kmlTasks.length + tasks.kmzTasks.length + shpGrouping.tasks.length + tasks.tiffTasks.length + tasks.geoJsonTasks.length
+        }, packets, errors)
     };
 }
 
@@ -289,28 +479,7 @@ export async function dispatchGisData(input = {}) {
     }
 
     if (normalizedType === 'shp') {
-        if (!(content instanceof ArrayBuffer)) {
-            throw new Error('SHP 单文件导入失败：缺少关联组件，请上传 ZIP 或完整文件夹（.shp/.dbf/.shx）');
-        }
-        const packet = {
-            kind: 'shp',
-            sourceType: normalizedType,
-            entryName: name,
-            shpParts: { shp: content }
-        };
-        return {
-            packet,
-            packets: [packet],
-            warnings,
-            errors,
-            blobUrls,
-            summary: {
-                detectedDatasets: 1,
-                importedDatasets: 1,
-                failedDatasets: 0,
-                byType: { kml: 0, kmz: 0, shp: 1, tiff: 0, geojson: 0 }
-            }
-        };
+        throw new Error('检测到单独 .shp 文件。请按同名文件组上传（至少 .shp，可选 .dbf/.shx/.prj/.cpg）或使用 ZIP。');
     }
 
     if ((normalizedType === 'geojson' || normalizedType === 'json')) {

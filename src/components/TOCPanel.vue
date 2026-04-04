@@ -1,6 +1,6 @@
 <template>
     <div class="toolbox-panel">
-        <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.tif,.tiff" @change="handleFileUpload" />
+        <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.dbf,.shx,.prj,.cpg,.tif,.tiff" @change="handleFileUpload" />
         <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input" @change="handleDirectoryUpload" />
 
         <div class="header">
@@ -56,6 +56,10 @@
                         </div>
                     </div>
                     <div class="upload-tip">支持单文件、多文件、文件夹上传，也可拖拽到此区域</div>
+                    <div class="upload-crs-tip">
+                        <span>❗ 文件大小不超过 {{ MAX_FILE_SIZE_MB }} MB❗</span>
+                        <span>🔔数据格式：GeoJSON、KML、KMZ、TIF、SHP</span>
+                    </div>
                     <div v-if="shouldShowUploadProgress" class="upload-progress" :class="`phase-${uploadProgressView.phase}`">
                         <div class="upload-progress-head">
                             <span>导入状态：{{ uploadProgressView.current }}/{{ uploadProgressView.total || 1 }}</span>
@@ -342,8 +346,15 @@ function handleFileUpload(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
 
-    const payloads = gisLoader.createUploadPayloadsFromFiles(files);
-    payloads.forEach((payload) => emit('upload-data', payload));
+    // Check file sizes
+    const oversized = files.filter(file => (file.size / MB) > MAX_FILE_SIZE_MB);
+    if (oversized.length) {
+        message.error(`选中 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB 限制：${oversized.map(f => f.name).join(', ')}`);
+        event.target.value = '';
+        return;
+    }
+
+    emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
 
     event.target.value = '';
 }
@@ -391,7 +402,7 @@ function handleUploadDrop(event) {
 
     const files = Array.from(event.dataTransfer?.files || []);
     if (!files.length) return;
-    gisLoader.createUploadPayloadsFromFiles(files).forEach((payload) => emit('upload-data', payload));
+    emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
 }
 
 function onDragStart(layerId) {
@@ -597,6 +608,22 @@ function applyStyle() {
     color: #6b7f72;
     padding: 0 2px;
 }
+
+.upload-crs-tip {
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: #1877f2;
+    padding: 6px 8px;
+    background: #e7f1ff;
+    border-radius: 4px;
+    border-left: 3px solid #1877f2;
+}
+
+.upload-crs-tip span {
+    display: block;
+    line-height: 1.4;
+}
+
 
 .upload-entry {
     border: 1.5px dashed #b7dcc7;

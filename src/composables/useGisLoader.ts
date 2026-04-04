@@ -5,7 +5,15 @@ import { flattenUploadInput, type FlattenedResource } from '../utils/gis/decompr
 import { parseKmlBuffer } from '../utils/gis/parsers/kmlParser';
 import { groupShpDatasets } from '../utils/gis/parsers/shpParser';
 import { loadTifBuffer } from '../utils/gis/parsers/tifLoader';
-import { reprojectGeoJSON, resolveDatasetProjection } from '../utils/gis/crs-engine';
+import {
+    createUnsupportedProjectedCrsError,
+    isUnsupportedProjectedCrsError,
+    reprojectGeoJSON,
+    resolveDatasetProjection,
+    UNSUPPORTED_PROJECTED_CRS_CODE,
+    UNSUPPORTED_PROJECTED_CRS_MESSAGE
+} from '../utils/gis/crs-engine';
+import { useMessage } from './useMessage';
 
 type GisDispatchInput = {
     resources?: Array<File | Blob | any>;
@@ -27,6 +35,8 @@ type PacketSummary = {
     };
 };
 
+const SHP_SIDECAR_EXTENSIONS = new Set(['shp', 'shx', 'dbf', 'prj', 'cpg']);
+
 function extOf(path = ''): string {
     const normalized = String(path || '').toLowerCase();
     const idx = normalized.lastIndexOf('.');
@@ -42,14 +52,31 @@ function stemOf(path = ''): string {
     return base.slice(0, idx);
 }
 
+function stemKeyOf(path = ''): string {
+    const normalized = String(path || '').replace(/\\/g, '/').trim();
+    const idx = normalized.lastIndexOf('.');
+    return (idx > 0 ? normalized.slice(0, idx) : normalized).toLowerCase();
+}
+
 function parseJsonBuffer(buffer: ArrayBuffer): any {
     const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
     return JSON.parse(text);
 }
 
+function decodeMaybeText(buffer?: ArrayBuffer): string {
+    if (!(buffer instanceof ArrayBuffer)) return '';
+    const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+    if (!utf8.includes('\uFFFD')) return utf8;
+    try {
+        return new TextDecoder('gbk', { fatal: false }).decode(buffer);
+    } catch {
+        return utf8;
+    }
+}
+
 function isSupportedExt(ext = ''): boolean {
     const normalized = String(ext || '').toLowerCase();
-    return ['kml', 'geojson', 'json', 'shp', 'tif', 'tiff', 'zip', 'kmz'].includes(normalized);
+    return ['kml', 'geojson', 'json', 'shp', 'shx', 'dbf', 'prj', 'cpg', 'tif', 'tiff', 'zip', 'kmz'].includes(normalized);
 }
 
 function summarizePackets(packets: any[], errors: any[]): PacketSummary {
@@ -111,10 +138,18 @@ async function buildShpArchivePayload(group: ReturnType<typeof groupShpDatasets>
     if (group.prj) zip.file(`${baseName}.prj`, group.prj.content);
     if (group.cpg) zip.file(`${baseName}.cpg`, group.cpg.content);
 
-    const prjText = group.prj
-        ? new TextDecoder('utf-8', { fatal: false }).decode(group.prj.content)
-        : '';
-    resolveDatasetProjection({ prjText, targetCrs: 'EPSG:4326' });
+    const prjText = decodeMaybeText(group.prj?.content);
+    const projection = resolveDatasetProjection({ prjText, targetCrs: 'EPSG:4326' });
+    
+    // Warn if PRJ exists but could not be resolved, but allow import to continue
+    // The actual reproject will happen during parsing
+    if (group.prj && !projection.prjResolved && prjText.trim()) {
+        const message = useMessage();
+        message.warning(
+            `数据 "${baseName}" 使用了未识别的投影坐标系: ${projection.prjName || '未知'}。将尝试自动转换为 WGS84，如有偏差请重新配置。`,
+            { duration: 6000 }
+        );
+    }
 
     const zipped = await zip.generateAsync({ type: 'arraybuffer' });
     return {
@@ -124,12 +159,17 @@ async function buildShpArchivePayload(group: ReturnType<typeof groupShpDatasets>
     };
 }
 
-function createUploadPayloadsFromFiles(files: File[]): GisDispatchInput[] {
-    return (files || []).filter(Boolean).map((file) => ({
-        resources: [file],
+function createUploadPayloadsFromFiles(files: File[]): GisDispatchInput {
+    const normalizedFiles = (files || []).filter(Boolean);
+    const firstName = normalizedFiles[0]
+        ? ((normalizedFiles[0] as any).webkitRelativePath || normalizedFiles[0].name)
+        : '多文件上传';
+
+    return {
+        resources: normalizedFiles,
         type: 'directory',
-        name: (file as any).webkitRelativePath || file.name
-    }));
+        name: firstName || '多文件上传'
+    };
 }
 
 function createUploadPayloadFromFolder(files: File[]): GisDispatchInput {
@@ -157,6 +197,7 @@ export function useGisLoader() {
     const lastPackets = shallowRef<any[]>([]);
     const lastPacket = shallowRef<any>(null);
     const blobUrls = ref<string[]>([]);
+    const message = useMessage();
 
     function revokeBlobUrls(): void {
         blobUrls.value.forEach((url) => {
@@ -178,6 +219,7 @@ export function useGisLoader() {
         lastPackets.value = [];
         lastPacket.value = null;
         revokeBlobUrls();
+        let projectionPopupShown = false;
 
         try {
             const flattened = await flattenUploadInput(input);
@@ -189,12 +231,28 @@ export function useGisLoader() {
             }
 
             const shpGroups = groupShpDatasets(supported);
-            const shpKeys = new Set(shpGroups.map((group) => group.key));
+            const shpKeys = new Set(shpGroups.map((group) => String(group.key || '').toLowerCase()));
+
+            const orphanSidecars = supported.filter((resource) => {
+                const ext = String(resource.ext || '').toLowerCase();
+                if (!SHP_SIDECAR_EXTENSIONS.has(ext)) return false;
+                return !shpKeys.has(stemKeyOf(resource.path));
+            });
+
+            if (orphanSidecars.length) {
+                warnings.value.push(`检测到 ${orphanSidecars.length} 个未匹配 .shp 的 sidecar 文件（.dbf/.shx/.prj/.cpg），已自动跳过。`);
+            }
+
+            shpGroups
+                .filter((group) => !group.dbf)
+                .forEach((group) => {
+                    warnings.value.push(`${group.shp.path}: 缺少同名 .dbf，将按几何数据继续解析（属性字段可能为空）。`);
+                });
 
             const nonShpResources = supported.filter((resource) => {
                 const ext = String(resource.ext || '').toLowerCase();
-                if (!['shp', 'shx', 'dbf', 'prj', 'cpg'].includes(ext)) return true;
-                const key = resource.path.replace(/\\/g, '/').replace(/\.[^/.]+$/, '');
+                if (!SHP_SIDECAR_EXTENSIONS.has(ext)) return true;
+                const key = stemKeyOf(resource.path);
                 return !shpKeys.has(key);
             });
 
@@ -219,7 +277,10 @@ export function useGisLoader() {
                         error: {
                             entryName: payload.name,
                             kind: payload.type,
-                            message: error?.message || String(error)
+                            message: error?.message || String(error),
+                            code: error?.code,
+                            userMessage: error?.userMessage,
+                            notified: !!error?.notified
                         }
                     };
                 }
@@ -244,6 +305,16 @@ export function useGisLoader() {
 
             warnings.value = mergedWarnings;
             errors.value = mergedErrors;
+
+            const hasUnsupportedProjection = mergedErrors.some((item) => String(item?.code || '').toUpperCase() === UNSUPPORTED_PROJECTED_CRS_CODE);
+            if (hasUnsupportedProjection && !projectionPopupShown) {
+                const alreadyNotified = mergedErrors.some((item) => String(item?.code || '').toUpperCase() === UNSUPPORTED_PROJECTED_CRS_CODE && !!item?.notified);
+                projectionPopupShown = true;
+                if (!alreadyNotified) {
+                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, { closable: true, duration: 0 });
+                }
+            }
+
             blobUrls.value = mergedBlobUrls;
             lastPackets.value = mergedPackets;
             lastPacket.value = mergedPackets[0] || null;
@@ -259,6 +330,12 @@ export function useGisLoader() {
             };
         } catch (error) {
             lastError.value = error;
+            if (isUnsupportedProjectedCrsError(error) && !projectionPopupShown) {
+                projectionPopupShown = true;
+                if (!(error as any)?.notified) {
+                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, { closable: true, duration: 0 });
+                }
+            }
             throw error;
         } finally {
             isLoading.value = false;

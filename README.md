@@ -94,7 +94,7 @@ WebGIS_Dev/
 │   │   ├── MapPointPickerCard.vue      # 地图起终点拾取
 │   │   ├── Message.vue                 # 全局消息通知组件（灵动岛效果）
 │   │   ├── SidePanel.vue               # 右侧总控容器（资讯/聊天/图层管理/公交/驾车）
-│   │   ├── ToolboxPanel.vue            # TOC/绘制/样式面板
+│   │   ├── TOCPanel.vue                # TOC/绘制/样式面板（上传入口、导入进度、拖拽上传）
 │   │   ├── TOCTreeItem.vue             # ⭐ [V2.8+] 递归树节点组件：右键菜单、悬停按钮、级联可见性、Teleport 固定菜单
 │   │   ├── TopBar.vue                  # 导航栏（菜单、分享、快捷跳转与功能入口）
 │   │   └── icons/
@@ -109,7 +109,7 @@ WebGIS_Dev/
 │   │   ├── useGisLoader.js             # 数据导入调度兼容入口（JavaScript 版本）
 │   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
-│   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层
+│   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层（矢量/栅格统一落图）
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
@@ -117,7 +117,13 @@ WebGIS_Dev/
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
 │   │   ├── useStyleEditor.js           # 图层样式模板
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
-│   │   └── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
+│   │   ├── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
+│   │   └── Magic/
+│   │       ├── useDelaunay.js          # 首屏 Delaunay 视觉特效
+│   │       ├── useFluid.js             # 首屏流体视觉特效
+│   │       ├── useGravity.js           # 首屏重力粒子视觉特效
+│   │       ├── useSingularity.js       # 首屏奇点视觉特效
+│   │       └── useWave.js              # 首屏波动视觉特效
 │   ├── constants/
 │   │   ├── goldenSoupQuores.js         # 心灵鸡汤句库，治愈你的伤痛
 │   ├── router/
@@ -134,12 +140,12 @@ WebGIS_Dev/
 │   │       ├── batchProcessor.js       # [文件解析] 容器内数据集分组、统计与批处理编排
 │   │       ├── crsAware.js             # [坐标转换] 历史 CRS 识别兼容逻辑
 │   │       ├── crs-engine.ts           # [坐标转换] 投影识别与 proj4 重投影执行引擎
-│   │       ├── dataDispatcher.js       # [文件解析] 导入流程分发器（解析、错误聚合、汇总）
+│   │       ├── dataDispatcher.js       # [文件解析] 导入流程分发器（多格式识别、SHP sidecar 聚合、错误聚合）
 │   │       ├── decompressFile.js       # [文件解析] 归档文件解压兼容入口
 │   │       ├── decompressor.ts         # [文件解析] ZIP/KMZ 递归解压与资源扫描
 │   │       └── parsers/
 │   │           ├── kmlParser.ts        # [文件解析] KML 几何与属性解析器
-│   │           ├── shpParser.ts        # [文件解析] SHP/DBF/SHX 同名组装与解析器
+│   │           ├── shpParser.ts        # [文件解析] SHP 解析器（头部校验、dbf/shx 回退、PRJ 重投影）
 │   │           └── tifLoader.ts        # [文件解析] TIFF/GeoTIFF 栅格载入与波段读取
 │   └── views/
 │       ├── HomeView.vue                # 主页面布局编排与 MapContainer/SidePanel 事件中枢(一分为三)
@@ -168,15 +174,23 @@ WebGIS_Dev/
 ### GISDataInlet 数据流（容器层-解析层-坐标层-调度层）
 
 1. `src/utils/gis/decompressor.ts`：递归扫描文件、文件夹、ZIP/KMZ，自动展开“压缩包套压缩包”并拉平资源。
-2. `src/utils/gis/parsers/*.ts`：按格式解析数据（KML/SHP/TIFF），其中 SHP 强制同目录同名 sidecar 关联（A.shp 对应 A.dbf/A.shx）。
-3. `src/utils/gis/crs-engine.ts`：对每个识别数据集执行 CRS 识别与投影策略决策，必要时触发 `proj4` 重投影。
-4. `src/composables/useGisLoader.ts`：统一调度入口，`Promise.all` 批处理解析任务并复用 `dataDispatcher` 聚合 `packets + warnings + errors + summary`。
+2. `src/utils/gis/parsers/*.ts`：按格式解析数据（KML/SHP/TIFF），其中 SHP 采用同名 sidecar 聚合（`.shp/.dbf/.shx/.prj/.cpg`）并支持回退解析（dbf/shx 异常时保留几何导入）。
+3. `src/utils/gis/crs-engine.ts`：对每个识别数据集执行 CRS 识别与投影策略决策，支持 WKT 注册与 `proj4` 重投影。
+4. `src/composables/useGisLoader.ts`：统一调度入口，处理多格式识别、SHP sidecar 组装、批处理解析，并聚合 `packets + warnings + errors + summary`。
 5. `src/composables/useLayerDataImport.js`：消费 packet，创建图层并接入样式、标注与交互。
 6. `src/composables/useLayerStore.ts`：维护图层 UI 状态与操作行为（显隐、缩放、移除、排序）。
 
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.8.1 (2026-04-04)
+#### 🧭 SHP 导入链路强化（参考 mapshaper 设计思路）
+* **同名 sidecar 组装修复**：修复多文件导入时 `.dbf/.shx/.prj/.cpg` 被误过滤的问题，统一按 stem 分组后再进入解析流程。
+* **解析容错增强**：`shpParser.ts` 新增 SHP 头部校验与分级回退策略（`shp+dbf+shx -> shp+dbf -> shp+shx -> shp-only`），降低异常数据导致的全量失败概率。
+* **属性编码兼容提示**：接入 `.cpg` 与 DBF `LDID` 编码提示逻辑，在属性解析失败时给出可理解告警并保留几何导入。
+* **导入路径统一**：移除导入层的直连 `shpjs` 分支，统一走 `dataDispatcher + shpParser`，避免 ZIP/文件夹/单文件行为不一致。
+* **文档同步**：更新 README 文件树与 GISDataInlet 说明，补充 `Magic/*` 子模块与最新导入策略说明。
 
 ### V2.8.0 (2026-04-03)
 #### 🌳 图层 TOC 升级为递归树结构 + ArcGIS 风格上下文菜单
@@ -193,7 +207,7 @@ WebGIS_Dev/
     * 菜单自动贴边（normalizeMenuPosition），点击外部、滚动、窗口 resize 时自动关闭。
     * 使用 Teleport 避免层叠上下文干扰，完整键盘与鼠标事件处理。
 * **事件契约保持**：
-    * 新增 **handleLayerTreeAction** 派发器（ToolboxPanel 43 行），将树内部事件（toggle-folder-visibility、zoom-layer 等）精确映射到原有 9 种 emit 类型。
+    * 新增 **handleLayerTreeAction** 派发器（TOCPanel 43 行），将树内部事件（toggle-folder-visibility、zoom-layer 等）精确映射到原有 9 种 emit 类型。
     * 上传面板保持不变，确保下游组件（HomeView、MapContainer）无感知迁移。
 * **性能优化**：
     * 移除 81 行冗余的扁平卡片模板，替换为 13 行树组件调用，代码减少 68 行。

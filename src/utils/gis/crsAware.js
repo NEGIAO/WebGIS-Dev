@@ -1,4 +1,6 @@
-import { detectGeoJSONProjection, detectProjectionFromKmlText, ensureProjectionAvailable, normalizeProjectionCode } from '../crsUtils';
+import { detectGeoJSONProjection, detectProjectionFromKmlText, ensureProjectionAvailable, normalizeProjectionCode } from '../crsUtils.js';
+
+const WKT_CRS_PATTERN = /\b(PROJCS|PROJCRS|GEOGCS|GEODCRS)\s*\[/i;
 
 function detectProjectionFromPrjText(prjText) {
     const text = String(prjText || '');
@@ -45,8 +47,20 @@ export async function resolveProjectionOrDefault(inputProjection, label = '数�
 }
 
 export async function detectShpProjectionFromPrj(prjText) {
-    const candidate = detectProjectionFromPrjText(prjText);
-    return resolveProjectionOrDefault(candidate, 'Shapefile');
+    const text = String(prjText || '');
+    const candidate = detectProjectionFromPrjText(text);
+    const resolved = await resolveProjectionOrDefault(candidate, 'Shapefile');
+
+    // PRJ 中已经声明了 WKT 坐标系但缺少可直接映射的 EPSG 时，
+    // 由后续 crs-engine 负责动态注册并重投影，这里避免提前给出误导性告警。
+    if (!candidate && WKT_CRS_PATTERN.test(text)) {
+        return {
+            projection: resolved.projection,
+            warning: null
+        };
+    }
+
+    return resolved;
 }
 
 export async function detectGeoJsonProjection(geojsonData) {
