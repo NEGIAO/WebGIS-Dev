@@ -82,27 +82,26 @@ import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'o
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
-import OSM from 'ol/source/OSM';
 import VectorSource from 'ol/source/Vector';
 
 // 几何与交互
 import Point from 'ol/geom/Point';
-import CircleGeom from 'ol/geom/Circle';
-import { LineString, Polygon } from 'ol/geom';
+import { Polygon } from 'ol/geom';
 import { Draw, Snap } from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
-const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 };
-const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51';
+const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 }; //初始位置
+const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51'; //高德 Web 服务 Key
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 
 // 天地图 Token：优先使用环境变量，否则使用默认值
 // 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
+//彩蛋：判断鼠标是否进入地环院，弹出地环院的图片信息
 const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
 const IMAGES = [
     '地理与环境学院标志牌.webp', '地理与环境学院入口.webp', '地学楼.webp',
@@ -111,7 +110,6 @@ const IMAGES = [
 
 // --- Refs ---
 const mapRef = ref(null);
-const mapContainerRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
 // ========== 默认底图配置 ==========
@@ -172,6 +170,7 @@ const busPickSource = new VectorSource();
 const busRouteSource = new VectorSource();
 const busStepStyleCache = new globalThis.Map();
 
+// 子组件向父组件回传事件接口定义
 const emit = defineEmits([
     'location-change',
     'coordinate-jump',
@@ -318,6 +317,9 @@ function getLayerLabelText(layerItem) {
     return String(layerItem.name || '').trim();
 }
 
+// [隶属] 图层管理-样式系统
+// [作用] 根据要素属性和图层配置智能生成标签文本。
+// [交互] 被 applyManagedLayerStyle 调用。
 function getFeatureLabelText(feature, layerItem) {
     if (!layerItem?.autoLabel || !layerItem?.labelVisible) return '';
 
@@ -355,6 +357,9 @@ function getFeatureLabelText(feature, layerItem) {
     return getLayerLabelText(layerItem);
 }
 
+// [隶属] 图层管理-样式系统
+// [作用] 构建托管图层的样式函数，支持标签文本自动生成与缓存优化。
+// [交互] 被 applyManagedLayerStyle 调用。
 function buildManagedLayerStyle(layerItem) {
     const baseStyleConfig = layerItem?.styleConfig || STYLE_TEMPLATES.classic;
     if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
@@ -387,6 +392,7 @@ function applyManagedLayerStyle(layerItem) {
 }
 
 // --- 样式定义 ---
+// 公交和驾车路线样式使用函数生成并缓存，支持基于步骤索引的颜色区分和高亮状态；其他样式使用固定实例。
 const styles = {
     draw: new Style({
         fill: new Fill({ color: 'rgba(255, 255, 255, 0.2)' }),
@@ -562,6 +568,9 @@ function getCurrentDriveStepIndex() {
     return driveHoverStepIndex >= 0 ? driveHoverStepIndex : driveActiveStepIndex;
 }
 
+// [隶属] 底图配置-URL 映射
+// [作用] 在 URL 参数中使用图层索引而非 ID，提供更简洁的 URL 格式。
+// 索引到 ID 的映射函数，支持 URL 参数与底图配置解耦。
 function getLayerIdByIndex(index) {
     const normalizedIndex = Number(index);
     if (!Number.isInteger(normalizedIndex)) return null;
@@ -569,11 +578,17 @@ function getLayerIdByIndex(index) {
     return URL_LAYER_OPTIONS[normalizedIndex] || null;
 }
 
+// [隶属] 底图配置-URL 映射
+// [作用] 在 URL 参数中使用图层索引而非 ID，提供更简洁的 URL 格式。
+// 简洁的 URL 格式。ID 到索引的映射函数，支持 URL 参数与底图配置解耦。
 function getLayerIndexById(layerId) {
     const idx = URL_LAYER_OPTIONS.indexOf(String(layerId || ''));
     return idx >= 0 ? idx : null;
 }
 
+// [隶属] 底图状态管理
+// [作用] 提供与 URL 同步、图层切换、图层实例管理等相关的核心逻辑。
+// 通过 useMapState Composable 集中管理地图状态相关逻辑，保持组件代码整洁。
 const {
     parseUrlToState,
     flyToView,
@@ -599,12 +614,16 @@ const {
     }
 });
 
+// --- URL 参数初始化 ---
 const initialUrlState = parseUrlToState();
 const initialLayerId = getLayerIdByIndex(initialUrlState?.layerIndex);
 if (initialLayerId) {
     selectedLayer.value = initialLayerId;
 }
 
+// [隶属] 地图初始化-视图状态
+// [作用] 根据 URL 参数或默认值设置初始视图状态，支持直接
+// 定位到分享链接中的地点。
 function getInitialViewState() {
     const routeState = parseUrlToState();
     if (
@@ -619,7 +638,9 @@ function getInitialViewState() {
     return INITIAL_VIEW;
 }
 
-// --- 初始化 ---
+// --- 组件挂载后 ---
+// [隶属] 地图初始化-启动流程
+// [作用] 初始化地图、绑定视图同步、设置格网状态、同步 URL 状态，并在首屏关键瓦片加载后执行非关键任务（主机测速、位置相关逻辑）。
 onMounted(async () => {
     componentUnmounted = false;
     initMap();
@@ -635,6 +656,9 @@ onMounted(async () => {
 
 });
 
+// [隶属] 启动流程-任务调度
+// [作用] 在首屏关键瓦片加载后调度非关键任务，避免
+// 阻塞首次渲染，提升首屏加载体验。
 function scheduleLowPriorityTask(task) {
     if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
         window.requestIdleCallback(() => {
@@ -711,6 +735,10 @@ async function runDeferredStartupTasks() {
     await detectIPLocale();
 }
 
+
+// [隶属] 组件卸载-资源清理
+// [作用] 组件卸载时清理地图实例、事件监听、异步
+// 任务等，避免内存泄漏和潜在错误。
 onUnmounted(() => {
     componentUnmounted = true;
     stopMapViewSync();
@@ -763,6 +791,9 @@ function refreshGoogleLayerSources() {
     });
 }
 
+// [隶属] 图层管理-要素 ID 管理
+// [作用] 确保托管图层中的每个要素都有唯一
+// ID，支持后续的查找、更新、样式应用等操作。
 function ensureFeatureId(feature, layerName, index) {
     const existingId = feature?.getId?.() || feature?.get?.('_gid') || feature?.get?.('id');
     const featureId = String(existingId || `${layerName || 'layer'}_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
@@ -775,6 +806,9 @@ function ensureFeatureId(feature, layerName, index) {
     return featureId;
 }
 
+// [隶属] 图层管理-要素序列化
+// [作用] 将托管图层中的要素转换为 GeoJSON-like 对象
+// 以便存储在 userDataLayers 中，并支持后续的查找、更新、样式应用等操作。
 function serializeManagedFeature(feature, layerName, index) {
     const featureId = ensureFeatureId(feature, layerName, index);
     const geometry = feature?.getGeometry?.();
@@ -800,10 +834,16 @@ function serializeManagedFeature(feature, layerName, index) {
     };
 }
 
+// [隶属] 图层管理-要素序列化
+// [作用] 将托管图层中的要素列表转换为 GeoJSON-like 对
+// 象列表以便存储在 userDataLayers 中，并支持后续的查找、更新、样式应用等操作。
 function serializeManagedFeatures(features = [], layerName = '') {
     return (features || []).map((feature, index) => serializeManagedFeature(feature, layerName, index));
 }
 
+// [隶属] 图层管理-要素查找
+// [作用] 根据图层 ID 和要素 ID 查找托管图层中的
+// 要素实例，支持后续的更新、样式应用等操作。
 function findManagedFeature(layerId, featureId) {
     const target = userDataLayers.find(item => item.id === layerId);
     if (!target) return null;
@@ -814,6 +854,9 @@ function findManagedFeature(layerId, featureId) {
     return sourceFeature || null;
 }
 
+// [隶属] 图层管理-要素高亮
+// [作用] 在地图上高亮显示指定的托管要素，支持点
+// 和面线不同的高亮样式，并确保同一时间只有一个要素被高亮。
 function createManagedFeatureHighlightStyle(feature) {
     const geometryType = feature?.getGeometry?.()?.getType?.() || '';
     const isPointLike = /Point$/i.test(geometryType);
@@ -834,6 +877,9 @@ function createManagedFeatureHighlightStyle(feature) {
     });
 }
 
+// [隶属] 图层管理-要素高亮
+// [作用] 清除当前托管要素的高亮样式，恢复默认
+// 样式显示，并确保同一时间只有一个要素被高亮。
 function clearManagedFeatureHighlight(feature) {
     if (!feature) return;
     if (typeof feature.setStyle === 'function') {
@@ -911,6 +957,9 @@ function createManagedVectorLayer({
     return id;
 }
 
+// [隶属] 图层管理-要素高亮
+// [作用] 定位并高亮显示指定的托管要素，支持点
+// 和面线不同的高亮样式，并确保同一时间只有一个要素被高亮。
 function zoomToManagedFeature({ layerId, featureId }) {
     if (!mapInstance.value) return;
     const feature = findManagedFeature(layerId, featureId);
@@ -928,6 +977,9 @@ function zoomToManagedFeature({ layerId, featureId }) {
     feature.setStyle(createManagedFeatureHighlightStyle(feature));
 }
 
+// [隶属] 图层管理-要素高亮
+// [作用] 高亮显示指定的托管要素，支持点和面线不同的高亮样式，并确保同一时间只有一个要素被高亮。
+// [交互] 被 emitFeatureSelected 调用以响应外部要素选中事件。
 function highlightManagedFeature({ layerId, featureId }) {
     const feature = findManagedFeature(layerId, featureId);
     if (!feature) return;
@@ -943,6 +995,7 @@ let layerDataImportApiPromise = null;
 let userLayerActionsApiPromise = null;
 let routeBuilderApiPromise = null;
 
+// 确保 useLayerDataImport API 已加载并可用，支持动态导入和按需加载。
 async function ensureLayerDataImportApi() {
     if (!layerDataImportApiPromise) {
         layerDataImportApiPromise = import('../composables/useLayerDataImport').then(({ useLayerDataImport }) => (
@@ -960,6 +1013,7 @@ async function ensureLayerDataImportApi() {
     return layerDataImportApiPromise;
 }
 
+// 确保 useUserLayerActions API 已加载并可用，支持动态导入和按需加载。
 async function ensureUserLayerActionsApi() {
     if (!userLayerActionsApiPromise) {
         userLayerActionsApiPromise = Promise.all([
@@ -996,13 +1050,14 @@ async function ensureUserLayerActionsApi() {
     }
     return userLayerActionsApiPromise;
 }
-
+// 确保 transitRouteBuilder API 已加载并可用，支持动态导入和按需加载。
 async function ensureRouteBuilderApi() {
     if (!routeBuilderApiPromise) {
         routeBuilderApiPromise = import('../utils/transitRouteBuilder');
     }
     return routeBuilderApiPromise;
 }
+
 
 async function addUserDataLayer(payload) {
     const api = await ensureLayerDataImportApi();
@@ -1132,9 +1187,10 @@ async function validateBaseLayerSwitch(layerId, layer, checkTimeoutMs = 3000) {
     });
 }
 
-//优化：支持多层次智能兜底的底图监测管理器
 /**
- * 底图兜底管理器：支持多层次降级策略
+ * 创建底图兜底管理器
+ * @param layerId 图层ID
+ * @param isDefaultBaseLayer 是否为默认底图
  */
 const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
     // 兜底候选选项按优先级排序：仅天地图和自定义（不使用OSM）
@@ -1172,7 +1228,6 @@ const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
     };
 };
 
-//BUG：本函数的作用主要是监测默认瓦片的状态，给出兜底行为，超时则切换底图
 /**
  * 监测图层加载状态并自动降级（智能防抖抗网络波动版）
  * @param {TileLayer} layer - 需要监测的图层实例
@@ -1313,11 +1368,6 @@ const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {})
 // [隶属] 图层切换-地图初始化
 // [作用] 初始化地图实例、底图层、业务图层与控件。
 // [交互] 触发 bindEvents，并在 watch(selectedLayer) 中联动底图切换。
-
-// bug
-// 初始化阶段被频繁调用，需优化避免重复加载和事件监听。
-// 图层成功加载处被调用三次，导致多次重复加载和提示，需优化。
-
 function initMap() {
     // 1.1 源定义与图层初始化 (由 LAYER_CONFIGS 动态驱动，不再硬编码 sources 对象)
     
@@ -1731,13 +1781,13 @@ function bindEvents() {
     }, false);
 }
 
-// --- 2. 业务逻辑 (区域图片) ---
-
-// --- 3. 关键修复：复位与定位逻辑 ---
-// 函数: updateViewByParams(lng, lat, z, layer)
-// 职责: 统一执行视图飞行、图层索引切换、并通过现有 flyToView 逻辑 replace URL（不再分散在多个组件手动改 query）
-// [隶属] 视图更新-统一入口
-// [作用] 统一处理经纬度、缩放、图层参数，执行飞行并 replace URL。
+/**
+ * 通过经纬度、缩放级别和图层索引更新地图视图。
+ * @param lng 经度
+ * @param lat 维度
+ * @param z 缩放级别
+ * @param layer 图层
+ */
 function updateViewByParams(lng, lat, z, layer) {
     const nextLng = Number(lng);
     const nextLat = Number(lat);

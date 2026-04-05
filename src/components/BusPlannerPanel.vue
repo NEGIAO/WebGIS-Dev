@@ -189,8 +189,8 @@ defineEmits(['close']);
 
 const errorMsg = ref('');
 const pickMode = ref<'start' | 'end' | ''>('');
-const startPoint = ref<{ lng: number; lat: number } | null>(null);
-const endPoint = ref<{ lng: number; lat: number } | null>(null);
+const startPoint = ref<{ lng: number; lat: number } | undefined>(undefined);
+const endPoint = ref<{ lng: number; lat: number } | undefined>(undefined);
 const lineType = ref('1');
 const planning = ref(false);
 const routes = ref<RouteCandidate[]>([]);
