@@ -1,5 +1,5 @@
 ﻿# NEGIAO's WebGIS（HENU 地理科学学院）
-[查看部署效果（个人主页）](https://negiao.github.io/WebGIS-Dev/#/register)
+[查看本项目的详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 [查看部署效果（国内）](https://negiao-pages.share.connect.posit.cloud/WebGIS/index.html)
 
 
