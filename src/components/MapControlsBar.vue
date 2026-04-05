@@ -1,42 +1,94 @@
 <template>
     <div class="map-controls-group modern-glass">
-        <div
-            class="coordinate-display"
-            :class="{ editing: isCoordinateEditing, invalid: isInputInvalid }"
-            @mouseenter="isCoordinateHover = true"
-            @mouseleave="isCoordinateHover = false"
-            @click="startCoordinateInput"
-            title="单击输入经纬度并回车跳转"
-        >
-            <template v-if="!isCoordinateEditing">
-                <span class="coordinate-text">{{ displayCoordinateText }}</span>
-                <button
-                    v-if="isCoordinateHover && canCopyCoordinate"
-                    class="copy-coordinate-btn"
-                    type="button"
-                    title="复制坐标"
-                    @click.stop="copyCurrentCoordinate"
-                >
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="9" y="9" width="11" height="11" rx="2"></rect>
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    <span class="copy-tooltip">{{ copyTooltipText }}</span>
-                </button>
-            </template>
-            <input
-                v-else
-                ref="coordinateInputRef"
-                v-model="coordinateInputValue"
-                class="coordinate-input"
-                type="text"
-                placeholder="114.302000, 34.814600"
-                @click.stop
-                @input="isInputInvalid = false"
-                @keydown.enter.prevent="submitCoordinateInput"
-                @keydown.esc.prevent="cancelCoordinateInput"
-                @blur="cancelCoordinateInput"
-            />
+        <div class="coordinate-section">
+            <div
+                class="coordinate-display"
+                :class="{ editing: isCoordinateEditing, invalid: isInputInvalid }"
+                @mouseenter="isCoordinateHover = true"
+                @mouseleave="isCoordinateHover = false"
+                @click="startCoordinateInput"
+                title="单击输入经纬度并回车跳转"
+            >
+                <template v-if="!isCoordinateEditing">
+                    <span class="coordinate-text">{{ displayCoordinateText }}</span>
+                    <div class="coordinate-actions">
+                        <button
+                            v-if="isCoordinateHover && canCopyCoordinate"
+                            class="copy-coordinate-btn"
+                            type="button"
+                            title="复制坐标"
+                            @click.stop="copyCurrentCoordinate"
+                        >
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                            <span class="copy-tooltip">{{ copyTooltipText }}</span>
+                        </button>
+                        <button
+                            class="format-config-btn"
+                            type="button"
+                            title="坐标格式设置"
+                            @click.stop="toggleFormatMenu"
+                        >
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </template>
+                <input
+                    v-else
+                    ref="coordinateInputRef"
+                    v-model="coordinateInputValue"
+                    class="coordinate-input"
+                    type="text"
+                    placeholder="114.302E, 34.814N 或 114°18'08.64&quot;E, 34°48'52.56&quot;N"
+                    @click.stop
+                    @input="isInputInvalid = false"
+                    @keydown.enter.prevent="submitCoordinateInput"
+                    @keydown.esc.prevent="cancelCoordinateInput"
+                    @blur="cancelCoordinateInput"
+                />
+            </div>
+
+            <!-- 格式配置菜单 -->
+            <div v-if="isFormatMenuVisible" class="format-menu">
+                <div class="format-menu-content">
+                    <div class="menu-section">
+                        <div class="menu-label">显示格式</div>
+                        <div class="format-options">
+                            <button
+                                v-for="fmt in Object.values(COORDINATE_FORMATS)"
+                                :key="fmt.id"
+                                class="format-option"
+                                :class="{ active: currentFormatId === fmt.id }"
+                                @click="selectFormat(fmt.id)"
+                            >
+                                <span class="format-label">{{ fmt.label }}</span>
+                                <span class="format-example">{{ fmt.example }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="menu-divider"></div>
+
+                    <div class="menu-section">
+                        <div class="menu-label">小数位数</div>
+                        <div class="decimal-options">
+                            <button
+                                v-for="(config, places) in DECIMAL_PLACES"
+                                :key="places"
+                                class="decimal-option"
+                                :class="{ active: currentDecimalPlaces === Number(places) }"
+                                @click="selectDecimalPlaces(Number(places))"
+                            >
+                                {{ config.label }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="zoom-level-display" title="当前缩放级别">{{ currentZoom }}</div>
@@ -62,18 +114,36 @@
  * MapControlsBar 组件
  * 地图底部右侧控制条，显示实时坐标、缩放级别、复制/编辑坐标、主页按钮
  * 功能：
- * - 实时坐标显示和编辑
+ * - 实时坐标显示和编辑（支持多种格式）
  * - 坐标复制到剪贴板
  * - 缩放级别显示
  * - 主页按钮（单击重置、双击定位用户）
+ * - 格式配置菜单（选择显示格式、小数位数）
  * - 完整的生命周期管理和计时器清理
  */
 
-import { computed, nextTick, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import {
+  COORDINATE_FORMATS,
+  DECIMAL_PLACES,
+  formatCoordinate,
+  parseCoordinate,
+  normalizeCoordinate
+} from '../utils/coordinateFormatter';
 
 // ========== 常量定义 ==========
 /** 坐标占位符，用于显示无效坐标时的默认文本 */
 const COORDINATE_PLACEHOLDER = 'Lon, Lat';
+
+/** 本地存储的键名 */
+const STORAGE_KEYS = {
+  FORMAT_ID: 'gis_coord_format_id',
+  DECIMAL_PLACES: 'gis_coord_decimal_places'
+};
+
+// ========== 默认配置 ==========
+const DEFAULT_FORMAT_ID = 'format_3'; // 默认显示格式：十进制带方向 (E, N)
+const DEFAULT_DECIMAL_PLACES = 6;
 
 // ========== 组件 Props 定义 ==========
 /**
@@ -116,6 +186,9 @@ const isCoordinateEditing = ref(false);                // 是否处于坐标编�
 const isInputInvalid = ref(false);                     // 坐标输入是否有效
 const copyTooltipText = ref('Copy');                   // 复制按钮提示文本
 const homeButtonRippling = ref(false);                 // 主页按钮是否显示涟漪效果
+const isFormatMenuVisible = ref(false);                // 格式菜单是否显示
+const currentFormatId = ref(DEFAULT_FORMAT_ID);        // 当前坐标格式ID
+const currentDecimalPlaces = ref(DEFAULT_DECIMAL_PLACES); // 当前小数位数
 
 // ========== 计时器变量 ==========
 let homeClickTimer = null;        // 主页按钮点击检测计时器（用于双击检测）
@@ -123,16 +196,16 @@ let homeRippleTimer = null;       // 主页按钮涟漪效果计时器
 let copyTooltipTimer = null;      // 复制提示文本重置计时器
 
 // ========== 计算属性 ==========
-/** 显示的坐标文本（无效时显示占位符） */
+/** 显示的坐标文本（使用选定的格式） */
 const displayCoordinateText = computed(() => {
-    const lng = Number(props.coordinate?.lng);
-    const lat = Number(props.coordinate?.lat);
-    if (Number.isFinite(lng) && Number.isFinite(lat)) {
-        return `${lng.toFixed(6)}, ${lat.toFixed(6)}`;
-    }
+  const lng = Number(props.coordinate?.lng);
+  const lat = Number(props.coordinate?.lat);
+  if (Number.isFinite(lng) && Number.isFinite(lat)) {
+    return formatCoordinate(lng, lat, currentFormatId.value, currentDecimalPlaces.value);
+  }
 
-    const text = String(props.coordinateText || '').trim();
-    return text || COORDINATE_PLACEHOLDER;
+  const text = String(props.coordinateText || '').trim();
+  return text || COORDINATE_PLACEHOLDER;
 });
 
 /** 是否可以复制坐标（坐标有效时） */
@@ -164,23 +237,22 @@ function cancelCoordinateInput() {
 
 /**
  * 解析用户输入的坐标字符串
- * 支持格式：114.302, 34.814 / 114.302,34.814（支持中文逗号）
+ * 支持多种格式自动识别：
+ * - 纯十进制: 114.302, 34.814
+ * - 带方向: 114.302E, 34.814N 或 34.814N, 114.302E
+ * - 度分秒: 114°18'08.64"E, 34°48'52.56"N
+ * - 支持中文逗号分隔
+ * 
  * @param {String} rawText - 原始输入文本
  * @returns {Object|null} { lng, lat } 或 null（解析失败）
  */
 function parseCoordinateInput(rawText) {
-    const matches = String(rawText || '')
-        .replace(/，/g, ',')
-        .match(/[-+]?\d*\.?\d+/g);
+  const parsed = parseCoordinate(rawText);
+  if (!parsed) return null;
 
-    if (!matches || matches.length < 2) return null;
-
-    const lng = Number(matches[0]);
-    const lat = Number(matches[1]);
-    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
-    if (lng < -180 || lng > 180 || lat < -90 || lat > 90) return null;
-
-    return { lng, lat };
+  // 规范化坐标
+  const normalized = normalizeCoordinate(parsed.lng, parsed.lat);
+  return normalized;
 }
 
 /**
@@ -303,6 +375,97 @@ function handleHomeInteract(event) {
 }
 
 /**
+ * 从 localStorage 加载坐标格式配置
+ */
+function loadFormatPreferences() {
+  try {
+    const savedFormatId = localStorage.getItem(STORAGE_KEYS.FORMAT_ID);
+    const savedDecimalPlaces = localStorage.getItem(STORAGE_KEYS.DECIMAL_PLACES);
+    
+    if (savedFormatId && COORDINATE_FORMATS[savedFormatId]) {
+      currentFormatId.value = savedFormatId;
+    }
+    
+    if (savedDecimalPlaces) {
+      const places = Number(savedDecimalPlaces);
+      if (DECIMAL_PLACES[places]) {
+        currentDecimalPlaces.value = places;
+      }
+    }
+  } catch (error) {
+    console.warn('无法加载坐标格式配置:', error);
+  }
+}
+
+/**
+ * 保存坐标格式配置到 localStorage
+ */
+function saveFormatPreferences() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.FORMAT_ID, currentFormatId.value);
+    localStorage.setItem(STORAGE_KEYS.DECIMAL_PLACES, String(currentDecimalPlaces.value));
+  } catch (error) {
+    console.warn('无法保存坐标格式配置:', error);
+  }
+}
+
+/**
+ * 打开/关闭格式配置菜单
+ */
+function toggleFormatMenu() {
+  isFormatMenuVisible.value = !isFormatMenuVisible.value;
+}
+
+/**
+ * 关闭格式配置菜单
+ */
+function closeFormatMenu() {
+  isFormatMenuVisible.value = false;
+}
+
+/**
+ * 选择格式
+ */
+function selectFormat(formatId) {
+  currentFormatId.value = formatId;
+  saveFormatPreferences();
+  closeFormatMenu();
+}
+
+/**
+ * 选择小数位数
+ */
+function selectDecimalPlaces(places) {
+  currentDecimalPlaces.value = places;
+  saveFormatPreferences();
+}
+
+/**
+ * 组件挂载时加载保存的配置
+ */
+onMounted(() => {
+  loadFormatPreferences();
+  
+  // 添加全局点击监听，点击菜单外部时关闭菜单
+  const handleClickOutside = (event) => {
+    if (isFormatMenuVisible.value) {
+      const menu = document.querySelector('.format-menu');
+      const button = document.querySelector('.format-config-btn');
+      if (menu && !menu.contains(event.target) && button && !button.contains(event.target)) {
+        closeFormatMenu();
+      }
+    }
+  };
+  
+  document.addEventListener('click', handleClickOutside);
+  
+  // 返回清理函数
+  return () => {
+    document.removeEventListener('click', handleClickOutside);
+  };
+});
+
+/**
  * 组件卸载时清理所有计时器 - 防止内存泄漏
  */
 onUnmounted(() => {
@@ -318,6 +481,7 @@ onUnmounted(() => {
         clearTimeout(copyTooltipTimer);
         copyTooltipTimer = null;
     }
+    closeFormatMenu();
 });
 </script>
 
@@ -388,6 +552,18 @@ onUnmounted(() => {
     border-color: rgba(254, 202, 202, 0.85);
 }
 
+.coordinate-section {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.coordinate-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .coordinate-text {
     /* 使用专门为显示数据设计的等宽字体 */
     font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
@@ -424,6 +600,158 @@ onUnmounted(() => {
 
 .copy-tooltip {
     line-height: 1;
+}
+
+.format-config-btn {
+    height: 22px;
+    width: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--glass-text);
+    border-radius: 50%;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.3s var(--trans-curve);
+    flex-shrink: 0;
+}
+
+.format-config-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px) scale(1.1);
+}
+
+.format-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: 8px;
+    z-index: 2000;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    overflow: hidden;
+    animation: slideUp 0.3s var(--trans-curve);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.format-menu-content {
+    padding: 12px;
+    min-width: 280px;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.menu-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0 4px;
+}
+
+.format-options {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.format-option {
+    padding: 6px 8px;
+    border: 1px solid rgba(48, 148, 65, 0.2);
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s var(--trans-curve);
+}
+
+.format-option:hover {
+    background: rgba(48, 148, 65, 0.08);
+    border-color: rgba(48, 148, 65, 0.4);
+}
+
+.format-option.active {
+    background: rgba(48, 148, 65, 0.15);
+    border-color: #309441;
+    box-shadow: inset 0 0 0 1px rgba(48, 148, 65, 0.3);
+}
+
+.format-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #309441;
+    margin-bottom: 2px;
+}
+
+.format-example {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.menu-divider {
+    height: 1px;
+    background: rgba(48, 148, 65, 0.1);
+    margin: 8px 0;
+}
+
+.decimal-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.decimal-option {
+    padding: 8px 12px;
+    border: 1px solid rgba(48, 148, 65, 0.2);
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    transition: all 0.2s var(--trans-curve);
+}
+
+.decimal-option:hover {
+    background: rgba(48, 148, 65, 0.08);
+    border-color: rgba(48, 148, 65, 0.4);
+}
+
+.decimal-option.active {
+    background: rgba(48, 148, 65, 0.2);
+    border-color: #309441;
+    color: #309441;
+    box-shadow: 0 0 0 2px rgba(48, 148, 65, 0.1);
 }
 
 .coordinate-input {
@@ -535,6 +863,24 @@ onUnmounted(() => {
 
     .copy-tooltip {
         display: none;
+    }
+
+    .format-menu {
+        position: fixed;
+        left: 12px;
+        right: 12px;
+        bottom: 62px;  /* 控制条高度 54px + 间距 8px，菜单显示在上方 */
+        top: auto;
+        max-width: none;
+        max-height: 50vh;
+    }
+
+    .format-menu-content {
+        min-width: unset;
+    }
+
+    .decimal-options {
+        grid-template-columns: 1fr 1fr 1fr;
     }
 }
 </style>
