@@ -61,6 +61,12 @@ function layerHasCoordinates(layer) {
     return Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude);
 }
 
+function supportsCoordinateOperations(layer) {
+    if (!layer) return false;
+    if (props.isRasterLayer(layer)) return false;
+    return true;
+}
+
 function toLayerNode(layer, level, group) {
     const baseNode = {
         id: layer.id,
@@ -81,8 +87,9 @@ function toLayerNode(layer, level, group) {
             attribute: hasAttributeFeatures(layer),
             style: group !== 'route' && !props.isRasterLayer(layer),
             label: (group === 'search' || group === 'upload') && canToggleLabel(layer),
-            copyCoordinates: group === 'search' && layerHasCoordinates(layer),
-            toggleSearchCRS: group === 'search',
+            copyCoordinates: supportsCoordinateOperations(layer) && layerHasCoordinates(layer),
+            toggleLayerCRS: supportsCoordinateOperations(layer),
+            exportLayerData: supportsCoordinateOperations(layer),
             zoom: true,
             remove: true,
             removeTip: group === 'search' ? '清空' : '移除',
@@ -99,8 +106,6 @@ function toLayerNode(layer, level, group) {
     if (group === 'route') {
         baseNode.actions.style = false;
         baseNode.actions.label = false;
-        baseNode.actions.copyCoordinates = false;
-        baseNode.actions.toggleSearchCRS = false;
     }
     return baseNode;
 }
@@ -166,6 +171,8 @@ function convertToTree() {
                         styleTarget: 'draw',
                         label: false,
                         copyCoordinates: false,
+                        toggleLayerCRS: false,
+                        exportLayerData: false,
                         zoom: true,
                         zoomEvent: 'interaction',
                         zoomPayload: { interaction: 'ZoomToGraphics' },

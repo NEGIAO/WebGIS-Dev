@@ -286,8 +286,15 @@ function handleDrawPointByCoordinates(payload) {
 /**
  * 处理搜索结果图层的坐标系切换
  */
-function handleToggleSearchLayerCRS(payload) {
-    mapContainerRef.value?.toggleSearchLayerCRS(payload);
+function handleToggleLayerCRS(payload) {
+    mapContainerRef.value?.toggleLayerCRS?.(payload);
+}
+
+/**
+ * 导出图层坐标数据（CSV/TXT）
+ */
+function handleExportLayerData(payload) {
+    mapContainerRef.value?.exportLayerCoordinates?.(payload);
 }
 
 function handleUserLayersChange(layers) {
@@ -427,7 +434,8 @@ function handleFeatureSelected(properties) {
                     @zoom-attribute-feature="handleZoomAttributeFeature"
                     @layer-selected="handleLayerSelected"
                     @draw-point-by-coordinates="handleDrawPointByCoordinates"
-                    @toggle-search-layer-crs="handleToggleSearchLayerCRS"
+                    @toggle-layer-crs="handleToggleLayerCRS"
+                    @export-layer-data="handleExportLayerData"
                     @switch-tab="handleSwitchSidePanelTab"
                     @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat">

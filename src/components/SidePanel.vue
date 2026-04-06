@@ -51,7 +51,8 @@
                     @highlight-attribute-feature="$emit('highlight-attribute-feature', $event)"
                     @zoom-attribute-feature="$emit('zoom-attribute-feature', $event)"
                     @draw-point-by-coordinates="$emit('draw-point-by-coordinates', $event)"
-                    @toggle-search-layer-crs="$emit('toggle-search-layer-crs', $event)"
+                    @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
+                    @export-layer-data="$emit('export-layer-data', $event)"
                 />
             </div>
 
@@ -255,7 +256,8 @@ const emit = defineEmits([
     'highlight-attribute-feature',
     'zoom-attribute-feature',
     'draw-point-by-coordinates',
-    'toggle-search-layer-crs'
+    'toggle-layer-crs',
+    'export-layer-data'
 ]);
 
 // ========== 3. 工具函数 ==========
