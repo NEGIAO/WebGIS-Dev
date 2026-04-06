@@ -1,5 +1,5 @@
 <template>
-    <div class="map-container" ref="mapContainerRef">
+    <div id="map-container" class="map-container" ref="mapContainerRef">
         <div id="map" ref="mapRef"></div>
 
         <MapEasterEgg
@@ -23,6 +23,11 @@
             @update-order="handleLayerOrderUpdate"
             @toggle-graticule="handleToggleGraticule"
             @search-jump="handleSearchJump"
+        />
+
+        <AttributeTable
+            @focus-feature="handleAttributeTableFocusFeature"
+            @highlight-feature="handleAttributeTableHighlightFeature"
         />
 
         <!-- 底部控制栏 -->
@@ -68,8 +73,11 @@ import {
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
+import AttributeTable from './AttributeTable.vue';
+import { useAttrStore } from '../stores/useAttrStore';
 
 const message = useMessage();
+const attrStore = useAttrStore();
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -216,6 +224,28 @@ function handleEasterEggImageOpen(src) {
 
 function handleEasterEggLocationChange(payload) {
     emit('location-change', payload);
+}
+
+function syncAttributeTableMapExtent() {
+    const map = mapInstance.value;
+    if (!map) return;
+
+    const size = map.getSize?.();
+    if (!Array.isArray(size) || size.length < 2) return;
+
+    const extent = map.getView()?.calculateExtent?.(size);
+    attrStore.setMapExtent(Array.isArray(extent) ? extent : null);
+}
+
+function handleAttributeTableFocusFeature(payload) {
+    if (!payload?.layerId || !payload?.featureId) return;
+    highlightManagedFeature(payload);
+    zoomToManagedFeature(payload);
+}
+
+function handleAttributeTableHighlightFeature(payload) {
+    if (!payload?.layerId || !payload?.featureId) return;
+    highlightManagedFeature(payload);
 }
 
 const isAttributeQueryEnabled = ref(true);
@@ -759,6 +789,7 @@ onUnmounted(() => {
     componentUnmounted = true;
     stopMapViewSync();
     stopGraticule();
+    attrStore.setMapExtent(null);
     if (pendingBusPick?.reject) {
         pendingBusPick.reject(new Error('地图已卸载'));
         pendingBusPick = null;
@@ -1667,6 +1698,7 @@ function initMap() {
     // 1.7 初始化时也要刷新一次图层状态，确保初始配置正确应用
     refreshLayersState();
     emitUserLayersChange();
+    syncAttributeTableMapExtent();
 }
 
 // [隶属] 图层切换-底图状态刷新
@@ -1834,6 +1866,7 @@ function bindEvents() {
             const lonLat = toLonLat(center);
             currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
         }
+        syncAttributeTableMapExtent();
     });
 
     // 触摸事件处理 - 移动端支持

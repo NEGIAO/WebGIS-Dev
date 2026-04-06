@@ -1,6 +1,7 @@
 <template>
     <div class="toolbox-panel">
-        <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.dbf,.shx,.prj,.cpg,.tif,.tiff" @change="handleFileUpload" />
+        <!-- <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.dbf,.shx,.prj,.cpg,.tif,.tiff" @change="handleFileUpload" /> -->
+                <input ref="fileInputRef" type="file" multiple class="hidden-input" accept="." @change="handleFileUpload" />
         <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input" @change="handleDirectoryUpload" />
 
         <div class="header">
@@ -15,8 +16,6 @@
             <button class="tab" :class="{ active: activeTab === 'draw' }" @click="activeTab = 'draw'">绘制</button>
             <button class="tab" :class="{ active: activeTab === 'style' }" @click="activeTab = 'style'">样式</button>
         </div>
-
-        <AttributeTable />
 
         <div v-if="activeTab === 'layers'" class="panel-scroll">
             <LayerPanel
@@ -201,10 +200,10 @@ import { computed, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useGisLoader } from '../composables/useGisLoader';
 import { useLayerStore } from '../composables/useLayerStore';
+import { useAttrStore } from '../stores/useAttrStore';
 import { useStyleEditor } from '../composables/useStyleEditor';
 import { COORDINATE_FORMATS, DECIMAL_PLACES, formatCoordinate } from '../utils/coordinateFormatter';
 import { generatePointName, processCoordinateInput } from '../utils/coordinateInputHandler';
-import AttributeTable from './AttributeTable.vue';
 import LayerPanel from './LayerPanel.vue';
 
 const props = defineProps({
@@ -244,6 +243,7 @@ const folderInputRef = ref(null);
 const message = useMessage();
 const gisLoader = useGisLoader();
 const layerStore = useLayerStore();
+const attrStore = useAttrStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
 const isUploadDragging = ref(false);
@@ -405,6 +405,7 @@ watch(
     () => props.userLayers,
     (layers) => {
         layerStore.syncLayers(layers || [], props.overview || {});
+        attrStore.syncLayers(layers || []);
     },
     { immediate: true, deep: true }
 );
@@ -433,7 +434,8 @@ function triggerFolderUpload() {
 }
 
 function openAttributeTable(layerId) {
-    layerStore.showAttributeTable(layerId);
+    const targetLayer = (props.userLayers || []).find((item) => item.id === layerId);
+    attrStore.openTable(layerId, targetLayer?.name || '未命名图层');
     activeTab.value = 'layers';
 }
 

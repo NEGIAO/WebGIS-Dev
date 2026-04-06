@@ -112,9 +112,11 @@ const menuItems = computed(() => {
     if (actions.toggleLayerCRS) {
         const currentCrs = String(props.node?.raw?.crs || 'wgs84').toLowerCase();
         const targetLabel = currentCrs === 'gcj02' ? 'WGS-84' : 'GCJ-02';
+        edit.push({ divider: true, key: 'divider_crs' });//添加分割线
         edit.push({ key: 'toggle-crs', label: `切换坐标系至 ${targetLabel}` });
     }
     if (actions.exportLayerData) {
+        edit.push({ divider: true, key: 'divider_export' });//添加分割线
         edit.push({ key: 'export-csv', label: '导出坐标(CSV)' });
         edit.push({ key: 'export-txt', label: '导出坐标(TXT)' });
         edit.push({ key: 'export-geojson', label: '导出坐标(GeoJSON)' });
@@ -569,7 +571,7 @@ onBeforeUnmount(() => {
 
 .menu-divider {
     height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(192, 210, 195, 0.4) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, rgba(67, 83, 69, 0.4) 50%, transparent 100%);
     margin: 4px 0;
 }
 </style>
