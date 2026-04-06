@@ -130,6 +130,8 @@ import {
   parseCoordinate,
   normalizeCoordinate
 } from '../utils/coordinateFormatter';
+import { useMessage } from '../composables/useMessage';
+const message = useMessage();
 
 // ========== 常量定义 ==========
 /** 坐标占位符，用于显示无效坐标时的默认文本 */
@@ -142,7 +144,7 @@ const STORAGE_KEYS = {
 };
 
 // ========== 默认坐标格式配置 ==========
-const DEFAULT_FORMAT_ID = 'format_6'; 
+const DEFAULT_FORMAT_ID = 'format_3'; 
 const DEFAULT_DECIMAL_PLACES = 6;
 
 // ========== 组件 Props 定义 ==========
@@ -289,6 +291,7 @@ const copyCurrentCoordinate = async () => {
         // 只有在支持 navigator.clipboard 且处于安全上下文(HTTPS/Localhost)时才可用
         if (navigator.clipboard && window.isSecureContext) {
             await navigator.clipboard.writeText(textToCopy);
+            message.success('坐标已复制到剪贴板');
         } else {
             // 如果不支持 API，手动抛错进入 catch 执行回退逻辑
             throw new Error('Clipboard API unavailable');

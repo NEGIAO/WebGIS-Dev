@@ -10,7 +10,9 @@
  */
 import { ref, reactive, defineAsyncComponent } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { useAttrStore } from '../stores/useAttrStore';
 const message = useMessage();
+const attrStore = useAttrStore();
 
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
@@ -299,6 +301,7 @@ function handleExportLayerData(payload) {
 
 function handleUserLayersChange(layers) {
     userLayers.value = layers || [];
+    attrStore.syncLayers(userLayers.value);
 }
 
 function handleGraphicsOverview(data) {
