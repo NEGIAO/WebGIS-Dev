@@ -187,9 +187,12 @@ export function formatCoordinate(lng, lat, formatId = 'format_1', decimalPlaces 
  * - 中文逗号
  * 
  * @param {string} input - 坐标字符串
+ * @param {string} formatId - 当前显示格式ID，用于判断纯十进制坐标的顺序 (可选)
+ *   - format_1, format_3, format_5: 经度在前
+ *   - format_2, format_4, format_6: 纬度在前
  * @returns {Object|null} { lng, lat } 或 null (解析失败)
  */
-export function parseCoordinate(input) {
+export function parseCoordinate(input, formatId = null) {
   if (!input || typeof input !== 'string') return null;
 
   // 标准化：中文逗号替换为英文逗号
@@ -249,7 +252,7 @@ export function parseCoordinate(input) {
 
     if (!Number.isFinite(num1) || !Number.isFinite(num2)) return null;
 
-    // 如果值的范围合法，则假设第一个是经度，第二个是纬度
+    // 验证坐标的范围
     // 经度范围：-180 到 180
     // 纬度范围：-90 到 90
     const isValid1EW = Math.abs(num1) <= 180;
@@ -257,17 +260,42 @@ export function parseCoordinate(input) {
     const isValid2EW = Math.abs(num2) <= 180;
     const isValid2NS = Math.abs(num2) <= 90;
 
-    // 首选：num1 是经度，num2 是纬度
+    // ===== 优先级 1：如果指定了格式，完全信任格式指示，不进行自动判断 =====
+    if (formatId) {
+      const isLatFirst = ['format_2', 'format_4', 'format_6'].includes(formatId);
+      
+      if (isLatFirst) {
+        // 纬度-经度格式（N, E）：第一个数是纬度，第二个数是经度
+        // 只要两个值都在各自的有效范围内，就返回
+        if (isValid1NS && isValid2EW) {
+          return { lng: num2, lat: num1 };
+        }
+      } else {
+        // 经度-纬度格式（E, N）：第一个数是经度，第二个数是纬度
+        // 只要两个值都在各自的有效范围内，就返回
+        if (isValid1EW && isValid2NS) {
+          return { lng: num1, lat: num2 };
+        }
+      }
+      
+      // 如果格式指示的范围检查失败，仍然尝试按格式返回
+      // 这样可以处理 51.901927 > 90 但被指定为纬度第二项的情况
+      // 原则：信任用户的格式选择
+      return isLatFirst ? { lng: num2, lat: num1 } : { lng: num1, lat: num2 };
+    }
+
+    // ===== 优先级 2：没有格式指示时，进行自动判断 =====
+    // 首选：num1 是经度(> 90)，num2 是纬度(<= 90)
     if (isValid1EW && isValid2NS && Math.abs(num1) > 90) {
       return { lng: num1, lat: num2 };
     }
 
-    // 次选：num1 是纬度，num2 是经度（如果 num1 <= 90 且 num2 > 90）
+    // 次选：num1 是纬度(<= 90)，num2 是经度(> 90)
     if (isValid1NS && isValid2EW && Math.abs(num2) > 90) {
       return { lng: num2, lat: num1 };
     }
 
-    // 都在范围内，默认第一个是经度
+    // 都在范围内：默认经度在前
     if (isValid1EW && isValid2NS) {
       return { lng: num1, lat: num2 };
     }

@@ -89,6 +89,7 @@ import Point from 'ol/geom/Point';
 import { Polygon } from 'ol/geom';
 import { Draw, Snap } from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -1668,12 +1669,11 @@ function bindEvents() {
     const map = mapInstance.value;
 
     // 统一处理鼠标移动：包括业务区域检测和工具提示
+    // 注意：坐标显示改为视图中心，不再跟踪鼠标位置，在 moveend 和 touchmove 事件中更新
     map.on('pointermove', (evt) => {
         if (evt.dragging) return;
 
         const coordinate = evt.coordinate;
-        const lonLat = toLonLat(coordinate);
-        currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
 
         // A. 测量提示逻辑
         if (helpTooltipEl) {
@@ -2204,7 +2204,8 @@ function handleSearchJump(payload) {
         type: 'search',
         名称: layerName,
         经度: Number(lon.toFixed(6)),
-        纬度: Number(lat.toFixed(6))
+        纬度: Number(lat.toFixed(6)),
+        坐标系: 'wgs84'
     });
     createManagedVectorLayer({
         name: layerName,
@@ -2215,7 +2216,8 @@ function handleSearchJump(payload) {
         autoLabel: true,
         metadata: {
             longitude: Number(lon.toFixed(6)),
-            latitude: Number(lat.toFixed(6))
+            latitude: Number(lat.toFixed(6)),
+            crs: 'wgs84'
         },
         fitView: false
     });
@@ -2227,6 +2229,159 @@ function handleSearchJump(payload) {
         duration: 700
     });
 
+}
+
+// --- 6. 坐标输入绘制与搜索图层坐标切换 ---
+// [隶属] 组件交互-手动坐标绘制
+// [作用] 接收输入经纬度（WGS-84 / GCJ-02），落图并自动飞行到目标点。
+function drawPointByCoordinatesInput(payload) {
+    if (!mapInstance.value || !payload) return;
+
+    const rawLng = Number(payload.lng);
+    const rawLat = Number(payload.lat);
+    const crsType = String(payload.crsType || 'wgs84').toLowerCase();
+
+    if (!Number.isFinite(rawLng) || !Number.isFinite(rawLat)) {
+        message.warning('输入坐标无效，请检查经纬度');
+        return;
+    }
+
+    if (rawLng < -180 || rawLng > 180 || rawLat < -90 || rawLat > 90) {
+        message.warning('输入坐标超出范围（经度 -180~180，纬度 -90~90）');
+        return;
+    }
+
+    let mapLng = rawLng;
+    let mapLat = rawLat;
+    if (crsType === 'gcj02') {
+        [mapLng, mapLat] = gcj02ToWgs84(rawLng, rawLat);
+    }
+
+    if (!Number.isFinite(mapLng) || !Number.isFinite(mapLat)) {
+        message.error('坐标转换失败，请稍后重试');
+        return;
+    }
+
+    const mapCoord = fromLonLat([mapLng, mapLat]);
+    const displayName = String(payload.displayName || `输入点_${rawLng.toFixed(6)}_${rawLat.toFixed(6)}`);
+
+    const pointFeature = new Feature({
+        geometry: new Point(mapCoord),
+        type: 'Point',
+        名称: displayName,
+        经度: Number(rawLng.toFixed(6)),
+        纬度: Number(rawLat.toFixed(6)),
+        坐标系: crsType
+    });
+
+    createManagedVectorLayer({
+        name: displayName,
+        type: 'Point',
+        sourceType: 'draw',
+        features: [pointFeature],
+        styleConfig: drawStyleConfig.value,
+        metadata: {
+            longitude: Number(rawLng.toFixed(6)),
+            latitude: Number(rawLat.toFixed(6)),
+            crs: crsType
+        },
+        fitView: false
+    });
+
+    mapInstance.value.getView().animate({
+        center: mapCoord,
+        zoom: 16,
+        duration: 700
+    });
+
+    message.success(`已绘制点位：${displayName}`);
+}
+
+// [隶属] 组件交互-搜索图层坐标切换
+// [作用] 在 WGS-84 与 GCJ-02 间切换搜索结果图层坐标并刷新展示与复制数据。
+function toggleSearchLayerCRS(payload) {
+    if (!mapInstance.value || !payload?.layerId) return;
+
+    const nextCrs = String(payload.crs || 'wgs84').toLowerCase();
+    if (!['wgs84', 'gcj02'].includes(nextCrs)) {
+        message.warning('目标坐标系不支持');
+        return;
+    }
+
+    const layerData = userDataLayers.find(item => item.id === payload.layerId);
+    if (!layerData) {
+        message.warning('未找到目标图层');
+        return;
+    }
+
+    const isSearchLayer = layerData.sourceType === 'search' && layerData.metadata?.category !== 'route' && !/_route$/i.test(String(layerData.type || ''));
+    if (!isSearchLayer) {
+        message.warning('仅搜索结果图层支持坐标系切换');
+        return;
+    }
+
+    const source = layerData.layer?.getSource?.();
+    const features = source?.getFeatures?.() || [];
+    if (!features.length) {
+        message.warning('图层中没有可转换的点位');
+        return;
+    }
+
+    const currentCrs = String(layerData.metadata?.crs || 'wgs84').toLowerCase();
+    if (currentCrs === nextCrs) {
+        message.info(`当前已是 ${nextCrs.toUpperCase()} 坐标系`);
+        return;
+    }
+
+    let firstPoint = null;
+
+    features.forEach((feature) => {
+        const geometry = feature.getGeometry?.();
+        if (!geometry || geometry.getType?.() !== 'Point') return;
+
+        const [currLng, currLat] = toLonLat(geometry.getCoordinates());
+        if (!Number.isFinite(currLng) || !Number.isFinite(currLat)) return;
+
+        let newLng = currLng;
+        let newLat = currLat;
+
+        if (currentCrs === 'wgs84' && nextCrs === 'gcj02') {
+            [newLng, newLat] = wgs84ToGcj02(currLng, currLat);
+        } else if (currentCrs === 'gcj02' && nextCrs === 'wgs84') {
+            [newLng, newLat] = gcj02ToWgs84(currLng, currLat);
+        }
+
+        if (!Number.isFinite(newLng) || !Number.isFinite(newLat)) return;
+
+        geometry.setCoordinates(fromLonLat([newLng, newLat]));
+        feature.set('经度', Number(newLng.toFixed(6)));
+        feature.set('纬度', Number(newLat.toFixed(6)));
+        feature.set('坐标系', nextCrs);
+
+        if (!firstPoint) {
+            firstPoint = [newLng, newLat];
+        }
+    });
+
+    if (firstPoint) {
+        layerData.metadata = {
+            ...(layerData.metadata || {}),
+            longitude: Number(firstPoint[0].toFixed(6)),
+            latitude: Number(firstPoint[1].toFixed(6)),
+            crs: nextCrs
+        };
+    } else {
+        layerData.metadata = {
+            ...(layerData.metadata || {}),
+            crs: nextCrs
+        };
+    }
+
+    layerData.features = serializeManagedFeatures(features, layerData.name);
+    layerData.layer?.changed?.();
+    emitUserLayersChange();
+
+    message.success(`已切换到 ${nextCrs.toUpperCase()} 坐标系`);
 }
 
 // --- 4. 外部接口 (文件导入/绘图) ---
@@ -2462,7 +2617,9 @@ defineExpose({
     reorderUserLayers,
     soloUserLayer,
     viewUserLayer,
-    zoomToGraphics
+    zoomToGraphics,
+    drawPointByCoordinatesInput,
+    toggleSearchLayerCRS
 });
 </script>
 

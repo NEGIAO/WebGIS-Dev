@@ -98,6 +98,41 @@
                     <button class="draw-op-btn draw-op-primary" @click="emit('interaction', 'ZoomToGraphics')">缩放图形</button>
                     <button class="draw-op-btn draw-op-warning" @click="emit('interaction', 'Clear')">清空</button>
                 </div>
+
+                <div class="coord-input-panel">
+                    <div class="card-title">坐标绘制点位</div>
+                    <div class="coord-input-grid">
+                        <input
+                            v-model.trim="coordInputLon"
+                            class="coord-input-field"
+                            type="text"
+                            placeholder="请输入经度（-180 ~ 180）"
+                            @keyup.enter="drawPointByCoordinates"
+                        />
+                        <input
+                            v-model.trim="coordInputLat"
+                            class="coord-input-field"
+                            type="text"
+                            placeholder="请输入纬度（-90 ~ 90）"
+                            @keyup.enter="drawPointByCoordinates"
+                        />
+                    </div>
+
+                    <div class="coord-crs-row">
+                        <label class="coord-crs-label">坐标系</label>
+                        <select v-model="coordInputCRS" class="coord-crs-select">
+                            <option value="wgs84">WGS-84</option>
+                            <option value="gcj02">GCJ-02</option>
+                        </select>
+                    </div>
+
+                    <div class="coord-input-actions">
+                        <button class="small-btn btn-accent" @click="drawPointByCoordinates">绘制点位</button>
+                        <button class="small-btn ghost" @click="clearCoordinateInput">清空输入</button>
+                    </div>
+
+                    <div v-if="coordInputError" class="coord-input-error">{{ coordInputError }}</div>
+                </div>
             </div>
 
             <div class="hint draw-hint">
@@ -167,6 +202,8 @@ import { useMessage } from '../composables/useMessage';
 import { useGisLoader } from '../composables/useGisLoader';
 import { useLayerStore } from '../composables/useLayerStore';
 import { useStyleEditor } from '../composables/useStyleEditor';
+import { COORDINATE_FORMATS, DECIMAL_PLACES, formatCoordinate } from '../utils/coordinateFormatter';
+import { generatePointName, processCoordinateInput } from '../utils/coordinateInputHandler';
 import AttributeTable from './AttributeTable.vue';
 import LayerPanel from './LayerPanel.vue';
 
@@ -181,6 +218,7 @@ const emit = defineEmits([
     'close',
     'upload-data',
     'interaction',
+    'layer-selected',
     'toggle-layer-visibility',
     'change-layer-opacity',
     'zoom-layer',
@@ -195,7 +233,9 @@ const emit = defineEmits([
     'update-draw-style',
     'update-layer-style',
     'highlight-attribute-feature',
-    'zoom-attribute-feature'
+    'zoom-attribute-feature',
+    'draw-point-by-coordinates',
+    'toggle-search-layer-crs'
 ]);
 
 const fileInputRef = ref(null);
@@ -206,8 +246,27 @@ const layerStore = useLayerStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
 const isUploadDragging = ref(false);
+const coordInputLon = ref('');
+const coordInputLat = ref('');
+const coordInputCRS = ref('wgs84');
+const coordInputError = ref('');
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
+
+const COORD_STORAGE_KEYS = {
+    FORMAT_ID: 'gis_coord_format_id',
+    DECIMAL_PLACES: 'gis_coord_decimal_places'
+};
+
+function getCurrentFormatConfig() {
+    const rawFormatId = String(localStorage.getItem(COORD_STORAGE_KEYS.FORMAT_ID) || 'format_6');
+    const rawPlaces = Number(localStorage.getItem(COORD_STORAGE_KEYS.DECIMAL_PLACES) || 6);
+
+    const formatId = COORDINATE_FORMATS[rawFormatId] ? rawFormatId : 'format_6';
+    const decimalPlaces = DECIMAL_PLACES[rawPlaces] ? rawPlaces : 6;
+
+    return { formatId, decimalPlaces };
+}
 
 const styleTemplates = styleEditor.styleTemplates;
 
@@ -272,14 +331,23 @@ const uploadProgressLabel = computed(() => {
     return '等待导入';
 });
 
+// 复制图层经纬度信息到剪贴板
+// 应当识别当前用户选择的格式，进行转化后复制
 async function copyLayerCoordinates(layer) {
     if (!(Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude))) {
         message.warning('当前图层未提供可复制的经纬度信息');
         return;
     }
-    const lon = Number(layer.longitude).toFixed(6);
-    const lat = Number(layer.latitude).toFixed(6);
-    const text = `${lon},${lat}`;
+
+    const { formatId, decimalPlaces } = getCurrentFormatConfig();
+    const lon = Number(layer.longitude);
+    const lat = Number(layer.latitude);
+    const text = formatCoordinate(lon, lat, formatId, decimalPlaces);
+
+    if (!text) {
+        message.warning('坐标格式化失败，无法复制');
+        return;
+    }
 
     try {
         if (navigator?.clipboard?.writeText) {
@@ -295,11 +363,37 @@ async function copyLayerCoordinates(layer) {
             document.execCommand('copy');
             document.body.removeChild(textarea);
         }
-        message.success(`已复制经纬度：${text}`);
-    } catch (error) {
-        message.error('copy coordinates failed', error);
+        message.success(`已复制坐标：${text}`);
+    } catch {
         message.error('复制失败，请稍后重试');
     }
+}
+
+function clearCoordinateInput() {
+    coordInputLon.value = '';
+    coordInputLat.value = '';
+    coordInputError.value = '';
+}
+
+function drawPointByCoordinates() {
+    coordInputError.value = '';
+    const crsType = String(coordInputCRS.value || 'wgs84').toLowerCase();
+    const result = processCoordinateInput(coordInputLon.value, coordInputLat.value, crsType);
+
+    if (!result.valid) {
+        coordInputError.value = result.message;
+        message.warning(result.message);
+        return;
+    }
+
+    emit('draw-point-by-coordinates', {
+        lng: result.lng,
+        lat: result.lat,
+        crsType,
+        displayName: generatePointName(result.lng, result.lat, crsType)
+    });
+
+    clearCoordinateInput();
 }
 
 function isRasterLayer(layer) {
@@ -432,6 +526,13 @@ function handleLayerTreeAction(evt) {
     }
     if (type === 'copy-layer-coordinates') {
         copyLayerCoordinates(evt.layer);
+        return;
+    }
+    if (type === 'toggle-search-layer-crs') {
+        emit('toggle-search-layer-crs', {
+            layerId: evt.layerId,
+            crs: evt.crs
+        });
         return;
     }
     if (type === 'drag-layer-start') {
@@ -845,6 +946,75 @@ function applyStyle() {
     gap: 8px;
     margin-top: 20px;
 }
+
+.coord-input-panel {
+    margin-top: 12px;
+    border: 1px solid #d7e7de;
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(245, 252, 248, 0.85);
+}
+
+.coord-input-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+.coord-input-field {
+    width: 100%;
+    border: 1px solid #b9d9c8;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #2f4f3e;
+    background: #ffffff;
+    box-sizing: border-box;
+}
+
+.coord-input-field:focus {
+    outline: none;
+    border-color: #2f9a57;
+    box-shadow: 0 0 0 2px rgba(47, 154, 87, 0.16);
+}
+
+.coord-crs-row {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.coord-crs-label {
+    font-size: 12px;
+    color: #466453;
+    white-space: nowrap;
+}
+
+.coord-crs-select {
+    flex: 1;
+    border: 1px solid #b9d9c8;
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: #ffffff;
+    color: #2f4f3e;
+}
+
+.coord-input-actions {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.coord-input-error {
+    margin-top: 8px;
+    color: #b83d3d;
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-word;
+}
+
 .template-row,
 .field-grid {
     display: grid;
@@ -1078,6 +1248,7 @@ function applyStyle() {
     }
 
     .actions-row,
+    .coord-input-actions,
     .field-grid {
         grid-template-columns: 1fr;
     }

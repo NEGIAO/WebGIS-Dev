@@ -48,3 +48,28 @@ export function gcj02ToWgs84(lon, lat) {
     const mgLon = lon + dLon;
     return [lon * 2 - mgLon, lat * 2 - mgLat];
 }
+
+/**
+ * Convert WGS-84 coordinates to GCJ-02 coordinates.
+ * @param {number} lon Longitude in WGS-84
+ * @param {number} lat Latitude in WGS-84
+ * @returns {[number, number]} [longitude, latitude] in GCJ-02
+ */
+export function wgs84ToGcj02(lon, lat) {
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return [lon, lat];
+    if (outOfChina(lon, lat)) return [lon, lat];
+
+    let dLat = transformLat(lon - 105.0, lat - 35.0);
+    let dLon = transformLon(lon - 105.0, lat - 35.0);
+    const radLat = lat / 180.0 * PI;
+    let magic = Math.sin(radLat);
+    magic = 1 - EE * magic * magic;
+    const sqrtMagic = Math.sqrt(magic);
+
+    dLat = (dLat * 180.0) / ((A * (1 - EE)) / (magic * sqrtMagic) * PI);
+    dLon = (dLon * 180.0) / (A / sqrtMagic * Math.cos(radLat) * PI);
+
+    const mgLat = lat + dLat;
+    const mgLon = lon + dLon;
+    return [mgLon, mgLat];
+}

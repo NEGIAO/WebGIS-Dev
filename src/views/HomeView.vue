@@ -276,6 +276,20 @@ function handleToggleLayerLabelVisibility(payload) {
     mapContainerRef.value?.setUserLayerLabelVisibility(payload);
 }
 
+/**
+ * 处理用户输入坐标绘制点位
+ */
+function handleDrawPointByCoordinates(payload) {
+    mapContainerRef.value?.drawPointByCoordinatesInput(payload);
+}
+
+/**
+ * 处理搜索结果图层的坐标系切换
+ */
+function handleToggleSearchLayerCRS(payload) {
+    mapContainerRef.value?.toggleSearchLayerCRS(payload);
+}
+
 function handleUserLayersChange(layers) {
     userLayers.value = layers || [];
 }
@@ -412,6 +426,8 @@ function handleFeatureSelected(properties) {
                     @highlight-attribute-feature="handleHighlightAttributeFeature"
                     @zoom-attribute-feature="handleZoomAttributeFeature"
                     @layer-selected="handleLayerSelected"
+                    @draw-point-by-coordinates="handleDrawPointByCoordinates"
+                    @toggle-search-layer-crs="handleToggleSearchLayerCRS"
                     @switch-tab="handleSwitchSidePanelTab"
                     @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat">

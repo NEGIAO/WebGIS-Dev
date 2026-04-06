@@ -24,6 +24,7 @@ export function useManagedLayerRegistry({
             autoLabel: !!item.autoLabel,
             labelVisible: item.labelVisible !== false,
             category: item.metadata?.category,
+            crs: item.metadata?.crs ? String(item.metadata.crs).toLowerCase() : undefined,
             longitude: Number.isFinite(item.metadata?.longitude) ? item.metadata.longitude : undefined,
             latitude: Number.isFinite(item.metadata?.latitude) ? item.metadata.latitude : undefined,
             styleConfig: item.styleConfig || { ...styleTemplates.classic }
