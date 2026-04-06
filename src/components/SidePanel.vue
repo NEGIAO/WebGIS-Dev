@@ -50,6 +50,8 @@
                     @update-layer-style="$emit('update-layer-style', $event)"
                     @highlight-attribute-feature="$emit('highlight-attribute-feature', $event)"
                     @zoom-attribute-feature="$emit('zoom-attribute-feature', $event)"
+                    @draw-point-by-coordinates="$emit('draw-point-by-coordinates', $event)"
+                    @toggle-search-layer-crs="$emit('toggle-search-layer-crs', $event)"
                 />
             </div>
 
@@ -251,7 +253,9 @@ const emit = defineEmits([
     'update-draw-style',
     'update-layer-style',
     'highlight-attribute-feature',
-    'zoom-attribute-feature'
+    'zoom-attribute-feature',
+    'draw-point-by-coordinates',
+    'toggle-search-layer-crs'
 ]);
 
 // ========== 3. 工具函数 ==========

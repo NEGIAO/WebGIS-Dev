@@ -82,6 +82,7 @@ function toLayerNode(layer, level, group) {
             style: group !== 'route' && !props.isRasterLayer(layer),
             label: (group === 'search' || group === 'upload') && canToggleLabel(layer),
             copyCoordinates: group === 'search' && layerHasCoordinates(layer),
+            toggleSearchCRS: group === 'search',
             zoom: true,
             remove: true,
             removeTip: group === 'search' ? '清空' : '移除',
@@ -99,6 +100,7 @@ function toLayerNode(layer, level, group) {
         baseNode.actions.style = false;
         baseNode.actions.label = false;
         baseNode.actions.copyCoordinates = false;
+        baseNode.actions.toggleSearchCRS = false;
     }
     return baseNode;
 }

@@ -141,8 +141,8 @@ const STORAGE_KEYS = {
   DECIMAL_PLACES: 'gis_coord_decimal_places'
 };
 
-// ========== 默认配置 ==========
-const DEFAULT_FORMAT_ID = 'format_3'; // 默认显示格式：十进制带方向 (E, N)
+// ========== 默认坐标格式配置 ==========
+const DEFAULT_FORMAT_ID = 'format_6'; 
 const DEFAULT_DECIMAL_PLACES = 6;
 
 // ========== 组件 Props 定义 ==========
@@ -243,11 +243,16 @@ function cancelCoordinateInput() {
  * - 度分秒: 114°18'08.64"E, 34°48'52.56"N
  * - 支持中文逗号分隔
  * 
+ * 对于纯十进制格式，按照当前选择的显示格式来判断顺序：
+ * - format_1, format_3, format_5：经度在前
+ * - format_2, format_4, format_6：纬度在前
+ * 
  * @param {String} rawText - 原始输入文本
  * @returns {Object|null} { lng, lat } 或 null（解析失败）
  */
 function parseCoordinateInput(rawText) {
-  const parsed = parseCoordinate(rawText);
+  // 传入当前格式 ID，让 parseCoordinate 根据格式判断顺序
+  const parsed = parseCoordinate(rawText, currentFormatId.value);
   if (!parsed) return null;
 
   // 规范化坐标
