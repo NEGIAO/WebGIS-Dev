@@ -565,6 +565,8 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'google_clean', label: 'Google简洁', stack: ['google_clean'] },
     { id: 'Google_clean', label: 'Google简洁(原版)', stack: ['Google_clean'] },
     { id: 'osm', label: 'OSM(需梯子)', stack: ['osm'] },
+    { id: 'amap', label: '高德地图(GCJ)', stack: ['amap'] },
+    { id: 'amap_image', label: '高德影像(GCJ)', stack: ['amap_image'] },
     { id: 'relief', label: '地形浮雕(MFF)', stack: ['relief', 'label'] },
     { id: 'mff_water', label: 'MFF水体', stack: ['relief', 'mff_water', 'label'] },
     { id: 'mff_admin', label: 'MFF行政边界', stack: ['relief', 'mff_admin', 'label'] },
@@ -580,8 +582,6 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'yandex_sat', label: 'Yandex卫星', stack: ['yandex_sat'] },
     { id: 'geoq_gray', label: 'GeoQ灰(GCJ)', stack: ['geoq_gray'] },
     { id: 'geoq_hydro', label: 'GeoQ水(GCJ)', stack: ['geoq_hydro'] },
-    { id: 'amap', label: '高德地图(GCJ)', stack: ['amap'] },
-    { id: 'amap_image', label: '高德影像(GCJ)', stack: ['amap_image'] },
     { id: 'tengxun', label: '腾讯地图(GCJ)', stack: ['tengxun'] },
     { id: 'topo', label: '地形图', stack: ['topo'] },
     { id: 'opentopomap', label: 'OpenTopoMap', stack: ['opentopomap'] },
@@ -595,7 +595,6 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'wikepedia', label: 'Wikipedia', stack: ['wikepedia'] },
     { id: 'toner', label: 'Stamen Toner', stack: ['toner'] },
     { id: 'alidade', label: 'Alidade Sm', stack: ['alidade'] },
-
     { id: 'custom', label: '自定义URL', stack: ['custom'] }
 ];
 

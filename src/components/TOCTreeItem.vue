@@ -109,10 +109,15 @@ const menuItems = computed(() => {
         edit.push({ key: 'label', label: props.node.labelVisible ? '关闭标注' : '开启标注' });
     }
     if (actions.copyCoordinates) edit.push({ key: 'copy', label: '复制坐标' });
-    if (actions.toggleSearchCRS) {
+    if (actions.toggleLayerCRS) {
         const currentCrs = String(props.node?.raw?.crs || 'wgs84').toLowerCase();
         const targetLabel = currentCrs === 'gcj02' ? 'WGS-84' : 'GCJ-02';
         edit.push({ key: 'toggle-crs', label: `切换坐标系至 ${targetLabel}` });
+    }
+    if (actions.exportLayerData) {
+        edit.push({ key: 'export-csv', label: '导出坐标(CSV)' });
+        edit.push({ key: 'export-txt', label: '导出坐标(TXT)' });
+        edit.push({ key: 'export-geojson', label: '导出坐标(GeoJSON)' });
     }
     if (edit.length) groups.push(edit);
 
@@ -232,9 +237,17 @@ function handleMenuCommand(key) {
     if (key === 'toggle-crs') {
         const currentCrs = String(props.node?.raw?.crs || 'wgs84').toLowerCase();
         const nextCrs = currentCrs === 'gcj02' ? 'wgs84' : 'gcj02';
-        emitAction('toggle-search-layer-crs', {
+        emitAction('toggle-layer-crs', {
             layerId: props.node.id,
             crs: nextCrs
+        });
+        closeContextMenu();
+        return;
+    }
+    if (key === 'export-csv' || key === 'export-txt' || key === 'export-geojson') {
+        emitAction('export-layer-data', {
+            layerId: props.node.id,
+            format: key === 'export-csv' ? 'csv' : (key === 'export-txt' ? 'txt' : 'geojson')
         });
         closeContextMenu();
         return;

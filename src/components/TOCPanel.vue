@@ -235,7 +235,8 @@ const emit = defineEmits([
     'highlight-attribute-feature',
     'zoom-attribute-feature',
     'draw-point-by-coordinates',
-    'toggle-search-layer-crs'
+    'toggle-layer-crs',
+    'export-layer-data'
 ]);
 
 const fileInputRef = ref(null);
@@ -528,10 +529,17 @@ function handleLayerTreeAction(evt) {
         copyLayerCoordinates(evt.layer);
         return;
     }
-    if (type === 'toggle-search-layer-crs') {
-        emit('toggle-search-layer-crs', {
+    if (type === 'toggle-layer-crs' || type === 'toggle-search-layer-crs') {
+        emit('toggle-layer-crs', {
             layerId: evt.layerId,
             crs: evt.crs
+        });
+        return;
+    }
+    if (type === 'export-layer-data') {
+        emit('export-layer-data', {
+            layerId: evt.layerId,
+            format: evt.format
         });
         return;
     }

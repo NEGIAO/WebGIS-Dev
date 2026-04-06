@@ -37,6 +37,17 @@
 </template>
 
 <script setup>
+/* 
+   本文件将作为中转是函数执行层
+   具体实现逻辑分散解耦到多个 Composable 中
+   保持组件代码清晰，职责单一。
+
+   只保留相关函数的调用
+   当前逻辑层代码量过大
+   具体实现禁止放到该组件内
+   便于进行项目的维护和升级
+   避免臃肿和职责混乱 
+*/
 import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
@@ -76,7 +87,7 @@ import { fromLonLat, toLonLat } from 'ol/proj';
 import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
 import { unByKey } from 'ol/Observable';
 import { getArea, getLength } from 'ol/sphere';
-import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
+import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty, getCenter as getExtentCenter } from 'ol/extent';
 
 // 图层与数据源
 import TileLayer from 'ol/layer/Tile';
@@ -90,6 +101,10 @@ import { Polygon } from 'ol/geom';
 import { Draw, Snap } from 'ol/interaction';
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
+import { 
+    createLayerExporter,
+    isVectorManagedLayer 
+} from '../utils/layerExportService';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -888,6 +903,55 @@ function clearManagedFeatureHighlight(feature) {
     }
 }
 
+// [隶属] 图层管理-代表点推断
+// [作用] 根据要素的几何类型智能推断一个代表点坐标
+// 以便在图层元数据中使用，支持后续的地图定位、URL 分享等功能。
+function getFeatureRepresentativeLonLat(feature) {
+    const geometry = feature?.getGeometry?.();
+    if (!geometry) return null;
+
+    const extent = geometry.getExtent?.();
+    if (!extent || extent.some(v => !Number.isFinite(v))) return null;
+
+    const centerCoord = geometry.getType?.() === 'Point'
+        ? geometry.getCoordinates?.()
+        : getExtentCenter(extent);
+
+    if (!Array.isArray(centerCoord) || centerCoord.length < 2) return null;
+
+    const [lon, lat] = toLonLat(centerCoord);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+
+    return [lon, lat];
+}
+
+function inferLayerRepresentativeLonLat(features = []) {
+    for (const feature of features || []) {
+        const pair = getFeatureRepresentativeLonLat(feature);
+        if (pair) return pair;
+    }
+    return null;
+}
+
+// [隶属] 图层管理-元数据规范化
+// [作用] 规范化托管图层的元数据结构，确保坐标
+// 系统一致，并智能推断缺失的代表点坐标，支持后续的地图定位、URL 分享等功能。
+function normalizeLayerMetadata(metadata, features = []) {
+    const nextMetadata = { ...(metadata || {}) };
+    const normalizedCrs = String(nextMetadata.crs || 'wgs84').toLowerCase();
+    nextMetadata.crs = normalizedCrs === 'gcj02' ? 'gcj02' : 'wgs84';
+
+    if (!(Number.isFinite(nextMetadata.longitude) && Number.isFinite(nextMetadata.latitude))) {
+        const pair = inferLayerRepresentativeLonLat(features);
+        if (pair) {
+            nextMetadata.longitude = Number(pair[0].toFixed(6));
+            nextMetadata.latitude = Number(pair[1].toFixed(6));
+        }
+    }
+
+    return nextMetadata;
+}
+
 // [隶属] 图层管理-托管图层创建
 // [作用] 将矢量要素创建为托管图层并登记到 userDataLayers。
 // [交互] 调用 emitUserLayersChange / emitGraphicsOverview，与外部面板同步。
@@ -905,11 +969,12 @@ function createManagedVectorLayer({
 
     const normalizedStyle = normalizeStyleConfig(styleConfig || STYLE_TEMPLATES.classic);
     const labelVisible = !!autoLabel;
+    const normalizedMetadata = normalizeLayerMetadata(metadata, features);
     const managedLayerState = {
         name,
         autoLabel: !!autoLabel,
         labelVisible,
-        metadata: metadata || null,
+        metadata: normalizedMetadata,
         styleConfig: normalizedStyle,
         labelStyleCache: new globalThis.Map()
     };
@@ -938,7 +1003,7 @@ function createManagedVectorLayer({
         features: serializedFeatures,
         autoLabel: managedLayerState.autoLabel,
         labelVisible,
-        metadata: managedLayerState.metadata,
+        metadata: normalizedMetadata,
         styleConfig: normalizedStyle,
         labelStyleCache: managedLayerState.labelStyleCache,
         layer
@@ -2297,9 +2362,44 @@ function drawPointByCoordinatesInput(payload) {
     message.success(`已绘制点位：${displayName}`);
 }
 
-// [隶属] 组件交互-搜索图层坐标切换
-// [作用] 在 WGS-84 与 GCJ-02 间切换搜索结果图层坐标并刷新展示与复制数据。
-function toggleSearchLayerCRS(payload) {
+// [隶属] 组件交互-坐标系转换
+// [作用] 将指定图层的矢量要素坐标在 WGS-84 与 GCJ-02 之间进行转换，并更新图层元数据与 TOC 显示字段。
+function applyCrsConversionToFeature(feature, converter, targetCrs) {
+    const geometry = feature?.getGeometry?.();
+    if (!geometry || typeof geometry.clone !== 'function') return null;
+
+    const convertedGeometry = geometry.clone();
+    convertedGeometry.transform('EPSG:3857', 'EPSG:4326');
+
+    convertedGeometry.applyTransform((input, output, stride) => {
+        const out = output || new Array(input.length);
+        for (let i = 0; i < input.length; i += stride) {
+            const [newLon, newLat] = converter(input[i], input[i + 1]);
+            out[i] = Number.isFinite(newLon) ? newLon : input[i];
+            out[i + 1] = Number.isFinite(newLat) ? newLat : input[i + 1];
+            for (let j = 2; j < stride; j++) {
+                out[i + j] = input[i + j];
+            }
+        }
+        return out;
+    });
+
+    convertedGeometry.transform('EPSG:4326', 'EPSG:3857');
+    feature.setGeometry(convertedGeometry);
+    feature.set('坐标系', targetCrs);
+
+    const representative = getFeatureRepresentativeLonLat(feature);
+    if (representative) {
+        feature.set('经度', Number(representative[0].toFixed(6)));
+        feature.set('纬度', Number(representative[1].toFixed(6)));
+    }
+
+    return representative;
+}
+
+// [隶属] 组件交互-图层坐标系切换
+// [作用] 在 WGS-84 与 GCJ-02 间切换任意矢量图层坐标并刷新 TOC 显示字段。
+function toggleLayerCRS(payload) {
     if (!mapInstance.value || !payload?.layerId) return;
 
     const nextCrs = String(payload.crs || 'wgs84').toLowerCase();
@@ -2314,16 +2414,15 @@ function toggleSearchLayerCRS(payload) {
         return;
     }
 
-    const isSearchLayer = layerData.sourceType === 'search' && layerData.metadata?.category !== 'route' && !/_route$/i.test(String(layerData.type || ''));
-    if (!isSearchLayer) {
-        message.warning('仅搜索结果图层支持坐标系切换');
+    if (!isVectorManagedLayer(layerData)) {
+        message.warning('该图层不是矢量图层，无法进行坐标转换');
         return;
     }
 
     const source = layerData.layer?.getSource?.();
     const features = source?.getFeatures?.() || [];
     if (!features.length) {
-        message.warning('图层中没有可转换的点位');
+        message.warning('图层中没有可转换的几何对象');
         return;
     }
 
@@ -2333,56 +2432,45 @@ function toggleSearchLayerCRS(payload) {
         return;
     }
 
-    let firstPoint = null;
+    const converter = currentCrs === 'wgs84' && nextCrs === 'gcj02'
+        ? wgs84ToGcj02
+        : gcj02ToWgs84;
 
+    let firstCoordinate = null;
     features.forEach((feature) => {
-        const geometry = feature.getGeometry?.();
-        if (!geometry || geometry.getType?.() !== 'Point') return;
-
-        const [currLng, currLat] = toLonLat(geometry.getCoordinates());
-        if (!Number.isFinite(currLng) || !Number.isFinite(currLat)) return;
-
-        let newLng = currLng;
-        let newLat = currLat;
-
-        if (currentCrs === 'wgs84' && nextCrs === 'gcj02') {
-            [newLng, newLat] = wgs84ToGcj02(currLng, currLat);
-        } else if (currentCrs === 'gcj02' && nextCrs === 'wgs84') {
-            [newLng, newLat] = gcj02ToWgs84(currLng, currLat);
-        }
-
-        if (!Number.isFinite(newLng) || !Number.isFinite(newLat)) return;
-
-        geometry.setCoordinates(fromLonLat([newLng, newLat]));
-        feature.set('经度', Number(newLng.toFixed(6)));
-        feature.set('纬度', Number(newLat.toFixed(6)));
-        feature.set('坐标系', nextCrs);
-
-        if (!firstPoint) {
-            firstPoint = [newLng, newLat];
+        const representative = applyCrsConversionToFeature(feature, converter, nextCrs);
+        if (!firstCoordinate && representative) {
+            firstCoordinate = representative;
         }
     });
 
-    if (firstPoint) {
-        layerData.metadata = {
-            ...(layerData.metadata || {}),
-            longitude: Number(firstPoint[0].toFixed(6)),
-            latitude: Number(firstPoint[1].toFixed(6)),
-            crs: nextCrs
-        };
-    } else {
-        layerData.metadata = {
-            ...(layerData.metadata || {}),
-            crs: nextCrs
-        };
+    const nextMetadata = {
+        ...(layerData.metadata || {}),
+        crs: nextCrs
+    };
+    if (firstCoordinate) {
+        nextMetadata.longitude = Number(firstCoordinate[0].toFixed(6));
+        nextMetadata.latitude = Number(firstCoordinate[1].toFixed(6));
     }
+    layerData.metadata = normalizeLayerMetadata(nextMetadata, features);
 
     layerData.features = serializeManagedFeatures(features, layerData.name);
+    source?.changed?.();
     layerData.layer?.changed?.();
     emitUserLayersChange();
 
     message.success(`已切换到 ${nextCrs.toUpperCase()} 坐标系`);
 }
+
+// 兼容旧事件命名，避免上游调用中断。
+function toggleSearchLayerCRS(payload) {
+    toggleLayerCRS(payload);
+}
+
+// [隶属] 组件交互-图层坐标导出
+// [作用] 将当前图层按当前坐标系导出为 CSV/TXT/GeoJSON。
+// [交互] 由外部组件调用，委托 layerExportService 处理。
+let exportLayerCoordinates;
 
 // --- 4. 外部接口 (文件导入/绘图) ---
 
@@ -2584,6 +2672,12 @@ const formatArea = (poly) => {
     return area > 10000 ? `${(area / 1000000).toFixed(2)} km²` : `${area.toFixed(2)} m²`;
 };
 
+// 初始化图层导出服务并包装为适配本组件的调用方式
+const exporterFn = createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 });
+exportLayerCoordinates = (payload) => {
+    exporterFn(payload, { userDataLayers });
+};
+
 // [隶属] 组件交互-对外能力暴露
 // [作用] 向父组件公开地图核心动作（导入、绘制、路线、图层管理等）。
 // [交互] HomeView 等父组件通过 ref 调用这些方法。
@@ -2619,7 +2713,9 @@ defineExpose({
     viewUserLayer,
     zoomToGraphics,
     drawPointByCoordinatesInput,
-    toggleSearchLayerCRS
+    toggleLayerCRS,
+    toggleSearchLayerCRS,
+    exportLayerCoordinates
 });
 </script>
 
