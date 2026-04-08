@@ -169,7 +169,7 @@ const menuItems = computed(() => {
     const edit = [];
     if (actions.attribute) edit.push({ key: 'attribute', label: '打开属性表' });
     if (actions.style) edit.push({ key: 'style', label: '样式设置' });
-    if (actions.label && isValidLabel(props.node?.raw?.labelFieldValue)) {
+    if (actions.label && isValidLabel(props.node?.raw?.name || props.node?.name)) {
         edit.push({ key: 'label', label: props.node.labelVisible ? '关闭标注' : '开启标注' });
     }
     if (actions.copyCoordinates) edit.push({ key: 'copy', label: '复制坐标' });
