@@ -39,7 +39,7 @@ export interface SharedResourceTreeNode {
     fileCount?: number;
 }
 
-const SHARED_RESOURCE_DIR = '/ShareDate';
+const SHARED_RESOURCE_DIR = './ShareDate';
 const SUPPORTED_EXTENSIONS = ['kml', 'kmz', 'geojson', 'json', 'shp', 'shx', 'dbf', 'prj', 'cpg', 'tif', 'tiff', 'zip'];
 
 function normalizeResourcePath(path: string): string {
@@ -172,7 +172,6 @@ export function useSharedResourceLoader() {
         scanError.value = null;
 
         try {
-            
             // 1. 扫描文件
             const rawModules = import.meta.glob('/public/ShareDate/**/*', {
                 query: '?url',
