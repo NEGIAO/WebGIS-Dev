@@ -131,9 +131,17 @@ WebGIS_Dev/
 │   │       ├── useSingularity.js       # 首屏奇点视觉特效
 │   │       └── useWave.js              # 首屏波动视觉特效
 │   ├── constants/
-│   │   ├── goldenSoupQuores.js         # 心灵鸡汤句库，治愈你的伤痛
+│   │   ├── goldenSoupQuotes.js         # 心灵鸡汤句库，治愈你的伤痛
+│   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts   # 非标准xyz切片配置示例
+│   │   ├── useBasemapManager.ts        # 底图配置管理（从 composables 迁移）
+│   │   └── useStyleEditor.js           # 图层样式模板配置
+│   ├── stores/
+│   │   └── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   ├── router/
 │   │   └── index.js                    # Vue Router 路由表与 hash history 配置
+│   ├── views/
+│   │   ├── HomeView.vue                # 主页面布局编排与 MapContainer/SidePanel 事件中枢
+│   │   └── RegisterView.vue            # 登录页面（预留）
 │   ├── utils/
 |   |   ├── coordinateFormatter.js      # 坐标显示与输入解析工具，支持多格式显示与智能输入识别
 |   |   ├── layerExportService.js       # 矢量数据导出服务，支持 CSV/TXT/GeoJSON 格式，自动附带 UTF-8 BOM 提升兼容性
@@ -145,20 +153,20 @@ WebGIS_Dev/
 │   │   ├── loadTiandituSdk.js          # [天地图 API] 天地图 SDK 按需加载与注入守卫
 │   │   ├── transitRouteBuilder.js      # [通用工具] 公交/驾车结果到地图要素的构建工具
 │   │   ├── userPositionCache.js        # [通用工具] 用户定位结果缓存与读取策略
+│   │   ├── labelValidator.ts           # [验证工具] 标注内容有效性判断，支持乱码/无意义值过滤
 │   │   └── gis/
 │   │       ├── batchProcessor.js       # [文件解析] 容器内数据集分组、统计与批处理编排
 │   │       ├── crsAware.js             # [坐标转换] 历史 CRS 识别兼容逻辑
 │   │       ├── crs-engine.ts           # [坐标转换] 投影识别与 proj4 重投影执行引擎
 │   │       ├── dataDispatcher.js       # [文件解析] 导入流程分发器（多格式识别、SHP sidecar 聚合、错误聚合）
 │   │       ├── decompressFile.js       # [文件解析] 归档文件解压兼容入口
-│   │       ├── decompressor.ts         # [文件解析] ZIP/KMZ 递归解压与资源扫描
+│   │       ├── decompressor.ts         # [文件解析] ZIP/KMZ 递归解压与资源扫描（支持子文件夹递归）
 │   │       └── parsers/
 │   │           ├── kmlParser.ts        # [文件解析] KML 几何与属性解析器
 │   │           ├── shpParser.ts        # [文件解析] SHP 解析器（头部校验、dbf/shx 回退、PRJ 重投影）
 │   │           └── tifLoader.ts        # [文件解析] TIFF/GeoTIFF 栅格载入与波段读取
-│   └── views/
-│       ├── HomeView.vue                # 主页面布局编排与 MapContainer/SidePanel 事件中枢(一分为三)
-│       └── RegisterView.vue            # 登录页面
+│   ├── App.vue                         # 根组件，承载 RouterView 输出
+│   └── main.js                         # Vue 应用启动入口，挂载 Pinia、Router 与全局消息宿主
 ├── package.json                        # 脚本与依赖配置
 ├── vite.config.js                      # Vite 构建与部署配置
 └── README.md                           # 项目说明文档
@@ -192,6 +200,20 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.8.4 (2026-04-08)
+#### 🐛 标注菜单修复 + 文件结构优化 + 共享资源递归扫描
+* **标注菜单 Bug 修复**：修正 TOCTreeItem.vue 中标注菜单判断逻辑，使用正确的属性 `props.node?.raw?.name` 替代不存在的 `labelFieldValue`，解决标注开启/关闭菜单无法显示的问题。
+* **文件结构重构**：
+  * 将非标准切片适配器等常量迁移至 `src/constants/` 目录，使 `composables` 职责聚焦于业务逻辑。
+  * 新增 `src/views/` 目录，集中管理页面级组件（HomeView、RegisterView）。
+  * `src/router/` 独立路由配置，支持未来的页面路由拓展。
+  * `src/stores/` 集中 Pinia 状态管理（useLayerStore.ts）。
+* **共享资源支持递归子文件夹**：
+  * `useSharedResourceLoader` 中 glob pattern 从 `/public/ShareDate/*` 升级为 `/public/ShareDate/**/*`，支持无限深度嵌套文件夹。
+  * TOCPanel 显示效果同步，多级目录以"📂 文件夹名"标题分组展示。
+  * 优化文件夹排序策略，"根目录"始终排前，其余按字母顺序排列。
+* **项目文档同步**：更新 README 目录树结构部分，新增 `constants/`、`views/`、`stores/` 目录说明与文件清单。
 
 ### V2.8.3 (2026-04-08)
 #### 📦 共享资源快速加载 + 样式优化
