@@ -201,7 +201,7 @@ WebGIS_Dev/
 
 ## 版本记录
 
-### V2.8.4 (2026-04-08)
+### V2.8.3 (2026-04-08)
 #### 🐛 标注菜单修复 + 文件结构优化 + 共享资源递归扫描
 * **标注菜单 Bug 修复**：修正 TOCTreeItem.vue 中标注菜单判断逻辑，使用正确的属性 `props.node?.raw?.name` 替代不存在的 `labelFieldValue`，解决标注开启/关闭菜单无法显示的问题。
 * **文件结构重构**：
@@ -215,7 +215,6 @@ WebGIS_Dev/
   * 优化文件夹排序策略，"根目录"始终排前，其余按字母顺序排列。
 * **项目文档同步**：更新 README 目录树结构部分，新增 `constants/`、`views/`、`stores/` 目录说明与文件清单。
 
-### V2.8.3 (2026-04-08)
 #### 📦 共享资源快速加载 + 样式优化
 * **共享资源加载器**：新增 `useSharedResourceLoader` composable，自动扫描 `public/ShareDate` 目录中的 KML/KMZ/GeoJSON/JSON/SHP/TIF/TIFF 文件。
 * **TOCPanel 集成共享资源**：在"图层"标签页下方添加"共享资源"菜单，用户点击"加载资源"按钮自动扫描，扫描结果以子菜单形式展示。
