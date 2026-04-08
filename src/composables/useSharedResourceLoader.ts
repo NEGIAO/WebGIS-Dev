@@ -172,11 +172,22 @@ export function useSharedResourceLoader() {
         scanError.value = null;
 
         try {
-            // 使用 import.meta.glob 递归扫描 ShareDate 下所有文件
-            const globModules = import.meta.glob('/public/ShareDate/**/*', {
+            
+            // 1. 扫描文件
+            const rawModules = import.meta.glob('/public/ShareDate/**/*', {
                 query: '?url',
-                import: 'default'
+                import: 'default',
+                eager: true // 建议开启 eager，确保数据立即同步可用
             });
+
+            // 2. 核心修复：把路径变成“相对路径”
+            const globModules = Object.fromEntries(
+                Object.entries(rawModules).map(([path, value]) => [
+                    path.replace(/^\/public\//, ''), 
+                    value
+                ])
+            );
+            // 解决路径问题
 
             const discoveredMap = new Map<string, SharedResource>();
 
