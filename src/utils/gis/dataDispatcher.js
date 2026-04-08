@@ -243,6 +243,7 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
 
     const resourcePool = buildResourcePool(archive.entries);
     const tasks = classifyArchiveDatasets(archive.entries);
+    const isKmzArchive = String(sourceType || '').toLowerCase() === 'kmz';
     const shpGrouping = groupShpEntriesByBaseName(archive.entries);
     if (Array.isArray(shpGrouping.warnings) && shpGrouping.warnings.length) {
         warnings.push(...shpGrouping.warnings);
@@ -256,11 +257,16 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
             const projectionResolved = await resolveProjectionOrDefault(detectKmlProjectionHint(kmlText), 'KML/KMZ');
             if (projectionResolved.warning) warnings.push(`${task.entry.path}: ${projectionResolved.warning}`);
 
+            const preservedEntryName = isKmzArchive && sourceName
+                ? sourceName
+                : task.entry.path;
+
             packets.push({
                 kind: 'kml',
                 sourceType,
                 sourceName,
-                entryName: task.entry.path,
+                entryName: preservedEntryName,
+                dispatchEntryName: task.entry.path,
                 kmlString: kmlText,
                 dataProjection: projectionResolved.projection,
                 needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase())

@@ -71,6 +71,7 @@ WebGIS_Dev/
 ├── public/
 │   ├── images/                         # 站点静态资源目录
 │   ├── tiles/                          # QGIS自制瓦片目录，按 public/tiles/{z}/{x}/{y}.png 组织，便于贡献和自用
+│   ├── ShareDate/                      # 📦 共享资源目录：放置 KML/KMZ/GeoJSON/SHP/TIF 等数据文件，应用启动时自动扫描供用户快速导入
 │   ├── min-enhanced.js                 # 第三方统计脚本延迟加载入口
 │   ├── ol.js / ol.css                  # OpenLayers 备用静态资源
 │   └── favicon.ico                     # 网站图标
@@ -97,7 +98,7 @@ WebGIS_Dev/
 │   │   ├── MapPointPickerCard.vue      # 地图起终点拾取
 │   │   ├── Message.vue                 # 全局消息通知组件（灵动岛效果）
 │   │   ├── SidePanel.vue               # 右侧总控容器（资讯/聊天/图层管理/公交/驾车）
-│   │   ├── TOCPanel.vue                # TOC/绘制/样式面板（上传入口、导入进度、拖拽上传）
+│   │   ├── TOCPanel.vue                # ⭐ 工具箱总容器：绘制、样式、图层与共享资源菜单（共享资源由 useSharedResourceLoader 驱动）
 │   │   ├── TOCTreeItem.vue             # ⭐ [V2.8+] 递归树节点组件：右键菜单、悬停按钮、级联可见性、Teleport 固定菜单
 │   │   ├── TopBar.vue                  # 导航栏（菜单、分享、快捷跳转与功能入口）
 │   │   └── icons/
@@ -119,6 +120,7 @@ WebGIS_Dev/
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
+│   │   ├── useSharedResourceLoader.ts  # 📦 [V2.8.3+] 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式、复用上传逻辑导入
 │   │   ├── useStyleEditor.js           # 图层样式模板
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   ├── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
@@ -190,6 +192,16 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.8.3 (2026-04-08)
+#### 📦 共享资源快速加载 + 样式优化
+* **共享资源加载器**：新增 `useSharedResourceLoader` composable，自动扫描 `public/ShareDate` 目录中的 KML/KMZ/GeoJSON/JSON/SHP/TIF/TIFF 文件。
+* **TOCPanel 集成共享资源**：在"图层"标签页下方添加"共享资源"菜单，用户点击"加载资源"按钮自动扫描，扫描结果以子菜单形式展示。
+* **复用上传逻辑**：每个共享资源将被转换为 File 对象，通过现有的导入流程处理，保证与手动上传完全一致的行为和错误处理。
+* **零代码维护**：不需要修改代码，只需将 KML/SHP 等文件放入 `public/ShareDate` 文件夹即可自动发现和二次利用。
+* **样式适配绿色主题**：共享资源菜单、按钮和资源项采用项目绿色主题（#2f9a57 等），与整体 UI 风格一致。
+* **可扩展架构**：支持两种扫描实现方式（import.meta.glob 编译时 + 动态 API 降级），便于后续集成真实后端服务或 CDN manifest 文件。
+* **生产最适方案**：优先使用 import.meta.glob（可靠稳定），无法使用时自动降级，确保开发和生产环境的一致性。
 
 ### V2.8.2 (2026-04-06)
 #### 🔁 矢量图层坐标切换（GCJ-02 <=> WGS-84） + 数据轻量导出 + 坐标显示格式优化

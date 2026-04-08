@@ -70,19 +70,47 @@ async function readDirectoryChildren(entry: any): Promise<any[]> {
     return all;
 }
 
-async function flattenArchive(buffer: ArrayBuffer, basePath: string): Promise<FlattenedResource[]> {
+async function flattenArchive(buffer: ArrayBuffer, basePath: string, archiveExt = 'zip'): Promise<FlattenedResource[]> {
     const zip = await JSZip.loadAsync(buffer);
     const output: FlattenedResource[] = [];
+    const usedPaths = new Set<string>();
+
+    function ensureUniquePath(path: string): string {
+        const normalized = normalizePath(path);
+        if (!usedPaths.has(normalized)) {
+            usedPaths.add(normalized);
+            return normalized;
+        }
+
+        const ext = extOf(normalized);
+        const stem = ext ? normalized.slice(0, -(ext.length + 1)) : normalized;
+        let suffix = 2;
+        let candidate = `${stem}__${suffix}${ext ? `.${ext}` : ''}`;
+        while (usedPaths.has(candidate)) {
+            suffix += 1;
+            candidate = `${stem}__${suffix}${ext ? `.${ext}` : ''}`;
+        }
+        usedPaths.add(candidate);
+        return candidate;
+    }
 
     const entries = Object.values(zip.files).filter((item) => !item.dir);
     for (const entry of entries) {
-        const innerPath = normalizePath(basePath ? `${basePath}/${entry.name}` : entry.name);
+        const entryPath = normalizePath(entry.name);
+        const entryExt = extOf(entryPath);
         const entryBuffer = await entry.async('arraybuffer');
+
+        // KMZ 的主 KML 常见文件名为 doc.kml。这里将其映射为“容器基名.kml”，
+        // 确保后续 TOC 图层名保持为原始 KMZ 文件名，而不是 doc/乱码名。
+        const preferredPath = (String(archiveExt).toLowerCase() === 'kmz' && entryExt === 'kml')
+            ? normalizePath(`${basePath}.kml`)
+            : normalizePath(basePath ? `${basePath}/${entryPath}` : entryPath);
+        const innerPath = ensureUniquePath(preferredPath);
         const ext = extOf(innerPath);
 
         if (isArchive(ext)) {
             const nestedBase = innerPath.replace(/\.[^/.]+$/, '');
-            const nested = await flattenArchive(entryBuffer, nestedBase);
+            const nested = await flattenArchive(entryBuffer, nestedBase, ext);
             output.push(...nested);
             continue;
         }
@@ -100,7 +128,7 @@ async function flattenFile(file: any, preferredPath = ''): Promise<FlattenedReso
 
     if (isArchive(ext)) {
         const basePath = path.replace(/\.[^/.]+$/, '');
-        return flattenArchive(buffer, basePath);
+        return flattenArchive(buffer, basePath, ext);
     }
 
     return [{ path, ext, content: buffer }];

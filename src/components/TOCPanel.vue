@@ -77,6 +77,46 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 共享资源菜单 -->
+            <div class="shared-resource-wrap">
+                <div class="card shared-resource-card">
+                    <div class="card-title shared-resource-title">
+                        <span class="share-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="18" cy="5" r="3"></circle>
+                                <circle cx="6" cy="12" r="3"></circle>
+                                <circle cx="18" cy="19" r="3"></circle>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                            </svg>
+                        </span>
+                        共享资源
+                    </div>
+                    <div class="shared-resource-menu">
+                        <button 
+                            class="shared-resource-btn" 
+                            :class="{ loading: sharedLoader.isScanning.value }"
+                            @click="scanSharedResources"
+                        >
+                            <span v-if="!sharedLoader.isScanning.value">📁 加载资源</span>
+                            <span v-else>⏳ 扫描中...</span>
+                        </button>
+                        <div v-if="sharedLoader.hasResources.value" class="resource-tree-root">
+                            <SharedResourceTreeItem
+                                v-for="node in sharedLoader.resourceTree.value"
+                                :key="node.id"
+                                :node="node"
+                                :level="0"
+                                @load-resource="loadSharedResource"
+                            />
+                        </div>
+                        <div v-else-if="!sharedLoader.isScanning.value && lastScanAttempted" class="resource-empty">
+                            暂无可用资源
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div v-else-if="activeTab === 'draw'" class="panel-scroll">
@@ -199,12 +239,15 @@
 import { computed, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useGisLoader } from '../composables/useGisLoader';
+import { useSharedResourceLoader } from '../composables/useSharedResourceLoader';
 import { useLayerStore } from '../composables/useLayerStore';
 import { useAttrStore } from '../stores/useAttrStore';
-import { useStyleEditor } from '../composables/useStyleEditor';
+import { useStyleEditor } from '../constants/useStyleEditor';
 import { COORDINATE_FORMATS, DECIMAL_PLACES, formatCoordinate } from '../utils/coordinateFormatter';
 import { generatePointName, processCoordinateInput } from '../utils/coordinateInputHandler';
 import LayerPanel from './LayerPanel.vue';
+import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
+
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
@@ -242,11 +285,13 @@ const fileInputRef = ref(null);
 const folderInputRef = ref(null);
 const message = useMessage();
 const gisLoader = useGisLoader();
+const sharedLoader = useSharedResourceLoader();
 const layerStore = useLayerStore();
 const attrStore = useAttrStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
 const isUploadDragging = ref(false);
+const lastScanAttempted = ref(false);
 const coordInputLon = ref('');
 const coordInputLat = ref('');
 const coordInputCRS = ref('wgs84');
@@ -613,6 +658,58 @@ function applyStyle() {
     }
     if (selectedEditLayerId.value) {
         emit('update-layer-style', { layerId: selectedEditLayerId.value, styleConfig: payload });
+    }
+}
+
+/**
+ * 扫描共享资源目录
+ * 此方法触发一次性扫描，结果存储在 sharedLoader 的反应式状态中
+ */
+async function scanSharedResources() {
+    try {
+        await sharedLoader.scanResources();
+        lastScanAttempted.value = true;
+        if (sharedLoader.hasResources.value) {
+            message.success(`发现 ${sharedLoader.resources.value.length} 个共享文件`);
+        } else {
+            message.info('未发现共享资源，请在 public/ShareDate 目录中添加数据文件');
+        }
+    } catch (error) {
+        message.error(`扫描共享资源失败: ${String(error)}`);
+        console.error('Error scanning shared resources:', error);
+    }
+}
+
+/**
+ * 加载选中的共享资源
+ * 复用现有的上传逻辑来导入数据
+ * 
+ * @param {Object} resource - 共享资源对象
+ */
+async function loadSharedResource(resource) {
+    if (!resource || !resource.path) {
+        message.warning('资源信息不完整');
+        return;
+    }
+
+    try {
+        // 使用共享加载器将资源转换为 File 对象
+        const files = await sharedLoader.loadResourceAsFiles(resource.path);
+        
+        if (!files || files.length === 0) {
+            message.warning('无法加载该资源');
+            return;
+        }
+
+        // 显示加载中的提示
+        message.info(`正在加载共享资源: ${resource.name}`, { duration: 2000 });
+
+        // 复用上传逻辑来处理资源导入
+        // 这样可以保证共享资源与手动上传的资源拥有完全相同的处理流程
+        emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
+    } catch (error) {
+        message.error(`加载共享资源失败: ${String(error)}`);
+        console.error('Error loading shared resource:', error);
     }
 }
 </script>
@@ -1218,6 +1315,103 @@ function applyStyle() {
     align-items: center;
     font-size: 12px;
     color: #4d6154;
+}
+
+.style-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right, #c8e1d0, #68c282);
+    outline: none;
+}
+
+/* ===== 共享资源样式 ===== */
+.shared-resource-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.shared-resource-card {
+    border: 1px solid rgba(153, 195, 170, 0.38);
+    border-radius: 10px;
+    padding: 11px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 20px rgba(58, 91, 67, 0.08);
+}
+
+.shared-resource-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #2e4b3a;
+    margin-bottom: 8px;
+}
+
+.share-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    color: #2f9a57;
+    background: #eaf7f0;
+}
+
+.shared-resource-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.shared-resource-btn {
+    border: 1px solid #7fc397;
+    background: #eef8f2;
+    color: #1d7541;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 34px;
+}
+
+.shared-resource-btn:hover {
+    border-color: #4fb373;
+    background: #d4f1e3;
+    color: #1d7541;
+    transform: translateY(-1px);
+}
+
+.shared-resource-btn.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.resource-tree-root {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    border: 1px solid rgba(77, 150, 103, 0.2);
+    border-radius: 8px;
+    background: rgba(239, 248, 242, 0.5);
+}
+
+.resource-empty {
+    text-align: center;
+    padding: 12px 8px;
+    font-size: 11px;
+    color: #8a9f92;
+    font-style: italic;
 }
 
 .style-slider {

@@ -69,7 +69,7 @@ import {
     getBasemapOptionLabel,
     getLayerCategory as getLayerCategoryById,
     getLayerGroup as getLayerGroupById
-} from '../composables/useBasemapManager';
+} from '../constants/useBasemapManager';
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
@@ -113,6 +113,7 @@ import {
     createLayerExporter,
     isVectorManagedLayer 
 } from '../utils/layerExportService';
+import { isLabelValid } from '../utils/labelValidator';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -355,17 +356,22 @@ function mergeStyleConfig(prevCfg, newCfg) {
 }
 
 // [隶属] 图层管理-样式系统
-// [作用] 根据图层状态决定标签文本是否显示。
+// [作用] 根据图层状态决定标签文本是否显示。并验证标注内容有效性。
 // [交互] 被 applyManagedLayerStyle 调用。
+// [验证] 使用 isLabelValid 过滤 null/乱码/过长的标注内容
 function getLayerLabelText(layerItem) {
     if (!layerItem?.autoLabel) return '';
     if (!layerItem?.labelVisible) return '';
-    return String(layerItem.name || '').trim();
+    const labelText = String(layerItem.name || '').trim();
+    // 验证标注内容是否有效（过滤 null/乱码/过长）
+    if (!isLabelValid(labelText, 100)) return '';
+    return labelText;
 }
 
 // [隶属] 图层管理-样式系统
 // [作用] 根据要素属性和图层配置智能生成标签文本。
 // [交互] 被 applyManagedLayerStyle 调用。
+// [验证] 使用 isLabelValid 过滤 null/乱码/过长的标注内容
 function getFeatureLabelText(feature, layerItem) {
     if (!layerItem?.autoLabel || !layerItem?.labelVisible) return '';
 
@@ -375,7 +381,7 @@ function getFeatureLabelText(feature, layerItem) {
     const preferredField = String(layerItem?.metadata?.labelField || '').trim();
     if (preferredField) {
         const preferredValue = props[preferredField];
-        if (preferredValue !== null && preferredValue !== undefined && String(preferredValue).trim()) {
+        if (preferredValue !== null && preferredValue !== undefined && isLabelValid(preferredValue, 100)) {
             return String(preferredValue).trim();
         }
     }
@@ -383,7 +389,7 @@ function getFeatureLabelText(feature, layerItem) {
     const candidateKeys = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
     for (const key of candidateKeys) {
         const value = props[key];
-        if (value !== null && value !== undefined && String(value).trim()) {
+        if (value !== null && value !== undefined && isLabelValid(value, 100)) {
             return String(value).trim();
         }
     }
@@ -394,6 +400,7 @@ function getFeatureLabelText(feature, layerItem) {
         && !String(key).startsWith('_')
         && value !== null
         && value !== undefined
+        && isLabelValid(value, 100)
         && String(value).trim()
     ));
     if (firstUsableEntry) {

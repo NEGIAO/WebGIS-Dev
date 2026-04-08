@@ -78,6 +78,24 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
+/**
+ * TOCTreeItem - 地理信息系统图层树节点组件
+ * 
+ * 标注内容验证规则（isValidLabel）：
+ * ✅ 显示标注菜单项的条件：
+ *   - 标注内容不为 null/undefined
+ *   - 不是空字符串
+ *   - 长度不超过100字符（可配置）
+ *   - 不包含乱码或过多特殊字符（特殊字符比例 < 50%）
+ *   - 不包含过多连续的无效符号序列
+ * ❌ 不予显示的情况：
+ *   - 标注为 null 或 undefined
+ *   - 空字符串或仅空格
+ *   - 超过最大长度限制
+ *   - 检测为乱码或控制字符过多
+ *   - 特殊符号比例过高
+ */
+
 defineOptions({ name: 'TOCTreeItem' });
 
 const props = defineProps({
@@ -90,6 +108,52 @@ const menuVisible = ref(false);
 const menuX = ref(0);
 const menuY = ref(0);
 const menuRef = ref(null);
+
+/**
+ * 验证标注内容是否有效（本地版本）
+ * 在此处可直接使用，也可从外部工具函数导入
+ * 参考：src/utils/labelValidator.ts 获取更多功能
+ * 
+ * @param {string} label - 标注内容
+ * @param {number} maxLength - 最大长度限制（默认100字符）
+ * @returns {boolean} - 是否为有效标注
+ */
+function isValidLabel(label, maxLength = 100) {
+    // 检查是否为 null 或 undefined
+    if (label === null || label === undefined) {
+        return false;
+    }
+
+    // 转换为字符串
+    const labelStr = String(label).trim();
+
+    // 检查是否为空字符串
+    if (!labelStr) {
+        return false;
+    }
+
+    // 检查长度是否过长
+    if (labelStr.length > maxLength) {
+        return false;
+    }
+
+    // 检查是否为乱码（检查是否包含过多的特殊字符或控制字符）
+    // 计算特殊字符比例，如果超过50%则认为是乱码
+    const specialCharMatch = labelStr.match(/[\x00-\x1F\x7F-\x9F\uD800-\uDFFF]/g);
+    const specialCharRatio = specialCharMatch ? specialCharMatch.length / labelStr.length : 0;
+
+    if (specialCharRatio > 0.5) {
+        return false;
+    }
+
+    // 检查是否包含过多的连续特殊符号或无效序列
+    const tooManySpecialChars = /[^\w\s\u4E00-\u9FA5\.\,\?\!\!\；:\-\(\)（）、，。？！；：\-—·].{2,}/g;
+    if (tooManySpecialChars.test(labelStr)) {
+        return false;
+    }
+
+    return true;
+}
 
 const menuItems = computed(() => {
     if (props.node?.type !== 'layer') return [];
@@ -105,7 +169,7 @@ const menuItems = computed(() => {
     const edit = [];
     if (actions.attribute) edit.push({ key: 'attribute', label: '打开属性表' });
     if (actions.style) edit.push({ key: 'style', label: '样式设置' });
-    if (actions.label) {
+    if (actions.label && isValidLabel(props.node?.raw?.labelFieldValue)) {
         edit.push({ key: 'label', label: props.node.labelVisible ? '关闭标注' : '开启标注' });
     }
     if (actions.copyCoordinates) edit.push({ key: 'copy', label: '复制坐标' });
