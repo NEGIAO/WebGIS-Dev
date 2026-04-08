@@ -30,6 +30,17 @@ export function useLayerDataImport({
     const gisInlet = useGisLoader();
     const message = useMessage();
 
+    /**
+     * 从样式库中随机选择一个样式，用于增强多个导入数据的视觉区分度
+     * @returns {Object} 随机选择的样式配置对象
+     */
+    function getRandomStyle() {
+        const styleKeys = Object.keys(styleTemplates);
+        if (styleKeys.length === 0) return styleTemplates.classic;
+        const randomKey = styleKeys[Math.floor(Math.random() * styleKeys.length)];
+        return styleTemplates[randomKey];
+    }
+
     async function getGeotiffFromBlob() {
         if (!cachedGeotiffFromBlob) {
             const mod = await import('geotiff');
@@ -891,7 +902,7 @@ export function useLayerDataImport({
                     type: layerType,
                     sourceType: 'upload',
                     features,
-                    styleConfig: styleTemplates.classic,
+                    styleConfig: getRandomStyle(),
                     autoLabel: true,
                     metadata: {
                         labelField,
@@ -1043,7 +1054,7 @@ export function useLayerDataImport({
                 type: normalizedType,
                 sourceType: 'upload',
                 features,
-                styleConfig: styleTemplates.classic,
+                styleConfig: getRandomStyle(),
                 autoLabel: true,
                 metadata: {
                     labelField

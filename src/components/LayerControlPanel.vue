@@ -87,7 +87,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { toLonLat } from 'ol/proj';
 import { fetchLocationResultsByService } from '../api/locationSearch';
-import { BASEMAP_OPTIONS, detectNonStandardXYZ } from '../composables/useBasemapManager';
+import { BASEMAP_OPTIONS, detectNonStandardXYZ } from '../constants/useBasemapManager';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
