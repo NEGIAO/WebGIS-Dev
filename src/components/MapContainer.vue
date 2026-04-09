@@ -63,13 +63,12 @@ import {
     activeGoogleTileHost as globalActiveGoogleTileHost,
     resolvePreferredGoogleHost,
     createLayerConfigs,
-    createXYZSourceFromUrl,
-    detectNonStandardXYZ,
     resolvePresetLayerIds,
     getBasemapOptionLabel,
     getLayerCategory as getLayerCategoryById,
     getLayerGroup as getLayerGroupById
 } from '../constants/useBasemapManager';
+import { createAutoTileSourceFromUrl } from '../composables/useTileSourceFactory';
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
@@ -1647,7 +1646,25 @@ function initMap() {
         const activeStack = resolvePresetLayerIds(val);
 
         switchLayerById(val, {
-            onUpdated: () => emitBaseLayersChange()
+            onUpdated: () => {
+                emitBaseLayersChange();
+                // 当进行降级切换时，强制刷新地图以确保瓦片正确加载
+                if (isAutoSwitchingLayer && mapInstance.value) {
+                    // 清空前一个底图的瓦片缓存
+                    if (prevVal && layerInstances[prevVal]) {
+                        const source = layerInstances[prevVal].getSource?.();
+                        if (source && typeof source.clear === 'function') {
+                            source.clear();
+                        }
+                    }
+                    // 给新图层一点时间初始化，然后刷新地图
+                    setTimeout(() => {
+                        if (mapInstance.value && typeof mapInstance.value.updateSize === 'function') {
+                            mapInstance.value.updateSize();
+                        }
+                    }, 50);
+                }
+            }
         });
         
         // 仅在真正切换时（prevVal不为undefined）进行验证
@@ -1728,7 +1745,7 @@ function handleLayerChange(payload = {}) {
     if (payload.source === 'custom-url') {
         customMapUrl.value = String(payload.customUrl || '').trim();
         if (customMapUrl.value) {
-            loadCustomMap();
+            void loadCustomMap();
         }
     }
 }
@@ -1944,20 +1961,24 @@ function resetView() {
 }
 
 // [隶属] 图层切换-自定义底图
-// [作用] 加载用户输入的 XYZ 地址并激活 custom 图层。
+// [作用] 加载用户输入的 URL，按 XYZ -> WMS -> WMTS 自动识别并激活 custom 图层。
 // [交互] 更新 layerList 并调用 refreshLayersState。
-function loadCustomMap() {
+async function loadCustomMap() {
     if (!customMapUrl.value) return;
+
     try {
-        // 使用智能 URL 转换：自动检测非标准格式并应用转换
-        customSource = createXYZSourceFromUrl(customMapUrl.value);
-        
-        // 检测并显示图源类型信息
-        const detected = detectNonStandardXYZ(customMapUrl.value);
-        if (detected) {
-            message.success(`自动识别非标准图源: ${detected.name}`);
-        }
-        
+        const detected = await createAutoTileSourceFromUrl(customMapUrl.value);
+        customSource = detected.source;
+
+        const kindTextMap = {
+            xyz: '标准XYZ',
+            'non-standard-xyz': '非标准XYZ',
+            wms: 'WMS',
+            wmts: 'WMTS'
+        };
+
+        message.success(`自动识别图源: ${kindTextMap[detected.kind]}（${detected.detail}）`);
+
         // 更新 custom 层的 source
         if (layerInstances['custom']) {
             layerInstances['custom'].setSource(customSource);
@@ -1968,8 +1989,9 @@ function loadCustomMap() {
                 refreshLayersState();
             }
         }
-    } catch (e) {
-        message.error(`加载自定义图源失败: ${e.message || 'URL格式错误或无法解析'}`);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error || 'URL格式错误或无法解析');
+        message.error(`加载自定义图源失败: ${errorMessage}`);
     }
 }
 
