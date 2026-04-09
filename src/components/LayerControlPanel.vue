@@ -43,11 +43,11 @@
             <input
                 v-model="customUrlInput"
                 class="custom-url-input"
-                placeholder="输入 https://.../{z}/{x}/{y}.png"
+                placeholder="支持 XYZ / WMS / WMTS 服务 URL"
             />
             <button class="custom-url-btn" @click="submitCustomUrl" title="加载">ok</button>
-            <div v-if="detectedNonStandardInfo" class="detected-format-hint">
-                ✓ 已识别: {{ detectedNonStandardInfo.name }}
+            <div v-if="detectedServiceInfo" class="detected-format-hint">
+                ✓ 已识别: {{ detectedServiceInfo.name }}
             </div>
         </div>
 
@@ -87,7 +87,8 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { toLonLat } from 'ol/proj';
 import { fetchLocationResultsByService } from '../api/locationSearch';
-import { BASEMAP_OPTIONS, detectNonStandardXYZ } from '../constants/useBasemapManager';
+import { BASEMAP_OPTIONS } from '../constants/useBasemapManager';
+import { detectCustomTileServiceKind } from '../composables/useTileSourceFactory';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
@@ -164,7 +165,7 @@ const showLayerManager = ref(false);
 const draggingIndex = ref(-1);
 const customUrlInput = ref(props.customMapUrl || '');
 const layerManagerAnchor = ref({ top: 0, left: 0 });
-const detectedNonStandardInfo = ref(null); // 检测到的非标准格式信息
+const detectedServiceInfo = ref(null); // 检测到的服务类型信息
 
 const PANEL_WIDTH = 200;
 
@@ -190,20 +191,16 @@ watch(
 );
 
 /**
- * 监听自定义 URL 输入，实时检测非标准格式
+ * 监听自定义 URL 输入，实时检测服务类型
  */
 watch(customUrlInput, (newUrl) => {
     if (!newUrl || !newUrl.trim()) {
-        detectedNonStandardInfo.value = null;
+        detectedServiceInfo.value = null;
         return;
     }
-    
-    const detected = detectNonStandardXYZ(newUrl);
-    if (detected) {
-        detectedNonStandardInfo.value = detected;
-    } else {
-        detectedNonStandardInfo.value = null;
-    }
+
+    const detected = detectCustomTileServiceKind(newUrl);
+    detectedServiceInfo.value = detected.kind === 'unknown' ? null : detected;
 });
 
 function handleLayerChange(event) {
