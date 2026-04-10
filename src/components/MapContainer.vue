@@ -186,7 +186,8 @@ const LAYER_CONFIGS = createLayerConfigs(NORM_BASE, TIANDITU_TK);
 const layerList = ref(LAYER_CONFIGS.map(cfg => ({ 
     id: cfg.id, 
     name: cfg.name, 
-    visible: cfg.visible 
+    visible: cfg.visible,
+    opacity: 1 // 初始透明度为 100%
 })));
 const layerInstances = {}; // 存储所有 TileLayer 实例
 
@@ -1146,6 +1147,21 @@ function handleLayerOrderUpdate(payload = {}) {
         const target = layerList.value.find((item) => item.id === payload.layerId);
         if (!target) return;
         target.visible = !!payload.visible;
+        refreshLayersState();
+    }
+
+    if (payload.type === 'opacity') {
+        const layerId = String(payload.layerId);
+        const opacity = Number(payload.opacity);
+        if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) return;
+
+        // 更新 layerList 中的 opacity 属性
+        const target = layerList.value.find((item) => item.id === layerId);
+        if (!target) return;
+        
+        target.opacity = opacity;
+        
+        // 调用 refreshLayersState 将 opacity 应用到实际图层
         refreshLayersState();
     }
 }
