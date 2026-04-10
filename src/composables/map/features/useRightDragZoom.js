@@ -3,8 +3,8 @@ const DEFAULT_TRIGGER_PX = 3;
 const DEFAULT_SUPPRESS_CONTEXT_MENU_MS = 180;
 
 /**
- * 为 OpenLayers 地图启用“右键按住拖拽缩放”。
- * 向上拖动放大，向下拖动缩小。
+ * 右键拖拽缩放功能库
+ * 职责：只管理右键按住上下拖动缩放，以及拖动后抑制 contextmenu。
  */
 export function createRightDragZoomController(map, options = {}) {
     if (!map) {
@@ -56,7 +56,17 @@ export function createRightDragZoomController(map, options = {}) {
         const targetZoom = state.startZoom - (deltaY * sensitivity);
         const clampedZoom = Math.max(minZoom, Math.min(maxZoom, targetZoom));
 
-        view?.setZoom?.(clampedZoom);
+        // 保持地图中心不变进行缩放（而不是以鼠标位置为中心）
+        const currentCenter = view?.getCenter?.();
+        if (currentCenter) {
+            view?.animate?.({
+                zoom: clampedZoom,
+                center: currentCenter,
+                duration: 0  // 无动画，立即生效
+            });
+        } else {
+            view?.setZoom?.(clampedZoom);
+        }
         event.preventDefault();
     };
 

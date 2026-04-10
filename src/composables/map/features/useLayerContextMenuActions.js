@@ -27,7 +27,7 @@ async function copyTextToClipboard(text) {
             return true;
         }
     } catch {
-        // 继续使用 fallback。
+        // fallback to execCommand.
     }
 
     try {
@@ -47,7 +47,8 @@ async function copyTextToClipboard(text) {
 }
 
 /**
- * 图层右键菜单动作处理：复制 URL / 查看 URL。
+ * 图层右键菜单动作库
+ * 职责：处理 URL 的提取、复制与查看，不关心 UI 菜单表现。
  */
 export function useLayerContextMenuActions({
     layerInstances,

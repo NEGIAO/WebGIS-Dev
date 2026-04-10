@@ -59,8 +59,24 @@ import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry'
 import { useUserLocation } from '../composables/useUserLocation';
 import { useMessage } from '../composables/useMessage';
 import { useMapState } from '../composables/useMapState';
-import { createRightDragZoomController } from '../composables/useRightDragZoom';
-import { useLayerContextMenuActions } from '../composables/useLayerContextMenuActions';
+import { createRightDragZoomController } from '../composables/map/features/useRightDragZoom';
+import { useLayerContextMenuActions } from '../composables/map/features/useLayerContextMenuActions';
+import { createBasemapResilience } from '../composables/map/features/useBasemapResilience';
+import { createManagedLayerStyleFeature } from '../composables/map/features/useManagedLayerStyle';
+import { createRouteStepStyles } from '../composables/map/features/useRouteStepStyles';
+import { createRouteStepInteraction } from '../composables/map/features/useRouteStepInteraction';
+import { createManagedFeatureSerializationFeature } from '../composables/map/features/useManagedFeatureSerialization';
+import { createStartupTaskSchedulerFeature } from '../composables/map/features/useStartupTaskScheduler';
+import { createBasemapUrlMappingFeature } from '../composables/map/features/useBasemapUrlMapping';
+import { createCoordinateSystemConversionFeature } from '../composables/map/features/useCoordinateSystemConversion';
+import { createMapSearchAndCoordinateInputFeature } from '../composables/map/features/useMapSearchAndCoordinateInput';
+import { createManagedFeatureHighlightFeature } from '../composables/map/features/useManagedFeatureHighlight';
+import { createDrawMeasureFeature } from '../composables/map/features/useDrawMeasure';
+import { createRouteRenderingFeature } from '../composables/map/features/useRouteRendering';
+import { createLayerMetadataNormalizationFeature } from '../composables/map/features/useLayerMetadataNormalization';
+import { createUserLayerApiFacadeFeature } from '../composables/map/features/useUserLayerApiFacade';
+import { createBasemapStateManagementFeature } from '../composables/map/features/useBasemapStateManagement';
+import { createManagedFeatureOperationsFeature } from '../composables/map/features/useManagedFeatureOperations';
 import { 
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
@@ -115,7 +131,6 @@ import {
     createLayerExporter,
     isVectorManagedLayer 
 } from '../utils/layerExportService';
-import { isLabelValid } from '../utils/labelValidator';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -182,19 +197,17 @@ const { handleLayerContextAction } = useLayerContextMenuActions({
     message
 });
 
+const {
+    validateBaseLayerSwitch,
+    createBaseLayerFallbackManager,
+    monitorLayerTimeout
+} = createBasemapResilience({ message });
+
 // --- 全局变量 (非响应式) ---
-let drawInteraction, snapInteraction;
-let measureTooltipEl, measureTooltipOverlay;
-let helpTooltipEl, helpTooltipOverlay;
-let sketchFeature;
-let componentUnmounted = false;
+const componentUnmountedRef = ref(false);
 let pendingBusPick = null;
 let busRouteLayerRef = null;
-let busRouteManagedLayerId = null;
-let busActiveStepIndex = -1;
-let busHoverStepIndex = -1;
-let driveActiveStepIndex = -1;
-let driveHoverStepIndex = -1;
+const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
 
 // 图层引用
@@ -203,7 +216,6 @@ const drawSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const busPickSource = new VectorSource();
 const busRouteSource = new VectorSource();
-const busStepStyleCache = new globalThis.Map();
 
 // 子组件向父组件回传事件接口定义
 const emit = defineEmits([
@@ -261,9 +273,11 @@ function handleAttributeTableHighlightFeature(payload) {
 
 const isAttributeQueryEnabled = ref(true);
 const userDataLayers = [];
-let drawGraphicSeed = 1;
 let drawLayerInstance = null;
-let currentManagedFeatureHighlight = null;
+let tooltipRef = {
+    helpTooltipEl: null,
+    helpTooltipOverlay: null
+};
 
 const STYLE_TEMPLATES = {
     classic: {
@@ -311,148 +325,182 @@ const {
 
 const drawStyleConfig = ref({ ...STYLE_TEMPLATES.classic });
 
-// [隶属] 图层管理-样式系统
-// [作用] 对样式配置做归一化，统一默认值和边界。
-// [交互] 被 createStyleFromConfig / mergeStyleConfig 调用。
-function normalizeStyleConfig(styleCfg = {}) {
-    const base = { ...STYLE_TEMPLATES.classic, ...(styleCfg || {}) };
-    return {
-        fillColor: base.fillColor,
-        fillOpacity: Math.min(1, Math.max(0, Number(base.fillOpacity ?? 0.2))),
-        strokeColor: base.strokeColor,
-        strokeWidth: Math.max(0.5, Number(base.strokeWidth ?? 2)),
-        pointRadius: Math.max(3, Number(base.pointRadius ?? 6))
-    };
-}
+// 托管图层样式系统已下沉到 feature 库，MapContainer 仅负责注入与调用。
+const {
+    normalizeStyleConfig,
+    createStyleFromConfig,
+    mergeStyleConfig,
+    buildManagedLayerStyle,
+    applyManagedLayerStyle
+} = createManagedLayerStyleFeature({
+    styleTemplates: STYLE_TEMPLATES
+});
 
-// [隶属] 图层管理-样式系统
-// [作用] 将样式配置转换为 OpenLayers Style 实例。
-// [交互] 被绘图层、上传层、搜索层样式设置调用。
-function createStyleFromConfig(styleCfg, options = {}) {
-    const cfg = normalizeStyleConfig(styleCfg);
-    const hex = cfg.fillColor?.replace('#', '') || '5fbf7a';
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    const labelText = String(options.labelText || '').trim();
-    return new Style({
-        stroke: new Stroke({ color: cfg.strokeColor, width: cfg.strokeWidth }),
-        fill: new Fill({ color: `rgba(${r}, ${g}, ${b}, ${cfg.fillOpacity})` }),
-        image: new CircleStyle({
-            radius: cfg.pointRadius,
-            fill: new Fill({ color: cfg.fillColor }),
-            stroke: new Stroke({ color: cfg.strokeColor, width: Math.max(1, cfg.strokeWidth / 2) })
-        }),
-        text: labelText
-            ? new Text({
-                text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
-                font: '600 12px "Segoe UI", "Microsoft YaHei", sans-serif',
-                fill: new Fill({ color: '#183a2a' }),
-                stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 }),
-                backgroundFill: new Fill({ color: 'rgba(255,255,255,0.82)' }),
-                padding: [2, 6, 2, 6],
-                offsetY: -14,
-                textAlign: 'center'
-            })
-            : undefined
-    });
-}
+const {
+    getBusStepStyle,
+    getBusStepPointStyle,
+    getDriveStepStyle,
+    clearRouteStepStyleCache
+} = createRouteStepStyles();
 
-// [隶属] 图层管理-样式系统
-// [作用] 合并旧配置与新配置并输出标准化结果。
-// [交互] 被 setDrawStyle 与图层样式编辑动作调用。
-function mergeStyleConfig(prevCfg, newCfg) {
-    return normalizeStyleConfig({ ...(prevCfg || {}), ...(newCfg || {}) });
-}
+const {
+    getCurrentBusStepIndex,
+    getCurrentDriveStepIndex,
+    resetRouteStepStates,
+    zoomToDriveRouteStep,
+    zoomToBusRouteStep,
+    previewBusRouteStep,
+    clearBusRouteStepPreview,
+    previewDriveRouteStep,
+    clearDriveRouteStepPreview
+} = createRouteStepInteraction({
+    mapInstanceRef: mapInstance,
+    routeSource: busRouteSource,
+    getRouteLayer: () => busRouteLayerRef,
+    ensureRouteBuilderApi
+});
 
-// [隶属] 图层管理-样式系统
-// [作用] 根据图层状态决定标签文本是否显示。并验证标注内容有效性。
-// [交互] 被 applyManagedLayerStyle 调用。
-// [验证] 使用 isLabelValid 过滤 null/乱码/过长的标注内容
-function getLayerLabelText(layerItem) {
-    if (!layerItem?.autoLabel) return '';
-    if (!layerItem?.labelVisible) return '';
-    const labelText = String(layerItem.name || '').trim();
-    // 验证标注内容是否有效（过滤 null/乱码/过长）
-    if (!isLabelValid(labelText, 100)) return '';
-    return labelText;
-}
+const {
+    ensureFeatureId,
+    serializeManagedFeature,
+    serializeManagedFeatures
+} = createManagedFeatureSerializationFeature();
 
-// [隶属] 图层管理-样式系统
-// [作用] 根据要素属性和图层配置智能生成标签文本。
-// [交互] 被 applyManagedLayerStyle 调用。
-// [验证] 使用 isLabelValid 过滤 null/乱码/过长的标注内容
-function getFeatureLabelText(feature, layerItem) {
-    if (!layerItem?.autoLabel || !layerItem?.labelVisible) return '';
+// 图层元数据规范化（必须在使用前定义）
+const {
+    getFeatureRepresentativeLonLat,
+    inferLayerRepresentativeLonLat,
+    normalizeLayerMetadata
+} = createLayerMetadataNormalizationFeature();
 
-    const props = typeof feature?.getProperties === 'function' ? feature.getProperties() : null;
-    if (!props) return getLayerLabelText(layerItem);
+const {
+    scheduleLowPriorityTask,
+    waitForCriticalTileReady
+} = createStartupTaskSchedulerFeature({
+    componentUnmountedRef,
+    criticalTileReadyTimeoutMs: CRITICAL_TILE_READY_TIMEOUT_MS,
+    mapInstanceRef: mapInstance
+});
 
-    const preferredField = String(layerItem?.metadata?.labelField || '').trim();
-    if (preferredField) {
-        const preferredValue = props[preferredField];
-        if (preferredValue !== null && preferredValue !== undefined && isLabelValid(preferredValue, 100)) {
-            return String(preferredValue).trim();
-        }
+const {
+    getLayerIdByIndex,
+    getLayerIndexById,
+    getLayerCategory,
+    getLayerGroup
+} = createBasemapUrlMappingFeature({
+    urlLayerOptions: URL_LAYER_OPTIONS,
+    getLayerCategoryById,
+    getLayerGroupById
+});
+
+const {
+    applyCrsConversionToFeature,
+    toggleLayerCRS,
+    toggleSearchLayerCRS
+} = createCoordinateSystemConversionFeature({
+    userDataLayers,
+    message,
+    wgs84ToGcj02,
+    gcj02ToWgs84,
+    isVectorManagedLayer,
+    serializeManagedFeatures,
+    normalizeLayerMetadata,
+    getFeatureRepresentativeLonLat,
+    emitUserLayersChange
+});
+
+const {
+    handleSearchJump,
+    drawPointByCoordinatesInput
+} = createMapSearchAndCoordinateInputFeature({
+    message,
+    mapInstanceRef: mapInstance,
+    createManagedVectorLayer,
+    gcj02ToWgs84,
+    searchResultStyle: SEARCH_RESULT_STYLE
+});
+
+const {
+    createManagedFeatureHighlightStyle,
+    clearManagedFeatureHighlight,
+    highlightManagedFeature,
+    getCurrentHighlightedFeature,
+    setCurrentHighlightedFeature
+} = createManagedFeatureHighlightFeature({
+    findManagedFeature: (layerId, featureId) => {
+        const layer = layerMap.get(layerId);
+        if (!layer || !layer.getSource) return null;
+        const source = layer.getSource();
+        return source.getFeatureById(featureId);
     }
+});
 
-    const candidateKeys = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
-    for (const key of candidateKeys) {
-        const value = props[key];
-        if (value !== null && value !== undefined && isLabelValid(value, 100)) {
-            return String(value).trim();
-        }
-    }
+// 托管要素操作
+const {
+    findManagedFeature,
+    zoomToManagedFeature
+} = createManagedFeatureOperationsFeature({
+    mapInstanceRef: mapInstance,
+    userDataLayers,
+    getCurrentHighlightedFeature,
+    setCurrentHighlightedFeature,
+    clearManagedFeatureHighlight,
+    createManagedFeatureHighlightStyle
+});
 
-    const firstUsableEntry = Object.entries(props).find(([key, value]) => (
-        key !== 'geometry'
-        && key !== 'style'
-        && !String(key).startsWith('_')
-        && value !== null
-        && value !== undefined
-        && isLabelValid(value, 100)
-        && String(value).trim()
-    ));
-    if (firstUsableEntry) {
-        return String(firstUsableEntry[1]).trim();
-    }
+// 绘图与测量交互
+let drawGraphicSeedRef = { value: 1 };
+const {
+    activateInteraction: activateDrawMeasure,
+    clearInteractions: clearDrawMeasureInteractions,
+    clearAllGraphics,
+    getDrawInteraction,
+    getSketchFeature
+} = createDrawMeasureFeature({
+    mapInstanceRef: mapInstance,
+    drawSource,
+    createStyleFromConfig,
+    createManagedVectorLayer,
+    emitGraphicsOverview,
+    refreshUserLayerZIndex,
+    emitUserLayersChange,
+    drawStyleConfig,
+    drawGraphicSeedRef,
+    userDataLayers,
+    tooltipRef
+});
 
-    return getLayerLabelText(layerItem);
-}
+// 路线绘制交互
+const {
+    drawRouteOnMap,
+    drawDriveRouteOnMap,
+    syncRouteManagedLayer
+} = createRouteRenderingFeature({
+    mapInstanceRef: mapInstance,
+    busRouteLayerRef,
+    busRouteSource,
+    resetRouteStepStates,
+    ensureRouteBuilderApi,
+    userDataLayers,
+    addManagedLayerRecord,
+    busRouteManagedLayerIdRef,
+    emitUserLayersChange,
+    emitGraphicsOverview
+});
 
-// [隶属] 图层管理-样式系统
-// [作用] 构建托管图层的样式函数，支持标签文本自动生成与缓存优化。
-// [交互] 被 applyManagedLayerStyle 调用。
-function buildManagedLayerStyle(layerItem) {
-    const baseStyleConfig = layerItem?.styleConfig || STYLE_TEMPLATES.classic;
-    if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
-        return createStyleFromConfig(baseStyleConfig, {
-            labelText: ''
-        });
-    }
-
-    layerItem.labelStyleCache = layerItem.labelStyleCache || new globalThis.Map();
-    return (feature) => {
-        const rawLabel = getFeatureLabelText(feature, layerItem);
-        const labelText = String(rawLabel || '').trim();
-        const cacheKey = labelText || '__empty__';
-        if (layerItem.labelStyleCache.has(cacheKey)) {
-            return layerItem.labelStyleCache.get(cacheKey);
-        }
-        const style = createStyleFromConfig(baseStyleConfig, { labelText });
-        layerItem.labelStyleCache.set(cacheKey, style);
-        return style;
-    };
-}
-
-// [隶属] 图层管理-样式系统
-// [作用] 将当前样式配置应用到目标托管图层。
-// [交互] 被 setDrawStyle / setUserLayerStyle / setUserLayerLabelVisibility 间接调用。
-function applyManagedLayerStyle(layerItem) {
-    if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
-    layerItem.labelStyleCache = new globalThis.Map();
-    layerItem.layer.setStyle(buildManagedLayerStyle(layerItem));
-}
+// 底图状态管理
+const {
+    emitBaseLayersChange,
+    refreshGoogleLayerSources
+} = createBasemapStateManagementFeature({
+    layerList,
+    selectedLayer,
+    getLayerCategory: getLayerCategoryById,
+    getLayerGroup: getLayerGroupById,
+    emit,
+    LAYER_CONFIGS,
+    layerInstances
+});
 
 // --- 样式定义 ---
 // 公交和驾车路线样式使用函数生成并缓存，支持基于步骤索引的颜色区分和高亮状态；其他样式使用固定实例。
@@ -485,169 +533,6 @@ const styles = {
         stroke: new Stroke({ color: 'rgba(34, 197, 94, 0.8)', width: 6, lineCap: 'round', lineJoin: 'round' })
     })
 };
-
-const BUS_STEP_COLOR_PALETTE = [
-    '#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4'
-];
-const DRIVE_STEP_COLOR_PALETTE = [
-    '#10B981', '#0EA5E9', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6'
-];
-
-// [隶属] 线路渲染-样式系统
-// [作用] 十六进制颜色转 rgba 字符串。
-// [交互] 被公交/驾车步骤样式函数复用。
-function hexToRgba(hexColor, alpha = 1) {
-    const hex = String(hexColor || '').replace('#', '').trim();
-    if (hex.length !== 6) return `rgba(59, 130, 246, ${alpha})`;
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-// [隶属] 线路渲染-公交样式
-// [作用] 获取公交步骤主色。
-// [交互] 被 getBusStepStyle / getBusStepPointStyle 调用。
-function getBusStepColor(stepIndex) {
-    const idx = Math.abs(Number(stepIndex || 0)) % BUS_STEP_COLOR_PALETTE.length;
-    return BUS_STEP_COLOR_PALETTE[idx];
-}
-
-// [隶属] 线路渲染-驾车样式
-// [作用] 获取驾车步骤主色。
-// [交互] 被 getDriveStepStyle 调用。
-function getDriveStepColor(stepIndex) {
-    const idx = Math.abs(Number(stepIndex || 0)) % DRIVE_STEP_COLOR_PALETTE.length;
-    return DRIVE_STEP_COLOR_PALETTE[idx];
-}
-
-// [隶属] 线路渲染-公交样式
-// [作用] 生成公交线段样式并做缓存。
-// [交互] 被公交路线图层 style 回调调用。
-function getBusStepStyle(stepIndex, isWalk = false, isActive = false) {
-    const normalizedStep = Number.isFinite(Number(stepIndex)) ? Number(stepIndex) : 0;
-    const key = `${normalizedStep}_${isWalk ? 'walk' : 'transit'}_${isActive ? 'active' : 'normal'}`;
-    if (busStepStyleCache.has(key)) return busStepStyleCache.get(key);
-
-    const baseColor = getBusStepColor(normalizedStep);
-    const color = isWalk
-        ? hexToRgba(baseColor, isActive ? 0.9 : 0.6)
-        : hexToRgba(baseColor, isActive ? 1 : 0.88);
-
-    const style = new Style({
-        stroke: new Stroke({
-            color,
-            width: isActive ? (isWalk ? 6 : 7) : (isWalk ? 4 : 5),
-            lineDash: isWalk ? [8, 6] : undefined,
-            lineCap: 'round',
-            lineJoin: 'round'
-        })
-    });
-    busStepStyleCache.set(key, style);
-    return style;
-}
-
-// [隶属] 线路渲染-公交样式
-// [作用] 生成公交站点样式（含站名文本）。
-// [交互] 被公交路线图层 style 回调调用。
-function getBusStepPointStyle(stepIndex, markerRole = 'segment-start', isActive = false, stationName = '') {
-    const normalizedStep = Number.isFinite(Number(stepIndex)) ? Number(stepIndex) : 0;
-    const role = markerRole === 'segment-end' ? 'segment-end' : 'segment-start';
-
-    const baseColor = getBusStepColor(normalizedStep);
-    const fillColor = role === 'segment-end'
-        ? hexToRgba(baseColor, isActive ? 1 : 0.88)
-        : hexToRgba(baseColor, isActive ? 0.9 : 0.72);
-
-    const labelText = String(stationName || '').trim();
-
-    const style = new Style({
-        image: new CircleStyle({
-            radius: isActive ? 7 : 5,
-            fill: new Fill({ color: fillColor }),
-            stroke: new Stroke({ color: '#ffffff', width: 2 })
-        }),
-        text: labelText
-            ? new Text({
-                text: labelText,
-                offsetY: role === 'segment-end' ? -14 : 14,
-                font: isActive ? '600 12px "Microsoft YaHei", sans-serif' : '500 11px "Microsoft YaHei", sans-serif',
-                fill: new Fill({ color: '#111827' }),
-                stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 })
-            })
-            : undefined
-    });
-    return style;
-}
-
-// [隶属] 线路渲染-驾车样式
-// [作用] 生成驾车总览线或步骤线样式并缓存。
-// [交互] 被驾车路线图层 style 回调调用。
-function getDriveStepStyle(stepIndex = 0, isActive = false, isStepSegment = false) {
-    if (!isStepSegment) {
-        const key = 'drive_overview';
-        if (busStepStyleCache.has(key)) return busStepStyleCache.get(key);
-        const style = new Style({
-            stroke: new Stroke({
-                color: 'rgba(5, 150, 105, 0.35)',
-                width: 4,
-                lineCap: 'round',
-                lineJoin: 'round'
-            })
-        });
-        busStepStyleCache.set(key, style);
-        return style;
-    }
-
-    const normalizedStep = Number.isFinite(Number(stepIndex)) ? Number(stepIndex) : 0;
-    const key = `drive_step_${normalizedStep}_${isActive ? 'active' : 'normal'}`;
-    if (busStepStyleCache.has(key)) return busStepStyleCache.get(key);
-
-    const color = hexToRgba(getDriveStepColor(normalizedStep), isActive ? 0.98 : 0.9);
-
-    const style = new Style({
-        stroke: new Stroke({
-            color,
-            width: isActive ? 8 : 6,
-            lineCap: 'round',
-            lineJoin: 'round'
-        })
-    });
-    busStepStyleCache.set(key, style);
-    return style;
-}
-
-// [隶属] 线路交互-步骤状态
-// [作用] 获取当前公交高亮步骤（悬停优先）。
-// [交互] 被公交图层样式判定调用。
-function getCurrentBusStepIndex() {
-    return busHoverStepIndex >= 0 ? busHoverStepIndex : busActiveStepIndex;
-}
-
-// [隶属] 线路交互-步骤状态
-// [作用] 获取当前驾车高亮步骤（悬停优先）。
-// [交互] 被驾车图层样式判定调用。
-function getCurrentDriveStepIndex() {
-    return driveHoverStepIndex >= 0 ? driveHoverStepIndex : driveActiveStepIndex;
-}
-
-// [隶属] 底图配置-URL 映射
-// [作用] 在 URL 参数中使用图层索引而非 ID，提供更简洁的 URL 格式。
-// 索引到 ID 的映射函数，支持 URL 参数与底图配置解耦。
-function getLayerIdByIndex(index) {
-    const normalizedIndex = Number(index);
-    if (!Number.isInteger(normalizedIndex)) return null;
-    if (normalizedIndex < 0 || normalizedIndex >= URL_LAYER_OPTIONS.length) return null;
-    return URL_LAYER_OPTIONS[normalizedIndex] || null;
-}
-
-// [隶属] 底图配置-URL 映射
-// [作用] 在 URL 参数中使用图层索引而非 ID，提供更简洁的 URL 格式。
-// 简洁的 URL 格式。ID 到索引的映射函数，支持 URL 参数与底图配置解耦。
-function getLayerIndexById(layerId) {
-    const idx = URL_LAYER_OPTIONS.indexOf(String(layerId || ''));
-    return idx >= 0 ? idx : null;
-}
 
 // [隶属] 底图状态管理
 // [作用] 提供与 URL 同步、图层切换、图层实例管理等相关的核心逻辑。
@@ -705,7 +590,7 @@ function getInitialViewState() {
 // [隶属] 地图初始化-启动流程
 // [作用] 初始化地图、绑定视图同步、设置格网状态、同步 URL 状态，并在首屏关键瓦片加载后执行非关键任务（主机测速、位置相关逻辑）。
 onMounted(async () => {
-    componentUnmounted = false;
+    componentUnmountedRef.value = false;
     initMap();
     bindMapViewSync();
     setGraticuleActive(showDynamicSplitLines.value);
@@ -719,50 +604,11 @@ onMounted(async () => {
 
 });
 
-// [隶属] 启动流程-任务调度
-// [作用] 在首屏关键瓦片加载后调度非关键任务，避免
-// 阻塞首次渲染，提升首屏加载体验。
-function scheduleLowPriorityTask(task) {
-    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(() => {
-            if (!componentUnmounted) task();
-        }, { timeout: 1500 });
-        return;
-    }
-    setTimeout(() => {
-        if (!componentUnmounted) task();
-    }, 0);
-}
-
-// [隶属] 启动流程-首屏优先
-// [作用] 等待关键瓦片完成首次渲染，避免阻塞后续非关键任务。
-// [交互] 被 onMounted 启动流程调用。
-function waitForCriticalTileReady(timeoutMs = CRITICAL_TILE_READY_TIMEOUT_MS) {
-    return new Promise((resolve) => {
-        const map = mapInstance.value;
-        if (!map) {
-            resolve();
-            return;
-        }
-        let settled = false;
-        const finish = () => {
-            if (settled) return;
-            settled = true;
-            if (renderCompleteKey) unByKey(renderCompleteKey);
-            clearTimeout(timer);
-            resolve();
-        };
-
-        const renderCompleteKey = map.on('rendercomplete', finish);
-        const timer = setTimeout(finish, timeoutMs);
-    });
-}
-
 // [隶属] 启动流程-首屏优化
 // [作用] 在首屏完成后执行非关键任务（主机测速、定位兜底）。
 // [交互] 调用 resolvePreferredGoogleHost / getCurrentLocation / detectIPLocale。
 async function runDeferredStartupTasks() {
-    if (componentUnmounted) return;
+    if (componentUnmountedRef.value) return;
 
     const routeViewState = parseUrlToState();
     if (Number.isFinite(routeViewState?.lng) && Number.isFinite(routeViewState?.lat)) {
@@ -773,7 +619,7 @@ async function runDeferredStartupTasks() {
 
     // 1) Google 主机测速切换（非关键，延后执行）。
     resolvePreferredGoogleHost().then((host) => {
-        if (componentUnmounted) return;
+        if (componentUnmountedRef.value) return;
         if (!host || host === activeGoogleTileHost.value) return;
         activeGoogleTileHost.value = host;
         refreshGoogleLayerSources();
@@ -784,7 +630,7 @@ async function runDeferredStartupTasks() {
     if (navigator.geolocation) {
         try {
             const pos = await getCurrentLocation(true);
-            if (componentUnmounted) return;
+            if (componentUnmountedRef.value) return;
             updateUserPosition(pos, true);
 
             // 有真实坐标时，可直接基于坐标更新国内外判定，避免依赖第三方 IP 误差。
@@ -803,10 +649,11 @@ async function runDeferredStartupTasks() {
 // [作用] 组件卸载时清理地图实例、事件监听、异步
 // 任务等，避免内存泄漏和潜在错误。
 onUnmounted(() => {
-    componentUnmounted = true;
+    componentUnmountedRef.value = true;
     stopMapViewSync();
     stopGraticule();
     rightDragZoomController?.dispose?.();
+    clearRouteStepStyleCache?.();
     rightDragZoomController = null;
     attrStore.setMapExtent(null);
     if (pendingBusPick?.reject) {
@@ -815,192 +662,6 @@ onUnmounted(() => {
     }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
-
-// [隶属] 图层切换-底图分类
-// [作用] 判断图层属于底图还是覆盖层。
-// [交互] 被 emitBaseLayersChange 与图层动作过滤逻辑调用。
-function getLayerCategory(layerId) {
-    return getLayerCategoryById(layerId);
-}
-
-// [隶属] 图层切换-底图分组
-// [作用] 为底图面板提供分组标签（影像/矢量/专题/注记）。
-// [交互] 被 emitBaseLayersChange 调用。
-function getLayerGroup(layerId) {
-    return getLayerGroupById(layerId);
-}
-
-// [隶属] 图层切换-对外状态同步
-// [作用] 广播底图列表状态，供外部组件展示或联动。
-// [交互] emit: base-layers-change。
-function emitBaseLayersChange() {
-    emit('base-layers-change', layerList.value.map(item => ({
-        id: item.id,
-        name: item.name,
-        visible: item.visible,
-        category: getLayerCategory(item.id),
-        group: getLayerGroup(item.id),
-        active: selectedLayer.value === item.id
-    })));
-}
-
-// [隶属] 图层切换-底图源刷新
-// [作用] 当 Google 主机切换后重建相关图层 source。
-// [交互] 被 runDeferredStartupTasks 调用。
-function refreshGoogleLayerSources() {
-    const googleLayerIds = ['google', 'google_standard', 'google_clean'];
-    googleLayerIds.forEach((id) => {
-        const cfg = LAYER_CONFIGS.find(item => item.id === id);
-        const layer = layerInstances[id];
-        if (!cfg || !layer) return;
-        layer.setSource(cfg.createSource());
-    });
-}
-
-// [隶属] 图层管理-要素 ID 管理
-// [作用] 确保托管图层中的每个要素都有唯一
-// ID，支持后续的查找、更新、样式应用等操作。
-function ensureFeatureId(feature, layerName, index) {
-    const existingId = feature?.getId?.() || feature?.get?.('_gid') || feature?.get?.('id');
-    const featureId = String(existingId || `${layerName || 'layer'}_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
-    if (typeof feature?.setId === 'function') {
-        feature.setId(featureId);
-    }
-    if (typeof feature?.set === 'function') {
-        feature.set('_gid', featureId);
-    }
-    return featureId;
-}
-
-// [隶属] 图层管理-要素序列化
-// [作用] 将托管图层中的要素转换为 GeoJSON-like 对象
-// 以便存储在 userDataLayers 中，并支持后续的查找、更新、样式应用等操作。
-function serializeManagedFeature(feature, layerName, index) {
-    const featureId = ensureFeatureId(feature, layerName, index);
-    const geometry = feature?.getGeometry?.();
-    const properties = { ...(feature?.getProperties?.() || {}) };
-    delete properties.geometry;
-    delete properties.style;
-
-    const serializedGeometry = geometry
-        ? {
-            type: geometry.getType?.() || 'Geometry',
-            coordinates: geometry.getCoordinates?.()
-        }
-        : null;
-
-    properties._gid = featureId;
-
-    return {
-        type: 'Feature',
-        id: featureId,
-        _gid: featureId,
-        properties,
-        geometry: serializedGeometry
-    };
-}
-
-// [隶属] 图层管理-要素序列化
-// [作用] 将托管图层中的要素列表转换为 GeoJSON-like 对
-// 象列表以便存储在 userDataLayers 中，并支持后续的查找、更新、样式应用等操作。
-function serializeManagedFeatures(features = [], layerName = '') {
-    return (features || []).map((feature, index) => serializeManagedFeature(feature, layerName, index));
-}
-
-// [隶属] 图层管理-要素查找
-// [作用] 根据图层 ID 和要素 ID 查找托管图层中的
-// 要素实例，支持后续的更新、样式应用等操作。
-function findManagedFeature(layerId, featureId) {
-    const target = userDataLayers.find(item => item.id === layerId);
-    if (!target) return null;
-    const source = target.layer?.getSource?.();
-    const normalizedId = String(featureId || '');
-    const sourceFeature = source?.getFeatureById?.(normalizedId)
-        || source?.getFeatures?.()?.find((feature) => String(feature?.getId?.() || feature?.get?.('_gid') || '') === normalizedId);
-    return sourceFeature || null;
-}
-
-// [隶属] 图层管理-要素高亮
-// [作用] 在地图上高亮显示指定的托管要素，支持点
-// 和面线不同的高亮样式，并确保同一时间只有一个要素被高亮。
-function createManagedFeatureHighlightStyle(feature) {
-    const geometryType = feature?.getGeometry?.()?.getType?.() || '';
-    const isPointLike = /Point$/i.test(geometryType);
-
-    if (isPointLike) {
-        return new Style({
-            image: new CircleStyle({
-                radius: 8,
-                fill: new Fill({ color: 'rgba(52, 211, 153, 0.95)' }),
-                stroke: new Stroke({ color: '#ffffff', width: 2 })
-            })
-        });
-    }
-
-    return new Style({
-        fill: new Fill({ color: 'rgba(48, 157, 88, 0.18)' }),
-        stroke: new Stroke({ color: '#1f8a4c', width: 4 })
-    });
-}
-
-// [隶属] 图层管理-要素高亮
-// [作用] 清除当前托管要素的高亮样式，恢复默认
-// 样式显示，并确保同一时间只有一个要素被高亮。
-function clearManagedFeatureHighlight(feature) {
-    if (!feature) return;
-    if (typeof feature.setStyle === 'function') {
-        feature.setStyle(undefined);
-    }
-}
-
-// [隶属] 图层管理-代表点推断
-// [作用] 根据要素的几何类型智能推断一个代表点坐标
-// 以便在图层元数据中使用，支持后续的地图定位、URL 分享等功能。
-function getFeatureRepresentativeLonLat(feature) {
-    const geometry = feature?.getGeometry?.();
-    if (!geometry) return null;
-
-    const extent = geometry.getExtent?.();
-    if (!extent || extent.some(v => !Number.isFinite(v))) return null;
-
-    const centerCoord = geometry.getType?.() === 'Point'
-        ? geometry.getCoordinates?.()
-        : getExtentCenter(extent);
-
-    if (!Array.isArray(centerCoord) || centerCoord.length < 2) return null;
-
-    const [lon, lat] = toLonLat(centerCoord);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
-
-    return [lon, lat];
-}
-
-function inferLayerRepresentativeLonLat(features = []) {
-    for (const feature of features || []) {
-        const pair = getFeatureRepresentativeLonLat(feature);
-        if (pair) return pair;
-    }
-    return null;
-}
-
-// [隶属] 图层管理-元数据规范化
-// [作用] 规范化托管图层的元数据结构，确保坐标
-// 系统一致，并智能推断缺失的代表点坐标，支持后续的地图定位、URL 分享等功能。
-function normalizeLayerMetadata(metadata, features = []) {
-    const nextMetadata = { ...(metadata || {}) };
-    const normalizedCrs = String(nextMetadata.crs || 'wgs84').toLowerCase();
-    nextMetadata.crs = normalizedCrs === 'gcj02' ? 'gcj02' : 'wgs84';
-
-    if (!(Number.isFinite(nextMetadata.longitude) && Number.isFinite(nextMetadata.latitude))) {
-        const pair = inferLayerRepresentativeLonLat(features);
-        if (pair) {
-            nextMetadata.longitude = Number(pair[0].toFixed(6));
-            nextMetadata.latitude = Number(pair[1].toFixed(6));
-        }
-    }
-
-    return nextMetadata;
-}
 
 // [隶属] 图层管理-托管图层创建
 // [作用] 将矢量要素创建为托管图层并登记到 userDataLayers。
@@ -1073,37 +734,6 @@ function createManagedVectorLayer({
     return id;
 }
 
-// [隶属] 图层管理-要素高亮
-// [作用] 定位并高亮显示指定的托管要素，支持点
-// 和面线不同的高亮样式，并确保同一时间只有一个要素被高亮。
-function zoomToManagedFeature({ layerId, featureId }) {
-    if (!mapInstance.value) return;
-    const feature = findManagedFeature(layerId, featureId);
-    if (!feature) return;
-    const geometry = feature.getGeometry?.();
-    const extent = geometry?.getExtent?.();
-    if (!extent || extent.some(v => !Number.isFinite(v))) return;
-    mapInstance.value.getView().fit(extent, {
-        padding: [80, 80, 80, 80],
-        duration: 800,
-        maxZoom: 18
-    });
-    clearManagedFeatureHighlight(currentManagedFeatureHighlight);
-    currentManagedFeatureHighlight = feature;
-    feature.setStyle(createManagedFeatureHighlightStyle(feature));
-}
-
-// [隶属] 图层管理-要素高亮
-// [作用] 高亮显示指定的托管要素，支持点和面线不同的高亮样式，并确保同一时间只有一个要素被高亮。
-// [交互] 被 emitFeatureSelected 调用以响应外部要素选中事件。
-function highlightManagedFeature({ layerId, featureId }) {
-    const feature = findManagedFeature(layerId, featureId);
-    if (!feature) return;
-    clearManagedFeatureHighlight(currentManagedFeatureHighlight);
-    currentManagedFeatureHighlight = feature;
-    feature.setStyle(createManagedFeatureHighlightStyle(feature));
-}
-
 // [隶属] 外部数据导入-动作集接入
 // [作用] 从 useLayerDataImport 注入上传入口与解析动作。
 // [交互] addUserDataLayer 由 defineExpose 对外提供给父组件调用。
@@ -1152,13 +782,13 @@ async function ensureUserLayerActionsApi() {
             projectExtentToMapView: dataImportApi.projectExtentToMapView,
             emitFeatureSelected: (payload) => emit('feature-selected', payload),
             isRouteManagedLayer: ({ layerId, removed }) => (
-                layerId === busRouteManagedLayerId
+                layerId === busRouteManagedLayerIdRef.value
                 || removed?.metadata?.category === 'bus-route'
                 || removed?.metadata?.category === 'drive-route'
                 || removed?.metadata?.category === 'route'
             ),
             onRouteManagedLayerRemoved: () => {
-                busRouteManagedLayerId = null;
+                busRouteManagedLayerIdRef.value = null;
                 resetRouteStepStates();
                 busRouteSource.clear();
             }
@@ -1174,56 +804,22 @@ async function ensureRouteBuilderApi() {
     return routeBuilderApiPromise;
 }
 
-
-async function addUserDataLayer(payload) {
-    const api = await ensureLayerDataImportApi();
-    return api.addUserDataLayer(payload);
-}
-
-async function queryRasterValueAtCoordinate(coordinate) {
-    const api = await ensureLayerDataImportApi();
-    return api.queryRasterValueAtCoordinate(coordinate);
-}
-
-async function setUserLayerVisibility(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.setUserLayerVisibility(...args);
-}
-
-async function setUserLayerOpacity(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.setUserLayerOpacity(...args);
-}
-
-async function removeUserLayer(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.removeUserLayer(...args);
-}
-
-async function reorderUserLayers(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.reorderUserLayers(...args);
-}
-
-async function soloUserLayer(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.soloUserLayer(...args);
-}
-
-async function setUserLayerStyle(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.setUserLayerStyle(...args);
-}
-
-async function setUserLayerLabelVisibility(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.setUserLayerLabelVisibility(...args);
-}
-
-async function applyStyleTemplate(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.applyStyleTemplate(...args);
-}
+// 用户图层 API 委托门面
+const {
+    addUserDataLayer,
+    queryRasterValueAtCoordinate,
+    setUserLayerVisibility,
+    setUserLayerOpacity,
+    removeUserLayer,
+    reorderUserLayers,
+    soloUserLayer,
+    setUserLayerStyle,
+    setUserLayerLabelVisibility,
+    applyStyleTemplate
+} = createUserLayerApiFacadeFeature({
+    ensureLayerDataImportApi,
+    ensureUserLayerActionsApi
+});
 
 async function setBaseLayerActive(...args) {
     const api = await ensureUserLayerActionsApi();
@@ -1244,241 +840,6 @@ async function viewUserLayer(...args) {
     const api = await ensureUserLayerActionsApi();
     return api.viewUserLayer(...args);
 }
-
-/**
- * 底图切换验证器：检测新切换底图的加载状态
- * 
- * @param {string} layerId - 切换到的底图ID
- * @param {TileLayer} layer - 底图对应的图层实例
- * @param {number} checkTimeoutMs - 检测时长（毫秒）
- * @returns {Promise<{success: boolean, reason: string}>}
- */
-async function validateBaseLayerSwitch(layerId, layer, checkTimeoutMs = 3000) {
-    return new Promise((resolve) => {
-        if (!layer) {
-            resolve({ success: false, reason: '底图图层实例不存在' });
-            return;
-        }
-
-        const source = layer.getSource();
-        if (!source) {
-            resolve({ success: false, reason: '底图数据源不可用' });
-            return;
-        }
-
-        let hasSuccessfulLoad = false;
-        let hasError = false;
-        let errorCount = 0;
-        let checkTimer = null;
-
-        const onTileLoadEnd = () => {
-            hasSuccessfulLoad = true;
-        };
-
-        const onTileLoadError = () => {
-            errorCount++;
-            if (errorCount >= 3) {
-                hasError = true;
-            }
-        };
-
-        // 添加事件监听
-        source.on('tileloadend', onTileLoadEnd);
-        source.on('tileloaderror', onTileLoadError);
-
-        // 设定检测时间
-        checkTimer = setTimeout(() => {
-            // 移除监听
-            source.un('tileloadend', onTileLoadEnd);
-            source.un('tileloaderror', onTileLoadError);
-
-            if (hasSuccessfulLoad) {
-                resolve({ success: true, reason: '切换成功' });
-            } else if (hasError) {
-                resolve({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
-            } else {
-                resolve({ success: false, reason: '未能获取底图数据（需梯子或超时）' });
-            }
-        }, checkTimeoutMs);
-    });
-}
-
-/**
- * 创建底图兜底管理器
- * @param layerId 图层ID
- * @param isDefaultBaseLayer 是否为默认底图
- */
-const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
-    // 兜底候选选项按优先级排序：仅天地图和自定义（不使用OSM）
-    const FALLBACK_OPTIONS = ['tianDiTu', 'local'];
-    
-    let fallbackAttempts = 0;
-    const maxFallbackAttempts = FALLBACK_OPTIONS.length;
-    let lastFallbackKey = null;
-    
-    return {
-        // 获取下一个兜底选项（仅用于自动切换，默认底图适用）
-        getNextFallbackOption: () => {
-            if (fallbackAttempts >= maxFallbackAttempts) {
-                message.warning(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
-                return null;
-            }
-            
-            const nextOption = FALLBACK_OPTIONS[fallbackAttempts];
-            lastFallbackKey = nextOption;
-            fallbackAttempts++;
-            return nextOption;
-        },
-        
-        // 获取当前兜底选项
-        getCurrentFallback: () => lastFallbackKey,
-        
-        // 是否仅限于提醒（非默认底图不自动切换）
-        isNotifyOnly: () => !isDefaultBaseLayer,
-        
-        // 重置兜底计数器
-        reset: () => {
-            fallbackAttempts = 0;
-            lastFallbackKey = null;
-        }
-    };
-};
-
-/**
- * 监测图层加载状态并自动降级（智能防抖抗网络波动版）
- * @param {TileLayer} layer - 需要监测的图层实例
- * @param {Object} callbacks - 回调函数对象 { onTimeout, onSuccess, onError }
- */
-const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {}) => {
-    // 防重复初始化
-    const monitorKey = `_isTimeoutMonitored_${layerId}`;
-    if (layer.get(monitorKey)) return;
-    layer.set(monitorKey, true);
-
-    const source = layer.getSource();
-    if (!source) return;
-
-    // 核心配置参数（可根据需要调整）
-    const MAX_ERRORS = 3;           // 容忍的最大连续报错瓦片数
-    const ACTIVITY_TIMEOUT = 10000; // 绝对静默超时10秒
-    const WARNING_THRESHOLD = 5;    // 累计错误数达到此值时发出警告
-
-    let activityTimer = null;
-    let loadingTilesCount = 0;
-    let consecutiveErrors = 0;      // 连续错误计数
-    let totalErrors = 0;            // 累计错误总数
-    let isSwitched = false;
-    let hasNotifiedSuccess = false;
-    
-    // 初始化兜底管理器
-    const fallbackManager = createBaseLayerFallbackManager(layerId, isDefaultBaseLayer); 
-
-    // 执行降级逻辑
-    const switchToBackup = (reason, triggerCallback) => {
-        if (isSwitched) return;
-        isSwitched = true;
-
-        message.warning(`[底图降级] ${layerId} - ${reason}`);
-        
-        // 如果仅限于提醒（非默认底图），则不切换，仅通知
-        if (fallbackManager.isNotifyOnly()) {
-            message.warning(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`);
-            if (triggerCallback) triggerCallback();
-            cleanUp();
-            return;
-        }
-        
-        // 仅默认底图才自动切换
-        const nextOption = fallbackManager.getNextFallbackOption();
-        if (!nextOption) {
-            message.error(`[底图降级] ${layerId} 所有兜底选项已尝试`);
-            if (triggerCallback) triggerCallback();
-            cleanUp();
-            return;
-        }
-        
-        message.warning(`[底图降级] ${layerId} 已切换至 ${nextOption}`);
-        
-        // 通知调用方需要切换底图
-        if (callbacks.onLayerSwitchRequired) {
-            callbacks.onLayerSwitchRequired(nextOption, reason);
-        }
-        
-        if (triggerCallback) triggerCallback();
-        cleanUp();
-    };
-
-    // 重置“绝对静默”定时器
-    const resetActivityTimer = () => {
-        if (activityTimer) clearTimeout(activityTimer);
-        if (loadingTilesCount > 0) {
-            activityTimer = setTimeout(() => {
-                switchToBackup(`服务无响应（${ACTIVITY_TIMEOUT/1000}秒无瓦片加载）`, callbacks.onTimeout);
-            }, ACTIVITY_TIMEOUT);
-        }
-    };
-
-    const onTileLoadStart = () => {
-        if (isSwitched) return;
-        loadingTilesCount++;
-        resetActivityTimer();
-    };
-
-    const onTileLoadEnd = () => {
-        if (isSwitched) return;
-        loadingTilesCount--;
-        consecutiveErrors = 0; // 只要有瓦片成功，清零连续错误计数
-
-        if (loadingTilesCount <= 0) {
-            loadingTilesCount = 0;
-            if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
-            
-            if (!hasNotifiedSuccess && totalErrors === 0) {
-                hasNotifiedSuccess = true;
-                if (callbacks.onSuccess) callbacks.onSuccess();
-            }
-        } else {
-            resetActivityTimer();
-        }
-    };
-
-    const onTileLoadError = () => {
-        if (isSwitched) return;
-        loadingTilesCount--;
-        consecutiveErrors++;
-        totalErrors++;
-
-        // 策略1：连续错误达到阈值，判定服务不可用
-        if (consecutiveErrors >= MAX_ERRORS) {
-            switchToBackup(`服务异常（连续${consecutiveErrors}个瓦片失败）`, callbacks.onError);
-            return;
-        }
-        
-        // 策略2：累计错误过多时发出警告
-        if (totalErrors === WARNING_THRESHOLD) {
-            message.warning(`[底图监测] ${layerId} 累计错误${totalErrors}个，建议检查网络`);
-        }
-
-        if (loadingTilesCount <= 0) {
-            loadingTilesCount = 0;
-            if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
-        } else {
-            resetActivityTimer();
-        }
-    };
-
-    const cleanUp = () => {
-        if (activityTimer) { clearTimeout(activityTimer); activityTimer = null; }
-        source.un('tileloadstart', onTileLoadStart);
-        source.un('tileloadend', onTileLoadEnd);
-        source.un('tileloaderror', onTileLoadError);
-    };
-
-    source.on('tileloadstart', onTileLoadStart);
-    source.on('tileloadend', onTileLoadEnd);
-    source.on('tileloaderror', onTileLoadError);
-};
-
 
 // --- 1. 地图核心逻辑 ---
 // [隶属] 图层切换-地图初始化
@@ -1814,18 +1175,19 @@ function bindEvents() {
         const coordinate = evt.coordinate;
 
         // A. 测量提示逻辑
-        if (helpTooltipEl) {
-            helpTooltipEl.innerHTML = sketchFeature ?
+        if (tooltipRef.helpTooltipEl) {
+            const sketchFeature = getSketchFeature();
+            tooltipRef.helpTooltipEl.innerHTML = sketchFeature ?
                 (sketchFeature.getGeometry() instanceof Polygon ? '双击结束多边形' : '双击结束测距') :
                 '单击开始绘制';
-            helpTooltipOverlay.setPosition(coordinate);
-            helpTooltipEl.classList.remove('hidden');
+            tooltipRef.helpTooltipOverlay.setPosition(coordinate);
+            tooltipRef.helpTooltipEl.classList.remove('hidden');
         }
 
     });
 
     viewport.addEventListener('mouseout', () => {
-        if (helpTooltipEl) helpTooltipEl.classList.add('hidden');
+        if (tooltipRef.helpTooltipEl) tooltipRef.helpTooltipEl.classList.add('hidden');
     });
 
     map.on('singleclick', async (evt) => {
@@ -1853,6 +1215,7 @@ function bindEvents() {
         }
 
         if (!isAttributeQueryEnabled.value) return;
+        const drawInteraction = getDrawInteraction();
         if (drawInteraction && drawInteraction.getActive()) return;
 
         // 属性查询
@@ -2035,521 +1398,6 @@ function startBusPointPick(type) {
     });
 }
 
-/**
- * 统一清理路线交互状态（选中步骤 + 悬停预览）。
- * 说明：公交与驾车共用一套路由图层，切换路线时必须同步复位状态，避免残留高亮。
- */
-function resetRouteStepStates() {
-    busActiveStepIndex = -1;
-    busHoverStepIndex = -1;
-    driveActiveStepIndex = -1;
-    driveHoverStepIndex = -1;
-}
-
-/**
- * 按模式获取指定步骤对应要素。
- */
-function getRouteStepFeatures(routeMode, stepIndex) {
-    const targetStepIndex = Number(stepIndex);
-    if (!Number.isFinite(targetStepIndex) || targetStepIndex < 0) return [];
-
-    return busRouteSource.getFeatures().filter((feature) => (
-        feature.get('routeMode') === routeMode && Number(feature.get('stepIndex')) === targetStepIndex
-    ));
-}
-
-/**
- * 统一执行步骤缩放逻辑（公交/驾车复用）。
- */
-async function zoomToRouteStep(routeMode, stepIndex, options = {}) {
-    if (!mapInstance.value) {
-        throw new Error('地图尚未初始化');
-    }
-
-    const { fitExtentToCoverage } = await ensureRouteBuilderApi();
-
-    const targetStepIndex = Number(stepIndex);
-    if (!Number.isFinite(targetStepIndex) || targetStepIndex < 0) {
-        throw new Error('步骤索引无效');
-    }
-
-    const stepFeatures = getRouteStepFeatures(routeMode, targetStepIndex);
-    if (!stepFeatures.length) {
-        const routeLabel = routeMode === 'drive' ? '驾车' : '公交';
-        throw new Error(`未找到${routeLabel}步骤 ${targetStepIndex + 1} 对应路段`);
-    }
-
-    if (routeMode === 'drive') {
-        driveActiveStepIndex = targetStepIndex;
-        driveHoverStepIndex = -1;
-    } else {
-        busActiveStepIndex = targetStepIndex;
-        busHoverStepIndex = -1;
-        driveActiveStepIndex = -1;
-        driveHoverStepIndex = -1;
-    }
-    busRouteLayerRef?.changed?.();
-
-    const stepExtent = createEmpty();
-    stepFeatures.forEach((feature) => {
-        const geometry = feature.getGeometry();
-        if (!geometry) return;
-        extendExtent(stepExtent, geometry.getExtent());
-    });
-
-    if (!isExtentEmpty(stepExtent)) {
-        fitExtentToCoverage(mapInstance.value, stepExtent, {
-            targetCoverage: options.targetCoverage ?? 0.84,
-            bufferRatio: options.bufferRatio ?? 0.16,
-            minBufferMeters: options.minBufferMeters ?? 120,
-            maxBufferMeters: options.maxBufferMeters ?? 1200,
-            padding: options.padding ?? [72, 72, 72, 72],
-            duration: options.duration ?? 650,
-            minZoom: options.minZoom ?? 10,
-            maxZoom: options.maxZoom ?? 19
-        });
-    }
-}
-
-/**
- * 统一处理步骤悬停预览（公交/驾车复用）。
- */
-function previewRouteStep(routeMode, stepIndex) {
-    const targetStepIndex = Number(stepIndex);
-    const normalized = Number.isFinite(targetStepIndex) && targetStepIndex >= 0 ? targetStepIndex : -1;
-
-    if (routeMode === 'drive') {
-        driveHoverStepIndex = normalized;
-    } else {
-        busHoverStepIndex = normalized;
-    }
-    busRouteLayerRef?.changed?.();
-}
-
-// [隶属] 路线规划-步骤预览
-// [作用] 清空指定模式的悬停步骤高亮。
-// [交互] 改变样式状态并触发 busRouteLayerRef.changed。
-function clearRouteStepPreview(routeMode) {
-    if (routeMode === 'drive') {
-        driveHoverStepIndex = -1;
-    } else {
-        busHoverStepIndex = -1;
-    }
-    busRouteLayerRef?.changed?.();
-}
-
-// [隶属] 路线规划-公交渲染
-// [作用] 将公交方案绘制到路线图层并自动缩放。
-// [交互] 更新托管图层信息，影响外部图层管理面板。
-async function drawRouteOnMap(route) {
-    if (!mapInstance.value) {
-        throw new Error('地图尚未初始化');
-    }
-
-    if (busRouteLayerRef && !mapInstance.value.getLayers().getArray().includes(busRouteLayerRef)) {
-        mapInstance.value.addLayer(busRouteLayerRef);
-    }
-
-    // 只清理旧线路，保留起终点 marker。
-    busRouteSource.clear();
-    resetRouteStepStates();
-
-    const { buildRouteRenderData, fitExtentToCoverage } = await ensureRouteBuilderApi();
-    const { features, fitExtent, featureCount, hasGeometry } = buildRouteRenderData('bus', route);
-    if (!featureCount) {
-        throw new Error('公交方案中未找到分段信息（segments 为空）');
-    }
-
-    busRouteSource.addFeatures(features);
-
-    const routeFeatureCount = busRouteSource.getFeatures().length;
-    if (!routeFeatureCount || !hasGeometry || isExtentEmpty(fitExtent)) {
-        throw new Error('公交方案存在，但未解析到可绘制的有效坐标点');
-    }
-
-    if (!isExtentEmpty(fitExtent)) {
-        fitExtentToCoverage(mapInstance.value, fitExtent, {
-            targetCoverage: 0.72,
-            bufferRatio: 0.08,
-            minBufferMeters: 120,
-            maxBufferMeters: 1800,
-            padding: [80, 80, 80, 80],
-            duration: 700,
-            minZoom: 6,
-            maxZoom: 19
-        });
-    }
-
-    busRouteLayerRef?.changed?.();
-
-    syncRouteManagedLayer({
-        name: '公交规划路线',
-        type: 'bus_route',
-        category: 'route',
-        featureCount: routeFeatureCount
-    });
-}
-
-// [隶属] 路线规划-驾车渲染
-// [作用] 将驾车路径绘制到路线图层并自动缩放。
-// [交互] 更新托管图层信息，影响外部图层管理面板。
-async function drawDriveRouteOnMap(routeLatLonStr) {
-    if (!mapInstance.value) {
-        throw new Error('地图尚未初始化');
-    }
-
-    if (busRouteLayerRef && !mapInstance.value.getLayers().getArray().includes(busRouteLayerRef)) {
-        mapInstance.value.addLayer(busRouteLayerRef);
-    }
-
-    // 清理旧路线，保留起终点 marker。
-    busRouteSource.clear();
-    resetRouteStepStates();
-
-    const { buildRouteRenderData, fitExtentToCoverage } = await ensureRouteBuilderApi();
-    const { features, fitExtent, hasGeometry } = buildRouteRenderData('drive', routeLatLonStr);
-    if (!hasGeometry || !features.length) {
-        throw new Error('驾车路线坐标不足，无法绘制');
-    }
-
-    busRouteSource.addFeatures(features);
-
-    if (!isExtentEmpty(fitExtent)) {
-        fitExtentToCoverage(mapInstance.value, fitExtent, {
-            targetCoverage: 0.72,
-            bufferRatio: 0.08,
-            minBufferMeters: 120,
-            maxBufferMeters: 1800,
-            padding: [80, 80, 80, 80],
-            duration: 700,
-            minZoom: 6,
-            maxZoom: 19
-        });
-    }
-
-    busRouteLayerRef?.changed?.();
-
-    syncRouteManagedLayer({
-        name: '驾车规划路线',
-        type: 'drive_route',
-        category: 'route',
-        featureCount: busRouteSource.getFeatures().length
-    });
-}
-
-// [隶属] 路线规划-驾车步骤定位
-// [作用] 聚焦到指定驾车步骤范围。
-// [交互] 由外部步骤列表交互触发。
-async function zoomToDriveRouteStep(stepIndex) {
-    return zoomToRouteStep('drive', stepIndex, {
-        targetCoverage: 0.84,
-        bufferRatio: 0.16,
-        minBufferMeters: 120,
-        maxBufferMeters: 1200,
-        padding: [72, 72, 72, 72],
-        duration: 650,
-        minZoom: 10,
-        maxZoom: 19
-    });
-}
-
-// [隶属] 路线规划-公交步骤定位
-// [作用] 聚焦到指定公交步骤范围。
-// [交互] 由外部步骤列表交互触发。
-async function zoomToBusRouteStep(stepIndex) {
-    return zoomToRouteStep('bus', stepIndex, {
-        targetCoverage: 0.84,
-        bufferRatio: 0.16,
-        minBufferMeters: 120,
-        maxBufferMeters: 1200,
-        padding: [72, 72, 72, 72],
-        duration: 650,
-        minZoom: 10,
-        maxZoom: 19
-    });
-}
-
-// [隶属] 路线规划-托管图层同步
-// [作用] 同步路线图层在 userDataLayers 中的记录。
-// [交互] 调用 emitUserLayersChange / emitGraphicsOverview。
-function syncRouteManagedLayer({ name, type, category, featureCount }) {
-    const routeFeatureCount = Number(featureCount || 0);
-    let managedItem = busRouteManagedLayerId
-        ? userDataLayers.find(item => item.id === busRouteManagedLayerId)
-        : null;
-
-    if (!managedItem && busRouteLayerRef) {
-        busRouteManagedLayerId = addManagedLayerRecord({
-            name,
-            type,
-            sourceType: 'search',
-            layer: busRouteLayerRef,
-            featureCount: routeFeatureCount,
-            styleConfig: null,
-            metadata: { category }
-        });
-        managedItem = userDataLayers.find(item => item.id === busRouteManagedLayerId) || null;
-    }
-
-    if (managedItem) {
-        managedItem.name = name;
-        managedItem.type = type;
-        managedItem.metadata = { ...(managedItem.metadata || {}), category };
-        managedItem.featureCount = routeFeatureCount;
-        managedItem.visible = true;
-        managedItem.layer?.setVisible?.(true);
-        emitUserLayersChange();
-        emitGraphicsOverview();
-    }
-}
-
-// [隶属] 路线规划-公交步骤预览
-// [作用] 公交步骤 hover 预览入口。
-// [交互] 由外部组件调用。
-function previewBusRouteStep(stepIndex) {
-    previewRouteStep('bus', stepIndex);
-}
-
-// [隶属] 路线规划-公交步骤预览
-// [作用] 清除公交步骤 hover 预览。
-// [交互] 由外部组件调用。
-function clearBusRouteStepPreview() {
-    clearRouteStepPreview('bus');
-}
-
-// [隶属] 路线规划-驾车步骤预览
-// [作用] 驾车步骤 hover 预览入口。
-// [交互] 由外部组件调用。
-function previewDriveRouteStep(stepIndex) {
-    previewRouteStep('drive', stepIndex);
-}
-
-// [隶属] 路线规划-驾车步骤预览
-// [作用] 清除驾车步骤 hover 预览。
-// [交互] 由外部组件调用。
-function clearDriveRouteStepPreview() {
-    clearRouteStepPreview('drive');
-}
-
-// --- 5. 地名搜索功能 (主逻辑) ---
-// [隶属] 组件交互-地名搜索
-// [作用] 接收 LayerControlPanel 解析后的定位载荷并渲染搜索结果图层。
-// [交互] 由 LayerControlPanel 的 search-jump 事件触发。
-function handleSearchJump(payload) {
-    if (!mapInstance.value || !payload) return;
-
-    const lon = Number(payload.lng);
-    const lat = Number(payload.lat);
-    if (Number.isNaN(lon) || Number.isNaN(lat)) {
-        message.warning('无法解析该结果的坐标');
-        return;
-    }
-    const coord = fromLonLat([lon, lat]);
-
-    const layerName = (payload.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
-    const f = new Feature({
-        geometry: new Point(coord),
-        type: 'search',
-        名称: layerName,
-        经度: Number(lon.toFixed(6)),
-        纬度: Number(lat.toFixed(6)),
-        坐标系: 'wgs84'
-    });
-    createManagedVectorLayer({
-        name: layerName,
-        type: 'search',
-        sourceType: 'search',
-        features: [f],
-        styleConfig: SEARCH_RESULT_STYLE,
-        autoLabel: true,
-        metadata: {
-            longitude: Number(lon.toFixed(6)),
-            latitude: Number(lat.toFixed(6)),
-            crs: 'wgs84'
-        },
-        fitView: false
-    });
-
-    // 动画缩放到位置
-    mapInstance.value.getView().animate({
-        center: coord,
-        zoom: Number(payload.zoom) > 0 ? Number(payload.zoom) : 16,
-        duration: 700
-    });
-
-}
-
-// --- 6. 坐标输入绘制与搜索图层坐标切换 ---
-// [隶属] 组件交互-手动坐标绘制
-// [作用] 接收输入经纬度（WGS-84 / GCJ-02），落图并自动飞行到目标点。
-function drawPointByCoordinatesInput(payload) {
-    if (!mapInstance.value || !payload) return;
-
-    const rawLng = Number(payload.lng);
-    const rawLat = Number(payload.lat);
-    const crsType = String(payload.crsType || 'wgs84').toLowerCase();
-
-    if (!Number.isFinite(rawLng) || !Number.isFinite(rawLat)) {
-        message.warning('输入坐标无效，请检查经纬度');
-        return;
-    }
-
-    if (rawLng < -180 || rawLng > 180 || rawLat < -90 || rawLat > 90) {
-        message.warning('输入坐标超出范围（经度 -180~180，纬度 -90~90）');
-        return;
-    }
-
-    let mapLng = rawLng;
-    let mapLat = rawLat;
-    if (crsType === 'gcj02') {
-        [mapLng, mapLat] = gcj02ToWgs84(rawLng, rawLat);
-    }
-
-    if (!Number.isFinite(mapLng) || !Number.isFinite(mapLat)) {
-        message.error('坐标转换失败，请稍后重试');
-        return;
-    }
-
-    const mapCoord = fromLonLat([mapLng, mapLat]);
-    const displayName = String(payload.displayName || `输入点_${rawLng.toFixed(6)}_${rawLat.toFixed(6)}`);
-
-    const pointFeature = new Feature({
-        geometry: new Point(mapCoord),
-        type: 'Point',
-        名称: displayName,
-        经度: Number(rawLng.toFixed(6)),
-        纬度: Number(rawLat.toFixed(6)),
-        坐标系: crsType
-    });
-
-    createManagedVectorLayer({
-        name: displayName,
-        type: 'Point',
-        sourceType: 'draw',
-        features: [pointFeature],
-        styleConfig: drawStyleConfig.value,
-        metadata: {
-            longitude: Number(rawLng.toFixed(6)),
-            latitude: Number(rawLat.toFixed(6)),
-            crs: crsType
-        },
-        fitView: false
-    });
-
-    mapInstance.value.getView().animate({
-        center: mapCoord,
-        zoom: 16,
-        duration: 700
-    });
-
-    message.success(`已绘制点位：${displayName}`);
-}
-
-// [隶属] 组件交互-坐标系转换
-// [作用] 将指定图层的矢量要素坐标在 WGS-84 与 GCJ-02 之间进行转换，并更新图层元数据与 TOC 显示字段。
-function applyCrsConversionToFeature(feature, converter, targetCrs) {
-    const geometry = feature?.getGeometry?.();
-    if (!geometry || typeof geometry.clone !== 'function') return null;
-
-    const convertedGeometry = geometry.clone();
-    convertedGeometry.transform('EPSG:3857', 'EPSG:4326');
-
-    convertedGeometry.applyTransform((input, output, stride) => {
-        const out = output || new Array(input.length);
-        for (let i = 0; i < input.length; i += stride) {
-            const [newLon, newLat] = converter(input[i], input[i + 1]);
-            out[i] = Number.isFinite(newLon) ? newLon : input[i];
-            out[i + 1] = Number.isFinite(newLat) ? newLat : input[i + 1];
-            for (let j = 2; j < stride; j++) {
-                out[i + j] = input[i + j];
-            }
-        }
-        return out;
-    });
-
-    convertedGeometry.transform('EPSG:4326', 'EPSG:3857');
-    feature.setGeometry(convertedGeometry);
-    feature.set('坐标系', targetCrs);
-
-    const representative = getFeatureRepresentativeLonLat(feature);
-    if (representative) {
-        feature.set('经度', Number(representative[0].toFixed(6)));
-        feature.set('纬度', Number(representative[1].toFixed(6)));
-    }
-
-    return representative;
-}
-
-// [隶属] 组件交互-图层坐标系切换
-// [作用] 在 WGS-84 与 GCJ-02 间切换任意矢量图层坐标并刷新 TOC 显示字段。
-function toggleLayerCRS(payload) {
-    if (!mapInstance.value || !payload?.layerId) return;
-
-    const nextCrs = String(payload.crs || 'wgs84').toLowerCase();
-    if (!['wgs84', 'gcj02'].includes(nextCrs)) {
-        message.warning('目标坐标系不支持');
-        return;
-    }
-
-    const layerData = userDataLayers.find(item => item.id === payload.layerId);
-    if (!layerData) {
-        message.warning('未找到目标图层');
-        return;
-    }
-
-    if (!isVectorManagedLayer(layerData)) {
-        message.warning('该图层不是矢量图层，无法进行坐标转换');
-        return;
-    }
-
-    const source = layerData.layer?.getSource?.();
-    const features = source?.getFeatures?.() || [];
-    if (!features.length) {
-        message.warning('图层中没有可转换的几何对象');
-        return;
-    }
-
-    const currentCrs = String(layerData.metadata?.crs || 'wgs84').toLowerCase();
-    if (currentCrs === nextCrs) {
-        message.info(`当前已是 ${nextCrs.toUpperCase()} 坐标系`);
-        return;
-    }
-
-    const converter = currentCrs === 'wgs84' && nextCrs === 'gcj02'
-        ? wgs84ToGcj02
-        : gcj02ToWgs84;
-
-    let firstCoordinate = null;
-    features.forEach((feature) => {
-        const representative = applyCrsConversionToFeature(feature, converter, nextCrs);
-        if (!firstCoordinate && representative) {
-            firstCoordinate = representative;
-        }
-    });
-
-    const nextMetadata = {
-        ...(layerData.metadata || {}),
-        crs: nextCrs
-    };
-    if (firstCoordinate) {
-        nextMetadata.longitude = Number(firstCoordinate[0].toFixed(6));
-        nextMetadata.latitude = Number(firstCoordinate[1].toFixed(6));
-    }
-    layerData.metadata = normalizeLayerMetadata(nextMetadata, features);
-
-    layerData.features = serializeManagedFeatures(features, layerData.name);
-    source?.changed?.();
-    layerData.layer?.changed?.();
-    emitUserLayersChange();
-
-    message.success(`已切换到 ${nextCrs.toUpperCase()} 坐标系`);
-}
-
-// 兼容旧事件命名，避免上游调用中断。
-function toggleSearchLayerCRS(payload) {
-    toggleLayerCRS(payload);
-}
-
 // [隶属] 组件交互-图层坐标导出
 // [作用] 将当前图层按当前坐标系导出为 CSV/TXT/GeoJSON。
 // [交互] 由外部组件调用，委托 layerExportService 处理。
@@ -2607,7 +1455,7 @@ function zoomToGraphics() {
 // [作用] 根据工具类型激活绘图、测量、清理、属性查询等交互。
 // [交互] 对外 emit(feature-selected/graphics-overview) 并被父组件工具箱调用。
 function activateInteraction(type) {
-    clearInteractions();
+    clearDrawMeasureInteractions();
     if (!mapInstance.value) return;
 
     if (type === 'AttributeQuery') {
@@ -2636,124 +1484,20 @@ function activateInteraction(type) {
     }
 
     if (type === 'Clear') {
-        drawSource.clear();
-        for (let i = userDataLayers.length - 1; i >= 0; i--) {
-            if (userDataLayers[i].sourceType === 'draw') {
-                mapInstance.value.removeLayer(userDataLayers[i].layer);
-                userDataLayers.splice(i, 1);
-            }
-        }
-        refreshUserLayerZIndex();
-        emitUserLayersChange();
-        mapInstance.value.getOverlays().clear();
-        emitGraphicsOverview();
+        clearAllGraphics();
         return;
     }
 
-    const isMeasure = ['MeasureDistance', 'MeasureArea'].includes(type);
-    const drawType = type === 'MeasureDistance' ? 'LineString' : (type === 'MeasureArea' ? 'Polygon' : type);
-
-    drawInteraction = new Draw({
-        source: drawSource,
-        type: drawType,
-        style: createStyleFromConfig(drawStyleConfig.value)
-    });
-
-    mapInstance.value.addInteraction(drawInteraction);
-    snapInteraction = new Snap({ source: drawSource });
-    mapInstance.value.addInteraction(snapInteraction);
-
-    if (isMeasure) {
-        createTooltips();
-        drawInteraction.on('drawstart', (evt) => {
-            sketchFeature = evt.feature;
-            sketchFeature.getGeometry().on('change', (e) => {
-                const geom = e.target;
-                let output, tooltipCoord;
-                if (geom instanceof Polygon) {
-                    output = formatArea(geom);
-                    tooltipCoord = geom.getInteriorPoint().getCoordinates();
-                } else {
-                    output = formatLength(geom);
-                    tooltipCoord = geom.getLastCoordinate();
-                }
-                measureTooltipEl.innerHTML = output;
-                measureTooltipOverlay.setPosition(tooltipCoord);
-            });
-        });
-        drawInteraction.on('drawend', () => {
-            measureTooltipEl.className = 'ol-tooltip ol-tooltip-static';
-            measureTooltipOverlay.setOffset([0, -7]);
-            sketchFeature = null;
-            measureTooltipEl = null;
-            createTooltips(); // 为下一次做准备
-            emitGraphicsOverview();
-        });
-    } else {
-        drawInteraction.on('drawend', (evt) => {
-            const feature = evt.feature;
-            const geom = feature.getGeometry();
-            const geomType = geom?.getType?.() || drawType;
-            drawSource.removeFeature(feature);
-
-            createManagedVectorLayer({
-                name: `绘制_${geomType}_${drawGraphicSeed++}`,
-                type: geomType,
-                sourceType: 'draw',
-                features: [feature],
-                styleConfig: drawStyleConfig.value,
-                fitView: false
-            });
-            emitGraphicsOverview();
-        });
-    }
+    // 其他类型则激活绘图/测量（Point/LineString/Polygon/MeasureDistance/MeasureArea）
+    activateDrawMeasure(type, (props) => emit('feature-selected', props));
 }
 
 // [隶属] 组件交互-绘图与测量
 // [作用] 清理当前激活的绘图/捕捉交互和提示覆盖物。
 // [交互] 被 activateInteraction 与外部调用复用。
 function clearInteractions() {
-    if (!mapInstance.value) return;
-    if (drawInteraction) mapInstance.value.removeInteraction(drawInteraction);
-    if (snapInteraction) mapInstance.value.removeInteraction(snapInteraction);
-    if (helpTooltipOverlay) mapInstance.value.removeOverlay(helpTooltipOverlay);
-    drawInteraction = null;
-    snapInteraction = null;
-    helpTooltipEl = null;
+    clearDrawMeasureInteractions();
 }
-
-// [隶属] 组件交互-绘图与测量
-// [作用] 创建测量值提示和操作引导提示覆盖物。
-// [交互] 被 activateInteraction(测量模式) 调用。
-function createTooltips() {
-    if (measureTooltipEl) measureTooltipEl.remove();
-    if (helpTooltipEl) helpTooltipEl.remove();
-
-    helpTooltipEl = document.createElement('div');
-    helpTooltipEl.className = 'ol-tooltip hidden';
-    helpTooltipOverlay = new Overlay({ element: helpTooltipEl, offset: [15, 0], positioning: 'center-left' });
-    mapInstance.value.addOverlay(helpTooltipOverlay);
-
-    measureTooltipEl = document.createElement('div');
-    measureTooltipEl.className = 'ol-tooltip ol-tooltip-measure';
-    measureTooltipOverlay = new Overlay({ element: measureTooltipEl, offset: [0, -15], positioning: 'bottom-center', stopEvent: false });
-    mapInstance.value.addOverlay(measureTooltipOverlay);
-}
-
-// [隶属] 组件交互-绘图与测量
-// [作用] 格式化线长度显示文本。
-// [交互] 被测距绘制过程调用。
-const formatLength = (line) => {
-    const len = getLength(line);
-    return len > 100 ? `${(len / 1000).toFixed(2)} km` : `${len.toFixed(2)} m`;
-};
-// [隶属] 组件交互-绘图与测量
-// [作用] 格式化面面积显示文本。
-// [交互] 被测面绘制过程调用。
-const formatArea = (poly) => {
-    const area = getArea(poly);
-    return area > 10000 ? `${(area / 1000000).toFixed(2)} km²` : `${area.toFixed(2)} m²`;
-};
 
 // 初始化图层导出服务并包装为适配本组件的调用方式
 const exporterFn = createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 });
@@ -2789,7 +1533,6 @@ defineExpose({
     setLayerVisibility,
     zoomToUserLayer,
     zoomToManagedFeature,
-    highlightManagedFeature,
     removeUserLayer,
     reorderUserLayers,
     soloUserLayer,
