@@ -2,7 +2,7 @@ import { ref, computed } from 'vue';
 import { useMessage } from './useMessage';
 
 /**
- * 共享资源加载器 - 用于从 public/ShareDate 目录加载预配置的地理数据资源
+ * 共享资源加载器 - 用于从 public/ShareData 目录加载预配置的地理数据资源
  * 
  * Features:
  * - 自动扫描共享资源目录
@@ -39,16 +39,16 @@ export interface SharedResourceTreeNode {
     fileCount?: number;
 }
 
-const SHARED_RESOURCE_DIR = './ShareDate';
+const SHARED_RESOURCE_DIR = './ShareData';
 const SUPPORTED_EXTENSIONS = ['kml', 'kmz', 'geojson', 'json', 'shp', 'shx', 'dbf', 'prj', 'cpg', 'tif', 'tiff', 'zip'];
 
 function normalizeResourcePath(path: string): string {
     return String(path || '')
         .replace(/\\/g, '/')
-        .replace(/^\/public\/ShareDate\//, '')
-        .replace(/^public\/ShareDate\//, '')
-        .replace(/^\/ShareDate\//, '')
-        .replace(/^ShareDate\//, '')
+        .replace(/^\/public\/ShareData\//, '')
+        .replace(/^public\/ShareData\//, '')
+        .replace(/^\/ShareData\//, '')
+        .replace(/^ShareData\//, '')
         .replace(/^\/+/, '')
         .trim();
 }
@@ -173,7 +173,7 @@ export function useSharedResourceLoader() {
 
         try {
             // 1. 扫描文件
-            const rawModules = import.meta.glob('/public/ShareDate/**/*', {
+            const rawModules = import.meta.glob('/public/ShareData/**/*', {
                 query: '?url',
                 import: 'default',
                 eager: true // 建议开启 eager，确保数据立即同步可用
@@ -276,7 +276,7 @@ export function useSharedResourceLoader() {
     /**
      * 将共享资源加载为 File 对象数组（用于复用上传逻辑）
      * 
-     * @param resourcePath - 资源路径 (相对于 ShareDate 目录)
+     * @param resourcePath - 资源路径 (相对于 ShareData 目录)
      * @returns File 对象数组
      */
     async function loadResourceAsFiles(resourcePath: string): Promise<File[]> {
