@@ -23,6 +23,7 @@
             @update-order="handleLayerOrderUpdate"
             @toggle-graticule="handleToggleGraticule"
             @search-jump="handleSearchJump"
+            @layer-context-action="handleLayerContextAction"
         />
 
         <AttributeTable
@@ -58,6 +59,8 @@ import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry'
 import { useUserLocation } from '../composables/useUserLocation';
 import { useMessage } from '../composables/useMessage';
 import { useMapState } from '../composables/useMapState';
+import { createRightDragZoomController } from '../composables/useRightDragZoom';
+import { useLayerContextMenuActions } from '../composables/useLayerContextMenuActions';
 import { 
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
@@ -172,6 +175,13 @@ const layerList = ref(LAYER_CONFIGS.map(cfg => ({
 })));
 const layerInstances = {}; // 存储所有 TileLayer 实例
 
+const { handleLayerContextAction } = useLayerContextMenuActions({
+    layerInstances,
+    getLayerConfigs: () => LAYER_CONFIGS,
+    customMapUrlRef: customMapUrl,
+    message
+});
+
 // --- 全局变量 (非响应式) ---
 let drawInteraction, snapInteraction;
 let measureTooltipEl, measureTooltipOverlay;
@@ -185,6 +195,7 @@ let busActiveStepIndex = -1;
 let busHoverStepIndex = -1;
 let driveActiveStepIndex = -1;
 let driveHoverStepIndex = -1;
+let rightDragZoomController = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -795,6 +806,8 @@ onUnmounted(() => {
     componentUnmounted = true;
     stopMapViewSync();
     stopGraticule();
+    rightDragZoomController?.dispose?.();
+    rightDragZoomController = null;
     attrStore.setMapExtent(null);
     if (pendingBusPick?.reject) {
         pendingBusPick.reject(new Error('地图已卸载'));
@@ -1788,6 +1801,10 @@ function handleToggleGraticule() {
 // [交互] 多处 emit：feature-selected、location-change。
 function bindEvents() {
     const map = mapInstance.value;
+    const viewport = map.getViewport();
+
+    rightDragZoomController?.dispose?.();
+    rightDragZoomController = createRightDragZoomController(map);
 
     // 统一处理鼠标移动：包括业务区域检测和工具提示
     // 注意：坐标显示改为视图中心，不再跟踪鼠标位置，在 moveend 和 touchmove 事件中更新
@@ -1807,7 +1824,7 @@ function bindEvents() {
 
     });
 
-    map.getViewport().addEventListener('mouseout', () => {
+    viewport.addEventListener('mouseout', () => {
         if (helpTooltipEl) helpTooltipEl.classList.add('hidden');
     });
 
@@ -1852,7 +1869,11 @@ function bindEvents() {
         }
     });
 
-    map.getViewport().addEventListener('contextmenu', (e) => {
+    viewport.addEventListener('contextmenu', (e) => {
+        if (rightDragZoomController?.shouldSuppressContextMenu?.()) {
+            e.preventDefault();
+            return;
+        }
         if (!isAttributeQueryEnabled.value) return;
         e.preventDefault();
         const pixel = map.getEventPixel(e);
@@ -1894,7 +1915,7 @@ function bindEvents() {
     });
 
     // 触摸事件处理 - 移动端支持
-    map.getViewport().addEventListener('touchmove', () => {
+    viewport.addEventListener('touchmove', () => {
         const center = map.getView().getCenter();
         if (center) {
             const lonLat = toLonLat(center);

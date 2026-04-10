@@ -67,6 +67,7 @@
                         @dragend="onDragEnd"
                         @dragover.prevent
                         @drop="onDrop($event, index)"
+                        @contextmenu.prevent="onLayerContextMenu(layer, index, $event)"
                         :class="{ dragging: draggingIndex === index }"
                     >
                         <div class="drag-handle">⋮⋮</div>
@@ -80,11 +81,40 @@
                 </div>
             </div>
         </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="showLayerContextMenu"
+                class="layer-context-menu"
+                :style="layerContextMenuStyle"
+                @contextmenu.prevent
+            >
+                <div
+                    class="context-menu-item context-has-submenu"
+                    @mouseenter="showUrlSubmenu = true"
+                    @mouseleave="showUrlSubmenu = false"
+                >
+                    <span>URL 操作</span>
+                    <span class="submenu-arrow">▶</span>
+                    <div
+                        v-if="showUrlSubmenu"
+                        class="context-submenu"
+                        :style="layerContextSubmenuStyle"
+                    >
+                        <button class="context-menu-item" @click="triggerLayerContextAction('copy-url')">复制 URL</button>
+                        <button class="context-menu-item" @click="triggerLayerContextAction('view-url')">查看 URL</button>
+                    </div>
+                </div>
+
+                <button class="context-menu-item" @click="moveContextLayerToTop">图层置顶</button>
+                <button class="context-menu-item" @click="moveContextLayerToBottom">图层置底</button>
+            </div>
+        </Teleport>
     </div>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { toLonLat } from 'ol/proj';
 import { fetchLocationResultsByService } from '../api/locationSearch';
 import { BASEMAP_OPTIONS } from '../constants/useBasemapManager';
@@ -152,12 +182,14 @@ const props = defineProps({
  * @event update-order 触发图层排序/显隐更新，payload: { type, dragIndex?, dropIndex?, layerId?, visible? }
  * @event toggle-graticule 触发经纬网开关
  * @event search-jump 触发搜索结果定位，payload: { lng, lat, zoom, name, raw }
+ * @event layer-context-action 触发图层右键菜单动作，payload: { action, layerId, layerName, layerIndex }
  */
 const emit = defineEmits([
     'change-layer',
     'update-order',
     'toggle-graticule',
-    'search-jump'
+    'search-jump',
+    'layer-context-action'
 ]);
 
 const layerManageButtonRef = ref(null);
@@ -166,8 +198,14 @@ const draggingIndex = ref(-1);
 const customUrlInput = ref(props.customMapUrl || '');
 const layerManagerAnchor = ref({ top: 0, left: 0 });
 const detectedServiceInfo = ref(null); // 检测到的服务类型信息
+const showLayerContextMenu = ref(false);
+const showUrlSubmenu = ref(false);
+const contextMenuLayer = ref(null);
+const layerContextMenuAnchor = ref({ top: 0, left: 0 });
 
 const PANEL_WIDTH = 200;
+const CONTEXT_MENU_WIDTH = 152;
+const CONTEXT_SUBMENU_WIDTH = 136;
 
 const serviceOptions = computed(() => {
     if (Array.isArray(props.services) && props.services.length) return props.services;
@@ -182,6 +220,25 @@ const layerManagerPanelStyle = computed(() => ({
     top: `${layerManagerAnchor.value.top}px`,
     left: `${layerManagerAnchor.value.left}px`
 }));
+
+const layerContextMenuStyle = computed(() => ({
+    top: `${layerContextMenuAnchor.value.top}px`,
+    left: `${layerContextMenuAnchor.value.left}px`
+}));
+
+const layerContextSubmenuStyle = computed(() => {
+    if (typeof window === 'undefined') {
+        return { left: `${CONTEXT_MENU_WIDTH - 4}px`, top: '0px' };
+    }
+
+    const availableRight = window.innerWidth - layerContextMenuAnchor.value.left;
+    const canOpenRight = availableRight > (CONTEXT_MENU_WIDTH + CONTEXT_SUBMENU_WIDTH + 20);
+
+    return {
+        left: canOpenRight ? `${CONTEXT_MENU_WIDTH - 4}px` : `-${CONTEXT_SUBMENU_WIDTH + 4}px`,
+        top: '0px'
+    };
+});
 
 watch(
     () => props.customMapUrl,
@@ -273,6 +330,87 @@ function onDrop(evt, dropIndex) {
     draggingIndex.value = -1;
 }
 
+function closeLayerContextMenu() {
+    showLayerContextMenu.value = false;
+    showUrlSubmenu.value = false;
+    contextMenuLayer.value = null;
+}
+
+function onLayerContextMenu(layer, index, event) {
+    if (!layer?.id || !event) return;
+
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
+    const maxLeft = Math.max(8, viewportWidth - CONTEXT_MENU_WIDTH - 8);
+    const maxTop = Math.max(8, viewportHeight - 140);
+
+    layerContextMenuAnchor.value = {
+        left: Math.min(Math.max(8, event.clientX), maxLeft),
+        top: Math.min(Math.max(8, event.clientY), maxTop)
+    };
+
+    contextMenuLayer.value = {
+        id: String(layer.id),
+        name: String(layer.name || layer.id),
+        index: Number(index)
+    };
+    showUrlSubmenu.value = false;
+    showLayerContextMenu.value = true;
+}
+
+function triggerLayerContextAction(action) {
+    const layer = contextMenuLayer.value;
+    if (!layer?.id) return;
+
+    emit('layer-context-action', {
+        action,
+        layerId: layer.id,
+        layerName: layer.name,
+        layerIndex: layer.index
+    });
+    closeLayerContextMenu();
+}
+
+function moveContextLayerToTop() {
+    const index = Number(contextMenuLayer.value?.index);
+    if (!Number.isInteger(index)) return;
+    if (index <= 0) {
+        closeLayerContextMenu();
+        return;
+    }
+
+    emit('update-order', {
+        type: 'reorder',
+        dragIndex: index,
+        dropIndex: 0
+    });
+    closeLayerContextMenu();
+}
+
+function moveContextLayerToBottom() {
+    const index = Number(contextMenuLayer.value?.index);
+    const lastIndex = props.layerList.length - 1;
+    if (!Number.isInteger(index) || lastIndex < 0) return;
+    if (index >= lastIndex) {
+        closeLayerContextMenu();
+        return;
+    }
+
+    emit('update-order', {
+        type: 'reorder',
+        dragIndex: index,
+        dropIndex: lastIndex
+    });
+    closeLayerContextMenu();
+}
+
+function handleGlobalPointerDown(event) {
+    if (!showLayerContextMenu.value) return;
+    const target = event?.target;
+    if (target instanceof Element && target.closest('.layer-context-menu')) return;
+    closeLayerContextMenu();
+}
+
 function updateLayerVisibility(layer, event) {
     emit('update-order', {
         type: 'visibility',
@@ -329,6 +467,7 @@ watch(showLayerManager, async (visible) => {
     if (!visible) {
         unbindAnchorListeners();
         draggingIndex.value = -1;
+        closeLayerContextMenu();
         return;
     }
 
@@ -337,8 +476,13 @@ watch(showLayerManager, async (visible) => {
     bindAnchorListeners();
 });
 
+onMounted(() => {
+    window.addEventListener('pointerdown', handleGlobalPointerDown);
+});
+
 onBeforeUnmount(() => {
     unbindAnchorListeners();
+    window.removeEventListener('pointerdown', handleGlobalPointerDown);
 });
 </script>
 
@@ -536,5 +680,56 @@ onBeforeUnmount(() => {
 
 .layer-name {
     flex: 1;
+}
+
+.layer-context-menu {
+    position: fixed;
+    min-width: 152px;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #d1fae5;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+    padding: 4px;
+    z-index: 2100;
+}
+
+.context-menu-item {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-size: 12px;
+    color: #0f172a;
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.context-menu-item:hover {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.context-has-submenu {
+    position: relative;
+}
+
+.context-submenu {
+    position: absolute;
+    min-width: 136px;
+    background: rgba(255, 255, 255, 0.99);
+    border: 1px solid #d1fae5;
+    border-radius: 6px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
+    padding: 4px;
+    z-index: 2110;
+}
+
+.submenu-arrow {
+    color: #4b5563;
+    font-size: 10px;
 }
 </style>
