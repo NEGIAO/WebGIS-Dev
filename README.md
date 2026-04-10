@@ -110,20 +110,27 @@ WebGIS_Dev/
 │   ├── composables/
 │   │   ├── useAreaImageOverlay.js      # 区域图片覆盖逻辑旧入口（已由 MapEasterEgg 组件化承接）
 │   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts        # 非标准xyz切片配置示例文件，供新增非标准图源参考
-│   │   ├── useBasemapManager.ts        # ⭐ 底图配置管理集中器,单文件配置底图和组合底图选项，提供统一接口供组件调用
+│   │   ├── useBasemapResilience.js     # 底图稳定性功能兼容入口（re-export 到 map/features）
 │   │   ├── useGisLoader.js             # 数据导入调度兼容入口（JavaScript 版本）
 │   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
+│   │   ├── useLayerContextMenuActions.js # 图层右键菜单动作兼容入口（re-export 到 map/features）
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层（矢量/栅格统一落图）
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
+│   │   ├── useRightDragZoom.js         # 右键拖拽缩放兼容入口（re-export 到 map/features）
 │   │   ├── useSharedResourceLoader.ts  # 📦 [V2.8.3+] 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式、复用上传逻辑导入
-│   │   ├── useStyleEditor.js           # 图层样式模板
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   ├── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
+│   │   ├── map/
+│   │   │   └── features/
+│   │   │       ├── README.md           # 地图功能库拆分约束与职责说明（一个功能一个库）
+│   │   │       ├── useBasemapResilience.js      # 底图切换验证、超时监测、兜底降级
+│   │   │       ├── useLayerContextMenuActions.js # 图层右键菜单 URL 动作库
+│   │   │       └── useRightDragZoom.js          # 地图右键拖拽框选缩放控制器
 │   │   └── Magic/
 │   │       ├── useDelaunay.js          # 首屏 Delaunay 视觉特效
 │   │       ├── useFluid.js             # 首屏流体视觉特效
@@ -179,6 +186,13 @@ WebGIS_Dev/
 1. 地图初始化与 OpenLayers 生命周期管理。
 2. 全局状态编排（底图状态、图层实例、绘图/路线等核心流程）。
 3. 与子组件的事件桥接（Props 下发，Emits 回传）。
+
+### map 功能库拆分（feature-per-library）
+
+1. 地图交互与底图稳定性逻辑统一迁移到 `src/composables/map/features/`。
+2. 每个功能单独一个库文件，避免在 `MapContainer.vue` 继续堆积实现细节。
+3. 旧入口文件保留 re-export 兼容层，保证现有调用不被一次性重构破坏。
+4. 新增 map 功能时，要求新增独立 feature 文件并同步更新目录文档。
 
 ### mapInstance 通信技术摘要
 

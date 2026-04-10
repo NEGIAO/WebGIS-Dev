@@ -44,9 +44,9 @@ export const GOOGLE_PROBE_TIMEOUT_MS = 1200;
 
 // ========== 类型定义 ==========
 export type LayerCategory = 'base' | 'label';
-export type LayerGroup = '影像' | '矢量' | '专题' | '注记';
+export type LayerGroup = '影像' | '矢量' | '专题' | '注记' | 'Canvas' | '地形' | '海洋' | '参考' | '专题'| '极地' | '世界' | '其他'| 'ArcGIS Online'| 'Root' | 'Navigation' | 'Elevation' | 'Ocean' | 'Polar' | 'Reference' | 'Specialty'| 'World';
 
-type TileSourceInstance = TileSourceLike | OSM | null;
+type TileSourceInstance = TileSourceLike | OSM | null; 
 
 type LayerFactoryContext = {
     normBase: string;
@@ -413,6 +413,202 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0'
         })
     },
+    // ===============================================================================================================================================
+    // Arcgis Online 服务25个
+    // --- Canvas 分类 ---
+
+    // --- Canvas 分类 ---
+    {
+        id: 'arcgis_canvas_dark_base',
+        name: 'ArcGIS深灰色底图',
+        category: 'base',
+        group: 'Canvas',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_canvas_dark_ref',
+        name: 'ArcGIS深灰色参考注记',
+        category: 'base',
+        group: 'Canvas',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_canvas_light_base',
+        name: 'ArcGIS浅灰色底图',
+        category: 'base',
+        group: 'Canvas',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_canvas_light_ref',
+        name: 'ArcGIS浅灰色参考注记',
+        category: 'base',
+        group: 'Canvas',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+    // --- Elevation 分类 ---
+    {
+        id: 'arcgis_elev_hillshade',
+        name: 'ArcGIS世界山体阴影',
+        category: 'base',
+        group: 'Elevation',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_elev_hillshade_dark',
+        name: 'ArcGIS深色山体阴影',
+        category: 'base',
+        group: 'Elevation',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+    // --- Ocean 分类 ---
+    {
+        id: 'arcgis_ocean_base',
+        name: 'ArcGIS海洋底图',
+        category: 'base',
+        group: 'Ocean',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_ocean_ref',
+        name: 'ArcGIS海洋参考注记',
+        category: 'base',
+        group: 'Ocean',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+    // --- Polar 分类 (极地) ---
+    {
+        id: 'arcgis_polar_ant_img',
+        name: 'ArcGIS南极影像',
+        category: 'base',
+        group: 'Polar',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Antarctic_Imagery/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_polar_arc_img',
+        name: 'ArcGIS北极影像',
+        category: 'base',
+        group: 'Polar',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Imagery/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_polar_arc_base',
+        name: 'ArcGIS北极底图',
+        category: 'base',
+        group: 'Polar',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_polar_arc_ref',
+        name: 'ArcGIS北极参考注记',
+        category: 'base',
+        group: 'Polar',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Reference/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+    // --- Reference 分类 ---
+    {
+        id: 'arcgis_ref_boundaries',
+        name: 'ArcGIS世界边界地名',
+        category: 'base',
+        group: 'Reference',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_ref_boundaries_alt',
+        name: 'ArcGIS世界边界地名(备选)',
+        category: 'base',
+        group: 'Reference',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_ref_overlay',
+        name: 'ArcGIS世界参考叠加层',
+        category: 'base',
+        group: 'Reference',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Reference_Overlay/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_ref_transport',
+        name: 'ArcGIS世界交通',
+        category: 'base',
+        group: 'Reference',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+    // --- Specialty 分类 ---
+    {
+        id: 'arcgis_spec_nav',
+        name: 'ArcGIS世界航海图',
+        category: 'base',
+        group: 'Specialty',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/Specialty/World_Navigation_Charts/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+    // --- Root 根目录 ---
+    {
+        id: 'arcgis_natgeo_world',
+        name: '国家地理世界地图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_usa_topo',
+        name: 'USA地形图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_imagery_root',
+        name: '世界影像图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_physical_root',
+        name: '世界自然地理图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_shaded_relief',
+        name: '世界地形渲染图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_street_root',
+        name: '世界街道图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_terrain_base',
+        name: '世界地形底图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}' })
+    },
+    {
+        id: 'arcgis_topo_root',
+        name: '世界地形图',
+        category: 'base',
+        group: 'World',
+        createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}' })
+    },
+
+
+
+    // ===============================================================================================================================================
     {
         id: 'topo',
         name: '地形图',
@@ -612,6 +808,38 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'osm', label: 'OSM(需梯子)', stack: ['osm'] },
     { id: 'amap', label: '高德地图(GCJ)', stack: ['amap'] },
     { id: 'amap_image', label: '高德影像(GCJ)', stack: ['amap_image'] },
+
+    // ArcGIS Online 系列 25个
+    { id: 'arcgis_canvas_dark', label: 'ArcGIS Canvas 深灰', stack: ['arcgis_canvas_dark_base', 'arcgis_canvas_dark_ref'] },
+    { id: 'arcgis_canvas_light', label: 'ArcGIS Canvas 浅灰', stack: ['arcgis_canvas_light_base', 'arcgis_canvas_light_ref'] },
+    { id: 'arcgis_elev_hillshade', label: 'ArcGIS Hillshade', stack: ['arcgis_elev_hillshade', 'label'] },
+    { id: 'arcgis_elev_hillshade_dark', label: 'ArcGIS Hillshade Dark', stack: ['arcgis_elev_hillshade_dark', 'label'] },
+    { id: 'arcgis_ocean', label: 'ArcGIS Ocean', stack: ['arcgis_ocean_base', 'arcgis_ocean_ref'] },
+    { id: 'arcgis_polar_ant_img', label: 'ArcGIS 南极影像', stack: ['arcgis_polar_ant_img'] },
+    { id: 'arcgis_polar_arc_img', label: 'ArcGIS 北极影像', stack: ['arcgis_polar_arc_img'] },
+    { id: 'arcgis_polar_arc', label: 'ArcGIS 北极', stack: ['arcgis_polar_arc_base', 'arcgis_polar_arc_ref'] },
+    { id: 'arcgis_ref_boundaries', label: 'ArcGIS 世界边界地名', stack: ['arcgis_ref_boundaries'] },
+    { id: 'arcgis_ref_boundaries_alt', label: 'ArcGIS 世界边界地名(备选)', stack: ['arcgis_ref_boundaries_alt'] },
+    { id: 'arcgis_ref_overlay', label: 'ArcGIS 世界参考叠加层', stack: ['arcgis_ref_overlay'] },
+    { id: 'arcgis_ref_transport', label: 'ArcGIS 世界交通', stack: ['arcgis_ref_transport', 'label'] },
+    { id: 'arcgis_spec_nav', label: 'ArcGIS 世界航海图', stack: ['arcgis_spec_nav'] },
+    { id: 'arcgis_natgeo_world', label: '国家地理世界地图', stack: ['arcgis_natgeo_world'] },
+    { id: 'arcgis_usa_topo', label: 'USA地形图', stack: ['arcgis_usa_topo', 'label'] },
+    { id: 'arcgis_imagery_root', label: '世界影像图', stack: ['arcgis_imagery_root','label'] },
+    { id: 'arcgis_physical_root', label: '世界自然地理图', stack: ['arcgis_physical_root', 'label'] },
+    { id: 'arcgis_shaded_relief', label: '世界地形渲染图', stack: ['arcgis_shaded_relief', 'label'] },
+    { id: 'arcgis_street_root', label: '世界街道图', stack: ['arcgis_street_root'] },
+    { id: 'arcgis_terrain_base', label: '漂亮海洋', stack: ['arcgis_terrain_base', 'label'] },
+    { id: 'arcgis_topo_root', label: '世界地形图', stack: ['arcgis_topo_root'] },
+    { id: 'arcgis_canvas_dark', label: 'ArcGIS Canvas 深灰', stack: ['arcgis_canvas_dark_base', 'arcgis_canvas_dark_ref'] },
+    { id: 'arcgis_canvas_light', label: 'ArcGIS Canvas 浅灰', stack: ['arcgis_canvas_light_base', 'arcgis_canvas_light_ref'] },
+    { id: 'arcgis_elev_hillshade', label: 'ArcGIS Hillshade', stack: ['arcgis_elev_hillshade'] },
+    { id: 'arcgis_elev_hillshade_dark', label: 'ArcGIS Hillshade Dark', stack: ['arcgis_elev_hillshade_dark'] },
+    { id: 'arcgis_ocean', label: 'ArcGIS Ocean', stack: ['arcgis_ocean_base', 'arcgis_ocean_ref'] },
+
+
+
+
     { id: 'relief', label: '地形浮雕(MFF)', stack: ['relief', 'label'] },
     { id: 'mff_water', label: 'MFF水体', stack: ['relief', 'mff_water', 'label'] },
     { id: 'mff_admin', label: 'MFF行政边界', stack: ['relief', 'mff_admin', 'label'] },
