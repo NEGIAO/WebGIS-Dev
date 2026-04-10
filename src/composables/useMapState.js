@@ -380,6 +380,11 @@ export function useMapState(mapInstance, options = {}) {
 
             layer.setVisible(!!item.visible);
             layer.setZIndex(layerList.length - index);
+            
+            // 应用透明度设置
+            if (typeof item.opacity === 'number' && item.opacity >= 0 && item.opacity <= 1) {
+                layer.setOpacity(item.opacity);
+            }
         });
     }
 

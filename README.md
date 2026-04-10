@@ -108,66 +108,43 @@ WebGIS_Dev/
 │   │       ├── IconSupport.vue         # 支持入口图标组件(未启用)
 │   │       └── IconTooling.vue         # 工具入口图标组件(未启用)
 │   ├── composables/
+│   │   ├── 📁 [全局通用工具库（Global Utilities）]
 │   │   ├── useAreaImageOverlay.js      # 区域图片覆盖逻辑旧入口（已由 MapEasterEgg 组件化承接）
-│   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts        # 非标准xyz切片配置示例文件，供新增非标准图源参考
-│   │   ├── useBasemapResilience.js     # 底图稳定性功能兼容入口（re-export 到 map/features）
-│   │   ├── useGisLoader.js             # 数据导入调度兼容入口（JavaScript 版本）
+│   │   ├── useGisLoader.js             # 数据导入调度主实现（JavaScript 版本）
 │   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
-│   │   ├── useLayerContextMenuActions.js # 图层右键菜单动作兼容入口（re-export 到 map/features）
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层（矢量/栅格统一落图）
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
-│   │   ├── useManagedLayerStyle.js     # 托管图层样式功能兼容入口（re-export 到 map/features）
-│   │   ├── useManagedFeatureSerialization.js # 要素序列化功能兼容入口（re-export 到 map/features）
-│   │   ├── useStartupTaskScheduler.js  # 启动任务调度功能兼容入口（re-export 到 map/features）
-│   │   ├── useBasemapUrlMapping.js     # 底图网址映射功能兼容入口（re-export 到 map/features）
-│   │   ├── useCoordinateSystemConversion.js # 坐标系转换功能兼容入口（re-export 到 map/features）
-│   │   ├── useMapSearchAndCoordinateInput.js # 地图搜索和坐标输入功能兼容入口（re-export 到 map/features）
-│   │   ├── useManagedFeatureHighlight.js # 要素高亮功能兼容入口（re-export 到 map/features）
-│   │   ├── useDrawMeasure.js             # 绘图与测量功能兼容入口（re-export 到 map/features）
-│   │   ├── useRouteRendering.js         # 路线绘制功能兼容入口（re-export 到 map/features）
-│   │   ├── useLayerMetadataNormalization.js # 图层元数据规范化兼容入口（re-export 到 map/features）
-│   │   ├── useUserLayerApiFacade.js     # 用户图层 API 委托兼容入口（re-export 到 map/features）
-│   │   ├── useBasemapStateManagement.js # 底图状态管理兼容入口（re-export 到 map/features）
-│   │   ├── useManagedFeatureOperations.js # 托管要素操作兼容入口（re-export 到 map/features）
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
-│   │   ├── useManagedLayerStyle.js     # 托管图层样式功能兼容入口（re-export 到 map/features）
-│   │   ├── useRouteStepInteraction.js  # 路线步骤交互功能兼容入口（re-export 到 map/features）
-│   │   ├── useRouteStepStyles.js       # 路线步骤样式功能兼容入口（re-export 到 map/features）
-│   │   ├── useRightDragZoom.js         # 右键拖拽缩放兼容入口（re-export 到 map/features）
-│   │   ├── useSharedResourceLoader.ts  # 📦 [V2.8.3+] 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式、复用上传逻辑导入
+│   │   ├── useSharedResourceLoader.ts  # 📦 [V2.8.3+] 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式
+│   │   ├── useTileSourceFactory.ts     # 瓦片源工厂：XYZ/WMS/WMTS 格式识别、嗅探与源创建
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   ├── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
-│   │   ├── map/
-│   │   │   └── features/
-│   │   │       ├── README.md           # 地图功能库拆分约束与职责说明（一个功能一个库）
-│   │   │       ├── useBasemapResilience.js      # 底图切换验证、超时监测、兜底降级
-│   │   │       ├── useLayerContextMenuActions.js # 图层右键菜单 URL 动作库
-│   │   │       ├── useManagedFeatureSerialization.js # 要素 ID 管理与 GeoJSON 序列化转换
-│   │   │       ├── useManagedLayerStyle.js       # 托管图层样式归一化、标签生成与样式应用
-│   │   │       ├── useRouteStepInteraction.js    # 路线步骤激活/预览状态与步骤缩放
-│   │   │       ├── useStartupTaskScheduler.js    # 首屏关键瓦片加载与非关键任务调度
-│   │   │       ├── useBasemapUrlMapping.js       # 底图网址映射（索引翻译、分类、分组）
-│   │   │       ├── useCoordinateSystemConversion.js # 提供坐标系转换功能
-│   │   │       ├── useMapSearchAndCoordinateInput.js # 地名搜索与坐标输入功能
-│   │   │       ├── useRouteStepStyles.js         # 公交/驾车路线步骤样式生成与缓存
-│   │   │       ├── useManagedFeatureHighlight.js # 要素高亮样式生成与状态管理
-│   │   │       ├── useDrawMeasure.js             # 绘制图形、测量距离/面积、提示管理
-│   │   │       ├── useRouteRendering.js         # 公交/驾车路线绘制与缩放
-│   │   │       ├── useLayerMetadataNormalization.js # 图层元数据规范化与坐标推断
-│   │   │       ├── useUserLayerApiFacade.js     # 用户图层 API 委托门面
-│   │   │       ├── useBasemapStateManagement.js # 底图状态管理（状态广播、源刷新）
-│   │   │       ├── useManagedFeatureOperations.js # 托管要素操作（查找、缩放）
-│   │   │       └── useRightDragZoom.js          # 地图右键拖拽框选缩放控制器
-│   │   └── Magic/
-│   │       ├── useDelaunay.js          # 首屏 Delaunay 视觉特效
-│   │       ├── useFluid.js             # 首屏流体视觉特效
-│   │       ├── useGravity.js           # 首屏重力粒子视觉特效
-│   │       ├── useSingularity.js       # 首屏奇点视觉特效
-│   │       └── useWave.js              # 首屏波动视觉特效
+│   │   ├── 📁 [地图业务特性库（Map Features - Phase 1-16 提取）]
+│   │   └── map/
+│   │       └── features/
+│   │           ├── README.md           # 地图功能库拆分约束与职责说明（一个功能一个库）
+│   │           ├── useBasemapResilience.js         # Phase 2: 底图切换验证、超时监测、兜底降级
+│   │           ├── useBasemapStateManagement.js    # Phase 15: 底图状态管理（状态广播、源刷新）
+│   │           ├── useBasemapUrlMapping.js         # Phase 3: 底图网址映射（索引翻译、分类、分组）
+│   │           ├── useCoordinateSystemConversion.js # Phase 5: 提供坐标系转换功能
+│   │           ├── useDrawMeasure.js               # Phase 1 → Phase 13 迁移: 绘制图形、测量距离/面积、提示管理
+│   │           ├── useLayerContextMenuActions.js   # Phase 4: 图层右键菜单 URL 动作库
+│   │           ├── useLayerMetadataNormalization.js # Phase 13: 图层元数据规范化与坐标推断
+│   │           ├── useManagedFeatureHighlight.js   # Phase 11: 要素高亮样式生成与状态管理
+│   │           ├── useManagedFeatureOperations.js  # Phase 16: 托管要素操作（查找、缩放）
+│   │           ├── useManagedFeatureSerialization.js # Phase 6: 要素 ID 管理与 GeoJSON 序列化转换
+│   │           ├── useManagedLayerStyle.js         # Phase 7: 托管图层样式归一化、标签生成与样式应用
+│   │           ├── useMapSearchAndCoordinateInput.js # Phase 8: 地名搜索与坐标输入功能
+│   │           ├── useRightDragZoom.js            # Phase 9: 地图右键拖拽框选缩放控制器
+│   │           ├── useRouteRendering.js           # Phase 12: 公交/驾车路线绘制与缩放
+│   │           ├── useRouteStepInteraction.js     # Phase 10: 路线步骤激活/预览状态与步骤缩放
+│   │           ├── useRouteStepStyles.js          # Phase 10: 公交/驾车路线步骤样式生成与缓存
+│   │           ├── useStartupTaskScheduler.js     # Phase 14: 首屏关键瓦片加载与非关键任务调度
+│   │           └── useUserLayerApiFacade.js       # Phase 14: 用户图层 API 委托门面
 │   ├── constants/
 │   │   ├── goldenSoupQuotes.js         # 心灵鸡汤句库，治愈你的伤痛
 │   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts   # 非标准xyz切片配置示例

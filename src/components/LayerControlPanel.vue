@@ -58,18 +58,19 @@
                     <span class="close-panel-btn" @click="showLayerManager = false">×</span>
                 </div>
                 <div class="layer-list">
-                    <div
-                        v-for="(layer, index) in layerList"
-                        :key="layer.id"
-                        class="layer-item"
-                        draggable="true"
-                        @dragstart="onDragStart($event, index)"
-                        @dragend="onDragEnd"
-                        @dragover.prevent
-                        @drop="onDrop($event, index)"
-                        @contextmenu.prevent="onLayerContextMenu(layer, index, $event)"
-                        :class="{ dragging: draggingIndex === index }"
-                    >
+            <div
+                v-for="(layer, index) in layerList"
+                :key="layer.id"
+                class="layer-item"
+                draggable="true"
+                @dragstart="onDragStart($event, index)"
+                @dragend="onDragEnd"
+                @dragover.prevent
+                @drop="onDrop($event, index)"
+                @contextmenu.prevent="onLayerContextMenu(layer, index, $event)"
+                @dblclick="onLayerDoubleTap(layer, index, $event)"
+                :class="{ dragging: draggingIndex === index }"
+            >
                         <div class="drag-handle">⋮⋮</div>
                         <input
                             type="checkbox"
@@ -104,6 +105,21 @@
                         <button class="context-menu-item" @click="triggerLayerContextAction('copy-url')">复制 URL</button>
                         <button class="context-menu-item" @click="triggerLayerContextAction('view-url')">查看 URL</button>
                     </div>
+                </div>
+
+                <!-- 透明度控制 -->
+                <div class="context-menu-item context-opacity-control">
+                    <span class="opacity-label">透明度</span>
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        :value="Math.round((layerOpacityMap.get(contextMenuLayer?.id) ?? 1) * 100)"
+                        @input="updateLayerOpacity($event)"
+                        class="opacity-slider"
+                        title="调整图层透明度"
+                    />
+                    <span class="opacity-value">{{ Math.round((layerOpacityMap.get(contextMenuLayer?.id) ?? 1) * 100) }}%</span>
                 </div>
 
                 <button class="context-menu-item" @click="moveContextLayerToTop">图层置顶</button>
@@ -179,7 +195,7 @@ const props = defineProps({
 
 /**
  * @event change-layer 触发底图切换，payload: { layerId, source, customUrl? }
- * @event update-order 触发图层排序/显隐更新，payload: { type, dragIndex?, dropIndex?, layerId?, visible? }
+ * @event update-order 触发图层排序/显隐更新，payload: { type, dragIndex?, dropIndex?, layerId?, visible?, opacity? }
  * @event toggle-graticule 触发经纬网开关
  * @event search-jump 触发搜索结果定位，payload: { lng, lat, zoom, name, raw }
  * @event layer-context-action 触发图层右键菜单动作，payload: { action, layerId, layerName, layerIndex }
@@ -202,6 +218,9 @@ const showLayerContextMenu = ref(false);
 const showUrlSubmenu = ref(false);
 const contextMenuLayer = ref(null);
 const layerContextMenuAnchor = ref({ top: 0, left: 0 });
+const layerOpacityMap = ref(new Map()); // 存储图层透明度，key: layerId, value: opacity (0-1)
+const lastTouchTime = ref(0); // 用于检测双击
+const isTouchDevice = ref(false); // 是否是触摸设备
 
 const PANEL_WIDTH = 200;
 const CONTEXT_MENU_WIDTH = 152;
@@ -371,6 +390,38 @@ function triggerLayerContextAction(action) {
     closeLayerContextMenu();
 }
 
+/**
+ * 处理移动端双击打开菜单（用于替代右键）
+ * 双击速度判定：两次点击间隔 < 300ms
+ */
+function onLayerDoubleTap(layer, index, event) {
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTouchTime.value;
+    lastTouchTime.value = now;
+
+    // 双击判定
+    if (timeSinceLastTap < 300 && isTouchDevice.value) {
+        event.preventDefault();
+        onLayerContextMenu(layer, index, event);
+    }
+}
+
+/**
+ * 更新图层透明度
+ */
+function updateLayerOpacity(event) {
+    const opacity = Number(event.target.value) / 100;
+    const layer = contextMenuLayer.value;
+    if (!layer?.id) return;
+
+    layerOpacityMap.value.set(layer.id, opacity);
+    emit('update-order', {
+        type: 'opacity',
+        layerId: layer.id,
+        opacity
+    });
+}
+
 function moveContextLayerToTop() {
     const index = Number(contextMenuLayer.value?.index);
     if (!Number.isInteger(index)) return;
@@ -478,6 +529,14 @@ watch(showLayerManager, async (visible) => {
 
 onMounted(() => {
     window.addEventListener('pointerdown', handleGlobalPointerDown);
+    
+    // 检测是否为触摸设备
+    isTouchDevice.value = () => {
+        return (('ontouchstart' in window) ||
+                (navigator.maxTouchPoints > 0) ||
+                (navigator.msMaxTouchPoints > 0));
+    };
+    isTouchDevice.value = isTouchDevice.value();
 });
 
 onBeforeUnmount(() => {
@@ -721,6 +780,64 @@ onBeforeUnmount(() => {
 
 .context-has-submenu {
     position: relative;
+}
+
+.context-opacity-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: #f5f5f5;
+}
+
+.opacity-label {
+    font-size: 12px;
+    color: #0f172a;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.opacity-slider {
+    flex: 1;
+    min-width: 80px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #d1fae5;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.opacity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #10b981;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.opacity-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #10b981;
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.opacity-value {
+    font-size: 11px;
+    color: #0f172a;
+    min-width: 30px;
+    text-align: right;
+    font-weight: 600;
+    flex-shrink: 0;
 }
 
 .context-submenu {
