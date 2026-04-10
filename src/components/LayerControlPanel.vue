@@ -500,6 +500,12 @@ onBeforeUnmount(() => {
     box-shadow: 0 10px 24px rgba(16, 65, 41, 0.22);
     z-index: 10;
 }
+@media (max-width: 768px) {
+    .layer-switcher {
+        right: 5px; /* 移动端靠右边距减小 */
+        top: 10px;  /* 可选：通常顶部也会相应调小一点点 */
+    }
+}
 
 .layer-select {
     padding: 4px 8px;

@@ -118,9 +118,25 @@ WebGIS_Dev/
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层（矢量/栅格统一落图）
 │   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
+│   │   ├── useManagedLayerStyle.js     # 托管图层样式功能兼容入口（re-export 到 map/features）
+│   │   ├── useManagedFeatureSerialization.js # 要素序列化功能兼容入口（re-export 到 map/features）
+│   │   ├── useStartupTaskScheduler.js  # 启动任务调度功能兼容入口（re-export 到 map/features）
+│   │   ├── useBasemapUrlMapping.js     # 底图网址映射功能兼容入口（re-export 到 map/features）
+│   │   ├── useCoordinateSystemConversion.js # 坐标系转换功能兼容入口（re-export 到 map/features）
+│   │   ├── useMapSearchAndCoordinateInput.js # 地图搜索和坐标输入功能兼容入口（re-export 到 map/features）
+│   │   ├── useManagedFeatureHighlight.js # 要素高亮功能兼容入口（re-export 到 map/features）
+│   │   ├── useDrawMeasure.js             # 绘图与测量功能兼容入口（re-export 到 map/features）
+│   │   ├── useRouteRendering.js         # 路线绘制功能兼容入口（re-export 到 map/features）
+│   │   ├── useLayerMetadataNormalization.js # 图层元数据规范化兼容入口（re-export 到 map/features）
+│   │   ├── useUserLayerApiFacade.js     # 用户图层 API 委托兼容入口（re-export 到 map/features）
+│   │   ├── useBasemapStateManagement.js # 底图状态管理兼容入口（re-export 到 map/features）
+│   │   ├── useManagedFeatureOperations.js # 托管要素操作兼容入口（re-export 到 map/features）
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
+│   │   ├── useManagedLayerStyle.js     # 托管图层样式功能兼容入口（re-export 到 map/features）
+│   │   ├── useRouteStepInteraction.js  # 路线步骤交互功能兼容入口（re-export 到 map/features）
+│   │   ├── useRouteStepStyles.js       # 路线步骤样式功能兼容入口（re-export 到 map/features）
 │   │   ├── useRightDragZoom.js         # 右键拖拽缩放兼容入口（re-export 到 map/features）
 │   │   ├── useSharedResourceLoader.ts  # 📦 [V2.8.3+] 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式、复用上传逻辑导入
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
@@ -130,6 +146,21 @@ WebGIS_Dev/
 │   │   │       ├── README.md           # 地图功能库拆分约束与职责说明（一个功能一个库）
 │   │   │       ├── useBasemapResilience.js      # 底图切换验证、超时监测、兜底降级
 │   │   │       ├── useLayerContextMenuActions.js # 图层右键菜单 URL 动作库
+│   │   │       ├── useManagedFeatureSerialization.js # 要素 ID 管理与 GeoJSON 序列化转换
+│   │   │       ├── useManagedLayerStyle.js       # 托管图层样式归一化、标签生成与样式应用
+│   │   │       ├── useRouteStepInteraction.js    # 路线步骤激活/预览状态与步骤缩放
+│   │   │       ├── useStartupTaskScheduler.js    # 首屏关键瓦片加载与非关键任务调度
+│   │   │       ├── useBasemapUrlMapping.js       # 底图网址映射（索引翻译、分类、分组）
+│   │   │       ├── useCoordinateSystemConversion.js # 提供坐标系转换功能
+│   │   │       ├── useMapSearchAndCoordinateInput.js # 地名搜索与坐标输入功能
+│   │   │       ├── useRouteStepStyles.js         # 公交/驾车路线步骤样式生成与缓存
+│   │   │       ├── useManagedFeatureHighlight.js # 要素高亮样式生成与状态管理
+│   │   │       ├── useDrawMeasure.js             # 绘制图形、测量距离/面积、提示管理
+│   │   │       ├── useRouteRendering.js         # 公交/驾车路线绘制与缩放
+│   │   │       ├── useLayerMetadataNormalization.js # 图层元数据规范化与坐标推断
+│   │   │       ├── useUserLayerApiFacade.js     # 用户图层 API 委托门面
+│   │   │       ├── useBasemapStateManagement.js # 底图状态管理（状态广播、源刷新）
+│   │   │       ├── useManagedFeatureOperations.js # 托管要素操作（查找、缩放）
 │   │   │       └── useRightDragZoom.js          # 地图右键拖拽框选缩放控制器
 │   │   └── Magic/
 │   │       ├── useDelaunay.js          # 首屏 Delaunay 视觉特效
