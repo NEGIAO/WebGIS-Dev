@@ -125,7 +125,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useAttrStore, type AttrRow } from '../stores/useAttrStore';
+import { useAttrStore, type AttrRow } from '../stores';
 
 type ResizeDirection = 'top' | 'right' | 'bottom' | 'left' | 'bottom-right';
 

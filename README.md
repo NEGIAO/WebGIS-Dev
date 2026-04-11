@@ -109,12 +109,9 @@ WebGIS_Dev/
 │   │       └── IconTooling.vue         # 工具入口图标组件(未启用)
 │   ├── composables/
 │   │   ├── 📁 [全局通用工具库（Global Utilities）]
-│   │   ├── useAreaImageOverlay.js      # 区域图片覆盖逻辑旧入口（已由 MapEasterEgg 组件化承接）
-│   │   ├── useGisLoader.js             # 数据导入调度主实现（JavaScript 版本）
 │   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层（矢量/栅格统一落图）
-│   │   ├── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
@@ -123,22 +120,30 @@ WebGIS_Dev/
 │   │   ├── useTileSourceFactory.ts     # 瓦片源工厂：XYZ/WMS/WMTS 格式识别、嗅探与源创建
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   ├── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
-│   │   ├── 📁 [地图业务特性库（Map Features - Phase 1-16 提取）]
+│   │   ├── 📁 [地图业务特性库（Map Features - Phase 1-24 提取）]
 │   │   └── map/
 │   │       └── features/
 │   │           ├── README.md           # 地图功能库拆分约束与职责说明（一个功能一个库）
+│   │           ├── index.js            # map feature 统一导出入口（barrel）
+│   │           ├── useBasemapLayerBootstrap.js     # Phase 24: 底图层初始化与首屏监控挂载
+│   │           ├── useBasemapSelectionWatcher.js   # Phase 23: 底图切换监听与可用性校验/自动兜底
 │   │           ├── useBasemapResilience.js         # Phase 2: 底图切换验证、超时监测、兜底降级
 │   │           ├── useBasemapStateManagement.js    # Phase 15: 底图状态管理（状态广播、源刷新）
 │   │           ├── useBasemapUrlMapping.js         # Phase 3: 底图网址映射（索引翻译、分类、分组）
 │   │           ├── useCoordinateSystemConversion.js # Phase 5: 提供坐标系转换功能
+│   │           ├── useCreateManagedVectorLayer.js  # Phase 19: 托管矢量图层创建工厂（创建/登记/视图适配）
+│   │           ├── useDeferredUserLayerApis.js      # Phase 22: 用户图层延迟 API 门面（动态导入+动作代理）
 │   │           ├── useDrawMeasure.js               # Phase 1 → Phase 13 迁移: 绘制图形、测量距离/面积、提示管理
 │   │           ├── useLayerContextMenuActions.js   # Phase 4: 图层右键菜单 URL 动作库
+│   │           ├── useLayerControlHandlers.js       # Phase 21: 图层面板事件（切换/排序/自定义URL）
 │   │           ├── useLayerMetadataNormalization.js # Phase 13: 图层元数据规范化与坐标推断
 │   │           ├── useManagedFeatureHighlight.js   # Phase 11: 要素高亮样式生成与状态管理
 │   │           ├── useManagedFeatureOperations.js  # Phase 16: 托管要素操作（查找、缩放）
 │   │           ├── useManagedFeatureSerialization.js # Phase 6: 要素 ID 管理与 GeoJSON 序列化转换
 │   │           ├── useManagedLayerStyle.js         # Phase 7: 托管图层样式归一化、标签生成与样式应用
+│   │           ├── useMapEventHandlers.js          # Phase 17: 地图事件绑定、坐标同步与交互统一
 │   │           ├── useMapSearchAndCoordinateInput.js # Phase 8: 地名搜索与坐标输入功能
+│   │           ├── useMapUIEventHandlers.js        # Phase 18: UI 事件转发与属性表同步
 │   │           ├── useRightDragZoom.js            # Phase 9: 地图右键拖拽框选缩放控制器
 │   │           ├── useRouteRendering.js           # Phase 12: 公交/驾车路线绘制与缩放
 │   │           ├── useRouteStepInteraction.js     # Phase 10: 路线步骤激活/预览状态与步骤缩放
@@ -147,10 +152,14 @@ WebGIS_Dev/
 │   │           └── useUserLayerApiFacade.js       # Phase 14: 用户图层 API 委托门面
 │   ├── constants/
 │   │   ├── goldenSoupQuotes.js         # 心灵鸡汤句库，治愈你的伤痛
+│   │   ├── index.js                    # 常量目录统一导出入口（barrel）
+│   │   ├── mapStyles.js                # 地图样式常量与样式工厂
 │   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts   # 非标准xyz切片配置示例
 │   │   ├── useBasemapManager.ts        # 底图配置管理（从 composables 迁移）
 │   │   └── useStyleEditor.js           # 图层样式模板配置
 │   ├── stores/
+│   │   ├── index.ts                    # Store 目录统一导出入口（barrel）
+│   │   ├── useAttrStore.ts             # 属性表状态仓库（extent、要素展示上下文）
 │   │   └── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   ├── router/
 │   │   └── index.js                    # Vue Router 路由表与 hash history 配置
@@ -182,6 +191,10 @@ WebGIS_Dev/
 │   │           └── tifLoader.ts        # [文件解析] TIFF/GeoTIFF 栅格载入与波段读取
 │   ├── App.vue                         # 根组件，承载 RouterView 输出
 │   └── main.js                         # Vue 应用启动入口，挂载 Pinia、Router 与全局消息宿主
+├── docs/
+│   └── BOUNDARY_INDEX.md               # 目录边界索引（由 docs:index 自动生成）
+├── scripts/
+│   └── generate-boundary-index.mjs     # 文档索引自动化脚本
 ├── package.json                        # 脚本与依赖配置
 ├── vite.config.js                      # Vite 构建与部署配置
 └── README.md                           # 项目说明文档
@@ -199,8 +212,14 @@ WebGIS_Dev/
 
 1. 地图交互与底图稳定性逻辑统一迁移到 `src/composables/map/features/`。
 2. 每个功能单独一个库文件，避免在 `MapContainer.vue` 继续堆积实现细节。
-3. 旧入口文件保留 re-export 兼容层，保证现有调用不被一次性重构破坏。
+3. 跨层引用优先走目录边界入口（`stores/`、`constants/`、`map/features/` 的 barrel），减少散点依赖。
 4. 新增 map 功能时，要求新增独立 feature 文件并同步更新目录文档。
+
+### 文档索引自动化
+
+1. 执行 `npm run docs:index` 自动生成 `docs/BOUNDARY_INDEX.md`。
+2. 索引覆盖 `src/stores`、`src/constants`、`src/composables/map/features` 三个边界目录。
+3. 目录重构或新增边界文件后，提交前建议重新生成一次索引。
 
 ### mapInstance 通信技术摘要
 
@@ -217,11 +236,56 @@ WebGIS_Dev/
 3. `src/utils/gis/crs-engine.ts`：对每个识别数据集执行 CRS 识别与投影策略决策，支持 WKT 注册与 `proj4` 重投影。
 4. `src/composables/useGisLoader.ts`：统一调度入口，处理多格式识别、SHP sidecar 组装、批处理解析，并聚合 `packets + warnings + errors + summary`。
 5. `src/composables/useLayerDataImport.js`：消费 packet，创建图层并接入样式、标注与交互。
-6. `src/composables/useLayerStore.ts`：维护图层 UI 状态与操作行为（显隐、缩放、移除、排序）。
+6. `src/stores/useLayerStore.ts`：维护图层 UI 状态与操作行为（显隐、缩放、移除、排序）。
 
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.8.4 (2026-04-11)
+#### 🧩 结构优化复盘 + MapContainer 持续解耦（Phase 18-25）
+* **MapContainer 持续瘦身**：
+    * 新增 `useLayerControlHandlers.js`，提取图层面板相关逻辑：`handleLayerChange`、`handleLayerOrderUpdate`、`loadCustomMap`。
+    * 将地图交互样式切换到 `src/constants/mapStyles.js` 的 `createMapStylesObject()` 工厂统一生成。
+    * 新增 `useDeferredUserLayerApis.js`，抽离用户图层延迟 API 门面（动态导入 + 动作代理）。
+    * 新增 `useBasemapSelectionWatcher.js`，抽离底图切换监听与自动兜底逻辑。
+    * 新增 `useBasemapLayerBootstrap.js`，抽离底图层初始化与首屏监控挂载。
+    * 修复多处 setup 初始化顺序导致的引用问题（桥接函数 + 依赖顺序整理）。
+    * 本轮持续重构后 MapContainer 行数约 `1263 -> 1042`（减少 221 行）。
+* **feature 库补全**：
+    * 新增并接入 `useMapUIEventHandlers.js`（Phase 18）。
+    * 新增并接入 `useCreateManagedVectorLayer.js`（Phase 19）。
+    * 新增并接入 `useLayerControlHandlers.js`（Phase 21）。
+    * 新增并接入 `useDeferredUserLayerApis.js`（Phase 22）。
+    * 新增并接入 `useBasemapSelectionWatcher.js`（Phase 23）。
+    * 新增并接入 `useBasemapLayerBootstrap.js`（Phase 24）。
+* **项目结构现代化整理（Phase 25）**：
+    * 新增 `src/composables/map/features/index.js`，MapContainer 改为统一 barrel 导入，降低 import 分散度。
+    * `useLayerStore` 主实现迁移至 `src/stores/useLayerStore.ts`。
+    * 删除冗余旧入口：`src/composables/useAreaImageOverlay.js`、`src/composables/useGisLoader.js`。
+* **目录边界收口（Phase 26）**：
+    * 新增 `src/stores/index.ts` 与 `src/constants/index.js`，统一跨层导入到目录边界。
+    * 规范化本地导入，移除 `./xxx.ts` 显式后缀写法。
+    * 清退空壳兼容层 `src/composables/useLayerStore.ts`。
+    * 新增 `scripts/generate-boundary-index.mjs` 与 `npm run docs:index`，自动维护 `docs/BOUNDARY_INDEX.md`。
+* **构建验证**：
+    * `npm run build` 持续通过，1229-1233 模块范围内稳定构建，无编译错误。
+
+#### 🎯 移动端优化 + 地图事件处理提取 + MapContainer 重构
+* **移动端交互升级**：
+  * 替换双击为长按（500ms）打开上下文菜单，提升移动端体验。
+  * 禁用移动端拖拽排序（Drag-Drop），保留 checkbox 显隐控制。
+  * 添加触摸防漂移检测，移动超过 10px 自动取消长按。
+  * Long-press 菜单支持完整操作（透明度、置顶/置底、URL 操作）。
+* **地图事件处理提取（Phase 17）**：
+  * 创建 `useMapEventHandlers.js`，统一处理所有地图事件（pointermove、singleclick、contextmenu、坐标更新等）。
+  * 坐标同步逻辑从 3 处分散位置合并到单一 `updateCurrentCoordinate` 函数。
+  * MapContainer 代码量减少 130+ 行（从 1420 → 1280 行）。
+  * 构建验证：1226 modules，20.06s，✅ 无错误。
+* **LayerControlPanel 增强**：
+  * 新增 `clearLongPressTimer` 函数，支持触摸取消与自动清理。
+  * CSS 增强：`-webkit-user-select: none` + `-webkit-touch-callout: none`，防止长按出现文本选择菜单。
+  * 移动端显示绿色"⋯"图标代替"⋮⋮"，视觉清晰提示长按操作。
 
 ### V2.8.3 (2026-04-08)
 #### 🐛 标注菜单修复 + 文件结构优化 + 共享资源递归扫描

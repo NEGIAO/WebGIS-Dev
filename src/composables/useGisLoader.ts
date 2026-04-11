@@ -1,6 +1,6 @@
 import { ref, shallowRef } from 'vue';
-import JSZip from 'jszip';
 import { dispatchGisData } from '../utils/gis/dataDispatcher';
+import { loadJsZip } from '../utils/gis/loadJsZip';
 import { flattenUploadInput, type FlattenedResource } from '../utils/gis/decompressor';
 import { parseKmlBuffer } from '../utils/gis/parsers/kmlParser';
 import { groupShpDatasets } from '../utils/gis/parsers/shpParser';
@@ -129,6 +129,7 @@ function buildSingleUploadPayload(resource: FlattenedResource): { content: unkno
 }
 
 async function buildShpArchivePayload(group: ReturnType<typeof groupShpDatasets>[number]): Promise<{ content: ArrayBuffer; type: string; name: string }> {
+    const JSZip = await loadJsZip();
     const zip = new JSZip();
     const baseName = stemOf(group.shp.path);
 
