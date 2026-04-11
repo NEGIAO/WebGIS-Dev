@@ -5,6 +5,8 @@
 
 ## 当前模块
 
+- `index.js`
+  - 职责：feature 模块统一导出（barrel），供 `MapContainer.vue` 与后续调用方集中导入。
 - `useRightDragZoom.js`
   - 职责：右键拖拽框选缩放的交互控制器创建与清理。
 - `useLayerContextMenuActions.js`
@@ -24,7 +26,7 @@
 - `useBasemapUrlMapping.js`
   - 职责：底图索引与ID的互相转换、分类与分组信息查询。
 - `useCoordinateSystemConversion.js`
-  - 职责：WGS-84与GCJ-02之闄的坐标转换与图层坐标系管理。
+  - 职责：WGS-84与GCJ-02之间的坐标转换与图层坐标系管理。
 - `useMapSearchAndCoordinateInput.js`
   - 职责：地名搜索结果落图与手动坐标绘制。
 - `useManagedFeatureHighlight.js`
@@ -40,7 +42,22 @@
 - `useBasemapStateManagement.js`
   - 职责：底图状态广播、Google 图层源刷新。
 - `useManagedFeatureOperations.js`
-  - 职责：托管图层要素查找与縧放操作。
+  - 职责：托管图层要素查找与缩放操作。
+- `useMapEventHandlers.js` ⭐ **Phase 17 - NEW**
+  - 职责：统一处理所有地图事件（pointermove、singleclick、contextmenu、坐标同步等），消除事件处理代码分散问题。
+  - 功能：坐标实时更新、属性查询、公交选点、右键菜单、提示管理。
+- `useMapUIEventHandlers.js`
+  - 职责：UI 事件转发与属性表范围同步（彩蛋、坐标跳转、复位、高亮联动）。
+- `useCreateManagedVectorLayer.js`
+  - 职责：托管矢量图层创建工厂（样式归一、要素序列化、注册、可选 fitView）。
+- `useLayerControlHandlers.js`
+  - 职责：图层面板事件处理（切换、排序、透明度、自定义底图 URL 识别与落图）。
+- `useDeferredUserLayerApis.js`
+  - 职责：用户图层延迟 API 门面（动态导入 useLayerDataImport/useUserLayerActions、动作代理）。
+- `useBasemapSelectionWatcher.js`
+  - 职责：底图切换监听与可用性校验，默认底图失败时自动兜底切换。
+- `useBasemapLayerBootstrap.js`
+  - 职责：底图层初始化与首屏监控挂载（创建 TileLayer、监控回调接入、图层实例映射）。
 
 ## 约束
 

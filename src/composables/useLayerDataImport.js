@@ -12,7 +12,7 @@ import {
 } from '../utils/crsUtils';
 import { isUnsupportedProjectedCrsError, UNSUPPORTED_PROJECTED_CRS_MESSAGE } from '../utils/gis/crs-engine';
 import { parseShpPartsToGeoJSON } from '../utils/gis/parsers/shpParser';
-import { useGisLoader } from './useGisLoader.ts';
+import { useGisLoader } from './useGisLoader';
 import { useMessage } from './useMessage';
 
 export function useLayerDataImport({

@@ -10,7 +10,7 @@
  */
 import { ref, reactive, defineAsyncComponent } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore } from '../stores/useAttrStore';
+import { useAttrStore } from '../stores';
 const message = useMessage();
 const attrStore = useAttrStore();
 
@@ -24,9 +24,21 @@ import MagicCursor from '../components/MagicCursor.vue';
 const CesiumContainer = ref(null);
 
 // 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
-const SidePanel = defineAsyncComponent(() =>
-    import('../components/SidePanel.vue')
-);
+const SidePanel = defineAsyncComponent({
+    loader: () => import('../components/SidePanel.vue'),
+    delay: 120,
+    timeout: 15000,
+    onError(error, retry, fail, attempts) {
+        const text = String(error?.message || error || '');
+        const isStaleOptimizeDep = text.includes('Outdated Optimize Dep') || text.includes('Failed to fetch dynamically imported module');
+        if (isStaleOptimizeDep && attempts <= 1) {
+            retry();
+            return;
+        }
+        message.error('侧边面板加载失败，请刷新页面后重试。');
+        fail(error);
+    }
+});
 
 // ========== 2. 响应式状态 ==========
 // 地图位置信息

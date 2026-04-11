@@ -54,29 +54,38 @@
    便于进行项目的维护和升级
    避免臃肿和职责混乱 
 */
-import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { ref, onMounted, onUnmounted, shallowRef } from 'vue';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
 import { useMessage } from '../composables/useMessage';
 import { useMapState } from '../composables/useMapState';
-import { createRightDragZoomController } from '../composables/map/features/useRightDragZoom';
-import { useLayerContextMenuActions } from '../composables/map/features/useLayerContextMenuActions';
-import { createBasemapResilience } from '../composables/map/features/useBasemapResilience';
-import { createManagedLayerStyleFeature } from '../composables/map/features/useManagedLayerStyle';
-import { createRouteStepStyles } from '../composables/map/features/useRouteStepStyles';
-import { createRouteStepInteraction } from '../composables/map/features/useRouteStepInteraction';
-import { createManagedFeatureSerializationFeature } from '../composables/map/features/useManagedFeatureSerialization';
-import { createStartupTaskSchedulerFeature } from '../composables/map/features/useStartupTaskScheduler';
-import { createBasemapUrlMappingFeature } from '../composables/map/features/useBasemapUrlMapping';
-import { createCoordinateSystemConversionFeature } from '../composables/map/features/useCoordinateSystemConversion';
-import { createMapSearchAndCoordinateInputFeature } from '../composables/map/features/useMapSearchAndCoordinateInput';
-import { createManagedFeatureHighlightFeature } from '../composables/map/features/useManagedFeatureHighlight';
-import { createDrawMeasureFeature } from '../composables/map/features/useDrawMeasure';
-import { createRouteRenderingFeature } from '../composables/map/features/useRouteRendering';
-import { createLayerMetadataNormalizationFeature } from '../composables/map/features/useLayerMetadataNormalization';
-import { createUserLayerApiFacadeFeature } from '../composables/map/features/useUserLayerApiFacade';
-import { createBasemapStateManagementFeature } from '../composables/map/features/useBasemapStateManagement';
-import { createManagedFeatureOperationsFeature } from '../composables/map/features/useManagedFeatureOperations';
+import {
+    createBasemapLayerBootstrap,
+    createBasemapResilience,
+    createBasemapSelectionWatcher,
+    createBasemapStateManagementFeature,
+    createBasemapUrlMappingFeature,
+    createCoordinateSystemConversionFeature,
+    useCreateManagedVectorLayer,
+    createDeferredUserLayerApis,
+    createDrawMeasureFeature,
+    useLayerContextMenuActions,
+    createLayerControlHandlers,
+    createLayerMetadataNormalizationFeature,
+    createManagedFeatureHighlightFeature,
+    createManagedFeatureOperationsFeature,
+    createManagedFeatureSerializationFeature,
+    createManagedLayerStyleFeature,
+    createMapEventHandlers,
+    createMapSearchAndCoordinateInputFeature,
+    createMapUIEventHandlers,
+    createRightDragZoomController,
+    createRouteRenderingFeature,
+    createRouteStepInteraction,
+    createRouteStepStyles,
+    createStartupTaskSchedulerFeature,
+    createUserLayerApiFacadeFeature
+} from '../composables/map/features';
 import { 
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
@@ -85,14 +94,17 @@ import {
     resolvePresetLayerIds,
     getBasemapOptionLabel,
     getLayerCategory as getLayerCategoryById,
-    getLayerGroup as getLayerGroupById
-} from '../constants/useBasemapManager';
+    getLayerGroup as getLayerGroupById,
+    STYLE_TEMPLATES,
+    SEARCH_RESULT_STYLE,
+    createMapStylesObject
+} from '../constants';
 import { createAutoTileSourceFromUrl } from '../composables/useTileSourceFactory';
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
-import { useAttrStore } from '../stores/useAttrStore';
+import { useAttrStore } from '../stores';
 
 const message = useMessage();
 const attrStore = useAttrStore();
@@ -107,25 +119,15 @@ const activeGoogleTileHost = globalActiveGoogleTileHost;
 // OpenLayers 核心库
 import Map from 'ol/Map';
 import View from 'ol/View';
-import Feature from 'ol/Feature';
-import Overlay from 'ol/Overlay';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
-import { unByKey } from 'ol/Observable';
-import { getArea, getLength } from 'ol/sphere';
-import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty, getCenter as getExtentCenter } from 'ol/extent';
+import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
 
 // 图层与数据源
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
-
-// 几何与交互
-import Point from 'ol/geom/Point';
-import { Polygon } from 'ol/geom';
-import { Draw, Snap } from 'ol/interaction';
-import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
 import { 
     createLayerExporter,
@@ -163,20 +165,9 @@ const showDynamicSplitLines = ref(false);
 const currentZoom = ref(17); // 当前缩放级别
 const currentCoordinate = ref(null);
 
-// 底图切换状态标志（用于防止自动切换时重复验证）
-let isAutoSwitchingLayer = false;
-
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 
 let searchSource, searchLayer;
-let customSource = null;
-const SEARCH_RESULT_STYLE = {
-    fillColor: '#ef4444',
-    fillOpacity: 0.9,
-    strokeColor: '#ffffff',
-    strokeWidth: 2,
-    pointRadius: 8
-};
 
 // ========== 图层配置初始化 ==========
 // 使用 composable 提供的工厂函数而不是直接定义 LAYER_CONFIGS
@@ -204,9 +195,21 @@ const {
     monitorLayerTimeout
 } = createBasemapResilience({ message });
 
+const {
+    initializeBasemapLayers
+} = createBasemapLayerBootstrap({
+    layerListRef: layerList,
+    layerConfigs: LAYER_CONFIGS,
+    layerInstances,
+    monitorLayerTimeout,
+    selectedLayerRef: selectedLayer,
+    message,
+    defaultLayerId: 'google'
+});
+
 // --- 全局变量 (非响应式) ---
 const componentUnmountedRef = ref(false);
-let pendingBusPick = null;
+const pendingBusPickRef = ref(null);
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
@@ -242,35 +245,8 @@ const {
     isDomestic
 });
 
-function handleEasterEggImageOpen(src) {
-    emit('update-news-image', src);
-}
-
-function handleEasterEggLocationChange(payload) {
-    emit('location-change', payload);
-}
-
-function syncAttributeTableMapExtent() {
-    const map = mapInstance.value;
-    if (!map) return;
-
-    const size = map.getSize?.();
-    if (!Array.isArray(size) || size.length < 2) return;
-
-    const extent = map.getView()?.calculateExtent?.(size);
-    attrStore.setMapExtent(Array.isArray(extent) ? extent : null);
-}
-
-function handleAttributeTableFocusFeature(payload) {
-    if (!payload?.layerId || !payload?.featureId) return;
-    highlightManagedFeature(payload);
-    zoomToManagedFeature(payload);
-}
-
-function handleAttributeTableHighlightFeature(payload) {
-    if (!payload?.layerId || !payload?.featureId) return;
-    highlightManagedFeature(payload);
-}
+// 注：handleEasterEggImageOpen, handleEasterEggLocationChange, 等函数现在由 createMapUIEventHandlers 提供
+// 此处保留注释以说明这些函数的来源
 
 const isAttributeQueryEnabled = ref(true);
 const userDataLayers = [];
@@ -278,37 +254,6 @@ let drawLayerInstance = null;
 let tooltipRef = {
     helpTooltipEl: null,
     helpTooltipOverlay: null
-};
-
-const STYLE_TEMPLATES = {
-    classic: {
-        fillColor: '#5fbf7a',
-        fillOpacity: 0.24,
-        strokeColor: '#2f7d3c',
-        strokeWidth: 2,
-        pointRadius: 6
-    },
-    warning: {
-        fillColor: '#f59e0b',
-        fillOpacity: 0.2,
-        strokeColor: '#b45309',
-        strokeWidth: 2.5,
-        pointRadius: 6
-    },
-    water: {
-        fillColor: '#3b82f6',
-        fillOpacity: 0.2,
-        strokeColor: '#1d4ed8',
-        strokeWidth: 2,
-        pointRadius: 6
-    },
-    magenta: {
-        fillColor: '#ec4899',
-        fillOpacity: 0.18,
-        strokeColor: '#be185d',
-        strokeWidth: 2,
-        pointRadius: 6
-    }
 };
 
 const {
@@ -410,6 +355,30 @@ const {
     emitUserLayersChange
 });
 
+// [Phase 19] 初始化托管图层创建器（必须在 createMapSearchAndCoordinateInputFeature 之前）
+const { createManagedVectorLayer } = useCreateManagedVectorLayer({
+    mapInstanceRef: mapInstance,
+    userDataLayers,
+    styleHelpers: {
+        normalizeStyleConfig,
+        buildManagedLayerStyle
+    },
+    featureHelpers: {
+        serializeManagedFeatures,
+        ensureFeatureId
+    },
+    metadataHelpers: {
+        normalizeLayerMetadata
+    },
+    registryHelpers: {
+        createManagedLayerId,
+        emitUserLayersChange,
+        emitGraphicsOverview,
+        refreshUserLayerZIndex
+    },
+    styleTemplates: STYLE_TEMPLATES
+});
+
 const {
     handleSearchJump,
     drawPointByCoordinatesInput
@@ -503,37 +472,79 @@ const {
     layerInstances
 });
 
+// 图层控制面板事件（切换/排序/自定义 URL）
+const {
+    loadCustomMap,
+    handleLayerChange,
+    handleLayerOrderUpdate
+} = createLayerControlHandlers({
+    selectedLayerRef: selectedLayer,
+    customMapUrlRef: customMapUrl,
+    layerListRef: layerList,
+    layerInstances,
+    refreshLayersState,
+    createAutoTileSourceFromUrl,
+    message
+});
+
+// 栅格值查询函数的 ref 包装（用于延迟初始化）
+const queryRasterValueAtCoordinateRef = ref(null);
+
+// 属性表范围同步函数桥接（用于解决 setup 初始化顺序依赖）
+let syncAttributeTableMapExtentImpl = () => {};
+
+function syncAttributeTableMapExtent() {
+    syncAttributeTableMapExtentImpl?.();
+}
+
+// 地图事件处理
+const {
+    bindMapEvents
+} = createMapEventHandlers({
+    mapInstanceRef: mapInstance,
+    currentCoordinateRef: currentCoordinate,
+    currentZoomRef: currentZoom,
+    emit,
+    getDrawInteraction,
+    getSketchFeature,
+    queryRasterValueAtCoordinateRef,
+    rightDragZoomControllerRef: { value: rightDragZoomController },
+    isAttributeQueryEnabledRef: isAttributeQueryEnabled,
+    tooltipRef,
+    syncAttributeTableMapExtent,
+    pendingBusPickRef,
+    busPickSource
+});
+
+// UI 事件处理器（简单转发 + 属性表同步）
+const {
+    handleEasterEggImageOpen,
+    handleEasterEggLocationChange,
+    syncAttributeTableMapExtent: syncAttributeTableMapExtentFromUI,
+    handleAttributeTableFocusFeature,
+    handleAttributeTableHighlightFeature,
+    handleToggleGraticule,
+    updateViewByParams,
+    handleJumpToCoordinates,
+    resetView
+} = createMapUIEventHandlers({
+    mapInstanceRef: mapInstance,
+    attrStoreRef: attrStore,
+    emit,
+    highlightManagedFeature,
+    zoomToManagedFeature,
+    toggleGraticule: (...args) => toggleGraticule(...args),
+    showDynamicSplitLinesRef: showDynamicSplitLines,
+    selectedLayerRef: selectedLayer,
+    INITIAL_VIEW,
+    flyToView: (...args) => flyToView(...args),
+    getLayerIndexById
+});
+
+syncAttributeTableMapExtentImpl = syncAttributeTableMapExtentFromUI;
+
 // --- 样式定义 ---
-// 公交和驾车路线样式使用函数生成并缓存，支持基于步骤索引的颜色区分和高亮状态；其他样式使用固定实例。
-const styles = {
-    draw: new Style({
-        fill: new Fill({ color: 'rgba(255, 255, 255, 0.2)' }),
-        stroke: new Stroke({ color: '#ffcc33', width: 2 }),
-        image: new CircleStyle({ radius: 7, fill: new Fill({ color: '#ffcc33' }) }),
-    }),
-    userPoint: new Style({
-        image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#1E90FF' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
-    }),
-    userAccuracy: new Style({
-        fill: new Fill({ color: 'rgba(30,144,255,0.12)' }),
-        stroke: new Stroke({ color: 'rgba(30,144,255,0.3)', width: 1 })
-    }),
-    busStart: new Style({
-        image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#22c55e' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
-    }),
-    busEnd: new Style({
-        image: new CircleStyle({ radius: 8, fill: new Fill({ color: '#ef4444' }), stroke: new Stroke({ color: '#fff', width: 2 }) })
-    }),
-    busRouteTransit: new Style({
-        stroke: new Stroke({ color: '#2563eb', width: 4, lineCap: 'round', lineJoin: 'round' })
-    }),
-    busRouteWalk: new Style({
-        stroke: new Stroke({ color: '#6b7280', width: 3, lineDash: [8, 6], lineCap: 'round', lineJoin: 'round' })
-    }),
-    driveRoute: new Style({
-        stroke: new Stroke({ color: 'rgba(34, 197, 94, 0.8)', width: 6, lineCap: 'round', lineJoin: 'round' })
-    })
-};
+const styles = createMapStylesObject();
 
 // [隶属] 底图状态管理
 // [作用] 提供与 URL 同步、图层切换、图层实例管理等相关的核心逻辑。
@@ -561,6 +572,24 @@ const {
         if (!layerId || selectedLayer.value === layerId) return;
         selectedLayer.value = layerId;
     }
+});
+
+const {
+    bindBasemapSelectionWatcher
+} = createBasemapSelectionWatcher({
+    selectedLayerRef: selectedLayer,
+    switchLayerById,
+    resolvePresetLayerIds,
+    emitBaseLayersChange,
+    mapInstanceRef: mapInstance,
+    layerInstances,
+    syncUrlFromMap,
+    validateBaseLayerSwitch,
+    createBaseLayerFallbackManager,
+    getBasemapOptionLabel,
+    message,
+    defaultLayerId: 'google',
+    validationTimeoutMs: 3000
 });
 
 // --- URL 参数初始化 ---
@@ -657,146 +686,56 @@ onUnmounted(() => {
     clearRouteStepStyleCache?.();
     rightDragZoomController = null;
     attrStore.setMapExtent(null);
-    if (pendingBusPick?.reject) {
-        pendingBusPick.reject(new Error('地图已卸载'));
-        pendingBusPick = null;
+    if (pendingBusPickRef.value?.reject) {
+        pendingBusPickRef.value.reject(new Error('地图已卸载'));
+        pendingBusPickRef.value = null;
     }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
 
-// [隶属] 图层管理-托管图层创建
-// [作用] 将矢量要素创建为托管图层并登记到 userDataLayers。
-// [交互] 调用 emitUserLayersChange / emitGraphicsOverview，与外部面板同步。
-function createManagedVectorLayer({
-    name,
-    type,
-    sourceType,
-    features,
-    styleConfig,
-    autoLabel = false,
-    metadata = null,
-    fitView = false
-}) {
-    if (!mapInstance.value || !features?.length) return null;
-
-    const normalizedStyle = normalizeStyleConfig(styleConfig || STYLE_TEMPLATES.classic);
-    const labelVisible = !!autoLabel;
-    const normalizedMetadata = normalizeLayerMetadata(metadata, features);
-    const managedLayerState = {
-        name,
-        autoLabel: !!autoLabel,
-        labelVisible,
-        metadata: normalizedMetadata,
-        styleConfig: normalizedStyle,
-        labelStyleCache: new globalThis.Map()
-    };
-    const layer = new VectorLayer({
-        source: new VectorSource({ features }),
-        zIndex: 120,
-        style: buildManagedLayerStyle(managedLayerState),
-        properties: { name }
-    });
-
-    const serializedFeatures = serializeManagedFeatures(features, name);
-    features.forEach((feature, index) => ensureFeatureId(feature, name, index));
-
-    mapInstance.value.addLayer(layer);
-
-    const id = createManagedLayerId();
-    userDataLayers.push({
-        id,
-        name,
-        type,
-        sourceType,
-        order: userDataLayers.length,
-        visible: true,
-        opacity: 1,
-        featureCount: features.length,
-        features: serializedFeatures,
-        autoLabel: managedLayerState.autoLabel,
-        labelVisible,
-        metadata: normalizedMetadata,
-        styleConfig: normalizedStyle,
-        labelStyleCache: managedLayerState.labelStyleCache,
-        layer
-    });
-
-    refreshUserLayerZIndex();
-    emitUserLayersChange();
-    emitGraphicsOverview();
-
-    if (fitView) {
-        mapInstance.value.getView().fit(layer.getSource().getExtent(), {
-            padding: [50, 50, 50, 50],
-            duration: 1000
-        });
-    }
-
-    return id;
-}
-
 // [隶属] 外部数据导入-动作集接入
 // [作用] 从 useLayerDataImport 注入上传入口与解析动作。
 // [交互] addUserDataLayer 由 defineExpose 对外提供给父组件调用。
-let layerDataImportApiPromise = null;
-let userLayerActionsApiPromise = null;
 let routeBuilderApiPromise = null;
 
-// 确保 useLayerDataImport API 已加载并可用，支持动态导入和按需加载。
-async function ensureLayerDataImportApi() {
-    if (!layerDataImportApiPromise) {
-        layerDataImportApiPromise = import('../composables/useLayerDataImport').then(({ useLayerDataImport }) => (
-            useLayerDataImport({
-                mapInstance,
-                initialView: INITIAL_VIEW,
-                userDataLayers,
-                addManagedLayerRecord,
-                createManagedVectorLayer,
-                styleTemplates: STYLE_TEMPLATES,
-                onImportProgress: (payload) => emit('upload-progress-change', payload)
-            })
-        ));
+const {
+    ensureLayerDataImportApi,
+    ensureUserLayerActionsApi,
+    setBaseLayerActive,
+    setLayerVisibility,
+    zoomToUserLayer,
+    viewUserLayer
+} = createDeferredUserLayerApis({
+    mapInstanceRef: mapInstance,
+    initialView: INITIAL_VIEW,
+    userDataLayers,
+    addManagedLayerRecord,
+    createManagedVectorLayer,
+    styleTemplates: STYLE_TEMPLATES,
+    onImportProgress: (payload) => emit('upload-progress-change', payload),
+    refreshUserLayerZIndex,
+    emitUserLayersChange,
+    emitGraphicsOverview,
+    mergeStyleConfig,
+    applyManagedLayerStyle,
+    setDrawStyle,
+    layerListRef: layerList,
+    selectedLayerRef: selectedLayer,
+    getLayerCategory,
+    refreshLayersState,
+    emitFeatureSelected: (payload) => emit('feature-selected', payload),
+    isRouteManagedLayer: ({ layerId, removed }) => (
+        layerId === busRouteManagedLayerIdRef.value
+        || removed?.metadata?.category === 'bus-route'
+        || removed?.metadata?.category === 'drive-route'
+        || removed?.metadata?.category === 'route'
+    ),
+    onRouteManagedLayerRemoved: () => {
+        busRouteManagedLayerIdRef.value = null;
+        resetRouteStepStates();
+        busRouteSource.clear();
     }
-    return layerDataImportApiPromise;
-}
-
-// 确保 useUserLayerActions API 已加载并可用，支持动态导入和按需加载。
-async function ensureUserLayerActionsApi() {
-    if (!userLayerActionsApiPromise) {
-        userLayerActionsApiPromise = Promise.all([
-            import('../composables/useUserLayerActions'),
-            ensureLayerDataImportApi()
-        ]).then(([actionsMod, dataImportApi]) => actionsMod.useUserLayerActions({
-            mapInstance,
-            userDataLayers,
-            refreshUserLayerZIndex,
-            emitUserLayersChange,
-            emitGraphicsOverview,
-            mergeStyleConfig,
-            applyManagedLayerStyle,
-            styleTemplates: STYLE_TEMPLATES,
-            setDrawStyle,
-            layerList,
-            selectedLayer,
-            getLayerCategory,
-            refreshLayersState,
-            projectExtentToMapView: dataImportApi.projectExtentToMapView,
-            emitFeatureSelected: (payload) => emit('feature-selected', payload),
-            isRouteManagedLayer: ({ layerId, removed }) => (
-                layerId === busRouteManagedLayerIdRef.value
-                || removed?.metadata?.category === 'bus-route'
-                || removed?.metadata?.category === 'drive-route'
-                || removed?.metadata?.category === 'route'
-            ),
-            onRouteManagedLayerRemoved: () => {
-                busRouteManagedLayerIdRef.value = null;
-                resetRouteStepStates();
-                busRouteSource.clear();
-            }
-        }));
-    }
-    return userLayerActionsApiPromise;
-}
+});
 // 确保 transitRouteBuilder API 已加载并可用，支持动态导入和按需加载。
 async function ensureRouteBuilderApi() {
     if (!routeBuilderApiPromise) {
@@ -822,25 +761,8 @@ const {
     ensureUserLayerActionsApi
 });
 
-async function setBaseLayerActive(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.setBaseLayerActive(...args);
-}
-
-async function setLayerVisibility(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.setLayerVisibility(...args);
-}
-
-async function zoomToUserLayer(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.zoomToUserLayer(...args);
-}
-
-async function viewUserLayer(...args) {
-    const api = await ensureUserLayerActionsApi();
-    return api.viewUserLayer(...args);
-}
+// 更新栅格值查询函数 ref（解决初始化顺序问题）
+queryRasterValueAtCoordinateRef.value = queryRasterValueAtCoordinate;
 
 // --- 1. 地图核心逻辑 ---
 // [隶属] 图层切换-地图初始化
@@ -848,55 +770,7 @@ async function viewUserLayer(...args) {
 // [交互] 触发 bindEvents，并在 watch(selectedLayer) 中联动底图切换。
 function initMap() {
     // 1.1 源定义与图层初始化 (由 LAYER_CONFIGS 动态驱动，不再硬编码 sources 对象)
-    
-    // 初始化所有底图层
-    layerList.value.forEach((item, index) => {
-        // 根据 id 查找配置并创建 source
-        const config = LAYER_CONFIGS.find(cfg => cfg.id === item.id);
-        // 首屏优先：仅为当前可见图层创建 source，其他图层按需懒创建。
-        const source = (config && item.visible) ? config.createSource() : null;
-
-        const layer = new TileLayer({
-            source: source,
-            visible: item.visible,
-            zIndex: index // 初始层级通过列表顺序决定（0最底层）
-        });
-
-    // 为可见的图层启用智能兜底监控（仅默认底图自动切换，其他底图仅提醒）
-    if (item.visible && source) {
-        const isDefaultBaseLayer = item.id === 'google'; // 默认底图判断
-        monitorLayerTimeout(layer, item.id, isDefaultBaseLayer, {
-            onTimeout: () => {
-                if (isDefaultBaseLayer) {
-                    message.warning(`${item.id}响应过慢，正在切换备用底图...`);
-                } else {
-                    message.warning(`${item.id}响应过慢，建议手动切换底图。`);
-                }
-            },
-            onError: () => {
-                if (isDefaultBaseLayer) {
-                    message.error(`${item.id}服务异常，正在切换备用底图...`);
-                } else {
-                    message.error(`${item.id}服务异常，建议手动切换底图。`);
-                }
-            },
-            onSuccess: () => {
-                    if (isDefaultBaseLayer) {
-                        message.success(`${item.id}加载成功。`)
-                    }
-                },
-            onLayerSwitchRequired: (nextOption, reason) => {
-                // 仅默认底图会触发此回调
-                selectedLayer.value = nextOption;
-                message.info(`已切换至${nextOption}底图（${reason}）`);
-            }
-        });
-    }
-
-    layerInstances[item.id] = layer;
-    });
-
-    const layersToAdd = layerList.value.map(item => layerInstances[item.id]);
+    const layersToAdd = initializeBasemapLayers();
 
     drawLayerInstance = new VectorLayer({
         source: drawSource,
@@ -1013,86 +887,13 @@ function initMap() {
     const initialLonLat = toLonLat(initialCenter);
     currentCoordinate.value = { lng: initialLonLat[0], lat: initialLonLat[1] };
 
-    // 1.5 事件监听
-    bindEvents();
+    // 1.5 初始化右拖缩放控制器
+    rightDragZoomController?.dispose?.();
+    rightDragZoomController = createRightDragZoomController(mapInstance.value);
 
-    // 1.6 监听底图切换 并验证切换结果（默认底图异常时自动兜底）
-    watch(selectedLayer, async (val, prevVal) => {
-        const activeStack = resolvePresetLayerIds(val);
-
-        switchLayerById(val, {
-            onUpdated: () => {
-                emitBaseLayersChange();
-                // 当进行降级切换时，强制刷新地图以确保瓦片正确加载
-                if (isAutoSwitchingLayer && mapInstance.value) {
-                    // 清空前一个底图的瓦片缓存
-                    if (prevVal && layerInstances[prevVal]) {
-                        const source = layerInstances[prevVal].getSource?.();
-                        if (source && typeof source.clear === 'function') {
-                            source.clear();
-                        }
-                    }
-                    // 给新图层一点时间初始化，然后刷新地图
-                    setTimeout(() => {
-                        if (mapInstance.value && typeof mapInstance.value.updateSize === 'function') {
-                            mapInstance.value.updateSize();
-                        }
-                    }, 50);
-                }
-            }
-        });
-        
-        // 仅在真正切换时（prevVal不为undefined）进行验证
-        if (prevVal !== undefined) {
-            syncUrlFromMap();
-            
-            // 如果正在自动切换，则跳过验证，直接完成切换
-            if (isAutoSwitchingLayer) {
-                isAutoSwitchingLayer = false;
-                return;
-            }
-            
-            // 获取切换后的底图图层实例
-            const switchedLayer = layerInstances[val];
-            if (switchedLayer) {
-                // 验证新底图的加载状态
-                const result = await validateBaseLayerSwitch(val, switchedLayer, 3000);
-                
-                if (result.success) {
-                    const optionLabel = getBasemapOptionLabel(val);
-                    if (activeStack.length > 1) {
-                        message.success(`已切换到${optionLabel}组合（${activeStack.join(' + ')}）`);
-                    } else {
-                        message.success(`已成功切换到${optionLabel}底图`);
-                    }
-                } else {
-                    // 检查是否为默认底图（google）
-                    const isDefaultBaseLayer = val === 'google';
-                    
-                    if (isDefaultBaseLayer) {
-                        // 默认底图异常时，自动切换到兜底选项
-                        message.error(`${val}底图加载失败（${result.reason}），正在自动切换备用底图...`);
-                        
-                        // 创建兜底管理器获取下一个选项
-                        const fallbackManager = createBaseLayerFallbackManager(val, true);
-                        const nextFallbackOption = fallbackManager.getNextFallbackOption();
-                        
-                        if (nextFallbackOption) {
-                            // 标记正在自动切换，防止无限递归
-                            isAutoSwitchingLayer = true;
-                            selectedLayer.value = nextFallbackOption;
-                            message.info(`已自动切换至${nextFallbackOption}底图`);
-                        } else {
-                            message.error('所有兜底底图均不可用，请检查网络或重新选择底图');
-                        }
-                    } else {
-                        // 非默认底图仅提示用户，不自动切换
-                        message.warning(`切换到${val}底图失败：${result.reason}，请重新选择底图`);
-                    }
-                }
-            }
-        }
-    }, { immediate: true });
+    // 1.6 事件监听
+    bindMapEvents();
+    bindBasemapSelectionWatcher();
 
     // 1.7 初始化时也要刷新一次图层状态，确保初始配置正确应用
     refreshLayersState();
@@ -1108,293 +909,6 @@ function refreshLayersState() {
     emitBaseLayersChange();
 }
 
-// [隶属] 图层切换-控制面板事件
-// [作用] 统一接收 LayerControlPanel 的图层切换与自定义 URL 加载。
-// [交互] 触发 selectedLayer 更新、loadCustomMap 与 refreshLayersState。
-function handleLayerChange(payload = {}) {
-    const nextLayerId = String(payload.layerId || '').trim();
-    if (nextLayerId) {
-        selectedLayer.value = nextLayerId;
-    }
-
-    if (payload.source === 'custom-url') {
-        customMapUrl.value = String(payload.customUrl || '').trim();
-        if (customMapUrl.value) {
-            void loadCustomMap();
-        }
-    }
-}
-
-// [隶属] 图层切换-控制面板事件
-// [作用] 处理图层排序与可见性更新。
-// [交互] 由 LayerControlPanel 的 update-order 事件触发。
-function handleLayerOrderUpdate(payload = {}) {
-    if (payload.type === 'reorder') {
-        const dragIndex = Number(payload.dragIndex);
-        const dropIndex = Number(payload.dropIndex);
-        if (!Number.isInteger(dragIndex) || !Number.isInteger(dropIndex)) return;
-        if (dragIndex < 0 || dropIndex < 0) return;
-        if (dragIndex >= layerList.value.length || dropIndex >= layerList.value.length) return;
-        if (dragIndex === dropIndex) return;
-
-        const moved = layerList.value.splice(dragIndex, 1)[0];
-        layerList.value.splice(dropIndex, 0, moved);
-        refreshLayersState();
-        return;
-    }
-
-    if (payload.type === 'visibility') {
-        const target = layerList.value.find((item) => item.id === payload.layerId);
-        if (!target) return;
-        target.visible = !!payload.visible;
-        refreshLayersState();
-    }
-
-    if (payload.type === 'opacity') {
-        const layerId = String(payload.layerId);
-        const opacity = Number(payload.opacity);
-        if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) return;
-
-        // 更新 layerList 中的 opacity 属性
-        const target = layerList.value.find((item) => item.id === layerId);
-        if (!target) return;
-        
-        target.opacity = opacity;
-        
-        // 调用 refreshLayersState 将 opacity 应用到实际图层
-        refreshLayersState();
-    }
-}
-
-// [隶属] 图片覆盖-经纬线控制
-// [作用] 由 LayerControlPanel 触发经纬线开关。
-// [交互] 委托 useMapState 的 graticule engine。
-function handleToggleGraticule() {
-    showDynamicSplitLines.value = toggleGraticule();
-}
-
-// [隶属] 组件交互-地图事件绑定
-// [作用] 统一绑定 pointermove、singleclick、contextmenu、resolution 事件。
-// [交互] 多处 emit：feature-selected、location-change。
-function bindEvents() {
-    const map = mapInstance.value;
-    const viewport = map.getViewport();
-
-    rightDragZoomController?.dispose?.();
-    rightDragZoomController = createRightDragZoomController(map);
-
-    // 统一处理鼠标移动：包括业务区域检测和工具提示
-    // 注意：坐标显示改为视图中心，不再跟踪鼠标位置，在 moveend 和 touchmove 事件中更新
-    map.on('pointermove', (evt) => {
-        if (evt.dragging) return;
-
-        const coordinate = evt.coordinate;
-
-        // A. 测量提示逻辑
-        if (tooltipRef.helpTooltipEl) {
-            const sketchFeature = getSketchFeature();
-            tooltipRef.helpTooltipEl.innerHTML = sketchFeature ?
-                (sketchFeature.getGeometry() instanceof Polygon ? '双击结束多边形' : '双击结束测距') :
-                '单击开始绘制';
-            tooltipRef.helpTooltipOverlay.setPosition(coordinate);
-            tooltipRef.helpTooltipEl.classList.remove('hidden');
-        }
-
-    });
-
-    viewport.addEventListener('mouseout', () => {
-        if (tooltipRef.helpTooltipEl) tooltipRef.helpTooltipEl.classList.add('hidden');
-    });
-
-    map.on('singleclick', async (evt) => {
-        if (pendingBusPick) {
-            const lonLat = toLonLat(evt.coordinate);
-            const pickType = pendingBusPick.type;
-
-            busPickSource.getFeatures().forEach((feature) => {
-                if (feature.get('busPickType') === pickType) {
-                    busPickSource.removeFeature(feature);
-                }
-            });
-
-            busPickSource.addFeature(new Feature({
-                geometry: new Point(evt.coordinate),
-                busPickType: pickType
-            }));
-
-            pendingBusPick.resolve({
-                lng: Number(lonLat[0].toFixed(6)),
-                lat: Number(lonLat[1].toFixed(6))
-            });
-            pendingBusPick = null;
-            return;
-        }
-
-        if (!isAttributeQueryEnabled.value) return;
-        const drawInteraction = getDrawInteraction();
-        if (drawInteraction && drawInteraction.getActive()) return;
-
-        // 属性查询
-        const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
-        if (feature) {
-            const { geometry, style, ...props } = feature.getProperties();
-            emit('feature-selected', props);
-            return;
-        }
-
-        const rasterInfo = await queryRasterValueAtCoordinate(evt.coordinate);
-        if (rasterInfo) {
-            emit('feature-selected', rasterInfo);
-        }
-    });
-
-    viewport.addEventListener('contextmenu', (e) => {
-        if (rightDragZoomController?.shouldSuppressContextMenu?.()) {
-            e.preventDefault();
-            return;
-        }
-        if (!isAttributeQueryEnabled.value) return;
-        e.preventDefault();
-        const pixel = map.getEventPixel(e);
-        const feature = map.forEachFeatureAtPixel(pixel, f => f);
-        if (!feature) return;
-        const { geometry, style, ...props } = feature.getProperties();
-        emit('feature-selected', {
-            ...props,
-            操作提示: '右键选择，可在工具箱中编辑样式'
-        });
-    });
-
-    // 缩放监听 & 视图变化坐标更新
-    map.getView().on('change:resolution', () => {
-        // 更新缩放级别显示
-        const zoom = map.getView().getZoom();
-        if (zoom !== undefined) {
-            currentZoom.value = Math.round(zoom);
-        }
-    });
-
-    // 地图中心变化监听 - 用于移动端和平移/缩放时实时更新坐标
-    map.getView().on('change:center', () => {
-        const center = map.getView().getCenter();
-        if (center) {
-            const lonLat = toLonLat(center);
-            currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
-        }
-    });
-
-    // 移动完成事件 - 确保坐标为最终视图中心
-    map.on('moveend', () => {
-        const center = map.getView().getCenter();
-        if (center) {
-            const lonLat = toLonLat(center);
-            currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
-        }
-        syncAttributeTableMapExtent();
-    });
-
-    // 触摸事件处理 - 移动端支持
-    viewport.addEventListener('touchmove', () => {
-        const center = map.getView().getCenter();
-        if (center) {
-            const lonLat = toLonLat(center);
-            currentCoordinate.value = { lng: lonLat[0], lat: lonLat[1] };
-        }
-    }, false);
-}
-
-/**
- * 通过经纬度、缩放级别和图层索引更新地图视图。
- * @param lng 经度
- * @param lat 维度
- * @param z 缩放级别
- * @param layer 图层
- */
-function updateViewByParams(lng, lat, z, layer) {
-    const nextLng = Number(lng);
-    const nextLat = Number(lat);
-    if (!Number.isFinite(nextLng) || !Number.isFinite(nextLat)) return;
-
-    const map = mapInstance.value;
-    const currentMapZoom = Number(map?.getView?.()?.getZoom?.() ?? INITIAL_VIEW.zoom);
-    const targetZoomRaw = Number(z);
-    const targetZoom = Number.isFinite(targetZoomRaw) ? targetZoomRaw : currentMapZoom;
-
-    const targetLayerRaw = Number(layer);
-    const targetLayerIndex = Number.isInteger(targetLayerRaw)
-        ? targetLayerRaw
-        : getLayerIndexById(selectedLayer.value);
-
-    flyToView({
-        lng: nextLng,
-        lat: nextLat,
-        zoom: targetZoom,
-        layerIndex: targetLayerIndex
-    });
-
-    currentCoordinate.value = { lng: nextLng, lat: nextLat };
-    emit('location-change', { lon: nextLng, lat: nextLat, source: 'view-param-update' });
-    emit('coordinate-jump', { lng: nextLng, lat: nextLat });
-}
-
-// [隶属] 底部控制-坐标跳转
-// [作用] 接收 MapControlsBar 的 jump-to 事件，统一飞行并同步 URL。
-// [交互] emit: location-change / coordinate-jump。
-function handleJumpToCoordinates({ lng, lat }) {
-    const map = mapInstance.value;
-    const currentMapZoom = Number(map?.getView?.()?.getZoom?.() ?? INITIAL_VIEW.zoom);
-    const nextZoom = Math.max(currentMapZoom, 12);
-
-    updateViewByParams(lng, lat, nextZoom, getLayerIndexById(selectedLayer.value));
-}
-
-// [隶属] 底部控制-Home 单击
-// [作用] 地图复位到初始中心和缩放。
-// [交互] 由 MapControlsBar 的 reset-view 事件触发。
-function resetView() {
-    updateViewByParams(
-        INITIAL_VIEW.center[0],
-        INITIAL_VIEW.center[1],
-        INITIAL_VIEW.zoom,
-        getLayerIndexById(selectedLayer.value)
-    );
-}
-
-// [隶属] 图层切换-自定义底图
-// [作用] 加载用户输入的 URL，按 XYZ -> WMS -> WMTS 自动识别并激活 custom 图层。
-// [交互] 更新 layerList 并调用 refreshLayersState。
-async function loadCustomMap() {
-    if (!customMapUrl.value) return;
-
-    try {
-        const detected = await createAutoTileSourceFromUrl(customMapUrl.value);
-        customSource = detected.source;
-
-        const kindTextMap = {
-            xyz: '标准XYZ',
-            'non-standard-xyz': '非标准XYZ',
-            wms: 'WMS',
-            wmts: 'WMTS'
-        };
-
-        message.success(`自动识别图源: ${kindTextMap[detected.kind]}（${detected.detail}）`);
-
-        // 更新 custom 层的 source
-        if (layerInstances['custom']) {
-            layerInstances['custom'].setSource(customSource);
-            // 自动开启
-            const item = layerList.value.find(l => l.id === 'custom');
-            if (item) {
-                item.visible = true;
-                refreshLayersState();
-            }
-        }
-    } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error || 'URL格式错误或无法解析');
-        message.error(`加载自定义图源失败: ${errorMessage}`);
-    }
-}
-
 // [隶属] 组件交互-路径选点
 // [作用] 启动地图点选 Promise，用于公交起终点拾取。
 // [交互] 由外部组件通过 defineExpose 调用。
@@ -1405,12 +919,12 @@ function startBusPointPick(type) {
 
     const pickType = type === 'end' ? 'end' : 'start';
 
-    if (pendingBusPick?.reject) {
-        pendingBusPick.reject(new Error('上一次选点已取消'));
+    if (pendingBusPickRef.value?.reject) {
+        pendingBusPickRef.value.reject(new Error('上一次选点已取消'));
     }
 
     return new Promise((resolve, reject) => {
-        pendingBusPick = { type: pickType, resolve, reject };
+        pendingBusPickRef.value = { type: pickType, resolve, reject };
     });
 }
 

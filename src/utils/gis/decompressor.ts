@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import { loadJsZip } from './loadJsZip';
 
 export type FlattenedResource = {
     path: string;
@@ -71,6 +71,7 @@ async function readDirectoryChildren(entry: any): Promise<any[]> {
 }
 
 async function flattenArchive(buffer: ArrayBuffer, basePath: string, archiveExt = 'zip'): Promise<FlattenedResource[]> {
+    const JSZip = await loadJsZip();
     const zip = await JSZip.loadAsync(buffer);
     const output: FlattenedResource[] = [];
     const usedPaths = new Set<string>();

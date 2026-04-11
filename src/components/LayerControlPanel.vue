@@ -62,16 +62,19 @@
                 v-for="(layer, index) in layerList"
                 :key="layer.id"
                 class="layer-item"
-                draggable="true"
+                :draggable="!isTouchDevice"
                 @dragstart="onDragStart($event, index)"
                 @dragend="onDragEnd"
                 @dragover.prevent
                 @drop="onDrop($event, index)"
                 @contextmenu.prevent="onLayerContextMenu(layer, index, $event)"
-                @dblclick="onLayerDoubleTap(layer, index, $event)"
+                @touchstart="onLayerTouchStart(layer, index, $event)"
+                @touchmove="onLayerTouchMove"
+                @touchend="onLayerTouchEnd"
                 :class="{ dragging: draggingIndex === index }"
             >
-                        <div class="drag-handle">⋮⋮</div>
+                        <div class="drag-handle" v-if="!isTouchDevice">⋮⋮</div>
+                        <div class="drag-handle mobile-hint" v-if="isTouchDevice">⋯</div>
                         <input
                             type="checkbox"
                             :checked="layer.visible"
@@ -133,7 +136,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { toLonLat } from 'ol/proj';
 import { fetchLocationResultsByService } from '../api/locationSearch';
-import { BASEMAP_OPTIONS } from '../constants/useBasemapManager';
+import { BASEMAP_OPTIONS } from '../constants';
 import { detectCustomTileServiceKind } from '../composables/useTileSourceFactory';
 
 // ========== 异步导入子组件 ==========
@@ -219,8 +222,13 @@ const showUrlSubmenu = ref(false);
 const contextMenuLayer = ref(null);
 const layerContextMenuAnchor = ref({ top: 0, left: 0 });
 const layerOpacityMap = ref(new Map()); // 存储图层透明度，key: layerId, value: opacity (0-1)
-const lastTouchTime = ref(0); // 用于检测双击
 const isTouchDevice = ref(false); // 是否是触摸设备
+
+// 移动端长按检测
+const longPressTimer = ref(null);
+const longPressTouchStart = ref({ x: 0, y: 0, target: null });
+const LONG_PRESS_DURATION = 500; // 长按时间阈值（毫秒）
+const LONG_PRESS_DRIFT = 10; // 移动距离阈值（像素）
 
 const PANEL_WIDTH = 200;
 const CONTEXT_MENU_WIDTH = 152;
@@ -331,6 +339,11 @@ function submitCustomUrl() {
 }
 
 function onDragStart(evt, index) {
+    // 移动端禁用拖动
+    if (isTouchDevice.value) {
+        evt.preventDefault();
+        return;
+    }
     draggingIndex.value = index;
     evt.dataTransfer.effectAllowed = 'move';
 }
@@ -340,6 +353,10 @@ function onDragEnd() {
 }
 
 function onDrop(evt, dropIndex) {
+    if (isTouchDevice.value) {
+        evt.preventDefault();
+        return;
+    }
     if (draggingIndex.value < 0) return;
     emit('update-order', {
         type: 'reorder',
@@ -391,19 +408,71 @@ function triggerLayerContextAction(action) {
 }
 
 /**
- * 处理移动端双击打开菜单（用于替代右键）
- * 双击速度判定：两次点击间隔 < 300ms
+ * 清除长按计时器
  */
-function onLayerDoubleTap(layer, index, event) {
-    const now = Date.now();
-    const timeSinceLastTap = now - lastTouchTime.value;
-    lastTouchTime.value = now;
-
-    // 双击判定
-    if (timeSinceLastTap < 300 && isTouchDevice.value) {
-        event.preventDefault();
-        onLayerContextMenu(layer, index, event);
+function clearLongPressTimer() {
+    if (longPressTimer.value) {
+        clearTimeout(longPressTimer.value);
+        longPressTimer.value = null;
     }
+}
+
+/**
+ * 处理 touchstart 事件，启动长按计时
+ */
+function onLayerTouchStart(layer, index, event) {
+    if (!isTouchDevice.value) return;
+
+    const touches = event.touches;
+    if (touches.length !== 1) {
+        clearLongPressTimer();
+        return;
+    }
+
+    longPressTouchStart.value = {
+        x: touches[0].clientX,
+        y: touches[0].clientY,
+        target: event.currentTarget
+    };
+
+    clearLongPressTimer();
+    longPressTimer.value = setTimeout(() => {
+        // 长按时间到达，显示右键菜单
+        const touch = event.touches[0];
+        onLayerContextMenu(layer, index, {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            preventDefault: () => {}
+        });
+    }, LONG_PRESS_DURATION);
+}
+
+/**
+ * 处理 touchmove 事件，如果移动距离过大则取消长按
+ */
+function onLayerTouchMove(event) {
+    if (!isTouchDevice.value || !longPressTimer.value) return;
+
+    const touches = event.touches;
+    if (touches.length !== 1) {
+        clearLongPressTimer();
+        return;
+    }
+
+    const dx = touches[0].clientX - longPressTouchStart.value.x;
+    const dy = touches[0].clientY - longPressTouchStart.value.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance > LONG_PRESS_DRIFT) {
+        clearLongPressTimer();
+    }
+}
+
+/**
+ * 处理 touchend 事件，清除长按计时
+ */
+function onLayerTouchEnd() {
+    clearLongPressTimer();
 }
 
 /**
@@ -531,16 +600,14 @@ onMounted(() => {
     window.addEventListener('pointerdown', handleGlobalPointerDown);
     
     // 检测是否为触摸设备
-    isTouchDevice.value = () => {
-        return (('ontouchstart' in window) ||
-                (navigator.maxTouchPoints > 0) ||
-                (navigator.msMaxTouchPoints > 0));
-    };
-    isTouchDevice.value = isTouchDevice.value();
+    isTouchDevice.value = (('ontouchstart' in window) ||
+            (navigator.maxTouchPoints > 0) ||
+            (navigator.msMaxTouchPoints > 0));
 });
 
 onBeforeUnmount(() => {
     unbindAnchorListeners();
+    clearLongPressTimer();
     window.removeEventListener('pointerdown', handleGlobalPointerDown);
 });
 </script>
@@ -725,6 +792,8 @@ onBeforeUnmount(() => {
     cursor: move;
     font-size: 13px;
     user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .layer-item:hover {
@@ -741,6 +810,14 @@ onBeforeUnmount(() => {
     color: #999;
     font-weight: bold;
     padding-right: 4px;
+}
+
+.drag-handle.mobile-hint {
+    cursor: pointer;
+    color: #10b981;
+    font-weight: bold;
+    padding-right: 4px;
+    font-size: 16px;
 }
 
 .layer-name {
