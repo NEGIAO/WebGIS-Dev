@@ -230,7 +230,8 @@ const emit = defineEmits([
     'user-layers-change',
     'graphics-overview',
     'base-layers-change',
-    'upload-progress-change'
+    'upload-progress-change',
+    'map-core-ready'
 ]);
 
 const {
@@ -627,7 +628,25 @@ onMounted(async () => {
     syncUrlFromMap();
 
     // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
-    await waitForCriticalTileReady();
+    try {
+        await waitForCriticalTileReady();
+    } catch {
+        // 超时或异常时也继续后续流程，避免阻塞页面可交互性。
+    }
+
+    // 通知父组件：主地图关键内容已就绪，可在空闲时预加载非关键资源。
+    if (!componentUnmountedRef.value) {
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => {
+                if (!componentUnmountedRef.value) {
+                    emit('map-core-ready');
+                }
+            });
+        } else {
+            emit('map-core-ready');
+        }
+    }
+
     scheduleLowPriorityTask(() => {
         runDeferredStartupTasks().catch(() => {});
     });

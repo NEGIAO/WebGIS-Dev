@@ -83,10 +83,10 @@
             </div>
 
             <!-- 模式 5: 新闻展示 (默认) -->
-            <div v-show="activeTab === 'info'" class="info-content">
+            <div v-if="activeTab === 'info'" class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
-                    <img :src="resolvePath('images/院徽.webp')" class="logo" alt="河南大学地理科学学院Logo">
+                    <img :src="resolvePath('images/院徽.webp')" class="logo" alt="河南大学地理科学学院Logo" loading="lazy" decoding="async">
                     <div class="title-wrapper">
                         <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
                     </div>
@@ -101,7 +101,15 @@
 
                 <!-- 图片展示区 -->
                 <div class="image-container">
-                    <img :src="displayData.image" class="news-image" :alt="displayData.title">
+                    <img
+                        :src="displayData.image"
+                        class="news-image"
+                        :alt="displayData.title"
+                        loading="lazy"
+                        decoding="async"
+                        fetchpriority="low"
+                        @error="handleNewsImageError"
+                    >
                 </div>
 
                 <!-- 文本内容 -->
@@ -117,7 +125,7 @@
                 
                 <!-- 访问统计，2026.3.9开始 -->
                 <div style="height: 20px; display: flex; justify-content: center; align-items: center;">
-                    <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge"/>
+                    <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge" loading="lazy" decoding="async"/>
                 </div>
                 
                 <!-- 底部链接 -->
@@ -297,8 +305,13 @@ const DEFAULT_STATE = {
     isExternal: true
 };
 
+const defaultNewsImage = resolvePath(DEFAULT_STATE.image);
+
 // ========== 5. 状态管理 ==========
 const currentNewsIndex = ref(0);
+const shouldLoadNewsImage = computed(() => (
+    props.activeTab === 'info' && (props.locationInfo.isInDihuan || Boolean(props.selectedImage))
+));
 
 // ========== 6. 计算属性 ==========
 /**
@@ -310,7 +323,7 @@ const displayData = computed(() => {
     if (!props.locationInfo.isInDihuan) {
         return {
             ...DEFAULT_STATE,
-            image: props.selectedImage || resolvePath(NEWS_LIST[currentNewsIndex.value].image)
+            image: shouldLoadNewsImage.value && props.selectedImage ? props.selectedImage : defaultNewsImage
         };
     }
 
@@ -318,7 +331,9 @@ const displayData = computed(() => {
     return {
         title: currentItem.title,
         text: currentItem.text,
-        image: props.selectedImage || resolvePath(currentItem.image),
+        image: shouldLoadNewsImage.value
+            ? (props.selectedImage || resolvePath(currentItem.image))
+            : defaultNewsImage,
         href: currentItem.href,
         isExternal: true
     };
@@ -329,6 +344,14 @@ const displayData = computed(() => {
 function nextNews() {
     currentNewsIndex.value = (currentNewsIndex.value + 1) % NEWS_LIST.length;
     emit('news-changed', currentNewsIndex.value);
+}
+
+function handleNewsImageError(event) {
+    const target = event?.target;
+    if (!target || typeof target.src !== 'string') return;
+    if (!target.src.includes(DEFAULT_STATE.image)) {
+        target.src = defaultNewsImage;
+    }
 }
 </script>
 

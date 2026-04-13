@@ -8,7 +8,7 @@
  * - 新闻侧边栏展示
  * - 鼠标特效
  */
-import { ref, reactive, defineAsyncComponent } from 'vue';
+import { ref, reactive, defineAsyncComponent, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useAttrStore } from '../stores';
 const message = useMessage();
@@ -23,10 +23,21 @@ import MagicCursor from '../components/MagicCursor.vue';
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
 
+const SidePanelLoading = {
+    name: 'SidePanelLoading',
+    render() {
+        return h('div', { class: 'sidepanel-loading-state' }, [
+            h('div', { class: 'sidepanel-loading-spinner' }),
+            h('span', { class: 'sidepanel-loading-text' }, '侧边面板资源加载中...')
+        ]);
+    }
+};
+
 // 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
 const SidePanel = defineAsyncComponent({
     loader: () => import('../components/SidePanel.vue'),
-    delay: 120,
+    loadingComponent: SidePanelLoading,
+    delay: 0,
     timeout: 15000,
     onError(error, retry, fail, attempts) {
         const text = String(error?.message || error || '');
@@ -57,6 +68,7 @@ const isMagicMode = ref(false);
 const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
+const sidePanelWarmupScheduled = ref(false);
 const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
@@ -68,6 +80,8 @@ const activeFeature = ref({ key: 'info', label: '新闻' });
 
 // 组件引用
 const mapContainerRef = ref(null);
+let sidePanelWarmupTimer = null;
+let sidePanelWarmupIdleId = null;
 
 // ========== 3. 事件处理函数 ==========
 
@@ -175,6 +189,29 @@ function handleActivateFeature(feature) {
 
 function handleSwitchSidePanelTab(tab) {
     activeSidePanelTab.value = tab;
+}
+
+/** 主地图关键内容就绪后，在空闲时预加载侧边面板资源。 */
+function handleMapCoreReady() {
+    if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) return;
+    sidePanelWarmupScheduled.value = true;
+
+    const preloadSidePanel = () => {
+        if (!shouldLoadSidePanel.value) {
+            shouldLoadSidePanel.value = true;
+        }
+    };
+
+    const queuePreload = () => {
+        if (typeof window === 'undefined') return;
+        sidePanelWarmupTimer = window.setTimeout(preloadSidePanel, 900);
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+        sidePanelWarmupIdleId = window.requestIdleCallback(queuePreload, { timeout: 2200 });
+    } else {
+        queuePreload();
+    }
 }
 
 /** 关闭 AI 聊天，切换回新闻模式 */
@@ -347,6 +384,20 @@ function handleFeatureSelected(properties) {
     featureQueryResult.value = properties;
     showQueryPanel.value = true;
 }
+
+onUnmounted(() => {
+    if (typeof window === 'undefined') return;
+
+    if (sidePanelWarmupIdleId !== null && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(sidePanelWarmupIdleId);
+        sidePanelWarmupIdleId = null;
+    }
+
+    if (sidePanelWarmupTimer !== null) {
+        window.clearTimeout(sidePanelWarmupTimer);
+        sidePanelWarmupTimer = null;
+    }
+});
 </script>
 
 <template>
@@ -378,6 +429,7 @@ function handleFeatureSelected(properties) {
                 <MapContainer
                     ref="mapContainerRef"
                     v-show="!is3DMode"
+                    @map-core-ready="handleMapCoreReady"
                     @location-change="handleLocationChange"
                     @update-news-image="handleUpdateNewsImage"
                     @feature-selected="handleFeatureSelected"
@@ -722,6 +774,41 @@ function handleFeatureSelected(properties) {
 .panel-placeholder:hover .placeholder-text {
     color: #096dd9;
     text-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
+}
+
+.sidepanel-loading-state {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: linear-gradient(135deg, rgba(24, 144, 255, 0.08) 0%, rgba(24, 144, 255, 0.18) 100%);
+}
+
+.sidepanel-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid rgba(24, 144, 255, 0.25);
+    border-top-color: #1890ff;
+    animation: sidepanel-spin 0.8s linear infinite;
+}
+
+.sidepanel-loading-text {
+    font-size: 12px;
+    color: #096dd9;
+    font-weight: 600;
+}
+
+@keyframes sidepanel-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Mobile Responsiveness */
