@@ -14,7 +14,7 @@
 ## 🚀 核心特性 (Key Features)
 
 ### 📂 图层管理 (TOC)
-* **ArcGIS 风格交互**：右键菜单管理，支持图层样式、标注、属性实时编辑与删除。
+* **ArcGIS 风格交互**：右键菜单管理，支持图层右键样式编辑、标注信息、拖拽管理。
 * **坐标动态重构**：内置 `WGS-84` 与 `GCJ-02` 自动纠偏，支持全图层一键重绘同步。
 * **全能数据导出**：支持点/线/面导出为 `GeoJSON`、`CSV`、 `TXT`。
 
@@ -25,14 +25,14 @@
 
 ### 🛠️ 交互与三维 (Analysis & 3D)
 * **精准绘测**：交互式点/线/面绘制、几何测量，支持经纬度精确键入生成要素。
-* **二三维联动**：集成 `CesiumJS` 高精度地形渲染，支持视角 URL 共享与 `ECharts` 图表交互。
-* **全域搜索**：内置天地图与国际 `Nominatim` 双搜索引擎，支持 40+ 多源 XYZ 底图。
-* **APPLE 灵动岛 信息提示栏**：仿照 Apple 灵动岛设计的全局消息系统，支持队列管理、悬停暂停、立即关闭等交互，附带诸多心灵鸡汤句子
+* **二三维联动**：集成 `CesiumJS` 地形渲染， `ECharts` 图表交互。
+* **全域搜索**：内置天地图与高德地名搜索API 双搜索引擎，支持 40+ XYZ 切片底图。
+* **APPLE 灵动岛 信息提示栏**：仿照 Apple 灵动岛设计的全局消息系统，支持队列管理、悬停暂停、立即关闭等交互，附带心灵鸡汤语录，提升用户体验。
 * **特效加持**：首屏 Delaunay、流体、重力、奇点、波动五大视觉特效，提升用户体验。
 
 ### ⚡ 极致性能与 AI (Optimization & AI)
 * **AI 空间助手**：集成 LLM API，提供 GIS 专业问答、操作指引及脚本辅助。
-* **极致性能**：侧边栏延迟加载，首屏提速 30-50%；支持超大数据量导出性能预警。
+* **极致性能**：侧边栏延迟加支持超大数据量载，首屏提速 30-50%；导出性能预警。
 * **全平台自适应**：响应式布局设计，完美适配移动端与桌面端交互体验。
 
 ## 快速开始
@@ -62,7 +62,7 @@ npm run build
 
 ### 本地瓦片资源
 
-将瓦片放置在 `public/tiles/{z}/{x}/{y}.png` 目录下即可自动读取，可使用QGIS自主制作切片，也可贡献到项目中供他人使用。
+将瓦片放置在 `public/tiles/{z}/{x}/{y}.png` 目录下即可自动读取，可使用QGIS制作切片，也可贡献到项目中共享。
 
 ## 目录结构
 
@@ -70,8 +70,8 @@ npm run build
 WebGIS_Dev/
 ├── public/
 │   ├── images/                         # 站点静态资源目录
-│   ├── tiles/                          # QGIS自制瓦片目录，按 public/tiles/{z}/{x}/{y}.png 组织，便于贡献和自用
-│   ├── ShareDate/                      # 📦 共享资源目录：放置 KML/KMZ/GeoJSON/SHP/TIF 等数据文件，应用启动时自动扫描供用户快速导入
+│   ├── tiles/                          # QGIS自制XYZ瓦片目录，按 public/tiles/{z}/{x}/{y}.png 组织
+│   ├── ShareDate/                      # 共享资源目录：放置 KML/KMZ/GeoJSON/SHP/TIF 等数据文件
 │   ├── min-enhanced.js                 # 第三方统计脚本延迟加载入口
 │   ├── ol.js / ol.css                  # OpenLayers 备用静态资源
 │   └── favicon.ico                     # 网站图标
@@ -82,25 +82,25 @@ WebGIS_Dev/
 │   │   ├── locationSearch.js           # [路由/网络封装] 3种服务地名检索封装与结果标准化
 │   │   └── map.js                      # [天地图 API] 天地图/高德检索与逆地理编码请求封装
 │   ├── components/
-│   │   ├── AttributeTable.vue          # 属性查询结果
-│   │   ├── BusPlannerPanel.vue         # 公交路径规划
+│   │   ├── AttributeTable.vue          # 属性表组件：要素属性展示、分页、搜索与地图交互（高亮/定位）
+│   │   ├── BusPlannerPanel.vue         # 公交路径规划组件：交互设置起终点、调用天地图 API、结果展示与地图交互
 │   │   ├── CesiumAdvancedEffects.vue   # Cesium 视觉处理与 ECharts 动态图表（3D 启用后懒加载）
 │   │   ├── CesiumContainer.vue         # Cesium 2D/3D 切换承接组件
-│   │   ├── ChatPanelContent.vue        # AI 助手会话（API曾被盗用，已禁用，请自行配置API KEY进行使用）
-│   │   ├── DrivingPlannerPanel.vue     # 驾车、步行路径规划
-│   │   ├── LayerControlPanel.vue       # 地图右上控制面板：搜索 API、底图切换、TOC 拖拽、经纬网开关（底图选项导入自 useBasemapManager）
+│   │   ├── ChatPanelContent.vue        # AI 助手组件（API曾被盗用，已限额，请自行配置API KEY进行使用）
+│   │   ├── DrivingPlannerPanel.vue     # 驾车、步行路径规划组件：交互设置起终点、调用天地图 API、结果展示与地图交互
+│   │   ├── LayerControlPanel.vue       # 底图控制面板组件（右上）：地名搜索 API、底图切换、底图拖拽管理、经纬网开关
 │   │   ├── LayerPanel.vue              # ⭐TOC构建器：扁平图层→递归树结构、文件夹级联、拖拽排序、标注管理
-│   │   ├── LocationSearch.vue          # 地名关键词搜索
-│   │   ├── MagicCursor.vue             # 首屏特效按钮
-│   │   ├── MapContainer.vue            # ⭐ 主地图：地图初始化 + 全局编排 + 组件桥接（底图配置导入自 useBasemapManager）
-│   │   ├── MapEasterEgg.vue            # 彩蛋图片模块：区域判定、像素定位、缩略图和 Lightbox（课上作业）
-│   │   ├── MapControlsBar.vue          # 地图右下控制面板（显示实时坐标、缩放级别、修改坐标与home按钮）
-│   │   ├── MapPointPickerCard.vue      # 地图起终点拾取
-│   │   ├── Message.vue                 # 全局消息通知组件（灵动岛效果）
-│   │   ├── SidePanel.vue               # 右侧总控容器（资讯/聊天/图层管理/公交/驾车）
-│   │   ├── TOCPanel.vue                # ⭐ 工具箱总容器：绘制、样式、图层与共享资源菜单（共享资源由 useSharedResourceLoader 驱动）
-│   │   ├── TOCTreeItem.vue             # ⭐ [V2.8+] 递归树节点组件：右键菜单、悬停按钮、级联可见性、Teleport 固定菜单
-│   │   ├── TopBar.vue                  # 导航栏（菜单、分享、快捷跳转与功能入口）
+│   │   ├── LocationSearch.vue          # 地名搜索API输入组件：支持天地图、高德双引擎，输入联想与结果选择
+│   │   ├── MagicCursor.vue             # 首屏特效按钮：Delaunay、流体、重力、奇点、波动五大特效，提升用户体验
+│   │   ├── MapContainer.vue            # ⭐ 主地图：地图初始化 + 全局编排 + 组件桥接
+│   │   ├── MapEasterEgg.vue            # 彩蛋图片组件：区域判定、像素定位、缩略图和 Lightbox（作业）
+│   │   ├── MapControlsBar.vue          # 经纬度、瓦片级别面板（显示坐标、缩放级别、修改坐标格式与home按钮）
+│   │   ├── MapPointPickerCard.vue      # 地图起终点拾取（供路径规划使用）
+│   │   ├── Message.vue                 # 消息通知组件（灵动岛效果）
+│   │   ├── SidePanel.vue               # 右侧总控容器（资讯/LLM/TOC/公交/驾车规划）
+│   │   ├── TOCPanel.vue                # TOC图层管理与控制面板：图层树、右键菜单、标注信息、拖拽排序、坐标切换
+│   │   ├── TOCTreeItem.vue             # 递归树节点组件：右键菜单、悬停按钮、级联可见性、Teleport 固定菜单
+│   │   ├── TopBar.vue                  # 顶部菜单栏：TOC、分享地点、分享视图URL、
 │   │   └── icons/
 │   │       ├── IconCommunity.vue       # 社区入口图标组件(未启用)
 │   │       ├── IconDocumentation.vue   # 文档入口图标组件(未启用)
@@ -109,18 +109,18 @@ WebGIS_Dev/
 │   │       └── IconTooling.vue         # 工具入口图标组件(未启用)
 │   ├── composables/
 │   │   ├── 📁 [全局通用工具库（Global Utilities）]
-│   │   ├── useGisLoader.ts             # 数据导入调度主实现（TypeScript 版本）
+│   │   ├── useGisLoader.ts             # 数据导入调度主实现
 │   │   ├── useKmzLoader.js             # KMZ 解压、KML 提取与内部资源重写
 │   │   ├── useLayerDataImport.js       # 容器数据导入总线，消费 packet 并创建图层（矢量/栅格统一落图）
 │   │   ├── useManagedLayerRegistry.js  # 托管图层注册与对外状态广播
 │   │   ├── useMapState.js              # ⭐ 地图状态管理引擎，处理 URL 同步（防抖）、图层切换、地形线渲染与视图动画
 │   │   ├── useMessage.js               # 全局消息系统（队列、默认时长、宿主挂载）
 │   │   ├── useMessageIslandMotion.js   # Message 交互计时控制（悬停暂停/恢复、立即关闭）
-│   │   ├── useSharedResourceLoader.ts  # 📦 [V2.8.3+] 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式
+│   │   ├── useSharedResourceLoader.ts  # 共享资源加载器：动态扫描 public/ShareDate 目录、支持 KML/KMZ/GeoJSON/SHP/TIF 等格式
 │   │   ├── useTileSourceFactory.ts     # 瓦片源工厂：XYZ/WMS/WMTS 格式识别、嗅探与源创建
 │   │   ├── useUserLayerActions.js      # 图层动作集合（显隐、删除、排序、缩放、样式）
 │   │   ├── useUserLocation.js          # 用户定位、国内外判定与定位更新策略
-│   │   ├── 📁 [地图业务特性库（Map Features - Phase 1-24 提取）]
+│   │   ├── 📁 [地图业务特性库（自MapContainer中解耦剥离）]
 │   │   └── map/
 │   │       └── features/
 │   │           ├── README.md           # 地图功能库拆分约束与职责说明（一个功能一个库）
@@ -151,21 +151,21 @@ WebGIS_Dev/
 │   │           ├── useStartupTaskScheduler.js     # Phase 14: 首屏关键瓦片加载与非关键任务调度
 │   │           └── useUserLayerApiFacade.js       # Phase 14: 用户图层 API 委托门面
 │   ├── constants/
-│   │   ├── goldenSoupQuotes.js         # 心灵鸡汤句库，治愈你的伤痛
+│   │   ├── goldenSoupQuotes.js         # 心灵鸡汤语录常量
 │   │   ├── index.js                    # 常量目录统一导出入口（barrel）
 │   │   ├── mapStyles.js                # 地图样式常量与样式工厂
 │   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts   # 非标准xyz切片配置示例
-│   │   ├── useBasemapManager.ts        # 底图配置管理（从 composables 迁移）
+│   │   ├── useBasemapManager.ts        # XYZ 瓦片图源配置
 │   │   └── useStyleEditor.js           # 图层样式模板配置
 │   ├── stores/
-│   │   ├── index.ts                    # Store 目录统一导出入口（barrel）
+│   │   ├── index.ts                    # Store 目录统一导出入口
 │   │   ├── useAttrStore.ts             # 属性表状态仓库（extent、要素展示上下文）
 │   │   └── useLayerStore.ts            # Pinia 图层状态仓库（显隐、排序、样式状态）
 │   ├── router/
 │   │   └── index.js                    # Vue Router 路由表与 hash history 配置
 │   ├── views/
-│   │   ├── HomeView.vue                # 主页面布局编排与 MapContainer/SidePanel 事件中枢
-│   │   └── RegisterView.vue            # 登录页面（预留）
+│   │   ├── HomeView.vue                # 主页面布局、事件中枢
+│   │   └── RegisterView.vue            # 登录页面
 │   ├── utils/
 |   |   ├── coordinateFormatter.js      # 坐标显示与输入解析工具，支持多格式显示与智能输入识别
 |   |   ├── layerExportService.js       # 矢量数据导出服务，支持 CSV/TXT/GeoJSON 格式，自动附带 UTF-8 BOM 提升兼容性
@@ -202,7 +202,7 @@ WebGIS_Dev/
 
 ## 模块化架构（Great Decoupling）
 
-本次重构后，`MapContainer.vue` 采用“最小外壳”模式，主职责仅保留：
+`MapContainer.vue` 采用“最小外壳”模式，主职责仅保留：
 
 1. 地图初始化与 OpenLayers 生命周期管理。
 2. 全局状态编排（底图状态、图层实例、绘图/路线等核心流程）。
@@ -243,7 +243,7 @@ WebGIS_Dev/
 ## 版本记录
 
 ### V2.8.4 (2026-04-11)
-#### 🧩 结构优化复盘 + MapContainer 持续解耦（Phase 18-25）
+#### 🧩 结构优化复盘 + MapContainer 解耦（Phase 18-25）
 * **MapContainer 持续瘦身**：
     * 新增 `useLayerControlHandlers.js`，提取图层面板相关逻辑：`handleLayerChange`、`handleLayerOrderUpdate`、`loadCustomMap`。
     * 将地图交互样式切换到 `src/constants/mapStyles.js` 的 `createMapStylesObject()` 工厂统一生成。
