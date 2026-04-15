@@ -45,14 +45,28 @@ export function createMapSearchAndCoordinateInputFeature({
         const coord = fromLonLat([lon, lat]);
 
         const layerName = (payload.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
-        const f = new Feature({
+        
+        // 构建特征属性，包含POI ID（来自Amap搜索结果）
+        const featureProperties = {
             geometry: new Point(coord),
             type: 'search',
             名称: layerName,
             经度: Number(lon.toFixed(6)),
             纬度: Number(lat.toFixed(6)),
             坐标系: 'wgs84'
-        });
+        };
+        
+        // 如果检测到POI ID，添加到属性中
+        if (payload.raw?.id) {
+            featureProperties['POI_ID'] = String(payload.raw.id);
+        }
+        
+        // 添加其他Amap特定字段
+        if (payload.raw?.address) {
+            featureProperties['地址'] = String(payload.raw.address);
+        }
+        
+        const f = new Feature(featureProperties);
         createManagedVectorLayer?.({
             name: layerName,
             type: 'search',

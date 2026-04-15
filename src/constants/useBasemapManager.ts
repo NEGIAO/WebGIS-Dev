@@ -565,7 +565,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     },
     {
         id: 'arcgis_imagery_root',
-        name: '世界影像图',
+        name: 'ESRI影像图',
         category: 'base',
         group: 'World',
         createSource: () => new XYZ({ url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' })
@@ -826,7 +826,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'arcgis_spec_nav', label: 'ESRI航海图', stack: ['arcgis_spec_nav'] },
     { id: 'arcgis_natgeo_world', label: '国家地理', stack: ['arcgis_natgeo_world'] },
     { id: 'arcgis_usa_topo', label: 'USA地形图', stack: ['arcgis_usa_topo', 'label'] },
-    { id: 'arcgis_imagery_root', label: '世界影像图', stack: ['arcgis_imagery_root','label'] },
+    { id: 'arcgis_imagery_root', label: 'ESRI影像图', stack: ['arcgis_imagery_root','label'] },
     { id: 'arcgis_physical_root', label: '世界自然地理图', stack: ['arcgis_physical_root', 'label'] },
     { id: 'arcgis_shaded_relief', label: '世界地形渲染图', stack: ['arcgis_shaded_relief', 'label'] },
     { id: 'arcgis_street_root', label: '世界街道图', stack: ['arcgis_street_root'] },

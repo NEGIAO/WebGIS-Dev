@@ -794,7 +794,9 @@ function handleLayerTreeAction(evt) {
     if (type === 'toggle-layer-crs' || type === 'toggle-search-layer-crs') {
         emit('toggle-layer-crs', {
             layerId: evt.layerId,
-            crs: evt.crs
+            crs: evt.crs,
+            fromCrs: evt.fromCrs,
+            toCrs: evt.toCrs
         });
         return;
     }

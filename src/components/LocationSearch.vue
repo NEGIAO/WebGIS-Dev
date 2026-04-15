@@ -28,6 +28,8 @@
             <li v-for="(item, index) in items" :key="`${item.id || item.display_name || item.name}_${index}`" @click="$emit('select-result', item)">
                 <div class="name">{{ item.name || item.display_name }}</div>
                 <div class="address">{{ item.address || item.display_name || '暂无地址信息' }}</div>
+                <div v-if="item.id" class="poi-id">ID: {{ item.id }}</div>
+                <!-- poi的ID，关键信息，作为请求AOI的依据信息 -->
             </li>
         </ul>
 
@@ -334,6 +336,14 @@ onBeforeUnmount(() => {
     margin-top: 2px;
     font-size: 12px;
     color: #5f7266;
+}
+
+.poi-id {
+    margin-top: 3px;
+    font-size: 11px;
+    color: #8fa399;
+    font-family: 'Courier New', monospace;
+    word-break: break-all;
 }
 
 .pagination {

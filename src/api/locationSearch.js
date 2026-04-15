@@ -116,7 +116,7 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10, amapKey = '' 
         const gcjLat = Number.parseFloat(location[1]);
         const [wgsLon, wgsLat] = gcj02ToWgs84(gcjLon, gcjLat);
         return {
-            id: poi.id,
+            id: poi.id,//poi ID，可通过此处直接请求对应的API，请求并解析其AOI边界，实现爬取；
             name: poi.name,
             address: poi.address || poi.pname || '',
             display_name: `${poi.name}${poi.address ? ` - ${poi.address}` : ''}`,

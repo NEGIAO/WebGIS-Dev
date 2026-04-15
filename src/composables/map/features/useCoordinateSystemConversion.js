@@ -75,12 +75,13 @@ export function createCoordinateSystemConversionFeature({
 
     /**
      * 在 WGS-84 与 GCJ-02 间切换任意矢量图层坐标并刷新显示字段
-     * @param {Object} payload - 操作载荷 { layerId, crs }
+     * @param {Object} payload - 操作载荷 { layerId, fromCrs, toCrs }
      */
     function toggleLayerCRS(payload) {
         if (!payload?.layerId) return;
 
-        const nextCrs = String(payload.crs || 'wgs84').toLowerCase();
+        const nextCrs = String(payload.toCrs || payload.crs || 'wgs84').toLowerCase();
+        const explicitFromCrs = String(payload.fromCrs || '').toLowerCase();
         if (!['wgs84', 'gcj02'].includes(nextCrs)) {
             message.warning?.('目标坐标系不支持');
             return;
@@ -105,14 +106,21 @@ export function createCoordinateSystemConversionFeature({
         }
 
         const currentCrs = String(layerData.metadata?.crs || 'wgs84').toLowerCase();
-        if (currentCrs === nextCrs) {
-            message.info?.(`当前已是 ${nextCrs.toUpperCase()} 坐标系`);
+        const sourceCrs = ['wgs84', 'gcj02'].includes(explicitFromCrs) ? explicitFromCrs : currentCrs;
+
+        if (sourceCrs === nextCrs) {
+            message.info?.(`源坐标系与目标坐标系一致：${nextCrs.toUpperCase()}，无需转换`);
             return;
         }
 
-        const converter = currentCrs === 'wgs84' && nextCrs === 'gcj02'
+        const converter = sourceCrs === 'wgs84' && nextCrs === 'gcj02'
             ? wgs84ToGcj02
-            : gcj02ToWgs84;
+            : (sourceCrs === 'gcj02' && nextCrs === 'wgs84' ? gcj02ToWgs84 : null);
+
+        if (!converter) {
+            message.warning?.('无法判定坐标转换方向，请重试并指定目标坐标系');
+            return;
+        }
 
         let firstCoordinate = null;
         features.forEach((feature) => {
@@ -137,7 +145,7 @@ export function createCoordinateSystemConversionFeature({
         layerData.layer?.changed?.();
         emitUserLayersChange?.();
 
-        message.success?.(`已切换到 ${nextCrs.toUpperCase()} 坐标系`);
+        message.success?.(`已完成 ${sourceCrs.toUpperCase()} => ${nextCrs.toUpperCase()} 坐标转换`);
     }
 
     /**

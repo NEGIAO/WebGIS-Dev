@@ -174,10 +174,9 @@ const menuItems = computed(() => {
     }
     if (actions.copyCoordinates) edit.push({ key: 'copy', label: '复制坐标' });
     if (actions.toggleLayerCRS) {
-        const currentCrs = String(props.node?.raw?.crs || 'wgs84').toLowerCase();
-        const targetLabel = currentCrs === 'gcj02' ? 'WGS-84' : 'GCJ-02';
         edit.push({ divider: true, key: 'divider_crs' });//添加分割线
-        edit.push({ key: 'toggle-crs', label: `切换坐标系至 ${targetLabel}` });
+        edit.push({ key: 'convert-wgs84-to-gcj02', label: 'WGS-84 =>GCJ-02' });
+        edit.push({ key: 'convert-gcj02-to-wgs84', label: 'GCJ-02 =>WGS-84' });
     }
     if (actions.exportLayerData) {
         edit.push({ divider: true, key: 'divider_export' });//添加分割线
@@ -300,12 +299,13 @@ function handleMenuCommand(key) {
         closeContextMenu();
         return;
     }
-    if (key === 'toggle-crs') {
-        const currentCrs = String(props.node?.raw?.crs || 'wgs84').toLowerCase();
-        const nextCrs = currentCrs === 'gcj02' ? 'wgs84' : 'gcj02';
+    if (key === 'convert-wgs84-to-gcj02' || key === 'convert-gcj02-to-wgs84') {
+        const fromCrs = key === 'convert-wgs84-to-gcj02' ? 'wgs84' : 'gcj02';
+        const toCrs = key === 'convert-wgs84-to-gcj02' ? 'gcj02' : 'wgs84';
         emitAction('toggle-layer-crs', {
             layerId: props.node.id,
-            crs: nextCrs
+            fromCrs,
+            toCrs
         });
         closeContextMenu();
         return;
