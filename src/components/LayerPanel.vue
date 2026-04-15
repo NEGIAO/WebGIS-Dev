@@ -67,7 +67,25 @@ function supportsCoordinateOperations(layer) {
     return true;
 }
 
+function getLayerPoiId(layer) {
+    const features = Array.isArray(layer?.features) ? layer.features : [];
+    const firstFeature = features[0] || {};
+    const properties = firstFeature?.properties && typeof firstFeature.properties === 'object'
+        ? firstFeature.properties
+        : {};
+
+    return String(
+        properties?.POI_ID
+        || properties?.poiid
+        || properties?.id
+        || ''
+    ).trim();
+}
+
 function toLayerNode(layer, level, group) {
+    const poiid = getLayerPoiId(layer);
+    const isSearchPointLayer = group === 'search' && String(layer?.type || '').toLowerCase() === 'search';
+
     const baseNode = {
         id: layer.id,
         name: String(layer.name || ''),
@@ -90,6 +108,12 @@ function toLayerNode(layer, level, group) {
             copyCoordinates: supportsCoordinateOperations(layer) && layerHasCoordinates(layer),
             toggleLayerCRS: supportsCoordinateOperations(layer),
             exportLayerData: supportsCoordinateOperations(layer),
+            openAoiPanel: isSearchPointLayer,
+            aoiPanelPayload: {
+                layerId: layer.id,
+                layerName: String(layer.name || ''),
+                poiid
+            },
             zoom: true,
             remove: true,
             removeTip: group === 'search' ? '清空' : '移除',

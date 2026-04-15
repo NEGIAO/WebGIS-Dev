@@ -32,6 +32,7 @@
                     :baseLayers="baseLayers"
                     :overview="toolboxOverview"
                     :uploadProgress="uploadProgress"
+                    :latest-search-poi="latestSearchPoi"
                     @close="$emit('switch-tab', 'info')"
                     @upload-data="$emit('upload-data', $event)"
                     @interaction="$emit('interaction', $event)"
@@ -51,6 +52,7 @@
                     @highlight-attribute-feature="$emit('highlight-attribute-feature', $event)"
                     @zoom-attribute-feature="$emit('zoom-attribute-feature', $event)"
                     @draw-point-by-coordinates="$emit('draw-point-by-coordinates', $event)"
+                    @draw-amap-aoi-from-json="$emit('draw-amap-aoi-from-json', $event)"
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
                     @export-layer-data="$emit('export-layer-data', $event)"
                 />
@@ -152,7 +154,6 @@ import ChatPanelContent from './ChatPanelContent.vue';
 import ToolboxPanel from './TOCPanel.vue';
 import BusPlannerPanel from './BusPlannerPanel.vue';
 import DrivingPlannerPanel from './DrivingPlannerPanel.vue';
-import Message from './Message.vue';
 
 // ========== 1. 常量定义 ==========
 const LINKS = {
@@ -192,6 +193,10 @@ const props = defineProps({
     uploadProgress: {
         type: Object,
         default: () => ({ phase: 'idle' })
+    },
+    latestSearchPoi: {
+        type: Object,
+        default: () => ({})
     },
     activeFeature: {
         type: Object,
@@ -264,6 +269,7 @@ const emit = defineEmits([
     'highlight-attribute-feature',
     'zoom-attribute-feature',
     'draw-point-by-coordinates',
+    'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data'
 ]);

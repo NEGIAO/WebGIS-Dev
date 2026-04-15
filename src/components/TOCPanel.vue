@@ -29,6 +29,20 @@
                 @action="handleLayerTreeAction"
             />
 
+            <AmapAoiInjectDialog
+                :visible="manualAoiDialogVisible"
+                :poi-id="manualAoiPoiId"
+                :json-text="manualAoiJsonText"
+                :detail-url="manualAoiDetailUrl"
+                :source-layer-name="manualAoiSourceLayerName"
+                :error-message="manualAoiError"
+                @update:poi-id="manualAoiPoiId = $event"
+                @update:json-text="manualAoiJsonText = $event"
+                @open-detail="openManualAoiDetailLink"
+                @submit="drawAmapAoiFromManualJson"
+                @close="closeManualAoiDialog"
+            />
+
             <div class="upload-zone-wrap">
                 <div
                     class="upload-entry"
@@ -290,6 +304,7 @@
                 <button class="small-btn style-apply-btn" @click="applyStyle">应用样式</button>
             </div>
         </div>
+
     </div>
 </template>
 
@@ -306,13 +321,15 @@ import { decodePos } from '../utils/urlCrypto';
 import { addressToLocation, reverseGeocodeByPriority } from '../api/geocoding';
 import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
+import AmapAoiInjectDialog from './AmapAoiInjectDialog.vue';
 
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
     baseLayers: { type: Array, default: () => [] },
     overview: { type: Object, default: () => ({ drawCount: 0, uploadCount: 0, layers: [] }) },
-    uploadProgress: { type: Object, default: () => ({ phase: 'idle' }) }
+    uploadProgress: { type: Object, default: () => ({ phase: 'idle' }) },
+    latestSearchPoi: { type: Object, default: () => ({}) }
 });
 
 const emit = defineEmits([
@@ -336,6 +353,7 @@ const emit = defineEmits([
     'highlight-attribute-feature',
     'zoom-attribute-feature',
     'draw-point-by-coordinates',
+    'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data'
 ]);
@@ -360,11 +378,27 @@ const coordInputPError = ref('');
 const geocodeAddressInput = ref('');
 const geocodeCityInput = ref('');
 const geocodeToolError = ref('');
+const manualAoiPoiId = ref('');
+const manualAoiJsonText = ref('');
+const manualAoiError = ref('');
+const manualAoiDialogVisible = ref(false);
+const manualAoiSourceLayerName = ref('');
 const isDecodePBusy = ref(false);
 const isGeocodeBusy = ref(false);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+
+function buildAmapDetailUrl(rawPoiId) {
+    const poiId = normalizeManualAoiPoiId(rawPoiId, { keepRawFallback: true });
+    return poiId
+        ? `https://www.amap.com/detail/get/detail?id=${encodeURIComponent(poiId)}`
+    : 'https://www.amap.com/';
+}
+
+const manualAoiDetailUrl = computed(() => {
+    return buildAmapDetailUrl(manualAoiPoiId.value);
+});
 
 const COORD_STORAGE_KEYS = {
     FORMAT_ID: 'gis_coord_format_id',
@@ -497,6 +531,115 @@ function clearGeocodeInput() {
     geocodeAddressInput.value = '';
     geocodeCityInput.value = '';
     geocodeToolError.value = '';
+}
+
+function normalizeManualAoiPoiId(rawValue, options = {}) {
+    const keepRawFallback = options?.keepRawFallback !== false;
+    const rawText = String(rawValue || '').trim();
+    if (!rawText) return '';
+
+    const unwrapped = rawText.replace(/^\{+|\}+$/g, '').replace(/^['"]+|['"]+$/g, '').trim();
+    if (!unwrapped) return '';
+
+    if (/^https?:\/\//i.test(unwrapped)) {
+        try {
+            const url = new URL(unwrapped);
+            const idFromUrl = String(url.searchParams.get('id') || url.searchParams.get('poiid') || '').trim();
+            if (idFromUrl) return idFromUrl;
+        } catch {
+            // noop
+        }
+    }
+
+    const inlineIdMatch = unwrapped.match(/[?&](?:id|poiid)=([^&#\s]+)/i);
+    if (inlineIdMatch?.[1]) {
+        return String(decodeURIComponent(inlineIdMatch[1])).trim();
+    }
+
+    try {
+        const parsed = JSON.parse(unwrapped);
+        const idFromJson = String(
+            parsed?.data?.base?.poiid
+            || parsed?.base?.poiid
+            || parsed?.data?.base?.id
+            || parsed?.pois?.[0]?.id
+            || parsed?.id
+            || ''
+        ).trim();
+        if (idFromJson) return idFromJson;
+    } catch {
+        // noop
+    }
+
+    return keepRawFallback ? unwrapped : '';
+}
+
+function closeManualAoiDialog() {
+    manualAoiDialogVisible.value = false;
+    manualAoiJsonText.value = '';
+    manualAoiError.value = '';
+    manualAoiSourceLayerName.value = '';
+}
+
+function openManualAoiDetailLink() {
+    manualAoiError.value = '';
+    const poiId = normalizeManualAoiPoiId(manualAoiPoiId.value, { keepRawFallback: true });
+    if (poiId) {
+        manualAoiPoiId.value = poiId;
+    }
+
+    const detailUrl = buildAmapDetailUrl(manualAoiPoiId.value);
+    if (typeof window !== 'undefined') {
+        const popup = window.open(detailUrl, '_blank', 'noopener,noreferrer');
+        if (!popup) {
+            message.warning('浏览器拦截了新窗口，请允许弹窗后重试');
+        }
+    }
+}
+
+function openManualAoiDialogByPoi(payload = {}, options = {}) {
+    const poiId = normalizeManualAoiPoiId(payload?.poiid, { keepRawFallback: false });
+    const layerName = String(payload?.layerName || '').trim();
+
+    manualAoiPoiId.value = poiId || '';
+    manualAoiJsonText.value = '';
+    manualAoiError.value = '';
+    manualAoiSourceLayerName.value = layerName;
+    manualAoiDialogVisible.value = true;
+
+    if (!poiId && options?.showMissingIdHint) {
+        message.info('该 POI 未返回 ID，请在弹窗中手动填写后继续');
+    }
+
+    if (options?.autoOpenDetail) {
+        openManualAoiDetailLink();
+    }
+
+    return true;
+}
+
+function drawAmapAoiFromManualJson() {
+    manualAoiError.value = '';
+    const jsonText = String(manualAoiJsonText.value || '').trim();
+    if (!jsonText) {
+        manualAoiError.value = '请先粘贴高德详情 JSON';
+        message.warning(manualAoiError.value);
+        return;
+    }
+
+    const inputPoiId = normalizeManualAoiPoiId(manualAoiPoiId.value);
+    const poiId = inputPoiId || normalizeManualAoiPoiId(jsonText, { keepRawFallback: false });
+    if (poiId) {
+        manualAoiPoiId.value = poiId;
+    }
+
+    emit('draw-amap-aoi-from-json', {
+        poiid: poiId,
+        jsonText,
+        sourceLayerName: manualAoiSourceLayerName.value
+    });
+
+    closeManualAoiDialog();
 }
 
 function buildReverseGeocodeProperties(reverseResult) {
@@ -678,6 +821,27 @@ watch(
     { immediate: true, deep: true }
 );
 
+watch(
+    () => [
+        Number(props.latestSearchPoi?._syncAt || 0),
+        String(props.latestSearchPoi?.poiid || props.latestSearchPoi?.id || '').trim(),
+        String(props.latestSearchPoi?.service || '').trim().toLowerCase(),
+        String(props.latestSearchPoi?.name || '').trim()
+    ],
+    ([syncAt, nextPoiId, service, poiName]) => {
+        if (!syncAt) return;
+        if (service && service !== 'amap') return;
+
+        openManualAoiDialogByPoi({
+            poiid: nextPoiId,
+            layerName: poiName
+        }, {
+            showMissingIdHint: true
+        });
+    },
+    { immediate: true }
+);
+
 layerStore.bindHandlers({
     onReorder: (payload) => emit('reorder-user-layers', payload),
     onHighlightFeature: (payload) => emit('highlight-attribute-feature', payload),
@@ -789,6 +953,15 @@ function handleLayerTreeAction(evt) {
     }
     if (type === 'copy-layer-coordinates') {
         copyLayerCoordinates(evt.layer);
+        return;
+    }
+    if (type === 'open-amap-aoi-panel') {
+        openManualAoiDialogByPoi({
+            poiid: evt?.poiid,
+            layerName: evt?.layerName
+        }, {
+            showMissingIdHint: true
+        });
         return;
     }
     if (type === 'toggle-layer-crs' || type === 'toggle-search-layer-crs') {

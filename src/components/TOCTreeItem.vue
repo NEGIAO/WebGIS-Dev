@@ -169,6 +169,7 @@ const menuItems = computed(() => {
     const edit = [];
     if (actions.attribute) edit.push({ key: 'attribute', label: '打开属性表' });
     if (actions.style) edit.push({ key: 'style', label: '样式设置' });
+    if (actions.openAoiPanel) edit.push({ key: 'open-aoi-panel', label: '打开 AOI 面板' });
     if (actions.label && isValidLabel(props.node?.raw?.name || props.node?.name)) {
         edit.push({ key: 'label', label: props.node.labelVisible ? '关闭标注' : '开启标注' });
     }
@@ -283,6 +284,14 @@ function handleMenuCommand(key) {
     }
     if (key === 'style') {
         emitAction('set-style-target', { layerId: actions.styleTarget || props.node.id });
+        closeContextMenu();
+        return;
+    }
+    if (key === 'open-aoi-panel') {
+        emitAction('open-amap-aoi-panel', {
+            layerId: props.node.id,
+            ...(actions.aoiPanelPayload || {})
+        });
         closeContextMenu();
         return;
     }

@@ -132,3 +132,27 @@ export const SEARCH_RESULT_STYLE = {
     strokeWidth: 2,
     pointRadius: 8
 };
+
+/**
+ * 搜索 AOI 结果样式配置
+ * 用于 POI 详情接口返回的面状地理围栏
+ */
+export const SEARCH_AOI_STYLE = {
+    fillColor: '#14b8a6',
+    fillOpacity: 0.22,
+    strokeColor: '#0f766e',
+    strokeWidth: 2.2,
+    pointRadius: 6
+};
+
+/**
+ * 用户协助提取 AOI 的默认样式
+ * 半透明蓝色填充 + 深蓝描边
+ */
+export const AMAP_EXTRACT_AOI_STYLE = {
+    fillColor: '#0099ff',
+    fillOpacity: 0.2,
+    strokeColor: '#005b99',
+    strokeWidth: 2,
+    pointRadius: 6
+};

@@ -106,6 +106,7 @@ const showQueryPanel = ref(false);
 const toolboxOverview = ref({ drawCount: 0, uploadCount: 0, layers: [] });
 const baseLayers = ref([]);
 const uploadProgress = ref({ phase: 'idle' });
+const latestSearchPoi = ref({});
 const activeFeature = ref({ key: 'info', label: '新闻' });
 
 // 组件引用
@@ -408,6 +409,18 @@ function handleDrawPointByCoordinates(payload) {
 }
 
 /**
+ * 处理用户手动粘贴高德详情 JSON 并绘制 AOI
+ */
+function handleDrawAmapAoiFromJson(payload) {
+    try {
+        mapContainerRef.value?.drawAmapAoiByDetailJsonInput?.(payload);
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : 'AOI 解析失败';
+        message.warning(`AOI 解析失败：${detail}`);
+    }
+}
+
+/**
  * 处理搜索结果图层的坐标系切换
  */
 function handleToggleLayerCRS(payload) {
@@ -440,6 +453,18 @@ function handleTopBarJumpView(lng, lat, z, layer) {
 
 function handleUploadProgressChange(progress) {
     uploadProgress.value = progress || { phase: 'idle' };
+}
+
+function handleSearchPoiSelected(poiPayload) {
+    const service = String(poiPayload?.service || '').trim().toLowerCase();
+    if (service && service !== 'amap') return;
+    const poiid = String(poiPayload?.poiid || '').trim();
+
+    latestSearchPoi.value = {
+        ...poiPayload,
+        poiid,
+        _syncAt: Date.now()
+    };
 }
 
 function closeQueryPanel() {
@@ -506,6 +531,7 @@ onUnmounted(() => {
                     v-show="!is3DMode && !isWeatherBoardMode"
                     @map-core-ready="handleMapCoreReady"
                     @location-change="handleLocationChange"
+                    @search-poi-selected="handleSearchPoiSelected"
                     @map-click="handleMapClick"
                     @update-news-image="handleUpdateNewsImage"
                     @feature-selected="handleFeatureSelected"
@@ -560,7 +586,7 @@ onUnmounted(() => {
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
                     :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
                     :activeFeature="activeFeature" :userLayers="userLayers" :baseLayers="baseLayers"
-                    :toolboxOverview="toolboxOverview" :uploadProgress="uploadProgress" :get-user-location="getMapUserLocation"
+                    :toolboxOverview="toolboxOverview" :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi" :get-user-location="getMapUserLocation"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
                     :zoom-to-bus-route-step="zoomToBusRouteStep"
@@ -583,6 +609,7 @@ onUnmounted(() => {
                     @zoom-attribute-feature="handleZoomAttributeFeature"
                     @layer-selected="handleLayerSelected"
                     @draw-point-by-coordinates="handleDrawPointByCoordinates"
+                    @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson"
                     @toggle-layer-crs="handleToggleLayerCRS"
                     @export-layer-data="handleExportLayerData"
                     @switch-tab="handleSwitchSidePanelTab"

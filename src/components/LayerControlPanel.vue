@@ -546,6 +546,7 @@ function updateLayerVisibility(layer, event) {
 function handleSearchJump(payload) {
     const lonVal = payload?.lon ?? payload?.x ?? payload?.lng ?? payload?.lonlat?.split?.(',')?.[0];
     const latVal = payload?.lat ?? payload?.y ?? payload?.latit ?? payload?.lonlat?.split?.(',')?.[1];
+    const sourceService = String(payload?._service || (payload?.id ? 'amap' : '')).trim().toLowerCase();
 
     const lng = lonVal != null ? Number.parseFloat(lonVal) : NaN;
     const lat = latVal != null ? Number.parseFloat(latVal) : NaN;
@@ -555,6 +556,9 @@ function handleSearchJump(payload) {
         lat,
         zoom: 16,
         name: String(payload?.display_name || payload?.name || '').trim(),
+        service: sourceService,
+        poiid: payload?.id ? String(payload.id).trim() : '',
+        amapKey: props.amapKey,
         raw: payload
     });
 }

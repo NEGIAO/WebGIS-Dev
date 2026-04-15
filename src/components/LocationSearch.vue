@@ -25,11 +25,20 @@
         <div v-else-if="searched && !items.length" class="status empty">未找到相关地点</div>
 
         <ul v-if="!loading && items.length" class="result-list">
-            <li v-for="(item, index) in items" :key="`${item.id || item.display_name || item.name}_${index}`" @click="$emit('select-result', item)">
-                <div class="name">{{ item.name || item.display_name }}</div>
+            <li v-for="(item, index) in items" :key="`${item.id || item.display_name || item.name}_${index}`" @click="handleSelectResult(item)">
+                <div class="result-head">
+                    <div class="name">{{ item.name || item.display_name }}</div>
+                    <button
+                        v-if="resolvePoiId(item)"
+                        class="copy-poi-btn"
+                        type="button"
+                        @click.stop="copyPoiId(item)"
+                    >
+                        复制ID
+                    </button>
+                </div>
                 <div class="address">{{ item.address || item.display_name || '暂无地址信息' }}</div>
-                <div v-if="item.id" class="poi-id">ID: {{ item.id }}</div>
-                <!-- poi的ID，关键信息，作为请求AOI的依据信息 -->
+                <div v-if="resolvePoiId(item)" class="poi-id">ID: {{ resolvePoiId(item) }}</div>
             </li>
         </ul>
 
@@ -43,6 +52,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useMessage } from '../composables/useMessage';
 
 const props = defineProps({
     fetcher: {
@@ -80,6 +90,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['select-result']);
+const message = useMessage();
 
 const rootRef = ref(null);
 const keywords = ref('');
@@ -102,6 +113,37 @@ function clearDebounceTimer() {
     if (!debounceTimer) return;
     clearTimeout(debounceTimer);
     debounceTimer = null;
+}
+
+function resolvePoiId(item) {
+    return String(item?.id ?? item?.poiid ?? '').trim();
+}
+
+async function copyPoiId(item) {
+    const poiId = resolvePoiId(item);
+    if (!poiId) {
+        message.warning('该结果不包含可复制的 POI ID');
+        return;
+    }
+
+    try {
+        if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(poiId);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = poiId;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+        message.success(`已复制 POI ID：${poiId}`);
+    } catch {
+        message.error('复制失败，请稍后重试');
+    }
 }
 
 async function runSearch(targetPage = 1) {
@@ -129,7 +171,8 @@ async function runSearch(targetPage = 1) {
         items.value = Array.isArray(result?.items) ? result.items : [];
         total.value = Number(result?.total || 0);
     } catch (error) {
-        message.warning('location search failed', error);
+        console.error('location search failed', error);
+        message.warning('地点搜索失败，请稍后重试');
         items.value = [];
         total.value = 0;
     } finally {
@@ -164,6 +207,13 @@ function handleOutsideClick(event) {
 function changePage(nextPage) {
     if (nextPage < 1 || nextPage > totalPages.value) return;
     runSearch(nextPage);
+}
+
+function handleSelectResult(item) {
+    emit('select-result', {
+        ...(item || {}),
+        _service: service.value
+    });
 }
 
 watch(keywords, (val) => {
@@ -226,16 +276,13 @@ onBeforeUnmount(() => {
 }
 
 .search-input {
+    flex: 1;
+    min-width: 150px;
     border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 8px;
     padding: 8px 10px;
     font-size: 13px;
     background: #fff;
-}
-
-.search-input {
-    flex: 1;
-    min-width: 150px;
 }
 
 .search-action {
@@ -330,6 +377,31 @@ onBeforeUnmount(() => {
     font-size: 13px;
     color: #213a2d;
     font-weight: 600;
+}
+
+.result-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.copy-poi-btn {
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    background: #ffffff;
+    color: #2f4f3e;
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.copy-poi-btn:hover {
+    border-color: #5ca67b;
+    background: #eef8f2;
+    color: #1f6e45;
 }
 
 .address {

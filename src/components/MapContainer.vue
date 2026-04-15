@@ -97,6 +97,8 @@ import {
     getLayerGroup as getLayerGroupById,
     STYLE_TEMPLATES,
     SEARCH_RESULT_STYLE,
+    SEARCH_AOI_STYLE,
+    AMAP_EXTRACT_AOI_STYLE,
     createMapStylesObject
 } from '../constants';
 import { createAutoTileSourceFromUrl } from '../composables/useTileSourceFactory';
@@ -284,6 +286,7 @@ const busRouteSource = new VectorSource();
 const emit = defineEmits([
     'location-change',
     'map-click',
+    'search-poi-selected',
     'coordinate-jump',
     'update-news-image',
     'feature-selected',
@@ -441,13 +444,22 @@ const { createManagedVectorLayer } = useCreateManagedVectorLayer({
 
 const {
     handleSearchJump,
-    drawPointByCoordinatesInput
+    drawPointByCoordinatesInput,
+    drawAmapAoiByDetailJsonInput
 } = createMapSearchAndCoordinateInputFeature({
     message,
     mapInstanceRef: mapInstance,
     createManagedVectorLayer,
     gcj02ToWgs84,
-    searchResultStyle: SEARCH_RESULT_STYLE
+    searchResultStyle: SEARCH_RESULT_STYLE,
+    searchAoiStyle: SEARCH_AOI_STYLE,
+    amapExtractAoiStyle: AMAP_EXTRACT_AOI_STYLE,
+    userDataLayers,
+    ensureFeatureId,
+    serializeManagedFeatures,
+    emitUserLayersChange,
+    emitGraphicsOverview,
+    onSearchPoiResolved: (payload) => emit('search-poi-selected', payload)
 });
 
 const {
@@ -1241,6 +1253,7 @@ defineExpose({
     viewUserLayer,
     zoomToGraphics,
     drawPointByCoordinatesInput,
+    drawAmapAoiByDetailJsonInput,
     toggleLayerCRS,
     toggleSearchLayerCRS,
     exportLayerCoordinates
