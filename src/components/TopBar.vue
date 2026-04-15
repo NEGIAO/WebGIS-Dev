@@ -121,9 +121,9 @@ const message = useMessage();
 
 //地点迁移
 const quickLocations = [
-    { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
-    { key: 'hedu', label: '河大', lng: 114.307960, lat: 34.813566, z: 11.83, layer: 0 },
-    { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
+    { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 3 },
+    { key: 'hedu', label: '河大', lng: 114.307960, lat: 34.813566, z: 11.83, layer: 3 },
+    { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 3 },
     { key: '51Area', label: '51区', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 3 }
 ];
 
@@ -176,7 +176,7 @@ function handleJump(location) {
     const lat = Number(location.lat);
     const z = Number(location.z);
     const layerIndexRaw = Number(location.layer);
-    const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : 0;
+    const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : 3;
 
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(z)) return;
 
@@ -238,8 +238,83 @@ function fallbackCopyViaExecCommand(text) {
     }
 }
 
+function normalizeBinaryFlag(value, fallback = '0') {
+    const text = String(value ?? '').trim().toLowerCase();
+    if (text === '1' || text === 'true') return '1';
+    if (text === '0' || text === 'false') return '0';
+    return fallback === '1' ? '1' : '0';
+}
+
+function normalizeLayerIndex(value, fallback = 3) {
+    const parsed = Number(String(value ?? '').trim());
+    if (Number.isInteger(parsed) && parsed >= 0) return String(parsed);
+
+    const fallbackParsed = Number(fallback);
+    if (Number.isInteger(fallbackParsed) && fallbackParsed >= 0) return String(fallbackParsed);
+    return '3';
+}
+
+function syncShareFlagInCurrentUrl() {
+    if (typeof window === 'undefined') return;
+
+    try {
+        const hash = String(window.location.hash || '#/home');
+        const hashWithoutSharp = hash.startsWith('#') ? hash.slice(1) : hash;
+        const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
+        const hashPath = hashPathRaw || '/home';
+        const hashParams = new URLSearchParams(hashQueryRaw);
+
+        hashParams.delete('from');
+        hashParams.delete('shared');
+        hashParams.set('s', '1');
+        hashParams.set('loc', normalizeBinaryFlag(hashParams.get('loc'), '0'));
+        hashParams.set('p', '0');
+        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), 3));
+        hashParams.delete('layer');
+
+        const nextHashQuery = hashParams.toString();
+        const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
+        const nextHash = nextHashQuery
+            ? `#${normalizedHashPath}?${nextHashQuery}`
+            : `#${normalizedHashPath}`;
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+
+        window.history.replaceState(window.history.state, '', nextUrl);
+    } catch {
+        // Ignore URL update failures to keep share flow unaffected.
+    }
+}
+
+function buildShareMarkedUrl(rawHref) {
+    try {
+        const url = new URL(rawHref, window.location.origin);
+        const hashText = String(url.hash || '');
+        const hashWithoutSharp = hashText.startsWith('#') ? hashText.slice(1) : hashText;
+        const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
+        const hashPath = hashPathRaw || '/home';
+        const hashParams = new URLSearchParams(hashQueryRaw);
+
+        // 标记该链接来自“分享”入口，供启动流程识别。
+        hashParams.delete('from');
+        hashParams.delete('shared');
+        hashParams.set('s', '1');
+        hashParams.set('loc', '0');
+        hashParams.set('p', '0');
+        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), 3));
+        hashParams.delete('layer');
+
+        const nextHashQuery = hashParams.toString();
+        const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
+        url.hash = nextHashQuery ? `${normalizedHashPath}?${nextHashQuery}` : normalizedHashPath;
+        return url.toString();
+    } catch {
+        const text = String(rawHref || '');
+        return text.includes('?') ? `${text}&s=1&loc=0&p=0&l=3` : `${text}?s=1&loc=0&p=0&l=3`;
+    }
+}
+
 async function handleShareView() {
-    const url = window.location.href;
+    const url = buildShareMarkedUrl(window.location.href);
 
     try {
         if (canUseNativeShare()) {
@@ -248,6 +323,7 @@ async function handleShareView() {
                 text: '分享当前地图视角链接',
                 url
             });
+            syncShareFlagInCurrentUrl();
             message.success('已唤起系统分享面板');
             return;
         }
@@ -264,6 +340,7 @@ async function handleShareView() {
         } else {
             fallbackCopyViaExecCommand(url);
         }
+        syncShareFlagInCurrentUrl();
         message.success('✅ 视角链接已复制，快去分享吧！');
     } catch (error) {
         message.error('分享链接复制失败', error);

@@ -25,6 +25,7 @@
                 <div class="coord-value" v-if="hasStart">
                     {{ Number(startPoint.lng).toFixed(6) }}, {{ Number(startPoint.lat).toFixed(6) }}
                 </div>
+                <div class="coord-address" v-if="hasStartAddress">{{ startAddress }}</div>
                 <div class="coord-empty" v-else>未设置</div>
             </div>
 
@@ -33,6 +34,7 @@
                 <div class="coord-value" v-if="hasEnd">
                     {{ Number(endPoint.lng).toFixed(6) }}, {{ Number(endPoint.lat).toFixed(6) }}
                 </div>
+                <div class="coord-address" v-if="hasEndAddress">{{ endAddress }}</div>
                 <div class="coord-empty" v-else>未设置</div>
             </div>
         </div>
@@ -54,6 +56,14 @@ const props = defineProps({
     endPoint: {
         type: Object,
         default: null
+    },
+    startAddress: {
+        type: String,
+        default: ''
+    },
+    endAddress: {
+        type: String,
+        default: ''
     },
     startLabel: {
         type: String,
@@ -93,6 +103,8 @@ function isPointValid(point) {
 
 const hasStart = computed(() => isPointValid(props.startPoint));
 const hasEnd = computed(() => isPointValid(props.endPoint));
+const hasStartAddress = computed(() => Boolean(String(props.startAddress || '').trim()));
+const hasEndAddress = computed(() => Boolean(String(props.endAddress || '').trim()));
 const themeClass = computed(() => props.theme === 'drive' ? 'theme-drive' : 'theme-bus');
 </script>
 
@@ -170,6 +182,14 @@ const themeClass = computed(() => props.theme === 'drive' ? 'theme-drive' : 'the
     font-weight: 700;
     color: #183a2a;
     word-break: break-all;
+}
+
+.coord-address {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #2d5a43;
+    word-break: break-word;
 }
 
 .coord-empty {

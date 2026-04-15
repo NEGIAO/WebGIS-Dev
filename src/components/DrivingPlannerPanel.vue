@@ -12,6 +12,8 @@
             :pick-mode="pickMode"
             :start-point="origPoint"
             :end-point="destPoint"
+            :start-address="origAddress"
+            :end-address="destAddress"
             theme="drive"
             start-label="设置起点"
             end-label="设置终点"
@@ -96,6 +98,7 @@
 import { reactive, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../utils/driveXmlParser';
+import { locationToAddress } from '../api/geocoding';
 
 interface ParsedRouteResult {
     distanceKm: string;
@@ -121,6 +124,8 @@ defineEmits<{
 
 const origPoint = reactive({ lng: '', lat: '' });
 const destPoint = reactive({ lng: '', lat: '' });
+const origAddress = ref('');
+const destAddress = ref('');
 const routeStyle = ref('0');
 const pickMode = ref<'' | 'start' | 'end'>('');
 
@@ -172,6 +177,22 @@ async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
         } else {
             destPoint.lng = lng.toFixed(6);
             destPoint.lat = lat.toFixed(6);
+        }
+
+        try {
+            const reverse = await locationToAddress(lng, lat, 'base');
+            const label = String(reverse?.formattedAddress || '').trim();
+            if (type === 'start') {
+                origAddress.value = label;
+            } else {
+                destAddress.value = label;
+            }
+        } catch {
+            if (type === 'start') {
+                origAddress.value = '';
+            } else {
+                destAddress.value = '';
+            }
         }
     } catch (e) {
         error.value = e instanceof Error ? e.message : '地图选点失败';

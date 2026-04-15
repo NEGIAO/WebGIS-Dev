@@ -67,8 +67,8 @@
 
 <script setup>
 import { ref, nextTick, watch } from 'vue';
-import { reverseGeocodeTianditu } from '../api/map';
 import { readUserPositionFromCache } from '../utils/userPositionCache';
+import { getGlobalUserLocationContext } from '../utils/userLocationContext';
 import { useMessage } from '../composables/useMessage';
 
 const emit = defineEmits(['close-chat']);
@@ -89,7 +89,6 @@ const modelHint = ref('点击🔄可获取更多模型');
 const DEFAULT_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || 'https://api.qnaigc.com/v1';
 const DEFAULT_API_KEY = import.meta.env.VITE_LLM_API_KEY || 'sk-af0fdab305019a96c669b9fdf6038317e499d43be5f7946b251eac1e8fe04914';
 const DEFAULT_MODEL = import.meta.env.VITE_LLM_MODEL || 'deepseek-V3-0324';
-const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
 const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v4') || DEFAULT_ENDPOINT);
 const apiKey = ref(localStorage.getItem('llm_apikey_v4') || DEFAULT_API_KEY);
@@ -136,30 +135,43 @@ const getChatCompletionsUrl = () => {
 
 const getCachedMapPosition = () => readUserPositionFromCache();
 
+const readUrlBinaryFlag = (key, fallback = '0') => {
+  if (typeof window === 'undefined') return fallback === '1';
+
+  const hash = String(window.location.hash || '');
+  const queryStart = hash.indexOf('?');
+  const hashParams = queryStart >= 0
+    ? new URLSearchParams(hash.slice(queryStart + 1))
+    : new URLSearchParams();
+  const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+
+  const raw = String(hashParams.get(key) ?? searchParams.get(key) ?? fallback).trim().toLowerCase();
+  return raw === '1' || raw === 'true';
+};
+
 const buildFirstMessageLocationContext = async () => {
   if (firstMessageLocationInjected.value) return '';
+  if (!readUrlBinaryFlag('loc', '0')) return '';
+
+  const globalLocation = getGlobalUserLocationContext();
+  if (globalLocation && Number.isFinite(globalLocation.lon) && Number.isFinite(globalLocation.lat)) {
+    const encoded = globalLocation.encodedLocation || {};
+    const source = String(globalLocation.source || 'unknown').trim();
+    const province = String(encoded.province || '').trim();
+    const city = String(encoded.city || '').trim();
+    const district = String(encoded.district || '').trim();
+    const adcode = String(encoded.adcode || '').trim();
+    const address = String(encoded.formattedAddress || '').trim();
+
+    firstMessageLocationInjected.value = true;
+    return `用户位置上下文（首次附带）：来源=${source || '未知'}，经度=${globalLocation.lon.toFixed(6)}，纬度=${globalLocation.lat.toFixed(6)}，省=${province || '未知'}，市=${city || '未知'}，区县=${district || '未知'}，编码=${adcode || '未知'}，地址=${address || '未知'}。`;
+  }
 
   const baseLocation = getCachedMapPosition();
 
   if (baseLocation) {
-    try {
-      const geocode = await reverseGeocodeTianditu({
-        lon: baseLocation.lon,
-        lat: baseLocation.lat,
-        tk: TIANDITU_TK
-      });
-
-      const ac = geocode.addressComponent || {};
-      const province = ac.province || ac.address || '';
-      const city = ac.city || ac.citycode || '';
-      const county = ac.county || ac.county_code || '';
-
-      firstMessageLocationInjected.value = true;
-      return `用户位置上下文（首次附带）：省=${province || '未知'}，市=${city || '未知'}，区县=${county || '未知'}，地址=${geocode.formattedAddress || '未知'}。`;
-    } catch (e) {
-      firstMessageLocationInjected.value = true;
-      return `用户位置上下文（首次附带）：经度=${baseLocation.lon.toFixed(4)}，纬度=${baseLocation.lat.toFixed(4)}。`;
-    }
+    firstMessageLocationInjected.value = true;
+    return `用户位置上下文（首次附带）：经度=${baseLocation.lon.toFixed(4)}，纬度=${baseLocation.lat.toFixed(4)}。`;
   }
 
   return '';

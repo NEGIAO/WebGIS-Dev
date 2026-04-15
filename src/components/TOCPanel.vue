@@ -171,6 +171,64 @@
                     </div>
 
                     <div v-if="coordInputError" class="coord-input-error">{{ coordInputError }}</div>
+
+                    <div class="coord-divider"></div>
+
+                    <div class="card-title">p 参数绘制点位</div>
+                    <div class="coord-input-grid">
+                        <input
+                            v-model.trim="coordInputP"
+                            class="coord-input-field"
+                            type="text"
+                            placeholder="请输入 p 参数"
+                            @keyup.enter="drawPointByPositionCode"
+                        />
+                    </div>
+                    <div class="coord-input-actions">
+                        <button class="small-btn btn-accent" :disabled="isDecodePBusy" @click="drawPointByPositionCode">
+                            {{ isDecodePBusy ? '解析中...' : '按 p 绘制' }}
+                        </button>
+                        <button class="small-btn ghost" @click="clearPositionCodeInput">清空 p</button>
+                    </div>
+                    <div v-if="coordInputPError" class="coord-input-error">{{ coordInputPError }}</div>
+                </div>
+
+                <div class="coord-input-panel geocode-tool-panel">
+                    <div class="card-title">地理编码工具</div>
+
+                    <div class="geocode-subtitle">地理编码（地址 -> 坐标）</div>
+                    <div class="coord-input-grid">
+                        <input
+                            v-model.trim="geocodeAddressInput"
+                            class="coord-input-field"
+                            type="text"
+                            placeholder="请输入地址信息（用于编码与标注）"
+                            @keyup.enter="drawPointByGeocodeAddress"
+                        />
+                        <input
+                            v-model.trim="geocodeCityInput"
+                            class="coord-input-field"
+                            type="text"
+                            placeholder="可选：城市限定（提升编码精度）"
+                            @keyup.enter="drawPointByGeocodeAddress"
+                        />
+                    </div>
+                    <div class="coord-input-actions">
+                        <button class="small-btn btn-accent" :disabled="isGeocodeBusy" @click="drawPointByGeocodeAddress">
+                            {{ isGeocodeBusy ? '编码中...' : '编码并绘制' }}
+                        </button>
+                        <button class="small-btn ghost" @click="clearGeocodeInput">清空地址</button>
+                    </div>
+
+                    <div class="coord-divider"></div>
+
+                    <div class="geocode-subtitle">逆地理编码（地图点选 -> 地址）</div>
+                    <div class="coord-input-actions single-action">
+                        <button class="small-btn btn-accent" @click="startReverseGeocodePick">地图点选逆编码并绘制</button>
+                    </div>
+                    <div class="geocode-tip">点击按钮后，请在地图中单击一个点，系统将自动逆地理编码并加入 TOC。</div>
+
+                    <div v-if="geocodeToolError" class="coord-input-error">{{ geocodeToolError }}</div>
                 </div>
             </div>
 
@@ -244,6 +302,8 @@ import { useLayerStore, useAttrStore } from '../stores';
 import { useStyleEditor } from '../constants';
 import { COORDINATE_FORMATS, DECIMAL_PLACES, formatCoordinate } from '../utils/coordinateFormatter';
 import { generatePointName, processCoordinateInput } from '../utils/coordinateInputHandler';
+import { decodePos } from '../utils/urlCrypto';
+import { addressToLocation, reverseGeocodeByPriority } from '../api/geocoding';
 import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
 
@@ -295,8 +355,16 @@ const coordInputLon = ref('');
 const coordInputLat = ref('');
 const coordInputCRS = ref('wgs84');
 const coordInputError = ref('');
+const coordInputP = ref('');
+const coordInputPError = ref('');
+const geocodeAddressInput = ref('');
+const geocodeCityInput = ref('');
+const geocodeToolError = ref('');
+const isDecodePBusy = ref(false);
+const isGeocodeBusy = ref(false);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
+const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
 
 const COORD_STORAGE_KEYS = {
     FORMAT_ID: 'gis_coord_format_id',
@@ -420,6 +488,42 @@ function clearCoordinateInput() {
     coordInputError.value = '';
 }
 
+function clearPositionCodeInput() {
+    coordInputP.value = '';
+    coordInputPError.value = '';
+}
+
+function clearGeocodeInput() {
+    geocodeAddressInput.value = '';
+    geocodeCityInput.value = '';
+    geocodeToolError.value = '';
+}
+
+function buildReverseGeocodeProperties(reverseResult) {
+    const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
+    const province = String(reverseResult?.province || '').trim();
+    const city = String(reverseResult?.city || '').trim();
+    const district = String(reverseResult?.district || '').trim();
+    const township = String(reverseResult?.township || '').trim();
+    const provider = String(reverseResult?.provider || '').trim();
+    const businessAreaText = Array.isArray(reverseResult?.businessAreas)
+        ? reverseResult.businessAreas
+            .map((item) => String(item?.name || '').trim())
+            .filter(Boolean)
+            .join('、')
+        : '';
+
+    return {
+        逆地理编码地址: formattedAddress || '未解析',
+        逆地理编码省: province || '未知',
+        逆地理编码市: city || '未知',
+        逆地理编码区县: district || '未知',
+        逆地理编码乡镇: township || '未知',
+        逆地理编码商圈: businessAreaText || '无',
+        逆地理编码服务: provider || 'unknown'
+    };
+}
+
 function drawPointByCoordinates() {
     coordInputError.value = '';
     const crsType = String(coordInputCRS.value || 'wgs84').toLowerCase();
@@ -439,6 +543,118 @@ function drawPointByCoordinates() {
     });
 
     clearCoordinateInput();
+}
+
+async function drawPointByPositionCode() {
+    coordInputPError.value = '';
+    const code = String(coordInputP.value || '').trim();
+
+    if (!code || code === '0') {
+        coordInputPError.value = '请输入有效的 p 参数（不能为 0）';
+        message.warning(coordInputPError.value);
+        return;
+    }
+
+    const decoded = decodePos(code);
+    if (!decoded || !Number.isFinite(decoded.lng) || !Number.isFinite(decoded.lat)) {
+        coordInputPError.value = 'p 参数解码失败，请检查编码内容';
+        message.warning(coordInputPError.value);
+        return;
+    }
+
+    isDecodePBusy.value = true;
+    try {
+        let reverseResult = null;
+        try {
+            reverseResult = await reverseGeocodeByPriority(decoded.lng, decoded.lat, {
+                tiandituTk: TIANDITU_TK,
+                silent: true
+            });
+        } catch {
+            reverseResult = null;
+        }
+
+        const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
+        const layerName = formattedAddress || `P_${code}`;
+
+        emit('draw-point-by-coordinates', {
+            lng: decoded.lng,
+            lat: decoded.lat,
+            crsType: 'wgs84',
+            displayName: layerName,
+            label: layerName,
+            layerName,
+            properties: {
+                来源: 'p参数解码',
+                原始编码: code,
+                解析后经度: Number(decoded.lng.toFixed(6)),
+                解析后纬度: Number(decoded.lat.toFixed(6)),
+                ...buildReverseGeocodeProperties(reverseResult)
+            }
+        });
+
+        message.success(`已按 p 参数绘制点位：${layerName}`);
+        clearPositionCodeInput();
+    } finally {
+        isDecodePBusy.value = false;
+    }
+}
+
+async function drawPointByGeocodeAddress() {
+    geocodeToolError.value = '';
+
+    const inputAddress = String(geocodeAddressInput.value || '').trim();
+    const inputCity = String(geocodeCityInput.value || '').trim();
+    if (!inputAddress) {
+        geocodeToolError.value = '请输入待编码的地址信息';
+        message.warning(geocodeToolError.value);
+        return;
+    }
+
+    isGeocodeBusy.value = true;
+    try {
+        const geocodeResult = await addressToLocation(inputAddress, inputCity, { silent: true });
+        let reverseResult = null;
+        try {
+            reverseResult = await reverseGeocodeByPriority(geocodeResult.lng, geocodeResult.lat, {
+                tiandituTk: TIANDITU_TK,
+                silent: true
+            });
+        } catch {
+            reverseResult = null;
+        }
+
+        emit('draw-point-by-coordinates', {
+            lng: geocodeResult.lng,
+            lat: geocodeResult.lat,
+            crsType: 'wgs84',
+            displayName: inputAddress,
+            label: inputAddress,
+            layerName: inputAddress,
+            properties: {
+                来源: '地理编码',
+                输入地址: inputAddress,
+                城市限定: inputCity || '无',
+                地理编码地址: String(geocodeResult?.formattedAddress || '').trim() || inputAddress,
+                地理编码级别: String(geocodeResult?.level || '').trim() || 'unknown',
+                地理编码ADCODE: String(geocodeResult?.adcode || '').trim() || 'unknown',
+                ...buildReverseGeocodeProperties(reverseResult)
+            }
+        });
+
+        message.success(`地理编码成功：${inputAddress}`);
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : '地理编码失败';
+        geocodeToolError.value = detail;
+        message.error(`地理编码失败：${detail}`);
+    } finally {
+        isGeocodeBusy.value = false;
+    }
+}
+
+function startReverseGeocodePick() {
+    geocodeToolError.value = '';
+    emit('interaction', 'ReverseGeocodePick');
 }
 
 function isRasterLayer(layer) {
@@ -1084,6 +1300,12 @@ async function loadSharedResource(resource) {
     box-shadow: 0 0 0 2px rgba(47, 154, 87, 0.16);
 }
 
+.coord-divider {
+    height: 1px;
+    margin: 10px 0;
+    background: #dbe9e1;
+}
+
 .coord-crs-row {
     margin-top: 8px;
     display: flex;
@@ -1111,6 +1333,28 @@ async function loadSharedResource(resource) {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+}
+
+.coord-input-actions.single-action {
+    grid-template-columns: 1fr;
+}
+
+.geocode-tool-panel {
+    margin-top: 10px;
+}
+
+.geocode-subtitle {
+    font-size: 12px;
+    font-weight: 600;
+    color: #3a5a48;
+    margin-bottom: 6px;
+}
+
+.geocode-tip {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #557565;
 }
 
 .coord-input-error {
@@ -1222,6 +1466,11 @@ async function loadSharedResource(resource) {
     background: #ebf7f0;
     border-color: #7fc397;
     color: #1d7541;
+}
+
+.small-btn:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
 }
 
 .small-btn.ghost {

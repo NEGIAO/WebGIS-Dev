@@ -9,6 +9,12 @@ import VectorSource from 'ol/source/Vector';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { unByKey } from 'ol/Observable';
 import { Fill, Stroke, Style, Text } from 'ol/style';
+import { addressToLocation } from '../api/geocoding';
+import {
+    getGlobalUserLocationContext,
+    USER_LOCATION_CONTEXT_CHANGE_EVENT
+} from '../utils/userLocationContext';
+import { encodePos, decodePos } from '../utils/urlCrypto';
 
 /**
  * 获取数组的第一个元素，如果不是数组则返回原值
@@ -26,7 +32,11 @@ function getFirstValue(value) {
  * @returns {number|null} 解析后的数字，或无法解析时返回 null
  */
 function parseNumber(value) {
-    const raw = Number(getFirstValue(value));
+    const firstValue = getFirstValue(value);
+    if (firstValue === null || firstValue === undefined) return null;
+    if (typeof firstValue === 'string' && firstValue.trim() === '') return null;
+
+    const raw = Number(firstValue);
     return Number.isFinite(raw) ? raw : null;
 }
 
@@ -54,6 +64,19 @@ function formatNumber(value, fractionDigits) {
 }
 
 /**
+ * 规范化持久化二值标记（0/1）
+ * @param {*} value - 原始标记值
+ * @param {'0'|'1'} [fallback='0'] - 默认值
+ * @returns {'0'|'1'} 规范化后的标记
+ */
+function normalizeBinaryFlag(value, fallback = '0') {
+    const raw = String(getFirstValue(value) ?? '').trim().toLowerCase();
+    if (raw === '1' || raw === 'true') return '1';
+    if (raw === '0' || raw === 'false') return '0';
+    return fallback === '1' ? '1' : '0';
+}
+
+/**
  * 从 URL hash 中解析查询参数
  * @returns {Object} 包含 lng、lat、z、l 的查询参数对象
  */
@@ -68,7 +91,10 @@ function parseHashQuery() {
         lng: params.get('lng'),
         lat: params.get('lat'),
         z: params.get('z'),
-        l: params.get('l')
+        l: params.get('l'),
+        s: params.get('s'),
+        loc: params.get('loc'),
+        p: params.get('p')
     };
 }
 
@@ -113,6 +139,7 @@ export function useMapState(mapInstance, options = {}) {
     let graticuleMoveKey = null;
     let graticuleLayer = null;
     let graticuleActive = false;
+    let locationContextChangeHandler = null;
 
     const debouncedSyncUrlFromMap = debounce(() => {
         syncUrlFromMap();
@@ -125,12 +152,98 @@ export function useMapState(mapInstance, options = {}) {
      * @private
      */
     function readQueryValue(key) {
+        const hashQuery = parseHashQuery();
+        const hashValue = getFirstValue(hashQuery[key]);
+        if (hashValue !== undefined && hashValue !== null && hashValue !== '') {
+            return hashValue;
+        }
+
         const routeValue = getFirstValue(route.query?.[key]);
         if (routeValue !== undefined && routeValue !== null && routeValue !== '') {
             return routeValue;
         }
-        const hashQuery = parseHashQuery();
-        return hashQuery[key];
+        return null;
+    }
+
+    /**
+     * 读取当前 URL 的完整查询参数快照（保留未知参数）
+     * hash 查询参数优先级高于 route.query。
+     * @returns {Record<string, string>}
+     * @private
+     */
+    function getCurrentQuerySnapshot() {
+        const snapshot = {};
+
+        const routeQuery = route?.query || {};
+        Object.keys(routeQuery).forEach((key) => {
+            const value = getFirstValue(routeQuery[key]);
+            if (value === undefined || value === null || value === '') return;
+            snapshot[key] = String(value);
+        });
+
+        if (typeof window !== 'undefined') {
+            const hash = String(window.location.hash || '');
+            const queryStart = hash.indexOf('?');
+            if (queryStart >= 0) {
+                const hashParams = new URLSearchParams(hash.slice(queryStart + 1));
+                hashParams.forEach((value, key) => {
+                    if (value === undefined || value === null || value === '') return;
+                    snapshot[key] = String(value);
+                });
+            }
+        }
+
+        return snapshot;
+    }
+
+    /**
+     * 解析定位状态（loc 标记或全局定位上下文）
+     * @returns {{
+     *   hasLocationCondition: boolean,
+     *   hasGlobalLocation: boolean,
+     *   globalLng: number|null,
+     *   globalLat: number|null
+     * }}
+     * @private
+     */
+    function resolveLocationState() {
+        const locateFlagReady = normalizeBinaryFlag(readQueryValue('loc'), '0') === '1';
+        const globalLocationContext = getGlobalUserLocationContext();
+        const globalLng = parseNumber(globalLocationContext?.lon);
+        const globalLat = parseNumber(globalLocationContext?.lat);
+        const hasGlobalLocation = globalLng !== null && globalLat !== null;
+
+        return {
+            hasLocationCondition: locateFlagReady || hasGlobalLocation,
+            hasGlobalLocation,
+            globalLng,
+            globalLat
+        };
+    }
+
+    /**
+     * 生成 p 参数（定位满足时写短码，不满足写 0）
+     * @param {number|null} fallbackLng
+     * @param {number|null} fallbackLat
+     * @returns {string}
+     * @private
+     */
+    function resolvePositionCode(fallbackLng = null, fallbackLat = null) {
+        const {
+            hasLocationCondition,
+            hasGlobalLocation,
+            globalLng,
+            globalLat
+        } = resolveLocationState();
+
+        if (!hasLocationCondition) return '0';
+
+        const sourceLng = hasGlobalLocation ? globalLng : parseNumber(fallbackLng);
+        const sourceLat = hasGlobalLocation ? globalLat : parseNumber(fallbackLat);
+        if (sourceLng === null || sourceLat === null) return '0';
+
+        const encoded = encodePos(sourceLng, sourceLat);
+        return encoded && encoded !== '0' ? encoded : '0';
     }
 
     /**
@@ -138,11 +251,23 @@ export function useMapState(mapInstance, options = {}) {
      * @returns {Object} 包含 lng、lat、zoom、layerIndex 的状态对象
      */
     function parseUrlToState() {
-        const lng = parseNumber(readQueryValue('lng'));
-        const lat = parseNumber(readQueryValue('lat'));
+        let lng = parseNumber(readQueryValue('lng'));
+        let lat = parseNumber(readQueryValue('lat'));
         const zoom = parseNumber(readQueryValue('z'));
         // 默认底图索引为 3（Google），如果 URL 中无参数则使用该默认值
         const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? 3;
+
+        const compactPosCode = String(readQueryValue('p') ?? '').trim();
+        if (compactPosCode && compactPosCode !== '0') {
+            const { hasLocationCondition } = resolveLocationState();
+            if (hasLocationCondition) {
+                const decodedPos = decodePos(compactPosCode);
+                if (decodedPos && Number.isFinite(decodedPos.lng) && Number.isFinite(decodedPos.lat)) {
+                    lng = decodedPos.lng;
+                    lat = decodedPos.lat;
+                }
+            }
+        }
 
         return {
             lng,
@@ -159,11 +284,19 @@ export function useMapState(mapInstance, options = {}) {
      * @private
      */
     function buildQuery({ lng, lat, zoom, layerIndex }) {
+        const shareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
+        const locateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
+        const normalizedLayerIndex = Number.isInteger(layerIndex) ? layerIndex : 3;
+        const compactPosCode = resolvePositionCode(lng, lat);
+
         return {
             lng: formatNumber(lng, 6),
             lat: formatNumber(lat, 6),
             z: formatNumber(zoom, 2),
-            l: Number.isInteger(layerIndex) ? String(layerIndex) : null
+            l: String(normalizedLayerIndex),
+            s: shareFlag,
+            loc: locateFlag,
+            p: compactPosCode || '0'
         };
     }
 
@@ -178,11 +311,17 @@ export function useMapState(mapInstance, options = {}) {
         const currentLat = String(readQueryValue('lat') ?? '');
         const currentZoom = String(readQueryValue('z') ?? '');
         const currentLayer = String(readQueryValue('l') ?? readQueryValue('layer') ?? '');
+        const currentShareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
+        const currentLocateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
+        const currentPosCode = String(readQueryValue('p') ?? '0');
 
         return currentLng === String(nextQuery.lng ?? '')
             && currentLat === String(nextQuery.lat ?? '')
             && currentZoom === String(nextQuery.z ?? '')
-            && currentLayer === String(nextQuery.l ?? '');
+            && currentLayer === String(nextQuery.l ?? '')
+            && currentShareFlag === String(nextQuery.s ?? '0')
+            && currentLocateFlag === String(nextQuery.loc ?? '0')
+            && currentPosCode === String(nextQuery.p ?? '0');
     }
 
     /**
@@ -191,13 +330,36 @@ export function useMapState(mapInstance, options = {}) {
      * @private
      */
     function replaceUrlQuery(nextQuery) {
-        if (!nextQuery?.lng || !nextQuery?.lat || !nextQuery?.z || !nextQuery?.l) return;
+        if (
+            !nextQuery?.lng
+            || !nextQuery?.lat
+            || !nextQuery?.z
+            || !nextQuery?.l
+            || !nextQuery?.s
+            || !nextQuery?.loc
+            || !nextQuery?.p
+        ) return;
+
+        const mergedQuery = {
+            ...getCurrentQuerySnapshot(),
+            ...nextQuery
+        };
+
+        Object.keys(mergedQuery).forEach((key) => {
+            const value = mergedQuery[key];
+            if (value === undefined || value === null || value === '') {
+                delete mergedQuery[key];
+                return;
+            }
+            mergedQuery[key] = String(value);
+        });
+
         if (isSameQuery(nextQuery)) return;
 
         if (router && route) {
             void router.replace({
                 path: route.path || '/home',
-                query: nextQuery
+                query: mergedQuery
             }).catch(() => {});
             return;
         }
@@ -205,9 +367,31 @@ export function useMapState(mapInstance, options = {}) {
         if (typeof window === 'undefined') return;
 
         const hashPath = String(window.location.hash || '#/home').split('?')[0] || '#/home';
-        const params = new URLSearchParams(nextQuery);
+        const params = new URLSearchParams(mergedQuery);
         const nextUrl = `${window.location.pathname}${window.location.search}${hashPath}?${params.toString()}`;
         window.location.replace(nextUrl);
+    }
+
+    /**
+     * 监听全局定位上下文变化，触发 URL 中 p 参数同步
+     * @private
+     */
+    function bindLocationContextSync() {
+        if (typeof window === 'undefined' || locationContextChangeHandler) return;
+        locationContextChangeHandler = () => {
+            debouncedSyncUrlFromMap();
+        };
+        window.addEventListener(USER_LOCATION_CONTEXT_CHANGE_EVENT, locationContextChangeHandler);
+    }
+
+    /**
+     * 停止全局定位上下文监听
+     * @private
+     */
+    function stopLocationContextSync() {
+        if (typeof window === 'undefined' || !locationContextChangeHandler) return;
+        window.removeEventListener(USER_LOCATION_CONTEXT_CHANGE_EVENT, locationContextChangeHandler);
+        locationContextChangeHandler = null;
     }
 
     /**
@@ -236,6 +420,7 @@ export function useMapState(mapInstance, options = {}) {
     function bindMapViewSync() {
         const map = mapInstance?.value;
         if (!map || moveEndKey) return;
+        bindLocationContextSync();
         moveEndKey = map.on('moveend', () => {
             debouncedSyncUrlFromMap();
         });
@@ -249,6 +434,7 @@ export function useMapState(mapInstance, options = {}) {
         unByKey(moveEndKey);
         moveEndKey = null;
         debouncedSyncUrlFromMap.cancel();
+        stopLocationContextSync();
     }
 
     /**
@@ -326,6 +512,105 @@ export function useMapState(mapInstance, options = {}) {
      */
     function updateMapView(params = {}) {
         flyToView(params);
+    }
+
+    /**
+     * 地址定位：地址解析 -> 地图动画定位
+     * @param {string} address - 地址文本
+     * @param {Object} [options={}] - 可选参数
+     * @param {string} [options.city=''] - 城市限定
+     * @param {number} [options.zoom=16] - 动画缩放级别
+     * @param {number} [options.duration=flyDuration] - 动画时长（毫秒）
+     * @returns {Promise<null|{lng:number,lat:number,adcode:string,level:string,formattedAddress:string}>}
+     */
+    async function locateAddress(address, {
+        city = '',
+        zoom = 16,
+        duration = flyDuration
+    } = {}) {
+        const normalizedAddress = String(address || '').trim();
+        if (!normalizedAddress) return null;
+
+        const map = mapInstance?.value;
+        const view = map?.getView?.();
+        if (!map || !view) return null;
+
+        const result = await addressToLocation(normalizedAddress, city);
+        if (!result) return null;
+
+        const targetZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 16;
+        const targetDuration = Number(duration) > 0 ? Number(duration) : flyDuration;
+        view.animate({
+            center: fromLonLat([result.lng, result.lat]),
+            zoom: targetZoom,
+            duration: targetDuration
+        });
+
+        return result;
+    }
+
+    /**
+     * 按经纬度范围缩放地图视图
+     * @param {number[]} extentLonLat - [minLng, minLat, maxLng, maxLat]
+     * @param {Object} [options={}] - 缩放配置
+     * @param {number} [options.duration=flyDuration] - 动画时长（毫秒）
+     * @param {number[]} [options.padding=[80,80,80,80]] - 视图边距
+     * @param {number} [options.maxZoom=11] - 最大缩放级别
+     * @returns {boolean} 是否执行成功
+     */
+    function fitToLonLatExtent(extentLonLat, {
+        duration = flyDuration,
+        padding = [80, 80, 80, 80],
+        maxZoom = 11
+    } = {}) {
+        const map = mapInstance?.value;
+        const view = map?.getView?.();
+        if (!map || !view || !Array.isArray(extentLonLat) || extentLonLat.length < 4) {
+            return false;
+        }
+
+        const values = extentLonLat.slice(0, 4).map((item) => Number(item));
+        if (!values.every((item) => Number.isFinite(item))) {
+            return false;
+        }
+
+        const minLng = Math.min(values[0], values[2]);
+        const minLat = Math.min(values[1], values[3]);
+        const maxLng = Math.max(values[0], values[2]);
+        const maxLat = Math.max(values[1], values[3]);
+
+        const lowerLeft = fromLonLat([minLng, minLat]);
+        const upperRight = fromLonLat([maxLng, maxLat]);
+        const extent = [
+            Math.min(lowerLeft[0], upperRight[0]),
+            Math.min(lowerLeft[1], upperRight[1]),
+            Math.max(lowerLeft[0], upperRight[0]),
+            Math.max(lowerLeft[1], upperRight[1])
+        ];
+
+        if (!extent.every((item) => Number.isFinite(item))) {
+            return false;
+        }
+
+        const width = Math.abs(extent[2] - extent[0]);
+        const height = Math.abs(extent[3] - extent[1]);
+        const normalizedDuration = Number(duration) > 0 ? Number(duration) : flyDuration;
+        const normalizedPadding = Array.isArray(padding) && padding.length === 4 ? padding : [80, 80, 80, 80];
+        const normalizedMaxZoom = Number.isFinite(Number(maxZoom)) ? Number(maxZoom) : 11;
+
+        if (width < 1e-6 || height < 1e-6) {
+            const center = fromLonLat([(minLng + maxLng) / 2, (minLat + maxLat) / 2]);
+            view.animate({ center, zoom: normalizedMaxZoom, duration: normalizedDuration });
+            return true;
+        }
+
+        view.fit(extent, {
+            duration: normalizedDuration,
+            padding: normalizedPadding,
+            maxZoom: normalizedMaxZoom
+        });
+
+        return true;
     }
 
     /**
@@ -665,6 +950,7 @@ export function useMapState(mapInstance, options = {}) {
 
     onUnmounted(() => {
         stopMapViewSync();
+        stopLocationContextSync();
         stopGraticule();
     });
 
@@ -672,6 +958,8 @@ export function useMapState(mapInstance, options = {}) {
         parseUrlToState,
         flyToView,
         updateMapView,
+        locateAddress,
+        fitToLonLatExtent,
         syncUrlFromMap,
         bindMapViewSync,
         stopMapViewSync,

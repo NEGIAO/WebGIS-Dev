@@ -5,7 +5,7 @@
 
 基于 Vue 3 + Vite + OpenLayers 构建的 WebGIS 项目，历经多次优化迭代，现已发展成为一个功能丰富、架构清晰的WebGIS平台。项目采用模块化组件设计，集成了 AI 助手、三维地球、Cesium电影级视觉效果、丰富多样的底图、鹰眼视图、实时坐标显示、视角 URL 同步、图层管理、矢量、栅格数据导入、矢量数据导出为txt\csv\geojson格式、WGS-84坐标与GCJ-02坐标系一键转换等多项核心功能，满足了从基础地图浏览到数据管理的多样化需求，未来将逐步扩展空间分析等诸多高级功能，坚持每日更新迭代。
 
-> 本项目最初为大二下学期课程作业，开发周期为 5 月 28 日至 6 月 13 日。交付后曾暂时搁置，直至 11 月 28 日在专业知识与实践经验积累之下，再次启动并持续迭代优化，至今（文档撰写日期）已达到 V2.8.0 版本，实用性和美观度均有显著提升。
+> 本项目最初为大二下学期课程作业，开发周期为 5 月 28 日至 6 月 13 日。交付后曾暂时搁置，直至 11 月 28 日在专业知识与实践经验积累之下，再次启动并持续迭代优化，至今（文档撰写日期）已达到 V2.8.5 版本，实用性和美观度均有显著提升。
 
 ## 主要特性
 
@@ -48,6 +48,7 @@ cp .env.example .env
 | 变量名 | 说明 | 必填 |
 |--------|------|------|
 | `VITE_TIANDITU_TK` | 天地图 API Token，[申请地址](https://console.tianditu.gov.cn/) | 推荐 |
+| `VITE_AMAP_WEB_SERVICE_KEY` | 高德 Web 服务 Key（地理编码、逆地理编码、IP定位），[申请地址](https://lbs.amap.com/) | 推荐 |
 | `VITE_LLM_API_KEY` | AI 助手 API Key，[申请地址](https://cloud.siliconflow.cn/) | 推荐 |
 | `VITE_LLM_ENDPOINT` | LLM API 端点 (默认 SiliconFlow) | 可选 |
 | `VITE_LLM_MODEL` | LLM 模型名称 (默认 DeepSeek-V2.5) | 可选 |
@@ -79,8 +80,10 @@ WebGIS_Dev/
 │   ├── App.vue                         # 根组件，承载 RouterView 输出
 │   ├── main.js                         # Vue 应用启动入口，挂载 Pinia、Router 与全局消息宿主
 │   ├── api/
+│   │   ├── geocoding.js                # 地理编码能力中心（高德优先，天地图兜底，地址<->坐标）
+│   │   ├── ipLocation.js               # 高德 IP 定位封装（城市范围、归一化结构）
 │   │   ├── locationSearch.js           # [路由/网络封装] 3种服务地名检索封装与结果标准化
-│   │   └── map.js                      # [天地图 API] 天地图/高德检索与逆地理编码请求封装
+│   │   └── map.js                      # API 聚合导出与检索请求封装（兼容旧调用入口）
 │   ├── components/
 │   │   ├── AttributeTable.vue          # 属性表组件：要素属性展示、分页、搜索与地图交互（高亮/定位）
 │   │   ├── BusPlannerPanel.vue         # 公交路径规划组件：交互设置起终点、调用天地图 API、结果展示与地图交互
@@ -98,9 +101,9 @@ WebGIS_Dev/
 │   │   ├── MapPointPickerCard.vue      # 地图起终点拾取（供路径规划使用）
 │   │   ├── Message.vue                 # 消息通知组件（灵动岛效果）
 │   │   ├── SidePanel.vue               # 右侧总控容器（资讯/LLM/TOC/公交/驾车规划）
-│   │   ├── TOCPanel.vue                # TOC图层管理与控制面板：图层树、右键菜单、标注信息、拖拽排序、坐标切换
+│   │   ├── TOCPanel.vue                # TOC图层管理与控制面板：图层树、坐标绘制、p参数解码绘制、地理编码/逆编码工具
 │   │   ├── TOCTreeItem.vue             # 递归树节点组件：右键菜单、悬停按钮、级联可见性、Teleport 固定菜单
-│   │   ├── TopBar.vue                  # 顶部菜单栏：TOC、分享地点、分享视图URL、
+│   │   ├── TopBar.vue                  # 顶部菜单栏：TOC、分享地点、分享视图URL（分享链接强制 p=0）
 │   │   └── icons/
 │   │       ├── IconCommunity.vue       # 社区入口图标组件(未启用)
 │   │       ├── IconDocumentation.vue   # 文档入口图标组件(未启用)
@@ -167,6 +170,7 @@ WebGIS_Dev/
 │   │   ├── HomeView.vue                # 主页面布局、事件中枢
 │   │   └── RegisterView.vue            # 登录页面
 │   ├── utils/
+|   |   ├── amapRectangle.js            # 高德 IP rectangle 字符串转 extent 工具
 |   |   ├── coordinateFormatter.js      # 坐标显示与输入解析工具，支持多格式显示与智能输入识别
 |   |   ├── layerExportService.js       # 矢量数据导出服务，支持 CSV/TXT/GeoJSON 格式，自动附带 UTF-8 BOM 提升兼容性
 │   │   ├── coordTransform.js           # [坐标转换] 常见坐标系经纬度转换与纠偏工具
@@ -176,6 +180,8 @@ WebGIS_Dev/
 │   │   ├── driveXmlParser.ts           # [文件解析] 天地图驾车 XML 结果解析器
 │   │   ├── loadTiandituSdk.js          # [天地图 API] 天地图 SDK 按需加载与注入守卫
 │   │   ├── transitRouteBuilder.js      # [通用工具] 公交/驾车结果到地图要素的构建工具
+│   │   ├── urlCrypto.js                # 极简坐标 URL 编解码库（p 参数）
+│   │   ├── userLocationContext.js      # 全局定位上下文存储与变更事件
 │   │   ├── userPositionCache.js        # [通用工具] 用户定位结果缓存与读取策略
 │   │   ├── labelValidator.ts           # [验证工具] 标注内容有效性判断，支持乱码/无意义值过滤
 │   │   └── gis/
@@ -241,6 +247,28 @@ WebGIS_Dev/
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
 ## 版本记录
+
+### V2.8.5 (2026-04-15)
+#### 🌐 多源地理服务 API 深度集成
+* **统一 API 封装库**：新增 `src/api/geocoding.js` 与 `src/api/ipLocation.js`，深度集成 **高德 (AMap)** 与 **天地图 (Tianditu)** 双引擎。
+    * **地理/逆地理编码**：支持结构化地址与经纬度双向转换，内置 WGS-84 (天地图) 与 GCJ-02 (高德) 坐标纠偏逻辑。
+    * **IP 定位服务**：实现基于 IPv4 的城市级定位，支持获取行政区划编码（adcode）及城市矩形外包框（Rectangle）。
+
+#### 🔐 URL 参数体系架构升级
+* **新增三位一体参数协议**：
+    * **`s` (Share ID)**：链接共享标识符，用于追踪分享来源与特定的业务会话上下文。
+    * **`loc` (Location Status)**：用户实时定位标识，记录用户当前的定位授权状态。
+    * **`p` (Private Encoded Data)**：加密地理位置参数。默认值为 `0`，用于存放基于 Base62 算法加密的短码信息。
+
+#### 🧪 坐标加解密与隐私安全
+* **可逆混淆算法**：于 `src/utils/urlCrypto.js` 中实现基于位封包（Bit-packing）与自定义 Base62 字符集的加解密逻辑。
+* **信息保护**：将敏感的高精度信息浮点数转换为 8-10 位的混淆短串，非对称逻辑确保分享链接中的地理隐私安全。
+* **参数绘制增强**：在坐标绘制面板新增 `p` 参数解析接口，实现“短码输入 -> 解码落图 -> 自动逆编码 -> 属性归档”的一键化链路。
+
+#### 🛠️ 交互逻辑与绘图引擎优化
+* **地理编码交互工具栏**：在绘制 Tab 中新增专属功能面板：
+    * **地理编码（地址落图）**：支持模糊地址检索，自动解析坐标并加入 TOC 图层管理，原始地址自动同步为点位标注。
+    * **逆地理编码（拾点识地）**：激活拾点模式后，
 
 ### V2.8.4 (2026-04-11)
 #### 🧩 结构优化复盘 + MapContainer 解耦（Phase 18-25）

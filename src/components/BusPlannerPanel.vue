@@ -12,6 +12,8 @@
             :pick-mode="pickMode"
             :start-point="startPoint"
             :end-point="endPoint"
+            :start-address="startAddress"
+            :end-address="endAddress"
             theme="bus"
             start-label="设置起点"
             end-label="设置终点"
@@ -116,6 +118,7 @@
 import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { useMessage } from '../composables/useMessage';
+import { locationToAddress } from '../api/geocoding';
 
 const message = useMessage();
 
@@ -191,6 +194,8 @@ const errorMsg = ref('');
 const pickMode = ref<'start' | 'end' | ''>('');
 const startPoint = ref<{ lng: number; lat: number } | undefined>(undefined);
 const endPoint = ref<{ lng: number; lat: number } | undefined>(undefined);
+const startAddress = ref('');
+const endAddress = ref('');
 const lineType = ref('1');
 const planning = ref(false);
 const routes = ref<RouteCandidate[]>([]);
@@ -317,6 +322,22 @@ async function enablePick(type: 'start' | 'end') {
             startPoint.value = point;
         } else {
             endPoint.value = point;
+        }
+
+        try {
+            const reverse = await locationToAddress(point.lng, point.lat, 'base');
+            const label = String(reverse?.formattedAddress || '').trim();
+            if (type === 'start') {
+                startAddress.value = label;
+            } else {
+                endAddress.value = label;
+            }
+        } catch {
+            if (type === 'start') {
+                startAddress.value = '';
+            } else {
+                endAddress.value = '';
+            }
         }
     } catch (err: any) {
         errorMsg.value = err?.message || '地图选点失败';

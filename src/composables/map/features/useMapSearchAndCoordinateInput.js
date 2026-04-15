@@ -79,7 +79,15 @@ export function createMapSearchAndCoordinateInputFeature({
     /**
      * 手动坐标绘制
      * 接收输入经纬度（WGS-84 / GCJ-02），落图并自动飞行到目标点
-     * @param {Object} payload - 坐标输入 { lng, lat, crsType, displayName }
+        * @param {Object} payload - 坐标输入
+        * @param {number|string} payload.lng
+        * @param {number|string} payload.lat
+        * @param {'wgs84'|'gcj02'} [payload.crsType='wgs84']
+        * @param {string} [payload.displayName] 输入名称
+        * @param {string} [payload.label] 点位标注名称
+        * @param {string} [payload.layerName] 图层名称
+        * @param {number} [payload.zoom] 动画缩放级别
+        * @param {Object} [payload.properties] 额外属性（会并入 Feature 属性）
      */
     function drawPointByCoordinatesInput(payload) {
         if (!mapInstanceRef.value || !payload) return;
@@ -110,37 +118,61 @@ export function createMapSearchAndCoordinateInputFeature({
         }
 
         const mapCoord = fromLonLat([mapLng, mapLat]);
-        const displayName = String(payload.displayName || `输入点_${rawLng.toFixed(6)}_${rawLat.toFixed(6)}`);
+        const displayName = String(payload.displayName || `输入点_${rawLng.toFixed(6)}_${rawLat.toFixed(6)}`).trim();
+        const labelName = String(payload.label || displayName || '').trim() || displayName;
+        const layerName = String(payload.layerName || labelName || displayName).trim() || displayName;
+        const labelField = String(payload.labelField || '名称').trim() || '名称';
+        const shouldAutoLabel = payload.autoLabel !== false;
+        const extraProperties = payload?.properties && typeof payload.properties === 'object'
+            ? { ...payload.properties }
+            : {};
 
-        const pointFeature = new Feature({
+        delete extraProperties.geometry;
+        delete extraProperties.style;
+
+        const pointProperties = {
             geometry: new Point(mapCoord),
             type: 'Point',
-            名称: displayName,
+            名称: labelName,
+            输入名称: displayName,
             经度: Number(rawLng.toFixed(6)),
             纬度: Number(rawLat.toFixed(6)),
-            坐标系: crsType
-        });
+            坐标系: crsType,
+            解析后经度: Number(mapLng.toFixed(6)),
+            解析后纬度: Number(mapLat.toFixed(6)),
+            ...extraProperties
+        };
+
+        const labelFieldValue = pointProperties[labelField];
+        if (labelFieldValue === null || labelFieldValue === undefined || String(labelFieldValue).trim() === '') {
+            pointProperties[labelField] = labelName;
+        }
+
+        const pointFeature = new Feature(pointProperties);
 
         createManagedVectorLayer?.({
-            name: displayName,
+            name: layerName,
             type: 'Point',
             sourceType: 'draw',
             features: [pointFeature],
+            autoLabel: shouldAutoLabel,
             metadata: {
                 longitude: Number(rawLng.toFixed(6)),
                 latitude: Number(rawLat.toFixed(6)),
-                crs: crsType
+                crs: crsType,
+                labelField
             },
             fitView: false
         });
 
+        const targetZoom = Number(payload.zoom);
         mapInstanceRef.value?.getView()?.animate?.({
             center: mapCoord,
-            zoom: 16,
+            zoom: Number.isFinite(targetZoom) && targetZoom > 0 ? targetZoom : 16,
             duration: 700
         });
 
-        message.success?.(`已绘制点位：${displayName}`);
+        message.success?.(`已绘制点位：${layerName}`);
     }
 
     return {

@@ -104,6 +104,7 @@ import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
+import { reverseGeocodeByPriority } from '../api/geocoding';
 import { useAttrStore } from '../stores';
 
 const message = useMessage();
@@ -138,7 +139,10 @@ import {
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 }; //初始位置
-const AMAP_WEB_SERVICE_KEY = '3e6d96476b807126acbc59384aa13e51'; //高德 Web 服务 Key
+const AMAP_WEB_SERVICE_KEY = import.meta.env.VITE_AMAP_WEB_SERVICE_KEY || '3e6d96476b807126acbc59384aa13e51'; //高德 Web 服务 Key
+if (typeof window !== 'undefined') {
+    window.__AMAP_WEB_SERVICE_KEY__ = AMAP_WEB_SERVICE_KEY;
+}
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 
 // 天地图 Token：优先使用环境变量，否则使用默认值
@@ -166,6 +170,60 @@ const currentZoom = ref(17); // 当前缩放级别
 const currentCoordinate = ref(null);
 
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
+let fitToLonLatExtentByMapState = () => false;
+
+function normalizeBinaryFlag(value, fallback = '0') {
+    const compact = String(value ?? '').trim().toLowerCase();
+    if (compact === '1' || compact === 'true') return '1';
+    if (compact === '0' || compact === 'false') return '0';
+    return fallback === '1' ? '1' : '0';
+}
+
+function parseSharedEntryFlagFromUrl() {
+    if (typeof window === 'undefined') return false;
+
+    const hash = String(window.location.hash || '');
+    const queryStart = hash.indexOf('?');
+    const hashParams = queryStart >= 0
+        ? new URLSearchParams(hash.slice(queryStart + 1))
+        : new URLSearchParams();
+
+    const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+    const shareFlagRaw = hashParams.get('s') ?? searchParams.get('s');
+    if (shareFlagRaw !== null && String(shareFlagRaw).trim() !== '') {
+        return normalizeBinaryFlag(shareFlagRaw, '0') === '1';
+    }
+
+    // 兼容旧版分享链接。
+    const legacyMarker = String(
+        hashParams.get('from')
+        || hashParams.get('shared')
+        || searchParams.get('from')
+        || searchParams.get('shared')
+        || ''
+    ).trim().toLowerCase();
+
+    return legacyMarker === 'share' || legacyMarker === 'shared' || legacyMarker === '1' || legacyMarker === 'true';
+}
+
+// 启动问候地址解析：高德优先，天地图兜底。
+async function resolveSharedAddressByLonLat(lng, lat) {
+    const lon = Number(lng);
+    const latitude = Number(lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(latitude)) return '';
+
+    try {
+        const geocodeResult = await reverseGeocodeByPriority(lon, latitude, {
+            tiandituTk: TIANDITU_TK,
+            tiandituTimeout: 3500,
+            silent: true
+        });
+        return String(geocodeResult?.formattedAddress || '').trim();
+    } catch {
+        // 逆地理编码失败不阻断启动流程，回退到通用欢迎语。
+        return '';
+    }
+}
 
 let searchSource, searchLayer;
 
@@ -210,6 +268,7 @@ const {
 // --- 全局变量 (非响应式) ---
 const componentUnmountedRef = ref(false);
 const pendingBusPickRef = ref(null);
+const pendingReverseGeocodePickRef = ref(null);
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
@@ -235,15 +294,14 @@ const emit = defineEmits([
 ]);
 
 const {
-    isCoordinateInChina,
     detectIPLocale,
     getCurrentLocation,
-    zoomToUser,
-    updateUserPosition
+    zoomToUser
 } = useUserLocation({
     mapInstance,
     userLocationSource,
-    isDomestic
+    isDomestic,
+    fitToLonLatExtent: (...args) => fitToLonLatExtentByMapState(...args)
 });
 
 // 注：handleEasterEggImageOpen, handleEasterEggLocationChange, 等函数现在由 createMapUIEventHandlers 提供
@@ -514,6 +572,7 @@ const {
     tooltipRef,
     syncAttributeTableMapExtent,
     pendingBusPickRef,
+    pendingReverseGeocodePickRef,
     busPickSource
 });
 
@@ -553,6 +612,8 @@ const styles = createMapStylesObject();
 const {
     parseUrlToState,
     flyToView,
+    locateAddress,
+    fitToLonLatExtent,
     syncUrlFromMap,
     bindMapViewSync,
     stopMapViewSync,
@@ -574,6 +635,8 @@ const {
         selectedLayer.value = layerId;
     }
 });
+
+fitToLonLatExtentByMapState = (...args) => fitToLonLatExtent(...args);
 
 const {
     bindBasemapSelectionWatcher
@@ -655,16 +718,19 @@ onMounted(async () => {
 
 // [隶属] 启动流程-首屏优化
 // [作用] 在首屏完成后执行非关键任务（主机测速、定位兜底）。
-// [交互] 调用 resolvePreferredGoogleHost / getCurrentLocation / detectIPLocale。
+// [交互] 调用 resolvePreferredGoogleHost / zoomToUser / detectIPLocale。
 async function runDeferredStartupTasks() {
     if (componentUnmountedRef.value) return;
 
     const routeViewState = parseUrlToState();
-    if (Number.isFinite(routeViewState?.lng) && Number.isFinite(routeViewState?.lat)) {
-        message.success(`欢迎来到NEGIAO分享的地点${routeViewState.lng.toFixed(6)},${routeViewState.lat.toFixed(6)}，正在加载地图...`, { duration: 2000 });
-        message.soup();
+    if (parseSharedEntryFlagFromUrl()) {
+        const shareAddress = await resolveSharedAddressByLonLat(routeViewState?.lng, routeViewState?.lat);
+        message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
+        message.soup();//鸡汤问候
         return;
     }
+
+    message.success('欢迎使用NEGIAO的WebGIS!', { duration: 3000 });
 
     // 1) Google 主机测速切换（非关键，延后执行）。
     resolvePreferredGoogleHost().then((host) => {
@@ -674,23 +740,14 @@ async function runDeferredStartupTasks() {
         refreshGoogleLayerSources();
     }).catch(() => {});
 
-    // 2) 位置相关逻辑（非关键，延后执行）。
-    // 优先使用浏览器真实定位；IP 仅用于国内外判定兜底，不再用于地图中心定位。
-    if (navigator.geolocation) {
-        try {
-            const pos = await getCurrentLocation(true);
-            if (componentUnmountedRef.value) return;
-            updateUserPosition(pos, true);
+    // 2) 非分享进入：主动执行“定位按钮”同款逻辑（GPS + IP 精度择优）。
+    const locatedResult = await zoomToUser();
+    if (componentUnmountedRef.value) return;
 
-            // 有真实坐标时，可直接基于坐标更新国内外判定，避免依赖第三方 IP 误差。
-            isDomestic.value = isCoordinateInChina(pos.lon, pos.lat);
-            return;
-        } catch (e) {
-            // 定位失败后再使用 IP 做兜底判定。
-        }
+    // 若主动定位完全失败，则仅补一次国内外判定，避免状态缺失。
+    if (!locatedResult) {
+        await detectIPLocale();
     }
-
-    await detectIPLocale();
 }
 
 
@@ -708,6 +765,10 @@ onUnmounted(() => {
     if (pendingBusPickRef.value?.reject) {
         pendingBusPickRef.value.reject(new Error('地图已卸载'));
         pendingBusPickRef.value = null;
+    }
+    if (pendingReverseGeocodePickRef.value?.reject) {
+        pendingReverseGeocodePickRef.value.reject(new Error('地图已卸载'));
+        pendingReverseGeocodePickRef.value = null;
     }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
@@ -936,6 +997,11 @@ function startBusPointPick(type) {
         return Promise.reject(new Error('地图尚未初始化'));
     }
 
+    if (pendingReverseGeocodePickRef.value?.reject) {
+        pendingReverseGeocodePickRef.value.reject(new Error('逆地理编码选点已取消'));
+        pendingReverseGeocodePickRef.value = null;
+    }
+
     const pickType = type === 'end' ? 'end' : 'start';
 
     if (pendingBusPickRef.value?.reject) {
@@ -945,6 +1011,73 @@ function startBusPointPick(type) {
     return new Promise((resolve, reject) => {
         pendingBusPickRef.value = { type: pickType, resolve, reject };
     });
+}
+
+// [隶属] 组件交互-逆地理编码选点
+// [作用] 启动地图点选 Promise，用于单击拾点后执行逆地理编码落图。
+function startReverseGeocodePick() {
+    if (!mapInstance.value) {
+        return Promise.reject(new Error('地图尚未初始化'));
+    }
+
+    if (pendingReverseGeocodePickRef.value?.reject) {
+        pendingReverseGeocodePickRef.value.reject(new Error('上一次逆地理编码选点已取消'));
+    }
+
+    return new Promise((resolve, reject) => {
+        pendingReverseGeocodePickRef.value = { resolve, reject };
+    });
+}
+
+async function startReverseGeocodePickAndDraw() {
+    const picked = await startReverseGeocodePick();
+    if (!picked || !Number.isFinite(picked.lng) || !Number.isFinite(picked.lat)) {
+        throw new Error('逆地理编码选点失败，请重试');
+    }
+
+    let reverseResult = null;
+    try {
+        reverseResult = await reverseGeocodeByPriority(picked.lng, picked.lat, {
+            tiandituTk: TIANDITU_TK,
+            silent: true
+        });
+    } catch {
+        reverseResult = null;
+    }
+
+    const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
+    const layerName = formattedAddress || `逆编码点_${picked.lng.toFixed(6)}_${picked.lat.toFixed(6)}`;
+    const businessAreaText = Array.isArray(reverseResult?.businessAreas)
+        ? reverseResult.businessAreas
+            .map((item) => String(item?.name || '').trim())
+            .filter(Boolean)
+            .join('、')
+        : '';
+
+    drawPointByCoordinatesInput({
+        lng: picked.lng,
+        lat: picked.lat,
+        crsType: 'wgs84',
+        displayName: layerName,
+        label: layerName,
+        layerName,
+        properties: {
+            来源: '地图逆地理编码拾点',
+            逆地理编码地址: formattedAddress || '未解析',
+            逆地理编码省: String(reverseResult?.province || '').trim() || '未知',
+            逆地理编码市: String(reverseResult?.city || '').trim() || '未知',
+            逆地理编码区县: String(reverseResult?.district || '').trim() || '未知',
+            逆地理编码乡镇: String(reverseResult?.township || '').trim() || '未知',
+            逆地理编码商圈: businessAreaText || '无',
+            逆地理编码服务: String(reverseResult?.provider || '').trim() || 'unknown'
+        }
+    });
+
+    if (formattedAddress) {
+        message.success(`逆地理编码成功：${formattedAddress}`);
+    } else {
+        message.warning('逆地理编码未返回地址，已按坐标绘制点位。');
+    }
 }
 
 // [隶属] 组件交互-图层坐标导出
@@ -1007,6 +1140,11 @@ function activateInteraction(type) {
     clearDrawMeasureInteractions();
     if (!mapInstance.value) return;
 
+    if (type !== 'ReverseGeocodePick' && pendingReverseGeocodePickRef.value?.reject) {
+        pendingReverseGeocodePickRef.value.reject(new Error('逆地理编码选点已取消'));
+        pendingReverseGeocodePickRef.value = null;
+    }
+
     if (type === 'AttributeQuery') {
         isAttributeQueryEnabled.value = true;
         return;
@@ -1014,6 +1152,19 @@ function activateInteraction(type) {
 
     if (type === 'CloseTools') {
         isAttributeQueryEnabled.value = false;
+        return;
+    }
+
+    if (type === 'ReverseGeocodePick') {
+        message.info('请在地图上单击一个点，系统将自动逆地理编码并绘制。', {
+            closable: true,
+            duration: 4500
+        });
+        startReverseGeocodePickAndDraw().catch((error) => {
+            const detail = error instanceof Error ? error.message : '未知错误';
+            if (/(取消|cancel)/i.test(detail)) return;
+            message.warning(`逆地理编码选点未完成：${detail}`);
+        });
         return;
     }
 
@@ -1059,6 +1210,7 @@ exportLayerCoordinates = (payload) => {
 // [交互] HomeView 等父组件通过 ref 调用这些方法。
 defineExpose({
     updateViewByParams,
+    locateAddress,
     addUserDataLayer,
     activateInteraction,
     clearInteractions,

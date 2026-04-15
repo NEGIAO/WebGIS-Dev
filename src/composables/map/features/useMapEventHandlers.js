@@ -20,6 +20,7 @@
  * - tooltipRef: 提示工具对象 { helpTooltipEl, helpTooltipOverlay }
  * - syncAttributeTableMapExtent: 属性表范围同步函数
  * - pendingBusPickRef: 待处理的公交选点 ref
+ * - pendingReverseGeocodePickRef: 待处理的逆地理编码选点 ref
  * - busPickSource: 公交选点图层的 VectorSource
  */
 
@@ -40,6 +41,7 @@ export function createMapEventHandlers({
     tooltipRef,
     syncAttributeTableMapExtent,
     pendingBusPickRef,
+    pendingReverseGeocodePickRef,
     busPickSource
 }) {
     /**
@@ -117,6 +119,18 @@ export function createMapEventHandlers({
                     lat: Number(lonLat[1].toFixed(6))
                 });
                 pendingBusPickRef.value = null;
+                return;
+            }
+
+            // 1.1 逆地理编码拾点处理
+            const pendingReverseGeocodePick = pendingReverseGeocodePickRef?.value;
+            if (pendingReverseGeocodePick) {
+                const lonLat = toLonLat(evt.coordinate);
+                pendingReverseGeocodePick.resolve({
+                    lng: Number(lonLat[0].toFixed(6)),
+                    lat: Number(lonLat[1].toFixed(6))
+                });
+                pendingReverseGeocodePickRef.value = null;
                 return;
             }
 
