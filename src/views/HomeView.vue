@@ -10,9 +10,10 @@
  */
 import { ref, reactive, defineAsyncComponent, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore } from '../stores';
+import { useAttrStore, useWeatherStore } from '../stores';
 const message = useMessage();
 const attrStore = useAttrStore();
+const weatherStore = useWeatherStore();
 
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
@@ -51,6 +52,33 @@ const SidePanel = defineAsyncComponent({
     }
 });
 
+const WeatherChartPanelLoading = {
+    name: 'WeatherChartPanelLoading',
+    render() {
+        return h('div', { class: 'weather-loading-state' }, [
+            h('div', { class: 'weather-loading-spinner' }),
+            h('span', { class: 'weather-loading-text' }, '天气看板资源加载中...')
+        ]);
+    }
+};
+
+const WeatherChartPanel = defineAsyncComponent({
+    loader: () => import('../components/WeatherChartPanel.vue'),
+    loadingComponent: WeatherChartPanelLoading,
+    delay: 0,
+    timeout: 15000,
+    onError(error, retry, fail, attempts) {
+        const text = String(error?.message || error || '');
+        const isStaleOptimizeDep = text.includes('Outdated Optimize Dep') || text.includes('Failed to fetch dynamically imported module');
+        if (isStaleOptimizeDep && attempts <= 1) {
+            retry();
+            return;
+        }
+        message.error('天气看板加载失败，请刷新页面后重试。');
+        fail(error);
+    }
+});
+
 // ========== 2. 响应式状态 ==========
 // 地图位置信息
 const locationInfo = reactive({
@@ -64,6 +92,8 @@ const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
+const isWeatherBoardMode = ref(false);
+const shouldLoadWeatherChartPanel = ref(false);
 const isMagicMode = ref(false);
 const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
@@ -88,6 +118,28 @@ let sidePanelWarmupIdleId = null;
 /** 地图位置变化处理 */
 function handleLocationChange(locationData) {
     Object.assign(locationInfo, locationData);
+
+    const lon = Number(locationData?.lon);
+    const lat = Number(locationData?.lat);
+    if (Number.isFinite(lon) && Number.isFinite(lat)) {
+        weatherStore.setMapPointTrigger({
+            lon,
+            lat,
+            source: String(locationData?.source || 'location-change')
+        });
+    }
+}
+
+function handleMapClick(locationData) {
+    const lon = Number(locationData?.lon);
+    const lat = Number(locationData?.lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+
+    weatherStore.setMapPointTrigger({
+        lon,
+        lat,
+        source: String(locationData?.source || 'map-click')
+    });
 }
 
 /** 更新新闻图片 */
@@ -220,8 +272,29 @@ function handleCloseChat() {
     activeFeature.value = { key: 'info', label: '新闻' };
 }
 
+function toggleWeatherBoardMode() {
+    const openingWeather = !isWeatherBoardMode.value;
+
+    if (openingWeather && !shouldLoadWeatherChartPanel.value) {
+        shouldLoadWeatherChartPanel.value = true;
+    }
+
+    isWeatherBoardMode.value = openingWeather;
+
+    if (openingWeather) {
+        is3DMode.value = false;
+        activeFeature.value = { key: 'weather-board', label: '天气看板' };
+    } else {
+        activeFeature.value = { key: 'map', label: '地图视图' };
+    }
+}
+
 /** 切换 2D/3D 视图 */
 async function toggle3D() {
+    if (isWeatherBoardMode.value) {
+        isWeatherBoardMode.value = false;
+    }
+
     if (is3DMode.value) {
         is3DMode.value = false;
         return;
@@ -408,19 +481,21 @@ onUnmounted(() => {
         <!-- 顶部控制栏 -->
         <div class="top-section">
             <TopBar
+                :is-weather-board-mode="isWeatherBoardMode"
                 @activate-magic="handleActivateMagic"
                 @toggle-3d="toggle3D"
                 @open-chat="openChat"
                 @open-toolbox="openToolbox"
                 @open-bus="openBusPlanner"
                 @open-drive="openDrivePlanner"
+                @toggle-weather-board="toggleWeatherBoardMode"
                 @activate-feature="handleActivateFeature"
                 @jump-view="handleTopBarJumpView"
             />
         </div>
 
         <div class="content-section">
-            <div class="map-wrapper">
+            <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode }">
                 <!-- 
                   优化点：
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
@@ -428,9 +503,10 @@ onUnmounted(() => {
                 -->
                 <MapContainer
                     ref="mapContainerRef"
-                    v-show="!is3DMode"
+                    v-show="!is3DMode && !isWeatherBoardMode"
                     @map-core-ready="handleMapCoreReady"
                     @location-change="handleLocationChange"
+                    @map-click="handleMapClick"
                     @update-news-image="handleUpdateNewsImage"
                     @feature-selected="handleFeatureSelected"
                     @user-layers-change="handleUserLayersChange"
@@ -439,8 +515,14 @@ onUnmounted(() => {
                     @base-layers-change="handleBaseLayersChange"
                 />
 
+                <component
+                    :is="WeatherChartPanel"
+                    v-if="isWeatherBoardMode && shouldLoadWeatherChartPanel"
+                    class="weather-board-surface"
+                />
+
                 <transition name="query-panel-fade">
-                    <div v-if="showQueryPanel && !is3DMode" class="query-panel">
+                    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode" class="query-panel">
                         <div class="query-panel-header">
                             <div>
                                 <div class="query-title">属性查询结果</div>
@@ -473,7 +555,7 @@ onUnmounted(() => {
                 </div>
             </div>
 
-            <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed }">
+            <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }">
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
                     :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
@@ -573,6 +655,11 @@ onUnmounted(() => {
     /* Important for flex items to shrink */
 }
 
+.weather-board-surface {
+    width: 100%;
+    height: 100%;
+}
+
 .cesium-loading {
     position: absolute;
     inset: 0;
@@ -584,6 +671,39 @@ onUnmounted(() => {
     color: #fff;
     font-size: 16px;
     font-weight: 600;
+}
+
+.weather-loading-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(31, 109, 56, 0.15);
+    color: #1f5a37;
+    z-index: 22;
+}
+
+.weather-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid rgba(44, 133, 76, 0.22);
+    border-top-color: #2d8a4f;
+    animation: weather-spin 0.9s linear infinite;
+}
+
+.weather-loading-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #2d6a46;
+}
+
+@keyframes weather-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .query-panel {
@@ -826,6 +946,10 @@ onUnmounted(() => {
         /* Ensure map has height */
     }
 
+    .map-wrapper.weather-mode {
+        min-height: 58vh;
+    }
+
     .query-panel {
         width: calc(100% - 20px);
         left: 10px;
@@ -842,6 +966,10 @@ onUnmounted(() => {
         height: 40vh;
         /* Fixed height for bottom panel on mobile */
         flex: none;
+    }
+
+    .side-panel-wrapper.weather-mode {
+        height: 32vh;
     }
 
     .side-panel-wrapper.collapsed {

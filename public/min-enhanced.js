@@ -82,7 +82,7 @@ function registerDelayedStatsLoader() {
                     };
                     supabaseScript.onerror = function (e) { console.log('加载 Supabase SDK 失败：', e); };
                     document.head.appendChild(supabaseScript);
-                } catch (err) { console.log('插入 Supabase 脚本出错：', err); }
+                } catch (err) { console.info('插入 Supabase 脚本出错：', err); }
 
                 // MapMyVisitors
                 try {

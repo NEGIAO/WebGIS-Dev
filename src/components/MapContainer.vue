@@ -283,6 +283,7 @@ const busRouteSource = new VectorSource();
 // 子组件向父组件回传事件接口定义
 const emit = defineEmits([
     'location-change',
+    'map-click',
     'coordinate-jump',
     'update-news-image',
     'feature-selected',

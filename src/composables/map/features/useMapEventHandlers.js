@@ -134,6 +134,13 @@ export function createMapEventHandlers({
                 return;
             }
 
+            const clickedLonLat = toLonLat(evt.coordinate);
+            emit?.('map-click', {
+                lon: Number(clickedLonLat[0].toFixed(6)),
+                lat: Number(clickedLonLat[1].toFixed(6)),
+                source: 'map-singleclick'
+            });
+
             // 2. 属性查询检查
             if (!isAttributeQueryEnabledRef?.value) return;
             

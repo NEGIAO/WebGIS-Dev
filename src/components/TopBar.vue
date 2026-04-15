@@ -19,6 +19,10 @@
                     <button class="menu-item" @click="handleOpenToolbox">🛠️ 图层管理</button>
                     <button class="menu-item" @click="handleOpenBusPlanner">🚌 公交规划</button>
                     <button class="menu-item" @click="handleOpenDrivePlanner">🚗 驾车规划</button>
+                    <button class="menu-item" @click="handleToggleWeatherBoard">
+                        <span class="menu-item-icon">{{ isWeatherBoardMode ? '🗺️' : '🌦️' }}</span>
+                        {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
+                    </button>
                     
                     <div class="menu-divider"></div>
                     <div class="menu-group-title">常用地点</div>
@@ -97,6 +101,13 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
 
+const props = defineProps({
+    isWeatherBoardMode: {
+        type: Boolean,
+        default: false
+    }
+});
+
 const emit = defineEmits([
     'toggle-magic',
     'activate-magic', // 发送特定的魔法特效
@@ -105,6 +116,7 @@ const emit = defineEmits([
     'open-toolbox',
     'open-bus',
     'open-drive',
+    'toggle-weather-board',
     'activate-feature',
     'jump-view'
 ]);
@@ -143,6 +155,15 @@ function handleOpenDrivePlanner() {
     showToolMenu.value = false;
     emit('activate-feature', { key: 'drive', label: '驾车规划' });
     emit('open-drive');
+}
+
+function handleToggleWeatherBoard() {
+    showToolMenu.value = false;
+    emit('activate-feature', {
+        key: props.isWeatherBoardMode ? 'map' : 'weather-board',
+        label: props.isWeatherBoardMode ? '地图视图' : '天气看板'
+    });
+    emit('toggle-weather-board');
 }
 
 function handleOpenChat() {

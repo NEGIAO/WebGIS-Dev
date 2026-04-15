@@ -63,12 +63,14 @@ function normalizeTiandituAddressComponent(addressComponent = {}) {
     const city = String(addressComponent?.city || addressComponent?.citycode || '').trim();
     const district = String(addressComponent?.county || addressComponent?.district || '').trim();
     const township = String(addressComponent?.town || addressComponent?.township || '').trim();
+    const adcode = String(addressComponent?.adcode || addressComponent?.adCode || '').trim();
 
     return {
         province,
         city: city || province,
         district,
         township,
+        adcode,
         businessAreas: []
     };
 }
@@ -259,7 +261,7 @@ export async function addressToLocation(address, city = '', options = {}) {
  * @param {number} lat WGS-84 纬度
  * @param {'base'|'all'} [extensions='base']
  * @param {{ silent?: boolean }} [options={}]
- * @returns {Promise<{formattedAddress:string,province:string,city:string,district:string,township:string,businessAreas:Array<{name:string,id?:string,location?:string}>,provider?:string}>}
+ * @returns {Promise<{formattedAddress:string,province:string,city:string,district:string,township:string,adcode:string,businessAreas:Array<{name:string,id?:string,location?:string}>,provider?:string}>}
  */
 export async function locationToAddress(lng, lat, extensions = 'base', options = {}) {
     const message = useMessage();
@@ -319,6 +321,7 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
         const city = normalizeAmapCity(ac?.city) || province;
         const district = String(ac?.district || '').trim();
         const township = String(ac?.township || '').trim();
+        const adcode = String(ac?.adcode || '').trim();
         const businessAreasRaw = Array.isArray(ac?.businessAreas) ? ac.businessAreas : [];
 
         return {
@@ -327,6 +330,7 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
             city,
             district,
             township,
+            adcode,
             businessAreas: businessAreasRaw.map((item) => ({
                 name: String(item?.name || '').trim(),
                 id: String(item?.id || '').trim(),
@@ -353,7 +357,7 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
  *   tiandituTimeout?: number,
  *   silent?: boolean
  * }} [options={}]
- * @returns {Promise<{formattedAddress:string,province:string,city:string,district:string,township:string,businessAreas:Array<{name:string,id?:string,location?:string}>,provider:string}>}
+ * @returns {Promise<{formattedAddress:string,province:string,city:string,district:string,township:string,adcode:string,businessAreas:Array<{name:string,id?:string,location?:string}>,provider:string}>}
  */
 export async function reverseGeocodeByPriority(lng, lat, options = {}) {
     const {
