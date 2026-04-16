@@ -87,6 +87,7 @@ import {
     createUserLayerApiFacadeFeature
 } from '../composables/map';
 import { 
+    DEFAULT_BASEMAP_PRESET_ID,
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
     resolvePreferredGoogleHost,
@@ -163,9 +164,9 @@ const mapRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
 // ========== 默认底图配置 ==========
-// 当前选中的底图 ID，默认为 'google'（对应图层索引 l=3）
+// 当前选中的底图 ID 统一由 DEFAULT_BASEMAP_PRESET_ID 控制。
 // 与 useMapState 中的 parseUrlToState 默认值保持一致
-const selectedLayer = ref('google');
+const selectedLayer = ref(DEFAULT_BASEMAP_PRESET_ID);
 const customMapUrl = ref('');
 const showDynamicSplitLines = ref(false);
 const currentZoom = ref(17); // 当前缩放级别
@@ -265,7 +266,7 @@ const {
     monitorLayerTimeout,
     selectedLayerRef: selectedLayer,
     message,
-    defaultLayerId: 'google'
+    defaultLayerId: DEFAULT_BASEMAP_PRESET_ID
 });
 
 // --- 全局变量 (非响应式) ---
@@ -666,7 +667,7 @@ const {
     createBaseLayerFallbackManager,
     getBasemapOptionLabel,
     message,
-    defaultLayerId: 'google',
+    defaultLayerId: DEFAULT_BASEMAP_PRESET_ID,
     validationTimeoutMs: 3000
 });
 

@@ -67,12 +67,10 @@ export default defineConfig(({ command, mode }) => {
             }
 
             if (isNodeModulePackage(id, 'echarts')) {
-              if (hasPathFragment(id, '/echarts/lib/chart/')) return 'vendor-echarts-charts';
-              if (hasPathFragment(id, '/echarts/lib/component/')) return 'vendor-echarts-components';
-              return 'vendor-echarts-core';
+              return 'vendor-echarts-all';
             }
 
-            if (isNodeModulePackage(id, 'zrender')) return 'vendor-zrender';
+            if (isNodeModulePackage(id, 'zrender')) return 'vendor-echarts-all';
             if (isNodeModulePackage(id, 'geotiff')) return 'vendor-geotiff';
             if (isNodeModulePackage(id, 'lerc')) return 'vendor-lerc';
             if (isNodeModulePackage(id, 'jszip')) return 'vendor-jszip';

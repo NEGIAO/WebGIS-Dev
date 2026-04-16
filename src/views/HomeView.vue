@@ -20,6 +20,7 @@ const weatherStore = useWeatherStore();
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
+import WeatherChartPanel from '../components/WeatherChartPanel.vue';
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
@@ -52,32 +53,7 @@ const SidePanel = defineAsyncComponent({
     }
 });
 
-const WeatherChartPanelLoading = {
-    name: 'WeatherChartPanelLoading',
-    render() {
-        return h('div', { class: 'weather-loading-state' }, [
-            h('div', { class: 'weather-loading-spinner' }),
-            h('span', { class: 'weather-loading-text' }, '天气看板资源加载中...')
-        ]);
-    }
-};
-
-const WeatherChartPanel = defineAsyncComponent({
-    loader: () => import('../components/WeatherChartPanel.vue'),
-    loadingComponent: WeatherChartPanelLoading,
-    delay: 0,
-    timeout: 15000,
-    onError(error, retry, fail, attempts) {
-        const text = String(error?.message || error || '');
-        const isStaleOptimizeDep = text.includes('Outdated Optimize Dep') || text.includes('Failed to fetch dynamically imported module');
-        if (isStaleOptimizeDep && attempts <= 1) {
-            retry();
-            return;
-        }
-        message.error('天气看板加载失败，请刷新页面后重试。');
-        fail(error);
-    }
-});
+// 天气看板改为静态导入：规避生产环境动态分块偶发的加载与初始化顺序问题。
 
 // ========== 2. 响应式状态 ==========
 // 地图位置信息

@@ -100,6 +100,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { DEFAULT_BASEMAP_LAYER_INDEX } from '../constants';
 
 const props = defineProps({
     isWeatherBoardMode: {
@@ -197,7 +198,7 @@ function handleJump(location) {
     const lat = Number(location.lat);
     const z = Number(location.z);
     const layerIndexRaw = Number(location.layer);
-    const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : 3;
+    const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : DEFAULT_BASEMAP_LAYER_INDEX;
 
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(z)) return;
 
@@ -266,13 +267,13 @@ function normalizeBinaryFlag(value, fallback = '0') {
     return fallback === '1' ? '1' : '0';
 }
 
-function normalizeLayerIndex(value, fallback = 3) {
+function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_LAYER_INDEX) {
     const parsed = Number(String(value ?? '').trim());
     if (Number.isInteger(parsed) && parsed >= 0) return String(parsed);
 
     const fallbackParsed = Number(fallback);
     if (Number.isInteger(fallbackParsed) && fallbackParsed >= 0) return String(fallbackParsed);
-    return '3';
+    return String(DEFAULT_BASEMAP_LAYER_INDEX);
 }
 
 function syncShareFlagInCurrentUrl() {
@@ -290,7 +291,7 @@ function syncShareFlagInCurrentUrl() {
         hashParams.set('s', '1');
         hashParams.set('loc', normalizeBinaryFlag(hashParams.get('loc'), '0'));
         hashParams.set('p', '0');
-        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), 3));
+        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), DEFAULT_BASEMAP_LAYER_INDEX));
         hashParams.delete('layer');
 
         const nextHashQuery = hashParams.toString();
@@ -321,7 +322,7 @@ function buildShareMarkedUrl(rawHref) {
         hashParams.set('s', '1');
         hashParams.set('loc', '0');
         hashParams.set('p', '0');
-        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), 3));
+        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), DEFAULT_BASEMAP_LAYER_INDEX));
         hashParams.delete('layer');
 
         const nextHashQuery = hashParams.toString();
@@ -330,7 +331,9 @@ function buildShareMarkedUrl(rawHref) {
         return url.toString();
     } catch {
         const text = String(rawHref || '');
-        return text.includes('?') ? `${text}&s=1&loc=0&p=0&l=3` : `${text}?s=1&loc=0&p=0&l=3`;
+        return text.includes('?')
+            ? `${text}&s=1&loc=0&p=0&l=${DEFAULT_BASEMAP_LAYER_INDEX}`
+            : `${text}?s=1&loc=0&p=0&l=${DEFAULT_BASEMAP_LAYER_INDEX}`;
     }
 }
 

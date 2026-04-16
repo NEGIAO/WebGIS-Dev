@@ -26,11 +26,11 @@
 </template>
 
 <script setup>
-import { defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 
 let Cesium = null;
-const CesiumAdvancedEffects = defineAsyncComponent(() => import('./CesiumAdvancedEffects.vue'));
 
 // --- 配置常量区域 ---
 const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';

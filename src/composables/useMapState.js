@@ -15,6 +15,7 @@ import {
     USER_LOCATION_CONTEXT_CHANGE_EVENT
 } from '../utils/userLocationContext';
 import { decodePos, encodePos } from '../utils/biz';
+import { DEFAULT_BASEMAP_LAYER_INDEX } from '../constants';
 
 /**
  * 获取数组的第一个元素，如果不是数组则返回原值
@@ -254,8 +255,8 @@ export function useMapState(mapInstance, options = {}) {
         let lng = parseNumber(readQueryValue('lng'));
         let lat = parseNumber(readQueryValue('lat'));
         const zoom = parseNumber(readQueryValue('z'));
-        // 默认底图索引为 3（Google），如果 URL 中无参数则使用该默认值
-        const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? 3;
+        // 默认底图索引统一由 DEFAULT_BASEMAP_LAYER_INDEX 控制。
+        const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? DEFAULT_BASEMAP_LAYER_INDEX;
 
         const compactPosCode = String(readQueryValue('p') ?? '').trim();
         if (compactPosCode && compactPosCode !== '0') {
@@ -286,7 +287,7 @@ export function useMapState(mapInstance, options = {}) {
     function buildQuery({ lng, lat, zoom, layerIndex }) {
         const shareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
         const locateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
-        const normalizedLayerIndex = Number.isInteger(layerIndex) ? layerIndex : 3;
+        const normalizedLayerIndex = Number.isInteger(layerIndex) ? layerIndex : DEFAULT_BASEMAP_LAYER_INDEX;
         const compactPosCode = resolvePositionCode(lng, lat);
 
         return {

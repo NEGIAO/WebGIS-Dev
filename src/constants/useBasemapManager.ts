@@ -76,6 +76,14 @@ type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
     defaultVisible?: boolean;
 };
 
+/** 
+    默认底图预设 ID
+    Default Basemap Preset ID
+ */
+export const DEFAULT_BASEMAP_PRESET_ID = 'tianDiTu';
+// export const DEFAULT_BASEMAP_PRESET_ID = 'local';
+// export const DEFAULT_BASEMAP_PRESET_ID = 'google';
+// //gac谷歌
 // ========== 响应式状态 ==========
 /** Google 主机选择状态（全局单例） */
 export const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
@@ -337,7 +345,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'Google(gac)',
         category: 'base',
         group: '影像',
-        defaultVisible: true,
         createSource: () => new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'), maxZoom: 20 })
     },
     {
@@ -913,6 +920,33 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
 const LAYER_SOURCE_MAP = new Map(LAYER_SOURCE_DEFINITIONS.map((item) => [item.id, item]));
 const BASEMAP_PRESET_MAP = new Map(BASEMAP_PRESETS.map((item) => [item.id, item]));
 
+function resolveDefaultBasemapLayerIndex(): number {
+    const index = BASEMAP_PRESETS.findIndex((preset) => preset.id === DEFAULT_BASEMAP_PRESET_ID);
+    return index >= 0 ? index : 0;
+}
+
+function resolveDefaultVisibleLayerIdSet(): Set<string> {
+    const preset = BASEMAP_PRESET_MAP.get(String(DEFAULT_BASEMAP_PRESET_ID || ''));
+    const stack = Array.isArray(preset?.stack) && preset.stack.length
+        ? preset.stack
+        : [String(DEFAULT_BASEMAP_PRESET_ID || '')];
+
+    const visibleLayerIdSet = new Set<string>();
+    stack.forEach((id) => {
+        const normalized = String(id || '').trim();
+        if (!normalized) return;
+        if (!LAYER_SOURCE_MAP.has(normalized)) return;
+        visibleLayerIdSet.add(normalized);
+    });
+
+    return visibleLayerIdSet;
+}
+
+/** 默认底图在 URL_LAYER_OPTIONS 中的索引。 */
+export const DEFAULT_BASEMAP_LAYER_INDEX = resolveDefaultBasemapLayerIndex();
+
+const DEFAULT_VISIBLE_LAYER_ID_SET = resolveDefaultVisibleLayerIdSet();
+
 /** URL 图层选项列表：用于 URL 参数中的图层索引映射。 */
 export const URL_LAYER_OPTIONS = BASEMAP_PRESETS.map((preset) => preset.id);
 
@@ -975,7 +1009,9 @@ export function createLayerConfigs(normBase: string = '/', tiandituTk: string = 
         name: definition.name,
         category: definition.category,
         group: definition.group,
-        visible: !!definition.defaultVisible,
+        visible: DEFAULT_VISIBLE_LAYER_ID_SET.size > 0
+            ? DEFAULT_VISIBLE_LAYER_ID_SET.has(definition.id)
+            : !!definition.defaultVisible,
         createSource: () => definition.createSource(context)
     }));
 }
