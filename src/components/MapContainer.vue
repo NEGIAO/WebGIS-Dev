@@ -738,14 +738,15 @@ async function runDeferredStartupTasks() {
     if (componentUnmountedRef.value) return;
 
     const routeViewState = parseUrlToState();
-    if (parseSharedEntryFlagFromUrl()) {
+    const isSharedEntry = parseSharedEntryFlagFromUrl();
+
+    if (isSharedEntry) {
         const shareAddress = await resolveSharedAddressByLonLat(routeViewState?.lng, routeViewState?.lat);
         message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
         message.soup();//鸡汤问候
-        return;
+    } else {
+        message.success('欢迎使用NEGIAO的WebGIS!(V2.8.7)', { duration: 3000 });
     }
-
-    message.success('欢迎使用NEGIAO的WebGIS!(V2.8.7)', { duration: 3000 });
 
     // 1) Google 主机测速切换（非关键，延后执行）。
     resolvePreferredGoogleHost().then((host) => {
@@ -755,13 +756,19 @@ async function runDeferredStartupTasks() {
         refreshGoogleLayerSources();
     }).catch(() => {});
 
-    // 2) 非分享进入：主动执行“定位按钮”同款逻辑（GPS + IP 精度择优）。
-    const locatedResult = await zoomToUser();
+    // 2) 首屏定位：分享进入时静默定位且不跳转视图，仅用于更新定位上下文与 URL 参数。
+    const locatedResult = isSharedEntry
+        ? await zoomToUser({ animate: false, silent: true })
+        : await zoomToUser();
     if (componentUnmountedRef.value) return;
 
     // 若主动定位完全失败，则仅补一次国内外判定，避免状态缺失。
     if (!locatedResult) {
-        await detectIPLocale();
+        if (isSharedEntry) {
+            await detectIPLocale({ silent: true });
+        } else {
+            await detectIPLocale();
+        }
     }
 }
 

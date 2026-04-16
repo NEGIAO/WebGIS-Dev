@@ -80,6 +80,51 @@ export function useUserLocation({
         return fallback === '1' ? '1' : '0';
     }
 
+    function readQueryValueFromUrl(key) {
+        if (typeof window === 'undefined') return '';
+
+        const hash = String(window.location.hash || '');
+        const queryStart = hash.indexOf('?');
+        if (queryStart >= 0) {
+            const hashParams = new URLSearchParams(hash.slice(queryStart + 1));
+            const hashValue = String(hashParams.get(key) || '').trim();
+            if (hashValue) return hashValue;
+        }
+
+        const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+        return String(searchParams.get(key) || '').trim();
+    }
+
+    // 统一开发者模式开关：dev=1 时默认禁用高德 IP 定位，并预留后续细粒度 API 开关扩展。
+    // 兼容旧参数 debug=1，避免已有调试链接失效。
+    function resolveDeveloperModeSwitches() {
+        const devModeRaw = readQueryValueFromUrl('dev') || readQueryValueFromUrl('debug');
+        const devModeEnabled = normalizeBinaryFlag(devModeRaw, '0') === '1';
+        const disableApiText = String(
+            readQueryValueFromUrl('devApi')
+            || readQueryValueFromUrl('devApis')
+            || readQueryValueFromUrl('disableApi')
+            || readQueryValueFromUrl('disableApis')
+            || readQueryValueFromUrl('debugApi')
+            || ''
+        ).toLowerCase();
+
+        const disableApiTokens = new Set(
+            disableApiText
+                .split(',')
+                .map((token) => token.trim())
+                .filter(Boolean)
+        );
+
+        return {
+            devModeEnabled,
+            disableAmapIpLocation: devModeEnabled
+                || disableApiTokens.has('amap-ip')
+                || disableApiTokens.has('amap-location')
+                || disableApiTokens.has('amap-ip-location')
+        };
+    }
+
     function markLocationSuccessFlagInUrl() {
         if (typeof window === 'undefined') return;
 
@@ -112,7 +157,9 @@ export function useUserLocation({
         return lon >= 73.0 && lon <= 135.0 && lat >= 18.0 && lat <= 54.0;
     }
 
-    async function detectIPLocale() {
+    async function detectIPLocale(options = {}) {
+        const { silent = false } = options || {};
+
         try {
             const res = await fetch('https://ipapi.co/json/');
             if (!res.ok) return { isDomestic: false };
@@ -126,14 +173,42 @@ export function useUserLocation({
             return { isDomestic: isDom };
         } catch (e) {
             const detail = e instanceof Error ? e.message : 'unknown';
-            message.warning(`IP locale detect failed: ${detail}`);
+            if (!silent) {
+                message.warning(`IP locale detect failed: ${detail}`);
+            }
             isDomestic.value = false;
             return { isDomestic: false };
         }
     }
 
-    async function zoomToUserCityByIp(ip = '') {
-        const locationResponse = await apiIpLocation(ip);
+    async function zoomToUserCityByIp(ip = '', options = {}) {
+        const { silent = false } = options || {};
+        const { disableAmapIpLocation, devModeEnabled } = resolveDeveloperModeSwitches();
+
+        if (disableAmapIpLocation) {
+            return {
+                ok: false,
+                status: '0',
+                requestStatus: '0',
+                city: '',
+                province: '',
+                adcode: '',
+                extent: null,
+                info: devModeEnabled ? 'dev=1' : 'api-disabled',
+                infocode: '',
+                raw: null,
+                errorMessage: devModeEnabled
+                    ? 'dev=1 已启用开发者模式，已禁用高德 IP 定位请求'
+                    : '已禁用高德 IP 定位请求',
+                disabledByDevMode: devModeEnabled,
+                disabledByDebug: true,
+                didFit: false,
+                geocode: null,
+                reverseGeocode: null
+            };
+        }
+
+        const locationResponse = await apiIpLocation(ip, { silent });
         const location = locationResponse?.data || null;
         if (!location?.ok) {
             return {
@@ -150,7 +225,9 @@ export function useUserLocation({
 
         const canFitExtent = Array.isArray(location.extent) && location.extent.length >= 4;
         if (!canFitExtent) {
-            message.warning('IP 定位未返回可用的城市范围。');
+            if (!silent) {
+                message.warning('IP 定位未返回可用的城市范围。');
+            }
             return {
                 ...location,
                 didFit: false,
@@ -224,9 +301,13 @@ export function useUserLocation({
             const cityLabel = reverseGeocode?.city || location.city || location.province || '当前城市';
             const districtLabel = reverseGeocode?.district ? ` ${reverseGeocode.district}` : '';
             const formattedAddress = reverseGeocode?.formattedAddress ? `（${reverseGeocode.formattedAddress}）` : '';
-            message.info(`已使用 IP 定位：${cityLabel}${districtLabel}${formattedAddress}`);
+            if (!silent) {
+                message.info(`已使用 IP 定位：${cityLabel}${districtLabel}${formattedAddress}`);
+            }
         } else {
-            message.warning('IP 城市范围获取成功，但地图缩放失败。');
+            if (!silent) {
+                message.warning('IP 城市范围获取成功，但地图缩放失败。');
+            }
         }
 
         return {
@@ -237,7 +318,10 @@ export function useUserLocation({
         };
     }
 
-    async function buildIpCandidate(ip = '') {
+    async function buildIpCandidate(ip = '', options = {}) {
+        const { disableAmapIpLocation = false } = options || {};
+        if (disableAmapIpLocation) return null;
+
         const ipResponse = await apiIpLocation(ip, { silent: true });
         const ipResult = ipResponse?.data || null;
         if (!ipResult?.ok) return null;
@@ -292,7 +376,13 @@ export function useUserLocation({
         }
     }
 
-    async function zoomToUser() {
+    async function zoomToUser(options = {}) {
+        const {
+            animate = true,
+            silent = false
+        } = options || {};
+        const { disableAmapIpLocation } = resolveDeveloperModeSwitches();
+
         const gpsTask = getCurrentLocation(true)
             .then((pos) => ({
                 source: 'gps',
@@ -305,7 +395,9 @@ export function useUserLocation({
             }))
             .catch(() => null);
 
-        const ipTask = buildIpCandidate().catch(() => null);
+        const ipTask = disableAmapIpLocation
+            ? Promise.resolve(null)
+            : buildIpCandidate('', { disableAmapIpLocation }).catch(() => null);
 
         const [gpsCandidate, ipCandidate] = await Promise.all([gpsTask, ipTask]);
         const candidates = [gpsCandidate, ipCandidate].filter((item) => (
@@ -316,7 +408,9 @@ export function useUserLocation({
         ));
 
         if (!candidates.length) {
-            message.error('定位失败：系统定位与 IP 定位均不可用。', { closable: true, duration: 6000 });
+            if (!silent) {
+                message.error('定位失败：系统定位与 IP 定位均不可用。', { closable: true, duration: 6000 });
+            }
             return null;
         }
 
@@ -326,7 +420,9 @@ export function useUserLocation({
         }, null);
 
         if (!selected) {
-            message.error('定位失败：未能选择有效定位结果。', { closable: true, duration: 6000 });
+            if (!silent) {
+                message.error('定位失败：未能选择有效定位结果。', { closable: true, duration: 6000 });
+            }
             return null;
         }
 
@@ -334,7 +430,7 @@ export function useUserLocation({
             lon: selected.lon,
             lat: selected.lat,
             accuracy: toDisplayAccuracyMeters(selected.accuracyMeters)
-        }, true);
+        }, !!animate);
 
         if (selected.source === 'gps') {
             isDomestic.value = isCoordinateInChina(selected.lon, selected.lat);
@@ -390,10 +486,12 @@ export function useUserLocation({
             markLocationSuccessFlagInUrl();
         }
 
-        message.success(`定位成功（${sourceLabel}，${accuracyLabel}）：${detailText}`, {
-            closable: true,
-            duration: 5000
-        });
+        if (!silent) {
+            message.success(`定位成功（${sourceLabel}，${accuracyLabel}）：${detailText}`, {
+                closable: true,
+                duration: 5000
+            });
+        }
 
         return {
             ...selected,

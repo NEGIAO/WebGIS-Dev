@@ -277,6 +277,34 @@ function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_LAYER_INDEX) {
     return String(DEFAULT_BASEMAP_LAYER_INDEX);
 }
 
+function normalizePositionCode(value, fallback = '0') {
+    const text = String(value ?? '').trim();
+    if (text) return text;
+    return String(fallback ?? '0');
+}
+
+function resolvePositionCodeForShare(hashParams, searchParams) {
+    const hashCode = normalizePositionCode(hashParams?.get('p'), '');
+    if (hashCode) return hashCode;
+
+    const searchCode = normalizePositionCode(searchParams?.get('p'), '');
+    if (searchCode) return searchCode;
+
+    return '0';
+}
+
+function extractPositionCodeFromText(rawHref) {
+    const text = String(rawHref || '');
+    const match = text.match(/[?#&]p=([^&#]*)/i);
+    if (!match) return '0';
+
+    try {
+        return normalizePositionCode(decodeURIComponent(match[1] || ''), '0');
+    } catch {
+        return normalizePositionCode(match[1] || '', '0');
+    }
+}
+
 function syncShareFlagInCurrentUrl() {
     if (typeof window === 'undefined') return;
 
@@ -286,12 +314,13 @@ function syncShareFlagInCurrentUrl() {
         const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
         const hashPath = hashPathRaw || '/home';
         const hashParams = new URLSearchParams(hashQueryRaw);
+        const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
 
         hashParams.delete('from');
         hashParams.delete('shared');
         hashParams.set('s', '1');
         hashParams.set('loc', normalizeBinaryFlag(hashParams.get('loc'), '0'));
-        hashParams.set('p', '0');
+        hashParams.set('p', resolvePositionCodeForShare(hashParams, searchParams));
         hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), DEFAULT_BASEMAP_LAYER_INDEX));
         hashParams.delete('layer');
 
@@ -322,7 +351,7 @@ function buildShareMarkedUrl(rawHref) {
         hashParams.delete('shared');
         hashParams.set('s', '1');
         hashParams.set('loc', '0');
-        hashParams.set('p', '0');
+        hashParams.set('p', resolvePositionCodeForShare(hashParams, url.searchParams));
         hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), DEFAULT_BASEMAP_LAYER_INDEX));
         hashParams.delete('layer');
 
@@ -332,9 +361,10 @@ function buildShareMarkedUrl(rawHref) {
         return url.toString();
     } catch {
         const text = String(rawHref || '');
+        const pCode = extractPositionCodeFromText(text);
         return text.includes('?')
-            ? `${text}&s=1&loc=0&p=0&l=${DEFAULT_BASEMAP_LAYER_INDEX}`
-            : `${text}?s=1&loc=0&p=0&l=${DEFAULT_BASEMAP_LAYER_INDEX}`;
+            ? `${text}&s=1&loc=0&p=${encodeURIComponent(pCode)}&l=${DEFAULT_BASEMAP_LAYER_INDEX}`
+            : `${text}?s=1&loc=0&p=${encodeURIComponent(pCode)}&l=${DEFAULT_BASEMAP_LAYER_INDEX}`;
     }
 }
 
