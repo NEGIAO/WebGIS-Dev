@@ -67,13 +67,10 @@ export default defineConfig(({ command, mode }) => {
               if (hasPathFragment(id, '/ol/control/')) return 'vendor-ol-control';
               if (hasPathFragment(id, '/ol/proj/')) return 'vendor-ol-proj';
               if (hasPathFragment(id, '/ol/interaction/')) return 'vendor-ol-interaction';
-              if (
-                hasPathFragment(id, '/ol/style/') ||
-                hasPathFragment(id, '/ol/geom/') ||
-                hasPathFragment(id, '/ol/render/')
-              ) {
-                return 'vendor-ol-graphics';
-              }
+              // Split style, geom, render into separate chunks to avoid circular dependencies
+              if (hasPathFragment(id, '/ol/style/')) return 'vendor-ol-style';
+              if (hasPathFragment(id, '/ol/geom/')) return 'vendor-ol-geom';
+              if (hasPathFragment(id, '/ol/render/')) return 'vendor-ol-render';
               return 'vendor-ol-core';
             }
 
