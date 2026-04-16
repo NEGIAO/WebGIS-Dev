@@ -98,7 +98,7 @@
 import { reactive, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../utils/driveXmlParser';
-import { locationToAddress } from '../api/geocoding';
+import { locationToAddress } from '../api';
 
 interface ParsedRouteResult {
     distanceKm: string;

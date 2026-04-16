@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:analyze": "vite build --mode analyze",
     "preview": "vite preview",
     "docs:index": "node scripts/generate-boundary-index.mjs"
   },
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.3",
+    "rollup-plugin-visualizer": "^5.14.0",
     "vite": "^6.2.4",
     "vite-plugin-vue-devtools": "^7.7.2"
   }

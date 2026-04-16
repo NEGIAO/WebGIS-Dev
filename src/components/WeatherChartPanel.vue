@@ -223,14 +223,37 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import * as echarts from 'echarts/core';
+import { BarChart, GaugeChart, LineChart } from 'echarts/charts';
+import {
+    GridComponent,
+    LegendComponent,
+    MarkPointComponent,
+    TooltipComponent
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 import { useMessage } from '../composables/useMessage';
-import { getWeather } from '../api/weather';
-import { addressToLocation, reverseGeocodeByPriority } from '../api/geocoding';
+import {
+    apiAddressGeocode,
+    apiReverseGeocodeWithFallback,
+    apiWeather
+} from '../api';
 import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT
 } from '../utils/userLocationContext';
 import { useWeatherStore } from '../stores';
+
+echarts.use([
+    LineChart,
+    BarChart,
+    GaugeChart,
+    GridComponent,
+    TooltipComponent,
+    LegendComponent,
+    MarkPointComponent,
+    CanvasRenderer
+]);
 
 const message = useMessage();
 const weatherStore = useWeatherStore();
@@ -253,7 +276,7 @@ const isCompact = computed(() => viewportWidth.value <= 1100);
 const trendChartRef = ref(null);
 const windChartRef = ref(null);
 
-let echartsModule = null;
+let echartsModule = echarts;
 let trendChart = null;
 let windChart = null;
 let lastWeatherRequestId = 0;
@@ -853,9 +876,9 @@ function hideChartsLoading() {
 }
 
 async function ensureEchartsReady() {
-    if (echartsModule) return;
-    const module = await import('echarts');
-    echartsModule = module;
+    if (!echartsModule) {
+        echartsModule = echarts;
+    }
 }
 
 async function ensureChartInstances() {
@@ -915,10 +938,12 @@ async function loadWeatherByAdcode(adcode, options = {}) {
         await ensureChartInstances();
         showChartsLoading();
 
-        const [baseResult, allResult] = await Promise.all([
-            getWeather(normalizedAdcode, 'base'),
-            getWeather(normalizedAdcode, 'all')
+        const [baseResponse, allResponse] = await Promise.all([
+            apiWeather(normalizedAdcode, 'base'),
+            apiWeather(normalizedAdcode, 'all')
         ]);
+        const baseResult = baseResponse?.data || null;
+        const allResult = allResponse?.data || null;
 
         if (requestId !== lastWeatherRequestId) return;
 
@@ -980,10 +1005,11 @@ async function resolveAdcodeByLonLat(lon, lat, source = 'map-event') {
     if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return;
 
     try {
-        const reverseResult = await reverseGeocodeByPriority(longitude, latitude, {
+        const reverseResponse = await apiReverseGeocodeWithFallback(longitude, latitude, {
             tiandituTk: TIANDITU_TK,
             silent: true
         });
+        const reverseResult = reverseResponse?.data || null;
 
         const nextAdcode = String(reverseResult?.adcode || '').trim();
         if (!/^\d{6}$/.test(nextAdcode)) return;
@@ -1019,11 +1045,17 @@ async function resolveCityAndQuery() {
 
     isBusy.value = true;
     try {
-        const geocode = await addressToLocation(cityText, cityText, { silent: true });
-        const reverseResult = await reverseGeocodeByPriority(geocode.lng, geocode.lat, {
+        const geocodeResponse = await apiAddressGeocode(cityText, cityText, { silent: true });
+        const geocode = geocodeResponse?.data || null;
+        if (!geocode || !Number.isFinite(geocode.lng) || !Number.isFinite(geocode.lat)) {
+            throw new Error('未解析到有效坐标');
+        }
+
+        const reverseResponse = await apiReverseGeocodeWithFallback(geocode.lng, geocode.lat, {
             tiandituTk: TIANDITU_TK,
             silent: true
         });
+        const reverseResult = reverseResponse?.data || null;
 
         const nextAdcode = String(geocode?.adcode || reverseResult?.adcode || '').trim();
         if (!/^\d{6}$/.test(nextAdcode)) {

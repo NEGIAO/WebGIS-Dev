@@ -118,7 +118,7 @@
 import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { useMessage } from '../composables/useMessage';
-import { locationToAddress } from '../api/geocoding';
+import { locationToAddress } from '../api';
 
 const message = useMessage();
 

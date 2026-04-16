@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { parseAmapAoiPayload } from '../utils/gis/parsers/amapAoiParser';
+import { parseAmapAoiPayload } from '../utils/geo';
 
 export {
     reverseGeocodeTianditu,

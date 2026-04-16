@@ -127,9 +127,9 @@ import {
   COORDINATE_FORMATS,
   DECIMAL_PLACES,
   formatCoordinate,
-  parseCoordinate,
-  normalizeCoordinate
-} from '../utils/coordinateFormatter';
+    parseCoordinate,
+    normalizeCoordinate
+} from '../utils/biz';
 import { useMessage } from '../composables/useMessage';
 const message = useMessage();
 

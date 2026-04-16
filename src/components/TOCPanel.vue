@@ -313,12 +313,20 @@ import { computed, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useGisLoader } from '../composables/useGisLoader';
 import { useSharedResourceLoader } from '../composables/useSharedResourceLoader';
+import { usePositionCodeTool } from '../composables/map';
 import { useLayerStore, useAttrStore } from '../stores';
 import { useStyleEditor } from '../constants';
-import { COORDINATE_FORMATS, DECIMAL_PLACES, formatCoordinate } from '../utils/coordinateFormatter';
-import { generatePointName, processCoordinateInput } from '../utils/coordinateInputHandler';
-import { decodePos } from '../utils/urlCrypto';
-import { addressToLocation, reverseGeocodeByPriority } from '../api/geocoding';
+import {
+    COORDINATE_FORMATS,
+    DECIMAL_PLACES,
+    formatCoordinate,
+    generatePointName,
+    processCoordinateInput
+} from '../utils/biz';
+import {
+    apiAddressGeocode,
+    apiReverseGeocodeWithFallback
+} from '../api';
 import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from './AmapAoiInjectDialog.vue';
@@ -388,6 +396,13 @@ const isGeocodeBusy = ref(false);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+
+const {
+    decodePositionCodeToPointPayload
+} = usePositionCodeTool({
+    tiandituTk: TIANDITU_TK,
+    reverseGeocode: apiReverseGeocodeWithFallback
+});
 
 function buildAmapDetailUrl(rawPoiId) {
     const poiId = normalizeManualAoiPoiId(rawPoiId, { keepRawFallback: true });
@@ -692,51 +707,20 @@ async function drawPointByPositionCode() {
     coordInputPError.value = '';
     const code = String(coordInputP.value || '').trim();
 
-    if (!code || code === '0') {
-        coordInputPError.value = '请输入有效的 p 参数（不能为 0）';
-        message.warning(coordInputPError.value);
-        return;
-    }
-
-    const decoded = decodePos(code);
-    if (!decoded || !Number.isFinite(decoded.lng) || !Number.isFinite(decoded.lat)) {
-        coordInputPError.value = 'p 参数解码失败，请检查编码内容';
-        message.warning(coordInputPError.value);
-        return;
-    }
-
     isDecodePBusy.value = true;
     try {
-        let reverseResult = null;
-        try {
-            reverseResult = await reverseGeocodeByPriority(decoded.lng, decoded.lat, {
-                tiandituTk: TIANDITU_TK,
-                silent: true
-            });
-        } catch {
-            reverseResult = null;
+        const decodeResult = await decodePositionCodeToPointPayload(code);
+        if (!decodeResult?.ok) {
+            coordInputPError.value = String(decodeResult?.error || 'p 参数解码失败，请检查编码内容');
+            message.warning(coordInputPError.value);
+            return;
         }
 
-        const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
-        const layerName = formattedAddress || `P_${code}`;
-
         emit('draw-point-by-coordinates', {
-            lng: decoded.lng,
-            lat: decoded.lat,
-            crsType: 'wgs84',
-            displayName: layerName,
-            label: layerName,
-            layerName,
-            properties: {
-                来源: 'p参数解码',
-                原始编码: code,
-                解析后经度: Number(decoded.lng.toFixed(6)),
-                解析后纬度: Number(decoded.lat.toFixed(6)),
-                ...buildReverseGeocodeProperties(reverseResult)
-            }
+            ...decodeResult.payload
         });
 
-        message.success(`已按 p 参数绘制点位：${layerName}`);
+        message.success(`已按 p 参数绘制点位：${decodeResult.layerName}`);
         clearPositionCodeInput();
     } finally {
         isDecodePBusy.value = false;
@@ -756,13 +740,18 @@ async function drawPointByGeocodeAddress() {
 
     isGeocodeBusy.value = true;
     try {
-        const geocodeResult = await addressToLocation(inputAddress, inputCity, { silent: true });
+        const geocodeResponse = await apiAddressGeocode(inputAddress, inputCity, { silent: true });
+        const geocodeResult = geocodeResponse?.data || null;
+        if (!geocodeResult || !Number.isFinite(geocodeResult.lng) || !Number.isFinite(geocodeResult.lat)) {
+            throw new Error('地理编码未返回有效坐标');
+        }
         let reverseResult = null;
         try {
-            reverseResult = await reverseGeocodeByPriority(geocodeResult.lng, geocodeResult.lat, {
+            const reverseResponse = await apiReverseGeocodeWithFallback(geocodeResult.lng, geocodeResult.lat, {
                 tiandituTk: TIANDITU_TK,
                 silent: true
             });
+            reverseResult = reverseResponse?.data || null;
         } catch {
             reverseResult = null;
         }

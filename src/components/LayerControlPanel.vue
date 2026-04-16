@@ -135,7 +135,7 @@
 <script setup>
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { toLonLat } from 'ol/proj';
-import { fetchLocationResultsByService } from '../api/locationSearch';
+import { apiSearchLocations } from '../api';
 import { BASEMAP_OPTIONS } from '../constants';
 import { detectCustomTileServiceKind } from '../composables/useTileSourceFactory';
 
@@ -319,7 +319,7 @@ function getCurrentMapBound() {
  * 面板内部接管地名检索请求，统一接入天地图/高德/Nominatim。
  */
 function fetchLocationResults({ service, keywords, page = 1, pageSize = 10, amapKey = '' }) {
-    return fetchLocationResultsByService({
+    return apiSearchLocations({
         service,
         keywords,
         page,
@@ -327,7 +327,7 @@ function fetchLocationResults({ service, keywords, page = 1, pageSize = 10, amap
         amapKey: amapKey || props.amapKey,
         tiandituTk: props.tiandituTk,
         mapBound: getCurrentMapBound()
-    });
+    }).then((response) => response?.data || { items: [], total: 0 });
 }
 
 function submitCustomUrl() {

@@ -85,7 +85,7 @@ import {
     createRouteStepStyles,
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature
-} from '../composables/map/features';
+} from '../composables/map';
 import { 
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
@@ -106,7 +106,7 @@ import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
-import { reverseGeocodeByPriority } from '../api/geocoding';
+import { apiReverseGeocodeWithFallback } from '../api';
 import { useAttrStore } from '../stores';
 
 const message = useMessage();
@@ -131,7 +131,7 @@ import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
-import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/geo';
 import { 
     createLayerExporter,
     isVectorManagedLayer 
@@ -215,11 +215,12 @@ async function resolveSharedAddressByLonLat(lng, lat) {
     if (!Number.isFinite(lon) || !Number.isFinite(latitude)) return '';
 
     try {
-        const geocodeResult = await reverseGeocodeByPriority(lon, latitude, {
+        const geocodeResponse = await apiReverseGeocodeWithFallback(lon, latitude, {
             tiandituTk: TIANDITU_TK,
             tiandituTimeout: 3500,
             silent: true
         });
+        const geocodeResult = geocodeResponse?.data || null;
         return String(geocodeResult?.formattedAddress || '').trim();
     } catch {
         // 逆地理编码失败不阻断启动流程，回退到通用欢迎语。
@@ -743,7 +744,7 @@ async function runDeferredStartupTasks() {
         return;
     }
 
-    message.success('欢迎使用NEGIAO的WebGIS!', { duration: 3000 });
+    message.success('欢迎使用NEGIAO的WebGIS!(V2.8.7)', { duration: 3000 });
 
     // 1) Google 主机测速切换（非关键，延后执行）。
     resolvePreferredGoogleHost().then((host) => {
@@ -1050,10 +1051,11 @@ async function startReverseGeocodePickAndDraw() {
 
     let reverseResult = null;
     try {
-        reverseResult = await reverseGeocodeByPriority(picked.lng, picked.lat, {
+        const reverseResponse = await apiReverseGeocodeWithFallback(picked.lng, picked.lat, {
             tiandituTk: TIANDITU_TK,
             silent: true
         });
+        reverseResult = reverseResponse?.data || null;
     } catch {
         reverseResult = null;
     }

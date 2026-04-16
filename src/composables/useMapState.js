@@ -9,12 +9,12 @@ import VectorSource from 'ol/source/Vector';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { unByKey } from 'ol/Observable';
 import { Fill, Stroke, Style, Text } from 'ol/style';
-import { addressToLocation } from '../api/geocoding';
+import { apiAddressGeocode } from '../api';
 import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT
 } from '../utils/userLocationContext';
-import { encodePos, decodePos } from '../utils/urlCrypto';
+import { decodePos, encodePos } from '../utils/biz';
 
 /**
  * 获取数组的第一个元素，如果不是数组则返回原值
@@ -535,7 +535,8 @@ export function useMapState(mapInstance, options = {}) {
         const view = map?.getView?.();
         if (!map || !view) return null;
 
-        const result = await addressToLocation(normalizedAddress, city);
+        const geocodeResponse = await apiAddressGeocode(normalizedAddress, city);
+        const result = geocodeResponse?.data || null;
         if (!result) return null;
 
         const targetZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 16;

@@ -2,8 +2,11 @@ import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import CircleGeom from 'ol/geom/Circle';
 import { fromLonLat } from 'ol/proj';
-import { getIpLocation } from '@/api/ipLocation';
-import { addressToLocation, reverseGeocodeByPriority } from '@/api/geocoding';
+import {
+    apiAddressGeocode,
+    apiIpLocation,
+    apiReverseGeocodeWithFallback
+} from '@/api';
 import { saveUserPositionToCache } from '../utils/userPositionCache';
 import { setGlobalUserLocationContext } from '../utils/userLocationContext';
 import { useMessage } from './useMessage';
@@ -130,7 +133,8 @@ export function useUserLocation({
     }
 
     async function zoomToUserCityByIp(ip = '') {
-        const location = await getIpLocation(ip);
+        const locationResponse = await apiIpLocation(ip);
+        const location = locationResponse?.data || null;
         if (!location?.ok) {
             return {
                 ...location,
@@ -172,12 +176,14 @@ export function useUserLocation({
 
         if (roughAddress) {
             try {
-                geocode = await addressToLocation(roughAddress, cityText);
+                const geocodeResponse = await apiAddressGeocode(roughAddress, cityText, { silent: true });
+                geocode = geocodeResponse?.data || null;
                 if (geocode) {
-                    reverseGeocode = await reverseGeocodeByPriority(geocode.lng, geocode.lat, {
+                    const reverseResponse = await apiReverseGeocodeWithFallback(geocode.lng, geocode.lat, {
                         tiandituTk: TIANDITU_TK,
                         silent: true
                     });
+                    reverseGeocode = reverseResponse?.data || null;
                 }
             } catch {
                 // API 内部已通过消息系统提示，这里保持主流程可继续。
@@ -232,7 +238,8 @@ export function useUserLocation({
     }
 
     async function buildIpCandidate(ip = '') {
-        const ipResult = await getIpLocation(ip, { silent: true });
+        const ipResponse = await apiIpLocation(ip, { silent: true });
+        const ipResult = ipResponse?.data || null;
         if (!ipResult?.ok) return null;
 
         const center = getExtentCenter(ipResult.extent);
@@ -337,10 +344,11 @@ export function useUserLocation({
 
         let reverseAddress = null;
         try {
-            reverseAddress = await reverseGeocodeByPriority(selected.lon, selected.lat, {
+            const reverseResponse = await apiReverseGeocodeWithFallback(selected.lon, selected.lat, {
                 tiandituTk: TIANDITU_TK,
                 silent: true
             });
+            reverseAddress = reverseResponse?.data || null;
         } catch {
             // 逆地理编码失败时保留坐标提示，不中断定位成功主流程。
         }

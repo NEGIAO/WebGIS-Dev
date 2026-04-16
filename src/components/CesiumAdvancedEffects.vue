@@ -34,7 +34,19 @@
 
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import * as echarts from 'echarts/core';
+import { LineChart } from 'echarts/charts';
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 import { useMessage } from '../composables/useMessage';
+
+echarts.use([
+  LineChart,
+  GridComponent,
+  LegendComponent,
+  TooltipComponent,
+  CanvasRenderer
+]);
 
 const props = defineProps({
   getViewer: {
@@ -62,7 +74,7 @@ let ambientOcclusionStage = null;
 let createdAmbientOcclusionStage = false;
 
 let chartInstance = null;
-let echartsModule = null;
+let echartsModule = echarts;
 
 let bootstrapTimer = null;
 let samplingTimer = null;
@@ -433,9 +445,6 @@ function restoreAtmosphereState(viewer) {
 
 async function initEchartsRuntime(viewer, Cesium) {
   if (!chartRef.value) return;
-
-  const mod = await import('echarts');
-  echartsModule = mod;
 
   if (!chartRef.value) return;
   chartInstance = echartsModule.init(chartRef.value);

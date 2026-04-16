@@ -1,10 +1,13 @@
 import { ref, shallowRef } from 'vue';
-import { dispatchGisData } from '../utils/gis/dataDispatcher';
-import { loadJsZip } from '../utils/gis/loadJsZip';
-import { flattenUploadInput, type FlattenedResource } from '../utils/gis/decompressor';
-import { parseKmlBuffer } from '../utils/gis/parsers/kmlParser';
-import { groupShpDatasets } from '../utils/gis/parsers/shpParser';
-import { loadTifBuffer } from '../utils/gis/parsers/tifLoader';
+import {
+    dispatchGisData,
+    flattenUploadInput,
+    groupShpDatasets,
+    loadJsZip,
+    loadTifBuffer,
+    parseKmlBuffer
+} from '../utils/io';
+import type { FlattenedResource } from '../utils/gis/decompressor';
 import {
     createUnsupportedProjectedCrsError,
     isUnsupportedProjectedCrsError,
@@ -12,7 +15,7 @@ import {
     resolveDatasetProjection,
     UNSUPPORTED_PROJECTED_CRS_CODE,
     UNSUPPORTED_PROJECTED_CRS_MESSAGE
-} from '../utils/gis/crs-engine';
+} from '../utils/geo';
 import { useMessage } from './useMessage';
 
 type GisDispatchInput = {

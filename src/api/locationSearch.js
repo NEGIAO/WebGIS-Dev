@@ -1,5 +1,5 @@
 import { searchAmapPlaces } from './map';
-import { gcj02ToWgs84 } from '../utils/coordTransform';
+import { gcj02ToWgs84 } from '../utils/geo';
 
 function normalizeTiandituItem(item) {
     if (!item) return null;

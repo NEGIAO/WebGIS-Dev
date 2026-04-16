@@ -8,10 +8,11 @@ import {
     detectGeoJSONProjection,
     detectProjectionFromKmlText,
     ensureProjectionAvailable,
+    isUnsupportedProjectedCrsError,
+    UNSUPPORTED_PROJECTED_CRS_MESSAGE,
     normalizeProjectionCode
-} from '../utils/crsUtils';
-import { isUnsupportedProjectedCrsError, UNSUPPORTED_PROJECTED_CRS_MESSAGE } from '../utils/gis/crs-engine';
-import { parseShpPartsToGeoJSON } from '../utils/gis/parsers/shpParser';
+} from '../utils/geo';
+import { parseShpPartsToGeoJSON } from '../utils/io';
 import { useGisLoader } from './useGisLoader';
 import { useMessage } from './useMessage';
 
