@@ -10,12 +10,15 @@ import 'ol/ol.css'
 const app = createApp(App)
 const pinia = createPinia()
 
-// Defer message system initialization to ensure all modules are loaded
 app.use(pinia)
 app.use(router)
 
-// Initialize message system after app setup to avoid initialization timing issues
-const message = useMessage()
-message.ensureMessageHost('top-center')
+// Mount after initial route is ready; run extra UI host initialization after mount.
+router.isReady().finally(() => {
+	app.mount('#app')
 
-app.mount('#app')
+	queueMicrotask(() => {
+		const message = useMessage()
+		message.ensureMessageHost('top-center')
+	})
+})

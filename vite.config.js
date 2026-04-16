@@ -62,16 +62,8 @@ export default defineConfig(({ command, mode }) => {
             if (!id.includes('node_modules')) return undefined;
 
             if (isNodeModulePackage(id, 'ol')) {
-              if (hasPathFragment(id, '/ol/source/')) return 'vendor-ol-source';
-              if (hasPathFragment(id, '/ol/layer/')) return 'vendor-ol-layer';
-              if (hasPathFragment(id, '/ol/control/')) return 'vendor-ol-control';
-              if (hasPathFragment(id, '/ol/proj/')) return 'vendor-ol-proj';
-              if (hasPathFragment(id, '/ol/interaction/')) return 'vendor-ol-interaction';
-              // Split style, geom, render into separate chunks to avoid circular dependencies
-              if (hasPathFragment(id, '/ol/style/')) return 'vendor-ol-style';
-              if (hasPathFragment(id, '/ol/geom/')) return 'vendor-ol-geom';
-              if (hasPathFragment(id, '/ol/render/')) return 'vendor-ol-render';
-              return 'vendor-ol-core';
+              // Keep all OpenLayers internals in one chunk to avoid circular init order issues.
+              return 'vendor-ol-all';
             }
 
             if (isNodeModulePackage(id, 'echarts')) {

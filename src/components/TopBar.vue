@@ -133,9 +133,9 @@ const message = useMessage();
 
 //地点迁移
 const quickLocations = [
-    { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 3 },
-    { key: 'hedu', label: '河大', lng: 114.307960, lat: 34.813566, z: 11.83, layer: 3 },
-    { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 3 },
+    { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
+    { key: 'hedu', label: '河大', lng: 114.307960, lat: 34.813566, z: 11.83, layer: 0 },
+    { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
     { key: '51Area', label: '51区', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 3 }
 ];
 
