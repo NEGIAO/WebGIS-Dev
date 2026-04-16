@@ -223,15 +223,6 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import * as echarts from 'echarts/core';
-import { BarChart, GaugeChart, LineChart } from 'echarts/charts';
-import {
-    GridComponent,
-    LegendComponent,
-    MarkPointComponent,
-    TooltipComponent
-} from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
 import { useMessage } from '../composables/useMessage';
 import {
     apiAddressGeocode,
@@ -243,17 +234,6 @@ import {
     USER_LOCATION_CONTEXT_CHANGE_EVENT
 } from '../utils/userLocationContext';
 import { useWeatherStore } from '../stores';
-
-echarts.use([
-    LineChart,
-    BarChart,
-    GaugeChart,
-    GridComponent,
-    TooltipComponent,
-    LegendComponent,
-    MarkPointComponent,
-    CanvasRenderer
-]);
 
 const message = useMessage();
 const weatherStore = useWeatherStore();
@@ -276,12 +256,32 @@ const isCompact = computed(() => viewportWidth.value <= 1100);
 const trendChartRef = ref(null);
 const windChartRef = ref(null);
 
-let echartsModule = echarts;
+let echartsModule = null;
+let echartsRuntimePromise = null;
 let trendChart = null;
 let windChart = null;
 let lastWeatherRequestId = 0;
 let lastLoadedAdcode = '';
 let resizeDebounceTimer = null;
+
+function loadEchartsRuntime() {
+    if (echartsRuntimePromise) return echartsRuntimePromise;
+
+    echartsRuntimePromise = import('../utils/echarts/weatherRuntime.js').then((runtimeModule) => {
+        const runtime = runtimeModule?.getWeatherEchartsRuntime?.();
+        if (!runtime) {
+            throw new Error('天气图表运行时加载失败');
+        }
+
+        echartsModule = runtime;
+        return runtime;
+    }).catch((error) => {
+        echartsRuntimePromise = null;
+        throw error;
+    });
+
+    return echartsRuntimePromise;
+}
 
 const WEATHER_ICON_MAP = {
     晴: '☀️',
@@ -876,8 +876,13 @@ function hideChartsLoading() {
 }
 
 async function ensureEchartsReady() {
-    if (!echartsModule) {
-        echartsModule = echarts;
+    if (echartsModule) return echartsModule;
+
+    try {
+        return await loadEchartsRuntime();
+    } catch (error) {
+        message.error('ECharts 模块加载失败', error);
+        throw error instanceof Error ? error : new Error('ECharts 模块加载失败');
     }
 }
 

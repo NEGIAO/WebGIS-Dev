@@ -3,7 +3,7 @@
     <div class="effects-panel">
       <div class="panel-head">
         <span class="panel-title">Cinematic FX</span>
-        <button class="panel-btn" @click="chartVisible = !chartVisible">
+        <button class="panel-btn" @click="toggleChartVisibility">
           {{ chartVisible ? '隐藏图表' : '显示图表' }}
         </button>
       </div>
@@ -34,19 +34,7 @@
 
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
-import * as echarts from 'echarts/core';
-import { LineChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
 import { useMessage } from '../composables/useMessage';
-
-echarts.use([
-  LineChart,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-  CanvasRenderer
-]);
 
 const props = defineProps({
   getViewer: {
@@ -66,7 +54,7 @@ const fogEnabled = ref(true);
 const hbaoEnabled = ref(false);
 const tiltShiftEnabled = ref(true);
 const atmosphereEnabled = ref(true);
-const chartVisible = ref(true);
+const chartVisible = ref(false);
 
 let fogStage = null;
 let tiltShiftStage = null;
@@ -74,7 +62,8 @@ let ambientOcclusionStage = null;
 let createdAmbientOcclusionStage = false;
 
 let chartInstance = null;
-let echartsModule = echarts;
+let echartsModule = null;
+let echartsRuntimePromise = null;
 
 let bootstrapTimer = null;
 let samplingTimer = null;
@@ -86,6 +75,30 @@ let hasRenderErrorNotified = false;
 let frameCounter = 0;
 let fpsValue = 0;
 let fpsStamp = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+function loadEchartsRuntime() {
+  if (echartsRuntimePromise) return echartsRuntimePromise;
+
+  echartsRuntimePromise = import('../utils/echarts/cesiumFxRuntime.js').then((runtimeModule) => {
+    const runtime = runtimeModule?.getCesiumFxEchartsRuntime?.();
+    if (!runtime) {
+      throw new Error('Cinematic FX 图表运行时加载失败');
+    }
+
+    echartsModule = runtime;
+    return runtime;
+  }).catch((error) => {
+    echartsRuntimePromise = null;
+    throw error;
+  });
+
+  return echartsRuntimePromise;
+}
+
+async function ensureEchartsReady() {
+  if (echartsModule) return echartsModule;
+  return loadEchartsRuntime();
+}
 
 const chartData = {
   labels: [],
@@ -125,8 +138,6 @@ function bootstrapWhenReady() {
         initRenderErrorGuard(viewer);
         initCinematicEffects(viewer, Cesium);
         bindFrameUpdates(viewer);
-        await initEchartsRuntime(viewer, Cesium);
-        startRealtimeSampling(viewer, Cesium);
         message.success('高级视觉效果已启用。');
       } catch (error) {
         message.error('高级视觉效果初始化失败', error);
@@ -443,28 +454,64 @@ function restoreAtmosphereState(viewer) {
   }
 }
 
-async function initEchartsRuntime(viewer, Cesium) {
-  if (!chartRef.value) return;
+function stopRealtimeSampling() {
+  if (samplingTimer) {
+    clearInterval(samplingTimer);
+    samplingTimer = null;
+  }
+}
 
-  if (!chartRef.value) return;
-  chartInstance = echartsModule.init(chartRef.value);
-  renderChartOption();
+async function toggleChartVisibility() {
+  const nextVisible = !chartVisible.value;
+  chartVisible.value = nextVisible;
 
-  resizeHandler = () => {
-    chartInstance?.resize();
-  };
-  window.addEventListener('resize', resizeHandler);
-
-  if (!chartVisible.value) {
-    chartVisible.value = true;
-    await nextTick();
-    chartInstance?.resize();
+  if (!nextVisible) {
+    stopRealtimeSampling();
+    return;
   }
 
+  const viewer = props.getViewer?.();
+  const Cesium = props.getCesium?.() || window.Cesium;
+  if (!viewer || !Cesium) {
+    chartVisible.value = false;
+    message.warning('图表暂不可用：3D Viewer 尚未就绪。');
+    return;
+  }
+
+  try {
+    await initEchartsRuntime(viewer, Cesium);
+    startRealtimeSampling(viewer, Cesium);
+    collectAndRenderPoint(viewer, Cesium);
+  } catch (error) {
+    chartVisible.value = false;
+    message.error('图表模块加载失败', error);
+  }
+}
+
+async function initEchartsRuntime(viewer, Cesium) {
+  await ensureEchartsReady();
+  await nextTick();
+
+  if (!chartRef.value) return;
+
+  if (!chartInstance) {
+    chartInstance = echartsModule.init(chartRef.value);
+    renderChartOption();
+  }
+
+  if (!resizeHandler) {
+    resizeHandler = () => {
+      chartInstance?.resize();
+    };
+    window.addEventListener('resize', resizeHandler);
+  }
+
+  chartInstance.resize();
   collectAndRenderPoint(viewer, Cesium);
 }
 
 function startRealtimeSampling(viewer, Cesium) {
+  if (samplingTimer) return;
   samplingTimer = window.setInterval(() => {
     if (!chartInstance || !chartVisible.value) return;
     collectAndRenderPoint(viewer, Cesium);
@@ -584,10 +631,7 @@ function cleanupEffects() {
     bootstrapTimer = null;
   }
 
-  if (samplingTimer) {
-    clearInterval(samplingTimer);
-    samplingTimer = null;
-  }
+  stopRealtimeSampling();
 
   const viewer = props.getViewer?.();
   const sceneStages = viewer?.scene?.postProcessStages;
