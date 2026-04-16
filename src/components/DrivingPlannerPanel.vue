@@ -99,6 +99,7 @@ import { reactive, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../utils/driveXmlParser';
 import { locationToAddress } from '../api';
+import { showLoading, hideLoading } from '../utils/loading';
 
 interface ParsedRouteResult {
     distanceKm: string;
@@ -270,6 +271,7 @@ async function startDriveSearch(): Promise<void> {
     }
 
     isLoading.value = true;
+    showLoading('正在规划驾车路线...');
     debug.status = 'requesting';
     debug.requestUrl = '';
     debug.rawDistance = '';
@@ -356,6 +358,7 @@ async function startDriveSearch(): Promise<void> {
         debug.message = message;
     } finally {
         isLoading.value = false;
+        hideLoading();
     }
 }
 </script>

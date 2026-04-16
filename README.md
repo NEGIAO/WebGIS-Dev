@@ -28,6 +28,7 @@
 * **二三维联动**：集成 `CesiumJS` 地形渲染， `ECharts` 图表交互。
 * **动态天气看板**：集成高德天气实况 + 4 日预报，支持城市名称/adcode 查询、地图点击联动、图表异步加载。
 * **全域搜索**：内置天地图与高德地名搜索API 双搜索引擎，支持 40+ XYZ 切片底图。
+* **全局 Loading 遮罩**：新增绿色主题全局加载层（毛玻璃 + CSS3 高性能环形动画），支持跨组件统一调用。
 * **APPLE 灵动岛 信息提示栏**：仿照 Apple 灵动岛设计的全局消息系统，支持队列管理、悬停暂停、立即关闭等交互，附带心灵鸡汤语录，提升用户体验。
 * **特效加持**：首屏 Delaunay、流体、重力、奇点、波动五大视觉特效，提升用户体验。
 
@@ -41,7 +42,7 @@
 ### 项目特点（面向 GitHub Pages）
 
 1. 针对 GitHub Pages 优化的 ESM 分包架构：基于 `manualChunks` 将框架层、地图层和数据处理层拆分为独立 chunk，提升并行加载与缓存命中。
-2. ECharts 与 OpenLayers 高度按需引入：图表模块按需注册、地图能力按模块导入，避免全量打包导致的首屏体积膨胀。
+2. ECharts 与 OpenLayers 高度按需引入：低频图表能力改为事件触发后再动态加载，避免首屏预加载大体积图表资源。
 3. 生产环境自动化 Console 清理：构建阶段启用 `esbuild.drop = ['console', 'debugger']`，减少噪声代码与输出体积。
 
 ### 环境变量配置
@@ -132,6 +133,7 @@ WebGIS_Dev/
 │   │   ├── CesiumContainer.vue         # Cesium 2D/3D 切换容器
 │   │   ├── ChatPanelContent.vue        # AI 空间助手组件（LLM API 集成）
 │   │   ├── DrivingPlannerPanel.vue     # 驾车、步行路径规划面板：起终点、路线结果展示
+│   │   ├── GlobalLoading.vue           # 全局加载遮罩：毛玻璃背景 + 绿色主题环形动画
 │   │   ├── LayerControlPanel.vue       # 底图控制面板（右上）：地名搜索、底图切换、经纬网控制
 │   │   ├── LayerPanel.vue              # TOC 树形展示层（数据由 Store 提供）
 │   │   ├── LocationSearch.vue          # 地名搜索输入组件：联想下拉、双引擎选择
@@ -218,6 +220,7 @@ WebGIS_Dev/
 │   │
 │   ├── stores/                         # ⭐ Pinia 状态仓库
 │   │   ├── index.ts                    # Store 统一导出入口
+│   │   ├── useAppStore.ts              # 应用级状态：全局 Loading 开关与文案
 │   │   ├── useAttrStore.ts             # 属性表状态：extent、要素展示上下文
 │   │   ├── useLayerStore.ts            # 图层状态：layerTree 构建、展开状态、操作行为
 │   │   └── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
@@ -231,78 +234,10 @@ WebGIS_Dev/
 │   │
 │   ├── utils/                          # ⭐ 工具函数层（领域化分层）
 │   │   ├── index.js                    # utils 总入口（re-export 所有域）
-│   │   ├── geo/                        # 坐标、投影、几何工具域
-│   │   │   └── index.js                # 坐标/投影相关统一导出
-│   │   ├── io/                         # 文件 I/O、解析、解压域
-│   │   │   └── index.js                # 解析/解压相关统一导出
-│   │   ├── biz/                        # 业务规则域
-│   │   │   └── index.js                # 业务规则统一导出（坐标格式、p 参数、标注校验）
-│   │   │
-│   │   ├── gis/                        # GIS 底层实现（坐标系、数据解析、压缩）
-│   │   │   ├── batchProcessor.js       # 批处理逻辑
-│   │   │   ├── crs-engine.ts           # 坐标参考系引擎（投影、WKT 处理）
-│   │   │   ├── crsAware.js             # CRS 识别与检测
-│   │   │   ├── dataDispatcher.js       # 数据分发器
-│   │   │   ├── decompressFile.js       # 文件解压
-│   │   │   ├── decompressor.ts         # 递归解压引擎（ZIP/KMZ 嵌套处理）
-│   │   │   ├── loadJsZip.ts            # jszip 加载与初始化
-│   │   │   └── parsers/                # 数据格式解析器
-│   │   │       ├── amapAoiParser.js    # 高德 AOI JSON 解析
-│   │   │       ├── kmlParser.ts        # KML/KMZ 解析
-│   │   │       ├── shpParser.ts        # SHP（含 sidecar 文件）解析
-│   │   │       └── tifLoader.ts        # GeoTIFF（单/多波段）加载
-│   │   │
-│   │   ├── coordTransform.js           # 历史坐标转换实现（由 geo 域暴露）
-│   │   ├── crsUtils.js                 # 历史 CRS 工具（由 geo 域暴露）
-│   │   ├── coordinateFormatter.js      # 历史坐标格式化（由 biz 域暴露）
-│   │   ├── coordinateInputHandler.js   # 历史坐标输入处理（由 biz 域暴露）
-│   │   ├── urlCrypto.js                # 历史 URL 加密（由 biz 域暴露）
-│   │   ├── labelValidator.ts           # 历史标注校验（由 biz 域暴露）
-│   │   ├── amapRectangle.js            # 高德矩形范围工具
-│   │   ├── layerExportService.js       # 图层导出服务（GeoJSON/CSV/TXT）
-│   │   ├── drawTransitRoute.ts         # 公交路线绘制
-│   │   ├── driveXmlParser.ts           # 驾车路线 XML 解析
-│   │   ├── transitRouteBuilder.js      # 路线构建器
-│   │   ├── userLocationContext.js      # 用户定位上下文管理
-│   │   ├── userPositionCache.js        # 用户位置缓存
-│   │   └── loadTiandituSdk.js          # 天地图 SDK 加载
-│   │
-│   └── assets/                         # 静态资源（图片、字体等）
-│
-├── docs/                               # 文档目录
-│   └── BOUNDARY_INDEX.md               # 目录边界索引（由 docs:index 自动生成）
-│
-├── scripts/                            # 构建脚本
-│   └── generate-boundary-index.mjs     # 文档索引自动化生成脚本
-│
-└── dist/                               # 构建产物目录（生成目标）
-    └── assets/                         # 打包后的 JS/CSS 资源     # 路线步骤样式
-│   │           ├── useStartupTaskScheduler.js       # 启动任务调度
-│   │           └── useUserLayerApiFacade.js         # 用户图层 API 门面
-│   │
-│   ├── constants/                      # 常量与配置
-│   │   ├── index.js                    # 常量统一导出（barrel 入口）
-│   │   ├── goldenSoupQuotes.js         # 心灵鸡汤语录常量
-│   │   ├── mapStyles.js                # 地图样式常量与工厂
-│   │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts    # 非标准 XYZ 瓦片配置示例
-│   │   ├── useBasemapManager.ts        # XYZ 瓦片源配置管理
-│   │   └── useStyleEditor.js           # 图层样式编辑模板配置
-│   │
-│   ├── stores/                         # ⭐ Pinia 状态仓库
-│   │   ├── index.ts                    # Store 统一导出入口
-│   │   ├── useAttrStore.ts             # 属性表状态：extent、要素展示上下文
-│   │   ├── useLayerStore.ts            # 图层状态：layerTree 构建、展开状态、操作行为
-│   │   └── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
-│   │
-│   ├── router/                         # Vue Router 路由
-│   │   └── index.js                    # 路由表与 hash history 配置
-│   │
-│   ├── views/                          # 页面级组件
-│   │   ├── HomeView.vue                # 主页面布局、事件中枢
-│   │   └── RegisterView.vue            # 登录/注册页面
-│   │
-│   ├── utils/                          # ⭐ 工具函数层（领域化分层）
-│   │   ├── index.js                    # utils 总入口（re-export 所有域）
+│   │   ├── loading.js                  # 全局 Loading 工具函数（showLoading / hideLoading）
+│   │   ├── echarts/                    # ECharts 运行时最小注册模块
+│   │   │   ├── cesiumFxRuntime.js      # Cesium FX 图表运行时按需注册
+│   │   │   └── weatherRuntime.js       # 天气图表运行时按需注册
 │   │   ├── geo/                        # 坐标、投影、几何工具域
 │   │   │   └── index.js                # 坐标/投影相关统一导出
 │   │   ├── io/                         # 文件 I/O、解析、解压域
@@ -391,13 +326,17 @@ WebGIS_Dev/
 
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
-## 本次变更特点（V2.8.7 架构收敛）
+## 本次变更特点（V2.8.8 Loading Overlay + 体验增强）
 
 1. **边界入口统一**：跨层调用优先使用目录入口文件，核心包括 `src/api/index.js`、`src/composables/map/index.js`、`src/utils/index.js`、`src/stores/index.ts`、`src/constants/index.js`。
 2. **map 领域解耦完成**：`MapContainer.vue` 从“功能堆叠”转为“编排外壳”，底图、图层、交互、路线、p 参数能力拆分为 map 域与 feature 库。
 3. **TOC 树构建下沉到 Store**：图层树结构与展开状态由 `useLayerStore.ts` 统一维护，视图层仅负责展示与事件分发。
 4. **utils 领域化分层**：`geo / io / biz` 作为一级领域出口，历史实现文件继续保留在 `src/utils/`，通过领域 barrel 对外暴露，降低迁移风险。
-5. **文档与边界可追踪**：通过 `npm run docs:index` 生成 `docs/BOUNDARY_INDEX.md`，目录边界变化可审计。
+5. **全局加载遮罩上线**：新增 `src/components/GlobalLoading.vue`，采用绿色主题、毛玻璃背景、CSS3 环形动画与动态提示文案，统一覆盖全应用异步阶段。
+6. **应用级 Loading Store**：新增 `src/stores/useAppStore.ts`，提供 `loading` 与 `loadingText` 状态，并通过 `showLoading/hideLoading` 统一控制。
+7. **全局调用工具函数**：新增 `src/utils/loading.js` 并由 `src/utils/index.js` 暴露，任意组件可零侵入调用全局遮罩。
+8. **关键耗时链路已接入**：`HomeView.vue`（3D 资源懒加载、GIS 数据导入）与 `CesiumContainer.vue`（3D 场景初始化）接入全局 Loading。
+9. **GitHub Pages 部署友好**：遮罩组件在 `App.vue` 同步挂载，避免异步组件首帧抖动和生产环境初次闪烁。
 
 ## 后续使用方式（推荐）
 
@@ -426,6 +365,23 @@ import { createMapStylesObject } from '@/constants';
 2. 在 `src/utils/geo/index.js`、`src/utils/io/index.js`、`src/utils/biz/index.js` 中按领域导出。
 3. 最后经 `src/utils/index.js` 暴露给上层，保持导入路径稳定。
 
+### 4) 全局 Loading 遮罩调用方式
+
+```js
+import { showLoading, hideLoading } from '@/utils';
+
+async function runTask() {
+    showLoading('正在加载地图资源...');
+    try {
+        await doSomethingAsync();
+    } finally {
+        hideLoading();
+    }
+}
+```
+
+说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
+
 ## 后续变更程序准则（贡献者约定）
 
 1. **边界优先**：新增能力先确定归属目录，再决定导出入口；禁止为“快速可用”绕过边界。
@@ -443,6 +399,14 @@ import { createMapStylesObject } from '@/constants';
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V2.8.7 (2026-04-16)
+#### 🌿 全局 Loading 遮罩 + 高耗时流程统一反馈
+* **新增全局遮罩组件**：`src/components/GlobalLoading.vue`，采用绿色主题、毛玻璃背景（`backdrop-filter: blur(4px)`）、CSS3 环形动画与动态提示语。
+* **新增应用级状态仓库**：`src/stores/useAppStore.ts`，统一管理 `loading` 与 `loadingText` 状态。
+* **新增全局工具接口**：`src/utils/loading.js` 暴露 `showLoading(text)` / `hideLoading()`，并通过 `src/utils/index.js` 统一导出。
+* **关键流程完成接入**：`src/views/HomeView.vue` 接入 3D 模块懒加载和 GIS 数据导入；`src/components/CesiumContainer.vue` 接入 3D 运行时初始化阶段。
+* **部署体验优化**：遮罩组件在根组件同步挂载，兼容 GitHub Pages，避免异步加载造成的首帧闪烁。
 
 ### V2.8.6 (2026-04-15)
 #### 🧭 基于用户协助的高德 AOI 提取（半自动）

@@ -119,6 +119,7 @@ import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { useMessage } from '../composables/useMessage';
 import { locationToAddress } from '../api';
+import { showLoading, hideLoading } from '../utils/loading';
 
 const message = useMessage();
 
@@ -398,6 +399,7 @@ async function startTransitPlan() {
     }
 
     planning.value = true;
+    showLoading('正在规划公交路线...');
     errorMsg.value = '';
     debugInfo.value = {
         status: 'requesting',
@@ -469,6 +471,7 @@ async function startTransitPlan() {
         message.error('[BusPlanner Debug] 规划失败:', err);
     } finally {
         planning.value = false;
+        hideLoading();
     }
 }
 </script>

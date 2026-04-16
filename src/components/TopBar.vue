@@ -101,6 +101,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '../constants';
+import { hideLoading, showLoading } from '@/utils';
 
 const props = defineProps({
     isWeatherBoardMode: {
@@ -339,7 +340,7 @@ function buildShareMarkedUrl(rawHref) {
 
 async function handleShareView() {
     const url = buildShareMarkedUrl(window.location.href);
-
+    // showLoading('正在准备分享链接...');
     try {
         if (canUseNativeShare()) {
             await navigator.share({

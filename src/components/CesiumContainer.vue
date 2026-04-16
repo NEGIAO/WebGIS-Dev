@@ -28,6 +28,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { showLoading, hideLoading } from '../utils/loading';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 
 let Cesium = null;
@@ -66,11 +67,15 @@ onUnmounted(() => {
     handler = null;
   }
   if (viewer) {
-    // 清理 credit 检查 interval
-    if (viewer._creditCheckInterval) {
-      clearInterval(viewer._creditCheckInterval);
+    try {
+      // 清理 credit 检查 interval
+      if (viewer._creditCheckInterval) {
+        clearInterval(viewer._creditCheckInterval);
+      }
+      viewer.destroy();
+    } catch (e) {
+      console.warn('Cesium viewer destroy warning:', e);
     }
-    viewer.destroy();
     viewer = null;
   }
 });
@@ -78,6 +83,7 @@ onUnmounted(() => {
 // --- 核心功能函数 ---
 
 async function bootCesium() {
+  showLoading('正在初始化 3D 场景...');
   try {
     await loadOfficialCesiumRuntime();
     if (!Cesium || !document.getElementById('cesiumContainer')) return;
@@ -97,6 +103,8 @@ async function bootCesium() {
   } catch (error) {
     message.error('Cesium 运行时加载失败', error);
     message.error('Cesium 初始化失败，请检查网络环境。', { closable: true });
+  } finally {
+    hideLoading();
   }
 }
 

@@ -2,13 +2,15 @@
 
 This file is auto-generated. Do not edit manually.
 
-Generated at: 2026-04-11T03:49:01.127Z
+Generated at: 2026-04-16T11:01:01.355Z
 
 ## Stores
 
 - src/stores/index.ts
+- src/stores/useAppStore.ts
 - src/stores/useAttrStore.ts
 - src/stores/useLayerStore.ts
+- src/stores/useWeatherStore.ts
 
 ## Constants
 

@@ -11,9 +11,13 @@
 import { ref, reactive, defineAsyncComponent, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useAttrStore, useWeatherStore } from '../stores';
+import { showLoading, hideLoading } from '../utils/loading';
 const message = useMessage();
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
+
+// 首屏地图初始化 Loading 拦截
+showLoading('正在初始化地图与核心环境...');
 
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
@@ -220,8 +224,9 @@ function handleSwitchSidePanelTab(tab) {
     activeSidePanelTab.value = tab;
 }
 
-/** 主地图关键内容就绪后，在空闲时预加载侧边面板资源。 */
+/** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
 function handleMapCoreReady() {
+    hideLoading();
     if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) return;
     sidePanelWarmupScheduled.value = true;
 
@@ -279,6 +284,7 @@ async function toggle3D() {
 
     if (!isCesiumLoaded.value && !isCesiumLoading.value) {
         isCesiumLoading.value = true;
+        showLoading('正在加载 3D 引擎资源...');
         try {
             const module = await import('../components/CesiumContainer.vue');
             CesiumContainer.value = module.default;
@@ -288,6 +294,7 @@ async function toggle3D() {
             return;
         } finally {
             isCesiumLoading.value = false;
+            hideLoading();
         }
     }
 
@@ -308,8 +315,13 @@ function handleActivateMagic(effectName) {
 }
 
 /** 处理文件上传 */
-function handleUploadData(data) {
-    mapContainerRef.value?.addUserDataLayer(data);
+async function handleUploadData(data) {
+    showLoading('正在导入 GIS 数据资源...');
+    try {
+        await Promise.resolve(mapContainerRef.value?.addUserDataLayer(data));
+    } finally {
+        hideLoading();
+    }
 }
 
 /** 处理地图交互工具 */
@@ -550,8 +562,10 @@ onUnmounted(() => {
                     </div>
                 </transition>
 
-                <!-- 点击后按需加载的 Cesium 组件 -->
-                <component :is="CesiumContainer" v-if="is3DMode && isCesiumLoaded" />
+                <!-- 点击后按需加载的 Cesium 组件（外层包裹 div 解决 Vue 3 Fragment 的 v-show 穿透失效问题） -->
+                <div v-show="is3DMode" class="cesium-wrapper" style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
+                    <component :is="CesiumContainer" v-if="isCesiumLoaded" />
+                </div>
                 <div v-if="isCesiumLoading" class="cesium-loading">
                     正在加载 3D 引擎...
                 </div>
