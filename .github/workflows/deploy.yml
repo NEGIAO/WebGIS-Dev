@@ -1,4 +1,4 @@
-name: Build Vue & Sync to Main Pages Repo
+name: FullStack Build & Multi-Deploy
 
 on:
   push:
@@ -30,11 +30,14 @@ jobs:
         with:
           node-version: 24
           cache: 'npm'
+          cache-dependency-path: './frontend/package-lock.json' # 明确依赖路径
 
-      - name: Install dependencies
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
         run: npm ci
 
-      - name: Build Project
+      - name: Build Frontend Project
+        working-directory: ./frontend
         run: npm run build
         # 此时生成了 dist 文件夹
 
@@ -42,14 +45,14 @@ jobs:
       - name: Upload pages artifact (for self)
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: frontend/dist
 
       # 2. 为“外部”的 Pages 仓库准备 artifact (普通文件)
       - name: Upload dist artifact (for external sync)
         uses: actions/upload-artifact@v4
         with:
           name: dist-files
-          path: dist
+          path: frontend/dist
 
   # ==========================================
   # 第二步：部署到 Vue 仓库自己的 Pages (可选)
@@ -130,3 +133,23 @@ jobs:
             echo "Pushing to ${TARGET_REPO}..."
             git push "https://x-access-token:${DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" $TARGET_BRANCH
           fi
+# ==========================================
+  # 第四步：同步到 Hugging Face (新增：全量代码同步)
+  # ==========================================
+  sync-to-huggingface:
+    needs: build # 确保前端能过编译再部署
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }} # 需要在 GitHub Secret 配置这个 Token
+        run: |
+          # 强制将当前全栈仓库推送到 HF
+          # 这样 HF 才会读取根目录的 Dockerfile 进行全栈构建
+          git push --force https://NEGIAO:$HF_TOKEN@huggingface.co/spaces/NEGIAO/WebGIS fullstack:main
