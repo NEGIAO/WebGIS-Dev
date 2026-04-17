@@ -472,9 +472,10 @@ const {
     setCurrentHighlightedFeature
 } = createManagedFeatureHighlightFeature({
     findManagedFeature: (layerId, featureId) => {
-        const layer = layerMap.get(layerId);
-        if (!layer || !layer.getSource) return null;
-        const source = layer.getSource();
+        // 从 userDataLayers 中查找对应的图层
+        const layerRecord = userDataLayers.find(item => item.id === layerId);
+        if (!layerRecord || !layerRecord.layer || !layerRecord.layer.getSource) return null;
+        const source = layerRecord.layer.getSource();
         return source.getFeatureById(featureId);
     }
 });

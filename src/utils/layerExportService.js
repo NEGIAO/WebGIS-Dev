@@ -1,8 +1,10 @@
 /**
  * Layer Export Service
- * 独立的图层坐标导出服务，支持多种格式（CSV/TXT/GeoJSON）
+ * 独立的图层坐标导出服务，支持多种格式（CSV/TXT/GeoJSON/KML）
  * 负责顶点收集、文件生成、下载等核心逻辑
  */
+
+import { exportFeaturesAsKml } from '../composables/map/toc';
 
 /**
  * 递归收集 WGS84 几何体的所有顶点
@@ -190,7 +192,7 @@ export function isVectorManagedLayer(layerData) {
 /**
  * 导出图层坐标
  * CSV/TXT：折点导出（每条顶点一行）
- * GeoJSON：保持原始几何（Point/LineString/Polygon等）
+ * GeoJSON/KML：保持原始几何导出（Point/LineString/Polygon等）
  */
 export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
     return function exportLayerCoordinates(payload, { userDataLayers }) {
@@ -215,12 +217,38 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
         }
 
         const rawFormat = String(payload.format || 'csv').toLowerCase();
-        const format = ['csv', 'txt', 'geojson'].includes(rawFormat) ? rawFormat : 'csv';
+        const format = ['csv', 'txt', 'geojson', 'kml'].includes(rawFormat) ? rawFormat : 'csv';
         const currentCrs = String(layerData.metadata?.crs || 'wgs84').toLowerCase();
         const safeName = sanitizeExportFileName(layerData.name || 'layer');
         let content = '';
         let fileName = '';
         let mimeType = '';
+
+        if (format === 'kml') {
+            const kmlResult = exportFeaturesAsKml({
+                features,
+                layerId: layerData.id,
+                layerName: layerData.name || 'layer',
+                sourceCrs: currentCrs,
+                featureProjection: 'EPSG:3857',
+                dataProjection: 'EPSG:4326',
+                decimals: 6,
+                triggerDownload: true
+            });
+
+            if (!kmlResult.featureCount) {
+                message.warning('图层中没有可导出的有效几何');
+                return;
+            }
+            const fileSize = Number(kmlResult.sizeBytes) || 0;
+
+            if (fileSize > 2 * 1024 * 1024) {
+                message.warning(`导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`);
+            }
+
+            message.success(`已导出 ${kmlResult.featureCount} 个要素（KML / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`);
+            return;
+        }
 
         // GeoJSON 保持原始几何导出
         if (format === 'geojson') {

@@ -6,12 +6,24 @@ export function useManagedLayerRegistry({
 }) {
     let userLayerSeed = 1;
 
+    function normalizeEmittedStandardTocItem(item) {
+        const candidate = item?.standardTocItem || item?.metadata?.standardTocItem;
+        if (!candidate || typeof candidate !== 'object') return null;
+
+        return {
+            ...candidate,
+            id: String(item?.id || candidate.id || ''),
+            name: String(item?.name || candidate.name || '')
+        };
+    }
+
     function createManagedLayerId() {
         return `layer_${userLayerSeed++}`;
     }
 
     function emitUserLayersChange() {
         emit('user-layers-change', userDataLayers.map(item => ({
+            standardTocItem: normalizeEmittedStandardTocItem(item),
             id: item.id,
             name: item.name,
             type: item.type,

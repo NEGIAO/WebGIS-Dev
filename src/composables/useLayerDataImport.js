@@ -13,6 +13,7 @@ import {
     normalizeProjectionCode
 } from '../utils/geo';
 import { parseShpPartsToGeoJSON } from '../utils/io';
+import { createStandardItem } from './map/toc/factory';
 import { useGisLoader } from './useGisLoader';
 import { useMessage } from './useMessage';
 
@@ -40,6 +41,28 @@ export function useLayerDataImport({
         if (styleKeys.length === 0) return styleTemplates.classic;
         const randomKey = styleKeys[Math.floor(Math.random() * styleKeys.length)];
         return styleTemplates[randomKey];
+    }
+
+    function buildStandardLayerItem({
+        id = '',
+        name = '',
+        layerType = 'geojson',
+        sourceType = 'upload',
+        featureCount = 0,
+        packet = null,
+        metadata = null,
+        capabilities = null
+    }) {
+        return createStandardItem({
+            id,
+            name,
+            layerType,
+            sourceType,
+            featureCount,
+            parsedData: packet,
+            metadata,
+            capabilities
+        });
     }
 
     async function getGeotiffFromBlob() {
@@ -318,7 +341,8 @@ export function useLayerDataImport({
         alertMessage = '该 TIF 未检测到坐标参考，已按当前视图中心临时加载。',
         metadata = { noGeorefFallback: true },
         nodataValue = null,
-        stretchRange = null
+        stretchRange = null,
+        packet = null
     }) {
         if (!mapInstance.value) return null;
 
@@ -430,6 +454,17 @@ export function useLayerDataImport({
             nodataValue,
             stretchRange: isSingleBand ? singleBandStretch : null
         });
+        const standardTocItem = buildStandardLayerItem({
+            name,
+            layerType: type || 'tif',
+            sourceType,
+            featureCount: 1,
+            packet,
+            metadata: {
+                sourceProjection: layerProjection,
+                sourceExtent: extent
+            }
+        });
         const id = addManagedLayerRecord({
             name,
             type,
@@ -438,6 +473,7 @@ export function useLayerDataImport({
             styleConfig: null,
             metadata: {
                 ...(metadata || {}),
+                standardTocItem,
                 rasterSampler,
                 rasterBandCount: bands.length,
                 stretchRange: isSingleBand ? singleBandStretch : null,
@@ -467,7 +503,8 @@ export function useLayerDataImport({
         type,
         sourceType,
         data,
-        fitView = false
+        fitView = false,
+        packet = null
     }) {
         if (!mapInstance.value || !(data instanceof ArrayBuffer)) return null;
 
@@ -534,7 +571,8 @@ export function useLayerDataImport({
                     singleBandRendered: sampleBandCount === 1
                 },
                 nodataValue,
-                stretchRange: singleBandStretch
+                stretchRange: singleBandStretch,
+                packet
             });
         }
 
@@ -583,6 +621,17 @@ export function useLayerDataImport({
             nodataValue,
             stretchRange: sampleBandCount === 1 ? singleBandStretch : null
         });
+        const standardTocItem = buildStandardLayerItem({
+            name,
+            layerType: type || 'tif',
+            sourceType,
+            featureCount: 1,
+            packet,
+            metadata: {
+                sourceProjection,
+                sourceExtent: viewCfg?.extent
+            }
+        });
         const id = addManagedLayerRecord({
             name,
             type,
@@ -590,6 +639,7 @@ export function useLayerDataImport({
             featureCount: 1,
             styleConfig: null,
             metadata: {
+                standardTocItem,
                 rasterSampler,
                 rasterBandCount: sampleBandCount,
                 nodataValue,
@@ -856,7 +906,8 @@ export function useLayerDataImport({
                         type: 'tiff',
                         sourceType: 'upload',
                         data: packet.arrayBuffer,
-                        fitView: importedCount === 0
+                        fitView: importedCount === 0,
+                        packet
                     });
                     importedCount += 1;
                     continue;
@@ -898,6 +949,17 @@ export function useLayerDataImport({
                 if (!features.length) throw new Error('无有效要素');
 
                 const labelField = pickFeatureLabelField(features);
+                const standardTocItem = buildStandardLayerItem({
+                    name: layerName,
+                    layerType,
+                    sourceType: 'upload',
+                    featureCount: features.length,
+                    packet,
+                    metadata: {
+                        labelField,
+                        dispatchEntry: packet.entryName || ''
+                    }
+                });
                 createManagedVectorLayer({
                     name: layerName,
                     type: layerType,
@@ -907,7 +969,8 @@ export function useLayerDataImport({
                     autoLabel: true,
                     metadata: {
                         labelField,
-                        dispatchEntry: packet.entryName || ''
+                        dispatchEntry: packet.entryName || '',
+                        standardTocItem
                     },
                     fitView: importedCount === 0
                 });
@@ -1049,6 +1112,15 @@ export function useLayerDataImport({
             const features = await parseUploadedFeatures({ content, type: normalizedType, name });
             if (!features.length) throw new Error('无有效数据');
             const labelField = pickFeatureLabelField(features);
+            const standardTocItem = buildStandardLayerItem({
+                name,
+                layerType: normalizedType,
+                sourceType: 'upload',
+                featureCount: features.length,
+                metadata: {
+                    labelField
+                }
+            });
 
             createManagedVectorLayer({
                 name,
@@ -1058,7 +1130,8 @@ export function useLayerDataImport({
                 styleConfig: getRandomStyle(),
                 autoLabel: true,
                 metadata: {
-                    labelField
+                    labelField,
+                    standardTocItem
                 },
                 fitView: true
             });

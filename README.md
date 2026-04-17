@@ -3,7 +3,7 @@
 [查看部署效果（国内）](https://negiao-pages.share.connect.posit.cloud/WebGIS/index.html)
 
 
-基于 Vue 3 + Vite + OpenLayers 构建的 WebGIS 项目，历经多次优化迭代，现已发展成为一个功能丰富、架构清晰的WebGIS平台。项目采用模块化组件设计，集成了 AI 助手、三维地球、Cesium电影级视觉效果、丰富多样的底图、鹰眼视图、实时坐标显示、视角 URL 同步、图层管理、矢量、栅格数据导入、矢量数据导出为txt\csv\geojson格式、WGS-84坐标与GCJ-02坐标系一键转换，以及基于高德天气 API + ECharts 的动态天气看板等多项核心功能，满足了从基础地图浏览到数据管理的多样化需求，未来将逐步扩展空间分析等诸多高级功能，坚持每日更新迭代。
+基于 Vue 3 + Vite + OpenLayers 构建的 WebGIS 项目，历经多次优化迭代，现已发展成为一个功能丰富、架构清晰的WebGIS平台。项目采用模块化组件设计，集成了 AI 助手、三维地球、Cesium电影级视觉效果、丰富多样的底图、鹰眼视图、实时坐标显示、视角 URL 同步、图层管理、矢量、栅格数据导入、矢量数据导出为txt\csv\geojson\kml格式、WGS-84坐标与GCJ-02坐标系一键转换，以及基于高德天气 API + ECharts 的动态天气看板等多项核心功能，满足了从基础地图浏览到数据管理的多样化需求，未来将逐步扩展空间分析等诸多高级功能，坚持每日更新迭代。
 
 > 本项目最初为大二下学期课程作业，开发周期为 5 月 28 日至 6 月 13 日。交付后曾暂时搁置，直至 11 月 28 日在专业知识与实践经验积累之下，再次启动并持续迭代优化，至今（文档撰写日期）已达到 V2.8.6 版本，实用性和美观度均有显著提升。
 
@@ -16,7 +16,7 @@
 ### 📂 图层管理 (TOC)
 * **ArcGIS 风格交互**：右键菜单管理，支持图层右键样式编辑、标注信息、拖拽管理。
 * **坐标动态重构**：内置 `WGS-84` 与 `GCJ-02` 自动纠偏，支持全图层一键重绘同步。
-* **全能数据导出**：支持点/线/面导出为 `GeoJSON`、`CSV`、 `TXT`。
+* **全能数据导出**：支持点/线/面导出为 `GeoJSON`、`CSV`、`TXT`、`KML`。
 
 ### 📥 多源数据引擎 (Data Engine)
 * **矢量全兼容**：支持 `SHP` (Zip)、`KML/KMZ`、`GeoJSON` 拖拽上传与自动标注。
@@ -181,6 +181,17 @@ WebGIS_Dev/
 │   │       ├── interactionHandlers.js  # 交互处理功能出口
 │   │       ├── routeService.js         # 路线服务功能出口
 │   │       ├── usePositionCodeTool.js  # p 参数编解码业务
+│   │       ├── toc/                     # TOC 领域（标准模型、右键菜单、多选、导出、协议层）
+│   │       │   ├── index.js             # toc 领域统一出口
+│   │       │   ├── protocol.js          # 🔹 TOC 协议层（菜单命令常量、导出格式标准化、能力解析）
+│   │       │   ├── factory.js           # StandardTOCItem 工厂（图层标准化）
+│   │       │   ├── actions/
+│   │       │   │   ├── contextActionManager.js     # TOC 面板右键动作管理器（统一处理批量/导出/图层动作）
+│   │       │   │   ├── exportService.js            # KML 导出服务（OpenLayers KML format 封装）
+│   │       │   │   └── selectionManager.js         # 递归多选与批量目标解析（含分帧大树选择）
+│   │       │   └── menu/
+│   │       │       ├── commandDispatcher.js        # 右键命令分发器（key -> 事件协议）
+│   │       │       └── contextMenu.js              # 右键菜单构建器（capabilities 驱动）
 │   │       └── features/               # 地图细粒度功能库（单一职责）
 │   │           ├── README.md           # feature 库职责约束
 │   │           ├── index.js            # feature 统一导出入口
@@ -222,7 +233,7 @@ WebGIS_Dev/
 │   │   ├── index.ts                    # Store 统一导出入口
 │   │   ├── useAppStore.ts              # 应用级状态：全局 Loading 开关与文案
 │   │   ├── useAttrStore.ts             # 属性表状态：extent、要素展示上下文
-│   │   ├── useLayerStore.ts            # 图层状态：layerTree 构建、展开状态、操作行为
+│   │   ├── useLayerStore.ts            # 🔹 图层状态：layerTree 构建、展开状态、parentId 驱动的层次结构、操作行为
 │   │   └── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
 │   │
 │   ├── router/                         # Vue Router 路由
@@ -266,7 +277,7 @@ WebGIS_Dev/
 │   │   ├── urlCrypto.js                # 历史 URL 加密（由 biz 域暴露）
 │   │   ├── labelValidator.ts           # 历史标注校验（由 biz 域暴露）
 │   │   ├── amapRectangle.js            # 高德矩形范围工具
-│   │   ├── layerExportService.js       # 图层导出服务（GeoJSON/CSV/TXT）
+│   │   ├── layerExportService.js       # 图层导出服务（GeoJSON/CSV/TXT/KML）
 │   │   ├── drawTransitRoute.ts         # 公交路线绘制
 │   │   ├── driveXmlParser.ts           # 驾车路线 XML 解析
 │   │   ├── transitRouteBuilder.js      # 路线构建器
@@ -277,7 +288,8 @@ WebGIS_Dev/
 │   └── assets/                         # 静态资源（图片、字体等）
 │
 ├── docs/                               # 文档目录
-│   └── BOUNDARY_INDEX.md               # 目录边界索引（由 docs:index 自动生成）
+│   ├── BOUNDARY_INDEX.md               # 目录边界索引（由 docs:index 自动生成）
+│   └── TOC_MAINTENANCE_GUIDE.md        # TOC 架构维护指南（风险、优化、升级路线）
 │
 ├── scripts/                            # 构建脚本
 │   └── generate-boundary-index.mjs     # 文档索引自动化生成脚本
@@ -326,19 +338,69 @@ WebGIS_Dev/
 
 批处理反馈示例：`已识别到 n 个数据集，正在同步导入...`。当某一数据集损坏时，系统会记录错误并继续导入剩余数据，最后统一汇总提示。
 
-## 本次变更特点（V2.8.8 Loading Overlay + 体验增强）
+## 本次变更特点（V2.8.9 ParentId 驱动的上传层次结构 + TOC 协议层中心化）
 
-1. **边界入口统一**：跨层调用优先使用目录入口文件，核心包括 `src/api/index.js`、`src/composables/map/index.js`、`src/utils/index.js`、`src/stores/index.ts`、`src/constants/index.js`。
-2. **map 领域解耦完成**：`MapContainer.vue` 从“功能堆叠”转为“编排外壳”，底图、图层、交互、路线、p 参数能力拆分为 map 域与 feature 库。
-3. **TOC 树构建下沉到 Store**：图层树结构与展开状态由 `useLayerStore.ts` 统一维护，视图层仅负责展示与事件分发。
-4. **utils 领域化分层**：`geo / io / biz` 作为一级领域出口，历史实现文件继续保留在 `src/utils/`，通过领域 barrel 对外暴露，降低迁移风险。
-5. **全局加载遮罩上线**：新增 `src/components/GlobalLoading.vue`，采用绿色主题、毛玻璃背景、CSS3 环形动画与动态提示文案，统一覆盖全应用异步阶段。
-6. **应用级 Loading Store**：新增 `src/stores/useAppStore.ts`，提供 `loading` 与 `loadingText` 状态，并通过 `showLoading/hideLoading` 统一控制。
-7. **全局调用工具函数**：新增 `src/utils/loading.js` 并由 `src/utils/index.js` 暴露，任意组件可零侵入调用全局遮罩。
-8. **关键耗时链路已接入**：`HomeView.vue`（3D 资源懒加载、GIS 数据导入）与 `CesiumContainer.vue`（3D 场景初始化）接入全局 Loading。
-9. **GitHub Pages 部署友好**：遮罩组件在 `App.vue` 同步挂载，避免异步组件首帧抖动和生产环境初次闪烁。
+1. **TOC 协议层中心化**：新增 `src/composables/map/toc/protocol.js` 作为 TOC 领域的协议枢纽，统一定义 `TOC_MENU_COMMANDS`（菜单命令常量 30+ 条）、导出格式标准化、图层 ID 解析、能力位定义等，使菜单、命令分发、动作执行三层完全解耦且易于维护。
+
+2. **ParentId 驱动的上传层次构建**：在 `useLayerStore.ts` 中实现完整的层次结构生成引擎，核心函数包括：
+   - `buildUploadLayerChildren()` - 从 parentId 路径链递归构建文件夹树与层级关系
+   - `normalizeUploadFolderPath()` - 支持多种分隔符（`/`、`\`、`>`）的路径规范化
+   - `buildUploadFolderPathChain()` - 递归生成完整的祖先路径链（用于展开状态初始化）
+   - `toUploadFolderNodeId()` - 动态文件夹 ID 生成（前缀 `folder-upload-dyn:` 避免冲突）
+   - `UploadFolderEntry` 类型定义 - 提供类型安全的层级树节点结构
+
+3. **展开状态智能初始化**：上传图层树的所有祖先文件夹在 `syncLayers()` 时自动标记为展开，用户无需手动展开深层文件夹即可直观查看数据组织，大幅提升用户体验。
+
+4. **兼容性与容错策略**：
+   - 保留对遗留 parentId 格式的降级支持
+   - 路径规范化支持多种输入格式自动识别
+   - 动态文件夹 ID 使用特定前缀确保与层 ID 无冲突
+
+5. **构建验证与性能**：
+   - `npm run build` 成功（1266 modules transformed）
+   - SidePanel bundle 体积：109.48 kB / 36.81 kB (gzipped)
+   - 无编译错误和性能下降
 
 ## 后续使用方式（推荐）
+
+### 🔧 TOC 协议层详解（protocol.js）
+
+`src/composables/map/toc/protocol.js` 是 TOC 领域的协议枢纽，集中定义了三大类协议：
+
+#### 1) 菜单命令常量 `TOC_MENU_COMMANDS`（30+ 条）
+```js
+import { TOC_MENU_COMMANDS } from '@/composables/map/toc';
+
+// 示例：显隐、导出、样式、删除等操作键
+const command = TOC_MENU_COMMANDS.TOGGLE_VISIBILITY; // 'toc-menu-toggle-visibility'
+```
+所有右键菜单项都使用这些常量作为唯一标识，避免字符串散落在各模块。
+
+#### 2) 导出格式标准化 `normalizeTocExportFormat(command)`
+```js
+import { normalizeTocExportFormat } from '@/composables/map/toc';
+
+const format = normalizeTocExportFormat(TOC_MENU_COMMANDS.EXPORT_AS_GEOJSON);
+// 返回值：{ format: 'GeoJSON', mimeType: 'application/geo+json', ext: '.geojson' }
+```
+将菜单命令映射到标准化的导出格式对象，支持 GeoJSON/CSV/TXT/KML 四种格式。
+
+#### 3) 图层 ID 规范化 `normalizeTocLayerId(nodeId, sourceType)`
+```js
+import { normalizeTocLayerId } from '@/composables/map/toc';
+
+// 解析上传层 ID：识别动态文件夹 vs 实际图层
+const isFolder = normalizeTocLayerId('folder-upload-dyn:path/to/folder', 'upload');
+```
+
+#### 4) 能力位定义与解析
+```js
+// 导出格式支持能力位
+const canExportGeoJSON = capabilities.canExportGeoJSON;
+const canExportKML = capabilities.canExportKML;
+```
+
+### 后续使用方式（推荐）
 
 ### 1) 统一从边界入口导入
 
@@ -358,6 +420,59 @@ import { createMapStylesObject } from '@/constants';
 2. 在对应领域入口（`basemapSystem.js` / `layerManager.js` / `interactionHandlers.js` / `routeService.js`）导出新能力。
 3. 如需跨域复用，再在 `src/composables/map/index.js` 汇总导出。
 4. 由 `MapContainer.vue` 进行注入与编排，不在子组件里分散地图写操作。
+
+### 2.2) 上传层次结构使用指南（parentId 驱动）
+
+当上传 ZIP/KMZ 等容器文件或多层文件夹结构时，系统自动根据 `parentId` 路径链生成层级树：
+
+```js
+// 上传文件夹结构示例：
+// ShareData/
+//   ├── 2024年数据/
+//   │   ├── 北京.geojson          // parentId: "北京"
+//   │   └── 上海.geojson          // parentId: "上海"
+//   └── 2023年数据/
+//       └── 广州.geojson          // parentId: "广州"
+
+// 生成的图层树（TOC 中展示）：
+// 📂 2024年数据
+//   ├─ 北京.geojson
+//   └─ 上海.geojson
+// 📂 2023年数据
+//   └─ 广州.geojson
+
+// 关键实现函数：
+import { buildUploadLayerChildren, normalizeUploadFolderPath } from '@/stores/useLayerStore';
+
+// 1) 规范化路径（支持 `/`、`\`、`>` 等多种分隔符）
+const normalizedPath = normalizeUploadFolderPath('path/to/subfolder'); // -> ['path', 'to', 'subfolder']
+
+// 2) 从 parentId 路径链构建完整的文件夹树
+const uploadChildren = buildUploadLayerChildren(uploadLayers);
+
+// 3) 所有祖先文件夹自动标记为展开状态（syncLayers() 内自动处理）
+// 用户打开 TOC 时会看到完整的层级结构，无需手动展开
+```
+
+#### 支持的路径格式
+- Unix 风格：`"2024/北京/数据"`
+- Windows 风格：`"2024\\北京\\数据"`
+- 自定义分隔符：`"2024>北京>数据"`
+- 混合分隔符（自动规范化）：`"2024/北京\\数据"`
+
+#### 动态文件夹 ID 生成规则
+```js
+// 动态文件夹使用特殊前缀避免与图层 ID 冲突
+const folderId = 'folder-upload-dyn:2024/北京'; // 前缀 + 规范化路径
+```
+
+### 2.1) 新增 TOC 右键菜单能力的标准流程
+
+1. **协议层先行**：在 `src/composables/map/toc/protocol.js` 中声明新的菜单命令常量（如 `TOC_MENU_COMMANDS.MY_ACTION = 'toc-menu-myaction'`）与导出格式（如 `TOC_EXPORT_FORMATS.MY_FORMAT`）。
+2. **菜单项声明**：在 `src/composables/map/toc/menu/contextMenu.js` 增加菜单项声明（只做显示策略，不写业务副作用），使用 protocol 中定义的常量作为菜单 key。
+3. **命令分发**：在 `src/composables/map/toc/menu/commandDispatcher.js` 增加命令分发规则（`key -> 标准化事件协议`），使用 protocol 的 `TOC_MENU_COMMANDS` 常量。
+4. **事件落地**：在 `src/composables/map/toc/actions/contextActionManager.js` 增加事件处理逻辑（批量操作、导出、动作转发），通过 `normalizeTocExportFormat()` 等 protocol 辅助函数简化实现。
+5. **选择逻辑**（如涉及树选择）：统一在 `src/composables/map/toc/actions/selectionManager.js` 维护，避免组件内出现递归遍历。
 
 ### 3) 新增 utils 能力的标准流程
 
@@ -399,6 +514,28 @@ async function runTask() {
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V2.8.8 (2026-04-17)
+#### 🌲 ParentId 驱动的上传层次结构实现 + TOC 协议层中心化
+* **协议层中心化**：新增 `src/composables/map/toc/protocol.js`，集中管理 TOC_MENU_COMMANDS、导出格式标准化（normalizeTocExportFormat）、图层 ID 解析（normalizeTocLayerId）、能力解析等协议定义。
+* **上传层次化构建**：在 `useLayerStore.ts` 中新增上传层次结构相关函数：
+  * `buildUploadLayerChildren()` - 从 parentId 路径链构建文件夹 + 层级关系
+  * `normalizeUploadFolderPath()` - 支持多种分隔符（`/`、`\`、`>`）的路径规范化
+  * `buildUploadFolderPathChain()` - 递归生成完整的祖先路径链（用于展开状态初始化）
+  * `toUploadFolderNodeId()` - 动态文件夹 ID 生成（前缀 `folder-upload-dyn:`）
+  * `deriveUploadFolderDisplayName()` - 文件夹显示名称推导
+  * `UploadFolderEntry` 类型定义 - 层级树节点结构
+* **展开状态智能初始化**：上传图层树的所有祖先文件夹在 `syncLayers()` 时自动标记为展开，提供直观的默认 UX
+* **兼容性保证**：保留对遗留 parentId 格式的降级支持，不破坏现有上传流程
+* **构建验证**：`npm run build` 成功（1266 modules transformed，SidePanel 109.48 kB / 36.81 kB gzipped）
+
+#### 🌳 TOC 右键菜单架构收敛 + KML 增强
+* **右键命令迁移完成**：将 TOC 右键命令解析从组件中迁移到 `src/composables/map/toc/menu/commandDispatcher.js`，组件仅负责渲染与事件透传。
+* **右键动作集中管理**：新增 `src/composables/map/toc/actions/contextActionManager.js`，统一处理多选、批量显示/隐藏、批量导出、批量移除及图层动作转发。
+* **KML 导出服务独立**：新增 `src/composables/map/toc/actions/exportService.js`，通过 OpenLayers `KML` format 直接写出，`layerExportService.js` 改为调用该服务。
+* **大树多选性能优化**：`selectionManager.js` 增加 `applyRecursiveSelectionChunked`，对上百要素 KML 文件夹执行分帧递归勾选，减少主线程阻塞。
+* **TOC 领域边界成型**：新增 `src/composables/map/toc/index.js`，并由 `src/composables/map/index.js` 汇总导出，便于后续统一维护。
+* **构建验证通过**：`npm run build` 成功（1265 modules transformed）。
 
 ### V2.8.7 (2026-04-16)
 #### 🌿 全局 Loading 遮罩 + 高耗时流程统一反馈

@@ -5,7 +5,8 @@
             :class="{ 
                 'is-folder': node.type === 'folder', 
                 'is-leaf': node.type === 'layer',
-                'is-active': node.type === 'layer' && node.id === activeLayerId
+                'is-active': node.type === 'layer' && node.id === activeLayerId,
+                'is-multi-selected': isLayerMultiSelected
             }"
             @click="handlePrimaryClick"
             @contextmenu.prevent="openContextMenuFromEvent"
@@ -38,7 +39,7 @@
 
             <span v-if="node.type === 'layer'" class="feature-badge">{{ node.featureCount || 0 }}</span>
 
-            <button v-if="node.type === 'layer'" class="more-btn" aria-label="更多操作" @click.stop="openContextMenuFromButton">•••</button>
+            <button v-if="menuItems.length" class="more-btn" aria-label="更多操作" @click.stop="openContextMenuFromButton">•••</button>
         </div>
 
         <div v-if="node.type === 'folder' && node.expanded" class="toc-children">
@@ -47,6 +48,7 @@
                 :key="child.id"
                 :node="child"
                 :active-layer-id="activeLayerId"
+                :selected-layer-ids="selectedLayerIds"
                 @action="emit('action', $event)"
             />
         </div>
@@ -78,6 +80,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { isValidLabel } from '../utils/biz';
+import {
+    resolveFolderSelectionState,
+    buildContextMenuItems,
+    dispatchContextMenuCommand
+} from '../composables/map/toc';
 
 /**
  * TOCTreeItem - 地理信息系统图层树节点组件
@@ -101,7 +108,8 @@ defineOptions({ name: 'TOCTreeItem' });
 
 const props = defineProps({
     node: { type: Object, required: true },
-    activeLayerId: { type: String, default: null }
+    activeLayerId: { type: String, default: null },
+    selectedLayerIds: { type: Array, default: () => [] }
 });
 
 const emit = defineEmits(['action']);
@@ -110,49 +118,73 @@ const menuX = ref(0);
 const menuY = ref(0);
 const menuRef = ref(null);
 
+const selectedLayerIdSet = computed(() => {
+    const ids = Array.isArray(props.selectedLayerIds) ? props.selectedLayerIds : [];
+    return new Set(ids.map((id) => String(id || '').trim()).filter(Boolean));
+});
+
+const isLayerMultiSelected = computed(() => {
+    if (props.node?.type !== 'layer') return false;
+    const layerId = String(props.node?.id || '').trim();
+    if (!layerId) return false;
+    return selectedLayerIdSet.value.has(layerId);
+});
+
+const folderSelectionState = computed(() => {
+    if (props.node?.type !== 'folder') {
+        return {
+            totalCount: 0,
+            selectedCount: 0,
+            isAllSelected: false,
+            hasAnySelected: false,
+            isPartialSelected: false
+        };
+    }
+
+    return resolveFolderSelectionState(props.node, selectedLayerIdSet.value);
+});
+
+const menuCapabilities = computed(() => {
+    const actions = props.node?.actions || {};
+    const canToggleLabel = !!actions.label && isValidLabel(props.node?.raw?.name || props.node?.name, 100).valid;
+    const canExportData = !!actions.exportLayerData;
+    const canExportCSV = actions.canExportCSV !== false && canExportData;
+    const canExportTXT = actions.canExportTXT !== false && canExportData;
+    const canExportGeoJSON = actions.canExportGeoJSON !== false && canExportData;
+    const canExportKML = actions.canExportKML !== false && canExportData;
+
+    return {
+        canView: !!actions.viewEvent,
+        canSolo: !!actions.soloEvent,
+        canOpenAttributeTable: !!actions.attribute,
+        canStyle: !!actions.style,
+        canOpenAoiPanel: !!actions.openAoiPanel,
+        canToggleLabel,
+        isLabelVisible: props.node?.labelVisible !== false,
+        canCopyCoordinates: !!actions.copyCoordinates,
+        canToggleLayerCRS: !!actions.toggleLayerCRS,
+        canExportData,
+        canExportCSV,
+        canExportTXT,
+        canExportGeoJSON,
+        canExportKML,
+        canZoom: !!actions.zoom,
+        canRemove: !!actions.remove,
+        removeLabel: actions.removeTip || '移除图层'
+    };
+});
+
 const menuItems = computed(() => {
-    if (props.node?.type !== 'layer') return [];
-
-    const actions = props.node.actions || {};
-    const groups = [];
-
-    const primary = [];
-    if (actions.viewEvent) primary.push({ key: 'view', label: '查看图层' });
-    if (actions.soloEvent) primary.push({ key: 'solo', label: '仅显示此图层' });
-    if (primary.length) groups.push(primary);
-
-    const edit = [];
-    if (actions.attribute) edit.push({ key: 'attribute', label: '打开属性表' });
-    if (actions.style) edit.push({ key: 'style', label: '样式设置' });
-    if (actions.openAoiPanel) edit.push({ key: 'open-aoi-panel', label: '打开 AOI 面板' });
-    if (actions.label && isValidLabel(props.node?.raw?.name || props.node?.name, 100).valid) {
-        edit.push({ key: 'label', label: props.node.labelVisible ? '关闭标注' : '开启标注' });
-    }
-    if (actions.copyCoordinates) edit.push({ key: 'copy', label: '复制坐标' });
-    if (actions.toggleLayerCRS) {
-        edit.push({ divider: true, key: 'divider_crs' });//添加分割线
-        edit.push({ key: 'convert-wgs84-to-gcj02', label: 'WGS-84 =>GCJ-02' });
-        edit.push({ key: 'convert-gcj02-to-wgs84', label: 'GCJ-02 =>WGS-84' });
-    }
-    if (actions.exportLayerData) {
-        edit.push({ divider: true, key: 'divider_export' });//添加分割线
-        edit.push({ key: 'export-csv', label: '导出坐标(CSV)' });
-        edit.push({ key: 'export-txt', label: '导出坐标(TXT)' });
-        edit.push({ key: 'export-geojson', label: '导出坐标(GeoJSON)' });
-    }
-    if (edit.length) groups.push(edit);
-
-    const ops = [];
-    if (actions.zoom) ops.push({ key: 'zoom', label: '缩放至图层' });
-    if (actions.remove) ops.push({ key: 'remove', label: actions.removeTip || '移除图层', danger: true });
-    if (ops.length) groups.push(ops);
-
-    const flattened = [];
-    groups.forEach((group, idx) => {
-        if (idx > 0) flattened.push({ key: `divider_${idx}`, divider: true });
-        flattened.push(...group);
+    return buildContextMenuItems({
+        node: props.node,
+        capabilities: menuCapabilities.value,
+        selectionState: {
+            selectedLayerIds: Array.from(selectedLayerIdSet.value),
+            currentNodeId: props.node?.id,
+            isCurrentLayerSelected: isLayerMultiSelected.value,
+            folderSelectionState: folderSelectionState.value
+        }
     });
-    return flattened;
 });
 
 function emitAction(type, payload = {}) {
@@ -189,7 +221,6 @@ function normalizeMenuPosition() {
 }
 
 function openContextMenuAt(x, y) {
-    if (props.node?.type !== 'layer') return;
     if (!menuItems.value.length) return;
 
     menuX.value = Number(x) || 0;
@@ -214,83 +245,18 @@ function openContextMenuFromButton(event) {
     openContextMenuAt(event.clientX, event.clientY);
 }
 
-function emitConfigured(eventName, payload) {
-    if (!eventName) return;
-    emitAction(eventName, payload);
-}
-
 function handleMenuCommand(key) {
-    const actions = props.node.actions || {};
+    const events = dispatchContextMenuCommand({
+        key,
+        node: props.node,
+        selectedLayerIds: Array.from(selectedLayerIdSet.value)
+    });
 
-    if (key === 'view') {
-        emitConfigured(actions.viewEvent, actions.viewPayload || { layerId: props.node.id });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'solo') {
-        emitConfigured(actions.soloEvent, actions.soloPayload || { layerId: props.node.id });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'attribute') {
-        emitAction('open-attribute-table', { layerId: props.node.id });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'style') {
-        emitAction('set-style-target', { layerId: actions.styleTarget || props.node.id });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'open-aoi-panel') {
-        emitAction('open-amap-aoi-panel', {
-            layerId: props.node.id,
-            ...(actions.aoiPanelPayload || {})
-        });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'label') {
-        emitAction('toggle-layer-label-visibility', {
-            layerId: props.node.id,
-            visible: !props.node.labelVisible
-        });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'copy') {
-        emitAction('copy-layer-coordinates', { layer: props.node.raw });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'convert-wgs84-to-gcj02' || key === 'convert-gcj02-to-wgs84') {
-        const fromCrs = key === 'convert-wgs84-to-gcj02' ? 'wgs84' : 'gcj02';
-        const toCrs = key === 'convert-wgs84-to-gcj02' ? 'gcj02' : 'wgs84';
-        emitAction('toggle-layer-crs', {
-            layerId: props.node.id,
-            fromCrs,
-            toCrs
-        });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'export-csv' || key === 'export-txt' || key === 'export-geojson') {
-        emitAction('export-layer-data', {
-            layerId: props.node.id,
-            format: key === 'export-csv' ? 'csv' : (key === 'export-txt' ? 'txt' : 'geojson')
-        });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'zoom') {
-        emitConfigured(actions.zoomEvent || 'zoom-layer', actions.zoomPayload || { layerId: props.node.id });
-        closeContextMenu();
-        return;
-    }
-    if (key === 'remove') {
-        emitConfigured(actions.removeEvent || 'remove-layer', actions.removePayload || { layerId: props.node.id });
-        closeContextMenu();
-    }
+    events.forEach((evt) => {
+        emitAction(evt.type, evt.payload || {});
+    });
+
+    closeContextMenu();
 }
 
 function handleToggleVisibility(event) {
@@ -383,6 +349,15 @@ onBeforeUnmount(() => {
 
 .toc-row.is-active:hover {
     background: linear-gradient(135deg, rgba(190, 225, 215, 0.7) 0%, rgba(180, 220, 210, 0.7) 100%);
+}
+
+.toc-row.is-multi-selected {
+    background: linear-gradient(135deg, rgba(195, 222, 250, 0.48) 0%, rgba(220, 240, 255, 0.4) 100%);
+    box-shadow: inset 0 0 0 1px rgba(50, 120, 190, 0.35);
+}
+
+.toc-row.is-multi-selected .name {
+    color: #225d92;
 }
 
 .toc-row::before {

@@ -23,6 +23,7 @@
                 :route-layers="routeLayers"
                 :search-layers="searchLayers"
                 :upload-layers="uploadLayers"
+                :selected-layer-ids="multiSelectedLayerIds"
                 :has-draw-card="hasDrawCard"
                 :overview="overview"
                 :is-raster-layer="isRasterLayer"
@@ -314,6 +315,12 @@ import { useMessage } from '../composables/useMessage';
 import { useGisLoader } from '../composables/useGisLoader';
 import { useSharedResourceLoader } from '../composables/useSharedResourceLoader';
 import { usePositionCodeTool } from '../composables/map';
+import {
+    applyRecursiveSelection,
+    applyRecursiveSelectionChunked,
+    pruneSelectedLayerIds,
+    handleLayerTreeContextAction
+} from '../composables/map/toc';
 import { useLayerStore, useAttrStore } from '../stores';
 import { useStyleEditor } from '../constants';
 import {
@@ -391,6 +398,8 @@ const manualAoiJsonText = ref('');
 const manualAoiError = ref('');
 const manualAoiDialogVisible = ref(false);
 const manualAoiSourceLayerName = ref('');
+const multiSelectedLayerIds = ref([]);
+let recursiveSelectionToken = 0;
 const isDecodePBusy = ref(false);
 const isGeocodeBusy = ref(false);
 const MB = 1024 * 1024;
@@ -793,11 +802,93 @@ function isRasterLayer(layer) {
     return layerStore.isRasterLayer(layer);
 }
 
+const availableLayerIds = computed(() => (
+    (props.userLayers || [])
+        .map((layer) => String(layer?.id || '').trim())
+        .filter(Boolean)
+));
+
+const layerActionMap = computed(() => {
+    const map = new Map();
+
+    const walk = (nodes = []) => {
+        (nodes || []).forEach((node) => {
+            if (!node) return;
+
+            if (node.type === 'layer') {
+                const nodeId = String(node.id || '').trim();
+                if (nodeId) {
+                    map.set(nodeId, node.actions || {});
+                }
+            }
+
+            if (Array.isArray(node.children) && node.children.length > 0) {
+                walk(node.children);
+            }
+        });
+    };
+
+    walk(layerStore.layerTree || []);
+    return map;
+});
+
+function resolveLayerActionsById(layerId) {
+    const id = String(layerId || '').trim();
+    if (!id) return null;
+    return layerActionMap.value.get(id) || null;
+}
+
+function pruneMultiSelectedLayerIds() {
+    multiSelectedLayerIds.value = pruneSelectedLayerIds(
+        multiSelectedLayerIds.value,
+        availableLayerIds.value
+    );
+}
+
+function setNodeRecursiveSelection(nodeId, checked) {
+    multiSelectedLayerIds.value = applyRecursiveSelection({
+        selectedLayerIds: multiSelectedLayerIds.value,
+        treeNodes: layerStore.layerTree || [],
+        targetNodeId: nodeId,
+        checked,
+        availableLayerIds: availableLayerIds.value
+    });
+}
+
+function addMultiSelectedLayer(layerId) {
+    setNodeRecursiveSelection(layerId, true);
+}
+
+function removeMultiSelectedLayer(layerId) {
+    setNodeRecursiveSelection(layerId, false);
+}
+
+function setFolderRecursiveSelection(nodeId, checked) {
+    const currentToken = ++recursiveSelectionToken;
+    applyRecursiveSelectionChunked({
+        selectedLayerIds: multiSelectedLayerIds.value,
+        treeNodes: layerStore.layerTree || [],
+        targetNodeId: nodeId,
+        checked,
+        availableLayerIds: availableLayerIds.value,
+        chunkSize: 180,
+        shouldCancel: () => currentToken !== recursiveSelectionToken
+    }).then((nextSelection) => {
+        if (currentToken !== recursiveSelectionToken) return;
+        multiSelectedLayerIds.value = nextSelection;
+    });
+}
+
+function clearMultiSelectedLayers() {
+    multiSelectedLayerIds.value = [];
+}
+
 watch(
     () => props.userLayers,
     (layers) => {
         layerStore.syncLayers(layers || [], props.overview || {});
         attrStore.syncLayers(layers || []);
+        pruneMultiSelectedLayerIds();
     },
     { immediate: true, deep: true }
 );
@@ -927,70 +1018,34 @@ function handleLayerTreeAction(evt) {
     const type = evt?.type;
     if (!type) return;
 
+    const contextHandled = handleLayerTreeContextAction({
+        evt,
+        selectedLayerIds: multiSelectedLayerIds.value,
+        availableLayerIds: availableLayerIds.value,
+        addMultiSelectedLayer,
+        removeMultiSelectedLayer,
+        clearMultiSelectedLayers,
+        setFolderRecursiveSelection,
+        emit,
+        message,
+        openAttributeTable,
+        setStyleTarget,
+        copyLayerCoordinates,
+        openManualAoiDialogByPoi,
+        onDragStart,
+        onDrop,
+        resolveLayerActionsById
+    });
+    if (contextHandled) return;
+
     if (type === 'layer-selected') {
         // 图层行被选中，可用于高亮地图上的图层等操作
         emit('layer-selected', evt.layerId);
         return;
     }
-    if (type === 'open-attribute-table') {
-        openAttributeTable(evt.layerId);
-        return;
-    }
-    if (type === 'set-style-target') {
-        setStyleTarget(evt.layerId);
-        return;
-    }
-    if (type === 'copy-layer-coordinates') {
-        copyLayerCoordinates(evt.layer);
-        return;
-    }
-    if (type === 'open-amap-aoi-panel') {
-        openManualAoiDialogByPoi({
-            poiid: evt?.poiid,
-            layerName: evt?.layerName
-        }, {
-            showMissingIdHint: true
-        });
-        return;
-    }
-    if (type === 'toggle-layer-crs' || type === 'toggle-search-layer-crs') {
-        emit('toggle-layer-crs', {
-            layerId: evt.layerId,
-            crs: evt.crs,
-            fromCrs: evt.fromCrs,
-            toCrs: evt.toCrs
-        });
-        return;
-    }
-    if (type === 'export-layer-data') {
-        emit('export-layer-data', {
-            layerId: evt.layerId,
-            format: evt.format
-        });
-        return;
-    }
-    if (type === 'drag-layer-start') {
-        onDragStart(evt.layerId);
-        return;
-    }
-    if (type === 'drop-layer') {
-        onDrop(evt.layerId);
-        return;
-    }
     if (type === 'toggle-layer-visibility') {
         emit('toggle-layer-visibility', { layerId: evt.layerId, visible: !!evt.visible });
         return;
-    }
-    if (type === 'toggle-layer-label-visibility') {
-        emit('toggle-layer-label-visibility', { layerId: evt.layerId, visible: !!evt.visible });
-        return;
-    }
-    if (type === 'zoom-layer' || type === 'view-layer' || type === 'remove-layer' || type === 'solo-layer') {
-        emit(type, evt.layerId);
-        return;
-    }
-    if (type === 'interaction') {
-        emit('interaction', evt.interaction);
     }
 }
 

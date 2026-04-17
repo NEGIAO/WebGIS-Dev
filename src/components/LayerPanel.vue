@@ -7,6 +7,7 @@
                 :key="node.id"
                 :node="node"
                 :active-layer-id="activeLayerId"
+                :selected-layer-ids="selectedLayerIds"
                 @action="handleTreeAction"
             />
         </div>
@@ -24,6 +25,7 @@ defineProps({
     routeLayers: { type: Array, default: () => [] },
     searchLayers: { type: Array, default: () => [] },
     uploadLayers: { type: Array, default: () => [] },
+    selectedLayerIds: { type: Array, default: () => [] },
     hasDrawCard: { type: Boolean, default: false },
     overview: { type: Object, default: () => ({ drawCount: 0 }) },
     isRasterLayer: { type: Function, required: true }
