@@ -138,18 +138,27 @@ jobs:
   # 第四步：同步到 Hugging Face (仅后端代码)
   # ==========================================
   sync-to-huggingface:
-    needs: build # 建议加上这一行，确保前端打包没问题再推后端
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      needs: build
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout Code
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
 
-      - name: Push to HF Space
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          # 使用 ${GITHUB_REF_NAME} 动态获取当前分支名
-          # 这样能确保推送的是刚刚修改的分支内容
-          git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" ${GITHUB_REF_NAME}:main
+        - name: Push Backend Only to HF
+          env:
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          run: |
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "actions@github.com"
+
+            # 1. 把刚才改好的 Dockerfile 拷贝进后端目录
+            cp Dockerfile backend/
+
+            # 2. 必须 commit 这个变动，subtree 才能识别到 backend 里的 Dockerfile
+            git add backend/Dockerfile
+            git commit -m "chore: prepare backend subtree for deployment"
+
+            # 3. 拆分并推送 (确保推送的是包含了 Dockerfile 的最新状态)
+            git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" `git subtree split --prefix=backend HEAD`:main
