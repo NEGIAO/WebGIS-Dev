@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGIS Frontend Integration Example</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #map {
+            flex: 1;
+            background: #e0e0e0;
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        select,
+        input,
+        button {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 5px;
+        }
+
+        button:hover {
+            background: #1976D2;
+        }
+
+        .info-box {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 12px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .info-item {
+            margin-bottom: 5px;
+            color: #666;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .status {
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .status.success {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .status.partial {
+            background: #FF9800;
+            color: white;
+        }
+
+        .status.error {
+            background: #f44336;
+            color: white;
+        }
+
+        .status.loading {
+            background: #2196F3;
+            color: white;
+        }
+
+        .header {
+            background: #f5f5f5;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .version {
+            font-size: 12px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 侧边栏 -->
+        <div class="sidebar">
+            <div class="title">🗺️ WebGIS Frontend</div>
+
+            <!-- API 配置 -->
+            <div class="section">
+                <div class="section-title">API Configuration</div>
+
+                <div class="control-group">
+                    <label for="apiUrl">Backend URL</label>
+                    <input 
+                        type="text" 
+                        id="apiUrl" 
+                        value="http://localhost:8000" 
+                        placeholder="http://your-domain"
+                    />
+                </div>
+
+                <button onclick="testBackend()">🔍 Test Backend</button>
+                <div id="backendStatus" class="info-box"></div>
+            </div>
+
+            <!-- 瓦片层配置 -->
+            <div class="section">
+                <div class="section-title">Tile Configuration</div>
+
+                <div class="control-group">
+                    <label for="tileLayer">Tile Layer Type</label>
+                    <select id="tileLayer" onchange="changeTileLayer()">
+                        <option value="s">🛰️ Satellite (s)</option>
+                        <option value="y">🗺️ Hybrid (y)</option>
+                        <option value="h">⛰️ Terrain (h)</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="coordinates">Zoom Level</label>
+                    <input 
+                        type="range" 
+                        id="zoomLevel" 
+                        min="1" 
+                        max="22" 
+                        value="13"
+                        oninput="updateCoordinates()"
+                        style="width: 100%;"
+                    />
+                    <span id="zoomDisplay" style="font-size: 12px; color: #999;">Level: 13</span>
+                </div>
+
+                <button onclick="downloadTile()">⬇️ Download Current Tile</button>
+            </div>
+
+            <!-- 访客统计 -->
+            <div class="section">
+                <div class="section-title">Visitor Tracking</div>
+
+                <div id="visitStatus" class="info-box"></div>
+
+                <button onclick="logVisit()">📍 Log My Visit</button>
+
+                <div class="info-box" style="margin-top: 10px;">
+                    <div class="info-item">
+                        <span class="info-label">Location:</span>
+                        <span id="visitCity">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">IP:</span>
+                        <span id="visitIP">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Time:</span>
+                        <span id="visitTime">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 开发者信息 -->
+            <div class="section">
+                <div class="section-title">Developer Info</div>
+
+                <button onclick="getApiInfo()">ℹ️ Get API Info</button>
+
+                <div id="apiInfo" class="info-box"></div>
+            </div>
+        </div>
+
+        <!-- 地图 -->
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // ==================== 全局变量 ====================
+        let map;
+        let tileLayer;
+        const getApiUrl = () => document.getElementById('apiUrl').value;
+
+        // ==================== 初始化 ====================
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            logVisit(); // 页面加载时记录访客
+        });
+
+        // ==================== 地图初始化 ====================
+        function initMap() {
+            // 创建地图，中心在北京
+            map = L.map('map').setView([39.9, 116.4], 13);
+
+            // 初始化瓦片层
+            updateTileLayer();
+
+            // 添加缩放和位置控制
+            L.control.scale().addTo(map);
+
+            // 监听地图缩放变化
+            map.on('zoomend', updateCoordinates);
+        }
+
+        // ==================== 瓦片层管理 ====================
+        function updateTileLayer() {
+            const apiUrl = getApiUrl();
+            const lyrs = document.getElementById('tileLayer').value;
+
+            // 移除旧瓦片层
+            if (tileLayer) {
+                map.removeLayer(tileLayer);
+            }
+
+            // 添加新瓦片层
+            tileLayer = L.tileLayer(`${apiUrl}/api/tile/{z}/{x}/{y}?lyrs=${lyrs}`, {
+                attribution: 'Google Satellite | WebGIS Backend',
+                maxZoom: 22,
+                errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+            }).addTo(map);
+
+            showStatus(`✓ Tile layer loaded (${lyrs})`, 'success');
+        }
+
+        function changeTileLayer() {
+            updateTileLayer();
+        }
+
+        // ==================== 坐标和缩放 ====================
+        function updateCoordinates() {
+            const zoom = map.getZoom();
+            document.getElementById('zoomLevel').value = zoom;
+            document.getElementById('zoomDisplay').textContent = `Level: ${zoom}`;
+        }
+
+        // ==================== 访客记录 ====================
+        async function logVisit() {
+            const apiUrl = getApiUrl();
+            const statusDiv = document.getElementById('visitStatus');
+
+            try {
+                statusDiv.innerHTML = '<div class="status loading">⏳ Recording visit...</div>';
+
+                const response = await fetch(`${apiUrl}/api/log-visit`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success' || data.status === 'partial_success') {
+                    statusDiv.innerHTML = `<div class="status success">✓ Visit recorded</div>`;
+
+                    if (data.data) {
+                        document.getElementById('visitCity').textContent = data.data.city || '-';
+                        document.getElementById('visitIP').textContent = data.data.ip || '-';
+                        document.getElementById('visitTime').textContent = data.data.visit_time || '-';
+                    }
+                } else {
+                    statusDiv.innerHTML = `<div class="status error">✗ Recording failed: ${data.message}</div>`;
+                }
+            } catch (err) {
+                statusDiv.innerHTML = `<div class="status error">✗ Error: ${err.message}</div>`;
+                console.error('Visit log error:', err);
+            }
+        }
+
+        // ==================== 后端测试 ====================
+        async function testBackend() {
+            const apiUrl = getApiUrl();
+            const statusDiv = document.getElementById('backendStatus');
+
+            try {
+                statusDiv.innerHTML = '<div class="status loading">⏳ Testing backend...</div>';
+
+                // 测试健康检查
+                const healthResponse = await fetch(`${apiUrl}/health`);
+                if (!healthResponse.ok) throw new Error('Health check failed');
+
+                // 测试 API 信息
+                const infoResponse = await fetch(`${apiUrl}/api/info`);
+                if (!infoResponse.ok) throw new Error('API info failed');
+
+                const info = await infoResponse.json();
+
+                statusDiv.innerHTML = `
+                    <div class="status success">✓ Backend is healthy</div>
+                    <div class="info-item"><span class="info-label">Version:</span> ${info.version}</div>
+                    <div class="info-item"><span class="info-label">Name:</span> ${info.name}</div>
+                `;
+            } catch (err) {
+                statusDiv.innerHTML = `<div class="status error">✗ Backend error: ${err.message}</div>`;
+            }
+        }
+
+        // ==================== 获取 API 信息 ====================
+        async function getApiInfo() {
+            const apiUrl = getApiUrl();
+            const infoDiv = document.getElementById('apiInfo');
+
+            try {
+                infoDiv.innerHTML = '<div class="status loading">⏳ Fetching API info...</div>';
+
+                const response = await fetch(`${apiUrl}/api/info`);
+                const data = await response.json();
+
+                let html = `<div class="status success">✓ API Information</div>`;
+                html += `<div class="info-item"><span class="info-label">Name:</span> ${data.name}</div>`;
+                html += `<div class="info-item"><span class="info-label">Version:</span> ${data.version}</div>`;
+                html += `<div class="info-item"><span class="info-label">Description:</span> ${data.description}</div>`;
+
+                infoDiv.innerHTML = html;
+            } catch (err) {
+                infoDiv.innerHTML = `<div class="status error">✗ Error: ${err.message}</div>`;
+            }
+        }
+
+        // ==================== 下载瓦片 ====================
+        async function downloadTile() {
+            const zoom = map.getZoom();
+            const center = map.getCenter();
+
+            // 计算瓦片坐标
+            const x = Math.floor((center.lng + 180) / 360 * (1 << zoom));
+            const y = Math.floor((1 - Math.log(Math.tan(center.lat * Math.PI / 180) + 1 / Math.cos(center.lat * Math.PI / 180)) / Math.PI) / 2 * (1 << zoom));
+
+            const apiUrl = getApiUrl();
+            const lyrs = document.getElementById('tileLayer').value;
+            const tileUrl = `${apiUrl}/api/tile/${zoom}/${x}/${y}?lyrs=${lyrs}`;
+
+            try {
+                const response = await fetch(tileUrl);
+                const blob = await response.blob();
+
+                // 创建下载链接
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `tile_${zoom}_${x}_${y}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+
+                showStatus(`✓ Tile downloaded (z:${zoom}, x:${x}, y:${y})`, 'success');
+            } catch (err) {
+                showStatus(`✗ Download failed: ${err.message}`, 'error');
+            }
+        }
+
+        // ==================== 状态显示 ====================
+        function showStatus(message, type) {
+            // 可以用于全局通知
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // ==================== 初始化地图事件监听 ====================
+        setTimeout(() => {
+            updateCoordinates();
+        }, 1000);
+    </script>
+</body>
+</html>

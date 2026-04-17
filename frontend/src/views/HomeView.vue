@@ -24,6 +24,7 @@ showLoading('正在初始化地图与核心环境...');
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
+import FloatingAccountPanel from '../components/FloatingAccountPanel.vue';
 import WeatherChartPanel from '../components/WeatherChartPanel.vue';
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
@@ -488,6 +489,8 @@ onUnmounted(() => {
 
 <template>
     <div class="home-container">
+        <FloatingAccountPanel />
+
         <!-- 特效光标 -->
         <MagicCursor :active="isMagicMode" :effect-name="magicEffectData" @toggle-active="(val) => isMagicMode = val" />
 

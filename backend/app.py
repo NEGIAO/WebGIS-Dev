@@ -1,186 +1,101 @@
+"""
+WebGIS Backend - FastAPI 主应用入口
+
+功能模块：
+- 瓦片代理：Google 卫星图瓦片代理 (api/proxy.py)
+- 访客统计：地理位置统计功能 (api/statistics.py)
+- 通用接口：新闻、数据处理、健康检查等
+"""
+
 import httpx
 import pandas as pd
-import struct
-import zlib
-from fastapi import FastAPI, Query, Response
+import logging
+from typing import Any, Dict
+
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+from api.proxy import router as proxy_router, build_http_client
+from api.statistics import router as statistics_router
+from api.auth import init_auth_storage, require_login, router as auth_router
 
-app = FastAPI()
+# ==================== 日志配置 ====================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-GOOGLE_TILE_ENDPOINT = "https://mt1.google.com/vt"
-GOOGLE_TILE_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://www.google.com/",
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
-}
-TILE_CACHE_CONTROL = "public, max-age=86400"
-HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
-HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=200, max_keepalive_connections=80)
+# ==================== FastAPI 应用初始化 ====================
 
+app = FastAPI(
+    title="WebGIS Backend",
+    description="WebGIS 后端 API 服务",
+    version="0.1.0",
+)
 
-def _build_http_client() -> httpx.AsyncClient:
-    # HTTP/2 needs the optional h2 package; fall back to HTTP/1.1 if unavailable.
-    try:
-        return httpx.AsyncClient(
-            timeout=HTTP_CLIENT_TIMEOUT,
-            limits=HTTP_CLIENT_LIMITS,
-            http2=True,
-            follow_redirects=True,
-        )
-    except ImportError:
-        return httpx.AsyncClient(
-            timeout=HTTP_CLIENT_TIMEOUT,
-            limits=HTTP_CLIENT_LIMITS,
-            follow_redirects=True,
-        )
-
-
-def _tile_error_response(status_code: int) -> Response:
-    return Response(
-        content=b"",
-        status_code=int(status_code),
-        media_type="image/jpeg",
-        headers={"Cache-Control": TILE_CACHE_CONTROL},
-    )
-
-
-def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
-    payload = chunk_type + data
-    return (
-        len(data).to_bytes(4, "big")
-        + payload
-        + zlib.crc32(payload).to_bytes(4, "big")
-    )
-
-
-def _build_transparent_png_tile(size: int = 256) -> bytes:
-    width = int(size)
-    height = int(size)
-    signature = b"\x89PNG\r\n\x1a\n"
-    ihdr = struct.pack("!IIBBBBB", width, height, 8, 6, 0, 0, 0)
-
-    # Each row starts with filter byte 0 and then RGBA zeros (fully transparent).
-    row = b"\x00" + (b"\x00" * (width * 4))
-    raw = row * height
-    compressed = zlib.compress(raw, 9)
-
-    return (
-        signature
-        + _png_chunk(b"IHDR", ihdr)
-        + _png_chunk(b"IDAT", compressed)
-        + _png_chunk(b"IEND", b"")
-    )
-
-
-TRANSPARENT_PLACEHOLDER_TILE = _build_transparent_png_tile(256)
-
-
-def _tile_placeholder_response(
-    reason: str,
-    upstream_status: Optional[int] = None,
-    lyrs: Optional[str] = None,
-) -> Response:
-    headers = {
-        "Cache-Control": TILE_CACHE_CONTROL,
-        "X-Tile-Fallback": "placeholder",
-        "X-Tile-Fallback-Reason": reason,
-    }
-    if upstream_status is not None:
-        headers["X-Tile-Upstream-Status"] = str(int(upstream_status))
-    if lyrs is not None:
-        headers["X-Tile-Lyrs"] = str(lyrs)
-
-    return Response(
-        content=TRANSPARENT_PLACEHOLDER_TILE,
-        status_code=200,
-        media_type="image/png",
-        headers=headers,
-    )
-
-
-def _resolve_lyrs(raw_lyrs: Optional[str]) -> str:
-    value = str(raw_lyrs or "").strip()
-    return value if value else "s"
-
-
-@app.on_event("startup")
-async def startup_event():
-    # Reuse one async client to reduce connection setup overhead under high tile concurrency.
-    app.state.http_client = _build_http_client()
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    client = getattr(app.state, "http_client", None)
-    if client is not None:
-        await client.aclose()
+# ==================== CORS 中间件配置 ====================
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "https://negiao.github.io",
+        "https://ripzhoudi.github.io",
+        "https://negiao-webgis.hf.space"  # 服务器自身域名（如需在线调试 Swagger UI 时也是此 Origin）
+    ],
+    allow_origin_regex="https?://.*",  # 允许所有 HTTP/HTTPS 源，适配你不固定的前端
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ==================== 生命周期事件 ====================
 
-@app.get("/tile/{z}/{x}/{y}")
-@app.get("/api/tile/{z}/{x}/{y}")
-async def proxy_google_satellite_tile(
-    z: int,
-    x: int,
-    y: int,
-    lyrs: Optional[str] = Query(default="s"),
-):
-    if z < 0 or z > 22 or x < 0 or y < 0:
-        return _tile_error_response(400)
 
-    resolved_lyrs = _resolve_lyrs(lyrs)
+@app.on_event("startup")
+async def startup_event():
+    """
+    应用启动事件：初始化全局 HTTP 客户端
+    """
+    logger.info("WebGIS Backend 启动...")
+    await init_auth_storage()
+    # 为瓦片代理创建共享的异步 HTTP 客户端
+    app.state.http_client = build_http_client()
+    logger.info("HTTP 客户端初始化完成")
 
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    应用关闭事件：清理资源
+    """
+    logger.info("WebGIS Backend 关闭...")
     client = getattr(app.state, "http_client", None)
-    if client is None:
-        # Startup may not have executed in some edge runtimes; keep endpoint usable.
-        client = _build_http_client()
-        app.state.http_client = client
+    if client is not None:
+        await client.aclose()
+        logger.info("HTTP 客户端已关闭")
 
-    try:
-        upstream = await client.get(
-            GOOGLE_TILE_ENDPOINT,
-            params={"lyrs": resolved_lyrs, "x": x, "y": y, "z": z},
-            headers=GOOGLE_TILE_HEADERS,
-        )
-    except httpx.TimeoutException:
-        return _tile_placeholder_response("timeout", 504, resolved_lyrs)
-    except httpx.RequestError:
-        return _tile_placeholder_response("request-error", 502, resolved_lyrs)
-    except Exception:
-        return _tile_placeholder_response("unexpected-error", 500, resolved_lyrs)
 
-    if upstream.status_code != 200:
-        return _tile_placeholder_response("upstream-status", upstream.status_code, resolved_lyrs)
+# ==================== 路由挂载 ====================
 
-    content_type = str(upstream.headers.get("Content-Type", "")).lower()
-    if not upstream.content or not content_type.startswith("image/"):
-        return _tile_placeholder_response("invalid-image", 502, resolved_lyrs)
+# 挂载瓦片代理路由
+app.include_router(proxy_router)
+logger.info("已注册瓦片代理路由")
 
-    return Response(
-        content=upstream.content,
-        media_type="image/jpeg",
-        headers={
-            "Cache-Control": TILE_CACHE_CONTROL,
-            "X-Tile-Lyrs": resolved_lyrs,
-        },
-    )
+# 挂载认证路由
+app.include_router(auth_router)
+logger.info("已注册认证路由")
+
+# 挂载访客统计路由
+app.include_router(statistics_router)
+logger.info("已注册访客统计路由")
 
 # --- 功能 1：简单的爬虫接口 ---
 # 前端请求：/api/news
 @app.get("/api/news")
-async def get_external_news():
+async def get_external_news(_current_user: Dict[str, Any] = Depends(require_login)):
     url = "https://api.example.com/gis-news" # 假设的外部接口
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
@@ -190,7 +105,7 @@ async def get_external_news():
 # --- 功能 2：GIS 数据处理 (用 Pandas) ---
 # 前端请求：/api/process-points
 @app.get("/api/process-points")
-async def process_gis_data():
+async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_login)):
     # 模拟一些原始坐标数据
     raw_data = [
         {"name": "点A", "lat": 30.5, "lng": 114.3},
@@ -205,7 +120,7 @@ async def process_gis_data():
 
 # --- 功能 3：测试数据接口 ---
 @app.get("/api/data")
-async def get_test_data():
+async def get_test_data(_current_user: Dict[str, Any] = Depends(require_login)):
     return {
         "status": "success", 
         "message": "恭喜！后端已经收到请求",
@@ -223,12 +138,17 @@ async def health_check():
 
 # --- 功能 5：信息接口 ---
 @app.get("/api/info")
-async def get_api_info():
+async def get_api_info(_current_user: Dict[str, Any] = Depends(require_login)):
     return {
         "name": "WebGIS Backend",
         "version": "0.1.0",
         "description": "WebGIS 后端 API 服务",
         "endpoints": [
+            "/api/auth/register - 注册普通用户",
+            "/api/auth/login - 登录（游客/普通用户/管理员）",
+            "/api/auth/me - 登录状态校验",
+            "/api/auth/logout - 退出登录",
+            "/api/auth/change-password - 修改当前账号密码",
             "/api/data - 测试数据",
             "/api/news - 新闻爬虫",
             "/api/process-points - GIS 数据处理",

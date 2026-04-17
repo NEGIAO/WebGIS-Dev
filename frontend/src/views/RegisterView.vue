@@ -2,15 +2,36 @@
     <div class="register-container">
         <div class="container fade-in">
             <div class="form-header">
-                <h1 class="form-title">创建新账户</h1>
-                <p class="form-subtitle">加入GIS系统，探索地理信息的世界</p>
-                <div class="default-login-hint">
-                    提示：默认账号密码都是123，直接输入即可进入
+                <h1 class="form-title">WebGIS 用户登录</h1>
+                <p class="form-subtitle">登录后才能访问系统主页与受保护 API</p>
+
+                <div class="quick-hints">
+                    <div class="hint-item">游客：用户名 user，密码 123</div>
+                    <div class="hint-item">管理员账号由数据库维护，前端不展示管理员密码</div>
                 </div>
             </div>
             
             <div class="form-body">
-                <form @submit.prevent="handleRegister">
+                <div class="mode-switch" role="tablist" aria-label="登录或注册">
+                    <button
+                        type="button"
+                        class="mode-btn"
+                        :class="{ active: mode === 'login' }"
+                        @click="switchMode('login')"
+                    >
+                        登录
+                    </button>
+                    <button
+                        type="button"
+                        class="mode-btn"
+                        :class="{ active: mode === 'register' }"
+                        @click="switchMode('register')"
+                    >
+                        注册
+                    </button>
+                </div>
+
+                <form @submit.prevent="handleSubmit">
                     <div class="form-group">
                         <label for="username">用户名</label>
                         <div class="input-group">
@@ -19,16 +40,17 @@
                                 type="text" 
                                 id="username" 
                                 v-model="username" 
-                                placeholder="输入用户名 (默认: 123)" 
-                                required
+                                :placeholder="mode === 'login' ? '请输入用户名（游客请输入 user）' : '3-24位：字母/数字/下划线'"
+                                :required="mode === 'register'"
                             >
                         </div>
-                        <div class="hint">
+                        <div class="hint" v-if="mode === 'login'">
                             <i class="fas fa-info-circle"></i>
-                            默认用户名为"123"，可直接登录
+                            登录角色由后端统一校验（游客/注册用户/管理员）
                         </div>
-                        <div v-if="usernameMessage" :class="['validation-message', usernameStatus]">
-                            {{ usernameMessage }}
+                        <div class="hint" v-else>
+                            <i class="fas fa-user-plus"></i>
+                            user/admin/super_admin 为保留用户名，不能注册
                         </div>
                     </div>
                     
@@ -40,108 +62,229 @@
                                 type="password" 
                                 id="password" 
                                 v-model="password" 
-                                placeholder="输入密码 (默认: 123)" 
+                                :placeholder="mode === 'login' ? '请输入密码' : '6-64位，至少包含字母和数字'"
                                 required
                             >
                         </div>
-                        <div class="hint">
+                        <div class="hint" v-if="mode === 'login'">
                             <i class="fas fa-shield-alt"></i>
-                            默认密码为"123"，可直接登录
+                            管理员密码仅保存在数据库中，不在前端页面展示
                         </div>
-                        <div v-if="passwordMessage" :class="['validation-message', passwordStatus]">
-                            {{ passwordMessage }}
+                        <div class="hint" v-else>
+                            <i class="fas fa-shield-alt"></i>
+                            注册密码必须包含字母和数字
                         </div>
                     </div>
+
+                    <div class="form-group" v-if="mode === 'register'">
+                        <label for="confirmPassword">确认密码</label>
+                        <div class="input-group">
+                            <i class="icon fas fa-check-circle"></i>
+                            <input
+                                type="password"
+                                id="confirmPassword"
+                                v-model="confirmPassword"
+                                placeholder="再次输入密码"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <div class="quick-action-row" v-if="mode === 'login'">
+                        <button type="button" class="quick-btn" @click="fillGuestAccount">
+                            填入游客账号
+                        </button>
+                    </div>
+
+                    <div v-if="formMessage" :class="['validation-message', formStatus]">
+                        {{ formMessage }}
+                    </div>
                     
-                    <button type="submit" class="btn">登录系统</button>
+                    <button type="submit" class="btn" :disabled="isSubmitting">
+                        {{ isSubmitting ? '处理中...' : (mode === 'login' ? '登录系统' : '创建账号') }}
+                    </button>
                     
                     <div class="login-link">
-                        忘记密码? <a href="#">找回密码</a>
+                        <template v-if="mode === 'login'">
+                            还没有账号？ <a href="#" @click.prevent="switchMode('register')">立即注册</a>
+                        </template>
+                        <template v-else>
+                            已有账号？ <a href="#" @click.prevent="switchMode('login')">返回登录</a>
+                        </template>
                     </div>
                 </form>
             </div>
             
             <div class="form-footer">
-                注册即表示您同意我们的 <a href="#">服务条款</a> 和 <a href="#">隐私政策</a>
+                登录即表示您同意我们的 <a href="#">服务条款</a> 和 <a href="#">隐私政策</a>
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
+import { apiAuthLogin, apiAuthRegister } from '../api/backend';
+import { getAuthToken, setAuthSession } from '../utils/auth';
 
 const router = useRouter();
+const route = useRoute();
 const message = useMessage();
+
+const mode = ref('login');
 const username = ref('');
 const password = ref('');
-const usernameMessage = ref('');
-const usernameStatus = ref('');
-const passwordMessage = ref('');
-const passwordStatus = ref('');
+const confirmPassword = ref('');
+const isSubmitting = ref(false);
+const formMessage = ref('');
+const formStatus = ref('');
 
-const usernameRegex = /^(?=.*[A-Za-z])(?=.*\d).{4,20}$/;
-// Simplified password regex for demo purposes, matching the original intent but maybe less strict if needed
-const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/;
+const usernameRegex = /^[A-Za-z0-9_]{3,24}$/;
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
+const reservedNames = new Set(['user', 'admin', 'super_admin']);
 
-watch(username, (newVal) => {
-    if (!newVal) {
-        usernameMessage.value = '';
-        usernameStatus.value = '';
+function setFormState(status = '', text = '') {
+    formStatus.value = status;
+    formMessage.value = text;
+}
+
+function normalizeUsername(raw) {
+    return String(raw || '').trim();
+}
+
+function resolveRedirectTarget() {
+    const redirect = String(route.query?.redirect || '/home').trim();
+    return redirect.startsWith('/') ? redirect : '/home';
+}
+
+function switchMode(nextMode) {
+    mode.value = nextMode;
+    setFormState('', '');
+    if (nextMode === 'login') {
+        confirmPassword.value = '';
+    }
+}
+
+function fillGuestAccount() {
+    mode.value = 'login';
+    username.value = 'user';
+    password.value = '123';
+    setFormState('success', '已填入游客账号，请点击“登录系统”');
+}
+
+async function handleLogin() {
+    const normalizedUsername = normalizeUsername(username.value);
+    const normalizedPassword = String(password.value || '').trim();
+
+    if (!normalizedPassword) {
+        setFormState('error', '请输入密码');
         return;
     }
-    if (usernameRegex.test(newVal) || newVal === '123') {
-        usernameMessage.value = '✓ 用户名格式正确';
-        usernameStatus.value = 'success';
-    } else {
-        usernameMessage.value = '✗ 用户名必须包含字母和数字，长度4-20位';
-        usernameStatus.value = 'error';
+
+    isSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        const payload = { password: normalizedPassword };
+        if (normalizedUsername) {
+            payload.username = normalizedUsername;
+        }
+
+        const result = await apiAuthLogin(payload);
+        const token = String(result?.token || '').trim();
+        const user = result?.user || null;
+
+        if (!token || !user) {
+            throw new Error('登录响应异常，请稍后重试');
+        }
+
+        setAuthSession({ token, user });
+        message.success(`登录成功，当前角色：${String(user.role || 'unknown')}`);
+        await router.replace(resolveRedirectTarget());
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail
+            || error?.message
+            || '登录失败，请稍后重试'
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+
+async function handleRegister() {
+    const normalizedUsername = normalizeUsername(username.value);
+    const normalizedPassword = String(password.value || '').trim();
+    const normalizedConfirmPassword = String(confirmPassword.value || '').trim();
+
+    if (!normalizedUsername) {
+        setFormState('error', '请填写用户名');
+        return;
+    }
+
+    if (reservedNames.has(normalizedUsername.toLowerCase())) {
+        setFormState('error', 'user/admin/super_admin 为系统保留用户名');
+        return;
+    }
+
+    if (!usernameRegex.test(normalizedUsername)) {
+        setFormState('error', '用户名仅支持字母、数字、下划线，长度 3-24 位');
+        return;
+    }
+
+    if (!passwordRegex.test(normalizedPassword)) {
+        setFormState('error', '密码需包含字母和数字，长度 6-64 位');
+        return;
+    }
+
+    if (normalizedConfirmPassword !== normalizedPassword) {
+        setFormState('error', '两次输入的密码不一致');
+        return;
+    }
+
+    isSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        await apiAuthRegister(normalizedUsername, normalizedPassword);
+        message.success('注册成功，请使用新账号登录');
+        password.value = '';
+        confirmPassword.value = '';
+        switchMode('login');
+        setFormState('success', '注册完成，请输入账号密码登录');
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail
+            || error?.message
+            || '注册失败，请稍后重试'
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+
+async function handleSubmit() {
+    if (isSubmitting.value) return;
+    if (mode.value === 'register') {
+        await handleRegister();
+        return;
+    }
+    await handleLogin();
+}
+
+onMounted(async () => {
+    const token = getAuthToken();
+    if (token) {
+        await router.replace('/home');
     }
 });
-
-watch(password, (newVal) => {
-    if (!newVal) {
-        passwordMessage.value = '';
-        passwordStatus.value = '';
-        return;
-    }
-    // Allow '123' as a valid password for the demo
-    if (passwordRegex.test(newVal) || newVal === '123') {
-        passwordMessage.value = '✓ 密码格式正确';
-        passwordStatus.value = 'success';
-    } else {
-        passwordMessage.value = '✗ 密码必须包含字母、数字和特殊字符，至少8位';
-        passwordStatus.value = 'error';
-    }
-});
-
-const handleRegister = () => {
-    if (username.value === '123' && password.value === '123') {
-        router.push('/home');
-        return;
-    }
-
-    // Strict validation for non-default credentials
-    let isValid = true;
-    if (!usernameRegex.test(username.value)) {
-        usernameMessage.value = '✗ 用户名必须包含字母和数字，长度4-20位';
-        usernameStatus.value = 'error';
-        isValid = false;
-    }
-    if (!passwordRegex.test(password.value)) {
-        passwordMessage.value = '✗ 密码必须包含字母、数字和特殊字符，至少8位';
-        passwordStatus.value = 'error';
-        isValid = false;
-    }
-
-    if (isValid) {
-        localStorage.setItem('username', username.value);
-        message.success('注册成功！即将跳转...');
-        router.push('/home');
-    }
-};
 </script>
 
 <style scoped>
@@ -168,10 +311,11 @@ const handleRegister = () => {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    padding: 20px;
+    min-height: 100dvh;
+    padding: clamp(10px, 2.6vw, 20px);
     width: 100%;
     box-sizing: border-box;
+    overflow: auto;
 }
 
 .container {
@@ -180,7 +324,10 @@ const handleRegister = () => {
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
     width: 100%;
     max-width: 450px;
+    max-height: calc(100dvh - 24px);
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .form-header {
@@ -206,9 +353,50 @@ const handleRegister = () => {
     margin-top: 5px;
 }
 
+.quick-hints {
+    margin-top: 12px;
+    display: grid;
+    gap: 6px;
+}
+
+.hint-item {
+    padding: 5px 10px;
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    font-size: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 .form-body {
-    padding: 35px;
+    padding: clamp(20px, 3.5vw, 35px);
     background-color: #ffffff;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.mode-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid #dfe8df;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 22px;
+}
+
+.mode-btn {
+    border: none;
+    background: #f4f8f4;
+    color: #406040;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mode-btn.active {
+    background: #4CAF50;
+    color: #fff;
 }
 
 .form-group {
@@ -291,6 +479,27 @@ input:focus {
     display: block;
 }
 
+.quick-action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.quick-btn {
+    border: 1px dashed #9ab79a;
+    background: #f7fbf7;
+    color: #2b5a2b;
+    border-radius: 5px;
+    padding: 9px 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.quick-btn:hover {
+    background: #edf7ed;
+}
+
 .btn {
     display: block;
     width: 100%;
@@ -315,6 +524,13 @@ input:focus {
 
 .btn:active {
     transform: translateY(0);
+}
+
+.btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .login-link {
@@ -350,6 +566,7 @@ input:focus {
     border-top: 1px solid #eee;
     font-size: 13px;
     color: #777;
+    flex-shrink: 0;
 }
 
 .default-login-hint {
@@ -366,26 +583,31 @@ input:focus {
 
 @media (max-width: 768px) {
     .register-container {
-        padding: 10px;
-        align-items: flex-start; /* Allow scrolling on small screens if content is tall */
-        padding-top: 20px;
+        align-items: stretch;
+        padding: 8px;
     }
 
     .container {
         max-width: 100%;
         border-radius: 8px;
+        max-height: none;
+        min-height: calc(100dvh - 16px);
     }
 
     .form-body {
-        padding: 20px;
+        padding: 18px;
     }
 
     .form-header {
-        padding: 20px;
+        padding: 18px;
     }
 
     .form-title {
         font-size: 24px;
+    }
+
+    .form-footer {
+        padding: 12px 16px;
     }
 }
 </style>

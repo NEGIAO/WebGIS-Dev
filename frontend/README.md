@@ -47,6 +47,38 @@ npm run build:analyze
 npm run preview
 ```
 
+## 🔐 登录系统使用说明
+
+前端已接入真实后端登录，不再使用本地假登录。
+
+### 三类登录方式
+
+1. 游客
+- 用户名：user
+- 密码：123
+
+2. 注册用户
+- 在登录页切换到“注册”模式创建账号
+- 注册成功后切回“登录”模式
+
+3. 超级管理员
+- 账号与密码由后端数据库维护
+- 管理员凭据不在前端代码与提示中展示
+
+### 强制登录拦截
+
+- 路由 /home 已开启守卫
+- 未登录直接访问 /#/home 会自动跳转 /#/register
+- 前端请求受保护后端 API 时会自动附加 Authorization: Bearer <token>
+
+### 依赖后端认证接口
+
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/auth/me
+- POST /api/auth/logout
+- POST /api/auth/change-password
+
 ## 📁 项目目录结构
 
 ```

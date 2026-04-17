@@ -11,6 +11,7 @@
  */
 
 import axios from 'axios'
+import { clearAuthSession, getAuthToken } from '../utils/auth'
 
 // 获取后端 URL，优先使用环境变量，否则使用默认值
 const backendURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
@@ -35,10 +36,10 @@ const backendAPI = axios.create({
  */
 backendAPI.interceptors.request.use(
   config => {
-    // 可以在这里添加认证令牌等
-    // if (auth.token) {
-    //   config.headers.Authorization = `Bearer ${auth.token}`
-    // }
+    const token = getAuthToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   error => {
@@ -81,6 +82,10 @@ backendAPI.interceptors.response.use(
       // 服务器响应错误
       const { status, data } = error.response
       message = data?.message || `服务器错误 (${status})`
+
+      if (status === 401) {
+        clearAuthSession()
+      }
     } else if (error.request) {
       // 请求已发出但没有收到响应
       message = '无法连接到后端服务器，请检查网络连接'
@@ -104,6 +109,32 @@ backendAPI.interceptors.response.use(
  * const result = await backendAPI.post('/api/v1/geocoding/encode', { address })
  */
 export default backendAPI
+
+/**
+ * 认证相关接口
+ */
+export async function apiAuthRegister(username, password) {
+  return backendAPI.post('/api/auth/register', { username, password })
+}
+
+export async function apiAuthLogin(payload) {
+  return backendAPI.post('/api/auth/login', payload)
+}
+
+export async function apiAuthMe() {
+  return backendAPI.get('/api/auth/me')
+}
+
+export async function apiAuthLogout() {
+  return backendAPI.post('/api/auth/logout')
+}
+
+export async function apiAuthChangePassword(currentPassword, newPassword) {
+  return backendAPI.post('/api/auth/change-password', {
+    current_password: currentPassword,
+    new_password: newPassword
+  })
+}
 
 /**
  * 便捷方法集合

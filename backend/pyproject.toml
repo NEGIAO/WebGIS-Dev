@@ -9,6 +9,8 @@ dependencies = [
     "uvicorn[standard]>=0.23.0",
     "httpx>=0.24.0",
     "pandas>=2.0.0",
+    "supabase",
+    "pytz",
     "python-multipart>=0.0.6",
 ]
 

@@ -1,8 +1,0 @@
-# 此文件已弃用，请使用 pyproject.toml + uv 进行依赖管理
-# 保留此文件仅作为参考，实际依赖在 pyproject.toml 中定义
-#
-# 若要使用 pip 安装，请运行：
-# pip install -e .
-#
-# 或直接使用 uv：
-# uv sync
