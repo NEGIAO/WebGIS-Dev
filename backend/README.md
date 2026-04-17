@@ -1,3 +1,15 @@
+---
+title: WebGIS
+emoji: 🌍
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
+# WebGIS Backend
+Powered by FastAPI and Docker.
+
 # WebGIS 后端 API 服务
 
 ## 📋 项目概述
