@@ -118,7 +118,7 @@ jobs:
 
           # 将下载的 dist 文件复制进去
           # ../dist-for-sync 是我们在上一步下载 artifact 的路径
-          cp -R ../dist-for-sync/frontend/. "$TARGET_DIR/"
+          cp -R ../dist-for-sync/. "$TARGET_DIR/"
 
           # 创建 .nojekyll 防止下划线文件丢失
           touch "$TARGET_DIR/.nojekyll"
