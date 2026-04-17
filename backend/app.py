@@ -2,7 +2,7 @@ import httpx
 import pandas as pd
 import struct
 import zlib
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -61,7 +61,11 @@ def _build_transparent_png_tile(size: int = 256) -> bytes:
 TRANSPARENT_PLACEHOLDER_TILE = _build_transparent_png_tile(256)
 
 
-def _tile_placeholder_response(reason: str, upstream_status: int | None = None) -> Response:
+def _tile_placeholder_response(
+    reason: str,
+    upstream_status: int | None = None,
+    lyrs: str | None = None,
+) -> Response:
     headers = {
         "Cache-Control": TILE_CACHE_CONTROL,
         "X-Tile-Fallback": "placeholder",
@@ -69,6 +73,8 @@ def _tile_placeholder_response(reason: str, upstream_status: int | None = None) 
     }
     if upstream_status is not None:
         headers["X-Tile-Upstream-Status"] = str(int(upstream_status))
+    if lyrs is not None:
+        headers["X-Tile-Lyrs"] = str(lyrs)
 
     return Response(
         content=TRANSPARENT_PLACEHOLDER_TILE,
@@ -76,6 +82,11 @@ def _tile_placeholder_response(reason: str, upstream_status: int | None = None) 
         media_type="image/png",
         headers=headers,
     )
+
+
+def _resolve_lyrs(raw_lyrs: str | None) -> str:
+    value = str(raw_lyrs or "").strip()
+    return value if value else "s"
 
 
 @app.on_event("startup")
@@ -104,9 +115,16 @@ app.add_middleware(
 
 
 @app.get("/tile/{z}/{x}/{y}")
-async def proxy_google_satellite_tile(z: int, x: int, y: int):
+async def proxy_google_satellite_tile(
+    z: int,
+    x: int,
+    y: int,
+    lyrs: str | None = Query(default="s"),
+):
     if z < 0 or z > 22 or x < 0 or y < 0:
         return _tile_error_response(400)
+
+    resolved_lyrs = _resolve_lyrs(lyrs)
 
     client = getattr(app.state, "http_client", None)
     if client is None:
@@ -122,27 +140,30 @@ async def proxy_google_satellite_tile(z: int, x: int, y: int):
     try:
         upstream = await client.get(
             GOOGLE_TILE_ENDPOINT,
-            params={"lyrs": "y", "x": x, "y": y, "z": z},
+            params={"lyrs": resolved_lyrs, "x": x, "y": y, "z": z},
             headers=GOOGLE_TILE_HEADERS,
         )
     except httpx.TimeoutException:
-        return _tile_placeholder_response("timeout", 504)
+        return _tile_placeholder_response("timeout", 504, resolved_lyrs)
     except httpx.RequestError:
-        return _tile_placeholder_response("request-error", 502)
+        return _tile_placeholder_response("request-error", 502, resolved_lyrs)
     except Exception:
-        return _tile_placeholder_response("unexpected-error", 500)
+        return _tile_placeholder_response("unexpected-error", 500, resolved_lyrs)
 
     if upstream.status_code != 200:
-        return _tile_placeholder_response("upstream-status", upstream.status_code)
+        return _tile_placeholder_response("upstream-status", upstream.status_code, resolved_lyrs)
 
     content_type = str(upstream.headers.get("Content-Type", "")).lower()
     if not upstream.content or not content_type.startswith("image/"):
-        return _tile_placeholder_response("invalid-image", 502)
+        return _tile_placeholder_response("invalid-image", 502, resolved_lyrs)
 
     return Response(
         content=upstream.content,
         media_type="image/jpeg",
-        headers={"Cache-Control": TILE_CACHE_CONTROL},
+        headers={
+            "Cache-Control": TILE_CACHE_CONTROL,
+            "X-Tile-Lyrs": resolved_lyrs,
+        },
     )
 
 # --- 功能 1：简单的爬虫接口 ---
