@@ -1,28 +1,21 @@
-# --- 前端构建阶段 ---
-FROM node:18 AS build-stage
-WORKDIR /app/frontend
-# 复制前端依赖并安装
-COPY frontend/package*.json ./
-RUN npm install
-# 复制前端所有代码并打包
-COPY frontend/ .
-RUN npm run build
+# 使用轻量级 Python 镜像
+FROM python:3.9-slim
 
-# --- 后端运行阶段 ---
-FROM python:3.9
+# 创建并切换到非 root 用户 (Hugging Face 安全要求)
 RUN useradd -m -u 1000 user
 USER user
 ENV PATH="/home/user/.local/bin:$PATH"
 WORKDIR /app
 
-# 安装后端依赖
-COPY --chown=user backend/requirements.txt ./backend/
-RUN pip install --no-cache-dir --upgrade -r ./backend/requirements.txt
+# 1. 复制后端依赖
+# 假设你的结构是：根目录/backend/requirements.txt
+COPY --chown=user backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir --upgrade -r requirements.txt
 
-# 复制前端打包好的产物到 backend 可以访问的地方
-COPY --from=build-stage --chown=user /app/frontend/dist ./dist
-# 复制后端代码
-COPY --chown=user backend/ ./backend/
+# 2. 复制后端核心代码
+# 假设你的核心代码在：根目录/backend/app.py
+COPY --chown=user backend/app.py ./app.py
 
-# 运行命令 (注意路径变了)
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "7860"]
+# 3. 启动 uvicorn
+# 端口必须是 7860
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

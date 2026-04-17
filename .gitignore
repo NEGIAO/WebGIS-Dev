@@ -7,9 +7,11 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
+node_modules/
+frontend/node_modules/
 .DS_Store
 dist
+frontend/dist/
 dist-ssr
 coverage
 *.local
@@ -30,3 +32,9 @@ coverage
 *.tsbuildinfo
 
 /.npm-cache/
+.npm-cache/
+.eslintcache
+.cache/
+
+.Ds_Store
+Thumbs.db

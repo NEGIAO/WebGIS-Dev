@@ -137,19 +137,17 @@ jobs:
   # 第四步：同步到 Hugging Face (新增：全量代码同步)
   # ==========================================
   sync-to-huggingface:
-    needs: build # 确保前端能过编译再部署
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          lfs: true
 
       - name: Push to HF Space
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }} # 需要在 GitHub Secret 配置这个 Token
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # 强制将当前全栈仓库推送到 HF
-          # 这样 HF 才会读取根目录的 Dockerfile 进行全栈构建
+          # 仅同步 backend 文件夹和 Dockerfile
+          # 其实直接推送整个仓库也可以，因为有了 Dockerfile，HF 会忽略没用的文件
           git push --force https://NEGIAO:$HF_TOKEN@huggingface.co/spaces/NEGIAO/WebGIS fullstack:main
