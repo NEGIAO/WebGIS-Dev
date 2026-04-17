@@ -20,7 +20,7 @@ RUN uv sync --no-cache
 
 # 5. 复制应用代码
 COPY --chown=user app.py .
-COPY --chown=user main.py . 
+COPY --chown=user api/ api/
 
 # 6. 暴露端口
 EXPOSE 7860
