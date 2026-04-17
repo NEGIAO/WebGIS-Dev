@@ -4,6 +4,7 @@ import struct
 import zlib
 from fastapi import FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 
 app = FastAPI()
 
@@ -19,6 +20,25 @@ GOOGLE_TILE_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8",
 }
 TILE_CACHE_CONTROL = "public, max-age=86400"
+HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
+HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=200, max_keepalive_connections=80)
+
+
+def _build_http_client() -> httpx.AsyncClient:
+    # HTTP/2 needs the optional h2 package; fall back to HTTP/1.1 if unavailable.
+    try:
+        return httpx.AsyncClient(
+            timeout=HTTP_CLIENT_TIMEOUT,
+            limits=HTTP_CLIENT_LIMITS,
+            http2=True,
+            follow_redirects=True,
+        )
+    except ImportError:
+        return httpx.AsyncClient(
+            timeout=HTTP_CLIENT_TIMEOUT,
+            limits=HTTP_CLIENT_LIMITS,
+            follow_redirects=True,
+        )
 
 
 def _tile_error_response(status_code: int) -> Response:
@@ -63,8 +83,8 @@ TRANSPARENT_PLACEHOLDER_TILE = _build_transparent_png_tile(256)
 
 def _tile_placeholder_response(
     reason: str,
-    upstream_status: int | None = None,
-    lyrs: str | None = None,
+    upstream_status: Optional[int] = None,
+    lyrs: Optional[str] = None,
 ) -> Response:
     headers = {
         "Cache-Control": TILE_CACHE_CONTROL,
@@ -84,7 +104,7 @@ def _tile_placeholder_response(
     )
 
 
-def _resolve_lyrs(raw_lyrs: str | None) -> str:
+def _resolve_lyrs(raw_lyrs: Optional[str]) -> str:
     value = str(raw_lyrs or "").strip()
     return value if value else "s"
 
@@ -92,12 +112,7 @@ def _resolve_lyrs(raw_lyrs: str | None) -> str:
 @app.on_event("startup")
 async def startup_event():
     # Reuse one async client to reduce connection setup overhead under high tile concurrency.
-    app.state.http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0),
-        limits=httpx.Limits(max_connections=200, max_keepalive_connections=80),
-        http2=True,
-        follow_redirects=True,
-    )
+    app.state.http_client = _build_http_client()
 
 
 @app.on_event("shutdown")
@@ -115,11 +130,12 @@ app.add_middleware(
 
 
 @app.get("/tile/{z}/{x}/{y}")
+@app.get("/api/tile/{z}/{x}/{y}")
 async def proxy_google_satellite_tile(
     z: int,
     x: int,
     y: int,
-    lyrs: str | None = Query(default="s"),
+    lyrs: Optional[str] = Query(default="s"),
 ):
     if z < 0 or z > 22 or x < 0 or y < 0:
         return _tile_error_response(400)
@@ -129,12 +145,7 @@ async def proxy_google_satellite_tile(
     client = getattr(app.state, "http_client", None)
     if client is None:
         # Startup may not have executed in some edge runtimes; keep endpoint usable.
-        client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0),
-            limits=httpx.Limits(max_connections=200, max_keepalive_connections=80),
-            http2=True,
-            follow_redirects=True,
-        )
+        client = _build_http_client()
         app.state.http_client = client
 
     try:
