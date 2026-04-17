@@ -39,3 +39,7 @@ coverage
 .Ds_Store
 Thumbs.db
 .venv/
+_pycache__/
+__pycache__/
+.python-version
+.env
