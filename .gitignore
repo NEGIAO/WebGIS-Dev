@@ -1,4 +1,47 @@
-# Logs
+# ========== 前端依赖与构建 ==========
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist
+dist-ssr
+*.tsbuildinfo
+.npm-cache/
+.eslintcache
+.cache/
+
+# ========== 后端依赖与缓存 ==========
+backend/__pycache__/
+backend/.venv/
+backend/venv/
+backend/.env
+backend/*.egg-info/
+backend/dist/
+backend/build/
+.python-version
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+PIPFILE.lock
+
+# ========== 日志与临时文件 ==========
 logs
 *.log
 npm-debug.log*
@@ -7,19 +50,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules/
-frontend/node_modules/
+# ========== 系统文件 ==========
 .DS_Store
-dist
-frontend/dist/
-dist-ssr
-coverage
-*.local
+.Ds_Store
+Thumbs.db
 
-/cypress/videos/
-/cypress/screenshots/
-
-# Editor directories and files
+# ========== 编辑器 ==========
 .vscode/*
 !.vscode/extensions.json
 .idea
@@ -29,17 +65,17 @@ coverage
 *.sln
 *.sw?
 
-*.tsbuildinfo
-
-/.npm-cache/
-.npm-cache/
-.eslintcache
-.cache/
-
-.Ds_Store
-Thumbs.db
-.venv/
-_pycache__/
-__pycache__/
-.python-version
+# ========== 本地环境 ==========
 .env
+.env.local
+.env.*.local
+.venv/
+venv/
+env/
+
+# ========== IDE ==========
+coverage
+*.local
+
+/cypress/videos/
+/cypress/screenshots/

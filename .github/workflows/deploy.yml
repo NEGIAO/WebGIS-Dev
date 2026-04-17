@@ -153,12 +153,16 @@ jobs:
             git config --global user.name "github-actions[bot]"
             git config --global user.email "actions@github.com"
 
-            # 1. 把刚才改好的 Dockerfile 拷贝进后端目录
-            cp Dockerfile backend/
+            # 验证后端必要文件是否存在
+            echo "Checking backend files..."
+            test -f backend/app.py || (echo "Missing backend/app.py" && exit 1)
+            test -f backend/pyproject.toml || (echo "Missing backend/pyproject.toml" && exit 1)
+            test -f backend/Dockerfile || (echo "Missing backend/Dockerfile" && exit 1)
+            echo "All required backend files found ✓"
 
-            # 2. 必须 commit 这个变动，subtree 才能识别到 backend 里的 Dockerfile
-            git add backend/Dockerfile
-            git commit -m "chore: prepare backend subtree for deployment"
-
-            # 3. 拆分并推送 (确保推送的是包含了 Dockerfile 的最新状态)
+            # 使用 git subtree 推送 backend 目录到 Hugging Face
+            # --force 参数确保覆盖远程分支，使用 :main 映射到 HF space 的 main 分支
+            echo "Pushing backend to Hugging Face Spaces..."
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" `git subtree split --prefix=backend HEAD`:main
+
+            echo "Backend deployment to Hugging Face completed ✓"

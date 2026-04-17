@@ -38,8 +38,7 @@ async def process_gis_data():
     
     return df.to_dict(orient="records")
 
-# --- 功能 3：根目录欢迎页 ---
-# 确保 @app.get 括号里的字符串是 "/api/data"
+# --- 功能 3：测试数据接口 ---
 @app.get("/api/data")
 async def get_test_data():
     return {
@@ -50,5 +49,24 @@ async def get_test_data():
             {"name": "测试点2", "value": 200}
         ]
     }
-def read_root():
-    return {"message": "WebGIS Backend is Running on Hugging Face!"}
+
+# --- 功能 4：健康检查 ---
+@app.get("/")
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "WebGIS Backend is Running!"}
+
+# --- 功能 5：信息接口 ---
+@app.get("/api/info")
+async def get_api_info():
+    return {
+        "name": "WebGIS Backend",
+        "version": "0.1.0",
+        "description": "WebGIS 后端 API 服务",
+        "endpoints": [
+            "/api/data - 测试数据",
+            "/api/news - 新闻爬虫",
+            "/api/process-points - GIS 数据处理",
+            "/health - 健康检查"
+        ]
+    }

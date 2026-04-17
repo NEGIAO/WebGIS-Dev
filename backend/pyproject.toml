@@ -1,12 +1,16 @@
 [project]
-name = "backend"
+name = "webgis-backend"
 version = "0.1.0"
-description = "UV管理后端环境"
+description = "WebGIS 后端服务（FastAPI + Pandas）"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.9"
 dependencies = [
-    "fastapi>=0.136.0",
-    "httpx>=0.28.1",
-    "pandas>=3.0.2",
-    "uvicorn>=0.44.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "httpx>=0.24.0",
+    "pandas>=2.0.0",
+    "python-multipart>=0.0.6",
 ]
+
+[tool.uv]
+managed = true
