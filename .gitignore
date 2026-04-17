@@ -38,3 +38,4 @@ coverage
 
 .Ds_Store
 Thumbs.db
+.venv/

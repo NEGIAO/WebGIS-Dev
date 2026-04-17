@@ -1,21 +1,21 @@
-# 使用轻量级 Python 镜像
 FROM python:3.9-slim
 
-# 创建并切换到非 root 用户 (Hugging Face 安全要求)
+# 1. 安装 uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# 2. 设置工作目录和用户
 RUN useradd -m -u 1000 user
 USER user
-ENV PATH="/home/user/.local/bin:$PATH"
 WORKDIR /app
 
-# 1. 复制后端依赖
-# 假设你的结构是：根目录/backend/requirements.txt
-COPY --chown=user backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --upgrade -r requirements.txt
+# 3. 先同步环境 (利用 Docker 缓存层)
+# 只需要这两个文件就能安装所有依赖
+COPY --chown=user backend/pyproject.toml backend/uv.lock ./
+RUN uv sync --frozen --no-cache
 
-# 2. 复制后端核心代码
-# 假设你的核心代码在：根目录/backend/app.py
+# 4. 复制后端代码
 COPY --chown=user backend/app.py ./app.py
 
-# 3. 启动 uvicorn
+# 5. 使用 uv 运行 (确保在虚拟环境中执行)
 # 端口必须是 7860
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uv", "run", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "7860"]

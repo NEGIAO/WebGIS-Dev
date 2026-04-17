@@ -39,6 +39,16 @@ async def process_gis_data():
     return df.to_dict(orient="records")
 
 # --- 功能 3：根目录欢迎页 ---
-@app.get("/")
+# 确保 @app.get 括号里的字符串是 "/api/data"
+@app.get("/api/data")
+async def get_test_data():
+    return {
+        "status": "success", 
+        "message": "恭喜！后端已经收到请求",
+        "data": [
+            {"name": "测试点1", "value": 100},
+            {"name": "测试点2", "value": 200}
+        ]
+    }
 def read_root():
     return {"message": "WebGIS Backend is Running on Hugging Face!"}
