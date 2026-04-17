@@ -14,6 +14,7 @@ backend/__pycache__/
 backend/.venv/
 backend/venv/
 backend/.env
+backend/.env.local
 backend/*.egg-info/
 backend/dist/
 backend/build/
@@ -39,7 +40,12 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-PIPFILE.lock
+
+# ========== 包管理器锁定文件 - 应该提交 ==========
+# 不忽略 uv.lock - 需要提交以锁定依赖版本
+# 不忽略 package-lock.json - 前端已提交
+# 仅忽略已弃用的 Pipfile.lock（如果有的话）
+# Pipfile.lock
 
 # ========== 日志与临时文件 ==========
 logs
