@@ -470,6 +470,10 @@ export async function apiAgentChatCompletions(payload = {}) {
   })
 }
 
+export async function apiAgentListModels() {
+  return backendAPI.get('/api/agent/models')
+}
+
 export async function apiStatisticsRealtime() {
   return backendAPI.get('/api/statistics/realtime')
 }

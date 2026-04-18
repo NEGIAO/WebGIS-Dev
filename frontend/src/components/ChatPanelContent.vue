@@ -22,7 +22,25 @@
         </label>
         <label class="user-config-item">
           <span>Model</span>
-          <input v-model="userConfigDraft.model" placeholder="deepseek-V3-0324" />
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <select v-model="userConfigDraft.model" class="model-select">
+              <option value="">-- 选择模型 --</option>
+              <optgroup label="平台模型">
+                <option v-for="m in platformModels" :key="m.id" :value="m.id">
+                  {{ m.name || m.id }}
+                </option>
+              </optgroup>
+              <optgroup label="常见模型">
+                <option v-for="m in commonModels" :key="m.id" :value="m.id">
+                  {{ m.name || m.id }}
+                </option>
+              </optgroup>
+            </select>
+            <button @click="loadAvailableModels" class="refresh-models-btn" :disabled="isLoadingModels" title="刷新模型列表">
+              {{ isLoadingModels ? '⏳' : '🔄' }}
+            </button>
+          </div>
+          <small class="hint">{{ modelLoadHint }}</small>
         </label>
         <label class="user-config-item">
           <span>Timeout (秒)</span>
@@ -99,7 +117,7 @@
 
 <script setup>
 import { computed, onMounted, ref, nextTick } from 'vue';
-import { apiAgentChatCompletions, apiAgentGetChatConfig, apiAgentGetUserConfig, apiAgentUpdateUserConfig } from '../api/backend';
+import { apiAgentChatCompletions, apiAgentGetChatConfig, apiAgentGetUserConfig, apiAgentUpdateUserConfig, apiAgentListModels } from '../api/backend';
 import { readUserPositionFromCache } from '../utils/userPositionCache';
 import { getGlobalUserLocationContext } from '../utils/userLocationContext';
 import { useMessage } from '../composables/useMessage';
@@ -131,6 +149,12 @@ const quota = ref({
   usage_date: '',
   quota_subject: '',
 });
+
+// 模型列表相关
+const isLoadingModels = ref(false);
+const modelLoadHint = ref('');
+const platformModels = ref([]);
+const commonModels = ref([]);
 
 const messages = ref([]);
 const firstMessageLocationInjected = ref(false);
@@ -267,6 +291,40 @@ const toggleUserConfig = async () => {
   showUserConfig.value = !showUserConfig.value;
   if (showUserConfig.value) {
     await loadUserConfig(false);
+    await loadAvailableModels();
+  }
+};
+
+const loadAvailableModels = async () => {
+  isLoadingModels.value = true;
+  modelLoadHint.value = '正在加载模型列表...';
+  
+  try {
+    // 调用后端 API 获取可用的模型列表
+    const response = await apiAgentListModels();
+    const data = response?.data || response || {};
+    const models = data?.models || [];
+
+    // 分离模型为平台模型和常见模型
+    platformModels.value = models.filter(m => m.source === 'platform' || m.source === 'personal');
+    commonModels.value = models.filter(m => m.source === 'common');
+
+    modelLoadHint.value = `✅ 已加载 ${models.length} 个模型`;
+  } catch (error) {
+    modelLoadHint.value = `❌ 加载模型列表失败: ${error.message}`;
+    message.error(`加载模型列表失败: ${error.message}`);
+    
+    // 如果加载失败，添加默认模型
+    platformModels.value = [
+      { id: 'deepseek-V3-0324', name: 'DeepSeek V3-0324', source: 'platform' }
+    ];
+    commonModels.value = [
+      { id: 'gpt-4', name: 'GPT-4', source: 'common' },
+      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', source: 'common' },
+      { id: 'claude-3-opus', name: 'Claude 3 Opus', source: 'common' },
+    ];
+  } finally {
+    isLoadingModels.value = false;
   }
 };
 
@@ -574,13 +632,55 @@ onMounted(async () => {
 }
 
 .user-config-item input,
-.user-config-item textarea {
+.user-config-item textarea,
+.user-config-item select {
   width: 100%;
   border: 1px solid #d7e5dc;
   border-radius: 6px;
   padding: 6px 8px;
   box-sizing: border-box;
   font-family: inherit;
+}
+
+.model-select {
+  flex: 1;
+  border: 1px solid #d7e5dc;
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  font-family: inherit;
+  background-color: white;
+  cursor: pointer;
+}
+
+.model-select:hover {
+  border-color: #4caf50;
+}
+
+.model-select:focus {
+  outline: none;
+  border-color: #4caf50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.refresh-models-btn {
+  padding: 6px 10px;
+  border: 1px solid #d7e5dc;
+  border-radius: 6px;
+  background-color: white;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.refresh-models-btn:hover:not(:disabled) {
+  border-color: #4caf50;
+  background-color: #f0f7f2;
+}
+
+.refresh-models-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .user-config-actions {

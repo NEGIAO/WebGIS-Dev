@@ -84,10 +84,13 @@ venv/
 env/
 
 # 忽略 backend/data 目录下的所有 .db 文件
+# hf 不能push 二进制文件，所以需要忽略数据库文件
 backend/data/*.db
-
-# 或者直接忽略整个 data 文件夹（推荐，因为这里通常只放持久化数据）
 backend/data/
+backend/data/*.db
+backend/data/
+**/*.db
+**/data/
 
 
 # ========== IDE ==========

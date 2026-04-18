@@ -184,7 +184,7 @@ const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
 const reservedNames = new Set(['user', 'admin']);
 
 const avatarOptions = computed(() => {
-    return Array.from({ length: 8 }, (_, index) => ({
+    return Array.from({ length: 12 }, (_, index) => ({
         index,
         label: `头像 ${index + 1}`,
         src: resolvePublicAssetPath(`avatars/avatar-${index}.svg`)

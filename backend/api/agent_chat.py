@@ -1137,3 +1137,73 @@ async def update_agent_user_config(
             },
         },
     }
+
+
+@router.get("/api/agent/models")
+async def get_available_models(
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """
+    获取可用的模型列表。
+    返回后端配置中的模型以及用户配置中的模型。
+    """
+    username = str(session.get("username") or "")
+    
+    # 获取后端提供商配置中的默认模型
+    provider = await asyncio.to_thread(_get_agent_provider_config_sync)
+    default_model = str(provider.get("model") or DEFAULT_AGENT_MODEL).strip()
+    
+    # 获取用户个人配置中的模型
+    user_cfg = await asyncio.to_thread(_read_agent_user_config_row_sync, username)
+    personal_model = str(user_cfg.get("model") or "").strip() if user_cfg else ""
+    
+    # 构建模型列表（去重，保持顺序）
+    models = []
+    seen = set()
+    
+    # 优先添加默认模型
+    if default_model and default_model not in seen:
+        models.append({
+            "id": default_model,
+            "name": default_model,
+            "source": "platform"
+        })
+        seen.add(default_model)
+    
+    # 然后添加用户个人模型（如果不同）
+    if personal_model and personal_model not in seen:
+        models.append({
+            "id": personal_model,
+            "name": personal_model,
+            "source": "personal"
+        })
+        seen.add(personal_model)
+    
+    # 常见模型列表（从环境变量或硬编码）
+    common_models = [
+        "deepseek-V3-0324",
+        "deepseek-chat",
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo",
+        "claude-3-opus",
+        "claude-3-sonnet",
+        "claude-3-haiku",
+    ]
+    
+    for model_id in common_models:
+        if model_id not in seen:
+            models.append({
+                "id": model_id,
+                "name": model_id,
+                "source": "common"
+            })
+            seen.add(model_id)
+    
+    return {
+        "status": "success",
+        "data": {
+            "models": models,
+            "current_model": str(user_cfg.get("model") or provider.get("model") or DEFAULT_AGENT_MODEL),
+        },
+    }
