@@ -170,7 +170,7 @@ export async function addressToLocation(address, city = '', options = {}) {
             }
         });
 
-        const data = response?.data || {};
+        const data = response || {};
         const status = String(data?.status ?? '0');
 
         if (status !== '1') {
@@ -260,7 +260,7 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
             }
         });
 
-        const data = response?.data || {};
+        const data = response || {};
         const status = String(data?.status ?? '0');
 
         if (status !== '1') {

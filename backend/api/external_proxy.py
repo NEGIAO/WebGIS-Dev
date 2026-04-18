@@ -75,7 +75,7 @@ def _resolve_amap_key() -> str:
         return db_key
     
     # 回退到环境变量
-    for env_name in ("AMAP_WEB_SERVICE_KEY", "AMAP_KEY", "GAODE_KEY"):
+    for env_name in ("AMAP_WEB_SERVICE_KEY", "AMAP_KEY", "GAODE_KEY", "VITE_AMAP_WEB_SERVICE_KEY"):
         value = str(os.getenv(env_name, "") or "").strip()
         if value:
             return value
@@ -222,6 +222,23 @@ async def proxy_amap_place_text(
     extensions: str = Query(default="base", pattern="^(base|all)$"),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：高德 POI 关键词检索代理（文本搜索）。
+
+    参数：
+    - keywords: 搜索关键词。
+    - city: 可选城市限制。
+    - page/offset: 分页参数。
+    - extensions: `base` 或 `all`。
+
+    返回：
+    - 原样转发高德 `/v3/place/text` JSON 响应。
+
+    处理过程：
+    1. 校验并读取后端托管高德 key；
+    2. 请求上游接口；
+    3. 统一错误映射后返回。
+    """
     amap_key = _require_amap_key_or_503()
 
     return await _request_upstream_json(
@@ -245,6 +262,16 @@ async def proxy_amap_place_detail(
     extensions: str = Query(default="all", pattern="^(base|all)$"),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：高德 POI 详情代理。
+
+    参数：
+    - id: 高德 POI ID。
+    - extensions: `base` 或 `all`。
+
+    返回：
+    - 原样转发高德 `/v3/place/detail` JSON 响应。
+    """
     amap_key = _require_amap_key_or_503()
 
     return await _request_upstream_json(
@@ -265,6 +292,16 @@ async def proxy_amap_geocode_geo(
     city: str = Query(default="", max_length=40),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：地理编码（地址 -> 坐标）后端代理。
+
+    参数：
+    - address: 待编码地址文本。
+    - city: 可选城市约束。
+
+    返回：
+    - 原样转发高德 `/v3/geocode/geo` JSON 响应。
+    """
     amap_key = _require_amap_key_or_503()
 
     return await _request_upstream_json(
@@ -287,6 +324,18 @@ async def proxy_amap_geocode_regeo(
     batch: bool = Query(default=False),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：逆地理编码（坐标 -> 地址）后端代理。
+
+    参数：
+    - location: `lng,lat`（高德坐标系 GCJ-02）。
+    - extensions: `base` 或 `all`。
+    - radius: 搜索半径（米）。
+    - batch: 是否批量模式。
+
+    返回：
+    - 原样转发高德 `/v3/geocode/regeo` JSON 响应。
+    """
     amap_key = _require_amap_key_or_503()
 
     return await _request_upstream_json(
@@ -309,6 +358,16 @@ async def proxy_amap_weather(
     extensions: str = Query(default="base", pattern="^(base|all)$"),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：高德天气查询代理。
+
+    参数：
+    - city: 行政区编码（adcode）。
+    - extensions: `base`=实况，`all`=预报。
+
+    返回：
+    - 原样转发高德 `/v3/weather/weatherInfo` JSON 响应。
+    """
     amap_key = _require_amap_key_or_503()
 
     return await _request_upstream_json(
@@ -328,6 +387,15 @@ async def proxy_amap_ip_location(
     ip: str = Query(default="", max_length=64),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：高德 IP 定位代理。
+
+    参数：
+    - ip: 可选 IP，留空时由高德按请求来源识别。
+
+    返回：
+    - 原样转发高德 `/v3/ip` JSON 响应。
+    """
     amap_key = _require_amap_key_or_503()
     normalized_ip = str(ip or "").strip()
 
@@ -348,6 +416,15 @@ async def proxy_amap_web_detail(
     id: str = Query(..., min_length=1, max_length=96),
     _current_user: Dict[str, Any] = Depends(require_api_access),
 ) -> Response:
+    """
+    功能：高德 Web 详情页接口代理（文本响应）。
+
+    参数：
+    - id: POI ID。
+
+    返回：
+    - 文本载荷（JSON/JSONP/HTML），由前端自行解析。
+    """
     text, content_type = await _request_upstream_text(
         request,
         AMAP_WEB_DETAIL_ROOT,
@@ -364,6 +441,16 @@ async def proxy_nominatim_search(
     keywords: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(default=10, ge=1, le=50),
 ):
+    """
+    功能：Nominatim 国际地名搜索代理（免鉴权）。
+
+    参数：
+    - keywords: 查询关键词。
+    - limit: 返回数量上限。
+
+    返回：
+    - Nominatim JSON 数组结果。
+    """
     # Nominatim 是免费的国际地名搜索服务，不需要认证限制
     return await _request_upstream_json_array(
         request,
@@ -382,6 +469,15 @@ async def proxy_epsg_proj4(
     request: Request,
     epsg_code: str,
 ) -> Response:
+    """
+    功能：查询 EPSG 的 Proj4 定义文本。
+
+    参数：
+    - epsg_code: EPSG 编码（3-6 位数字）。
+
+    返回：
+    - `text/plain` 格式的 proj4 字符串。
+    """
     code = str(epsg_code or "").strip()
     if not re.fullmatch(r"\d{3,6}", code):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="无效的 EPSG 编码")
@@ -404,6 +500,15 @@ async def proxy_ipapi_country(
     request: Request,
     ip: str = Query(default="", max_length=64),
 ) -> Dict[str, Any]:
+    """
+    功能：IP 所属国家/城市信息代理（ipapi）。
+
+    参数：
+    - ip: 可选，留空时自动使用客户端 IP。
+
+    返回：
+    - 标准化后的国家、地区、城市信息。
+    """
     normalized_ip = str(ip or "").strip() or _extract_client_ip(request)
     endpoint = f"{IPAPI_ENDPOINT}/{normalized_ip}/json/" if normalized_ip else f"{IPAPI_ENDPOINT}/json/"
 

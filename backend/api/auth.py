@@ -1061,6 +1061,17 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register")
 async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
+    """
+    功能：注册普通用户账号。
+
+    参数：
+    - payload.username: 用户名（3-24 位，字母数字下划线）。
+    - payload.password: 密码（6-64 位，需含字母和数字）。
+    - payload.avatar_index: 初始头像索引。
+
+    返回：
+    - 注册结果、用户基础信息（username/role/avatar_index）。
+    """
     await init_auth_storage()
 
     username = _normalize_username(payload.username)
@@ -1094,6 +1105,16 @@ async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
 
 @router.get("/check-username")
 async def check_username_availability(username: str = "") -> Dict[str, Any]:
+    """
+    功能：检查用户名是否可注册。
+
+    参数：
+    - username: 待检测用户名。
+
+    返回：
+    - available: 是否可用。
+    - message: 可读原因（保留名/格式错误/已存在等）。
+    """
     await init_auth_storage()
 
     normalized = _normalize_username(username)
@@ -1136,6 +1157,23 @@ async def check_username_availability(username: str = "") -> Dict[str, Any]:
 
 @router.post("/login")
 async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
+    """
+    功能：用户登录（游客 / 注册用户 / 管理员）。
+
+    参数：
+    - payload.username/password: 登录凭证。
+    - payload.guest_device_id: 游客设备标识（游客模式可选）。
+
+    返回：
+    - token: 会话令牌。
+    - user: 登录后用户信息。
+    - quota: 当前角色配额快照。
+
+    处理过程：
+    1. 根据用户名分支鉴权（guest/admin/registered）；
+    2. 创建会话并记录登录；
+    3. 返回 token 与配额信息。
+    """
     await init_auth_storage()
 
     username = _normalize_username(payload.username)
@@ -1237,6 +1275,16 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
 
 @router.get("/me")
 async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+    """
+    功能：获取当前登录用户信息与配额快照。
+
+    参数：
+    - session: 当前会话（由 `require_login` 注入）。
+
+    返回：
+    - user: 用户名、角色、头像、会话时间信息。
+    - quota: 当日配额使用情况。
+    """
     username = str(session.get("username") or "")
     role = str(session.get("role") or "")
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
@@ -1269,6 +1317,7 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> 
 
 @router.post("/logout")
 async def logout_user(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+    """功能：注销当前登录会话。"""
     await asyncio.to_thread(_delete_session_sync, str(session.get("token", "")))
     return {
         "status": "success",
@@ -1281,6 +1330,21 @@ async def change_password(
     payload: ChangePasswordRequest,
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """
+    功能：修改当前注册用户密码。
+
+    参数：
+    - payload.current_password: 当前密码。
+    - payload.new_password: 新密码。
+
+    返回：
+    - 修改成功消息。
+
+    处理过程：
+    1. 校验身份与角色（游客/管理员禁止）；
+    2. 校验旧密码和新密码规则；
+    3. 更新密码并注销该账号全部会话。
+    """
     username = str(session.get("username") or "").strip()
     role = normalize_role(session.get("role"), username)
 
@@ -1352,9 +1416,18 @@ async def change_avatar(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
     """
-    用户修改头像。
-    - 仅已登录用户支持（不支持游客、管理员）
-    - 范围验证由 Pydantic 自动处理
+    功能：修改当前注册用户头像。
+
+    参数：
+    - payload.new_avatar_index: 头像索引（0~MAX_AVATAR_INDEX）。
+
+    返回：
+    - 更新结果与 avatar_index。
+
+    处理过程：
+    1. 校验登录态与角色；
+    2. 校验头像索引范围；
+    3. 写库并返回结果。
     """
     username = str(session.get("username") or "").strip()
     role = normalize_role(session.get("role"), username)
@@ -1409,7 +1482,12 @@ async def change_avatar(
 
 @router.get("/storage-path")
 async def get_auth_storage_path() -> Dict[str, Any]:
-    """调试接口：返回当前认证存储路径。"""
+    """
+    功能：调试接口，返回当前认证数据库路径。
+
+    返回：
+    - path: 认证数据库实际文件路径。
+    """
     return {
         "status": "success",
         "path": str(AUTH_DB_PATH),

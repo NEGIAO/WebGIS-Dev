@@ -209,7 +209,7 @@ export async function searchAmapPlaces({
         }
     });
 
-    return response?.data || {};
+    return response || {};
 }
 
 /**
@@ -238,7 +238,7 @@ export async function fetchAmapPoiDetailAoi({
             responseType: 'text',
             transformResponse: [(value) => value]
         });
-        const rawPayload = webResponse?.data;
+        const rawPayload = webResponse;
         const webData = parseAmapWebDetailPayload(rawPayload);
         if (webData && typeof webData === 'object') {
             const status = String(webData?.status ?? '1');
@@ -269,7 +269,7 @@ export async function fetchAmapPoiDetailAoi({
                 }
             });
 
-            const restData = restResponse?.data || {};
+            const restData = restResponse || {};
             const status = String(restData?.status ?? '0');
             if (status !== '1') {
                 const reason = restData?.info || restData?.message || '高德详情查询失败';

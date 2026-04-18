@@ -126,6 +126,12 @@ logger.info("已注册 Agent 对话路由")
 # 前端请求：/api/news
 @app.get("/api/news")
 async def get_external_news(_current_user: Dict[str, Any] = Depends(require_api_access)):
+    """
+    功能：演示外部新闻源抓取接口（需登录且具备 API 调用权限）。
+
+    返回：
+    - 外部新闻接口的 JSON 原始数据。
+    """
     url = "https://api.example.com/gis-news" # 假设的外部接口
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
@@ -136,6 +142,12 @@ async def get_external_news(_current_user: Dict[str, Any] = Depends(require_api_
 # 前端请求：/api/process-points
 @app.get("/api/process-points")
 async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_api_access)):
+    """
+    功能：演示 GIS 点数据处理流程（Pandas）。
+
+    返回：
+    - 处理后的点位列表（附加 status 字段）。
+    """
     # 模拟一些原始坐标数据
     raw_data = [
         {"name": "点A", "lat": 30.5, "lng": 114.3},
@@ -151,6 +163,7 @@ async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_api_a
 # --- 功能 3：测试数据接口 ---
 @app.get("/api/data")
 async def get_test_data(_current_user: Dict[str, Any] = Depends(require_api_access)):
+    """功能：测试接口连通性并返回示例数据。"""
     return {
         "status": "success", 
         "message": "恭喜！后端已经收到请求",
@@ -164,11 +177,18 @@ async def get_test_data(_current_user: Dict[str, Any] = Depends(require_api_acce
 @app.get("/")
 @app.get("/health")
 async def health_check():
+    """功能：健康检查接口，用于探活与部署监控。"""
     return {"status": "healthy", "message": "WebGIS Backend is Running!"}
 
 # --- 功能 5：信息接口 ---
 @app.get("/api/info")
 async def get_api_info(_current_user: Dict[str, Any] = Depends(require_api_access)):
+    """
+    功能：返回后端服务概览与核心端点目录。
+
+    返回：
+    - name/version/description 以及 endpoints 列表。
+    """
     return {
         "name": "WebGIS Backend",
         "version": "0.1.0",
@@ -187,6 +207,8 @@ async def get_api_info(_current_user: Dict[str, Any] = Depends(require_api_acces
             "/api/admin/* - 管理员数据库与配置接口",
             "/api/agent/chat/config - Agent 服务状态与配额快照",
             "/api/agent/chat/completions - Agent 对话后端代理",
+            "/api/agent/user-config - 用户个人 Agent 配置",
+            "/api/agent/models - 上游可用模型列表探测",
             "/api/admin/agent/config - 管理员 Agent 配置",
             "/api/data - 测试数据",
             "/api/news - 新闻爬虫",

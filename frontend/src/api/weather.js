@@ -86,7 +86,7 @@ export async function getWeather(adcode, type = 'base') {
             }
         });
 
-        const data = response?.data || {};
+        const data = response || {};
         const status = String(data?.status ?? '0');
         if (status !== '1') {
             const reason = data?.info || data?.message || '高德天气接口返回失败';

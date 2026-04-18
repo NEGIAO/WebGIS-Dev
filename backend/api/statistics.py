@@ -1017,6 +1017,21 @@ async def log_visit(
     visit_payload: Optional[VisitLogRequest] = None,
     session: Dict[str, Any] = Depends(require_api_access),
 ) -> VisitLogResponse:
+    """
+    功能：记录访问日志（IP/GPS）并写入本地统计表，可选同步 Supabase。
+
+    参数：
+    - visit_payload: 前端上报的 GPS 与权限信息（可选）。
+    - session: 当前登录会话（包含角色、游客标识等）。
+
+    返回：
+    - success/partial_success/failed 以及事件明细数据。
+
+    处理过程：
+    1. 聚合 IP 与 GPS，选择优先坐标源；
+    2. 写入 visit_tracking_events 与用户访问统计；
+    3. 根据配置尝试同步 Supabase 并返回同步状态。
+    """
     username = str(session.get("username") or "unknown")
     role = normalize_role(session.get("role"), username)
     guest_uid = str(session.get("guest_uid") or "").strip()
@@ -1206,6 +1221,12 @@ async def log_visit(
 async def get_center_statistics(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """
+    功能：获取用户中心聚合数据。
+
+    返回：
+    - 当前用户信息、配额、个人统计、全站实时统计、公告、留言等。
+    """
     username = str(session.get("username") or "")
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
@@ -1241,6 +1262,7 @@ async def get_center_statistics(
 async def get_realtime_statistics(
     _session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """功能：获取全站实时统计快照。"""
     realtime = await asyncio.to_thread(_get_realtime_global_stats_sync)
     return {
         "status": "success",
@@ -1253,6 +1275,15 @@ async def create_user_message(
     payload: UserMessageCreateRequest,
     session: Dict[str, Any] = Depends(require_api_access),
 ) -> Dict[str, Any]:
+    """
+    功能：发布用户留言。
+
+    参数：
+    - payload.content: 留言内容（1~500 字）。
+
+    返回：
+    - 新留言 ID 与基础字段。
+    """
     username = str(session.get("username") or "")
     content = str(payload.content or "").strip()
 
@@ -1285,6 +1316,7 @@ async def create_user_message(
 async def list_user_messages(
     _session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """功能：查询最近留言列表。"""
     messages = await asyncio.to_thread(_list_recent_messages_sync, 50)
     return {
         "status": "success",
@@ -1296,6 +1328,7 @@ async def list_user_messages(
 async def get_current_announcement(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """功能：读取当前用户可见的有效公告。"""
     username = str(session.get("username") or "")
     announcement = await asyncio.to_thread(_get_active_announcement_sync, username)
     return {
@@ -1309,6 +1342,7 @@ async def dismiss_announcement(
     payload: DismissAnnouncementRequest,
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """功能：将指定公告标记为“当前用户已忽略”。"""
     username = str(session.get("username") or "")
     announcement_id = int(payload.announcement_id)
 
@@ -1324,6 +1358,7 @@ async def dismiss_announcement(
 async def list_all_user_statistics(
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """功能：管理员查看全体用户统计指标列表。"""
     rows = await asyncio.to_thread(_list_all_user_stats_sync, 800)
     return {
         "status": "success",
@@ -1341,6 +1376,13 @@ async def admin_list_visit_events(
     sync_status: str = Query(default=""),
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """
+    功能：管理员分页查询访问事件。
+
+    参数：
+    - limit/offset: 分页。
+    - username/coord_source/geo_permission/sync_status: 可选过滤条件。
+    """
     rows = await asyncio.to_thread(
         _list_visit_tracking_events_sync,
         limit,
@@ -1361,6 +1403,7 @@ async def admin_get_visit_event(
     event_id: int,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """功能：管理员按 ID 查询单条访问事件。"""
     row = await asyncio.to_thread(_get_visit_tracking_event_sync, event_id)
     if row is None:
         raise HTTPException(
@@ -1378,6 +1421,7 @@ async def admin_create_visit_event(
     payload: AdminVisitEventCreateRequest,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """功能：管理员手工创建访问事件。"""
     row_id = await asyncio.to_thread(_create_visit_tracking_event_admin_sync, payload)
     return {
         "status": "success",
@@ -1392,6 +1436,7 @@ async def admin_update_visit_event(
     payload: AdminVisitEventUpdateRequest,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """功能：管理员更新指定访问事件。"""
     affected = await asyncio.to_thread(_update_visit_tracking_event_admin_sync, event_id, payload)
     if affected <= 0:
         raise HTTPException(
@@ -1410,6 +1455,7 @@ async def admin_delete_visit_event(
     event_id: int,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """功能：管理员删除指定访问事件。"""
     affected = await asyncio.to_thread(_delete_visit_tracking_event_sync, event_id)
     if affected <= 0:
         raise HTTPException(
@@ -1428,6 +1474,12 @@ async def admin_sync_visit_event_to_supabase(
     event_id: int,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """
+    功能：管理员手工触发单条访问事件同步到 Supabase。
+
+    返回：
+    - success/partial_success 以及同步结果明细。
+    """
     row = await asyncio.to_thread(_get_visit_tracking_event_sync, event_id)
     if row is None:
         raise HTTPException(

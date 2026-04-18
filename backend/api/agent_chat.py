@@ -714,12 +714,72 @@ def _sanitize_history(history: List[AgentChatHistoryItem]) -> List[Dict[str, str
     return items[-12:]
 
 
+def _extract_client_ip(request: Request) -> str:
+    """
+    从请求中提取客户端 IP 地址。
+    支持代理场景（X-Forwarded-For, X-Real-IP）。
+    """
+    if "x-forwarded-for" in request.headers:
+        return str(request.headers["x-forwarded-for"]).split(",")[0].strip()
+    if "x-real-ip" in request.headers:
+        return str(request.headers["x-real-ip"]).strip()
+    return str(request.client.host or "127.0.0.1")
+
+
+async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
+    """
+    尝试通过 IP 获取用户地理位置信息（省市县等）。
+    若获取成功，返回格式化的位置字符串；否则返回 None。
+    
+    注：仅在用户未明确提供位置上下文时使用，作为备选方案。
+    """
+    if not ip or ip == "127.0.0.1" or ip == "::1":
+        return None
+    
+    amap_key = str(os.getenv("AMAP_WEB_SERVICE_KEY", "")).strip()
+    if not amap_key:
+        return None
+    
+    try:
+        timeout = httpx.Timeout(connect=2.0, read=5.0, write=2.0, pool=1.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            url = f"https://restapi.amap.com/v3/ip?ip={ip}&key={amap_key}"
+            response = await client.get(url)
+            data = response.json()
+            
+            if data.get("status") == "1":
+                province = str(data.get("province") or "").strip()
+                city = str(data.get("city") or "").strip()
+                country = str(data.get("country") or "中国").strip()
+                adcode = str(data.get("adcode") or "").strip()
+                
+                # 只有在获得至少省份信息时才返回
+                if province:
+                    return f"来源=IP定位，省={province}，市={city}，国家={country}，编码={adcode}。"
+    except Exception as e:
+        logger.debug(f"Failed to geolocate IP {ip}: {e}")
+    
+    return None
+
+
 def _join_system_prompt(base_prompt: str, location_context: Optional[str]) -> str:
+    """
+    将基础系统提示词与用户位置上下文合并。
+    位置上下文总是附加到系统提示词中，以确保 Agent 能够理解用户的地理位置信息。
+    """
     location_text = str(location_context or "").strip()
+    
     if not location_text:
         return base_prompt
-
-    return f"{base_prompt}\n\nUser location context (first-turn hint): {location_text}"
+    
+    # 为 WebGIS Agent 增强系统提示词，确保它理解用户的地理位置
+    enhanced_prompt = (
+        f"{base_prompt}\n\n"
+        f"【用户地理位置信息】\n{location_text}\n\n"
+        f"请基于用户的地理位置提供相关的WebGIS和地理空间信息服务。"
+    )
+    
+    return enhanced_prompt
 
 
 def _coerce_content_text(raw: Any) -> str:
@@ -874,6 +934,265 @@ async def _call_upstream_chat(
     return data
 
 
+def _extract_models_from_upstream_payload(payload: Any) -> List[Dict[str, Any]]:
+    """从上游 `/models` 响应中提取标准化模型列表。"""
+    rows: List[Any] = []
+    if isinstance(payload, list):
+        rows = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("data"), list):
+            rows = payload.get("data") or []
+        elif isinstance(payload.get("models"), list):
+            rows = payload.get("models") or []
+        elif isinstance(payload.get("result"), list):
+            rows = payload.get("result") or []
+
+    def _normalize_api_type_tokens(raw_value: Any) -> List[str]:
+        tokens: List[str] = []
+
+        if raw_value is None:
+            return tokens
+
+        if isinstance(raw_value, str):
+            text = raw_value.strip()
+            if not text:
+                return tokens
+
+            for piece in text.replace("|", ",").replace(";", ",").split(","):
+                normalized = str(piece or "").strip().lower()
+                if normalized:
+                    tokens.append(normalized)
+            return tokens
+
+        if isinstance(raw_value, (list, tuple, set)):
+            for item in raw_value:
+                tokens.extend(_normalize_api_type_tokens(item))
+            return tokens
+
+        if isinstance(raw_value, dict):
+            for key, value in raw_value.items():
+                key_text = str(key or "").strip().lower()
+                if isinstance(value, bool):
+                    if value and key_text:
+                        tokens.append(key_text)
+                elif value is not None:
+                    tokens.extend(_normalize_api_type_tokens(value))
+            return tokens
+
+        return tokens
+
+    def _extract_api_types(row: Dict[str, Any]) -> List[str]:
+        candidates = [
+            row.get("apiType"),
+            row.get("api_type"),
+            row.get("apiTypes"),
+            row.get("api_types"),
+            row.get("supportedApiTypes"),
+            row.get("supported_api_types"),
+            row.get("apiTypeList"),
+            row.get("api_type_list"),
+            row.get("abilities"),
+            row.get("capabilities"),
+            row.get("ability"),
+            row.get("type"),
+        ]
+
+        merged: List[str] = []
+        for candidate in candidates:
+            merged.extend(_normalize_api_type_tokens(candidate))
+
+        unique: List[str] = []
+        seen_local: set[str] = set()
+        for token in merged:
+            if token not in seen_local:
+                seen_local.add(token)
+                unique.append(token)
+        return unique
+
+    def _infer_chat_compatible(model_id: str, api_types: List[str]) -> bool:
+        if api_types:
+            if any("openai.chat" in token or token == "chat" or "chat.completion" in token for token in api_types):
+                return True
+            if any(
+                "embedding" in token
+                or "rerank" in token
+                or "image" in token
+                or "speech" in token
+                or "audio" in token
+                or "asr" in token
+                or "tts" in token
+                for token in api_types
+            ):
+                return False
+
+        model_key = str(model_id or "").strip().lower()
+        if not model_key:
+            return True
+
+        non_chat_hints = [
+            "embedding",
+            "rerank",
+            "whisper",
+            "tts",
+            "asr",
+            "stt",
+            "vision",
+            "image",
+            "dalle",
+            "flux",
+            "midjourney",
+        ]
+        if any(hint in model_key for hint in non_chat_hints):
+            return False
+
+        return True
+
+    models: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if isinstance(row, str):
+            model_id = str(row).strip()
+            model_name = model_id
+            owned_by = ""
+        elif isinstance(row, dict):
+            model_id = str(row.get("id") or row.get("model") or row.get("name") or "").strip()
+            model_name = str(row.get("name") or row.get("display_name") or model_id).strip() or model_id
+            owned_by = str(row.get("owned_by") or row.get("provider") or "").strip()
+            api_types = _extract_api_types(row)
+        else:
+            continue
+
+        if not isinstance(row, dict):
+            api_types = []
+
+        if not model_id or model_id in seen:
+            continue
+
+        models.append(
+            {
+                "id": model_id,
+                "name": model_name,
+                "owned_by": owned_by,
+                "source": "upstream",
+                "api_types": api_types,
+                "chat_compatible": _infer_chat_compatible(model_id, api_types),
+            }
+        )
+        seen.add(model_id)
+
+    return models
+
+
+async def _call_upstream_models(
+    request: Request,
+    *,
+    base_url: str,
+    api_key: str,
+    timeout_seconds: int,
+) -> Tuple[List[Dict[str, Any]], str]:
+    """向上游模型服务请求 `/models`，返回可用模型列表和命中的端点。"""
+    normalized_base = str(base_url or "").strip().rstrip("/")
+    if not normalized_base:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent base URL is not configured.",
+        )
+
+    endpoints = [f"{normalized_base}/models"]
+    if not normalized_base.endswith("/v1"):
+        endpoints.append(f"{normalized_base}/v1/models")
+
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {api_key}",
+    }
+
+    client = getattr(request.app.state, "http_client", None)
+    should_close = False
+    if client is None:
+        client = httpx.AsyncClient(follow_redirects=True)
+        should_close = True
+
+    last_status = 0
+    last_detail = ""
+    try:
+        for endpoint in endpoints:
+            try:
+                response = await client.get(
+                    endpoint,
+                    headers=headers,
+                    timeout=max(5, min(180, int(timeout_seconds))),
+                )
+            except httpx.TimeoutException as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail="Agent models endpoint timeout.",
+                ) from exc
+            except httpx.RequestError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Agent models request failed.",
+                ) from exc
+
+            if response.status_code == 404:
+                last_status = 404
+                continue
+
+            if response.status_code in {401, 403}:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Agent service key is invalid or expired.",
+                )
+
+            if response.status_code == 429:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Agent models request is rate-limited upstream.",
+                )
+
+            if response.status_code < 200 or response.status_code >= 300:
+                last_status = int(response.status_code)
+                try:
+                    err_payload = response.json()
+                    if isinstance(err_payload, dict):
+                        last_detail = str(
+                            err_payload.get("error", {}).get("message")
+                            if isinstance(err_payload.get("error"), dict)
+                            else err_payload.get("message")
+                            or ""
+                        ).strip()
+                except Exception:
+                    last_detail = ""
+                continue
+
+            try:
+                payload = response.json()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Agent models endpoint returned non-JSON response.",
+                ) from exc
+
+            models = _extract_models_from_upstream_payload(payload)
+            return models, endpoint
+
+    finally:
+        if should_close:
+            await client.aclose()
+
+    if last_status == 404:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Agent upstream does not expose a /models endpoint.",
+        )
+
+    suffix = f" {last_detail}" if last_detail else ""
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail=f"Agent models request failed (HTTP {last_status or 0}).{suffix}",
+    )
+
+
 async def _record_agent_call_safe(
     *,
     username: str,
@@ -902,6 +1221,23 @@ router = APIRouter(tags=["agent-chat"])
 async def get_agent_chat_config(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """
+    功能：获取当前登录用户的 Agent 服务状态、模型和当日配额快照。
+
+    参数：
+    - session: 登录会话（`require_login` 注入），用于识别用户与角色。
+
+    返回：
+    - service_ready: 后端是否具备可调用条件（base_url/model/key）。
+    - model: 当前生效模型。
+    - quota: 当日调用配额使用情况。
+    - key_status/provider: 当前密钥来源与运行参数快照。
+
+    处理过程：
+    1. 解析用户名、角色和 quota_subject。
+    2. 读取用户生效运行时配置。
+    3. 读取当日配额快照并统一返回。
+    """
     username = str(session.get("username") or "")
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
@@ -936,6 +1272,28 @@ async def agent_chat_completions(
     request: Request,
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """
+    功能：代理用户对话请求到上游 LLM，并执行配额与安全控制。
+
+    参数：
+    - payload.message: 用户本轮问题。
+    - payload.history: 近几轮历史消息（仅 user/assistant，最多 12 条）。
+    - payload.location_context: 首轮可选地理上下文。
+    - session: 登录会话。
+
+    返回：
+    - reply: 模型回复文本。
+    - model: 本次调用的生效模型。
+    - quota: 调用后的当日配额。
+    - usage: 上游返回的 token 使用统计（若提供）。
+
+    处理过程：
+    1. 消耗并校验配额；
+    2. 若客户端未提供位置上下文，自动从用户 IP 获取地理位置信息；
+    3. 组装 system/history/user 消息，始终附带用户地理位置；
+    4. 调用上游 `/chat/completions`；
+    5. 解析回复并记录调用日志。
+    """
     username = str(session.get("username") or "")
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
@@ -958,9 +1316,20 @@ async def agent_chat_completions(
         )
 
     history_items = _sanitize_history(payload.history)
+    
+    # 获取或构建位置上下文
+    location_context = str(payload.location_context or "").strip()
+    
+    # 如果客户端未提供位置上下文，尝试从 IP 获取
+    if not location_context:
+        client_ip = _extract_client_ip(request)
+        ip_location = await _try_get_location_from_ip_async(client_ip)
+        if ip_location:
+            location_context = ip_location
+    
     system_prompt = _join_system_prompt(
         str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
-        payload.location_context,
+        location_context,
     )
 
     request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
@@ -973,6 +1342,7 @@ async def agent_chat_completions(
             "history_len": len(history_items),
             "quota_subject": quota_subject,
             "api_key_source": runtime.get("api_key_source"),
+            "has_location_context": bool(location_context),
         },
         ensure_ascii=False,
     )
@@ -1009,6 +1379,20 @@ async def agent_chat_completions(
             },
         }
     except HTTPException as exc:
+        detail_text = str(exc.detail or "")
+        if (
+            int(exc.status_code) == status.HTTP_502_BAD_GATEWAY
+            and "does not support apiType:openai.chat" in detail_text
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "当前模型不支持 openai.chat（chat/completions）。"
+                    "请在“我的 Agent 配置”中改为上游可用聊天模型，"
+                    "或切换支持 chat 的平台模型。"
+                ),
+            ) from exc
+
         upstream_status = int(exc.status_code)
         raise
     finally:
@@ -1026,6 +1410,17 @@ async def agent_chat_completions(
 async def admin_get_agent_config(
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """
+    功能：管理员读取平台级 Agent 配置、密钥状态和配额策略。
+
+    参数：
+    - _session: 管理员会话（`require_admin` 注入）。
+
+    返回：
+    - provider: 平台默认 base_url/model/system_prompt/timeout 等。
+    - key_status: 当前后端密钥是否存在及来源。
+    - chat_quota: guest/registered/admin 对话限额策略。
+    """
     config = await asyncio.to_thread(_get_agent_provider_config_sync)
     key_status = await asyncio.to_thread(_get_agent_key_status_sync)
 
@@ -1048,6 +1443,20 @@ async def admin_update_agent_config(
     payload: AgentConfigUpdateRequest,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    """
+    功能：管理员更新平台级 Agent 默认配置。
+
+    参数：
+    - payload: 可选更新字段（base_url/model/system_prompt/timeout/max_tokens/temperature）。
+
+    返回：
+    - provider: 更新后并标准化的完整平台配置。
+
+    处理过程：
+    1. 过滤未提交字段；
+    2. 校验并写入 system_config；
+    3. 返回生效配置快照。
+    """
     updates = _model_dump_compat(payload, exclude_none=True)
 
     if not updates:
@@ -1071,6 +1480,17 @@ async def admin_update_agent_config(
 async def get_agent_user_config(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """
+    功能：读取当前用户的 Agent 配置（个人覆盖 + 生效结果）。
+
+    参数：
+    - session: 登录会话。
+
+    返回：
+    - effective: 最终生效参数（已合并平台默认与个人覆盖）。
+    - personal: 用户个人覆盖项（仅本人可见）。
+    - default_provider: 平台默认配置。
+    """
     username = str(session.get("username") or "")
     role = normalize_role(session.get("role"), username)
 
@@ -1110,6 +1530,17 @@ async def update_agent_user_config(
     payload: AgentUserConfigUpdateRequest,
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
+    """
+    功能：更新当前用户的个人 Agent 配置。
+
+    参数：
+    - payload: 个人密钥、模型、base_url、提示词、超时、采样参数等。
+      支持 `clear_personal_key` 和 `reset_provider_overrides` 两种快捷操作。
+
+    返回：
+    - saved: 本次写入后的用户配置记录。
+    - effective: 合并后的生效运行参数。
+    """
     username = str(session.get("username") or "")
     updates = _model_dump_compat(payload, exclude_unset=True)
 
@@ -1141,69 +1572,107 @@ async def update_agent_user_config(
 
 @router.get("/api/agent/models")
 async def get_available_models(
+    request: Request,
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
     """
-    获取可用的模型列表。
-    返回后端配置中的模型以及用户配置中的模型。
+    功能：请求上游模型端点并返回“当前账号真实可用”的模型列表。
+
+    参数：
+    - request: FastAPI 请求对象，用于复用应用级 HTTP 客户端。
+    - session: 登录会话。
+
+    返回：
+    - models: 标准化模型列表（优先来自上游 `/models`）。
+    - current_model: 当前生效模型。
+    - upstream_endpoint: 本次命中的上游 models 地址。
+    - api_key_source: 使用的平台密钥/个人密钥来源标记。
+
+    处理过程：
+    1. 读取当前用户生效运行时配置；
+    2. 调用上游 `/models`（含 `/v1/models` 回退探测）；
+    3. 标准化并去重返回；
+    4. 若当前生效模型未在上游列表中，附加为 `configured` 记录。
     """
     username = str(session.get("username") or "")
-    
-    # 获取后端提供商配置中的默认模型
-    provider = await asyncio.to_thread(_get_agent_provider_config_sync)
-    default_model = str(provider.get("model") or DEFAULT_AGENT_MODEL).strip()
-    
-    # 获取用户个人配置中的模型
-    user_cfg = await asyncio.to_thread(_read_agent_user_config_row_sync, username)
-    personal_model = str(user_cfg.get("model") or "").strip() if user_cfg else ""
-    
-    # 构建模型列表（去重，保持顺序）
-    models = []
-    seen = set()
-    
-    # 优先添加默认模型
-    if default_model and default_model not in seen:
-        models.append({
-            "id": default_model,
-            "name": default_model,
-            "source": "platform"
-        })
-        seen.add(default_model)
-    
-    # 然后添加用户个人模型（如果不同）
-    if personal_model and personal_model not in seen:
-        models.append({
-            "id": personal_model,
-            "name": personal_model,
-            "source": "personal"
-        })
-        seen.add(personal_model)
-    
-    # 常见模型列表（从环境变量或硬编码）
-    common_models = [
-        "deepseek-V3-0324",
-        "deepseek-chat",
-        "gpt-4",
-        "gpt-4-turbo",
-        "gpt-3.5-turbo",
-        "claude-3-opus",
-        "claude-3-sonnet",
-        "claude-3-haiku",
+
+    runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
+    base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+    api_key = str(runtime.get("api_key") or "").strip()
+    current_model = str(runtime.get("model") or DEFAULT_AGENT_MODEL).strip()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent key is not configured on backend. Please set platform key or personal key first.",
+        )
+
+    upstream_models, upstream_endpoint = await _call_upstream_models(
+        request,
+        base_url=base_url,
+        api_key=api_key,
+        timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
+    )
+
+    compatible_upstream_models = [
+        item for item in upstream_models if bool(item.get("chat_compatible", True))
     ]
-    
-    for model_id in common_models:
-        if model_id not in seen:
-            models.append({
-                "id": model_id,
-                "name": model_id,
-                "source": "common"
-            })
-            seen.add(model_id)
-    
+    incompatible_upstream_models = [
+        item for item in upstream_models if not bool(item.get("chat_compatible", True))
+    ]
+
+    models: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in compatible_upstream_models:
+        model_id = str(item.get("id") or "").strip()
+        if not model_id or model_id in seen:
+            continue
+
+        normalized = {
+            "id": model_id,
+            "name": str(item.get("name") or model_id).strip() or model_id,
+            "owned_by": str(item.get("owned_by") or "").strip(),
+            "source": "upstream",
+            "is_current": model_id == current_model,
+            "api_types": item.get("api_types") if isinstance(item.get("api_types"), list) else [],
+            "chat_compatible": True,
+        }
+        models.append(normalized)
+        seen.add(model_id)
+
+    if current_model and current_model not in seen:
+        is_current_chat_compatible = True
+        for item in incompatible_upstream_models:
+            if str(item.get("id") or "").strip() == current_model:
+                is_current_chat_compatible = False
+                break
+
+        models.insert(
+            0,
+            {
+                "id": current_model,
+                "name": f"{current_model} (当前配置)",
+                "owned_by": "",
+                "source": "configured",
+                "is_current": True,
+                "chat_compatible": is_current_chat_compatible,
+                "note": (
+                    "当前模型不支持 openai.chat，请更换为上游可用聊天模型"
+                    if not is_current_chat_compatible
+                    else "当前模型未出现在上游 /models 列表中"
+                ),
+            },
+        )
+
     return {
         "status": "success",
         "data": {
             "models": models,
-            "current_model": str((user_cfg and user_cfg.get("model")) or (provider and provider.get("model")) or DEFAULT_AGENT_MODEL),
+            "current_model": current_model,
+            "upstream_endpoint": upstream_endpoint,
+            "api_key_source": str(runtime.get("api_key_source") or "missing"),
+            "model_count": len(models),
+            "upstream_model_total": len(upstream_models),
+            "excluded_non_chat_models": len(incompatible_upstream_models),
         },
     }

@@ -25,14 +25,25 @@
           <div style="display: flex; gap: 6px; align-items: center;">
             <select v-model="userConfigDraft.model" class="model-select">
               <option value="">-- 选择模型 --</option>
-              <optgroup label="平台模型">
-                <option v-for="m in platformModels" :key="m.id" :value="m.id">
-                  {{ m.name || m.id }}
+              <option v-if="!configuredModels.length && !upstreamModels.length" value="" disabled>未获取到可用模型</option>
+              <optgroup v-if="configuredModels.length" label="当前配置模型">
+                <option
+                  v-for="m in configuredModels"
+                  :key="m.id"
+                  :value="m.id"
+                  :disabled="m.chat_compatible === false"
+                >
+                  {{ formatModelOptionLabel(m) }}
                 </option>
               </optgroup>
-              <optgroup label="常见模型">
-                <option v-for="m in commonModels" :key="m.id" :value="m.id">
-                  {{ m.name || m.id }}
+              <optgroup v-if="upstreamModels.length" label="上游可用模型">
+                <option
+                  v-for="m in upstreamModels"
+                  :key="m.id"
+                  :value="m.id"
+                  :disabled="m.chat_compatible === false"
+                >
+                  {{ formatModelOptionLabel(m) }}
                 </option>
               </optgroup>
             </select>
@@ -153,8 +164,8 @@ const quota = ref({
 // 模型列表相关
 const isLoadingModels = ref(false);
 const modelLoadHint = ref('');
-const platformModels = ref([]);
-const commonModels = ref([]);
+const configuredModels = ref([]);
+const upstreamModels = ref([]);
 
 const messages = ref([]);
 const firstMessageLocationInjected = ref(false);
@@ -303,29 +314,46 @@ const loadAvailableModels = async () => {
     // 调用后端 API 获取可用的模型列表
     const response = await apiAgentListModels();
     const data = response?.data || response || {};
-    const models = data?.models || [];
+    const models = Array.isArray(data?.models) ? data.models : [];
 
-    // 分离模型为平台模型和常见模型
-    platformModels.value = models.filter(m => m.source === 'platform' || m.source === 'personal');
-    commonModels.value = models.filter(m => m.source === 'common');
+    configuredModels.value = models.filter((m) => m?.source !== 'upstream');
+    upstreamModels.value = models.filter((m) => m?.source === 'upstream');
 
-    modelLoadHint.value = `✅ 已加载 ${models.length} 个模型`;
+    const currentModel = String(data?.current_model || '').trim();
+    if (!String(userConfigDraft.value.model || '').trim() && currentModel) {
+      userConfigDraft.value.model = currentModel;
+    }
+
+    if (!models.length) {
+      modelLoadHint.value = '未从上游返回可用模型，请检查 Base URL / API Key。';
+    } else {
+      modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（上游 ${upstreamModels.value.length}）`;
+    }
   } catch (error) {
     modelLoadHint.value = `❌ 加载模型列表失败: ${error.message}`;
     message.error(`加载模型列表失败: ${error.message}`);
-    
-    // 如果加载失败，添加默认模型
-    platformModels.value = [
-      { id: 'deepseek-V3-0324', name: 'DeepSeek V3-0324', source: 'platform' }
-    ];
-    commonModels.value = [
-      { id: 'gpt-4', name: 'GPT-4', source: 'common' },
-      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', source: 'common' },
-      { id: 'claude-3-opus', name: 'Claude 3 Opus', source: 'common' },
-    ];
+    configuredModels.value = [];
+    upstreamModels.value = [];
+
+    const fallbackModel = String(userConfigDraft.value.model || modelName.value || '').trim();
+    if (fallbackModel) {
+      configuredModels.value = [{
+        id: fallbackModel,
+        name: `当前模型：${fallbackModel}`,
+        source: 'configured',
+      }];
+    }
   } finally {
     isLoadingModels.value = false;
   }
+};
+
+const formatModelOptionLabel = (model = {}) => {
+  const name = String(model?.name || model?.id || '').trim() || 'unknown-model';
+  if (model?.chat_compatible === false) {
+    return `${name}（不支持 chat/completions）`;
+  }
+  return name;
 };
 
 const saveUserConfig = async () => {
@@ -397,30 +425,33 @@ const readUrlBinaryFlag = (key, fallback = '0') => {
 };
 
 const buildFirstMessageLocationContext = async () => {
+  // 只在首次消息时注入位置信息（防止重复）
   if (firstMessageLocationInjected.value) return '';
-  if (!readUrlBinaryFlag('loc', '0')) return '';
 
+  // 优先使用全局用户位置上下文（通常由IP定位或GPS获得）
   const globalLocation = getGlobalUserLocationContext();
   if (globalLocation && Number.isFinite(globalLocation.lon) && Number.isFinite(globalLocation.lat)) {
     const encoded = globalLocation.encodedLocation || {};
-    const source = String(globalLocation.source || 'unknown').trim();
-    const province = String(encoded.province || '').trim();
-    const city = String(encoded.city || '').trim();
-    const district = String(encoded.district || '').trim();
-    const adcode = String(encoded.adcode || '').trim();
+    const source = String(globalLocation.source || '未知').trim();
+    const province = String(encoded.province || '未知').trim();
+    const city = String(encoded.city || '未知').trim();
+    const district = String(encoded.district || '未知').trim();
+    const adcode = String(encoded.adcode || '未知').trim();
     const address = String(encoded.formattedAddress || '').trim();
 
     firstMessageLocationInjected.value = true;
-    return `用户位置上下文（首次附带）：来源=${source || '未知'}，经度=${globalLocation.lon.toFixed(6)}，纬度=${globalLocation.lat.toFixed(6)}，省=${province || '未知'}，市=${city || '未知'}，区县=${district || '未知'}，编码=${adcode || '未知'}，地址=${address || '未知'}。`;
+    return `用户位置上下文（首条消息附带）：来源=${source}，经度=${globalLocation.lon.toFixed(6)}，纬度=${globalLocation.lat.toFixed(6)}，省=${province}，市=${city}，区县=${district}，编码=${adcode}，地址=${address || '待完善'}。`;
   }
 
+  // 其次使用地图缓存的用户位置
   const baseLocation = getCachedMapPosition();
-
   if (baseLocation) {
     firstMessageLocationInjected.value = true;
-    return `用户位置上下文（首次附带）：经度=${baseLocation.lon.toFixed(4)}，纬度=${baseLocation.lat.toFixed(4)}。`;
+    return `用户位置上下文（首条消息附带）：经度=${baseLocation.lon.toFixed(6)}，纬度=${baseLocation.lat.toFixed(6)}。`;
   }
 
+  // 如果都没有，则不附带位置信息但标记已处理
+  firstMessageLocationInjected.value = true;
   return '';
 };
 

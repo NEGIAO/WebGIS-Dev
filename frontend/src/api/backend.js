@@ -150,7 +150,7 @@ export function handleApiError(error, messageHandler, defaultErrorMsg = '操作�
  * 导出 API 客户端实例
  * 使用方式:
  * import backendAPI from '@/api/backend'
- * const result = await backendAPI.post('/api/v1/geocoding/encode', { address })
+ * const result = await backendAPI.get('/api/proxy/amap/geocode/geo', { params: { address } })
  */
 export default backendAPI
 
@@ -208,7 +208,12 @@ export async function apiAuthChangeAvatar(newAvatarIndex) {
  * @returns {Promise<{lng, lat, address, adcode}>}
  */
 export async function apiGeocode(address, city = '') {
-  return backendAPI.post('/api/v1/geocoding/encode', { address, city })
+  return backendAPI.get('/api/proxy/amap/geocode/geo', {
+    params: {
+      address: String(address || '').trim(),
+      city: String(city || '').trim()
+    }
+  })
 }
 
 /**
@@ -218,7 +223,14 @@ export async function apiGeocode(address, city = '') {
  * @returns {Promise<{address, province, city, district, adcode}>}
  */
 export async function apiReverseGeocode(lng, lat) {
-  return backendAPI.post('/api/v1/geocoding/reverse', { lng, lat })
+  return backendAPI.get('/api/proxy/amap/geocode/regeo', {
+    params: {
+      location: `${Number(lng)},${Number(lat)}`,
+      extensions: 'base',
+      radius: 1000,
+      batch: false
+    }
+  })
 }
 
 /**
@@ -227,7 +239,12 @@ export async function apiReverseGeocode(lng, lat) {
  * @returns {Promise<{weather, temperature, windDirection, windPower, humidity}>}
  */
 export async function apiGetWeatherCurrent(adcode) {
-  return backendAPI.get('/api/v1/weather/current', { params: { adcode } })
+  return backendAPI.get('/api/proxy/amap/weather', {
+    params: {
+      city: String(adcode || '').trim(),
+      extensions: 'base'
+    }
+  })
 }
 
 /**
@@ -237,8 +254,12 @@ export async function apiGetWeatherCurrent(adcode) {
  * @returns {Promise<Array>}
  */
 export async function apiGetWeatherForecast(adcode, days = 7) {
-  return backendAPI.get('/api/v1/weather/forecast', {
-    params: { adcode, days }
+  void days
+  return backendAPI.get('/api/proxy/amap/weather', {
+    params: {
+      city: String(adcode || '').trim(),
+      extensions: 'all'
+    }
   })
 }
 
@@ -250,8 +271,27 @@ export async function apiGetWeatherForecast(adcode, days = 7) {
  * @returns {Promise<Array>}
  */
 export async function apiSearchLocations(keywords, region = '', service = 'auto') {
-  return backendAPI.get('/api/v1/search/locations', {
-    params: { keywords, region, service }
+  const normalizedService = String(service || 'auto').trim().toLowerCase()
+  const normalizedKeywords = String(keywords || '').trim()
+  const normalizedRegion = String(region || '').trim()
+
+  if (normalizedService === 'nominatim') {
+    return backendAPI.get('/api/proxy/search/nominatim', {
+      params: {
+        keywords: normalizedKeywords,
+        limit: 10
+      }
+    })
+  }
+
+  return backendAPI.get('/api/proxy/amap/place/text', {
+    params: {
+      keywords: normalizedKeywords,
+      city: normalizedRegion,
+      page: 1,
+      offset: 10,
+      extensions: 'base'
+    }
   })
 }
 
@@ -262,8 +302,14 @@ export async function apiSearchLocations(keywords, region = '', service = 'auto'
  * @returns {Promise<Array>}
  */
 export async function apiSearchSuggest(keywords, city = '') {
-  return backendAPI.get('/api/v1/search/suggest', {
-    params: { keywords, city }
+  return backendAPI.get('/api/proxy/amap/place/text', {
+    params: {
+      keywords: String(keywords || '').trim(),
+      city: String(city || '').trim(),
+      page: 1,
+      offset: 8,
+      extensions: 'base'
+    }
   })
 }
 
@@ -272,9 +318,7 @@ export async function apiSearchSuggest(keywords, city = '') {
  * @deprecated 使用 apiLocationIpLocate 替代
  */
 export async function apiGetLocationFromIP(ip = '') {
-  return backendAPI.get('/api/v1/location/ip', {
-    params: ip ? { ip } : {}
-  })
+  return apiLocationIpLocate(ip)
 }
 
 /**
