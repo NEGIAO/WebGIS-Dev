@@ -1,4 +1,4 @@
-import axios from 'axios';
+import backendAPI from './backend';
 import { parseAmapAoiPayload } from '../utils/geo';
 
 export {
@@ -7,35 +7,6 @@ export {
     locationToAddress,
     reverseGeocodeByPriority
 } from './geocoding';
-
-const amapClient = axios.create({
-    // Static deployment mode: call AMap REST API directly (no Vite proxy).
-    baseURL: 'https://restapi.amap.com',
-    timeout: 8000
-});
-
-function resolveAmapWebDetailBaseUrl() {
-    if (import.meta.env.DEV) {
-        return '/amap-web-detail';
-    }
-
-    if (typeof window === 'undefined') {
-        return 'https://www.amap.com';
-    }
-
-    const host = String(window.location.hostname || '').toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1') {
-        return '/amap-web-detail';
-    }
-
-    return 'https://www.amap.com';
-}
-
-const amapWebDetailClient = axios.create({
-    // AOI mining_shape 来源接口（无需 Web Service Key）
-    baseURL: resolveAmapWebDetailBaseUrl(),
-    timeout: 8000
-});
 
 function parseLngLatPair(text) {
     const parts = String(text || '').split(',');
@@ -222,16 +193,14 @@ export function parseAmapDetailAoiFromPayload(payload) {
 }
 
 export async function searchAmapPlaces({
-    key,
     keywords,
     city = '',
     page = 1,
     offset = 10,
     extensions = 'base'
 }) {
-    const response = await amapClient.get('/v3/place/text', {
+    const response = await backendAPI.get('/api/proxy/amap/place/text', {
         params: {
-            key,
             keywords,
             city,
             page,
@@ -250,12 +219,10 @@ export async function searchAmapPlaces({
  * 目标路径：data.spec.mining_shape.shape
  */
 export async function fetchAmapPoiDetailAoi({
-    key = '',
     poiid,
     extensions = 'all'
 }) {
     const normalizedPoiId = String(poiid || '').trim();
-    const normalizedKey = String(key || '').trim();
 
     if (!normalizedPoiId) {
         throw new Error('高德详情查询缺少 poiid 参数');
@@ -266,7 +233,7 @@ export async function fetchAmapPoiDetailAoi({
     let lastError = null;
 
     try {
-        const webResponse = await amapWebDetailClient.get('/detail/get/detail', {
+        const webResponse = await backendAPI.get('/api/proxy/amap/web/detail', {
             params: { id: normalizedPoiId },
             responseType: 'text',
             transformResponse: [(value) => value]
@@ -292,12 +259,11 @@ export async function fetchAmapPoiDetailAoi({
         lastError = error;
     }
 
-    // 当 web 详情失败时，且调用方提供了 key，则尝试 REST 详情作为兜底。
-    if (!data && normalizedKey) {
+    // 当 web 详情失败时，回退到 REST 详情兜底（密钥由后端托管）。
+    if (!data) {
         try {
-            const restResponse = await amapClient.get('/v3/place/detail', {
+            const restResponse = await backendAPI.get('/api/proxy/amap/place/detail', {
                 params: {
-                    key: normalizedKey,
                     id: normalizedPoiId,
                     extensions
                 }

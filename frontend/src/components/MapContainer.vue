@@ -16,7 +16,6 @@
             :selected-layer="selectedLayer"
             :custom-map-url="customMapUrl"
             :active-graticule="showDynamicSplitLines"
-            :amap-key="AMAP_WEB_SERVICE_KEY"
             :tianditu-tk="TIANDITU_TK"
             :is-domestic="isDomestic"
             @change-layer="handleLayerChange"
@@ -142,10 +141,6 @@ import {
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 }; //初始位置
-const AMAP_WEB_SERVICE_KEY = import.meta.env.VITE_AMAP_WEB_SERVICE_KEY || '3e6d96476b807126acbc59384aa13e51'; //高德 Web 服务 Key
-if (typeof window !== 'undefined') {
-    window.__AMAP_WEB_SERVICE_KEY__ = AMAP_WEB_SERVICE_KEY;
-}
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 
 // 天地图 Token：优先使用环境变量，否则使用默认值

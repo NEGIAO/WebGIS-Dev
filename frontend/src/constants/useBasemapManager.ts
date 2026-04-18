@@ -245,6 +245,15 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ? createXYZSourceFromUrl(customUrl, { adapters: NON_STANDARD_XYZ_ADAPTERS })
             : null
     },
+    {
+        id:'Backend_Proxy',
+        name: '后端代理',
+        category: 'base',
+        group: '专题',
+        createSource: () => new XYZ({
+            url: 'https://negiao-webgis.hf.space/api/tile/{z}/{x}/{y}'
+        })
+    },
     
     // ========== 配置1：用户自定义 WMS/WMTS/XYZ 图层==========
     // 在此直接添加新的WMS、WMTS、XYZ服务，然后在配置2（BASEMAP_PRESETS）中添加堆叠预设
@@ -803,6 +812,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'tianDiTu_vec', label: '天地图矢量', stack: ['tianDiTu_vec', 'label_vector'] },
     { id: 'tianDiTu', label: '天地图影像', stack: ['tianDiTu', 'label'] },
     { id: 'google', label: 'Google(gac)', stack: ['google', 'label'] },
+        { id: 'Backend_Proxy', label: '后端代理谷歌', stack: ['Backend_Proxy', 'label'] },
 
     // 用户自定义预设（直接在此添加新预设）
     { id: 'hn_basic_farmland_wmts', label: '河南基本农田', stack: ['tianDiTu', 'hn_basic_farmland_wmts', 'label'] },

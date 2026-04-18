@@ -2,12 +2,12 @@
     <div class="register-container">
         <div class="container fade-in">
             <div class="form-header">
-                <h1 class="form-title">WebGIS 用户登录</h1>
-                <p class="form-subtitle">登录后才能访问系统主页与受保护 API</p>
+                <h1 class="form-title">NEGIAO's WebGIS</h1>
+                <h1 class="form-title"> 用户登录/注册</h1>
+                <p class="form-subtitle">登录以访问系统主页与受保护 API</p>
 
                 <div class="quick-hints">
-                    <div class="hint-item">游客：用户名 user，密码 123</div>
-                    <div class="hint-item">管理员账号由数据库维护，前端不展示管理员密码</div>
+                    <div class="hint-item">游客登陆API受限</div>
                 </div>
             </div>
             
@@ -42,6 +42,7 @@
                                 v-model="username" 
                                 :placeholder="mode === 'login' ? '请输入用户名（游客请输入 user）' : '3-24位：字母/数字/下划线'"
                                 :required="mode === 'register'"
+                                @blur="handleUsernameBlur"
                             >
                         </div>
                         <div class="hint" v-if="mode === 'login'">
@@ -50,7 +51,15 @@
                         </div>
                         <div class="hint" v-else>
                             <i class="fas fa-user-plus"></i>
-                            user/admin/super_admin 为保留用户名，不能注册
+                            user/admin 为保留用户名，不能注册
+                        </div>
+                        <div
+                            v-if="mode === 'register' && usernameCheckMessage"
+                            class="hint username-check"
+                            :class="usernameCheckStatus"
+                        >
+                            <i :class="usernameCheckIcon"></i>
+                            {{ usernameCheckMessage }}
                         </div>
                     </div>
                     
@@ -68,7 +77,7 @@
                         </div>
                         <div class="hint" v-if="mode === 'login'">
                             <i class="fas fa-shield-alt"></i>
-                            管理员密码仅保存在数据库中，不在前端页面展示
+                            游客默认一键登陆，无需密码，注册用户请使用注册时设置的密码登录
                         </div>
                         <div class="hint" v-else>
                             <i class="fas fa-shield-alt"></i>
@@ -90,9 +99,33 @@
                         </div>
                     </div>
 
+                    <div class="form-group" v-if="mode === 'register'">
+                        <label>选择头像</label>
+                        <div class="avatar-grid" role="radiogroup" aria-label="注册头像选择">
+                            <button
+                                v-for="avatar in avatarOptions"
+                                :key="avatar.index"
+                                type="button"
+                                class="avatar-item"
+                                :class="{ active: selectedAvatarIndex === avatar.index }"
+                                :aria-label="avatar.label"
+                                :aria-pressed="selectedAvatarIndex === avatar.index"
+                                @click="selectedAvatarIndex = avatar.index"
+                            >
+                                <img :src="avatar.src" :alt="avatar.label" loading="lazy">
+                                <span>{{ avatar.label }}</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="quick-action-row" v-if="mode === 'login'">
-                        <button type="button" class="quick-btn" @click="fillGuestAccount">
-                            填入游客账号
+                        <button type="button" class="quick-btn guest-login" @click="quickGuestLogin">
+                            <i class="fas fa-person-hiking"></i>
+                            游客一键登陆
+                        </button>
+                        <button type="button" class="quick-btn confirm-login" :disabled="isSubmitting" @click="handleSubmit">
+                            <i class="fas fa-sign-in-alt"></i>
+                            {{ isSubmitting ? '处理中...' : '确认登陆' }}
                         </button>
                     </div>
 
@@ -100,8 +133,8 @@
                         {{ formMessage }}
                     </div>
                     
-                    <button type="submit" class="btn" :disabled="isSubmitting">
-                        {{ isSubmitting ? '处理中...' : (mode === 'login' ? '登录系统' : '创建账号') }}
+                    <button v-if="mode === 'register'" type="submit" class="btn" :disabled="isSubmitting">
+                        {{ isSubmitting ? '处理中...' : '创建账号' }}
                     </button>
                     
                     <div class="login-link">
@@ -123,11 +156,10 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
-import { apiAuthLogin, apiAuthRegister } from '../api/backend';
+import { apiAuthCheckUsername, apiAuthLogin, apiAuthRegister, apiLocationTrackVisit } from '../api/backend';
 import { getAuthToken, setAuthSession } from '../utils/auth';
 
 const router = useRouter();
@@ -138,13 +170,36 @@ const mode = ref('login');
 const username = ref('');
 const password = ref('');
 const confirmPassword = ref('');
+const selectedAvatarIndex = ref(0);
 const isSubmitting = ref(false);
+const isCheckingUsername = ref(false);
 const formMessage = ref('');
 const formStatus = ref('');
+const usernameCheckStatus = ref('');
+const usernameCheckMessage = ref('');
+const lastCheckedUsername = ref('');
 
 const usernameRegex = /^[A-Za-z0-9_]{3,24}$/;
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
-const reservedNames = new Set(['user', 'admin', 'super_admin']);
+const reservedNames = new Set(['user', 'admin']);
+
+const avatarOptions = computed(() => {
+    return Array.from({ length: 8 }, (_, index) => ({
+        index,
+        label: `头像 ${index + 1}`,
+        src: resolvePublicAssetPath(`avatars/avatar-${index}.svg`)
+    }));
+});
+
+const usernameCheckIcon = computed(() => {
+    if (usernameCheckStatus.value === 'success') {
+        return 'fas fa-check-circle';
+    }
+    if (usernameCheckStatus.value === 'loading') {
+        return 'fas fa-spinner fa-spin';
+    }
+    return 'fas fa-exclamation-circle';
+});
 
 function setFormState(status = '', text = '') {
     formStatus.value = status;
@@ -153,6 +208,19 @@ function setFormState(status = '', text = '') {
 
 function normalizeUsername(raw) {
     return String(raw || '').trim();
+}
+
+function resolvePublicAssetPath(relativePath) {
+    const base = String(import.meta.env.BASE_URL || '/').trim();
+    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+    const normalizedPath = String(relativePath || '').replace(/^\/+/, '');
+    return `${normalizedBase}${normalizedPath}`;
+}
+
+function resetUsernameCheck() {
+    usernameCheckStatus.value = '';
+    usernameCheckMessage.value = '';
+    lastCheckedUsername.value = '';
 }
 
 function resolveRedirectTarget() {
@@ -165,6 +233,8 @@ function switchMode(nextMode) {
     setFormState('', '');
     if (nextMode === 'login') {
         confirmPassword.value = '';
+        resetUsernameCheck();
+        selectedAvatarIndex.value = 0;
     }
 }
 
@@ -172,7 +242,127 @@ function fillGuestAccount() {
     mode.value = 'login';
     username.value = 'user';
     password.value = '123';
+    resetUsernameCheck();
     setFormState('success', '已填入游客账号，请点击“登录系统”');
+}
+async function quickGuestLogin() {
+    isSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        // 游客一键登陆：账号 user，密码 123
+        const result = await apiAuthLogin({ 
+            username: 'user',
+            password: '123' 
+        });
+        const token = String(result?.token || '').trim();
+        const user = result?.user || null;
+
+        if (!token || !user) {
+            throw new Error('游客登录响应异常，请稍后重试');
+        }
+
+        setAuthSession({ token, user });
+        message.success(`游客登陆成功，欢迎使用！`);
+        await router.replace(resolveRedirectTarget());
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail
+            || error?.message
+            || '游客登陆失败，请稍后重试'
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+async function checkUsernameAvailability({ silent = false, force = false } = {}) {
+    if (mode.value !== 'register') {
+        return true;
+    }
+
+    const normalizedUsername = normalizeUsername(username.value);
+    if (!normalizedUsername) {
+        usernameCheckStatus.value = 'error';
+        usernameCheckMessage.value = '请先输入用户名';
+        lastCheckedUsername.value = '';
+        if (!silent) {
+            message.warning(usernameCheckMessage.value);
+        }
+        return false;
+    }
+
+    const lowered = normalizedUsername.toLowerCase();
+    if (reservedNames.has(lowered)) {
+        usernameCheckStatus.value = 'error';
+        usernameCheckMessage.value = 'user/admin 为系统保留用户名';
+        lastCheckedUsername.value = normalizedUsername;
+        if (!silent) {
+            message.warning(usernameCheckMessage.value);
+        }
+        return false;
+    }
+
+    if (!usernameRegex.test(normalizedUsername)) {
+        usernameCheckStatus.value = 'error';
+        usernameCheckMessage.value = '用户名仅支持字母、数字、下划线，长度 3-24 位';
+        lastCheckedUsername.value = normalizedUsername;
+        if (!silent) {
+            message.warning(usernameCheckMessage.value);
+        }
+        return false;
+    }
+
+    if (
+        !force
+        && normalizedUsername === lastCheckedUsername.value
+        && (usernameCheckStatus.value === 'success' || usernameCheckStatus.value === 'error')
+    ) {
+        return usernameCheckStatus.value === 'success';
+    }
+
+    isCheckingUsername.value = true;
+    usernameCheckStatus.value = 'loading';
+    usernameCheckMessage.value = '正在检查用户名可用性...';
+
+    try {
+        const result = await apiAuthCheckUsername(normalizedUsername);
+        const available = Boolean(result?.available);
+        const detail = String(result?.message || (available ? '用户名可用' : '用户名不可用'));
+
+        lastCheckedUsername.value = normalizedUsername;
+        usernameCheckStatus.value = available ? 'success' : 'error';
+        usernameCheckMessage.value = detail;
+
+        if (!silent && !available) {
+            message.warning(detail);
+        }
+
+        return available;
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail
+            || error?.message
+            || '用户名校验失败，请稍后重试'
+        );
+        usernameCheckStatus.value = 'error';
+        usernameCheckMessage.value = detail;
+        lastCheckedUsername.value = normalizedUsername;
+        if (!silent) {
+            message.error(detail);
+        }
+        return false;
+    } finally {
+        isCheckingUsername.value = false;
+    }
+}
+
+async function handleUsernameBlur() {
+    if (mode.value !== 'register') {
+        return;
+    }
+    await checkUsernameAvailability();
 }
 
 async function handleLogin() {
@@ -228,7 +418,7 @@ async function handleRegister() {
     }
 
     if (reservedNames.has(normalizedUsername.toLowerCase())) {
-        setFormState('error', 'user/admin/super_admin 为系统保留用户名');
+        setFormState('error', 'user/admin 为系统保留用户名');
         return;
     }
 
@@ -247,14 +437,28 @@ async function handleRegister() {
         return;
     }
 
+    const isUsernameAvailable = await checkUsernameAvailability({ silent: true, force: true });
+    if (!isUsernameAvailable) {
+        const detail = usernameCheckMessage.value || '用户名不可用，请更换后重试';
+        setFormState('error', detail);
+        message.warning(detail);
+        return;
+    }
+
     isSubmitting.value = true;
     setFormState('', '');
 
     try {
-        await apiAuthRegister(normalizedUsername, normalizedPassword);
+        await apiAuthRegister(
+            normalizedUsername,
+            normalizedPassword,
+            selectedAvatarIndex.value,
+        );
         message.success('注册成功，请使用新账号登录');
         password.value = '';
         confirmPassword.value = '';
+        selectedAvatarIndex.value = 0;
+        resetUsernameCheck();
         switchMode('login');
         setFormState('success', '注册完成，请输入账号密码登录');
     } catch (error) {
@@ -283,6 +487,42 @@ onMounted(async () => {
     const token = getAuthToken();
     if (token) {
         await router.replace('/home');
+    }
+
+    // 自动发送定位追踪请求（无需等待，异步处理）
+    // 用户进入登陆页面时自动记录访问信息到数据库
+    apiLocationTrackVisit({
+        userAgent: navigator?.userAgent,
+        referrer: document?.referrer
+    }).then((result) => {
+        if (result?.tracked) {
+            console.log('[Location Tracking] 访问已记录:', {
+                ip: result?.ip,
+                city: result?.city,
+                province: result?.province,
+                country: result?.country
+            });
+        }
+    }).catch((error) => {
+        // 失败不影响登陆页面使用，静默处理
+        console.warn('[Location Tracking] 追踪请求失败:', error?.message);
+    });
+});
+
+watch(username, (nextUsername) => {
+    if (mode.value !== 'register') {
+        return;
+    }
+
+    const normalized = normalizeUsername(nextUsername);
+    if (!normalized) {
+        resetUsernameCheck();
+        return;
+    }
+
+    if (normalized !== lastCheckedUsername.value) {
+        usernameCheckStatus.value = '';
+        usernameCheckMessage.value = '';
     }
 });
 </script>
@@ -341,9 +581,11 @@ onMounted(async () => {
 .form-title {
     font-weight: 700;
     font-size: 28px;
-    margin-bottom: 8px;
+    margin-bottom: 0px;
+    margin-top: 0px;
     letter-spacing: 0.5px;
     text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    
 }
 
 .form-subtitle {
@@ -369,6 +611,7 @@ onMounted(async () => {
 
 .form-body {
     padding: clamp(20px, 3.5vw, 35px);
+    padding-top: 3%;
     background-color: #ffffff;
     flex: 1;
     overflow-y: auto;
@@ -463,6 +706,66 @@ input:focus {
     font-size: 14px;
 }
 
+.username-check {
+    margin-top: 8px;
+    font-weight: 500;
+}
+
+.username-check.success {
+    color: #2e7d32;
+}
+
+.username-check.error {
+    color: #d32f2f;
+}
+
+.username-check.loading {
+    color: #5f6f7f;
+}
+
+.avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.avatar-item {
+    border: 1px solid #dfe7df;
+    border-radius: 10px;
+    background: #f8fbf8;
+    color: #2e402e;
+    padding: 8px;
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.avatar-item:hover {
+    transform: translateY(-1px);
+    border-color: #7cb87c;
+    background: #f1f8f1;
+}
+
+.avatar-item.active {
+    border-color: #4CAF50;
+    background: #edf7ed;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+}
+
+.avatar-item img {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.avatar-item span {
+    font-size: 12px;
+    font-weight: 600;
+}
+
 .validation-message {
     margin-top: 8px;
     font-size: 13px;
@@ -481,23 +784,65 @@ input:focus {
 
 .quick-action-row {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
     margin-top: 12px;
+    margin-bottom: 20px;
 }
 
 .quick-btn {
-    border: 1px dashed #9ab79a;
+    border: 1px solid #9ab79a;
     background: #f7fbf7;
     color: #2b5a2b;
     border-radius: 5px;
-    padding: 9px 8px;
-    font-size: 13px;
+    padding: 11px 8px;
+    font-size: 14px;
     cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
-.quick-btn:hover {
+.quick-btn i {
+    font-size: 14px;
+}
+
+.quick-btn:hover:not(:disabled) {
     background: #edf7ed;
+    border-color: #7cb87c;
+    transform: translateY(-1px);
+}
+
+.quick-btn.guest-login {
+    background: linear-gradient(135deg, #e8f5e9 0%, #f1f8f1 100%);
+    border-color: #81c784;
+}
+
+.quick-btn.guest-login:hover:not(:disabled) {
+    background: linear-gradient(135deg, #dceee4 0%, #e8f5e9 100%);
+    border-color: #66bb6a;
+    box-shadow: 0 2px 6px rgba(76, 175, 80, 0.2);
+}
+
+.quick-btn.confirm-login {
+    background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%);
+    border-color: #66bb6a;
+    color: #1b5e20;
+    font-weight: 600;
+}
+
+.quick-btn.confirm-login:hover:not(:disabled) {
+    background: linear-gradient(135deg, #a5d6a7 0%, #81c784 100%);
+    border-color: #558b2f;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.quick-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .btn {
@@ -608,6 +953,10 @@ input:focus {
 
     .form-footer {
         padding: 12px 16px;
+    }
+
+    .avatar-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 </style>

@@ -514,6 +514,11 @@ WebGIS_Dev/
 │   │   └── weather.js                  # 天气查询服务
 │   │
 │   ├── components/                     # Vue 组件层
+│   │   ├── UserCenter/                 # 用户中心与 API 管理面板
+│   │   │   ├── FloatingAccountPanel.vue # 悬浮账号/登录入口
+│   │   │   ├── AdminControlPanel.vue   # 管理员总览面板
+│   │   │   ├── ApiManagementPanel.vue  # API 接口使用情况统计
+│   │   │   └── ApiKeysManagementPanel.vue # API Keys 管理面板
 │   │   ├── AmapAoiInjectDialog.vue     # 高德 AOI 手动注入对话框
 │   │   ├── AttributeTable.vue          # 属性表：要素属性展示、分页、搜索与地图交互
 │   │   ├── BusPlannerPanel.vue         # 公交路径规划面板：起终点设置、API 调用、结果展示

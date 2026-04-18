@@ -8,10 +8,11 @@
  * - 新闻侧边栏展示
  * - 鼠标特效
  */
-import { ref, reactive, defineAsyncComponent, onUnmounted, h } from 'vue';
+import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { useAttrStore, useWeatherStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
+import { apiLogVisit } from '../api/backend';
 const message = useMessage();
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
@@ -24,7 +25,8 @@ showLoading('正在初始化地图与核心环境...');
 import TopBar from '../components/TopBar.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
-import FloatingAccountPanel from '../components/FloatingAccountPanel.vue';
+import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
+import PersistentAnnouncementBar from '../components/PersistentAnnouncementBar.vue';
 import WeatherChartPanel from '../components/WeatherChartPanel.vue';
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
@@ -485,12 +487,18 @@ onUnmounted(() => {
         sidePanelWarmupTimer = null;
     }
 });
+
+onMounted(async () => {
+    try {
+        await apiLogVisit();
+    } catch {
+        // 访问记录失败不影响主页面使用
+    }
+});
 </script>
 
 <template>
     <div class="home-container">
-        <FloatingAccountPanel />
-
         <!-- 特效光标 -->
         <MagicCursor :active="isMagicMode" :effect-name="magicEffectData" @toggle-active="(val) => isMagicMode = val" />
 
@@ -510,8 +518,15 @@ onUnmounted(() => {
             />
         </div>
 
+        <PersistentAnnouncementBar />
+
         <div class="content-section">
             <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode }">
+                <!-- 
+                  将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
+                -->
+                <FloatingAccountPanel class="home-account-panel" />
+
                 <!-- 
                   优化点：
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
@@ -657,7 +672,7 @@ onUnmounted(() => {
     display: flex;
     flex: 1;
     width: 100%;
-    height: calc(100vh - 60px);
+    min-height: 0;
     gap: 10px;
     padding: 10px;
     box-sizing: border-box;
@@ -678,6 +693,54 @@ onUnmounted(() => {
 .weather-board-surface {
     width: 100%;
     height: 100%;
+}
+
+/* 用户中心面板 (由 HomeView 配置覆盖位置) */
+:deep(.home-account-panel) {
+    position: absolute !important;
+    top: 20px !important;
+    left: 230px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
+    bottom: auto !important;
+    z-index: 2000 !important; /* 高于地图和其他组件 */
+    flex-direction: column !important; /* 调整流向为向下展开 */
+}
+
+/* 设置向下展开的动画源点及过渡方向 */
+:deep(.home-account-panel .account-panel) {
+    transform-origin: top left !important;
+}
+
+:deep(.home-account-panel .account-panel-transition-enter-from),
+:deep(.home-account-panel .account-panel-transition-leave-to) {
+    transform: translateY(-20px) scale(0.96) !important;
+}
+
+:deep(.home-account-panel.is-fullscreen),
+:deep(.home-account-panel.is-fullscreen .account-panel) {
+    position: fixed !important; /* 改为 fixed 以便脱离 map-wrapper 容器覆盖全屏 */
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 9999 !important; /* 保证全屏时完全处于最高层, 覆盖 TopBar 等 */
+    border-radius: 0 !important; /* 全屏不需要圆角 */
+}
+
+@media (max-width: 768px) {
+    :deep(.home-account-panel) {
+        top: 10px !important;
+        left: 10px !important;
+        /* Mobile adapts tightly and relies on map padding */
+    }
+}
+
+/* 如果覆盖地图默认放大缩小控件，将其推开 */
+:deep(.ol-zoom) {
+    top: 100px !important;
+    left: 20px !important;
+}
+:deep(.cesium-viewer-toolbar) {
+    top: 80px !important;
 }
 
 .cesium-loading {

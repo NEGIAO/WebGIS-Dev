@@ -87,7 +87,8 @@ function createMessage(type, text, options = {}) {
     text: String(text || ''),
     duration: getDefaultDuration(type, options.duration),
     closable: options.closable ?? true,
-    showTitle: options.showTitle ?? true
+    showTitle: options.showTitle ?? true,
+    onClose: options.onClose
   };
 
   if (state.messages.length >= MAX_VISIBLE) {
@@ -102,6 +103,11 @@ function createMessage(type, text, options = {}) {
 function remove(id) {
   const idx = state.messages.findIndex((m) => m.id === id);
   if (idx < 0) return;
+
+  const msg = state.messages[idx];
+  if (typeof msg.onClose === 'function') {
+    msg.onClose();
+  }
 
   state.messages.splice(idx, 1);
   flushQueue();

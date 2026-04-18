@@ -2,7 +2,6 @@
     <div class="layer-switcher">
         <LocationSearch
             :fetcher="fetchLocationResults"
-            :amapKey="amapKey"
             :services="serviceOptions"
             storageKey="map_search_selected_service"
             @select-result="handleSearchJump"
@@ -152,7 +151,6 @@ const LocationSearch = defineAsyncComponent(() => import('./LocationSearch.vue')
  * @prop {Boolean} activeGraticule - 经纬网是否激活对象常用
  * @prop {String} selectedLayer - 当前选中底图的 ID
  * @prop {String} customMapUrl - 自定义 XYZ 底图 URL
- * @prop {String} amapKey - 高德地图 API Key（用于逆地理编码等服务）
  * @prop {String} tiandituTk - 天地图 Token
  * @prop {Boolean} isDomestic - 是否国内访问环境（用于服务推荐排序）
  * @prop {Array} services - 启用的地名检索服务列表（如 ['tianditu', 'nominatim']）
@@ -175,10 +173,6 @@ const props = defineProps({
         default: 'google'
     },
     customMapUrl: {
-        type: String,
-        default: ''
-    },
-    amapKey: {
         type: String,
         default: ''
     },
@@ -318,13 +312,12 @@ function getCurrentMapBound() {
 /**
  * 面板内部接管地名检索请求，统一接入天地图/高德/Nominatim。
  */
-function fetchLocationResults({ service, keywords, page = 1, pageSize = 10, amapKey = '' }) {
+function fetchLocationResults({ service, keywords, page = 1, pageSize = 10 }) {
     return apiSearchLocations({
         service,
         keywords,
         page,
         pageSize,
-        amapKey: amapKey || props.amapKey,
         tiandituTk: props.tiandituTk,
         mapBound: getCurrentMapBound()
     }).then((response) => response?.data || { items: [], total: 0 });
@@ -558,7 +551,6 @@ function handleSearchJump(payload) {
         name: String(payload?.display_name || payload?.name || '').trim(),
         service: sourceService,
         poiid: payload?.id ? String(payload.id).trim() : '',
-        amapKey: props.amapKey,
         raw: payload
     });
 }

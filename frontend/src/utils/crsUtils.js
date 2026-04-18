@@ -1,6 +1,7 @@
 import { get as getProjection } from 'ol/proj.js';
 import { register } from 'ol/proj/proj4.js';
 import proj4 from 'proj4';
+import backendAPI from '../api/backend';
 
 const EPSG_PATTERN = /(EPSG[:/]{1,2})(\d{3,6})/i;
 const URN_EPSG_PATTERN = /urn:ogc:def:crs:EPSG::(\d{3,6})/i;
@@ -229,10 +230,12 @@ export async function ensureProjectionAvailable(projectionCode) {
     if (!epsgCode) return null;
 
     try {
-        const resp = await fetch(`https://epsg.io/${epsgCode}.proj4`, { cache: 'force-cache' });
-        if (!resp.ok) return null;
-
-        const defText = (await resp.text()).trim();
+        const defText = String(
+            await backendAPI.get(`/api/proxy/geo/epsg/${epsgCode}/proj4`, {
+                responseType: 'text',
+                transformResponse: [(value) => value]
+            })
+        ).trim();
         if (!defText || /Not found/i.test(defText)) return null;
 
         proj4.defs(normalized, defText);

@@ -7,12 +7,18 @@ import {
 import { fetchLocationResultsByService } from './locationSearch';
 import { getIpLocation } from './ipLocation';
 import { getWeather } from './weather';
+import backendAPI, {
+    apiLocationIpLocate,
+    apiLocationReverse,
+    apiLocationTrackVisit
+} from './backend';
 
 export * from './map';
 export * from './geocoding';
 export * from './locationSearch';
 export * from './ipLocation';
 export * from './weather';
+export * from './backend';
 
 /**
  * 统一地址地理编码入口。
@@ -70,6 +76,20 @@ export async function apiIpLocation(ip = '', options = {}) {
     return {
         ok: !!data?.ok,
         service: 'amap-ip',
+        data
+    };
+}
+
+/**
+ * 统一 IP 所属国家探测（后端代理 ipapi）。
+ */
+export async function apiIpCountry(ip = '') {
+    const data = await backendAPI.get('/api/proxy/ipapi/country', {
+        params: String(ip || '').trim() ? { ip: String(ip || '').trim() } : {}
+    });
+    return {
+        ok: true,
+        service: 'ipapi-country',
         data
     };
 }

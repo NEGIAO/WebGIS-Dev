@@ -1,7 +1,6 @@
 import { useMessage } from '@/composables/useMessage';
 import { parseAmapRectangleToExtent } from '@/utils/amapRectangle';
-
-const AMAP_IP_API_ENDPOINT = 'https://restapi.amap.com/v3/ip';
+import backendAPI, { handleApiError } from './backend';
 
 function normalizeText(value) {
     if (Array.isArray(value)) {
@@ -12,28 +11,6 @@ function normalizeText(value) {
     if (typeof value === 'string') {
         const normalized = value.trim();
         return normalized === '[]' ? '' : normalized;
-    }
-
-    return '';
-}
-
-function resolveAmapWebServiceKey() {
-    const envKey = String(
-        import.meta.env.VITE_AMAP_WEB_SERVICE_KEY
-        || import.meta.env.VITE_AMAP_KEY
-        || import.meta.env.VITE_GAODE_KEY
-        || ''
-    ).trim();
-
-    if (envKey) return envKey;
-
-    if (typeof window !== 'undefined') {
-        const globalKey = String(
-            window.__AMAP_WEB_SERVICE_KEY__
-            || window.AMAP_WEB_SERVICE_KEY
-            || ''
-        ).trim();
-        if (globalKey) return globalKey;
     }
 
     return '';
@@ -66,41 +43,12 @@ function buildNormalizedResult(raw = {}) {
 export async function getIpLocation(ip = '', options = {}) {
     const message = useMessage();
     const { silent = false } = options || {};
-    const key = resolveAmapWebServiceKey();
-
-    if (!key) {
-        const errorMessage = '高德 Web 服务 Key 未配置，无法执行 IP 定位。';
-        if (!silent) {
-            message.warning(errorMessage, { closable: true, duration: 5000 });
-        }
-        return {
-            ok: false,
-            status: '0',
-            requestStatus: '0',
-            city: '',
-            province: '',
-            adcode: '',
-            extent: null,
-            info: '',
-            infocode: '',
-            raw: null,
-            errorMessage
-        };
-    }
-
-    const query = new URLSearchParams({ key });
     const normalizedIp = String(ip || '').trim();
-    if (normalizedIp) {
-        query.set('ip', normalizedIp);
-    }
 
     try {
-        const response = await fetch(`${AMAP_IP_API_ENDPOINT}?${query.toString()}`);
-        if (!response.ok) {
-            throw new Error(`高德 IP 定位请求失败（HTTP ${response.status}）`);
-        }
-
-        const raw = await response.json();
+        const raw = await backendAPI.get('/api/proxy/amap/ip', {
+            params: normalizedIp ? { ip: normalizedIp } : {}
+        });
         const normalized = buildNormalizedResult(raw);
 
         if (!normalized.ok) {
@@ -116,9 +64,14 @@ export async function getIpLocation(ip = '', options = {}) {
 
         return normalized;
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '网络异常';
-        if (!silent) {
-            message.error(`IP 定位网络异常：${errorMessage}`, { closable: true, duration: 6000 });
+        if (error?.isQuotaExceeded) {
+            // 配额用完：使用友好提示
+            handleApiError(error, message, 'IP 定位：API 调用额度已用完');
+        } else {
+            const errorMessage = error instanceof Error ? error.message : '网络异常';
+            if (!silent) {
+                message.error(`IP 定位网络异常：${errorMessage}`, { closable: true, duration: 6000 });
+            }
         }
 
         return {

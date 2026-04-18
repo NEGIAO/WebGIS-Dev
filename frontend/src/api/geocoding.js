@@ -1,12 +1,7 @@
 import axios from 'axios';
+import backendAPI, { handleApiError } from './backend';
 import { useMessage } from '@/composables/useMessage';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@/utils/coordTransform.js';
-
-const amapClient = axios.create({
-    // Static deployment mode: call AMap REST API directly (no Vite proxy).
-    baseURL: 'https://restapi.amap.com',
-    timeout: 8000
-});
 
 const tiandituClient = axios.create({
     // 按天地图接口文档使用 geocoder 端点。
@@ -14,28 +9,6 @@ const tiandituClient = axios.create({
     baseURL: 'https://api.tianditu.gov.cn',
     timeout: 8000
 });
-
-function resolveAmapWebServiceKey() {
-    const envKey = String(
-        import.meta.env.VITE_AMAP_WEB_SERVICE_KEY
-        || import.meta.env.VITE_AMAP_KEY
-        || import.meta.env.VITE_GAODE_KEY
-        || ''
-    ).trim();
-
-    if (envKey) return envKey;
-
-    if (typeof window !== 'undefined') {
-        const globalKey = String(
-            window.__AMAP_WEB_SERVICE_KEY__
-            || window.AMAP_WEB_SERVICE_KEY
-            || ''
-        ).trim();
-        if (globalKey) return globalKey;
-    }
-
-    return '';
-}
 
 function normalizeAmapCity(cityValue) {
     if (Array.isArray(cityValue)) {
@@ -178,7 +151,6 @@ export async function reverseGeocodeTianditu({
  */
 export async function addressToLocation(address, city = '', options = {}) {
     const message = useMessage();
-    const key = resolveAmapWebServiceKey();
     const normalizedAddress = String(address || '').trim();
     const silent = !!options?.silent;
 
@@ -190,18 +162,9 @@ export async function addressToLocation(address, city = '', options = {}) {
         throw error;
     }
 
-    if (!key) {
-        const error = new Error('高德 Web 服务 Key 未配置，无法执行地理编码');
-        if (!silent) {
-            message.warning(error.message, { closable: true, duration: 5000 });
-        }
-        throw error;
-    }
-
     try {
-        const response = await amapClient.get('/v3/geocode/geo', {
+        const response = await backendAPI.get('/api/proxy/amap/geocode/geo', {
             params: {
-                key,
                 address: normalizedAddress,
                 city: String(city || '').trim()
             }
@@ -246,11 +209,16 @@ export async function addressToLocation(address, city = '', options = {}) {
             formattedAddress: String(best?.formatted_address || normalizedAddress)
         };
     } catch (error) {
-        const detail = error instanceof Error ? error.message : '网络异常';
-        if (!error?.__notified && !silent) {
-            message.error(`地理编码请求异常：${detail}`, { closable: true, duration: 6000 });
+        if (error?.isQuotaExceeded) {
+            // 配额用完：使用友好提示
+            handleApiError(error, message, '地理编码：API 调用额度已用完');
+        } else {
+            const detail = error instanceof Error ? error.message : '网络异常';
+            if (!error?.__notified && !silent) {
+                message.error(`地理编码请求异常：${detail}`, { closable: true, duration: 6000 });
+            }
         }
-        throw error instanceof Error ? error : new Error(detail);
+        throw error instanceof Error ? error : new Error('地理编码失败');
     }
 }
 
@@ -265,7 +233,6 @@ export async function addressToLocation(address, city = '', options = {}) {
  */
 export async function locationToAddress(lng, lat, extensions = 'base', options = {}) {
     const message = useMessage();
-    const key = resolveAmapWebServiceKey();
     const wgsLng = Number(lng);
     const wgsLat = Number(lat);
     const silent = !!options?.silent;
@@ -278,23 +245,14 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
         throw error;
     }
 
-    if (!key) {
-        const error = new Error('高德 Web 服务 Key 未配置，无法执行逆地理编码');
-        if (!silent) {
-            message.warning(error.message, { closable: true, duration: 5000 });
-        }
-        throw error;
-    }
-
     const [gcjLng, gcjLat] = wgs84ToGcj02(wgsLng, wgsLat);
     if (!Number.isFinite(gcjLng) || !Number.isFinite(gcjLat)) {
         throw new Error('坐标转换失败（WGS-84 -> GCJ-02）');
     }
 
     try {
-        const response = await amapClient.get('/v3/geocode/regeo', {
+        const response = await backendAPI.get('/api/proxy/amap/geocode/regeo', {
             params: {
-                key,
                 location: `${gcjLng},${gcjLat}`,
                 extensions,
                 radius: 1000,
@@ -339,11 +297,16 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
             provider: 'amap'
         };
     } catch (error) {
-        const detail = error instanceof Error ? error.message : '网络异常';
-        if (!error?.__notified && !silent) {
-            message.error(`逆地理编码请求异常：${detail}`, { closable: true, duration: 6000 });
+        if (error?.isQuotaExceeded) {
+            // 配额用完：使用友好提示
+            handleApiError(error, message, '逆地理编码：API 调用额度已用完');
+        } else {
+            const detail = error instanceof Error ? error.message : '网络异常';
+            if (!error?.__notified && !silent) {
+                message.error(`逆地理编码请求异常：${detail}`, { closable: true, duration: 6000 });
+            }
         }
-        throw error instanceof Error ? error : new Error(detail);
+        throw error instanceof Error ? error : new Error('逆地理编码失败');
     }
 }
 

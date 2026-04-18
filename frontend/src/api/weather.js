@@ -1,32 +1,5 @@
-import axios from 'axios';
 import { useMessage } from '@/composables/useMessage';
-
-const weatherClient = axios.create({
-    baseURL: 'https://restapi.amap.com',
-    timeout: 8000
-});
-
-function resolveAmapWebServiceKey() {
-    const envKey = String(
-        import.meta.env.VITE_AMAP_WEB_SERVICE_KEY
-        || import.meta.env.VITE_AMAP_KEY
-        || import.meta.env.VITE_GAODE_KEY
-        || ''
-    ).trim();
-
-    if (envKey) return envKey;
-
-    if (typeof window !== 'undefined') {
-        const globalKey = String(
-            window.__AMAP_WEB_SERVICE_KEY__
-            || window.AMAP_WEB_SERVICE_KEY
-            || ''
-        ).trim();
-        if (globalKey) return globalKey;
-    }
-
-    return '';
-}
+import backendAPI, { handleApiError } from './backend';
 
 function normalizeWindPower(value) {
     const text = String(value ?? '').trim();
@@ -96,7 +69,6 @@ function normalizeForecast(forecast = {}) {
  */
 export async function getWeather(adcode, type = 'base') {
     const message = useMessage();
-    const key = resolveAmapWebServiceKey();
     const normalizedAdcode = String(adcode ?? '').trim();
     const normalizedType = type === 'all' ? 'all' : 'base';
 
@@ -106,16 +78,9 @@ export async function getWeather(adcode, type = 'base') {
         throw error;
     }
 
-    if (!key) {
-        const error = new Error('高德 Web 服务 Key 未配置，无法查询天气数据');
-        message.warning(error.message, { closable: true, duration: 5000 });
-        throw error;
-    }
-
     try {
-        const response = await weatherClient.get('/v3/weather/weatherInfo', {
+        const response = await backendAPI.get('/api/proxy/amap/weather', {
             params: {
-                key,
                 city: normalizedAdcode,
                 extensions: normalizedType
             }
@@ -152,8 +117,13 @@ export async function getWeather(adcode, type = 'base') {
             raw: data
         };
     } catch (error) {
-        const detail = error instanceof Error ? error.message : '网络异常';
-        message.error(`天气查询失败：${detail}`, { closable: true, duration: 6000 });
-        throw error instanceof Error ? error : new Error(detail);
+        if (error?.isQuotaExceeded) {
+            // 配额用完：使用友好提示
+            handleApiError(error, message, '天气查询：API 调用额度已用完');
+        } else {
+            const detail = error instanceof Error ? error.message : '网络异常';
+            message.error(`天气查询失败：${detail}`, { closable: true, duration: 6000 });
+        }
+        throw error instanceof Error ? error : new Error('天气查询失败');
     }
 }

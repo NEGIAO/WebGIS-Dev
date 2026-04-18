@@ -1,8 +1,9 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import HomeView from '../views/HomeView.vue';
 import RegisterView from '../views/RegisterView.vue';
 import { apiAuthMe } from '../api/backend';
 import { clearAuthSession, getAuthToken } from '../utils/auth';
+
+const HomeView = () => import('../views/HomeView.vue');
 
 const router = createRouter({
   history: createWebHashHistory(),

@@ -15,8 +15,13 @@ from typing import Any, Dict
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.proxy import router as proxy_router, build_http_client
+from api.external_proxy import router as external_proxy_router
 from api.statistics import router as statistics_router
-from api.auth import init_auth_storage, require_login, router as auth_router
+from api.location import router as location_router
+from api.auth import init_auth_storage, require_api_access, router as auth_router
+from api.admin import router as admin_router
+from api.api_management import router as api_management_router
+from api.api_keys_management import router as api_keys_router
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -84,6 +89,10 @@ async def shutdown_event():
 app.include_router(proxy_router)
 logger.info("已注册瓦片代理路由")
 
+# 挂载外部服务代理路由（高德/Nominatim/EPSG/IP）
+app.include_router(external_proxy_router)
+logger.info("已注册外部服务代理路由")
+
 # 挂载认证路由
 app.include_router(auth_router)
 logger.info("已注册认证路由")
@@ -92,10 +101,26 @@ logger.info("已注册认证路由")
 app.include_router(statistics_router)
 logger.info("已注册访客统计路由")
 
+# 挂载位置服务路由
+app.include_router(location_router)
+logger.info("已注册位置服务路由")
+
+# 挂载管理员路由
+app.include_router(admin_router)
+logger.info("已注册管理员路由")
+
+# 挂载 API 管理路由
+app.include_router(api_management_router)
+logger.info("已注册 API 管理路由")
+
+# 挂载 API 密钥管理路由
+app.include_router(api_keys_router)
+logger.info("已注册 API 密钥管理路由")
+
 # --- 功能 1：简单的爬虫接口 ---
 # 前端请求：/api/news
 @app.get("/api/news")
-async def get_external_news(_current_user: Dict[str, Any] = Depends(require_login)):
+async def get_external_news(_current_user: Dict[str, Any] = Depends(require_api_access)):
     url = "https://api.example.com/gis-news" # 假设的外部接口
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
@@ -105,7 +130,7 @@ async def get_external_news(_current_user: Dict[str, Any] = Depends(require_logi
 # --- 功能 2：GIS 数据处理 (用 Pandas) ---
 # 前端请求：/api/process-points
 @app.get("/api/process-points")
-async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_login)):
+async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_api_access)):
     # 模拟一些原始坐标数据
     raw_data = [
         {"name": "点A", "lat": 30.5, "lng": 114.3},
@@ -120,7 +145,7 @@ async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_login
 
 # --- 功能 3：测试数据接口 ---
 @app.get("/api/data")
-async def get_test_data(_current_user: Dict[str, Any] = Depends(require_login)):
+async def get_test_data(_current_user: Dict[str, Any] = Depends(require_api_access)):
     return {
         "status": "success", 
         "message": "恭喜！后端已经收到请求",
@@ -138,7 +163,7 @@ async def health_check():
 
 # --- 功能 5：信息接口 ---
 @app.get("/api/info")
-async def get_api_info(_current_user: Dict[str, Any] = Depends(require_login)):
+async def get_api_info(_current_user: Dict[str, Any] = Depends(require_api_access)):
     return {
         "name": "WebGIS Backend",
         "version": "0.1.0",
@@ -149,6 +174,12 @@ async def get_api_info(_current_user: Dict[str, Any] = Depends(require_login)):
             "/api/auth/me - 登录状态校验",
             "/api/auth/logout - 退出登录",
             "/api/auth/change-password - 修改当前账号密码",
+            "/api/statistics/center - 账户中心统计与配额",
+            "/api/statistics/realtime - 全站实时统计",
+            "/api/announcement/current - 当前公告",
+            "/api/announcement/dismiss - 关闭公告",
+            "/api/statistics/messages - 留言列表与发布",
+            "/api/admin/* - 管理员数据库与配置接口",
             "/api/data - 测试数据",
             "/api/news - 新闻爬虫",
             "/api/process-points - GIS 数据处理",

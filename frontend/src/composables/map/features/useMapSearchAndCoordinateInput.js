@@ -339,7 +339,6 @@ export function createMapSearchAndCoordinateInputFeature({
     async function fetchAndDrawSearchAoi(payload, pointLayerName) {
         const selectedService = String(payload?.service || payload?.raw?._service || '').trim().toLowerCase();
         const poiid = String(payload?.poiid || payload?.raw?.id || '').trim();
-        const amapKey = String(payload?.amapKey || '').trim();
         if (!poiid) {
             if (selectedService === 'amap') {
                 message.warning?.('该高德结果缺少 POI ID，已跳过 AOI 请求');
@@ -350,7 +349,6 @@ export function createMapSearchAndCoordinateInputFeature({
         let detail = null;
         try {
             detail = await fetchAmapPoiDetailAoi({
-                key: amapKey,
                 poiid,
                 extensions: 'all'
             });

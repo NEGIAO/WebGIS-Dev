@@ -59,10 +59,6 @@ const props = defineProps({
         type: Function,
         required: true
     },
-    amapKey: {
-        type: String,
-        default: ''
-    },
     placeholder: {
         type: String,
         default: '搜索地名，如：郑州'
@@ -164,8 +160,7 @@ async function runSearch(targetPage = 1) {
             service: service.value,
             keywords: q,
             page: targetPage,
-            pageSize: props.pageSize,
-            amapKey: props.amapKey
+            pageSize: props.pageSize
         });
 
         items.value = Array.isArray(result?.items) ? result.items : [];
