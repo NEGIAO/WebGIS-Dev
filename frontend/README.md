@@ -47,6 +47,103 @@ npm run build:analyze
 npm run preview
 ```
 
+## 🌐 多部署环境配置
+
+本项目支持在多个不同的部署环境中运行，使用统一的资源路径处理机制。
+
+### 支持的部署环境
+
+1. **本地开发** - `http://localhost:5173`
+   ```bash
+   VITE_BASE_URL=./
+   npm run dev
+   ```
+
+2. **GitHub Pages (WebGIS-Dev 仓库)**
+   - URL: `https://negiao.github.io/WebGIS-Dev/`
+   ```bash
+   VITE_BASE_URL=/WebGIS-Dev/ npm run build
+   ```
+
+3. **GitHub Pages (io 仓库)**
+   - URL: `https://negiao.github.io/WebGIS/`
+   ```bash
+   VITE_BASE_URL=/WebGIS/ npm run build
+   ```
+
+4. **Posit Connect Cloud**
+   - URL: `https://negiao-pages.share.connect.posit.cloud/WebGIS/`
+   ```bash
+   VITE_BASE_URL=/WebGIS/ npm run build
+   ```
+
+### 路径处理标准
+
+**✅ 正确做法（使用相对路径或 resolvePublicAssetPath 函数）**
+
+```javascript
+// ✅ 方式 1: 使用 resolvePublicAssetPath 函数（推荐）
+import { resolvePublicAssetPath } from '@/utils'
+const avatarUrl = resolvePublicAssetPath('avatars/avatar-0.svg')
+
+// ✅ 方式 2: 在模板中直接使用函数
+<img :src="resolvePublicAssetPath('avatars/avatar-0.svg')" />
+
+// ✅ 方式 3: 相对路径（需要确保从正确的起点）
+<img src="./avatars/avatar-0.svg" />
+```
+
+**❌ 错误做法（绝对路径会导致部署失败）**
+
+```javascript
+// ❌ 不要使用绝对路径
+<img src="/avatars/avatar-0.svg" />  // 在不同部署环境中会失败
+```
+
+### resolvePublicAssetPath 函数原理
+
+该函数会自动根据 `BASE_URL` 环境变量来构建正确的资源路径：
+
+```javascript
+function resolvePublicAssetPath(relativePath) {
+  const base = String(import.meta.env.BASE_URL || '/').trim()
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`
+  const normalizedPath = String(relativePath || '').replace(/^\/+/, '')
+  return `${normalizedBase}${normalizedPath}`
+}
+
+// 示例
+BASE_URL='./':              './avatars/avatar-0.svg'
+BASE_URL='/WebGIS-Dev/':    '/WebGIS-Dev/avatars/avatar-0.svg'
+BASE_URL='/WebGIS/':        '/WebGIS/avatars/avatar-0.svg'
+```
+
+### 配置说明
+
+编辑 `.env.local` 或 `.env.production` 文件配置 VITE_BASE_URL：
+
+```env
+# 本地开发
+VITE_BASE_URL=./
+
+# 生产部署
+# VITE_BASE_URL=/WebGIS-Dev/
+# VITE_BASE_URL=/WebGIS/
+```
+
+或者在构建命令中直接指定：
+
+```bash
+# 为 GitHub Pages WebGIS-Dev 部署
+VITE_BASE_URL=/WebGIS-Dev/ npm run build
+
+# 为 GitHub Pages WebGIS 部署
+VITE_BASE_URL=/WebGIS/ npm run build
+
+# 为 Posit Cloud 部署
+VITE_BASE_URL=/WebGIS/ npm run build
+```
+
 ## 🔐 登录系统使用说明
 
 前端已接入真实后端登录，不再使用本地假登录。

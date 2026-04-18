@@ -18,8 +18,13 @@ export default defineConfig(({ command, mode }) => {
   const isAnalyze = mode === 'analyze';
   const isProductionLikeBuild = isBuild && mode !== 'development';
 
+  // 从环境变量读取 BASE_URL，支持多种部署环境
+  // 用法：VITE_BASE_URL=/WebGIS-Dev/ npm run build
+  // 默认使用相对路径 './' 支持本地开发
+  const baseUrl = process.env.VITE_BASE_URL || './';
+
   return {
-    base: './',
+    base: baseUrl,
     plugins: [
       vue(),
       command === 'serve' && vueDevTools(),

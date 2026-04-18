@@ -62,6 +62,8 @@ lerna-debug.log*
 .DS_Store
 .Ds_Store
 Thumbs.db
+webgis_auth.db
+
 
 # ========== 编辑器 ==========
 .vscode/*
@@ -80,6 +82,13 @@ Thumbs.db
 .venv/
 venv/
 env/
+
+# 忽略 backend/data 目录下的所有 .db 文件
+backend/data/*.db
+
+# 或者直接忽略整个 data 文件夹（推荐，因为这里通常只放持久化数据）
+backend/data/
+
 
 # ========== IDE ==========
 coverage

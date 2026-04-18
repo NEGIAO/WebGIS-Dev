@@ -100,6 +100,10 @@ const userAvatarSrc = computed(() => {
   return resolvePublicAssetPath(`avatars/avatar-${userAvatarIndex.value}.svg`)
 })
 
+const getAvatarSrc = (avatarIndex) => {
+  return resolvePublicAssetPath(`avatars/avatar-${avatarIndex}.svg`)
+}
+
 const roleText = computed(() => {
   const role = String(user.value?.role || '').trim()
   return roleTextMap[role] || '未知角色'
@@ -738,7 +742,7 @@ onBeforeUnmount(() => {
                     :class="{ selected: selectedAvatarIndex === (index - 1) }"
                     @click="selectedAvatarIndex = index - 1"
                   >
-                    <img :src="`avatars/avatar-${index - 1}.svg`" :alt="`Avatar ${index}`" />
+                    <img :src="getAvatarSrc(index - 1)" :alt="`Avatar ${index}`" />
                   </div>
                 </div>
                 <button 

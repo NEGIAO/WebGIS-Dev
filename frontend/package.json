@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "build:analyze": "vite build --mode analyze",
+    "build:webgis-dev": "VITE_BASE_URL=/WebGIS-Dev/ vite build --outDir dist-webgis-dev",
+    "build:webgis": "VITE_BASE_URL=/WebGIS/ vite build --outDir dist-webgis",
+    "build:posit": "VITE_BASE_URL=/WebGIS/ vite build --outDir dist-posit",
     "preview": "vite preview",
     "docs:index": "node scripts/generate-boundary-index.mjs"
   },
