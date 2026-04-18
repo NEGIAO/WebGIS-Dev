@@ -1204,6 +1204,6 @@ async def get_available_models(
         "status": "success",
         "data": {
             "models": models,
-            "current_model": str(user_cfg.get("model") or provider.get("model") or DEFAULT_AGENT_MODEL),
+            "current_model": str((user_cfg and user_cfg.get("model")) or (provider and provider.get("model")) or DEFAULT_AGENT_MODEL),
         },
     }
