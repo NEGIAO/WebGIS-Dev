@@ -738,7 +738,7 @@ onBeforeUnmount(() => {
                     :class="{ selected: selectedAvatarIndex === (index - 1) }"
                     @click="selectedAvatarIndex = index - 1"
                   >
-                    <img :src="`/avatars/avatar-${index - 1}.svg`" :alt="`Avatar ${index}`" />
+                    <img :src="`avatars/avatar-${index - 1}.svg`" :alt="`Avatar ${index}`" />
                   </div>
                 </div>
                 <button 
