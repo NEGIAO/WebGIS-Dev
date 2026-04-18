@@ -2,8 +2,8 @@ name: FullStack Build & Multi-Deploy
 
 on:
   push:
-    branches: [ fullstack, main ]
-    # 目前为测试阶段，先监听 fullstack 
+    branches: [ main ]
+    # 监听main分支的推送事件，确保每次更新都会触发部署流程
   workflow_dispatch:
 
 # 权限设置：允许读取仓库内容，允许写 Pages
@@ -56,7 +56,7 @@ jobs:
           path: frontend/dist
 
   # ==========================================
-  # 第二步：部署到 Vue 仓库自己的 Pages (可选)
+  # 第二步：部署到 Vue 仓库自己的 Pages
   # ==========================================
   deploy-to-self:
     needs: build
@@ -70,7 +70,8 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # ==========================================
-  # 第三步：同步到 NEGIAO.github.io 
+  # 第三步：同步到 NEGIAO.github.io中的WebGIS目录
+  # （为posit connect cloud准备最新build版本并同步更新）
   # ==========================================
   sync-to-main-repo:
     needs: build
@@ -83,16 +84,16 @@ jobs:
           name: dist-files
           path: dist-for-sync
 
-      # 2. 这里的逻辑是：克隆主仓库 -> 删除原子目录 -> 放入新文件 -> 推送
+      # 2. 逻辑：克隆主仓库 -> 删除原子目录 -> 放入新文件 -> 推送
       - name: Push to NEGIAO.github.io
         env:
-          # Vue 仓库的 Secrets 里配置这个 Token
+          # Vue 仓库的 Secrets 里配置这个 Token 防止泄露，权限只给 NEGIAO.github.io 仓库的写权限
           DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
         run: |
           # --- 配置变量 ---
           TARGET_REPO="NEGIAO/NEGIAO.github.io"   # 主页仓库 (三件套)
           TARGET_BRANCH="main"                    # 主页仓库的分支
-          TARGET_DIR="WebGIS"                 # Vue 项目在主页仓库里名字
+          TARGET_DIR="WebGIS"                     # Vue 项目在主页仓库里名字
                                                   # 最终访问路径会是: https://NEGIAO.github.io/WebGIS/
 
           # --- 设置 Git 用户 ---
@@ -117,7 +118,7 @@ jobs:
           mkdir -p "$TARGET_DIR"
 
           # 将下载的 dist 文件复制进去
-          # ../dist-for-sync 是我们在上一步下载 artifact 的路径
+          # ../dist-for-sync 是在上一步下载 artifact 的路径
           cp -R ../dist-for-sync/. "$TARGET_DIR/"
 
           # 创建 .nojekyll 防止下划线文件丢失
@@ -130,12 +131,13 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes detected. Skipping push."
           else
-            git commit -m "Update Vue app from source repo: ${GITHUB_SHA::7}"
+            git commit -m "Update WebGIS from source repo: ${GITHUB_SHA::7}"
             echo "Pushing to ${TARGET_REPO}..."
             git push "https://x-access-token:${DEPLOY_TOKEN}@github.com/${TARGET_REPO}.git" $TARGET_BRANCH
           fi
 # ==========================================
-  # 第四步：同步到 Hugging Face (仅后端代码)
+  # 第四步：同步到 Hugging Face 
+  # (仅Backend后端代码)
   # ==========================================
   sync-to-huggingface:
       needs: build
