@@ -91,6 +91,7 @@ const baseLayers = ref([]);
 const uploadProgress = ref({ phase: 'idle' });
 const latestSearchPoi = ref({});
 const activeFeature = ref({ key: 'info', label: '新闻' });
+const isAccountPanelFullscreen = ref(false);
 
 // 组件引用
 const mapContainerRef = ref(null);
@@ -225,6 +226,10 @@ function handleActivateFeature(feature) {
 
 function handleSwitchSidePanelTab(tab) {
     activeSidePanelTab.value = tab;
+}
+
+function handleAccountPanelFullscreenChange(fullscreen) {
+    isAccountPanelFullscreen.value = Boolean(fullscreen);
 }
 
 /** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
@@ -521,11 +526,14 @@ onMounted(async () => {
         <PersistentAnnouncementBar />
 
         <div class="content-section">
-            <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode }">
+            <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode, 'account-fullscreen': isAccountPanelFullscreen }">
                 <!-- 
                   将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
                 -->
-                <FloatingAccountPanel class="home-account-panel" />
+                <FloatingAccountPanel
+                    class="home-account-panel"
+                    @fullscreen-change="handleAccountPanelFullscreenChange"
+                />
 
                 <!-- 
                   优化点：
@@ -534,7 +542,7 @@ onMounted(async () => {
                 -->
                 <MapContainer
                     ref="mapContainerRef"
-                    v-show="!is3DMode && !isWeatherBoardMode"
+                    v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
                     @map-core-ready="handleMapCoreReady"
                     @location-change="handleLocationChange"
                     @search-poi-selected="handleSearchPoiSelected"
@@ -549,12 +557,12 @@ onMounted(async () => {
 
                 <component
                     :is="WeatherChartPanel"
-                    v-if="isWeatherBoardMode && shouldLoadWeatherChartPanel"
+                    v-if="isWeatherBoardMode && shouldLoadWeatherChartPanel && !isAccountPanelFullscreen"
                     class="weather-board-surface"
                 />
 
                 <transition name="query-panel-fade">
-                    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode" class="query-panel">
+                    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen" class="query-panel">
                         <div class="query-panel-header">
                             <div>
                                 <div class="query-title">属性查询结果</div>
@@ -581,10 +589,10 @@ onMounted(async () => {
                 </transition>
 
                 <!-- 点击后按需加载的 Cesium 组件（外层包裹 div 解决 Vue 3 Fragment 的 v-show 穿透失效问题） -->
-                <div v-show="is3DMode" class="cesium-wrapper" style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
+                <div v-show="is3DMode && !isAccountPanelFullscreen" class="cesium-wrapper" style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
                     <component :is="CesiumContainer" v-if="isCesiumLoaded" />
                 </div>
-                <div v-if="isCesiumLoading" class="cesium-loading">
+                <div v-if="isCesiumLoading && !isAccountPanelFullscreen" class="cesium-loading">
                     正在加载 3D 引擎...
                 </div>
             </div>
@@ -684,6 +692,7 @@ onMounted(async () => {
     background: #e6f7ff;
     border-radius: 12px;
     position: relative;
+    isolation: isolate;
     overflow: hidden;
     display: flex;
     min-width: 0;
@@ -701,7 +710,7 @@ onMounted(async () => {
     top: 20px !important;
     left: 230px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
     bottom: auto !important;
-    z-index: 2000 !important; /* 高于地图和其他组件 */
+    z-index: 2200 !important; /* 高于地图和其他组件 */
     flex-direction: column !important; /* 调整流向为向下展开 */
 }
 
@@ -715,21 +724,29 @@ onMounted(async () => {
     transform: translateY(-20px) scale(0.96) !important;
 }
 
-:deep(.home-account-panel.is-fullscreen),
+:deep(.home-account-panel.is-fullscreen) {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 5000 !important; /* 在 map-wrapper 内封顶 */
+    gap: 0 !important;
+}
+
 :deep(.home-account-panel.is-fullscreen .account-panel) {
-    position: fixed !important; /* 改为 fixed 以便脱离 map-wrapper 容器覆盖全屏 */
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    z-index: 9999 !important; /* 保证全屏时完全处于最高层, 覆盖 TopBar 等 */
-    border-radius: 0 !important; /* 全屏不需要圆角 */
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 5001 !important;
+    border-radius: 12px !important;
+    clip-path: none !important;
 }
 
 @media (max-width: 768px) {
     :deep(.home-account-panel) {
-        top: 10px !important;
-        left: 10px !important;
+        top: 140px !important;
+        left: 5px !important;
         /* Mobile adapts tightly and relies on map padding */
     }
 }

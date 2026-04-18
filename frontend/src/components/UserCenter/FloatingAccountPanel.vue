@@ -18,6 +18,7 @@ const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPan
 
 const router = useRouter()
 const message = useMessage()
+const emit = defineEmits(['fullscreen-change'])
 
 // Panel State
 const isOpen = ref(false)
@@ -243,20 +244,34 @@ async function refreshMessages() {
 
 function closePanel() {
   isOpen.value = false
+  setFullscreen(false)
   setTimeout(() => {
     activeMenu.value = 'overview'
     resetPasswordForm()
   }, 200)
 }
 
-function togglePanel() {
-  isOpen.value = !isOpen.value
+function setFullscreen(nextValue) {
+  const normalized = Boolean(nextValue)
+  if (isFullscreen.value === normalized) return
+  isFullscreen.value = normalized
+  emit('fullscreen-change', normalized)
+}
 
-  if (isOpen.value) {
+function toggleFullscreen() {
+  setFullscreen(!isFullscreen.value)
+}
+
+function togglePanel() {
+  const nextOpen = !isOpen.value
+  isOpen.value = nextOpen
+
+  if (nextOpen) {
     loadCenterData({ silent: true })
   }
 
-  if (!isOpen.value) {
+  if (!nextOpen) {
+    setFullscreen(false)
     setTimeout(() => {
       activeMenu.value = 'overview'
       resetPasswordForm()
@@ -283,6 +298,12 @@ function handleDocumentClick(event) {
   const root = event.target?.closest?.('.floating-account-manager')
   if (!root) {
     closePanel()
+  }
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === 'Escape' && isFullscreen.value) {
+    setFullscreen(false)
   }
 }
 
@@ -386,20 +407,19 @@ onMounted(() => {
   }
 
   document.addEventListener('pointerdown', handleDocumentClick)
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && isFullscreen.value) {
-      isFullscreen.value = false
-    }
-  })
+  document.addEventListener('keydown', handleDocumentKeydown)
 })
 
 onBeforeUnmount(() => {
+  setFullscreen(false)
+
   if (centerTimer && typeof window !== 'undefined') {
     window.clearInterval(centerTimer)
     centerTimer = null
   }
 
   document.removeEventListener('pointerdown', handleDocumentClick)
+  document.removeEventListener('keydown', handleDocumentKeydown)
 })
 </script>
 
@@ -443,7 +463,7 @@ onBeforeUnmount(() => {
             type="button"
             class="btn-fullscreen"
             :title="isFullscreen ? '退出全屏' : '全屏展开'"
-            @click="isFullscreen = !isFullscreen"
+            @click="toggleFullscreen"
           >
             <i :class="isFullscreen ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
           </button>
@@ -730,9 +750,7 @@ onBeforeUnmount(() => {
 }
 
 .floating-account-manager.is-fullscreen {
-  top: auto;
-  left: auto;
-  z-index: auto;
+  z-index: 3000;
 }
 
 .floating-account-manager.is-fullscreen .account-fab {
@@ -858,15 +876,10 @@ onBeforeUnmount(() => {
 }
 
 .account-panel.is-fullscreen {
-  position: fixed;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
   border-radius: 0;
   border: none;
   clip-path: none;
-  z-index: 9999 !important;
+  z-index: 1;
   transform-origin: center;
   /* background defaults to panel gradient */
 }
@@ -1797,8 +1810,8 @@ input:checked + .slider:before {
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .floating-account-manager {
-    top: 220px;
-    left: 10px;
+    top: 500px;
+    left: 100px;
   }
   .account-panel {
     width: min(95vw, 420px);
@@ -1806,11 +1819,6 @@ input:checked + .slider:before {
 
   /* Fullscreen mode on mobile */
   .account-panel.is-fullscreen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
     border-radius: 0;
     border: none;
   }

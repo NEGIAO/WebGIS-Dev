@@ -81,54 +81,41 @@ docker-compose up
 ```
 WebGIS_Dev/
 ├── .github/
-│   └── workflows/
-│       └── deploy.yml              # CI/CD 自动化部署配置
-│                                   # - 前端 → GitHub Pages
-│                                   # - 后端 → Hugging Face Spaces
-│                                   # - 中间仓库 → NEGIAO.github.io
-│
-├── frontend/                       # 🔹 前端项目（Vue 3 + Vite + OpenLayers）
+│   └── workflows/                  # CI/CD 配置
+├── frontend/                       # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
 │   ├── src/
-│   │   ├── components/             # Vue 组件（30+）
-│   │   ├── composables/            # 业务逻辑与地图功能库
+│   │   ├── api/                    # 前端 API 封装
+│   │   ├── components/             # 业务组件
+│   │   │   └── UserCenter/         # 用户中心子模块
+│   │   │       ├── FloatingAccountPanel.vue
+│   │   │       ├── AdminControlPanel.vue
+│   │   │       └── ApiManagementPanel.vue
+│   │   ├── composables/            # 组合式逻辑
+│   │   ├── constants/              # 常量配置
+│   │   ├── router/                 # 路由
 │   │   ├── stores/                 # Pinia 状态管理
-│   │   ├── api/                    # API 服务层
-│   │   ├── utils/                  # 工具函数（领域化分层）
-│   │   ├── router/                 # Vue Router 路由
-│   │   ├── views/                  # 页面级组件
-│   │   └── assets/                 # 静态资源
-│   ├── public/                     # 静态资源根目录
-│   │   ├── tiles/                  # 本地 XYZ 瓦片
-│   │   ├── ShareData/              # 共享数据
-│   │   └── images/                 # 站点图片
-│   ├── docs/                       # 开发文档
-│   ├── scripts/                    # 构建脚本
-│   ├── vite.config.js              # Vite 构建配置
-│   ├── package.json                # NPM 脚本与依赖
-│   ├── README.md                   # 🔹 前端详细文档
-│   └── start_server.bat            # Windows 启动脚本
-│
-├── backend/                        # 🔹 后端项目（FastAPI + Python）
-│   ├── app.py                      # FastAPI 主应用
-│   ├── main.py                     # HF Spaces 启动脚本
-│   ├── Dockerfile                  # Docker 镜像定义
-│   ├── pyproject.toml              # uv 项目配置与依赖
-│   ├── uv.lock                     # 依赖版本锁定
-│   ├── requirements.txt            # pip 备用依赖列表
-│   ├── .env.example                # 环境变量示例
-│   ├── routers/                    # 路由蓝图（可选）
-│   ├── services/                   # 业务逻辑层（可选）
-│   ├── models/                     # Pydantic 数据模型
-│   ├── utils/                      # 工具函数
-│   ├── tests/                      # 单元测试
-│   ├── README.md                   # 🔹 后端详细文档
-│   └── .python-version             # Python 版本指定
-│
-├── Dockerfile                      # 根目录 Dockerfile（已弃用，使用 backend/Dockerfile）
-├── docker-compose.yml              # Docker Compose 编排（可选）
-├── .gitignore                      # Git 忽略规则
-├── .env.example                    # 项目环境变量示例
-└── README.md                       # 本文件（整体项目文档）
+│   │   ├── utils/                  # 工具函数
+│   │   └── views/                  # 页面（HomeView / RegisterView）
+│   ├── public/                     # 静态资源（tiles/images/ShareData）
+│   ├── docs/                       # 前端专项文档
+│   ├── scripts/                    # 构建与维护脚本
+│   ├── package.json
+│   ├── vite.config.js
+│   └── README.md                   # 🔹 前端详细文档
+├── backend/                        # 🔹 后端（FastAPI）
+│   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
+│   ├── app.py                      # FastAPI 入口
+│   ├── data/                       # 本地/挂载数据目录
+│   ├── Dockerfile                  # 后端镜像构建
+│   ├── pyproject.toml              # 依赖与项目配置（uv）
+│   ├── uv.lock                     # 锁文件
+│   ├── .env.example
+│   ├── .python-version
+│   └── README.md                   # 🔹 后端详细文档
+├── API_MANAGEMENT_GUIDE.md
+├── LAYOUT_POSITIONING_GUIDE.md
+├── LOCATION_SEARCH_*.md            # 位置搜索相关说明与检查报告
+└── README.md                       # 本文件
 ```
 
 ## 📚 文档导航

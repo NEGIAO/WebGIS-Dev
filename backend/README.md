@@ -10,12 +10,38 @@ pinned: false
 !!!!!!!!!!开头不可以改变，否则服务器罢工！！！！！！！！！！
 
 # WebGIS Backend
-Powered by FastAPI and Docker.# WebGIS Backend (FastAPI)
+Powered by FastAPI and Docker.
 
 WebGIS 后端服务，当前包含三大核心能力：
 - Google 瓦片代理：GET /api/tile/{z}/{x}/{y}
 - 访客地理统计：POST /api/log-visit
 - 真实用户登录系统：/api/auth/*（含三类身份）
+
+## 0. 项目结构
+
+```text
+backend/
+├── api/
+│   ├── auth.py                 # 认证与会话
+│   ├── statistics.py           # 统计中心与实时统计
+│   ├── location.py             # 位置服务相关接口
+│   ├── proxy.py                # 瓦片代理
+│   ├── external_proxy.py       # 外部代理能力
+│   ├── admin.py                # 管理端接口
+│   ├── api_management.py       # API 管理
+│   ├── api_keys_management.py  # API Key 管理
+│   └── __init__.py
+├── app.py                      # FastAPI 应用入口
+├── Dockerfile                  # 容器化部署
+├── pyproject.toml              # 依赖与项目配置（uv）
+├── uv.lock                     # 锁文件
+├── .env.example                # 环境变量示例
+├── .python-version             # Python 版本
+├── data/                       # 运行数据目录（AUTH_DB 可落盘到此）
+├── frontend_example.html       # 前端调用示例
+├── test_location_apis.py       # 位置接口测试脚本
+└── README.md
+```
 
 ## 1. 认证系统
 

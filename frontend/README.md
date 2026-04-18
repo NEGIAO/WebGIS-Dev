@@ -83,140 +83,46 @@ npm run preview
 
 ```
 frontend/
-├── index.html                # HTML 入口文件
-├── package.json              # NPM 脚本与依赖
-├── vite.config.js            # Vite 构建配置
-│                             # - manualChunks 分包
-│                             # - esbuild 清理 console
-│                             # - rollup 优化
-│
-├── eslint.config.js          # ESLint 代码规范
-├── jsconfig.json             # JavaScript 项目配置
-│
-├── .env.example              # 环境变量示例
-├── start_server.bat          # Windows 启动脚本
-│
-├── public/                   # 🔹 静态资源
-│   ├── favicon.ico
-│   ├── min-enhanced.js       # 第三方统计脚本
-│   ├── ol.js / ol.css        # OpenLayers 备用资源
-│   ├── images/               # 静态图片
-│   ├── tiles/                # 本地 XYZ 瓦片（public/tiles/{z}/{x}/{y}.png）
-│   └── ShareData/            # 共享数据目录
-│
-├── src/                      # 🔹 源代码目录
-│   ├── App.vue               # 根组件
-│   ├── main.js               # 应用入口
-│   ├── Guideline.md          # 开发约定与设计指南
-│   │
-│   ├── api/                  # API 服务层
-│   │   ├── index.js          # 统一出口
-│   │   ├── geocoding.js      # 地理编码（高德+天地图双引擎）
-│   │   ├── weather.js        # 天气查询
-│   │   ├── routes.js         # 路线规划
-│   │   ├── map.js            # 地图 API
-│   │   └── locationSearch.js # 地名搜索
-│   │
-│   ├── components/           # Vue 组件层（30+ 个业务组件）
-│   │   ├── MapContainer.vue  # 地图容器（主组件）
-│   │   ├── LayerPanel.vue    # 图层树
-│   │   ├── TOCPanel.vue      # TOC 管理
-│   │   ├── WeatherChartPanel.vue  # 天气看板
-│   │   ├── CesiumContainer.vue    # 3D 地球
-│   │   ├── ChatPanelContent.vue   # AI 助手
-│   │   ├── DrivingPlannerPanel.vue  # 驾车规划
-│   │   ├── AttributeTable.vue   # 属性表
-│   │   └── (其他组件...)
-│   │
-│   ├── composables/          # 可组合函数层（业务逻辑）
-│   │   ├── useMapState.js    # 地图状态管理与 URL 同步
-│   │   ├── useGisLoader.ts   # GIS 数据导入调度
-│   │   ├── useManagedLayerRegistry.js  # 图层注册表
-│   │   ├── useLayerDataImport.js  # 数据导入总线
-│   │   ├── useMessage.js     # 全局消息系统
-│   │   ├── useUserLocation.js  # 用户定位
-│   │   │
-│   │   ├── map/              # 地图功能库
-│   │   │   ├── index.js      # 地图域统一出口
-│   │   │   ├── features/     # 细粒度功能（单一职责）
-│   │   │   │   ├── useBasemapLayerBootstrap.js
-│   │   │   │   ├── useCoordinateSystemConversion.js
-│   │   │   │   ├── useDrawMeasure.js
-│   │   │   │   └── (其他功能...)
-│   │   │   └── toc/          # TOC 协议层
-│   │   │       ├── protocol.js    # 菜单命令、导出格式标准
-│   │   │       ├── factory.js     # StandardTOCItem 工厂
-│   │   │       ├── actions/       # 动作执行
-│   │   │       └── menu/          # 右键菜单
-│   │   │
-│   │   └── Magic/            # 首屏特效库
-│   │       ├── useDelaunay.js
-│   │       ├── useFluid.js
-│   │       ├── useGravity.js
-│   │       ├── useWave.js
-│   │       └── useSingularity.js
-│   │
-│   ├── constants/            # 常量与配置
-│   │   ├── index.js          # 统一出口
-│   │   ├── mapStyles.js      # 地图样式工厂
-│   │   ├── goldenSoupQuotes.js  # 心灵鸡汤语录
-│   │   └── useBasemapManager.ts  # 底图配置管理
-│   │
-│   ├── stores/               # Pinia 状态仓库
-│   │   ├── index.ts          # 统一出口
-│   │   ├── useLayerStore.ts  # 🔹 图层状态与操作
-│   │   ├── useAppStore.ts    # 应用全局状态
-│   │   ├── useAttrStore.ts   # 属性表状态
-│   │   └── useWeatherStore.ts # 天气状态
-│   │
-│   ├── router/               # Vue Router
-│   │   └── index.js          # 路由配置
-│   │
-│   ├── views/                # 页面级组件
-│   │   ├── HomeView.vue      # 主页面
-│   │   └── RegisterView.vue  # 注册页面
-│   │
-│   ├── utils/                # 工具函数库（领域化分层）
-│   │   ├── index.js          # 总入口
-│   │   ├── geo/              # 坐标、投影、几何
-│   │   │   └── index.js
-│   │   ├── io/               # 文件 I/O、解析
-│   │   │   └── index.js
-│   │   ├── biz/              # 业务规则
-│   │   │   └── index.js
-│   │   ├── gis/              # GIS 底层实现
-│   │   │   ├── crs-engine.ts # 坐标参考系引擎
-│   │   │   ├── decompressor.ts  # ZIP/KMZ 解压
-│   │   │   └── parsers/      # 格式解析器
-│   │   │       ├── kmlParser.ts
-│   │   │       ├── shpParser.ts
-│   │   │       ├── tifLoader.ts
-│   │   │       └── amapAoiParser.js
-│   │   │
-│   │   └── (其他工具函数)
-│   │
-│   ├── assets/               # 静态资源
-│   │   ├── images/
-│   │   ├── styles/
-│   │   └── fonts/
-│   │
-│   └── styles/               # 全局样式
-│       └── style.css
-│
-├── docs/                     # 📚 文档目录
-│   ├── BOUNDARY_INDEX.md     # 边界索引（自动生成）
-│   ├── TOC_MAINTENANCE_GUIDE.md
-│   └── TOC_MENU_AND_DATA_MODEL.md
-│
-├── scripts/                  # 构建脚本
-│   └── generate-boundary-index.mjs  # 边界索引生成
-│
-├── stats.html               # 构建体积分析报告（生成目标）
-├── dist/                    # 构建产物（生成目标）
-│   ├── index.html
-│   └── assets/
-│
-└── README.md                # 本文件
+├── .env.example
+├── .env.local
+├── .env.production
+├── index.html
+├── package.json
+├── vite.config.js
+├── eslint.config.js
+├── jsconfig.json
+├── public/                         # 静态资源（images / tiles / ShareData）
+├── docs/                           # 前端开发文档
+├── scripts/                        # 维护脚本
+├── src/
+│   ├── App.vue
+│   ├── main.js
+│   ├── Guideline.md
+│   ├── api/                        # 后端接口封装
+│   ├── assets/                     # 图片/样式等资源
+│   ├── components/                 # 主业务组件
+│   │   ├── MapContainer.vue
+│   │   ├── TopBar.vue
+│   │   ├── SidePanel.vue
+│   │   ├── WeatherChartPanel.vue
+│   │   ├── CesiumContainer.vue
+│   │   └── UserCenter/
+│   │       ├── FloatingAccountPanel.vue
+│   │       ├── AdminControlPanel.vue
+│   │       ├── ApiManagementPanel.vue
+│   │       └── ApiKeysManagementPanel.vue
+│   ├── composables/                # 组合式逻辑
+│   │   └── map/features/           # 地图功能模块化拆分
+│   ├── constants/                  # 常量与配置
+│   ├── router/                     # 路由
+│   ├── stores/                     # Pinia 状态管理
+│   ├── utils/                      # 工具与 GIS 处理
+│   └── views/
+│       ├── HomeView.vue            # 用户中心全屏由此文件管理（覆盖 map-wrapper）
+│       └── RegisterView.vue
+├── dist/                           # 构建产物（生成目录）
+├── stats.html                      # 构建分析产物（生成文件）
+└── README.md
 ```
 
 ## 📦 核心依赖
