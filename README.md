@@ -219,9 +219,8 @@ VITE_TIANDITU_TK=your_tianditu_token
 VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
 
 # LLM API（AI 助手）
-VITE_LLM_API_KEY=your_llm_key
-VITE_LLM_ENDPOINT=https://api.siliconflow.cn/v1
-VITE_LLM_MODEL=deepseek-ai/DeepSeek-V2.5
+# 现已改为后端代理模式：前端无需配置任何 LLM Key
+# 对话统一经由后端接口 /api/agent/chat/*
 
 # 后端 API 地址
 VITE_BACKEND_URL=http://localhost:8000
@@ -233,6 +232,13 @@ VITE_BACKEND_URL=http://localhost:8000
 # 第三方 API Keys
 AMAP_API_KEY=your_key
 TIANDITU_API_KEY=your_key
+
+# Agent 对话（后端代理）
+AGENT_API_KEY=your_agent_key
+AGENT_BASE_URL=https://api.qnaigc.com/v1
+AGENT_MODEL=deepseek-V3-0324
+AGENT_CHAT_GUEST_DAILY_QUOTA=10
+AGENT_CHAT_REGISTERED_DAILY_QUOTA=100
 
 # 数据库（可选）
 DATABASE_URL=postgresql://user:password@localhost/webgis
@@ -254,6 +260,20 @@ LOG_LEVEL=INFO
 | 技术栈 | 5+ |
 
 ## 🔄 更新日志
+
+### V3.0.1 (2026-04-18)
+#### 🔹 Agent 对话后端代理化与配额分级
+
+**新增**：
+- ✅ Agent 对话后端代理接口：`/api/agent/chat/config`、`/api/agent/chat/completions`
+- ✅ 管理员 Agent 配置接口：`/api/admin/agent/config`
+- ✅ 独立对话配额：游客 `10` 次/日、注册用户 `100` 次/日、管理员不限
+- ✅ 管理端支持 `agent_api_key` 管理（兼容历史 `agent_token`）
+
+**改进**：
+- ✅ 前端聊天组件不再持有 LLM token/key，仅负责展示与交互
+- ✅ 对话服务状态与额度在聊天面板实时显示
+- ✅ `.pyc` 缓存文件停止跟踪（补充忽略规则并清理已跟踪缓存）
 
 ### V3.0.0 (2026-04-17)
 #### 🔹 前后端分离架构完整版
@@ -395,6 +415,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-04-17  
-**当前版本**：V3.0.0  
+**最后更新**：2026-04-18  
+**当前版本**：V3.0.1  
 **项目状态**：开发中 - 持续迭代优化

@@ -20,6 +20,8 @@ backend/dist/
 backend/build/
 .python-version
 __pycache__/
+**/__pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.so

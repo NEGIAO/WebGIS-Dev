@@ -190,6 +190,12 @@ export async function apiAuthChangePassword(currentPassword, newPassword) {
   })
 }
 
+export async function apiAuthChangeAvatar(newAvatarIndex) {
+  return backendAPI.post('/api/auth/change-avatar', {
+    new_avatar_index: newAvatarIndex
+  })
+}
+
 /**
  * 便捷方法集合
  * 使用这些方法可以更简洁地调用后端 API
@@ -407,12 +413,61 @@ export async function apiPlanWalkingRoute(origin, destination) {
  * ========== 用户中心与统计接口 ==========
  */
 
-export async function apiLogVisit() {
-  return backendAPI.post('/api/log-visit', {})
+export async function apiLogVisit(payload = {}) {
+  return backendAPI.post('/api/log-visit', {
+    gps_lng: payload.gps_lng ?? null,
+    gps_lat: payload.gps_lat ?? null,
+    gps_accuracy: payload.gps_accuracy ?? null,
+    gps_timestamp: payload.gps_timestamp || '',
+    geo_permission: payload.geo_permission || 'unknown',
+    gps_error: payload.gps_error || ''
+  })
 }
 
 export async function apiStatisticsCenter() {
   return backendAPI.get('/api/statistics/center')
+}
+
+export async function apiAgentGetChatConfig() {
+  return backendAPI.get('/api/agent/chat/config')
+}
+
+export async function apiAgentGetUserConfig() {
+  return backendAPI.get('/api/agent/user-config')
+}
+
+export async function apiAgentUpdateUserConfig(payload = {}) {
+  const safePayload = {}
+
+  if ('api_key' in payload) safePayload.api_key = String(payload.api_key || '')
+  if (payload.base_url) safePayload.base_url = String(payload.base_url).trim()
+  if (payload.model) safePayload.model = String(payload.model).trim()
+  if (payload.system_prompt) safePayload.system_prompt = String(payload.system_prompt).trim()
+  if (typeof payload.timeout_seconds !== 'undefined') safePayload.timeout_seconds = Number(payload.timeout_seconds)
+  if (typeof payload.max_tokens !== 'undefined') safePayload.max_tokens = Number(payload.max_tokens)
+  if (typeof payload.temperature !== 'undefined') safePayload.temperature = Number(payload.temperature)
+  if (typeof payload.clear_personal_key !== 'undefined') safePayload.clear_personal_key = !!payload.clear_personal_key
+  if (typeof payload.reset_provider_overrides !== 'undefined') safePayload.reset_provider_overrides = !!payload.reset_provider_overrides
+
+  return backendAPI.post('/api/agent/user-config', safePayload)
+}
+
+export async function apiAgentChatCompletions(payload = {}) {
+  const history = Array.isArray(payload.history)
+    ? payload.history
+      .map(item => ({
+        role: String(item?.role || '').trim(),
+        content: String(item?.content || '').trim(),
+      }))
+      .filter(item => (item.role === 'user' || item.role === 'assistant') && item.content)
+      .slice(-12)
+    : []
+
+  return backendAPI.post('/api/agent/chat/completions', {
+    message: String(payload.message || '').trim(),
+    history,
+    location_context: String(payload.location_context || '').trim(),
+  })
 }
 
 export async function apiStatisticsRealtime() {
@@ -443,6 +498,30 @@ export async function apiDismissAnnouncement(announcementId) {
 
 export async function apiAdminOverview() {
   return backendAPI.get('/api/admin/overview')
+}
+
+export async function apiAdminListVisitEvents(params = {}) {
+  return backendAPI.get('/api/statistics/admin/visit-events', { params })
+}
+
+export async function apiAdminGetVisitEvent(eventId) {
+  return backendAPI.get(`/api/statistics/admin/visit-events/${encodeURIComponent(eventId)}`)
+}
+
+export async function apiAdminCreateVisitEvent(payload) {
+  return backendAPI.post('/api/statistics/admin/visit-events', payload)
+}
+
+export async function apiAdminUpdateVisitEvent(eventId, payload) {
+  return backendAPI.put(`/api/statistics/admin/visit-events/${encodeURIComponent(eventId)}`, payload)
+}
+
+export async function apiAdminDeleteVisitEvent(eventId) {
+  return backendAPI.delete(`/api/statistics/admin/visit-events/${encodeURIComponent(eventId)}`)
+}
+
+export async function apiAdminSyncVisitEventToSupabase(eventId) {
+  return backendAPI.post(`/api/statistics/admin/visit-events/${encodeURIComponent(eventId)}/sync-supabase`)
 }
 
 export async function apiAdminListTables() {
@@ -532,4 +611,49 @@ export async function apiAdminDeleteApiKey(keyName) {
 
 export async function apiAdminGetApiKey(keyName) {
   return backendAPI.get(`/api/admin/api-keys/${encodeURIComponent(keyName)}`)
+}
+
+export async function apiAdminGetAgentConfig() {
+  return backendAPI.get('/api/admin/agent/config')
+}
+
+export async function apiAdminUpdateAgentConfig(payload = {}) {
+  const safePayload = {}
+
+  if (payload.base_url) safePayload.base_url = String(payload.base_url).trim()
+  if (payload.model) safePayload.model = String(payload.model).trim()
+  if (payload.system_prompt) safePayload.system_prompt = String(payload.system_prompt).trim()
+  if (typeof payload.timeout_seconds !== 'undefined') safePayload.timeout_seconds = Number(payload.timeout_seconds)
+  if (typeof payload.max_tokens !== 'undefined') safePayload.max_tokens = Number(payload.max_tokens)
+  if (typeof payload.temperature !== 'undefined') safePayload.temperature = Number(payload.temperature)
+
+  return backendAPI.post('/api/admin/agent/config', safePayload)
+}
+
+export function syncUserRoleToUrl(user) {
+  if (typeof window === 'undefined') return
+
+  const roleRaw = String(user?.role || '').trim().toLowerCase()
+  const role = roleRaw === 'admin' ? 'admin' : roleRaw === 'guest' ? 'guest' : 'registered'
+
+  try {
+    const hash = String(window.location.hash || '#/home')
+    const hashWithoutSharp = hash.startsWith('#') ? hash.slice(1) : hash
+    const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?')
+    const hashPath = hashPathRaw || '/home'
+    const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`
+    const params = new URLSearchParams(hashQueryRaw)
+
+    params.set('ut', role)
+
+    const nextHashQuery = params.toString()
+    const nextHash = nextHashQuery
+      ? `#${normalizedHashPath}?${nextHashQuery}`
+      : `#${normalizedHashPath}`
+
+    const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`
+    window.history.replaceState(window.history.state, '', nextUrl)
+  } catch {
+    // ignore URL sync errors
+  }
 }

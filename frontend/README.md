@@ -151,10 +151,8 @@ VITE_TIANDITU_TK=your_tianditu_token
 # 高德 Web Service Key
 VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
 
-# LLM API（AI 助手）
-VITE_LLM_API_KEY=your_llm_key
-VITE_LLM_ENDPOINT=https://api.siliconflow.cn/v1
-VITE_LLM_MODEL=deepseek-ai/DeepSeek-V2.5
+# AI 助手已改为后端代理模式（前端无需配置 LLM Key）
+# 由管理员在后端配置 Agent Key 与模型参数
 
 # 后端 API 地址
 VITE_BACKEND_URL=http://localhost:8000
@@ -250,6 +248,18 @@ const data = await getMyData({ id: 123 })
 
 ## 🔄 更新日志
 
+### V3.0.1 (2026-04-18)
+#### 🔹 AI 对话前端改造（后端代理化）
+
+**新增**：
+- ✅ 聊天面板接入后端 Agent 接口（`/api/agent/chat/*`）
+- ✅ 聊天面板展示后端返回的服务状态、模型与额度
+- ✅ 管理后台新增 Agent 对话参数编辑能力（Base URL / Model / Prompt 等）
+
+**改进**：
+- ✅ 前端不再持有和直连 LLM token/key
+- ✅ 对话额度按后端策略控制（游客 10、注册 100、管理员不限）
+
 ### V3.0.0 (2026-04-17)
 #### 🔹 前后端分离架构完整版
 
@@ -338,8 +348,8 @@ MIT License
 
 ---
 
-**最后更新**：2026-04-17  
-**当前版本**：V3.0.0  
+**最后更新**：2026-04-18  
+**当前版本**：V3.0.1  
 **维护者**：NEGIAO  
 **技术栈**：Vue 3 + Vite + OpenLayers + Cesium
 
@@ -351,9 +361,7 @@ cp .env.example .env
 |--------|------|------|
 | `VITE_TIANDITU_TK` | 天地图 API Token，[申请地址](https://console.tianditu.gov.cn/) | 推荐 |
 | `VITE_AMAP_WEB_SERVICE_KEY` | 高德 Web 服务 Key（地理编码、逆地理编码、IP定位、天气查询），[申请地址](https://lbs.amap.com/) | 推荐 |
-| `VITE_LLM_API_KEY` | AI 助手 API Key，[申请地址](https://cloud.siliconflow.cn/) | 推荐 |
-| `VITE_LLM_ENDPOINT` | LLM API 端点 (默认 SiliconFlow) | 可选 |
-| `VITE_LLM_MODEL` | LLM 模型名称 (默认 DeepSeek-V2.5) | 可选 |
+| `VITE_BACKEND_URL` | WebGIS 后端地址（含 Agent 对话代理） | 必填 |
 
 ### 开发与构建
 

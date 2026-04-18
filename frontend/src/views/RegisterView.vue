@@ -159,8 +159,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
-import { apiAuthCheckUsername, apiAuthLogin, apiAuthRegister, apiLocationTrackVisit } from '../api/backend';
-import { getAuthToken, setAuthSession } from '../utils/auth';
+import { apiAuthCheckUsername, apiAuthLogin, apiAuthRegister, apiLocationTrackVisit, syncUserRoleToUrl } from '../api/backend';
+import { getAuthToken, getOrCreateGuestDeviceId, setAuthSession } from '../utils/auth';
 
 const router = useRouter();
 const route = useRoute();
@@ -250,10 +250,12 @@ async function quickGuestLogin() {
     setFormState('', '');
 
     try {
+        const guestDeviceId = getOrCreateGuestDeviceId();
         // 游客一键登陆：账号 user，密码 123
         const result = await apiAuthLogin({ 
             username: 'user',
-            password: '123' 
+            password: '123',
+            guest_device_id: guestDeviceId || undefined,
         });
         const token = String(result?.token || '').trim();
         const user = result?.user || null;
@@ -263,6 +265,7 @@ async function quickGuestLogin() {
         }
 
         setAuthSession({ token, user });
+        syncUserRoleToUrl(user);
         message.success(`游客登陆成功，欢迎使用！`);
         await router.replace(resolveRedirectTarget());
     } catch (error) {
@@ -382,6 +385,9 @@ async function handleLogin() {
         if (normalizedUsername) {
             payload.username = normalizedUsername;
         }
+        if (normalizedUsername.toLowerCase() === 'user') {
+            payload.guest_device_id = getOrCreateGuestDeviceId() || undefined;
+        }
 
         const result = await apiAuthLogin(payload);
         const token = String(result?.token || '').trim();
@@ -392,6 +398,7 @@ async function handleLogin() {
         }
 
         setAuthSession({ token, user });
+        syncUserRoleToUrl(user);
         message.success(`登录成功，当前角色：${String(user.role || 'unknown')}`);
         await router.replace(resolveRedirectTarget());
     } catch (error) {

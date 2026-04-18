@@ -3,40 +3,73 @@
     <div class="chat-header">
       <span class="chat-title">🤖 AI 助手</span>
       <div class="header-controls">
+        <button @click="toggleUserConfig" class="icon-btn" title="我的 Agent 配置">⚙️</button>
+        <button @click="reloadAgentConfig(true)" class="icon-btn" title="刷新状态">🔄</button>
         <button @click="clearHistory" class="icon-btn" title="清除历史">🧹</button>
-        <button @click="showSettings = !showSettings" class="icon-btn" title="设置">⚙️</button>
-        <button @click="$emit('close-chat')" class="icon-btn" title="退出AI">✖️</button>
+        <button @click="emit('close-chat')" class="icon-btn" title="退出AI">✖️</button>
       </div>
     </div>
 
-    <!-- 设置面板 -->
-    <div v-if="showSettings" class="settings-panel">
-      <div class="form-group">
-        <label>API Endpoint:</label>
-        <input v-model="apiEndpoint" placeholder="https://api.qnaigc.com/v1" />
-      </div>
-      <div class="form-group">
-        <label>API Key:</label>
-        <input v-model="apiKey" type="password" placeholder="sk-..." />
-      </div>
-      <div class="form-group">
-        <label>Model:
-          <button @click="fetchModels" class="refresh-btn" :disabled="isFetchingModels" title="刷新模型列表">
-            {{ isFetchingModels ? '⏳' : '🔄' }}
-          </button>
+    <div v-if="showUserConfig" class="user-config-panel">
+      <div class="user-config-grid">
+        <label class="user-config-item user-config-item-full">
+          <span>我的 Agent API Key</span>
+          <input v-model="userConfigDraft.api_key" type="password" placeholder="sk-...（仅存后端，不在前端明文持久化）" />
         </label>
-        <select v-model="modelName" class="model-select">
-          <option v-for="model in availableModels" :key="model.id" :value="model.id">
-            {{ model.name || model.id }}
-          </option>
-        </select>
-        <small class="hint">{{ modelHint }}</small>
+        <label class="user-config-item">
+          <span>Base URL</span>
+          <input v-model="userConfigDraft.base_url" placeholder="https://api.xxx.com/v1" />
+        </label>
+        <label class="user-config-item">
+          <span>Model</span>
+          <input v-model="userConfigDraft.model" placeholder="deepseek-V3-0324" />
+        </label>
+        <label class="user-config-item">
+          <span>Timeout (秒)</span>
+          <input v-model.number="userConfigDraft.timeout_seconds" type="number" min="5" max="180" />
+        </label>
+        <label class="user-config-item">
+          <span>Max Tokens</span>
+          <input v-model.number="userConfigDraft.max_tokens" type="number" min="1" max="8192" />
+        </label>
+        <label class="user-config-item">
+          <span>Temperature</span>
+          <input v-model.number="userConfigDraft.temperature" type="number" min="0" max="2" step="0.1" />
+        </label>
+        <label class="user-config-item user-config-item-full">
+          <span>System Prompt</span>
+          <textarea v-model="userConfigDraft.system_prompt" rows="3" placeholder="仅覆盖你自己的系统提示词（可选）"></textarea>
+        </label>
       </div>
-      <button @click="showSettings = false" class="save-btn">保存并返回</button>
+
+      <div class="user-config-actions">
+        <button @click="saveUserConfig" :disabled="userConfigSaving">{{ userConfigSaving ? '保存中...' : '保存我的配置' }}</button>
+        <button @click="clearPersonalKey" :disabled="userConfigSaving" class="secondary">清除我的 Key</button>
+        <button @click="resetProviderOverrides" :disabled="userConfigSaving" class="secondary">恢复平台默认参数</button>
+      </div>
+
+      <small class="hint">提示：你可以使用自己申请的 Agent 账号，调用仍然由后端转发执行。</small>
     </div>
 
-    <!-- 聊天内容 -->
-    <div v-else class="chat-body" ref="chatBody">
+    <div class="service-status">
+      <div class="status-line">
+        <span class="status-label">服务状态:</span>
+        <span :class="['status-value', serviceReady ? 'status-ready' : 'status-unready']">
+          {{ serviceReady ? '已连接后端 Agent' : '未就绪（请联系管理员配置）' }}
+        </span>
+      </div>
+      <div class="status-line">
+        <span class="status-label">当前模型:</span>
+        <span class="status-value">{{ modelName || '未配置' }}</span>
+      </div>
+      <div class="status-line">
+        <span class="status-label">今日对话额度:</span>
+        <span class="status-value">{{ quotaText }}</span>
+      </div>
+      <small class="hint">{{ statusHint }}</small>
+    </div>
+
+    <div class="chat-body" ref="chatBody">
       <div v-for="(msg, index) in messages" :key="index" :class="['message', msg.role]">
         <template v-if="msg.role === 'assistant'">
           <div class="message-content">{{ getAnswerContent(msg.content) }}</div>
@@ -52,21 +85,21 @@
       </div>
     </div>
 
-    <!-- 输入框 -->
-    <div v-if="!showSettings" class="chat-footer">
-      <textarea 
-        v-model="inputMessage" 
+    <div class="chat-footer">
+      <textarea
+        v-model="inputMessage"
         @keydown.enter.prevent="sendMessage"
-        placeholder="请输入您的问题..."
+        :placeholder="serviceReady ? '请输入您的问题...' : '服务未就绪，请联系管理员配置 Agent Key'"
         rows="1"
       ></textarea>
-      <button @click="sendMessage" :disabled="isLoading || !inputMessage.trim()">发送</button>
+      <button @click="sendMessage" :disabled="sendDisabled">发送</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick, watch } from 'vue';
+import { computed, onMounted, ref, nextTick } from 'vue';
+import { apiAgentChatCompletions, apiAgentGetChatConfig, apiAgentGetUserConfig, apiAgentUpdateUserConfig } from '../api/backend';
 import { readUserPositionFromCache } from '../utils/userPositionCache';
 import { getGlobalUserLocationContext } from '../utils/userLocationContext';
 import { useMessage } from '../composables/useMessage';
@@ -74,63 +107,219 @@ import { useMessage } from '../composables/useMessage';
 const emit = defineEmits(['close-chat']);
 const message = useMessage();
 
-const showSettings = ref(false);
 const inputMessage = ref('');
 const isLoading = ref(false);
 const chatBody = ref(null);
-const isFetchingModels = ref(false);
-const availableModels = ref([
-  { id: 'deepseek-V3-0324', name: 'DeepSeek V3-0324 (默认)' }
-]);
-const modelHint = ref('点击🔄可获取更多模型');
-
-// API 配置：优先使用 localStorage，其次使用环境变量，最后使用默认值
-// 注意：API Key 不应硬编码在代码中，请在 .env 文件中配置 VITE_LLM_API_KEY
-const DEFAULT_ENDPOINT = import.meta.env.VITE_LLM_ENDPOINT || 'https://api.qnaigc.com/v1';
-const DEFAULT_API_KEY = import.meta.env.VITE_LLM_API_KEY || 'sk-af0fdab305019a96c669b9fdf6038317e499d43be5f7946b251eac1e8fe04914';
-const DEFAULT_MODEL = import.meta.env.VITE_LLM_MODEL || 'deepseek-V3-0324';
-
-const apiEndpoint = ref(localStorage.getItem('llm_endpoint_v4') || DEFAULT_ENDPOINT);
-const apiKey = ref(localStorage.getItem('llm_apikey_v4') || DEFAULT_API_KEY);
-const modelName = ref(localStorage.getItem('llm_model_v4') || DEFAULT_MODEL);
+const modelName = ref('');
+const statusHint = ref('正在连接后端 Agent...');
+const serviceReady = ref(false);
+const showUserConfig = ref(false);
+const userConfigSaving = ref(false);
+const userConfigDraft = ref({
+  api_key: '',
+  base_url: '',
+  model: '',
+  system_prompt: '',
+  timeout_seconds: 45,
+  max_tokens: 512,
+  temperature: 0.2,
+});
+const quota = ref({
+  limit: null,
+  used: 0,
+  remaining: null,
+  usage_date: '',
+  quota_subject: '',
+});
 
 const messages = ref([]);
 const firstMessageLocationInjected = ref(false);
 const clearConfirmArmed = ref(false);
 let clearConfirmTimer = null;
 
-// 经济模式：限制上下文和回答长度，尽量降低 token 消耗
-const ECONOMY_SYSTEM_PROMPT = '你是 WebGIS 助手。默认用中文，回答控制在3-5句内，除非用户明确要求详细；优先给简短、可执行步骤；代码只给最小可运行片段。';
 const MAX_CONTEXT_MESSAGES = 6;
 const MAX_CHARS_PER_MESSAGE = 600;
-const MAX_OUTPUT_TOKENS = 280;
-const LOW_TEMPERATURE = 0.2;
 const AUTO_PRUNE_AFTER_TURNS = 12;
 
-// 初始化欢迎消息，根据 API Key 是否配置显示不同内容
-const initWelcomeMessage = () => {
-  if (!apiKey.value) {
-    return { 
-      role: 'assistant', 
-      content: '您好！我是 AI 助手。\n\n⚠️ 注意：尚未配置 API Key。\n请点击右上角 ⚙️ 设置您的 API Key 后开始使用。' 
-    };
-  }
-  return { role: 'assistant', content: '您好！我是您的 AI 助手，有什么可以帮您？' };
-};
-
-// 初始化消息列表
-messages.value = [initWelcomeMessage()];
-
-watch([apiEndpoint, apiKey, modelName], () => {
-  localStorage.setItem('llm_endpoint_v4', apiEndpoint.value);
-  localStorage.setItem('llm_apikey_v4', apiKey.value);
-  localStorage.setItem('llm_model_v4', modelName.value);
+const initWelcomeMessage = () => ({
+  role: 'assistant',
+  content: serviceReady.value
+    ? '您好！我是由后端代理的 AI 助手，您可以直接开始提问。'
+    : '您好！AI 服务暂未就绪。请联系管理员在后台配置 Agent Key。'
 });
 
-const getChatCompletionsUrl = () => {
-  const endpoint = apiEndpoint.value.trim().replace(/\/$/, '');
-  if (/\/chat\/completions$/i.test(endpoint)) return endpoint;
-  return `${endpoint}/chat/completions`;
+messages.value = [initWelcomeMessage()];
+
+const normalizeQuota = (raw) => {
+  const limit = raw?.limit === null || typeof raw?.limit === 'undefined'
+    ? null
+    : Number(raw.limit);
+  const used = Number(raw?.used || 0);
+  const remaining = raw?.remaining === null || typeof raw?.remaining === 'undefined'
+    ? null
+    : Number(raw.remaining);
+
+  return {
+    limit: Number.isFinite(limit) ? limit : null,
+    used: Number.isFinite(used) ? Math.max(0, used) : 0,
+    remaining: Number.isFinite(remaining) ? Math.max(0, remaining) : null,
+    usage_date: String(raw?.usage_date || ''),
+    quota_subject: String(raw?.quota_subject || ''),
+  };
+};
+
+const quotaText = computed(() => {
+  const limit = quota.value.limit;
+  const used = quota.value.used;
+  const remaining = quota.value.remaining;
+
+  if (limit === null) {
+    return '管理员无限制';
+  }
+
+  return `${used}/${limit}（剩余 ${remaining ?? 0}）`;
+});
+
+const quotaExhausted = computed(() => {
+  return Number.isFinite(quota.value.remaining) && Number(quota.value.remaining) <= 0;
+});
+
+const sendDisabled = computed(() => {
+  return isLoading.value || !inputMessage.value.trim() || !serviceReady.value || quotaExhausted.value;
+});
+
+const updateWelcomeMessageIfNeeded = () => {
+  if (!Array.isArray(messages.value) || messages.value.length === 0) {
+    messages.value = [initWelcomeMessage()];
+    return;
+  }
+
+  const first = messages.value[0];
+  if (first?.role !== 'assistant') return;
+
+  const text = String(first?.content || '');
+  const shouldReplace = text.includes('AI 服务暂未就绪')
+    || text.includes('由后端代理的 AI 助手')
+    || text.includes('初始化中');
+
+  if (shouldReplace) {
+    messages.value[0] = initWelcomeMessage();
+  }
+};
+
+const reloadAgentConfig = async (showToast = false) => {
+  try {
+    const result = await apiAgentGetChatConfig();
+    const data = result?.data || result || {};
+
+    serviceReady.value = !!data?.service_ready;
+    modelName.value = String(data?.model || '');
+    quota.value = normalizeQuota(data?.quota || {});
+
+    if (serviceReady.value) {
+      statusHint.value = '后端 Agent 已连接，前端不会暴露任何对话密钥。';
+    } else {
+      statusHint.value = '后端 Agent 未完成配置，请管理员在用户中心设置 Agent Key。';
+    }
+
+    updateWelcomeMessageIfNeeded();
+
+    if (showToast) {
+      message.success('已刷新 AI 服务状态');
+    }
+  } catch (error) {
+    serviceReady.value = false;
+    statusHint.value = `状态获取失败：${error.message}`;
+    if (showToast) {
+      message.error(`刷新失败：${error.message}`);
+    }
+  }
+};
+
+const loadUserConfig = async (showToast = false) => {
+  try {
+    const result = await apiAgentGetUserConfig();
+    const data = result?.data || result || {};
+    const personal = data?.personal || {};
+    const effective = data?.effective || {};
+
+    userConfigDraft.value = {
+      api_key: '',
+      base_url: String(personal?.base_url || effective?.base_url || ''),
+      model: String(personal?.model || effective?.model || ''),
+      system_prompt: String(personal?.system_prompt || ''),
+      timeout_seconds: Number(personal?.timeout_seconds ?? effective?.timeout_seconds ?? 45),
+      max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 512),
+      temperature: Number(personal?.temperature ?? effective?.temperature ?? 0.2),
+    };
+
+    if (showToast) {
+      message.success('已加载你的 Agent 配置');
+    }
+  } catch (error) {
+    if (showToast) {
+      message.error(`加载个人配置失败：${error.message}`);
+    }
+  }
+};
+
+const toggleUserConfig = async () => {
+  showUserConfig.value = !showUserConfig.value;
+  if (showUserConfig.value) {
+    await loadUserConfig(false);
+  }
+};
+
+const saveUserConfig = async () => {
+  userConfigSaving.value = true;
+  try {
+    const payload = {
+      api_key: String(userConfigDraft.value.api_key || '').trim(),
+      base_url: String(userConfigDraft.value.base_url || '').trim(),
+      model: String(userConfigDraft.value.model || '').trim(),
+      system_prompt: String(userConfigDraft.value.system_prompt || '').trim(),
+      timeout_seconds: Number(userConfigDraft.value.timeout_seconds || 45),
+      max_tokens: Number(userConfigDraft.value.max_tokens || 512),
+      temperature: Number(userConfigDraft.value.temperature ?? 0.2),
+    };
+
+    await apiAgentUpdateUserConfig(payload);
+    userConfigDraft.value.api_key = '';
+    await reloadAgentConfig(false);
+    message.success('你的 Agent 配置已保存');
+  } catch (error) {
+    message.error(`保存个人配置失败：${error.message}`);
+  } finally {
+    userConfigSaving.value = false;
+  }
+};
+
+const clearPersonalKey = async () => {
+  userConfigSaving.value = true;
+  try {
+    await apiAgentUpdateUserConfig({ clear_personal_key: true, api_key: '' });
+    userConfigDraft.value.api_key = '';
+    await reloadAgentConfig(false);
+    message.success('已清除你的个人 Agent Key');
+  } catch (error) {
+    message.error(`清除失败：${error.message}`);
+  } finally {
+    userConfigSaving.value = false;
+  }
+};
+
+const resetProviderOverrides = async () => {
+  userConfigSaving.value = true;
+  try {
+    await apiAgentUpdateUserConfig({ reset_provider_overrides: true });
+    await loadUserConfig(false);
+    await reloadAgentConfig(false);
+    message.success('已恢复平台默认参数');
+  } catch (error) {
+    message.error(`恢复失败：${error.message}`);
+  } finally {
+    userConfigSaving.value = false;
+  }
 };
 
 const getCachedMapPosition = () => readUserPositionFromCache();
@@ -185,6 +374,7 @@ const compactText = (text, maxChars = MAX_CHARS_PER_MESSAGE) => {
 
 const buildEconomyContext = () => {
   return messages.value
+    .filter((_, idx) => idx !== 0)
     .filter(m => m.role === 'user' || m.role === 'assistant')
     .filter(m => m.content && m.content.trim())
     .slice(-MAX_CONTEXT_MESSAGES)
@@ -243,53 +433,7 @@ const pruneHistoryIfNeeded = () => {
     .slice(-2);
 
   messages.value = [welcome, ...recentDialogue];
-  modelHint.value = '🧹 已自动精简历史，仅保留最近一轮对话以节省 token';
-};
-
-const pickEconomyModel = (models) => {
-  if (!Array.isArray(models) || models.length === 0) return null;
-
-  const isLikelyChatModel = (id) => {
-    const name = String(id || '').toLowerCase();
-    if (!name) return false;
-
-    const blockedKeywords = ['embedding', 'rerank', 'tts', 'asr', 'whisper', 'vision', 'image', 'moderation'];
-    if (blockedKeywords.some(k => name.includes(k))) return false;
-
-    return true;
-  };
-
-  const scoreModel = (id) => {
-    const name = String(id || '').toLowerCase();
-    let score = 100;
-
-    if (name.includes('free')) score -= 40;
-    if (name.includes('mini') || name.includes('lite') || name.includes('small')) score -= 25;
-    if (name.includes('chat')) score -= 10;
-    if (name.includes('7b') || name.includes('8b') || name.includes('1.5b') || name.includes('3b')) score -= 20;
-
-    if (name.includes('reasoner') || name.includes('r1')) score += 25;
-    if (name.includes('32b') || name.includes('70b') || name.includes('671b')) score += 30;
-    if (name.includes('v3')) score += 15;
-
-    return score;
-  };
-
-  const candidates = models.filter(m => isLikelyChatModel(m.id));
-  const target = candidates.length ? candidates : models;
-  return [...target].sort((a, b) => scoreModel(a.id) - scoreModel(b.id))[0] || null;
-};
-
-const refreshAndChooseEconomyModel = async () => {
-  await fetchModels();
-
-  if (!availableModels.value.length) return;
-
-  const selected = pickEconomyModel(availableModels.value);
-  if (selected && selected.id !== modelName.value) {
-    modelName.value = selected.id;
-    modelHint.value = `💡 已切换到更省 token 的可用模型：${selected.name || selected.id}`;
-  }
+  statusHint.value = '🧹 已自动精简历史，仅保留最近一轮对话以节省上下文开销';
 };
 
 const scrollToBottom = () => {
@@ -323,238 +467,60 @@ const clearHistory = () => {
   message.success('聊天历史已清除');
 };
 
-const fetchModels = async () => {
-  if (!apiKey.value) {
-    modelHint.value = '❌ 请先填写 API Key';
-    return;
-  }
-
-  isFetchingModels.value = true;
-  modelHint.value = '正在获取模型列表...';
-
-  try {
-    // 构建 models 端点 URL
-    const baseUrl = apiEndpoint.value.trim().replace(/\/$/, '').replace(/\/chat\/completions$/i, '');
-    const modelsUrl = `${baseUrl}/models`;
-
-    const response = await fetch(modelsUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${apiKey.value}`
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (data.data && Array.isArray(data.data)) {
-      availableModels.value = data.data
-        .filter(m => m.id) // 过滤掉没有 id 的
-        .map(m => ({
-          id: m.id,
-          name: m.name || m.id
-        }));
-      
-      modelHint.value = `✅ 已加载 ${availableModels.value.length} 个模型`;
-      
-      // 如果当前选中的模型不在列表中，自动选择第一个
-      if (!availableModels.value.some(m => m.id === modelName.value) && availableModels.value.length > 0) {
-        modelName.value = availableModels.value[0].id;
-      }
-    } else {
-      throw new Error('返回数据格式异常');
-    }
-  } catch (error) {
-    modelHint.value = `❌ 获取失败: ${error.message}`;
-    message.error('获取模型列表失败:', error);
-  } finally {
-    isFetchingModels.value = false;
-  }
-};
-
-const readJsonSafely = async (response, { useClone = false } = {}) => {
-  const target = useClone ? response?.clone?.() : response;
-  if (!target) return {};
-
-  try {
-    return await target.json();
-  } catch (error) {
-    return {};
-  }
-};
-
-const readErrorMessage = async (response, { useClone = false } = {}) => {
-  const errData = await readJsonSafely(response, { useClone });
-  return {
-    errData,
-    errorMessage: errData?.error?.message || '请求失败'
-  };
-};
-
-const isSseResponse = (response) => {
-  if (!response?.body || typeof response.body.getReader !== 'function') return false;
-
-  const contentType = String(response.headers?.get('content-type') || '').toLowerCase();
-  if (!contentType) return true;
-
-  return contentType.includes('text/event-stream')
-    || contentType.includes('application/x-ndjson')
-    || contentType.includes('text/plain');
-};
-
 const sendMessage = async () => {
-  if (!inputMessage.value.trim() || isLoading.value) return;
+  if (sendDisabled.value) return;
 
   pruneHistoryIfNeeded();
 
   const userMsg = inputMessage.value.trim();
+  const requestHistory = buildEconomyContext();
+  const locationContextText = await buildFirstMessageLocationContext();
+
   messages.value.push({ role: 'user', content: userMsg });
   inputMessage.value = '';
   isLoading.value = true;
   scrollToBottom();
 
-  // 创建一个新的 assistant 消息占位
   const assistantMsgIndex = messages.value.push({ role: 'assistant', content: '' }) - 1;
 
   try {
-    if (!apiKey.value) {
-      throw new Error('请先在设置中配置 API Key');
-    }
-
-    // 每次发送前先刷新模型并优先选择可用且更经济的模型
-    //await refreshAndChooseEconomyModel();
-
-    const locationContextText = await buildFirstMessageLocationContext();
-
-    const chatCompletionsUrl = getChatCompletionsUrl();
-
-    const systemPrompt = locationContextText
-      ? `${ECONOMY_SYSTEM_PROMPT} ${locationContextText}`
-      : ECONOMY_SYSTEM_PROMPT;
-
-    const requestMessages = [
-      { role: 'system', content: systemPrompt },
-      ...buildEconomyContext()
-    ];
-
-    const requestHeaders = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey.value}`
-    };
-
-    const fullPayload = {
-      model: modelName.value,
-      messages: requestMessages,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      temperature: LOW_TEMPERATURE,
-      stream: true
-    };
-
-    let response = await fetch(chatCompletionsUrl, {
-      method: 'POST',
-      headers: requestHeaders,
-      body: JSON.stringify(fullPayload)
+    const result = await apiAgentChatCompletions({
+      message: userMsg,
+      history: requestHistory,
+      location_context: locationContextText,
     });
-    let useStream = true;
 
-    if (!response.ok) {
-      const { errorMessage } = await readErrorMessage(response, { useClone: true });
-      const isInvalidChatSetting = errorMessage.includes('invalid chat setting') || errorMessage.includes('(2013)');
+    const data = result?.data || result || {};
+    const reply = String(data?.reply || '').trim();
 
-      // 某些渠道不支持 max_tokens/temperature 等设置时，自动降级为最小参数重试
-      if (isInvalidChatSetting) {
-        modelHint.value = '⚠️ 当前渠道不支持部分参数，已自动降级重试';
-        response = await fetch(chatCompletionsUrl, {
-          method: 'POST',
-          headers: requestHeaders,
-          body: JSON.stringify({
-            model: modelName.value,
-            messages: requestMessages,
-            stream: true
-          })
-        });
+    messages.value[assistantMsgIndex].content = reply || '（未返回有效内容）';
 
-        // 若仍是 2013，则进一步降级为非流式，兼容只接受最小 chat 设置的渠道
-        if (!response.ok) {
-          const { errorMessage: retryMessage } = await readErrorMessage(response, { useClone: true });
-          const stillInvalid = retryMessage.includes('invalid chat setting') || retryMessage.includes('(2013)');
-          if (stillInvalid) {
-            modelHint.value = '⚠️ 已切换兼容模式（非流式）';
-            response = await fetch(chatCompletionsUrl, {
-              method: 'POST',
-              headers: requestHeaders,
-              body: JSON.stringify({
-                model: modelName.value,
-                messages: requestMessages,
-                stream: false
-              })
-            });
-            useStream = false;
-          }
-        }
-      }
+    if (data?.model) {
+      modelName.value = String(data.model);
     }
 
-    if (!response.ok) {
-      const { errorMessage } = await readErrorMessage(response, { useClone: true });
-      if (errorMessage.includes('no available channels for model')) {
-        throw new Error(`当前模型不可用：${modelName.value}。请点击设置中的🔄刷新模型列表并切换到可用模型。`);
-      }
-      throw new Error(errorMessage);
+    if (data?.quota) {
+      quota.value = normalizeQuota(data.quota);
     }
 
-    if (useStream && isSseResponse(response)) {
-      // 处理流式响应
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = '';
-      let done = false;
-      let fullContent = "";
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (line.trim().startsWith('data: ')) {
-              const jsonStr = line.trim().substring(6);
-              if (jsonStr === '[DONE]') break;
-
-              try {
-                const json = JSON.parse(jsonStr);
-                const content = json.choices[0]?.delta?.content || "";
-                fullContent += content;
-                messages.value[assistantMsgIndex].content = fullContent;
-                scrollToBottom();
-              } catch (e) {
-                message.warning("Parse error", e);
-              }
-            }
-          }
-        }
-      }
-    } else {
-      // 处理非流式响应
-      const json = await response.json();
-      const content = json?.choices?.[0]?.message?.content || '';
-      messages.value[assistantMsgIndex].content = content || '（未返回有效内容）';
-      scrollToBottom();
+    if (quotaExhausted.value) {
+      statusHint.value = '今日对话额度已用完，请明日再试或切换更高权限账号。';
     }
 
   } catch (error) {
     messages.value[assistantMsgIndex].content = `出错啦: ${error.message}`;
+    if (error?.isQuotaExceeded) {
+      statusHint.value = '今日对话额度已用完，请明日再试。';
+    }
   } finally {
     isLoading.value = false;
     scrollToBottom();
   }
 };
+
+onMounted(async () => {
+  await reloadAgentConfig(false);
+});
 </script>
 
 <style scoped>
@@ -575,6 +541,101 @@ const sendMessage = async () => {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.service-status {
+  border-bottom: 1px solid #e9ecef;
+  background: #fdfefe;
+  padding: 10px 14px;
+}
+
+.user-config-panel {
+  border-bottom: 1px solid #e9ecef;
+  background: #fcfffd;
+  padding: 10px 14px 12px;
+}
+
+.user-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.user-config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #315142;
+}
+
+.user-config-item-full {
+  grid-column: 1 / -1;
+}
+
+.user-config-item input,
+.user-config-item textarea {
+  width: 100%;
+  border: 1px solid #d7e5dc;
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.user-config-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.user-config-actions button {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  background: #4caf50;
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.user-config-actions button.secondary {
+  background: #8aa39a;
+}
+
+.user-config-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85em;
+  margin-bottom: 4px;
+}
+
+.status-line:last-of-type {
+  margin-bottom: 0;
+}
+
+.status-label {
+  color: #5f6d66;
+}
+
+.status-value {
+  color: #2a3a32;
+  font-weight: 600;
+}
+
+.status-ready {
+  color: #2e7d32;
+}
+
+.status-unready {
+  color: #c62828;
 }
 
 .chat-title {

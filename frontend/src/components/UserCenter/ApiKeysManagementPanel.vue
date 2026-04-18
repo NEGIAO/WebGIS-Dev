@@ -60,46 +60,46 @@
                     </div>
                 </div>
 
-                <!-- Agent 会话 API Token -->
+                <!-- Agent 对话 API Key -->
                 <div class="key-card">
                     <div class="key-header">
-                        <h3>🤖 Agent 会话 Token</h3>
-                        <span :class="['status-badge', keysStatus.agent_token?.is_set ? 'set' : 'unset']">
-                            {{ keysStatus.agent_token?.is_set ? '已配置' : '未配置' }}
+                        <h3>🤖 Agent 对话 API Key</h3>
+                        <span :class="['status-badge', keysStatus.agent_api_key?.is_set ? 'set' : 'unset']">
+                            {{ keysStatus.agent_api_key?.is_set ? '已配置' : '未配置' }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div v-if="editingKey === 'agent_token'" class="edit-form">
+                        <div v-if="editingKey === 'agent_api_key'" class="edit-form">
                             <textarea
-                                v-model="editValues.agent_token"
-                                placeholder="粘贴您的 Agent API Token"
+                                v-model="editValues.agent_api_key"
+                                placeholder="粘贴您的 Agent 对话 API Key"
                                 rows="3"
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button class="btn btn-save" @click="saveKey('agent_token')">保存</button>
+                                <button class="btn btn-save" @click="saveKey('agent_api_key')">保存</button>
                                 <button class="btn btn-cancel" @click="cancelEdit">取消</button>
                             </div>
                         </div>
                         <div v-else class="key-display">
                             <p class="key-value">
-                                {{ keysStatus.agent_token?.is_set ? '●●●●●●●●●●(已设置)' : '未配置' }}
+                                {{ keysStatus.agent_api_key?.is_set ? '●●●●●●●●●●(已设置)' : '未配置' }}
                             </p>
                             <div class="key-actions">
-                                <button class="btn btn-edit" @click="startEdit('agent_token')">编辑</button>
+                                <button class="btn btn-edit" @click="startEdit('agent_api_key')">编辑</button>
                                 <button
-                                    v-if="keysStatus.agent_token?.is_set"
+                                    v-if="keysStatus.agent_api_key?.is_set"
                                     class="btn btn-delete"
-                                    @click="deleteKey('agent_token')"
+                                    @click="deleteKey('agent_api_key')"
                                 >
                                     删除
                                 </button>
                             </div>
-                            <p class="key-hint">Agent 会话认证令牌</p>
+                            <p class="key-hint">后端代理对话使用，仅管理员可配置</p>
                         </div>
                     </div>
                     <div class="key-footer">
-                        最后更新: {{ formatTime(keysStatus.agent_token?.updated_at) }}
+                        最后更新: {{ formatTime(keysStatus.agent_api_key?.updated_at) }}
                     </div>
                 </div>
 
@@ -150,13 +150,105 @@
             </div>
         </div>
 
+        <div class="agent-config-section">
+            <div class="section-header-row">
+                <h3>⚙️ Agent 对话参数</h3>
+                <div class="section-actions">
+                    <button class="btn btn-edit" @click="loadAgentConfig">刷新</button>
+                    <button
+                        v-if="!editingAgentConfig"
+                        class="btn btn-edit"
+                        @click="startEditAgentConfig"
+                    >
+                        编辑参数
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="agentConfigLoading" class="loading-state">
+                <span class="spinner"></span> 加载配置中...
+            </div>
+
+            <div v-else-if="editingAgentConfig" class="edit-form">
+                <div class="config-grid">
+                    <label class="config-item">
+                        <span>Base URL</span>
+                        <input v-model="agentConfigDraft.base_url" class="key-input" placeholder="https://api.xxx.com/v1" />
+                    </label>
+                    <label class="config-item">
+                        <span>Model</span>
+                        <input v-model="agentConfigDraft.model" class="key-input" placeholder="deepseek-V3-0324" />
+                    </label>
+                    <label class="config-item">
+                        <span>Timeout (seconds)</span>
+                        <input v-model.number="agentConfigDraft.timeout_seconds" type="number" min="5" max="180" class="key-input" />
+                    </label>
+                    <label class="config-item">
+                        <span>Max Tokens</span>
+                        <input v-model.number="agentConfigDraft.max_tokens" type="number" min="1" max="8192" class="key-input" />
+                    </label>
+                    <label class="config-item">
+                        <span>Temperature</span>
+                        <input v-model.number="agentConfigDraft.temperature" type="number" min="0" max="2" step="0.1" class="key-input" />
+                    </label>
+                    <label class="config-item config-item-full">
+                        <span>System Prompt</span>
+                        <textarea
+                            v-model="agentConfigDraft.system_prompt"
+                            rows="4"
+                            class="key-input"
+                            placeholder="用于后端统一注入的系统提示词"
+                        ></textarea>
+                    </label>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-save" @click="saveAgentConfig">保存参数</button>
+                    <button class="btn btn-cancel" @click="cancelEditAgentConfig">取消</button>
+                </div>
+            </div>
+
+            <div v-else class="config-view">
+                <div class="config-grid">
+                    <div class="config-item">
+                        <span>Base URL</span>
+                        <strong>{{ agentConfig.base_url || '未配置' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Model</span>
+                        <strong>{{ agentConfig.model || '未配置' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Timeout</span>
+                        <strong>{{ agentConfig.timeout_seconds || '-' }} 秒</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Max Tokens</span>
+                        <strong>{{ agentConfig.max_tokens || '-' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Temperature</span>
+                        <strong>{{ agentConfig.temperature ?? '-' }}</strong>
+                    </div>
+                    <div class="config-item config-item-full">
+                        <span>System Prompt</span>
+                        <strong>{{ agentConfig.system_prompt || '未配置' }}</strong>
+                    </div>
+                </div>
+
+                <p class="config-note">
+                    对话额度：游客 {{ agentQuota.guest }} 次/日，注册用户 {{ agentQuota.registered }} 次/日，管理员不限。
+                </p>
+            </div>
+        </div>
+
         <!-- 提示信息 -->
         <div class="warning-box">
             <span class="warning-icon">⚠️</span>
             <div class="warning-content">
                 <p><strong>安全提示：</strong></p>
                 <ul>
-                    <li>密钥将被加密存储在后端数据库中</li>
+                    <li>密钥仅存储在后端数据库中，不会暴露到前端运行时</li>
                     <li>仅管理员可以修改和查看密钥</li>
                     <li>不要在前端代码中硬编码 API 密钥</li>
                     <li>定期检查密钥使用情况和安全性</li>
@@ -170,9 +262,11 @@
 import { ref, onMounted } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import {
+    apiAdminGetAgentConfig,
     apiAdminGetApiKeysStatus,
-    apiAdminSetApiKey,
     apiAdminDeleteApiKey,
+    apiAdminSetApiKey,
+    apiAdminUpdateAgentConfig,
 } from '../../api/backend';
 
 const message = useMessage();
@@ -180,15 +274,31 @@ const message = useMessage();
 const loading = ref(false);
 const keysStatus = ref({
     amap_key: { is_set: false, updated_at: null },
-    agent_token: { is_set: false, updated_at: null },
+    agent_api_key: { is_set: false, updated_at: null },
     tianditu_tk: { is_set: false, updated_at: null },
 });
 
 const editingKey = ref(null);
 const editValues = ref({
     amap_key: '',
-    agent_token: '',
+    agent_api_key: '',
     tianditu_tk: '',
+});
+
+const agentConfigLoading = ref(false);
+const editingAgentConfig = ref(false);
+const agentConfig = ref({
+    base_url: '',
+    model: '',
+    timeout_seconds: 45,
+    max_tokens: 512,
+    temperature: 0.2,
+    system_prompt: '',
+});
+const agentConfigDraft = ref({ ...agentConfig.value });
+const agentQuota = ref({
+    guest: 10,
+    registered: 100,
 });
 
 function formatTime(isoString) {
@@ -212,7 +322,12 @@ async function loadKeysStatus() {
     loading.value = true;
     try {
         const result = await apiAdminGetApiKeysStatus();
-        keysStatus.value = result?.data || {};
+        const data = result?.data || {};
+        keysStatus.value = {
+            amap_key: data.amap_key || { is_set: false, updated_at: null },
+            agent_api_key: data.agent_api_key || data.agent_token || { is_set: false, updated_at: null },
+            tianditu_tk: data.tianditu_tk || { is_set: false, updated_at: null },
+        };
     } catch (error) {
         message.error(`加载密钥状态失败: ${error.message}`);
     } finally {
@@ -229,9 +344,93 @@ function cancelEdit() {
     editingKey.value = null;
     editValues.value = {
         amap_key: '',
-        agent_token: '',
+        agent_api_key: '',
         tianditu_tk: '',
     };
+}
+
+function hydrateAgentConfigDraft() {
+    agentConfigDraft.value = {
+        base_url: String(agentConfig.value.base_url || ''),
+        model: String(agentConfig.value.model || ''),
+        timeout_seconds: Number(agentConfig.value.timeout_seconds || 45),
+        max_tokens: Number(agentConfig.value.max_tokens || 512),
+        temperature: Number(agentConfig.value.temperature ?? 0.2),
+        system_prompt: String(agentConfig.value.system_prompt || ''),
+    };
+}
+
+function startEditAgentConfig() {
+    editingAgentConfig.value = true;
+    hydrateAgentConfigDraft();
+}
+
+function cancelEditAgentConfig() {
+    editingAgentConfig.value = false;
+    hydrateAgentConfigDraft();
+}
+
+async function loadAgentConfig() {
+    agentConfigLoading.value = true;
+    try {
+        const result = await apiAdminGetAgentConfig();
+        const data = result?.data || {};
+        const provider = data?.provider || {};
+        agentConfig.value = {
+            base_url: String(provider.base_url || ''),
+            model: String(provider.model || ''),
+            timeout_seconds: Number(provider.timeout_seconds || 45),
+            max_tokens: Number(provider.max_tokens || 512),
+            temperature: Number(provider.temperature ?? 0.2),
+            system_prompt: String(provider.system_prompt || ''),
+        };
+
+        const quota = data?.chat_quota || {};
+        agentQuota.value = {
+            guest: Number(quota.guest || 10),
+            registered: Number(quota.registered || 100),
+        };
+
+        hydrateAgentConfigDraft();
+    } catch (error) {
+        message.error(`加载 Agent 配置失败: ${error.message}`);
+    } finally {
+        agentConfigLoading.value = false;
+    }
+}
+
+async function saveAgentConfig() {
+    const payload = {
+        base_url: String(agentConfigDraft.value.base_url || '').trim(),
+        model: String(agentConfigDraft.value.model || '').trim(),
+        timeout_seconds: Number(agentConfigDraft.value.timeout_seconds || 45),
+        max_tokens: Number(agentConfigDraft.value.max_tokens || 512),
+        temperature: Number(agentConfigDraft.value.temperature ?? 0.2),
+        system_prompt: String(agentConfigDraft.value.system_prompt || '').trim(),
+    };
+
+    if (!payload.base_url || !payload.model || !payload.system_prompt) {
+        message.error('Base URL、Model、System Prompt 不能为空');
+        return;
+    }
+
+    try {
+        const result = await apiAdminUpdateAgentConfig(payload);
+        const provider = result?.data?.provider || {};
+        agentConfig.value = {
+            base_url: String(provider.base_url || payload.base_url),
+            model: String(provider.model || payload.model),
+            timeout_seconds: Number(provider.timeout_seconds || payload.timeout_seconds),
+            max_tokens: Number(provider.max_tokens || payload.max_tokens),
+            temperature: Number(provider.temperature ?? payload.temperature),
+            system_prompt: String(provider.system_prompt || payload.system_prompt),
+        };
+        hydrateAgentConfigDraft();
+        editingAgentConfig.value = false;
+        message.success('Agent 参数已保存');
+    } catch (error) {
+        message.error(`保存 Agent 配置失败: ${error.message}`);
+    }
 }
 
 async function saveKey(keyName) {
@@ -268,6 +467,7 @@ async function deleteKey(keyName) {
 
 onMounted(async () => {
     await loadKeysStatus();
+    await loadAgentConfig();
 });
 </script>
 
@@ -504,6 +704,75 @@ onMounted(async () => {
     border-top: 1px solid rgba(76, 175, 80, 0.1);
     font-size: 11px;
     color: #6c9e78;
+}
+
+.agent-config-section {
+    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(76, 175, 80, 0.2);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.section-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.section-header-row h3 {
+    margin: 0;
+    color: #214a31;
+}
+
+.section-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+    gap: 10px;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #2e5d3e;
+    font-size: 13px;
+}
+
+.config-item strong {
+    color: #214a31;
+    font-weight: 600;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.config-item-full {
+    grid-column: 1 / -1;
+}
+
+.config-view {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.config-note {
+    margin: 0;
+    font-size: 12px;
+    color: #4b8b60;
+}
+
+@media (max-width: 900px) {
+    .config-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .warning-box {

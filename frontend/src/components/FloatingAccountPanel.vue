@@ -1,7 +1,7 @@
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from '../../composables/useMessage'
+import { useMessage } from '../composables/useMessage'
 import {
   apiAuthChangePassword,
   apiAuthChangeAvatar,
@@ -12,15 +12,14 @@ import {
   apiStatisticsCenter,
   apiStatisticsRealtime,
   syncUserRoleToUrl
-} from '../../api/backend'
-import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession } from '../../utils/auth'
+} from '../api/backend'
+import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession } from '../utils/auth'
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'))
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'))
 
 const router = useRouter()
 const message = useMessage()
-const emit = defineEmits(['fullscreen-change'])
 
 // Panel State
 const isOpen = ref(false)
@@ -252,34 +251,20 @@ async function refreshMessages() {
 
 function closePanel() {
   isOpen.value = false
-  setFullscreen(false)
   setTimeout(() => {
     activeMenu.value = 'overview'
     resetPasswordForm()
   }, 200)
 }
 
-function setFullscreen(nextValue) {
-  const normalized = Boolean(nextValue)
-  if (isFullscreen.value === normalized) return
-  isFullscreen.value = normalized
-  emit('fullscreen-change', normalized)
-}
-
-function toggleFullscreen() {
-  setFullscreen(!isFullscreen.value)
-}
-
 function togglePanel() {
-  const nextOpen = !isOpen.value
-  isOpen.value = nextOpen
+  isOpen.value = !isOpen.value
 
-  if (nextOpen) {
+  if (isOpen.value) {
     loadCenterData({ silent: true })
   }
 
-  if (!nextOpen) {
-    setFullscreen(false)
+  if (!isOpen.value) {
     setTimeout(() => {
       activeMenu.value = 'overview'
       resetPasswordForm()
@@ -306,12 +291,6 @@ function handleDocumentClick(event) {
   const root = event.target?.closest?.('.floating-account-manager')
   if (!root) {
     closePanel()
-  }
-}
-
-function handleDocumentKeydown(event) {
-  if (event.key === 'Escape' && isFullscreen.value) {
-    setFullscreen(false)
   }
 }
 
@@ -444,19 +423,20 @@ onMounted(() => {
   }
 
   document.addEventListener('pointerdown', handleDocumentClick)
-  document.addEventListener('keydown', handleDocumentKeydown)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isFullscreen.value) {
+      isFullscreen.value = false
+    }
+  })
 })
 
 onBeforeUnmount(() => {
-  setFullscreen(false)
-
   if (centerTimer && typeof window !== 'undefined') {
     window.clearInterval(centerTimer)
     centerTimer = null
   }
 
   document.removeEventListener('pointerdown', handleDocumentClick)
-  document.removeEventListener('keydown', handleDocumentKeydown)
 })
 </script>
 
@@ -500,7 +480,7 @@ onBeforeUnmount(() => {
             type="button"
             class="btn-fullscreen"
             :title="isFullscreen ? '退出全屏' : '全屏展开'"
-            @click="toggleFullscreen"
+            @click="isFullscreen = !isFullscreen"
           >
             <i :class="isFullscreen ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
           </button>
@@ -804,7 +784,7 @@ onBeforeUnmount(() => {
 .floating-account-manager {
   position: fixed;
   top: 20px;
-  left: 230px;
+  left: 220px;
   z-index: 1500;
   display: flex;
   flex-direction: column;
@@ -814,7 +794,9 @@ onBeforeUnmount(() => {
 }
 
 .floating-account-manager.is-fullscreen {
-  z-index: 3000;
+  bottom: auto;
+  left: auto;
+  z-index: auto;
 }
 
 .floating-account-manager.is-fullscreen .account-fab {
@@ -829,18 +811,8 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   color: #fff;
-
-  /* 👇 抛弃固定高度，用自适应单位 */
-  height: auto;
-  min-height: 44px; /* 移动端最小可点击高度 */
-  max-height: 56px; /* 大屏不超出原来的设计 */
-
-  /* 👇 内边距也自适应 */
+  height: 56px;
   padding: 6px 20px 6px 8px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px; /* 图标和文字的间距 */
-
   cursor: pointer;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 16px rgba(91, 207, 137, 0.25);
   transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -950,10 +922,15 @@ onBeforeUnmount(() => {
 }
 
 .account-panel.is-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   border-radius: 0;
   border: none;
   clip-path: none;
-  z-index: 1;
+  z-index: 9999;
   transform-origin: center;
   /* background defaults to panel gradient */
 }
@@ -1048,7 +1025,7 @@ onBeforeUnmount(() => {
   width: 64px;
   height: 64px;
   font-size: 26px;
-  background: linear-gradient(135deg, #5bcf89 0%, #3dce7e 100%);
+  background: linear-gradient(135deg, #5bcf89 0%, #20874e 100%);
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -1995,8 +1972,8 @@ input:checked + .slider:before {
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .floating-account-manager {
-    top: 500px;
-    left: 100px;
+    top: 220px;
+    left: 10px;
   }
   .account-panel {
     width: min(95vw, 420px);
@@ -2004,6 +1981,11 @@ input:checked + .slider:before {
 
   /* Fullscreen mode on mobile */
   .account-panel.is-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     border-radius: 0;
     border: none;
   }

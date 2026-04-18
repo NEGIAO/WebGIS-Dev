@@ -43,6 +43,7 @@ REGISTERED_DAILY_API_QUOTA = 50
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{6,64}$")
+GUEST_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{6,128}$")
 
 # 兼容历史项目中提到的保留名。
 RESERVED_USERNAMES = {
@@ -50,6 +51,40 @@ RESERVED_USERNAMES = {
     ADMIN_USERNAME,
     "super_admin",
 }
+
+
+def _normalize_guest_device_id(raw_value: Optional[str]) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+
+    if len(value) > 128:
+        value = value[:128]
+
+    if GUEST_DEVICE_ID_PATTERN.fullmatch(value):
+        return value
+
+    compact = re.sub(r"[^A-Za-z0-9_.:-]", "", value)
+    if len(compact) < 6:
+        return ""
+
+    return compact[:128]
+
+
+def _build_guest_uid(ip: str, user_agent: str, guest_device_id: str) -> str:
+    seed_device_id = _normalize_guest_device_id(guest_device_id)
+    if not seed_device_id:
+        seed_device_id = secrets.token_urlsafe(10)
+
+    seed = "|".join(
+        [
+            str(ip or "unknown").strip(),
+            str(user_agent or "unknown").strip(),
+            seed_device_id,
+        ]
+    )
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return f"guest_{digest[:16]}"
 
 
 def normalize_role(raw_role: Optional[str], username: Optional[str]) -> str:
@@ -66,6 +101,22 @@ def normalize_role(raw_role: Optional[str], username: Optional[str]) -> str:
     return ROLE_REGISTERED
 
 
+def resolve_quota_subject(
+    username: Optional[str],
+    role: Optional[str],
+    guest_uid: Optional[str] = None,
+) -> str:
+    resolved_username = str(username or "").strip()
+    normalized_role = normalize_role(role, resolved_username)
+
+    if normalized_role == ROLE_GUEST:
+        normalized_guest_uid = str(guest_uid or "").strip()
+        if normalized_guest_uid:
+            return normalized_guest_uid
+
+    return resolved_username or "unknown"
+
+
 def get_role_daily_quota(role: Optional[str]) -> Optional[int]:
     normalized = normalize_role(role, None)
     if normalized == ROLE_GUEST:
@@ -75,9 +126,26 @@ def get_role_daily_quota(role: Optional[str]) -> Optional[int]:
     return None  # 管理员不限额
 
 
+def _default_auth_db_path() -> Path:
+    """默认路径策略：HF 使用 /data；本地开发优先项目 data 目录。"""
+    space_id = str(os.getenv("SPACE_ID") or os.getenv("HF_SPACE_ID") or "").strip()
+    if space_id:
+        return Path("/data/webgis_auth.db")
+
+    if os.name != "nt":
+        data_root = Path("/data")
+        try:
+            if data_root.exists() and os.access(str(data_root), os.W_OK):
+                return data_root / "webgis_auth.db"
+        except Exception:
+            pass
+
+    return Path.cwd() / "data" / "webgis_auth.db"
+
+
 def _resolve_auth_db_path() -> Path:
-    configured = str(os.getenv("AUTH_DB_PATH", "/data/webgis_auth.db")).strip()
-    preferred = Path(configured or "/data/webgis_auth.db")
+    configured = str(os.getenv("AUTH_DB_PATH", "")).strip()
+    preferred = Path(configured) if configured else _default_auth_db_path()
 
     try:
         preferred.parent.mkdir(parents=True, exist_ok=True)
@@ -106,11 +174,16 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: Optional[str] = Field(default=None, max_length=24)
     password: str = Field(..., min_length=1, max_length=128)
+    guest_device_id: Optional[str] = Field(default=None, max_length=128)
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=1, max_length=128)
     new_password: str = Field(..., min_length=6, max_length=64)
+
+
+class ChangeAvatarRequest(BaseModel):
+    new_avatar_index: int = Field(..., ge=0, le=MAX_AVATAR_INDEX)
 
 
 def _utc_now() -> datetime:
@@ -152,14 +225,35 @@ def get_auth_db_connection() -> sqlite3.Connection:
     return _db_connection()
 
 
+def _safe_execute(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> bool:
+    """安全执行 SQL，捕获异常，记录错误但不中断流程。"""
+    try:
+        if params:
+            conn.execute(sql, params)
+        else:
+            conn.execute(sql)
+        return True
+    except Exception as e:
+        logger.warning("SQL 执行警告：%s | SQL: %s", str(e)[:200], sql[:100])
+        return False
+
+
 def _init_auth_storage_sync() -> None:
+    """
+    幂等数据库初始化与迁移。
+    - 所有 CREATE TABLE IF NOT EXISTS 已自动化。
+    - 所有列补充采用 PRAGMA table_info 检测；列补充失败时记录但继续。
+    - 所有索引创建采用 CREATE INDEX IF NOT EXISTS；失败时记录但继续。
+    - 保证服务始终可启动：不因迁移失败而中断。
+    """
     now_iso = _iso(_utc_now())
     default_contact = "管理员联系方式：请联系系统管理员"
 
     with _db_connection() as conn:
         conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute(
-            """
+        
+        # 表：users
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
@@ -168,37 +262,38 @@ def _init_auth_storage_sync() -> None:
                 avatar_index INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
-            """
-        )
-
+        """)
         user_column_rows = conn.execute("PRAGMA table_info(users)").fetchall()
         user_columns = {str(dict(row).get("name") or "") for row in user_column_rows}
         if "avatar_index" not in user_columns:
-            conn.execute(
-                "ALTER TABLE users ADD COLUMN avatar_index INTEGER NOT NULL DEFAULT 0"
-            )
-        conn.execute(
-            """
+            _safe_execute(conn, "ALTER TABLE users ADD COLUMN avatar_index INTEGER NOT NULL DEFAULT 0")
+
+        # 表：sessions
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
                 username TEXT NOT NULL,
                 role TEXT NOT NULL,
+                guest_uid TEXT,
+                guest_device_id TEXT,
                 ip TEXT,
                 user_agent TEXT,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL
             )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)"
-        )
+        """)
+        session_column_rows = conn.execute("PRAGMA table_info(sessions)").fetchall()
+        session_columns = {str(dict(row).get("name") or "") for row in session_column_rows}
+        if "guest_uid" not in session_columns:
+            _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN guest_uid TEXT")
+        if "guest_device_id" not in session_columns:
+            _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN guest_device_id TEXT")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_guest_uid ON sessions(guest_uid)")
 
-        conn.execute(
-            """
+        # 表：user_metrics
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS user_metrics (
                 username TEXT PRIMARY KEY,
                 login_count INTEGER NOT NULL DEFAULT 0,
@@ -209,11 +304,10 @@ def _init_auth_storage_sync() -> None:
                 last_logout_at TEXT,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
 
-        conn.execute(
-            """
+        # 表：api_usage_daily
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS api_usage_daily (
                 username TEXT NOT NULL,
                 role TEXT NOT NULL,
@@ -222,11 +316,10 @@ def _init_auth_storage_sync() -> None:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (username, usage_date)
             )
-            """
-        )
+        """)
 
-        conn.execute(
-            """
+        # 表：user_visits
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS user_visits (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -238,17 +331,132 @@ def _init_auth_storage_sync() -> None:
                 user_agent TEXT,
                 created_at TEXT NOT NULL
             )
-            """
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_user_visits_username ON user_visits(username)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_user_visits_created_at ON user_visits(created_at)"
-        )
+        """)
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_user_visits_username ON user_visits(username)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_user_visits_created_at ON user_visits(created_at)")
 
-        conn.execute(
-            """
+        # 表：visit_tracking_events
+        _safe_execute(conn, """
+            CREATE TABLE IF NOT EXISTS visit_tracking_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'guest',
+                guest_uid TEXT,
+                quota_subject TEXT,
+                ip TEXT,
+                ip_city TEXT,
+                ip_region TEXT,
+                ip_country TEXT,
+                latitude REAL,
+                longitude REAL,
+                coord_source TEXT NOT NULL DEFAULT 'unknown',
+                geo_permission TEXT NOT NULL DEFAULT 'unknown',
+                gps_accuracy REAL,
+                gps_error TEXT,
+                gps_timestamp TEXT,
+                encoded_pos TEXT NOT NULL DEFAULT '0',
+                visit_time TEXT NOT NULL,
+                user_agent TEXT,
+                created_at TEXT NOT NULL,
+                supabase_sync_status TEXT NOT NULL DEFAULT 'pending',
+                supabase_sync_error TEXT,
+                supabase_synced_at TEXT
+            )
+        """)
+        visit_tracking_column_rows = conn.execute("PRAGMA table_info(visit_tracking_events)").fetchall()
+        visit_tracking_columns = {str(dict(row).get("name") or "") for row in visit_tracking_column_rows}
+        if "role" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN role TEXT NOT NULL DEFAULT 'guest'")
+        if "guest_uid" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN guest_uid TEXT")
+        if "quota_subject" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN quota_subject TEXT")
+        if "ip_city" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN ip_city TEXT")
+        if "ip_region" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN ip_region TEXT")
+        if "ip_country" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN ip_country TEXT")
+        if "coord_source" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN coord_source TEXT NOT NULL DEFAULT 'unknown'")
+        if "geo_permission" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN geo_permission TEXT NOT NULL DEFAULT 'unknown'")
+        if "gps_accuracy" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN gps_accuracy REAL")
+        if "gps_error" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN gps_error TEXT")
+        if "gps_timestamp" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN gps_timestamp TEXT")
+        if "encoded_pos" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN encoded_pos TEXT NOT NULL DEFAULT '0'")
+        if "supabase_sync_status" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN supabase_sync_status TEXT NOT NULL DEFAULT 'pending'")
+        if "supabase_sync_error" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN supabase_sync_error TEXT")
+        if "supabase_synced_at" not in visit_tracking_columns:
+            _safe_execute(conn, "ALTER TABLE visit_tracking_events ADD COLUMN supabase_synced_at TEXT")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_visit_tracking_events_username ON visit_tracking_events(username)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_visit_tracking_events_created_at ON visit_tracking_events(created_at)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_visit_tracking_events_source ON visit_tracking_events(coord_source)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_visit_tracking_events_supabase_sync ON visit_tracking_events(supabase_sync_status)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_visit_tracking_events_guest_uid ON visit_tracking_events(guest_uid)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_visit_tracking_events_quota_subject ON visit_tracking_events(quota_subject)")
+
+        # 表：guest_identity_records
+        _safe_execute(conn, """
+            CREATE TABLE IF NOT EXISTS guest_identity_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guest_uid TEXT UNIQUE NOT NULL,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'guest',
+                guest_device_id TEXT,
+                ip TEXT,
+                coord_source TEXT NOT NULL DEFAULT 'unknown',
+                geo_permission TEXT NOT NULL DEFAULT 'unknown',
+                encoded_pos TEXT NOT NULL DEFAULT '0',
+                last_latitude REAL,
+                last_longitude REAL,
+                user_agent TEXT,
+                visit_count INTEGER NOT NULL DEFAULT 0,
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            )
+        """)
+        guest_identity_column_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()
+        guest_identity_columns = {str(dict(row).get("name") or "") for row in guest_identity_column_rows}
+        if "id" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN id INTEGER")
+        if "username" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN username TEXT NOT NULL DEFAULT 'user'")
+        if "role" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN role TEXT NOT NULL DEFAULT 'guest'")
+        if "guest_device_id" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN guest_device_id TEXT")
+        if "ip" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN ip TEXT")
+        if "coord_source" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN coord_source TEXT NOT NULL DEFAULT 'unknown'")
+        if "geo_permission" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN geo_permission TEXT NOT NULL DEFAULT 'unknown'")
+        if "encoded_pos" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN encoded_pos TEXT NOT NULL DEFAULT '0'")
+        if "last_latitude" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN last_latitude REAL")
+        if "last_longitude" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN last_longitude REAL")
+        if "user_agent" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN user_agent TEXT")
+        if "visit_count" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 0")
+        if "first_seen_at" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN first_seen_at TEXT NOT NULL DEFAULT ''")
+        if "last_seen_at" not in guest_identity_columns:
+            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_guest_identity_records_last_seen ON guest_identity_records(last_seen_at)")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_guest_identity_records_encoded_pos ON guest_identity_records(encoded_pos)")
+
+        # 表：announcements
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS announcements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message TEXT NOT NULL,
@@ -257,22 +465,20 @@ def _init_auth_storage_sync() -> None:
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
 
-        conn.execute(
-            """
+        # 表：announcement_dismissals
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS announcement_dismissals (
                 username TEXT NOT NULL,
                 announcement_id INTEGER NOT NULL,
                 dismissed_at TEXT NOT NULL,
                 PRIMARY KEY (username, announcement_id)
             )
-            """
-        )
+        """)
 
-        conn.execute(
-            """
+        # 表：user_messages
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS user_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
@@ -280,27 +486,23 @@ def _init_auth_storage_sync() -> None:
                 created_at TEXT NOT NULL,
                 is_visible INTEGER NOT NULL DEFAULT 1
             )
-            """
-        )
+        """)
 
-        conn.execute(
-            """
+        # 表：system_config
+        _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS system_config (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             )
-            """
-        )
+        """)
 
-        conn.execute(
-            """
+        # 初始化系统配置
+        _safe_execute(conn, """
             INSERT INTO system_config (key, value, updated_at)
             VALUES ('admin_contact', ?, ?)
             ON CONFLICT(key) DO NOTHING
-            """,
-            (default_contact, now_iso),
-        )
+        """, (default_contact, now_iso))
 
         conn.commit()
 
@@ -435,6 +637,49 @@ def _create_user_sync(username: str, password: str, avatar_index: int = 0) -> bo
         return False
 
 
+def _get_or_create_guest_username_sync(guest_uid: str) -> str:
+    """
+    获取或创建游客用户名。如果游客记录存在，返回其用户名；
+    否则创建新记录并返回基于 ID 的用户名（如 'user_1'）。
+    """
+    with _db_connection() as conn:
+        # 查询现有记录
+        existing = conn.execute(
+            "SELECT id, username FROM guest_identity_records WHERE guest_uid = ?",
+            (guest_uid,),
+        ).fetchone()
+        
+        if existing:
+            return str(dict(existing).get("username") or "user")
+        
+        # 创建新的游客记录
+        now_iso = _iso(_utc_now())
+        # 计算下一个 id
+        max_id_row = conn.execute("SELECT MAX(id) FROM guest_identity_records").fetchone()
+        next_id = (dict(max_id_row).get("MAX(id)") or 0) + 1
+        generated_username = f"user_{next_id}"
+        
+        try:
+            conn.execute(
+                """
+                INSERT INTO guest_identity_records (
+                    guest_uid,
+                    username,
+                    role,
+                    visit_count,
+                    first_seen_at,
+                    last_seen_at
+                ) VALUES (?, ?, 'guest', 0, ?, ?)
+                """,
+                (guest_uid, generated_username, now_iso, now_iso),
+            )
+            conn.commit()
+        except Exception:
+            pass
+        
+        return generated_username
+
+
 def _ensure_user_metric_row_sync(conn: sqlite3.Connection, username: str) -> None:
     conn.execute(
         """
@@ -495,6 +740,8 @@ def _create_session_sync(
     role: str,
     ip: str,
     user_agent: str,
+    guest_uid: str = "",
+    guest_device_id: str = "",
 ) -> Dict[str, Any]:
     now = _utc_now()
     expires_at = now + timedelta(hours=SESSION_EXPIRE_HOURS)
@@ -504,13 +751,25 @@ def _create_session_sync(
     with _db_connection() as conn:
         conn.execute(
             """
-            INSERT INTO sessions (token, username, role, ip, user_agent, created_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (
+                token,
+                username,
+                role,
+                guest_uid,
+                guest_device_id,
+                ip,
+                user_agent,
+                created_at,
+                expires_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 token,
                 username,
                 resolved_role,
+                str(guest_uid or "").strip(),
+                _normalize_guest_device_id(guest_device_id),
                 ip,
                 user_agent,
                 _iso(now),
@@ -523,6 +782,8 @@ def _create_session_sync(
         "token": token,
         "username": username,
         "role": resolved_role,
+        "guest_uid": str(guest_uid or "").strip(),
+        "guest_device_id": _normalize_guest_device_id(guest_device_id),
         "created_at": _iso(now),
         "expires_at": _iso(expires_at),
     }
@@ -532,7 +793,7 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
-            SELECT token, username, role, ip, user_agent, created_at, expires_at
+            SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent, created_at, expires_at
             FROM sessions
             WHERE token = ?
             """,
@@ -630,8 +891,13 @@ def _get_admin_password() -> str:
     return configured or DEFAULT_ADMIN_PASSWORD_LOCAL
 
 
-def _consume_api_quota_sync(username: str, role: str) -> Dict[str, Any]:
+def _consume_api_quota_sync(
+    username: str,
+    role: str,
+    quota_subject: Optional[str] = None,
+) -> Dict[str, Any]:
     normalized_role = normalize_role(role, username)
+    resolved_quota_subject = str(quota_subject or "").strip() or str(username or "").strip() or "unknown"
     
     # 管理员不受配额限制
     if normalized_role == ROLE_ADMIN:
@@ -641,6 +907,7 @@ def _consume_api_quota_sync(username: str, role: str) -> Dict[str, Any]:
             "used": 0,
             "remaining": None,
             "usage_date": _utc_date_str(),
+            "quota_subject": resolved_quota_subject,
         }
     
     daily_limit = get_role_daily_quota(normalized_role)
@@ -650,7 +917,7 @@ def _consume_api_quota_sync(username: str, role: str) -> Dict[str, Any]:
     with _db_connection() as conn:
         row = conn.execute(
             "SELECT calls FROM api_usage_daily WHERE username = ? AND usage_date = ?",
-            (username, usage_date),
+            (resolved_quota_subject, usage_date),
         ).fetchone()
 
         used = int((dict(row).get("calls") if row else 0) or 0)
@@ -662,6 +929,7 @@ def _consume_api_quota_sync(username: str, role: str) -> Dict[str, Any]:
                 "used": used,
                 "remaining": 0,
                 "usage_date": usage_date,
+                "quota_subject": resolved_quota_subject,
             }
 
         conn.execute(
@@ -674,7 +942,7 @@ def _consume_api_quota_sync(username: str, role: str) -> Dict[str, Any]:
                 calls = api_usage_daily.calls + 1,
                 updated_at = excluded.updated_at
             """,
-            (username, normalized_role, usage_date, now_iso),
+            (resolved_quota_subject, normalized_role, usage_date, now_iso),
         )
 
         _ensure_user_metric_row_sync(conn, username)
@@ -698,18 +966,24 @@ def _consume_api_quota_sync(username: str, role: str) -> Dict[str, Any]:
         "used": next_used,
         "remaining": remaining,
         "usage_date": usage_date,
+        "quota_subject": resolved_quota_subject,
     }
 
 
-def get_user_quota_snapshot_sync(username: str, role: str) -> Dict[str, Any]:
+def get_user_quota_snapshot_sync(
+    username: str,
+    role: str,
+    quota_subject: Optional[str] = None,
+) -> Dict[str, Any]:
     normalized_role = normalize_role(role, username)
+    resolved_quota_subject = str(quota_subject or "").strip() or str(username or "").strip() or "unknown"
     usage_date = _utc_date_str()
     daily_limit = get_role_daily_quota(normalized_role)
 
     with _db_connection() as conn:
         row = conn.execute(
             "SELECT calls FROM api_usage_daily WHERE username = ? AND usage_date = ?",
-            (username, usage_date),
+            (resolved_quota_subject, usage_date),
         ).fetchone()
 
     used = int((dict(row).get("calls") if row else 0) or 0)
@@ -720,6 +994,7 @@ def get_user_quota_snapshot_sync(username: str, role: str) -> Dict[str, Any]:
         "used": used,
         "remaining": remaining,
         "usage_date": usage_date,
+        "quota_subject": resolved_quota_subject,
     }
 
 
@@ -750,6 +1025,11 @@ async def require_api_access(request: Request) -> Dict[str, Any]:
         _consume_api_quota_sync,
         str(session.get("username") or ""),
         str(session.get("role") or ""),
+        resolve_quota_subject(
+            session.get("username"),
+            session.get("role"),
+            session.get("guest_uid"),
+        ),
     )
 
     if not bool(quota.get("allowed")):
@@ -868,9 +1148,17 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         )
 
     normalized_username = username.lower()
+    request_ip = _extract_client_ip(request)
+    request_user_agent = str(request.headers.get("User-Agent", "unknown"))
+    guest_uid = ""
+    guest_device_id = ""
 
     if normalized_username == GUEST_USERNAME and hmac.compare_digest(password, GUEST_PASSWORD):
-        resolved_username = GUEST_USERNAME
+        guest_device_id = _normalize_guest_device_id(payload.guest_device_id)
+        guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
+        
+        # 获取或创建游客记录，获得实际的用户名（如 "user_1", "user_2" 等）
+        resolved_username = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
         resolved_role = ROLE_GUEST
         resolved_avatar_index = 0
     elif normalized_username == ADMIN_USERNAME:
@@ -912,15 +1200,23 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         _create_session_sync,
         resolved_username,
         resolved_role,
-        _extract_client_ip(request),
-        str(request.headers.get("User-Agent", "unknown")),
+        request_ip,
+        request_user_agent,
+        guest_uid,
+        guest_device_id,
     )
 
     await asyncio.to_thread(_record_login_sync, resolved_username)
+    quota_subject = resolve_quota_subject(
+        resolved_username,
+        resolved_role,
+        session.get("guest_uid"),
+    )
     quota = await asyncio.to_thread(
         get_user_quota_snapshot_sync,
         resolved_username,
         resolved_role,
+        quota_subject,
     )
 
     return {
@@ -930,6 +1226,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         "user": {
             "username": resolved_username,
             "role": resolved_role,
+            "guest_uid": str(session.get("guest_uid") or ""),
             "avatar_index": resolved_avatar_index,
             "created_at": session["created_at"],
             "expires_at": session["expires_at"],
@@ -942,8 +1239,9 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
 async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
     username = str(session.get("username") or "")
     role = str(session.get("role") or "")
+    quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
-    quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role)
+    quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
 
     avatar_index = 0
     lowered_username = username.lower()
@@ -960,6 +1258,7 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> 
         "user": {
             "username": username,
             "role": normalize_role(role, username),
+            "guest_uid": str(session.get("guest_uid") or ""),
             "avatar_index": avatar_index,
             "session_created_at": session.get("created_at"),
             "expires_at": session.get("expires_at"),
@@ -1044,6 +1343,67 @@ async def change_password(
     return {
         "status": "success",
         "message": "密码已更新，请重新登录",
+    }
+
+
+@router.post("/change-avatar")
+async def change_avatar(
+    payload: ChangeAvatarRequest,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """
+    用户修改头像。
+    - 仅已登录用户支持（不支持游客、管理员）
+    - 范围验证由 Pydantic 自动处理
+    """
+    username = str(session.get("username") or "").strip()
+    role = normalize_role(session.get("role"), username)
+
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="登录状态异常，请重新登录",
+        )
+
+    if role == ROLE_GUEST:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="游客账号不支持修改头像",
+        )
+
+    if role == ROLE_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="管理员头像不支持修改",
+        )
+
+    new_avatar_index = _normalize_avatar_index(payload.new_avatar_index)
+
+    # 更新数据库
+    def _update_avatar_sync() -> bool:
+        try:
+            with _db_connection() as conn:
+                conn.execute(
+                    "UPDATE users SET avatar_index = ? WHERE username = ?",
+                    (new_avatar_index, username),
+                )
+                conn.commit()
+                return conn.total_changes > 0
+        except Exception as e:
+            logger.error("更新头像失败 [username=%s]: %s", username, str(e)[:200])
+            return False
+
+    updated = await asyncio.to_thread(_update_avatar_sync)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="头像更新失败，请稍后重试",
+        )
+
+    return {
+        "status": "success",
+        "message": "头像已更新",
+        "avatar_index": new_avatar_index,
     }
 
 

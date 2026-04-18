@@ -22,6 +22,7 @@ from api.auth import init_auth_storage, require_api_access, router as auth_route
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router
+from api.agent_chat import router as agent_chat_router
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -117,6 +118,10 @@ logger.info("已注册 API 管理路由")
 app.include_router(api_keys_router)
 logger.info("已注册 API 密钥管理路由")
 
+# 挂载 Agent 对话路由
+app.include_router(agent_chat_router)
+logger.info("已注册 Agent 对话路由")
+
 # --- 功能 1：简单的爬虫接口 ---
 # 前端请求：/api/news
 @app.get("/api/news")
@@ -180,6 +185,9 @@ async def get_api_info(_current_user: Dict[str, Any] = Depends(require_api_acces
             "/api/announcement/dismiss - 关闭公告",
             "/api/statistics/messages - 留言列表与发布",
             "/api/admin/* - 管理员数据库与配置接口",
+            "/api/agent/chat/config - Agent 服务状态与配额快照",
+            "/api/agent/chat/completions - Agent 对话后端代理",
+            "/api/admin/agent/config - 管理员 Agent 配置",
             "/api/data - 测试数据",
             "/api/news - 新闻爬虫",
             "/api/process-points - GIS 数据处理",

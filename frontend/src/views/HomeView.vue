@@ -479,6 +479,101 @@ function handleFeatureSelected(properties) {
     showQueryPanel.value = true;
 }
 
+async function buildVisitLogPayload() {
+    const payload = {
+        geo_permission: 'unknown',
+        gps_lng: null,
+        gps_lat: null,
+        gps_accuracy: null,
+        gps_timestamp: '',
+        gps_error: ''
+    };
+
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        return payload;
+    }
+
+    if (!navigator.geolocation) {
+        payload.geo_permission = 'unsupported';
+        payload.gps_error = 'geolocation-not-supported';
+        return payload;
+    }
+
+    try {
+        if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+            const permissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+            payload.geo_permission = String(permissionStatus?.state || 'unknown');
+        }
+    } catch {
+        // ignore permission API read errors
+    }
+
+    const shouldTryGps = (
+        payload.geo_permission === 'granted'
+        || payload.geo_permission === 'prompt'
+        || payload.geo_permission === 'unknown'
+    );
+
+    if (!shouldTryGps) {
+        return payload;
+    }
+
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 3500,
+                maximumAge: 60000
+            });
+        });
+
+        payload.geo_permission = 'granted';
+        payload.gps_lng = Number(position?.coords?.longitude);
+        payload.gps_lat = Number(position?.coords?.latitude);
+        payload.gps_accuracy = Number(position?.coords?.accuracy);
+        payload.gps_timestamp = new Date(position?.timestamp || Date.now()).toISOString();
+    } catch (error) {
+        const code = Number(error?.code || 0);
+        if (code === 1) {
+            payload.geo_permission = 'denied';
+        }
+        payload.gps_error = String(error?.message || `geolocation-error-${code}`).slice(0, 250);
+    }
+
+    return payload;
+}
+
+function syncVisitPosCodeToUrl(encodedPos) {
+    if (typeof window === 'undefined') return;
+
+    const normalizedCode = String(encodedPos || '').trim() || '0';
+
+    try {
+        const hash = String(window.location.hash || '#/home');
+        const hashWithoutSharp = hash.startsWith('#') ? hash.slice(1) : hash;
+        const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
+        const hashPath = hashPathRaw || '/home';
+        const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
+        const params = new URLSearchParams(hashQueryRaw);
+
+        params.set('p', normalizedCode);
+
+        if (normalizedCode !== '0' && String(params.get('loc') || '').trim() === '') {
+            params.set('loc', '1');
+        }
+
+        const nextHashQuery = params.toString();
+        const nextHash = nextHashQuery
+            ? `#${normalizedHashPath}?${nextHashQuery}`
+            : `#${normalizedHashPath}`;
+
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+        window.history.replaceState(window.history.state, '', nextUrl);
+    } catch {
+        // URL 写入失败时不阻断主流程
+    }
+}
+
 onUnmounted(() => {
     if (typeof window === 'undefined') return;
 
@@ -495,7 +590,10 @@ onUnmounted(() => {
 
 onMounted(async () => {
     try {
-        await apiLogVisit();
+        const visitPayload = await buildVisitLogPayload();
+        const visitResponse = await apiLogVisit(visitPayload);
+        const encodedPos = String(visitResponse?.data?.encoded_pos || '0');
+        syncVisitPosCodeToUrl(encodedPos);
     } catch {
         // 访问记录失败不影响主页面使用
     }

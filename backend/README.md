@@ -16,6 +16,7 @@ WebGIS 后端服务，当前包含三大核心能力：
 - Google 瓦片代理：GET /api/tile/{z}/{x}/{y}
 - 访客地理统计：POST /api/log-visit
 - 真实用户登录系统：/api/auth/*（含三类身份）
+- Agent 对话后端代理：/api/agent/chat/*（按身份配额）
 
 ## 0. 项目结构
 
@@ -30,6 +31,7 @@ backend/
 │   ├── admin.py                # 管理端接口
 │   ├── api_management.py       # API 管理
 │   ├── api_keys_management.py  # API Key 管理
+│   ├── agent_chat.py           # Agent 对话代理与配置
 │   └── __init__.py
 ├── app.py                      # FastAPI 应用入口
 ├── Dockerfile                  # 容器化部署
@@ -182,6 +184,8 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 - GET /api/data
 - GET /api/info
 - POST /api/log-visit
+- GET /api/agent/chat/config
+- POST /api/agent/chat/completions
 
 公开接口：
 - GET /
@@ -201,6 +205,13 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 - AUTH_DB_PATH=/data/webgis_auth.db
 - AUTH_SESSION_EXPIRE_HOURS=72
 - AUTH_PASSWORD_HASH_ITERATIONS=120000
+
+Agent 对话可选配置：
+- AGENT_API_KEY=your_agent_key
+- AGENT_BASE_URL=https://api.qnaigc.com/v1
+- AGENT_MODEL=deepseek-V3-0324
+- AGENT_CHAT_GUEST_DAILY_QUOTA=10
+- AGENT_CHAT_REGISTERED_DAILY_QUOTA=100
 
 示例（.env）：
 ```bash

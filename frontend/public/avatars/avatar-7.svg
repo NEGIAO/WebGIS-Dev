@@ -1,14 +1,16 @@
 <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg7" x1="0" y1="0" x2="96" y2="96">
-      <stop stop-color="#F8961E"/>
-      <stop offset="1" stop-color="#577590"/>
+    <linearGradient id="bg_winter" x1="0" y1="0" x2="96" y2="96">
+      <stop stop-color="#a18cd1"/>
+      <stop offset="1" stop-color="#fbc2eb"/>
     </linearGradient>
   </defs>
-  <rect width="96" height="96" rx="48" fill="url(#bg7)"/>
-  <circle cx="48" cy="51" r="23" fill="#F8D5AD"/>
-  <path d="M24 44C24 30 35 21 48 21C61 21 72 30 72 44" stroke="#28343E" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="40" cy="50" r="2.8" fill="#263238"/>
-  <circle cx="56" cy="50" r="2.8" fill="#263238"/>
-  <path d="M41 60C44 63 52 63 55 60" stroke="#A9485D" stroke-width="2.7" stroke-linecap="round"/>
+  <rect width="96" height="96" rx="48" fill="url(#bg_winter)"/>
+  <path d="M25 50C25 35 30 25 48 25C66 25 71 35 71 50V65H25V50Z" fill="#8D6E63"/>
+  <circle cx="48" cy="51" r="23" fill="#FFE0BD"/>
+  <path d="M26 45C26 35 34 26 48 26C62 26 70 35 70 45" stroke="#F4D03F" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="40" cy="51" r="2.8" fill="#263238"/>
+  <circle cx="56" cy="51" r="2.8" fill="#263238"/>
+  <path d="M41 61C43.4 64.5 52.6 64.5 55 61" stroke="#B04A5A" stroke-width="2.8" stroke-linecap="round"/>
+  <path d="M30 65 A20 20 0 0 0 66 65 L66 70 A20 20 0 0 0 30 70 Z" fill="#B04A5A"/>
 </svg>

@@ -1,14 +1,15 @@
 <svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg4" x1="0" y1="0" x2="96" y2="96">
-      <stop stop-color="#F3722C"/>
-      <stop offset="1" stop-color="#F94144"/>
+    <linearGradient id="bg_turban" x1="0" y1="0" x2="96" y2="96">
+      <stop stop-color="#ffd194"/>
+      <stop offset="1" stop-color="#70e1f5"/>
     </linearGradient>
   </defs>
-  <rect width="96" height="96" rx="48" fill="url(#bg4)"/>
-  <circle cx="48" cy="53" r="21" fill="#FAD8B1"/>
-  <path d="M27 42C30 31 39 25 48 25C57 25 66 31 69 42" stroke="#263238" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="41" cy="53" r="2.7" fill="#263238"/>
-  <circle cx="55" cy="53" r="2.7" fill="#263238"/>
-  <path d="M42 62C44.5 65 51.5 65 54 62" stroke="#A74A5F" stroke-width="2.7" stroke-linecap="round"/>
+  <rect width="96" height="96" rx="48" fill="url(#bg_turban)"/>
+  <circle cx="48" cy="51" r="23" fill="#FFD8A8"/>
+  <path d="M26 43C26 31 36 22 48 22C60 22 70 31 70 43V47H26V43Z" fill="#FFFFFF"/>
+  <path d="M26 43 C26 31 36 22 48 22 C60 22 70 31 70 43" stroke="#CCCCCC" stroke-width="1"/>
+  <circle cx="40" cy="51" r="2.8" fill="#263238"/>
+  <circle cx="56" cy="51" r="2.8" fill="#263238"/>
+  <path d="M41 61C43.4 64.5 52.6 64.5 55 61" stroke="#B04A5A" stroke-width="2.8" stroke-linecap="round"/>
 </svg>
