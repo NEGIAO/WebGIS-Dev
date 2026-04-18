@@ -7,8 +7,10 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](#许可证)
 
 ## 📖 项目简介
+<img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/a3fcebc7-4b22-4ad2-8cfc-62443d114da9" />
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已发展成为专业级的地理信息系统应用
+
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，先已进入V3.0阶段，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
