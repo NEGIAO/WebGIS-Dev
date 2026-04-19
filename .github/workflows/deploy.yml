@@ -150,47 +150,50 @@ jobs:
             name: dist-files
             path: dist-to-hf
 
-        - name: Cleanup Tiles and Push to HF
+        - name: Push Static Dist with LFS to HF
           env:
             HF_TOKEN: ${{ secrets.HF_TOKEN }}
           run: |
             cd dist-to-hf
             
-            # 1. 核心操作：彻底删除瓦片文件夹，避免触发 HF 数量限制
+            # 1. 彻底删除瓦片文件夹（保留这个操作，瓦片绝对不能传）
             if [ -d "tiles" ]; then
-              echo "Removing tiles directory to prevent deployment failure..."
               rm -rf tiles/
             fi
             
-            # 2. 初始化 Git（无需 LFS 追踪瓦片了）
+            # 2. 初始化 Git 和 LFS
             git init
-            
-            # 如果你的 KMZ 或其他 GIS 资源很大，可以只追踪它们
             git lfs install
-            git lfs track "*.kmz"
-            git lfs track "*.kml"
+            
+            # 3. 【核心修改】强制追踪所有潜在的二进制文件为 LFS
+            # 这样 HF 就会通过 LFS 存储它们，而不会在 pre-receive 阶段拦截
+            git lfs track "images/*.webp"
+            git lfs track "images/*.png"
+            git lfs track "images/*.jpg"
+            git lfs track "assets/*.kmz"
+            git lfs track "assets/*.kml"
+            git lfs track "*.ico"
+            
+            # 必须添加 .gitattributes 否则追踪不生效
+            git add .gitattributes
             
             git config user.name "github-actions[bot]"
             git config user.email "actions@github.com"
 
-            # 3. 注入 HF Space 必要的元数据
+            # 4. 注入元数据
             cat <<EOT > README.md
             ---
-            title: WebGIS-Frontend-Lite
-            emoji: 🌍
-            colorFrom: blue
-            colorTo: green
+            title: WebGIS-Frontend-Final
+            emoji: 🚀
             sdk: static
-            pinned: false
             ---
             EOT
 
-            # 4. 提交純代码和核心资源
+            # 5. 提交并推送
             git add .
-            git commit -m "Deploy Frontend Lite (Excluded Tiles): ${GITHUB_SHA::7}"
-
-            # 5. 强制推送到 HF
-            echo "Pushing cleaned frontend build to Hugging Face..."
+            git commit -m "Fix: Track all images with LFS to bypass HF restrictions"
+            
+            echo "Pushing to Hugging Face..."
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main
             
 # ========================================== 
