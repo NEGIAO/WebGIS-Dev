@@ -128,7 +128,7 @@
 
 <script setup>
 import { computed, onMounted, ref, nextTick } from 'vue';
-import { apiAgentChatCompletions, apiAgentGetChatConfig, apiAgentGetUserConfig, apiAgentUpdateUserConfig, apiAgentListModels } from '../api/backend';
+import { apiAgentChatCompletions, apiAgentGetChatConfig, apiAgentGetUserConfig, apiAgentUpdateUserConfig, apiAgentListModels, apiAgentSaveModelPreference } from '../api/backend';
 import { readUserPositionFromCache } from '../utils/userPositionCache';
 import { getGlobalUserLocationContext } from '../utils/userLocationContext';
 import { useMessage } from '../composables/useMessage';
@@ -332,12 +332,34 @@ const loadAvailableModels = async () => {
     upstreamModels.value = models.filter((m) => m?.source === 'upstream');
 
     const currentModel = String(data?.current_model || '').trim();
-    if (!String(userConfigDraft.value.model || '').trim() && currentModel) {
-      userConfigDraft.value.model = currentModel;
+    
+    // 零配置即刻响应：如果用户未选择模型，自动从可用列表中随机选择一个
+    // 这样确保首条消息请求能够成功转发
+    if (!String(userConfigDraft.value.model || '').trim()) {
+      if (currentModel) {
+        // 若后端已推荐（通常是管理员配置的默认模型或用户偏好），使用它
+        userConfigDraft.value.model = currentModel;
+      } else if (models.length > 0) {
+        // 否则从可用列表中随机选择一个
+        const chatModels = models.filter((m) => m?.chat_compatible !== false);
+        if (chatModels.length > 0) {
+          const randomModel = chatModels[Math.floor(Math.random() * chatModels.length)];
+          userConfigDraft.value.model = String(randomModel?.id || '');
+          // 异步保存为用户偏好（后台保存，不阻塞）
+          if (userConfigDraft.value.model) {
+            apiAgentSaveModelPreference(userConfigDraft.value.model).catch((e) => {
+              logger.debug(`Auto-save model preference failed: ${e.message}`);
+            });
+          }
+        }
+      }
     }
 
     if (!models.length) {
       modelLoadHint.value = '未从上游返回可用模型，请检查 Base URL / API Key。';
+      if (data?.fallback_reason) {
+        modelLoadHint.value += `（${data.fallback_reason}）`;
+      }
     } else {
       modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（上游 ${upstreamModels.value.length}）`;
     }
@@ -382,6 +404,17 @@ const saveUserConfig = async () => {
     };
 
     await apiAgentUpdateUserConfig(payload);
+    
+    // 若用户在个人配置中选择了特定模型，保存为偏好设置（用于跨设备同步）
+    if (payload.model) {
+      try {
+        await apiAgentSaveModelPreference(payload.model);
+      } catch (e) {
+        logger.debug(`Failed to save model preference: ${e.message}`);
+        // 不中断主流程，模型偏好是可选的
+      }
+    }
+    
     userConfigDraft.value.api_key = '';
     await reloadAgentConfig(false);
     message.success('你的 Agent 配置已保存');
@@ -621,6 +654,10 @@ const sendMessage = async () => {
 };
 
 onMounted(async () => {
+  // 零配置即刻响应：启动时自动预加载模型列表（背景加载，不阻塞）
+  // 这样即使用户未主动选择模型，系统也会有可用的随机降级模型
+  loadAvailableModels();
+  
   await reloadAgentConfig(false);
 });
 </script>

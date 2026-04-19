@@ -223,6 +223,48 @@ def _pick_runtime_model(
     return "", "missing", False
 
 
+def _cache_available_models_sync(models: List[Dict[str, Any]]) -> None:
+    """
+    缓存当前可用模型列表到 system_config 数据库。
+    这样即使上游服务临时不可用，仍可使用缓存的模型列表进行随机降级。
+    
+    参数：
+    - models: 标准化的模型字典列表，每个字典至少包含 "id" 字段。
+    """
+    try:
+        _ensure_agent_chat_tables_sync()
+        # 提取模型 ID 列表
+        model_ids = []
+        seen: set[str] = set()
+        for model in models:
+            model_id = str(model.get("id") or "").strip()
+            if model_id and model_id not in seen:
+                model_ids.append(model_id)
+                seen.add(model_id)
+
+        if not model_ids:
+            return
+
+        # 转换为 JSON 格式存储
+        cache_value = json.dumps(model_ids)
+
+        with _db_connection() as conn:
+            _ensure_system_config_table_sync(conn)
+            conn.execute(
+                """
+                INSERT INTO system_config (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(key)
+                DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+                """,
+                (CONFIG_KEY_AVAILABLE_MODELS, cache_value),
+            )
+            conn.commit()
+            logger.debug(f"Cached {len(model_ids)} models to system_config")
+    except Exception as e:
+        logger.warning(f"Failed to cache available models: {e}")
+
+
 def _normalize_system_prompt(value: str) -> str:
     normalized = str(value or "").strip()
     return normalized or DEFAULT_AGENT_SYSTEM_PROMPT
@@ -1950,6 +1992,7 @@ async def get_available_models(
     4. 若当前生效模型未在上游列表中，附加为 `configured` 记录。
     """
     username = str(session.get("username") or "")
+    fallback_reason = None
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
     base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
@@ -1962,12 +2005,40 @@ async def get_available_models(
             detail="Agent key is not configured on backend. Please set platform key or personal key first.",
         )
 
-    upstream_models, upstream_endpoint = await _call_upstream_models(
-        request,
-        base_url=base_url,
-        api_key=api_key,
-        timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
-    )
+    # 尝试从上游获取模型列表
+    upstream_models = []
+    upstream_endpoint = ""
+    upstream_error = None
+    try:
+        upstream_models, upstream_endpoint = await _call_upstream_models(
+            request,
+            base_url=base_url,
+            api_key=api_key,
+            timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
+        )
+    except Exception as e:
+        upstream_error = str(e)
+        logger.warning(f"Failed to fetch models from upstream: {e}, will try fallback cache")
+
+    # 若上游成功，缓存模型列表
+    if upstream_models and not upstream_error:
+        compatible_upstream_models = [
+            item for item in upstream_models if bool(item.get("chat_compatible", True))
+        ]
+        # 异步缓存，不阻塞响应
+        asyncio.create_task(_cache_models_async(compatible_upstream_models))
+    elif upstream_error:
+        # 若上游失败，尝试使用缓存的模型列表
+        fallback_reason = f"上游服务暂时不可用（{upstream_error}），使用缓存模型列表"
+        cached_model_list = _normalize_available_models(
+            _get_system_config_values_sync([CONFIG_KEY_AVAILABLE_MODELS]).get(CONFIG_KEY_AVAILABLE_MODELS, "")
+        )
+        if cached_model_list:
+            # 重建模型字典以兼容下游代码
+            upstream_models = [{"id": mid, "name": mid} for mid in cached_model_list]
+            logger.info(f"Using cached {len(upstream_models)} models as fallback")
+        else:
+            fallback_reason = "上游服务不可用，且无可用缓存模型。请检查 Agent 配置或联系管理员。"
 
     compatible_upstream_models = [
         item for item in upstream_models if bool(item.get("chat_compatible", True))
@@ -2029,5 +2100,87 @@ async def get_available_models(
             "model_count": len(models),
             "upstream_model_total": len(upstream_models),
             "excluded_non_chat_models": len(incompatible_upstream_models),
+            **({"fallback_reason": fallback_reason} if fallback_reason else {}),
         },
     }
+
+
+async def _cache_models_async(models: List[Dict[str, Any]]) -> None:
+    """异步包装器，在后台缓存模型列表不阻塞响应。"""
+    try:
+        await asyncio.to_thread(_cache_available_models_sync, models)
+    except Exception as e:
+        logger.debug(f"Background model caching failed: {e}")
+
+
+@router.patch("/api/agent/user/preference")
+async def update_user_model_preference(
+    payload: Dict[str, Any],
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """
+    功能：保存用户的模型偏好设置到 user_preferences 表。
+    
+    参数：
+    - payload: {"preferred_model": "model-id"}
+
+    返回：
+    - preferred_model: 保存后的模型偏好。
+    
+    处理过程：
+    1. 验证模型 ID 有效性
+    2. 写入 user_preferences.preferred_agent_model
+    3. 返回成功确认
+    """
+    username = str(session.get("username") or "")
+    preferred_model = _normalize_model(str(payload.get("preferred_model") or ""))
+
+    if not preferred_model:
+        # 允许清空偏好（传空字符串）
+        pass
+
+    try:
+        _ensure_agent_chat_tables_sync()
+        with _db_connection() as conn:
+            # 确保 user_preferences 表存在
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    username TEXT PRIMARY KEY,
+                    default_basemap TEXT,
+                    language TEXT,
+                    unit_system TEXT,
+                    preferred_agent_model TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+
+            # 更新用户偏好
+            conn.execute(
+                """
+                INSERT INTO user_preferences (username, preferred_agent_model, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(username)
+                DO UPDATE SET preferred_agent_model = excluded.preferred_agent_model, updated_at = datetime('now')
+                """,
+                (username, preferred_model),
+            )
+            conn.commit()
+            logger.info(f"User {username} preferred model updated to {preferred_model or '(cleared)'}")
+    except Exception as e:
+        logger.error(f"Failed to update user model preference: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save model preference: {str(e)}",
+        )
+
+    return {
+        "status": "success",
+        "message": "Model preference updated.",
+        "data": {
+            "username": username,
+            "preferred_model": preferred_model,
+        },
+    }
+

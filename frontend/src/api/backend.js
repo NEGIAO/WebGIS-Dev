@@ -79,7 +79,7 @@ backendAPI.interceptors.response.use(
         return data.data || data
       } else {
         // 错误响应
-        const error = new Error(data.message || '请求失败')
+        const error = new Error(data.message || '请求失败,额度可能已用完')
         error.code = data.code
         error.data = data
         return Promise.reject(error)
@@ -91,7 +91,7 @@ backendAPI.interceptors.response.use(
   },
   error => {
     // 处理网络错误、超时等
-    let message = '请求失败'
+    let message = '请求失败,请稍后重试'
     let isQuotaExceeded = false
     
     if (error.response) {
@@ -123,10 +123,10 @@ backendAPI.interceptors.response.use(
       }
     } else if (error.request) {
       // 请求已发出但没有收到响应
-      message = '无法连接到后端服务器，请检查网络连接'
+      message = '模型不可用，请点击刷新模型按钮，切换模型后重试！'
     } else {
       // 其他错误
-      message = error.message || '未知错误'
+      message = error.message || '未知错误,请稍后重试'
     }
     
     // 只在非配额用完的情况下输出错误日志
@@ -553,6 +553,12 @@ export async function apiAgentChatCompletions(payload = {}) {
 
 export async function apiAgentListModels() {
   return backendAPI.get('/api/agent/models')
+}
+
+export async function apiAgentSaveModelPreference(preferredModel) {
+  return backendAPI.patch('/api/agent/user/preference', {
+    preferred_model: String(preferredModel || '').trim()
+  })
 }
 
 export async function apiStatisticsRealtime() {
