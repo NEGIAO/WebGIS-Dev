@@ -106,6 +106,7 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 前端详细文档
 ├── backend/                        # 🔹 后端（FastAPI）
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
+│   │   └── agent_chat.py           # ✨ V3.0.2 配置同步修复
 │   ├── app.py                      # FastAPI 入口
 │   ├── data/                       # 本地/挂载数据目录
 │   ├── Dockerfile                  # 后端镜像构建
@@ -113,7 +114,7 @@ WebGIS_Dev/
 │   ├── uv.lock                     # 锁文件
 │   ├── .env.example
 │   ├── .python-version
-│   └── README.md                   # 🔹 后端详细文档
+│   └── README.md                   # 🔹 后端详细文档（含 V3.0.2 更新说明）
 ├── API_MANAGEMENT_GUIDE.md
 ├── LAYOUT_POSITIONING_GUIDE.md
 ├── LOCATION_SEARCH_*.md            # 位置搜索相关说明与检查报告

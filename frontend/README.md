@@ -1360,3 +1360,16 @@ async function runTask() {
 
 欢迎继续扩展功能，例如添加更多兴趣点、天气信息或 3D 建筑模型。若遇到问题，欢迎提 Issue 讨论。祝学习 顺利！
 ```
+
+
+## 🤖 后端 Agent Chat 系统（V3.0.2）
+
+后端提供了完整的 LLM Agent 对话服务，前端可通过 `/api/agent/chat/*` 接口调用：
+
+- **权限管理**：区分 Guest（每日 10 次）、Registered（每日 100 次）、Admin（无限次）
+- **配置管理**：Admin 可通过前端面板配置 LLM Provider（如 DeepSeek-V3）
+- **个性化配置**：用户可保存个人参数配置（温度、系统提示等）
+- **配额消费**：实时跟踪用户配额使用情况
+
+更多详情见 [后端详细文档 - Agent Chat](../backend/README.md#%EF%B8%8F-v302-agent-chat-配置同步修复)
+

@@ -243,3 +243,54 @@ Authorization: Bearer <token>
 - 登录页真实调用 /api/auth/login 和 /api/auth/register
 - 路由守卫拦截未登录访问 /home
 - API 客户端自动附加 Authorization 头
+
+
+---
+
+## ✨ V3.0.2 Agent Chat 配置同步修复（2026-04-19）
+
+### 问题描述
+
+原有实现存在以下问题：
+1. 管理员配置了，但普通用户显示"未配置"
+2. 身份鉴别失效，权限管理无法生效
+3. 用户额度限制无法正确执行
+
+### 修复内容
+
+✅ **配置同步**：统一数据库事务管理，确保管理员配置被所有用户正确读取  
+✅ **权限鉴别**：改进权限检查，Admin/Registered/Guest 角色生效  
+✅ **额度管理**：增强配额消费的可靠性，日配额限制能正确执行  
+✅ **可观测性**：添加详细日志，便于排查问题  
+
+### 核心改进
+
+**文件**：`backend/api/agent_chat.py`
+
+**修复的函数**（共 9 个）：
+1. `_ensure_agent_chat_tables_sync()` - 统一事务管理
+2. `_ensure_system_config_table_sync()` - 移除内部提交
+3. `_ensure_api_keys_table_sync()` - 移除内部提交
+4. `_get_system_config_values_sync()` - 异常处理与回退
+5. `_set_agent_provider_config_sync()` - 管理员配置改进
+6. `_read_agent_user_config_row_sync()` - 用户配置读取安全性
+7. `_upsert_agent_user_config_sync()` - 用户配置更新
+8. `_consume_agent_chat_quota_sync()` - 配额消费日志
+9. `_get_agent_chat_quota_snapshot_sync()` - 配额查询异常处理
+
+### 启用 DEBUG 日志
+
+```bash
+LOG_LEVEL=DEBUG uv run uvicorn app:app --reload
+```
+
+关键日志消息：
+- `Agent config updated with N rows` → Admin 配置已保存 ✅
+- `User quota exceeded: N/M` → 用户超过配额（被阻止）✅
+- `Admin {user} has unlimited quota` → Admin 权限确认 ✅
+
+### 详细文档
+
+- **快速指南**：`docs/backend-agent-chat-guide.md`
+- **完整日志**：`docs/2026-04-19-AgentChat配置同步修复.md`
+- **规范执行**：`docs/2026-04-19-版本规范执行记录.md`
