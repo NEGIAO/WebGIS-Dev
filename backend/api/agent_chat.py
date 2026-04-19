@@ -240,112 +240,149 @@ def _safe_parse_float(value: Any, fallback: float, minimum: float, maximum: floa
 
 
 def _ensure_system_config_table_sync(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS system_config (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        """
-    )
-
-
-def _ensure_api_keys_table_sync(conn: sqlite3.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS api_keys (
-            key_name TEXT PRIMARY KEY,
-            key_value TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            updated_by TEXT
-        )
-        """
-    )
-
-
-def _ensure_agent_chat_tables_sync() -> None:
-    with _db_connection() as conn:
-        _ensure_system_config_table_sync(conn)
-        _ensure_api_keys_table_sync(conn)
-
+    try:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS agent_chat_usage_daily (
-                quota_subject TEXT NOT NULL,
-                role TEXT NOT NULL,
-                usage_date TEXT NOT NULL,
-                calls INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (quota_subject, usage_date)
+            CREATE TABLE IF NOT EXISTS system_config (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
             """
         )
-        conn.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_agent_chat_usage_role_date
-            ON agent_chat_usage_daily(role, usage_date)
-            """
-        )
+    except Exception as e:
+        logger.error(f"Failed to ensure system_config table: {e}")
+        raise
 
+
+def _ensure_api_keys_table_sync(conn: sqlite3.Connection) -> None:
+    try:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS agent_user_config (
-                username TEXT PRIMARY KEY,
-                api_key TEXT,
-                base_url TEXT,
-                model TEXT,
-                system_prompt TEXT,
-                timeout_seconds INTEGER,
-                max_tokens INTEGER,
-                temperature REAL,
+            CREATE TABLE IF NOT EXISTS api_keys (
+                key_name TEXT PRIMARY KEY,
+                key_value TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 updated_by TEXT
             )
             """
         )
+    except Exception as e:
+        logger.error(f"Failed to ensure api_keys table: {e}")
+        raise
 
-        user_cfg_cols = conn.execute("PRAGMA table_info(agent_user_config)").fetchall()
-        user_cfg_col_names = {str(dict(row).get("name") or "") for row in user_cfg_cols}
-        if "api_key" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN api_key TEXT")
-        if "base_url" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN base_url TEXT")
-        if "model" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN model TEXT")
-        if "system_prompt" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN system_prompt TEXT")
-        if "timeout_seconds" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN timeout_seconds INTEGER")
-        if "max_tokens" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN max_tokens INTEGER")
-        if "temperature" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN temperature REAL")
-        if "updated_at" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
-        if "updated_by" not in user_cfg_col_names:
-            conn.execute("ALTER TABLE agent_user_config ADD COLUMN updated_by TEXT")
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_agent_user_config_updated_at ON agent_user_config(updated_at)"
-        )
-        conn.commit()
+def _ensure_agent_chat_tables_sync() -> None:
+    try:
+        with _db_connection() as conn:
+            _ensure_system_config_table_sync(conn)
+            _ensure_api_keys_table_sync(conn)
+
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_chat_usage_daily (
+                    quota_subject TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    usage_date TEXT NOT NULL,
+                    calls INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (quota_subject, usage_date)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_agent_chat_usage_role_date
+                ON agent_chat_usage_daily(role, usage_date)
+                """
+            )
+
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_user_config (
+                    username TEXT PRIMARY KEY,
+                    api_key TEXT,
+                    base_url TEXT,
+                    model TEXT,
+                    system_prompt TEXT,
+                    timeout_seconds INTEGER,
+                    max_tokens INTEGER,
+                    temperature REAL,
+                    updated_at TEXT NOT NULL,
+                    updated_by TEXT
+                )
+                """
+            )
+
+            try:
+                user_cfg_cols = conn.execute("PRAGMA table_info(agent_user_config)").fetchall()
+                user_cfg_col_names = {str(dict(row).get("name") or "") for row in user_cfg_cols}
+            except Exception as e:
+                logger.warning(f"Failed to get user_config columns: {e}")
+                user_cfg_col_names = set()
+
+            cols_to_add = [
+                ("api_key", "TEXT"), 
+                ("base_url", "TEXT"), 
+                ("model", "TEXT"),
+                ("system_prompt", "TEXT"), 
+                ("timeout_seconds", "INTEGER"),
+                ("max_tokens", "INTEGER"), 
+                ("temperature", "REAL"),
+                ("updated_by", "TEXT")
+            ]
+            for col_name, col_type in cols_to_add:
+                if col_name not in user_cfg_col_names:
+                    try:
+                        conn.execute(f"ALTER TABLE agent_user_config ADD COLUMN {col_name} {col_type}")
+                    except Exception as e:
+                        logger.debug(f"{col_name} may exist: {e}")
+
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_agent_user_config_updated_at ON agent_user_config(updated_at)"
+            )
+            conn.commit()
+            logger.debug("Agent chat tables synced successfully")
+    except Exception as e:
+        logger.error(f"Failed to ensure agent chat tables: {e}")
+        raise
 
 
 def _read_agent_user_config_row_sync(username: str) -> Optional[Dict[str, Any]]:
     _ensure_agent_chat_tables_sync()
-    with _db_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT username, api_key, base_url, model, system_prompt,
-                   timeout_seconds, max_tokens, temperature, updated_at, updated_by
-            FROM agent_user_config
-            WHERE username = ?
-            """,
-            (str(username or "").strip(),),
-        ).fetchone()
+    try:
+        with _db_connection() as conn:
+            # 确保表存在
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_user_config (
+                    username TEXT PRIMARY KEY,
+                    api_key TEXT,
+                    base_url TEXT,
+                    model TEXT,
+                    system_prompt TEXT,
+                    timeout_seconds INTEGER,
+                    max_tokens INTEGER,
+                    temperature REAL,
+                    updated_at TEXT NOT NULL,
+                    updated_by TEXT
+                )
+                """
+            )
+            row = conn.execute(
+                """
+                SELECT username, api_key, base_url, model, system_prompt,
+                       timeout_seconds, max_tokens, temperature, updated_at, updated_by
+                FROM agent_user_config
+                WHERE username = ?
+                """,
+                (str(username or "").strip(),),
+            ).fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Failed to read agent user config for {username}: {e}")
+        return None
 
 
 def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updated_by: str = "self") -> Dict[str, Any]:
@@ -355,7 +392,11 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
     if not normalized_username:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid username.")
 
-    existing = _read_agent_user_config_row_sync(normalized_username) or {"username": normalized_username}
+    try:
+        existing = _read_agent_user_config_row_sync(normalized_username) or {"username": normalized_username}
+    except Exception as e:
+        logger.error(f"Failed to read existing user config: {e}")
+        existing = {"username": normalized_username}
     merged = dict(existing)
 
     def _normalize_optional_text(key: str, max_len: int) -> Optional[str]:
@@ -393,39 +434,61 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
     merged["updated_at"] = _iso_now()
     merged["updated_by"] = str(updated_by or "self")[:64]
 
-    with _db_connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO agent_user_config (
-                username, api_key, base_url, model, system_prompt,
-                timeout_seconds, max_tokens, temperature, updated_at, updated_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(username)
-            DO UPDATE SET
-                api_key = excluded.api_key,
-                base_url = excluded.base_url,
-                model = excluded.model,
-                system_prompt = excluded.system_prompt,
-                timeout_seconds = excluded.timeout_seconds,
-                max_tokens = excluded.max_tokens,
-                temperature = excluded.temperature,
-                updated_at = excluded.updated_at,
-                updated_by = excluded.updated_by
-            """,
-            (
-                normalized_username,
-                merged.get("api_key"),
-                merged.get("base_url"),
-                merged.get("model"),
-                merged.get("system_prompt"),
-                merged.get("timeout_seconds"),
-                merged.get("max_tokens"),
-                merged.get("temperature"),
-                merged.get("updated_at"),
-                merged.get("updated_by"),
-            ),
-        )
-        conn.commit()
+    try:
+        with _db_connection() as conn:
+            # 确保表存在
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_user_config (
+                    username TEXT PRIMARY KEY,
+                    api_key TEXT,
+                    base_url TEXT,
+                    model TEXT,
+                    system_prompt TEXT,
+                    timeout_seconds INTEGER,
+                    max_tokens INTEGER,
+                    temperature REAL,
+                    updated_at TEXT NOT NULL,
+                    updated_by TEXT
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO agent_user_config (
+                    username, api_key, base_url, model, system_prompt,
+                    timeout_seconds, max_tokens, temperature, updated_at, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(username)
+                DO UPDATE SET
+                    api_key = excluded.api_key,
+                    base_url = excluded.base_url,
+                    model = excluded.model,
+                    system_prompt = excluded.system_prompt,
+                    timeout_seconds = excluded.timeout_seconds,
+                    max_tokens = excluded.max_tokens,
+                    temperature = excluded.temperature,
+                    updated_at = excluded.updated_at,
+                    updated_by = excluded.updated_by
+                """,
+                (
+                    normalized_username,
+                    merged.get("api_key"),
+                    merged.get("base_url"),
+                    merged.get("model"),
+                    merged.get("system_prompt"),
+                    merged.get("timeout_seconds"),
+                    merged.get("max_tokens"),
+                    merged.get("temperature"),
+                    merged.get("updated_at"),
+                    merged.get("updated_by"),
+                ),
+            )
+            conn.commit()
+            logger.info(f"User agent config updated for {normalized_username}")
+    except Exception as e:
+        logger.error(f"Failed to upsert user agent config: {e}")
+        raise
 
     row = _read_agent_user_config_row_sync(normalized_username) or {}
     return {
@@ -499,17 +562,23 @@ def _get_system_config_values_sync(keys: List[str]) -> Dict[str, str]:
     placeholders = ", ".join(["?"] * len(keys))
     sql = f"SELECT key, value FROM system_config WHERE key IN ({placeholders})"
 
-    with _db_connection() as conn:
-        rows = conn.execute(sql, tuple(keys)).fetchall()
+    try:
+        with _db_connection() as conn:
+            # 确保表存在
+            _ensure_system_config_table_sync(conn)
+            rows = conn.execute(sql, tuple(keys)).fetchall()
 
-    result: Dict[str, str] = {}
-    for row in rows:
-        item = dict(row)
-        key = str(item.get("key") or "").strip()
-        value = str(item.get("value") or "")
-        if key:
-            result[key] = value
-    return result
+        result: Dict[str, str] = {}
+        for row in rows:
+            item = dict(row)
+            key = str(item.get("key") or "").strip()
+            value = str(item.get("value") or "")
+            if key:
+                result[key] = value
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get system config values: {e}")
+        return {}
 
 
 def _get_agent_provider_config_sync() -> Dict[str, Any]:
@@ -610,19 +679,26 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     if rows_to_upsert:
-        with _db_connection() as conn:
-            conn.executemany(
-                """
-                INSERT INTO system_config (key, value, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(key)
-                DO UPDATE SET
-                    value = excluded.value,
-                    updated_at = excluded.updated_at
-                """,
-                rows_to_upsert,
-            )
-            conn.commit()
+        try:
+            with _db_connection() as conn:
+                # 确保表存在
+                _ensure_system_config_table_sync(conn)
+                conn.executemany(
+                    """
+                    INSERT INTO system_config (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key)
+                    DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = excluded.updated_at
+                    """,
+                    rows_to_upsert,
+                )
+                conn.commit()
+                logger.info(f"Agent config updated with {len(rows_to_upsert)} rows")
+        except Exception as e:
+            logger.error(f"Failed to set agent provider config: {e}")
+            raise
 
     return _get_agent_provider_config_sync()
 
@@ -712,6 +788,7 @@ def _consume_agent_chat_quota_sync(username: str, role: str, quota_subject: str)
 
     daily_limit = _get_agent_chat_daily_limit(role, username)
     if normalized_role == ROLE_ADMIN:
+        logger.debug(f"Admin {username} has unlimited quota")
         return {
             "allowed": True,
             "limit": None,
@@ -720,6 +797,59 @@ def _consume_agent_chat_quota_sync(username: str, role: str, quota_subject: str)
             "usage_date": usage_date,
             "quota_subject": normalized_subject,
         }
+
+    try:
+        with _db_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT calls FROM agent_chat_usage_daily
+                WHERE quota_subject = ? AND usage_date = ?
+                """,
+                (normalized_subject, usage_date),
+            ).fetchone()
+
+            used = int((dict(row).get("calls") if row else 0) or 0)
+            if daily_limit is not None and used >= daily_limit:
+                logger.warning(f"User {username} quota exceeded: {used}/{daily_limit}")
+                return {
+                    "allowed": False,
+                    "limit": daily_limit,
+                    "used": used,
+                    "remaining": 0,
+                    "usage_date": usage_date,
+                    "quota_subject": normalized_subject,
+                }
+
+            conn.execute(
+                """
+                INSERT INTO agent_chat_usage_daily (quota_subject, role, usage_date, calls, updated_at)
+                VALUES (?, ?, ?, 1, ?)
+                ON CONFLICT(quota_subject, usage_date)
+                DO UPDATE SET
+                    role = excluded.role,
+                    calls = agent_chat_usage_daily.calls + 1,
+                    updated_at = excluded.updated_at
+                """,
+                (normalized_subject, normalized_role, usage_date, now_iso),
+            )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to consume quota for {username}: {e}")
+        raise
+
+    next_used = used + 1
+    remaining = None if daily_limit is None else max(0, daily_limit - next_used)
+    
+    logger.debug(f"User {username} quota after consume: {next_used}/{daily_limit}")
+
+    return {
+        "allowed": True,
+        "limit": daily_limit,
+        "used": next_used,
+        "remaining": remaining,
+        "usage_date": usage_date,
+        "quota_subject": normalized_subject,
+    }
 
     with _db_connection() as conn:
         row = conn.execute(
@@ -776,6 +906,7 @@ def _get_agent_chat_quota_snapshot_sync(username: str, role: str, quota_subject:
     daily_limit = _get_agent_chat_daily_limit(role, username)
 
     if normalize_role(role, username) == ROLE_ADMIN:
+        logger.debug(f"Admin {username} quota snapshot: unlimited")
         return {
             "limit": None,
             "used": 0,
@@ -783,6 +914,33 @@ def _get_agent_chat_quota_snapshot_sync(username: str, role: str, quota_subject:
             "usage_date": usage_date,
             "quota_subject": normalized_subject,
         }
+
+    try:
+        with _db_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT calls FROM agent_chat_usage_daily
+                WHERE quota_subject = ? AND usage_date = ?
+                """,
+                (normalized_subject, usage_date),
+            ).fetchone()
+
+        used = int((dict(row).get("calls") if row else 0) or 0)
+    except Exception as e:
+        logger.error(f"Failed to get quota snapshot for {username}: {e}")
+        used = 0
+    
+    remaining = None if daily_limit is None else max(0, daily_limit - used)
+    
+    logger.debug(f"User {username} quota snapshot: {used}/{daily_limit} remaining={remaining}")
+
+    return {
+        "limit": daily_limit,
+        "used": used,
+        "remaining": remaining,
+        "usage_date": usage_date,
+        "quota_subject": normalized_subject,
+    }
 
     with _db_connection() as conn:
         row = conn.execute(
