@@ -24,8 +24,12 @@
     <div id="app"></div>
     <script type="module" src="./src/main.js"></script>
     <!-- 导入js文件 -->
+
     <script src="./min-enhanced.js"></script>
-    <!-- 导入增强功能的js文件（51.la立即执行，其他延迟3秒 ） -->
+    <!-- 
+        导入增强功能的js文件（51.la立即执行，其他延迟3秒 ） 
+        不声明为module，确保立即执行，且不受模块作用域限制
+     -->
 </body>
 
 </html>
