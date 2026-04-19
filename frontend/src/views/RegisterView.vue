@@ -160,7 +160,14 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
 import { apiAuthCheckUsername, apiAuthLogin, apiAuthRegister, apiLocationTrackVisit, syncUserRoleToUrl } from '../api/backend';
-import { getAuthToken, getOrCreateGuestDeviceId, setAuthSession } from '../utils/auth';
+import {
+    consumePersistedPositionCode,
+    getAuthToken,
+    getOrCreateGuestDeviceId,
+    injectPositionCodeToPath,
+    peekPersistedPositionCode,
+    setAuthSession,
+} from '../utils/auth';
 
 const router = useRouter();
 const route = useRoute();
@@ -225,7 +232,9 @@ function resetUsernameCheck() {
 
 function resolveRedirectTarget() {
     const redirect = String(route.query?.redirect || '/home').trim();
-    return redirect.startsWith('/') ? redirect : '/home';
+    const safeRedirect = redirect.startsWith('/') ? redirect : '/home';
+    const persistedPositionCode = peekPersistedPositionCode();
+    return injectPositionCodeToPath(safeRedirect, persistedPositionCode);
 }
 
 function switchMode(nextMode) {
@@ -268,6 +277,7 @@ async function quickGuestLogin() {
         syncUserRoleToUrl(user);
         message.success(`游客登陆成功，欢迎使用！`);
         await router.replace(resolveRedirectTarget());
+        consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail
@@ -401,6 +411,7 @@ async function handleLogin() {
         syncUserRoleToUrl(user);
         message.success(`登录成功，当前角色：${String(user.role || 'unknown')}`);
         await router.replace(resolveRedirectTarget());
+        consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail
@@ -493,7 +504,9 @@ async function handleSubmit() {
 onMounted(async () => {
     const token = getAuthToken();
     if (token) {
-        await router.replace('/home');
+        await router.replace(resolveRedirectTarget());
+        consumePersistedPositionCode();
+        return;
     }
 
     // 自动发送定位追踪请求（无需等待，异步处理）

@@ -353,25 +353,6 @@ def _normalize_avatar_index(raw_avatar_index: Any) -> int:
     return value
 
 
-def _get_user_avatar_index_sync(username: str, role: str) -> int:
-    lowered_username = str(username or "").strip().lower()
-    lowered_role = str(role or "").strip().lower()
-
-    if lowered_username == "admin" or lowered_role == "admin":
-        return 1
-
-    if lowered_username == "user" or lowered_role == "guest":
-        return 0
-
-    with _db_connection() as conn:
-        row = conn.execute(
-            "SELECT avatar_index FROM users WHERE username = ?",
-            (username,),
-        ).fetchone()
-
-    return _normalize_avatar_index((dict(row) if row else {}).get("avatar_index"))
-
-
 def _record_visit_sync(username: str, visit_record: Dict[str, Any]) -> None:
     now_iso = _iso(_utc_now())
 
@@ -1236,7 +1217,6 @@ async def get_center_statistics(
     self_stats = await asyncio.to_thread(_get_self_stats_sync, username, token)
     realtime = await asyncio.to_thread(_get_realtime_global_stats_sync)
     admin_contact = await asyncio.to_thread(_get_admin_contact_sync)
-    avatar_index = await asyncio.to_thread(_get_user_avatar_index_sync, username, role)
     messages = await asyncio.to_thread(_list_recent_messages_sync, 30)
     announcement = await asyncio.to_thread(_get_active_announcement_sync, username)
 
@@ -1245,7 +1225,7 @@ async def get_center_statistics(
         "user": {
             "username": username,
             "role": role,
-            "avatar_index": avatar_index,
+            "avatar_index": 0,
             "session_created_at": session.get("created_at"),
             "expires_at": session.get("expires_at"),
         },

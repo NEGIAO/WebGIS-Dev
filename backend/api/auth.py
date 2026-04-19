@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
@@ -34,6 +35,19 @@ ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD_ENV_NAME = "SUPER_USER"
 DEFAULT_ADMIN_PASSWORD_LOCAL = "123456"
 MAX_AVATAR_INDEX = 11
+
+DEFAULT_USER_LANGUAGE = "zh-CN"
+DEFAULT_USER_UNIT_SYSTEM = "metric"
+
+SUPPORTED_USER_LANGUAGES = {
+    "zh-cn": "zh-CN",
+    "en-us": "en-US",
+}
+
+SUPPORTED_UNIT_SYSTEMS = {
+    "metric": "metric",
+    "imperial": "imperial",
+}
 
 SESSION_EXPIRE_HOURS = int(os.getenv("AUTH_SESSION_EXPIRE_HOURS", "72"))
 PASSWORD_HASH_ITERATIONS = int(os.getenv("AUTH_PASSWORD_HASH_ITERATIONS", "120000"))
@@ -184,6 +198,13 @@ class ChangePasswordRequest(BaseModel):
 
 class ChangeAvatarRequest(BaseModel):
     new_avatar_index: int = Field(..., ge=0, le=MAX_AVATAR_INDEX)
+
+
+class UpdatePreferencesRequest(BaseModel):
+    default_basemap: Optional[str] = Field(default=None, max_length=80)
+    language: Optional[str] = Field(default=None, max_length=16)
+    unit_system: Optional[str] = Field(default=None, max_length=16)
+    preferred_agent_model: Optional[str] = Field(default=None, max_length=160)
 
 
 def _utc_now() -> datetime:
@@ -488,6 +509,31 @@ def _init_auth_storage_sync() -> None:
             )
         """)
 
+        # 表：user_preferences
+        _safe_execute(conn, """
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                username TEXT PRIMARY KEY,
+                default_basemap TEXT NOT NULL DEFAULT '',
+                language TEXT NOT NULL DEFAULT 'zh-CN',
+                unit_system TEXT NOT NULL DEFAULT 'metric',
+                preferred_agent_model TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+        """)
+        preference_column_rows = conn.execute("PRAGMA table_info(user_preferences)").fetchall()
+        preference_columns = {str(dict(row).get("name") or "") for row in preference_column_rows}
+        if "default_basemap" not in preference_columns:
+            _safe_execute(conn, "ALTER TABLE user_preferences ADD COLUMN default_basemap TEXT NOT NULL DEFAULT ''")
+        if "language" not in preference_columns:
+            _safe_execute(conn, "ALTER TABLE user_preferences ADD COLUMN language TEXT NOT NULL DEFAULT 'zh-CN'")
+        if "unit_system" not in preference_columns:
+            _safe_execute(conn, "ALTER TABLE user_preferences ADD COLUMN unit_system TEXT NOT NULL DEFAULT 'metric'")
+        if "preferred_agent_model" not in preference_columns:
+            _safe_execute(conn, "ALTER TABLE user_preferences ADD COLUMN preferred_agent_model TEXT NOT NULL DEFAULT ''")
+        if "updated_at" not in preference_columns:
+            _safe_execute(conn, "ALTER TABLE user_preferences ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
+        _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_user_preferences_updated_at ON user_preferences(updated_at)")
+
         # 表：system_config
         _safe_execute(conn, """
             CREATE TABLE IF NOT EXISTS system_config (
@@ -562,6 +608,199 @@ def _normalize_avatar_index(raw_avatar_index: Any) -> int:
     return value
 
 
+def _normalize_default_basemap(raw_value: Any) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+
+    if len(value) > 80:
+        value = value[:80]
+
+    if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
+        return value
+
+    compact = re.sub(r"[^A-Za-z0-9_.:-]", "", value)
+    return compact[:80]
+
+
+def _normalize_language(raw_value: Any) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return DEFAULT_USER_LANGUAGE
+
+    token = value.replace("_", "-").lower()
+    return SUPPORTED_USER_LANGUAGES.get(token, DEFAULT_USER_LANGUAGE)
+
+
+def _normalize_unit_system(raw_value: Any) -> str:
+    value = str(raw_value or "").strip().lower()
+    if not value:
+        return DEFAULT_USER_UNIT_SYSTEM
+    return SUPPORTED_UNIT_SYSTEMS.get(value, DEFAULT_USER_UNIT_SYSTEM)
+
+
+def _normalize_preferred_agent_model(raw_value: Any) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+    return value[:160]
+
+
+def _safe_username_for_path(username: str) -> str:
+    compact = re.sub(r"[^A-Za-z0-9_.-]", "_", str(username or "").strip())
+    compact = compact.strip("._-")
+    return compact[:64] or "user"
+
+
+def _default_preferences() -> Dict[str, str]:
+    return {
+        "default_basemap": "",
+        "language": DEFAULT_USER_LANGUAGE,
+        "unit_system": DEFAULT_USER_UNIT_SYSTEM,
+        "preferred_agent_model": "",
+    }
+
+
+def _get_system_config_value_sync(key: str, default: str = "") -> str:
+    with _db_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM system_config WHERE key = ?",
+            (str(key or "").strip(),),
+        ).fetchone()
+
+    if not row:
+        return str(default or "")
+    return str(dict(row).get("value") or default or "")
+
+
+def _set_system_config_value_sync(key: str, value: str) -> None:
+    now_iso = _iso(_utc_now())
+    with _db_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO system_config (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key)
+            DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (str(key or "").strip(), str(value or ""), now_iso),
+        )
+        conn.commit()
+
+
+def _set_admin_avatar_index_sync(new_avatar_index: int) -> int:
+    normalized = _normalize_avatar_index(new_avatar_index)
+    _set_system_config_value_sync("admin_avatar_index", str(normalized))
+    return normalized
+
+
+def _ensure_user_preferences_row_sync(conn: sqlite3.Connection, username: str) -> None:
+    defaults = _default_preferences()
+    now_iso = _iso(_utc_now())
+    conn.execute(
+        """
+        INSERT INTO user_preferences (
+            username,
+            default_basemap,
+            language,
+            unit_system,
+            preferred_agent_model,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(username)
+        DO NOTHING
+        """,
+        (
+            username,
+            defaults["default_basemap"],
+            defaults["language"],
+            defaults["unit_system"],
+            defaults["preferred_agent_model"],
+            now_iso,
+        ),
+    )
+
+
+def _get_user_preferences_sync(username: str) -> Dict[str, str]:
+    defaults = _default_preferences()
+
+    with _db_connection() as conn:
+        _ensure_user_preferences_row_sync(conn, username)
+        row = conn.execute(
+            """
+            SELECT default_basemap, language, unit_system, preferred_agent_model
+            FROM user_preferences
+            WHERE username = ?
+            """,
+            (username,),
+        ).fetchone()
+        conn.commit()
+
+    payload = dict(row) if row else {}
+    return {
+        "default_basemap": _normalize_default_basemap(payload.get("default_basemap") or defaults["default_basemap"]),
+        "language": _normalize_language(payload.get("language") or defaults["language"]),
+        "unit_system": _normalize_unit_system(payload.get("unit_system") or defaults["unit_system"]),
+        "preferred_agent_model": _normalize_preferred_agent_model(
+            payload.get("preferred_agent_model") or defaults["preferred_agent_model"]
+        ),
+    }
+
+
+def _upsert_user_preferences_sync(username: str, updates: Dict[str, Any]) -> Dict[str, str]:
+    existing = _get_user_preferences_sync(username)
+
+    merged = {
+        "default_basemap": _normalize_default_basemap(
+            existing.get("default_basemap") if "default_basemap" not in updates else updates.get("default_basemap")
+        ),
+        "language": _normalize_language(
+            existing.get("language") if "language" not in updates else updates.get("language")
+        ),
+        "unit_system": _normalize_unit_system(
+            existing.get("unit_system") if "unit_system" not in updates else updates.get("unit_system")
+        ),
+        "preferred_agent_model": _normalize_preferred_agent_model(
+            existing.get("preferred_agent_model") if "preferred_agent_model" not in updates else updates.get("preferred_agent_model")
+        ),
+    }
+
+    now_iso = _iso(_utc_now())
+    with _db_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO user_preferences (
+                username,
+                default_basemap,
+                language,
+                unit_system,
+                preferred_agent_model,
+                updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(username)
+            DO UPDATE SET
+                default_basemap = excluded.default_basemap,
+                language = excluded.language,
+                unit_system = excluded.unit_system,
+                preferred_agent_model = excluded.preferred_agent_model,
+                updated_at = excluded.updated_at
+            """,
+            (
+                username,
+                merged["default_basemap"],
+                merged["language"],
+                merged["unit_system"],
+                merged["preferred_agent_model"],
+                now_iso,
+            ),
+        )
+        conn.commit()
+
+    return merged
+
+
 def _validate_register_payload(username: str, password: str) -> None:
     lowered = username.lower()
 
@@ -609,6 +848,52 @@ def _extract_token(request: Request) -> str:
 
     query_token = str(request.query_params.get("token", "")).strip()
     return query_token
+
+
+def _normalize_binary_flag(raw_value: Any, fallback: str = "0") -> str:
+    raw = str(raw_value or "").strip().lower()
+    if raw in {"1", "true"}:
+        return "1"
+    if raw in {"0", "false"}:
+        return "0"
+    return "1" if fallback == "1" else "0"
+
+
+def _is_guest_allow_request(request: Request) -> bool:
+    query_share_flag = request.query_params.get("s")
+    header_share_flag = request.headers.get("X-Share-Mode") or request.headers.get("X-Guest-Allow")
+    normalized = _normalize_binary_flag(query_share_flag or header_share_flag, "0")
+    return normalized == "1"
+
+
+async def _build_temporary_guest_session_async(request: Request) -> Dict[str, Any]:
+    request_ip = _extract_client_ip(request)
+    request_user_agent = str(request.headers.get("User-Agent", "unknown"))
+    guest_device_id = _normalize_guest_device_id(
+        request.headers.get("X-Guest-Device-Id")
+        or request.query_params.get("guest_device_id")
+    )
+    guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
+    username = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
+
+    now = _utc_now()
+    expires_at = now + timedelta(hours=2)
+    temporary_credential = f"guest_tmp_{secrets.token_urlsafe(12)}"
+
+    return {
+        "token": "",
+        "username": username,
+        "role": ROLE_GUEST,
+        "guest_uid": guest_uid,
+        "guest_device_id": guest_device_id,
+        "ip": request_ip,
+        "user_agent": request_user_agent,
+        "created_at": _iso(now),
+        "expires_at": _iso(expires_at),
+        "is_temporary": True,
+        "guest_allow": True,
+        "temporary_credential": temporary_credential,
+    }
 
 
 def _get_user_sync(username: str) -> Optional[Dict[str, Any]]:
@@ -886,6 +1171,18 @@ def _update_user_password_sync(username: str, new_password: str) -> bool:
         return int(cursor.rowcount or 0) > 0
 
 
+def _update_user_avatar_index_sync(username: str, avatar_index: int) -> bool:
+    normalized_avatar_index = _normalize_avatar_index(avatar_index)
+
+    with _db_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET avatar_index = ? WHERE username = ?",
+            (normalized_avatar_index, username),
+        )
+        conn.commit()
+        return int(cursor.rowcount or 0) > 0
+
+
 def _get_admin_password() -> str:
     configured = str(os.getenv(ADMIN_PASSWORD_ENV_NAME, "")).strip()
     return configured or DEFAULT_ADMIN_PASSWORD_LOCAL
@@ -1003,6 +1300,9 @@ async def require_login(request: Request) -> Dict[str, Any]:
 
     token = _extract_token(request)
     if not token:
+        if _is_guest_allow_request(request):
+            return await _build_temporary_guest_session_async(request)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="请先登录后再访问",
@@ -1010,6 +1310,9 @@ async def require_login(request: Request) -> Dict[str, Any]:
 
     session = await asyncio.to_thread(_get_session_sync, token)
     if session is None:
+        if _is_guest_allow_request(request):
+            return await _build_temporary_guest_session_async(request)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="登录状态已失效，请重新登录",
@@ -1041,6 +1344,7 @@ async def require_api_access(request: Request) -> Dict[str, Any]:
         )
 
     session["quota"] = quota
+    session["quota_subject"] = quota.get("quota_subject")
     return session
 
 
@@ -1092,6 +1396,8 @@ async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
             detail="用户名已存在，请更换后重试",
         )
 
+    preferences = await asyncio.to_thread(_get_user_preferences_sync, username)
+
     return {
         "status": "success",
         "message": "注册成功，请使用新账号登录",
@@ -1100,6 +1406,7 @@ async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
             "role": ROLE_REGISTERED,
             "avatar_index": avatar_index,
         },
+        "preferences": preferences,
     }
 
 
@@ -1256,6 +1563,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         resolved_role,
         quota_subject,
     )
+    preferences = await asyncio.to_thread(_get_user_preferences_sync, resolved_username)
 
     return {
         "status": "success",
@@ -1269,6 +1577,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
             "created_at": session["created_at"],
             "expires_at": session["expires_at"],
         },
+        "preferences": preferences,
         "quota": quota,
     }
 
@@ -1290,16 +1599,7 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> 
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
     quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
-
-    avatar_index = 0
-    lowered_username = username.lower()
-    if lowered_username == ADMIN_USERNAME:
-        avatar_index = 1
-    elif lowered_username == GUEST_USERNAME:
-        avatar_index = 0
-    else:
-        db_user = await asyncio.to_thread(_get_user_sync, username)
-        avatar_index = _normalize_avatar_index((db_user or {}).get("avatar_index"))
+    preferences = await asyncio.to_thread(_get_user_preferences_sync, username)
 
     return {
         "status": "success",
@@ -1307,11 +1607,15 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> 
             "username": username,
             "role": normalize_role(role, username),
             "guest_uid": str(session.get("guest_uid") or ""),
-            "avatar_index": avatar_index,
+            "avatar_index": 0,
             "session_created_at": session.get("created_at"),
             "expires_at": session.get("expires_at"),
+            "is_temporary": bool(session.get("is_temporary")),
+            "temporary_credential": str(session.get("temporary_credential") or ""),
         },
+        "preferences": preferences,
         "quota": quota,
+        "guest_allow": bool(session.get("guest_allow")),
     }
 
 
@@ -1416,7 +1720,7 @@ async def change_avatar(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
     """
-    功能：修改当前注册用户头像。
+    功能：修改当前账号头像索引（注册用户 + 管理员）。
 
     参数：
     - payload.new_avatar_index: 头像索引（0~MAX_AVATAR_INDEX）。
@@ -1444,29 +1748,14 @@ async def change_avatar(
             detail="游客账号不支持修改头像",
         )
 
-    if role == ROLE_ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="管理员头像不支持修改",
-        )
-
     new_avatar_index = _normalize_avatar_index(payload.new_avatar_index)
 
-    # 更新数据库
-    def _update_avatar_sync() -> bool:
-        try:
-            with _db_connection() as conn:
-                conn.execute(
-                    "UPDATE users SET avatar_index = ? WHERE username = ?",
-                    (new_avatar_index, username),
-                )
-                conn.commit()
-                return conn.total_changes > 0
-        except Exception as e:
-            logger.error("更新头像失败 [username=%s]: %s", username, str(e)[:200])
-            return False
+    if role == ROLE_ADMIN:
+        await asyncio.to_thread(_set_admin_avatar_index_sync, new_avatar_index)
+        updated = True
+    else:
+        updated = await asyncio.to_thread(_update_user_avatar_index_sync, username, new_avatar_index)
 
-    updated = await asyncio.to_thread(_update_avatar_sync)
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1477,6 +1766,62 @@ async def change_avatar(
         "status": "success",
         "message": "头像已更新",
         "avatar_index": new_avatar_index,
+    }
+
+
+@router.get("/preferences")
+async def get_user_preferences(
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """功能：读取当前用户偏好设置。"""
+    username = str(session.get("username") or "").strip()
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="登录状态异常，请重新登录",
+        )
+
+    preferences = await asyncio.to_thread(_get_user_preferences_sync, username)
+    return {
+        "status": "success",
+        "preferences": preferences,
+    }
+
+
+@router.post("/preferences")
+async def update_user_preferences(
+    payload: UpdatePreferencesRequest,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """功能：更新当前用户偏好设置并持久化。"""
+    username = str(session.get("username") or "").strip()
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="登录状态异常，请重新登录",
+        )
+
+    updates: Dict[str, Any] = {}
+    if payload.default_basemap is not None:
+        updates["default_basemap"] = payload.default_basemap
+    if payload.language is not None:
+        updates["language"] = payload.language
+    if payload.unit_system is not None:
+        updates["unit_system"] = payload.unit_system
+    if payload.preferred_agent_model is not None:
+        updates["preferred_agent_model"] = payload.preferred_agent_model
+
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="未提供可更新的偏好字段",
+        )
+
+    preferences = await asyncio.to_thread(_upsert_user_preferences_sync, username, updates)
+    return {
+        "status": "success",
+        "message": "偏好设置已保存",
+        "preferences": preferences,
     }
 
 

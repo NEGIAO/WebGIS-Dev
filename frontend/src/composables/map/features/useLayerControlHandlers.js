@@ -16,6 +16,27 @@ export function createLayerControlHandlers({
     createAutoTileSourceFromUrl,
     message
 }) {
+    const BASEMAP_SWITCH_DEBOUNCE_MS = 300;
+    let basemapSwitchTimer = null;
+
+    function applyBasemapSelection(layerId) {
+        const normalizedLayerId = String(layerId || '').trim();
+        if (!normalizedLayerId || !selectedLayerRef) return;
+        selectedLayerRef.value = normalizedLayerId;
+    }
+
+    function scheduleBasemapSelection(layerId) {
+        if (basemapSwitchTimer) {
+            clearTimeout(basemapSwitchTimer);
+            basemapSwitchTimer = null;
+        }
+
+        basemapSwitchTimer = setTimeout(() => {
+            applyBasemapSelection(layerId);
+            basemapSwitchTimer = null;
+        }, BASEMAP_SWITCH_DEBOUNCE_MS);
+    }
+
     /**
      * 加载用户输入的 URL，按 XYZ -> WMS -> WMTS 自动识别并激活 custom 图层。
      */
@@ -56,8 +77,8 @@ export function createLayerControlHandlers({
      */
     function handleLayerChange(payload = {}) {
         const nextLayerId = String(payload.layerId || '').trim();
-        if (nextLayerId && selectedLayerRef) {
-            selectedLayerRef.value = nextLayerId;
+        if (nextLayerId) {
+            scheduleBasemapSelection(nextLayerId);
         }
 
         if (payload.source === 'custom-url' && customMapUrlRef) {

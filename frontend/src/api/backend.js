@@ -11,7 +11,12 @@
  */
 
 import axios from 'axios'
-import { clearAuthSession, getAuthToken } from '../utils/auth'
+import {
+  clearAuthSession,
+  getAuthToken,
+  getOrCreateGuestDeviceId,
+  readShareModeFromUrl
+} from '../utils/auth'
 
 // 获取后端 URL，优先使用环境变量，否则使用默认值
 const backendURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
@@ -40,6 +45,16 @@ backendAPI.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
+    if (!token && readShareModeFromUrl()) {
+      config.headers['X-Share-Mode'] = '1'
+
+      const guestDeviceId = getOrCreateGuestDeviceId()
+      if (guestDeviceId) {
+        config.headers['X-Guest-Device-Id'] = guestDeviceId
+      }
+    }
+
     return config
   },
   error => {
@@ -82,7 +97,15 @@ backendAPI.interceptors.response.use(
     if (error.response) {
       // 服务器响应错误
       const { status, data } = error.response
-      message = data?.detail || data?.message || `服务器错误 (${status})`
+      const detail = data?.detail
+      if (typeof detail === 'string' && detail.trim()) {
+        message = detail.trim()
+      } else if (detail && typeof detail === 'object') {
+        const nestedMsg = String(detail?.message || detail?.detail || '').trim()
+        message = nestedMsg || JSON.stringify(detail)
+      } else {
+        message = data?.message || `服务器错误 (${status})`
+      }
 
       if (status === 401) {
         clearAuthSession()
@@ -194,6 +217,20 @@ export async function apiAuthChangeAvatar(newAvatarIndex) {
   return backendAPI.post('/api/auth/change-avatar', {
     new_avatar_index: newAvatarIndex
   })
+}
+
+export async function apiAuthGetPreferences() {
+  return backendAPI.get('/api/auth/preferences')
+}
+
+export async function apiAuthUpdatePreferences(payload = {}) {
+  const safePayload = {}
+  if ('default_basemap' in payload) safePayload.default_basemap = String(payload.default_basemap || '').trim()
+  if ('language' in payload) safePayload.language = String(payload.language || '').trim()
+  if ('unit_system' in payload) safePayload.unit_system = String(payload.unit_system || '').trim()
+  if ('preferred_agent_model' in payload) safePayload.preferred_agent_model = String(payload.preferred_agent_model || '').trim()
+
+  return backendAPI.post('/api/auth/preferences', safePayload)
 }
 
 /**
@@ -669,7 +706,13 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
   const safePayload = {}
 
   if (payload.base_url) safePayload.base_url = String(payload.base_url).trim()
-  if (payload.model) safePayload.model = String(payload.model).trim()
+  if ('model' in payload) safePayload.model = String(payload.model || '').trim()
+  if (Array.isArray(payload.available_models)) {
+    safePayload.available_models = payload.available_models
+      .map(item => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 200)
+  }
   if (payload.system_prompt) safePayload.system_prompt = String(payload.system_prompt).trim()
   if (typeof payload.timeout_seconds !== 'undefined') safePayload.timeout_seconds = Number(payload.timeout_seconds)
   if (typeof payload.max_tokens !== 'undefined') safePayload.max_tokens = Number(payload.max_tokens)

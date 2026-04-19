@@ -1,6 +1,9 @@
 import backendAPI from './backend';
 import { gcj02ToWgs84 } from '../utils/geo';
 
+const AMAP_SUCCESS_STATUS = '1';
+const AMAP_SUCCESS_INFOCODE = '10000';
+
 function normalizeTiandituItem(item) {
     if (!item) return null;
 
@@ -167,7 +170,11 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10 }) {
 
         // 检查高德 API 响应状态
         const status = String(data?.status ?? '0');
-        if (status !== '1') {
+        const infocode = String(data?.infocode ?? '');
+        const isSuccess = status === AMAP_SUCCESS_STATUS
+            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
+
+        if (!isSuccess) {
             const infocode = data?.infocode || 'unknown';
             const errorMsg = data?.info || data?.message || '搜索失败';
             
@@ -189,7 +196,7 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10 }) {
                 detailedMsg = '请求参数非法';
             }
             
-            throw new Error(`高德搜索失败: ${detailedMsg} (错误码: ${infocode})`);
+            throw new Error(`高德搜索失败: ${detailedMsg} (status=${status}, 错误码=${infocode})`);
         }
 
         // 解析 POI 列表

@@ -23,6 +23,8 @@ AMAP_WEB_DETAIL_ROOT = "https://www.amap.com/detail/get/detail"
 NOMINATIM_SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 EPSG_PROJ4_ENDPOINT = "https://epsg.io/{code}.proj4"
 IPAPI_ENDPOINT = "https://ipapi.co"
+AMAP_SUCCESS_STATUS = "1"
+AMAP_SUCCESS_INFOCODE = "10000"
 
 HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
 HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=120, max_keepalive_connections=60)
@@ -212,6 +214,64 @@ def _require_amap_key_or_503() -> str:
     return amap_key
 
 
+def _amap_error_status_code(infocode: str) -> int:
+    compact = str(infocode or "").strip()
+
+    if compact in {"10003", "10004", "10014", "10015", "10019", "10020", "10044"}:
+        return status.HTTP_429_TOO_MANY_REQUESTS
+
+    if compact in {
+        "10001", "10002", "10005", "10006", "10007", "10008", "10009", "10010",
+        "10011", "10012", "10013", "10016", "10017", "10018", "10021", "10022",
+        "10026", "10027", "10028", "10029", "10030", "10031", "10032", "10033",
+        "10034", "10035", "10036", "10037", "10038", "10039", "10040", "10041",
+        "10042", "10043",
+    }:
+        return status.HTTP_403_FORBIDDEN
+
+    if compact in {"20000", "20001", "20002", "20003", "20800", "20801", "20802", "20803", "30000", "30001"}:
+        return status.HTTP_400_BAD_REQUEST
+
+    return status.HTTP_502_BAD_GATEWAY
+
+
+def _ensure_amap_success(payload: Dict[str, Any], endpoint_name: str) -> Dict[str, Any]:
+    amap_status = str(payload.get("status") or "").strip()
+    infocode = str(payload.get("infocode") or "").strip()
+
+    if amap_status == AMAP_SUCCESS_STATUS and (not infocode or infocode == AMAP_SUCCESS_INFOCODE):
+        return payload
+
+    info = str(payload.get("info") or payload.get("message") or "高德接口返回失败").strip() or "高德接口返回失败"
+    status_code = _amap_error_status_code(infocode)
+    raise HTTPException(
+        status_code=status_code,
+        detail=(
+            f"高德接口调用失败: {info} "
+            f"(endpoint={endpoint_name}, status={amap_status or 'unknown'}, infocode={infocode or 'unknown'})"
+        ),
+    )
+
+
+async def _request_amap_json(
+    request: Request,
+    endpoint_path: str,
+    endpoint_name: str,
+    *,
+    params: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    amap_key = _require_amap_key_or_503()
+    safe_params = dict(params or {})
+    safe_params["key"] = amap_key
+
+    payload = await _request_upstream_json(
+        request,
+        f"{AMAP_REST_ROOT}{endpoint_path}",
+        params=safe_params,
+    )
+    return _ensure_amap_success(payload, endpoint_name)
+
+
 @router.get("/amap/place/text")
 async def proxy_amap_place_text(
     request: Request,
@@ -239,13 +299,11 @@ async def proxy_amap_place_text(
     2. 请求上游接口；
     3. 统一错误映射后返回。
     """
-    amap_key = _require_amap_key_or_503()
-
-    return await _request_upstream_json(
+    return await _request_amap_json(
         request,
-        f"{AMAP_REST_ROOT}/v3/place/text",
+        "/v3/place/text",
+        "poi_search",
         params={
-            "key": amap_key,
             "keywords": str(keywords).strip(),
             "city": str(city or "").strip(),
             "page": int(page),
@@ -272,13 +330,11 @@ async def proxy_amap_place_detail(
     返回：
     - 原样转发高德 `/v3/place/detail` JSON 响应。
     """
-    amap_key = _require_amap_key_or_503()
-
-    return await _request_upstream_json(
+    return await _request_amap_json(
         request,
-        f"{AMAP_REST_ROOT}/v3/place/detail",
+        "/v3/place/detail",
+        "poi_detail",
         params={
-            "key": amap_key,
             "id": str(id).strip(),
             "extensions": str(extensions or "all").strip(),
         },
@@ -302,13 +358,11 @@ async def proxy_amap_geocode_geo(
     返回：
     - 原样转发高德 `/v3/geocode/geo` JSON 响应。
     """
-    amap_key = _require_amap_key_or_503()
-
-    return await _request_upstream_json(
+    return await _request_amap_json(
         request,
-        f"{AMAP_REST_ROOT}/v3/geocode/geo",
+        "/v3/geocode/geo",
+        "geo_coding",
         params={
-            "key": amap_key,
             "address": str(address).strip(),
             "city": str(city or "").strip(),
         },
@@ -336,13 +390,11 @@ async def proxy_amap_geocode_regeo(
     返回：
     - 原样转发高德 `/v3/geocode/regeo` JSON 响应。
     """
-    amap_key = _require_amap_key_or_503()
-
-    return await _request_upstream_json(
+    return await _request_amap_json(
         request,
-        f"{AMAP_REST_ROOT}/v3/geocode/regeo",
+        "/v3/geocode/regeo",
+        "reverse_geo_coding",
         params={
-            "key": amap_key,
             "location": str(location).strip(),
             "extensions": str(extensions or "base").strip(),
             "radius": int(radius),
@@ -368,14 +420,19 @@ async def proxy_amap_weather(
     返回：
     - 原样转发高德 `/v3/weather/weatherInfo` JSON 响应。
     """
-    amap_key = _require_amap_key_or_503()
+    normalized_city = str(city or "").strip()
+    if not re.fullmatch(r"\d{6}", normalized_city):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="天气查询参数 city 必须为 6 位 adcode",
+        )
 
-    return await _request_upstream_json(
+    return await _request_amap_json(
         request,
-        f"{AMAP_REST_ROOT}/v3/weather/weatherInfo",
+        "/v3/weather/weatherInfo",
+        "get_weather",
         params={
-            "key": amap_key,
-            "city": str(city).strip(),
+            "city": normalized_city,
             "extensions": str(extensions or "base").strip(),
         },
     )
@@ -396,16 +453,16 @@ async def proxy_amap_ip_location(
     返回：
     - 原样转发高德 `/v3/ip` JSON 响应。
     """
-    amap_key = _require_amap_key_or_503()
     normalized_ip = str(ip or "").strip()
 
-    params: Dict[str, Any] = {"key": amap_key}
+    params: Dict[str, Any] = {}
     if normalized_ip:
         params["ip"] = normalized_ip
 
-    return await _request_upstream_json(
+    return await _request_amap_json(
         request,
-        f"{AMAP_REST_ROOT}/v3/ip",
+        "/v3/ip",
+        "ip_location",
         params=params,
     )
 

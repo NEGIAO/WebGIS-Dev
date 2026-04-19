@@ -15,7 +15,9 @@ import {
     USER_LOCATION_CONTEXT_CHANGE_EVENT
 } from '../utils/userLocationContext';
 import { decodePos, encodePos } from '../utils/biz';
-import { DEFAULT_BASEMAP_LAYER_INDEX } from '../constants';
+import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
+
+const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';
 
 /**
  * 获取数组的第一个元素，如果不是数组则返回原值
@@ -97,6 +99,23 @@ function parseHashQuery() {
         loc: params.get('loc'),
         p: params.get('p')
     };
+}
+
+function resolvePreferredDefaultLayerIndex() {
+    if (typeof window === 'undefined') return DEFAULT_BASEMAP_LAYER_INDEX;
+
+    const storage = window.localStorage;
+    if (!storage) return DEFAULT_BASEMAP_LAYER_INDEX;
+
+    const preferredBasemapId = String(storage.getItem(USER_PREFERENCE_BASEMAP_KEY) || '').trim();
+    if (!preferredBasemapId) return DEFAULT_BASEMAP_LAYER_INDEX;
+
+    const matchedIndex = Array.isArray(URL_LAYER_OPTIONS)
+        ? URL_LAYER_OPTIONS.findIndex((item) => String(item || '').trim() === preferredBasemapId)
+        : -1;
+
+    if (matchedIndex >= 0) return matchedIndex;
+    return DEFAULT_BASEMAP_LAYER_INDEX;
 }
 
 /**
@@ -256,7 +275,7 @@ export function useMapState(mapInstance, options = {}) {
         let lat = parseNumber(readQueryValue('lat'));
         const zoom = parseNumber(readQueryValue('z'));
         // 默认底图索引统一由 DEFAULT_BASEMAP_LAYER_INDEX 控制。
-        const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? DEFAULT_BASEMAP_LAYER_INDEX;
+        const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? resolvePreferredDefaultLayerIndex();
 
         const compactPosCode = String(readQueryValue('p') ?? '').trim();
         if (compactPosCode && compactPosCode !== '0') {

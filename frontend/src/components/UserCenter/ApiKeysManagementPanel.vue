@@ -177,7 +177,16 @@
                     </label>
                     <label class="config-item">
                         <span>Model</span>
-                        <input v-model="agentConfigDraft.model" class="key-input" placeholder="deepseek-V3-0324" />
+                        <input v-model="agentConfigDraft.model" class="key-input" placeholder="留空时按 available_models 随机调度" />
+                    </label>
+                    <label class="config-item config-item-full">
+                        <span>Available Models（逗号或换行分隔）</span>
+                        <textarea
+                            v-model="agentConfigDraft.available_models_text"
+                            rows="3"
+                            class="key-input"
+                            placeholder="qwen-plus\ndeepseek-chat\ngpt-4o-mini"
+                        ></textarea>
                     </label>
                     <label class="config-item">
                         <span>Timeout (seconds)</span>
@@ -217,6 +226,10 @@
                     <div class="config-item">
                         <span>Model</span>
                         <strong>{{ agentConfig.model || '未配置' }}</strong>
+                    </div>
+                    <div class="config-item config-item-full">
+                        <span>Available Models</span>
+                        <strong>{{ (agentConfig.available_models || []).join(', ') || '未配置' }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Timeout</span>
@@ -290,12 +303,16 @@ const editingAgentConfig = ref(false);
 const agentConfig = ref({
     base_url: '',
     model: '',
+    available_models: [],
     timeout_seconds: 45,
     max_tokens: 512,
     temperature: 0.2,
     system_prompt: '',
 });
-const agentConfigDraft = ref({ ...agentConfig.value });
+const agentConfigDraft = ref({
+    ...agentConfig.value,
+    available_models_text: '',
+});
 const agentQuota = ref({
     guest: 10,
     registered: 100,
@@ -353,11 +370,23 @@ function hydrateAgentConfigDraft() {
     agentConfigDraft.value = {
         base_url: String(agentConfig.value.base_url || ''),
         model: String(agentConfig.value.model || ''),
+        available_models_text: Array.isArray(agentConfig.value.available_models)
+            ? agentConfig.value.available_models.join('\n')
+            : '',
         timeout_seconds: Number(agentConfig.value.timeout_seconds || 45),
         max_tokens: Number(agentConfig.value.max_tokens || 512),
         temperature: Number(agentConfig.value.temperature ?? 0.2),
         system_prompt: String(agentConfig.value.system_prompt || ''),
     };
+}
+
+function parseAvailableModelsText(rawText) {
+    return String(rawText || '')
+        .split(/[,\n]/g)
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .filter((item, index, array) => array.indexOf(item) === index)
+        .slice(0, 200);
 }
 
 function startEditAgentConfig() {
@@ -379,6 +408,7 @@ async function loadAgentConfig() {
         agentConfig.value = {
             base_url: String(provider.base_url || ''),
             model: String(provider.model || ''),
+            available_models: Array.isArray(provider.available_models) ? provider.available_models : [],
             timeout_seconds: Number(provider.timeout_seconds || 45),
             max_tokens: Number(provider.max_tokens || 512),
             temperature: Number(provider.temperature ?? 0.2),
@@ -400,17 +430,24 @@ async function loadAgentConfig() {
 }
 
 async function saveAgentConfig() {
+    const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text)
     const payload = {
         base_url: String(agentConfigDraft.value.base_url || '').trim(),
         model: String(agentConfigDraft.value.model || '').trim(),
+        available_models: availableModels,
         timeout_seconds: Number(agentConfigDraft.value.timeout_seconds || 45),
         max_tokens: Number(agentConfigDraft.value.max_tokens || 512),
         temperature: Number(agentConfigDraft.value.temperature ?? 0.2),
         system_prompt: String(agentConfigDraft.value.system_prompt || '').trim(),
     };
 
-    if (!payload.base_url || !payload.model || !payload.system_prompt) {
-        message.error('Base URL、Model、System Prompt 不能为空');
+    if (!payload.base_url || !payload.system_prompt) {
+        message.error('Base URL、System Prompt 不能为空');
+        return;
+    }
+
+    if (!payload.model && payload.available_models.length === 0) {
+        message.error('请至少配置一个固定 Model 或 available_models 列表');
         return;
     }
 
@@ -420,6 +457,9 @@ async function saveAgentConfig() {
         agentConfig.value = {
             base_url: String(provider.base_url || payload.base_url),
             model: String(provider.model || payload.model),
+            available_models: Array.isArray(provider.available_models)
+                ? provider.available_models
+                : payload.available_models,
             timeout_seconds: Number(provider.timeout_seconds || payload.timeout_seconds),
             max_tokens: Number(provider.max_tokens || payload.max_tokens),
             temperature: Number(provider.temperature ?? payload.temperature),

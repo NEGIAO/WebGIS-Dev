@@ -38,6 +38,15 @@
             经纬线
         </button>
 
+        <button
+            v-if="basemapCircuitOpen"
+            class="basemap-reset-btn"
+            @click="emit('reset-basemap-chain')"
+            title="当前网络异常，点击重置底图链路"
+        >
+            重置链路
+        </button>
+
         <div v-if="selectedLayer === 'custom'" class="custom-url-wrapper">
             <input
                 v-model="customUrlInput"
@@ -168,6 +177,10 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
+    basemapCircuitOpen: {
+        type: Boolean,
+        default: false
+    },
     selectedLayer: {
         type: String,
         default: 'google'
@@ -202,6 +215,7 @@ const emit = defineEmits([
     'update-order',
     'toggle-graticule',
     'search-jump',
+    'reset-basemap-chain',
     'layer-context-action'
 ]);
 
@@ -732,6 +746,22 @@ onBeforeUnmount(() => {
     color: #166534;
     border-color: #f0fdf4;
     font-weight: 700;
+}
+
+.basemap-reset-btn {
+    background: rgba(254, 226, 226, 0.2);
+    border: 1px solid rgba(254, 202, 202, 0.55);
+    color: #fee2e2;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 3px 8px;
+    margin-left: 4px;
+    font-size: 12px;
+    vertical-align: middle;
+}
+
+.basemap-reset-btn:hover {
+    background: rgba(254, 226, 226, 0.34);
 }
 
 .layer-manager-panel {

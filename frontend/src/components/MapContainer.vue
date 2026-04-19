@@ -16,12 +16,14 @@
             :selected-layer="selectedLayer"
             :custom-map-url="customMapUrl"
             :active-graticule="showDynamicSplitLines"
+            :basemap-circuit-open="basemapCircuitOpen"
             :tianditu-tk="TIANDITU_TK"
             :is-domestic="isDomestic"
             @change-layer="handleLayerChange"
             @update-order="handleLayerOrderUpdate"
             @toggle-graticule="handleToggleGraticule"
             @search-jump="handleSearchJump"
+            @reset-basemap-chain="handleResetBasemapChain"
             @layer-context-action="handleLayerContextAction"
         />
 
@@ -164,6 +166,7 @@ const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 const selectedLayer = ref(DEFAULT_BASEMAP_PRESET_ID);
 const customMapUrl = ref('');
 const showDynamicSplitLines = ref(false);
+const basemapCircuitOpen = ref(false);
 const currentZoom = ref(17); // 当前缩放级别
 const currentCoordinate = ref(null);
 
@@ -650,7 +653,8 @@ const {
 fitToLonLatExtentByMapState = (...args) => fitToLonLatExtent(...args);
 
 const {
-    bindBasemapSelectionWatcher
+    bindBasemapSelectionWatcher,
+    resetBasemapChain
 } = createBasemapSelectionWatcher({
     selectedLayerRef: selectedLayer,
     switchLayerById,
@@ -664,8 +668,20 @@ const {
     getBasemapOptionLabel,
     message,
     defaultLayerId: DEFAULT_BASEMAP_PRESET_ID,
-    validationTimeoutMs: 3000
+    validationTimeoutMs: 3000,
+    switchDebounceMs: 300,
+    circuitBreakThreshold: 3,
+    onCircuitBreak: () => {
+        basemapCircuitOpen.value = true;
+    },
+    onCircuitReset: () => {
+        basemapCircuitOpen.value = false;
+    }
 });
+
+function handleResetBasemapChain() {
+    resetBasemapChain?.({ targetLayerId: selectedLayer.value });
+}
 
 // --- URL 参数初始化 ---
 const initialUrlState = parseUrlToState();

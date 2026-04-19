@@ -281,7 +281,7 @@ const loadUserConfig = async (showToast = false) => {
     userConfigDraft.value = {
       api_key: '',
       base_url: String(personal?.base_url || effective?.base_url || ''),
-      model: String(personal?.model || effective?.model || ''),
+      model: String(personal?.model || ''),
       system_prompt: String(personal?.system_prompt || ''),
       timeout_seconds: Number(personal?.timeout_seconds ?? effective?.timeout_seconds ?? 45),
       max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 512),

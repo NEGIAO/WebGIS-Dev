@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -67,7 +68,7 @@ AGENT_CHAT_GUEST_DAILY_QUOTA = _safe_env_int("AGENT_CHAT_GUEST_DAILY_QUOTA", 10,
 AGENT_CHAT_REGISTERED_DAILY_QUOTA = _safe_env_int("AGENT_CHAT_REGISTERED_DAILY_QUOTA", 100, 1, 10000)
 
 DEFAULT_AGENT_BASE_URL = str(os.getenv("AGENT_BASE_URL", "https://api.qnaigc.com/v1")).strip() or "https://api.qnaigc.com/v1"
-DEFAULT_AGENT_MODEL = str(os.getenv("AGENT_MODEL", "deepseek-V3-0324")).strip() or "deepseek-V3-0324"
+DEFAULT_AGENT_MODEL = str(os.getenv("AGENT_MODEL", "")).strip()
 DEFAULT_AGENT_SYSTEM_PROMPT = str(
     os.getenv(
         "AGENT_SYSTEM_PROMPT",
@@ -80,6 +81,7 @@ DEFAULT_AGENT_TEMPERATURE = _safe_env_float("AGENT_TEMPERATURE", 0.2, 0.0, 2.0)
 
 CONFIG_KEY_BASE_URL = "agent_base_url"
 CONFIG_KEY_MODEL = "agent_model"
+CONFIG_KEY_AVAILABLE_MODELS = "agent_available_models"
 CONFIG_KEY_SYSTEM_PROMPT = "agent_system_prompt"
 CONFIG_KEY_TIMEOUT_SECONDS = "agent_timeout_seconds"
 CONFIG_KEY_MAX_TOKENS = "agent_max_tokens"
@@ -101,7 +103,8 @@ class AgentChatRequest(BaseModel):
 
 class AgentConfigUpdateRequest(BaseModel):
     base_url: Optional[str] = Field(default=None, min_length=1, max_length=240)
-    model: Optional[str] = Field(default=None, min_length=1, max_length=160)
+    model: Optional[str] = Field(default=None, max_length=160)
+    available_models: Optional[List[str]] = Field(default=None, max_items=200)
     system_prompt: Optional[str] = Field(default=None, min_length=1, max_length=2000)
     timeout_seconds: Optional[int] = Field(default=None, ge=5, le=180)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
@@ -144,8 +147,75 @@ def _normalize_base_url(value: str) -> str:
 
 
 def _normalize_model(value: str) -> str:
-    normalized = str(value or "").strip()
-    return normalized or DEFAULT_AGENT_MODEL
+    return str(value or "").strip()
+
+
+def _normalize_available_models(raw_value: Any) -> List[str]:
+    rows: List[str] = []
+
+    if raw_value is None:
+        return rows
+
+    if isinstance(raw_value, str):
+        text = raw_value.strip()
+        if not text:
+            return rows
+
+        parsed: Any = None
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except Exception:
+                parsed = None
+
+        if isinstance(parsed, list):
+            raw_list = parsed
+        else:
+            raw_list = [piece.strip() for piece in text.replace(";", ",").split(",")]
+    elif isinstance(raw_value, (list, tuple, set)):
+        raw_list = list(raw_value)
+    else:
+        raw_list = [raw_value]
+
+    seen: set[str] = set()
+    for item in raw_list:
+        model = _normalize_model(str(item or ""))[:160]
+        if not model or model in seen:
+            continue
+        seen.add(model)
+        rows.append(model)
+
+    return rows[:200]
+
+
+def _pick_runtime_model(
+    *,
+    user_override_model: str,
+    preference_model: str,
+    provider_model: str,
+    available_models: List[str],
+) -> Tuple[str, str, bool]:
+    user_override = _normalize_model(user_override_model)
+    if user_override:
+        return user_override, "user-config", True
+
+    preferred = _normalize_model(preference_model)
+    if preferred:
+        return preferred, "user-preference", True
+
+    pool = _normalize_available_models(available_models)
+    if pool:
+        return random.choice(pool), "provider-random", False
+
+    provider_default = _normalize_model(provider_model)
+    if provider_default:
+        return provider_default, "provider-config", False
+
+    env_default = _normalize_model(DEFAULT_AGENT_MODEL)
+    if env_default:
+        return env_default, "env-default", False
+
+    return "", "missing", False
 
 
 def _normalize_system_prompt(value: str) -> str:
@@ -379,12 +449,36 @@ def _resolve_effective_agent_runtime_sync(username: str) -> Dict[str, Any]:
     key_info = _resolve_agent_api_key_sync()
     user_cfg = _read_agent_user_config_row_sync(username) or {}
 
+    pref_row = None
+    try:
+        with _db_connection() as conn:
+            pref_row = conn.execute(
+                "SELECT preferred_agent_model FROM user_preferences WHERE username = ?",
+                (str(username or "").strip(),),
+            ).fetchone()
+    except Exception:
+        pref_row = None
+
+    preferred_model = ""
+    if pref_row:
+        preferred_model = _normalize_model((dict(pref_row).get("preferred_agent_model") or ""))
+
     personal_key = str(user_cfg.get("api_key") or "").strip()
     use_personal_key = bool(personal_key)
+    available_models = _normalize_available_models(provider.get("available_models") or [])
+    runtime_model, runtime_model_source, runtime_model_locked = _pick_runtime_model(
+        user_override_model=str(user_cfg.get("model") or ""),
+        preference_model=preferred_model,
+        provider_model=str(provider.get("model") or ""),
+        available_models=available_models,
+    )
 
     effective = {
         "base_url": _normalize_base_url(str(user_cfg.get("base_url") or provider.get("base_url") or DEFAULT_AGENT_BASE_URL)),
-        "model": _normalize_model(str(user_cfg.get("model") or provider.get("model") or DEFAULT_AGENT_MODEL)),
+        "model": runtime_model,
+        "model_source": runtime_model_source,
+        "model_locked": bool(runtime_model_locked),
+        "available_models": available_models,
         "system_prompt": _normalize_system_prompt(str(user_cfg.get("system_prompt") or provider.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT)),
         "timeout_seconds": _safe_parse_int(user_cfg.get("timeout_seconds"), int(provider.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS), 5, 180),
         "max_tokens": _safe_parse_int(user_cfg.get("max_tokens"), int(provider.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS), 1, 8192),
@@ -423,6 +517,7 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
         [
             CONFIG_KEY_BASE_URL,
             CONFIG_KEY_MODEL,
+            CONFIG_KEY_AVAILABLE_MODELS,
             CONFIG_KEY_SYSTEM_PROMPT,
             CONFIG_KEY_TIMEOUT_SECONDS,
             CONFIG_KEY_MAX_TOKENS,
@@ -432,6 +527,7 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
 
     base_url = _normalize_base_url(config_values.get(CONFIG_KEY_BASE_URL, DEFAULT_AGENT_BASE_URL))
     model = _normalize_model(config_values.get(CONFIG_KEY_MODEL, DEFAULT_AGENT_MODEL))
+    available_models = _normalize_available_models(config_values.get(CONFIG_KEY_AVAILABLE_MODELS, ""))
     system_prompt = _normalize_system_prompt(
         config_values.get(CONFIG_KEY_SYSTEM_PROMPT, DEFAULT_AGENT_SYSTEM_PROMPT)
     )
@@ -458,6 +554,7 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
     return {
         "base_url": base_url,
         "model": model,
+        "available_models": available_models,
         "system_prompt": system_prompt,
         "timeout_seconds": timeout_seconds,
         "max_tokens": max_tokens,
@@ -475,6 +572,14 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
         rows_to_upsert.append((CONFIG_KEY_BASE_URL, _normalize_base_url(str(updates["base_url"])), now_iso))
     if "model" in updates:
         rows_to_upsert.append((CONFIG_KEY_MODEL, _normalize_model(str(updates["model"])), now_iso))
+    if "available_models" in updates:
+        rows_to_upsert.append(
+            (
+                CONFIG_KEY_AVAILABLE_MODELS,
+                json.dumps(_normalize_available_models(updates.get("available_models")), ensure_ascii=False),
+                now_iso,
+            )
+        )
     if "system_prompt" in updates:
         rows_to_upsert.append(
             (CONFIG_KEY_SYSTEM_PROMPT, _normalize_system_prompt(str(updates["system_prompt"])), now_iso)
@@ -1250,6 +1355,9 @@ async def get_agent_chat_config(
         "data": {
             "service_ready": bool(runtime.get("api_key")) and bool(runtime.get("base_url")) and bool(runtime.get("model")),
             "model": str(runtime.get("model") or ""),
+            "model_source": str(runtime.get("model_source") or "missing"),
+            "model_locked": bool(runtime.get("model_locked")),
+            "available_models": runtime.get("available_models") if isinstance(runtime.get("available_models"), list) else [],
             "quota": quota,
             "key_status": {
                 "is_set": bool(str(runtime.get("api_key") or "").strip()),
@@ -1309,10 +1417,17 @@ async def agent_chat_completions(
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
     api_key = str(runtime.get("api_key") or "").strip()
+    runtime_model = str(runtime.get("model") or "").strip()
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Agent key is not configured on backend. Please contact admin.",
+        )
+
+    if not runtime_model:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent model is not configured. Please set model or available_models in backend config.",
         )
 
     history_items = _sanitize_history(payload.history)
@@ -1338,10 +1453,11 @@ async def agent_chat_completions(
 
     request_params = json.dumps(
         {
-            "model": runtime.get("model"),
+            "model": runtime_model,
             "history_len": len(history_items),
             "quota_subject": quota_subject,
             "api_key_source": runtime.get("api_key_source"),
+            "model_source": runtime.get("model_source"),
             "has_location_context": bool(location_context),
         },
         ensure_ascii=False,
@@ -1354,7 +1470,7 @@ async def agent_chat_completions(
             request,
             base_url=str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL),
             api_key=api_key,
-            model=str(runtime.get("model") or DEFAULT_AGENT_MODEL),
+            model=runtime_model,
             messages=request_messages,
             timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
             max_tokens=int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS),
@@ -1372,7 +1488,8 @@ async def agent_chat_completions(
             "status": "success",
             "data": {
                 "reply": reply,
-                "model": str(runtime.get("model") or DEFAULT_AGENT_MODEL),
+                "model": runtime_model,
+                "model_source": str(runtime.get("model_source") or "unknown"),
                 "quota": quota,
                 "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
                 "api_key_source": str(runtime.get("api_key_source") or "unknown"),
@@ -1507,6 +1624,9 @@ async def get_agent_user_config(
             "effective": {
                 "base_url": str(runtime.get("base_url") or ""),
                 "model": str(runtime.get("model") or ""),
+                "model_source": str(runtime.get("model_source") or "missing"),
+                "model_locked": bool(runtime.get("model_locked")),
+                "available_models": runtime.get("available_models") if isinstance(runtime.get("available_models"), list) else [],
                 "timeout_seconds": int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
                 "max_tokens": int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS),
                 "temperature": float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE),
@@ -1561,6 +1681,9 @@ async def update_agent_user_config(
             "effective": {
                 "base_url": str(runtime.get("base_url") or ""),
                 "model": str(runtime.get("model") or ""),
+                "model_source": str(runtime.get("model_source") or "missing"),
+                "model_locked": bool(runtime.get("model_locked")),
+                "available_models": runtime.get("available_models") if isinstance(runtime.get("available_models"), list) else [],
                 "timeout_seconds": int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
                 "max_tokens": int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS),
                 "temperature": float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE),
@@ -1599,7 +1722,7 @@ async def get_available_models(
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
     base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
     api_key = str(runtime.get("api_key") or "").strip()
-    current_model = str(runtime.get("model") or DEFAULT_AGENT_MODEL).strip()
+    current_model = str(runtime.get("model") or "").strip()
 
     if not api_key:
         raise HTTPException(

@@ -1,6 +1,9 @@
 import { useMessage } from '@/composables/useMessage';
 import backendAPI, { handleApiError } from './backend';
 
+const AMAP_SUCCESS_STATUS = '1';
+const AMAP_SUCCESS_INFOCODE = '10000';
+
 function normalizeWindPower(value) {
     const text = String(value ?? '').trim();
     const matched = text.match(/\d+(?:\.\d+)?/);
@@ -88,16 +91,20 @@ export async function getWeather(adcode, type = 'base') {
 
         const data = response || {};
         const status = String(data?.status ?? '0');
-        if (status !== '1') {
+        const infocode = String(data?.infocode ?? '');
+        const isSuccess = status === AMAP_SUCCESS_STATUS
+            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
+
+        if (!isSuccess) {
             const reason = data?.info || data?.message || '高德天气接口返回失败';
-            throw new Error(`${reason} (status=${status})`);
+            throw new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
         }
 
         const lives = Array.isArray(data?.lives) ? data.lives : [];
         const forecasts = Array.isArray(data?.forecasts) ? data.forecasts : [];
         const count = String(data?.count ?? '0');
         const info = String(data?.info || data?.message || '');
-        const infocode = String(data?.infocode ?? '');
+        const normalizedInfocode = String(data?.infocode ?? '');
 
         const live = lives[0] ? normalizeLive(lives[0]) : null;
         const forecast = forecasts[0] ? normalizeForecast(forecasts[0]) : null;
@@ -108,7 +115,7 @@ export async function getWeather(adcode, type = 'base') {
             status,
             count,
             info,
-            infocode,
+            infocode: normalizedInfocode,
             adcode: String(live?.adcode || forecast?.adcode || normalizedAdcode),
             city: String(live?.city || forecast?.city || ''),
             province: String(live?.province || forecast?.province || ''),

@@ -3,6 +3,9 @@ import backendAPI, { handleApiError } from './backend';
 import { useMessage } from '@/composables/useMessage';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@/utils/coordTransform.js';
 
+const AMAP_SUCCESS_STATUS = '1';
+const AMAP_SUCCESS_INFOCODE = '10000';
+
 const tiandituClient = axios.create({
     // 按天地图接口文档使用 geocoder 端点。
     // 若页面为 https 且遇到混合内容限制，可改为 https://api.tianditu.gov.cn
@@ -172,13 +175,16 @@ export async function addressToLocation(address, city = '', options = {}) {
 
         const data = response || {};
         const status = String(data?.status ?? '0');
+        const infocode = String(data?.infocode ?? '');
+        const isSuccess = status === AMAP_SUCCESS_STATUS
+            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
-        if (status !== '1') {
+        if (!isSuccess) {
             const reason = data?.info || data?.message || '高德地理编码失败';
             if (!silent) {
                 message.error(`地理编码失败：${reason}`, { closable: true, duration: 5500 });
             }
-            const notifiedError = new Error(`${reason} (status=${status})`);
+            const notifiedError = new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
             notifiedError.__notified = !silent;
             throw notifiedError;
         }
@@ -262,13 +268,16 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
 
         const data = response || {};
         const status = String(data?.status ?? '0');
+        const infocode = String(data?.infocode ?? '');
+        const isSuccess = status === AMAP_SUCCESS_STATUS
+            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
-        if (status !== '1') {
+        if (!isSuccess) {
             const reason = data?.info || data?.message || '高德逆地理编码失败';
             if (!silent) {
                 message.error(`逆地理编码失败：${reason}`, { closable: true, duration: 5500 });
             }
-            const notifiedError = new Error(`${reason} (status=${status})`);
+            const notifiedError = new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
             notifiedError.__notified = !silent;
             throw notifiedError;
         }

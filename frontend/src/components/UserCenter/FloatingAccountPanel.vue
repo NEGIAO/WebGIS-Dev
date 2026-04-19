@@ -7,6 +7,7 @@ import {
   apiAuthChangeAvatar,
   apiAuthLogout,
   apiAuthMe,
+  apiAgentListModels,
   apiCreateUserMessage,
   apiListUserMessages,
   apiStatisticsCenter,
@@ -14,12 +15,15 @@ import {
   syncUserRoleToUrl
 } from '../../api/backend'
 import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession } from '../../utils/auth'
+import { BASEMAP_OPTIONS } from '../../constants'
+import { useUserPreferencesStore } from '../../stores'
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'))
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'))
 
 const router = useRouter()
 const message = useMessage()
+const userPreferencesStore = useUserPreferencesStore()
 const emit = defineEmits(['fullscreen-change'])
 
 // Panel State
@@ -69,6 +73,15 @@ const confirmPassword = ref('')
 const selectedAvatarIndex = ref(0)
 const avatarSaving = ref(false)
 
+const preferenceDraft = ref({
+  default_basemap: '',
+  language: 'zh-CN',
+  unit_system: 'metric',
+  preferred_agent_model: ''
+})
+const preferenceSaving = ref(false)
+const preferenceModelOptions = ref([])
+
 const roleTextMap = Object.freeze({
   admin: '管理员',
   super_admin: '管理员',
@@ -113,6 +126,10 @@ const roleText = computed(() => {
 const panelLabel = computed(() => {
   const username = String(user.value?.username || '').trim()
   return username ? `账号：${username}` : '账号中心'
+})
+
+const basemapPreferenceOptions = computed(() => {
+  return Array.isArray(BASEMAP_OPTIONS) ? BASEMAP_OPTIONS : []
 })
 
 const selfStats = computed(() => centerData.value?.self_stats || {})
@@ -183,6 +200,7 @@ async function syncCurrentUser() {
     if (!result?.user) return
 
     user.value = result.user
+    selectedAvatarIndex.value = Number(result?.user?.avatar_index ?? selectedAvatarIndex.value)
     syncUserRoleToUrl(result.user)
     const token = getAuthToken()
     if (token) {
@@ -202,6 +220,7 @@ async function loadCenterData({ silent = false } = {}) {
 
     if (result?.user) {
       user.value = result.user
+      selectedAvatarIndex.value = Number(result?.user?.avatar_index ?? selectedAvatarIndex.value)
       syncUserRoleToUrl(result.user)
       const token = getAuthToken()
       if (token) {
@@ -295,10 +314,78 @@ function selectMenu(menu) {
   if (menu === 'admin' && !isAdmin.value) return
 
   activeMenu.value = menu
+  if (menu === 'preferences') {
+    void loadUserPreferences({ silent: true })
+    void loadPreferenceModelOptions({ silent: true })
+  }
   if (menu !== 'security') {
     resetPasswordForm()
   }
 }
+
+function normalizePreferences(raw = {}) {
+  const languageRaw = String(raw?.language || '').trim().toLowerCase().replace('_', '-')
+  const language = languageRaw === 'en-us' ? 'en-US' : 'zh-CN'
+  const unitRaw = String(raw?.unit_system || '').trim().toLowerCase()
+  const unitSystem = unitRaw === 'imperial' ? 'imperial' : 'metric'
+
+  return {
+    default_basemap: String(raw?.default_basemap || '').trim(),
+    language,
+    unit_system: unitSystem,
+    preferred_agent_model: String(raw?.preferred_agent_model || '').trim(),
+  }
+}
+
+function syncPreferenceDraftFromStore() {
+  preferenceDraft.value = normalizePreferences(userPreferencesStore.preferences)
+}
+
+async function loadUserPreferences({ silent = true } = {}) {
+  try {
+    await userPreferencesStore.loadPreferences({ force: true, silent })
+    syncPreferenceDraftFromStore()
+  } catch (error) {
+    if (!silent) {
+      message.error(String(error?.message || '偏好设置加载失败'))
+    }
+  }
+}
+
+async function loadPreferenceModelOptions({ silent = true } = {}) {
+  try {
+    const result = await apiAgentListModels()
+    const data = result?.data || result || {}
+    const models = Array.isArray(data?.models) ? data.models : []
+    preferenceModelOptions.value = models
+      .filter((item) => item?.chat_compatible !== false)
+      .map((item) => String(item?.id || '').trim())
+      .filter(Boolean)
+      .filter((item, index, array) => array.indexOf(item) === index)
+  } catch (error) {
+    preferenceModelOptions.value = []
+    if (!silent) {
+      message.warning(String(error?.message || '模型列表加载失败'))
+    }
+  }
+}
+
+async function handleSavePreferences() {
+  if (preferenceSaving.value) return
+  preferenceSaving.value = true
+
+  try {
+    const saved = await userPreferencesStore.savePreferences(normalizePreferences(preferenceDraft.value))
+    preferenceDraft.value = normalizePreferences(saved)
+    message.success('偏好设置已保存')
+  } catch (error) {
+    message.error(String(error?.message || '偏好设置保存失败'))
+  } finally {
+    preferenceSaving.value = false
+  }
+}
+
+
 
 function resetPasswordForm() {
   currentPassword.value = ''
@@ -390,7 +477,7 @@ async function handleSaveAvatar() {
       message.success('头像已更新')
       // 更新本地用户对象
       if (user.value) {
-        user.value.avatar_index = selectedAvatarIndex.value
+        user.value.avatar_index = Number(result?.avatar_index ?? selectedAvatarIndex.value)
         const token = getAuthToken()
         if (token) {
           setAuthSession({ token, user: user.value })
@@ -434,6 +521,8 @@ let centerTimer = null
 
 onMounted(() => {
   syncCurrentUser()
+  void loadUserPreferences({ silent: true })
+  void loadPreferenceModelOptions({ silent: true })
   // 初始化头像选择为当前用户的头像
   selectedAvatarIndex.value = userAvatarIndex.value
   loadCenterData({ silent: true })
@@ -728,24 +817,69 @@ onBeforeUnmount(() => {
               <div class="pref-list">
                 <div class="pref-item">
                   <div class="pref-info">
-                    <span class="pref-title"><i class="fas fa-moon"></i> 深色模式</span>
-                    <span class="pref-desc">跟随系统自动切换界面主题</span>
+                    <span class="pref-title"><i class="fas fa-map"></i> 默认底图</span>
+                    <span class="pref-desc">刷新后自动应用当前选择的底图</span>
                   </div>
-                  <label class="modern-toggle">
-                    <input type="checkbox" disabled checked>
-                    <span class="slider"></span>
-                  </label>
+                  <select v-model="preferenceDraft.default_basemap" class="pref-select">
+                    <option value="">跟随系统默认</option>
+                    <option
+                      v-for="option in basemapPreferenceOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
+                    </option>
+                  </select>
                 </div>
+
                 <div class="pref-item">
                   <div class="pref-info">
-                    <span class="pref-title"><i class="fas fa-bell"></i> 系统通知</span>
-                    <span class="pref-desc">接收重要更新和消息推送</span>
+                    <span class="pref-title"><i class="fas fa-language"></i> 界面语言</span>
+                    <span class="pref-desc">设置账号默认语言偏好</span>
                   </div>
-                  <label class="modern-toggle">
-                    <input type="checkbox" disabled checked>
-                    <span class="slider"></span>
-                  </label>
+                  <select v-model="preferenceDraft.language" class="pref-select">
+                    <option value="zh-CN">简体中文</option>
+                    <option value="en-US">English</option>
+                  </select>
                 </div>
+
+                <div class="pref-item">
+                  <div class="pref-info">
+                    <span class="pref-title"><i class="fas fa-ruler-combined"></i> 单位制</span>
+                    <span class="pref-desc">控制距离等数值默认单位</span>
+                  </div>
+                  <select v-model="preferenceDraft.unit_system" class="pref-select">
+                    <option value="metric">公制 (km / m)</option>
+                    <option value="imperial">英制 (mi / ft)</option>
+                  </select>
+                </div>
+
+                <div class="pref-item">
+                  <div class="pref-info">
+                    <span class="pref-title"><i class="fas fa-robot"></i> 偏好 Agent 模型</span>
+                    <span class="pref-desc">设置后将锁定优先使用该模型（若可用）</span>
+                  </div>
+                  <select v-model="preferenceDraft.preferred_agent_model" class="pref-select">
+                    <option value="">自动调度（后端随机）</option>
+                    <option
+                      v-for="modelId in preferenceModelOptions"
+                      :key="modelId"
+                      :value="modelId"
+                    >
+                      {{ modelId }}
+                    </option>
+                  </select>
+                </div>
+
+                <button
+                  class="btn-primary w-100"
+                  type="button"
+                  :disabled="preferenceSaving"
+                  @click="handleSavePreferences"
+                >
+                  <i class="fas" :class="preferenceSaving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+                  {{ preferenceSaving ? '保存中...' : '保存偏好设置' }}
+                </button>
 
                 <!-- 头像选择器 -->
                 <div class="pref-item avatar-selector-item">
@@ -754,6 +888,9 @@ onBeforeUnmount(() => {
                     <span class="pref-desc">选择你喜欢的头像样式</span>
                   </div>
                 </div>
+
+
+
                 <div class="avatar-grid">
                   <div 
                     v-for="index in 12" 
@@ -1531,6 +1668,21 @@ onBeforeUnmount(() => {
 .pref-desc {
   font-size: 13px;
   color: #8fbc9f;
+}
+
+.pref-select {
+  min-width: 150px;
+  border: 1px solid rgba(91, 207, 137, 0.35);
+  border-radius: 8px;
+  background: rgba(8, 20, 14, 0.7);
+  color: #e6fff1;
+  padding: 8px 10px;
+}
+
+.pref-select:focus {
+  outline: none;
+  border-color: #5bcf89;
+  box-shadow: 0 0 10px rgba(91, 207, 137, 0.2);
 }
 
 .modern-toggle {
