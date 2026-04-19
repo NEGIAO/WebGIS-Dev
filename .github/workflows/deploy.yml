@@ -141,54 +141,55 @@ jobs:
   # (仅前端构建产物 dist)
 # ==========================================
   deploy-frontend-to-hf:
-      needs: build
-      runs-on: ubuntu-latest
-      steps:
-        # 1. 下载第一步构建好的 dist 产物
-        - name: Download built files
-          uses: actions/download-artifact@v4
-          with:
-            name: dist-files
-            path: dist-to-hf
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built files
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-files
+          path: dist-to-hf
 
-        # 2. 部署到 HF Static Space
-        - name: Push Static Dist to HF
-          env:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          run: |
-            cd dist-to-hf
-            
-            # 初始化临时 Git 环境，将 dist 内容作为一个独立仓库处理
-            git init
-            git config user.name "github-actions[bot]"
-            git config user.email "actions@github.com"
+      - name: Push Static Dist with LFS to HF
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd dist-to-hf
+          
+          # 1. 安装并初始化 LFS
+          git init
+          git lfs install
+          
+          # 2. 强制追踪所有图片文件为 LFS 模式
+          # 这能绕过 HF 对普通二进制文件数量和大小的 pre-receive 限制
+          git lfs track "tiles/**/*.png"
+          git lfs track "*.png"
+          git lfs track "*.jpg"
+          git lfs track ".gitattributes"
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "actions@github.com"
 
-            # 关键：注入 HF Static Space 必须的元数据块
-            # 如果没有这个 README.md，HF 无法识别这是静态网页
-            cat <<EOT > README.md
-            ---
-            title: WebGIS-Frontend
-            emoji: 🌍
-            colorFrom: blue
-            colorTo: green
-            sdk: static
-            pinned: false
-            ---
-            EOT
+          # 3. 注入元数据
+          cat <<EOT > README.md
+          ---
+          title: WebGIS-Frontend
+          emoji: 🌍
+          colorFrom: blue
+          colorTo: green
+          sdk: static
+          pinned: false
+          ---
+          EOT
 
-            # 创建 .nojekyll (虽然 HF 不走 Jekyll，但作为 WebGIS 部署是个好习惯)
-            touch .nojekyll
+          # 4. 提交
+          git add .
+          git commit -m "Deploy Frontend with Tiles via LFS: ${GITHUB_SHA::7}"
 
-            # 提交所有打包后的文件
-            git add .
-            git commit -m "Deploy Frontend from GitHub Actions: ${GITHUB_SHA::7}"
-
-            # 强制推送至 HF 的 Web 仓库 main 分支
-            echo "Pushing frontend build to Hugging Face: NEGIAO/Web"
-            git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main
-
-            echo "Frontend deployment to HF Space (NEGIAO/Web) completed ✓"
-
+          # 5. 推送到 HF (注意：推送大量瓦片可能会耗时较久)
+          echo "Pushing frontend build (with LFS tiles) to Hugging Face..."
+          git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main
+          
 # ========================================== 
   # 第五步：同步到 Hugging Face 
   # (仅Backend后端代码)
