@@ -31,7 +31,7 @@ backend/
 │   ├── admin.py                # 管理端接口
 │   ├── api_management.py       # API 管理
 │   ├── api_keys_management.py  # API Key 管理
-│   ├── agent_chat.py           # Agent 对话代理与配置
+│   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
 │   └── __init__.py
 ├── app.py                      # FastAPI 应用入口
 ├── Dockerfile                  # 容器化部署
@@ -294,3 +294,104 @@ LOG_LEVEL=DEBUG uv run uvicorn app:app --reload
 - **快速指南**：`docs/backend-agent-chat-guide.md`
 - **完整日志**：`docs/2026-04-19-AgentChat配置同步修复.md`
 - **规范执行**：`docs/2026-04-19-版本规范执行记录.md`
+
+### 关键改进
+
+- 对话配额改为**数据库动态读取**（`system_config`），不再依赖硬编码常量。
+- 管理员可在后台直接修改 Guest / Registered 每日对话额度。
+- 对话链路改为：**先校验额度 -> 成功调用上游后再扣费**。
+- 上游失败/超时/异常时，不扣减用户额度。
+
+### 涉及文件
+
+- `backend/api/agent_chat.py`
+
+---
+
+
+### 核心诉求
+
+**痛点**：新用户使用 Agent Chat 时，若未主动配置模型，首条信息请求必然因模型路径无效而失败。
+
+**目标**：实现**"开箱即用"**体验——新用户无需任何配置，点击"发送"即可立即获得 AI 回复。
+
+### 关键改进
+
+#### 后端增强（`backend/api/agent_chat.py`）
+
+1. **模型列表缓存** → `_cache_available_models_sync()`
+   - 将上游返回的模型 ID 列表存储到 `system_config` 数据库
+   - 支持离线降级：若上游服务临时不可用，使用缓存列表
+
+2. **智能降级流程** → `get_available_models()` 重构
+   - 优先：实时调用上游 `/models`
+   - 降级1：上游超时 → 使用缓存列表
+   - 降级2：无缓存 → 返回友好错误提示
+
+3. **模型偏好持久化** → `@router.patch("/api/agent/user/preference")`
+   - 新端点允许用户保存"偏好模型"到 `user_preferences` 表
+   - 跨设备登录后自动应用偏好
+
+#### 前端增强（`frontend/src/components/ChatPanelContent.vue`）
+
+1. **启动时自动加载模型** → `onMounted()` 改进
+   - 页面初始化时后台加载模型列表（不阻塞 UI）
+
+2. **自动模型选择** → `loadAvailableModels()` 增强
+   - 若用户未选择模型，自动从可用列表中**随机选择一个**
+   - 自动保存为用户偏好（后台异步，无额外延迟）
+
+3. **后端信息反馈** → 支持 `fallback_reason` 字段
+   - 前端可展示模型加载的降级原因（仅调试用）
+
+#### API 新增
+
+**后端新增**：
+- `PATCH /api/agent/user/preference` - 保存用户模型偏好
+- `_cache_available_models_sync()` - 缓存模型到数据库
+- `_cache_models_async()` - 后台异步缓存
+
+**前端新增**：
+- `apiAgentSaveModelPreference(model)` - API 包装器
+
+### 涉及文件
+
+- `backend/api/agent_chat.py` (+130 lines)
+- `frontend/src/components/ChatPanelContent.vue` (+45 lines)
+- `frontend/src/api/backend.js` (+5 lines)
+
+### 零配置流程图
+
+```
+用户点击聊天图标
+  ↓
+onMounted() 触发
+  ↓ ┌─ 后台加载模型列表 (loadAvailableModels)
+  │ ├─ 优先: 查询上游 /models
+  │ ├─ 降级: 上游失败 → 使用缓存列表
+  │ └─ 自动选择: 若用户未配置，从列表中随机挑一个
+  │
+  ↓ [用户UI展示就绪]
+用户输入问题，点击"发送"
+  ↓
+前后端使用自动选择的模型
+  ↓
+✅ 首条消息成功获得 AI 回复
+```
+
+### 配置举例
+
+无需额外配置！系统自动工作：
+
+```python
+# 后端自动监听 agent_available_models（system_config key）
+# 前端自动触发 onMounted() 预加载
+# 首次发送消息时，自动使用系统选定的模型
+```
+
+### 性能提示
+
+- 模型列表缓存不阻塞响应（使用 `asyncio.create_task()` 后台保存）
+- 前端预加载模型不阻塞页面渲染
+- 用户体验：**立即可用，无感知延迟**
+

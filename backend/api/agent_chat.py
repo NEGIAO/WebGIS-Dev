@@ -86,6 +86,8 @@ CONFIG_KEY_SYSTEM_PROMPT = "agent_system_prompt"
 CONFIG_KEY_TIMEOUT_SECONDS = "agent_timeout_seconds"
 CONFIG_KEY_MAX_TOKENS = "agent_max_tokens"
 CONFIG_KEY_TEMPERATURE = "agent_temperature"
+CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA = "agent_chat_guest_daily_quota"
+CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA = "agent_chat_registered_daily_quota"
 
 USER_CONFIG_TABLE = "agent_user_config"
 
@@ -109,6 +111,9 @@ class AgentConfigUpdateRequest(BaseModel):
     timeout_seconds: Optional[int] = Field(default=None, ge=5, le=180)
     max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    guest_daily_quota: Optional[int] = Field(default=None, ge=1, le=100000)
+    registered_daily_quota: Optional[int] = Field(default=None, ge=1, le=100000)
+    reset_chat_quota: Optional[bool] = Field(default=None)
 
 
 class AgentUserConfigUpdateRequest(BaseModel):
@@ -216,6 +221,48 @@ def _pick_runtime_model(
         return env_default, "env-default", False
 
     return "", "missing", False
+
+
+def _cache_available_models_sync(models: List[Dict[str, Any]]) -> None:
+    """
+    缓存当前可用模型列表到 system_config 数据库。
+    这样即使上游服务临时不可用，仍可使用缓存的模型列表进行随机降级。
+    
+    参数：
+    - models: 标准化的模型字典列表，每个字典至少包含 "id" 字段。
+    """
+    try:
+        _ensure_agent_chat_tables_sync()
+        # 提取模型 ID 列表
+        model_ids = []
+        seen: set[str] = set()
+        for model in models:
+            model_id = str(model.get("id") or "").strip()
+            if model_id and model_id not in seen:
+                model_ids.append(model_id)
+                seen.add(model_id)
+
+        if not model_ids:
+            return
+
+        # 转换为 JSON 格式存储
+        cache_value = json.dumps(model_ids)
+
+        with _db_connection() as conn:
+            _ensure_system_config_table_sync(conn)
+            conn.execute(
+                """
+                INSERT INTO system_config (key, value, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(key)
+                DO UPDATE SET value = excluded.value, updated_at = datetime('now')
+                """,
+                (CONFIG_KEY_AVAILABLE_MODELS, cache_value),
+            )
+            conn.commit()
+            logger.debug(f"Cached {len(model_ids)} models to system_config")
+    except Exception as e:
+        logger.warning(f"Failed to cache available models: {e}")
 
 
 def _normalize_system_prompt(value: str) -> str:
@@ -631,11 +678,61 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
     }
 
 
+def _get_agent_chat_quota_policy_sync() -> Dict[str, Optional[int]]:
+    config_values = _get_system_config_values_sync(
+        [
+            CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
+            CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
+        ]
+    )
+
+    guest_quota = _safe_parse_int(
+        config_values.get(CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA),
+        AGENT_CHAT_GUEST_DAILY_QUOTA,
+        1,
+        100000,
+    )
+    registered_quota = _safe_parse_int(
+        config_values.get(CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA),
+        AGENT_CHAT_REGISTERED_DAILY_QUOTA,
+        1,
+        100000,
+    )
+
+    return {
+        "guest": guest_quota,
+        "registered": registered_quota,
+        "admin": None,
+    }
+
+
+def _delete_system_config_keys_sync(keys: List[str]) -> None:
+    normalized_keys = [str(key or "").strip() for key in (keys or []) if str(key or "").strip()]
+    if not normalized_keys:
+        return
+
+    placeholders = ", ".join(["?"] * len(normalized_keys))
+    sql = f"DELETE FROM system_config WHERE key IN ({placeholders})"
+
+    with _db_connection() as conn:
+        _ensure_system_config_table_sync(conn)
+        conn.execute(sql, tuple(normalized_keys))
+        conn.commit()
+
+
 def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
     _ensure_agent_chat_tables_sync()
 
     now_iso = _iso_now()
     rows_to_upsert: List[Tuple[str, str, str]] = []
+
+    if bool(updates.get("reset_chat_quota")):
+        _delete_system_config_keys_sync(
+            [
+                CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
+                CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
+            ]
+        )
 
     if "base_url" in updates:
         rows_to_upsert.append((CONFIG_KEY_BASE_URL, _normalize_base_url(str(updates["base_url"])), now_iso))
@@ -674,6 +771,29 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
             (
                 CONFIG_KEY_TEMPERATURE,
                 str(_safe_parse_float(updates["temperature"], DEFAULT_AGENT_TEMPERATURE, 0.0, 2.0)),
+                now_iso,
+            )
+        )
+    if "guest_daily_quota" in updates:
+        rows_to_upsert.append(
+            (
+                CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
+                str(_safe_parse_int(updates["guest_daily_quota"], AGENT_CHAT_GUEST_DAILY_QUOTA, 1, 100000)),
+                now_iso,
+            )
+        )
+    if "registered_daily_quota" in updates:
+        rows_to_upsert.append(
+            (
+                CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
+                str(
+                    _safe_parse_int(
+                        updates["registered_daily_quota"],
+                        AGENT_CHAT_REGISTERED_DAILY_QUOTA,
+                        1,
+                        100000,
+                    )
+                ),
                 now_iso,
             )
         )
@@ -771,11 +891,57 @@ def _get_agent_key_status_sync() -> Dict[str, Any]:
 
 def _get_agent_chat_daily_limit(role: str, username: str) -> Optional[int]:
     normalized_role = normalize_role(role, username)
+    quota_policy = _get_agent_chat_quota_policy_sync()
     if normalized_role == ROLE_ADMIN:
         return None
     if normalized_role == "guest":
-        return AGENT_CHAT_GUEST_DAILY_QUOTA
-    return AGENT_CHAT_REGISTERED_DAILY_QUOTA
+        return int(quota_policy.get("guest") or AGENT_CHAT_GUEST_DAILY_QUOTA)
+    return int(quota_policy.get("registered") or AGENT_CHAT_REGISTERED_DAILY_QUOTA)
+
+
+def _check_agent_chat_quota_sync(username: str, role: str, quota_subject: str) -> Dict[str, Any]:
+    _ensure_agent_chat_tables_sync()
+
+    normalized_role = normalize_role(role, username)
+    normalized_subject = str(quota_subject or "").strip() or str(username or "").strip() or "unknown"
+    usage_date = _utc_date_str()
+    daily_limit = _get_agent_chat_daily_limit(role, username)
+
+    if normalized_role == ROLE_ADMIN:
+        return {
+            "allowed": True,
+            "limit": None,
+            "used": 0,
+            "remaining": None,
+            "usage_date": usage_date,
+            "quota_subject": normalized_subject,
+        }
+
+    used = 0
+    try:
+        with _db_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT calls FROM agent_chat_usage_daily
+                WHERE quota_subject = ? AND usage_date = ?
+                """,
+                (normalized_subject, usage_date),
+            ).fetchone()
+        used = int((dict(row).get("calls") if row else 0) or 0)
+    except Exception as e:
+        logger.error(f"Failed to precheck quota for {username}: {e}")
+
+    remaining = None if daily_limit is None else max(0, daily_limit - used)
+    allowed = bool(daily_limit is None or used < daily_limit)
+
+    return {
+        "allowed": allowed,
+        "limit": daily_limit,
+        "used": used,
+        "remaining": remaining,
+        "usage_date": usage_date,
+        "quota_subject": normalized_subject,
+    }
 
 
 def _consume_agent_chat_quota_sync(username: str, role: str, quota_subject: str) -> Dict[str, Any]:
@@ -851,52 +1017,6 @@ def _consume_agent_chat_quota_sync(username: str, role: str, quota_subject: str)
         "quota_subject": normalized_subject,
     }
 
-    with _db_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT calls FROM agent_chat_usage_daily
-            WHERE quota_subject = ? AND usage_date = ?
-            """,
-            (normalized_subject, usage_date),
-        ).fetchone()
-
-        used = int((dict(row).get("calls") if row else 0) or 0)
-        if daily_limit is not None and used >= daily_limit:
-            return {
-                "allowed": False,
-                "limit": daily_limit,
-                "used": used,
-                "remaining": 0,
-                "usage_date": usage_date,
-                "quota_subject": normalized_subject,
-            }
-
-        conn.execute(
-            """
-            INSERT INTO agent_chat_usage_daily (quota_subject, role, usage_date, calls, updated_at)
-            VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT(quota_subject, usage_date)
-            DO UPDATE SET
-                role = excluded.role,
-                calls = agent_chat_usage_daily.calls + 1,
-                updated_at = excluded.updated_at
-            """,
-            (normalized_subject, normalized_role, usage_date, now_iso),
-        )
-        conn.commit()
-
-    next_used = used + 1
-    remaining = None if daily_limit is None else max(0, daily_limit - next_used)
-
-    return {
-        "allowed": True,
-        "limit": daily_limit,
-        "used": next_used,
-        "remaining": remaining,
-        "usage_date": usage_date,
-        "quota_subject": normalized_subject,
-    }
-
 
 def _get_agent_chat_quota_snapshot_sync(username: str, role: str, quota_subject: str) -> Dict[str, Any]:
     _ensure_agent_chat_tables_sync()
@@ -933,26 +1053,6 @@ def _get_agent_chat_quota_snapshot_sync(username: str, role: str, quota_subject:
     remaining = None if daily_limit is None else max(0, daily_limit - used)
     
     logger.debug(f"User {username} quota snapshot: {used}/{daily_limit} remaining={remaining}")
-
-    return {
-        "limit": daily_limit,
-        "used": used,
-        "remaining": remaining,
-        "usage_date": usage_date,
-        "quota_subject": normalized_subject,
-    }
-
-    with _db_connection() as conn:
-        row = conn.execute(
-            """
-            SELECT calls FROM agent_chat_usage_daily
-            WHERE quota_subject = ? AND usage_date = ?
-            """,
-            (normalized_subject, usage_date),
-        ).fetchone()
-
-    used = int((dict(row).get("calls") if row else 0) or 0)
-    remaining = None if daily_limit is None else max(0, daily_limit - used)
 
     return {
         "limit": daily_limit,
@@ -1564,13 +1664,13 @@ async def agent_chat_completions(
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
-    quota = await asyncio.to_thread(_consume_agent_chat_quota_sync, username, role, quota_subject)
-    if not bool(quota.get("allowed")):
-        limit = quota.get("limit")
-        used = quota.get("used")
+    quota_preview = await asyncio.to_thread(_check_agent_chat_quota_sync, username, role, quota_subject)
+    if not bool(quota_preview.get("allowed")):
+        limit = quota_preview.get("limit")
+        used = quota_preview.get("used")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Daily chat quota exceeded ({used}/{limit}). Please try again tomorrow.",
+            detail=f"今日额度已达上限（{used}/{limit}），请明日再试。",
         )
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
@@ -1642,13 +1742,30 @@ async def agent_chat_completions(
                 detail="Agent upstream returned empty content.",
             )
 
+        quota_after = await asyncio.to_thread(_consume_agent_chat_quota_sync, username, role, quota_subject)
+        if not bool(quota_after.get("allowed", True)):
+            quota_snapshot = await asyncio.to_thread(
+                _get_agent_chat_quota_snapshot_sync,
+                username,
+                role,
+                quota_subject,
+            )
+            quota_after = {
+                "allowed": False,
+                "limit": quota_snapshot.get("limit"),
+                "used": quota_snapshot.get("used"),
+                "remaining": quota_snapshot.get("remaining"),
+                "usage_date": quota_snapshot.get("usage_date"),
+                "quota_subject": quota_snapshot.get("quota_subject"),
+            }
+
         return {
             "status": "success",
             "data": {
                 "reply": reply,
                 "model": runtime_model,
                 "model_source": str(runtime.get("model_source") or "unknown"),
-                "quota": quota,
+                "quota": quota_after,
                 "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
                 "api_key_source": str(runtime.get("api_key_source") or "unknown"),
             },
@@ -1698,17 +1815,14 @@ async def admin_get_agent_config(
     """
     config = await asyncio.to_thread(_get_agent_provider_config_sync)
     key_status = await asyncio.to_thread(_get_agent_key_status_sync)
+    chat_quota = await asyncio.to_thread(_get_agent_chat_quota_policy_sync)
 
     return {
         "status": "success",
         "data": {
             "provider": config,
             "key_status": key_status,
-            "chat_quota": {
-                "guest": AGENT_CHAT_GUEST_DAILY_QUOTA,
-                "registered": AGENT_CHAT_REGISTERED_DAILY_QUOTA,
-                "admin": None,
-            },
+            "chat_quota": chat_quota,
         },
     }
 
@@ -1722,7 +1836,7 @@ async def admin_update_agent_config(
     功能：管理员更新平台级 Agent 默认配置。
 
     参数：
-    - payload: 可选更新字段（base_url/model/system_prompt/timeout/max_tokens/temperature）。
+    - payload: 可选更新字段（base_url/model/system_prompt/timeout/max_tokens/temperature/guest_daily_quota/registered_daily_quota/reset_chat_quota）。
 
     返回：
     - provider: 更新后并标准化的完整平台配置。
@@ -1732,7 +1846,7 @@ async def admin_update_agent_config(
     2. 校验并写入 system_config；
     3. 返回生效配置快照。
     """
-    updates = _model_dump_compat(payload, exclude_none=True)
+    updates = _model_dump_compat(payload, exclude_none=True, exclude_unset=True)
 
     if not updates:
         raise HTTPException(
@@ -1741,12 +1855,14 @@ async def admin_update_agent_config(
         )
 
     saved = await asyncio.to_thread(_set_agent_provider_config_sync, updates)
+    chat_quota = await asyncio.to_thread(_get_agent_chat_quota_policy_sync)
 
     return {
         "status": "success",
         "message": "Agent config updated.",
         "data": {
             "provider": saved,
+            "chat_quota": chat_quota,
         },
     }
 
@@ -1876,6 +1992,7 @@ async def get_available_models(
     4. 若当前生效模型未在上游列表中，附加为 `configured` 记录。
     """
     username = str(session.get("username") or "")
+    fallback_reason = None
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
     base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
@@ -1888,12 +2005,40 @@ async def get_available_models(
             detail="Agent key is not configured on backend. Please set platform key or personal key first.",
         )
 
-    upstream_models, upstream_endpoint = await _call_upstream_models(
-        request,
-        base_url=base_url,
-        api_key=api_key,
-        timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
-    )
+    # 尝试从上游获取模型列表
+    upstream_models = []
+    upstream_endpoint = ""
+    upstream_error = None
+    try:
+        upstream_models, upstream_endpoint = await _call_upstream_models(
+            request,
+            base_url=base_url,
+            api_key=api_key,
+            timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
+        )
+    except Exception as e:
+        upstream_error = str(e)
+        logger.warning(f"Failed to fetch models from upstream: {e}, will try fallback cache")
+
+    # 若上游成功，缓存模型列表
+    if upstream_models and not upstream_error:
+        compatible_upstream_models = [
+            item for item in upstream_models if bool(item.get("chat_compatible", True))
+        ]
+        # 异步缓存，不阻塞响应
+        asyncio.create_task(_cache_models_async(compatible_upstream_models))
+    elif upstream_error:
+        # 若上游失败，尝试使用缓存的模型列表
+        fallback_reason = f"上游服务暂时不可用（{upstream_error}），使用缓存模型列表"
+        cached_model_list = _normalize_available_models(
+            _get_system_config_values_sync([CONFIG_KEY_AVAILABLE_MODELS]).get(CONFIG_KEY_AVAILABLE_MODELS, "")
+        )
+        if cached_model_list:
+            # 重建模型字典以兼容下游代码
+            upstream_models = [{"id": mid, "name": mid} for mid in cached_model_list]
+            logger.info(f"Using cached {len(upstream_models)} models as fallback")
+        else:
+            fallback_reason = "上游服务不可用，且无可用缓存模型。请检查 Agent 配置或联系管理员。"
 
     compatible_upstream_models = [
         item for item in upstream_models if bool(item.get("chat_compatible", True))
@@ -1955,5 +2100,87 @@ async def get_available_models(
             "model_count": len(models),
             "upstream_model_total": len(upstream_models),
             "excluded_non_chat_models": len(incompatible_upstream_models),
+            **({"fallback_reason": fallback_reason} if fallback_reason else {}),
         },
     }
+
+
+async def _cache_models_async(models: List[Dict[str, Any]]) -> None:
+    """异步包装器，在后台缓存模型列表不阻塞响应。"""
+    try:
+        await asyncio.to_thread(_cache_available_models_sync, models)
+    except Exception as e:
+        logger.debug(f"Background model caching failed: {e}")
+
+
+@router.patch("/api/agent/user/preference")
+async def update_user_model_preference(
+    payload: Dict[str, Any],
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """
+    功能：保存用户的模型偏好设置到 user_preferences 表。
+    
+    参数：
+    - payload: {"preferred_model": "model-id"}
+
+    返回：
+    - preferred_model: 保存后的模型偏好。
+    
+    处理过程：
+    1. 验证模型 ID 有效性
+    2. 写入 user_preferences.preferred_agent_model
+    3. 返回成功确认
+    """
+    username = str(session.get("username") or "")
+    preferred_model = _normalize_model(str(payload.get("preferred_model") or ""))
+
+    if not preferred_model:
+        # 允许清空偏好（传空字符串）
+        pass
+
+    try:
+        _ensure_agent_chat_tables_sync()
+        with _db_connection() as conn:
+            # 确保 user_preferences 表存在
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_preferences (
+                    username TEXT PRIMARY KEY,
+                    default_basemap TEXT,
+                    language TEXT,
+                    unit_system TEXT,
+                    preferred_agent_model TEXT,
+                    updated_at TEXT
+                )
+                """
+            )
+
+            # 更新用户偏好
+            conn.execute(
+                """
+                INSERT INTO user_preferences (username, preferred_agent_model, updated_at)
+                VALUES (?, ?, datetime('now'))
+                ON CONFLICT(username)
+                DO UPDATE SET preferred_agent_model = excluded.preferred_agent_model, updated_at = datetime('now')
+                """,
+                (username, preferred_model),
+            )
+            conn.commit()
+            logger.info(f"User {username} preferred model updated to {preferred_model or '(cleared)'}")
+    except Exception as e:
+        logger.error(f"Failed to update user model preference: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save model preference: {str(e)}",
+        )
+
+    return {
+        "status": "success",
+        "message": "Model preference updated.",
+        "data": {
+            "username": username,
+            "preferred_model": preferred_model,
+        },
+    }
+

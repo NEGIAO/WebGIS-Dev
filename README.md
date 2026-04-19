@@ -88,6 +88,7 @@ WebGIS_Dev/
 │   ├── src/
 │   │   ├── api/                    # 前端 API 封装
 │   │   ├── components/             # 业务组件
+│   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   │   └── UserCenter/         # 用户中心子模块
 │   │   │       ├── FloatingAccountPanel.vue
 │   │   │       ├── AdminControlPanel.vue
@@ -106,7 +107,7 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 前端详细文档
 ├── backend/                        # 🔹 后端（FastAPI）
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
-│   │   └── agent_chat.py           # ✨ V3.0.2 配置同步修复
+│   │   └── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
 │   ├── app.py                      # FastAPI 入口
 │   ├── data/                       # 本地/挂载数据目录
 │   ├── Dockerfile                  # 后端镜像构建
