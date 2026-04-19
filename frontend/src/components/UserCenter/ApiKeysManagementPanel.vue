@@ -200,6 +200,14 @@
                         <span>Temperature</span>
                         <input v-model.number="agentConfigDraft.temperature" type="number" min="0" max="2" step="0.1" class="key-input" />
                     </label>
+                    <label class="config-item">
+                        <span>Guest 每日额度</span>
+                        <input v-model.number="agentConfigDraft.guest_daily_quota" type="number" min="1" max="100000" class="key-input" />
+                    </label>
+                    <label class="config-item">
+                        <span>Registered 每日额度</span>
+                        <input v-model.number="agentConfigDraft.registered_daily_quota" type="number" min="1" max="100000" class="key-input" />
+                    </label>
                     <label class="config-item config-item-full">
                         <span>System Prompt</span>
                         <textarea
@@ -213,6 +221,7 @@
 
                 <div class="button-group">
                     <button class="btn btn-save" @click="saveAgentConfig">保存参数</button>
+                    <button class="btn btn-edit" @click="resetChatQuota">恢复默认额度</button>
                     <button class="btn btn-cancel" @click="cancelEditAgentConfig">取消</button>
                 </div>
             </div>
@@ -242,6 +251,14 @@
                     <div class="config-item">
                         <span>Temperature</span>
                         <strong>{{ agentConfig.temperature ?? '-' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Guest 每日额度</span>
+                        <strong>{{ agentQuota.guest }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Registered 每日额度</span>
+                        <strong>{{ agentQuota.registered }}</strong>
                     </div>
                     <div class="config-item config-item-full">
                         <span>System Prompt</span>
@@ -312,6 +329,8 @@ const agentConfig = ref({
 const agentConfigDraft = ref({
     ...agentConfig.value,
     available_models_text: '',
+    guest_daily_quota: 10,
+    registered_daily_quota: 100,
 });
 const agentQuota = ref({
     guest: 10,
@@ -376,6 +395,8 @@ function hydrateAgentConfigDraft() {
         timeout_seconds: Number(agentConfig.value.timeout_seconds || 45),
         max_tokens: Number(agentConfig.value.max_tokens || 512),
         temperature: Number(agentConfig.value.temperature ?? 0.2),
+        guest_daily_quota: Number(agentQuota.value.guest || 10),
+        registered_daily_quota: Number(agentQuota.value.registered || 100),
         system_prompt: String(agentConfig.value.system_prompt || ''),
     };
 }
@@ -403,7 +424,7 @@ async function loadAgentConfig() {
     agentConfigLoading.value = true;
     try {
         const result = await apiAdminGetAgentConfig();
-        const data = result?.data || {};
+        const data = result?.data || result || {};
         const provider = data?.provider || {};
         agentConfig.value = {
             base_url: String(provider.base_url || ''),
@@ -431,6 +452,9 @@ async function loadAgentConfig() {
 
 async function saveAgentConfig() {
     const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text)
+    const guestDailyQuota = Number(agentConfigDraft.value.guest_daily_quota || 0);
+    const registeredDailyQuota = Number(agentConfigDraft.value.registered_daily_quota || 0);
+
     const payload = {
         base_url: String(agentConfigDraft.value.base_url || '').trim(),
         model: String(agentConfigDraft.value.model || '').trim(),
@@ -438,6 +462,8 @@ async function saveAgentConfig() {
         timeout_seconds: Number(agentConfigDraft.value.timeout_seconds || 45),
         max_tokens: Number(agentConfigDraft.value.max_tokens || 512),
         temperature: Number(agentConfigDraft.value.temperature ?? 0.2),
+        guest_daily_quota: guestDailyQuota,
+        registered_daily_quota: registeredDailyQuota,
         system_prompt: String(agentConfigDraft.value.system_prompt || '').trim(),
     };
 
@@ -451,9 +477,20 @@ async function saveAgentConfig() {
         return;
     }
 
+    if (!Number.isFinite(guestDailyQuota) || guestDailyQuota < 1) {
+        message.error('Guest 每日额度必须是大于 0 的整数');
+        return;
+    }
+
+    if (!Number.isFinite(registeredDailyQuota) || registeredDailyQuota < 1) {
+        message.error('Registered 每日额度必须是大于 0 的整数');
+        return;
+    }
+
     try {
         const result = await apiAdminUpdateAgentConfig(payload);
-        const provider = result?.data?.provider || {};
+        const data = result?.data || result || {};
+        const provider = data?.provider || {};
         agentConfig.value = {
             base_url: String(provider.base_url || payload.base_url),
             model: String(provider.model || payload.model),
@@ -465,11 +502,28 @@ async function saveAgentConfig() {
             temperature: Number(provider.temperature ?? payload.temperature),
             system_prompt: String(provider.system_prompt || payload.system_prompt),
         };
+
+        const quota = data?.chat_quota || {};
+        agentQuota.value = {
+            guest: Number(quota.guest || payload.guest_daily_quota || 10),
+            registered: Number(quota.registered || payload.registered_daily_quota || 100),
+        };
+
         hydrateAgentConfigDraft();
         editingAgentConfig.value = false;
         message.success('Agent 参数已保存');
     } catch (error) {
         message.error(`保存 Agent 配置失败: ${error.message}`);
+    }
+}
+
+async function resetChatQuota() {
+    try {
+        await apiAdminUpdateAgentConfig({ reset_chat_quota: true });
+        await loadAgentConfig();
+        message.success('已恢复默认对话额度');
+    } catch (error) {
+        message.error(`恢复默认额度失败: ${error.message}`);
     }
 }
 

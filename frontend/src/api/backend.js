@@ -717,6 +717,15 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
   if (typeof payload.timeout_seconds !== 'undefined') safePayload.timeout_seconds = Number(payload.timeout_seconds)
   if (typeof payload.max_tokens !== 'undefined') safePayload.max_tokens = Number(payload.max_tokens)
   if (typeof payload.temperature !== 'undefined') safePayload.temperature = Number(payload.temperature)
+  if (typeof payload.guest_daily_quota !== 'undefined' && payload.guest_daily_quota !== null) {
+    safePayload.guest_daily_quota = Number(payload.guest_daily_quota)
+  }
+  if (typeof payload.registered_daily_quota !== 'undefined' && payload.registered_daily_quota !== null) {
+    safePayload.registered_daily_quota = Number(payload.registered_daily_quota)
+  }
+  if (payload.reset_chat_quota === true) {
+    safePayload.reset_chat_quota = true
+  }
 
   return backendAPI.post('/api/admin/agent/config', safePayload)
 }

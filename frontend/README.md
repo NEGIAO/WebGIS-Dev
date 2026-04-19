@@ -196,18 +196,20 @@ frontend/
 │   ├── main.js
 │   ├── Guideline.md
 │   ├── api/                        # 后端接口封装
+│   │   └── backend.js              # 统一 API 客户端（含 Agent 配额/错误语义）
 │   ├── assets/                     # 图片/样式等资源
 │   ├── components/                 # 主业务组件
 │   │   ├── MapContainer.vue
 │   │   ├── TopBar.vue
 │   │   ├── SidePanel.vue
+│   │   ├── ChatPanelContent.vue    # AI 助手面板（服务状态/额度/交互）
 │   │   ├── WeatherChartPanel.vue
 │   │   ├── CesiumContainer.vue
 │   │   └── UserCenter/
 │   │       ├── FloatingAccountPanel.vue
 │   │       ├── AdminControlPanel.vue
 │   │       ├── ApiManagementPanel.vue
-│   │       └── ApiKeysManagementPanel.vue
+│   │       └── ApiKeysManagementPanel.vue  # 管理员 Agent 参数与额度配置
 │   ├── composables/                # 组合式逻辑
 │   │   └── map/features/           # 地图功能模块化拆分
 │   ├── constants/                  # 常量与配置

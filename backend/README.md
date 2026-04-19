@@ -31,7 +31,7 @@ backend/
 │   ├── admin.py                # 管理端接口
 │   ├── api_management.py       # API 管理
 │   ├── api_keys_management.py  # API Key 管理
-│   ├── agent_chat.py           # Agent 对话代理与配置
+│   ├── agent_chat.py           # Agent 对话代理（全局同步 + 动态配额 + 成功后扣费）
 │   └── __init__.py
 ├── app.py                      # FastAPI 应用入口
 ├── Dockerfile                  # 容器化部署
@@ -294,3 +294,16 @@ LOG_LEVEL=DEBUG uv run uvicorn app:app --reload
 - **快速指南**：`docs/backend-agent-chat-guide.md`
 - **完整日志**：`docs/2026-04-19-AgentChat配置同步修复.md`
 - **规范执行**：`docs/2026-04-19-版本规范执行记录.md`
+
+## ✨ V3.0.3 Agent 配额与计费链路强化（2026-04-19）
+
+### 关键改进
+
+- 对话配额改为**数据库动态读取**（`system_config`），不再依赖硬编码常量。
+- 管理员可在后台直接修改 Guest / Registered 每日对话额度。
+- 对话链路改为：**先校验额度 -> 成功调用上游后再扣费**。
+- 上游失败/超时/异常时，不扣减用户额度。
+
+### 涉及文件
+
+- `backend/api/agent_chat.py`

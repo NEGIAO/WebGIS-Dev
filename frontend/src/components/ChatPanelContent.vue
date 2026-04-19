@@ -118,7 +118,7 @@
       <textarea
         v-model="inputMessage"
         @keydown.enter.prevent="sendMessage"
-        :placeholder="serviceReady ? '请输入您的问题...' : '服务未就绪，请联系管理员配置 Agent Key'"
+        :placeholder="inputPlaceholder"
         rows="1"
       ></textarea>
       <button @click="sendMessage" :disabled="sendDisabled">发送</button>
@@ -219,6 +219,16 @@ const quotaExhausted = computed(() => {
   return Number.isFinite(quota.value.remaining) && Number(quota.value.remaining) <= 0;
 });
 
+const inputPlaceholder = computed(() => {
+  if (!serviceReady.value) {
+    return '服务未就绪，请联系管理员配置 Agent Key';
+  }
+  if (quotaExhausted.value) {
+    return '今日额度已达上限，请明日再试';
+  }
+  return '请输入您的问题...';
+});
+
 const sendDisabled = computed(() => {
   return isLoading.value || !inputMessage.value.trim() || !serviceReady.value || quotaExhausted.value;
 });
@@ -252,7 +262,9 @@ const reloadAgentConfig = async (showToast = false) => {
     quota.value = normalizeQuota(data?.quota || {});
 
     if (serviceReady.value) {
-      statusHint.value = '后端 Agent 已连接，前端不会暴露任何对话密钥。';
+      statusHint.value = quotaExhausted.value
+        ? '今日对话额度已达上限，请明日再试。'
+        : '后端 Agent 已连接，前端不会暴露任何对话密钥。';
     } else {
       statusHint.value = '后端 Agent 未完成配置，请管理员在用户中心设置 Agent Key。';
     }
@@ -599,7 +611,8 @@ const sendMessage = async () => {
   } catch (error) {
     messages.value[assistantMsgIndex].content = `出错啦: ${error.message}`;
     if (error?.isQuotaExceeded) {
-      statusHint.value = '今日对话额度已用完，请明日再试。';
+      statusHint.value = '今日额度已达上限，请明日再试。';
+      await reloadAgentConfig(false);
     }
   } finally {
     isLoading.value = false;
