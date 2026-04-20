@@ -214,7 +214,7 @@ frontend/
 │   │   └── map/features/           # 地图功能模块化拆分
 │   ├── constants/                  # 常量与配置
 │   ├── router/                     # 路由与二段式页面懒加载
-│   │   ├── index.js
+│   │   ├── index.js                # 路由守卫 + Loading Relay 接力（home 路由不提前 hideLoading）
 │   │   └── lazyHomeViewLoader.js   # Home 页面二段式懒加载隔离器（避免登录首屏拉取 GIS 重资源）
 │   ├── stores/                     # Pinia 状态管理
 │   ├── utils/                      # 工具与 GIS 处理
@@ -223,7 +223,7 @@ frontend/
 │   │       ├── deferredGisAssets.js         # GIS 重资源预热编排
 │   │       └── deferredGisWarmupLauncher.js # 登录页 3 秒后预热触发器
 │   └── views/
-│       ├── HomeView.vue            # 用户中心全屏由此文件管理（覆盖 map-wrapper）
+│       ├── HomeView.vue            # 用户中心全屏由此文件管理（覆盖 map-wrapper，接管地图加载态收口）
 │       └── RegisterView.vue
 ├── dist/                           # 构建产物（生成目录）
 ├── stats.html                      # 构建分析产物（生成文件）
@@ -550,7 +550,7 @@ WebGIS_Dev/
 │   │   ├── LayerPanel.vue              # TOC 树形展示层（数据由 Store 提供）
 │   │   ├── LocationSearch.vue          # 地名搜索输入组件：联想下拉、双引擎选择
 │   │   ├── MagicCursor.vue             # 首屏特效按钮：Delaunay、流体、重力、奇点、波动五大特效
-│   │   ├── MapContainer.vue            # ⭐ 主地图容器：地图初始化、全局编排、组件桥接
+│   │   ├── MapContainer.vue            # ⭐ 主地图容器：地图初始化、核心就绪/失败事件上报、组件桥接
 │   │   ├── MapControlsBar.vue          # 坐标显示、缩放级别、坐标格式转换面板
 │   │   ├── MapEasterEgg.vue            # 彩蛋交互区域：区域判定、像素定位、Lightbox 展示
 │   │   ├── MapPointPickerCard.vue      # 地图点位拾取卡片（供路径规划使用）
@@ -643,17 +643,17 @@ WebGIS_Dev/
 │   │
 │   ├── stores/                         # ⭐ Pinia 状态仓库
 │   │   ├── index.ts                    # Store 统一导出入口
-│   │   ├── useAppStore.ts              # 应用级状态：全局 Loading 开关与文案
+│   │   ├── useAppStore.ts              # 应用级状态：Loading 状态管理、15s 超时保护、GIS 初始化锁
 │   │   ├── useAttrStore.ts             # 属性表状态：extent、要素展示上下文
 │   │   ├── useLayerStore.ts            # 🔹 图层状态：layerTree 构建、展开状态、parentId 驱动的层次结构、操作行为
 │   │   └── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
 │   │
 │   ├── router/                         # Vue Router 路由
-│   │   ├── index.js                    # 路由表与 hash history 配置
+│   │   ├── index.js                    # 路由表、鉴权守卫、Loading Relay + 路径比较守卫 + GIS 初始化锁
 │   │   └── lazyHomeViewLoader.js       # HomeView 二段式懒加载入口（隔离 GIS 依赖）
 │   │
 │   ├── views/                          # 页面级组件
-│   │   ├── HomeView.vue                # 主页面布局、事件中枢
+│   │   ├── HomeView.vue                # 主页面布局、事件中枢、地图加载态收口 + GIS 初始化锁标记
 │   │   └── RegisterView.vue            # 登录/注册页面
 │   │
 │   ├── utils/                          # ⭐ 工具函数层（领域化分层）

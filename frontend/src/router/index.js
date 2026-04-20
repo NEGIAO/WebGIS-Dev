@@ -1,6 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import RegisterView from '../views/RegisterView.vue';
-import { useAuthStore } from '../stores';
+import { useAuthStore, useAppStore } from '../stores';
 import { hideLoading, showLoading } from '../utils/loading';
 import {
   persistPositionCode,
@@ -80,10 +80,26 @@ function cacheRoutePositionCode(route) {
   persistPositionCodeFromUrl();
 }
 
-router.beforeEach(async (to) => {
+let lastNavigationPath = null;
+
+router.beforeEach(async (to, from) => {
   const requiresAuth = !!to.meta?.requiresAuth;
   const shareModeEnabled = readShareFlagFromRoute(to);
   const shouldCheckAuth = requiresAuth || to.name === 'register';
+  const isHomeRoute = to.name === 'home';
+  let shouldRelayLoadingToHome = false;
+
+  // Guard 1: Ignore pure query/hash changes (parameter updates only)
+  const isRealNavigation = !from || from.path !== to.path;
+  if (!isRealNavigation) {
+    return true;
+  }
+
+  // Guard 2: After GIS init completes, prevent re-showing loading for home route
+  const appStore = useAppStore();
+  if (appStore.isInitialGisLoadComplete && isHomeRoute) {
+    return true;
+  }
 
   if (!shouldCheckAuth) {
     return true;
@@ -92,6 +108,7 @@ router.beforeEach(async (to) => {
   const authStore = useAuthStore();
   authStore.beginAuthCheck();
   showLoading('正在验证登录状态...');
+  lastNavigationPath = to.path;
 
   try {
     const isLoggedIn = await authStore.ensureValidSession();
@@ -105,13 +122,22 @@ router.beforeEach(async (to) => {
     }
 
     if (to.name === 'register' && isLoggedIn && !shareModeEnabled) {
+      showLoading('Loading Map Engine & Assets...');
+      shouldRelayLoadingToHome = true;
       return { name: 'home' };
+    }
+
+    if (isHomeRoute) {
+      showLoading('Loading Map Engine & Assets...');
+      shouldRelayLoadingToHome = true;
     }
 
     return true;
   } finally {
     authStore.endAuthCheck();
-    hideLoading();
+    if (!shouldRelayLoadingToHome) {
+      hideLoading();
+    }
   }
 });
 

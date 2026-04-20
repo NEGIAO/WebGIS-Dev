@@ -21,6 +21,7 @@
 
 **文件名格式**：`YYYY-MM-DD-更新主题.md`  
 *(例如：`2026-04-19-fix-auth-loading.md`)*
+存放路径：`/Docs/yy-mm-dd/yyyy-mm-dd-更新主题.md`
 
 **日志必须包含以下信息：**
 

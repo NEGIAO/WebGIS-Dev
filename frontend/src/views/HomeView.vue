@@ -10,15 +10,15 @@
  */
 import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore, useWeatherStore } from '../stores';
+import { useAttrStore, useWeatherStore, useAppStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
 
-// 首屏地图初始化 Loading 拦截
-showLoading('正在初始化地图与核心环境...');
+// 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
+// showLoading('正在初始化地图与核心环境...'); // 已由 router.beforeEach 接力处理
 
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
@@ -95,6 +95,7 @@ const isAccountPanelFullscreen = ref(false);
 
 // 组件引用
 const mapContainerRef = ref(null);
+const mapCoreLoadingSettled = ref(false);
 let sidePanelWarmupTimer = null;
 let sidePanelWarmupIdleId = null;
 
@@ -233,8 +234,24 @@ function handleAccountPanelFullscreenChange(fullscreen) {
 }
 
 /** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
-function handleMapCoreReady() {
+function settleMapCoreLoading(payload = {}) {
+    if (mapCoreLoadingSettled.value) return;
+    mapCoreLoadingSettled.value = true;
+    
+    const appStore = useAppStore();
+    appStore.markGisInitComplete();
+    
     hideLoading();
+
+    if (payload?.isError) {
+        const detail = String(payload?.message || '').trim();
+        message.error(detail || '地图资源加载失败，请刷新页面后重试。');
+    }
+}
+
+/** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
+function handleMapCoreReady() {
+    settleMapCoreLoading();
     if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) return;
     sidePanelWarmupScheduled.value = true;
 
@@ -254,6 +271,13 @@ function handleMapCoreReady() {
     } else {
         queuePreload();
     }
+}
+
+function handleMapCoreFailed(payload = {}) {
+    settleMapCoreLoading({
+        isError: true,
+        message: String(payload?.message || '').trim() || '地图初始化失败，请检查网络后重试。'
+    });
 }
 
 /** 关闭 AI 聊天，切换回新闻模式 */
@@ -575,6 +599,8 @@ function syncVisitPosCodeToUrl(encodedPos) {
 }
 
 onUnmounted(() => {
+    settleMapCoreLoading();
+
     if (typeof window === 'undefined') return;
 
     if (sidePanelWarmupIdleId !== null && typeof window.cancelIdleCallback === 'function') {
@@ -644,6 +670,7 @@ onMounted(async () => {
                             ref="mapContainerRef"
                             v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
                             @map-core-ready="handleMapCoreReady"
+                            @map-core-failed="handleMapCoreFailed"
                             @location-change="handleLocationChange"
                             @search-poi-selected="handleSearchPoiSelected"
                             @map-click="handleMapClick"

@@ -118,6 +118,9 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 后端详细文档（含 V3.0.2 更新说明）
 ├── Docs/                           # 开发维护日志与强制执行规范
 │   ├── Force_command.md            # Agent 开发维护日志与 README 结构同步规范
+│   ├── 26-04-20/
+│   │   ├── 2026-04-20-ux-relay-and-proxy-fix.md  # Loading 接力与通用代理修复日志
+│   │   └── 2026-04-20-loading-logic-fix.md       # 加载逻辑韧性与递归 Bug 修复日志 (v3.0.3)
 │   └── 2026-04-20-sequential-load-fix.md  # 登录页 3 秒顺序加载修复记录
 ├── API_MANAGEMENT_GUIDE.md
 ├── LAYOUT_POSITIONING_GUIDE.md

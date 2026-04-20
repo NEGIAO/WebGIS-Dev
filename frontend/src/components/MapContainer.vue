@@ -301,7 +301,8 @@ const emit = defineEmits([
     'graphics-overview',
     'base-layers-change',
     'upload-progress-change',
-    'map-core-ready'
+    'map-core-ready',
+    'map-core-failed'
 ]);
 
 const {
@@ -719,35 +720,42 @@ function getInitialViewState() {
 // [作用] 初始化地图、绑定视图同步、设置格网状态、同步 URL 状态，并在首屏关键瓦片加载后执行非关键任务（主机测速、位置相关逻辑）。
 onMounted(async () => {
     componentUnmountedRef.value = false;
-    initMap();
-    bindMapViewSync();
-    setGraticuleActive(showDynamicSplitLines.value);
-    syncUrlFromMap();
-
-    // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
     try {
-        await waitForCriticalTileReady();
-    } catch {
-        // 超时或异常时也继续后续流程，避免阻塞页面可交互性。
-    }
+        initMap();
+        bindMapViewSync();
+        setGraticuleActive(showDynamicSplitLines.value);
+        syncUrlFromMap();
 
-    // 通知父组件：主地图关键内容已就绪，可在空闲时预加载非关键资源。
-    if (!componentUnmountedRef.value) {
-        if (typeof requestAnimationFrame === 'function') {
-            requestAnimationFrame(() => {
-                if (!componentUnmountedRef.value) {
-                    emit('map-core-ready');
-                }
-            });
-        } else {
-            emit('map-core-ready');
+        // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
+        try {
+            await waitForCriticalTileReady();
+        } catch {
+            // 超时或异常时也继续后续流程，避免阻塞页面可交互性。
+        }
+
+        // 通知父组件：主地图关键内容已就绪，可在空闲时预加载非关键资源。
+        if (!componentUnmountedRef.value) {
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(() => {
+                    if (!componentUnmountedRef.value) {
+                        emit('map-core-ready');
+                    }
+                });
+            } else {
+                emit('map-core-ready');
+            }
+        }
+
+        scheduleLowPriorityTask(() => {
+            runDeferredStartupTasks().catch(() => {});
+        });
+    } catch (error) {
+        const detail = String(error?.message || error || '地图核心初始化异常').trim();
+        message.error(`地图核心初始化失败：${detail}`);
+        if (!componentUnmountedRef.value) {
+            emit('map-core-failed', { message: detail });
         }
     }
-
-    scheduleLowPriorityTask(() => {
-        runDeferredStartupTasks().catch(() => {});
-    });
-
 });
 
 // [隶属] 启动流程-首屏优化

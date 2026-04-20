@@ -14,6 +14,7 @@ Powered by FastAPI and Docker.
 
 WebGIS 后端服务，当前包含三大核心能力：
 - Google 瓦片代理：GET /api/tile/{z}/{x}/{y}
+- 通用流式代理：GET /proxy/{target_url:path}（Provider Agnostic）
 - 访客地理统计：POST /api/log-visit
 - 真实用户登录系统：/api/auth/*（含三类身份）
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
@@ -33,7 +34,7 @@ backend/
 │   ├── api_keys_management.py  # API Key 管理
 │   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
 │   └── __init__.py
-├── app.py                      # FastAPI 应用入口
+├── app.py                      # FastAPI 应用入口（含通用流式代理 /proxy/{target_url:path}）
 ├── Dockerfile                  # 容器化部署
 ├── pyproject.toml              # 依赖与项目配置（uv）
 ├── uv.lock                     # 锁文件
