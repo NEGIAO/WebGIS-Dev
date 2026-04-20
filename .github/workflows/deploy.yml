@@ -156,49 +156,47 @@ jobs:
           run: |
             cd dist-to-hf
             
-            # 1. 物理移除瓦片目录（HF不能上传大量瓦片）
-            rm -rf tiles/ 2>/dev/null || true
+            # 1. 彻底删除瓦片文件夹（保留这个操作，瓦片绝对不能传）
+            if [ -d "tiles" ]; then
+              rm -rf tiles/
+            fi
             
-            # 2. 初始化 Git 并安装 LFS 
+            # 2. 初始化 Git 和 LFS
             git init
             git lfs install
             
-            # 3. 核心：强制追踪所有图片和地理数据格式（解决二进制报错）
-            # 使用通配符覆盖 images 和 assets 目录
-            git lfs track "images/**"
-            git lfs track "assets/**"
-            git lfs track "**/*.webp"
-            git lfs track "**/*.png"
-            git lfs track "**/*.jpg"
-            git lfs track "**/*.ico"
-            git lfs track "**/*.kmz"
-            git lfs track "**/*.kml"
+            # 3. 【核心修改】强制追踪所有潜在的二进制文件为 LFS
+            # 这样 HF 就会通过 LFS 存储它们，而不会在 pre-receive 阶段拦截
+            git lfs track "images/*.webp"
+            git lfs track "images/*.png"
+            git lfs track "images/*.jpg"
+            git lfs track "assets/*.kmz"
+            git lfs track "assets/*.kml"
+            git lfs track "*.ico"
             
-            # 4. 必须先 add .gitattributes，否则 LFS 追踪可能在本次提交不生效
+            # 必须添加 .gitattributes 否则追踪不生效
             git add .gitattributes
             
-            # 5. 配置身份
             git config user.name "github-actions[bot]"
             git config user.email "actions@github.com"
 
-            # 6. 注入 Space 元数据，HF强制要求，否则无法识别为有效的 Space
+            # 4. 注入元数据
             cat <<EOT > README.md
             ---
-            title: WebGIS-Frontend
-            emoji: 🌍
+            title: WebGIS-Frontend-Final
+            emoji: 🚀
             sdk: static
             ---
             EOT
 
-            # 7. 提交所有文件
+            # 5. 提交并推送
             git add .
-            git commit -m "Optimization: Deploying code only, images via LFS"
+            git commit -m "Fix: Track all images with LFS to bypass HF restrictions"
             
-            # 8. 强制推送到 HF
-            echo "Pushing to Hugging Face Space..."
-            git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main 
-
-# ==========================================
+            echo "Pushing to Hugging Face..."
+            git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main
+            
+# ========================================== 
   # 第五步：同步到 Hugging Face 
   # (仅Backend后端代码)
 # ==========================================
