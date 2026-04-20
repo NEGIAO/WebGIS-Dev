@@ -80,9 +80,10 @@ type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
     默认底图预设 ID
     Default Basemap Preset ID
  */
-export const DEFAULT_BASEMAP_PRESET_ID = 'tianDiTu';
+// export const DEFAULT_BASEMAP_PRESET_ID = 'tianDiTu';
 // export const DEFAULT_BASEMAP_PRESET_ID = 'local';
 // export const DEFAULT_BASEMAP_PRESET_ID = 'google';
+export const DEFAULT_BASEMAP_PRESET_ID = 'mapbox_custom_label';
 // //gac谷歌
 // ========== 响应式状态 ==========
 /** Google 主机选择状态（全局单例） */
@@ -370,6 +371,24 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         group: '矢量',
         createSource: () => new XYZ({
             url: buildGoogleTileUrl('/maps/vt?lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off')
+        })
+    },
+    {
+        id: 'mapbox_custom_label',
+        name: 'Mapbox 自定义',
+        category: 'base',
+        group: '矢量',
+        createSource: () => new XYZ({
+            url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ'
+        })
+    },
+    {
+        id: 'mapbox_custom_unlabeled',
+        name: 'Mapbox 自定义(无标注)',
+        category: 'base',
+        group: '矢量',
+        createSource: () => new XYZ({
+            url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ'
         })
     },
     {
@@ -826,7 +845,9 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'osm', label: 'OSM(需梯子)', stack: ['osm'] },
     { id: 'amap', label: '高德地图(GCJ)', stack: ['amap'] },
     { id: 'amap_image', label: '高德影像(GCJ)', stack: ['amap_image'] },
-
+    { id: 'mapbox_custom_label', label: 'Mapbox 自定义', stack: ['mapbox_custom_labels'] },
+    { id: 'mapbox_custom_unlabeled', label: 'Mapbox 自定义(无标注)', stack: ['mapbox_custom_unlabeled'] },
+    
     // ESRI Online 系列 25个
     { id: 'arcgis_canvas_dark', label: 'ESRI深灰', stack: ['arcgis_canvas_dark_base', 'arcgis_canvas_dark_ref'] },
     { id: 'arcgis_canvas_light', label: 'ESRI浅灰', stack: ['arcgis_canvas_light_base', 'arcgis_canvas_light_ref'] },
