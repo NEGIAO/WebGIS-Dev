@@ -550,7 +550,7 @@ WebGIS_Dev/
 │   │   ├── LayerPanel.vue              # TOC 树形展示层（数据由 Store 提供）
 │   │   ├── LocationSearch.vue          # 地名搜索输入组件：联想下拉、双引擎选择
 │   │   ├── MagicCursor.vue             # 首屏特效按钮：Delaunay、流体、重力、奇点、波动五大特效
-│   │   ├── MapContainer.vue            # ⭐ 主地图容器：地图初始化、核心就绪/失败事件上报、组件桥接
+│   │   ├── MapContainer.vue            # ⭐ 主地图容器：地图初始化、核心就绪/失败事件、延迟参数应用 (v3.0.4)
 │   │   ├── MapControlsBar.vue          # 坐标显示、缩放级别、坐标格式转换面板
 │   │   ├── MapEasterEgg.vue            # 彩蛋交互区域：区域判定、像素定位、Lightbox 展示
 │   │   ├── MapPointPickerCard.vue      # 地图点位拾取卡片（供路径规划使用）
@@ -646,10 +646,12 @@ WebGIS_Dev/
 │   │   ├── useAppStore.ts              # 应用级状态：Loading 状态管理、15s 超时保护、GIS 初始化锁
 │   │   ├── useAttrStore.ts             # 属性表状态：extent、要素展示上下文
 │   │   ├── useLayerStore.ts            # 🔹 图层状态：layerTree 构建、展开状态、parentId 驱动的层次结构、操作行为
-│   │   └── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
+│   │   ├── useUrlParamStore.ts         # URL 参数管理：参数提取、验证、延迟应用锁（v3.0.4 分享模式优先级重构）
+│   │   ├── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
+│   │   └── useUserPreferencesStore.ts  # 用户偏好：底图选择、面板状态等
 │   │
 │   ├── router/                         # Vue Router 路由
-│   │   ├── index.js                    # 路由表、鉴权守卫、Loading Relay + 路径比较守卫 + GIS 初始化锁
+│   │   ├── index.js                    # 路由表、三层优先级守卫：Share Mode Bypass (s=1) + 参数提取 + 鉴权 (v3.0.4)
 │   │   └── lazyHomeViewLoader.js       # HomeView 二段式懒加载入口（隔离 GIS 依赖）
 │   │
 │   ├── views/                          # 页面级组件

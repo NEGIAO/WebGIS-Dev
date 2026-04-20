@@ -110,10 +110,11 @@ import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
 import { apiReverseGeocodeWithFallback } from '../api';
-import { useAttrStore } from '../stores';
+import { useAttrStore, useUrlParamStore } from '../stores';
 
 const message = useMessage();
 const attrStore = useAttrStore();
+const urlParamStore = useUrlParamStore();
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -698,6 +699,49 @@ if (initialLayerId) {
     selectedLayer.value = initialLayerId;
 }
 
+// ========== URL 参数延迟应用 ==========
+// [隶属] 地图初始化-延迟参数应用
+// [作用] 在地图 GIS 核心初始化完成后，应用之前在路由阶段提取的 URL 参数
+//       这确保了分享链接中的坐标、缩放级别、图层选择能够被正确应用
+// [流程] 
+//   1. 在路由守卫中提取参数到 urlParamStore
+//   2. MapContainer 挂载并初始化 GIS 引擎
+//   3. GIS 初始化完成后调用此函数应用参数
+//   4. 标记为已应用，防止重复应用
+function applyDeferredUrlParams() {
+    if (!mapInstance?.value) {
+        console.warn('[MapContainer] Cannot apply deferred params: mapInstance not ready');
+        return;
+    }
+
+    const validParams = urlParamStore.getValidCoordinateParams();
+    if (!validParams) {
+        // 没有有效的地理坐标参数，直接标记已应用
+        urlParamStore.markParamsAsApplied();
+        return;
+    }
+
+    try {
+        console.info('[MapContainer] Applying deferred URL params:', validParams);
+
+        // 应用坐标、缩放、图层索引
+        flyToView({
+            lng: validParams.lng,
+            lat: validParams.lat,
+            z: validParams.z,
+            l: validParams.l,
+            duration: 500 // 应用参数时的动画持续时间
+        });
+
+        // 标记为已应用
+        urlParamStore.markParamsAsApplied();
+        console.info('[MapContainer] Deferred URL params applied successfully');
+    } catch (error) {
+        console.error('[MapContainer] Failed to apply deferred URL params:', error);
+        urlParamStore.markParamsAsApplied(); // 即使失败也标记已应用，防止重复尝试
+    }
+}
+
 // [隶属] 地图初始化-视图状态
 // [作用] 根据 URL 参数或默认值设置初始视图状态，支持直接
 // 定位到分享链接中的地点。
@@ -744,6 +788,14 @@ onMounted(async () => {
             } else {
                 emit('map-core-ready');
             }
+        }
+
+        // ========== Step 2: Apply Deferred URL Parameters ==========
+        // [优先级] 地图核心就绪后，应用之前在路由守卫中提取的 URL 参数
+        // [目的] 确保地图引擎已准备好，然后应用坐标、缩放、图层等参数
+        // [注意] 仅在首次进入 home 路由时应用，后续参数变化由 URL 同步处理
+        if (!componentUnmountedRef.value && !urlParamStore.isParamApplied) {
+            applyDeferredUrlParams();
         }
 
         scheduleLowPriorityTask(() => {

@@ -1,11 +1,14 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import RegisterView from '../views/RegisterView.vue';
-import { useAuthStore, useAppStore } from '../stores';
+import { useAuthStore, useAppStore, useUrlParamStore } from '../stores';
 import { hideLoading, showLoading } from '../utils/loading';
 import {
   persistPositionCode,
   persistPositionCodeFromUrl,
-  readPositionCodeFromUrl
+  readPositionCodeFromUrl,
+  injectGuestTokenForShareMode,
+  readShareModeFromUrl,
+  getAuthToken
 } from '../utils/auth';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
@@ -95,12 +98,44 @@ router.beforeEach(async (to, from) => {
     return true;
   }
 
-  // Guard 2: After GIS init completes, prevent re-showing loading for home route
+  // ========== CRITICAL: Share Mode Bypass (Highest Priority) ==========
+  // [优先级 1] 如果 s=1（分享模式），直接注入访客令牌，绕过登录
+  if (shareModeEnabled && !getAuthToken()) {
+    const guestInjected = injectGuestTokenForShareMode();
+    if (guestInjected) {
+      console.info('[Router] Share mode detected: Guest token injected');
+      // 继续到下一步（参数提取）
+    } else {
+      console.warn('[Router] Failed to inject guest token for share mode');
+      // 即使失败也继续，用户会看到访客受限的功能
+    }
+  }
+
+  // [优先级 2] 提取 URL 参数并存储到 urlParamStore（独立于鉴权过程）
+  const urlParamStore = useUrlParamStore();
+  const routeQueryParams = {
+    lng: readRouteQueryValue(to, 'lng'),
+    lat: readRouteQueryValue(to, 'lat'),
+    z: readRouteQueryValue(to, 'z'),
+    l: readRouteQueryValue(to, 'l'),
+    s: readRouteQueryValue(to, 's'),
+    loc: readRouteQueryValue(to, 'loc'),
+    p: readRouteQueryValue(to, 'p')
+  };
+
+  if (isHomeRoute) {
+    // 在路由阶段就提取 URL 参数，等待 MapContainer 挂载后再应用
+    urlParamStore.extractAndStorePendingParams(routeQueryParams);
+    console.info('[Router] URL params extracted and stored for deferred application');
+  }
+
+  // Guard 3: After GIS init completes, prevent re-showing loading for home route
   const appStore = useAppStore();
   if (appStore.isInitialGisLoadComplete && isHomeRoute) {
     return true;
   }
 
+  // ========== Standard Authentication Flow ==========
   if (!shouldCheckAuth) {
     return true;
   }
@@ -113,6 +148,7 @@ router.beforeEach(async (to, from) => {
   try {
     const isLoggedIn = await authStore.ensureValidSession();
 
+    // [Share Mode] 即使未登录，分享模式也允许访问（已通过访客令牌）
     if (requiresAuth && !isLoggedIn && !shareModeEnabled) {
       cacheRoutePositionCode(to);
       return {

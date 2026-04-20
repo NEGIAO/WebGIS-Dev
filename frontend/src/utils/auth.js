@@ -189,3 +189,79 @@ export function injectPositionCodeToPath(path = '/home', code = '') {
   const query = params.toString()
   return query ? `${pathname}?${query}` : pathname
 }
+
+// ============ Share Mode 访客令牌注入 ============
+
+/**
+ * 为分享模式注入访客令牌（临时）
+ * 仅在 s=1 时调用，会生成临时访客凭证并存储
+ * 
+ * @returns {boolean} 是否成功注入（true 表示已注入访客令牌）
+ */
+export function injectGuestTokenForShareMode() {
+  try {
+    // 1. 生成或获取访客设备 ID
+    const guestDeviceId = getOrCreateGuestDeviceId()
+    if (!guestDeviceId) {
+      console.warn('[Auth] Failed to create guest device ID')
+      return false
+    }
+
+    // 2. 构造临时访客令牌（格式：guest_<timestamp>_<deviceId>）
+    const timestamp = Date.now()
+    const guestToken = `guest_${timestamp}_${guestDeviceId}`
+
+    // 3. 构造访客用户对象
+    const guestUser = {
+      username: 'Guest',
+      role: 'visitor',
+      guest_uid: guestDeviceId,
+      guest_token: guestToken,
+      created_at: new Date().toISOString()
+    }
+
+    // 4. 注入到认证存储中
+    setAuthSession({
+      token: guestToken,
+      user: guestUser
+    })
+
+    console.info('[Auth] Guest token injected for share mode', {
+      guestDeviceId,
+      timestamp,
+      user: guestUser.username
+    })
+
+    return true
+  } catch (error) {
+    console.error('[Auth] Failed to inject guest token:', error)
+    return false
+  }
+}
+
+/**
+ * 检查当前会话是否是访客身份
+ * @returns {boolean}
+ */
+export function isGuestSession() {
+  const user = getAuthUser()
+  return user?.role === 'visitor' || user?.guest_uid !== undefined
+}
+
+/**
+ * 获取当前访客会话的元数据
+ * @returns {Object|null} {guestDeviceId, guestToken, createdAt} 或 null
+ */
+export function getGuestSessionMetadata() {
+  if (!isGuestSession()) return null
+
+  const user = getAuthUser()
+  const token = getAuthToken()
+
+  return {
+    guestDeviceId: user?.guest_uid || '',
+    guestToken: token,
+    createdAt: user?.created_at || '',
+    username: user?.username || 'Unknown'
+  }
+}
