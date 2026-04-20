@@ -213,9 +213,15 @@ frontend/
 │   ├── composables/                # 组合式逻辑
 │   │   └── map/features/           # 地图功能模块化拆分
 │   ├── constants/                  # 常量与配置
-│   ├── router/                     # 路由
+│   ├── router/                     # 路由与二段式页面懒加载
+│   │   ├── index.js
+│   │   └── lazyHomeViewLoader.js   # Home 页面二段式懒加载隔离器（避免登录首屏拉取 GIS 重资源）
 │   ├── stores/                     # Pinia 状态管理
 │   ├── utils/                      # 工具与 GIS 处理
+│   │   └── gis/
+│   │       ├── mapRuntimeDeps.js            # OpenLayers 运行时依赖延迟入口
+│   │       ├── deferredGisAssets.js         # GIS 重资源预热编排
+│   │       └── deferredGisWarmupLauncher.js # 登录页 3 秒后预热触发器
 │   └── views/
 │       ├── HomeView.vue            # 用户中心全屏由此文件管理（覆盖 map-wrapper）
 │       └── RegisterView.vue
@@ -643,7 +649,8 @@ WebGIS_Dev/
 │   │   └── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
 │   │
 │   ├── router/                         # Vue Router 路由
-│   │   └── index.js                    # 路由表与 hash history 配置
+│   │   ├── index.js                    # 路由表与 hash history 配置
+│   │   └── lazyHomeViewLoader.js       # HomeView 二段式懒加载入口（隔离 GIS 依赖）
 │   │
 │   ├── views/                          # 页面级组件
 │   │   ├── HomeView.vue                # 主页面布局、事件中枢
@@ -667,9 +674,12 @@ WebGIS_Dev/
 │   │   │   ├── crs-engine.ts           # 坐标参考系引擎（投影、WKT 处理）
 │   │   │   ├── crsAware.js             # CRS 识别与检测
 │   │   │   ├── dataDispatcher.js       # 数据分发器
+│   │   │   ├── deferredGisAssets.js    # GIS 重资产预热编排（OL + GeoTIFF）
+│   │   │   ├── deferredGisWarmupLauncher.js # 预热触发器（登录页定时后调用）
 │   │   │   ├── decompressFile.js       # 文件解压
 │   │   │   ├── decompressor.ts         # 递归解压引擎（ZIP/KMZ 嵌套处理）
 │   │   │   ├── loadJsZip.ts            # jszip 加载与初始化
+│   │   │   ├── mapRuntimeDeps.js       # OpenLayers 运行时依赖延迟模块
 │   │   │   └── parsers/                # 数据格式解析器
 │   │   │       ├── amapAoiParser.js    # 高德 AOI JSON 解析
 │   │   │       ├── kmlParser.ts        # KML/KMZ 解析

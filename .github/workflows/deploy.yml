@@ -156,7 +156,7 @@ jobs:
           run: |
             cd dist-to-hf
             
-            # 1. 彻底删除瓦片文件夹（保留这个操作，瓦片绝对不能传）
+            # 1. 彻底删除瓦片文件夹（HF对大数量文件有限制）
             if [ -d "tiles" ]; then
               rm -rf tiles/
             fi
@@ -165,7 +165,7 @@ jobs:
             git init
             git lfs install
             
-            # 3. 【核心修改】强制追踪所有潜在的二进制文件为 LFS
+            # 3. 强制追踪所有潜在的二进制文件为 LFS
             # 这样 HF 就会通过 LFS 存储它们，而不会在 pre-receive 阶段拦截
             git lfs track "images/*.webp"
             git lfs track "images/*.png"
@@ -183,7 +183,7 @@ jobs:
             # 4. 注入元数据
             cat <<EOT > README.md
             ---
-            title: WebGIS-Frontend-Final
+            title: WebGIS-Frontend
             emoji: 🚀
             sdk: static
             ---
@@ -191,7 +191,7 @@ jobs:
 
             # 5. 提交并推送
             git add .
-            git commit -m "Fix: Track all images with LFS to bypass HF restrictions"
+            git commit -m "Updatate WebGIS frontend dist to Hugging Face: ${GITHUB_SHA::7}"
             
             echo "Pushing to Hugging Face..."
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main

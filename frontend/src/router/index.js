@@ -8,7 +8,7 @@ import {
   readPositionCodeFromUrl
 } from '../utils/auth';
 
-const HomeView = () => import('../views/HomeView.vue');
+const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
 
 const router = createRouter({
   history: createWebHashHistory(),

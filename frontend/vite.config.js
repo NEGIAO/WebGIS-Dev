@@ -108,12 +108,21 @@ export default defineConfig(({ command, mode }) => {
       sourcemap: !isProductionLikeBuild,    // 开发环境生成 sourcemap，生产环境不生成
       minify: 'esbuild',                   // 使用 esbuild 压缩（速度最快）
       chunkSizeWarningLimit: 300,           // 打包超过 300KB 发出警告
+      // Disable Vite modulepreload dependency rewriting to avoid pulling deferred
+      // GIS assets into the register/login startup module graph.
+      modulePreload: false,
 
       // Rollup 打包细粒度配置（代码分割、分包）
       rollupOptions: {
         output: {
           // 手动代码分割：将不同第三方库拆分为独立 chunk
           manualChunks(id) {
+            // Ensure Vite dynamic-import runtime helper does not get attached to
+            // heavy GIS vendor chunks (which would pull them into entry imports).
+            if (id.includes('vite/preload-helper')) {
+              return 'vendor-runtime';
+            }
+
             // 只对 node_modules 中的库进行分包
             if (!id.includes('node_modules')) return undefined;
 

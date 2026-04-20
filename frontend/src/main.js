@@ -5,9 +5,6 @@ import router from './router'
 import { useMessage } from './composables/useMessage'
 import { useUserPreferencesStore } from './stores'
 
-// Import OL CSS first (before any OL module imports to ensure proper style loading)
-import 'ol/ol.css'
-
 const app = createApp(App)
 const pinia = createPinia()
 

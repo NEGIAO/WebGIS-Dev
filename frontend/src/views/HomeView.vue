@@ -638,20 +638,32 @@ onMounted(async () => {
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
                   2. CesiumContainer 使用 v-if。3D地图很重，只有需要时才渲染 DOM。
                 -->
-                <MapContainer
-                    ref="mapContainerRef"
-                    v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
-                    @map-core-ready="handleMapCoreReady"
-                    @location-change="handleLocationChange"
-                    @search-poi-selected="handleSearchPoiSelected"
-                    @map-click="handleMapClick"
-                    @update-news-image="handleUpdateNewsImage"
-                    @feature-selected="handleFeatureSelected"
-                    @user-layers-change="handleUserLayersChange"
-                    @graphics-overview="handleGraphicsOverview"
-                    @upload-progress-change="handleUploadProgressChange"
-                    @base-layers-change="handleBaseLayersChange"
-                />
+                <Suspense>
+                    <template #default>
+                        <MapContainer
+                            ref="mapContainerRef"
+                            v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            @map-core-ready="handleMapCoreReady"
+                            @location-change="handleLocationChange"
+                            @search-poi-selected="handleSearchPoiSelected"
+                            @map-click="handleMapClick"
+                            @update-news-image="handleUpdateNewsImage"
+                            @feature-selected="handleFeatureSelected"
+                            @user-layers-change="handleUserLayersChange"
+                            @graphics-overview="handleGraphicsOverview"
+                            @upload-progress-change="handleUploadProgressChange"
+                            @base-layers-change="handleBaseLayersChange"
+                        />
+                    </template>
+                    <template #fallback>
+                        <div
+                            v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            class="map-runtime-loading"
+                        >
+                            地图核心资源加载中...
+                        </div>
+                    </template>
+                </Suspense>
 
                 <component
                     :is="WeatherChartPanel"
@@ -795,6 +807,20 @@ onMounted(async () => {
     display: flex;
     min-width: 0;
     /* Important for flex items to shrink */
+}
+
+.map-runtime-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(236, 248, 238, 0.9), rgba(216, 239, 220, 0.88));
+    color: #1f5e2a;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
 }
 
 .weather-board-surface {

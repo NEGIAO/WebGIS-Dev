@@ -60,6 +60,7 @@ import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry'
 import { useUserLocation } from '../composables/useUserLocation';
 import { useMessage } from '../composables/useMessage';
 import { useMapState } from '../composables/useMapState';
+import { loadMapRuntimeDeps } from '../utils/gis/mapRuntimeDeps';
 import {
     createBasemapLayerBootstrap,
     createBasemapResilience,
@@ -121,18 +122,24 @@ const attrStore = useAttrStore();
 // 使用全局共享的 Google 主机 ref，支持主机切换后的动态更新
 const activeGoogleTileHost = globalActiveGoogleTileHost;
 
-// OpenLayers 核心库
-import Map from 'ol/Map';
-import View from 'ol/View';
-import { fromLonLat, toLonLat } from 'ol/proj';
-import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
-import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
+// OpenLayers 运行时依赖按需动态加载，避免进入登录页首屏预加载图。
+const {
+    Map,
+    View,
+    fromLonLat,
+    toLonLat,
+    defaultControls,
+    ScaleLine,
+    OverviewMap,
+    createEmpty,
+    extendExtent,
+    isExtentEmpty,
+    TileLayer,
+    VectorLayer,
+    XYZ,
+    VectorSource
+} = await loadMapRuntimeDeps();
 
-// 图层与数据源
-import TileLayer from 'ol/layer/Tile';
-import VectorLayer from 'ol/layer/Vector';
-import XYZ from 'ol/source/XYZ';
-import VectorSource from 'ol/source/Vector';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/geo';
 import { 
     createLayerExporter,

@@ -156,7 +156,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
 import { apiAuthCheckUsername, apiAuthLogin, apiAuthRegister, apiLocationTrackVisit, syncUserRoleToUrl } from '../api/backend';
@@ -185,6 +185,7 @@ const formStatus = ref('');
 const usernameCheckStatus = ref('');
 const usernameCheckMessage = ref('');
 const lastCheckedUsername = ref('');
+let gisPrewarmTimer = null;
 
 const usernameRegex = /^[A-Za-z0-9_]{3,24}$/;
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
@@ -527,6 +528,26 @@ onMounted(async () => {
         // 失败不影响登陆页面使用，静默处理
         console.warn('[Location Tracking] 追踪请求失败:', error?.message);
     });
+    // 首屏加载后默认3秒后开始加载，可根据实际情况调整这个预热时机和延迟，确保不与首屏关键资源争抢带宽。 
+    // 登录页就绪 3 秒后才开始后台预热 GIS 资产，避免首屏带宽争抢。
+    if (typeof window !== 'undefined') {
+        gisPrewarmTimer = window.setTimeout(() => {
+            if (route.name !== 'register') return;
+
+            import('../utils/gis/deferredGisWarmupLauncher')
+                .then((mod) => mod.launchDeferredGisWarmup())
+                .catch((error) => {
+                    console.warn('[GIS Prewarm] 预热失败(不影响登录流程):', error?.message || error);
+                });
+        }, 3000);
+    }
+});
+
+onUnmounted(() => {
+    if (gisPrewarmTimer !== null && typeof window !== 'undefined') {
+        window.clearTimeout(gisPrewarmTimer);
+        gisPrewarmTimer = null;
+    }
 });
 
 watch(username, (nextUsername) => {
