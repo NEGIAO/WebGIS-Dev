@@ -15,7 +15,7 @@
         </div>
 
         <!-- 面板内容区域 -->
-        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' }">
+        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' || activeTab === 'compass' }">
             <div class="active-feature-banner" v-if="activeFeature?.label">
                 当前激活功能：{{ activeFeature.label }}
             </div>
@@ -84,7 +84,15 @@
                 />
             </div>
 
-            <!-- 模式 5: 新闻展示 (默认) -->
+            <!-- 模式 5: 风水罗盘 -->
+            <div v-show="activeTab === 'compass'" class="toolbox-content">
+                <CompassControlPanel
+                    :get-user-location="getUserLocation"
+                    @close="$emit('switch-tab', 'info')"
+                />
+            </div>
+
+            <!-- 模式 6: 新闻展示 (默认) -->
             <div v-if="activeTab === 'info'" class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
@@ -154,6 +162,7 @@ import ChatPanelContent from './ChatPanelContent.vue';
 import ToolboxPanel from './TOCPanel.vue';
 import BusPlannerPanel from './BusPlannerPanel.vue';
 import DrivingPlannerPanel from './DrivingPlannerPanel.vue';
+import CompassControlPanel from './CompassControlPanel.vue';
 
 // ========== 1. 常量定义 ==========
 const LINKS = {
@@ -172,7 +181,7 @@ const props = defineProps({
     },
     activeTab: {
         type: String,
-        default: 'info' // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
+        default: 'info' // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
     },
     isCollapsed: {
         type: Boolean,

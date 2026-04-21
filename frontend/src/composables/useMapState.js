@@ -80,6 +80,49 @@ function normalizeBinaryFlag(value, fallback = '0') {
 }
 
 /**
+ * 解析 p 参数中的位置短码与扩展 token。
+ * 结构：<positionCode>~c:<compassToken>
+ * @param {*} value - p 参数原始值
+ * @returns {{ positionCode: string, compassToken: string }}
+ */
+function splitPValue(value) {
+    const raw = String(getFirstValue(value) ?? '').trim();
+    if (!raw) {
+        return {
+            positionCode: '0',
+            compassToken: ''
+        };
+    }
+
+    const marker = '~c:';
+    const markerIndex = raw.indexOf(marker);
+    if (markerIndex < 0) {
+        return {
+            positionCode: raw,
+            compassToken: ''
+        };
+    }
+
+    return {
+        positionCode: raw.slice(0, markerIndex) || '0',
+        compassToken: raw.slice(markerIndex + marker.length)
+    };
+}
+
+/**
+ * 合并位置短码与扩展 token。
+ * @param {string} positionCode - 位置短码
+ * @param {string} compassToken - 罗盘扩展 token
+ * @returns {string} 合并后的 p 参数
+ */
+function mergePValue(positionCode, compassToken) {
+    const safePositionCode = String(positionCode || '0').trim() || '0';
+    const safeCompassToken = String(compassToken || '').trim();
+    if (!safeCompassToken) return safePositionCode;
+    return `${safePositionCode}~c:${safeCompassToken}`;
+}
+
+/**
  * 从 URL hash 中解析查询参数
  * @returns {Object} 包含 lng、lat、z、l 的查询参数对象
  */
@@ -277,7 +320,7 @@ export function useMapState(mapInstance, options = {}) {
         // 默认底图索引统一由 DEFAULT_BASEMAP_LAYER_INDEX 控制。
         const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? resolvePreferredDefaultLayerIndex();
 
-        const compactPosCode = String(readQueryValue('p') ?? '').trim();
+        const compactPosCode = splitPValue(readQueryValue('p')).positionCode;
         if (compactPosCode && compactPosCode !== '0') {
             const { hasLocationCondition } = resolveLocationState();
             if (hasLocationCondition) {
@@ -308,6 +351,7 @@ export function useMapState(mapInstance, options = {}) {
         const locateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
         const normalizedLayerIndex = Number.isInteger(layerIndex) ? layerIndex : DEFAULT_BASEMAP_LAYER_INDEX;
         const compactPosCode = resolvePositionCode(lng, lat);
+        const existingP = splitPValue(readQueryValue('p'));
 
         return {
             lng: formatNumber(lng, 6),
@@ -316,7 +360,7 @@ export function useMapState(mapInstance, options = {}) {
             l: String(normalizedLayerIndex),
             s: shareFlag,
             loc: locateFlag,
-            p: compactPosCode || '0'
+            p: mergePValue(compactPosCode || '0', existingP.compassToken)
         };
     }
 

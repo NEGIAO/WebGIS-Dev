@@ -10,12 +10,13 @@
  */
 import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore, useWeatherStore, useAppStore } from '../stores';
+import { useAttrStore, useWeatherStore, useAppStore, useCompassStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
+const compassStore = useCompassStore();
 
 // 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
 // showLoading('正在初始化地图与核心环境...'); // 已由 router.beforeEach 接力处理
@@ -82,7 +83,7 @@ const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
 const sidePanelWarmupScheduled = ref(false);
-const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
+const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
 const showQueryPanel = ref(false);
@@ -145,11 +146,17 @@ function toggleSidePanel() {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
+    if (isSidePanelCollapsed.value) {
+        compassStore.setPlacementMode(false);
+        compassStore.setSensorEnabled(false);
+    }
     message.soup();
 }
 
 /** 打开 AI 聊天面板 */
 function openChat() {
+    compassStore.setPlacementMode(false);
+    compassStore.setSensorEnabled(false);
     activeSidePanelTab.value = 'chat';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -158,6 +165,8 @@ function openChat() {
 }
 
 function openToolbox() {
+    compassStore.setPlacementMode(false);
+    compassStore.setSensorEnabled(false);
     activeSidePanelTab.value = 'toolbox';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -165,7 +174,18 @@ function openToolbox() {
     isSidePanelCollapsed.value = false;
 }
 
+function openCompassPanel() {
+    activeSidePanelTab.value = 'compass';
+    compassStore.setEnabled(true);
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
 function openBusPlanner() {
+    compassStore.setPlacementMode(false);
+    compassStore.setSensorEnabled(false);
     activeSidePanelTab.value = 'bus';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -174,6 +194,8 @@ function openBusPlanner() {
 }
 
 function openDrivePlanner() {
+    compassStore.setPlacementMode(false);
+    compassStore.setSensorEnabled(false);
     activeSidePanelTab.value = 'drive';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -226,6 +248,10 @@ function handleActivateFeature(feature) {
 }
 
 function handleSwitchSidePanelTab(tab) {
+    if (tab !== 'compass') {
+        compassStore.setPlacementMode(false);
+        compassStore.setSensorEnabled(false);
+    }
     activeSidePanelTab.value = tab;
 }
 
@@ -639,6 +665,7 @@ onMounted(async () => {
                 @toggle-3d="toggle3D"
                 @open-chat="openChat"
                 @open-toolbox="openToolbox"
+                @open-compass="openCompassPanel"
                 @open-bus="openBusPlanner"
                 @open-drive="openDrivePlanner"
                 @toggle-weather-board="toggleWeatherBoardMode"

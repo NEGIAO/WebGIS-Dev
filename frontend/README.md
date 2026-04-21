@@ -202,6 +202,8 @@ frontend/
 │   │   ├── MapContainer.vue
 │   │   ├── TopBar.vue
 │   │   ├── SidePanel.vue
+│   │   ├── CompassControlPanel.vue # 风水罗盘控制台（地理直径/图层样式/传感器）
+│   │   ├── feng-shui-compass-svg/  # 罗盘 SVG 渲染引擎与主题配置
 │   │   ├── ChatPanelContent.vue    # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   ├── WeatherChartPanel.vue
 │   │   ├── CesiumContainer.vue
@@ -216,10 +218,11 @@ frontend/
 │   ├── router/                     # 路由与二段式页面懒加载
 │   │   ├── index.js                # 路由守卫 + Loading Relay 接力（home 路由不提前 hideLoading）
 │   │   └── lazyHomeViewLoader.js   # Home 页面二段式懒加载隔离器（避免登录首屏拉取 GIS 重资源）
-│   ├── stores/                     # Pinia 状态管理
+│   ├── stores/                     # Pinia 状态管理（含 useCompassStore）
+│   ├── services/                   # 业务服务层（含 CompassManager 罗盘管理器）
 │   ├── utils/                      # 工具与 GIS 处理
 │   │   └── gis/
-│   │       ├── mapRuntimeDeps.js            # OpenLayers 运行时依赖延迟入口
+│   │       ├── mapRuntimeDeps.js            # OpenLayers 运行时依赖延迟入口（含 Overlay）
 │   │       ├── deferredGisAssets.js         # GIS 重资源预热编排
 │   │       └── deferredGisWarmupLauncher.js # 登录页 3 秒后预热触发器
 │   └── views/
@@ -544,22 +547,24 @@ WebGIS_Dev/
 │   │   ├── CesiumAdvancedEffects.vue   # Cesium 3D 视觉效果与 ECharts 动态图表（3D 启用后懒加载）
 │   │   ├── CesiumContainer.vue         # Cesium 2D/3D 切换容器
 │   │   ├── ChatPanelContent.vue        # AI 空间助手组件（LLM API 集成）
+│   │   ├── CompassControlPanel.vue      # 风水罗盘控制面板：地理直径、图层样式、颜色与 JSON 全量配置
 │   │   ├── DrivingPlannerPanel.vue     # 驾车、步行路径规划面板：起终点、路线结果展示
+│   │   ├── feng-shui-compass-svg/       # 罗盘 SVG 渲染核心：主题库 + 类型系统
 │   │   ├── GlobalLoading.vue           # 全局加载遮罩：毛玻璃背景 + 绿色主题环形动画
 │   │   ├── LayerControlPanel.vue       # 底图控制面板（右上）：地名搜索、底图切换、经纬网控制
 │   │   ├── LayerPanel.vue              # TOC 树形展示层（数据由 Store 提供）
 │   │   ├── LocationSearch.vue          # 地名搜索输入组件：联想下拉、双引擎选择
 │   │   ├── MagicCursor.vue             # 首屏特效按钮：Delaunay、流体、重力、奇点、波动五大特效
-│   │   ├── MapContainer.vue            # ⭐ 主地图容器：地图初始化、核心就绪/失败事件、延迟参数应用 (v3.0.4)
+│   │   ├── MapContainer.vue            # ⭐ 主地图容器：地图初始化与事件中枢（罗盘逻辑已委托 CompassManager）
 │   │   ├── MapControlsBar.vue          # 坐标显示、缩放级别、坐标格式转换面板
 │   │   ├── MapEasterEgg.vue            # 彩蛋交互区域：区域判定、像素定位、Lightbox 展示
 │   │   ├── MapPointPickerCard.vue      # 地图点位拾取卡片（供路径规划使用）
 │   │   ├── Message.vue                 # 消息通知组件（仿 Apple 灵动岛效果）
 │   │   ├── SharedResourceTreeItem.vue  # 共享资源树形节点组件
-│   │   ├── SidePanel.vue               # 右侧容器总控：资讯/LLM/TOC/路径规划等功能区
+│   │   ├── SidePanel.vue               # 右侧容器总控：资讯/LLM/TOC/路径规划/风水罗盘功能区
 │   │   ├── TOCPanel.vue                # TOC 图层管理与工具面板：图层树、坐标工具、地理编码
 │   │   ├── TOCTreeItem.vue             # 递归树节点组件：右键菜单、悬停按钮、级联可见性控制
-│   │   ├── TopBar.vue                  # 顶部菜单栏：TOC 开关、分享地点、分享视图 URL
+│   │   ├── TopBar.vue                  # 顶部菜单栏：TOC 开关、风水罗盘入口、分享视图 URL
 │   │   ├── WeatherChartPanel.vue       # 天气看板：温度趋势图 + 风力仪表、移动端自适应
 │   │   └── icons/                      # 图标组件目录（大部分未启用）
 │   │       ├── IconCommunity.vue       # 社区入口图标
@@ -646,9 +651,15 @@ WebGIS_Dev/
 │   │   ├── useAppStore.ts              # 应用级状态：Loading 状态管理、15s 超时保护、GIS 初始化锁
 │   │   ├── useAttrStore.ts             # 属性表状态：extent、要素展示上下文
 │   │   ├── useLayerStore.ts            # 🔹 图层状态：layerTree 构建、展开状态、parentId 驱动的层次结构、操作行为
+│   │   ├── useCompassStore.ts          # 风水罗盘状态：地理实体参数、渲染配置、图层级样式与 URL 序列化
 │   │   ├── useUrlParamStore.ts         # URL 参数管理：参数提取、验证、延迟应用锁（v3.0.4 分享模式优先级重构）
 │   │   ├── useWeatherStore.ts          # 天气状态：当前 adcode、来源、地图联动
 │   │   └── useUserPreferencesStore.ts  # 用户偏好：底图选择、面板状态等
+│   │
+│   ├── services/                       # 业务服务层（地图外置能力）
+│   │   └── compass/
+│   │       ├── CompassManager.ts       # 罗盘管理器：Overlay 生命周期、分辨率缩放、传感器与 URL 同步
+│   │       └── compassUrlState.ts      # 罗盘 URL 编解码：兼容 p 参数位置短码与罗盘扩展 token
 │   │
 │   ├── router/                         # Vue Router 路由
 │   │   ├── index.js                    # 路由表、三层优先级守卫：Share Mode Bypass (s=1) + 参数提取 + 鉴权 (v3.0.4)

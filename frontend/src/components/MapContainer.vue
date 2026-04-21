@@ -1,5 +1,9 @@
 <template>
-    <div id="map-container" class="map-container" ref="mapContainerRef">
+    <div
+        id="map-container"
+        class="map-container"
+        ref="mapContainerRef"
+    >
         <div id="map" ref="mapRef"></div>
 
         <MapEasterEgg
@@ -31,6 +35,10 @@
             @focus-feature="handleAttributeTableFocusFeature"
             @highlight-feature="handleAttributeTableHighlightFeature"
         />
+
+        <div ref="compassOverlayRef" class="compass-overlay-host" :class="{ 'is-visible': compassStore.enabled }">
+            <FengShuiCompassSvg :config="compassStore.renderConfig" />
+        </div>
 
         <!-- 底部控制栏 -->
         <MapControlsBar
@@ -109,12 +117,15 @@ import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
+import FengShuiCompassSvg from './feng-shui-compass-svg/feng-shui-compass-svg.vue';
 import { apiReverseGeocodeWithFallback } from '../api';
-import { useAttrStore, useUrlParamStore } from '../stores';
+import { useAttrStore, useUrlParamStore, useCompassStore } from '../stores';
+import { CompassManager } from '../services/compass/CompassManager';
 
 const message = useMessage();
 const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
+const compassStore = useCompassStore();
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -165,8 +176,10 @@ const IMAGES = [
 ].map(img => `${NORM_BASE}images/${img}`);
 
 // --- Refs ---
+const mapContainerRef = ref(null);
 const mapRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
+const compassOverlayRef = ref(null);
 
 // ========== 默认底图配置 ==========
 // 当前选中的底图 ID 统一由 DEFAULT_BASEMAP_PRESET_ID 控制。
@@ -282,6 +295,7 @@ const pendingReverseGeocodePickRef = ref(null);
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
+let compassManagerRef = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -859,6 +873,9 @@ onUnmounted(() => {
     componentUnmountedRef.value = true;
     stopMapViewSync();
     stopGraticule();
+    compassManagerRef?.dispose?.();
+    compassManagerRef = null;
+
     rightDragZoomController?.dispose?.();
     clearRouteStepStyleCache?.();
     rightDragZoomController = null;
@@ -1049,6 +1066,7 @@ function initMap() {
 
     // 1.4 实例化地图
     const initialViewState = getInitialViewState();
+
     mapInstance.value = new Map({
         target: mapRef.value,
         layers: [...layersToAdd, drawLayerInstance, userLayer, busRouteLayer, busPickLayer, searchLayer],
@@ -1062,6 +1080,18 @@ function initMap() {
     });
 
     currentZoom.value = Number(mapInstance.value.getView()?.getZoom?.() ?? initialViewState.zoom);
+
+    // 罗盘逻辑由独立管理器封装，MapContainer 只负责实例化。
+    if (compassOverlayRef.value) {
+        compassManagerRef?.dispose?.();
+        compassManagerRef = new CompassManager({
+            map: mapInstance.value,
+            store: compassStore,
+            overlayElement: compassOverlayRef.value,
+            mapContainerElement: mapContainerRef.value
+        });
+        compassManagerRef.init();
+    }
 
     // 1.4.5 初始化坐标显示 - 从视图中心获取坐标，处理移动端初始化
     const initialCenter = mapInstance.value.getView().getCenter();
@@ -1361,6 +1391,22 @@ defineExpose({
 #map {
     width: 100%;
     height: 100%;
+}
+
+.compass-overlay-host {
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 8;
+}
+
+.compass-overlay-host.is-visible {
+    opacity: 1;
+}
+
+.map-container.compass-placement-mode :deep(#map),
+.map-container.compass-placement-mode #map {
+    cursor: crosshair;
 }
 
 /* OpenLayers Tooltips Override */

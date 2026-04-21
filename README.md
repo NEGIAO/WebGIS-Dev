@@ -89,6 +89,8 @@ WebGIS_Dev/
 │   │   ├── api/                    # 前端 API 封装
 │   │   ├── components/             # 业务组件
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
+│   │   │   ├── CompassControlPanel.vue # 风水罗盘高级控制面板（地理直径/图层样式/JSON）
+│   │   │   ├── feng-shui-compass-svg/  # 罗盘 SVG 渲染核心与主题库
 │   │   │   └── UserCenter/         # 用户中心子模块
 │   │   │       ├── FloatingAccountPanel.vue
 │   │   │       ├── AdminControlPanel.vue
@@ -96,7 +98,8 @@ WebGIS_Dev/
 │   │   ├── composables/            # 组合式逻辑
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
-│   │   ├── stores/                 # Pinia 状态管理
+│   │   ├── stores/                 # Pinia 状态管理（含地理实体罗盘状态 useCompassStore）
+│   │   ├── services/               # 业务服务（含 CompassManager 罗盘管理器）
 │   │   ├── utils/                  # 工具函数
 │   │   └── views/                  # 页面（HomeView / RegisterView）
 │   ├── public/                     # 静态资源（tiles/images/ShareData）
@@ -122,6 +125,9 @@ WebGIS_Dev/
 │   │   ├── 2026-04-20-url-sync-refactor.md       # URL 状态同步与分享模式优先级逻辑重构 (v3.0.4)
 │   │   ├── 2026-04-20-ux-relay-and-proxy-fix.md  # Loading 接力与通用代理修复日志
 │   │   └── 2026-04-20-loading-logic-fix.md       # 加载逻辑韧性与递归 Bug 修复日志 (v3.0.3)
+│   ├── 26-04-21/
+│   │   ├── 2026-04-21-compass-integration.md      # 风水罗盘首次接入（Overlay/传感器/URL）
+│   │   └── 2026-04-21-compass-manager-encapsulation.md # 罗盘地理实体化与管理器封装日志
 │   └── 2026-04-20-sequential-load-fix.md  # 登录页 3 秒顺序加载修复记录
 ├── API_MANAGEMENT_GUIDE.md
 ├── LAYOUT_POSITIONING_GUIDE.md

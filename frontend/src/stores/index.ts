@@ -5,3 +5,4 @@ export * from './useAppStore';
 export * from './useAuthStore';
 export * from './useUserPreferencesStore';
 export * from './useUrlParamStore';
+export * from './useCompassStore';
