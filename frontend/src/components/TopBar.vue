@@ -3,98 +3,114 @@
         <div class="branding">
             <a href="../index.html" class="logo-link">
                 <img :src="`${normalizedBase}images/icon.webp`" alt="Icon" class="logo-icon" />
-                <span class="title-text">The Science of Where</span>
+                <span class="title-text">The Science of Where！</span>
             </a>
         </div>
 
-        <div class="controls">
-            <div class="menu-host" ref="menuHostRef">
-                <!-- 原有的菜单 -->
-                <button class="nav-btn" @click="toggleToolMenu" title="菜单项">
-                    <span class="btn-icon">📋</span>
-                    <span class="btn-text">菜单</span>
-                </button>
-                <div v-if="showToolMenu" class="floating-menu">
-                    <!-- ... -->
-                    <button class="menu-item" @click="handleOpenToolbox">🛠️ 图层管理</button>
-                    <button class="menu-item" @click="handleOpenCompass">🧭 风水罗盘</button>
-                    <button class="menu-item" @click="handleOpenBusPlanner">🚌 公交规划</button>
-                    <button class="menu-item" @click="handleOpenDrivePlanner">🚗 驾车规划</button>
-                    <button class="menu-item" @click="handleToggleWeatherBoard">
-                        <span class="menu-item-icon">{{ isWeatherBoardMode ? '🗺️' : '🌦️' }}</span>
-                        {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
-                    </button>
-                    
-                    <div class="menu-divider"></div>
-                    <div class="menu-group-title">常用地点</div>
-                    <button
-                        v-for="loc in quickLocations"
-                        :key="loc.key"
-                        class="menu-item menu-item-quick"
-                        @click="handleJump(loc)"
-                    >
-                        <span class="menu-item-icon">❤️</span>
-                        <span class="menu-item-label">{{ loc.label }}</span>
-                    </button>
-                    <div class="menu-divider"></div>
-                    <button class="menu-item" @click="handleSoup" title="来点鸡汤">
-                        <span class="menu-item-icon">🥣</span> 鸡汤
-                    </button>
-                </div>
-            </div>
-
-            <button class="nav-btn" @click="handleShareView" title="分享当前视角">
-                <span class="btn-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="6" cy="6" r="2" />
-                        <circle cx="18" cy="12" r="2" />
-                        <circle cx="6" cy="18" r="2" />
-                        <path d="M8.5 7.3 15.5 10.3" />
-                        <path d="M8.5 16.7 15.5 13.7" />
-                    </svg>
+<div class="controls">
+        <div class="menu-host" ref="menuHostRef">
+            <button class="nav-btn" @click="toggleToolMenu" title="菜单项">
+                <span class="btn-icon">
+                    <list-icon :size="18" color="#ffffff" :stroke-width="2" />
                 </span>
-                <span class="btn-text">分享</span>
+                <span class="btn-text">菜单</span>
             </button>
-
-            <button class="nav-btn" @click="handleOpenChat" title="AI 助手">
-                <span class="btn-icon">🤖</span>
-                <span class="btn-text">AI 助手</span>
-            </button>
-
-            <button class="nav-btn" @click="handleToggle3D" title="切换2D/3D视图">
-                <span class="btn-icon">🌍</span>
-                <span class="btn-text">3D视图</span>
-            </button>
-
-            <!-- 魔法特效菜单 -->
-            <div class="menu-host" ref="magicMenuHostRef">
-                <button class="nav-btn magic-btn" @click="toggleMagicMenu" title="魔法特效选项">
-                    <span class="btn-icon">✨</span>
-                    <span class="btn-text">特效</span>
+            <div v-if="showToolMenu" class="floating-menu">
+                <button class="menu-item" @click="handleOpenToolbox">
+                    <layers-icon :size="16" color="#38BDF8" class="m-icon" /> 图层管理
                 </button>
-                <div v-if="showMagicMenu" class="floating-menu">
-                    <button class="menu-item" @click="handleActivateMagic('fluid')" title="流体动力学烟雾">
-                        <span class="menu-item-icon">💨</span> 流体烟雾
-                    </button>
-                    <button class="menu-item" @click="handleActivateMagic('gravity')" title="动态引力场网络">
-                        <span class="menu-item-icon">🌌</span> 引力场
-                    </button>
-                    <button class="menu-item" @click="handleActivateMagic('void')" title="时空扭曲维度塌陷">
-                        <span class="menu-item-icon">🌀</span> 维度塌陷
-                    </button>
-                    <button class="menu-item" @click="handleActivateMagic('wave')" title="量子相干与干涉波">
-                        <span class="menu-item-icon">🌊</span> 量子波
-                    </button>
-                    <button class="menu-item highlight-magic" @click="handleActivateMagic('singularity')" title="引力奇点与元球流体">
-                        <span class="menu-item-icon">🌑</span> 黑洞引力
-                    </button>
-                    <div class="menu-divider"></div>
-                    <button class="menu-item magic-close-btn" @click="handleActivateMagic('off')">
-                        <span class="menu-item-icon">❌</span> 关闭特效
-                    </button>
-                </div>
+                <button class="menu-item" @click="handleOpenCompass">
+                    <compass-icon :size="16" color="#FB923C" class="m-icon" /> 风水罗盘
+                </button>
+                <button class="menu-item" @click="handleOpenBusPlanner">
+                    <bus-icon :size="16" color="#4ADE80" class="m-icon" /> 公交规划
+                </button>
+                <button class="menu-item" @click="handleOpenDrivePlanner">
+                    <car-icon :size="16" color="#F472B6" class="m-icon" /> 驾车规划
+                </button>
+                <button class="menu-item" @click="handleToggleWeatherBoard">
+                    <span class="menu-item-icon">
+                        <component 
+                            :is="isWeatherBoardMode ? MapIcon : CloudSunIcon" 
+                            :size="16" 
+                            :color="isWeatherBoardMode ? '#38BDF8' : '#FACC15'"
+                            class="m-icon"
+                        />
+                    </span>
+                    {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
+                </button>
+                
+                <div class="menu-divider"></div>
+                <div class="menu-group-title">常用地点</div>
+                <button
+                    v-for="loc in quickLocations"
+                    :key="loc.key"
+                    class="menu-item menu-item-quick"
+                    @click="handleJump(loc)"
+                >
+                    <span class="menu-item-icon">
+                        <map-pin-icon :size="18" color="#4ADE80" style="margin: 0 10px;" />
+                    </span>
+                    <span class="menu-item-label">{{ loc.label }}</span>
+                </button>
+                <div class="menu-divider"></div>
+                <button class="menu-item" @click="handleSoup" title="来点鸡汤">
+                    <smile-icon :size="16" color="white" class="m-icon" /> 鸡汤
+                </button>
             </div>
         </div>
+
+        <button class="nav-btn" @click="handleShareView" title="分享当前视角">
+            <span class="btn-icon">
+                <share-2-icon :size="18" color="#38BDF8" :stroke-width="1.8" />
+            </span>
+            <span class="btn-text">分享</span>
+        </button>
+
+        <button class="nav-btn" @click="handleOpenChat" title="AI 助手">
+            <span class="btn-icon">
+                <bot-icon :size="20" color="white" :stroke-width="2" />
+            </span>
+            <span class="btn-text">AI 助手</span>
+        </button>
+
+        <button class="nav-btn" @click="handleToggle3D" title="切换2D/3D视图">
+            <span class="btn-icon">
+                <GlobeIcon :size="18" color="#4ADE80" :stroke-width="2" />
+            </span>
+            <span class="btn-text">3D视图</span>
+        </button>
+
+        <div class="menu-host" ref="magicMenuHostRef">
+            <button class="nav-btn magic-btn" @click="toggleMagicMenu" title="魔法特效选项">
+                <span class="btn-icon">
+                    <sparkles-icon :size="18" color="white" :stroke-width="2" />
+                </span>
+                <span class="btn-text">特效</span>
+            </button>
+            <div v-if="showMagicMenu" class="floating-menu">
+                <button class="menu-item" @click="handleActivateMagic('fluid')">
+                    <wind-icon :size="16" color="#94A3B8" class="m-icon" /> 流体烟雾
+                </button>
+                <button class="menu-item" @click="handleActivateMagic('gravity')">
+                    <orbit-icon :size="16" color="#818CF8" class="m-icon" /> 引力场
+                </button>
+                <button class="menu-item" @click="handleActivateMagic('void')">
+                    <aperture-icon :size="16" color="#A78BFA" class="m-icon" /> 维度塌陷
+                </button>
+                <button class="menu-item" @click="handleActivateMagic('wave')">
+                    <waves-icon :size="16" color="#2DD4BF" class="m-icon" /> 量子波
+                </button>
+                <button class="menu-item highlight-magic" @click="handleActivateMagic('singularity')">
+                    <circle-dot-icon :size="16" color="#1E293B" class="m-icon" /> 黑洞引力
+                </button>
+                <div class="menu-divider"></div>
+                <button class="menu-item magic-close-btn" @click="handleActivateMagic('off')">
+                    <circle-x-icon :size="16" color="#EF4444" class="m-icon" /> 关闭特效
+                </button>
+            </div>
+        </div>
+</div>
     </div>
 </template>
 
@@ -102,7 +118,29 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '../constants';
-import { hideLoading, showLoading } from '@/utils';
+// import { hideLoading, showLoading } from '@/utils';
+import { 
+    List as ListIcon,
+    Layers as LayersIcon,
+    Compass as CompassIcon,
+    Bus as BusIcon,
+    Car as CarIcon,
+    CloudSun as CloudSunIcon,
+    Map as MapIcon,
+    MapPin as MapPinIcon,
+    Smile as SmileIcon,
+    Share2 as Share2Icon,
+    Bot as BotIcon,
+    // Globe2 as GlobeIcon,
+    Sparkles as SparklesIcon,
+    Wind as WindIcon,
+    Orbit as OrbitIcon,
+    Aperture as ApertureIcon,
+    Waves as WavesIcon,
+    CircleDot as CircleDotIcon,
+    CircleX as CircleXIcon
+} from 'lucide-vue-next';
+import { Globe as GlobeIcon } from 'lucide-vue-next';
 
 const props = defineProps({
     isWeatherBoardMode: {
@@ -421,6 +459,11 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+
+.m-icon {
+    margin-right: 8px;
+    vertical-align: middle;
+}
 .top-bar {
     width: 100%;
     height: 60px;
@@ -451,7 +494,7 @@ onBeforeUnmount(() => {
 }
 
 .logo-icon {
-    height: 36px;
+    height: 40px;
     width: auto;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
     transition: transform 0.3s;
@@ -463,7 +506,7 @@ onBeforeUnmount(() => {
 
 .title-text {
     font-family: 'Cinzel', 'Times New Roman', serif;
-    font-size: 25px;
+    font-size: 30px;
     font-weight: 700;
     letter-spacing: 1px;
     background: linear-gradient(to bottom, #fff, #e0e0e0);
@@ -589,13 +632,16 @@ onBeforeUnmount(() => {
 }
 
 .magic-close-btn {
-    color: #ff4d4f;
+    color: #f80004;
 }
 .magic-close-btn:hover {
     background: rgba(255, 77, 79, 0.15) !important;
 }
 
 @media (max-width: 768px) {
+    .logo-icon {
+        height: 30px;
+    }
     .top-bar {
         padding: 0 10px;
     }
@@ -609,8 +655,8 @@ onBeforeUnmount(() => {
     }
 
     .nav-btn {
-        padding: 8px;
-        min-width: 36px;
+        padding: 5px;
+        min-width: 20px;
         justify-content: center;
     }
 

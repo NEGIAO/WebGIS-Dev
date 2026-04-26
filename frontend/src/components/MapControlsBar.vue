@@ -1,6 +1,10 @@
 <template>
     <div class="map-controls-group modern-glass">
         <div class="coordinate-section">
+            <!-- <svg id="map-marker-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="margin: 0 10px;">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+            </svg> -->
+
             <div
                 class="coordinate-display"
                 :class="{ editing: isCoordinateEditing, invalid: isInputInvalid }"
@@ -507,8 +511,8 @@ onUnmounted(() => {
     --trans-curve: cubic-bezier(0.4, 0, 0.2, 1);
     
     position: absolute;
-    right: 18px;
-    bottom: 24px;
+    right: 8px;
+    bottom: 8px;
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -792,7 +796,7 @@ onUnmounted(() => {
 }
 
 .divider {
-    width: 1px;
+    width: 2px;
     height: 20px;
     background-color: var(--glass-divider);
     flex-shrink: 0;

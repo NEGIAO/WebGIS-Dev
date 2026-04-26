@@ -1,7 +1,10 @@
 <template>
   <div class="chat-container">
     <div class="chat-header">
-      <span class="chat-title">🤖 AI 助手</span>
+      <span class="chat-title">
+        <bot-icon :size="18" color="Green" :stroke-width="2" />
+         AI 助手
+      </span>
       <div class="header-controls">
         <button @click="toggleUserConfig" class="icon-btn" title="我的 Agent 配置">⚙️</button>
         <button @click="reloadAgentConfig(true)" class="icon-btn" title="刷新状态">🔄</button>
@@ -27,22 +30,12 @@
               <option value="">-- 选择模型 --</option>
               <option v-if="!configuredModels.length && !upstreamModels.length" value="" disabled>未获取到可用模型</option>
               <optgroup v-if="configuredModels.length" label="当前配置模型">
-                <option
-                  v-for="m in configuredModels"
-                  :key="m.id"
-                  :value="m.id"
-                  :disabled="m.chat_compatible === false"
-                >
+                <option v-for="m in configuredModels" :key="m.id" :value="m.id" :disabled="m.chat_compatible === false">
                   {{ formatModelOptionLabel(m) }}
                 </option>
               </optgroup>
               <optgroup v-if="upstreamModels.length" label="上游可用模型">
-                <option
-                  v-for="m in upstreamModels"
-                  :key="m.id"
-                  :value="m.id"
-                  :disabled="m.chat_compatible === false"
-                >
+                <option v-for="m in upstreamModels" :key="m.id" :value="m.id" :disabled="m.chat_compatible === false">
                   {{ formatModelOptionLabel(m) }}
                 </option>
               </optgroup>
@@ -72,7 +65,8 @@
       </div>
 
       <div class="user-config-actions">
-        <button @click="saveUserConfig" :disabled="userConfigSaving">{{ userConfigSaving ? '保存中...' : '保存我的配置' }}</button>
+        <button @click="saveUserConfig" :disabled="userConfigSaving">{{ userConfigSaving ? '保存中...' : '保存我的配置'
+          }}</button>
         <button @click="clearPersonalKey" :disabled="userConfigSaving" class="secondary">清除我的 Key</button>
         <button @click="resetProviderOverrides" :disabled="userConfigSaving" class="secondary">恢复平台默认参数</button>
       </div>
@@ -115,12 +109,8 @@
     </div>
 
     <div class="chat-footer">
-      <textarea
-        v-model="inputMessage"
-        @keydown.enter.prevent="sendMessage"
-        :placeholder="inputPlaceholder"
-        rows="1"
-      ></textarea>
+      <textarea v-model="inputMessage" @keydown.enter.prevent="sendMessage" :placeholder="inputPlaceholder"
+        rows="1"></textarea>
       <button @click="sendMessage" :disabled="sendDisabled">发送</button>
     </div>
   </div>
@@ -132,6 +122,7 @@ import { apiAgentChatCompletions, apiAgentGetChatConfig, apiAgentGetUserConfig, 
 import { readUserPositionFromCache } from '../utils/userPositionCache';
 import { getGlobalUserLocationContext } from '../utils/userLocationContext';
 import { useMessage } from '../composables/useMessage';
+import { Bot as BotIcon } from 'lucide-vue-next';
 
 const emit = defineEmits(['close-chat']);
 const message = useMessage();
@@ -321,7 +312,7 @@ const toggleUserConfig = async () => {
 const loadAvailableModels = async () => {
   isLoadingModels.value = true;
   modelLoadHint.value = '正在加载模型列表...';
-  
+
   try {
     // 调用后端 API 获取可用的模型列表
     const response = await apiAgentListModels();
@@ -332,7 +323,7 @@ const loadAvailableModels = async () => {
     upstreamModels.value = models.filter((m) => m?.source === 'upstream');
 
     const currentModel = String(data?.current_model || '').trim();
-    
+
     // 零配置即刻响应：如果用户未选择模型，自动从可用列表中随机选择一个
     // 这样确保首条消息请求能够成功转发
     if (!String(userConfigDraft.value.model || '').trim()) {
@@ -404,7 +395,7 @@ const saveUserConfig = async () => {
     };
 
     await apiAgentUpdateUserConfig(payload);
-    
+
     // 若用户在个人配置中选择了特定模型，保存为偏好设置（用于跨设备同步）
     if (payload.model) {
       try {
@@ -414,7 +405,7 @@ const saveUserConfig = async () => {
         // 不中断主流程，模型偏好是可选的
       }
     }
-    
+
     userConfigDraft.value.api_key = '';
     await reloadAgentConfig(false);
     message.success('你的 Agent 配置已保存');
@@ -657,7 +648,7 @@ onMounted(async () => {
   // 零配置即刻响应：启动时自动预加载模型列表（背景加载，不阻塞）
   // 这样即使用户未主动选择模型，系统也会有可用的随机降级模型
   loadAvailableModels();
-  
+
   await reloadAgentConfig(false);
 });
 </script>
@@ -673,7 +664,7 @@ onMounted(async () => {
 }
 
 .chat-header {
-  background: white; 
+  background: white;
   color: #333;
   padding: 10px 15px;
   display: flex;
@@ -868,9 +859,10 @@ onMounted(async () => {
   border-radius: 12px;
   font-size: 0.95em;
   line-height: 1.5;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   word-wrap: break-word;
-  white-space: pre-wrap; /* 保留换行和空格 */
+  white-space: pre-wrap;
+  /* 保留换行和空格 */
 }
 
 .message.user .message-content {

@@ -579,7 +579,7 @@ onBeforeUnmount(() => {
         <!-- Header Profile Summary -->
         <div class="panel-header blur-bg">
           <div class="profile-main">
-            <div class="profile-avatar large">
+            <div class="profile-avatar large blur-bg">
               <img :src="userAvatarSrc" :alt="`${user?.username || '用户'}头像`" loading="lazy">
             </div>
             <div class="profile-info">
@@ -942,17 +942,17 @@ onBeforeUnmount(() => {
   Emerald Gradient & Premium Glassmorphism Design
 */
 
-.floating-account-manager {
+/* .floating-account-manager {
   position: fixed;
-  top: 20px;
-  left: 230px;
+  top: 200px;
+  left: 250px;
   z-index: 1500;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   align-items: flex-start;
   gap: 16px;
-}
+} */
 
 .floating-account-manager.is-fullscreen {
   z-index: 3000;
@@ -1189,14 +1189,16 @@ onBeforeUnmount(() => {
   width: 64px;
   height: 64px;
   font-size: 26px;
-  background: linear-gradient(135deg, #5bcf89 0%, #3dce7e 100%);
+  /* background: linear-gradient(135deg, #5bcf89 0%, #3dce7e 100%); */
+  /* background:transparent; */
+    background: rgba(91, 207, 137, 0.05);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  /* color: #fff; */
   font-weight: bold;
-  border: 1px solid rgba(91, 207, 137, 0.6);
+  /* border: 1px solid rgba(91, 207, 137, 0.6); */
   box-shadow: 0 4px 18px rgba(91, 207, 137, 0.35);
 }
 

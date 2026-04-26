@@ -1434,7 +1434,7 @@ defineExpose({
 /* 鹰眼视图样式 */
 :deep(.ol-custom-overviewmap) {
     position: absolute;
-    left: 10px;
+    left: 60px;
     top: 10px;
     right: auto;
     bottom: auto;

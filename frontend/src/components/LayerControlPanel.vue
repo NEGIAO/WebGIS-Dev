@@ -625,8 +625,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .layer-switcher {
     position: absolute;
-    top: 15px;
-    right: 15px;
+    top: 8px;
+    right: 8px;
     background: rgb(48, 148, 65);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);

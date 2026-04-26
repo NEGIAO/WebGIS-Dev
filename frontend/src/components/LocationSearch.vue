@@ -8,7 +8,11 @@
                 :placeholder="placeholder"
             />
             <div class="search-action">
-                <button class="search-btn" type="submit">搜索</button>
+                <button class="search-btn" type="submit">
+                    <span class="btn-icon">
+                        <search-icon :size="18" color="#309441" :stroke-width="4" />
+                    </span>
+                </button>
                 <ul v-if="showServiceMenu" class="service-menu">
                     <li
                         v-for="item in services"
@@ -53,6 +57,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { Search as SearchIcon } from 'lucide-vue-next';
 
 const props = defineProps({
     fetcher: {

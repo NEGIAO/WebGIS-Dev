@@ -24,6 +24,7 @@ const compassStore = useCompassStore();
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
 import TopBar from '../components/TopBar.vue';
+import ControlsPanel from '@/components/ControlsPanel.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
@@ -654,7 +655,7 @@ onMounted(async () => {
 
 <template>
     <div class="home-container">
-        <!-- 特效光标 -->
+        <!-- 特效光标遮罩 -->
         <MagicCursor :active="isMagicMode" :effect-name="magicEffectData" @toggle-active="(val) => isMagicMode = val" />
 
         <!-- 顶部控制栏 -->
@@ -674,9 +675,16 @@ onMounted(async () => {
             />
         </div>
 
+        <!-- 持续公告栏 -->
         <PersistentAnnouncementBar />
 
         <div class="content-section">
+            <!-- 侧边控制栏（左）-->
+            <div class="Control-panel">
+                <ControlsPanel  />
+            </div>
+
+            <!-- 地图2D、3D、天气面板容器 -->
             <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode, 'account-fullscreen': isAccountPanelFullscreen }">
                 <!-- 
                   将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
@@ -761,6 +769,7 @@ onMounted(async () => {
                 </div>
             </div>
 
+            <!-- 侧边容器栏（右）-->
             <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }">
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
@@ -845,21 +854,33 @@ onMounted(async () => {
     flex: 1;
     width: 100%;
     min-height: 0;
-    gap: 10px;
-    padding: 10px;
+    /* gap: 5px;
+    padding: 5px; */
     box-sizing: border-box;
     overflow: hidden;
 }
-
+.Control-panel {
+    width: 0px;
+    /* Fixed width for left control panel */
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0px 0;
+    background: #ffffffcc;
+    /* border-radius: 10px; */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
 .map-wrapper {
     flex: 1;
     background: #e6f7ff;
-    border-radius: 12px;
+    border-radius: 10px;
     position: relative;
     isolation: isolate;
     overflow: hidden;
     display: flex;
     min-width: 0;
+    margin: 5px;
     /* Important for flex items to shrink */
 }
 
@@ -885,8 +906,8 @@ onMounted(async () => {
 /* 用户中心面板 (由 HomeView 配置覆盖位置) */
 :deep(.home-account-panel) {
     position: absolute !important;
-    top: 20px !important;
-    left: 230px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
+    top: 10px !important;
+    left: 265px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
     bottom: auto !important;
     z-index: 2200 !important; /* 高于地图和其他组件 */
     flex-direction: column !important; /* 调整流向为向下展开 */
@@ -926,6 +947,10 @@ onMounted(async () => {
         top: 140px !important;
         left: 5px !important;
         /* Mobile adapts tightly and relies on map padding */
+    }
+    /* 隐藏控制面板 */
+    .Control-panel {
+        display: none;
     }
 }
 
@@ -1086,7 +1111,7 @@ onMounted(async () => {
     width: 350px;
     flex-shrink: 0;
     background: #f5f5f5;
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
