@@ -10,12 +10,13 @@
  */
 import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore, useWeatherStore, useAppStore } from '../stores';
+import { useAttrStore, useWeatherStore, useAppStore, useCompassStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
+const compassStore = useCompassStore();
 
 // 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
 // showLoading('正在初始化地图与核心环境...'); // 已由 router.beforeEach 接力处理
@@ -82,7 +83,7 @@ const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
 const sidePanelWarmupScheduled = ref(false);
-const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive'
+const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
 const showQueryPanel = ref(false);
@@ -145,11 +146,19 @@ function toggleSidePanel() {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
+    if (isSidePanelCollapsed.value) {
+        compassStore.setPlacementMode(false);
+    }
     message.soup();
+}
+
+function stopCompassTransientInteractions() {
+    compassStore.setPlacementMode(false);
 }
 
 /** 打开 AI 聊天面板 */
 function openChat() {
+    stopCompassTransientInteractions();
     activeSidePanelTab.value = 'chat';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -158,6 +167,7 @@ function openChat() {
 }
 
 function openToolbox() {
+    stopCompassTransientInteractions();
     activeSidePanelTab.value = 'toolbox';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -165,7 +175,18 @@ function openToolbox() {
     isSidePanelCollapsed.value = false;
 }
 
+async function openCompassPanel() {
+    activeSidePanelTab.value = 'compass';
+    compassStore.setEnabled(true);
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+    await compassStore.ensureConfigLoaded();
+}
+
 function openBusPlanner() {
+    stopCompassTransientInteractions();
     activeSidePanelTab.value = 'bus';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -174,6 +195,7 @@ function openBusPlanner() {
 }
 
 function openDrivePlanner() {
+    stopCompassTransientInteractions();
     activeSidePanelTab.value = 'drive';
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
@@ -226,6 +248,9 @@ function handleActivateFeature(feature) {
 }
 
 function handleSwitchSidePanelTab(tab) {
+    if (tab !== 'compass') {
+        stopCompassTransientInteractions();
+    }
     activeSidePanelTab.value = tab;
 }
 
@@ -318,7 +343,8 @@ async function toggle3D() {
         isCesiumLoading.value = true;
         showLoading('正在加载 3D 引擎资源...');
         try {
-            const module = await import('../components/CesiumContainer.vue');
+            // const module = await import('../components/Cesium/CesiumContainer.vue');
+            const module = await import('../components/Cesium/CesiumContainer.vue');
             CesiumContainer.value = module.default;
             isCesiumLoaded.value = true;
         } catch (error) {
@@ -639,6 +665,7 @@ onMounted(async () => {
                 @toggle-3d="toggle3D"
                 @open-chat="openChat"
                 @open-toolbox="openToolbox"
+                @open-compass="openCompassPanel"
                 @open-bus="openBusPlanner"
                 @open-drive="openDrivePlanner"
                 @toggle-weather-board="toggleWeatherBoardMode"

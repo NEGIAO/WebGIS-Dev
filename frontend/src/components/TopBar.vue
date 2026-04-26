@@ -17,6 +17,7 @@
                 <div v-if="showToolMenu" class="floating-menu">
                     <!-- ... -->
                     <button class="menu-item" @click="handleOpenToolbox">🛠️ 图层管理</button>
+                    <button class="menu-item" @click="handleOpenCompass">🧭 风水罗盘</button>
                     <button class="menu-item" @click="handleOpenBusPlanner">🚌 公交规划</button>
                     <button class="menu-item" @click="handleOpenDrivePlanner">🚗 驾车规划</button>
                     <button class="menu-item" @click="handleToggleWeatherBoard">
@@ -116,6 +117,7 @@ const emit = defineEmits([
     'toggle-3d',
     'open-chat',
     'open-toolbox',
+    'open-compass',
     'open-bus',
     'open-drive',
     'toggle-weather-board',
@@ -145,6 +147,12 @@ function handleOpenToolbox() {
     showToolMenu.value = false;
     emit('activate-feature', { key: 'toolbox', label: '工具箱' });
     emit('open-toolbox');
+}
+
+function handleOpenCompass() {
+    showToolMenu.value = false;
+    emit('activate-feature', { key: 'compass', label: '风水罗盘' });
+    emit('open-compass');
 }
 
 function handleOpenBusPlanner() {

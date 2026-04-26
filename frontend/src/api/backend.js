@@ -577,6 +577,20 @@ export async function apiGetCurrentAnnouncement() {
   return backendAPI.get('/api/announcement/current')
 }
 
+/**
+ * 列出罗盘预设（cid + 名称）。
+ */
+export async function apiCompassConfigList() {
+  return backendAPI.get('/api/compass/configs')
+}
+
+/**
+ * 按 cid 获取完整罗盘配置 JSON。
+ */
+export async function apiCompassConfigByCid(cid) {
+  return backendAPI.get(`/api/compass/config/${encodeURIComponent(String(cid || '').trim())}`)
+}
+
 export async function apiDismissAnnouncement(announcementId) {
   return backendAPI.post('/api/announcement/dismiss', {
     announcement_id: announcementId

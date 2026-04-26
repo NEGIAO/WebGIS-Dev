@@ -34,7 +34,7 @@
 
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { useMessage } from '../composables/useMessage';
+import { useMessage } from '../../composables/useMessage';
 
 const props = defineProps({
   getViewer: {
@@ -79,7 +79,7 @@ let fpsStamp = typeof performance !== 'undefined' ? performance.now() : Date.now
 function loadEchartsRuntime() {
   if (echartsRuntimePromise) return echartsRuntimePromise;
 
-  echartsRuntimePromise = import('../utils/echarts/cesiumFxRuntime.js').then((runtimeModule) => {
+  echartsRuntimePromise = import('../../utils/echarts/cesiumFxRuntime.js').then((runtimeModule) => {
     const runtime = runtimeModule?.getCesiumFxEchartsRuntime?.();
     if (!runtime) {
       throw new Error('Cinematic FX 图表运行时加载失败');

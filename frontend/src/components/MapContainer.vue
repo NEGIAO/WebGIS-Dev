@@ -1,5 +1,10 @@
 <template>
-    <div id="map-container" class="map-container" ref="mapContainerRef">
+    <div
+        id="map-container"
+        class="map-container"
+        :class="{ 'compass-placement-mode': compassStore.enabled && compassStore.mode === 'vector' && compassStore.placementMode }"
+        ref="mapContainerRef"
+    >
         <div id="map" ref="mapRef"></div>
 
         <MapEasterEgg
@@ -31,6 +36,14 @@
             @focus-feature="handleAttributeTableFocusFeature"
             @highlight-feature="handleAttributeTableHighlightFeature"
         />
+
+        <div
+            v-if="compassStore.hudVisible"
+            class="compass-hud-wrapper"
+            :style="{ opacity: compassStore.opacity }"
+        >
+            <FengShuiCompassSvg :config="compassStore.hudRenderConfig" />
+        </div>
 
         <!-- 底部控制栏 -->
         <MapControlsBar
@@ -109,12 +122,15 @@ import LayerControlPanel from './LayerControlPanel.vue';
 import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
+import FengShuiCompassSvg from './feng-shui-compass-svg/feng-shui-compass-svg.vue';
 import { apiReverseGeocodeWithFallback } from '../api';
-import { useAttrStore, useUrlParamStore } from '../stores';
+import { useAttrStore, useUrlParamStore, useCompassStore } from '../stores';
+import { CompassManager } from '../services/CompassManager';
 
 const message = useMessage();
 const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
+const compassStore = useCompassStore();
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -165,6 +181,7 @@ const IMAGES = [
 ].map(img => `${NORM_BASE}images/${img}`);
 
 // --- Refs ---
+const mapContainerRef = ref(null);
 const mapRef = ref(null);
 const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 
@@ -282,6 +299,7 @@ const pendingReverseGeocodePickRef = ref(null);
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
+let compassManagerRef = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -859,6 +877,8 @@ onUnmounted(() => {
     componentUnmountedRef.value = true;
     stopMapViewSync();
     stopGraticule();
+    compassManagerRef?.dispose?.();
+    compassManagerRef = null;
     rightDragZoomController?.dispose?.();
     clearRouteStepStyleCache?.();
     rightDragZoomController = null;
@@ -1062,6 +1082,14 @@ function initMap() {
     });
 
     currentZoom.value = Number(mapInstance.value.getView()?.getZoom?.() ?? initialViewState.zoom);
+
+    compassManagerRef?.dispose?.();
+    compassManagerRef = new CompassManager({
+        map: mapInstance.value,
+        store: compassStore,
+        mapContainerElement: mapContainerRef.value
+    });
+    void compassManagerRef.init();
 
     // 1.4.5 初始化坐标显示 - 从视图中心获取坐标，处理移动端初始化
     const initialCenter = mapInstance.value.getView().getCenter();
@@ -1361,6 +1389,20 @@ defineExpose({
 #map {
     width: 100%;
     height: 100%;
+}
+
+.compass-hud-wrapper {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+    z-index: 1210;
+    pointer-events: none;
+    transform: translateZ(0);
+}
+
+.map-container.compass-placement-mode :deep(#map),
+.map-container.compass-placement-mode #map {
+    cursor: crosshair;
 }
 
 /* OpenLayers Tooltips Override */
