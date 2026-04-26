@@ -94,13 +94,14 @@ const handleSelect = (id) => {
 <style scoped>
 .sidebar-container {
     /* 定位 */
+    height: 100%;
     position: relative;
-    left: 25px;
-    top: 50%;
-    transform: translateY(-50%);
+    /* left: 5px; */
+    /* top: 50%;
+    transform: translateY(-50%); */
 
     /* 绿色系背景 - 玻璃拟态 */
-    background: rgba(14, 113, 34, 0.85);
+    background: rgba(255, 255, 255, 0.85);
     /* 深绿色半透明 */
     backdrop-filter: blur(10px);
     border: 1px solid rgba(229, 236, 230, 0.048);
@@ -110,9 +111,10 @@ const handleSelect = (id) => {
     flex-direction: column;
     padding-bottom: 12px;
     padding-top: 12px;
-    padding-left: 8px;
+    padding-left: 0px;
     padding-right: 1px;
-    border-radius: 16px;
+    /* 顺序：左上(0) 右上(10px) 右下(10px) 左下(0) */
+    border-radius: 0 16px 16px 0;
     gap: 15px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     z-index: 1000;
@@ -128,7 +130,7 @@ const handleSelect = (id) => {
     cursor: pointer;
     transition: all 0.3s ease;
     border-radius: 12px;
-    color: rgba(255, 255, 255, 0.7);
+    color: #397d39
 }
 
 .icon-wrapper {
@@ -143,13 +145,13 @@ const handleSelect = (id) => {
 
 /* 悬停效果 */
 .sidebar-item:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: rgba(14, 149, 41, 0.292);
+    color: #d12f2f;
 }
 
 /* 激活状态 - 亮绿色渐变 */
 .sidebar-item.active {
-    background: linear-gradient(135deg, #00bfa5 0%, #009688 100%);
+    background: linear-gradient(200deg, #6a9e98 0%, #57b861 100%);
     color: #fff;
     box-shadow: 0 4px 15px rgba(0, 191, 165, 0.4);
 }

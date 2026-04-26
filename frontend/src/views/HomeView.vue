@@ -861,15 +861,15 @@ onMounted(async () => {
     overflow: hidden;
 }
 .Control-panel {
-    width: 0px;
+    width: 60px;
     /* Fixed width for left control panel */
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 0px 0;
-    background: #ffffffcc;
-    /* border-radius: 10px; */
+    background: #ffffff00;
+    border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 .map-wrapper {
@@ -907,8 +907,8 @@ onMounted(async () => {
 /* 用户中心面板 (由 HomeView 配置覆盖位置) */
 :deep(.home-account-panel) {
     position: absolute !important;
-    top: 10px !important;
-    left: 265px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
+    top: 5px !important;
+    left: 215px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
     bottom: auto !important;
     z-index: 2200 !important; /* 高于地图和其他组件 */
     flex-direction: column !important; /* 调整流向为向下展开 */

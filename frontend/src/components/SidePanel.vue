@@ -4,14 +4,15 @@
         <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开面板' : '收起面板'">
             <!-- 只用一个向左的箭头，通过动态 class 控制旋转 -->
             <svg 
-                class="handle-icon" 
-                :class="{ 'is-flipped': !isCollapsed }" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor"
-            >
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-            </svg>
+        class="handle-icon" 
+        :class="{ 'is-flipped': !isCollapsed }" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor"
+    >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 19l-7-7 7-7" />
+    </svg>
         </div>
 
         <!-- 面板内容区域 -->
@@ -388,7 +389,7 @@ function handleNewsImageError(event) {
     width: 15px;
     height: 60px;
     align-self: center;
-    background: #14c259;
+    background: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -399,15 +400,15 @@ function handleNewsImageError(event) {
 }
 
 .toggle-handle:hover {
-    background: #10a049;
+    background: #10a04a7c;
     width: 20px;
 }
 
 .handle-icon {
     font-size: 12px;
-    color: #fff;
+    color: #0fb549;
     font-weight: bold;
-    width: 20px;
+    width: 20px;    
     height: 20px;
     /* 增加平滑的过渡动画 */
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 

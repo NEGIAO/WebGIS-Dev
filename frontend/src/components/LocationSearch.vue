@@ -301,7 +301,7 @@ onBeforeUnmount(() => {
 }
 
 .search-btn:hover {
-    background: #195e3b;
+    background: #cacccfde;
 }
 
 .service-menu {

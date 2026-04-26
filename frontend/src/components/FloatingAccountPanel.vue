@@ -1976,7 +1976,7 @@ input:checked + .slider:before {
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .floating-account-manager {
-    top: 220px;
+    top: 200px;
     left: 10px;
   }
   .account-panel {

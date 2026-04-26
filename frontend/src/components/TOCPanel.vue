@@ -1154,7 +1154,7 @@ async function loadSharedResource(resource) {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 14px;
+    padding: 4px;
     background: linear-gradient(180deg, #fdfefd 0%, #f3f8f5 100%);
     color: #2f3a45;
 }
