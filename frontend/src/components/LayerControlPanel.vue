@@ -958,4 +958,10 @@ onBeforeUnmount(() => {
     color: #4b5563;
     font-size: 10px;
 }
+@media (max-width: 768px) {
+    .layer-switcher {
+        top:5px;
+        right: 3px;
+    }
+}
 </style>

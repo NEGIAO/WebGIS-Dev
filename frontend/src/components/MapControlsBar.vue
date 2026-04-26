@@ -863,7 +863,7 @@ onUnmounted(() => {
     .map-controls-group {
         left: 12px;
         right: 12px;
-        bottom: 16px;
+        bottom: 10px;
         padding: 8px;
         gap: 8px;
     }

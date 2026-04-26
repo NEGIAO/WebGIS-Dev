@@ -62,7 +62,7 @@
 
         <button class="nav-btn" @click="handleShareView" title="分享当前视角">
             <span class="btn-icon">
-                <share-2-icon :size="18" color="#38BDF8" :stroke-width="1.8" />
+                <share-2-icon :size="18" color="white" :stroke-width="1.8" />
             </span>
             <span class="btn-text">分享</span>
         </button>
@@ -76,7 +76,7 @@
 
         <button class="nav-btn" @click="handleToggle3D" title="切换2D/3D视图">
             <span class="btn-icon">
-                <GlobeIcon :size="18" color="#4ADE80" :stroke-width="2" />
+                <GlobeIcon :size="18" color="white" :stroke-width="2" />
             </span>
             <span class="btn-text">3D视图</span>
         </button>

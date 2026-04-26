@@ -10,7 +10,7 @@
         <MapEasterEgg
             :map-instance="mapInstance"
             :bounds="DIHUAN_BOUNDS"
-            :images="IMAGES"
+            :images="IMAGES"over
             @open-large-image="handleEasterEggImageOpen"
             @location-change="handleEasterEggLocationChange"
         />
@@ -1032,12 +1032,12 @@ function initMap() {
     // 1.3 控件
     // 从 LAYER_CONFIGS 中获取 Google 配置，使鹰眼视图与坐标系保持一致
     const controls = defaultControls({ zoom: false }).extend([
-        new ScaleLine({ 
-            units: 'metric',
-            bar: true, 
-            minWidth: 100 ,
-            // className: 'ol-scaleline main-scale'//绑定类名，控制css
-        }),
+        // new ScaleLine({ 
+        //     units: 'metric',
+        //     bar: true, 
+        //     minWidth: 100 ,
+        //     // className: 'ol-scaleline'//绑定类名，控制css
+        // }),
 
         // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
         //bug：待修复,临时使用
@@ -1080,6 +1080,14 @@ function initMap() {
         }),
         controls
     });
+    // 创建比例尺
+    const scaleline = new ScaleLine({ 
+        units: 'metric',
+        bar: true, 
+        minWidth: 100,
+        // className: 'my-custom-scale'
+    });
+    mapInstance.value.addControl(scaleline);
 
     currentZoom.value = Number(mapInstance.value.getView()?.getZoom?.() ?? initialViewState.zoom);
 
@@ -1478,5 +1486,13 @@ defineExpose({
         width: 120px;
         height: 120px;
     }
+    :deep(.ol-custom-overviewmap) {
+        left: 5px;
+        top: 5px;
+    }
+    /* :deep(ol-scale-line) {
+        left: 5px;
+        bottom: 5px;
+    } */
 }
 </style>

@@ -846,7 +846,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'amap', label: '高德地图(GCJ)', stack: ['amap'] },
     { id: 'amap_image', label: '高德影像(GCJ)', stack: ['amap_image'] },
     { id: 'mapbox_custom_label', label: 'Mapbox 自定义', stack: ['mapbox_custom_labels'] },
-    { id: 'mapbox_custom_unlabeled', label: 'Mapbox 自定义(无标注)', stack: ['mapbox_custom_unlabeled'] },
+    { id: 'mapbox_custom_unlabeled', label: 'Mapbox 无标注', stack: ['mapbox_custom_unlabeled'] },
     
     // ESRI Online 系列 25个
     { id: 'arcgis_canvas_dark', label: 'ESRI深灰', stack: ['arcgis_canvas_dark_base', 'arcgis_canvas_dark_ref'] },

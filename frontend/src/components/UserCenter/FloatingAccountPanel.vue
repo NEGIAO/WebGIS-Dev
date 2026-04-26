@@ -2157,7 +2157,7 @@ input:checked + .slider:before {
     left: 100px;
   }
   .account-panel {
-    width: min(95vw, 420px);
+    width: min(96vw, 420px);
   }
 
   /* Fullscreen mode on mobile */

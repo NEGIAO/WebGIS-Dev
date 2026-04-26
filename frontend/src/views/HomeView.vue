@@ -675,7 +675,7 @@ onMounted(async () => {
             />
         </div>
 
-        <!-- 持续公告栏 -->
+        <!-- 用户公告栏 -->
         <PersistentAnnouncementBar />
 
         <div class="content-section">
@@ -684,16 +684,17 @@ onMounted(async () => {
                 <ControlsPanel  />
             </div>
 
+
+
             <!-- 地图2D、3D、天气面板容器 -->
             <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode, 'account-fullscreen': isAccountPanelFullscreen }">
                 <!-- 
-                  将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
+                    将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
                 -->
                 <FloatingAccountPanel
                     class="home-account-panel"
                     @fullscreen-change="handleAccountPanelFullscreenChange"
                 />
-
                 <!-- 
                   优化点：
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
@@ -912,17 +913,14 @@ onMounted(async () => {
     z-index: 2200 !important; /* 高于地图和其他组件 */
     flex-direction: column !important; /* 调整流向为向下展开 */
 }
-
 /* 设置向下展开的动画源点及过渡方向 */
 :deep(.home-account-panel .account-panel) {
     transform-origin: top left !important;
 }
-
 :deep(.home-account-panel .account-panel-transition-enter-from),
 :deep(.home-account-panel .account-panel-transition-leave-to) {
     transform: translateY(-20px) scale(0.96) !important;
 }
-
 :deep(.home-account-panel.is-fullscreen) {
     position: absolute !important;
     inset: 0 !important;
@@ -931,7 +929,6 @@ onMounted(async () => {
     z-index: 5000 !important; /* 在 map-wrapper 内封顶 */
     gap: 0 !important;
 }
-
 :deep(.home-account-panel.is-fullscreen .account-panel) {
     position: absolute !important;
     inset: 0 !important;
@@ -1238,8 +1235,8 @@ onMounted(async () => {
 @media (max-width: 768px) {
     .content-section {
         flex-direction: column;
-        padding: 5px;
-        gap: 5px;
+        padding: 0px;
+        gap: 0px;
     }
 
     .map-wrapper {
@@ -1247,6 +1244,7 @@ onMounted(async () => {
         /* Map takes available space */
         min-height: 50vh;
         /* Ensure map has height */
+        margin:2px
     }
 
     .map-wrapper.weather-mode {
