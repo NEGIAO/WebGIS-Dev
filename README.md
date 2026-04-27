@@ -106,7 +106,7 @@ WebGIS_Dev/
 │   │   ├── services/               # 业务服务（含 CompassManager / DistrictManager）
 │   │   ├── utils/                  # 工具函数
 │   │   └── views/                  # 页面（HomeView / RegisterView）
-│   ├── public/                     # 静态资源（tiles/images/ShareData/adcode_tree.json）
+│   ├── public/                     # 静态资源（tiles/images/ShareData/adcode.json）
 │   ├── docs/                       # 前端专项文档
 │   ├── scripts/                    # 构建与维护脚本
 │   ├── package.json

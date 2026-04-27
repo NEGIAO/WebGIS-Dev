@@ -238,7 +238,7 @@ frontend/
 └── README.md
 ```
 
-补充：`public/adcode_tree.json` 已作为行政区划树数据源加入静态资源目录。
+补充：`public/adcode.json` 已作为行政区划树数据源加入静态资源目录。
 
 ## 📦 核心依赖
 

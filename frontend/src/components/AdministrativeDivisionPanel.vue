@@ -130,7 +130,7 @@ async function tryLoadTreeFile(fileName) {
 }
 
 /**
- * 按顺序尝试加载 adcode_tree.json 与 adcode.json，兼容不同数据命名。
+ * 按顺序尝试加载 adcode.json，兼容不同数据命名。
  */
 async function loadTreeData(forceReload = false) {
     if (loading.value) return;
@@ -139,7 +139,7 @@ async function loadTreeData(forceReload = false) {
     loading.value = true;
     loadError.value = '';
 
-    const candidates = ['adcode_tree.json', 'adcode.json'];
+    const candidates = ['adcode.json'];
 
     try {
         let loaded = [];
@@ -154,7 +154,7 @@ async function loadTreeData(forceReload = false) {
         }
 
         if (!loaded.length) {
-            throw new Error('未能加载 adcode_tree.json / adcode.json，请检查 public 目录数据文件。');
+            throw new Error('未能加载 adcode.json，请检查 public 目录数据文件。');
         }
 
         treeData.value = loaded;

@@ -3,6 +3,7 @@
  * 本文件仅维护图层 URL、分组、组合栈与轻量映射。
  * 协议识别与建源逻辑请见 src/composables/useTileSourceFactory.ts
  */
+// import { anonymousTileLoader } from '@/composables/useTileSourceFactory';
 
 import { ref } from 'vue';
 import XYZ from 'ol/source/XYZ';
@@ -856,13 +857,20 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             url: 'https://negiao-webgis.hf.space/api/tile/{z}/{x}/{y}'
         })
     },
+    // 待修复
+    // 盗用的token，有风险，会被mapbox后台检测到，为避免被溯源，需要隐藏referrer，
+    // 且不允许用户修改URL（因为用户修改后可能会暴露token）
     {
         id: 'custom_mapbox_labeled',
         name: 'Mapbox 自定义',
         category: "custom",
         group: '自定义',
-        createSource: () => new XYZ({
-            url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ'
+        createSource: () => 
+            new XYZ({
+            url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+            // crossOrigin: 'anonymous',
+            // // 关键：在这里直接指定加载函数
+            // tileLoadFunction: (tile, src) => anonymousTileLoader(tile, src)
         })
     },
     {
@@ -871,7 +879,11 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'custom',
         group: '自定义',
         createSource: () => new XYZ({
-            url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ'
+            url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+            // crossOrigin: 'anonymous',
+            // // 关键：在这里直接指定加载函数
+            // tileLoadFunction: (tile, src) => anonymousTileLoader(tile, src)
+        
         })
     }
 ];
