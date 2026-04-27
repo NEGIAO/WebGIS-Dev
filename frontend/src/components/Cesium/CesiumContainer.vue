@@ -51,8 +51,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { showLoading, hideLoading } from '../../utils/loading';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
-// import Wind2D from './Wind2D'; // 导入刚刚实现的 Wind2D 类
-//此处还没实现
+import Wind2D from './Wind2D';
 
 let Cesium = null;
 
@@ -73,7 +72,7 @@ const TDT_PLUGIN_URLS = [
 // --- 响应式变量 ---
 let viewer = null;
 let handler = null;
-let wind2D = null; // Wind2D 实例
+const wind2D = ref(null); // Wind2D 实例
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 const shouldLoadAdvancedEffects = ref(false);
 const message = useMessage();
@@ -89,16 +88,24 @@ onMounted(() => {
   bootCesium();
 });
 
+function clearWind2D() {
+  if (!wind2D.value) return;
+  try {
+    viewer?.scene?.primitives?.remove(wind2D.value);
+  } catch (e) {
+    console.warn('Wind2D primitive remove warning:', e);
+  }
+  wind2D.value.destroy();
+  wind2D.value = null;
+}
+
 onUnmounted(() => {
   shouldLoadAdvancedEffects.value = false;
   if (handler) {
     handler.destroy();
     handler = null;
   }
-  if (wind2D) {
-    wind2D.destroy();
-    wind2D = null;
-  }
+  clearWind2D();
   if (viewer) {
     try {
       if (viewer._creditCheckInterval) {
@@ -347,15 +354,12 @@ function loadSimulatedWind() {
   }
 
   // 如果已有实例则先销毁
-  if (wind2D) {
-    wind2D.destroy();
-    wind2D = null;
-  }
+  clearWind2D();
 
   const data = generateSimulatedWindData();
 
   // 创建 Wind2D 实例（与面板参数同步）
-  wind2D = new Wind2D(viewer, {
+  wind2D.value = new Wind2D(viewer, {
     maxWindSpeed: 20,         // 最大风速（用于归一化）
     cesium: Cesium,
     speedFactor: speedFactor.value,
@@ -365,10 +369,13 @@ function loadSimulatedWind() {
   });
 
   // 加载数据，内部会自动设置粒子数
-  wind2D.loadData(data);
+  wind2D.value.loadData(data);
+
+  // 按 Cesium Primitive 协议注册到场景渲染管线
+  viewer.scene.primitives.add(wind2D.value);
 
   // 飞到风场中央
-  wind2D.flyTo();
+  wind2D.value.flyTo();
 
   message.success('风场加载成功，可通过下方滑块调节样式');
 }
@@ -377,11 +384,11 @@ function loadSimulatedWind() {
  * 滑块参数变化时，实时更新 Wind2D 实例
  */
 function onParamChange() {
-  if (!wind2D) return;
-  wind2D.speedFactor = speedFactor.value;
-  wind2D.arrowLength = arrowLength.value;
-  wind2D.trailLength = trailLength.value;
-  wind2D.alphaFactor = alphaFactor.value;
+  if (!wind2D.value) return;
+  wind2D.value.speedFactor = speedFactor.value;
+  wind2D.value.arrowLength = arrowLength.value;
+  wind2D.value.trailLength = trailLength.value;
+  wind2D.value.alphaFactor = alphaFactor.value;
 }
 
 // --- 辅助工具函数 ---

@@ -255,6 +255,55 @@ function handleSwitchSidePanelTab(tab) {
     activeSidePanelTab.value = tab;
 }
 
+function handleControlsOpenTab(tab) {
+    const next = String(tab || '').trim();
+    if (!next) return;
+
+    handleSwitchSidePanelTab(next);
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
+function handleControlsMapInteraction(type) {
+    const nextType = String(type || '').trim();
+    if (!nextType) return;
+    mapContainerRef.value?.activateInteraction?.(nextType);
+}
+
+function handleControlsShowAnalysis() {
+    message.info('分析功能入口已接入，后续可扩展缓冲区/最短路径专属面板。');
+}
+
+async function handleControlsDistrictSelect(payload) {
+    const adcode = String(payload?.value || '').trim();
+    const districtName = String(payload?.label || '').trim() || adcode;
+
+    if (!/^\d{6}$/.test(adcode)) {
+        message.warning('行政区 adcode 无效，请重新选择。');
+        return;
+    }
+
+    try {
+        const result = await mapContainerRef.value?.focusDistrictByAdcode?.({
+            adcode,
+            name: districtName,
+            fit: true
+        });
+
+        if (!result) {
+            message.warning('地图尚未准备完成，请稍后再试。');
+            return;
+        }
+
+        message.success(`已加载行政区边界：${districtName}`);
+    } catch (error) {
+        const detail = String(error?.message || '').trim();
+        message.error(detail || '行政区边界加载失败');
+    }
+}
+
 function handleAccountPanelFullscreenChange(fullscreen) {
     isAccountPanelFullscreen.value = Boolean(fullscreen);
 }
@@ -681,7 +730,12 @@ onMounted(async () => {
         <div class="content-section">
             <!-- 侧边控制栏（左）-->
             <div class="Control-panel">
-                <ControlsPanel  />
+                <ControlsPanel
+                    @open-tab="handleControlsOpenTab"
+                    @map-interaction="handleControlsMapInteraction"
+                    @show-analysis="handleControlsShowAnalysis"
+                    @district-select="handleControlsDistrictSelect"
+                />
             </div>
 
 

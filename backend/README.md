@@ -33,6 +33,7 @@ backend/
 │   ├── api_management.py       # API 管理
 │   ├── api_keys_management.py  # API Key 管理
 │   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
+│   ├── compass_config.py       # 罗盘主题配置接口（cid -> 完整配置 JSON）
 │   └── __init__.py
 ├── app.py                      # FastAPI 应用入口（含通用流式代理 /proxy/{target_url:path}）
 ├── Dockerfile                  # 容器化部署
@@ -43,7 +44,7 @@ backend/
 ├── data/                       # 运行数据目录（AUTH_DB 可落盘到此）
 ├── frontend_example.html       # 前端调用示例
 ├── test_location_apis.py       # 位置接口测试脚本
-└── README.md                   # 后端文档（本次顺序加载修复任务中后端结构无新增/删除）
+└── README.md                   # 后端文档（同步检查：2026-04-27 前端新增 DistrictManager/行政区划树模块，后端结构无新增/删除）
 ```
 
 ## 1. 认证系统

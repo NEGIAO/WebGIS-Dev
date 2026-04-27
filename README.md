@@ -89,6 +89,12 @@ WebGIS_Dev/
 │   │   ├── api/                    # 前端 API 封装
 │   │   ├── components/             # 业务组件
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
+│   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
+│   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）
+│   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划面板（树节点 + 模糊检索）
+│   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
+│   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）
+│   │   │   ├── Cesium/               # Cesium 子模块（含 Wind2D.js 多层风场粒子渲染）
 │   │   │   └── UserCenter/         # 用户中心子模块
 │   │   │       ├── FloatingAccountPanel.vue
 │   │   │       ├── AdminControlPanel.vue
@@ -96,10 +102,11 @@ WebGIS_Dev/
 │   │   ├── composables/            # 组合式逻辑
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
-│   │   ├── stores/                 # Pinia 状态管理
+│   │   ├── stores/                 # Pinia 状态管理（含 useCompassStore/useTOCStore）
+│   │   ├── services/               # 业务服务（含 CompassManager / DistrictManager）
 │   │   ├── utils/                  # 工具函数
 │   │   └── views/                  # 页面（HomeView / RegisterView）
-│   ├── public/                     # 静态资源（tiles/images/ShareData）
+│   ├── public/                     # 静态资源（tiles/images/ShareData/adcode_tree.json）
 │   ├── docs/                       # 前端专项文档
 │   ├── scripts/                    # 构建与维护脚本
 │   ├── package.json
@@ -107,7 +114,8 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 前端详细文档
 ├── backend/                        # 🔹 后端（FastAPI）
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
-│   │   └── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
+│   │   ├── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
+│   │   └── compass_config.py       # 罗盘主题配置接口（cid -> 配置 JSON）
 │   ├── app.py                      # FastAPI 入口
 │   ├── data/                       # 本地/挂载数据目录
 │   ├── Dockerfile                  # 后端镜像构建
@@ -118,10 +126,18 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 后端详细文档（含 V3.0.2 更新说明）
 ├── Docs/                           # 开发维护日志与强制执行规范
 │   ├── Force_command.md            # Agent 开发维护日志与 README 结构同步规范
+│   ├── 2026-04-27-districts-ui.md  # 行政区划模块任务入口日志（索引）
+│   ├── 2026-04-22-native-canvas-rendering.md # 本次罗盘原生 Canvas 管线重构日志
 │   ├── 26-04-20/
 │   │   ├── 2026-04-20-url-sync-refactor.md       # URL 状态同步与分享模式优先级逻辑重构 (v3.0.4)
 │   │   ├── 2026-04-20-ux-relay-and-proxy-fix.md  # Loading 接力与通用代理修复日志
 │   │   └── 2026-04-20-loading-logic-fix.md       # 加载逻辑韧性与递归 Bug 修复日志 (v3.0.3)
+│   ├── 26-04-22/
+│   │   └── 2026-04-22-native-canvas-rendering.md # 罗盘原生 Canvas 矢量重构与传感器联动
+│   ├── 26-04-27/
+│   │   ├── 2026-04-27-native-canvas-rendering.md # 罗盘原生 Canvas 渲染优化日志
+│   │   ├── 2026-04-27-wind2d-cesium-integration.md # Wind2D 风场接入与 GPU 渲染规范落地
+│   │   └── 2026-04-27-districts-ui.md # 行政区划 UI/边界服务/TOC 同步日志
 │   └── 2026-04-20-sequential-load-fix.md  # 登录页 3 秒顺序加载修复记录
 ├── API_MANAGEMENT_GUIDE.md
 ├── LAYOUT_POSITIONING_GUIDE.md

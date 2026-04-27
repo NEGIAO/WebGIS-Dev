@@ -51,13 +51,19 @@ export function createManagedLayerStyleFeature({
             }),
             text: labelText
                 ? new Text({
+                    // =======================
+                    // 已改成你要的样式 ✅
+                    // =======================
                     text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
-                    font: '600 12px "Segoe UI", "Microsoft YaHei", sans-serif',
-                    fill: new Fill({ color: '#183a2a' }),
-                    stroke: new Stroke({ color: 'rgba(255,255,255,0.95)', width: 3 }),
-                    backgroundFill: new Fill({ color: 'rgba(255,255,255,0.82)' }),
-                    padding: [2, 6, 2, 6],
-                    offsetY: -14,
+                    font: '600 14px "Microsoft YaHei", "PingFang SC", sans-serif',
+                    fill: new Fill({ color: '#ffffff' }),
+                    stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.72)', width: 3 }),
+                    overflow: true,
+
+                    // 清理旧样式
+                    backgroundFill: undefined,
+                    padding: [0, 0, 0, 0],
+                    offsetY: 0,
                     textAlign: 'center'
                 })
                 : undefined

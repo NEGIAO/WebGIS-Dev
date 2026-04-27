@@ -1,21 +1,29 @@
 <template>
-    <div class="sidebar-container">
-        <div class="sidebar-item" v-for="item in menuItems" :key="item.id" :class="{ active: activeId === item.id }"
-            @click="handleSelect(item.id)">
+    <div class="sidebar-shell">
+        <div class="sidebar-container">
+            <div class="sidebar-item" v-for="item in menuItems" :key="item.id" :class="{ active: activeId === item.id }"
+                @click="handleSelect(item.id)">
 
-            <div class="icon-wrapper">
-                <component :is="item.icon" :size="20" />
+                <div class="icon-wrapper">
+                    <component :is="item.icon" :size="20" />
+                </div>
+
+                <span class="label">{{ item.label }}</span>
             </div>
-
-            <span class="label">{{ item.label }}</span>
         </div>
+
+        <AdministrativeDivisionPanel
+            :visible="districtPanelVisible"
+            @close="districtPanelVisible = false"
+            @select="handleDistrictSelect"
+        />
     </div>
 </template>
 
 <script setup>
 import { useMessage } from '../composables/useMessage';
-const message = useMessage();
 import { ref } from 'vue';
+import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
 import {
     Map as MapIcon,
     Layers,
@@ -26,7 +34,17 @@ import {
     LayoutGrid
 } from 'lucide-vue-next';
 
+const message = useMessage();
+
+const emit = defineEmits([
+    'open-tab',
+    'map-interaction',
+    'show-analysis',
+    'district-select'
+]);
+
 const activeId = ref('map');
+const districtPanelVisible = ref(false);
 
 const menuItems = [
     { id: 'map', label: '地图', icon: MapIcon, action: 'toggleMap' },
@@ -35,6 +53,7 @@ const menuItems = [
     { id: 'measure', label: '测量', icon: Ruler, action: 'toggleMeasure' },
     { id: 'mark', label: '标注', icon: MapPin, action: 'toggleMark' },
     { id: 'analyze', label: '分析', icon: Boxes, action: 'toggleAnalyze' },
+    { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
     { id: 'more', label: '更多', icon: LayoutGrid, action: 'toggleMore' },
 ];
 
@@ -42,40 +61,52 @@ const handleSelect = (id) => {
     // 1. 更新 UI 选中状态
     activeId.value = id;
 
+    if (id !== 'adcode' && districtPanelVisible.value) {
+        districtPanelVisible.value = false;
+    }
+
     // 2. 找到当前点击的对象，以便获取 action
     const currentItem = menuItems.find(item => item.id === id);
     if (!currentItem) return;
 
-    // 3. 执行对应的业务逻辑
-    // 这里暂时统一使用提示，后续需要接入Pina,对接组件功能
+    // 3. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
     switch (currentItem.action) {
         case 'toggleMap':
-            message.info(`呃，还没想好做什么呢...`);
+            emit('open-tab', 'info');
+            message.info('已切换到地图信息面板');
             break;
             
         case 'toggleLayers':
-            // TODO: 打通sidepanel中的图层目录面板功能
-            message.info(`【${currentItem.label}】功能：图层目录面板待打通...`);
+            emit('open-tab', 'toolbox');
             break;
 
         case 'toggleDraw':
-            // TODO: 打通sidepanel中的矢量绘制工具功能
-            message.info(`【${currentItem.label}】功能：矢量绘制工具待打通...`);
+            emit('open-tab', 'toolbox');
+            emit('map-interaction', 'Polygon');
+            message.info('已激活绘制工具（Polygon）');
             break;
 
         case 'toggleMeasure':
-            // TODO: 打通sidepanel中的距离与面积测量功能
-            message.info(`【${currentItem.label}】功能：距离与面积测量待打通...`);
+            emit('open-tab', 'toolbox');
+            emit('map-interaction', 'MeasureDistance');
+            message.info('已激活测距工具');
             break;
 
         case 'toggleMark':
-            // TODO: 打通sidepanel中的地图点位绘制功能，实现地图标注信息编辑功能
-            message.info(`【${currentItem.label}】功能：地图标注与注记待打通...`);
+            emit('open-tab', 'toolbox');
+            emit('map-interaction', 'ReverseGeocodePick');
+            message.info('请在地图单击进行标注与逆地理编码');
             break;
 
         case 'toggleAnalyze':
-            // TODO: 点击后弹出分析工具列表，展示先做一个缓冲区，最短路径的UI，具体的功能还未确定
-            message.info(`【${currentItem.label}】功能：空间分析与缓冲区计算待打通...`);
+            emit('open-tab', 'toolbox');
+            emit('show-analysis');
+            message.info('分析入口已打开（可在工具箱中继续操作）');
+            break;
+
+        case 'toggleAdcode':
+            districtPanelVisible.value = !districtPanelVisible.value;
+            message.info(districtPanelVisible.value ? '行政区划面板已打开' : '行政区划面板已关闭');
             break;
 
         case 'toggleMore':
@@ -89,9 +120,18 @@ const handleSelect = (id) => {
     }
 };
 
+const handleDistrictSelect = (payload) => {
+    emit('district-select', payload);
+};
+
 </script>
 
 <style scoped>
+.sidebar-shell {
+    position: relative;
+    height: 100%;
+}
+
 .sidebar-container {
     /* 定位 */
     height: 100%;

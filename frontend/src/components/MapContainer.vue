@@ -124,13 +124,15 @@ import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
 import FengShuiCompassSvg from './feng-shui-compass-svg/feng-shui-compass-svg.vue';
 import { apiReverseGeocodeWithFallback } from '../api';
-import { useAttrStore, useUrlParamStore, useCompassStore } from '../stores';
+import { useAttrStore, useUrlParamStore, useCompassStore, useTOCStore } from '../stores';
 import { CompassManager } from '../services/CompassManager';
+import { DistrictManager } from '../services/DistrictManager';
 
 const message = useMessage();
 const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
 const compassStore = useCompassStore();
+const tocStore = useTOCStore();
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -300,6 +302,7 @@ let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
 let compassManagerRef = null;
+let districtManagerRef = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -877,6 +880,8 @@ onUnmounted(() => {
     componentUnmountedRef.value = true;
     stopMapViewSync();
     stopGraticule();
+    districtManagerRef?.dispose?.();
+    districtManagerRef = null;
     compassManagerRef?.dispose?.();
     compassManagerRef = null;
     rightDragZoomController?.dispose?.();
@@ -1330,6 +1335,41 @@ function activateInteraction(type) {
     activateDrawMeasure(type, (props) => emit('feature-selected', props));
 }
 
+function ensureDistrictManager() {
+    if (!mapInstance.value) return null;
+
+    if (!districtManagerRef) {
+        districtManagerRef = new DistrictManager({
+            map: mapInstance.value,
+            tocStore,
+            layerId: 'district_boundary_layer'
+        });
+    }
+
+    return districtManagerRef;
+}
+
+// [隶属] 行政区划-边界加载
+// [作用] 根据 adcode 加载边界 GeoJSON，执行 GCJ02->WGS84 纠偏并自动聚焦。
+// [交互] 由 HomeView 接收 ControlsPanel 树节点事件后调用。
+async function focusDistrictByAdcode(payload = {}) {
+    const adcode = String(payload?.adcode || payload?.value || '').trim();
+    if (!/^\d{6}$/.test(adcode)) {
+        throw new Error('行政区 adcode 必须是 6 位数字');
+    }
+
+    const manager = ensureDistrictManager();
+    if (!manager) {
+        throw new Error('地图尚未初始化');
+    }
+
+    return manager.loadBoundary({
+        adcode,
+        name: String(payload?.name || payload?.label || '').trim(),
+        fit: payload?.fit !== false
+    });
+}
+
 // [隶属] 组件交互-绘图与测量
 // [作用] 清理当前激活的绘图/捕捉交互和提示覆盖物。
 // [交互] 被 activateInteraction 与外部调用复用。
@@ -1377,6 +1417,7 @@ defineExpose({
     soloUserLayer,
     viewUserLayer,
     zoomToGraphics,
+    focusDistrictByAdcode,
     drawPointByCoordinatesInput,
     drawAmapAoiByDetailJsonInput,
     toggleLayerCRS,
