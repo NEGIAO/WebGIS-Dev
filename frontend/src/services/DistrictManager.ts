@@ -210,7 +210,15 @@ export class DistrictManager {
         }
 
         const sourceUrl = `${DISTRICT_ENDPOINT_BASE}/${adcode}.json`;
-        const response = await fetch(sourceUrl, { method: 'GET' });
+
+        // --- 修改开始 ---
+        const response = await fetch(sourceUrl, { 
+            method: 'GET',
+            // 关键点：告诉浏览器不要发送 Referer 头，从而绕过阿里云的防盗链检查
+            referrerPolicy: 'no-referrer' 
+        });
+          // --- 修改结束 ---
+        // const response = await fetch(sourceUrl, { method: 'GET' });
         if (!response.ok) {
             throw new Error(`行政区边界请求失败（${response.status}）`);
         }
