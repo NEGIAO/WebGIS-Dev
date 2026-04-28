@@ -52,8 +52,10 @@ SUPPORTED_UNIT_SYSTEMS = {
 SESSION_EXPIRE_HOURS = int(os.getenv("AUTH_SESSION_EXPIRE_HOURS", "72"))
 PASSWORD_HASH_ITERATIONS = int(os.getenv("AUTH_PASSWORD_HASH_ITERATIONS", "120000"))
 
-GUEST_DAILY_API_QUOTA = 5
-REGISTERED_DAILY_API_QUOTA = 50
+# 不同用户权限的额度，因为是盗用的api，100和1000的额度算很多了，后续可以根据实际调用情况进行调整，目前先设置为一个相对宽松的额度，避免过早限制用户的正常使用。
+# 后续如果需要限制了再进行调整，目前先保留这个逻辑，方便后续调整。
+GUEST_DAILY_API_QUOTA = 100 #游客一天100次根本用不完
+REGISTERED_DAILY_API_QUOTA = 1000 #注册用户一天1000次，基本不可能用完，除非被滥用，后续可以根据实际情况进行调整。
 
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{6,64}$")

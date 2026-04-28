@@ -222,6 +222,9 @@
 </template>
 
 <script setup>
+// TODO:
+// 天气api查询中，需要按照adcode进行查询，该数据已经本地化为json数据，在ControlsPanel中已经实现了前端的查询和可视化的功能，直接复用即可；
+// 天气面板中当前实现的逻辑是请求两次高德api（第一次用api查询adcode，第二次用adcode查询天气，浪费了一次api，没有复用前端的adcode.json文件），需要接入该adcode.json进行，可以节省一次api并提高查询响应速度；
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
 import {

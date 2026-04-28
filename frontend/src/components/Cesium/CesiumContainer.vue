@@ -47,6 +47,12 @@
 </template>
 
 <script setup>
+// TODO:
+// cesium当前是直接加载来自天地图的资源，非官方的库，因此很多的功能和接口不兼容，
+// 需要改为官方库的引用，解决兼容问题（wind2d中与非官方的cesium不兼容，无法正确运行）
+// 需要注意到问题是：当前的cesium库使用频率很低，且cesium.js的文件量过大，
+// 需要延迟加载，点击了对应的按钮后才触发加载引用，首屏加载的时候为了提高响应速度，
+// 绝对不可以引入cesium.js相关的非必要文件
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { showLoading, hideLoading } from '../../utils/loading';
