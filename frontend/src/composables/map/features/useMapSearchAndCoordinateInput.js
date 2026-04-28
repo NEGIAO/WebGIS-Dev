@@ -6,7 +6,8 @@
  * - handleSearchJump(payload)
  * - drawPointByCoordinatesInput(payload)
  */
-
+    // 1. 导入万能解析器
+import { universalAmapParser } from '@/utils/gis/parsers/universalAmapParser';
 import { fromLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
@@ -365,72 +366,121 @@ export function createMapSearchAndCoordinateInputFeature({
         drawAoiFeatureFromDetail(detail, { ...payload, poiid }, pointLayerName);
     }
 
-    function drawAmapAoiByDetailJsonInput(payload = {}) {
-        try {
-            const jsonText = String(payload?.jsonText || '').trim();
-            if (!jsonText) {
-                message.warning?.('请先粘贴高德详情 JSON 内容');
-                return;
-            }
+    // AOI 提取流程 - 由用户手动粘贴高德详情 JSON 内容触发，避免自动请求导致的验证弹窗和无效请求。
+    // function drawAmapAoiByDetailJsonInput(payload = {}) {
+    //     try {
+    //         const jsonText = String(payload?.jsonText || '').trim();
+    //         if (!jsonText) {
+    //             message.warning?.('请先粘贴高德详情 JSON 内容');
+    //             return;
+    //         }
 
-            const detail = parseAmapDetailAoiFromPayload(jsonText);
-            const manualPoiId = String(payload?.poiid || '').trim();
-            const poiid = manualPoiId || String(detail?.poiid || '').trim();
-            const poiName = String(detail?.name || detail?.base?.name || '').trim();
-            const fallbackName = poiid ? `POI_${poiid}` : (String(payload?.sourceLayerName || '').trim() || 'AOI');
-            const layerName = String(payload?.layerName || '').trim() || `${poiName || fallbackName} - AOI范围`;
+    //         const detail = parseAmapDetailAoiFromPayload(jsonText);
+    //         const manualPoiId = String(payload?.poiid || '').trim();
+    //         const poiid = manualPoiId || String(detail?.poiid || '').trim();
+    //         const poiName = String(detail?.name || detail?.base?.name || '').trim();
+    //         const fallbackName = poiid ? `POI_${poiid}` : (String(payload?.sourceLayerName || '').trim() || 'AOI');
+    //         const layerName = String(payload?.layerName || '').trim() || `${poiName || fallbackName} - AOI范围`;
 
-            let mapRings = convertWgsRingsToMapRings(detail?.ringsWgs84 || []);
-            if (!mapRings.length) {
-                mapRings = convertGcjRingsToMapRings(detail?.rings || []);
-            }
-            if (!mapRings.length) {
-                message.warning?.('未发现边界数据');
-                return;
-            }
+    //         let mapRings = convertWgsRingsToMapRings(detail?.ringsWgs84 || []);
+    //         if (!mapRings.length) {
+    //             mapRings = convertGcjRingsToMapRings(detail?.rings || []);
+    //         }
+    //         if (!mapRings.length) {
+    //             message.warning?.('未发现边界数据');
+    //             return;
+    //         }
 
-            const baseProperties = detail?.base && typeof detail.base === 'object'
-                ? { ...detail.base }
-                : {};
+    //         const baseProperties = detail?.base && typeof detail.base === 'object'
+    //             ? { ...detail.base }
+    //             : {};
 
-            const aoiFeature = new Feature({
-                geometry: new Polygon(mapRings),
-                type: 'search_aoi',
-                名称: layerName,
-                ...(poiid ? { POI_ID: poiid } : {}),
-                来源服务: 'amap-manual-json',
-                ...baseProperties
-            });
+    //         const aoiFeature = new Feature({
+    //             geometry: new Polygon(mapRings),
+    //             type: 'search_aoi',
+    //             名称: layerName,
+    //             ...(poiid ? { POI_ID: poiid } : {}),
+    //             来源服务: 'amap-manual-json',
+    //             ...baseProperties
+    //         });
 
-            createManagedVectorLayer?.({
-                name: layerName,
-                type: 'search_aoi',
-                sourceType: 'search',
-                features: [aoiFeature],
-                styleConfig: amapExtractAoiStyle,
-                autoLabel: true,
-                metadata: {
-                    ...buildAoiMetadata(detail, payload),
-                    category: 'search-aoi',
-                    labelField: '名称'
-                },
-                fitView: true
-            });
+    //         createManagedVectorLayer?.({
+    //             name: layerName,
+    //             type: 'search_aoi',
+    //             sourceType: 'search',
+    //             features: [aoiFeature],
+    //             styleConfig: amapExtractAoiStyle,
+    //             autoLabel: true,
+    //             metadata: {
+    //                 ...buildAoiMetadata(detail, payload),
+    //                 category: 'search-aoi',
+    //                 labelField: '名称'
+    //             },
+    //             fitView: true
+    //         });
 
-            message.success?.('AOI 提取成功，属性已同步至属性表');
-        } catch (error) {
-            const code = String(error?.code || '').toUpperCase();
-            if (code.includes('NO_SHAPE') || code.includes('INVALID_SHAPE')) {
-                message.warning?.('未发现边界数据');
-                return;
-            }
+    //         message.success?.('AOI 提取成功，属性已同步至属性表');
+    //     } catch (error) {
+    //         const code = String(error?.code || '').toUpperCase();
+    //         if (code.includes('NO_SHAPE') || code.includes('INVALID_SHAPE')) {
+    //             message.warning?.('未发现边界数据');
+    //             return;
+    //         }
 
-            const detailText = error instanceof Error
-                ? error.message
-                : 'AOI 解析失败';
-            message.warning?.(detailText || 'AOI 解析失败');
+    //         const detailText = error instanceof Error
+    //             ? error.message
+    //             : 'AOI 解析失败';
+    //         message.warning?.(detailText || 'AOI 解析失败');
+    //     }
+    // }
+
+
+// 2. 更新原有的 drawAmapAoiByDetailJsonInput 函数
+function drawAmapAoiByDetailJsonInput(payload = {}) {
+    try {
+        const jsonText = String(payload?.jsonText || '').trim();
+        if (!jsonText) {
+            message.warning?.('请先粘贴高德详情 JSON 内容');
+            return;
         }
+
+        // --- 核心改动点：调用万能解析器 ---
+        const detail = universalAmapParser(jsonText); 
+        // --------------------------------
+        
+        const poiid = String(payload?.poiid || detail?.poiid || '').trim();
+        const layerName = detail.name ? `${detail.name} - AOI范围` : '未知AOI';
+
+        // 3. 执行地图渲染逻辑 (注意坐标系的选择)
+        // 假设你的地图需要的是 WGS84 坐标，使用 detail.ringsWgs84
+        // 如果是高德底图（GCJ02），使用 detail.ringsGcj02
+        let mapRings = convertWgsRingsToMapRings(detail.ringsWgs84); 
+        
+        if (!mapRings.length) {
+            message.warning?.('未发现边界数据');
+            return;
+        }
+
+        const aoiFeature = new Feature({
+            geometry: new Polygon(mapRings),
+            名称: layerName,
+            POI_ID: poiid,
+            来源: detail.source
+        });
+
+        // 调用你已有的图层创建函数
+        createManagedVectorLayer?.({
+            name: layerName,
+            features: [aoiFeature],
+            fitView: true
+        });
+
+        message.success?.('解析成功！');
+    } catch (error) {
+        console.error('AOI提取失败:', error);
+        message.error?.(error.message || '解析失败');
     }
+}
 
     /**
      * 处理地名搜索跳转

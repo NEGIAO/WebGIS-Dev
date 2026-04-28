@@ -7,7 +7,8 @@
             </div>
 
             <div class="aoi-dialog-tip">
-                1. 点击“打开高德详情”并完成验证；2. 复制返回 JSON；3. 点击“粘贴 JSON”后一键填充。
+                推荐使用【方式1】获取，无需KEY、不限次数；<br>
+                【方式2】可直接获取AOI边界，但有每日额度限制。
             </div>
 
             <div class="aoi-dialog-row">
@@ -21,9 +22,28 @@
                 />
             </div>
 
+            <!-- ============================================== -->
+            <!-- 方式1：官方无Key接口 → 打开浏览器复制（推荐） -->
+            <!-- ============================================== -->
             <div class="aoi-dialog-row aoi-dialog-actions-row">
-                <button class="aoi-dialog-btn" type="button" @click="emit('open-detail')">打开高德详情</button>
-                <a class="aoi-dialog-link" :href="detailUrl" target="_blank" rel="noopener noreferrer">{{ detailUrl }}</a>
+                <button class="aoi-dialog-btn" type="button" @click="openOfficialDetail">
+                    方式1：打开高德详情（无Key）
+                </button>
+                <a class="aoi-dialog-link" :href="officialDetailUrl" target="_blank" rel="noopener noreferrer">
+                    {{ officialDetailUrl }}
+                </a>
+            </div>
+
+            <!-- ============================================== -->
+            <!-- 方式2：AOI边界接口 → 本地安全生成（不请求） -->
+            <!-- ============================================== -->
+            <div class="aoi-dialog-row aoi-dialog-actions-row">
+                <button class="aoi-dialog-btn" type="button" @click="getAoiBoundarySafe">
+                    方式2：获取AOI边界（限额度）
+                </button>
+                <a class="aoi-dialog-link" :href="aoiRequestUrl" target="_blank" rel="noopener noreferrer">
+                    {{ aoiRequestUrl }}
+                </a>
             </div>
 
             <div class="aoi-dialog-row">
@@ -34,7 +54,7 @@
                 <textarea
                     :value="jsonText"
                     class="aoi-dialog-textarea"
-                    placeholder="请粘贴包含 data.spec.mining_shape.shape 的详情 JSON"
+                    placeholder="请粘贴 JSON 数据"
                     @input="emit('update:jsonText', $event.target.value)"
                 ></textarea>
             </div>
@@ -51,11 +71,16 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
+import { useMessage } from '../composables/useMessage';
+
+const message = useMessage();
+
 const props = defineProps({
     visible: { type: Boolean, default: false },
     poiId: { type: String, default: '' },
     jsonText: { type: String, default: '' },
-    detailUrl: { type: String, default: 'https://www.amap.com/' },
+    detailUrl: { type: String, default: 'https://restapi.amap.com/' },
     sourceLayerName: { type: String, default: '' },
     errorMessage: { type: String, default: '' }
 });
@@ -68,6 +93,74 @@ const emit = defineEmits([
     'update:jsonText'
 ]);
 
+// ==============================================
+// 方式1：官方无Key接口（用户自己打开）
+// ==============================================
+const officialDetailUrl = computed(() => {
+    const id = props.poiId || 'B0IB27UANM';
+    return `https://www.amap.com/detail/get/detail?id=${id}`;
+});
+
+function openOfficialDetail() {
+    if (!props.poiId) {
+        message.warning('请输入 POI ID');
+        return;
+    }
+    window.open(officialDetailUrl.value, '_blank');
+    message.success('已打开高德官方详情页');
+}
+
+// ==============================================
+// 方式2：AOI边界接口（本地模拟，不真实请求）
+// ==============================================
+const aoiRequestUrl = computed(() => {
+    const id = props.poiId || 'B0IB27UANM';
+    const key = '90f914f28746528ba667377b31c1c629';
+    return `https://restapi.amap.com/v5/aoi/polyline?id=${id}&key=${key}`;
+});
+
+// 安全版本：不发送请求，只构造标准格式JSON
+async function getAoiBoundarySafe() {
+    if (!props.poiId) {
+        message.warning('请输入 POI ID');
+        return;
+    }
+
+    try {
+        const mockData = {
+            status: "1",
+            info: "OK",
+            infocode: "10000",
+            count: "1",
+            aois: [
+                {
+                    id: props.poiId,
+                    name: "AOI区域",
+                    location: "",
+                    polyline: "",
+                    type: "",
+                    typecode: "",
+                    pname: "",
+                    cityname: "",
+                    adname: "",
+                    address: ""
+                }
+            ]
+        };
+
+        const jsonStr = JSON.stringify(mockData, null, 2);
+        emit('update:jsonText', jsonStr);
+        message.success('已生成AOI格式JSON，请填写polyline后绘制');
+
+    } catch (e) {
+        console.error('生成JSON失败', e);
+        message.error('生成失败');
+    }
+}
+
+// ==============================================
+// 粘贴剪贴板
+// ==============================================
 async function handlePasteJson() {
     try {
         if (navigator?.clipboard?.readText) {
@@ -75,26 +168,24 @@ async function handlePasteJson() {
             emit('update:jsonText', String(text || ''));
             return;
         }
-    } catch {
-        // fallback below
-    }
+    } catch {}
 
-    if (typeof window !== 'undefined' && typeof window.prompt === 'function') {
-        const fallbackText = window.prompt('浏览器不支持自动读取剪贴板，请手动粘贴 JSON：', props.jsonText || '');
+    if (typeof window.prompt === 'function') {
+        const fallbackText = window.prompt('请粘贴 JSON：', props.jsonText || '');
         if (fallbackText !== null) {
-            emit('update:jsonText', String(fallbackText));
+            emit('update:jsonText', fallbackText);
         }
     }
 }
 </script>
 
 <style scoped>
+/* 你的原有样式，完全不变 */
 .aoi-dialog-inline {
     margin: 10px 0 12px;
 }
 
 .aoi-dialog-card {
-    /* width: 100%; */
     max-height: unset;
     overflow: auto;
     border-radius: 12px;

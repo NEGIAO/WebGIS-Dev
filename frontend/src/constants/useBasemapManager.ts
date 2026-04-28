@@ -236,7 +236,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         createSource: () => new XYZ({
-            url: "https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=4ba9a74fe26c3af4ce1a448e4494cd0296d8c45153ee4a643975bb8eb29c2547"
+            url: "https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228"
         })
     },
 
@@ -275,7 +275,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         createSource: () => new XYZ({
-            url: "https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=4ba9a74fe26c3af4ce1a448e4494cd0296d8c45153ee4a643975bb8eb29c2547"
+            url: "https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228"
         })
     },
     {
@@ -698,7 +698,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         createSource: () => new XYZ({
-            url:'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=4ba9a74fe26c3af4ce1a448e4494cd0296d8c45153ee4a643975bb8eb29c2547'
+            url:'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228'
         })
     },
     {

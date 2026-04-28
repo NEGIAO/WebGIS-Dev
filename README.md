@@ -429,6 +429,9 @@ export const getMyData = async (params) => {
 ### Q: 数据导入支持哪些格式？
 **A**：GeoJSON、KML/KMZ、Shapefile、GeoTIFF、CSV、XYZ 瓦片等。详见 [前端文档](./frontend/README.md)。
 
+## TODO
+参考md文档，将现有的低级api切换为高级api并解析出数据进行查看
+
 ## 📄 许可证
 
 MIT License - 可自由使用、修改、分发

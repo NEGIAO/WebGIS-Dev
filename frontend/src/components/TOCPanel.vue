@@ -642,6 +642,7 @@ function openManualAoiDialogByPoi(payload = {}, options = {}) {
     return true;
 }
 
+// 解析用户输入的高德详情 JSON，尝试从中提取 POI ID，并触发绘制事件
 function drawAmapAoiFromManualJson() {
     manualAoiError.value = '';
     const jsonText = String(manualAoiJsonText.value || '').trim();
@@ -653,17 +654,17 @@ function drawAmapAoiFromManualJson() {
 
     const inputPoiId = normalizeManualAoiPoiId(manualAoiPoiId.value);
     const poiId = inputPoiId || normalizeManualAoiPoiId(jsonText, { keepRawFallback: false });
-    if (poiId) {
-        manualAoiPoiId.value = poiId;
-    }
+        if (poiId) {
+            manualAoiPoiId.value = poiId;
+        }
 
-    emit('draw-amap-aoi-from-json', {
-        poiid: poiId,
+        emit('draw-amap-aoi-from-json', {
+            poiid: poiId,
         jsonText,
-        sourceLayerName: manualAoiSourceLayerName.value
-    });
+            sourceLayerName: manualAoiSourceLayerName.value
+        });
 
-    closeManualAoiDialog();
+        closeManualAoiDialog();
 }
 
 function buildReverseGeocodeProperties(reverseResult) {
