@@ -44,7 +44,7 @@ backend/
 ├── data/                       # 运行数据目录（AUTH_DB 可落盘到此）
 ├── frontend_example.html       # 前端调用示例
 ├── test_location_apis.py       # 位置接口测试脚本
-└── README.md                   # 后端文档（同步检查：2026-04-27 前端新增 DistrictManager/行政区划树模块，后端结构无新增/删除）
+└── README.md                   # 后端文档（同步检查：2026-04-28 前端行政区划已并入 TOC，后端结构无新增/删除）
 ```
 
 ## 1. 认证系统

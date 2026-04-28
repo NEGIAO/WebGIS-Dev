@@ -10,13 +10,14 @@
  */
 import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore, useWeatherStore, useAppStore, useCompassStore } from '../stores';
+import { useAttrStore, useWeatherStore, useAppStore, useCompassStore, useTOCStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
 const compassStore = useCompassStore();
+const tocStore = useTOCStore();
 
 // 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
 // showLoading('正在初始化地图与核心环境...'); // 已由 router.beforeEach 接力处理
@@ -304,6 +305,66 @@ async function handleControlsDistrictSelect(payload) {
     }
 }
 
+function getLayerMetaById(layerId) {
+    const id = String(layerId || '').trim();
+    if (!id) return null;
+    return tocStore.getLayerMeta(id);
+}
+
+function isDistrictLayer(layerId) {
+    return String(getLayerMetaById(layerId)?.sourceType || '') === 'district-boundary';
+}
+
+function getDistrictMeta(layerId) {
+    const meta = getLayerMetaById(layerId);
+    if (!meta || String(meta.sourceType || '') !== 'district-boundary') return null;
+    return meta;
+}
+
+function focusDistrictLayer(layerId) {
+    const meta = getDistrictMeta(layerId);
+    if (!meta) return false;
+
+    mapContainerRef.value?.focusDistrictByAdcode?.({
+        adcode: meta.adcode,
+        name: meta.name,
+        fit: true
+    });
+    return true;
+}
+
+function handleDistrictLayerVisibility(layerId, visible) {
+    const meta = getDistrictMeta(layerId);
+    if (!meta) return false;
+
+    mapContainerRef.value?.setDistrictLayerVisibility?.(meta.adcode, !!visible);
+    return true;
+}
+
+function handleDistrictLayerRemove(layerId) {
+    const meta = getDistrictMeta(layerId);
+    if (!meta) return false;
+
+    mapContainerRef.value?.removeDistrictLayer?.(meta.adcode);
+    message.success(`已移除行政区划图层：${meta.name}`);
+    return true;
+}
+
+function syncDistrictLayerVisibility(layerId) {
+    const activeId = String(layerId || '').trim();
+    const districtLayers = tocStore.layerMetadataList.filter((meta) => String(meta.sourceType || '') === 'district-boundary');
+    if (!districtLayers.length) return;
+
+    districtLayers.forEach((meta) => {
+        const shouldShow = meta.id === activeId;
+        if (meta.visible === shouldShow) return;
+        tocStore.upsertLayerMeta({
+            ...meta,
+            visible: shouldShow
+        });
+    });
+}
+
 function handleAccountPanelFullscreenChange(fullscreen) {
     isAccountPanelFullscreen.value = Boolean(fullscreen);
 }
@@ -438,6 +499,10 @@ function handleInteraction(type) {
 }
 
 function handleToggleLayerVisibility({ layerId, visible }) {
+    if (isDistrictLayer(layerId)) {
+        handleDistrictLayerVisibility(layerId, visible);
+        return;
+    }
     mapContainerRef.value?.setUserLayerVisibility(layerId, visible);
 }
 
@@ -454,14 +519,17 @@ function handleToggleBaseLayerVisibility({ layerId, visible }) {
 }
 
 function handleZoomLayer(layerId) {
+    if (focusDistrictLayer(layerId)) return;
     mapContainerRef.value?.zoomToUserLayer(layerId);
 }
 
 function handleViewLayer(layerId) {
+    if (focusDistrictLayer(layerId)) return;
     mapContainerRef.value?.viewUserLayer(layerId);
 }
 
 function handleRemoveLayer(layerId) {
+    if (handleDistrictLayerRemove(layerId)) return;
     mapContainerRef.value?.removeUserLayer(layerId);
 }
 
@@ -471,6 +539,7 @@ function handleReorderUserLayers(payload) {
 
 function handleSoloLayer(layerId) {
     mapContainerRef.value?.soloUserLayer(layerId);
+    syncDistrictLayerVisibility(layerId);
 }
 
 function handleApplyStyleTemplate(payload) {
@@ -569,6 +638,7 @@ function closeQueryPanel() {
 
 /** 处理图层被选中事件 */
 function handleLayerSelected(layerId) {
+    if (focusDistrictLayer(layerId)) return;
     mapContainerRef.value?.highlightUserLayer?.(layerId);
 }
 

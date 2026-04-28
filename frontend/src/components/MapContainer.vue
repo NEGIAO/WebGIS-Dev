@@ -1342,7 +1342,10 @@ function ensureDistrictManager() {
         districtManagerRef = new DistrictManager({
             map: mapInstance.value,
             tocStore,
-            layerId: 'district_boundary_layer'
+            userDataLayers,
+            emitUserLayersChange,
+            emitGraphicsOverview,
+            serializeManagedFeatures
         });
     }
 
@@ -1368,6 +1371,20 @@ async function focusDistrictByAdcode(payload = {}) {
         name: String(payload?.name || payload?.label || '').trim(),
         fit: payload?.fit !== false
     });
+}
+
+function setDistrictLayerVisibility(adcode, visible) {
+    const manager = ensureDistrictManager();
+    if (manager) {
+        manager.setDistrictLayerVisibility(adcode, visible);
+    }
+}
+
+function removeDistrictLayer(adcode) {
+    const manager = ensureDistrictManager();
+    if (manager) {
+        manager.removeDistrictLayer(adcode);
+    }
 }
 
 // [隶属] 组件交互-绘图与测量
@@ -1418,6 +1435,8 @@ defineExpose({
     viewUserLayer,
     zoomToGraphics,
     focusDistrictByAdcode,
+    setDistrictLayerVisibility,
+    removeDistrictLayer,
     drawPointByCoordinatesInput,
     drawAmapAoiByDetailJsonInput,
     toggleLayerCRS,

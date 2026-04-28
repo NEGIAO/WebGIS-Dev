@@ -91,7 +91,7 @@ WebGIS_Dev/
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
 │   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）
-│   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划面板（树节点 + 模糊检索）
+│   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划选择面板（仅定位/加载，TOC 统一承载管理）
 │   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
 │   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）
 │   │   │   ├── Cesium/               # Cesium 子模块（含 Wind2D.js 多层风场粒子渲染）
@@ -103,7 +103,7 @@ WebGIS_Dev/
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
 │   │   ├── stores/                 # Pinia 状态管理（含 useCompassStore/useTOCStore）
-│   │   ├── services/               # 业务服务（含 CompassManager / DistrictManager）
+│   │   ├── services/               # 业务服务（DistrictManager 负责行政区划边界加载并同步 TOC 元数据）
 │   │   ├── utils/                  # 工具函数
 │   │   └── views/                  # 页面（HomeView / RegisterView）
 │   ├── public/                     # 静态资源（tiles/images/ShareData/adcode.json）
@@ -138,6 +138,8 @@ WebGIS_Dev/
 │   │   ├── 2026-04-27-native-canvas-rendering.md # 罗盘原生 Canvas 渲染优化日志
 │   │   ├── 2026-04-27-wind2d-cesium-integration.md # Wind2D 风场接入与 GPU 渲染规范落地
 │   │   └── 2026-04-27-districts-ui.md # 行政区划 UI/边界服务/TOC 同步日志
+│   ├── 26-04-28/
+│   │   └── 2026-04-28-toc-district-unification.md # 行政区划并入主 TOC 目录与右键管理
 │   └── 2026-04-20-sequential-load-fix.md  # 登录页 3 秒顺序加载修复记录
 ├── API_MANAGEMENT_GUIDE.md
 ├── LAYOUT_POSITIONING_GUIDE.md

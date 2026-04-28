@@ -46,7 +46,7 @@ export function useManagedLayerRegistry({
     function emitGraphicsOverview() {
         emit('graphics-overview', {
             drawCount: drawSource.getFeatures().length,
-            uploadCount: userDataLayers.length,
+            uploadCount: userDataLayers.filter(item => item?.sourceType === 'upload').length,
             layers: userDataLayers.map(item => ({
                 id: item.id,
                 name: item.name,
@@ -60,7 +60,8 @@ export function useManagedLayerRegistry({
     function refreshUserLayerZIndex() {
         userDataLayers.forEach((item, index) => {
             item.order = index;
-            item.layer.setZIndex(120 + index);
+            const zIndex = item?.sourceType === 'district-boundary' ? (1180 + index) : (120 + index);
+            item.layer.setZIndex(zIndex);
         });
     }
 

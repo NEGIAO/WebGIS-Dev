@@ -1,17 +1,20 @@
 <template>
-    <div class="layer-tree-wrap card">
-        <div class="card-title">图层目录</div>
-        <div v-if="layerTree.length" class="layer-tree-root">
-            <TOCTreeItem
-                v-for="node in layerTree"
-                :key="node.id"
-                :node="node"
-                :active-layer-id="activeLayerId"
-                :selected-layer-ids="selectedLayerIds"
-                @action="handleTreeAction"
-            />
+    <div class="layer-panel-container">
+        <!-- 图层目录 -->
+        <div class="layer-tree-wrap card">
+            <div class="card-title">图层目录</div>
+            <div v-if="layerTree.length" class="layer-tree-root">
+                <TOCTreeItem
+                    v-for="node in layerTree"
+                    :key="node.id"
+                    :node="node"
+                    :active-layer-id="activeLayerId"
+                    :selected-layer-ids="selectedLayerIds"
+                    @action="handleTreeAction"
+                />
+            </div>
+            <div v-else class="empty">暂无图层</div>
         </div>
-        <div v-else class="empty">暂无图层</div>
     </div>
 </template>
 
@@ -67,6 +70,12 @@ function handleTreeAction(evt) {
 </script>
 
 <style scoped>
+.layer-panel-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
 .layer-tree-wrap {
     padding: 12px;
 }

@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { useTOCStore } from './useTOCStore';
 
 type LayerHandlers = {
     onToggleVisibility?: (payload: { layerId: string; visible: boolean }) => void;
@@ -90,7 +91,7 @@ function hasAttributeFeatures(layer: any): boolean {
 }
 
 function canToggleLabel(layer: any): boolean {
-    return !!layer?.autoLabel;
+    return !!layer?.autoLabel || String(layer?.sourceType || '').toLowerCase() === 'district-boundary';
 }
 
 function layerHasCoordinates(layer: any): boolean {
@@ -475,6 +476,63 @@ function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState
         .filter(Boolean);
 }
 
+function toDistrictLayerNode(meta: any, level: number): any {
+    const id = String(meta?.id || '').trim();
+    const name = String(meta?.name || meta?.adcode || '行政区划').trim() || '行政区划';
+    const visible = meta?.visible !== false;
+    const featureCount = Number(meta?.featureCount || 0);
+
+    const capabilities = {
+        attribute: true,
+        style: true,
+        label: true,
+        copyCoordinates: true,
+        toggleLayerCRS: true,
+        exportLayerData: true,
+        canExportCSV: true,
+        canExportTXT: true,
+        canExportGeoJSON: true,
+        canExportKML: true,
+        openAoiPanel: false,
+        zoom: true,
+        remove: true
+    };
+
+    return toLayerNode({
+        id,
+        name,
+        type: 'geojson',
+        sourceType: 'district-boundary',
+        visible,
+        featureCount,
+        opacity: 1,
+        capabilities,
+        standardTocItem: {
+            id,
+            name,
+            nodeType: 'layer',
+            layerType: 'geojson',
+            sourceType: 'district-boundary',
+            format: 'geojson',
+            parentId: 'folder-district',
+            visible,
+            opacity: 1,
+            selected: false,
+            expanded: false,
+            featureCount,
+            capabilities,
+            children: [],
+            metadata: {
+                ...(meta?.metadata || {}),
+                adcode: String(meta?.adcode || ''),
+                sourceUrl: String(meta?.sourceUrl || ''),
+                updatedAt: String(meta?.updatedAt || ''),
+                sourceType: 'district-boundary'
+            }
+        }
+    } as any, level, 'district');
+}
+
 function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any {
     const standardItem = getLayerStandardItem(layer);
     const layerType = normalizeStandardLayerType(standardItem?.layerType || layer?.type || '');
@@ -509,7 +567,7 @@ function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any 
         actions: {
             attribute: capabilities.attribute !== false && hasAttributeFeatures(layer),
             style: capabilities.style !== false && group !== 'route' && !isRasterLayer(layer),
-            label: capabilities.label !== false && (group === 'search' || group === 'upload') && canToggleLabel(layer),
+            label: capabilities.label !== false && (group === 'search' || group === 'upload' || group === 'district') && canToggleLabel(layer),
             copyCoordinates: capabilities.copyCoordinates !== false && supportsCoordinateOperations(layer) && layerHasCoordinates(layer),
             toggleLayerCRS: capabilities.toggleLayerCRS !== false && supportsCoordinateOperations(layer),
             exportLayerData: capabilities.exportLayerData === true,
@@ -532,7 +590,7 @@ function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any 
             zoomPayload: { layerId: layer.id },
             removeEvent: 'remove-layer',
             removePayload: { layerId: layer.id },
-            soloEvent: (group === 'draw' || group === 'upload') ? 'solo-layer' : '',
+            soloEvent: (group === 'draw' || group === 'upload' || group === 'district') ? 'solo-layer' : '',
             soloPayload: { layerId: layer.id }
         }
     };
@@ -549,6 +607,7 @@ function buildLayerTree({
     routeLayers,
     searchLayers,
     uploadLayers,
+    districtLayers,
     hasDrawCard,
     drawCount,
     expandedState
@@ -557,6 +616,7 @@ function buildLayerTree({
     routeLayers: LayerStoreLayer[];
     searchLayers: LayerStoreLayer[];
     uploadLayers: LayerStoreLayer[];
+    districtLayers: any[];
     hasDrawCard: boolean;
     drawCount: number;
     expandedState: Record<string, boolean>;
@@ -649,10 +709,22 @@ function buildLayerTree({
         }));
     }
 
+    if (districtLayers.length) {
+        const districtChildren = districtLayers.map((meta) => toDistrictLayerNode(meta, 1));
+        tree.push(folderNode({
+            id: 'folder-district',
+            name: '行政区划',
+            level: 0,
+            children: districtChildren,
+            expandedState
+        }));
+    }
+
     return tree;
 }
 
 export const useLayerStore = defineStore('layerStore', () => {
+    const tocStore = useTOCStore();
     const userLayers = ref<LayerStoreLayer[]>([]);
     const overview = ref<any>({ drawCount: 0, uploadCount: 0, layers: [] });
     const selectedDrawTool = ref('AttributeQuery');
@@ -666,7 +738,8 @@ export const useLayerStore = defineStore('layerStore', () => {
         'folder-draw': true,
         'folder-route': true,
         'folder-search': true,
-        'folder-upload': true
+        'folder-upload': true,
+        'folder-district': true
     });
 
     const sortedUserLayers = computed(() => [...userLayers.value].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
@@ -682,6 +755,18 @@ export const useLayerStore = defineStore('layerStore', () => {
         if (layer.category === 'route') return false;
         return !/_route$/i.test(String(layer.type || ''));
     }));
+
+    const districtLayers = computed(() => {
+        return (tocStore.layerMetadataList || [])
+            .filter((meta) => String(meta?.sourceType || '') === 'district-boundary')
+            .map((meta) => ({
+                ...meta,
+                id: String(meta.id || ''),
+                name: String(meta.name || meta.adcode || '行政区划'),
+                sourceType: 'district-boundary',
+                visible: meta.visible !== false
+            }));
+    });
 
     const hasDrawCard = computed(() => drawLayers.value.length > 0 || Number(overview.value?.drawCount || 0) > 0);
 
@@ -704,6 +789,7 @@ export const useLayerStore = defineStore('layerStore', () => {
         routeLayers: routeLayers.value,
         searchLayers: searchLayers.value,
         uploadLayers: uploadLayers.value,
+        districtLayers: districtLayers.value,
         hasDrawCard: hasDrawCard.value,
         drawCount: Number(overview.value?.drawCount || 0),
         expandedState: layerTreeExpandedState.value
@@ -875,6 +961,7 @@ export const useLayerStore = defineStore('layerStore', () => {
         uploadLayers,
         routeLayers,
         searchLayers,
+        districtLayers,
         hasDrawCard,
         layerTree,
         activeAttributeLayer,
