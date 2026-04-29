@@ -4,6 +4,7 @@
  * 
  * 负责管理地图上的风水指南针组件的完整生命周期，包括：
  * - 指南针矢量图层的挂载/卸载
+ * - 指南针的可见性
  * - 地理要素的位置同步
  * - 在 OpenLayers 渲染管道中进行原生 Canvas 矢量渲染
  * - 设备传感器方向同步（陀螺仪）
@@ -34,7 +35,7 @@ type CompassManagerOptions = {
 };
 
 // 基础配置尺寸，作为缩放计算的基准
-const BASE_CONFIG_SIZE = 800;
+const BASE_CONFIG_SIZE = 1000;
 
 /**
  * 数值夹紧函数
@@ -317,6 +318,8 @@ export class CompassManager {
         this.source.addFeature(this.feature);
 
         this.layer = new VectorLayer({
+            // 做一个缓冲半径，避免指南针边缘被地图容器裁切掉（尤其在放大时）
+            renderBuffer: 2000,
             source: this.source,
             style: this.style,
             updateWhileAnimating: true,
@@ -404,7 +407,7 @@ export class CompassManager {
                     this.store.enabled,
                     this.store.mode,
                     this.store.minResolution,
-                    this.store.physicalDiameterMeters,
+                    this.store.physicalRadiusMeters,
                     this.store.opacity,
                     this.store.rotation,
                     this.store.renderCacheToken
@@ -607,7 +610,7 @@ export class CompassManager {
             writeCompassUrlState({
                 lng: Number(this.store.position?.lng),
                 lat: Number(this.store.position?.lat),
-                radius: Number(this.store.physicalDiameterMeters || 220) / 2
+                radius: Number(this.store.physicalRadiusMeters || 10000)
             });
         }, 120);
     }
@@ -632,7 +635,7 @@ export class CompassManager {
         }
 
         if (Number.isFinite(Number(urlState.radius))) {
-            this.store.setPhysicalDiameterMeters(Number(urlState.radius) * 2);
+            this.store.setPhysicalRadiusMeters(Number(urlState.radius));
         }
     }
 
@@ -674,6 +677,45 @@ export class CompassManager {
         return radiusPx;
     }
 
+    // 封装一个函数，判断指南针圆是否与当前视图相交，以优化渲染性能
+    private isCompassVisibleInView(
+        centerPixel: [number, number],
+        radiusPx: number
+    ): boolean {
+        const size = this.map.getSize();
+        if (!Array.isArray(size) || size.length < 2) {
+            return true;
+        }
+
+        const width = Number(size[0]);
+        const height = Number(size[1]);
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+            return true;
+        }
+
+        // 使用“点到矩形最近距离”判断圆与视图是否相交。
+        const minX = 0;
+        const minY = 0;
+        const maxX = width;
+        const maxY = height;
+
+        const centerX = Number(centerPixel[0]);
+        const centerY = Number(centerPixel[1]);
+        if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
+            return false;
+        }
+
+        const nearestX = Math.max(minX, Math.min(centerX, maxX));
+        const nearestY = Math.max(minY, Math.min(centerY, maxY));
+
+        const dx = centerX - nearestX;
+        const dy = centerY - nearestY;
+
+        return (dx * dx + dy * dy) <= (radiusPx * radiusPx);
+    }
+
+
+    
     /**
      * 创建原生 Canvas 渲染样式
      * 返回 OpenLayers 的自定义渲染样式，在地图 Canvas 中绘制指南针
@@ -694,10 +736,14 @@ export class CompassManager {
     private createNativeCanvasStyle(): Style {
         return new Style({
             renderer: (pixelCoordinates: unknown, renderState: any) => {
+                
                 if (!this.store.enabled || this.store.mode !== 'vector') return;
 
                 const context = renderState?.context as CanvasRenderingContext2D | undefined;
                 if (!context) return;
+                
+
+
 
                 const pointPixel = resolvePoint(pixelCoordinates);
                 if (!pointPixel) return;
@@ -717,7 +763,7 @@ export class CompassManager {
                     return;
                 }
 
-                const radiusMeters = Number(this.store.physicalDiameterMeters || 220) / 2;
+                const radiusMeters = Number(this.store.physicalRadiusMeters || 10000);
                 const radiusPx = this.samplePixelRadius(centerCoord, radiusMeters);
                 if (!Number.isFinite(radiusPx) || radiusPx < 2) return;
 
@@ -742,6 +788,12 @@ export class CompassManager {
                 const hasScale = config?.isShowScale !== false;
                 const contentOuterRadius = hasScale ? radiusPx * 0.82 : radiusPx * 0.95;
                 const layerBand = Math.max(1, (contentOuterRadius - tianChiRadius) / Math.max(1, layers.length));
+
+
+                //判断是否有可见部分在视图范围内，控制渲染性能，避免在指南针完全不可见时仍然执行复杂的绘制逻辑
+                if (!this.isCompassVisibleInView([centerX, centerY], radiusPx)) {
+                    return;
+                }
 
                 context.save();
                 context.globalAlpha = opacity;

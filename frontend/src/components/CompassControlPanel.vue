@@ -56,59 +56,79 @@
             </div>
         </div>
 
-        <div class="card-row">
-            <div class="field full-width">
-                <label>地理直径（米）：{{ Number(compassStore.physicalDiameterMeters).toFixed(0) }}</label>
-                <input
-                    type="range"
-                    min="20"
-                    max="12000"
-                    step="10"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.physicalDiameterMeters"
-                    @input="(event) => compassStore.setPhysicalDiameterMeters(event?.target?.value)"
-                />
-            </div>
-
-            <div class="field full-width">
-                <label>透明度：{{ Number(compassStore.opacity).toFixed(2) }}</label>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="1"
-                    step="0.01"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.opacity"
-                    @input="(event) => compassStore.setOpacity(event?.target?.value)"
-                />
-            </div>
-
-            <div class="field full-width" v-if="compassStore.mode === 'vector'">
-                <label>最小分辨率阈值（zoom out 自动隐藏）：{{ Number(compassStore.minResolution).toFixed(2) }}</label>
-                <input
-                    type="range"
-                    min="1"
-                    max="1500"
-                    step="1"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.minResolution"
-                    @input="(event) => compassStore.setMinResolution(event?.target?.value)"
-                />
-            </div>
-
-            <div class="field full-width" v-if="compassStore.mode === 'hud'">
-                <label>HUD 尺寸（像素）：{{ Number(compassStore.hudSizePx).toFixed(0) }}</label>
-                <input
-                    type="range"
-                    min="500"
-                    max="1000"
-                    step="1"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.hudSizePx"
-                    @input="(event) => compassStore.setHudSize(event?.target?.value)"
-                />
-            </div>
+<div class="card-row">
+    <div class="field full-width">
+        <div class="label-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label>地理半径 (米)</label>
+            <input
+                type="number"
+                class="compact-number-input"
+                :disabled="!compassStore.enabled"
+                :value="Number(compassStore.physicalRadiusMeters).toFixed(1)"
+                @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+            />
         </div>
+
+        <input
+            type="range"
+            :min="100" 
+            :max="20000000" 
+            step="0.5"
+            class="compass-slider"
+            :disabled="!compassStore.enabled"
+            :value="compassStore.physicalRadiusMeters"
+            @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+        />
+        
+        <div class="slider-ticks" style="display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 4px;">
+            <span>100m</span>
+            <span>10000000</span>
+            <span>20000000m</span>
+        </div>
+    </div>
+
+    <div class="field full-width">
+        <label>透明度：{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</label>
+        <input
+            type="range"
+            min="0.1"
+            max="1"
+            step="0.01"
+            class="compass-slider"
+            :disabled="!compassStore.enabled"
+            :value="compassStore.opacity"
+            @input="(e) => compassStore.setOpacity(Number(e.target.value))"
+        />
+    </div>
+
+    <div class="field full-width" v-if="compassStore.mode === 'vector'">
+        <label>自动隐藏阈值 (Res)：{{ Number(compassStore.minResolution).toFixed(0) }}</label>
+        <input
+            type="range"
+            min="100"
+            max="36000"
+            step="10"
+            class="compass-slider"
+            :disabled="!compassStore.enabled"
+            :value="compassStore.minResolution"
+            @input="(e) => compassStore.setMinResolution(Number(e.target.value))"
+        />
+    </div>
+
+    <div class="field full-width" v-if="compassStore.mode === 'hud'">
+        <label>HUD 尺寸：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
+        <input
+            type="range"
+            min="300"
+            max="1200"
+            step="1"
+            class="compass-slider"
+            :disabled="!compassStore.enabled"
+            :value="compassStore.hudSizePx"
+            @input="(e) => compassStore.setHudSize(Number(e.target.value))"
+        />
+    </div>
+</div>
 
         <div class="card-row">
             <div class="field">

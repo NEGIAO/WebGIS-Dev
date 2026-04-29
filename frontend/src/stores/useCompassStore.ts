@@ -154,7 +154,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     });
 
     const rotation = ref(0);
-    const physicalDiameterMeters = ref(220);
+    const physicalRadiusMeters = ref(10000);
     const opacity = ref(0.9);
     const minResolution = ref(450);
     const hudSizePx = ref(280);
@@ -243,8 +243,10 @@ export const useCompassStore = defineStore('compassStore', () => {
         rotation.value = normalizeAngle(nextRotation);
     }
 
-    function setPhysicalDiameterMeters(nextMeters: number): void {
-        physicalDiameterMeters.value = clamp(Number(nextMeters), 20, 12000);
+    function setPhysicalRadiusMeters(nextMeters: number): void {
+        const numeric = Number(nextMeters);
+        if (!Number.isFinite(numeric)) return;
+        physicalRadiusMeters.value = Math.abs(numeric);
     }
 
     function setOpacity(nextOpacity: number): void {
@@ -282,7 +284,7 @@ export const useCompassStore = defineStore('compassStore', () => {
             const fallbackConfig = createFallbackConfigByCid(safeCid);
             replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
             hasFetchedLocalConfig.value = true;
-        } catch (error) {
+        } catch (error: any) {
             const fallbackConfig = createFallbackConfigByCid(safeCid);
             replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
             configError.value = String(error?.message || `failed to load local cid: ${safeCid}`);
@@ -336,7 +338,7 @@ export const useCompassStore = defineStore('compassStore', () => {
         sensorPermission,
         position,
         rotation,
-        physicalDiameterMeters,
+        physicalRadiusMeters,
         opacity,
         minResolution,
         hudSizePx,
@@ -359,7 +361,7 @@ export const useCompassStore = defineStore('compassStore', () => {
         setSensorPermission,
         setPosition,
         setRotation,
-        setPhysicalDiameterMeters,
+        setPhysicalRadiusMeters,
         setOpacity,
         setMinResolution,
         setHudSize,
