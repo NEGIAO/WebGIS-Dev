@@ -33,7 +33,6 @@ backend/
 │   ├── api_management.py       # API 管理
 │   ├── api_keys_management.py  # API Key 管理
 │   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
-│   ├── compass_config.py       # 罗盘主题配置接口（cid -> 完整配置 JSON）
 │   └── __init__.py
 ├── app.py                      # FastAPI 应用入口（含通用流式代理 /proxy/{target_url:path}）
 ├── Dockerfile                  # 容器化部署

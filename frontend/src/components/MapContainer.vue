@@ -845,7 +845,7 @@ async function runDeferredStartupTasks() {
         message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
         message.soup();//鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V2.8.7)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.0.5)', { duration: 3000 });
     }
 
     // 1) Google 主机测速切换（非关键，延后执行）。

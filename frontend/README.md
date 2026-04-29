@@ -76,7 +76,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-04-28 更新）
+## 目录结构（2026-04-29 更新）
 
 以下结构按当前工程实际文件更新，尽量做到逐文件注释。
 
@@ -134,7 +134,7 @@ frontend/
     │   ├── AttributeTable.vue                   # 属性表组件（字段/筛选/联动）
     │   ├── BusPlannerPanel.vue                  # 公交路径规划面板
     │   ├── ChatPanelContent.vue                 # AI 聊天面板
-    │   ├── CompassControlPanel.vue              # 罗盘控制面板
+    │   ├── CompassControlPanel.vue              # 罗盘控制面板（主题本地切换，分享状态不走后端）
     │   ├── ControlsPanel.vue                    # 左侧工具总面板
     │   ├── DrivingPlannerPanel.vue              # 驾车路径规划面板
     │   ├── FloatingAccountPanel.vue             # 账号悬浮入口（兼容旧引用）
@@ -264,8 +264,8 @@ frontend/
     │   └── lazyHomeViewLoader.js                # HomeView 二段式懒加载
     │
     ├── services/
-    │   ├── CompassManager.ts                    # 罗盘管理服务
-    │   ├── compassUrlState.ts                   # 罗盘 URL 参数编解码
+    │   ├── CompassManager.ts                    # 罗盘管理服务（启动时按加密参数还原并聚焦）
+    │   ├── compassUrlState.ts                   # 罗盘 URL 单参数加密状态（cs）编解码
     │   └── DistrictManager.ts                   # 行政区边界加载与 TOC/图层同步
     │
     ├── stores/
@@ -273,7 +273,7 @@ frontend/
     │   ├── useAppStore.ts                       # 全局应用状态
     │   ├── useAttrStore.ts                      # 属性表状态
     │   ├── useAuthStore.ts                      # 登录认证状态
-    │   ├── useCompassStore.ts                   # 罗盘状态
+    │   ├── useCompassStore.ts                   # 罗盘状态（纯前端本地主题配置）
     │   ├── useLayerStore.ts                     # 图层树与图层交互状态
     │   ├── useTOCStore.ts                       # TOC 元数据与行政区树状态
     │   ├── useUrlParamStore.ts                  # URL 参数状态

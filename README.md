@@ -115,7 +115,7 @@ WebGIS_Dev/
 ├── backend/                        # 🔹 后端（FastAPI）
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
 │   │   ├── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
-│   │   └── compass_config.py       # 罗盘主题配置接口（cid -> 配置 JSON）
+│   │   └── ...                     # 其余后端接口模块（已移除罗盘配置后端接口，罗盘分享改为前端本地编码）
 │   ├── app.py                      # FastAPI 入口
 │   ├── data/                       # 本地/挂载数据目录
 │   ├── Dockerfile                  # 后端镜像构建
@@ -140,6 +140,7 @@ WebGIS_Dev/
 │   │   └── 2026-04-27-districts-ui.md # 行政区划 UI/边界服务/TOC 同步日志
 │   ├── 26-04-28/
 │   │   └── 2026-04-28-toc-district-unification.md # 行政区划并入主 TOC 目录与右键管理
+│   ├── 2026-04-29-compass-url-crypto.md # 罗盘 URL 单参数加密与后端解耦日志
 │   └── 2026-04-20-sequential-load-fix.md  # 登录页 3 秒顺序加载修复记录
 ├── API_MANAGEMENT_GUIDE.md
 ├── LAYOUT_POSITIONING_GUIDE.md

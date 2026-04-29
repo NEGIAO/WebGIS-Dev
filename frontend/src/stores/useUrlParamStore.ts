@@ -33,6 +33,7 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
      * 在路由守卫中调用，以便在组件挂载前做好准备
      * 
      * @param {Object} queryParams - 从路由查询提取的参数对象
+     * 支持的参数包括：
      *   - lng: 经度
      *   - lat: 纬度
      *   - z: 缩放级别
@@ -40,6 +41,8 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
      *   - s: 分享标记 ('0' | '1')
      *   - loc: 定位授权标记 ('0' | '1')
      *   - p: 加密位置编码
+     *   - ut: 用户类型（guest|admin|registered）
+     *   - cs: 罗盘参数（加密字符串）
      */
     function extractAndStorePendingParams(queryParams = {}) {
         // 验证并规范化参数

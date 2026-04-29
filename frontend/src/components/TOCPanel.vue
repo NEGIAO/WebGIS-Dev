@@ -664,7 +664,8 @@ function drawAmapAoiFromManualJson() {
             sourceLayerName: manualAoiSourceLayerName.value
         });
 
-        closeManualAoiDialog();
+        // closeManualAoiDialog();
+        // 取消自动关闭，允许用户继续修改 JSON 或 POI ID 以调整绘制结果
 }
 
 function buildReverseGeocodeProperties(reverseResult) {

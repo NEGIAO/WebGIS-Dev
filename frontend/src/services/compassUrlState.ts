@@ -1,10 +1,13 @@
+import { decodeCompassState, encodeCompassState } from '../utils/urlCrypto';
+
 export type CompassUrlPayload = {
     lng?: number | null;
     lat?: number | null;
-    rotation?: number | null;
-    cid?: string | null;
-    mode?: 'vector' | 'hud' | null;
+    radius?: number | null;
 };
+
+const COMPASS_PARAM_KEY = 'cs';
+const LEGACY_PARAM_KEYS = ['clng', 'clat', 'crot', 'cid', 'cmode'];
 
 function toFinite(value: unknown): number | null {
     const numeric = Number(value);
@@ -34,23 +37,19 @@ function readMergedQuery(): { path: string; query: URLSearchParams } {
     return { path, query };
 }
 
-function normalizeMode(value: unknown): 'vector' | 'hud' | null {
-    const compact = String(value || '').trim().toLowerCase();
-    if (compact === 'vector') return 'vector';
-    if (compact === 'hud') return 'hud';
-    return null;
-}
-
 export function readCompassUrlState(): CompassUrlPayload {
     if (typeof window === 'undefined') return {};
 
     const { query } = readMergedQuery();
+    const stateCode = String(query.get(COMPASS_PARAM_KEY) || '').trim();
+    const decoded = decodeCompassState(stateCode);
+
+    if (!decoded) return {};
+
     return {
-        lng: toFinite(query.get('clng')),
-        lat: toFinite(query.get('clat')),
-        rotation: toFinite(query.get('crot')),
-        cid: String(query.get('cid') || '').trim() || null,
-        mode: normalizeMode(query.get('cmode'))
+        lng: toFinite(decoded.lng),
+        lat: toFinite(decoded.lat),
+        radius: toFinite(decoded.radius)
     };
 }
 
@@ -60,15 +59,23 @@ export function writeCompassUrlState(payload: CompassUrlPayload): void {
     try {
         const { path, query } = readMergedQuery();
 
-        if (toFinite(payload.lng) !== null) query.set('clng', String(Number(payload.lng).toFixed(6)));
-        if (toFinite(payload.lat) !== null) query.set('clat', String(Number(payload.lat).toFixed(6)));
-        if (toFinite(payload.rotation) !== null) query.set('crot', String(Number(payload.rotation).toFixed(2)));
+        const lng = toFinite(payload.lng);
+        const lat = toFinite(payload.lat);
+        const radius = toFinite(payload.radius);
 
-        const cid = String(payload.cid || '').trim();
-        if (cid) query.set('cid', cid);
+        const encoded = Number.isFinite(Number(lng))
+            && Number.isFinite(Number(lat))
+            && Number.isFinite(Number(radius))
+            ? encodeCompassState(Number(lng), Number(lat), Number(radius))
+            : '0';
 
-        const mode = normalizeMode(payload.mode);
-        if (mode) query.set('cmode', mode);
+        LEGACY_PARAM_KEYS.forEach((key) => query.delete(key));
+
+        if (encoded && encoded !== '0') {
+            query.set(COMPASS_PARAM_KEY, encoded);
+        } else {
+            query.delete(COMPASS_PARAM_KEY);
+        }
 
         const nextQuery = query.toString();
         const nextHash = nextQuery ? `#${path}?${nextQuery}` : `#${path}`;

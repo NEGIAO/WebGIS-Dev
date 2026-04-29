@@ -290,7 +290,9 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'Google原版',
         category: 'imagery',
         group: '影像',
-        createSource: () => new XYZ({ url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 })
+        createSource: () => new XYZ({ 
+            // tilePixelRatio: 2,
+            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', maxZoom: 20 })
     },
     {
         id: 'imagery_gac',

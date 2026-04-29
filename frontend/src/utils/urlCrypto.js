@@ -8,6 +8,12 @@ const LAT_BITS = 28n;
 const LAT_MASK = (1n << LAT_BITS) - 1n;
 const MAX_PACKED = (BigInt(LNG_MAX_SCALED) << LAT_BITS) | BigInt(LAT_MAX_SCALED);
 
+const RADIUS_SCALE = 10;
+const RADIUS_MAX_SCALED = 500000 * RADIUS_SCALE;
+const RADIUS_BITS = 23n;
+const RADIUS_MASK = (1n << RADIUS_BITS) - 1n;
+const MAX_COMPASS_PACKED = (MAX_PACKED << RADIUS_BITS) | BigInt(RADIUS_MAX_SCALED);
+
 // 打乱后的 Base62 字符表（非默认顺序）
 const BASE62_ALPHABET = '4CiHUu0oP7ahIA29xNQtgbOMDs6V3nREfw1mGlvWeqSjFT8dJXpBLYKr5kzyZc';
 const BASE = 62n;
@@ -119,5 +125,106 @@ export const decodePos = (code) => {
     return {
         lng: Number(lng.toFixed(6)),
         lat: Number(lat.toFixed(6))
+    };
+};
+
+/**
+ * 编码罗盘 URL 状态：经度 + 纬度 + 半径（米）。
+ *
+ * @param {number|string} lng
+ * @param {number|string} lat
+ * @param {number|string} radiusMeters
+ * @returns {string} 短字符串；异常时返回 '0'
+ */
+export const encodeCompassState = (lng, lat, radiusMeters) => {
+    const normalizedLng = Number(lng);
+    const normalizedLat = Number(lat);
+    const normalizedRadius = Number(radiusMeters);
+
+    if (!Number.isFinite(normalizedLng) || !Number.isFinite(normalizedLat)) {
+        return '0';
+    }
+
+    if (normalizedLng < -180 || normalizedLng > 180 || normalizedLat < -90 || normalizedLat > 90) {
+        return '0';
+    }
+
+    if (!Number.isFinite(normalizedRadius) || normalizedRadius < 0 || normalizedRadius > RADIUS_MAX_SCALED / RADIUS_SCALE) {
+        return '0';
+    }
+
+    const lngScaled = Math.round((normalizedLng + 180) * COORD_SCALE);
+    const latScaled = Math.round((normalizedLat + 90) * COORD_SCALE);
+    const radiusScaled = Math.round(normalizedRadius * RADIUS_SCALE);
+
+    if (
+        lngScaled < 0
+        || lngScaled > LNG_MAX_SCALED
+        || latScaled < 0
+        || latScaled > LAT_MAX_SCALED
+        || radiusScaled < 0
+        || radiusScaled > RADIUS_MAX_SCALED
+    ) {
+        return '0';
+    }
+
+    const packedPos = (BigInt(lngScaled) << LAT_BITS) | BigInt(latScaled);
+    const packed = (packedPos << RADIUS_BITS) | BigInt(radiusScaled);
+
+    const encoded = encodeBase62(packed);
+    if (!encoded) return '0';
+
+    if (encoded.length >= MIN_CODE_LENGTH) return encoded;
+    return encoded.padStart(MIN_CODE_LENGTH, BASE62_ALPHABET[0]);
+};
+
+/**
+ * 解码罗盘 URL 状态：经度 + 纬度 + 半径（米）。
+ *
+ * @param {string} code
+ * @returns {{lng:number,lat:number,radius:number}|null}
+ */
+export const decodeCompassState = (code) => {
+    const text = String(code || '').trim();
+    if (!text || text === '0') return null;
+
+    const packed = decodeBase62(text);
+    if (packed === null || packed < 0n || packed > MAX_COMPASS_PACKED) {
+        return null;
+    }
+
+    const packedPos = packed >> RADIUS_BITS;
+    const radiusScaled = Number(packed & RADIUS_MASK);
+
+    const lngScaled = Number(packedPos >> LAT_BITS);
+    const latScaled = Number(packedPos & LAT_MASK);
+
+    if (
+        !Number.isFinite(lngScaled)
+        || !Number.isFinite(latScaled)
+        || !Number.isFinite(radiusScaled)
+    ) {
+        return null;
+    }
+
+    if (
+        lngScaled < 0
+        || lngScaled > LNG_MAX_SCALED
+        || latScaled < 0
+        || latScaled > LAT_MAX_SCALED
+        || radiusScaled < 0
+        || radiusScaled > RADIUS_MAX_SCALED
+    ) {
+        return null;
+    }
+
+    const lng = (lngScaled - LNG_OFFSET_SCALED) / COORD_SCALE;
+    const lat = (latScaled - LAT_OFFSET_SCALED) / COORD_SCALE;
+    const radius = radiusScaled / RADIUS_SCALE;
+
+    return {
+        lng: Number(lng.toFixed(6)),
+        lat: Number(lat.toFixed(6)),
+        radius: Number(radius.toFixed(1))
     };
 };

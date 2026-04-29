@@ -299,7 +299,6 @@ export class CompassManager {
                 () => this.store.cid,
                 () => {
                     this.requestRender();
-                    this.scheduleUrlSync();
                 }
             )
         );
@@ -428,9 +427,7 @@ export class CompassManager {
             writeCompassUrlState({
                 lng: Number(this.store.position?.lng),
                 lat: Number(this.store.position?.lat),
-                rotation: Number(this.store.rotation || 0),
-                cid: String(this.store.cid || ''),
-                mode: this.store.mode
+                radius: Number(this.store.physicalDiameterMeters || 220) / 2
             });
         }, 120);
     }
@@ -441,21 +438,19 @@ export class CompassManager {
     private async restoreFromUrlState(): Promise<void> {
         const urlState = readCompassUrlState();
 
-        if (urlState.cid) {
-            await this.store.setCidAndLoad(urlState.cid);
-        }
-
         if (Number.isFinite(Number(urlState.lng)) && Number.isFinite(Number(urlState.lat))) {
-            this.store.setPosition(Number(urlState.lng), Number(urlState.lat));
+            const lng = Number(urlState.lng);
+            const lat = Number(urlState.lat);
+
+            this.store.setPosition(lng, lat);
             this.store.setEnabled(true);
+
+            const center = fromLonLat([lng, lat]);
+            this.map.getView()?.setCenter(center);
         }
 
-        if (Number.isFinite(Number(urlState.rotation))) {
-            this.store.setRotation(Number(urlState.rotation));
-        }
-
-        if (urlState.mode === 'vector' || urlState.mode === 'hud') {
-            this.store.setMode(urlState.mode);
+        if (Number.isFinite(Number(urlState.radius))) {
+            this.store.setPhysicalDiameterMeters(Number(urlState.radius) * 2);
         }
     }
 

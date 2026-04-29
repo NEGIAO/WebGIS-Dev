@@ -95,31 +95,68 @@ const emit = defineEmits([
 
 // ==============================================
 // 方式1：官方无Key接口（用户自己打开）
+// 用的接口是高德地图的公开详情页接口，理论上不需要API Key，但可能会有访问频率限制或其他反爬措施。
+// 先尝试后台请求解析，如果失败再引导用户手动打开链接获取数据。
 // ==============================================
 const officialDetailUrl = computed(() => {
     const id = props.poiId || 'B0IB27UANM';
     return `https://www.amap.com/detail/get/detail?id=${id}`;
 });
-
-function openOfficialDetail() {
+async function openOfficialDetail() {
     if (!props.poiId) {
         message.warning('请输入 POI ID');
         return;
     }
-    window.open(officialDetailUrl.value, '_blank');
-    message.success('已打开高德官方详情页');
+
+    const url = officialDetailUrl.value;
+
+    try {
+        // 1. 尝试静默请求（隐藏 Referrer）
+        const response = await fetch(url, {
+            method: 'GET',
+            referrerPolicy: 'no-referrer', // 隐藏来源，尝试规避部分校验
+        });
+
+        if (!response.ok) throw new Error('网络响应异常');
+
+        const res = await response.json();
+
+        // 2. 解析高德官方接口的返回逻辑
+        // 注意：官方接口的成功标志通常是 status: "1" 或 data.status: "1"
+        if (res.status === '1' || (res.data && res.data.status === '1')) {
+            const jsonStr = JSON.stringify(res, null, 2);
+            emit('update:jsonText', jsonStr);
+            message.success('成功从官方接口解析 AOI 详情');
+        } else {
+            // 3. 业务逻辑失败（比如接口改版、频繁访问被封、参数失效）
+            throw new Error(res.info || '接口返回异常');
+        }
+
+    } catch (e) {
+        console.warn('后台解析官方接口失败:', e);
+        
+        // 4. 容错处理：提醒用户并执行原始的跳转逻辑
+        message.info('后台解析受阻，正在为你打开官方详情页进行手动获取...');
+        
+        // 延迟一小会儿跳转，让用户看清提示
+        setTimeout(() => {
+            window.open(url, '_blank');
+        }, 2000);
+    }
 }
 
+
 // ==============================================
-// 方式2：AOI边界接口（本地模拟，不真实请求）
+// 方式2：AOI边界接口（真实请求）
+// 使用的高级接口，直接返回AOI边界数据，但需要API Key且有访问限制。
+// 这里直接请求并处理结果，用户无需手动操作。
 // ==============================================
 const aoiRequestUrl = computed(() => {
     const id = props.poiId || 'B0IB27UANM';
     const key = '90f914f28746528ba667377b31c1c629';
+    //key为奥维的，免费额度较大，且不绑定域名，适合测试使用
     return `https://restapi.amap.com/v5/aoi/polyline?id=${id}&key=${key}`;
 });
-
-// 安全版本：不发送请求，只构造标准格式JSON
 async function getAoiBoundarySafe() {
     if (!props.poiId) {
         message.warning('请输入 POI ID');
@@ -127,34 +164,36 @@ async function getAoiBoundarySafe() {
     }
 
     try {
-        const mockData = {
-            status: "1",
-            info: "OK",
-            infocode: "10000",
-            count: "1",
-            aois: [
-                {
-                    id: props.poiId,
-                    name: "AOI区域",
-                    location: "",
-                    polyline: "",
-                    type: "",
-                    typecode: "",
-                    pname: "",
-                    cityname: "",
-                    adname: "",
-                    address: ""
-                }
-            ]
-        };
+        // 1. 使用 fetch 发起真实请求
+        const response = await fetch(aoiRequestUrl.value,{
+            // 关键配置：隐藏来源信息
+            referrer: "", // 清空 Referer
+            referrerPolicy: "no-referrer", // 完全不发送 Referer
+            mode: "cors", // 保持跨域模式
+            credentials: "omit" // 不发送 Cookie、Origin 信息
+        });
+        
+        // 2. 检查网络状态
+        if (!response.ok) throw new Error('网络请求失败');
+        
+        // 3. 解析返回的 JSON 数据
+        const realData = await response.json();
 
-        const jsonStr = JSON.stringify(mockData, null, 2);
-        emit('update:jsonText', jsonStr);
-        message.success('已生成AOI格式JSON，请填写polyline后绘制');
+        // 4. 判断高德 API 的业务状态码码 (status 为 "1" 代表成功)
+        if (realData.status === "1" && realData.aois && realData.aois.length > 0) {
+            const jsonStr = JSON.stringify(realData, null, 2);
+            emit('update:jsonText', jsonStr);
+            message.success('AOI数据抓取成功');
+        } else {
+            // 如果 API 返回错误（比如 key 无效或 ID 找不到）
+            message.error(`抓取失败: ${realData.info || '未知错误'}`);
+            // 失败时也可以把原始错误数据传出去方便调试
+            emit('update:jsonText', JSON.stringify(realData, null, 2));
+        }
 
     } catch (e) {
-        console.error('生成JSON失败', e);
-        message.error('生成失败');
+        console.error('请求AOI接口出错', e);
+        message.error('请求失败，请检查网络或 API Key');
     }
 }
 

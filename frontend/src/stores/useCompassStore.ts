@@ -2,7 +2,6 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { FengShuiCompassConfig, Layer } from '../components/feng-shui-compass-svg/types';
 import localThemes from '../components/feng-shui-compass-svg/themes';
-import { apiCompassConfigByCid, apiCompassConfigList } from '../api/backend';
 
 export type CompassMode = 'vector' | 'hud';
 
@@ -174,8 +173,8 @@ export const useCompassStore = defineStore('compassStore', () => {
 
     const isConfigLoading = ref(false);
     const configError = ref('');
-    const hasFetchedRemoteConfig = ref(false);
     const hasFetchedThemeCatalog = ref(false);
+    const hasFetchedLocalConfig = ref(false);
 
     const hasValidPosition = computed(() => hasValidLonLat(position.value));
     const vectorVisible = computed(() => enabled.value && mode.value === 'vector');
@@ -277,26 +276,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     async function loadThemeCatalog(): Promise<void> {
         if (hasFetchedThemeCatalog.value) return;
         hasFetchedThemeCatalog.value = true;
-
-        try {
-            const payload = await apiCompassConfigList();
-            const items = Array.isArray(payload?.items) ? payload.items : [];
-            if (!items.length) return;
-
-            themeOptions.value = items
-                .map((item) => ({
-                    cid: String(item?.cid || '').trim(),
-                    name: String(item?.name || item?.cid || '').trim(),
-                    description: String(item?.description || '').trim()
-                }))
-                .filter((item) => Boolean(item.cid));
-
-            if (!themeOptions.value.length) {
-                themeOptions.value = deepClone(DEFAULT_THEME_OPTIONS);
-            }
-        } catch {
-            themeOptions.value = deepClone(DEFAULT_THEME_OPTIONS);
-        }
+        themeOptions.value = deepClone(DEFAULT_THEME_OPTIONS);
     }
 
     async function loadConfigByCid(nextCid: string): Promise<void> {
@@ -305,15 +285,13 @@ export const useCompassStore = defineStore('compassStore', () => {
         configError.value = '';
 
         try {
-            const payload = await apiCompassConfigByCid(safeCid);
-            const backendConfig = payload?.config;
-            const backendName = String(payload?.name || resolveThemeNameByCid(safeCid));
-            replaceConfig(backendConfig, safeCid, backendName);
-            hasFetchedRemoteConfig.value = true;
+            const fallbackConfig = createFallbackConfigByCid(safeCid);
+            replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
+            hasFetchedLocalConfig.value = true;
         } catch (error) {
             const fallbackConfig = createFallbackConfigByCid(safeCid);
             replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
-            configError.value = String(error?.message || `failed to load cid: ${safeCid}`);
+            configError.value = String(error?.message || `failed to load local cid: ${safeCid}`);
         } finally {
             isConfigLoading.value = false;
         }
@@ -325,7 +303,7 @@ export const useCompassStore = defineStore('compassStore', () => {
 
     async function ensureConfigLoaded(): Promise<void> {
         await loadThemeCatalog();
-        if (!hasFetchedRemoteConfig.value) {
+        if (!hasFetchedLocalConfig.value) {
             await loadConfigByCid(cid.value || DEFAULT_CID);
         }
     }

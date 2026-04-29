@@ -25,10 +25,6 @@ from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router
 from api.agent_chat import router as agent_chat_router
-from api.compass_config import (
-    init_compass_config_storage,
-    router as compass_config_router,
-)
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -73,7 +69,6 @@ async def startup_event():
     """
     logger.info("WebGIS Backend 启动...")
     await init_auth_storage()
-    await init_compass_config_storage()
     # 为瓦片代理创建共享的异步 HTTP 客户端
     app.state.http_client = build_http_client()
     logger.info("HTTP 客户端初始化完成")
@@ -128,10 +123,6 @@ logger.info("已注册 API 密钥管理路由")
 # 挂载 Agent 对话路由
 app.include_router(agent_chat_router)
 logger.info("已注册 Agent 对话路由")
-
-# 挂载罗盘主题配置路由
-app.include_router(compass_config_router)
-logger.info("已注册罗盘配置路由")
 
 
 # ==================== 通用流式代理 ====================
