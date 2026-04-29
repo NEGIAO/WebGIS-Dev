@@ -288,7 +288,9 @@ function initOfficialTerrain() {
     viewer.scene.globe.depthTestAgainstTerrain = true;
     return true;
   } catch (error) {
-    message.error('GeoTerrainProvider 初始化失败', error);
+    viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    message.warning('官方地形服务加载失败，已降级为椭球地形。', { closable: true });
+    message.error('官方地形初始化失败', error);
     return false;
   }
 }

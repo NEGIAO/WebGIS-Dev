@@ -517,14 +517,24 @@ function getTextY(layerIndex: number, textIndex: number, layer: Layer) {
 
 function getTextTransform(layerIndex: number, textIndex: number, layer: Layer) {
   const pos = getTextPosition(layerIndex, textIndex, layer);
-  // 如果设置了垂直显示，则根据文字位置计算角度，使其始终以圆心为底
-  const extraRotation = layer.vertical
-    ? pos.angle > 90 && pos.angle < 270
-      ? 270
-      : 90
-    : 0;
-  return `rotate(${pos.angle + extraRotation} ${pos.x} ${pos.y})`;
+  let rotation = 0;
+  
+  if (layer.vertical) {
+    // Radial mode: text perpendicular to center (+90° offset)
+    rotation = pos.angle + 90;
+  } else {
+    // Parallel mode: text tangent to circle, always readable
+    // For angles 90-270° (left side), add 180° to prevent upside-down text
+    if (pos.angle > 90 && pos.angle < 270) {
+      rotation = pos.angle + 180;
+    } else {
+      rotation = pos.angle;
+    }
+  }
+  
+  return `rotate(${rotation} ${pos.x} ${pos.y})`;
 }
+  
 // 获取同宫文字位置和变换
 function getTogetherTextPosition(
   layerIndex: number,
@@ -579,7 +589,22 @@ function getTogetherTextTransform(
   layer: Layer
 ) {
   const pos = getTogetherTextPosition(layerIndex, textIndex, subIndex, layer);
-  return `rotate(${pos.angle} ${pos.x} ${pos.y})`;
+  let rotation = 0;
+  
+  if (layer.vertical) {
+    // Radial mode: text perpendicular to center (+90° offset)
+    rotation = pos.angle + 90;
+  } else {
+    // Parallel mode: text tangent to circle, always readable
+    // For angles 90-270° (left side), add 180° to prevent upside-down text
+    if (pos.angle > 90 && pos.angle < 270) {
+      rotation = pos.angle + 180;
+    } else {
+      rotation = pos.angle;
+    }
+  }
+  
+  return `rotate(${rotation} ${pos.x} ${pos.y})`;
 }
 
 // 获取层边框路径

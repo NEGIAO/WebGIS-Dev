@@ -145,7 +145,7 @@
 </template>
 
 <script setup>
-// TODO:
+// TODO:√
 // 风水罗盘的url参数过多，完全没有必要，关键参数是中心的经纬度和半径两个参数；
 // 将两个参数使用已经实现的编码js工具，也不需要后端处理，将这个参数编码到url即可，现在的url参数过多且没必要（clng=114.347533&clat=34.813990&crot=0.00&cid=ancient-cinnabar&cmode=vector）
 // 精简为一个参数即可，默认为0；

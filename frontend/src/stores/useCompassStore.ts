@@ -62,32 +62,25 @@ function toLayerArray(data: FengShuiCompassConfig['data']): Layer[] {
 function normalizeCompassConfig(rawConfig: Partial<FengShuiCompassConfig> | null | undefined, cid: string, name = ''): FengShuiCompassConfig {
     const fallback = {
         info: { id: cid, name: name || cid },
-        compassSize: { width: 800, height: 800 },
-        data: [],
+        compassSize: { width: 1000, height: 1000 },  // 罗盘大小
+        data: [],                                 // 图层数据
         line: {
-            borderColor: '#AAAAAA',
-            scaleColor: '#AAAAAA',
-            scaleHighlightColor: '#FF0000'
+            borderColor: '#AAAAAA',                 // 边框颜色
+            scaleColor: '#AAAAAA',                  // 刻度颜色
+            scaleHighlightColor: '#FF0000'          // 高亮刻度
         },
-        rotate: 0,
-        latticeFill: [],
-        isShowTianxinCross: true,
-        isShowScale: true,
+        rotate: 0,                                // 旋转角度
+        latticeFill: [],                          // 文字填充色
+        isShowTianxinCross: true,                 // 显示天心十字线
+        isShowScale: true,                        // 显示刻度
         scaclStyle: {
-            minLineHeight: 10,
-            midLineHeight: 20,
-            maxLineHeight: 25,
-            numberFontSize: 13
+            minLineHeight: 10,                      // 刻度短线高度
+            midLineHeight: 20,                      // 中线高度
+            maxLineHeight: 25,                      // 长线高度
+            numberFontSize: 15                      // 刻度文字大小
         },
-        autoFontSize: false,
-        animation: {
-            enable: false,
-            duration: 400,
-            delay: 60
-        },
-        tianxinCrossWidth: 2,
-        tianxinCrossColor: '#FF0000',
-        tianxinCrossLengthRatio: 1 / 3
+        tianxinCrossWidth: 2,                     // 天心线宽度
+        tianxinCrossColor: '#FF0000',             // 天心线颜色
     } as FengShuiCompassConfig;
 
     const merged = {

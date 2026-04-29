@@ -40,6 +40,7 @@ const theme: FengShuiCompassConfig = {
       vertical: false,
       togetherStyle: "equally",
       data: [
+        // bug1:显示成纵向的了，需要显示成横向的
         ["坎", "☰", "辰"],
         ["艮", "☲", "寅"],
         ["震", "☱", "申"],
@@ -119,6 +120,7 @@ const theme: FengShuiCompassConfig = {
       ],
     },
     {
+      //bug2:显示成横向了，需要显示成竖向 
       name: "透地六十龙",
       startAngle: 0,
       textColor: "aqua",

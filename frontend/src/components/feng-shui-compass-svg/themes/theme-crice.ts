@@ -23,9 +23,9 @@ const theme: FengShuiCompassConfig = {
     maxLineHeight: 25,
   },
   line: {
-    borderColor: "#AAAAAA",
+    borderColor: "#0fb730",
     scaleColor: "#AAAAAA",
-    scaleHighlightColor: "#AAAAAA",
+    scaleHighlightColor: "#10b323",
   },
   isShowTianxinCross: false,
 
