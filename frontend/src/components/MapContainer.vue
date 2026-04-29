@@ -1,58 +1,29 @@
 <template>
-    <div
-        id="map-container"
-        class="map-container"
+    <div id="map-container" class="map-container"
         :class="{ 'compass-placement-mode': compassStore.enabled && compassStore.mode === 'vector' && compassStore.placementMode }"
-        ref="mapContainerRef"
-    >
+        ref="mapContainerRef">
         <div id="map" ref="mapRef"></div>
 
-        <MapEasterEgg
-            :map-instance="mapInstance"
-            :bounds="DIHUAN_BOUNDS"
-            :images="IMAGES"over
-            @open-large-image="handleEasterEggImageOpen"
-            @location-change="handleEasterEggLocationChange"
-        />
+        <MapEasterEgg :map-instance="mapInstance" :bounds="DIHUAN_BOUNDS" :images="IMAGES" over
+            @open-large-image="handleEasterEggImageOpen" @location-change="handleEasterEggLocationChange" />
 
-        <LayerControlPanel
-            :map-instance="mapInstance"
-            :layer-list="layerList"
-            :selected-layer="selectedLayer"
-            :custom-map-url="customMapUrl"
-            :active-graticule="showDynamicSplitLines"
-            :basemap-circuit-open="basemapCircuitOpen"
-            :tianditu-tk="TIANDITU_TK"
-            :is-domestic="isDomestic"
-            @change-layer="handleLayerChange"
-            @update-order="handleLayerOrderUpdate"
-            @toggle-graticule="handleToggleGraticule"
-            @search-jump="handleSearchJump"
-            @reset-basemap-chain="handleResetBasemapChain"
-            @layer-context-action="handleLayerContextAction"
-        />
+        <LayerControlPanel :map-instance="mapInstance" :layer-list="layerList" :selected-layer="selectedLayer"
+            :custom-map-url="customMapUrl" :active-graticule="showDynamicSplitLines"
+            :basemap-circuit-open="basemapCircuitOpen" :tianditu-tk="TIANDITU_TK" :is-domestic="isDomestic"
+            @change-layer="handleLayerChange" @update-order="handleLayerOrderUpdate"
+            @toggle-graticule="handleToggleGraticule" @search-jump="handleSearchJump"
+            @reset-basemap-chain="handleResetBasemapChain" @layer-context-action="handleLayerContextAction" />
 
-        <AttributeTable
-            @focus-feature="handleAttributeTableFocusFeature"
-            @highlight-feature="handleAttributeTableHighlightFeature"
-        />
+        <AttributeTable @focus-feature="handleAttributeTableFocusFeature"
+            @highlight-feature="handleAttributeTableHighlightFeature" />
 
-        <div
-            v-if="compassStore.hudVisible"
-            class="compass-hud-wrapper"
-            :style="{ opacity: compassStore.opacity }"
-        >
+        <div v-if="compassStore.hudVisible" class="compass-hud-wrapper" :style="{ opacity: compassStore.opacity }">
             <FengShuiCompassSvg :config="compassStore.hudRenderConfig" />
         </div>
 
         <!-- 底部控制栏 -->
-        <MapControlsBar
-            :coordinate="currentCoordinate"
-            :current-zoom="currentZoom"
-            @reset-view="resetView"
-            @locate-me="zoomToUser"
-            @jump-to="handleJumpToCoordinates"
-        />
+        <MapControlsBar :coordinate="currentCoordinate" :current-zoom="currentZoom" @reset-view="resetView"
+            @locate-me="zoomToUser" @jump-to="handleJumpToCoordinates" />
     </div>
 </template>
 
@@ -101,7 +72,7 @@ import {
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature
 } from '../composables/map';
-import { 
+import {
     DEFAULT_BASEMAP_PRESET_ID,
     URL_LAYER_OPTIONS,
     activeGoogleTileHost as globalActiveGoogleTileHost,
@@ -160,9 +131,9 @@ const {
 } = await loadMapRuntimeDeps();
 
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/geo';
-import { 
+import {
     createLayerExporter,
-    isVectorManagedLayer 
+    isVectorManagedLayer
 } from '../utils/layerExportService';
 
 // --- 配置常量 ---
@@ -261,9 +232,9 @@ let searchSource, searchLayer;
 const LAYER_CONFIGS = createLayerConfigs(NORM_BASE, TIANDITU_TK);
 
 // 初始化图层列表状态 (从配置生成)
-const layerList = ref(LAYER_CONFIGS.map(cfg => ({ 
-    id: cfg.id, 
-    name: cfg.name, 
+const layerList = ref(LAYER_CONFIGS.map(cfg => ({
+    id: cfg.id,
+    name: cfg.name,
     visible: cfg.visible,
     opacity: 1 // 初始透明度为 100%
 })));
@@ -594,7 +565,7 @@ const {
 const queryRasterValueAtCoordinateRef = ref(null);
 
 // 属性表范围同步函数桥接（用于解决 setup 初始化顺序依赖）
-let syncAttributeTableMapExtentImpl = () => {};
+let syncAttributeTableMapExtentImpl = () => { };
 
 function syncAttributeTableMapExtent() {
     syncAttributeTableMapExtentImpl?.();
@@ -820,7 +791,7 @@ onMounted(async () => {
         }
 
         scheduleLowPriorityTask(() => {
-            runDeferredStartupTasks().catch(() => {});
+            runDeferredStartupTasks().catch(() => { });
         });
     } catch (error) {
         const detail = String(error?.message || error || '地图核心初始化异常').trim();
@@ -837,7 +808,10 @@ onMounted(async () => {
 async function runDeferredStartupTasks() {
     if (componentUnmountedRef.value) return;
 
+
     const routeViewState = parseUrlToState();
+
+
     const isSharedEntry = parseSharedEntryFlagFromUrl();
 
     if (isSharedEntry) {
@@ -854,7 +828,7 @@ async function runDeferredStartupTasks() {
         if (!host || host === activeGoogleTileHost.value) return;
         activeGoogleTileHost.value = host;
         refreshGoogleLayerSources();
-    }).catch(() => {});
+    }).catch(() => { });
 
     // 2) 首屏定位：分享进入时静默定位且不跳转视图，仅用于更新定位上下文与 URL 参数。
     const locatedResult = isSharedEntry
@@ -1086,9 +1060,9 @@ function initMap() {
         controls
     });
     // 创建比例尺
-    const scaleline = new ScaleLine({ 
+    const scaleline = new ScaleLine({
         units: 'metric',
-        bar: true, 
+        bar: true,
         minWidth: 100,
         // className: 'my-custom-scale'
     });
@@ -1546,10 +1520,12 @@ defineExpose({
         width: 120px;
         height: 120px;
     }
+
     :deep(.ol-custom-overviewmap) {
         left: 5px;
         top: 5px;
     }
+
     /* :deep(ol-scale-line) {
         left: 5px;
         bottom: 5px;

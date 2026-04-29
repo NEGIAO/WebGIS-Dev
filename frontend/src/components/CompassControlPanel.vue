@@ -100,8 +100,8 @@
                 <label>HUD 尺寸（像素）：{{ Number(compassStore.hudSizePx).toFixed(0) }}</label>
                 <input
                     type="range"
-                    min="180"
-                    max="520"
+                    min="500"
+                    max="1000"
                     step="1"
                     :disabled="!compassStore.enabled"
                     :value="compassStore.hudSizePx"

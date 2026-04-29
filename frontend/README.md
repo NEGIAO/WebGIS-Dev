@@ -264,7 +264,7 @@ frontend/
     │   └── lazyHomeViewLoader.js                # HomeView 二段式懒加载
     │
     ├── services/
-    │   ├── CompassManager.ts                    # 罗盘管理服务（启动时按加密参数还原并聚焦）
+    │   ├── CompassManager.ts                    # 罗盘管理服务（罗盘绘制的主要实现逻辑）
     │   ├── compassUrlState.ts                   # 罗盘 URL 单参数加密状态（cs）编解码
     │   └── DistrictManager.ts                   # 行政区边界加载与 TOC/图层同步
     │

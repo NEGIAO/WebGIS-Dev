@@ -146,7 +146,7 @@ export function useMapState(mapInstance, options = {}) {
         flyDuration = 700,
         syncDebounceMs = 500,
         getLayerIndex = () => null,
-        onLayerIndexChange = () => {},
+        onLayerIndexChange = () => { },
         layerListRef = null,
         layerInstances = null,
         layerConfigs = null,
@@ -277,12 +277,27 @@ export function useMapState(mapInstance, options = {}) {
         // 默认底图索引统一由 DEFAULT_BASEMAP_LAYER_INDEX 控制。
         const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? resolvePreferredDefaultLayerIndex();
 
+        //修复URL错误
         const compactPosCode = String(readQueryValue('p') ?? '').trim();
-        if (compactPosCode && compactPosCode !== '0') {
+
+        if (
+            (lng === null || lat === null)
+            && compactPosCode
+            && compactPosCode !== '0'
+        ) {
+
             const { hasLocationCondition } = resolveLocationState();
+
             if (hasLocationCondition) {
+
                 const decodedPos = decodePos(compactPosCode);
-                if (decodedPos && Number.isFinite(decodedPos.lng) && Number.isFinite(decodedPos.lat)) {
+
+                if (
+                    decodedPos
+                    && Number.isFinite(decodedPos.lng)
+                    && Number.isFinite(decodedPos.lat)
+                ) {
+
                     lng = decodedPos.lng;
                     lat = decodedPos.lat;
                 }
@@ -380,7 +395,7 @@ export function useMapState(mapInstance, options = {}) {
             void router.replace({
                 path: route.path || '/home',
                 query: mergedQuery
-            }).catch(() => {});
+            }).catch(() => { });
             return;
         }
 
@@ -686,7 +701,7 @@ export function useMapState(mapInstance, options = {}) {
 
             layer.setVisible(!!item.visible);
             layer.setZIndex(layerList.length - index);
-            
+
             // 应用透明度设置
             if (typeof item.opacity === 'number' && item.opacity >= 0 && item.opacity <= 1) {
                 layer.setOpacity(item.opacity);

@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+//注意：此处仅仅引用了配置，实际的绘制实现和他们无关，绘制实现完全在CompassManager中，与Vue无关
 import type { FengShuiCompassConfig, Layer } from '../components/feng-shui-compass-svg/types';
 import localThemes from '../components/feng-shui-compass-svg/themes';
 

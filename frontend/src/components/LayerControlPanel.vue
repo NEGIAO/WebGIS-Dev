@@ -1,58 +1,34 @@
 <template>
     <div class="layer-switcher">
-        <LocationSearch
-            :fetcher="fetchLocationResults"
-            :services="serviceOptions"
-            storageKey="map_search_selected_service"
-            @select-result="handleSearchJump"
-        />
+        <LocationSearch :fetcher="fetchLocationResults" :services="serviceOptions"
+            storageKey="map_search_selected_service" @select-result="handleSearchJump" />
 
         <div class="layer-label">选择底图</div>
         <select class="layer-select" :value="selectedLayer" @change="handleLayerChange">
-            <option
-                v-for="option in BASEMAP_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-            >
+            <option v-for="option in BASEMAP_OPTIONS" :key="option.value" :value="option.value">
                 {{ option.label }}
             </option>
         </select>
 
-        <button
-            ref="layerManageButtonRef"
-            class="layer-manage-btn"
-            @click="toggleLayerManager"
-            title="图层管理"
-        >
+        <button ref="layerManageButtonRef" class="layer-manage-btn" @click="toggleLayerManager" title="图层管理">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z"/>
+                <path
+                    d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z" />
             </svg>
         </button>
 
-        <button
-            class="graticule-btn"
-            :class="{ active: activeGraticule }"
-            @click="emit('toggle-graticule')"
-            title="经纬度分割线"
-        >
+        <button class="graticule-btn" :class="{ active: activeGraticule }" @click="emit('toggle-graticule')"
+            title="经纬度分割线">
             经纬线
         </button>
 
-        <button
-            v-if="basemapCircuitOpen"
-            class="basemap-reset-btn"
-            @click="emit('reset-basemap-chain')"
-            title="当前网络异常，点击重置底图链路"
-        >
+        <button v-if="basemapCircuitOpen" class="basemap-reset-btn" @click="emit('reset-basemap-chain')"
+            title="当前网络异常，点击重置底图链路">
             重置链路
         </button>
 
         <div v-if="selectedLayer === 'custom'" class="custom-url-wrapper">
-            <input
-                v-model="customUrlInput"
-                class="custom-url-input"
-                placeholder="支持 XYZ / WMS / WMTS 服务 URL"
-            />
+            <input v-model="customUrlInput" class="custom-url-input" placeholder="支持 XYZ / WMS / WMTS 服务 URL" />
             <button class="custom-url-btn" @click="submitCustomUrl" title="加载">ok</button>
             <div v-if="detectedServiceInfo" class="detected-format-hint">
                 ✓ 已识别: {{ detectedServiceInfo.name }}
@@ -66,28 +42,15 @@
                     <span class="close-panel-btn" @click="showLayerManager = false">×</span>
                 </div>
                 <div class="layer-list">
-            <div
-                v-for="(layer, index) in layerList"
-                :key="layer.id"
-                class="layer-item"
-                :draggable="!isTouchDevice"
-                @dragstart="onDragStart($event, index)"
-                @dragend="onDragEnd"
-                @dragover.prevent
-                @drop="onDrop($event, index)"
-                @contextmenu.prevent="onLayerContextMenu(layer, index, $event)"
-                @touchstart="onLayerTouchStart(layer, index, $event)"
-                @touchmove="onLayerTouchMove"
-                @touchend="onLayerTouchEnd"
-                :class="{ dragging: draggingIndex === index }"
-            >
+                    <div v-for="(layer, index) in layerList" :key="layer.id" class="layer-item"
+                        :draggable="!isTouchDevice" @dragstart="onDragStart($event, index)" @dragend="onDragEnd"
+                        @dragover.prevent @drop="onDrop($event, index)"
+                        @contextmenu.prevent="onLayerContextMenu(layer, index, $event)"
+                        @touchstart="onLayerTouchStart(layer, index, $event)" @touchmove="onLayerTouchMove"
+                        @touchend="onLayerTouchEnd" :class="{ dragging: draggingIndex === index }">
                         <div class="drag-handle" v-if="!isTouchDevice">⋮⋮</div>
                         <div class="drag-handle mobile-hint" v-if="isTouchDevice">⋯</div>
-                        <input
-                            type="checkbox"
-                            :checked="layer.visible"
-                            @change="updateLayerVisibility(layer, $event)"
-                        >
+                        <input type="checkbox" :checked="layer.visible" @change="updateLayerVisibility(layer, $event)">
                         <span class="layer-name">{{ layer.name }}</span>
                     </div>
                 </div>
@@ -95,24 +58,13 @@
         </Teleport>
 
         <Teleport to="body">
-            <div
-                v-if="showLayerContextMenu"
-                class="layer-context-menu"
-                :style="layerContextMenuStyle"
-                @contextmenu.prevent
-            >
-                <div
-                    class="context-menu-item context-has-submenu"
-                    @mouseenter="showUrlSubmenu = true"
-                    @mouseleave="showUrlSubmenu = false"
-                >
+            <div v-if="showLayerContextMenu" class="layer-context-menu" :style="layerContextMenuStyle"
+                @contextmenu.prevent>
+                <div class="context-menu-item context-has-submenu" @mouseenter="showUrlSubmenu = true"
+                    @mouseleave="showUrlSubmenu = false">
                     <span>URL 操作</span>
                     <span class="submenu-arrow">▶</span>
-                    <div
-                        v-if="showUrlSubmenu"
-                        class="context-submenu"
-                        :style="layerContextSubmenuStyle"
-                    >
+                    <div v-if="showUrlSubmenu" class="context-submenu" :style="layerContextSubmenuStyle">
                         <button class="context-menu-item" @click="triggerLayerContextAction('copy-url')">复制 URL</button>
                         <button class="context-menu-item" @click="triggerLayerContextAction('view-url')">查看 URL</button>
                     </div>
@@ -121,16 +73,11 @@
                 <!-- 透明度控制 -->
                 <div class="context-menu-item context-opacity-control">
                     <span class="opacity-label">透明度</span>
-                    <input
-                        type="range"
-                        min="0"
-                        max="100"
+                    <input type="range" min="0" max="100"
                         :value="Math.round((layerOpacityMap.get(contextMenuLayer?.id) ?? 1) * 100)"
-                        @input="updateLayerOpacity($event)"
-                        class="opacity-slider"
-                        title="调整图层透明度"
-                    />
-                    <span class="opacity-value">{{ Math.round((layerOpacityMap.get(contextMenuLayer?.id) ?? 1) * 100) }}%</span>
+                        @input="updateLayerOpacity($event)" class="opacity-slider" title="调整图层透明度" />
+                    <span class="opacity-value">{{ Math.round((layerOpacityMap.get(contextMenuLayer?.id) ?? 1) * 100)
+                        }}%</span>
                 </div>
 
                 <button class="context-menu-item" @click="moveContextLayerToTop">图层置顶</button>
@@ -449,7 +396,7 @@ function onLayerTouchStart(layer, index, event) {
         onLayerContextMenu(layer, index, {
             clientX: touch.clientX,
             clientY: touch.clientY,
-            preventDefault: () => {}
+            preventDefault: () => { }
         });
     }, LONG_PRESS_DURATION);
 }
@@ -608,11 +555,11 @@ watch(showLayerManager, async (visible) => {
 
 onMounted(() => {
     window.addEventListener('pointerdown', handleGlobalPointerDown);
-    
+
     // 检测是否为触摸设备
     isTouchDevice.value = (('ontouchstart' in window) ||
-            (navigator.maxTouchPoints > 0) ||
-            (navigator.msMaxTouchPoints > 0));
+        (navigator.maxTouchPoints > 0) ||
+        (navigator.msMaxTouchPoints > 0));
 });
 
 onBeforeUnmount(() => {
@@ -636,10 +583,13 @@ onBeforeUnmount(() => {
     box-shadow: 0 10px 24px rgba(16, 65, 41, 0.22);
     z-index: 10;
 }
+
 @media (max-width: 768px) {
     .layer-switcher {
-        right: 5px; /* 移动端靠右边距减小 */
-        top: 10px;  /* 可选：通常顶部也会相应调小一点点 */
+        right: 5px;
+        /* 移动端靠右边距减小 */
+        top: 10px;
+        /* 可选：通常顶部也会相应调小一点点 */
     }
 }
 
@@ -961,9 +911,10 @@ onBeforeUnmount(() => {
     color: #4b5563;
     font-size: 10px;
 }
+
 @media (max-width: 768px) {
     .layer-switcher {
-        top:5px;
+        top: 5px;
         right: 3px;
     }
 }

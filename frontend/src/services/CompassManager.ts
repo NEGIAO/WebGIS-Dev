@@ -1,3 +1,16 @@
+/**
+ * CompassManager Service
+ * 风水指南针地图管理服务
+ * 
+ * 负责管理地图上的风水指南针组件的完整生命周期，包括：
+ * - 指南针矢量图层的挂载/卸载
+ * - 地理要素的位置同步
+ * - 在 OpenLayers 渲染管道中进行原生 Canvas 矢量渲染
+ * - 设备传感器方向同步（陀螺仪）
+ * - URL 状态持久化与恢复
+ * - 放置模式下的鼠标交互处理
+ */
+
 import { watch, type WatchStopHandle } from 'vue';
 import type Map from 'ol/Map';
 import Feature from 'ol/Feature';
@@ -20,14 +33,29 @@ type CompassManagerOptions = {
     mapContainerElement?: HTMLElement | null;
 };
 
+// 基础配置尺寸，作为缩放计算的基准
 const BASE_CONFIG_SIZE = 800;
 
+/**
+ * 数值夹紧函数
+ * 将数值限制在指定的最小值和最大值之间
+ * @param value - 待夹紧的数值
+ * @param minValue - 最小值
+ * @param maxValue - 最大值
+ * @returns 夹紧后的数值，若输入为 NaN 则返回最小值
+ */
 function clamp(value: number, minValue: number, maxValue: number): number {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return minValue;
     return Math.max(minValue, Math.min(maxValue, numeric));
 }
 
+/**
+ * 角度规范化函数
+ * 将任意角度值转换为 [0, 360) 范围内的标准角度
+ * @param value - 待规范化的角度值
+ * @returns 规范化后的角度值（0-360）
+ */
 function normalizeAngle(value: number): number {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 0;
@@ -35,12 +63,25 @@ function normalizeAngle(value: number): number {
     return compact < 0 ? compact + 360 : compact;
 }
 
+/**
+ * 图层数据转换函数
+ * 将指南针配置中的 data 字段转换为统一的 Layer 数组格式
+ * @param data - 原始数据配置，可能是单个对象或数组
+ * @returns 转换后的图层数组
+ */
 function toLayerArray(data: FengShuiCompassConfig['data']): Layer[] {
     if (Array.isArray(data)) return data;
     if (data && typeof data === 'object') return [data as Layer];
     return [];
 }
 
+/**
+ * 文本颜色解析函数
+ * 从图层配置中解析出指定索引的文本颜色
+ * @param layer - 图层配置对象
+ * @param textIndex - 文本行索引（用于数组类型的多色文本）
+ * @returns 文本颜色值，默认为 '#F8FAFC'
+ */
 function resolveTextColor(layer: Layer, textIndex = 0): string {
     const fallback = '#F8FAFC';
     if (Array.isArray(layer?.textColor)) {
@@ -49,6 +90,12 @@ function resolveTextColor(layer: Layer, textIndex = 0): string {
     return String(layer?.textColor || fallback);
 }
 
+/**
+ * 像素坐标解析函数
+ * 从 OpenLayers 渲染器提供的坐标数据中提取有效的 [x, y] 像素坐标
+ * @param pixelCoordinates - 原始像素坐标数据（可能是嵌套数组结构）
+ * @returns 解析后的 [x, y] 坐标对，若数据无效返回 null
+ */
 function resolvePoint(pixelCoordinates: unknown): [number, number] | null {
     if (!Array.isArray(pixelCoordinates)) return null;
 
@@ -68,38 +115,74 @@ function resolvePoint(pixelCoordinates: unknown): [number, number] | null {
     return [x, y];
 }
 
+/**
+ * 放射性文本绘制函数
+ * 在圆周上按指定角度、半径绘制旋转对齐的文本
+ * 支持两种对齐模式：径向垂直（朝向圆心）和环形横向（沿切线方向）
+ * 
+ * @param ctx - Canvas 2D 上下文
+ * @param angleRad - 文本在圆周上的角度（弧度制）
+ * @param radiusPx - 文本距离原点的半径（像素）
+ * @param text - 待绘制的文本内容
+ * @param fontSize - 字体大小（像素）
+ * @param color - 文本颜色
+ * @param vertical - 对齐模式
+ *   - true: 径向垂直模式，文字沿半径方向朝向圆心
+ *   - false: 环形横向模式，文字沿切线方向（垂直于半径）
+ */
 function drawRadialText(
     ctx: CanvasRenderingContext2D,
     angleRad: number,
     radiusPx: number,
     text: string,
     fontSize: number,
-    color: string
+    color: string,
+    vertical = false // true: 径向垂直(朝向圆心) | false: 环形横向(沿切线)
 ): void {
     const content = String(text || '').trim();
     if (!content) return;
 
+    // 1. 计算文字在圆周上的位置
     const x = Math.cos(angleRad) * radiusPx;
     const y = Math.sin(angleRad) * radiusPx;
 
     ctx.save();
-    ctx.translate(x, y);
+    ctx.translate(x, y); // 把原点移到文字位置（关键：旋转中心在这里）
 
-    let rotate = angleRad + Math.PI / 2;
-    if (rotate > Math.PI / 2 && rotate < (Math.PI * 3) / 2) {
-        rotate += Math.PI;
+    let rotate: number;
+
+    if (vertical) {
+        // 径向垂直：文字沿半径方向，朝向圆心
+        rotate = angleRad;
+        // 自动翻转：保证文字在所有位置都正立（不会倒着）
+        if (angleRad > Math.PI / 2 && angleRad < (Math.PI * 3) / 2) {
+            rotate += Math.PI;
+        }
+    } else {
+        // 环形横向：文字沿切线方向（垂直于半径）
+        rotate = angleRad + Math.PI / 2; // +90° 让文字垂直于半径，沿切线排列
+        // 自动翻转：保证文字在所有位置都正立
+        if (rotate > Math.PI / 2 && rotate < (Math.PI * 3) / 2) {
+            rotate += Math.PI;
+        }
     }
 
-    ctx.rotate(rotate);
+    ctx.rotate(rotate); // 应用旋转
+
+    // 文字样式设置
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `${Math.round(fontSize)}px "Microsoft YaHei", "PingFang SC", sans-serif`;
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(0.75, fontSize * 0.12);
+
+    // 描边（抗锯齿，和你原图效果一致）
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.52)';
     ctx.strokeText(content, 0, 0);
+    // 填充文字
     ctx.fillStyle = color;
     ctx.fillText(content, 0, 0);
+
     ctx.restore();
 }
 
@@ -111,27 +194,50 @@ function drawRadialText(
  * - sensor heading synchronization
  * - URL state synchronization
  */
+/**
+ * CompassManager 类
+ * 指南针管理器 - 负责地图上风水指南针的完整生命周期管理
+ * 
+ * 主要职责：
+ * 1. 矢量图层管理：创建、添加、移除 OpenLayers 矢量图层
+ * 2. 地理要素同步：保持指南针地理坐标与门店状态一致
+ * 3. 原生 Canvas 渲染：使用 OpenLayers Style 的自定义渲染器绘制指南针
+ * 4. 用户交互：处理放置模式下的地图点击事件
+ * 5. 传感器集成：同步设备陀螺仪数据到指南针旋转角度
+ * 6. 状态持久化：与 URL 参数同步指南针位置和配置
+ */
 export class CompassManager {
-    private readonly map: Map;
-    private readonly store: CompassStore;
-    private readonly mapContainerElement: HTMLElement | null;
+    // ==================== 核心依赖 ====================
+    private readonly map: Map;                           // OpenLayers Map 实例
+    private readonly store: CompassStore;                // Pinia 状态存储
+    private readonly mapContainerElement: HTMLElement | null; // 地图容器 DOM 元素
 
-    private source: VectorSource | null = null;
-    private feature: Feature<Point> | null = null;
-    private layer: VectorLayer<VectorSource> | null = null;
+    // ==================== 指南针图层相关 ====================
+    private source: VectorSource | null = null;         // 矢量数据源
+    private feature: Feature<Point> | null = null;      // 指南针中心点要素
+    private layer: VectorLayer<VectorSource> | null = null; // 矢量图层
 
-    private stopHandles: WatchStopHandle[] = [];
-    private viewResolutionKey: unknown = null;
+    // ==================== 事件监听器句柄 ====================
+    private stopHandles: WatchStopHandle[] = [];         // Vue watch 停止函数集合
+    private viewResolutionKey: unknown = null;           // 地图分辨率变化事件监听器 key
 
-    private singleClickHandler: ((event: MouseEvent) => void) | null = null;
-    private resizeHandler: (() => void) | null = null;
+    private singleClickHandler: ((event: MouseEvent) => void) | null = null; // 地图点击处理器
+    private resizeHandler: (() => void) | null = null;   // 窗口缩放处理器
 
-    private orientationHandler: ((event: DeviceOrientationEvent & { webkitCompassHeading?: number }) => void) | null = null;
+    private orientationHandler: ((event: DeviceOrientationEvent & { webkitCompassHeading?: number }) => void) | null = null; // 设备方向传感器处理器
 
-    private urlSyncTimer: number | null = null;
+    private urlSyncTimer: number | null = null;         // URL 同步防抖计时器
 
-    private readonly style: Style;
+    // ==================== 渲染相关 ====================
+    private readonly style: Style;                       // 自定义 Canvas 渲染样式
 
+    /**
+     * 构造函数
+     * @param options - 管理器初始化选项
+     *   - map: OpenLayers 地图实例
+     *   - store: Pinia 状态存储
+     *   - mapContainerElement: 地图容器 DOM 元素（可选）
+     */
     constructor(options: CompassManagerOptions) {
         this.map = options.map;
         this.store = options.store;
@@ -140,7 +246,15 @@ export class CompassManager {
     }
 
     /**
-     * Initialize manager lifecycle, restore URL state and mount vector compass layer.
+     * 初始化管理器
+     * 执行完整的初始化流程：
+     * 1. 等待指南针配置加载完毕
+     * 2. 从 URL 参数恢复指南针状态
+     * 3. 创建并挂载矢量图层
+     * 4. 同步地理要素坐标
+     * 5. 绑定地图和状态存储事件监听器
+     * 6. 设置图层可见性和放置模式光标
+     * 7. 启动 URL 状态同步定时器
      */
     async init(): Promise<void> {
         await this.store.ensureConfigLoaded();
@@ -156,7 +270,14 @@ export class CompassManager {
     }
 
     /**
-     * Dispose manager and release all listeners/resources.
+     * 销毁管理器并释放所有资源
+     * 清理流程：
+     * 1. 停止所有 Vue watch 监听
+     * 2. 解绑所有地图事件监听器
+     * 3. 停止设备方向传感器监听
+     * 4. 清理 URL 同步定时器
+     * 5. 从地图移除矢量图层
+     * 6. 移除放置模式 CSS 类
      */
     dispose(): void {
         this.stopHandles.forEach((stop) => stop());
@@ -183,6 +304,11 @@ export class CompassManager {
         }
     }
 
+    /**
+     * 确保矢量图层已创建
+     * 创建 OpenLayers 矢量图层、数据源和中心点要素
+     * 如果图层已存在则直接返回
+     */
     private ensureVectorLayer(): void {
         if (this.layer) return;
 
@@ -202,6 +328,10 @@ export class CompassManager {
         this.map.addLayer(this.layer);
     }
 
+    /**
+     * 解绑地图事件监听器
+     * 包括：单击事件、分辨率变化事件、窗口缩放事件
+     */
     private unbindMapListeners(): void {
         if (this.singleClickHandler) {
             this.map.getViewport().removeEventListener('click', this.singleClickHandler);
@@ -219,6 +349,13 @@ export class CompassManager {
         }
     }
 
+    /**
+     * 绑定地图事件监听器
+     * 包括：
+     * - 地图单击事件（用于放置模式）
+     * - 地图分辨率变化事件（用于重新渲染）
+     * - 窗口缩放事件（用于重新渲染）
+     */
     private bindMapListeners(): void {
         if (!this.singleClickHandler) {
             this.singleClickHandler = this.handleMapSingleClick;
@@ -240,6 +377,15 @@ export class CompassManager {
         }
     }
 
+    /**
+     * 绑定状态存储监听器
+     * 监听以下状态变化并触发相应的更新：
+     * - 位置 (lng/lat)：同步地理要素坐标
+     * - 启用状态、模式、缩放限制、直径、透明度、旋转角度：重新渲染
+     * - 传感器启用状态与 HUD 模式：启动/停止设备方向传感器
+     * - 放置模式：更新鼠标光标样式
+     * - 指南针配置 ID：重新渲染
+     */
     private bindStoreWatchers(): void {
         this.stopHandles.push(
             watch(
@@ -305,7 +451,9 @@ export class CompassManager {
     }
 
     /**
-     * Update feature point geometry from store lon/lat state.
+     * 同步地理要素坐标
+     * 将状态存储中的经纬度坐标同步到 OpenLayers 点要素
+     * 如果位置无效，则从地图中心获取坐标
      */
     private syncFeatureGeometry(): void {
         if (!this.feature) return;
@@ -327,7 +475,10 @@ export class CompassManager {
     }
 
     /**
-     * Apply layer-level visibility and auto-hide threshold for zoomed-out views.
+     * 更新图层可见性
+     * 设置图层显示条件：
+     * - 指南针启用 && 模式为 'vector' 时显示
+     * - 根据 minResolution 设置地图缩放限制（用于自动隐藏）
      */
     private updateLayerVisibility(): void {
         if (!this.layer) return;
@@ -338,12 +489,17 @@ export class CompassManager {
         this.layer.setMaxResolution(Number(this.store.minResolution || 450));
     }
 
+    /**
+     * 请求地图重新渲染
+     * 触发 OpenLayers 地图的渲染流程
+     */
     private requestRender(): void {
         this.map.render();
     }
 
     /**
-     * Handle map click placement while in vector placement mode.
+     * 处理地图单击事件（放置模式）
+     * 当处于放置模式时，将地图点击位置转换为经纬度并保存到状态存储
      */
     private handleMapSingleClick = (event: MouseEvent): void => {
         if (!this.store.enabled || this.store.mode !== 'vector' || !this.store.placementMode) return;
@@ -358,6 +514,10 @@ export class CompassManager {
         this.scheduleUrlSync();
     };
 
+    /**
+     * 更新放置模式下的鼠标光标样式
+     * 在地图容器上添加/移除 'compass-placement-mode' CSS 类
+     */
     private updatePlacementCursor(): void {
         if (!this.mapContainerElement) return;
 
@@ -368,6 +528,10 @@ export class CompassManager {
         this.mapContainerElement.classList.toggle('compass-placement-mode', active);
     }
 
+    /**
+     * 规范化方向角
+     * 将任意方向角转换为 [0, 360) 范围
+     */
     private normalizeHeading(value: number): number {
         const numeric = Number(value);
         if (!Number.isFinite(numeric)) return 0;
@@ -376,7 +540,9 @@ export class CompassManager {
     }
 
     /**
-     * Fuse hardware heading (webkitCompassHeading/alpha) into store rotation.
+     * 处理设备方向传感器事件
+     * 从陀螺仪数据中提取方向角并同步到状态存储
+     * 支持 iOS (webkitCompassHeading) 和 Android (alpha) 两种方向传感器
      */
     private handleDeviceOrientation = (
         event: DeviceOrientationEvent & { webkitCompassHeading?: number }
@@ -395,6 +561,11 @@ export class CompassManager {
         this.store.setRotation(this.normalizeHeading(heading));
     };
 
+    /**
+     * 启动设备方向传感器监听
+     * 申请设备方向权限并监听 deviceorientation 事件
+     * 如果浏览器不支持或权限被拒绝，则更新状态存储的传感器状态
+     */
     private startDeviceOrientationSync(): void {
         if (typeof window === 'undefined' || this.orientationHandler) return;
 
@@ -408,12 +579,21 @@ export class CompassManager {
         window.addEventListener('deviceorientation', this.orientationHandler, true);
     }
 
+    /**
+     * 停止设备方向传感器监听
+     * 移除 deviceorientation 事件监听器
+     */
     private stopDeviceOrientationSync(): void {
         if (typeof window === 'undefined' || !this.orientationHandler) return;
         window.removeEventListener('deviceorientation', this.orientationHandler, true);
         this.orientationHandler = null;
     }
 
+    /**
+     * 调度 URL 状态同步（防抖）
+     * 将指南针位置信息写入 URL 参数，用于页面刷新时保持状态
+     * 使用 120ms 防抖延迟避免频繁更新
+     */
     private scheduleUrlSync(): void {
         if (typeof window === 'undefined') return;
 
@@ -433,7 +613,9 @@ export class CompassManager {
     }
 
     /**
-     * Restore persisted compass state from URL, then load cid config if present.
+     * 从 URL 参数恢复指南针状态
+     * 解析 URL 查询参数中的指南针位置和大小配置
+     * 如果参数有效，则更新状态存储并将地图中心移至该位置
      */
     private async restoreFromUrlState(): Promise<void> {
         const urlState = readCompassUrlState();
@@ -455,7 +637,12 @@ export class CompassManager {
     }
 
     /**
-     * Convert geographic meter radius to current pixel radius with geodesic sampling.
+     * 计算地理半径对应的像素半径
+     * 使用大地测量算法采样指南针半径
+     * 从地图中心沿东向 (90°) 计算指定米数距离对应的像素距离
+     * @param centerCoord - 指南针中心坐标 [lon, lat]
+     * @param radiusMeters - 地理半径（米）
+     * @returns 像素半径，若计算失败返回 NaN
      */
     private samplePixelRadius(centerCoord: [number, number], radiusMeters: number): number {
         if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) return Number.NaN;
@@ -488,8 +675,21 @@ export class CompassManager {
     }
 
     /**
-     * Build OpenLayers custom canvas style renderer for native compass drawing.
-     * All rings/text/crosshair are rendered directly in map canvas per frame.
+     * 创建原生 Canvas 渲染样式
+     * 返回 OpenLayers 的自定义渲染样式，在地图 Canvas 中绘制指南针
+     * 
+     * 渲染内容包括：
+     * 1. 太极圆：中心核心圆
+     * 2. 图层环：多个同心圆及其分隔线
+     * 3. 图层文本：八卦、龙、数字等标注文本
+     *    - 支持纵向堆叠和横向排列两种布局模式
+     *    - 自动根据缩放级别隐藏密集文本（LOD 优化）
+     * 4. 刻度环：外侧的度数刻度和数字
+     * 5. 天心十字：中心十字标记线
+     * 
+     * 所有元素都根据指南针半径自动缩放，以保持正确的视觉比例
+     * 
+     * @returns 自定义 Canvas 渲染样式
      */
     private createNativeCanvasStyle(): Style {
         return new Style({
@@ -602,28 +802,65 @@ export class CompassManager {
 
                         if (Array.isArray(label)) {
                             const rows = label.map((item) => String(item || '').trim()).filter(Boolean);
-                            const rowCount = Math.max(1, rows.length);
-                            rows.forEach((rowText, rowIndex) => {
-                                const rr = innerR + layerBand * ((rowIndex + 1) / (rowCount + 1));
-                                drawRadialText(
-                                    context,
-                                    angleMid,
-                                    rr,
-                                    rowText,
-                                    defaultFont * 0.76,
-                                    resolveTextColor(layer, rowIndex)
-                                );
-                            });
+                            const rowCount = rows.length;
+                            if (rowCount === 0) continue;
+
+                            // 读取配置中的排列样式，默认为原有逻辑（垂直堆叠）
+                            const style = (layer as any).togetherStyle;
+
+                            if (style === 'equally') {
+                                // --- 【横向排列逻辑】 ---
+                                // 1. 半径固定在层中心
+                                const rr = innerR + layerBand * 0.52;
+
+                                // 2. 计算一格（segment）的总弧度，并留出边距
+                                const segmentSpan = (Math.PI * 2) / segmentCount;
+                                const contentSpan = segmentSpan * 0.85; // 占据 85% 的格子空间，防止文字挨太近
+
+                                rows.forEach((rowText, rowIndex) => {
+                                    // 3. 计算角度偏移：让文字以 angleMid 为中心左右平分
+                                    const offset = (rowIndex - (rowCount - 1) / 2) * (contentSpan / rowCount);
+
+                                    drawRadialText(
+                                        context,
+                                        angleMid + offset, // 偏移角度实现横向
+                                        rr,                // 固定半径
+                                        rowText,
+                                        defaultFont * 0.85, // 横排可以稍微大一点点
+                                        resolveTextColor(layer, rowIndex),
+                                        false
+                                    );
+                                });
+                            } else {
+                                // --- 【原有纵向排列逻辑】 ---
+                                rows.forEach((rowText, rowIndex) => {
+                                    const rr = innerR + layerBand * ((rowIndex + 1) / (rowCount + 1));
+                                    drawRadialText(
+                                        context,
+                                        angleMid,
+                                        rr,
+                                        rowText,
+                                        defaultFont * 0.76,
+                                        resolveTextColor(layer, rowIndex),
+                                        false
+                                    );
+                                });
+                            }
                             continue;
                         }
 
+                        // ==============================================
+                        // 🔴 修改点 2：这里最后加 【, layer.vertical ?? false】
+                        // 作用：普通文本（透地六十龙）→ 读取配置里的 vertical
+                        // ==============================================
                         drawRadialText(
                             context,
                             angleMid,
                             innerR + layerBand * 0.52,
                             String(label || ''),
                             defaultFont,
-                            resolveTextColor(layer, i)
+                            resolveTextColor(layer, i),
+                            layer.vertical ?? false // 🔴 这里必须读取 layer.vertical
                         );
                     }
                 });
