@@ -62,7 +62,7 @@ import Wind2D from './Wind2D';
 let Cesium = null;
 
 // --- 配置常量区域 ---
-const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
+const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK;
 const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 

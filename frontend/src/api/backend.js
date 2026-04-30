@@ -21,7 +21,7 @@ import {
 // 获取后端 URL，优先使用环境变量，否则使用默认值
 const backendURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
 
-console.log('[Backend API Client] 后端 URL:', backendURL)
+console.log('后端 URL:', backendURL)
 
 /**
  * 后端 API 客户端实例

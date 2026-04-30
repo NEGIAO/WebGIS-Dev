@@ -254,7 +254,7 @@ const props = defineProps({
     }
 });
 
-const tiandituToken = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
+const tiandituToken = import.meta.env.VITE_TIANDITU_TK;
 
 const emit = defineEmits([
     'news-changed',

@@ -9,6 +9,8 @@
 ## 📖 项目简介
 <img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/a3fcebc7-4b22-4ad2-8cfc-62443d114da9" />
 
+## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
+> 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
 **NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，先已进入V3.0阶段，正逐步发展成为专业级的地理信息系统应用
 
@@ -107,7 +109,6 @@ WebGIS_Dev/
 │   │   ├── utils/                  # 工具函数
 │   │   └── views/                  # 页面（HomeView / RegisterView）
 │   ├── public/                     # 静态资源（tiles/images/ShareData/adcode.json）
-│   ├── docs/                       # 前端专项文档
 │   ├── scripts/                    # 构建与维护脚本
 │   ├── package.json
 │   ├── vite.config.js
@@ -125,35 +126,16 @@ WebGIS_Dev/
 │   ├── .python-version
 │   └── README.md                   # 🔹 后端详细文档（含 V3.0.2 更新说明）
 ├── Docs/                           # 开发维护日志与强制执行规范
-│   ├── Force_command.md            # Agent 开发维护日志与 README 结构同步规范
-│   ├── 2026-04-27-districts-ui.md  # 行政区划模块任务入口日志（索引）
-│   ├── 2026-04-22-native-canvas-rendering.md # 本次罗盘原生 Canvas 管线重构日志
-│   ├── 26-04-20/
-│   │   ├── 2026-04-20-url-sync-refactor.md       # URL 状态同步与分享模式优先级逻辑重构 (v3.0.4)
-│   │   ├── 2026-04-20-ux-relay-and-proxy-fix.md  # Loading 接力与通用代理修复日志
-│   │   └── 2026-04-20-loading-logic-fix.md       # 加载逻辑韧性与递归 Bug 修复日志 (v3.0.3)
-│   ├── 26-04-22/
-│   │   └── 2026-04-22-native-canvas-rendering.md # 罗盘原生 Canvas 矢量重构与传感器联动
-│   ├── 26-04-27/
-│   │   ├── 2026-04-27-native-canvas-rendering.md # 罗盘原生 Canvas 渲染优化日志
-│   │   ├── 2026-04-27-wind2d-cesium-integration.md # Wind2D 风场接入与 GPU 渲染规范落地
-│   │   └── 2026-04-27-districts-ui.md # 行政区划 UI/边界服务/TOC 同步日志
-│   ├── 26-04-28/
-│   │   └── 2026-04-28-toc-district-unification.md # 行政区划并入主 TOC 目录与右键管理
-│   ├── 2026-04-29-compass-url-crypto.md # 罗盘 URL 单参数加密与后端解耦日志
-│   └── 2026-04-20-sequential-load-fix.md  # 登录页 3 秒顺序加载修复记录
 ├── API_MANAGEMENT_GUIDE.md
-├── LAYOUT_POSITIONING_GUIDE.md
-├── LOCATION_SEARCH_*.md            # 位置搜索相关说明与检查报告
-└── README.md                       # 本文件
+├── LocalDev.bat                     # Windows 本地开发一键脚本(启动前后端本地开发环境)
+└── README.md                       # 本文件（项目概述）
 ```
 
 ## 📚 文档导航
 
 - **[前端详细文档](./frontend/README.md)**：Vue 3、Vite、组件、状态管理、构建优化
 - **[后端详细文档](./backend/README.md)**：FastAPI、Pydantic、Docker、部署
-- **[前端开发指南](./frontend/src/Guideline.md)**：开发约定、架构设计、最佳实践
-- **[部署指南](#部署指南)**：GitHub Pages、Docker、HF Spaces
+- **[部署指南](##部署指南)**：GitHub Pages、Docker、HF Spaces
 
 ## 🏗️ 架构设计
 
@@ -187,7 +169,7 @@ WebGIS_Dev/
 | 环境 | 前端地址 | 后端地址 | API 端点 |
 |------|---------|---------|---------|
 | **本地开发** | http://localhost:5173 | http://localhost:8000 | http://localhost:8000/api/* |
-| **生产环境** | https://yourdomain.com | https://backend.yourdomain.com | https://backend.yourdomain.com/api/* |
+| **生产环境** | https://negiao.github.io/WebGIS-Dev/ | https://negiao-webgis.hf.space/ | https://negiao-webgis.hf.space/api/* |
 | **GitHub Pages** | https://NEGIAO.github.io/WebGIS | Hugging Face Spaces | [查看 deploy.yml] |
 
 ## 🌐 部署指南
@@ -205,7 +187,7 @@ WebGIS_Dev/
    - Actions 会自动构建并部署到 GitHub Pages
 
 3. **访问**：
-   - https://NEGIAO.github.io/WebGIS（通过中间仓库 NEGIAO.github.io）
+   - https://NEGIAO.github.io/WebGIS （通过中间仓库 NEGIAO.github.io）
 
 ### 后端部署（Hugging Face Spaces）
 
@@ -222,7 +204,7 @@ WebGIS_Dev/
 
 3. **验证**：
    - HF Spaces 构建日志：https://huggingface.co/spaces/NEGIAO/WebGIS
-   - API 访问：https://NEGIAO-WebGIS.hf.space/docs
+   - API 文档说明：https://NEGIAO-WebGIS.hf.space/docs
 
 ### Docker 本地部署
 
@@ -338,10 +320,10 @@ LOG_LEVEL=INFO
 
 ```bash
 # 1. 创建页面组件
-touch frontend/src/views/MyFeaturePage.vue
+touch frontend/src/components/MyFeaturePage.vue
 
 # 2. 配置路由
-# frontend/src/router/index.js
+# frontend/src/router/index.js 或在views/HomeView.vue中引入
 
 # 3. 添加菜单项
 # 在 TopBar 或 SidePanel 中添加导航
@@ -350,7 +332,7 @@ touch frontend/src/views/MyFeaturePage.vue
 #### 后端新增 API
 
 ```python
-# backend/app.py 或 backend/routers/my_router.py
+# backend/app.py 或 backend/api/my_router.py
 @app.get("/api/v1/my-endpoint")
 async def my_endpoint():
     """API 文档"""
@@ -360,7 +342,8 @@ async def my_endpoint():
 #### 前后端通信
 
 ```javascript
-// frontend/src/api/myService.js
+// frontend/src/api/backend.js
+// 前端端通信桥梁
 export const getMyData = async (params) => {
   const response = await fetch('/api/v1/my-endpoint', {
     method: 'GET'
@@ -431,7 +414,7 @@ export const getMyData = async (params) => {
 **A**：GeoJSON、KML/KMZ、Shapefile、GeoTIFF、CSV、XYZ 瓦片等。详见 [前端文档](./frontend/README.md)。
 
 ## TODO
-参考md文档，将现有的低级api切换为高级api并解析出数据进行查看
+参考高德api的md文档，将现有的低级api切换为高级api并解析出数据进行查看
 
 ## 📄 许可证
 

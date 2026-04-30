@@ -115,7 +115,7 @@ frontend/
     ├── main.js                           # 应用入口（挂载 Router/Pinia）
     │
     ├── api/
-    │   ├── backend.js                    # 后端 API 客户端（鉴权/异常语义）
+    │   ├── backend.js                    # 前后端通信 API 枢纽（用户鉴权/异常处理）
     │   ├── geocoding.js                  # 地理编码/逆地理编码 API
     │   ├── index.js                      # API 聚合导出
     │   ├── ipLocation.js                 # IP 定位 API
