@@ -32,10 +32,6 @@ jobs:
           node-version: 24
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json' # 明确依赖路径
-      # 清理缓存
-      - name: Clean npm cache
-        working-directory: ./frontend
-        run: npm cache clean --force
 
       - name: Install Frontend Dependencies
         working-directory: ./frontend
