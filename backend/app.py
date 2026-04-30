@@ -165,7 +165,6 @@ PROXY_DEFAULT_REQUEST_HEADERS = {
     "Accept-Encoding": "gzip, deflate, br",
 }
 
-
 def _build_proxy_target_url(target_url: str, query: str) -> str:
     normalized_target = str(target_url or "").strip().lstrip("/")
     if not normalized_target:
@@ -183,7 +182,6 @@ def _build_proxy_target_url(target_url: str, query: str) -> str:
         upstream_url = f"{upstream_url}{glue}{compact_query}"
 
     return upstream_url
-
 
 def _build_proxy_request_headers(request: Request) -> Dict[str, str]:
     headers = dict(PROXY_DEFAULT_REQUEST_HEADERS)
@@ -271,70 +269,19 @@ async def universal_stream_proxy(target_url: str, request: Request):
         headers=response_headers,
         background=background_tasks,
     )
-    
 # =====================================================
-# =====================================================
-# --- 功能 1：简单的爬虫接口 ---
-# 前端请求：/api/news
-@app.get("/api/news")
-async def get_external_news(_current_user: Dict[str, Any] = Depends(require_api_access)):
-    """
-    功能：演示外部新闻源抓取接口（需登录且具备 API 调用权限）。
-
-    返回：
-    - 外部新闻接口的 JSON 原始数据。
-    """
-    url = "https://api.example.com/gis-news" # 假设的外部接口
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        # 这里可以对爬取的数据进行清洗
-        return response.json()
-
-# --- 功能 2：GIS 数据处理 (用 Pandas) ---
-# 前端请求：/api/process-points
-@app.get("/api/process-points")
-async def process_gis_data(_current_user: Dict[str, Any] = Depends(require_api_access)):
-    """
-    功能：演示 GIS 点数据处理流程（Pandas）。
-
-    返回：
-    - 处理后的点位列表（附加 status 字段）。
-    """
-    # 模拟一些原始坐标数据
-    raw_data = [
-        {"name": "点A", "lat": 30.5, "lng": 114.3},
-        {"name": "点B", "lat": 30.6, "lng": 114.4}
-    ]
-    df = pd.DataFrame(raw_data)
-    
-    # 简单处理：比如给所有点加个“已处理”标记
-    df['status'] = 'processed'
-    
-    return df.to_dict(orient="records")
-
-# --- 功能 3：测试数据接口 ---
-@app.get("/api/data")
-async def get_test_data(_current_user: Dict[str, Any] = Depends(require_api_access)):
-    """功能：测试接口连通性并返回示例数据。"""
-    return {
-        "status": "success", 
-        "message": "恭喜！后端已经收到请求",
-        "data": [
-            {"name": "测试点1", "value": 100},
-            {"name": "测试点2", "value": 200}
-        ]
-    }
-
-# --- 功能 4：健康检查 ---
+# ==================== 通用流式代理 ====================
+# --- 功能：健康检查 ---
 @app.get("/")
 @app.get("/health")
 async def health_check():
     """功能：健康检查接口，用于探活与部署监控。"""
     return {"status": "healthy", "message": "WebGIS Backend is Running!"}
 
-# --- 功能 5：信息接口 ---
+# --- 信息接口 ---
+# 返回后端服务的概览信息和核心端点目录，方便前端调试和开发者了解 API 结构。
 @app.get("/api/info")
-async def get_api_info(_current_user: Dict[str, Any] = Depends(require_api_access)):
+async def get_api_info():
     """
     功能：返回后端服务概览与核心端点目录。
 
@@ -364,9 +311,6 @@ async def get_api_info(_current_user: Dict[str, Any] = Depends(require_api_acces
             "/api/agent/user-config - 用户个人 Agent 配置",
             "/api/agent/models - 上游可用模型列表探测（支持动态随机调度）",
             "/api/admin/agent/config - 管理员 Agent 配置",
-            "/api/data - 测试数据",
-            "/api/news - 新闻爬虫",
-            "/api/process-points - GIS 数据处理",
             "/health - 健康检查"
         ]
     }
