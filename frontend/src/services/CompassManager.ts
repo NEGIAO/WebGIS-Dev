@@ -918,48 +918,69 @@ export class CompassManager {
                 });
 
                 // Scale ring.
-                if (hasScale) {
-                    const scale = config?.scaclStyle || {
-                        minLineHeight: 10,
-                        midLineHeight: 20,
-                        maxLineHeight: 25,
-                        numberFontSize: 13
-                    };
+                // ==================== 4. 刻度环与数字 (Scale Ring) ====================
+if (hasScale) {
+    const scale = config?.scaclStyle || {
+        minLineHeight: 10,
+        midLineHeight: 20,
+        maxLineHeight: 25,
+        numberFontSize: 13
+    };
 
-                    const baseScale = radiusPx / (BASE_CONFIG_SIZE / 2);
-                    const shortLen = clamp(Number(scale.minLineHeight || 10) * baseScale, 2, 20);
-                    const midLen = clamp(Number(scale.midLineHeight || 20) * baseScale, 3, 28);
-                    const longLen = clamp(Number(scale.maxLineHeight || 25) * baseScale, 4, 36);
-                    const numberFont = clamp(Number(scale.numberFontSize || 13) * baseScale, 8, 18);
-                    const scaleInner = contentOuterRadius + 2;
+    // 1. 定义地理比例常数 (相对于总半径 radiusPx)
+    // 假设 0.82 为主体边缘，我们将刻度分布在 0.82 到 1.0 的地理区间内
+    const scaleStartRatio = 0.825;       // 刻度起始位置 (82.5% 半径处)
+    const tickMaxRatio = 0.06;           // 最长刻度线占总半径的 6%
+    const numberPosRatio = 0.93;         // 数字中心点位于 93% 半径处
 
-                    for (let degree = 0; degree < 360; degree += 1) {
-                        const angle = -Math.PI / 2 + (degree * Math.PI) / 180;
-                        const ten = degree % 10 === 0;
-                        const five = degree % 5 === 0;
-                        const markLen = ten ? longLen : five ? midLen : shortLen;
-                        const color = ten
-                            ? String(line.scaleHighlightColor || '#FF0000')
-                            : String(line.scaleColor || '#AAAAAA');
+    const scaleInner = radiusPx * scaleStartRatio; 
+    const baseScale = radiusPx / (BASE_CONFIG_SIZE / 2);
 
-                        context.strokeStyle = color;
-                        context.beginPath();
-                        context.moveTo(Math.cos(angle) * scaleInner, Math.sin(angle) * scaleInner);
-                        context.lineTo(Math.cos(angle) * (scaleInner + markLen), Math.sin(angle) * (scaleInner + markLen));
-                        context.stroke();
+    // 2. 将刻度线长度转换为比例长度
+    const shortLen = clamp(Number(scale.minLineHeight || 10) * baseScale, 2, radiusPx * 0.03);
+    const midLen = clamp(Number(scale.midLineHeight || 20) * baseScale, 3, radiusPx * 0.05);
+    const longLen = clamp(Number(scale.maxLineHeight || 25) * baseScale, 4, radiusPx * tickMaxRatio);
+    
+    // 3. 将字号转换为比例大小
+    const numberFont = clamp(Number(scale.numberFontSize || 13) * baseScale, 6, radiusPx * 0.05);
 
-                        if (ten && showDenseText) {
-                            drawRadialText(
-                                context,
-                                angle,
-                                scaleInner + markLen + numberFont,
-                                String(degree),
-                                numberFont,
-                                color
-                            );
-                        }
-                    }
-                }
+    for (let degree = 0; degree < 360; degree += 1) {
+        const angle = -Math.PI / 2 + (degree * Math.PI) / 180;
+        const isTen = degree % 10 === 0;
+        const isFive = degree % 5 === 0;
+        
+        const markLen = isTen ? longLen : isFive ? midLen : shortLen;
+        const color = isTen
+            ? String(line.scaleHighlightColor || '#FF0000')
+            : String(line.scaleColor || '#AAAAAA');
+
+        context.strokeStyle = color;
+        context.lineWidth = Math.max(0.5, baseScale * 0.8); // 刻度线宽度也随比例变化
+
+        // 绘制刻度线：从 scaleInner 出发，向外延伸 markLen
+        context.beginPath();
+        context.moveTo(Math.cos(angle) * scaleInner, Math.sin(angle) * scaleInner);
+        context.lineTo(
+            Math.cos(angle) * (scaleInner + markLen), 
+            Math.sin(angle) * (scaleInner + markLen)
+        );
+        context.stroke();
+
+        // 绘制标注数字：放置在预设的比例圆周上
+        // 只有当半径足够大（地理实体可见度高）时才渲染文字
+        if (isTen && radiusPx > 120) {
+            drawRadialText(
+                context,
+                angle,
+                radiusPx * numberPosRatio, // 绝对地理位置：93% 半径处
+                String(degree),
+                numberFont,
+                color,
+                false // 刻度数字通常沿切线排列
+            );
+        }
+    }
+}
 
                 // Tianxin cross: exactly 1/3 radius.
                 if (config?.isShowTianxinCross !== false) {
