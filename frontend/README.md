@@ -17,7 +17,7 @@
 ## 🚀 快速开始
 # WebGIS 前端项目
 
-基于 Vue 3 + Vite + OpenLayers/Cesium 的 WebGIS 前端工程。
+基于 Vue 3 + Vite + OpenLayers/Cesium 的 WebGIS 前端工程
 
 ## 项目概览
 
