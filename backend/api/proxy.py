@@ -19,7 +19,7 @@ def build_http_client():
     """
     return httpx.AsyncClient(
         timeout=httpx.Timeout(20.0, connect=5.0), # 设置超时时间
-        follow_redirects=True,
+        follow_redirects=False,
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
         verify=False # 如果代理某些自签名证书的瓦片服务，可能需要设为 False
     )
@@ -100,20 +100,37 @@ async def ships66_tile(z: int, x: int, y: int, request: Request):
 
     # 瓦片请求尽量干净，不转发浏览器的 Origin/Referer
     headers = {
-        "User-Agent": PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"],
-        "Accept": "image/png,image/*;q=0.9,*/*;q=0.8",
+    "User-Agent": "...Chrome...",
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
     }
 
     client = getattr(request.app.state, "http_client", None)
     fallback_client = None
     if client is None:
-        fallback_client = httpx.AsyncClient(follow_redirects=True)
+        fallback_client = httpx.AsyncClient(follow_redirects=False)
         client = fallback_client
 
     upstream_request = client.build_request("GET", upstream_url, headers=headers)
 
     try:
         upstream_response = await client.send(upstream_request, stream=True)
+        if upstream_response.status_code in (301, 302, 307, 308):
+            location = upstream_response.headers.get("location")
+
+            background = BackgroundTasks()
+            background.add_task(upstream_response.aclose)
+
+            if fallback_client:
+                background.add_task(fallback_client.aclose)
+
+            return Response(
+                status_code=upstream_response.status_code,
+                headers={"Location": location},
+                background=background
+            )
     except httpx.TimeoutException:
         if fallback_client:
             await fallback_client.aclose()
@@ -161,7 +178,7 @@ async def universal_stream_proxy(target_url: str, request: Request):
     client = shared_client
 
     if client is None:
-        fallback_client = httpx.AsyncClient(follow_redirects=True)
+        fallback_client = httpx.AsyncClient(follow_redirects=False)
         client = fallback_client
 
     upstream_request = client.build_request(
@@ -172,6 +189,20 @@ async def universal_stream_proxy(target_url: str, request: Request):
 
     try:
         upstream_response = await client.send(upstream_request, stream=True)
+        if upstream_response.status_code in (301, 302, 307, 308):
+            location = upstream_response.headers.get("location")
+
+            background = BackgroundTasks()
+            background.add_task(upstream_response.aclose)
+
+            if fallback_client:
+                background.add_task(fallback_client.aclose)
+
+            return httpx.Response(
+                status_code=upstream_response.status_code,
+                headers={"Location": location},
+                background=background
+            )
     except httpx.TimeoutException:
         if fallback_client is not None:
             await fallback_client.aclose()

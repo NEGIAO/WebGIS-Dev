@@ -13,6 +13,17 @@ type CompassPosition = {
     lat: number;
 };
 
+
+/**
+ * 选中宫位的接口定义
+ */
+export interface SelectedPalace {
+  layerIndex: number;    // 落在第几层
+  segmentIndex: number;  // 落在该层的第几个扇区
+  data: string | string[]; // 宫位的文字内容
+  coord: number[];       // 点击位置的地理坐标 [lon, lat]，用于弹窗定位
+}
+
 type CompassThemeOption = {
     cid: string;
     name: string;
@@ -140,7 +151,242 @@ function hasValidLonLat(position: CompassPosition): boolean {
         && Number(position.lat) <= 90;
 }
 
+
+// export const useCompassStore = defineStore('compassStore', () => {
+//     const enabled = ref(false);
+//     const mode = ref<CompassMode>('vector');
+//     const placementMode = ref(false);
+
+//     const sensorEnabled = ref(false);
+//     const sensorPermission = ref<SensorPermission>('unknown');
+
+//     const position = ref<CompassPosition>({
+//         lng: 114.302,
+//         lat: 34.8146
+//     });
+
+//     const rotation = ref(0);
+//     const physicalRadiusMeters = ref(10000);
+//     const opacity = ref(0.9);
+//     const minResolution = ref(450);
+//     const hudSizePx = ref(280);
+
+//     const cid = ref(DEFAULT_CID);
+//     const themeOptions = ref<CompassThemeOption[]>(deepClone(DEFAULT_THEME_OPTIONS));
+
+//     const config = ref<FengShuiCompassConfig>(createFallbackConfigByCid(DEFAULT_CID));
+//     const configRevision = ref(1);
+
+//     const isConfigLoading = ref(false);
+//     const configError = ref('');
+//     const hasFetchedThemeCatalog = ref(false);
+//     const hasFetchedLocalConfig = ref(false);
+
+//     const hasValidPosition = computed(() => hasValidLonLat(position.value));
+//     const vectorVisible = computed(() => enabled.value && mode.value === 'vector');
+//     const hudVisible = computed(() => enabled.value && mode.value === 'hud');
+
+//     const vectorRenderConfig = computed<FengShuiCompassConfig>(() => {
+//         return {
+//             ...deepClone(config.value),
+//             rotate: normalizeAngle(rotation.value),
+//             tianxinCrossLengthRatio: clamp(Number(config.value?.tianxinCrossLengthRatio || 1 / 3), 0.1, 1)
+//         } as FengShuiCompassConfig;
+//     });
+
+//     const hudRenderConfig = computed<FengShuiCompassConfig>(() => {
+//         const baseConfig = vectorRenderConfig.value;
+//         const size = Math.round(clamp(hudSizePx.value, 180, 520));
+//         return {
+//             ...deepClone(baseConfig),
+//             compassSize: {
+//                 ...(baseConfig?.compassSize || {}),
+//                 width: size,
+//                 height: size
+//             },
+//             rotate: normalizeAngle(rotation.value),
+//             tianxinCrossLengthRatio: clamp(Number(baseConfig?.tianxinCrossLengthRatio || 1 / 3), 0.1, 1)
+//         } as FengShuiCompassConfig;
+//     });
+
+//     const renderCacheToken = computed(() => `${String(cid.value)}:${Number(configRevision.value || 0)}`);
+
+//     function bumpConfigRevision(): void {
+//         configRevision.value += 1;
+//     }
+
+//     function setEnabled(next: boolean): void {
+//         enabled.value = Boolean(next);
+//         if (!enabled.value) {
+//             placementMode.value = false;
+//             sensorEnabled.value = false;
+//         }
+//     }
+
+//     function setMode(nextMode: CompassMode): void {
+//         mode.value = nextMode === 'hud' ? 'hud' : 'vector';
+//         if (mode.value !== 'vector') {
+//             placementMode.value = false;
+//         }
+//     }
+
+//     function setPlacementMode(next: boolean): void {
+//         placementMode.value = Boolean(next);
+//     }
+
+//     function setSensorEnabled(next: boolean): void {
+//         sensorEnabled.value = Boolean(next);
+//     }
+
+//     function setSensorPermission(next: SensorPermission): void {
+//         sensorPermission.value = next;
+//     }
+
+//     function setPosition(lng: number, lat: number): void {
+//         const nextPosition = {
+//             lng: Number(lng),
+//             lat: Number(lat)
+//         };
+//         if (!hasValidLonLat(nextPosition)) return;
+//         position.value = nextPosition;
+//     }
+
+//     function setRotation(nextRotation: number): void {
+//         rotation.value = normalizeAngle(nextRotation);
+//     }
+
+//     function setPhysicalRadiusMeters(nextMeters: number): void {
+//         const numeric = Number(nextMeters);
+//         if (!Number.isFinite(numeric)) return;
+//         physicalRadiusMeters.value = Math.abs(numeric);
+//     }
+
+//     function setOpacity(nextOpacity: number): void {
+//         opacity.value = clamp(Number(nextOpacity), 0.1, 1);
+//     }
+
+//     function setMinResolution(nextResolution: number): void {
+//         minResolution.value = clamp(Number(nextResolution), 0.01, 50000);
+//     }
+
+//     function setHudSize(nextSize: number): void {
+//         hudSizePx.value = clamp(Number(nextSize), 180, 520);
+//     }
+
+//     function replaceConfig(nextConfig: Partial<FengShuiCompassConfig> | null | undefined, nextCid?: string, nextName?: string): void {
+//         const targetCid = String(nextCid || cid.value || DEFAULT_CID).trim() || DEFAULT_CID;
+//         const normalized = normalizeCompassConfig(nextConfig, targetCid, String(nextName || resolveThemeNameByCid(targetCid)));
+//         config.value = normalized;
+//         cid.value = targetCid;
+//         bumpConfigRevision();
+//     }
+
+//     async function loadThemeCatalog(): Promise<void> {
+//         if (hasFetchedThemeCatalog.value) return;
+//         hasFetchedThemeCatalog.value = true;
+//         themeOptions.value = deepClone(DEFAULT_THEME_OPTIONS);
+//     }
+
+//     async function loadConfigByCid(nextCid: string): Promise<void> {
+//         const safeCid = String(nextCid || '').trim() || DEFAULT_CID;
+//         isConfigLoading.value = true;
+//         configError.value = '';
+
+//         try {
+//             const fallbackConfig = createFallbackConfigByCid(safeCid);
+//             replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
+//             hasFetchedLocalConfig.value = true;
+//         } catch (error: any) {
+//             const fallbackConfig = createFallbackConfigByCid(safeCid);
+//             replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
+//             configError.value = String(error?.message || `failed to load local cid: ${safeCid}`);
+//         } finally {
+//             isConfigLoading.value = false;
+//         }
+//     }
+
+//     async function setCidAndLoad(nextCid: string): Promise<void> {
+//         await loadConfigByCid(nextCid);
+//     }
+
+//     async function ensureConfigLoaded(): Promise<void> {
+//         await loadThemeCatalog();
+//         if (!hasFetchedLocalConfig.value) {
+//             await loadConfigByCid(cid.value || DEFAULT_CID);
+//         }
+//     }
+
+//     async function requestOrientationPermission(): Promise<boolean> {
+//         if (typeof window === 'undefined' || typeof DeviceOrientationEvent === 'undefined') {
+//             setSensorPermission('unsupported');
+//             return false;
+//         }
+
+//         const requester = (DeviceOrientationEvent as any)?.requestPermission;
+//         if (typeof requester !== 'function') {
+//             setSensorPermission('granted');
+//             return true;
+//         }
+
+//         try {
+//             const result = await requester.call(DeviceOrientationEvent);
+//             if (result === 'granted') {
+//                 setSensorPermission('granted');
+//                 return true;
+//             }
+//             setSensorPermission('denied');
+//             return false;
+//         } catch {
+//             setSensorPermission('denied');
+//             return false;
+//         }
+//     }
+
+//     return {
+//         enabled,
+//         mode,
+//         placementMode,
+//         sensorEnabled,
+//         sensorPermission,
+//         position,
+//         rotation,
+//         physicalRadiusMeters,
+//         opacity,
+//         minResolution,
+//         hudSizePx,
+//         cid,
+//         themeOptions,
+//         config,
+//         configRevision,
+//         isConfigLoading,
+//         configError,
+//         hasValidPosition,
+//         vectorVisible,
+//         hudVisible,
+//         vectorRenderConfig,
+//         hudRenderConfig,
+//         renderCacheToken,
+//         setEnabled,
+//         setMode,
+//         setPlacementMode,
+//         setSensorEnabled,
+//         setSensorPermission,
+//         setPosition,
+//         setRotation,
+//         setPhysicalRadiusMeters,
+//         setOpacity,
+//         setMinResolution,
+//         setHudSize,
+//         replaceConfig,
+//         loadThemeCatalog,
+//         loadConfigByCid,
+//         setCidAndLoad,
+//         ensureConfigLoaded,
+//         requestOrientationPermission
+//     };
+// });
 export const useCompassStore = defineStore('compassStore', () => {
+    // ==================== 1. 基础显示状态 ====================
     const enabled = ref(false);
     const mode = ref<CompassMode>('vector');
     const placementMode = ref(false);
@@ -148,20 +394,25 @@ export const useCompassStore = defineStore('compassStore', () => {
     const sensorEnabled = ref(false);
     const sensorPermission = ref<SensorPermission>('unknown');
 
+    // 默认不设置有效位置，避免未授权时默认渲染/计算带来的性能开销
     const position = ref<CompassPosition>({
-        lng: 114.302,
-        lat: 34.8146
+        lng: Number.NaN,
+        lat: Number.NaN
     });
 
     const rotation = ref(0);
-    const physicalRadiusMeters = ref(10000);
+    const physicalRadiusMeters = ref(1000);
     const opacity = ref(0.9);
-    const minResolution = ref(450);
+    const minResolution = ref(99999);
     const hudSizePx = ref(280);
 
+    // ==================== 2. 交互状态 (🔴 新增) ====================
+    // 当前被点击选中的宫位信息
+    const selectedPalace = ref<SelectedPalace | null>(null);
+
+    // ==================== 3. 配置与元数据 ====================
     const cid = ref(DEFAULT_CID);
     const themeOptions = ref<CompassThemeOption[]>(deepClone(DEFAULT_THEME_OPTIONS));
-
     const config = ref<FengShuiCompassConfig>(createFallbackConfigByCid(DEFAULT_CID));
     const configRevision = ref(1);
 
@@ -170,6 +421,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     const hasFetchedThemeCatalog = ref(false);
     const hasFetchedLocalConfig = ref(false);
 
+    // ==================== 4. 计算属性 ====================
     const hasValidPosition = computed(() => hasValidLonLat(position.value));
     const vectorVisible = computed(() => enabled.value && mode.value === 'vector');
     const hudVisible = computed(() => enabled.value && mode.value === 'hud');
@@ -199,6 +451,15 @@ export const useCompassStore = defineStore('compassStore', () => {
 
     const renderCacheToken = computed(() => `${String(cid.value)}:${Number(configRevision.value || 0)}`);
 
+    // ==================== 5. Actions ====================
+
+    /**
+     * 🔴 新增：设置选中的宫位
+     */
+    function setSelectedPalace(next: SelectedPalace | null): void {
+        selectedPalace.value = next;
+    }
+
     function bumpConfigRevision(): void {
         configRevision.value += 1;
     }
@@ -208,6 +469,7 @@ export const useCompassStore = defineStore('compassStore', () => {
         if (!enabled.value) {
             placementMode.value = false;
             sensorEnabled.value = false;
+            selectedPalace.value = null; // 关闭时清除选中
         }
     }
 
@@ -215,8 +477,26 @@ export const useCompassStore = defineStore('compassStore', () => {
         mode.value = nextMode === 'hud' ? 'hud' : 'vector';
         if (mode.value !== 'vector') {
             placementMode.value = false;
+            selectedPalace.value = null; // 切换模式时清理
         }
     }
+
+    /**
+     * 🟡 修改：更新位置
+     * 当罗盘位置改变时，通常需要清除之前的选中状态，避免弹窗漂移[cite: 4]
+     */
+    function setPosition(lng: number, lat: number): void {
+        const nextPosition = {
+            lng: Number(lng),
+            lat: Number(lat)
+        };
+        if (!hasValidLonLat(nextPosition)) return;
+        
+        position.value = nextPosition;
+        selectedPalace.value = null; // 🔴 关键：移动罗盘后清除高亮和弹窗
+    }
+
+    // --- 以下保持原样 ---
 
     function setPlacementMode(next: boolean): void {
         placementMode.value = Boolean(next);
@@ -228,15 +508,6 @@ export const useCompassStore = defineStore('compassStore', () => {
 
     function setSensorPermission(next: SensorPermission): void {
         sensorPermission.value = next;
-    }
-
-    function setPosition(lng: number, lat: number): void {
-        const nextPosition = {
-            lng: Number(lng),
-            lat: Number(lat)
-        };
-        if (!hasValidLonLat(nextPosition)) return;
-        position.value = nextPosition;
     }
 
     function setRotation(nextRotation: number): void {
@@ -267,6 +538,7 @@ export const useCompassStore = defineStore('compassStore', () => {
         config.value = normalized;
         cid.value = targetCid;
         bumpConfigRevision();
+        selectedPalace.value = null; // 配置更换后重置选中
     }
 
     async function loadThemeCatalog(): Promise<void> {
@@ -342,6 +614,7 @@ export const useCompassStore = defineStore('compassStore', () => {
         opacity,
         minResolution,
         hudSizePx,
+        selectedPalace, // 🔴 暴露状态
         cid,
         themeOptions,
         config,
@@ -365,6 +638,7 @@ export const useCompassStore = defineStore('compassStore', () => {
         setOpacity,
         setMinResolution,
         setHudSize,
+        setSelectedPalace, // 🔴 暴露 Action
         replaceConfig,
         loadThemeCatalog,
         loadConfigByCid,

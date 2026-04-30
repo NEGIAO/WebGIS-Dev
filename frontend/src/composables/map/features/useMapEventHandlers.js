@@ -23,10 +23,15 @@
  * - pendingReverseGeocodePickRef: 待处理的逆地理编码选点 ref
  * - busPickSource: 公交选点图层的 VectorSource
  */
+/**
+ * 地图事件处理统一库
+ */
 
 import { toLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 import { Point, Polygon } from 'ol/geom';
+// 新增：导入 Vue nextTick 解决生命周期时序问题
+import { nextTick } from 'vue';
 
 export function createMapEventHandlers({
     mapInstanceRef,
@@ -44,110 +49,78 @@ export function createMapEventHandlers({
     pendingReverseGeocodePickRef,
     busPickSource
 }) {
-    /**
-     * 更新当前坐标状态
-     * @param {Array} olCoordinate - OpenLayers 坐标数组 [x, y]
-     */
     function updateCurrentCoordinate(olCoordinate) {
         if (!olCoordinate || olCoordinate.length < 2) return;
         const lonLat = toLonLat(olCoordinate);
         if (currentCoordinateRef?.value !== undefined) {
-            currentCoordinateRef.value = {
-                lng: lonLat[0],
-                lat: lonLat[1]
-            };
+            currentCoordinateRef.value = { lng: lonLat[0], lat: lonLat[1] };
         }
     }
 
-    /**
-     * 绑定所有地图事件
-     */
     function bindMapEvents() {
         const map = mapInstanceRef?.value;
         if (!map) return;
-
         const viewport = map.getViewport();
 
-        // ========== pointermove 事件：提示文字更新 ==========
+        // ✅ 修复 Canvas 警告（正确时机：地图渲染后）
+        map.on('postrender', () => {
+            const canvas = viewport.querySelector('canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx && !ctx.willReadFrequently) {
+                    ctx.willReadFrequently = true;
+                }
+            }
+        });
+
+        // ========== pointermove 事件 ==========
         map.on('pointermove', (evt) => {
             if (evt.dragging) return;
-
             const coordinate = evt.coordinate;
-
-            // 绘图测量提示逻辑
             if (tooltipRef?.helpTooltipEl) {
                 const sketchFeature = getSketchFeature?.();
-                
                 const tooltipText = sketchFeature ?
                     (sketchFeature.getGeometry?.() instanceof Polygon ? '双击结束多边形' : '双击结束测距') :
                     '单击开始绘制';
-                
                 tooltipRef.helpTooltipEl.innerHTML = tooltipText;
                 tooltipRef.helpTooltipOverlay?.setPosition?.(coordinate);
                 tooltipRef.helpTooltipEl.classList.remove('hidden');
             }
         });
 
-        // ========== mouseout 事件：隐藏提示 ==========
+        // ========== mouseout 事件 ==========
         viewport.addEventListener('mouseout', () => {
-            if (tooltipRef?.helpTooltipEl) {
-                tooltipRef.helpTooltipEl.classList.add('hidden');
-            }
+            if (tooltipRef?.helpTooltipEl) tooltipRef.helpTooltipEl.classList.add('hidden');
         });
 
-        // ========== singleclick 事件：公交选点 + 属性查询 ==========
+        // ========== singleclick 事件 ==========
         map.on('singleclick', async (evt) => {
-            // 1. 公交选点处理
             const pendingBusPick = pendingBusPickRef?.value;
             if (pendingBusPick) {
                 const lonLat = toLonLat(evt.coordinate);
                 const pickType = pendingBusPick.type;
-
-                busPickSource?.getFeatures?.().forEach((feature) => {
-                    if (feature.get('busPickType') === pickType) {
-                        busPickSource.removeFeature(feature);
-                    }
-                });
-
-                busPickSource?.addFeature?.(new Feature({
-                    geometry: new Point(evt.coordinate),
-                    busPickType: pickType
-                }));
-
-                pendingBusPick.resolve({
-                    lng: Number(lonLat[0].toFixed(6)),
-                    lat: Number(lonLat[1].toFixed(6))
-                });
+                busPickSource?.getFeatures?.().forEach(f => f.get('busPickType') === pickType && busPickSource.removeFeature(f));
+                busPickSource?.addFeature?.(new Feature({ geometry: new Point(evt.coordinate), busPickType: pickType }));
+                pendingBusPick.resolve({ lng: Number(lonLat[0].toFixed(6)), lat: Number(lonLat[1].toFixed(6)) });
                 pendingBusPickRef.value = null;
                 return;
             }
 
-            // 1.1 逆地理编码拾点处理
             const pendingReverseGeocodePick = pendingReverseGeocodePickRef?.value;
             if (pendingReverseGeocodePick) {
                 const lonLat = toLonLat(evt.coordinate);
-                pendingReverseGeocodePick.resolve({
-                    lng: Number(lonLat[0].toFixed(6)),
-                    lat: Number(lonLat[1].toFixed(6))
-                });
+                pendingReverseGeocodePick.resolve({ lng: Number(lonLat[0].toFixed(6)), lat: Number(lonLat[1].toFixed(6)) });
                 pendingReverseGeocodePickRef.value = null;
                 return;
             }
 
             const clickedLonLat = toLonLat(evt.coordinate);
-            emit?.('map-click', {
-                lon: Number(clickedLonLat[0].toFixed(6)),
-                lat: Number(clickedLonLat[1].toFixed(6)),
-                source: 'map-singleclick'
-            });
+            emit?.('map-click', { lon: Number(clickedLonLat[0].toFixed(6)), lat: Number(clickedLonLat[1].toFixed(6)), source: 'map-singleclick' });
 
-            // 2. 属性查询检查
             if (!isAttributeQueryEnabledRef?.value) return;
-            
             const drawInteraction = getDrawInteraction?.();
             if (drawInteraction?.getActive?.()) return;
 
-            // 3. 矢量要素查询
             const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
             if (feature) {
                 const { geometry, style, ...props } = feature.getProperties();
@@ -155,68 +128,49 @@ export function createMapEventHandlers({
                 return;
             }
 
-            // 4. 栅格值查询（延迟可用，检查 ref）
             const queryRasterFn = queryRasterValueAtCoordinateRef?.value;
             if (queryRasterFn) {
                 const rasterInfo = await queryRasterFn(evt.coordinate);
-                if (rasterInfo) {
-                    emit?.('feature-selected', rasterInfo);
-                }
+                rasterInfo && emit?.('feature-selected', rasterInfo);
             }
         });
 
-        // ========== contextmenu 事件：右键属性查询 ==========
+        // ========== contextmenu 事件 ==========
         viewport.addEventListener('contextmenu', (e) => {
-            // 右拖缩放控制器检查
             const controller = rightDragZoomControllerRef?.value;
-            if (controller?.shouldSuppressContextMenu?.()) {
-                e.preventDefault();
-                return;
-            }
-
+            if (controller?.shouldSuppressContextMenu?.()) { e.preventDefault(); return; }
             if (!isAttributeQueryEnabledRef?.value) return;
             e.preventDefault();
-
             const pixel = map.getEventPixel(e);
             const feature = map.forEachFeatureAtPixel(pixel, f => f);
             if (!feature) return;
-
             const { geometry, style, ...props } = feature.getProperties();
-            emit?.('feature-selected', {
-                ...props,
-                操作提示: '右键选择，可在工具箱中编辑样式'
-            });
+            emit?.('feature-selected', { ...props, 操作提示: '右键选择，可在工具箱中编辑样式' });
         });
 
-        // ========== 缩放级别监听 ==========
+        // ========== 缩放/中心事件 ==========
         map.getView().on('change:resolution', () => {
             const zoom = map.getView().getZoom();
-            if (zoom !== undefined && currentZoomRef?.value !== undefined) {
-                currentZoomRef.value = Math.round(zoom);
-            }
+            zoom !== undefined && (currentZoomRef.value = Math.round(zoom));
         });
 
-        // ========== 地图中心变化（实时坐标更新） ==========
         map.getView().on('change:center', () => {
-            const center = map.getView().getCenter();
-            updateCurrentCoordinate(center);
+            updateCurrentCoordinate(map.getView().getCenter());
         });
 
-        // ========== 移动完成（最终坐标 + 属性表范围同步） ==========
-        map.on('moveend', () => {
-            const center = map.getView().getCenter();
-            updateCurrentCoordinate(center);
+        // ✅ 修复 宽高0 警告（nextTick 等待 DOM 渲染完成）
+        map.on('moveend', async () => {
+            updateCurrentCoordinate(map.getView().getCenter());
             syncAttributeTableMapExtent?.();
+            await nextTick();
+            map.updateSize();
         });
 
-        // ========== 触摸事件（移动端坐标更新） ==========
+        // ========== 移动端触摸事件 ==========
         viewport.addEventListener('touchmove', () => {
-            const center = map.getView().getCenter();
-            updateCurrentCoordinate(center);
+            updateCurrentCoordinate(map.getView().getCenter());
         }, false);
     }
 
-    return {
-        bindMapEvents
-    };
+    return { bindMapEvents };
 }

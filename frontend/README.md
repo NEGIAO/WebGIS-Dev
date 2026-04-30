@@ -153,6 +153,7 @@ frontend/
     │   ├── SidePanel.vue                        # 右侧综合侧栏（资讯/TOC/聊天/路线）
     │   ├── TOCPanel.vue                         # TOC 与图层工具主面板
     │   ├── TOCTreeItem.vue                      # TOC 递归节点（右键菜单入口）
+    │   ├── PalaceExplanationPanel.vue           # 罗盘宫位解释面板（点击选中宫位后显示风水解释）
     │   ├── TopBar.vue                           # 顶栏组件
     │   ├── WeatherChartPanel.vue                # 天气可视化组件
     │   │
@@ -166,8 +167,14 @@ frontend/
     │   ├── feng-shui-compass-svg/
     │   │   ├── feng-shui-compass-svg.vue        # 罗盘 SVG 主组件
     │   │   ├── data/                            # 罗盘静态数据
-    │   │   ├── themes/                          # 罗盘主题配置
-    │   │   └── types/                           # 罗盘类型定义
+    │   │   ├── themes/                          # 罗盘主题配置（5种主题配置）
+    │   │   ├── types/                           # 罗盘类型定义
+    │   │   └── Explanation/                     # 宫位解释 JSON 数据
+    │   │       ├── compass_explanation_standard.json       # 标准罗盘宫位解释
+    │   │       ├── polygon_explanation_standard.json       # 多边形主题宫位解释
+    │   │       ├── circle_explanation_standard.json        # 圆形主题宫位解释
+    │   │       ├── dark_explanation_standard.json          # 暗黑主题宫位解释
+    │   │       └── simple_explanation_standard.json        # 简洁主题宫位解释
     │   │
     │   ├── icons/
     │   │   ├── IconCommunity.vue                # 社区图标
@@ -289,11 +296,13 @@ frontend/
     │   ├── crsUtils.js                          # CRS 工具
     │   ├── drawTransitRoute.ts                  # 公交路径绘制
     │   ├── driveXmlParser.ts                    # 驾车 XML 解析
+    │   ├── explanationLookup.ts                 # 罗盘宫位解释查询引擎（精确映射 + 回退策略）
     │   ├── index.js                             # utils 聚合导出
     │   ├── labelValidator.ts                    # 标注内容校验
     │   ├── layerExportService.js                # 图层导出服务
     │   ├── loading.js                           # 全局 loading 控制
     │   ├── loadTiandituSdk.js                   # 天地图 SDK 加载
+    │   ├── themeExplanationMapper.ts            # 罗盘主题→解释数据映射器（主题识别与标准化导入）
     │   ├── transitRouteBuilder.js               # 路线构建器
     │   ├── urlCrypto.js                         # URL 编解码辅助
     │   ├── userLocationContext.js               # 用户定位上下文
@@ -331,19 +340,34 @@ frontend/
 
 ## 近期架构更新（重点）
 
-### 1) TOC 与行政区划统一
+### 1) 罗盘宫位解释系统（v3.0.6 新增）
+
+- **标准化解释数据**：5种主题各配置独立的 JSON 解释库，采用统一的 schema（category/title/meaning）
+- **精确查询引擎**：新增 `explanationLookup.ts` 实现分层精确匹配（sectionKey + palaceName）与多级回退
+- **主题映射器**：新增 `themeExplanationMapper.ts` 负责主题识别、标准化 JSON 导入、缺失兜底
+- **交互面板**：新增 `PalaceExplanationPanel.vue` 显示点击宫位的完整解释，支持 5种主题样式
+- **智能高亮**：罗盘点击时渲染高亮扇区，同时弹出解释面板，交互流畅无阻塞
+
+### 2) 罗盘性能优化（v3.0.6 重构）
+
+- **延迟初始化**：默认不创建向量图层，仅当用户启用或 URL 携带 `cs` 参数时才按需创建
+- **默认位置无效**：将默认经纬度改为 NaN，避免页面加载时不必要的渲染与计算开销
+- **放置模式修复**：支持在「地图点选定位」模式下，点击地图直接设置罗盘中心
+- **多字宫位完整显示**：修复了三字宫位名称只显示第一个字的 bug，改用 join() 完整拼接
+
+### 3) TOC 与行政区划统一
 
 - 行政区图层已并入主 TOC 树（不再单独维护一套面板逻辑）
 - `DistrictManager.ts` 负责边界加载与图层元数据同步
 - `useTOCStore.ts` + `useLayerStore.ts` 协同生成行政区目录节点
 
-### 2) TOC 协议层中心化
+### 4) TOC 协议层中心化
 
 - `src/composables/map/toc/protocol.js` 统一管理命令与格式
 - `menu/commandDispatcher.js` 负责菜单命令到事件映射
 - `actions/contextActionManager.js` 负责事件落地执行
 
-### 3) MapContainer 最小外壳化
+### 5) MapContainer 最小外壳化
 
 - 地图核心能力通过 composables/features 模块拆分
 - 组件职责以“编排 + 暴露 API”为主
@@ -369,7 +393,7 @@ MIT
 
 ---
 
-最后更新：2026-04-28
+最后更新：2026-04-30
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -389,6 +413,32 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.0.6 (2026-04-30)
+#### 🧭 罗盘宫位解释系统与性能优化
+* **宫位解释架构升级**：
+  * 新增 `src/utils/explanationLookup.ts`，实现分层精确查询（按 sectionKey + palaceName 精确匹配）与多级回退策略（universalQuery/generateDefaultExplanation），确保所有宫位都有解释显示。
+  * 新增 `src/utils/themeExplanationMapper.ts`，负责主题识别（根据 config.info 推导）、标准化 JSON 优先导入、缺失时自动兜底，完整支持 5 种主题映射。
+  * 新增 `src/components/PalaceExplanationPanel.vue`，渲染点击宫位的风水解释面板（支持 5 种主题样式，包含完整的 UI 交互与关闭逻辑）。
+  * 新增 5 个标准化 JSON 解释库：`compass_explanation_standard.json`、`polygon_explanation_standard.json`、`circle_explanation_standard.json`、`dark_explanation_standard.json`、`simple_explanation_standard.json`，每个采用统一的 { category, title, meaning } schema。
+  * 新增 `src/utils/DATA_FORMAT_SPECIFICATION.md`，规范宫位解释 JSON 的数据结构与扩展方式。
+* **罗盘性能重构**：
+  * 修改 `src/stores/useCompassStore.ts`，默认位置改为 `NaN`（无有效值），避免页面加载时不必要的默认罗盘渲染。
+  * 修改 `src/services/CompassManager.ts`：
+    - `ensureVectorLayer()` 延迟创建逻辑，仅当启用且为 vector 模式时才创建图层。
+    - `bindStoreWatchers()` 新增 watch，在 enabled && mode === 'vector' 时触发懒创建。
+    - `handleMapSingleClick` 分支支持放置模式（placementMode=true 时直接设置位置）与宫位选中（非放置模式时解析宫位并触发高亮）。
+  * 修改 `src/components/PalaceExplanationPanel.vue`，宫位名称拼接改用 `join('')` 而非仅取首字，完整支持三字及以上宫位标签。
+* **交互改进**：
+  * 修改 `src/stores/useCompassStore.ts` 的 `setSelectedPalace()` 与相关 action，支持点击宫位后自动渲染高亮扇区。
+  * 修改 `setPosition()` 逻辑，移动罗盘时自动清除之前的选中状态，避免弹窗漂移。
+* **文档完善**：
+  * 更新 `frontend/README.md` 的目录结构与版本记录。
+* **构建验证**：所有修改文件均通过 TypeScript 静态检查，无编译错误。
+* **关键特性**：
+  * 罗盘默认不加载（cs=0），仅用户主动启用或分享链接带参数时才渲染。
+  * 宫位点击与选中的高亮、解释显示完全解耦，互不干扰，地图 click 事件保持原有逻辑不变。
+  * 支持灵活扩展：新增宫位解释只需更新 JSON 文件，无需修改代码。
 
 ### V2.8.8 (2026-04-17)
 #### 🌲 ParentId 驱动的上传层次结构实现 + TOC 协议层中心化

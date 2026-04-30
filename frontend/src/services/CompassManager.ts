@@ -311,10 +311,13 @@ export class CompassManager {
      * 如果图层已存在则直接返回
      */
     private ensureVectorLayer(): void {
+        // 延迟创建：仅当启用且为 vector 模式时才创建图层，避免默认创建带来的性能负担
         if (this.layer) return;
+        if (!this.store.enabled || this.store.mode !== 'vector') return;
 
         this.source = new VectorSource();
-        this.feature = new Feature<Point>(new Point(fromLonLat([this.store.position.lng, this.store.position.lat])));
+        // 如果当前没有有效位置，先创建空要素，后续由 syncFeatureGeometry 填充几何信息
+        this.feature = new Feature<Point>();
         this.source.addFeature(this.feature);
 
         this.layer = new VectorLayer({
@@ -325,7 +328,7 @@ export class CompassManager {
             updateWhileAnimating: true,
             updateWhileInteracting: true,
             zIndex: 1205,
-            visible: true
+            visible: Boolean(this.store.enabled && this.store.mode === 'vector')
         });
 
         this.map.addLayer(this.layer);
@@ -445,10 +448,32 @@ export class CompassManager {
 
         this.stopHandles.push(
             watch(
+                () => this.store.enabled && this.store.mode === 'vector',
+                (active) => {
+                    if (active) {
+                        this.ensureVectorLayer();
+                    }
+                },
+                { immediate: true }
+            )
+        );
+
+        this.stopHandles.push(
+            watch(
                 () => this.store.cid,
                 () => {
                     this.requestRender();
                 }
+            )
+        );
+
+        this.stopHandles.push(
+            watch(
+                () => this.store.selectedPalace,
+                () => {
+                    this.requestRender();
+                },
+                { deep: true }
             )
         );
     }
@@ -504,18 +529,18 @@ export class CompassManager {
      * 处理地图单击事件（放置模式）
      * 当处于放置模式时，将地图点击位置转换为经纬度并保存到状态存储
      */
-    private handleMapSingleClick = (event: MouseEvent): void => {
-        if (!this.store.enabled || this.store.mode !== 'vector' || !this.store.placementMode) return;
+    // private handleMapSingleClick = (event: MouseEvent): void => {
+    //     if (!this.store.enabled || this.store.mode !== 'vector' || !this.store.placementMode) return;
 
-        const coordinate = this.map.getEventCoordinate(event);
-        if (!Array.isArray(coordinate) || coordinate.length < 2) return;
+    //     const coordinate = this.map.getEventCoordinate(event);
+    //     if (!Array.isArray(coordinate) || coordinate.length < 2) return;
 
-        const [lng, lat] = toLonLat(coordinate);
-        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    //     const [lng, lat] = toLonLat(coordinate);
+    //     if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
 
-        this.store.setPosition(lng, lat);
-        this.scheduleUrlSync();
-    };
+    //     this.store.setPosition(lng, lat);
+    //     this.scheduleUrlSync();
+    // };
 
     /**
      * 更新放置模式下的鼠标光标样式
@@ -677,6 +702,84 @@ export class CompassManager {
         return radiusPx;
     }
 
+// 在 CompassManager 类中添加/修改以下代码
+
+    private handleMapSingleClick = (event: MouseEvent): void => {
+        if (!this.store.enabled || this.store.mode !== 'vector') return;
+
+        // 如果处于放置模式：直接把点击位置设置为罗盘中心（经纬度）
+        if (this.store.placementMode) {
+            const coordinate = this.map.getEventCoordinate(event);
+            if (!Array.isArray(coordinate) || coordinate.length < 2) return;
+            const [lng, lat] = toLonLat(coordinate);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+            this.store.setPosition(lng, lat);
+            this.scheduleUrlSync();
+            return;
+        }
+
+        // 非放置模式：尝试解析点击是否落在罗盘内部并选中宫位
+        const pixel = this.map.getEventPixel(event);
+        if (!pixel) return;
+
+        const geometry = this.feature?.getGeometry() as Point | undefined;
+        const centerCoord = geometry?.getCoordinates?.();
+        if (!Array.isArray(centerCoord) || centerCoord.length < 2) return;
+
+        const centerPixel = this.map.getPixelFromCoordinate(centerCoord as [number, number]);
+        if (!Array.isArray(centerPixel) || centerPixel.length < 2) return;
+
+        const dx = pixel[0] - centerPixel[0];
+        const dy = pixel[1] - centerPixel[1];
+        const distance = Math.hypot(dx, dy);
+
+        const radiusMeters = Number(this.store.physicalRadiusMeters || 10000);
+        const radiusPx = this.samplePixelRadius(centerCoord as [number, number], radiusMeters);
+        const config = this.store.vectorRenderConfig;
+        const layers = toLayerArray(config?.data);
+        if (!layers.length || !Number.isFinite(radiusPx)) return;
+
+        const configWidth = Number(config?.compassSize?.width || BASE_CONFIG_SIZE);
+        const tianChiRatio = clamp(Number(config?.compassSize?.tianChiRadius || configWidth * 0.1) / configWidth, 0.06, 0.22);
+        const tianChiRadius = radiusPx * tianChiRatio;
+        const contentOuterRadius = (config?.isShowScale !== false) ? radiusPx * 0.82 : radiusPx * 0.95;
+        const layerBand = (contentOuterRadius - tianChiRadius) / Math.max(1, layers.length);
+
+        if (distance < tianChiRadius || distance > contentOuterRadius) {
+            this.store.setSelectedPalace(null);
+            return;
+        }
+
+        const layerIndex = Math.floor((distance - tianChiRadius) / layerBand);
+        const targetLayer = layers[layerIndex];
+        if (!targetLayer) return;
+
+        const rotationRad = (normalizeAngle(Number(this.store.rotation || 0)) * Math.PI) / 180;
+        let angle = Math.atan2(dy, dx) - rotationRad;
+
+        const startOffset = (Number(targetLayer.startAngle || 0) * Math.PI) / 180;
+        angle = (angle + Math.PI / 2 - startOffset) % (Math.PI * 2);
+        if (angle < 0) angle += Math.PI * 2;
+
+        const segmentCount = Array.isArray(targetLayer.data) ? targetLayer.data.length : 1;
+        const segmentIndex = Math.floor((angle / (Math.PI * 2)) * segmentCount);
+
+        const palaceData = Array.isArray(targetLayer.data)
+            ? (targetLayer.data[segmentIndex] ?? '')
+            : (targetLayer.data ?? '');
+
+        // 把 coord 规范为经纬度（lon, lat），便于弹窗定位与外部使用
+        const clickedCoord = this.map.getCoordinateFromPixel(pixel);
+        const lonLat = Array.isArray(clickedCoord) && clickedCoord.length >= 2 ? toLonLat(clickedCoord) : null;
+
+        this.store.setSelectedPalace({
+            layerIndex,
+            segmentIndex,
+            data: palaceData,
+            coord: lonLat || []
+        });
+    };
+
     // 封装一个函数，判断指南针圆是否与当前视图相交，以优化渲染性能
     private isCompassVisibleInView(
         centerPixel: [number, number],
@@ -826,13 +929,25 @@ export class CompassManager {
                     context.arc(0, 0, outerR, 0, Math.PI * 2);
                     context.stroke();
 
-                    // Segment dividers.
+                    // Segment dividers and highlight.
+                    const selected = this.store.selectedPalace;
                     for (let i = 0; i < segmentCount; i += 1) {
                         const angle = -Math.PI / 2 + startOffset + (i * Math.PI * 2) / segmentCount;
                         const sx = Math.cos(angle) * innerR;
                         const sy = Math.sin(angle) * innerR;
                         const ex = Math.cos(angle) * outerR;
                         const ey = Math.sin(angle) * outerR;
+
+                        if (selected && selected.layerIndex === layerIndex && selected.segmentIndex === i) {
+                            context.save();
+                            context.fillStyle = 'rgba(255, 215, 0, 0.4)';
+                            context.beginPath();
+                            context.arc(0, 0, outerR, angle, angle + (Math.PI * 2) / segmentCount);
+                            context.arc(0, 0, innerR, angle + (Math.PI * 2) / segmentCount, angle, true);
+                            context.closePath();
+                            context.fill();
+                            context.restore();
+                        }
 
                         context.beginPath();
                         context.moveTo(sx, sy);
