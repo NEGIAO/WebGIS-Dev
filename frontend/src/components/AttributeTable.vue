@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     gap: 10px;
     padding: 0 12px;
-    background: linear-gradient(120deg, rgba(33, 126, 72, 0.92), rgba(20, 96, 56, 0.9));
+    background: linear-gradient(120deg, rgba(36, 129, 35, 0.755), rgba(20, 96, 55, 0.705));
     color: #f4fff8;
     user-select: none;
     cursor: grab;
@@ -690,7 +690,7 @@ onBeforeUnmount(() => {
     top: 0;
     z-index: 2;
     border-bottom: 1px solid rgba(75, 121, 95, 0.2);
-    background: #2b8a56;
+    background: #0c9b4dc7;
     color: #fff;
     font-weight: 700;
     font-size: 12px;

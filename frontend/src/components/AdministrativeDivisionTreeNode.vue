@@ -135,7 +135,7 @@ function emitSelect(payload) {
 .expand-button {
     border: none;
     background: transparent;
-    color: #93b8a6;
+    color: #d2c9c9;
     cursor: pointer;
     border-radius: 4px;
 }

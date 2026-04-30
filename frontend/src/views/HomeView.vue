@@ -1136,8 +1136,8 @@ onMounted(async () => {
     bottom: 16px;
     width: 320px;
     max-height: 42vh;
-    background: rgba(30, 120, 56, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(300deg, #90b79ead, #1ea953b4);
+    border: 2px solid rgba(192, 200, 191, 0.377);
     border-radius: 12px;
     color: #fff;
     z-index: 1200;

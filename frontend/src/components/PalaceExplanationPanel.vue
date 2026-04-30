@@ -326,7 +326,7 @@ $feng-shui-green: #2d5016;
 .palace-explanation-panel {
   position: relative;
   z-index: 1;
-  background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(26, 26, 46, 0.98) 100%);
+  background: linear-gradient(135deg, rgba(26, 46, 30, 0.744) 0%, rgba(26, 26, 46, 0.832) 100%);
   border: 2px solid $feng-shui-gold;
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),

@@ -128,7 +128,7 @@ watch(
 
     height: 80%;
 
-    background: rgba(12, 45, 28, 0.88);
+    background: linear-gradient(#59b27edb,#0f7938c9);
     border: 1px solid rgba(92, 198, 150, 0.5);
     box-shadow: 6px 0 22px rgba(0, 0, 0, 0.25);
 
@@ -153,7 +153,7 @@ watch(
     font-size: 15px;
     font-weight: 700;
     /* 标题：亮绿色 */
-    color: #edfff3;
+    color: #d6e6db;
 }
 
 .close-button {
@@ -162,14 +162,14 @@ watch(
     border: none;
     border-radius: 6px;
     /* 关闭按钮背景：暗绿 */
-    background: rgba(110, 168, 134, 0.22);
+    background: rgba(17, 95, 49, 0.22);
     color: #e0f7e9;
     cursor: pointer;
 }
 
 .close-button:hover {
     /* 悬停：暗红绿色（更高级） */
-    background: rgba(188, 70, 70, 0.58);
+    background: rgba(122, 139, 128, 0.849);
 }
 
 .panel-search-wrap {
@@ -182,7 +182,7 @@ watch(
     /* 输入框边框：青绿色 */
     border: 1px solid rgba(100, 190, 142, 0.52);
     /* 输入框背景：深绿 */
-    background: rgba(10, 38, 20, 0.85);
+    background: rgba(255, 255, 255, 0.77);
     color: #d8f9e6;
     border-radius: 8px;
     padding: 0 10px;
