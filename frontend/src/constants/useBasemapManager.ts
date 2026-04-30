@@ -856,7 +856,16 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: "custom",
         group: '自定义',
         createSource: () => new XYZ({
-            url: 'https://negiao-webgis.hf.space/api/tile/{z}/{x}/{y}'
+            url: 'https://negiao-webgis.hf.space/proxy/mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
+        })
+    },
+    {
+        id:'ships66',
+        name:"船舶网",
+        category:"custom",
+        group:'自定义',
+        createSource: () => new XYZ({
+            url: 'https://negiao-webgis.hf.space/tiles/ships66/{z}/{x}/{y}.png'
         })
     },
     // 待修复
@@ -961,6 +970,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'gd_basic_farmland_preset', label: '广东基本农田', stack: ['imagery_tianditu', 'theme_gd_basic_farmland_wms', 'label_tianditu'] },
 
     // --- Windy 气象系列 ---
+    { id: 'ship66_preset', label: '船舶网', stack: ['ships66'] },
     { id: 'windy_preset', label: 'Windy户外', stack: ['theme_windy'] },
     { id: 'windy2_preset', label: 'Windy冬季', stack: ['theme_windy2'] },
     { id: 'windy_outer_preset', label: 'Windy轮廓', stack: ['theme_windy_outer'] },
@@ -988,7 +998,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     // 8. 其他与自定义
     // ==========================================
     { id: 'vector_geoq_gray_preset', label: 'GeoQ灰', stack: ['vector_geoq_gray'] },
-    { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] }
+    { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
 ];
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

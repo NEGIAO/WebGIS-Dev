@@ -20,7 +20,7 @@ from api.proxy import router as proxy_router, build_http_client
 from api.external_proxy import router as external_proxy_router
 from api.statistics import router as statistics_router
 from api.location import router as location_router
-from api.auth import init_auth_storage, require_api_access, router as auth_router
+from api.auth import init_auth_storage, router as auth_router
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router
@@ -125,152 +125,6 @@ app.include_router(agent_chat_router)
 logger.info("已注册 Agent 对话路由")
 
 
-# ==================== 通用流式代理 ====================
-# =====================================================
-#  HTTP 代理，可以代理任意上游资源，前端通过构造特定的 URL 来访问不同的服务（如瓦片服务、外部 API 等）。
-# Proxy/proxy
-PROXY_HOP_BY_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-}
-
-PROXY_PASSTHROUGH_HEADERS = {
-    "accept-ranges",
-    "cache-control",
-    "content-disposition",
-    "content-encoding",
-    "content-length",
-    "content-range",
-    "content-type",
-    "etag",
-    "expires",
-    "last-modified",
-    "vary",
-}
-
-PROXY_DEFAULT_REQUEST_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "*/*",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-}
-
-def _build_proxy_target_url(target_url: str, query: str) -> str:
-    normalized_target = str(target_url or "").strip().lstrip("/")
-    if not normalized_target:
-        raise HTTPException(status_code=400, detail="target_url 不能为空")
-
-    # 约定：缺省协议统一补全为 https://，并允许调用方显式传入 http/https。
-    if normalized_target.startswith(("http://", "https://")):
-        upstream_url = normalized_target
-    else:
-        upstream_url = f"https://{normalized_target}"
-
-    compact_query = str(query or "").lstrip("?")
-    if compact_query:
-        glue = "&" if "?" in upstream_url else "?"
-        upstream_url = f"{upstream_url}{glue}{compact_query}"
-
-    return upstream_url
-
-def _build_proxy_request_headers(request: Request) -> Dict[str, str]:
-    headers = dict(PROXY_DEFAULT_REQUEST_HEADERS)
-
-    # 保留关键请求头，增强对上游服务的兼容性。
-    for key in ("Accept", "Accept-Language", "Referer", "Origin", "Range"):
-        incoming_value = request.headers.get(key)
-        if incoming_value:
-            headers[key] = incoming_value
-
-    return headers
-
-
-@app.get("/proxy/{target_url:path}")
-async def universal_stream_proxy(target_url: str, request: Request):
-    """
-    通用流式代理：将 /proxy/{target_url:path} 代理到任意上游 HTTP(S) 资源。
-
-    使用方式示例：
-    - /proxy/services.arcgisonline.com/ArcGIS/rest/services/.../tile/3/4/5
-    - /proxy/mt0.google.com/vt?lyrs=s&x=6&y=7&z=4
-    """
-    upstream_url = _build_proxy_target_url(target_url, request.url.query)
-    proxy_request_headers = _build_proxy_request_headers(request)
-
-    shared_client = getattr(app.state, "http_client", None)
-    fallback_client = None
-    client = shared_client
-
-    if client is None:
-        fallback_client = httpx.AsyncClient(follow_redirects=True)
-        client = fallback_client
-
-    upstream_request = client.build_request(
-        "GET",
-        upstream_url,
-        headers=proxy_request_headers,
-    )
-
-    try:
-        upstream_response = await client.send(upstream_request, stream=True)
-    except httpx.TimeoutException:
-        if fallback_client is not None:
-            await fallback_client.aclose()
-        return JSONResponse(
-            status_code=504,
-            content={
-                "detail": "代理请求超时",
-                "upstream": upstream_url,
-            },
-            headers={"X-Proxy-Status": "TIMEOUT"},
-        )
-    except httpx.HTTPError as exc:
-        if fallback_client is not None:
-            await fallback_client.aclose()
-        return JSONResponse(
-            status_code=502,
-            content={
-                "detail": "代理请求失败",
-                "upstream": upstream_url,
-                "error": str(exc),
-            },
-            headers={"X-Proxy-Status": "UPSTREAM_ERROR"},
-        )
-
-    response_headers: Dict[str, str] = {}
-    for key, value in upstream_response.headers.items():
-        lower_key = key.lower()
-        if lower_key in PROXY_HOP_BY_HOP_HEADERS:
-            continue
-        if lower_key in PROXY_PASSTHROUGH_HEADERS:
-            response_headers[key] = value
-
-    proxy_status = "SUCCESS" if upstream_response.status_code < 400 else "UPSTREAM_ERROR"
-    response_headers["X-Proxy-Status"] = proxy_status
-
-    background_tasks = BackgroundTasks()
-    background_tasks.add_task(upstream_response.aclose)
-    if fallback_client is not None:
-        background_tasks.add_task(fallback_client.aclose)
-
-    return StreamingResponse(
-        upstream_response.aiter_raw(),
-        status_code=upstream_response.status_code,
-        headers=response_headers,
-        background=background_tasks,
-    )
-# =====================================================
-# ==================== 通用流式代理 ====================
 # --- 功能：健康检查 ---
 @app.get("/")
 @app.get("/health")
@@ -282,6 +136,60 @@ async def health_check():
 # 返回后端服务的概览信息和核心端点目录，方便前端调试和开发者了解 API 结构。
 @app.get("/api/info")
 async def get_api_info():
+    """
+    功能：动态扫描全量接口并提取函数注释。
+    """
+    api_list = []
+    
+    # 遍历 FastAPI 注册的所有路由
+    for route in app.routes:
+        # 确保是普通的 API 路由（排除静态文件或重定向路由）
+        if hasattr(route, "endpoint") and hasattr(route, "path"):
+            # 提取函数的 docstring (注释)
+            # .strip() 用于去除首尾换行，split('\n')[0] 只取注释的第一行作为简述
+            description = (route.endpoint.__doc__ or "暂无说明").strip().split('\n')[0]
+            
+            # 过滤掉一些不需要展示的系统级接口
+            if route.path in ["/openapi.json", "/docs", "/redoc"]:
+                continue
+                
+            methods = list(route.methods - {"HEAD", "OPTIONS"}) if route.methods else []
+            
+            api_list.append({
+                "path": route.path,
+                "methods": methods,
+                "description": description
+            })
+
+    # 按照路径排序，方便查看
+    api_list.sort(key=lambda x: x["path"])
+
+    return {
+        "name": "WebGIS Backend",
+        "version": "0.1.0",
+        "description": "WebGIS 后端 API 服务",
+        "total_endpoints": len(api_list),
+        "endpoints": api_list
+    }
+    """
+    功能：动态返回后端服务概览与全量端点目录。
+    """
+    url_list = []
+    # 遍历 FastAPI 注册的所有路由
+    for route in app.routes:
+        # 排除静态资源路由和重复的路由
+        if hasattr(route, "path") and hasattr(route, "methods"):
+            # 也可以在这里过滤掉不想展示给前端的敏感接口，比如 admin
+            methods = ", ".join(route.methods)
+            url_list.append(f"[{methods}] {route.path}")
+
+    return {
+        "name": "WebGIS Backend",
+        "version": "0.1.0",
+        "description": "WebGIS 后端 API 服务",
+        "total_endpoints": len(url_list),
+        "endpoints": sorted(url_list)  # 排序后更易读
+    }
     """
     功能：返回后端服务概览与核心端点目录。
 
