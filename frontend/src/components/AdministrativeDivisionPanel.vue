@@ -1,37 +1,54 @@
 <template>
-    <transition name="district-panel-fade">
-        <section v-if="visible" class="district-panel" aria-label="行政区划面板">
-            <header class="panel-header">
-                <h3 class="panel-title">行政区划</h3>
-                <button class="close-button" type="button" aria-label="关闭行政区划面板" @click="emit('close')">×</button>
+    <transition name="eco-panel-fade">
+        <section v-if="visible" class="eco-district-panel" aria-label="行政区划面板">
+            <!-- 头部：鲜艳绿色背景 -->
+            <header class="eco-header">
+                <div class="header-left">
+                    <span class="header-icon">🗺️</span>
+                    <h3 class="eco-title">行政区划</h3>
+                </div>
+                <button class="eco-close-btn" type="button" @click="emit('close')">×</button>
             </header>
 
-            <div class="panel-search-wrap">
-                <input v-model.trim="searchKeyword" class="panel-search" type="text" placeholder="输入省市区名称或 adcode"
-                    autocomplete="off" />
+            <!-- 搜索区 -->
+            <div class="eco-search-section">
+                <div class="search-input-wrapper">
+                    <input v-model.trim="searchKeyword" class="eco-input" type="text" placeholder="搜索省市区或 adcode..."
+                        autocomplete="off" />
+                    <span class="search-icon">🔍</span>
+                </div>
             </div>
 
-            <div class="panel-meta">
-                <span v-if="tocStore.districtTreeLoading">行政区数据加载中...</span>
-                <span v-else-if="tocStore.districtTreeError">行政区数据加载失败</span>
-                <span v-else>节点总数 {{ tocStore.districtTreeTotalNodeCount }}，匹配 {{ matchedNodeCount }}</span>
+            <!-- 数据统计：浅绿色胶囊 -->
+            <div class="eco-meta-bar">
+                <div v-if="tocStore.districtTreeLoading" class="eco-status-tag loading">数据加载中...</div>
+                <div v-else-if="tocStore.districtTreeError" class="eco-status-tag error">加载失败</div>
+                <div v-else class="eco-stats">
+                    <span class="stat-item">总数: {{ tocStore.districtTreeTotalNodeCount }}</span>
+                    <span class="stat-divider"></span>
+                    <span class="stat-item">匹配: {{ matchedNodeCount }}</span>
+                </div>
             </div>
 
-            <div class="panel-body">
-                <div v-if="tocStore.districtTreeLoading" class="panel-loading">正在读取 adcode 树...</div>
+            <!-- 树形内容区 -->
+            <div class="eco-panel-body">
+                <div v-if="tocStore.districtTreeLoading" class="eco-loading">
+                    <div class="spinner"></div>
+                    <p>正在读取 adcode 树...</p>
+                </div>
 
-                <div v-else-if="tocStore.districtTreeError" class="panel-error">
+                <div v-else-if="tocStore.districtTreeError" class="eco-error-box">
                     <p>{{ tocStore.districtTreeError }}</p>
-                    <button type="button" class="retry-button" @click="tocStore.loadDistrictTree(BASE_URL, true)">重试</button>
+                    <button type="button" class="eco-retry-btn" @click="tocStore.loadDistrictTree(BASE_URL, true)">重试</button>
                 </div>
 
                 <template v-else>
-                    <ul v-if="filteredTreeData.length" class="tree-root">
+                    <ul v-if="filteredTreeData.length" class="eco-tree-root">
                         <AdministrativeDivisionTreeNode v-for="node in filteredTreeData"
                             :key="`${node.value}_${node.label}`" :node="node" :level="0" :auto-expand="autoExpand"
                             :selected-adcode="selectedAdcode" @select="handleNodeSelect" />
                     </ul>
-                    <div v-else class="panel-empty">没有匹配到行政区节点</div>
+                    <div v-else class="eco-empty-state">没有匹配到行政区节点</div>
                 </template>
             </div>
         </section>
@@ -119,143 +136,186 @@ watch(
 </script>
 
 <style scoped>
-.district-panel {
+/* 整个面板：改为白底大圆角卡片 */
+.eco-district-panel {
     position: absolute;
-    left: 66px;
-    top: 12%;
-    bottom: 0;
-    width: 340px;
-
-    height: 80%;
-
-    background: linear-gradient(#59b27edb,#0f7938c9);
-    border: 1px solid rgba(92, 198, 150, 0.5);
-    box-shadow: 6px 0 22px rgba(0, 0, 0, 0.25);
-
-    border-radius: 0 14px 14px 0;
+    left: 80px; /* 避开左侧导航栏 */
+    top: 100px;
+    bottom: 40px;
+    width: 320px;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    border: 1px solid #e0eee0;
     z-index: 1060;
 }
 
-.panel-header {
+/* 头部：使用 #56AB56 鲜艳绿 */
+.eco-header {
+    background-color: #56AB56;
+    padding: 14px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+}
+
+.header-left {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 12px 12px 8px;
-    /* 底部边框：柔和绿色 */
-    border-bottom: 1px solid rgba(104, 192, 144, 0.32);
+    gap: 8px;
 }
 
-.panel-title {
+.eco-title {
     margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    /* 标题：亮绿色 */
-    color: #d6e6db;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
 }
 
-.close-button {
-    width: 24px;
-    height: 24px;
+.eco-close-btn {
+    width: 26px;
+    height: 26px;
     border: none;
-    border-radius: 6px;
-    /* 关闭按钮背景：暗绿 */
-    background: rgba(17, 95, 49, 0.22);
-    color: #e0f7e9;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
     cursor: pointer;
+    font-size: 18px;
+    line-height: 22px;
+    transition: 0.2s;
 }
 
-.close-button:hover {
-    /* 悬停：暗红绿色（更高级） */
-    background: rgba(122, 139, 128, 0.849);
+.eco-close-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
 }
 
-.panel-search-wrap {
-    padding: 10px 12px 0;
+/* 搜索框：圆润、浅绿色背景 */
+.eco-search-section {
+    padding: 16px 16px 8px;
 }
 
-.panel-search {
+.search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.eco-input {
     width: 100%;
-    height: 34px;
-    /* 输入框边框：青绿色 */
-    border: 1px solid rgba(100, 190, 142, 0.52);
-    /* 输入框背景：深绿 */
-    background: rgba(255, 255, 255, 0.77);
-    color: #d8f9e6;
-    border-radius: 8px;
-    padding: 0 10px;
+    height: 38px;
+    background: #f1f8f1;
+    border: 1px solid #d5e8d5;
+    border-radius: 12px;
+    padding: 0 35px 0 12px;
+    color: #2c3e50;
+    font-size: 13px;
     outline: none;
-    font-size: 13px;
+    transition: all 0.2s;
 }
 
-.panel-search:focus {
-    /* 聚焦高亮：亮青绿 */
-    border-color: rgba(68, 204, 128, 0.92);
+.eco-input:focus {
+    background: #ffffff;
+    border-color: #56AB56;
+    box-shadow: 0 0 0 3px rgba(86, 171, 86, 0.15);
 }
 
-.panel-meta {
-    min-height: 26px;
-    padding: 8px 12px 6px;
-    /* 辅助文字：浅绿 */
-    color: #b1d9c2;
-    font-size: 12px;
+.search-icon {
+    position: absolute;
+    right: 12px;
+    font-size: 14px;
+    pointer-events: none;
+    opacity: 0.5;
 }
 
-.panel-body {
+/* 统计条：浅绿色胶囊样式 */
+.eco-meta-bar {
+    padding: 4px 16px 12px;
+}
+
+.eco-stats {
+    background: #E9F5E9;
+    padding: 6px 14px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #468a46;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.stat-divider {
+    width: 1px;
+    height: 10px;
+    background: #c5dcc5;
+}
+
+/* 列表主体 */
+.eco-panel-body {
     flex: 1;
-    overflow: auto;
-    padding: 0 10px 12px;
+    overflow-y: auto;
+    padding: 0 12px 16px;
 }
 
-.panel-loading,
-.panel-empty,
-.panel-error {
-    margin-top: 12px;
-    color: #c1e6d2;
-    font-size: 13px;
+/* 自定义滚动条 */
+.eco-panel-body::-webkit-scrollbar {
+    width: 4px;
+}
+.eco-panel-body::-webkit-scrollbar-thumb {
+    background: #56AB56;
+    border-radius: 10px;
 }
 
-.panel-error p {
-    margin: 0 0 10px;
-    line-height: 1.5;
-}
-
-.retry-button {
-    border: 1px solid rgba(106, 196, 148, 0.55);
-    background: rgba(18, 66, 38, 0.5);
-    color: #e0ffe9;
-    border-radius: 8px;
-    height: 30px;
-    padding: 0 12px;
-    cursor: pointer;
-}
-
-.retry-button:hover {
-    background: rgba(22, 92, 48, 0.65);
-}
-
-.tree-root {
+.eco-tree-root {
+    list-style: none;
     margin: 0;
     padding: 0;
 }
 
-.district-panel-fade-enter-active,
-.district-panel-fade-leave-active {
-    transition: opacity 0.2s ease;
+/* 加载与重试样式 */
+.eco-loading {
+    padding: 40px 0;
+    text-align: center;
+    color: #88a088;
 }
 
-.district-panel-fade-enter-from,
-.district-panel-fade-leave-to {
+.eco-retry-btn {
+    background: #56AB56;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.eco-empty-state {
+    text-align: center;
+    color: #adc0ad;
+    padding: 40px 0;
+    font-size: 13px;
+}
+
+/* 动画效果：平滑上浮 */
+.eco-panel-fade-enter-active,
+.eco-panel-fade-leave-active {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.eco-panel-fade-enter-from,
+.eco-panel-fade-leave-to {
     opacity: 0;
+    transform: translateY(20px) scale(0.98);
 }
 
 @media (max-width: 900px) {
-    .district-panel {
-        left: 0;
-        width: min(82vw, 340px);
-        border-radius: 0 12px 12px 0;
+    .eco-district-panel {
+        left: 10px;
+        width: calc(100% - 20px);
     }
 }
 </style>

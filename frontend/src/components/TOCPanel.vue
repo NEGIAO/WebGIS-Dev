@@ -134,126 +134,94 @@
             </div>
         </div>
 
-        <div v-else-if="activeTab === 'draw'" class="panel-scroll">
-            <div class="card draw-card">
-                <div class="card-title">绘制工具</div>
-                <div class="draw-grid">
-                    <button
-                        v-for="tool in drawTools"
-                        :key="tool.value"
-                        class="draw-tool-btn"
-                        :class="{ active: selectedDrawTool === tool.value }"
-                        @click="activateDrawTool(tool.value)"
-                    >
-                        {{ tool.label }}
-                    </button>
-                </div>
-                <div class="actions-row">
-                    <button class="draw-op-btn draw-op-primary" @click="emit('interaction', 'ZoomToGraphics')">缩放图形</button>
-                    <button class="draw-op-btn draw-op-warning" @click="emit('interaction', 'Clear')">清空</button>
-                </div>
+<div v-else-if="activeTab === 'draw'" class="eco-panel-scroll">
+    <!-- 1. 核心绘图工具区 -->
+    <div class="eco-section">
+        <div class="section-header">
+            <span class="section-dot"></span>
+            <span class="section-title">基础绘图</span>
+        </div>
+        <div class="eco-draw-grid">
+            <button
+                v-for="tool in drawTools"
+                :key="tool.value"
+                class="eco-tool-pill"
+                :class="{ active: selectedDrawTool === tool.value }"
+                @click="activateDrawTool(tool.value)"
+            >
+                {{ tool.label }}
+            </button>
+        </div>
+        <div class="eco-actions-flex">
+            <button class="eco-btn-op primary" @click="emit('interaction', 'ZoomToGraphics')">全幅显示</button>
+            <button class="eco-btn-op warning" @click="emit('interaction', 'Clear')">清空画布</button>
+        </div>
+    </div>
 
-                <div class="coord-input-panel">
-                    <div class="card-title">坐标绘制点位</div>
-                    <div class="coord-input-grid">
-                        <input
-                            v-model.trim="coordInputLon"
-                            class="coord-input-field"
-                            type="text"
-                            placeholder="请输入经度（-180 ~ 180）"
-                            @keyup.enter="drawPointByCoordinates"
-                        />
-                        <input
-                            v-model.trim="coordInputLat"
-                            class="coord-input-field"
-                            type="text"
-                            placeholder="请输入纬度（-90 ~ 90）"
-                            @keyup.enter="drawPointByCoordinates"
-                        />
-                    </div>
-
-                    <div class="coord-crs-row">
-                        <label class="coord-crs-label">坐标系</label>
-                        <select v-model="coordInputCRS" class="coord-crs-select">
-                            <option value="wgs84">WGS-84</option>
-                            <option value="gcj02">GCJ-02</option>
-                        </select>
-                    </div>
-
-                    <div class="coord-input-actions">
-                        <button class="small-btn btn-accent" @click="drawPointByCoordinates">绘制点位</button>
-                        <button class="small-btn ghost" @click="clearCoordinateInput">清空输入</button>
-                    </div>
-
-                    <div v-if="coordInputError" class="coord-input-error">{{ coordInputError }}</div>
-
-                    <div class="coord-divider"></div>
-
-                    <div class="card-title">p 参数绘制点位</div>
-                    <div class="coord-input-grid">
-                        <input
-                            v-model.trim="coordInputP"
-                            class="coord-input-field"
-                            type="text"
-                            placeholder="请输入 p 参数"
-                            @keyup.enter="drawPointByPositionCode"
-                        />
-                    </div>
-                    <div class="coord-input-actions">
-                        <button class="small-btn btn-accent" :disabled="isDecodePBusy" @click="drawPointByPositionCode">
-                            {{ isDecodePBusy ? '解析中...' : '按 p 绘制' }}
-                        </button>
-                        <button class="small-btn ghost" @click="clearPositionCodeInput">清空 p</button>
-                    </div>
-                    <div v-if="coordInputPError" class="coord-input-error">{{ coordInputPError }}</div>
-                </div>
-
-                <div class="coord-input-panel geocode-tool-panel">
-                    <div class="card-title">地理编码工具</div>
-
-                    <div class="geocode-subtitle">地理编码（地址 -> 坐标）</div>
-                    <div class="coord-input-grid">
-                        <input
-                            v-model.trim="geocodeAddressInput"
-                            class="coord-input-field"
-                            type="text"
-                            placeholder="请输入地址信息（用于编码与标注）"
-                            @keyup.enter="drawPointByGeocodeAddress"
-                        />
-                        <input
-                            v-model.trim="geocodeCityInput"
-                            class="coord-input-field"
-                            type="text"
-                            placeholder="可选：城市限定（提升编码精度）"
-                            @keyup.enter="drawPointByGeocodeAddress"
-                        />
-                    </div>
-                    <div class="coord-input-actions">
-                        <button class="small-btn btn-accent" :disabled="isGeocodeBusy" @click="drawPointByGeocodeAddress">
-                            {{ isGeocodeBusy ? '编码中...' : '编码并绘制' }}
-                        </button>
-                        <button class="small-btn ghost" @click="clearGeocodeInput">清空地址</button>
-                    </div>
-
-                    <div class="coord-divider"></div>
-
-                    <div class="geocode-subtitle">逆地理编码（地图点选 -> 地址）</div>
-                    <div class="coord-input-actions single-action">
-                        <button class="small-btn btn-accent" @click="startReverseGeocodePick">地图点选逆编码并绘制</button>
-                    </div>
-                    <div class="geocode-tip">点击按钮后，请在地图中单击一个点，系统将自动逆地理编码并加入 TOC。</div>
-
-                    <div v-if="geocodeToolError" class="coord-input-error">{{ geocodeToolError }}</div>
-                </div>
+    <!-- 2. 精确坐标定位区 (合并了经纬度和 P 参数) -->
+    <div class="eco-section alt-bg">
+        <div class="section-header">
+            <span class="section-dot"></span>
+            <span class="section-title">坐标定位</span>
+        </div>
+        
+        <!-- 经纬度输入 -->
+        <div class="eco-input-group">
+            <div class="input-row">
+                <input v-model.trim="coordInputLon" class="eco-input" placeholder="经度" />
+                <input v-model.trim="coordInputLat" class="eco-input" placeholder="纬度" />
             </div>
-
-            <div class="hint draw-hint">
-                <div>鼠标事件</div>
-                <div>左键：选中/查看图层</div>
-                <div>右键：仅显示当前图层</div>
-                <div>地图右键：快速触发属性查询</div>
+            <div class="input-row compact">
+                <select v-model="coordInputCRS" class="eco-select">
+                    <option value="wgs84">WGS-84</option>
+                    <option value="gcj02">GCJ-02</option>
+                </select>
+                <button class="eco-btn-sm" @click="drawPointByCoordinates">绘制</button>
             </div>
         </div>
+
+        <div class="eco-divider"><span>OR</span></div>
+
+        <!-- P 参数输入 -->
+        <div class="eco-input-group">
+            <div class="input-row">
+                <input v-model.trim="coordInputP" class="eco-input" placeholder="请输入 P 参数" />
+                <button class="eco-btn-sm" :disabled="isDecodePBusy" @click="drawPointByPositionCode">
+                    {{ isDecodePBusy ? '...' : '解析' }}
+                </button>
+            </div>
+        </div>
+        <div v-if="coordInputError || coordInputPError" class="eco-error-msg">
+            {{ coordInputError || coordInputPError }}
+        </div>
+    </div>
+
+    <!-- 3. 地理编码工具 -->
+    <div class="eco-section">
+        <div class="section-header">
+            <span class="section-dot"></span>
+            <span class="section-title">地理编码</span>
+        </div>
+        <div class="eco-input-group">
+            <input v-model.trim="geocodeAddressInput" class="eco-input full" placeholder="输入地址..." />
+            <div class="input-row compact mt-8">
+                <input v-model.trim="geocodeCityInput" class="eco-input" placeholder="限定城市(可选)" />
+                <button class="eco-btn-sm" :disabled="isGeocodeBusy" @click="drawPointByGeocodeAddress">编码</button>
+            </div>
+        </div>
+        
+        <button class="eco-btn-reverse mt-12" @click="startReverseGeocodePick">
+            <span class="icon">📍</span> 地图点选逆编码
+        </button>
+    </div>
+
+    <!-- 4. 底部操作提示 (改用气泡感设计) -->
+    <div class="eco-hint-box">
+        <div class="hint-item"><span>左键</span> 选中要素</div>
+        <div class="hint-item"><span>右键</span> 独立显示</div>
+        <div class="hint-item"><span>地图右键</span> 属性查询</div>
+    </div>
+</div>
 
         <div v-else class="panel-scroll style-scroll">
             <div class="style-panel">
@@ -1151,6 +1119,223 @@ async function loadSharedResource(resource) {
 </script>
 
 <style scoped>
+
+/* 面板容器滚动 */
+.eco-panel-scroll {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* 分组标题样式 */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.section-dot {
+    width: 4px;
+    height: 14px;
+    background: #56AB56;
+    border-radius: 4px;
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #468a46;
+}
+
+/* 绘图工具网格：胶囊化 */
+.eco-draw-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.eco-tool-pill {
+    padding: 8px 4px;
+    border: 1px solid #e0eee0;
+    background: #fff;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.eco-tool-pill.active {
+    background: #56AB56;
+    color: #fff;
+    border-color: #56AB56;
+    box-shadow: 0 4px 10px rgba(86, 171, 86, 0.3);
+}
+
+/* 输入框组合样式 */
+.eco-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.input-row {
+    display: flex;
+    gap: 8px;
+}
+
+.input-row.compact .eco-input { width: 60%; }
+.input-row.compact .eco-btn-sm { flex: 1; }
+
+.eco-input {
+    background: #f9fbf9;
+    border: 1px solid #e8eee8;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+    outline: none;
+    transition: border 0.2s;
+    width: 100%;
+}
+
+.eco-input:focus {
+    border-color: #56AB56;
+}
+
+.eco-select {
+    background: #f9fbf9;
+    border: 1px solid #e8eee8;
+    border-radius: 10px;
+    font-size: 12px;
+    padding: 0 8px;
+    color: #555;
+}
+
+/* 按钮样式：对标截图中的圆润感 */
+.eco-btn-sm {
+    background: #56AB56;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 6px 16px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.eco-btn-reverse {
+    width: 100%;
+    padding: 10px;
+    background: #E9F5E9;
+    border: 1px dashed #56AB56;
+    border-radius: 12px;
+    color: #468a46;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+}
+/* 操作按钮行布局 */
+.eco-actions-flex {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+/* 基础按钮样式 */
+.eco-btn-op {
+    flex: 1;
+    padding: 10px 0;
+    border: none;
+    border-radius: 12px; /* 保持大圆角一致性 */
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* “全幅显示” - 采用你主题中的主绿 */
+.eco-btn-op.primary {
+    background-color: #56ab56b5;
+    border: #2b8a4b;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(86, 171, 86, 0.2);
+}
+
+.eco-btn-op.primary:hover {
+    background-color: #4a944a;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(86, 171, 86, 0.3);
+}
+
+/* “清空画布” - 采用柔和的橙黄色，避免过于突兀 */
+.eco-btn-op.warning {
+    background-color: #f8b60084; /* 暖色调的黄色 */
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(248, 181, 0, 0.2);
+}
+
+.eco-btn-op.warning:hover {
+    background-color: #e0a400;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(248, 181, 0, 0.3);
+}
+
+/* 按钮点击时的按下效果 */
+.eco-btn-op:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+}
+
+/* 分隔线 */
+.eco-divider {
+    text-align: center;
+    margin: 12px 0;
+    position: relative;
+}
+.eco-divider::before {
+    content: "";
+    position: absolute;
+    top: 50%; left: 0; right: 0;
+    height: 1.5px; background: #bfc7bfa2;
+}
+.eco-divider span {
+    position: relative;
+    background: #fff; /* 如果在 alt-bg 区域则设为该色 */
+    padding: 0 10px;
+    font-size: 10px;
+    color: #ccc;
+}
+
+/* 提示框 */
+.eco-hint-box {
+    background: #f5f8f5;
+    border-radius: 16px;
+    padding: 12px;
+    border: 1px solid #edf2ed;
+}
+
+.hint-item {
+    font-size: 11px;
+    color: #88a088;
+    line-height: 20px;
+}
+
+.hint-item span {
+    background: #56AB56;
+    color: white;
+    padding: 0 4px;
+    border-radius: 4px;
+    margin-right: 4px;
+    font-weight: bold;
+}
+
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+
 .toolbox-panel {
     height: 100%;
     display: flex;

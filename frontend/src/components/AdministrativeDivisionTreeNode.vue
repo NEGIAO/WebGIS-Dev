@@ -150,7 +150,7 @@ function emitSelect(payload) {
     min-width: 0;
     border: none;
     background: transparent;
-    color: #d9ede4;
+    color: #000000ae;
     border-radius: 6px;
     display: flex;
     align-items: center;
@@ -174,7 +174,7 @@ function emitSelect(payload) {
 
 .node-value {
     font-size: 11px;
-    color: #7ed9b8;
+    color: #109161;
     opacity: 0.9;
 }
 

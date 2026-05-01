@@ -858,7 +858,7 @@ onMounted(async () => {
                     class="weather-board-surface"
                 />
 
-                <transition name="query-panel-fade">
+                <!-- <transition name="query-panel-fade">
                     <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen" class="query-panel">
                         <div class="query-panel-header">
                             <div>
@@ -883,7 +883,43 @@ onMounted(async () => {
                             </div>
                         </div>
                     </div>
-                </transition>
+                </transition> -->
+<transition name="query-panel-fade">
+    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen" class="eco-query-panel">
+        <!-- 头部：使用你顶栏那样的鲜艳绿 -->
+        <div class="eco-header">
+            <div class="header-content">
+                <i class="icon-leaf">🍃</i>
+                <span class="eco-title">属性信息</span>
+            </div>
+            <button class="eco-close" @click="closeQueryPanel">×</button>
+        </div>
+
+        <div class="eco-body">
+            <!-- 统计小标签：模仿你用户面板的浅绿色调 -->
+            <div class="eco-stats">
+                <span class="eco-tag">绘制: {{ toolboxOverview.drawCount }}</span>
+                <span class="eco-tag">上传: {{ toolboxOverview.uploadCount }}</span>
+            </div>
+
+            <div class="eco-list-container">
+                <div
+                    v-for="([key, value], idx) in Object.entries(featureQueryResult || {})"
+                    :key="`${key}_${idx}`"
+                    class="eco-item"
+                >
+                    <div class="eco-key">{{ key }}</div>
+                    <div class="eco-val">{{ value }}</div>
+                </div>
+
+                <!-- 空状态 -->
+                <div v-if="Object.keys(featureQueryResult || {}).length === 0" class="eco-empty">
+                    未发现属性数据
+                </div>
+            </div>
+        </div>
+    </div>
+</transition>
 
                 <!-- 点击后按需加载的 Cesium 组件（外层包裹 div 解决 Vue 3 Fragment 的 v-show 穿透失效问题） -->
                 <div v-show="is3DMode && !isAccountPanelFullscreen" class="cesium-wrapper" style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
@@ -1129,105 +1165,143 @@ onMounted(async () => {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
-
-.query-panel {
+/* 面板主体 */
+.eco-query-panel {
     position: absolute;
-    left: 16px;
-    bottom: 16px;
-    width: 320px;
-    max-height: 42vh;
-    background: linear-gradient(300deg, #90b79ead, #1ea953b4);
-    border: 2px solid rgba(192, 200, 191, 0.377);
-    border-radius: 12px;
-    color: #fff;
-    z-index: 1200;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(8px);
+    left: 20px;
+    bottom: 20px;
+    width: 300px;
+    background: #ffffff;
+    border-radius: 20px; /* 大圆角，匹配导航栏风格 */
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    border: 1px solid #e0eee0;
+    z-index: 2000;
 }
 
-.query-panel-header {
+/* 头部：对标你的绿色顶栏 */
+.eco-header {
+    background-color: #56AB56; /* 匹配你截图顶栏的绿色 */
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+}
+
+.eco-title {
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 1px;
+}
+
+.header-content {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    gap: 8px;
 }
 
-.query-title {
-    font-size: 16px;
-    font-weight: 700;
-    line-height: 1.2;
-}
-
-.query-subtitle {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
-    margin-top: 2px;
-}
-
-.query-close {
+.eco-close {
+    background: rgba(255, 255, 255, 0.2);
     border: none;
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
-    font-size: 18px;
-    width: 28px;
-    height: 28px;
+    color: white;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     cursor: pointer;
+    line-height: 20px;
+    font-size: 16px;
+    transition: background 0.2s;
 }
 
-.query-close:hover {
-    background: rgba(255, 255, 255, 0.24);
+.eco-close:hover {
+    background: rgba(255, 255, 255, 0.4);
 }
 
-.query-panel-body {
-    padding: 10px 12px 12px;
+/* 内容区 */
+.eco-body {
+    padding: 16px;
+}
+
+/* 统计标签：对标你的 user_1 绿色胶囊样式 */
+.eco-stats {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.eco-tag {
+    background: #E9F5E9; /* 浅绿背景 */
+    color: #468a46;      /* 深绿文字 */
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid #d5e8d5;
+}
+
+/* 属性列表 */
+.eco-list-container {
+    max-height: 260px;
     overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* 自定义滚动条 */
+.eco-list-container::-webkit-scrollbar {
+    width: 4px;
+}
+.eco-list-container::-webkit-scrollbar-thumb {
+    background: #56AB56;
+    border-radius: 10px;
+}
+
+/* 属性单项 */
+.eco-item {
+    padding: 10px 0;
+    border-bottom: 1px dashed #eee;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
-.query-row {
-    display: grid;
-    grid-template-columns: 110px 1fr;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 7px 8px;
+.eco-item:last-child {
+    border-bottom: none;
 }
 
-.query-key {
-    color: rgba(255, 255, 255, 0.84);
-    font-size: 12px;
-    font-weight: 600;
+.eco-key {
+    font-size: 11px;
+    color: #88a088;
+    text-transform: uppercase;
+    font-weight: bold;
 }
 
-.query-val {
-    color: #fff;
-    font-size: 12px;
-    word-break: break-word;
+.eco-val {
+    font-size: 13px;
+    color: #333;
+    font-weight: 500;
+    word-break: break-all;
 }
 
-.query-empty {
+/* 空状态 */
+.eco-empty {
     text-align: center;
-    color: rgba(255, 255, 255, 0.8);
-    padding: 8px 0;
+    color: #adc0ad;
+    font-size: 12px;
+    padding: 20px 0;
 }
 
+/* 动画 */
 .query-panel-fade-enter-active,
 .query-panel-fade-leave-active {
-    transition: opacity 0.2s ease, transform 0.2s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .query-panel-fade-enter-from,
 .query-panel-fade-leave-to {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(20px) scale(0.95);
 }
-
 .side-panel-wrapper {
     width: 350px;
     flex-shrink: 0;
