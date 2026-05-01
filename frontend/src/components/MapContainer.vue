@@ -78,6 +78,7 @@ import {
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature
 } from '../composables/map';
+import { prioritizeTileSourceRequest } from '../composables/useTileSourceFactory';
 import {
     DEFAULT_BASEMAP_PRESET_ID,
     URL_LAYER_OPTIONS,
@@ -810,10 +811,10 @@ onMounted(async () => {
             }
         }
 
-        // ========== Phase 4: 等待底图充分利用网络后再应用 URL 参数 ==========
-        // 增加 200ms 延迟确保底图瓦片请求已充分发送到网络层
-        // 避免 URL 参数应用导致的视图变化打断底图加载
-        await new Promise(r => setTimeout(r, 200));
+        // ========== Phase 4: 立即应用 URL 参数（移除人为延迟） ==========
+        // 之前有短暂延迟以确保瓦片请求到达网络层，但为了保证底图请求
+        // 立即触发，这里移除任意人为延迟，改为依赖 prioritizeTileSourceRequest
+        // 来保证浏览器优先级。
 
         // ========== Phase 5: 应用延迟 URL 参数 ==========
         // [优先级] 底图加载完成后才应用 URL 参数
@@ -1072,10 +1073,10 @@ function initMap() {
             // ],
             layers: [
                 new TileLayer({
-                    source: new XYZ({
+                    source: prioritizeTileSourceRequest(new XYZ({
                         url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
                         maxZoom: 20
-                    })
+                    }))
                 })
             ],
             collapseLabel: '«',

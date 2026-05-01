@@ -217,11 +217,9 @@ export function createBasemapSelectionWatcher({
                 emitBaseLayersChange?.();
 
                 if (isAutoSwitchingLayer && mapInstanceRef?.value) {
-                    setTimeout(() => {
-                        if (mapInstanceRef?.value && typeof mapInstanceRef.value.updateSize === 'function') {
-                            mapInstanceRef.value.updateSize();
-                        }
-                    }, 50);
+                    if (mapInstanceRef?.value && typeof mapInstanceRef.value.updateSize === 'function') {
+                        mapInstanceRef.value.updateSize();
+                    }
                 }
             }
         });
@@ -238,99 +236,73 @@ export function createBasemapSelectionWatcher({
         if (!switchedLayer) return;
 
         // 创建 AbortController 用于验证过程中的中止
-        const controller = new AbortController();
-        ongoingValidations.set(val, controller);
+        // Start background validation: do not await – render first, validate later
+        (async () => {
+            const controller = new AbortController();
+            ongoingValidations.set(val, controller);
+            try {
+                const result = await validateBaseLayerSwitch?.(val, switchedLayer, validationTimeoutMs, controller.signal);
+                ongoingValidations.delete(val);
+                if (currentSeq !== switchSeq) return;
 
-        const result = await validateBaseLayerSwitch?.(val, switchedLayer, validationTimeoutMs, controller.signal);
-        ongoingValidations.delete(val);
-        if (currentSeq !== switchSeq) {
-            return;
-        }
+                if (result?.success) {
+                    clearLayerFailure(val);
+                    const optionLabel = getBasemapOptionLabel?.(val) || val;
+                    if (activeStack.length > 1) {
+                        message?.success?.(`已切换到${optionLabel}组合（${activeStack.join(' + ')}）`);
+                    } else {
+                        message?.success?.(`已成功切换到${optionLabel}底图`);
+                    }
+                    isAutoSwitchingLayer = false;
+                    return;
+                }
 
-        if (result?.success) {
-            clearLayerFailure(val);
-            const optionLabel = getBasemapOptionLabel?.(val) || val;
-            if (activeStack.length > 1) {
-                message?.success?.(`已切换到${optionLabel}组合（${activeStack.join(' + ')}）`);
-            } else {
-                message?.success?.(`已成功切换到${optionLabel}底图`);
-            }
-            isAutoSwitchingLayer = false;
-            return;
-        }
+                // Validation failed: mark failure and possibly fallback
+                const reason = result?.reason || '未知错误';
+                const failCount = markLayerFailure(val);
+                const isDefaultBaseLayer = val === defaultLayerId;
 
-        const reason = result?.reason || '未知错误';
-        const failCount = markLayerFailure(val);
-        const isDefaultBaseLayer = val === defaultLayerId;
+                if (failCount >= circuitBreakThreshold) {
+                    message?.error?.('当前网络异常，请尝试手动重试。可点击“重置链路”按钮。');
+                    const fallbackManager = createBaseLayerFallbackManager?.(val, true);
+                    const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
+                    if (nextFallbackOption && nextFallbackOption !== val) {
+                        isAutoSwitchingLayer = true;
+                        selectedLayerRef.value = nextFallbackOption;
+                        message?.info?.(`已自动切换至${nextFallbackOption}底图`);
+                    }
+                    return;
+                }
 
-        if (failCount >= circuitBreakThreshold) {
-            message?.error?.('当前网络异常，请尝试手动重试。可点击“重置链路”按钮。');
+                if (!isDefaultBaseLayer) {
+                    message?.warning?.(`切换到${val}底图失败：${reason}，请重新选择底图`);
+                    return;
+                }
 
-            const fallbackManager = createBaseLayerFallbackManager?.(val, true);
-            const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
-            if (nextFallbackOption && nextFallbackOption !== val) {
+                // Try fallback chain for default base layer
+                const fallbackManager = createBaseLayerFallbackManager?.(val, true);
+                const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
+                if (!nextFallbackOption) {
+                    message?.error?.('所有兜底底图均不可用，请检查网络或重新选择底图');
+                    return;
+                }
+
                 isAutoSwitchingLayer = true;
                 selectedLayerRef.value = nextFallbackOption;
                 message?.info?.(`已自动切换至${nextFallbackOption}底图`);
+            } catch (e) {
+                ongoingValidations.delete(val);
             }
-            return;
-        }
-
-        if (!isDefaultBaseLayer) {
-            message?.warning?.(`切换到${val}底图失败：${reason}，请重新选择底图`);
-            return;
-        }
-
-        /**
-         * [改进] 自动降级时也要验证
-         * 如果降级失败，继续降级到下一个底图
-         */
-        if (isAutoSwitchingLayer) {
-            // 降级中的验证失败，继续降级
-            const fallbackManager = createBaseLayerFallbackManager?.(val, isDefaultBaseLayer);
-            const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
-            if (nextFallbackOption && nextFallbackOption !== val) {
-                isAutoSwitchingLayer = true;
-                selectedLayerRef.value = nextFallbackOption;
-                message?.info?.(`${val}底图加载失败，已自动切换至${nextFallbackOption}底图`);
-                return;
-            }
-            isAutoSwitchingLayer = false;
-            message?.error?.('所有兜底底图均不可用，请检查网络或重新选择底图');
-            return;
-        }
-
-        message?.error?.(`${val}底图加载失败（${reason}），正在自动切换备用底图...`);
-        const fallbackManager = createBaseLayerFallbackManager?.(val, true);
-        const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
-
-        if (!nextFallbackOption) {
-            message?.error?.('所有兜底底图均不可用，请检查网络或重新选择底图');
-            return;
-        }
-
-        isAutoSwitchingLayer = true;
-        selectedLayerRef.value = nextFallbackOption;
-        message?.info?.(`已自动切换至${nextFallbackOption}底图`);
+        })();
     }
 
     function bindBasemapSelectionWatcher() {
+        // Immediate reaction to selection changes: do not debounce baseline basemap switches
         return watch(selectedLayerRef, (val, prevVal, onCleanup) => {
             clearSwitchTimer();
-
-            if (prevVal === undefined) {
-                switchSeq += 1;
-                void runLayerSwitch(val, prevVal, switchSeq);
-                return;
-            }
-
-            switchTimer = setTimeout(() => {
-                switchSeq += 1;
-                const currentSeq = switchSeq;
-                void runLayerSwitch(val, prevVal, currentSeq);
-                switchTimer = null;
-            }, switchDebounceMs);
-
+            switchSeq += 1;
+            const currentSeq = switchSeq;
+            void runLayerSwitch(val, prevVal, currentSeq);
             onCleanup(() => {
                 clearSwitchTimer();
             });
