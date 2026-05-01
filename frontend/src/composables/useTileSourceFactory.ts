@@ -203,6 +203,43 @@ async function fetchTextWithTimeout(url: string, timeoutMs: number = CAPABILITIE
     }
 }
 
+function applyHighPriorityTileLoadFunction(tile: any, src: string): void {
+    const image = tile?.getImage?.();
+    if (!image) return;
+
+    try {
+        if ('fetchPriority' in image) {
+            image.fetchPriority = 'high';
+        }
+    } catch {
+        // ignore
+    }
+
+    try {
+        if ('loading' in image) {
+            image.loading = 'eager';
+        }
+    } catch {
+        // ignore
+    }
+
+    image.src = src;
+}
+
+export function prioritizeTileSourceRequest<T>(source: T): T {
+    if (!source || typeof (source as any)?.setTileLoadFunction !== 'function') {
+        return source;
+    }
+
+    try {
+        (source as any).setTileLoadFunction(applyHighPriorityTileLoadFunction);
+    } catch {
+        // ignore
+    }
+
+    return source;
+}
+
 function pickPreferredWmsCrs(layer: any): string {
     const values: string[] = [];
 
@@ -336,12 +373,12 @@ function createTileWmsSource(opts: {
     url: string;
     params: Record<string, string>;
 }): TileWMS {
-    return new TileWMS({
+    return prioritizeTileSourceRequest(new TileWMS({
         url: opts.url,
         params: opts.params,
         crossOrigin: 'anonymous',
         zDirection: 0
-    });
+    }));
 }
 
 function createWmsSourceFromGetMapUrl(urlObj: URL): TileWMS {
@@ -451,13 +488,13 @@ export function createXYZSourceFromUrl(rawUrl: string, options: TileSourceFactor
     const nonStandard = detectNonStandardXYZ(cleanUrl, adapters);
 
     if (nonStandard) {
-        return new XYZ({
+        return prioritizeTileSourceRequest(new XYZ({
             tileUrlFunction: nonStandard.urlFunction,
             tilePixelRatio: 1
-        });
+        }));
     }
 
-    return new XYZ({ url: cleanUrl });
+    return prioritizeTileSourceRequest(new XYZ({ url: cleanUrl }));
 }
 
 export function createConfiguredServiceSource(
@@ -515,10 +552,10 @@ function createXyzSourceStrict(
 
     if (nonStandard) {
         return {
-            source: new XYZ({
+            source: prioritizeTileSourceRequest(new XYZ({
                 tileUrlFunction: nonStandard.urlFunction,
                 tilePixelRatio: 1
-            }),
+            })),
             kind: 'non-standard-xyz',
             detail: nonStandard.name
         };
@@ -529,7 +566,7 @@ function createXyzSourceStrict(
     }
 
     return {
-        source: new XYZ({ url }),
+        source: prioritizeTileSourceRequest(new XYZ({ url })),
         kind: 'xyz',
         detail: '标准 XYZ'
     };
@@ -544,7 +581,7 @@ async function createWmsSourceStrict(rawUrl: string): Promise<AutoTileSourceResu
     const request = getSearchParamCaseInsensitive(parsed, 'REQUEST').toUpperCase();
     if (request === 'GETMAP') {
         return {
-            source: createWmsSourceFromGetMapUrl(parsed),
+            source: prioritizeTileSourceRequest(createWmsSourceFromGetMapUrl(parsed)),
             kind: 'wms',
             detail: 'WMS GetMap'
         };
@@ -641,10 +678,10 @@ async function createWmtsSourceStrict(
 
     if (wmtsOptions) {
         return {
-            source: new WMTS({
+            source: prioritizeTileSourceRequest(new WMTS({
                 ...wmtsOptions,
                 zDirection: -1
-            }),
+            })),
             kind: 'wmts',
             detail: `WMTS 图层: ${layerId}`
         };
@@ -721,19 +758,31 @@ export async function createAutoTileSourceFromUrl(
     const errors: string[] = [];
 
     try {
-        return createXyzSourceStrict(normalizedUrl, adapters);
+        const xyzResult = createXyzSourceStrict(normalizedUrl, adapters);
+        return {
+            ...xyzResult,
+            source: prioritizeTileSourceRequest(xyzResult.source)
+        };
     } catch (error) {
         errors.push(`XYZ: ${toErrorMessage(error)}`);
     }
 
     try {
-        return await createWmsSourceStrict(normalizedUrl);
+        const wmsResult = await createWmsSourceStrict(normalizedUrl);
+        return {
+            ...wmsResult,
+            source: prioritizeTileSourceRequest(wmsResult.source)
+        };
     } catch (error) {
         errors.push(`WMS: ${toErrorMessage(error)}`);
     }
 
     try {
-        return await createWmtsSourceStrict(normalizedUrl, adapters);
+        const wmtsResult = await createWmtsSourceStrict(normalizedUrl, adapters);
+        return {
+            ...wmtsResult,
+            source: prioritizeTileSourceRequest(wmtsResult.source)
+        };
     } catch (error) {
         errors.push(`WMTS: ${toErrorMessage(error)}`);
     }

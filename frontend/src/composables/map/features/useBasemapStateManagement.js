@@ -8,6 +8,7 @@
  * 中文注释遵循原有约定，保持代码可读性。
  */
 
+import { prioritizeTileSourceRequest } from '../../useTileSourceFactory';
 
 /**
  * 创建底图状态管理特性工厂函数
@@ -89,7 +90,7 @@ export function createBasemapStateManagementFeature({
             const cfg = LAYER_CONFIGS.find(item => item.id === id);
             const layer = layerInstances[id];
             if (!cfg || !layer) return;
-            layer.setSource(cfg.createSource());
+            layer.setSource(prioritizeTileSourceRequest(cfg.createSource()));
         });
     }
 

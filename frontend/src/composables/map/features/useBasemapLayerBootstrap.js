@@ -1,4 +1,5 @@
 import TileLayer from 'ol/layer/Tile';
+import { prioritizeTileSourceRequest } from '../../useTileSourceFactory';
 
 /**
  * Basemap layer bootstrap feature
@@ -23,7 +24,9 @@ export function createBasemapLayerBootstrap({
 
         list.forEach((item, index) => {
             const config = layerConfigs.find((cfg) => cfg.id === item.id);
-            const source = (config && item.visible) ? config.createSource() : null;
+            const source = (config && item.visible)
+                ? prioritizeTileSourceRequest(config.createSource())
+                : null;
 
             const layer = new TileLayer({
                 source,

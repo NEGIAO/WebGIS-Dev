@@ -770,23 +770,34 @@ function getInitialViewState() {
 
 // --- 组件挂载后 ---
 // [隶属] 地图初始化-启动流程
-// [作用] 初始化地图、绑定视图同步、设置格网状态、同步 URL 状态，并在首屏关键瓦片加载后执行非关键任务（主机测速、位置相关逻辑）。
+// [作用] 初始化地图、绑定视图同步、设置格网状态。
+//        底图加载拥有绝对优先级，所有非关键初始化任务都延后到底图加载完成。
+// [优先级链]
+//   1. initMap() + bindMapViewSync() + setGraticuleActive() + syncUrlFromMap() - 同步初始化，不阻塞
+//   2. 底图瓦片请求在后台自由发送，拥有绝对网络优先级（由 prioritizeTileSourceRequest 保证）
+//   3. waitForCriticalTileReady() - 等待底图 rendercomplete 或 3s 超时
+//   4. emit('map-core-ready') - 通知父组件地图核心就绪
+//   5. applyDeferredUrlParams() - 延后到底图加载稳定后，避免打断瓦片加载
+//   6. runDeferredStartupTasks() - 所有非关键任务（Google 测速、定位等）在最后执行
 onMounted(async () => {
     componentUnmountedRef.value = false;
     try {
-        initMap();
-        bindMapViewSync();
-        setGraticuleActive(showDynamicSplitLines.value);
-        syncUrlFromMap();
+        // ========== Phase 1: 同步初始化 - 快速返回，让底图加载开始 ==========
+        initMap();                                              // 创建地图实例，底图图层已添加
+        bindMapViewSync();                                      // 绑定视图同步（不阻塞）
+        setGraticuleActive(showDynamicSplitLines.value);        // 设置格网（不阻塞）
+        syncUrlFromMap();                                       // 从 URL 同步地图状态（不阻塞）
 
-        // 首屏优先：先让关键瓦片尽快加载，非关键任务延后到首次渲染后再执行。
+        // ========== Phase 2: 等待底图渲染完成 ==========
+        // 注意：此时底图瓦片请求已在后台发送，拥有高优先级（由 prioritizeTileSourceRequest 保证）
+        // waitForCriticalTileReady() 是非阻塞的 - 等待 map rendercomplete 事件或 3s 超时
         try {
             await waitForCriticalTileReady();
         } catch {
             // 超时或异常时也继续后续流程，避免阻塞页面可交互性。
         }
 
-        // 通知父组件：主地图关键内容已就绪，可在空闲时预加载非关键资源。
+        // ========== Phase 3: 通知父组件地图核心就绪 ==========
         if (!componentUnmountedRef.value) {
             if (typeof requestAnimationFrame === 'function') {
                 requestAnimationFrame(() => {
@@ -799,14 +810,22 @@ onMounted(async () => {
             }
         }
 
-        // ========== Step 2: Apply Deferred URL Parameters ==========
-        // [优先级] 地图核心就绪后，应用之前在路由守卫中提取的 URL 参数
-        // [目的] 确保地图引擎已准备好，然后应用坐标、缩放、图层等参数
+        // ========== Phase 4: 等待底图充分利用网络后再应用 URL 参数 ==========
+        // 增加 200ms 延迟确保底图瓦片请求已充分发送到网络层
+        // 避免 URL 参数应用导致的视图变化打断底图加载
+        await new Promise(r => setTimeout(r, 200));
+
+        // ========== Phase 5: 应用延迟 URL 参数 ==========
+        // [优先级] 底图加载完成后才应用 URL 参数
+        // [目的] 确保 URL 参数应用不会与底图加载竞争网络资源
         // [注意] 仅在首次进入 home 路由时应用，后续参数变化由 URL 同步处理
         if (!componentUnmountedRef.value && !urlParamStore.isParamApplied) {
             applyDeferredUrlParams();
         }
 
+        // ========== Phase 6: 执行所有非关键初始化任务 ==========
+        // Google 主机测速、用户定位、IP 定位等都延后到这里
+        // 使用 scheduleLowPriorityTask 确保在浏览器空闲时执行
         scheduleLowPriorityTask(() => {
             runDeferredStartupTasks().catch(() => { });
         });
@@ -819,18 +838,18 @@ onMounted(async () => {
     }
 });
 
-// [隶属] 启动流程-首屏优化
-// [作用] 在首屏完成后执行非关键任务（主机测速、定位兜底）。
-// [交互] 调用 resolvePreferredGoogleHost / zoomToUser / detectIPLocale。
+// [隶属] 启动流程-后期初始化
+// [作用] 在底图加载完成、URL 参数已应用后执行所有非关键任务。
+//        这包括：Google 主机测速、用户定位、IP 定位等。
+// [优先级] 这些任务不影响首屏交互性，可在浏览器空闲时执行。
+// [并行策略] Google 主机测速与用户定位可并行执行（不相互依赖）
 async function runDeferredStartupTasks() {
     if (componentUnmountedRef.value) return;
 
-
     const routeViewState = parseUrlToState();
-
-
     const isSharedEntry = parseSharedEntryFlagFromUrl();
 
+    // ========== 分享或欢迎消息 ==========
     if (isSharedEntry) {
         const shareAddress = await resolveSharedAddressByLonLat(routeViewState?.lng, routeViewState?.lat);
         message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
@@ -839,7 +858,8 @@ async function runDeferredStartupTasks() {
         message.success('欢迎使用NEGIAO的WebGIS!(V3.0.5)', { duration: 3000 });
     }
 
-    // 1) Google 主机测速切换（非关键，延后执行）。
+    // ========== 并行执行：Google 主机测速（非阻塞） ==========
+    // 注意：这里使用 Promise 而不是 await，避免阻塞后续定位逻辑
     resolvePreferredGoogleHost().then((host) => {
         if (componentUnmountedRef.value) return;
         if (!host || host === activeGoogleTileHost.value) return;
@@ -847,7 +867,8 @@ async function runDeferredStartupTasks() {
         refreshGoogleLayerSources();
     }).catch(() => { });
 
-    // 2) 首屏定位：分享进入时静默定位且不跳转视图，仅用于更新定位上下文与 URL 参数。
+    // ========== 用户定位 ==========
+    // 分享进入时静默定位且不跳转视图，仅用于更新定位上下文与 URL 参数。
     const locatedResult = isSharedEntry
         ? await zoomToUser({ animate: false, silent: true })
         : await zoomToUser();

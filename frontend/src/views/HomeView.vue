@@ -102,6 +102,10 @@ const mapCoreLoadingSettled = ref(false);
 let sidePanelWarmupTimer = null;
 let sidePanelWarmupIdleId = null;
 
+// ========== 访问记录延迟执行标志 ==========
+// 确保 visitLog 不与底图加载竞争网络资源
+const visitLogScheduled = ref(false);
+
 // ========== 3. 事件处理函数 ==========
 
 /** 地图位置变化处理 */
@@ -388,24 +392,49 @@ function settleMapCoreLoading(payload = {}) {
 /** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
 function handleMapCoreReady() {
     settleMapCoreLoading();
-    if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) return;
-    sidePanelWarmupScheduled.value = true;
-
-    const preloadSidePanel = () => {
-        if (!shouldLoadSidePanel.value) {
-            shouldLoadSidePanel.value = true;
-        }
-    };
-
-    const queuePreload = () => {
-        if (typeof window === 'undefined') return;
-        sidePanelWarmupTimer = window.setTimeout(preloadSidePanel, 900);
-    };
-
-    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-        sidePanelWarmupIdleId = window.requestIdleCallback(queuePreload, { timeout: 2200 });
+    
+    // ========== Phase 1: 处理侧边面板预热 ==========
+    if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) {
+        // 侧边面板已在加载或已加载，先执行 visitLog
     } else {
-        queuePreload();
+        sidePanelWarmupScheduled.value = true;
+
+        const preloadSidePanel = () => {
+            if (!shouldLoadSidePanel.value) {
+                shouldLoadSidePanel.value = true;
+            }
+        };
+
+        const queuePreload = () => {
+            if (typeof window === 'undefined') return;
+            sidePanelWarmupTimer = window.setTimeout(preloadSidePanel, 900);
+        };
+
+        if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+            sidePanelWarmupIdleId = window.requestIdleCallback(queuePreload, { timeout: 2200 });
+        } else {
+            queuePreload();
+        }
+    }
+
+    // ========== Phase 2: 处理访问记录（非关键，延后到底图就绪后）==========
+    // 关键改进：visitLog 不再与底图加载竞争
+    // 原本在 HomeView.onMounted() 中立即执行，现在延后到这里
+    if (!visitLogScheduled.value) {
+        visitLogScheduled.value = true;
+        executeVisitLogAsync();
+    }
+}
+
+/** 异步执行访问记录，不阻塞底图和侧边面板加载 */
+async function executeVisitLogAsync() {
+    try {
+        const visitPayload = await buildVisitLogPayload();
+        const visitResponse = await apiLogVisit(visitPayload);
+        const encodedPos = String(visitResponse?.data?.encoded_pos || '0');
+        syncVisitPosCodeToUrl(encodedPos);
+    } catch {
+        // 访问记录失败不影响主页面使用
     }
 }
 
@@ -758,17 +787,17 @@ onUnmounted(() => {
         window.clearTimeout(sidePanelWarmupTimer);
         sidePanelWarmupTimer = null;
     }
+    
+    // 注意：visitLog 可能在组件卸载后才执行
+    // 这是可接受的，因为它是非关键任务，只是记录访问信息
 });
 
 onMounted(async () => {
-    try {
-        const visitPayload = await buildVisitLogPayload();
-        const visitResponse = await apiLogVisit(visitPayload);
-        const encodedPos = String(visitResponse?.data?.encoded_pos || '0');
-        syncVisitPosCodeToUrl(encodedPos);
-    } catch {
-        // 访问记录失败不影响主页面使用
-    }
+    // ========== 访问记录已延迟到 handleMapCoreReady 执行 ==========
+    // 原理：访问记录（buildVisitLogPayload + apiLogVisit）包含地理定位和 HTTP 请求
+    // 如果在这里执行，会与底图加载竞争网络资源和事件循环
+    // 现在改为在底图核心就绪后执行，确保底图有绝对优先级
+    // visitLog 调用已移到 handleMapCoreReady() 中的 executeVisitLogAsync()
 });
 </script>
 

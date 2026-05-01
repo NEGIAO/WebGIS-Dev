@@ -16,6 +16,7 @@ import {
 } from '../utils/userLocationContext';
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
+import { prioritizeTileSourceRequest } from './useTileSourceFactory';
 
 const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';
 
@@ -674,7 +675,7 @@ export function useMapState(mapInstance, options = {}) {
         if (!layer || layer.getSource?.()) return;
         const cfg = findLayerConfigById(layerId, configs);
         if (!cfg || typeof cfg.createSource !== 'function') return;
-        layer.setSource(cfg.createSource());
+        layer.setSource(prioritizeTileSourceRequest(cfg.createSource()));
     }
 
     /**
