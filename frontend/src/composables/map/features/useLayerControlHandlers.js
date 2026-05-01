@@ -16,25 +16,20 @@ export function createLayerControlHandlers({
     createAutoTileSourceFromUrl,
     message
 }) {
-    const BASEMAP_SWITCH_DEBOUNCE_MS = 300;
-    let basemapSwitchTimer = null;
-
+    /**
+     * [改进] 删除第一层防抖，让 watch 防抖处理
+     * 响应延迟从 600ms → 300ms
+     */
     function applyBasemapSelection(layerId) {
         const normalizedLayerId = String(layerId || '').trim();
         if (!normalizedLayerId || !selectedLayerRef) return;
-        selectedLayerRef.value = normalizedLayerId;
-    }
-
-    function scheduleBasemapSelection(layerId) {
-        if (basemapSwitchTimer) {
-            clearTimeout(basemapSwitchTimer);
-            basemapSwitchTimer = null;
+        
+        // 相同底图不重复设置，避免触发多余的 watch
+        if (selectedLayerRef.value === normalizedLayerId) {
+            return;
         }
-
-        basemapSwitchTimer = setTimeout(() => {
-            applyBasemapSelection(layerId);
-            basemapSwitchTimer = null;
-        }, BASEMAP_SWITCH_DEBOUNCE_MS);
+        
+        selectedLayerRef.value = normalizedLayerId;
     }
 
     /**
@@ -74,11 +69,13 @@ export function createLayerControlHandlers({
 
     /**
      * 统一接收图层切换与自定义 URL 加载。
+     * [改进] 直接设置 ref，让 watch 处理防抖
      */
     function handleLayerChange(payload = {}) {
         const nextLayerId = String(payload.layerId || '').trim();
         if (nextLayerId) {
-            scheduleBasemapSelection(nextLayerId);
+            // 直接设置，不防抖（防抖由 watch 处理）
+            applyBasemapSelection(nextLayerId);
         }
 
         if (payload.source === 'custom-url' && customMapUrlRef) {

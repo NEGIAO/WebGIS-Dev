@@ -32,6 +32,26 @@ export function createBasemapStateManagementFeature({
     LAYER_CONFIGS,
     layerInstances
 }) {
+    /**
+     * [改进] 批量 emit 包装器，减少频繁的事件广播
+     * 50ms 窗口内的多个 emit 调用会被合并为一次
+     */
+    const createBatchEmitter = (fn, { batchWindow = 50 } = {}) => {
+        let pending = false;
+        let timer = null;
+
+        return (...args) => {
+            if (pending) return;
+
+            pending = true;
+            clearTimeout(timer);
+
+            timer = setTimeout(() => {
+                fn(...args);
+                pending = false;
+            }, batchWindow);
+        };
+    };
 
     /**
      * 广播底图列表状态
@@ -40,6 +60,7 @@ export function createBasemapStateManagementFeature({
      * 广播给外部组件，用于面板展示或其他组件联动。
      * 
      * [交互] emit: base-layers-change
+     * [改进] 使用批量 emit 减少重绘
      */
     function emitBaseLayersChange() {
         emit('base-layers-change', layerList.value.map(item => ({
@@ -51,6 +72,9 @@ export function createBasemapStateManagementFeature({
             active: selectedLayer.value === item.id
         })));
     }
+
+    // 创建批量版本的 emit
+    const emitBaseLayersChangeBatched = createBatchEmitter(emitBaseLayersChange, { batchWindow: 50 });
 
     /**
      * 刷新 Google 图层源
@@ -71,6 +95,7 @@ export function createBasemapStateManagementFeature({
 
     return {
         emitBaseLayersChange,
+        emitBaseLayersChangeBatched,
         refreshGoogleLayerSources
     };
 }

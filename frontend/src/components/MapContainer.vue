@@ -551,6 +551,7 @@ const {
 // 底图状态管理
 const {
     emitBaseLayersChange,
+    emitBaseLayersChangeBatched,
     refreshGoogleLayerSources
 } = createBasemapStateManagementFeature({
     layerList,
@@ -676,7 +677,7 @@ const {
     selectedLayerRef: selectedLayer,
     switchLayerById,
     resolvePresetLayerIds,
-    emitBaseLayersChange,
+    emitBaseLayersChange: emitBaseLayersChangeBatched,
     mapInstanceRef: mapInstance,
     layerInstances,
     syncUrlFromMap,
@@ -1115,10 +1116,11 @@ function initMap() {
 
 // [隶属] 图层切换-底图状态刷新
 // [作用] 将 layerList 的可见性与顺序同步到真实图层。
-// [交互] 调用 emitBaseLayersChange，与外部组件同步状态。
+// [交互] 调用 emitBaseLayersChangeBatched，与外部组件同步状态。
+// [改进] 使用批量 emit 减少重绘次数
 function refreshLayersState() {
     refreshLayerInstances();
-    emitBaseLayersChange();
+    emitBaseLayersChangeBatched();
 }
 
 // [隶属] 组件交互-路径选点

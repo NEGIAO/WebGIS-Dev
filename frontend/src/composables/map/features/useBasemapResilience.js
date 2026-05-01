@@ -3,50 +3,85 @@
  * 职责：底图切换验证、加载监测、异常降级策略。
  */
 export function createBasemapResilience({ message }) {
-    const validateBaseLayerSwitch = async (layerId, layer, checkTimeoutMs = 3000) => {
-        return new Promise((resolve) => {
-            if (!layer) {
-                resolve({ success: false, reason: '底图图层实例不存在' });
-                return;
-            }
+    /**
+     * [改进] 验证底图加载状态
+     * - 前置检查立即返回（同步）
+     * - 网络检查使用 Promise.race 快速失败（1.5s）
+     * - 支持 AbortSignal 用于验证中止
+     */
+    const validateBaseLayerSwitch = async (layerId, layer, checkTimeoutMs = 3000, signal) => {
+        // 前置检查：立即返回，不走 Promise
+        if (!layer) {
+            return { success: false, reason: '底图图层实例不存在' };
+        }
 
-            const source = layer.getSource?.();
-            if (!source) {
-                resolve({ success: false, reason: '底图数据源不可用' });
-                return;
-            }
+        const source = layer.getSource?.();
+        if (!source) {
+            return { success: false, reason: '底图数据源不可用' };
+        }
 
-            let hasSuccessfulLoad = false;
-            let hasError = false;
-            let errorCount = 0;
+        // 监听 abort 信号
+        if (signal?.aborted) {
+            return { success: false, reason: '验证已取消' };
+        }
 
-            const onTileLoadEnd = () => {
-                hasSuccessfulLoad = true;
-            };
+        return Promise.race([
+            // 实际的瓦片加载验证
+            new Promise((resolve) => {
+                let hasSuccessfulLoad = false;
+                let hasError = false;
+                let errorCount = 0;
 
-            const onTileLoadError = () => {
-                errorCount++;
-                if (errorCount >= 3) {
-                    hasError = true;
+                const onTileLoadEnd = () => {
+                    hasSuccessfulLoad = true;
+                };
+
+                const onTileLoadError = () => {
+                    errorCount++;
+                    if (errorCount >= 3) {
+                        hasError = true;
+                    }
+                };
+
+                const cleanup = () => {
+                    source.un('tileloadend', onTileLoadEnd);
+                    source.un('tileloaderror', onTileLoadError);
+                    if (signal) {
+                        signal.removeEventListener('abort', onAbort);
+                    }
+                };
+
+                const onAbort = () => {
+                    cleanup();
+                    resolve({ success: false, reason: '验证已取消' });
+                };
+
+                if (signal) {
+                    signal.addEventListener('abort', onAbort);
                 }
-            };
 
-            source.on('tileloadend', onTileLoadEnd);
-            source.on('tileloaderror', onTileLoadError);
+                source.on('tileloadend', onTileLoadEnd);
+                source.on('tileloaderror', onTileLoadError);
 
-            setTimeout(() => {
-                source.un('tileloadend', onTileLoadEnd);
-                source.un('tileloaderror', onTileLoadError);
+                setTimeout(() => {
+                    cleanup();
 
-                if (hasSuccessfulLoad) {
-                    resolve({ success: true, reason: '切换成功' });
-                } else if (hasError) {
-                    resolve({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
-                } else {
-                    resolve({ success: false, reason: '未能获取底图数据（需梯子或超时）' });
-                }
-            }, checkTimeoutMs);
-        });
+                    if (hasSuccessfulLoad) {
+                        resolve({ success: true, reason: '切换成功' });
+                    } else if (hasError) {
+                        resolve({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
+                    } else {
+                        resolve({ success: false, reason: '未能获取底图数据（需梯子或超时）' });
+                    }
+                }, checkTimeoutMs);
+            }),
+            // [改进] 快速失败：1.5s 就认为超时，而不是等 3s
+            new Promise(resolve =>
+                setTimeout(() => {
+                    resolve({ success: false, reason: '加载超时（1.5s）' });
+                }, 1500)
+            )
+        ]);
     };
 
     const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
