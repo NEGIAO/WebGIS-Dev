@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 
 
@@ -198,7 +198,7 @@ async def universal_stream_proxy(target_url: str, request: Request):
             if fallback_client:
                 background.add_task(fallback_client.aclose)
 
-            return httpx.Response(
+            return Response(
                 status_code=upstream_response.status_code,
                 headers={"Location": location},
                 background=background
