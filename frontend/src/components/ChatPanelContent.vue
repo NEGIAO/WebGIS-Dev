@@ -3,7 +3,7 @@
     <div class="chat-header">
       <span class="chat-title">
         <bot-icon :size="18" color="Green" :stroke-width="2" />
-         AI 助手
+        AI 助手
       </span>
       <div class="header-controls">
         <button @click="toggleUserConfig" class="icon-btn" title="我的 Agent 配置">⚙️</button>
@@ -66,7 +66,7 @@
 
       <div class="user-config-actions">
         <button @click="saveUserConfig" :disabled="userConfigSaving">{{ userConfigSaving ? '保存中...' : '保存我的配置'
-          }}</button>
+        }}</button>
         <button @click="clearPersonalKey" :disabled="userConfigSaving" class="secondary">清除我的 Key</button>
         <button @click="resetProviderOverrides" :disabled="userConfigSaving" class="secondary">恢复平台默认参数</button>
       </div>

@@ -1339,7 +1339,7 @@ onMounted(async () => {
 }
 
 .side-panel-wrapper {
-    width: 350px;
+    width: 400px;
     flex-shrink: 0;
     background: #f5f5f5;
     border-radius: 10px;

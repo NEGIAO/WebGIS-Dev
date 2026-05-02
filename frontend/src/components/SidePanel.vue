@@ -559,20 +559,31 @@ function handleNewsImageError(event) {
 /* 移动端适配 */
 @media (max-width: 768px) {
     .info-panel {
+        display: flex;
+        /* 确保父容器是 Flex 布局 */
         flex-direction: column;
         /* 垂直排列 */
         width: 100% !important;
+
+        /* 1. 设置面板高度为视口高度的 60% */
+        height: 60vh;
+
         transition: transform 0.3s ease;
-        /* 改为 transform 动画更流畅 */
-        /* 关键修复：移动端允许内容溢出，防止按钮被切掉 */
         overflow: visible;
+        /* 允许按钮溢出显示 */
+
+        /* 定位基准，确保收起动画逻辑清晰 */
+        position: fixed;
+        bottom: 0;
+        left: 0;
     }
 
-    /* 收起状态下的特殊处理 */
+    /* 收起状态下的处理：将整个面板向下推 */
     .info-panel.collapsed {
-        /* 这里假设你的面板是在底部，收起时往下移，只保留按钮高度 */
-        /* 如果你的面板是根据高度变化的，请保留 height: auto */
-        height: auto;
+        /* 向上平移 100% 负方向减去按钮高度，或者直接推下去 */
+        transform: translateY(100%);
+        /* 注意：如果完全推下去，按钮也会看不见。
+           通常配合 transition 使用，或者只推 60vh 的高度 */
     }
 
     .toggle-handle {
@@ -580,36 +591,38 @@ function handleNewsImageError(event) {
         height: 30px;
         align-self: center;
         border-radius: 15px 15px 0 0;
-        margin-top: 0;
-        margin-bottom: 0;
-        order: -1;
 
-        /* 👇 核心：居中 + 向上偏移 30px */
-        position: relative;
-        top: -30px;
-        transform: translateX(25%);
+        /* 核心修改 */
+        position: static;
+        /* 恢复默认，不再需要 relative */
+        margin-top: -30px;
+        /* 用负外边距向上拉 */
+        margin-bottom: 0;
+
+        transform: translateX(0%);
+        /* 保持你的水平偏移 */
     }
 
     .handle-icon {
-        /* 旋转箭头方向，使其指向合适的方向 */
+        /* 旋转箭头方向 */
+        transition: transform 0.3s ease;
         transform: rotate(90deg);
-        font-size: 14px;
+        width: 20px;
+        /* 建议给 SVG 设置明确大小 */
+        height: 20px;
     }
 
     .handle-icon.is-flipped {
         transform: rotate(-90deg);
     }
 
-    .panel-content {
-        min-width: unset;
-        /* padding: 15px; Removed */
-        max-height: 60vh;
-        /* overflow-y: auto; Removed */
-    }
-
     .info-content {
+        /* 5. 确保内容区自动填充剩余空间 */
+        flex: 1;
         padding: 15px;
         overflow-y: auto;
+        /* 内容过多时可滚动 */
+        background-color: #fff;
     }
 }
 </style>
