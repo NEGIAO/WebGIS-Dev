@@ -151,6 +151,7 @@ export function createBasemapResilience({ message }) {
 
             if (fallbackManager.isNotifyOnly()) {
                 message?.warning?.(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`);
+                message?.info?.('若页面长时间无底图，请尝试切换底图或刷新页面以重新加载。');
                 if (triggerCallback) triggerCallback();
                 cleanUp();
                 return;
@@ -159,6 +160,7 @@ export function createBasemapResilience({ message }) {
             const nextOption = fallbackManager.getNextFallbackOption();
             if (!nextOption) {
                 message?.error?.(`[底图降级] ${layerId} 所有兜底选项已尝试`);
+                message?.info?.('若切换后仍无底图，请刷新页面或手动选择其他底图。');
                 if (triggerCallback) triggerCallback();
                 cleanUp();
                 return;

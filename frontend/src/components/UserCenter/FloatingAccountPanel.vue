@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from '../../composables/useMessage'
 import {
@@ -24,7 +24,18 @@ const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPan
 const router = useRouter()
 const message = useMessage()
 const userPreferencesStore = useUserPreferencesStore()
-const emit = defineEmits(['fullscreen-change'])
+const props = defineProps({
+  open: {
+    type: Boolean,
+    default: undefined
+  },
+  showFab: {
+    type: Boolean,
+    default: true
+  }
+})
+
+const emit = defineEmits(['fullscreen-change', 'update:open'])
 
 // Panel State
 const isOpen = ref(false)
@@ -122,6 +133,8 @@ const roleText = computed(() => {
   const role = String(user.value?.role || '').trim()
   return roleTextMap[role] || '未知角色'
 })
+
+const hasControlledOpen = computed(() => props.open !== undefined)
 
 const panelLabel = computed(() => {
   const username = String(user.value?.username || '').trim()
@@ -274,12 +287,19 @@ async function refreshMessages() {
 }
 
 function closePanel() {
-  isOpen.value = false
+  setOpen(false)
   setFullscreen(false)
   setTimeout(() => {
     activeMenu.value = 'overview'
     resetPasswordForm()
   }, 200)
+}
+
+function setOpen(nextValue) {
+  const normalized = Boolean(nextValue)
+  if (isOpen.value === normalized) return
+  isOpen.value = normalized
+  emit('update:open', normalized)
 }
 
 function setFullscreen(nextValue) {
@@ -295,7 +315,7 @@ function toggleFullscreen() {
 
 function togglePanel() {
   const nextOpen = !isOpen.value
-  isOpen.value = nextOpen
+  setOpen(nextOpen)
 
   if (nextOpen) {
     loadCenterData({ silent: true })
@@ -309,6 +329,27 @@ function togglePanel() {
     }, 200)
   }
 }
+
+watch(
+  () => props.open,
+  (nextValue) => {
+    if (!hasControlledOpen.value) return
+    const normalized = Boolean(nextValue)
+    if (isOpen.value !== normalized) {
+      isOpen.value = normalized
+      if (normalized) {
+        loadCenterData({ silent: true })
+      } else {
+        setFullscreen(false)
+        setTimeout(() => {
+          activeMenu.value = 'overview'
+          resetPasswordForm()
+        }, 200)
+      }
+    }
+  },
+  { immediate: true }
+)
 
 function selectMenu(menu) {
   if (menu === 'admin' && !isAdmin.value) return
@@ -556,6 +597,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="floating-account-manager" :class="{ 'is-open': isOpen, 'is-fullscreen': isFullscreen }">
     <button
+      v-if="showFab"
       class="account-fab"
       type="button"
       :aria-label="panelLabel"

@@ -54,7 +54,7 @@ const menuItems = [
     { id: 'mark', label: '标注', icon: MapPin, action: 'toggleMark' },
     { id: 'analyze', label: '分析', icon: Boxes, action: 'toggleAnalyze' },
     { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
-    { id: 'more', label: '更多', icon: LayoutGrid, action: 'toggleMore' },
+    { id: 'more', label: '卷帘分析', icon: LayoutGrid, action: 'toggleMore' },
 ];
 
 const handleSelect = (id) => {

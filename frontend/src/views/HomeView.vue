@@ -94,6 +94,7 @@ const baseLayers = ref([]);
 const uploadProgress = ref({ phase: 'idle' });
 const latestSearchPoi = ref({});
 const activeFeature = ref({ key: 'info', label: '新闻' });
+const isAccountPanelOpen = ref(false);
 const isAccountPanelFullscreen = ref(false);
 
 // 组件引用
@@ -371,6 +372,13 @@ function syncDistrictLayerVisibility(layerId) {
 
 function handleAccountPanelFullscreenChange(fullscreen) {
     isAccountPanelFullscreen.value = Boolean(fullscreen);
+    if (isAccountPanelFullscreen.value) {
+        isAccountPanelOpen.value = true;
+    }
+}
+
+function handleToggleAccountPanel() {
+    isAccountPanelOpen.value = !isAccountPanelOpen.value;
 }
 
 /** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
@@ -820,6 +828,7 @@ onMounted(async () => {
                 @toggle-weather-board="toggleWeatherBoardMode"
                 @activate-feature="handleActivateFeature"
                 @jump-view="handleTopBarJumpView"
+                @toggle-account-center="handleToggleAccountPanel"
             />
         </div>
 
@@ -846,6 +855,8 @@ onMounted(async () => {
                 -->
                 <FloatingAccountPanel
                     class="home-account-panel"
+                    v-model:open="isAccountPanelOpen"
+                    :show-fab="false"
                     @fullscreen-change="handleAccountPanelFullscreenChange"
                 />
                 <!-- 
@@ -1130,9 +1141,12 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
     :deep(.home-account-panel) {
-        top: 140px !important;
-        left: 5px !important;
-        /* Mobile adapts tightly and relies on map padding */
+        top: 8px !important;
+        left: 8px !important;
+        right: 8px !important;
+        width: auto !important;
+        max-width: none !important;
+        /* Mobile follows the map area width and sits just under the top bar */
     }
     /* 隐藏控制面板 */
     .Control-panel {
