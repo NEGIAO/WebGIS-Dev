@@ -3,24 +3,20 @@
         <!-- 折叠开关 -->
         <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开面板' : '收起面板'">
             <!-- 只用一个向左的箭头，通过动态 class 控制旋转 -->
-            <svg 
-        class="handle-icon" 
-        :class="{ 'is-flipped': !isCollapsed }" 
-        viewBox="0 0 24 24" 
-        fill="none" 
-        stroke="currentColor"
-    >
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7" />
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 19l-7-7 7-7" />
-    </svg>
+            <svg class="handle-icon" :class="{ 'is-flipped': !isCollapsed }" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 19l-7-7 7-7" />
+            </svg>
         </div>
 
         <!-- 面板内容区域 -->
-        <div class="panel-content" v-show="!isCollapsed" :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' || activeTab === 'compass' }">
+        <div class="panel-content" v-show="!isCollapsed"
+            :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' || activeTab === 'compass' }">
             <div class="active-feature-banner" v-if="activeFeature?.label">
                 当前激活功能：{{ activeFeature.label }}
             </div>
-            
+
             <!-- 模式 1: AI 聊天 -->
             <div v-show="activeTab === 'chat'" class="toolbox-content">
                 <ChatPanelContent @close-chat="$emit('close-chat')" />
@@ -28,22 +24,16 @@
 
             <!-- 模式 2: 工具箱 -->
             <div v-show="activeTab === 'toolbox'" class="toolbox-content">
-                <ToolboxPanel
-                    :userLayers="userLayers"
-                    :baseLayers="baseLayers"
-                    :overview="toolboxOverview"
-                    :uploadProgress="uploadProgress"
-                    :latest-search-poi="latestSearchPoi"
-                    @close="$emit('switch-tab', 'info')"
-                    @upload-data="$emit('upload-data', $event)"
+                <ToolboxPanel :userLayers="userLayers" :baseLayers="baseLayers" :overview="toolboxOverview"
+                    :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi"
+                    @close="$emit('switch-tab', 'info')" @upload-data="$emit('upload-data', $event)"
                     @interaction="$emit('interaction', $event)"
                     @toggle-layer-visibility="$emit('toggle-layer-visibility', $event)"
                     @change-layer-opacity="$emit('change-layer-opacity', $event)"
                     @set-base-layer="$emit('set-base-layer', $event)"
                     @toggle-base-layer-visibility="$emit('toggle-base-layer-visibility', $event)"
                     @toggle-layer-label-visibility="$emit('toggle-layer-label-visibility', $event)"
-                    @zoom-layer="$emit('zoom-layer', $event)"
-                    @view-layer="$emit('view-layer', $event)"
+                    @zoom-layer="$emit('zoom-layer', $event)" @view-layer="$emit('view-layer', $event)"
                     @remove-layer="$emit('remove-layer', $event)"
                     @reorder-user-layers="$emit('reorder-user-layers', $event)"
                     @solo-layer="$emit('solo-layer', $event)"
@@ -55,49 +45,36 @@
                     @draw-point-by-coordinates="$emit('draw-point-by-coordinates', $event)"
                     @draw-amap-aoi-from-json="$emit('draw-amap-aoi-from-json', $event)"
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
-                    @export-layer-data="$emit('export-layer-data', $event)"
-                />
+                    @export-layer-data="$emit('export-layer-data', $event)" />
             </div>
 
             <!-- 模式 3: 公交规划 -->
             <div v-show="activeTab === 'bus'" class="toolbox-content">
-                <BusPlannerPanel
-                    :token="tiandituToken"
-                    :start-bus-point-pick="startBusPointPick"
-                    :draw-route-on-map="drawRouteOnMap"
-                    :zoom-to-bus-route-step="zoomToBusRouteStep"
+                <BusPlannerPanel :token="tiandituToken" :start-bus-point-pick="startBusPointPick"
+                    :draw-route-on-map="drawRouteOnMap" :zoom-to-bus-route-step="zoomToBusRouteStep"
                     :preview-bus-route-step="previewBusRouteStep"
-                    :clear-bus-route-step-preview="clearBusRouteStepPreview"
-                    @close="$emit('switch-tab', 'info')"
-                />
+                    :clear-bus-route-step-preview="clearBusRouteStepPreview" @close="$emit('switch-tab', 'info')" />
             </div>
 
             <!-- 模式 4: 驾车规划 -->
             <div v-show="activeTab === 'drive'" class="toolbox-content">
-                <DrivingPlannerPanel
-                    :token="tiandituToken"
-                    :start-map-point-pick="startBusPointPick"
-                    :draw-drive-route-on-map="drawDriveRouteOnMap"
-                    :zoom-to-drive-route-step="zoomToDriveRouteStep"
+                <DrivingPlannerPanel :token="tiandituToken" :start-map-point-pick="startBusPointPick"
+                    :draw-drive-route-on-map="drawDriveRouteOnMap" :zoom-to-drive-route-step="zoomToDriveRouteStep"
                     :preview-drive-route-step="previewDriveRouteStep"
-                    :clear-drive-route-step-preview="clearDriveRouteStepPreview"
-                    @close="$emit('switch-tab', 'info')"
-                />
+                    :clear-drive-route-step-preview="clearDriveRouteStepPreview" @close="$emit('switch-tab', 'info')" />
             </div>
 
             <!-- 模式 5: 风水罗盘 -->
             <div v-show="activeTab === 'compass'" class="toolbox-content">
-                <CompassControlPanel
-                    :get-user-location="getUserLocation"
-                    @close="$emit('switch-tab', 'info')"
-                />
+                <CompassControlPanel :get-user-location="getUserLocation" @close="$emit('switch-tab', 'info')" />
             </div>
 
             <!-- 模式 6: 新闻展示 (默认) -->
             <div v-if="activeTab === 'info'" class="info-content">
                 <!-- 顶部 Logo 栏 -->
                 <div class="panel-header">
-                    <img :src="resolvePath('images/院徽.webp')" class="logo" alt="河南大学地理科学学院Logo" loading="lazy" decoding="async">
+                    <img :src="resolvePath('images/院徽.webp')" class="logo" alt="河南大学地理科学学院Logo" loading="lazy"
+                        decoding="async">
                     <div class="title-wrapper">
                         <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
                     </div>
@@ -112,15 +89,8 @@
 
                 <!-- 图片展示区 -->
                 <div class="image-container">
-                    <img
-                        :src="displayData.image"
-                        class="news-image"
-                        :alt="displayData.title"
-                        loading="lazy"
-                        decoding="async"
-                        fetchpriority="low"
-                        @error="handleNewsImageError"
-                    >
+                    <img :src="displayData.image" class="news-image" :alt="displayData.title" loading="lazy"
+                        decoding="async" fetchpriority="low" @error="handleNewsImageError">
                 </div>
 
                 <!-- 文本内容 -->
@@ -133,12 +103,13 @@
 
                 <!-- 插槽：允许父组件插入额外内容 -->
                 <slot name="extra-content"></slot>
-                
+
                 <!-- 访问统计，2026.3.9开始 -->
                 <div style="height: 20px; display: flex; justify-content: center; align-items: center;">
-                    <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge" loading="lazy" decoding="async"/>
+                    <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge"
+                        loading="lazy" decoding="async" />
                 </div>
-                
+
                 <!-- 底部链接 -->
                 <div class="panel-footer">
                     <a :href="LINKS.MAIN_NEWS" target="_blank">河南大学地理科学学院！</a>
@@ -381,12 +352,14 @@ function handleNewsImageError(event) {
     overflow: hidden;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
     transition: width 0.3s ease;
+    overflow: visible !important;
+    position: relative;
 }
 
 /* 折叠手柄 */
 .toggle-handle {
     background-color: transparent;
-    width: 15px;
+    width: 30px;
     height: 60px;
     align-self: center;
     background: #ffffff;
@@ -396,22 +369,28 @@ function handleNewsImageError(event) {
     cursor: pointer;
     border-radius: 12px 0 0 12px;
     transition: all 0.2s ease;
-    z-index: 10;
+    z-index: 9999;
+
+    /* 👇 向左偏移 15px 核心代码 */
+    position: absolute;
+    left: -30px;
+    top: 50%;
+    transform: translateY(-50%);
 }
 
 .toggle-handle:hover {
-    background: #10a04a7c;
-    width: 20px;
+    background: #03431fc1;
+    width: 30px;
 }
 
 .handle-icon {
     font-size: 12px;
     color: #0fb549;
     font-weight: bold;
-    width: 20px;    
+    width: 20px;
     height: 20px;
     /* 增加平滑的过渡动画 */
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .handle-icon.is-flipped {
@@ -598,20 +577,17 @@ function handleNewsImageError(event) {
 
     .toggle-handle {
         width: 80px;
-        /* 加宽一点，方便手指点击 */
-        height: 15px;
-        /*稍微增高 */
+        height: 30px;
         align-self: center;
-        /* 水平居中 */
         border-radius: 15px 15px 0 0;
-        /* 上圆角 */
-
-        /* 关键修复：去掉之前的 margin-top: -24px */
         margin-top: 0;
         margin-bottom: 0;
-
-        /* 确保按钮在 flex 布局的最上方 */
         order: -1;
+
+        /* 👇 核心：居中 + 向上偏移 30px */
+        position: relative;
+        top: -30px;
+        transform: translateX(25%);
     }
 
     .handle-icon {
@@ -619,6 +595,7 @@ function handleNewsImageError(event) {
         transform: rotate(90deg);
         font-size: 14px;
     }
+
     .handle-icon.is-flipped {
         transform: rotate(-90deg);
     }

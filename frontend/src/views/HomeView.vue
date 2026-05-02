@@ -385,10 +385,10 @@ function handleToggleAccountPanel() {
 function settleMapCoreLoading(payload = {}) {
     if (mapCoreLoadingSettled.value) return;
     mapCoreLoadingSettled.value = true;
-    
+
     const appStore = useAppStore();
     appStore.markGisInitComplete();
-    
+
     hideLoading();
 
     if (payload?.isError) {
@@ -400,7 +400,7 @@ function settleMapCoreLoading(payload = {}) {
 /** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
 function handleMapCoreReady() {
     settleMapCoreLoading();
-    
+
     // ========== Phase 1: 处理侧边面板预热 ==========
     if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) {
         // 侧边面板已在加载或已加载，先执行 visitLog
@@ -795,7 +795,7 @@ onUnmounted(() => {
         window.clearTimeout(sidePanelWarmupTimer);
         sidePanelWarmupTimer = null;
     }
-    
+
     // 注意：visitLog 可能在组件卸载后才执行
     // 这是可接受的，因为它是非关键任务，只是记录访问信息
 });
@@ -816,20 +816,11 @@ onMounted(async () => {
 
         <!-- 顶部控制栏 -->
         <div class="top-section">
-            <TopBar
-                :is-weather-board-mode="isWeatherBoardMode"
-                @activate-magic="handleActivateMagic"
-                @toggle-3d="toggle3D"
-                @open-chat="openChat"
-                @open-toolbox="openToolbox"
-                @open-compass="openCompassPanel"
-                @open-bus="openBusPlanner"
-                @open-drive="openDrivePlanner"
-                @toggle-weather-board="toggleWeatherBoardMode"
-                @activate-feature="handleActivateFeature"
-                @jump-view="handleTopBarJumpView"
-                @toggle-account-center="handleToggleAccountPanel"
-            />
+            <TopBar :is-weather-board-mode="isWeatherBoardMode" @activate-magic="handleActivateMagic"
+                @toggle-3d="toggle3D" @open-chat="openChat" @open-toolbox="openToolbox" @open-compass="openCompassPanel"
+                @open-bus="openBusPlanner" @open-drive="openDrivePlanner" @toggle-weather-board="toggleWeatherBoardMode"
+                @activate-feature="handleActivateFeature" @jump-view="handleTopBarJumpView"
+                @toggle-account-center="handleToggleAccountPanel" />
         </div>
 
         <!-- 用户公告栏 -->
@@ -838,27 +829,19 @@ onMounted(async () => {
         <div class="content-section">
             <!-- 侧边控制栏（左）-->
             <div class="Control-panel">
-                <ControlsPanel
-                    @open-tab="handleControlsOpenTab"
-                    @map-interaction="handleControlsMapInteraction"
-                    @show-analysis="handleControlsShowAnalysis"
-                    @district-select="handleControlsDistrictSelect"
-                />
+                <ControlsPanel @open-tab="handleControlsOpenTab" @map-interaction="handleControlsMapInteraction"
+                    @show-analysis="handleControlsShowAnalysis" @district-select="handleControlsDistrictSelect" />
             </div>
 
 
-
             <!-- 地图2D、3D、天气面板容器 -->
-            <div class="map-wrapper" :class="{ 'weather-mode': isWeatherBoardMode, 'account-fullscreen': isAccountPanelFullscreen }">
+            <div class="map-wrapper"
+                :class="{ 'weather-mode': isWeatherBoardMode, 'account-fullscreen': isAccountPanelFullscreen }">
                 <!-- 
                     将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
                 -->
-                <FloatingAccountPanel
-                    class="home-account-panel"
-                    v-model:open="isAccountPanelOpen"
-                    :show-fab="false"
-                    @fullscreen-change="handleAccountPanelFullscreenChange"
-                />
+                <FloatingAccountPanel class="home-account-panel" v-model:open="isAccountPanelOpen" :show-fab="false"
+                    @fullscreen-change="handleAccountPanelFullscreenChange" />
                 <!-- 
                   优化点：
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
@@ -866,37 +849,27 @@ onMounted(async () => {
                 -->
                 <Suspense>
                     <template #default>
-                        <MapContainer
-                            ref="mapContainerRef"
+                        <MapContainer ref="mapContainerRef"
                             v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
-                            @map-core-ready="handleMapCoreReady"
-                            @map-core-failed="handleMapCoreFailed"
-                            @location-change="handleLocationChange"
-                            @search-poi-selected="handleSearchPoiSelected"
-                            @map-click="handleMapClick"
-                            @update-news-image="handleUpdateNewsImage"
-                            @feature-selected="handleFeatureSelected"
-                            @user-layers-change="handleUserLayersChange"
+                            @map-core-ready="handleMapCoreReady" @map-core-failed="handleMapCoreFailed"
+                            @location-change="handleLocationChange" @search-poi-selected="handleSearchPoiSelected"
+                            @map-click="handleMapClick" @update-news-image="handleUpdateNewsImage"
+                            @feature-selected="handleFeatureSelected" @user-layers-change="handleUserLayersChange"
                             @graphics-overview="handleGraphicsOverview"
                             @upload-progress-change="handleUploadProgressChange"
-                            @base-layers-change="handleBaseLayersChange"
-                        />
+                            @base-layers-change="handleBaseLayersChange" />
                     </template>
                     <template #fallback>
-                        <div
-                            v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
-                            class="map-runtime-loading"
-                        >
+                        <div v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            class="map-runtime-loading">
                             地图核心资源加载中...
                         </div>
                     </template>
                 </Suspense>
 
-                <component
-                    :is="WeatherChartPanel"
+                <component :is="WeatherChartPanel"
                     v-if="isWeatherBoardMode && shouldLoadWeatherChartPanel && !isAccountPanelFullscreen"
-                    class="weather-board-surface"
-                />
+                    class="weather-board-surface" />
 
                 <!-- <transition name="query-panel-fade">
                     <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen" class="query-panel">
@@ -924,45 +897,44 @@ onMounted(async () => {
                         </div>
                     </div>
                 </transition> -->
-<transition name="query-panel-fade">
-    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen" class="eco-query-panel">
-        <!-- 头部：使用你顶栏那样的鲜艳绿 -->
-        <div class="eco-header">
-            <div class="header-content">
-                <i class="icon-leaf">🍃</i>
-                <span class="eco-title">属性信息</span>
-            </div>
-            <button class="eco-close" @click="closeQueryPanel">×</button>
-        </div>
+                <transition name="query-panel-fade">
+                    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                        class="eco-query-panel">
+                        <!-- 头部：使用你顶栏那样的鲜艳绿 -->
+                        <div class="eco-header">
+                            <div class="header-content">
+                                <i class="icon-leaf">🍃</i>
+                                <span class="eco-title">属性信息</span>
+                            </div>
+                            <button class="eco-close" @click="closeQueryPanel">×</button>
+                        </div>
 
-        <div class="eco-body">
-            <!-- 统计小标签：模仿你用户面板的浅绿色调 -->
-            <div class="eco-stats">
-                <span class="eco-tag">绘制: {{ toolboxOverview.drawCount }}</span>
-                <span class="eco-tag">上传: {{ toolboxOverview.uploadCount }}</span>
-            </div>
+                        <div class="eco-body">
+                            <!-- 统计小标签：模仿你用户面板的浅绿色调 -->
+                            <div class="eco-stats">
+                                <span class="eco-tag">绘制: {{ toolboxOverview.drawCount }}</span>
+                                <span class="eco-tag">上传: {{ toolboxOverview.uploadCount }}</span>
+                            </div>
 
-            <div class="eco-list-container">
-                <div
-                    v-for="([key, value], idx) in Object.entries(featureQueryResult || {})"
-                    :key="`${key}_${idx}`"
-                    class="eco-item"
-                >
-                    <div class="eco-key">{{ key }}</div>
-                    <div class="eco-val">{{ value }}</div>
-                </div>
+                            <div class="eco-list-container">
+                                <div v-for="([key, value], idx) in Object.entries(featureQueryResult || {})"
+                                    :key="`${key}_${idx}`" class="eco-item">
+                                    <div class="eco-key">{{ key }}</div>
+                                    <div class="eco-val">{{ value }}</div>
+                                </div>
 
-                <!-- 空状态 -->
-                <div v-if="Object.keys(featureQueryResult || {}).length === 0" class="eco-empty">
-                    未发现属性数据
-                </div>
-            </div>
-        </div>
-    </div>
-</transition>
+                                <!-- 空状态 -->
+                                <div v-if="Object.keys(featureQueryResult || {}).length === 0" class="eco-empty">
+                                    未发现属性数据
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </transition>
 
                 <!-- 点击后按需加载的 Cesium 组件（外层包裹 div 解决 Vue 3 Fragment 的 v-show 穿透失效问题） -->
-                <div v-show="is3DMode && !isAccountPanelFullscreen" class="cesium-wrapper" style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
+                <div v-show="is3DMode && !isAccountPanelFullscreen" class="cesium-wrapper"
+                    style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
                     <component :is="CesiumContainer" v-if="isCesiumLoaded" />
                 </div>
                 <div v-if="isCesiumLoading && !isAccountPanelFullscreen" class="cesium-loading">
@@ -971,40 +943,34 @@ onMounted(async () => {
             </div>
 
             <!-- 侧边容器栏（右）-->
-            <div class="side-panel-wrapper" :class="{ 'collapsed': isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }">
+            <div class="side-panel-wrapper"
+                :class="{ 'collapsed': isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }">
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
-                    :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab"
-                    :activeFeature="activeFeature" :userLayers="userLayers" :baseLayers="baseLayers"
-                    :toolboxOverview="toolboxOverview" :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi" :get-user-location="getMapUserLocation"
-                    :start-bus-point-pick="startBusPointPick"
-                    :draw-route-on-map="drawRouteOnMap"
-                    :zoom-to-bus-route-step="zoomToBusRouteStep"
+                    :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab" :activeFeature="activeFeature"
+                    :userLayers="userLayers" :baseLayers="baseLayers" :toolboxOverview="toolboxOverview"
+                    :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi"
+                    :get-user-location="getMapUserLocation" :start-bus-point-pick="startBusPointPick"
+                    :draw-route-on-map="drawRouteOnMap" :zoom-to-bus-route-step="zoomToBusRouteStep"
                     :preview-bus-route-step="previewBusRouteStep"
                     :clear-bus-route-step-preview="clearBusRouteStepPreview"
-                    :draw-drive-route-on-map="drawDriveRouteOnMap"
-                    :zoom-to-drive-route-step="zoomToDriveRouteStep"
+                    :draw-drive-route-on-map="drawDriveRouteOnMap" :zoom-to-drive-route-step="zoomToDriveRouteStep"
                     :preview-drive-route-step="previewDriveRouteStep"
-                    :clear-drive-route-step-preview="clearDriveRouteStepPreview"
-                    @upload-data="handleUploadData" @interaction="handleInteraction"
-                    @toggle-layer-visibility="handleToggleLayerVisibility"
+                    :clear-drive-route-step-preview="clearDriveRouteStepPreview" @upload-data="handleUploadData"
+                    @interaction="handleInteraction" @toggle-layer-visibility="handleToggleLayerVisibility"
                     @change-layer-opacity="handleChangeLayerOpacity" @set-base-layer="handleSetBaseLayer"
                     @toggle-base-layer-visibility="handleToggleBaseLayerVisibility"
-                    @toggle-layer-label-visibility="handleToggleLayerLabelVisibility"
-                    @zoom-layer="handleZoomLayer" @view-layer="handleViewLayer"
-                    @remove-layer="handleRemoveLayer" @reorder-user-layers="handleReorderUserLayers"
-                    @solo-layer="handleSoloLayer" @apply-style-template="handleApplyStyleTemplate"
-                    @update-draw-style="handleUpdateDrawStyle" @update-layer-style="handleUpdateLayerStyle"
+                    @toggle-layer-label-visibility="handleToggleLayerLabelVisibility" @zoom-layer="handleZoomLayer"
+                    @view-layer="handleViewLayer" @remove-layer="handleRemoveLayer"
+                    @reorder-user-layers="handleReorderUserLayers" @solo-layer="handleSoloLayer"
+                    @apply-style-template="handleApplyStyleTemplate" @update-draw-style="handleUpdateDrawStyle"
+                    @update-layer-style="handleUpdateLayerStyle"
                     @highlight-attribute-feature="handleHighlightAttributeFeature"
-                    @zoom-attribute-feature="handleZoomAttributeFeature"
-                    @layer-selected="handleLayerSelected"
+                    @zoom-attribute-feature="handleZoomAttributeFeature" @layer-selected="handleLayerSelected"
                     @draw-point-by-coordinates="handleDrawPointByCoordinates"
-                    @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson"
-                    @toggle-layer-crs="handleToggleLayerCRS"
-                    @export-layer-data="handleExportLayerData"
-                    @switch-tab="handleSwitchSidePanelTab"
-                    @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel"
-                    @close-chat="handleCloseChat">
+                    @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson" @toggle-layer-crs="handleToggleLayerCRS"
+                    @export-layer-data="handleExportLayerData" @switch-tab="handleSwitchSidePanelTab"
+                    @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel" @close-chat="handleCloseChat">
                     <template v-slot:extra-content>
                         <div class="extra-info">
                             <h3>提示</h3>
@@ -1060,6 +1026,7 @@ onMounted(async () => {
     box-sizing: border-box;
     overflow: hidden;
 }
+
 .Control-panel {
     width: 60px;
     /* Fixed width for left control panel */
@@ -1072,6 +1039,7 @@ onMounted(async () => {
     border-radius: 10px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
+
 .map-wrapper {
     flex: 1;
     background: #e6f7ff;
@@ -1081,7 +1049,10 @@ onMounted(async () => {
     overflow: hidden;
     display: flex;
     min-width: 0;
-    margin: 5px;
+    /* 展示使用0边距 */
+    margin: 0px;
+    /* margin-right: 0px; */
+    z-index: 1;
     /* Important for flex items to shrink */
 }
 
@@ -1108,27 +1079,35 @@ onMounted(async () => {
 :deep(.home-account-panel) {
     position: absolute !important;
     top: 5px !important;
-    left: 215px !important; /* 位于鹰眼(左侧, 宽200px)的右侧 */
+    left: 215px !important;
+    /* 位于鹰眼(左侧, 宽200px)的右侧 */
     bottom: auto !important;
-    z-index: 2200 !important; /* 高于地图和其他组件 */
-    flex-direction: column !important; /* 调整流向为向下展开 */
+    z-index: 2200 !important;
+    /* 高于地图和其他组件 */
+    flex-direction: column !important;
+    /* 调整流向为向下展开 */
 }
+
 /* 设置向下展开的动画源点及过渡方向 */
 :deep(.home-account-panel .account-panel) {
     transform-origin: top left !important;
 }
+
 :deep(.home-account-panel .account-panel-transition-enter-from),
 :deep(.home-account-panel .account-panel-transition-leave-to) {
     transform: translateY(-20px) scale(0.96) !important;
 }
+
 :deep(.home-account-panel.is-fullscreen) {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;
     height: 100% !important;
-    z-index: 5000 !important; /* 在 map-wrapper 内封顶 */
+    z-index: 5000 !important;
+    /* 在 map-wrapper 内封顶 */
     gap: 0 !important;
 }
+
 :deep(.home-account-panel.is-fullscreen .account-panel) {
     position: absolute !important;
     inset: 0 !important;
@@ -1148,6 +1127,7 @@ onMounted(async () => {
         max-width: none !important;
         /* Mobile follows the map area width and sits just under the top bar */
     }
+
     /* 隐藏控制面板 */
     .Control-panel {
         display: none;
@@ -1159,6 +1139,7 @@ onMounted(async () => {
     top: 100px !important;
     left: 20px !important;
 }
+
 :deep(.cesium-viewer-toolbar) {
     top: 80px !important;
 }
@@ -1205,9 +1186,15 @@ onMounted(async () => {
 }
 
 @keyframes weather-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
+
 /* 面板主体 */
 .eco-query-panel {
     position: absolute;
@@ -1215,7 +1202,8 @@ onMounted(async () => {
     bottom: 20px;
     width: 300px;
     background: #ffffff;
-    border-radius: 20px; /* 大圆角，匹配导航栏风格 */
+    border-radius: 20px;
+    /* 大圆角，匹配导航栏风格 */
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     border: 1px solid #e0eee0;
@@ -1224,7 +1212,8 @@ onMounted(async () => {
 
 /* 头部：对标你的绿色顶栏 */
 .eco-header {
-    background-color: #56AB56; /* 匹配你截图顶栏的绿色 */
+    background-color: #56AB56;
+    /* 匹配你截图顶栏的绿色 */
     padding: 12px 16px;
     display: flex;
     justify-content: space-between;
@@ -1274,8 +1263,10 @@ onMounted(async () => {
 }
 
 .eco-tag {
-    background: #E9F5E9; /* 浅绿背景 */
-    color: #468a46;      /* 深绿文字 */
+    background: #E9F5E9;
+    /* 浅绿背景 */
+    color: #468a46;
+    /* 深绿文字 */
     padding: 4px 12px;
     border-radius: 20px;
     font-size: 11px;
@@ -1294,6 +1285,7 @@ onMounted(async () => {
 .eco-list-container::-webkit-scrollbar {
     width: 4px;
 }
+
 .eco-list-container::-webkit-scrollbar-thumb {
     background: #56AB56;
     border-radius: 10px;
@@ -1345,19 +1337,22 @@ onMounted(async () => {
     opacity: 0;
     transform: translateY(20px) scale(0.95);
 }
+
 .side-panel-wrapper {
     width: 350px;
     flex-shrink: 0;
     background: #f5f5f5;
     border-radius: 10px;
-    overflow: hidden;
+    overflow: visible !important;
+    position: relative;
     display: flex;
     flex-direction: column;
     transition: width 0.3s ease, height 0.3s ease;
+    z-index: 2;
 }
 
 .side-panel-wrapper.collapsed {
-    width: 20px;
+    width: 0px;
 }
 
 /* 侧边栏占位符样式 */
@@ -1467,6 +1462,7 @@ onMounted(async () => {
     from {
         transform: rotate(0deg);
     }
+
     to {
         transform: rotate(360deg);
     }
@@ -1485,7 +1481,7 @@ onMounted(async () => {
         /* Map takes available space */
         min-height: 50vh;
         /* Ensure map has height */
-        margin:2px
+        margin: 2px
     }
 
     .map-wrapper.weather-mode {
@@ -1515,7 +1511,7 @@ onMounted(async () => {
     }
 
     .side-panel-wrapper.collapsed {
-        height: 20px;
+        height: 0px;
         width: 100%;
     }
 

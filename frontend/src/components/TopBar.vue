@@ -11,7 +11,7 @@
             <div class="menu-host" ref="menuHostRef">
                 <button class="nav-btn" @click="toggleToolMenu" title="菜单项">
                     <span class="btn-icon">
-                    <list-icon :size="18" color="#ffffff" :stroke-width="2" />
+                        <list-icon :size="18" color="#ffffff" :stroke-width="2" />
                     </span>
                     <span class="btn-text">菜单</span>
                 </button>
@@ -54,28 +54,28 @@
 
             <button class="nav-btn" @click="handleShareView" title="分享当前视角">
                 <span class="btn-icon">
-                <share-2-icon :size="18" color="white" :stroke-width="1.8" />
+                    <share-2-icon :size="18" color="white" :stroke-width="1.8" />
                 </span>
                 <span class="btn-text">分享</span>
             </button>
 
             <button class="nav-btn" @click="handleOpenChat" title="AI 助手">
                 <span class="btn-icon">
-                <bot-icon :size="20" color="white" :stroke-width="2" />
+                    <bot-icon :size="20" color="white" :stroke-width="2" />
                 </span>
                 <span class="btn-text">AI 助手</span>
             </button>
 
             <button class="nav-btn" @click="handleToggle3D" title="切换2D/3D视图">
                 <span class="btn-icon">
-                <GlobeIcon :size="18" color="white" :stroke-width="2" />
+                    <GlobeIcon :size="18" color="white" :stroke-width="2" />
                 </span>
                 <span class="btn-text">3D视图</span>
             </button>
 
             <button class="nav-btn" @click="handleToggleAccountCenter" title="用户中心">
                 <span class="btn-icon">
-                    <sparkles-icon :size="18" color="white" :stroke-width="2" />
+                    <user-icon :size="18" color="white" :stroke-width="2" />
                 </span>
                 <span class="btn-text">用户中心</span>
             </button>
@@ -555,7 +555,8 @@ onBeforeUnmount(() => {
     -webkit-backdrop-filter: blur(8px);
     padding: 6px;
     z-index: 2200;
-    overflow: hidden;          /* 防止内容超出圆角 */
+    overflow: hidden;
+    /* 防止内容超出圆角 */
 }
 
 .menu-divider {
@@ -603,7 +604,7 @@ onBeforeUnmount(() => {
 }
 
 .nav-btn {
-   background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.25);
     color: #eee;
     padding: 8px 16px;
