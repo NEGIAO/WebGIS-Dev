@@ -4,8 +4,14 @@
         ref="mapContainerRef">
         <div id="map" ref="mapRef"></div>
 
+        <!-- Map Swipe Controller -->
+        <MapSwipeController v-if="layerStore.swipeConfig.enabled" :swipe-position="layerStore.swipeConfig.position"
+            :swipe-mode="layerStore.swipeConfig.mode" :is-active="layerStore.swipeConfig.enabled"
+            :container-rect="mapContainerRect" @update:swipe-position="handleSwipePositionUpdate"
+            @update:swipe-mode="handleSwipeModeUpdate" @close="handleSwipeClose" />
+
         <!-- <MapEasterEgg :map-instance="mapInstance" :bounds="DIHUAN_BOUNDS" :images="IMAGES" over -->
-            @open-large-image="handleEasterEggImageOpen" @location-change="handleEasterEggLocationChange" />
+        @open-large-image="handleEasterEggImageOpen" @location-change="handleEasterEggLocationChange" />
 
         <LayerControlPanel :map-instance="mapInstance" :layer-list="layerList" :selected-layer="selectedLayer"
             :custom-map-url="customMapUrl" :active-graticule="showDynamicSplitLines"
@@ -22,9 +28,7 @@
         </div>
 
         <!-- 风水宫位解释面板 -->
-        <PalaceExplanationPanel 
-            :selected-palace="selectedPalace" 
-            :theme-config="compassStore.config"
+        <PalaceExplanationPanel :selected-palace="selectedPalace" :theme-config="compassStore.config"
             @close="handleCloseExplanation" />
 
         <!-- 底部控制栏 -->
@@ -45,9 +49,10 @@
    便于进行项目的维护和升级
    避免臃肿和职责混乱 
 */
-import { computed, ref, onMounted, onUnmounted, shallowRef } from 'vue';
+import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useManagedLayerRegistry } from '../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../composables/useUserLocation';
+import { useMapSwipe } from '../composables/useMapSwipe';
 import { useMessage } from '../composables/useMessage';
 import { useMapState } from '../composables/useMapState';
 import { loadMapRuntimeDeps } from '../utils/gis/mapRuntimeDeps';
@@ -97,13 +102,14 @@ import {
 } from '../constants';
 import { createAutoTileSourceFromUrl } from '../composables/useTileSourceFactory';
 import LayerControlPanel from './LayerControlPanel.vue';
+import MapSwipeController from './MapSwipeController.vue';
 // import MapEasterEgg from './MapEasterEgg.vue';
 import MapControlsBar from './MapControlsBar.vue';
 import AttributeTable from './AttributeTable.vue';
 import FengShuiCompassSvg from './feng-shui-compass-svg/feng-shui-compass-svg.vue';
 import PalaceExplanationPanel from './PalaceExplanationPanel.vue';
 import { apiReverseGeocodeWithFallback } from '../api';
-import { useAttrStore, useUrlParamStore, useCompassStore, useTOCStore } from '../stores';
+import { useAttrStore, useUrlParamStore, useCompassStore, useTOCStore, useLayerStore } from '../stores';
 import { CompassManager } from '../services/CompassManager';
 import { DistrictManager } from '../services/DistrictManager';
 
@@ -112,15 +118,209 @@ const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
 const compassStore = useCompassStore();
 const tocStore = useTOCStore();
+const layerStore = useLayerStore();
 
+// ========== Map Swipe Setup ==========
+const SWIPE_COMPARE_LAYER_PREFIX = '__swipe_compare_layer__';
+const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom', 'local_tiles_preset']);
+
+function resolveSwipeLayerIds(presetId) {
+    const layerIds = resolvePresetLayerIds(presetId).filter((id) => {
+        const layerConfig = LAYER_CONFIGS.find((cfg) => cfg.id === id);
+        return !!layerConfig?.createSource;
+    });
+
+    return layerIds;
+}
+
+function createSwipeSourceByLayerId(layerId) {
+    const layerConfig = LAYER_CONFIGS.find((cfg) => cfg.id === layerId);
+    if (!layerConfig) return null;
+
+    const layerFactoryContext = {
+        normBase: NORM_BASE,
+        tiandituTk: TIANDITU_TK,
+        customUrl: customMapUrl.value || ''
+    };
+
+    return layerConfig.createSource?.(layerFactoryContext) || null;
+}
+
+function clearSwipeCompareLayers() {
+    if (!mapInstance.value) return;
+
+    const toRemove = mapInstance.value
+        .getLayers()
+        .getArray()
+        .filter((layer) => String(layer.get('name') || '').startsWith(SWIPE_COMPARE_LAYER_PREFIX));
+
+    toRemove.forEach((layer) => mapInstance.value.removeLayer(layer));
+}
+
+function resolveVisibleTileLayersByIds(layerIds) {
+    return (layerIds || [])
+        .map((id) => layerInstances[id])
+        .filter((layer) => {
+            if (!layer) return false;
+            if (layer.constructor?.name !== 'TileLayer') return false;
+            const source = layer.getSource?.();
+            return !!(source && typeof source.getTile === 'function' && layer.getVisible?.());
+        });
+}
+
+// 启用双底图对比功能 (卷帘分析)
+async function enableBasemapSwipe(config = {}) {
+    const { leftBasemapId, rightBasemapId, mode = 'horizontal' } = config;
+
+    if (!mapInstance.value) {
+        throw new Error('地图尚未初始化');
+    }
+
+    if (!leftBasemapId || !rightBasemapId) {
+        throw new Error('左右底图 ID 不能为空');
+    }
+
+    if (SWIPE_UNSUPPORTED_PRESETS.has(leftBasemapId) || SWIPE_UNSUPPORTED_PRESETS.has(rightBasemapId)) {
+        const errorMsg = '不支持的底图类型。卷帘分析仅支持标准在线底图，请选择其他底图选项。';
+        console.error('[enableBasemapSwipe] Error:', errorMsg);
+        message.error(errorMsg);
+        throw new Error(errorMsg);
+    }
+
+    try {
+        console.log('[enableBasemapSwipe] Starting with:', { leftBasemapId, rightBasemapId, mode });
+
+        // 先将左侧预设设为当前主底图，确保左侧完整显示的是“底图组”而非单层。
+        if (typeof switchLayerById === 'function') {
+            switchLayerById(leftBasemapId, {
+                onUpdated: () => {
+                    selectedLayer.value = leftBasemapId;
+                }
+            });
+            if (typeof emitBaseLayersChangeBatched === 'function') {
+                emitBaseLayersChangeBatched();
+            }
+        }
+
+        // 清理旧状态，避免重复附着与旧图层残留。
+        detachSwipeFromLayers();
+        clearSwipeCompareLayers();
+
+        const leftLayerIds = resolveSwipeLayerIds(leftBasemapId);
+        const rightLayerIds = resolveSwipeLayerIds(rightBasemapId);
+
+        if (!leftLayerIds.length) {
+            throw new Error(`左侧底图组 ${leftBasemapId} 没有可用图层`);
+        }
+        if (!rightLayerIds.length) {
+            throw new Error(`右侧底图组 ${rightBasemapId} 没有可用图层`);
+        }
+
+        const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);
+        if (!leftTileLayers.length) {
+            throw new Error('左侧底图组未完成初始化，请稍后再试');
+        }
+
+        const rightCompareLayers = [];
+
+        rightLayerIds.forEach((layerId, index) => {
+            const source = createSwipeSourceByLayerId(layerId);
+            if (!source) {
+                throw new Error(`无法为右侧图层 ${layerId} 创建 source`);
+            }
+
+            const compareLayer = new TileLayer({
+                source,
+                visible: true,
+                properties: {
+                    name: `${SWIPE_COMPARE_LAYER_PREFIX}_${index}_${layerId}`,
+                    layerType: 'basemap-swipe-compare',
+                    swipeCompareLayer: true,
+                    swipeSide: 'right',
+                    swipeLayerId: layerId
+                }
+            });
+
+            // 保证右侧对比图层在左侧图层上方渲染（仅右侧区域会显示）。
+            compareLayer.setZIndex(10000 + index);
+            mapInstance.value.addLayer(compareLayer);
+            rightCompareLayers.push(compareLayer);
+        });
+
+        if (!rightCompareLayers.length) {
+            throw new Error('右侧底图组创建失败');
+        }
+
+        const swipeBindings = [
+            ...leftTileLayers.map((layer) => ({ layer, side: 'left' })),
+            ...rightCompareLayers.map((layer) => ({ layer, side: 'right' }))
+        ];
+
+        console.log('[enableBasemapSwipe] Attaching swipe handlers:', {
+            leftLayerIds,
+            rightLayerIds,
+            leftLayerCount: leftTileLayers.length,
+            rightLayerCount: rightCompareLayers.length
+        });
+
+        attachSwipeToLayers(mapInstance.value, swipeBindings);
+        updateSwipeMode(mode);
+
+        layerStore.setSwipeConfig({
+            enabled: true,
+            position: 0.5,
+            mode,
+            targetLayerIds: [...leftLayerIds, ...rightLayerIds]
+        });
+
+        mapInstance.value.render();
+
+        message.success('卷帘分析已启用，拖拽分割线对比两个底图组');
+
+        return {
+            success: true,
+            message: '已启用卷帘分析对比'
+        };
+    } catch (error) {
+        console.error('[enableBasemapSwipe] Error:', error);
+        message.error(String(error?.message || error || '启用失败'));
+        throw error;
+    }
+}
+const {
+    attachToLayers: attachSwipeToLayers,
+    detachFromLayers: detachSwipeFromLayers,
+    updateSwipePosition,
+    updateSwipeMode
+} = useMapSwipe();
+
+const mapContainerRect = ref(null);
 
 const store = useCompassStore();
 const selectedPalace = computed(() => store.selectedPalace);
 
 // 关闭宫位解释面板
 const handleCloseExplanation = () => {
-  store.setSelectedPalace(null);
+    store.setSelectedPalace(null);
 };
+
+// ========== Map Swipe Event Handlers ==========
+function handleSwipePositionUpdate(position) {
+    layerStore.updateSwipePosition(position);
+    updateSwipePosition(position);
+}
+
+function handleSwipeModeUpdate(mode) {
+    layerStore.updateSwipeMode(mode);
+    updateSwipeMode(mode);
+}
+
+function handleSwipeClose() {
+    layerStore.disableSwipe();
+    detachSwipeFromLayers();
+    clearSwipeCompareLayers();
+    mapInstance.value?.render?.();
+}
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -886,6 +1086,38 @@ async function runDeferredStartupTasks() {
 }
 
 
+// ========== Map Swipe Watcher ==========
+// 监听swipeConfig变化：仅负责关闭时清理。
+// 开启卷帘的绑定逻辑统一在 enableBasemapSwipe 中执行，避免与 watcher 互相覆盖。
+watch(() => layerStore.swipeConfig.enabled, (enabled) => {
+    if (enabled) {
+        return;
+    }
+
+    detachSwipeFromLayers();
+    clearSwipeCompareLayers();
+    if (mapInstance.value) {
+        mapInstance.value.render();
+    }
+}, { immediate: false });
+
+// ========== Update Map Container Rect ==========
+watch(() => mapContainerRef.value, (el) => {
+    if (el) {
+        mapContainerRect.value = el.getBoundingClientRect();
+    }
+}, { immediate: true });
+
+// 监听窗口大小变化以更新容器rect
+if (typeof window !== 'undefined') {
+    window.addEventListener('resize', () => {
+        if (mapContainerRef.value) {
+            mapContainerRect.value = mapContainerRef.value.getBoundingClientRect();
+        }
+    });
+}
+
+
 // [隶属] 组件卸载-资源清理
 // [作用] 组件卸载时清理地图实例、事件监听、异步
 // 任务等，避免内存泄漏和潜在错误。
@@ -893,6 +1125,7 @@ onUnmounted(() => {
     componentUnmountedRef.value = true;
     stopMapViewSync();
     stopGraticule();
+    detachSwipeFromLayers();
     districtManagerRef?.dispose?.();
     districtManagerRef = null;
     compassManagerRef?.dispose?.();
@@ -1455,7 +1688,8 @@ defineExpose({
     drawAmapAoiByDetailJsonInput,
     toggleLayerCRS,
     toggleSearchLayerCRS,
-    exportLayerCoordinates
+    exportLayerCoordinates,
+    enableBasemapSwipe
 });
 </script>
 
@@ -1486,6 +1720,7 @@ defineExpose({
 .map-container.compass-placement-mode #map {
     cursor: crosshair;
 }
+
 
 /* OpenLayers Tooltips Override */
 :deep(.ol-tooltip) {

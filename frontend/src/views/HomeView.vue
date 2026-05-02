@@ -310,6 +310,36 @@ async function handleControlsDistrictSelect(payload) {
     }
 }
 
+/**
+ * 处理卷帘分析（双底图对比）事件
+ */
+async function handleEnableBasemapSwipe(payload) {
+    const { leftBasemap, rightBasemap, mode } = payload || {};
+
+    console.log('[handleEnableBasemapSwipe] Received payload:', { leftBasemap, rightBasemap, mode });
+
+    if (!mapContainerRef.value) {
+        console.error('[handleEnableBasemapSwipe] MapContainer ref not available');
+        message.error('地图容器未准备好');
+        return;
+    }
+
+    try {
+        console.log('[handleEnableBasemapSwipe] Calling mapContainerRef.enableBasemapSwipe');
+        // 调用MapContainer的swipe相关方法
+        const result = await mapContainerRef.value?.enableBasemapSwipe?.({
+            leftBasemapId: leftBasemap,
+            rightBasemapId: rightBasemap,
+            mode: mode || 'horizontal'
+        });
+        console.log('[handleEnableBasemapSwipe] Result:', result);
+    } catch (error) {
+        console.error('[handleEnableBasemapSwipe] Error:', error);
+        const detail = String(error?.message || '').trim();
+        message.error(detail || '卷帘分析启用失败，请检查底图配置');
+    }
+}
+
 function getLayerMetaById(layerId) {
     const id = String(layerId || '').trim();
     if (!id) return null;
@@ -830,7 +860,8 @@ onMounted(async () => {
             <!-- 侧边控制栏（左）-->
             <div class="Control-panel">
                 <ControlsPanel @open-tab="handleControlsOpenTab" @map-interaction="handleControlsMapInteraction"
-                    @show-analysis="handleControlsShowAnalysis" @district-select="handleControlsDistrictSelect" />
+                    @show-analysis="handleControlsShowAnalysis" @district-select="handleControlsDistrictSelect"
+                    @enable-basemap-swipe="handleEnableBasemapSwipe" />
             </div>
 
 

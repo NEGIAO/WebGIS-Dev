@@ -354,6 +354,7 @@ function handleNewsImageError(event) {
     transition: width 0.3s ease;
     overflow: visible !important;
     position: relative;
+    border-radius: 16px 0 0 16px;
 }
 
 /* 折叠手柄 */
