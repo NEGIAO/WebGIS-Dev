@@ -157,15 +157,44 @@ function clearSwipeCompareLayers() {
     toRemove.forEach((layer) => mapInstance.value.removeLayer(layer));
 }
 
+function isValidTileLayer(layer) {
+    if (!layer) return false;
+    if (layer.constructor?.name !== 'TileLayer') return false;
+    const source = layer.getSource?.();
+    return !!(source && typeof source.getTile === 'function' && layer.getVisible?.());
+}
+
 function resolveVisibleTileLayersByIds(layerIds) {
+    if (!mapInstance.value) return [];
+    
+    const mapLayers = mapInstance.value.getLayers().getArray();
+    
     return (layerIds || [])
-        .map((id) => layerInstances[id])
-        .filter((layer) => {
-            if (!layer) return false;
-            if (layer.constructor?.name !== 'TileLayer') return false;
-            const source = layer.getSource?.();
-            return !!(source && typeof source.getTile === 'function' && layer.getVisible?.());
-        });
+        .map((layerId) => {
+            // 策略1：从 layerInstances 获取（快速路径）
+            let layer = layerInstances[layerId];
+            if (isValidTileLayer(layer)) {
+                console.log(`[resolveVisibleTileLayersByIds] Found layer ${layerId} in layerInstances`);
+                return layer;
+            }
+            
+            // 策略2：从 map.getLayers() 中查找（降级路径，应对部署环境的异步初始化问题）
+            layer = mapLayers.find((l) => {
+                const name = l.get?.('name');
+                const id = l.get?.('id');
+                return (name === layerId || id === layerId) && isValidTileLayer(l);
+            });
+            if (layer) {
+                console.log(`[resolveVisibleTileLayersByIds] Found layer ${layerId} in map.getLayers()`);
+                // 同时更新 layerInstances 以加速后续查询
+                layerInstances[layerId] = layer;
+                return layer;
+            }
+            
+            console.warn(`[resolveVisibleTileLayersByIds] Layer ${layerId} not found in either layerInstances or map.getLayers()`);
+            return null;
+        })
+        .filter(Boolean);
 }
 
 // 启用双底图对比功能 (卷帘分析)
@@ -216,9 +245,30 @@ async function enableBasemapSwipe(config = {}) {
             throw new Error(`右侧底图组 ${rightBasemapId} 没有可用图层`);
         }
 
+        // ========== [修复] 解决部署环境的异步初始化问题 ==========
+        // 原因：在部署环境中，switchLayerById 的图层实例化可能存在异步延迟（网络、事件循环）
+        // 修复：等待一个 requestAnimationFrame 周期确保 layerInstances 状态已同步，
+        //      同时给异步初始化充足时间，降级策略会从 map.getLayers() 中查找
+        await new Promise((resolve) => {
+            if (typeof requestAnimationFrame === 'function') {
+                requestAnimationFrame(resolve);
+            } else {
+                setTimeout(resolve, 0);
+            }
+        });
+
         const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);
         if (!leftTileLayers.length) {
-            throw new Error('左侧底图组未完成初始化，请稍后再试');
+            // [改进] 提供详细的调试信息用于故障排除
+            const debugInfo = {
+                leftBasemapId,
+                leftLayerIds,
+                mapLayersCount: mapInstance.value?.getLayers?.().getArray?.().length ?? 0,
+                layerInstancesKeys: Object.keys(layerInstances),
+                mapState: mapInstance.value ? 'initialized' : 'not-initialized'
+            };
+            console.error('[enableBasemapSwipe] Left basemap resolution failed:', debugInfo);
+            throw new Error(`左侧底图组 ${leftBasemapId} 初始化失败。请检查底图配置或稍后重试。调试信息已输出到浏览器控制台。`);
         }
 
         const rightCompareLayers = [];
