@@ -158,55 +158,34 @@ function clearSwipeCompareLayers() {
 }
 
 /**
- * 检查是否为有效的 TileLayer
- * [修复] 移除 getVisible() 检查 - 在部署环境中，图层可能在初始化过程中暂时不可见，
- *        但实际上已经加载到了地图上，不应该因为临时不可见而排除
+ * 直接获取图层，不做任何检查
+ * 简化逻辑，直接从 layerInstances 或 map.getLayers() 中找到图层就使用
  */
-function isValidTileLayer(layer, allowInvisible = true) {
-    if (!layer) return false;
-    if (layer.constructor?.name !== 'TileLayer') return false;
-    const source = layer.getSource?.();
-    if (!source || typeof source.getTile !== 'function') return false;
-    
-    // 严格模式：检查可见性（用于关键操作）
-    // 宽松模式：允许不可见的图层（用于卷帘，因为卷帘会自己控制显示区域）
-    if (!allowInvisible && !layer.getVisible?.()) {
-        return false;
-    }
-    
-    return true;
-}
-
-function resolveVisibleTileLayersByIds(layerIds, allowInvisible = true) {
+function resolveVisibleTileLayersByIds(layerIds) {
     if (!mapInstance.value) return [];
     
     const mapLayers = mapInstance.value.getLayers().getArray();
     const result = [];
     
     (layerIds || []).forEach((layerId) => {
-        // 策略1：从 layerInstances 获取（快速路径）
+        // 策略1：从 layerInstances 获取
         let layer = layerInstances[layerId];
-        if (isValidTileLayer(layer, allowInvisible)) {
-            console.log(`[resolveVisibleTileLayersByIds] Found layer ${layerId} in layerInstances`);
+        if (layer) {
             result.push(layer);
             return;
         }
         
-        // 策略2：从 map.getLayers() 中查找（降级路径，应对部署环境的异步初始化问题）
+        // 策略2：从 map.getLayers() 中查找
         layer = mapLayers.find((l) => {
             const name = l.get?.('name');
             const id = l.get?.('id');
-            return (name === layerId || id === layerId) && isValidTileLayer(l, allowInvisible);
+            return name === layerId || id === layerId;
         });
         if (layer) {
-            console.log(`[resolveVisibleTileLayersByIds] Found layer ${layerId} in map.getLayers()`);
-            // 同时更新 layerInstances 以加速后续查询
             layerInstances[layerId] = layer;
             result.push(layer);
             return;
         }
-        
-        console.warn(`[resolveVisibleTileLayersByIds] Layer ${layerId} not found in either layerInstances or map.getLayers()`);
     });
     
     return result;
@@ -253,13 +232,6 @@ async function enableBasemapSwipe(config = {}) {
         const leftLayerIds = resolveSwipeLayerIds(leftBasemapId);
         const rightLayerIds = resolveSwipeLayerIds(rightBasemapId);
 
-        console.log('[enableBasemapSwipe] Resolved layer IDs:', {
-            leftBasemapId,
-            leftLayerIds,
-            rightBasemapId,
-            rightLayerIds
-        });
-
         if (!leftLayerIds.length) {
             throw new Error(`左侧底图组 ${leftBasemapId} 没有可用图层`);
         }
@@ -268,9 +240,7 @@ async function enableBasemapSwipe(config = {}) {
         }
 
         // ========== [修复] 解决部署环境的异步初始化问题 ==========
-        // 原因：在部署环境中，switchLayerById 的图层实例化可能存在异步延迟（网络、事件循环）
-        // 修复：等待一个 requestAnimationFrame 周期确保 layerInstances 状态已同步，
-        //      同时给异步初始化充足时间，降级策略会从 map.getLayers() 中查找
+        // 等待一个 requestAnimationFrame 周期确保状态已同步
         await new Promise((resolve) => {
             if (typeof requestAnimationFrame === 'function') {
                 requestAnimationFrame(resolve);
@@ -279,30 +249,17 @@ async function enableBasemapSwipe(config = {}) {
             }
         });
 
-        // [修复] 使用宽松模式（allowInvisible=true）允许暂时不可见的图层用于卷帘
-        // 这解决了部署环境中图层在初始化过程中可能暂时不可见的问题
-        const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds, true);
+        // 直接获取图层，不做检查
+        const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);
         if (!leftTileLayers.length) {
-            // [改进] 提供详细的调试信息用于故障排除
-            const debugInfo = {
-                leftBasemapId,
-                leftLayerIds,
-                mapLayersCount: mapInstance.value?.getLayers?.().getArray?.().length ?? 0,
-                layerInstancesKeys: Object.keys(layerInstances),
-                mapState: mapInstance.value ? 'initialized' : 'not-initialized'
-            };
-            console.error('[enableBasemapSwipe] Left basemap resolution failed:', debugInfo);
-            throw new Error(`左侧底图组 ${leftBasemapId} 初始化失败。请检查底图配置或稍后重试。调试信息已输出到浏览器控制台。`);
+            throw new Error(`左侧底图组 ${leftBasemapId} 未找到`);
         }
 
         const rightCompareLayers = [];
 
         rightLayerIds.forEach((layerId, index) => {
-            console.log(`[enableBasemapSwipe] Creating right compare layer: ${layerId} (index: ${index})`);
-            
             const source = createSwipeSourceByLayerId(layerId);
             if (!source) {
-                console.error(`[enableBasemapSwipe] Failed to create source for right layer ${layerId}`);
                 throw new Error(`无法为右侧图层 ${layerId} 创建 source`);
             }
 
@@ -318,35 +275,19 @@ async function enableBasemapSwipe(config = {}) {
                 }
             });
 
-            // 保证右侧对比图层在左侧图层上方渲染（仅右侧区域会显示）。
             compareLayer.setZIndex(10000 + index);
             mapInstance.value.addLayer(compareLayer);
-            console.log(`[enableBasemapSwipe] Right compare layer ${layerId} added to map with zIndex ${10000 + index}`);
             rightCompareLayers.push(compareLayer);
         });
 
-        console.log(`[enableBasemapSwipe] Right compare layers created: ${rightCompareLayers.length}/${rightLayerIds.length}`);
         if (!rightCompareLayers.length) {
-            const debugInfo = {
-                rightBasemapId,
-                rightLayerIds,
-                attemptedCount: rightLayerIds.length
-            };
-            console.error('[enableBasemapSwipe] Right basemap creation failed:', debugInfo);
-            throw new Error(`右侧底图组 ${rightBasemapId} 创建失败。调试信息已输出到浏览器控制台。`);
+            throw new Error('右侧底图组创建失败');
         }
 
         const swipeBindings = [
             ...leftTileLayers.map((layer) => ({ layer, side: 'left' })),
             ...rightCompareLayers.map((layer) => ({ layer, side: 'right' }))
         ];
-
-        console.log('[enableBasemapSwipe] Attaching swipe handlers:', {
-            leftLayerIds,
-            rightLayerIds,
-            leftLayerCount: leftTileLayers.length,
-            rightLayerCount: rightCompareLayers.length
-        });
 
         attachSwipeToLayers(mapInstance.value, swipeBindings);
         updateSwipeMode(mode);
@@ -368,17 +309,10 @@ async function enableBasemapSwipe(config = {}) {
         };
     } catch (error) {
         console.error('[enableBasemapSwipe] Error:', error);
-        console.error('[enableBasemapSwipe] Full error object:', error);
-        
-        // 清理可能已添加的不完整右侧图层
         clearSwipeCompareLayers();
-        
-        // 确保 swipe 状态被重置
         detachSwipeFromLayers();
         layerStore.disableSwipe();
-        
-        const errorMsg = String(error?.message || error || '启用失败');
-        message.error(errorMsg);
+        message.error(String(error?.message || error || '启用失败'));
         throw error;
     }
 }
