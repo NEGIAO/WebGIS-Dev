@@ -470,6 +470,9 @@ export const getMyData = async (params) => {
 
 MIT License - 可自由使用、修改、分发
 
+### 告知义务：
+如果你在任何公开环境（包括但不限于网站、服务器、论文、展览）运行或部署本项目或其衍生版本，请通过邮件 [yaonaigao@gmail.com] 或 GitHub Issue 告知作者。告知你的使用，表明本项目使你得到了帮助即可。
+
 ## 👤 作者
 
 **NEGIAO** - [GitHub](https://github.com/NEGIAO) | [项目分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)

@@ -973,7 +973,6 @@ uniform float alphaFactor;
 uniform float colorSpeedMin;
 uniform float colorSpeedMax;
 
-out vec4 out_FragColor;
 
 vec3 speedToColor(float t) {
   if (t < 0.25) {
