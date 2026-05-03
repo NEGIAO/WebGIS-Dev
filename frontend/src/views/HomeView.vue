@@ -844,7 +844,7 @@ onMounted(async () => {
         <!-- 特效光标遮罩 -->
         <MagicCursor :active="isMagicMode" :effect-name="magicEffectData" @toggle-active="(val) => isMagicMode = val" />
 
-        <!-- 顶部控制栏 -->
+        <!-- 顶部栏菜单栏 -->
         <div class="top-section">
             <TopBar :is-weather-board-mode="isWeatherBoardMode" @activate-magic="handleActivateMagic"
                 @toggle-3d="toggle3D" @open-chat="openChat" @open-toolbox="openToolbox" @open-compass="openCompassPanel"
@@ -853,7 +853,7 @@ onMounted(async () => {
                 @toggle-account-center="handleToggleAccountPanel" />
         </div>
 
-        <!-- 用户公告栏 -->
+        <!-- 系统公告栏 -->
         <PersistentAnnouncementBar />
 
         <div class="content-section">
@@ -902,36 +902,10 @@ onMounted(async () => {
                     v-if="isWeatherBoardMode && shouldLoadWeatherChartPanel && !isAccountPanelFullscreen"
                     class="weather-board-surface" />
 
-                <!-- <transition name="query-panel-fade">
-                    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen" class="query-panel">
-                        <div class="query-panel-header">
-                            <div>
-                                <div class="query-title">属性查询结果</div>
-                                <div class="query-subtitle">
-                                    绘制 {{ toolboxOverview.drawCount }} | 上传 {{ toolboxOverview.uploadCount }}
-                                </div>
-                            </div>
-                            <button class="query-close" @click="closeQueryPanel">×</button>
-                        </div>
-                        <div class="query-panel-body">
-                            <div
-                                v-for="([key, value], idx) in Object.entries(featureQueryResult || {})"
-                                :key="`${key}_${idx}`"
-                                class="query-row"
-                            >
-                                <span class="query-key">{{ key }}</span>
-                                <span class="query-val">{{ value }}</span>
-                            </div>
-                            <div v-if="Object.keys(featureQueryResult || {}).length === 0" class="query-empty">
-                                当前要素没有可展示属性
-                            </div>
-                        </div>
-                    </div>
-                </transition> -->
                 <transition name="query-panel-fade">
                     <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
                         class="eco-query-panel">
-                        <!-- 头部：使用你顶栏那样的鲜艳绿 -->
+                        <!-- 头部：使用顶栏主题色 -->
                         <div class="eco-header">
                             <div class="header-content">
                                 <i class="icon-leaf">🍃</i>
@@ -1489,6 +1463,12 @@ onMounted(async () => {
     font-weight: 600;
 }
 
+.extra-info {
+    padding: 10px;
+    background: #eee;
+    border-radius: 4px;
+    margin-top: 10px;
+}
 @keyframes sidepanel-spin {
     from {
         transform: rotate(0deg);
@@ -1568,12 +1548,5 @@ onMounted(async () => {
         font-size: 14px;
         letter-spacing: 1px;
     }
-}
-
-.extra-info {
-    padding: 10px;
-    background: #eee;
-    border-radius: 4px;
-    margin-top: 10px;
 }
 </style>

@@ -26,7 +26,7 @@
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
 - 🎨 电影级视觉效果、数据可视化、首屏特效
-- 🔍 绘制、测量、路线规划、地点搜索、**双底图对比（Map Swipe）**
+- 🔍 绘制、测量、路线规划、地点搜索、**双底图对比（Map Swipe，仅裁剪在线底图，不影响业务图层）**
 - 🌤️ 实时天气 + 趋势预报
 - 🤖 AI 空间助手（LLM 集成）
 - ⚡ 30-50% 首屏性能优化
@@ -93,6 +93,7 @@ WebGIS_Dev/
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
 │   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）
+│   │   │   ├── MapSwipeController.vue # 卷帘对比控制器（仅作用于在线底图）
 │   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划选择面板（仅定位/加载，TOC 统一承载管理）
 │   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
 │   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）

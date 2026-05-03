@@ -275,7 +275,8 @@ async function enableBasemapSwipe(config = {}) {
                 }
             });
 
-            compareLayer.setZIndex(10000 + index);
+            // 卷帘 compare 图层只负责底图对比，必须低于业务图层的 zIndex，避免遮挡 TOC/矢量数据。
+            compareLayer.setZIndex(100 + index);
             mapInstance.value.addLayer(compareLayer);
             rightCompareLayers.push(compareLayer);
         });

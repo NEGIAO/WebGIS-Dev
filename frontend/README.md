@@ -147,7 +147,7 @@ frontend/
     │   ├── MapControlsBar.vue                   # 底部坐标/缩放/定位工具栏
     │   ├── MapEasterEgg.vue                     # 地图彩蛋组件
     │   ├── MapPointPickerCard.vue               # 地图点选卡片
-    │   ├── MapSwipeController.vue               # 地图对比滑块组件（双底图对比）
+    │   ├── MapSwipeController.vue               # 地图对比滑块组件（仅裁剪在线底图，不影响业务图层）
     │   ├── Message.vue                          # 全局消息条
     │   ├── PersistentAnnouncementBar.vue        # 顶部公告条
     │   ├── SharedResourceTreeItem.vue           # 共享资源树节点
@@ -196,8 +196,8 @@ frontend/
     │   ├── useLayerDataImport.js                # 导入数据转图层主流程
     │   ├── useManagedLayerRegistry.js           # 托管图层注册/广播
     │   ├── useMapState.js                       # 地图状态与视图状态管理
-    │   ├── useMapSwipe.ts                       # 地图对比滑块 Canvas 裁剪逻辑
-    │   ├── useMapSwipeTest.ts                   # 地图对比滑块测试与调试工具
+    │   ├── useMapSwipe.ts                       # 地图对比滑块 Canvas 裁剪逻辑（仅作用于底图层）
+    │   ├── useMapSwipeTest.ts                   # 地图对比滑块测试与调试工具（验证底图/业务图层分离）
     │   ├── useMessage.js                        # 消息系统 composable
     │   ├── useMessageIslandMotion.js            # 消息动效行为控制
     │   ├── useSharedResourceLoader.ts           # 共享资源扫描/加载
