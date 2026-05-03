@@ -16,7 +16,7 @@ jobs:
         uses: sangonzal/repository-traffic-action@v0.1.5
         env:
           # 使用你 Secret 中配置的 Token
-          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          TRAFFIC_ACTION_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}   
         with:
           #  GitHub 用户名/仓库名
           branch: traffic
