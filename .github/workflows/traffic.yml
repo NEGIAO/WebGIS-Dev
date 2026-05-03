@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Repository Traffic
-        uses: sangonzal/repository-traffic-action@v0.1.6
+        uses: sangonzal/repository-traffic-action@v0.1.5
         env:
           # 使用你 Secret 中配置的 Token
           TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
