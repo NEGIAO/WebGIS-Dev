@@ -19,8 +19,4 @@ jobs:
           TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
         with:
           #  GitHub 用户名/仓库名
-          repository: ${{ github.repository }}
-          # 存储数据和图片的文件夹名称
-          workdir: traffic
-          # 存储数据和图片的分支名称，单独一个分支
           branch: traffic
