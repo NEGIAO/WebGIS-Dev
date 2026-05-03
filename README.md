@@ -9,6 +9,8 @@
 ## 📖 项目简介
 <img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/a3fcebc7-4b22-4ad2-8cfc-62443d114da9" />
 
+![Views](https://raw.githubusercontent.com/NEGIAO/WebGIS_Dev/traffic/traffic/views.png)
+
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 

@@ -1,0 +1,26 @@
+name: Repository Traffic
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天北京时间早上 6 点运行 (UTC 0:00)
+  workflow_dispatch:      # 允许手动触发，方便立即测试
+
+jobs:
+  update-traffic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Repository Traffic
+        uses: sangonzal/repository-traffic-action@v0.1.6
+        env:
+          # 使用你 Secret 中配置的 Token
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        with:
+          #  GitHub 用户名/仓库名
+          repository: ${{ github.repository }}
+          # 存储数据和图片的文件夹名称
+          workdir: traffic
+          # 存储数据和图片的分支名称，单独一个分支
+          branch: traffic
