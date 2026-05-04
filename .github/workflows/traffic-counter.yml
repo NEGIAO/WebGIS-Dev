@@ -20,37 +20,46 @@ jobs:
             const fs = require('fs');
             const path = '.github/traffic.json';
 
-            // 读取历史总数
-            let totalViews = 0;
-            let totalClones = 0;
+            // 读取你现有的总数（不清空！不覆盖！）
+            let data = {
+              totalViews: 0,
+              totalClones: 0,
+              lastUpdate: ''
+            };
             if (fs.existsSync(path)) {
-              const data = JSON.parse(fs.readFileSync(path, 'utf8'));
-              totalViews = data.totalViews || 0;
-              totalClones = data.totalClones || 0;
+              data = JSON.parse(fs.readFileSync(path, 'utf8'));
             }
 
-            // 获取 GitHub 官方 14 天数据
+            // 获取 GitHub 官方 14天数据
             const views = await github.request('GET /repos/{owner}/{repo}/traffic/views', {
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
-
             const clones = await github.request('GET /repos/{owner}/{repo}/traffic/clones', {
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
 
-            const countViews = views.data.count || 0;
-            const countClones = clones.data.count || 0;
+            // ==============================================
+            // 逻辑：如果是第一次统计 → 直接用 GitHub 14天总数
+            // 之后每天 → 只加【今天新增】，不重复计算
+            // ==============================================
+            const today = new Date().toISOString().split('T')[0];
+            const todayViews = views.data.views.find(v => v.timestamp.startsWith(today))?.count || 0;
+            const todayClones = clones.data.clones.find(c => c.timestamp.startsWith(today))?.count || 0;
 
-            // 写入最新总数
-            const result = {
-              totalViews: totalViews + countViews,
-              totalClones: totalClones + countClones,
-              lastUpdate: new Date().toISOString()
-            };
+            if (data.totalViews === 0 && data.totalClones === 0) {
+              // 第一次运行：用 GitHub 官方近14天真实总数
+              data.totalViews = views.data.count;
+              data.totalClones = clones.data.count;
+            } else {
+              // 非第一次：只加今天新增
+              data.totalViews += todayViews;
+              data.totalClones += todayClones;
+            }
 
-            fs.writeFileSync(path, JSON.stringify(result, null, 2));
+            data.lastUpdate = new Date().toISOString();
+            fs.writeFileSync(path, JSON.stringify(data, null, 2));
 
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
