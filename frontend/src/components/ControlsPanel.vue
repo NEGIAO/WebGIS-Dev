@@ -111,12 +111,12 @@ const emit = defineEmits([
     'enable-basemap-swipe'
 ]);
 
-const activeId = ref('news');
+const activeId = ref('layers');
 const districtPanelVisible = ref(false);
 
 const menuItems = [
-    { id: 'news', label: '新闻', icon: Newspaper, action: 'toggleNews' },
     { id: 'layers', label: '图层', icon: Layers, action: 'toggleLayers' },
+    { id: 'news', label: '新闻', icon: Newspaper, action: 'toggleNews' },
     { id: 'draw', label: '绘制', icon: Pencil, action: 'toggleDraw' },
     { id: 'measure', label: '测量', icon: Ruler, action: 'toggleMeasure' },
     { id: 'mark', label: '标注', icon: MapPin, action: 'toggleMark' },

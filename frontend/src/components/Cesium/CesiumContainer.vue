@@ -27,6 +27,7 @@
 
   <!-- 风场参数调节面板 -->
   <div v-if="wind2D" class="wind-controls">
+    <button class="close-btn" @click="wind2D = false" title="关闭控制面板">×</button>
     <div class="param-row">
       <label>速度因子: {{ speedFactor.toFixed(1) }}</label>
       <input type="range" min="0.1" max="5" step="0.1" v-model.number="speedFactor" @input="onParamChange" />
@@ -529,6 +530,40 @@ async function loadCustomTileset() {
   transform: translateY(-2px);
 }
 
+
+.wind-controls {
+  position: relative; /* 必须设置，作为按钮定位的基准 */
+  padding: 20px;     /* 留出顶部空间防止遮挡按钮 */
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  /* 其他你现有的样式... */
+}
+
+.close-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  line-height: 1;
+  border-radius: 50%;
+}
+
+.close-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #d12f2f; /* 悬停变为红色提示 */
+  transform: scale(1.1);
+}
 /* 新增风场控制面板样式 */
 .wind-controls {
   position: absolute;

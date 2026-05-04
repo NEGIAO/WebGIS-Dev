@@ -70,7 +70,9 @@
                 <span class="btn-icon">
                     <GlobeIcon :size="18" color="white" :stroke-width="2" />
                 </span>
-                <span class="btn-text">3D视图</span>
+                <span class="btn-text">
+                    {{ is3DMode ? '2D视图' : '3D视图' }}
+                </span>
             </button>
 
             <button class="nav-btn" @click="handleToggleAccountCenter" title="用户中心">
@@ -220,8 +222,11 @@ function handleOpenChat() {
     emit('open-chat');
 }
 
+const is3DMode = ref(false);
+
 function handleToggle3D() {
-    emit('activate-feature', { key: '3d', label: '3D视图' });
+    is3DMode.value = !is3DMode.value;
+    emit('activate-feature', { key: '3d', label: is3DMode.value ? '3D视图' : '2D视图' });
     emit('toggle-3d');
 }
 
