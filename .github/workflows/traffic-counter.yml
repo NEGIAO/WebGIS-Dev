@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch traffic data
+      - name: Fetch and save traffic data
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -20,41 +20,41 @@ jobs:
             const fs = require('fs');
             const path = '.github/traffic.json';
 
+            // 读取历史总数
             let totalViews = 0;
             let totalClones = 0;
-
             if (fs.existsSync(path)) {
               const data = JSON.parse(fs.readFileSync(path, 'utf8'));
-              totalViews = data.count.views || 0;
-              totalClones = data.count.clones || 0;
+              totalViews = data.totalViews || 0;
+              totalClones = data.totalClones || 0;
             }
 
-            const { data: views } = await github.rest.repos.getPageViews({
+            // 获取 GitHub 官方 14 天数据
+            const views = await github.request('GET /repos/{owner}/{repo}/traffic/views', {
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
 
-            const { data: clones } = await github.rest.repos.getClones({
+            const clones = await github.request('GET /repos/{owner}/{repo}/traffic/clones', {
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
 
-            const newViews = views.count || 0;
-            const newClones = clones.count || 0;
+            const countViews = views.data.count || 0;
+            const countClones = clones.data.count || 0;
 
-            const stats = {
-              count: {
-                views: totalViews + newViews,
-                clones: totalClones + newClones,
-              },
-              lastUpdate: new Date().toISOString(),
+            // 写入最新总数
+            const result = {
+              totalViews: totalViews + countViews,
+              totalClones: totalClones + countClones,
+              lastUpdate: new Date().toISOString()
             };
 
-            fs.writeFileSync(path, JSON.stringify(stats, null, 2));
+            fs.writeFileSync(path, JSON.stringify(result, null, 2));
 
-      - name: Commit changes
+      - name: Commit and push
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update traffic stats [auto]"
+          message: "Update traffic statistics [auto]"
           committer_name: GitHub Actions
           committer_email: actions@github.com
