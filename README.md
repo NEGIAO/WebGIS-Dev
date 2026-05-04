@@ -8,7 +8,7 @@
 
 
 [![visitors](https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis)](https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis)
-[![Total Clones](https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=count.clones&url=https%3A%2F%2Fraw.githubusercontent.com%2FNEGIAO%2FWebGIS-Dev%2Fmain%2F.github%2Ftraffic-statistics.json)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic)
+[![Total Clones](https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=count.clones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic)
 ![Last Commit](https://img.shields.io/github/last-commit/negiao/webgis-dev)
 ![Repo Size](https://img.shields.io/github/repo-size/negiao/webgis)
 

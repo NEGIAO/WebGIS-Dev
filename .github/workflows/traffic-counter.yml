@@ -1,33 +1,60 @@
-name: Traffic Statistics
-
+name: Update Traffic Stats
 on:
   schedule:
-    - cron: "0 0 * * *"  # 每天 UTC 0 点运行（中国早上8点）
-  workflow_dispatch:     # 允许手动点一下运行
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
-  stats:
+  traffic:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     permissions:
       contents: write
-      
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Fetch & Save Traffic Data
-        uses: xiaohoo/github-traffic-stats@master
+      - name: Fetch traffic data
+        uses: actions/github-script@v7
         with:
-          path: .github/traffic-statistics.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = '.github/traffic.json';
 
-      - name: Commit & Push
+            let totalViews = 0;
+            let totalClones = 0;
+
+            if (fs.existsSync(path)) {
+              const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+              totalViews = data.count.views || 0;
+              totalClones = data.count.clones || 0;
+            }
+
+            const { data: views } = await github.rest.repos.getPageViews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const { data: clones } = await github.rest.repos.getClones({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const newViews = views.count || 0;
+            const newClones = clones.count || 0;
+
+            const stats = {
+              count: {
+                views: totalViews + newViews,
+                clones: totalClones + newClones,
+              },
+              lastUpdate: new Date().toISOString(),
+            };
+
+            fs.writeFileSync(path, JSON.stringify(stats, null, 2));
+
+      - name: Commit changes
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update traffic statistics [auto]"
+          message: "Update traffic stats [auto]"
           committer_name: GitHub Actions
           committer_email: actions@github.com
