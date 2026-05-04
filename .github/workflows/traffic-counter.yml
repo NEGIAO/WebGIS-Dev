@@ -1,0 +1,33 @@
+name: Traffic Statistics
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # 每天 UTC 0 点运行（中国早上8点）
+  workflow_dispatch:     # 允许手动点一下运行
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch & Save Traffic Data
+        uses: xiaohoo/github-traffic-stats@master
+        with:
+          path: .github/traffic-statistics.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit & Push
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Update traffic statistics [auto]"
+          committer_name: GitHub Actions
+          committer_email: actions@github.com
