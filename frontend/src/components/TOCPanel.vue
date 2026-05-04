@@ -1,8 +1,9 @@
 <template>
     <div class="toolbox-panel">
         <!-- <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.dbf,.shx,.prj,.cpg,.tif,.tiff" @change="handleFileUpload" /> -->
-                <input ref="fileInputRef" type="file" multiple class="hidden-input" accept="." @change="handleFileUpload" />
-        <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input" @change="handleDirectoryUpload" />
+        <input ref="fileInputRef" type="file" multiple class="hidden-input" accept="." @change="handleFileUpload" />
+        <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input"
+            @change="handleDirectoryUpload" />
 
         <div class="header">
             <div>
@@ -12,52 +13,34 @@
         </div>
 
         <div class="tabs">
-            <button class="tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
+                <button class="tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
             <button class="tab" :class="{ active: activeTab === 'draw' }" @click="activeTab = 'draw'">绘制</button>
             <button class="tab" :class="{ active: activeTab === 'style' }" @click="activeTab = 'style'">样式</button>
-            <button class="tab" :class="{ active: activeTab === 'download' }" @click="activeTab = 'download'">下载</button>
+            <button class="tab" :class="{ active: activeTab === 'download' }"
+                @click="activeTab = 'download'">下载</button>
         </div>
 
         <div v-if="activeTab === 'layers'" class="panel-scroll">
-            <LayerPanel
-                :draw-layers="drawLayers"
-                :route-layers="routeLayers"
-                :search-layers="searchLayers"
-                :upload-layers="uploadLayers"
-                :selected-layer-ids="multiSelectedLayerIds"
-                :has-draw-card="hasDrawCard"
-                :overview="overview"
-                :is-raster-layer="isRasterLayer"
-                @action="handleLayerTreeAction"
-            />
+            <LayerPanel :draw-layers="drawLayers" :route-layers="routeLayers" :search-layers="searchLayers"
+                :upload-layers="uploadLayers" :selected-layer-ids="multiSelectedLayerIds" :has-draw-card="hasDrawCard"
+                :overview="overview" :is-raster-layer="isRasterLayer" @action="handleLayerTreeAction" />
 
-            <AmapAoiInjectDialog
-                :visible="manualAoiDialogVisible"
-                :poi-id="manualAoiPoiId"
-                :json-text="manualAoiJsonText"
-                :detail-url="manualAoiDetailUrl"
-                :source-layer-name="manualAoiSourceLayerName"
-                :error-message="manualAoiError"
-                @update:poi-id="manualAoiPoiId = $event"
-                @update:json-text="manualAoiJsonText = $event"
-                @open-detail="openManualAoiDetailLink"
-                @submit="drawAmapAoiFromManualJson"
-                @close="closeManualAoiDialog"
-            />
+            <AmapAoiInjectDialog :visible="manualAoiDialogVisible" :poi-id="manualAoiPoiId"
+                :json-text="manualAoiJsonText" :detail-url="manualAoiDetailUrl"
+                :source-layer-name="manualAoiSourceLayerName" :error-message="manualAoiError"
+                @update:poi-id="manualAoiPoiId = $event" @update:json-text="manualAoiJsonText = $event"
+                @open-detail="openManualAoiDetailLink" @submit="drawAmapAoiFromManualJson"
+                @close="closeManualAoiDialog" />
 
             <div class="upload-zone-wrap">
-                <div
-                    class="upload-entry"
-                    :class="{ dragging: isUploadDragging }"
-                    @dragenter.prevent="handleUploadDragEnter"
-                    @dragover.prevent="handleUploadDragOver"
-                    @dragleave.prevent="handleUploadDragLeave"
-                    @drop.prevent="handleUploadDrop"
-                >
+                <div class="upload-entry" :class="{ dragging: isUploadDragging }"
+                    @dragenter.prevent="handleUploadDragEnter" @dragover.prevent="handleUploadDragOver"
+                    @dragleave.prevent="handleUploadDragLeave" @drop.prevent="handleUploadDrop">
                     <div class="card-top">
                         <div class="card-title upload-title">
                             <span class="upload-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M12 16V5"></path>
                                     <path d="m8 9 4-4 4 4"></path>
                                     <path d="M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5"></path>
@@ -75,7 +58,8 @@
                         <span>❗ 文件大小不超过 {{ MAX_FILE_SIZE_MB }} MB❗</span>
                         <span>🔔数据格式：GeoJSON、KML、KMZ、TIF、SHP</span>
                     </div>
-                    <div v-if="shouldShowUploadProgress" class="upload-progress" :class="`phase-${uploadProgressView.phase}`">
+                    <div v-if="shouldShowUploadProgress" class="upload-progress"
+                        :class="`phase-${uploadProgressView.phase}`">
                         <div class="upload-progress-head">
                             <span>导入状态：{{ uploadProgressView.current }}/{{ uploadProgressView.total || 1 }}</span>
                             <span>{{ uploadProgressLabel }}</span>
@@ -89,7 +73,8 @@
                             <span v-if="uploadProgressView.warnings">警告 {{ uploadProgressView.warnings }}</span>
                             <span v-if="uploadProgressView.errors">错误 {{ uploadProgressView.errors }}</span>
                         </div>
-                        <div v-if="uploadProgressView.message" class="upload-progress-message">{{ uploadProgressView.message }}</div>
+                        <div v-if="uploadProgressView.message" class="upload-progress-message">{{
+                            uploadProgressView.message }}</div>
                     </div>
                 </div>
             </div>
@@ -99,7 +84,8 @@
                 <div class="card shared-resource-card">
                     <div class="card-title shared-resource-title">
                         <span class="share-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="18" cy="5" r="3"></circle>
                                 <circle cx="6" cy="12" r="3"></circle>
                                 <circle cx="18" cy="19" r="3"></circle>
@@ -110,22 +96,14 @@
                         共享资源
                     </div>
                     <div class="shared-resource-menu">
-                        <button 
-                            class="shared-resource-btn" 
-                            :class="{ loading: sharedLoader.isScanning.value }"
-                            @click="scanSharedResources"
-                        >
+                        <button class="shared-resource-btn" :class="{ loading: sharedLoader.isScanning.value }"
+                            @click="scanSharedResources">
                             <span v-if="!sharedLoader.isScanning.value">📁 加载资源</span>
                             <span v-else>⏳ 扫描中...</span>
                         </button>
                         <div v-if="sharedLoader.hasResources.value" class="resource-tree-root">
-                            <SharedResourceTreeItem
-                                v-for="node in sharedLoader.resourceTree.value"
-                                :key="node.id"
-                                :node="node"
-                                :level="0"
-                                @load-resource="loadSharedResource"
-                            />
+                            <SharedResourceTreeItem v-for="node in sharedLoader.resourceTree.value" :key="node.id"
+                                :node="node" :level="0" @load-resource="loadSharedResource" />
                         </div>
                         <div v-else-if="!sharedLoader.isScanning.value && lastScanAttempted" class="resource-empty">
                             暂无可用资源
@@ -135,97 +113,94 @@
             </div>
         </div>
 
-<div v-else-if="activeTab === 'draw'" class="eco-panel-scroll">
-    <!-- 1. 核心绘图工具区 -->
-    <div class="eco-section">
-        <div class="section-header">
-            <span class="section-dot"></span>
-            <span class="section-title">基础绘图</span>
-        </div>
-        <div class="eco-draw-grid">
-            <button
-                v-for="tool in drawTools"
-                :key="tool.value"
-                class="eco-tool-pill"
-                :class="{ active: selectedDrawTool === tool.value }"
-                @click="activateDrawTool(tool.value)"
-            >
-                {{ tool.label }}
-            </button>
-        </div>
-        <div class="eco-actions-flex">
-            <button class="eco-btn-op primary" @click="emit('interaction', 'ZoomToGraphics')">全幅显示</button>
-            <button class="eco-btn-op warning" @click="emit('interaction', 'Clear')">清空画布</button>
-        </div>
-    </div>
-
-    <!-- 2. 精确坐标定位区 (合并了经纬度和 P 参数) -->
-    <div class="eco-section alt-bg">
-        <div class="section-header">
-            <span class="section-dot"></span>
-            <span class="section-title">坐标定位</span>
-        </div>
-        
-        <!-- 经纬度输入 -->
-        <div class="eco-input-group">
-            <div class="input-row">
-                <input v-model.trim="coordInputLon" class="eco-input" placeholder="经度" />
-                <input v-model.trim="coordInputLat" class="eco-input" placeholder="纬度" />
+        <div v-else-if="activeTab === 'draw'" class="eco-panel-scroll">
+            <!-- 1. 核心绘图工具区 -->
+            <div class="eco-section">
+                <div class="section-header">
+                    <span class="section-dot"></span>
+                    <span class="section-title">基础绘图</span>
+                </div>
+                <div class="eco-draw-grid">
+                    <button v-for="tool in drawTools" :key="tool.value" class="eco-tool-pill"
+                        :class="{ active: selectedDrawTool === tool.value }" @click="activateDrawTool(tool.value)">
+                        {{ tool.label }}
+                    </button>
+                </div>
+                <div class="eco-actions-flex">
+                    <button class="eco-btn-op primary" @click="emit('interaction', 'ZoomToGraphics')">全幅显示</button>
+                    <button class="eco-btn-op warning" @click="emit('interaction', 'Clear')">清空画布</button>
+                </div>
             </div>
-            <div class="input-row compact">
-                <select v-model="coordInputCRS" class="eco-select">
-                    <option value="wgs84">WGS-84</option>
-                    <option value="gcj02">GCJ-02</option>
-                </select>
-                <button class="eco-btn-sm" @click="drawPointByCoordinates">绘制</button>
+
+            <!-- 2. 精确坐标定位区 (合并了经纬度和 P 参数) -->
+            <div class="eco-section alt-bg">
+                <div class="section-header">
+                    <span class="section-dot"></span>
+                    <span class="section-title">坐标定位</span>
+                </div>
+
+                <!-- 经纬度输入 -->
+                <div class="eco-input-group">
+                    <div class="input-row">
+                        <input v-model.trim="coordInputLon" class="eco-input" placeholder="经度" />
+                        <input v-model.trim="coordInputLat" class="eco-input" placeholder="纬度" />
+                    </div>
+                    <div class="input-row compact">
+                        <select v-model="coordInputCRS" class="eco-select">
+                            <option value="wgs84">WGS-84</option>
+                            <option value="gcj02">GCJ-02</option>
+                        </select>
+                        <button class="eco-btn-sm" @click="drawPointByCoordinates">绘制</button>
+                    </div>
+                </div>
+
+                <div class="eco-divider"><span>OR</span></div>
+
+                <!-- P 参数输入 -->
+                <div class="eco-input-group">
+                    <div class="input-row">
+                        <input v-model.trim="coordInputP" class="eco-input" placeholder="请输入 P 参数" />
+                        <button class="eco-btn-sm" :disabled="isDecodePBusy" @click="drawPointByPositionCode">
+                            {{ isDecodePBusy ? '...' : '解析' }}
+                        </button>
+                    </div>
+                </div>
+                <div v-if="coordInputError || coordInputPError" class="eco-error-msg">
+                    {{ coordInputError || coordInputPError }}
+                </div>
             </div>
-        </div>
 
-        <div class="eco-divider"><span>OR</span></div>
+            <!-- 3. 地理编码工具 -->
+            <div class="eco-section">
+                <div class="section-header">
+                    <span class="section-dot"></span>
+                    <span class="section-title">地理编码</span>
+                </div>
+                <div class="eco-input-group">
+                    <input v-model.trim="geocodeAddressInput" class="eco-input full" placeholder="输入地址..." />
+                    <div class="input-row compact mt-8">
+                        <input v-model.trim="geocodeCityInput" class="eco-input" placeholder="限定城市(可选)" />
+                        <button class="eco-btn-sm" :disabled="isGeocodeBusy"
+                            @click="drawPointByGeocodeAddress">编码</button>
+                    </div>
+                </div>
 
-        <!-- P 参数输入 -->
-        <div class="eco-input-group">
-            <div class="input-row">
-                <input v-model.trim="coordInputP" class="eco-input" placeholder="请输入 P 参数" />
-                <button class="eco-btn-sm" :disabled="isDecodePBusy" @click="drawPointByPositionCode">
-                    {{ isDecodePBusy ? '...' : '解析' }}
+                <button class="eco-btn-reverse mt-12" @click="startReverseGeocodePick">
+                    <span class="icon">📍</span> 地图点选逆编码
                 </button>
             </div>
-        </div>
-        <div v-if="coordInputError || coordInputPError" class="eco-error-msg">
-            {{ coordInputError || coordInputPError }}
-        </div>
-    </div>
 
-    <!-- 3. 地理编码工具 -->
-    <div class="eco-section">
-        <div class="section-header">
-            <span class="section-dot"></span>
-            <span class="section-title">地理编码</span>
-        </div>
-        <div class="eco-input-group">
-            <input v-model.trim="geocodeAddressInput" class="eco-input full" placeholder="输入地址..." />
-            <div class="input-row compact mt-8">
-                <input v-model.trim="geocodeCityInput" class="eco-input" placeholder="限定城市(可选)" />
-                <button class="eco-btn-sm" :disabled="isGeocodeBusy" @click="drawPointByGeocodeAddress">编码</button>
+            <!-- 4. 底部操作提示 (改用气泡感设计) -->
+            <div class="eco-hint-box">
+                <div class="hint-item"><span>左键</span> 选中要素</div>
+                <div class="hint-item"><span>右键</span> 独立显示</div>
+                <div class="hint-item"><span>地图右键</span> 属性查询</div>
             </div>
         </div>
-        
-        <button class="eco-btn-reverse mt-12" @click="startReverseGeocodePick">
-            <span class="icon">📍</span> 地图点选逆编码
-        </button>
-    </div>
-
-    <!-- 4. 底部操作提示 (改用气泡感设计) -->
-    <div class="eco-hint-box">
-        <div class="hint-item"><span>左键</span> 选中要素</div>
-        <div class="hint-item"><span>右键</span> 独立显示</div>
-        <div class="hint-item"><span>地图右键</span> 属性查询</div>
-    </div>
-</div>
 
         <div v-else-if="activeTab === 'download'" class="panel-scroll">
-            <MapDownloader :visible="true" @close="activeTab = 'layers'" @request-extent="emit('request-download-extent')" />
+            <MapDownloader :visible="true" @close="activeTab = 'layers'"
+                @request-extent="emit('request-download-extent')" />
         </div>
 
         <div v-else class="panel-scroll style-scroll">
@@ -245,7 +220,8 @@
                     <label>编辑目标</label>
                     <div class="select-wrap">
                         <select v-model="selectedEditLayerId" class="style-select">
-                            <option v-for="layer in editableLayers" :key="layer.id" :value="layer.id">{{ layer.name }}</option>
+                            <option v-for="layer in editableLayers" :key="layer.id" :value="layer.id">{{ layer.name }}
+                            </option>
                         </select>
                     </div>
                 </div>
@@ -265,14 +241,16 @@
                             <label>填充透明度</label>
                             <span>{{ styleForm.fillOpacityPct }}%</span>
                         </div>
-                        <input class="style-slider" type="range" min="0" max="100" v-model.number="styleForm.fillOpacityPct" />
+                        <input class="style-slider" type="range" min="0" max="100"
+                            v-model.number="styleForm.fillOpacityPct" />
                     </div>
                     <div class="field">
                         <div class="slider-head">
                             <label>边框宽度</label>
                             <span>{{ styleForm.strokeWidth }}</span>
                         </div>
-                        <input class="style-slider" type="range" min="1" max="8" step="0.5" v-model.number="styleForm.strokeWidth" />
+                        <input class="style-slider" type="range" min="1" max="8" step="0.5"
+                            v-model.number="styleForm.strokeWidth" />
                     </div>
                 </div>
                 <button class="small-btn style-apply-btn" @click="applyStyle">应用样式</button>
@@ -407,7 +385,7 @@ function buildAmapDetailUrl(rawPoiId) {
     const poiId = normalizeManualAoiPoiId(rawPoiId, { keepRawFallback: true });
     return poiId
         ? `https://www.amap.com/detail/get/detail?id=${encodeURIComponent(poiId)}`
-    : 'https://www.amap.com/';
+        : 'https://www.amap.com/';
 }
 
 const manualAoiDetailUrl = computed(() => {
@@ -644,18 +622,18 @@ function drawAmapAoiFromManualJson() {
 
     const inputPoiId = normalizeManualAoiPoiId(manualAoiPoiId.value);
     const poiId = inputPoiId || normalizeManualAoiPoiId(jsonText, { keepRawFallback: false });
-        if (poiId) {
-            manualAoiPoiId.value = poiId;
-        }
+    if (poiId) {
+        manualAoiPoiId.value = poiId;
+    }
 
-        emit('draw-amap-aoi-from-json', {
-            poiid: poiId,
+    emit('draw-amap-aoi-from-json', {
+        poiid: poiId,
         jsonText,
-            sourceLayerName: manualAoiSourceLayerName.value
-        });
+        sourceLayerName: manualAoiSourceLayerName.value
+    });
 
-        // closeManualAoiDialog();
-        // 取消自动关闭，允许用户继续修改 JSON 或 POI ID 以调整绘制结果
+    // closeManualAoiDialog();
+    // 取消自动关闭，允许用户继续修改 JSON 或 POI ID 以调整绘制结果
 }
 
 function buildReverseGeocodeProperties(reverseResult) {
@@ -1061,7 +1039,7 @@ function applyTemplate(templateId) {
     if (targetTemplate) {
         styleForm.value.fillColor = targetTemplate.color;
         // 建议：描边色通常可以设为和填充色一致，或者加深一点
-        styleForm.value.strokeColor = targetTemplate.color; 
+        styleForm.value.strokeColor = targetTemplate.color;
     }
 
     // 3. 执行原有的业务 emit (保持与父组件/地图引擎的通信)
@@ -1121,7 +1099,7 @@ async function loadSharedResource(resource) {
     try {
         // 使用共享加载器将资源转换为 File 对象
         const files = await sharedLoader.loadResourceAsFiles(resource.path);
-        
+
         if (!files || files.length === 0) {
             message.warning('无法加载该资源');
             return;
@@ -1141,7 +1119,6 @@ async function loadSharedResource(resource) {
 </script>
 
 <style scoped>
-
 /* 面板容器滚动 */
 .eco-panel-scroll {
     padding: 16px;
@@ -1208,8 +1185,13 @@ async function loadSharedResource(resource) {
     gap: 8px;
 }
 
-.input-row.compact .eco-input { width: 60%; }
-.input-row.compact .eco-btn-sm { flex: 1; }
+.input-row.compact .eco-input {
+    width: 60%;
+}
+
+.input-row.compact .eco-btn-sm {
+    flex: 1;
+}
 
 .eco-input {
     background: #f9fbf9;
@@ -1257,6 +1239,7 @@ async function loadSharedResource(resource) {
     cursor: pointer;
     font-weight: 500;
 }
+
 /* 操作按钮行布局 */
 .eco-actions-flex {
     display: flex;
@@ -1269,7 +1252,8 @@ async function loadSharedResource(resource) {
     flex: 1;
     padding: 10px 0;
     border: none;
-    border-radius: 12px; /* 保持大圆角一致性 */
+    border-radius: 12px;
+    /* 保持大圆角一致性 */
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
@@ -1295,7 +1279,8 @@ async function loadSharedResource(resource) {
 
 /* “清空画布” - 采用柔和的橙黄色，避免过于突兀 */
 .eco-btn-op.warning {
-    background-color: #f8b60084; /* 暖色调的黄色 */
+    background-color: #f8b60084;
+    /* 暖色调的黄色 */
     color: #ffffff;
     box-shadow: 0 4px 12px rgba(248, 181, 0, 0.2);
 }
@@ -1318,15 +1303,21 @@ async function loadSharedResource(resource) {
     margin: 12px 0;
     position: relative;
 }
+
 .eco-divider::before {
     content: "";
     position: absolute;
-    top: 50%; left: 0; right: 0;
-    height: 1.5px; background: #bfc7bfa2;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1.5px;
+    background: #bfc7bfa2;
 }
+
 .eco-divider span {
     position: relative;
-    background: #fff; /* 如果在 alt-bg 区域则设为该色 */
+    background: #fff;
+    /* 如果在 alt-bg 区域则设为该色 */
     padding: 0 10px;
     font-size: 10px;
     color: #ccc;
@@ -1355,8 +1346,13 @@ async function loadSharedResource(resource) {
     font-weight: bold;
 }
 
-.mt-8 { margin-top: 8px; }
-.mt-12 { margin-top: 12px; }
+.mt-8 {
+    margin-top: 8px;
+}
+
+.mt-12 {
+    margin-top: 12px;
+}
 
 .toolbox-panel {
     height: 100%;
@@ -1368,7 +1364,9 @@ async function loadSharedResource(resource) {
     color: #2f3a45;
 }
 
-.hidden-input { display: none; }
+.hidden-input {
+    display: none;
+}
 
 .header {
     display: flex;
@@ -1378,8 +1376,17 @@ async function loadSharedResource(resource) {
     padding-bottom: 8px;
 }
 
-.title { font-size: 20px; font-weight: 700; color: #2b8a4b; letter-spacing: 0.2px; }
-.subtitle { font-size: 12px; color: #72897a; }
+.title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2b8a4b;
+    letter-spacing: 0.2px;
+}
+
+.subtitle {
+    font-size: 12px;
+    color: #72897a;
+}
 
 .tabs {
     display: grid;
@@ -1690,7 +1697,7 @@ async function loadSharedResource(resource) {
     gap: 8px;
 }
 
-.actions-row{
+.actions-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;

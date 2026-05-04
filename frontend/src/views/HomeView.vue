@@ -86,7 +86,7 @@ const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
 const sidePanelWarmupScheduled = ref(false);
-const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
+const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
 const toolboxTab = ref('layers');
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
@@ -921,7 +921,6 @@ onMounted(async () => {
                             v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
                             @map-core-ready="handleMapCoreReady" @map-core-failed="handleMapCoreFailed"
                             @location-change="handleLocationChange" @search-poi-selected="handleSearchPoiSelected"
-                            @map-click="handleMapClick" @update-news-image="handleUpdateNewsImage"
                             @feature-selected="handleFeatureSelected" @user-layers-change="handleUserLayersChange"
                             @graphics-overview="handleGraphicsOverview"
                             @upload-progress-change="handleUploadProgressChange"

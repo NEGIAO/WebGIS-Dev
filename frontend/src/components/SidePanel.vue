@@ -12,8 +12,8 @@
 
         <!-- 面板内容区域 -->
         <div class="panel-content" v-show="!isCollapsed"
-            :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' || activeTab === 'compass' }">
-            <div class="active-feature-banner" v-if="activeFeature?.label">
+            :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' || activeTab === 'compass' || activeTab === 'info' }">
+            <div class="active-feature-banner" v-if="activeFeature?.label && activeTab !== 'info'">
                 当前激活功能：{{ activeFeature.label }}
             </div>
 
@@ -71,50 +71,66 @@
                 <CompassControlPanel :get-user-location="getUserLocation" @close="$emit('switch-tab', 'info')" />
             </div>
 
-            <!-- 模式 6: 新闻展示 (默认) -->
-            <div v-if="activeTab === 'info'" class="info-content">
-                <!-- 顶部 Logo 栏 -->
-                <div class="panel-header">
-                    <img :src="resolvePath('images/院徽.webp')" class="logo" alt="河南大学地理科学学院Logo" loading="lazy"
-                        decoding="async">
-                    <div class="title-wrapper">
-                        <a :href="LINKS.MAIN_NEWS" target="_blank" class="main-title">地科院新闻</a>
+            <!-- 模式 6: 热点新闻 -->
+            <div v-show="activeTab === 'info'" class="news-dashboard">
+                <div class="news-header-bar">
+                    <span class="news-logo">Hot News</span>
+                    <span class="news-subtitle">{{ currentPlatformLabel }} 实时热点</span>
+                </div>
+
+                <!-- 平台标签 -->
+                <div class="news-platform-tabs">
+                    <button
+                        v-for="p in newsPlatforms"
+                        :key="p.key"
+                        class="platform-chip"
+                        :class="{ active: currentPlatform === p.key }"
+                        @click="switchNewsPlatform(p.key)"
+                    >{{ p.label }}</button>
+                </div>
+
+                <!-- 加载状态 -->
+                <div v-if="newsLoading" class="news-loading">
+                    <div class="loading-dot-pulse"></div>
+                    <span>获取热点中...</span>
+                </div>
+
+                <!-- 新闻列表 -->
+                <div v-else class="news-list">
+                    <a
+                        v-for="(item, idx) in newsItems"
+                        :key="idx"
+                        :href="item.url"
+                        target="_blank"
+                        class="news-card"
+                    >
+                        <div class="news-rank" :class="rankClass(idx)">{{ idx + 1 }}</div>
+                        <div class="news-body">
+                            <div class="news-title">{{ item.title }}</div>
+                            <div class="news-meta" v-if="item.desc || item.content">
+                                <span class="news-desc">{{ item.desc || item.content }}</span>
+                            </div>
+                        </div>
+                        <div class="news-score" v-if="item.score || item.publish_time">
+                            <span class="score-value">{{ item.publish_time ? item.publish_time.slice(-8) : formatScore(item.score) }}</span>
+                        </div>
+                    </a>
+                    <div v-if="!newsItems.length && !newsLoading" class="news-empty">
+                        暂无热点数据
                     </div>
                 </div>
 
-                <!-- 新闻标题 -->
-                <div class="news-header">
-                    <a :href="displayData.href" :target="displayData.isExternal ? '_blank' : '_self'">
-                        {{ displayData.title }}
-                    </a>
-                </div>
-
-                <!-- 图片展示区 -->
-                <div class="image-container">
-                    <img :src="displayData.image" class="news-image" :alt="displayData.title" loading="lazy"
-                        decoding="async" fetchpriority="low" @error="handleNewsImageError">
-                </div>
-
-                <!-- 文本内容 -->
-                <div class="text-content" v-html="displayData.text"></div>
-
-                <!-- 交互按钮 -->
-                <button class="action-button" @click="nextNews" title="切换下一条新闻">
-                    点击，新闻++
-                </button>
-
-                <!-- 插槽：允许父组件插入额外内容 -->
-                <slot name="extra-content"></slot>
-
-                <!-- 访问统计，2026.3.9开始 -->
+                <!-- 访问统计 -->
                 <div style="height: 20px; display: flex; justify-content: center; align-items: center;">
                     <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge"
                         loading="lazy" decoding="async" />
                 </div>
 
-                <!-- 底部链接 -->
-                <div class="panel-footer">
-                    <a :href="LINKS.MAIN_NEWS" target="_blank">河南大学地理科学学院！</a>
+                <div class="news-footer">
+                    <span class="footer-status" :class="{ live: !newsLoading }">
+                        <span class="status-dot"></span>
+                        {{ newsLoading ? '加载中' : `更新于 ${lastNewsUpdate}` }}
+                    </span>
                 </div>
             </div>
         </div>
@@ -131,17 +147,41 @@
  * - 支持折叠/展开
  * - 移动端自适应
  */
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import ChatPanelContent from './ChatPanelContent.vue';
 import ToolboxPanel from './TOCPanel.vue';
 import BusPlannerPanel from './BusPlannerPanel.vue';
 import DrivingPlannerPanel from './DrivingPlannerPanel.vue';
 import CompassControlPanel from './CompassControlPanel.vue';
 
-// ========== 1. 常量定义 ==========
-const LINKS = {
-    MAIN_NEWS: "https://cep.henu.edu.cn/zhxw/xyxw.htm"
-};
+// ========== 1. 热点新闻平台配置 ==========
+const NEWS_PLATFORMS = [
+    { key: 'weibo', label: '微博' },
+    { key: 'zhihu', label: '知乎' },
+    { key: 'baidu', label: '百度' },
+    { key: 'bilibili', label: 'B站' },
+    { key: '36kr', label: '36氪' },
+    { key: 'github', label: 'GitHub' },
+    { key: 'juejin', label: '掘金' },
+    { key: 'hackernews', label: 'HN' },
+    { key: 'douyin', label: '抖音' },
+    { key: 'v2ex', label: 'V2EX' },
+    { key: 'tieba', label: '贴吧' },
+    { key: 'jinritoutiao', label: '头条' },
+    { key: 'shaoshupai', label: '少数派' },
+    { key: '52pojie', label: '吾爱破解' },
+    { key: 'douban', label: '豆瓣' },
+    { key: 'hupu', label: '虎扑' },
+    { key: 'tenxunwang', label: '腾讯网' },
+    { key: 'stackoverflow', label: 'StackOverflow' },
+    { key: 'sina_finance', label: '新浪财经' },
+    { key: 'eastmoney', label: '东方财富' },
+    { key: 'xueqiu', label: '雪球' },
+    { key: 'cls', label: '财联社' }
+];
+
+const NEWS_API_BASE = 'https://orz.ai/api/v1/dailynews';
+const NEWS_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 
 // ========== 2. Props & Emits ==========
 const props = defineProps({
@@ -149,13 +189,9 @@ const props = defineProps({
         type: Object,
         default: () => ({ isInDihuan: false, lonLat: [0, 0] })
     },
-    selectedImage: {
-        type: String,
-        default: ''
-    },
     activeTab: {
         type: String,
-        default: 'info' // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
+        default: 'info' // 'info(hotnews)' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
     },
     toolboxTab: {
         type: String,
@@ -233,8 +269,22 @@ const props = defineProps({
 
 const tiandituToken = import.meta.env.VITE_TIANDITU_TK;
 
+function formatScore(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return '';
+    if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+}
+
+function rankClass(idx) {
+    if (idx === 0) return 'rank-top1';
+    if (idx === 1) return 'rank-top2';
+    if (idx === 2) return 'rank-top3';
+    return '';
+}
+
 const emit = defineEmits([
-    'news-changed',
     'toggle-panel',
     'close-chat',
     'switch-tab',
@@ -262,91 +312,57 @@ const emit = defineEmits([
     'request-download-extent'
 ]);
 
-// ========== 3. 工具函数 ==========
-const baseUrl = import.meta.env.BASE_URL || '/';
-const resolvePath = (path) => {
-    const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    return `${base}${path}`;
-};
+// ========== 3. 新闻状态管理 ==========
+const currentPlatform = ref('weibo');
+const newsItems = ref([]);
+const newsLoading = ref(false);
+const lastNewsUpdate = ref('');
+let newsTimer = null;
 
-// ========== 4. 新闻数据源 ==========
-const NEWS_LIST = [
-    {
-        title: "4.22地球日，地环院开展系列活动",
-        text: "春风拂绿野，万物竞芳华。在第56个世界地球日来临之际，4月21日上午，由河南大学相关单位主办，在金明校区马可广场举行。学校相关职能部门领导，地理科学与工程学部委员，地理科学学院全体班子成员和师生代表...",
-        image: "images/地球日活动.webp",
-        href: "https://cep.henu.edu.cn/info/1022/13421.htm"
-    },
-    {
-        title: "地理科学与工程学部首届大会召开",
-        text: "2025年2月23日，河南大学地理科学与工程学部首届大会在河南大学金明校区锥形报告厅顺利召开。中国工程院院士、空间基准全国重点实验室学术带头人王家耀等职能部门有关领导...",
-        image: "images/学部大会.webp",
-        href: "https://cep.henu.edu.cn/info/1022/12491.htm"
-    },
-    {
-        title: "2023级本科生年级大会召开",
-        text: "为助力我院2023级本科生厘清学术培养路径，系统提升科研素养与安全防范能力，树立科学的学术发展与职业规划意识，5月29日下午，我院于金明校区综合教学楼2306教室召开...",
-        image: "images/年级大会.webp",
-        href: "https://cep.henu.edu.cn/info/1022/14001.htm"
-    },
-];
+const newsPlatforms = computed(() => NEWS_PLATFORMS);
 
-const DEFAULT_STATE = {
-    title: "地科院新闻",
-    text: "请将鼠标移动到地科院区域<br>查看新闻内容<br><br>在左侧地图中放大<br>可以查看地科院的照片！<br><br>下方还有内容哦！<br>请鼠标下滑",
-    image: "images/院徽.webp",
-    href: LINKS.MAIN_NEWS,
-    isExternal: true
-};
-
-const defaultNewsImage = resolvePath(DEFAULT_STATE.image);
-
-// ========== 5. 状态管理 ==========
-const currentNewsIndex = ref(0);
-const shouldLoadNewsImage = computed(() => (
-    props.activeTab === 'info' && (props.locationInfo.isInDihuan || Boolean(props.selectedImage))
-));
-
-// ========== 6. 计算属性 ==========
-/**
- * 核心逻辑：统一决定当前应该显示什么数据
- * - 如果不在指定区域，显示默认提示
- * - 如果在区域内，显示当前新闻
- */
-const displayData = computed(() => {
-    if (!props.locationInfo.isInDihuan) {
-        return {
-            ...DEFAULT_STATE,
-            image: shouldLoadNewsImage.value && props.selectedImage ? props.selectedImage : defaultNewsImage
-        };
-    }
-
-    const currentItem = NEWS_LIST[currentNewsIndex.value];
-    return {
-        title: currentItem.title,
-        text: currentItem.text,
-        image: shouldLoadNewsImage.value
-            ? (props.selectedImage || resolvePath(currentItem.image))
-            : defaultNewsImage,
-        href: currentItem.href,
-        isExternal: true
-    };
+const currentPlatformLabel = computed(() => {
+    const p = NEWS_PLATFORMS.find((p) => p.key === currentPlatform.value);
+    return p?.label || currentPlatform.value;
 });
 
-// ========== 7. 事件处理 ==========
-/** 切换到下一条新闻 */
-function nextNews() {
-    currentNewsIndex.value = (currentNewsIndex.value + 1) % NEWS_LIST.length;
-    emit('news-changed', currentNewsIndex.value);
-}
-
-function handleNewsImageError(event) {
-    const target = event?.target;
-    if (!target || typeof target.src !== 'string') return;
-    if (!target.src.includes(DEFAULT_STATE.image)) {
-        target.src = defaultNewsImage;
+// ========== 4. 新闻功能函数 ==========
+async function fetchNews(platform) {
+    newsLoading.value = true;
+    try {
+        const resp = await fetch(`${NEWS_API_BASE}/?platform=${platform}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (json.status === '200' && Array.isArray(json.data)) {
+            newsItems.value = json.data.slice(0, 25);
+            const now = new Date();
+            lastNewsUpdate.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        } else {
+            newsItems.value = [];
+        }
+    } catch (error) {
+        console.error('获取新闻失败:', error);
+        newsItems.value = [];
+    } finally {
+        newsLoading.value = false;
     }
 }
+
+function switchNewsPlatform(platform) {
+    if (currentPlatform.value === platform) return;
+    currentPlatform.value = platform;
+    fetchNews(platform);
+}
+
+/** 生命周期钩子 */
+onMounted(() => {
+    fetchNews(currentPlatform.value);
+    newsTimer = setInterval(() => fetchNews(currentPlatform.value), NEWS_REFRESH_INTERVAL);
+});
+
+onUnmounted(() => {
+    if (newsTimer) clearInterval(newsTimer);
+});
 </script>
 
 <style scoped>
@@ -435,135 +451,6 @@ function handleNewsImageError(event) {
     padding: 0;
 }
 
-.info-content {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-}
-
-/* 头部 */
-.panel-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 15px;
-    border-bottom: 2px solid #f0f0f0;
-    padding-bottom: 10px;
-}
-
-.logo {
-    width: 50px;
-    height: 50px;
-    object-fit: contain;
-    margin-right: 15px;
-}
-
-.main-title {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 25px;
-    color: #1f5eac;
-    text-decoration: none;
-    font-weight: 700;
-}
-
-/* 新闻标题 */
-.news-header {
-    font-size: 18px;
-    margin: 10px 0;
-    font-weight: bold;
-    line-height: 1.4;
-    min-height: 50px;
-    /* 保持高度稳定，防止跳动 */
-}
-
-.news-header a {
-    color: #2746ae;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.news-header a:hover {
-    color: #1a2f75;
-    text-decoration: underline;
-}
-
-/* 图片 */
-.image-container {
-    width: 100%;
-    border-radius: 8px;
-    /* 不裁剪图片，改为居中显示完整图片 */
-    overflow: visible;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    margin-bottom: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.news-image {
-    width: 100%;
-    height: auto;
-    /* 始终完整显示（不裁剪） */
-    object-fit: contain;
-    display: block;
-    transition: transform 0.25s ease, max-height 0.25s ease;
-    max-height: 60vh;
-}
-
-.news-image:hover {
-    transform: scale(1.01);
-}
-
-/* 文本 */
-.text-content {
-    font-size: 14px;
-    color: #444;
-    line-height: 1.6;
-    margin-bottom: 15px;
-    flex-grow: 1;
-}
-
-/* 按钮 */
-.action-button {
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    padding: 12px;
-    font-size: 16px;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: background-color 0.2s, transform 0.1s;
-    box-shadow: 0 2px 4px rgba(76, 175, 80, 0.3);
-}
-
-.action-button:hover {
-    background-color: #43a047;
-}
-
-.action-button:active {
-    transform: translateY(1px);
-}
-
-/* 底部 */
-.panel-footer {
-    margin-top: auto;
-    text-align: center;
-    padding-top: 15px;
-    border-top: 1px solid #eee;
-    font-size: 12px;
-}
-
-.panel-footer a {
-    color: #999;
-    text-decoration: none;
-    transition: color 0.2s;
-}
-
-.panel-footer a:hover {
-    color: #1c8ae4;
-}
-
 /* 移动端适配 */
 @media (max-width: 768px) {
     .info-panel {
@@ -623,14 +510,245 @@ function handleNewsImageError(event) {
     .handle-icon.is-flipped {
         transform: rotate(-90deg);
     }
+}
 
-    .info-content {
-        /* 5. 确保内容区自动填充剩余空间 */
-        flex: 1;
-        padding: 15px;
-        overflow-y: auto;
-        /* 内容过多时可滚动 */
-        background-color: #fff;
+/* ── News Dashboard 样式 ── */
+.news-dashboard {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    gap: 0;
+    padding: 0 !important;
+    background: #fff;
+}
+
+.news-header-bar {
+    padding: 16px 16px 8px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.news-logo {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #07ac4c, #239c42);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: block;
+    line-height: 1.2;
+}
+
+.news-subtitle {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.news-platform-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 16px;
+    flex-shrink: 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.platform-chip {
+    padding: 5px 12px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    background: transparent;
+    color: #999;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.platform-chip:hover {
+    border-color: #13c64f;
+    color: #268c0a;
+}
+
+.platform-chip.active {
+    background: rgba(0, 153, 204, 0.12);
+    border-color: #0ea342;
+    color: #15883d;
+}
+
+.news-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 16px;
+    color: #999;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+}
+
+.loading-dot-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #0dcd4a;
+    animation: dotPulse 1.2s ease-out infinite;
+}
+
+@keyframes dotPulse {
+    0%, 100% { 
+        box-shadow: 0 0 0 0 rgba(5, 165, 59, 0.6);
     }
+    50% { 
+        box-shadow: 0 0 0 12px rgba(0, 212, 255, 0);
+    }
+}
+
+.news-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.news-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 8px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: inherit;
+    transition: background 0.2s ease;
+}
+
+.news-card:hover {
+    background: #f5f5f5;
+}
+
+.news-rank {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #999;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.rank-top1 { 
+    color: #f0b35a; 
+    background: rgba(240, 179, 90, 0.12);
+}
+
+.rank-top2 { 
+    color: #a0b8c8; 
+    background: rgba(160, 184, 200, 0.1);
+}
+
+.rank-top3 { 
+    color: #c89070; 
+    background: rgba(200, 144, 112, 0.1);
+}
+
+.news-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.news-title {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 0.2s ease;
+}
+
+.news-card:hover .news-title {
+    color: #15ac3a;
+}
+
+.news-meta {
+    margin-top: 2px;
+}
+
+.news-desc {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 12px;
+    color: #999;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.news-score {
+    flex-shrink: 0;
+}
+
+.score-value {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10px;
+    color: #999;
+    background: rgba(0, 0, 0, 0.08);
+    padding: 2px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+}
+
+.news-empty {
+    padding: 40px 16px;
+    text-align: center;
+    color: #999;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+}
+
+.news-footer {
+    padding: 12px 16px;
+    border-top: 1px solid #f0f0f0;
+    flex-shrink: 0;
+}
+
+.footer-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 10px;
+    color: #999;
+}
+
+.footer-status.live { 
+    color: #4CAF50;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.footer-status.live .status-dot {
+    animation: dotPulse 2s ease-out infinite;
 }
 </style>

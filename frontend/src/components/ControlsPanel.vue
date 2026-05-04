@@ -74,6 +74,7 @@ import { ref } from 'vue';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
 import {
     Map as MapIcon,
+    Newspaper,
     Columns2,
     Layers,
     Pencil,
@@ -110,19 +111,19 @@ const emit = defineEmits([
     'enable-basemap-swipe'
 ]);
 
-const activeId = ref('map');
+const activeId = ref('news');
 const districtPanelVisible = ref(false);
 
 const menuItems = [
-    { id: 'map', label: '地图', icon: MapIcon, action: 'toggleMap' },
+    { id: 'news', label: '新闻', icon: Newspaper, action: 'toggleNews' },
     { id: 'layers', label: '图层', icon: Layers, action: 'toggleLayers' },
     { id: 'draw', label: '绘制', icon: Pencil, action: 'toggleDraw' },
     { id: 'measure', label: '测量', icon: Ruler, action: 'toggleMeasure' },
     { id: 'mark', label: '标注', icon: MapPin, action: 'toggleMark' },
     { id: 'more', label: '卷帘分析', icon: Columns2, action: 'toggleMore' },
-    { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
     { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
-    { id: 'download', label: '下载', icon: Download, action: 'toggleDownload' }
+    { id: 'download', label: '下载底图', icon: Download, action: 'toggleDownload' },
+    { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
     
 ];
 
@@ -140,9 +141,9 @@ const handleSelect = (id) => {
 
     // 3. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
     switch (currentItem.action) {
-        case 'toggleMap':
+        case 'toggleNews':
             emit('open-tab', 'info');
-            message.info('已切换到地图信息面板');
+            message.info('已切换到新闻面板');
             break;
 
         case 'toggleLayers':
@@ -255,48 +256,60 @@ const getBasemapLabel = (id) => {
 <style scoped>
 .sidebar-shell {
     position: relative;
-    height: 100%;
+    /* 确保 shell 占满了父级高度，或者直接给个视口高度 */
+    height: 100vh; 
 }
 
 .sidebar-container {
-    /* 定位 */
-    height: 100%;
+    /* 1. 核心尺寸：假设你的顶部绿色导航栏高度是 60px，这里减去它 */
+    /* 如果导航栏高度不同，请相应调整这个 60px */
+    height: calc(100vh - 60px); 
     position: relative;
-    /* left: 5px; */
-    /* top: 50%;
-    transform: translateY(-50%); */
+    box-sizing: border-box;
 
-    /* 绿色系背景 - 玻璃拟态 */
-    background: rgba(255, 255, 255, 0.85);
-    /* 深绿色半透明 */
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(229, 236, 230, 0.048);
-
-    /* 布局 */
+    /* 2. 布局与滚动 */
     display: flex;
     flex-direction: column;
-    padding-bottom: 12px;
-    padding-top: 12px;
-    padding-left: 0px;
-    padding-right: 1px;
-    /* 顺序：左上(0) 右上(10px) 右下(10px) 左下(0) */
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-y: auto;
+    overflow-x: hidden; /* 防止出现横向滚动条 */
+    
+    /* 3. 间距：底部 padding 给大一点，确保最后一个按钮滚动后离边缘有距离 */
+    padding-top: 15px;
+    padding-bottom: 30px; 
+    gap: 12px;
+
+    /* 4. 隐藏滚动条 */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    /* 5. 视觉样式保持 */
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(229, 236, 230, 0.5);
     border-radius: 0 16px 16px 0;
-    gap: 15px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
     z-index: 1000;
 }
 
+/* Chrome/Safari 隐藏滚动条 */
+.sidebar-container::-webkit-scrollbar {
+    display: none;
+}
+
 .sidebar-item {
+    flex-shrink: 0; /* 强制不被压缩 */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 56px;
-    height: 60px;
+    min-height: 60px; /* 使用 min-height 确保高度 */
     cursor: pointer;
     transition: all 0.3s ease;
     border-radius: 12px;
-    color: #397d39
+    color: #397d39;
 }
 
 .icon-wrapper {
@@ -369,7 +382,7 @@ const getBasemapLabel = (id) => {
     align-items: center;
     padding: 20px;
     border-bottom: 1px solid #f0f0f0;
-    background: linear-gradient(135deg, #66ea87a6 0%, #0a6815a4 100%);
+    background: linear-gradient(135deg, #0d972fc8 0%, #0a6815c1 100%);
     color: white;
 }
 

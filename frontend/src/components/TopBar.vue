@@ -85,7 +85,7 @@
                     <span class="btn-icon">
                         <sparkles-icon :size="18" color="white" :stroke-width="2" />
                     </span>
-                    <span class="btn-text">特效</span>
+                    <span class="btn-text">屏幕特效</span>
                 </button>
                 <div v-if="showMagicMenu" class="floating-menu">
                     <button class="menu-item" @click="handleActivateMagic('fluid')">

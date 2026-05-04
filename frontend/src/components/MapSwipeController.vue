@@ -20,7 +20,7 @@
     <!-- 控制按钮 -->
     <div class="swipe-controls">
       <!-- 模式切换按钮 -->
-      <button class="control-btn mode-toggle-btn" @click="toggleMode" title="Toggle swipe mode (horizontal/vertical)"
+      <button class="control-btn mode-toggle-btn" @click="toggleMode" title="模式切换（水平/垂直）"
         aria-label="Toggle swipe mode">
         <svg viewBox="0 0 24 24" width="16" height="16">
           <!-- 旋转图标 -->
@@ -29,7 +29,7 @@
       </button>
 
       <!-- 关闭按钮 -->
-      <button class="control-btn close-btn" @click="closeSwipe" title="Close swipe mode" aria-label="Close swipe mode">
+      <button class="control-btn close-btn" @click="closeSwipe" title="关闭卷帘模式" aria-label="关闭卷帘模式">
         <svg viewBox="0 0 24 24" width="16" height="16">
           <path fill="currentColor" d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" />
