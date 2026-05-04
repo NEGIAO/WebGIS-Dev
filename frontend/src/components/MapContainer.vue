@@ -374,7 +374,8 @@ const {
     TileLayer,
     VectorLayer,
     XYZ,
-    VectorSource
+    VectorSource,
+    DragBox
 } = await loadMapRuntimeDeps();
 
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/geo';
@@ -516,6 +517,8 @@ const {
 const componentUnmountedRef = ref(false);
 const pendingBusPickRef = ref(null);
 const pendingReverseGeocodePickRef = ref(null);
+const pendingDownloadBoxPickRef = ref(null);
+let downloadBoxInteraction = null;
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
@@ -1086,7 +1089,7 @@ async function runDeferredStartupTasks() {
         message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
         message.soup();//鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.0.5)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.0)', { duration: 3000 });
     }
 
     // ========== 并行执行：Google 主机测速（非阻塞） ==========
@@ -1448,6 +1451,67 @@ function startReverseGeocodePick() {
     });
 }
 
+function cancelDownloadBoxPick(reason = '下载范围选择已取消') {
+    if (downloadBoxInteraction && mapInstance.value) {
+        mapInstance.value.removeInteraction(downloadBoxInteraction);
+    }
+    downloadBoxInteraction = null;
+    if (pendingDownloadBoxPickRef.value?.reject) {
+        pendingDownloadBoxPickRef.value.reject(new Error(reason));
+    }
+    pendingDownloadBoxPickRef.value = null;
+}
+
+function pickDownloadExtent() {
+    if (!mapInstance.value) {
+        return Promise.reject(new Error('地图尚未初始化'));
+    }
+
+    if (pendingDownloadBoxPickRef.value?.reject) {
+        pendingDownloadBoxPickRef.value.reject(new Error('上一次范围选择已取消'));
+    }
+
+    return new Promise((resolve, reject) => {
+        pendingDownloadBoxPickRef.value = { resolve, reject };
+        downloadBoxInteraction = new DragBox({
+            condition: () => true
+        });
+        mapInstance.value.addInteraction(downloadBoxInteraction);
+
+        downloadBoxInteraction.on('boxend', () => {
+            const geometry = downloadBoxInteraction?.getGeometry?.();
+            const extent = geometry?.getExtent?.();
+            if (downloadBoxInteraction && mapInstance.value) {
+                mapInstance.value.removeInteraction(downloadBoxInteraction);
+            }
+            downloadBoxInteraction = null;
+            const pending = pendingDownloadBoxPickRef.value;
+            pendingDownloadBoxPickRef.value = null;
+            
+            if (!extent || extent.length < 4) {
+                pending?.reject?.(new Error('下载范围获取失败'));
+                return;
+            }
+
+            // extent 当前是 EPSG:3857 格式 [minX, minY, maxX, maxY]
+            // 转换为 WGS84 格式 (EPSG:4326)
+            const [minX_3857, minY_3857, maxX_3857, maxY_3857] = extent;
+            
+            // 使用 toLonLat 将两个角的坐标转换
+            const [minLon, minLat] = toLonLat([minX_3857, minY_3857]);
+            const [maxLon, maxLat] = toLonLat([maxX_3857, maxY_3857]);
+            
+            // 构建 WGS84 坐标系下的 extent [minLon, minLat, maxLon, maxLat]
+            const wgs84Extent = [minLon, minLat, maxLon, maxLat];
+            
+            pending?.resolve?.({
+                extent: wgs84Extent,
+                crs: 'EPSG:4326'  // 返回的是 WGS84 坐标
+            });
+        });
+    });
+}
+
 async function startReverseGeocodePickAndDraw() {
     const picked = await startReverseGeocodePick();
     if (!picked || !Number.isFinite(picked.lng) || !Number.isFinite(picked.lat)) {
@@ -1669,6 +1733,7 @@ function removeDistrictLayer(adcode) {
 // [交互] 被 activateInteraction 与外部调用复用。
 function clearInteractions() {
     clearDrawMeasureInteractions();
+    cancelDownloadBoxPick();
 }
 
 // 初始化图层导出服务并包装为适配本组件的调用方式
@@ -1716,6 +1781,7 @@ defineExpose({
     removeDistrictLayer,
     drawPointByCoordinatesInput,
     drawAmapAoiByDetailJsonInput,
+    pickDownloadExtent,
     toggleLayerCRS,
     toggleSearchLayerCRS,
     exportLayerCoordinates,

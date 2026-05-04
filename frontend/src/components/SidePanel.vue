@@ -25,6 +25,7 @@
             <!-- 模式 2: 工具箱 -->
             <div v-show="activeTab === 'toolbox'" class="toolbox-content">
                 <ToolboxPanel :userLayers="userLayers" :baseLayers="baseLayers" :overview="toolboxOverview"
+                    :default-tab="toolboxTab"
                     :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi"
                     @close="$emit('switch-tab', 'info')" @upload-data="$emit('upload-data', $event)"
                     @interaction="$emit('interaction', $event)"
@@ -45,7 +46,8 @@
                     @draw-point-by-coordinates="$emit('draw-point-by-coordinates', $event)"
                     @draw-amap-aoi-from-json="$emit('draw-amap-aoi-from-json', $event)"
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
-                    @export-layer-data="$emit('export-layer-data', $event)" />
+                    @export-layer-data="$emit('export-layer-data', $event)"
+                    @request-download-extent="$emit('request-download-extent')" />
             </div>
 
             <!-- 模式 3: 公交规划 -->
@@ -155,6 +157,10 @@ const props = defineProps({
         type: String,
         default: 'info' // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
     },
+    toolboxTab: {
+        type: String,
+        default: 'layers'
+    },
     isCollapsed: {
         type: Boolean,
         default: false
@@ -252,7 +258,8 @@ const emit = defineEmits([
     'draw-point-by-coordinates',
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
-    'export-layer-data'
+    'export-layer-data',
+    'request-download-extent'
 ]);
 
 // ========== 3. 工具函数 ==========

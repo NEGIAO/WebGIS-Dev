@@ -19,6 +19,7 @@ export * from './locationSearch';
 export * from './ipLocation';
 export * from './weather';
 export * from './backend';
+export * from './download';
 
 /**
  * 统一地址地理编码入口。

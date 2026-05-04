@@ -1,0 +1,510 @@
+<template>
+    <div v-if="visible" class="map-downloader">
+        <header class="downloader-header">
+            <div>
+                <div class="header-title">在线底图导出</div>
+                <div class="header-subtitle">BBox 输入支持 EPSG:4326 / 3857，导出为 GeoTIFF</div>
+            </div>
+            <div class="header-actions">
+                <span class="status-chip" :class="statusClass">{{ statusText }}</span>
+                <button class="close-btn" type="button" @click="emit('close')">×</button>
+            </div>
+        </header>
+
+        <section class="downloader-body">
+            <div class="form-row">
+                <label>底图源</label>
+                <select v-model="selectedPreset" class="form-select">
+                    <option v-for="preset in tilePresets" :key="preset.id" :value="preset.id" :disabled="!preset.downloadable">
+                        {{ preset.label }}
+                    </option>
+                </select>
+                <div v-if="activePresetHint" class="field-hint">{{ activePresetHint }}</div>
+            </div>
+
+            <div class="form-row">
+                <label>Tile URL 模板</label>
+                <input
+                    v-model="store.tileUrlTemplate"
+                    class="form-input"
+                    type="text"
+                    :disabled="!isCustomPreset"
+                    placeholder="https://.../{z}/{x}/{y}.png"
+                />
+            </div>
+
+            <div class="form-row form-grid">
+                <div class="form-field">
+                    <label>BBox CRS</label>
+                    <select v-model="store.bboxCrs" class="form-select">
+                        <option value="EPSG:4326">EPSG:4326 (lon/lat)</option>
+                        <!-- <option value="EPSG:3857">EPSG:3857 (meters)</option> -->
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label>分辨率 (m)</label>
+                    <input v-model.number="store.resolutionM" class="form-input" type="number" min="0.1" step="0.1" />
+                </div>
+            </div>
+
+            <div class="bbox-grid">
+                <div class="form-field">
+                    <label>Min Lon/X</label>
+                    <input v-model.number="store.bbox.minLon" class="form-input" type="number" step="0.000001" />
+                </div>
+                <div class="form-field">
+                    <label>Min Lat/Y</label>
+                    <input v-model.number="store.bbox.minLat" class="form-input" type="number" step="0.000001" />
+                </div>
+                <div class="form-field">
+                    <label>Max Lon/X</label>
+                    <input v-model.number="store.bbox.maxLon" class="form-input" type="number" step="0.000001" />
+                </div>
+                <div class="form-field">
+                    <label>Max Lat/Y</label>
+                    <input v-model.number="store.bbox.maxLat" class="form-input" type="number" step="0.000001" />
+                </div>
+            </div>
+
+            <div class="action-row">
+                <button 
+                    class="ghost-btn" 
+                    type="button" 
+                    @click="emit('request-extent')"
+                >
+                    地图框选范围
+                </button>
+                <span class="field-hint">在地图拖拽矩形框选下载范围</span>
+            </div>
+
+            <div class="action-row">
+                <button class="primary-btn" type="button" :disabled="store.isSubmitting" @click="handleSubmit">
+                    {{ store.isSubmitting ? '提交中...' : '开始下载' }}
+                </button>
+                <button class="ghost-btn" type="button" :disabled="!store.isPolling" @click="store.stopPolling">
+                    停止轮询
+                </button>
+                <button class="ghost-btn" type="button" @click="handleReset">
+                    重置
+                </button>
+            </div>
+
+            <div class="progress-card">
+                <div class="progress-head">
+                    <span>进度</span>
+                    <span class="progress-value">{{ progressLabel }}</span>
+                </div>
+                <div class="progress-track">
+                    <div class="progress-bar" :style="{ width: progressWidth }"></div>
+                </div>
+                <div class="progress-meta">
+                    <span v-if="store.taskId">任务 ID: {{ store.taskId }}</span>
+                    <span v-if="store.message">{{ store.message }}</span>
+                    <span v-if="expiresHint">{{ expiresHint }}</span>
+                    <span v-if="store.lastError" class="error-text">{{ store.lastError }}</span>
+                </div>
+            </div>
+
+            <div class="task-query">
+                <label>任务 ID 查询</label>
+                <div class="task-query-row">
+                    <input v-model.trim="lookupTaskId" class="form-input" type="text" placeholder="输入任务 ID" />
+                    <button class="ghost-btn" type="button" @click="handleLookup">查询</button>
+                </div>
+            </div>
+        </section>
+    </div>
+</template>
+
+<script setup>
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { useMessage } from '../composables/useMessage';
+import { useDownloadStore } from '../stores/useDownloadStore';
+import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../constants';
+
+const props = defineProps({
+    visible: { type: Boolean, default: true }
+});
+
+const emit = defineEmits(['close', 'request-extent']);
+const message = useMessage();
+const store = useDownloadStore();
+
+const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
+const layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
+
+function extractTileTemplate(source) {
+    if (!source) return '';
+    const directUrl = typeof source.getUrl === 'function' ? source.getUrl() : '';
+    const urls = typeof source.getUrls === 'function' ? source.getUrls() : null;
+    const candidate = directUrl || (Array.isArray(urls) ? urls[0] : '');
+    if (!candidate) return '';
+    if (candidate.includes('{-y}')) return '';
+    if (candidate.includes('{z}') && candidate.includes('{x}') && candidate.includes('{y}')) {
+        return candidate;
+    }
+    return '';
+}
+
+function resolvePresetTemplate(presetId) {
+    const layerIds = resolvePresetLayerIds(presetId);
+    for (const layerId of layerIds) {
+        const config = layerConfigMap.get(layerId);
+        if (!config) continue;
+        if (config.category === 'label') continue;
+        try {
+            const source = config.createSource?.();
+            const template = extractTileTemplate(source);
+            if (template) return template;
+        } catch {
+            continue;
+        }
+    }
+    return '';
+}
+
+const tilePresets = computed(() => {
+    return BASEMAP_OPTIONS.map((option) => {
+        const template = resolvePresetTemplate(option.value);
+        const isCustom = option.value === 'custom';
+        const downloadable = isCustom || Boolean(template);
+        return {
+            id: option.value,
+            label: option.label,
+            template,
+            downloadable,
+            isCustom
+        };
+    }).filter((preset) => preset.downloadable || preset.isCustom);
+});
+
+const selectedPreset = ref('');
+const activePreset = computed(() => tilePresets.value.find((item) => item.id === selectedPreset.value));
+const isCustomPreset = computed(() => activePreset.value?.isCustom || !activePreset.value?.template);
+const activePresetHint = computed(() => {
+    if (!activePreset.value) return '';
+    if (activePreset.value.isCustom) return '可手动输入自定义 URL 模板';
+    if (!activePreset.value.template) return '该底图暂不支持导出';
+    return '';
+});
+
+watch(tilePresets, (list) => {
+    if (!list.length) return;
+    if (!selectedPreset.value || !list.some((item) => item.id === selectedPreset.value)) {
+        const first = list.find((item) => item.downloadable) || list[0];
+        selectedPreset.value = first?.id || '';
+    }
+}, { immediate: true });
+
+watch(selectedPreset, (presetId) => {
+    const preset = tilePresets.value.find((item) => item.id === presetId);
+    if (preset && preset.template) {
+        store.tileUrlTemplate = preset.template;
+    }
+});
+
+const statusText = computed(() => {
+    const statusMap = {
+        idle: '待命',
+        pending: '已提交',
+        downloading: '下载中',
+        stitching: '拼接中',
+        success: '已完成',
+        expired: '已过期',
+        failed: '失败'
+    };
+    return statusMap[store.status] || store.status;
+});
+
+const statusClass = computed(() => `status-${store.status}`);
+const progressWidth = computed(() => `${Math.min(100, Math.max(0, store.progress))}%`);
+const progressLabel = computed(() => `${Math.round(store.progress)}%`);
+const expiresHint = computed(() => {
+    if (!store.expiresAt && !store.expiresInSeconds) return '';
+    if (store.isExpired) return '任务已过期（30分钟保留期）';
+    if (store.expiresInSeconds > 0) {
+        const minutes = Math.max(1, Math.ceil(store.expiresInSeconds / 60));
+        return `任务将在 ${minutes} 分钟后过期`;
+    }
+    return '';
+});
+
+// const lookupTaskId = ref('');
+
+const lookupTaskId = ref('');
+
+async function handleSubmit() {
+    const ok = await store.submitTask();
+    if (ok) {
+        message.success('下载任务已提交');
+    } else if (store.lastError) {
+        message.error(store.lastError);
+    }
+}
+
+function handleReset() {
+    store.resetTask();
+    const first = tilePresets.value.find((item) => item.downloadable) || tilePresets.value[0];
+    selectedPreset.value = first?.id || '';
+}
+
+async function handleLookup() {
+    const ok = await store.fetchTaskById(lookupTaskId.value, true);
+    if (ok) {
+        message.success('任务状态已更新');
+    } else if (store.lastError) {
+        message.error(store.lastError);
+    }
+}
+
+onBeforeUnmount(() => {
+    store.stopPolling();
+});
+</script>
+
+<style scoped>
+.map-downloader {
+    border-radius: 14px;
+    border: 1px solid rgba(46, 126, 78, 0.2);
+    background: linear-gradient(180deg, #f6fff8 0%, #eef8f1 100%);
+    box-shadow: 0 16px 34px rgba(33, 94, 63, 0.15);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.downloader-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.header-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1f6b46;
+}
+
+.header-subtitle {
+    font-size: 12px;
+    color: #4a6d59;
+    margin-top: 4px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-chip {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(46, 126, 78, 0.12);
+    color: #1f6b46;
+}
+
+.status-chip.status-success {
+    background: rgba(34, 197, 94, 0.16);
+    color: #0f7a3b;
+}
+
+.status-chip.status-failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #b91c1c;
+}
+
+.status-chip.status-expired {
+    background: rgba(245, 158, 11, 0.16);
+    color: #b45309;
+}
+
+.close-btn {
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    color: #3f6b55;
+    cursor: pointer;
+}
+
+.downloader-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.form-row label,
+.form-field label {
+    font-size: 12px;
+    color: #2f5b47;
+    font-weight: 600;
+}
+
+.field-hint {
+    font-size: 11px;
+    color: #5b7a68;
+}
+
+.form-input,
+.form-select {
+    border-radius: 8px;
+    border: 1px solid rgba(31, 106, 63, 0.25);
+    background: rgba(255, 255, 255, 0.92);
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #1f2e28;
+}
+
+.form-input:disabled {
+    background: rgba(233, 241, 236, 0.7);
+    color: #799183;
+}
+
+.bbox-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.action-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.primary-btn {
+    border: none;
+    border-radius: 9px;
+    background: #1f7a4d;
+    color: #fff;
+    font-weight: 700;
+    padding: 8px 14px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primary-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 18px rgba(31, 122, 77, 0.2);
+}
+
+.primary-btn:disabled {
+    background: rgba(31, 122, 77, 0.5);
+    cursor: not-allowed;
+}
+
+.ghost-btn {
+    border: 1px solid rgba(31, 122, 77, 0.3);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #1f6b46;
+    font-weight: 600;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.ghost-btn:disabled {
+    color: #9bb2a5;
+    border-color: rgba(31, 122, 77, 0.15);
+    cursor: not-allowed;
+}
+
+.progress-card {
+    border-radius: 12px;
+    border: 1px solid rgba(31, 122, 77, 0.16);
+    background: rgba(255, 255, 255, 0.85);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.progress-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #1f6b46;
+    font-weight: 700;
+}
+
+.progress-track {
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(31, 122, 77, 0.12);
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #2faa66 0%, #1f7a4d 100%);
+    transition: width 0.3s ease;
+}
+
+.progress-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: #4b6d5a;
+}
+
+.task-query {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.task-query-row {
+    display: flex;
+    gap: 8px;
+}
+
+.task-query-row .form-input {
+    flex: 1;
+}
+
+.error-text {
+    color: #c0392b;
+    font-weight: 600;
+}
+
+@media (max-width: 720px) {
+    .form-grid,
+    .bbox-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .downloader-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .header-actions {
+        align-self: flex-end;
+    }
+}
+</style>

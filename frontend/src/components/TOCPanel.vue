@@ -15,6 +15,7 @@
             <button class="tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
             <button class="tab" :class="{ active: activeTab === 'draw' }" @click="activeTab = 'draw'">绘制</button>
             <button class="tab" :class="{ active: activeTab === 'style' }" @click="activeTab = 'style'">样式</button>
+            <button class="tab" :class="{ active: activeTab === 'download' }" @click="activeTab = 'download'">下载</button>
         </div>
 
         <div v-if="activeTab === 'layers'" class="panel-scroll">
@@ -223,6 +224,10 @@
     </div>
 </div>
 
+        <div v-else-if="activeTab === 'download'" class="panel-scroll">
+            <MapDownloader :visible="true" @close="activeTab = 'layers'" @request-extent="emit('request-download-extent')" />
+        </div>
+
         <div v-else class="panel-scroll style-scroll">
             <div class="style-panel">
                 <div class="card-title">样式模板</div>
@@ -305,6 +310,7 @@ import {
 import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from './AmapAoiInjectDialog.vue';
+import MapDownloader from './MapDownloader.vue';
 
 
 const props = defineProps({
@@ -312,7 +318,8 @@ const props = defineProps({
     baseLayers: { type: Array, default: () => [] },
     overview: { type: Object, default: () => ({ drawCount: 0, uploadCount: 0, layers: [] }) },
     uploadProgress: { type: Object, default: () => ({ phase: 'idle' }) },
-    latestSearchPoi: { type: Object, default: () => ({}) }
+    latestSearchPoi: { type: Object, default: () => ({}) },
+    defaultTab: { type: String, default: 'layers' }
 });
 
 const emit = defineEmits([
@@ -338,7 +345,8 @@ const emit = defineEmits([
     'draw-point-by-coordinates',
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
-    'export-layer-data'
+    'export-layer-data',
+    'request-download-extent'
 ]);
 
 const fileInputRef = ref(null);
@@ -373,6 +381,20 @@ const isGeocodeBusy = ref(false);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+
+function normalizeTab(value) {
+    const normalized = String(value || '').trim();
+    if (['layers', 'draw', 'style', 'download'].includes(normalized)) return normalized;
+    return 'layers';
+}
+
+watch(
+    () => props.defaultTab,
+    (next) => {
+        activeTab.value = normalizeTab(next);
+    },
+    { immediate: true }
+);
 
 const {
     decodePositionCodeToPointPayload

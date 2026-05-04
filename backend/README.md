@@ -12,12 +12,14 @@ pinned: false
 # WebGIS Backend
 Powered by FastAPI and Docker.
 
-WebGIS 后端服务，当前包含三大核心能力：
+WebGIS 后端服务，当前包含五大核心能力：
 - Google 瓦片代理：GET /api/tile/{z}/{x}/{y}
 - 通用流式代理：GET /proxy/{target_url:path}（Provider Agnostic）
 - 访客地理统计：POST /api/log-visit
 - 真实用户登录系统：/api/auth/*（含三类身份）
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
+- 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
+- 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 
 ## 0. 项目结构
 
@@ -27,24 +29,30 @@ backend/
 │   ├── auth.py                 # 认证与会话
 │   ├── statistics.py           # 统计中心与实时统计
 │   ├── location.py             # 位置服务相关接口
-│   ├── proxy.py                # 瓦片代理
+│   ├── proxy.py                # 瓦片代理（含 GCJ-02 ↔ WGS84 纠偏代理）
 │   ├── external_proxy.py       # 外部代理能力
 │   ├── admin.py                # 管理端接口
 │   ├── api_management.py       # API 管理
 │   ├── api_keys_management.py  # API Key 管理
 │   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
+│   ├── download.py             # 🆕 在线底图下载任务 API
 │   └── __init__.py
-├── app.py                      # FastAPI 应用入口（含通用流式代理 /proxy/{target_url:path}）
+├── core/
+│   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
+│   └── task_scheduler.py       # 🆕 过期任务清理调度器（30分钟保留期）
+├── models/
+│   └── download_task.py        # 🆕 SQLModel 下载任务表（SQLite 持久化）
+├── app.py                      # FastAPI 应用入口（集成下载路由和调度器）
 ├── Dockerfile                  # 容器化部署
-├── pyproject.toml              # 依赖与项目配置（uv）
+├── docker-compose.yml          # 🆕 Docker Compose 编排
+├── pyproject.toml              # 依赖与项目配置（uv，新增 rasterio/sqlmodel/apscheduler）
 ├── uv.lock                     # 锁文件
 ├── .env.example                # 环境变量示例
 ├── .python-version             # Python 版本
-├── data/                       # 运行数据目录（AUTH_DB 可落盘到此）
+├── data/                       # 运行数据目录（AUTH_DB、临时 TIF 文件、任务数据库）
 ├── frontend_example.html       # 前端调用示例
 ├── test_location_apis.py       # 位置接口测试脚本
-└── README.md                   # 后端文档（同步检查：2026-05-03 卷帘仅调整前端图层顺序，后端结构无新增/删除）
-```
+└── README.md                   # 后端文档
 
 ## 1. 认证系统
 
@@ -154,6 +162,21 @@ curl "http://localhost:8000/api/tile/16/53576/25999?lyrs=y"
 http://localhost:8000/api/tile/{z}/{x}/{y}?lyrs=s
 ```
 
+### 2.1.1 GCJ/WGS 纠偏瓦片代理
+
+接口：
+- GET /proxy/gcj2wgs/{target_url:path}
+- GET /proxy/wgs2gcj/{target_url:path}
+
+示例：
+```bash
+# GCJ02 -> WGS84
+curl "http://localhost:8000/proxy/gcj2wgs/mt1.google.com/vt?x=53576&y=25999&z=16&lyrs=s"
+
+# WGS84 -> GCJ02
+curl "http://localhost:8000/proxy/wgs2gcj/mt1.google.com/vt?x=53576&y=25999&z=16&lyrs=s"
+```
+
 ### 2.2 访客统计 API
 
 接口：
@@ -221,7 +244,108 @@ SUPABASE_KEY=your-anon-public-key
 AUTH_DB_PATH=/data/webgis_auth.db
 ```
 
-## 5. 本地启动
+## 5. 🆕 在线底图下载 API
+
+### 功能概述
+支持从任意 Web Mercator (EPSG:3857) 瓦片源异步下载指定范围的底图，并输出为地理参考的 GeoTIFF 格式。
+
+#### API 端点
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| POST | `/api/download/tasks` | 创建下载任务 |
+| GET | `/api/download/tasks/{task_id}` | 查询任务状态 |
+| GET | `/api/download/tasks/{task_id}/file` | 下载生成的 GeoTIFF 文件 |
+
+#### 请求示例
+
+```bash
+# 1. 创建下载任务
+curl -X POST http://localhost:8000/api/download/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tile_url_template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "bbox": {
+      "minLon": 114.2,
+      "minLat": 29.5,
+      "maxLon": 114.3,
+      "maxLat": 29.6
+    },
+    "crs": "EPSG:4326",
+    "resolution_m": 30,
+    "format": "GeoTIFF"
+  }'
+
+# 返回
+{
+  "task_id": "abc123",
+  "status": "pending",
+  "progress": 0,
+  "message": "Task created"
+}
+
+# 2. 轮询任务状态
+curl http://localhost:8000/api/download/tasks/abc123
+
+# 3. 下载 GeoTIFF
+curl -O http://localhost:8000/api/download/tasks/abc123/file
+```
+
+#### 核心实现细节
+
+- **并发控制**：使用 `asyncio.Semaphore(10)` 限制并发瓦片下载数
+- **内存优化**：Rasterio Window streaming，无需一次性加载全部瓦片
+- **坐标转换**：自动支持 EPSG:3857 (Web Mercator) 范围计算
+- **任务持久化**：SQLite 数据库记录任务历史
+- **自动清理**：后台调度器每分钟清理超过 30 分钟的过期任务
+
+---
+
+## 6. 🆕 GCJ-02 实时纠偏代理
+
+### 功能概述
+针对中国境内地图数据的坐标系转换代理，支持实时转换请求。
+
+#### API 端点
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| GET | `/proxy/gcj2wgs/{lon}/{lat}` | GCJ-02 → WGS84（火星坐标 → 真实坐标）|
+| GET | `/proxy/wgs2gcj/{lon}/{lat}` | WGS84 → GCJ-02（真实坐标 → 火星坐标）|
+
+#### 使用场景
+
+1. **GCJ-02 瓦片转 WGS84**：
+   ```javascript
+   // 高德地图瓦片 → 标准 GPS
+   fetch('/proxy/gcj2wgs/116.4074/39.9042')
+     .then(r => r.json())
+     .then(data => console.log(data)) 
+     // { lon: 116.3974, lat: 39.8932 }
+   ```
+
+2. **WGS84 数据上传至高德地图**：
+   ```javascript
+   // 用户标记的 GPS 点 → 高德坐标系
+   fetch('/proxy/wgs2gcj/116.3974/39.8932')
+     .then(r => r.json())
+     .then(data => {
+       // 用转换后的坐标添加到高德地图
+       amap.add(new AMap.Marker({
+         position: [data.lon, data.lat]
+       }))
+     })
+   ```
+
+#### 技术细节
+
+- 采用 Everyhing 算法或等效坐标系转换库
+- 前端透明调用，无需修改业务逻辑
+- 支持单点转换和批量转换（后期扩展）
+
+---
+
+## 7. 本地启动
 
 ```bash
 cd backend
@@ -233,7 +357,31 @@ uv run uvicorn app:app --reload --port 8000
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
-## 6. 前端联调要点
+## 8. Docker Compose 一键启动（推荐）
+
+```bash
+# 项目根目录执行
+docker-compose up -d
+
+# 检查服务状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# 停止服务
+docker-compose down
+```
+
+服务地址：
+- 前端：http://localhost:5173
+- 后端 API：http://localhost:8000
+- 后端文档：http://localhost:8000/docs
+
+---
+
+## 9. 前端联调要点
 
 前端请求受保护接口时，请在请求头中带上 token：
 ```http

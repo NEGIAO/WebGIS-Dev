@@ -1,9 +1,13 @@
 import httpx
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+
+from gcj_rectify.rectify import get_gcj2wgs_tile, get_wgs2gcj_tile
+from gcj_rectify.url_template import parse_tile_url
+from gcj_rectify.utils import get_cache_dir
 
 
 
@@ -92,6 +96,22 @@ def _build_proxy_request_headers(request: Request) -> Dict[str, str]:
 
     return headers
 
+
+def _resolve_gcj_cache_dir(request: Request):
+    cache_dir = getattr(request.app.state, "gcj_rectify_cache_dir", None)
+    if cache_dir is None:
+        cache_dir = get_cache_dir()
+        request.app.state.gcj_rectify_cache_dir = cache_dir
+    return cache_dir
+
+
+def _resolve_gcj_http_client(request: Request) -> Tuple[httpx.AsyncClient, bool]:
+    shared_client = getattr(request.app.state, "http_client", None)
+    if shared_client is not None:
+        return shared_client, False
+    fallback_client = build_http_client()
+    return fallback_client, True
+
 #海图专用代理（因为 ships66 的瓦片服务对请求头要求较高，且不允许跨域访问，所以单独写一个专用接口来代理这些瓦片请求，避免污染通用代理的逻辑和性能）
 #eg:本地前端请求：http://localhost:8000/tiles/ships66/{z}/{x}/{y}.png
 @router.get("/tiles/ships66/{z}/{x}/{y}.png")
@@ -160,6 +180,68 @@ async def ships66_tile(z: int, x: int, y: int, request: Request):
         headers=response_headers,
         background=background,
     )
+
+
+@router.get("/proxy/gcj2wgs/{target_url:path}")
+async def gcj2wgs_proxy(target_url: str, request: Request):
+    """GCJ02 -> WGS84 tile rectification for arbitrary XYZ tile URLs."""
+    upstream_url = _build_proxy_target_url(target_url, request.url.query)
+    try:
+        template, xyz = parse_tile_url(upstream_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    cache_dir = _resolve_gcj_cache_dir(request)
+    client, should_close = _resolve_gcj_http_client(request)
+    try:
+        tile_bytes = await get_gcj2wgs_tile(
+            xyz.x,
+            xyz.y,
+            xyz.z,
+            template,
+            cache_dir,
+            client=client,
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="纠偏请求超时") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"纠偏失败: {exc}") from exc
+    finally:
+        if should_close:
+            await client.aclose()
+
+    return Response(content=tile_bytes, media_type="image/png")
+
+
+@router.get("/proxy/wgs2gcj/{target_url:path}")
+async def wgs2gcj_proxy(target_url: str, request: Request):
+    """WGS84 -> GCJ02 tile rectification for arbitrary XYZ tile URLs."""
+    upstream_url = _build_proxy_target_url(target_url, request.url.query)
+    try:
+        template, xyz = parse_tile_url(upstream_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    cache_dir = _resolve_gcj_cache_dir(request)
+    client, should_close = _resolve_gcj_http_client(request)
+    try:
+        tile_bytes = await get_wgs2gcj_tile(
+            xyz.x,
+            xyz.y,
+            xyz.z,
+            template,
+            cache_dir,
+            client=client,
+        )
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="纠偏请求超时") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"纠偏失败: {exc}") from exc
+    finally:
+        if should_close:
+            await client.aclose()
+
+    return Response(content=tile_bytes, media_type="image/png")
 
 @router.get("/proxy/{target_url:path}")
 async def universal_stream_proxy(target_url: str, request: Request):

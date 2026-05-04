@@ -8,6 +8,7 @@ import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
+import DragBox from 'ol/interaction/DragBox';
 
 let mapRuntimeDepsPromise = null;
 
@@ -25,7 +26,8 @@ const mapRuntimeDeps = {
     TileLayer,
     VectorLayer,
     XYZ,
-    VectorSource
+    VectorSource,
+    DragBox
 };
 
 /**

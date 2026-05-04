@@ -80,7 +80,8 @@ import {
     Ruler,
     MapPin,
     Boxes,
-    LayoutGrid
+    LayoutGrid,
+    Download
 } from 'lucide-vue-next';
 import { useLayerStore } from '../stores/useLayerStore';
 import { BASEMAP_OPTIONS } from '../constants';
@@ -102,6 +103,7 @@ const swipeMode = ref('horizontal');
 
 const emit = defineEmits([
     'open-tab',
+    'open-toolbox-tab',
     'map-interaction',
     'show-analysis',
     'district-select',
@@ -120,6 +122,8 @@ const menuItems = [
     { id: 'more', label: '卷帘分析', icon: Columns2, action: 'toggleMore' },
     { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
     { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
+    { id: 'download', label: '下载', icon: Download, action: 'toggleDownload' }
+    
 ];
 
 const handleSelect = (id) => {
@@ -184,6 +188,12 @@ const handleSelect = (id) => {
                 // 未启用，打开对话框让用户选择左右底图
                 showSwipeDialog.value = true;
             }
+            break;
+
+        case 'toggleDownload':
+            emit('open-tab', 'toolbox');
+            emit('open-toolbox-tab', 'download');
+            message.info('已打开底图下载面板');
             break;
 
         default:

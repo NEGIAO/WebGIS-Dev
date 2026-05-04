@@ -76,7 +76,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-05-01 更新）
+## 目录结构（2026-05-04 更新）
 
 以下结构按当前工程实际文件更新，尽量做到逐文件注释。
 
@@ -116,6 +116,7 @@ frontend/
     │
     ├── api/
     │   ├── backend.js                    # 前后端通信 API 枢纽（用户鉴权/异常处理）
+    │   ├── download.js                   # 底图下载任务 API
     │   ├── geocoding.js                  # 地理编码/逆地理编码 API
     │   ├── index.js                      # API 聚合导出
     │   ├── ipLocation.js                 # IP 定位 API
@@ -146,6 +147,7 @@ frontend/
     │   ├── MapContainer.vue                     # 地图容器与能力暴露核心组件
     │   ├── MapControlsBar.vue                   # 底部坐标/缩放/定位工具栏
     │   ├── MapEasterEgg.vue                     # 地图彩蛋组件
+    │   ├── MapDownloader.vue                    # 在线底图导出面板
     │   ├── MapPointPickerCard.vue               # 地图点选卡片
     │   ├── MapSwipeController.vue               # 地图对比滑块组件（仅裁剪在线底图，不影响业务图层）
     │   ├── Message.vue                          # 全局消息条
@@ -284,6 +286,7 @@ frontend/
     │   ├── useAttrStore.ts                      # 属性表状态
     │   ├── useAuthStore.ts                      # 登录认证状态
     │   ├── useCompassStore.ts                   # 罗盘状态（纯前端本地主题配置）
+    │   ├── useDownloadStore.ts                  # 底图下载任务状态
     │   ├── useLayerStore.ts                     # 图层树与图层交互状态
     │   ├── useTOCStore.ts                       # TOC 元数据与行政区树状态
     │   ├── useUrlParamStore.ts                  # URL 参数状态
@@ -341,6 +344,159 @@ frontend/
         └── RegisterView.vue                     # 登录/注册页
 ```
 
+## 🆕 在线底图下载模块 (V3.1.0)
+
+### MapDownloader 组件
+
+**位置**：`src/components/MapDownloader.vue`
+
+**功能**：
+- 底图源选择（Google/Bing/OpenStreetMap 等）
+- 分辨率配置（10m/30m/100m 等）
+- 矩形范围选择（点击按钮激活地图拖拽）
+- 异步任务提交与状态监控
+- GeoTIFF 文件下载
+
+**事件链**：
+```
+MapDownloader.vue (emit 'request-extent')
+  ↓
+TOCPanel.vue (relay)
+  ↓
+SidePanel.vue (relay)
+  ↓
+HomeView.vue (listen @request-download-extent)
+  ↓
+MapContainer.vue.pickDownloadExtent()
+  ↓
+useDownloadStore.applyBboxFromExtent()
+```
+
+**使用示例**：
+```vue
+<script setup>
+import MapDownloader from '@/components/MapDownloader.vue'
+import { useDownloadStore } from '@/stores'
+
+const downloadStore = useDownloadStore()
+const showDownloader = ref(false)
+
+const handleExtentRequest = async () => {
+  // 等待用户在地图上选择范围
+  const result = await mapContainer.pickDownloadExtent()
+  // 结果格式: { extent: [minLon, minLat, maxLon, maxLat], crs: 'EPSG:4326' }
+  downloadStore.applyBboxFromExtent(result.extent, result.crs)
+}
+</script>
+
+<template>
+  <MapDownloader
+    v-if="showDownloader"
+    @close="showDownloader = false"
+    @request-extent="handleExtentRequest"
+  />
+</template>
+```
+
+### useDownloadStore Pinia 状态
+
+**位置**：`src/stores/useDownloadStore.ts`
+
+**核心状态**：
+```typescript
+{
+  // 当前任务
+  currentTaskId: string | null
+  currentStatus: 'pending' | 'processing' | 'completed' | 'failed'
+  currentProgress: number // 0-100
+  currentMessage: string
+  
+  // 范围与参数
+  bbox: {
+    minLon: number
+    minLat: number
+    maxLon: number
+    maxLat: number
+  }
+  resolution_m: number // 分辨率（米）
+  tile_url_template: string // 瓦片源 URL
+  
+  // 任务历史
+  taskHistory: DownloadTask[]
+}
+```
+
+**关键方法**：
+```typescript
+// 应用范围（自动坐标系转换）
+applyBboxFromExtent(extent: [minX, minY, maxX, maxY], crs: string)
+
+// 提交下载任务
+submitDownloadTask(): Promise<{ task_id: string }>
+
+// 查询任务状态
+pollTaskStatus(taskId: string): Promise<DownloadTask>
+
+// 获取下载文件 URL
+getFileUrl(taskId: string): string
+
+// 清空历史任务
+clearHistory()
+```
+
+### download.js API 客户端
+
+**位置**：`src/api/download.js`
+
+**导出方法**：
+```javascript
+// 创建下载任务
+export async function createDownloadTask(payload) {
+  // payload: {
+  //   tile_url_template: string
+  //   bbox: { minLon, minLat, maxLon, maxLat }
+  //   crs: 'EPSG:4326' | 'EPSG:3857'
+  //   resolution_m: number
+  //   format: 'GeoTIFF'
+  // }
+  // 返回: { task_id, status, progress, message }
+}
+
+// 查询任务状态
+export async function getDownloadTask(taskId) {
+  // 返回: { task_id, status, progress, message, created_at, updated_at }
+}
+
+// 获取文件下载 URL
+export function downloadTaskFileUrl(taskId) {
+  // 返回: `/api/download/tasks/{taskId}/file`
+}
+```
+
+### MapContainer 范围选择集成
+
+**方法**：`pickDownloadExtent()`
+
+**工作流**：
+1. 激活 DragBox 交互（矩形选择）
+2. 用户在地图上拖拽选择范围
+3. 返回 EPSG:3857 范围: `[minX, minY, maxX, maxY]`
+4. 调用 `toLonLat()` 转换为 EPSG:4326 (WGS84)
+5. 返回 Promise 对象：
+   ```javascript
+   {
+     extent: [minLon, minLat, maxLon, maxLat],
+     crs: 'EPSG:4326'
+   }
+   ```
+
+**坐标系说明**：
+- **EPSG:3857** (Web Mercator)：OpenLayers 内部使用，X/Y 分别为投影坐标
+- **EPSG:4326** (WGS84)：GIS 标准坐标系，经度/纬度（Lon/Lat）
+- 转换函数：`toLonLat([projX, projY]) → [lon, lat]`
+
+---
+
 ## 近期架构更新
 
 ### 🔄 V3.0.7 (2026-05-01)
@@ -366,7 +522,7 @@ MIT
 
 ---
 
-最后更新：2026-05-01
+最后更新：2026-05-04 12:00
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）

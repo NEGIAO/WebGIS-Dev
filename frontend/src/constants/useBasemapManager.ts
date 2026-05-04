@@ -239,6 +239,15 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () => prioritizeTileSourceRequest(new XYZ({
             url: "https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228"
         }))
+    },  
+    {
+        id:'amap_label',
+        name: '高德注记无偏',
+        group: '注记',
+        category: 'label',
+        createSource: () => prioritizeTileSourceRequest(new XYZ({
+            url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+        }))
     },
 
     {
@@ -285,6 +294,13 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         createSource: () => prioritizeTileSourceRequest(new XYZ({ url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}' }))
+    },
+    {
+        id:'imagery_amap_wgs',
+        name: '高德影像(WGS)',
+        category: 'imagery',
+        group: '影像',
+        createSource: () => prioritizeTileSourceRequest(new XYZ({ url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}' }))
     },
     {
         id: 'imagery_google',
@@ -713,6 +729,15 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
         }))
     },
+    {
+        id: 'vector_amap_wgs',
+        name: '高德地图(WGS)',
+        category: 'vector',
+        group: '矢量',
+        createSource: () => prioritizeTileSourceRequest(new XYZ({
+            url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+        }))
+    },
 
     {
         id: 'vector_tengxun',
@@ -927,7 +952,9 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'imagery_amap_preset', label: '高德影像', stack: ['imagery_amap'] },
     { id: 'imagery_yandex_preset', label: 'Yandex卫星', stack: ['imagery_yandex'] },
     { id: 'google_Backend_Proxy_preset', label: '后端代理谷歌', stack: ['google_Backend_Proxy','label_tianditu'] },
-    
+    { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
+    { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
+
     // --- 矢量类 ---
     { id: 'imagery_google_standard_preset', label: 'Google标准', stack: ['imagery_google_standard'] },
     { id: 'vector_Google_clean_preset', label: 'Google简洁', stack: ['vector_Google_clean'] },

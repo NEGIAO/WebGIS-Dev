@@ -7,3 +7,4 @@ export * from './useUserPreferencesStore';
 export * from './useUrlParamStore';
 export * from './useCompassStore';
 export * from './useTOCStore';
+export * from './useDownloadStore';

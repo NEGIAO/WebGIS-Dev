@@ -25,6 +25,9 @@ from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router
 from api.agent_chat import router as agent_chat_router
+from api.download import router as download_router
+from core.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
+from models.download_task import init_download_task_db
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -69,6 +72,8 @@ async def startup_event():
     """
     logger.info("WebGIS Backend 启动...")
     await init_auth_storage()
+    init_download_task_db()
+    app.state.task_scheduler = start_task_cleanup_scheduler()
     # 为瓦片代理创建共享的异步 HTTP 客户端
     app.state.http_client = build_http_client()
     logger.info("HTTP 客户端初始化完成")
@@ -80,6 +85,9 @@ async def shutdown_event():
     应用关闭事件：清理资源
     """
     logger.info("WebGIS Backend 关闭...")
+    scheduler = getattr(app.state, "task_scheduler", None)
+    if scheduler is not None:
+        shutdown_task_cleanup_scheduler(scheduler)
     client = getattr(app.state, "http_client", None)
     if client is not None:
         await client.aclose()
@@ -123,6 +131,10 @@ logger.info("已注册 API 密钥管理路由")
 # 挂载 Agent 对话路由
 app.include_router(agent_chat_router)
 logger.info("已注册 Agent 对话路由")
+
+# 挂载下载任务路由
+app.include_router(download_router)
+logger.info("已注册下载任务路由")
 
 
 # --- 功能：健康检查 ---

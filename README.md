@@ -18,8 +18,8 @@
 
 ### 🎯 项目定位
 
-- **前端**：基于 Vue 3 + Vite + OpenLayers，托管在 GitHub Pages  
-- **后端**：基于 FastAPI + Python，部署在 Hugging Face Spaces（支持 Docker）
+- **前端**：基于 Vue 3 + Vite + OpenLayers + Cesium，托管在 GitHub Pages  
+- **后端**：基于 FastAPI + Python，用Dockers部署在 Hugging Face Spaces
 - **架构**：RESTful API 通信，前后端完全解耦，支持独立扩展
 
 ### 💫 核心特性
@@ -28,6 +28,7 @@
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
 - 🎨 电影级视觉效果、数据可视化、首屏特效
+- 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步）
 - 🔍 绘制、测量、路线规划、地点搜索、**双底图对比（Map Swipe，仅裁剪在线底图，不影响业务图层）**
 - 🌤️ 实时天气 + 趋势预报
 - 🤖 AI 空间助手（LLM 集成）
@@ -35,6 +36,7 @@
 
 **后端功能**：
 - 📡 地理数据处理与坐标系转换
+- 🗺️ 底图数据下载
 - 🌦️ 天气数据服务
 - 🛣️ 路线规划与导航
 - 📰 新闻爬虫与数据采集
@@ -44,42 +46,72 @@
 
 ## 🚀 快速开始
 
-### 前端本地开发
+### 📋 依赖环境（必需）
+
+在开始之前，请确保已安装以下工具：
+
+- **Node.js 16+** —— 前端构建与开发服务器
+- **Docker Desktop** —— 容器化后端环境（**强制要求**）
+- **LocalDev.bat** —— Windows 快速启动脚本（推荐使用）
+
+### 🎯 推荐方式：使用 LocalDev.bat（一键启动）
+
+最简单的启动方式——**双击 LocalDev.bat 文件即可**：
 
 ```bash
-# 1. 安装依赖
+# Windows 系统
+双击 LocalDev.bat
+
+# 脚本会自动执行：
+# 1. npm install （前端依赖）
+# 2. npm run dev （前端开发服务器：http://localhost:5173）
+# 3. docker-compose up （后端容器：http://localhost:7860）
+```
+
+**访问地址**：
+- 前端：http://localhost:5173
+- 后端 API 文档：http://localhost:7860/docs
+
+### 手动启动（高级用户）
+
+#### 前端本地开发
+
+```bash
+# 1. 进入前端目录
 cd frontend
+
+# 2. 安装依赖
 npm install
 
-# 2. 启动开发服务器
+# 3. 启动开发服务器
 npm run dev
 
-# 3. 访问应用
+# 4. 访问应用
 # http://localhost:5173
 ```
 
-### 后端本地开发
+#### 后端本地开发（需要 Docker Desktop 运行）
 
 ```bash
-# 1. 安装依赖
-cd backend
-uv sync
+# 1. 启动 Docker Compose（包含后端服务）
+docker-compose up
 
-# 2. 启动开发服务器
-uv run uvicorn app:app --reload --port 8000
+# 2. 等待容器启动完成
 
 # 3. 访问 API 文档
-# http://localhost:8000/docs
+# http://localhost:7860/docs
 ```
 
-### 使用 Docker Compose（推荐）
+**注意**：后端已升级为 Docker Compose 容器化部署，需要 Docker Desktop 支持。不再支持直接运行 `uvicorn`。
+
+### 使用 Docker Compose（生产部署）
 
 ```bash
 # 一键启动前后端
 docker-compose up
 
 # 前端：http://localhost:5173
-# 后端：http://localhost:8000
+# 后端：http://localhost:7860
 ```
 
 ## 📁 项目结构
@@ -91,11 +123,15 @@ WebGIS_Dev/
 ├── frontend/                       # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
 │   ├── src/
 │   │   ├── api/                    # 前端 API 封装
+│   │   │   ├── download.js         # 🆕 在线底图下载 API 客户端
+│   │   │   └── ...                 # 其余 API 模块
 │   │   ├── components/             # 业务组件
+│   │   │   ├── MapDownloader.vue   # 🆕 在线底图下载面板（底图/分辨率/范围选择）
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
 │   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）
 │   │   │   ├── MapSwipeController.vue # 卷帘对比控制器（仅作用于在线底图）
+│   │   │   ├── MapContainer.vue    # 🔄 升级：支持矩形框选和坐标转换（WGS84↔EPSG:3857）
 │   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划选择面板（仅定位/加载，TOC 统一承载管理）
 │   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
 │   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）
@@ -107,9 +143,15 @@ WebGIS_Dev/
 │   │   ├── composables/            # 组合式逻辑
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
-│   │   ├── stores/                 # Pinia 状态管理（含 useCompassStore/useTOCStore）
+│   │   ├── stores/                 # Pinia 状态管理
+│   │   │   ├── useDownloadStore.ts # 🆕 在线底图下载任务状态管理
+│   │   │   ├── useCompassStore.ts  # 罗盘状态
+│   │   │   ├── useTOCStore.ts      # 图层树状态
+│   │   │   └── ...                 # 其余 Pinia stores
 │   │   ├── services/               # 业务服务（DistrictManager 负责行政区划边界加载并同步 TOC 元数据）
 │   │   ├── utils/                  # 工具函数
+│   │   │   └── gis/                # GIS 工具库
+│   │   │       └── mapRuntimeDeps.js # OpenLayers 运行时依赖（包含 DragBox 等）
 │   │   └── views/                  # 页面（HomeView / RegisterView）
 │   ├── public/                     # 静态资源（tiles/images/ShareData/adcode.json）
 │   ├── scripts/                    # 构建与维护脚本
@@ -118,19 +160,27 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 前端详细文档
 ├── backend/                        # 🔹 后端（FastAPI）
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
+│   │   ├── download.py             # 🆕 在线底图下载任务 API（POST/GET 任务）
 │   │   ├── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
-│   │   └── ...                     # 其余后端接口模块（已移除罗盘配置后端接口，罗盘分享改为前端本地编码）
-│   ├── app.py                      # FastAPI 入口
+│   │   └── ...                     # 其余后端接口模块
+│   ├── core/                       # 🆕 核心业务逻辑模块
+│   │   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
+│   │   └── task_scheduler.py       # 🆕 过期任务清理调度器（30分钟保留期）
+│   ├── models/                     # 🆕 数据模型层
+│   │   └── download_task.py        # 🆕 SQLModel 下载任务表（支持 SQLite 持久化）
+│   ├── app.py                      # FastAPI 入口（集成下载路由和调度器）
 │   ├── data/                       # 本地/挂载数据目录
 │   ├── Dockerfile                  # 后端镜像构建
-│   ├── pyproject.toml              # 依赖与项目配置（uv）
+│   ├── docker-compose.yml          # 🆕 Docker Compose 编排（前后端容器化）
+│   ├── pyproject.toml              # 依赖与项目配置（uv，新增 rasterio/sqlmodel/apscheduler）
 │   ├── uv.lock                     # 锁文件
 │   ├── .env.example
 │   ├── .python-version
-│   └── README.md                   # 🔹 后端详细文档（含 V3.0.2 更新说明）
+│   └── README.md                   # 🔹 后端详细文档
 ├── Docs/                           # 开发维护日志与强制执行规范
+├── docker-compose.yml              # 🆕 顶级 Docker Compose（一键启动前后端）
+├── LocalDev.bat                    # 🔄 升级：支持 Docker Compose 启动前后端
 ├── API_MANAGEMENT_GUIDE.md
-├── LocalDev.bat                     # Windows 本地开发一键脚本(启动前后端本地开发环境)
 └── README.md                       # 本文件（项目概述）
 ```
 
@@ -158,7 +208,7 @@ WebGIS_Dev/
                          ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   后端 (FastAPI)                        │
-│                   http://localhost:8000                │
+│                   http://localhost:7860                │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  Routes → Services (Business Logic) → Utils      │  │
 │  │           ↓                                       │  │
@@ -171,7 +221,7 @@ WebGIS_Dev/
 
 | 环境 | 前端地址 | 后端地址 | API 端点 |
 |------|---------|---------|---------|
-| **本地开发** | http://localhost:5173 | http://localhost:8000 | http://localhost:8000/api/* |
+| **本地开发** | http://localhost:5173 | http://localhost:7860 | http://localhost:7860/api/* |
 | **生产环境** | https://negiao.github.io/WebGIS-Dev/ | https://negiao-webgis.hf.space/ | https://negiao-webgis.hf.space/api/* |
 | **GitHub Pages** | https://NEGIAO.github.io/WebGIS | Hugging Face Spaces | [查看 deploy.yml] |
 
@@ -216,7 +266,7 @@ WebGIS_Dev/
 docker build -t webgis-backend:latest -f Dockerfile .
 
 # 运行容器
-docker run -p 8000:7860 webgis-backend:latest
+docker run -p 7860:7860 webgis-backend:latest
 
 # 或使用 docker-compose
 docker-compose up
@@ -238,7 +288,7 @@ VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
 # 对话统一经由后端接口 /api/agent/chat/*
 
 # 后端 API 地址
-VITE_BACKEND_URL=http://localhost:8000
+VITE_BACKEND_URL=http://localhost:7860
 ```
 
 ### 后端环境变量（backend/.env）
@@ -276,7 +326,124 @@ LOG_LEVEL=INFO
 
 ## 🔄 更新日志
 
-### 🔄 V3.0.7 (2026-05-01)
+### � V3.1.0 (2026-05-04)
+#### 🔹 在线地图下载 + GCJ-02实时纠偏 + Docker Compose容器化
+
+本次版本引入**在线地图下载系统、GCJ-02坐标纠偏、Docker Compose容器化**，进一步完善后端服务能力，实现专业级地图数据导出功能。
+
+---
+
+#### 🌟 核心特性（重点）
+
+##### 1. 在线底图下载面板（MapDownloader）✨
+- **功能**：前端UI可视化选择任意在线底图、自定义分辨率、矩形框选范围
+- **输出**：异步后端任务生成标准 GeoTIFF 格式地图数据，可直接导入 ArcGIS / QGIS 等专业 GIS 应用
+- **工作流**：
+  1. 用户选择底图源（天地图/Google/自定义 URL）
+  2. 输入分辨率（支持 EPSG:4326 / EPSG:3857 两种坐标系）
+  3. 地图框选范围（拖拽矩形）或手动输入四至范围
+  4. 提交后端，后端异步下载瓦片 + Rasterio 拼接
+  5. 生成 GeoTIFF 文件，自动计算过期时间（30分钟保留期）
+  6. 前端轮询获取进度，完成后自动下载
+- **技术亮点**：
+  - 后端 httpx 异步并发下载（信号量控制 10 并发）
+  - Rasterio Window 流式写入（避免全量内存加载）
+  - SQLite 任务持久化 + APScheduler 自动清理
+
+##### 2. GCJ-02在线底图实时纠偏 ✨
+- **问题**：高德、腾讯地图使用 GCJ-02 坐标系，直接叠加会产生偏移
+- **解决**：后端新增 GCJ-02 ↔ WGS84 实时转换代理
+  ```
+  /proxy/gcj2wgs/{target_url:path}  —— GCJ-02 → WGS84
+  /proxy/wgs2gcj/{target_url:path}  —— WGS84 → GCJ-02
+  ```
+- **使用场景**：
+  - 高德底图配合 WGS84 数据层叠加
+  - 下载高德底图后，自动纠偏以 WGS84 存储
+
+##### 3. Docker Compose 容器化部署 🐳
+- **改进**：后端升级为 Docker Compose 多容器编排
+- **优势**：
+  - 依赖隔离：应用、数据库、缓存独立容器
+  - 开发一致性：本地开发环境 = 生产环境
+  - 快速启动：一命令启动完整后端栈
+- **一键启动**：`LocalDev.bat` 双击即可启动前后端
+
+---
+
+#### 📦 涉及文件
+
+**前端新增**：
+- `frontend/src/components/MapDownloader.vue` —— 下载面板 UI
+- `frontend/src/stores/useDownloadStore.ts` —— Pinia 状态管理
+- `frontend/src/api/download.js` —— API 客户端
+
+**后端新增**：
+- `backend/core/tile_engine.py` —— 瓦片下载 + 拼接引擎
+- `backend/core/task_scheduler.py` —— 过期任务清理调度器
+- `backend/models/download_task.py` —— SQLModel 任务表
+- `backend/api/download.py` —— 下载任务 REST API
+
+**部署升级**：
+- `docker-compose.yml` —— Docker Compose 编排（顶级）
+- `backend/docker-compose.yml` —— 后端专用编排
+- `LocalDev.bat` —— 升级，支持 Docker Compose 启动
+
+**依赖升级**：
+- `backend/pyproject.toml` 新增：rasterio, sqlmodel, apscheduler, httpx
+
+---
+
+#### ⚙️ 新增后端接口
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| POST | `/api/download/tasks` | 创建下载任务 |
+| GET | `/api/download/tasks/{task_id}` | 查询任务状态 & 进度 |
+| GET | `/api/download/tasks/{task_id}/file` | 下载 GeoTIFF 文件 |
+| GET | `/proxy/gcj2wgs/{target_url:path}` | GCJ-02 → WGS84 纠偏 |
+| GET | `/proxy/wgs2gcj/{target_url:path}` | WGS84 → GCJ-02 纠偏 |
+
+---
+
+#### 📋 环境要求
+
+**必需依赖**：
+- Node.js 16+
+- Docker Desktop（**强制要求**）
+- Python 3.10+（仅内部使用）
+
+**启动方式**：
+```bash
+# Windows: 双击 LocalDev.bat
+# 自动启动：
+#   - npm install && npm run dev （前端）
+#   - docker-compose up （后端）
+
+# 或手动启动
+docker-compose up
+```
+
+---
+
+#### ✅ 使用者收益
+
+1. **专业地图导出**：生成标准 GeoTIFF，可直接用于 GIS 分析
+2. **坐标系无缝支持**：自动纠偏 GCJ-02，避免国内地图叠加偏移
+3. **简化部署**：Docker Compose 统一环境，减少配置复杂度
+4. **开发体验升级**：LocalDev.bat 一键启动，无需手动配置
+
+---
+
+#### 🔄 兼容性说明
+
+- ✅ **无破坏性变更**：现有功能完全保持
+- ✅ **渐进式增强**：新功能可选使用
+- ✅ **向后兼容**：旧版本接口仍可用
+
+---
+
+### �🔄 V3.0.7 (2026-05-01)
 #### 🔹 在线地图性能优化与功能完善
 
 本次版本聚焦**底图/图层切换体验、内存稳定性、弱网兼容性**，全面解决卡顿、延迟、闪烁、内存泄漏等问题，图层操作响应速度、界面流畅度、长期运行稳定性实现大幅提升，同时保持功能兼容、无感升级。
@@ -452,7 +619,7 @@ export const getMyData = async (params) => {
 ## ⚠️ 常见问题
 
 ### Q: 前后端如何本地联调？
-**A**：前端 `localhost:5173` → 后端 `localhost:8000`，确保 CORS 配置正确。
+**A**：前端 `localhost:5173` → 后端 `localhost:7860`，确保 CORS 配置正确。
 
 ### Q: 如何修改后端技术栈？
 **A**：后端仍在测试阶段，可随时调整。在 `backend/README.md` 中有详细的扩展指南。

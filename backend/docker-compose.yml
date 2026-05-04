@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports:
+      - "7860:7860"
+    volumes:
+      - .:/app # 关键：将本地代码实时映射到容器
+      - /app/.venv # 可选：防止本地虚拟环境覆盖容器内的环境
+    environment:
+      - PYTHONUNBUFFERED=1
+    # 覆盖 Dockerfile 的 CMD，确保开启 --reload
+    command: uv run uvicorn app:app --host 0.0.0.0 --port 7860 --reload

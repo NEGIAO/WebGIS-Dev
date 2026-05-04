@@ -8,9 +8,9 @@
  * - 新闻侧边栏展示
  * - 鼠标特效
  */
-import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h } from 'vue';
+import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h, nextTick } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore, useWeatherStore, useAppStore, useCompassStore, useTOCStore } from '../stores';
+import { useAttrStore, useWeatherStore, useAppStore, useCompassStore, useTOCStore, useDownloadStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
@@ -18,6 +18,7 @@ const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
 const compassStore = useCompassStore();
 const tocStore = useTOCStore();
+const downloadStore = useDownloadStore();
 
 // 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
 // showLoading('正在初始化地图与核心环境...'); // 已由 router.beforeEach 接力处理
@@ -86,6 +87,7 @@ const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
 const sidePanelWarmupScheduled = ref(false);
 const activeSidePanelTab = ref('toolbox'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
+const toolboxTab = ref('layers');
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
 const showQueryPanel = ref(false);
@@ -272,6 +274,20 @@ function handleControlsOpenTab(tab) {
     isSidePanelCollapsed.value = false;
 }
 
+function handleControlsOpenToolboxTab(tab) {
+    const next = String(tab || '').trim();
+    if (!next) return;
+    if (toolboxTab.value === next) {
+        toolboxTab.value = 'layers';
+        nextTick(() => {
+            toolboxTab.value = next;
+        });
+    } else {
+        toolboxTab.value = next;
+    }
+    handleControlsOpenTab('toolbox');
+}
+
 function handleControlsMapInteraction(type) {
     const nextType = String(type || '').trim();
     if (!nextType) return;
@@ -280,6 +296,29 @@ function handleControlsMapInteraction(type) {
 
 function handleControlsShowAnalysis() {
     message.info('分析功能入口已接入，后续可扩展缓冲区/最短路径专属面板。');
+}
+
+async function handleRequestDownloadExtent() {
+    try {
+        message.info('请在地图上拖拽框选下载范围');
+        const result = await mapContainerRef.value?.pickDownloadExtent?.();
+        const extent = result?.extent;
+        if (!extent) {
+            message.warning('未获取到下载范围');
+            return;
+        }
+        const ok = downloadStore.applyBboxFromExtent(extent, result?.crs || 'EPSG:3857');
+        if (ok) {
+            message.success('已更新下载范围');
+        } else {
+            message.warning('下载范围解析失败');
+        }
+    } catch (error) {
+        const detail = String(error?.message || '').trim();
+        if (detail && !/(取消|cancel)/i.test(detail)) {
+            message.error(detail || '获取下载范围失败');
+        }
+    }
 }
 
 async function handleControlsDistrictSelect(payload) {
@@ -538,8 +577,6 @@ async function toggle3D() {
         is3DMode.value = true;
     }
 }
-
-/** 开启特定魔法特效 */
 function handleActivateMagic(effectName) {
     if (effectName === 'off') {
         isMagicMode.value = false;
@@ -859,9 +896,9 @@ onMounted(async () => {
         <div class="content-section">
             <!-- 侧边控制栏（左）-->
             <div class="Control-panel">
-                <ControlsPanel @open-tab="handleControlsOpenTab" @map-interaction="handleControlsMapInteraction"
-                    @show-analysis="handleControlsShowAnalysis" @district-select="handleControlsDistrictSelect"
-                    @enable-basemap-swipe="handleEnableBasemapSwipe" />
+                <ControlsPanel @open-tab="handleControlsOpenTab" @open-toolbox-tab="handleControlsOpenToolboxTab"
+                    @map-interaction="handleControlsMapInteraction" @show-analysis="handleControlsShowAnalysis"
+                    @district-select="handleControlsDistrictSelect" @enable-basemap-swipe="handleEnableBasemapSwipe" />
             </div>
 
 
@@ -975,6 +1012,7 @@ onMounted(async () => {
                     @draw-point-by-coordinates="handleDrawPointByCoordinates"
                     @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson" @toggle-layer-crs="handleToggleLayerCRS"
                     @export-layer-data="handleExportLayerData" @switch-tab="handleSwitchSidePanelTab"
+                    @request-download-extent="handleRequestDownloadExtent"
                     @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel" @close-chat="handleCloseChat">
                     <template v-slot:extra-content>
                         <div class="extra-info">
