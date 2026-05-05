@@ -1,7 +1,7 @@
 """
 日志流监控：
 - local：广播本进程 Python logging（无需 Token，适合本地开发）
-- hf：代理 Hugging Face Space 运行日志（需 SUPER_USER，适合线上部署）
+- hf：代理 Hugging Face Space 运行日志（需 LOG，适合线上部署）
 
 模式由 WEBGIS_LOG_STREAM_MODE 或运行环境自动选择，详见 effective_log_stream_mode()。
 """
@@ -26,7 +26,8 @@ router = APIRouter(
     tags=["系统监控"],
 )
 
-DEFAULT_HF_LOGS_URL = "https://huggingface.co/api/spaces/NEGIAO/WebGIS/logs/run"
+DEFAULT_HF_RUN_LOGS_URL = "https://huggingface.co/api/spaces/NEGIAO/WebGIS/logs/run"
+DEFAULT_HF_BUILD_LOGS_URL = "https://huggingface.co/api/spaces/NEGIAO/WebGIS/logs/build"
 
 # ---------- 本地日志广播（多订阅者）----------
 
@@ -39,12 +40,8 @@ _handler_attached = False
 SUBSCRIBER_QUEUE_MAX = 800
 
 
-def _hf_logs_url() -> str:
-    return os.getenv("HF_SPACE_LOGS_URL", DEFAULT_HF_LOGS_URL).strip() or DEFAULT_HF_LOGS_URL
-
-
-def _super_user_token() -> str:
-    return os.getenv("SUPER_USER", "").strip()
+def _LOG_token() -> str:
+    return os.getenv("LOG", "").strip()
 
 
 def _sse_escape_data(line: str) -> str:
@@ -265,71 +262,50 @@ async def logs_stream_config():
 
 
 @router.get("/logs/stream")
-async def stream_logs():
+async def stream_logs(type: str = "run"): # 接收前端传来的 type 参数 (run/build)
     mode = effective_log_stream_mode()
 
+    # 1. 本地开发模式：直接广播本进程日志，不区分 run/build
     if mode == "local":
-        return StreamingResponse(
-            _local_log_generator(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache, no-transform",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
-        )
+        return StreamingResponse(_local_log_generator(), media_type="text/event-stream")
 
-    token = _super_user_token()
+    # 2. 线上模式：检查 Token
+    token = _LOG_token()
     if not token:
-        raise HTTPException(
-            status_code=503,
-            detail="部署环境未配置 SUPER_USER，无法代理 Hugging Face 运行日志。",
-        )
+        raise HTTPException(status_code=503, detail="未配置 LOG Token")
 
-    target_url = _hf_logs_url()
+    # 根据前端选择动态切换 HF Endpoint[cite: 4]
+    target_url = DEFAULT_HF_BUILD_LOGS_URL if type == "build" else DEFAULT_HF_RUN_LOGS_URL
+    
     headers = {
         "Authorization": f"Bearer {token}",
-        "Accept": "text/event-stream, text/plain, */*",
+        "Accept": "text/event-stream",
     }
 
     async def hf_generator():
         try:
             async with httpx.AsyncClient(timeout=None, follow_redirects=True) as client:
                 async with client.stream("GET", target_url, headers=headers) as response:
-                    if not response.is_success:
-                        body = await response.aread()
-                        snippet = body.decode("utf-8", errors="replace")[:800]
-                        logger.warning(
-                            "HF logs upstream error: %s %s",
-                            response.status_code,
-                            snippet,
-                        )
-                        yield f"data: [upstream {response.status_code}] {_sse_escape_data(snippet)}\n\n"
+                    if response.status_code == 401:
+                        yield "data: [error] Token 校验失败，请检查 Secret 是否为 hf_ 开头\n\n"
                         return
-
+                    
                     async for line in response.aiter_lines():
-                        if not line:
-                            continue
-                        line = line.strip("\r")
                         if line:
-                            yield f"data: {_sse_escape_data(line)}\n\n"
-        except httpx.HTTPError as exc:
-            logger.exception("HF logs stream HTTP error")
-            yield f"data: [proxy error] {_sse_escape_data(str(exc))}\n\n"
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("HF logs stream failed")
-            yield f"data: [proxy error] {_sse_escape_data(str(exc))}\n\n"
+                            # 增加来源标识
+                            label = f"[{type.upper()}] "
+                            yield f"data: {label}{_sse_escape_data(line)}\n\n"
+        except Exception as e:
+            yield f"data: [proxy error] {str(e)}\n\n"
 
     return StreamingResponse(
         hf_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no", # 禁用代理缓存，确保日志实时
+        }
     )
-
 
 async def _local_log_generator():
     q = await _register_subscriber()

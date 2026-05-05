@@ -158,6 +158,7 @@ frontend/
     │   ├── TOCTreeItem.vue                      # TOC 递归节点（右键菜单入口）
     │   ├── PalaceExplanationPanel.vue           # 罗盘宫位解释面板（点击选中宫位后显示风水解释）
     │   ├── TopBar.vue                           # 顶栏组件
+    │   ├── LogMonitor.vue                       # 日志监控组件
     │   ├── WeatherChartPanel.vue                # 天气可视化组件
     │   │
     │   ├── Cesium/

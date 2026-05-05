@@ -3,6 +3,17 @@
         <div class="panel-header">
             <div class="status-info">
                 <Terminal :size="14" class="header-icon" />
+                <!-- 仅在远程模式显示 RUN/BUILD 切换 -->
+                <div v-if="displaySourceLabel === 'REMOTE'" class="log-type-switcher">
+                    <button 
+                        :class="['type-btn', { active: currentType === 'run' }]" 
+                        @click="switchType('run')"
+                    >RUN</button>
+                    <button 
+                        :class="['type-btn', { active: currentType === 'build' }]" 
+                        @click="switchType('build')"
+                    >BUILD</button>
+                </div>
                 <span class="title">TERMINAL</span>
                 <div class="divider"></div>
                 <span :class="['status-dot', { active: isConnected, pending: streamDesired && !isConnected }]"></span>
@@ -56,8 +67,23 @@ import { ref, onUnmounted, nextTick, computed, watch } from 'vue';
 import { Terminal, Play, Square, Trash2, AlertCircle,Copy, Check } from 'lucide-vue-next';
 import { BACKEND_BASE_URL } from '../api/backend';
 
-// ... 此处保持你原有的 props 和 logic 不变 ...
-// (保持逻辑代码一致，重点优化样式)
+const currentType = ref('run'); // 默认监控运行日志
+const logsStreamUrl = computed(() => {
+    const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
+    // 增加 type 参数[cite: 5]
+    return `${base}/monitor/logs/stream?type=${currentType.value}`;
+});
+
+/** 切换逻辑：切换后若已连接则重连[cite: 5] */
+function switchType(type) {
+    if (currentType.value === type) return;
+    currentType.value = type;
+    
+    if (streamDesired.value) {
+        closeConnection();
+        openConnection();
+    }
+}
 
 const props = defineProps({
     visible: { type: Boolean, default: true },
@@ -106,6 +132,8 @@ async function copySingleLine(text) {
 // 简单逻辑：根据关键词返回样式类
 function getLogClass(msg) {
     const text = msg.toUpperCase();
+    if (text.includes('[BUILD]')) return 'log-build'; // 在 CSS 中定义紫色或蓝色
+    if (text.includes('[RUN]')) return 'log-run';
     if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
     if (text.includes('WARN')) return 'log-warning';
     if (text.includes('INFO')) return 'log-info';
@@ -149,10 +177,6 @@ const scrollToBottom = async () => {
     }
 };
 
-const logsStreamUrl = computed(() => {
-    const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
-    return `${base}/monitor/logs/stream`;
-});
 
 const displaySourceLabel = computed(() => {
     try {
@@ -174,7 +198,7 @@ function closeConnection() {
 
 function openConnection() {
     streamDesired.value = true;
-    eventSource = new EventSource(logsStreamUrl.value);
+    eventSource = new EventSource(logsStreamUrl.value); // 这里会使用带参数的 URL
     eventSource.onopen = () => isConnected.value = true;
     eventSource.onmessage = (e) => pushLine(e.data);
     eventSource.onerror = () => closeConnection();
@@ -184,6 +208,30 @@ onUnmounted(() => closeConnection());
 </script>
 
 <style scoped>
+/* 切换器样式 */
+.log-type-switcher {
+    display: flex;
+    background: #27272a;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.type-btn {
+    padding: 2px 10px;
+    font-size: 10px;
+    border: none;
+    background: transparent;
+    color: #71717a;
+    cursor: pointer;
+    border-radius: 2px;
+    font-weight: 700;
+    transition: all 0.2s;
+}
+
+.type-btn.active {
+    background: #3f3f46;
+    color: #f4f4f5;
+}
 /* 核心容器优化 */
 .webgis-log-panel {
     width: 40%; 
@@ -322,6 +370,8 @@ onUnmounted(() => closeConnection());
 .log-warning { color: #fbbf24 !important; }
 .log-info { color: #109942 !important; }
 .log-success { color: #4ade80 !important; }
+.log-build { color: #0e13a3 !important; font-weight: 500; }
+.log-run { color: #1ab142 !important; font-weight: 500; }
 
 /* 空状态动画 */
 .empty-tip {
@@ -351,5 +401,8 @@ onUnmounted(() => closeConnection());
     align-items: center;
     gap: 6px;
     border-bottom: 1px solid #450a0a;
+}
+@media (max-width: 768px) {
+    .webgis-log-panel { width: 100%; }
 }
 </style>

@@ -33,6 +33,7 @@ backend/
 │   ├── external_proxy.py       # 外部代理能力
 │   ├── admin.py                # 管理端接口
 │   ├── api_management.py       # API 管理
+│   ├── monitor.py              # Log 监控
 │   ├── api_keys_management.py  # API Key 管理
 │   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
 │   ├── download.py             # 🆕 在线底图下载任务 API
