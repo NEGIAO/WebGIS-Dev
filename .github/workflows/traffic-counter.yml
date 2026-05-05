@@ -20,17 +20,21 @@ jobs:
             const fs = require('fs');
             const path = '.github/traffic.json';
 
-            // 读取你现有的总数（不清空！不覆盖！）
+            // 1. 初始化或读取现有数据
             let data = {
               totalViews: 0,
+              totalUniqueViews: 0,
               totalClones: 0,
+              totalUniqueClones: 0,
               lastUpdate: ''
             };
+            
             if (fs.existsSync(path)) {
-              data = JSON.parse(fs.readFileSync(path, 'utf8'));
+              const fileContent = fs.readFileSync(path, 'utf8');
+              if (fileContent) data = JSON.parse(fileContent);
             }
 
-            // 获取 GitHub 官方 14天数据
+            // 2. 获取 GitHub 官方 14 天数据
             const views = await github.request('GET /repos/{owner}/{repo}/traffic/views', {
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -40,30 +44,44 @@ jobs:
               repo: context.repo.repo,
             });
 
-            // ==============================================
-            // 逻辑：如果是第一次统计 → 直接用 GitHub 14天总数
-            // 之后每天 → 只加【今天新增】，不重复计算
-            // ==============================================
-            const today = new Date().toISOString().split('T')[0];
-            const todayViews = views.data.views.find(v => v.timestamp.startsWith(today))?.count || 0;
-            const todayClones = clones.data.clones.find(c => c.timestamp.startsWith(today))?.count || 0;
+            // 3. 定位“昨天”的数据 (由于今天的数据尚未跑完，统计昨天的数据最准确)
+            const yesterday = new Date();
+            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
 
+            const yesterdayViewsObj = views.data.views.find(v => v.timestamp.startsWith(yesterdayStr));
+            const yesterdayClonesObj = clones.data.clones.find(c => c.timestamp.startsWith(yesterdayStr));
+
+            const yViews = yesterdayViewsObj ? yesterdayViewsObj.count : 0;
+            const yUViews = yesterdayViewsObj ? yesterdayViewsObj.uniques : 0;
+            const yClones = yesterdayClonesObj ? yesterdayClonesObj.count : 0;
+            const yUClones = yesterdayClonesObj ? yesterdayClonesObj.uniques : 0;
+
+            // 4. 更新逻辑
             if (data.totalViews === 0 && data.totalClones === 0) {
-              // 第一次运行：用 GitHub 官方近14天真实总数
+              // 第一次运行：初始化为 GitHub 官方提供的 14 天总计数值
               data.totalViews = views.data.count;
+              data.totalUniqueViews = views.data.uniques;
               data.totalClones = clones.data.count;
+              data.totalUniqueClones = clones.data.uniques;
             } else {
-              // 非第一次：只加今天新增
-              data.totalViews += todayViews;
-              data.totalClones += todayClones;
+              // 之后每天：累加昨天的全量数据和独立用户数
+              data.totalViews += yViews;
+              data.totalUniqueViews += yUViews;
+              data.totalClones += yClones;
+              data.totalUniqueClones += yUClones;
             }
 
             data.lastUpdate = new Date().toISOString();
+
+            // 5. 写入文件
+            const dir = '.github';
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir);
             fs.writeFileSync(path, JSON.stringify(data, null, 2));
 
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update traffic statistics [auto]"
+          message: "Update traffic statistics (including uniques) [auto]"
           committer_name: GitHub Actions
           committer_email: actions@github.com
