@@ -537,7 +537,7 @@ async function loadCustomTileset() {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  /* 其他你现有的样式... */
+  /* 其他现有的样式... */
 }
 
 .close-btn {

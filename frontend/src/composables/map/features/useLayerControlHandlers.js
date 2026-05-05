@@ -1,11 +1,11 @@
 /**
- * 图层控制面板事件处理库（Phase 21）
- *
- * 功能：
- * - 处理底图切换与自定义 URL 加载
- * - 处理图层排序、显隐、透明度更新
- * - 处理自定义底图自动识别并落图
+ * 图层控制面板事件处理库（Phase 21 - 性能优化版）
+ * 
+ * 主要改进：
+ * 1. 引入 AbortController 机制阻断无用的底图切片请求
+ * 2. 优化并发槽位释放，解决国外底图加载导致的“卡死”问题
  */
+import { abortTileSourceRequests } from '../../useTileSourceFactory'; // 确保路径指向你存放工厂函数的地方
 
 export function createLayerControlHandlers({
     selectedLayerRef,
@@ -17,28 +17,52 @@ export function createLayerControlHandlers({
     message
 }) {
     /**
-     * [改进] 删除第一层防抖，让 watch 防抖处理
-     * 响应延迟从 600ms → 300ms
+     * 【关键改动 1】：内部助手函数
+     * 作用：在物理层面掐断指定图层正在进行的 HTTP 请求[cite: 2]
+     */
+    function stopLayerNetworkRequests(layerId) {
+        if (!layerId || !layerInstances) return;
+        const layer = layerInstances[layerId];
+        const source = layer?.getSource?.();
+        if (source) {
+            // 立即停止所有 pending 的 fetch 请求，释放浏览器 6 个并发槽位[cite: 2]
+            abortTileSourceRequests(source);
+        }
+    }
+
+    /**
+     * 应用底图选择
      */
     function applyBasemapSelection(layerId) {
         const normalizedLayerId = String(layerId || '').trim();
         if (!normalizedLayerId || !selectedLayerRef) return;
         
-        // 相同底图不重复设置，避免触发多余的 watch
         if (selectedLayerRef.value === normalizedLayerId) {
             return;
         }
+        
+        /**
+         * 【关键改动 2】：先阻断，再切换
+         * 如果不调用这一步，旧底图（如 Google）没加载完的瓦片会继续占用网络通道[cite: 2]
+         */
+        stopLayerNetworkRequests(selectedLayerRef.value);
         
         selectedLayerRef.value = normalizedLayerId;
     }
 
     /**
-     * 加载用户输入的 URL，按 XYZ -> WMS -> WMTS 自动识别并激活 custom 图层。
+     * 加载自定义 URL 底图
      */
     async function loadCustomMap() {
         if (!customMapUrlRef?.value) return;
 
         try {
+            /**
+             * 【关键改动 3】：清理 custom 图层的残留请求
+             * 防止用户连续快速点击“加载”按钮导致请求堆积[cite: 2]
+             */
+            stopLayerNetworkRequests('custom');
+
             const detected = await createAutoTileSourceFromUrl(customMapUrlRef.value);
             const customLayer = layerInstances?.custom;
 
@@ -68,13 +92,11 @@ export function createLayerControlHandlers({
     }
 
     /**
-     * 统一接收图层切换与自定义 URL 加载。
-     * [改进] 直接设置 ref，让 watch 处理防抖
+     * 统一接收图层切换与自定义 URL 加载
      */
     function handleLayerChange(payload = {}) {
         const nextLayerId = String(payload.layerId || '').trim();
         if (nextLayerId) {
-            // 直接设置，不防抖（防抖由 watch 处理）
             applyBasemapSelection(nextLayerId);
         }
 
@@ -87,7 +109,7 @@ export function createLayerControlHandlers({
     }
 
     /**
-     * 处理图层排序、可见性和透明度更新。
+     * 处理图层排序、可见性和透明度更新（这部分逻辑保持现状即可）
      */
     function handleLayerOrderUpdate(payload = {}) {
         const list = layerListRef?.value;

@@ -452,7 +452,7 @@ function drawAmapAoiByDetailJsonInput(payload = {}) {
         const layerName = detail.name ? `${detail.name} - AOI范围` : '未知AOI';
 
         // 3. 执行地图渲染逻辑 (注意坐标系的选择)
-        // 假设你的地图需要的是 WGS84 坐标，使用 detail.ringsWgs84
+        // 假设的地图需要的是 WGS84 坐标，使用 detail.ringsWgs84
         // 如果是高德底图（GCJ02），使用 detail.ringsGcj02
         let mapRings = convertWgsRingsToMapRings(detail.ringsWgs84); 
         
@@ -468,7 +468,7 @@ function drawAmapAoiByDetailJsonInput(payload = {}) {
             来源: detail.source
         });
 
-        // 调用你已有的图层创建函数
+        // 调用已有的图层创建函数
         createManagedVectorLayer?.({
             name: layerName,
             features: [aoiFeature],

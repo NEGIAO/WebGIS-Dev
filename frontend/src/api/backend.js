@@ -125,7 +125,7 @@ backendAPI.interceptors.response.use(
       }
     } else if (error.request) {
       // 请求已发出但没有收到响应
-      message = '模型不可用，请点击刷新模型按钮，切换模型后重试！'
+      message = '网络异常,请检查您的连接'
     } else {
       // 其他错误
       message = error.message || '未知错误,请稍后重试'

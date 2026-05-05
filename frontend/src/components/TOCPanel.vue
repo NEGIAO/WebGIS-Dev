@@ -1263,7 +1263,7 @@ async function loadSharedResource(resource) {
     justify-content: center;
 }
 
-/* “全幅显示” - 采用你主题中的主绿 */
+/* “全幅显示” - 采用主题中的主绿 */
 .eco-btn-op.primary {
     background-color: #56ab56b5;
     border: #2b8a4b;

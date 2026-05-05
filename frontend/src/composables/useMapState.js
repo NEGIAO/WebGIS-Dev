@@ -711,6 +711,31 @@ export function useMapState(mapInstance, options = {}) {
     }
 
     /**
+     * 强制清除指定图层的 source，防止其后台继续请求
+     * 彻底清空 OL 内部瓦片缓存和待处理队列
+     * @param {string} layerId - 图层 ID
+     */
+    function clearLayerSourceForced(layerId) {
+        if (!layerInstances || !layerId) return;
+        const layer = layerInstances[layerId];
+        if (!layer) return;
+        const source = layer.getSource?.();
+        if (!source) return;
+        // 清空 OL 内部瓦片缓存和待处理队列
+        if (typeof source.clear === 'function') {
+            try {
+                source.clear();
+            } catch (e) {
+                console.debug('[OL-Queue-Clear] Error clearing source:', e);
+            }
+        }
+        // 断开 layer 与 source 的关联
+        if (typeof layer.setSource === 'function') {
+            layer.setSource(null);
+        }
+    }
+
+    /**
      * 按 ID 切换图层（设置为可见/不可见）
      * 自动处理卫星图和矢量图标注的显示/隐藏
      * @param {string} layerId - 目标图层 ID
@@ -738,9 +763,11 @@ export function useMapState(mapInstance, options = {}) {
             ? visibleLayerResolver(layerId, { layerList, instanceMap, configs })
             : null;
 
+        const visibleIdSet = new Set();
+
         if (Array.isArray(resolvedIds) && resolvedIds.length) {
             normalizedResolvedIds = resolvedIds.map((id) => String(id));
-            const visibleIdSet = new Set(normalizedResolvedIds);
+            normalizedResolvedIds.forEach((id) => visibleIdSet.add(id));
             let matchedCount = 0;
 
             layerList.forEach((item) => {
@@ -778,6 +805,19 @@ export function useMapState(mapInstance, options = {}) {
             const vectorLabelItem = layerList.find((item) => item.id === 'label_vector');
             if (vectorLabelItem) vectorLabelItem.visible = needsVectorLabel;
         }
+
+        // 关键修复：在 refreshLayerInstances 之前，先强制清除所有即将隐藏的底图图层源。
+        // 这样能彻底消除 OL 内部队列的阻塞和后台请求占槽。
+        layerList.forEach((item) => {
+            if (!item.visible) {
+                const cfg = configs.find((c) => c.id === item.id);
+                const category = cfg?.category;
+                const isBasemap = category === 'label' || category === 'imagery' || category === 'vector' || category === 'terrain' || category === 'theme' || category === 'custom';
+                if (isBasemap) {
+                    clearLayerSourceForced(item.id);
+                }
+            }
+        });
 
         refreshLayerInstances({ layerList, instanceMap, configs });
 

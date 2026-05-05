@@ -3,40 +3,41 @@
         <div class="panel-header">
             <div class="status-info">
                 <Terminal :size="14" class="header-icon" />
-                <!-- 仅在远程模式显示 RUN/BUILD 切换 -->
                 <div v-if="displaySourceLabel === 'REMOTE'" class="log-type-switcher">
-                    <button 
-                        :class="['type-btn', { active: currentType === 'run' }]" 
-                        @click="switchType('run')"
-                    >RUN</button>
-                    <button 
-                        :class="['type-btn', { active: currentType === 'build' }]" 
-                        @click="switchType('build')"
-                    >BUILD</button>
+                    <button :class="['type-btn', { active: currentType === 'run' }]"
+                        @click="switchType('run')">RUN</button>
+                    <button :class="['type-btn', { active: currentType === 'build' }]"
+                        @click="switchType('build')">BUILD</button>
                 </div>
                 <span class="title">TERMINAL</span>
+                <div class="divider"></div>
+
+                <div class="lock-scroll-option" @click="isLocked = !isLocked">
+                    <div :class="['custom-checkbox', { checked: isLocked }]">
+                        <div v-if="isLocked" class="inner-check"></div>
+                    </div>
+                    <span class="lock-text">Lock scroll</span>
+                </div>
+
                 <div class="divider"></div>
                 <span :class="['status-dot', { active: isConnected, pending: streamDesired && !isConnected }]"></span>
                 <span class="env-hint">{{ displaySourceLabel }}</span>
             </div>
             <div class="header-actions">
-                <!-- 新增：一键复制全部按钮 -->
-                <button 
-                    type="button" 
-                    class="action-btn secondary" 
-                    :disabled="logEntries.length === 0"
-                    @click="copyAllLogs"
-                >
+                <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0"
+                    @click="copyAllLogs">
                     <component :is="isCopiedAll ? Check : Copy" :size="14" />
                     {{ isCopiedAll ? '已复制' : '复制全部' }}
                 </button>
-                
-                <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0" @click="clearLogs">
+
+                <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0"
+                    @click="clearLogs">
                     <Trash2 :size="14" />
                     清空
                 </button>
-                
-                <button type="button" @click="toggleConnection" :class="['action-btn', streamDesired ? 'danger' : 'success']">
+
+                <button type="button" @click="toggleConnection"
+                    :class="['action-btn', streamDesired ? 'danger' : 'success']">
                     <component :is="streamDesired ? Square : Play" :size="14" />
                     {{ streamDesired ? '停止' : '开启' }}
                 </button>
@@ -44,95 +45,51 @@
         </div>
 
         <div ref="scrollContainer" class="log-viewport">
-            <!-- 修改：添加双击单行复制 -->
-            <div 
-                v-for="(log, index) in logEntries" 
-                :key="index" 
-                class="log-line"
-                @dblclick="copySingleLine(log.message)"
-                title="双击复制此行内容"
-            >
+            <div v-for="(log, index) in logEntries" :key="index" class="log-line"
+                @dblclick="copySingleLine(log.message)" title="双击复制此行内容">
                 <span class="line-number">{{ index + 1 }}</span>
                 <span class="timestamp">{{ log.time }}</span>
-                <span :class="['content', getLogClass(log.message)]">{{ log.message }}</span>
+                <!-- 优化：改为直接从对象读取预计算好的类名 -->
+                <span :class="['content', log.className]">{{ log.message }}</span>
             </div>
-            <!-- ... -->
+            <div v-if="logEntries.length === 0" class="empty-tip">
+                Waiting for logs...<span class="scan-line"></span>
+            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-// 导入增加 Trash2 和 AlertCircle 图标
-import { ref, onUnmounted, nextTick, computed, watch } from 'vue';
-import { Terminal, Play, Square, Trash2, AlertCircle,Copy, Check } from 'lucide-vue-next';
+import { ref, onUnmounted, nextTick, computed } from 'vue';
+import { Terminal, Play, Square, Trash2, Copy, Check } from 'lucide-vue-next';
 import { BACKEND_BASE_URL } from '../api/backend';
-
-const currentType = ref('run'); // 默认监控运行日志
-const logsStreamUrl = computed(() => {
-    const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
-    // 增加 type 参数[cite: 5]
-    return `${base}/monitor/logs/stream?type=${currentType.value}`;
-});
-
-/** 切换逻辑：切换后若已连接则重连[cite: 5] */
-function switchType(type) {
-    if (currentType.value === type) return;
-    currentType.value = type;
-    
-    if (streamDesired.value) {
-        closeConnection();
-        openConnection();
-    }
-}
 
 const props = defineProps({
     visible: { type: Boolean, default: true },
-    autoStart: { type: Boolean, default: import.meta.env.PROD },
     maxLines: { type: Number, default: 2500 },
 });
 
 const logEntries = ref([]);
 const isConnected = ref(false);
 const streamDesired = ref(false);
+const isLocked = ref(false); // 控制滚动锁定
 const scrollContainer = ref(null);
-const statusHint = ref('');
+const isCopiedAll = ref(false);
+const currentType = ref('run');
 let eventSource = null;
 
-const isCopiedAll = ref(false);
+// 缓冲区优化逻辑
+let logBuffer = [];
+let renderPending = false;
 
-/** 复制全部日志[cite: 2] */
-async function copyAllLogs() {
-    if (logEntries.value.length === 0) return;
-    
-    // 将数组对象转换为纯文本：[时间] 内容[cite: 2]
-    const fullText = logEntries.value
-        .map(log => `[${log.time}] ${log.message}`)
-        .join('\n');
+const logsStreamUrl = computed(() => {
+    const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
+    return `${base}/monitor/logs/stream?type=${currentType.value}`;
+});
 
-    try {
-        await navigator.clipboard.writeText(fullText);
-        isCopiedAll.value = true;
-        // 2秒后恢复图标[cite: 2]
-        setTimeout(() => isCopiedAll.value = false, 2000);
-    } catch (err) {
-        console.error('复制失败:', err);
-    }
-}
-
-/** 双击复制单行内容[cite: 2] */
-async function copySingleLine(text) {
-    try {
-        await navigator.clipboard.writeText(text);
-        // 这里可以添加一个轻量级的 Toast 提示，或者改变背景色反馈[cite: 2]
-    } catch (err) {
-        console.error('单行复制失败:', err);
-    }
-}
-
-// 简单逻辑：根据关键词返回样式类
 function getLogClass(msg) {
     const text = msg.toUpperCase();
-    if (text.includes('[BUILD]')) return 'log-build'; // 在 CSS 中定义紫色或蓝色
+    if (text.includes('[BUILD]')) return 'log-build';
     if (text.includes('[RUN]')) return 'log-run';
     if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
     if (text.includes('WARN')) return 'log-warning';
@@ -141,42 +98,79 @@ function getLogClass(msg) {
     return '';
 }
 
-// ... 保持原有 logic 函数 (pushLine, openConnection 等) ...
-//[cite: 2]
+/** 
+ * 核心滚动逻辑：
+ * 只要不是锁定状态，就强制滚动到底部
+ */
+const scrollToBottom = () => {
+    if (scrollContainer.value) {
+        // 直接赋值为当前总高度，确保滚动到底部
+        scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
+    }
+};
 
+/** 
+ * 缓冲区冲刷逻辑
+ */
 function pushLine(message) {
-    // 强制使用中国标准时间 (UTC+8) 格式化
     const timeString = new Date().toLocaleTimeString('zh-CN', {
         hour12: false,
-        timeZone: 'Asia/Shanghai', // 强制指定上海时区
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
+        timeZone: 'Asia/Shanghai',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
 
-    logEntries.value.push({
+    logBuffer.push({
         message: String(message ?? ''),
         time: timeString,
+        className: getLogClass(String(message ?? ''))
     });
 
-    // 保持最大行数限制
-    if (logEntries.value.length > props.maxLines) {
-        logEntries.value.shift();
+    if (!renderPending) {
+        renderPending = true;
+        requestAnimationFrame(() => {
+            logEntries.value.push(...logBuffer);
+            logBuffer = [];
+
+            if (logEntries.value.length > props.maxLines) {
+                logEntries.value.splice(0, logEntries.value.length - props.maxLines);
+            }
+
+            // 只有在用户没有锁定滚动时，才执行强制滚动
+            if (!isLocked.value) {
+                scrollToBottom();
+            }
+            renderPending = false;
+        });
     }
-    scrollToBottom();
+}
+
+
+function switchType(type) {
+    if (currentType.value === type) return;
+    currentType.value = type;
+    if (streamDesired.value) {
+        closeConnection();
+        openConnection();
+    }
 }
 
 function clearLogs() {
     logEntries.value = [];
 }
 
-const scrollToBottom = async () => {
-    await nextTick();
-    if (scrollContainer.value) {
-        scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
-    }
-};
+async function copyAllLogs() {
+    if (logEntries.value.length === 0) return;
+    const fullText = logEntries.value.map(log => `[${log.time}] ${log.message}`).join('\n');
+    try {
+        await navigator.clipboard.writeText(fullText);
+        isCopiedAll.value = true;
+        setTimeout(() => isCopiedAll.value = false, 2000);
+    } catch (err) { console.error('复制失败:', err); }
+}
 
+async function copySingleLine(text) {
+    try { await navigator.clipboard.writeText(text); } catch (err) { console.error(err); }
+}
 
 const displaySourceLabel = computed(() => {
     try {
@@ -192,13 +186,16 @@ const toggleConnection = () => {
 
 function closeConnection() {
     streamDesired.value = false;
-    if (eventSource) eventSource.close();
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
     isConnected.value = false;
 }
 
 function openConnection() {
     streamDesired.value = true;
-    eventSource = new EventSource(logsStreamUrl.value); // 这里会使用带参数的 URL
+    eventSource = new EventSource(logsStreamUrl.value);
     eventSource.onopen = () => isConnected.value = true;
     eventSource.onmessage = (e) => pushLine(e.data);
     eventSource.onerror = () => closeConnection();
@@ -208,7 +205,7 @@ onUnmounted(() => closeConnection());
 </script>
 
 <style scoped>
-/* 切换器样式 */
+/* 保持原本的所有样式 */
 .log-type-switcher {
     display: flex;
     background: #27272a;
@@ -232,13 +229,13 @@ onUnmounted(() => closeConnection());
     background: #3f3f46;
     color: #f4f4f5;
 }
-/* 核心容器优化 */
+
 .webgis-log-panel {
-    width: 40%; 
+    width: 40%;
     height: 100%;
     display: flex;
     flex-direction: column;
-    background: #09090b; /* 更深的黑 */
+    background: #09090b;
     color: #e4e4e7;
     border: 1px solid #27272a;
     border-radius: 6px;
@@ -247,7 +244,6 @@ onUnmounted(() => closeConnection());
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
 }
 
-/* 头部：VS Code 风格 */
 .panel-header {
     background: #18181b;
     padding: 6px 12px;
@@ -285,7 +281,6 @@ onUnmounted(() => closeConnection());
     color: #71717a;
 }
 
-/* 按钮组 */
 .header-actions {
     display: flex;
     gap: 6px;
@@ -299,7 +294,7 @@ onUnmounted(() => closeConnection());
     font-size: 11px;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s;
     border: 1px solid transparent;
 }
 
@@ -313,11 +308,16 @@ onUnmounted(() => closeConnection());
     background: #27272a;
 }
 
-.action-btn.success { background: #166534; color: #bbf7d0; }
-.action-btn.danger { background: #7f1d1d; color: #fecaca; }
-.action-btn:hover { filter: brightness(1.2); transform: translateY(-1px); }
+.action-btn.success {
+    background: #166534;
+    color: #bbf7d0;
+}
 
-/* 日志内容区域 */
+.action-btn.danger {
+    background: #7f1d1d;
+    color: #fecaca;
+}
+
 .log-viewport {
     flex: 1;
     overflow-y: auto;
@@ -325,10 +325,6 @@ onUnmounted(() => closeConnection());
     scrollbar-width: thin;
     scrollbar-color: #3f3f46 transparent;
 }
-
-/* 滚动条美化 */
-.log-viewport::-webkit-scrollbar { width: 8px; }
-.log-viewport::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; border: 2px solid #09090b; }
 
 .log-line {
     display: flex;
@@ -339,7 +335,9 @@ onUnmounted(() => closeConnection());
     transition: background 0.1s;
 }
 
-.log-line:hover { background: #18181b; }
+.log-line:hover {
+    background: #18181b;
+}
 
 .line-number {
     color: #0bb867;
@@ -349,14 +347,9 @@ onUnmounted(() => closeConnection());
 }
 
 .timestamp {
-    color: #52525b; /* 调暗时间戳颜色，类似 VS Code 风格 */
-    font-variant-numeric: tabular-nums; /* 使用等宽数字，避免时间跳动 */
+    color: #52525b;
     flex-shrink: 0;
     font-size: 11px;
-}
-
-.log-line:hover .timestamp {
-    color: #71717a; /* 悬浮时稍微亮一点点 */
 }
 
 .content {
@@ -365,20 +358,99 @@ onUnmounted(() => closeConnection());
     color: #d4d4d8;
 }
 
-/* 语义化颜色 */
-.log-error { color: #f87171 !important; font-weight: 500; }
-.log-warning { color: #fbbf24 !important; }
-.log-info { color: #109942 !important; }
-.log-success { color: #4ade80 !important; }
-.log-build { color: #0e13a3 !important; font-weight: 500; }
-.log-run { color: #1ab142 !important; font-weight: 500; }
+.log-error {
+    color: #f87171 !important;
+    font-weight: 500;
+}
 
-/* 空状态动画 */
+.log-warning {
+    color: #fbbf24 !important;
+}
+
+.log-info {
+    color: #109942 !important;
+}
+
+.log-success {
+    color: #4ade80 !important;
+}
+
+.log-build {
+    color: #0e13a3 !important;
+    font-weight: 500;
+}
+
+.log-run {
+    color: #1ab142 !important;
+    font-weight: 500;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3f3f46;
+    transition: all 0.3s;
+}
+
+.status-dot.active {
+    background: #22c55e;
+    box-shadow: 0 0 8px #22c55e;
+}
+
+.status-dot.pending {
+    background: #eab308;
+}
+
+/* --- 按照图片新增的 Lock scroll 样式 --- */
+.lock-scroll-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 2px 4px;
+    user-select: none;
+}
+
+.custom-checkbox {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #3f3f46;
+    border-radius: 3px;
+    background: #18181b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.custom-checkbox.checked {
+    border-color: #52525b;
+    background: #27272a;
+}
+
+.inner-check {
+    width: 6px;
+    height: 6px;
+    background: #5dce3a;
+    border-radius: 1px;
+}
+
+.lock-text {
+    font-size: 11px;
+    color: #d4d8d6;
+    /* 稍微亮一点，符合图片感观 */
+    font-weight: 500;
+}
+
+.lock-scroll-option:hover .lock-text {
+    color: #ffffff;
+}
+
 .empty-tip {
     padding: 20px;
     color: #3f3f46;
     font-style: italic;
-    position: relative;
 }
 
 .scan-line {
@@ -390,19 +462,15 @@ onUnmounted(() => closeConnection());
     vertical-align: middle;
 }
 
-@keyframes blink { 50% { opacity: 0; } }
-
-.status-hint {
-    background: rgba(127, 29, 29, 0.2);
-    color: #fca5a5;
-    padding: 4px 12px;
-    font-size: 11px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    border-bottom: 1px solid #450a0a;
+@keyframes blink {
+    50% {
+        opacity: 0;
+    }
 }
+
 @media (max-width: 768px) {
-    .webgis-log-panel { width: 100%; }
+    .webgis-log-panel {
+        width: 100%;
+    }
 }
 </style>

@@ -219,7 +219,7 @@ async function handlePasteJson() {
 </script>
 
 <style scoped>
-/* 你的原有样式，完全不变 */
+/* 的原有样式，完全不变 */
 .aoi-dialog-inline {
     margin: 10px 0 12px;
 }

@@ -495,7 +495,7 @@ onUnmounted(() => {
         margin-bottom: 0;
 
         transform: translateX(0%);
-        /* 保持你的水平偏移 */
+        /* 保持的水平偏移 */
     }
 
     .handle-icon {

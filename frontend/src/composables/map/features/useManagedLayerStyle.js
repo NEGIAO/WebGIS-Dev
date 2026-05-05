@@ -52,7 +52,7 @@ export function createManagedLayerStyleFeature({
             text: labelText
                 ? new Text({
                     // =======================
-                    // 已改成你要的样式 ✅
+                    // 已改成要的样式 ✅
                     // =======================
                     text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
                     font: '600 14px "Microsoft YaHei", "PingFang SC", sans-serif',

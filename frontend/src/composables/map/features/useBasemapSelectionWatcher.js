@@ -1,4 +1,5 @@
 import { watch } from 'vue';
+import { abortTileSourceRequests } from '../../useTileSourceFactory';
 
 /**
  * Basemap selection watcher feature
@@ -13,6 +14,7 @@ export function createBasemapSelectionWatcher({
     selectedLayerRef,
     switchLayerById,
     resolvePresetLayerIds,
+    isBasemapLayerId,
     emitBaseLayersChange,
     mapInstanceRef,
     layerInstances,
@@ -111,6 +113,11 @@ export function createBasemapSelectionWatcher({
         if (!layer) return;
 
         const source = layer.getSource?.();
+        if (source) {
+            // Abort first so pending tile fetches release browser and OL queue slots.
+            abortTileSourceRequests(source);
+        }
+
         if (source && typeof source.clear === 'function') {
             source.clear();
         }
@@ -145,6 +152,42 @@ export function createBasemapSelectionWatcher({
                     releaseLayerSource(id);
                 }
             });
+    }
+
+    function abortNonCurrentBasemapSources(activeLayerId) {
+        if (!layerInstances) return;
+
+        const activeStack = Array.isArray(resolvePresetLayerIds?.(activeLayerId))
+            ? resolvePresetLayerIds(activeLayerId)
+            : [activeLayerId];
+        const keepSet = new Set(activeStack.map((id) => String(id || '').trim()).filter(Boolean));
+
+        Object.entries(layerInstances).forEach(([layerId, layer]) => {
+            const normalizedLayerId = String(layerId || '').trim();
+            if (!normalizedLayerId || keepSet.has(normalizedLayerId)) return;
+
+            if (typeof isBasemapLayerId === 'function' && !isBasemapLayerId(normalizedLayerId)) {
+                return;
+            }
+
+            const source = layer?.getSource?.();
+            if (!source) return;
+
+            // Aggressive mode: immediately stop all non-active basemap requests.
+            abortTileSourceRequests(source);
+
+            if (typeof source.clear === 'function') {
+                try {
+                    source.clear();
+                } catch {
+                    // ignore
+                }
+            }
+
+            if (typeof layer?.setSource === 'function') {
+                layer.setSource(null);
+            }
+        });
     }
 
     function resetBasemapChain({ targetLayerId } = {}) {
@@ -211,6 +254,8 @@ export function createBasemapSelectionWatcher({
         if (prevVal !== undefined) {
             releasePreviousLayerSources(prevVal, val);
         }
+
+        abortNonCurrentBasemapSources(val);
 
         switchLayerById?.(val, {
             onUpdated: () => {

@@ -911,6 +911,10 @@ const {
     selectedLayerRef: selectedLayer,
     switchLayerById,
     resolvePresetLayerIds,
+    isBasemapLayerId: (layerId) => {
+        const category = getLayerCategoryById?.(String(layerId || '').trim());
+        return category === 'label' || category === 'imagery' || category === 'vector' || category === 'terrain' || category === 'theme' || category === 'custom';
+    },
     emitBaseLayersChange: emitBaseLayersChangeBatched,
     mapInstanceRef: mapInstance,
     layerInstances,
@@ -1089,7 +1093,7 @@ async function runDeferredStartupTasks() {
         message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
         message.soup();//鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.0)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.1)', { duration: 3000 });
     }
 
     // ========== 并行执行：Google 主机测速（非阻塞） ==========

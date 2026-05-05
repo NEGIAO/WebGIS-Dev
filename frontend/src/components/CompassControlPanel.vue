@@ -10,7 +10,7 @@
 
         <div class="card-row switch-grid">
             <label class="switch-item">
-                <input type="checkbox" :checked="compassStore.enabled" @change="handleEnabledChange" />
+                <input type="checkbox" :checked="compassStore.unabaled" @change="handleEnabledChange" />
                 <span>启用罗盘</span>
             </label>
             <label class="switch-item">

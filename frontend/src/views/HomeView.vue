@@ -1258,10 +1258,10 @@ onMounted(async () => {
     z-index: 2000;
 }
 
-/* 头部：对标你的绿色顶栏 */
+/* 头部：对标0的绿色顶栏 */
 .eco-header {
     background-color: #56AB56;
-    /* 匹配你截图顶栏的绿色 */
+    /* 匹配0截图顶栏的绿色 */
     padding: 12px 16px;
     display: flex;
     justify-content: space-between;
@@ -1303,7 +1303,7 @@ onMounted(async () => {
     padding: 16px;
 }
 
-/* 统计标签：对标你的 user_1 绿色胶囊样式 */
+/* 统计标签：对标0的 user_1 绿色胶囊样式 */
 .eco-stats {
     display: flex;
     gap: 8px;

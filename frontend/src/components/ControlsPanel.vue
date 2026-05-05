@@ -278,7 +278,7 @@ const getBasemapLabel = (id) => {
 }
 
 .sidebar-container {
-    /* 1. 核心尺寸：假设你的顶部绿色导航栏高度是 60px，这里减去它 */
+    /* 1. 核心尺寸：假设的顶部绿色导航栏高度是 60px，这里减去它 */
     /* 如果导航栏高度不同，请相应调整这个 60px */
     height: calc(100vh - 60px); 
     position: relative;

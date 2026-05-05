@@ -177,7 +177,7 @@ function drawRadialText(
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(0.75, fontSize * 0.12);
 
-    // 描边（抗锯齿，和你原图效果一致）
+    // 描边（抗锯齿，和原图效果一致）
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.52)';
     ctx.strokeText(content, 0, 0);
     // 填充文字

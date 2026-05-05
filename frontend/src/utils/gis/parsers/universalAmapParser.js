@@ -85,7 +85,7 @@ export function parseAmapDetailAoi(payload) {
 }
 
 /**
- * 逻辑2：解析高德搜索 AOI 数据 (你新增的逻辑)
+ * 逻辑2：解析高德搜索 AOI 数据 (新增的逻辑)
  */
 export function parseAmapSearchAoi(payload) {
     const data = parsePayloadToObject(payload);

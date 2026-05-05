@@ -62,6 +62,8 @@ export type AutoDetectOptions = {
 const DEFAULT_WMS_VERSION = '1.1.1';
 const DEFAULT_WMTS_VERSION = '1.0.0';
 const CAPABILITIES_FETCH_TIMEOUT_MS = 10000;
+const TILE_REQUEST_TIMEOUT_MS = 15000;
+const TILE_STATE_ERROR = 3;
 
 function normalizeCustomServiceUrl(rawUrl: string): string {
     return String(rawUrl || '').trim().replace(/&amp;/gi, '&');
@@ -226,16 +228,162 @@ function applyHighPriorityTileLoadFunction(tile: any, src: string): void {
     image.src = src;
 }
 
+function markTileAsError(tile: any): void {
+    if (!tile || typeof tile.setState !== 'function') return;
+    try {
+        // Force tile out of LOADING state so OL queue slots can be released.
+        tile.setState(TILE_STATE_ERROR);
+    } catch {
+        // ignore
+    }
+}
+
+/**
+ * 强制遍历 OL Source 内部的所有瓦片（包括缓存、队列、loading 中的）
+ * 并将其状态标记为 ERROR，释放 OL 并发队列的占位
+ */
+function markAllSourceTilesAsError(source: any): void {
+    if (!source) return;
+
+    try {
+        // 方案1：直接访问 source 的 tileCache
+        const tileCache = source?.tileCache_ || source?.tileCache;
+        if (tileCache) {
+            // ol/Cache 通常有 forEach 或可迭代
+            if (typeof tileCache.forEach === 'function') {
+                tileCache.forEach((tile: any) => markTileAsError(tile));
+            } else if (tileCache[Symbol.iterator]) {
+                for (const tile of tileCache) {
+                    markTileAsError(tile);
+                }
+            }
+        }
+    } catch {
+        // ignore cache iteration errors
+    }
+
+    try {
+        // 方案2：访问 source 的加载中的瓦片（XYZ/TileWMS 等都有 tileLoadingKeys_）
+        const loadingKeys = source?.tileLoadingKeys_;
+        if (loadingKeys && typeof loadingKeys === 'object') {
+            // 这是一个 Map-like 结构，遍历所有 loading 的 tile
+            for (const key of Object.keys(loadingKeys)) {
+                // 无法直接从 key 还原 tile 对象，但可以尝试从缓存中查找
+                const cache = source?.tileCache_ || source?.tileCache;
+                if (cache) {
+                    let tileToMark = null;
+                    
+                    // 尝试通过不同的 API 获取对应的 tile
+                    if (typeof cache.get === 'function') {
+                        tileToMark = cache.get(key);
+                    } else if (typeof cache.getByKey === 'function') {
+                        tileToMark = cache.getByKey(key);
+                    }
+
+                    if (tileToMark) {
+                        markTileAsError(tileToMark);
+                    }
+                }
+            }
+        }
+    } catch {
+        // ignore loading keys traversal errors
+    }
+
+    try {
+        // 方案3：对于 TileWMS/WMTS，遍历其特定的内部结构
+        // 某些版本的 OL 可能在 source 的其他属性中保存缓存
+        const tileArray = source?.tiles_;
+        if (Array.isArray(tileArray)) {
+            tileArray.forEach((tile: any) => markTileAsError(tile));
+        }
+    } catch {
+        // ignore array traversal errors
+    }
+}
+
+function getSourceEpoch(source: any): number {
+    const rawEpoch = Number(source?.get?.('abortEpoch') ?? 0);
+    return Number.isFinite(rawEpoch) ? rawEpoch : 0;
+}
+
+
 export function prioritizeTileSourceRequest<T>(source: T): T {
     if (!source || typeof (source as any)?.setTileLoadFunction !== 'function') {
         return source;
     }
 
-    try {
-        (source as any).setTileLoadFunction(applyHighPriorityTileLoadFunction);
-    } catch {
-        // ignore
-    }
+    // 1. 为该数据源创建一个专属的 AbortController
+    const abortController = new AbortController();
+    (source as any).set('abortController', abortController);
+    (source as any).set('abortEpoch', 0);
+
+    // 2. 覆盖默认的 tileLoadFunction，使用 fetch 进行强控请求
+    (source as any).setTileLoadFunction((tile: any, src: string) => {
+        const image = tile.getImage();
+        if (!image) return;
+
+        // 获取当前数据源最新的 signal
+        const controller = (source as any).get('abortController') as AbortController;
+        const signal = controller.signal;
+        const epoch = getSourceEpoch(source);
+
+        const timeoutController = new AbortController();
+        
+        // 关键改进：在 abort signal 被触发时立即标记 tile 为 error
+        // 这样可以在 fetch promise chain 完成前就释放 OL 的队列槽位
+        const onAbortSignal = () => {
+            try {
+                markTileAsError(tile);
+            } catch {
+                // ignore
+            }
+        };
+        signal.addEventListener('abort', onAbortSignal, { once: true });
+        
+        const onAbort = () => timeoutController.abort();
+        signal.addEventListener('abort', onAbort, { once: true });
+        const timeoutTimer = window.setTimeout(() => timeoutController.abort(), TILE_REQUEST_TIMEOUT_MS);
+
+        // 使用 fetch 替代隐式的 image.src 请求
+        fetch(src, {
+            signal: timeoutController.signal,
+            // @ts-ignore
+            priority: 'high' // 提示浏览器这是高优先级请求
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            if (signal.aborted || epoch !== getSourceEpoch(source)) {
+                markTileAsError(tile);
+                return;
+            }
+
+            const objectUrl = URL.createObjectURL(blob);
+            // 内存释放：图片加载成功或失败后撤销 URL
+            image.onload = () => URL.revokeObjectURL(objectUrl);
+            image.onerror = () => URL.revokeObjectURL(objectUrl);
+            
+            // 将二进制数据转为 Blob URL 赋给 img，此时不需要再走网络请求
+            image.src = objectUrl;
+        })
+        .catch(error => {
+            // 无论是网络报错还是主动中止，都必须释放 OL 的 loading 队列占位。
+            if (error?.name !== 'AbortError') {
+                console.debug('瓦片请求失败:', src, error);
+            }
+            markTileAsError(tile);
+        })
+        .finally(() => {
+            clearTimeout(timeoutTimer);
+            signal.removeEventListener('abort', onAbortSignal);
+            signal.removeEventListener('abort', onAbort);
+        });
+    });
 
     return source;
 }
@@ -743,6 +891,46 @@ export function detectCustomTileServiceKind(
     }
 
     return { kind: 'unknown', name: '未知格式' };
+}
+
+/**
+ * 阻断该图源所有正在进行的网络请求
+ * 三层级联释放：(1) 发送 abort signal，(2) 标记所有缓存/loading 的 tiles，(3) clear 源
+ * @param source OpenLayers的Source对象
+ */
+export function abortTileSourceRequests(source: any): void {
+    if (!source || typeof source.get !== 'function') return;
+
+    const currentEpoch = getSourceEpoch(source);
+    if (typeof source.set === 'function') {
+        source.set('abortEpoch', currentEpoch + 1);
+    }
+
+    const controller = source.get('abortController');
+    if (controller instanceof AbortController) {
+        // 1. 发送终止信号，所有正在 pending 的 fetch 请求会被立刻掐断
+        controller.abort();
+        
+        // 2. 马上赋予一个新的控制器，以防用户一会又切回这个底图（旧控制器一旦 abort 就会永久失效）
+        source.set('abortController', new AbortController());
+    }
+
+    // 2.5 强制标记 OL 内部所有 tiles 为错误状态，立即释放并发加载槽位
+    // 这是关键操作：OL 会根据 tile.setState() 来管理加载队列，如果不标记，OL 会认为这些 tiles 仍在加载
+    try {
+        markAllSourceTilesAsError(source);
+    } catch (e) {
+        // best-effort only
+    }
+
+    // 3. 清空 OL 内部瓦片缓存和待处理队列
+    if (typeof source.clear === 'function') {
+        try {
+            source.clear();
+        } catch {
+            // ignore
+        }
+    }
 }
 
 export async function createAutoTileSourceFromUrl(
