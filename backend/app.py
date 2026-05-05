@@ -49,19 +49,26 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "https://negiao.github.io",
-        "https://ripzhoudi.github.io",
-        "https://negiao-webgis.hf.space"  # 服务器自身域名（如需在线调试 Swagger UI 时也是此 Origin）
-    ],
-    allow_origin_regex="https?://.*",  # 允许所有 HTTP/HTTPS 源，适配不固定的前端
-    allow_credentials=True,
+    allow_origins=["*"],        # 允许所有来源
+    allow_credentials=False,    
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=[
+#         "http://localhost:5173",
+#         "http://127.0.0.1:5173",
+#         "http://localhost:4173",
+#         "https://negiao.github.io",
+#         "https://ripzhoudi.github.io",
+#         "https://negiao-webgis.hf.space"  # 服务器自身域名（如需在线调试 Swagger UI 时也是此 Origin）
+#     ],
+#     allow_origin_regex="https?://.*",  # 允许所有 HTTP/HTTPS 源，适配不固定的前端
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 # ==================== 生命周期事件 ====================
 
