@@ -1,17 +1,22 @@
 # NEGIAO's WebGIS - 专业级前后端分离 WebGIS 平台
 
-[![Vue](https://img.shields.io/badge/Vue-3.3+-4FC08D?logo=vuedotjs)](https://vuejs.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.0+-646CFF?logo=vite)](https://vitejs.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![OpenLayers](https://img.shields.io/badge/OpenLayers-8.x-FFD700?logo=openlayers)](https://openlayers.org/)
+[![Vue](https://img.shields.io/badge/Vue-3.5+-4FC08D?logo=vuedotjs)](https://vuejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
+[![OpenLayers](https://img.shields.io/badge/OpenLayers-10.5-FFD700?logo=openlayers)](https://openlayers.org/)
+[![Cesium](https://img.shields.io/badge/Cesium-1.110+-64B5F6?logo=cesium)](https://cesium.com/)
+[![Deployment](https://img.shields.io/badge/Frontend-GitHub%20Pages-black?logo=github)](https://pages.github.com/)
+[![Docker](https://img.shields.io/badge/Docker-24.x-2496ED?logo=docker)](https://www.docker.com/)
+[![Deployment](https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface)](https://huggingface.co/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](#许可证)
 
+---
+<div align="center">
 
-[![visitors](https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis)](https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis)
-[![Total Clones](https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic)
-[![Unique Cloners](https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic)
-![Last Commit](https://img.shields.io/github/last-commit/negiao/webgis-dev)
-![Repo Size](https://img.shields.io/github/repo-size/negiao/webgis)
+| 访问统计 (Visitors) | 累计克隆 (Total Clones) | 独立克隆人数 (Unique Cloners) | 最后提交 (Last Commit) |
+| :---: | :---: | :---: | :---: |
+| [![visitors](https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis)](https://github.com/NEGIAO/WebGIS-Dev) | [![Total Clones](https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic) | [![Unique Cloners](https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic) | ![Last Commit](https://img.shields.io/github/last-commit/negiao/webgis-dev) |
+
+</div>
 
 ## 📖 项目简介
 <img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/a3fcebc7-4b22-4ad2-8cfc-62443d114da9" />
