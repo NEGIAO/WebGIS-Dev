@@ -5,6 +5,8 @@ export const useAppStore = defineStore('appStore', () => {
     const loading = ref(false);
     const loadingText = ref('');
     const isInitialGisLoadComplete = ref(false);
+    /** 左侧「日志监控」入口控制的运行日志面板显隐 */
+    const logMonitorVisible = ref(false);
     
     let loadingTimeoutId: any = null;
 
@@ -42,12 +44,23 @@ export const useAppStore = defineStore('appStore', () => {
         isInitialGisLoadComplete.value = true;
     }
 
+    function toggleLogMonitor() {
+        logMonitorVisible.value = !logMonitorVisible.value;
+    }
+
+    function setLogMonitorVisible(visible: boolean) {
+        logMonitorVisible.value = !!visible;
+    }
+
     return {
         loading,
         loadingText,
         isInitialGisLoadComplete,
+        logMonitorVisible,
         showLoading,
         hideLoading,
-        markGisInitComplete
+        markGisInitComplete,
+        toggleLogMonitor,
+        setLogMonitorVisible
     };
 });

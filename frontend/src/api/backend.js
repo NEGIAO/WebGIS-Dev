@@ -6,7 +6,7 @@
  * 
  * 环境变量：
  *   - VITE_BACKEND_URL: 后端 API 地址
- *     本地开发: http://localhost:8000
+ *     本地开发: http://localhost:7860（与 Hugging Face Spaces 本地一致时可改 .env）
  *     生产环境: https://negiao-webgis.hf.space
  */
 
@@ -18,8 +18,10 @@ import {
   readShareModeFromUrl
 } from '../utils/auth'
 
-// 获取后端 URL，优先使用环境变量，否则使用默认值
-const backendURL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+/** 与 Vite 环境变量一致的后端根地址（无尾部斜杠），供 axios 与 SSE 等共用 */
+export const BACKEND_BASE_URL = String(import.meta.env.VITE_BACKEND_URL || 'http://localhost:7860').replace(/\/$/, '')
+
+const backendURL = BACKEND_BASE_URL
 
 console.log('后端 URL:', backendURL)
 

@@ -1,7 +1,8 @@
 <template>
     <div class="sidebar-shell">
         <div class="sidebar-container">
-            <div class="sidebar-item" v-for="item in menuItems" :key="item.id" :class="{ active: activeId === item.id }"
+            <div class="sidebar-item" v-for="item in menuItems" :key="item.id"
+                :class="{ active: activeId === item.id || (item.id === 'log' && logMonitorVisible) }"
                 @click="handleSelect(item.id)">
 
                 <div class="icon-wrapper">
@@ -74,6 +75,7 @@ import { ref } from 'vue';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
 import {
     Map as MapIcon,
+    Activity,
     Newspaper,
     Columns2,
     Layers,
@@ -85,10 +87,14 @@ import {
     Download
 } from 'lucide-vue-next';
 import { useLayerStore } from '../stores/useLayerStore';
+import { useAppStore } from '../stores/useAppStore';
+import { storeToRefs } from 'pinia';
 import { BASEMAP_OPTIONS } from '../constants';
 
 const message = useMessage();
 const layerStore = useLayerStore();
+const appStore = useAppStore();
+const { logMonitorVisible } = storeToRefs(appStore);
 
 // ========== 卷帘分析支持的底图 ==========
 // 排除不支持的底图：'custom'（需要customUrl）和'local_tiles_preset'（本地瓦片）
@@ -123,11 +129,26 @@ const menuItems = [
     { id: 'more', label: '卷帘分析', icon: Columns2, action: 'toggleMore' },
     { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
     { id: 'download', label: '下载底图', icon: Download, action: 'toggleDownload' },
+    { id: 'log', label: '日志监控', icon: Activity, action: 'toggleLog' },
     { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
     
 ];
 
 const handleSelect = (id) => {
+    const currentItem = menuItems.find(item => item.id === id);
+    if (!currentItem) return;
+
+    if (currentItem.action === 'toggleLog') {
+        appStore.toggleLogMonitor();
+        if (appStore.logMonitorVisible) {
+            activeId.value = 'log';
+        } else if (activeId.value === 'log') {
+            activeId.value = 'layers';
+        }
+        message.info(appStore.logMonitorVisible ? '日志监控面板已打开' : '日志监控面板已关闭');
+        return;
+    }
+
     // 1. 更新 UI 选中状态
     activeId.value = id;
 
@@ -135,11 +156,7 @@ const handleSelect = (id) => {
         districtPanelVisible.value = false;
     }
 
-    // 2. 找到当前点击的对象，以便获取 action
-    const currentItem = menuItems.find(item => item.id === id);
-    if (!currentItem) return;
-
-    // 3. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
+    // 2. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
     switch (currentItem.action) {
         case 'toggleNews':
             emit('open-tab', 'info');

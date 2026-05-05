@@ -9,11 +9,13 @@
  * - 鼠标特效
  */
 import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h, nextTick } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useMessage } from '../composables/useMessage';
 import { useAttrStore, useWeatherStore, useAppStore, useCompassStore, useTOCStore, useDownloadStore } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
+const { logMonitorVisible } = storeToRefs(useAppStore());
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
 const compassStore = useCompassStore();
@@ -32,6 +34,7 @@ import MagicCursor from '../components/MagicCursor.vue';
 import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
 import PersistentAnnouncementBar from '../components/PersistentAnnouncementBar.vue';
 import WeatherChartPanel from '../components/WeatherChartPanel.vue';
+import LogMonitor from '../components/LogMonitor.vue';
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
@@ -951,7 +954,7 @@ onMounted(async () => {
                         </div>
 
                         <div class="eco-body">
-                            <!-- 统计小标签：模仿你用户面板的浅绿色调 -->
+                            <!-- 统计小标签：模仿用户面板的浅绿色调 -->
                             <div class="eco-stats">
                                 <span class="eco-tag">绘制: {{ toolboxOverview.drawCount }}</span>
                                 <span class="eco-tag">上传: {{ toolboxOverview.uploadCount }}</span>
@@ -982,6 +985,9 @@ onMounted(async () => {
                     正在加载 3D 引擎...
                 </div>
             </div>
+
+            <!-- 日志监控面板 -->
+            <LogMonitor v-show="logMonitorVisible" :visible="logMonitorVisible" />
 
             <!-- 侧边容器栏（右）-->
             <div class="side-panel-wrapper"
@@ -1063,8 +1069,8 @@ onMounted(async () => {
     flex: 1;
     width: 100%;
     min-height: 0;
-    /* gap: 5px;
-    padding: 5px; */
+    gap: 2px;
+    padding: 5px 0;
     box-sizing: border-box;
     overflow: hidden;
 }

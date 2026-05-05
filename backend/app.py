@@ -28,6 +28,7 @@ from api.agent_chat import router as agent_chat_router
 from api.download import router as download_router
 from core.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
 from models.download_task import init_download_task_db
+from api.minitor import init_monitor_log_streaming, router as monitor_router
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -56,7 +57,7 @@ app.add_middleware(
         "https://ripzhoudi.github.io",
         "https://negiao-webgis.hf.space"  # 服务器自身域名（如需在线调试 Swagger UI 时也是此 Origin）
     ],
-    allow_origin_regex="https?://.*",  # 允许所有 HTTP/HTTPS 源，适配你不固定的前端
+    allow_origin_regex="https?://.*",  # 允许所有 HTTP/HTTPS 源，适配不固定的前端
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,6 +72,7 @@ async def startup_event():
     应用启动事件：初始化全局 HTTP 客户端
     """
     logger.info("WebGIS Backend 启动...")
+    app.state.log_stream_mode = init_monitor_log_streaming()
     await init_auth_storage()
     init_download_task_db()
     app.state.task_scheduler = start_task_cleanup_scheduler()
@@ -136,6 +138,9 @@ logger.info("已注册 Agent 对话路由")
 app.include_router(download_router)
 logger.info("已注册下载任务路由")
 
+# 挂载监控路由
+app.include_router(monitor_router)
+logger.info("已注册监控路由")
 
 # --- 功能：健康检查 ---
 @app.get("/")
