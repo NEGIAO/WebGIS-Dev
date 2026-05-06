@@ -89,9 +89,10 @@
                 </button>
             </div>
 
+            <!-- 后端生成进度 -->
             <div class="progress-card">
                 <div class="progress-head">
-                    <span>进度</span>
+                    <span>后端生成进度</span>
                     <span class="progress-value">{{ progressLabel }}</span>
                 </div>
                 <div class="progress-track">
@@ -102,6 +103,35 @@
                     <span v-if="store.message">{{ store.message }}</span>
                     <span v-if="expiresHint">{{ expiresHint }}</span>
                     <span v-if="store.lastError" class="error-text">{{ store.lastError }}</span>
+                </div>
+            </div>
+
+            <!-- 本地文件传输进度 (新增UI) -->
+            <div v-if="transferState.active || transferState.total > 0 || transferState.error" class="progress-card transfer-card">
+                <div class="progress-head">
+                    <span>本地下载传输进度 (5分钟限时)</span>
+                    <span class="progress-value">{{ transferState.progress }}%</span>
+                </div>
+                <div class="progress-track transfer-track">
+                    <div class="progress-bar transfer-bar" :style="{ width: transferState.progress + '%' }"></div>
+                </div>
+                <div class="progress-meta transfer-meta">
+                    <span v-if="transferState.total > 0">
+                        已传输: {{ formatBytes(transferState.downloaded) }} / {{ formatBytes(transferState.total) }}
+                    </span>
+                    <span v-else-if="transferState.active">
+                        已传输: {{ formatBytes(transferState.downloaded) }} (计算总大小中...)
+                    </span>
+                    <span v-if="transferState.error" class="error-text">{{ transferState.error }}</span>
+                    
+                    <div class="transfer-actions">
+                        <button v-if="transferState.active" class="ghost-btn cancel-btn" type="button" @click="cancelTransfer">
+                            取消下载
+                        </button>
+                        <button v-if="!transferState.active && store.status === 'success'" class="primary-btn re-download-btn" type="button" @click="downloadFileToLocal">
+                            重新下载到本地
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -132,7 +162,144 @@ const store = useDownloadStore();
 
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
 const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
-const layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
+const layerConfigMap = new Map(layerConfigs.map((item) =>[item.id, item]));
+
+/* ----------- 文件传输相关状态 (新增) ----------- */
+const transferState = ref({
+    active: false,
+    downloaded: 0,
+    total: 0,
+    progress: 0,
+    error: ''
+});
+
+let abortController = null;
+let transferTimeout = null;
+
+// 格式化字节大小
+function formatBytes(bytes, decimals = 2) {
+    if (!bytes) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+// 取消传输
+function cancelTransfer() {
+    if (abortController) {
+        abortController.abort('UserCancelled');
+        abortController = null;
+    }
+}
+
+// 核心下载逻辑
+async function downloadFileToLocal() {
+    if (!store.taskId) return;
+    
+    // 初始化/重置传输状态
+    transferState.value = {
+        active: true,
+        downloaded: 0,
+        total: 0,
+        progress: 0,
+        error: ''
+    };
+    
+    abortController = new AbortController();
+    const signal = abortController.signal;
+    
+    // 5分钟超时限制 (300,000 毫秒)
+    transferTimeout = setTimeout(() => {
+        if (abortController) {
+            abortController.abort('TimeoutLimit');
+        }
+    }, 5 * 60 * 1000);
+
+    try {
+        const response = await fetch(`/api/download/tasks/${store.taskId}/file`, { signal });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status}`);
+        }
+        
+        // 获取文件总大小
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        transferState.value.total = total;
+        
+        const reader = response.body.getReader();
+        const chunks =[];
+        let downloaded = 0;
+        
+        // 读取流，实时计算进度
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            chunks.push(value);
+            downloaded += value.length;
+            transferState.value.downloaded = downloaded;
+            
+            if (total > 0) {
+                transferState.value.progress = Math.round((downloaded / total) * 100);
+            }
+        }
+        
+        // 将分块合并为 Blob 并触发浏览器下载行为
+        const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/tiff' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        
+        // 尝试从 Content-Disposition 提取文件名
+        let filename = `basemap_${store.taskId}.tif`;
+        const disposition = response.headers.get('content-disposition');
+        if (disposition && disposition.indexOf('attachment') !== -1) {
+            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+            const matches = filenameRegex.exec(disposition);
+            if (matches != null && matches[1]) {
+                filename = matches[1].replace(/['"]/g, '');
+            }
+        }
+        a.download = filename;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        // 清理内存
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        transferState.value.active = false;
+        message.success('文件成功下载到本地！');
+    } catch (err) {
+        if (err.name === 'AbortError' || err === 'UserCancelled' || err === 'TimeoutLimit') {
+            const isTimeout = err === 'TimeoutLimit' || (signal && signal.reason === 'TimeoutLimit');
+            transferState.value.error = isTimeout ? '下载已取消：超过 5 分钟限制' : '下载已手动取消';
+            if (isTimeout) message.error('文件下载超时（超过5分钟）');
+        } else {
+            transferState.value.error = `传输失败: ${err.message}`;
+            message.error('文件传输到本地失败');
+        }
+        transferState.value.active = false;
+    } finally {
+        if (transferTimeout) {
+            clearTimeout(transferTimeout);
+            transferTimeout = null;
+        }
+    }
+}
+
+// 监听后端状态：当状态变为成功且文件就绪时，自动开始传输到本地
+watch(() => store.status, (newStatus) => {
+    if (newStatus === 'success' && store.taskId) {
+        downloadFileToLocal();
+    }
+});
+/* ------------------------------------------- */
 
 function extractTileTemplate(source) {
     if (!source) return '';
@@ -230,11 +397,12 @@ const expiresHint = computed(() => {
     return '';
 });
 
-// const lookupTaskId = ref('');
-
 const lookupTaskId = ref('');
 
 async function handleSubmit() {
+    // 提交前重置传输状态
+    transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
+    
     const ok = await store.submitTask();
     if (ok) {
         message.success('下载任务已提交');
@@ -245,6 +413,8 @@ async function handleSubmit() {
 
 function handleReset() {
     store.resetTask();
+    cancelTransfer();
+    transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
     const first = tilePresets.value.find((item) => item.downloadable) || tilePresets.value[0];
     selectedPreset.value = first?.id || '';
 }
@@ -260,6 +430,7 @@ async function handleLookup() {
 
 onBeforeUnmount(() => {
     store.stopPolling();
+    cancelTransfer();
 });
 </script>
 
@@ -432,6 +603,7 @@ onBeforeUnmount(() => {
     cursor: not-allowed;
 }
 
+/* 原有的进度条卡片 */
 .progress-card {
     border-radius: 12px;
     border: 1px solid rgba(31, 122, 77, 0.16);
@@ -470,6 +642,45 @@ onBeforeUnmount(() => {
     gap: 4px;
     font-size: 12px;
     color: #4b6d5a;
+}
+
+/* 新增的下载传输 UI 样式 */
+.transfer-card {
+    border-color: rgba(37, 99, 235, 0.2);
+    background: rgba(240, 248, 255, 0.85);
+}
+.transfer-card .progress-head {
+    color: #1e40af;
+}
+.transfer-track {
+    background: rgba(37, 99, 235, 0.12);
+}
+.transfer-bar {
+    background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
+}
+.transfer-meta {
+    color: #1e3a8a;
+}
+.transfer-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+.cancel-btn {
+    border-color: rgba(220, 38, 38, 0.4);
+    color: #dc2626;
+    padding: 6px 12px;
+}
+.cancel-btn:hover {
+    background: rgba(220, 38, 38, 0.1);
+}
+.re-download-btn {
+    background: #2563eb;
+    padding: 6px 12px;
+    font-size: 12px;
+}
+.re-download-btn:hover {
+    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2);
 }
 
 .task-query {
