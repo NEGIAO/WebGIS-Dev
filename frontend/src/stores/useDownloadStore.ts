@@ -146,8 +146,8 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     const bbox = ref<BBoxInput>({
         minLon: 116.2,
         minLat: 39.8,
-        maxLon: 116.6,
-        maxLat: 40.1
+        maxLon: 116.3,
+        maxLat: 39.9
     });
     const bboxCrs = ref<'EPSG:4326' | 'EPSG:3857'>('EPSG:4326');
     const resolutionM = ref(DEFAULT_RESOLUTION);
