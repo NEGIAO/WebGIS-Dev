@@ -1,4 +1,5 @@
 name: Update Traffic Stats
+
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -9,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,31 +22,40 @@ jobs:
             const fs = require('fs');
             const path = '.github/traffic.json';
 
-            // 1. 初始化或读取现有数据
+            // ========================
+            // 1. 初始化数据结构
+            // ========================
             let data = {
               totalViews: 0,
               totalUniqueViews: 0,
               totalClones: 0,
               totalUniqueClones: 0,
-              lastUpdate: ''
+              lastUpdate: '',
+              lastCountedDate: '',
+              daily: {}
             };
-            
+
             if (fs.existsSync(path)) {
-              const fileContent = fs.readFileSync(path, 'utf8');
-              if (fileContent) data = JSON.parse(fileContent);
+              const content = fs.readFileSync(path, 'utf8');
+              if (content) data = JSON.parse(content);
             }
 
-            // 2. 获取 GitHub 官方 14 天数据
+            // ========================
+            // 2. 获取 GitHub API 数据
+            // ========================
             const views = await github.request('GET /repos/{owner}/{repo}/traffic/views', {
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
+
             const clones = await github.request('GET /repos/{owner}/{repo}/traffic/clones', {
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
 
-            // 3. 定位“昨天”的数据 (由于今天的数据尚未跑完，统计昨天的数据最准确)
+            // ========================
+            // 3. 获取“昨天”的日期
+            // ========================
             const yesterday = new Date();
             yesterday.setUTCDate(yesterday.getUTCDate() - 1);
             const yesterdayStr = yesterday.toISOString().split('T')[0];
@@ -57,31 +68,49 @@ jobs:
             const yClones = yesterdayClonesObj ? yesterdayClonesObj.count : 0;
             const yUClones = yesterdayClonesObj ? yesterdayClonesObj.uniques : 0;
 
-            // 4. 更新逻辑
-            if (data.totalViews === 0 && data.totalClones === 0) {
-              // 第一次运行：初始化为 GitHub 官方提供的 14 天总计数值
+            // ========================
+            // 4. 初始化（仅第一次）
+            // ========================
+            if (!data.lastUpdate) {
               data.totalViews = views.data.count;
               data.totalUniqueViews = views.data.uniques;
               data.totalClones = clones.data.count;
               data.totalUniqueClones = clones.data.uniques;
-            } else {
-              // 之后每天：累加昨天的全量数据和独立用户数
+            }
+
+            // ========================
+            // 5. 防重复统计（关键）
+            // ========================
+            if (data.lastCountedDate !== yesterdayStr) {
               data.totalViews += yViews;
               data.totalUniqueViews += yUViews;
               data.totalClones += yClones;
               data.totalUniqueClones += yUClones;
+
+              data.lastCountedDate = yesterdayStr;
+
+              // 保存每日记录
+              data.daily[yesterdayStr] = {
+                views: yViews,
+                uniqueViews: yUViews,
+                clones: yClones,
+                uniqueClones: yUClones
+              };
             }
 
             data.lastUpdate = new Date().toISOString();
 
-            // 5. 写入文件
+            // ========================
+            // 6. 写入文件
+            // ========================
             const dir = '.github';
             if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-            fs.writeFileSync(path, JSON.stringify(data, null, 2));
 
+            fs.writeFileSync(path, JSON.stringify(data, null, 2));
+      
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
         with:
-          message: "Update traffic statistics (including uniques) [auto]"
-          committer_name: GitHub Actions
-          committer_email: actions@github.com
+          add: '.github/traffic.json'
+          message: "Update traffic statistics [auto]"
+          default_author: github_actions
