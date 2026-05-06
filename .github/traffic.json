@@ -1,7 +1,16 @@
 {
-  "totalViews": 500,
-  "totalUniqueViews": 84,
-  "totalClones": 1699,
-  "totalUniqueClones": 541,
-  "lastUpdate": "2026-05-06T03:33:44.060Z"
+  "totalViews": 617,
+  "totalUniqueViews": 91,
+  "totalClones": 1959,
+  "totalUniqueClones": 622,
+  "lastUpdate": "2026-05-06T12:31:13.802Z",
+  "lastCountedDate": "2026-05-05",
+  "daily": {
+    "2026-05-05": {
+      "views": 117,
+      "uniqueViews": 7,
+      "clones": 260,
+      "uniqueClones": 81
+    }
+  }
 }
