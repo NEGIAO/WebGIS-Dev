@@ -75,10 +75,23 @@ function buildTaskPayload(
     if (!template) {
         throw new Error('请输入瓦片 URL 模板');
     }
+    
+    // 验证瓦片模板包含必要的占位符
+    if (!template.includes('{z}') || !template.includes('{x}') || !template.includes('{y}')) {
+        throw new Error('瓦片 URL 模板必须包含 {z}、{x}、{y} 占位符');
+    }
 
     const normalizedResolution = Number(resolutionM);
     if (!Number.isFinite(normalizedResolution) || normalizedResolution <= 0) {
         throw new Error('分辨率必须是大于 0 的数字');
+    }
+    
+    // 限制分辨率范围（0.5m 到 1000m）
+    if (normalizedResolution < 0.5) {
+        throw new Error('分辨率过高，最小值为 0.5 米');
+    }
+    if (normalizedResolution > 1000) {
+        throw new Error('分辨率过低，最大值为 1000 米');
     }
 
     const parsedBBox: BBoxInput = {
@@ -96,6 +109,11 @@ function buildTaskPayload(
     }
 
     const normalizedBBox = clampBboxByCrs(parsedBBox, bboxCrs);
+    
+    // 验证 BBox 有效性（检查是否为有效矩形）
+    if (normalizedBBox.minLon === normalizedBBox.maxLon || normalizedBBox.minLat === normalizedBBox.maxLat) {
+        throw new Error('选择框面积不能为 0，请选择有效的地理范围');
+    }
 
     return {
         tile_url_template: template,
@@ -156,6 +174,12 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
     function applyTaskResponse(payload: DownloadTaskResponse): void {
         // Normalize backend payload into store fields.
+        // 防御性编程：验证 payload 是否为有效的对象
+        if (!payload || typeof payload !== 'object') {
+            console.error('[DownloadStore] Invalid task response:', payload);
+            return;
+        }
+        
         taskId.value = String(payload?.task_id || taskId.value || '').trim();
         status.value = (payload?.status as DownloadStatus) || status.value;
         progress.value = Number(payload?.progress ?? progress.value ?? 0);
@@ -204,16 +228,29 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 bboxCrs.value
             );
             const response = await apiDownloadCreateTask(payload);
-            applyTaskResponse(response || {});
+            
+            // 验证响应有效性
+            if (!response || typeof response !== 'object') {
+                throw new Error('后端返回无效的响应格式');
+            }
+            
+            applyTaskResponse(response);
             status.value = (response?.status as DownloadStatus) || 'pending';
             progress.value = Number(response?.progress ?? 0);
-            message.value = String(response?.message || '任务已提交');
+            message.value = String(response?.message || '任务已提交').trim();
+            
+            // 验证任务ID是否有效
+            if (!taskId.value) {
+                throw new Error('后端未返回有效的任务ID');
+            }
+            
             startPolling();
             return true;
         } catch (error) {
             const detail = error instanceof Error ? error.message : '创建任务失败';
             lastError.value = detail;
             status.value = 'failed';
+            console.error('[DownloadStore] submitTask failed:', detail, error);
             return false;
         } finally {
             isSubmitting.value = false;
@@ -225,7 +262,14 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         pollInFlight = true;
         try {
             const response = await apiDownloadTaskStatus(taskId.value);
-            applyTaskResponse(response || {});
+            
+            // 验证响应有效性
+            if (!response || typeof response !== 'object') {
+                throw new Error('后端返回无效的轮询响应');
+            }
+            
+            applyTaskResponse(response);
+            
             if (shouldTriggerDownload()) {
                 await downloadResult();
                 stopPolling();
@@ -233,7 +277,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 stopPolling();
             }
         } catch (error) {
-            lastError.value = error instanceof Error ? error.message : '轮询失败';
+            const errorMsg = error instanceof Error ? error.message : '轮询失败';
+            lastError.value = errorMsg;
+            console.error('[DownloadStore] pollOnce failed:', errorMsg, error);
         } finally {
             pollInFlight = false;
         }
@@ -264,10 +310,28 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             status.value = 'failed';
             return;
         }
+        
         downloadTriggered = true;
         try {
             const response = await apiDownloadTaskFile(taskId.value);
-            const blob = response instanceof Blob ? response : new Blob([response], { type: 'image/tiff' });
+            
+            // 处理 Blob 响应
+            let blob: Blob;
+            if (response instanceof Blob) {
+                blob = response;
+            } else if (response && typeof response === 'object') {
+                // 如果返回的是对象（错误响应），抛出错误
+                throw new Error(JSON.stringify(response));
+            } else {
+                // 尝试转换为 Blob
+                blob = new Blob([response], { type: 'image/tiff' });
+            }
+            
+            // 验证 Blob 有效性
+            if (!blob || blob.size === 0) {
+                throw new Error('下载的文件为空');
+            }
+            
             const filename = `basemap_${taskId.value}.tif`;
             triggerBrowserDownload(blob, filename);
             downloadedAt.value = Date.now();
@@ -276,8 +340,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             progress.value = 100;
         } catch (error) {
             downloadTriggered = false;
-            lastError.value = error instanceof Error ? error.message : '下载文件失败';
+            const errorMsg = error instanceof Error ? error.message : '下载文件失败';
+            lastError.value = errorMsg;
             status.value = 'failed';
+            console.error('[DownloadStore] downloadResult failed:', errorMsg, error);
         }
     }
 
@@ -290,14 +356,23 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
         try {
             const response = await apiDownloadTaskStatus(safeId);
-            applyTaskResponse(response || {});
+            
+            // 验证响应有效性
+            if (!response || typeof response !== 'object') {
+                throw new Error('后端返回无效的响应');
+            }
+            
+            applyTaskResponse(response);
             taskId.value = safeId;
+            
             if (autoPoll && !['success', 'failed', 'expired'].includes(status.value)) {
                 startPolling();
             }
             return true;
         } catch (error) {
-            lastError.value = error instanceof Error ? error.message : '任务查询失败';
+            const errorMsg = error instanceof Error ? error.message : '任务查询失败';
+            lastError.value = errorMsg;
+            console.error('[DownloadStore] fetchTaskById failed:', errorMsg, error);
             return false;
         }
     }

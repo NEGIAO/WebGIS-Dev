@@ -27,7 +27,7 @@
                 <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0"
                     @click="copyAllLogs">
                     <component :is="isCopiedAll ? Check : Copy" :size="14" />
-                    {{ isCopiedAll ? '已复制' : '复制全部' }}
+                    <span class="btn-label">{{ isCopiedAll ? '已复制' : '复制全部' }}</span>
                 </button>
 
                 <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0"
@@ -468,9 +468,70 @@ onUnmounted(() => closeConnection());
     }
 }
 
+/* 移动端适配 */
 @media (max-width: 768px) {
     .webgis-log-panel {
         width: 100%;
+        /* 移动端占满宽度 */
+        height: 50vh;
+        /* 在移动端通常作为底部面板，占半屏高度 */
+        border-radius: 0;
+        /* 移动端边缘通常不需要圆角 */
+    }
+
+    .panel-header {
+        height: auto;
+        /* 高度自适应 */
+        flex-direction: column;
+        /* 纵向排列，解决遮挡 */
+        align-items: flex-start;
+        padding: 8px 12px;
+        gap: 10px;
+    }
+
+    .status-info {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        /* 如果状态信息太多，允许换行 */
+        gap: 8px;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+        /* 按钮横向平铺 */
+    }
+
+    /* 移动端缩小按钮间距和文字，腾出空间 */
+    .action-btn {
+        padding: 4px 8px;
+        flex: 1;
+        /* 让按钮平分宽度 */
+        justify-content: center;
+        font-size: 10px;
+    }
+
+    /* 隐藏一些次要的装饰元素，节省空间 */
+    .divider {
+        display: none;
+    }
+
+    .lock-text {
+        font-size: 10px;
+    }
+
+    /* 针对极窄屏幕（如 iPhone SE）进一步优化 */
+    @media (max-width: 380px) {
+        .title {
+            display: none;
+            /* 隐藏 TERMINAL 字样，保留图标 */
+        }
+
+        .action-btn span {
+            display: none;
+            /* 只显示图标，隐藏按钮文字 */
+        }
     }
 }
 </style>
