@@ -20,6 +20,12 @@ export async function apiDownloadTaskStatus(taskId) {
 }
 
 /**
+ * Download request timeout: 5 minutes (300000ms)
+ * Much longer than global 8s timeout since large GeoTIFF files take time to stream
+ */
+const DOWNLOAD_REQUEST_TIMEOUT = Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT || 300000);
+
+/**
  * Download the resulting GeoTIFF file.
  * @param {string} taskId
  * @returns {Promise<Blob>} GeoTIFF blob
@@ -27,6 +33,7 @@ export async function apiDownloadTaskStatus(taskId) {
 export async function apiDownloadTaskFile(taskId) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
     return backendAPI.get(`/api/download/tasks/${safeId}/file`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: DOWNLOAD_REQUEST_TIMEOUT  // Override global 8s timeout for file download
     });
 }

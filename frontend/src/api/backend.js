@@ -125,7 +125,12 @@ backendAPI.interceptors.response.use(
       }
     } else if (error.request) {
       // 请求已发出但没有收到响应
-      message = '网络异常,请检查您的连接'
+      // 区分超时错误和网络断开
+      if (error.code === 'ECONNABORTED' || /timeout/i.test(String(error?.message || ''))) {
+        message = '请求超时，请稍后重试'
+      } else {
+        message = '网络异常,请检查您的连接'
+      }
     } else {
       // 其他错误
       message = error.message || '未知错误,请稍后重试'
