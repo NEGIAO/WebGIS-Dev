@@ -23,7 +23,7 @@ jobs:
             const path = '.github/traffic.json';
 
             // ========================
-            // 1. 初始化数据结构
+            // 1. 默认数据结构
             // ========================
             let data = {
               totalViews: 0,
@@ -35,13 +35,32 @@ jobs:
               daily: {}
             };
 
+            // ========================
+            // 2. 读取旧数据（兼容旧版本）
+            // ========================
             if (fs.existsSync(path)) {
               const content = fs.readFileSync(path, 'utf8');
-              if (content) data = JSON.parse(content);
+              if (content) {
+                try {
+                  const oldData = JSON.parse(content);
+                  data = { ...data, ...oldData };
+                } catch (e) {
+                  console.log('JSON parse error, using default data');
+                }
+              }
             }
 
+            // 字段兜底（防止 undefined 报错）
+            data.totalViews = data.totalViews || 0;
+            data.totalUniqueViews = data.totalUniqueViews || 0;
+            data.totalClones = data.totalClones || 0;
+            data.totalUniqueClones = data.totalUniqueClones || 0;
+            data.lastUpdate = data.lastUpdate || '';
+            data.lastCountedDate = data.lastCountedDate || '';
+            if (!data.daily) data.daily = {};
+
             // ========================
-            // 2. 获取 GitHub API 数据
+            // 3. 获取 GitHub API 数据
             // ========================
             const views = await github.request('GET /repos/{owner}/{repo}/traffic/views', {
               owner: context.repo.owner,
@@ -54,7 +73,7 @@ jobs:
             });
 
             // ========================
-            // 3. 获取“昨天”的日期
+            // 4. 获取“昨天”的日期
             // ========================
             const yesterday = new Date();
             yesterday.setUTCDate(yesterday.getUTCDate() - 1);
@@ -69,7 +88,7 @@ jobs:
             const yUClones = yesterdayClonesObj ? yesterdayClonesObj.uniques : 0;
 
             // ========================
-            // 4. 初始化（仅第一次）
+            // 5. 初始化（仅第一次）
             // ========================
             if (!data.lastUpdate) {
               data.totalViews = views.data.count;
@@ -79,7 +98,7 @@ jobs:
             }
 
             // ========================
-            // 5. 防重复统计（关键）
+            // 6. 防重复统计（核心）
             // ========================
             if (data.lastCountedDate !== yesterdayStr) {
               data.totalViews += yViews;
@@ -89,7 +108,7 @@ jobs:
 
               data.lastCountedDate = yesterdayStr;
 
-              // 保存每日记录
+              //
               data.daily[yesterdayStr] = {
                 views: yViews,
                 uniqueViews: yUViews,
@@ -101,13 +120,13 @@ jobs:
             data.lastUpdate = new Date().toISOString();
 
             // ========================
-            // 6. 写入文件
+            // 7. 写入文件
             // ========================
             const dir = '.github';
             if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 
             fs.writeFileSync(path, JSON.stringify(data, null, 2));
-      
+
       - name: Commit and push
         uses: EndBug/add-and-commit@v9
         with:
