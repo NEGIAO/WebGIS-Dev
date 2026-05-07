@@ -271,7 +271,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'http://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
+                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
                 }),
             ),
     },
@@ -374,7 +374,9 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         group: '影像',
         createSource: () =>
             prioritizeTileSourceRequest(
-                new XYZ({ url: buildGoogleTileUrl('/maps/vt?lyrs=m&x={x}&y={y}&z={z}') }),
+                new XYZ({ 
+                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga' 
+                }),
             ),
     },
     {
@@ -1008,13 +1010,15 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     },
     {
         id: 'vector_Google_clean',
-        name: 'Google简洁(原版)',
+        name: 'Google简洁(wgs)',
         category: 'vector',
         group: '矢量',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off',
+                    //原版简洁  url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off',
+                    //代理简洁  url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off',
+                    url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
                 }),
             ),
     },
@@ -1119,7 +1123,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     //     category: 'terrain',
     //     group: '地形',
     //     createSource: () => new XYZ({
-    //         url:'http://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5'
+    //         url:'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5'
     //     })
     // },
     // {
