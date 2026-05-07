@@ -131,11 +131,15 @@ async def build_geotiff_from_tiles(
         )
 
         if seed_bytes:
-            seed_data, band_count, dtype = _decode_tile(seed_bytes)
+            seed_data, seed_band_count, dtype = _decode_tile(seed_bytes)
         else:
             seed_data = None
-            band_count = 3
+            seed_band_count = 3
             dtype = "uint8"
+
+        # 标准化波段数: PNG和JPG都统一为3波段RGB
+        # 避免PNG灰色化和JPG膨胀问题
+        band_count = 3
 
         profile = {
             "driver": "GTiff",
@@ -233,10 +237,46 @@ def _lonlat_to_tile_xy(lon: float, lat: float, zoom: int) -> Tuple[int, int]:
 
 
 def _decode_tile(tile_bytes: bytes) -> Tuple[np.ndarray, int, str]:
+    """Decode tile bytes and apply colormap for indexed color images.
+    
+    Args:
+        tile_bytes: Raw tile image bytes
+        
+    Returns:
+        Tuple of (data array, band_count, dtype_string)
+        - For indexed color PNG: converts to RGB (3 bands)
+        - For grayscale: returns as-is (1 band)
+        - For RGB/RGBA: returns as-is
+    """
     with MemoryFile(tile_bytes) as mem:
         with mem.open() as dataset:
             data = dataset.read()
-            return data, dataset.count, dataset.dtypes[0]
+            band_count = dataset.count
+            dtype = dataset.dtypes[0]
+            
+            # 检测并处理索引颜色PNG (Indexed Color Palette)
+            if band_count == 1 and hasattr(dataset, 'colorinterp'):
+                # 检查是否存在颜色表(Colormap)
+                colormap = dataset.colormap(1)
+                if colormap is not None:
+                    logger.info("Detected indexed color PNG, applying colormap")
+                    # colormap是字典: {index: (R, G, B)}
+                    # 构建查找表: 0-255每个索引对应的RGB值
+                    lut = np.zeros((256, 3), dtype=dtype)
+                    for idx, rgb in colormap.items():
+                        if 0 <= idx < 256:
+                            # RGB是元组(r, g, b)或(r, g, b, a)
+                            lut[idx, :] = rgb[:3]
+                    
+                    # 应用颜色表: 将索引值映射到RGB
+                    # data shape: (1, H, W) -> 需要转为 (3, H, W)
+                    indexed_data = data[0]  # (H, W)
+                    rgb_data = lut[indexed_data]  # (H, W, 3)
+                    data = np.transpose(rgb_data, (2, 0, 1))  # (3, H, W)
+                    band_count = 3
+                    logger.info("Colormap applied: %d bytes -> RGB", len(tile_bytes))
+            
+            return data, band_count, dtype
 
 
 def _write_tile_array(
@@ -248,19 +288,54 @@ def _write_tile_array(
     min_y: int,
     tile_size: int,
 ) -> None:
+    """Write tile array to GeoTIFF with intelligent band conversion.
+    
+    Handles:
+    - 2D grayscale (H, W) → 3D RGB by replicating
+    - 1-band indexed/grayscale → RGB by replicating
+    - 4-band RGBA → 3-band RGB (remove alpha)
+    - Band count mismatch → pad or truncate
+    """
+    # 处理2D灰度图 → 3D RGB (复制灰度到三个波段)
     if data.ndim == 2:
-        data = data[np.newaxis, :, :]
+        # Grayscale (H, W) → RGB (3, H, W) by replicating
+        gray = data
+        data = np.stack([gray, gray, gray], axis=0)
+        logger.debug("Converted 2D grayscale to 3D RGB")
 
-    if data.shape[0] < dst.count:
-        pad = np.zeros((dst.count, data.shape[1], data.shape[2]), dtype=data.dtype)
-        pad[: data.shape[0]] = data
-        data = pad
+    # 处理1波段数据(真正的灰度或已处理的索引颜色)
+    # 注意: 索引颜色PNG应该在_decode_tile()中已转换为3波段
+    if data.shape[0] == 1:
+        logger.info("Converting single grayscale band to RGB")
+        data = np.repeat(data, 3, axis=0)
+
+    # 处理4波段RGBA → 3波段RGB (去掉Alpha通道)
+    if data.shape[0] == 4:
+        logger.info("Converting RGBA to RGB by removing alpha channel")
+        data = data[:3, :, :]
+    # 如果波段数超过目标，截断
     elif data.shape[0] > dst.count:
+        logger.info("Truncating tile from %d to %d bands", data.shape[0], dst.count)
         data = data[: dst.count]
 
+    # 如果波段数不足目标波段数，用最后一个波段的值填充
+    if data.shape[0] < dst.count:
+        logger.info(
+            "Padding tile from %d to %d bands", data.shape[0], dst.count
+        )
+        pad = np.full(
+            (dst.count, data.shape[1], data.shape[2]),
+            data[-1],
+            dtype=data.dtype,
+        )
+        pad[: data.shape[0]] = data
+        data = pad
+
+    # dtype转换
     if data.dtype != dst.dtypes[0]:
         data = data.astype(dst.dtypes[0], copy=False)
 
+    # 计算写入窗口
     tile_height = data.shape[1]
     tile_width = data.shape[2]
     col_off = (tile_x - min_x) * tile_size
