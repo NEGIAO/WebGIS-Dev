@@ -221,7 +221,7 @@
                             取消下载
                         </button>
                         <button
-                            v-if="!transferState.active && store.status === 'success'"
+                            v-if="!transferState.active && (store.status === 'success' || transferState.error)"
                             class="primary-btn re-download-btn"
                             type="button"
                             @click="downloadFileToLocal"
@@ -256,6 +256,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { apiDownloadTaskFile } from '../api/download';
 import { useMessage } from '../composables/useMessage';
 import { useDownloadStore } from '../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../constants';
@@ -280,9 +281,9 @@ const transferState = ref({
     progress: 0,
     error: '',
 });
+const lastTransferredTaskId = ref('');
 
 let abortController = null;
-let transferTimeout = null;
 
 // 格式化字节大小
 function formatBytes(bytes, decimals = 2) {
@@ -305,6 +306,7 @@ function cancelTransfer() {
 // 核心下载逻辑
 async function downloadFileToLocal() {
     if (!store.taskId) return;
+    cancelTransfer();
 
     // 初始化/重置传输状态
     transferState.value = {
@@ -316,65 +318,49 @@ async function downloadFileToLocal() {
     };
 
     abortController = new AbortController();
-    const signal = abortController.signal;
-
-    // 5分钟超时限制 (300,000 毫秒)
-    transferTimeout = setTimeout(
-        () => {
-            if (abortController) {
-                abortController.abort('TimeoutLimit');
-            }
-        },
-        5 * 60 * 1000,
-    );
 
     try {
-        const response = await fetch(`/api/download/tasks/${store.taskId}/file`, { signal });
+        const response = await apiDownloadTaskFile(
+            store.taskId,
+            (progress, meta) => {
+                transferState.value.progress = progress;
+                const loaded = Number(meta?.loaded || 0);
+                const total = Number(meta?.total || 0);
+                if (loaded > 0) {
+                    transferState.value.downloaded = loaded;
+                }
+                if (total > 0) {
+                    transferState.value.total = total;
+                }
+            },
+            { signal: abortController.signal },
+        );
 
-        if (!response.ok) {
-            throw new Error(`HTTP Error: ${response.status}`);
+        const blob = response?.data;
+        if (!(blob instanceof Blob) || blob.size <= 0) {
+            throw new Error('下载文件为空或响应无效');
         }
 
-        // 获取文件总大小
-        const contentLength = response.headers.get('content-length');
-        const total = contentLength ? parseInt(contentLength, 10) : 0;
-        transferState.value.total = total;
-
-        const reader = response.body.getReader();
-        const chunks = [];
-        let downloaded = 0;
-
-        // 读取流，实时计算进度
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            chunks.push(value);
-            downloaded += value.length;
-            transferState.value.downloaded = downloaded;
-
-            if (total > 0) {
-                transferState.value.progress = Math.round((downloaded / total) * 100);
-            }
+        const contentLength = Number(response?.headers?.['content-length'] || 0);
+        if (contentLength > 0) {
+            transferState.value.total = contentLength;
+            transferState.value.downloaded = Math.max(transferState.value.downloaded, contentLength);
+            transferState.value.progress = 100;
         }
 
-        // 将分块合并为 Blob 并触发浏览器下载行为
-        const blob = new Blob(chunks, {
-            type: response.headers.get('content-type') || 'image/tiff',
-        });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
 
         // 尝试从 Content-Disposition 提取文件名
-        let filename = `basemap_${store.taskId}.tif`;
-        const disposition = response.headers.get('content-disposition');
-        if (disposition && disposition.indexOf('attachment') !== -1) {
-            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+        let filename = `map-export-${store.taskId}.tif`;
+        const disposition = String(response?.headers?.['content-disposition'] || '');
+        if (disposition.includes('attachment')) {
+            const filenameRegex = /filename\*?=(?:UTF-8''|['"])?([^;'"\n]+)/i;
             const matches = filenameRegex.exec(disposition);
-            if (matches != null && matches[1]) {
-                filename = matches[1].replace(/['"]/g, '');
+            if (matches && matches[1]) {
+                filename = decodeURIComponent(matches[1].replace(/['"]/g, '').trim());
             }
         }
         a.download = filename;
@@ -387,25 +373,21 @@ async function downloadFileToLocal() {
         document.body.removeChild(a);
 
         transferState.value.active = false;
+        transferState.value.error = '';
+        lastTransferredTaskId.value = store.taskId;
         message.success('文件成功下载到本地！');
     } catch (err) {
-        if (err.name === 'AbortError' || err === 'UserCancelled' || err === 'TimeoutLimit') {
-            const isTimeout =
-                err === 'TimeoutLimit' || (signal && signal.reason === 'TimeoutLimit');
-            transferState.value.error = isTimeout
-                ? '下载已取消：超过 5 分钟限制'
-                : '下载已手动取消';
-            if (isTimeout) message.error('文件下载超时（超过5分钟）');
+        const canceledByUser = err?.code === 'ERR_CANCELED';
+        if (canceledByUser) {
+            transferState.value.error = '下载已手动取消';
         } else {
             transferState.value.error = `传输失败: ${err.message}`;
             message.error('文件传输到本地失败');
         }
         transferState.value.active = false;
+        transferState.value.progress = 0;
     } finally {
-        if (transferTimeout) {
-            clearTimeout(transferTimeout);
-            transferTimeout = null;
-        }
+        abortController = null;
     }
 }
 
@@ -413,7 +395,13 @@ async function downloadFileToLocal() {
 watch(
     () => store.status,
     (newStatus) => {
-        if (newStatus === 'success' && store.taskId) {
+        if (
+            newStatus === 'success' &&
+            store.taskId &&
+            !transferState.value.active &&
+            lastTransferredTaskId.value !== store.taskId &&
+            !transferState.value.error
+        ) {
             downloadFileToLocal();
         }
     },
@@ -499,6 +487,9 @@ watch(selectedPreset, (presetId) => {
 });
 
 const statusText = computed(() => {
+    if (transferState.value.active) return '传输中';
+    if (transferState.value.error) return '传输失败';
+
     const statusMap = {
         idle: '待命',
         pending: '已提交',
@@ -511,7 +502,11 @@ const statusText = computed(() => {
     return statusMap[store.status] || store.status;
 });
 
-const statusClass = computed(() => `status-${store.status}`);
+const statusClass = computed(() => {
+    if (transferState.value.active) return 'status-transferring';
+    if (transferState.value.error) return 'status-transfer-failed';
+    return `status-${store.status}`;
+});
 const progressWidth = computed(() => `${Math.min(100, Math.max(0, store.progress))}%`);
 const progressLabel = computed(() => `${Math.round(store.progress)}%`);
 const expiresHint = computed(() => {
@@ -529,6 +524,7 @@ const lookupTaskId = ref('');
 async function handleSubmit() {
     // 提交前重置传输状态
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
+    lastTransferredTaskId.value = '';
 
     const ok = await store.submitTask();
     if (ok) {
@@ -542,6 +538,7 @@ function handleReset() {
     store.resetTask();
     cancelTransfer();
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
+    lastTransferredTaskId.value = '';
     const first = tilePresets.value.find((item) => item.downloadable) || tilePresets.value[0];
     selectedPreset.value = first?.id || '';
 }
@@ -620,6 +617,16 @@ onBeforeUnmount(() => {
 .status-chip.status-expired {
     background: rgba(245, 158, 11, 0.16);
     color: #b45309;
+}
+
+.status-chip.status-transferring {
+    background: rgba(37, 99, 235, 0.16);
+    color: #1d4ed8;
+}
+
+.status-chip.status-transfer-failed {
+    background: rgba(239, 68, 68, 0.15);
+    color: #b91c1c;
 }
 
 .close-btn {

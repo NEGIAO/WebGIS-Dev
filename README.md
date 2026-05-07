@@ -140,10 +140,10 @@ WebGIS_Dev/
 ├── frontend/                       # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
 │   ├── src/
 │   │   ├── api/                    # 前端 API 封装
-│   │   │   ├── download.js         # 🆕 在线底图下载 API 客户端
+│   │   │   ├── download.js         # 🆕 在线底图下载 API 客户端（支持 onDownloadProgress 实时回调）
 │   │   │   └── ...                 # 其余 API 模块
 │   │   ├── components/             # 业务组件
-│   │   │   ├── MapDownloader.vue   # 🆕 在线底图下载面板（底图/分辨率/范围选择）
+│   │   │   ├── MapDownloader.vue   # 🆕 在线底图下载面板（后端生成进度 + 文件传输实时进度）
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
 │   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）

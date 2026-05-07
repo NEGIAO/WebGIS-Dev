@@ -28,12 +28,24 @@ const DOWNLOAD_REQUEST_TIMEOUT = Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TI
 /**
  * 下载生成的 GeoTIFF 文件
  * @param {string} taskId
- * @returns {Promise<Blob>} GeoTIFF 文件二进制对象
+ * @param {(progress: number, meta?: { loaded: number, total: number }) => void} onProgress
+ * @param {{ signal?: AbortSignal }} options
+ * @returns {Promise<import('axios').AxiosResponse<Blob>>} 完整响应对象（含 headers）
  */
-export async function apiDownloadTaskFile(taskId) {
+export async function apiDownloadTaskFile(taskId, onProgress, options = {}) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
     return backendAPI.get(`/api/download/tasks/${safeId}/file`, {
         responseType: 'blob',
-        timeout: DOWNLOAD_REQUEST_TIMEOUT, // 覆盖全局 8s 超时，确保大文件下载不中断
+        timeout: DOWNLOAD_REQUEST_TIMEOUT,
+        signal: options.signal,
+        onDownloadProgress: (progressEvent) => {
+            const loaded = Number(progressEvent?.loaded || 0);
+            const total = Number(progressEvent?.total || 0);
+            const progress =
+                total > 0 ? Math.min(100, Math.max(0, Math.round((loaded / total) * 100))) : 0;
+            if (typeof onProgress === 'function') {
+                onProgress(progress, { loaded, total });
+            }
+        },
     });
 }

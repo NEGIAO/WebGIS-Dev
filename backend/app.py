@@ -25,9 +25,9 @@ from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router
 from api.agent_chat import router as agent_chat_router
-from api.download import router as download_router
-from core.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
-from models.download_task import init_download_task_db
+from download_xyz.download import router as download_router
+from download_xyz.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
+from download_xyz.download_task import init_download_task_db
 from api.minitor import init_monitor_log_streaming, router as monitor_router
 
 # ==================== 日志配置 ====================

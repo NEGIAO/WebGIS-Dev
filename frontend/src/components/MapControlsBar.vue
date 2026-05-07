@@ -576,10 +576,6 @@ onUnmounted(() => {
     -webkit-backdrop-filter: blur(12px);
 }
 
-.modern-glass {
-    /* Kept for compatibility if still conditionally used, but merged above */
-}
-
 .coordinate-display {
     min-width: 260px;
     height: 38px;

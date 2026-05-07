@@ -8,7 +8,7 @@ from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, select
 
-from models.download_task import DownloadTask, get_engine
+from .download_task import DownloadTask, get_engine
 
 logger = logging.getLogger(__name__)
 

@@ -116,7 +116,7 @@ frontend/
     │
     ├── api/
     │   ├── backend.js                    # 前后端通信 API 枢纽（用户鉴权/异常处理）
-    │   ├── download.js                   # 底图下载任务 API
+    │   ├── download.js                   # 底图下载任务 API（支持 onDownloadProgress 与 Blob 下载）
     │   ├── geocoding.js                  # 地理编码/逆地理编码 API
     │   ├── index.js                      # API 聚合导出
     │   ├── ipLocation.js                 # IP 定位 API
@@ -147,7 +147,7 @@ frontend/
     │   ├── MapContainer.vue                     # 地图容器与能力暴露核心组件
     │   ├── MapControlsBar.vue                   # 底部坐标/缩放/定位工具栏
     │   ├── MapEasterEgg.vue                     # 地图彩蛋组件
-    │   ├── MapDownloader.vue                    # 在线底图导出面板
+    │   ├── MapDownloader.vue                    # 在线底图导出面板（支持传输进度/总大小/失败重试）
     │   ├── MapPointPickerCard.vue               # 地图点选卡片
     │   ├── MapSwipeController.vue               # 地图对比滑块组件（仅裁剪在线底图，不影响业务图层）
     │   ├── Message.vue                          # 全局消息条

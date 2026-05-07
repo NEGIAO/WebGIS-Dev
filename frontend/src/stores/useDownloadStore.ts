@@ -280,8 +280,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
             applyTaskResponse(response);
 
-            if (shouldTriggerDownload()) {
-                await downloadResult();
+            if (status.value === 'success' || fileReady.value || progress.value >= 100) {
                 stopPolling();
             } else if (status.value === 'failed' || isExpired.value) {
                 stopPolling();
@@ -304,15 +303,6 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         pollTimer = window.setInterval(pollOnce, intervalMs);
     }
 
-    function shouldTriggerDownload(): boolean {
-        // Auto-download when backend reports success or progress reaches 100%.
-        if (downloadTriggered) return false;
-        if (isExpired.value) return false;
-        if (fileReady.value) return true;
-        if (status.value === 'success') return true;
-        return progress.value >= 100;
-    }
-
     async function downloadResult(): Promise<void> {
         if (!taskId.value || downloadTriggered) return;
         if (isExpired.value) {
@@ -323,11 +313,13 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
         downloadTriggered = true;
         try {
-            const response = await apiDownloadTaskFile(taskId.value);
+            const response = await apiDownloadTaskFile(taskId.value, undefined);
 
             // 处理 Blob 响应
             let blob: Blob;
-            if (response instanceof Blob) {
+            if (response?.data instanceof Blob) {
+                blob = response.data;
+            } else if (response instanceof Blob) {
                 blob = response;
             } else if (response && typeof response === 'object') {
                 // 如果返回的是对象（错误响应），抛出错误

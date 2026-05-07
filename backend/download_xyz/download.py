@@ -11,8 +11,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from core.tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles
-from models.download_task import DownloadTask, create_task, get_task, update_task
+from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles
+from .download_task import DownloadTask, create_task, get_task, update_task
 
 logger = logging.getLogger(__name__)
 

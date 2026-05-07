@@ -73,6 +73,11 @@ backendAPI.interceptors.request.use(
  */
 backendAPI.interceptors.response.use(
     (response) => {
+        // Keep full response for binary downloads so callers can read headers.
+        if (response?.config?.responseType === 'blob' || response?.config?.responseType === 'arraybuffer') {
+            return response;
+        }
+
         // 返回数据中的 data 字段
         const { data } = response;
 

@@ -36,7 +36,7 @@ backend/
 │   ├── monitor.py              # Log 监控
 │   ├── api_keys_management.py  # API Key 管理
 │   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
-│   ├── download.py             # 🆕 在线底图下载任务 API
+│   ├── download.py             # 🆕 在线底图下载任务 API（文件流下载供前端传输进度展示）
 │   └── __init__.py
 ├── core/
 │   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
