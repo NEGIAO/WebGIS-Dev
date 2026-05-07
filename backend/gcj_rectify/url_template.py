@@ -35,17 +35,66 @@ class TileUrlTemplate:
 def parse_tile_url(url: str) -> Tuple[TileUrlTemplate, TileXYZ]:
     """Parse a tile URL into a template and XYZ coordinates."""
     parsed = urlparse(url)
+    
+    # 优先方案：原封不动的查找 x/y/z 或是 WMTS 标准的 tilecol/tilerow/tilematrix
+    # 这样能兼容没有 "?" 的 URL，并且防止对特殊字符发生意料之外的 urlencode 编码
+    x_match = re.search(r"\b(?:x|tilecol|col)=(\d+)", url, re.IGNORECASE)
+    y_match = re.search(r"\b(?:y|tilerow|row)=(\d+)", url, re.IGNORECASE)
+    z_match = re.search(r"\b(?:z|tilematrix|zoom|level)=(\d+)", url, re.IGNORECASE)
+    
+    if x_match and y_match and z_match:
+        x_val = int(x_match.group(1))
+        y_val = int(y_match.group(1))
+        z_val = int(z_match.group(1))
+        
+        if _is_valid_xyz(z_val, x_val, y_val):
+            template_str = url
+            # 为了防止索引偏移，我们从后向前(倒序)进行替换
+            matches =[
+                ("x", x_match.start(1), x_match.end(1)),
+                ("y", y_match.start(1), y_match.end(1)),
+                ("z", z_match.start(1), z_match.end(1)),
+            ]
+            matches.sort(key=lambda m: m[1], reverse=True)
+            for key, start, end in matches:
+                template_str = template_str[:start] + f"{{{key}}}" + template_str[end:]
+                
+            template_id = template_str
+            return (
+                TileUrlTemplate(
+                    scheme=parsed.scheme,
+                    netloc=parsed.netloc,
+                    path_segments=(),
+                    query_pairs=(),
+                    mode="format",   # 新增 format 模式，直接一律原封不动组装
+                    indices={},
+                    affixes={},
+                    query_keys={},
+                    params="",
+                    fragment="",
+                    cache_key=_hash_template(template_id),
+                    template_id=template_id,
+                ),
+                TileXYZ(x=x_val, y=y_val, z=z_val),
+            )
+
+    # 备选方案1：标准查询参数解析 (同样引入对 WMTS 等别名的支持)
     query_pairs = tuple(parse_qsl(parsed.query, keep_blank_values=True))
     lower_key_map = {key.lower(): key for key, _ in query_pairs}
 
-    if all(key in lower_key_map for key in ("x", "y", "z")):
-        x_key = lower_key_map["x"]
-        y_key = lower_key_map["y"]
-        z_key = lower_key_map["z"]
+    x_aliases = ("x", "tilecol", "col")
+    y_aliases = ("y", "tilerow", "row")
+    z_aliases = ("z", "tilematrix", "zoom", "level")
+
+    x_key = next((lower_key_map[k] for k in x_aliases if k in lower_key_map), None)
+    y_key = next((lower_key_map[k] for k in y_aliases if k in lower_key_map), None)
+    z_key = next((lower_key_map[k] for k in z_aliases if k in lower_key_map), None)
+
+    if x_key and y_key and z_key:
         x_val = _parse_int(_get_query_value(query_pairs, x_key), "x")
         y_val = _parse_int(_get_query_value(query_pairs, y_key), "y")
         z_val = _parse_int(_get_query_value(query_pairs, z_key), "z")
-        template_id = _build_query_template_id(parsed, query_pairs)
+        template_id = _build_query_template_id(parsed, query_pairs, x_key, y_key, z_key)
         return (
             TileUrlTemplate(
                 scheme=parsed.scheme,
@@ -64,6 +113,7 @@ def parse_tile_url(url: str) -> Tuple[TileUrlTemplate, TileXYZ]:
             TileXYZ(x=x_val, y=y_val, z=z_val),
         )
 
+    # 备选方案2：标准路径切片解析
     path_segments = _split_path(parsed.path)
     numeric_segments = _extract_numeric_segments(path_segments)
     if len(numeric_segments) < 3:
@@ -118,7 +168,16 @@ def parse_tile_url(url: str) -> Tuple[TileUrlTemplate, TileXYZ]:
 
 def build_tile_url(template: TileUrlTemplate, x: int, y: int, z: int) -> str:
     """Build a tile URL from a parsed template and XYZ coordinates."""
-    if template.mode == "query":
+    
+    # 触发 format 模式时，原封不动的把坐标塞回去，不去拆解和重组 URL
+    if template.mode == "format":
+        url = template.template_id
+        url = url.replace("{x}", str(x))
+        url = url.replace("{y}", str(y))
+        url = url.replace("{z}", str(z))
+        return url
+        
+    elif template.mode == "query":
         pairs = list(template.query_pairs)
         pairs = _replace_query_value(pairs, template.query_keys["x"], str(x))
         pairs = _replace_query_value(pairs, template.query_keys["y"], str(y))
@@ -157,7 +216,7 @@ def _join_path(segments: List[str]) -> str:
 
 
 def _extract_numeric_segments(segments: List[str]) -> List[Tuple[int, int, str, str]]:
-    numeric_segments = []
+    numeric_segments =[]
     for idx, segment in enumerate(segments):
         match = re.search(r"(\d+)", segment)
         if not match:
@@ -196,7 +255,7 @@ def _replace_query_value(
     value: str,
 ) -> List[Tuple[str, str]]:
     replaced = False
-    new_pairs: List[Tuple[str, str]] = []
+    new_pairs: List[Tuple[str, str]] =[]
     for k, v in pairs:
         if k == key:
             new_pairs.append((k, value))
@@ -211,15 +270,17 @@ def _replace_query_value(
 def _build_query_template_id(
     parsed,
     query_pairs: Tuple[Tuple[str, str], ...],
+    x_key: str,
+    y_key: str,
+    z_key: str,
 ) -> str:
-    template_pairs = []
+    template_pairs =[]
     for key, value in query_pairs:
-        lower = key.lower()
-        if lower == "x":
+        if key == x_key:
             template_pairs.append((key, "{x}"))
-        elif lower == "y":
+        elif key == y_key:
             template_pairs.append((key, "{y}"))
-        elif lower == "z":
+        elif key == z_key:
             template_pairs.append((key, "{z}"))
         else:
             template_pairs.append((key, value))
