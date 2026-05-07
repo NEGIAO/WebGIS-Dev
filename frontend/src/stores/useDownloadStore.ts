@@ -313,7 +313,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
         downloadTriggered = true;
         try {
-            const response = await apiDownloadTaskFile(taskId.value, undefined);
+            const response = await apiDownloadTaskFile(taskId.value, () => {});
 
             // 处理 Blob 响应
             let blob: Blob;

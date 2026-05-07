@@ -295,6 +295,27 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
+// 生成可读的文件名：{底图名称}_{分辨率m}_{mm_dd_hh}.tif
+function buildReadableFilename() {
+    const activePreset = layerConfigMap.get(selectedPreset.value);
+    const presetName = String(activePreset?.label || selectedPreset.value || 'basemap')
+        .trim()
+        .replace(/[\/:*?"<>|]+/g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    
+    const resolution = Number(store.resolutionM || 0);
+    const resolutionPart = Number.isFinite(resolution) ? `${resolution}m` : '0m';
+    
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    
+    return `${presetName}_${resolutionPart}_${mm}_${dd}_${hh}.tif`;
+}
+
 // 取消传输
 function cancelTransfer() {
     if (abortController) {
@@ -354,7 +375,7 @@ async function downloadFileToLocal() {
         a.href = url;
 
         // 尝试从 Content-Disposition 提取文件名
-        let filename = `map-export-${store.taskId}.tif`;
+        let filename = buildReadableFilename();
         const disposition = String(response?.headers?.['content-disposition'] || '');
         if (disposition.includes('attachment')) {
             const filenameRegex = /filename\*?=(?:UTF-8''|['"])?([^;'"\n]+)/i;
