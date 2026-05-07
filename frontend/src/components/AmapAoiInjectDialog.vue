@@ -1,13 +1,27 @@
 <template>
-    <div v-if="visible" class="aoi-dialog-inline">
-        <div class="aoi-dialog-card" role="dialog" aria-modal="false" aria-label="高德 AOI 数据注入">
+    <div
+        v-if="visible"
+        class="aoi-dialog-inline"
+    >
+        <div
+            class="aoi-dialog-card"
+            role="dialog"
+            aria-modal="false"
+            aria-label="高德 AOI 数据注入"
+        >
             <div class="aoi-dialog-head">
                 <div class="aoi-dialog-title">高德 AOI 数据注入</div>
-                <button class="aoi-dialog-close" type="button" @click="emit('close')">×</button>
+                <button
+                    class="aoi-dialog-close"
+                    type="button"
+                    @click="emit('close')"
+                >
+                    ×
+                </button>
             </div>
 
             <div class="aoi-dialog-tip">
-                推荐使用【方式1】获取，无需KEY、不限次数；<br>
+                推荐使用【方式1】获取，无需KEY、不限次数；<br />
                 【方式2】可直接获取AOI边界，但有每日额度限制。
             </div>
 
@@ -26,10 +40,19 @@
             <!-- 方式1：官方无Key接口 → 打开浏览器复制（推荐） -->
             <!-- ============================================== -->
             <div class="aoi-dialog-row aoi-dialog-actions-row">
-                <button class="aoi-dialog-btn" type="button" @click="openOfficialDetail">
+                <button
+                    class="aoi-dialog-btn"
+                    type="button"
+                    @click="openOfficialDetail"
+                >
                     方式1：打开高德详情（无Key）
                 </button>
-                <a class="aoi-dialog-link" :href="officialDetailUrl" target="_blank" rel="noopener noreferrer">
+                <a
+                    class="aoi-dialog-link"
+                    :href="officialDetailUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
                     {{ officialDetailUrl }}
                 </a>
             </div>
@@ -38,10 +61,19 @@
             <!-- 方式2：AOI边界接口 → 本地安全生成（不请求） -->
             <!-- ============================================== -->
             <div class="aoi-dialog-row aoi-dialog-actions-row">
-                <button class="aoi-dialog-btn" type="button" @click="getAoiBoundarySafe">
+                <button
+                    class="aoi-dialog-btn"
+                    type="button"
+                    @click="getAoiBoundarySafe"
+                >
                     方式2：获取AOI边界（限额度）
                 </button>
-                <a class="aoi-dialog-link" :href="aoiRequestUrl" target="_blank" rel="noopener noreferrer">
+                <a
+                    class="aoi-dialog-link"
+                    :href="aoiRequestUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
                     {{ aoiRequestUrl }}
                 </a>
             </div>
@@ -49,7 +81,13 @@
             <div class="aoi-dialog-row">
                 <div class="aoi-dialog-row-head">
                     <label class="aoi-dialog-label">详情 JSON</label>
-                    <button class="aoi-dialog-mini-btn" type="button" @click="handlePasteJson">粘贴 JSON</button>
+                    <button
+                        class="aoi-dialog-mini-btn"
+                        type="button"
+                        @click="handlePasteJson"
+                    >
+                        粘贴 JSON
+                    </button>
                 </div>
                 <textarea
                     :value="jsonText"
@@ -59,12 +97,34 @@
                 ></textarea>
             </div>
 
-            <div v-if="sourceLayerName" class="aoi-dialog-source">来源图层：{{ sourceLayerName }}</div>
-            <div v-if="errorMessage" class="aoi-dialog-error">{{ errorMessage }}</div>
+            <div
+                v-if="sourceLayerName"
+                class="aoi-dialog-source"
+            >
+                来源图层：{{ sourceLayerName }}
+            </div>
+            <div
+                v-if="errorMessage"
+                class="aoi-dialog-error"
+            >
+                {{ errorMessage }}
+            </div>
 
             <div class="aoi-dialog-foot">
-                <button class="aoi-dialog-btn aoi-dialog-btn-primary" type="button" @click="emit('submit')">解析绘制</button>
-                <button class="aoi-dialog-btn aoi-dialog-btn-ghost" type="button" @click="emit('close')">取消</button>
+                <button
+                    class="aoi-dialog-btn aoi-dialog-btn-primary"
+                    type="button"
+                    @click="emit('submit')"
+                >
+                    解析绘制
+                </button>
+                <button
+                    class="aoi-dialog-btn aoi-dialog-btn-ghost"
+                    type="button"
+                    @click="emit('close')"
+                >
+                    取消
+                </button>
             </div>
         </div>
     </div>
@@ -82,16 +142,10 @@ const props = defineProps({
     jsonText: { type: String, default: '' },
     detailUrl: { type: String, default: 'https://restapi.amap.com/' },
     sourceLayerName: { type: String, default: '' },
-    errorMessage: { type: String, default: '' }
+    errorMessage: { type: String, default: '' },
 });
 
-const emit = defineEmits([
-    'close',
-    'open-detail',
-    'submit',
-    'update:poiId',
-    'update:jsonText'
-]);
+const emit = defineEmits(['close', 'open-detail', 'submit', 'update:poiId', 'update:jsonText']);
 
 // ==============================================
 // 方式1：官方无Key接口（用户自己打开）
@@ -131,20 +185,18 @@ async function openOfficialDetail() {
             // 3. 业务逻辑失败（比如接口改版、频繁访问被封、参数失效）
             throw new Error(res.info || '接口返回异常');
         }
-
     } catch (e) {
         console.warn('后台解析官方接口失败:', e);
-        
+
         // 4. 容错处理：提醒用户并执行原始的跳转逻辑
         message.info('后台解析受阻，正在为你打开官方详情页进行手动获取...');
-        
+
         // 延迟一小会儿跳转，让用户看清提示
         setTimeout(() => {
             window.open(url, '_blank');
         }, 2000);
     }
 }
-
 
 // ==============================================
 // 方式2：AOI边界接口（真实请求）
@@ -165,22 +217,22 @@ async function getAoiBoundarySafe() {
 
     try {
         // 1. 使用 fetch 发起真实请求
-        const response = await fetch(aoiRequestUrl.value,{
+        const response = await fetch(aoiRequestUrl.value, {
             // 关键配置：隐藏来源信息
-            referrer: "", // 清空 Referer
-            referrerPolicy: "no-referrer", // 完全不发送 Referer
-            mode: "cors", // 保持跨域模式
-            credentials: "omit" // 不发送 Cookie、Origin 信息
+            referrer: '', // 清空 Referer
+            referrerPolicy: 'no-referrer', // 完全不发送 Referer
+            mode: 'cors', // 保持跨域模式
+            credentials: 'omit', // 不发送 Cookie、Origin 信息
         });
-        
+
         // 2. 检查网络状态
         if (!response.ok) throw new Error('网络请求失败');
-        
+
         // 3. 解析返回的 JSON 数据
         const realData = await response.json();
 
         // 4. 判断高德 API 的业务状态码码 (status 为 "1" 代表成功)
-        if (realData.status === "1" && realData.aois && realData.aois.length > 0) {
+        if (realData.status === '1' && realData.aois && realData.aois.length > 0) {
             const jsonStr = JSON.stringify(realData, null, 2);
             emit('update:jsonText', jsonStr);
             message.success('AOI数据抓取成功');
@@ -190,7 +242,6 @@ async function getAoiBoundarySafe() {
             // 失败时也可以把原始错误数据传出去方便调试
             emit('update:jsonText', JSON.stringify(realData, null, 2));
         }
-
     } catch (e) {
         console.error('请求AOI接口出错', e);
         message.error('请求失败，请检查网络或 API Key');

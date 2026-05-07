@@ -76,11 +76,11 @@ export function createBasemapResilience({ message }) {
                 }, checkTimeoutMs);
             }),
             // [改进] 快速失败：1.5s 就认为超时，而不是等 3s
-            new Promise(resolve =>
+            new Promise((resolve) =>
                 setTimeout(() => {
                     resolve({ success: false, reason: '加载超时（1.5s）' });
-                }, 1500)
-            )
+                }, 1500),
+            ),
         ]);
     };
 
@@ -108,7 +108,7 @@ export function createBasemapResilience({ message }) {
             reset: () => {
                 fallbackAttempts = 0;
                 lastFallbackKey = null;
-            }
+            },
         };
     };
 
@@ -179,7 +179,10 @@ export function createBasemapResilience({ message }) {
             if (activityTimer) clearTimeout(activityTimer);
             if (loadingTilesCount > 0) {
                 activityTimer = setTimeout(() => {
-                    switchToBackup(`服务无响应（${ACTIVITY_TIMEOUT / 1000}秒无瓦片加载）`, callbacks.onTimeout);
+                    switchToBackup(
+                        `服务无响应（${ACTIVITY_TIMEOUT / 1000}秒无瓦片加载）`,
+                        callbacks.onTimeout,
+                    );
                 }, ACTIVITY_TIMEOUT);
             }
         };
@@ -245,6 +248,6 @@ export function createBasemapResilience({ message }) {
     return {
         validateBaseLayerSwitch,
         createBaseLayerFallbackManager,
-        monitorLayerTimeout
+        monitorLayerTimeout,
     };
 }

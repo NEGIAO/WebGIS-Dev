@@ -5,7 +5,12 @@
                 <div class="title">公交规划</div>
                 <div class="title-sub">Transit Route Planner</div>
             </div>
-            <button class="ghost-btn" @click="$emit('close')">关闭</button>
+            <button
+                class="ghost-btn"
+                @click="$emit('close')"
+            >
+                关闭
+            </button>
         </div>
 
         <MapPointPickerCard
@@ -22,39 +27,89 @@
         />
 
         <div class="plan-row">
-            <label class="plan-label" for="lineTypeSelect">公交策略</label>
-            <select id="lineTypeSelect" v-model="lineType" class="plan-select">
+            <label
+                class="plan-label"
+                for="lineTypeSelect"
+                >公交策略</label
+            >
+            <select
+                id="lineTypeSelect"
+                v-model="lineType"
+                class="plan-select"
+            >
                 <option value="1">1 - 较快捷</option>
                 <option value="2">2 - 少换乘</option>
                 <option value="3">3 - 少步行</option>
                 <option value="4">4 - 不乘地铁</option>
             </select>
-            <button class="plan-btn" :disabled="planning" @click="startTransitPlan">
+            <button
+                class="plan-btn"
+                :disabled="planning"
+                @click="startTransitPlan"
+            >
                 {{ planning ? '规划中...' : '开始公交规划' }}
             </button>
         </div>
 
-        <div class="status-line error" v-if="errorMsg">{{ errorMsg }}</div>
-        <div class="status-line" v-else-if="pickMode === 'start'">请在主地图上单击一个位置设置起点</div>
-        <div class="status-line" v-else-if="pickMode === 'end'">请在主地图上单击一个位置设置终点</div>
+        <div
+            class="status-line error"
+            v-if="errorMsg"
+        >
+            {{ errorMsg }}
+        </div>
+        <div
+            class="status-line"
+            v-else-if="pickMode === 'start'"
+        >
+            请在主地图上单击一个位置设置起点
+        </div>
+        <div
+            class="status-line"
+            v-else-if="pickMode === 'end'"
+        >
+            请在主地图上单击一个位置设置终点
+        </div>
 
         <details class="debug-box">
             <summary>调试信息</summary>
-            <div class="debug-row"><span>请求状态：</span><span>{{ debugInfo.status }}</span></div>
-            <div class="debug-row"><span>resultCode：</span><span>{{ debugInfo.resultCode || '-' }}</span></div>
-            <div class="debug-row"><span>分组数量：</span><span>{{ debugInfo.groupCount }}</span></div>
-            <div class="debug-row"><span>线路数量：</span><span>{{ debugInfo.lineCount }}</span></div>
-            <div class="debug-row"><span>请求URL：</span><span class="debug-text">{{ debugInfo.requestUrl || '未发起请求' }}</span></div>
-            <div class="debug-row"><span>响应结构：</span><span class="debug-text">{{ debugInfo.responseShape || '-' }}</span></div>
-            <div class="debug-row"><span>候选数量：</span><span>{{ debugInfo.candidateCount }}</span></div>
-            <div class="debug-row"><span>提示：</span><span class="debug-text">{{ debugInfo.message || '-' }}</span></div>
+            <div class="debug-row">
+                <span>请求状态：</span><span>{{ debugInfo.status }}</span>
+            </div>
+            <div class="debug-row">
+                <span>resultCode：</span><span>{{ debugInfo.resultCode || '-' }}</span>
+            </div>
+            <div class="debug-row">
+                <span>分组数量：</span><span>{{ debugInfo.groupCount }}</span>
+            </div>
+            <div class="debug-row">
+                <span>线路数量：</span><span>{{ debugInfo.lineCount }}</span>
+            </div>
+            <div class="debug-row">
+                <span>请求URL：</span
+                ><span class="debug-text">{{ debugInfo.requestUrl || '未发起请求' }}</span>
+            </div>
+            <div class="debug-row">
+                <span>响应结构：</span
+                ><span class="debug-text">{{ debugInfo.responseShape || '-' }}</span>
+            </div>
+            <div class="debug-row">
+                <span>候选数量：</span><span>{{ debugInfo.candidateCount }}</span>
+            </div>
+            <div class="debug-row">
+                <span>提示：</span><span class="debug-text">{{ debugInfo.message || '-' }}</span>
+            </div>
         </details>
 
         <div class="planner-main">
-            <aside class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto">
+            <aside
+                class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"
+            >
                 <div class="route-title">候选路线</div>
 
-                <div v-if="routes.length === 0" class="text-xs text-emerald-700/60 leading-5">
+                <div
+                    v-if="routes.length === 0"
+                    class="text-xs text-emerald-700/60 leading-5"
+                >
                     先在主地图设置起终点并点击开始公交规划
                 </div>
 
@@ -77,10 +132,15 @@
                 </button>
             </aside>
 
-            <aside class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto">
+            <aside
+                class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"
+            >
                 <div class="route-title">导航步骤</div>
 
-                <div v-if="!selectedRoute" class="text-xs text-emerald-700/60 leading-5">
+                <div
+                    v-if="!selectedRoute"
+                    class="text-xs text-emerald-700/60 leading-5"
+                >
                     选择一个候选方案后，可查看每个分段的起点、终点和路段名称
                 </div>
 
@@ -106,7 +166,12 @@
                     </div>
                 </button>
 
-                <div v-if="selectedRoute && (!selectedRoute.steps || selectedRoute.steps.length === 0)" class="text-xs text-emerald-700/60 leading-5">
+                <div
+                    v-if="
+                        selectedRoute && (!selectedRoute.steps || selectedRoute.steps.length === 0)
+                    "
+                    class="text-xs text-emerald-700/60 leading-5"
+                >
                     当前方案未返回可展示的分段步骤
                 </div>
             </aside>
@@ -122,7 +187,6 @@ import { locationToAddress } from '../api';
 import { showLoading, hideLoading } from '../utils/loading';
 
 const message = useMessage();
-
 
 interface TransitStation {
     name: string;
@@ -210,7 +274,7 @@ const debugInfo = ref({
     message: '',
     resultCode: '',
     groupCount: 0,
-    lineCount: 0
+    lineCount: 0,
 });
 
 const selectedRoute = computed<RouteCandidate | null>(() => {
@@ -225,11 +289,16 @@ function parseSegmentMetrics(segment: TransitSegment) {
     const d = Number(firstLine?.segmentDistance ?? 0);
     return {
         time: Number.isFinite(t) ? t : 0,
-        distance: Number.isFinite(d) ? d : 0
+        distance: Number.isFinite(d) ? d : 0,
     };
 }
 
-function resolveStationName(name: string | undefined, type: 'start' | 'end', index: number, total: number): string {
+function resolveStationName(
+    name: string | undefined,
+    type: 'start' | 'end',
+    index: number,
+    total: number,
+): string {
     const normalized = String(name || '').trim();
     if (normalized) return normalized;
 
@@ -252,21 +321,39 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
 
     return raw.map((item, idx) => {
         const segmentList = Array.isArray(item?.segments) ? item.segments : [];
-        const total = segmentList.reduce((acc, segment) => {
-            const metrics = parseSegmentMetrics(segment);
-            return {
-                time: acc.time + metrics.time,
-                distance: acc.distance + metrics.distance
-            };
-        }, { time: 0, distance: 0 });
+        const total = segmentList.reduce(
+            (acc, segment) => {
+                const metrics = parseSegmentMetrics(segment);
+                return {
+                    time: acc.time + metrics.time,
+                    distance: acc.distance + metrics.distance,
+                };
+            },
+            { time: 0, distance: 0 },
+        );
 
-        const lineName = String(item?.lineName || '').replace(/\s*\|\s*$/, '').trim() || `方案 ${idx + 1}`;
+        const lineName =
+            String(item?.lineName || '')
+                .replace(/\s*\|\s*$/, '')
+                .trim() || `方案 ${idx + 1}`;
         const steps: StepInfo[] = segmentList.map((segment, segmentIndex) => {
-            const firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
+            const firstLine = Array.isArray(segment?.segmentLine)
+                ? segment.segmentLine[0]
+                : undefined;
             const metrics = parseSegmentMetrics(segment);
             const segmentType = Number(segment?.segmentType ?? 0);
-            const startName = resolveStationName(segment?.stationStart?.name, 'start', segmentIndex, segmentList.length);
-            const endName = resolveStationName(segment?.stationEnd?.name, 'end', segmentIndex, segmentList.length);
+            const startName = resolveStationName(
+                segment?.stationStart?.name,
+                'start',
+                segmentIndex,
+                segmentList.length,
+            );
+            const endName = resolveStationName(
+                segment?.stationEnd?.name,
+                'end',
+                segmentIndex,
+                segmentList.length,
+            );
             const segmentName = getSegmentDisplayName(segment, segmentIndex);
 
             return {
@@ -277,7 +364,7 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
                 startName,
                 endName,
                 time: Math.round(metrics.time),
-                distanceKm: (metrics.distance / 1000).toFixed(2)
+                distanceKm: (metrics.distance / 1000).toFixed(2),
             };
         });
 
@@ -287,7 +374,7 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
             time: Math.round(total.time),
             distanceKm: (total.distance / 1000).toFixed(2),
             segments: segmentList,
-            steps
+            steps,
         };
     });
 }
@@ -303,7 +390,7 @@ function extractLinesFromTransitResponse(data: TransitResponse) {
 
     return {
         groups,
-        lines: allLines
+        lines: allLines,
     };
 }
 
@@ -409,14 +496,14 @@ async function startTransitPlan() {
         message: '',
         resultCode: '',
         groupCount: 0,
-        lineCount: 0
+        lineCount: 0,
     };
 
     try {
         const postObj = {
             startposition: `${startPoint.value.lng},${startPoint.value.lat}`,
             endposition: `${endPoint.value.lng},${endPoint.value.lat}`,
-            linetype: String(lineType.value)
+            linetype: String(lineType.value),
         };
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
@@ -429,8 +516,11 @@ async function startTransitPlan() {
             throw new Error(`公交规划请求失败: ${res.status}`);
         }
 
-        const data = await res.json() as TransitResponse;
-        const shapeKeys = data && typeof data === 'object' ? Object.keys(data).slice(0, 8).join(', ') : typeof data;
+        const data = (await res.json()) as TransitResponse;
+        const shapeKeys =
+            data && typeof data === 'object'
+                ? Object.keys(data).slice(0, 8).join(', ')
+                : typeof data;
         const extracted = extractLinesFromTransitResponse(data);
         const normalized = normalizeTransitResults(extracted.lines);
 
@@ -458,7 +548,8 @@ async function startTransitPlan() {
         }
     } catch (err: any) {
         const rawMessage = err?.message || '';
-        const likelyNetworkBlocked = err instanceof TypeError || /failed\s+to\s+fetch/i.test(String(rawMessage));
+        const likelyNetworkBlocked =
+            err instanceof TypeError || /failed\s+to\s+fetch/i.test(String(rawMessage));
         const hint = likelyNetworkBlocked
             ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
             : '';
@@ -563,7 +654,9 @@ async function startTransitPlan() {
     font-weight: 600;
     white-space: nowrap;
     box-shadow: 0 6px 14px rgba(19, 90, 56, 0.25);
-    transition: transform 0.15s ease, box-shadow 0.2s ease;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.2s ease;
 }
 
 .plan-btn:hover:not(:disabled) {
@@ -645,7 +738,9 @@ async function startTransitPlan() {
 .route-card-active {
     border-color: #15803d;
     background: linear-gradient(160deg, rgba(187, 247, 208, 0.55), rgba(220, 252, 231, 0.8));
-    box-shadow: inset 0 0 0 1px rgba(21, 128, 61, 0.22), 0 8px 18px rgba(21, 128, 61, 0.13);
+    box-shadow:
+        inset 0 0 0 1px rgba(21, 128, 61, 0.22),
+        0 8px 18px rgba(21, 128, 61, 0.13);
 }
 
 .route-head {
@@ -702,7 +797,9 @@ async function startTransitPlan() {
 .step-card-active {
     border-color: #166534;
     background: linear-gradient(160deg, rgba(187, 247, 208, 0.6), rgba(220, 252, 231, 0.8));
-    box-shadow: inset 0 0 0 1px rgba(22, 101, 52, 0.22), 0 8px 18px rgba(22, 101, 52, 0.12);
+    box-shadow:
+        inset 0 0 0 1px rgba(22, 101, 52, 0.22),
+        0 8px 18px rgba(22, 101, 52, 0.12);
 }
 
 .step-head {

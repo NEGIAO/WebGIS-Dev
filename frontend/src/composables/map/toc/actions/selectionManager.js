@@ -1,7 +1,4 @@
-import {
-    normalizeTocLayerId,
-    normalizeTocLayerIdList
-} from '../protocol';
+import { normalizeTocLayerId, normalizeTocLayerIdList } from '../protocol';
 
 function scheduleSelectionChunk() {
     if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
@@ -62,7 +59,7 @@ function summarizeFolderSelectionRecursive(node, selectedSet) {
         if (!nodeId) return { total: 0, selected: 0 };
         return {
             total: 1,
-            selected: selectedSet.has(nodeId) ? 1 : 0
+            selected: selectedSet.has(nodeId) ? 1 : 0,
         };
     }
 
@@ -80,9 +77,10 @@ function summarizeFolderSelectionRecursive(node, selectedSet) {
 }
 
 export function resolveFolderSelectionState(node, selectedLayerIdsOrSet = []) {
-    const selectedSet = selectedLayerIdsOrSet instanceof Set
-        ? selectedLayerIdsOrSet
-        : new Set(normalizeLayerIdList(selectedLayerIdsOrSet));
+    const selectedSet =
+        selectedLayerIdsOrSet instanceof Set
+            ? selectedLayerIdsOrSet
+            : new Set(normalizeLayerIdList(selectedLayerIdsOrSet));
 
     const summary = summarizeFolderSelectionRecursive(node, selectedSet);
 
@@ -91,7 +89,7 @@ export function resolveFolderSelectionState(node, selectedLayerIdsOrSet = []) {
         selectedCount: summary.selected,
         isAllSelected: summary.total > 0 && summary.total === summary.selected,
         hasAnySelected: summary.selected > 0,
-        isPartialSelected: summary.selected > 0 && summary.selected < summary.total
+        isPartialSelected: summary.selected > 0 && summary.selected < summary.total,
     };
 }
 
@@ -99,8 +97,7 @@ export function pruneSelectedLayerIds(selectedLayerIds = [], availableLayerIds =
     const availableSet = new Set(normalizeLayerIdList(availableLayerIds));
     if (!availableSet.size) return [];
 
-    return normalizeLayerIdList(selectedLayerIds)
-        .filter((id) => availableSet.has(id));
+    return normalizeLayerIdList(selectedLayerIds).filter((id) => availableSet.has(id));
 }
 
 export function applyRecursiveSelection({
@@ -108,7 +105,7 @@ export function applyRecursiveSelection({
     treeNodes = [],
     targetNodeId = '',
     checked = true,
-    availableLayerIds = []
+    availableLayerIds = [],
 } = {}) {
     const selectedSet = new Set(normalizeLayerIdList(selectedLayerIds));
     const targetNode = findTreeNodeByIdRecursive(treeNodes, targetNodeId);
@@ -139,7 +136,7 @@ export async function applyRecursiveSelectionChunked({
     checked = true,
     availableLayerIds = [],
     chunkSize = 180,
-    shouldCancel
+    shouldCancel,
 } = {}) {
     const selectedSet = new Set(normalizeLayerIdList(selectedLayerIds));
     if (typeof shouldCancel === 'function' && shouldCancel()) {
@@ -185,12 +182,11 @@ export function resolveBatchTargetLayerIds({
     inputLayerIds = [],
     fallbackLayerId = '',
     selectedLayerIds = [],
-    availableLayerIds = []
+    availableLayerIds = [],
 } = {}) {
     const availableSet = new Set(normalizeLayerIdList(availableLayerIds));
 
-    const inputTargets = normalizeLayerIdList(inputLayerIds)
-        .filter((id) => availableSet.has(id));
+    const inputTargets = normalizeLayerIdList(inputLayerIds).filter((id) => availableSet.has(id));
     if (inputTargets.length > 0) return inputTargets;
 
     const fallback = normalizeTocLayerId(fallbackLayerId);

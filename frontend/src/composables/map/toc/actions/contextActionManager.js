@@ -1,7 +1,12 @@
 import { resolveBatchTargetLayerIds } from './selectionManager';
 import { normalizeTocExportFormat } from '../protocol';
 
-const LAYER_ID_FORWARD_EVENT_TYPES = new Set(['zoom-layer', 'view-layer', 'remove-layer', 'solo-layer']);
+const LAYER_ID_FORWARD_EVENT_TYPES = new Set([
+    'zoom-layer',
+    'view-layer',
+    'remove-layer',
+    'solo-layer',
+]);
 
 function canLayerExportFormat(layerActions, format) {
     if (!layerActions || typeof layerActions !== 'object') return true;
@@ -31,7 +36,7 @@ export function handleLayerTreeContextAction({
     openManualAoiDialogByPoi,
     onDragStart,
     onDrop,
-    resolveLayerActionsById
+    resolveLayerActionsById,
 } = {}) {
     const type = String(evt?.type || '').trim();
     if (!type) return false;
@@ -61,7 +66,7 @@ export function handleLayerTreeContextAction({
             inputLayerIds: evt.layerIds,
             fallbackLayerId: evt.layerId,
             selectedLayerIds,
-            availableLayerIds
+            availableLayerIds,
         });
 
         if (!targets.length) {
@@ -69,12 +74,14 @@ export function handleLayerTreeContextAction({
             return true;
         }
 
-        const operation = String(evt.operation || '').trim().toLowerCase();
+        const operation = String(evt.operation || '')
+            .trim()
+            .toLowerCase();
         if (operation === 'set-visible') {
             targets.forEach((layerId) => {
                 emit?.('toggle-layer-visibility', {
                     layerId,
-                    visible: !!evt.visible
+                    visible: !!evt.visible,
                 });
             });
             message?.success?.(`已批量${evt.visible ? '显示' : '隐藏'} ${targets.length} 个图层`);
@@ -83,7 +90,9 @@ export function handleLayerTreeContextAction({
 
         if (operation === 'export') {
             const format = normalizeTocExportFormat(evt.format);
-            const exportTargets = targets.filter((layerId) => canLayerExportFormat(resolveLayerActionsById?.(layerId), format));
+            const exportTargets = targets.filter((layerId) =>
+                canLayerExportFormat(resolveLayerActionsById?.(layerId), format),
+            );
 
             if (!exportTargets.length) {
                 message?.warning?.(`所选图层均不支持 ${format.toUpperCase()} 导出`);
@@ -95,10 +104,14 @@ export function handleLayerTreeContextAction({
             });
 
             if (exportTargets.length < targets.length) {
-                message?.info?.(`已过滤 ${targets.length - exportTargets.length} 个不支持 ${format.toUpperCase()} 的图层`);
+                message?.info?.(
+                    `已过滤 ${targets.length - exportTargets.length} 个不支持 ${format.toUpperCase()} 的图层`,
+                );
             }
 
-            message?.success?.(`已触发 ${exportTargets.length} 个图层的 ${format.toUpperCase()} 导出`);
+            message?.success?.(
+                `已触发 ${exportTargets.length} 个图层的 ${format.toUpperCase()} 导出`,
+            );
             return true;
         }
 
@@ -131,12 +144,15 @@ export function handleLayerTreeContextAction({
     }
 
     if (type === 'open-amap-aoi-panel') {
-        openManualAoiDialogByPoi?.({
-            poiid: evt?.poiid,
-            layerName: evt?.layerName
-        }, {
-            showMissingIdHint: true
-        });
+        openManualAoiDialogByPoi?.(
+            {
+                poiid: evt?.poiid,
+                layerName: evt?.layerName,
+            },
+            {
+                showMissingIdHint: true,
+            },
+        );
         return true;
     }
 
@@ -145,7 +161,7 @@ export function handleLayerTreeContextAction({
             layerId: evt.layerId,
             crs: evt.crs,
             fromCrs: evt.fromCrs,
-            toCrs: evt.toCrs
+            toCrs: evt.toCrs,
         });
         return true;
     }
@@ -159,7 +175,7 @@ export function handleLayerTreeContextAction({
 
         emit?.('export-layer-data', {
             layerId: evt.layerId,
-            format
+            format,
         });
         return true;
     }

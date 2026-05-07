@@ -3,10 +3,10 @@ import VectorSource from 'ol/source/Vector';
 
 /**
  * [Phase 19]: Managed Vector Layer Creation Composable
- * 
+ *
  * 提取创建托管矢量图层的生命周期逻辑
  * 职责：图层创建、要素规范化、样式应用、数据登记
- * 
+ *
  * @param {Object} config - Configuration object
  * @param {Ref} config.mapInstanceRef - Map instance reference
  * @param {Array} config.userDataLayers - User data layers registry
@@ -24,32 +24,24 @@ export function useCreateManagedVectorLayer({
     featureHelpers,
     metadataHelpers,
     registryHelpers,
-    styleTemplates
+    styleTemplates,
 }) {
-    const {
-        normalizeStyleConfig,
-        buildManagedLayerStyle
-    } = styleHelpers;
+    const { normalizeStyleConfig, buildManagedLayerStyle } = styleHelpers;
 
-    const {
-        serializeManagedFeatures,
-        ensureFeatureId
-    } = featureHelpers;
+    const { serializeManagedFeatures, ensureFeatureId } = featureHelpers;
 
-    const {
-        normalizeLayerMetadata
-    } = metadataHelpers;
+    const { normalizeLayerMetadata } = metadataHelpers;
 
     const {
         createManagedLayerId,
         emitUserLayersChange,
         emitGraphicsOverview,
-        refreshUserLayerZIndex
+        refreshUserLayerZIndex,
     } = registryHelpers;
 
     /**
      * 创建并登记托管矢量图层
-     * 
+     *
      * [流程]:
      * 1. 验证 map 实例和要素数据
      * 2. 规范化样式配置和元数据
@@ -60,7 +52,7 @@ export function useCreateManagedVectorLayer({
      * 7. 刷新 zIndex 索引
      * 8. 触发外部事件同步（UI 面板）
      * 9. 可选执行 fitView 操作
-     * 
+     *
      * @param {Object} params - Layer creation parameters
      * @param {string} params.name - Layer display name
      * @param {string} params.type - Layer type (e.g., 'shape', 'route')
@@ -80,7 +72,7 @@ export function useCreateManagedVectorLayer({
         styleConfig,
         autoLabel = false,
         metadata = null,
-        fitView = false
+        fitView = false,
     }) {
         if (!mapInstanceRef.value || !features?.length) return null;
 
@@ -98,7 +90,7 @@ export function useCreateManagedVectorLayer({
             labelVisible,
             metadata: normalizedMetadata,
             styleConfig: normalizedStyle,
-            labelStyleCache: new globalThis.Map()
+            labelStyleCache: new globalThis.Map(),
         };
 
         // 4. 创建 VectorLayer
@@ -106,7 +98,7 @@ export function useCreateManagedVectorLayer({
             source: new VectorSource({ features }),
             zIndex: 120,
             style: buildManagedLayerStyle(managedLayerState),
-            properties: { name }
+            properties: { name },
         });
 
         // 5. 序列化要素并应用 ID
@@ -133,7 +125,7 @@ export function useCreateManagedVectorLayer({
             metadata: normalizedMetadata,
             styleConfig: normalizedStyle,
             labelStyleCache: managedLayerState.labelStyleCache,
-            layer
+            layer,
         });
 
         // 8. 触发层索引刷新和外部事件
@@ -145,7 +137,7 @@ export function useCreateManagedVectorLayer({
         if (fitView) {
             mapInstanceRef.value.getView().fit(layer.getSource().getExtent(), {
                 padding: [50, 50, 50, 50],
-                duration: 1000
+                duration: 1000,
             });
         }
 
@@ -153,6 +145,6 @@ export function useCreateManagedVectorLayer({
     }
 
     return {
-        createManagedVectorLayer
+        createManagedVectorLayer,
     };
 }

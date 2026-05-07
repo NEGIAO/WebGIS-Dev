@@ -1,26 +1,26 @@
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import App from './App.vue'
-import router from './router'
-import { useMessage } from './composables/useMessage'
-import { useUserPreferencesStore } from './stores'
+import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import App from './App.vue';
+import router from './router';
+import { useMessage } from './composables/useMessage';
+import { useUserPreferencesStore } from './stores';
 
-const app = createApp(App)
-const pinia = createPinia()
+const app = createApp(App);
+const pinia = createPinia();
 
-app.use(pinia)
-app.use(router)
+app.use(pinia);
+app.use(router);
 
-const userPreferencesStore = useUserPreferencesStore(pinia)
-void userPreferencesStore.bootstrap()
+const userPreferencesStore = useUserPreferencesStore(pinia);
+void userPreferencesStore.bootstrap();
 
 // Mount immediately so RouterView and GlobalLoading can render during async guards.
-app.mount('#app')
+app.mount('#app');
 
 // Keep message host initialization after router ready.
 router.isReady().finally(() => {
-	queueMicrotask(() => {
-		const message = useMessage()
-		message.ensureMessageHost('top-center')
-	})
-})
+    queueMicrotask(() => {
+        const message = useMessage();
+        message.ensureMessageHost('top-center');
+    });
+});

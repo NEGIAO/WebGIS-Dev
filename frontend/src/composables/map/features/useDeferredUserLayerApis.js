@@ -26,24 +26,25 @@ export function createDeferredUserLayerApis({
     refreshLayersState,
     isRouteManagedLayer,
     onRouteManagedLayerRemoved,
-    emitFeatureSelected
+    emitFeatureSelected,
 }) {
     let layerDataImportApiPromise = null;
     let userLayerActionsApiPromise = null;
 
     async function ensureLayerDataImportApi() {
         if (!layerDataImportApiPromise) {
-            layerDataImportApiPromise = import('../../useLayerDataImport').then(({ useLayerDataImport }) => (
-                useLayerDataImport({
-                    mapInstance: mapInstanceRef,
-                    initialView,
-                    userDataLayers,
-                    addManagedLayerRecord,
-                    createManagedVectorLayer,
-                    styleTemplates,
-                    onImportProgress
-                })
-            ));
+            layerDataImportApiPromise = import('../../useLayerDataImport').then(
+                ({ useLayerDataImport }) =>
+                    useLayerDataImport({
+                        mapInstance: mapInstanceRef,
+                        initialView,
+                        userDataLayers,
+                        addManagedLayerRecord,
+                        createManagedVectorLayer,
+                        styleTemplates,
+                        onImportProgress,
+                    }),
+            );
         }
         return layerDataImportApiPromise;
     }
@@ -52,26 +53,28 @@ export function createDeferredUserLayerApis({
         if (!userLayerActionsApiPromise) {
             userLayerActionsApiPromise = Promise.all([
                 import('../../useUserLayerActions'),
-                ensureLayerDataImportApi()
-            ]).then(([actionsMod, dataImportApi]) => actionsMod.useUserLayerActions({
-                mapInstance: mapInstanceRef,
-                userDataLayers,
-                refreshUserLayerZIndex,
-                emitUserLayersChange,
-                emitGraphicsOverview,
-                mergeStyleConfig,
-                applyManagedLayerStyle,
-                styleTemplates,
-                setDrawStyle,
-                layerList: layerListRef,
-                selectedLayer: selectedLayerRef,
-                getLayerCategory,
-                refreshLayersState,
-                projectExtentToMapView: dataImportApi.projectExtentToMapView,
-                emitFeatureSelected,
-                isRouteManagedLayer,
-                onRouteManagedLayerRemoved
-            }));
+                ensureLayerDataImportApi(),
+            ]).then(([actionsMod, dataImportApi]) =>
+                actionsMod.useUserLayerActions({
+                    mapInstance: mapInstanceRef,
+                    userDataLayers,
+                    refreshUserLayerZIndex,
+                    emitUserLayersChange,
+                    emitGraphicsOverview,
+                    mergeStyleConfig,
+                    applyManagedLayerStyle,
+                    styleTemplates,
+                    setDrawStyle,
+                    layerList: layerListRef,
+                    selectedLayer: selectedLayerRef,
+                    getLayerCategory,
+                    refreshLayersState,
+                    projectExtentToMapView: dataImportApi.projectExtentToMapView,
+                    emitFeatureSelected,
+                    isRouteManagedLayer,
+                    onRouteManagedLayerRemoved,
+                }),
+            );
         }
 
         return userLayerActionsApiPromise;
@@ -105,6 +108,6 @@ export function createDeferredUserLayerApis({
         setBaseLayerActive,
         setLayerVisibility,
         zoomToUserLayer,
-        viewUserLayer
+        viewUserLayer,
     };
 }

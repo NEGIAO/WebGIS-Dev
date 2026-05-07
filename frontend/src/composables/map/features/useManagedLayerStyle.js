@@ -6,20 +6,17 @@ const DEFAULT_STYLE_TEMPLATE = {
     fillOpacity: 0.24,
     strokeColor: '#2f7d3c',
     strokeWidth: 2,
-    pointRadius: 6
+    pointRadius: 6,
 };
 
 /**
  * 托管图层样式功能库
  * 职责：样式归一化、标签生成、样式函数构建与应用。
  */
-export function createManagedLayerStyleFeature({
-    styleTemplates,
-    maxLabelLength = 100
-} = {}) {
+export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength = 100 } = {}) {
     const defaultStyleTemplate = {
         ...DEFAULT_STYLE_TEMPLATE,
-        ...(styleTemplates?.classic || {})
+        ...(styleTemplates?.classic || {}),
     };
 
     const normalizeStyleConfig = (styleCfg = {}) => {
@@ -29,7 +26,7 @@ export function createManagedLayerStyleFeature({
             fillOpacity: Math.min(1, Math.max(0, Number(base.fillOpacity ?? 0.2))),
             strokeColor: base.strokeColor,
             strokeWidth: Math.max(0.5, Number(base.strokeWidth ?? 2)),
-            pointRadius: Math.max(3, Number(base.pointRadius ?? 6))
+            pointRadius: Math.max(3, Number(base.pointRadius ?? 6)),
         };
     };
 
@@ -47,26 +44,29 @@ export function createManagedLayerStyleFeature({
             image: new CircleStyle({
                 radius: cfg.pointRadius,
                 fill: new Fill({ color: cfg.fillColor }),
-                stroke: new Stroke({ color: cfg.strokeColor, width: Math.max(1, cfg.strokeWidth / 2) })
+                stroke: new Stroke({
+                    color: cfg.strokeColor,
+                    width: Math.max(1, cfg.strokeWidth / 2),
+                }),
             }),
             text: labelText
                 ? new Text({
-                    // =======================
-                    // 已改成要的样式 ✅
-                    // =======================
-                    text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
-                    font: '600 14px "Microsoft YaHei", "PingFang SC", sans-serif',
-                    fill: new Fill({ color: '#ffffff' }),
-                    stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.72)', width: 3 }),
-                    overflow: true,
+                      // =======================
+                      // 已改成要的样式 ✅
+                      // =======================
+                      text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
+                      font: '600 14px "Microsoft YaHei", "PingFang SC", sans-serif',
+                      fill: new Fill({ color: '#ffffff' }),
+                      stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.72)', width: 3 }),
+                      overflow: true,
 
-                    // 清理旧样式
-                    backgroundFill: undefined,
-                    padding: [0, 0, 0, 0],
-                    offsetY: 0,
-                    textAlign: 'center'
-                })
-                : undefined
+                      // 清理旧样式
+                      backgroundFill: undefined,
+                      padding: [0, 0, 0, 0],
+                      offsetY: 0,
+                      textAlign: 'center',
+                  })
+                : undefined,
         });
     };
 
@@ -92,12 +92,26 @@ export function createManagedLayerStyleFeature({
         const preferredField = String(layerItem?.metadata?.labelField || '').trim();
         if (preferredField) {
             const preferredValue = props[preferredField];
-            if (preferredValue !== null && preferredValue !== undefined && isLabelValid(preferredValue, maxLabelLength)) {
+            if (
+                preferredValue !== null &&
+                preferredValue !== undefined &&
+                isLabelValid(preferredValue, maxLabelLength)
+            ) {
                 return String(preferredValue).trim();
             }
         }
 
-        const candidateKeys = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'TITLE', 'label', 'Label'];
+        const candidateKeys = [
+            'name',
+            'Name',
+            'NAME',
+            '名称',
+            'title',
+            'Title',
+            'TITLE',
+            'label',
+            'Label',
+        ];
         for (const key of candidateKeys) {
             const value = props[key];
             if (value !== null && value !== undefined && isLabelValid(value, maxLabelLength)) {
@@ -105,15 +119,16 @@ export function createManagedLayerStyleFeature({
             }
         }
 
-        const firstUsableEntry = Object.entries(props).find(([key, value]) => (
-            key !== 'geometry'
-            && key !== 'style'
-            && !String(key).startsWith('_')
-            && value !== null
-            && value !== undefined
-            && isLabelValid(value, maxLabelLength)
-            && String(value).trim()
-        ));
+        const firstUsableEntry = Object.entries(props).find(
+            ([key, value]) =>
+                key !== 'geometry' &&
+                key !== 'style' &&
+                !String(key).startsWith('_') &&
+                value !== null &&
+                value !== undefined &&
+                isLabelValid(value, maxLabelLength) &&
+                String(value).trim(),
+        );
         if (firstUsableEntry) {
             return String(firstUsableEntry[1]).trim();
         }
@@ -153,6 +168,6 @@ export function createManagedLayerStyleFeature({
         createStyleFromConfig,
         mergeStyleConfig,
         buildManagedLayerStyle,
-        applyManagedLayerStyle
+        applyManagedLayerStyle,
     };
 }

@@ -12,7 +12,7 @@ import { Fill, Stroke, Style, Text } from 'ol/style';
 import { apiAddressGeocode } from '../api';
 import {
     getGlobalUserLocationContext,
-    USER_LOCATION_CONTEXT_CHANGE_EVENT
+    USER_LOCATION_CONTEXT_CHANGE_EVENT,
 } from '../utils/userLocationContext';
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
@@ -74,7 +74,9 @@ function formatNumber(value, fractionDigits) {
  * @returns {'0'|'1'} 规范化后的标记
  */
 function normalizeBinaryFlag(value, fallback = '0') {
-    const raw = String(getFirstValue(value) ?? '').trim().toLowerCase();
+    const raw = String(getFirstValue(value) ?? '')
+        .trim()
+        .toLowerCase();
     if (raw === '1' || raw === 'true') return '1';
     if (raw === '0' || raw === 'false') return '0';
     return fallback === '1' ? '1' : '0';
@@ -98,7 +100,7 @@ function parseHashQuery() {
         l: params.get('l'),
         s: params.get('s'),
         loc: params.get('loc'),
-        p: params.get('p')
+        p: params.get('p'),
     };
 }
 
@@ -122,7 +124,7 @@ function resolvePreferredDefaultLayerIndex() {
 /**
  * 地图状态管理组合式函数
  * 负责 URL 同步、图层切换、地形线渲染与视图动画
- * 
+ *
  * @param {Object} mapInstance - ShallowRef 包装的 OpenLayers Map 实例
  * @param {Object} options - 配置选项
  * @param {number} [options.defaultZoom=17] - 默认缩放级别
@@ -147,13 +149,13 @@ export function useMapState(mapInstance, options = {}) {
         flyDuration = 700,
         syncDebounceMs = 500,
         getLayerIndex = () => null,
-        onLayerIndexChange = () => { },
+        onLayerIndexChange = () => {},
         layerListRef = null,
         layerInstances = null,
         layerConfigs = null,
         resolveVisibleLayerIds = null,
         satelliteLayers = ['tianDiTu', 'Google', 'esri', 'google'],
-        vectorLayers = ['tianDiTu_vec']
+        vectorLayers = ['tianDiTu_vec'],
     } = options;
 
     let moveEndKey = null;
@@ -238,7 +240,7 @@ export function useMapState(mapInstance, options = {}) {
             hasLocationCondition: locateFlagReady || hasGlobalLocation,
             hasGlobalLocation,
             globalLng,
-            globalLat
+            globalLat,
         };
     }
 
@@ -250,12 +252,8 @@ export function useMapState(mapInstance, options = {}) {
      * @private
      */
     function resolvePositionCode(fallbackLng = null, fallbackLat = null) {
-        const {
-            hasLocationCondition,
-            hasGlobalLocation,
-            globalLng,
-            globalLat
-        } = resolveLocationState();
+        const { hasLocationCondition, hasGlobalLocation, globalLng, globalLat } =
+            resolveLocationState();
 
         if (!hasLocationCondition) return '0';
 
@@ -276,29 +274,24 @@ export function useMapState(mapInstance, options = {}) {
         let lat = parseNumber(readQueryValue('lat'));
         const zoom = parseNumber(readQueryValue('z'));
         // 默认底图索引统一由 DEFAULT_BASEMAP_LAYER_INDEX 控制。
-        const layerIndex = parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ?? resolvePreferredDefaultLayerIndex();
+        const layerIndex =
+            parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ??
+            resolvePreferredDefaultLayerIndex();
 
         //修复URL错误
         const compactPosCode = String(readQueryValue('p') ?? '').trim();
 
-        if (
-            (lng === null || lat === null)
-            && compactPosCode
-            && compactPosCode !== '0'
-        ) {
-
+        if ((lng === null || lat === null) && compactPosCode && compactPosCode !== '0') {
             const { hasLocationCondition } = resolveLocationState();
 
             if (hasLocationCondition) {
-
                 const decodedPos = decodePos(compactPosCode);
 
                 if (
-                    decodedPos
-                    && Number.isFinite(decodedPos.lng)
-                    && Number.isFinite(decodedPos.lat)
+                    decodedPos &&
+                    Number.isFinite(decodedPos.lng) &&
+                    Number.isFinite(decodedPos.lat)
                 ) {
-
                     lng = decodedPos.lng;
                     lat = decodedPos.lat;
                 }
@@ -309,7 +302,7 @@ export function useMapState(mapInstance, options = {}) {
             lng,
             lat,
             zoom: zoom === null ? defaultZoom : zoom,
-            layerIndex
+            layerIndex,
         };
     }
 
@@ -322,7 +315,9 @@ export function useMapState(mapInstance, options = {}) {
     function buildQuery({ lng, lat, zoom, layerIndex }) {
         const shareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
         const locateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
-        const normalizedLayerIndex = Number.isInteger(layerIndex) ? layerIndex : DEFAULT_BASEMAP_LAYER_INDEX;
+        const normalizedLayerIndex = Number.isInteger(layerIndex)
+            ? layerIndex
+            : DEFAULT_BASEMAP_LAYER_INDEX;
         const compactPosCode = resolvePositionCode(lng, lat);
 
         return {
@@ -332,7 +327,7 @@ export function useMapState(mapInstance, options = {}) {
             l: String(normalizedLayerIndex),
             s: shareFlag,
             loc: locateFlag,
-            p: compactPosCode || '0'
+            p: compactPosCode || '0',
         };
     }
 
@@ -351,13 +346,15 @@ export function useMapState(mapInstance, options = {}) {
         const currentLocateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
         const currentPosCode = String(readQueryValue('p') ?? '0');
 
-        return currentLng === String(nextQuery.lng ?? '')
-            && currentLat === String(nextQuery.lat ?? '')
-            && currentZoom === String(nextQuery.z ?? '')
-            && currentLayer === String(nextQuery.l ?? '')
-            && currentShareFlag === String(nextQuery.s ?? '0')
-            && currentLocateFlag === String(nextQuery.loc ?? '0')
-            && currentPosCode === String(nextQuery.p ?? '0');
+        return (
+            currentLng === String(nextQuery.lng ?? '') &&
+            currentLat === String(nextQuery.lat ?? '') &&
+            currentZoom === String(nextQuery.z ?? '') &&
+            currentLayer === String(nextQuery.l ?? '') &&
+            currentShareFlag === String(nextQuery.s ?? '0') &&
+            currentLocateFlag === String(nextQuery.loc ?? '0') &&
+            currentPosCode === String(nextQuery.p ?? '0')
+        );
     }
 
     /**
@@ -367,18 +364,19 @@ export function useMapState(mapInstance, options = {}) {
      */
     function replaceUrlQuery(nextQuery) {
         if (
-            !nextQuery?.lng
-            || !nextQuery?.lat
-            || !nextQuery?.z
-            || !nextQuery?.l
-            || !nextQuery?.s
-            || !nextQuery?.loc
-            || !nextQuery?.p
-        ) return;
+            !nextQuery?.lng ||
+            !nextQuery?.lat ||
+            !nextQuery?.z ||
+            !nextQuery?.l ||
+            !nextQuery?.s ||
+            !nextQuery?.loc ||
+            !nextQuery?.p
+        )
+            return;
 
         const mergedQuery = {
             ...getCurrentQuerySnapshot(),
-            ...nextQuery
+            ...nextQuery,
         };
 
         Object.keys(mergedQuery).forEach((key) => {
@@ -393,10 +391,12 @@ export function useMapState(mapInstance, options = {}) {
         if (isSameQuery(nextQuery)) return;
 
         if (router && route) {
-            void router.replace({
-                path: route.path || '/home',
-                query: mergedQuery
-            }).catch(() => { });
+            void router
+                .replace({
+                    path: route.path || '/home',
+                    query: mergedQuery,
+                })
+                .catch(() => {});
             return;
         }
 
@@ -426,7 +426,10 @@ export function useMapState(mapInstance, options = {}) {
      */
     function stopLocationContextSync() {
         if (typeof window === 'undefined' || !locationContextChangeHandler) return;
-        window.removeEventListener(USER_LOCATION_CONTEXT_CHANGE_EVENT, locationContextChangeHandler);
+        window.removeEventListener(
+            USER_LOCATION_CONTEXT_CHANGE_EVENT,
+            locationContextChangeHandler,
+        );
         locationContextChangeHandler = null;
     }
 
@@ -498,15 +501,14 @@ export function useMapState(mapInstance, options = {}) {
         const normalizedZoom = parseNumber(zoom ?? z);
 
         if (view && normalizedLng !== null && normalizedLat !== null) {
-            const targetZoom = normalizedZoom === null
-                ? Number(view.getZoom?.() ?? defaultZoom)
-                : normalizedZoom;
+            const targetZoom =
+                normalizedZoom === null ? Number(view.getZoom?.() ?? defaultZoom) : normalizedZoom;
 
             if (typeof view.animate === 'function') {
                 view.animate({
                     center: fromLonLat([normalizedLng, normalizedLat]),
                     zoom: targetZoom,
-                    duration: Number(duration) > 0 ? Number(duration) : flyDuration
+                    duration: Number(duration) > 0 ? Number(duration) : flyDuration,
                 });
             } else {
                 view.setCenter?.(fromLonLat([normalizedLng, normalizedLat]));
@@ -514,7 +516,8 @@ export function useMapState(mapInstance, options = {}) {
             }
         }
 
-        const finalLayerIndex = normalizedLayerIndex !== null ? normalizedLayerIndex : parseInteger(getLayerIndex());
+        const finalLayerIndex =
+            normalizedLayerIndex !== null ? normalizedLayerIndex : parseInteger(getLayerIndex());
         let finalLng = normalizedLng;
         let finalLat = normalizedLat;
         let finalZoom = normalizedZoom;
@@ -530,21 +533,28 @@ export function useMapState(mapInstance, options = {}) {
             finalZoom = finalZoom === null ? currentZoom : finalZoom;
         }
 
-        if (finalLng === null || finalLat === null || finalZoom === null || finalLayerIndex === null) {
+        if (
+            finalLng === null ||
+            finalLat === null ||
+            finalZoom === null ||
+            finalLayerIndex === null
+        ) {
             return;
         }
 
-        replaceUrlQuery(buildQuery({
-            lng: finalLng,
-            lat: finalLat,
-            zoom: finalZoom,
-            layerIndex: finalLayerIndex
-        }));
+        replaceUrlQuery(
+            buildQuery({
+                lng: finalLng,
+                lat: finalLat,
+                zoom: finalZoom,
+                layerIndex: finalLayerIndex,
+            }),
+        );
     }
 
     /**
      * 更新地图视图（flyToView 的别名）
-     * @param {Object} params - 目标参数 
+     * @param {Object} params - 目标参数
      */
     function updateMapView(params = {}) {
         flyToView(params);
@@ -559,11 +569,7 @@ export function useMapState(mapInstance, options = {}) {
      * @param {number} [options.duration=flyDuration] - 动画时长（毫秒）
      * @returns {Promise<null|{lng:number,lat:number,adcode:string,level:string,formattedAddress:string}>}
      */
-    async function locateAddress(address, {
-        city = '',
-        zoom = 16,
-        duration = flyDuration
-    } = {}) {
+    async function locateAddress(address, { city = '', zoom = 16, duration = flyDuration } = {}) {
         const normalizedAddress = String(address || '').trim();
         if (!normalizedAddress) return null;
 
@@ -580,7 +586,7 @@ export function useMapState(mapInstance, options = {}) {
         view.animate({
             center: fromLonLat([result.lng, result.lat]),
             zoom: targetZoom,
-            duration: targetDuration
+            duration: targetDuration,
         });
 
         return result;
@@ -595,11 +601,10 @@ export function useMapState(mapInstance, options = {}) {
      * @param {number} [options.maxZoom=11] - 最大缩放级别
      * @returns {boolean} 是否执行成功
      */
-    function fitToLonLatExtent(extentLonLat, {
-        duration = flyDuration,
-        padding = [80, 80, 80, 80],
-        maxZoom = 11
-    } = {}) {
+    function fitToLonLatExtent(
+        extentLonLat,
+        { duration = flyDuration, padding = [80, 80, 80, 80], maxZoom = 11 } = {},
+    ) {
         const map = mapInstance?.value;
         const view = map?.getView?.();
         if (!map || !view || !Array.isArray(extentLonLat) || extentLonLat.length < 4) {
@@ -622,7 +627,7 @@ export function useMapState(mapInstance, options = {}) {
             Math.min(lowerLeft[0], upperRight[0]),
             Math.min(lowerLeft[1], upperRight[1]),
             Math.max(lowerLeft[0], upperRight[0]),
-            Math.max(lowerLeft[1], upperRight[1])
+            Math.max(lowerLeft[1], upperRight[1]),
         ];
 
         if (!extent.every((item) => Number.isFinite(item))) {
@@ -632,7 +637,8 @@ export function useMapState(mapInstance, options = {}) {
         const width = Math.abs(extent[2] - extent[0]);
         const height = Math.abs(extent[3] - extent[1]);
         const normalizedDuration = Number(duration) > 0 ? Number(duration) : flyDuration;
-        const normalizedPadding = Array.isArray(padding) && padding.length === 4 ? padding : [80, 80, 80, 80];
+        const normalizedPadding =
+            Array.isArray(padding) && padding.length === 4 ? padding : [80, 80, 80, 80];
         const normalizedMaxZoom = Number.isFinite(Number(maxZoom)) ? Number(maxZoom) : 11;
 
         if (width < 1e-6 || height < 1e-6) {
@@ -644,7 +650,7 @@ export function useMapState(mapInstance, options = {}) {
         view.fit(extent, {
             duration: normalizedDuration,
             padding: normalizedPadding,
-            maxZoom: normalizedMaxZoom
+            maxZoom: normalizedMaxZoom,
         });
 
         return true;
@@ -688,7 +694,7 @@ export function useMapState(mapInstance, options = {}) {
     function refreshLayerInstances({
         layerList = layerListRef?.value,
         instanceMap = layerInstances,
-        configs = layerConfigs
+        configs = layerConfigs,
     } = {}) {
         if (!Array.isArray(layerList) || !instanceMap) return;
 
@@ -747,21 +753,25 @@ export function useMapState(mapInstance, options = {}) {
      * @param {Array} [options.vectorIds] - 矢量图层 ID 列表
      * @param {Function} [options.onUpdated] - 更新完成的回调函数
      */
-    function switchLayerById(layerId, {
-        layerList = layerListRef?.value,
-        instanceMap = layerInstances,
-        configs = layerConfigs,
-        visibleLayerResolver = resolveVisibleLayerIds,
-        satelliteIds = satelliteLayers,
-        vectorIds = vectorLayers,
-        onUpdated
-    } = {}) {
+    function switchLayerById(
+        layerId,
+        {
+            layerList = layerListRef?.value,
+            instanceMap = layerInstances,
+            configs = layerConfigs,
+            visibleLayerResolver = resolveVisibleLayerIds,
+            satelliteIds = satelliteLayers,
+            vectorIds = vectorLayers,
+            onUpdated,
+        } = {},
+    ) {
         if (!Array.isArray(layerList) || !layerId) return;
         let normalizedResolvedIds = null;
 
-        const resolvedIds = typeof visibleLayerResolver === 'function'
-            ? visibleLayerResolver(layerId, { layerList, instanceMap, configs })
-            : null;
+        const resolvedIds =
+            typeof visibleLayerResolver === 'function'
+                ? visibleLayerResolver(layerId, { layerList, instanceMap, configs })
+                : null;
 
         const visibleIdSet = new Set();
 
@@ -812,7 +822,13 @@ export function useMapState(mapInstance, options = {}) {
             if (!item.visible) {
                 const cfg = configs.find((c) => c.id === item.id);
                 const category = cfg?.category;
-                const isBasemap = category === 'label' || category === 'imagery' || category === 'vector' || category === 'terrain' || category === 'theme' || category === 'custom';
+                const isBasemap =
+                    category === 'label' ||
+                    category === 'imagery' ||
+                    category === 'vector' ||
+                    category === 'terrain' ||
+                    category === 'theme' ||
+                    category === 'custom';
                 if (isBasemap) {
                     clearLayerSourceForced(item.id);
                 }
@@ -868,16 +884,16 @@ export function useMapState(mapInstance, options = {}) {
             stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 2 }),
             text: textLabel
                 ? new Text({
-                    text: textLabel,
-                    font: 'bold 12px Consolas, Monaco, monospace',
-                    fill: new Fill({ color: '#124e28' }),
-                    backgroundFill: new Fill({ color: 'rgba(255,255,255,0.9)' }),
-                    padding: [2, 4, 2, 4],
-                    offsetX: textOptions.offsetX ?? 0,
-                    offsetY: textOptions.offsetY ?? -10,
-                    textAlign: textOptions.textAlign ?? 'center'
-                })
-                : undefined
+                      text: textLabel,
+                      font: 'bold 12px Consolas, Monaco, monospace',
+                      fill: new Fill({ color: '#124e28' }),
+                      backgroundFill: new Fill({ color: 'rgba(255,255,255,0.9)' }),
+                      padding: [2, 4, 2, 4],
+                      offsetX: textOptions.offsetX ?? 0,
+                      offsetY: textOptions.offsetY ?? -10,
+                      textAlign: textOptions.textAlign ?? 'center',
+                  })
+                : undefined,
         });
     }
 
@@ -894,7 +910,7 @@ export function useMapState(mapInstance, options = {}) {
 
         graticuleLayer = new VectorLayer({
             source: new VectorSource(),
-            zIndex: 1080
+            zIndex: 1080,
         });
         map.addLayer(graticuleLayer);
         return graticuleLayer;
@@ -959,24 +975,30 @@ export function useMapState(mapInstance, options = {}) {
             features.push(line);
 
             const leftLabel = new Feature({ geometry: new Point(start) });
-            leftLabel.setStyle(createGraticuleStyle(formatLatitude(lat), { offsetX: 42, textAlign: 'left' }));
+            leftLabel.setStyle(
+                createGraticuleStyle(formatLatitude(lat), { offsetX: 42, textAlign: 'left' }),
+            );
             const rightLabel = new Feature({ geometry: new Point(end) });
-            rightLabel.setStyle(createGraticuleStyle(formatLatitude(lat), { offsetX: -42, textAlign: 'right' }));
+            rightLabel.setStyle(
+                createGraticuleStyle(formatLatitude(lat), { offsetX: -42, textAlign: 'right' }),
+            );
             features.push(leftLabel, rightLabel);
         });
 
         const centerCoord = fromLonLat([centerLon, centerLat]);
         const centerPlus = new Feature({ geometry: new Point(centerCoord) });
-        centerPlus.setStyle(new Style({
-            text: new Text({
-                text: '+',
-                font: '700 26px "Segoe UI", "Arial", sans-serif',
-                fill: new Fill({ color: 'rgba(255, 235, 130, 0.98)' }),
-                stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.78)', width: 3 }),
-                textAlign: 'center',
-                textBaseline: 'middle'
-            })
-        }));
+        centerPlus.setStyle(
+            new Style({
+                text: new Text({
+                    text: '+',
+                    font: '700 26px "Segoe UI", "Arial", sans-serif',
+                    fill: new Fill({ color: 'rgba(255, 235, 130, 0.98)' }),
+                    stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.78)', width: 3 }),
+                    textAlign: 'center',
+                    textBaseline: 'middle',
+                }),
+            }),
+        );
 
         features.push(centerPlus);
         source.addFeatures(features);
@@ -1045,6 +1067,6 @@ export function useMapState(mapInstance, options = {}) {
         setGraticuleActive,
         toggleGraticule,
         updateGraticuleLayer,
-        stopGraticule
+        stopGraticule,
     };
 }

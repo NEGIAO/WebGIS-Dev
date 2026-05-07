@@ -17,8 +17,5 @@ export function loadGeotiffRuntime() {
  * Start GIS heavy assets prewarm lazily.
  */
 export function warmDeferredGisAssets() {
-    return Promise.allSettled([
-        loadMapRuntimeDeps(),
-        loadGeotiffRuntime()
-    ]);
+    return Promise.allSettled([loadMapRuntimeDeps(), loadGeotiffRuntime()]);
 }

@@ -1,29 +1,57 @@
 <template>
     <transition name="eco-panel-fade">
-        <section v-if="visible" class="eco-district-panel" aria-label="行政区划面板">
+        <section
+            v-if="visible"
+            class="eco-district-panel"
+            aria-label="行政区划面板"
+        >
             <!-- 头部：鲜艳绿色背景 -->
             <header class="eco-header">
                 <div class="header-left">
                     <span class="header-icon">🗺️</span>
                     <h3 class="eco-title">行政区划</h3>
                 </div>
-                <button class="eco-close-btn" type="button" @click="emit('close')">×</button>
+                <button
+                    class="eco-close-btn"
+                    type="button"
+                    @click="emit('close')"
+                >
+                    ×
+                </button>
             </header>
 
             <!-- 搜索区 -->
             <div class="eco-search-section">
                 <div class="search-input-wrapper">
-                    <input v-model.trim="searchKeyword" class="eco-input" type="text" placeholder="搜索省市区或 adcode..."
-                        autocomplete="off" />
+                    <input
+                        v-model.trim="searchKeyword"
+                        class="eco-input"
+                        type="text"
+                        placeholder="搜索省市区或 adcode..."
+                        autocomplete="off"
+                    />
                     <span class="search-icon">🔍</span>
                 </div>
             </div>
 
             <!-- 数据统计：浅绿色胶囊 -->
             <div class="eco-meta-bar">
-                <div v-if="tocStore.districtTreeLoading" class="eco-status-tag loading">数据加载中...</div>
-                <div v-else-if="tocStore.districtTreeError" class="eco-status-tag error">加载失败</div>
-                <div v-else class="eco-stats">
+                <div
+                    v-if="tocStore.districtTreeLoading"
+                    class="eco-status-tag loading"
+                >
+                    数据加载中...
+                </div>
+                <div
+                    v-else-if="tocStore.districtTreeError"
+                    class="eco-status-tag error"
+                >
+                    加载失败
+                </div>
+                <div
+                    v-else
+                    class="eco-stats"
+                >
                     <span class="stat-item">总数: {{ tocStore.districtTreeTotalNodeCount }}</span>
                     <span class="stat-divider"></span>
                     <span class="stat-item">匹配: {{ matchedNodeCount }}</span>
@@ -32,23 +60,49 @@
 
             <!-- 树形内容区 -->
             <div class="eco-panel-body">
-                <div v-if="tocStore.districtTreeLoading" class="eco-loading">
+                <div
+                    v-if="tocStore.districtTreeLoading"
+                    class="eco-loading"
+                >
                     <div class="spinner"></div>
                     <p>正在读取 adcode 树...</p>
                 </div>
 
-                <div v-else-if="tocStore.districtTreeError" class="eco-error-box">
+                <div
+                    v-else-if="tocStore.districtTreeError"
+                    class="eco-error-box"
+                >
                     <p>{{ tocStore.districtTreeError }}</p>
-                    <button type="button" class="eco-retry-btn" @click="tocStore.loadDistrictTree(BASE_URL, true)">重试</button>
+                    <button
+                        type="button"
+                        class="eco-retry-btn"
+                        @click="tocStore.loadDistrictTree(BASE_URL, true)"
+                    >
+                        重试
+                    </button>
                 </div>
 
                 <template v-else>
-                    <ul v-if="filteredTreeData.length" class="eco-tree-root">
-                        <AdministrativeDivisionTreeNode v-for="node in filteredTreeData"
-                            :key="`${node.value}_${node.label}`" :node="node" :level="0" :auto-expand="autoExpand"
-                            :selected-adcode="selectedAdcode" @select="handleNodeSelect" />
+                    <ul
+                        v-if="filteredTreeData.length"
+                        class="eco-tree-root"
+                    >
+                        <AdministrativeDivisionTreeNode
+                            v-for="node in filteredTreeData"
+                            :key="`${node.value}_${node.label}`"
+                            :node="node"
+                            :level="0"
+                            :auto-expand="autoExpand"
+                            :selected-adcode="selectedAdcode"
+                            @select="handleNodeSelect"
+                        />
                     </ul>
-                    <div v-else class="eco-empty-state">没有匹配到行政区节点</div>
+                    <div
+                        v-else
+                        class="eco-empty-state"
+                    >
+                        没有匹配到行政区节点
+                    </div>
                 </template>
             </div>
         </section>
@@ -63,8 +117,8 @@ import AdministrativeDivisionTreeNode from './AdministrativeDivisionTreeNode.vue
 const props = defineProps({
     visible: {
         type: Boolean,
-        default: false
-    }
+        default: false,
+    },
 });
 
 const emit = defineEmits(['close', 'select']);
@@ -77,7 +131,9 @@ const searchKeyword = ref('');
 const selectedAdcode = ref('');
 
 function filterTreeNodes(nodes = [], keyword = '') {
-    const query = String(keyword || '').trim().toLowerCase();
+    const query = String(keyword || '')
+        .trim()
+        .toLowerCase();
     if (!query) return nodes;
 
     const result = [];
@@ -90,7 +146,7 @@ function filterTreeNodes(nodes = [], keyword = '') {
         if (currentMatch || childMatches.length > 0) {
             result.push({
                 ...node,
-                children: childMatches
+                children: childMatches,
             });
         }
     });
@@ -109,7 +165,11 @@ function countTreeNodes(nodes = []) {
     return total;
 }
 
-const keywordLower = computed(() => String(searchKeyword.value || '').trim().toLowerCase());
+const keywordLower = computed(() =>
+    String(searchKeyword.value || '')
+        .trim()
+        .toLowerCase(),
+);
 const filteredTreeData = computed(() => filterTreeNodes(tocStore.districtTree, keywordLower.value));
 const matchedNodeCount = computed(() => countTreeNodes(filteredTreeData.value));
 const autoExpand = computed(() => keywordLower.value.length > 0);
@@ -121,7 +181,7 @@ function handleNodeSelect(payload) {
     selectedAdcode.value = adcode;
     emit('select', {
         label: String(payload?.label || '').trim(),
-        value: adcode
+        value: adcode,
     });
 }
 
@@ -131,7 +191,7 @@ watch(
         if (!nextVisible) return;
         void tocStore.loadDistrictTree(BASE_URL);
     },
-    { immediate: true }
+    { immediate: true },
 );
 </script>
 
@@ -139,7 +199,8 @@ watch(
 /* 整个面板：改为白底大圆角卡片 */
 .eco-district-panel {
     position: absolute;
-    left: 80px; /* 避开左侧导航栏 */
+    left: 80px;
+    /* 避开左侧导航栏 */
     top: 100px;
     bottom: 40px;
     width: 320px;
@@ -155,7 +216,7 @@ watch(
 
 /* 头部：使用 #56AB56 鲜艳绿 */
 .eco-header {
-    background-color: #56AB56;
+    background-color: #56ab56;
     padding: 14px 16px;
     display: flex;
     justify-content: space-between;
@@ -219,7 +280,7 @@ watch(
 
 .eco-input:focus {
     background: #ffffff;
-    border-color: #56AB56;
+    border-color: #56ab56;
     box-shadow: 0 0 0 3px rgba(86, 171, 86, 0.15);
 }
 
@@ -237,7 +298,7 @@ watch(
 }
 
 .eco-stats {
-    background: #E9F5E9;
+    background: #e9f5e9;
     padding: 6px 14px;
     border-radius: 20px;
     display: inline-flex;
@@ -265,8 +326,9 @@ watch(
 .eco-panel-body::-webkit-scrollbar {
     width: 4px;
 }
+
 .eco-panel-body::-webkit-scrollbar-thumb {
-    background: #56AB56;
+    background: #56ab56;
     border-radius: 10px;
 }
 
@@ -284,7 +346,7 @@ watch(
 }
 
 .eco-retry-btn {
-    background: #56AB56;
+    background: #56ab56;
     color: white;
     border: none;
     padding: 6px 16px;

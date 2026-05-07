@@ -1,12 +1,16 @@
 <template>
-    <div class="toc-item" :class="[`kind-${node.type}`, { expanded: !!node.expanded }]" :style="{ '--node-level': Number(node.level || 0) }">
+    <div
+        class="toc-item"
+        :class="[`kind-${node.type}`, { expanded: !!node.expanded }]"
+        :style="{ '--node-level': Number(node.level || 0) }"
+    >
         <div
             class="toc-row"
-            :class="{ 
-                'is-folder': node.type === 'folder', 
+            :class="{
+                'is-folder': node.type === 'folder',
                 'is-leaf': node.type === 'layer',
                 'is-active': node.type === 'layer' && node.id === activeLayerId,
-                'is-multi-selected': isLayerMultiSelected
+                'is-multi-selected': isLayerMultiSelected,
             }"
             @click="handlePrimaryClick"
             @contextmenu.prevent="openContextMenuFromEvent"
@@ -19,13 +23,28 @@
                 v-if="node.type === 'folder'"
                 class="tree-toggle"
                 :aria-label="node.expanded ? '折叠' : '展开'"
-                @click.stop="emitAction('toggle-folder-expand', { nodeId: node.id, expanded: !node.expanded })"
+                @click.stop="
+                    emitAction('toggle-folder-expand', {
+                        nodeId: node.id,
+                        expanded: !node.expanded,
+                    })
+                "
             >
-                <span class="chevron" :class="{ open: !!node.expanded }">▸</span>
+                <span
+                    class="chevron"
+                    :class="{ open: !!node.expanded }"
+                    >▸</span
+                >
             </button>
-            <span v-else class="tree-toggle tree-toggle-placeholder"></span>
+            <span
+                v-else
+                class="tree-toggle tree-toggle-placeholder"
+            ></span>
 
-            <label class="row-label" @click.stop>
+            <label
+                class="row-label"
+                @click.stop
+            >
                 <input
                     v-if="node.showCheckbox !== false"
                     type="checkbox"
@@ -33,16 +52,38 @@
                     :ref="node.type === 'folder' ? setFolderCheckboxRef : null"
                     @change="handleToggleVisibility"
                 />
-                <span class="name" :title="node.displayName || node.name">{{ node.displayName || node.name }}</span>
-                <span v-if="node.type === 'layer' && node.id === activeLayerId" class="active-indicator">●</span>
+                <span
+                    class="name"
+                    :title="node.displayName || node.name"
+                    >{{ node.displayName || node.name }}</span
+                >
+                <span
+                    v-if="node.type === 'layer' && node.id === activeLayerId"
+                    class="active-indicator"
+                    >●</span
+                >
             </label>
 
-            <span v-if="node.type === 'layer'" class="feature-badge">{{ node.featureCount || 0 }}</span>
+            <span
+                v-if="node.type === 'layer'"
+                class="feature-badge"
+                >{{ node.featureCount || 0 }}</span
+            >
 
-            <button v-if="menuItems.length" class="more-btn" aria-label="更多操作" @click.stop="openContextMenuFromButton">•••</button>
+            <button
+                v-if="menuItems.length"
+                class="more-btn"
+                aria-label="更多操作"
+                @click.stop="openContextMenuFromButton"
+            >
+                •••
+            </button>
         </div>
 
-        <div v-if="node.type === 'folder' && node.expanded" class="toc-children">
+        <div
+            v-if="node.type === 'folder' && node.expanded"
+            class="toc-children"
+        >
             <TOCTreeItem
                 v-for="child in node.children || []"
                 :key="child.id"
@@ -61,8 +102,14 @@
                 :style="{ left: `${menuX}px`, top: `${menuY}px` }"
                 @contextmenu.prevent
             >
-                <template v-for="item in menuItems" :key="item.key">
-                    <div v-if="item.divider" class="menu-divider"></div>
+                <template
+                    v-for="item in menuItems"
+                    :key="item.key"
+                >
+                    <div
+                        v-if="item.divider"
+                        class="menu-divider"
+                    ></div>
                     <button
                         v-else
                         class="menu-item"
@@ -83,12 +130,12 @@ import { isValidLabel } from '../utils/biz';
 import {
     resolveFolderSelectionState,
     buildContextMenuItems,
-    dispatchContextMenuCommand
+    dispatchContextMenuCommand,
 } from '../composables/map/toc';
 
 /**
  * TOCTreeItem - 地理信息系统图层树节点组件
- * 
+ *
  * 标注内容验证规则（isValidLabel）：
  * ✅ 显示标注菜单项的条件：
  *   - 标注内容不为 null/undefined
@@ -109,7 +156,7 @@ defineOptions({ name: 'TOCTreeItem' });
 const props = defineProps({
     node: { type: Object, required: true },
     activeLayerId: { type: String, default: null },
-    selectedLayerIds: { type: Array, default: () => [] }
+    selectedLayerIds: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['action']);
@@ -137,7 +184,7 @@ const folderSelectionState = computed(() => {
             selectedCount: 0,
             isAllSelected: false,
             hasAnySelected: false,
-            isPartialSelected: false
+            isPartialSelected: false,
         };
     }
 
@@ -146,7 +193,8 @@ const folderSelectionState = computed(() => {
 
 const menuCapabilities = computed(() => {
     const actions = props.node?.actions || {};
-    const canToggleLabel = !!actions.label && isValidLabel(props.node?.raw?.name || props.node?.name, 100).valid;
+    const canToggleLabel =
+        !!actions.label && isValidLabel(props.node?.raw?.name || props.node?.name, 100).valid;
     const canExportData = !!actions.exportLayerData;
     const canExportCSV = actions.canExportCSV !== false && canExportData;
     const canExportTXT = actions.canExportTXT !== false && canExportData;
@@ -170,7 +218,7 @@ const menuCapabilities = computed(() => {
         canExportKML,
         canZoom: !!actions.zoom,
         canRemove: !!actions.remove,
-        removeLabel: actions.removeTip || '移除图层'
+        removeLabel: actions.removeTip || '移除图层',
     };
 });
 
@@ -182,8 +230,8 @@ const menuItems = computed(() => {
             selectedLayerIds: Array.from(selectedLayerIdSet.value),
             currentNodeId: props.node?.id,
             isCurrentLayerSelected: isLayerMultiSelected.value,
-            folderSelectionState: folderSelectionState.value
-        }
+            folderSelectionState: folderSelectionState.value,
+        },
     });
 });
 
@@ -249,7 +297,7 @@ function handleMenuCommand(key) {
     const events = dispatchContextMenuCommand({
         key,
         node: props.node,
-        selectedLayerIds: Array.from(selectedLayerIdSet.value)
+        selectedLayerIds: Array.from(selectedLayerIdSet.value),
     });
 
     events.forEach((evt) => {
@@ -274,7 +322,10 @@ function handlePrimaryClick() {
     }
     if (props.node.type === 'folder') return;
     if (props.node.actions?.viewEvent) {
-        emitAction(props.node.actions.viewEvent, props.node.actions.viewPayload || { layerId: props.node.id });
+        emitAction(
+            props.node.actions.viewEvent,
+            props.node.actions.viewPayload || { layerId: props.node.id },
+        );
     }
 }
 
@@ -333,7 +384,11 @@ onBeforeUnmount(() => {
 }
 
 .toc-row:hover {
-    background: linear-gradient(135deg, rgba(116, 175, 144, 0.545) 0%, rgba(235, 247, 240, 0.8) 100%);
+    background: linear-gradient(
+        135deg,
+        rgba(116, 175, 144, 0.545) 0%,
+        rgba(235, 247, 240, 0.8) 100%
+    );
 }
 
 .toc-row.is-active {
@@ -352,7 +407,11 @@ onBeforeUnmount(() => {
 }
 
 .toc-row.is-multi-selected {
-    background: linear-gradient(135deg, rgba(195, 222, 250, 0.48) 0%, rgba(220, 240, 255, 0.4) 100%);
+    background: linear-gradient(
+        135deg,
+        rgba(195, 222, 250, 0.48) 0%,
+        rgba(220, 240, 255, 0.4) 100%
+    );
     box-shadow: inset 0 0 0 1px rgba(50, 120, 190, 0.35);
 }
 
@@ -504,15 +563,15 @@ onBeforeUnmount(() => {
 .toc-row.is-leaf {
     background-color: rgba(255, 255, 255, 0.6); /* 淡淡的白色透明，适合暗色模式 */
     /* 或者具体的颜色 */
-    /* background-color: #fafafa; */ 
-    
+    /* background-color: #fafafa; */
+
     transition: background-color 0.2s ease; /* 添加平滑过渡 */
 }
 .toc-row.is-folder {
     background-color: rgba(26, 163, 60, 0.566); /* 淡淡的白色透明，适合暗色模式 */
     /* 或者具体的颜色 */
-    /* background-color: #f5f5f5; */ 
-    
+    /* background-color: #f5f5f5; */
+
     transition: background-color 0.2s ease; /* 添加平滑过渡 */
 }
 
@@ -535,8 +594,14 @@ onBeforeUnmount(() => {
     min-width: 180px;
     border: 1px solid rgb(20, 22, 21);
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 252, 249, 0.98) 100%);
-    box-shadow: 0 12px 32px rgba(45, 85, 63, 0.15), 0 4px 12px rgba(45, 85, 63, 0.08);
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.98) 0%,
+        rgba(247, 252, 249, 0.98) 100%
+    );
+    box-shadow:
+        0 12px 32px rgba(45, 85, 63, 0.15),
+        0 4px 12px rgba(45, 85, 63, 0.08);
     padding: 6px;
     backdrop-filter: blur(4px);
 }

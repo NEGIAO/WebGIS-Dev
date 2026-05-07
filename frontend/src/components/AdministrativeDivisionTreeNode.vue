@@ -1,6 +1,12 @@
 <template>
-    <li class="district-tree-node" :class="{ selected: isSelected }">
-        <div class="node-row" :style="{ paddingLeft: `${Math.max(level, 0) * 12}px` }">
+    <li
+        class="district-tree-node"
+        :class="{ selected: isSelected }"
+    >
+        <div
+            class="node-row"
+            :style="{ paddingLeft: `${Math.max(level, 0) * 12}px` }"
+        >
             <button
                 v-if="hasChildren"
                 class="expand-button"
@@ -10,15 +16,25 @@
             >
                 {{ expanded ? '▾' : '▸' }}
             </button>
-            <span v-else class="expand-placeholder"></span>
+            <span
+                v-else
+                class="expand-placeholder"
+            ></span>
 
-            <button class="node-select-button" type="button" @click.stop="selectNode">
+            <button
+                class="node-select-button"
+                type="button"
+                @click.stop="selectNode"
+            >
                 <span class="node-label">{{ node.label }}</span>
                 <span class="node-value">{{ node.value }}</span>
             </button>
         </div>
 
-        <ul v-if="hasChildren && expanded" class="node-children">
+        <ul
+            v-if="hasChildren && expanded"
+            class="node-children"
+        >
             <AdministrativeDivisionTreeNode
                 v-for="child in node.children"
                 :key="`${child.value}_${child.label}`"
@@ -40,20 +56,20 @@ defineOptions({ name: 'AdministrativeDivisionTreeNode' });
 const props = defineProps({
     node: {
         type: Object,
-        required: true
+        required: true,
     },
     level: {
         type: Number,
-        default: 0
+        default: 0,
     },
     autoExpand: {
         type: Boolean,
-        default: false
+        default: false,
     },
     selectedAdcode: {
         type: String,
-        default: ''
-    }
+        default: '',
+    },
 });
 
 const emit = defineEmits(['select']);
@@ -81,7 +97,7 @@ watch(
             expanded.value = false;
         }
     },
-    { immediate: true }
+    { immediate: true },
 );
 
 function toggleExpand() {
@@ -97,7 +113,7 @@ function selectNode() {
     emit('select', {
         label,
         value,
-        level: Number(props.level) || 0
+        level: Number(props.level) || 0,
     });
 }
 

@@ -66,11 +66,16 @@ const TILE_REQUEST_TIMEOUT_MS = 15000;
 const TILE_STATE_ERROR = 3;
 
 function normalizeCustomServiceUrl(rawUrl: string): string {
-    return String(rawUrl || '').trim().replace(/&amp;/gi, '&');
+    return String(rawUrl || '')
+        .trim()
+        .replace(/&amp;/gi, '&');
 }
 
 function normalizeTemplateTokens(url: string): string {
-    return String(url || '').replace(/\$\{([a-z_]+)\}/gi, (_, axis: string) => `{${String(axis || '').toLowerCase()}}`);
+    return String(url || '').replace(
+        /\$\{([a-z_]+)\}/gi,
+        (_, axis: string) => `{${String(axis || '').toLowerCase()}}`,
+    );
 }
 
 function parseUrlSafe(rawUrl: string): URL | null {
@@ -169,14 +174,22 @@ function resolveServiceEndpoint(candidateUrl: string, fallbackUrl: string): stri
     const candidateParsed = parseUrlSafe(candidateUrl);
     if (!candidateParsed) return fallbackEndpoint;
 
-    if (fallbackParsed && candidateParsed.hostname !== fallbackParsed.hostname && isPrivateHost(candidateParsed.hostname)) {
+    if (
+        fallbackParsed &&
+        candidateParsed.hostname !== fallbackParsed.hostname &&
+        isPrivateHost(candidateParsed.hostname)
+    ) {
         return fallbackEndpoint;
     }
 
     return `${candidateParsed.origin}${candidateParsed.pathname}`;
 }
 
-function createCapabilitiesUrl(rawUrl: string, service: 'WMS' | 'WMTS', defaultVersion: string): string {
+function createCapabilitiesUrl(
+    rawUrl: string,
+    service: 'WMS' | 'WMTS',
+    defaultVersion: string,
+): string {
     const parsed = parseUrlSafe(rawUrl);
     if (!parsed) return rawUrl;
 
@@ -190,7 +203,10 @@ function createCapabilitiesUrl(rawUrl: string, service: 'WMS' | 'WMTS', defaultV
     return parsed.toString();
 }
 
-async function fetchTextWithTimeout(url: string, timeoutMs: number = CAPABILITIES_FETCH_TIMEOUT_MS): Promise<string> {
+async function fetchTextWithTimeout(
+    url: string,
+    timeoutMs: number = CAPABILITIES_FETCH_TIMEOUT_MS,
+): Promise<string> {
     const abortController = new AbortController();
     const timer = setTimeout(() => abortController.abort(), timeoutMs);
 
@@ -272,7 +288,7 @@ function markAllSourceTilesAsError(source: any): void {
                 const cache = source?.tileCache_ || source?.tileCache;
                 if (cache) {
                     let tileToMark = null;
-                    
+
                     // 尝试通过不同的 API 获取对应的 tile
                     if (typeof cache.get === 'function') {
                         tileToMark = cache.get(key);
@@ -307,7 +323,6 @@ function getSourceEpoch(source: any): number {
     return Number.isFinite(rawEpoch) ? rawEpoch : 0;
 }
 
-
 export function prioritizeTileSourceRequest<T>(source: T): T {
     if (!source || typeof (source as any)?.setTileLoadFunction !== 'function') {
         return source;
@@ -329,7 +344,7 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
         const epoch = getSourceEpoch(source);
 
         const timeoutController = new AbortController();
-        
+
         // 关键改进：在 abort signal 被触发时立即标记 tile 为 error
         // 这样可以在 fetch promise chain 完成前就释放 OL 的队列槽位
         const onAbortSignal = () => {
@@ -340,49 +355,52 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
             }
         };
         signal.addEventListener('abort', onAbortSignal, { once: true });
-        
+
         const onAbort = () => timeoutController.abort();
         signal.addEventListener('abort', onAbort, { once: true });
-        const timeoutTimer = window.setTimeout(() => timeoutController.abort(), TILE_REQUEST_TIMEOUT_MS);
+        const timeoutTimer = window.setTimeout(
+            () => timeoutController.abort(),
+            TILE_REQUEST_TIMEOUT_MS,
+        );
 
         // 使用 fetch 替代隐式的 image.src 请求
         fetch(src, {
             signal: timeoutController.signal,
             // @ts-ignore
-            priority: 'high' // 提示浏览器这是高优先级请求
+            priority: 'high', // 提示浏览器这是高优先级请求
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.blob();
-        })
-        .then(blob => {
-            if (signal.aborted || epoch !== getSourceEpoch(source)) {
-                markTileAsError(tile);
-                return;
-            }
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.blob();
+            })
+            .then((blob) => {
+                if (signal.aborted || epoch !== getSourceEpoch(source)) {
+                    markTileAsError(tile);
+                    return;
+                }
 
-            const objectUrl = URL.createObjectURL(blob);
-            // 内存释放：图片加载成功或失败后撤销 URL
-            image.onload = () => URL.revokeObjectURL(objectUrl);
-            image.onerror = () => URL.revokeObjectURL(objectUrl);
-            
-            // 将二进制数据转为 Blob URL 赋给 img，此时不需要再走网络请求
-            image.src = objectUrl;
-        })
-        .catch(error => {
-            // 无论是网络报错还是主动中止，都必须释放 OL 的 loading 队列占位。
-            if (error?.name !== 'AbortError') {
-                console.debug('瓦片请求失败:', src, error);
-            }
-            markTileAsError(tile);
-        })
-        .finally(() => {
-            clearTimeout(timeoutTimer);
-            signal.removeEventListener('abort', onAbortSignal);
-            signal.removeEventListener('abort', onAbort);
-        });
+                const objectUrl = URL.createObjectURL(blob);
+                // 内存释放：图片加载成功或失败后撤销 URL
+                image.onload = () => URL.revokeObjectURL(objectUrl);
+                image.onerror = () => URL.revokeObjectURL(objectUrl);
+
+                // 将二进制数据转为 Blob URL 赋给 img，此时不需要再走网络请求
+                image.src = objectUrl;
+            })
+            .catch((error) => {
+                // 无论是网络报错还是主动中止，都必须释放 OL 的 loading 队列占位。
+                if (error?.name !== 'AbortError') {
+                    console.debug('瓦片请求失败:', src, error);
+                }
+                markTileAsError(tile);
+            })
+            .finally(() => {
+                clearTimeout(timeoutTimer);
+                signal.removeEventListener('abort', onAbortSignal);
+                signal.removeEventListener('abort', onAbort);
+            });
     });
 
     return source;
@@ -418,11 +436,7 @@ function findFirstNamedWmsLayer(layer: any): any | null {
     const name = String(layer?.Name || '').trim();
     if (name) return layer;
 
-    const children = Array.isArray(layer?.Layer)
-        ? layer.Layer
-        : layer?.Layer
-            ? [layer.Layer]
-            : [];
+    const children = Array.isArray(layer?.Layer) ? layer.Layer : layer?.Layer ? [layer.Layer] : [];
 
     for (const child of children) {
         const found = findFirstNamedWmsLayer(child);
@@ -482,8 +496,8 @@ function pickWmtsMatrixSet(layer: any): string {
     const links = Array.isArray(layer?.TileMatrixSetLink)
         ? layer.TileMatrixSetLink
         : layer?.TileMatrixSetLink
-            ? [layer.TileMatrixSetLink]
-            : [];
+          ? [layer.TileMatrixSetLink]
+          : [];
 
     const matrixSets: string[] = links
         .map((item: any) => String(item?.TileMatrixSet || '').trim())
@@ -517,16 +531,15 @@ function buildWmtsGetTileTemplateUrl(urlObj: URL): string {
     return templateUrl.toString();
 }
 
-function createTileWmsSource(opts: {
-    url: string;
-    params: Record<string, string>;
-}): TileWMS {
-    return prioritizeTileSourceRequest(new TileWMS({
-        url: opts.url,
-        params: opts.params,
-        crossOrigin: 'anonymous',
-        zDirection: 0
-    }));
+function createTileWmsSource(opts: { url: string; params: Record<string, string> }): TileWMS {
+    return prioritizeTileSourceRequest(
+        new TileWMS({
+            url: opts.url,
+            params: opts.params,
+            crossOrigin: 'anonymous',
+            zDirection: 0,
+        }),
+    );
 }
 
 function createWmsSourceFromGetMapUrl(urlObj: URL): TileWMS {
@@ -549,7 +562,7 @@ function createWmsSourceFromGetMapUrl(urlObj: URL): TileWMS {
         STYLES: styles,
         FORMAT: format,
         TRANSPARENT: transparent,
-        VERSION: version
+        VERSION: version,
     };
 
     if (version === '1.3.0') {
@@ -560,7 +573,7 @@ function createWmsSourceFromGetMapUrl(urlObj: URL): TileWMS {
 
     return createTileWmsSource({
         url: endpoint,
-        params
+        params,
     });
 }
 
@@ -571,7 +584,7 @@ export function normalizeTileY(z: number, rawY: number, mode: TileYNormalizeMode
     if (mode === 'invert-tms') return (1 << z) - 1 - rawY;
     if (mode === 'ol-negative') return -rawY - 1;
 
-    return rawY < 0 ? (-rawY - 1) : rawY;
+    return rawY < 0 ? -rawY - 1 : rawY;
 }
 
 export function toQuadKey(x: number, y: number, z: number): string {
@@ -586,7 +599,11 @@ export function toQuadKey(x: number, y: number, z: number): string {
     return quadKey;
 }
 
-export function buildMapsForFreeAdapter(layerName: string, displayName: string, ext: string = 'gif'): NonStandardXYZAdapter {
+export function buildMapsForFreeAdapter(
+    layerName: string,
+    displayName: string,
+    ext: string = 'gif',
+): NonStandardXYZAdapter {
     return {
         pattern: new RegExp(`maps-for-free\\.com.*${layerName}`, 'i'),
         name: displayName,
@@ -595,7 +612,7 @@ export function buildMapsForFreeAdapter(layerName: string, displayName: string, 
             const x = tileCoord[1];
             const y = normalizeTileY(z, tileCoord[2], 'auto');
             return `https://maps-for-free.com/layer/${layerName}/z${z}/row${y}/${z}_${x}-${y}.${ext}`;
-        }
+        },
     };
 }
 
@@ -611,18 +628,18 @@ export const DEFAULT_NON_STANDARD_XYZ_ADAPTERS: Record<string, NonStandardXYZAda
     'maps-for-free-tundra': buildMapsForFreeAdapter('tundra', '冻土(MFF)'),
     'maps-for-free-sand': buildMapsForFreeAdapter('sand', '沙地(MFF)'),
     'maps-for-free-swamp': buildMapsForFreeAdapter('swamp', '沼泽(MFF)'),
-    'maps-for-free-ice': buildMapsForFreeAdapter('ice', '冰川(MFF)')
+    'maps-for-free-ice': buildMapsForFreeAdapter('ice', '冰川(MFF)'),
 };
 
 export function detectNonStandardXYZ(
     url: string,
-    adapters: Record<string, NonStandardXYZAdapter> = DEFAULT_NON_STANDARD_XYZ_ADAPTERS
+    adapters: Record<string, NonStandardXYZAdapter> = DEFAULT_NON_STANDARD_XYZ_ADAPTERS,
 ): { name: string; urlFunction: (tc: number[]) => string } | null {
     for (const adapter of Object.values(adapters || {})) {
         if (adapter.pattern.test(url)) {
             return {
                 name: adapter.name,
-                urlFunction: adapter.urlFunction
+                urlFunction: adapter.urlFunction,
             };
         }
     }
@@ -630,16 +647,21 @@ export function detectNonStandardXYZ(
     return null;
 }
 
-export function createXYZSourceFromUrl(rawUrl: string, options: TileSourceFactoryOptions = {}): XYZ {
+export function createXYZSourceFromUrl(
+    rawUrl: string,
+    options: TileSourceFactoryOptions = {},
+): XYZ {
     const cleanUrl = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
     const adapters = options.adapters || DEFAULT_NON_STANDARD_XYZ_ADAPTERS;
     const nonStandard = detectNonStandardXYZ(cleanUrl, adapters);
 
     if (nonStandard) {
-        return prioritizeTileSourceRequest(new XYZ({
-            tileUrlFunction: nonStandard.urlFunction,
-            tilePixelRatio: 1
-        }));
+        return prioritizeTileSourceRequest(
+            new XYZ({
+                tileUrlFunction: nonStandard.urlFunction,
+                tilePixelRatio: 1,
+            }),
+        );
     }
 
     return prioritizeTileSourceRequest(new XYZ({ url: cleanUrl }));
@@ -647,20 +669,20 @@ export function createXYZSourceFromUrl(rawUrl: string, options: TileSourceFactor
 
 export function createConfiguredServiceSource(
     definition: ConfiguredTileServiceDefinition,
-    options: { adapters?: Record<string, NonStandardXYZAdapter> } = {}
+    options: { adapters?: Record<string, NonStandardXYZAdapter> } = {},
 ): TileSourceLike {
     const url = normalizeTemplateTokens(normalizeCustomServiceUrl(definition.url));
     const serviceType = definition.serviceType;
 
     if (serviceType === 'xyz') {
         return createXYZSourceFromUrl(url, {
-            adapters: options.adapters
+            adapters: options.adapters,
         });
     }
 
     if (serviceType === 'wmts') {
         return createXYZSourceFromUrl(url, {
-            adapters: options.adapters
+            adapters: options.adapters,
         });
     }
 
@@ -673,7 +695,7 @@ export function createConfiguredServiceSource(
         STYLES: String(definition.wms?.styles || ''),
         FORMAT: String(definition.wms?.format || 'image/png'),
         TRANSPARENT: definition.wms?.transparent === false ? 'false' : 'true',
-        VERSION: version
+        VERSION: version,
     };
 
     if (!params.LAYERS) {
@@ -688,24 +710,26 @@ export function createConfiguredServiceSource(
 
     return createTileWmsSource({
         url: endpoint,
-        params
+        params,
     });
 }
 
 function createXyzSourceStrict(
     url: string,
-    adapters: Record<string, NonStandardXYZAdapter>
+    adapters: Record<string, NonStandardXYZAdapter>,
 ): AutoTileSourceResult {
     const nonStandard = detectNonStandardXYZ(url, adapters);
 
     if (nonStandard) {
         return {
-            source: prioritizeTileSourceRequest(new XYZ({
-                tileUrlFunction: nonStandard.urlFunction,
-                tilePixelRatio: 1
-            })),
+            source: prioritizeTileSourceRequest(
+                new XYZ({
+                    tileUrlFunction: nonStandard.urlFunction,
+                    tilePixelRatio: 1,
+                }),
+            ),
             kind: 'non-standard-xyz',
-            detail: nonStandard.name
+            detail: nonStandard.name,
         };
     }
 
@@ -716,7 +740,7 @@ function createXyzSourceStrict(
     return {
         source: prioritizeTileSourceRequest(new XYZ({ url })),
         kind: 'xyz',
-        detail: '标准 XYZ'
+        detail: '标准 XYZ',
     };
 }
 
@@ -731,7 +755,7 @@ async function createWmsSourceStrict(rawUrl: string): Promise<AutoTileSourceResu
         return {
             source: prioritizeTileSourceRequest(createWmsSourceFromGetMapUrl(parsed)),
             kind: 'wms',
-            detail: 'WMS GetMap'
+            detail: 'WMS GetMap',
         };
     }
 
@@ -748,7 +772,8 @@ async function createWmsSourceStrict(rawUrl: string): Promise<AutoTileSourceResu
     }
 
     const preferredFormat = Array.isArray(capabilities?.Capability?.Request?.GetMap?.Format)
-        ? capabilities.Capability.Request.GetMap.Format.find((fmt: string) => /png/i.test(fmt)) || capabilities.Capability.Request.GetMap.Format[0]
+        ? capabilities.Capability.Request.GetMap.Format.find((fmt: string) => /png/i.test(fmt)) ||
+          capabilities.Capability.Request.GetMap.Format[0]
         : 'image/png';
 
     const endpointCandidate = extractWmsGetMapUrl(capabilities);
@@ -761,7 +786,7 @@ async function createWmsSourceStrict(rawUrl: string): Promise<AutoTileSourceResu
         STYLES: '',
         FORMAT: String(preferredFormat || 'image/png'),
         TRANSPARENT: 'true',
-        VERSION: version
+        VERSION: version,
     };
 
     if (version === '1.3.0') {
@@ -773,16 +798,16 @@ async function createWmsSourceStrict(rawUrl: string): Promise<AutoTileSourceResu
     return {
         source: createTileWmsSource({
             url: endpoint,
-            params
+            params,
         }),
         kind: 'wms',
-        detail: `WMS 图层: ${layerName}`
+        detail: `WMS 图层: ${layerName}`,
     };
 }
 
 async function createWmtsSourceStrict(
     rawUrl: string,
-    adapters: Record<string, NonStandardXYZAdapter>
+    adapters: Record<string, NonStandardXYZAdapter>,
 ): Promise<AutoTileSourceResult> {
     const parsed = parseUrlSafe(rawUrl);
     if (!parsed || !detectWmtsByUrl(parsed)) {
@@ -794,10 +819,10 @@ async function createWmtsSourceStrict(
         const templateUrl = buildWmtsGetTileTemplateUrl(parsed);
         return {
             source: createXYZSourceFromUrl(templateUrl, {
-                adapters
+                adapters,
             }),
             kind: 'wmts',
-            detail: 'WMTS GetTile 模板'
+            detail: 'WMTS GetTile 模板',
         };
     }
 
@@ -809,8 +834,8 @@ async function createWmtsSourceStrict(
     const layers = Array.isArray(capabilities?.Contents?.Layer)
         ? capabilities.Contents.Layer
         : capabilities?.Contents?.Layer
-            ? [capabilities.Contents.Layer]
-            : [];
+          ? [capabilities.Contents.Layer]
+          : [];
 
     const layer = layers.find((item: any) => item?.Identifier) || layers[0];
     const layerId = String(layer?.Identifier || '').trim();
@@ -821,47 +846,52 @@ async function createWmtsSourceStrict(
     const matrixSet = pickWmtsMatrixSet(layer);
     const wmtsOptions = optionsFromCapabilities(capabilities, {
         layer: layerId,
-        matrixSet: matrixSet || undefined
+        matrixSet: matrixSet || undefined,
     });
 
     if (wmtsOptions) {
         return {
-            source: prioritizeTileSourceRequest(new WMTS({
-                ...wmtsOptions,
-                zDirection: -1
-            })),
+            source: prioritizeTileSourceRequest(
+                new WMTS({
+                    ...wmtsOptions,
+                    zDirection: -1,
+                }),
+            ),
             kind: 'wmts',
-            detail: `WMTS 图层: ${layerId}`
+            detail: `WMTS 图层: ${layerId}`,
         };
     }
 
     const resourceUrls = Array.isArray(layer?.ResourceURL)
         ? layer.ResourceURL
         : layer?.ResourceURL
-            ? [layer.ResourceURL]
-            : [];
-    const tileTemplate = resourceUrls.find((item: any) => String(item?.resourceType || '').toLowerCase() === 'tile')?.template;
+          ? [layer.ResourceURL]
+          : [];
+    const tileTemplate = resourceUrls.find(
+        (item: any) => String(item?.resourceType || '').toLowerCase() === 'tile',
+    )?.template;
     if (!tileTemplate) {
         throw new Error('WMTS Capabilities 解析失败：缺少可用的 ResourceURL 模板');
     }
 
     const normalizedTemplate = normalizeWmtsResourceTemplate(tileTemplate);
-    const templateWithMatrixSet = matrixSet && normalizedTemplate.includes('{tilematrixset}')
-        ? normalizedTemplate.replace(/\{tilematrixset\}/gi, matrixSet)
-        : normalizedTemplate;
+    const templateWithMatrixSet =
+        matrixSet && normalizedTemplate.includes('{tilematrixset}')
+            ? normalizedTemplate.replace(/\{tilematrixset\}/gi, matrixSet)
+            : normalizedTemplate;
 
     return {
         source: createXYZSourceFromUrl(templateWithMatrixSet, {
-            adapters
+            adapters,
         }),
         kind: 'wmts',
-        detail: `WMTS 模板: ${layerId}`
+        detail: `WMTS 模板: ${layerId}`,
     };
 }
 
 export function detectCustomTileServiceKind(
     rawUrl: string,
-    adapters: Record<string, NonStandardXYZAdapter> = DEFAULT_NON_STANDARD_XYZ_ADAPTERS
+    adapters: Record<string, NonStandardXYZAdapter> = DEFAULT_NON_STANDARD_XYZ_ADAPTERS,
 ): { kind: CustomTileSourceKind; name: string } {
     const normalizedUrl = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
     if (!normalizedUrl) {
@@ -910,7 +940,7 @@ export function abortTileSourceRequests(source: any): void {
     if (controller instanceof AbortController) {
         // 1. 发送终止信号，所有正在 pending 的 fetch 请求会被立刻掐断
         controller.abort();
-        
+
         // 2. 马上赋予一个新的控制器，以防用户一会又切回这个底图（旧控制器一旦 abort 就会永久失效）
         source.set('abortController', new AbortController());
     }
@@ -935,7 +965,7 @@ export function abortTileSourceRequests(source: any): void {
 
 export async function createAutoTileSourceFromUrl(
     rawUrl: string,
-    options: AutoDetectOptions = {}
+    options: AutoDetectOptions = {},
 ): Promise<AutoTileSourceResult> {
     const normalizedUrl = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
     if (!normalizedUrl) {
@@ -949,7 +979,7 @@ export async function createAutoTileSourceFromUrl(
         const xyzResult = createXyzSourceStrict(normalizedUrl, adapters);
         return {
             ...xyzResult,
-            source: prioritizeTileSourceRequest(xyzResult.source)
+            source: prioritizeTileSourceRequest(xyzResult.source),
         };
     } catch (error) {
         errors.push(`XYZ: ${toErrorMessage(error)}`);
@@ -959,7 +989,7 @@ export async function createAutoTileSourceFromUrl(
         const wmsResult = await createWmsSourceStrict(normalizedUrl);
         return {
             ...wmsResult,
-            source: prioritizeTileSourceRequest(wmsResult.source)
+            source: prioritizeTileSourceRequest(wmsResult.source),
         };
     } catch (error) {
         errors.push(`WMS: ${toErrorMessage(error)}`);
@@ -969,7 +999,7 @@ export async function createAutoTileSourceFromUrl(
         const wmtsResult = await createWmtsSourceStrict(normalizedUrl, adapters);
         return {
             ...wmtsResult,
-            source: prioritizeTileSourceRequest(wmtsResult.source)
+            source: prioritizeTileSourceRequest(wmtsResult.source),
         };
     } catch (error) {
         errors.push(`WMTS: ${toErrorMessage(error)}`);

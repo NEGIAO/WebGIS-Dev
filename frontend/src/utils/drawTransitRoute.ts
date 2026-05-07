@@ -34,7 +34,12 @@ function parseLonlat(value: string): [number, number] | null {
     return [lng, lat];
 }
 
-function makeDefaultName(rawName: string, kind: 'start' | 'end', index: number, total: number): string {
+function makeDefaultName(
+    rawName: string,
+    kind: 'start' | 'end',
+    index: number,
+    total: number,
+): string {
     const name = String(rawName || '').trim();
     if (name) return name;
     if (kind === 'start' && index === 0) return '起点';
@@ -42,7 +47,13 @@ function makeDefaultName(rawName: string, kind: 'start' | 'end', index: number, 
     return '途经点';
 }
 
-function addMarkerWithLabel(map: TiandituMap, T: any, lng: number, lat: number, labelText: string): any {
+function addMarkerWithLabel(
+    map: TiandituMap,
+    T: any,
+    lng: number,
+    lat: number,
+    labelText: string,
+): any {
     const point = new T.LngLat(lng, lat);
     const marker = new T.Marker(point);
 
@@ -57,7 +68,7 @@ function addMarkerWithLabel(map: TiandituMap, T: any, lng: number, lat: number, 
         const label = new T.Label({
             text: labelText,
             position: point,
-            offset: new T.Point(12, -8)
+            offset: new T.Point(12, -8),
         });
         map.addOverLay(label);
     }
@@ -84,7 +95,12 @@ export function drawTransitRoute(line: TransitLine, map: TiandituMap): void {
 
     segments.forEach((segment, segmentIndex) => {
         const total = segments.length;
-        const startName = makeDefaultName(segment?.stationStart?.name, 'start', segmentIndex, total);
+        const startName = makeDefaultName(
+            segment?.stationStart?.name,
+            'start',
+            segmentIndex,
+            total,
+        );
         const endName = makeDefaultName(segment?.stationEnd?.name, 'end', segmentIndex, total);
 
         const startCoord = parseLonlat(segment?.stationStart?.lonlat);
@@ -118,7 +134,7 @@ export function drawTransitRoute(line: TransitLine, map: TiandituMap): void {
         }
 
         const isWalk = Number(segment?.segmentType) === 1;
-        const routeName = isWalk ? '步行' : (lineName || `公交段 ${segmentIndex + 1}`);
+        const routeName = isWalk ? '步行' : lineName || `公交段 ${segmentIndex + 1}`;
 
         let color = '#888888';
         let lineStyle = 'dashed';
@@ -132,7 +148,7 @@ export function drawTransitRoute(line: TransitLine, map: TiandituMap): void {
             color,
             weight: 6,
             opacity: 0.9,
-            lineStyle
+            lineStyle,
         });
 
         (polyline as any).__routeName = routeName;

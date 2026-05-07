@@ -21,12 +21,18 @@
         <!-- 标签页内容 -->
         <div class="tabs-content">
             <!-- 1. 用户 API 使用统计 -->
-            <div v-show="activeTab === 'by-user'" class="tab-panel">
+            <div
+                v-show="activeTab === 'by-user'"
+                class="tab-panel"
+            >
                 <div class="panel-header">
                     <h2>用户 API 调用统计</h2>
                     <div class="filter-controls">
                         <label>统计天数：</label>
-                        <select v-model.number="userStatsFilter.days" @change="loadUserStats">
+                        <select
+                            v-model.number="userStatsFilter.days"
+                            @change="loadUserStats"
+                        >
                             <option :value="7">最近 7 天</option>
                             <option :value="30">最近 30 天</option>
                             <option :value="90">最近 90 天</option>
@@ -34,11 +40,17 @@
                     </div>
                 </div>
 
-                <div v-if="loadingUserStats" class="loading-state">
+                <div
+                    v-if="loadingUserStats"
+                    class="loading-state"
+                >
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <table v-else-if="userStats.length > 0" class="data-table">
+                <table
+                    v-else-if="userStats.length > 0"
+                    class="data-table"
+                >
                     <thead>
                         <tr>
                             <th>用户名</th>
@@ -50,10 +62,17 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(stat, idx) in userStats" :key="idx" class="data-row">
+                        <tr
+                            v-for="(stat, idx) in userStats"
+                            :key="idx"
+                            class="data-row"
+                        >
                             <td class="username">{{ stat.username }}</td>
                             <td>
-                                <span class="role-badge" :class="stat.role.toLowerCase()">
+                                <span
+                                    class="role-badge"
+                                    :class="stat.role.toLowerCase()"
+                                >
                                     {{ stat.role }}
                                 </span>
                             </td>
@@ -64,16 +83,27 @@
                         </tr>
                     </tbody>
                 </table>
-                <div v-else class="empty-state">暂无数据</div>
+                <div
+                    v-else
+                    class="empty-state"
+                >
+                    暂无数据
+                </div>
             </div>
 
             <!-- 2. API 端点使用统计 -->
-            <div v-show="activeTab === 'by-endpoint'" class="tab-panel">
+            <div
+                v-show="activeTab === 'by-endpoint'"
+                class="tab-panel"
+            >
                 <div class="panel-header">
                     <h2>API 端点调用统计</h2>
                     <div class="filter-controls">
                         <label>统计天数：</label>
-                        <select v-model.number="endpointStatsFilter.days" @change="loadEndpointStats">
+                        <select
+                            v-model.number="endpointStatsFilter.days"
+                            @change="loadEndpointStats"
+                        >
                             <option :value="7">最近 7 天</option>
                             <option :value="30">最近 30 天</option>
                             <option :value="90">最近 90 天</option>
@@ -81,11 +111,17 @@
                     </div>
                 </div>
 
-                <div v-if="loadingEndpointStats" class="loading-state">
+                <div
+                    v-if="loadingEndpointStats"
+                    class="loading-state"
+                >
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <table v-else-if="endpointStats.length > 0" class="data-table">
+                <table
+                    v-else-if="endpointStats.length > 0"
+                    class="data-table"
+                >
                     <thead>
                         <tr>
                             <th>API 端点</th>
@@ -98,7 +134,11 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(stat, idx) in endpointStats" :key="idx" class="data-row">
+                        <tr
+                            v-for="(stat, idx) in endpointStats"
+                            :key="idx"
+                            class="data-row"
+                        >
                             <td class="endpoint-name">{{ formatEndpoint(stat.api_endpoint) }}</td>
                             <td class="highlight">{{ stat.call_count }}</td>
                             <td class="success">{{ stat.success_count }}</td>
@@ -114,11 +154,19 @@
                         </tr>
                     </tbody>
                 </table>
-                <div v-else class="empty-state">暂无数据</div>
+                <div
+                    v-else
+                    class="empty-state"
+                >
+                    暂无数据
+                </div>
             </div>
 
             <!-- 3. API 调用日志 -->
-            <div v-show="activeTab === 'logs'" class="tab-panel">
+            <div
+                v-show="activeTab === 'logs'"
+                class="tab-panel"
+            >
                 <div class="panel-header">
                     <h2>API 调用日志</h2>
                     <div class="filter-controls">
@@ -134,20 +182,34 @@
                             placeholder="按 API 端点过滤..."
                             @change="loadLogs"
                         />
-                        <select v-model.number="logsFilter.days" @change="loadLogs">
+                        <select
+                            v-model.number="logsFilter.days"
+                            @change="loadLogs"
+                        >
                             <option :value="7">最近 7 天</option>
                             <option :value="30">最近 30 天</option>
                             <option :value="90">最近 90 天</option>
                         </select>
-                        <button class="btn-refresh" @click="loadLogs">刷新</button>
+                        <button
+                            class="btn-refresh"
+                            @click="loadLogs"
+                        >
+                            刷新
+                        </button>
                     </div>
                 </div>
 
-                <div v-if="loadingLogs" class="loading-state">
+                <div
+                    v-if="loadingLogs"
+                    class="loading-state"
+                >
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <table v-else-if="apiLogs.length > 0" class="data-table logs-table">
+                <table
+                    v-else-if="apiLogs.length > 0"
+                    class="data-table logs-table"
+                >
                     <thead>
                         <tr>
                             <th>时间</th>
@@ -159,17 +221,27 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="(log, idx) in apiLogs" :key="idx" class="data-row">
+                        <tr
+                            v-for="(log, idx) in apiLogs"
+                            :key="idx"
+                            class="data-row"
+                        >
                             <td class="timestamp">{{ formatTime(log.timestamp) }}</td>
                             <td>{{ log.username }}</td>
                             <td>
-                                <span class="role-badge" :class="log.role.toLowerCase()">
+                                <span
+                                    class="role-badge"
+                                    :class="log.role.toLowerCase()"
+                                >
                                     {{ log.role }}
                                 </span>
                             </td>
                             <td class="endpoint-name">{{ formatEndpoint(log.api_endpoint) }}</td>
                             <td>
-                                <span class="status-code" :class="getStatusClass(log.status_code)">
+                                <span
+                                    class="status-code"
+                                    :class="getStatusClass(log.status_code)"
+                                >
                                     {{ log.status_code }}
                                 </span>
                             </td>
@@ -179,17 +251,22 @@
                 </table>
 
                 <!-- 分页控制 -->
-                <div v-if="apiLogs.length > 0" class="pagination">
+                <div
+                    v-if="apiLogs.length > 0"
+                    class="pagination"
+                >
                     <button
                         class="btn-paging"
                         :disabled="logsFilter.offset === 0"
-                        @click="logsFilter.offset = Math.max(0, logsFilter.offset - logsFilter.limit)"
+                        @click="
+                            logsFilter.offset = Math.max(0, logsFilter.offset - logsFilter.limit)
+                        "
                     >
                         ← 上一页
                     </button>
                     <span class="page-info">
-                        第 {{ (logsFilter.offset / logsFilter.limit) + 1 }} 页
-                        (显示 {{ apiLogs.length }} 条)
+                        第 {{ logsFilter.offset / logsFilter.limit + 1 }} 页 (显示
+                        {{ apiLogs.length }} 条)
                     </span>
                     <button
                         class="btn-paging"
@@ -200,30 +277,56 @@
                     </button>
                 </div>
 
-                <div v-else class="empty-state">暂无数据</div>
+                <div
+                    v-else
+                    class="empty-state"
+                >
+                    暂无数据
+                </div>
             </div>
 
             <!-- 4. 配额配置 -->
-            <div v-show="activeTab === 'quota'" class="tab-panel">
+            <div
+                v-show="activeTab === 'quota'"
+                class="tab-panel"
+            >
                 <div class="panel-header">
                     <h2>API 配额配置</h2>
                 </div>
 
-                <div v-if="loadingQuota" class="loading-state">
+                <div
+                    v-if="loadingQuota"
+                    class="loading-state"
+                >
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <div v-else class="quota-grid">
-                    <div v-for="(config, role) in quotaConfig" :key="role" class="quota-card">
+                <div
+                    v-else
+                    class="quota-grid"
+                >
+                    <div
+                        v-for="(config, role) in quotaConfig"
+                        :key="role"
+                        class="quota-card"
+                    >
                         <div class="quota-header">
                             <h3>{{ getRoleLabel(role) }}</h3>
-                            <span class="role-badge" :class="role.toLowerCase()">{{ role }}</span>
+                            <span
+                                class="role-badge"
+                                :class="role.toLowerCase()"
+                                >{{ role }}</span
+                            >
                         </div>
                         <div class="quota-body">
                             <div class="quota-item">
                                 <label>每日限额：</label>
                                 <span class="quota-value">
-                                    {{ config.daily_limit === null ? '无限制' : `${config.daily_limit} 次` }}
+                                    {{
+                                        config.daily_limit === null
+                                            ? '无限制'
+                                            : `${config.daily_limit} 次`
+                                    }}
                                 </span>
                             </div>
                         </div>
@@ -238,7 +341,10 @@
             </div>
 
             <!-- 5. API 密钥管理 -->
-            <div v-show="activeTab === 'api-keys'" class="tab-panel">
+            <div
+                v-show="activeTab === 'api-keys'"
+                class="tab-panel"
+            >
                 <ApiKeysManagementPanel />
             </div>
         </div>
@@ -247,7 +353,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { apiAdminApiUsageByUser, apiAdminApiUsageByEndpoint, apiAdminApiLogs, apiAdminQuotaConfig } from '../../api/backend';
+import {
+    apiAdminApiUsageByUser,
+    apiAdminApiUsageByEndpoint,
+    apiAdminApiLogs,
+    apiAdminQuotaConfig,
+} from '../../api/backend';
 import { useMessage } from '../../composables/useMessage';
 import ApiKeysManagementPanel from './ApiKeysManagementPanel.vue';
 
@@ -551,7 +662,9 @@ onMounted(async () => {
 }
 
 .endpoint-name {
-    font-family: ''Courier New'', monospace;
+    font-family:
+        '' Courier New '',
+        monospace;
     color: #444;
     word-break: break-all;
     background: rgba(76, 175, 80, 0.08);
@@ -568,9 +681,18 @@ onMounted(async () => {
     text-transform: uppercase;
 }
 
-.role-badge.guest { background: rgba(33, 150, 243, 0.15); color: #1976d2; }
-.role-badge.registered { background: rgba(76, 175, 80, 0.15); color: #388e3c; }
-.role-badge.admin { background: rgba(255, 152, 0, 0.15); color: #f57c00; }
+.role-badge.guest {
+    background: rgba(33, 150, 243, 0.15);
+    color: #1976d2;
+}
+.role-badge.registered {
+    background: rgba(76, 175, 80, 0.15);
+    color: #388e3c;
+}
+.role-badge.admin {
+    background: rgba(255, 152, 0, 0.15);
+    color: #f57c00;
+}
 
 .highlight {
     color: #3c8d4c;
@@ -582,8 +704,14 @@ onMounted(async () => {
     font-size: 12px;
 }
 
-.success { color: #388e3c; font-weight: 600; }
-.error { color: #d32f2f; font-weight: 600; }
+.success {
+    color: #388e3c;
+    font-weight: 600;
+}
+.error {
+    color: #d32f2f;
+    font-weight: 600;
+}
 
 .percentage {
     font-weight: 600;
@@ -603,10 +731,22 @@ onMounted(async () => {
     font-size: 12px;
 }
 
-.status-code.success { background: rgba(76, 175, 80, 0.15); color: #1b5e20; }
-.status-code.client-error { background: rgba(255, 87, 34, 0.15); color: #bf360c; }
-.status-code.server-error { background: rgba(244, 67, 54, 0.15); color: #b71c1c; }
-.status-code.info { background: rgba(33, 150, 243, 0.15); color: #0d47a1; }
+.status-code.success {
+    background: rgba(76, 175, 80, 0.15);
+    color: #1b5e20;
+}
+.status-code.client-error {
+    background: rgba(255, 87, 34, 0.15);
+    color: #bf360c;
+}
+.status-code.server-error {
+    background: rgba(244, 67, 54, 0.15);
+    color: #b71c1c;
+}
+.status-code.info {
+    background: rgba(33, 150, 243, 0.15);
+    color: #0d47a1;
+}
 
 .loading-state {
     display: flex;
@@ -628,8 +768,12 @@ onMounted(async () => {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .empty-state {
@@ -749,7 +893,9 @@ onMounted(async () => {
     background: rgba(255, 255, 255, 0.8);
     padding: 2px 6px;
     border-radius: 4px;
-    font-family: ''Courier New'', monospace;
+    font-family:
+        '' Courier New '',
+        monospace;
     font-weight: 600;
 }
 

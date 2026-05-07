@@ -5,7 +5,12 @@
                 <div class="title">驾车规划</div>
                 <div class="title-sub">Driving & Walking Routing</div>
             </div>
-            <button class="ghost-btn" @click="$emit('close')">关闭</button>
+            <button
+                class="ghost-btn"
+                @click="$emit('close')"
+            >
+                关闭
+            </button>
         </div>
 
         <MapPointPickerCard
@@ -26,34 +31,78 @@
         />
 
         <div class="plan-row">
-            <label class="plan-label" for="driveStyleSelect">路线策略</label>
-            <select id="driveStyleSelect" v-model="routeStyle" class="plan-select">
+            <label
+                class="plan-label"
+                for="driveStyleSelect"
+                >路线策略</label
+            >
+            <select
+                id="driveStyleSelect"
+                v-model="routeStyle"
+                class="plan-select"
+            >
                 <option value="0">0 - 最快路线</option>
                 <option value="1">1 - 最短路线</option>
                 <option value="2">2 - 避开高速</option>
                 <option value="3">3 - 步行</option>
             </select>
-            <button class="plan-btn" :disabled="isLoading" @click="startDriveSearch">
+            <button
+                class="plan-btn"
+                :disabled="isLoading"
+                @click="startDriveSearch"
+            >
                 {{ isLoading ? '导航中...' : '开始导航' }}
             </button>
         </div>
 
-        <div class="status-line error" v-if="error">{{ error }}</div>
-        <div class="status-line" v-else-if="pickMode === 'start'">请在主地图上单击一个位置设置起点</div>
-        <div class="status-line" v-else-if="pickMode === 'end'">请在主地图上单击一个位置设置终点</div>
+        <div
+            class="status-line error"
+            v-if="error"
+        >
+            {{ error }}
+        </div>
+        <div
+            class="status-line"
+            v-else-if="pickMode === 'start'"
+        >
+            请在主地图上单击一个位置设置起点
+        </div>
+        <div
+            class="status-line"
+            v-else-if="pickMode === 'end'"
+        >
+            请在主地图上单击一个位置设置终点
+        </div>
 
         <details class="debug-box">
             <summary>调试信息</summary>
-            <div class="debug-row"><span>请求状态：</span><span>{{ debug.status }}</span></div>
-            <div class="debug-row"><span>请求URL：</span><span class="debug-text">{{ debug.requestUrl || '-' }}</span></div>
-            <div class="debug-row"><span>distance：</span><span>{{ debug.rawDistance || '-' }}</span></div>
-            <div class="debug-row"><span>duration：</span><span>{{ debug.rawDuration || '-' }}</span></div>
-            <div class="debug-row"><span>steps数量：</span><span>{{ debug.stepCount }}</span></div>
-            <div class="debug-row"><span>提示：</span><span class="debug-text">{{ debug.message || '-' }}</span></div>
+            <div class="debug-row">
+                <span>请求状态：</span><span>{{ debug.status }}</span>
+            </div>
+            <div class="debug-row">
+                <span>请求URL：</span><span class="debug-text">{{ debug.requestUrl || '-' }}</span>
+            </div>
+            <div class="debug-row">
+                <span>distance：</span><span>{{ debug.rawDistance || '-' }}</span>
+            </div>
+            <div class="debug-row">
+                <span>duration：</span><span>{{ debug.rawDuration || '-' }}</span>
+            </div>
+            <div class="debug-row">
+                <span>steps数量：</span><span>{{ debug.stepCount }}</span>
+            </div>
+            <div class="debug-row">
+                <span>提示：</span><span class="debug-text">{{ debug.message || '-' }}</span>
+            </div>
         </details>
 
-        <div class="planner-main" v-if="routeResult">
-            <aside class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto">
+        <div
+            class="planner-main"
+            v-if="routeResult"
+        >
+            <aside
+                class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"
+            >
                 <div class="route-title">导航结果</div>
 
                 <div class="summary-grid">
@@ -75,7 +124,11 @@
                     :key="`${index}_${step.text.slice(0, 20)}`"
                     class="route-card"
                     :class="selectedStepIndex === index ? 'route-card-active' : ''"
-                    :style="{ borderLeftColor: getStepColor(index), borderLeftWidth: '4px', borderLeftStyle: 'solid' }"
+                    :style="{
+                        borderLeftColor: getStepColor(index),
+                        borderLeftWidth: '4px',
+                        borderLeftStyle: 'solid',
+                    }"
                     @mouseenter="handlePreviewDriveStep(index)"
                     @mouseleave="clearDriveStepPreview"
                     @click="handleSelectDriveStep(index)"
@@ -86,7 +139,10 @@
                     </div>
                 </div>
 
-                <div v-if="routeResult.steps.length === 0" class="route-empty">
+                <div
+                    v-if="routeResult.steps.length === 0"
+                    class="route-empty"
+                >
                     暂无路线引导信息
                 </div>
             </aside>
@@ -112,7 +168,10 @@ const YOUR_TIANDITU_TK = 'YOUR_TIANDITU_TK';
 
 const props = defineProps<{
     token?: string;
-    drawDriveRouteOnMap?: (payload: { routeLatLonStr: string; stepLinePoints: string[] }) => Promise<void> | void;
+    drawDriveRouteOnMap?: (payload: {
+        routeLatLonStr: string;
+        stepLinePoints: string[];
+    }) => Promise<void> | void;
     zoomToDriveRouteStep?: (stepIndex: number) => Promise<void> | void;
     previewDriveRouteStep?: (stepIndex: number) => Promise<void> | void;
     clearDriveRouteStepPreview?: () => Promise<void> | void;
@@ -141,7 +200,7 @@ const debug = reactive({
     rawDistance: '',
     rawDuration: '',
     stepCount: 0,
-    message: ''
+    message: '',
 });
 
 const DRIVE_STEP_COLOR_PALETTE = ['#10B981', '#0EA5E9', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6'];
@@ -203,7 +262,14 @@ async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
 }
 
 function isValidLngLat(lng: number, lat: number): boolean {
-    return Number.isFinite(lng) && Number.isFinite(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90;
+    return (
+        Number.isFinite(lng) &&
+        Number.isFinite(lat) &&
+        lng >= -180 &&
+        lng <= 180 &&
+        lat >= -90 &&
+        lat <= 90
+    );
 }
 
 function formatDuration(seconds: number): string {
@@ -226,7 +292,7 @@ async function handleSelectDriveStep(stepIndex: number): Promise<void> {
             await props.drawDriveRouteOnMap({
                 routeLatLonStr: routeResult.value.routelatlon,
                 // 不过滤空项，保留步骤索引与分段索引的一一对应关系。
-                stepLinePoints: routeResult.value.steps.map((step) => step.linePoint)
+                stepLinePoints: routeResult.value.steps.map((step) => step.linePoint),
             });
         }
 
@@ -284,7 +350,7 @@ async function startDriveSearch(): Promise<void> {
         const postObj = {
             orig: `${oLng},${oLat}`,
             dest: `${dLng},${dLat}`,
-            style: String(routeStyle.value)
+            style: String(routeStyle.value),
         };
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
@@ -301,16 +367,18 @@ async function startDriveSearch(): Promise<void> {
         // 天地图 drive API 返回 XML，交给独立解析器处理。
         const xmlString = await response.text();
         const parsed = parseDriveRouteXml(xmlString);
-        const steps = parsed.segments.map((seg) => ({
-            text: seg.guide,
-            linePoint: seg.streetLatLon
-        })).filter((step) => step.text);
+        const steps = parsed.segments
+            .map((seg) => ({
+                text: seg.guide,
+                linePoint: seg.streetLatLon,
+            }))
+            .filter((step) => step.text);
 
         routeResult.value = {
             distanceKm: Number.isFinite(parsed.distanceKm) ? parsed.distanceKm.toFixed(2) : '0.00',
             durationText: parsed.durationText || formatDuration(parsed.durationSec),
             routelatlon: parsed.routeLatLon,
-            steps
+            steps,
         };
 
         // 若 XML 返回了参数里的起终点，回填到输入框，便于核对。
@@ -335,7 +403,7 @@ async function startDriveSearch(): Promise<void> {
         if (parsed.routeLatLon && props.drawDriveRouteOnMap) {
             await props.drawDriveRouteOnMap({
                 routeLatLonStr: parsed.routeLatLon,
-                stepLinePoints: steps.map((step) => step.linePoint)
+                stepLinePoints: steps.map((step) => step.linePoint),
             });
         }
 
@@ -349,10 +417,11 @@ async function startDriveSearch(): Promise<void> {
         }
     } catch (e) {
         const rawMessage = e instanceof Error ? e.message : String(e || '');
-        const likelyNetworkBlocked = e instanceof TypeError || /failed\s+to\s+fetch/i.test(rawMessage);
+        const likelyNetworkBlocked =
+            e instanceof TypeError || /failed\s+to\s+fetch/i.test(rawMessage);
         const message = likelyNetworkBlocked
             ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
-            : (rawMessage || '导航失败');
+            : rawMessage || '导航失败';
         error.value = message;
         debug.status = 'error';
         debug.message = message;
@@ -450,7 +519,9 @@ async function startDriveSearch(): Promise<void> {
     font-weight: 600;
     white-space: nowrap;
     box-shadow: 0 6px 14px rgba(29, 78, 216, 0.25);
-    transition: transform 0.15s ease, box-shadow 0.2s ease;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.2s ease;
 }
 
 .plan-btn:hover:not(:disabled) {

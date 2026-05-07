@@ -45,12 +45,12 @@ function parsePayloadToObject(payload) {
 
 function extractAoiShape(data = {}) {
     return String(
-        data?.data?.spec?.mining_shape?.shape
-        || data?.spec?.mining_shape?.shape
-        || data?.pois?.[0]?.spec?.mining_shape?.shape
-        || data?.pois?.[0]?.biz_ext?.aoi
-        || data?.pois?.[0]?.aoi
-        || ''
+        data?.data?.spec?.mining_shape?.shape ||
+            data?.spec?.mining_shape?.shape ||
+            data?.pois?.[0]?.spec?.mining_shape?.shape ||
+            data?.pois?.[0]?.biz_ext?.aoi ||
+            data?.pois?.[0]?.aoi ||
+            '',
     ).trim();
 }
 
@@ -61,22 +61,18 @@ function extractBaseNode(data = {}) {
 
 function extractPoiId(data = {}) {
     return String(
-        data?.data?.base?.poiid
-        || data?.base?.poiid
-        || data?.pois?.[0]?.id
-        || data?.pois?.[0]?.poiid
-        || data?.id
-        || ''
+        data?.data?.base?.poiid ||
+            data?.base?.poiid ||
+            data?.pois?.[0]?.id ||
+            data?.pois?.[0]?.poiid ||
+            data?.id ||
+            '',
     ).trim();
 }
 
 function extractPoiName(data = {}, base = {}) {
     return String(
-        base?.name
-        || data?.data?.base?.name
-        || data?.base?.name
-        || data?.pois?.[0]?.name
-        || ''
+        base?.name || data?.data?.base?.name || data?.base?.name || data?.pois?.[0]?.name || '',
     ).trim();
 }
 
@@ -143,10 +139,12 @@ function parseShapeToGcjRings(shape = '') {
         .split('|')
         .map((ringText) => ringText.trim())
         .filter(Boolean)
-        .map((ringText) => ringText
-            .split(';')
-            .map((pairText) => parseLngLatPair(pairText))
-            .filter((point) => Array.isArray(point)))
+        .map((ringText) =>
+            ringText
+                .split(';')
+                .map((pairText) => parseLngLatPair(pairText))
+                .filter((point) => Array.isArray(point)),
+        )
         .map((ring) => closeRingIfNeeded(ring))
         .filter((ring) => Array.isArray(ring) && ring.length >= 4);
 }
@@ -172,9 +170,7 @@ function convertGcjRingsToWgs84(gcjRings = []) {
 
 function extractCenter(data = {}, base = {}) {
     const centerText = String(
-        data?.data?.spec?.mining_shape?.center
-        || data?.spec?.mining_shape?.center
-        || ''
+        data?.data?.spec?.mining_shape?.center || data?.spec?.mining_shape?.center || '',
     ).trim();
 
     if (centerText) {
@@ -184,7 +180,7 @@ function extractCenter(data = {}, base = {}) {
             if (Number.isFinite(wgsLng) && Number.isFinite(wgsLat)) {
                 return {
                     gcj: centerPair,
-                    wgs84: [wgsLng, wgsLat]
+                    wgs84: [wgsLng, wgsLat],
                 };
             }
         }
@@ -197,7 +193,7 @@ function extractCenter(data = {}, base = {}) {
         if (Number.isFinite(wgsLng) && Number.isFinite(wgsLat)) {
             return {
                 gcj: [x, y],
-                wgs84: [wgsLng, wgsLat]
+                wgs84: [wgsLng, wgsLat],
             };
         }
     }
@@ -236,7 +232,7 @@ export function parseAmapAoiPayload(payload) {
         base,
         center,
         ringsGcj02,
-        ringsWgs84
+        ringsWgs84,
     };
 }
 

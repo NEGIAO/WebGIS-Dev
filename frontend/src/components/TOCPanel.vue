@@ -1,56 +1,144 @@
 <template>
     <div class="toolbox-panel">
         <!-- <input ref="fileInputRef" type="file" multiple class="hidden-input" accept=".geojson,.json,.kml,.kmz,.zip,.shp,.dbf,.shx,.prj,.cpg,.tif,.tiff" @change="handleFileUpload" /> -->
-        <input ref="fileInputRef" type="file" multiple class="hidden-input" accept="." @change="handleFileUpload" />
-        <input ref="folderInputRef" type="file" multiple webkitdirectory directory class="hidden-input"
-            @change="handleDirectoryUpload" />
+        <input
+            ref="fileInputRef"
+            type="file"
+            multiple
+            class="hidden-input"
+            accept="."
+            @change="handleFileUpload"
+        />
+        <input
+            ref="folderInputRef"
+            type="file"
+            multiple
+            webkitdirectory
+            directory
+            class="hidden-input"
+            @change="handleDirectoryUpload"
+        />
 
         <div class="header">
             <div>
                 <div class="title">工具箱</div>
             </div>
-            <button class="ghost-btn" @click="emit('close')">关闭</button>
+            <button
+                class="ghost-btn"
+                @click="emit('close')"
+            >
+                关闭
+            </button>
         </div>
 
         <div class="tabs">
-                <button class="tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
-            <button class="tab" :class="{ active: activeTab === 'draw' }" @click="activeTab = 'draw'">绘制</button>
-            <button class="tab" :class="{ active: activeTab === 'style' }" @click="activeTab = 'style'">样式</button>
-            <button class="tab" :class="{ active: activeTab === 'download' }"
-                @click="activeTab = 'download'">下载</button>
+            <button
+                class="tab"
+                :class="{ active: activeTab === 'layers' }"
+                @click="activeTab = 'layers'"
+            >
+                图层
+            </button>
+            <button
+                class="tab"
+                :class="{ active: activeTab === 'draw' }"
+                @click="activeTab = 'draw'"
+            >
+                绘制
+            </button>
+            <button
+                class="tab"
+                :class="{ active: activeTab === 'style' }"
+                @click="activeTab = 'style'"
+            >
+                样式
+            </button>
+            <button
+                class="tab"
+                :class="{ active: activeTab === 'download' }"
+                @click="activeTab = 'download'"
+            >
+                下载
+            </button>
         </div>
 
-        <div v-if="activeTab === 'layers'" class="panel-scroll">
-            <LayerPanel :draw-layers="drawLayers" :route-layers="routeLayers" :search-layers="searchLayers"
-                :upload-layers="uploadLayers" :selected-layer-ids="multiSelectedLayerIds" :has-draw-card="hasDrawCard"
-                :overview="overview" :is-raster-layer="isRasterLayer" @action="handleLayerTreeAction" />
+        <div
+            v-if="activeTab === 'layers'"
+            class="panel-scroll"
+        >
+            <LayerPanel
+                :draw-layers="drawLayers"
+                :route-layers="routeLayers"
+                :search-layers="searchLayers"
+                :upload-layers="uploadLayers"
+                :selected-layer-ids="multiSelectedLayerIds"
+                :has-draw-card="hasDrawCard"
+                :overview="overview"
+                :is-raster-layer="isRasterLayer"
+                @action="handleLayerTreeAction"
+            />
 
-            <AmapAoiInjectDialog :visible="manualAoiDialogVisible" :poi-id="manualAoiPoiId"
-                :json-text="manualAoiJsonText" :detail-url="manualAoiDetailUrl"
-                :source-layer-name="manualAoiSourceLayerName" :error-message="manualAoiError"
-                @update:poi-id="manualAoiPoiId = $event" @update:json-text="manualAoiJsonText = $event"
-                @open-detail="openManualAoiDetailLink" @submit="drawAmapAoiFromManualJson"
-                @close="closeManualAoiDialog" />
+            <AmapAoiInjectDialog
+                :visible="manualAoiDialogVisible"
+                :poi-id="manualAoiPoiId"
+                :json-text="manualAoiJsonText"
+                :detail-url="manualAoiDetailUrl"
+                :source-layer-name="manualAoiSourceLayerName"
+                :error-message="manualAoiError"
+                @update:poi-id="manualAoiPoiId = $event"
+                @update:json-text="manualAoiJsonText = $event"
+                @open-detail="openManualAoiDetailLink"
+                @submit="drawAmapAoiFromManualJson"
+                @close="closeManualAoiDialog"
+            />
 
             <div class="upload-zone-wrap">
-                <div class="upload-entry" :class="{ dragging: isUploadDragging }"
-                    @dragenter.prevent="handleUploadDragEnter" @dragover.prevent="handleUploadDragOver"
-                    @dragleave.prevent="handleUploadDragLeave" @drop.prevent="handleUploadDrop">
+                <div
+                    class="upload-entry"
+                    :class="{ dragging: isUploadDragging }"
+                    @dragenter.prevent="handleUploadDragEnter"
+                    @dragover.prevent="handleUploadDragOver"
+                    @dragleave.prevent="handleUploadDragLeave"
+                    @drop.prevent="handleUploadDrop"
+                >
                     <div class="card-top">
                         <div class="card-title upload-title">
-                            <span class="upload-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                    stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <span
+                                class="upload-icon"
+                                aria-hidden="true"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    width="16"
+                                    height="16"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
                                     <path d="M12 16V5"></path>
                                     <path d="m8 9 4-4 4 4"></path>
-                                    <path d="M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5"></path>
+                                    <path
+                                        d="M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5"
+                                    ></path>
                                 </svg>
                             </span>
                             上传图层
                         </div>
                         <div class="upload-btns">
-                            <button class="small-btn" @click="triggerFileUpload">上传文件</button>
-                            <button class="small-btn ghost" @click="triggerFolderUpload">上传文件夹</button>
+                            <button
+                                class="small-btn"
+                                @click="triggerFileUpload"
+                            >
+                                上传文件
+                            </button>
+                            <button
+                                class="small-btn ghost"
+                                @click="triggerFolderUpload"
+                            >
+                                上传文件夹
+                            </button>
                         </div>
                     </div>
                     <div class="upload-tip">支持单文件、多文件、文件夹上传，也可拖拽到此区域</div>
@@ -58,23 +146,41 @@
                         <span>❗ 文件大小不超过 {{ MAX_FILE_SIZE_MB }} MB❗</span>
                         <span>🔔数据格式：GeoJSON、KML、KMZ、TIF、SHP</span>
                     </div>
-                    <div v-if="shouldShowUploadProgress" class="upload-progress"
-                        :class="`phase-${uploadProgressView.phase}`">
+                    <div
+                        v-if="shouldShowUploadProgress"
+                        class="upload-progress"
+                        :class="`phase-${uploadProgressView.phase}`"
+                    >
                         <div class="upload-progress-head">
-                            <span>导入状态：{{ uploadProgressView.current }}/{{ uploadProgressView.total || 1 }}</span>
+                            <span
+                                >导入状态：{{ uploadProgressView.current }}/{{
+                                    uploadProgressView.total || 1
+                                }}</span
+                            >
                             <span>{{ uploadProgressLabel }}</span>
                         </div>
                         <div class="upload-progress-bar">
-                            <div class="upload-progress-fill" :style="{ width: `${uploadProgressPercent}%` }"></div>
+                            <div
+                                class="upload-progress-fill"
+                                :style="{ width: `${uploadProgressPercent}%` }"
+                            ></div>
                         </div>
                         <div class="upload-progress-meta">
                             <span>成功 {{ uploadProgressView.success }}</span>
                             <span>失败 {{ uploadProgressView.failed }}</span>
-                            <span v-if="uploadProgressView.warnings">警告 {{ uploadProgressView.warnings }}</span>
-                            <span v-if="uploadProgressView.errors">错误 {{ uploadProgressView.errors }}</span>
+                            <span v-if="uploadProgressView.warnings"
+                                >警告 {{ uploadProgressView.warnings }}</span
+                            >
+                            <span v-if="uploadProgressView.errors"
+                                >错误 {{ uploadProgressView.errors }}</span
+                            >
                         </div>
-                        <div v-if="uploadProgressView.message" class="upload-progress-message">{{
-                            uploadProgressView.message }}</div>
+                        <div
+                            v-if="uploadProgressView.message"
+                            class="upload-progress-message"
+                        >
+                            {{ uploadProgressView.message }}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -83,29 +189,76 @@
             <div class="shared-resource-wrap">
                 <div class="card shared-resource-card">
                     <div class="card-title shared-resource-title">
-                        <span class="share-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-                                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="18" cy="5" r="3"></circle>
-                                <circle cx="6" cy="12" r="3"></circle>
-                                <circle cx="18" cy="19" r="3"></circle>
-                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                        <span
+                            class="share-icon"
+                            aria-hidden="true"
+                        >
+                            <svg
+                                viewBox="0 0 24 24"
+                                width="16"
+                                height="16"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <circle
+                                    cx="18"
+                                    cy="5"
+                                    r="3"
+                                ></circle>
+                                <circle
+                                    cx="6"
+                                    cy="12"
+                                    r="3"
+                                ></circle>
+                                <circle
+                                    cx="18"
+                                    cy="19"
+                                    r="3"
+                                ></circle>
+                                <line
+                                    x1="8.59"
+                                    y1="13.51"
+                                    x2="15.42"
+                                    y2="17.49"
+                                ></line>
+                                <line
+                                    x1="15.41"
+                                    y1="6.51"
+                                    x2="8.59"
+                                    y2="10.49"
+                                ></line>
                             </svg>
                         </span>
                         共享资源
                     </div>
                     <div class="shared-resource-menu">
-                        <button class="shared-resource-btn" :class="{ loading: sharedLoader.isScanning.value }"
-                            @click="scanSharedResources">
+                        <button
+                            class="shared-resource-btn"
+                            :class="{ loading: sharedLoader.isScanning.value }"
+                            @click="scanSharedResources"
+                        >
                             <span v-if="!sharedLoader.isScanning.value">📁 加载资源</span>
                             <span v-else>⏳ 扫描中...</span>
                         </button>
-                        <div v-if="sharedLoader.hasResources.value" class="resource-tree-root">
-                            <SharedResourceTreeItem v-for="node in sharedLoader.resourceTree.value" :key="node.id"
-                                :node="node" :level="0" @load-resource="loadSharedResource" />
+                        <div
+                            v-if="sharedLoader.hasResources.value"
+                            class="resource-tree-root"
+                        >
+                            <SharedResourceTreeItem
+                                v-for="node in sharedLoader.resourceTree.value"
+                                :key="node.id"
+                                :node="node"
+                                :level="0"
+                                @load-resource="loadSharedResource"
+                            />
                         </div>
-                        <div v-else-if="!sharedLoader.isScanning.value && lastScanAttempted" class="resource-empty">
+                        <div
+                            v-else-if="!sharedLoader.isScanning.value && lastScanAttempted"
+                            class="resource-empty"
+                        >
                             暂无可用资源
                         </div>
                     </div>
@@ -113,7 +266,10 @@
             </div>
         </div>
 
-        <div v-else-if="activeTab === 'draw'" class="eco-panel-scroll">
+        <div
+            v-else-if="activeTab === 'draw'"
+            class="eco-panel-scroll"
+        >
             <!-- 1. 核心绘图工具区 -->
             <div class="eco-section">
                 <div class="section-header">
@@ -121,14 +277,29 @@
                     <span class="section-title">基础绘图</span>
                 </div>
                 <div class="eco-draw-grid">
-                    <button v-for="tool in drawTools" :key="tool.value" class="eco-tool-pill"
-                        :class="{ active: selectedDrawTool === tool.value }" @click="activateDrawTool(tool.value)">
+                    <button
+                        v-for="tool in drawTools"
+                        :key="tool.value"
+                        class="eco-tool-pill"
+                        :class="{ active: selectedDrawTool === tool.value }"
+                        @click="activateDrawTool(tool.value)"
+                    >
                         {{ tool.label }}
                     </button>
                 </div>
                 <div class="eco-actions-flex">
-                    <button class="eco-btn-op primary" @click="emit('interaction', 'ZoomToGraphics')">全幅显示</button>
-                    <button class="eco-btn-op warning" @click="emit('interaction', 'Clear')">清空画布</button>
+                    <button
+                        class="eco-btn-op primary"
+                        @click="emit('interaction', 'ZoomToGraphics')"
+                    >
+                        全幅显示
+                    </button>
+                    <button
+                        class="eco-btn-op warning"
+                        @click="emit('interaction', 'Clear')"
+                    >
+                        清空画布
+                    </button>
                 </div>
             </div>
 
@@ -142,15 +313,31 @@
                 <!-- 经纬度输入 -->
                 <div class="eco-input-group">
                     <div class="input-row">
-                        <input v-model.trim="coordInputLon" class="eco-input" placeholder="经度" />
-                        <input v-model.trim="coordInputLat" class="eco-input" placeholder="纬度" />
+                        <input
+                            v-model.trim="coordInputLon"
+                            class="eco-input"
+                            placeholder="经度"
+                        />
+                        <input
+                            v-model.trim="coordInputLat"
+                            class="eco-input"
+                            placeholder="纬度"
+                        />
                     </div>
                     <div class="input-row compact">
-                        <select v-model="coordInputCRS" class="eco-select">
+                        <select
+                            v-model="coordInputCRS"
+                            class="eco-select"
+                        >
                             <option value="wgs84">WGS-84</option>
                             <option value="gcj02">GCJ-02</option>
                         </select>
-                        <button class="eco-btn-sm" @click="drawPointByCoordinates">绘制</button>
+                        <button
+                            class="eco-btn-sm"
+                            @click="drawPointByCoordinates"
+                        >
+                            绘制
+                        </button>
                     </div>
                 </div>
 
@@ -159,13 +346,24 @@
                 <!-- P 参数输入 -->
                 <div class="eco-input-group">
                     <div class="input-row">
-                        <input v-model.trim="coordInputP" class="eco-input" placeholder="请输入 P 参数" />
-                        <button class="eco-btn-sm" :disabled="isDecodePBusy" @click="drawPointByPositionCode">
+                        <input
+                            v-model.trim="coordInputP"
+                            class="eco-input"
+                            placeholder="请输入 P 参数"
+                        />
+                        <button
+                            class="eco-btn-sm"
+                            :disabled="isDecodePBusy"
+                            @click="drawPointByPositionCode"
+                        >
                             {{ isDecodePBusy ? '...' : '解析' }}
                         </button>
                     </div>
                 </div>
-                <div v-if="coordInputError || coordInputPError" class="eco-error-msg">
+                <div
+                    v-if="coordInputError || coordInputPError"
+                    class="eco-error-msg"
+                >
                     {{ coordInputError || coordInputPError }}
                 </div>
             </div>
@@ -177,15 +375,31 @@
                     <span class="section-title">地理编码</span>
                 </div>
                 <div class="eco-input-group">
-                    <input v-model.trim="geocodeAddressInput" class="eco-input full" placeholder="输入地址..." />
+                    <input
+                        v-model.trim="geocodeAddressInput"
+                        class="eco-input full"
+                        placeholder="输入地址..."
+                    />
                     <div class="input-row compact mt-8">
-                        <input v-model.trim="geocodeCityInput" class="eco-input" placeholder="限定城市(可选)" />
-                        <button class="eco-btn-sm" :disabled="isGeocodeBusy"
-                            @click="drawPointByGeocodeAddress">编码</button>
+                        <input
+                            v-model.trim="geocodeCityInput"
+                            class="eco-input"
+                            placeholder="限定城市(可选)"
+                        />
+                        <button
+                            class="eco-btn-sm"
+                            :disabled="isGeocodeBusy"
+                            @click="drawPointByGeocodeAddress"
+                        >
+                            编码
+                        </button>
                     </div>
                 </div>
 
-                <button class="eco-btn-reverse mt-12" @click="startReverseGeocodePick">
+                <button
+                    class="eco-btn-reverse mt-12"
+                    @click="startReverseGeocodePick"
+                >
                     <span class="icon">📍</span> 地图点选逆编码
                 </button>
             </div>
@@ -198,17 +412,34 @@
             </div>
         </div>
 
-        <div v-else-if="activeTab === 'download'" class="panel-scroll">
-            <MapDownloader :visible="true" @close="activeTab = 'layers'"
-                @request-extent="emit('request-download-extent')" />
+        <div
+            v-else-if="activeTab === 'download'"
+            class="panel-scroll"
+        >
+            <MapDownloader
+                :visible="true"
+                @close="activeTab = 'layers'"
+                @request-extent="emit('request-download-extent')"
+            />
         </div>
 
-        <div v-else class="panel-scroll style-scroll">
+        <div
+            v-else
+            class="panel-scroll style-scroll"
+        >
             <div class="style-panel">
                 <div class="card-title">样式模板</div>
                 <div class="template-chip-row">
-                    <button class="template-chip" v-for="t in styleTemplates" :key="t.id" @click="applyTemplate(t.id)">
-                        <span class="chip-dot" :style="{ backgroundColor: t.color }"></span>
+                    <button
+                        class="template-chip"
+                        v-for="t in styleTemplates"
+                        :key="t.id"
+                        @click="applyTemplate(t.id)"
+                    >
+                        <span
+                            class="chip-dot"
+                            :style="{ backgroundColor: t.color }"
+                        ></span>
                         <span>{{ t.name }}</span>
                     </button>
                 </div>
@@ -219,8 +450,16 @@
                 <div class="field">
                     <label>编辑目标</label>
                     <div class="select-wrap">
-                        <select v-model="selectedEditLayerId" class="style-select">
-                            <option v-for="layer in editableLayers" :key="layer.id" :value="layer.id">{{ layer.name }}
+                        <select
+                            v-model="selectedEditLayerId"
+                            class="style-select"
+                        >
+                            <option
+                                v-for="layer in editableLayers"
+                                :key="layer.id"
+                                :value="layer.id"
+                            >
+                                {{ layer.name }}
                             </option>
                         </select>
                     </div>
@@ -228,11 +467,19 @@
                 <div class="field-grid">
                     <div class="field">
                         <label>填充色</label>
-                        <input type="color" class="style-color" v-model="styleForm.fillColor" />
+                        <input
+                            type="color"
+                            class="style-color"
+                            v-model="styleForm.fillColor"
+                        />
                     </div>
                     <div class="field">
                         <label>边框色</label>
-                        <input type="color" class="style-color" v-model="styleForm.strokeColor" />
+                        <input
+                            type="color"
+                            class="style-color"
+                            v-model="styleForm.strokeColor"
+                        />
                     </div>
                 </div>
                 <div class="field-grid">
@@ -241,22 +488,37 @@
                             <label>填充透明度</label>
                             <span>{{ styleForm.fillOpacityPct }}%</span>
                         </div>
-                        <input class="style-slider" type="range" min="0" max="100"
-                            v-model.number="styleForm.fillOpacityPct" />
+                        <input
+                            class="style-slider"
+                            type="range"
+                            min="0"
+                            max="100"
+                            v-model.number="styleForm.fillOpacityPct"
+                        />
                     </div>
                     <div class="field">
                         <div class="slider-head">
                             <label>边框宽度</label>
                             <span>{{ styleForm.strokeWidth }}</span>
                         </div>
-                        <input class="style-slider" type="range" min="1" max="8" step="0.5"
-                            v-model.number="styleForm.strokeWidth" />
+                        <input
+                            class="style-slider"
+                            type="range"
+                            min="1"
+                            max="8"
+                            step="0.5"
+                            v-model.number="styleForm.strokeWidth"
+                        />
                     </div>
                 </div>
-                <button class="small-btn style-apply-btn" @click="applyStyle">应用样式</button>
+                <button
+                    class="small-btn style-apply-btn"
+                    @click="applyStyle"
+                >
+                    应用样式
+                </button>
             </div>
         </div>
-
     </div>
 </template>
 
@@ -270,7 +532,7 @@ import {
     applyRecursiveSelection,
     applyRecursiveSelectionChunked,
     pruneSelectedLayerIds,
-    handleLayerTreeContextAction
+    handleLayerTreeContextAction,
 } from '../composables/map/toc';
 import { useLayerStore, useAttrStore } from '../stores';
 import { useStyleEditor } from '../constants';
@@ -279,17 +541,13 @@ import {
     DECIMAL_PLACES,
     formatCoordinate,
     generatePointName,
-    processCoordinateInput
+    processCoordinateInput,
 } from '../utils/biz';
-import {
-    apiAddressGeocode,
-    apiReverseGeocodeWithFallback
-} from '../api';
+import { apiAddressGeocode, apiReverseGeocodeWithFallback } from '../api';
 import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from './AmapAoiInjectDialog.vue';
 import MapDownloader from './MapDownloader.vue';
-
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
@@ -297,7 +555,7 @@ const props = defineProps({
     overview: { type: Object, default: () => ({ drawCount: 0, uploadCount: 0, layers: [] }) },
     uploadProgress: { type: Object, default: () => ({ phase: 'idle' }) },
     latestSearchPoi: { type: Object, default: () => ({}) },
-    defaultTab: { type: String, default: 'layers' }
+    defaultTab: { type: String, default: 'layers' },
 });
 
 const emit = defineEmits([
@@ -324,7 +582,7 @@ const emit = defineEmits([
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data',
-    'request-download-extent'
+    'request-download-extent',
 ]);
 
 const fileInputRef = ref(null);
@@ -371,14 +629,12 @@ watch(
     (next) => {
         activeTab.value = normalizeTab(next);
     },
-    { immediate: true }
+    { immediate: true },
 );
 
-const {
-    decodePositionCodeToPointPayload
-} = usePositionCodeTool({
+const { decodePositionCodeToPointPayload } = usePositionCodeTool({
     tiandituTk: TIANDITU_TK,
-    reverseGeocode: apiReverseGeocodeWithFallback
+    reverseGeocode: apiReverseGeocodeWithFallback,
 });
 
 function buildAmapDetailUrl(rawPoiId) {
@@ -394,7 +650,7 @@ const manualAoiDetailUrl = computed(() => {
 
 const COORD_STORAGE_KEYS = {
     FORMAT_ID: 'gis_coord_format_id',
-    DECIMAL_PLACES: 'gis_coord_decimal_places'
+    DECIMAL_PLACES: 'gis_coord_decimal_places',
 };
 
 function getCurrentFormatConfig() {
@@ -415,7 +671,7 @@ const drawTools = [
     { value: 'LineString', label: '线' },
     { value: 'Polygon', label: '面' },
     { value: 'MeasureDistance', label: '测距' },
-    { value: 'MeasureArea', label: '测面' }
+    { value: 'MeasureArea', label: '测面' },
 ];
 
 const styleForm = styleEditor.styleForm;
@@ -424,7 +680,7 @@ const selectedEditLayerId = computed({
     get: () => layerStore.selectedEditLayerId,
     set: (value) => {
         layerStore.selectedEditLayerId = value;
-    }
+    },
 });
 const drawLayers = computed(() => layerStore.drawLayers);
 const uploadLayers = computed(() => layerStore.uploadLayers);
@@ -443,7 +699,7 @@ const uploadProgressView = computed(() => {
         failed: Math.max(0, Number(raw.failed) || 0),
         warnings: Math.max(0, Number(raw.warnings) || 0),
         errors: Math.max(0, Number(raw.errors) || 0),
-        message: String(raw.message || '')
+        message: String(raw.message || ''),
     };
 });
 
@@ -530,13 +786,18 @@ function normalizeManualAoiPoiId(rawValue, options = {}) {
     const rawText = String(rawValue || '').trim();
     if (!rawText) return '';
 
-    const unwrapped = rawText.replace(/^\{+|\}+$/g, '').replace(/^['"]+|['"]+$/g, '').trim();
+    const unwrapped = rawText
+        .replace(/^\{+|\}+$/g, '')
+        .replace(/^['"]+|['"]+$/g, '')
+        .trim();
     if (!unwrapped) return '';
 
     if (/^https?:\/\//i.test(unwrapped)) {
         try {
             const url = new URL(unwrapped);
-            const idFromUrl = String(url.searchParams.get('id') || url.searchParams.get('poiid') || '').trim();
+            const idFromUrl = String(
+                url.searchParams.get('id') || url.searchParams.get('poiid') || '',
+            ).trim();
             if (idFromUrl) return idFromUrl;
         } catch {
             // noop
@@ -551,12 +812,12 @@ function normalizeManualAoiPoiId(rawValue, options = {}) {
     try {
         const parsed = JSON.parse(unwrapped);
         const idFromJson = String(
-            parsed?.data?.base?.poiid
-            || parsed?.base?.poiid
-            || parsed?.data?.base?.id
-            || parsed?.pois?.[0]?.id
-            || parsed?.id
-            || ''
+            parsed?.data?.base?.poiid ||
+                parsed?.base?.poiid ||
+                parsed?.data?.base?.id ||
+                parsed?.pois?.[0]?.id ||
+                parsed?.id ||
+                '',
         ).trim();
         if (idFromJson) return idFromJson;
     } catch {
@@ -629,7 +890,7 @@ function drawAmapAoiFromManualJson() {
     emit('draw-amap-aoi-from-json', {
         poiid: poiId,
         jsonText,
-        sourceLayerName: manualAoiSourceLayerName.value
+        sourceLayerName: manualAoiSourceLayerName.value,
     });
 
     // closeManualAoiDialog();
@@ -645,9 +906,9 @@ function buildReverseGeocodeProperties(reverseResult) {
     const provider = String(reverseResult?.provider || '').trim();
     const businessAreaText = Array.isArray(reverseResult?.businessAreas)
         ? reverseResult.businessAreas
-            .map((item) => String(item?.name || '').trim())
-            .filter(Boolean)
-            .join('、')
+              .map((item) => String(item?.name || '').trim())
+              .filter(Boolean)
+              .join('、')
         : '';
 
     return {
@@ -657,7 +918,7 @@ function buildReverseGeocodeProperties(reverseResult) {
         逆地理编码区县: district || '未知',
         逆地理编码乡镇: township || '未知',
         逆地理编码商圈: businessAreaText || '无',
-        逆地理编码服务: provider || 'unknown'
+        逆地理编码服务: provider || 'unknown',
     };
 }
 
@@ -676,7 +937,7 @@ function drawPointByCoordinates() {
         lng: result.lng,
         lat: result.lat,
         crsType,
-        displayName: generatePointName(result.lng, result.lat, crsType)
+        displayName: generatePointName(result.lng, result.lat, crsType),
     });
 
     clearCoordinateInput();
@@ -690,13 +951,15 @@ async function drawPointByPositionCode() {
     try {
         const decodeResult = await decodePositionCodeToPointPayload(code);
         if (!decodeResult?.ok) {
-            coordInputPError.value = String(decodeResult?.error || 'p 参数解码失败，请检查编码内容');
+            coordInputPError.value = String(
+                decodeResult?.error || 'p 参数解码失败，请检查编码内容',
+            );
             message.warning(coordInputPError.value);
             return;
         }
 
         emit('draw-point-by-coordinates', {
-            ...decodeResult.payload
+            ...decodeResult.payload,
         });
 
         message.success(`已按 p 参数绘制点位：${decodeResult.layerName}`);
@@ -721,15 +984,23 @@ async function drawPointByGeocodeAddress() {
     try {
         const geocodeResponse = await apiAddressGeocode(inputAddress, inputCity, { silent: true });
         const geocodeResult = geocodeResponse?.data || null;
-        if (!geocodeResult || !Number.isFinite(geocodeResult.lng) || !Number.isFinite(geocodeResult.lat)) {
+        if (
+            !geocodeResult ||
+            !Number.isFinite(geocodeResult.lng) ||
+            !Number.isFinite(geocodeResult.lat)
+        ) {
             throw new Error('地理编码未返回有效坐标');
         }
         let reverseResult = null;
         try {
-            const reverseResponse = await apiReverseGeocodeWithFallback(geocodeResult.lng, geocodeResult.lat, {
-                tiandituTk: TIANDITU_TK,
-                silent: true
-            });
+            const reverseResponse = await apiReverseGeocodeWithFallback(
+                geocodeResult.lng,
+                geocodeResult.lat,
+                {
+                    tiandituTk: TIANDITU_TK,
+                    silent: true,
+                },
+            );
             reverseResult = reverseResponse?.data || null;
         } catch {
             reverseResult = null;
@@ -749,8 +1020,8 @@ async function drawPointByGeocodeAddress() {
                 地理编码地址: String(geocodeResult?.formattedAddress || '').trim() || inputAddress,
                 地理编码级别: String(geocodeResult?.level || '').trim() || 'unknown',
                 地理编码ADCODE: String(geocodeResult?.adcode || '').trim() || 'unknown',
-                ...buildReverseGeocodeProperties(reverseResult)
-            }
+                ...buildReverseGeocodeProperties(reverseResult),
+            },
         });
 
         message.success(`地理编码成功：${inputAddress}`);
@@ -772,11 +1043,9 @@ function isRasterLayer(layer) {
     return layerStore.isRasterLayer(layer);
 }
 
-const availableLayerIds = computed(() => (
-    (props.userLayers || [])
-        .map((layer) => String(layer?.id || '').trim())
-        .filter(Boolean)
-));
+const availableLayerIds = computed(() =>
+    (props.userLayers || []).map((layer) => String(layer?.id || '').trim()).filter(Boolean),
+);
 
 const layerActionMap = computed(() => {
     const map = new Map();
@@ -811,7 +1080,7 @@ function resolveLayerActionsById(layerId) {
 function pruneMultiSelectedLayerIds() {
     multiSelectedLayerIds.value = pruneSelectedLayerIds(
         multiSelectedLayerIds.value,
-        availableLayerIds.value
+        availableLayerIds.value,
     );
 }
 
@@ -821,7 +1090,7 @@ function setNodeRecursiveSelection(nodeId, checked) {
         treeNodes: layerStore.layerTree || [],
         targetNodeId: nodeId,
         checked,
-        availableLayerIds: availableLayerIds.value
+        availableLayerIds: availableLayerIds.value,
     });
 }
 
@@ -842,7 +1111,7 @@ function setFolderRecursiveSelection(nodeId, checked) {
         checked,
         availableLayerIds: availableLayerIds.value,
         chunkSize: 180,
-        shouldCancel: () => currentToken !== recursiveSelectionToken
+        shouldCancel: () => currentToken !== recursiveSelectionToken,
     }).then((nextSelection) => {
         if (currentToken !== recursiveSelectionToken) return;
         multiSelectedLayerIds.value = nextSelection;
@@ -860,7 +1129,7 @@ watch(
         attrStore.syncLayers(layers || []);
         pruneMultiSelectedLayerIds();
     },
-    { immediate: true, deep: true }
+    { immediate: true, deep: true },
 );
 
 watch(
@@ -868,35 +1137,40 @@ watch(
     (overview) => {
         layerStore.syncLayers(props.userLayers || [], overview || {});
     },
-    { immediate: true, deep: true }
+    { immediate: true, deep: true },
 );
 
 watch(
     () => [
         Number(props.latestSearchPoi?._syncAt || 0),
         String(props.latestSearchPoi?.poiid || props.latestSearchPoi?.id || '').trim(),
-        String(props.latestSearchPoi?.service || '').trim().toLowerCase(),
-        String(props.latestSearchPoi?.name || '').trim()
+        String(props.latestSearchPoi?.service || '')
+            .trim()
+            .toLowerCase(),
+        String(props.latestSearchPoi?.name || '').trim(),
     ],
     ([syncAt, nextPoiId, service, poiName]) => {
         if (!syncAt) return;
         if (service && service !== 'amap') return;
 
-        openManualAoiDialogByPoi({
-            poiid: nextPoiId,
-            layerName: poiName
-        }, {
-            showMissingIdHint: true
-        });
+        openManualAoiDialogByPoi(
+            {
+                poiid: nextPoiId,
+                layerName: poiName,
+            },
+            {
+                showMissingIdHint: true,
+            },
+        );
     },
-    { immediate: true }
+    { immediate: true },
 );
 
 layerStore.bindHandlers({
     onReorder: (payload) => emit('reorder-user-layers', payload),
     onHighlightFeature: (payload) => emit('highlight-attribute-feature', payload),
     onZoomFeature: (payload) => emit('zoom-attribute-feature', payload),
-    onViewFeature: (payload) => emit('zoom-attribute-feature', payload)
+    onViewFeature: (payload) => emit('zoom-attribute-feature', payload),
 });
 
 function triggerFileUpload() {
@@ -918,9 +1192,11 @@ function handleFileUpload(event) {
     if (!files.length) return;
 
     // Check file sizes
-    const oversized = files.filter(file => (file.size / MB) > MAX_FILE_SIZE_MB);
+    const oversized = files.filter((file) => file.size / MB > MAX_FILE_SIZE_MB);
     if (oversized.length) {
-        message.error(`选中 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB 限制：${oversized.map(f => f.name).join(', ')}`);
+        message.error(
+            `选中 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB 限制：${oversized.map((f) => f.name).join(', ')}`,
+        );
         event.target.value = '';
         return;
     }
@@ -934,9 +1210,12 @@ function handleDirectoryUpload(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
 
-    const oversized = files.filter(file => (file.size / MB) > MAX_FILE_SIZE_MB);
+    const oversized = files.filter((file) => file.size / MB > MAX_FILE_SIZE_MB);
     if (oversized.length) {
-        message.warning(`文件夹中有 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB，将在导入阶段按规则处理。`, { duration: 5200 });
+        message.warning(
+            `文件夹中有 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB，将在导入阶段按规则处理。`,
+            { duration: 5200 },
+        );
     }
 
     emit('upload-data', gisLoader.createUploadPayloadFromFolder(files));
@@ -963,7 +1242,9 @@ function handleUploadDrop(event) {
     const items = Array.from(event.dataTransfer?.items || []);
 
     const entryItems = items
-        .map(item => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+        .map((item) =>
+            typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null,
+        )
         .filter(Boolean);
 
     if (entryItems.length) {
@@ -1004,7 +1285,7 @@ function handleLayerTreeAction(evt) {
         openManualAoiDialogByPoi,
         onDragStart,
         onDrop,
-        resolveLayerActionsById
+        resolveLayerActionsById,
     });
     if (contextHandled) return;
 
@@ -1035,7 +1316,7 @@ function applyTemplate(templateId) {
     if (!targetId) return; // 如果没有选中任何图层，直接返回
 
     // 2. 更新本地 styleForm (让界面底部的颜色选择器实时同步变色)
-    const targetTemplate = styleTemplates.find(t => t.id === templateId);
+    const targetTemplate = styleTemplates.find((t) => t.id === templateId);
     if (targetTemplate) {
         styleForm.value.fillColor = targetTemplate.color;
         // 建议：描边色通常可以设为和填充色一致，或者加深一点
@@ -1087,7 +1368,7 @@ async function scanSharedResources() {
 /**
  * 加载选中的共享资源
  * 复用现有的上传逻辑来导入数据
- * 
+ *
  * @param {Object} resource - 共享资源对象
  */
 async function loadSharedResource(resource) {
@@ -1138,7 +1419,7 @@ async function loadSharedResource(resource) {
 .section-dot {
     width: 4px;
     height: 14px;
-    background: #56AB56;
+    background: #56ab56;
     border-radius: 4px;
 }
 
@@ -1167,9 +1448,9 @@ async function loadSharedResource(resource) {
 }
 
 .eco-tool-pill.active {
-    background: #56AB56;
+    background: #56ab56;
     color: #fff;
-    border-color: #56AB56;
+    border-color: #56ab56;
     box-shadow: 0 4px 10px rgba(86, 171, 86, 0.3);
 }
 
@@ -1205,7 +1486,7 @@ async function loadSharedResource(resource) {
 }
 
 .eco-input:focus {
-    border-color: #56AB56;
+    border-color: #56ab56;
 }
 
 .eco-select {
@@ -1219,7 +1500,7 @@ async function loadSharedResource(resource) {
 
 /* 按钮样式：对标截图中的圆润感 */
 .eco-btn-sm {
-    background: #56AB56;
+    background: #56ab56;
     color: white;
     border: none;
     border-radius: 10px;
@@ -1231,8 +1512,8 @@ async function loadSharedResource(resource) {
 .eco-btn-reverse {
     width: 100%;
     padding: 10px;
-    background: #E9F5E9;
-    border: 1px dashed #56AB56;
+    background: #e9f5e9;
+    border: 1px dashed #56ab56;
     border-radius: 12px;
     color: #468a46;
     font-size: 13px;
@@ -1305,7 +1586,7 @@ async function loadSharedResource(resource) {
 }
 
 .eco-divider::before {
-    content: "";
+    content: '';
     position: absolute;
     top: 50%;
     left: 0;
@@ -1338,7 +1619,7 @@ async function loadSharedResource(resource) {
 }
 
 .hint-item span {
-    background: #56AB56;
+    background: #56ab56;
     color: white;
     padding: 0 4px;
     border-radius: 4px;
@@ -1407,7 +1688,10 @@ async function loadSharedResource(resource) {
     font-size: 12px;
     cursor: pointer;
     color: #4e6656;
-    transition: transform 0.14s ease, background-color 0.14s ease, border-color 0.14s ease;
+    transition:
+        transform 0.14s ease,
+        background-color 0.14s ease,
+        border-color 0.14s ease;
 }
 
 .tab:hover {
@@ -1482,13 +1766,15 @@ async function loadSharedResource(resource) {
     line-height: 1.4;
 }
 
-
 .upload-entry {
     border: 1.5px dashed #b7dcc7;
     border-radius: 8px;
     background: #f9fdfb;
     padding: 10px;
-    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    transition:
+        border-color 0.15s ease,
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
 }
 
 .upload-entry.dragging {

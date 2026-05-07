@@ -4,15 +4,15 @@
  */
 
 export interface ExplanationResult {
-    category: string;      // 分类名称（如"八数"、"九星"等）
-    title: string;         // 宫位标题
-    meaning: string;       // 解释内容
+    category: string; // 分类名称（如"八数"、"九星"等）
+    title: string; // 宫位标题
+    meaning: string; // 解释内容
 }
 
 export interface DataLayer {
-    name: string | string[];     // 层级名称
-    data: any[];                 // 数据数组
-    [key: string]: any;          // 其他属性
+    name: string | string[]; // 层级名称
+    data: any[]; // 数据数组
+    [key: string]: any; // 其他属性
 }
 
 export interface PalaceQueryInput {
@@ -33,11 +33,16 @@ export class ExplanationLookup {
     static lookupThemeLayer(
         themeLayers: DataLayer[],
         explanationData: any,
-        query: PalaceQueryInput
+        query: PalaceQueryInput,
     ): ExplanationResult | null {
         const { layerIndex, segmentIndex, palaceName } = query;
 
-        if (!Array.isArray(themeLayers) || !palaceName || layerIndex < 0 || layerIndex >= themeLayers.length) {
+        if (
+            !Array.isArray(themeLayers) ||
+            !palaceName ||
+            layerIndex < 0 ||
+            layerIndex >= themeLayers.length
+        ) {
             return null;
         }
 
@@ -50,7 +55,7 @@ export class ExplanationLookup {
             return {
                 category: this.getCategoryName(layer?.name, segmentIndex),
                 title: palaceName,
-                meaning: exact
+                meaning: exact,
             };
         }
 
@@ -69,7 +74,7 @@ export class ExplanationLookup {
         layers: any[],
         layerIndex: number,
         segmentIndex: number,
-        palaceName: string
+        palaceName: string,
     ): ExplanationResult | null {
         if (!layers || layerIndex < 0 || layerIndex >= layers.length) return null;
         const layer = layers[layerIndex];
@@ -92,7 +97,7 @@ export class ExplanationLookup {
     private static queryFromData(
         data: any[],
         segmentIndex: number,
-        palaceName: string
+        palaceName: string,
     ): string | null {
         if (!Array.isArray(data) || data.length === 0) {
             return null;
@@ -101,10 +106,12 @@ export class ExplanationLookup {
         // 情况1：简单数组 - 改为包含匹配（支持多字宫名的部分匹配/完全匹配）
         if (typeof data[0] === 'string' || typeof data[0] === 'number') {
             // 先找完全匹配，再找包含匹配
-            const exactMatch = data.find(item => String(item) === palaceName);
+            const exactMatch = data.find((item) => String(item) === palaceName);
             if (exactMatch) return String(exactMatch);
 
-            const partialMatch = data.find(item => String(item).includes(palaceName) || palaceName.includes(String(item)));
+            const partialMatch = data.find(
+                (item) => String(item).includes(palaceName) || palaceName.includes(String(item)),
+            );
             if (partialMatch) return String(partialMatch);
             return null;
         }
@@ -115,10 +122,13 @@ export class ExplanationLookup {
             if (segmentIndex < data.length) {
                 const segment = data[segmentIndex];
                 if (Array.isArray(segment)) {
-                    const exactMatch = segment.find(item => String(item) === palaceName);
+                    const exactMatch = segment.find((item) => String(item) === palaceName);
                     if (exactMatch) return String(exactMatch);
 
-                    const partialMatch = segment.find(item => String(item).includes(palaceName) || palaceName.includes(String(item)));
+                    const partialMatch = segment.find(
+                        (item) =>
+                            String(item).includes(palaceName) || palaceName.includes(String(item)),
+                    );
                     if (partialMatch) return String(partialMatch);
                 }
             }
@@ -126,9 +136,11 @@ export class ExplanationLookup {
             // 方案2：跨分段拼接（解决多字宫名拆分在不同分段的情况）
             const allSegments = data.flat(); // 扁平化多维数组
             const combinedMatch = allSegments
-                .map(item => String(item))
+                .map((item) => String(item))
                 .join('')
-                .includes(palaceName) ? palaceName : null;
+                .includes(palaceName)
+                ? palaceName
+                : null;
             if (combinedMatch) return combinedMatch;
         }
 
@@ -139,7 +151,8 @@ export class ExplanationLookup {
 
                 // 遍历对象的所有 key，做包含匹配
                 const matchedKey = Object.keys(item).find(
-                    key => key === palaceName || key.includes(palaceName) || palaceName.includes(key)
+                    (key) =>
+                        key === palaceName || key.includes(palaceName) || palaceName.includes(key),
                 );
                 if (matchedKey) return String(item[matchedKey]);
             }
@@ -148,7 +161,10 @@ export class ExplanationLookup {
         return null;
     }
 
-    private static getSectionKey(name: string | string[] | undefined, segmentIndex: number): string {
+    private static getSectionKey(
+        name: string | string[] | undefined,
+        segmentIndex: number,
+    ): string {
         if (Array.isArray(name)) {
             if (name.length === 1) return String(name[0] || '');
             return name.join('-');
@@ -164,7 +180,11 @@ export class ExplanationLookup {
         return explanationData[sectionKey] ?? explanationData[sectionKey.replace(/-/g, '')] ?? null;
     }
 
-    private static extractExactExplanation(section: any, palaceName: string, segmentIndex: number): string | null {
+    private static extractExactExplanation(
+        section: any,
+        palaceName: string,
+        segmentIndex: number,
+    ): string | null {
         if (!section || !palaceName) return null;
 
         if (typeof section === 'string') {
@@ -176,7 +196,8 @@ export class ExplanationLookup {
             // 处理数组中的对象 - 包含匹配
             if (segment && typeof segment === 'object' && !Array.isArray(segment)) {
                 const matchedKey = Object.keys(segment).find(
-                    key => key === palaceName || key.includes(palaceName) || palaceName.includes(key)
+                    (key) =>
+                        key === palaceName || key.includes(palaceName) || palaceName.includes(key),
                 );
                 if (matchedKey) return String(segment[matchedKey]);
             }
@@ -185,7 +206,10 @@ export class ExplanationLookup {
             for (const item of section) {
                 if (item && typeof item === 'object' && !Array.isArray(item)) {
                     const matchedKey = Object.keys(item).find(
-                        key => key === palaceName || key.includes(palaceName) || palaceName.includes(key)
+                        (key) =>
+                            key === palaceName ||
+                            key.includes(palaceName) ||
+                            palaceName.includes(key),
                     );
                     if (matchedKey) return String(item[matchedKey]);
                 }
@@ -197,7 +221,7 @@ export class ExplanationLookup {
         if (typeof section === 'object') {
             // 处理单层对象 - 包含匹配
             const matchedKey = Object.keys(section).find(
-                key => key === palaceName || key.includes(palaceName) || palaceName.includes(key)
+                (key) => key === palaceName || key.includes(palaceName) || palaceName.includes(key),
             );
             if (matchedKey) return String(section[matchedKey]);
 
@@ -206,7 +230,10 @@ export class ExplanationLookup {
                 const value = section[key];
                 if (value && typeof value === 'object' && !Array.isArray(value)) {
                     const nestedMatchedKey = Object.keys(value).find(
-                        nestedKey => nestedKey === palaceName || nestedKey.includes(palaceName) || palaceName.includes(nestedKey)
+                        (nestedKey) =>
+                            nestedKey === palaceName ||
+                            nestedKey.includes(palaceName) ||
+                            palaceName.includes(nestedKey),
                     );
                     if (nestedMatchedKey) return String(value[nestedMatchedKey]);
                 }
@@ -234,10 +261,7 @@ export class ExplanationLookup {
      * 通用查询（用于 simple 主题或不规则结构）
      * 遍历所有可能的结构找到目标
      */
-    static universalQuery(
-        explanationData: any,
-        palaceName: string
-    ): ExplanationResult | null {
+    static universalQuery(explanationData: any, palaceName: string): ExplanationResult | null {
         if (!explanationData || typeof explanationData !== 'object') {
             return null;
         }
@@ -252,7 +276,7 @@ export class ExplanationLookup {
                     return {
                         category: key,
                         title: palaceName,
-                        meaning: String(section[palaceName])
+                        meaning: String(section[palaceName]),
                     };
                 }
             }
@@ -267,7 +291,7 @@ export class ExplanationLookup {
                         return {
                             category: key,
                             title: palaceName,
-                            meaning: String(item[palaceName])
+                            meaning: String(item[palaceName]),
                         };
                     }
 
@@ -276,7 +300,7 @@ export class ExplanationLookup {
                         return {
                             category: key,
                             title: palaceName,
-                            meaning: palaceName
+                            meaning: palaceName,
                         };
                     }
                 }

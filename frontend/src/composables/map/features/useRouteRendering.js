@@ -34,7 +34,7 @@ export function createRouteRenderingFeature({
     addManagedLayerRecord = () => null,
     busRouteManagedLayerIdRef = { value: null },
     emitUserLayersChange = () => {},
-    emitGraphicsOverview = () => {}
+    emitGraphicsOverview = () => {},
 }) {
     /**
      * 同步路线图层到托管图层记录
@@ -43,7 +43,7 @@ export function createRouteRenderingFeature({
     function syncRouteManagedLayer({ name, type, category, featureCount }) {
         const routeFeatureCount = Number(featureCount || 0);
         let managedItem = busRouteManagedLayerIdRef.value
-            ? userDataLayers.find(item => item.id === busRouteManagedLayerIdRef.value)
+            ? userDataLayers.find((item) => item.id === busRouteManagedLayerIdRef.value)
             : null;
 
         if (!managedItem && busRouteLayerRef) {
@@ -54,9 +54,10 @@ export function createRouteRenderingFeature({
                 layer: busRouteLayerRef,
                 featureCount: routeFeatureCount,
                 styleConfig: null,
-                metadata: { category }
+                metadata: { category },
             });
-            managedItem = userDataLayers.find(item => item.id === busRouteManagedLayerIdRef.value) || null;
+            managedItem =
+                userDataLayers.find((item) => item.id === busRouteManagedLayerIdRef.value) || null;
         }
 
         if (managedItem) {
@@ -88,8 +89,11 @@ export function createRouteRenderingFeature({
         resetRouteStepStates();
 
         const { buildRouteRenderData, fitExtentToCoverage } = await ensureRouteBuilderApi();
-        const { features, fitExtent, featureCount, hasGeometry } = buildRouteRenderData('bus', route);
-        
+        const { features, fitExtent, featureCount, hasGeometry } = buildRouteRenderData(
+            'bus',
+            route,
+        );
+
         if (!featureCount) {
             throw new Error('公交方案中未找到分段信息（segments 为空）');
         }
@@ -110,7 +114,7 @@ export function createRouteRenderingFeature({
                 padding: [80, 80, 80, 80],
                 duration: 700,
                 minZoom: 6,
-                maxZoom: 19
+                maxZoom: 19,
             });
         }
 
@@ -120,7 +124,7 @@ export function createRouteRenderingFeature({
             name: '公交规划路线',
             type: 'bus_route',
             category: 'route',
-            featureCount: routeFeatureCount
+            featureCount: routeFeatureCount,
         });
     }
 
@@ -145,7 +149,7 @@ export function createRouteRenderingFeature({
 
         const { buildRouteRenderData, fitExtentToCoverage } = await ensureRouteBuilderApi();
         const { features, fitExtent, hasGeometry } = buildRouteRenderData('drive', routeLatLonStr);
-        
+
         if (!hasGeometry || !features.length) {
             throw new Error('驾车路线坐标不足，无法绘制');
         }
@@ -161,7 +165,7 @@ export function createRouteRenderingFeature({
                 padding: [80, 80, 80, 80],
                 duration: 700,
                 minZoom: 6,
-                maxZoom: 19
+                maxZoom: 19,
             });
         }
 
@@ -171,13 +175,13 @@ export function createRouteRenderingFeature({
             name: '驾车规划路线',
             type: 'drive_route',
             category: 'route',
-            featureCount: busRouteSource.getFeatures().length
+            featureCount: busRouteSource.getFeatures().length,
         });
     }
 
     return {
         drawRouteOnMap,
         drawDriveRouteOnMap,
-        syncRouteManagedLayer
+        syncRouteManagedLayer,
     };
 }

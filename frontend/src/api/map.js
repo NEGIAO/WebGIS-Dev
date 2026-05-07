@@ -5,7 +5,7 @@ export {
     reverseGeocodeTianditu,
     addressToLocation,
     locationToAddress,
-    reverseGeocodeByPriority
+    reverseGeocodeByPriority,
 } from './geocoding';
 
 function parseLngLatPair(text) {
@@ -46,22 +46,24 @@ function parseAmapMiningShape(shape) {
         .split('|')
         .map((ringText) => ringText.trim())
         .filter(Boolean)
-        .map((ringText) => ringText
-            .split(';')
-            .map((pairText) => parseLngLatPair(pairText))
-            .filter((point) => Array.isArray(point)))
+        .map((ringText) =>
+            ringText
+                .split(';')
+                .map((pairText) => parseLngLatPair(pairText))
+                .filter((point) => Array.isArray(point)),
+        )
         .map((ring) => closeRingIfNeeded(ring))
         .filter((ring) => Array.isArray(ring) && ring.length >= 4);
 }
 
 function extractAoiShapeFromDetail(data = {}) {
     return String(
-        data?.data?.spec?.mining_shape?.shape
-        || data?.spec?.mining_shape?.shape
-        || data?.pois?.[0]?.spec?.mining_shape?.shape
-        || data?.pois?.[0]?.biz_ext?.aoi
-        || data?.pois?.[0]?.aoi
-        || ''
+        data?.data?.spec?.mining_shape?.shape ||
+            data?.spec?.mining_shape?.shape ||
+            data?.pois?.[0]?.spec?.mining_shape?.shape ||
+            data?.pois?.[0]?.biz_ext?.aoi ||
+            data?.pois?.[0]?.aoi ||
+            '',
     ).trim();
 }
 
@@ -155,7 +157,9 @@ function parseAmapWebDetailPayload(payload) {
 }
 
 function isLikelyHtmlPayload(payload) {
-    const text = String(payload || '').trim().toLowerCase();
+    const text = String(payload || '')
+        .trim()
+        .toLowerCase();
     if (!text) return false;
     return text.startsWith('<!doctype html') || text.startsWith('<html');
 }
@@ -188,7 +192,7 @@ export function parseAmapDetailAoiFromPayload(payload) {
         base: parsed.base,
         center: parsed.center,
         raw: parsed.raw,
-        source: 'amap-manual-json'
+        source: 'amap-manual-json',
     };
 }
 
@@ -197,7 +201,7 @@ export async function searchAmapPlaces({
     city = '',
     page = 1,
     offset = 10,
-    extensions = 'base'
+    extensions = 'base',
 }) {
     const response = await backendAPI.get('/api/proxy/amap/place/text', {
         params: {
@@ -205,8 +209,8 @@ export async function searchAmapPlaces({
             city,
             page,
             offset,
-            extensions
-        }
+            extensions,
+        },
     });
 
     return response || {};
@@ -218,10 +222,7 @@ export async function searchAmapPlaces({
  * 兼容回退：/v3/place/detail（当提供 key 且 web 详情失败时）
  * 目标路径：data.spec.mining_shape.shape
  */
-export async function fetchAmapPoiDetailAoi({
-    poiid,
-    extensions = 'all'
-}) {
+export async function fetchAmapPoiDetailAoi({ poiid, extensions = 'all' }) {
     const normalizedPoiId = String(poiid || '').trim();
 
     if (!normalizedPoiId) {
@@ -236,7 +237,7 @@ export async function fetchAmapPoiDetailAoi({
         const webResponse = await backendAPI.get('/api/proxy/amap/web/detail', {
             params: { id: normalizedPoiId },
             responseType: 'text',
-            transformResponse: [(value) => value]
+            transformResponse: [(value) => value],
         });
         const rawPayload = webResponse;
         const webData = parseAmapWebDetailPayload(rawPayload);
@@ -250,7 +251,7 @@ export async function fetchAmapPoiDetailAoi({
         } else if (isLikelyHtmlPayload(rawPayload)) {
             throw createAmapVerifyRequiredError(
                 normalizedPoiId,
-                '高德 Web 详情返回验证页面，未获取到 JSON（触发人机校验）'
+                '高德 Web 详情返回验证页面，未获取到 JSON（触发人机校验）',
             );
         } else {
             throw new Error('高德 Web 详情响应无法解析为 JSON 对象');
@@ -265,8 +266,8 @@ export async function fetchAmapPoiDetailAoi({
             const restResponse = await backendAPI.get('/api/proxy/amap/place/detail', {
                 params: {
                     id: normalizedPoiId,
-                    extensions
-                }
+                    extensions,
+                },
             });
 
             const restData = restResponse || {};
@@ -300,6 +301,6 @@ export async function fetchAmapPoiDetailAoi({
         rings,
         base,
         source,
-        raw: data
+        raw: data,
     };
 }

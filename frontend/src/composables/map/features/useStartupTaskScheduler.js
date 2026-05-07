@@ -1,7 +1,7 @@
 /**
  * 启动任务调度功能库
  * 负责首屏优先策略与非关键任务的延后执行
- * 
+ *
  * 导出：
  * - scheduleLowPriorityTask(task)
  * - waitForCriticalTileReady(timeoutMs)
@@ -19,7 +19,7 @@ import { unByKey } from 'ol/Observable';
 export function createStartupTaskSchedulerFeature({
     componentUnmountedRef,
     criticalTileReadyTimeoutMs = 3000,
-    mapInstanceRef = null
+    mapInstanceRef = null,
 }) {
     /**
      * 在首屏关键瓦片加载后调度非关键任务
@@ -29,9 +29,12 @@ export function createStartupTaskSchedulerFeature({
      */
     function scheduleLowPriorityTask(task) {
         if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(() => {
-                if (!componentUnmountedRef.value) task();
-            }, { timeout: 1500 });
+            window.requestIdleCallback(
+                () => {
+                    if (!componentUnmountedRef.value) task();
+                },
+                { timeout: 1500 },
+            );
             return;
         }
         setTimeout(() => {
@@ -68,6 +71,6 @@ export function createStartupTaskSchedulerFeature({
 
     return {
         scheduleLowPriorityTask,
-        waitForCriticalTileReady
+        waitForCriticalTileReady,
     };
 }

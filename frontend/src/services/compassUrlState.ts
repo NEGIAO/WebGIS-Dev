@@ -22,13 +22,15 @@ function readHashState(): { path: string; query: URLSearchParams } {
 
     return {
         path: path.startsWith('/') ? path : `/${path}`,
-        query: new URLSearchParams(queryRaw)
+        query: new URLSearchParams(queryRaw),
     };
 }
 
 function readMergedQuery(): { path: string; query: URLSearchParams } {
     const { path, query } = readHashState();
-    const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+    const searchParams = new URLSearchParams(
+        String(window.location.search || '').replace(/^\?/, ''),
+    );
 
     searchParams.forEach((value, key) => {
         if (!query.has(key)) query.set(key, value);
@@ -49,7 +51,7 @@ export function readCompassUrlState(): CompassUrlPayload {
     return {
         lng: toFinite(decoded.lng),
         lat: toFinite(decoded.lat),
-        radius: toFinite(decoded.radius)
+        radius: toFinite(decoded.radius),
     };
 }
 
@@ -63,11 +65,12 @@ export function writeCompassUrlState(payload: CompassUrlPayload): void {
         const lat = toFinite(payload.lat);
         const radius = toFinite(payload.radius);
 
-        const encoded = Number.isFinite(Number(lng))
-            && Number.isFinite(Number(lat))
-            && Number.isFinite(Number(radius))
-            ? encodeCompassState(Number(lng), Number(lat), Number(radius))
-            : '0';
+        const encoded =
+            Number.isFinite(Number(lng)) &&
+            Number.isFinite(Number(lat)) &&
+            Number.isFinite(Number(radius))
+                ? encodeCompassState(Number(lng), Number(lat), Number(radius))
+                : '0';
 
         LEGACY_PARAM_KEYS.forEach((key) => query.delete(key));
 

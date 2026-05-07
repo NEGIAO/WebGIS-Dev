@@ -91,7 +91,9 @@ function hasAttributeFeatures(layer: any): boolean {
 }
 
 function canToggleLabel(layer: any): boolean {
-    return !!layer?.autoLabel || String(layer?.sourceType || '').toLowerCase() === 'district-boundary';
+    return (
+        !!layer?.autoLabel || String(layer?.sourceType || '').toLowerCase() === 'district-boundary'
+    );
 }
 
 function layerHasCoordinates(layer: any): boolean {
@@ -107,20 +109,18 @@ function supportsCoordinateOperations(layer: any): boolean {
 function getLayerPoiId(layer: any): string {
     const features = Array.isArray(layer?.features) ? layer.features : [];
     const firstFeature = features[0] || {};
-    const properties = firstFeature?.properties && typeof firstFeature.properties === 'object'
-        ? firstFeature.properties
-        : {};
+    const properties =
+        firstFeature?.properties && typeof firstFeature.properties === 'object'
+            ? firstFeature.properties
+            : {};
 
-    return String(
-        properties?.POI_ID
-        || properties?.poiid
-        || properties?.id
-        || ''
-    ).trim();
+    return String(properties?.POI_ID || properties?.poiid || properties?.id || '').trim();
 }
 
 function normalizeStandardLayerType(rawType: unknown): string {
-    const normalized = String(rawType || '').trim().toLowerCase();
+    const normalized = String(rawType || '')
+        .trim()
+        .toLowerCase();
     if (!normalized) return 'geojson';
     if (normalized === 'kmz') return 'kml';
     if (normalized === 'tiff') return 'tif';
@@ -136,26 +136,34 @@ function getLayerStandardItem(layer: LayerStoreLayer): StandardTOCItem | null {
         id: String(candidate.id || layer.id || ''),
         name: String(candidate.name || layer.name || ''),
         nodeType: candidate.nodeType === 'group' ? 'group' : 'layer',
-        layerType: normalizeStandardLayerType(candidate.layerType || candidate.format || layer.type),
+        layerType: normalizeStandardLayerType(
+            candidate.layerType || candidate.format || layer.type,
+        ),
         sourceType: String(candidate.sourceType || layer.sourceType || 'upload'),
-        format: String(candidate.format || candidate.layerType || layer.type || 'geojson').toLowerCase(),
+        format: String(
+            candidate.format || candidate.layerType || layer.type || 'geojson',
+        ).toLowerCase(),
         parentId: candidate.parentId != null ? String(candidate.parentId) : null,
         visible: candidate.visible !== false && layer.visible !== false,
         opacity: Number.isFinite(candidate.opacity)
             ? Number(candidate.opacity)
-            : (Number.isFinite(layer.opacity) ? Number(layer.opacity) : 1),
+            : Number.isFinite(layer.opacity)
+              ? Number(layer.opacity)
+              : 1,
         selected: !!candidate.selected,
         expanded: candidate.expanded !== false,
         featureCount: Number.isFinite(candidate.featureCount)
             ? Number(candidate.featureCount)
-            : (Number(layer.featureCount) || 0),
-        capabilities: candidate.capabilities && typeof candidate.capabilities === 'object'
-            ? { ...candidate.capabilities }
-            : {},
+            : Number(layer.featureCount) || 0,
+        capabilities:
+            candidate.capabilities && typeof candidate.capabilities === 'object'
+                ? { ...candidate.capabilities }
+                : {},
         children: Array.isArray(candidate.children) ? candidate.children : [],
-        metadata: candidate.metadata && typeof candidate.metadata === 'object'
-            ? { ...candidate.metadata }
-            : {}
+        metadata:
+            candidate.metadata && typeof candidate.metadata === 'object'
+                ? { ...candidate.metadata }
+                : {},
     };
 }
 
@@ -166,7 +174,7 @@ function normalizeLayerRecord(layer: any): LayerStoreLayer {
         name: String(layer?.name || ''),
         type: String(layer?.type || ''),
         sourceType: String(layer?.sourceType || 'upload'),
-        standardTocItem: layer?.standardTocItem || null
+        standardTocItem: layer?.standardTocItem || null,
     };
 
     normalizedLayer.standardTocItem = getLayerStandardItem(normalizedLayer);
@@ -179,7 +187,9 @@ function normalizeExportFormats(rawFormats: unknown): string[] {
     const seen = new Set<string>();
     const normalized: string[] = [];
     rawFormats.forEach((item) => {
-        const key = String(item || '').trim().toLowerCase();
+        const key = String(item || '')
+            .trim()
+            .toLowerCase();
         if (!key || seen.has(key)) return;
         seen.add(key);
         normalized.push(key);
@@ -188,7 +198,11 @@ function normalizeExportFormats(rawFormats: unknown): string[] {
     return normalized;
 }
 
-function resolveLayerCapabilities(layer: LayerStoreLayer, group: string, standardItem: StandardTOCItem | null): StandardLayerCapabilities {
+function resolveLayerCapabilities(
+    layer: LayerStoreLayer,
+    group: string,
+    standardItem: StandardTOCItem | null,
+): StandardLayerCapabilities {
     const coordinateOpsSupported = supportsCoordinateOperations(layer);
 
     const defaults: StandardLayerCapabilities = {
@@ -204,34 +218,44 @@ function resolveLayerCapabilities(layer: LayerStoreLayer, group: string, standar
         canExportKML: coordinateOpsSupported,
         openAoiPanel: false,
         zoom: true,
-        remove: true
+        remove: true,
     };
 
     const merged = {
         ...defaults,
         ...(standardItem?.capabilities || {}),
-        ...(layer?.capabilities || {})
+        ...(layer?.capabilities || {}),
     };
 
     const explicitFormats = normalizeExportFormats(merged.exportFormats);
     const hasExplicitFormats = explicitFormats.length > 0;
     const exportEnabled = merged.exportLayerData !== false && coordinateOpsSupported;
 
-    merged.canExportCSV = exportEnabled
-        && merged.canExportCSV !== false
-        && (!hasExplicitFormats || explicitFormats.includes('csv'));
-    merged.canExportTXT = exportEnabled
-        && merged.canExportTXT !== false
-        && (!hasExplicitFormats || explicitFormats.includes('txt'));
-    merged.canExportGeoJSON = exportEnabled
-        && merged.canExportGeoJSON !== false
-        && (!hasExplicitFormats || explicitFormats.includes('geojson'));
-    merged.canExportKML = exportEnabled
-        && merged.canExportKML !== false
-        && (!hasExplicitFormats || explicitFormats.includes('kml'));
+    merged.canExportCSV =
+        exportEnabled &&
+        merged.canExportCSV !== false &&
+        (!hasExplicitFormats || explicitFormats.includes('csv'));
+    merged.canExportTXT =
+        exportEnabled &&
+        merged.canExportTXT !== false &&
+        (!hasExplicitFormats || explicitFormats.includes('txt'));
+    merged.canExportGeoJSON =
+        exportEnabled &&
+        merged.canExportGeoJSON !== false &&
+        (!hasExplicitFormats || explicitFormats.includes('geojson'));
+    merged.canExportKML =
+        exportEnabled &&
+        merged.canExportKML !== false &&
+        (!hasExplicitFormats || explicitFormats.includes('kml'));
 
-    merged.exportLayerData = exportEnabled
-        && !!(merged.canExportCSV || merged.canExportTXT || merged.canExportGeoJSON || merged.canExportKML);
+    merged.exportLayerData =
+        exportEnabled &&
+        !!(
+            merged.canExportCSV ||
+            merged.canExportTXT ||
+            merged.canExportGeoJSON ||
+            merged.canExportKML
+        );
 
     if (group === 'route') {
         merged.style = false;
@@ -263,7 +287,7 @@ function folderNode({
     name,
     level,
     children,
-    expandedState
+    expandedState,
 }: {
     id: string;
     name: string;
@@ -284,7 +308,7 @@ function folderNode({
         children,
         expanded: expandedState[id] !== false,
         level,
-        showCheckbox: total > 0
+        showCheckbox: total > 0,
     };
 }
 
@@ -348,9 +372,7 @@ function deriveUploadFolderDisplayName(segment: string): string {
     return display || '未命名分组';
 }
 
-type UploadFolderChildRef =
-    | { kind: 'folder'; id: string }
-    | { kind: 'layer'; node: any };
+type UploadFolderChildRef = { kind: 'folder'; id: string } | { kind: 'layer'; node: any };
 
 type UploadFolderEntry = {
     id: string;
@@ -359,7 +381,10 @@ type UploadFolderEntry = {
     orderedChildren: UploadFolderChildRef[];
 };
 
-function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState: Record<string, boolean>): any[] {
+function buildUploadLayerChildren(
+    uploadLayers: LayerStoreLayer[],
+    expandedState: Record<string, boolean>,
+): any[] {
     if (!uploadLayers.length) return [];
 
     const folderMap = new Map<string, UploadFolderEntry>();
@@ -400,7 +425,7 @@ function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState
                     id: folderId,
                     name: deriveUploadFolderDisplayName(segment),
                     parentId: parentEntry?.id || null,
-                    orderedChildren: []
+                    orderedChildren: [],
                 };
                 folderMap.set(folderId, entry);
             }
@@ -420,7 +445,10 @@ function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState
         const baseLayerNode = toLayerNode(layer, 1, 'upload');
         const rawParentPath = normalizeUploadFolderPath(layer.standardTocItem?.parentId);
         if (!rawParentPath) {
-            rootChildren.push({ kind: 'layer', node: { ...baseLayerNode, level: 1, parentId: null } });
+            rootChildren.push({
+                kind: 'layer',
+                node: { ...baseLayerNode, level: 1, parentId: null },
+            });
             return;
         }
 
@@ -428,7 +456,10 @@ function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState
         const rootPath = segments[0] || '';
         const deepestEntry = ensureUploadFolderBySegments(segments);
         if (!deepestEntry) {
-            rootChildren.push({ kind: 'layer', node: { ...baseLayerNode, level: 1, parentId: null } });
+            rootChildren.push({
+                kind: 'layer',
+                node: { ...baseLayerNode, level: 1, parentId: null },
+            });
             return;
         }
 
@@ -452,7 +483,7 @@ function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState
                 return {
                     ...child.node,
                     level: level + 1,
-                    parentId: folderId
+                    parentId: folderId,
                 };
             })
             .filter(Boolean);
@@ -462,7 +493,7 @@ function buildUploadLayerChildren(uploadLayers: LayerStoreLayer[], expandedState
             name: entry.name,
             level,
             children,
-            expandedState
+            expandedState,
         });
     }
 
@@ -495,42 +526,46 @@ function toDistrictLayerNode(meta: any, level: number): any {
         canExportKML: true,
         openAoiPanel: false,
         zoom: true,
-        remove: true
+        remove: true,
     };
 
-    return toLayerNode({
-        id,
-        name,
-        type: 'geojson',
-        sourceType: 'district-boundary',
-        visible,
-        featureCount,
-        opacity: 1,
-        capabilities,
-        standardTocItem: {
+    return toLayerNode(
+        {
             id,
             name,
-            nodeType: 'layer',
-            layerType: 'geojson',
+            type: 'geojson',
             sourceType: 'district-boundary',
-            format: 'geojson',
-            parentId: 'folder-district',
             visible,
-            opacity: 1,
-            selected: false,
-            expanded: false,
             featureCount,
+            opacity: 1,
             capabilities,
-            children: [],
-            metadata: {
-                ...(meta?.metadata || {}),
-                adcode: String(meta?.adcode || ''),
-                sourceUrl: String(meta?.sourceUrl || ''),
-                updatedAt: String(meta?.updatedAt || ''),
-                sourceType: 'district-boundary'
-            }
-        }
-    } as any, level, 'district');
+            standardTocItem: {
+                id,
+                name,
+                nodeType: 'layer',
+                layerType: 'geojson',
+                sourceType: 'district-boundary',
+                format: 'geojson',
+                parentId: 'folder-district',
+                visible,
+                opacity: 1,
+                selected: false,
+                expanded: false,
+                featureCount,
+                capabilities,
+                children: [],
+                metadata: {
+                    ...(meta?.metadata || {}),
+                    adcode: String(meta?.adcode || ''),
+                    sourceUrl: String(meta?.sourceUrl || ''),
+                    updatedAt: String(meta?.updatedAt || ''),
+                    sourceType: 'district-boundary',
+                },
+            },
+        } as any,
+        level,
+        'district',
+    );
 }
 
 function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any {
@@ -559,7 +594,9 @@ function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any 
         format: String(standardItem?.format || layerType || ''),
         opacity: Number.isFinite(layer.opacity)
             ? Number(layer.opacity)
-            : (Number.isFinite(standardItem?.opacity) ? Number(standardItem?.opacity) : 1),
+            : Number.isFinite(standardItem?.opacity)
+              ? Number(standardItem?.opacity)
+              : 1,
         selected: !!standardItem?.selected,
         parentId: standardItem?.parentId || null,
         draggable: group === 'upload',
@@ -567,9 +604,16 @@ function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any 
         actions: {
             attribute: capabilities.attribute !== false && hasAttributeFeatures(layer),
             style: capabilities.style !== false && group !== 'route' && !isRasterLayer(layer),
-            label: capabilities.label !== false && (group === 'search' || group === 'upload' || group === 'district') && canToggleLabel(layer),
-            copyCoordinates: capabilities.copyCoordinates !== false && supportsCoordinateOperations(layer) && layerHasCoordinates(layer),
-            toggleLayerCRS: capabilities.toggleLayerCRS !== false && supportsCoordinateOperations(layer),
+            label:
+                capabilities.label !== false &&
+                (group === 'search' || group === 'upload' || group === 'district') &&
+                canToggleLabel(layer),
+            copyCoordinates:
+                capabilities.copyCoordinates !== false &&
+                supportsCoordinateOperations(layer) &&
+                layerHasCoordinates(layer),
+            toggleLayerCRS:
+                capabilities.toggleLayerCRS !== false && supportsCoordinateOperations(layer),
             exportLayerData: capabilities.exportLayerData === true,
             canExportCSV: capabilities.canExportCSV === true,
             canExportTXT: capabilities.canExportTXT === true,
@@ -579,7 +623,7 @@ function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any 
             aoiPanelPayload: {
                 layerId: layer.id,
                 layerName: String(layer.name || ''),
-                poiid
+                poiid,
             },
             zoom: capabilities.zoom !== false,
             remove: capabilities.remove !== false,
@@ -590,9 +634,10 @@ function toLayerNode(layer: LayerStoreLayer, level: number, group: string): any 
             zoomPayload: { layerId: layer.id },
             removeEvent: 'remove-layer',
             removePayload: { layerId: layer.id },
-            soloEvent: (group === 'draw' || group === 'upload' || group === 'district') ? 'solo-layer' : '',
-            soloPayload: { layerId: layer.id }
-        }
+            soloEvent:
+                group === 'draw' || group === 'upload' || group === 'district' ? 'solo-layer' : '',
+            soloPayload: { layerId: layer.id },
+        },
     };
 
     if (group === 'route') {
@@ -610,7 +655,7 @@ function buildLayerTree({
     districtLayers,
     hasDrawCard,
     drawCount,
-    expandedState
+    expandedState,
 }: {
     drawLayers: LayerStoreLayer[];
     routeLayers: LayerStoreLayer[];
@@ -627,97 +672,107 @@ function buildLayerTree({
         const drawChildren = drawLayers.length
             ? drawLayers.map((layer) => toLayerNode(layer, 1, 'draw'))
             : [
-                {
-                    id: 'draw_virtual',
-                    name: '绘制图形集合',
-                    displayName: '绘制图形集合',
-                    type: 'layer',
-                    visible: true,
-                    children: [],
-                    expanded: false,
-                    level: 1,
-                    featureCount: Number(drawCount) || 0,
-                    showCheckbox: false,
-                    draggable: false,
-                    droppable: false,
-                    actions: {
-                        attribute: false,
-                        style: true,
-                        styleTarget: 'draw',
-                        label: false,
-                        copyCoordinates: false,
-                        toggleLayerCRS: false,
-                        exportLayerData: false,
-                        canExportCSV: false,
-                        canExportTXT: false,
-                        canExportGeoJSON: false,
-                        canExportKML: false,
-                        zoom: true,
-                        zoomEvent: 'interaction',
-                        zoomPayload: { interaction: 'ZoomToGraphics' },
-                        remove: true,
-                        removeTip: '清空',
-                        removeEvent: 'interaction',
-                        removePayload: { interaction: 'Clear' },
-                        viewEvent: 'interaction',
-                        viewPayload: { interaction: 'ViewGraphics' },
-                        soloEvent: 'interaction',
-                        soloPayload: { interaction: 'ZoomToGraphics' }
-                    }
-                }
-            ];
+                  {
+                      id: 'draw_virtual',
+                      name: '绘制图形集合',
+                      displayName: '绘制图形集合',
+                      type: 'layer',
+                      visible: true,
+                      children: [],
+                      expanded: false,
+                      level: 1,
+                      featureCount: Number(drawCount) || 0,
+                      showCheckbox: false,
+                      draggable: false,
+                      droppable: false,
+                      actions: {
+                          attribute: false,
+                          style: true,
+                          styleTarget: 'draw',
+                          label: false,
+                          copyCoordinates: false,
+                          toggleLayerCRS: false,
+                          exportLayerData: false,
+                          canExportCSV: false,
+                          canExportTXT: false,
+                          canExportGeoJSON: false,
+                          canExportKML: false,
+                          zoom: true,
+                          zoomEvent: 'interaction',
+                          zoomPayload: { interaction: 'ZoomToGraphics' },
+                          remove: true,
+                          removeTip: '清空',
+                          removeEvent: 'interaction',
+                          removePayload: { interaction: 'Clear' },
+                          viewEvent: 'interaction',
+                          viewPayload: { interaction: 'ViewGraphics' },
+                          soloEvent: 'interaction',
+                          soloPayload: { interaction: 'ZoomToGraphics' },
+                      },
+                  },
+              ];
 
-        tree.push(folderNode({
-            id: 'folder-draw',
-            name: '绘制图层',
-            level: 0,
-            children: drawChildren,
-            expandedState
-        }));
+        tree.push(
+            folderNode({
+                id: 'folder-draw',
+                name: '绘制图层',
+                level: 0,
+                children: drawChildren,
+                expandedState,
+            }),
+        );
     }
 
     if (routeLayers.length) {
         const routeChildren = routeLayers.map((layer) => toLayerNode(layer, 1, 'route'));
-        tree.push(folderNode({
-            id: 'folder-route',
-            name: '路线图层',
-            level: 0,
-            children: routeChildren,
-            expandedState
-        }));
+        tree.push(
+            folderNode({
+                id: 'folder-route',
+                name: '路线图层',
+                level: 0,
+                children: routeChildren,
+                expandedState,
+            }),
+        );
     }
 
     if (searchLayers.length) {
         const searchChildren = searchLayers.map((layer) => toLayerNode(layer, 1, 'search'));
-        tree.push(folderNode({
-            id: 'folder-search',
-            name: '搜索结果图层',
-            level: 0,
-            children: searchChildren,
-            expandedState
-        }));
+        tree.push(
+            folderNode({
+                id: 'folder-search',
+                name: '搜索结果图层',
+                level: 0,
+                children: searchChildren,
+                expandedState,
+            }),
+        );
     }
 
     if (uploadLayers.length) {
         const uploadChildren = buildUploadLayerChildren(uploadLayers, expandedState);
-        tree.push(folderNode({
-            id: 'folder-upload',
-            name: '上传图层',
-            level: 0,
-            children: uploadChildren,
-            expandedState
-        }));
+        tree.push(
+            folderNode({
+                id: 'folder-upload',
+                name: '上传图层',
+                level: 0,
+                children: uploadChildren,
+                expandedState,
+            }),
+        );
     }
 
     if (districtLayers.length) {
         const districtChildren = districtLayers.map((meta) => toDistrictLayerNode(meta, 1));
-        tree.push(folderNode({
-            id: 'folder-district',
-            name: '行政区划',
-            level: 0,
-            children: districtChildren,
-            expandedState
-        }));
+        tree.push(
+            folderNode({
+                id: 'folder-district',
+                name: '行政区划',
+                level: 0,
+                children: districtChildren,
+                expandedState,
+            }),
+        );
     }
 
     return tree;
@@ -739,43 +794,60 @@ export const useLayerStore = defineStore('layerStore', () => {
         'folder-route': true,
         'folder-search': true,
         'folder-upload': true,
-        'folder-district': true
+        'folder-district': true,
     });
 
     // ========== Map Swipe Configuration ==========
     // 管理地图对比滑块（Map Swipe/Roller）功能的状态
     // 从 localStorage 恢复持久化的卷帘状态（如果有）
-    const _persistKey = 'webgis_swipe_config_v1'
-    let persisted: any = null
+    const _persistKey = 'webgis_swipe_config_v1';
+    let persisted: any = null;
     try {
         if (typeof window !== 'undefined') {
-            const raw = localStorage.getItem(_persistKey)
-            if (raw) persisted = JSON.parse(raw)
+            const raw = localStorage.getItem(_persistKey);
+            if (raw) persisted = JSON.parse(raw);
         }
     } catch (e) {
-        persisted = null
+        persisted = null;
     }
 
     const swipeConfig = ref({
         enabled: persisted?.enabled === true || false,
-        position: typeof persisted?.position === 'number' ? Math.max(0.05, Math.min(0.95, persisted.position)) : 0.5,
-        mode: (persisted?.mode === 'vertical' ? 'vertical' : 'horizontal') as 'horizontal' | 'vertical',
-        targetLayerIds: Array.isArray(persisted?.targetLayerIds) ? persisted.targetLayerIds : [] as string[]
+        position:
+            typeof persisted?.position === 'number'
+                ? Math.max(0.05, Math.min(0.95, persisted.position))
+                : 0.5,
+        mode: (persisted?.mode === 'vertical' ? 'vertical' : 'horizontal') as
+            | 'horizontal'
+            | 'vertical',
+        targetLayerIds: Array.isArray(persisted?.targetLayerIds)
+            ? persisted.targetLayerIds
+            : ([] as string[]),
     });
 
-    const sortedUserLayers = computed(() => [...userLayers.value].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-    const drawLayers = computed(() => sortedUserLayers.value.filter((layer) => layer.sourceType === 'draw'));
-    const uploadLayers = computed(() => sortedUserLayers.value.filter((layer) => layer.sourceType === 'upload'));
-    const routeLayers = computed(() => sortedUserLayers.value.filter((layer) => {
-        if (layer.sourceType !== 'search') return false;
-        if (layer.category === 'route') return true;
-        return /_route$/i.test(String(layer.type || ''));
-    }));
-    const searchLayers = computed(() => sortedUserLayers.value.filter((layer) => {
-        if (layer.sourceType !== 'search') return false;
-        if (layer.category === 'route') return false;
-        return !/_route$/i.test(String(layer.type || ''));
-    }));
+    const sortedUserLayers = computed(() =>
+        [...userLayers.value].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    );
+    const drawLayers = computed(() =>
+        sortedUserLayers.value.filter((layer) => layer.sourceType === 'draw'),
+    );
+    const uploadLayers = computed(() =>
+        sortedUserLayers.value.filter((layer) => layer.sourceType === 'upload'),
+    );
+    const routeLayers = computed(() =>
+        sortedUserLayers.value.filter((layer) => {
+            if (layer.sourceType !== 'search') return false;
+            if (layer.category === 'route') return true;
+            return /_route$/i.test(String(layer.type || ''));
+        }),
+    );
+    const searchLayers = computed(() =>
+        sortedUserLayers.value.filter((layer) => {
+            if (layer.sourceType !== 'search') return false;
+            if (layer.category === 'route') return false;
+            return !/_route$/i.test(String(layer.type || ''));
+        }),
+    );
 
     const districtLayers = computed(() => {
         return (tocStore.layerMetadataList || [])
@@ -785,13 +857,17 @@ export const useLayerStore = defineStore('layerStore', () => {
                 id: String(meta.id || ''),
                 name: String(meta.name || meta.adcode || '行政区划'),
                 sourceType: 'district-boundary',
-                visible: meta.visible !== false
+                visible: meta.visible !== false,
             }));
     });
 
-    const hasDrawCard = computed(() => drawLayers.value.length > 0 || Number(overview.value?.drawCount || 0) > 0);
+    const hasDrawCard = computed(
+        () => drawLayers.value.length > 0 || Number(overview.value?.drawCount || 0) > 0,
+    );
 
-    const activeAttributeLayer = computed(() => userLayers.value.find((layer) => layer.id === attributeTableLayerId.value) || null);
+    const activeAttributeLayer = computed(
+        () => userLayers.value.find((layer) => layer.id === attributeTableLayerId.value) || null,
+    );
     const activeAttributeTable = computed(() => {
         const features = activeAttributeLayer.value?.features;
         return Array.isArray(features) ? features : [];
@@ -799,22 +875,27 @@ export const useLayerStore = defineStore('layerStore', () => {
 
     const editableLayers = computed(() => [
         { id: 'draw', name: `绘制图形 (${overview.value?.drawCount || 0})` },
-        ...searchLayers.value.map((layer) => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` })),
+        ...searchLayers.value.map((layer) => ({
+            id: layer.id,
+            name: `${layer.name} (${layer.featureCount || 0})`,
+        })),
         ...sortedUserLayers.value
             .filter((layer) => layer.sourceType !== 'search' && !isRasterLayer(layer))
-            .map((layer) => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` }))
+            .map((layer) => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` })),
     ]);
 
-    const layerTree = computed(() => buildLayerTree({
-        drawLayers: drawLayers.value,
-        routeLayers: routeLayers.value,
-        searchLayers: searchLayers.value,
-        uploadLayers: uploadLayers.value,
-        districtLayers: districtLayers.value,
-        hasDrawCard: hasDrawCard.value,
-        drawCount: Number(overview.value?.drawCount || 0),
-        expandedState: layerTreeExpandedState.value
-    }));
+    const layerTree = computed(() =>
+        buildLayerTree({
+            drawLayers: drawLayers.value,
+            routeLayers: routeLayers.value,
+            searchLayers: searchLayers.value,
+            uploadLayers: uploadLayers.value,
+            districtLayers: districtLayers.value,
+            hasDrawCard: hasDrawCard.value,
+            drawCount: Number(overview.value?.drawCount || 0),
+            expandedState: layerTreeExpandedState.value,
+        }),
+    );
 
     function syncLayers(nextLayers: any[] = [], nextOverview: any = {}): void {
         const normalizedLayers = Array.isArray(nextLayers)
@@ -846,7 +927,10 @@ export const useLayerStore = defineStore('layerStore', () => {
         });
         layerTreeExpandedState.value = nextExpandedState;
 
-        if (attributeTableLayerId.value && !userLayers.value.find((layer) => layer.id === attributeTableLayerId.value)) {
+        if (
+            attributeTableLayerId.value &&
+            !userLayers.value.find((layer) => layer.id === attributeTableLayerId.value)
+        ) {
             attributeTableLayerId.value = '';
             attributeTableVisible.value = false;
             selectedAttributeFeatureId.value = '';
@@ -884,10 +968,17 @@ export const useLayerStore = defineStore('layerStore', () => {
     function findActiveAttributeFeature(featureId: string): any | null {
         const featureKey = String(featureId || '').trim();
         if (!featureKey) return null;
-        return activeAttributeTable.value.find((feature: any) => {
-            const keys = [feature?.id, feature?._gid, feature?.properties?._gid, feature?.properties?.id];
-            return keys.some((key) => String(key || '') === featureKey);
-        }) || null;
+        return (
+            activeAttributeTable.value.find((feature: any) => {
+                const keys = [
+                    feature?.id,
+                    feature?._gid,
+                    feature?.properties?._gid,
+                    feature?.properties?.id,
+                ];
+                return keys.some((key) => String(key || '') === featureKey);
+            }) || null
+        );
     }
 
     function highlightFeature(featureId: string): void {
@@ -896,7 +987,11 @@ export const useLayerStore = defineStore('layerStore', () => {
         const feature = findActiveAttributeFeature(featureId);
         if (!feature) return;
         selectedAttributeFeatureId.value = String(featureId);
-        handlers.value.onHighlightFeature?.({ layerId: layer.id, featureId: String(featureId), feature });
+        handlers.value.onHighlightFeature?.({
+            layerId: layer.id,
+            featureId: String(featureId),
+            feature,
+        });
     }
 
     function zoomToFeature(featureId: string): void {
@@ -937,7 +1032,7 @@ export const useLayerStore = defineStore('layerStore', () => {
         if (!id) return;
         layerTreeExpandedState.value = {
             ...layerTreeExpandedState.value,
-            [id]: !!expanded
+            [id]: !!expanded,
         };
     }
 
@@ -1005,51 +1100,51 @@ export const useLayerStore = defineStore('layerStore', () => {
         getLayerLeafNodesByFolder,
         // ========== Map Swipe API ==========
         setSwipeConfig: (config: Partial<typeof swipeConfig.value>) => {
-            swipeConfig.value = { ...swipeConfig.value, ...config }
+            swipeConfig.value = { ...swipeConfig.value, ...config };
         },
         updateSwipePosition: (position: number) => {
-            const clamped = Math.max(0.05, Math.min(0.95, position))
-            swipeConfig.value.position = clamped
+            const clamped = Math.max(0.05, Math.min(0.95, position));
+            swipeConfig.value.position = clamped;
             try {
                 if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value }
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave))
+                    const toSave = { ...swipeConfig.value };
+                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
                 }
             } catch (e) {
                 // ignore storage errors
             }
         },
         updateSwipeMode: (mode: 'horizontal' | 'vertical') => {
-            swipeConfig.value.mode = mode
+            swipeConfig.value.mode = mode;
             try {
                 if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value }
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave))
+                    const toSave = { ...swipeConfig.value };
+                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
                 }
             } catch (e) {
                 // ignore
             }
         },
         enableSwipe: (layerIds: string[] = []) => {
-            swipeConfig.value.enabled = true
-            swipeConfig.value.targetLayerIds = layerIds
+            swipeConfig.value.enabled = true;
+            swipeConfig.value.targetLayerIds = layerIds;
             try {
                 if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value }
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave))
+                    const toSave = { ...swipeConfig.value };
+                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
                 }
             } catch (e) {}
         },
         disableSwipe: () => {
-            swipeConfig.value.enabled = false
+            swipeConfig.value.enabled = false;
             try {
                 if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value }
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave))
+                    const toSave = { ...swipeConfig.value };
+                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
                 }
             } catch (e) {}
         },
         isRasterLayer,
-        formatLayerDisplayName
+        formatLayerDisplayName,
     };
 });

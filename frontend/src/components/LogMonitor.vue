@@ -2,57 +2,110 @@
     <div class="webgis-log-panel">
         <div class="panel-header">
             <div class="status-info">
-                <Terminal :size="14" class="header-icon" />
-                <div v-if="displaySourceLabel === 'REMOTE'" class="log-type-switcher">
-                    <button :class="['type-btn', { active: currentType === 'run' }]"
-                        @click="switchType('run')">RUN</button>
-                    <button :class="['type-btn', { active: currentType === 'build' }]"
-                        @click="switchType('build')">BUILD</button>
+                <Terminal
+                    :size="14"
+                    class="header-icon"
+                />
+                <div
+                    v-if="displaySourceLabel === 'REMOTE'"
+                    class="log-type-switcher"
+                >
+                    <button
+                        :class="['type-btn', { active: currentType === 'run' }]"
+                        @click="switchType('run')"
+                    >
+                        RUN
+                    </button>
+                    <button
+                        :class="['type-btn', { active: currentType === 'build' }]"
+                        @click="switchType('build')"
+                    >
+                        BUILD
+                    </button>
                 </div>
                 <span class="title">TERMINAL</span>
                 <div class="divider"></div>
 
-                <div class="lock-scroll-option" @click="isLocked = !isLocked">
+                <div
+                    class="lock-scroll-option"
+                    @click="isLocked = !isLocked"
+                >
                     <div :class="['custom-checkbox', { checked: isLocked }]">
-                        <div v-if="isLocked" class="inner-check"></div>
+                        <div
+                            v-if="isLocked"
+                            class="inner-check"
+                        ></div>
                     </div>
                     <span class="lock-text">Lock scroll</span>
                 </div>
 
                 <div class="divider"></div>
-                <span :class="['status-dot', { active: isConnected, pending: streamDesired && !isConnected }]"></span>
+                <span
+                    :class="[
+                        'status-dot',
+                        { active: isConnected, pending: streamDesired && !isConnected },
+                    ]"
+                ></span>
                 <span class="env-hint">{{ displaySourceLabel }}</span>
             </div>
             <div class="header-actions">
-                <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0"
-                    @click="copyAllLogs">
-                    <component :is="isCopiedAll ? Check : Copy" :size="14" />
+                <button
+                    type="button"
+                    class="action-btn secondary"
+                    :disabled="logEntries.length === 0"
+                    @click="copyAllLogs"
+                >
+                    <component
+                        :is="isCopiedAll ? Check : Copy"
+                        :size="14"
+                    />
                     <span class="btn-label">{{ isCopiedAll ? '已复制' : '复制全部' }}</span>
                 </button>
 
-                <button type="button" class="action-btn secondary" :disabled="logEntries.length === 0"
-                    @click="clearLogs">
+                <button
+                    type="button"
+                    class="action-btn secondary"
+                    :disabled="logEntries.length === 0"
+                    @click="clearLogs"
+                >
                     <Trash2 :size="14" />
                     清空
                 </button>
 
-                <button type="button" @click="toggleConnection"
-                    :class="['action-btn', streamDesired ? 'danger' : 'success']">
-                    <component :is="streamDesired ? Square : Play" :size="14" />
+                <button
+                    type="button"
+                    @click="toggleConnection"
+                    :class="['action-btn', streamDesired ? 'danger' : 'success']"
+                >
+                    <component
+                        :is="streamDesired ? Square : Play"
+                        :size="14"
+                    />
                     {{ streamDesired ? '停止' : '开启' }}
                 </button>
             </div>
         </div>
 
-        <div ref="scrollContainer" class="log-viewport">
-            <div v-for="(log, index) in logEntries" :key="index" class="log-line"
-                @dblclick="copySingleLine(log.message)" title="双击复制此行内容">
+        <div
+            ref="scrollContainer"
+            class="log-viewport"
+        >
+            <div
+                v-for="(log, index) in logEntries"
+                :key="index"
+                class="log-line"
+                @dblclick="copySingleLine(log.message)"
+                title="双击复制此行内容"
+            >
                 <span class="line-number">{{ index + 1 }}</span>
                 <span class="timestamp">{{ log.time }}</span>
                 <!-- 优化：改为直接从对象读取预计算好的类名 -->
                 <span :class="['content', log.className]">{{ log.message }}</span>
             </div>
-            <div v-if="logEntries.length === 0" class="empty-tip">
+            <div
+                v-if="logEntries.length === 0"
+                class="empty-tip"
+            >
                 Waiting for logs...<span class="scan-line"></span>
             </div>
         </div>
@@ -98,7 +151,7 @@ function getLogClass(msg) {
     return '';
 }
 
-/** 
+/**
  * 核心滚动逻辑：
  * 只要不是锁定状态，就强制滚动到底部
  */
@@ -109,20 +162,22 @@ const scrollToBottom = () => {
     }
 };
 
-/** 
+/**
  * 缓冲区冲刷逻辑
  */
 function pushLine(message) {
     const timeString = new Date().toLocaleTimeString('zh-CN', {
         hour12: false,
         timeZone: 'Asia/Shanghai',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
     });
 
     logBuffer.push({
         message: String(message ?? ''),
         time: timeString,
-        className: getLogClass(String(message ?? ''))
+        className: getLogClass(String(message ?? '')),
     });
 
     if (!renderPending) {
@@ -144,7 +199,6 @@ function pushLine(message) {
     }
 }
 
-
 function switchType(type) {
     if (currentType.value === type) return;
     currentType.value = type;
@@ -160,23 +214,31 @@ function clearLogs() {
 
 async function copyAllLogs() {
     if (logEntries.value.length === 0) return;
-    const fullText = logEntries.value.map(log => `[${log.time}] ${log.message}`).join('\n');
+    const fullText = logEntries.value.map((log) => `[${log.time}] ${log.message}`).join('\n');
     try {
         await navigator.clipboard.writeText(fullText);
         isCopiedAll.value = true;
-        setTimeout(() => isCopiedAll.value = false, 2000);
-    } catch (err) { console.error('复制失败:', err); }
+        setTimeout(() => (isCopiedAll.value = false), 2000);
+    } catch (err) {
+        console.error('复制失败:', err);
+    }
 }
 
 async function copySingleLine(text) {
-    try { await navigator.clipboard.writeText(text); } catch (err) { console.error(err); }
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 const displaySourceLabel = computed(() => {
     try {
         const u = new URL(logsStreamUrl.value);
         return u.hostname === 'localhost' ? 'LOCAL' : 'REMOTE';
-    } catch { return 'UNKNOWN'; }
+    } catch {
+        return 'UNKNOWN';
+    }
 });
 
 const toggleConnection = () => {
@@ -196,7 +258,7 @@ function closeConnection() {
 function openConnection() {
     streamDesired.value = true;
     eventSource = new EventSource(logsStreamUrl.value);
-    eventSource.onopen = () => isConnected.value = true;
+    eventSource.onopen = () => (isConnected.value = true);
     eventSource.onmessage = (e) => pushLine(e.data);
     eventSource.onerror = () => closeConnection();
 }

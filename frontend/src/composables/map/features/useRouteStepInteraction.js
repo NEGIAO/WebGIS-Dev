@@ -8,7 +8,7 @@ export function createRouteStepInteraction({
     mapInstanceRef,
     routeSource,
     getRouteLayer,
-    ensureRouteBuilderApi
+    ensureRouteBuilderApi,
 }) {
     let busActiveStepIndex = -1;
     let busHoverStepIndex = -1;
@@ -39,9 +39,13 @@ export function createRouteStepInteraction({
         const targetStepIndex = Number(stepIndex);
         if (!Number.isFinite(targetStepIndex) || targetStepIndex < 0) return [];
 
-        return routeSource.getFeatures().filter((feature) => (
-            feature.get('routeMode') === routeMode && Number(feature.get('stepIndex')) === targetStepIndex
-        ));
+        return routeSource
+            .getFeatures()
+            .filter(
+                (feature) =>
+                    feature.get('routeMode') === routeMode &&
+                    Number(feature.get('stepIndex')) === targetStepIndex,
+            );
     };
 
     const zoomToRouteStep = async (routeMode, stepIndex, options = {}) => {
@@ -90,14 +94,15 @@ export function createRouteStepInteraction({
                 padding: options.padding ?? [72, 72, 72, 72],
                 duration: options.duration ?? 650,
                 minZoom: options.minZoom ?? 10,
-                maxZoom: options.maxZoom ?? 19
+                maxZoom: options.maxZoom ?? 19,
             });
         }
     };
 
     const previewRouteStep = (routeMode, stepIndex) => {
         const targetStepIndex = Number(stepIndex);
-        const normalized = Number.isFinite(targetStepIndex) && targetStepIndex >= 0 ? targetStepIndex : -1;
+        const normalized =
+            Number.isFinite(targetStepIndex) && targetStepIndex >= 0 ? targetStepIndex : -1;
 
         if (routeMode === 'drive') {
             driveHoverStepIndex = normalized;
@@ -125,7 +130,7 @@ export function createRouteStepInteraction({
             padding: [72, 72, 72, 72],
             duration: 650,
             minZoom: 10,
-            maxZoom: 19
+            maxZoom: 19,
         });
     };
 
@@ -138,7 +143,7 @@ export function createRouteStepInteraction({
             padding: [72, 72, 72, 72],
             duration: 650,
             minZoom: 10,
-            maxZoom: 19
+            maxZoom: 19,
         });
     };
 
@@ -170,6 +175,6 @@ export function createRouteStepInteraction({
         previewBusRouteStep,
         clearBusRouteStepPreview,
         previewDriveRouteStep,
-        clearDriveRouteStepPreview
+        clearDriveRouteStepPreview,
     };
 }

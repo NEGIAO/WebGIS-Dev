@@ -1,40 +1,88 @@
 <template>
-    <div class="info-panel" :class="{ 'collapsed': isCollapsed, 'in-dihuan': props.locationInfo.isInDihuan }">
+    <div
+        class="info-panel"
+        :class="{ collapsed: isCollapsed, 'in-dihuan': props.locationInfo.isInDihuan }"
+    >
         <!-- 折叠开关 -->
-        <div class="toggle-handle" @click="$emit('toggle-panel')" :title="isCollapsed ? '展开面板' : '收起面板'">
+        <div
+            class="toggle-handle"
+            @click="$emit('toggle-panel')"
+            :title="isCollapsed ? '展开面板' : '收起面板'"
+        >
             <!-- 只用一个向左的箭头，通过动态 class 控制旋转 -->
-            <svg class="handle-icon" :class="{ 'is-flipped': !isCollapsed }" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 19l-7-7 7-7" />
+            <svg
+                class="handle-icon"
+                :class="{ 'is-flipped': !isCollapsed }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+            >
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M11 19l-7-7 7-7"
+                />
+                <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 19l-7-7 7-7"
+                />
             </svg>
         </div>
 
         <!-- 面板内容区域 -->
-        <div class="panel-content" v-show="!isCollapsed"
-            :class="{ 'no-padding': activeTab === 'chat' || activeTab === 'toolbox' || activeTab === 'bus' || activeTab === 'drive' || activeTab === 'compass' || activeTab === 'info' }">
-            <div class="active-feature-banner" v-if="activeFeature?.label && activeTab !== 'info'">
+        <div
+            class="panel-content"
+            v-show="!isCollapsed"
+            :class="{
+                'no-padding':
+                    activeTab === 'chat' ||
+                    activeTab === 'toolbox' ||
+                    activeTab === 'bus' ||
+                    activeTab === 'drive' ||
+                    activeTab === 'compass' ||
+                    activeTab === 'info',
+            }"
+        >
+            <div
+                class="active-feature-banner"
+                v-if="activeFeature?.label && activeTab !== 'info'"
+            >
                 当前激活功能：{{ activeFeature.label }}
             </div>
 
             <!-- 模式 1: AI 聊天 -->
-            <div v-show="activeTab === 'chat'" class="toolbox-content">
+            <div
+                v-show="activeTab === 'chat'"
+                class="toolbox-content"
+            >
                 <ChatPanelContent @close-chat="$emit('close-chat')" />
             </div>
 
             <!-- 模式 2: 工具箱 -->
-            <div v-show="activeTab === 'toolbox'" class="toolbox-content">
-                <ToolboxPanel :userLayers="userLayers" :baseLayers="baseLayers" :overview="toolboxOverview"
+            <div
+                v-show="activeTab === 'toolbox'"
+                class="toolbox-content"
+            >
+                <ToolboxPanel
+                    :userLayers="userLayers"
+                    :baseLayers="baseLayers"
+                    :overview="toolboxOverview"
                     :default-tab="toolboxTab"
-                    :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi"
-                    @close="$emit('switch-tab', 'info')" @upload-data="$emit('upload-data', $event)"
+                    :uploadProgress="uploadProgress"
+                    :latest-search-poi="latestSearchPoi"
+                    @close="$emit('switch-tab', 'info')"
+                    @upload-data="$emit('upload-data', $event)"
                     @interaction="$emit('interaction', $event)"
                     @toggle-layer-visibility="$emit('toggle-layer-visibility', $event)"
                     @change-layer-opacity="$emit('change-layer-opacity', $event)"
                     @set-base-layer="$emit('set-base-layer', $event)"
                     @toggle-base-layer-visibility="$emit('toggle-base-layer-visibility', $event)"
                     @toggle-layer-label-visibility="$emit('toggle-layer-label-visibility', $event)"
-                    @zoom-layer="$emit('zoom-layer', $event)" @view-layer="$emit('view-layer', $event)"
+                    @zoom-layer="$emit('zoom-layer', $event)"
+                    @view-layer="$emit('view-layer', $event)"
                     @remove-layer="$emit('remove-layer', $event)"
                     @reorder-user-layers="$emit('reorder-user-layers', $event)"
                     @solo-layer="$emit('solo-layer', $event)"
@@ -47,32 +95,58 @@
                     @draw-amap-aoi-from-json="$emit('draw-amap-aoi-from-json', $event)"
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
                     @export-layer-data="$emit('export-layer-data', $event)"
-                    @request-download-extent="$emit('request-download-extent')" />
+                    @request-download-extent="$emit('request-download-extent')"
+                />
             </div>
 
             <!-- 模式 3: 公交规划 -->
-            <div v-show="activeTab === 'bus'" class="toolbox-content">
-                <BusPlannerPanel :token="tiandituToken" :start-bus-point-pick="startBusPointPick"
-                    :draw-route-on-map="drawRouteOnMap" :zoom-to-bus-route-step="zoomToBusRouteStep"
+            <div
+                v-show="activeTab === 'bus'"
+                class="toolbox-content"
+            >
+                <BusPlannerPanel
+                    :token="tiandituToken"
+                    :start-bus-point-pick="startBusPointPick"
+                    :draw-route-on-map="drawRouteOnMap"
+                    :zoom-to-bus-route-step="zoomToBusRouteStep"
                     :preview-bus-route-step="previewBusRouteStep"
-                    :clear-bus-route-step-preview="clearBusRouteStepPreview" @close="$emit('switch-tab', 'info')" />
+                    :clear-bus-route-step-preview="clearBusRouteStepPreview"
+                    @close="$emit('switch-tab', 'info')"
+                />
             </div>
 
             <!-- 模式 4: 驾车规划 -->
-            <div v-show="activeTab === 'drive'" class="toolbox-content">
-                <DrivingPlannerPanel :token="tiandituToken" :start-map-point-pick="startBusPointPick"
-                    :draw-drive-route-on-map="drawDriveRouteOnMap" :zoom-to-drive-route-step="zoomToDriveRouteStep"
+            <div
+                v-show="activeTab === 'drive'"
+                class="toolbox-content"
+            >
+                <DrivingPlannerPanel
+                    :token="tiandituToken"
+                    :start-map-point-pick="startBusPointPick"
+                    :draw-drive-route-on-map="drawDriveRouteOnMap"
+                    :zoom-to-drive-route-step="zoomToDriveRouteStep"
                     :preview-drive-route-step="previewDriveRouteStep"
-                    :clear-drive-route-step-preview="clearDriveRouteStepPreview" @close="$emit('switch-tab', 'info')" />
+                    :clear-drive-route-step-preview="clearDriveRouteStepPreview"
+                    @close="$emit('switch-tab', 'info')"
+                />
             </div>
 
             <!-- 模式 5: 风水罗盘 -->
-            <div v-show="activeTab === 'compass'" class="toolbox-content">
-                <CompassControlPanel :get-user-location="getUserLocation" @close="$emit('switch-tab', 'info')" />
+            <div
+                v-show="activeTab === 'compass'"
+                class="toolbox-content"
+            >
+                <CompassControlPanel
+                    :get-user-location="getUserLocation"
+                    @close="$emit('switch-tab', 'info')"
+                />
             </div>
 
             <!-- 模式 6: 热点新闻 -->
-            <div v-show="activeTab === 'info'" class="news-dashboard">
+            <div
+                v-show="activeTab === 'info'"
+                class="news-dashboard"
+            >
                 <div class="news-header-bar">
                     <span class="news-logo">Hot News</span>
                     <span class="news-subtitle">{{ currentPlatformLabel }} 实时热点</span>
@@ -86,17 +160,25 @@
                         class="platform-chip"
                         :class="{ active: currentPlatform === p.key }"
                         @click="switchNewsPlatform(p.key)"
-                    >{{ p.label }}</button>
+                    >
+                        {{ p.label }}
+                    </button>
                 </div>
 
                 <!-- 加载状态 -->
-                <div v-if="newsLoading" class="news-loading">
+                <div
+                    v-if="newsLoading"
+                    class="news-loading"
+                >
                     <div class="loading-dot-pulse"></div>
                     <span>获取热点中...</span>
                 </div>
 
                 <!-- 新闻列表 -->
-                <div v-else class="news-list">
+                <div
+                    v-else
+                    class="news-list"
+                >
                     <a
                         v-for="(item, idx) in newsItems"
                         :key="idx"
@@ -104,30 +186,62 @@
                         target="_blank"
                         class="news-card"
                     >
-                        <div class="news-rank" :class="rankClass(idx)">{{ idx + 1 }}</div>
+                        <div
+                            class="news-rank"
+                            :class="rankClass(idx)"
+                        >
+                            {{ idx + 1 }}
+                        </div>
                         <div class="news-body">
                             <div class="news-title">{{ item.title }}</div>
-                            <div class="news-meta" v-if="item.desc || item.content">
+                            <div
+                                class="news-meta"
+                                v-if="item.desc || item.content"
+                            >
                                 <span class="news-desc">{{ item.desc || item.content }}</span>
                             </div>
                         </div>
-                        <div class="news-score" v-if="item.score || item.publish_time">
-                            <span class="score-value">{{ item.publish_time ? item.publish_time.slice(-8) : formatScore(item.score) }}</span>
+                        <div
+                            class="news-score"
+                            v-if="item.score || item.publish_time"
+                        >
+                            <span class="score-value">{{
+                                item.publish_time
+                                    ? item.publish_time.slice(-8)
+                                    : formatScore(item.score)
+                            }}</span>
                         </div>
                     </a>
-                    <div v-if="!newsItems.length && !newsLoading" class="news-empty">
+                    <div
+                        v-if="!newsItems.length && !newsLoading"
+                        class="news-empty"
+                    >
                         暂无热点数据
                     </div>
                 </div>
 
                 <!-- 访问统计 -->
-                <div style="height: 20px; display: flex; justify-content: center; align-items: center;">
-                    <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitor badge"
-                        loading="lazy" decoding="async" />
+                <div
+                    style="
+                        height: 20px;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    "
+                >
+                    <img
+                        src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis"
+                        alt="visitor badge"
+                        loading="lazy"
+                        decoding="async"
+                    />
                 </div>
 
                 <div class="news-footer">
-                    <span class="footer-status" :class="{ live: !newsLoading }">
+                    <span
+                        class="footer-status"
+                        :class="{ live: !newsLoading }"
+                    >
                         <span class="status-dot"></span>
                         {{ newsLoading ? '加载中' : `更新于 ${lastNewsUpdate}` }}
                     </span>
@@ -140,7 +254,7 @@
 <script setup>
 /**
  * SidePanel.vue - 可折叠侧边栏组件
- * 
+ *
  * 功能：
  * - 新闻展示模式 (info)
  * - AI 聊天模式 (chat)
@@ -177,7 +291,7 @@ const NEWS_PLATFORMS = [
     { key: 'sina_finance', label: '新浪财经' },
     { key: 'eastmoney', label: '东方财富' },
     { key: 'xueqiu', label: '雪球' },
-    { key: 'cls', label: '财联社' }
+    { key: 'cls', label: '财联社' },
 ];
 
 const NEWS_API_BASE = 'https://orz.ai/api/v1/dailynews';
@@ -187,84 +301,84 @@ const NEWS_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 const props = defineProps({
     locationInfo: {
         type: Object,
-        default: () => ({ isInDihuan: false, lonLat: [0, 0] })
+        default: () => ({ isInDihuan: false, lonLat: [0, 0] }),
     },
     activeTab: {
         type: String,
-        default: 'info' // 'info(hotnews)' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
+        default: 'info', // 'info(hotnews)' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
     },
     toolboxTab: {
         type: String,
-        default: 'layers'
+        default: 'layers',
     },
     isCollapsed: {
         type: Boolean,
-        default: false
+        default: false,
     },
     userLayers: {
         type: Array,
-        default: () => []
+        default: () => [],
     },
     baseLayers: {
         type: Array,
-        default: () => []
+        default: () => [],
     },
     toolboxOverview: {
         type: Object,
-        default: () => ({ drawCount: 0, uploadCount: 0, layers: [] })
+        default: () => ({ drawCount: 0, uploadCount: 0, layers: [] }),
     },
     uploadProgress: {
         type: Object,
-        default: () => ({ phase: 'idle' })
+        default: () => ({ phase: 'idle' }),
     },
     latestSearchPoi: {
         type: Object,
-        default: () => ({})
+        default: () => ({}),
     },
     activeFeature: {
         type: Object,
-        default: () => ({ key: 'info', label: '新闻' })
+        default: () => ({ key: 'info', label: '新闻' }),
     },
     getUserLocation: {
         type: Function,
-        default: null
+        default: null,
     },
     startBusPointPick: {
         type: Function,
-        default: null
+        default: null,
     },
     drawRouteOnMap: {
         type: Function,
-        default: null
+        default: null,
     },
     zoomToBusRouteStep: {
         type: Function,
-        default: null
+        default: null,
     },
     previewBusRouteStep: {
         type: Function,
-        default: null
+        default: null,
     },
     clearBusRouteStepPreview: {
         type: Function,
-        default: null
+        default: null,
     },
     drawDriveRouteOnMap: {
         type: Function,
-        default: null
+        default: null,
     },
     zoomToDriveRouteStep: {
         type: Function,
-        default: null
+        default: null,
     },
     previewDriveRouteStep: {
         type: Function,
-        default: null
+        default: null,
     },
     clearDriveRouteStepPreview: {
         type: Function,
-        default: null
-    }
+        default: null,
+    },
 });
 
 const tiandituToken = import.meta.env.VITE_TIANDITU_TK;
@@ -309,7 +423,7 @@ const emit = defineEmits([
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data',
-    'request-download-extent'
+    'request-download-extent',
 ]);
 
 // ========== 3. 新闻状态管理 ==========
@@ -601,10 +715,11 @@ onUnmounted(() => {
 }
 
 @keyframes dotPulse {
-    0%, 100% { 
+    0%,
+    100% {
         box-shadow: 0 0 0 0 rgba(5, 165, 59, 0.6);
     }
-    50% { 
+    50% {
         box-shadow: 0 0 0 12px rgba(0, 212, 255, 0);
     }
 }
@@ -648,18 +763,18 @@ onUnmounted(() => {
     background: rgba(0, 0, 0, 0.08);
 }
 
-.rank-top1 { 
-    color: #f0b35a; 
+.rank-top1 {
+    color: #f0b35a;
     background: rgba(240, 179, 90, 0.12);
 }
 
-.rank-top2 { 
-    color: #a0b8c8; 
+.rank-top2 {
+    color: #a0b8c8;
     background: rgba(160, 184, 200, 0.1);
 }
 
-.rank-top3 { 
-    color: #c89070; 
+.rank-top3 {
+    color: #c89070;
     background: rgba(200, 144, 112, 0.1);
 }
 
@@ -737,8 +852,8 @@ onUnmounted(() => {
     color: #999;
 }
 
-.footer-status.live { 
-    color: #4CAF50;
+.footer-status.live {
+    color: #4caf50;
 }
 
 .status-dot {

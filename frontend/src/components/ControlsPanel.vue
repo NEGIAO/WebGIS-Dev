@@ -1,35 +1,61 @@
 <template>
     <div class="sidebar-shell">
         <div class="sidebar-container">
-            <div class="sidebar-item" v-for="item in menuItems" :key="item.id"
-                :class="{ active: activeId === item.id || (item.id === 'log' && logMonitorVisible) }"
-                @click="handleSelect(item.id)">
-
+            <div
+                class="sidebar-item"
+                v-for="item in menuItems"
+                :key="item.id"
+                :class="{
+                    active: activeId === item.id || (item.id === 'log' && logMonitorVisible),
+                }"
+                @click="handleSelect(item.id)"
+            >
                 <div class="icon-wrapper">
-                    <component :is="item.icon" :size="20" />
+                    <component
+                        :is="item.icon"
+                        :size="20"
+                    />
                 </div>
 
                 <span class="label">{{ item.label }}</span>
             </div>
         </div>
 
-        <AdministrativeDivisionPanel :visible="districtPanelVisible" @close="districtPanelVisible = false"
-            @select="handleDistrictSelect" />
+        <AdministrativeDivisionPanel
+            :visible="districtPanelVisible"
+            @close="districtPanelVisible = false"
+            @select="handleDistrictSelect"
+        />
 
         <!-- Map Swipe 底图选择对话框 -->
-        <div v-if="showSwipeDialog" class="swipe-dialog-overlay" @click.self="cancelSwipeDialog">
+        <div
+            v-if="showSwipeDialog"
+            class="swipe-dialog-overlay"
+            @click.self="cancelSwipeDialog"
+        >
             <div class="swipe-dialog-box">
                 <div class="dialog-header">
                     <h3>卷帘分析 - 选择对比底图</h3>
-                    <button class="close-btn" @click="cancelSwipeDialog">×</button>
+                    <button
+                        class="close-btn"
+                        @click="cancelSwipeDialog"
+                    >
+                        ×
+                    </button>
                 </div>
 
                 <div class="dialog-content">
                     <div class="form-group">
                         <label>左侧底图：</label>
-                        <select v-model="leftBasemap" class="basemap-select">
-                            <option v-for="option in SWIPE_SUPPORTED_BASEMAPS" :key="option.value"
-                                :value="option.value">
+                        <select
+                            v-model="leftBasemap"
+                            class="basemap-select"
+                        >
+                            <option
+                                v-for="option in SWIPE_SUPPORTED_BASEMAPS"
+                                :key="option.value"
+                                :value="option.value"
+                            >
                                 {{ option.label }}
                             </option>
                         </select>
@@ -37,9 +63,15 @@
 
                     <div class="form-group">
                         <label>右侧底图：</label>
-                        <select v-model="rightBasemap" class="basemap-select">
-                            <option v-for="option in SWIPE_SUPPORTED_BASEMAPS" :key="option.value"
-                                :value="option.value">
+                        <select
+                            v-model="rightBasemap"
+                            class="basemap-select"
+                        >
+                            <option
+                                v-for="option in SWIPE_SUPPORTED_BASEMAPS"
+                                :key="option.value"
+                                :value="option.value"
+                            >
                                 {{ option.label }}
                             </option>
                         </select>
@@ -48,12 +80,18 @@
                     <div class="form-group">
                         <label>滑动模式：</label>
                         <div class="mode-selector">
-                            <button class="mode-btn" :class="{ active: swipeMode === 'horizontal' }"
-                                @click="swipeMode = 'horizontal'">
+                            <button
+                                class="mode-btn"
+                                :class="{ active: swipeMode === 'horizontal' }"
+                                @click="swipeMode = 'horizontal'"
+                            >
                                 ↔ 水平
                             </button>
-                            <button class="mode-btn" :class="{ active: swipeMode === 'vertical' }"
-                                @click="swipeMode = 'vertical'">
+                            <button
+                                class="mode-btn"
+                                :class="{ active: swipeMode === 'vertical' }"
+                                @click="swipeMode = 'vertical'"
+                            >
                                 ↕ 竖直
                             </button>
                         </div>
@@ -61,8 +99,18 @@
                 </div>
 
                 <div class="dialog-footer">
-                    <button class="cancel-btn" @click="cancelSwipeDialog">取消</button>
-                    <button class="confirm-btn" @click="confirmSwipeConfig">启用对比</button>
+                    <button
+                        class="cancel-btn"
+                        @click="cancelSwipeDialog"
+                    >
+                        取消
+                    </button>
+                    <button
+                        class="confirm-btn"
+                        @click="confirmSwipeConfig"
+                    >
+                        启用对比
+                    </button>
                 </div>
             </div>
         </div>
@@ -84,7 +132,7 @@ import {
     MapPin,
     Boxes,
     LayoutGrid,
-    Download
+    Download,
 } from 'lucide-vue-next';
 import { useLayerStore } from '../stores/useLayerStore';
 import { useAppStore } from '../stores/useAppStore';
@@ -99,7 +147,7 @@ const { logMonitorVisible } = storeToRefs(appStore);
 // ========== 卷帘分析支持的底图 ==========
 // 排除不支持的底图：'custom'（需要customUrl）和'local_tiles_preset'（本地瓦片）
 const SWIPE_SUPPORTED_BASEMAPS = BASEMAP_OPTIONS.filter(
-    option => option.value !== 'custom' && option.value !== 'local_tiles_preset'
+    (option) => option.value !== 'custom' && option.value !== 'local_tiles_preset',
 );
 
 // ========== Map Swipe 对话框状态 ==========
@@ -114,7 +162,7 @@ const emit = defineEmits([
     'map-interaction',
     'show-analysis',
     'district-select',
-    'enable-basemap-swipe'
+    'enable-basemap-swipe',
 ]);
 
 const activeId = ref('layers');
@@ -131,11 +179,10 @@ const menuItems = [
     { id: 'download', label: '下载底图', icon: Download, action: 'toggleDownload' },
     { id: 'log', label: '日志监控', icon: Activity, action: 'toggleLog' },
     { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
-    
 ];
 
 const handleSelect = (id) => {
-    const currentItem = menuItems.find(item => item.id === id);
+    const currentItem = menuItems.find((item) => item.id === id);
     if (!currentItem) return;
 
     if (currentItem.action === 'toggleLog') {
@@ -215,7 +262,7 @@ const handleSelect = (id) => {
             break;
 
         default:
-            message.warn("未识别的 Action:", currentItem.action);
+            message.warn('未识别的 Action:', currentItem.action);
             break;
     }
 };
@@ -243,11 +290,13 @@ const confirmSwipeConfig = () => {
     emit('enable-basemap-swipe', {
         leftBasemap: leftBasemap.value,
         rightBasemap: rightBasemap.value,
-        mode: swipeMode.value
+        mode: swipeMode.value,
     });
 
     showSwipeDialog.value = false;
-    message.success(`正在加载卷帘对比：${getBasemapLabel(leftBasemap.value)} ↔ ${getBasemapLabel(rightBasemap.value)}`);
+    message.success(
+        `正在加载卷帘对比：${getBasemapLabel(leftBasemap.value)} ↔ ${getBasemapLabel(rightBasemap.value)}`,
+    );
 };
 
 /**
@@ -264,23 +313,22 @@ const cancelSwipeDialog = () => {
  * 根据底图ID获取显示名称
  */
 const getBasemapLabel = (id) => {
-    const option = BASEMAP_OPTIONS.find(opt => opt.value === id);
+    const option = BASEMAP_OPTIONS.find((opt) => opt.value === id);
     return option?.label || id;
 };
-
 </script>
 
 <style scoped>
 .sidebar-shell {
     position: relative;
     /* 确保 shell 占满了父级高度，或者直接给个视口高度 */
-    height: 100vh; 
+    height: 100vh;
 }
 
 .sidebar-container {
     /* 1. 核心尺寸：假设的顶部绿色导航栏高度是 60px，这里减去它 */
     /* 如果导航栏高度不同，请相应调整这个 60px */
-    height: calc(100vh - 60px); 
+    height: calc(100vh - 60px);
     position: relative;
     box-sizing: border-box;
 
@@ -291,10 +339,10 @@ const getBasemapLabel = (id) => {
     flex-wrap: nowrap;
     overflow-y: auto;
     overflow-x: hidden; /* 防止出现横向滚动条 */
-    
+
     /* 3. 间距：底部 padding 给大一点，确保最后一个按钮滚动后离边缘有距离 */
     padding-top: 15px;
-    padding-bottom: 30px; 
+    padding-bottom: 30px;
     gap: 12px;
 
     /* 4. 隐藏滚动条 */

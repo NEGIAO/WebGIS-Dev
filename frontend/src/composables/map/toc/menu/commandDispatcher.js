@@ -2,7 +2,7 @@ import {
     TOC_MENU_COMMANDS,
     normalizeTocLayerId,
     normalizeTocLayerIdList,
-    resolveTocExportFormatFromCommand
+    resolveTocExportFormatFromCommand,
 } from '../protocol';
 
 function resolveBatchTargets(nodeId, selectedLayerIds = []) {
@@ -23,12 +23,10 @@ function pushConfiguredEvent(bucket, eventName, payload) {
     bucket.push({ type: normalized, payload: payload || {} });
 }
 
-export function dispatchContextMenuCommand({
-    key,
-    node,
-    selectedLayerIds = []
-} = {}) {
-    const commandKey = String(key || '').trim().toLowerCase();
+export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } = {}) {
+    const commandKey = String(key || '')
+        .trim()
+        .toLowerCase();
     if (!commandKey) return [];
 
     const actions = node?.actions || {};
@@ -53,27 +51,30 @@ export function dispatchContextMenuCommand({
     }
 
     if (
-        commandKey === TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_ADD
-        || commandKey === TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_REMOVE
+        commandKey === TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_ADD ||
+        commandKey === TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_REMOVE
     ) {
         events.push({
             type: 'multi-select-toggle-folder-recursive',
             payload: {
                 nodeId,
-                checked: commandKey === TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_ADD
-            }
+                checked: commandKey === TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_ADD,
+            },
         });
         return events;
     }
 
-    if (commandKey === TOC_MENU_COMMANDS.BATCH_SHOW || commandKey === TOC_MENU_COMMANDS.BATCH_HIDE) {
+    if (
+        commandKey === TOC_MENU_COMMANDS.BATCH_SHOW ||
+        commandKey === TOC_MENU_COMMANDS.BATCH_HIDE
+    ) {
         events.push({
             type: 'batch-layer-operation',
             payload: {
                 operation: 'set-visible',
                 layerIds: batchTargets,
-                visible: commandKey === TOC_MENU_COMMANDS.BATCH_SHOW
-            }
+                visible: commandKey === TOC_MENU_COMMANDS.BATCH_SHOW,
+            },
         });
         return events;
     }
@@ -83,8 +84,8 @@ export function dispatchContextMenuCommand({
             type: 'batch-layer-operation',
             payload: {
                 operation: 'remove',
-                layerIds: batchTargets
-            }
+                layerIds: batchTargets,
+            },
         });
         return events;
     }
@@ -95,8 +96,8 @@ export function dispatchContextMenuCommand({
             payload: {
                 operation: 'export',
                 layerIds: batchTargets,
-                format: resolveTocExportFormatFromCommand(commandKey)
-            }
+                format: resolveTocExportFormatFromCommand(commandKey),
+            },
         });
         return events;
     }
@@ -117,7 +118,10 @@ export function dispatchContextMenuCommand({
     }
 
     if (commandKey === TOC_MENU_COMMANDS.STYLE) {
-        events.push({ type: 'set-style-target', payload: { layerId: actions.styleTarget || nodeId } });
+        events.push({
+            type: 'set-style-target',
+            payload: { layerId: actions.styleTarget || nodeId },
+        });
         return events;
     }
 
@@ -126,8 +130,8 @@ export function dispatchContextMenuCommand({
             type: 'open-amap-aoi-panel',
             payload: {
                 layerId: nodeId,
-                ...(actions.aoiPanelPayload || {})
-            }
+                ...(actions.aoiPanelPayload || {}),
+            },
         });
         return events;
     }
@@ -137,8 +141,8 @@ export function dispatchContextMenuCommand({
             type: 'toggle-layer-label-visibility',
             payload: {
                 layerId: nodeId,
-                visible: node?.labelVisible === false
-            }
+                visible: node?.labelVisible === false,
+            },
         });
         return events;
     }
@@ -149,16 +153,17 @@ export function dispatchContextMenuCommand({
     }
 
     if (
-        commandKey === TOC_MENU_COMMANDS.CONVERT_WGS84_TO_GCJ02
-        || commandKey === TOC_MENU_COMMANDS.CONVERT_GCJ02_TO_WGS84
+        commandKey === TOC_MENU_COMMANDS.CONVERT_WGS84_TO_GCJ02 ||
+        commandKey === TOC_MENU_COMMANDS.CONVERT_GCJ02_TO_WGS84
     ) {
         events.push({
             type: 'toggle-layer-crs',
             payload: {
                 layerId: nodeId,
-                fromCrs: commandKey === TOC_MENU_COMMANDS.CONVERT_WGS84_TO_GCJ02 ? 'wgs84' : 'gcj02',
-                toCrs: commandKey === TOC_MENU_COMMANDS.CONVERT_WGS84_TO_GCJ02 ? 'gcj02' : 'wgs84'
-            }
+                fromCrs:
+                    commandKey === TOC_MENU_COMMANDS.CONVERT_WGS84_TO_GCJ02 ? 'wgs84' : 'gcj02',
+                toCrs: commandKey === TOC_MENU_COMMANDS.CONVERT_WGS84_TO_GCJ02 ? 'gcj02' : 'wgs84',
+            },
         });
         return events;
     }
@@ -168,19 +173,27 @@ export function dispatchContextMenuCommand({
             type: 'export-layer-data',
             payload: {
                 layerId: nodeId,
-                format: resolveTocExportFormatFromCommand(commandKey)
-            }
+                format: resolveTocExportFormatFromCommand(commandKey),
+            },
         });
         return events;
     }
 
     if (commandKey === TOC_MENU_COMMANDS.ZOOM) {
-        pushConfiguredEvent(events, actions.zoomEvent || 'zoom-layer', actions.zoomPayload || { layerId: nodeId });
+        pushConfiguredEvent(
+            events,
+            actions.zoomEvent || 'zoom-layer',
+            actions.zoomPayload || { layerId: nodeId },
+        );
         return events;
     }
 
     if (commandKey === TOC_MENU_COMMANDS.REMOVE) {
-        pushConfiguredEvent(events, actions.removeEvent || 'remove-layer', actions.removePayload || { layerId: nodeId });
+        pushConfiguredEvent(
+            events,
+            actions.removeEvent || 'remove-layer',
+            actions.removePayload || { layerId: nodeId },
+        );
         return events;
     }
 

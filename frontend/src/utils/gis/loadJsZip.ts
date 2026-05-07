@@ -1,12 +1,15 @@
 type JSZipModule = typeof import('jszip');
-import JSZip from "jszip";
+import JSZip from 'jszip';
 const Zip = JSZip;
 type JSZipCtor = typeof Zip;
 let jsZipPromise: Promise<JSZipCtor> | null = null;
 
 function shouldForceReload(messageText: string): boolean {
     const msg = String(messageText || '');
-    return msg.includes('Outdated Optimize Dep') || msg.includes('Failed to fetch dynamically imported module');
+    return (
+        msg.includes('Outdated Optimize Dep') ||
+        msg.includes('Failed to fetch dynamically imported module')
+    );
 }
 
 /**

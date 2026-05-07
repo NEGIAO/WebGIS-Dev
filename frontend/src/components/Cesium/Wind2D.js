@@ -1,677 +1,665 @@
 const DEFAULT_OPTIONS = {
-  speedFactor: 1.0,
-  cullSpeedMin: 0.0,
-  cullSpeedMax: 15.0,
-  windSpeedMin: 0.0,
-  windSpeedMax: 15.0,
-  arrowLength: 15000.0,
-  trailLength: 20000.0,
-  decaySpeed: 0.005,
-  alphaFactor: 1.0,
-  maxWindSpeed: 15.0,
+    speedFactor: 1.0,
+    cullSpeedMin: 0.0,
+    cullSpeedMax: 15.0,
+    windSpeedMin: 0.0,
+    windSpeedMax: 15.0,
+    arrowLength: 15000.0,
+    trailLength: 20000.0,
+    decaySpeed: 0.005,
+    alphaFactor: 1.0,
+    maxWindSpeed: 15.0,
 };
 
-const QUAD_POSITIONS = new Float32Array([
-  -1.0, -1.0,
-  1.0, -1.0,
-  1.0, 1.0,
-  -1.0, 1.0,
-]);
+const QUAD_POSITIONS = new Float32Array([-1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0]);
 
-const QUAD_TEXCOORDS = new Float32Array([
-  0.0, 0.0,
-  1.0, 0.0,
-  1.0, 1.0,
-  0.0, 1.0,
-]);
+const QUAD_TEXCOORDS = new Float32Array([0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]);
 
 const QUAD_INDICES = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
 function clamp(value, minValue, maxValue) {
-  return Math.max(minValue, Math.min(maxValue, value));
+    return Math.max(minValue, Math.min(maxValue, value));
 }
 
 function toFiniteNumber(value, fallback) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : fallback;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 function computeParticleTextureSize(targetCount, gl) {
-  const gpuMaxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-  const maxTextureSize = Math.min(2048, gpuMaxSize);
-  const safeCount = Math.max(1, Math.floor(targetCount));
-  const root = Math.sqrt(safeCount);
-  const log2Root = Math.log2(root);
-  const roundedPow = Number.isFinite(log2Root) ? Math.round(log2Root) : 4;
-  let size = Math.pow(2, roundedPow);
-  size = clamp(size, 16, maxTextureSize);
-  return size;
+    const gpuMaxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    const maxTextureSize = Math.min(2048, gpuMaxSize);
+    const safeCount = Math.max(1, Math.floor(targetCount));
+    const root = Math.sqrt(safeCount);
+    const log2Root = Math.log2(root);
+    const roundedPow = Number.isFinite(log2Root) ? Math.round(log2Root) : 4;
+    let size = Math.pow(2, roundedPow);
+    size = clamp(size, 16, maxTextureSize);
+    return size;
 }
 
 function createRandomParticleData(textureSize) {
-  const total = textureSize * textureSize;
-  const data = new Float32Array(total * 4);
-  for (let i = 0; i < total; i += 1) {
-    const base = i * 4;
-    data[base] = Math.random();
-    data[base + 1] = Math.random();
-    data[base + 2] = Math.random();
-    data[base + 3] = Math.random();
-  }
-  return data;
+    const total = textureSize * textureSize;
+    const data = new Float32Array(total * 4);
+    for (let i = 0; i < total; i += 1) {
+        const base = i * 4;
+        data[base] = Math.random();
+        data[base + 1] = Math.random();
+        data[base + 2] = Math.random();
+        data[base + 3] = Math.random();
+    }
+    return data;
 }
 
 function createZeroTextureData(textureSize) {
-  return new Float32Array(textureSize * textureSize * 4);
+    return new Float32Array(textureSize * textureSize * 4);
 }
 
 function createWindAtlasTexture(context, gl, width, height, data) {
-  const texture = gl.createTexture();
-  if (!texture) {
-    throw new Error('Failed to create wind atlas texture.');
-  }
+    const texture = gl.createTexture();
+    if (!texture) {
+        throw new Error('Failed to create wind atlas texture.');
+    }
 
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-  gl.texImage2D(
-    gl.TEXTURE_2D,
-    0,
-    gl.RGBA16F,
-    width,
-    height,
-    0,
-    gl.RGBA,
-    gl.FLOAT,
-    data,
-  );
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
-  let released = false;
-  return {
-    _context: context,
-    _texture: texture,
-    _target: gl.TEXTURE_2D,
-    _width: width,
-    _height: height,
-    destroy() {
-      if (released) return;
-      gl.deleteTexture(texture);
-      released = true;
-    },
-  };
+    let released = false;
+    return {
+        _context: context,
+        _texture: texture,
+        _target: gl.TEXTURE_2D,
+        _width: width,
+        _height: height,
+        destroy() {
+            if (released) return;
+            gl.deleteTexture(texture);
+            released = true;
+        },
+    };
 }
 
 export default class Wind2D {
-  constructor(viewer, options = {}) {
-    if (!viewer || !viewer.scene || !viewer.scene.context) {
-      throw new Error('Wind2D requires a valid Cesium Viewer instance.');
-    }
-
-    this._viewer = viewer;
-    this._scene = viewer.scene;
-    this._context = this._scene.context;
-    this._gl = this._context._gl;
-    this._Cesium = options.cesium || globalThis.Cesium;
-
-    if (!this._Cesium) {
-      throw new Error('Wind2D requires Cesium runtime from options.cesium or window.Cesium.');
-    }
-
-    if (!this._context.webgl2) {
-      throw new Error('Wind2D requires WebGL2 context.');
-    }
-
-    const config = { ...DEFAULT_OPTIONS, ...options };
-
-    this.speedFactor = toFiniteNumber(config.speedFactor, DEFAULT_OPTIONS.speedFactor);
-    this.cullSpeedMin = toFiniteNumber(config.cullSpeedMin, DEFAULT_OPTIONS.cullSpeedMin);
-    this.cullSpeedMax = toFiniteNumber(config.cullSpeedMax, DEFAULT_OPTIONS.cullSpeedMax);
-    this.windSpeedMin = toFiniteNumber(config.windSpeedMin, DEFAULT_OPTIONS.windSpeedMin);
-    this.windSpeedMax = toFiniteNumber(config.windSpeedMax, DEFAULT_OPTIONS.windSpeedMax);
-    this.arrowLength = toFiniteNumber(config.arrowLength, DEFAULT_OPTIONS.arrowLength);
-    this.trailLength = toFiniteNumber(config.trailLength, DEFAULT_OPTIONS.trailLength);
-    this.decaySpeed = toFiniteNumber(config.decaySpeed, DEFAULT_OPTIONS.decaySpeed);
-    this.alphaFactor = toFiniteNumber(config.alphaFactor, DEFAULT_OPTIONS.alphaFactor);
-    this.maxWindSpeed = toFiniteNumber(config.maxWindSpeed, DEFAULT_OPTIONS.maxWindSpeed);
-
-    this.visibleLayerMin = 0;
-    this.visibleLayerMax = 0;
-    this.particleDensity = toFiniteNumber(options.particleDensity, 1.0);
-
-    this.show = true;
-
-    this._isDestroyed = false;
-    this._needsRebuild = true;
-    this._particleState = 0;
-
-    this._layerCount = 0;
-    this._maxNx = 0;
-    this._maxNy = 0;
-    this._atlasWidth = 0;
-    this._atlasHeight = 0;
-    this._dataPointCount = 0;
-
-    this._bounds = null;
-    this._altitudes = [];
-
-    this._centerLon = 0.0;
-    this._centerLat = 0.0;
-    this._centerHeight = 0.0;
-    this._centerLonRad = 0.0;
-    this._centerLatRad = 0.0;
-    this._centerCartesian = this._Cesium.Cartesian3.fromDegrees(0.0, 0.0, 0.0);
-    this._modelMatrix = this._Cesium.Transforms.eastNorthUpToFixedFrame(this._centerCartesian);
-
-    this._particleTextureSize = 16;
-    this._particleCount = 16 * 16;
-    this._drawVertexCount = this._particleCount * 6;
-
-    this._particlePositionTextures = [null, null];
-    this._velocityTextures = [null, null];
-    this._framebuffers = [null, null];
-    this._windAtlasTexture = null;
-
-    this._quadVertexArray = null;
-    this._particleVertexArray = null;
-    this._particleVertexBuffer = null;
-
-    this._updateProgram = null;
-    this._drawProgram = null;
-    this._updateCommand = null;
-    this._drawCommand = null;
-  }
-
-  loadData(apiData) {
-    if (!apiData || typeof apiData !== 'object') {
-      throw new Error('Wind2D.loadData requires a valid data object.');
-    }
-
-    const longitude = toFiniteNumber(apiData.longitude, NaN);
-    const latitude = toFiniteNumber(apiData.latitude, NaN);
-    const altitude = Array.isArray(apiData.altitude) ? apiData.altitude : [];
-    const sizeMesh = Array.isArray(apiData.sizeMesh) ? apiData.sizeMesh : [];
-    const count = Array.isArray(apiData.count) ? apiData.count : [];
-    const hspeed = Array.isArray(apiData.hspeed) ? apiData.hspeed : [];
-    const hdir = Array.isArray(apiData.hdir) ? apiData.hdir : [];
-    const vspeed = Array.isArray(apiData.vspeed) ? apiData.vspeed : [];
-
-    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
-      throw new Error('Wind2D.loadData requires finite longitude and latitude.');
-    }
-
-    const layerCount = altitude.length;
-    if (layerCount < 1) {
-      throw new Error('Wind2D.loadData requires at least one altitude layer.');
-    }
-
-    if (sizeMesh.length !== layerCount || count.length !== layerCount) {
-      throw new Error('Wind2D.loadData sizeMesh/count length must match altitude length.');
-    }
-
-    const normalizedCount = count.map((item) => Math.max(1, Math.floor(toFiniteNumber(item, 1))));
-    const normalizedMesh = sizeMesh.map((item) => Math.max(1, toFiniteNumber(item, 1)));
-    const normalizedAltitude = altitude.map((item) => toFiniteNumber(item, 0));
-
-    const totalPoints = normalizedCount.reduce((sum, nx) => sum + nx * nx, 0);
-    if (hspeed.length < totalPoints || hdir.length < totalPoints || vspeed.length < totalPoints) {
-      throw new Error('Wind2D.loadData hspeed/hdir/vspeed length does not match grid count.');
-    }
-
-    this._layerCount = layerCount;
-    this.visibleLayerMin = 0;
-    this.visibleLayerMax = layerCount - 1;
-    this._altitudes = normalizedAltitude.slice();
-
-    this._maxNx = Math.max(...normalizedCount);
-    this._maxNy = this._maxNx;
-    this._atlasWidth = this._maxNx;
-    this._atlasHeight = this._maxNy * layerCount;
-
-    const atlasData = new Float32Array(this._atlasWidth * this._atlasHeight * 4);
-    let srcOffset = 0;
-
-    for (let k = 0; k < layerCount; k += 1) {
-      const nx = normalizedCount[k];
-      const ny = nx;
-
-      for (let j = 0; j < ny; j += 1) {
-        for (let i = 0; i < nx; i += 1) {
-          const srcIdx = srcOffset + j * nx + i;
-          const dstIdx = ((k * this._maxNy + j) * this._atlasWidth + i) * 4;
-
-          const speed = Number(hspeed[srcIdx]);
-          const directionDeg = Number(hdir[srcIdx]);
-          const vertical = Number(vspeed[srcIdx]);
-          const valid = Number.isFinite(speed) && Number.isFinite(directionDeg);
-
-          if (!valid) {
-            atlasData[dstIdx] = 0.0;
-            atlasData[dstIdx + 1] = 0.0;
-            atlasData[dstIdx + 2] = 0.0;
-            atlasData[dstIdx + 3] = 0.0;
-            continue;
-          }
-
-          const dirRad = (directionDeg * Math.PI) / 180.0;
-          atlasData[dstIdx] = speed * Math.sin(dirRad);
-          atlasData[dstIdx + 1] = speed * Math.cos(dirRad);
-          atlasData[dstIdx + 2] = Number.isFinite(vertical) ? vertical : 0.0;
-          atlasData[dstIdx + 3] = 1.0;
+    constructor(viewer, options = {}) {
+        if (!viewer || !viewer.scene || !viewer.scene.context) {
+            throw new Error('Wind2D requires a valid Cesium Viewer instance.');
         }
-      }
 
-      srcOffset += nx * ny;
+        this._viewer = viewer;
+        this._scene = viewer.scene;
+        this._context = this._scene.context;
+        this._gl = this._context._gl;
+        this._Cesium = options.cesium || globalThis.Cesium;
+
+        if (!this._Cesium) {
+            throw new Error('Wind2D requires Cesium runtime from options.cesium or window.Cesium.');
+        }
+
+        if (!this._context.webgl2) {
+            throw new Error('Wind2D requires WebGL2 context.');
+        }
+
+        const config = { ...DEFAULT_OPTIONS, ...options };
+
+        this.speedFactor = toFiniteNumber(config.speedFactor, DEFAULT_OPTIONS.speedFactor);
+        this.cullSpeedMin = toFiniteNumber(config.cullSpeedMin, DEFAULT_OPTIONS.cullSpeedMin);
+        this.cullSpeedMax = toFiniteNumber(config.cullSpeedMax, DEFAULT_OPTIONS.cullSpeedMax);
+        this.windSpeedMin = toFiniteNumber(config.windSpeedMin, DEFAULT_OPTIONS.windSpeedMin);
+        this.windSpeedMax = toFiniteNumber(config.windSpeedMax, DEFAULT_OPTIONS.windSpeedMax);
+        this.arrowLength = toFiniteNumber(config.arrowLength, DEFAULT_OPTIONS.arrowLength);
+        this.trailLength = toFiniteNumber(config.trailLength, DEFAULT_OPTIONS.trailLength);
+        this.decaySpeed = toFiniteNumber(config.decaySpeed, DEFAULT_OPTIONS.decaySpeed);
+        this.alphaFactor = toFiniteNumber(config.alphaFactor, DEFAULT_OPTIONS.alphaFactor);
+        this.maxWindSpeed = toFiniteNumber(config.maxWindSpeed, DEFAULT_OPTIONS.maxWindSpeed);
+
+        this.visibleLayerMin = 0;
+        this.visibleLayerMax = 0;
+        this.particleDensity = toFiniteNumber(options.particleDensity, 1.0);
+
+        this.show = true;
+
+        this._isDestroyed = false;
+        this._needsRebuild = true;
+        this._particleState = 0;
+
+        this._layerCount = 0;
+        this._maxNx = 0;
+        this._maxNy = 0;
+        this._atlasWidth = 0;
+        this._atlasHeight = 0;
+        this._dataPointCount = 0;
+
+        this._bounds = null;
+        this._altitudes = [];
+
+        this._centerLon = 0.0;
+        this._centerLat = 0.0;
+        this._centerHeight = 0.0;
+        this._centerLonRad = 0.0;
+        this._centerLatRad = 0.0;
+        this._centerCartesian = this._Cesium.Cartesian3.fromDegrees(0.0, 0.0, 0.0);
+        this._modelMatrix = this._Cesium.Transforms.eastNorthUpToFixedFrame(this._centerCartesian);
+
+        this._particleTextureSize = 16;
+        this._particleCount = 16 * 16;
+        this._drawVertexCount = this._particleCount * 6;
+
+        this._particlePositionTextures = [null, null];
+        this._velocityTextures = [null, null];
+        this._framebuffers = [null, null];
+        this._windAtlasTexture = null;
+
+        this._quadVertexArray = null;
+        this._particleVertexArray = null;
+        this._particleVertexBuffer = null;
+
+        this._updateProgram = null;
+        this._drawProgram = null;
+        this._updateCommand = null;
+        this._drawCommand = null;
     }
 
-    this._createOrReplaceWindAtlasTexture(atlasData);
+    loadData(apiData) {
+        if (!apiData || typeof apiData !== 'object') {
+            throw new Error('Wind2D.loadData requires a valid data object.');
+        }
 
-    const maxSizeMesh = Math.max(...normalizedMesh);
-    const totalSizeMeters = this._maxNx * maxSizeMesh;
-    const halfSizeDeg = totalSizeMeters / 2.0 / 111320.0;
-    const latRad = (latitude * Math.PI) / 180.0;
-    const cosLat = Math.max(0.000001, Math.abs(Math.cos(latRad)));
-    const halfSizeLonDeg = totalSizeMeters / 2.0 / (111320.0 * cosLat);
+        const longitude = toFiniteNumber(apiData.longitude, NaN);
+        const latitude = toFiniteNumber(apiData.latitude, NaN);
+        const altitude = Array.isArray(apiData.altitude) ? apiData.altitude : [];
+        const sizeMesh = Array.isArray(apiData.sizeMesh) ? apiData.sizeMesh : [];
+        const count = Array.isArray(apiData.count) ? apiData.count : [];
+        const hspeed = Array.isArray(apiData.hspeed) ? apiData.hspeed : [];
+        const hdir = Array.isArray(apiData.hdir) ? apiData.hdir : [];
+        const vspeed = Array.isArray(apiData.vspeed) ? apiData.vspeed : [];
 
-    this._bounds = {
-      minLon: longitude - halfSizeLonDeg,
-      maxLon: longitude + halfSizeLonDeg,
-      minLat: latitude - halfSizeDeg,
-      maxLat: latitude + halfSizeDeg,
-      minHeight: Math.min(...normalizedAltitude),
-      maxHeight: Math.max(...normalizedAltitude),
-    };
+        if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+            throw new Error('Wind2D.loadData requires finite longitude and latitude.');
+        }
 
-    this._dataPointCount = totalPoints;
-    this._updateTransform();
-    this.setParticleDensity(this.particleDensity);
-    this._needsRebuild = true;
-  }
+        const layerCount = altitude.length;
+        if (layerCount < 1) {
+            throw new Error('Wind2D.loadData requires at least one altitude layer.');
+        }
 
-  setParticleCount(count) {
-    const target = Math.max(1, Math.floor(toFiniteNumber(count, 1)));
-    const nextSize = computeParticleTextureSize(target, this._gl);
+        if (sizeMesh.length !== layerCount || count.length !== layerCount) {
+            throw new Error('Wind2D.loadData sizeMesh/count length must match altitude length.');
+        }
 
-    const hasResources = !!(
-      this._particlePositionTextures[0]
-      && this._particlePositionTextures[1]
-      && this._velocityTextures[0]
-      && this._velocityTextures[1]
-      && this._framebuffers[0]
-      && this._framebuffers[1]
-    );
+        const normalizedCount = count.map((item) =>
+            Math.max(1, Math.floor(toFiniteNumber(item, 1))),
+        );
+        const normalizedMesh = sizeMesh.map((item) => Math.max(1, toFiniteNumber(item, 1)));
+        const normalizedAltitude = altitude.map((item) => toFiniteNumber(item, 0));
 
-    if (hasResources && nextSize === this._particleTextureSize) {
-      return;
+        const totalPoints = normalizedCount.reduce((sum, nx) => sum + nx * nx, 0);
+        if (
+            hspeed.length < totalPoints ||
+            hdir.length < totalPoints ||
+            vspeed.length < totalPoints
+        ) {
+            throw new Error('Wind2D.loadData hspeed/hdir/vspeed length does not match grid count.');
+        }
+
+        this._layerCount = layerCount;
+        this.visibleLayerMin = 0;
+        this.visibleLayerMax = layerCount - 1;
+        this._altitudes = normalizedAltitude.slice();
+
+        this._maxNx = Math.max(...normalizedCount);
+        this._maxNy = this._maxNx;
+        this._atlasWidth = this._maxNx;
+        this._atlasHeight = this._maxNy * layerCount;
+
+        const atlasData = new Float32Array(this._atlasWidth * this._atlasHeight * 4);
+        let srcOffset = 0;
+
+        for (let k = 0; k < layerCount; k += 1) {
+            const nx = normalizedCount[k];
+            const ny = nx;
+
+            for (let j = 0; j < ny; j += 1) {
+                for (let i = 0; i < nx; i += 1) {
+                    const srcIdx = srcOffset + j * nx + i;
+                    const dstIdx = ((k * this._maxNy + j) * this._atlasWidth + i) * 4;
+
+                    const speed = Number(hspeed[srcIdx]);
+                    const directionDeg = Number(hdir[srcIdx]);
+                    const vertical = Number(vspeed[srcIdx]);
+                    const valid = Number.isFinite(speed) && Number.isFinite(directionDeg);
+
+                    if (!valid) {
+                        atlasData[dstIdx] = 0.0;
+                        atlasData[dstIdx + 1] = 0.0;
+                        atlasData[dstIdx + 2] = 0.0;
+                        atlasData[dstIdx + 3] = 0.0;
+                        continue;
+                    }
+
+                    const dirRad = (directionDeg * Math.PI) / 180.0;
+                    atlasData[dstIdx] = speed * Math.sin(dirRad);
+                    atlasData[dstIdx + 1] = speed * Math.cos(dirRad);
+                    atlasData[dstIdx + 2] = Number.isFinite(vertical) ? vertical : 0.0;
+                    atlasData[dstIdx + 3] = 1.0;
+                }
+            }
+
+            srcOffset += nx * ny;
+        }
+
+        this._createOrReplaceWindAtlasTexture(atlasData);
+
+        const maxSizeMesh = Math.max(...normalizedMesh);
+        const totalSizeMeters = this._maxNx * maxSizeMesh;
+        const halfSizeDeg = totalSizeMeters / 2.0 / 111320.0;
+        const latRad = (latitude * Math.PI) / 180.0;
+        const cosLat = Math.max(0.000001, Math.abs(Math.cos(latRad)));
+        const halfSizeLonDeg = totalSizeMeters / 2.0 / (111320.0 * cosLat);
+
+        this._bounds = {
+            minLon: longitude - halfSizeLonDeg,
+            maxLon: longitude + halfSizeLonDeg,
+            minLat: latitude - halfSizeDeg,
+            maxLat: latitude + halfSizeDeg,
+            minHeight: Math.min(...normalizedAltitude),
+            maxHeight: Math.max(...normalizedAltitude),
+        };
+
+        this._dataPointCount = totalPoints;
+        this._updateTransform();
+        this.setParticleDensity(this.particleDensity);
+        this._needsRebuild = true;
     }
 
-    this._particleTextureSize = nextSize;
-    this._particleCount = nextSize * nextSize;
-    this._drawVertexCount = this._particleCount * 6;
+    setParticleCount(count) {
+        const target = Math.max(1, Math.floor(toFiniteNumber(count, 1)));
+        const nextSize = computeParticleTextureSize(target, this._gl);
 
-    this._rebuildParticleResources();
-    this._needsRebuild = true;
-  }
+        const hasResources = !!(
+            this._particlePositionTextures[0] &&
+            this._particlePositionTextures[1] &&
+            this._velocityTextures[0] &&
+            this._velocityTextures[1] &&
+            this._framebuffers[0] &&
+            this._framebuffers[1]
+        );
 
-  setParticleDensity(density) {
-    const safeDensity = clamp(toFiniteNumber(density, this.particleDensity), 0.05, 10.0);
-    this.particleDensity = safeDensity;
+        if (hasResources && nextSize === this._particleTextureSize) {
+            return;
+        }
 
-    if (this._dataPointCount <= 0) {
-      return;
+        this._particleTextureSize = nextSize;
+        this._particleCount = nextSize * nextSize;
+        this._drawVertexCount = this._particleCount * 6;
+
+        this._rebuildParticleResources();
+        this._needsRebuild = true;
     }
 
-    const targetCount = Math.max(1, Math.floor(this._dataPointCount * safeDensity));
-    this.setParticleCount(targetCount);
-  }
+    setParticleDensity(density) {
+        const safeDensity = clamp(toFiniteNumber(density, this.particleDensity), 0.05, 10.0);
+        this.particleDensity = safeDensity;
 
-  setBounds(minLon, maxLon, minLat, maxLat) {
-    const lon0 = toFiniteNumber(minLon, NaN);
-    const lon1 = toFiniteNumber(maxLon, NaN);
-    const lat0 = toFiniteNumber(minLat, NaN);
-    const lat1 = toFiniteNumber(maxLat, NaN);
+        if (this._dataPointCount <= 0) {
+            return;
+        }
 
-    if (!Number.isFinite(lon0) || !Number.isFinite(lon1) || !Number.isFinite(lat0) || !Number.isFinite(lat1)) {
-      return;
+        const targetCount = Math.max(1, Math.floor(this._dataPointCount * safeDensity));
+        this.setParticleCount(targetCount);
     }
 
-    const nextBounds = this._bounds
-      ? { ...this._bounds }
-      : {
-        minHeight: 0,
-        maxHeight: 0,
-      };
+    setBounds(minLon, maxLon, minLat, maxLat) {
+        const lon0 = toFiniteNumber(minLon, NaN);
+        const lon1 = toFiniteNumber(maxLon, NaN);
+        const lat0 = toFiniteNumber(minLat, NaN);
+        const lat1 = toFiniteNumber(maxLat, NaN);
 
-    nextBounds.minLon = Math.min(lon0, lon1);
-    nextBounds.maxLon = Math.max(lon0, lon1);
-    nextBounds.minLat = Math.min(lat0, lat1);
-    nextBounds.maxLat = Math.max(lat0, lat1);
+        if (
+            !Number.isFinite(lon0) ||
+            !Number.isFinite(lon1) ||
+            !Number.isFinite(lat0) ||
+            !Number.isFinite(lat1)
+        ) {
+            return;
+        }
 
-    this._bounds = nextBounds;
-    this._updateTransform();
-    this._needsRebuild = true;
-  }
+        const nextBounds = this._bounds
+            ? { ...this._bounds }
+            : {
+                  minHeight: 0,
+                  maxHeight: 0,
+              };
 
-  flyTo() {
-    if (!this._bounds || !this._viewer || !this._viewer.camera) {
-      return;
+        nextBounds.minLon = Math.min(lon0, lon1);
+        nextBounds.maxLon = Math.max(lon0, lon1);
+        nextBounds.minLat = Math.min(lat0, lat1);
+        nextBounds.maxLat = Math.max(lat0, lat1);
+
+        this._bounds = nextBounds;
+        this._updateTransform();
+        this._needsRebuild = true;
     }
 
-    const centerLon = (this._bounds.minLon + this._bounds.maxLon) * 0.5;
-    const centerLat = (this._bounds.minLat + this._bounds.maxLat) * 0.5;
+    flyTo() {
+        if (!this._bounds || !this._viewer || !this._viewer.camera) {
+            return;
+        }
 
-    this._viewer.camera.flyTo({
-      destination: this._Cesium.Cartesian3.fromDegrees(centerLon, centerLat, 2000000.0),
-      orientation: {
-        heading: 0.0,
-        pitch: -this._Cesium.Math.PI_OVER_TWO,
-        roll: 0.0,
-      },
-    });
-  }
+        const centerLon = (this._bounds.minLon + this._bounds.maxLon) * 0.5;
+        const centerLat = (this._bounds.minLat + this._bounds.maxLat) * 0.5;
 
-  update(frameState) {
-    if (this._isDestroyed || !this.show) {
-      return;
+        this._viewer.camera.flyTo({
+            destination: this._Cesium.Cartesian3.fromDegrees(centerLon, centerLat, 2000000.0),
+            orientation: {
+                heading: 0.0,
+                pitch: -this._Cesium.Math.PI_OVER_TWO,
+                roll: 0.0,
+            },
+        });
     }
 
-    const ready = !!(
-      this._windAtlasTexture
-      && this._particlePositionTextures[0]
-      && this._particlePositionTextures[1]
-      && this._velocityTextures[0]
-      && this._velocityTextures[1]
-      && this._framebuffers[0]
-      && this._framebuffers[1]
-    );
+    update(frameState) {
+        if (this._isDestroyed || !this.show) {
+            return;
+        }
 
-    if (!ready) {
-      return;
+        const ready = !!(
+            this._windAtlasTexture &&
+            this._particlePositionTextures[0] &&
+            this._particlePositionTextures[1] &&
+            this._velocityTextures[0] &&
+            this._velocityTextures[1] &&
+            this._framebuffers[0] &&
+            this._framebuffers[1]
+        );
+
+        if (!ready) {
+            return;
+        }
+
+        if (this._needsRebuild || !this._updateCommand || !this._drawCommand) {
+            this._rebuildCommands();
+        }
+
+        if (!this._updateCommand || !this._drawCommand) {
+            return;
+        }
+
+        const readState = this._particleState;
+        const writeState = 1 - readState;
+
+        this._updateCommand.framebuffer = this._framebuffers[writeState];
+        this._updateCommand.execute(this._context, frameState ? frameState.passState : undefined);
+
+        this._particleState = writeState;
+        this._drawCommand.modelMatrix = this._modelMatrix;
+
+        if (frameState && Array.isArray(frameState.commandList)) {
+            frameState.commandList.push(this._drawCommand);
+        }
     }
 
-    if (this._needsRebuild || !this._updateCommand || !this._drawCommand) {
-      this._rebuildCommands();
+    destroy() {
+        if (this._isDestroyed) {
+            return;
+        }
+
+        this._destroyCommandResources();
+        this._destroyParticleResources();
+
+        if (this._quadVertexArray) {
+            this._quadVertexArray.destroy();
+            this._quadVertexArray = null;
+        }
+
+        if (this._windAtlasTexture) {
+            this._windAtlasTexture.destroy();
+            this._windAtlasTexture = null;
+        }
+
+        this._isDestroyed = true;
     }
 
-    if (!this._updateCommand || !this._drawCommand) {
-      return;
+    isDestroyed() {
+        return this._isDestroyed;
     }
 
-    const readState = this._particleState;
-    const writeState = 1 - readState;
+    _createOrReplaceWindAtlasTexture(atlasData) {
+        if (this._windAtlasTexture) {
+            this._windAtlasTexture.destroy();
+            this._windAtlasTexture = null;
+        }
 
-    this._updateCommand.framebuffer = this._framebuffers[writeState];
-    this._updateCommand.execute(this._context, frameState ? frameState.passState : undefined);
-
-    this._particleState = writeState;
-    this._drawCommand.modelMatrix = this._modelMatrix;
-
-    if (frameState && Array.isArray(frameState.commandList)) {
-      frameState.commandList.push(this._drawCommand);
-    }
-  }
-
-  destroy() {
-    if (this._isDestroyed) {
-      return;
+        this._windAtlasTexture = createWindAtlasTexture(
+            this._context,
+            this._gl,
+            this._atlasWidth,
+            this._atlasHeight,
+            atlasData,
+        );
     }
 
-    this._destroyCommandResources();
-    this._destroyParticleResources();
+    _updateTransform() {
+        if (!this._bounds) {
+            return;
+        }
 
-    if (this._quadVertexArray) {
-      this._quadVertexArray.destroy();
-      this._quadVertexArray = null;
+        this._centerLon = (this._bounds.minLon + this._bounds.maxLon) * 0.5;
+        this._centerLat = (this._bounds.minLat + this._bounds.maxLat) * 0.5;
+        this._centerHeight = (this._bounds.minHeight + this._bounds.maxHeight) * 0.5;
+
+        this._centerLonRad = this._Cesium.Math.toRadians(this._centerLon);
+        this._centerLatRad = this._Cesium.Math.toRadians(this._centerLat);
+        this._centerCartesian = this._Cesium.Cartesian3.fromDegrees(
+            this._centerLon,
+            this._centerLat,
+            this._centerHeight,
+        );
+        this._modelMatrix = this._Cesium.Transforms.eastNorthUpToFixedFrame(this._centerCartesian);
     }
 
-    if (this._windAtlasTexture) {
-      this._windAtlasTexture.destroy();
-      this._windAtlasTexture = null;
+    _rebuildParticleResources() {
+        this._destroyParticleResources();
+
+        const Cesium = this._Cesium;
+        const size = this._particleTextureSize;
+        const randomData = createRandomParticleData(size);
+        const zeroData = createZeroTextureData(size);
+
+        for (let i = 0; i < 2; i += 1) {
+            this._particlePositionTextures[i] = new Cesium.Texture({
+                context: this._context,
+                width: size,
+                height: size,
+                pixelFormat: Cesium.PixelFormat.RGBA,
+                pixelDatatype: Cesium.PixelDatatype.FLOAT,
+                source: {
+                    width: size,
+                    height: size,
+                    arrayBufferView: randomData,
+                },
+                sampler: new Cesium.Sampler({
+                    minificationFilter: Cesium.TextureMinificationFilter.NEAREST,
+                    magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST,
+                }),
+            });
+
+            this._velocityTextures[i] = new Cesium.Texture({
+                context: this._context,
+                width: size,
+                height: size,
+                pixelFormat: Cesium.PixelFormat.RGBA,
+                pixelDatatype: Cesium.PixelDatatype.FLOAT,
+                source: {
+                    width: size,
+                    height: size,
+                    arrayBufferView: zeroData,
+                },
+                sampler: new Cesium.Sampler({
+                    minificationFilter: Cesium.TextureMinificationFilter.NEAREST,
+                    magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST,
+                }),
+            });
+
+            this._framebuffers[i] = new Cesium.Framebuffer({
+                context: this._context,
+                colorTextures: [this._particlePositionTextures[i], this._velocityTextures[i]],
+                destroyAttachments: false,
+            });
+
+            const nativeFbo = this._framebuffers[i]._framebuffer;
+            this._gl.bindFramebuffer(this._gl.DRAW_FRAMEBUFFER, nativeFbo);
+            this._gl.drawBuffers([this._gl.COLOR_ATTACHMENT0, this._gl.COLOR_ATTACHMENT1]);
+            this._gl.bindFramebuffer(this._gl.DRAW_FRAMEBUFFER, null);
+        }
+
+        this._particleState = 0;
     }
 
-    this._isDestroyed = true;
-  }
-
-  isDestroyed() {
-    return this._isDestroyed;
-  }
-
-  _createOrReplaceWindAtlasTexture(atlasData) {
-    if (this._windAtlasTexture) {
-      this._windAtlasTexture.destroy();
-      this._windAtlasTexture = null;
+    _destroyParticleResources() {
+        for (let i = 0; i < 2; i += 1) {
+            if (this._framebuffers[i]) {
+                this._framebuffers[i].destroy();
+                this._framebuffers[i] = null;
+            }
+            if (this._particlePositionTextures[i]) {
+                this._particlePositionTextures[i].destroy();
+                this._particlePositionTextures[i] = null;
+            }
+            if (this._velocityTextures[i]) {
+                this._velocityTextures[i].destroy();
+                this._velocityTextures[i] = null;
+            }
+        }
     }
 
-    this._windAtlasTexture = createWindAtlasTexture(
-      this._context,
-      this._gl,
-      this._atlasWidth,
-      this._atlasHeight,
-      atlasData,
-    );
-  }
+    _rebuildCommands() {
+        const hasTextures = !!(
+            this._particlePositionTextures[0] &&
+            this._particlePositionTextures[1] &&
+            this._velocityTextures[0] &&
+            this._velocityTextures[1] &&
+            this._framebuffers[0] &&
+            this._framebuffers[1] &&
+            this._windAtlasTexture
+        );
 
-  _updateTransform() {
-    if (!this._bounds) {
-      return;
+        if (!hasTextures) {
+            return;
+        }
+
+        this._destroyCommandResources();
+        this._buildQuadVertexArray();
+        this._buildParticleVertexArray();
+        this._buildUpdateProgram();
+        this._buildDrawProgram();
+        this._buildUpdateCommand();
+        this._buildDrawCommand();
+        this._needsRebuild = false;
     }
 
-    this._centerLon = (this._bounds.minLon + this._bounds.maxLon) * 0.5;
-    this._centerLat = (this._bounds.minLat + this._bounds.maxLat) * 0.5;
-    this._centerHeight = (this._bounds.minHeight + this._bounds.maxHeight) * 0.5;
+    _destroyCommandResources() {
+        this._updateCommand = null;
+        this._drawCommand = null;
 
-    this._centerLonRad = this._Cesium.Math.toRadians(this._centerLon);
-    this._centerLatRad = this._Cesium.Math.toRadians(this._centerLat);
-    this._centerCartesian = this._Cesium.Cartesian3.fromDegrees(
-      this._centerLon,
-      this._centerLat,
-      this._centerHeight,
-    );
-    this._modelMatrix = this._Cesium.Transforms.eastNorthUpToFixedFrame(this._centerCartesian);
-  }
+        if (this._updateProgram) {
+            this._updateProgram.destroy();
+            this._updateProgram = null;
+        }
 
-  _rebuildParticleResources() {
-    this._destroyParticleResources();
+        if (this._drawProgram) {
+            this._drawProgram.destroy();
+            this._drawProgram = null;
+        }
 
-    const Cesium = this._Cesium;
-    const size = this._particleTextureSize;
-    const randomData = createRandomParticleData(size);
-    const zeroData = createZeroTextureData(size);
+        if (this._particleVertexArray) {
+            this._particleVertexArray.destroy();
+            this._particleVertexArray = null;
+        }
 
-    for (let i = 0; i < 2; i += 1) {
-      this._particlePositionTextures[i] = new Cesium.Texture({
-        context: this._context,
-        width: size,
-        height: size,
-        pixelFormat: Cesium.PixelFormat.RGBA,
-        pixelDatatype: Cesium.PixelDatatype.FLOAT,
-        source: {
-          width: size,
-          height: size,
-          arrayBufferView: randomData,
-        },
-        sampler: new Cesium.Sampler({
-          minificationFilter: Cesium.TextureMinificationFilter.NEAREST,
-          magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST,
-        }),
-      });
-
-      this._velocityTextures[i] = new Cesium.Texture({
-        context: this._context,
-        width: size,
-        height: size,
-        pixelFormat: Cesium.PixelFormat.RGBA,
-        pixelDatatype: Cesium.PixelDatatype.FLOAT,
-        source: {
-          width: size,
-          height: size,
-          arrayBufferView: zeroData,
-        },
-        sampler: new Cesium.Sampler({
-          minificationFilter: Cesium.TextureMinificationFilter.NEAREST,
-          magnificationFilter: Cesium.TextureMagnificationFilter.NEAREST,
-        }),
-      });
-
-      this._framebuffers[i] = new Cesium.Framebuffer({
-        context: this._context,
-        colorTextures: [
-          this._particlePositionTextures[i],
-          this._velocityTextures[i],
-        ],
-        destroyAttachments: false,
-      });
-
-      const nativeFbo = this._framebuffers[i]._framebuffer;
-      this._gl.bindFramebuffer(this._gl.DRAW_FRAMEBUFFER, nativeFbo);
-      this._gl.drawBuffers([this._gl.COLOR_ATTACHMENT0, this._gl.COLOR_ATTACHMENT1]);
-      this._gl.bindFramebuffer(this._gl.DRAW_FRAMEBUFFER, null);
+        if (this._particleVertexBuffer) {
+            this._particleVertexBuffer.destroy();
+            this._particleVertexBuffer = null;
+        }
     }
 
-    this._particleState = 0;
-  }
+    _buildQuadVertexArray() {
+        if (this._quadVertexArray) {
+            return;
+        }
 
-  _destroyParticleResources() {
-    for (let i = 0; i < 2; i += 1) {
-      if (this._framebuffers[i]) {
-        this._framebuffers[i].destroy();
-        this._framebuffers[i] = null;
-      }
-      if (this._particlePositionTextures[i]) {
-        this._particlePositionTextures[i].destroy();
-        this._particlePositionTextures[i] = null;
-      }
-      if (this._velocityTextures[i]) {
-        this._velocityTextures[i].destroy();
-        this._velocityTextures[i] = null;
-      }
-    }
-  }
+        const Cesium = this._Cesium;
+        const positionBuffer = Cesium.Buffer.createVertexBuffer({
+            context: this._context,
+            typedArray: QUAD_POSITIONS,
+            usage: Cesium.BufferUsage.STATIC_DRAW,
+        });
 
-  _rebuildCommands() {
-    const hasTextures = !!(
-      this._particlePositionTextures[0]
-      && this._particlePositionTextures[1]
-      && this._velocityTextures[0]
-      && this._velocityTextures[1]
-      && this._framebuffers[0]
-      && this._framebuffers[1]
-      && this._windAtlasTexture
-    );
+        const texCoordBuffer = Cesium.Buffer.createVertexBuffer({
+            context: this._context,
+            typedArray: QUAD_TEXCOORDS,
+            usage: Cesium.BufferUsage.STATIC_DRAW,
+        });
 
-    if (!hasTextures) {
-      return;
-    }
+        const indexBuffer = Cesium.Buffer.createIndexBuffer({
+            context: this._context,
+            typedArray: QUAD_INDICES,
+            usage: Cesium.BufferUsage.STATIC_DRAW,
+            indexDatatype: Cesium.IndexDatatype.UNSIGNED_SHORT,
+        });
 
-    this._destroyCommandResources();
-    this._buildQuadVertexArray();
-    this._buildParticleVertexArray();
-    this._buildUpdateProgram();
-    this._buildDrawProgram();
-    this._buildUpdateCommand();
-    this._buildDrawCommand();
-    this._needsRebuild = false;
-  }
-
-  _destroyCommandResources() {
-    this._updateCommand = null;
-    this._drawCommand = null;
-
-    if (this._updateProgram) {
-      this._updateProgram.destroy();
-      this._updateProgram = null;
+        this._quadVertexArray = new Cesium.VertexArray({
+            context: this._context,
+            attributes: [
+                {
+                    index: 0,
+                    vertexBuffer: positionBuffer,
+                    componentsPerAttribute: 2,
+                },
+                {
+                    index: 1,
+                    vertexBuffer: texCoordBuffer,
+                    componentsPerAttribute: 2,
+                },
+            ],
+            indexBuffer,
+        });
     }
 
-    if (this._drawProgram) {
-      this._drawProgram.destroy();
-      this._drawProgram = null;
+    _buildParticleVertexArray() {
+        const Cesium = this._Cesium;
+        const particleIndices = new Float32Array(this._drawVertexCount);
+        for (let i = 0; i < particleIndices.length; i += 1) {
+            particleIndices[i] = i;
+        }
+
+        this._particleVertexBuffer = Cesium.Buffer.createVertexBuffer({
+            context: this._context,
+            typedArray: particleIndices,
+            usage: Cesium.BufferUsage.STATIC_DRAW,
+        });
+
+        this._particleVertexArray = new Cesium.VertexArray({
+            context: this._context,
+            attributes: [
+                {
+                    index: 0,
+                    vertexBuffer: this._particleVertexBuffer,
+                    componentsPerAttribute: 1,
+                },
+            ],
+        });
     }
 
-    if (this._particleVertexArray) {
-      this._particleVertexArray.destroy();
-      this._particleVertexArray = null;
-    }
-
-    if (this._particleVertexBuffer) {
-      this._particleVertexBuffer.destroy();
-      this._particleVertexBuffer = null;
-    }
-  }
-
-  _buildQuadVertexArray() {
-    if (this._quadVertexArray) {
-      return;
-    }
-
-    const Cesium = this._Cesium;
-    const positionBuffer = Cesium.Buffer.createVertexBuffer({
-      context: this._context,
-      typedArray: QUAD_POSITIONS,
-      usage: Cesium.BufferUsage.STATIC_DRAW,
-    });
-
-    const texCoordBuffer = Cesium.Buffer.createVertexBuffer({
-      context: this._context,
-      typedArray: QUAD_TEXCOORDS,
-      usage: Cesium.BufferUsage.STATIC_DRAW,
-    });
-
-    const indexBuffer = Cesium.Buffer.createIndexBuffer({
-      context: this._context,
-      typedArray: QUAD_INDICES,
-      usage: Cesium.BufferUsage.STATIC_DRAW,
-      indexDatatype: Cesium.IndexDatatype.UNSIGNED_SHORT,
-    });
-
-    this._quadVertexArray = new Cesium.VertexArray({
-      context: this._context,
-      attributes: [
-        {
-          index: 0,
-          vertexBuffer: positionBuffer,
-          componentsPerAttribute: 2,
-        },
-        {
-          index: 1,
-          vertexBuffer: texCoordBuffer,
-          componentsPerAttribute: 2,
-        },
-      ],
-      indexBuffer,
-    });
-  }
-
-  _buildParticleVertexArray() {
-    const Cesium = this._Cesium;
-    const particleIndices = new Float32Array(this._drawVertexCount);
-    for (let i = 0; i < particleIndices.length; i += 1) {
-      particleIndices[i] = i;
-    }
-
-    this._particleVertexBuffer = Cesium.Buffer.createVertexBuffer({
-      context: this._context,
-      typedArray: particleIndices,
-      usage: Cesium.BufferUsage.STATIC_DRAW,
-    });
-
-    this._particleVertexArray = new Cesium.VertexArray({
-      context: this._context,
-      attributes: [
-        {
-          index: 0,
-          vertexBuffer: this._particleVertexBuffer,
-          componentsPerAttribute: 1,
-        },
-      ],
-    });
-  }
-
-  _buildUpdateProgram() {
-    const Cesium = this._Cesium;
-    const vertexShaderSource = `#version 300 es
+    _buildUpdateProgram() {
+        const Cesium = this._Cesium;
+        const vertexShaderSource = `#version 300 es
 in vec2 position;
 in vec2 textureCoordinates;
 out vec2 v_textureCoordinates;
@@ -680,7 +668,7 @@ void main() {
   v_textureCoordinates = textureCoordinates;
 }`;
 
-    const fragmentShaderSource = `#version 300 es
+        const fragmentShaderSource = `#version 300 es
 precision highp float;
 precision highp sampler2D;
 
@@ -820,20 +808,20 @@ void main() {
   velocityOut = vec4(wind, 0.0);
 }`;
 
-    this._updateProgram = Cesium.ShaderProgram.fromCache({
-      context: this._context,
-      vertexShaderSource,
-      fragmentShaderSource,
-      attributeLocations: {
-        position: 0,
-        textureCoordinates: 1,
-      },
-    });
-  }
+        this._updateProgram = Cesium.ShaderProgram.fromCache({
+            context: this._context,
+            vertexShaderSource,
+            fragmentShaderSource,
+            attributeLocations: {
+                position: 0,
+                textureCoordinates: 1,
+            },
+        });
+    }
 
-  _buildDrawProgram() {
-    const Cesium = this._Cesium;
-    const vertexShaderSource = `#version 300 es
+    _buildDrawProgram() {
+        const Cesium = this._Cesium;
+        const vertexShaderSource = `#version 300 es
 precision highp float;
 precision highp sampler2D;
 
@@ -962,7 +950,7 @@ void main() {
   gl_Position = czm_modelViewProjection * vec4(vertex, 1.0);
 }`;
 
-    const fragmentShaderSource = `#version 300 es
+        const fragmentShaderSource = `#version 300 es
 precision highp float;
 
 in float v_age;
@@ -1003,129 +991,141 @@ void main() {
   out_FragColor = vec4(color, alpha);
 }`;
 
-    this._drawProgram = Cesium.ShaderProgram.fromCache({
-      context: this._context,
-      vertexShaderSource,
-      fragmentShaderSource,
-      attributeLocations: {
-        particleIndex: 0,
-      },
-    });
-  }
-
-  _buildUpdateCommand() {
-    const Cesium = this._Cesium;
-    const renderState = Cesium.RenderState.fromCache({
-      viewport: new Cesium.BoundingRectangle(
-        0,
-        0,
-        this._particleTextureSize,
-        this._particleTextureSize,
-      ),
-    });
-
-    this._updateCommand = new Cesium.DrawCommand({
-      owner: this,
-      primitiveType: Cesium.PrimitiveType.TRIANGLES,
-      vertexArray: this._quadVertexArray,
-      shaderProgram: this._updateProgram,
-      renderState,
-      framebuffer: this._framebuffers[1 - this._particleState],
-      uniformMap: this._getUpdateUniformMap(),
-    });
-  }
-
-  _buildDrawCommand() {
-    const Cesium = this._Cesium;
-    const renderState = Cesium.RenderState.fromCache({
-      depthTest: {
-        enabled: true,
-      },
-      depthMask: false,
-      blending: Cesium.BlendingState.ALPHA_BLEND,
-    });
-
-    this._drawCommand = new Cesium.DrawCommand({
-      owner: this,
-      primitiveType: Cesium.PrimitiveType.LINES,
-      vertexArray: this._particleVertexArray,
-      shaderProgram: this._drawProgram,
-      renderState,
-      modelMatrix: this._modelMatrix,
-      uniformMap: this._getDrawUniformMap(),
-      pass: Cesium.Pass.TRANSLUCENT,
-      count: this._drawVertexCount,
-    });
-  }
-
-  _getVisibleLayerRange() {
-    if (this._layerCount <= 0) {
-      return { min: 0, max: 0 };
+        this._drawProgram = Cesium.ShaderProgram.fromCache({
+            context: this._context,
+            vertexShaderSource,
+            fragmentShaderSource,
+            attributeLocations: {
+                particleIndex: 0,
+            },
+        });
     }
 
-    const minLayer = clamp(
-      Math.floor(toFiniteNumber(this.visibleLayerMin, 0)),
-      0,
-      this._layerCount - 1,
-    );
+    _buildUpdateCommand() {
+        const Cesium = this._Cesium;
+        const renderState = Cesium.RenderState.fromCache({
+            viewport: new Cesium.BoundingRectangle(
+                0,
+                0,
+                this._particleTextureSize,
+                this._particleTextureSize,
+            ),
+        });
 
-    const maxLayer = clamp(
-      Math.floor(toFiniteNumber(this.visibleLayerMax, this._layerCount - 1)),
-      minLayer,
-      this._layerCount - 1,
-    );
+        this._updateCommand = new Cesium.DrawCommand({
+            owner: this,
+            primitiveType: Cesium.PrimitiveType.TRIANGLES,
+            vertexArray: this._quadVertexArray,
+            shaderProgram: this._updateProgram,
+            renderState,
+            framebuffer: this._framebuffers[1 - this._particleState],
+            uniformMap: this._getUpdateUniformMap(),
+        });
+    }
 
-    return { min: minLayer, max: maxLayer };
-  }
+    _buildDrawCommand() {
+        const Cesium = this._Cesium;
+        const renderState = Cesium.RenderState.fromCache({
+            depthTest: {
+                enabled: true,
+            },
+            depthMask: false,
+            blending: Cesium.BlendingState.ALPHA_BLEND,
+        });
 
-  _normalizeSpeedRange(minValue, maxValue) {
-    const denominator = Math.max(0.0001, toFiniteNumber(this.maxWindSpeed, DEFAULT_OPTIONS.maxWindSpeed));
-    const normMin = clamp(toFiniteNumber(minValue, 0) / denominator, 0, 1);
-    const normMax = clamp(toFiniteNumber(maxValue, denominator) / denominator, 0, 1);
-    return {
-      min: Math.min(normMin, normMax),
-      max: Math.max(normMin, normMax),
-    };
-  }
+        this._drawCommand = new Cesium.DrawCommand({
+            owner: this,
+            primitiveType: Cesium.PrimitiveType.LINES,
+            vertexArray: this._particleVertexArray,
+            shaderProgram: this._drawProgram,
+            renderState,
+            modelMatrix: this._modelMatrix,
+            uniformMap: this._getDrawUniformMap(),
+            pass: Cesium.Pass.TRANSLUCENT,
+            count: this._drawVertexCount,
+        });
+    }
 
-  _getUpdateUniformMap() {
-    return {
-      currentParticlesPosition: () => this._particlePositionTextures[this._particleState],
-      windAtlas: () => this._windAtlasTexture,
-      speedFactor: () => toFiniteNumber(this.speedFactor, DEFAULT_OPTIONS.speedFactor),
-      maxWindSpeed: () => Math.max(0.0001, toFiniteNumber(this.maxWindSpeed, DEFAULT_OPTIONS.maxWindSpeed)),
-      decaySpeed: () => clamp(toFiniteNumber(this.decaySpeed, DEFAULT_OPTIONS.decaySpeed), 0.0, 1.0),
-      layerCount: () => this._layerCount,
-      maxNx: () => this._maxNx,
-      maxNy: () => this._maxNy,
-      atlasW: () => this._atlasWidth,
-      atlasH: () => this._atlasHeight,
-      visibleLayerMin: () => this._getVisibleLayerRange().min,
-      visibleLayerMax: () => this._getVisibleLayerRange().max,
-    };
-  }
+    _getVisibleLayerRange() {
+        if (this._layerCount <= 0) {
+            return { min: 0, max: 0 };
+        }
 
-  _getDrawUniformMap() {
-    return {
-      currentParticlesPosition: () => this._particlePositionTextures[this._particleState],
-      velocityTexture: () => this._velocityTextures[this._particleState],
-      particlesTextureSize: () => this._particleTextureSize,
-      arrowLength: () => toFiniteNumber(this.arrowLength, DEFAULT_OPTIONS.arrowLength),
-      trailLength: () => toFiniteNumber(this.trailLength, DEFAULT_OPTIONS.trailLength),
-      speedMin: () => this._normalizeSpeedRange(this.cullSpeedMin, this.cullSpeedMax).min,
-      speedMax: () => this._normalizeSpeedRange(this.cullSpeedMin, this.cullSpeedMax).max,
-      colorSpeedMin: () => this._normalizeSpeedRange(this.windSpeedMin, this.windSpeedMax).min,
-      colorSpeedMax: () => this._normalizeSpeedRange(this.windSpeedMin, this.windSpeedMax).max,
-      alphaFactor: () => clamp(toFiniteNumber(this.alphaFactor, DEFAULT_OPTIONS.alphaFactor), 0.0, 1.0),
-      boundsMinLon: () => (this._bounds ? this._Cesium.Math.toRadians(this._bounds.minLon) : 0.0),
-      boundsMaxLon: () => (this._bounds ? this._Cesium.Math.toRadians(this._bounds.maxLon) : 0.0),
-      boundsMinLat: () => (this._bounds ? this._Cesium.Math.toRadians(this._bounds.minLat) : 0.0),
-      boundsMaxLat: () => (this._bounds ? this._Cesium.Math.toRadians(this._bounds.maxLat) : 0.0),
-      boundsMinHeight: () => (this._bounds ? this._bounds.minHeight : 0.0),
-      boundsMaxHeight: () => (this._bounds ? this._bounds.maxHeight : 0.0),
-      centerECEF: () => this._centerCartesian,
-      centerLonRad: () => this._centerLonRad,
-      centerLatRad: () => this._centerLatRad,
-    };
-  }
+        const minLayer = clamp(
+            Math.floor(toFiniteNumber(this.visibleLayerMin, 0)),
+            0,
+            this._layerCount - 1,
+        );
+
+        const maxLayer = clamp(
+            Math.floor(toFiniteNumber(this.visibleLayerMax, this._layerCount - 1)),
+            minLayer,
+            this._layerCount - 1,
+        );
+
+        return { min: minLayer, max: maxLayer };
+    }
+
+    _normalizeSpeedRange(minValue, maxValue) {
+        const denominator = Math.max(
+            0.0001,
+            toFiniteNumber(this.maxWindSpeed, DEFAULT_OPTIONS.maxWindSpeed),
+        );
+        const normMin = clamp(toFiniteNumber(minValue, 0) / denominator, 0, 1);
+        const normMax = clamp(toFiniteNumber(maxValue, denominator) / denominator, 0, 1);
+        return {
+            min: Math.min(normMin, normMax),
+            max: Math.max(normMin, normMax),
+        };
+    }
+
+    _getUpdateUniformMap() {
+        return {
+            currentParticlesPosition: () => this._particlePositionTextures[this._particleState],
+            windAtlas: () => this._windAtlasTexture,
+            speedFactor: () => toFiniteNumber(this.speedFactor, DEFAULT_OPTIONS.speedFactor),
+            maxWindSpeed: () =>
+                Math.max(0.0001, toFiniteNumber(this.maxWindSpeed, DEFAULT_OPTIONS.maxWindSpeed)),
+            decaySpeed: () =>
+                clamp(toFiniteNumber(this.decaySpeed, DEFAULT_OPTIONS.decaySpeed), 0.0, 1.0),
+            layerCount: () => this._layerCount,
+            maxNx: () => this._maxNx,
+            maxNy: () => this._maxNy,
+            atlasW: () => this._atlasWidth,
+            atlasH: () => this._atlasHeight,
+            visibleLayerMin: () => this._getVisibleLayerRange().min,
+            visibleLayerMax: () => this._getVisibleLayerRange().max,
+        };
+    }
+
+    _getDrawUniformMap() {
+        return {
+            currentParticlesPosition: () => this._particlePositionTextures[this._particleState],
+            velocityTexture: () => this._velocityTextures[this._particleState],
+            particlesTextureSize: () => this._particleTextureSize,
+            arrowLength: () => toFiniteNumber(this.arrowLength, DEFAULT_OPTIONS.arrowLength),
+            trailLength: () => toFiniteNumber(this.trailLength, DEFAULT_OPTIONS.trailLength),
+            speedMin: () => this._normalizeSpeedRange(this.cullSpeedMin, this.cullSpeedMax).min,
+            speedMax: () => this._normalizeSpeedRange(this.cullSpeedMin, this.cullSpeedMax).max,
+            colorSpeedMin: () =>
+                this._normalizeSpeedRange(this.windSpeedMin, this.windSpeedMax).min,
+            colorSpeedMax: () =>
+                this._normalizeSpeedRange(this.windSpeedMin, this.windSpeedMax).max,
+            alphaFactor: () =>
+                clamp(toFiniteNumber(this.alphaFactor, DEFAULT_OPTIONS.alphaFactor), 0.0, 1.0),
+            boundsMinLon: () =>
+                this._bounds ? this._Cesium.Math.toRadians(this._bounds.minLon) : 0.0,
+            boundsMaxLon: () =>
+                this._bounds ? this._Cesium.Math.toRadians(this._bounds.maxLon) : 0.0,
+            boundsMinLat: () =>
+                this._bounds ? this._Cesium.Math.toRadians(this._bounds.minLat) : 0.0,
+            boundsMaxLat: () =>
+                this._bounds ? this._Cesium.Math.toRadians(this._bounds.maxLat) : 0.0,
+            boundsMinHeight: () => (this._bounds ? this._bounds.minHeight : 0.0),
+            boundsMaxHeight: () => (this._bounds ? this._bounds.maxHeight : 0.0),
+            centerECEF: () => this._centerCartesian,
+            centerLonRad: () => this._centerLonRad,
+            centerLatRad: () => this._centerLatRad,
+        };
+    }
 }

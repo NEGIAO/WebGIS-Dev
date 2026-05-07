@@ -37,7 +37,7 @@ export function createDrawMeasureFeature({
     drawStyleConfig = { value: {} },
     drawGraphicSeedRef = { value: 1 },
     userDataLayers = [],
-    tooltipRef = { helpTooltipEl: null, helpTooltipOverlay: null }
+    tooltipRef = { helpTooltipEl: null, helpTooltipOverlay: null },
 }) {
     // 内部状态
     let drawInteraction = null;
@@ -80,24 +80,24 @@ export function createDrawMeasureFeature({
 
         helpTooltipEl = document.createElement('div');
         helpTooltipEl.className = 'ol-tooltip hidden';
-        helpTooltipOverlay = new Overlay({ 
-            element: helpTooltipEl, 
-            offset: [15, 0], 
-            positioning: 'center-left' 
+        helpTooltipOverlay = new Overlay({
+            element: helpTooltipEl,
+            offset: [15, 0],
+            positioning: 'center-left',
         });
         map.addOverlay(helpTooltipOverlay);
-        
+
         // 同步到外部ref，供MapContainer中的事件处理器使用
         tooltipRef.helpTooltipEl = helpTooltipEl;
         tooltipRef.helpTooltipOverlay = helpTooltipOverlay;
 
         measureTooltipEl = document.createElement('div');
         measureTooltipEl.className = 'ol-tooltip ol-tooltip-measure';
-        measureTooltipOverlay = new Overlay({ 
-            element: measureTooltipEl, 
-            offset: [0, -15], 
-            positioning: 'bottom-center', 
-            stopEvent: false 
+        measureTooltipOverlay = new Overlay({
+            element: measureTooltipEl,
+            offset: [0, -15],
+            positioning: 'bottom-center',
+            stopEvent: false,
         });
         map.addOverlay(measureTooltipOverlay);
     }
@@ -116,7 +116,7 @@ export function createDrawMeasureFeature({
         drawInteraction = null;
         snapInteraction = null;
         helpTooltipEl = null;
-        
+
         // 清理外部ref
         tooltipRef.helpTooltipEl = null;
         tooltipRef.helpTooltipOverlay = null;
@@ -133,14 +133,13 @@ export function createDrawMeasureFeature({
         if (!map || !drawSource) return;
 
         const isMeasure = ['MeasureDistance', 'MeasureArea'].includes(type);
-        const drawType = type === 'MeasureDistance' 
-            ? 'LineString' 
-            : (type === 'MeasureArea' ? 'Polygon' : type);
+        const drawType =
+            type === 'MeasureDistance' ? 'LineString' : type === 'MeasureArea' ? 'Polygon' : type;
 
         drawInteraction = new Draw({
             source: drawSource,
             type: drawType,
-            style: createStyleFromConfig(drawStyleConfig.value)
+            style: createStyleFromConfig(drawStyleConfig.value),
         });
 
         map.addInteraction(drawInteraction);
@@ -194,7 +193,7 @@ export function createDrawMeasureFeature({
                     sourceType: 'draw',
                     features: [feature],
                     styleConfig: drawStyleConfig.value,
-                    fitView: false
+                    fitView: false,
                 });
                 emitGraphicsOverview();
             });
@@ -243,6 +242,6 @@ export function createDrawMeasureFeature({
         formatArea,
         createTooltips,
         getDrawInteraction,
-        getSketchFeature
+        getSketchFeature,
     };
 }

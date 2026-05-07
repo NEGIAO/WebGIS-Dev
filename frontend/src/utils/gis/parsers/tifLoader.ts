@@ -6,6 +6,6 @@ export type TifParsed = {
 export function loadTifBuffer(buffer: ArrayBuffer): TifParsed {
     return {
         kind: 'tiff',
-        arrayBuffer: buffer
+        arrayBuffer: buffer,
     };
 }

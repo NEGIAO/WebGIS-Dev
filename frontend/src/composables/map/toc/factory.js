@@ -1,7 +1,9 @@
 const DEFAULT_SOURCE_TYPE = 'upload';
 
 function normalizeLayerType(rawType = '') {
-    const normalized = String(rawType || '').trim().toLowerCase();
+    const normalized = String(rawType || '')
+        .trim()
+        .toLowerCase();
     if (!normalized) return 'geojson';
 
     if (normalized === 'kmz') return 'kml';
@@ -13,7 +15,9 @@ function normalizeLayerType(rawType = '') {
 }
 
 function normalizeFormat(rawFormat = '', normalizedLayerType = '') {
-    const normalized = String(rawFormat || '').trim().toLowerCase();
+    const normalized = String(rawFormat || '')
+        .trim()
+        .toLowerCase();
     if (normalized) {
         if (normalized === 'tiff') return 'tif';
         if (normalized === 'kmz') return 'kml';
@@ -35,7 +39,8 @@ function deriveFeatureCount(input = {}) {
     const parsedData = input.parsedData;
     if (parsedData && typeof parsedData === 'object') {
         if (Array.isArray(parsedData.features)) return parsedData.features.length;
-        if (Array.isArray(parsedData.geojsonData?.features)) return parsedData.geojsonData.features.length;
+        if (Array.isArray(parsedData.geojsonData?.features))
+            return parsedData.geojsonData.features.length;
     }
 
     if (normalizeLayerType(input.layerType || input.type || input.kind) === 'tif') {
@@ -61,7 +66,7 @@ function getDefaultCapabilities(layerType = 'geojson') {
         remove: true,
         reorder: true,
         toggleVisibility: true,
-        setOpacity: true
+        setOpacity: true,
     };
 }
 
@@ -72,7 +77,8 @@ function sanitizeParsedData(parsedData) {
 
     if (parsedData.kind) summary.kind = String(parsedData.kind);
     if (parsedData.entryName) summary.entryName = String(parsedData.entryName);
-    if (parsedData.dispatchEntryName) summary.dispatchEntryName = String(parsedData.dispatchEntryName);
+    if (parsedData.dispatchEntryName)
+        summary.dispatchEntryName = String(parsedData.dispatchEntryName);
     if (parsedData.dataProjection) summary.dataProjection = String(parsedData.dataProjection);
     if (typeof parsedData.needsReprojection === 'boolean') {
         summary.needsReprojection = parsedData.needsReprojection;
@@ -82,17 +88,16 @@ function sanitizeParsedData(parsedData) {
 }
 
 export function createStandardItem(input = {}) {
-    const normalizedLayerType = normalizeLayerType(input.layerType || input.type || input.kind || input.format);
+    const normalizedLayerType = normalizeLayerType(
+        input.layerType || input.type || input.kind || input.format,
+    );
     const format = normalizeFormat(input.format, normalizedLayerType);
     const featureCount = deriveFeatureCount(input);
 
-    const customCapabilities = input.capabilities && typeof input.capabilities === 'object'
-        ? input.capabilities
-        : {};
+    const customCapabilities =
+        input.capabilities && typeof input.capabilities === 'object' ? input.capabilities : {};
 
-    const metadata = input.metadata && typeof input.metadata === 'object'
-        ? input.metadata
-        : {};
+    const metadata = input.metadata && typeof input.metadata === 'object' ? input.metadata : {};
 
     return {
         id: input.id != null ? String(input.id) : '',
@@ -103,19 +108,21 @@ export function createStandardItem(input = {}) {
         format,
         parentId: input.parentId != null ? String(input.parentId) : null,
         visible: input.visible !== false,
-        opacity: Number.isFinite(input.opacity) ? Math.max(0, Math.min(1, Number(input.opacity))) : 1,
+        opacity: Number.isFinite(input.opacity)
+            ? Math.max(0, Math.min(1, Number(input.opacity)))
+            : 1,
         selected: !!input.selected,
         expanded: input.expanded !== false,
         featureCount,
         capabilities: {
             ...getDefaultCapabilities(normalizedLayerType),
-            ...customCapabilities
+            ...customCapabilities,
         },
         children: Array.isArray(input.children) ? input.children : [],
         metadata: {
             ...sanitizeParsedData(input.parsedData),
-            ...metadata
-        }
+            ...metadata,
+        },
     };
 }
 

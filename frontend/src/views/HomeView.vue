@@ -1,7 +1,7 @@
 <script setup>
 /**
  * HomeView.vue - 主页面组件
- * 
+ *
  * 功能：
  * - 2D/3D 地图切换
  * - AI 助手集成
@@ -11,7 +11,14 @@
 import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '../composables/useMessage';
-import { useAttrStore, useWeatherStore, useAppStore, useCompassStore, useTOCStore, useDownloadStore } from '../stores';
+import {
+    useAttrStore,
+    useWeatherStore,
+    useAppStore,
+    useCompassStore,
+    useTOCStore,
+    useDownloadStore,
+} from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
@@ -44,9 +51,9 @@ const SidePanelLoading = {
     render() {
         return h('div', { class: 'sidepanel-loading-state' }, [
             h('div', { class: 'sidepanel-loading-spinner' }),
-            h('span', { class: 'sidepanel-loading-text' }, '侧边面板资源加载中...')
+            h('span', { class: 'sidepanel-loading-text' }, '侧边面板资源加载中...'),
         ]);
-    }
+    },
 };
 
 // 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
@@ -57,14 +64,16 @@ const SidePanel = defineAsyncComponent({
     timeout: 15000,
     onError(error, retry, fail, attempts) {
         const text = String(error?.message || error || '');
-        const isStaleOptimizeDep = text.includes('Outdated Optimize Dep') || text.includes('Failed to fetch dynamically imported module');
+        const isStaleOptimizeDep =
+            text.includes('Outdated Optimize Dep') ||
+            text.includes('Failed to fetch dynamically imported module');
         if (isStaleOptimizeDep && attempts <= 1) {
             retry();
             return;
         }
         message.error('侧边面板加载失败，请刷新页面后重试。');
         fail(error);
-    }
+    },
 });
 
 // 天气看板改为静态导入：规避生产环境动态分块偶发的加载与初始化顺序问题。
@@ -73,7 +82,7 @@ const SidePanel = defineAsyncComponent({
 // 地图位置信息
 const locationInfo = reactive({
     isInDihuan: false,
-    lonLat: [0, 0]
+    lonLat: [0, 0],
 });
 
 // UI 状态
@@ -124,7 +133,7 @@ function handleLocationChange(locationData) {
         weatherStore.setMapPointTrigger({
             lon,
             lat,
-            source: String(locationData?.source || 'location-change')
+            source: String(locationData?.source || 'location-change'),
         });
     }
 }
@@ -137,7 +146,7 @@ function handleMapClick(locationData) {
     weatherStore.setMapPointTrigger({
         lon,
         lat,
-        source: String(locationData?.source || 'map-click')
+        source: String(locationData?.source || 'map-click'),
     });
 }
 
@@ -337,7 +346,7 @@ async function handleControlsDistrictSelect(payload) {
         const result = await mapContainerRef.value?.focusDistrictByAdcode?.({
             adcode,
             name: districtName,
-            fit: true
+            fit: true,
         });
 
         if (!result) {
@@ -358,7 +367,11 @@ async function handleControlsDistrictSelect(payload) {
 async function handleEnableBasemapSwipe(payload) {
     const { leftBasemap, rightBasemap, mode } = payload || {};
 
-    console.log('[handleEnableBasemapSwipe] Received payload:', { leftBasemap, rightBasemap, mode });
+    console.log('[handleEnableBasemapSwipe] Received payload:', {
+        leftBasemap,
+        rightBasemap,
+        mode,
+    });
 
     if (!mapContainerRef.value) {
         console.error('[handleEnableBasemapSwipe] MapContainer ref not available');
@@ -372,7 +385,7 @@ async function handleEnableBasemapSwipe(payload) {
         const result = await mapContainerRef.value?.enableBasemapSwipe?.({
             leftBasemapId: leftBasemap,
             rightBasemapId: rightBasemap,
-            mode: mode || 'horizontal'
+            mode: mode || 'horizontal',
         });
         console.log('[handleEnableBasemapSwipe] Result:', result);
     } catch (error) {
@@ -405,7 +418,7 @@ function focusDistrictLayer(layerId) {
     mapContainerRef.value?.focusDistrictByAdcode?.({
         adcode: meta.adcode,
         name: meta.name,
-        fit: true
+        fit: true,
     });
     return true;
 }
@@ -429,7 +442,9 @@ function handleDistrictLayerRemove(layerId) {
 
 function syncDistrictLayerVisibility(layerId) {
     const activeId = String(layerId || '').trim();
-    const districtLayers = tocStore.layerMetadataList.filter((meta) => String(meta.sourceType || '') === 'district-boundary');
+    const districtLayers = tocStore.layerMetadataList.filter(
+        (meta) => String(meta.sourceType || '') === 'district-boundary',
+    );
     if (!districtLayers.length) return;
 
     districtLayers.forEach((meta) => {
@@ -437,7 +452,7 @@ function syncDistrictLayerVisibility(layerId) {
         if (meta.visible === shouldShow) return;
         tocStore.upsertLayerMeta({
             ...meta,
-            visible: shouldShow
+            visible: shouldShow,
         });
     });
 }
@@ -521,7 +536,7 @@ async function executeVisitLogAsync() {
 function handleMapCoreFailed(payload = {}) {
     settleMapCoreLoading({
         isError: true,
-        message: String(payload?.message || '').trim() || '地图初始化失败，请检查网络后重试。'
+        message: String(payload?.message || '').trim() || '地图初始化失败，请检查网络后重试。',
     });
 }
 
@@ -728,14 +743,16 @@ function handleUploadProgressChange(progress) {
 }
 
 function handleSearchPoiSelected(poiPayload) {
-    const service = String(poiPayload?.service || '').trim().toLowerCase();
+    const service = String(poiPayload?.service || '')
+        .trim()
+        .toLowerCase();
     if (service && service !== 'amap') return;
     const poiid = String(poiPayload?.poiid || '').trim();
 
     latestSearchPoi.value = {
         ...poiPayload,
         poiid,
-        _syncAt: Date.now()
+        _syncAt: Date.now(),
     };
 }
 
@@ -763,7 +780,7 @@ async function buildVisitLogPayload() {
         gps_lat: null,
         gps_accuracy: null,
         gps_timestamp: '',
-        gps_error: ''
+        gps_error: '',
     };
 
     if (typeof window === 'undefined' || typeof navigator === 'undefined') {
@@ -785,11 +802,10 @@ async function buildVisitLogPayload() {
         // ignore permission API read errors
     }
 
-    const shouldTryGps = (
-        payload.geo_permission === 'granted'
-        || payload.geo_permission === 'prompt'
-        || payload.geo_permission === 'unknown'
-    );
+    const shouldTryGps =
+        payload.geo_permission === 'granted' ||
+        payload.geo_permission === 'prompt' ||
+        payload.geo_permission === 'unknown';
 
     if (!shouldTryGps) {
         return payload;
@@ -800,7 +816,7 @@ async function buildVisitLogPayload() {
             navigator.geolocation.getCurrentPosition(resolve, reject, {
                 enableHighAccuracy: true,
                 timeout: 3500,
-                maximumAge: 60000
+                maximumAge: 60000,
             });
         });
 
@@ -882,15 +898,28 @@ onMounted(async () => {
 <template>
     <div class="home-container">
         <!-- 特效光标遮罩 -->
-        <MagicCursor :active="isMagicMode" :effect-name="magicEffectData" @toggle-active="(val) => isMagicMode = val" />
+        <MagicCursor
+            :active="isMagicMode"
+            :effect-name="magicEffectData"
+            @toggle-active="(val) => (isMagicMode = val)"
+        />
 
         <!-- 顶部栏菜单栏 -->
         <div class="top-section">
-            <TopBar :is-weather-board-mode="isWeatherBoardMode" @activate-magic="handleActivateMagic"
-                @toggle-3d="toggle3D" @open-chat="openChat" @open-toolbox="openToolbox" @open-compass="openCompassPanel"
-                @open-bus="openBusPlanner" @open-drive="openDrivePlanner" @toggle-weather-board="toggleWeatherBoardMode"
-                @activate-feature="handleActivateFeature" @jump-view="handleTopBarJumpView"
-                @toggle-account-center="handleToggleAccountPanel" />
+            <TopBar
+                :is-weather-board-mode="isWeatherBoardMode"
+                @activate-magic="handleActivateMagic"
+                @toggle-3d="toggle3D"
+                @open-chat="openChat"
+                @open-toolbox="openToolbox"
+                @open-compass="openCompassPanel"
+                @open-bus="openBusPlanner"
+                @open-drive="openDrivePlanner"
+                @toggle-weather-board="toggleWeatherBoardMode"
+                @activate-feature="handleActivateFeature"
+                @jump-view="handleTopBarJumpView"
+                @toggle-account-center="handleToggleAccountPanel"
+            />
         </div>
 
         <!-- 系统公告栏 -->
@@ -899,20 +928,33 @@ onMounted(async () => {
         <div class="content-section">
             <!-- 侧边控制栏（左）-->
             <div class="Control-panel">
-                <ControlsPanel @open-tab="handleControlsOpenTab" @open-toolbox-tab="handleControlsOpenToolboxTab"
-                    @map-interaction="handleControlsMapInteraction" @show-analysis="handleControlsShowAnalysis"
-                    @district-select="handleControlsDistrictSelect" @enable-basemap-swipe="handleEnableBasemapSwipe" />
+                <ControlsPanel
+                    @open-tab="handleControlsOpenTab"
+                    @open-toolbox-tab="handleControlsOpenToolboxTab"
+                    @map-interaction="handleControlsMapInteraction"
+                    @show-analysis="handleControlsShowAnalysis"
+                    @district-select="handleControlsDistrictSelect"
+                    @enable-basemap-swipe="handleEnableBasemapSwipe"
+                />
             </div>
 
-
             <!-- 地图2D、3D、天气面板容器 -->
-            <div class="map-wrapper"
-                :class="{ 'weather-mode': isWeatherBoardMode, 'account-fullscreen': isAccountPanelFullscreen }">
+            <div
+                class="map-wrapper"
+                :class="{
+                    'weather-mode': isWeatherBoardMode,
+                    'account-fullscreen': isAccountPanelFullscreen,
+                }"
+            >
                 <!-- 
                     将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
                 -->
-                <FloatingAccountPanel class="home-account-panel" v-model:open="isAccountPanelOpen" :show-fab="false"
-                    @fullscreen-change="handleAccountPanelFullscreenChange" />
+                <FloatingAccountPanel
+                    class="home-account-panel"
+                    v-model:open="isAccountPanelOpen"
+                    :show-fab="false"
+                    @fullscreen-change="handleAccountPanelFullscreenChange"
+                />
                 <!-- 
                   优化点：
                   1. MapContainer 使用 v-show。2D地图是核心，需优先加载且切换3D时不销毁(保持状态)。
@@ -920,37 +962,62 @@ onMounted(async () => {
                 -->
                 <Suspense>
                     <template #default>
-                        <MapContainer ref="mapContainerRef"
+                        <MapContainer
+                            ref="mapContainerRef"
                             v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
-                            @map-core-ready="handleMapCoreReady" @map-core-failed="handleMapCoreFailed"
-                            @location-change="handleLocationChange" @search-poi-selected="handleSearchPoiSelected"
-                            @feature-selected="handleFeatureSelected" @user-layers-change="handleUserLayersChange"
+                            @map-core-ready="handleMapCoreReady"
+                            @map-core-failed="handleMapCoreFailed"
+                            @location-change="handleLocationChange"
+                            @search-poi-selected="handleSearchPoiSelected"
+                            @feature-selected="handleFeatureSelected"
+                            @user-layers-change="handleUserLayersChange"
                             @graphics-overview="handleGraphicsOverview"
                             @upload-progress-change="handleUploadProgressChange"
-                            @base-layers-change="handleBaseLayersChange" />
+                            @base-layers-change="handleBaseLayersChange"
+                        />
                     </template>
                     <template #fallback>
-                        <div v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
-                            class="map-runtime-loading">
+                        <div
+                            v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            class="map-runtime-loading"
+                        >
                             地图核心资源加载中...
                         </div>
                     </template>
                 </Suspense>
 
-                <component :is="WeatherChartPanel"
-                    v-if="isWeatherBoardMode && shouldLoadWeatherChartPanel && !isAccountPanelFullscreen"
-                    class="weather-board-surface" />
+                <component
+                    :is="WeatherChartPanel"
+                    v-if="
+                        isWeatherBoardMode &&
+                        shouldLoadWeatherChartPanel &&
+                        !isAccountPanelFullscreen
+                    "
+                    class="weather-board-surface"
+                />
 
                 <transition name="query-panel-fade">
-                    <div v-if="showQueryPanel && !is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
-                        class="eco-query-panel">
+                    <div
+                        v-if="
+                            showQueryPanel &&
+                            !is3DMode &&
+                            !isWeatherBoardMode &&
+                            !isAccountPanelFullscreen
+                        "
+                        class="eco-query-panel"
+                    >
                         <!-- 头部：使用顶栏主题色 -->
                         <div class="eco-header">
                             <div class="header-content">
                                 <i class="icon-leaf">🍃</i>
                                 <span class="eco-title">属性信息</span>
                             </div>
-                            <button class="eco-close" @click="closeQueryPanel">×</button>
+                            <button
+                                class="eco-close"
+                                @click="closeQueryPanel"
+                            >
+                                ×
+                            </button>
                         </div>
 
                         <div class="eco-body">
@@ -961,14 +1028,22 @@ onMounted(async () => {
                             </div>
 
                             <div class="eco-list-container">
-                                <div v-for="([key, value], idx) in Object.entries(featureQueryResult || {})"
-                                    :key="`${key}_${idx}`" class="eco-item">
+                                <div
+                                    v-for="([key, value], idx) in Object.entries(
+                                        featureQueryResult || {},
+                                    )"
+                                    :key="`${key}_${idx}`"
+                                    class="eco-item"
+                                >
                                     <div class="eco-key">{{ key }}</div>
                                     <div class="eco-val">{{ value }}</div>
                                 </div>
 
                                 <!-- 空状态 -->
-                                <div v-if="Object.keys(featureQueryResult || {}).length === 0" class="eco-empty">
+                                <div
+                                    v-if="Object.keys(featureQueryResult || {}).length === 0"
+                                    class="eco-empty"
+                                >
                                     未发现属性数据
                                 </div>
                             </div>
@@ -977,48 +1052,86 @@ onMounted(async () => {
                 </transition>
 
                 <!-- 点击后按需加载的 Cesium 组件（外层包裹 div 解决 Vue 3 Fragment 的 v-show 穿透失效问题） -->
-                <div v-show="is3DMode && !isAccountPanelFullscreen" class="cesium-wrapper"
-                    style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5;">
-                    <component :is="CesiumContainer" v-if="isCesiumLoaded" />
+                <div
+                    v-show="is3DMode && !isAccountPanelFullscreen"
+                    class="cesium-wrapper"
+                    style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5"
+                >
+                    <component
+                        :is="CesiumContainer"
+                        v-if="isCesiumLoaded"
+                    />
                 </div>
-                <div v-if="isCesiumLoading && !isAccountPanelFullscreen" class="cesium-loading">
+                <div
+                    v-if="isCesiumLoading && !isAccountPanelFullscreen"
+                    class="cesium-loading"
+                >
                     正在加载 3D 引擎...
                 </div>
             </div>
 
             <!-- 日志监控面板 -->
-            <LogMonitor v-show="logMonitorVisible" :visible="logMonitorVisible" />
+            <LogMonitor
+                v-show="logMonitorVisible"
+                :visible="logMonitorVisible"
+            />
 
             <!-- 侧边容器栏（右）-->
-            <div class="side-panel-wrapper"
-                :class="{ 'collapsed': isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }">
+            <div
+                class="side-panel-wrapper"
+                :class="{ collapsed: isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }"
+            >
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
-                <SidePanel v-if="shouldLoadSidePanel" :locationInfo="locationInfo" :selectedImage="selectedImage"
-                    :isCollapsed="isSidePanelCollapsed" :activeTab="activeSidePanelTab" :activeFeature="activeFeature"
-                    :userLayers="userLayers" :baseLayers="baseLayers" :toolboxOverview="toolboxOverview"
-                    :uploadProgress="uploadProgress" :latest-search-poi="latestSearchPoi"
-                    :get-user-location="getMapUserLocation" :start-bus-point-pick="startBusPointPick"
-                    :draw-route-on-map="drawRouteOnMap" :zoom-to-bus-route-step="zoomToBusRouteStep"
+                <SidePanel
+                    v-if="shouldLoadSidePanel"
+                    :locationInfo="locationInfo"
+                    :selectedImage="selectedImage"
+                    :isCollapsed="isSidePanelCollapsed"
+                    :activeTab="activeSidePanelTab"
+                    :activeFeature="activeFeature"
+                    :userLayers="userLayers"
+                    :baseLayers="baseLayers"
+                    :toolboxOverview="toolboxOverview"
+                    :uploadProgress="uploadProgress"
+                    :latest-search-poi="latestSearchPoi"
+                    :get-user-location="getMapUserLocation"
+                    :start-bus-point-pick="startBusPointPick"
+                    :draw-route-on-map="drawRouteOnMap"
+                    :zoom-to-bus-route-step="zoomToBusRouteStep"
                     :preview-bus-route-step="previewBusRouteStep"
                     :clear-bus-route-step-preview="clearBusRouteStepPreview"
-                    :draw-drive-route-on-map="drawDriveRouteOnMap" :zoom-to-drive-route-step="zoomToDriveRouteStep"
+                    :draw-drive-route-on-map="drawDriveRouteOnMap"
+                    :zoom-to-drive-route-step="zoomToDriveRouteStep"
                     :preview-drive-route-step="previewDriveRouteStep"
-                    :clear-drive-route-step-preview="clearDriveRouteStepPreview" @upload-data="handleUploadData"
-                    @interaction="handleInteraction" @toggle-layer-visibility="handleToggleLayerVisibility"
-                    @change-layer-opacity="handleChangeLayerOpacity" @set-base-layer="handleSetBaseLayer"
+                    :clear-drive-route-step-preview="clearDriveRouteStepPreview"
+                    @upload-data="handleUploadData"
+                    @interaction="handleInteraction"
+                    @toggle-layer-visibility="handleToggleLayerVisibility"
+                    @change-layer-opacity="handleChangeLayerOpacity"
+                    @set-base-layer="handleSetBaseLayer"
                     @toggle-base-layer-visibility="handleToggleBaseLayerVisibility"
-                    @toggle-layer-label-visibility="handleToggleLayerLabelVisibility" @zoom-layer="handleZoomLayer"
-                    @view-layer="handleViewLayer" @remove-layer="handleRemoveLayer"
-                    @reorder-user-layers="handleReorderUserLayers" @solo-layer="handleSoloLayer"
-                    @apply-style-template="handleApplyStyleTemplate" @update-draw-style="handleUpdateDrawStyle"
+                    @toggle-layer-label-visibility="handleToggleLayerLabelVisibility"
+                    @zoom-layer="handleZoomLayer"
+                    @view-layer="handleViewLayer"
+                    @remove-layer="handleRemoveLayer"
+                    @reorder-user-layers="handleReorderUserLayers"
+                    @solo-layer="handleSoloLayer"
+                    @apply-style-template="handleApplyStyleTemplate"
+                    @update-draw-style="handleUpdateDrawStyle"
                     @update-layer-style="handleUpdateLayerStyle"
                     @highlight-attribute-feature="handleHighlightAttributeFeature"
-                    @zoom-attribute-feature="handleZoomAttributeFeature" @layer-selected="handleLayerSelected"
+                    @zoom-attribute-feature="handleZoomAttributeFeature"
+                    @layer-selected="handleLayerSelected"
                     @draw-point-by-coordinates="handleDrawPointByCoordinates"
-                    @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson" @toggle-layer-crs="handleToggleLayerCRS"
-                    @export-layer-data="handleExportLayerData" @switch-tab="handleSwitchSidePanelTab"
+                    @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson"
+                    @toggle-layer-crs="handleToggleLayerCRS"
+                    @export-layer-data="handleExportLayerData"
+                    @switch-tab="handleSwitchSidePanelTab"
                     @request-download-extent="handleRequestDownloadExtent"
-                    @news-changed="handleNewsChanged" @toggle-panel="toggleSidePanel" @close-chat="handleCloseChat">
+                    @news-changed="handleNewsChanged"
+                    @toggle-panel="toggleSidePanel"
+                    @close-chat="handleCloseChat"
+                >
                     <template v-slot:extra-content>
                         <div class="extra-info">
                             <h3>提示</h3>
@@ -1027,10 +1140,24 @@ onMounted(async () => {
                     </template>
                 </SidePanel>
                 <!-- 未加载时显示展开提示 -->
-                <div v-else class="panel-placeholder" @click="toggleSidePanel">
+                <div
+                    v-else
+                    class="panel-placeholder"
+                    @click="toggleSidePanel"
+                >
                     <div class="placeholder-content">
-                        <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        <svg
+                            class="placeholder-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M15 19l-7-7 7-7"
+                            />
                         </svg>
                         <span class="placeholder-text">展开</span>
                     </div>
@@ -1260,7 +1387,7 @@ onMounted(async () => {
 
 /* 头部：对标0的绿色顶栏 */
 .eco-header {
-    background-color: #56AB56;
+    background-color: #56ab56;
     /* 匹配0截图顶栏的绿色 */
     padding: 12px 16px;
     display: flex;
@@ -1311,7 +1438,7 @@ onMounted(async () => {
 }
 
 .eco-tag {
-    background: #E9F5E9;
+    background: #e9f5e9;
     /* 浅绿背景 */
     color: #468a46;
     /* 深绿文字 */
@@ -1335,7 +1462,7 @@ onMounted(async () => {
 }
 
 .eco-list-container::-webkit-scrollbar-thumb {
-    background: #56AB56;
+    background: #56ab56;
     border-radius: 10px;
 }
 
@@ -1395,7 +1522,9 @@ onMounted(async () => {
     position: relative;
     display: flex;
     flex-direction: column;
-    transition: width 0.3s ease, height 0.3s ease;
+    transition:
+        width 0.3s ease,
+        height 0.3s ease;
     z-index: 2;
 }
 
@@ -1535,7 +1664,7 @@ onMounted(async () => {
         /* Map takes available space */
         min-height: 50vh;
         /* Ensure map has height */
-        margin: 2px
+        margin: 2px;
     }
 
     .map-wrapper.weather-mode {

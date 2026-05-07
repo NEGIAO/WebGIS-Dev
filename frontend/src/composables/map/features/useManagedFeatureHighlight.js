@@ -16,9 +16,7 @@ import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
  * @param {Function} options.findManagedFeature - 查找托管要素的函数
  * @returns {Object} 包含高亮相关函数的对象
  */
-export function createManagedFeatureHighlightFeature({
-    findManagedFeature = () => null
-}) {
+export function createManagedFeatureHighlightFeature({ findManagedFeature = () => null }) {
     // 当前被高亮的要素引用（闭包中维护）
     let currentHighlightedFeature = null;
 
@@ -37,14 +35,14 @@ export function createManagedFeatureHighlightFeature({
                 image: new CircleStyle({
                     radius: 8,
                     fill: new Fill({ color: 'rgba(52, 211, 153, 0.95)' }),
-                    stroke: new Stroke({ color: '#ffffff', width: 2 })
-                })
+                    stroke: new Stroke({ color: '#ffffff', width: 2 }),
+                }),
             });
         }
 
         return new Style({
             fill: new Fill({ color: 'rgba(48, 157, 88, 0.18)' }),
-            stroke: new Stroke({ color: '#1f8a4c', width: 4 })
+            stroke: new Stroke({ color: '#1f8a4c', width: 4 }),
         });
     }
 
@@ -94,6 +92,6 @@ export function createManagedFeatureHighlightFeature({
         clearManagedFeatureHighlight,
         highlightManagedFeature,
         getCurrentHighlightedFeature,
-        setCurrentHighlightedFeature
+        setCurrentHighlightedFeature,
     };
 }

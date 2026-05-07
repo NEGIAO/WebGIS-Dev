@@ -35,7 +35,7 @@ export function createBasemapSelectionWatcher({
     let switchSeq = 0;
 
     const failureStateMap = new Map();
-    
+
     /**
      * [改进] 添加验证追踪机制，防止验证过程中的状态变化
      * 当 releasePreviousLayerSources 被调用时，自动 abort 进行中的验证
@@ -201,10 +201,13 @@ export function createBasemapSelectionWatcher({
          */
         const MAX_FAILURE_RECORDS = 50;
         if (failureStateMap.size > MAX_FAILURE_RECORDS) {
-            const keysToDelete = Array.from(failureStateMap.keys()).slice(0, failureStateMap.size - MAX_FAILURE_RECORDS);
-            keysToDelete.forEach(key => failureStateMap.delete(key));
+            const keysToDelete = Array.from(failureStateMap.keys()).slice(
+                0,
+                failureStateMap.size - MAX_FAILURE_RECORDS,
+            );
+            keysToDelete.forEach((key) => failureStateMap.delete(key));
         }
-        
+
         // 清理所有故障记录
         failureStateMap.forEach((state) => {
             state.failures = 0;
@@ -227,10 +230,13 @@ export function createBasemapSelectionWatcher({
         switchLayerById?.(normalizedTarget, {
             onUpdated: () => {
                 emitBaseLayersChange?.();
-                if (mapInstanceRef?.value && typeof mapInstanceRef.value.updateSize === 'function') {
+                if (
+                    mapInstanceRef?.value &&
+                    typeof mapInstanceRef.value.updateSize === 'function'
+                ) {
                     mapInstanceRef.value.updateSize();
                 }
-            }
+            },
         });
 
         syncUrlFromMap?.();
@@ -262,11 +268,14 @@ export function createBasemapSelectionWatcher({
                 emitBaseLayersChange?.();
 
                 if (isAutoSwitchingLayer && mapInstanceRef?.value) {
-                    if (mapInstanceRef?.value && typeof mapInstanceRef.value.updateSize === 'function') {
+                    if (
+                        mapInstanceRef?.value &&
+                        typeof mapInstanceRef.value.updateSize === 'function'
+                    ) {
                         mapInstanceRef.value.updateSize();
                     }
                 }
-            }
+            },
         });
 
         if (prevVal === undefined) return;
@@ -286,7 +295,12 @@ export function createBasemapSelectionWatcher({
             const controller = new AbortController();
             ongoingValidations.set(val, controller);
             try {
-                const result = await validateBaseLayerSwitch?.(val, switchedLayer, validationTimeoutMs, controller.signal);
+                const result = await validateBaseLayerSwitch?.(
+                    val,
+                    switchedLayer,
+                    validationTimeoutMs,
+                    controller.signal,
+                );
                 ongoingValidations.delete(val);
                 if (currentSeq !== switchSeq) return;
 
@@ -294,7 +308,9 @@ export function createBasemapSelectionWatcher({
                     clearLayerFailure(val);
                     const optionLabel = getBasemapOptionLabel?.(val) || val;
                     if (activeStack.length > 1) {
-                        message?.success?.(`已切换到${optionLabel}组合（${activeStack.join(' + ')}）`);
+                        message?.success?.(
+                            `已切换到${optionLabel}组合（${activeStack.join(' + ')}）`,
+                        );
                     } else {
                         message?.success?.(`已成功切换到${optionLabel}底图`);
                     }
@@ -343,19 +359,23 @@ export function createBasemapSelectionWatcher({
 
     function bindBasemapSelectionWatcher() {
         // Immediate reaction to selection changes: do not debounce baseline basemap switches
-        return watch(selectedLayerRef, (val, prevVal, onCleanup) => {
-            clearSwitchTimer();
-            switchSeq += 1;
-            const currentSeq = switchSeq;
-            void runLayerSwitch(val, prevVal, currentSeq);
-            onCleanup(() => {
+        return watch(
+            selectedLayerRef,
+            (val, prevVal, onCleanup) => {
                 clearSwitchTimer();
-            });
-        }, { immediate: true });
+                switchSeq += 1;
+                const currentSeq = switchSeq;
+                void runLayerSwitch(val, prevVal, currentSeq);
+                onCleanup(() => {
+                    clearSwitchTimer();
+                });
+            },
+            { immediate: true },
+        );
     }
 
     return {
         bindBasemapSelectionWatcher,
-        resetBasemapChain
+        resetBasemapChain,
     };
 }

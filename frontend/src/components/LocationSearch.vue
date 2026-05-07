@@ -1,6 +1,12 @@
 <template>
-    <div class="location-search" ref="rootRef">
-        <form class="search-form" @submit.prevent="handleSubmit">
+    <div
+        class="location-search"
+        ref="rootRef"
+    >
+        <form
+            class="search-form"
+            @submit.prevent="handleSubmit"
+        >
             <input
                 v-model.trim="keywords"
                 class="search-input"
@@ -8,12 +14,22 @@
                 :placeholder="placeholder"
             />
             <div class="search-action">
-                <button class="search-btn" type="submit">
+                <button
+                    class="search-btn"
+                    type="submit"
+                >
                     <span class="btn-icon">
-                        <search-icon :size="18" color="#309441" :stroke-width="4" />
+                        <search-icon
+                            :size="18"
+                            color="#309441"
+                            :stroke-width="4"
+                        />
                     </span>
                 </button>
-                <ul v-if="showServiceMenu" class="service-menu">
+                <ul
+                    v-if="showServiceMenu"
+                    class="service-menu"
+                >
                     <li
                         v-for="item in services"
                         :key="item.value"
@@ -25,11 +41,28 @@
             </div>
         </form>
 
-        <div v-if="loading" class="status loading">Loading...</div>
-        <div v-else-if="searched && !items.length" class="status empty">未找到相关地点</div>
+        <div
+            v-if="loading"
+            class="status loading"
+        >
+            Loading...
+        </div>
+        <div
+            v-else-if="searched && !items.length"
+            class="status empty"
+        >
+            未找到相关地点
+        </div>
 
-        <ul v-if="!loading && items.length" class="result-list">
-            <li v-for="(item, index) in items" :key="`${item.id || item.display_name || item.name}_${index}`" @click="handleSelectResult(item)">
+        <ul
+            v-if="!loading && items.length"
+            class="result-list"
+        >
+            <li
+                v-for="(item, index) in items"
+                :key="`${item.id || item.display_name || item.name}_${index}`"
+                @click="handleSelectResult(item)"
+            >
                 <div class="result-head">
                     <div class="name">{{ item.name || item.display_name }}</div>
                     <button
@@ -42,14 +75,36 @@
                     </button>
                 </div>
                 <div class="address">{{ item.address || item.display_name || '暂无地址信息' }}</div>
-                <div v-if="resolvePoiId(item)" class="poi-id">ID: {{ resolvePoiId(item) }}</div>
+                <div
+                    v-if="resolvePoiId(item)"
+                    class="poi-id"
+                >
+                    ID: {{ resolvePoiId(item) }}
+                </div>
             </li>
         </ul>
 
-        <div v-if="!loading && totalPages > 1" class="pagination">
-            <button class="page-btn" type="button" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
+        <div
+            v-if="!loading && totalPages > 1"
+            class="pagination"
+        >
+            <button
+                class="page-btn"
+                type="button"
+                :disabled="page <= 1"
+                @click="changePage(page - 1)"
+            >
+                上一页
+            </button>
             <span class="page-text">{{ page }} / {{ totalPages }}</span>
-            <button class="page-btn" type="button" :disabled="page >= totalPages" @click="changePage(page + 1)">下一页</button>
+            <button
+                class="page-btn"
+                type="button"
+                :disabled="page >= totalPages"
+                @click="changePage(page + 1)"
+            >
+                下一页
+            </button>
         </div>
     </div>
 </template>
@@ -62,32 +117,32 @@ import { Search as SearchIcon } from 'lucide-vue-next';
 const props = defineProps({
     fetcher: {
         type: Function,
-        required: true
+        required: true,
     },
     placeholder: {
         type: String,
-        default: '搜索地名，如：郑州'
+        default: '搜索地名，如：郑州',
     },
     pageSize: {
         type: Number,
-        default: 10
+        default: 10,
     },
     storageKey: {
         type: String,
-        default: ''
+        default: '',
     },
     defaultService: {
         type: String,
-        default: 'tianditu'
+        default: 'tianditu',
     },
     services: {
         type: Array,
-        default: () => ([
+        default: () => [
             { value: 'tianditu', label: '天地图' },
             { value: 'nominatim', label: '国际（Nominatim）' },
-            { value: 'amap', label: '高德（Amap）' }
-        ])
-    }
+            { value: 'amap', label: '高德（Amap）' },
+        ],
+    },
 });
 
 const emit = defineEmits(['select-result']);
@@ -165,7 +220,7 @@ async function runSearch(targetPage = 1) {
             service: service.value,
             keywords: q,
             page: targetPage,
-            pageSize: props.pageSize
+            pageSize: props.pageSize,
         });
 
         items.value = Array.isArray(result?.items) ? result.items : [];
@@ -212,7 +267,7 @@ function changePage(nextPage) {
 function handleSelectResult(item) {
     emit('select-result', {
         ...(item || {}),
-        _service: service.value
+        _service: service.value,
     });
 }
 

@@ -1,13 +1,10 @@
-export {
-    gcj02ToWgs84,
-    wgs84ToGcj02
-} from '../coordTransform';
+export { gcj02ToWgs84, wgs84ToGcj02 } from '../coordTransform';
 
 export {
     detectGeoJSONProjection,
     detectProjectionFromKmlText,
     ensureProjectionAvailable,
-    normalizeProjectionCode
+    normalizeProjectionCode,
 } from '../crsUtils';
 
 export {
@@ -17,7 +14,7 @@ export {
     isUnsupportedProjectedCrsError,
     reprojectGeoJSON,
     resolveDatasetProjection,
-    sanitizeWktText
+    sanitizeWktText,
 } from '../gis/crs-engine';
 
 export {
@@ -25,26 +22,18 @@ export {
     detectKmlProjectionHint,
     detectShpProjectionFromPrj,
     precheckArchiveCrs,
-    resolveProjectionOrDefault
+    resolveProjectionOrDefault,
 } from '../gis/crsAware';
 
-export {
-    parseAmapAoiPayload,
-    extractAmapPoiId
-} from '../gis/parsers/amapAoiParser';
+export { parseAmapAoiPayload, extractAmapPoiId } from '../gis/parsers/amapAoiParser';
 
-export {
-    parseDriveRouteXml,
-    parseAndDrawDriveRoute
-} from '../driveXmlParser';
+export { parseDriveRouteXml, parseAndDrawDriveRoute } from '../driveXmlParser';
 
-export {
-    drawTransitRoute
-} from '../drawTransitRoute';
+export { drawTransitRoute } from '../drawTransitRoute';
 
 export {
     buildBusRouteRenderData,
     buildDriveRouteRenderData,
     buildRouteRenderData,
-    fitExtentToCoverage
+    fitExtentToCoverage,
 } from '../transitRouteBuilder';

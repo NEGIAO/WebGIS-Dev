@@ -1,7 +1,7 @@
 /**
  * 坐标系转换功能库
  * 负责矢量要素坐标在 WGS-84 与 GCJ-02 之间的转换与图层坐标系管理
- * 
+ *
  * 导出：
  * - applyCrsConversionToFeature(feature, converter, targetCrs)
  * - toggleLayerCRS(payload)
@@ -31,7 +31,7 @@ export function createCoordinateSystemConversionFeature({
     serializeManagedFeatures = () => [],
     normalizeLayerMetadata = (m) => m,
     getFeatureRepresentativeLonLat = () => null,
-    emitUserLayersChange = () => {}
+    emitUserLayersChange = () => {},
 }) {
     /**
      * 应用坐标系转换到单个要素
@@ -87,7 +87,7 @@ export function createCoordinateSystemConversionFeature({
             return;
         }
 
-        const layerData = userDataLayers.find(item => item.id === payload.layerId);
+        const layerData = userDataLayers.find((item) => item.id === payload.layerId);
         if (!layerData) {
             message.warning?.('未找到目标图层');
             return;
@@ -106,16 +106,21 @@ export function createCoordinateSystemConversionFeature({
         }
 
         const currentCrs = String(layerData.metadata?.crs || 'wgs84').toLowerCase();
-        const sourceCrs = ['wgs84', 'gcj02'].includes(explicitFromCrs) ? explicitFromCrs : currentCrs;
+        const sourceCrs = ['wgs84', 'gcj02'].includes(explicitFromCrs)
+            ? explicitFromCrs
+            : currentCrs;
 
         if (sourceCrs === nextCrs) {
             message.info?.(`源坐标系与目标坐标系一致：${nextCrs.toUpperCase()}，无需转换`);
             return;
         }
 
-        const converter = sourceCrs === 'wgs84' && nextCrs === 'gcj02'
-            ? wgs84ToGcj02
-            : (sourceCrs === 'gcj02' && nextCrs === 'wgs84' ? gcj02ToWgs84 : null);
+        const converter =
+            sourceCrs === 'wgs84' && nextCrs === 'gcj02'
+                ? wgs84ToGcj02
+                : sourceCrs === 'gcj02' && nextCrs === 'wgs84'
+                  ? gcj02ToWgs84
+                  : null;
 
         if (!converter) {
             message.warning?.('无法判定坐标转换方向，请重试并指定目标坐标系');
@@ -132,7 +137,7 @@ export function createCoordinateSystemConversionFeature({
 
         const nextMetadata = {
             ...(layerData.metadata || {}),
-            crs: nextCrs
+            crs: nextCrs,
         };
         if (firstCoordinate) {
             nextMetadata.longitude = Number(firstCoordinate[0].toFixed(6));
@@ -158,6 +163,6 @@ export function createCoordinateSystemConversionFeature({
     return {
         applyCrsConversionToFeature,
         toggleLayerCRS,
-        toggleSearchLayerCRS
+        toggleSearchLayerCRS,
     };
 }

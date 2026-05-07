@@ -1,28 +1,26 @@
 /**
  * useUserLayerApiFacade.js
- * 
+ *
  * [作用] 提取所有用户图层 API 委托函数，统一管理动态导入和 API 调用
  * [特点] 提供一致的异步 API 接口，隐藏动态导入细节，支持 API 缓存和延迟加载
  * [模式] Factory 函数，依赖注入 ensureXxxApi 确保函数
- * 
+ *
  * 中文注释遵循原有约定，保持代码可读性。
  */
 
-
 /**
  * 创建用户图层 API 门面工厂函数
- * 
+ *
  * @param {Object} options - 工厂选项
  * @param {Function} options.ensureLayerDataImportApi - 确保数据导入 API 已加载
  * @param {Function} options.ensureUserLayerActionsApi - 确保用户图层动作 API 已加载
- * 
+ *
  * @returns {Object} 返回所有 API 委托函数
  */
 export function createUserLayerApiFacadeFeature({
     ensureLayerDataImportApi,
-    ensureUserLayerActionsApi
+    ensureUserLayerActionsApi,
 }) {
-
     /**
      * 添加用户数据图层
      */
@@ -113,6 +111,6 @@ export function createUserLayerApiFacadeFeature({
         soloUserLayer,
         setUserLayerStyle,
         setUserLayerLabelVisibility,
-        applyStyleTemplate
+        applyStyleTemplate,
     };
 }

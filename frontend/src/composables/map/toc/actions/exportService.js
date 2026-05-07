@@ -23,7 +23,7 @@ function resolveFeatureName(feature, fallbackName) {
         feature?.get?.('name'),
         feature?.get?.('Name'),
         feature?.get?.('名称'),
-        fallbackName
+        fallbackName,
     ];
     const hit = candidates.find((item) => String(item || '').trim().length > 0);
     return String(hit || fallbackName || 'feature');
@@ -36,7 +36,7 @@ export function buildKmlContent({
     sourceCrs = 'wgs84',
     featureProjection = 'EPSG:3857',
     dataProjection = 'EPSG:4326',
-    decimals = 6
+    decimals = 6,
 } = {}) {
     const clonedFeatures = [];
 
@@ -59,25 +59,25 @@ export function buildKmlContent({
         return {
             content: '',
             featureCount: 0,
-            clonedFeatures: []
+            clonedFeatures: [],
         };
     }
 
     const kmlWriter = new KML({
         writeStyles: false,
-        extractStyles: false
+        extractStyles: false,
     });
 
     const content = kmlWriter.writeFeatures(clonedFeatures, {
         featureProjection,
         dataProjection,
-        decimals
+        decimals,
     });
 
     return {
         content,
         featureCount: clonedFeatures.length,
-        clonedFeatures
+        clonedFeatures,
     };
 }
 
@@ -90,7 +90,7 @@ export function exportFeaturesAsKml({
     dataProjection = 'EPSG:4326',
     decimals = 6,
     triggerDownload = true,
-    fileName
+    fileName,
 } = {}) {
     const built = buildKmlContent({
         features,
@@ -99,36 +99,38 @@ export function exportFeaturesAsKml({
         sourceCrs,
         featureProjection,
         dataProjection,
-        decimals
+        decimals,
     });
 
     if (!built.featureCount || !built.content) {
         return {
             ...built,
             fileName: '',
-            sizeBytes: 0
+            sizeBytes: 0,
         };
     }
 
     const safeName = sanitizeFileName(layerName);
-    const outputFileName = String(fileName || `${safeName}_${String(sourceCrs || 'wgs84').toLowerCase()}.kml`);
+    const outputFileName = String(
+        fileName || `${safeName}_${String(sourceCrs || 'wgs84').toLowerCase()}.kml`,
+    );
 
     let sizeBytes = 0;
     if (triggerDownload) {
         sizeBytes = triggerTextDownload(
             outputFileName,
             built.content,
-            'application/vnd.google-earth.kml+xml;charset=utf-8'
+            'application/vnd.google-earth.kml+xml;charset=utf-8',
         );
     } else {
         sizeBytes = new Blob([built.content], {
-            type: 'application/vnd.google-earth.kml+xml;charset=utf-8'
+            type: 'application/vnd.google-earth.kml+xml;charset=utf-8',
         }).size;
     }
 
     return {
         ...built,
         fileName: outputFileName,
-        sizeBytes
+        sizeBytes,
     };
 }

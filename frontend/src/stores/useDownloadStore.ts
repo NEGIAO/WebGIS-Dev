@@ -1,12 +1,15 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import {
-    apiDownloadCreateTask,
-    apiDownloadTaskFile,
-    apiDownloadTaskStatus
-} from '../api/download';
+import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus } from '../api/download';
 
-type DownloadStatus = 'idle' | 'pending' | 'downloading' | 'stitching' | 'success' | 'failed' | 'expired';
+type DownloadStatus =
+    | 'idle'
+    | 'pending'
+    | 'downloading'
+    | 'stitching'
+    | 'success'
+    | 'failed'
+    | 'expired';
 
 type BBoxInput = {
     minLon: number;
@@ -52,7 +55,7 @@ function clampBboxByCrs(bbox: BBoxInput, crs: string): BBoxInput {
             minLon: clamp(bbox.minLon, -MAX_MERCATOR, MAX_MERCATOR),
             minLat: clamp(bbox.minLat, -MAX_MERCATOR, MAX_MERCATOR),
             maxLon: clamp(bbox.maxLon, -MAX_MERCATOR, MAX_MERCATOR),
-            maxLat: clamp(bbox.maxLat, -MAX_MERCATOR, MAX_MERCATOR)
+            maxLat: clamp(bbox.maxLat, -MAX_MERCATOR, MAX_MERCATOR),
         });
     }
 
@@ -60,7 +63,7 @@ function clampBboxByCrs(bbox: BBoxInput, crs: string): BBoxInput {
         minLon: clamp(bbox.minLon, -180, 180),
         minLat: clamp(bbox.minLat, -MAX_LATITUDE, MAX_LATITUDE),
         maxLon: clamp(bbox.maxLon, -180, 180),
-        maxLat: clamp(bbox.maxLat, -MAX_LATITUDE, MAX_LATITUDE)
+        maxLat: clamp(bbox.maxLat, -MAX_LATITUDE, MAX_LATITUDE),
     });
 }
 
@@ -68,14 +71,14 @@ function buildTaskPayload(
     tileUrlTemplate: string,
     bbox: BBoxInput,
     resolutionM: number,
-    bboxCrs: string
+    bboxCrs: string,
 ): { tile_url_template: string; bbox: number[]; resolution_m: number; bbox_crs: string } {
     // Validate inputs and build the backend payload.
     const template = String(tileUrlTemplate || '').trim();
     if (!template) {
         throw new Error('请输入瓦片 URL 模板');
     }
-    
+
     // 验证瓦片模板包含必要的占位符
     if (!template.includes('{z}') || !template.includes('{x}') || !template.includes('{y}')) {
         throw new Error('瓦片 URL 模板必须包含 {z}、{x}、{y} 占位符');
@@ -85,7 +88,7 @@ function buildTaskPayload(
     if (!Number.isFinite(normalizedResolution) || normalizedResolution <= 0) {
         throw new Error('分辨率必须是大于 0 的数字');
     }
-    
+
     // 限制分辨率范围（0.5m 到 1000m）
     if (normalizedResolution < 0.5) {
         throw new Error('分辨率过高，最小值为 0.5 米');
@@ -98,20 +101,25 @@ function buildTaskPayload(
         minLon: Number(bbox.minLon),
         minLat: Number(bbox.minLat),
         maxLon: Number(bbox.maxLon),
-        maxLat: Number(bbox.maxLat)
+        maxLat: Number(bbox.maxLat),
     };
 
-    if (!Number.isFinite(parsedBBox.minLon)
-        || !Number.isFinite(parsedBBox.minLat)
-        || !Number.isFinite(parsedBBox.maxLon)
-        || !Number.isFinite(parsedBBox.maxLat)) {
+    if (
+        !Number.isFinite(parsedBBox.minLon) ||
+        !Number.isFinite(parsedBBox.minLat) ||
+        !Number.isFinite(parsedBBox.maxLon) ||
+        !Number.isFinite(parsedBBox.maxLat)
+    ) {
         throw new Error('BBox 必须填写完整的数字坐标');
     }
 
     const normalizedBBox = clampBboxByCrs(parsedBBox, bboxCrs);
-    
+
     // 验证 BBox 有效性（检查是否为有效矩形）
-    if (normalizedBBox.minLon === normalizedBBox.maxLon || normalizedBBox.minLat === normalizedBBox.maxLat) {
+    if (
+        normalizedBBox.minLon === normalizedBBox.maxLon ||
+        normalizedBBox.minLat === normalizedBBox.maxLat
+    ) {
         throw new Error('选择框面积不能为 0，请选择有效的地理范围');
     }
 
@@ -121,10 +129,10 @@ function buildTaskPayload(
             normalizedBBox.minLon,
             normalizedBBox.minLat,
             normalizedBBox.maxLon,
-            normalizedBBox.maxLat
+            normalizedBBox.maxLat,
         ],
         resolution_m: normalizedResolution,
-        bbox_crs: String(bboxCrs || 'EPSG:4326').trim() || 'EPSG:4326'
+        bbox_crs: String(bboxCrs || 'EPSG:4326').trim() || 'EPSG:4326',
     };
 }
 
@@ -147,7 +155,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         minLon: 116.2,
         minLat: 39.8,
         maxLon: 116.3,
-        maxLat: 39.9
+        maxLat: 39.9,
     });
     const bboxCrs = ref<'EPSG:4326' | 'EPSG:3857'>('EPSG:4326');
     const resolutionM = ref(DEFAULT_RESOLUTION);
@@ -170,7 +178,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     let downloadTriggered = false;
 
     const hasActiveTask = computed(() => Boolean(taskId.value));
-    const isRunning = computed(() => ['pending', 'downloading', 'stitching'].includes(status.value));
+    const isRunning = computed(() =>
+        ['pending', 'downloading', 'stitching'].includes(status.value),
+    );
 
     function applyTaskResponse(payload: DownloadTaskResponse): void {
         // Normalize backend payload into store fields.
@@ -179,7 +189,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             console.error('[DownloadStore] Invalid task response:', payload);
             return;
         }
-        
+
         taskId.value = String(payload?.task_id || taskId.value || '').trim();
         status.value = (payload?.status as DownloadStatus) || status.value;
         progress.value = Number(payload?.progress ?? progress.value ?? 0);
@@ -225,25 +235,25 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 tileUrlTemplate.value,
                 bbox.value,
                 resolutionM.value,
-                bboxCrs.value
+                bboxCrs.value,
             );
             const response = await apiDownloadCreateTask(payload);
-            
+
             // 验证响应有效性
             if (!response || typeof response !== 'object') {
                 throw new Error('后端返回无效的响应格式');
             }
-            
+
             applyTaskResponse(response);
             status.value = (response?.status as DownloadStatus) || 'pending';
             progress.value = Number(response?.progress ?? 0);
             message.value = String(response?.message || '任务已提交').trim();
-            
+
             // 验证任务ID是否有效
             if (!taskId.value) {
                 throw new Error('后端未返回有效的任务ID');
             }
-            
+
             startPolling();
             return true;
         } catch (error) {
@@ -262,14 +272,14 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         pollInFlight = true;
         try {
             const response = await apiDownloadTaskStatus(taskId.value);
-            
+
             // 验证响应有效性
             if (!response || typeof response !== 'object') {
                 throw new Error('后端返回无效的轮询响应');
             }
-            
+
             applyTaskResponse(response);
-            
+
             if (shouldTriggerDownload()) {
                 await downloadResult();
                 stopPolling();
@@ -310,11 +320,11 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             status.value = 'failed';
             return;
         }
-        
+
         downloadTriggered = true;
         try {
             const response = await apiDownloadTaskFile(taskId.value);
-            
+
             // 处理 Blob 响应
             let blob: Blob;
             if (response instanceof Blob) {
@@ -326,12 +336,12 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 // 尝试转换为 Blob
                 blob = new Blob([response], { type: 'image/tiff' });
             }
-            
+
             // 验证 Blob 有效性
             if (!blob || blob.size === 0) {
                 throw new Error('下载的文件为空');
             }
-            
+
             const filename = `basemap_${taskId.value}.tif`;
             triggerBrowserDownload(blob, filename);
             downloadedAt.value = Date.now();
@@ -356,15 +366,15 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
         try {
             const response = await apiDownloadTaskStatus(safeId);
-            
+
             // 验证响应有效性
             if (!response || typeof response !== 'object') {
                 throw new Error('后端返回无效的响应');
             }
-            
+
             applyTaskResponse(response);
             taskId.value = safeId;
-            
+
             if (autoPoll && !['success', 'failed', 'expired'].includes(status.value)) {
                 startPolling();
             }
@@ -377,7 +387,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         }
     }
 
-    function applyBboxFromExtent(extent: number[], crs: 'EPSG:4326' | 'EPSG:3857' = 'EPSG:3857'): boolean {
+    function applyBboxFromExtent(
+        extent: number[],
+        crs: 'EPSG:4326' | 'EPSG:3857' = 'EPSG:3857',
+    ): boolean {
         if (!Array.isArray(extent) || extent.length < 4) return false;
         const [minX, minY, maxX, maxY] = extent;
         if (![minX, minY, maxX, maxY].every((value) => Number.isFinite(value))) return false;
@@ -386,7 +399,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             minLon: minX,
             minLat: minY,
             maxLon: maxX,
-            maxLat: maxY
+            maxLat: maxY,
         };
         return true;
     }
@@ -417,6 +430,6 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         downloadResult,
         resetTask,
         fetchTaskById,
-        applyBboxFromExtent
+        applyBboxFromExtent,
     };
 });

@@ -45,12 +45,20 @@ export function loadTiandituSdk(tk) {
             if (existing.readyState === 'complete' || existing.readyState === 'loaded') {
                 existing.remove();
             } else {
-                existing.addEventListener('load', () => {
-                    if (!resolveIfReady()) {
-                        cleanupWithError('天地图 SDK 已加载，但未检测到 T.Map（可能是 token 域名绑定或 CSP 问题）');
-                    }
-                }, { once: true });
-                existing.addEventListener('error', () => cleanupWithError('天地图 SDK 加载失败'), { once: true });
+                existing.addEventListener(
+                    'load',
+                    () => {
+                        if (!resolveIfReady()) {
+                            cleanupWithError(
+                                '天地图 SDK 已加载，但未检测到 T.Map（可能是 token 域名绑定或 CSP 问题）',
+                            );
+                        }
+                    },
+                    { once: true },
+                );
+                existing.addEventListener('error', () => cleanupWithError('天地图 SDK 加载失败'), {
+                    once: true,
+                });
                 return;
             }
         }
@@ -63,7 +71,9 @@ export function loadTiandituSdk(tk) {
             if (resolveIfReady()) {
                 return;
             }
-            cleanupWithError('天地图 SDK 已加载，但未检测到 T.Map（可能是 token 域名绑定或 CSP 问题）');
+            cleanupWithError(
+                '天地图 SDK 已加载，但未检测到 T.Map（可能是 token 域名绑定或 CSP 问题）',
+            );
         };
         script.onerror = () => {
             cleanupWithError('天地图 SDK 加载失败');

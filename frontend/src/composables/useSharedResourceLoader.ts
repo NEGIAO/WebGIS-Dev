@@ -3,13 +3,13 @@ import { useMessage } from './useMessage';
 
 /**
  * 共享资源加载器 - 用于从 public/ShareData 目录加载预配置的地理数据资源
- * 
+ *
  * Features:
  * - 自动扫描共享资源目录
  * - 支持 KML, KMZ, GeoJSON, JSON, SHP, TIF/TIFF 格式
  * - 将文件内容转换为 Blob，复用上传逻辑
  * - 可扩展的资源发现机制
- * 
+ *
  * 使用方式：
  * const sharedLoader = useSharedResourceLoader();
  * const resources = await sharedLoader.scanResources();
@@ -17,11 +17,11 @@ import { useMessage } from './useMessage';
  */
 
 export interface SharedResource {
-    name: string;           // 文件名 (如 '全国禁飞区.kml')
-    path: string;           // 相对路径 (如 '全国禁飞区.kml')
-    type: string;           // 文件扩展名小写 (如 'kml')
-    size?: number;          // 文件大小 (字节)
-    lastModified?: number;  // 最后修改时间
+    name: string; // 文件名 (如 '全国禁飞区.kml')
+    path: string; // 相对路径 (如 '全国禁飞区.kml')
+    type: string; // 文件扩展名小写 (如 'kml')
+    size?: number; // 文件大小 (字节)
+    lastModified?: number; // 最后修改时间
 }
 
 export interface SharedResourceGroup {
@@ -40,7 +40,20 @@ export interface SharedResourceTreeNode {
 }
 
 const SHARED_RESOURCE_DIR = './ShareData';
-const SUPPORTED_EXTENSIONS = ['kml', 'kmz', 'geojson', 'json', 'shp', 'shx', 'dbf', 'prj', 'cpg', 'tif', 'tiff', 'zip'];
+const SUPPORTED_EXTENSIONS = [
+    'kml',
+    'kmz',
+    'geojson',
+    'json',
+    'shp',
+    'shx',
+    'dbf',
+    'prj',
+    'cpg',
+    'tif',
+    'tiff',
+    'zip',
+];
 
 function normalizeResourcePath(path: string): string {
     return String(path || '')
@@ -105,13 +118,13 @@ function buildResourceTree(resourceList: SharedResource[]): SharedResourceTreeNo
                     name: part,
                     path: resource.path,
                     type: 'file',
-                    resource
+                    resource,
                 });
                 break;
             }
 
             let folderNode = currentNodes.find(
-                (node) => node.type === 'folder' && node.name === part
+                (node) => node.type === 'folder' && node.name === part,
             );
 
             if (!folderNode) {
@@ -120,7 +133,7 @@ function buildResourceTree(resourceList: SharedResource[]): SharedResourceTreeNo
                     name: part,
                     path: currentPath,
                     type: 'folder',
-                    children: []
+                    children: [],
                 };
                 currentNodes.push(folderNode);
             }
@@ -164,7 +177,7 @@ export function useSharedResourceLoader() {
      * 扫描共享资源目录（支持两种实现方式）
      * 方案1: 使用 import.meta.glob（编译时扩展，最可靠）
      * 方案2: 使用 fetch API 动态获取（需要后端支持）
-     * 
+     *
      * @returns 发现的资源列表
      */
     async function scanResources(): Promise<SharedResource[]> {
@@ -176,15 +189,15 @@ export function useSharedResourceLoader() {
             const rawModules = import.meta.glob('/public/ShareData/**/*', {
                 query: '?url',
                 import: 'default',
-                eager: true // 建议开启 eager，确保数据立即同步可用
+                eager: true, // 建议开启 eager，确保数据立即同步可用
             });
 
             // 2. 核心修复：把路径变成“相对路径”
             const globModules = Object.fromEntries(
                 Object.entries(rawModules).map(([path, value]) => [
-                    path.replace(/^\/public\//, ''), 
-                    value
-                ])
+                    path.replace(/^\/public\//, ''),
+                    value,
+                ]),
             );
             // 解决路径问题
 
@@ -205,7 +218,7 @@ export function useSharedResourceLoader() {
                     discoveredMap.set(relativePath, {
                         name: filename,
                         path: relativePath,
-                        type: ext
+                        type: ext,
                     });
                 } catch (error) {
                     console.warn(`Failed to process shared resource: ${path}`, error);
@@ -218,7 +231,10 @@ export function useSharedResourceLoader() {
 
             return resources.value;
         } catch (error) {
-            console.warn('Failed to scan shared resources with glob, falling back to dynamic fetch', error);
+            console.warn(
+                'Failed to scan shared resources with glob, falling back to dynamic fetch',
+                error,
+            );
 
             try {
                 // 降级方案: 尝试通过 API 或直接 fetch .json manifest
@@ -255,7 +271,7 @@ export function useSharedResourceLoader() {
                             path: normalizedPath,
                             type: ext,
                             size: Number(r?.size) || undefined,
-                            lastModified: Number(r?.lastModified) || undefined
+                            lastModified: Number(r?.lastModified) || undefined,
                         } as SharedResource;
                     })
                     .filter((r: SharedResource) => !!r.path && isSupportedExtension(r.type));
@@ -275,7 +291,7 @@ export function useSharedResourceLoader() {
 
     /**
      * 将共享资源加载为 File 对象数组（用于复用上传逻辑）
-     * 
+     *
      * @param resourcePath - 资源路径 (相对于 ShareData 目录)
      * @returns File 对象数组
      */
@@ -306,18 +322,18 @@ export function useSharedResourceLoader() {
      */
     function getContentTypeForExtension(ext: string): string {
         const mimeMap: Record<string, string> = {
-            'kml': 'application/xml',
-            'kmz': 'application/zip',
-            'geojson': 'application/geo+json',
-            'json': 'application/json',
-            'shp': 'application/x-shapefile',
-            'shx': 'application/octet-stream',
-            'dbf': 'application/octet-stream',
-            'prj': 'text/plain',
-            'cpg': 'text/plain',
-            'tif': 'image/tiff',
-            'tiff': 'image/tiff',
-            'zip': 'application/zip'
+            kml: 'application/xml',
+            kmz: 'application/zip',
+            geojson: 'application/geo+json',
+            json: 'application/json',
+            shp: 'application/x-shapefile',
+            shx: 'application/octet-stream',
+            dbf: 'application/octet-stream',
+            prj: 'text/plain',
+            cpg: 'text/plain',
+            tif: 'image/tiff',
+            tiff: 'image/tiff',
+            zip: 'application/zip',
         };
         return mimeMap[ext.toLowerCase()] || 'application/octet-stream';
     }
@@ -332,7 +348,7 @@ export function useSharedResourceLoader() {
      */
     const groupedResources = computed(() => {
         const grouped: Record<string, SharedResource[]> = {};
-        resources.value.forEach(resource => {
+        resources.value.forEach((resource) => {
             if (!grouped[resource.type]) {
                 grouped[resource.type] = [];
             }
@@ -368,6 +384,6 @@ export function useSharedResourceLoader() {
         loadResourceAsFiles,
         isSupportedExtension,
         getExtension,
-        refresh
+        refresh,
     };
 }

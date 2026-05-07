@@ -54,7 +54,7 @@ export function useLayerContextMenuActions({
     layerInstances,
     getLayerConfigs,
     customMapUrlRef,
-    message
+    message,
 }) {
     const resolveLayerSourceUrl = (layerId) => {
         const normalizedLayerId = String(layerId || '').trim();
@@ -127,6 +127,6 @@ export function useLayerContextMenuActions({
 
     return {
         resolveLayerSourceUrl,
-        handleLayerContextAction
+        handleLayerContextAction,
     };
 }

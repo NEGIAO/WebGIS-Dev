@@ -1,5 +1,8 @@
 <template>
-    <div class="point-picker-wrap" :class="themeClass">
+    <div
+        class="point-picker-wrap"
+        :class="themeClass"
+    >
         <div class="point-picker-actions">
             <button
                 type="button"
@@ -22,20 +25,46 @@
         <div class="point-coords-grid">
             <div class="coord-card">
                 <div class="coord-title">{{ startTitle }}</div>
-                <div class="coord-value" v-if="hasStart">
+                <div
+                    class="coord-value"
+                    v-if="hasStart"
+                >
                     {{ Number(startPoint.lng).toFixed(6) }}, {{ Number(startPoint.lat).toFixed(6) }}
                 </div>
-                <div class="coord-address" v-if="hasStartAddress">{{ startAddress }}</div>
-                <div class="coord-empty" v-else>未设置</div>
+                <div
+                    class="coord-address"
+                    v-if="hasStartAddress"
+                >
+                    {{ startAddress }}
+                </div>
+                <div
+                    class="coord-empty"
+                    v-else
+                >
+                    未设置
+                </div>
             </div>
 
             <div class="coord-card">
                 <div class="coord-title">{{ endTitle }}</div>
-                <div class="coord-value" v-if="hasEnd">
+                <div
+                    class="coord-value"
+                    v-if="hasEnd"
+                >
                     {{ Number(endPoint.lng).toFixed(6) }}, {{ Number(endPoint.lat).toFixed(6) }}
                 </div>
-                <div class="coord-address" v-if="hasEndAddress">{{ endAddress }}</div>
-                <div class="coord-empty" v-else>未设置</div>
+                <div
+                    class="coord-address"
+                    v-if="hasEndAddress"
+                >
+                    {{ endAddress }}
+                </div>
+                <div
+                    class="coord-empty"
+                    v-else
+                >
+                    未设置
+                </div>
             </div>
         </div>
     </div>
@@ -47,52 +76,52 @@ import { computed } from 'vue';
 const props = defineProps({
     pickMode: {
         type: String,
-        default: ''
+        default: '',
     },
     startPoint: {
         type: Object,
-        default: null
+        default: null,
     },
     endPoint: {
         type: Object,
-        default: null
+        default: null,
     },
     startAddress: {
         type: String,
-        default: ''
+        default: '',
     },
     endAddress: {
         type: String,
-        default: ''
+        default: '',
     },
     startLabel: {
         type: String,
-        default: '设置起点（地图选择）'
+        default: '设置起点（地图选择）',
     },
     endLabel: {
         type: String,
-        default: '设置终点（地图选择）'
+        default: '设置终点（地图选择）',
     },
     startPickingText: {
         type: String,
-        default: '请在地图单击起点...'
+        default: '请在地图单击起点...',
     },
     endPickingText: {
         type: String,
-        default: '请在地图单击终点...'
+        default: '请在地图单击终点...',
     },
     startTitle: {
         type: String,
-        default: '起点坐标'
+        default: '起点坐标',
     },
     endTitle: {
         type: String,
-        default: '终点坐标'
+        default: '终点坐标',
     },
     theme: {
         type: String,
-        default: 'bus' // 'bus' | 'drive'
-    }
+        default: 'bus', // 'bus' | 'drive'
+    },
 });
 
 defineEmits(['pick-start', 'pick-end']);
@@ -105,7 +134,7 @@ const hasStart = computed(() => isPointValid(props.startPoint));
 const hasEnd = computed(() => isPointValid(props.endPoint));
 const hasStartAddress = computed(() => Boolean(String(props.startAddress || '').trim()));
 const hasEndAddress = computed(() => Boolean(String(props.endAddress || '').trim()));
-const themeClass = computed(() => props.theme === 'drive' ? 'theme-drive' : 'theme-bus');
+const themeClass = computed(() => (props.theme === 'drive' ? 'theme-drive' : 'theme-bus'));
 </script>
 
 <style scoped>

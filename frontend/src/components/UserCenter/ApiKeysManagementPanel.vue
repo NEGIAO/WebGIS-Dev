@@ -7,21 +7,32 @@
 
         <!-- 密钥列表 -->
         <div class="keys-section">
-            <div v-if="loading" class="loading-state">
+            <div
+                v-if="loading"
+                class="loading-state"
+            >
                 <span class="spinner"></span> 加载中...
             </div>
 
-            <div v-else class="keys-grid">
+            <div
+                v-else
+                class="keys-grid"
+            >
                 <!-- 高德地图 API Key -->
                 <div class="key-card">
                     <div class="key-header">
                         <h3>🗺️ 高德地图 API Key</h3>
-                        <span :class="['status-badge', keysStatus.amap_key?.is_set ? 'set' : 'unset']">
+                        <span
+                            :class="['status-badge', keysStatus.amap_key?.is_set ? 'set' : 'unset']"
+                        >
                             {{ keysStatus.amap_key?.is_set ? '已配置' : '未配置' }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div v-if="editingKey === 'amap_key'" class="edit-form">
+                        <div
+                            v-if="editingKey === 'amap_key'"
+                            class="edit-form"
+                        >
                             <textarea
                                 v-model="editValues.amap_key"
                                 placeholder="粘贴您的高德地图 Web 服务 API Key"
@@ -29,16 +40,34 @@
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button class="btn btn-save" @click="saveKey('amap_key')">保存</button>
-                                <button class="btn btn-cancel" @click="cancelEdit">取消</button>
+                                <button
+                                    class="btn btn-save"
+                                    @click="saveKey('amap_key')"
+                                >
+                                    保存
+                                </button>
+                                <button
+                                    class="btn btn-cancel"
+                                    @click="cancelEdit"
+                                >
+                                    取消
+                                </button>
                             </div>
                         </div>
-                        <div v-else class="key-display">
+                        <div
+                            v-else
+                            class="key-display"
+                        >
                             <p class="key-value">
                                 {{ keysStatus.amap_key?.is_set ? '●●●●●●●●●●(已设置)' : '未配置' }}
                             </p>
                             <div class="key-actions">
-                                <button class="btn btn-edit" @click="startEdit('amap_key')">编辑</button>
+                                <button
+                                    class="btn btn-edit"
+                                    @click="startEdit('amap_key')"
+                                >
+                                    编辑
+                                </button>
                                 <button
                                     v-if="keysStatus.amap_key?.is_set"
                                     class="btn btn-delete"
@@ -49,7 +78,10 @@
                             </div>
                             <p class="key-hint">
                                 如需获取密钥，访问
-                                <a href="https://lbs.amap.com/api/webservice/guide/create-project/api-key" target="_blank">
+                                <a
+                                    href="https://lbs.amap.com/api/webservice/guide/create-project/api-key"
+                                    target="_blank"
+                                >
                                     高德地图开放平台
                                 </a>
                             </p>
@@ -64,12 +96,20 @@
                 <div class="key-card">
                     <div class="key-header">
                         <h3>🤖 Agent 对话 API Key</h3>
-                        <span :class="['status-badge', keysStatus.agent_api_key?.is_set ? 'set' : 'unset']">
+                        <span
+                            :class="[
+                                'status-badge',
+                                keysStatus.agent_api_key?.is_set ? 'set' : 'unset',
+                            ]"
+                        >
                             {{ keysStatus.agent_api_key?.is_set ? '已配置' : '未配置' }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div v-if="editingKey === 'agent_api_key'" class="edit-form">
+                        <div
+                            v-if="editingKey === 'agent_api_key'"
+                            class="edit-form"
+                        >
                             <textarea
                                 v-model="editValues.agent_api_key"
                                 placeholder="粘贴您的 Agent 对话 API Key"
@@ -77,16 +117,38 @@
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button class="btn btn-save" @click="saveKey('agent_api_key')">保存</button>
-                                <button class="btn btn-cancel" @click="cancelEdit">取消</button>
+                                <button
+                                    class="btn btn-save"
+                                    @click="saveKey('agent_api_key')"
+                                >
+                                    保存
+                                </button>
+                                <button
+                                    class="btn btn-cancel"
+                                    @click="cancelEdit"
+                                >
+                                    取消
+                                </button>
                             </div>
                         </div>
-                        <div v-else class="key-display">
+                        <div
+                            v-else
+                            class="key-display"
+                        >
                             <p class="key-value">
-                                {{ keysStatus.agent_api_key?.is_set ? '●●●●●●●●●●(已设置)' : '未配置' }}
+                                {{
+                                    keysStatus.agent_api_key?.is_set
+                                        ? '●●●●●●●●●●(已设置)'
+                                        : '未配置'
+                                }}
                             </p>
                             <div class="key-actions">
-                                <button class="btn btn-edit" @click="startEdit('agent_api_key')">编辑</button>
+                                <button
+                                    class="btn btn-edit"
+                                    @click="startEdit('agent_api_key')"
+                                >
+                                    编辑
+                                </button>
                                 <button
                                     v-if="keysStatus.agent_api_key?.is_set"
                                     class="btn btn-delete"
@@ -107,12 +169,20 @@
                 <div class="key-card">
                     <div class="key-header">
                         <h3>🌍 天地图 TK</h3>
-                        <span :class="['status-badge', keysStatus.tianditu_tk?.is_set ? 'set' : 'unset']">
+                        <span
+                            :class="[
+                                'status-badge',
+                                keysStatus.tianditu_tk?.is_set ? 'set' : 'unset',
+                            ]"
+                        >
                             {{ keysStatus.tianditu_tk?.is_set ? '已配置' : '未配置' }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div v-if="editingKey === 'tianditu_tk'" class="edit-form">
+                        <div
+                            v-if="editingKey === 'tianditu_tk'"
+                            class="edit-form"
+                        >
                             <textarea
                                 v-model="editValues.tianditu_tk"
                                 placeholder="粘贴您的天地图 API Key"
@@ -120,16 +190,36 @@
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button class="btn btn-save" @click="saveKey('tianditu_tk')">保存</button>
-                                <button class="btn btn-cancel" @click="cancelEdit">取消</button>
+                                <button
+                                    class="btn btn-save"
+                                    @click="saveKey('tianditu_tk')"
+                                >
+                                    保存
+                                </button>
+                                <button
+                                    class="btn btn-cancel"
+                                    @click="cancelEdit"
+                                >
+                                    取消
+                                </button>
                             </div>
                         </div>
-                        <div v-else class="key-display">
+                        <div
+                            v-else
+                            class="key-display"
+                        >
                             <p class="key-value">
-                                {{ keysStatus.tianditu_tk?.is_set ? '●●●●●●●●●●(已设置)' : '未配置' }}
+                                {{
+                                    keysStatus.tianditu_tk?.is_set ? '●●●●●●●●●●(已设置)' : '未配置'
+                                }}
                             </p>
                             <div class="key-actions">
-                                <button class="btn btn-edit" @click="startEdit('tianditu_tk')">编辑</button>
+                                <button
+                                    class="btn btn-edit"
+                                    @click="startEdit('tianditu_tk')"
+                                >
+                                    编辑
+                                </button>
                                 <button
                                     v-if="keysStatus.tianditu_tk?.is_set"
                                     class="btn btn-delete"
@@ -138,9 +228,7 @@
                                     删除
                                 </button>
                             </div>
-                            <p class="key-hint">
-                                天地图底图 API 密钥（可选）
-                            </p>
+                            <p class="key-hint">天地图底图 API 密钥（可选）</p>
                         </div>
                     </div>
                     <div class="key-footer">
@@ -154,7 +242,12 @@
             <div class="section-header-row">
                 <h3>⚙️ Agent 对话参数</h3>
                 <div class="section-actions">
-                    <button class="btn btn-edit" @click="loadAgentConfig">刷新</button>
+                    <button
+                        class="btn btn-edit"
+                        @click="loadAgentConfig"
+                    >
+                        刷新
+                    </button>
                     <button
                         v-if="!editingAgentConfig"
                         class="btn btn-edit"
@@ -165,19 +258,33 @@
                 </div>
             </div>
 
-            <div v-if="agentConfigLoading" class="loading-state">
+            <div
+                v-if="agentConfigLoading"
+                class="loading-state"
+            >
                 <span class="spinner"></span> 加载配置中...
             </div>
 
-            <div v-else-if="editingAgentConfig" class="edit-form">
+            <div
+                v-else-if="editingAgentConfig"
+                class="edit-form"
+            >
                 <div class="config-grid">
                     <label class="config-item">
                         <span>Base URL</span>
-                        <input v-model="agentConfigDraft.base_url" class="key-input" placeholder="https://api.xxx.com/v1" />
+                        <input
+                            v-model="agentConfigDraft.base_url"
+                            class="key-input"
+                            placeholder="https://api.xxx.com/v1"
+                        />
                     </label>
                     <label class="config-item">
                         <span>Model</span>
-                        <input v-model="agentConfigDraft.model" class="key-input" placeholder="留空时按 available_models 随机调度" />
+                        <input
+                            v-model="agentConfigDraft.model"
+                            class="key-input"
+                            placeholder="留空时按 available_models 随机调度"
+                        />
                     </label>
                     <label class="config-item config-item-full">
                         <span>Available Models（逗号或换行分隔）</span>
@@ -190,23 +297,54 @@
                     </label>
                     <label class="config-item">
                         <span>Timeout (seconds)</span>
-                        <input v-model.number="agentConfigDraft.timeout_seconds" type="number" min="5" max="180" class="key-input" />
+                        <input
+                            v-model.number="agentConfigDraft.timeout_seconds"
+                            type="number"
+                            min="5"
+                            max="180"
+                            class="key-input"
+                        />
                     </label>
                     <label class="config-item">
                         <span>Max Tokens</span>
-                        <input v-model.number="agentConfigDraft.max_tokens" type="number" min="1" max="8192" class="key-input" />
+                        <input
+                            v-model.number="agentConfigDraft.max_tokens"
+                            type="number"
+                            min="1"
+                            max="8192"
+                            class="key-input"
+                        />
                     </label>
                     <label class="config-item">
                         <span>Temperature</span>
-                        <input v-model.number="agentConfigDraft.temperature" type="number" min="0" max="2" step="0.1" class="key-input" />
+                        <input
+                            v-model.number="agentConfigDraft.temperature"
+                            type="number"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            class="key-input"
+                        />
                     </label>
                     <label class="config-item">
                         <span>Guest 每日额度</span>
-                        <input v-model.number="agentConfigDraft.guest_daily_quota" type="number" min="1" max="100000" class="key-input" />
+                        <input
+                            v-model.number="agentConfigDraft.guest_daily_quota"
+                            type="number"
+                            min="1"
+                            max="100000"
+                            class="key-input"
+                        />
                     </label>
                     <label class="config-item">
                         <span>Registered 每日额度</span>
-                        <input v-model.number="agentConfigDraft.registered_daily_quota" type="number" min="1" max="100000" class="key-input" />
+                        <input
+                            v-model.number="agentConfigDraft.registered_daily_quota"
+                            type="number"
+                            min="1"
+                            max="100000"
+                            class="key-input"
+                        />
                     </label>
                     <label class="config-item config-item-full">
                         <span>System Prompt</span>
@@ -220,13 +358,31 @@
                 </div>
 
                 <div class="button-group">
-                    <button class="btn btn-save" @click="saveAgentConfig">保存参数</button>
-                    <button class="btn btn-edit" @click="resetChatQuota">恢复默认额度</button>
-                    <button class="btn btn-cancel" @click="cancelEditAgentConfig">取消</button>
+                    <button
+                        class="btn btn-save"
+                        @click="saveAgentConfig"
+                    >
+                        保存参数
+                    </button>
+                    <button
+                        class="btn btn-edit"
+                        @click="resetChatQuota"
+                    >
+                        恢复默认额度
+                    </button>
+                    <button
+                        class="btn btn-cancel"
+                        @click="cancelEditAgentConfig"
+                    >
+                        取消
+                    </button>
                 </div>
             </div>
 
-            <div v-else class="config-view">
+            <div
+                v-else
+                class="config-view"
+            >
                 <div class="config-grid">
                     <div class="config-item">
                         <span>Base URL</span>
@@ -238,7 +394,9 @@
                     </div>
                     <div class="config-item config-item-full">
                         <span>Available Models</span>
-                        <strong>{{ (agentConfig.available_models || []).join(', ') || '未配置' }}</strong>
+                        <strong>{{
+                            (agentConfig.available_models || []).join(', ') || '未配置'
+                        }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Timeout</span>
@@ -267,7 +425,8 @@
                 </div>
 
                 <p class="config-note">
-                    对话额度：游客 {{ agentQuota.guest }} 次/日，注册用户 {{ agentQuota.registered }} 次/日，管理员不限。
+                    对话额度：游客 {{ agentQuota.guest }} 次/日，注册用户
+                    {{ agentQuota.registered }} 次/日，管理员不限。
                 </p>
             </div>
         </div>
@@ -361,7 +520,8 @@ async function loadKeysStatus() {
         const data = result?.data || {};
         keysStatus.value = {
             amap_key: data.amap_key || { is_set: false, updated_at: null },
-            agent_api_key: data.agent_api_key || data.agent_token || { is_set: false, updated_at: null },
+            agent_api_key: data.agent_api_key ||
+                data.agent_token || { is_set: false, updated_at: null },
             tianditu_tk: data.tianditu_tk || { is_set: false, updated_at: null },
         };
     } catch (error) {
@@ -429,7 +589,9 @@ async function loadAgentConfig() {
         agentConfig.value = {
             base_url: String(provider.base_url || ''),
             model: String(provider.model || ''),
-            available_models: Array.isArray(provider.available_models) ? provider.available_models : [],
+            available_models: Array.isArray(provider.available_models)
+                ? provider.available_models
+                : [],
             timeout_seconds: Number(provider.timeout_seconds || 45),
             max_tokens: Number(provider.max_tokens || 512),
             temperature: Number(provider.temperature ?? 0.2),
@@ -451,7 +613,7 @@ async function loadAgentConfig() {
 }
 
 async function saveAgentConfig() {
-    const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text)
+    const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text);
     const guestDailyQuota = Number(agentConfigDraft.value.guest_daily_quota || 0);
     const registeredDailyQuota = Number(agentConfigDraft.value.registered_daily_quota || 0);
 
@@ -612,8 +774,12 @@ onMounted(async () => {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 .keys-grid {

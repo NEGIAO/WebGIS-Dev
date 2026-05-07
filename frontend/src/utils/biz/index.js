@@ -8,7 +8,7 @@ export {
     getDirectionSuffix,
     isValidCoordinate,
     normalizeCoordinate,
-    parseCoordinate
+    parseCoordinate,
 } from '../coordinateFormatter';
 
 export {
@@ -16,7 +16,7 @@ export {
     normalizeCoordinatePair,
     normalizeCoordinateValue,
     processCoordinateInput,
-    validateCoordinateInput
+    validateCoordinateInput,
 } from '../coordinateInputHandler';
 
 export {
@@ -24,26 +24,18 @@ export {
     isLabelValid,
     isValidLabel,
     sanitizeLabel,
-    validateLabels
+    validateLabels,
 } from '../labelValidator';
 
-export {
-    decodePos,
-    encodePos
-} from '../urlCrypto';
+export { decodePos, encodePos } from '../urlCrypto';
 
-export {
-    parseAmapRectangleToExtent
-} from '../amapRectangle';
+export { parseAmapRectangleToExtent } from '../amapRectangle';
 
 export {
     getGlobalUserLocationContext,
     setGlobalUserLocationContext,
     clearGlobalUserLocationContext,
-    USER_LOCATION_CONTEXT_CHANGE_EVENT
+    USER_LOCATION_CONTEXT_CHANGE_EVENT,
 } from '../userLocationContext';
 
-export {
-    saveUserPositionToCache,
-    readUserPositionFromCache
-} from '../userPositionCache';
+export { saveUserPositionToCache, readUserPositionFromCache } from '../userPositionCache';

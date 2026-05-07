@@ -1,12 +1,12 @@
 /**
  * 地图事件处理统一库
- * 
+ *
  * 功能：
  * - 地图事件绑定（pointermove, singleclick, contextmenu, 坐标更新等）
  * - 坐标同步管理
  * - 右键菜单控制
  * - 移动端和桌面端事件兼容
- * 
+ *
  * 依赖注入参数：
  * - mapInstanceRef: OpenLayers Map 实例 ShallowRef
  * - currentCoordinateRef: 当前坐标响应式状态 ref
@@ -47,7 +47,7 @@ export function createMapEventHandlers({
     syncAttributeTableMapExtent,
     pendingBusPickRef,
     pendingReverseGeocodePickRef,
-    busPickSource
+    busPickSource,
 }) {
     function updateCurrentCoordinate(olCoordinate) {
         if (!olCoordinate || olCoordinate.length < 2) return;
@@ -79,9 +79,11 @@ export function createMapEventHandlers({
             const coordinate = evt.coordinate;
             if (tooltipRef?.helpTooltipEl) {
                 const sketchFeature = getSketchFeature?.();
-                const tooltipText = sketchFeature ?
-                    (sketchFeature.getGeometry?.() instanceof Polygon ? '双击结束多边形' : '双击结束测距') :
-                    '单击开始绘制';
+                const tooltipText = sketchFeature
+                    ? sketchFeature.getGeometry?.() instanceof Polygon
+                        ? '双击结束多边形'
+                        : '双击结束测距'
+                    : '单击开始绘制';
                 tooltipRef.helpTooltipEl.innerHTML = tooltipText;
                 tooltipRef.helpTooltipOverlay?.setPosition?.(coordinate);
                 tooltipRef.helpTooltipEl.classList.remove('hidden');
@@ -99,9 +101,18 @@ export function createMapEventHandlers({
             if (pendingBusPick) {
                 const lonLat = toLonLat(evt.coordinate);
                 const pickType = pendingBusPick.type;
-                busPickSource?.getFeatures?.().forEach(f => f.get('busPickType') === pickType && busPickSource.removeFeature(f));
-                busPickSource?.addFeature?.(new Feature({ geometry: new Point(evt.coordinate), busPickType: pickType }));
-                pendingBusPick.resolve({ lng: Number(lonLat[0].toFixed(6)), lat: Number(lonLat[1].toFixed(6)) });
+                busPickSource
+                    ?.getFeatures?.()
+                    .forEach(
+                        (f) => f.get('busPickType') === pickType && busPickSource.removeFeature(f),
+                    );
+                busPickSource?.addFeature?.(
+                    new Feature({ geometry: new Point(evt.coordinate), busPickType: pickType }),
+                );
+                pendingBusPick.resolve({
+                    lng: Number(lonLat[0].toFixed(6)),
+                    lat: Number(lonLat[1].toFixed(6)),
+                });
                 pendingBusPickRef.value = null;
                 return;
             }
@@ -109,19 +120,26 @@ export function createMapEventHandlers({
             const pendingReverseGeocodePick = pendingReverseGeocodePickRef?.value;
             if (pendingReverseGeocodePick) {
                 const lonLat = toLonLat(evt.coordinate);
-                pendingReverseGeocodePick.resolve({ lng: Number(lonLat[0].toFixed(6)), lat: Number(lonLat[1].toFixed(6)) });
+                pendingReverseGeocodePick.resolve({
+                    lng: Number(lonLat[0].toFixed(6)),
+                    lat: Number(lonLat[1].toFixed(6)),
+                });
                 pendingReverseGeocodePickRef.value = null;
                 return;
             }
 
             const clickedLonLat = toLonLat(evt.coordinate);
-            emit?.('map-click', { lon: Number(clickedLonLat[0].toFixed(6)), lat: Number(clickedLonLat[1].toFixed(6)), source: 'map-singleclick' });
+            emit?.('map-click', {
+                lon: Number(clickedLonLat[0].toFixed(6)),
+                lat: Number(clickedLonLat[1].toFixed(6)),
+                source: 'map-singleclick',
+            });
 
             if (!isAttributeQueryEnabledRef?.value) return;
             const drawInteraction = getDrawInteraction?.();
             if (drawInteraction?.getActive?.()) return;
 
-            const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
+            const feature = map.forEachFeatureAtPixel(evt.pixel, (f) => f);
             if (feature) {
                 const { geometry, style, ...props } = feature.getProperties();
                 emit?.('feature-selected', props);
@@ -138,11 +156,14 @@ export function createMapEventHandlers({
         // ========== contextmenu 事件 ==========
         viewport.addEventListener('contextmenu', (e) => {
             const controller = rightDragZoomControllerRef?.value;
-            if (controller?.shouldSuppressContextMenu?.()) { e.preventDefault(); return; }
+            if (controller?.shouldSuppressContextMenu?.()) {
+                e.preventDefault();
+                return;
+            }
             if (!isAttributeQueryEnabledRef?.value) return;
             e.preventDefault();
             const pixel = map.getEventPixel(e);
-            const feature = map.forEachFeatureAtPixel(pixel, f => f);
+            const feature = map.forEachFeatureAtPixel(pixel, (f) => f);
             if (!feature) return;
             const { geometry, style, ...props } = feature.getProperties();
             emit?.('feature-selected', { ...props, 操作提示: '右键选择，可在工具箱中编辑样式' });
@@ -167,9 +188,13 @@ export function createMapEventHandlers({
         });
 
         // ========== 移动端触摸事件 ==========
-        viewport.addEventListener('touchmove', () => {
-            updateCurrentCoordinate(map.getView().getCenter());
-        }, false);
+        viewport.addEventListener(
+            'touchmove',
+            () => {
+                updateCurrentCoordinate(map.getView().getCenter());
+            },
+            false,
+        );
     }
 
     return { bindMapEvents };

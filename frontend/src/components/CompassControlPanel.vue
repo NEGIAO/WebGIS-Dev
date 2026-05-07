@@ -5,12 +5,21 @@
                 <div class="panel-title">风水罗盘</div>
                 <div class="panel-subtitle">Native Vector + HUD 双模式</div>
             </div>
-            <button class="ghost-btn" @click="$emit('close')">返回</button>
+            <button
+                class="ghost-btn"
+                @click="$emit('close')"
+            >
+                返回
+            </button>
         </div>
 
         <div class="card-row switch-grid">
             <label class="switch-item">
-                <input type="checkbox" :checked="compassStore.unabaled" @change="handleEnabledChange" />
+                <input
+                    type="checkbox"
+                    :checked="compassStore.unabaled"
+                    @change="handleEnabledChange"
+                />
                 <span>启用罗盘</span>
             </label>
             <label class="switch-item">
@@ -36,7 +45,11 @@
         <div class="card-row">
             <div class="field full-width">
                 <label>显示模式</label>
-                <select :value="compassStore.mode" :disabled="!compassStore.enabled" @change="handleModeChange">
+                <select
+                    :value="compassStore.mode"
+                    :disabled="!compassStore.enabled"
+                    @change="handleModeChange"
+                >
                     <option value="vector">Mode 1: 地理实体（Vector）</option>
                     <option value="hud">Mode 2: 设备 HUD（固定屏幕）</option>
                 </select>
@@ -44,7 +57,11 @@
 
             <div class="field full-width">
                 <label>主题（cid）</label>
-                <select :value="compassStore.cid" :disabled="compassStore.isConfigLoading" @change="handleThemeChange">
+                <select
+                    :value="compassStore.cid"
+                    :disabled="compassStore.isConfigLoading"
+                    @change="handleThemeChange"
+                >
                     <option
                         v-for="item in compassStore.themeOptions"
                         :key="item.cid"
@@ -56,93 +73,134 @@
             </div>
         </div>
 
-<div class="card-row">
-    <div class="field full-width">
-        <div class="label-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <label>地理半径 (米)</label>
-            <input
-                type="number"
-                class="compact-number-input"
-                :disabled="!compassStore.enabled"
-                :value="Number(compassStore.physicalRadiusMeters).toFixed(1)"
-                @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
-            />
+        <div class="card-row">
+            <div class="field full-width">
+                <div
+                    class="label-row"
+                    style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 8px;
+                    "
+                >
+                    <label>地理半径 (米)</label>
+                    <input
+                        type="number"
+                        class="compact-number-input"
+                        :disabled="!compassStore.enabled"
+                        :value="Number(compassStore.physicalRadiusMeters).toFixed(1)"
+                        @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+                    />
+                </div>
+
+                <input
+                    type="range"
+                    :min="100"
+                    :max="20000000"
+                    step="0.5"
+                    class="compass-slider"
+                    :disabled="!compassStore.enabled"
+                    :value="compassStore.physicalRadiusMeters"
+                    @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+                />
+
+                <div
+                    class="slider-ticks"
+                    style="
+                        display: flex;
+                        justify-content: space-between;
+                        font-size: 10px;
+                        color: #888;
+                        margin-top: 4px;
+                    "
+                >
+                    <span>100m</span>
+                    <span>10000000</span>
+                    <span>20000000m</span>
+                </div>
+            </div>
+
+            <div class="field full-width">
+                <label>透明度：{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</label>
+                <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.01"
+                    class="compass-slider"
+                    :disabled="!compassStore.enabled"
+                    :value="compassStore.opacity"
+                    @input="(e) => compassStore.setOpacity(Number(e.target.value))"
+                />
+            </div>
+
+            <div
+                class="field full-width"
+                v-if="compassStore.mode === 'vector'"
+            >
+                <label
+                    >自动隐藏阈值 (Res)：{{ Number(compassStore.minResolution).toFixed(0) }}</label
+                >
+                <input
+                    type="range"
+                    min="100"
+                    max="36000"
+                    step="10"
+                    class="compass-slider"
+                    :disabled="!compassStore.enabled"
+                    :value="compassStore.minResolution"
+                    @input="(e) => compassStore.setMinResolution(Number(e.target.value))"
+                />
+            </div>
+
+            <div
+                class="field full-width"
+                v-if="compassStore.mode === 'hud'"
+            >
+                <label>HUD 尺寸：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
+                <input
+                    type="range"
+                    min="300"
+                    max="1200"
+                    step="1"
+                    class="compass-slider"
+                    :disabled="!compassStore.enabled"
+                    :value="compassStore.hudSizePx"
+                    @input="(e) => compassStore.setHudSize(Number(e.target.value))"
+                />
+            </div>
         </div>
-
-        <input
-            type="range"
-            :min="100" 
-            :max="20000000" 
-            step="0.5"
-            class="compass-slider"
-            :disabled="!compassStore.enabled"
-            :value="compassStore.physicalRadiusMeters"
-            @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
-        />
-        
-        <div class="slider-ticks" style="display: flex; justify-content: space-between; font-size: 10px; color: #888; margin-top: 4px;">
-            <span>100m</span>
-            <span>10000000</span>
-            <span>20000000m</span>
-        </div>
-    </div>
-
-    <div class="field full-width">
-        <label>透明度：{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</label>
-        <input
-            type="range"
-            min="0.1"
-            max="1"
-            step="0.01"
-            class="compass-slider"
-            :disabled="!compassStore.enabled"
-            :value="compassStore.opacity"
-            @input="(e) => compassStore.setOpacity(Number(e.target.value))"
-        />
-    </div>
-
-    <div class="field full-width" v-if="compassStore.mode === 'vector'">
-        <label>自动隐藏阈值 (Res)：{{ Number(compassStore.minResolution).toFixed(0) }}</label>
-        <input
-            type="range"
-            min="100"
-            max="36000"
-            step="10"
-            class="compass-slider"
-            :disabled="!compassStore.enabled"
-            :value="compassStore.minResolution"
-            @input="(e) => compassStore.setMinResolution(Number(e.target.value))"
-        />
-    </div>
-
-    <div class="field full-width" v-if="compassStore.mode === 'hud'">
-        <label>HUD 尺寸：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
-        <input
-            type="range"
-            min="300"
-            max="1200"
-            step="1"
-            class="compass-slider"
-            :disabled="!compassStore.enabled"
-            :value="compassStore.hudSizePx"
-            @input="(e) => compassStore.setHudSize(Number(e.target.value))"
-        />
-    </div>
-</div>
 
         <div class="card-row">
             <div class="field">
                 <label>经度</label>
-                <input v-model="lngInput" type="number" step="0.000001" :disabled="!compassStore.enabled" />
+                <input
+                    v-model="lngInput"
+                    type="number"
+                    step="0.000001"
+                    :disabled="!compassStore.enabled"
+                />
             </div>
             <div class="field">
                 <label>纬度</label>
-                <input v-model="latInput" type="number" step="0.000001" :disabled="!compassStore.enabled" />
+                <input
+                    v-model="latInput"
+                    type="number"
+                    step="0.000001"
+                    :disabled="!compassStore.enabled"
+                />
             </div>
             <div class="field actions-field">
                 <label>&nbsp;</label>
                 <div class="actions-row">
-                    <button class="action-btn" :disabled="!compassStore.enabled" @click="applyLonLat">应用坐标</button>
+                    <button
+                        class="action-btn"
+                        :disabled="!compassStore.enabled"
+                        @click="applyLonLat"
+                    >
+                        应用坐标
+                    </button>
                     <button
                         class="action-btn action-muted"
                         :disabled="!compassStore.enabled || !getUserLocation"
@@ -155,11 +213,24 @@
         </div>
 
         <div class="card-row compact-row">
-            <div class="status-chip" :class="`status-${compassStore.sensorPermission}`">
+            <div
+                class="status-chip"
+                :class="`status-${compassStore.sensorPermission}`"
+            >
                 {{ sensorStatusText }}
             </div>
-            <div class="status-chip" v-if="compassStore.isConfigLoading">配置加载中...</div>
-            <div class="status-chip status-error" v-if="compassStore.configError">{{ compassStore.configError }}</div>
+            <div
+                class="status-chip"
+                v-if="compassStore.isConfigLoading"
+            >
+                配置加载中...
+            </div>
+            <div
+                class="status-chip status-error"
+                v-if="compassStore.configError"
+            >
+                {{ compassStore.configError }}
+            </div>
         </div>
     </div>
 </template>
@@ -178,8 +249,8 @@ import { useCompassStore } from '../stores';
 const props = defineProps({
     getUserLocation: {
         type: Function,
-        default: null
-    }
+        default: null,
+    },
 });
 
 defineEmits(['close']);
@@ -190,10 +261,14 @@ const compassStore = useCompassStore();
 const lngInput = ref(String(compassStore.position?.lng ?? ''));
 const latInput = ref(String(compassStore.position?.lat ?? ''));
 
-watch(() => compassStore.position, (nextPosition) => {
-    lngInput.value = Number.isFinite(Number(nextPosition?.lng)) ? String(nextPosition.lng) : '';
-    latInput.value = Number.isFinite(Number(nextPosition?.lat)) ? String(nextPosition.lat) : '';
-}, { deep: true, immediate: true });
+watch(
+    () => compassStore.position,
+    (nextPosition) => {
+        lngInput.value = Number.isFinite(Number(nextPosition?.lng)) ? String(nextPosition.lng) : '';
+        latInput.value = Number.isFinite(Number(nextPosition?.lat)) ? String(nextPosition.lat) : '';
+    },
+    { deep: true, immediate: true },
+);
 
 const sensorStatusText = computed(() => {
     if (compassStore.sensorPermission === 'granted') return '传感器权限：已授权';
@@ -213,7 +288,9 @@ function handlePlacementModeChange(event) {
 }
 
 function handleModeChange(event) {
-    const mode = String(event?.target?.value || 'vector').trim().toLowerCase();
+    const mode = String(event?.target?.value || 'vector')
+        .trim()
+        .toLowerCase();
     compassStore.setMode(mode === 'hud' ? 'hud' : 'vector');
 }
 
@@ -246,7 +323,14 @@ function applyLonLat() {
     const lng = Number(lngInput.value);
     const lat = Number(latInput.value);
 
-    if (!Number.isFinite(lng) || !Number.isFinite(lat) || lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+    if (
+        !Number.isFinite(lng) ||
+        !Number.isFinite(lat) ||
+        lng < -180 ||
+        lng > 180 ||
+        lat < -90 ||
+        lat > 90
+    ) {
         message.warning('请输入有效经纬度');
         return;
     }

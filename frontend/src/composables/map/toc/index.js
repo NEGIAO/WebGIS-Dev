@@ -6,13 +6,10 @@ export {
     normalizeTocLayerId,
     normalizeTocLayerIdList,
     normalizeTocExportFormat,
-    resolveTocExportFormatFromCommand
+    resolveTocExportFormatFromCommand,
 } from './protocol';
 
-export {
-    buildKmlContent,
-    exportFeaturesAsKml
-} from './actions/exportService';
+export { buildKmlContent, exportFeaturesAsKml } from './actions/exportService';
 
 export {
     normalizeLayerIdList,
@@ -22,7 +19,7 @@ export {
     pruneSelectedLayerIds,
     applyRecursiveSelection,
     applyRecursiveSelectionChunked,
-    resolveBatchTargetLayerIds
+    resolveBatchTargetLayerIds,
 } from './actions/selectionManager';
 
 export { handleLayerTreeContextAction } from './actions/contextActionManager';

@@ -1,10 +1,10 @@
 /**
  * 地图 UI 事件处理统一库（Phase 18）
- * 
+ *
  * 功能：
  * - UI 组件事件转发
  * - 简单的状态更新与属性表同步
- * 
+ *
  * 注：复杂的图层控制逻辑（handleLayerChange/OrderUpdate）保留在 MapContainer
  */
 
@@ -21,7 +21,7 @@ export function createMapUIEventHandlers({
     selectedLayerRef,
     INITIAL_VIEW,
     flyToView,
-    getLayerIndexById
+    getLayerIndexById,
 }) {
     /**
      * 彩蛋：图片开启
@@ -43,7 +43,7 @@ export function createMapUIEventHandlers({
     function syncAttributeTableMapExtent() {
         const map = mapInstanceRef?.value;
         const attrStore = attrStoreRef?.value;
-        
+
         if (!map || !attrStore) return;
 
         const size = map.getSize?.();
@@ -101,7 +101,7 @@ export function createMapUIEventHandlers({
             lng: nextLng,
             lat: nextLat,
             zoom: targetZoom,
-            layerIndex: targetLayerIndex
+            layerIndex: targetLayerIndex,
         });
 
         emit?.('location-change', { lon: nextLng, lat: nextLat, source: 'view-param-update' });
@@ -129,7 +129,7 @@ export function createMapUIEventHandlers({
             initialCenter[0],
             initialCenter[1],
             initialZoom,
-            getLayerIndexById?.(selectedLayerRef?.value)
+            getLayerIndexById?.(selectedLayerRef?.value),
         );
     }
 
@@ -142,6 +142,6 @@ export function createMapUIEventHandlers({
         handleToggleGraticule,
         updateViewByParams,
         handleJumpToCoordinates,
-        resetView
+        resetView,
     };
 }

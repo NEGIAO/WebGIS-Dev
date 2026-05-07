@@ -1,13 +1,32 @@
 import { decompressBuffer, detectMagicType } from './decompressFile.js';
-import { detectGeoJsonProjection, detectKmlProjectionHint, detectShpProjectionFromPrj, resolveProjectionOrDefault } from './crsAware.js';
+import {
+    detectGeoJsonProjection,
+    detectKmlProjectionHint,
+    detectShpProjectionFromPrj,
+    resolveProjectionOrDefault,
+} from './crsAware.js';
 import { buildResourcePool, classifyArchiveDatasets } from './batchProcessor.js';
 
-const RESOURCE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'css', 'js', 'html', 'htm']);
+const RESOURCE_EXTENSIONS = new Set([
+    'png',
+    'jpg',
+    'jpeg',
+    'gif',
+    'webp',
+    'bmp',
+    'svg',
+    'css',
+    'js',
+    'html',
+    'htm',
+]);
 const SHP_EXTENSIONS = new Set(['shp', 'dbf', 'shx', 'prj', 'cpg']);
 
 function normalizeType(type, name = '') {
     const normalizedType = String(type || '').toLowerCase();
-    const filename = String(name || '').trim().toLowerCase();
+    const filename = String(name || '')
+        .trim()
+        .toLowerCase();
     const ext = filename.includes('.') ? filename.split('.').pop() : '';
 
     if (ext === 'kmz') return 'kmz';
@@ -31,7 +50,10 @@ function decodeBufferToText(buffer) {
 }
 
 function normalizePath(path = '') {
-    return String(path || '').replace(/\\/g, '/').replace(/^\.\/?/, '').trim();
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/^\.\/?/, '')
+        .trim();
 }
 
 function extOf(path = '') {
@@ -74,13 +96,13 @@ function groupShpEntriesByBaseName(entries = []) {
             dbfEntry: null,
             shxEntry: null,
             prjEntry: null,
-            cpgEntry: null
+            cpgEntry: null,
         };
 
         const normalizedEntry = {
             ...entry,
             path: rawPath,
-            extension
+            extension,
         };
 
         if (extension === 'shp') current.shpEntry = normalizedEntry;
@@ -97,7 +119,9 @@ function groupShpEntriesByBaseName(entries = []) {
 
     for (const group of groups.values()) {
         if (group.shpEntry && !group.dbfEntry) {
-            warnings.push(`${group.shpEntry.path}: 缺少同名 .dbf，将按几何数据继续解析（属性字段可能为空）。`);
+            warnings.push(
+                `${group.shpEntry.path}: 缺少同名 .dbf，将按几何数据继续解析（属性字段可能为空）。`,
+            );
         }
         if (!group.shpEntry && group.dbfEntry) {
             warnings.push(`${group.dbfEntry.path}: 检测到单独 .dbf，缺少同名 .shp，已跳过该任务。`);
@@ -137,7 +161,7 @@ function groupBrowserFilesByBaseName(files = []) {
             dbf: null,
             shx: null,
             prj: null,
-            cpg: null
+            cpg: null,
         };
 
         if (extension === 'shp') current.shp = file;
@@ -167,18 +191,23 @@ export async function buildShpPacketsFromBrowserFiles(files = [], options = {}) 
         }
 
         // 在解析前先并行读取 buffer/text，确保 PRJ 文本就绪。
-        const [shpBuffer, dbfBuffer, shxBuffer, prjBuffer, cpgBuffer, prjUtf8Text, cpgUtf8Text] = await Promise.all([
-            group.shp.arrayBuffer(),
-            group.dbf?.arrayBuffer?.() ?? Promise.resolve(undefined),
-            group.shx?.arrayBuffer?.() ?? Promise.resolve(undefined),
-            group.prj?.arrayBuffer?.() ?? Promise.resolve(undefined),
-            group.cpg?.arrayBuffer?.() ?? Promise.resolve(undefined),
-            group.prj?.text?.() ?? Promise.resolve(''),
-            group.cpg?.text?.() ?? Promise.resolve('')
-        ]);
+        const [shpBuffer, dbfBuffer, shxBuffer, prjBuffer, cpgBuffer, prjUtf8Text, cpgUtf8Text] =
+            await Promise.all([
+                group.shp.arrayBuffer(),
+                group.dbf?.arrayBuffer?.() ?? Promise.resolve(undefined),
+                group.shx?.arrayBuffer?.() ?? Promise.resolve(undefined),
+                group.prj?.arrayBuffer?.() ?? Promise.resolve(undefined),
+                group.cpg?.arrayBuffer?.() ?? Promise.resolve(undefined),
+                group.prj?.text?.() ?? Promise.resolve(''),
+                group.cpg?.text?.() ?? Promise.resolve(''),
+            ]);
 
-        const prjText = prjBuffer ? decodeBufferToText(prjBuffer).trim() : String(prjUtf8Text || '').trim();
-        const cpgText = cpgBuffer ? decodeBufferToText(cpgBuffer).trim() : String(cpgUtf8Text || '').trim();
+        const prjText = prjBuffer
+            ? decodeBufferToText(prjBuffer).trim()
+            : String(prjUtf8Text || '').trim();
+        const cpgText = cpgBuffer
+            ? decodeBufferToText(cpgBuffer).trim()
+            : String(cpgUtf8Text || '').trim();
         const projectionResolved = await detectShpProjectionFromPrj(prjText);
         if (!group.prj) {
             warnings.push(`${group.stem}: 缺少 .prj，尝试按 WGS84（EPSG:4326）渲染。`);
@@ -192,7 +221,9 @@ export async function buildShpPacketsFromBrowserFiles(files = [], options = {}) 
             sourceName: options.sourceName || 'browser-file-list',
             entryName: `${group.stem}.shp`,
             dataProjection: projectionResolved.projection,
-            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase()),
+            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
+                String(projectionResolved.projection || '').toUpperCase(),
+            ),
             shpParts: {
                 shp: shpBuffer,
                 dbf: dbfBuffer,
@@ -200,8 +231,8 @@ export async function buildShpPacketsFromBrowserFiles(files = [], options = {}) 
                 prj: prjBuffer,
                 cpg: cpgBuffer,
                 prjText,
-                cpgText
-            }
+                cpgText,
+            },
         });
     }
 
@@ -210,7 +241,7 @@ export async function buildShpPacketsFromBrowserFiles(files = [], options = {}) 
         packets,
         warnings,
         taskCount: packets.length,
-        groupCount: grouped.size
+        groupCount: grouped.size,
     };
 }
 
@@ -230,8 +261,8 @@ function buildSummary(tasks, packets, errors) {
             kmz: tasks.kmzTasks.length,
             shp: tasks.shpTasks.length,
             tiff: tasks.tiffTasks.length,
-            geojson: tasks.geoJsonTasks.length
-        }
+            geojson: tasks.geoJsonTasks.length,
+        },
     };
 }
 
@@ -254,12 +285,14 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
     for (const task of tasks.kmlTasks) {
         try {
             const kmlText = decodeBufferToText(task.entry.buffer);
-            const projectionResolved = await resolveProjectionOrDefault(detectKmlProjectionHint(kmlText), 'KML/KMZ');
-            if (projectionResolved.warning) warnings.push(`${task.entry.path}: ${projectionResolved.warning}`);
+            const projectionResolved = await resolveProjectionOrDefault(
+                detectKmlProjectionHint(kmlText),
+                'KML/KMZ',
+            );
+            if (projectionResolved.warning)
+                warnings.push(`${task.entry.path}: ${projectionResolved.warning}`);
 
-            const preservedEntryName = isKmzArchive && sourceName
-                ? sourceName
-                : task.entry.path;
+            const preservedEntryName = isKmzArchive && sourceName ? sourceName : task.entry.path;
 
             packets.push({
                 kind: 'kml',
@@ -269,10 +302,16 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                 dispatchEntryName: task.entry.path,
                 kmlString: kmlText,
                 dataProjection: projectionResolved.projection,
-                needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase())
+                needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
+                    String(projectionResolved.projection || '').toUpperCase(),
+                ),
             });
         } catch (error) {
-            errors.push({ entryName: task.entry.path, kind: 'kml', message: error?.message || String(error) });
+            errors.push({
+                entryName: task.entry.path,
+                kind: 'kml',
+                message: error?.message || String(error),
+            });
         }
     }
 
@@ -281,7 +320,7 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
             const nested = await dispatchGisData({
                 content: task.entry.buffer,
                 type: 'kmz',
-                name: task.entry.path
+                name: task.entry.path,
             });
 
             if (Array.isArray(nested.warnings)) warnings.push(...nested.warnings);
@@ -289,7 +328,11 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
             if (Array.isArray(nested.blobUrls)) blobUrls.push(...nested.blobUrls);
             if (Array.isArray(nested.packets)) packets.push(...nested.packets);
         } catch (error) {
-            errors.push({ entryName: task.entry.path, kind: 'kmz', message: error?.message || String(error) });
+            errors.push({
+                entryName: task.entry.path,
+                kind: 'kmz',
+                message: error?.message || String(error),
+            });
         }
     }
 
@@ -309,7 +352,9 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                 sourceName,
                 entryName: task.shpEntry.path,
                 dataProjection: projectionResolved.projection,
-                needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase()),
+                needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
+                    String(projectionResolved.projection || '').toUpperCase(),
+                ),
                 shpParts: {
                     shp: task.shpEntry.buffer,
                     shx: task.shxEntry?.buffer,
@@ -317,13 +362,17 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                     prj: task.prjEntry?.buffer,
                     cpg: task.cpgEntry?.buffer,
                     prjText,
-                    cpgText
+                    cpgText,
                 },
                 resourcePool,
-                resources: resources.resources
+                resources: resources.resources,
             });
         } catch (error) {
-            errors.push({ entryName: task.shpEntry?.path || task.stem, kind: 'shp', message: error?.message || String(error) });
+            errors.push({
+                entryName: task.shpEntry?.path || task.stem,
+                kind: 'shp',
+                message: error?.message || String(error),
+            });
         }
     }
 
@@ -340,10 +389,14 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                 entryName: task.entry.path,
                 arrayBuffer: task.entry.buffer,
                 blob,
-                blobUrl
+                blobUrl,
             });
         } catch (error) {
-            errors.push({ entryName: task.entry.path, kind: 'tiff', message: error?.message || String(error) });
+            errors.push({
+                entryName: task.entry.path,
+                kind: 'tiff',
+                message: error?.message || String(error),
+            });
         }
     }
 
@@ -352,7 +405,8 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
             const text = decodeBufferToText(task.entry.buffer);
             const geojsonData = parseGeoJsonContent(text);
             const projectionResolved = await detectGeoJsonProjection(geojsonData);
-            if (projectionResolved.warning) warnings.push(`${task.entry.path}: ${projectionResolved.warning}`);
+            if (projectionResolved.warning)
+                warnings.push(`${task.entry.path}: ${projectionResolved.warning}`);
 
             packets.push({
                 kind: 'geojson',
@@ -361,12 +415,18 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
                 entryName: task.entry.path,
                 geojsonData,
                 dataProjection: projectionResolved.projection,
-                needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase()),
+                needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
+                    String(projectionResolved.projection || '').toUpperCase(),
+                ),
                 resourcePool,
-                resources: resources.resources
+                resources: resources.resources,
             });
         } catch (error) {
-            errors.push({ entryName: task.entry.path, kind: 'geojson', message: error?.message || String(error) });
+            errors.push({
+                entryName: task.entry.path,
+                kind: 'geojson',
+                message: error?.message || String(error),
+            });
         }
     }
 
@@ -376,11 +436,20 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
         errors,
         blobUrls,
         resourcePool,
-        summary: buildSummary({
-            ...tasks,
-            shpTasks: shpGrouping.tasks,
-            datasetCount: tasks.kmlTasks.length + tasks.kmzTasks.length + shpGrouping.tasks.length + tasks.tiffTasks.length + tasks.geoJsonTasks.length
-        }, packets, errors)
+        summary: buildSummary(
+            {
+                ...tasks,
+                shpTasks: shpGrouping.tasks,
+                datasetCount:
+                    tasks.kmlTasks.length +
+                    tasks.kmzTasks.length +
+                    shpGrouping.tasks.length +
+                    tasks.tiffTasks.length +
+                    tasks.geoJsonTasks.length,
+            },
+            packets,
+            errors,
+        ),
     };
 }
 
@@ -419,7 +488,8 @@ export async function dispatchGisData(input = {}) {
 
     const normalizedType = normalizeType(type, name);
     const topMagic = content instanceof ArrayBuffer ? detectMagicType(content) : 'unknown';
-    const shouldDecompress = normalizedType === 'zip' || normalizedType === 'kmz' || topMagic === 'zip';
+    const shouldDecompress =
+        normalizedType === 'zip' || normalizedType === 'kmz' || topMagic === 'zip';
 
     if (shouldDecompress) {
         if (!(content instanceof ArrayBuffer)) {
@@ -430,7 +500,7 @@ export async function dispatchGisData(input = {}) {
         const batchResult = await buildArchivePackets({
             archive,
             sourceType: normalizedType,
-            sourceName: name
+            sourceName: name,
         });
 
         warnings.push(...batchResult.warnings);
@@ -439,7 +509,9 @@ export async function dispatchGisData(input = {}) {
 
         if (!batchResult.packets.length) {
             if (errors.length) {
-                const detail = errors.map((item) => `${item.entryName}: ${item.message}`).join('; ');
+                const detail = errors
+                    .map((item) => `${item.entryName}: ${item.message}`)
+                    .join('; ');
                 throw new Error(`压缩包中未导入任何有效数据集。${detail}`);
             }
             throw new Error('压缩包中未识别到有效 GIS 数据集');
@@ -452,13 +524,16 @@ export async function dispatchGisData(input = {}) {
             errors,
             blobUrls,
             resourcePool: batchResult.resourcePool,
-            summary: batchResult.summary
+            summary: batchResult.summary,
         };
     }
 
     if (normalizedType === 'kml') {
         const kmlText = typeof content === 'string' ? content : decodeBufferToText(content);
-        const projectionResolved = await resolveProjectionOrDefault(detectKmlProjectionHint(kmlText), 'KML');
+        const projectionResolved = await resolveProjectionOrDefault(
+            detectKmlProjectionHint(kmlText),
+            'KML',
+        );
         if (projectionResolved.warning) warnings.push(projectionResolved.warning);
 
         const packet = {
@@ -467,7 +542,9 @@ export async function dispatchGisData(input = {}) {
             entryName: name,
             kmlString: kmlText,
             dataProjection: projectionResolved.projection,
-            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase())
+            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
+                String(projectionResolved.projection || '').toUpperCase(),
+            ),
         };
         return {
             packet,
@@ -479,16 +556,18 @@ export async function dispatchGisData(input = {}) {
                 detectedDatasets: 1,
                 importedDatasets: 1,
                 failedDatasets: 0,
-                byType: { kml: 1, kmz: 0, shp: 0, tiff: 0, geojson: 0 }
-            }
+                byType: { kml: 1, kmz: 0, shp: 0, tiff: 0, geojson: 0 },
+            },
         };
     }
 
     if (normalizedType === 'shp') {
-        throw new Error('检测到单独 .shp 文件。请按同名文件组上传（至少 .shp，可选 .dbf/.shx/.prj/.cpg）或使用 ZIP。');
+        throw new Error(
+            '检测到单独 .shp 文件。请按同名文件组上传（至少 .shp，可选 .dbf/.shx/.prj/.cpg）或使用 ZIP。',
+        );
     }
 
-    if ((normalizedType === 'geojson' || normalizedType === 'json')) {
+    if (normalizedType === 'geojson' || normalizedType === 'json') {
         const geojsonData = parseGeoJsonContent(content);
         const projectionResolved = await detectGeoJsonProjection(geojsonData);
         if (projectionResolved.warning) warnings.push(projectionResolved.warning);
@@ -499,7 +578,9 @@ export async function dispatchGisData(input = {}) {
             entryName: name,
             geojsonData,
             dataProjection: projectionResolved.projection,
-            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(String(projectionResolved.projection || '').toUpperCase())
+            needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
+                String(projectionResolved.projection || '').toUpperCase(),
+            ),
         };
         return {
             packet,
@@ -511,12 +592,15 @@ export async function dispatchGisData(input = {}) {
                 detectedDatasets: 1,
                 importedDatasets: 1,
                 failedDatasets: 0,
-                byType: { kml: 0, kmz: 0, shp: 0, tiff: 0, geojson: 1 }
-            }
+                byType: { kml: 0, kmz: 0, shp: 0, tiff: 0, geojson: 1 },
+            },
         };
     }
 
-    if ((normalizedType === 'tif' || normalizedType === 'tiff' || topMagic === 'tiff') && content instanceof ArrayBuffer) {
+    if (
+        (normalizedType === 'tif' || normalizedType === 'tiff' || topMagic === 'tiff') &&
+        content instanceof ArrayBuffer
+    ) {
         const blob = new Blob([content], { type: 'image/tiff' });
         const blobUrl = URL.createObjectURL(blob);
         blobUrls.push(blobUrl);
@@ -527,7 +611,7 @@ export async function dispatchGisData(input = {}) {
             entryName: name,
             arrayBuffer: content,
             blob,
-            blobUrl
+            blobUrl,
         };
         return {
             packet,
@@ -539,8 +623,8 @@ export async function dispatchGisData(input = {}) {
                 detectedDatasets: 1,
                 importedDatasets: 1,
                 failedDatasets: 0,
-                byType: { kml: 0, kmz: 0, shp: 0, tiff: 1, geojson: 0 }
-            }
+                byType: { kml: 0, kmz: 0, shp: 0, tiff: 1, geojson: 0 },
+            },
         };
     }
 

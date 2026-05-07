@@ -1,5 +1,8 @@
 function normalizePath(path) {
-    return String(path || '').replace(/\\/g, '/').replace(/^\.\//, '').trim();
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .trim();
 }
 
 function getExtension(path) {
@@ -73,7 +76,11 @@ export function classifyArchiveDatasets(entries = []) {
             continue;
         }
 
-        if (extension === 'geojson' || extension === 'json' || normalizedEntry.magicType === 'json') {
+        if (
+            extension === 'geojson' ||
+            extension === 'json' ||
+            normalizedEntry.magicType === 'json'
+        ) {
             geoJsonTasks.push({ entry: normalizedEntry });
             continue;
         }
@@ -88,7 +95,7 @@ export function classifyArchiveDatasets(entries = []) {
                 shxEntry: null,
                 dbfEntry: null,
                 prjEntry: null,
-                cpgEntry: null
+                cpgEntry: null,
             };
 
             if (extension === 'shp') group.shpEntry = normalizedEntry;
@@ -107,9 +114,11 @@ export function classifyArchiveDatasets(entries = []) {
         if (!group.dbfEntry || !group.shxEntry) {
             const missingParts = [
                 group.dbfEntry ? null : '.dbf',
-                group.shxEntry ? null : '.shx'
+                group.shxEntry ? null : '.shx',
             ].filter(Boolean);
-            shpWarnings.push(`${group.shpEntry.path}: Shapefile 数据不完整，缺少 ${missingParts.join(' 和 ')}，将尝试继续解析。`);
+            shpWarnings.push(
+                `${group.shpEntry.path}: Shapefile 数据不完整，缺少 ${missingParts.join(' 和 ')}，将尝试继续解析。`,
+            );
         }
         shpTasks.push(group);
     }
@@ -121,7 +130,12 @@ export function classifyArchiveDatasets(entries = []) {
         shpWarnings,
         tiffTasks,
         geoJsonTasks,
-        datasetCount: kmlTasks.length + kmzTasks.length + shpTasks.length + tiffTasks.length + geoJsonTasks.length
+        datasetCount:
+            kmlTasks.length +
+            kmzTasks.length +
+            shpTasks.length +
+            tiffTasks.length +
+            geoJsonTasks.length,
     };
 }
 

@@ -1,15 +1,28 @@
 <template>
-    <div class="shared-tree-item" :style="{ '--node-level': Number(level || 0) }">
-        <div class="shared-tree-row" :class="{ 'is-folder': isFolder, 'is-file': !isFolder }">
+    <div
+        class="shared-tree-item"
+        :style="{ '--node-level': Number(level || 0) }"
+    >
+        <div
+            class="shared-tree-row"
+            :class="{ 'is-folder': isFolder, 'is-file': !isFolder }"
+        >
             <button
                 v-if="isFolder"
                 class="shared-tree-toggle"
                 :aria-label="expanded ? '折叠' : '展开'"
                 @click.stop="toggleFolder"
             >
-                <span class="shared-tree-chevron" :class="{ open: expanded }">▸</span>
+                <span
+                    class="shared-tree-chevron"
+                    :class="{ open: expanded }"
+                    >▸</span
+                >
             </button>
-            <span v-else class="shared-tree-toggle shared-tree-toggle-placeholder"></span>
+            <span
+                v-else
+                class="shared-tree-toggle shared-tree-toggle-placeholder"
+            ></span>
 
             <button
                 v-if="!isFolder"
@@ -21,13 +34,20 @@
                 <span class="shared-tree-name">{{ displayName }}</span>
             </button>
 
-            <div v-else class="shared-tree-folder-label" @click="toggleFolder">
+            <div
+                v-else
+                class="shared-tree-folder-label"
+                @click="toggleFolder"
+            >
                 <span class="shared-tree-name">{{ displayName }}</span>
                 <span class="shared-tree-count">{{ node.fileCount || 0 }}</span>
             </div>
         </div>
 
-        <div v-if="isFolder && expanded" class="shared-tree-children">
+        <div
+            v-if="isFolder && expanded"
+            class="shared-tree-children"
+        >
             <SharedResourceTreeItem
                 v-for="child in node.children || []"
                 :key="child.id"
@@ -46,7 +66,7 @@ defineOptions({ name: 'SharedResourceTreeItem' });
 
 const props = defineProps({
     node: { type: Object, required: true },
-    level: { type: Number, default: 0 }
+    level: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(['load-resource']);
@@ -79,7 +99,7 @@ watch(
         // 新节点默认展开，便于首次查看全部共享目录结构。
         expanded.value = true;
     },
-    { immediate: true }
+    { immediate: true },
 );
 
 function toggleFolder() {

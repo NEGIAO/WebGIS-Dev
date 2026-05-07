@@ -88,7 +88,7 @@ export function parseDriveRouteXml(xmlString: string): DriveResult {
             guide,
             streetDistanceMeter,
             streetDistanceText,
-            streetLatLon
+            streetLatLon,
         };
     });
 
@@ -99,7 +99,7 @@ export function parseDriveRouteXml(xmlString: string): DriveResult {
         durationSec,
         durationText: toMinuteText(durationSec),
         routeLatLon,
-        segments
+        segments,
     };
 }
 
@@ -136,15 +136,18 @@ export function parseAndDrawDriveRoute(xmlString: string, map: any): DriveDrawRe
     if (startMarker) map.addOverLay(startMarker);
     if (endMarker) map.addOverLay(endMarker);
 
-    const routeLngLats = parseLinePoint(result.routeLatLon).map((p) => new TApi.LngLat(p.lng, p.lat));
-    const routePolyline = routeLngLats.length >= 2
-        ? new TApi.Polyline(routeLngLats, {
-            color: '#10B981',
-            weight: 6,
-            opacity: 0.95,
-            lineStyle: 'solid'
-        })
-        : null;
+    const routeLngLats = parseLinePoint(result.routeLatLon).map(
+        (p) => new TApi.LngLat(p.lng, p.lat),
+    );
+    const routePolyline =
+        routeLngLats.length >= 2
+            ? new TApi.Polyline(routeLngLats, {
+                  color: '#10B981',
+                  weight: 6,
+                  opacity: 0.95,
+                  lineStyle: 'solid',
+              })
+            : null;
 
     if (routePolyline) {
         map.addOverLay(routePolyline);
@@ -157,6 +160,6 @@ export function parseAndDrawDriveRoute(xmlString: string, map: any): DriveDrawRe
         result,
         startMarker,
         endMarker,
-        routePolyline
+        routePolyline,
     };
 }

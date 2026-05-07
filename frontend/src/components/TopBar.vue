@@ -1,113 +1,284 @@
 <template>
     <div class="top-bar">
         <div class="branding">
-            <a href="../index.html" class="logo-link">
-                <img :src="`${normalizedBase}images/icon.webp`" alt="Icon" class="logo-icon" />
+            <a
+                href="../index.html"
+                class="logo-link"
+            >
+                <img
+                    :src="`${normalizedBase}images/icon.webp`"
+                    alt="Icon"
+                    class="logo-icon"
+                />
                 <span class="title-text">The Science of Where！</span>
             </a>
         </div>
 
         <div class="controls">
-            <div class="menu-host" ref="menuHostRef">
-                <button class="nav-btn" @click="toggleToolMenu" title="菜单项">
+            <div
+                class="menu-host"
+                ref="menuHostRef"
+            >
+                <button
+                    class="nav-btn"
+                    @click="toggleToolMenu"
+                    title="菜单项"
+                >
                     <span class="btn-icon">
-                        <list-icon :size="18" color="#ffffff" :stroke-width="2" />
+                        <list-icon
+                            :size="18"
+                            color="#ffffff"
+                            :stroke-width="2"
+                        />
                     </span>
                     <span class="btn-text">菜单</span>
                 </button>
-                <div v-if="showToolMenu" class="floating-menu">
-                    <button class="menu-item" @click="handleOpenToolbox">
-                        <layers-icon :size="16" color="#38BDF8" class="m-icon" /> 图层管理
+                <div
+                    v-if="showToolMenu"
+                    class="floating-menu"
+                >
+                    <button
+                        class="menu-item"
+                        @click="handleOpenToolbox"
+                    >
+                        <layers-icon
+                            :size="16"
+                            color="#38BDF8"
+                            class="m-icon"
+                        />
+                        图层管理
                     </button>
-                    <button class="menu-item" @click="handleOpenCompass">
-                        <compass-icon :size="16" color="#FB923C" class="m-icon" /> 风水罗盘
+                    <button
+                        class="menu-item"
+                        @click="handleOpenCompass"
+                    >
+                        <compass-icon
+                            :size="16"
+                            color="#FB923C"
+                            class="m-icon"
+                        />
+                        风水罗盘
                     </button>
-                    <button class="menu-item" @click="handleOpenBusPlanner">
-                        <bus-icon :size="16" color="#4ADE80" class="m-icon" /> 公交规划
+                    <button
+                        class="menu-item"
+                        @click="handleOpenBusPlanner"
+                    >
+                        <bus-icon
+                            :size="16"
+                            color="#4ADE80"
+                            class="m-icon"
+                        />
+                        公交规划
                     </button>
-                    <button class="menu-item" @click="handleOpenDrivePlanner">
-                        <car-icon :size="16" color="#F472B6" class="m-icon" /> 驾车规划
+                    <button
+                        class="menu-item"
+                        @click="handleOpenDrivePlanner"
+                    >
+                        <car-icon
+                            :size="16"
+                            color="#F472B6"
+                            class="m-icon"
+                        />
+                        驾车规划
                     </button>
-                    <button class="menu-item" @click="handleToggleWeatherBoard">
+                    <button
+                        class="menu-item"
+                        @click="handleToggleWeatherBoard"
+                    >
                         <span class="menu-item-icon">
-                            <component :is="isWeatherBoardMode ? MapIcon : CloudSunIcon" :size="16"
-                                :color="isWeatherBoardMode ? '#38BDF8' : '#FACC15'" class="m-icon" />
+                            <component
+                                :is="isWeatherBoardMode ? MapIcon : CloudSunIcon"
+                                :size="16"
+                                :color="isWeatherBoardMode ? '#38BDF8' : '#FACC15'"
+                                class="m-icon"
+                            />
                         </span>
                         {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
                     </button>
 
                     <div class="menu-divider"></div>
                     <div class="menu-group-title">常用地点</div>
-                    <button v-for="loc in quickLocations" :key="loc.key" class="menu-item menu-item-quick"
-                        @click="handleJump(loc)">
+                    <button
+                        v-for="loc in quickLocations"
+                        :key="loc.key"
+                        class="menu-item menu-item-quick"
+                        @click="handleJump(loc)"
+                    >
                         <span class="menu-item-icon">
-                            <map-pin-icon :size="18" color="#4ADE80" style="margin: 0 10px;" />
+                            <map-pin-icon
+                                :size="18"
+                                color="#4ADE80"
+                                style="margin: 0 10px"
+                            />
                         </span>
                         <span class="menu-item-label">{{ loc.label }}</span>
                     </button>
                     <div class="menu-divider"></div>
-                    <button class="menu-item" @click="handleSoup" title="来点鸡汤">
-                        <smile-icon :size="16" color="white" class="m-icon" /> 鸡汤
+                    <button
+                        class="menu-item"
+                        @click="handleSoup"
+                        title="来点鸡汤"
+                    >
+                        <smile-icon
+                            :size="16"
+                            color="white"
+                            class="m-icon"
+                        />
+                        鸡汤
                     </button>
                 </div>
             </div>
 
-            <button class="nav-btn" @click="handleShareView" title="分享当前视角">
+            <button
+                class="nav-btn"
+                @click="handleShareView"
+                title="分享当前视角"
+            >
                 <span class="btn-icon">
-                    <share-2-icon :size="18" color="white" :stroke-width="1.8" />
+                    <share-2-icon
+                        :size="18"
+                        color="white"
+                        :stroke-width="1.8"
+                    />
                 </span>
                 <span class="btn-text">分享</span>
             </button>
 
-            <button class="nav-btn" @click="handleOpenChat" title="AI 助手">
+            <button
+                class="nav-btn"
+                @click="handleOpenChat"
+                title="AI 助手"
+            >
                 <span class="btn-icon">
-                    <bot-icon :size="20" color="white" :stroke-width="2" />
+                    <bot-icon
+                        :size="20"
+                        color="white"
+                        :stroke-width="2"
+                    />
                 </span>
                 <span class="btn-text">AI 助手</span>
             </button>
 
-            <button class="nav-btn" @click="handleToggle3D" title="切换2D/3D视图">
+            <button
+                class="nav-btn"
+                @click="handleToggle3D"
+                title="切换2D/3D视图"
+            >
                 <span class="btn-icon">
-                    <GlobeIcon :size="18" color="white" :stroke-width="2" />
+                    <GlobeIcon
+                        :size="18"
+                        color="white"
+                        :stroke-width="2"
+                    />
                 </span>
                 <span class="btn-text">
                     {{ is3DMode ? '2D视图' : '3D视图' }}
                 </span>
             </button>
 
-            <button class="nav-btn" @click="handleToggleAccountCenter" title="用户中心">
+            <button
+                class="nav-btn"
+                @click="handleToggleAccountCenter"
+                title="用户中心"
+            >
                 <span class="btn-icon">
-                    <user-icon :size="18" color="white" :stroke-width="2" />
+                    <user-icon
+                        :size="18"
+                        color="white"
+                        :stroke-width="2"
+                    />
                 </span>
                 <span class="btn-text">用户中心</span>
             </button>
 
-            <div class="menu-host" ref="magicMenuHostRef">
-                <button class="nav-btn magic-btn" @click="toggleMagicMenu" title="魔法特效选项">
+            <div
+                class="menu-host"
+                ref="magicMenuHostRef"
+            >
+                <button
+                    class="nav-btn magic-btn"
+                    @click="toggleMagicMenu"
+                    title="魔法特效选项"
+                >
                     <span class="btn-icon">
-                        <sparkles-icon :size="18" color="white" :stroke-width="2" />
+                        <sparkles-icon
+                            :size="18"
+                            color="white"
+                            :stroke-width="2"
+                        />
                     </span>
                     <span class="btn-text">屏幕特效</span>
                 </button>
-                <div v-if="showMagicMenu" class="floating-menu">
-                    <button class="menu-item" @click="handleActivateMagic('fluid')">
-                        <wind-icon :size="16" color="#94A3B8" class="m-icon" /> 流体烟雾
+                <div
+                    v-if="showMagicMenu"
+                    class="floating-menu"
+                >
+                    <button
+                        class="menu-item"
+                        @click="handleActivateMagic('fluid')"
+                    >
+                        <wind-icon
+                            :size="16"
+                            color="#94A3B8"
+                            class="m-icon"
+                        />
+                        流体烟雾
                     </button>
-                    <button class="menu-item" @click="handleActivateMagic('gravity')">
-                        <orbit-icon :size="16" color="#818CF8" class="m-icon" /> 引力场
+                    <button
+                        class="menu-item"
+                        @click="handleActivateMagic('gravity')"
+                    >
+                        <orbit-icon
+                            :size="16"
+                            color="#818CF8"
+                            class="m-icon"
+                        />
+                        引力场
                     </button>
-                    <button class="menu-item" @click="handleActivateMagic('void')">
-                        <aperture-icon :size="16" color="#A78BFA" class="m-icon" /> 维度塌陷
+                    <button
+                        class="menu-item"
+                        @click="handleActivateMagic('void')"
+                    >
+                        <aperture-icon
+                            :size="16"
+                            color="#A78BFA"
+                            class="m-icon"
+                        />
+                        维度塌陷
                     </button>
-                    <button class="menu-item" @click="handleActivateMagic('wave')">
-                        <waves-icon :size="16" color="#2DD4BF" class="m-icon" /> 量子波
+                    <button
+                        class="menu-item"
+                        @click="handleActivateMagic('wave')"
+                    >
+                        <waves-icon
+                            :size="16"
+                            color="#2DD4BF"
+                            class="m-icon"
+                        />
+                        量子波
                     </button>
-                    <button class="menu-item highlight-magic" @click="handleActivateMagic('singularity')">
-                        <circle-dot-icon :size="16" color="#1E293B" class="m-icon" /> 黑洞引力
+                    <button
+                        class="menu-item highlight-magic"
+                        @click="handleActivateMagic('singularity')"
+                    >
+                        <circle-dot-icon
+                            :size="16"
+                            color="#1E293B"
+                            class="m-icon"
+                        />
+                        黑洞引力
                     </button>
                     <div class="menu-divider"></div>
-                    <button class="menu-item magic-close-btn" @click="handleActivateMagic('off')">
-                        <circle-x-icon :size="16" color="#EF4444" class="m-icon" /> 关闭特效
+                    <button
+                        class="menu-item magic-close-btn"
+                        @click="handleActivateMagic('off')"
+                    >
+                        <circle-x-icon
+                            :size="16"
+                            color="#EF4444"
+                            class="m-icon"
+                        />
+                        关闭特效
                     </button>
                 </div>
             </div>
@@ -140,15 +311,15 @@ import {
     Waves as WavesIcon,
     CircleDot as CircleDotIcon,
     CircleX as CircleXIcon,
-    User as UserIcon
+    User as UserIcon,
 } from 'lucide-vue-next';
 import { Globe as GlobeIcon } from 'lucide-vue-next';
 
 const props = defineProps({
     isWeatherBoardMode: {
         type: Boolean,
-        default: false
-    }
+        default: false,
+    },
 });
 
 const emit = defineEmits([
@@ -163,7 +334,7 @@ const emit = defineEmits([
     'toggle-weather-board',
     'activate-feature',
     'jump-view',
-    'toggle-account-center'
+    'toggle-account-center',
 ]);
 
 const showToolMenu = ref(false);
@@ -179,9 +350,9 @@ const message = useMessage();
 //地点迁移
 const quickLocations = [
     { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
-    { key: 'hedu', label: '河大', lng: 114.307960, lat: 34.813566, z: 11.83, layer: 0 },
+    { key: 'hedu', label: '河大', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 0 },
     { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
-    { key: '51Area', label: '51区', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 6 }
+    { key: '51Area', label: '51区', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 6 },
 ];
 
 function handleOpenToolbox() {
@@ -212,7 +383,7 @@ function handleToggleWeatherBoard() {
     showToolMenu.value = false;
     emit('activate-feature', {
         key: props.isWeatherBoardMode ? 'map' : 'weather-board',
-        label: props.isWeatherBoardMode ? '地图视图' : '天气看板'
+        label: props.isWeatherBoardMode ? '地图视图' : '天气看板',
     });
     emit('toggle-weather-board');
 }
@@ -255,7 +426,9 @@ function handleJump(location) {
     const lat = Number(location.lat);
     const z = Number(location.z);
     const layerIndexRaw = Number(location.layer);
-    const layerIndex = Number.isInteger(layerIndexRaw) ? layerIndexRaw : DEFAULT_BASEMAP_LAYER_INDEX;
+    const layerIndex = Number.isInteger(layerIndexRaw)
+        ? layerIndexRaw
+        : DEFAULT_BASEMAP_LAYER_INDEX;
 
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(z)) return;
 
@@ -318,7 +491,9 @@ function fallbackCopyViaExecCommand(text) {
 }
 
 function normalizeBinaryFlag(value, fallback = '0') {
-    const text = String(value ?? '').trim().toLowerCase();
+    const text = String(value ?? '')
+        .trim()
+        .toLowerCase();
     if (text === '1' || text === 'true') return '1';
     if (text === '0' || text === 'false') return '0';
     return fallback === '1' ? '1' : '0';
@@ -370,14 +545,22 @@ function syncShareFlagInCurrentUrl() {
         const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
         const hashPath = hashPathRaw || '/home';
         const hashParams = new URLSearchParams(hashQueryRaw);
-        const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+        const searchParams = new URLSearchParams(
+            String(window.location.search || '').replace(/^\?/, ''),
+        );
 
         hashParams.delete('from');
         hashParams.delete('shared');
         hashParams.set('s', '1');
         hashParams.set('loc', normalizeBinaryFlag(hashParams.get('loc'), '0'));
         hashParams.set('p', resolvePositionCodeForShare(hashParams, searchParams));
-        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), DEFAULT_BASEMAP_LAYER_INDEX));
+        hashParams.set(
+            'l',
+            normalizeLayerIndex(
+                hashParams.get('l') ?? hashParams.get('layer'),
+                DEFAULT_BASEMAP_LAYER_INDEX,
+            ),
+        );
         hashParams.delete('layer');
 
         const nextHashQuery = hashParams.toString();
@@ -408,7 +591,13 @@ function buildShareMarkedUrl(rawHref) {
         hashParams.set('s', '1');
         hashParams.set('loc', '0');
         hashParams.set('p', resolvePositionCodeForShare(hashParams, url.searchParams));
-        hashParams.set('l', normalizeLayerIndex(hashParams.get('l') ?? hashParams.get('layer'), DEFAULT_BASEMAP_LAYER_INDEX));
+        hashParams.set(
+            'l',
+            normalizeLayerIndex(
+                hashParams.get('l') ?? hashParams.get('layer'),
+                DEFAULT_BASEMAP_LAYER_INDEX,
+            ),
+        );
         hashParams.delete('layer');
 
         const nextHashQuery = hashParams.toString();
@@ -432,7 +621,7 @@ async function handleShareView() {
             await navigator.share({
                 title: 'NEGIAO WebGIS 视角',
                 text: '分享当前地图视角链接',
-                url
+                url,
             });
             syncShareFlagInCurrentUrl();
             message.success('已唤起系统分享面板');
@@ -621,7 +810,6 @@ onBeforeUnmount(() => {
     gap: 6px;
     transition: all 0.3s ease;
     white-space: nowrap;
-
 }
 
 .nav-btn:hover {
@@ -629,7 +817,6 @@ onBeforeUnmount(() => {
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     color: #fff;
-
 
     background: rgba(110, 124, 117, 0.15);
     backdrop-filter: blur(12px);

@@ -2,7 +2,7 @@ import {
     addressToLocation,
     locationToAddress,
     reverseGeocodeByPriority,
-    reverseGeocodeTianditu
+    reverseGeocodeTianditu,
 } from './geocoding';
 import { fetchLocationResultsByService } from './locationSearch';
 import { getIpLocation } from './ipLocation';
@@ -10,7 +10,7 @@ import { getWeather } from './weather';
 import backendAPI, {
     apiLocationIpLocate,
     apiLocationReverse,
-    apiLocationTrackVisit
+    apiLocationTrackVisit,
 } from './backend';
 
 export * from './map';
@@ -29,7 +29,7 @@ export async function apiAddressGeocode(address, city = '', options = {}) {
     return {
         ok: true,
         service: 'amap',
-        data
+        data,
     };
 }
 
@@ -41,7 +41,7 @@ export async function apiReverseGeocode(lng, lat, options = {}) {
     return {
         ok: true,
         service: 'amap',
-        data
+        data,
     };
 }
 
@@ -53,7 +53,7 @@ export async function apiReverseGeocodeWithFallback(lng, lat, options = {}) {
     return {
         ok: true,
         service: String(data?.provider || 'unknown').toLowerCase(),
-        data
+        data,
     };
 }
 
@@ -64,8 +64,10 @@ export async function apiSearchLocations(params = {}) {
     const normalized = await fetchLocationResultsByService(params);
     return {
         ok: true,
-        service: String(params?.service || '').trim().toLowerCase(),
-        data: normalized
+        service: String(params?.service || '')
+            .trim()
+            .toLowerCase(),
+        data: normalized,
     };
 }
 
@@ -77,7 +79,7 @@ export async function apiIpLocation(ip = '', options = {}) {
     return {
         ok: !!data?.ok,
         service: 'amap-ip',
-        data
+        data,
     };
 }
 
@@ -86,12 +88,12 @@ export async function apiIpLocation(ip = '', options = {}) {
  */
 export async function apiIpCountry(ip = '') {
     const data = await backendAPI.get('/api/proxy/ipapi/country', {
-        params: String(ip || '').trim() ? { ip: String(ip || '').trim() } : {}
+        params: String(ip || '').trim() ? { ip: String(ip || '').trim() } : {},
     });
     return {
         ok: true,
         service: 'ipapi-country',
-        data
+        data,
     };
 }
 
@@ -103,7 +105,7 @@ export async function apiWeather(adcode, type = 'base') {
     return {
         ok: true,
         service: 'amap-weather',
-        data
+        data,
     };
 }
 
@@ -114,5 +116,5 @@ export {
     reverseGeocodeTianditu,
     fetchLocationResultsByService,
     getIpLocation,
-    getWeather
+    getWeather,
 };

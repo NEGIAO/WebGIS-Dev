@@ -18,7 +18,10 @@ export interface NormalizedTileContext {
  * 标准化 tileCoord。
  * OpenLayers 的 tileUrlFunction 入参是 [z, x, rawY]，rawY 在不同服务里语义可能不同。
  */
-export function normalizeTileContext(tileCoord: number[], yMode: YMode = 'auto'): NormalizedTileContext {
+export function normalizeTileContext(
+    tileCoord: number[],
+    yMode: YMode = 'auto',
+): NormalizedTileContext {
     const z = tileCoord[0];
     const x = tileCoord[1];
     const rawY = tileCoord[2];
@@ -26,7 +29,7 @@ export function normalizeTileContext(tileCoord: number[], yMode: YMode = 'auto')
     let y = rawY;
     if (yMode === 'invert-tms') y = (1 << z) - 1 - rawY;
     else if (yMode === 'ol-negative') y = -rawY - 1;
-    else if (yMode === 'auto') y = rawY < 0 ? (-rawY - 1) : rawY;
+    else if (yMode === 'auto') y = rawY < 0 ? -rawY - 1 : rawY;
 
     return { z, x, y, rawY };
 }
@@ -53,7 +56,7 @@ export function toBaiduTileXY(x: number, y: number, z: number): { x: number; y: 
     const offset = 1 << (z - 1);
     return {
         x: x - offset,
-        y: offset - y - 1
+        y: offset - y - 1,
     };
 }
 
@@ -74,12 +77,12 @@ const directoryStructuredRecipe: NonStandardRecipe = {
     keyPoints: [
         '不能依赖 {x}-{y} 模板推断，建议统一用 tileUrlFunction 拼接。',
         '优先输出日志确认 z/x/y 与请求 URL 一致。',
-        '必要时增加 row 偏移量做局部校正。'
+        '必要时增加 row 偏移量做局部校正。',
     ],
     buildUrl: (tileCoord) => {
         const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
         return `https://maps-for-free.com/layer/relief/z${z}/row${y}/${z}_${x}-${y}.jpg`;
-    }
+    },
 };
 
 /** 2) TMS 规范型：y 轴反转。 */
@@ -89,12 +92,12 @@ const tmsRecipe: NonStandardRecipe = {
     keyPoints: [
         '典型现象是地图上下颠倒。',
         '核心转换：y = (2^z - 1) - y。',
-        '注意先确认当前 rawY 是哪种语义，再决定是否反转。'
+        '注意先确认当前 rawY 是哪种语义，再决定是否反转。',
     ],
     buildUrl: (tileCoord) => {
         const { z, x, y } = normalizeTileContext(tileCoord, 'invert-tms');
         return `https://example-tms.server/tiles/${z}/${x}/${y}.png`;
-    }
+    },
 };
 
 /** 3) QuadKey 编码型：Bing。 */
@@ -104,13 +107,13 @@ const quadKeyRecipe: NonStandardRecipe = {
     keyPoints: [
         'URL 不再是 z/x/y，而是单一 quadkey。',
         '必须先拿到标准 xyz，再编码。',
-        '多子域时可用 x+y 做散列。'
+        '多子域时可用 x+y 做散列。',
     ],
     buildUrl: (tileCoord) => {
         const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
         const qk = toQuadKey(x, y, z);
         return `https://t0.tiles.virtualearth.net/tiles/a${qk}.jpeg?g=1`;
-    }
+    },
 };
 
 /** 4) 百度特殊切片。 */
@@ -120,13 +123,13 @@ const baiduRecipe: NonStandardRecipe = {
     keyPoints: [
         '百度与标准 Web Mercator 网格不兼容。',
         '通常需自定义 TileGrid 与 resolutions。',
-        'x/y 往往还要做中心偏移。'
+        'x/y 往往还要做中心偏移。',
     ],
     buildUrl: (tileCoord) => {
         const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
         const bd = toBaiduTileXY(x, y, z);
         return `https://online0.map.bdimg.com/onlinelabel/?qt=tile&x=${bd.x}&y=${bd.y}&z=${z}&styles=pl&scaler=1&p=1`;
-    }
+    },
 };
 
 /** 5) 动态参数/API 请求型。 */
@@ -136,7 +139,7 @@ const dynamicApiRecipe: NonStandardRecipe = {
     keyPoints: [
         '参数顺序、签名、token 可能影响返回。',
         '建议统一在 URLSearchParams 中构造。',
-        '必要时加入随机因子或时间戳。'
+        '必要时加入随机因子或时间戳。',
     ],
     buildUrl: (tileCoord) => {
         const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
@@ -144,10 +147,10 @@ const dynamicApiRecipe: NonStandardRecipe = {
             style: '8',
             x: String(x),
             y: String(y),
-            z: String(z)
+            z: String(z),
         });
         return `https://webrd01.is.autonavi.com/appmaptile?${params.toString()}`;
-    }
+    },
 };
 
 /**
@@ -161,12 +164,12 @@ const gcj02Recipe: NonStandardRecipe = {
         '底图在 GCJ-02，矢量在 WGS84 时会整体错位。',
         '方案A：矢量实时 WGS84->GCJ-02 再叠加。',
         '方案B：服务端重切片/纠偏，输出 WGS84 对齐瓦片。',
-        '方案C：全链路统一到 GCJ-02（底图+叠加数据）。'
+        '方案C：全链路统一到 GCJ-02（底图+叠加数据）。',
     ],
     buildUrl: (tileCoord) => {
         const { z, x, y } = normalizeTileContext(tileCoord, 'auto');
         return `https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=${x}&y=${y}&z=${z}`;
-    }
+    },
 };
 
 export const NON_STANDARD_XYZ_SOLUTION_EXAMPLES: Record<string, NonStandardRecipe> = {
@@ -175,7 +178,7 @@ export const NON_STANDARD_XYZ_SOLUTION_EXAMPLES: Record<string, NonStandardRecip
     quadKeyRecipe,
     baiduRecipe,
     dynamicApiRecipe,
-    gcj02Recipe
+    gcj02Recipe,
 };
 
 /**

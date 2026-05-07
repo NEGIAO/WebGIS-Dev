@@ -36,12 +36,20 @@ function normalizeEncodedLocation(encodedLocation = {}) {
             return {
                 name,
                 id: normalizeText(item.id),
-                location: normalizeText(item.location)
+                location: normalizeText(item.location),
             };
         })
         .filter(Boolean);
 
-    if (!formattedAddress && !province && !city && !district && !township && !adcode && !businessAreas.length) {
+    if (
+        !formattedAddress &&
+        !province &&
+        !city &&
+        !district &&
+        !township &&
+        !adcode &&
+        !businessAreas.length
+    ) {
         return null;
     }
 
@@ -52,7 +60,7 @@ function normalizeEncodedLocation(encodedLocation = {}) {
         district,
         township,
         adcode,
-        businessAreas
+        businessAreas,
     };
 }
 
@@ -69,10 +77,7 @@ function normalizeContext(context = {}) {
     const source = normalizeText(context.source) || 'unknown';
 
     const encodedLocation = normalizeEncodedLocation(
-        context.encodedLocation
-        || context.reverseAddress
-        || context.geocode
-        || null
+        context.encodedLocation || context.reverseAddress || context.geocode || null,
     );
 
     return {
@@ -82,7 +87,7 @@ function normalizeContext(context = {}) {
         accuracyMeters: Number.isFinite(accuracyMeters) ? accuracyMeters : 0,
         source,
         timestamp,
-        encodedLocation
+        encodedLocation,
     };
 }
 
@@ -98,9 +103,11 @@ function writeToWindow(context) {
 function notifyContextChange(context) {
     if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
     try {
-        window.dispatchEvent(new CustomEvent(USER_LOCATION_CONTEXT_CHANGE_EVENT, {
-            detail: { context: context || null }
-        }));
+        window.dispatchEvent(
+            new CustomEvent(USER_LOCATION_CONTEXT_CHANGE_EVENT, {
+                detail: { context: context || null },
+            }),
+        );
     } catch {
         // Ignore custom-event dispatch failures.
     }

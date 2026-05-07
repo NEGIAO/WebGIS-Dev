@@ -10,7 +10,7 @@ export function createRightDragZoomController(map, options = {}) {
     if (!map) {
         return {
             dispose: () => {},
-            shouldSuppressContextMenu: () => false
+            shouldSuppressContextMenu: () => false,
         };
     }
 
@@ -31,7 +31,7 @@ export function createRightDragZoomController(map, options = {}) {
         moved: false,
         startY: 0,
         startZoom: 0,
-        suppressContextMenuUntil: 0
+        suppressContextMenuUntil: 0,
     };
 
     const onPointerDown = (event) => {
@@ -53,7 +53,7 @@ export function createRightDragZoomController(map, options = {}) {
 
         const minZoom = Number(view?.getMinZoom?.() ?? 0);
         const maxZoom = Number(view?.getMaxZoom?.() ?? 22);
-        const targetZoom = state.startZoom - (deltaY * sensitivity);
+        const targetZoom = state.startZoom - deltaY * sensitivity;
         const clampedZoom = Math.max(minZoom, Math.min(maxZoom, targetZoom));
 
         // 保持地图中心不变进行缩放（而不是以鼠标位置为中心）
@@ -62,7 +62,7 @@ export function createRightDragZoomController(map, options = {}) {
             view?.animate?.({
                 zoom: clampedZoom,
                 center: currentCenter,
-                duration: 0  // 无动画，立即生效
+                duration: 0, // 无动画，立即生效
             });
         } else {
             view?.setZoom?.(clampedZoom);
@@ -96,6 +96,6 @@ export function createRightDragZoomController(map, options = {}) {
         },
         shouldSuppressContextMenu() {
             return Date.now() < state.suppressContextMenuUntil;
-        }
+        },
     };
 }

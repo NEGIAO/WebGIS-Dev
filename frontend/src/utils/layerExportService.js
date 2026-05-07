@@ -26,7 +26,7 @@ export function collectVerticesFromLonLatGeometry(geometry) {
             geometryType: type,
             partIndex,
             ringIndex,
-            vertexIndex
+            vertexIndex,
         });
     };
 
@@ -55,7 +55,11 @@ export function collectVerticesFromLonLatGeometry(geometry) {
         const lines = geometry.getCoordinates?.() || [];
         lines.forEach((lineCoords, lineIdx) => {
             (lineCoords || []).forEach((coord, coordIdx) => {
-                pushVertex(coord, { partIndex: lineIdx + 1, ringIndex: 0, vertexIndex: coordIdx + 1 });
+                pushVertex(coord, {
+                    partIndex: lineIdx + 1,
+                    ringIndex: 0,
+                    vertexIndex: coordIdx + 1,
+                });
             });
         });
         return vertices;
@@ -65,7 +69,11 @@ export function collectVerticesFromLonLatGeometry(geometry) {
         const rings = geometry.getCoordinates?.() || [];
         rings.forEach((ringCoords, ringIdx) => {
             (ringCoords || []).forEach((coord, coordIdx) => {
-                pushVertex(coord, { partIndex: 1, ringIndex: ringIdx + 1, vertexIndex: coordIdx + 1 });
+                pushVertex(coord, {
+                    partIndex: 1,
+                    ringIndex: ringIdx + 1,
+                    vertexIndex: coordIdx + 1,
+                });
             });
         });
         return vertices;
@@ -79,7 +87,7 @@ export function collectVerticesFromLonLatGeometry(geometry) {
                     pushVertex(coord, {
                         partIndex: polygonIdx + 1,
                         ringIndex: ringIdx + 1,
-                        vertexIndex: coordIdx + 1
+                        vertexIndex: coordIdx + 1,
                     });
                 });
             });
@@ -96,11 +104,11 @@ export function collectVerticesFromLonLatGeometry(geometry) {
                 partCursor += 1;
                 return;
             }
-            const maxPartIndex = Math.max(...subVertices.map(v => Number(v.partIndex) || 1));
+            const maxPartIndex = Math.max(...subVertices.map((v) => Number(v.partIndex) || 1));
             subVertices.forEach((v) => {
                 vertices.push({
                     ...v,
-                    partIndex: Number(v.partIndex) + partCursor - 1
+                    partIndex: Number(v.partIndex) + partCursor - 1,
                 });
             });
             partCursor += Math.max(1, maxPartIndex);
@@ -175,9 +183,9 @@ export function getFeatureNameForExport(feature, fallbackName) {
         feature?.get?.('name'),
         feature?.get?.('Name'),
         feature?.get?.('NAME'),
-        fallbackName
+        fallbackName,
     ];
-    const hit = candidates.find(item => String(item || '').trim().length > 0);
+    const hit = candidates.find((item) => String(item || '').trim().length > 0);
     return String(hit || fallbackName || '未命名要素');
 }
 
@@ -198,7 +206,7 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
     return function exportLayerCoordinates(payload, { userDataLayers }) {
         if (!payload?.layerId) return;
 
-        const layerData = userDataLayers.find(item => item.id === payload.layerId);
+        const layerData = userDataLayers.find((item) => item.id === payload.layerId);
         if (!layerData) {
             message.warning('未找到目标图层');
             return;
@@ -233,7 +241,7 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
                 featureProjection: 'EPSG:3857',
                 dataProjection: 'EPSG:4326',
                 decimals: 6,
-                triggerDownload: true
+                triggerDownload: true,
             });
 
             if (!kmlResult.featureCount) {
@@ -243,10 +251,14 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
             const fileSize = Number(kmlResult.sizeBytes) || 0;
 
             if (fileSize > 2 * 1024 * 1024) {
-                message.warning(`导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`);
+                message.warning(
+                    `导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`,
+                );
             }
 
-            message.success(`已导出 ${kmlResult.featureCount} 个要素（KML / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`);
+            message.success(
+                `已导出 ${kmlResult.featureCount} 个要素（KML / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`,
+            );
             return;
         }
 
@@ -282,12 +294,12 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
                         ID: featureId,
                         名称: name,
                         几何类型: geomType || '未知',
-                        坐标系: currentCrs
+                        坐标系: currentCrs,
                     },
                     geometry: {
                         type: geomType || 'Point',
-                        coordinates: coordinates
-                    }
+                        coordinates: coordinates,
+                    },
                 });
             });
 
@@ -298,9 +310,9 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
                     sourceLayerId: layerData.id,
                     sourceLayerName: layerData.name,
                     featureCount: geojsonFeatures.length,
-                    generatedAt: new Date().toISOString()
+                    generatedAt: new Date().toISOString(),
                 },
-                features: geojsonFeatures
+                features: geojsonFeatures,
             };
 
             content = JSON.stringify(geojson, null, 2);
@@ -310,10 +322,14 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
             const fileSize = triggerTextDownload(fileName, content, mimeType);
 
             if (fileSize > 2 * 1024 * 1024) {
-                message.warning(`导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`);
+                message.warning(
+                    `导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`,
+                );
             }
 
-            message.success(`已导出 ${geojsonFeatures.length} 个要素（${format.toUpperCase()} / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`);
+            message.success(
+                `已导出 ${geojsonFeatures.length} 个要素（${format.toUpperCase()} / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`,
+            );
             return;
         }
 
@@ -334,7 +350,7 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
                     geometryType: vertex.geometryType,
                     partIndex: vertex.partIndex,
                     ringIndex: vertex.ringIndex,
-                    vertexIndex: vertex.vertexIndex
+                    vertexIndex: vertex.vertexIndex,
                 });
             });
         });
@@ -347,16 +363,20 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
         if (format === 'csv') {
             const lines = ['ID,经度,纬度,名称,几何类型,部件,环,点序号'];
             exportRows.forEach((row) => {
-                lines.push([
-                    row.id,
-                    row.lon,
-                    row.lat,
-                    row.name,
-                    row.geometryType,
-                    row.partIndex,
-                    row.ringIndex,
-                    row.vertexIndex
-                ].map(toCsvCell).join(','));
+                lines.push(
+                    [
+                        row.id,
+                        row.lon,
+                        row.lat,
+                        row.name,
+                        row.geometryType,
+                        row.partIndex,
+                        row.ringIndex,
+                        row.vertexIndex,
+                    ]
+                        .map(toCsvCell)
+                        .join(','),
+                );
             });
             content = `\uFEFF${lines.join('\n')}`;
             fileName = `${safeName}_${currentCrs}.csv`;
@@ -364,7 +384,9 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
         } else if (format === 'txt') {
             const lines = ['ID\t经度\t纬度\t名称\t几何类型\t部件\t环\t点序号'];
             exportRows.forEach((row) => {
-                lines.push(`${row.id}\t${row.lon}\t${row.lat}\t${row.name}\t${row.geometryType}\t${row.partIndex}\t${row.ringIndex}\t${row.vertexIndex}`);
+                lines.push(
+                    `${row.id}\t${row.lon}\t${row.lat}\t${row.name}\t${row.geometryType}\t${row.partIndex}\t${row.ringIndex}\t${row.vertexIndex}`,
+                );
             });
             content = lines.join('\n');
             fileName = `${safeName}_${currentCrs}.txt`;
@@ -374,9 +396,13 @@ export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
         const fileSize = triggerTextDownload(fileName, content, mimeType);
 
         if (fileSize > 2 * 1024 * 1024) {
-            message.warning(`导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`);
+            message.warning(
+                `导出文件较大：${formatBytes(fileSize)}，若浏览器卡顿可先筛选图层或减少要素后再导出`,
+            );
         }
 
-        message.success(`已导出 ${exportRows.length} 条折点记录（${format.toUpperCase()} / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`);
+        message.success(
+            `已导出 ${exportRows.length} 条折点记录（${format.toUpperCase()} / ${currentCrs.toUpperCase()} / ${formatBytes(fileSize)}）`,
+        );
     };
 }

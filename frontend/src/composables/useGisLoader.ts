@@ -5,7 +5,7 @@ import {
     groupShpDatasets,
     loadJsZip,
     loadTifBuffer,
-    parseKmlBuffer
+    parseKmlBuffer,
 } from '../utils/io';
 import type { FlattenedResource } from '../utils/gis/decompressor';
 import {
@@ -14,7 +14,7 @@ import {
     reprojectGeoJSON,
     resolveDatasetProjection,
     UNSUPPORTED_PROJECTED_CRS_CODE,
-    UNSUPPORTED_PROJECTED_CRS_MESSAGE
+    UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '../utils/geo';
 import { useMessage } from './useMessage';
 
@@ -56,7 +56,9 @@ function stemOf(path = ''): string {
 }
 
 function stemKeyOf(path = ''): string {
-    const normalized = String(path || '').replace(/\\/g, '/').trim();
+    const normalized = String(path || '')
+        .replace(/\\/g, '/')
+        .trim();
     const idx = normalized.lastIndexOf('.');
     return (idx > 0 ? normalized.slice(0, idx) : normalized).toLowerCase();
 }
@@ -79,7 +81,20 @@ function decodeMaybeText(buffer?: ArrayBuffer): string {
 
 function isSupportedExt(ext = ''): boolean {
     const normalized = String(ext || '').toLowerCase();
-    return ['kml', 'geojson', 'json', 'shp', 'shx', 'dbf', 'prj', 'cpg', 'tif', 'tiff', 'zip', 'kmz'].includes(normalized);
+    return [
+        'kml',
+        'geojson',
+        'json',
+        'shp',
+        'shx',
+        'dbf',
+        'prj',
+        'cpg',
+        'tif',
+        'tiff',
+        'zip',
+        'kmz',
+    ].includes(normalized);
 }
 
 function summarizePackets(packets: any[], errors: any[]): PacketSummary {
@@ -93,11 +108,13 @@ function summarizePackets(packets: any[], errors: any[]): PacketSummary {
         detectedDatasets: packets.length + errors.length,
         importedDatasets: packets.length,
         failedDatasets: errors.length,
-        byType
+        byType,
     };
 }
 
-function buildSingleUploadPayload(resource: FlattenedResource): { content: unknown; type: string; name: string } | null {
+function buildSingleUploadPayload(
+    resource: FlattenedResource,
+): { content: unknown; type: string; name: string } | null {
     const ext = String(resource.ext || '').toLowerCase();
 
     if (ext === 'kml') {
@@ -115,7 +132,7 @@ function buildSingleUploadPayload(resource: FlattenedResource): { content: unkno
         return {
             content: JSON.stringify(projected),
             type: ext,
-            name: resource.path
+            name: resource.path,
         };
     }
 
@@ -131,7 +148,9 @@ function buildSingleUploadPayload(resource: FlattenedResource): { content: unkno
     return null;
 }
 
-async function buildShpArchivePayload(group: ReturnType<typeof groupShpDatasets>[number]): Promise<{ content: ArrayBuffer; type: string; name: string }> {
+async function buildShpArchivePayload(
+    group: ReturnType<typeof groupShpDatasets>[number],
+): Promise<{ content: ArrayBuffer; type: string; name: string }> {
     const JSZip = await loadJsZip();
     const zip = new JSZip();
     const baseName = stemOf(group.shp.path);
@@ -144,14 +163,14 @@ async function buildShpArchivePayload(group: ReturnType<typeof groupShpDatasets>
 
     const prjText = decodeMaybeText(group.prj?.content);
     const projection = resolveDatasetProjection({ prjText, targetCrs: 'EPSG:4326' });
-    
+
     // Warn if PRJ exists but could not be resolved, but allow import to continue
     // The actual reproject will happen during parsing
     if (group.prj && !projection.prjResolved && prjText.trim()) {
         const message = useMessage();
         message.warning(
             `数据 "${baseName}" 使用了未识别的投影坐标系: ${projection.prjName || '未知'}。将尝试自动转换为 WGS84，如有偏差请重新配置。`,
-            { duration: 6000 }
+            { duration: 6000 },
         );
     }
 
@@ -159,20 +178,20 @@ async function buildShpArchivePayload(group: ReturnType<typeof groupShpDatasets>
     return {
         content: zipped,
         type: 'zip',
-        name: `${group.key}.zip`
+        name: `${group.key}.zip`,
     };
 }
 
 function createUploadPayloadsFromFiles(files: File[]): GisDispatchInput {
     const normalizedFiles = (files || []).filter(Boolean);
     const firstName = normalizedFiles[0]
-        ? ((normalizedFiles[0] as any).webkitRelativePath || normalizedFiles[0].name)
+        ? (normalizedFiles[0] as any).webkitRelativePath || normalizedFiles[0].name
         : '多文件上传';
 
     return {
         resources: normalizedFiles,
         type: 'directory',
-        name: firstName || '多文件上传'
+        name: firstName || '多文件上传',
     };
 }
 
@@ -180,7 +199,7 @@ function createUploadPayloadFromFolder(files: File[]): GisDispatchInput {
     return {
         resources: files || [],
         type: 'directory',
-        name: files?.[0]?.webkitRelativePath?.split('/')?.[0] || '文件夹上传'
+        name: files?.[0]?.webkitRelativePath?.split('/')?.[0] || '文件夹上传',
     };
 }
 
@@ -188,7 +207,7 @@ function createUploadPayloadFromEntries(entries: any[]): GisDispatchInput {
     return {
         resources: entries || [],
         type: 'directory',
-        name: '拖拽导入'
+        name: '拖拽导入',
     };
 }
 
@@ -235,7 +254,9 @@ export function useGisLoader() {
             }
 
             const shpGroups = groupShpDatasets(supported);
-            const shpKeys = new Set(shpGroups.map((group) => String(group.key || '').toLowerCase()));
+            const shpKeys = new Set(
+                shpGroups.map((group) => String(group.key || '').toLowerCase()),
+            );
 
             const orphanSidecars = supported.filter((resource) => {
                 const ext = String(resource.ext || '').toLowerCase();
@@ -244,13 +265,17 @@ export function useGisLoader() {
             });
 
             if (orphanSidecars.length) {
-                warnings.value.push(`检测到 ${orphanSidecars.length} 个未匹配 .shp 的 sidecar 文件（.dbf/.shx/.prj/.cpg），已自动跳过。`);
+                warnings.value.push(
+                    `检测到 ${orphanSidecars.length} 个未匹配 .shp 的 sidecar 文件（.dbf/.shx/.prj/.cpg），已自动跳过。`,
+                );
             }
 
             shpGroups
                 .filter((group) => !group.dbf)
                 .forEach((group) => {
-                    warnings.value.push(`${group.shp.path}: 缺少同名 .dbf，将按几何数据继续解析（属性字段可能为空）。`);
+                    warnings.value.push(
+                        `${group.shp.path}: 缺少同名 .dbf，将按几何数据继续解析（属性字段可能为空）。`,
+                    );
                 });
 
             const nonShpResources = supported.filter((resource) => {
@@ -264,31 +289,35 @@ export function useGisLoader() {
                 .map((resource) => buildSingleUploadPayload(resource))
                 .filter(Boolean) as Array<{ content: unknown; type: string; name: string }>;
 
-            const shpPayloads = await Promise.all(shpGroups.map((group) => buildShpArchivePayload(group)));
+            const shpPayloads = await Promise.all(
+                shpGroups.map((group) => buildShpArchivePayload(group)),
+            );
             const payloads = [...individualPayloads, ...shpPayloads];
 
             if (!payloads.length) {
                 throw new Error('未识别到可导入的数据集');
             }
 
-            const settled = await Promise.all(payloads.map(async (payload) => {
-                try {
-                    const dispatched = await dispatchGisData(payload);
-                    return { ok: true as const, dispatched };
-                } catch (error: any) {
-                    return {
-                        ok: false as const,
-                        error: {
-                            entryName: payload.name,
-                            kind: payload.type,
-                            message: error?.message || String(error),
-                            code: error?.code,
-                            userMessage: error?.userMessage,
-                            notified: !!error?.notified
-                        }
-                    };
-                }
-            }));
+            const settled = await Promise.all(
+                payloads.map(async (payload) => {
+                    try {
+                        const dispatched = await dispatchGisData(payload);
+                        return { ok: true as const, dispatched };
+                    } catch (error: any) {
+                        return {
+                            ok: false as const,
+                            error: {
+                                entryName: payload.name,
+                                kind: payload.type,
+                                message: error?.message || String(error),
+                                code: error?.code,
+                                userMessage: error?.userMessage,
+                                notified: !!error?.notified,
+                            },
+                        };
+                    }
+                }),
+            );
 
             const mergedPackets: any[] = [];
             const mergedWarnings: string[] = [...warnings.value];
@@ -302,20 +331,31 @@ export function useGisLoader() {
                 }
                 const dispatched = item.dispatched;
                 if (Array.isArray(dispatched?.packets)) mergedPackets.push(...dispatched.packets);
-                if (Array.isArray(dispatched?.warnings)) mergedWarnings.push(...dispatched.warnings);
+                if (Array.isArray(dispatched?.warnings))
+                    mergedWarnings.push(...dispatched.warnings);
                 if (Array.isArray(dispatched?.errors)) mergedErrors.push(...dispatched.errors);
-                if (Array.isArray(dispatched?.blobUrls)) mergedBlobUrls.push(...dispatched.blobUrls);
+                if (Array.isArray(dispatched?.blobUrls))
+                    mergedBlobUrls.push(...dispatched.blobUrls);
             });
 
             warnings.value = mergedWarnings;
             errors.value = mergedErrors;
 
-            const hasUnsupportedProjection = mergedErrors.some((item) => String(item?.code || '').toUpperCase() === UNSUPPORTED_PROJECTED_CRS_CODE);
+            const hasUnsupportedProjection = mergedErrors.some(
+                (item) => String(item?.code || '').toUpperCase() === UNSUPPORTED_PROJECTED_CRS_CODE,
+            );
             if (hasUnsupportedProjection && !projectionPopupShown) {
-                const alreadyNotified = mergedErrors.some((item) => String(item?.code || '').toUpperCase() === UNSUPPORTED_PROJECTED_CRS_CODE && !!item?.notified);
+                const alreadyNotified = mergedErrors.some(
+                    (item) =>
+                        String(item?.code || '').toUpperCase() === UNSUPPORTED_PROJECTED_CRS_CODE &&
+                        !!item?.notified,
+                );
                 projectionPopupShown = true;
                 if (!alreadyNotified) {
-                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, { closable: true, duration: 0 });
+                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, {
+                        closable: true,
+                        duration: 0,
+                    });
                 }
             }
 
@@ -330,14 +370,17 @@ export function useGisLoader() {
                 warnings: warnings.value,
                 errors: errors.value,
                 summary: summary.value,
-                blobUrls: blobUrls.value
+                blobUrls: blobUrls.value,
             };
         } catch (error) {
             lastError.value = error;
             if (isUnsupportedProjectedCrsError(error) && !projectionPopupShown) {
                 projectionPopupShown = true;
                 if (!(error as any)?.notified) {
-                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, { closable: true, duration: 0 });
+                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, {
+                        closable: true,
+                        duration: 0,
+                    });
                 }
             }
             throw error;
@@ -359,6 +402,6 @@ export function useGisLoader() {
         revokeBlobUrls,
         createUploadPayloadsFromFiles,
         createUploadPayloadFromFolder,
-        createUploadPayloadFromEntries
+        createUploadPayloadFromEntries,
     };
 }

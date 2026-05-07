@@ -46,7 +46,8 @@ type PanelRect = {
     initialized: boolean;
 };
 
-const { flattenAttributes, inferValueType, normalizeLayerAttributeSnapshot } = createLayerMetadataNormalizationFeature();
+const { flattenAttributes, inferValueType, normalizeLayerAttributeSnapshot } =
+    createLayerMetadataNormalizationFeature();
 
 function toFeatureId(feature: any, index: number): string {
     const candidates = [
@@ -57,7 +58,7 @@ function toFeatureId(feature: any, index: number): string {
         feature?.properties?.OBJECTID,
         feature?.properties?.FID,
         feature?.properties?.objectid,
-        feature?.properties?.fid
+        feature?.properties?.fid,
     ];
     const matched = candidates.find((item) => String(item || '').trim().length > 0);
     return String(matched || `feature_${index + 1}`);
@@ -80,10 +81,17 @@ function stringifySearchText(parts: unknown[]): string {
         .toLowerCase();
 }
 
-function accumulateCoords(coord: any, bounds: { minX: number; minY: number; maxX: number; maxY: number }) {
+function accumulateCoords(
+    coord: any,
+    bounds: { minX: number; minY: number; maxX: number; maxY: number },
+) {
     if (!Array.isArray(coord)) return;
 
-    if (coord.length >= 2 && Number.isFinite(Number(coord[0])) && Number.isFinite(Number(coord[1]))) {
+    if (
+        coord.length >= 2 &&
+        Number.isFinite(Number(coord[0])) &&
+        Number.isFinite(Number(coord[1]))
+    ) {
         const x = Number(coord[0]);
         const y = Number(coord[1]);
         bounds.minX = Math.min(bounds.minX, x);
@@ -112,7 +120,7 @@ function computeGeometryExtent(geometry: any): [number, number, number, number] 
         minX: Number.POSITIVE_INFINITY,
         minY: Number.POSITIVE_INFINITY,
         maxX: Number.NEGATIVE_INFINITY,
-        maxY: Number.NEGATIVE_INFINITY
+        maxY: Number.NEGATIVE_INFINITY,
     };
 
     accumulateCoords(coordinates, bounds);
@@ -126,14 +134,14 @@ function computeGeometryExtent(geometry: any): [number, number, number, number] 
 
 function intersectsExtent(
     a: [number, number, number, number],
-    b: [number, number, number, number]
+    b: [number, number, number, number],
 ): boolean {
     return !(a[0] > b[2] || a[2] < b[0] || a[1] > b[3] || a[3] < b[1]);
 }
 
 function buildFieldConfig(
     rows: AttrRow[],
-    previousMap: Record<string, AttrFieldConfigItem> = {}
+    previousMap: Record<string, AttrFieldConfigItem> = {},
 ): Record<string, AttrFieldConfigItem> {
     const keys = new Set<string>();
     rows.forEach((row) => {
@@ -154,49 +162,68 @@ function buildFieldConfig(
             key: fieldKey,
             alias: String(oldConfig?.alias || fieldKey),
             visible: oldConfig?.visible !== false,
-            type: (oldConfig?.type || Object.entries(typeCounts).sort((left, right) => right[1] - left[1])[0]?.[0] || 'string') as AttrFieldType
+            type: (oldConfig?.type ||
+                Object.entries(typeCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ||
+                'string') as AttrFieldType,
         };
     });
 
     return nextMap;
 }
 
-function buildLayerDataset(layer: any, previousSnapshot: AttrLayerDataset | null = null): AttrLayerDataset {
+function buildLayerDataset(
+    layer: any,
+    previousSnapshot: AttrLayerDataset | null = null,
+): AttrLayerDataset {
     const snapshot = normalizeLayerAttributeSnapshot(layer);
-    const rows: AttrRow[] = (snapshot.rows || snapshot.records || []).map((record: any, index: number) => {
-        const properties = record?.properties && typeof record.properties === 'object'
-            ? { ...record.properties }
-            : {};
-        const rawAttributes = record?.rawAttributes && typeof record.rawAttributes === 'object'
-            ? { ...record.rawAttributes }
-            : {};
-        const statistics = record?.statistics && typeof record.statistics === 'object'
-            ? { ...record.statistics }
-            : {};
+    const rows: AttrRow[] = (snapshot.rows || snapshot.records || []).map(
+        (record: any, index: number) => {
+            const properties =
+                record?.properties && typeof record.properties === 'object'
+                    ? { ...record.properties }
+                    : {};
+            const rawAttributes =
+                record?.rawAttributes && typeof record.rawAttributes === 'object'
+                    ? { ...record.rawAttributes }
+                    : {};
+            const statistics =
+                record?.statistics && typeof record.statistics === 'object'
+                    ? { ...record.statistics }
+                    : {};
 
-        return {
-            id: String(record?.id || record?.featureId || toFeatureId(record, index)),
-            featureId: String(record?.featureId || record?.id || toFeatureId(record, index)),
-            layerId: String(record?.layerId || snapshot.layerId || layer?.id || ''),
-            layerName: String(record?.layerName || snapshot.layerName || layer?.name || '未命名图层'),
-            sourceType: String(record?.sourceType || snapshot.sourceType || layer?.sourceType || 'upload'),
-            geometryType: String(record?.geometryType || snapshot.geometryType || layer?.type || 'unknown'),
-            properties,
-            rawAttributes,
-            statistics,
-            geometry: record?.geometry || null,
-            extent: record?.extent || computeGeometryExtent(record?.geometry),
-            searchText: String(record?.searchText || stringifySearchText([
-                record?.featureId,
-                record?.geometryType,
-                record?.properties,
-                record?.rawAttributes,
-                record?.statistics,
-                snapshot.layerName,
-                layer?.name
-            ]))
-        };
-    });
+            return {
+                id: String(record?.id || record?.featureId || toFeatureId(record, index)),
+                featureId: String(record?.featureId || record?.id || toFeatureId(record, index)),
+                layerId: String(record?.layerId || snapshot.layerId || layer?.id || ''),
+                layerName: String(
+                    record?.layerName || snapshot.layerName || layer?.name || '未命名图层',
+                ),
+                sourceType: String(
+                    record?.sourceType || snapshot.sourceType || layer?.sourceType || 'upload',
+                ),
+                geometryType: String(
+                    record?.geometryType || snapshot.geometryType || layer?.type || 'unknown',
+                ),
+                properties,
+                rawAttributes,
+                statistics,
+                geometry: record?.geometry || null,
+                extent: record?.extent || computeGeometryExtent(record?.geometry),
+                searchText: String(
+                    record?.searchText ||
+                        stringifySearchText([
+                            record?.featureId,
+                            record?.geometryType,
+                            record?.properties,
+                            record?.rawAttributes,
+                            record?.statistics,
+                            snapshot.layerName,
+                            layer?.name,
+                        ]),
+                ),
+            };
+        },
+    );
 
     return {
         id: String(snapshot.id || layer?.id || ''),
@@ -206,8 +233,14 @@ function buildLayerDataset(layer: any, previousSnapshot: AttrLayerDataset | null
         geometryType: String(snapshot.geometryType || layer?.type || 'unknown'),
         metadata: { ...(snapshot.metadata || {}) },
         rows,
-        fieldConfig: buildFieldConfig(rows, (previousSnapshot?.fieldConfig || snapshot.fieldConfig || {}) as Record<string, AttrFieldConfigItem>),
-        statistics: { ...(snapshot.statistics || {}) }
+        fieldConfig: buildFieldConfig(
+            rows,
+            (previousSnapshot?.fieldConfig || snapshot.fieldConfig || {}) as Record<
+                string,
+                AttrFieldConfigItem
+            >,
+        ),
+        statistics: { ...(snapshot.statistics || {}) },
     };
 }
 
@@ -227,28 +260,43 @@ export const useAttrStore = defineStore('attrStore', () => {
         y: 0,
         width: 940,
         height: 360,
-        initialized: false
+        initialized: false,
     });
 
-    const activeDataset = computed<AttrLayerDataset | null>(() => datasets.value[activeLayerId.value] || null);
+    const activeDataset = computed<AttrLayerDataset | null>(
+        () => datasets.value[activeLayerId.value] || null,
+    );
     const activeRows = computed<AttrRow[]>(() => activeDataset.value?.rows || []);
-    const activeFields = computed<AttrFieldConfigItem[]>(() => Object.values(activeDataset.value?.fieldConfig || {}));
-    const visibleFields = computed<AttrFieldConfigItem[]>(() => activeFields.value.filter((item) => item.visible));
-    const numericFields = computed<AttrFieldConfigItem[]>(() => activeFields.value.filter((item) => item.type === 'number'));
+    const activeFields = computed<AttrFieldConfigItem[]>(() =>
+        Object.values(activeDataset.value?.fieldConfig || {}),
+    );
+    const visibleFields = computed<AttrFieldConfigItem[]>(() =>
+        activeFields.value.filter((item) => item.visible),
+    );
+    const numericFields = computed<AttrFieldConfigItem[]>(() =>
+        activeFields.value.filter((item) => item.type === 'number'),
+    );
 
     function matchesCurrentView(row: AttrRow): boolean {
         if (!filterByCurrentView.value || !currentMapExtent.value) return true;
         if (!row.extent) return true;
-        return intersectsExtent(row.extent, currentMapExtent.value as [number, number, number, number]);
+        return intersectsExtent(
+            row.extent,
+            currentMapExtent.value as [number, number, number, number],
+        );
     }
 
     function matchesSearch(row: AttrRow): boolean {
-        const query = String(searchQuery.value || '').trim().toLowerCase();
+        const query = String(searchQuery.value || '')
+            .trim()
+            .toLowerCase();
         if (!query) return true;
         return String(row.searchText || '').includes(query);
     }
 
-    const filteredRows = computed<AttrRow[]>(() => activeRows.value.filter((row) => matchesCurrentView(row) && matchesSearch(row)));
+    const filteredRows = computed<AttrRow[]>(() =>
+        activeRows.value.filter((row) => matchesCurrentView(row) && matchesSearch(row)),
+    );
 
     const displayRows = computed<AttrRow[]>(() => {
         const rows = filteredRows.value;
@@ -284,8 +332,10 @@ export const useAttrStore = defineStore('attrStore', () => {
             }
 
             if (field.type === 'boolean') {
-                const leftBoolean = String(leftValue).toLowerCase() === 'true' || leftValue === true ? 1 : 0;
-                const rightBoolean = String(rightValue).toLowerCase() === 'true' || rightValue === true ? 1 : 0;
+                const leftBoolean =
+                    String(leftValue).toLowerCase() === 'true' || leftValue === true ? 1 : 0;
+                const rightBoolean =
+                    String(rightValue).toLowerCase() === 'true' || rightValue === true ? 1 : 0;
                 return (leftBoolean - rightBoolean) * direction;
             }
 
@@ -301,7 +351,10 @@ export const useAttrStore = defineStore('attrStore', () => {
         const snapshot = buildLayerDataset(layer, previous);
         datasets.value[layerId] = {
             ...snapshot,
-            fieldConfig: buildFieldConfig(snapshot.rows, (previous?.fieldConfig || {}) as Record<string, AttrFieldConfigItem>)
+            fieldConfig: buildFieldConfig(
+                snapshot.rows,
+                (previous?.fieldConfig || {}) as Record<string, AttrFieldConfigItem>,
+            ),
         };
     }
 
@@ -332,7 +385,7 @@ export const useAttrStore = defineStore('attrStore', () => {
             metadata: {},
             rows: [],
             fieldConfig: {},
-            statistics: {}
+            statistics: {},
         };
         datasets.value[normalizedLayerId] = placeholder;
         return placeholder;
@@ -414,12 +467,7 @@ export const useAttrStore = defineStore('attrStore', () => {
             currentMapExtent.value = null;
             return;
         }
-        currentMapExtent.value = [
-            normalized[0],
-            normalized[1],
-            normalized[2],
-            normalized[3]
-        ];
+        currentMapExtent.value = [normalized[0], normalized[1], normalized[2], normalized[3]];
     }
 
     function setFieldAlias(fieldKey: string, alias: string): void {
@@ -440,14 +488,14 @@ export const useAttrStore = defineStore('attrStore', () => {
         panelRect.value = {
             ...panelRect.value,
             ...nextRect,
-            initialized: true
+            initialized: true,
         };
     }
 
     function resetPanelRectInitialized(): void {
         panelRect.value = {
             ...panelRect.value,
-            initialized: false
+            initialized: false,
         };
     }
 
@@ -485,6 +533,6 @@ export const useAttrStore = defineStore('attrStore', () => {
         setFieldAlias,
         setFieldVisibility,
         setPanelRect,
-        resetPanelRectInitialized
+        resetPanelRectInitialized,
     };
 });

@@ -10,17 +10,37 @@
             >
                 <div class="loading-shell">
                     <div class="hud-loader">
-                        <svg class="sci-fi-ring" viewBox="0 0 100 100">
-                            <circle class="ring-outer" cx="50" cy="50" r="45"></circle>
-                            <circle class="ring-middle" cx="50" cy="50" r="36"></circle>
-                            <polygon class="ring-inner" points="50,20 76,65 24,65"></polygon>
+                        <svg
+                            class="sci-fi-ring"
+                            viewBox="0 0 100 100"
+                        >
+                            <circle
+                                class="ring-outer"
+                                cx="50"
+                                cy="50"
+                                r="45"
+                            ></circle>
+                            <circle
+                                class="ring-middle"
+                                cx="50"
+                                cy="50"
+                                r="36"
+                            ></circle>
+                            <polygon
+                                class="ring-inner"
+                                points="50,20 76,65 24,65"
+                            ></polygon>
                         </svg>
                         <div class="radar-sweep"></div>
                         <div class="core-glow"></div>
                     </div>
                     <div class="hud-text-container">
                         <div class="loading-title">
-                            <span class="glitch" :data-text="resolvedLoadingText">{{ resolvedLoadingText }}</span>
+                            <span
+                                class="glitch"
+                                :data-text="resolvedLoadingText"
+                                >{{ resolvedLoadingText }}</span
+                            >
                         </div>
                         <div class="loading-subtitle">
                             <span>{{ loadingHint.replace(/\.+$/, '') }}</span>
@@ -68,13 +88,17 @@ function stopHintAnimation() {
     dotFrame.value = 0;
 }
 
-watch(loading, (visible) => {
-    if (visible) {
-        startHintAnimation();
-    } else {
-        stopHintAnimation();
-    }
-}, { immediate: true });
+watch(
+    loading,
+    (visible) => {
+        if (visible) {
+            startHintAnimation();
+        } else {
+            stopHintAnimation();
+        }
+    },
+    { immediate: true },
+);
 
 onBeforeUnmount(() => {
     stopHintAnimation();
@@ -91,7 +115,12 @@ onBeforeUnmount(() => {
     justify-content: center;
     pointer-events: none; /* 允许点击穿透 */
     /* 添加一个平缓的径向暗色阴影，增加发光元件在浅色/卫星底图上的对比度，同时保持四周透明 */
-    background: radial-gradient(circle at center, rgba(10, 20, 15, 0.6) 0%, rgba(10, 20, 15, 0.4) 25%, transparent 70%);
+    background: radial-gradient(
+        circle at center,
+        rgba(10, 20, 15, 0.6) 0%,
+        rgba(10, 20, 15, 0.4) 25%,
+        transparent 70%
+    );
 }
 
 .loading-shell {
@@ -186,16 +215,28 @@ onBeforeUnmount(() => {
     border-right: 2px solid rgba(91, 207, 137, 0.3);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 0 15px rgba(91, 207, 137, 0.15);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        inset 0 0 15px rgba(91, 207, 137, 0.15);
     position: relative;
     overflow: hidden;
-    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+    clip-path: polygon(
+        10px 0,
+        100% 0,
+        100% calc(100% - 10px),
+        calc(100% - 10px) 100%,
+        0 100%,
+        0 10px
+    );
 }
 
 .hud-text-container::before {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0; height: 1px;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
     background: linear-gradient(90deg, transparent, #5bcf89, transparent);
     animation: scan-line 2s linear infinite;
 }
@@ -228,33 +269,63 @@ onBeforeUnmount(() => {
 
 /* Animations */
 @keyframes rotate-clockwise {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes rotate-counter-clockwise {
-    0% { transform: rotate(360deg); }
-    100% { transform: rotate(0deg); }
+    0% {
+        transform: rotate(360deg);
+    }
+    100% {
+        transform: rotate(0deg);
+    }
 }
 
 @keyframes pulse-triangle {
-    0%, 100% { transform: scale(0.85); opacity: 0.6; filter: drop-shadow(0 0 4px rgba(63, 181, 109, 0.5)); }
-    50% { transform: scale(1.05) rotate(180deg); opacity: 1; filter: drop-shadow(0 0 12px rgba(63, 181, 109, 0.9)); }
+    0%,
+    100% {
+        transform: scale(0.85);
+        opacity: 0.6;
+        filter: drop-shadow(0 0 4px rgba(63, 181, 109, 0.5));
+    }
+    50% {
+        transform: scale(1.05) rotate(180deg);
+        opacity: 1;
+        filter: drop-shadow(0 0 12px rgba(63, 181, 109, 0.9));
+    }
 }
 
 @keyframes core-pulse {
-    0%, 100% { opacity: 0.4; transform: scale(0.8); }
-    50% { opacity: 0.8; transform: scale(1.5); }
+    0%,
+    100% {
+        opacity: 0.4;
+        transform: scale(0.8);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.5);
+    }
 }
 
 @keyframes scan-line {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
 }
 
 .loading-fade-enter-active,
 .loading-fade-leave-active {
-    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition:
+        opacity 0.4s ease,
+        transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 .loading-fade-enter-from,

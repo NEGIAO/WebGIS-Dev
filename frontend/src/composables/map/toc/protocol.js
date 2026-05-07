@@ -29,7 +29,7 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     EXPORT_GEOJSON: 'export-geojson',
     EXPORT_KML: 'export-kml',
     ZOOM: 'zoom',
-    REMOVE: 'remove'
+    REMOVE: 'remove',
 });
 
 export function normalizeTocLayerId(id) {
@@ -52,15 +52,21 @@ export function normalizeTocLayerIdList(ids = []) {
 }
 
 export function normalizeTocExportFormat(rawFormat = '', fallback = 'csv') {
-    const normalized = String(rawFormat || '').trim().toLowerCase();
+    const normalized = String(rawFormat || '')
+        .trim()
+        .toLowerCase();
     if (TOC_EXPORT_FORMAT_SET.has(normalized)) return normalized;
 
-    const normalizedFallback = String(fallback || 'csv').trim().toLowerCase();
+    const normalizedFallback = String(fallback || 'csv')
+        .trim()
+        .toLowerCase();
     return TOC_EXPORT_FORMAT_SET.has(normalizedFallback) ? normalizedFallback : 'csv';
 }
 
 export function resolveTocExportFormatFromCommand(commandKey = '', fallback = 'csv') {
-    const key = String(commandKey || '').trim().toLowerCase();
+    const key = String(commandKey || '')
+        .trim()
+        .toLowerCase();
 
     for (const format of TOC_EXPORT_FORMATS) {
         if (key.endsWith(format)) return format;

@@ -49,7 +49,7 @@ function normalizeTreeNodes(inputNodes: any[] = []): DistrictTreeNode[] {
             return {
                 label,
                 value,
-                children
+                children,
             };
         })
         .filter((node) => Boolean(node.value) || node.children.length > 0);
@@ -92,8 +92,9 @@ export const useTOCStore = defineStore('tocStore', () => {
     const layerMetadataMap = ref<Record<string, TOCLayerMetadata>>({});
 
     const layerMetadataList = computed(() => {
-        return Object.values(layerMetadataMap.value)
-            .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+        return Object.values(layerMetadataMap.value).sort((a, b) =>
+            String(b.updatedAt).localeCompare(String(a.updatedAt)),
+        );
     });
 
     function upsertLayerMeta(meta: Partial<TOCLayerMetadata> & { id: string }): TOCLayerMetadata {
@@ -106,13 +107,13 @@ export const useTOCStore = defineStore('tocStore', () => {
         const longitude = Number.isFinite(meta.longitude)
             ? Number(meta.longitude)
             : Number.isFinite(previous?.longitude)
-                ? Number(previous.longitude)
-                : undefined;
+              ? Number(previous.longitude)
+              : undefined;
         const latitude = Number.isFinite(meta.latitude)
             ? Number(meta.latitude)
             : Number.isFinite(previous?.latitude)
-                ? Number(previous.latitude)
-                : undefined;
+              ? Number(previous.latitude)
+              : undefined;
 
         const nextItem: TOCLayerMetadata = {
             id: layerId,
@@ -120,24 +121,29 @@ export const useTOCStore = defineStore('tocStore', () => {
             adcode: normalizeText(meta.adcode, previous?.adcode || ''),
             sourceType: normalizeText(meta.sourceType, previous?.sourceType || 'unknown'),
             sourceUrl: normalizeText(meta.sourceUrl, previous?.sourceUrl || ''),
-            visible: meta.visible !== undefined ? Boolean(meta.visible) : previous?.visible !== false,
+            visible:
+                meta.visible !== undefined ? Boolean(meta.visible) : previous?.visible !== false,
             featureCount: Number.isFinite(meta.featureCount)
                 ? Number(meta.featureCount)
                 : Number(previous?.featureCount || 0),
             extent: normalizeExtent(meta.extent ?? previous?.extent ?? []),
             longitude,
             latitude,
-            features: Array.isArray(meta.features) ? meta.features : (Array.isArray(previous?.features) ? previous.features : []),
+            features: Array.isArray(meta.features)
+                ? meta.features
+                : Array.isArray(previous?.features)
+                  ? previous.features
+                  : [],
             updatedAt: normalizeText(meta.updatedAt, new Date().toISOString()),
             metadata: {
                 ...(previous?.metadata || {}),
-                ...((meta.metadata && typeof meta.metadata === 'object') ? meta.metadata : {})
-            }
+                ...(meta.metadata && typeof meta.metadata === 'object' ? meta.metadata : {}),
+            },
         };
 
         layerMetadataMap.value = {
             ...layerMetadataMap.value,
-            [layerId]: nextItem
+            [layerId]: nextItem,
         };
 
         return nextItem;
@@ -171,11 +177,15 @@ export const useTOCStore = defineStore('tocStore', () => {
     const districtTreeTotalNodeCount = computed(() => countTreeNodes(districtTree.value));
 
     const selectedDistrictNodesList = computed(() => {
-        return Object.values(selectedDistrictNodes.value)
-            .sort((a, b) => String(b.value).localeCompare(String(a.value)));
+        return Object.values(selectedDistrictNodes.value).sort((a, b) =>
+            String(b.value).localeCompare(String(a.value)),
+        );
     });
 
-    async function loadDistrictTree(baseUrl: string = '/', forceReload: boolean = false): Promise<void> {
+    async function loadDistrictTree(
+        baseUrl: string = '/',
+        forceReload: boolean = false,
+    ): Promise<void> {
         if (districtTreeLoading.value) return;
         if (districtTreeHasLoaded.value && !forceReload) return;
 
@@ -197,7 +207,9 @@ export const useTOCStore = defineStore('tocStore', () => {
             }
 
             if (!loaded.length) {
-                throw new Error('未能加载行政区划树文件（adcode_tree.json / adcode.json），请检查 public 目录数据文件。');
+                throw new Error(
+                    '未能加载行政区划树文件（adcode_tree.json / adcode.json），请检查 public 目录数据文件。',
+                );
             }
 
             districtTree.value = loaded;
@@ -221,7 +233,7 @@ export const useTOCStore = defineStore('tocStore', () => {
         } else {
             selectedDistrictNodes.value = {
                 ...selectedDistrictNodes.value,
-                [layerId]: node
+                [layerId]: node,
             };
         }
     }
@@ -296,8 +308,8 @@ export const useTOCStore = defineStore('tocStore', () => {
             metadata: {
                 nodeType: 'layer',
                 category: 'administrative-division',
-                parentNodeLabel: node.label
-            }
-        })
+                parentNodeLabel: node.label,
+            },
+        }),
     };
 });

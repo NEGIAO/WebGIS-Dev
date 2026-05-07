@@ -27,7 +27,7 @@ const mapRuntimeDeps = {
     VectorLayer,
     XYZ,
     VectorSource,
-    DragBox
+    DragBox,
 };
 
 /**

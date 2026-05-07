@@ -2,12 +2,7 @@ import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import CircleGeom from 'ol/geom/Circle';
 import { fromLonLat } from 'ol/proj';
-import {
-    apiAddressGeocode,
-    apiIpCountry,
-    apiLocationIpLocate,
-    apiLocationReverse
-} from '@/api';
+import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationReverse } from '@/api';
 import { useMessage } from '@/composables/useMessage';
 import { saveUserPositionToCache } from '../utils/userPositionCache';
 import { setGlobalUserLocationContext } from '../utils/userLocationContext';
@@ -19,19 +14,20 @@ export function useUserLocation({
     mapInstance,
     userLocationSource,
     isDomestic,
-    fitToLonLatExtent = null
+    fitToLonLatExtent = null,
 }) {
     const message = useMessage();
 
     function toRad(value) {
-        return Number(value) * Math.PI / 180;
+        return (Number(value) * Math.PI) / 180;
     }
 
     function haversineMeters(lon1, lat1, lon2, lat2) {
         const dLat = toRad(lat2 - lat1);
         const dLon = toRad(lon2 - lon1);
-        const a = Math.sin(dLat / 2) ** 2
-            + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return 6371000 * c;
     }
@@ -46,7 +42,7 @@ export function useUserLocation({
         const maxY = Math.max(nums[1], nums[3]);
         return {
             lon: (minX + maxX) / 2,
-            lat: (minY + maxY) / 2
+            lat: (minY + maxY) / 2,
         };
     }
 
@@ -65,7 +61,8 @@ export function useUserLocation({
         const widthMeters = haversineMeters(minX, centerLat, maxX, centerLat);
         const heightMeters = haversineMeters(centerLon, minY, centerLon, maxY);
         const diagonalMeters = Math.sqrt(widthMeters ** 2 + heightMeters ** 2);
-        if (!Number.isFinite(diagonalMeters) || diagonalMeters <= 0) return Number.POSITIVE_INFINITY;
+        if (!Number.isFinite(diagonalMeters) || diagonalMeters <= 0)
+            return Number.POSITIVE_INFINITY;
 
         return Math.max(1000, diagonalMeters / 2);
     }
@@ -76,7 +73,9 @@ export function useUserLocation({
     }
 
     function normalizeBinaryFlag(value, fallback = '0') {
-        const text = String(value ?? '').trim().toLowerCase();
+        const text = String(value ?? '')
+            .trim()
+            .toLowerCase();
         if (text === '1' || text === 'true') return '1';
         if (text === '0' || text === 'false') return '0';
         return fallback === '1' ? '1' : '0';
@@ -93,7 +92,9 @@ export function useUserLocation({
             if (hashValue) return hashValue;
         }
 
-        const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+        const searchParams = new URLSearchParams(
+            String(window.location.search || '').replace(/^\?/, ''),
+        );
         return String(searchParams.get(key) || '').trim();
     }
 
@@ -103,27 +104,28 @@ export function useUserLocation({
         const devModeRaw = readQueryValueFromUrl('dev') || readQueryValueFromUrl('debug');
         const devModeEnabled = normalizeBinaryFlag(devModeRaw, '0') === '1';
         const disableApiText = String(
-            readQueryValueFromUrl('devApi')
-            || readQueryValueFromUrl('devApis')
-            || readQueryValueFromUrl('disableApi')
-            || readQueryValueFromUrl('disableApis')
-            || readQueryValueFromUrl('debugApi')
-            || ''
+            readQueryValueFromUrl('devApi') ||
+                readQueryValueFromUrl('devApis') ||
+                readQueryValueFromUrl('disableApi') ||
+                readQueryValueFromUrl('disableApis') ||
+                readQueryValueFromUrl('debugApi') ||
+                '',
         ).toLowerCase();
 
         const disableApiTokens = new Set(
             disableApiText
                 .split(',')
                 .map((token) => token.trim())
-                .filter(Boolean)
+                .filter(Boolean),
         );
 
         return {
             devModeEnabled,
-            disableAmapIpLocation: devModeEnabled
-                || disableApiTokens.has('amap-ip')
-                || disableApiTokens.has('amap-location')
-                || disableApiTokens.has('amap-ip-location')
+            disableAmapIpLocation:
+                devModeEnabled ||
+                disableApiTokens.has('amap-ip') ||
+                disableApiTokens.has('amap-location') ||
+                disableApiTokens.has('amap-ip-location'),
         };
     }
 
@@ -166,10 +168,10 @@ export function useUserLocation({
             const response = await apiIpCountry('');
             const data = response?.data || {};
             const cc = data.country || data.country_code || data.country_name;
-            const isDom = typeof cc === 'string' && (
-                cc.toString().toUpperCase().includes('CN')
-                || cc.toString().toLowerCase().includes('china')
-            );
+            const isDom =
+                typeof cc === 'string' &&
+                (cc.toString().toUpperCase().includes('CN') ||
+                    cc.toString().toLowerCase().includes('china'));
             isDomestic.value = isDom;
             return { isDomestic: isDom };
         } catch (e) {
@@ -191,9 +193,9 @@ export function useUserLocation({
 
         try {
             // 调用后端统一定位 API（优先高德，失败则免费服务）
-            const locationResponse = await apiLocationIpLocate(ip, { 
+            const locationResponse = await apiLocationIpLocate(ip, {
                 preferFreeService,
-                silent: true  // 后端错误由前端处理
+                silent: true, // 后端错误由前端处理
             });
 
             const location = locationResponse || null;
@@ -206,7 +208,7 @@ export function useUserLocation({
                     ...location,
                     didFit: false,
                     geocode: null,
-                    reverseGeocode: null
+                    reverseGeocode: null,
                 };
             }
 
@@ -223,17 +225,18 @@ export function useUserLocation({
                     ...location,
                     didFit: false,
                     geocode: null,
-                    reverseGeocode: null
+                    reverseGeocode: null,
                 };
             }
 
-            const didFit = typeof fitToLonLatExtent === 'function'
-                ? fitToLonLatExtent(location.extent, {
-                    duration: 900,
-                    padding: [90, 90, 90, 90],
-                    maxZoom: 11
-                })
-                : false;
+            const didFit =
+                typeof fitToLonLatExtent === 'function'
+                    ? fitToLonLatExtent(location.extent, {
+                          duration: 900,
+                          padding: [90, 90, 90, 90],
+                          maxZoom: 11,
+                      })
+                    : false;
 
             // 结合 IP 定位结果补充地理编码与逆地理编码信息，用于展示用户定位语义。
             const cityText = String(location.city || '').trim();
@@ -244,13 +247,15 @@ export function useUserLocation({
 
             if (roughAddress) {
                 try {
-                    const geocodeResponse = await apiAddressGeocode(roughAddress, cityText, { silent: true });
+                    const geocodeResponse = await apiAddressGeocode(roughAddress, cityText, {
+                        silent: true,
+                    });
                     geocode = geocodeResponse?.data || null;
                     if (geocode) {
                         // 使用后端代理的反向地理编码
                         const reverseResponse = await apiLocationReverse(geocode.lng, geocode.lat, {
                             preferService: 'auto',
-                            silent: true
+                            silent: true,
                         });
                         reverseGeocode = reverseResponse?.data || null;
                     }
@@ -260,21 +265,23 @@ export function useUserLocation({
             }
 
             if (didFit) {
-                const estimatedAccuracy = toDisplayAccuracyMeters(estimateExtentAccuracyMeters(location.extent));
+                const estimatedAccuracy = toDisplayAccuracyMeters(
+                    estimateExtentAccuracyMeters(location.extent),
+                );
                 const encodedLocation = reverseGeocode
                     ? {
-                        ...reverseGeocode,
-                        adcode: String(location.adcode || '')
-                    }
+                          ...reverseGeocode,
+                          adcode: String(location.adcode || ''),
+                      }
                     : {
-                        formattedAddress: roughAddress,
-                        province: provinceText,
-                        city: cityText,
-                        district: '',
-                        township: '',
-                        adcode: String(location.adcode || ''),
-                        businessAreas: []
-                    };
+                          formattedAddress: roughAddress,
+                          province: provinceText,
+                          city: cityText,
+                          district: '',
+                          township: '',
+                          adcode: String(location.adcode || ''),
+                          businessAreas: [],
+                      };
 
                 const globalLocationContext = setGlobalUserLocationContext({
                     lon: Number(geocode?.lng ?? getExtentCenter(location.extent)?.lon ?? 0),
@@ -283,19 +290,24 @@ export function useUserLocation({
                     accuracyMeters: estimatedAccuracy,
                     source: location.source || 'ip',
                     timestamp: Date.now(),
-                    encodedLocation
+                    encodedLocation,
                 });
 
                 if (globalLocationContext) {
                     markLocationSuccessFlagInUrl();
                 }
 
-                const cityLabel = reverseGeocode?.city || location.city || location.province || '当前城市';
+                const cityLabel =
+                    reverseGeocode?.city || location.city || location.province || '当前城市';
                 const districtLabel = reverseGeocode?.district ? ` ${reverseGeocode.district}` : '';
-                const formattedAddress = reverseGeocode?.formattedAddress ? `（${reverseGeocode.formattedAddress}）` : '';
+                const formattedAddress = reverseGeocode?.formattedAddress
+                    ? `（${reverseGeocode.formattedAddress}）`
+                    : '';
                 const serviceLabel = location.source === 'amap' ? '高德' : '免费定位';
                 if (!silent) {
-                    message.info(`已使用 IP 定位（${serviceLabel}）：${cityLabel}${districtLabel}${formattedAddress}`);
+                    message.info(
+                        `已使用 IP 定位（${serviceLabel}）：${cityLabel}${districtLabel}${formattedAddress}`,
+                    );
                 }
             } else {
                 if (!silent) {
@@ -307,7 +319,7 @@ export function useUserLocation({
                 ...location,
                 didFit,
                 geocode,
-                reverseGeocode
+                reverseGeocode,
             };
         } catch (error) {
             if (!silent) {
@@ -325,7 +337,7 @@ export function useUserLocation({
                 didFit: false,
                 geocode: null,
                 reverseGeocode: null,
-                errorMessage: error?.message || '定位失败'
+                errorMessage: error?.message || '定位失败',
             };
         }
     }
@@ -336,16 +348,17 @@ export function useUserLocation({
 
         try {
             // 使用后端统一定位 API
-            const locationResponse = await apiLocationIpLocate(ip, { 
-                preferFreeService: false,  // 优先高德
-                silent: true
+            const locationResponse = await apiLocationIpLocate(ip, {
+                preferFreeService: false, // 优先高德
+                silent: true,
             });
-            
+
             const ipResult = locationResponse || null;
             if (!ipResult?.ok) return null;
 
             const center = getExtentCenter(ipResult.extent);
-            if (!center || !Number.isFinite(center.lon) || !Number.isFinite(center.lat)) return null;
+            if (!center || !Number.isFinite(center.lon) || !Number.isFinite(center.lat))
+                return null;
 
             const accuracyMeters = estimateExtentAccuracyMeters(ipResult.extent);
             return {
@@ -353,7 +366,7 @@ export function useUserLocation({
                 lon: center.lon,
                 lat: center.lat,
                 accuracyMeters,
-                ipResult
+                ipResult,
             };
         } catch (error) {
             // 如果是配额用完，向上层抛出，不返回 null
@@ -370,13 +383,14 @@ export function useUserLocation({
             if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
 
             navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({
-                    lon: pos.coords.longitude,
-                    lat: pos.coords.latitude,
-                    accuracy: pos.coords.accuracy
-                }),
+                (pos) =>
+                    resolve({
+                        lon: pos.coords.longitude,
+                        lat: pos.coords.latitude,
+                        accuracy: pos.coords.accuracy,
+                    }),
                 (err) => reject(err),
-                { enableHighAccuracy, timeout: 5000 }
+                { enableHighAccuracy, timeout: 5000 },
             );
         });
     }
@@ -388,14 +402,18 @@ export function useUserLocation({
         saveUserPositionToCache(pos);
 
         userLocationSource.clear();
-        userLocationSource.addFeature(new Feature({
-            geometry: new CircleGeom(coord, pos.accuracy || 30),
-            type: 'accuracy'
-        }));
-        userLocationSource.addFeature(new Feature({
-            geometry: new Point(coord),
-            type: 'position'
-        }));
+        userLocationSource.addFeature(
+            new Feature({
+                geometry: new CircleGeom(coord, pos.accuracy || 30),
+                type: 'accuracy',
+            }),
+        );
+        userLocationSource.addFeature(
+            new Feature({
+                geometry: new Point(coord),
+                type: 'position',
+            }),
+        );
 
         if (animate && mapInstance.value) {
             mapInstance.value.getView().animate({ center: coord, zoom: 18, duration: 1000 });
@@ -403,10 +421,7 @@ export function useUserLocation({
     }
 
     async function zoomToUser(options = {}) {
-        const {
-            animate = true,
-            silent = false
-        } = options || {};
+        const { animate = true, silent = false } = options || {};
         const { disableAmapIpLocation } = resolveDeveloperModeSwitches();
 
         try {
@@ -418,29 +433,33 @@ export function useUserLocation({
                     accuracyMeters: Number.isFinite(Number(pos.accuracy))
                         ? Math.max(1, Number(pos.accuracy))
                         : 25,
-                    raw: pos
+                    raw: pos,
                 }))
                 .catch(() => null);
 
             const ipTask = disableAmapIpLocation
                 ? Promise.resolve(null)
                 : buildIpCandidate('', { disableAmapIpLocation }).catch((error) => {
-                    // 配额用完时不能隐藏，让外层处理
-                    if (error?.isQuotaExceeded) throw error;
-                    return null;
-                });
+                      // 配额用完时不能隐藏，让外层处理
+                      if (error?.isQuotaExceeded) throw error;
+                      return null;
+                  });
 
             const [gpsCandidate, ipCandidate] = await Promise.all([gpsTask, ipTask]);
-            const candidates = [gpsCandidate, ipCandidate].filter((item) => (
-                item
-                && Number.isFinite(item.lon)
-                && Number.isFinite(item.lat)
-                && Number.isFinite(item.accuracyMeters)
-            ));
+            const candidates = [gpsCandidate, ipCandidate].filter(
+                (item) =>
+                    item &&
+                    Number.isFinite(item.lon) &&
+                    Number.isFinite(item.lat) &&
+                    Number.isFinite(item.accuracyMeters),
+            );
 
             if (!candidates.length) {
                 if (!silent) {
-                    message.error('定位失败：系统定位与 IP 定位均不可用。', { closable: true, duration: 6000 });
+                    message.error('定位失败：系统定位与 IP 定位均不可用。', {
+                        closable: true,
+                        duration: 6000,
+                    });
                 }
                 return null;
             }
@@ -452,90 +471,100 @@ export function useUserLocation({
 
             if (!selected) {
                 if (!silent) {
-                    message.error('定位失败：未能选择有效定位结果。', { closable: true, duration: 6000 });
+                    message.error('定位失败：未能选择有效定位结果。', {
+                        closable: true,
+                        duration: 6000,
+                    });
                 }
                 return null;
             }
 
-            updateUserPosition({
+            updateUserPosition(
+                {
+                    lon: selected.lon,
+                    lat: selected.lat,
+                    accuracy: toDisplayAccuracyMeters(selected.accuracyMeters),
+                },
+                !!animate,
+            );
+
+            if (selected.source === 'gps') {
+                isDomestic.value = isCoordinateInChina(selected.lon, selected.lat);
+            } else if (selected.ipResult?.adcode) {
+                isDomestic.value = true;
+            }
+
+            let reverseAddress = null;
+            try {
+                // 使用后端代理的反向地理编码
+                const reverseResponse = await apiLocationReverse(selected.lon, selected.lat, {
+                    preferService: 'auto',
+                    silent: true,
+                });
+                reverseAddress = reverseResponse?.data || null;
+            } catch {
+                // 逆地理编码失败时保留坐标提示，不中断定位成功主流程。
+            }
+
+            const sourceLabel = selected.source === 'gps' ? '系统定位' : 'IP定位';
+            const accuracyLabel = `精度约 ${Math.round(selected.accuracyMeters)}m`;
+            const fallbackAddress =
+                selected.source === 'ip'
+                    ? `${selected.ipResult?.province || ''}${selected.ipResult?.city || ''}`.trim()
+                    : '';
+            const resolvedAddress = String(
+                reverseAddress?.formattedAddress || fallbackAddress,
+            ).trim();
+            const detailText =
+                resolvedAddress || `${selected.lon.toFixed(6)}, ${selected.lat.toFixed(6)}`;
+
+            const encodedLocation = reverseAddress
+                ? {
+                      ...reverseAddress,
+                      adcode: String(selected.ipResult?.adcode || ''),
+                  }
+                : {
+                      formattedAddress: fallbackAddress,
+                      province: String(selected.ipResult?.province || ''),
+                      city: String(selected.ipResult?.city || ''),
+                      district: '',
+                      township: '',
+                      adcode: String(selected.ipResult?.adcode || ''),
+                      businessAreas: [],
+                  };
+
+            const globalLocationContext = setGlobalUserLocationContext({
                 lon: selected.lon,
                 lat: selected.lat,
-            accuracy: toDisplayAccuracyMeters(selected.accuracyMeters)
-        }, !!animate);
-
-        if (selected.source === 'gps') {
-            isDomestic.value = isCoordinateInChina(selected.lon, selected.lat);
-        } else if (selected.ipResult?.adcode) {
-            isDomestic.value = true;
-        }
-
-        let reverseAddress = null;
-        try {
-            // 使用后端代理的反向地理编码
-            const reverseResponse = await apiLocationReverse(selected.lon, selected.lat, {
-                preferService: 'auto',
-                silent: true
+                accuracy: toDisplayAccuracyMeters(selected.accuracyMeters),
+                accuracyMeters: selected.accuracyMeters,
+                source: selected.source,
+                timestamp: Date.now(),
+                encodedLocation,
             });
-            reverseAddress = reverseResponse?.data || null;
-        } catch {
-            // 逆地理编码失败时保留坐标提示，不中断定位成功主流程。
-        }
 
-        const sourceLabel = selected.source === 'gps' ? '系统定位' : 'IP定位';
-        const accuracyLabel = `精度约 ${Math.round(selected.accuracyMeters)}m`;
-        const fallbackAddress = selected.source === 'ip'
-            ? `${selected.ipResult?.province || ''}${selected.ipResult?.city || ''}`.trim()
-            : '';
-        const resolvedAddress = String(reverseAddress?.formattedAddress || fallbackAddress).trim();
-        const detailText = resolvedAddress || `${selected.lon.toFixed(6)}, ${selected.lat.toFixed(6)}`;
-
-        const encodedLocation = reverseAddress
-            ? {
-                ...reverseAddress,
-                adcode: String(selected.ipResult?.adcode || '')
+            if (globalLocationContext) {
+                markLocationSuccessFlagInUrl();
             }
-            : {
-                formattedAddress: fallbackAddress,
-                province: String(selected.ipResult?.province || ''),
-                city: String(selected.ipResult?.city || ''),
-                district: '',
-                township: '',
-                adcode: String(selected.ipResult?.adcode || ''),
-                businessAreas: []
+
+            if (!silent) {
+                message.success(`定位成功（${sourceLabel}，${accuracyLabel}）：${detailText}`, {
+                    closable: true,
+                    duration: 5000,
+                });
+            }
+
+            return {
+                ...selected,
+                reverseAddress,
+                globalLocationContext,
             };
-
-        const globalLocationContext = setGlobalUserLocationContext({
-            lon: selected.lon,
-            lat: selected.lat,
-            accuracy: toDisplayAccuracyMeters(selected.accuracyMeters),
-            accuracyMeters: selected.accuracyMeters,
-            source: selected.source,
-            timestamp: Date.now(),
-            encodedLocation
-        });
-
-        if (globalLocationContext) {
-            markLocationSuccessFlagInUrl();
-        }
-
-        if (!silent) {
-            message.success(`定位成功（${sourceLabel}，${accuracyLabel}）：${detailText}`, {
-                closable: true,
-                duration: 5000
-            });
-        }
-
-        return {
-            ...selected,
-            reverseAddress,
-            globalLocationContext
-        };
         } catch (error) {
             // 处理配额用完的错误
             if (error?.isQuotaExceeded) {
                 message.warning(error.message || 'IP 定位：API 调用额度已用完，部分功能受限', {
                     closable: true,
-                    duration: 0
+                    duration: 0,
                 });
             } else {
                 console.error('[useUserLocation] 定位异常:', error);
@@ -550,6 +579,6 @@ export function useUserLocation({
         zoomToUserCityByIp,
         getCurrentLocation,
         zoomToUser,
-        updateUserPosition
+        updateUserPosition,
     };
 }

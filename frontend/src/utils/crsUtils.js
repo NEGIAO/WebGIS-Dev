@@ -12,11 +12,11 @@ const WKT_NAME_TO_EPSG = [
     { pattern: /WEB[_\s]?MERCATOR|PSEUDO[-_\s]?MERCATOR/i, epsg: 'EPSG:3857' },
     { pattern: /CGCS[_\s]?2000|GCS_CHINA_GEODETIC_COORDINATE_SYSTEM_2000/i, epsg: 'EPSG:4490' },
     { pattern: /XI'?AN[_\s]?1980|GCS_XIAN_1980/i, epsg: 'EPSG:4610' },
-    { pattern: /BEIJING[_\s]?1954|GCS_BEIJING_1954/i, epsg: 'EPSG:4214' }
+    { pattern: /BEIJING[_\s]?1954|GCS_BEIJING_1954/i, epsg: 'EPSG:4214' },
 ];
 
 const COMMON_DEFS = {
-    'EPSG:4490': '+proj=longlat +ellps=GRS80 +no_defs +type=crs'
+    'EPSG:4490': '+proj=longlat +ellps=GRS80 +no_defs +type=crs',
 };
 
 function extractWktAuthorityCode(text = '') {
@@ -24,7 +24,9 @@ function extractWktAuthorityCode(text = '') {
     if (!input) return null;
 
     const isProjectedWkt = /\bPROJ(?:CS|CRS)\s*\[/i.test(input);
-    const allMatches = Array.from(input.matchAll(/AUTHORITY\s*\[\s*["']EPSG["']\s*,\s*["']?(\d{3,6})["']?\s*\]/gi));
+    const allMatches = Array.from(
+        input.matchAll(/AUTHORITY\s*\[\s*["']EPSG["']\s*,\s*["']?(\d{3,6})["']?\s*\]/gi),
+    );
     if (!allMatches.length) return null;
 
     if (isProjectedWkt) {
@@ -75,7 +77,7 @@ export function normalizeProjectionCode(input) {
             input.properties?.name,
             input.properties?.code,
             input.crs,
-            input.projection
+            input.projection,
         ];
 
         for (const candidate of candidates) {
@@ -175,7 +177,9 @@ export function detectGeoJSONProjection(geojson) {
 
     const features = Array.isArray(geojson?.features)
         ? geojson.features
-        : (Array.isArray(geojson) ? geojson : []);
+        : Array.isArray(geojson)
+          ? geojson
+          : [];
 
     const samples = [];
     for (const feature of features) {
@@ -233,8 +237,8 @@ export async function ensureProjectionAvailable(projectionCode) {
         const defText = String(
             await backendAPI.get(`/api/proxy/geo/epsg/${epsgCode}/proj4`, {
                 responseType: 'text',
-                transformResponse: [(value) => value]
-            })
+                transformResponse: [(value) => value],
+            }),
         ).trim();
         if (!defText || /Not found/i.test(defText)) return null;
 

@@ -29,13 +29,18 @@ function getStorage(): Storage | null {
 }
 
 function normalizeLanguage(value: unknown): string {
-    const compact = String(value ?? '').trim().toLowerCase().replace('_', '-');
+    const compact = String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace('_', '-');
     if (compact === 'en-us') return 'en-US';
     return 'zh-CN';
 }
 
 function normalizeUnitSystem(value: unknown): 'metric' | 'imperial' {
-    const compact = String(value ?? '').trim().toLowerCase();
+    const compact = String(value ?? '')
+        .trim()
+        .toLowerCase();
     return compact === 'imperial' ? 'imperial' : 'metric';
 }
 
@@ -82,7 +87,9 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
     const saving = ref(false);
     const initialized = ref(false);
 
-    const preferredAgentModel = computed(() => String(preferences.value.preferred_agent_model || '').trim());
+    const preferredAgentModel = computed(() =>
+        String(preferences.value.preferred_agent_model || '').trim(),
+    );
 
     function persistToStorage(): void {
         const storage = getStorage();
@@ -119,7 +126,9 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
         }
     }
 
-    async function loadPreferences(options: { force?: boolean; silent?: boolean } = {}): Promise<UserPreferences> {
+    async function loadPreferences(
+        options: { force?: boolean; silent?: boolean } = {},
+    ): Promise<UserPreferences> {
         const { force = false, silent = true } = options;
 
         if (!force && initialized.value) {
@@ -137,9 +146,10 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
         loading.value = true;
         try {
             const result = await apiAuthGetPreferences();
-            const payload = (result && typeof result === 'object' && 'data' in result)
-                ? (result as any).data
-                : result;
+            const payload =
+                result && typeof result === 'object' && 'data' in result
+                    ? (result as any).data
+                    : result;
             const remote = normalizePreferences(payload?.preferences || payload || {});
             preferences.value = remote;
             persistToStorage();
@@ -170,15 +180,18 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
             normalizedPayload.unit_system = normalizeUnitSystem(partial.unit_system);
         }
         if (Object.prototype.hasOwnProperty.call(partial, 'preferred_agent_model')) {
-            normalizedPayload.preferred_agent_model = normalizeAgentModel(partial.preferred_agent_model);
+            normalizedPayload.preferred_agent_model = normalizeAgentModel(
+                partial.preferred_agent_model,
+            );
         }
 
         saving.value = true;
         try {
             const result = await apiAuthUpdatePreferences(normalizedPayload);
-            const payload = (result && typeof result === 'object' && 'data' in result)
-                ? (result as any).data
-                : result;
+            const payload =
+                result && typeof result === 'object' && 'data' in result
+                    ? (result as any).data
+                    : result;
             const merged = normalizePreferences({
                 ...preferences.value,
                 ...(payload?.preferences || payload || {}),

@@ -32,7 +32,8 @@ function normalizePrimitiveValue(value) {
     if (value === null || value === undefined) return value;
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
     if (typeof value === 'boolean') return value;
-    if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : String(value);
+    if (value instanceof Date)
+        return Number.isFinite(value.getTime()) ? value.toISOString() : String(value);
     if (typeof value === 'string') return value.trim();
     return String(value);
 }
@@ -100,8 +101,9 @@ function flattenAttributes(input, prefix = '', target = {}, seen = new WeakSet()
     }
     seen.add(input);
 
-    const entries = Object.entries(input)
-        .filter(([key]) => !['geometry', 'style', 'id', '_gid'].includes(key));
+    const entries = Object.entries(input).filter(
+        ([key]) => !['geometry', 'style', 'id', '_gid'].includes(key),
+    );
 
     if (!entries.length && prefix) {
         target[prefix] = {};
@@ -115,7 +117,12 @@ function flattenAttributes(input, prefix = '', target = {}, seen = new WeakSet()
             return;
         }
 
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value instanceof Date) {
+        if (
+            typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean' ||
+            value instanceof Date
+        ) {
             target[nextKey] = normalizePrimitiveValue(value);
             return;
         }
@@ -127,13 +134,15 @@ function flattenAttributes(input, prefix = '', target = {}, seen = new WeakSet()
 }
 
 function getGeometryType(feature) {
-    return String(
-        feature?.getGeometry?.()?.getType?.()
-        || feature?.geometry?.type
-        || feature?.geometryType
-        || feature?.type
-        || ''
-    ).trim() || 'unknown';
+    return (
+        String(
+            feature?.getGeometry?.()?.getType?.() ||
+                feature?.geometry?.type ||
+                feature?.geometryType ||
+                feature?.type ||
+                '',
+        ).trim() || 'unknown'
+    );
 }
 
 function getGeometryExtent(feature) {
@@ -154,12 +163,16 @@ function getGeometryExtent(feature) {
         minX: Number.POSITIVE_INFINITY,
         minY: Number.POSITIVE_INFINITY,
         maxX: Number.NEGATIVE_INFINITY,
-        maxY: Number.NEGATIVE_INFINITY
+        maxY: Number.NEGATIVE_INFINITY,
     };
 
     const visit = (node) => {
         if (!Array.isArray(node)) return;
-        if (node.length >= 2 && Number.isFinite(Number(node[0])) && Number.isFinite(Number(node[1]))) {
+        if (
+            node.length >= 2 &&
+            Number.isFinite(Number(node[0])) &&
+            Number.isFinite(Number(node[1]))
+        ) {
             const x = Number(node[0]);
             const y = Number(node[1]);
             bounds.minX = Math.min(bounds.minX, x);
@@ -187,9 +200,8 @@ function getFeatureRepresentativeLonLat(feature) {
     const extent = geometry.getExtent?.();
     if (!extent || extent.some((value) => !Number.isFinite(value))) return null;
 
-    const centerCoord = geometry.getType?.() === 'Point'
-        ? geometry.getCoordinates?.()
-        : getExtentCenter(extent);
+    const centerCoord =
+        geometry.getType?.() === 'Point' ? geometry.getCoordinates?.() : getExtentCenter(extent);
 
     if (!Array.isArray(centerCoord) || centerCoord.length < 2) return null;
 
@@ -232,7 +244,7 @@ function extractFeatureId(feature, index = 0) {
         feature?.properties?.OBJECTID,
         feature?.properties?.FID,
         feature?.properties?.objectid,
-        feature?.properties?.fid
+        feature?.properties?.fid,
     ];
 
     const matched = candidates.find((item) => String(item || '').trim().length > 0);
@@ -294,7 +306,10 @@ function buildFieldConfig(records, previousMap = {}) {
             key: fieldKey,
             alias: String(oldConfig?.alias || fieldKey),
             visible: oldConfig?.visible !== false,
-            type: oldConfig?.type || (Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'string')
+            type:
+                oldConfig?.type ||
+                Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+                'string',
         };
     });
 
@@ -328,19 +343,19 @@ function buildRecordStatistics(properties) {
         typeCounts,
         numericSummary: numericValues.length
             ? {
-                count: numericValues.length,
-                sum,
-                avg: sum / numericValues.length,
-                min: Math.min(...numericValues),
-                max: Math.max(...numericValues)
-            }
+                  count: numericValues.length,
+                  sum,
+                  avg: sum / numericValues.length,
+                  min: Math.min(...numericValues),
+                  max: Math.max(...numericValues),
+              }
             : {
-                count: 0,
-                sum: 0,
-                avg: 0,
-                min: null,
-                max: null
-            }
+                  count: 0,
+                  sum: 0,
+                  avg: 0,
+                  min: null,
+                  max: null,
+              },
     };
 }
 
@@ -362,7 +377,7 @@ function normalizeFeatureRecord(feature, context = {}) {
         extent,
         properties: flattened,
         rawAttributes,
-        statistics: buildRecordStatistics(flattened)
+        statistics: buildRecordStatistics(flattened),
     };
 }
 
@@ -372,28 +387,35 @@ function normalizeLayerAttributeSnapshot(layer = {}, previousSnapshot = null) {
     const sourceType = String(layer?.sourceType || previousSnapshot?.sourceType || 'upload');
     const features = Array.isArray(layer?.features) ? layer.features : [];
     const layerMetadata = isPlainObject(layer?.metadata) ? layer.metadata : {};
-    const fallbackMetadata = isPlainObject(layer?.standardTocItem?.metadata) ? layer.standardTocItem.metadata : {};
-    const metadata = normalizeLayerMetadata({
-        ...(fallbackMetadata || {}),
-        ...(layerMetadata || {})
-    }, features);
+    const fallbackMetadata = isPlainObject(layer?.standardTocItem?.metadata)
+        ? layer.standardTocItem.metadata
+        : {};
+    const metadata = normalizeLayerMetadata(
+        {
+            ...(fallbackMetadata || {}),
+            ...(layerMetadata || {}),
+        },
+        features,
+    );
 
     const records = features.length
-        ? features.map((feature, index) => normalizeFeatureRecord(feature, {
-            id: extractFeatureId(feature, index),
-            index,
-            layerId,
-            layerName,
-            sourceType,
-            geometryType: layer?.geometryType || metadata?.geometryType || 'unknown'
-        }))
+        ? features.map((feature, index) =>
+              normalizeFeatureRecord(feature, {
+                  id: extractFeatureId(feature, index),
+                  index,
+                  layerId,
+                  layerName,
+                  sourceType,
+                  geometryType: layer?.geometryType || metadata?.geometryType || 'unknown',
+              }),
+          )
         : [];
 
     if (!records.length) {
         const syntheticAttributes = flattenAttributes({
             ...(fallbackMetadata || {}),
             ...(layerMetadata || {}),
-            ...(layer?.statistics || {})
+            ...(layer?.statistics || {}),
         });
 
         if (Object.keys(syntheticAttributes).length) {
@@ -403,20 +425,22 @@ function normalizeLayerAttributeSnapshot(layer = {}, previousSnapshot = null) {
                 layerId,
                 layerName,
                 sourceType,
-                geometryType: String(layer?.geometryType || layer?.type || metadata?.geometryType || 'raster').toLowerCase(),
+                geometryType: String(
+                    layer?.geometryType || layer?.type || metadata?.geometryType || 'raster',
+                ).toLowerCase(),
                 geometry: null,
                 extent: null,
                 properties: syntheticAttributes,
                 rawAttributes: safeClone({
                     ...(fallbackMetadata || {}),
                     ...(layerMetadata || {}),
-                    ...(layer?.statistics || {})
+                    ...(layer?.statistics || {}),
                 }),
                 statistics: {
                     valueCount: Object.keys(syntheticAttributes).length,
                     typeCounts: { string: 0, number: 0, date: 0, boolean: 0, object: 0, null: 0 },
-                    numericSummary: { count: 0, sum: 0, avg: 0, min: null, max: null }
-                }
+                    numericSummary: { count: 0, sum: 0, avg: 0, min: null, max: null },
+                },
             });
         }
     }
@@ -428,33 +452,39 @@ function normalizeLayerAttributeSnapshot(layer = {}, previousSnapshot = null) {
         acc[key] = (acc[key] || 0) + 1;
         return acc;
     }, {});
-    const aggregatedStatistics = records.reduce((acc, record) => {
-        acc.valueCount += Number(record.statistics?.valueCount || 0);
-        acc.typeCounts = mergeTypeCounts(acc.typeCounts, record.statistics?.typeCounts || {});
-        acc.numericSummary.count += Number(record.statistics?.numericSummary?.count || 0);
-        acc.numericSummary.sum += Number(record.statistics?.numericSummary?.sum || 0);
-        if (record.statistics?.numericSummary?.min !== null) {
-            acc.numericSummary.min = acc.numericSummary.min === null
-                ? record.statistics.numericSummary.min
-                : Math.min(acc.numericSummary.min, record.statistics.numericSummary.min);
-        }
-        if (record.statistics?.numericSummary?.max !== null) {
-            acc.numericSummary.max = acc.numericSummary.max === null
-                ? record.statistics.numericSummary.max
-                : Math.max(acc.numericSummary.max, record.statistics.numericSummary.max);
-        }
-        return acc;
-    }, {
-        rowCount: records.length,
-        valueCount: 0,
-        fieldCount: Object.keys(fieldConfig).length,
-        geometryTypeCounts,
-        typeCounts: { string: 0, number: 0, date: 0, boolean: 0, object: 0, null: 0 },
-        numericSummary: { count: 0, sum: 0, avg: 0, min: null, max: null }
-    });
+    const aggregatedStatistics = records.reduce(
+        (acc, record) => {
+            acc.valueCount += Number(record.statistics?.valueCount || 0);
+            acc.typeCounts = mergeTypeCounts(acc.typeCounts, record.statistics?.typeCounts || {});
+            acc.numericSummary.count += Number(record.statistics?.numericSummary?.count || 0);
+            acc.numericSummary.sum += Number(record.statistics?.numericSummary?.sum || 0);
+            if (record.statistics?.numericSummary?.min !== null) {
+                acc.numericSummary.min =
+                    acc.numericSummary.min === null
+                        ? record.statistics.numericSummary.min
+                        : Math.min(acc.numericSummary.min, record.statistics.numericSummary.min);
+            }
+            if (record.statistics?.numericSummary?.max !== null) {
+                acc.numericSummary.max =
+                    acc.numericSummary.max === null
+                        ? record.statistics.numericSummary.max
+                        : Math.max(acc.numericSummary.max, record.statistics.numericSummary.max);
+            }
+            return acc;
+        },
+        {
+            rowCount: records.length,
+            valueCount: 0,
+            fieldCount: Object.keys(fieldConfig).length,
+            geometryTypeCounts,
+            typeCounts: { string: 0, number: 0, date: 0, boolean: 0, object: 0, null: 0 },
+            numericSummary: { count: 0, sum: 0, avg: 0, min: null, max: null },
+        },
+    );
 
     if (aggregatedStatistics.numericSummary.count > 0) {
-        aggregatedStatistics.numericSummary.avg = aggregatedStatistics.numericSummary.sum / aggregatedStatistics.numericSummary.count;
+        aggregatedStatistics.numericSummary.avg =
+            aggregatedStatistics.numericSummary.sum / aggregatedStatistics.numericSummary.count;
     }
 
     return {
@@ -462,12 +492,14 @@ function normalizeLayerAttributeSnapshot(layer = {}, previousSnapshot = null) {
         layerId,
         layerName,
         sourceType,
-        geometryType: String(layer?.geometryType || metadata?.geometryType || (records[0]?.geometryType || 'unknown')),
+        geometryType: String(
+            layer?.geometryType || metadata?.geometryType || records[0]?.geometryType || 'unknown',
+        ),
         metadata,
         rows: records,
         records,
         fieldConfig,
-        statistics: aggregatedStatistics
+        statistics: aggregatedStatistics,
     };
 }
 
@@ -479,6 +511,6 @@ export function createLayerMetadataNormalizationFeature() {
         normalizeLayerAttributeSnapshot,
         getFeatureRepresentativeLonLat,
         inferLayerRepresentativeLonLat,
-        normalizeLayerMetadata
+        normalizeLayerMetadata,
     };
 }

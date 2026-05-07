@@ -4,12 +4,15 @@ export function saveUserPositionToCache(pos) {
     if (!pos) return;
 
     try {
-        localStorage.setItem(USER_POSITION_CACHE_KEY, JSON.stringify({
-            lon: Number(pos.lon),
-            lat: Number(pos.lat),
-            accuracy: Number(pos.accuracy || 0),
-            timestamp: Date.now()
-        }));
+        localStorage.setItem(
+            USER_POSITION_CACHE_KEY,
+            JSON.stringify({
+                lon: Number(pos.lon),
+                lat: Number(pos.lat),
+                accuracy: Number(pos.accuracy || 0),
+                timestamp: Date.now(),
+            }),
+        );
     } catch (e) {
         // Ignore storage failures to avoid breaking map/chat flow.
     }
@@ -26,7 +29,7 @@ export function readUserPositionFromCache() {
             lon: Number(parsed.lon),
             lat: Number(parsed.lat),
             accuracy: Number(parsed.accuracy || 0),
-            timestamp: Number(parsed.timestamp || 0)
+            timestamp: Number(parsed.timestamp || 0),
         };
     } catch (e) {
         return null;

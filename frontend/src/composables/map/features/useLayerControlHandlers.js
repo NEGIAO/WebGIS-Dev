@@ -1,6 +1,6 @@
 /**
  * 图层控制面板事件处理库（Phase 21 - 性能优化版）
- * 
+ *
  * 主要改进：
  * 1. 引入 AbortController 机制阻断无用的底图切片请求
  * 2. 优化并发槽位释放，解决国外底图加载导致的“卡死”问题
@@ -14,7 +14,7 @@ export function createLayerControlHandlers({
     layerInstances,
     refreshLayersState,
     createAutoTileSourceFromUrl,
-    message
+    message,
 }) {
     /**
      * 【关键改动 1】：内部助手函数
@@ -36,17 +36,17 @@ export function createLayerControlHandlers({
     function applyBasemapSelection(layerId) {
         const normalizedLayerId = String(layerId || '').trim();
         if (!normalizedLayerId || !selectedLayerRef) return;
-        
+
         if (selectedLayerRef.value === normalizedLayerId) {
             return;
         }
-        
+
         /**
          * 【关键改动 2】：先阻断，再切换
          * 如果不调用这一步，旧底图（如 Google）没加载完的瓦片会继续占用网络通道[cite: 2]
          */
         stopLayerNetworkRequests(selectedLayerRef.value);
-        
+
         selectedLayerRef.value = normalizedLayerId;
     }
 
@@ -70,7 +70,7 @@ export function createLayerControlHandlers({
                 xyz: '标准XYZ',
                 'non-standard-xyz': '非标准XYZ',
                 wms: 'WMS',
-                wmts: 'WMTS'
+                wmts: 'WMTS',
             };
 
             message?.success?.(`自动识别图源: ${kindTextMap[detected.kind]}（${detected.detail}）`);
@@ -84,9 +84,8 @@ export function createLayerControlHandlers({
                 }
             }
         } catch (error) {
-            const errorMessage = error instanceof Error
-                ? error.message
-                : String(error || 'URL格式错误或无法解析');
+            const errorMessage =
+                error instanceof Error ? error.message : String(error || 'URL格式错误或无法解析');
             message?.error?.(`加载自定义图源失败: ${errorMessage}`);
         }
     }
@@ -152,6 +151,6 @@ export function createLayerControlHandlers({
     return {
         loadCustomMap,
         handleLayerChange,
-        handleLayerOrderUpdate
+        handleLayerOrderUpdate,
     };
 }

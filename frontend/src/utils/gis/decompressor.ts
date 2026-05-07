@@ -11,7 +11,10 @@ function isArrayBufferLike(input: unknown): input is ArrayBuffer {
 }
 
 function normalizePath(path = ''): string {
-    return String(path || '').replace(/\\/g, '/').replace(/^\.?\//, '').trim();
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/^\.?\//, '')
+        .trim();
 }
 
 function extOf(path: string): string {
@@ -40,7 +43,12 @@ async function readAsArrayBuffer(file: any): Promise<ArrayBuffer> {
 }
 
 function isEntryLike(input: unknown): input is any {
-    return !!input && typeof input === 'object' && ('isFile' in (input as Record<string, unknown>) || 'isDirectory' in (input as Record<string, unknown>));
+    return (
+        !!input &&
+        typeof input === 'object' &&
+        ('isFile' in (input as Record<string, unknown>) ||
+            'isDirectory' in (input as Record<string, unknown>))
+    );
 }
 
 function isBlobLike(input: unknown): input is any {
@@ -55,22 +63,27 @@ async function readDirectoryChildren(entry: any): Promise<any[]> {
     const reader = entry.createReader();
     const all: any[] = [];
 
-    const readBatch = (): Promise<void> => new Promise((resolve, reject) => {
-        reader.readEntries((entries: any[]) => {
-            if (!entries || !entries.length) {
-                resolve();
-                return;
-            }
-            all.push(...entries);
-            readBatch().then(resolve).catch(reject);
-        }, reject);
-    });
+    const readBatch = (): Promise<void> =>
+        new Promise((resolve, reject) => {
+            reader.readEntries((entries: any[]) => {
+                if (!entries || !entries.length) {
+                    resolve();
+                    return;
+                }
+                all.push(...entries);
+                readBatch().then(resolve).catch(reject);
+            }, reject);
+        });
 
     await readBatch();
     return all;
 }
 
-async function flattenArchive(buffer: ArrayBuffer, basePath: string, archiveExt = 'zip'): Promise<FlattenedResource[]> {
+async function flattenArchive(
+    buffer: ArrayBuffer,
+    basePath: string,
+    archiveExt = 'zip',
+): Promise<FlattenedResource[]> {
     const JSZip = await loadJsZip();
     const zip = await JSZip.loadAsync(buffer);
     const output: FlattenedResource[] = [];
@@ -103,9 +116,10 @@ async function flattenArchive(buffer: ArrayBuffer, basePath: string, archiveExt 
 
         // KMZ 的主 KML 常见文件名为 doc.kml。这里将其映射为“容器基名.kml”，
         // 确保后续 TOC 图层名保持为原始 KMZ 文件名，而不是 doc/乱码名。
-        const preferredPath = (String(archiveExt).toLowerCase() === 'kmz' && entryExt === 'kml')
-            ? normalizePath(`${basePath}.kml`)
-            : normalizePath(basePath ? `${basePath}/${entryPath}` : entryPath);
+        const preferredPath =
+            String(archiveExt).toLowerCase() === 'kmz' && entryExt === 'kml'
+                ? normalizePath(`${basePath}.kml`)
+                : normalizePath(basePath ? `${basePath}/${entryPath}` : entryPath);
         const innerPath = ensureUniquePath(preferredPath);
         const ext = extOf(innerPath);
 
@@ -123,7 +137,9 @@ async function flattenArchive(buffer: ArrayBuffer, basePath: string, archiveExt 
 }
 
 async function flattenFile(file: any, preferredPath = ''): Promise<FlattenedResource[]> {
-    const path = normalizePath(preferredPath || (file as any).webkitRelativePath || (file as any).name || 'unknown');
+    const path = normalizePath(
+        preferredPath || (file as any).webkitRelativePath || (file as any).name || 'unknown',
+    );
     const ext = extOf(path);
     const buffer = await readAsArrayBuffer(file);
 
@@ -140,7 +156,11 @@ async function flattenEntry(entry: any, basePath = ''): Promise<FlattenedResourc
 
     if (entry.isFile) {
         const file = await readEntryFile(entry);
-        const path = normalizePath(basePath ? `${basePath}/${file.name}` : (entry.fullPath || file.webkitRelativePath || file.name));
+        const path = normalizePath(
+            basePath
+                ? `${basePath}/${file.name}`
+                : entry.fullPath || file.webkitRelativePath || file.name,
+        );
         return flattenFile(file, path);
     }
 
@@ -173,7 +193,10 @@ export async function flattenResources(resources: any[]): Promise<FlattenedResou
         }
 
         if (isBlobLike(resource)) {
-            const flattened = await flattenFile(resource, (resource as any).webkitRelativePath || (resource as any).name || 'unknown');
+            const flattened = await flattenFile(
+                resource,
+                (resource as any).webkitRelativePath || (resource as any).name || 'unknown',
+            );
             output.push(...flattened);
         }
     }

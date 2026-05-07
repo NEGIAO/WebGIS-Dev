@@ -81,7 +81,12 @@ export const encodePos = (lng, lat) => {
     const lngScaled = Math.round((normalizedLng + 180) * COORD_SCALE);
     const latScaled = Math.round((normalizedLat + 90) * COORD_SCALE);
 
-    if (lngScaled < 0 || lngScaled > LNG_MAX_SCALED || latScaled < 0 || latScaled > LAT_MAX_SCALED) {
+    if (
+        lngScaled < 0 ||
+        lngScaled > LNG_MAX_SCALED ||
+        latScaled < 0 ||
+        latScaled > LAT_MAX_SCALED
+    ) {
         return '0';
     }
 
@@ -115,7 +120,12 @@ export const decodePos = (code) => {
         return null;
     }
 
-    if (lngScaled < 0 || lngScaled > LNG_MAX_SCALED || latScaled < 0 || latScaled > LAT_MAX_SCALED) {
+    if (
+        lngScaled < 0 ||
+        lngScaled > LNG_MAX_SCALED ||
+        latScaled < 0 ||
+        latScaled > LAT_MAX_SCALED
+    ) {
         return null;
     }
 
@@ -124,7 +134,7 @@ export const decodePos = (code) => {
 
     return {
         lng: Number(lng.toFixed(6)),
-        lat: Number(lat.toFixed(6))
+        lat: Number(lat.toFixed(6)),
     };
 };
 
@@ -149,7 +159,11 @@ export const encodeCompassState = (lng, lat, radiusMeters) => {
         return '0';
     }
 
-    if (!Number.isFinite(normalizedRadius) || normalizedRadius < 0 || normalizedRadius > RADIUS_MAX_SCALED / RADIUS_SCALE) {
+    if (
+        !Number.isFinite(normalizedRadius) ||
+        normalizedRadius < 0 ||
+        normalizedRadius > RADIUS_MAX_SCALED / RADIUS_SCALE
+    ) {
         return '0';
     }
 
@@ -158,12 +172,12 @@ export const encodeCompassState = (lng, lat, radiusMeters) => {
     const radiusScaled = Math.round(normalizedRadius * RADIUS_SCALE);
 
     if (
-        lngScaled < 0
-        || lngScaled > LNG_MAX_SCALED
-        || latScaled < 0
-        || latScaled > LAT_MAX_SCALED
-        || radiusScaled < 0
-        || radiusScaled > RADIUS_MAX_SCALED
+        lngScaled < 0 ||
+        lngScaled > LNG_MAX_SCALED ||
+        latScaled < 0 ||
+        latScaled > LAT_MAX_SCALED ||
+        radiusScaled < 0 ||
+        radiusScaled > RADIUS_MAX_SCALED
     ) {
         return '0';
     }
@@ -200,20 +214,20 @@ export const decodeCompassState = (code) => {
     const latScaled = Number(packedPos & LAT_MASK);
 
     if (
-        !Number.isFinite(lngScaled)
-        || !Number.isFinite(latScaled)
-        || !Number.isFinite(radiusScaled)
+        !Number.isFinite(lngScaled) ||
+        !Number.isFinite(latScaled) ||
+        !Number.isFinite(radiusScaled)
     ) {
         return null;
     }
 
     if (
-        lngScaled < 0
-        || lngScaled > LNG_MAX_SCALED
-        || latScaled < 0
-        || latScaled > LAT_MAX_SCALED
-        || radiusScaled < 0
-        || radiusScaled > RADIUS_MAX_SCALED
+        lngScaled < 0 ||
+        lngScaled > LNG_MAX_SCALED ||
+        latScaled < 0 ||
+        latScaled > LAT_MAX_SCALED ||
+        radiusScaled < 0 ||
+        radiusScaled > RADIUS_MAX_SCALED
     ) {
         return null;
     }
@@ -225,6 +239,6 @@ export const decodeCompassState = (code) => {
     return {
         lng: Number(lng.toFixed(6)),
         lat: Number(lat.toFixed(6)),
-        radius: Number(radius.toFixed(1))
+        radius: Number(radius.toFixed(1)),
     };
 };

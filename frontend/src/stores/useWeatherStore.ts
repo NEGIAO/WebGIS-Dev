@@ -52,7 +52,7 @@ export const useWeatherStore = defineStore('weatherStore', () => {
             lon,
             lat,
             source: String(payload?.source || 'map').trim() || 'map',
-            timestamp: Number(payload?.timestamp) > 0 ? Number(payload.timestamp) : Date.now()
+            timestamp: Number(payload?.timestamp) > 0 ? Number(payload.timestamp) : Date.now(),
         };
         return true;
     }
@@ -65,6 +65,6 @@ export const useWeatherStore = defineStore('weatherStore', () => {
         lastUpdatedAt,
         mapPointTrigger,
         setAdcode,
-        setMapPointTrigger
+        setMapPointTrigger,
     };
 });

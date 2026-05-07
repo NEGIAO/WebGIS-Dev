@@ -48,9 +48,7 @@ function normalizeAdcode(rawAdcode: unknown): string {
 function normalizeExtent(rawExtent: unknown): number[] {
     if (!Array.isArray(rawExtent) || rawExtent.length < 4) return [];
 
-    const next = rawExtent
-        .slice(0, 4)
-        .map((value) => Number(value));
+    const next = rawExtent.slice(0, 4).map((value) => Number(value));
 
     return next.every((value) => Number.isFinite(value)) ? next : [];
 }
@@ -59,11 +57,14 @@ function transformCoordinateValue(rawCoordinates: unknown): unknown {
     if (!Array.isArray(rawCoordinates)) return rawCoordinates;
 
     if (
-        rawCoordinates.length >= 2
-        && Number.isFinite(rawCoordinates[0])
-        && Number.isFinite(rawCoordinates[1])
+        rawCoordinates.length >= 2 &&
+        Number.isFinite(rawCoordinates[0]) &&
+        Number.isFinite(rawCoordinates[1])
     ) {
-        const [lon, lat] = convertGCJ02ToWGS84(Number(rawCoordinates[0]), Number(rawCoordinates[1]));
+        const [lon, lat] = convertGCJ02ToWGS84(
+            Number(rawCoordinates[0]),
+            Number(rawCoordinates[1]),
+        );
         const copy = [...rawCoordinates];
         copy[0] = lon;
         copy[1] = lat;
@@ -84,7 +85,7 @@ function transformGeometry(geometry: any): any {
             ...geometry,
             geometries: Array.isArray(geometry.geometries)
                 ? geometry.geometries.map((item: any) => transformGeometry(item))
-                : []
+                : [],
         };
     }
 
@@ -92,21 +93,23 @@ function transformGeometry(geometry: any): any {
 
     return {
         ...geometry,
-        coordinates: transformCoordinateValue(geometry.coordinates)
+        coordinates: transformCoordinateValue(geometry.coordinates),
     };
 }
 
 function normalizeBoundaryGeoJSON(payload: any): any {
     const rawFeatures = Array.isArray(payload?.features)
         ? payload.features
-        : (payload?.type === 'Feature' ? [payload] : []);
+        : payload?.type === 'Feature'
+          ? [payload]
+          : [];
 
     return {
         type: 'FeatureCollection',
         features: rawFeatures.map((feature: any) => ({
             ...feature,
-            geometry: transformGeometry(feature?.geometry)
-        }))
+            geometry: transformGeometry(feature?.geometry),
+        })),
     };
 }
 
@@ -115,7 +118,7 @@ function resolveFeatureName(feature: Feature): string {
         feature.get('name'),
         feature.get('NAME'),
         feature.get('fullname'),
-        feature.get('fullName')
+        feature.get('fullName'),
     ];
 
     for (const item of candidates) {
@@ -147,14 +150,17 @@ export class DistrictManager {
         this.format = new GeoJSON();
     }
 
-    private createLayerForDistrict(adcode: string, name: string): { layer: VectorLayer<VectorSource>, source: VectorSource } {
+    private createLayerForDistrict(
+        adcode: string,
+        name: string,
+    ): { layer: VectorLayer<VectorSource>; source: VectorSource } {
         const layerId = `district_${adcode}`;
-        
+
         // 如果已经存在，直接返回
         if (this.districtLayers.has(layerId)) {
             return {
                 layer: this.districtLayers.get(layerId)!,
-                source: this.districtSources.get(layerId)!
+                source: this.districtSources.get(layerId)!,
             };
         }
 
@@ -167,11 +173,11 @@ export class DistrictManager {
                 const boundaryStyle = new Style({
                     stroke: new Stroke({
                         color: 'rgba(33, 188, 255, 0.95)',
-                        width: 2.2
+                        width: 2.2,
                     }),
                     fill: new Fill({
-                        color: 'rgba(33, 188, 255, 0.10)'
-                    })
+                        color: 'rgba(33, 188, 255, 0.10)',
+                    }),
                 });
 
                 if (!districtName) return boundaryStyle;
@@ -183,11 +189,11 @@ export class DistrictManager {
                         fill: new Fill({ color: '#ffffff' }),
                         stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.72)', width: 3 }),
                         overflow: true,
-                    })
+                    }),
                 });
 
                 return [boundaryStyle, textStyle];
-            }
+            },
         });
 
         layer.set('layerId', layerId);
@@ -202,16 +208,19 @@ export class DistrictManager {
         return { layer, source };
     }
 
-    private pushLayerMeta(layerId: string, meta: {
-        adcode: string;
-        name: string;
-        sourceUrl: string;
-        featureCount: number;
-        extent: number[];
-        longitude?: number;
-        latitude?: number;
-        features?: any[];
-    }): void {
+    private pushLayerMeta(
+        layerId: string,
+        meta: {
+            adcode: string;
+            name: string;
+            sourceUrl: string;
+            featureCount: number;
+            extent: number[];
+            longitude?: number;
+            latitude?: number;
+            features?: any[];
+        },
+    ): void {
         const layer = this.districtLayers.get(layerId);
         this.tocStore.upsertLayerMeta({
             id: layerId,
@@ -229,36 +238,45 @@ export class DistrictManager {
             metadata: {
                 endpoint: DISTRICT_ENDPOINT_BASE,
                 projection: 'WGS84->WebMercator',
-                fitApplied: true
-            }
+                fitApplied: true,
+            },
         });
     }
 
-    private syncManagedLayerRecord(layerId: string, name: string, features: any[], extent: number[]): void {
+    private syncManagedLayerRecord(
+        layerId: string,
+        name: string,
+        features: any[],
+        extent: number[],
+    ): void {
         const layer = this.districtLayers.get(layerId);
         if (!layer) return;
 
-        const geometryCenter = Array.isArray(extent) && extent.length >= 4
-            ? getExtentCenter(extent as [number, number, number, number])
-            : null;
+        const geometryCenter =
+            Array.isArray(extent) && extent.length >= 4
+                ? getExtentCenter(extent as [number, number, number, number])
+                : null;
         const [longitude, latitude] = geometryCenter
             ? toLonLat(geometryCenter, this.map.getView().getProjection())
             : [undefined, undefined];
 
-        const serializedFeatures = typeof this.serializeManagedFeatures === 'function'
-            ? this.serializeManagedFeatures(features, name)
-            : features.map((feature, index) => ({
-                type: 'Feature',
-                id: String(feature?.getId?.() || `${layerId}_${index + 1}`),
-                _gid: String(feature?.getId?.() || `${layerId}_${index + 1}`),
-                properties: {
-                    ...(typeof feature?.getProperties === 'function' ? feature.getProperties() : {})
-                },
-                geometry: {
-                    type: feature?.getGeometry?.()?.getType?.() || 'Geometry',
-                    coordinates: feature?.getGeometry?.()?.getCoordinates?.() || null
-                }
-            }));
+        const serializedFeatures =
+            typeof this.serializeManagedFeatures === 'function'
+                ? this.serializeManagedFeatures(features, name)
+                : features.map((feature, index) => ({
+                      type: 'Feature',
+                      id: String(feature?.getId?.() || `${layerId}_${index + 1}`),
+                      _gid: String(feature?.getId?.() || `${layerId}_${index + 1}`),
+                      properties: {
+                          ...(typeof feature?.getProperties === 'function'
+                              ? feature.getProperties()
+                              : {}),
+                      },
+                      geometry: {
+                          type: feature?.getGeometry?.()?.getType?.() || 'Geometry',
+                          coordinates: feature?.getGeometry?.()?.getCoordinates?.() || null,
+                      },
+                  }));
 
         const existingIndex = this.userDataLayers.findIndex((item) => item?.id === layerId);
         const nextRecord = {
@@ -267,14 +285,18 @@ export class DistrictManager {
             name,
             type: 'geojson',
             sourceType: 'district-boundary',
-            order: existingIndex >= 0 ? this.userDataLayers[existingIndex].order : this.userDataLayers.length,
+            order:
+                existingIndex >= 0
+                    ? this.userDataLayers[existingIndex].order
+                    : this.userDataLayers.length,
             visible: layer.getVisible() !== false,
             opacity: 1,
             featureCount: features.length,
             features: serializedFeatures,
             autoLabel: true,
             labelVisible: true,
-            styleConfig: existingIndex >= 0 ? this.userDataLayers[existingIndex].styleConfig : undefined,
+            styleConfig:
+                existingIndex >= 0 ? this.userDataLayers[existingIndex].styleConfig : undefined,
             metadata: {
                 ...(existingIndex >= 0 ? this.userDataLayers[existingIndex].metadata || {} : {}),
                 category: 'administrative-division',
@@ -282,9 +304,9 @@ export class DistrictManager {
                 longitude,
                 latitude,
                 crs: 'wgs84',
-                sourceProjection: 'EPSG:4326'
+                sourceProjection: 'EPSG:4326',
             },
-            layer
+            layer,
         };
 
         if (existingIndex >= 0) {
@@ -318,9 +340,9 @@ export class DistrictManager {
         // 创建或获取图层和数据源
         const { layer, source } = this.createLayerForDistrict(adcode, layerName);
 
-        const response = await fetch(sourceUrl, { 
+        const response = await fetch(sourceUrl, {
             method: 'GET',
-            referrerPolicy: 'no-referrer' 
+            referrerPolicy: 'no-referrer',
         });
 
         if (!response.ok) {
@@ -332,7 +354,7 @@ export class DistrictManager {
 
         const features = this.format.readFeatures(normalizedGeoJSON, {
             dataProjection: 'EPSG:4326',
-            featureProjection: this.map.getView().getProjection()
+            featureProjection: this.map.getView().getProjection(),
         });
 
         if (!features.length) {
@@ -343,9 +365,10 @@ export class DistrictManager {
         source.addFeatures(features);
 
         const extent = normalizeExtent(source.getExtent());
-        const geometryCenter = extent.length === 4
-            ? getExtentCenter(extent as [number, number, number, number])
-            : null;
+        const geometryCenter =
+            extent.length === 4
+                ? getExtentCenter(extent as [number, number, number, number])
+                : null;
         const [longitude, latitude] = geometryCenter
             ? toLonLat(geometryCenter, this.map.getView().getProjection())
             : [undefined, undefined];
@@ -355,7 +378,7 @@ export class DistrictManager {
             this.map.getView().fit(extent, {
                 padding: [72, 72, 72, 72],
                 duration: 760,
-                maxZoom: 10
+                maxZoom: 10,
             });
         }
 
@@ -367,9 +390,10 @@ export class DistrictManager {
             extent,
             longitude,
             latitude,
-            features: typeof this.serializeManagedFeatures === 'function'
-                ? this.serializeManagedFeatures(features, layerName)
-                : []
+            features:
+                typeof this.serializeManagedFeatures === 'function'
+                    ? this.serializeManagedFeatures(features, layerName)
+                    : [],
         });
 
         this.syncManagedLayerRecord(layerId, layerName, features, extent);
@@ -378,7 +402,7 @@ export class DistrictManager {
             adcode,
             name: layerName,
             featureCount: features.length,
-            extent
+            extent,
         };
     }
 
@@ -391,7 +415,7 @@ export class DistrictManager {
             if (meta) {
                 this.tocStore.upsertLayerMeta({
                     ...meta,
-                    visible
+                    visible,
                 });
             }
         }
@@ -417,14 +441,14 @@ export class DistrictManager {
     }
 
     clear(): void {
-        Array.from(this.districtLayers.keys()).forEach(layerId => {
+        Array.from(this.districtLayers.keys()).forEach((layerId) => {
             const layer = this.districtLayers.get(layerId);
             if (layer) {
                 this.map.removeLayer(layer);
             }
         });
 
-        Array.from(this.districtSources.keys()).forEach(layerId => {
+        Array.from(this.districtSources.keys()).forEach((layerId) => {
             const source = this.districtSources.get(layerId);
             if (source) {
                 source.clear();
@@ -436,8 +460,8 @@ export class DistrictManager {
 
         // 清除所有行政区划元数据
         this.tocStore.layerMetadataList
-            .filter(meta => meta.sourceType === 'district-boundary')
-            .forEach(meta => this.tocStore.removeLayerMeta(meta.id));
+            .filter((meta) => meta.sourceType === 'district-boundary')
+            .forEach((meta) => this.tocStore.removeLayerMeta(meta.id));
     }
 
     dispose(): void {

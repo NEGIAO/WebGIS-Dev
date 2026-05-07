@@ -10,9 +10,9 @@ function buildReverseGeocodeProperties(reverseResult) {
     const provider = String(reverseResult?.provider || '').trim();
     const businessAreaText = Array.isArray(reverseResult?.businessAreas)
         ? reverseResult.businessAreas
-            .map((item) => String(item?.name || '').trim())
-            .filter(Boolean)
-            .join('、')
+              .map((item) => String(item?.name || '').trim())
+              .filter(Boolean)
+              .join('、')
         : '';
 
     return {
@@ -22,7 +22,7 @@ function buildReverseGeocodeProperties(reverseResult) {
         逆地理编码区县: district || '未知',
         逆地理编码乡镇: township || '未知',
         逆地理编码商圈: businessAreaText || '无',
-        逆地理编码服务: provider || 'unknown'
+        逆地理编码服务: provider || 'unknown',
     };
 }
 
@@ -34,14 +34,14 @@ function buildReverseGeocodeProperties(reverseResult) {
  */
 export function usePositionCodeTool({
     tiandituTk = '',
-    reverseGeocode = apiReverseGeocodeWithFallback
+    reverseGeocode = apiReverseGeocodeWithFallback,
 } = {}) {
     async function decodePositionCodeToPointPayload(code) {
         const normalizedCode = String(code || '').trim();
         if (!normalizedCode || normalizedCode === '0') {
             return {
                 ok: false,
-                error: '请输入有效的 p 参数（不能为 0）'
+                error: '请输入有效的 p 参数（不能为 0）',
             };
         }
 
@@ -49,7 +49,7 @@ export function usePositionCodeTool({
         if (!decoded || !Number.isFinite(decoded.lng) || !Number.isFinite(decoded.lat)) {
             return {
                 ok: false,
-                error: 'p 参数解码失败，请检查编码内容'
+                error: 'p 参数解码失败，请检查编码内容',
             };
         }
 
@@ -57,7 +57,7 @@ export function usePositionCodeTool({
         try {
             const reverseResponse = await reverseGeocode(decoded.lng, decoded.lat, {
                 tiandituTk,
-                silent: true
+                silent: true,
             });
             reverseResult = reverseResponse?.data || null;
         } catch {
@@ -82,13 +82,13 @@ export function usePositionCodeTool({
                     原始编码: normalizedCode,
                     解析后经度: Number(decoded.lng.toFixed(6)),
                     解析后纬度: Number(decoded.lat.toFixed(6)),
-                    ...buildReverseGeocodeProperties(reverseResult)
-                }
-            }
+                    ...buildReverseGeocodeProperties(reverseResult),
+                },
+            },
         };
     }
 
     return {
-        decodePositionCodeToPointPayload
+        decodePositionCodeToPointPayload,
     };
 }

@@ -1,5 +1,8 @@
 function normalizePath(path) {
-    return String(path || '').replace(/\\/g, '/').replace(/^\.\//, '').trim();
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .trim();
 }
 
 function getExtension(path) {
@@ -18,16 +21,20 @@ function detectMagicTypeFromBytes(bytes) {
         const b2 = bytes[2];
         const b3 = bytes[3];
 
-        if (b0 === 0x50 && b1 === 0x4b && (
-            (b2 === 0x03 && b3 === 0x04)
-            || (b2 === 0x05 && b3 === 0x06)
-            || (b2 === 0x07 && b3 === 0x08)
-        )) {
+        if (
+            b0 === 0x50 &&
+            b1 === 0x4b &&
+            ((b2 === 0x03 && b3 === 0x04) ||
+                (b2 === 0x05 && b3 === 0x06) ||
+                (b2 === 0x07 && b3 === 0x08))
+        ) {
             return 'zip';
         }
 
-        if ((b0 === 0x49 && b1 === 0x49 && b2 === 0x2a && b3 === 0x00)
-            || (b0 === 0x4d && b1 === 0x4d && b2 === 0x00 && b3 === 0x2a)) {
+        if (
+            (b0 === 0x49 && b1 === 0x49 && b2 === 0x2a && b3 === 0x00) ||
+            (b0 === 0x4d && b1 === 0x4d && b2 === 0x00 && b3 === 0x2a)
+        ) {
             return 'tiff';
         }
     }
@@ -90,7 +97,7 @@ export async function decompressBuffer(input) {
             extension,
             magicType,
             buffer,
-            size: buffer.byteLength
+            size: buffer.byteLength,
         });
     }
 
@@ -106,9 +113,11 @@ export async function decompressBuffer(input) {
         fileEntryMap,
         hasNestedPath: entries.some((item) => item.path.includes('/')),
         findByExtension(ext) {
-            const normalizedExt = String(ext || '').toLowerCase().replace(/^\./, '');
+            const normalizedExt = String(ext || '')
+                .toLowerCase()
+                .replace(/^\./, '');
             return entries.filter((item) => item.extension === normalizedExt);
-        }
+        },
     };
 }
 

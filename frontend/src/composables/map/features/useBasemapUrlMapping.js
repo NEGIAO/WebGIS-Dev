@@ -1,7 +1,7 @@
 /**
  * 底图URL映射功能库
  * 负责底图索引与ID的互相转换、分类与分组信息查询
- * 
+ *
  * 导出：
  * - getLayerIdByIndex(index)
  * - getLayerIndexById(layerId)
@@ -19,7 +19,7 @@
 export function createBasemapUrlMappingFeature({
     urlLayerOptions = [],
     getLayerCategoryById = () => null,
-    getLayerGroupById = () => null
+    getLayerGroupById = () => null,
 }) {
     /**
      * 根据图层索引获取底图 ID
@@ -67,6 +67,6 @@ export function createBasemapUrlMappingFeature({
         getLayerIdByIndex,
         getLayerIndexById,
         getLayerCategory,
-        getLayerGroup
+        getLayerGroup,
     };
 }

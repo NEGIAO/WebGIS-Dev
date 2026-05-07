@@ -3,16 +3,20 @@
         <div class="container fade-in">
             <div class="form-header">
                 <h1 class="form-title">NEGIAO's WebGIS</h1>
-                <h1 class="form-title"> 用户登录/注册</h1>
+                <h1 class="form-title">用户登录/注册</h1>
                 <p class="form-subtitle">登录以访问系统主页与受保护 API</p>
 
                 <div class="quick-hints">
                     <div class="hint-item">游客登陆API受限</div>
                 </div>
             </div>
-            
+
             <div class="form-body">
-                <div class="mode-switch" role="tablist" aria-label="登录或注册">
+                <div
+                    class="mode-switch"
+                    role="tablist"
+                    aria-label="登录或注册"
+                >
                     <button
                         type="button"
                         class="mode-btn"
@@ -36,20 +40,29 @@
                         <label for="username">用户名</label>
                         <div class="input-group">
                             <i class="icon fas fa-user"></i>
-                            <input 
-                                type="text" 
-                                id="username" 
-                                v-model="username" 
-                                :placeholder="mode === 'login' ? '请输入用户名（游客请输入 user）' : '3-24位：字母/数字/下划线'"
+                            <input
+                                type="text"
+                                id="username"
+                                v-model="username"
+                                :placeholder="mode === 'login'
+                                        ? '请输入用户名（游客请输入 user）'
+                                        : '3-24位：字母/数字/下划线'
+                                    "
                                 :required="mode === 'register'"
                                 @blur="handleUsernameBlur"
-                            >
+                            />
                         </div>
-                        <div class="hint" v-if="mode === 'login'">
+                        <div
+                            class="hint"
+                            v-if="mode === 'login'"
+                        >
                             <i class="fas fa-info-circle"></i>
                             登录角色由后端统一校验（游客/注册用户/管理员）
                         </div>
-                        <div class="hint" v-else>
+                        <div
+                            class="hint"
+                            v-else
+                        >
                             <i class="fas fa-user-plus"></i>
                             user/admin 为保留用户名，不能注册
                         </div>
@@ -62,30 +75,40 @@
                             {{ usernameCheckMessage }}
                         </div>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="password">密码</label>
                         <div class="input-group">
                             <i class="icon fas fa-lock"></i>
-                            <input 
-                                type="password" 
-                                id="password" 
-                                v-model="password" 
-                                :placeholder="mode === 'login' ? '请输入密码' : '6-64位，至少包含字母和数字'"
+                            <input
+                                type="password"
+                                id="password"
+                                v-model="password"
+                                :placeholder="mode === 'login' ? '请输入密码' : '6-64位，至少包含字母和数字'
+                                    "
                                 required
-                            >
+                            />
                         </div>
-                        <div class="hint" v-if="mode === 'login'">
+                        <div
+                            class="hint"
+                            v-if="mode === 'login'"
+                        >
                             <i class="fas fa-shield-alt"></i>
                             游客默认一键登陆，无需密码，注册用户请使用注册时设置的密码登录
                         </div>
-                        <div class="hint" v-else>
+                        <div
+                            class="hint"
+                            v-else
+                        >
                             <i class="fas fa-shield-alt"></i>
                             注册密码必须包含字母和数字
                         </div>
                     </div>
 
-                    <div class="form-group" v-if="mode === 'register'">
+                    <div
+                        class="form-group"
+                        v-if="mode === 'register'"
+                    >
                         <label for="confirmPassword">确认密码</label>
                         <div class="input-group">
                             <i class="icon fas fa-check-circle"></i>
@@ -95,13 +118,20 @@
                                 v-model="confirmPassword"
                                 placeholder="再次输入密码"
                                 required
-                            >
+                            />
                         </div>
                     </div>
 
-                    <div class="form-group" v-if="mode === 'register'">
+                    <div
+                        class="form-group"
+                        v-if="mode === 'register'"
+                    >
                         <label>选择头像</label>
-                        <div class="avatar-grid" role="radiogroup" aria-label="注册头像选择">
+                        <div
+                            class="avatar-grid"
+                            role="radiogroup"
+                            aria-label="注册头像选择"
+                        >
                             <button
                                 v-for="avatar in avatarOptions"
                                 :key="avatar.index"
@@ -112,42 +142,74 @@
                                 :aria-pressed="selectedAvatarIndex === avatar.index"
                                 @click="selectedAvatarIndex = avatar.index"
                             >
-                                <img :src="avatar.src" :alt="avatar.label" loading="lazy">
+                                <img
+                                    :src="avatar.src"
+                                    :alt="avatar.label"
+                                    loading="lazy"
+                                />
                                 <span>{{ avatar.label }}</span>
                             </button>
                         </div>
                     </div>
 
-                    <div class="quick-action-row" v-if="mode === 'login'">
-                        <button type="button" class="quick-btn guest-login" @click="quickGuestLogin">
+                    <div
+                        class="quick-action-row"
+                        v-if="mode === 'login'"
+                    >
+                        <button
+                            type="button"
+                            class="quick-btn guest-login"
+                            @click="quickGuestLogin"
+                        >
                             <i class="fas fa-person-hiking"></i>
                             游客一键登陆
                         </button>
-                        <button type="button" class="quick-btn confirm-login" :disabled="isSubmitting" @click="handleSubmit">
+                        <button
+                            type="button"
+                            class="quick-btn confirm-login"
+                            :disabled="isSubmitting"
+                            @click="handleSubmit"
+                        >
                             <i class="fas fa-sign-in-alt"></i>
                             {{ isSubmitting ? '处理中...' : '确认登陆' }}
                         </button>
                     </div>
 
-                    <div v-if="formMessage" :class="['validation-message', formStatus]">
+                    <div
+                        v-if="formMessage"
+                        :class="['validation-message', formStatus]"
+                    >
                         {{ formMessage }}
                     </div>
-                    
-                    <button v-if="mode === 'register'" type="submit" class="btn" :disabled="isSubmitting">
+
+                    <button
+                        v-if="mode === 'register'"
+                        type="submit"
+                        class="btn"
+                        :disabled="isSubmitting"
+                    >
                         {{ isSubmitting ? '处理中...' : '创建账号' }}
                     </button>
-                    
+
                     <div class="login-link">
                         <template v-if="mode === 'login'">
-                            还没有账号？ <a href="#" @click.prevent="switchMode('register')">立即注册</a>
+                            还没有账号？
+                            <a
+                                href="#"
+                                @click.prevent="switchMode('register')"
+                            >立即注册</a>
                         </template>
                         <template v-else>
-                            已有账号？ <a href="#" @click.prevent="switchMode('login')">返回登录</a>
+                            已有账号？
+                            <a
+                                href="#"
+                                @click.prevent="switchMode('login')"
+                            >返回登录</a>
                         </template>
                     </div>
                 </form>
             </div>
-            
+
             <div class="form-footer">
                 登录即表示您同意我们的 <a href="#">服务条款</a> 和 <a href="#">隐私政策</a>
             </div>
@@ -159,7 +221,13 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
-import { apiAuthCheckUsername, apiAuthLogin, apiAuthRegister, apiLocationTrackVisit, syncUserRoleToUrl } from '../api/backend';
+import {
+    apiAuthCheckUsername,
+    apiAuthLogin,
+    apiAuthRegister,
+    apiLocationTrackVisit,
+    syncUserRoleToUrl,
+} from '../api/backend';
 import {
     consumePersistedPositionCode,
     getAuthToken,
@@ -195,7 +263,7 @@ const avatarOptions = computed(() => {
     return Array.from({ length: 12 }, (_, index) => ({
         index,
         label: `头像 ${index + 1}`,
-        src: resolvePublicAssetPath(`avatars/avatar-${index}.svg`)
+        src: resolvePublicAssetPath(`avatars/avatar-${index}.svg`),
     }));
 });
 
@@ -262,7 +330,7 @@ async function quickGuestLogin() {
     try {
         const guestDeviceId = getOrCreateGuestDeviceId();
         // 游客一键登陆：账号 user，密码 123
-        const result = await apiAuthLogin({ 
+        const result = await apiAuthLogin({
             username: 'user',
             password: '123',
             guest_device_id: guestDeviceId || undefined,
@@ -281,9 +349,9 @@ async function quickGuestLogin() {
         consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
-            error?.originalError?.response?.data?.detail
-            || error?.message
-            || '游客登陆失败，请稍后重试'
+            error?.originalError?.response?.data?.detail ||
+            error?.message ||
+            '游客登陆失败，请稍后重试',
         );
         setFormState('error', detail);
         message.error(detail);
@@ -329,9 +397,9 @@ async function checkUsernameAvailability({ silent = false, force = false } = {})
     }
 
     if (
-        !force
-        && normalizedUsername === lastCheckedUsername.value
-        && (usernameCheckStatus.value === 'success' || usernameCheckStatus.value === 'error')
+        !force &&
+        normalizedUsername === lastCheckedUsername.value &&
+        (usernameCheckStatus.value === 'success' || usernameCheckStatus.value === 'error')
     ) {
         return usernameCheckStatus.value === 'success';
     }
@@ -356,9 +424,9 @@ async function checkUsernameAvailability({ silent = false, force = false } = {})
         return available;
     } catch (error) {
         const detail = String(
-            error?.originalError?.response?.data?.detail
-            || error?.message
-            || '用户名校验失败，请稍后重试'
+            error?.originalError?.response?.data?.detail ||
+            error?.message ||
+            '用户名校验失败，请稍后重试',
         );
         usernameCheckStatus.value = 'error';
         usernameCheckMessage.value = detail;
@@ -415,9 +483,9 @@ async function handleLogin() {
         consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
-            error?.originalError?.response?.data?.detail
-            || error?.message
-            || '登录失败，请稍后重试'
+            error?.originalError?.response?.data?.detail ||
+            error?.message ||
+            '登录失败，请稍后重试',
         );
         setFormState('error', detail);
         message.error(detail);
@@ -468,11 +536,7 @@ async function handleRegister() {
     setFormState('', '');
 
     try {
-        await apiAuthRegister(
-            normalizedUsername,
-            normalizedPassword,
-            selectedAvatarIndex.value,
-        );
+        await apiAuthRegister(normalizedUsername, normalizedPassword, selectedAvatarIndex.value);
         message.success('注册成功，请使用新账号登录');
         password.value = '';
         confirmPassword.value = '';
@@ -482,9 +546,9 @@ async function handleRegister() {
         setFormState('success', '注册完成，请输入账号密码登录');
     } catch (error) {
         const detail = String(
-            error?.originalError?.response?.data?.detail
-            || error?.message
-            || '注册失败，请稍后重试'
+            error?.originalError?.response?.data?.detail ||
+            error?.message ||
+            '注册失败，请稍后重试',
         );
         setFormState('error', detail);
         message.error(detail);
@@ -514,21 +578,23 @@ onMounted(async () => {
     // 用户进入登陆页面时自动记录访问信息到数据库
     apiLocationTrackVisit({
         userAgent: navigator?.userAgent,
-        referrer: document?.referrer
-    }).then((result) => {
-        if (result?.tracked) {
-            console.log('[Location Tracking] 访问已记录:', {
-                ip: result?.ip,
-                city: result?.city,
-                province: result?.province,
-                country: result?.country
-            });
-        }
-    }).catch((error) => {
-        // 失败不影响登陆页面使用，静默处理
-        console.warn('[Location Tracking] 追踪请求失败:', error?.message);
-    });
-    // 首屏加载后默认1秒 1S 1s 后开始加载，可根据实际情况调整这个预热时机和延迟，确保不与首屏关键资源争抢带宽。 
+        referrer: document?.referrer,
+    })
+        .then((result) => {
+            if (result?.tracked) {
+                console.log('[Location Tracking] 访问已记录:', {
+                    ip: result?.ip,
+                    city: result?.city,
+                    province: result?.province,
+                    country: result?.country,
+                });
+            }
+        })
+        .catch((error) => {
+            // 失败不影响登陆页面使用，静默处理
+            console.warn('[Location Tracking] 追踪请求失败:', error?.message);
+        });
+    // 首屏加载后默认1秒 1S 1s 后开始加载，可根据实际情况调整这个预热时机和延迟，确保不与首屏关键资源争抢带宽。
     // 登录页就绪 1 秒后才开始后台预热 GIS 资产，避免首屏带宽争抢。
     if (typeof window !== 'undefined') {
         gisPrewarmTimer = window.setTimeout(() => {
@@ -537,7 +603,10 @@ onMounted(async () => {
             import('../utils/gis/deferredGisWarmupLauncher')
                 .then((mod) => mod.launchDeferredGisWarmup())
                 .catch((error) => {
-                    console.warn('[GIS Prewarm] 预热失败(不影响登录流程):', error?.message || error);
+                    console.warn(
+                        '[GIS Prewarm] 预热失败(不影响登录流程):',
+                        error?.message || error,
+                    );
                 });
         }, 1000);
     }
@@ -570,15 +639,17 @@ watch(username, (nextUsername) => {
 
 <style scoped>
 /* Scoped styles from Register.html */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
 }
 
 :root {
-    --primary-color: #4CAF50;
+    --primary-color: #4caf50;
     --primary-hover: #45a049;
     --error-color: #f44336;
-    --success-color: #4CAF50;
+    --success-color: #4caf50;
     --text-color: #333;
     --light-bg: #f9f9f9;
     --border-color: #e0e0e0;
@@ -612,7 +683,7 @@ watch(username, (nextUsername) => {
 }
 
 .form-header {
-    background: linear-gradient(135deg, #4CAF50, #2E7D32);
+    background: linear-gradient(135deg, #4caf50, #2e7d32);
     color: white;
     padding: 25px;
     text-align: center;
@@ -625,8 +696,7 @@ watch(username, (nextUsername) => {
     margin-bottom: 0px;
     margin-top: 0px;
     letter-spacing: 0.5px;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .form-subtitle {
@@ -679,7 +749,7 @@ watch(username, (nextUsername) => {
 }
 
 .mode-btn.active {
-    background: #4CAF50;
+    background: #4caf50;
     color: #fff;
 }
 
@@ -704,7 +774,7 @@ label {
 }
 
 .form-group:hover label {
-    color: #4CAF50;
+    color: #4caf50;
 }
 
 .input-group {
@@ -730,7 +800,7 @@ input {
 
 input:focus {
     outline: none;
-    border-color: #4CAF50;
+    border-color: #4caf50;
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
 }
 
@@ -790,7 +860,7 @@ input:focus {
 }
 
 .avatar-item.active {
-    border-color: #4CAF50;
+    border-color: #4caf50;
     background: #edf7ed;
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
 }
@@ -819,7 +889,7 @@ input:focus {
 }
 
 .validation-message.success {
-    color: #4CAF50;
+    color: #4caf50;
     display: block;
 }
 
@@ -889,7 +959,7 @@ input:focus {
 .btn {
     display: block;
     width: 100%;
-    background-color: #4CAF50;
+    background-color: #4caf50;
     color: white;
     border: none;
     padding: 14px;
@@ -927,7 +997,7 @@ input:focus {
 }
 
 .login-link a {
-    color: #4CAF50;
+    color: #4caf50;
     text-decoration: none;
     font-weight: 500;
 }
@@ -937,8 +1007,15 @@ input:focus {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .fade-in {

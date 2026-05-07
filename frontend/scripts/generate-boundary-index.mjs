@@ -2,24 +2,24 @@ import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const OUTPUT_PATH = path.join(ROOT, 'docs', 'BOUNDARY_INDEX.md');
+const OUTPUT_PATH = path.join(ROOT, 'scripts', 'BOUNDARY_INDEX.md');
 
 const TARGETS = [
     {
         title: 'Stores',
         dir: 'src/stores',
-        exts: new Set(['.ts', '.js'])
+        exts: new Set(['.ts', '.js']),
     },
     {
         title: 'Constants',
         dir: 'src/constants',
-        exts: new Set(['.ts', '.js'])
+        exts: new Set(['.ts', '.js']),
     },
     {
         title: 'Map Features',
         dir: 'src/composables/map/features',
-        exts: new Set(['.ts', '.js'])
-    }
+        exts: new Set(['.ts', '.js']),
+    },
 ];
 
 async function listFilesRecursive(baseDir, exts) {

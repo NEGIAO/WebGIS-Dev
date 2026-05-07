@@ -6,7 +6,11 @@
                 <p class="weather-subtitle">高德天气数据实时联动 · 默认 adcode: 410202</p>
             </div>
             <div class="weather-toolbar-right">
-                <button class="toolbar-btn" :disabled="isBusy" @click="refreshWeather">
+                <button
+                    class="toolbar-btn"
+                    :disabled="isBusy"
+                    @click="refreshWeather"
+                >
                     {{ isBusy ? '刷新中...' : '刷新天气' }}
                 </button>
             </div>
@@ -24,7 +28,13 @@
                         placeholder="输入6位 adcode"
                         @keyup.enter="applyAdcodeQuery"
                     />
-                    <button class="query-btn" :disabled="isBusy" @click="applyAdcodeQuery">查询</button>
+                    <button
+                        class="query-btn"
+                        :disabled="isBusy"
+                        @click="applyAdcodeQuery"
+                    >
+                        查询
+                    </button>
                 </div>
             </div>
 
@@ -38,7 +48,13 @@
                         placeholder="输入城市/区县名称"
                         @keyup.enter="resolveCityAndQuery"
                     />
-                    <button class="query-btn" :disabled="isBusy" @click="resolveCityAndQuery">解析</button>
+                    <button
+                        class="query-btn"
+                        :disabled="isBusy"
+                        @click="resolveCityAndQuery"
+                    >
+                        解析
+                    </button>
                 </div>
             </div>
         </div>
@@ -72,7 +88,10 @@
             </div>
         </div>
 
-        <div class="rain-focus-panel" :class="{ 'has-rain': rainFocus.hasRain, 'unknown': rainFocus.level === 'unknown' }">
+        <div
+            class="rain-focus-panel"
+            :class="{ 'has-rain': rainFocus.hasRain, unknown: rainFocus.level === 'unknown' }"
+        >
             <div class="rain-focus-left">
                 <div class="rain-focus-icon">{{ rainFocus.icon }}</div>
                 <div class="rain-focus-text">
@@ -83,7 +102,11 @@
             <div class="rain-focus-right">
                 <span class="rain-badge">{{ rainFocus.badge }}</span>
                 <div class="rain-hit-list">
-                    <span v-if="!rainFocus.hits.length" class="rain-hit empty">未来 4 天白天/夜间均未识别到“雨”关键词</span>
+                    <span
+                        v-if="!rainFocus.hits.length"
+                        class="rain-hit empty"
+                        >未来 4 天白天/夜间均未识别到“雨”关键词</span
+                    >
                     <span
                         v-for="(hit, idx) in rainFocus.hits"
                         :key="`${hit.date}_${hit.period}_${idx}`"
@@ -98,12 +121,18 @@
         <div class="charts-layout">
             <div class="chart-panel trend-panel">
                 <div class="chart-title">未来 4 天气温趋势</div>
-                <div ref="trendChartRef" class="chart-canvas"></div>
+                <div
+                    ref="trendChartRef"
+                    class="chart-canvas"
+                ></div>
             </div>
 
             <div class="chart-panel side-panel">
                 <div class="chart-title">风力仪表 + 预报风级</div>
-                <div ref="windChartRef" class="chart-canvas"></div>
+                <div
+                    ref="windChartRef"
+                    class="chart-canvas"
+                ></div>
             </div>
         </div>
 
@@ -149,25 +178,67 @@
             <div class="detail-panel">
                 <div class="detail-title">实况天气 lives 全字段</div>
                 <div class="meta-grid">
-                    <div class="meta-item"><span class="meta-key">province</span><span class="meta-val">{{ liveWeather?.province || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">city</span><span class="meta-val">{{ liveWeather?.city || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">adcode</span><span class="meta-val">{{ liveWeather?.adcode || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">weather</span><span class="meta-val">{{ resolveWeatherIcon(liveWeather?.weather) }} {{ liveWeather?.weather || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">temperature</span><span class="meta-val">{{ liveWeather?.temperature ?? '--' }} °C</span></div>
-                    <div class="meta-item"><span class="meta-key">winddirection</span><span class="meta-val">{{ liveWeather?.windDirection || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">windpower</span><span class="meta-val">{{ liveWeather?.windPowerText || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">humidity</span><span class="meta-val">{{ liveWeather?.humidity ?? '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">reporttime</span><span class="meta-val">{{ liveWeather?.reportTime || '--' }}</span></div>
+                    <div class="meta-item">
+                        <span class="meta-key">province</span
+                        ><span class="meta-val">{{ liveWeather?.province || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">city</span
+                        ><span class="meta-val">{{ liveWeather?.city || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">adcode</span
+                        ><span class="meta-val">{{ liveWeather?.adcode || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">weather</span
+                        ><span class="meta-val"
+                            >{{ resolveWeatherIcon(liveWeather?.weather) }}
+                            {{ liveWeather?.weather || '--' }}</span
+                        >
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">temperature</span
+                        ><span class="meta-val">{{ liveWeather?.temperature ?? '--' }} °C</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">winddirection</span
+                        ><span class="meta-val">{{ liveWeather?.windDirection || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">windpower</span
+                        ><span class="meta-val">{{ liveWeather?.windPowerText || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">humidity</span
+                        ><span class="meta-val">{{ liveWeather?.humidity ?? '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">reporttime</span
+                        ><span class="meta-val">{{ liveWeather?.reportTime || '--' }}</span>
+                    </div>
                 </div>
             </div>
 
             <div class="detail-panel forecast-panel">
                 <div class="detail-title">预报天气 forecasts.casts 全字段（4 日）</div>
                 <div class="meta-grid forecast-meta-grid">
-                    <div class="meta-item"><span class="meta-key">forecasts.province</span><span class="meta-val">{{ forecastWeather?.province || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">forecasts.city</span><span class="meta-val">{{ forecastWeather?.city || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">forecasts.adcode</span><span class="meta-val">{{ forecastWeather?.adcode || '--' }}</span></div>
-                    <div class="meta-item"><span class="meta-key">forecasts.reporttime</span><span class="meta-val">{{ forecastWeather?.reportTime || '--' }}</span></div>
+                    <div class="meta-item">
+                        <span class="meta-key">forecasts.province</span
+                        ><span class="meta-val">{{ forecastWeather?.province || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">forecasts.city</span
+                        ><span class="meta-val">{{ forecastWeather?.city || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">forecasts.adcode</span
+                        ><span class="meta-val">{{ forecastWeather?.adcode || '--' }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-key">forecasts.reporttime</span
+                        ><span class="meta-val">{{ forecastWeather?.reportTime || '--' }}</span>
+                    </div>
                 </div>
                 <div class="forecast-table-wrap">
                     <table class="forecast-table">
@@ -186,11 +257,20 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="(cast, idx) in casts" :key="`${cast.date}_${idx}`">
+                            <tr
+                                v-for="(cast, idx) in casts"
+                                :key="`${cast.date}_${idx}`"
+                            >
                                 <td>{{ cast.date || '--' }}</td>
                                 <td>{{ formatWeekLabel(cast.week) }}</td>
-                                <td>{{ resolveWeatherIcon(cast.dayWeather) }} {{ cast.dayWeather || '--' }}</td>
-                                <td>{{ resolveWeatherIcon(cast.nightWeather) }} {{ cast.nightWeather || '--' }}</td>
+                                <td>
+                                    {{ resolveWeatherIcon(cast.dayWeather) }}
+                                    {{ cast.dayWeather || '--' }}
+                                </td>
+                                <td>
+                                    {{ resolveWeatherIcon(cast.nightWeather) }}
+                                    {{ cast.nightWeather || '--' }}
+                                </td>
                                 <td>{{ cast.dayTemp ?? '--' }} °C</td>
                                 <td>{{ cast.nightTemp ?? '--' }} °C</td>
                                 <td>{{ cast.dayWind || '--' }}</td>
@@ -199,7 +279,12 @@
                                 <td>{{ cast.nightPowerText || '--' }}</td>
                             </tr>
                             <tr v-if="!casts.length">
-                                <td colspan="10" class="forecast-empty">暂无预报数据</td>
+                                <td
+                                    colspan="10"
+                                    class="forecast-empty"
+                                >
+                                    暂无预报数据
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -227,14 +312,10 @@
 // 天气面板中当前实现的逻辑是请求两次高德api（第一次用api查询adcode，第二次用adcode查询天气，浪费了一次api，没有复用前端的adcode.json文件），需要接入该adcode.json进行，可以节省一次api并提高查询响应速度；
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../composables/useMessage';
-import {
-    apiAddressGeocode,
-    apiReverseGeocodeWithFallback,
-    apiWeather
-} from '../api';
+import { apiAddressGeocode, apiReverseGeocodeWithFallback, apiWeather } from '../api';
 import {
     getGlobalUserLocationContext,
-    USER_LOCATION_CONTEXT_CHANGE_EVENT
+    USER_LOCATION_CONTEXT_CHANGE_EVENT,
 } from '../utils/userLocationContext';
 import { useWeatherStore } from '../stores';
 
@@ -270,18 +351,20 @@ let resizeDebounceTimer = null;
 function loadEchartsRuntime() {
     if (echartsRuntimePromise) return echartsRuntimePromise;
 
-    echartsRuntimePromise = import('../utils/echarts/weatherRuntime.js').then((runtimeModule) => {
-        const runtime = runtimeModule?.getWeatherEchartsRuntime?.();
-        if (!runtime) {
-            throw new Error('天气图表运行时加载失败');
-        }
+    echartsRuntimePromise = import('../utils/echarts/weatherRuntime.js')
+        .then((runtimeModule) => {
+            const runtime = runtimeModule?.getWeatherEchartsRuntime?.();
+            if (!runtime) {
+                throw new Error('天气图表运行时加载失败');
+            }
 
-        echartsModule = runtime;
-        return runtime;
-    }).catch((error) => {
-        echartsRuntimePromise = null;
-        throw error;
-    });
+            echartsModule = runtime;
+            return runtime;
+        })
+        .catch((error) => {
+            echartsRuntimePromise = null;
+            throw error;
+        });
 
     return echartsRuntimePromise;
 }
@@ -304,17 +387,17 @@ const WEATHER_ICON_MAP = {
     有风: '🌬️',
     大风: '🌬️',
     台风: '🌪️',
-    沙尘暴: '🌪️'
+    沙尘暴: '🌪️',
 };
 
 const WEEK_LABEL_MAP = {
-    '1': '周一',
-    '2': '周二',
-    '3': '周三',
-    '4': '周四',
-    '5': '周五',
-    '6': '周六',
-    '7': '周日'
+    1: '周一',
+    2: '周二',
+    3: '周三',
+    4: '周四',
+    5: '周五',
+    6: '周六',
+    7: '周日',
 };
 
 const RAIN_KEYWORD_REGEXP = /雨|雷|暴雨|阵雨|冻雨|雨夹雪|毛毛雨|强对流/;
@@ -381,12 +464,21 @@ const weatherIcon = computed(() => {
 });
 
 const liveCityLabel = computed(() => {
-    const province = String(liveWeather.value?.province || forecastWeather.value?.province || weatherStore.currentProvince || '').trim();
-    const city = String(liveWeather.value?.city || forecastWeather.value?.city || weatherStore.currentCity || '').trim();
+    const province = String(
+        liveWeather.value?.province ||
+            forecastWeather.value?.province ||
+            weatherStore.currentProvince ||
+            '',
+    ).trim();
+    const city = String(
+        liveWeather.value?.city || forecastWeather.value?.city || weatherStore.currentCity || '',
+    ).trim();
     return `${province}${city}`.trim() || '未知城市';
 });
 
-const liveWeatherText = computed(() => String(liveWeather.value?.weather || '天气未知').trim() || '天气未知');
+const liveWeatherText = computed(
+    () => String(liveWeather.value?.weather || '天气未知').trim() || '天气未知',
+);
 const liveTemperatureText = computed(() => {
     const temp = toFixedNumber(liveWeather.value?.temperature, '--');
     return temp === '--' ? '--°C' : `${temp}°C`;
@@ -395,9 +487,17 @@ const liveHumidityText = computed(() => {
     const humidity = toFixedNumber(liveWeather.value?.humidity, '--');
     return humidity === '--' ? '--' : `${humidity}%`;
 });
-const liveWindDirectionText = computed(() => String(liveWeather.value?.windDirection || '--').trim() || '--');
-const liveWindPowerText = computed(() => String(liveWeather.value?.windPowerText || '--').trim() || '--');
-const liveReportTimeText = computed(() => String(liveWeather.value?.reportTime || forecastWeather.value?.reportTime || '--').trim() || '--');
+const liveWindDirectionText = computed(
+    () => String(liveWeather.value?.windDirection || '--').trim() || '--',
+);
+const liveWindPowerText = computed(
+    () => String(liveWeather.value?.windPowerText || '--').trim() || '--',
+);
+const liveReportTimeText = computed(
+    () =>
+        String(liveWeather.value?.reportTime || forecastWeather.value?.reportTime || '--').trim() ||
+        '--',
+);
 
 const baseRawJson = computed(() => JSON.stringify(baseRawPayload.value || {}, null, 2));
 const forecastRawJson = computed(() => JSON.stringify(forecastRawPayload.value || {}, null, 2));
@@ -415,7 +515,7 @@ const rainFocus = computed(() => {
                 date,
                 period: '白天',
                 weather: String(cast?.dayWeather || '--'),
-                icon: resolveWeatherIcon(cast?.dayWeather)
+                icon: resolveWeatherIcon(cast?.dayWeather),
             });
         }
 
@@ -424,13 +524,15 @@ const rainFocus = computed(() => {
                 date,
                 period: '夜间',
                 weather: String(cast?.nightWeather || '--'),
-                icon: resolveWeatherIcon(cast?.nightWeather)
+                icon: resolveWeatherIcon(cast?.nightWeather),
             });
         }
     });
 
     const hasRain = liveHasRain || hits.length > 0;
-    const hasAnyText = !!liveText || casts.value.some((cast) => String(cast?.dayWeather || cast?.nightWeather || '').trim());
+    const hasAnyText =
+        !!liveText ||
+        casts.value.some((cast) => String(cast?.dayWeather || cast?.nightWeather || '').trim());
 
     if (!hasAnyText) {
         return {
@@ -440,7 +542,7 @@ const rainFocus = computed(() => {
             badge: '待判定',
             title: '暂未获取到可判定的天气文本',
             subtitle: '请刷新或切换 adcode 后重试',
-            hits
+            hits,
         };
     }
 
@@ -456,7 +558,7 @@ const rainFocus = computed(() => {
             subtitle: hits.length
                 ? `未来 4 日识别到 ${hits.length} 个可能降雨时段`
                 : '当前天气文本中包含降雨关键词',
-            hits
+            hits,
         };
     }
 
@@ -467,7 +569,7 @@ const rainFocus = computed(() => {
         badge: '无雨信号',
         title: '当前与未来 4 日未识别到降雨关键词',
         subtitle: '如需更精细的降雨概率，建议接入分钟级降水或雷达数据',
-        hits
+        hits,
     };
 });
 
@@ -508,7 +610,7 @@ function renderTrendChart() {
                     })
                     .join('<br/>');
                 return `${title}<br/>${lines}`;
-            }
+            },
         },
         legend: {
             data: ['白天气温', '晚间气温'],
@@ -516,14 +618,14 @@ function renderTrendChart() {
             icon: 'roundRect',
             itemWidth: mobile ? 10 : 14,
             itemHeight: mobile ? 6 : 8,
-            textStyle: { color: '#2a5a3f', fontSize: mobile ? 11 : 12 }
+            textStyle: { color: '#2a5a3f', fontSize: mobile ? 11 : 12 },
         },
         grid: {
             left: mobile ? 34 : 42,
             right: mobile ? 14 : 18,
             top: mobile ? 46 : 48,
             bottom: mobile ? 34 : 30,
-            containLabel: true
+            containLabel: true,
         },
         xAxis: {
             type: 'category',
@@ -532,9 +634,9 @@ function renderTrendChart() {
             axisLabel: {
                 color: '#2c6045',
                 fontSize: mobile ? 11 : 12,
-                rotate: compact ? 14 : 0
+                rotate: compact ? 14 : 0,
             },
-            axisTick: { alignWithLabel: true }
+            axisTick: { alignWithLabel: true },
         },
         yAxis: {
             type: 'value',
@@ -544,7 +646,7 @@ function renderTrendChart() {
             axisLine: { show: false },
             axisLabel: { color: '#2c6045', fontSize: mobile ? 11 : 12 },
             nameTextStyle: { color: '#2c6045', fontSize: mobile ? 10 : 11 },
-            splitLine: { lineStyle: { color: 'rgba(90, 150, 110, 0.18)' } }
+            splitLine: { lineStyle: { color: 'rgba(90, 150, 110, 0.18)' } },
         },
         series: [
             {
@@ -560,16 +662,21 @@ function renderTrendChart() {
                 areaStyle: {
                     color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                         { offset: 0, color: 'rgba(60, 180, 107, 0.35)' },
-                        { offset: 1, color: 'rgba(60, 180, 107, 0.02)' }
-                    ])
+                        { offset: 1, color: 'rgba(60, 180, 107, 0.02)' },
+                    ]),
                 },
                 emphasis: { focus: 'series' },
-                markPoint: mobile ? undefined : {
-                    symbolSize: 34,
-                    label: { color: '#ffffff', fontSize: 10 },
-                    itemStyle: { color: '#2f9b58' },
-                    data: [{ type: 'max', name: '最高' }, { type: 'min', name: '最低' }]
-                }
+                markPoint: mobile
+                    ? undefined
+                    : {
+                          symbolSize: 34,
+                          label: { color: '#ffffff', fontSize: 10 },
+                          itemStyle: { color: '#2f9b58' },
+                          data: [
+                              { type: 'max', name: '最高' },
+                              { type: 'min', name: '最低' },
+                          ],
+                      },
             },
             {
                 name: '晚间气温',
@@ -584,12 +691,12 @@ function renderTrendChart() {
                 areaStyle: {
                     color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                         { offset: 0, color: 'rgba(45, 140, 255, 0.32)' },
-                        { offset: 1, color: 'rgba(45, 140, 255, 0.02)' }
-                    ])
+                        { offset: 1, color: 'rgba(45, 140, 255, 0.02)' },
+                    ]),
                 },
-                emphasis: { focus: 'series' }
-            }
-        ]
+                emphasis: { focus: 'series' },
+            },
+        ],
     };
 
     trendChart.setOption(option, { notMerge: true, lazyUpdate: true });
@@ -615,8 +722,16 @@ function getWindLayoutMetrics() {
 
     const preferredGaugeByWidth = ratio >= 2.2 ? width * 0.12 : width * 0.15;
     const preferredGaugeByHeight = height * 0.3;
-    const gaugeRadiusPx = clampValue(Math.round(Math.min(preferredGaugeByWidth, preferredGaugeByHeight)), 46, 96);
-    const gaugeCenterYPx = clampValue(Math.round(legendTopPx + 16 + gaugeRadiusPx * 0.85), 60, Math.round(height * 0.42));
+    const gaugeRadiusPx = clampValue(
+        Math.round(Math.min(preferredGaugeByWidth, preferredGaugeByHeight)),
+        46,
+        96,
+    );
+    const gaugeCenterYPx = clampValue(
+        Math.round(legendTopPx + 16 + gaugeRadiusPx * 0.85),
+        60,
+        Math.round(height * 0.42),
+    );
 
     const minSide = Math.min(width, height);
     const gaugeRadiusPercent = `${clampValue((gaugeRadiusPx / minSide) * 100, 14, 34).toFixed(2)}%`;
@@ -633,7 +748,7 @@ function getWindLayoutMetrics() {
     const barsTopPx = clampValue(
         Math.round(gaugeCenterYPx + gaugeRadiusPx * 0.45 + height * 0.06),
         120,
-        Math.round(height * 0.6)
+        Math.round(height * 0.6),
     );
     const barsTopPercent = `${((barsTopPx / height) * 100).toFixed(2)}%`;
 
@@ -667,7 +782,7 @@ function getWindLayoutMetrics() {
         axisFontSize,
         yNameFontSize,
         barMaxWidth,
-        lineSymbolSize
+        lineSymbolSize,
     };
 }
 
@@ -708,14 +823,14 @@ function renderWindChart() {
             icon: 'roundRect',
             itemWidth: metrics.legendItemWidth,
             itemHeight: metrics.legendItemHeight,
-            textStyle: { color: '#2a5a3f', fontSize: metrics.legendFontSize }
+            textStyle: { color: '#2a5a3f', fontSize: metrics.legendFontSize },
         },
         grid: {
             left: metrics.gridLeft,
             right: metrics.gridRight,
             top: metrics.barsTopPercent,
             bottom: metrics.gridBottom,
-            containLabel: true
+            containLabel: true,
         },
         xAxis: {
             type: 'category',
@@ -723,9 +838,9 @@ function renderWindChart() {
             axisLabel: {
                 color: '#2c6045',
                 fontSize: metrics.axisFontSize,
-                rotate: xLabelRotate
+                rotate: xLabelRotate,
             },
-            axisLine: { lineStyle: { color: '#7fb79a' } }
+            axisLine: { lineStyle: { color: '#7fb79a' } },
         },
         yAxis: {
             type: 'value',
@@ -734,7 +849,7 @@ function renderWindChart() {
             max: axisMax,
             axisLabel: { color: '#2c6045', fontSize: metrics.axisFontSize },
             nameTextStyle: { color: '#2c6045', fontSize: metrics.yNameFontSize },
-            splitLine: { lineStyle: { color: 'rgba(90, 150, 110, 0.18)' } }
+            splitLine: { lineStyle: { color: 'rgba(90, 150, 110, 0.18)' } },
         },
         tooltip: {
             trigger: 'axis',
@@ -759,9 +874,9 @@ function renderWindChart() {
                     String(list[0]?.axisValue || '--'),
                     ...lines,
                     `白天风向: ${String(cast?.dayWind || '--')}`,
-                    `夜间风向: ${String(cast?.nightWind || '--')}`
+                    `夜间风向: ${String(cast?.nightWind || '--')}`,
                 ].join('<br/>');
-            }
+            },
         },
         series: [
             {
@@ -770,35 +885,35 @@ function renderWindChart() {
                 endAngle: -30,
                 tooltip: {
                     trigger: 'item',
-                    formatter: `当前实况风力：${currentWind} 级`
+                    formatter: `当前实况风力：${currentWind} 级`,
                 },
                 center: ['50%', metrics.gaugeCenterYPercent],
                 radius: metrics.gaugeRadiusPercent,
                 min: 0,
                 max: 12,
                 splitNumber: metrics.gaugeSplitNumber,
-                progress: { 
-                    show: true, 
+                progress: {
+                    show: true,
                     width: metrics.gaugeStroke,
                     roundCap: true,
-                    itemStyle: { 
+                    itemStyle: {
                         color: new echartsModule.graphic.LinearGradient(0, 0, 1, 0, [
                             { offset: 0, color: '#73c990' },
-                            { offset: 1, color: '#24864c' }
-                        ])
-                    } 
+                            { offset: 1, color: '#24864c' },
+                        ]),
+                    },
                 },
                 axisLine: {
                     roundCap: true,
                     lineStyle: {
                         width: metrics.gaugeStroke,
-                        color: [[1, 'rgba(65, 150, 95, 0.12)']]
-                    }
+                        color: [[1, 'rgba(65, 150, 95, 0.12)']],
+                    },
                 },
                 axisTick: { show: false },
-                splitLine: { 
-                    length: metrics.gaugeSplitLength, 
-                    lineStyle: { color: '#7fb79a', width: 2 } 
+                splitLine: {
+                    length: metrics.gaugeSplitLength,
+                    lineStyle: { color: '#7fb79a', width: 2 },
                 },
                 axisLabel: {
                     color: '#5b846f',
@@ -808,12 +923,12 @@ function renderWindChart() {
                         const numeric = Number(value);
                         if (!Number.isFinite(numeric)) return '';
                         return numeric % metrics.gaugeLabelStep === 0 ? String(numeric) : '';
-                    }
+                    },
                 },
-                pointer: { 
-                    itemStyle: { color: '#2d8253' }, 
+                pointer: {
+                    itemStyle: { color: '#2d8253' },
                     length: '45%',
-                    width: Math.max(3, metrics.gaugeStroke * 0.4)
+                    width: Math.max(3, metrics.gaugeStroke * 0.4),
                 },
                 title: { show: false },
                 detail: {
@@ -822,9 +937,9 @@ function renderWindChart() {
                     fontWeight: 800,
                     color: '#1f5a37',
                     offsetCenter: [0, '52%'],
-                    formatter: '{value} 级'
+                    formatter: '{value} 级',
                 },
-                data: [{ value: currentWind }]
+                data: [{ value: currentWind }],
             },
             {
                 name: '白天风力',
@@ -835,9 +950,9 @@ function renderWindChart() {
                     borderRadius: [5, 5, 0, 0],
                     color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                         { offset: 0, color: 'rgba(63, 183, 110, 0.92)' },
-                        { offset: 1, color: 'rgba(63, 183, 110, 0.48)' }
-                    ])
-                }
+                        { offset: 1, color: 'rgba(63, 183, 110, 0.48)' },
+                    ]),
+                },
             },
             {
                 name: '夜间风力',
@@ -848,9 +963,9 @@ function renderWindChart() {
                     borderRadius: [5, 5, 0, 0],
                     color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                         { offset: 0, color: 'rgba(43, 139, 255, 0.9)' },
-                        { offset: 1, color: 'rgba(43, 139, 255, 0.45)' }
-                    ])
-                }
+                        { offset: 1, color: 'rgba(43, 139, 255, 0.45)' },
+                    ]),
+                },
             },
             {
                 name: '平均风力',
@@ -860,9 +975,9 @@ function renderWindChart() {
                 symbolSize: metrics.lineSymbolSize,
                 data: averagePowers,
                 lineStyle: { width: 2.2, color: '#2f7f58', type: 'dashed' },
-                itemStyle: { color: '#2f7f58' }
-            }
-        ]
+                itemStyle: { color: '#2f7f58' },
+            },
+        ],
     };
 
     windChart.setOption(option, { notMerge: true, lazyUpdate: true });
@@ -948,7 +1063,7 @@ async function loadWeatherByAdcode(adcode, options = {}) {
 
         const [baseResponse, allResponse] = await Promise.all([
             apiWeather(normalizedAdcode, 'base'),
-            apiWeather(normalizedAdcode, 'all')
+            apiWeather(normalizedAdcode, 'all'),
         ]);
         const baseResult = baseResponse?.data || null;
         const allResult = allResponse?.data || null;
@@ -961,13 +1076,13 @@ async function loadWeatherByAdcode(adcode, options = {}) {
             status: String(baseResult?.status || baseResult?.raw?.status || '--'),
             count: String(baseResult?.count || baseResult?.raw?.count || '--'),
             info: String(baseResult?.info || baseResult?.raw?.info || '--'),
-            infocode: String(baseResult?.infocode || baseResult?.raw?.infocode || '--')
+            infocode: String(baseResult?.infocode || baseResult?.raw?.infocode || '--'),
         };
         forecastApiMeta.value = {
             status: String(allResult?.status || allResult?.raw?.status || '--'),
             count: String(allResult?.count || allResult?.raw?.count || '--'),
             info: String(allResult?.info || allResult?.raw?.info || '--'),
-            infocode: String(allResult?.infocode || allResult?.raw?.infocode || '--')
+            infocode: String(allResult?.infocode || allResult?.raw?.infocode || '--'),
         };
         baseRawPayload.value = baseResult?.raw || null;
         forecastRawPayload.value = allResult?.raw || null;
@@ -976,7 +1091,7 @@ async function loadWeatherByAdcode(adcode, options = {}) {
         weatherStore.setAdcode(normalizedAdcode, {
             city: baseResult?.city || allResult?.city || weatherStore.currentCity,
             province: baseResult?.province || allResult?.province || weatherStore.currentProvince,
-            source: String(options.source || 'weather-fetch')
+            source: String(options.source || 'weather-fetch'),
         });
 
         await nextTick();
@@ -1001,7 +1116,7 @@ function applyAdcodeFromLocationContext(context, source = 'location-context') {
     weatherStore.setAdcode(adcode, {
         city: currentContext?.encodedLocation?.city || weatherStore.currentCity,
         province: currentContext?.encodedLocation?.province || weatherStore.currentProvince,
-        source
+        source,
     });
     adcodeInput.value = adcode;
     return true;
@@ -1015,7 +1130,7 @@ async function resolveAdcodeByLonLat(lon, lat, source = 'map-event') {
     try {
         const reverseResponse = await apiReverseGeocodeWithFallback(longitude, latitude, {
             tiandituTk: TIANDITU_TK,
-            silent: true
+            silent: true,
         });
         const reverseResult = reverseResponse?.data || null;
 
@@ -1025,7 +1140,7 @@ async function resolveAdcodeByLonLat(lon, lat, source = 'map-event') {
         weatherStore.setAdcode(nextAdcode, {
             city: reverseResult?.city || weatherStore.currentCity,
             province: reverseResult?.province || weatherStore.currentProvince,
-            source
+            source,
         });
         adcodeInput.value = nextAdcode;
     } catch {
@@ -1061,7 +1176,7 @@ async function resolveCityAndQuery() {
 
         const reverseResponse = await apiReverseGeocodeWithFallback(geocode.lng, geocode.lat, {
             tiandituTk: TIANDITU_TK,
-            silent: true
+            silent: true,
         });
         const reverseResult = reverseResponse?.data || null;
 
@@ -1074,7 +1189,7 @@ async function resolveCityAndQuery() {
         weatherStore.setAdcode(nextAdcode, {
             city: reverseResult?.city || cityText,
             province: reverseResult?.province || weatherStore.currentProvince,
-            source: 'city-input'
+            source: 'city-input',
         });
 
         adcodeInput.value = nextAdcode;
@@ -1087,7 +1202,7 @@ async function resolveCityAndQuery() {
 async function refreshWeather() {
     await loadWeatherByAdcode(weatherStore.currentAdcode || adcodeInput.value || '410202', {
         force: true,
-        source: 'manual-refresh'
+        source: 'manual-refresh',
     });
 }
 
@@ -1098,7 +1213,7 @@ function handleLocationContextChange(event) {
 
     void loadWeatherByAdcode(weatherStore.currentAdcode, {
         force: true,
-        source: 'location-context-change'
+        source: 'location-context-change',
     });
 }
 
@@ -1109,7 +1224,7 @@ watch(
         if (!/^\d{6}$/.test(normalized)) return;
         adcodeInput.value = normalized;
         void loadWeatherByAdcode(normalized, { source: 'store-watch' });
-    }
+    },
 );
 
 watch(
@@ -1118,7 +1233,7 @@ watch(
         const payload = weatherStore.mapPointTrigger;
         if (!payload) return;
         void resolveAdcodeByLonLat(payload.lon, payload.lat, payload.source || 'map-event');
-    }
+    },
 );
 
 onMounted(async () => {
@@ -1128,11 +1243,11 @@ onMounted(async () => {
     const loadedFromContext = applyAdcodeFromLocationContext(null, 'location-context-initial');
     const initAdcode = loadedFromContext
         ? weatherStore.currentAdcode
-        : (weatherStore.currentAdcode || '410202');
+        : weatherStore.currentAdcode || '410202';
 
     await loadWeatherByAdcode(initAdcode, {
         force: true,
-        source: 'component-mounted'
+        source: 'component-mounted',
     });
 
     if (typeof window !== 'undefined') {
@@ -1214,7 +1329,9 @@ onBeforeUnmount(() => {
     padding: 0 14px;
     font-size: 13px;
     cursor: pointer;
-    transition: transform 0.16s ease, box-shadow 0.16s ease;
+    transition:
+        transform 0.16s ease,
+        box-shadow 0.16s ease;
 }
 
 .toolbar-btn:hover {

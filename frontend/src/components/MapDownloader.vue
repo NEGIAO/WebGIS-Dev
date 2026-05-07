@@ -1,25 +1,51 @@
 <template>
-    <div v-if="visible" class="map-downloader">
+    <div
+        v-if="visible"
+        class="map-downloader"
+    >
         <header class="downloader-header">
             <div>
                 <div class="header-title">在线底图导出</div>
                 <div class="header-subtitle">BBox 输入支持 EPSG:4326 / 3857，导出为 GeoTIFF</div>
             </div>
             <div class="header-actions">
-                <span class="status-chip" :class="statusClass">{{ statusText }}</span>
-                <button class="close-btn" type="button" @click="emit('close')">×</button>
+                <span
+                    class="status-chip"
+                    :class="statusClass"
+                    >{{ statusText }}</span
+                >
+                <button
+                    class="close-btn"
+                    type="button"
+                    @click="emit('close')"
+                >
+                    ×
+                </button>
             </div>
         </header>
 
         <section class="downloader-body">
             <div class="form-row">
                 <label>底图源</label>
-                <select v-model="selectedPreset" class="form-select">
-                    <option v-for="preset in tilePresets" :key="preset.id" :value="preset.id" :disabled="!preset.downloadable">
+                <select
+                    v-model="selectedPreset"
+                    class="form-select"
+                >
+                    <option
+                        v-for="preset in tilePresets"
+                        :key="preset.id"
+                        :value="preset.id"
+                        :disabled="!preset.downloadable"
+                    >
                         {{ preset.label }}
                     </option>
                 </select>
-                <div v-if="activePresetHint" class="field-hint">{{ activePresetHint }}</div>
+                <div
+                    v-if="activePresetHint"
+                    class="field-hint"
+                >
+                    {{ activePresetHint }}
+                </div>
             </div>
 
             <div class="form-row">
@@ -36,40 +62,69 @@
             <div class="form-row form-grid">
                 <div class="form-field">
                     <label>BBox CRS</label>
-                    <select v-model="store.bboxCrs" class="form-select">
+                    <select
+                        v-model="store.bboxCrs"
+                        class="form-select"
+                    >
                         <option value="EPSG:4326">EPSG:4326 (lon/lat)</option>
                         <!-- <option value="EPSG:3857">EPSG:3857 (meters)</option> -->
                     </select>
                 </div>
                 <div class="form-field">
                     <label>分辨率 (m)</label>
-                    <input v-model.number="store.resolutionM" class="form-input" type="number" min="0.1" step="0.1" />
+                    <input
+                        v-model.number="store.resolutionM"
+                        class="form-input"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                    />
                 </div>
             </div>
 
             <div class="bbox-grid">
                 <div class="form-field">
                     <label>Min Lon/X</label>
-                    <input v-model.number="store.bbox.minLon" class="form-input" type="number" step="0.000001" />
+                    <input
+                        v-model.number="store.bbox.minLon"
+                        class="form-input"
+                        type="number"
+                        step="0.000001"
+                    />
                 </div>
                 <div class="form-field">
                     <label>Min Lat/Y</label>
-                    <input v-model.number="store.bbox.minLat" class="form-input" type="number" step="0.000001" />
+                    <input
+                        v-model.number="store.bbox.minLat"
+                        class="form-input"
+                        type="number"
+                        step="0.000001"
+                    />
                 </div>
                 <div class="form-field">
                     <label>Max Lon/X</label>
-                    <input v-model.number="store.bbox.maxLon" class="form-input" type="number" step="0.000001" />
+                    <input
+                        v-model.number="store.bbox.maxLon"
+                        class="form-input"
+                        type="number"
+                        step="0.000001"
+                    />
                 </div>
                 <div class="form-field">
                     <label>Max Lat/Y</label>
-                    <input v-model.number="store.bbox.maxLat" class="form-input" type="number" step="0.000001" />
+                    <input
+                        v-model.number="store.bbox.maxLat"
+                        class="form-input"
+                        type="number"
+                        step="0.000001"
+                    />
                 </div>
             </div>
 
             <div class="action-row">
-                <button 
-                    class="ghost-btn" 
-                    type="button" 
+                <button
+                    class="ghost-btn"
+                    type="button"
                     @click="emit('request-extent')"
                 >
                     地图框选范围
@@ -78,13 +133,27 @@
             </div>
 
             <div class="action-row">
-                <button class="primary-btn" type="button" :disabled="store.isSubmitting" @click="handleSubmit">
+                <button
+                    class="primary-btn"
+                    type="button"
+                    :disabled="store.isSubmitting"
+                    @click="handleSubmit"
+                >
                     {{ store.isSubmitting ? '提交中...' : '开始下载' }}
                 </button>
-                <button class="ghost-btn" type="button" :disabled="!store.isPolling" @click="store.stopPolling">
+                <button
+                    class="ghost-btn"
+                    type="button"
+                    :disabled="!store.isPolling"
+                    @click="store.stopPolling"
+                >
                     停止轮询
                 </button>
-                <button class="ghost-btn" type="button" @click="handleReset">
+                <button
+                    class="ghost-btn"
+                    type="button"
+                    @click="handleReset"
+                >
                     重置
                 </button>
             </div>
@@ -96,39 +165,67 @@
                     <span class="progress-value">{{ progressLabel }}</span>
                 </div>
                 <div class="progress-track">
-                    <div class="progress-bar" :style="{ width: progressWidth }"></div>
+                    <div
+                        class="progress-bar"
+                        :style="{ width: progressWidth }"
+                    ></div>
                 </div>
                 <div class="progress-meta">
                     <span v-if="store.taskId">任务 ID: {{ store.taskId }}</span>
                     <span v-if="store.message">{{ store.message }}</span>
                     <span v-if="expiresHint">{{ expiresHint }}</span>
-                    <span v-if="store.lastError" class="error-text">{{ store.lastError }}</span>
+                    <span
+                        v-if="store.lastError"
+                        class="error-text"
+                        >{{ store.lastError }}</span
+                    >
                 </div>
             </div>
 
             <!-- 本地文件传输进度 (新增UI) -->
-            <div v-if="transferState.active || transferState.total > 0 || transferState.error" class="progress-card transfer-card">
+            <div
+                v-if="transferState.active || transferState.total > 0 || transferState.error"
+                class="progress-card transfer-card"
+            >
                 <div class="progress-head">
                     <span>本地下载传输进度 (5分钟限时)</span>
                     <span class="progress-value">{{ transferState.progress }}%</span>
                 </div>
                 <div class="progress-track transfer-track">
-                    <div class="progress-bar transfer-bar" :style="{ width: transferState.progress + '%' }"></div>
+                    <div
+                        class="progress-bar transfer-bar"
+                        :style="{ width: transferState.progress + '%' }"
+                    ></div>
                 </div>
                 <div class="progress-meta transfer-meta">
                     <span v-if="transferState.total > 0">
-                        已传输: {{ formatBytes(transferState.downloaded) }} / {{ formatBytes(transferState.total) }}
+                        已传输: {{ formatBytes(transferState.downloaded) }} /
+                        {{ formatBytes(transferState.total) }}
                     </span>
                     <span v-else-if="transferState.active">
                         已传输: {{ formatBytes(transferState.downloaded) }} (计算总大小中...)
                     </span>
-                    <span v-if="transferState.error" class="error-text">{{ transferState.error }}</span>
-                    
+                    <span
+                        v-if="transferState.error"
+                        class="error-text"
+                        >{{ transferState.error }}</span
+                    >
+
                     <div class="transfer-actions">
-                        <button v-if="transferState.active" class="ghost-btn cancel-btn" type="button" @click="cancelTransfer">
+                        <button
+                            v-if="transferState.active"
+                            class="ghost-btn cancel-btn"
+                            type="button"
+                            @click="cancelTransfer"
+                        >
                             取消下载
                         </button>
-                        <button v-if="!transferState.active && store.status === 'success'" class="primary-btn re-download-btn" type="button" @click="downloadFileToLocal">
+                        <button
+                            v-if="!transferState.active && store.status === 'success'"
+                            class="primary-btn re-download-btn"
+                            type="button"
+                            @click="downloadFileToLocal"
+                        >
                             重新下载到本地
                         </button>
                     </div>
@@ -138,8 +235,19 @@
             <div class="task-query">
                 <label>任务 ID 查询</label>
                 <div class="task-query-row">
-                    <input v-model.trim="lookupTaskId" class="form-input" type="text" placeholder="输入任务 ID" />
-                    <button class="ghost-btn" type="button" @click="handleLookup">查询</button>
+                    <input
+                        v-model.trim="lookupTaskId"
+                        class="form-input"
+                        type="text"
+                        placeholder="输入任务 ID"
+                    />
+                    <button
+                        class="ghost-btn"
+                        type="button"
+                        @click="handleLookup"
+                    >
+                        查询
+                    </button>
                 </div>
             </div>
         </section>
@@ -153,7 +261,7 @@ import { useDownloadStore } from '../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../constants';
 
 const props = defineProps({
-    visible: { type: Boolean, default: true }
+    visible: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['close', 'request-extent']);
@@ -162,7 +270,7 @@ const store = useDownloadStore();
 
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
 const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
-const layerConfigMap = new Map(layerConfigs.map((item) =>[item.id, item]));
+const layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
 
 /* ----------- 文件传输相关状态 (新增) ----------- */
 const transferState = ref({
@@ -170,7 +278,7 @@ const transferState = ref({
     downloaded: 0,
     total: 0,
     progress: 0,
-    error: ''
+    error: '',
 });
 
 let abortController = null;
@@ -197,63 +305,68 @@ function cancelTransfer() {
 // 核心下载逻辑
 async function downloadFileToLocal() {
     if (!store.taskId) return;
-    
+
     // 初始化/重置传输状态
     transferState.value = {
         active: true,
         downloaded: 0,
         total: 0,
         progress: 0,
-        error: ''
+        error: '',
     };
-    
+
     abortController = new AbortController();
     const signal = abortController.signal;
-    
+
     // 5分钟超时限制 (300,000 毫秒)
-    transferTimeout = setTimeout(() => {
-        if (abortController) {
-            abortController.abort('TimeoutLimit');
-        }
-    }, 5 * 60 * 1000);
+    transferTimeout = setTimeout(
+        () => {
+            if (abortController) {
+                abortController.abort('TimeoutLimit');
+            }
+        },
+        5 * 60 * 1000,
+    );
 
     try {
         const response = await fetch(`/api/download/tasks/${store.taskId}/file`, { signal });
-        
+
         if (!response.ok) {
             throw new Error(`HTTP Error: ${response.status}`);
         }
-        
+
         // 获取文件总大小
         const contentLength = response.headers.get('content-length');
         const total = contentLength ? parseInt(contentLength, 10) : 0;
         transferState.value.total = total;
-        
+
         const reader = response.body.getReader();
-        const chunks =[];
+        const chunks = [];
         let downloaded = 0;
-        
+
         // 读取流，实时计算进度
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            
+
             chunks.push(value);
             downloaded += value.length;
             transferState.value.downloaded = downloaded;
-            
+
             if (total > 0) {
                 transferState.value.progress = Math.round((downloaded / total) * 100);
             }
         }
-        
+
         // 将分块合并为 Blob 并触发浏览器下载行为
-        const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/tiff' });
+        const blob = new Blob(chunks, {
+            type: response.headers.get('content-type') || 'image/tiff',
+        });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        
+
         // 尝试从 Content-Disposition 提取文件名
         let filename = `basemap_${store.taskId}.tif`;
         const disposition = response.headers.get('content-disposition');
@@ -265,20 +378,23 @@ async function downloadFileToLocal() {
             }
         }
         a.download = filename;
-        
+
         document.body.appendChild(a);
         a.click();
-        
+
         // 清理内存
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
-        
+
         transferState.value.active = false;
         message.success('文件成功下载到本地！');
     } catch (err) {
         if (err.name === 'AbortError' || err === 'UserCancelled' || err === 'TimeoutLimit') {
-            const isTimeout = err === 'TimeoutLimit' || (signal && signal.reason === 'TimeoutLimit');
-            transferState.value.error = isTimeout ? '下载已取消：超过 5 分钟限制' : '下载已手动取消';
+            const isTimeout =
+                err === 'TimeoutLimit' || (signal && signal.reason === 'TimeoutLimit');
+            transferState.value.error = isTimeout
+                ? '下载已取消：超过 5 分钟限制'
+                : '下载已手动取消';
             if (isTimeout) message.error('文件下载超时（超过5分钟）');
         } else {
             transferState.value.error = `传输失败: ${err.message}`;
@@ -294,11 +410,14 @@ async function downloadFileToLocal() {
 }
 
 // 监听后端状态：当状态变为成功且文件就绪时，自动开始传输到本地
-watch(() => store.status, (newStatus) => {
-    if (newStatus === 'success' && store.taskId) {
-        downloadFileToLocal();
-    }
-});
+watch(
+    () => store.status,
+    (newStatus) => {
+        if (newStatus === 'success' && store.taskId) {
+            downloadFileToLocal();
+        }
+    },
+);
 /* ------------------------------------------- */
 
 function extractTileTemplate(source) {
@@ -341,14 +460,18 @@ const tilePresets = computed(() => {
             label: option.label,
             template,
             downloadable,
-            isCustom
+            isCustom,
         };
     }).filter((preset) => preset.downloadable || preset.isCustom);
 });
 
 const selectedPreset = ref('');
-const activePreset = computed(() => tilePresets.value.find((item) => item.id === selectedPreset.value));
-const isCustomPreset = computed(() => activePreset.value?.isCustom || !activePreset.value?.template);
+const activePreset = computed(() =>
+    tilePresets.value.find((item) => item.id === selectedPreset.value),
+);
+const isCustomPreset = computed(
+    () => activePreset.value?.isCustom || !activePreset.value?.template,
+);
 const activePresetHint = computed(() => {
     if (!activePreset.value) return '';
     if (activePreset.value.isCustom) return '可手动输入自定义 URL 模板';
@@ -356,13 +479,17 @@ const activePresetHint = computed(() => {
     return '';
 });
 
-watch(tilePresets, (list) => {
-    if (!list.length) return;
-    if (!selectedPreset.value || !list.some((item) => item.id === selectedPreset.value)) {
-        const first = list.find((item) => item.downloadable) || list[0];
-        selectedPreset.value = first?.id || '';
-    }
-}, { immediate: true });
+watch(
+    tilePresets,
+    (list) => {
+        if (!list.length) return;
+        if (!selectedPreset.value || !list.some((item) => item.id === selectedPreset.value)) {
+            const first = list.find((item) => item.downloadable) || list[0];
+            selectedPreset.value = first?.id || '';
+        }
+    },
+    { immediate: true },
+);
 
 watch(selectedPreset, (presetId) => {
     const preset = tilePresets.value.find((item) => item.id === presetId);
@@ -379,7 +506,7 @@ const statusText = computed(() => {
         stitching: '拼接中',
         success: '已完成',
         expired: '已过期',
-        failed: '失败'
+        failed: '失败',
     };
     return statusMap[store.status] || store.status;
 });
@@ -402,7 +529,7 @@ const lookupTaskId = ref('');
 async function handleSubmit() {
     // 提交前重置传输状态
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
-    
+
     const ok = await store.submitTask();
     if (ok) {
         message.success('下载任务已提交');
@@ -574,7 +701,9 @@ onBeforeUnmount(() => {
     font-weight: 700;
     padding: 8px 14px;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
 .primary-btn:hover {

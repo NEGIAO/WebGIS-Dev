@@ -1,39 +1,81 @@
 <template>
-    <div id="map-container" class="map-container"
-        :class="{ 'compass-placement-mode': compassStore.enabled && compassStore.mode === 'vector' && compassStore.placementMode }"
-        ref="mapContainerRef">
-        <div id="map" ref="mapRef"></div>
+    <div
+        id="map-container"
+        class="map-container"
+        :class="{
+            'compass-placement-mode':
+                compassStore.enabled &&
+                compassStore.mode === 'vector' &&
+                compassStore.placementMode,
+        }"
+        ref="mapContainerRef"
+    >
+        <div
+            id="map"
+            ref="mapRef"
+        ></div>
 
         <!-- Map Swipe Controller -->
-        <MapSwipeController v-if="layerStore.swipeConfig.enabled" :swipe-position="layerStore.swipeConfig.position"
-            :swipe-mode="layerStore.swipeConfig.mode" :is-active="layerStore.swipeConfig.enabled"
-            :container-rect="mapContainerRect" @update:swipe-position="handleSwipePositionUpdate"
-            @update:swipe-mode="handleSwipeModeUpdate" @close="handleSwipeClose" />
+        <MapSwipeController
+            v-if="layerStore.swipeConfig.enabled"
+            :swipe-position="layerStore.swipeConfig.position"
+            :swipe-mode="layerStore.swipeConfig.mode"
+            :is-active="layerStore.swipeConfig.enabled"
+            :container-rect="mapContainerRect"
+            @update:swipe-position="handleSwipePositionUpdate"
+            @update:swipe-mode="handleSwipeModeUpdate"
+            @close="handleSwipeClose"
+        />
 
         <!-- <MapEasterEgg :map-instance="mapInstance" :bounds="DIHUAN_BOUNDS" :images="IMAGES" over -->
-        @open-large-image="handleEasterEggImageOpen" @location-change="handleEasterEggLocationChange" />
+        @open-large-image="handleEasterEggImageOpen"
+        @location-change="handleEasterEggLocationChange" />
 
-        <LayerControlPanel :map-instance="mapInstance" :layer-list="layerList" :selected-layer="selectedLayer"
-            :custom-map-url="customMapUrl" :active-graticule="showDynamicSplitLines"
-            :basemap-circuit-open="basemapCircuitOpen" :tianditu-tk="TIANDITU_TK" :is-domestic="isDomestic"
-            @change-layer="handleLayerChange" @update-order="handleLayerOrderUpdate"
-            @toggle-graticule="handleToggleGraticule" @search-jump="handleSearchJump"
-            @reset-basemap-chain="handleResetBasemapChain" @layer-context-action="handleLayerContextAction" />
+        <LayerControlPanel
+            :map-instance="mapInstance"
+            :layer-list="layerList"
+            :selected-layer="selectedLayer"
+            :custom-map-url="customMapUrl"
+            :active-graticule="showDynamicSplitLines"
+            :basemap-circuit-open="basemapCircuitOpen"
+            :tianditu-tk="TIANDITU_TK"
+            :is-domestic="isDomestic"
+            @change-layer="handleLayerChange"
+            @update-order="handleLayerOrderUpdate"
+            @toggle-graticule="handleToggleGraticule"
+            @search-jump="handleSearchJump"
+            @reset-basemap-chain="handleResetBasemapChain"
+            @layer-context-action="handleLayerContextAction"
+        />
 
-        <AttributeTable @focus-feature="handleAttributeTableFocusFeature"
-            @highlight-feature="handleAttributeTableHighlightFeature" />
+        <AttributeTable
+            @focus-feature="handleAttributeTableFocusFeature"
+            @highlight-feature="handleAttributeTableHighlightFeature"
+        />
 
-        <div v-if="compassStore.hudVisible" class="compass-hud-wrapper" :style="{ opacity: compassStore.opacity }">
+        <div
+            v-if="compassStore.hudVisible"
+            class="compass-hud-wrapper"
+            :style="{ opacity: compassStore.opacity }"
+        >
             <FengShuiCompassSvg :config="compassStore.hudRenderConfig" />
         </div>
 
         <!-- 风水宫位解释面板 -->
-        <PalaceExplanationPanel :selected-palace="selectedPalace" :theme-config="compassStore.config"
-            @close="handleCloseExplanation" />
+        <PalaceExplanationPanel
+            :selected-palace="selectedPalace"
+            :theme-config="compassStore.config"
+            @close="handleCloseExplanation"
+        />
 
         <!-- 底部控制栏 -->
-        <MapControlsBar :coordinate="currentCoordinate" :current-zoom="currentZoom" @reset-view="resetView"
-            @locate-me="zoomToUser" @jump-to="handleJumpToCoordinates" />
+        <MapControlsBar
+            :coordinate="currentCoordinate"
+            :current-zoom="currentZoom"
+            @reset-view="resetView"
+            @locate-me="zoomToUser"
+            @jump-to="handleJumpToCoordinates"
+        />
     </div>
 </template>
 
@@ -81,7 +123,7 @@ import {
     createRouteStepInteraction,
     createRouteStepStyles,
     createStartupTaskSchedulerFeature,
-    createUserLayerApiFacadeFeature
+    createUserLayerApiFacadeFeature,
 } from '../composables/map';
 import { prioritizeTileSourceRequest } from '../composables/useTileSourceFactory';
 import {
@@ -98,7 +140,7 @@ import {
     SEARCH_RESULT_STYLE,
     SEARCH_AOI_STYLE,
     AMAP_EXTRACT_AOI_STYLE,
-    createMapStylesObject
+    createMapStylesObject,
 } from '../constants';
 import { createAutoTileSourceFromUrl } from '../composables/useTileSourceFactory';
 import LayerControlPanel from './LayerControlPanel.vue';
@@ -109,7 +151,13 @@ import AttributeTable from './AttributeTable.vue';
 import FengShuiCompassSvg from './feng-shui-compass-svg/feng-shui-compass-svg.vue';
 import PalaceExplanationPanel from './PalaceExplanationPanel.vue';
 import { apiReverseGeocodeWithFallback } from '../api';
-import { useAttrStore, useUrlParamStore, useCompassStore, useTOCStore, useLayerStore } from '../stores';
+import {
+    useAttrStore,
+    useUrlParamStore,
+    useCompassStore,
+    useTOCStore,
+    useLayerStore,
+} from '../stores';
 import { CompassManager } from '../services/CompassManager';
 import { DistrictManager } from '../services/DistrictManager';
 
@@ -140,7 +188,7 @@ function createSwipeSourceByLayerId(layerId) {
     const layerFactoryContext = {
         normBase: NORM_BASE,
         tiandituTk: TIANDITU_TK,
-        customUrl: customMapUrl.value || ''
+        customUrl: customMapUrl.value || '',
     };
 
     return layerConfig.createSource?.(layerFactoryContext) || null;
@@ -163,10 +211,10 @@ function clearSwipeCompareLayers() {
  */
 function resolveVisibleTileLayersByIds(layerIds) {
     if (!mapInstance.value) return [];
-    
+
     const mapLayers = mapInstance.value.getLayers().getArray();
     const result = [];
-    
+
     (layerIds || []).forEach((layerId) => {
         // 策略1：从 layerInstances 获取
         let layer = layerInstances[layerId];
@@ -174,7 +222,7 @@ function resolveVisibleTileLayersByIds(layerIds) {
             result.push(layer);
             return;
         }
-        
+
         // 策略2：从 map.getLayers() 中查找
         layer = mapLayers.find((l) => {
             const name = l.get?.('name');
@@ -187,7 +235,7 @@ function resolveVisibleTileLayersByIds(layerIds) {
             return;
         }
     });
-    
+
     return result;
 }
 
@@ -203,7 +251,10 @@ async function enableBasemapSwipe(config = {}) {
         throw new Error('左右底图 ID 不能为空');
     }
 
-    if (SWIPE_UNSUPPORTED_PRESETS.has(leftBasemapId) || SWIPE_UNSUPPORTED_PRESETS.has(rightBasemapId)) {
+    if (
+        SWIPE_UNSUPPORTED_PRESETS.has(leftBasemapId) ||
+        SWIPE_UNSUPPORTED_PRESETS.has(rightBasemapId)
+    ) {
         const errorMsg = '不支持的底图类型。卷帘分析仅支持标准在线底图，请选择其他底图选项。';
         console.error('[enableBasemapSwipe] Error:', errorMsg);
         message.error(errorMsg);
@@ -218,7 +269,7 @@ async function enableBasemapSwipe(config = {}) {
             switchLayerById(leftBasemapId, {
                 onUpdated: () => {
                     selectedLayer.value = leftBasemapId;
-                }
+                },
             });
             if (typeof emitBaseLayersChangeBatched === 'function') {
                 emitBaseLayersChangeBatched();
@@ -271,8 +322,8 @@ async function enableBasemapSwipe(config = {}) {
                     layerType: 'basemap-swipe-compare',
                     swipeCompareLayer: true,
                     swipeSide: 'right',
-                    swipeLayerId: layerId
-                }
+                    swipeLayerId: layerId,
+                },
             });
 
             // 卷帘 compare 图层只负责底图对比，必须低于业务图层的 zIndex，避免遮挡 TOC/矢量数据。
@@ -287,7 +338,7 @@ async function enableBasemapSwipe(config = {}) {
 
         const swipeBindings = [
             ...leftTileLayers.map((layer) => ({ layer, side: 'left' })),
-            ...rightCompareLayers.map((layer) => ({ layer, side: 'right' }))
+            ...rightCompareLayers.map((layer) => ({ layer, side: 'right' })),
         ];
 
         attachSwipeToLayers(mapInstance.value, swipeBindings);
@@ -297,7 +348,7 @@ async function enableBasemapSwipe(config = {}) {
             enabled: true,
             position: 0.5,
             mode,
-            targetLayerIds: [...leftLayerIds, ...rightLayerIds]
+            targetLayerIds: [...leftLayerIds, ...rightLayerIds],
         });
 
         mapInstance.value.render();
@@ -306,7 +357,7 @@ async function enableBasemapSwipe(config = {}) {
 
         return {
             success: true,
-            message: '已启用卷帘分析对比'
+            message: '已启用卷帘分析对比',
         };
     } catch (error) {
         console.error('[enableBasemapSwipe] Error:', error);
@@ -321,7 +372,7 @@ const {
     attachToLayers: attachSwipeToLayers,
     detachFromLayers: detachSwipeFromLayers,
     updateSwipePosition,
-    updateSwipeMode
+    updateSwipeMode,
 } = useMapSwipe();
 
 const mapContainerRect = ref(null);
@@ -375,14 +426,11 @@ const {
     VectorLayer,
     XYZ,
     VectorSource,
-    DragBox
+    DragBox,
 } = await loadMapRuntimeDeps();
 
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/geo';
-import {
-    createLayerExporter,
-    isVectorManagedLayer
-} from '../utils/layerExportService';
+import { createLayerExporter, isVectorManagedLayer } from '../utils/layerExportService';
 
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
@@ -420,7 +468,9 @@ const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 let fitToLonLatExtentByMapState = () => false;
 
 function normalizeBinaryFlag(value, fallback = '0') {
-    const compact = String(value ?? '').trim().toLowerCase();
+    const compact = String(value ?? '')
+        .trim()
+        .toLowerCase();
     if (compact === '1' || compact === 'true') return '1';
     if (compact === '0' || compact === 'false') return '0';
     return fallback === '1' ? '1' : '0';
@@ -431,11 +481,12 @@ function parseSharedEntryFlagFromUrl() {
 
     const hash = String(window.location.hash || '');
     const queryStart = hash.indexOf('?');
-    const hashParams = queryStart >= 0
-        ? new URLSearchParams(hash.slice(queryStart + 1))
-        : new URLSearchParams();
+    const hashParams =
+        queryStart >= 0 ? new URLSearchParams(hash.slice(queryStart + 1)) : new URLSearchParams();
 
-    const searchParams = new URLSearchParams(String(window.location.search || '').replace(/^\?/, ''));
+    const searchParams = new URLSearchParams(
+        String(window.location.search || '').replace(/^\?/, ''),
+    );
     const shareFlagRaw = hashParams.get('s') ?? searchParams.get('s');
     if (shareFlagRaw !== null && String(shareFlagRaw).trim() !== '') {
         return normalizeBinaryFlag(shareFlagRaw, '0') === '1';
@@ -443,14 +494,21 @@ function parseSharedEntryFlagFromUrl() {
 
     // 兼容旧版分享链接。
     const legacyMarker = String(
-        hashParams.get('from')
-        || hashParams.get('shared')
-        || searchParams.get('from')
-        || searchParams.get('shared')
-        || ''
-    ).trim().toLowerCase();
+        hashParams.get('from') ||
+            hashParams.get('shared') ||
+            searchParams.get('from') ||
+            searchParams.get('shared') ||
+            '',
+    )
+        .trim()
+        .toLowerCase();
 
-    return legacyMarker === 'share' || legacyMarker === 'shared' || legacyMarker === '1' || legacyMarker === 'true';
+    return (
+        legacyMarker === 'share' ||
+        legacyMarker === 'shared' ||
+        legacyMarker === '1' ||
+        legacyMarker === 'true'
+    );
 }
 
 // 启动问候地址解析：高德优先，天地图兜底。
@@ -463,7 +521,7 @@ async function resolveSharedAddressByLonLat(lng, lat) {
         const geocodeResponse = await apiReverseGeocodeWithFallback(lon, latitude, {
             tiandituTk: TIANDITU_TK,
             tiandituTimeout: 3500,
-            silent: true
+            silent: true,
         });
         const geocodeResult = geocodeResponse?.data || null;
         return String(geocodeResult?.formattedAddress || '').trim();
@@ -480,37 +538,34 @@ let searchSource, searchLayer;
 const LAYER_CONFIGS = createLayerConfigs(NORM_BASE, TIANDITU_TK);
 
 // 初始化图层列表状态 (从配置生成)
-const layerList = ref(LAYER_CONFIGS.map(cfg => ({
-    id: cfg.id,
-    name: cfg.name,
-    visible: cfg.visible,
-    opacity: 1 // 初始透明度为 100%
-})));
+const layerList = ref(
+    LAYER_CONFIGS.map((cfg) => ({
+        id: cfg.id,
+        name: cfg.name,
+        visible: cfg.visible,
+        opacity: 1, // 初始透明度为 100%
+    })),
+);
 const layerInstances = {}; // 存储所有 TileLayer 实例
 
 const { handleLayerContextAction } = useLayerContextMenuActions({
     layerInstances,
     getLayerConfigs: () => LAYER_CONFIGS,
     customMapUrlRef: customMapUrl,
-    message
+    message,
 });
 
-const {
-    validateBaseLayerSwitch,
-    createBaseLayerFallbackManager,
-    monitorLayerTimeout
-} = createBasemapResilience({ message });
+const { validateBaseLayerSwitch, createBaseLayerFallbackManager, monitorLayerTimeout } =
+    createBasemapResilience({ message });
 
-const {
-    initializeBasemapLayers
-} = createBasemapLayerBootstrap({
+const { initializeBasemapLayers } = createBasemapLayerBootstrap({
     layerListRef: layerList,
     layerConfigs: LAYER_CONFIGS,
     layerInstances,
     monitorLayerTimeout,
     selectedLayerRef: selectedLayer,
     message,
-    defaultLayerId: DEFAULT_BASEMAP_PRESET_ID
+    defaultLayerId: DEFAULT_BASEMAP_PRESET_ID,
 });
 
 // --- 全局变量 (非响应式) ---
@@ -545,18 +600,14 @@ const emit = defineEmits([
     'base-layers-change',
     'upload-progress-change',
     'map-core-ready',
-    'map-core-failed'
+    'map-core-failed',
 ]);
 
-const {
-    detectIPLocale,
-    getCurrentLocation,
-    zoomToUser
-} = useUserLocation({
+const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
     mapInstance,
     userLocationSource,
     isDomestic,
-    fitToLonLatExtent: (...args) => fitToLonLatExtentByMapState(...args)
+    fitToLonLatExtent: (...args) => fitToLonLatExtentByMapState(...args),
 });
 
 // 注：handleEasterEggImageOpen, handleEasterEggLocationChange, 等函数现在由 createMapUIEventHandlers 提供
@@ -567,7 +618,7 @@ const userDataLayers = [];
 let drawLayerInstance = null;
 let tooltipRef = {
     helpTooltipEl: null,
-    helpTooltipOverlay: null
+    helpTooltipOverlay: null,
 };
 
 const {
@@ -575,12 +626,12 @@ const {
     emitUserLayersChange,
     emitGraphicsOverview,
     refreshUserLayerZIndex,
-    addManagedLayerRecord
+    addManagedLayerRecord,
 } = useManagedLayerRegistry({
     emit,
     userDataLayers,
     drawSource,
-    styleTemplates: STYLE_TEMPLATES
+    styleTemplates: STYLE_TEMPLATES,
 });
 
 const drawStyleConfig = ref({ ...STYLE_TEMPLATES.classic });
@@ -591,17 +642,13 @@ const {
     createStyleFromConfig,
     mergeStyleConfig,
     buildManagedLayerStyle,
-    applyManagedLayerStyle
+    applyManagedLayerStyle,
 } = createManagedLayerStyleFeature({
-    styleTemplates: STYLE_TEMPLATES
+    styleTemplates: STYLE_TEMPLATES,
 });
 
-const {
-    getBusStepStyle,
-    getBusStepPointStyle,
-    getDriveStepStyle,
-    clearRouteStepStyleCache
-} = createRouteStepStyles();
+const { getBusStepStyle, getBusStepPointStyle, getDriveStepStyle, clearRouteStepStyleCache } =
+    createRouteStepStyles();
 
 const {
     getCurrentBusStepIndex,
@@ -612,62 +659,46 @@ const {
     previewBusRouteStep,
     clearBusRouteStepPreview,
     previewDriveRouteStep,
-    clearDriveRouteStepPreview
+    clearDriveRouteStepPreview,
 } = createRouteStepInteraction({
     mapInstanceRef: mapInstance,
     routeSource: busRouteSource,
     getRouteLayer: () => busRouteLayerRef,
-    ensureRouteBuilderApi
+    ensureRouteBuilderApi,
 });
 
-const {
-    ensureFeatureId,
-    serializeManagedFeature,
-    serializeManagedFeatures
-} = createManagedFeatureSerializationFeature();
+const { ensureFeatureId, serializeManagedFeature, serializeManagedFeatures } =
+    createManagedFeatureSerializationFeature();
 
 // 图层元数据规范化（必须在使用前定义）
-const {
-    getFeatureRepresentativeLonLat,
-    inferLayerRepresentativeLonLat,
-    normalizeLayerMetadata
-} = createLayerMetadataNormalizationFeature();
+const { getFeatureRepresentativeLonLat, inferLayerRepresentativeLonLat, normalizeLayerMetadata } =
+    createLayerMetadataNormalizationFeature();
 
-const {
-    scheduleLowPriorityTask,
-    waitForCriticalTileReady
-} = createStartupTaskSchedulerFeature({
+const { scheduleLowPriorityTask, waitForCriticalTileReady } = createStartupTaskSchedulerFeature({
     componentUnmountedRef,
     criticalTileReadyTimeoutMs: CRITICAL_TILE_READY_TIMEOUT_MS,
-    mapInstanceRef: mapInstance
+    mapInstanceRef: mapInstance,
 });
 
-const {
-    getLayerIdByIndex,
-    getLayerIndexById,
-    getLayerCategory,
-    getLayerGroup
-} = createBasemapUrlMappingFeature({
-    urlLayerOptions: URL_LAYER_OPTIONS,
-    getLayerCategoryById,
-    getLayerGroupById
-});
+const { getLayerIdByIndex, getLayerIndexById, getLayerCategory, getLayerGroup } =
+    createBasemapUrlMappingFeature({
+        urlLayerOptions: URL_LAYER_OPTIONS,
+        getLayerCategoryById,
+        getLayerGroupById,
+    });
 
-const {
-    applyCrsConversionToFeature,
-    toggleLayerCRS,
-    toggleSearchLayerCRS
-} = createCoordinateSystemConversionFeature({
-    userDataLayers,
-    message,
-    wgs84ToGcj02,
-    gcj02ToWgs84,
-    isVectorManagedLayer,
-    serializeManagedFeatures,
-    normalizeLayerMetadata,
-    getFeatureRepresentativeLonLat,
-    emitUserLayersChange
-});
+const { applyCrsConversionToFeature, toggleLayerCRS, toggleSearchLayerCRS } =
+    createCoordinateSystemConversionFeature({
+        userDataLayers,
+        message,
+        wgs84ToGcj02,
+        gcj02ToWgs84,
+        isVectorManagedLayer,
+        serializeManagedFeatures,
+        normalizeLayerMetadata,
+        getFeatureRepresentativeLonLat,
+        emitUserLayersChange,
+    });
 
 // [Phase 19] 初始化托管图层创建器（必须在 createMapSearchAndCoordinateInputFeature 之前）
 const { createManagedVectorLayer } = useCreateManagedVectorLayer({
@@ -675,71 +706,65 @@ const { createManagedVectorLayer } = useCreateManagedVectorLayer({
     userDataLayers,
     styleHelpers: {
         normalizeStyleConfig,
-        buildManagedLayerStyle
+        buildManagedLayerStyle,
     },
     featureHelpers: {
         serializeManagedFeatures,
-        ensureFeatureId
+        ensureFeatureId,
     },
     metadataHelpers: {
-        normalizeLayerMetadata
+        normalizeLayerMetadata,
     },
     registryHelpers: {
         createManagedLayerId,
         emitUserLayersChange,
         emitGraphicsOverview,
-        refreshUserLayerZIndex
+        refreshUserLayerZIndex,
     },
-    styleTemplates: STYLE_TEMPLATES
+    styleTemplates: STYLE_TEMPLATES,
 });
 
-const {
-    handleSearchJump,
-    drawPointByCoordinatesInput,
-    drawAmapAoiByDetailJsonInput
-} = createMapSearchAndCoordinateInputFeature({
-    message,
-    mapInstanceRef: mapInstance,
-    createManagedVectorLayer,
-    gcj02ToWgs84,
-    searchResultStyle: SEARCH_RESULT_STYLE,
-    searchAoiStyle: SEARCH_AOI_STYLE,
-    amapExtractAoiStyle: AMAP_EXTRACT_AOI_STYLE,
-    userDataLayers,
-    ensureFeatureId,
-    serializeManagedFeatures,
-    emitUserLayersChange,
-    emitGraphicsOverview,
-    onSearchPoiResolved: (payload) => emit('search-poi-selected', payload)
-});
+const { handleSearchJump, drawPointByCoordinatesInput, drawAmapAoiByDetailJsonInput } =
+    createMapSearchAndCoordinateInputFeature({
+        message,
+        mapInstanceRef: mapInstance,
+        createManagedVectorLayer,
+        gcj02ToWgs84,
+        searchResultStyle: SEARCH_RESULT_STYLE,
+        searchAoiStyle: SEARCH_AOI_STYLE,
+        amapExtractAoiStyle: AMAP_EXTRACT_AOI_STYLE,
+        userDataLayers,
+        ensureFeatureId,
+        serializeManagedFeatures,
+        emitUserLayersChange,
+        emitGraphicsOverview,
+        onSearchPoiResolved: (payload) => emit('search-poi-selected', payload),
+    });
 
 const {
     createManagedFeatureHighlightStyle,
     clearManagedFeatureHighlight,
     highlightManagedFeature,
     getCurrentHighlightedFeature,
-    setCurrentHighlightedFeature
+    setCurrentHighlightedFeature,
 } = createManagedFeatureHighlightFeature({
     findManagedFeature: (layerId, featureId) => {
         // 从 userDataLayers 中查找对应的图层
-        const layerRecord = userDataLayers.find(item => item.id === layerId);
+        const layerRecord = userDataLayers.find((item) => item.id === layerId);
         if (!layerRecord || !layerRecord.layer || !layerRecord.layer.getSource) return null;
         const source = layerRecord.layer.getSource();
         return source.getFeatureById(featureId);
-    }
+    },
 });
 
 // 托管要素操作
-const {
-    findManagedFeature,
-    zoomToManagedFeature
-} = createManagedFeatureOperationsFeature({
+const { findManagedFeature, zoomToManagedFeature } = createManagedFeatureOperationsFeature({
     mapInstanceRef: mapInstance,
     userDataLayers,
     getCurrentHighlightedFeature,
     setCurrentHighlightedFeature,
     clearManagedFeatureHighlight,
-    createManagedFeatureHighlightStyle
+    createManagedFeatureHighlightStyle,
 });
 
 // 绘图与测量交互
@@ -749,7 +774,7 @@ const {
     clearInteractions: clearDrawMeasureInteractions,
     clearAllGraphics,
     getDrawInteraction,
-    getSketchFeature
+    getSketchFeature,
 } = createDrawMeasureFeature({
     mapInstanceRef: mapInstance,
     drawSource,
@@ -761,15 +786,11 @@ const {
     drawStyleConfig,
     drawGraphicSeedRef,
     userDataLayers,
-    tooltipRef
+    tooltipRef,
 });
 
 // 路线绘制交互
-const {
-    drawRouteOnMap,
-    drawDriveRouteOnMap,
-    syncRouteManagedLayer
-} = createRouteRenderingFeature({
+const { drawRouteOnMap, drawDriveRouteOnMap, syncRouteManagedLayer } = createRouteRenderingFeature({
     mapInstanceRef: mapInstance,
     busRouteLayerRef,
     busRouteSource,
@@ -779,53 +800,44 @@ const {
     addManagedLayerRecord,
     busRouteManagedLayerIdRef,
     emitUserLayersChange,
-    emitGraphicsOverview
+    emitGraphicsOverview,
 });
 
 // 底图状态管理
-const {
-    emitBaseLayersChange,
-    emitBaseLayersChangeBatched,
-    refreshGoogleLayerSources
-} = createBasemapStateManagementFeature({
-    layerList,
-    selectedLayer,
-    getLayerCategory: getLayerCategoryById,
-    getLayerGroup: getLayerGroupById,
-    emit,
-    LAYER_CONFIGS,
-    layerInstances
-});
+const { emitBaseLayersChange, emitBaseLayersChangeBatched, refreshGoogleLayerSources } =
+    createBasemapStateManagementFeature({
+        layerList,
+        selectedLayer,
+        getLayerCategory: getLayerCategoryById,
+        getLayerGroup: getLayerGroupById,
+        emit,
+        LAYER_CONFIGS,
+        layerInstances,
+    });
 
 // 图层控制面板事件（切换/排序/自定义 URL）
-const {
-    loadCustomMap,
-    handleLayerChange,
-    handleLayerOrderUpdate
-} = createLayerControlHandlers({
+const { loadCustomMap, handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers({
     selectedLayerRef: selectedLayer,
     customMapUrlRef: customMapUrl,
     layerListRef: layerList,
     layerInstances,
     refreshLayersState,
     createAutoTileSourceFromUrl,
-    message
+    message,
 });
 
 // 栅格值查询函数的 ref 包装（用于延迟初始化）
 const queryRasterValueAtCoordinateRef = ref(null);
 
 // 属性表范围同步函数桥接（用于解决 setup 初始化顺序依赖）
-let syncAttributeTableMapExtentImpl = () => { };
+let syncAttributeTableMapExtentImpl = () => {};
 
 function syncAttributeTableMapExtent() {
     syncAttributeTableMapExtentImpl?.();
 }
 
 // 地图事件处理
-const {
-    bindMapEvents
-} = createMapEventHandlers({
+const { bindMapEvents } = createMapEventHandlers({
     mapInstanceRef: mapInstance,
     currentCoordinateRef: currentCoordinate,
     currentZoomRef: currentZoom,
@@ -839,7 +851,7 @@ const {
     syncAttributeTableMapExtent,
     pendingBusPickRef,
     pendingReverseGeocodePickRef,
-    busPickSource
+    busPickSource,
 });
 
 // UI 事件处理器（简单转发 + 属性表同步）
@@ -852,7 +864,7 @@ const {
     handleToggleGraticule,
     updateViewByParams,
     handleJumpToCoordinates,
-    resetView
+    resetView,
 } = createMapUIEventHandlers({
     mapInstanceRef: mapInstance,
     attrStoreRef: attrStore,
@@ -864,7 +876,7 @@ const {
     selectedLayerRef: selectedLayer,
     INITIAL_VIEW,
     flyToView: (...args) => flyToView(...args),
-    getLayerIndexById
+    getLayerIndexById,
 });
 
 syncAttributeTableMapExtentImpl = syncAttributeTableMapExtentFromUI;
@@ -887,7 +899,7 @@ const {
     switchLayerById,
     setGraticuleActive,
     toggleGraticule,
-    stopGraticule
+    stopGraticule,
 } = useMapState(mapInstance, {
     defaultZoom: INITIAL_VIEW.zoom,
     layerListRef: layerList,
@@ -899,21 +911,25 @@ const {
         const layerId = getLayerIdByIndex(layerIndex);
         if (!layerId || selectedLayer.value === layerId) return;
         selectedLayer.value = layerId;
-    }
+    },
 });
 
 fitToLonLatExtentByMapState = (...args) => fitToLonLatExtent(...args);
 
-const {
-    bindBasemapSelectionWatcher,
-    resetBasemapChain
-} = createBasemapSelectionWatcher({
+const { bindBasemapSelectionWatcher, resetBasemapChain } = createBasemapSelectionWatcher({
     selectedLayerRef: selectedLayer,
     switchLayerById,
     resolvePresetLayerIds,
     isBasemapLayerId: (layerId) => {
         const category = getLayerCategoryById?.(String(layerId || '').trim());
-        return category === 'label' || category === 'imagery' || category === 'vector' || category === 'terrain' || category === 'theme' || category === 'custom';
+        return (
+            category === 'label' ||
+            category === 'imagery' ||
+            category === 'vector' ||
+            category === 'terrain' ||
+            category === 'theme' ||
+            category === 'custom'
+        );
     },
     emitBaseLayersChange: emitBaseLayersChangeBatched,
     mapInstanceRef: mapInstance,
@@ -932,7 +948,7 @@ const {
     },
     onCircuitReset: () => {
         basemapCircuitOpen.value = false;
-    }
+    },
 });
 
 function handleResetBasemapChain() {
@@ -950,7 +966,7 @@ if (initialLayerId) {
 // [隶属] 地图初始化-延迟参数应用
 // [作用] 在地图 GIS 核心初始化完成后，应用之前在路由阶段提取的 URL 参数
 //       这确保了分享链接中的坐标、缩放级别、图层选择能够被正确应用
-// [流程] 
+// [流程]
 //   1. 在路由守卫中提取参数到 urlParamStore
 //   2. MapContainer 挂载并初始化 GIS 引擎
 //   3. GIS 初始化完成后调用此函数应用参数
@@ -977,7 +993,7 @@ function applyDeferredUrlParams() {
             lat: validParams.lat,
             z: validParams.z,
             l: validParams.l,
-            duration: 500 // 应用参数时的动画持续时间
+            duration: 500, // 应用参数时的动画持续时间
         });
 
         // 标记为已应用
@@ -994,13 +1010,10 @@ function applyDeferredUrlParams() {
 // 定位到分享链接中的地点。
 function getInitialViewState() {
     const routeState = parseUrlToState();
-    if (
-        Number.isFinite(routeState?.lng)
-        && Number.isFinite(routeState?.lat)
-    ) {
+    if (Number.isFinite(routeState?.lng) && Number.isFinite(routeState?.lat)) {
         return {
             center: [routeState.lng, routeState.lat],
-            zoom: Number.isFinite(routeState.zoom) ? routeState.zoom : INITIAL_VIEW.zoom
+            zoom: Number.isFinite(routeState.zoom) ? routeState.zoom : INITIAL_VIEW.zoom,
         };
     }
     return INITIAL_VIEW;
@@ -1021,10 +1034,10 @@ onMounted(async () => {
     componentUnmountedRef.value = false;
     try {
         // ========== Phase 1: 同步初始化 - 快速返回，让底图加载开始 ==========
-        initMap();                                              // 创建地图实例，底图图层已添加
-        bindMapViewSync();                                      // 绑定视图同步（不阻塞）
-        setGraticuleActive(showDynamicSplitLines.value);        // 设置格网（不阻塞）
-        syncUrlFromMap();                                       // 从 URL 同步地图状态（不阻塞）
+        initMap(); // 创建地图实例，底图图层已添加
+        bindMapViewSync(); // 绑定视图同步（不阻塞）
+        setGraticuleActive(showDynamicSplitLines.value); // 设置格网（不阻塞）
+        syncUrlFromMap(); // 从 URL 同步地图状态（不阻塞）
 
         // ========== Phase 2: 等待底图渲染完成 ==========
         // 注意：此时底图瓦片请求已在后台发送，拥有高优先级（由 prioritizeTileSourceRequest 保证）
@@ -1065,7 +1078,7 @@ onMounted(async () => {
         // Google 主机测速、用户定位、IP 定位等都延后到这里
         // 使用 scheduleLowPriorityTask 确保在浏览器空闲时执行
         scheduleLowPriorityTask(() => {
-            runDeferredStartupTasks().catch(() => { });
+            runDeferredStartupTasks().catch(() => {});
         });
     } catch (error) {
         const detail = String(error?.message || error || '地图核心初始化异常').trim();
@@ -1089,21 +1102,28 @@ async function runDeferredStartupTasks() {
 
     // ========== 分享或欢迎消息 ==========
     if (isSharedEntry) {
-        const shareAddress = await resolveSharedAddressByLonLat(routeViewState?.lng, routeViewState?.lat);
-        message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, { duration: 3000 });
-        message.soup();//鸡汤问候
+        const shareAddress = await resolveSharedAddressByLonLat(
+            routeViewState?.lng,
+            routeViewState?.lat,
+        );
+        message.success(`分享地点：${shareAddress || '地址解析失败，请稍后重试'}`, {
+            duration: 3000,
+        });
+        message.soup(); //鸡汤问候
     } else {
         message.success('欢迎使用NEGIAO的WebGIS!(V3.1.1)', { duration: 3000 });
     }
 
     // ========== 并行执行：Google 主机测速（非阻塞） ==========
     // 注意：这里使用 Promise 而不是 await，避免阻塞后续定位逻辑
-    resolvePreferredGoogleHost().then((host) => {
-        if (componentUnmountedRef.value) return;
-        if (!host || host === activeGoogleTileHost.value) return;
-        activeGoogleTileHost.value = host;
-        refreshGoogleLayerSources();
-    }).catch(() => { });
+    resolvePreferredGoogleHost()
+        .then((host) => {
+            if (componentUnmountedRef.value) return;
+            if (!host || host === activeGoogleTileHost.value) return;
+            activeGoogleTileHost.value = host;
+            refreshGoogleLayerSources();
+        })
+        .catch(() => {});
 
     // ========== 用户定位 ==========
     // 分享进入时静默定位且不跳转视图，仅用于更新定位上下文与 URL 参数。
@@ -1122,28 +1142,35 @@ async function runDeferredStartupTasks() {
     }
 }
 
-
 // ========== Map Swipe Watcher ==========
 // 监听swipeConfig变化：仅负责关闭时清理。
 // 开启卷帘的绑定逻辑统一在 enableBasemapSwipe 中执行，避免与 watcher 互相覆盖。
-watch(() => layerStore.swipeConfig.enabled, (enabled) => {
-    if (enabled) {
-        return;
-    }
+watch(
+    () => layerStore.swipeConfig.enabled,
+    (enabled) => {
+        if (enabled) {
+            return;
+        }
 
-    detachSwipeFromLayers();
-    clearSwipeCompareLayers();
-    if (mapInstance.value) {
-        mapInstance.value.render();
-    }
-}, { immediate: false });
+        detachSwipeFromLayers();
+        clearSwipeCompareLayers();
+        if (mapInstance.value) {
+            mapInstance.value.render();
+        }
+    },
+    { immediate: false },
+);
 
 // ========== Update Map Container Rect ==========
-watch(() => mapContainerRef.value, (el) => {
-    if (el) {
-        mapContainerRect.value = el.getBoundingClientRect();
-    }
-}, { immediate: true });
+watch(
+    () => mapContainerRef.value,
+    (el) => {
+        if (el) {
+            mapContainerRect.value = el.getBoundingClientRect();
+        }
+    },
+    { immediate: true },
+);
 
 // 监听窗口大小变化以更新容器rect
 if (typeof window !== 'undefined') {
@@ -1153,7 +1180,6 @@ if (typeof window !== 'undefined') {
         }
     });
 }
-
 
 // [隶属] 组件卸载-资源清理
 // [作用] 组件卸载时清理地图实例、事件监听、异步
@@ -1193,7 +1219,7 @@ const {
     setBaseLayerActive,
     setLayerVisibility,
     zoomToUserLayer,
-    viewUserLayer
+    viewUserLayer,
 } = createDeferredUserLayerApis({
     mapInstanceRef: mapInstance,
     initialView: INITIAL_VIEW,
@@ -1213,17 +1239,16 @@ const {
     getLayerCategory,
     refreshLayersState,
     emitFeatureSelected: (payload) => emit('feature-selected', payload),
-    isRouteManagedLayer: ({ layerId, removed }) => (
-        layerId === busRouteManagedLayerIdRef.value
-        || removed?.metadata?.category === 'bus-route'
-        || removed?.metadata?.category === 'drive-route'
-        || removed?.metadata?.category === 'route'
-    ),
+    isRouteManagedLayer: ({ layerId, removed }) =>
+        layerId === busRouteManagedLayerIdRef.value ||
+        removed?.metadata?.category === 'bus-route' ||
+        removed?.metadata?.category === 'drive-route' ||
+        removed?.metadata?.category === 'route',
     onRouteManagedLayerRemoved: () => {
         busRouteManagedLayerIdRef.value = null;
         resetRouteStepStates();
         busRouteSource.clear();
-    }
+    },
 });
 // 确保 transitRouteBuilder API 已加载并可用，支持动态导入和按需加载。
 async function ensureRouteBuilderApi() {
@@ -1244,10 +1269,10 @@ const {
     soloUserLayer,
     setUserLayerStyle,
     setUserLayerLabelVisibility,
-    applyStyleTemplate
+    applyStyleTemplate,
 } = createUserLayerApiFacadeFeature({
     ensureLayerDataImportApi,
-    ensureUserLayerActionsApi
+    ensureUserLayerActionsApi,
 });
 
 // 更新栅格值查询函数 ref（解决初始化顺序问题）
@@ -1264,17 +1289,19 @@ function initMap() {
     drawLayerInstance = new VectorLayer({
         source: drawSource,
         style: createStyleFromConfig(drawStyleConfig.value),
-        zIndex: 999
+        zIndex: 999,
     });
     const userLayer = new VectorLayer({
         source: userLocationSource,
         zIndex: 1000,
-        style: (feature) => feature.get('type') === 'accuracy' ? styles.userAccuracy : styles.userPoint
+        style: (feature) =>
+            feature.get('type') === 'accuracy' ? styles.userAccuracy : styles.userPoint,
     });
     const busPickLayer = new VectorLayer({
         source: busPickSource,
         zIndex: 1085,
-        style: (feature) => feature.get('busPickType') === 'end' ? styles.busEnd : styles.busStart
+        style: (feature) =>
+            feature.get('busPickType') === 'end' ? styles.busEnd : styles.busStart,
     });
     const busRouteLayer = new VectorLayer({
         source: busRouteSource,
@@ -1293,11 +1320,11 @@ function initMap() {
                 const markerRole = String(feature.get('markerRole') || 'segment-start');
                 const stationName = String(feature.get('stationName') || '');
                 const activeBusStep = getCurrentBusStepIndex();
-                const isActive = activeBusStep >= 0 && (
-                    Array.isArray(stepIndices)
+                const isActive =
+                    activeBusStep >= 0 &&
+                    (Array.isArray(stepIndices)
                         ? stepIndices.map((v) => Number(v)).includes(activeBusStep)
-                        : activeBusStep === stepIndex
-                );
+                        : activeBusStep === stepIndex);
                 return getBusStepPointStyle(stepIndex, markerRole, isActive, stationName);
             }
             const segmentType = Number(feature.get('segmentType') ?? 0);
@@ -1305,7 +1332,7 @@ function initMap() {
             const activeBusStep = getCurrentBusStepIndex();
             const isActive = activeBusStep >= 0 && activeBusStep === stepIndex;
             return getBusStepStyle(stepIndex, segmentType === 1, isActive);
-        }
+        },
     });
     busRouteLayerRef = busRouteLayer;
 
@@ -1314,15 +1341,15 @@ function initMap() {
     searchLayer = new VectorLayer({
         source: searchSource,
         zIndex: 1100,
-        style: createStyleFromConfig(SEARCH_RESULT_STYLE)
+        style: createStyleFromConfig(SEARCH_RESULT_STYLE),
     });
 
     // 1.3 控件
     // 从 LAYER_CONFIGS 中获取 Google 配置，使鹰眼视图与坐标系保持一致
     const controls = defaultControls({ zoom: false }).extend([
-        // new ScaleLine({ 
+        // new ScaleLine({
         //     units: 'metric',
-        //     bar: true, 
+        //     bar: true,
         //     minWidth: 100 ,
         //     // className: 'ol-scaleline'//绑定类名，控制css
         // }),
@@ -1343,30 +1370,39 @@ function initMap() {
             // ],
             layers: [
                 new TileLayer({
-                    source: prioritizeTileSourceRequest(new XYZ({
-                        url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
-                        maxZoom: 20
-                    }))
-                })
+                    source: prioritizeTileSourceRequest(
+                        new XYZ({
+                            url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+                            maxZoom: 20,
+                        }),
+                    ),
+                }),
             ],
             collapseLabel: '«',
             label: '»',
-            collapsed: false
-        })
+            collapsed: false,
+        }),
     ]);
 
     // 1.4 实例化地图
     const initialViewState = getInitialViewState();
     mapInstance.value = new Map({
         target: mapRef.value,
-        layers: [...layersToAdd, drawLayerInstance, userLayer, busRouteLayer, busPickLayer, searchLayer],
+        layers: [
+            ...layersToAdd,
+            drawLayerInstance,
+            userLayer,
+            busRouteLayer,
+            busPickLayer,
+            searchLayer,
+        ],
         view: new View({
             center: fromLonLat(initialViewState.center),
             zoom: initialViewState.zoom,
-            minZoom: 0,  // 允许缩放到最低级别
-            maxZoom: 22
+            minZoom: 0, // 允许缩放到最低级别
+            maxZoom: 22,
         }),
-        controls
+        controls,
     });
     // 创建比例尺
     const scaleline = new ScaleLine({
@@ -1383,7 +1419,7 @@ function initMap() {
     compassManagerRef = new CompassManager({
         map: mapInstance.value,
         store: compassStore,
-        mapContainerElement: mapContainerRef.value
+        mapContainerElement: mapContainerRef.value,
     });
     void compassManagerRef.init();
 
@@ -1478,7 +1514,7 @@ function pickDownloadExtent() {
     return new Promise((resolve, reject) => {
         pendingDownloadBoxPickRef.value = { resolve, reject };
         downloadBoxInteraction = new DragBox({
-            condition: () => true
+            condition: () => true,
         });
         mapInstance.value.addInteraction(downloadBoxInteraction);
 
@@ -1491,7 +1527,7 @@ function pickDownloadExtent() {
             downloadBoxInteraction = null;
             const pending = pendingDownloadBoxPickRef.value;
             pendingDownloadBoxPickRef.value = null;
-            
+
             if (!extent || extent.length < 4) {
                 pending?.reject?.(new Error('下载范围获取失败'));
                 return;
@@ -1500,17 +1536,17 @@ function pickDownloadExtent() {
             // extent 当前是 EPSG:3857 格式 [minX, minY, maxX, maxY]
             // 转换为 WGS84 格式 (EPSG:4326)
             const [minX_3857, minY_3857, maxX_3857, maxY_3857] = extent;
-            
+
             // 使用 toLonLat 将两个角的坐标转换
             const [minLon, minLat] = toLonLat([minX_3857, minY_3857]);
             const [maxLon, maxLat] = toLonLat([maxX_3857, maxY_3857]);
-            
+
             // 构建 WGS84 坐标系下的 extent [minLon, minLat, maxLon, maxLat]
             const wgs84Extent = [minLon, minLat, maxLon, maxLat];
-            
+
             pending?.resolve?.({
                 extent: wgs84Extent,
-                crs: 'EPSG:4326'  // 返回的是 WGS84 坐标
+                crs: 'EPSG:4326', // 返回的是 WGS84 坐标
             });
         });
     });
@@ -1526,7 +1562,7 @@ async function startReverseGeocodePickAndDraw() {
     try {
         const reverseResponse = await apiReverseGeocodeWithFallback(picked.lng, picked.lat, {
             tiandituTk: TIANDITU_TK,
-            silent: true
+            silent: true,
         });
         reverseResult = reverseResponse?.data || null;
     } catch {
@@ -1534,12 +1570,13 @@ async function startReverseGeocodePickAndDraw() {
     }
 
     const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
-    const layerName = formattedAddress || `逆编码点_${picked.lng.toFixed(6)}_${picked.lat.toFixed(6)}`;
+    const layerName =
+        formattedAddress || `逆编码点_${picked.lng.toFixed(6)}_${picked.lat.toFixed(6)}`;
     const businessAreaText = Array.isArray(reverseResult?.businessAreas)
         ? reverseResult.businessAreas
-            .map((item) => String(item?.name || '').trim())
-            .filter(Boolean)
-            .join('、')
+              .map((item) => String(item?.name || '').trim())
+              .filter(Boolean)
+              .join('、')
         : '';
 
     drawPointByCoordinatesInput({
@@ -1557,8 +1594,8 @@ async function startReverseGeocodePickAndDraw() {
             逆地理编码区县: String(reverseResult?.district || '').trim() || '未知',
             逆地理编码乡镇: String(reverseResult?.township || '').trim() || '未知',
             逆地理编码商圈: businessAreaText || '无',
-            逆地理编码服务: String(reverseResult?.provider || '').trim() || 'unknown'
-        }
+            逆地理编码服务: String(reverseResult?.provider || '').trim() || 'unknown',
+        },
     });
 
     if (formattedAddress) {
@@ -1584,8 +1621,8 @@ function setDrawStyle(styleCfg) {
         drawLayerInstance.setStyle(createStyleFromConfig(drawStyleConfig.value));
     }
     userDataLayers
-        .filter(item => item.sourceType === 'draw')
-        .forEach(item => {
+        .filter((item) => item.sourceType === 'draw')
+        .forEach((item) => {
             item.styleConfig = mergeStyleConfig(item.styleConfig, styleCfg);
             applyManagedLayerStyle(item);
         });
@@ -1600,13 +1637,13 @@ function zoomToGraphics() {
     const unionExtent = createEmpty();
 
     const drawExtent = drawSource.getExtent();
-    if (drawExtent && drawExtent.every(v => Number.isFinite(v))) {
+    if (drawExtent && drawExtent.every((v) => Number.isFinite(v))) {
         extendExtent(unionExtent, drawExtent);
     }
 
-    userDataLayers.forEach(item => {
+    userDataLayers.forEach((item) => {
         const ext = item.layer.getSource()?.getExtent();
-        if (ext && ext.every(v => Number.isFinite(v))) {
+        if (ext && ext.every((v) => Number.isFinite(v))) {
             extendExtent(unionExtent, ext);
         }
     });
@@ -1616,7 +1653,7 @@ function zoomToGraphics() {
     mapInstance.value.getView().fit(unionExtent, {
         padding: [80, 80, 80, 80],
         duration: 900,
-        maxZoom: 18
+        maxZoom: 18,
     });
 }
 
@@ -1646,7 +1683,7 @@ function activateInteraction(type) {
     if (type === 'ReverseGeocodePick') {
         message.info('请在地图上单击一个点，系统将自动逆地理编码并绘制。', {
             closable: true,
-            duration: 4500
+            duration: 4500,
         });
         startReverseGeocodePickAndDraw().catch((error) => {
             const detail = error instanceof Error ? error.message : '未知错误';
@@ -1666,7 +1703,7 @@ function activateInteraction(type) {
         emit('feature-selected', {
             绘制图形数量: drawSource.getFeatures().length,
             上传图层数量: userDataLayers.length,
-            上传图层名称: userDataLayers.map(item => item.name).join('、') || '无'
+            上传图层名称: userDataLayers.map((item) => item.name).join('、') || '无',
         });
         return;
     }
@@ -1690,7 +1727,7 @@ function ensureDistrictManager() {
             userDataLayers,
             emitUserLayersChange,
             emitGraphicsOverview,
-            serializeManagedFeatures
+            serializeManagedFeatures,
         });
     }
 
@@ -1714,7 +1751,7 @@ async function focusDistrictByAdcode(payload = {}) {
     return manager.loadBoundary({
         adcode,
         name: String(payload?.name || payload?.label || '').trim(),
-        fit: payload?.fit !== false
+        fit: payload?.fit !== false,
     });
 }
 
@@ -1789,7 +1826,7 @@ defineExpose({
     toggleLayerCRS,
     toggleSearchLayerCRS,
     exportLayerCoordinates,
-    enableBasemapSwipe
+    enableBasemapSwipe,
 });
 </script>
 
@@ -1821,7 +1858,6 @@ defineExpose({
     cursor: crosshair;
 }
 
-
 /* OpenLayers Tooltips Override */
 :deep(.ol-tooltip) {
     position: relative;
@@ -1846,7 +1882,6 @@ defineExpose({
 }
 
 /* 比例尺 */
-
 
 /* 鹰眼视图样式 */
 :deep(.ol-custom-overviewmap) {

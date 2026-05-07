@@ -11,7 +11,8 @@ type ProjectionResult = {
 };
 
 export const UNSUPPORTED_PROJECTED_CRS_CODE = 'UNSUPPORTED_PROJECTED_CRS';
-export const UNSUPPORTED_PROJECTED_CRS_MESSAGE = '投影坐标系处理遇到问题。系统已尝试自动转换到 WGS84，若转换失败可能存在坐标系配置问题。';
+export const UNSUPPORTED_PROJECTED_CRS_MESSAGE =
+    '投影坐标系处理遇到问题。系统已尝试自动转换到 WGS84，若转换失败可能存在坐标系配置问题。';
 
 type PrjRegistrationResult = {
     code: string;
@@ -50,7 +51,9 @@ function detectFromPrj(prjText = ''): string {
     const isProjectedWkt = /\bPROJ(?:CS|CRS)\s*\[/i.test(text);
     if (isProjectedWkt) {
         // Try to extract EPSG code from AUTHORITY block (including projected codes)
-        const allAuthorityCodes = Array.from(text.matchAll(/AUTHORITY\s*\[\s*["']EPSG["']\s*,\s*["']?(\d{4,6})["']?\s*\]/gi))
+        const allAuthorityCodes = Array.from(
+            text.matchAll(/AUTHORITY\s*\[\s*["']EPSG["']\s*,\s*["']?(\d{4,6})["']?\s*\]/gi),
+        )
             .map((item) => Number(item?.[1]))
             .filter((value) => Number.isFinite(value));
 
@@ -90,7 +93,8 @@ function detectFromPrj(prjText = ''): string {
     // Geographic coordinate systems
     if (/WGS[_\s]?84|GCS_WGS_1984/i.test(text)) return 'EPSG:4326';
     if (/WEB_MERCATOR|PSEUDO[-_\s]?MERCATOR|3857/i.test(text)) return 'EPSG:3857';
-    if (/CGCS[_\s]?2000|4490|GCS_CHINA_GEODETIC_COORDINATE_SYSTEM_2000/i.test(text)) return 'EPSG:4490';
+    if (/CGCS[_\s]?2000|4490|GCS_CHINA_GEODETIC_COORDINATE_SYSTEM_2000/i.test(text))
+        return 'EPSG:4490';
     if (/XI'?AN[_\s]?1980|4610|GCS_XIAN_1980|西安80/i.test(text)) return 'EPSG:4610';
     if (/BEIJING[_\s]?1954|4214|GCS_BEIJING_1954|北京54/i.test(text)) return 'EPSG:4214';
 
@@ -138,7 +142,7 @@ function registerWktProjection(prjText = ''): PrjRegistrationResult {
         return {
             code: 'EPSG:4326',
             prjName,
-            resolved: true
+            resolved: true,
         };
     }
 
@@ -147,7 +151,7 @@ function registerWktProjection(prjText = ''): PrjRegistrationResult {
         return {
             code: directCode,
             prjName,
-            resolved: true
+            resolved: true,
         };
     }
 
@@ -160,7 +164,7 @@ function registerWktProjection(prjText = ''): PrjRegistrationResult {
             return {
                 code: alias,
                 prjName,
-                resolved: true
+                resolved: true,
             };
         }
     } catch (error: any) {
@@ -168,7 +172,7 @@ function registerWktProjection(prjText = ''): PrjRegistrationResult {
             code: '',
             prjName,
             resolved: false,
-            error: error?.message || String(error)
+            error: error?.message || String(error),
         };
     }
 
@@ -176,12 +180,16 @@ function registerWktProjection(prjText = ''): PrjRegistrationResult {
         code: '',
         prjName,
         resolved: false,
-        error: '无法解析 PRJ WKT 定义'
+        error: '无法解析 PRJ WKT 定义',
     };
 }
 
 export function createUnsupportedProjectedCrsError(detail = '', notified = false): Error {
-    const error = new Error(detail ? `${UNSUPPORTED_PROJECTED_CRS_MESSAGE}（${detail}）` : UNSUPPORTED_PROJECTED_CRS_MESSAGE) as Error & {
+    const error = new Error(
+        detail
+            ? `${UNSUPPORTED_PROJECTED_CRS_MESSAGE}（${detail}）`
+            : UNSUPPORTED_PROJECTED_CRS_MESSAGE,
+    ) as Error & {
         code?: string;
         userMessage?: string;
         notified?: boolean;
@@ -215,26 +223,41 @@ function ensureProjectionDefs(): void {
 
     // Web Mercator projection
     if (!proj4.defs('EPSG:3857')) {
-        proj4.defs('EPSG:3857', '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs');
+        proj4.defs(
+            'EPSG:3857',
+            '+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs',
+        );
     }
 
     // Projected coordinate systems for China (中国常用投影坐标系)
     // CGCS2000 / 3-degree Gauss-Kruger System - used in China
     if (!proj4.defs('EPSG:2387')) {
         // CGCS2000 / Gauss-Kruger zone 18
-        proj4.defs('EPSG:2387', '+proj=tmerc +lat_0=0 +lon_0=105 +k=1 +x_0=18500000 +y_0=0 +ellps=GRS80 +units=m +no_defs');
+        proj4.defs(
+            'EPSG:2387',
+            '+proj=tmerc +lat_0=0 +lon_0=105 +k=1 +x_0=18500000 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
     }
     if (!proj4.defs('EPSG:2388')) {
         // CGCS2000 / Gauss-Kruger zone 21
-        proj4.defs('EPSG:2388', '+proj=tmerc +lat_0=0 +lon_0=111 +k=1 +x_0=21500000 +y_0=0 +ellps=GRS80 +units=m +no_defs');
+        proj4.defs(
+            'EPSG:2388',
+            '+proj=tmerc +lat_0=0 +lon_0=111 +k=1 +x_0=21500000 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
     }
     if (!proj4.defs('EPSG:2389')) {
         // CGCS2000 / Gauss-Kruger zone 24
-        proj4.defs('EPSG:2389', '+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=24500000 +y_0=0 +ellps=GRS80 +units=m +no_defs');
+        proj4.defs(
+            'EPSG:2389',
+            '+proj=tmerc +lat_0=0 +lon_0=117 +k=1 +x_0=24500000 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
     }
     if (!proj4.defs('EPSG:2390')) {
         // CGCS2000 / Gauss-Kruger zone 27
-        proj4.defs('EPSG:2390', '+proj=tmerc +lat_0=0 +lon_0=123 +k=1 +x_0=27500000 +y_0=0 +ellps=GRS80 +units=m +no_defs');
+        proj4.defs(
+            'EPSG:2390',
+            '+proj=tmerc +lat_0=0 +lon_0=123 +k=1 +x_0=27500000 +y_0=0 +ellps=GRS80 +units=m +no_defs',
+        );
     }
 
     // UTM WGS84 zones (48, 49, 50, 51) - common for worldwide data
@@ -273,7 +296,7 @@ export function resolveDatasetProjection(input: {
         prjProvided: !!prjText.trim(),
         prjResolved: !!sourceByPrj || !prjText.trim(),
         prjName: prjResolved.prjName,
-        prjError: prjResolved.error
+        prjError: prjResolved.error,
     };
 }
 
@@ -287,7 +310,11 @@ function transformCoordinates(coords: any, sourceCrs: string, targetCrs: string)
     return coords.map((child) => transformCoordinates(child, sourceCrs, targetCrs));
 }
 
-export function reprojectGeoJSON<T extends any>(geojson: T, sourceCrs: string, targetCrs: 'EPSG:4326' | 'EPSG:3857' = 'EPSG:4326'): T {
+export function reprojectGeoJSON<T extends any>(
+    geojson: T,
+    sourceCrs: string,
+    targetCrs: 'EPSG:4326' | 'EPSG:3857' = 'EPSG:4326',
+): T {
     const normalizedSource = normalizeCrs(sourceCrs);
     if (!normalizedSource || normalizedSource === targetCrs) return geojson;
 
@@ -297,7 +324,11 @@ export function reprojectGeoJSON<T extends any>(geojson: T, sourceCrs: string, t
 
     const applyToFeature = (feature: any) => {
         if (feature?.geometry?.coordinates) {
-            feature.geometry.coordinates = transformCoordinates(feature.geometry.coordinates, normalizedSource, targetCrs);
+            feature.geometry.coordinates = transformCoordinates(
+                feature.geometry.coordinates,
+                normalizedSource,
+                targetCrs,
+            );
         }
     };
 

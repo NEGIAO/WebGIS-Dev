@@ -29,7 +29,7 @@ function buildNormalizedResult(raw = {}) {
         extent: parseAmapRectangleToExtent(normalizeText(raw?.rectangle)),
         info: normalizeText(raw?.info),
         infocode: normalizeText(raw?.infocode),
-        raw
+        raw,
     };
 }
 
@@ -47,7 +47,7 @@ export async function getIpLocation(ip = '', options = {}) {
 
     try {
         const raw = await backendAPI.get('/api/proxy/amap/ip', {
-            params: normalizedIp ? { ip: normalizedIp } : {}
+            params: normalizedIp ? { ip: normalizedIp } : {},
         });
         const normalized = buildNormalizedResult(raw);
 
@@ -58,7 +58,7 @@ export async function getIpLocation(ip = '', options = {}) {
             }
             return {
                 ...normalized,
-                errorMessage: `IP 定位失败：${reason}`
+                errorMessage: `IP 定位失败：${reason}`,
             };
         }
 
@@ -72,7 +72,10 @@ export async function getIpLocation(ip = '', options = {}) {
         } else {
             errorMessage = error instanceof Error ? error.message : '网络异常';
             if (!silent) {
-                message.error(`IP 定位网络异常：${errorMessage}`, { closable: true, duration: 6000 });
+                message.error(`IP 定位网络异常：${errorMessage}`, {
+                    closable: true,
+                    duration: 6000,
+                });
             }
         }
 
@@ -87,7 +90,7 @@ export async function getIpLocation(ip = '', options = {}) {
             info: '',
             infocode: '',
             raw: null,
-            errorMessage
+            errorMessage,
         };
     }
 }

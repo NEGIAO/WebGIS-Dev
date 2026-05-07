@@ -4,7 +4,7 @@ import {
     isUnsupportedProjectedCrsError,
     reprojectGeoJSON,
     resolveDatasetProjection,
-    UNSUPPORTED_PROJECTED_CRS_MESSAGE
+    UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '../crs-engine';
 import { useMessage } from '../../../composables/useMessage';
 
@@ -47,11 +47,13 @@ const SHP_TYPE_NAMES: Record<number, string> = {
     21: 'PointM',
     23: 'PolylineM',
     25: 'PolygonM',
-    28: 'MultiPointM'
+    28: 'MultiPointM',
 };
 
 function normalizePath(path = ''): string {
-    return String(path || '').replace(/\\/g, '/').trim();
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .trim();
 }
 
 function pathDir(path = ''): string {
@@ -133,12 +135,14 @@ function inspectShpHeader(shpBuffer: ArrayBuffer): {
     return {
         shapeType,
         version,
-        declaredByteLength
+        declaredByteLength,
     };
 }
 
 function normalizeEncodingName(raw = ''): string {
-    const text = String(raw || '').trim().replace(/^['"]|['"]$/g, '');
+    const text = String(raw || '')
+        .trim()
+        .replace(/^['"]|['"]$/g, '');
     if (!text) return '';
     return text.toUpperCase().replace(/[^A-Z0-9_-]+/g, '');
 }
@@ -151,11 +155,11 @@ function detectDbfEncodingHint(cpgText = '', dbfBuffer?: ArrayBuffer): string {
     const ldid = new DataView(dbfBuffer).getUint8(29);
     const map: Record<number, string> = {
         0x03: 'CP1252',
-        0x4D: 'CP936',
-        0x4F: 'CP950',
+        0x4d: 'CP936',
+        0x4f: 'CP950',
         0x57: 'CP1252',
         0x78: 'CP950',
-        0x7A: 'CP936'
+        0x7a: 'CP936',
     };
     return map[ldid] || '';
 }
@@ -169,7 +173,11 @@ async function toArrayBuffer(input?: ArrayBuffer | Blob): Promise<ArrayBuffer | 
     return undefined;
 }
 
-function validateCoordinatePair(lon: number, lat: number, targetCrs: 'EPSG:4326' | 'EPSG:3857'): string | null {
+function validateCoordinatePair(
+    lon: number,
+    lat: number,
+    targetCrs: 'EPSG:4326' | 'EPSG:3857',
+): string | null {
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return '坐标转换结果包含 NaN/Infinity';
 
     if (targetCrs === 'EPSG:4326') {
@@ -191,7 +199,10 @@ function validateCoordinatePair(lon: number, lat: number, targetCrs: 'EPSG:4326'
     return null;
 }
 
-function validateGeoJsonCoordinates(geojson: any, targetCrs: 'EPSG:4326' | 'EPSG:3857'): string | null {
+function validateGeoJsonCoordinates(
+    geojson: any,
+    targetCrs: 'EPSG:4326' | 'EPSG:3857',
+): string | null {
     const limit = 5000;
     let checked = 0;
 
@@ -234,7 +245,7 @@ function normalizeFeatureCollection(geojson: any): any {
     if (Array.isArray(geojson)) {
         return {
             type: 'FeatureCollection',
-            features: geojson.flatMap((item) => item?.features || [])
+            features: geojson.flatMap((item) => item?.features || []),
         };
     }
     return geojson;
@@ -270,10 +281,13 @@ export function getGeoJsonFirstCoordinatePair(geojson: any): [number, number] | 
     return pickFirstCoordinateRecursive(geojson?.coordinates);
 }
 
-export function buildReprojectionDebugSnapshot(beforeGeojson: any, afterGeojson: any): ReprojectionDebugSnapshot {
+export function buildReprojectionDebugSnapshot(
+    beforeGeojson: any,
+    afterGeojson: any,
+): ReprojectionDebugSnapshot {
     return {
         before: getGeoJsonFirstCoordinatePair(beforeGeojson),
-        after: getGeoJsonFirstCoordinatePair(afterGeojson)
+        after: getGeoJsonFirstCoordinatePair(afterGeojson),
     };
 }
 
@@ -283,9 +297,14 @@ function assignFeatureIds(featureCollection: any): any {
     const features = Array.isArray(clone?.features) ? clone.features : [];
 
     features.forEach((feature: any, index: number) => {
-        const gid = feature?.id || feature?.properties?._gid || feature?.properties?.id || `feature_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const gid =
+            feature?.id ||
+            feature?.properties?._gid ||
+            feature?.properties?.id ||
+            `feature_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         feature.id = gid;
-        feature.properties = feature.properties && typeof feature.properties === 'object' ? feature.properties : {};
+        feature.properties =
+            feature.properties && typeof feature.properties === 'object' ? feature.properties : {};
         feature.properties._gid = gid;
     });
 
@@ -314,7 +333,7 @@ function buildParseAttempts(params: {
 
     const pushAttempt = (label: string, options: { withDbf: boolean; withShx: boolean }) => {
         const input: Record<string, ArrayBuffer> = {
-            shp: params.shpBuffer
+            shp: params.shpBuffer,
         };
         if (options.withDbf && params.dbfBuffer instanceof ArrayBuffer) {
             input.dbf = params.dbfBuffer;
@@ -330,7 +349,7 @@ function buildParseAttempts(params: {
             label,
             input,
             usesDbf: !!input.dbf,
-            usesShx: !!input.shx
+            usesShx: !!input.shx,
         });
     };
 
@@ -354,7 +373,7 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         toArrayBuffer(parts?.dbf),
         toArrayBuffer(parts?.shx),
         toArrayBuffer(parts?.prj),
-        toArrayBuffer(parts?.cpg)
+        toArrayBuffer(parts?.cpg),
     ]);
 
     if (!(shpBuffer instanceof ArrayBuffer)) {
@@ -367,7 +386,9 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
     // 容忍头部文件长度与实际长度存在少量偏差，避免误伤历史数据；仅在偏差较大时提示。
     const sizeDiff = Math.abs(shpHeader.declaredByteLength - shpBuffer.byteLength);
     if (shpHeader.declaredByteLength > 0 && sizeDiff > 32) {
-        message.warning('检测到 .shp 头部长度与实际文件长度存在较大差异，已尝试兼容解析。', { duration: 3600 });
+        message.warning('检测到 .shp 头部长度与实际文件长度存在较大差异，已尝试兼容解析。', {
+            duration: 3600,
+        });
     }
 
     const shp = await getShpParserLib();
@@ -385,7 +406,7 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         } catch (error: any) {
             failures.push({
                 attempt,
-                message: error?.message || String(error)
+                message: error?.message || String(error),
             });
         }
     }
@@ -409,33 +430,57 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
     const cpgText = String(parts?.cpgText || '').trim() || decodeMaybeText(cpgBuffer).trim();
     const encodingHint = detectDbfEncodingHint(cpgText, dbfBuffer);
     if (encodingHint && dbfBuffer instanceof ArrayBuffer && !usedAttempt.usesDbf) {
-        message.warning(`检测到 DBF 编码提示(${encodingHint})，但属性表未成功解析。`, { duration: 3600 });
+        message.warning(`检测到 DBF 编码提示(${encodingHint})，但属性表未成功解析。`, {
+            duration: 3600,
+        });
     }
 
     const projection = resolveDatasetProjection({ prjText, targetCrs: 'EPSG:4326' });
     const projectionName = projection.prjName || projection.sourceCrs || '未知投影';
 
     if (projection.prjProvided && !projection.prjResolved) {
-        message.error(buildProjectionFailureMessage(projectionName), { closable: true, duration: 0 });
-        throw createUnsupportedProjectedCrsError(projection.prjName || projection.prjError || 'PRJ 解析失败', true);
+        message.error(buildProjectionFailureMessage(projectionName), {
+            closable: true,
+            duration: 0,
+        });
+        throw createUnsupportedProjectedCrsError(
+            projection.prjName || projection.prjError || 'PRJ 解析失败',
+            true,
+        );
     }
 
     if (!projection.needsTransform) return featureCollection;
 
     try {
-        const projected = reprojectGeoJSON(featureCollection, projection.sourceCrs, projection.targetCrs);
+        const projected = reprojectGeoJSON(
+            featureCollection,
+            projection.sourceCrs,
+            projection.targetCrs,
+        );
         const validationError = validateGeoJsonCoordinates(projected, projection.targetCrs);
         if (validationError) {
-            message.error(buildProjectionFailureMessage(projectionName), { closable: true, duration: 0 });
-            throw createUnsupportedProjectedCrsError(`${projectionName} / ${validationError}`, true);
+            message.error(buildProjectionFailureMessage(projectionName), {
+                closable: true,
+                duration: 0,
+            });
+            throw createUnsupportedProjectedCrsError(
+                `${projectionName} / ${validationError}`,
+                true,
+            );
         }
         return projected;
     } catch (error: any) {
         if (projection.prjProvided) {
             if (!isUnsupportedProjectedCrsError(error)) {
-                message.error(buildProjectionFailureMessage(projectionName), { closable: true, duration: 0 });
+                message.error(buildProjectionFailureMessage(projectionName), {
+                    closable: true,
+                    duration: 0,
+                });
             }
-            throw createUnsupportedProjectedCrsError(projection.prjName || projection.prjError || error?.message || '重投影失败', true);
+            throw createUnsupportedProjectedCrsError(
+                projection.prjName || projection.prjError || error?.message || '重投影失败',
+                true,
+            );
         }
         if (isUnsupportedProjectedCrsError(error)) {
             throw error;

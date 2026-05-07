@@ -1,7 +1,7 @@
 /**
  * CompassManager Service
  * 风水指南针地图管理服务
- * 
+ *
  * 负责管理地图上的风水指南针组件的完整生命周期，包括：
  * - 指南针矢量图层的挂载/卸载
  * - 指南针的可见性
@@ -120,7 +120,7 @@ function resolvePoint(pixelCoordinates: unknown): [number, number] | null {
  * 放射性文本绘制函数
  * 在圆周上按指定角度、半径绘制旋转对齐的文本
  * 支持两种对齐模式：径向垂直（朝向圆心）和环形横向（沿切线方向）
- * 
+ *
  * @param ctx - Canvas 2D 上下文
  * @param angleRad - 文本在圆周上的角度（弧度制）
  * @param radiusPx - 文本距离原点的半径（像素）
@@ -138,7 +138,7 @@ function drawRadialText(
     text: string,
     fontSize: number,
     color: string,
-    vertical = false // true: 径向垂直(朝向圆心) | false: 环形横向(沿切线)
+    vertical = false, // true: 径向垂直(朝向圆心) | false: 环形横向(沿切线)
 ): void {
     const content = String(text || '').trim();
     if (!content) return;
@@ -198,7 +198,7 @@ function drawRadialText(
 /**
  * CompassManager 类
  * 指南针管理器 - 负责地图上风水指南针的完整生命周期管理
- * 
+ *
  * 主要职责：
  * 1. 矢量图层管理：创建、添加、移除 OpenLayers 矢量图层
  * 2. 地理要素同步：保持指南针地理坐标与门店状态一致
@@ -209,28 +209,30 @@ function drawRadialText(
  */
 export class CompassManager {
     // ==================== 核心依赖 ====================
-    private readonly map: Map;                           // OpenLayers Map 实例
-    private readonly store: CompassStore;                // Pinia 状态存储
+    private readonly map: Map; // OpenLayers Map 实例
+    private readonly store: CompassStore; // Pinia 状态存储
     private readonly mapContainerElement: HTMLElement | null; // 地图容器 DOM 元素
 
     // ==================== 指南针图层相关 ====================
-    private source: VectorSource | null = null;         // 矢量数据源
-    private feature: Feature<Point> | null = null;      // 指南针中心点要素
+    private source: VectorSource | null = null; // 矢量数据源
+    private feature: Feature<Point> | null = null; // 指南针中心点要素
     private layer: VectorLayer<VectorSource> | null = null; // 矢量图层
 
     // ==================== 事件监听器句柄 ====================
-    private stopHandles: WatchStopHandle[] = [];         // Vue watch 停止函数集合
-    private viewResolutionKey: unknown = null;           // 地图分辨率变化事件监听器 key
+    private stopHandles: WatchStopHandle[] = []; // Vue watch 停止函数集合
+    private viewResolutionKey: unknown = null; // 地图分辨率变化事件监听器 key
 
     private singleClickHandler: ((event: MouseEvent) => void) | null = null; // 地图点击处理器
-    private resizeHandler: (() => void) | null = null;   // 窗口缩放处理器
+    private resizeHandler: (() => void) | null = null; // 窗口缩放处理器
 
-    private orientationHandler: ((event: DeviceOrientationEvent & { webkitCompassHeading?: number }) => void) | null = null; // 设备方向传感器处理器
+    private orientationHandler:
+        | ((event: DeviceOrientationEvent & { webkitCompassHeading?: number }) => void)
+        | null = null; // 设备方向传感器处理器
 
-    private urlSyncTimer: number | null = null;         // URL 同步防抖计时器
+    private urlSyncTimer: number | null = null; // URL 同步防抖计时器
 
     // ==================== 渲染相关 ====================
-    private readonly style: Style;                       // 自定义 Canvas 渲染样式
+    private readonly style: Style; // 自定义 Canvas 渲染样式
 
     /**
      * 构造函数
@@ -328,7 +330,7 @@ export class CompassManager {
             updateWhileAnimating: true,
             updateWhileInteracting: true,
             zIndex: 1205,
-            visible: Boolean(this.store.enabled && this.store.mode === 'vector')
+            visible: Boolean(this.store.enabled && this.store.mode === 'vector'),
         });
 
         this.map.addLayer(this.layer);
@@ -400,8 +402,8 @@ export class CompassManager {
                     this.syncFeatureGeometry();
                     this.scheduleUrlSync();
                 },
-                { immediate: true }
-            )
+                { immediate: true },
+            ),
         );
 
         this.stopHandles.push(
@@ -413,15 +415,15 @@ export class CompassManager {
                     this.store.physicalRadiusMeters,
                     this.store.opacity,
                     this.store.rotation,
-                    this.store.renderCacheToken
+                    this.store.renderCacheToken,
                 ],
                 () => {
                     this.updateLayerVisibility();
                     this.requestRender();
                     this.scheduleUrlSync();
                 },
-                { immediate: true }
-            )
+                { immediate: true },
+            ),
         );
 
         this.stopHandles.push(
@@ -434,16 +436,17 @@ export class CompassManager {
                     }
                     this.stopDeviceOrientationSync();
                 },
-                { immediate: true }
-            )
+                { immediate: true },
+            ),
         );
 
         this.stopHandles.push(
             watch(
-                () => this.store.enabled && this.store.mode === 'vector' && this.store.placementMode,
+                () =>
+                    this.store.enabled && this.store.mode === 'vector' && this.store.placementMode,
                 () => this.updatePlacementCursor(),
-                { immediate: true }
-            )
+                { immediate: true },
+            ),
         );
 
         this.stopHandles.push(
@@ -454,8 +457,8 @@ export class CompassManager {
                         this.ensureVectorLayer();
                     }
                 },
-                { immediate: true }
-            )
+                { immediate: true },
+            ),
         );
 
         this.stopHandles.push(
@@ -463,8 +466,8 @@ export class CompassManager {
                 () => this.store.cid,
                 () => {
                     this.requestRender();
-                }
-            )
+                },
+            ),
         );
 
         this.stopHandles.push(
@@ -473,8 +476,8 @@ export class CompassManager {
                 () => {
                     this.requestRender();
                 },
-                { deep: true }
-            )
+                { deep: true },
+            ),
         );
     }
 
@@ -549,9 +552,10 @@ export class CompassManager {
     private updatePlacementCursor(): void {
         if (!this.mapContainerElement) return;
 
-        const active = Boolean(this.store.enabled)
-            && this.store.mode === 'vector'
-            && Boolean(this.store.placementMode);
+        const active =
+            Boolean(this.store.enabled) &&
+            this.store.mode === 'vector' &&
+            Boolean(this.store.placementMode);
 
         this.mapContainerElement.classList.toggle('compass-placement-mode', active);
     }
@@ -573,7 +577,7 @@ export class CompassManager {
      * 支持 iOS (webkitCompassHeading) 和 Android (alpha) 两种方向传感器
      */
     private handleDeviceOrientation = (
-        event: DeviceOrientationEvent & { webkitCompassHeading?: number }
+        event: DeviceOrientationEvent & { webkitCompassHeading?: number },
     ): void => {
         if (!this.store.enabled || !this.store.sensorEnabled) return;
 
@@ -635,7 +639,7 @@ export class CompassManager {
             writeCompassUrlState({
                 lng: Number(this.store.position?.lng),
                 lat: Number(this.store.position?.lat),
-                radius: Number(this.store.physicalRadiusMeters || 10000)
+                radius: Number(this.store.physicalRadiusMeters || 10000),
             });
         }, 120);
     }
@@ -686,7 +690,7 @@ export class CompassManager {
         const edgeLonLat = offsetLonLat(
             [Number(centerLonLat[0]), Number(centerLonLat[1])],
             radiusMeters,
-            Math.PI / 2
+            Math.PI / 2,
         );
         const edgeCoord = fromLonLat(edgeLonLat, projection);
 
@@ -740,9 +744,14 @@ export class CompassManager {
         if (!layers.length || !Number.isFinite(radiusPx)) return;
 
         const configWidth = Number(config?.compassSize?.width || BASE_CONFIG_SIZE);
-        const tianChiRatio = clamp(Number(config?.compassSize?.tianChiRadius || configWidth * 0.1) / configWidth, 0.06, 0.22);
+        const tianChiRatio = clamp(
+            Number(config?.compassSize?.tianChiRadius || configWidth * 0.1) / configWidth,
+            0.06,
+            0.22,
+        );
         const tianChiRadius = radiusPx * tianChiRatio;
-        const contentOuterRadius = (config?.isShowScale !== false) ? radiusPx * 0.82 : radiusPx * 0.95;
+        const contentOuterRadius =
+            config?.isShowScale !== false ? radiusPx * 0.82 : radiusPx * 0.95;
         const layerBand = (contentOuterRadius - tianChiRadius) / Math.max(1, layers.length);
 
         if (distance < tianChiRadius || distance > contentOuterRadius) {
@@ -770,21 +779,19 @@ export class CompassManager {
 
         // 把 coord 规范为经纬度（lon, lat），便于弹窗定位与外部使用
         const clickedCoord = this.map.getCoordinateFromPixel(pixel);
-        const lonLat = Array.isArray(clickedCoord) && clickedCoord.length >= 2 ? toLonLat(clickedCoord) : null;
+        const lonLat =
+            Array.isArray(clickedCoord) && clickedCoord.length >= 2 ? toLonLat(clickedCoord) : null;
 
         this.store.setSelectedPalace({
             layerIndex,
             segmentIndex,
             data: palaceData,
-            coord: lonLat || []
+            coord: lonLat || [],
         });
     };
 
     // 封装一个函数，判断指南针圆是否与当前视图相交，以优化渲染性能
-    private isCompassVisibleInView(
-        centerPixel: [number, number],
-        radiusPx: number
-    ): boolean {
+    private isCompassVisibleInView(centerPixel: [number, number], radiusPx: number): boolean {
         const size = this.map.getSize();
         if (!Array.isArray(size) || size.length < 2) {
             return true;
@@ -814,15 +821,13 @@ export class CompassManager {
         const dx = centerX - nearestX;
         const dy = centerY - nearestY;
 
-        return (dx * dx + dy * dy) <= (radiusPx * radiusPx);
+        return dx * dx + dy * dy <= radiusPx * radiusPx;
     }
-
-
 
     /**
      * 创建原生 Canvas 渲染样式
      * 返回 OpenLayers 的自定义渲染样式，在地图 Canvas 中绘制指南针
-     * 
+     *
      * 渲染内容包括：
      * 1. 太极圆：中心核心圆
      * 2. 图层环：多个同心圆及其分隔线
@@ -831,22 +836,18 @@ export class CompassManager {
      *    - 自动根据缩放级别隐藏密集文本（LOD 优化）
      * 4. 刻度环：外侧的度数刻度和数字
      * 5. 天心十字：中心十字标记线
-     * 
+     *
      * 所有元素都根据指南针半径自动缩放，以保持正确的视觉比例
-     * 
+     *
      * @returns 自定义 Canvas 渲染样式
      */
     private createNativeCanvasStyle(): Style {
         return new Style({
             renderer: (pixelCoordinates: unknown, renderState: any) => {
-
                 if (!this.store.enabled || this.store.mode !== 'vector') return;
 
                 const context = renderState?.context as CanvasRenderingContext2D | undefined;
                 if (!context) return;
-
-
-
 
                 const pointPixel = resolvePoint(pixelCoordinates);
                 if (!pointPixel) return;
@@ -855,14 +856,21 @@ export class CompassManager {
                 const centerCoordRaw = geometry?.getCoordinates?.();
                 if (!Array.isArray(centerCoordRaw) || centerCoordRaw.length < 2) return;
 
-                const centerCoord: [number, number] = [Number(centerCoordRaw[0]), Number(centerCoordRaw[1])];
+                const centerCoord: [number, number] = [
+                    Number(centerCoordRaw[0]),
+                    Number(centerCoordRaw[1]),
+                ];
                 const centerX = Number(pointPixel[0]);
                 const centerY = Number(pointPixel[1]);
                 if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return;
 
                 const minResolution = Number(this.store.minResolution || 450);
                 const resolution = Number(renderState?.resolution);
-                if (Number.isFinite(minResolution) && Number.isFinite(resolution) && resolution > minResolution) {
+                if (
+                    Number.isFinite(minResolution) &&
+                    Number.isFinite(resolution) &&
+                    resolution > minResolution
+                ) {
                     return;
                 }
 
@@ -877,21 +885,26 @@ export class CompassManager {
                 const line = config?.line || {
                     borderColor: '#AAAAAA',
                     scaleColor: '#AAAAAA',
-                    scaleHighlightColor: '#FF0000'
+                    scaleHighlightColor: '#FF0000',
                 };
 
                 const opacity = clamp(Number(this.store.opacity || 0.9), 0.1, 1);
-                const rotationRad = (normalizeAngle(Number(this.store.rotation || 0)) * Math.PI) / 180;
+                const rotationRad =
+                    (normalizeAngle(Number(this.store.rotation || 0)) * Math.PI) / 180;
 
                 const configWidth = Number(config?.compassSize?.width || BASE_CONFIG_SIZE);
-                const tianChiRadiusRaw = Number(config?.compassSize?.tianChiRadius || configWidth * 0.1);
+                const tianChiRadiusRaw = Number(
+                    config?.compassSize?.tianChiRadius || configWidth * 0.1,
+                );
                 const tianChiRatio = clamp(tianChiRadiusRaw / Math.max(1, configWidth), 0.06, 0.22);
                 const tianChiRadius = radiusPx * tianChiRatio;
 
                 const hasScale = config?.isShowScale !== false;
                 const contentOuterRadius = hasScale ? radiusPx * 0.82 : radiusPx * 0.95;
-                const layerBand = Math.max(1, (contentOuterRadius - tianChiRadius) / Math.max(1, layers.length));
-
+                const layerBand = Math.max(
+                    1,
+                    (contentOuterRadius - tianChiRadius) / Math.max(1, layers.length),
+                );
 
                 //判断是否有可见部分在视图范围内，控制渲染性能，避免在指南针完全不可见时仍然执行复杂的绘制逻辑
                 if (!this.isCompassVisibleInView([centerX, centerY], radiusPx)) {
@@ -938,12 +951,23 @@ export class CompassManager {
                         const ex = Math.cos(angle) * outerR;
                         const ey = Math.sin(angle) * outerR;
 
-                        if (selected && selected.layerIndex === layerIndex && selected.segmentIndex === i) {
+                        if (
+                            selected &&
+                            selected.layerIndex === layerIndex &&
+                            selected.segmentIndex === i
+                        ) {
                             context.save();
                             context.fillStyle = 'rgba(255, 215, 0, 0.4)';
                             context.beginPath();
                             context.arc(0, 0, outerR, angle, angle + (Math.PI * 2) / segmentCount);
-                            context.arc(0, 0, innerR, angle + (Math.PI * 2) / segmentCount, angle, true);
+                            context.arc(
+                                0,
+                                0,
+                                innerR,
+                                angle + (Math.PI * 2) / segmentCount,
+                                angle,
+                                true,
+                            );
                             context.closePath();
                             context.fill();
                             context.restore();
@@ -955,20 +979,24 @@ export class CompassManager {
                         context.stroke();
                     }
 
-                    const shouldSkipText = (
-                        (segmentCount >= 60 && !showUltraDenseText)
-                        || (segmentCount >= 24 && !showDenseText)
-                    );
+                    const shouldSkipText =
+                        (segmentCount >= 60 && !showUltraDenseText) ||
+                        (segmentCount >= 24 && !showDenseText);
                     if (shouldSkipText) return;
 
-                    const defaultFont = clamp(Number(layer?.fontSize || 16), 8, 34) * (radiusPx / (BASE_CONFIG_SIZE / 2));
+                    const defaultFont =
+                        clamp(Number(layer?.fontSize || 16), 8, 34) *
+                        (radiusPx / (BASE_CONFIG_SIZE / 2));
 
                     for (let i = 0; i < segmentCount; i += 1) {
-                        const angleMid = -Math.PI / 2 + startOffset + ((i + 0.5) * Math.PI * 2) / segmentCount;
+                        const angleMid =
+                            -Math.PI / 2 + startOffset + ((i + 0.5) * Math.PI * 2) / segmentCount;
                         const label = Array.isArray(layer?.data) ? layer.data[i] : '';
 
                         if (Array.isArray(label)) {
-                            const rows = label.map((item) => String(item || '').trim()).filter(Boolean);
+                            const rows = label
+                                .map((item) => String(item || '').trim())
+                                .filter(Boolean);
                             const rowCount = rows.length;
                             if (rowCount === 0) continue;
 
@@ -986,22 +1014,24 @@ export class CompassManager {
 
                                 rows.forEach((rowText, rowIndex) => {
                                     // 3. 计算角度偏移：让文字以 angleMid 为中心左右平分
-                                    const offset = (rowIndex - (rowCount - 1) / 2) * (contentSpan / rowCount);
+                                    const offset =
+                                        (rowIndex - (rowCount - 1) / 2) * (contentSpan / rowCount);
 
                                     drawRadialText(
                                         context,
                                         angleMid + offset, // 偏移角度实现横向
-                                        rr,                // 固定半径
+                                        rr, // 固定半径
                                         rowText,
                                         defaultFont * 0.85, // 横排可以稍微大一点点
                                         resolveTextColor(layer, rowIndex),
-                                        false
+                                        false,
                                     );
                                 });
                             } else {
                                 // --- 【原有纵向排列逻辑】 ---
                                 rows.forEach((rowText, rowIndex) => {
-                                    const rr = innerR + layerBand * ((rowIndex + 1) / (rowCount + 1));
+                                    const rr =
+                                        innerR + layerBand * ((rowIndex + 1) / (rowCount + 1));
                                     drawRadialText(
                                         context,
                                         angleMid,
@@ -1009,7 +1039,7 @@ export class CompassManager {
                                         rowText,
                                         defaultFont * 0.76,
                                         resolveTextColor(layer, rowIndex),
-                                        false
+                                        false,
                                     );
                                 });
                             }
@@ -1027,7 +1057,7 @@ export class CompassManager {
                             String(label || ''),
                             defaultFont,
                             resolveTextColor(layer, i),
-                            layer.vertical ?? false // 🔴 这里必须读取 layer.vertical
+                            layer.vertical ?? false, // 🔴 这里必须读取 layer.vertical
                         );
                     }
                 });
@@ -1039,25 +1069,41 @@ export class CompassManager {
                         minLineHeight: 10,
                         midLineHeight: 20,
                         maxLineHeight: 25,
-                        numberFontSize: 13
+                        numberFontSize: 13,
                     };
 
                     // 1. 定义地理比例常数 (相对于总半径 radiusPx)
                     // 假设 0.82 为主体边缘，我们将刻度分布在 0.82 到 1.0 的地理区间内
-                    const scaleStartRatio = 0.825;       // 刻度起始位置 (82.5% 半径处)
-                    const tickMaxRatio = 0.06;           // 最长刻度线占总半径的 6%
-                    const numberPosRatio = 0.9;         // 数字中心点位于 93% 半径处
+                    const scaleStartRatio = 0.825; // 刻度起始位置 (82.5% 半径处)
+                    const tickMaxRatio = 0.06; // 最长刻度线占总半径的 6%
+                    const numberPosRatio = 0.9; // 数字中心点位于 93% 半径处
 
                     const scaleInner = radiusPx * scaleStartRatio;
                     const baseScale = radiusPx / (BASE_CONFIG_SIZE / 2);
 
                     // 2. 将刻度线长度转换为比例长度
-                    const shortLen = clamp(Number(scale.minLineHeight || 10) * baseScale, 2, radiusPx * 0.03);
-                    const midLen = clamp(Number(scale.midLineHeight || 20) * baseScale, 3, radiusPx * 0.05);
-                    const longLen = clamp(Number(scale.maxLineHeight || 25) * baseScale, 4, radiusPx * tickMaxRatio);
+                    const shortLen = clamp(
+                        Number(scale.minLineHeight || 10) * baseScale,
+                        2,
+                        radiusPx * 0.03,
+                    );
+                    const midLen = clamp(
+                        Number(scale.midLineHeight || 20) * baseScale,
+                        3,
+                        radiusPx * 0.05,
+                    );
+                    const longLen = clamp(
+                        Number(scale.maxLineHeight || 25) * baseScale,
+                        4,
+                        radiusPx * tickMaxRatio,
+                    );
 
                     // 3. 将字号转换为比例大小
-                    const numberFont = clamp(Number(scale.numberFontSize || 13) * baseScale, 6, radiusPx * 0.05);
+                    const numberFont = clamp(
+                        Number(scale.numberFontSize || 13) * baseScale,
+                        6,
+                        radiusPx * 0.05,
+                    );
 
                     for (let degree = 0; degree < 360; degree += 1) {
                         const angle = -Math.PI / 2 + (degree * Math.PI) / 180;
@@ -1077,7 +1123,7 @@ export class CompassManager {
                         context.moveTo(Math.cos(angle) * scaleInner, Math.sin(angle) * scaleInner);
                         context.lineTo(
                             Math.cos(angle) * (scaleInner + markLen),
-                            Math.sin(angle) * (scaleInner + markLen)
+                            Math.sin(angle) * (scaleInner + markLen),
                         );
                         context.stroke();
 
@@ -1091,7 +1137,7 @@ export class CompassManager {
                                 String(degree),
                                 numberFont * 1.5,
                                 color,
-                                false // 刻度数字通常沿切线排列
+                                false, // 刻度数字通常沿切线排列
                             );
                         }
                     }
@@ -1100,7 +1146,9 @@ export class CompassManager {
                 // Tianxin cross: exactly 1/3 radius.
                 if (config?.isShowTianxinCross !== false) {
                     context.strokeStyle = String(config?.tianxinCrossColor || '#FF0000');
-                    context.lineWidth = clamp(Number(config?.tianxinCrossWidth || 2), 1, 8) * (radiusPx / (BASE_CONFIG_SIZE / 2));
+                    context.lineWidth =
+                        clamp(Number(config?.tianxinCrossWidth || 2), 1, 8) *
+                        (radiusPx / (BASE_CONFIG_SIZE / 2));
 
                     const crossHalf = radiusPx / 3;
                     context.beginPath();
@@ -1115,7 +1163,7 @@ export class CompassManager {
                 }
 
                 context.restore();
-            }
+            },
         });
     }
 }

@@ -1,7 +1,7 @@
 /**
  * 托管要素序列化功能库
  * 负责要素 ID 管理与 GeoJSON 序列化转换
- * 
+ *
  * 导出：
  * - ensureFeatureId(feature, layerName, index)
  * - serializeManagedFeature(feature, layerName, index)
@@ -18,7 +18,10 @@
  */
 function ensureFeatureId(feature, layerName, index) {
     const existingId = feature?.getId?.() || feature?.get?.('_gid') || feature?.get?.('id');
-    const featureId = String(existingId || `${layerName || 'layer'}_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+    const featureId = String(
+        existingId ||
+            `${layerName || 'layer'}_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    );
     if (typeof feature?.setId === 'function') {
         feature.setId(featureId);
     }
@@ -45,9 +48,9 @@ function serializeManagedFeature(feature, layerName, index) {
 
     const serializedGeometry = geometry
         ? {
-            type: geometry.getType?.() || 'Geometry',
-            coordinates: geometry.getCoordinates?.()
-        }
+              type: geometry.getType?.() || 'Geometry',
+              coordinates: geometry.getCoordinates?.(),
+          }
         : null;
 
     properties._gid = featureId;
@@ -57,7 +60,7 @@ function serializeManagedFeature(feature, layerName, index) {
         id: featureId,
         _gid: featureId,
         properties,
-        geometry: serializedGeometry
+        geometry: serializedGeometry,
     };
 }
 
@@ -69,7 +72,9 @@ function serializeManagedFeature(feature, layerName, index) {
  * @returns {Object[]} GeoJSON-like Feature 对象数组
  */
 function serializeManagedFeatures(features = [], layerName = '') {
-    return (features || []).map((feature, index) => serializeManagedFeature(feature, layerName, index));
+    return (features || []).map((feature, index) =>
+        serializeManagedFeature(feature, layerName, index),
+    );
 }
 
 /**
@@ -80,6 +85,6 @@ export function createManagedFeatureSerializationFeature() {
     return {
         ensureFeatureId,
         serializeManagedFeature,
-        serializeManagedFeatures
+        serializeManagedFeatures,
     };
 }

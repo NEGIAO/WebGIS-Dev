@@ -4,7 +4,10 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const IS_DEV = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV;
 
 function normalizePath(path) {
-    return String(path || '').replace(/\\/g, '/').replace(/^\.\//, '').trim();
+    return String(path || '')
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .trim();
 }
 
 function splitDirAndFile(path) {
@@ -13,7 +16,7 @@ function splitDirAndFile(path) {
     if (idx < 0) return { dir: '', file: normalized };
     return {
         dir: normalized.slice(0, idx),
-        file: normalized.slice(idx + 1)
+        file: normalized.slice(idx + 1),
     };
 }
 
@@ -53,17 +56,17 @@ function detectMimeType(path) {
 function pickMainKmlEntry(entries) {
     if (!entries.length) return null;
 
-    const docKml = entries.find((entry) => splitDirAndFile(entry.name).file.toLowerCase() === 'doc.kml');
+    const docKml = entries.find(
+        (entry) => splitDirAndFile(entry.name).file.toLowerCase() === 'doc.kml',
+    );
     if (docKml) return docKml;
 
-    return entries
-        .slice()
-        .sort((a, b) => {
-            const depthA = normalizePath(a.name).split('/').length;
-            const depthB = normalizePath(b.name).split('/').length;
-            if (depthA !== depthB) return depthA - depthB;
-            return normalizePath(a.name).length - normalizePath(b.name).length;
-        })[0];
+    return entries.slice().sort((a, b) => {
+        const depthA = normalizePath(a.name).split('/').length;
+        const depthB = normalizePath(b.name).split('/').length;
+        if (depthA !== depthB) return depthA - depthB;
+        return normalizePath(a.name).length - normalizePath(b.name).length;
+    })[0];
 }
 
 function countByRegex(text, regex) {
@@ -75,16 +78,19 @@ function getKmlContentScore(text) {
     const content = String(text || '');
     const placemarkCount = countByRegex(content, /<\s*(?:[\w-]+:)?Placemark\b/gi);
     const coordinatesCount = countByRegex(content, /<\s*(?:[\w-]+:)?coordinates\b/gi);
-    const pointLinePolygonCount = countByRegex(content, /<\s*(?:[\w-]+:)?(?:Point|LineString|Polygon)\b/gi);
+    const pointLinePolygonCount = countByRegex(
+        content,
+        /<\s*(?:[\w-]+:)?(?:Point|LineString|Polygon)\b/gi,
+    );
     const documentCount = countByRegex(content, /<\s*(?:[\w-]+:)?Document\b/gi);
 
     // 优先保证“有可渲染要素”的 KML 胜出，其次再看体量。
     return (
-        placemarkCount * 1000
-        + coordinatesCount * 300
-        + pointLinePolygonCount * 120
-        + documentCount * 20
-        + Math.min(content.length, 5000)
+        placemarkCount * 1000 +
+        coordinatesCount * 300 +
+        pointLinePolygonCount * 120 +
+        documentCount * 20 +
+        Math.min(content.length, 5000)
     );
 }
 
@@ -161,10 +167,7 @@ async function rewriteKmlImageHrefs({ kmlText, kmlEntryName, entryMap, blobUrlCo
 }
 
 export async function extractKmlFromKmz(kmzInput, options = {}) {
-    const {
-        rewriteResourceBlobUrls = false,
-        debug = false
-    } = options;
+    const { rewriteResourceBlobUrls = false, debug = false } = options;
 
     const kmzBuffer = await toArrayBuffer(kmzInput);
     const { default: JSZip } = await import('jszip');
@@ -187,7 +190,7 @@ export async function extractKmlFromKmz(kmzInput, options = {}) {
         decodedCandidates.push({
             entry,
             text,
-            score: getKmlContentScore(text)
+            score: getKmlContentScore(text),
         });
     }
 
@@ -196,7 +199,9 @@ export async function extractKmlFromKmz(kmzInput, options = {}) {
         mainKmlEntry = decodedCandidates[0].entry;
         kmlString = decodedCandidates[0].text;
     } else {
-        const fallback = decodedCandidates.find((item) => item.entry.name === mainKmlEntry?.name) || decodedCandidates[0];
+        const fallback =
+            decodedCandidates.find((item) => item.entry.name === mainKmlEntry?.name) ||
+            decodedCandidates[0];
         if (!fallback) {
             throw new Error('KMZ 中 KML 读取失败');
         }
@@ -211,7 +216,7 @@ export async function extractKmlFromKmz(kmzInput, options = {}) {
             kmlText: kmlString,
             kmlEntryName: mainKmlEntry.name,
             entryMap,
-            blobUrlCollector: resourceBlobUrls
+            blobUrlCollector: resourceBlobUrls,
         });
     }
 
@@ -220,23 +225,19 @@ export async function extractKmlFromKmz(kmzInput, options = {}) {
             mainKmlEntry: mainKmlEntry.name,
             totalEntries: entries.length,
             kmlEntryCount: kmlEntries.length,
-            rewrittenResourceCount: resourceBlobUrls.length
+            rewrittenResourceCount: resourceBlobUrls.length,
         });
     }
 
     return {
         kmlString,
         entryName: mainKmlEntry.name,
-        resourceBlobUrls
+        resourceBlobUrls,
     };
 }
 
 export function useKmzLoader(options = {}) {
-    const {
-        parseKml = null,
-        rewriteResourceBlobUrls = false,
-        debug = false
-    } = options;
+    const { parseKml = null, rewriteResourceBlobUrls = false, debug = false } = options;
 
     const isLoading = ref(false);
     const error = ref(null);
@@ -263,8 +264,9 @@ export function useKmzLoader(options = {}) {
 
         try {
             const result = await extractKmlFromKmz(source, {
-                rewriteResourceBlobUrls: loadOptions.rewriteResourceBlobUrls ?? rewriteResourceBlobUrls,
-                debug: loadOptions.debug ?? debug
+                rewriteResourceBlobUrls:
+                    loadOptions.rewriteResourceBlobUrls ?? rewriteResourceBlobUrls,
+                debug: loadOptions.debug ?? debug,
             });
 
             kmlString.value = result.kmlString;
@@ -292,6 +294,6 @@ export function useKmzLoader(options = {}) {
         resourceBlobUrls,
         loadKmz,
         extractKmlFromKmz,
-        revokeResourceBlobUrls
+        revokeResourceBlobUrls,
     };
 }

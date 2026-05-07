@@ -1,4 +1,3 @@
-
 <!-- 
         本项目实现的功能：  
 
@@ -46,18 +45,19 @@
                     
 -->
 <script setup>
-import { RouterView } from 'vue-router'
-import GlobalLoading from './components/GlobalLoading.vue'
+import { RouterView } from 'vue-router';
+import GlobalLoading from './components/GlobalLoading.vue';
 </script>
 
 <template>
-  <RouterView />
-  <GlobalLoading />
+    <RouterView />
+    <GlobalLoading />
 </template>
 
 <style>
 /* Global Styles */
-html, body {
+html,
+body {
     margin: 0;
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;

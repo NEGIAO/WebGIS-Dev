@@ -18,9 +18,22 @@
     </transition>
 
     <Teleport to="body">
-        <div v-if="showLargeImg" class="lightbox" @click="closeLargeImage">
-            <img :src="largeImageSrc" class="large-image" @click.stop />
-            <button class="close-btn" @click="closeLargeImage">×</button>
+        <div
+            v-if="showLargeImg"
+            class="lightbox"
+            @click="closeLargeImage"
+        >
+            <img
+                :src="largeImageSrc"
+                class="large-image"
+                @click.stop
+            />
+            <button
+                class="close-btn"
+                @click="closeLargeImage"
+            >
+                ×
+            </button>
         </div>
     </Teleport>
 </template>
@@ -41,38 +54,38 @@ const props = defineProps({
     /** OpenLayers Map 实例（shallowRef） */
     mapInstance: {
         type: Object,
-        default: null
+        default: null,
     },
     /** 彩蛋区域边界：{ minLon, maxLon, minLat, maxLat } */
     bounds: {
         type: Object,
-        default: () => ({ minLon: 0, maxLon: 0, minLat: 0, maxLat: 0 })
+        default: () => ({ minLon: 0, maxLon: 0, minLat: 0, maxLat: 0 }),
     },
     /** 缩略图列表 */
     images: {
         type: Array,
-        default: () => []
+        default: () => [],
     },
     /** 受控显示状态（可选） */
     show: {
         type: Boolean,
-        default: undefined
+        default: undefined,
     },
     /** 受控像素坐标（可选） */
     position: {
         type: Object,
-        default: undefined
+        default: undefined,
     },
     /** 受控挂载状态（可选） */
     shouldMount: {
         type: Boolean,
-        default: undefined
+        default: undefined,
     },
     /** 缩略图显示最低缩放阈值 */
     zoomThreshold: {
         type: Number,
-        default: 17
-    }
+        default: 17,
+    },
 });
 
 /**
@@ -95,13 +108,13 @@ const internalPosition = ref({ x: 0, y: 0 });
 let pointerMoveKey = null;
 let currentMapRef = null;
 
-const resolvedShow = computed(() => (
-    typeof props.show === 'boolean' ? props.show : internalShow.value
-));
+const resolvedShow = computed(() =>
+    typeof props.show === 'boolean' ? props.show : internalShow.value,
+);
 
-const resolvedShouldMount = computed(() => (
-    typeof props.shouldMount === 'boolean' ? props.shouldMount : internalShouldMount.value
-));
+const resolvedShouldMount = computed(() =>
+    typeof props.shouldMount === 'boolean' ? props.shouldMount : internalShouldMount.value,
+);
 
 const resolvedPosition = computed(() => {
     if (props.position && Number.isFinite(props.position.x) && Number.isFinite(props.position.y)) {
@@ -114,14 +127,18 @@ const shouldRenderImageSet = computed(() => resolvedShouldMount.value && resolve
 
 const imageSetStyle = computed(() => ({
     left: `${Number(resolvedPosition.value?.x || 0)}px`,
-    top: `${Number(resolvedPosition.value?.y || 0)}px`
+    top: `${Number(resolvedPosition.value?.y || 0)}px`,
 }));
 
-watch(resolvedShow, (visible) => {
-    if (visible && !internalShouldMount.value) {
-        internalShouldMount.value = true;
-    }
-}, { immediate: true });
+watch(
+    resolvedShow,
+    (visible) => {
+        if (visible && !internalShouldMount.value) {
+            internalShouldMount.value = true;
+        }
+    },
+    { immediate: true },
+);
 
 /**
  * 依据指针坐标与缩放级别更新图片集显示状态和像素位置。
@@ -134,18 +151,17 @@ function evaluateAreaVisibility(coordinate, pixel) {
     const zoom = Number(view?.getZoom?.());
     const lonLat = toLonLat(coordinate);
     const [lon, lat] = lonLat;
-    const inArea = (
-        lon >= Number(props.bounds?.minLon)
-        && lon <= Number(props.bounds?.maxLon)
-        && lat >= Number(props.bounds?.minLat)
-        && lat <= Number(props.bounds?.maxLat)
-    );
+    const inArea =
+        lon >= Number(props.bounds?.minLon) &&
+        lon <= Number(props.bounds?.maxLon) &&
+        lat >= Number(props.bounds?.minLat) &&
+        lat <= Number(props.bounds?.maxLat);
 
     internalShow.value = Number.isFinite(zoom) && zoom >= Number(props.zoomThreshold) && inArea;
     if (internalShow.value && Array.isArray(pixel) && pixel.length >= 2) {
         internalPosition.value = {
             x: Number(pixel[0]) + INTERNAL_OFFSET_PX,
-            y: Number(pixel[1]) + INTERNAL_OFFSET_PX
+            y: Number(pixel[1]) + INTERNAL_OFFSET_PX,
         };
     }
 
@@ -172,9 +188,13 @@ function bindMapListener() {
     });
 }
 
-watch(() => props.mapInstance?.value, () => {
-    bindMapListener();
-}, { immediate: true });
+watch(
+    () => props.mapInstance?.value,
+    () => {
+        bindMapListener();
+    },
+    { immediate: true },
+);
 
 function showLargeImage(src) {
     largeImageSrc.value = src;

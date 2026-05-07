@@ -23,9 +23,27 @@
                             title="复制坐标"
                             @click.stop="copyCurrentCoordinate"
                         >
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <rect x="9" y="9" width="11" height="11" rx="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            <svg
+                                viewBox="0 0 24 24"
+                                width="14"
+                                height="14"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <rect
+                                    x="9"
+                                    y="9"
+                                    width="11"
+                                    height="11"
+                                    rx="2"
+                                ></rect>
+                                <path
+                                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                ></path>
                             </svg>
                             <span class="copy-tooltip">{{ copyTooltipText }}</span>
                         </button>
@@ -35,7 +53,17 @@
                             title="坐标格式设置"
                             @click.stop="toggleFormatMenu"
                         >
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <svg
+                                viewBox="0 0 24 24"
+                                width="14"
+                                height="14"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
                                 <polyline points="9 18 15 12 9 6"></polyline>
                             </svg>
                         </button>
@@ -57,7 +85,10 @@
             </div>
 
             <!-- 格式配置菜单 -->
-            <div v-if="isFormatMenuVisible" class="format-menu">
+            <div
+                v-if="isFormatMenuVisible"
+                class="format-menu"
+            >
                 <div class="format-menu-content">
                     <div class="menu-section">
                         <div class="menu-label">显示格式</div>
@@ -95,7 +126,12 @@
             </div>
         </div>
 
-        <div class="zoom-level-display" title="当前缩放级别">{{ currentZoom }}</div>
+        <div
+            class="zoom-level-display"
+            title="当前缩放级别"
+        >
+            {{ currentZoom }}
+        </div>
         <div class="divider"></div>
         <button
             class="home-btn"
@@ -104,7 +140,17 @@
             title="单击复位 / 双击定位"
             type="button"
         >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+            >
                 <path d="M3 10.5 12 3l9 7.5"></path>
                 <path d="M5 9.8V20h14V9.8"></path>
                 <path d="M10 20v-6h4v6"></path>
@@ -128,11 +174,11 @@
 
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
-  COORDINATE_FORMATS,
-  DECIMAL_PLACES,
-  formatCoordinate,
+    COORDINATE_FORMATS,
+    DECIMAL_PLACES,
+    formatCoordinate,
     parseCoordinate,
-    normalizeCoordinate
+    normalizeCoordinate,
 } from '../utils/biz';
 import { useMessage } from '../composables/useMessage';
 const message = useMessage();
@@ -143,12 +189,12 @@ const COORDINATE_PLACEHOLDER = 'Lon, Lat';
 
 /** 本地存储的键名 */
 const STORAGE_KEYS = {
-  FORMAT_ID: 'gis_coord_format_id',
-  DECIMAL_PLACES: 'gis_coord_decimal_places'
+    FORMAT_ID: 'gis_coord_format_id',
+    DECIMAL_PLACES: 'gis_coord_decimal_places',
 };
 
 // ========== 默认坐标格式配置 ==========
-const DEFAULT_FORMAT_ID = 'format_3'; 
+const DEFAULT_FORMAT_ID = 'format_3';
 const DEFAULT_DECIMAL_PLACES = 6;
 
 // ========== 组件 Props 定义 ==========
@@ -160,16 +206,16 @@ const DEFAULT_DECIMAL_PLACES = 6;
 const props = defineProps({
     coordinate: {
         type: Object,
-        default: null
+        default: null,
     },
     coordinateText: {
         type: String,
-        default: COORDINATE_PLACEHOLDER
+        default: COORDINATE_PLACEHOLDER,
     },
     currentZoom: {
         type: [Number, String],
-        default: '--'
-    }
+        default: '--',
+    },
 });
 
 // ========== 组件 Emits 定义 ==========
@@ -178,40 +224,36 @@ const props = defineProps({
  * @emit locate-me - 定位到用户位置（双击主页按钮）
  * @emit jump-to - 跳转到指定坐标 { lng, lat }
  */
-const emit = defineEmits([
-    'reset-view',
-    'locate-me',
-    'jump-to'
-]);
+const emit = defineEmits(['reset-view', 'locate-me', 'jump-to']);
 
 // ========== 状态变量 ==========
-const coordinateInputRef = ref(null);                  // 坐标输入框 ref
-const coordinateInputValue = ref('');                  // 坐标输入框当前值
-const isCoordinateHover = ref(false);                  // 坐标区是否 hover
-const isCoordinateEditing = ref(false);                // 是否处于坐标编辑模式
-const isInputInvalid = ref(false);                     // 坐标输入是否有效
-const copyTooltipText = ref('Copy');                   // 复制按钮提示文本
-const homeButtonRippling = ref(false);                 // 主页按钮是否显示涟漪效果
-const isFormatMenuVisible = ref(false);                // 格式菜单是否显示
-const currentFormatId = ref(DEFAULT_FORMAT_ID);        // 当前坐标格式ID
+const coordinateInputRef = ref(null); // 坐标输入框 ref
+const coordinateInputValue = ref(''); // 坐标输入框当前值
+const isCoordinateHover = ref(false); // 坐标区是否 hover
+const isCoordinateEditing = ref(false); // 是否处于坐标编辑模式
+const isInputInvalid = ref(false); // 坐标输入是否有效
+const copyTooltipText = ref('Copy'); // 复制按钮提示文本
+const homeButtonRippling = ref(false); // 主页按钮是否显示涟漪效果
+const isFormatMenuVisible = ref(false); // 格式菜单是否显示
+const currentFormatId = ref(DEFAULT_FORMAT_ID); // 当前坐标格式ID
 const currentDecimalPlaces = ref(DEFAULT_DECIMAL_PLACES); // 当前小数位数
 
 // ========== 计时器变量 ==========
-let homeClickTimer = null;        // 主页按钮点击检测计时器（用于双击检测）
-let homeRippleTimer = null;       // 主页按钮涟漪效果计时器
-let copyTooltipTimer = null;      // 复制提示文本重置计时器
+let homeClickTimer = null; // 主页按钮点击检测计时器（用于双击检测）
+let homeRippleTimer = null; // 主页按钮涟漪效果计时器
+let copyTooltipTimer = null; // 复制提示文本重置计时器
 
 // ========== 计算属性 ==========
 /** 显示的坐标文本（使用选定的格式） */
 const displayCoordinateText = computed(() => {
-  const lng = Number(props.coordinate?.lng);
-  const lat = Number(props.coordinate?.lat);
-  if (Number.isFinite(lng) && Number.isFinite(lat)) {
-    return formatCoordinate(lng, lat, currentFormatId.value, currentDecimalPlaces.value);
-  }
+    const lng = Number(props.coordinate?.lng);
+    const lat = Number(props.coordinate?.lat);
+    if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        return formatCoordinate(lng, lat, currentFormatId.value, currentDecimalPlaces.value);
+    }
 
-  const text = String(props.coordinateText || '').trim();
-  return text || COORDINATE_PLACEHOLDER;
+    const text = String(props.coordinateText || '').trim();
+    return text || COORDINATE_PLACEHOLDER;
 });
 
 /** 是否可以复制坐标（坐标有效时） */
@@ -248,22 +290,22 @@ function cancelCoordinateInput() {
  * - 带方向: 114.302E, 34.814N 或 34.814N, 114.302E
  * - 度分秒: 114°18'08.64"E, 34°48'52.56"N
  * - 支持中文逗号分隔
- * 
+ *
  * 对于纯十进制格式，按照当前选择的显示格式来判断顺序：
  * - format_1, format_3, format_5：经度在前
  * - format_2, format_4, format_6：纬度在前
- * 
+ *
  * @param {String} rawText - 原始输入文本
  * @returns {Object|null} { lng, lat } 或 null（解析失败）
  */
 function parseCoordinateInput(rawText) {
-  // 传入当前格式 ID，让 parseCoordinate 根据格式判断顺序
-  const parsed = parseCoordinate(rawText, currentFormatId.value);
-  if (!parsed) return null;
+    // 传入当前格式 ID，让 parseCoordinate 根据格式判断顺序
+    const parsed = parseCoordinate(rawText, currentFormatId.value);
+    if (!parsed) return null;
 
-  // 规范化坐标
-  const normalized = normalizeCoordinate(parsed.lng, parsed.lat);
-  return normalized;
+    // 规范化坐标
+    const normalized = normalizeCoordinate(parsed.lng, parsed.lat);
+    return normalized;
 }
 
 /**
@@ -288,7 +330,7 @@ function submitCoordinateInput() {
 const copyCurrentCoordinate = async () => {
     // 1. 检查是否允许复制以及文本是否存在
     if (!canCopyCoordinate.value || !displayCoordinateText.value) return;
-    
+
     const textToCopy = displayCoordinateText.value;
 
     try {
@@ -304,23 +346,23 @@ const copyCurrentCoordinate = async () => {
         // ========== 回退逻辑 (Fallback) ==========
         const fallbackInput = document.createElement('textarea');
         fallbackInput.value = textToCopy;
-        
+
         // 确保 textarea 在页面上不可见但可操作
         fallbackInput.style.position = 'fixed';
         fallbackInput.style.left = '-9999px';
         fallbackInput.style.top = '0';
         fallbackInput.style.opacity = '0';
-        
+
         document.body.appendChild(fallbackInput);
         fallbackInput.focus();
         fallbackInput.select();
-        
+
         try {
             document.execCommand('copy');
         } catch (err) {
             message.error('无法执行复制命令:', err);
         }
-        
+
         document.body.removeChild(fallbackInput);
     }
 
@@ -390,91 +432,91 @@ function handleHomeInteract(event) {
  * 从 localStorage 加载坐标格式配置
  */
 function loadFormatPreferences() {
-  try {
-    const savedFormatId = localStorage.getItem(STORAGE_KEYS.FORMAT_ID);
-    const savedDecimalPlaces = localStorage.getItem(STORAGE_KEYS.DECIMAL_PLACES);
-    
-    if (savedFormatId && COORDINATE_FORMATS[savedFormatId]) {
-      currentFormatId.value = savedFormatId;
+    try {
+        const savedFormatId = localStorage.getItem(STORAGE_KEYS.FORMAT_ID);
+        const savedDecimalPlaces = localStorage.getItem(STORAGE_KEYS.DECIMAL_PLACES);
+
+        if (savedFormatId && COORDINATE_FORMATS[savedFormatId]) {
+            currentFormatId.value = savedFormatId;
+        }
+
+        if (savedDecimalPlaces) {
+            const places = Number(savedDecimalPlaces);
+            if (DECIMAL_PLACES[places]) {
+                currentDecimalPlaces.value = places;
+            }
+        }
+    } catch (error) {
+        console.warn('无法加载坐标格式配置:', error);
     }
-    
-    if (savedDecimalPlaces) {
-      const places = Number(savedDecimalPlaces);
-      if (DECIMAL_PLACES[places]) {
-        currentDecimalPlaces.value = places;
-      }
-    }
-  } catch (error) {
-    console.warn('无法加载坐标格式配置:', error);
-  }
 }
 
 /**
  * 保存坐标格式配置到 localStorage
  */
 function saveFormatPreferences() {
-  try {
-    localStorage.setItem(STORAGE_KEYS.FORMAT_ID, currentFormatId.value);
-    localStorage.setItem(STORAGE_KEYS.DECIMAL_PLACES, String(currentDecimalPlaces.value));
-  } catch (error) {
-    console.warn('无法保存坐标格式配置:', error);
-  }
+    try {
+        localStorage.setItem(STORAGE_KEYS.FORMAT_ID, currentFormatId.value);
+        localStorage.setItem(STORAGE_KEYS.DECIMAL_PLACES, String(currentDecimalPlaces.value));
+    } catch (error) {
+        console.warn('无法保存坐标格式配置:', error);
+    }
 }
 
 /**
  * 打开/关闭格式配置菜单
  */
 function toggleFormatMenu() {
-  isFormatMenuVisible.value = !isFormatMenuVisible.value;
+    isFormatMenuVisible.value = !isFormatMenuVisible.value;
 }
 
 /**
  * 关闭格式配置菜单
  */
 function closeFormatMenu() {
-  isFormatMenuVisible.value = false;
+    isFormatMenuVisible.value = false;
 }
 
 /**
  * 选择格式
  */
 function selectFormat(formatId) {
-  currentFormatId.value = formatId;
-  saveFormatPreferences();
-  closeFormatMenu();
+    currentFormatId.value = formatId;
+    saveFormatPreferences();
+    closeFormatMenu();
 }
 
 /**
  * 选择小数位数
  */
 function selectDecimalPlaces(places) {
-  currentDecimalPlaces.value = places;
-  saveFormatPreferences();
+    currentDecimalPlaces.value = places;
+    saveFormatPreferences();
 }
 
 /**
  * 组件挂载时加载保存的配置
  */
 onMounted(() => {
-  loadFormatPreferences();
-  
-  // 添加全局点击监听，点击菜单外部时关闭菜单
-  const handleClickOutside = (event) => {
-    if (isFormatMenuVisible.value) {
-      const menu = document.querySelector('.format-menu');
-      const button = document.querySelector('.format-config-btn');
-      if (menu && !menu.contains(event.target) && button && !button.contains(event.target)) {
-        closeFormatMenu();
-      }
-    }
-  };
-  
-  document.addEventListener('click', handleClickOutside);
-  
-  // 返回清理函数
-  return () => {
-    document.removeEventListener('click', handleClickOutside);
-  };
+    loadFormatPreferences();
+
+    // 添加全局点击监听，点击菜单外部时关闭菜单
+    const handleClickOutside = (event) => {
+        if (isFormatMenuVisible.value) {
+            const menu = document.querySelector('.format-menu');
+            const button = document.querySelector('.format-config-btn');
+            if (menu && !menu.contains(event.target) && button && !button.contains(event.target)) {
+                closeFormatMenu();
+            }
+        }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+
+    // 返回清理函数
+    return () => {
+        document.removeEventListener('click', handleClickOutside);
+    };
 });
 
 /**
@@ -501,7 +543,11 @@ onUnmounted(() => {
 .map-controls-group {
     --brand-color: #309441;
     --brand-color-rgb: 48, 148, 65;
-    --glass-bg: linear-gradient(135deg, rgba(var(--brand-color-rgb), 0.85), rgba(var(--brand-color-rgb), 0.85));
+    --glass-bg: linear-gradient(
+        135deg,
+        rgba(var(--brand-color-rgb), 0.85),
+        rgba(var(--brand-color-rgb), 0.85)
+    );
     --glass-border: rgba(255, 255, 255, 0.2);
     --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
     --glass-text: #ffffff;
@@ -509,7 +555,7 @@ onUnmounted(() => {
     --recessed-bg: rgba(0, 0, 0, 0.1);
     --glass-divider: rgba(255, 255, 255, 0.2);
     --trans-curve: cubic-bezier(0.4, 0, 0.2, 1);
-    
+
     position: absolute;
     right: 8px;
     bottom: 8px;
@@ -522,7 +568,7 @@ onUnmounted(() => {
     color: var(--glass-text);
     white-space: nowrap;
     transition: all 0.3s var(--trans-curve);
-    
+
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
@@ -644,7 +690,9 @@ onUnmounted(() => {
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
     border: 1px solid rgba(255, 255, 255, 0.5);
     border-radius: 12px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.15),
+        0 4px 12px rgba(0, 0, 0, 0.1);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     overflow: hidden;
@@ -881,7 +929,7 @@ onUnmounted(() => {
         position: fixed;
         left: 12px;
         right: 12px;
-        bottom: 62px;  /* 控制条高度 54px + 间距 8px，菜单显示在上方 */
+        bottom: 62px; /* 控制条高度 54px + 间距 8px，菜单显示在上方 */
         top: auto;
         max-width: none;
         max-height: 50vh;

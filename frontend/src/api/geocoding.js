@@ -10,7 +10,7 @@ const tiandituClient = axios.create({
     // 按天地图接口文档使用 geocoder 端点。
     // 若页面为 https 且遇到混合内容限制，可改为 https://api.tianditu.gov.cn
     baseURL: 'https://api.tianditu.gov.cn',
-    timeout: 8000
+    timeout: 8000,
 });
 
 function normalizeAmapCity(cityValue) {
@@ -47,7 +47,7 @@ function normalizeTiandituAddressComponent(addressComponent = {}) {
         district,
         township,
         adcode,
-        businessAreas: []
+        businessAreas: [],
     };
 }
 
@@ -99,7 +99,7 @@ export async function reverseGeocodeTianditu({
     ver = '1',
     type = 'geocode',
     timeout = 8000,
-    signal
+    signal,
 }) {
     if (lon === undefined || lon === null || lon === '') {
         throw new Error('天地图逆地理编码缺少必填参数: lon');
@@ -114,7 +114,7 @@ export async function reverseGeocodeTianditu({
     const postStrObject = {
         lon: String(lon),
         lat: String(lat),
-        ver: String(ver)
+        ver: String(ver),
     };
 
     const response = await tiandituClient.get('/geocoder', {
@@ -122,10 +122,10 @@ export async function reverseGeocodeTianditu({
             tk: String(tk).trim(),
             type,
             ver: String(ver),
-            postStr: JSON.stringify(postStrObject)
+            postStr: JSON.stringify(postStrObject),
         },
         timeout,
-        signal
+        signal,
     });
 
     const data = response?.data || {};
@@ -141,7 +141,7 @@ export async function reverseGeocodeTianditu({
     return {
         formattedAddress: result?.formatted_address || '',
         addressComponent: result?.addressComponent || {},
-        raw: data
+        raw: data,
     };
 }
 
@@ -169,22 +169,24 @@ export async function addressToLocation(address, city = '', options = {}) {
         const response = await backendAPI.get('/api/proxy/amap/geocode/geo', {
             params: {
                 address: normalizedAddress,
-                city: String(city || '').trim()
-            }
+                city: String(city || '').trim(),
+            },
         });
 
         const data = response || {};
         const status = String(data?.status ?? '0');
         const infocode = String(data?.infocode ?? '');
-        const isSuccess = status === AMAP_SUCCESS_STATUS
-            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
+        const isSuccess =
+            status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
             const reason = data?.info || data?.message || '高德地理编码失败';
             if (!silent) {
                 message.error(`地理编码失败：${reason}`, { closable: true, duration: 5500 });
             }
-            const notifiedError = new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
+            const notifiedError = new Error(
+                `${reason} (status=${status}, infocode=${infocode || 'unknown'})`,
+            );
             notifiedError.__notified = !silent;
             throw notifiedError;
         }
@@ -212,7 +214,7 @@ export async function addressToLocation(address, city = '', options = {}) {
             lat: wgsLat,
             adcode: String(best?.adcode || ''),
             level: String(best?.level || ''),
-            formattedAddress: String(best?.formatted_address || normalizedAddress)
+            formattedAddress: String(best?.formatted_address || normalizedAddress),
         };
     } catch (error) {
         if (error?.isQuotaExceeded) {
@@ -262,22 +264,24 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
                 location: `${gcjLng},${gcjLat}`,
                 extensions,
                 radius: 1000,
-                batch: false
-            }
+                batch: false,
+            },
         });
 
         const data = response || {};
         const status = String(data?.status ?? '0');
         const infocode = String(data?.infocode ?? '');
-        const isSuccess = status === AMAP_SUCCESS_STATUS
-            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
+        const isSuccess =
+            status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
             const reason = data?.info || data?.message || '高德逆地理编码失败';
             if (!silent) {
                 message.error(`逆地理编码失败：${reason}`, { closable: true, duration: 5500 });
             }
-            const notifiedError = new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
+            const notifiedError = new Error(
+                `${reason} (status=${status}, infocode=${infocode || 'unknown'})`,
+            );
             notifiedError.__notified = !silent;
             throw notifiedError;
         }
@@ -298,12 +302,14 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
             district,
             township,
             adcode,
-            businessAreas: businessAreasRaw.map((item) => ({
-                name: String(item?.name || '').trim(),
-                id: String(item?.id || '').trim(),
-                location: String(item?.location || '').trim()
-            })).filter((item) => item.name),
-            provider: 'amap'
+            businessAreas: businessAreasRaw
+                .map((item) => ({
+                    name: String(item?.name || '').trim(),
+                    id: String(item?.id || '').trim(),
+                    location: String(item?.location || '').trim(),
+                }))
+                .filter((item) => item.name),
+            provider: 'amap',
         };
     } catch (error) {
         if (error?.isQuotaExceeded) {
@@ -336,7 +342,7 @@ export async function reverseGeocodeByPriority(lng, lat, options = {}) {
         extensions = 'base',
         tiandituTk = '',
         tiandituTimeout = 8000,
-        silent = false
+        silent = false,
     } = options || {};
 
     const wgsLng = Number(lng);
@@ -357,14 +363,14 @@ export async function reverseGeocodeByPriority(lng, lat, options = {}) {
             lon: wgsLng,
             lat: wgsLat,
             tk,
-            timeout: Number(tiandituTimeout) > 0 ? Number(tiandituTimeout) : 8000
+            timeout: Number(tiandituTimeout) > 0 ? Number(tiandituTimeout) : 8000,
         });
 
         const normalized = normalizeTiandituAddressComponent(tianditu?.addressComponent || {});
         return {
             formattedAddress: String(tianditu?.formattedAddress || '').trim(),
             ...normalized,
-            provider: 'tianditu'
+            provider: 'tianditu',
         };
     }
 }

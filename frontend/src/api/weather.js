@@ -22,7 +22,7 @@ function normalizeLive(live = {}) {
         windPowerText: String(live?.windpower || '').trim(),
         windPower: normalizeWindPower(live?.windpower),
         humidity: Number(live?.humidity),
-        reportTime: String(live?.reporttime || '').trim()
+        reportTime: String(live?.reporttime || '').trim(),
     };
 }
 
@@ -46,8 +46,8 @@ function normalizeForecast(forecast = {}) {
             dayPowerText: String(item?.daypower || '').trim(),
             nightPowerText: String(item?.nightpower || '').trim(),
             dayPower: normalizeWindPower(item?.daypower),
-            nightPower: normalizeWindPower(item?.nightpower)
-        }))
+            nightPower: normalizeWindPower(item?.nightpower),
+        })),
     };
 }
 
@@ -85,15 +85,15 @@ export async function getWeather(adcode, type = 'base') {
         const response = await backendAPI.get('/api/proxy/amap/weather', {
             params: {
                 city: normalizedAdcode,
-                extensions: normalizedType
-            }
+                extensions: normalizedType,
+            },
         });
 
         const data = response || {};
         const status = String(data?.status ?? '0');
         const infocode = String(data?.infocode ?? '');
-        const isSuccess = status === AMAP_SUCCESS_STATUS
-            && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
+        const isSuccess =
+            status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
             const reason = data?.info || data?.message || '高德天气接口返回失败';
@@ -121,7 +121,7 @@ export async function getWeather(adcode, type = 'base') {
             province: String(live?.province || forecast?.province || ''),
             live,
             forecast,
-            raw: data
+            raw: data,
         };
     } catch (error) {
         if (error?.isQuotaExceeded) {

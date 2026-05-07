@@ -3,7 +3,10 @@
         <!-- 图层目录 -->
         <div class="layer-tree-wrap card">
             <div class="card-title">图层目录</div>
-            <div v-if="layerTree.length" class="layer-tree-root">
+            <div
+                v-if="layerTree.length"
+                class="layer-tree-root"
+            >
                 <TOCTreeItem
                     v-for="node in layerTree"
                     :key="node.id"
@@ -13,7 +16,12 @@
                     @action="handleTreeAction"
                 />
             </div>
-            <div v-else class="empty">暂无图层</div>
+            <div
+                v-else
+                class="empty"
+            >
+                暂无图层
+            </div>
         </div>
     </div>
 </template>
@@ -31,7 +39,7 @@ defineProps({
     selectedLayerIds: { type: Array, default: () => [] },
     hasDrawCard: { type: Boolean, default: false },
     overview: { type: Object, default: () => ({ drawCount: 0 }) },
-    isRasterLayer: { type: Function, required: true }
+    isRasterLayer: { type: Function, required: true },
 });
 
 const emit = defineEmits(['action']);
@@ -59,7 +67,7 @@ function handleTreeAction(evt) {
             emit('action', {
                 type: 'toggle-layer-visibility',
                 layerId: leaf.id,
-                visible: !!evt.visible
+                visible: !!evt.visible,
             });
         });
         return;
@@ -89,9 +97,15 @@ function handleTreeAction(evt) {
 .card {
     border: 1px solid rgba(153, 195, 170, 0.35);
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.75) 0%, rgba(248, 253, 250, 0.75) 100%);
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.75) 0%,
+        rgba(248, 253, 250, 0.75) 100%
+    );
     backdrop-filter: blur(8px);
-    box-shadow: 0 8px 24px rgba(45, 85, 63, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow:
+        0 8px 24px rgba(45, 85, 63, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .card-title {

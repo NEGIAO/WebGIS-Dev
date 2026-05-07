@@ -13,15 +13,14 @@ type CompassPosition = {
     lat: number;
 };
 
-
 /**
  * 选中宫位的接口定义
  */
 export interface SelectedPalace {
-  layerIndex: number;    // 落在第几层
-  segmentIndex: number;  // 落在该层的第几个扇区
-  data: string | string[]; // 宫位的文字内容
-  coord: number[];       // 点击位置的地理坐标 [lon, lat]，用于弹窗定位
+    layerIndex: number; // 落在第几层
+    segmentIndex: number; // 落在该层的第几个扇区
+    data: string | string[]; // 宫位的文字内容
+    coord: number[]; // 点击位置的地理坐标 [lon, lat]，用于弹窗定位
 }
 
 type CompassThemeOption = {
@@ -37,15 +36,15 @@ const DEFAULT_THEME_OPTIONS: CompassThemeOption[] = [
     { cid: 'dark-gold', name: 'Dark Gold' },
     { cid: 'jade-realm', name: 'Jade Realm' },
     { cid: 'minimalist', name: 'Minimalist' },
-    { cid: 'cyber-blueprint', name: 'Cyber Blueprint' }
+    { cid: 'cyber-blueprint', name: 'Cyber Blueprint' },
 ];
 
 const LOCAL_THEME_INDEX_BY_CID: Record<string, number> = {
     'ancient-cinnabar': 0,
     'dark-gold': 2,
     'jade-realm': 1,
-    'minimalist': 4,
-    'cyber-blueprint': 3
+    minimalist: 4,
+    'cyber-blueprint': 3,
 };
 
 function deepClone<T>(value: T): T {
@@ -71,28 +70,32 @@ function toLayerArray(data: FengShuiCompassConfig['data']): Layer[] {
     return [];
 }
 
-function normalizeCompassConfig(rawConfig: Partial<FengShuiCompassConfig> | null | undefined, cid: string, name = ''): FengShuiCompassConfig {
+function normalizeCompassConfig(
+    rawConfig: Partial<FengShuiCompassConfig> | null | undefined,
+    cid: string,
+    name = '',
+): FengShuiCompassConfig {
     const fallback = {
         info: { id: cid, name: name || cid },
-        compassSize: { width: 1000, height: 1000 },  // 罗盘大小
-        data: [],                                 // 图层数据
+        compassSize: { width: 1000, height: 1000 }, // 罗盘大小
+        data: [], // 图层数据
         line: {
-            borderColor: '#AAAAAA',                 // 边框颜色
-            scaleColor: '#AAAAAA',                  // 刻度颜色
-            scaleHighlightColor: '#FF0000'          // 高亮刻度
+            borderColor: '#AAAAAA', // 边框颜色
+            scaleColor: '#AAAAAA', // 刻度颜色
+            scaleHighlightColor: '#FF0000', // 高亮刻度
         },
-        rotate: 0,                                // 旋转角度
-        latticeFill: [],                          // 文字填充色
-        isShowTianxinCross: true,                 // 显示天心十字线
-        isShowScale: true,                        // 显示刻度
+        rotate: 0, // 旋转角度
+        latticeFill: [], // 文字填充色
+        isShowTianxinCross: true, // 显示天心十字线
+        isShowScale: true, // 显示刻度
         scaclStyle: {
-            minLineHeight: 10,                      // 刻度短线高度
-            midLineHeight: 20,                      // 中线高度
-            maxLineHeight: 25,                      // 长线高度
-            numberFontSize: 15                      // 刻度文字大小
+            minLineHeight: 10, // 刻度短线高度
+            midLineHeight: 20, // 中线高度
+            maxLineHeight: 25, // 长线高度
+            numberFontSize: 15, // 刻度文字大小
         },
-        tianxinCrossWidth: 2,                     // 天心线宽度
-        tianxinCrossColor: '#FF0000',             // 天心线颜色
+        tianxinCrossWidth: 2, // 天心线宽度
+        tianxinCrossColor: '#FF0000', // 天心线颜色
     } as FengShuiCompassConfig;
 
     const merged = {
@@ -102,27 +105,31 @@ function normalizeCompassConfig(rawConfig: Partial<FengShuiCompassConfig> | null
             ...(fallback.info || {}),
             ...((rawConfig && rawConfig.info) || {}),
             id: cid,
-            name: String((rawConfig && rawConfig.info && rawConfig.info.name) || name || cid)
+            name: String((rawConfig && rawConfig.info && rawConfig.info.name) || name || cid),
         },
         compassSize: {
             ...(fallback.compassSize || {}),
-            ...((rawConfig && rawConfig.compassSize) || {})
+            ...((rawConfig && rawConfig.compassSize) || {}),
         },
         line: {
             ...(fallback.line || {}),
-            ...((rawConfig && rawConfig.line) || {})
+            ...((rawConfig && rawConfig.line) || {}),
         },
         scaclStyle: {
             ...(fallback.scaclStyle || {}),
-            ...((rawConfig && rawConfig.scaclStyle) || {})
-        }
+            ...((rawConfig && rawConfig.scaclStyle) || {}),
+        },
     } as FengShuiCompassConfig;
 
     merged.data = toLayerArray(rawConfig?.data || fallback.data);
     merged.rotate = 0;
     merged.tianxinCrossWidth = clamp(Number(merged.tianxinCrossWidth || 2), 1, 8);
     merged.tianxinCrossColor = String(merged.tianxinCrossColor || '#FF0000');
-    merged.tianxinCrossLengthRatio = clamp(Number((rawConfig as any)?.tianxinCrossLengthRatio || 1 / 3), 0.1, 1);
+    merged.tianxinCrossLengthRatio = clamp(
+        Number((rawConfig as any)?.tianxinCrossLengthRatio || 1 / 3),
+        0.1,
+        1,
+    );
 
     return merged;
 }
@@ -135,22 +142,24 @@ function resolveThemeNameByCid(cid: string): string {
 function createFallbackConfigByCid(cid: string): FengShuiCompassConfig {
     const safeCid = String(cid || DEFAULT_CID).trim() || DEFAULT_CID;
     const index = LOCAL_THEME_INDEX_BY_CID[safeCid] ?? 0;
-    const localTheme = Array.isArray(localThemes) && localThemes[index]
-        ? deepClone(localThemes[index] as FengShuiCompassConfig)
-        : null;
+    const localTheme =
+        Array.isArray(localThemes) && localThemes[index]
+            ? deepClone(localThemes[index] as FengShuiCompassConfig)
+            : null;
 
     return normalizeCompassConfig(localTheme, safeCid, resolveThemeNameByCid(safeCid));
 }
 
 function hasValidLonLat(position: CompassPosition): boolean {
-    return Number.isFinite(Number(position?.lng))
-        && Number.isFinite(Number(position?.lat))
-        && Number(position.lng) >= -180
-        && Number(position.lng) <= 180
-        && Number(position.lat) >= -90
-        && Number(position.lat) <= 90;
+    return (
+        Number.isFinite(Number(position?.lng)) &&
+        Number.isFinite(Number(position?.lat)) &&
+        Number(position.lng) >= -180 &&
+        Number(position.lng) <= 180 &&
+        Number(position.lat) >= -90 &&
+        Number(position.lat) <= 90
+    );
 }
-
 
 // export const useCompassStore = defineStore('compassStore', () => {
 //     const enabled = ref(false);
@@ -397,7 +406,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     // 默认不设置有效位置，避免未授权时默认渲染/计算带来的性能开销
     const position = ref<CompassPosition>({
         lng: Number.NaN,
-        lat: Number.NaN
+        lat: Number.NaN,
     });
 
     const rotation = ref(0);
@@ -430,7 +439,11 @@ export const useCompassStore = defineStore('compassStore', () => {
         return {
             ...deepClone(config.value),
             rotate: normalizeAngle(rotation.value),
-            tianxinCrossLengthRatio: clamp(Number(config.value?.tianxinCrossLengthRatio || 1 / 3), 0.1, 1)
+            tianxinCrossLengthRatio: clamp(
+                Number(config.value?.tianxinCrossLengthRatio || 1 / 3),
+                0.1,
+                1,
+            ),
         } as FengShuiCompassConfig;
     });
 
@@ -442,14 +455,20 @@ export const useCompassStore = defineStore('compassStore', () => {
             compassSize: {
                 ...(baseConfig?.compassSize || {}),
                 width: size,
-                height: size
+                height: size,
             },
             rotate: normalizeAngle(rotation.value),
-            tianxinCrossLengthRatio: clamp(Number(baseConfig?.tianxinCrossLengthRatio || 1 / 3), 0.1, 1)
+            tianxinCrossLengthRatio: clamp(
+                Number(baseConfig?.tianxinCrossLengthRatio || 1 / 3),
+                0.1,
+                1,
+            ),
         } as FengShuiCompassConfig;
     });
 
-    const renderCacheToken = computed(() => `${String(cid.value)}:${Number(configRevision.value || 0)}`);
+    const renderCacheToken = computed(
+        () => `${String(cid.value)}:${Number(configRevision.value || 0)}`,
+    );
 
     // ==================== 5. Actions ====================
 
@@ -488,10 +507,10 @@ export const useCompassStore = defineStore('compassStore', () => {
     function setPosition(lng: number, lat: number): void {
         const nextPosition = {
             lng: Number(lng),
-            lat: Number(lat)
+            lat: Number(lat),
         };
         if (!hasValidLonLat(nextPosition)) return;
-        
+
         position.value = nextPosition;
         selectedPalace.value = null; // 🔴 关键：移动罗盘后清除高亮和弹窗
     }
@@ -532,9 +551,17 @@ export const useCompassStore = defineStore('compassStore', () => {
         hudSizePx.value = clamp(Number(nextSize), 180, 520);
     }
 
-    function replaceConfig(nextConfig: Partial<FengShuiCompassConfig> | null | undefined, nextCid?: string, nextName?: string): void {
+    function replaceConfig(
+        nextConfig: Partial<FengShuiCompassConfig> | null | undefined,
+        nextCid?: string,
+        nextName?: string,
+    ): void {
         const targetCid = String(nextCid || cid.value || DEFAULT_CID).trim() || DEFAULT_CID;
-        const normalized = normalizeCompassConfig(nextConfig, targetCid, String(nextName || resolveThemeNameByCid(targetCid)));
+        const normalized = normalizeCompassConfig(
+            nextConfig,
+            targetCid,
+            String(nextName || resolveThemeNameByCid(targetCid)),
+        );
         config.value = normalized;
         cid.value = targetCid;
         bumpConfigRevision();
@@ -644,6 +671,6 @@ export const useCompassStore = defineStore('compassStore', () => {
         loadConfigByCid,
         setCidAndLoad,
         ensureConfigLoaded,
-        requestOrientationPermission
+        requestOrientationPermission,
     };
 });

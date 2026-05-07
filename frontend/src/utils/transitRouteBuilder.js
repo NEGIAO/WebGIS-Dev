@@ -7,7 +7,7 @@ import {
     extend as extendExtent,
     isEmpty as isExtentEmpty,
     getWidth as getExtentWidth,
-    getHeight as getExtentHeight
+    getHeight as getExtentHeight,
 } from 'ol/extent';
 
 function normalizeLonLatPair(lon, lat) {
@@ -16,7 +16,10 @@ function normalizeLonLatPair(lon, lat) {
     if (!Number.isFinite(lng) || !Number.isFinite(latitude)) return null;
 
     // Some responses may provide lat/lon ordering.
-    if ((Math.abs(lng) <= 90 && Math.abs(latitude) > 90) || (Math.abs(lng) <= 60 && Math.abs(latitude) >= 90)) {
+    if (
+        (Math.abs(lng) <= 90 && Math.abs(latitude) > 90) ||
+        (Math.abs(lng) <= 60 && Math.abs(latitude) >= 90)
+    ) {
         [lng, latitude] = [latitude, lng];
     }
 
@@ -83,7 +86,7 @@ function addOrMergeMarker(markerMap, coord, markerRole, stepIndex, stationName) 
             coord,
             roles: new Set([markerRole]),
             stepIndices: new Set([stepIndex]),
-            stationNames: name ? new Set([name]) : new Set()
+            stationNames: name ? new Set([name]) : new Set(),
         });
         return;
     }
@@ -113,7 +116,7 @@ export function buildBusRouteRenderData(route) {
             features: [],
             fitExtent: createEmpty(),
             featureCount: 0,
-            hasGeometry: false
+            hasGeometry: false,
         };
     }
 
@@ -125,7 +128,9 @@ export function buildBusRouteRenderData(route) {
     segments.forEach((segment, segmentIndex) => {
         const segmentLineItems = Array.isArray(segment?.segmentLine)
             ? segment.segmentLine
-            : (segment?.segmentLine ? [{ linePoint: String(segment.segmentLine) }] : []);
+            : segment?.segmentLine
+              ? [{ linePoint: String(segment.segmentLine) }]
+              : [];
 
         let segmentStartCoord = null;
         let segmentEndCoord = null;
@@ -140,12 +145,14 @@ export function buildBusRouteRenderData(route) {
             if (!segmentStartCoord) segmentStartCoord = points[0];
             segmentEndCoord = points[points.length - 1];
 
-            features.push(new Feature({
-                geometry: new LineString(points),
-                segmentType: Number(segment?.segmentType ?? 0),
-                stepIndex: segmentIndex,
-                routeMode: 'bus'
-            }));
+            features.push(
+                new Feature({
+                    geometry: new LineString(points),
+                    segmentType: Number(segment?.segmentType ?? 0),
+                    stepIndex: segmentIndex,
+                    routeMode: 'bus',
+                }),
+            );
 
             points.forEach((coord) => {
                 extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]);
@@ -168,14 +175,16 @@ export function buildBusRouteRenderData(route) {
         const stationName = Array.from(item.stationNames).join(' / ');
         const stepIndices = Array.from(item.stepIndices).sort((a, b) => a - b);
 
-        features.push(new Feature({
-            geometry: new Point(item.coord),
-            routeMode: 'bus',
-            markerRole: resolveMarkerRole(item.roles),
-            stepIndices,
-            stepIndex: stepIndices[0] ?? 0,
-            stationName
-        }));
+        features.push(
+            new Feature({
+                geometry: new Point(item.coord),
+                routeMode: 'bus',
+                markerRole: resolveMarkerRole(item.roles),
+                stepIndices,
+                stepIndex: stepIndices[0] ?? 0,
+                stationName,
+            }),
+        );
 
         extendExtent(fitExtent, [item.coord[0], item.coord[1], item.coord[0], item.coord[1]]);
         hasGeometry = true;
@@ -185,7 +194,7 @@ export function buildBusRouteRenderData(route) {
         features,
         fitExtent,
         featureCount: features.length,
-        hasGeometry
+        hasGeometry,
     };
 }
 
@@ -195,9 +204,10 @@ export function buildBusRouteRenderData(route) {
  * - Optionally supports per-step line strings for step click zoom.
  */
 export function buildDriveRouteRenderData(routeInput) {
-    const fullLinePoint = typeof routeInput === 'string'
-        ? routeInput
-        : String(routeInput?.routeLatLonStr || routeInput?.routelatlon || '');
+    const fullLinePoint =
+        typeof routeInput === 'string'
+            ? routeInput
+            : String(routeInput?.routeLatLonStr || routeInput?.routelatlon || '');
 
     const stepLinePointsRaw = Array.isArray(routeInput?.stepLinePoints)
         ? routeInput.stepLinePoints
@@ -209,11 +219,13 @@ export function buildDriveRouteRenderData(routeInput) {
 
     const fullPoints = parseTransitLinePoint(fullLinePoint);
     if (fullPoints.length >= 2) {
-        features.push(new Feature({
-            geometry: new LineString(fullPoints),
-            routeMode: 'drive',
-            stepIndex: -1
-        }));
+        features.push(
+            new Feature({
+                geometry: new LineString(fullPoints),
+                routeMode: 'drive',
+                stepIndex: -1,
+            }),
+        );
         fullPoints.forEach((coord) => {
             extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]);
             hasGeometry = true;
@@ -223,11 +235,13 @@ export function buildDriveRouteRenderData(routeInput) {
     stepLinePointsRaw.forEach((linePoint, stepIndex) => {
         const stepPoints = parseTransitLinePoint(linePoint);
         if (stepPoints.length < 2) return;
-        features.push(new Feature({
-            geometry: new LineString(stepPoints),
-            routeMode: 'drive',
-            stepIndex
-        }));
+        features.push(
+            new Feature({
+                geometry: new LineString(stepPoints),
+                routeMode: 'drive',
+                stepIndex,
+            }),
+        );
         stepPoints.forEach((coord) => {
             extendExtent(fitExtent, [coord[0], coord[1], coord[0], coord[1]]);
             hasGeometry = true;
@@ -239,7 +253,7 @@ export function buildDriveRouteRenderData(routeInput) {
         fitExtent,
         featureCount: features.length,
         hasGeometry,
-        hasDriveSteps: stepLinePointsRaw.length > 0
+        hasDriveSteps: stepLinePointsRaw.length > 0,
     };
 }
 
@@ -255,7 +269,7 @@ export function buildRouteRenderData(mode, input) {
         features: [],
         fitExtent: createEmpty(),
         featureCount: 0,
-        hasGeometry: false
+        hasGeometry: false,
     };
 }
 
@@ -263,16 +277,20 @@ export function buildRouteRenderData(mode, input) {
  * Fit map view to geometry by target screen coverage.
  * Use this for both route-level and step-level zoom.
  */
-export function fitExtentToCoverage(map, extent, {
-    targetCoverage = 0.9,
-    bufferRatio = 0.12,
-    minBufferMeters = 80,
-    maxBufferMeters = 1200,
-    padding = [72, 72, 72, 72],
-    duration = 700,
-    minZoom = 6,
-    maxZoom = 19
-} = {}) {
+export function fitExtentToCoverage(
+    map,
+    extent,
+    {
+        targetCoverage = 0.9,
+        bufferRatio = 0.12,
+        minBufferMeters = 80,
+        maxBufferMeters = 1200,
+        padding = [72, 72, 72, 72],
+        duration = 700,
+        minZoom = 6,
+        maxZoom = 19,
+    } = {},
+) {
     if (!map || !extent || isExtentEmpty(extent)) return;
 
     const view = map.getView();
@@ -310,7 +328,7 @@ export function fitExtentToCoverage(map, extent, {
         centerX - finalWidth / 2,
         centerY - finalHeight / 2,
         centerX + finalWidth / 2,
-        centerY + finalHeight / 2
+        centerY + finalHeight / 2,
     ];
 
     const resolution = view.getResolutionForExtent(targetExtent, [usableWidthPx, usableHeightPx]);
@@ -325,6 +343,6 @@ export function fitExtentToCoverage(map, extent, {
         zoom: safeZoom,
         maxZoom,
         minZoom,
-        nearest: true
+        nearest: true,
     });
 }

@@ -1,4 +1,9 @@
-import { detectGeoJSONProjection, detectProjectionFromKmlText, ensureProjectionAvailable, normalizeProjectionCode } from '../crsUtils.js';
+import {
+    detectGeoJSONProjection,
+    detectProjectionFromKmlText,
+    ensureProjectionAvailable,
+    normalizeProjectionCode,
+} from '../crsUtils.js';
 
 const WKT_CRS_PATTERN = /\b(PROJCS|PROJCRS|GEOGCS|GEODCRS)\s*\[/i;
 
@@ -42,7 +47,7 @@ export async function resolveProjectionOrDefault(inputProjection, label = '数�
 
     return {
         projection: 'EPSG:4326',
-        warning: `${label} 坐标系无法识别，尝试按 WGS84（EPSG:4326）渲染。`
+        warning: `${label} 坐标系无法识别，尝试按 WGS84（EPSG:4326）渲染。`,
     };
 }
 
@@ -56,7 +61,7 @@ export async function detectShpProjectionFromPrj(prjText) {
     if (!candidate && WKT_CRS_PATTERN.test(text)) {
         return {
             projection: resolved.projection,
-            warning: null
+            warning: null,
         };
     }
 
@@ -85,10 +90,12 @@ export async function precheckArchiveCrs(entries = []) {
         kmlProjection: null,
         resolvedProjection: 'EPSG:4326',
         warning: null,
-        needsReprojection: false
+        needsReprojection: false,
     };
 
-    const prjEntry = entries.find((item) => item.extension === 'prj' && item.buffer instanceof ArrayBuffer) || null;
+    const prjEntry =
+        entries.find((item) => item.extension === 'prj' && item.buffer instanceof ArrayBuffer) ||
+        null;
     if (prjEntry) {
         const prjText = decodeBufferToText(prjEntry.buffer);
         const prjResolved = await detectShpProjectionFromPrj(prjText);
@@ -97,7 +104,9 @@ export async function precheckArchiveCrs(entries = []) {
         if (prjResolved.warning) output.warning = prjResolved.warning;
     }
 
-    const kmlEntry = entries.find((item) => item.extension === 'kml' && item.buffer instanceof ArrayBuffer) || null;
+    const kmlEntry =
+        entries.find((item) => item.extension === 'kml' && item.buffer instanceof ArrayBuffer) ||
+        null;
     if (kmlEntry) {
         const kmlText = decodeBufferToText(kmlEntry.buffer);
         const kmlHint = detectKmlProjectionHint(kmlText);
@@ -111,7 +120,9 @@ export async function precheckArchiveCrs(entries = []) {
         }
     }
 
-    output.needsReprojection = !['EPSG:4326', 'EPSG:3857'].includes(String(output.resolvedProjection || '').toUpperCase());
+    output.needsReprojection = !['EPSG:4326', 'EPSG:3857'].includes(
+        String(output.resolvedProjection || '').toUpperCase(),
+    );
     if (!output.prjProjection && !output.kmlProjection && !output.warning) {
         output.warning = '坐标系未明确声明，尝试按 WGS84（EPSG:4326）渲染。';
     }

@@ -16,7 +16,7 @@ export function createBasemapLayerBootstrap({
     monitorLayerTimeout,
     selectedLayerRef,
     message,
-    defaultLayerId = 'google'
+    defaultLayerId = 'google',
 }) {
     function initializeBasemapLayers() {
         const list = layerListRef?.value;
@@ -24,14 +24,13 @@ export function createBasemapLayerBootstrap({
 
         list.forEach((item, index) => {
             const config = layerConfigs.find((cfg) => cfg.id === item.id);
-            const source = (config && item.visible)
-                ? prioritizeTileSourceRequest(config.createSource())
-                : null;
+            const source =
+                config && item.visible ? prioritizeTileSourceRequest(config.createSource()) : null;
 
             const layer = new TileLayer({
                 source,
                 visible: item.visible,
-                zIndex: index
+                zIndex: index,
             });
 
             if (item.visible && source) {
@@ -61,7 +60,7 @@ export function createBasemapLayerBootstrap({
                             selectedLayerRef.value = nextOption;
                         }
                         message?.info?.(`已切换至${nextOption}底图（${reason}）`);
-                    }
+                    },
                 });
             }
 
@@ -72,6 +71,6 @@ export function createBasemapLayerBootstrap({
     }
 
     return {
-        initializeBasemapLayers
+        initializeBasemapLayers,
     };
 }
