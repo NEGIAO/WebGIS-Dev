@@ -4,11 +4,12 @@ import hashlib
 import logging
 import math
 import os
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
@@ -25,19 +26,16 @@ DEFAULT_OUTPUT_DIR = "/tmp"
 DEFAULT_TASK_TTL_MINUTES = 30
 DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = 60
 
-# Token cache: {token: (task_id, expires_at)}
+# 下载令牌缓存：{token: (task_id, expires_at)}
 _download_tokens: Dict[str, tuple[str, datetime]] = {}
+
+# 下载任务附加元数据缓存：用于生成更可读的下载文件名
+_download_task_metadata: Dict[str, dict] = {}
 
 
 class CreateDownloadTaskRequest(BaseModel):
-    """Download task request with comprehensive validation.
-    
-    Fields:
-        tile_url_template: Tile URL template with {z}, {x}, {y} placeholders
-        bbox: Bounding box [minLon, minLat, maxLon, maxLat]
-        resolution_m: Output resolution in meters (0.3 to 1000)
-        bbox_crs: Coordinate reference system (default: EPSG:4326)
-    """
+    """下载任务请求参数。"""
+
     tile_url_template: str = Field(..., min_length=1, max_length=500)
     bbox: List[float] = Field(..., min_items=4, max_items=4)
     resolution_m: float = Field(..., gt=0.3, le=1000)
@@ -55,66 +53,45 @@ class DownloadTaskStatusResponse(BaseModel):
     expires_at: datetime
     expires_in_seconds: int
     is_expired: bool
-    download_token: Optional[str] = None  # New field for native download mode
+    download_token: Optional[str] = None
 
 
 def _generate_download_token(task_id: str) -> str:
-    """Generate a secure, time-limited token for direct file download.
-    
-    Args:
-        task_id: The download task ID to encode in the token
-        
-    Returns:
-        URL-safe token string
-    """
+    """为指定任务生成一个安全的临时下载令牌。"""
     random_part = secrets.token_urlsafe(32)
     task_hash = hashlib.sha256(task_id.encode()).hexdigest()[:8]
     return f"{task_id}_{task_hash}_{random_part}"
 
 
 def _validate_download_token(token: str, task_id: str) -> bool:
-    """Validate if a download token is still active and matches the task.
-    
-    Args:
-        token: Token string to validate
-        task_id: Expected task ID
-        
-    Returns:
-        True if token is valid and not expired
-    """
+    """校验下载令牌是否存在、匹配且未过期。"""
     if token not in _download_tokens:
         return False
-    
+
     stored_task_id, expires_at = _download_tokens[token]
     if stored_task_id != task_id:
         return False
-    
+
     if datetime.utcnow() >= expires_at:
-        del _download_tokens[token]  # Clean up expired token
+        del _download_tokens[token]
         return False
-    
+
     return True
 
 
-def _create_download_token_for_task(task_id: str, lifetime_minutes: int = DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES) -> str:
-    """Create and store a download token for a specific task.
-    
-    Args:
-        task_id: The task ID to associate with this token
-        lifetime_minutes: How long the token remains valid
-        
-    Returns:
-        The generated token string
-    """
+def _create_download_token_for_task(
+    task_id: str,
+    lifetime_minutes: int = DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES,
+) -> str:
+    """为某个任务创建并保存一个下载令牌。"""
     token = _generate_download_token(task_id)
     expires_at = datetime.utcnow() + timedelta(minutes=lifetime_minutes)
     _download_tokens[token] = (task_id, expires_at)
-    
-    # Cleanup old expired tokens periodically
+
+    # 令牌数量过多时，直接清空旧缓存，避免内存持续增长
     if len(_download_tokens) > 1000:
-        now = datetime.utcnow()
-        _download_tokens.clear()  # Simple cleanup
-    
+        _download_tokens.clear()
+
     return token
 
 
@@ -123,53 +100,53 @@ async def create_download_task(
     payload: CreateDownloadTaskRequest,
     background_tasks: BackgroundTasks,
 ):
-    """Create a download task and enqueue the async tile export job.
-    
-    Args:
-        payload: Download request parameters
-        background_tasks: FastAPI background tasks manager
-        
-    Returns:
-        DownloadTaskStatusResponse: Initial task status
-        
-    Raises:
-        HTTPException: If validation fails
-    """
+    """创建下载任务，并将异步拼接流程放入后台执行。"""
     try:
-        # Validate tile URL template
         _validate_tile_template(payload.tile_url_template)
-        
-        # Validate bbox values
+
         if len(payload.bbox) != 4:
             raise HTTPException(status_code=400, detail="bbox must have exactly 4 values")
-        
+
         min_x, min_y, max_x, max_y = payload.bbox
-        if not all(isinstance(v, (int, float)) and not math.isnan(v) and not math.isinf(v) 
-                   for v in [min_x, min_y, max_x, max_y]):
+        if not all(
+            isinstance(v, (int, float)) and not math.isnan(v) and not math.isinf(v)
+            for v in [min_x, min_y, max_x, max_y]
+        ):
             raise HTTPException(status_code=400, detail="All bbox values must be finite numbers")
-        
-        # Validate CRS format
-        crs = str(payload.bbox_crs or '').strip().upper()
+
+        crs = str(payload.bbox_crs or "").strip().upper()
         if crs not in {"EPSG:4326", "EPSG:3857", "EPSG4326", "EPSG3857", "4326", "3857"}:
-            logger.warning("Unsupported CRS: %s (will default to EPSG:4326)", crs)
-        
-        # Create output directory
+            logger.warning("不支持的 CRS：%s，将按 EPSG:4326 处理", crs)
+
         os.makedirs(DEFAULT_OUTPUT_DIR, exist_ok=True)
-        
-        # Generate task
+
         task_id = uuid.uuid4().hex
         output_path = os.path.join(DEFAULT_OUTPUT_DIR, f"{task_id}.tif")
         task = create_task(task_id, file_path=output_path)
-        
+
+        basemap_id = _extract_basemap_id(payload.tile_url_template)
+        readable_filename = _build_readable_filename(
+            basemap_id=basemap_id,
+            resolution_m=payload.resolution_m,
+            created_at=task.created_at,
+        )
+
+        _download_task_metadata[task_id] = {
+            "tile_url_template": payload.tile_url_template,
+            "basemap_id": basemap_id,
+            "resolution_m": payload.resolution_m,
+            "created_at": task.created_at,
+            "readable_filename": readable_filename,
+        }
+
         logger.info(
-            "Created download task: %s | Template: %s | CRS: %s | Resolution: %s",
+            "创建下载任务：%s | 底图：%s | CRS：%s | 分辨率：%s",
             task_id,
             payload.tile_url_template[:50],
             crs,
-            payload.resolution_m
+            payload.resolution_m,
         )
-        
-        # Enqueue background job
+
         background_tasks.add_task(
             _process_download_task,
             task_id,
@@ -178,30 +155,20 @@ async def create_download_task(
         )
 
         return _build_status_response(task)
-    
+
     except HTTPException:
         raise
     except Exception as exc:
-        logger.exception("Error creating download task: %s", str(exc))
+        logger.exception("创建下载任务失败：%s", str(exc))
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create task: {str(exc)[:100]}"
+            detail=f"Failed to create task: {str(exc)[:100]}",
         )
 
 
 @router.get("/tasks/{task_id}", response_model=DownloadTaskStatusResponse)
 def get_download_task(task_id: str):
-    """Fetch task status for polling clients.
-    
-    Args:
-        task_id: Unique task identifier
-        
-    Returns:
-        DownloadTaskStatusResponse: Current task status with download_token if ready
-        
-    Raises:
-        HTTPException: If task not found or expired
-    """
+    """查询任务状态。"""
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
@@ -210,64 +177,52 @@ def get_download_task(task_id: str):
 
 @router.get("/tasks/{task_id}/file")
 def download_task_file(task_id: str, token: Optional[str] = None):
-    """Stream the resulting GeoTIFF when the task finishes.
-    
-    Supports two modes:
-    1. With token query parameter (browser native download)
-    2. Without token (API client with Authorization header)
-    
-    Args:
-        task_id: Unique task identifier
-        token: Optional download token for native browser downloads
-        
-    Returns:
-        FileResponse: GeoTIFF file stream with proper Content-Disposition header
-        
-    Raises:
-        HTTPException: If task not found, expired, failed, or file missing
-    """
+    """下载任务完成后的 GeoTIFF 文件。"""
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
-    
-    # Validate token if provided (browser native download mode)
+
+    # 如果传入了令牌，则按浏览器直链下载模式校验
     if token and not _validate_download_token(token, task_id):
-        logger.warning("Invalid or expired download token for task: %s", task_id)
+        logger.warning("任务 %s 的下载令牌无效或已过期", task_id)
         raise HTTPException(
             status_code=401,
             detail="Download token is invalid or expired. Please request a new token.",
         )
-    
+
     expires_at, _, is_expired = _get_expiration(task)
     if is_expired:
         raise HTTPException(
             status_code=410,
-            detail=f"Task expired on {expires_at.isoformat()}. Tasks are kept for {DEFAULT_TASK_TTL_MINUTES} minutes."
+            detail=(
+                f"Task expired on {expires_at.isoformat()}. "
+                f"Tasks are kept for {DEFAULT_TASK_TTL_MINUTES} minutes."
+            ),
         )
-    
+
     if task.status != "success":
         raise HTTPException(
             status_code=400,
-            detail=f"Task is not ready. Current status: {task.status}. Message: {task.message}"
+            detail=f"Task is not ready. Current status: {task.status}. Message: {task.message}",
         )
-    
+
     if not task.file_path or not os.path.exists(task.file_path):
-        logger.error("Output file missing for task %s: %s", task_id, task.file_path)
+        logger.error("任务 %s 的输出文件缺失：%s", task_id, task.file_path)
         raise HTTPException(
             status_code=500,
-            detail="Output file not found on server. Task may have been cleaned up."
+            detail="Output file not found on server. Task may have been cleaned up.",
         )
 
     file_size = os.path.getsize(task.file_path)
-    logger.info("Downloading file for task %s: %s (size: %d bytes)", task_id, task.file_path, file_size)
-    
-    # Generate readable filename with proper encoding for Content-Disposition
-    filename = f"basemap_{task_id}.tif"
-    
-    # RFC 5987 encoding for proper filename in both old and new browsers
-    filename_encoded = quote(filename.encode('utf-8'), safe='')
+    logger.info("下载任务文件：%s | 路径：%s | 大小：%d 字节", task_id, task.file_path, file_size)
+
+    # 优先使用创建任务时缓存的可读文件名，失败时回退到 task_id
+    filename = _build_download_filename(task_id)
+
+    # 使用 RFC 5987 编码，保证不同浏览器都能正确识别中文/特殊字符文件名
+    filename_encoded = quote(filename.encode("utf-8"), safe="")
     content_disposition = f"attachment; filename*=UTF-8''{filename_encoded}"
-    
+
     return FileResponse(
         task.file_path,
         media_type="image/tiff",
@@ -277,7 +232,7 @@ def download_task_file(task_id: str, token: Optional[str] = None):
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
             "Expires": "0",
-        }
+        },
     )
 
 
@@ -286,26 +241,21 @@ async def _process_download_task(
     payload: CreateDownloadTaskRequest,
     output_path: str,
 ) -> None:
-    """Run the tile export pipeline and update task status fields.
-    
-    Args:
-        task_id: Unique task identifier
-        payload: Download request parameters (tile URL template, bbox, resolution)
-        output_path: Output file path for GeoTIFF
-    """
+    """执行瓦片下载与 GeoTIFF 拼接，并持续更新任务状态。"""
     logger.info(
-        "Starting download task: %s | Template: %s | BBox CRS: %s | Resolution: %s",
+        "开始执行下载任务：%s | 底图：%s | CRS：%s | 分辨率：%s",
         task_id,
         payload.tile_url_template[:50],
         payload.bbox_crs,
-        payload.resolution_m
+        payload.resolution_m,
     )
-    
-    update_task(task_id, status="downloading", progress=5, message="Downloading tiles")
+
+    update_task(task_id, status="downloading", progress=5, message="正在下载瓦片")
 
     progress_state = {"last": 0}
 
     async def report_progress(done: int, total: int, phase: str) -> None:
+        """向任务状态回写进度。"""
         if total <= 0:
             return
         ratio = done / total
@@ -317,18 +267,17 @@ async def _process_download_task(
             task_id,
             status="downloading",
             progress=progress,
-            message=f"Downloading tiles {done}/{total}"
+            message=f"正在下载瓦片 {done}/{total}",
         )
 
     try:
-        # Normalize bbox from input CRS to EPSG:4326
+        # 将输入范围统一转换为 EPSG:4326，方便后续切片计算
         bbox_4326 = _normalize_bbox(payload.bbox, payload.bbox_crs)
         if not bbox_4326 or len(bbox_4326) != 4:
             raise ValueError(f"Invalid normalized bbox: {bbox_4326}")
-        
-        logger.debug("Normalized bbox: %s", bbox_4326)
-        
-        # Build GeoTIFF from tiles
+
+        logger.debug("标准化后的 bbox：%s", bbox_4326)
+
         result = await build_geotiff_from_tiles(
             payload.tile_url_template,
             bbox_4326,
@@ -336,50 +285,43 @@ async def _process_download_task(
             output_path,
             progress_callback=report_progress,
         )
-        
+
         logger.info(
-            "Download completed: %s | Tiles: %d/%d | Output: %s",
+            "下载完成：%s | 已下载瓦片：%d/%d | 输出：%s",
             task_id,
             result.get("downloaded_tiles", 0),
             result.get("tile_count", 0),
-            output_path
+            output_path,
         )
-        
-        update_task(task_id, status="stitching", progress=96, message="Finalizing GeoTIFF")
-        
-        # Verify output file exists and has content
+
+        update_task(task_id, status="stitching", progress=96, message="正在整理 GeoTIFF")
+
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"Output file not created: {output_path}")
-        
+
         file_size = os.path.getsize(output_path)
         if file_size == 0:
             raise ValueError(f"Output file is empty: {output_path}")
-        
-        logger.info("Output file validated: %s | Size: %d bytes", output_path, file_size)
-        
+
+        logger.info("输出文件校验通过：%s | 大小：%d 字节", output_path, file_size)
+
         update_task(task_id, status="success", progress=100, message="Ready")
     except Exception as exc:
-        logger.exception("Download task failed: %s | Error: %s", task_id, str(exc))
-        error_msg = str(exc)[:200]  # Truncate long error messages
+        logger.exception("下载任务失败：%s | 错误：%s", task_id, str(exc))
+        error_msg = str(exc)[:200]
         update_task(task_id, status="failed", progress=0, message=error_msg)
 
 
 def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
-    """Shape a stable response payload for task polling.
-    
-    Generates a download_token if the task is ready for download.
-    """
+    """组装适合轮询接口返回的任务状态数据。"""
     expires_at, expires_in, is_expired = _get_expiration(task)
     status = "expired" if is_expired else task.status
-    file_ready = bool(
-        status == "success" and task.file_path and os.path.exists(task.file_path)
-    )
-    
-    # Generate download token for successful tasks (browser native download mode)
+    file_ready = bool(status == "success" and task.file_path and os.path.exists(task.file_path))
+
     download_token = None
     if file_ready:
         download_token = _create_download_token_for_task(task.id)
-    
+
     return DownloadTaskStatusResponse(
         task_id=task.id,
         status=status,
@@ -396,32 +338,24 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
 
 
 def _validate_tile_template(template: str) -> None:
-    """Ensure the tile URL template is valid and contains required placeholders.
-    
-    Args:
-        template: Tile URL template string
-        
-    Raises:
-        HTTPException: If template is invalid
-    """
+    """校验瓦片 URL 模板是否有效，且必须包含必要占位符。"""
     if not template or not isinstance(template, str):
         raise HTTPException(
             status_code=400,
             detail="tile_url_template must be a non-empty string",
         )
-    
+
     required_tokens = ("{z}", "{x}", "{y}")
     missing_tokens = [token for token in required_tokens if token not in template]
-    
+
     if missing_tokens:
         raise HTTPException(
             status_code=400,
             detail=f"tile_url_template must include {', '.join(required_tokens)}, but missing: {', '.join(missing_tokens)}",
         )
-    
-    # Warn about potentially unsupported placeholder styles
+
     if "{-y}" in template:
-        logger.warning("Template uses {-y} placeholder which may not be supported: %s", template[:50])
+        logger.warning("模板使用了 {-y} 占位符，但当前版本不支持：%s", template[:50])
         raise HTTPException(
             status_code=400,
             detail="The {-y} placeholder style is not supported. Use {y} instead.",
@@ -429,35 +363,23 @@ def _validate_tile_template(template: str) -> None:
 
 
 def _normalize_bbox(bbox: List[float], bbox_crs: str) -> tuple[float, float, float, float]:
-    """Normalize and validate bounding box, converting from input CRS to EPSG:4326.
-    
-    Args:
-        bbox: [minX, minY, maxX, maxY] in the specified CRS
-        bbox_crs: Coordinate Reference System (e.g., 'EPSG:4326', 'EPSG:3857')
-        
-    Returns:
-        Normalized bbox [minLon, minLat, maxLon, maxLat] in EPSG:4326
-        
-    Raises:
-        HTTPException: If bbox is invalid or has only 4 values
-    """
+    """将边界框标准化，并在必要时转换为 EPSG:4326。"""
     if len(bbox) != 4:
         raise HTTPException(status_code=400, detail="bbox must have 4 numbers")
-    
+
     min_x, min_y, max_x, max_y = bbox
-    
-    # Swap if needed to ensure min < max
+
+    # 先保证最小值在前，避免用户传入反向范围
     if min_x > max_x:
         min_x, max_x = max_x, min_x
     if min_y > max_y:
         min_y, max_y = max_y, min_y
 
-    # Identify CRS and apply appropriate transformation
-    crs = str(bbox_crs or '').strip().upper()
+    crs = str(bbox_crs or "").strip().upper()
     if crs in {"EPSG:3857", "EPSG3857", "3857"}:
         return _bbox_3857_to_4326(min_x, min_y, max_x, max_y)
 
-    # EPSG:4326 or unknown CRS: treat as WGS84, just clamp values
+    # 默认按 WGS84 处理，并做范围裁剪
     min_x = _clamp(min_x, -180.0, 180.0)
     max_x = _clamp(max_x, -180.0, 180.0)
     min_y = _clamp(min_y, -MAX_LATITUDE, MAX_LATITUDE)
@@ -471,16 +393,9 @@ def _bbox_3857_to_4326(
     max_x: float,
     max_y: float,
 ) -> tuple[float, float, float, float]:
-    """Convert bounding box from EPSG:3857 (Web Mercator) to EPSG:4326 (WGS84).
-    
-    Args:
-        min_x, min_y, max_x, max_y: Bounds in EPSG:3857 (meters)
-        
-    Returns:
-        [minLon, minLat, maxLon, maxLat] in EPSG:4326 (degrees)
-    """
+    """将 EPSG:3857(Web Mercator) 边界框转换为 EPSG:4326。"""
     def to_lonlat(x: float, y: float) -> tuple[float, float]:
-        """Convert single point from EPSG:3857 to EPSG:4326."""
+        """将单个点从 EPSG:3857 转换为 EPSG:4326。"""
         clamped_x = _clamp(x, -WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT)
         clamped_y = _clamp(y, -WEB_MERCATOR_EXTENT, WEB_MERCATOR_EXTENT)
         lon = (clamped_x / WEB_MERCATOR_EXTENT) * 180.0
@@ -498,14 +413,7 @@ def _bbox_3857_to_4326(
 
 
 def _get_expiration(task: DownloadTask) -> tuple[datetime, int, bool]:
-    """Calculate task expiration details.
-    
-    Args:
-        task: Download task model instance
-        
-    Returns:
-        Tuple of (expires_at datetime, expires_in seconds, is_expired boolean)
-    """
+    """计算任务的过期时间、剩余秒数与是否过期。"""
     expires_at = task.created_at + timedelta(minutes=DEFAULT_TASK_TTL_MINUTES)
     now = datetime.utcnow()
     expires_in = max(0, int((expires_at - now).total_seconds()))
@@ -513,14 +421,70 @@ def _get_expiration(task: DownloadTask) -> tuple[datetime, int, bool]:
 
 
 def _clamp(value: float, min_value: float, max_value: float) -> float:
-    """Clamp a numeric value within min and max bounds.
-    
-    Args:
-        value: Value to clamp
-        min_value: Minimum allowed value
-        max_value: Maximum allowed value
-        
-    Returns:
-        Clamped value within [min_value, max_value]
-    """
+    """将数值限制在指定区间内。"""
     return max(min_value, min(value, max_value))
+
+
+def _extract_basemap_id(tile_url_template: str) -> str:
+    """从瓦片请求模板中提取底图标识，优先使用请求域名。"""
+    raw = str(tile_url_template or "").strip()
+    if not raw:
+        return "basemap"
+
+    parsed = urlparse(raw)
+    host = (parsed.hostname or parsed.netloc or "").strip()
+
+    # 如果模板缺少协议，urlparse 可能无法正确识别域名，这里做一次补救
+    if not host and raw.startswith("//"):
+        parsed = urlparse(f"https:{raw}")
+        host = (parsed.hostname or parsed.netloc or "").strip()
+
+    if not host:
+        # 再兜底一次：从 URL 前缀里粗略提取主机段
+        match = re.match(r"^(?:https?://)?([^/?:]+)", raw, flags=re.IGNORECASE)
+        if match:
+            host = match.group(1).strip()
+
+    host = host.lower()
+    host = re.sub(r"[^a-z0-9.\-]+", "_", host)
+    host = host.strip("._-")
+    return host or "basemap"
+
+
+def _format_resolution_for_filename(resolution_m: float) -> str:
+    """将分辨率格式化为适合文件名的字符串。"""
+    value = f"{resolution_m:g}"
+    value = value.replace(" ", "")
+    return f"{value}m"
+
+
+def _build_readable_filename(
+    basemap_id: str,
+    resolution_m: float,
+    created_at: datetime,
+) -> str:
+    """生成可读的导出文件名。"""
+    timestamp = created_at.strftime("%m_%d_%H")
+    safe_basemap = _sanitize_filename_component(basemap_id)
+    safe_resolution = _sanitize_filename_component(_format_resolution_for_filename(resolution_m))
+    return f"{safe_basemap}_{safe_resolution}_{timestamp}.tif"
+
+
+def _sanitize_filename_component(value: str) -> str:
+    """清理文件名片段中的非法或不友好字符。"""
+    text = str(value or "").strip()
+    text = re.sub(r"[\\/:*?\"<>|]+", "_", text)
+    text = re.sub(r"\s+", "_", text)
+    text = re.sub(r"_+", "_", text)
+    return text.strip("._-") or "basemap"
+
+
+def _build_download_filename(task_id: str) -> str:
+    """根据任务元数据生成最终下载文件名。"""
+    meta = _download_task_metadata.get(task_id, {})
+    readable_filename = meta.get("readable_filename")
+    if readable_filename:
+        return readable_filename
+
+    # 如果元数据丢失，则回退为任务 ID，确保至少可以正常下载
+    return f"basemap_{task_id}.tif"
