@@ -335,7 +335,6 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
         expires_in_seconds=expires_in,
         is_expired=is_expired,
         download_token=download_token,
-        download_token=download_token,
     )
 
 
