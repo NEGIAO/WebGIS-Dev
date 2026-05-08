@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hashlib
 import logging
 import math
 import os
@@ -333,6 +334,7 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
         expires_at=expires_at,
         expires_in_seconds=expires_in,
         is_expired=is_expired,
+        download_token=download_token,
         download_token=download_token,
     )
 
