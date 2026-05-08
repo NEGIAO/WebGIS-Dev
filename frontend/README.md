@@ -27,6 +27,18 @@
 - 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD
 
 ## 快速开始
+# WebGIS 前端项目
+
+基于 Vue 3 + Vite + OpenLayers/Cesium 的 WebGIS 前端工程
+
+## 项目概览
+
+- 地图内核：OpenLayers 2D + Cesium 3D
+- 数据能力：GeoJSON/KML/KMZ/SHP/GeoTIFF/CSV 导入，CSV/TXT/GeoJSON/KML 导出
+- 图层系统：TOC 协议层、右键菜单、多选批处理、行政区划与用户图层统一管理
+- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD
+
+## 快速开始
 
 ### 环境要求
 
@@ -85,6 +97,7 @@ frontend/
 ├── .env.example                          # 环境变量模板
 ├── .env.local                            # 本地开发环境变量（不建议提交）
 ├── .env.production                       # 生产环境变量
+├── .prettierrc                           # Prettier 格式化配置
 ├── eslint.config.js                      # ESLint 规则配置
 ├── index.html                            # Vite HTML 入口
 ├── jsconfig.json                         # JS/路径别名配置
@@ -98,13 +111,13 @@ frontend/
 │
 ├── public/                               # 静态资源目录
 │   ├── adcode.json                       # 行政区划树数据（行政区面板使用）
-│   ├── favicon.ico                       # 站点图标
+│   ├── favicon.ico                       # Vue 图标
 │   ├── min-enhanced.js                   # 统计/增强脚本
 │   ├── ol.css                            # OpenLayers 备用样式
 │   ├── ol.js                             # OpenLayers 备用脚本
-│   ├── avatars/                          # 头像资源
+│   ├── avatars/                          # 用户头像
 │   ├── images/                           # 图片资源（含校园/Logo/罗盘素材）
-│   ├── ShareData/                        # 共享 GIS 数据样例目录
+│   ├── ShareData/                        # 共享 GIS 数据
 │   └── tiles/                            # 本地瓦片目录（z/x/y）
 │
 ├── scripts/
@@ -165,8 +178,6 @@ frontend/
     │   │   ├── CesiumAdvancedEffects.vue        # Cesium 高级特效
     │   │   ├── CesiumContainer.vue              # 3D 容器组件
     │   │   ├── Wind2D.js                        # 2D 风场渲染核心
-    │   │   ├── Wind2D.html                      # 风场调试页面
-    │   │   └── phy.html                         # 物理/效果测试页面
     │   │
     │   ├── feng-shui-compass-svg/
     │   │   ├── feng-shui-compass-svg.vue        # 罗盘 SVG 主组件
@@ -180,12 +191,12 @@ frontend/
     │   │       ├── dark_explanation_standard.json          # 暗黑主题宫位解释
     │   │       └── simple_explanation_standard.json        # 简洁主题宫位解释
     │   │
-    │   ├── icons/
-    │   │   ├── IconCommunity.vue                # 社区图标
-    │   │   ├── IconDocumentation.vue            # 文档图标
-    │   │   ├── IconEcosystem.vue                # 生态图标
-    │   │   ├── IconSupport.vue                  # 支持图标
-    │   │   └── IconTooling.vue                  # 工具图标
+    │   ├── icons/                                          # 图标组件（未实现）
+    │   │   ├── IconCommunity.vue                
+    │   │   ├── IconDocumentation.vue            
+    │   │   ├── IconEcosystem.vue                
+    │   │   ├── IconSupport.vue                  
+    │   │   └── IconTooling.vue                  
     │   │
     │   └── UserCenter/
     │       ├── AdminControlPanel.vue            # 管理员控制台
@@ -336,8 +347,11 @@ frontend/
     │       ├── mapRuntimeDeps.js                # OpenLayers 运行时依赖加载
     │       └── parsers/
     │           ├── amapAoiParser.js             # AOI 解析器
+    │           ├── dbfParser.js                 # DBF 解析器
     │           ├── kmlParser.ts                 # KML/KMZ 解析器
+    │           ├── kmlStyleParser.ts            # KML/KMZ 样式解析器
     │           ├── shpParser.ts                 # SHP 解析器
+    │           ├── unifiedParser.ts             # 统一解析器
     │           └── tifLoader.ts                 # GeoTIFF 解析器
     │
     └── views/
@@ -345,6 +359,11 @@ frontend/
         └── RegisterView.vue                     # 登录/注册页
 ```
 
+## V3.1.2 
+### - `MapDownloader.vue`：新增下载模式选择（`native` / `progressive`），并在 `native` 模式下触发 token 附带的原生浏览器下载。  
+### - `useDownloadStore.ts`：新增 `downloadMode` 与 `downloadToken` 字段；`applyTaskResponse` 会接收后端返回的 `download_token`。  
+### - `api/download.js`：增加 `apiDownloadTaskFileUrl(taskId, token)` 用于生成浏览器原生下载 URL；保留 `apiDownloadTaskFile` 作为流式下载。  
+### - UI/UX：Progressive 模式下显示本地传输进度卡片并支持取消；Native 模式隐藏进度卡片以节省资源。
 ## 🆕 在线底图下载模块 (V3.1.0)
 
 ### MapDownloader 组件

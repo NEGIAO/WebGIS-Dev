@@ -343,7 +343,11 @@ LOG_LEVEL=INFO
 
 ## 🔄 更新日志
 
-### � V3.1.0 (2026-05-04)
+### V 3.1.2 (05-08) 
+- 原生下载模式: 为大文件下载引入 token-based 浏览器原生下载，避免页面内存占用。  
+- 后端 FileResponse 优化: 使用 RFC 5987 编码的 Content-Disposition 并增加缓存控制头。  
+- 前端增强: `MapDownloader.vue` 增加下载模式选择（native/progressive），Progressive 模式保留流式进度显示。  
+### V3.1.0 (2026-05-04)
 #### 🔹 在线地图下载 + GCJ-02实时纠偏 + Docker Compose容器化
 
 本次版本引入**在线地图下载系统、GCJ-02坐标纠偏、Docker Compose容器化**，进一步完善后端服务能力，实现专业级地图数据导出功能。
