@@ -182,13 +182,12 @@
                 </div>
             </div>
 
-            <!-- 本地文件传输进度 (新增UI) -->
             <div
                 v-if="transferState.active || transferState.total > 0 || transferState.error"
                 class="progress-card transfer-card"
             >
                 <div class="progress-head">
-                    <span>本地下载传输进度 (15分钟限时)</span>
+                    <span>本地传输进度 (剩余时间: {{ countdownText }})</span>
                     <span class="progress-value">{{ transferState.progress }}%</span>
                 </div>
                 <div class="progress-track transfer-track">
@@ -273,7 +272,40 @@ const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
 const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
 const layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
 
-/* ----------- 文件传输相关状态 (新增) ----------- */
+/* ----------- 倒计时逻辑 (新增) ----------- */
+// 半小时下载有效期，时间到自动取消下载任务
+const INITIAL_SECONDS = 1800; // 30分钟 = 1800秒
+const timeLeft = ref(INITIAL_SECONDS);
+const timer = ref(null);
+
+const countdownText = computed(() => {
+    if (timeLeft.value <= 0) return '已超时';
+    const minutes = Math.floor(timeLeft.value / 60);
+    const seconds = timeLeft.value % 60;
+    return `${minutes}分 ${String(seconds).padStart(2, '0')}秒`;
+});
+
+function startCountdown() {
+    stopCountdown(); // 先清除旧的
+    timeLeft.value = INITIAL_SECONDS;
+    timer.value = setInterval(() => {
+        if (timeLeft.value > 0) {
+            timeLeft.value--;
+        } else {
+            stopCountdown();
+        }
+    }, 1000);
+}
+
+function stopCountdown() {
+    if (timer.value) {
+        clearInterval(timer.value);
+        timer.value = null;
+    }
+}
+/* --------------------------------------- */
+
+/* ----------- 文件传输相关状态 ----------- */
 const transferState = ref({
     active: false,
     downloaded: 0,
@@ -322,14 +354,16 @@ function cancelTransfer() {
         abortController.abort('UserCancelled');
         abortController = null;
     }
+    stopCountdown(); // 取消下载时停止倒计时
 }
 
-// 核心下载逻辑
 async function downloadFileToLocal() {
     if (!store.taskId) return;
     cancelTransfer();
 
-    // 初始化/重置传输状态
+    // 开始下载时重置并启动倒计时
+    startCountdown();
+
     transferState.value = {
         active: true,
         downloaded: 0,
@@ -397,6 +431,7 @@ async function downloadFileToLocal() {
         transferState.value.error = '';
         lastTransferredTaskId.value = store.taskId;
         message.success('文件成功下载到本地！');
+        stopCountdown(); // 传输成功后停止
     } catch (err) {
         const canceledByUser = err?.code === 'ERR_CANCELED';
         if (canceledByUser) {
@@ -407,6 +442,7 @@ async function downloadFileToLocal() {
         }
         transferState.value.active = false;
         transferState.value.progress = 0;
+        stopCountdown(); // 失败后停止
     } finally {
         abortController = null;
     }
@@ -546,10 +582,12 @@ async function handleSubmit() {
     // 提交前重置传输状态
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
     lastTransferredTaskId.value = '';
+    stopCountdown(); // 重新提交时先重置倒计时
 
     const ok = await store.submitTask();
     if (ok) {
         message.success('下载任务已提交');
+        // 如果后端直接返回成功（虽然极少），这里也会启动倒计时
     } else if (store.lastError) {
         message.error(store.lastError);
     }
@@ -558,6 +596,7 @@ async function handleSubmit() {
 function handleReset() {
     store.resetTask();
     cancelTransfer();
+    stopCountdown();
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
     lastTransferredTaskId.value = '';
     const first = tilePresets.value.find((item) => item.downloadable) || tilePresets.value[0];
@@ -576,10 +615,12 @@ async function handleLookup() {
 onBeforeUnmount(() => {
     store.stopPolling();
     cancelTransfer();
+    stopCountdown();
 });
 </script>
 
 <style scoped>
+/* 样式部分保持不变，根据需要给 countdownText 所在的 span 加颜色 */
 .map-downloader {
     border-radius: 14px;
     border: 1px solid rgba(46, 126, 78, 0.2);
