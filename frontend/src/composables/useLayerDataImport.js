@@ -20,6 +20,7 @@ import {
     normalizeProjectionCode,
 } from '../utils/geo';
 import { parseShpPartsToGeoJSON } from '../utils/io';
+import { applyKmlStylesToFeatures } from '../utils/gis/parsers/kmlStyleParser';
 import { createStandardItem } from './map/toc/factory';
 import { useGisLoader } from './useGisLoader';
 import { useMessage } from './useMessage';
@@ -833,6 +834,10 @@ export function useLayerDataImport({
         return firstUsableKey || null;
     }
 
+    /**
+     * 解析 KML 文本为 features，并应用 KML 中定义的样式
+     * 支持 PolyStyle、LineStyle、IconStyle 等样式元素
+     */
     async function parseKmlTextToFeatures(kmlText, label = 'KML') {
         const detectedProjection = detectProjectionFromKmlText(kmlText);
         const dataProjection = await resolveSupportedProjection(
@@ -858,9 +863,30 @@ export function useLayerDataImport({
             });
         }
 
+        // 应用 KML 样式（PolyStyle、LineStyle、IconStyle）
+        if (features && features.length > 0) {
+            try {
+                const styleResult = applyKmlStylesToFeatures(features, kmlText);
+                if (styleResult.successCount > 0) {
+                    console.info(
+                        `[KML样式] 成功应用 ${styleResult.successCount}/${features.length} 个特征的样式`
+                    );
+                }
+                if (styleResult.errors.length > 0) {
+                    console.warn('[KML样式] 部分样式应用失败:', styleResult.errors);
+                }
+            } catch (err) {
+                console.error('[KML样式] 样式应用异常:', err);
+                // 继续返回 features，即使样式应用失败
+            }
+        }
+
         return features;
     }
 
+    /**
+     * 解析 KML 文本为 features（指定投影），并应用 KML 中定义的样式
+     */
     async function parseKmlTextToFeaturesWithProjection(
         kmlText,
         dataProjection = 'EPSG:4326',
@@ -886,6 +912,24 @@ export function useLayerDataImport({
                 dataProjection: projectionToUse,
                 featureProjection: 'EPSG:3857',
             });
+        }
+
+        // 应用 KML 样式
+        if (features && features.length > 0) {
+            try {
+                const styleResult = applyKmlStylesToFeatures(features, kmlText);
+                if (styleResult.successCount > 0) {
+                    console.info(
+                        `[KML样式] 成功应用 ${styleResult.successCount}/${features.length} 个特征的样式`
+                    );
+                }
+                if (styleResult.errors.length > 0) {
+                    console.warn('[KML样式] 部分样式应用失败:', styleResult.errors);
+                }
+            } catch (err) {
+                console.error('[KML样式] 样式应用异常:', err);
+                // 继续返回 features，即使样式应用失败
+            }
         }
 
         return features;
