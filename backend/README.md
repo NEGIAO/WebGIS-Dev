@@ -24,36 +24,43 @@ WebGIS 后端服务，当前包含五大核心能力：
 ## 0. 项目结构
 
 ```text
-backend/
-├── api/
-│   ├── auth.py                 # 认证与会话
-│   ├── statistics.py           # 统计中心与实时统计
-│   ├── location.py             # 位置服务相关接口
-│   ├── proxy.py                # 瓦片代理（含 GCJ-02 ↔ WGS84 纠偏代理）
-│   ├── external_proxy.py       # 外部代理能力
-│   ├── admin.py                # 管理端接口
-│   ├── api_management.py       # API 管理
-│   ├── monitor.py              # Log 监控
-│   ├── api_keys_management.py  # API Key 管理
-│   ├── agent_chat.py           # Agent 对话代理（V3.0.4 零配置/模型缓存/偏好持久化）
-│   ├── download.py             # 🆕 在线底图下载任务 API（文件流下载供前端传输进度展示）
-│   └── __init__.py
-├── core/
-│   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
-│   └── task_scheduler.py       # 🆕 过期任务清理调度器（30分钟保留期）
-├── models/
-│   └── download_task.py        # 🆕 SQLModel 下载任务表（SQLite 持久化）
-├── app.py                      # FastAPI 应用入口（集成下载路由和调度器）
-├── Dockerfile                  # 容器化部署
-├── docker-compose.yml          # 🆕 Docker Compose 编排
-├── pyproject.toml              # 依赖与项目配置（uv，新增 rasterio/sqlmodel/apscheduler）
-├── uv.lock                     # 锁文件
-├── .env.example                # 环境变量示例
-├── .python-version             # Python 版本
-├── data/                       # 运行数据目录（AUTH_DB、临时 TIF 文件、任务数据库）
-├── frontend_example.html       # 前端调用示例
-├── test_location_apis.py       # 位置接口测试脚本
-└── README.md                   # 后端文档
+backend/                                           
+├── api/                                           # api 路由模块
+│   ├── __init__.py                                # 
+│   ├── admin.py                                   # 管理员相关接口
+│   ├── agent_chat.py                              # Agent 对话接口
+│   ├── api_keys_management.py                     # API密钥管理接口
+│   ├── api_management.py                          # API管理接口
+│   ├── auth.py                                    # 认证接口
+│   ├── external_proxy.py                          # 外部代理接口
+│   ├── location.py                                # 定位相关接口
+│   ├── minitor.py                                 # 监控接口
+│   ├── proxy.py                                   # 通用代理XYZ瓦片
+│   └── statistics.py                              # 统计接口
+│                                                  # 
+├── download_xyz/                                  # 在线底图下载模块
+│   ├── download.py                                # 下载逻辑
+│   ├── download_task.py                           # 下载任务
+│   ├── task_scheduler.py                          # 任务调度器
+│   └── tile_engine.py                             # 瓦片引擎
+│                                                  # 
+├── gcj_rectify/                                   # GCJ-02 纠偏模块
+│   ├── __init__.py                                # 
+│   ├── fetch.py                                   # 数据获取
+│   ├── rectify.py                                 # 纠偏逻辑
+│   ├── transform.py                               # 坐标转换
+│   ├── url_template.py                            # URL模板
+│   └── utils.py                                   # 
+│                                                  # 
+├── .dockerignore                                  # dockerignore 文件
+├── .env.example                                   # 环境变量模板
+├── app.py                                         # 主应用文件
+├── docker-compose.yml                             # Docker Compose 配置
+├── Dockerfile                                     # Dockerfile
+├── pyproject.toml                                 # 项目依赖配置
+├── README.md                                      # 项目说明文档
+└── uv.lock                                        # uv依赖锁定文件
+```
 
 ## 1. 认证系统
 

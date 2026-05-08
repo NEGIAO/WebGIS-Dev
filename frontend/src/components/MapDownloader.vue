@@ -82,6 +82,35 @@
                 </div>
             </div>
 
+            <!-- 下载模式选择（新增） -->
+            <div class="form-row">
+                <label>下载模式</label>
+                <div class="download-mode-selector">
+                    <label class="mode-option">
+                        <input
+                            v-model="store.downloadMode"
+                            type="radio"
+                            value="native"
+                        />
+                        <span class="mode-label">
+                            浏览器托管（推荐）
+                            <span class="mode-hint">不占用网页内存，大文件更稳定</span>
+                        </span>
+                    </label>
+                    <label class="mode-option">
+                        <input
+                            v-model="store.downloadMode"
+                            type="radio"
+                            value="progressive"
+                        />
+                        <span class="mode-label">
+                            前端可视化（测试）
+                            <span class="mode-hint">显示实时下载进度</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
             <div class="bbox-grid">
                 <div class="form-field">
                     <label>Min Lon/X</label>
@@ -183,7 +212,7 @@
             </div>
 
             <div
-                v-if="transferState.active || transferState.total > 0 || transferState.error"
+                v-if="(transferState.active || transferState.total > 0 || transferState.error) && store.downloadMode === 'progressive'"
                 class="progress-card transfer-card"
             >
                 <div class="progress-head">
@@ -223,7 +252,7 @@
                             v-if="!transferState.active && (store.status === 'success' || transferState.error)"
                             class="primary-btn re-download-btn"
                             type="button"
-                            @click="downloadFileToLocal"
+                            @click="handleRedownload"
                         >
                             重新下载到本地
                         </button>
@@ -255,7 +284,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { apiDownloadTaskFile } from '../api/download';
+import { apiDownloadTaskFile, apiDownloadTaskFileUrl } from '../api/download';
 import { useMessage } from '../composables/useMessage';
 import { useDownloadStore } from '../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../constants';
@@ -361,8 +390,10 @@ async function downloadFileToLocal() {
     if (!store.taskId) return;
     cancelTransfer();
 
-    // 开始下载时重置并启动倒计时
-    startCountdown();
+    // 开始下载时重置并启动倒计时（仅在 progressive 模式下）
+    if (store.downloadMode === 'progressive') {
+        startCountdown();
+    }
 
     transferState.value = {
         active: true,
@@ -448,7 +479,47 @@ async function downloadFileToLocal() {
     }
 }
 
-// 监听后端状态：当状态变为成功且文件就绪时，自动开始传输到本地
+/**
+ * 触发浏览器原生下载（使用 download_token）
+ * 浏览器接管下载任务，不占用网页内存，大文件更稳定
+ */
+function triggerNativeDownload() {
+    if (!store.taskId || !store.downloadToken) {
+        message.error('任务 ID 或下载令牌缺失，无法下载');
+        return;
+    }
+
+    if (store.isExpired) {
+        message.error('任务已过期，无法下载');
+        return;
+    }
+
+    try {
+        // 构建带 token 的下载 URL
+        const downloadUrl = apiDownloadTaskFileUrl(store.taskId, store.downloadToken);
+        
+        // 通过创建临时链接并触发点击来启动浏览器原生下载
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        
+        // 记录下载时间
+        store.downloadedAt = Date.now();
+        message.success('下载已启动，文件将在浏览器中下载');
+        
+        // 停止倒计时（已完成）
+        stopCountdown();
+    } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : '无法启动下载';
+        message.error(`浏览器原生下载失败: ${errorMsg}`);
+        console.error('[MapDownloader] triggerNativeDownload failed:', error);
+    }
+}
+
+// 监听后端状态：当状态变为成功且文件就绪时，根据用户选择的模式自动触发下载
 watch(
     () => store.status,
     (newStatus) => {
@@ -459,7 +530,14 @@ watch(
             lastTransferredTaskId.value !== store.taskId &&
             !transferState.value.error
         ) {
-            downloadFileToLocal();
+            // 根据下载模式选择下载方式
+            if (store.downloadMode === 'native') {
+                // 浏览器托管模式：使用 token 直接下载
+                triggerNativeDownload();
+            } else {
+                // 前端可视化模式：使用流式下载显示进度
+                downloadFileToLocal();
+            }
         }
     },
 );
@@ -579,7 +657,7 @@ const expiresHint = computed(() => {
 const lookupTaskId = ref('');
 
 async function handleSubmit() {
-    // 提交前重置传输状态
+    // 提交前重置传输状态和倒计时
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
     lastTransferredTaskId.value = '';
     stopCountdown(); // 重新提交时先重置倒计时
@@ -587,7 +665,7 @@ async function handleSubmit() {
     const ok = await store.submitTask();
     if (ok) {
         message.success('下载任务已提交');
-        // 如果后端直接返回成功（虽然极少），这里也会启动倒计时
+        // 倒计时将在实际下载开始时根据模式启动
     } else if (store.lastError) {
         message.error(store.lastError);
     }
@@ -601,6 +679,20 @@ function handleReset() {
     lastTransferredTaskId.value = '';
     const first = tilePresets.value.find((item) => item.downloadable) || tilePresets.value[0];
     selectedPreset.value = first?.id || '';
+}
+
+/**
+ * 根据用户选择的模式重新下载
+ * 在浏览器托管模式下使用原生下载，在前端可视化模式下使用流式下载
+ */
+function handleRedownload() {
+    if (!store.taskId) return;
+    
+    if (store.downloadMode === 'native') {
+        triggerNativeDownload();
+    } else {
+        downloadFileToLocal();
+    }
 }
 
 async function handleLookup() {
@@ -754,6 +846,42 @@ onBeforeUnmount(() => {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 10px;
+}
+
+/* 下载模式选择器样式 (新增) */
+.download-mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mode-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mode-option input[type="radio"] {
+    margin-top: 3px;
+    cursor: pointer;
+    accent-color: #1f7a4d;
+}
+
+.mode-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    color: #1f2e28;
+    font-weight: 500;
+}
+
+.mode-hint {
+    font-size: 11px;
+    color: #5b7a68;
+    font-weight: 400;
 }
 
 .action-row {

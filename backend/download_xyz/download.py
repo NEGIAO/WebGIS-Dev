@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
@@ -20,6 +23,10 @@ router = APIRouter(prefix="/api/download", tags=["Download"])
 
 DEFAULT_OUTPUT_DIR = "/tmp"
 DEFAULT_TASK_TTL_MINUTES = 30
+DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = 60
+
+# Token cache: {token: (task_id, expires_at)}
+_download_tokens: Dict[str, tuple[str, datetime]] = {}
 
 
 class CreateDownloadTaskRequest(BaseModel):
@@ -48,6 +55,67 @@ class DownloadTaskStatusResponse(BaseModel):
     expires_at: datetime
     expires_in_seconds: int
     is_expired: bool
+    download_token: Optional[str] = None  # New field for native download mode
+
+
+def _generate_download_token(task_id: str) -> str:
+    """Generate a secure, time-limited token for direct file download.
+    
+    Args:
+        task_id: The download task ID to encode in the token
+        
+    Returns:
+        URL-safe token string
+    """
+    random_part = secrets.token_urlsafe(32)
+    task_hash = hashlib.sha256(task_id.encode()).hexdigest()[:8]
+    return f"{task_id}_{task_hash}_{random_part}"
+
+
+def _validate_download_token(token: str, task_id: str) -> bool:
+    """Validate if a download token is still active and matches the task.
+    
+    Args:
+        token: Token string to validate
+        task_id: Expected task ID
+        
+    Returns:
+        True if token is valid and not expired
+    """
+    if token not in _download_tokens:
+        return False
+    
+    stored_task_id, expires_at = _download_tokens[token]
+    if stored_task_id != task_id:
+        return False
+    
+    if datetime.utcnow() >= expires_at:
+        del _download_tokens[token]  # Clean up expired token
+        return False
+    
+    return True
+
+
+def _create_download_token_for_task(task_id: str, lifetime_minutes: int = DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES) -> str:
+    """Create and store a download token for a specific task.
+    
+    Args:
+        task_id: The task ID to associate with this token
+        lifetime_minutes: How long the token remains valid
+        
+    Returns:
+        The generated token string
+    """
+    token = _generate_download_token(task_id)
+    expires_at = datetime.utcnow() + timedelta(minutes=lifetime_minutes)
+    _download_tokens[token] = (task_id, expires_at)
+    
+    # Cleanup old expired tokens periodically
+    if len(_download_tokens) > 1000:
+        now = datetime.utcnow()
+        _download_tokens.clear()  # Simple cleanup
+    
+    return token
 
 
 @router.post("/tasks", response_model=DownloadTaskStatusResponse)
@@ -129,7 +197,7 @@ def get_download_task(task_id: str):
         task_id: Unique task identifier
         
     Returns:
-        DownloadTaskStatusResponse: Current task status
+        DownloadTaskStatusResponse: Current task status with download_token if ready
         
     Raises:
         HTTPException: If task not found or expired
@@ -141,14 +209,19 @@ def get_download_task(task_id: str):
 
 
 @router.get("/tasks/{task_id}/file")
-def download_task_file(task_id: str):
+def download_task_file(task_id: str, token: Optional[str] = None):
     """Stream the resulting GeoTIFF when the task finishes.
+    
+    Supports two modes:
+    1. With token query parameter (browser native download)
+    2. Without token (API client with Authorization header)
     
     Args:
         task_id: Unique task identifier
+        token: Optional download token for native browser downloads
         
     Returns:
-        FileResponse: GeoTIFF file stream
+        FileResponse: GeoTIFF file stream with proper Content-Disposition header
         
     Raises:
         HTTPException: If task not found, expired, failed, or file missing
@@ -156,6 +229,14 @@ def download_task_file(task_id: str):
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+    
+    # Validate token if provided (browser native download mode)
+    if token and not _validate_download_token(token, task_id):
+        logger.warning("Invalid or expired download token for task: %s", task_id)
+        raise HTTPException(
+            status_code=401,
+            detail="Download token is invalid or expired. Please request a new token.",
+        )
     
     expires_at, _, is_expired = _get_expiration(task)
     if is_expired:
@@ -180,8 +261,24 @@ def download_task_file(task_id: str):
     file_size = os.path.getsize(task.file_path)
     logger.info("Downloading file for task %s: %s (size: %d bytes)", task_id, task.file_path, file_size)
     
+    # Generate readable filename with proper encoding for Content-Disposition
     filename = f"basemap_{task_id}.tif"
-    return FileResponse(task.file_path, media_type="image/tiff", filename=filename)
+    
+    # RFC 5987 encoding for proper filename in both old and new browsers
+    filename_encoded = quote(filename.encode('utf-8'), safe='')
+    content_disposition = f"attachment; filename*=UTF-8''{filename_encoded}"
+    
+    return FileResponse(
+        task.file_path,
+        media_type="image/tiff",
+        filename=filename,
+        headers={
+            "Content-Disposition": content_disposition,
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 async def _process_download_task(
@@ -268,12 +365,21 @@ async def _process_download_task(
 
 
 def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
-    """Shape a stable response payload for task polling."""
+    """Shape a stable response payload for task polling.
+    
+    Generates a download_token if the task is ready for download.
+    """
     expires_at, expires_in, is_expired = _get_expiration(task)
     status = "expired" if is_expired else task.status
     file_ready = bool(
         status == "success" and task.file_path and os.path.exists(task.file_path)
     )
+    
+    # Generate download token for successful tasks (browser native download mode)
+    download_token = None
+    if file_ready:
+        download_token = _create_download_token_for_task(task.id)
+    
     return DownloadTaskStatusResponse(
         task_id=task.id,
         status=status,
@@ -285,6 +391,7 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
         expires_at=expires_at,
         expires_in_seconds=expires_in,
         is_expired=is_expired,
+        download_token=download_token,
     )
 
 

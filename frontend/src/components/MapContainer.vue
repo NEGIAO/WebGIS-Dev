@@ -1111,7 +1111,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.1)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.2)', { duration: 3000 });
     }
 
     // ========== 并行执行：Google 主机测速（非阻塞） ==========

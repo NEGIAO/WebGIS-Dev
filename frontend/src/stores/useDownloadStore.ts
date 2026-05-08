@@ -2,6 +2,8 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus } from '../api/download';
 
+type DownloadMode = 'native' | 'progressive'; // native: browser native download, progressive: front-end visualization
+
 type DownloadStatus =
     | 'idle'
     | 'pending'
@@ -27,6 +29,7 @@ type DownloadTaskResponse = {
     expires_at?: string;
     expires_in_seconds?: number;
     is_expired?: boolean;
+    download_token?: string;
 };
 
 const DEFAULT_TEMPLATE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
@@ -160,6 +163,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     const bboxCrs = ref<'EPSG:4326' | 'EPSG:3857'>('EPSG:4326');
     const resolutionM = ref(DEFAULT_RESOLUTION);
 
+    // Download mode: 'native' (default) or 'progressive'
+    const downloadMode = ref<DownloadMode>('native');
+    
     const taskId = ref('');
     const status = ref<DownloadStatus>('idle');
     const progress = ref(0);
@@ -172,6 +178,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     const isSubmitting = ref(false);
     const isPolling = ref(false);
     const downloadedAt = ref<number | null>(null);
+    
+    // Download token for native browser downloads
+    const downloadToken = ref('');
 
     let pollTimer: number | null = null;
     let pollInFlight = false;
@@ -198,6 +207,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         expiresAt.value = String(payload?.expires_at || '').trim();
         expiresInSeconds.value = Number(payload?.expires_in_seconds ?? 0);
         isExpired.value = payload?.is_expired === true || status.value === 'expired';
+        
+        // Store download token if available (for native browser downloads)
+        downloadToken.value = String(payload?.download_token || '').trim();
     }
 
     function stopPolling(): void {
@@ -222,6 +234,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         isExpired.value = false;
         lastError.value = '';
         downloadedAt.value = null;
+        downloadToken.value = '';
         downloadTriggered = false;
     }
 
@@ -401,6 +414,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         bbox,
         bboxCrs,
         resolutionM,
+        downloadMode,
         taskId,
         status,
         progress,
@@ -413,6 +427,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         isSubmitting,
         isPolling,
         downloadedAt,
+        downloadToken,
         hasActiveTask,
         isRunning,
         submitTask,

@@ -26,7 +26,20 @@ export async function apiDownloadTaskStatus(taskId) {
 const DOWNLOAD_REQUEST_TIMEOUT = Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT || 2000000);
 
 /**
- * 下载生成的 GeoTIFF 文件
+ * 下载生成的 GeoTIFF 文件（使用 token，用于原生浏览器下载）
+ * @param {string} taskId
+ * @param {string} token
+ * @returns {Promise<string>} 完整的下载 URL
+ */
+export function apiDownloadTaskFileUrl(taskId, token) {
+    const safeId = encodeURIComponent(String(taskId || '').trim());
+    const tokenParam = encodeURIComponent(String(token || '').trim());
+    const baseUrl = backendAPI.defaults.baseURL || '';
+    return `${baseUrl}/api/download/tasks/${safeId}/file?token=${tokenParam}`;
+}
+
+/**
+ * 下载生成的 GeoTIFF 文件（使用流式响应，用于前端进度可视化）
  * @param {string} taskId
  * @param {(progress: number, meta?: { loaded: number, total: number }) => void} onProgress
  * @param {{ signal?: AbortSignal }} options
