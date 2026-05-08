@@ -1009,6 +1009,10 @@ export function useLayerDataImport({
         }
 
         if (normalizedType === 'shp') {
+            console.warn(
+                '[SHP] 检测到单个 .shp 文件上传，属性信息可能不完整。\n' +
+                '建议：请将 .shp, .dbf, .shx, .prj, .cpg 等同名文件一起上传或打包成 ZIP。'
+            );
             const geojson = await parseShpPartsToGeoJSON({ shp: content });
             const gjFormat = new GeoJSON();
             const detectedProjection = detectGeoJSONProjection(geojson);

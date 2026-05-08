@@ -6,6 +6,7 @@ import {
     resolveDatasetProjection,
     UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '../crs-engine';
+import { parseDbfBuffer, dbfToProperties, type DbfData } from './dbfParser';
 import { useMessage } from '../../../composables/useMessage';
 
 export type ShpDataset = {
@@ -167,8 +168,13 @@ function detectDbfEncodingHint(cpgText = '', dbfBuffer?: ArrayBuffer): string {
 async function toArrayBuffer(input?: ArrayBuffer | Blob): Promise<ArrayBuffer | undefined> {
     if (!input) return undefined;
     if (input instanceof ArrayBuffer) return input;
-    if (typeof (input as Blob).arrayBuffer === 'function') {
-        return (input as Blob).arrayBuffer();
+    if (input instanceof Blob && typeof (input as any).arrayBuffer === 'function') {
+        try {
+            return await (input as any).arrayBuffer();
+        } catch (err) {
+            console.warn('[SHP] Blob 转换为 ArrayBuffer 失败:', err);
+            return undefined;
+        }
     }
     return undefined;
 }
@@ -311,6 +317,75 @@ function assignFeatureIds(featureCollection: any): any {
     return clone;
 }
 
+/**
+ * 使用 DBF 属性数据增强 GeoJSON features
+ * 将完整的属性信息与几何数据关联
+ * 
+ * @param featureCollection 原始 GeoJSON FeatureCollection
+ * @param dbfData 解析后的 DBF 属性表数据
+ * @returns 增强后的 FeatureCollection
+ */
+function enrichFeaturesWithDbfAttributes(featureCollection: any, dbfData: DbfData): any {
+    if (!featureCollection || !Array.isArray(featureCollection?.features)) {
+        console.warn('[SHP] GeoJSON 无效，无法进行属性关联');
+        return featureCollection;
+    }
+
+    const features = featureCollection.features;
+    const dbfRecords = dbfData.records;
+
+    if (features.length === 0) {
+        console.warn('[SHP] 无任何 feature，无法进行属性关联');
+        return featureCollection;
+    }
+
+    if (dbfRecords.length === 0) {
+        console.warn('[SHP] 无任何 DBF 记录，属性关联失败');
+        return featureCollection;
+    }
+
+    let successCount = 0;
+    let mismatchWarnings = 0;
+
+    // 按索引关联：第 i 个几何 = 第 i 个属性
+    features.forEach((feature: any, index: number) => {
+        if (index < dbfRecords.length) {
+            const dbfRecord = dbfRecords[index];
+            const originalPropsCount = Object.keys(feature.properties || {}).length;
+            
+            // 保留原有属性，使用 DBF 属性进行补充和覆盖
+            feature.properties = {
+                ...feature.properties,
+                ...dbfRecord.values,
+                _dbf_fields: dbfData.fields.map(f => f.name),
+                _dbf_encoding: dbfData.encoding,
+            };
+            
+            const newPropsCount = Object.keys(dbfRecord.values).length;
+            if (newPropsCount > 0) {
+                successCount += 1;
+            }
+        } else if (index < features.length) {
+            // feature 数量超过 DBF 记录数，记录警告
+            mismatchWarnings += 1;
+        }
+    });
+
+    if (mismatchWarnings > 0) {
+        console.warn(
+            `[SHP] ${mismatchWarnings} 个 feature 没有对应的 DBF 记录\n` +
+            `feature 总数: ${features.length}, DBF 记录数: ${dbfRecords.length}`
+        );
+    }
+
+    console.info(
+        `[SHP] 属性增强完成：${successCount}/${features.length} 个 feature 获得 DBF 属性\n` +
+        `字段数: ${dbfData.fields.length}, 编码: ${dbfData.encoding}`
+    );
+
+    return featureCollection;
+}
+
 async function getShpParserLib(): Promise<any> {
     const mod = await import('shpjs');
     return mod.default || mod;
@@ -425,9 +500,49 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         message.warning('索引文件(.shx)解析异常，已回退为顺序扫描 .shp 导入。', { duration: 4200 });
     }
 
-    const featureCollection = assignFeatureIds(normalizeFeatureCollection(raw));
+    let featureCollection = assignFeatureIds(normalizeFeatureCollection(raw));
     const prjText = String(parts?.prjText || '').trim() || decodeMaybeText(prjBuffer).trim();
     const cpgText = String(parts?.cpgText || '').trim() || decodeMaybeText(cpgBuffer).trim();
+    
+    console.info('[SHP] 开始属性解析链路 -', {
+        hasDbf: dbfBuffer instanceof ArrayBuffer,
+        hasCpg: cpgBuffer instanceof ArrayBuffer,
+        cpgText: cpgText ? cpgText.substring(0, 20) : 'none',
+        usedDbfFromShpjs: usedAttempt?.usesDbf ? 'yes' : 'no',
+        featureCount: Array.isArray(featureCollection?.features) ? featureCollection.features.length : 0,
+    });
+    
+    // 尝试使用增强的 DBF 解析器获取更完整的属性信息
+    // 仅在 shpjs 解析时未包含 DBF 的情况下尝试
+    let dbfData: DbfData | null = null;
+    if (dbfBuffer instanceof ArrayBuffer && !usedAttempt?.usesDbf) {
+        try {
+            console.info('[SHP] 启动自定义 DBF 解析...');
+            dbfData = parseDbfBuffer(dbfBuffer, cpgText);
+            
+            if (dbfData.warnings.length > 0) {
+                console.warn('[SHP] DBF 解析警告:', dbfData.warnings);
+            }
+            
+            // 将 DBF 属性与 GeoJSON feature 关联
+            featureCollection = enrichFeaturesWithDbfAttributes(featureCollection, dbfData);
+            console.info(
+                `[SHP] ✓ 完成属性增强\n` +
+                `  - 记录数: ${dbfData.records.length}\n` +
+                `  - 字段数: ${dbfData.fields.length}\n` +
+                `  - 编码: ${dbfData.encoding}`
+            );
+        } catch (err: any) {
+            console.error('[SHP] 自定义 DBF 解析失败，将尝试使用 shpjs 属性:', err?.message || err);
+            dbfData = null;
+            // 不中断流程，继续使用 shpjs 的属性
+        }
+    } else if (dbfBuffer instanceof ArrayBuffer && usedAttempt?.usesDbf) {
+        console.info('[SHP] shpjs 已成功解析 DBF，使用其提供的属性');
+    } else if (!dbfBuffer) {
+        console.info('[SHP] 未提供 DBF 文件，仅导入几何数据');
+    }
+    
     const encodingHint = detectDbfEncodingHint(cpgText, dbfBuffer);
     if (encodingHint && dbfBuffer instanceof ArrayBuffer && !usedAttempt.usesDbf) {
         message.warning(`检测到 DBF 编码提示(${encodingHint})，但属性表未成功解析。`, {
