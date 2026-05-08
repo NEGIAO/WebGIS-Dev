@@ -142,12 +142,21 @@ const logsStreamUrl = computed(() => {
 
 function getLogClass(msg) {
     const text = msg.toUpperCase();
+
+    // 1. 优先识别严重错误 (包含 FAILED, ERROR)
+    if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
+
+    // 2. 识别警告 (WARNING)
+    if (text.includes('WARN')) return 'log-warning';
+
+    // 3. 识别成功状态
+    if (text.includes('SUCCESS') || text.includes('200 OK')) return 'log-success';
+
+    // 4. 最后识别业务流程标签
     if (text.includes('[BUILD]')) return 'log-build';
     if (text.includes('[RUN]')) return 'log-run';
-    if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
-    if (text.includes('WARN')) return 'log-warning';
     if (text.includes('INFO')) return 'log-info';
-    if (text.includes('SUCCESS') || text.includes('200 OK')) return 'log-success';
+
     return '';
 }
 

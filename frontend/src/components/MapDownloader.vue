@@ -188,7 +188,7 @@
                 class="progress-card transfer-card"
             >
                 <div class="progress-head">
-                    <span>本地下载传输进度 (5分钟限时)</span>
+                    <span>本地下载传输进度 (15分钟限时)</span>
                     <span class="progress-value">{{ transferState.progress }}%</span>
                 </div>
                 <div class="progress-track transfer-track">

@@ -20,10 +20,10 @@ export async function apiDownloadTaskStatus(taskId) {
 }
 
 /**
- * 下载请求超时时间：5 分钟 (300000ms)
+ * 下载请求超时时间：15 分钟 (1000000ms)
  * 远长于全局 8s 超时设置，因为大型 GeoTIFF 文件流传输耗时较久
  */
-const DOWNLOAD_REQUEST_TIMEOUT = Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT || 300000);
+const DOWNLOAD_REQUEST_TIMEOUT = Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT || 1000000);
 
 /**
  * 下载生成的 GeoTIFF 文件
