@@ -2,7 +2,8 @@ name: Update Traffic Stats
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    # 建议避开 UTC 0 点的高峰期，改为 UTC 2 点（北京时间上午 10 点）执行
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 jobs:
@@ -73,24 +74,29 @@ jobs:
             });
 
             // ========================
-            // 4. 获取“昨天”的日期
+            // 4. 获取“前天”的日期 (T-2)，因为昨天的数据可能有延迟
             // ========================
-            const yesterday = new Date();
-            yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-            const yesterdayStr = yesterday.toISOString().split('T')[0];
+            const targetDate = new Date();
+            targetDate.setUTCDate(targetDate.getUTCDate() - 2); 
+            const targetDateStr = targetDate.toISOString().split('T')[0];
 
-            const yesterdayViewsObj = views.data.views.find(v => v.timestamp.startsWith(yesterdayStr));
-            const yesterdayClonesObj = clones.data.clones.find(c => c.timestamp.startsWith(yesterdayStr));
+            const targetViewsObj = views.data.views.find(v => v.timestamp.startsWith(targetDateStr));
+            const targetClonesObj = clones.data.clones.find(c => c.timestamp.startsWith(targetDateStr));
 
-            const yViews = yesterdayViewsObj ? yesterdayViewsObj.count : 0;
-            const yUViews = yesterdayViewsObj ? yesterdayViewsObj.uniques : 0;
-            const yClones = yesterdayClonesObj ? yesterdayClonesObj.count : 0;
-            const yUClones = yesterdayClonesObj ? yesterdayClonesObj.uniques : 0;
+            const tViews = targetViewsObj ? targetViewsObj.count : 0;
+            const tUViews = targetViewsObj ? targetViewsObj.uniques : 0;
+            const tClones = targetClonesObj ? targetClonesObj.count : 0;
+            const tUClones = targetClonesObj ? targetClonesObj.uniques : 0;
+
+            console.log(`Target Date (T-2): ${targetDateStr}`);
+            console.log(`Views: ${tViews}, Clones: ${tClones}`);
 
             // ========================
             // 5. 初始化（仅第一次）
             // ========================
-            if (!data.lastUpdate) {
+            const isFirstRun = !data.lastUpdate;
+            if (isFirstRun) {
+              console.log('First run detected. Initializing data from past 14 days.');
               data.totalViews = views.data.count;
               data.totalUniqueViews = views.data.uniques;
               data.totalClones = clones.data.count;
@@ -98,23 +104,28 @@ jobs:
             }
 
             // ========================
-            // 6. 防重复统计（核心）
+            // 6. 防重复统计与累加（核心）
             // ========================
-            if (data.lastCountedDate !== yesterdayStr) {
-              data.totalViews += yViews;
-              data.totalUniqueViews += yUViews;
-              data.totalClones += yClones;
-              data.totalUniqueClones += yUClones;
+            if (data.lastCountedDate !== targetDateStr) {
+              // 只有在非初次运行的情况下，才进行累加，防止第一次运行把今天的数据重复加上
+              if (!isFirstRun) {
+                data.totalViews += tViews;
+                data.totalUniqueViews += tUViews;
+                data.totalClones += tClones;
+                data.totalUniqueClones += tUClones;
+              }
 
-              data.lastCountedDate = yesterdayStr;
+              data.lastCountedDate = targetDateStr;
 
-              //
-              data.daily[yesterdayStr] = {
-                views: yViews,
-                uniqueViews: yUViews,
-                clones: yClones,
-                uniqueClones: yUClones
+              // 记录每日详情
+              data.daily[targetDateStr] = {
+                views: tViews,
+                uniqueViews: tUViews,
+                clones: tClones,
+                uniqueClones: tUClones
               };
+            } else {
+              console.log(`Data for ${targetDateStr} already counted. Skipping addition.`);
             }
 
             data.lastUpdate = new Date().toISOString();
@@ -131,5 +142,5 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           add: '.github/traffic.json'
-          message: "Update traffic statistics [auto]"
+          message: "chore: update traffic statistics [auto]"
           default_author: github_actions
