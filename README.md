@@ -43,6 +43,7 @@
 
 **前端功能**：
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
+- Custom terrain + WTFS labels (in-repo providers, no TDT Cesium plugins)
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
 - 🎨 电影级视觉效果、数据可视化、首屏特效
 - 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步）
@@ -152,7 +153,7 @@ WebGIS_Dev/
 │   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划选择面板（仅定位/加载，TOC 统一承载管理）
 │   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
 │   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）
-│   │   │   ├── Cesium/               # Cesium 子模块（含 Wind2D.js 多层风场粒子渲染）
+│   │   │   ├── Cesium/               # Cesium module (Wind2D + terrain providers)
 │   │   │   └── UserCenter/         # 用户中心子模块
 │   │   │       ├── FloatingAccountPanel.vue
 │   │   │       ├── AdminControlPanel.vue

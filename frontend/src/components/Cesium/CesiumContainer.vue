@@ -112,17 +112,15 @@
 </template>
 
 <script setup>
-// TODO:
-// cesium当前是直接加载来自天地图的资源，非官方的库，因此很多的功能和接口不兼容，
-// 需要改为官方库的引用，解决兼容问题（wind2d中与非官方的cesium不兼容，无法正确运行）
-// 需要注意到问题是：当前的cesium库使用频率很低，且cesium.js的文件量过大，
-// 需要延迟加载，点击了对应的按钮后才触发加载引用，首屏加载的时候为了提高响应速度，
-// 绝对不可以引入cesium.js相关的非必要文件
+// Cesium runtime is loaded on demand to keep the initial bundle lean.
+// Terrain and label providers are registered after Cesium is available.
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { showLoading, hideLoading } from '../../utils/loading';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import Wind2D from './Wind2D';
+import createGeoTerrainProvider from './terrain/GeoTerrainProvider';
+import createGeoWTFS from './terrain/GeoWTFS';
 
 let Cesium = null;
 
@@ -131,19 +129,47 @@ const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK;
 const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 
-const TDT_CESIUM_JS_URL = 'https://api.tianditu.gov.cn/cdn/demo/sanwei/static/cesium/Cesium.js';
-const TDT_CESIUM_CSS_URL =
-    'https://api.tianditu.gov.cn/cdn/demo/sanwei/static/cesium/Widgets/widgets.css';
-const TDT_PLUGIN_URLS = [
-    'https://api.tianditu.gov.cn/cdn/plugins/cesium/Cesium_ext_min.js',
-    'https://api.tianditu.gov.cn/cdn/plugins/cesium/long.min.js',
-    'https://api.tianditu.gov.cn/cdn/plugins/cesium/bytebuffer.min.js',
-    'https://api.tianditu.gov.cn/cdn/plugins/cesium/protobuf.min.js',
+const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.110/Build/Cesium/';
+const CESIUM_JS_URL = `${CESIUM_BASE_URL}Cesium.js`;
+const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
+
+const TDT_LABEL_METADATA = {
+    boundBox: {
+        minX: -180,
+        minY: -90,
+        maxX: 180,
+        maxY: 90,
+    },
+    minLevel: 1,
+    maxLevel: 20,
+};
+
+const TDT_LABEL_INIT_TILES = [
+    { x: 6, y: 1, level: 2, boundBox: { minX: 90, minY: 0, maxX: 135, maxY: 45 } },
+    { x: 7, y: 1, level: 2, boundBox: { minX: 135, minY: 0, maxX: 180, maxY: 45 } },
+    { x: 6, y: 0, level: 2, boundBox: { minX: 90, minY: 45, maxX: 135, maxY: 90 } },
+    { x: 7, y: 0, level: 2, boundBox: { minX: 135, minY: 45, maxX: 180, maxY: 90 } },
+    { x: 5, y: 1, level: 2, boundBox: { minX: 45, minY: 0, maxX: 90, maxY: 45 } },
+    { x: 4, y: 1, level: 2, boundBox: { minX: 0, minY: 0, maxX: 45, maxY: 45 } },
+    { x: 5, y: 0, level: 2, boundBox: { minX: 45, minY: 45, maxX: 90, maxY: 90 } },
+    { x: 4, y: 0, level: 2, boundBox: { minX: 0, minY: 45, maxX: 45, maxY: 90 } },
+    { x: 6, y: 2, level: 2, boundBox: { minX: 90, minY: -45, maxX: 135, maxY: 0 } },
+    { x: 6, y: 3, level: 2, boundBox: { minX: 90, minY: -90, maxX: 135, maxY: -45 } },
+    { x: 7, y: 2, level: 2, boundBox: { minX: 135, minY: -45, maxX: 180, maxY: 0 } },
+    { x: 5, y: 2, level: 2, boundBox: { minX: 45, minY: -45, maxX: 90, maxY: 0 } },
+    { x: 4, y: 2, level: 2, boundBox: { minX: 0, minY: -45, maxX: 45, maxY: 0 } },
+    { x: 3, y: 1, level: 2, boundBox: { minX: -45, minY: 0, maxX: 0, maxY: 45 } },
+    { x: 3, y: 0, level: 2, boundBox: { minX: -45, minY: 45, maxX: 0, maxY: 90 } },
+    { x: 2, y: 0, level: 2, boundBox: { minX: -90, minY: 45, maxX: -45, maxY: 90 } },
+    { x: 0, y: 1, level: 2, boundBox: { minX: -180, minY: 0, maxX: -135, maxY: 45 } },
+    { x: 1, y: 0, level: 2, boundBox: { minX: -135, minY: 45, maxX: -90, maxY: 90 } },
+    { x: 0, y: 0, level: 2, boundBox: { minX: -180, minY: 45, maxX: -135, maxY: 90 } },
 ];
 
 // --- 响应式变量 ---
 let viewer = null;
 let handler = null;
+let wtfs = null;
 const wind2D = ref(null); // Wind2D 实例
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 const shouldLoadAdvancedEffects = ref(false);
@@ -171,6 +197,16 @@ function clearWind2D() {
     wind2D.value = null;
 }
 
+function clearWTFS() {
+    if (!wtfs) return;
+    try {
+        wtfs.destroy();
+    } catch (e) {
+        console.warn('WTFS destroy warning:', e);
+    }
+    wtfs = null;
+}
+
 onUnmounted(() => {
     shouldLoadAdvancedEffects.value = false;
     if (handler) {
@@ -178,6 +214,7 @@ onUnmounted(() => {
         handler = null;
     }
     clearWind2D();
+    clearWTFS();
     if (viewer) {
         try {
             if (viewer._creditCheckInterval) {
@@ -196,19 +233,23 @@ onUnmounted(() => {
 async function bootCesium() {
     showLoading('正在初始化 3D 场景...');
     try {
-        await loadOfficialCesiumRuntime();
+        await loadCesiumRuntime();
         if (!Cesium || !document.getElementById('cesiumContainer')) return;
 
         initViewer();
         setupInteractions();
         addBaseImageryLayers();
 
-        const terrainReady = initOfficialTerrain();
+        const terrainReady = initCustomTerrain();
+        const labelsReady = initTdtLabels();
         shouldLoadAdvancedEffects.value = true;
         if (terrainReady) {
             message.success('天地图基础影像与地形加载成功。');
         } else {
             message.error('天地图地形加载失败，请检查 token 或网络。', { closable: true });
+        }
+        if (!labelsReady) {
+            console.warn('WTFS label initialization failed.');
         }
 
         // 风场在初始化完毕后即可准备加载（但需要手动点击按钮或自动加载）
@@ -229,12 +270,12 @@ function getCesium() {
     return Cesium || window.Cesium;
 }
 
-async function loadOfficialCesiumRuntime() {
-    await loadStyleOnce(TDT_CESIUM_CSS_URL, 'tdt-cesium-widgets-style');
-    await loadScriptOnce(TDT_CESIUM_JS_URL, 'tdt-cesium-runtime-script');
-    for (let i = 0; i < TDT_PLUGIN_URLS.length; i++) {
-        await loadScriptOnce(TDT_PLUGIN_URLS[i], `tdt-plugin-${i}`);
+async function loadCesiumRuntime() {
+    if (!window.CESIUM_BASE_URL) {
+        window.CESIUM_BASE_URL = CESIUM_BASE_URL;
     }
+    await loadStyleOnce(CESIUM_CSS_URL, 'cesium-widgets-style');
+    await loadScriptOnce(CESIUM_JS_URL, 'cesium-runtime-script');
     Cesium = window.Cesium;
     if (!Cesium) throw new Error('Cesium global 未找到');
 }
@@ -312,6 +353,8 @@ function initViewer() {
 
 function setupInteractions() {
     handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    
+    // Mouse move: update coordinate display
     handler.setInputAction((movement) => {
         const ray = viewer.camera.getPickRay(movement.endPosition);
         if (!ray) return;
@@ -324,6 +367,34 @@ function setupInteractions() {
             coordinateDisplay.value = `经度: ${lng}, 纬度: ${lat}, 海拔: ${height}米`;
         }
     }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+    
+    // Right mouse drag: free camera rotation (no pitch constraints)
+    handler.setInputAction((movement) => {
+        const deltaMove = movement.endPosition;
+        const startPosition = movement.startPosition;
+        
+        if (!Cesium.defined(viewer.terrainProvider)) {
+            return;
+        }
+        
+        const ellipsoid = viewer.scene.globe.ellipsoid;
+        const cartesian = viewer.camera.pickEllipsoid(startPosition, ellipsoid);
+        if (!cartesian) {
+            // Rotate around center of globe
+            const camera = viewer.camera;
+            const moveRate = 0.002;
+            camera.rotate(Cesium.Cartesian3.UNIT_X, -moveRate * (deltaMove.endPosition.y - deltaMove.startPosition.y));
+            camera.rotate(Cesium.Cartesian3.UNIT_Y, -moveRate * (deltaMove.endPosition.x - deltaMove.startPosition.x));
+        }
+    }, Cesium.ScreenSpaceEventType.RIGHT_DRAG);
+    
+    // Disable default right-click zoom behavior by handling right-down and right-up
+    handler.setInputAction(() => {
+        // Prevent default zoom on right click
+    }, Cesium.ScreenSpaceEventType.RIGHT_DOWN);
+    handler.setInputAction(() => {
+        // Prevent default zoom on right click
+    }, Cesium.ScreenSpaceEventType.RIGHT_UP);
 }
 
 function addBaseImageryLayers() {
@@ -345,22 +416,70 @@ function addBaseImageryLayers() {
     imageryLayers.addImageryProvider(iboLayer);
 }
 
-function initOfficialTerrain() {
-    const terrainUrls = TDT_SUBDOMAINS.map(
-        (s) => `https://t${s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=${TDT_TOKEN}`,
-    );
-    if (!window.Cesium?.GeoTerrainProvider) {
-        message.error('GeoTerrainProvider 不存在，插件未正确加载。');
-        return false;
-    }
+function initCustomTerrain() {
+    const GeoTerrainProvider = createGeoTerrainProvider(Cesium);
     try {
-        viewer.terrainProvider = new window.Cesium.GeoTerrainProvider({ urls: terrainUrls });
+        viewer.terrainProvider = new GeoTerrainProvider({
+            url: `${TDT_SERVICE_ROOT}mapservice/swdx?T=elv_c&tk={token}&x={x}&y={y}&l={z}`,
+            subdomains: TDT_SUBDOMAINS,
+            token: TDT_TOKEN,
+        });
         viewer.scene.globe.depthTestAgainstTerrain = true;
         return true;
     } catch (error) {
         viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
         message.warning('官方地形服务加载失败，已降级为椭球地形。', { closable: true });
         message.error('官方地形初始化失败', error);
+        return false;
+    }
+}
+
+function initTdtLabels() {
+    try {
+        const GeoWTFS = createGeoWTFS(Cesium);
+        wtfs = new GeoWTFS(viewer, {
+            subdomains: TDT_SUBDOMAINS,
+            url: `${TDT_SERVICE_ROOT}mapservice/GetTiles?lxys={z},{x},{y}&tk=${TDT_TOKEN}&VERSION=1.0.0`,
+            icoUrl: `${TDT_SERVICE_ROOT}mapservice/GetIcon?id={id}&tk=${TDT_TOKEN}`,
+            metadata: TDT_LABEL_METADATA,
+            aotuCollide: true,
+            collisionPadding: [5, 10, 8, 5],
+            serverFirstStyle: true,
+            labelGraphics: {
+                font: '28px sans-serif',
+                fontSize: 28,
+                fillColor: Cesium.Color.WHITE,
+                scale: 0.5,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 5,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                showBackground: false,
+                backgroundColor: Cesium.Color.RED,
+                backgroundPadding: new Cesium.Cartesian2(10, 10),
+                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                verticalOrigin: Cesium.VerticalOrigin.TOP,
+                eyeOffset: new Cesium.Cartesian3(0, 0, 10),
+                pixelOffset: Cesium.Cartesian2.ZERO,
+            },
+            billboardGraphics: {
+                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                verticalOrigin: Cesium.VerticalOrigin.CENTER,
+                eyeOffset: Cesium.Cartesian3.ZERO,
+                pixelOffset: Cesium.Cartesian2.ZERO,
+                alignedAxis: Cesium.Cartesian3.ZERO,
+                color: Cesium.Color.WHITE,
+                rotation: 0,
+                scale: 1,
+                width: 18,
+                height: 18,
+            },
+        });
+        wtfs.initTDT(TDT_LABEL_INIT_TILES, () => {
+            viewer.scene.requestRender();
+        });
+        return true;
+    } catch (error) {
+        console.warn('WTFS init error:', error);
         return false;
     }
 }

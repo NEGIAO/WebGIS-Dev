@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-05-04 更新）
+## 目录结构（2026-05-14 更新）
 
 以下结构按当前工程实际文件更新，尽量做到逐文件注释。
 
@@ -178,6 +178,10 @@ frontend/
     │   │   ├── CesiumAdvancedEffects.vue        # Cesium 高级特效
     │   │   ├── CesiumContainer.vue              # 3D 容器组件
     │   │   ├── Wind2D.js                        # 2D 风场渲染核心
+    │   │   └── terrain/                         # 地形与标注 Provider
+    │   │       ├── GeoTerrainProvider.js        # 自定义地形 Provider
+    │   │       ├── GeoWTFS.js                   # 自定义 WTFS 标注 Provider
+    │   │       └── util.js                      # Protobuf 工具
     │   │
     │   ├── feng-shui-compass-svg/
     │   │   ├── feng-shui-compass-svg.vue        # 罗盘 SVG 主组件
