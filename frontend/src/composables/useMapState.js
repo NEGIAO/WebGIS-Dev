@@ -1,11 +1,7 @@
 import debounce from 'lodash/debounce';
 import { onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import Feature from 'ol/Feature';
-import Point from 'ol/geom/Point';
-import { LineString } from 'ol/geom';
-import VectorLayer from 'ol/layer/Vector';
-import VectorSource from 'ol/source/Vector';
+import Graticule from 'ol/layer/Graticule';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { unByKey } from 'ol/Observable';
 import { Fill, Stroke, Style, Text } from 'ol/style';
@@ -17,6 +13,11 @@ import {
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
 import { prioritizeTileSourceRequest } from './useTileSourceFactory';
+// 新增：中心点标记所需导入
+import Feature from 'ol/Feature';
+import Point from 'ol/geom/Point';
+import VectorLayer from 'ol/layer/Vector';
+import VectorSource from 'ol/source/Vector';
 
 const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';
 
@@ -159,10 +160,13 @@ export function useMapState(mapInstance, options = {}) {
     } = options;
 
     let moveEndKey = null;
-    let graticuleMoveKey = null;
     let graticuleLayer = null;
     let graticuleActive = false;
     let locationContextChangeHandler = null;
+
+    // ---------- 新增：中心点标记相关变量 ----------
+    let centerPointLayer = null;      // 中心点矢量图层
+    let centerPointMoveEndKey = null; // 地图移动事件监听句柄
 
     const debouncedSyncUrlFromMap = debounce(() => {
         syncUrlFromMap();
@@ -853,54 +857,9 @@ export function useMapState(mapInstance, options = {}) {
     }
 
     /**
-     * 格式化经度为字符串 (如 "123.4567°E")
-     * @param {number} lon - 经度值
-     * @returns {string} 格式化的经度字符串
-     */
-    function formatLongitude(lon) {
-        const abs = Math.abs(lon).toFixed(4);
-        return `${abs}°${lon >= 0 ? 'E' : 'W'}`;
-    }
-
-    /**
-     * 格式化纬度为字符串 (如 "56.7890°N")
-     * @param {number} lat - 纬度值
-     * @returns {string} 格式化的纬度字符串
-     */
-    function formatLatitude(lat) {
-        const abs = Math.abs(lat).toFixed(4);
-        return `${abs}°${lat >= 0 ? 'N' : 'S'}`;
-    }
-
-    /**
-     * 创建经纬网线的样式
-     * @param {string} [textLabel=''] - 文本标签
-     * @param {Object} [textOptions={}] - 文本选项 { offsetX, offsetY, textAlign }
-     * @returns {Style} OpenLayers 样式对象
-     * @private
-     */
-    function createGraticuleStyle(textLabel = '', textOptions = {}) {
-        return new Style({
-            stroke: new Stroke({ color: 'rgba(255,255,255,0.92)', width: 2 }),
-            text: textLabel
-                ? new Text({
-                      text: textLabel,
-                      font: 'bold 12px Consolas, Monaco, monospace',
-                      fill: new Fill({ color: '#124e28' }),
-                      backgroundFill: new Fill({ color: 'rgba(255,255,255,0.9)' }),
-                      padding: [2, 4, 2, 4],
-                      offsetX: textOptions.offsetX ?? 0,
-                      offsetY: textOptions.offsetY ?? -10,
-                      textAlign: textOptions.textAlign ?? 'center',
-                  })
-                : undefined,
-        });
-    }
-
-    /**
      * 确保经纬网图层已创建
-     * 如果图层不存在则创建新的 VectorLayer，并添加到地图
-     * @returns {VectorLayer|null} 经纬网图层
+     * 使用 OpenLayers 内置 Graticule 类以获得最佳性能和平滑渲染
+     * @returns {Graticule|null} 经纬网图层
      * @private
      */
     function ensureGraticuleLayer() {
@@ -908,90 +867,63 @@ export function useMapState(mapInstance, options = {}) {
         if (!map) return null;
         if (graticuleLayer) return graticuleLayer;
 
-        graticuleLayer = new VectorLayer({
-            source: new VectorSource(),
+        graticuleLayer = new Graticule({
+            strokeStyle: new Stroke({
+                color: 'rgba(200, 200, 200, 0.6)',
+                width: 1.5,
+                lineDash: [5, 5],
+            }),
+            showLabels: true,
+            lonLabelStyle: new Text({
+                font: 'bold 14px "Segoe UI", Arial, sans-serif',
+                fill: new Fill({ color: '#fff' }),
+                stroke: new Stroke({ color: '#000', width: 3 }),
+                backgroundFill: new Fill({ color: 'rgba(0, 0, 0, 0.5)' }),
+                backgroundStroke: new Stroke({ color: '#999', width: 1 }),
+                padding: [3, 5, 3, 5],
+                offsetY: -55,
+                textAlign: 'center',
+            }),
+            latLabelStyle: new Text({
+                font: 'bold 14px "Segoe UI", Arial, sans-serif',
+                fill: new Fill({ color: '#fff' }),
+                stroke: new Stroke({ color: '#000', width: 3 }),
+                backgroundFill: new Fill({ color: 'rgba(0, 0, 0, 0.5)' }),
+                backgroundStroke: new Stroke({ color: '#999', width: 1 }),
+                padding: [3, 5, 3, 5],
+                offsetX: -75,
+                textAlign: 'center',
+            }),
             zIndex: 1080,
         });
         map.addLayer(graticuleLayer);
         return graticuleLayer;
     }
 
+    // ========== 新增：中心点标记相关函数 ==========
+
     /**
-     * 更新经纬网图层
-     * 根据当前地图视图范围重绘经纬线和标签
+     * 确保中心点矢量图层已创建
+     * 创建一个带 '+' 符号的矢量点图层
+     * @returns {VectorLayer|null} 中心点图层实例
      * @private
      */
-    function updateGraticuleLayer() {
+    function ensureCenterPointLayer() {
         const map = mapInstance?.value;
-        if (!map) return;
+        if (!map) return null;
+        if (centerPointLayer) return centerPointLayer;
 
-        const layer = ensureGraticuleLayer();
-        const source = layer?.getSource?.();
-        if (!source) return;
-
-        source.clear();
-        if (!graticuleActive) {
-            layer.setVisible(false);
-            return;
-        }
-
-        layer.setVisible(true);
-        const view = map.getView();
-        const size = map.getSize();
-        if (!size) return;
-
-        const extent = view.calculateExtent(size);
-        const sw = toLonLat([extent[0], extent[1]]);
-        const ne = toLonLat([extent[2], extent[3]]);
-
-        const lonStep = (ne[0] - sw[0]) / 3;
-        const latStep = (ne[1] - sw[1]) / 3;
-        const lonList = [sw[0] + lonStep, sw[0] + lonStep * 2];
-        const latList = [sw[1] + latStep, sw[1] + latStep * 2];
-        const centerLon = (sw[0] + ne[0]) / 2;
-        const centerLat = (sw[1] + ne[1]) / 2;
-
-        const features = [];
-
-        lonList.forEach((lon) => {
-            const start = fromLonLat([lon, sw[1]]);
-            const end = fromLonLat([lon, ne[1]]);
-            const line = new Feature({ geometry: new LineString([start, end]) });
-            line.setStyle(createGraticuleStyle());
-            features.push(line);
-
-            const topLabel = new Feature({ geometry: new Point(end) });
-            topLabel.setStyle(createGraticuleStyle(formatLongitude(lon), { offsetY: 12 }));
-            const bottomLabel = new Feature({ geometry: new Point(start) });
-            bottomLabel.setStyle(createGraticuleStyle(formatLongitude(lon), { offsetY: -12 }));
-            features.push(topLabel, bottomLabel);
+        // 创建矢量源并添加一个初始要素（坐标先设为原点，后续更新）
+        const source = new VectorSource();
+        const feature = new Feature({
+            geometry: new Point([0, 0]),
         });
-
-        latList.forEach((lat) => {
-            const start = fromLonLat([sw[0], lat]);
-            const end = fromLonLat([ne[0], lat]);
-            const line = new Feature({ geometry: new LineString([start, end]) });
-            line.setStyle(createGraticuleStyle());
-            features.push(line);
-
-            const leftLabel = new Feature({ geometry: new Point(start) });
-            leftLabel.setStyle(
-                createGraticuleStyle(formatLatitude(lat), { offsetX: 42, textAlign: 'left' }),
-            );
-            const rightLabel = new Feature({ geometry: new Point(end) });
-            rightLabel.setStyle(
-                createGraticuleStyle(formatLatitude(lat), { offsetX: -42, textAlign: 'right' }),
-            );
-            features.push(leftLabel, rightLabel);
-        });
-
-        const centerCoord = fromLonLat([centerLon, centerLat]);
-        const centerPlus = new Feature({ geometry: new Point(centerCoord) });
-        centerPlus.setStyle(
+        // 设置 '+' 样式（半透金黄加黑色描边）
+        feature.setStyle(
             new Style({
                 text: new Text({
                     text: '+',
-                    font: '700 26px "Segoe UI", "Arial", sans-serif',
+                    font: '700 30px "Segoe UI", "Arial", sans-serif',
                     fill: new Fill({ color: 'rgba(255, 235, 130, 0.98)' }),
                     stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.78)', width: 3 }),
                     textAlign: 'center',
@@ -999,13 +931,81 @@ export function useMapState(mapInstance, options = {}) {
                 }),
             }),
         );
+        source.addFeature(feature);
 
-        features.push(centerPlus);
-        source.addFeatures(features);
+        centerPointLayer = new VectorLayer({
+            source: source,
+            zIndex: 1090,      // 高于经纬网，确保显示在地图元素之上
+            visible: graticuleActive, // 初始可见性与经纬网保持一致
+        });
+        map.addLayer(centerPointLayer);
+        return centerPointLayer;
     }
 
     /**
-     * 设置经纬网的激活状态
+     * 更新中心点位置到当前地图视图的中心
+     * @private
+     */
+    function updateCenterPointPosition() {
+        const map = mapInstance?.value;
+        if (!centerPointLayer || !graticuleActive || !map) return; // 只有激活时才更新
+
+        const view = map.getView();
+        if (!view) return;
+
+        const centerCoord = view.getCenter(); // 投影坐标系坐标
+        if (!centerCoord) return;
+
+        const source = centerPointLayer.getSource();
+        if (!source) return;
+
+        const feature = source.getFeatures()[0];
+        if (feature) {
+            feature.getGeometry().setCoordinates(centerCoord);
+        }
+    }
+
+    /**
+     * 绑定地图移动事件，实时更新中心点位置
+     * @private
+     */
+    function bindCenterPointMoveListener() {
+        if (centerPointMoveEndKey) return;
+        const map = mapInstance?.value;
+        if (!map) return;
+
+        centerPointMoveEndKey = map.on('moveend', () => {
+            if (graticuleActive) {
+                updateCenterPointPosition();
+            }
+        });
+    }
+
+    /**
+     * 解绑中心点移动监听
+     * @private
+     */
+    function unbindCenterPointMoveListener() {
+        if (!centerPointMoveEndKey) return;
+        unByKey(centerPointMoveEndKey);
+        centerPointMoveEndKey = null;
+    }
+
+    /**
+     * 清理中心点图层（卸载时调用）
+     * @private
+     */
+    function stopCenterPoint() {
+        if (centerPointLayer && mapInstance?.value) {
+            mapInstance.value.removeLayer(centerPointLayer);
+            centerPointLayer = null;
+        }
+        unbindCenterPointMoveListener();
+    }
+
+    // ========== 修改：设置经纬网的激活状态，同时联动中心点 ==========
+    /**
+     * 设置经纬网的激活状态，同时联动控制中心点标记的显示/隐藏
      * @param {boolean} active - 是否激活
      * @returns {boolean} 设置后的激活状态
      */
@@ -1014,18 +1014,34 @@ export function useMapState(mapInstance, options = {}) {
         const map = mapInstance?.value;
         if (!map) return graticuleActive;
 
-        if (graticuleActive && !graticuleMoveKey) {
-            graticuleMoveKey = map.on('moveend', () => {
-                if (graticuleActive) updateGraticuleLayer();
-            });
+        // 处理经纬网图层
+        const layer = ensureGraticuleLayer();
+        if (layer) {
+            layer.setVisible(graticuleActive);
         }
 
-        updateGraticuleLayer();
+        // 处理中心点图层（联动）
+        if (graticuleActive) {
+            // 激活时：确保中心点图层存在，更新当前位置，绑定移动监听
+            ensureCenterPointLayer();
+            if (centerPointLayer) {
+                updateCenterPointPosition();
+                centerPointLayer.setVisible(true);
+            }
+            bindCenterPointMoveListener();
+        } else {
+            // 关闭时：隐藏中心点图层，解绑移动监听
+            if (centerPointLayer) {
+                centerPointLayer.setVisible(false);
+            }
+            unbindCenterPointMoveListener();
+        }
+
         return graticuleActive;
     }
 
     /**
-     * 切换经纬网的显示/隐藏状态
+     * 切换经纬网的显示/隐藏状态（同时切换中心点）
      * @returns {boolean} 切换后的激活状态
      */
     function toggleGraticule() {
@@ -1033,24 +1049,25 @@ export function useMapState(mapInstance, options = {}) {
     }
 
     /**
-     * 停止经纬网，清除事件监听和图层数据
+     * 停止经纬网和中心点，隐藏并清理资源
      */
     function stopGraticule() {
-        if (graticuleMoveKey) {
-            unByKey(graticuleMoveKey);
-            graticuleMoveKey = null;
-        }
         if (graticuleLayer) {
             graticuleLayer.setVisible(false);
-            graticuleLayer.getSource()?.clear?.();
         }
+        if (centerPointLayer) {
+            centerPointLayer.setVisible(false);
+        }
+        unbindCenterPointMoveListener();
         graticuleActive = false;
     }
 
+    // 组件卸载时清理所有资源
     onUnmounted(() => {
         stopMapViewSync();
         stopLocationContextSync();
         stopGraticule();
+        stopCenterPoint(); // 彻底移除中心点图层
     });
 
     return {
@@ -1066,7 +1083,6 @@ export function useMapState(mapInstance, options = {}) {
         switchLayerById,
         setGraticuleActive,
         toggleGraticule,
-        updateGraticuleLayer,
         stopGraticule,
     };
 }

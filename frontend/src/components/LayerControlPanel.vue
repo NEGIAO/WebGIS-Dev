@@ -8,19 +8,27 @@
         />
 
         <div class="layer-label">选择底图</div>
-        <select
-            class="layer-select"
-            :value="selectedLayer"
-            @change="handleLayerChange"
+        <div
+            class="custom-select-container"
+            ref="customSelectRef"
+            @click="toggleSelectDropdown"
         >
-            <option
-                v-for="option in BASEMAP_OPTIONS"
-                :key="option.value"
-                :value="option.value"
-            >
-                {{ option.label }}
-            </option>
-        </select>
+            <div class="custom-select-trigger">
+                <span>{{ currentLayerLabel }}</span>
+                <span class="dropdown-arrow" :class="{ 'arrow-up': isSelectDropdownOpen }">▼</span>
+            </div>
+            <div v-show="isSelectDropdownOpen" class="custom-select-dropdown">
+                <div
+                    v-for="option in BASEMAP_OPTIONS"
+                    :key="option.value"
+                    class="custom-select-option"
+                    :class="{ 'selected': option.value === selectedLayer }"
+                    @click.stop="selectOption(option)"
+                >
+                    {{ option.label }}
+                </div>
+            </div>
+        </div>
 
         <button
             ref="layerManageButtonRef"
@@ -329,6 +337,27 @@ const layerManagerPanelStyle = computed(() => ({
     left: `${layerManagerAnchor.value.left}px`,
 }));
 
+// 自定义 Select 状态
+const isSelectDropdownOpen = ref(false);
+const customSelectRef = ref(null);
+
+const currentLayerLabel = computed(() => {
+    const found = BASEMAP_OPTIONS.find(opt => opt.value === props.selectedLayer);
+    return found ? found.label : '选择底图';
+});
+
+function toggleSelectDropdown(event) {
+    isSelectDropdownOpen.value = !isSelectDropdownOpen.value;
+}
+
+function selectOption(option) {
+    emit('change-layer', {
+        layerId: option.value,
+        source: 'dropdown',
+    });
+    isSelectDropdownOpen.value = false;
+}
+
 const layerContextMenuStyle = computed(() => ({
     top: `${layerContextMenuAnchor.value.top}px`,
     left: `${layerContextMenuAnchor.value.left}px`,
@@ -367,13 +396,6 @@ watch(customUrlInput, (newUrl) => {
     const detected = detectCustomTileServiceKind(newUrl);
     detectedServiceInfo.value = detected.kind === 'unknown' ? null : detected;
 });
-
-function handleLayerChange(event) {
-    emit('change-layer', {
-        layerId: event.target.value,
-        source: 'dropdown',
-    });
-}
 
 /**
  * 获取当前地图范围（SW,NE）用于后端搜索裁剪。
@@ -605,8 +627,13 @@ function moveContextLayerToBottom() {
 }
 
 function handleGlobalPointerDown(event) {
-    if (!showLayerContextMenu.value) return;
     const target = event?.target;
+    // 处理自定义底图选择器的外部点击
+    if (isSelectDropdownOpen.value && target instanceof Element && !target.closest('.custom-select-container')) {
+        isSelectDropdownOpen.value = false;
+    }
+
+    if (!showLayerContextMenu.value) return;
     if (target instanceof Element && target.closest('.layer-context-menu')) return;
     closeLayerContextMenu();
 }
@@ -719,6 +746,101 @@ onBeforeUnmount(() => {
         top: 10px;
         /* 可选：通常顶部也会相应调小一点点 */
     }
+}
+
+/* 自定义下拉框样式 */
+.custom-select-container {
+    position: relative;
+    display: inline-block;
+    margin: 0 0 0 6px;
+    vertical-align: middle;
+    font-size: 13px;
+    user-select: none;
+}
+
+.custom-select-trigger {
+    padding: 4px 10px;
+    border: 1px solid rgba(22, 158, 69, 0.45);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.85);
+    color: #0f172a;
+    cursor: pointer;
+    min-width: 100px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.custom-select-trigger:hover {
+    background: rgba(255, 255, 255, 1);
+    box-shadow: 0 0 4px rgba(22, 158, 69, 0.2);
+}
+
+.dropdown-arrow {
+    font-size: 10px;
+    color: #166534;
+    transition: transform 0.3s;
+}
+
+.dropdown-arrow.arrow-up {
+    transform: rotate(180deg);
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: max-content;
+    min-width: 100%;
+    max-height: 450px;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #d1fae5;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+    z-index: 2200;
+    overflow-y: auto;
+    animation: fadeIn 0.15s ease-out;
+}
+
+.custom-select-dropdown::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb {
+    background: #22c55e;
+    border-radius: 4px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #16a34a;
+}
+
+.custom-select-option {
+    padding: 6px 12px;
+    color: #0f172a;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.custom-select-option:hover {
+    background: #dcfce7;
+}
+
+.custom-select-option.selected {
+    background: #22c55e;
+    color: #fff;
+    font-weight: 600;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .layer-select {
@@ -852,6 +974,23 @@ onBeforeUnmount(() => {
     max-height: 300px;
     overflow-y: auto;
     z-index: 2000;
+}
+
+.layer-manager-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.layer-manager-panel::-webkit-scrollbar-track {
+    background: rgba(240, 245, 240, 0.8);
+}
+
+.layer-manager-panel::-webkit-scrollbar-thumb {
+    background: #56AB56;
+    border-radius: 4px;
+}
+
+.layer-manager-panel::-webkit-scrollbar-thumb:hover {
+    background: #56AB56;
 }
 
 .panel-header {
