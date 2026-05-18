@@ -1,0 +1,78 @@
+## 🗺️ 功能路线图 (Roadmap): 动态集成 OSM 矢量数据生态
+
+### 1. 功能概述 (Feature Overview)
+
+允许用户在前端地图上通过自定义区域（当前视口、行政区划或手绘多边形）和属性条件（如餐饮、学校、交通设施），动态向 OpenStreetMap (OSM) 接口发起请求，实时获取最新的矢量地理数据。数据获取后，系统将自动进行格式转换，并动态加载至前端地图渲染，同时在图层控制面板（TOC）中同步上线，支持图层显隐控制及纯前端 GeoJSON 数据导出。
+
+### 2. 核心核心技术栈 (Technology Stack)
+
+* **数据源后端**：OSM Overpass API (`[https://overpass-api.de/api/interpreter](https://overpass-api.de/api/interpreter)`)
+* **查询语言**：Overpass QL (Overpass Query Language)
+* **前端框架及组件**：Vue 3 + Pinia (状态管理)
+* **地图引擎**：OpenLayers (或其他主流 WebGIS 前端框架)
+* **数据转换中间件**：`osmtogeojson` (npm 插件，用于将 OSM 拓扑结构转换为标准 GeoJSON)
+
+---
+
+### 3. 核心实现阶段与技术手段 (Implementation Stages)
+
+#### 阶段一：前端 UI 与交互设计 (Query Construction)
+
+* **空间范围捕获**：
+* 方法 A：利用地图引擎 API 获取当前视口的经纬度边界（Bounding Box）。
+* 方法 B：集成 OpenLayers 的 `Draw` 交互组件，允许用户在地图上框选矩形或绘制多边形。
+* 方法 C：提供常用行政区划下拉菜单（后台绑定行政区名称）。
+
+
+* **属性条件表单**：
+* 设计常用 POI / 道路 / 建筑的快捷勾选（映射为 OSM 标准的 `Key=Value` 标签）。
+* 为高级用户提供自定义 `Key` 和 `Value` 的输入框。
+
+
+
+#### 阶段二：动态查询构建与网络请求 (API Interacting)
+
+* **动态拼装 Overpass QL**：
+* 在 Vue 组件内部，根据用户选择的空间和属性参数，动态组装出带参数的 Overpass QL 字符串。
+* **关键点**：声明输出格式为 `[out:json]`，并在输出末尾声明 `out body geom;` 以确保返回线、面要素的完整几何坐标。
+
+
+* **异步请求发送**：
+* 使用 `axios` 或 `fetch` 向 Overpass 接口发送 `POST` 请求（采用 `application/x-www-form-urlencoded` 格式传递 `data` 参数），避免因为查询语句过长导致 URL 超长报错。
+
+
+
+#### 阶段三：数据解析、渲染与 TOC 联动 (Data Parsing & Rendering)
+
+* **数据格式标准化**：
+* 引入 `osmtogeojson` 库，在前端将 Overpass 接口返回的原始 JSON 转化为标准的 GeoJSON 格式。
+
+
+* **地图图层动态加载**：
+* 使用 OpenLayers 的 `VectorSource` 和 `VectorLayer` 读取转化后的 GeoJSON 数据，生成对应的矢量要素，并打上自定义样式（Style）添加到地图实例中。
+
+
+* **TOC 面板状态同步**：
+* 将新生成的图层实例及其元数据（如图层名称、要素数量）推入 Pinia 的图层列表状态中。
+* TOC 组件读取该状态，通过 `v-model` 绑定多选框，控制图层的 `setVisible(true/false)`，实现图层显隐切换。
+
+
+
+#### 阶段四：数据本地化导出 (Data Export)
+
+* **纯前端数据下载**：
+* 在 TOC 图层列表旁添加“下载”按钮。
+* 触发时，直接将前端已持有的标准 GeoJSON 对象转化为 Data URI 或通过 `Blob` 对象创建临时下载链接，实现零后端参与的纯前端文件导出（`.geojson` 格式）。
+
+
+
+---
+
+### 4. 潜在风险与优化预案 (Risks & Optimizations)
+
+* **大数量性能瓶颈**：若用户在广阔区域查询密集要素（如全城建筑物），可能引发浏览器内存崩溃。
+* *优化方案*：在前端发起请求前做阈值限制。例如限制当前地图层级（Zoom）必须大于 13 级才激活查询按钮；或者限制返回结果的 `timeout` 和数量上限。
+
+
+* **接口频率限制 (Rate Limit)**：Overpass 公共服务器有流量控制，频繁请求会导致 `429` 报错。
+* *长期优化方案*：未来可考虑采用后端（如 FastAPI/Python）做一层接口中转和 Redis 数据缓存，若相同区域和条件的查询在短时间内重复触发，直接读取缓存，保护公共资源并加速响应。
