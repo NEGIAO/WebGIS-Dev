@@ -1236,6 +1236,19 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
+    {
+        id: 'custom_China_Blender',
+        name: 'China Blender',
+        category: 'custom',
+        group: '自定义',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+                }),
+            ),
+    },
+
 ];
 
 // 配置2：多底图叠置预设（下拉菜单显示用）
@@ -1297,11 +1310,8 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
 
     // --- 艺术风格/Mapbox ---
     { id: 'custom_mapbox_labeled_preset', label: 'Mapbox自定义', stack: ['custom_mapbox_labeled'] },
-    {
-        id: 'custom_mapbox_unlabeled_preset',
-        label: 'Mapbox(无注记)',
-        stack: ['custom_mapbox_unlabeled', 'label_tuxin'],
-    },
+    { id: 'custom_mapbox_unlabeled_preset',label: 'Mapbox(无注记)',stack: ['custom_mapbox_unlabeled', 'label_tuxin'],},
+    { id: 'custom_China_Blender_preset', label: 'China Blender', stack: ['custom_China_Blender','terrain_google'] },
     { id: 'vector_carton_light_preset', label: 'Carto浅色', stack: ['vector_carton_light'] },
     { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
