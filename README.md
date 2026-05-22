@@ -26,7 +26,7 @@
 </div>
 
 ## 📖 项目简介
-<img width="1919" height="866" alt="image" src="https://github.com/user-attachments/assets/a3fcebc7-4b22-4ad2-8cfc-62443d114da9" />
+<img width="1248" height="723" alt="界面预览" src="https://github.com/user-attachments/assets/90255184-7623-46f5-97f3-115e07f4f917" />
 
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
