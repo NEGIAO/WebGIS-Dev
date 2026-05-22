@@ -1,5 +1,5 @@
-import TileLayer from 'ol/layer/Tile';
 import { prioritizeTileSourceRequest } from '../../useTileSourceFactory';
+import { createBasemapLayerFromSource } from './basemapLayerFactory';
 
 /**
  * Basemap layer bootstrap feature
@@ -24,13 +24,12 @@ export function createBasemapLayerBootstrap({
 
         list.forEach((item, index) => {
             const config = layerConfigs.find((cfg) => cfg.id === item.id);
-            const source =
-                config && item.visible ? prioritizeTileSourceRequest(config.createSource()) : null;
-
-            const layer = new TileLayer({
-                source,
+            const rawSource = config && item.visible ? config.createSource() : null;
+            const source = rawSource ? prioritizeTileSourceRequest(rawSource) : null;
+            const layer = createBasemapLayerFromSource(source, {
                 visible: item.visible,
                 zIndex: index,
+                opacity: typeof item.opacity === 'number' ? item.opacity : 1,
             });
 
             if (item.visible && source) {

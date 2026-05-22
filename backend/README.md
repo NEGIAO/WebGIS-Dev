@@ -21,7 +21,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 
-## 0. 项目结构（2026-05-14 校验）
+## 0. 项目结构（2026-05-22 校验）
 
 ```text
 backend/                                           

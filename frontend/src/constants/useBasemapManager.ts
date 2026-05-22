@@ -16,6 +16,7 @@ import type {
 import {
     buildMapsForFreeAdapter,
     createConfiguredServiceSource,
+    createVectorTileSourceFromUrl,
     createXYZSourceFromUrl,
     prioritizeTileSourceRequest,
 } from '../composables/useTileSourceFactory';
@@ -1117,6 +1118,16 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
+    {
+        id: 'vector_henu_border_pbf',
+        name: 'HENU边界矢量',
+        category: 'vector',
+        group: '矢量',
+        createSource: () =>
+            createVectorTileSourceFromUrl(
+                'https://webgis.henu.edu.cn/server/rest/services/Hosted/Border_Vector/VectorTileServer/tile/{z}/{y}/{x}.pbf',
+            ),
+    },
     // ===================================================================
     // 5、地形图层
     {
@@ -1446,6 +1457,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     // ==========================================
     { id: 'vector_geoq_gray_preset', label: 'GeoQ灰', stack: ['vector_geoq_gray'] },
     { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
+    { id: 'vector_henu_border_preset', label: '矢量边界', stack: ['vector_henu_border_pbf'] },
 ];
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++

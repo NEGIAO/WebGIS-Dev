@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-05-14 更新）
+## 目录结构（2026-05-22 更新）
 
 以下结构按当前工程实际文件更新，尽量做到逐文件注释。
 
@@ -241,6 +241,7 @@ frontend/
     │       ├── features/
     │       │   ├── README.md                    # features 子模块说明
     │       │   ├── index.js                     # features 聚合导出
+    │       │   ├── basemapLayerFactory.js        # Basemap layer factory (raster vs vector tile)
     │       │   ├── useBasemapLayerBootstrap.js  # 底图初始化
     │       │   ├── useBasemapResilience.js      # 底图容灾与兜底
     │       │   ├── useBasemapSelectionWatcher.js # 底图切换监听

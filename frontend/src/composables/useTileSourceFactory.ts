@@ -6,12 +6,20 @@
 import XYZ from 'ol/source/XYZ';
 import TileWMS from 'ol/source/TileWMS';
 import WMTS, { optionsFromCapabilities } from 'ol/source/WMTS';
+import VectorTileSource from 'ol/source/VectorTile';
 import WMSCapabilities from 'ol/format/WMSCapabilities';
 import WMTSCapabilities from 'ol/format/WMTSCapabilities';
+import MVT from 'ol/format/MVT';
 
 export type TileYNormalizeMode = 'auto' | 'direct' | 'invert-tms' | 'ol-negative';
-export type CustomTileSourceKind = 'xyz' | 'non-standard-xyz' | 'wms' | 'wmts' | 'unknown';
-export type TileSourceLike = XYZ | TileWMS | WMTS;
+export type CustomTileSourceKind =
+    | 'xyz'
+    | 'non-standard-xyz'
+    | 'wms'
+    | 'wmts'
+    | 'vector-tile'
+    | 'unknown';
+export type TileSourceLike = XYZ | TileWMS | WMTS | VectorTileSource;
 
 export type AutoTileSourceResult = {
     source: TileSourceLike;
@@ -25,7 +33,7 @@ export type NonStandardXYZAdapter = {
     urlFunction: (tileCoord: number[]) => string;
 };
 
-export type ConfiguredTileServiceType = 'xyz' | 'wms' | 'wmts';
+export type ConfiguredTileServiceType = 'xyz' | 'wms' | 'wmts' | 'vector-tile';
 
 export type ConfiguredTileServiceDefinition = {
     id: string;
@@ -114,6 +122,19 @@ function setSearchParamCaseInsensitive(urlObj: URL, key: string, value: string):
 
 function looksLikeXYZTemplate(url: string): boolean {
     return /\{z\}/i.test(url) && /\{x\}/i.test(url) && (/\{y\}/i.test(url) || /\{-y\}/i.test(url));
+}
+
+// Heuristics to identify vector tile (MVT/PBF) URLs.
+function looksLikeVectorTileUrl(url: string): boolean {
+    const normalized = String(url || '').toLowerCase();
+    if (!normalized) return false;
+
+    if (/\.(pbf|mvt)(\?|$)/.test(normalized)) return true;
+    if (/vectortileserver|vectortile|vector-tiles/.test(normalized)) return true;
+    if (/(\?|&)f=pbf(\b|&)/.test(normalized)) return true;
+    if (/(\?|&)format=pbf(\b|&)/.test(normalized)) return true;
+
+    return false;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -328,6 +349,10 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
         return source;
     }
 
+    if (source instanceof VectorTileSource) {
+        return source;
+    }
+
     // 1. 为该数据源创建一个专属的 AbortController
     const abortController = new AbortController();
     (source as any).set('abortController', abortController);
@@ -468,6 +493,13 @@ function detectWmsByUrl(urlObj: URL): boolean {
     if (request === 'GETMAP') return true;
     if (request === 'GETCAPABILITIES' && /\/wms(\/|$|\?)/i.test(urlObj.pathname)) return true;
 
+    const layers = getSearchParamCaseInsensitive(urlObj, 'LAYERS');
+    const bbox = getSearchParamCaseInsensitive(urlObj, 'BBOX');
+    const format = getSearchParamCaseInsensitive(urlObj, 'FORMAT');
+    if (layers && (bbox || format)) return true;
+
+    if (/wmss?erver/i.test(urlObj.pathname)) return true;
+
     return /\/wms(\/|$|\?)/i.test(urlObj.pathname);
 }
 
@@ -480,6 +512,13 @@ function detectWmtsByUrl(urlObj: URL): boolean {
 
     if (request === 'GETTILE') return true;
     if (request === 'GETCAPABILITIES' && /\/wmts(\/|$|\?)/i.test(urlObj.pathname)) return true;
+
+    const tileMatrix = getSearchParamCaseInsensitive(urlObj, 'TILEMATRIX');
+    const tileRow = getSearchParamCaseInsensitive(urlObj, 'TILEROW');
+    const tileCol = getSearchParamCaseInsensitive(urlObj, 'TILECOL');
+    if (tileMatrix || tileRow || tileCol) return true;
+
+    if (/\{\s*tilematrix\s*\}/i.test(urlObj.toString())) return true;
 
     return /\/wmts(\/|$|\?)/i.test(urlObj.pathname);
 }
@@ -667,6 +706,15 @@ export function createXYZSourceFromUrl(
     return prioritizeTileSourceRequest(new XYZ({ url: cleanUrl }));
 }
 
+export function createVectorTileSourceFromUrl(rawUrl: string): VectorTileSource {
+    const cleanUrl = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
+
+    return new VectorTileSource({
+        url: cleanUrl,
+        format: new MVT(),
+    });
+}
+
 export function createConfiguredServiceSource(
     definition: ConfiguredTileServiceDefinition,
     options: { adapters?: Record<string, NonStandardXYZAdapter> } = {},
@@ -684,6 +732,10 @@ export function createConfiguredServiceSource(
         return createXYZSourceFromUrl(url, {
             adapters: options.adapters,
         });
+    }
+
+    if (serviceType === 'vector-tile') {
+        return createVectorTileSourceFromUrl(url);
     }
 
     const parsed = parseUrlSafe(url);
@@ -712,6 +764,23 @@ export function createConfiguredServiceSource(
         url: endpoint,
         params,
     });
+}
+
+// Create vector tile source with template validation.
+function createVectorTileSourceStrict(url: string): AutoTileSourceResult {
+    if (!looksLikeVectorTileUrl(url)) {
+        throw new Error('未识别为矢量切片服务');
+    }
+
+    if (!looksLikeXYZTemplate(url)) {
+        throw new Error('矢量切片 URL 缺少 {z}/{x}/{y} 模板占位符');
+    }
+
+    return {
+        source: createVectorTileSourceFromUrl(url),
+        kind: 'vector-tile',
+        detail: 'MVT/PBF',
+    };
 }
 
 function createXyzSourceStrict(
@@ -826,6 +895,17 @@ async function createWmtsSourceStrict(
         };
     }
 
+    if (/\{\s*tilematrix\s*\}/i.test(rawUrl)) {
+        const normalizedTemplate = normalizeWmtsResourceTemplate(rawUrl);
+        return {
+            source: createXYZSourceFromUrl(normalizedTemplate, {
+                adapters,
+            }),
+            kind: 'wmts',
+            detail: 'WMTS 模板',
+        };
+    }
+
     const capabilitiesUrl = createCapabilitiesUrl(rawUrl, 'WMTS', DEFAULT_WMTS_VERSION);
     const xmlText = await fetchTextWithTimeout(capabilitiesUrl);
     const parser = new WMTSCapabilities();
@@ -896,6 +976,10 @@ export function detectCustomTileServiceKind(
     const normalizedUrl = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
     if (!normalizedUrl) {
         return { kind: 'unknown', name: '未知格式' };
+    }
+
+    if (looksLikeVectorTileUrl(normalizedUrl)) {
+        return { kind: 'vector-tile', name: '矢量切片 (MVT/PBF)' };
     }
 
     const nonStandard = detectNonStandardXYZ(normalizedUrl, adapters);
@@ -974,6 +1058,13 @@ export async function createAutoTileSourceFromUrl(
 
     const adapters = options.adapters || DEFAULT_NON_STANDARD_XYZ_ADAPTERS;
     const errors: string[] = [];
+
+    try {
+        const vectorResult = createVectorTileSourceStrict(normalizedUrl);
+        return vectorResult;
+    } catch (error) {
+        errors.push(`VectorTile: ${toErrorMessage(error)}`);
+    }
 
     try {
         const xyzResult = createXyzSourceStrict(normalizedUrl, adapters);

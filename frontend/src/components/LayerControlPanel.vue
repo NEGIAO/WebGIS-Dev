@@ -73,7 +73,7 @@
             <input
                 v-model="customUrlInput"
                 class="custom-url-input"
-                placeholder="支持 XYZ / WMS / WMTS 服务 URL"
+                placeholder="支持 XYZ / WMS / WMTS / 矢量切片 URL"
             />
             <button
                 class="custom-url-btn"

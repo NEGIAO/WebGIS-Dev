@@ -6,6 +6,7 @@
  * 2. 优化并发槽位释放，解决国外底图加载导致的“卡死”问题
  */
 import { abortTileSourceRequests } from '../../useTileSourceFactory'; // 确保路径指向你存放工厂函数的地方
+import { createBasemapLayerFromSource, isVectorTileLayer } from './basemapLayerFactory';
 
 export function createLayerControlHandlers({
     selectedLayerRef,
@@ -15,6 +16,7 @@ export function createLayerControlHandlers({
     refreshLayersState,
     createAutoTileSourceFromUrl,
     message,
+    mapInstanceRef,
 }) {
     /**
      * 【关键改动 1】：内部助手函数
@@ -27,6 +29,43 @@ export function createLayerControlHandlers({
         if (source) {
             // 立即停止所有 pending 的 fetch 请求，释放浏览器 6 个并发槽位[cite: 2]
             abortTileSourceRequests(source);
+        }
+    }
+
+    // Resolve layer visibility, opacity, and zIndex for replacement.
+    function resolveLayerPresentation(layerId, fallbackLayer) {
+        const list = layerListRef?.value;
+        const item = Array.isArray(list) ? list.find((entry) => entry.id === layerId) : null;
+
+        const visible =
+            fallbackLayer?.getVisible?.() ??
+            (typeof item?.visible === 'boolean' ? item.visible : true);
+        const opacity =
+            fallbackLayer?.getOpacity?.() ??
+            (typeof item?.opacity === 'number' ? item.opacity : 1);
+        const zIndex =
+            fallbackLayer?.getZIndex?.() ??
+            (item && Array.isArray(list) ? list.length - list.indexOf(item) : 0);
+
+        return { visible, opacity, zIndex };
+    }
+
+    // Swap the layer instance in map and cache when type changes.
+    function replaceLayerInstance(layerId, nextLayer) {
+        if (!layerId || !nextLayer) return;
+        const map = mapInstanceRef?.value;
+        const currentLayer = layerInstances?.[layerId];
+
+        if (map && currentLayer) {
+            map.removeLayer(currentLayer);
+        }
+
+        if (map) {
+            map.addLayer(nextLayer);
+        }
+
+        if (layerInstances) {
+            layerInstances[layerId] = nextLayer;
         }
     }
 
@@ -65,23 +104,40 @@ export function createLayerControlHandlers({
 
             const detected = await createAutoTileSourceFromUrl(customMapUrlRef.value);
             const customLayer = layerInstances?.custom;
+            const layerState = resolveLayerPresentation('custom', customLayer);
 
             const kindTextMap = {
                 xyz: '标准XYZ',
                 'non-standard-xyz': '非标准XYZ',
                 wms: 'WMS',
                 wmts: 'WMTS',
+                'vector-tile': '矢量切片',
             };
 
             message?.success?.(`自动识别图源: ${kindTextMap[detected.kind]}（${detected.detail}）`);
 
-            if (customLayer?.setSource) {
-                customLayer.setSource(detected.source);
-                const target = layerListRef?.value?.find((item) => item.id === 'custom');
-                if (target) {
-                    target.visible = true;
-                    refreshLayersState?.();
+            const isVectorTile = detected.kind === 'vector-tile';
+
+            if (isVectorTile) {
+                if (customLayer && isVectorTileLayer(customLayer) && customLayer.setSource) {
+                    customLayer.setSource(detected.source);
+                } else {
+                    const nextLayer = createBasemapLayerFromSource(detected.source, layerState);
+                    replaceLayerInstance('custom', nextLayer);
                 }
+            } else {
+                if (customLayer && !isVectorTileLayer(customLayer) && customLayer.setSource) {
+                    customLayer.setSource(detected.source);
+                } else {
+                    const nextLayer = createBasemapLayerFromSource(detected.source, layerState);
+                    replaceLayerInstance('custom', nextLayer);
+                }
+            }
+
+            const target = layerListRef?.value?.find((item) => item.id === 'custom');
+            if (target) {
+                target.visible = true;
+                refreshLayersState?.();
             }
         } catch (error) {
             const errorMessage =
@@ -104,6 +160,14 @@ export function createLayerControlHandlers({
             if (customMapUrlRef.value) {
                 void loadCustomMap();
             }
+        }
+
+        if (
+            nextLayerId === 'custom' &&
+            customMapUrlRef?.value &&
+            payload.source !== 'custom-url'
+        ) {
+            void loadCustomMap();
         }
     }
 

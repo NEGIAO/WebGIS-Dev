@@ -159,6 +159,7 @@ WebGIS_Dev/
 │   │   │       ├── AdminControlPanel.vue
 │   │   │       └── ApiManagementPanel.vue
 │   │   ├── composables/            # 组合式逻辑
+│   │   │   └── map/features/basemapLayerFactory.js # Basemap layer factory (vector tile support)
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
 │   │   ├── stores/                 # Pinia 状态管理
@@ -196,6 +197,7 @@ WebGIS_Dev/
 │   ├── .python-version
 │   └── README.md                   # 🔹 后端详细文档
 ├── Docs/                           # 开发维护日志与强制执行规范
+│   └── 26-05-22/2026-05-22-enhance-custom-basemap-vector-tile.md # Log: custom basemap + vector tile
 ├── docker-compose.yml              # 🆕 顶级 Docker Compose（一键启动前后端）
 ├── LocalDev.bat                    # 🔄 升级：支持 Docker Compose 启动前后端
 ├── API_MANAGEMENT_GUIDE.md

@@ -143,6 +143,7 @@ import {
     createMapStylesObject,
 } from '../constants';
 import { createAutoTileSourceFromUrl } from '../composables/useTileSourceFactory';
+import { createBasemapLayerFromSource } from '../composables/map/features/basemapLayerFactory';
 import LayerControlPanel from './LayerControlPanel.vue';
 import MapSwipeController from './MapSwipeController.vue';
 // import MapEasterEgg from './MapEasterEgg.vue';
@@ -314,20 +315,19 @@ async function enableBasemapSwipe(config = {}) {
                 throw new Error(`无法为右侧图层 ${layerId} 创建 source`);
             }
 
-            const compareLayer = new TileLayer({
-                source,
+            // 卷帘 compare 图层只负责底图对比，必须低于业务图层的 zIndex，避免遮挡 TOC/矢量数据。
+            const compareLayer = createBasemapLayerFromSource(source, {
                 visible: true,
-                properties: {
-                    name: `${SWIPE_COMPARE_LAYER_PREFIX}_${index}_${layerId}`,
-                    layerType: 'basemap-swipe-compare',
-                    swipeCompareLayer: true,
-                    swipeSide: 'right',
-                    swipeLayerId: layerId,
-                },
+                zIndex: 100 + index,
             });
 
-            // 卷帘 compare 图层只负责底图对比，必须低于业务图层的 zIndex，避免遮挡 TOC/矢量数据。
-            compareLayer.setZIndex(100 + index);
+            compareLayer.setProperties({
+                name: `${SWIPE_COMPARE_LAYER_PREFIX}_${index}_${layerId}`,
+                layerType: 'basemap-swipe-compare',
+                swipeCompareLayer: true,
+                swipeSide: 'right',
+                swipeLayerId: layerId,
+            });
             mapInstance.value.addLayer(compareLayer);
             rightCompareLayers.push(compareLayer);
         });
@@ -546,7 +546,7 @@ const layerList = ref(
         opacity: 1, // 初始透明度为 100%
     })),
 );
-const layerInstances = {}; // 存储所有 TileLayer 实例
+const layerInstances = {}; // 存储所有底图层实例 (TileLayer/VectorTileLayer)
 
 const { handleLayerContextAction } = useLayerContextMenuActions({
     layerInstances,
@@ -824,6 +824,7 @@ const { loadCustomMap, handleLayerChange, handleLayerOrderUpdate } = createLayer
     refreshLayersState,
     createAutoTileSourceFromUrl,
     message,
+    mapInstanceRef: mapInstance,
 });
 
 // 栅格值查询函数的 ref 包装（用于延迟初始化）
