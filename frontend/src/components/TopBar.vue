@@ -353,6 +353,7 @@ const quickLocations = [
     { key: 'hedu', label: '河大', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 0 },
     { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
     { key: '51Area', label: '51区', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 6 },
+    { key: 'China', label: '美丽中国', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 21 },
 ];
 
 function handleOpenToolbox() {

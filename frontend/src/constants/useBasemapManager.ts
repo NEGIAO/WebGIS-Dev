@@ -380,6 +380,18 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'imagery_mapbox',
+        name: 'Mapbox影像',
+        category: 'imagery',
+        group: '影像',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ'
+                }),
+            ),
+    },
+    {
         id: 'imagery_yandex',
         name: 'Yandex影像',
         category: 'imagery',
@@ -1296,6 +1308,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
     { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
+    { id: 'imagery_mapbox_preset', label: 'Mapbox影像', stack: ['imagery_mapbox','label_tuxin'] },
 
     // --- 矢量类 ---
     {
