@@ -435,7 +435,7 @@ import { createLayerExporter, isVectorManagedLayer } from '../utils/layerExportS
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
-const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 17 }; //初始位置
+const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; //初始位置
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 
 // 天地图 Token：优先使用环境变量，否则使用默认值

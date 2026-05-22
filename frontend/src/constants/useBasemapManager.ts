@@ -109,7 +109,8 @@ type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
 // export const DEFAULT_BASEMAP_PRESET_ID = 'tianDiTu';
 // export const DEFAULT_BASEMAP_PRESET_ID = 'local';
 // export const DEFAULT_BASEMAP_PRESET_ID = 'google';
-export const DEFAULT_BASEMAP_PRESET_ID = 'custom_mapbox_unlabeled_preset';
+// export const DEFAULT_BASEMAP_PRESET_ID = 'custom_mapbox_unlabeled_preset';
+export const DEFAULT_BASEMAP_PRESET_ID = 'custom_China_Blender_preset_2';
 // //gac谷歌
 // ========== 响应式状态 ==========
 /** Google 主机选择状态（全局单例） */
@@ -1335,7 +1336,8 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     // --- 艺术风格/Mapbox ---
     { id: 'custom_mapbox_labeled_preset', label: 'Mapbox自定义', stack: ['custom_mapbox_labeled'] },
     { id: 'custom_mapbox_unlabeled_preset',label: 'Mapbox(无注记)',stack: ['custom_mapbox_unlabeled', 'label_tuxin'],},
-    { id: 'custom_China_Blender_preset', label: 'China Blender', stack: ['custom_China_Blender','terrain_google'] },
+    { id: 'custom_China_Blender_preset', label: 'China Blender1', stack: ['custom_China_Blender','terrain_google'] },
+        { id: 'custom_China_Blender_preset_2', label: 'China Blender2', stack: ['custom_China_Blender'] },
     { id: 'vector_carton_light_preset', label: 'Carto浅色', stack: ['vector_carton_light'] },
     { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
