@@ -570,15 +570,44 @@ export async function apiAgentChatCompletions(payload = {}) {
               .slice(-12)
         : [];
 
-    return backendAPI.post('/api/agent/chat/completions', {
+    const body = {
         message: String(payload.message || '').trim(),
         history,
         location_context: String(payload.location_context || '').trim(),
-    });
+    };
+
+    // 传递用户配置面板中尚未保存的参数覆盖
+    if (payload.override_base_url) {
+        body.override_base_url = String(payload.override_base_url).trim();
+    }
+    if (payload.override_api_key) {
+        body.override_api_key = String(payload.override_api_key).trim();
+    }
+    if (payload.override_model) {
+        body.override_model = String(payload.override_model).trim();
+    }
+    if (typeof payload.override_timeout_seconds !== 'undefined' && payload.override_timeout_seconds !== null) {
+        body.override_timeout_seconds = Number(payload.override_timeout_seconds);
+    }
+    if (typeof payload.override_max_tokens !== 'undefined' && payload.override_max_tokens !== null) {
+        body.override_max_tokens = Number(payload.override_max_tokens);
+    }
+    if (typeof payload.override_temperature !== 'undefined' && payload.override_temperature !== null) {
+        body.override_temperature = Number(payload.override_temperature);
+    }
+
+    return backendAPI.post('/api/agent/chat/completions', body);
 }
 
-export async function apiAgentListModels() {
-    return backendAPI.get('/api/agent/models');
+export async function apiAgentListModels(options = {}) {
+    const params = {};
+    if (options.override_base_url) {
+        params.override_base_url = String(options.override_base_url).trim();
+    }
+    if (options.override_api_key) {
+        params.override_api_key = String(options.override_api_key).trim();
+    }
+    return backendAPI.get('/api/agent/models', { params });
 }
 
 export async function apiAgentSaveModelPreference(preferredModel) {

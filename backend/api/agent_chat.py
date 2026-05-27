@@ -101,6 +101,13 @@ class AgentChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=12)
     location_context: Optional[str] = Field(default=None, max_length=1000)
+    # 用户配置面板中尚未保存的参数覆盖（动态跟随用户输入）
+    override_base_url: Optional[str] = Field(default=None, max_length=240)
+    override_api_key: Optional[str] = Field(default=None, max_length=5000)
+    override_model: Optional[str] = Field(default=None, max_length=160)
+    override_timeout_seconds: Optional[int] = Field(default=None, ge=5, le=180)
+    override_max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
+    override_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
 
 
 class AgentConfigUpdateRequest(BaseModel):
@@ -1674,8 +1681,21 @@ async def agent_chat_completions(
         )
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
-    api_key = str(runtime.get("api_key") or "").strip()
-    runtime_model = str(runtime.get("model") or "").strip()
+
+    # 优先使用前端传入的 override 参数（用户配置面板中尚未保存的设置），
+    # 使对话能动态跟随用户在面板中填写的 base_url / api_key / model 等参数，
+    # 而非仅使用数据库中已持久化的值。
+    override_api_key = str(payload.override_api_key or "").strip()
+    override_base_url = str(payload.override_base_url or "").strip()
+    override_model = str(payload.override_model or "").strip()
+
+    api_key = override_api_key if override_api_key else str(runtime.get("api_key") or "").strip()
+    runtime_model = override_model if override_model else str(runtime.get("model") or "").strip()
+    base_url = _normalize_base_url(override_base_url) if override_base_url else str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+    override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS)
+    override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS)
+    override_temp = float(payload.override_temperature) if payload.override_temperature is not None else float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE)
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1717,6 +1737,7 @@ async def agent_chat_completions(
             "api_key_source": runtime.get("api_key_source"),
             "model_source": runtime.get("model_source"),
             "has_location_context": bool(location_context),
+            "has_overrides": bool(override_api_key or override_base_url or override_model),
         },
         ensure_ascii=False,
     )
@@ -1726,13 +1747,13 @@ async def agent_chat_completions(
     try:
         upstream_data = await _call_upstream_chat(
             request,
-            base_url=str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL),
+            base_url=base_url,
             api_key=api_key,
             model=runtime_model,
             messages=request_messages,
-            timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
-            max_tokens=int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS),
-            temperature=float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE),
+            timeout_seconds=override_timeout,
+            max_tokens=override_max_tokens,
+            temperature=override_temp,
         )
 
         reply = _extract_assistant_reply(upstream_data)
@@ -1971,13 +1992,19 @@ async def update_agent_user_config(
 async def get_available_models(
     request: Request,
     session: Dict[str, Any] = Depends(require_login),
+    override_base_url: Optional[str] = None,
+    override_api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    功能：请求上游模型端点并返回“当前账号真实可用”的模型列表。
+    功能：请求上游模型端点并返回"当前账号真实可用"的模型列表。
 
     参数：
     - request: FastAPI 请求对象，用于复用应用级 HTTP 客户端。
     - session: 登录会话。
+    - override_base_url: 可选，前端用户配置面板中尚未保存的 base_url，
+      传入后优先使用此地址请求上游 /models（不影响后端持久化配置）。
+    - override_api_key: 可选，前端用户配置面板中尚未保存的 api_key，
+      传入后优先使用此密钥请求上游 /models。
 
     返回：
     - models: 标准化模型列表（优先来自上游 `/models`）。
@@ -1987,16 +2014,32 @@ async def get_available_models(
 
     处理过程：
     1. 读取当前用户生效运行时配置；
-    2. 调用上游 `/models`（含 `/v1/models` 回退探测）；
-    3. 标准化并去重返回；
-    4. 若当前生效模型未在上游列表中，附加为 `configured` 记录。
+    2. 若前端传入 override_base_url / override_api_key，优先使用（动态跟随用户面板设置）；
+    3. 调用上游 `/models`（含 `/v1/models` 回退探测）；
+    4. 标准化并去重返回；
+    5. 若当前生效模型未在上游列表中，附加为 `configured` 记录。
     """
     username = str(session.get("username") or "")
     fallback_reason = None
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
-    base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
-    api_key = str(runtime.get("api_key") or "").strip()
+
+    # 优先使用前端传入的 override 参数（用户配置面板中尚未保存的设置），
+    # 使刷新模型列表能动态跟随用户在面板中填写的 base_url / api_key，
+    # 而非仅使用数据库中已持久化的值。
+    override_base_url_clean = str(override_base_url or "").strip()
+    override_api_key_clean = str(override_api_key or "").strip()
+
+    if override_base_url_clean:
+        base_url = _normalize_base_url(override_base_url_clean)
+    else:
+        base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+
+    if override_api_key_clean:
+        api_key = override_api_key_clean
+    else:
+        api_key = str(runtime.get("api_key") or "").strip()
+
     current_model = str(runtime.get("model") or "").strip()
 
     if not api_key:

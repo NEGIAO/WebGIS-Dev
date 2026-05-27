@@ -51,7 +51,7 @@
                     <input
                         v-model="userConfigDraft.api_key"
                         type="password"
-                        placeholder="sk-...（仅存后端，不在前端明文持久化）"
+                        placeholder="sk-...（填写后启用前端直连模式，不经过后端代理）"
                     />
                 </label>
                 <label class="user-config-item">
@@ -64,45 +64,19 @@
                 <label class="user-config-item">
                     <span>Model</span>
                     <div style="display: flex; gap: 6px; align-items: center">
-                        <select
+                        <input
                             v-model="userConfigDraft.model"
-                            class="model-select"
-                        >
-                            <option value="">-- 选择模型 --</option>
+                            list="model-suggestions"
+                            class="model-input"
+                            placeholder="输入或选择模型名称"
+                        />
+                        <datalist id="model-suggestions">
                             <option
-                                v-if="!configuredModels.length && !upstreamModels.length"
-                                value=""
-                                disabled
-                            >
-                                未获取到可用模型
-                            </option>
-                            <optgroup
-                                v-if="configuredModels.length"
-                                label="当前配置模型"
-                            >
-                                <option
-                                    v-for="m in configuredModels"
-                                    :key="m.id"
-                                    :value="m.id"
-                                    :disabled="m.chat_compatible === false"
-                                >
-                                    {{ formatModelOptionLabel(m) }}
-                                </option>
-                            </optgroup>
-                            <optgroup
-                                v-if="upstreamModels.length"
-                                label="上游可用模型"
-                            >
-                                <option
-                                    v-for="m in upstreamModels"
-                                    :key="m.id"
-                                    :value="m.id"
-                                    :disabled="m.chat_compatible === false"
-                                >
-                                    {{ formatModelOptionLabel(m) }}
-                                </option>
-                            </optgroup>
-                        </select>
+                                v-for="m in allModels"
+                                :key="m.id"
+                                :value="m.id"
+                            >{{ m.name || m.id }}</option>
+                        </datalist>
                         <button
                             @click="loadAvailableModels"
                             class="refresh-models-btn"
@@ -129,7 +103,7 @@
                         v-model.number="userConfigDraft.max_tokens"
                         type="number"
                         min="1"
-                        max="8192"
+                        max="128000"
                     />
                 </label>
                 <label class="user-config-item">
@@ -175,25 +149,49 @@
                 </button>
             </div>
 
-            <small class="hint"
-                >提示：你可以使用自己申请的 Agent 账号，调用仍然由后端转发执行。</small
-            >
+            <small class="hint">
+                💡 直连模式下消息直接发送到 LLM 服务，不经后端代理。配置仅保存在当前页面会话中。
+            </small>
         </div>
 
         <div class="service-status">
             <div class="status-line">
+                <span class="status-label">路由模式:</span>
+                <button
+                    @click="toggleRoutingMode"
+                    :class="['mode-toggle-btn', isDirectMode ? 'mode-direct' : 'mode-proxy']"
+                    title="点击切换路由模式"
+                >
+                    {{ isDirectMode ? '🔗 前端直连' : '🛡️ 后端代理' }}
+                    <span class="mode-toggle-hint">（点击切换）</span>
+                </button>
+            </div>
+            <div class="status-line">
                 <span class="status-label">服务状态:</span>
                 <span :class="['status-value', serviceReady ? 'status-ready' : 'status-unready']">
-                    {{ serviceReady ? '已连接后端 Agent' : '未就绪（请联系管理员配置）' }}
+                    {{ serviceReady ? (isDirectMode ? '个人 API 已配置' : '已连接后端 Agent') : '未就绪（请配置 API Key 或联系管理员）' }}
                 </span>
             </div>
             <div class="status-line">
                 <span class="status-label">当前模型:</span>
-                <span class="status-value">{{ modelName || '未配置' }}</span>
+                <span class="status-value">{{ modelName || '未配置' }}
+                    <span v-if="directConfig.model && isDirectMode" class="model-source-tag">直连</span>
+                    <span v-else-if="modelName" class="model-source-tag proxy">代理</span>
+                </span>
             </div>
-            <div class="status-line">
+            <div
+                v-if="!isDirectMode"
+                class="status-line"
+            >
                 <span class="status-label">今日对话额度:</span>
                 <span class="status-value">{{ quotaText }}</span>
+            </div>
+            <div
+                v-if="isDirectMode"
+                class="status-line"
+            >
+                <span class="status-label">额度:</span>
+                <span class="status-value status-direct">无限制（使用个人 Key）</span>
             </div>
             <small class="hint">{{ statusHint }}</small>
         </div>
@@ -271,7 +269,7 @@ const inputMessage = ref('');
 const isLoading = ref(false);
 const chatBody = ref(null);
 const modelName = ref('');
-const statusHint = ref('正在连接后端 Agent...');
+const statusHint = ref('正在初始化...');
 const serviceReady = ref(false);
 const showUserConfig = ref(false);
 const userConfigSaving = ref(false);
@@ -281,7 +279,7 @@ const userConfigDraft = ref({
     model: '',
     system_prompt: '',
     timeout_seconds: 45,
-    max_tokens: 512,
+    max_tokens: 8192,
     temperature: 0.2,
 });
 const quota = ref({
@@ -298,6 +296,85 @@ const modelLoadHint = ref('');
 const configuredModels = ref([]);
 const upstreamModels = ref([]);
 
+/** 合并所有可用模型列表，供 datalist 使用 */
+const allModels = computed(() => {
+    return [...configuredModels.value, ...upstreamModels.value];
+});
+
+/**
+ * 前端直连模式配置（仅保存在内存，不持久化，刷新页面后需重新输入 API Key）
+ * 默认值指向 mimo-v2.5-pro，用户可自由修改。
+ */
+const directConfig = ref({
+    api_key: 'tp-cs24lphikpjnqg0kkctxl167xhnkv4writnf46j3cv4y0nsw',
+    base_url: 'https://token-plan-cn.xiaomimimo.com/v1',
+    model: 'mimo-v2.5-pro',
+    system_prompt: '',
+    timeout_seconds: 45,
+    max_tokens: 8192,
+    temperature: 0.2,
+});
+
+/**
+ * 是否处于前端直连模式
+ * 条件：用户配置了个人 API Key 且填写了 Base URL
+ */
+const isDirectMode = computed(() => {
+    return !!(directConfig.value.api_key && directConfig.value.base_url);
+});
+
+/**
+ * 切换路由模式
+ * 在直连模式和代理模式之间切换，自动同步配置到配置面板
+ */
+const toggleRoutingMode = () => {
+    if (isDirectMode.value) {
+        // 当前是直连 → 切换到代理：清空直连配置
+        directConfig.value = {
+            api_key: '',
+            base_url: '',
+            model: '',
+            system_prompt: '',
+            timeout_seconds: 45,
+            max_tokens: 8192,
+            temperature: 0.2,
+        };
+        message.success('已切换为后端代理模式');
+    } else {
+        // 当前是代理 → 切换到直连：使用默认直连配置
+        directConfig.value = {
+            api_key: 'tp-cs24lphikpjnqg0kkctxl167xhnkv4writnf46j3cv4y0nsw',
+            base_url: 'https://token-plan-cn.xiaomimimo.com/anthropic',
+            model: 'mimo-v2.5-pro',
+            system_prompt: '',
+            timeout_seconds: 45,
+            max_tokens: 8192,
+            temperature: 0.2,
+        };
+        message.success('已切换为前端直连模式（默认 mimo-v2.5-pro）');
+    }
+    // 同步到配置面板
+    syncDraftFromDirectConfig();
+    updateWelcomeMessageIfNeeded();
+};
+
+/**
+ * 将直连配置同步到配置面板（供用户查看和编辑）
+ */
+const syncDraftFromDirectConfig = () => {
+    if (isDirectMode.value) {
+        userConfigDraft.value = {
+            api_key: directConfig.value.api_key,
+            base_url: directConfig.value.base_url,
+            model: directConfig.value.model,
+            system_prompt: directConfig.value.system_prompt,
+            timeout_seconds: directConfig.value.timeout_seconds,
+            max_tokens: directConfig.value.max_tokens,
+            temperature: directConfig.value.temperature,
+        };
+    }
+};
+
 const messages = ref([]);
 const firstMessageLocationInjected = ref(false);
 const clearConfirmArmed = ref(false);
@@ -307,12 +384,20 @@ const MAX_CONTEXT_MESSAGES = 6;
 const MAX_CHARS_PER_MESSAGE = 600;
 const AUTO_PRUNE_AFTER_TURNS = 12;
 
-const initWelcomeMessage = () => ({
-    role: 'assistant',
-    content: serviceReady.value
-        ? '您好！我是由后端代理的 AI 助手，您可以直接开始提问。'
-        : '您好！AI 服务暂未就绪。请联系管理员在后台配置 Agent Key。',
-});
+const initWelcomeMessage = () => {
+    if (isDirectMode.value) {
+        return {
+            role: 'assistant',
+            content: `您好！当前为前端直连模式，消息将直接发送到 ${directConfig.value.base_url}。`,
+        };
+    }
+    return {
+        role: 'assistant',
+        content: serviceReady.value
+            ? '您好！我是由后端代理的 AI 助手，您可以直接开始提问。'
+            : '您好！AI 服务暂未就绪。请在 ⚙️ 配置中填写个人 API Key 启用直连模式，或联系管理员配置后端。',
+    };
+};
 
 messages.value = [initWelcomeMessage()];
 
@@ -347,12 +432,17 @@ const quotaText = computed(() => {
 });
 
 const quotaExhausted = computed(() => {
+    // 直连模式下不受后端配额限制
+    if (isDirectMode.value) return false;
     return Number.isFinite(quota.value.remaining) && Number(quota.value.remaining) <= 0;
 });
 
 const inputPlaceholder = computed(() => {
+    if (isDirectMode.value) {
+        return '请输入您的问题（前端直连模式）...';
+    }
     if (!serviceReady.value) {
-        return '服务未就绪，请联系管理员配置 Agent Key';
+        return '服务未就绪，请在 ⚙️ 配置中填写 API Key 或联系管理员';
     }
     if (quotaExhausted.value) {
         return '今日额度已达上限，请明日再试';
@@ -361,9 +451,10 @@ const inputPlaceholder = computed(() => {
 });
 
 const sendDisabled = computed(() => {
-    return (
-        isLoading.value || !inputMessage.value.trim() || !serviceReady.value || quotaExhausted.value
-    );
+    if (isLoading.value || !inputMessage.value.trim()) return true;
+    // 直连模式下只要 inputMessage 有内容就可发送
+    if (isDirectMode.value) return false;
+    return !serviceReady.value || quotaExhausted.value;
 });
 
 const updateWelcomeMessageIfNeeded = () => {
@@ -379,6 +470,7 @@ const updateWelcomeMessageIfNeeded = () => {
     const shouldReplace =
         text.includes('AI 服务暂未就绪') ||
         text.includes('由后端代理的 AI 助手') ||
+        text.includes('前端直连模式') ||
         text.includes('初始化中');
 
     if (shouldReplace) {
@@ -386,21 +478,163 @@ const updateWelcomeMessageIfNeeded = () => {
     }
 };
 
+/**
+ * 前端直连调用 LLM API（OpenAI 兼容格式）
+ *
+ * 当用户配置了个人 API Key 时，直接从前端发起 HTTP 请求到 LLM 服务端点，
+ * 绕过后端代理。适用于用户使用自己申请的 API Key 场景。
+ *
+ * @param {Object} options - 调用参数
+ * @param {string} options.baseUrl - LLM API 基础地址
+ * @param {string} options.apiKey - API 密钥
+ * @param {string} options.model - 模型名称
+ * @param {Array} options.messages - 消息列表 [{role, content}]
+ * @param {number} options.maxTokens - 最大生成 token 数
+ * @param {number} options.temperature - 采样温度
+ * @param {number} options.timeoutSeconds - 超时秒数
+ * @returns {Promise<Object>} OpenAI 兼容的响应数据
+ */
+const callDirectLLM = async ({ baseUrl, apiKey, model, messages: apiMessages, maxTokens, temperature, timeoutSeconds }) => {
+    const cleanBase = String(baseUrl || '').replace(/\/+$/, '');
+    const endpoint = `${cleanBase}/chat/completions`;
+
+    const controller = new AbortController();
+    const timeoutMs = Math.max(5000, Math.min(180000, (timeoutSeconds || 45) * 1000));
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model,
+                messages: apiMessages,
+                max_tokens: maxTokens || 512,
+                temperature: temperature ?? 0.2,
+                stream: false,
+            }),
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            const errMsg =
+                errData?.error?.message ||
+                errData?.message ||
+                errData?.detail ||
+                `HTTP ${response.status}`;
+            throw new Error(errMsg);
+        }
+
+        return await response.json();
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error('请求超时，请增加 Timeout 设置或稍后重试');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
+/**
+ * 直接从用户配置的 LLM 端点获取可用模型列表
+ *
+ * 尝试请求 {baseUrl}/models 和 {baseUrl}/v1/models 两个端点，
+ * 返回第一个成功响应的模型列表。
+ *
+ * @param {string} baseUrl - LLM API 基础地址
+ * @param {string} apiKey - API 密钥
+ * @returns {Promise<Array>} 标准化的模型对象列表
+ */
+const fetchDirectModels = async (baseUrl, apiKey) => {
+    const cleanBase = String(baseUrl || '').replace(/\/+$/, '');
+    const endpoints = [`${cleanBase}/models`];
+    if (!cleanBase.endsWith('/v1')) {
+        endpoints.push(`${cleanBase}/v1/models`);
+    }
+
+    for (const endpoint of endpoints) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            const response = await fetch(endpoint, {
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    Accept: 'application/json',
+                },
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                const data = await response.json();
+                const rawList =
+                    data?.data || data?.models || data?.result || (Array.isArray(data) ? data : []);
+                return rawList.map((m) => ({
+                    id: m.id || m.name || String(m),
+                    name: m.name || m.id || String(m),
+                    source: 'upstream',
+                    chat_compatible: true,
+                }));
+            }
+        } catch {
+            continue;
+        }
+    }
+    return [];
+};
+
+/**
+ * 构建带位置上下文的系统提示词
+ *
+ * @param {string} basePrompt - 基础系统提示词
+ * @param {string} locationContext - 用户位置上下文信息
+ * @returns {string} 合并后的完整系统提示词
+ */
+const buildSystemPrompt = (basePrompt, locationContext) => {
+    let prompt = basePrompt || 'You are a helpful AI assistant. Reply in concise Chinese unless the user asks for another language.';
+    const locationText = String(locationContext || '').trim();
+    if (locationText) {
+        prompt += `\n\n【用户地理位置信息】\n${locationText}\n\n请基于用户的地理位置提供相关的WebGIS和地理空间信息服务。`;
+    }
+    return prompt;
+};
+
 const reloadAgentConfig = async (showToast = false) => {
     try {
-        const result = await apiAgentGetChatConfig();
-        const data = result?.data || result || {};
-
-        serviceReady.value = !!data?.service_ready;
-        modelName.value = String(data?.model || '');
-        quota.value = normalizeQuota(data?.quota || {});
-
-        if (serviceReady.value) {
-            statusHint.value = quotaExhausted.value
-                ? '今日对话额度已达上限，请明日再试。'
-                : '后端 Agent 已连接，前端不会暴露任何对话密钥。';
+        if (isDirectMode.value) {
+            // 直连模式：使用本地 directConfig 更新状态
+            serviceReady.value = true;
+            modelName.value = directConfig.value.model || '未配置';
+            statusHint.value = '前端直连模式：使用个人 API Key 直接调用 LLM 服务，不经过后端代理。';
+            // 仍然尝试获取后端配额信息（供参考）
+            try {
+                const result = await apiAgentGetChatConfig();
+                const data = result?.data || result || {};
+                quota.value = normalizeQuota(data?.quota || {});
+            } catch {
+                // 直连模式下后端错误可忽略
+            }
         } else {
-            statusHint.value = '后端 Agent 未完成配置，请管理员在用户中心设置 Agent Key。';
+            // 代理模式：从后端获取完整配置
+            const result = await apiAgentGetChatConfig();
+            const data = result?.data || result || {};
+
+            serviceReady.value = !!data?.service_ready;
+            modelName.value = String(data?.model || '');
+            quota.value = normalizeQuota(data?.quota || {});
+
+            if (serviceReady.value) {
+                statusHint.value = quotaExhausted.value
+                    ? '今日对话额度已达上限，请明日再试。'
+                    : '后端 Agent 已连接，前端不会暴露任何对话密钥。';
+            } else {
+                statusHint.value = '后端 Agent 未完成配置。请在 ⚙️ 配置中填写个人 API Key 启用直连模式。';
+            }
         }
 
         updateWelcomeMessageIfNeeded();
@@ -409,7 +643,9 @@ const reloadAgentConfig = async (showToast = false) => {
             message.success('已刷新 AI 服务状态');
         }
     } catch (error) {
-        serviceReady.value = false;
+        if (!isDirectMode.value) {
+            serviceReady.value = false;
+        }
         statusHint.value = `状态获取失败：${error.message}`;
         if (showToast) {
             message.error(`刷新失败：${error.message}`);
@@ -424,15 +660,20 @@ const loadUserConfig = async (showToast = false) => {
         const personal = data?.personal || {};
         const effective = data?.effective || {};
 
-        userConfigDraft.value = {
-            api_key: '',
-            base_url: String(personal?.base_url || effective?.base_url || ''),
-            model: String(personal?.model || ''),
-            system_prompt: String(personal?.system_prompt || ''),
-            timeout_seconds: Number(personal?.timeout_seconds ?? effective?.timeout_seconds ?? 45),
-            max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 512),
-            temperature: Number(personal?.temperature ?? effective?.temperature ?? 0.2),
-        };
+        // 如果当前是直连模式，优先显示直连配置
+        if (isDirectMode.value) {
+            syncDraftFromDirectConfig();
+        } else {
+            userConfigDraft.value = {
+                api_key: '',
+                base_url: String(personal?.base_url || effective?.base_url || ''),
+                model: String(personal?.model || effective?.model || ''),
+                system_prompt: String(personal?.system_prompt || ''),
+                timeout_seconds: Number(personal?.timeout_seconds ?? effective?.timeout_seconds ?? 45),
+                max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 8192),
+                temperature: Number(personal?.temperature ?? effective?.temperature ?? 0.2),
+            };
+        }
 
         if (showToast) {
             message.success('已加载你的 Agent 配置');
@@ -452,54 +693,80 @@ const toggleUserConfig = async () => {
     }
 };
 
+/**
+ * 加载可用模型列表
+ *
+ * 直连模式：直接从用户配置的 LLM 端点获取模型列表
+ * 代理模式：通过后端代理获取模型列表（支持 override 参数动态跟随面板设置）
+ */
 const loadAvailableModels = async () => {
     isLoadingModels.value = true;
     modelLoadHint.value = '正在加载模型列表...';
 
     try {
-        // 调用后端 API 获取可用的模型列表
-        const response = await apiAgentListModels();
-        const data = response?.data || response || {};
-        const models = Array.isArray(data?.models) ? data.models : [];
+        let models = [];
+
+        if (isDirectMode.value) {
+            // 直连模式：从用户端点直接获取模型列表
+            const dc = directConfig.value;
+            models = await fetchDirectModels(dc.base_url, dc.api_key);
+            if (!models.length) {
+                modelLoadHint.value = '未从上游返回可用模型，请检查 Base URL / API Key 是否正确。';
+            } else {
+                modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（直连模式）`;
+            }
+        } else {
+            // 代理模式：通过后端获取
+            const overrideOptions = {};
+            const draftBaseUrl = String(userConfigDraft.value.base_url || '').trim();
+            const draftApiKey = String(userConfigDraft.value.api_key || '').trim();
+            if (draftBaseUrl) {
+                overrideOptions.override_base_url = draftBaseUrl;
+            }
+            if (draftApiKey) {
+                overrideOptions.override_api_key = draftApiKey;
+            }
+            const response = await apiAgentListModels(overrideOptions);
+            const data = response?.data || response || {};
+            models = Array.isArray(data?.models) ? data.models : [];
+
+            if (!models.length) {
+                modelLoadHint.value = '未从上游返回可用模型，请检查 Base URL / API Key。';
+                if (data?.fallback_reason) {
+                    modelLoadHint.value += `（${data.fallback_reason}）`;
+                }
+            } else {
+                modelLoadHint.value = `✅ 已加载 ${models.length} 个模型`;
+            }
+        }
 
         configuredModels.value = models.filter((m) => m?.source !== 'upstream');
         upstreamModels.value = models.filter((m) => m?.source === 'upstream');
 
-        const currentModel = String(data?.current_model || '').trim();
-
-        // 零配置即刻响应：如果用户未选择模型，自动从可用列表中随机选择一个
-        // 这样确保首条消息请求能够成功转发
+        // 零配置即刻响应：如果用户未选择模型，自动从可用列表中选择
         if (!String(userConfigDraft.value.model || '').trim()) {
+            const currentModel = isDirectMode.value
+                ? ''
+                : String(
+                      (await apiAgentGetChatConfig().catch(() => ({})))?.data?.model || '',
+                  ).trim();
+
             if (currentModel) {
-                // 若后端已推荐（通常是管理员配置的默认模型或用户偏好），使用它
                 userConfigDraft.value.model = currentModel;
             } else if (models.length > 0) {
-                // 否则从可用列表中随机选择一个
                 const chatModels = models.filter((m) => m?.chat_compatible !== false);
                 if (chatModels.length > 0) {
                     const randomModel = chatModels[Math.floor(Math.random() * chatModels.length)];
                     userConfigDraft.value.model = String(randomModel?.id || '');
-                    // 异步保存为用户偏好（后台保存，不阻塞）
-                    if (userConfigDraft.value.model) {
-                        apiAgentSaveModelPreference(userConfigDraft.value.model).catch((e) => {
-                            logger.debug(`Auto-save model preference failed: ${e.message}`);
-                        });
+                    // 异步保存为用户偏好
+                    if (userConfigDraft.value.model && !isDirectMode.value) {
+                        apiAgentSaveModelPreference(userConfigDraft.value.model).catch(() => {});
                     }
                 }
             }
         }
-
-        if (!models.length) {
-            modelLoadHint.value = '未从上游返回可用模型，请检查 Base URL / API Key。';
-            if (data?.fallback_reason) {
-                modelLoadHint.value += `（${data.fallback_reason}）`;
-            }
-        } else {
-            modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（上游 ${upstreamModels.value.length}）`;
-        }
     } catch (error) {
         modelLoadHint.value = `❌ 加载模型列表失败: ${error.message}`;
-        message.error(`加载模型列表失败: ${error.message}`);
         configuredModels.value = [];
         upstreamModels.value = [];
 
@@ -526,36 +793,77 @@ const formatModelOptionLabel = (model = {}) => {
     return name;
 };
 
+/**
+ * 保存用户配置
+ *
+ * - 如果用户填写了 API Key + Base URL → 启用前端直连模式（Key 仅存内存，不发后端）
+ * - 非敏感字段（base_url、model 等）始终同步保存到后端以保持跨设备一致性
+ * - 如果用户未填写 API Key → 切换为后端代理模式
+ */
 const saveUserConfig = async () => {
     userConfigSaving.value = true;
     try {
-        const payload = {
-            api_key: String(userConfigDraft.value.api_key || '').trim(),
-            base_url: String(userConfigDraft.value.base_url || '').trim(),
+        const personalApiKey = String(userConfigDraft.value.api_key || '').trim();
+        const personalBaseUrl = String(userConfigDraft.value.base_url || '').trim();
+
+        // 非敏感字段始终保存到后端（保持跨设备一致性）
+        const backendPayload = {
+            base_url: personalBaseUrl,
             model: String(userConfigDraft.value.model || '').trim(),
             system_prompt: String(userConfigDraft.value.system_prompt || '').trim(),
             timeout_seconds: Number(userConfigDraft.value.timeout_seconds || 45),
-            max_tokens: Number(userConfigDraft.value.max_tokens || 512),
+            max_tokens: Number(userConfigDraft.value.max_tokens || 8192),
             temperature: Number(userConfigDraft.value.temperature ?? 0.2),
         };
 
-        await apiAgentUpdateUserConfig(payload);
+        // API Key 不发送到后端
+        if (personalApiKey) {
+            // 直连模式：Key 仅保存在前端内存
+            directConfig.value = {
+                api_key: personalApiKey,
+                ...backendPayload,
+            };
+        } else {
+            // 代理模式：清空直连配置
+            directConfig.value = {
+                api_key: '',
+                base_url: '',
+                model: '',
+                system_prompt: '',
+                timeout_seconds: 45,
+                max_tokens: 8192,
+                temperature: 0.2,
+            };
+        }
 
-        // 若用户在个人配置中选择了特定模型，保存为偏好设置（用于跨设备同步）
-        if (payload.model) {
+        // 尝试保存到后端（非敏感字段），失败不影响直连模式
+        try {
+            await apiAgentUpdateUserConfig(backendPayload);
+        } catch (backendError) {
+            console.warn('[ChatPanel] 后端配置保存失败（直连模式不受影响）:', backendError.message);
+        }
+
+        // 保存模型偏好
+        if (backendPayload.model) {
             try {
-                await apiAgentSaveModelPreference(payload.model);
-            } catch (e) {
-                logger.debug(`Failed to save model preference: ${e.message}`);
-                // 不中断主流程，模型偏好是可选的
+                await apiAgentSaveModelPreference(backendPayload.model);
+            } catch {
+                // 不中断主流程
             }
         }
 
+        // 清空 draft 中的 API Key（安全考虑）
         userConfigDraft.value.api_key = '';
+
         await reloadAgentConfig(false);
-        message.success('你的 Agent 配置已保存');
+
+        if (personalApiKey) {
+            message.success('已启用前端直连模式（API Key 仅保存在当前会话，刷新后需重新输入）');
+        } else {
+            message.success('配置已保存到后端（后端代理模式）');
+        }
     } catch (error) {
-        message.error(`保存个人配置失败：${error.message}`);
+        message.error(`保存配置失败：${error.message}`);
     } finally {
         userConfigSaving.value = false;
     }
@@ -564,10 +872,27 @@ const saveUserConfig = async () => {
 const clearPersonalKey = async () => {
     userConfigSaving.value = true;
     try {
-        await apiAgentUpdateUserConfig({ clear_personal_key: true, api_key: '' });
+        // 清空前端直连配置
+        directConfig.value = {
+            api_key: '',
+            base_url: '',
+            model: '',
+            system_prompt: '',
+            timeout_seconds: 45,
+            max_tokens: 8192,
+            temperature: 0.2,
+        };
         userConfigDraft.value.api_key = '';
+
+        // 同时清除后端存储的 Key
+        try {
+            await apiAgentUpdateUserConfig({ clear_personal_key: true, api_key: '' });
+        } catch {
+            // 后端清除失败不影响本地清除
+        }
+
         await reloadAgentConfig(false);
-        message.success('已清除你的个人 Agent Key');
+        message.success('已清除个人 API Key，切换为后端代理模式');
     } catch (error) {
         message.error(`清除失败：${error.message}`);
     } finally {
@@ -578,7 +903,24 @@ const clearPersonalKey = async () => {
 const resetProviderOverrides = async () => {
     userConfigSaving.value = true;
     try {
-        await apiAgentUpdateUserConfig({ reset_provider_overrides: true });
+        // 清空前端直连配置
+        directConfig.value = {
+            api_key: '',
+            base_url: '',
+            model: '',
+            system_prompt: '',
+            timeout_seconds: 45,
+            max_tokens: 8192,
+            temperature: 0.2,
+        };
+
+        // 重置后端配置
+        try {
+            await apiAgentUpdateUserConfig({ reset_provider_overrides: true });
+        } catch {
+            // 后端重置失败不影响本地重置
+        }
+
         await loadUserConfig(false);
         await reloadAgentConfig(false);
         message.success('已恢复平台默认参数');
@@ -591,28 +933,9 @@ const resetProviderOverrides = async () => {
 
 const getCachedMapPosition = () => readUserPositionFromCache();
 
-const readUrlBinaryFlag = (key, fallback = '0') => {
-    if (typeof window === 'undefined') return fallback === '1';
-
-    const hash = String(window.location.hash || '');
-    const queryStart = hash.indexOf('?');
-    const hashParams =
-        queryStart >= 0 ? new URLSearchParams(hash.slice(queryStart + 1)) : new URLSearchParams();
-    const searchParams = new URLSearchParams(
-        String(window.location.search || '').replace(/^\?/, ''),
-    );
-
-    const raw = String(hashParams.get(key) ?? searchParams.get(key) ?? fallback)
-        .trim()
-        .toLowerCase();
-    return raw === '1' || raw === 'true';
-};
-
 const buildFirstMessageLocationContext = async () => {
-    // 只在首次消息时注入位置信息（防止重复）
     if (firstMessageLocationInjected.value) return '';
 
-    // 优先使用全局用户位置上下文（通常由IP定位或GPS获得）
     const globalLocation = getGlobalUserLocationContext();
     if (
         globalLocation &&
@@ -631,14 +954,12 @@ const buildFirstMessageLocationContext = async () => {
         return `用户位置上下文（首条消息附带）：来源=${source}，经度=${globalLocation.lon.toFixed(6)}，纬度=${globalLocation.lat.toFixed(6)}，省=${province}，市=${city}，区县=${district}，编码=${adcode}，地址=${address || '待完善'}。`;
     }
 
-    // 其次使用地图缓存的用户位置
     const baseLocation = getCachedMapPosition();
     if (baseLocation) {
         firstMessageLocationInjected.value = true;
         return `用户位置上下文（首条消息附带）：经度=${baseLocation.lon.toFixed(6)}，纬度=${baseLocation.lat.toFixed(6)}。`;
     }
 
-    // 如果都没有，则不附带位置信息但标记已处理
     firstMessageLocationInjected.value = true;
     return '';
 };
@@ -747,6 +1068,13 @@ const clearHistory = () => {
     message.success('聊天历史已清除');
 };
 
+/**
+ * 发送消息
+ *
+ * 根据当前模式选择调用路径：
+ * - 直连模式：前端直接调用 LLM API（callDirectLLM）
+ * - 代理模式：通过后端转发（apiAgentChatCompletions）
+ */
 const sendMessage = async () => {
     if (sendDisabled.value) return;
 
@@ -764,33 +1092,92 @@ const sendMessage = async () => {
     const assistantMsgIndex = messages.value.push({ role: 'assistant', content: '' }) - 1;
 
     try {
-        const result = await apiAgentChatCompletions({
-            message: userMsg,
-            history: requestHistory,
-            location_context: locationContextText,
-        });
+        let reply = '';
+        let usedModel = '';
 
-        const data = result?.data || result || {};
-        const reply = String(data?.reply || '').trim();
+        if (isDirectMode.value) {
+            // ==================== 前端直连模式 ====================
+            const dc = directConfig.value;
+            const systemPrompt = buildSystemPrompt(dc.system_prompt, locationContextText);
+            const apiMessages = [
+                { role: 'system', content: systemPrompt },
+                ...requestHistory,
+                { role: 'user', content: userMsg },
+            ];
+
+            const rawData = await callDirectLLM({
+                baseUrl: dc.base_url,
+                apiKey: dc.api_key,
+                model: dc.model,
+                messages: apiMessages,
+                maxTokens: dc.max_tokens,
+                temperature: dc.temperature,
+                timeoutSeconds: dc.timeout_seconds,
+            });
+
+            // 从 OpenAI 兼容响应中提取回复
+            reply = rawData?.choices?.[0]?.message?.content || '';
+            usedModel = rawData?.model || dc.model || '';
+
+            // 直连模式无后端配额，不更新 quota
+        } else {
+            // ==================== 后端代理模式 ====================
+            const chatPayload = {
+                message: userMsg,
+                history: requestHistory,
+                location_context: locationContextText,
+            };
+
+            // 传递用户配置面板中尚未保存的参数覆盖
+            const draftBaseUrl = String(userConfigDraft.value.base_url || '').trim();
+            const draftApiKey = String(userConfigDraft.value.api_key || '').trim();
+            const draftModel = String(userConfigDraft.value.model || '').trim();
+            const draftTimeout = userConfigDraft.value.timeout_seconds;
+            const draftMaxTokens = userConfigDraft.value.max_tokens;
+            const draftTemperature = userConfigDraft.value.temperature;
+
+            if (draftBaseUrl) chatPayload.override_base_url = draftBaseUrl;
+            if (draftApiKey) chatPayload.override_api_key = draftApiKey;
+            if (draftModel) chatPayload.override_model = draftModel;
+            if (typeof draftTimeout === 'number' && draftTimeout > 0)
+                chatPayload.override_timeout_seconds = draftTimeout;
+            if (typeof draftMaxTokens === 'number' && draftMaxTokens > 0)
+                chatPayload.override_max_tokens = draftMaxTokens;
+            if (typeof draftTemperature === 'number')
+                chatPayload.override_temperature = draftTemperature;
+
+            const result = await apiAgentChatCompletions(chatPayload);
+            const data = result?.data || result || {};
+
+            reply = String(data?.reply || '').trim();
+            usedModel = String(data?.model || '');
+
+            if (data?.quota) {
+                quota.value = normalizeQuota(data.quota);
+            }
+        }
 
         messages.value[assistantMsgIndex].content = reply || '（未返回有效内容）';
 
-        if (data?.model) {
-            modelName.value = String(data.model);
+        if (usedModel) {
+            modelName.value = usedModel;
         }
 
-        if (data?.quota) {
-            quota.value = normalizeQuota(data.quota);
-        }
-
-        if (quotaExhausted.value) {
+        if (!isDirectMode.value && quotaExhausted.value) {
             statusHint.value = '今日对话额度已用完，请明日再试或切换更高权限账号。';
         }
     } catch (error) {
         messages.value[assistantMsgIndex].content = `出错啦: ${error.message}`;
+
         if (error?.isQuotaExceeded) {
             statusHint.value = '今日额度已达上限，请明日再试。';
             await reloadAgentConfig(false);
+        }
+
+        // 直连模式下的 CORS 错误提示
+        if (isDirectMode.value && /Failed to fetch|NetworkError|CORS/i.test(String(error?.message || ''))) {
+            messages.value[assistantMsgIndex].content =
+                `网络请求失败: ${error.message}\n\n提示：直连模式可能遇到 CORS 限制。如果 LLM API 不支持浏览器直接访问，请考虑使用后端代理模式。`;
         }
     } finally {
         isLoading.value = false;
@@ -799,10 +1186,8 @@ const sendMessage = async () => {
 };
 
 onMounted(async () => {
-    // 零配置即刻响应：启动时自动预加载模型列表（背景加载，不阻塞）
-    // 这样即使用户未主动选择模型，系统也会有可用的随机降级模型
+    // 启动时自动预加载模型列表
     loadAvailableModels();
-
     await reloadAgentConfig(false);
 });
 </script>
@@ -868,7 +1253,7 @@ onMounted(async () => {
     font-family: inherit;
 }
 
-.model-select {
+.model-input {
     flex: 1;
     border: 1px solid #d7e5dc;
     border-radius: 6px;
@@ -876,14 +1261,13 @@ onMounted(async () => {
     box-sizing: border-box;
     font-family: inherit;
     background-color: white;
-    cursor: pointer;
 }
 
-.model-select:hover {
+.model-input:hover {
     border-color: #4caf50;
 }
 
-.model-select:focus {
+.model-input:focus {
     outline: none;
     border-color: #4caf50;
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
@@ -964,6 +1348,71 @@ onMounted(async () => {
     color: #c62828;
 }
 
+.status-direct {
+    color: #1565c0;
+}
+
+.status-proxy {
+    color: #6a1b9a;
+}
+
+.mode-toggle-btn {
+    background: none;
+    border: 1px solid #d7e5dc;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.mode-toggle-btn.mode-direct {
+    color: #1565c0;
+    border-color: #90caf9;
+    background: #e3f2fd;
+}
+
+.mode-toggle-btn.mode-direct:hover {
+    background: #bbdefb;
+    border-color: #42a5f5;
+}
+
+.mode-toggle-btn.mode-proxy {
+    color: #6a1b9a;
+    border-color: #ce93d8;
+    background: #f3e5f5;
+}
+
+.mode-toggle-btn.mode-proxy:hover {
+    background: #e1bee7;
+    border-color: #ab47bc;
+}
+
+.mode-toggle-hint {
+    font-size: 0.85em;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.model-source-tag {
+    font-size: 0.7em;
+    font-weight: 400;
+    color: #1565c0;
+    background: #e3f2fd;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+}
+
+.model-source-tag.proxy {
+    color: #6a1b9a;
+    background: #f3e5f5;
+}
+
 .chat-title {
     font-weight: bold;
     font-size: 1em;
@@ -1016,7 +1465,6 @@ onMounted(async () => {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
     word-wrap: break-word;
     white-space: pre-wrap;
-    /* 保留换行和空格 */
 }
 
 .message.user .message-content {
@@ -1103,84 +1551,10 @@ textarea:focus {
     cursor: not-allowed;
 }
 
-.settings-panel {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-    background: white;
-}
-
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.form-group label {
-    font-size: 0.9em;
-    font-weight: 600;
-    color: #444;
-}
-
-.form-group input,
-.form-group select {
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-}
-
-.form-group input:focus,
-.form-group select:focus {
-    outline: none;
-    border-color: #4caf50;
-}
-
-.model-select {
-    width: 100%;
-    cursor: pointer;
-}
-
-.refresh-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1em;
-    margin-left: 8px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.2s;
-}
-
-.refresh-btn:hover:not(:disabled) {
-    background: #f0f0f0;
-}
-
-.refresh-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
 .hint {
     color: #666;
     font-size: 0.85em;
     margin-top: 4px;
     display: block;
-}
-
-.save-btn {
-    margin-top: auto;
-    padding: 10px;
-    background: #107341;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
 }
 </style>
