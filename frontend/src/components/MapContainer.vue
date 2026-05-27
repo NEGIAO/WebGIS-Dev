@@ -122,6 +122,7 @@ import {
     createRouteRenderingFeature,
     createRouteStepInteraction,
     createRouteStepStyles,
+    createSpatialAnalysisFeature,
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature,
 } from '../composables/map';
@@ -769,6 +770,18 @@ const { findManagedFeature, zoomToManagedFeature } = createManagedFeatureOperati
 
 // 绘图与测量交互
 let drawGraphicSeedRef = { value: 1 };
+
+// 空间分析交互
+const { runSpatialAnalysis } = createSpatialAnalysisFeature({
+    mapInstanceRef: mapInstance,
+    createManagedVectorLayer,
+    emitGraphicsOverview,
+    emitUserLayersChange,
+    refreshUserLayerZIndex,
+    userDataLayers,
+    message,
+});
+
 const {
     activateInteraction: activateDrawMeasure,
     clearInteractions: clearDrawMeasureInteractions,
@@ -1836,6 +1849,7 @@ defineExpose({
     toggleSearchLayerCRS,
     exportLayerCoordinates,
     enableBasemapSwipe,
+    runSpatialAnalysis,
 });
 </script>
 

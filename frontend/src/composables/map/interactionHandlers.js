@@ -4,5 +4,6 @@ export { createMapEventHandlers } from './features/useMapEventHandlers';
 export { createMapSearchAndCoordinateInputFeature } from './features/useMapSearchAndCoordinateInput';
 export { createMapUIEventHandlers } from './features/useMapUIEventHandlers';
 export { createRightDragZoomController } from './features/useRightDragZoom';
+export { createSpatialAnalysisFeature } from './features/useSpatialAnalysis';
 export { createStartupTaskSchedulerFeature } from './features/useStartupTaskScheduler';
 export { usePositionCodeTool } from './usePositionCodeTool';

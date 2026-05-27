@@ -142,14 +142,11 @@ frontend/
     │   └── main.css                      # 应用主样式
     │
     ├── components/
-    │   ├── AdministrativeDivisionPanel.vue      # 行政区面板（选区、触发边界加载）
-    │   ├── AdministrativeDivisionTreeNode.vue   # 行政区树节点（递归渲染）
     │   ├── AmapAoiInjectDialog.vue              # 高德 AOI 手动注入弹窗
     │   ├── AttributeTable.vue                   # 属性表组件（字段/筛选/联动）
     │   ├── BusPlannerPanel.vue                  # 公交路径规划面板
     │   ├── ChatPanelContent.vue                 # AI 聊天面板
     │   ├── CompassControlPanel.vue              # 罗盘控制面板（主题本地切换，分享状态不走后端）
-    │   ├── ControlsPanel.vue                    # 左侧工具总面板
     │   ├── DrivingPlannerPanel.vue              # 驾车路径规划面板
     │   ├── FloatingAccountPanel.vue             # 账号悬浮入口（兼容旧引用）
     │   ├── GlobalLoading.vue                    # 全局加载遮罩
@@ -173,6 +170,14 @@ frontend/
     │   ├── TopBar.vue                           # 顶栏组件
     │   ├── LogMonitor.vue                       # 日志监控组件
     │   ├── WeatherChartPanel.vue                # 天气可视化组件
+    │   │
+    │   ├── ControlsPanel/                      # 左侧控制栏功能域
+    │   │   ├── ControlsPanel.vue               # 左侧工具总面板（主入口）
+    │   │   ├── AdministrativeDivisionPanel.vue # 行政区面板（选区、触发边界加载）
+    │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区树节点（递归渲染）
+    │   │   ├── DrawPanel.vue                   # 绘制子面板（点/线/面选择）
+    │   │   ├── MeasurePanel.vue                # 测量子面板（测距/测面选择）
+    │   │   └── SpatialAnalysisPanel.vue        # 空间分析面板（缓冲区/叠加/凸包）
     │   │
     │   ├── Cesium/
     │   │   ├── CesiumAdvancedEffects.vue        # Cesium 高级特效
@@ -265,6 +270,7 @@ frontend/
     │       │   ├── useRouteRendering.js          # 路线渲染
     │       │   ├── useRouteStepInteraction.js    # 路线步骤交互
     │       │   ├── useRouteStepStyles.js         # 路线步骤样式
+    │       │   ├── useSpatialAnalysis.js         # 空间分析（缓冲区/叠加/凸包）
     │       │   ├── useStartupTaskScheduler.js    # 启动任务调度
     │       │   └── useUserLayerApiFacade.js      # 用户图层 API 门面
     │       │

@@ -21,5 +21,6 @@ export { createRightDragZoomController } from './useRightDragZoom';
 export { createRouteRenderingFeature } from './useRouteRendering';
 export { createRouteStepInteraction } from './useRouteStepInteraction';
 export { createRouteStepStyles } from './useRouteStepStyles';
+export { createSpatialAnalysisFeature } from './useSpatialAnalysis';
 export { createStartupTaskSchedulerFeature } from './useStartupTaskScheduler';
 export { createUserLayerApiFacadeFeature } from './useUserLayerApiFacade';

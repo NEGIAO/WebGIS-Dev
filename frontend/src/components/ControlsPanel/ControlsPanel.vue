@@ -27,6 +27,30 @@
             @select="handleDistrictSelect"
         />
 
+        <!-- 绘制子面板 -->
+        <DrawPanel
+            v-if="drawPanelVisible"
+            @draw-type="handleDrawType"
+            @clear="handleClearDraw"
+            @close="drawPanelVisible = false"
+        />
+
+        <!-- 测量子面板 -->
+        <MeasurePanel
+            v-if="measurePanelVisible"
+            @measure-type="handleMeasureType"
+            @clear="handleClearMeasure"
+            @close="measurePanelVisible = false"
+        />
+
+        <!-- 空间分析子面板 -->
+        <SpatialAnalysisPanel
+            v-if="spatialPanelVisible"
+            :available-layers="userLayers"
+            @analysis="handleSpatialAnalysis"
+            @close="spatialPanelVisible = false"
+        />
+
         <!-- Map Swipe 底图选择对话框 -->
         <div
             v-if="showSwipeDialog"
@@ -118,11 +142,13 @@
 </template>
 
 <script setup>
-import { useMessage } from '../composables/useMessage';
+import { useMessage } from '../../composables/useMessage';
 import { ref } from 'vue';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
+import DrawPanel from './DrawPanel.vue';
+import MeasurePanel from './MeasurePanel.vue';
+import SpatialAnalysisPanel from './SpatialAnalysisPanel.vue';
 import {
-    Map as MapIcon,
     Activity,
     Newspaper,
     Columns2,
@@ -134,15 +160,23 @@ import {
     LayoutGrid,
     Download,
 } from 'lucide-vue-next';
-import { useLayerStore } from '../stores/useLayerStore';
-import { useAppStore } from '../stores/useAppStore';
+import { useLayerStore } from '../../stores/useLayerStore';
+import { useAppStore } from '../../stores/useAppStore';
 import { storeToRefs } from 'pinia';
-import { BASEMAP_OPTIONS } from '../constants';
+import { BASEMAP_OPTIONS } from '../../constants';
 
 const message = useMessage();
 const layerStore = useLayerStore();
 const appStore = useAppStore();
 const { logMonitorVisible } = storeToRefs(appStore);
+
+// ========== Props ==========
+const props = defineProps({
+    userLayers: {
+        type: Array,
+        default: () => [],
+    },
+});
 
 // ========== 卷帘分析支持的底图 ==========
 // 排除不支持的底图：'custom'（需要customUrl）和'local_tiles_preset'（本地瓦片）
@@ -163,10 +197,18 @@ const emit = defineEmits([
     'show-analysis',
     'district-select',
     'enable-basemap-swipe',
+    'draw-type',
+    'clear-draw',
+    'measure-type',
+    'clear-measure',
+    'spatial-analysis',
 ]);
 
 const activeId = ref('layers');
 const districtPanelVisible = ref(false);
+const drawPanelVisible = ref(false);
+const measurePanelVisible = ref(false);
+const spatialPanelVisible = ref(false);
 
 const menuItems = [
     { id: 'layers', label: '图层', icon: Layers, action: 'toggleLayers' },
@@ -199,8 +241,18 @@ const handleSelect = (id) => {
     // 1. 更新 UI 选中状态
     activeId.value = id;
 
+    // 关闭不相关的子面板
     if (id !== 'adcode' && districtPanelVisible.value) {
         districtPanelVisible.value = false;
+    }
+    if (id !== 'draw' && drawPanelVisible.value) {
+        drawPanelVisible.value = false;
+    }
+    if (id !== 'measure' && measurePanelVisible.value) {
+        measurePanelVisible.value = false;
+    }
+    if (id !== 'analyze' && spatialPanelVisible.value) {
+        spatialPanelVisible.value = false;
     }
 
     // 2. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
@@ -215,15 +267,19 @@ const handleSelect = (id) => {
             break;
 
         case 'toggleDraw':
-            emit('open-tab', 'toolbox');
-            emit('map-interaction', 'Polygon');
-            message.info('已激活绘制工具（Polygon）');
+            // 切换绘制子面板显示状态
+            drawPanelVisible.value = !drawPanelVisible.value;
+            if (drawPanelVisible.value) {
+                emit('open-tab', 'toolbox');
+            }
             break;
 
         case 'toggleMeasure':
-            emit('open-tab', 'toolbox');
-            emit('map-interaction', 'MeasureDistance');
-            message.info('已激活测距工具');
+            // 切换测量子面板显示状态
+            measurePanelVisible.value = !measurePanelVisible.value;
+            if (measurePanelVisible.value) {
+                emit('open-tab', 'toolbox');
+            }
             break;
 
         case 'toggleMark':
@@ -233,9 +289,11 @@ const handleSelect = (id) => {
             break;
 
         case 'toggleAnalyze':
-            emit('open-tab', 'toolbox');
-            emit('show-analysis');
-            message.info('分析入口已打开（可在工具箱中继续操作）');
+            // 切换空间分析子面板显示状态
+            spatialPanelVisible.value = !spatialPanelVisible.value;
+            if (spatialPanelVisible.value) {
+                emit('open-tab', 'toolbox');
+            }
             break;
 
         case 'toggleAdcode':
@@ -269,6 +327,48 @@ const handleSelect = (id) => {
 
 const handleDistrictSelect = (payload) => {
     emit('district-select', payload);
+};
+
+/**
+ * 处理绘制类型选择
+ * @param {string} type - 绘制类型：Point/LineString/Polygon
+ */
+const handleDrawType = (type) => {
+    emit('map-interaction', type);
+    message.info(`已激活绘制工具：${type === 'Point' ? '点' : type === 'LineString' ? '线' : '面'}`);
+};
+
+/**
+ * 清除所有绘制图形
+ */
+const handleClearDraw = () => {
+    emit('map-interaction', 'Clear');
+    message.success('已清除所有绘制图形');
+};
+
+/**
+ * 处理测量类型选择
+ * @param {string} type - 测量类型：MeasureDistance/MeasureArea
+ */
+const handleMeasureType = (type) => {
+    emit('map-interaction', type);
+    message.info(type === 'MeasureDistance' ? '已激活测距工具' : '已激活测面工具');
+};
+
+/**
+ * 清除所有测量结果
+ */
+const handleClearMeasure = () => {
+    emit('map-interaction', 'Clear');
+    message.success('已清除所有测量结果');
+};
+
+/**
+ * 处理空间分析请求
+ * @param {Object} payload - 分析参数，包含 type（buffer/overlay/convexHull）等
+ */
+const handleSpatialAnalysis = (payload) => {
+    emit('spatial-analysis', payload);
 };
 
 // ========== Map Swipe 对话框处理 ==========
@@ -323,6 +423,16 @@ const getBasemapLabel = (id) => {
     position: relative;
     /* 确保 shell 占满了父级高度，或者直接给个视口高度 */
     height: 100vh;
+}
+
+/* 子面板定位：悬浮在侧边栏右侧 */
+.sidebar-shell :deep(.draw-panel),
+.sidebar-shell :deep(.measure-panel),
+.sidebar-shell :deep(.spatial-panel) {
+    position: absolute;
+    left: 68px;
+    top: 80px;
+    z-index: 1001;
 }
 
 .sidebar-container {

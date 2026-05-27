@@ -35,7 +35,7 @@ const downloadStore = useDownloadStore();
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
 import TopBar from '../components/TopBar.vue';
-import ControlsPanel from '@/components/ControlsPanel.vue';
+import ControlsPanel from '@/components/ControlsPanel/ControlsPanel.vue';
 import MapContainer from '../components/MapContainer.vue';
 import MagicCursor from '../components/MagicCursor.vue';
 import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
@@ -308,6 +308,22 @@ function handleControlsMapInteraction(type) {
 
 function handleControlsShowAnalysis() {
     message.info('分析功能入口已接入，后续可扩展缓冲区/最短路径专属面板。');
+}
+
+/**
+ * 处理空间分析事件（缓冲区/叠加/凸包）
+ * @param {Object} payload - 分析参数
+ * @param {string} payload.type - 分析类型：buffer/overlay/convexHull
+ */
+function handleSpatialAnalysis(payload) {
+    const analysisType = String(payload?.type || '').trim();
+    if (!analysisType) {
+        message.warning('未指定分析类型');
+        return;
+    }
+
+    // 转发到 MapContainer 执行
+    mapContainerRef.value?.runSpatialAnalysis?.(payload);
 }
 
 async function handleRequestDownloadExtent() {
@@ -929,12 +945,14 @@ onMounted(async () => {
             <!-- 侧边控制栏（左）-->
             <div class="Control-panel">
                 <ControlsPanel
+                    :user-layers="userLayers"
                     @open-tab="handleControlsOpenTab"
                     @open-toolbox-tab="handleControlsOpenToolboxTab"
                     @map-interaction="handleControlsMapInteraction"
                     @show-analysis="handleControlsShowAnalysis"
                     @district-select="handleControlsDistrictSelect"
                     @enable-basemap-swipe="handleEnableBasemapSwipe"
+                    @spatial-analysis="handleSpatialAnalysis"
                 />
             </div>
 
