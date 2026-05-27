@@ -78,7 +78,7 @@
                             >{{ m.name || m.id }}</option>
                         </datalist>
                         <button
-                            @click="loadAvailableModels"
+                            @click="reloadAgentConfig(true)"
                             class="refresh-models-btn"
                             :disabled="isLoadingModels"
                             title="刷新模型列表"
@@ -608,10 +608,43 @@ const buildSystemPrompt = (basePrompt, locationContext) => {
 const reloadAgentConfig = async (showToast = false) => {
     try {
         if (isDirectMode.value) {
-            // 直连模式：使用本地 directConfig 更新状态
+            // 个人 Key 模式：从后端代理获取可用模型列表并随机选择一个
             serviceReady.value = true;
-            modelName.value = directConfig.value.model || '未配置';
             statusHint.value = '个人 Key 模式：使用个人 API Key 经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。';
+
+            // 经后端代理获取当前端点的可用模型列表
+            try {
+                const dc = directConfig.value;
+                const modelsResult = await apiAgentListModels({
+                    override_base_url: dc.base_url,
+                    override_api_key: dc.api_key,
+                });
+                const modelsData = modelsResult?.data || modelsResult || {};
+                const models = Array.isArray(modelsData?.models) ? modelsData.models : [];
+
+                if (models.length > 0) {
+                    // 从可用聊天模型中随机选择一个
+                    const chatModels = models.filter((m) => m?.chat_compatible !== false);
+                    const pool = chatModels.length > 0 ? chatModels : models;
+                    const randomModel = pool[Math.floor(Math.random() * pool.length)];
+                    const selectedModel = String(randomModel?.id || dc.model || '');
+                    if (selectedModel) {
+                        directConfig.value.model = selectedModel;
+                        modelName.value = selectedModel;
+                    } else {
+                        modelName.value = dc.model || '未配置';
+                    }
+                    statusHint.value = `个人 Key 模式：已随机选择模型 ${modelName.value}（共 ${pool.length} 个可用），经后端代理转发。`;
+                } else {
+                    // 获取模型列表失败，使用配置中的默认模型
+                    modelName.value = dc.model || '未配置';
+                    statusHint.value = '个人 Key 模式：未获取到可用模型列表，使用配置中的默认模型。';
+                }
+            } catch (modelError) {
+                modelName.value = directConfig.value.model || '未配置';
+                statusHint.value = `个人 Key 模式：模型列表获取失败（${modelError.message}），使用默认模型。`;
+            }
+
             // 仍然尝试获取后端配额信息（供参考）
             try {
                 const result = await apiAgentGetChatConfig();

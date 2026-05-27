@@ -433,6 +433,8 @@ def _get_expiration(task: DownloadTask) -> tuple[datetime, int, bool]:
     """计算任务的过期时间、剩余秒数与是否过期。"""
     expires_at = task.created_at + timedelta(minutes=DEFAULT_TASK_TTL_MINUTES)
     now = datetime.now(timezone.utc)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
     expires_in = max(0, int((expires_at - now).total_seconds()))
     return expires_at, expires_in, now >= expires_at
 
