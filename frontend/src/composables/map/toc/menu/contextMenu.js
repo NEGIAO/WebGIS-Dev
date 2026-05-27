@@ -107,6 +107,7 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         if (primary.length) groups.push(primary);
 
         const edit = [];
+        edit.push({ key: TOC_MENU_COMMANDS.RENAME, label: '重命名' });
         if (capabilities.canOpenAttributeTable)
             edit.push({ key: TOC_MENU_COMMANDS.ATTRIBUTE, label: '打开属性表' });
         if (capabilities.canStyle) edit.push({ key: TOC_MENU_COMMANDS.STYLE, label: '样式设置' });
@@ -120,6 +121,8 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         }
         if (capabilities.canCopyCoordinates)
             edit.push({ key: TOC_MENU_COMMANDS.COPY, label: '复制坐标' });
+        edit.push({ key: TOC_MENU_COMMANDS.OPACITY, label: '透明度', opacity: capabilities.currentOpacity ?? 1 });
+        edit.push({ key: TOC_MENU_COMMANDS.PROPERTIES, label: '图层属性' });
 
         if (capabilities.canToggleLayerCRS) {
             edit.push({ divider: true, key: 'divider_crs' });

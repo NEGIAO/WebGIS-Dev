@@ -851,22 +851,26 @@ export function useLayerDataImport({
             featureProjection: 'EPSG:3857',
         });
 
-        // 兼容部分导出工具：全量使用 kml: 前缀时，OpenLayers 可能出现空解析。
-        if ((!features || !features.length) && /<\s*\/?\s*kml:/i.test(kmlText)) {
-            const normalizedKmlText = String(kmlText)
+        // 始终归一化 kml: 前缀，确保样式解析器能正确匹配
+        let kmlTextForStyle = kmlText;
+        if (/<\s*\/?\s*kml:/i.test(kmlText)) {
+            kmlTextForStyle = String(kmlText)
                 .replace(/<(\/?)(\s*)kml:/gi, '<$1$2')
                 .replace(/\s+xmlns:kml\s*=\s*(['"]).*?\1/gi, '');
 
-            features = kmlFormat.readFeatures(normalizedKmlText, {
-                dataProjection,
-                featureProjection: 'EPSG:3857',
-            });
+            // 仅在首次解析失败时用归一化文本重试
+            if (!features || !features.length) {
+                features = kmlFormat.readFeatures(kmlTextForStyle, {
+                    dataProjection,
+                    featureProjection: 'EPSG:3857',
+                });
+            }
         }
 
         // 应用 KML 样式（PolyStyle、LineStyle、IconStyle）
         if (features && features.length > 0) {
             try {
-                const styleResult = applyKmlStylesToFeatures(features, kmlText);
+                const styleResult = applyKmlStylesToFeatures(features, kmlTextForStyle);
                 if (styleResult.successCount > 0) {
                     console.info(
                         `[KML样式] 成功应用 ${styleResult.successCount}/${features.length} 个特征的样式`
@@ -903,21 +907,26 @@ export function useLayerDataImport({
             featureProjection: 'EPSG:3857',
         });
 
-        if ((!features || !features.length) && /<\s*\/?\s*kml:/i.test(kmlText)) {
-            const normalizedKmlText = String(kmlText)
+        // 始终归一化 kml: 前缀，确保样式解析器能正确匹配
+        let kmlTextForStyle = kmlText;
+        if (/<\s*\/?\s*kml:/i.test(kmlText)) {
+            kmlTextForStyle = String(kmlText)
                 .replace(/<(\/?)(\s*)kml:/gi, '<$1$2')
                 .replace(/\s+xmlns:kml\s*=\s*(['"]).*?\1/gi, '');
 
-            features = kmlFormat.readFeatures(normalizedKmlText, {
-                dataProjection: projectionToUse,
-                featureProjection: 'EPSG:3857',
-            });
+            // 仅在首次解析失败时用归一化文本重试
+            if (!features || !features.length) {
+                features = kmlFormat.readFeatures(kmlTextForStyle, {
+                    dataProjection: projectionToUse,
+                    featureProjection: 'EPSG:3857',
+                });
+            }
         }
 
         // 应用 KML 样式
         if (features && features.length > 0) {
             try {
-                const styleResult = applyKmlStylesToFeatures(features, kmlText);
+                const styleResult = applyKmlStylesToFeatures(features, kmlTextForStyle);
                 if (styleResult.successCount > 0) {
                     console.info(
                         `[KML样式] 成功应用 ${styleResult.successCount}/${features.length} 个特征的样式`

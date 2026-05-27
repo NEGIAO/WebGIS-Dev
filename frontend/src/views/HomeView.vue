@@ -18,6 +18,7 @@ import {
     useCompassStore,
     useTOCStore,
     useDownloadStore,
+    useLayerStore,
 } from '../stores';
 import { showLoading, hideLoading } from '../utils/loading';
 import { apiLogVisit } from '../api/backend';
@@ -28,6 +29,7 @@ const weatherStore = useWeatherStore();
 const compassStore = useCompassStore();
 const tocStore = useTOCStore();
 const downloadStore = useDownloadStore();
+const layerStore = useLayerStore();
 
 // 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
 // showLoading('正在初始化地图与核心环境...'); // 已由 router.beforeEach 接力处理
@@ -648,6 +650,10 @@ function handleChangeLayerOpacity({ layerId, opacity }) {
     mapContainerRef.value?.setUserLayerOpacity(layerId, opacity);
 }
 
+function handleRenameLayer({ layerId, newName }) {
+    layerStore.renameLayer(layerId, newName);
+}
+
 function handleSetBaseLayer(layerId) {
     mapContainerRef.value?.setBaseLayerActive(layerId);
 }
@@ -1126,6 +1132,7 @@ onMounted(async () => {
                     @interaction="handleInteraction"
                     @toggle-layer-visibility="handleToggleLayerVisibility"
                     @change-layer-opacity="handleChangeLayerOpacity"
+                    @rename-layer="handleRenameLayer"
                     @set-base-layer="handleSetBaseLayer"
                     @toggle-base-layer-visibility="handleToggleBaseLayerVisibility"
                     @toggle-layer-label-visibility="handleToggleLayerLabelVisibility"

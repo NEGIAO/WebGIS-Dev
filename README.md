@@ -51,6 +51,8 @@
 - 🌤️ 实时天气 + 趋势预报
 - 🤖 AI 空间助手（LLM 集成）
 - ⚡ 30-50% 首屏性能优化
+- 🗂️ **TOC 图层管理增强**：图层重命名、透明度控制、属性查看、搜索过滤
+- 📐 **空间分析**：缓冲区/交集/并集/差集/凸包（后端 Shapely 精确计算）
 
 **后端功能**：
 - 📡 地理数据处理与坐标系转换
@@ -61,6 +63,7 @@
 - 💾 GIS 数据格式转换
 - ⚙️ 异步后台任务
 - 🔐 三类身份登录 + 会话鉴权（/data 持久化）
+- 📐 **空间分析 API**：基于 Shapely 2.x 的精确几何运算（缓冲区/叠加分析/凸包）
 
 ## 🚀 快速开始
 
@@ -148,8 +151,12 @@ WebGIS_Dev/
 │   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
 │   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
 │   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）
+│   │   │   ├── LayerPanel.vue      # 🆕 图层面板（搜索过滤 + 树形目录）
+│   │   │   ├── LayerPropertiesDialog.vue # 🆕 图层属性对话框（显示图层元数据）
 │   │   │   ├── MapSwipeController.vue # 卷帘对比控制器（仅作用于在线底图）
 │   │   │   ├── MapContainer.vue    # 🔄 升级：支持矩形框选和坐标转换（WGS84↔EPSG:3857）
+│   │   │   ├── TOCPanel.vue        # 🔄 TOC 面板（样式重构，CSS 变量化）
+│   │   │   ├── TOCTreeItem.vue     # 🔄 TOC 树节点（重命名/透明度/属性/多选）
 │   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划选择面板（仅定位/加载，TOC 统一承载管理）
 │   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
 │   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）
@@ -159,17 +166,25 @@ WebGIS_Dev/
 │   │   │       ├── AdminControlPanel.vue
 │   │   │       └── ApiManagementPanel.vue
 │   │   ├── composables/            # 组合式逻辑
-│   │   │   └── map/features/basemapLayerFactory.js # Basemap layer factory (vector tile support)
+│   │   │   ├── map/features/basemapLayerFactory.js # Basemap layer factory (vector tile support)
+│   │   │   ├── map/features/useManagedLayerStyle.js # 🔄 托管图层样式（支持 KML 样式保留）
+│   │   │   ├── map/toc/            # TOC 模块（protocol/contextMenu/commandDispatcher）
+│   │   │   ├── useLayerDataImport.js # 🔄 数据导入（KML/KMZ 样式解析修复）
+│   │   │   └── useKmzLoader.js     # KMZ 专用加载器（KML 选择 + 图片 href 重写）
+│   │   ├── assets/
+│   │   │   └── toc-theme.css       # 🆕 TOC 主题变量（统一管理设计令牌）
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
 │   │   ├── stores/                 # Pinia 状态管理
 │   │   │   ├── useDownloadStore.ts # 🆕 在线底图下载任务状态管理
+│   │   │   ├── useLayerStore.ts    # 🔄 图层状态（支持重命名）
 │   │   │   ├── useCompassStore.ts  # 罗盘状态
 │   │   │   ├── useTOCStore.ts      # 图层树状态
 │   │   │   └── ...                 # 其余 Pinia stores
 │   │   ├── services/               # 业务服务（DistrictManager 负责行政区划边界加载并同步 TOC 元数据）
 │   │   ├── utils/                  # 工具函数
 │   │   │   └── gis/                # GIS 工具库
+│   │   │       ├── parsers/kmlStyleParser.js # 🔄 KML 样式解析器（PolyStyle/LineStyle/IconStyle）
 │   │   │       └── mapRuntimeDeps.js # OpenLayers 运行时依赖（包含 DragBox 等）
 │   │   └── views/                  # 页面（HomeView / RegisterView）
 │   ├── public/                     # 静态资源（tiles/images/ShareData/adcode.json）
@@ -181,6 +196,7 @@ WebGIS_Dev/
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
 │   │   ├── download.py             # 🆕 在线底图下载任务 API（POST/GET 任务）
 │   │   ├── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
+│   │   ├── spatial.py              # 🆕 空间分析 API（缓冲区/交集/并集/差集/凸包，基于 Shapely）
 │   │   └── ...                     # 其余后端接口模块
 │   ├── core/                       # 🆕 核心业务逻辑模块
 │   │   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
@@ -198,6 +214,9 @@ WebGIS_Dev/
 │   └── README.md                   # 🔹 后端详细文档
 ├── Docs/                          # 开发维护日志与强制执行规范
 │   └── 26-05-22/2026-05-22-enhance-custom-basemap-vector-tile.md # Log: custom basemap + vector tile
+│   └── 26-05-27/2026-05-27-spatial-analysis-backend.md # 🆕 空间分析后端化改造日志
+│   └── 26-05-27/2026-05-27-toc-improvements.md # 🆕 TOC 功能增强日志（重命名/透明度/属性/搜索）
+│   └── 26-05-27/2026-05-27-kmz-style-fix.md # 🆕 KMZ 样式解析修复日志
 ├── docker-compose.yml              # 🆕 顶级 Docker Compose（一键启动前后端）
 ├── LocalDev.bat                    # 🔄 升级：支持 Docker Compose 启动前后端
 ├── API_MANAGEMENT_GUIDE.md
@@ -678,6 +697,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-05-018 109:00
-**当前版本**：V3.1.2
+**最后更新**：2026-05-27 17:00
+**当前版本**：V3.1.3
 **项目状态**：开发中 - 持续迭代优化

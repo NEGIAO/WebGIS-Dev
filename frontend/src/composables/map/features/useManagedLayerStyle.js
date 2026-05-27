@@ -139,13 +139,27 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
     const buildManagedLayerStyle = (layerItem) => {
         const baseStyleConfig = layerItem?.styleConfig || defaultStyleTemplate;
         if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
-            return createStyleFromConfig(baseStyleConfig, { labelText: '' });
+            return (feature) => {
+                const existingStyle = feature.getStyle();
+                if (existingStyle && !(existingStyle instanceof Function)) {
+                    return existingStyle;
+                }
+                return createStyleFromConfig(baseStyleConfig, { labelText: '' });
+            };
         }
 
         layerItem.labelStyleCache = layerItem.labelStyleCache || new globalThis.Map();
         return (feature) => {
             const rawLabel = getFeatureLabelText(feature, layerItem);
             const labelText = String(rawLabel || '').trim();
+
+            const existingStyle = feature.getStyle();
+            if (existingStyle && !(existingStyle instanceof Function)) {
+                if (!labelText) return existingStyle;
+                const labelOnly = createStyleFromConfig(baseStyleConfig, { labelText });
+                return [existingStyle, labelOnly];
+            }
+
             const cacheKey = labelText || '__empty__';
             if (layerItem.labelStyleCache.has(cacheKey)) {
                 return layerItem.labelStyleCache.get(cacheKey);

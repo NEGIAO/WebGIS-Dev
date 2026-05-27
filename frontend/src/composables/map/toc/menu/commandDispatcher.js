@@ -197,5 +197,20 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
         return events;
     }
 
+    if (commandKey === TOC_MENU_COMMANDS.RENAME) {
+        events.push({ type: 'rename-layer', payload: { layerId: nodeId } });
+        return events;
+    }
+
+    if (commandKey === TOC_MENU_COMMANDS.OPACITY) {
+        events.push({ type: 'change-layer-opacity', payload: { layerId: nodeId } });
+        return events;
+    }
+
+    if (commandKey === TOC_MENU_COMMANDS.PROPERTIES) {
+        events.push({ type: 'show-layer-properties', payload: { layerId: nodeId } });
+        return events;
+    }
+
     return events;
 }

@@ -53,10 +53,24 @@
                     @change="handleToggleVisibility"
                 />
                 <span
+                    v-if="!isRenaming"
                     class="name"
                     :title="node.displayName || node.name"
+                    @dblclick.stop="startRename"
                     >{{ node.displayName || node.name }}</span
                 >
+                <input
+                    v-else
+                    ref="renameInputRef"
+                    class="rename-input"
+                    type="text"
+                    :value="renameValue"
+                    @input="renameValue = $event.target.value"
+                    @keydown.enter="commitRename"
+                    @keydown.escape="cancelRename"
+                    @blur="commitRename"
+                    @click.stop
+                />
                 <span
                     v-if="node.type === 'layer' && node.id === activeLayerId"
                     class="active-indicator"
@@ -110,6 +124,22 @@
                         v-if="item.divider"
                         class="menu-divider"
                     ></div>
+                    <div
+                        v-else-if="item.key === 'opacity'"
+                        class="menu-opacity-item"
+                    >
+                        <span class="menu-item-label">{{ item.label }}</span>
+                        <input
+                            type="range"
+                            class="opacity-slider"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            :value="item.opacity ?? 1"
+                            @input="handleOpacityChange($event.target.value)"
+                        />
+                        <span class="opacity-value">{{ Math.round((item.opacity ?? 1) * 100) }}%</span>
+                    </div>
                     <button
                         v-else
                         class="menu-item"
@@ -164,6 +194,9 @@ const menuVisible = ref(false);
 const menuX = ref(0);
 const menuY = ref(0);
 const menuRef = ref(null);
+const isRenaming = ref(false);
+const renameValue = ref('');
+const renameInputRef = ref(null);
 
 const selectedLayerIdSet = computed(() => {
     const ids = Array.isArray(props.selectedLayerIds) ? props.selectedLayerIds : [];
@@ -219,6 +252,7 @@ const menuCapabilities = computed(() => {
         canZoom: !!actions.zoom,
         canRemove: !!actions.remove,
         removeLabel: actions.removeTip || '移除图层',
+        currentOpacity: props.node?.opacity ?? 1,
     };
 });
 
@@ -294,6 +328,12 @@ function openContextMenuFromButton(event) {
 }
 
 function handleMenuCommand(key) {
+    if (key === 'rename') {
+        closeContextMenu();
+        startRename();
+        return;
+    }
+
     const events = dispatchContextMenuCommand({
         key,
         node: props.node,
@@ -320,13 +360,6 @@ function handlePrimaryClick() {
     if (props.node.type === 'layer') {
         emitAction('layer-selected', { layerId: props.node.id });
     }
-    if (props.node.type === 'folder') return;
-    if (props.node.actions?.viewEvent) {
-        emitAction(
-            props.node.actions.viewEvent,
-            props.node.actions.viewPayload || { layerId: props.node.id },
-        );
-    }
 }
 
 function handleGlobalPointerDown(event) {
@@ -336,6 +369,33 @@ function handleGlobalPointerDown(event) {
         return;
     }
     closeContextMenu();
+}
+
+function startRename() {
+    if (props.node.type !== 'layer') return;
+    renameValue.value = props.node.displayName || props.node.name || '';
+    isRenaming.value = true;
+    nextTick(() => {
+        renameInputRef.value?.select?.();
+    });
+}
+
+function commitRename() {
+    if (!isRenaming.value) return;
+    const newName = renameValue.value.trim();
+    isRenaming.value = false;
+    if (newName && newName !== (props.node.displayName || props.node.name)) {
+        emitAction('rename-layer', { layerId: props.node.id, newName });
+    }
+}
+
+function cancelRename() {
+    isRenaming.value = false;
+}
+
+function handleOpacityChange(value) {
+    const opacity = Math.max(0, Math.min(1, Number(value) || 0));
+    emitAction('change-layer-opacity', { layerId: props.node.id, opacity });
 }
 
 function handleDragStart() {
@@ -375,48 +435,40 @@ onBeforeUnmount(() => {
     min-height: 32px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    border-radius: 8px;
-    padding: 4px 8px 4px calc(6px + (var(--node-level, 0) * 18px));
-    transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+    gap: var(--toc-spacing-sm);
+    border-radius: var(--toc-radius-md);
+    padding: var(--toc-spacing-xs) var(--toc-spacing-md) var(--toc-spacing-xs) calc(6px + (var(--node-level, 0) * 18px));
+    transition: all var(--toc-transition-normal);
     cursor: pointer;
     user-select: none;
 }
 
 .toc-row:hover {
-    background: linear-gradient(
-        135deg,
-        rgba(116, 175, 144, 0.545) 0%,
-        rgba(235, 247, 240, 0.8) 100%
-    );
+    background: var(--toc-bg-hover);
 }
 
 .toc-row.is-active {
-    background: linear-gradient(135deg, rgba(200, 230, 220, 0.5) 0%, rgba(190, 225, 215, 0.5) 100%);
-    border-left: 3px solid #1f7b49;
+    background: var(--toc-bg-active);
+    border-left: 3px solid var(--toc-primary);
     padding-left: calc(3px + (var(--node-level, 0) * 18px));
 }
 
 .toc-row.is-active .name {
-    color: #1f7b49;
+    color: var(--toc-primary);
     font-weight: 500;
 }
 
 .toc-row.is-active:hover {
-    background: linear-gradient(135deg, rgba(190, 225, 215, 0.7) 0%, rgba(180, 220, 210, 0.7) 100%);
+    background: var(--toc-bg-active-hover);
 }
 
 .toc-row.is-multi-selected {
-    background: linear-gradient(
-        135deg,
-        rgba(195, 222, 250, 0.48) 0%,
-        rgba(220, 240, 255, 0.4) 100%
-    );
-    box-shadow: inset 0 0 0 1px rgba(50, 120, 190, 0.35);
+    background: var(--toc-bg-selected);
+    box-shadow: inset 0 0 0 1px var(--toc-border-selected);
 }
 
 .toc-row.is-multi-selected .name {
-    color: #225d92;
+    color: var(--toc-selected-text);
 }
 
 .toc-row::before {
@@ -425,10 +477,10 @@ onBeforeUnmount(() => {
     left: calc((var(--node-level, 0) * 18px) - 9px);
     top: 50%;
     width: 10px;
-    border-top: 1px solid #171c19;
+    border-top: 1px solid var(--toc-tree-line);
     transform: translateY(-50%);
     opacity: calc(min(var(--node-level, 0), 0.6));
-    transition: opacity 0.16s ease;
+    transition: opacity var(--toc-transition-normal);
 }
 
 .toc-row.is-active::before {
@@ -445,14 +497,14 @@ onBeforeUnmount(() => {
     justify-content: center;
     padding: 0;
     cursor: pointer;
-    color: #5f7e6d;
-    transition: color 0.16s ease;
-    border-radius: 4px;
+    color: var(--toc-text-secondary);
+    transition: color var(--toc-transition-normal);
+    border-radius: var(--toc-radius-sm);
 }
 
 .tree-toggle:hover {
-    background: rgba(31, 123, 73, 0.06);
-    color: #1f7b49;
+    background: var(--toc-primary-bg);
+    color: var(--toc-primary);
 }
 
 .tree-toggle-placeholder {
@@ -460,7 +512,7 @@ onBeforeUnmount(() => {
 }
 
 .chevron {
-    transition: transform 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform var(--toc-transition-normal);
     font-size: 11px;
     line-height: 1;
 }
@@ -475,24 +527,24 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 7px;
-    transition: all 0.16s ease;
+    transition: all var(--toc-transition-normal);
 }
 
 .name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
-    color: #2f4a3b;
-    transition: color 0.16s ease;
+    font-size: var(--toc-font-sm);
+    color: var(--toc-text-dark);
+    transition: color var(--toc-transition-normal);
 }
 
 .active-indicator {
     flex-shrink: 0;
     font-size: 8px;
-    color: #1f7b49;
+    color: var(--toc-primary);
     opacity: 0;
-    transition: opacity 0.16s ease;
+    transition: opacity var(--toc-transition-normal);
 }
 
 .toc-row.is-active .active-indicator {
@@ -501,32 +553,32 @@ onBeforeUnmount(() => {
 
 .feature-badge {
     flex-shrink: 0;
-    font-size: 10px;
-    color: #5f7e6d;
-    border: 1px solid #d4e6db;
+    font-size: var(--toc-font-xs);
+    color: var(--toc-text-secondary);
+    border: 1px solid var(--toc-badge-border);
     background: linear-gradient(135deg, rgba(242, 248, 244, 0.9) 0%, rgba(235, 244, 239, 0.9) 100%);
-    border-radius: 12px;
-    padding: 2px 8px;
+    border-radius: var(--toc-radius-lg);
+    padding: 2px var(--toc-spacing-md);
     line-height: 1.4;
-    transition: all 0.16s ease;
+    transition: all var(--toc-transition-normal);
 }
 
 .toc-row:hover .feature-badge {
-    border-color: #b8d9c8;
-    background: #e8f4ed;
+    border-color: var(--toc-badge-border-hover);
+    background: var(--toc-badge-bg-hover);
 }
 
 .toc-row.is-active .feature-badge {
-    color: #1f7b49;
-    border-color: #a8d4c0;
-    background: #ddf0e8;
+    color: var(--toc-primary);
+    border-color: var(--toc-border-active);
+    background: var(--toc-badge-bg-active);
 }
 
 .more-btn {
     margin-left: auto;
-    border: 1px solid #d6e5dc;
+    border: 1px solid var(--toc-border-medium);
     background: transparent;
-    color: #5f7e6d;
+    color: var(--toc-text-secondary);
     border-radius: 6px;
     min-width: 28px;
     height: 28px;
@@ -534,14 +586,14 @@ onBeforeUnmount(() => {
     padding: 0 6px;
     cursor: pointer;
     opacity: 0;
-    transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
-    font-size: 14px;
+    transition: all var(--toc-transition-normal);
+    font-size: var(--toc-font-lg);
     font-weight: bold;
 }
 
 .more-btn:hover {
-    border-color: #1f7b49;
-    color: #1f7b49;
+    border-color: var(--toc-primary);
+    color: var(--toc-primary);
     background: linear-gradient(135deg, rgba(31, 123, 72, 0.263) 0%, rgba(31, 123, 73, 0.05) 100%);
 }
 
@@ -556,23 +608,17 @@ onBeforeUnmount(() => {
 }
 
 .toc-row.is-active .more-btn {
-    border-color: #1f7b49;
-    color: #1f7b49;
+    border-color: var(--toc-primary);
+    color: var(--toc-primary);
 }
 
 .toc-row.is-leaf {
-    background-color: rgba(255, 255, 255, 0.6); /* 淡淡的白色透明，适合暗色模式 */
-    /* 或者具体的颜色 */
-    /* background-color: #fafafa; */
-
-    transition: background-color 0.2s ease; /* 添加平滑过渡 */
+    background-color: var(--toc-bg-leaf);
+    transition: background-color var(--toc-transition-slow);
 }
 .toc-row.is-folder {
-    background-color: rgba(26, 163, 60, 0.566); /* 淡淡的白色透明，适合暗色模式 */
-    /* 或者具体的颜色 */
-    /* background-color: #f5f5f5; */
-
-    transition: background-color 0.2s ease; /* 添加平滑过渡 */
+    background-color: var(--toc-bg-folder);
+    transition: background-color var(--toc-transition-slow);
 }
 
 .toc-children {
@@ -585,24 +631,18 @@ onBeforeUnmount(() => {
     left: calc((var(--node-level, 0) * 18px) + 5px);
     top: 0;
     bottom: 0px;
-    border-left: 2px solid rgba(87, 113, 100, 0.621);
+    border-left: 2px solid var(--toc-tree-guide);
 }
 
 .toc-context-menu {
     position: fixed;
     z-index: 1200;
     min-width: 180px;
-    border: 1px solid rgb(20, 22, 21);
-    border-radius: 12px;
-    background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.98) 0%,
-        rgba(247, 252, 249, 0.98) 100%
-    );
-    box-shadow:
-        0 12px 32px rgba(45, 85, 63, 0.15),
-        0 4px 12px rgba(45, 85, 63, 0.08);
-    padding: 6px;
+    border: 1px solid var(--toc-menu-border);
+    border-radius: var(--toc-radius-lg);
+    background: var(--toc-bg-menu);
+    box-shadow: var(--toc-shadow-lg);
+    padding: var(--toc-spacing-sm);
     backdrop-filter: blur(4px);
 }
 
@@ -610,18 +650,18 @@ onBeforeUnmount(() => {
     width: 100%;
     border: none;
     background: transparent;
-    color: #2c4638;
+    color: var(--toc-text-primary);
     text-align: left;
-    border-radius: 8px;
-    padding: 8px 11px;
-    font-size: 12px;
+    border-radius: var(--toc-radius-md);
+    padding: var(--toc-spacing-md) 11px;
+    font-size: var(--toc-font-sm);
     cursor: pointer;
-    transition: all 0.12s ease;
+    transition: all var(--toc-transition-fast);
 }
 
 .menu-item:hover {
     background: linear-gradient(135deg, rgba(230, 218, 200, 0.4) 0%, rgba(190, 225, 215, 0.3) 100%);
-    color: #1f7b49;
+    color: var(--toc-primary);
 }
 
 .menu-item:active {
@@ -629,17 +669,59 @@ onBeforeUnmount(() => {
 }
 
 .menu-item.danger {
-    color: #b83d3d;
+    color: var(--toc-danger);
 }
 
 .menu-item.danger:hover {
-    background: linear-gradient(135deg, rgba(255, 240, 240, 0.5) 0%, rgba(255, 235, 235, 0.4) 100%);
-    color: #a53a3a;
+    background: var(--toc-danger-bg);
+    color: var(--toc-danger-hover);
 }
 
 .menu-divider {
     height: 1px;
     background: linear-gradient(90deg, transparent 0%, rgba(67, 83, 69, 0.4) 50%, transparent 100%);
-    margin: 4px 0;
+    margin: var(--toc-spacing-xs) 0;
+}
+
+.rename-input {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--toc-primary);
+    border-radius: var(--toc-radius-sm);
+    padding: 1px var(--toc-spacing-xs);
+    font-size: var(--toc-font-sm);
+    color: var(--toc-text-dark);
+    background: var(--toc-bg-input);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--toc-primary-bg-hover);
+}
+
+.menu-opacity-item {
+    display: flex;
+    align-items: center;
+    gap: var(--toc-spacing-md);
+    padding: var(--toc-spacing-sm) 11px;
+    font-size: var(--toc-font-sm);
+    color: var(--toc-text-primary);
+}
+
+.menu-item-label {
+    flex-shrink: 0;
+    min-width: 42px;
+}
+
+.opacity-slider {
+    flex: 1;
+    height: 4px;
+    accent-color: var(--toc-primary);
+    cursor: pointer;
+}
+
+.opacity-value {
+    flex-shrink: 0;
+    width: 36px;
+    text-align: right;
+    font-size: 11px;
+    color: var(--toc-text-secondary);
 }
 </style>

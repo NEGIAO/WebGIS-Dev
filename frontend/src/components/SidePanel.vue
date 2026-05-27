@@ -96,6 +96,8 @@
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
                     @export-layer-data="$emit('export-layer-data', $event)"
                     @request-download-extent="$emit('request-download-extent')"
+                    @rename-layer="$emit('rename-layer', $event)"
+                    @layer-selected="$emit('layer-selected', $event)"
                 />
             </div>
 
@@ -424,6 +426,8 @@ const emit = defineEmits([
     'toggle-layer-crs',
     'export-layer-data',
     'request-download-extent',
+    'rename-layer',
+    'layer-selected',
 ]);
 
 // ========== 3. 新闻状态管理 ==========

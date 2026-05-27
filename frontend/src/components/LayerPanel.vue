@@ -3,12 +3,25 @@
         <!-- 图层目录 -->
         <div class="layer-tree-wrap card">
             <div class="card-title">图层目录</div>
+            <div class="layer-search-wrap">
+                <input
+                    v-model="searchQuery"
+                    class="layer-search-input"
+                    type="text"
+                    placeholder="搜索图层..."
+                />
+                <span
+                    v-if="searchQuery"
+                    class="search-clear"
+                    @click="clearSearch"
+                >&times;</span>
+            </div>
             <div
-                v-if="layerTree.length"
+                v-if="filteredLayerTree.length"
                 class="layer-tree-root"
             >
                 <TOCTreeItem
-                    v-for="node in layerTree"
+                    v-for="node in filteredLayerTree"
                     :key="node.id"
                     :node="node"
                     :active-layer-id="activeLayerId"
@@ -20,7 +33,7 @@
                 v-else
                 class="empty"
             >
-                暂无图层
+                {{ searchQuery ? '无匹配图层' : '暂无图层' }}
             </div>
         </div>
     </div>
@@ -46,13 +59,55 @@ const emit = defineEmits(['action']);
 const layerStore = useLayerStore();
 
 const activeLayerId = ref(null);
+const searchQuery = ref('');
 const layerTree = computed(() => layerStore.layerTree);
+
+function matchesSearch(node, query) {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    const name = String(node.displayName || node.name || '').toLowerCase();
+    if (name.includes(q)) return true;
+    if (node.type === 'folder' && node.children) {
+        return node.children.some((child) => matchesSearch(child, query));
+    }
+    return false;
+}
+
+function filterTree(nodes, query) {
+    if (!query) return nodes;
+    const result = [];
+    for (const node of nodes) {
+        if (node.type === 'folder') {
+            const filteredChildren = filterTree(node.children || [], query);
+            const folderMatches = matchesSearch(node, query);
+            if (folderMatches || filteredChildren.length > 0) {
+                result.push({
+                    ...node,
+                    children: folderMatches ? (node.children || []) : filteredChildren,
+                    expanded: true,
+                });
+            }
+        } else if (matchesSearch(node, query)) {
+            result.push(node);
+        }
+    }
+    return result;
+}
+
+const filteredLayerTree = computed(() => {
+    return filterTree(layerTree.value, searchQuery.value.trim());
+});
+
+function clearSearch() {
+    searchQuery.value = '';
+}
 
 function handleTreeAction(evt) {
     if (!evt?.type) return;
 
     if (evt.type === 'layer-selected') {
         activeLayerId.value = evt.layerId;
+        emit('action', evt);
         return;
     }
 
@@ -85,7 +140,7 @@ function handleTreeAction(evt) {
 }
 
 .layer-tree-wrap {
-    padding: 12px;
+    padding: var(--toc-spacing-lg);
 }
 
 .layer-tree-root {
@@ -95,31 +150,75 @@ function handleTreeAction(evt) {
 }
 
 .card {
-    border: 1px solid rgba(153, 195, 170, 0.35);
-    border-radius: 12px;
-    background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.75) 0%,
-        rgba(248, 253, 250, 0.75) 100%
-    );
+    border: 1px solid var(--toc-border-light);
+    border-radius: var(--toc-radius-lg);
+    background: var(--toc-bg-card);
     backdrop-filter: blur(8px);
-    box-shadow:
-        0 8px 24px rgba(45, 85, 63, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow: var(--toc-shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .card-title {
-    font-size: 13px;
+    font-size: var(--toc-font-md);
     font-weight: 700;
-    color: #1f4d36;
-    margin-bottom: 8px;
+    color: var(--toc-card-title);
+    margin-bottom: var(--toc-spacing-md);
     letter-spacing: 0.3px;
 }
 
+.layer-search-wrap {
+    position: relative;
+    margin-bottom: var(--toc-spacing-md);
+}
+
+.layer-search-input {
+    width: 100%;
+    padding: var(--toc-spacing-sm) 28px var(--toc-spacing-sm) 10px;
+    border: 1px solid var(--toc-border-light);
+    border-radius: var(--toc-radius-md);
+    font-size: var(--toc-font-sm);
+    color: var(--toc-text-primary);
+    background: var(--toc-bg-white);
+    outline: none;
+    transition: border-color var(--toc-transition-slow), box-shadow var(--toc-transition-slow);
+    box-sizing: border-box;
+}
+
+.layer-search-input:focus {
+    border-color: var(--toc-primary);
+    box-shadow: 0 0 0 2px var(--toc-primary-bg-hover);
+}
+
+.layer-search-input::placeholder {
+    color: var(--toc-text-light);
+}
+
+.search-clear {
+    position: absolute;
+    right: var(--toc-spacing-md);
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: var(--toc-text-light);
+    font-size: 16px;
+    line-height: 1;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--toc-radius-full);
+    transition: color var(--toc-transition-normal), background var(--toc-transition-normal);
+}
+
+.search-clear:hover {
+    color: var(--toc-text-primary);
+    background: var(--toc-primary-bg);
+}
+
 .empty {
-    color: #8a9d92;
-    font-size: 12px;
-    padding: 12px 8px;
+    color: var(--toc-text-muted);
+    font-size: var(--toc-font-sm);
+    padding: var(--toc-spacing-lg) var(--toc-spacing-md);
     text-align: center;
 }
 </style>

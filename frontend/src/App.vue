@@ -55,6 +55,8 @@ import GlobalLoading from './components/GlobalLoading.vue';
 </template>
 
 <style>
+@import './assets/toc-theme.css';
+
 /* Global Styles */
 html,
 body {

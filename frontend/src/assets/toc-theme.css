@@ -1,0 +1,153 @@
+/**
+ * TOC 主题变量
+ * 统一管理图层目录相关组件的颜色、间距、圆角等设计令牌
+ * 修改此文件即可全局更新 TOC 面板样式
+ */
+
+:root {
+    /* ===== 主色调 ===== */
+    --toc-primary: #1f7b49;
+    --toc-primary-light: #2f9a57;
+    --toc-primary-lighter: #56ab56;
+    --toc-primary-dark: #1d7541;
+    --toc-primary-bg: rgba(31, 123, 73, 0.06);
+    --toc-primary-bg-hover: rgba(31, 123, 73, 0.12);
+
+    /* ===== 文本颜色 ===== */
+    --toc-text-primary: #2c4638;
+    --toc-text-secondary: #5f7e6d;
+    --toc-text-dark: #2f4a3b;
+    --toc-text-light: #8faa9b;
+    --toc-text-muted: #8a9d92;
+
+    /* ===== 背景色 ===== */
+    --toc-bg-white: rgba(255, 255, 255, 0.8);
+    --toc-bg-hover: linear-gradient(135deg, rgba(116, 175, 144, 0.545) 0%, rgba(235, 247, 240, 0.8) 100%);
+    --toc-bg-active: linear-gradient(135deg, rgba(200, 230, 220, 0.5) 0%, rgba(190, 225, 215, 0.5) 100%);
+    --toc-bg-selected: linear-gradient(135deg, rgba(195, 222, 250, 0.48) 0%, rgba(220, 240, 255, 0.4) 100%);
+    --toc-bg-card: linear-gradient(135deg, rgba(255, 255, 255, 0.75) 0%, rgba(248, 253, 250, 0.75) 100%);
+    --toc-bg-menu: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 252, 249, 0.98) 100%);
+    --toc-bg-overlay: rgba(0, 0, 0, 0.4);
+
+    /* ===== 边框颜色 ===== */
+    --toc-border-light: rgba(153, 195, 170, 0.35);
+    --toc-border-medium: #d6e5dc;
+    --toc-border-active: #a8d4c0;
+    --toc-border-selected: rgba(50, 120, 190, 0.35);
+
+    /* ===== 危险色 ===== */
+    --toc-danger: #b83d3d;
+    --toc-danger-hover: #a53a3a;
+    --toc-danger-bg: linear-gradient(135deg, rgba(255, 240, 240, 0.5) 0%, rgba(255, 235, 235, 0.4) 100%);
+
+    /* ===== 多选色 ===== */
+    --toc-selected-text: #225d92;
+
+    /* ===== 行背景 ===== */
+    --toc-bg-leaf: rgba(255, 255, 255, 0.6);
+    --toc-bg-folder: rgba(26, 163, 60, 0.566);
+    --toc-bg-active-hover: linear-gradient(135deg, rgba(190, 225, 215, 0.7) 0%, rgba(180, 220, 210, 0.7) 100%);
+
+    /* ===== 徽章 ===== */
+    --toc-badge-border: #d4e6db;
+    --toc-badge-border-hover: #b8d9c8;
+    --toc-badge-bg-hover: #e8f4ed;
+    --toc-badge-bg-active: #ddf0e8;
+
+    /* ===== 树连接线 ===== */
+    --toc-tree-line: #171c19;
+    --toc-tree-guide: rgba(87, 113, 100, 0.621);
+
+    /* ===== 菜单边框 ===== */
+    --toc-menu-border: rgb(20, 22, 21);
+
+    /* ===== 表格分隔线 ===== */
+    --toc-table-separator: #f0f4f1;
+
+    /* ===== 输入框/对话框背景 ===== */
+    --toc-bg-input: #ffffff;
+    --toc-bg-dialog: #ffffff;
+
+    /* ===== 卡片标题 ===== */
+    --toc-card-title: #1f4d36;
+    --toc-card-title-dark: #2e4b3a;
+
+    /* ===== 工具按钮 ===== */
+    --toc-btn-primary: #56ab56;
+    --toc-btn-primary-hover: #4a944a;
+    --toc-btn-warning: #f8b600;
+    --toc-btn-warning-hover: #e0a400;
+    --toc-btn-reverse-bg: #e9f5e9;
+    --toc-btn-reverse-border: #56ab56;
+    --toc-btn-reverse-text: #468a46;
+
+    /* ===== 输入框 ===== */
+    --toc-input-bg: #f9fbf9;
+    --toc-input-border: #e8eee8;
+    --toc-input-focus: #56ab56;
+
+    /* ===== 分隔线 ===== */
+    --toc-divider: #bfc7bf;
+
+    /* ===== 提示框 ===== */
+    --toc-hint-bg: #f5f8f5;
+    --toc-hint-border: #edf2ed;
+    --toc-hint-text: #88a088;
+
+    /* ===== 选项卡 ===== */
+    --toc-tab-border: rgba(130, 176, 146, 0.18);
+    --toc-tab-bg: rgba(255, 255, 255, 0.42);
+    --toc-tab-text: #4e6656;
+    --toc-tab-active-bg: linear-gradient(135deg, rgba(48, 157, 88, 0.92) 0%, rgba(44, 133, 76, 0.92) 100%);
+    --toc-tab-active-border: rgba(33, 128, 72, 0.84);
+
+    /* ===== 上传区域 ===== */
+    --toc-upload-border: #b7dcc7;
+    --toc-upload-bg: #f9fdfb;
+    --toc-upload-drag-border: #3f9f67;
+    --toc-upload-drag-bg: #eaf7f0;
+    --toc-upload-icon: #2f8e58;
+    --toc-upload-progress-border: #d8e9df;
+    --toc-upload-progress-bg: #f8fcfa;
+    --toc-upload-done-border: #b8dec7;
+    --toc-upload-done-bg: #f0fbf4;
+    --toc-upload-error-border: #e8bbbb;
+    --toc-upload-error-bg: #fff4f4;
+
+    /* ===== 工具面板 ===== */
+    --toc-toolbox-bg: linear-gradient(180deg, #fdfefd 0%, #f3f8f5 100%);
+    --toc-toolbox-text: #2f3a45;
+    --toc-header-border: #dde9e2;
+    --toc-title: #2b8a4b;
+    --toc-subtitle: #72897a;
+
+    /* ===== 间距 ===== */
+    --toc-spacing-xs: 4px;
+    --toc-spacing-sm: 6px;
+    --toc-spacing-md: 8px;
+    --toc-spacing-lg: 12px;
+    --toc-spacing-xl: 16px;
+
+    /* ===== 圆角 ===== */
+    --toc-radius-sm: 4px;
+    --toc-radius-md: 8px;
+    --toc-radius-lg: 12px;
+    --toc-radius-full: 50%;
+
+    /* ===== 字体大小 ===== */
+    --toc-font-xs: 10px;
+    --toc-font-sm: 12px;
+    --toc-font-md: 13px;
+    --toc-font-lg: 14px;
+
+    /* ===== 阴影 ===== */
+    --toc-shadow-sm: 0 4px 12px rgba(45, 85, 63, 0.08);
+    --toc-shadow-md: 0 8px 24px rgba(45, 85, 63, 0.08);
+    --toc-shadow-lg: 0 12px 32px rgba(45, 85, 63, 0.15), 0 4px 12px rgba(45, 85, 63, 0.08);
+    --toc-shadow-dialog: 0 20px 60px rgba(0, 0, 0, 0.25);
+
+    /* ===== 过渡 ===== */
+    --toc-transition-fast: 0.12s ease;
+    --toc-transition-normal: 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+    --toc-transition-slow: 0.2s ease-out;
+}

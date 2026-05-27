@@ -30,6 +30,9 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     EXPORT_KML: 'export-kml',
     ZOOM: 'zoom',
     REMOVE: 'remove',
+    RENAME: 'rename',
+    OPACITY: 'opacity',
+    PROPERTIES: 'properties',
 });
 
 export function normalizeTocLayerId(id) {

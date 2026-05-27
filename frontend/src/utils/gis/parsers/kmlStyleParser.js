@@ -66,11 +66,27 @@ export function parseKmlColor(kmlColor) {
 }
 
 /**
+ * 移除 KML 默认命名空间，确保 querySelectorAll 能正确匹配元素
+ * 当 KML 声明 xmlns="http://www.opengis.net/kml/2.2" 时，
+ * CSS 选择器无法匹配命名空间内的元素，需先移除默认命名空间
+ *
+ * @param {string} kmlText - 原始 KML 文本
+ * @returns {string} 移除默认命名空间后的 KML 文本
+ */
+function stripKmlDefaultNamespace(kmlText) {
+    return String(kmlText)
+        .replace(/\s+xmlns\s*=\s*(['"])http:\/\/www\.opengis\.net\/kml\/2\.2\1/gi, '')
+        .replace(/\s+xmlns:gx\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\s+xmlns:xsi\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\s+xsi:schemaLocation\s*=\s*(['"]).*?\1/gi, '');
+}
+
+/**
  * 从 KML XML 文本中提取样式定义
  * 支持两种方式：
  * 1. 内联样式 (<Placemark><Style>...</Style></Placemark>)
  * 2. 引用样式 (<Placemark><styleUrl>#styleName</styleUrl></Placemark>)
- * 
+ *
  * @param {string} kmlText - KML 内容
  * @returns {Map<string, object>} styleId -> styleDefinition 的映射表
  */
@@ -82,8 +98,9 @@ export function extractKmlStyleDefinitions(kmlText) {
     }
 
     try {
-        const xmlDoc = new DOMParser().parseFromString(kmlText, 'text/xml');
-        
+        const normalizedKml = stripKmlDefaultNamespace(kmlText);
+        const xmlDoc = new DOMParser().parseFromString(normalizedKml, 'text/xml');
+
         // 检查解析错误
         if (xmlDoc.documentElement.tagName === 'parsererror') {
             console.warn('[kmlStyleParser] KML XML 解析失败');
@@ -93,12 +110,39 @@ export function extractKmlStyleDefinitions(kmlText) {
         // 提取全局 Style 定义 (<Style id="..."></Style>)
         const styleElements = xmlDoc.querySelectorAll('Style[id], [id] > Style');
         styleElements.forEach((styleEl) => {
-            const styleId = styleEl.id || styleEl.parentElement?.id;
+            const styleId = styleEl.getAttribute('id') || styleEl.parentElement?.getAttribute('id');
             if (!styleId) return;
 
             const styleDef = parseKmlStyleElement(styleEl);
             if (styleDef) {
                 styleMap.set(styleId, styleDef);
+            }
+        });
+
+        // 提取 StyleMap 定义 (<StyleMap id="..."><Pair>...</Pair></StyleMap>)
+        const styleMapElements = xmlDoc.querySelectorAll('StyleMap[id]');
+        styleMapElements.forEach((smEl) => {
+            const smId = smEl.getAttribute('id');
+            if (!smId) return;
+
+            // StyleMap 的 normal pair 优先
+            const normalPair = smEl.querySelector('Pair[key="normal"]') || smEl.querySelector('Pair');
+            if (normalPair) {
+                const styleUrl = normalPair.querySelector('styleUrl');
+                if (styleUrl) {
+                    const refId = String(styleUrl.textContent || '').trim().replace(/^#/, '');
+                    if (refId && styleMap.has(refId)) {
+                        styleMap.set(smId, styleMap.get(refId));
+                        return;
+                    }
+                }
+                const inlineStyle = normalPair.querySelector('Style');
+                if (inlineStyle) {
+                    const styleDef = parseKmlStyleElement(inlineStyle);
+                    if (styleDef) {
+                        styleMap.set(smId, styleDef);
+                    }
+                }
             }
         });
 
@@ -422,8 +466,9 @@ export function applyKmlStylesToFeatures(features, kmlText) {
         // 第一步：提取全局样式定义
         const globalStyles = extractKmlStyleDefinitions(kmlText);
 
-        // 第二步：解析 XML 获得 Placemark 元素映射
-        const xmlDoc = new DOMParser().parseFromString(kmlText, 'text/xml');
+        // 第二步：解析 XML 获得 Placemark 元素映射（需移除命名空间以确保 querySelectorAll 正常工作）
+        const normalizedKml = stripKmlDefaultNamespace(kmlText);
+        const xmlDoc = new DOMParser().parseFromString(normalizedKml, 'text/xml');
         if (xmlDoc.documentElement.tagName === 'parsererror') {
             result.errors.push('KML XML 解析失败');
             return result;

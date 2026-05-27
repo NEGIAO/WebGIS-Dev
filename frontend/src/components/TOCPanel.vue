@@ -519,6 +519,12 @@
                 </button>
             </div>
         </div>
+
+        <LayerPropertiesDialog
+            :visible="propertiesDialogVisible"
+            :layer="propertiesDialogLayer"
+            @close="propertiesDialogVisible = false"
+        />
     </div>
 </template>
 
@@ -548,6 +554,7 @@ import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from './AmapAoiInjectDialog.vue';
 import MapDownloader from './MapDownloader.vue';
+import LayerPropertiesDialog from './LayerPropertiesDialog.vue';
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
@@ -583,6 +590,8 @@ const emit = defineEmits([
     'toggle-layer-crs',
     'export-layer-data',
     'request-download-extent',
+    'rename-layer',
+    'show-layer-properties',
 ]);
 
 const fileInputRef = ref(null);
@@ -614,6 +623,8 @@ const multiSelectedLayerIds = ref([]);
 let recursiveSelectionToken = 0;
 const isDecodePBusy = ref(false);
 const isGeocodeBusy = ref(false);
+const propertiesDialogVisible = ref(false);
+const propertiesDialogLayer = ref(null);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
@@ -1298,6 +1309,22 @@ function handleLayerTreeAction(evt) {
         emit('toggle-layer-visibility', { layerId: evt.layerId, visible: !!evt.visible });
         return;
     }
+    if (type === 'rename-layer') {
+        emit('rename-layer', { layerId: evt.layerId, newName: evt.newName });
+        return;
+    }
+    if (type === 'change-layer-opacity') {
+        emit('change-layer-opacity', { layerId: evt.layerId, opacity: evt.opacity });
+        return;
+    }
+    if (type === 'show-layer-properties') {
+        const node = layerStore.findLayerTreeNodeById(evt.layerId);
+        if (node) {
+            propertiesDialogLayer.value = node;
+            propertiesDialogVisible.value = true;
+        }
+        return;
+    }
 }
 
 function setStyleTarget(layerId) {
@@ -1426,7 +1453,7 @@ async function loadSharedResource(resource) {
 .section-title {
     font-size: 14px;
     font-weight: 600;
-    color: #468a46;
+    color: var(--toc-btn-reverse-text);
 }
 
 /* 绘图工具网格：胶囊化 */
@@ -1438,19 +1465,19 @@ async function loadSharedResource(resource) {
 
 .eco-tool-pill {
     padding: 8px 4px;
-    border: 1px solid #e0eee0;
-    background: #fff;
+    border: 1px solid var(--toc-border-light);
+    background: var(--toc-bg-white);
     border-radius: 12px;
     font-size: 12px;
-    color: #666;
+    color: var(--toc-text-secondary);
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .eco-tool-pill.active {
-    background: #56ab56;
+    background: var(--toc-btn-primary);
     color: #fff;
-    border-color: #56ab56;
+    border-color: var(--toc-btn-primary);
     box-shadow: 0 4px 10px rgba(86, 171, 86, 0.3);
 }
 
@@ -1475,8 +1502,8 @@ async function loadSharedResource(resource) {
 }
 
 .eco-input {
-    background: #f9fbf9;
-    border: 1px solid #e8eee8;
+    background: var(--toc-input-bg);
+    border: 1px solid var(--toc-input-border);
     border-radius: 10px;
     padding: 8px 12px;
     font-size: 12px;
@@ -1486,21 +1513,21 @@ async function loadSharedResource(resource) {
 }
 
 .eco-input:focus {
-    border-color: #56ab56;
+    border-color: var(--toc-input-focus);
 }
 
 .eco-select {
-    background: #f9fbf9;
-    border: 1px solid #e8eee8;
+    background: var(--toc-input-bg);
+    border: 1px solid var(--toc-input-border);
     border-radius: 10px;
     font-size: 12px;
     padding: 0 8px;
-    color: #555;
+    color: var(--toc-text-secondary);
 }
 
 /* 按钮样式：对标截图中的圆润感 */
 .eco-btn-sm {
-    background: #56ab56;
+    background: var(--toc-btn-primary);
     color: white;
     border: none;
     border-radius: 10px;
@@ -1512,10 +1539,10 @@ async function loadSharedResource(resource) {
 .eco-btn-reverse {
     width: 100%;
     padding: 10px;
-    background: #e9f5e9;
-    border: 1px dashed #56ab56;
+    background: var(--toc-btn-reverse-bg);
+    border: 1px dashed var(--toc-btn-reverse-border);
     border-radius: 12px;
-    color: #468a46;
+    color: var(--toc-btn-reverse-text);
     font-size: 13px;
     cursor: pointer;
     font-weight: 500;
@@ -1546,28 +1573,27 @@ async function loadSharedResource(resource) {
 
 /* “全幅显示” - 采用主题中的主绿 */
 .eco-btn-op.primary {
-    background-color: #56ab56b5;
-    border: #2b8a4b;
+    background-color: var(--toc-btn-primary);
+    border: var(--toc-primary-dark);
     color: #ffffff;
     box-shadow: 0 4px 12px rgba(86, 171, 86, 0.2);
 }
 
 .eco-btn-op.primary:hover {
-    background-color: #4a944a;
+    background-color: var(--toc-btn-primary-hover);
     transform: translateY(-1px);
     box-shadow: 0 6px 15px rgba(86, 171, 86, 0.3);
 }
 
 /* “清空画布” - 采用柔和的橙黄色，避免过于突兀 */
 .eco-btn-op.warning {
-    background-color: #f8b60084;
-    /* 暖色调的黄色 */
+    background-color: var(--toc-btn-warning);
     color: #ffffff;
     box-shadow: 0 4px 12px rgba(248, 181, 0, 0.2);
 }
 
 .eco-btn-op.warning:hover {
-    background-color: #e0a400;
+    background-color: var(--toc-btn-warning-hover);
     transform: translateY(-1px);
     box-shadow: 0 6px 15px rgba(248, 181, 0, 0.3);
 }
@@ -1592,34 +1618,33 @@ async function loadSharedResource(resource) {
     left: 0;
     right: 0;
     height: 1.5px;
-    background: #bfc7bfa2;
+    background: var(--toc-divider);
 }
 
 .eco-divider span {
     position: relative;
-    background: #fff;
-    /* 如果在 alt-bg 区域则设为该色 */
+    background: var(--toc-bg-white);
     padding: 0 10px;
     font-size: 10px;
-    color: #ccc;
+    color: var(--toc-text-muted);
 }
 
 /* 提示框 */
 .eco-hint-box {
-    background: #f5f8f5;
+    background: var(--toc-hint-bg);
     border-radius: 16px;
     padding: 12px;
-    border: 1px solid #edf2ed;
+    border: 1px solid var(--toc-hint-border);
 }
 
 .hint-item {
     font-size: 11px;
-    color: #88a088;
+    color: var(--toc-hint-text);
     line-height: 20px;
 }
 
 .hint-item span {
-    background: #56ab56;
+    background: var(--toc-btn-primary);
     color: white;
     padding: 0 4px;
     border-radius: 4px;
@@ -1641,8 +1666,8 @@ async function loadSharedResource(resource) {
     flex-direction: column;
     gap: 10px;
     padding: 4px;
-    background: linear-gradient(180deg, #fdfefd 0%, #f3f8f5 100%);
-    color: #2f3a45;
+    background: var(--toc-toolbox-bg);
+    color: var(--toc-toolbox-text);
 }
 
 .hidden-input {
@@ -1653,20 +1678,20 @@ async function loadSharedResource(resource) {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #dde9e2;
+    border-bottom: 1px solid var(--toc-header-border);
     padding-bottom: 8px;
 }
 
 .title {
     font-size: 20px;
     font-weight: 700;
-    color: #2b8a4b;
+    color: var(--toc-title);
     letter-spacing: 0.2px;
 }
 
 .subtitle {
     font-size: 12px;
-    color: #72897a;
+    color: var(--toc-subtitle);
 }
 
 .tabs {
@@ -1681,13 +1706,13 @@ async function loadSharedResource(resource) {
 }
 
 .tab {
-    border: 1px solid rgba(130, 176, 146, 0.18);
-    background: rgba(255, 255, 255, 0.42);
+    border: 1px solid var(--toc-tab-border);
+    background: var(--toc-tab-bg);
     border-radius: 10px;
     padding: 8px 4px;
     font-size: 12px;
     cursor: pointer;
-    color: #4e6656;
+    color: var(--toc-tab-text);
     transition:
         transform 0.14s ease,
         background-color 0.14s ease,
@@ -1701,8 +1726,8 @@ async function loadSharedResource(resource) {
 }
 
 .tab.active {
-    border-color: rgba(33, 128, 72, 0.84);
-    background: linear-gradient(135deg, rgba(48, 157, 88, 0.92) 0%, rgba(44, 133, 76, 0.92) 100%);
+    border-color: var(--toc-tab-active-border);
+    background: var(--toc-tab-active-bg);
     color: #ffffff;
     font-weight: 600;
     box-shadow: 0 8px 20px rgba(36, 125, 72, 0.24);
@@ -1740,14 +1765,14 @@ async function loadSharedResource(resource) {
 .card-title {
     font-size: 13px;
     font-weight: 700;
-    color: #2e4b3a;
+    color: var(--toc-card-title-dark);
     margin-bottom: 6px;
 }
 
 .upload-tip {
     margin-bottom: 8px;
     font-size: 11px;
-    color: #6b7f72;
+    color: var(--toc-text-secondary);
     padding: 0 2px;
 }
 
@@ -1767,9 +1792,9 @@ async function loadSharedResource(resource) {
 }
 
 .upload-entry {
-    border: 1.5px dashed #b7dcc7;
+    border: 1.5px dashed var(--toc-upload-border);
     border-radius: 8px;
-    background: #f9fdfb;
+    background: var(--toc-upload-bg);
     padding: 10px;
     transition:
         border-color 0.15s ease,
@@ -1778,8 +1803,8 @@ async function loadSharedResource(resource) {
 }
 
 .upload-entry.dragging {
-    border-color: #3f9f67;
-    background: #eaf7f0;
+    border-color: var(--toc-upload-drag-border);
+    background: var(--toc-upload-drag-bg);
     box-shadow: 0 0 0 3px rgba(90, 169, 122, 0.15);
 }
 
@@ -1796,25 +1821,25 @@ async function loadSharedResource(resource) {
     width: 20px;
     height: 20px;
     border-radius: 6px;
-    color: #2f8e58;
-    background: #eaf7f0;
+    color: var(--toc-upload-icon);
+    background: var(--toc-upload-drag-bg);
 }
 
 .upload-progress {
-    border: 1px solid #d8e9df;
-    background: #f8fcfa;
+    border: 1px solid var(--toc-upload-progress-border);
+    background: var(--toc-upload-progress-bg);
     border-radius: 8px;
     padding: 7px;
 }
 
 .upload-progress.phase-error {
-    border-color: #e8bbbb;
-    background: #fff4f4;
+    border-color: var(--toc-upload-error-border);
+    background: var(--toc-upload-error-bg);
 }
 
 .upload-progress.phase-done {
-    border-color: #b8dec7;
-    background: #f0fbf4;
+    border-color: var(--toc-upload-done-border);
+    background: var(--toc-upload-done-bg);
 }
 
 .upload-progress-head {
@@ -1828,7 +1853,7 @@ async function loadSharedResource(resource) {
 
 .upload-progress-bar {
     height: 8px;
-    background: #e3efe8;
+    background: var(--toc-border-light);
     border-radius: 999px;
     overflow: hidden;
 }
@@ -1836,7 +1861,7 @@ async function loadSharedResource(resource) {
 .upload-progress-fill {
     height: 100%;
     width: 0;
-    background: linear-gradient(90deg, #68c282 0%, #31a05b 100%);
+    background: linear-gradient(90deg, var(--toc-primary-lighter) 0%, var(--toc-primary) 100%);
     transition: width 0.24s ease;
 }
 
@@ -1847,7 +1872,7 @@ async function loadSharedResource(resource) {
 .upload-progress-meta {
     margin-top: 5px;
     font-size: 10px;
-    color: #7e8d83;
+    color: var(--toc-text-muted);
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
@@ -1856,7 +1881,7 @@ async function loadSharedResource(resource) {
 .upload-progress-message {
     margin-top: 3px;
     font-size: 10px;
-    color: #54705f;
+    color: var(--toc-text-secondary);
     word-break: break-word;
 }
 
@@ -1874,7 +1899,7 @@ async function loadSharedResource(resource) {
 }
 
 .layer-item {
-    border-bottom: 1px solid #e8efe9;
+    border-bottom: 1px solid var(--toc-border-light);
     padding: 8px 4px;
     background: transparent;
     cursor: pointer;
@@ -1882,7 +1907,7 @@ async function loadSharedResource(resource) {
 }
 
 .layer-item:hover {
-    background: #f4faf6;
+    background: var(--toc-primary-bg);
 }
 
 .layer-main {
@@ -1908,9 +1933,9 @@ async function loadSharedResource(resource) {
 .feature-badge {
     flex-shrink: 0;
     font-size: 10px;
-    color: #486353;
-    border: 1px solid #d4e6db;
-    background: #f2f8f4;
+    color: var(--toc-text-secondary);
+    border: 1px solid var(--toc-badge-border);
+    background: var(--toc-badge-bg-hover);
     border-radius: 999px;
     padding: 1px 7px;
     line-height: 1.5;
@@ -1928,9 +1953,9 @@ async function loadSharedResource(resource) {
 
 .action-icon-btn {
     position: relative;
-    border: 1px solid #d6e5dc;
-    background: #f7fcf9;
-    color: #2f6046;
+    border: 1px solid var(--toc-border-medium);
+    background: var(--toc-bg-white);
+    color: var(--toc-text-dark);
     border-radius: 7px;
     width: 24px;
     height: 24px;
@@ -1944,21 +1969,21 @@ async function loadSharedResource(resource) {
 }
 
 .action-icon-btn:hover {
-    background: #ebf7f0;
-    border-color: #87bf9d;
-    color: #1f7b49;
+    background: var(--toc-primary-bg);
+    border-color: var(--toc-border-active);
+    color: var(--toc-primary);
 }
 
 .action-icon-btn.danger {
-    border-color: #ebc8c8;
-    background: #fff5f5;
-    color: #ae4a4a;
+    border-color: var(--toc-upload-error-border);
+    background: var(--toc-upload-error-bg);
+    color: var(--toc-danger);
 }
 
 .action-icon-btn.danger:hover {
-    border-color: #df9d9d;
-    background: #ffecec;
-    color: #9f2f2f;
+    border-color: var(--toc-danger);
+    background: var(--toc-danger-bg);
+    color: var(--toc-danger-hover);
 }
 
 .action-icon-btn[data-tip]:hover::after {
@@ -1992,10 +2017,10 @@ async function loadSharedResource(resource) {
 
 .coord-input-panel {
     margin-top: 12px;
-    border: 1px solid #d7e7de;
+    border: 1px solid var(--toc-border-light);
     border-radius: 8px;
     padding: 10px;
-    background: rgba(245, 252, 248, 0.85);
+    background: var(--toc-bg-card);
 }
 
 .coord-input-grid {
@@ -2006,25 +2031,25 @@ async function loadSharedResource(resource) {
 
 .coord-input-field {
     width: 100%;
-    border: 1px solid #b9d9c8;
+    border: 1px solid var(--toc-border-active);
     border-radius: 8px;
     padding: 8px 10px;
     font-size: 12px;
-    color: #2f4f3e;
-    background: #ffffff;
+    color: var(--toc-text-dark);
+    background: var(--toc-bg-input);
     box-sizing: border-box;
 }
 
 .coord-input-field:focus {
     outline: none;
-    border-color: #2f9a57;
-    box-shadow: 0 0 0 2px rgba(47, 154, 87, 0.16);
+    border-color: var(--toc-primary-light);
+    box-shadow: 0 0 0 2px var(--toc-primary-bg-hover);
 }
 
 .coord-divider {
     height: 1px;
     margin: 10px 0;
-    background: #dbe9e1;
+    background: var(--toc-border-light);
 }
 
 .coord-crs-row {
@@ -2036,17 +2061,17 @@ async function loadSharedResource(resource) {
 
 .coord-crs-label {
     font-size: 12px;
-    color: #466453;
+    color: var(--toc-text-secondary);
     white-space: nowrap;
 }
 
 .coord-crs-select {
     flex: 1;
-    border: 1px solid #b9d9c8;
+    border: 1px solid var(--toc-border-active);
     border-radius: 8px;
     padding: 6px 8px;
-    background: #ffffff;
-    color: #2f4f3e;
+    background: var(--toc-bg-input);
+    color: var(--toc-text-dark);
 }
 
 .coord-input-actions {
@@ -2067,7 +2092,7 @@ async function loadSharedResource(resource) {
 .geocode-subtitle {
     font-size: 12px;
     font-weight: 600;
-    color: #3a5a48;
+    color: var(--toc-text-dark);
     margin-bottom: 6px;
 }
 
@@ -2075,12 +2100,12 @@ async function loadSharedResource(resource) {
     margin-top: 8px;
     font-size: 11px;
     line-height: 1.45;
-    color: #557565;
+    color: var(--toc-text-secondary);
 }
 
 .coord-input-error {
     margin-top: 8px;
-    color: #b83d3d;
+    color: var(--toc-danger);
     font-size: 12px;
     line-height: 1.4;
     word-break: break-word;
@@ -2114,9 +2139,9 @@ async function loadSharedResource(resource) {
 .ghost-btn,
 .small-btn,
 .template {
-    border: 1px solid #d5e4db;
-    background: #f6fbf8;
-    color: #2d4f3a;
+    border: 1px solid var(--toc-border-medium);
+    background: var(--toc-bg-white);
+    color: var(--toc-text-dark);
     border-radius: 8px;
     padding: 6px 8px;
     font-size: 12px;
@@ -2125,9 +2150,9 @@ async function loadSharedResource(resource) {
 
 .draw-tool-btn {
     min-height: 34px;
-    border: 1px solid #7fbe98;
-    background: #fbfefd;
-    color: #2f6147;
+    border: 1px solid var(--toc-border-active);
+    background: var(--toc-bg-white);
+    color: var(--toc-text-dark);
     border-radius: 8px;
     padding: 6px 8px;
     font-size: 12px;
@@ -2136,12 +2161,12 @@ async function loadSharedResource(resource) {
 }
 
 .draw-tool-btn:hover {
-    background: #f1f9f4;
+    background: var(--toc-primary-bg);
 }
 
 .draw-tool-btn.active {
-    border-color: #2f9a57;
-    background: #2f9a57;
+    border-color: var(--toc-primary-light);
+    background: var(--toc-primary-light);
     color: #ffffff;
     font-weight: 600;
 }
@@ -2150,7 +2175,7 @@ async function loadSharedResource(resource) {
     border: 1px solid transparent;
     border-radius: 8px;
     min-height: 34px;
-    background: #f6fbf8;
+    background: var(--toc-bg-white);
     padding: 6px 8px;
     font-size: 12px;
     font-weight: 600;
@@ -2158,35 +2183,35 @@ async function loadSharedResource(resource) {
 }
 
 .draw-op-primary {
-    border-color: #7eaed8;
-    background: #edf5fc;
-    color: #245f95;
+    border-color: var(--toc-border-active);
+    background: var(--toc-primary-bg);
+    color: var(--toc-primary);
 }
 
 .btn-accent {
-    border-color: #9bc9af;
-    background: #eef8f2;
-    color: #1d7541;
+    border-color: var(--toc-border-active);
+    background: var(--toc-primary-bg);
+    color: var(--toc-primary-dark);
 }
 
 .draw-op-warning {
-    border-color: #e8c080;
-    background: #fff7e8;
-    color: #9a5a02;
+    border-color: var(--toc-btn-warning);
+    background: var(--toc-upload-drag-bg);
+    color: var(--toc-btn-warning-hover);
 }
 
 .btn-danger {
-    border-color: #e2a3a3;
-    background: #fff1f1;
-    color: #a03636;
+    border-color: var(--toc-upload-error-border);
+    background: var(--toc-upload-error-bg);
+    color: var(--toc-danger);
 }
 
 .ghost-btn:hover,
 .small-btn:hover,
 .template:hover {
-    background: #ebf7f0;
-    border-color: #7fc397;
-    color: #1d7541;
+    background: var(--toc-primary-bg);
+    border-color: var(--toc-border-active);
+    color: var(--toc-primary-dark);
 }
 
 .small-btn:disabled {
@@ -2195,9 +2220,9 @@ async function loadSharedResource(resource) {
 }
 
 .small-btn.ghost {
-    background: #ffffff;
-    border-color: #d7e6dd;
-    color: #3e6851;
+    background: var(--toc-bg-input);
+    border-color: var(--toc-border-medium);
+    color: var(--toc-text-secondary);
 }
 
 .style-scroll {
@@ -2215,9 +2240,9 @@ async function loadSharedResource(resource) {
 }
 
 .template-chip {
-    border: 1px solid #d9e8df;
-    background: #fbfdfc;
-    color: #2f4f3e;
+    border: 1px solid var(--toc-border-light);
+    background: var(--toc-bg-white);
+    color: var(--toc-text-dark);
     border-radius: 8px;
     padding: 7px 9px;
     font-size: 12px;
@@ -2228,8 +2253,8 @@ async function loadSharedResource(resource) {
 }
 
 .template-chip:hover {
-    border-color: #8bc3a3;
-    background: #f1f9f4;
+    border-color: var(--toc-border-active);
+    background: var(--toc-primary-bg);
 }
 
 .chip-dot {
@@ -2241,7 +2266,7 @@ async function loadSharedResource(resource) {
 
 .style-divider {
     height: 1px;
-    background: #deebe3;
+    background: var(--toc-border-light);
     margin: 12px 0;
 }
 
@@ -2255,7 +2280,7 @@ async function loadSharedResource(resource) {
     right: 10px;
     top: 50%;
     transform: translateY(-50%);
-    color: #56806a;
+    color: var(--toc-text-secondary);
     pointer-events: none;
     font-size: 11px;
 }
@@ -2263,18 +2288,18 @@ async function loadSharedResource(resource) {
 .style-select {
     width: 100%;
     appearance: none;
-    border: 1px solid #8ec6a5;
-    background: #fbfefc;
-    color: #2d4a3a;
+    border: 1px solid var(--toc-border-active);
+    background: var(--toc-bg-white);
+    color: var(--toc-text-dark);
     border-radius: 8px;
     padding: 8px 30px 8px 10px;
 }
 
 .style-color {
-    border: 1px solid #d2e5da;
+    border: 1px solid var(--toc-border-light);
     border-radius: 8px;
     padding: 2px;
-    background: #ffffff;
+    background: var(--toc-bg-input);
     height: 34px;
 }
 
@@ -2283,14 +2308,14 @@ async function loadSharedResource(resource) {
     justify-content: space-between;
     align-items: center;
     font-size: 12px;
-    color: #4d6154;
+    color: var(--toc-text-secondary);
 }
 
 .style-slider {
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background: linear-gradient(to right, #c8e1d0, #68c282);
+    background: linear-gradient(to right, var(--toc-border-light), var(--toc-primary-lighter));
     outline: none;
 }
 
@@ -2316,7 +2341,7 @@ async function loadSharedResource(resource) {
     gap: 6px;
     font-size: 13px;
     font-weight: 700;
-    color: #2e4b3a;
+    color: var(--toc-card-title-dark);
     margin-bottom: 8px;
 }
 
@@ -2327,8 +2352,8 @@ async function loadSharedResource(resource) {
     width: 18px;
     height: 18px;
     border-radius: 5px;
-    color: #2f9a57;
-    background: #eaf7f0;
+    color: var(--toc-primary-light);
+    background: var(--toc-primary-bg);
 }
 
 .shared-resource-menu {
@@ -2338,9 +2363,9 @@ async function loadSharedResource(resource) {
 }
 
 .shared-resource-btn {
-    border: 1px solid #7fc397;
-    background: #eef8f2;
-    color: #1d7541;
+    border: 1px solid var(--toc-border-active);
+    background: var(--toc-primary-bg);
+    color: var(--toc-primary-dark);
     border-radius: 8px;
     padding: 8px 10px;
     font-size: 12px;
@@ -2355,9 +2380,9 @@ async function loadSharedResource(resource) {
 }
 
 .shared-resource-btn:hover {
-    border-color: #4fb373;
-    background: #d4f1e3;
-    color: #1d7541;
+    border-color: var(--toc-primary-light);
+    background: var(--toc-primary-bg-hover);
+    color: var(--toc-primary-dark);
     transform: translateY(-1px);
 }
 
@@ -2370,33 +2395,33 @@ async function loadSharedResource(resource) {
     max-height: 320px;
     overflow-y: auto;
     padding: 6px;
-    border: 1px solid rgba(77, 150, 103, 0.2);
+    border: 1px solid var(--toc-primary-bg-hover);
     border-radius: 8px;
-    background: rgba(239, 248, 242, 0.5);
+    background: var(--toc-primary-bg);
 }
 
 .resource-empty {
     text-align: center;
     padding: 12px 8px;
     font-size: 11px;
-    color: #8a9f92;
+    color: var(--toc-text-muted);
     font-style: italic;
 }
 
 .style-slider {
-    accent-color: #2f9a57;
+    accent-color: var(--toc-primary-light);
 }
 
 .style-apply-btn {
     margin-top: 8px;
-    border-color: #7cbf95;
-    background: #edf9f1;
-    color: #1f7a44;
+    border-color: var(--toc-border-active);
+    background: var(--toc-primary-bg);
+    color: var(--toc-primary);
 }
 
 .hint {
     font-size: 12px;
-    color: #4a555e;
+    color: var(--toc-text-secondary);
     line-height: 1.9;
     padding: 2px 2px 0;
 }
@@ -2407,7 +2432,7 @@ async function loadSharedResource(resource) {
 }
 
 .empty {
-    color: #7a8f80;
+    color: var(--toc-text-muted);
     font-size: 12px;
 }
 

@@ -950,6 +950,27 @@ export const useLayerStore = defineStore('layerStore', () => {
         selectedEditLayerId.value = layerId || 'draw';
     }
 
+    function renameLayer(layerId: string, newName: string): void {
+        const id = String(layerId || '').trim();
+        const name = String(newName || '').trim();
+        if (!id || !name) return;
+
+        const idx = userLayers.value.findIndex((l: any) => String(l.id).trim() === id);
+        if (idx < 0) return;
+
+        const layer: any = { ...userLayers.value[idx] };
+        layer.name = name;
+        layer.displayName = name;
+
+        if (layer.standardTocItem) {
+            layer.standardTocItem = { ...layer.standardTocItem, name };
+        }
+
+        const updated = [...userLayers.value];
+        updated[idx] = layer;
+        userLayers.value = updated;
+    }
+
     function setDrawTool(tool: string): void {
         selectedDrawTool.value = tool;
     }
@@ -1087,6 +1108,7 @@ export const useLayerStore = defineStore('layerStore', () => {
         syncLayers,
         bindHandlers,
         setStyleTarget,
+        renameLayer,
         setDrawTool,
         showAttributeTable,
         closeAttributeTable,
