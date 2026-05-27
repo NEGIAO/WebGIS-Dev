@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, Session, create_engine, select
@@ -10,7 +10,7 @@ DEFAULT_DB_PATH = "/tmp/webgis_download_tasks.db"
 
 
 def _utc_now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 class DownloadTask(SQLModel, table=True):
