@@ -17,6 +17,7 @@ dependencies = [
     "supabase",
     "pytz",
     "python-multipart>=0.0.6",
+    "shapely>=2.0.0",
 ]
 
 [tool.uv]

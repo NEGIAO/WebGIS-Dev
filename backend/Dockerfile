@@ -11,6 +11,7 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
     apt-get update && apt-get install -y --no-install-recommends \
     libexpat1 \
     libgdal-dev \
+    libgeos-dev \
     libgl1 \
     && rm -rf /var/lib/apt/lists/*
 

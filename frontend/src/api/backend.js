@@ -853,6 +853,21 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
     return backendAPI.post('/api/admin/agent/config', safePayload);
 }
 
+// ==================== 空间分析接口 ====================
+
+/**
+ * 调用后端空间分析 API
+ * @param {Object} payload - 分析参数
+ * @param {string} payload.operation - 分析类型：buffer/intersection/union/difference/convexHull
+ * @param {number} [payload.radius] - 缓冲半径（米），buffer 专用
+ * @param {Object} payload.features_a - 图层 A 的 GeoJSON FeatureCollection
+ * @param {Object} [payload.features_b] - 图层 B 的 GeoJSON FeatureCollection
+ * @returns {Promise<Object>} { code, data: FeatureCollection, message }
+ */
+export async function apiSpatialAnalysis(payload) {
+    return backendAPI.post('/api/v1/spatial/analysis', payload);
+}
+
 export function syncUserRoleToUrl(user) {
     if (typeof window === 'undefined') return;
 

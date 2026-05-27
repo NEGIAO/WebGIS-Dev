@@ -29,6 +29,7 @@ from download_xyz.download import router as download_router
 from download_xyz.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
 from download_xyz.download_task import init_download_task_db
 from api.minitor import init_monitor_log_streaming, router as monitor_router
+from api.spatial import router as spatial_router
 
 # ==================== 日志配置 ====================
 logging.basicConfig(
@@ -148,6 +149,10 @@ logger.info("已注册下载任务路由")
 # 挂载监控路由
 app.include_router(monitor_router)
 logger.info("已注册监控路由")
+
+# 挂载空间分析路由
+app.include_router(spatial_router)
+logger.info("已注册空间分析路由")
 
 # --- 功能：健康检查 ---
 @app.get("/")

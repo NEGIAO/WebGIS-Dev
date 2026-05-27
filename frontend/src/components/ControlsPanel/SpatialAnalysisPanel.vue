@@ -258,7 +258,7 @@ function showResult(type, msg) {
 
 <style scoped>
 .spatial-panel {
-    width: 260px;
+    width: 200px;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(12px);
     border-radius: 12px;
