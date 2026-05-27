@@ -62,6 +62,28 @@ export function createMapEventHandlers({
         if (!map) return;
         const viewport = map.getViewport();
 
+        // 保存 viewport 上的匿名监听器引用，便于卸载时清理
+        const _mouseoutHandler = () => {
+            if (tooltipRef?.helpTooltipEl) tooltipRef.helpTooltipEl.classList.add('hidden');
+        };
+        const _contextmenuHandler = (e) => {
+            const controller = rightDragZoomControllerRef?.value;
+            if (controller?.shouldSuppressContextMenu?.()) {
+                e.preventDefault();
+                return;
+            }
+            if (!isAttributeQueryEnabledRef?.value) return;
+            e.preventDefault();
+            const pixel = map.getEventPixel(e);
+            const feature = map.forEachFeatureAtPixel(pixel, (f) => f);
+            if (!feature) return;
+            const { geometry, style, ...props } = feature.getProperties();
+            emit?.('feature-selected', { ...props, 操作提示: '右键选择，可在工具箱中编辑样式' });
+        };
+        const _touchmoveHandler = () => {
+            updateCurrentCoordinate(map.getView().getCenter());
+        };
+
         // ✅ 修复 Canvas 警告（正确时机：地图渲染后）
         map.on('postrender', () => {
             const canvas = viewport.querySelector('canvas');
@@ -91,9 +113,7 @@ export function createMapEventHandlers({
         });
 
         // ========== mouseout 事件 ==========
-        viewport.addEventListener('mouseout', () => {
-            if (tooltipRef?.helpTooltipEl) tooltipRef.helpTooltipEl.classList.add('hidden');
-        });
+        viewport.addEventListener('mouseout', _mouseoutHandler);
 
         // ========== singleclick 事件 ==========
         map.on('singleclick', async (evt) => {
@@ -154,20 +174,7 @@ export function createMapEventHandlers({
         });
 
         // ========== contextmenu 事件 ==========
-        viewport.addEventListener('contextmenu', (e) => {
-            const controller = rightDragZoomControllerRef?.value;
-            if (controller?.shouldSuppressContextMenu?.()) {
-                e.preventDefault();
-                return;
-            }
-            if (!isAttributeQueryEnabledRef?.value) return;
-            e.preventDefault();
-            const pixel = map.getEventPixel(e);
-            const feature = map.forEachFeatureAtPixel(pixel, (f) => f);
-            if (!feature) return;
-            const { geometry, style, ...props } = feature.getProperties();
-            emit?.('feature-selected', { ...props, 操作提示: '右键选择，可在工具箱中编辑样式' });
-        });
+        viewport.addEventListener('contextmenu', _contextmenuHandler);
 
         // ========== 缩放/中心事件 ==========
         map.getView().on('change:resolution', () => {
@@ -188,13 +195,14 @@ export function createMapEventHandlers({
         });
 
         // ========== 移动端触摸事件 ==========
-        viewport.addEventListener(
-            'touchmove',
-            () => {
-                updateCurrentCoordinate(map.getView().getCenter());
-            },
-            false,
-        );
+        viewport.addEventListener('touchmove', _touchmoveHandler, false);
+
+        // 返回清理函数，组件卸载时移除 viewport 上的监听器
+        return function cleanupMapEventHandlers() {
+            viewport.removeEventListener('mouseout', _mouseoutHandler);
+            viewport.removeEventListener('contextmenu', _contextmenuHandler);
+            viewport.removeEventListener('touchmove', _touchmoveHandler);
+        };
     }
 
     return { bindMapEvents };

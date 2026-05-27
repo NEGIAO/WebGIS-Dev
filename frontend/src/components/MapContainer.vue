@@ -27,9 +27,9 @@
             @close="handleSwipeClose"
         />
 
-        <!-- <MapEasterEgg :map-instance="mapInstance" :bounds="DIHUAN_BOUNDS" :images="IMAGES" over -->
-        @open-large-image="handleEasterEggImageOpen"
-        @location-change="handleEasterEggLocationChange" />
+        <!-- <MapEasterEgg :map-instance="mapInstance" :bounds="DIHUAN_BOUNDS" :images="IMAGES"
+            @open-large-image="handleEasterEggImageOpen"
+            @location-change="handleEasterEggLocationChange" /> -->
 
         <LayerControlPanel
             :map-instance="mapInstance"
@@ -838,6 +838,7 @@ function syncAttributeTableMapExtent() {
 }
 
 // 地图事件处理
+let _cleanupMapEventHandlers = null;
 const { bindMapEvents } = createMapEventHandlers({
     mapInstanceRef: mapInstance,
     currentCoordinateRef: currentCoordinate,
@@ -1174,12 +1175,13 @@ watch(
 );
 
 // 监听窗口大小变化以更新容器rect
+const _handleResize = () => {
+    if (mapContainerRef.value) {
+        mapContainerRect.value = mapContainerRef.value.getBoundingClientRect();
+    }
+};
 if (typeof window !== 'undefined') {
-    window.addEventListener('resize', () => {
-        if (mapContainerRef.value) {
-            mapContainerRect.value = mapContainerRef.value.getBoundingClientRect();
-        }
-    });
+    window.addEventListener('resize', _handleResize);
 }
 
 // [隶属] 组件卸载-资源清理
@@ -1197,6 +1199,12 @@ onUnmounted(() => {
     rightDragZoomController?.dispose?.();
     clearRouteStepStyleCache?.();
     rightDragZoomController = null;
+    // 清理 resize 和 viewport 事件监听器，避免内存泄漏
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', _handleResize);
+    }
+    _cleanupMapEventHandlers?.();
+    _cleanupMapEventHandlers = null;
     attrStore.setMapExtent(null);
     if (pendingBusPickRef.value?.reject) {
         pendingBusPickRef.value.reject(new Error('地图已卸载'));
@@ -1433,8 +1441,8 @@ function initMap() {
     rightDragZoomController?.dispose?.();
     rightDragZoomController = createRightDragZoomController(mapInstance.value);
 
-    // 1.6 事件监听
-    bindMapEvents();
+    // 1.6 事件监听（返回清理函数用于卸载时移除 viewport 监听器）
+    _cleanupMapEventHandlers = bindMapEvents();
     bindBasemapSelectionWatcher();
 
     // 1.7 初始化时也要刷新一次图层状态，确保初始配置正确应用

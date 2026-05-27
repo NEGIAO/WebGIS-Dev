@@ -110,6 +110,27 @@ class AgentChatRequest(BaseModel):
     override_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
 
 
+class AgentChatProxyRequest(BaseModel):
+    """
+    用户个人 API Key 代理聊天请求（绕过平台配额限制）。
+    
+    与 AgentChatRequest 的区别：
+    - api_key、base_url、model 为必填项（由前端"个人 Key 模式"提供）
+    - 不消耗平台配额（用户使用自己的 API Key）
+    - 所有请求经后端代理转发，避免浏览器 CORS 限制
+    """
+    message: str = Field(..., min_length=1, max_length=2000)
+    history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=12)
+    location_context: Optional[str] = Field(default=None, max_length=1000)
+    api_key: str = Field(..., min_length=1, max_length=5000)
+    base_url: str = Field(..., min_length=1, max_length=240)
+    model: str = Field(..., min_length=1, max_length=160)
+    system_prompt: Optional[str] = Field(default=None, max_length=2000)
+    timeout_seconds: int = Field(default=45, ge=5, le=180)
+    max_tokens: int = Field(default=8192, ge=1, le=8192)
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+
+
 class AgentConfigUpdateRequest(BaseModel):
     base_url: Optional[str] = Field(default=None, min_length=1, max_length=240)
     model: Optional[str] = Field(default=None, max_length=160)
@@ -2226,4 +2247,131 @@ async def update_user_model_preference(
             "preferred_model": preferred_model,
         },
     }
+
+
+@router.post("/api/agent/chat/proxy")
+async def agent_chat_proxy(
+    payload: AgentChatProxyRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """
+    功能：用户个人 API Key 代理聊天端点（绕过浏览器 CORS 限制，不消耗平台配额）。
+
+    解决的问题：
+    - 前端"直连模式"直接从浏览器调用外部 LLM API 时，会因为 CORS 策略被浏览器拒绝。
+    - 此端点将请求经后端转发，彻底解决跨域问题。
+
+    与 /api/agent/chat/completions 的区别：
+    - 使用用户前端传入的 api_key/base_url/model（不做平台配置回退）
+    - 不消耗平台每日配额（用户使用自己的 API Key）
+    - 记录 API 调用日志（用于审计）
+
+    参数：
+    - payload.message: 用户本轮问题。
+    - payload.history: 近几轮历史消息（仅 user/assistant）。
+    - payload.location_context: 可选地理上下文。
+    - payload.api_key: 用户个人 LLM API Key（必填）。
+    - payload.base_url: LLM API 基础地址（必填）。
+    - payload.model: 模型名称（必填）。
+    - payload.system_prompt: 可选系统提示词覆盖。
+    - payload.timeout_seconds: 超时秒数（默认 45）。
+    - payload.max_tokens: 最大 token 数（默认 8192）。
+    - payload.temperature: 采样温度（默认 0.2）。
+
+    返回：
+    - reply: 模型回复文本。
+    - model: 本次调用的模型名称。
+    - usage: 上游返回的 token 使用统计（若提供）。
+    """
+    username = str(session.get("username") or "anonymous")
+    role = normalize_role(session.get("role"), username)
+
+    api_key = str(payload.api_key or "").strip()
+    base_url = str(payload.base_url or "").strip().rstrip("/")
+    model = str(payload.model or "").strip()
+
+    if not api_key or not base_url or not model:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="api_key, base_url, model are required.",
+        )
+
+    # 清洗历史消息
+    history_items = _sanitize_history(payload.history)
+
+    # 构建位置上下文
+    location_context = str(payload.location_context or "").strip()
+    if not location_context:
+        client_ip = _extract_client_ip(request)
+        ip_location = await _try_get_location_from_ip_async(client_ip)
+        if ip_location:
+            location_context = ip_location
+
+    # 构建系统提示词
+    user_system_prompt = str(payload.system_prompt or "").strip()
+    if not user_system_prompt:
+        user_system_prompt = "You are a helpful AI assistant. Reply in concise Chinese unless the user asks for another language."
+
+    system_prompt = _join_system_prompt(user_system_prompt, location_context)
+
+    # 组装消息
+    request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    request_messages.extend(history_items)
+    request_messages.append({"role": "user", "content": str(payload.message or "").strip()})
+
+    # 记录请求参数（不包含 api_key）
+    request_params = json.dumps(
+        {
+            "endpoint": "/api/agent/chat/proxy",
+            "model": model,
+            "base_url": base_url,
+            "history_len": len(history_items),
+            "has_location_context": bool(location_context),
+        },
+        ensure_ascii=False,
+    )
+
+    started_at = time.perf_counter()
+    upstream_status = 200
+    try:
+        upstream_data = await _call_upstream_chat(
+            request,
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            messages=request_messages,
+            timeout_seconds=int(payload.timeout_seconds),
+            max_tokens=int(payload.max_tokens),
+            temperature=float(payload.temperature),
+        )
+
+        reply = _extract_assistant_reply(upstream_data)
+        if not reply:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Agent upstream returned empty content.",
+            )
+
+        return {
+            "status": "success",
+            "data": {
+                "reply": reply,
+                "model": model,
+                "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+                "mode": "personal-proxy",
+            },
+        }
+    except HTTPException as exc:
+        upstream_status = int(exc.status_code)
+        raise
+    finally:
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        await _record_agent_call_safe(
+            username=username,
+            role=role,
+            status_code=upstream_status,
+            elapsed_ms=elapsed_ms,
+            request_params=request_params,
+        )
 

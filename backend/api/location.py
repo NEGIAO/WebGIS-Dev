@@ -120,50 +120,49 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "127.0.0.1"
 
 
-async def amap_ip_locate(ip: str) -> Optional[Dict[str, Any]]:
+async def _get_http_client(request: Request) -> httpx.AsyncClient:
+    """从 app.state 获取共享 httpx 客户端，不存在时新建。"""
+    client = getattr(request.app.state, "http_client", None)
+    if client is not None:
+        return client
+    return httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT)
+
+
+async def amap_ip_locate(ip: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
     """
     调用高德 IP 定位 API
-    
+
+    Args:
+        ip: IP 地址
+        client: 共享 httpx 客户端
+
     Returns:
-        成功时返回 {city, province, adcode, extent}
-        失败时返回 None
+        成功时返回 {city, province, adcode, extent}，失败时返回 None
     """
     if not AMAP_KEY:
         logger.warning("AMAP_KEY 未配置")
         return None
-    
+
     try:
-        async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT) as client:
-            url = f"https://restapi.amap.com/v3/ip?ip={ip}&key={AMAP_KEY}"
-            response = await client.get(url)
-            data = response.json()
-            
-            if data.get("status") == "1":
-                # 成功
-                return {
-                    "city": data.get("city"),
-                    "province": data.get("province"),
-                    "country": data.get("country", "中国"),
-                    "adcode": data.get("adcode"),
-                    "extent": [
-                        float(data.get("rectangle", "0,0,0,0").split(",")[0]),
-                        float(data.get("rectangle", "0,0,0,0").split(",")[1]),
-                        float(data.get("rectangle", "0,0,0,0").split(",")[2]),
-                        float(data.get("rectangle", "0,0,0,0").split(",")[3]),
-                    ]
-                }
-            else:
-                # API 返回错误
-                error_msg = data.get("info", "未知错误")
-                logger.warning(f"高德 IP 定位错误: {error_msg}")
-                
-                # 检查是否是配额错误
-                if "日查询次数" in error_msg or "服务次数" in error_msg:
-                    raise HTTPException(
-                        status_code=429,
-                        detail="IP 定位：API 调用额度已用完，部分功能受限"
-                    )
-                return None
+        url = f"https://restapi.amap.com/v3/ip"
+        response = await client.get(url, params={"ip": ip, "key": AMAP_KEY})
+        data = response.json()
+
+        if data.get("status") == "1":
+            rectangle = data.get("rectangle", "0,0,0,0").split(",")
+            return {
+                "city": data.get("city"),
+                "province": data.get("province"),
+                "country": data.get("country", "中国"),
+                "adcode": data.get("adcode"),
+                "extent": [float(rectangle[i]) for i in range(4)],
+            }
+        else:
+            error_msg = data.get("info", "未知错误")
+            logger.warning(f"高德 IP 定位错误: {error_msg}")
+            if "日查询次数" in error_msg or "服务次数" in error_msg:
+                raise HTTPException(status_code=429, detail="IP 定位：API 调用额度已用完，部分功能受限")
+            return None
     except HTTPException:
         raise
     except Exception as e:
@@ -171,99 +170,98 @@ async def amap_ip_locate(ip: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-async def free_service_ip_locate(ip: str) -> Optional[Dict[str, Any]]:
+async def free_service_ip_locate(ip: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
     """
     使用免费服务进行 IP 定位（ipapi.co）
-    
+
+    Args:
+        ip: IP 地址
+        client: 共享 httpx 客户端
+
     Returns:
-        成功时返回 {city, province, country, adcode}
-        失败时返回 None
+        成功时返回 {city, province, country, adcode}，失败时返回 None
     """
     try:
-        async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT) as client:
-            url = f"{IPAPI_ENDPOINT}/{ip}/json/"
-            response = await client.get(url)
-            data = response.json()
-            
-            return {
-                "city": data.get("city"),
-                "province": data.get("region"),
-                "country": data.get("country_name", "Unknown"),
-                "adcode": "",
-                "extent": None  # 免费服务不提供范围
-            }
+        response = await client.get(f"{IPAPI_ENDPOINT}/{ip}/json/")
+        data = response.json()
+        return {
+            "city": data.get("city"),
+            "province": data.get("region"),
+            "country": data.get("country_name", "Unknown"),
+            "adcode": "",
+            "extent": None,
+        }
     except Exception as e:
         logger.error(f"免费 IP 定位异常: {str(e)}")
         return None
 
 
-async def amap_reverse_geocode(lng: float, lat: float) -> Optional[Dict[str, Any]]:
+async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
     """
     调用高德反向地理编码 API
-    
+
+    Args:
+        lng, lat: 坐标
+        client: 共享 httpx 客户端
+
     Returns:
-        成功时返回 {formattedAddress, province, city, district, adcode}
-        失败时返回 None
+        成功时返回 {formattedAddress, province, city, district, adcode}，失败时返回 None
     """
     if not AMAP_KEY:
         logger.warning("AMAP_KEY 未配置")
         return None
-    
+
     try:
-        async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT) as client:
-            url = f"https://restapi.amap.com/v3/geocode/regeo?location={lng},{lat}&key={AMAP_KEY}&extensions=all"
-            response = await client.get(url)
-            data = response.json()
-            
-            if data.get("status") == "1" and data.get("regeocode"):
-                regeo = data["regeocode"]
-                address = regeo.get("formatted_address", "")
-                address_component = regeo.get("address_component", {})
-                
-                return {
-                    "formattedAddress": address,
-                    "province": address_component.get("province"),
-                    "city": address_component.get("city"),
-                    "district": address_component.get("district"),
-                    "township": address_component.get("township"),
-                    "adcode": address_component.get("adcode"),
-                }
-            return None
+        response = await client.get(
+            "https://restapi.amap.com/v3/geocode/regeo",
+            params={"location": f"{lng},{lat}", "key": AMAP_KEY, "extensions": "all"},
+        )
+        data = response.json()
+
+        if data.get("status") == "1" and data.get("regeocode"):
+            regeo = data["regeocode"]
+            ac = regeo.get("address_component", {})
+            return {
+                "formattedAddress": regeo.get("formatted_address", ""),
+                "province": ac.get("province"),
+                "city": ac.get("city"),
+                "district": ac.get("district"),
+                "township": ac.get("township"),
+                "adcode": ac.get("adcode"),
+            }
+        return None
     except Exception as e:
         logger.error(f"高德反向地理编码异常: {str(e)}")
         return None
 
 
-async def nominatim_reverse_geocode(lng: float, lat: float) -> Optional[Dict[str, Any]]:
+async def nominatim_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
     """
     调用 Nominatim 反向地理编码 API（免费）
-    
+
+    Args:
+        lng, lat: 坐标
+        client: 共享 httpx 客户端
+
     Returns:
-        成功时返回 {formattedAddress, city, province}
-        失败时返回 None
+        成功时返回 {formattedAddress, city, province}，失败时返回 None
     """
     try:
-        async with httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT) as client:
-            url = f"{NOMINATIM_ENDPOINT}/reverse"
-            params = {
-                "lon": lng,
-                "lat": lat,
-                "format": "json",
-                "zoom": 10,
-                "addressdetails": 1
-            }
-            response = await client.get(url, params=params, headers={"User-Agent": "WebGIS"})
-            data = response.json()
-            
-            address = data.get("address", {})
-            return {
-                "formattedAddress": data.get("display_name"),
-                "province": address.get("state"),
-                "city": address.get("city"),
-                "district": address.get("county"),
-                "township": None,
-                "adcode": None,
-            }
+        response = await client.get(
+            f"{NOMINATIM_ENDPOINT}/reverse",
+            params={"lon": lng, "lat": lat, "format": "json", "zoom": 10, "addressdetails": 1},
+            headers={"User-Agent": "WebGIS"},
+        )
+        data = response.json()
+        address = data.get("address", {})
+        return {
+            "formattedAddress": data.get("display_name"),
+            "province": address.get("state"),
+            "city": address.get("city"),
+            "district": address.get("county"),
+            "township": None,
+            "adcode": None,
+        }
     except Exception as e:
         logger.error(f"Nominatim 反向地理编码异常: {str(e)}")
         return None
@@ -295,10 +293,11 @@ async def ip_locate(
        - 返回 source="free"
     """
     ip = request_data.ip.strip() or get_client_ip(request)
-    
+    client = await _get_http_client(request)
+
     # 跳过高德（开发者模式或用户设置）
     if request_data.prefer_free_service:
-        result = await free_service_ip_locate(ip)
+        result = await free_service_ip_locate(ip, client)
         if result:
             return {
                 "code": 200,
@@ -319,7 +318,7 @@ async def ip_locate(
     
     # 尝试高德 API
     try:
-        result = await amap_ip_locate(ip)
+        result = await amap_ip_locate(ip, client)
         if result:
             return {
                 "code": 200,
@@ -343,7 +342,7 @@ async def ip_locate(
         pass
     
     # 降级到免费服务
-    result = await free_service_ip_locate(ip)
+    result = await free_service_ip_locate(ip, client)
     if result:
         return {
             "code": 200,
@@ -366,52 +365,42 @@ async def ip_locate(
 @router.post("/location/reverse", response_model=Dict[str, Any])
 async def reverse_geocode(
     request_data: ReverseGeocodeRequest,
+    request: Request,
     current_user: Optional[Dict[str, Any]] = Depends(require_api_access_optional),
 ):
     """
     反向地理编码接口，支持多个服务
-    
+
     prefer_service 优先级：
     - "auto": 自动选择（高德 > Nominatim）
     - "amap": 仅使用高德
     - "nominatim": 仅使用 Nominatim
     """
-    
+    client = await _get_http_client(request)
+
     if request_data.prefer_service == "auto":
         # 自动选择：尝试高德 → Nominatim
-        
-        # 1. 尝试高德
-        result = await amap_reverse_geocode(request_data.lng, request_data.lat)
+        result = await amap_reverse_geocode(request_data.lng, request_data.lat, client)
         if result:
             return {
                 "code": 200,
-                "data": {
-                    **result,
-                    "source": "amap"
-                },
-                "message": "success"
+                "data": {**result, "source": "amap"},
+                "message": "success",
             }
-    
+
     elif request_data.prefer_service == "amap":
-        result = await amap_reverse_geocode(request_data.lng, request_data.lat)
+        result = await amap_reverse_geocode(request_data.lng, request_data.lat, client)
         if result:
             return {
                 "code": 200,
-                "data": {
-                    **result,
-                    "source": "amap"
-                },
-                "message": "success"
+                "data": {**result, "source": "amap"},
+                "message": "success",
             }
         else:
-            return {
-                "code": 400,
-                "data": {"ok": False},
-                "message": "高德反向地理编码失败"
-            }
-    
+            return {"code": 400, "data": {"ok": False}, "message": "高德反向地理编码失败"}
+
     # 使用 Nominatim（总是可用）
-    result = await nominatim_reverse_geocode(request_data.lng, request_data.lat)
+    result = await nominatim_reverse_geocode(request_data.lng, request_data.lat, client)
     if result:
         return {
             "code": 200,
@@ -445,9 +434,10 @@ async def track_visit(
     
     ip = get_client_ip(request)
     timestamp = datetime.now(timezone.utc).isoformat()
-    
+    client = await _get_http_client(request)
+
     # IP 定位（使用免费服务，快速）
-    location = await free_service_ip_locate(ip)
+    location = await free_service_ip_locate(ip, client)
     
     if location:
         city = location.get("city")

@@ -51,7 +51,7 @@
                     <input
                         v-model="userConfigDraft.api_key"
                         type="password"
-                        placeholder="sk-...（填写后启用前端直连模式，不经过后端代理）"
+                        placeholder="sk-...（填写后启用个人 Key 模式，消息经后端代理转发到 LLM）"
                     />
                 </label>
                 <label class="user-config-item">
@@ -150,7 +150,7 @@
             </div>
 
             <small class="hint">
-                💡 直连模式下消息直接发送到 LLM 服务，不经后端代理。配置仅保存在当前页面会话中。
+                💡 个人 Key 模式下消息经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。API Key 仅保存在当前页面会话中。
             </small>
         </div>
 
@@ -162,20 +162,20 @@
                     :class="['mode-toggle-btn', isDirectMode ? 'mode-direct' : 'mode-proxy']"
                     title="点击切换路由模式"
                 >
-                    {{ isDirectMode ? '🔗 前端直连' : '🛡️ 后端代理' }}
+                    {{ isDirectMode ? '🔑 个人 Key 模式' : '🛡️ 后端代理' }}
                     <span class="mode-toggle-hint">（点击切换）</span>
                 </button>
             </div>
             <div class="status-line">
                 <span class="status-label">服务状态:</span>
                 <span :class="['status-value', serviceReady ? 'status-ready' : 'status-unready']">
-                    {{ serviceReady ? (isDirectMode ? '个人 API 已配置' : '已连接后端 Agent') : '未就绪（请配置 API Key 或联系管理员）' }}
+                    {{ serviceReady ? (isDirectMode ? '个人 API 已配置（经后端代理）' : '已连接后端 Agent') : '未就绪（请配置 API Key 或联系管理员）' }}
                 </span>
             </div>
             <div class="status-line">
                 <span class="status-label">当前模型:</span>
                 <span class="status-value">{{ modelName || '未配置' }}
-                    <span v-if="directConfig.model && isDirectMode" class="model-source-tag">直连</span>
+                    <span v-if="directConfig.model && isDirectMode" class="model-source-tag">个人Key</span>
                     <span v-else-if="modelName" class="model-source-tag proxy">代理</span>
                 </span>
             </div>
@@ -251,6 +251,7 @@
 import { computed, onMounted, ref, nextTick } from 'vue';
 import {
     apiAgentChatCompletions,
+    apiAgentChatProxy,
     apiAgentGetChatConfig,
     apiAgentGetUserConfig,
     apiAgentUpdateUserConfig,
@@ -339,19 +340,19 @@ const toggleRoutingMode = () => {
             max_tokens: 8192,
             temperature: 0.2,
         };
-        message.success('已切换为后端代理模式');
+                message.success('已切换为后端代理模式');
     } else {
-        // 当前是代理 → 切换到直连：使用默认直连配置
+        // 当前是代理 → 切换到个人 Key 模式：使用默认直连配置
         directConfig.value = {
             api_key: 'tp-cs24lphikpjnqg0kkctxl167xhnkv4writnf46j3cv4y0nsw',
-            base_url: 'https://token-plan-cn.xiaomimimo.com/anthropic',
+            base_url: 'https://token-plan-cn.xiaomimimo.com/v1',
             model: 'mimo-v2.5-pro',
             system_prompt: '',
             timeout_seconds: 45,
             max_tokens: 8192,
             temperature: 0.2,
         };
-        message.success('已切换为前端直连模式（默认 mimo-v2.5-pro）');
+        message.success('已切换为个人 Key 模式（默认 mimo-v2.5-pro，经后端代理转发）');
     }
     // 同步到配置面板
     syncDraftFromDirectConfig();
@@ -388,7 +389,7 @@ const initWelcomeMessage = () => {
     if (isDirectMode.value) {
         return {
             role: 'assistant',
-            content: `您好！当前为前端直连模式，消息将直接发送到 ${directConfig.value.base_url}。`,
+            content: `您好！当前为个人 Key 模式，消息将经后端代理转发到 ${directConfig.value.base_url}。`,
         };
     }
     return {
@@ -439,7 +440,7 @@ const quotaExhausted = computed(() => {
 
 const inputPlaceholder = computed(() => {
     if (isDirectMode.value) {
-        return '请输入您的问题（前端直连模式）...';
+        return '请输入您的问题（个人 Key 模式，经后端代理）...';
     }
     if (!serviceReady.value) {
         return '服务未就绪，请在 ⚙️ 配置中填写 API Key 或联系管理员';
@@ -470,7 +471,7 @@ const updateWelcomeMessageIfNeeded = () => {
     const shouldReplace =
         text.includes('AI 服务暂未就绪') ||
         text.includes('由后端代理的 AI 助手') ||
-        text.includes('前端直连模式') ||
+        text.includes('个人 Key 模式') ||
         text.includes('初始化中');
 
     if (shouldReplace) {
@@ -610,7 +611,7 @@ const reloadAgentConfig = async (showToast = false) => {
             // 直连模式：使用本地 directConfig 更新状态
             serviceReady.value = true;
             modelName.value = directConfig.value.model || '未配置';
-            statusHint.value = '前端直连模式：使用个人 API Key 直接调用 LLM 服务，不经过后端代理。';
+            statusHint.value = '个人 Key 模式：使用个人 API Key 经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。';
             // 仍然尝试获取后端配额信息（供参考）
             try {
                 const result = await apiAgentGetChatConfig();
@@ -707,13 +708,19 @@ const loadAvailableModels = async () => {
         let models = [];
 
         if (isDirectMode.value) {
-            // 直连模式：从用户端点直接获取模型列表
+            // 直连模式：经后端代理获取模型列表（避免浏览器 CORS 限制）
             const dc = directConfig.value;
-            models = await fetchDirectModels(dc.base_url, dc.api_key);
+            const overrideOptions = {
+                override_base_url: dc.base_url,
+                override_api_key: dc.api_key,
+            };
+            const response = await apiAgentListModels(overrideOptions);
+            const data = response?.data || response || {};
+            models = Array.isArray(data?.models) ? data.models : [];
             if (!models.length) {
                 modelLoadHint.value = '未从上游返回可用模型，请检查 Base URL / API Key 是否正确。';
             } else {
-                modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（直连模式）`;
+                modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（个人 Key 模式）`;
             }
         } else {
             // 代理模式：通过后端获取
@@ -1072,7 +1079,7 @@ const clearHistory = () => {
  * 发送消息
  *
  * 根据当前模式选择调用路径：
- * - 直连模式：前端直接调用 LLM API（callDirectLLM）
+ * - 个人 Key 模式：经后端代理转发（apiAgentChatProxy），避免浏览器 CORS 限制
  * - 代理模式：通过后端转发（apiAgentChatCompletions）
  */
 const sendMessage = async () => {
@@ -1096,30 +1103,25 @@ const sendMessage = async () => {
         let usedModel = '';
 
         if (isDirectMode.value) {
-            // ==================== 前端直连模式 ====================
+            // ==================== 个人 Key 模式（经后端代理转发） ====================
             const dc = directConfig.value;
-            const systemPrompt = buildSystemPrompt(dc.system_prompt, locationContextText);
-            const apiMessages = [
-                { role: 'system', content: systemPrompt },
-                ...requestHistory,
-                { role: 'user', content: userMsg },
-            ];
 
-            const rawData = await callDirectLLM({
-                baseUrl: dc.base_url,
-                apiKey: dc.api_key,
+            const result = await apiAgentChatProxy({
+                message: userMsg,
+                history: requestHistory,
+                location_context: locationContextText,
+                api_key: dc.api_key,
+                base_url: dc.base_url,
                 model: dc.model,
-                messages: apiMessages,
-                maxTokens: dc.max_tokens,
+                system_prompt: dc.system_prompt || undefined,
+                timeout_seconds: dc.timeout_seconds,
+                max_tokens: dc.max_tokens,
                 temperature: dc.temperature,
-                timeoutSeconds: dc.timeout_seconds,
             });
 
-            // 从 OpenAI 兼容响应中提取回复
-            reply = rawData?.choices?.[0]?.message?.content || '';
-            usedModel = rawData?.model || dc.model || '';
-
-            // 直连模式无后端配额，不更新 quota
+            const data = result?.data || result || {};
+            reply = String(data?.reply || '').trim();
+            usedModel = String(data?.model || dc.model || '');
         } else {
             // ==================== 后端代理模式 ====================
             const chatPayload = {
@@ -1172,12 +1174,6 @@ const sendMessage = async () => {
         if (error?.isQuotaExceeded) {
             statusHint.value = '今日额度已达上限，请明日再试。';
             await reloadAgentConfig(false);
-        }
-
-        // 直连模式下的 CORS 错误提示
-        if (isDirectMode.value && /Failed to fetch|NetworkError|CORS/i.test(String(error?.message || ''))) {
-            messages.value[assistantMsgIndex].content =
-                `网络请求失败: ${error.message}\n\n提示：直连模式可能遇到 CORS 限制。如果 LLM API 不支持浏览器直接访问，请考虑使用后端代理模式。`;
         }
     } finally {
         isLoading.value = false;

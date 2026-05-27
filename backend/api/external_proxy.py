@@ -497,9 +497,10 @@ async def proxy_nominatim_search(
     request: Request,
     keywords: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(default=10, ge=1, le=50),
+    _current_user: dict = Depends(require_api_access),
 ):
     """
-    功能：Nominatim 国际地名搜索代理（免鉴权）。
+    功能：Nominatim 国际地名搜索代理（需鉴权）。
 
     参数：
     - keywords: 查询关键词。
@@ -508,7 +509,6 @@ async def proxy_nominatim_search(
     返回：
     - Nominatim JSON 数组结果。
     """
-    # Nominatim 是免费的国际地名搜索服务，不需要认证限制
     return await _request_upstream_json_array(
         request,
         NOMINATIM_SEARCH_ENDPOINT,
@@ -525,6 +525,7 @@ async def proxy_nominatim_search(
 async def proxy_epsg_proj4(
     request: Request,
     epsg_code: str,
+    _current_user: dict = Depends(require_api_access),
 ) -> Response:
     """
     功能：查询 EPSG 的 Proj4 定义文本。

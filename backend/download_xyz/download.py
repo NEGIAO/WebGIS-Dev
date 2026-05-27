@@ -1,20 +1,21 @@
 from __future__ import annotations
 
 import hashlib
-import hashlib
 import logging
 import math
 import os
 import re
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlparse
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from api.auth import require_api_access
 
 from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles
 from .download_task import DownloadTask, create_task, get_task, update_task
@@ -31,7 +32,9 @@ DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = 60
 _download_tokens: Dict[str, tuple[str, datetime]] = {}
 
 # 下载任务附加元数据缓存：用于生成更可读的下载文件名
+# key 为 task_id，value 为元数据字典，过期后由清理逻辑移除
 _download_task_metadata: Dict[str, dict] = {}
+_METADATA_MAX_SIZE = 500
 
 
 class CreateDownloadTaskRequest(BaseModel):
@@ -73,7 +76,7 @@ def _validate_download_token(token: str, task_id: str) -> bool:
     if stored_task_id != task_id:
         return False
 
-    if datetime.utcnow() >= expires_at:
+    if datetime.now(timezone.utc) >= expires_at:
         del _download_tokens[token]
         return False
 
@@ -86,12 +89,24 @@ def _create_download_token_for_task(
 ) -> str:
     """为某个任务创建并保存一个下载令牌。"""
     token = _generate_download_token(task_id)
-    expires_at = datetime.utcnow() + timedelta(minutes=lifetime_minutes)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=lifetime_minutes)
     _download_tokens[token] = (task_id, expires_at)
 
-    # 令牌数量过多时，直接清空旧缓存，避免内存持续增长
+    # 令牌数量过多时，只清除已过期的令牌，避免活跃令牌被误删
     if len(_download_tokens) > 1000:
-        _download_tokens.clear()
+        now = datetime.now(timezone.utc)
+        expired_keys = [k for k, (_, exp) in _download_tokens.items() if now >= exp]
+        for k in expired_keys:
+            del _download_tokens[k]
+
+    # 元数据缓存超限时，移除最老的一批（按创建时间排序）
+    if len(_download_task_metadata) > _METADATA_MAX_SIZE:
+        sorted_keys = sorted(
+            _download_task_metadata.keys(),
+            key=lambda k: _download_task_metadata[k].get("created_at", datetime.min),
+        )
+        for k in sorted_keys[: len(sorted_keys) // 2]:
+            _download_task_metadata.pop(k, None)
 
     return token
 
@@ -100,6 +115,7 @@ def _create_download_token_for_task(
 async def create_download_task(
     payload: CreateDownloadTaskRequest,
     background_tasks: BackgroundTasks,
+    _current_user: dict = Depends(require_api_access),
 ):
     """创建下载任务，并将异步拼接流程放入后台执行。"""
     try:
@@ -416,7 +432,7 @@ def _bbox_3857_to_4326(
 def _get_expiration(task: DownloadTask) -> tuple[datetime, int, bool]:
     """计算任务的过期时间、剩余秒数与是否过期。"""
     expires_at = task.created_at + timedelta(minutes=DEFAULT_TASK_TTL_MINUTES)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expires_in = max(0, int((expires_at - now).total_seconds()))
     return expires_at, expires_in, now >= expires_at
 

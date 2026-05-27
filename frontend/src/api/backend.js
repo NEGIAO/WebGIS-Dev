@@ -616,6 +616,55 @@ export async function apiAgentSaveModelPreference(preferredModel) {
     });
 }
 
+/**
+ * 用户个人 API Key 代理聊天（后端转发，绕过浏览器 CORS 限制）
+ *
+ * 当用户配置了个人 API Key 时，通过后端代理转发 LLM 请求，
+ * 避免浏览器直接调用外部 LLM API 遇到 CORS 拦截。
+ * 不消耗平台配额（用户使用自己的 API Key）。
+ *
+ * @param {Object} payload - 聊天参数
+ * @param {string} payload.message - 用户本轮问题
+ * @param {Array} payload.history - 历史消息 [{role, content}]
+ * @param {string} payload.location_context - 位置上下文
+ * @param {string} payload.api_key - 用户个人 LLM API Key
+ * @param {string} payload.base_url - LLM API 基础地址
+ * @param {string} payload.model - 模型名称
+ * @param {string} [payload.system_prompt] - 系统提示词覆盖
+ * @param {number} [payload.timeout_seconds] - 超时秒数
+ * @param {number} [payload.max_tokens] - 最大 token 数
+ * @param {number} [payload.temperature] - 采样温度
+ * @returns {Promise<Object>} {reply, model, usage, mode}
+ */
+export async function apiAgentChatProxy(payload = {}) {
+    const body = {
+        message: String(payload.message || '').trim(),
+        history: Array.isArray(payload.history)
+            ? payload.history
+                  .map((item) => ({
+                      role: String(item?.role || '').trim(),
+                      content: String(item?.content || '').trim(),
+                  }))
+                  .filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content)
+                  .slice(-12)
+            : [],
+        location_context: String(payload.location_context || '').trim(),
+        api_key: String(payload.api_key || '').trim(),
+        base_url: String(payload.base_url || '').trim(),
+        model: String(payload.model || '').trim(),
+    };
+
+    if (payload.system_prompt) body.system_prompt = String(payload.system_prompt).trim();
+    if (typeof payload.timeout_seconds !== 'undefined' && payload.timeout_seconds !== null)
+        body.timeout_seconds = Number(payload.timeout_seconds);
+    if (typeof payload.max_tokens !== 'undefined' && payload.max_tokens !== null)
+        body.max_tokens = Number(payload.max_tokens);
+    if (typeof payload.temperature !== 'undefined' && payload.temperature !== null)
+        body.temperature = Number(payload.temperature);
+
+    return backendAPI.post('/api/agent/chat/proxy', body);
+}
+
 export async function apiStatisticsRealtime() {
     return backendAPI.get('/api/statistics/realtime');
 }

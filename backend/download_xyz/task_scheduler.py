@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -20,7 +20,7 @@ _scheduler: Optional[BackgroundScheduler] = None
 
 def cleanup_expired_tasks(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> int:
     """Delete tasks and files older than max_age_hours and return removed count."""
-    cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     engine = get_engine()
     removed_count = 0
 

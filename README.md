@@ -196,7 +196,7 @@ WebGIS_Dev/
 │   ├── .env.example
 │   ├── .python-version
 │   └── README.md                   # 🔹 后端详细文档
-├── Docs/                           # 开发维护日志与强制执行规范
+├── Docs/                          # 开发维护日志与强制执行规范
 │   └── 26-05-22/2026-05-22-enhance-custom-basemap-vector-tile.md # Log: custom basemap + vector tile
 ├── docker-compose.yml              # 🆕 顶级 Docker Compose（一键启动前后端）
 ├── LocalDev.bat                    # 🔄 升级：支持 Docker Compose 启动前后端
@@ -427,6 +427,7 @@ LOG_LEVEL=INFO
 | GET | `/api/download/tasks/{task_id}/file` | 下载 GeoTIFF 文件 |
 | GET | `/proxy/gcj2wgs/{target_url:path}` | GCJ-02 → WGS84 纠偏 |
 | GET | `/proxy/wgs2gcj/{target_url:path}` | WGS84 → GCJ-02 纠偏 |
+| POST | `/api/agent/chat/proxy` | ✨ 用户个人 Key 代理聊天（绕过浏览器 CORS） |
 
 ---
 

@@ -411,6 +411,13 @@ async function handleSubmitUserMessage() {
 
 let centerTimer = null;
 
+// ESC 键退出全屏
+const handleEscapeKey = (e) => {
+    if (e.key === 'Escape' && isFullscreen.value) {
+        isFullscreen.value = false;
+    }
+};
+
 onMounted(() => {
     syncCurrentUser();
     // 初始化头像选择为当前用户的头像
@@ -427,11 +434,7 @@ onMounted(() => {
     }
 
     document.addEventListener('pointerdown', handleDocumentClick);
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isFullscreen.value) {
-            isFullscreen.value = false;
-        }
-    });
+    document.addEventListener('keydown', handleEscapeKey);
 });
 
 onBeforeUnmount(() => {
@@ -441,6 +444,7 @@ onBeforeUnmount(() => {
     }
 
     document.removeEventListener('pointerdown', handleDocumentClick);
+    document.removeEventListener('keydown', handleEscapeKey);
 });
 </script>
 

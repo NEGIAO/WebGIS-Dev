@@ -928,6 +928,7 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> str:
     """
     获取或创建游客用户名。如果游客记录存在，返回其用户名；
     否则创建新记录并返回基于 ID 的用户名（如 'user_1'）。
+    使用数据库事务和 UNIQUE 约束避免并发竞态。
     """
     with _db_connection() as conn:
         # 查询现有记录
@@ -935,19 +936,14 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> str:
             "SELECT id, username FROM guest_identity_records WHERE guest_uid = ?",
             (guest_uid,),
         ).fetchone()
-        
+
         if existing:
             return str(dict(existing).get("username") or "user")
-        
-        # 创建新的游客记录
+
+        # 创建新的游客记录，使用子查询原子获取下一个 ID
         now_iso = _iso(_utc_now())
-        # 计算下一个 id
-        max_id_row = conn.execute("SELECT MAX(id) FROM guest_identity_records").fetchone()
-        next_id = (dict(max_id_row).get("MAX(id)") or 0) + 1
-        generated_username = f"user_{next_id}"
-        
         try:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO guest_identity_records (
                     guest_uid,
@@ -956,15 +952,24 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> str:
                     visit_count,
                     first_seen_at,
                     last_seen_at
-                ) VALUES (?, ?, 'guest', 0, ?, ?)
+                ) VALUES (?, 'user_' || (SELECT COALESCE(MAX(id), 0) + 1 FROM guest_identity_records), 'guest', 0, ?, ?)
                 """,
-                (guest_uid, generated_username, now_iso, now_iso),
+                (guest_uid, now_iso, now_iso),
             )
             conn.commit()
+            # 读取实际插入的用户名
+            row = conn.execute(
+                "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
+                (guest_uid,),
+            ).fetchone()
+            return str(dict(row).get("username") or "user") if row else "user"
         except Exception:
-            pass
-        
-        return generated_username
+            # 并发插入冲突时，重新查询已存在的记录
+            row = conn.execute(
+                "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
+                (guest_uid,),
+            ).fetchone()
+            return str(dict(row).get("username") or "user") if row else "user"
 
 
 def _ensure_user_metric_row_sync(conn: sqlite3.Connection, username: str) -> None:
@@ -1197,7 +1202,7 @@ def _consume_api_quota_sync(
 ) -> Dict[str, Any]:
     normalized_role = normalize_role(role, username)
     resolved_quota_subject = str(quota_subject or "").strip() or str(username or "").strip() or "unknown"
-    
+
     # 管理员不受配额限制
     if normalized_role == ROLE_ADMIN:
         return {
@@ -1208,29 +1213,14 @@ def _consume_api_quota_sync(
             "usage_date": _utc_date_str(),
             "quota_subject": resolved_quota_subject,
         }
-    
+
     daily_limit = get_role_daily_quota(normalized_role)
     usage_date = _utc_date_str()
     now_iso = _iso(_utc_now())
 
     with _db_connection() as conn:
-        row = conn.execute(
-            "SELECT calls FROM api_usage_daily WHERE username = ? AND usage_date = ?",
-            (resolved_quota_subject, usage_date),
-        ).fetchone()
-
-        used = int((dict(row).get("calls") if row else 0) or 0)
-
-        if daily_limit is not None and used >= daily_limit:
-            return {
-                "allowed": False,
-                "limit": daily_limit,
-                "used": used,
-                "remaining": 0,
-                "usage_date": usage_date,
-                "quota_subject": resolved_quota_subject,
-            }
-
+        # 原子递增：先插入或更新配额计数，再读取结果
+        # 使用单条 SQL 的 ON CONFLICT DO UPDATE 保证原子性
         conn.execute(
             """
             INSERT INTO api_usage_daily (username, role, usage_date, calls, updated_at)
@@ -1244,6 +1234,29 @@ def _consume_api_quota_sync(
             (resolved_quota_subject, normalized_role, usage_date, now_iso),
         )
 
+        # 读取递增后的实际值，用于配额判断
+        row = conn.execute(
+            "SELECT calls FROM api_usage_daily WHERE username = ? AND usage_date = ?",
+            (resolved_quota_subject, usage_date),
+        ).fetchone()
+        current_used = int((dict(row).get("calls") if row else 0) or 0)
+
+        # 如果超限，回滚递增操作
+        if daily_limit is not None and current_used > daily_limit:
+            conn.execute(
+                "UPDATE api_usage_daily SET calls = calls - 1 WHERE username = ? AND usage_date = ?",
+                (resolved_quota_subject, usage_date),
+            )
+            conn.commit()
+            return {
+                "allowed": False,
+                "limit": daily_limit,
+                "used": current_used - 1,
+                "remaining": 0,
+                "usage_date": usage_date,
+                "quota_subject": resolved_quota_subject,
+            }
+
         _ensure_user_metric_row_sync(conn, username)
         conn.execute(
             """
@@ -1256,13 +1269,12 @@ def _consume_api_quota_sync(
         )
         conn.commit()
 
-    next_used = used + 1
-    remaining = None if daily_limit is None else max(0, daily_limit - next_used)
+    remaining = None if daily_limit is None else max(0, daily_limit - current_used)
 
     return {
         "allowed": True,
         "limit": daily_limit,
-        "used": next_used,
+        "used": current_used,
         "remaining": remaining,
         "usage_date": usage_date,
         "quota_subject": resolved_quota_subject,
