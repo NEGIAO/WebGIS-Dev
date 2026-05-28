@@ -12,11 +12,10 @@ import {
     apiListUserMessages,
     apiStatisticsCenter,
     apiStatisticsRealtime,
-    syncUserRoleToUrl,
 } from '../../api/backend';
-import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession } from '../../utils/auth';
+import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '../../utils/auth';
 import { BASEMAP_OPTIONS } from '../../constants';
-import { useUserPreferencesStore } from '../../stores';
+import { useUserPreferencesStore, useThemeStore } from '../../stores';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
@@ -24,6 +23,7 @@ const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPan
 const router = useRouter();
 const message = useMessage();
 const userPreferencesStore = useUserPreferencesStore();
+const themeStore = useThemeStore();
 const props = defineProps({
     open: {
         type: Boolean,
@@ -1035,6 +1035,40 @@ onBeforeUnmount(() => {
                                     </select>
                                 </div>
 
+                                <!-- 主题切换 -->
+                                <div class="pref-item">
+                                    <div class="pref-info">
+                                        <span class="pref-title"
+                                            ><i class="fas fa-palette"></i> 主题风格</span
+                                        >
+                                        <span class="pref-desc">选择界面主题色调</span>
+                                    </div>
+                                </div>
+                                <div class="theme-grid">
+                                    <div
+                                        class="theme-option"
+                                        :class="{ selected: themeStore.theme === 'default' }"
+                                        @click="themeStore.setTheme('default')"
+                                    >
+                                        <div
+                                            class="theme-preview"
+                                            style="background: linear-gradient(135deg, #4caf50, #2e7d32)"
+                                        ></div>
+                                        <span class="theme-label">默认绿</span>
+                                    </div>
+                                    <div
+                                        class="theme-option"
+                                        :class="{ selected: themeStore.theme === 'blue' }"
+                                        @click="themeStore.setTheme('blue')"
+                                    >
+                                        <div
+                                            class="theme-preview"
+                                            style="background: linear-gradient(135deg, #1976d2, #0d47a1)"
+                                        ></div>
+                                        <span class="theme-label">海洋蓝</span>
+                                    </div>
+                                </div>
+
                                 <button
                                     class="btn-primary w-100"
                                     type="button"
@@ -1208,7 +1242,7 @@ onBeforeUnmount(() => {
     justify-content: center;
     font-size: 18px;
     font-weight: 700;
-    background: linear-gradient(135deg, #5bcf89 0%, #20874e 100%);
+    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-primary-dark) 100%);
     color: #fff;
     box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.4);
     border: 2px solid rgba(91, 207, 137, 0.7);
@@ -1227,10 +1261,10 @@ onBeforeUnmount(() => {
     right: 0;
     width: 12px;
     height: 12px;
-    background: #5bcf89;
+    background: var(--brand-accent-light);
     border: 2px solid #0a180f;
     border-radius: 50%;
-    box-shadow: 0 0 8px #5bcf89;
+    box-shadow: 0 0 8px var(--brand-accent-light);
 }
 
 .account-fab-text {
@@ -1244,7 +1278,7 @@ onBeforeUnmount(() => {
 
 .fold-icon {
     font-size: 14px;
-    color: #5bcf89;
+    color: var(--brand-accent-light);
     opacity: 0.8;
     transition: transform 0.4s ease;
     margin-left: 2px;
@@ -1423,13 +1457,13 @@ onBeforeUnmount(() => {
 }
 
 .profile-role i {
-    color: #5bcf89;
+    color: var(--brand-accent-light);
 }
 
 .btn-fullscreen {
     background: rgba(91, 207, 137, 0.15);
     border: 1px solid rgba(91, 207, 137, 0.4);
-    color: #5bcf89;
+    color: var(--brand-accent-light);
     width: 40px;
     height: 40px;
     border-radius: 8px;
@@ -1488,7 +1522,7 @@ onBeforeUnmount(() => {
 }
 
 .nav-tab.active i {
-    color: #5bcf89;
+    color: var(--brand-accent-light);
 }
 
 .nav-tab.active::after {
@@ -1499,8 +1533,8 @@ onBeforeUnmount(() => {
     width: 70%;
     height: 3px;
     border-radius: 3px 3px 0 0;
-    background: #5bcf89;
-    box-shadow: 0 -2px 10px #5bcf89;
+    background: var(--brand-accent-light);
+    box-shadow: 0 -2px 10px var(--brand-accent-light);
 }
 
 /* Content Area */
@@ -1555,14 +1589,14 @@ onBeforeUnmount(() => {
 }
 
 .text-success {
-    color: #5bcf89;
+    color: var(--brand-accent-light);
     text-shadow: 0 0 6px rgba(91, 207, 137, 0.5);
 }
 .active-dot {
     font-size: 10px;
     margin-right: 6px;
     vertical-align: middle;
-    box-shadow: 0 0 8px #5bcf89;
+    box-shadow: 0 0 8px var(--brand-accent-light);
     border-radius: 50%;
 }
 
@@ -1591,7 +1625,7 @@ onBeforeUnmount(() => {
 
 .stat-box:hover {
     transform: translateY(-3px);
-    border-color: #5bcf89;
+    border-color: var(--brand-accent-light);
     background: rgba(22, 44, 30, 0.8);
     box-shadow:
         inset 0 0 12px rgba(0, 0, 0, 0.3),
@@ -1600,7 +1634,7 @@ onBeforeUnmount(() => {
 
 .stat-icon {
     font-size: 20px;
-    color: #5bcf89;
+    color: var(--brand-accent-light);
     filter: drop-shadow(0 0 6px rgba(91, 207, 137, 0.5));
 }
 
@@ -1649,7 +1683,7 @@ onBeforeUnmount(() => {
 
 .user-message-input:focus {
     outline: none;
-    border-color: #5bcf89;
+    border-color: var(--brand-accent-light);
     box-shadow: 0 0 10px rgba(91, 207, 137, 0.3);
     background: rgba(12, 28, 18, 0.9);
 }
@@ -1729,7 +1763,7 @@ onBeforeUnmount(() => {
     color: #a0ddb6;
     text-transform: uppercase;
     letter-spacing: 1px;
-    border-left: 3px solid #5bcf89;
+    border-left: 3px solid var(--brand-accent-light);
     padding-left: 10px;
 }
 
@@ -1764,7 +1798,7 @@ onBeforeUnmount(() => {
 
 .modern-input-group input:focus {
     outline: none;
-    border-color: #5bcf89;
+    border-color: var(--brand-accent-light);
     box-shadow:
         0 0 10px rgba(91, 207, 137, 0.3),
         inset 0 0 6px rgba(91, 207, 137, 0.15);
@@ -1772,7 +1806,7 @@ onBeforeUnmount(() => {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, rgba(91, 207, 137, 0.85) 0%, #20874e 100%);
+    background: linear-gradient(135deg, rgba(91, 207, 137, 0.85) 0%, var(--brand-primary-dark) 100%);
     color: white;
     border: 1px solid rgba(91, 207, 137, 0.6);
     height: 48px;
@@ -1793,8 +1827,8 @@ onBeforeUnmount(() => {
 .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(91, 207, 137, 0.35);
-    border-color: #5bcf89;
-    background: linear-gradient(135deg, #5bcf89 0%, #28a763 100%);
+    border-color: var(--brand-accent-light);
+    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-primary) 100%);
 }
 
 .btn-primary:disabled {
@@ -1871,7 +1905,7 @@ onBeforeUnmount(() => {
 }
 
 .pref-title i {
-    color: #5bcf89;
+    color: var(--brand-accent-light);
 }
 
 .pref-desc {
@@ -1890,7 +1924,7 @@ onBeforeUnmount(() => {
 
 .pref-select:focus {
     outline: none;
-    border-color: #5bcf89;
+    border-color: var(--brand-accent-light);
     box-shadow: 0 0 10px rgba(91, 207, 137, 0.2);
 }
 
@@ -1935,12 +1969,12 @@ onBeforeUnmount(() => {
 
 input:checked + .slider {
     background-color: rgba(91, 207, 137, 0.4);
-    border-color: #5bcf89;
+    border-color: var(--brand-accent-light);
 }
 input:checked + .slider:before {
     transform: translateX(20px);
-    background-color: #5bcf89;
-    box-shadow: 0 0 10px #5bcf89;
+    background-color: var(--brand-accent-light);
+    box-shadow: 0 0 10px var(--brand-accent-light);
 }
 
 .coming-soon {
@@ -1974,6 +2008,49 @@ input:checked + .slider:before {
     border-bottom: 1px solid rgba(91, 207, 137, 0.1);
     margin-bottom: 16px;
     padding-bottom: 12px;
+}
+
+/* 主题选择器 */
+.theme-grid {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0 16px;
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 2px solid var(--border-light);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--bg-primary);
+}
+
+.theme-option:hover {
+    border-color: var(--brand-primary-light);
+    background: var(--bg-hover);
+}
+
+.theme-option.selected {
+    border-color: var(--brand-primary);
+    background: var(--bg-active);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+}
+
+.theme-preview {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.theme-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .avatar-grid {
@@ -2010,11 +2087,11 @@ input:checked + .slider:before {
 }
 
 .avatar-option.selected {
-    border-color: #5bcf89;
+    border-color: var(--brand-accent-light);
     background: rgba(91, 207, 137, 0.25);
     box-shadow:
         0 0 0 3px rgba(91, 207, 137, 0.1),
-        inset 0 0 0 2px #5bcf89;
+        inset 0 0 0 2px var(--brand-accent-light);
 }
 
 .avatar-option.selected::after {
@@ -2024,7 +2101,7 @@ input:checked + .slider:before {
     left: 50%;
     transform: translate(-50%, -50%);
     font-size: 20px;
-    color: #5bcf89;
+    color: var(--brand-accent-light);
     font-weight: bold;
     background: rgba(255, 255, 255, 0.9);
     width: 28px;
@@ -2068,7 +2145,7 @@ input:checked + .slider:before {
 
 .avatar-status {
     text-align: center;
-    color: #5bcf89;
+    color: var(--brand-accent-light);
     font-size: 13px;
     padding: 8px;
     margin-top: 8px;
@@ -2156,13 +2233,13 @@ input:checked + .slider:before {
 
 /* Light Mint Theme Override (aligned with TopBar) */
 .floating-account-manager {
-    --acc-mint-50: #f3fff7;
-    --acc-mint-100: #e8f8ee;
-    --acc-mint-200: #d6f2e1;
-    --acc-mint-300: #c1e8d0;
-    --acc-mint-500: #59b66a;
-    --acc-mint-600: #4ca65c;
-    --acc-mint-700: #3c8d4c;
+    --acc-mint-50: var(--bg-brand-light);
+    --acc-mint-100: var(--bg-brand-light);
+    --acc-mint-200: var(--bg-brand-lighter);
+    --acc-mint-300: var(--bg-brand-lighter);
+    --acc-mint-500: var(--brand-primary-light);
+    --acc-mint-600: var(--brand-primary);
+    --acc-mint-700: var(--brand-primary-dark);
     --acc-text-strong: #214a31;
     --acc-text-main: #2c5f3e;
     --acc-text-soft: #5d7f6a;
@@ -2365,7 +2442,7 @@ input:checked + .slider:before {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #6fca7a 0%, #4caf50 100%);
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
     border-color: rgba(63, 148, 75, 0.55);
     color: #f8fff9;
     box-shadow: 0 6px 16px rgba(58, 129, 76, 0.24);
@@ -2373,7 +2450,7 @@ input:checked + .slider:before {
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, #7fd489 0%, #57b862 100%);
+    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
     box-shadow: 0 8px 18px rgba(58, 129, 76, 0.3);
 }
 

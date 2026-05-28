@@ -276,3 +276,38 @@ export function getGuestSessionMetadata() {
         username: user?.username || 'Unknown',
     };
 }
+
+/**
+ * 将用户角色同步到 URL hash 参数中（ut=userType）
+ * 用于前端路由守卫和分享链接识别用户身份
+ * @param {Object} user - 用户对象，包含 role 字段
+ */
+export function syncUserRoleToUrl(user) {
+    if (typeof window === 'undefined') return;
+
+    const roleRaw = String(user?.role || '')
+        .trim()
+        .toLowerCase();
+    const role = roleRaw === 'admin' ? 'admin' : roleRaw === 'guest' ? 'guest' : 'registered';
+
+    try {
+        const hash = String(window.location.hash || '#/home');
+        const hashWithoutSharp = hash.startsWith('#') ? hash.slice(1) : hash;
+        const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
+        const hashPath = hashPathRaw || '/home';
+        const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
+        const params = new URLSearchParams(hashQueryRaw);
+
+        params.set('ut', role);
+
+        const nextHashQuery = params.toString();
+        const nextHash = nextHashQuery
+            ? `#${normalizedHashPath}?${nextHashQuery}`
+            : `#${normalizedHashPath}`;
+
+        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+        window.history.replaceState(window.history.state, '', nextUrl);
+    } catch {
+        // ignore URL sync errors
+    }
+}

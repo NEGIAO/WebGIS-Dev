@@ -1,0 +1,98 @@
+/**
+ * WebGIS 全局主题变量
+ *
+ * 所有组件的品牌色、文字色、背景色、边框色统一从此文件派生。
+ * 切换主题只需修改 [data-theme] 属性，变量自动联动。
+ *
+ * 主题方案：
+ *   - :root（默认）= 浅绿主题
+ *   - [data-theme="dark-green"] = 深绿主题
+ */
+
+:root {
+    /* ===== 品牌主色 ===== */
+    --brand-primary: #4caf50;
+    --brand-primary-dark: #2e7d32;
+    --brand-primary-light: #81c784;
+    --brand-primary-lighter: #a5d6a7;
+    --brand-primary-bg: #e8f5e9;
+
+    /* ===== 品牌强调色 ===== */
+    --brand-accent: #57b861;
+    --brand-accent-dark: #0a6815;
+    --brand-accent-light: #5bcf89;
+    --brand-accent-muted: #397d39;
+
+    /* ===== 渐变 ===== */
+    --brand-gradient: linear-gradient(135deg, #139647 0%, #0a6815 100%);
+    --brand-gradient-light: linear-gradient(135deg, #6fca7a 0%, #57b861 100%);
+    --brand-gradient-header: linear-gradient(135deg, #0d972fc8 0%, #0a6815c1 100%);
+
+    /* ===== 文字色 ===== */
+    --text-primary: #333;
+    --text-secondary: #666;
+    --text-muted: #999;
+    --text-on-brand: #fff;
+    --text-brand: #397d39;
+    --text-brand-dark: #2c4638;
+
+    /* ===== 背景色 ===== */
+    --bg-primary: #fff;
+    --bg-secondary: #f9f9f9;
+    --bg-brand-light: #e8f5e9;
+    --bg-brand-lighter: #c8e6c9;
+    --bg-hover: rgba(87, 184, 97, 0.08);
+    --bg-active: rgba(87, 184, 97, 0.15);
+
+    /* ===== 边框色 ===== */
+    --border-light: #e0e0e0;
+    --border-brand: #81c784;
+    --border-brand-light: #c8e6c9;
+
+    /* ===== 功能色（不随主题变化） ===== */
+    --danger: #ef4444;
+    --danger-light: #fecaca;
+    --warning: #f8b600;
+    --info: #1890ff;
+    --success: #52c41a;
+
+    /* ===== 圆角 ===== */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 12px;
+    --radius-full: 50%;
+
+    /* ===== 阴影 ===== */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+/* ===== 蓝色主题 ===== */
+[data-theme="blue"] {
+    --brand-primary: #1976d2;
+    --brand-primary-dark: #0d47a1;
+    --brand-primary-light: #64b5f6;
+    --brand-primary-lighter: #bbdefb;
+    --brand-primary-bg: #e3f2fd;
+
+    --brand-accent: #2196f3;
+    --brand-accent-dark: #0d47a1;
+    --brand-accent-light: #90caf9;
+    --brand-accent-muted: #1565c0;
+
+    --brand-gradient: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);
+    --brand-gradient-light: linear-gradient(135deg, #42a5f5 0%, #1976d2 100%);
+    --brand-gradient-header: linear-gradient(135deg, #1565c0c8 0%, #0d47a1c1 100%);
+
+    --text-brand: #1565c0;
+    --text-brand-dark: #0d47a1;
+
+    --bg-brand-light: #e3f2fd;
+    --bg-brand-lighter: #bbdefb;
+    --bg-hover: rgba(33, 150, 243, 0.08);
+    --bg-active: rgba(33, 150, 243, 0.15);
+
+    --border-brand: #64b5f6;
+    --border-brand-light: #bbdefb;
+}

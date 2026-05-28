@@ -1,19 +1,17 @@
 """
 空间分析 API
-提供缓冲区、叠加分析（交集/并集/差集）、凸包等空间分析能力
+提供缓冲区、叠加分析（交集/并集/差集）、凸包、泰森多边形、空间聚合、多环缓冲区、几何简化等空间分析能力
 基于 Shapely 2.x 实现精确几何运算
 """
 
-import json
 import logging
 import math
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from shapely import from_geojson, to_geojson, union_all, convex_hull
-from shapely.geometry import shape, mapping
-from shapely.ops import unary_union
+from shapely.geometry import shape, mapping, box, MultiPoint, Polygon
+from shapely.ops import unary_union, voronoi_diagram
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ class GeoJSONFeatureCollection(BaseModel):
 class SpatialAnalysisRequest(BaseModel):
     operation: str = Field(
         ...,
-        description="分析类型：buffer / intersection / union / difference / convexHull",
+        description="分析类型：buffer / intersection / union / difference / convexHull / voronoi / aggregation / multiRingBuffer / simplify",
     )
     radius: Optional[float] = Field(
         default=1000.0,
@@ -44,6 +42,31 @@ class SpatialAnalysisRequest(BaseModel):
     )
     features_b: Optional[GeoJSONFeatureCollection] = Field(
         default=None, description="图层 B 的 GeoJSON FeatureCollection（叠加分析使用）"
+    )
+    # 高级分析参数
+    distances: Optional[List[float]] = Field(
+        default=None,
+        description="多环缓冲区距离数组（米），如 [100, 300, 500]",
+    )
+    tolerance: Optional[float] = Field(
+        default=None,
+        description="几何简化容差（度），simplify 操作使用",
+        ge=0.000001,
+        le=10,
+    )
+    bbox: Optional[List[float]] = Field(
+        default=None,
+        description="可视范围 [minLon, minLat, maxLon, maxLat]，aggregation 操作使用",
+    )
+    grid_type: Optional[str] = Field(
+        default="grid",
+        description="网格类型：grid（方格网）/ hexbin（六边形），aggregation 操作使用",
+    )
+    grid_size: Optional[float] = Field(
+        default=0.01,
+        description="网格大小（度），aggregation 操作使用",
+        ge=0.0001,
+        le=10,
     )
 
 
@@ -210,6 +233,328 @@ def do_convex_hull(geoms_a: list) -> dict:
     return shapely_geoms_to_geojson_featurecollection([hull], "convexHull")
 
 
+def do_voronoi(geoms_a: list) -> dict:
+    """泰森多边形（Voronoi Diagram）分析
+    输入点要素，计算每个点的势力范围多边形。
+    使用 shapely.ops.voronoi_diagram 实现。
+    """
+    # 提取所有点几何
+    points = []
+    for geom in geoms_a:
+        if geom is None or geom.is_empty:
+            continue
+        if geom.geom_type == "Point":
+            points.append(geom)
+        elif geom.geom_type == "MultiPoint":
+            points.extend(list(geom.geoms))
+        else:
+            # 对于非点几何，取其质心
+            points.append(geom.centroid)
+
+    if len(points) < 2:
+        raise ValueError("泰森多边形分析至少需要 2 个点要素")
+
+    multi_point = MultiPoint(points)
+
+    # 计算边界 envelope，留出余量防止边缘多边形无限延伸
+    envelope = multi_point.convex_hull
+
+    # 检测退化输入（共线或重合点导致 convex_hull 不是 Polygon）
+    if envelope.geom_type in ("Point", "LineString"):
+        raise ValueError("输入点集退化（共线或重合），无法计算泰森多边形")
+    minx, miny, maxx, maxy = envelope.bounds
+    dx = (maxx - minx) * 0.5 if maxx > minx else 0.01
+    dy = (maxy - miny) * 0.5 if maxy > miny else 0.01
+    bounding_poly = box(minx - dx, miny - dy, maxx + dx, maxy + dy)
+
+    # 计算 Voronoi 图
+    voronoi_result = voronoi_diagram(multi_point, envelope=bounding_poly)
+
+    result_geoms = []
+    for i, geom in enumerate(voronoi_result.geoms):
+        if geom is None or geom.is_empty:
+            continue
+        # 裁剪到边界内
+        clipped = geom.intersection(bounding_poly)
+        if not clipped.is_empty:
+            result_geoms.append(clipped)
+
+    if not result_geoms:
+        raise ValueError("泰森多边形计算未产生有效结果")
+
+    # 构建带属性的 FeatureCollection
+    features = []
+    for i, geom in enumerate(result_geoms):
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "_analysisType": "voronoi",
+                "site_index": i,
+            },
+            "geometry": mapping(geom),
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "analysis_type": "voronoi",
+        "feature_count": len(features),
+    }
+
+
+def do_spatial_aggregation(
+    geoms_a: list,
+    bbox: list,
+    grid_type: str = "grid",
+    grid_size: float = 0.01,
+) -> dict:
+    """空间聚合分析（网格化/蜂窝化）
+    在指定 BBox 范围内生成方格网或六边形网格，统计每个网格内包含的点数。
+    返回带 count 属性的网格 GeoJSON。
+    """
+    if len(bbox) != 4:
+        raise ValueError("bbox 必须为 [minLon, minLat, maxLon, maxLat]")
+
+    min_lon, min_lat, max_lon, max_lat = bbox
+    if min_lon >= max_lon or min_lat >= max_lat:
+        raise ValueError("bbox 范围无效")
+
+    # 提取所有点坐标
+    points = []
+    for geom in geoms_a:
+        if geom is None or geom.is_empty:
+            continue
+        if geom.geom_type == "Point":
+            points.append(geom)
+        elif geom.geom_type == "MultiPoint":
+            points.extend(list(geom.geoms))
+        else:
+            points.append(geom.centroid)
+
+    if not points:
+        raise ValueError("无有效点要素可聚合")
+
+    # 构建 bounding box 多边形
+    bbox_poly = box(min_lon, min_lat, max_lon, max_lat)
+
+    grid_cells = []
+
+    if grid_type == "hexbin":
+        # 六边形网格（平顶六边形，奇数行偏移半列实现蜂窝交错）
+        hex_width = grid_size
+        hex_height = grid_size * math.sqrt(3) / 2.0
+
+        row = 0
+        y = min_lat
+        while y < max_lat + hex_height:
+            # 仅奇数行向右偏移 3/4 个 hex_width，实现蜂窝交错排列
+            x_row_offset = (hex_width * 3 / 4) if row % 2 == 1 else 0
+            x = min_lon
+            while x < max_lon + hex_width:
+                cx = x + x_row_offset
+                cy = y
+                hex_coords = []
+                for angle_deg in range(0, 360, 60):
+                    angle_rad = math.radians(angle_deg)
+                    hx = cx + (hex_width / 2.0) * math.cos(angle_rad)
+                    hy = cy + (hex_width / 2.0) * math.sin(angle_rad)
+                    hex_coords.append((hx, hy))
+                hex_coords.append(hex_coords[0])  # 闭合
+                try:
+                    hex_poly = Polygon(hex_coords)
+                    if hex_poly.is_valid and hex_poly.intersects(bbox_poly):
+                        clipped = hex_poly.intersection(bbox_poly)
+                        if not clipped.is_empty:
+                            grid_cells.append(clipped)
+                except Exception:
+                    pass
+                x += hex_width * 3 / 4
+            y += hex_height
+            row += 1
+    else:
+        # 方格网（默认），使用整数计数器避免浮点累积误差
+        n_cols = max(1, math.ceil((max_lon - min_lon) / grid_size))
+        n_rows = max(1, math.ceil((max_lat - min_lat) / grid_size))
+        for col in range(n_cols):
+            x = min_lon + col * grid_size
+            for row_i in range(n_rows):
+                y = min_lat + row_i * grid_size
+                cell = box(x, y, min(x + grid_size, max_lon), min(y + grid_size, max_lat))
+                grid_cells.append(cell)
+
+    if not grid_cells:
+        raise ValueError("未生成有效网格")
+
+    # 统计每个网格内的点数
+    result_features = []
+    for cell in grid_cells:
+        count = 0
+        for pt in points:
+            if cell.contains(pt):
+                count += 1
+        if count > 0:
+            result_features.append({
+                "type": "Feature",
+                "properties": {
+                    "_analysisType": "aggregation",
+                    "count": count,
+                    "grid_type": grid_type,
+                },
+                "geometry": mapping(cell),
+            })
+
+    if not result_features:
+        raise ValueError("聚合分析未产生包含要素的网格（所有网格均为空）")
+
+    return {
+        "type": "FeatureCollection",
+        "features": result_features,
+        "analysis_type": "aggregation",
+        "feature_count": len(result_features),
+    }
+
+
+def do_multi_ring_buffer(geoms_a: list, distances: list) -> dict:
+    """多环缓冲区分析
+    接收距离数组（米），生成由内到外的同心环。
+    使用 difference 擦除实现"甜甜圈"中空环状拓扑。
+    """
+    if not distances or len(distances) < 1:
+        raise ValueError("至少需要一个缓冲距离")
+
+    # 排序距离（由小到大）
+    sorted_distances = sorted(distances)
+    if sorted_distances[0] <= 0:
+        raise ValueError("缓冲距离必须大于 0")
+
+    ref_lat = get_reference_lat(geoms_a)
+    merged = unary_union([g for g in geoms_a if g is not None and not g.is_empty])
+    if merged.is_empty:
+        raise ValueError("无有效几何可计算缓冲区")
+
+    # 生成每个距离的缓冲区（从小到大）
+    rings = []
+    prev_buffer = None
+    for i, dist_m in enumerate(sorted_distances):
+        dist_deg = meters_to_degrees_approx(dist_m, ref_lat)
+        current_buffer = merged.buffer(dist_deg, resolution=64)
+
+        if prev_buffer is not None:
+            # 甜甜圈：大环减去小环
+            ring = current_buffer.difference(prev_buffer)
+        else:
+            # 最内环：减去原始几何
+            ring = current_buffer.difference(merged)
+
+        if not ring.is_empty:
+            rings.append((ring, i, dist_m))
+        prev_buffer = current_buffer
+
+    if not rings:
+        raise ValueError("多环缓冲区计算未产生有效结果")
+
+    # 构建 FeatureCollection
+    features = []
+    for geom, idx, dist in rings:
+        features.append({
+            "type": "Feature",
+            "properties": {
+                "_analysisType": "multiRingBuffer",
+                "ring_index": idx,
+                "distance_m": dist,
+            },
+            "geometry": mapping(geom),
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "analysis_type": "multiRingBuffer",
+        "feature_count": len(features),
+    }
+
+
+def do_simplify(geoms_a: list, tolerance: float) -> dict:
+    """几何简化（抽稀）
+    使用 Douglas-Peucker 算法对复杂几何进行节点抽稀。
+    返回简化后的几何，附带原始和简化后的节点数信息。
+    """
+    if tolerance <= 0:
+        raise ValueError("容差必须大于 0")
+
+    result_features = []
+    total_original = 0
+    total_simplified = 0
+
+    for geom in geoms_a:
+        if geom is None or geom.is_empty:
+            continue
+
+        # 统计原始节点数
+        if geom.geom_type == "Polygon":
+            original_count = len(geom.exterior.coords)
+            for interior in geom.interiors:
+                original_count += len(interior.coords)
+        elif geom.geom_type == "LineString":
+            original_count = len(geom.coords)
+        elif geom.geom_type == "MultiPolygon":
+            original_count = sum(
+                len(p.exterior.coords) + sum(len(i.coords) for i in p.interiors)
+                for p in geom.geoms
+            )
+        elif geom.geom_type == "MultiLineString":
+            original_count = sum(len(ls.coords) for ls in geom.geoms)
+        else:
+            original_count = 0
+
+        simplified = geom.simplify(tolerance, preserve_topology=True)
+        if simplified.is_empty:
+            continue
+
+        # 统计简化后节点数
+        if simplified.geom_type == "Polygon":
+            simplified_count = len(simplified.exterior.coords)
+            for interior in simplified.interiors:
+                simplified_count += len(interior.coords)
+        elif simplified.geom_type == "LineString":
+            simplified_count = len(simplified.coords)
+        elif simplified.geom_type == "MultiPolygon":
+            simplified_count = sum(
+                len(p.exterior.coords) + sum(len(i.coords) for i in p.interiors)
+                for p in simplified.geoms
+            )
+        elif simplified.geom_type == "MultiLineString":
+            simplified_count = sum(len(ls.coords) for ls in simplified.geoms)
+        else:
+            simplified_count = 0
+
+        total_original += original_count
+        total_simplified += simplified_count
+
+        result_features.append({
+            "type": "Feature",
+            "properties": {
+                "_analysisType": "simplify",
+                "original_vertices": original_count,
+                "simplified_vertices": simplified_count,
+                "tolerance": tolerance,
+            },
+            "geometry": mapping(simplified),
+        })
+
+    if not result_features:
+        raise ValueError("几何简化未产生有效结果")
+
+    return {
+        "type": "FeatureCollection",
+        "features": result_features,
+        "analysis_type": "simplify",
+        "feature_count": len(result_features),
+        "total_original_vertices": total_original,
+        "total_simplified_vertices": total_simplified,
+    }
+
+
 # ==================== API 端点 ====================
 
 
@@ -217,7 +562,7 @@ def do_convex_hull(geoms_a: list) -> dict:
 async def spatial_analysis(request: SpatialAnalysisRequest):
     """
     空间分析接口
-    支持 buffer / intersection / union / difference / convexHull
+    支持 buffer / intersection / union / difference / convexHull / voronoi / aggregation / multiRingBuffer / simplify
     输入和输出均为 GeoJSON FeatureCollection（EPSG:4326）
     """
     operation = request.operation.lower().strip()
@@ -249,10 +594,29 @@ async def spatial_analysis(request: SpatialAnalysisRequest):
             result = do_difference(geoms_a, geoms_b)
         elif operation == "convexhull":
             result = do_convex_hull(geoms_a)
+        elif operation == "voronoi":
+            result = do_voronoi(geoms_a)
+        elif operation == "aggregation":
+            if not request.bbox:
+                raise ValueError("空间聚合分析需要 bbox 参数 [minLon, minLat, maxLon, maxLat]")
+            result = do_spatial_aggregation(
+                geoms_a,
+                request.bbox,
+                request.grid_type if request.grid_type is not None else "grid",
+                request.grid_size if request.grid_size is not None else 0.01,
+            )
+        elif operation == "multiringbuffer":
+            if not request.distances:
+                raise ValueError("多环缓冲区需要 distances 参数（距离数组，单位：米）")
+            result = do_multi_ring_buffer(geoms_a, request.distances)
+        elif operation == "simplify":
+            if not request.tolerance:
+                raise ValueError("几何简化需要 tolerance 参数（容差，单位：度）")
+            result = do_simplify(geoms_a, request.tolerance)
         else:
             raise HTTPException(
                 status_code=400,
-                detail=f"不支持的分析类型: {operation}，支持: buffer/intersection/union/difference/convexHull",
+                detail=f"不支持的分析类型: {operation}，支持: buffer/intersection/union/difference/convexHull/voronoi/aggregation/multiRingBuffer/simplify",
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

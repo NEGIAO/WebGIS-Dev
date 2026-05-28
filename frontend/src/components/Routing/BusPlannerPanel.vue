@@ -590,7 +590,7 @@ async function startTransitPlan() {
     font-size: 18px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #125535;
+    color: var(--brand-accent-dark);
 }
 
 .title-sub {
@@ -605,7 +605,7 @@ async function startTransitPlan() {
     border: 1px solid rgba(18, 85, 53, 0.18);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.92);
-    color: #275541;
+    color: var(--brand-primary-dark);
     padding: 6px 12px;
     font-size: 12px;
     transition: all 0.2s ease;
@@ -630,7 +630,7 @@ async function startTransitPlan() {
 
 .plan-label {
     font-size: 12px;
-    color: #4f6757;
+    color: var(--brand-accent-muted);
     white-space: nowrap;
 }
 
@@ -647,7 +647,7 @@ async function startTransitPlan() {
 .plan-btn {
     border: 1px solid rgba(34, 139, 34, 0.42);
     border-radius: 8px;
-    background: linear-gradient(145deg, #1f7b49, #145737);
+    background: linear-gradient(145deg, var(--brand-primary-dark), var(--brand-accent-dark));
     color: #fff;
     padding: 8px 12px;
     cursor: pointer;
@@ -671,7 +671,7 @@ async function startTransitPlan() {
 
 .status-line {
     font-size: 12px;
-    color: #4f6757;
+    color: var(--brand-accent-muted);
 }
 
 .status-line.error {
@@ -688,13 +688,13 @@ async function startTransitPlan() {
 
 .debug-box summary {
     cursor: pointer;
-    color: #35594a;
+    color: var(--brand-accent-muted);
     font-weight: 600;
 }
 
 .debug-row {
     margin-top: 4px;
-    color: #3f5d50;
+    color: var(--brand-accent-muted);
     display: grid;
     grid-template-columns: 64px 1fr;
     gap: 6px;
@@ -714,7 +714,7 @@ async function startTransitPlan() {
 .route-title {
     font-size: 13px;
     font-weight: 700;
-    color: #1f6a3f;
+    color: var(--brand-primary-dark);
     margin: 2px 2px 8px;
 }
 
@@ -736,7 +736,7 @@ async function startTransitPlan() {
 }
 
 .route-card-active {
-    border-color: #15803d;
+    border-color: var(--brand-primary-dark);
     background: linear-gradient(160deg, rgba(187, 247, 208, 0.55), rgba(220, 252, 231, 0.8));
     box-shadow:
         inset 0 0 0 1px rgba(21, 128, 61, 0.22),
@@ -754,7 +754,7 @@ async function startTransitPlan() {
 .route-name {
     font-size: 13px;
     font-weight: 700;
-    color: #052e16;
+    color: var(--brand-accent-dark);
     line-height: 1.35;
 }
 
@@ -763,7 +763,7 @@ async function startTransitPlan() {
     border-radius: 999px;
     border: 1px solid rgba(21, 128, 61, 0.2);
     background: rgba(255, 255, 255, 0.8);
-    color: #166534;
+    color: var(--brand-primary-dark);
     padding: 2px 8px;
     font-size: 11px;
     font-weight: 700;
@@ -795,7 +795,7 @@ async function startTransitPlan() {
 }
 
 .step-card-active {
-    border-color: #166534;
+    border-color: var(--brand-primary-dark);
     background: linear-gradient(160deg, rgba(187, 247, 208, 0.6), rgba(220, 252, 231, 0.8));
     box-shadow:
         inset 0 0 0 1px rgba(22, 101, 52, 0.22),
@@ -813,7 +813,7 @@ async function startTransitPlan() {
     border-radius: 999px;
     border: 1px solid rgba(21, 128, 61, 0.2);
     background: rgba(255, 255, 255, 0.8);
-    color: #166534;
+    color: var(--brand-primary-dark);
     padding: 2px 8px;
     font-size: 11px;
     font-weight: 700;
@@ -829,7 +829,7 @@ async function startTransitPlan() {
     margin-top: 7px;
     font-size: 13px;
     font-weight: 700;
-    color: #052e16;
+    color: var(--brand-accent-dark);
     line-height: 1.35;
 }
 

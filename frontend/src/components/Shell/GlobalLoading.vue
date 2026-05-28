@@ -165,12 +165,12 @@ onBeforeUnmount(() => {
 
 .ring-middle {
     fill: none;
-    stroke: #5bcf89;
+    stroke: var(--brand-accent-light);
     stroke-width: 2.5;
     stroke-dasharray: 40 20 60 20;
     transform-origin: center;
     animation: rotate-counter-clockwise 3s cubic-bezier(0.68, -0.15, 0.265, 1.15) infinite;
-    filter: drop-shadow(0 0 8px #5bcf89);
+    filter: drop-shadow(0 0 8px var(--brand-accent-light));
 }
 
 .ring-inner {
@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: #5bcf89;
+    background: var(--brand-accent-light);
     filter: blur(10px);
     animation: core-pulse 2s ease-in-out infinite;
 }
@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
     background: rgba(14, 28, 20, 0.6);
     padding: 12px 28px;
     border-radius: 6px;
-    border-left: 2px solid #5bcf89;
+    border-left: 2px solid var(--brand-accent-light);
     border-right: 2px solid rgba(91, 207, 137, 0.3);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, #5bcf89, transparent);
+    background: linear-gradient(90deg, transparent, var(--brand-accent-light), transparent);
     animation: scan-line 2s linear infinite;
 }
 

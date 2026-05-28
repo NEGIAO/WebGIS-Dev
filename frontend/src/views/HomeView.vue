@@ -230,6 +230,11 @@ function getMapUserLocation(enableHighAccuracy = true) {
     return mapContainerRef.value?.getCurrentLocation?.(enableHighAccuracy);
 }
 
+/** 获取当前地图可视范围（BBox），返回 { minLon, minLat, maxLon, maxLat } */
+function getMapExtent() {
+    return mapContainerRef.value?.getMapExtent?.() || null;
+}
+
 function startBusPointPick(type) {
     return mapContainerRef.value?.startBusPointPick?.(type);
 }
@@ -952,6 +957,7 @@ onMounted(async () => {
             <div class="Control-panel">
                 <ControlsPanel
                     :user-layers="userLayers"
+                    :get-map-extent="getMapExtent"
                     @open-tab="handleControlsOpenTab"
                     @open-toolbox-tab="handleControlsOpenToolboxTab"
                     @map-interaction="handleControlsMapInteraction"
@@ -1264,7 +1270,7 @@ onMounted(async () => {
     align-items: center;
     justify-content: center;
     background: linear-gradient(180deg, rgba(236, 248, 238, 0.9), rgba(216, 239, 220, 0.88));
-    color: #1f5e2a;
+    color: var(--brand-accent-dark);
     font-size: 15px;
     font-weight: 600;
     letter-spacing: 0.3px;
@@ -1375,7 +1381,7 @@ onMounted(async () => {
     height: 28px;
     border-radius: 50%;
     border: 3px solid rgba(44, 133, 76, 0.22);
-    border-top-color: #2d8a4f;
+    border-top-color: var(--brand-primary-dark);
     animation: weather-spin 0.9s linear infinite;
 }
 
@@ -1412,7 +1418,7 @@ onMounted(async () => {
 
 /* 头部：对标0的绿色顶栏 */
 .eco-header {
-    background-color: #56ab56;
+    background-color: var(--brand-primary-light);
     /* 匹配0截图顶栏的绿色 */
     padding: 12px 16px;
     display: flex;
@@ -1487,7 +1493,7 @@ onMounted(async () => {
 }
 
 .eco-list-container::-webkit-scrollbar-thumb {
-    background: #56ab56;
+    background: var(--brand-primary-light);
     border-radius: 10px;
 }
 
@@ -1608,7 +1614,7 @@ onMounted(async () => {
 .placeholder-icon {
     width: 28px;
     height: 28px;
-    color: #1890ff;
+    color: var(--info);
     transition: all 0.3s ease;
     filter: drop-shadow(0 2px 4px rgba(24, 144, 255, 0.2));
 }
@@ -1623,7 +1629,7 @@ onMounted(async () => {
     writing-mode: vertical-rl;
     font-size: 13px;
     font-weight: 600;
-    color: #1890ff;
+    color: var(--info);
     letter-spacing: 2px;
     text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
     transition: all 0.3s ease;
@@ -1650,7 +1656,7 @@ onMounted(async () => {
     height: 24px;
     border-radius: 50%;
     border: 2px solid rgba(24, 144, 255, 0.25);
-    border-top-color: #1890ff;
+    border-top-color: var(--info);
     animation: sidepanel-spin 0.8s linear infinite;
 }
 

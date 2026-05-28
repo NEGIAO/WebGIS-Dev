@@ -20,6 +20,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
+- 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 
 ## 0. 项目结构（2026-05-22 校验）
 
@@ -34,8 +35,9 @@ backend/
 │   ├── auth.py                                    # 认证接口
 │   ├── external_proxy.py                          # 外部代理接口
 │   ├── location.py                                # 定位相关接口
-│   ├── minitor.py                                 # 监控接口
+│   ├── monitor.py                                 # 监控接口
 │   ├── proxy.py                                   # 通用代理XYZ瓦片
+│   ├── spatial.py                                 # 空间分析 API（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 │   └── statistics.py                              # 统计接口
 │                                                  # 
 ├── download_xyz/                                  # 在线底图下载模块

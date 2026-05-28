@@ -549,7 +549,7 @@ onMounted(async () => {
 .admin-select:focus,
 .admin-textarea:focus {
     outline: none;
-    border-color: #59b66a;
+    border-color: var(--brand-primary-light);
     box-shadow: 0 0 0 3px rgba(89, 182, 106, 0.15);
 }
 
@@ -561,7 +561,7 @@ onMounted(async () => {
 
 .admin-action-btn,
 .admin-mini-btn {
-    background: linear-gradient(135deg, #6fca7a 0%, #4caf50 100%);
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
     color: #ffffff;
     border: 1px solid rgba(63, 148, 75, 0.55);
     border-radius: 8px;
@@ -585,7 +585,7 @@ onMounted(async () => {
 
 .admin-mini-btn:hover:not(:disabled),
 .admin-action-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, #7fd489 0%, #57b862 100%);
+    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
     transform: translateY(-1px);
     box-shadow: 0 6px 14px rgba(58, 129, 76, 0.25);
 }

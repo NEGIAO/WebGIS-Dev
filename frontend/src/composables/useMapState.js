@@ -1,4 +1,19 @@
-import debounce from 'lodash/debounce';
+/**
+ * 轻量 debounce，支持 .cancel() 取消待执行的调用
+ * 替代 lodash-es/debounce，减少 ~25KB 依赖
+ */
+function debounce(fn, ms) {
+    let timer = null;
+    const debounced = (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+    };
+    debounced.cancel = () => {
+        clearTimeout(timer);
+        timer = null;
+    };
+    return debounced;
+}
 import { onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import Graticule from 'ol/layer/Graticule';

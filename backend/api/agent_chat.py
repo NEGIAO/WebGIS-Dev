@@ -1605,10 +1605,11 @@ async def _record_agent_call_safe(
         logger.warning("Failed to record agent call log: %s", str(exc))
 
 
-router = APIRouter(tags=["agent-chat"])
+router = APIRouter(prefix="/api/agent", tags=["agent-chat"])
+admin_router = APIRouter(prefix="/api/admin/agent", tags=["agent-chat-admin"])
 
 
-@router.get("/api/agent/chat/config")
+@router.get("/chat/config")
 async def get_agent_chat_config(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
@@ -1660,7 +1661,7 @@ async def get_agent_chat_config(
     }
 
 
-@router.post("/api/agent/chat/completions")
+@router.post("/chat/completions")
 async def agent_chat_completions(
     payload: AgentChatRequest,
     request: Request,
@@ -1840,7 +1841,7 @@ async def agent_chat_completions(
         )
 
 
-@router.get("/api/admin/agent/config")
+@admin_router.get("/config")
 async def admin_get_agent_config(
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -1869,7 +1870,7 @@ async def admin_get_agent_config(
     }
 
 
-@router.post("/api/admin/agent/config")
+@admin_router.post("/config")
 async def admin_update_agent_config(
     payload: AgentConfigUpdateRequest,
     _session: Dict[str, Any] = Depends(require_admin),
@@ -1909,7 +1910,7 @@ async def admin_update_agent_config(
     }
 
 
-@router.get("/api/agent/user-config")
+@router.get("/user-config")
 async def get_agent_user_config(
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
@@ -1961,7 +1962,7 @@ async def get_agent_user_config(
     }
 
 
-@router.post("/api/agent/user-config")
+@router.post("/user-config")
 async def update_agent_user_config(
     payload: AgentUserConfigUpdateRequest,
     session: Dict[str, Any] = Depends(require_login),
@@ -2009,7 +2010,7 @@ async def update_agent_user_config(
     }
 
 
-@router.get("/api/agent/models")
+@router.get("/models")
 async def get_available_models(
     request: Request,
     session: Dict[str, Any] = Depends(require_login),
@@ -2177,7 +2178,7 @@ async def _cache_models_async(models: List[Dict[str, Any]]) -> None:
         logger.debug(f"Background model caching failed: {e}")
 
 
-@router.patch("/api/agent/user/preference")
+@router.patch("/user/preference")
 async def update_user_model_preference(
     payload: Dict[str, Any],
     session: Dict[str, Any] = Depends(require_login),
@@ -2249,7 +2250,7 @@ async def update_user_model_preference(
     }
 
 
-@router.post("/api/agent/chat/proxy")
+@router.post("/chat/proxy")
 async def agent_chat_proxy(
     payload: AgentChatProxyRequest,
     request: Request,

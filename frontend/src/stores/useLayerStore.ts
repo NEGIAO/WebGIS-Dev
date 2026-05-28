@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { useTOCStore } from './useTOCStore';
+import { useSwipeConfigStore } from './useSwipeConfigStore';
 
 type LayerHandlers = {
     onToggleVisibility?: (payload: { layerId: string; visible: boolean }) => void;
@@ -797,33 +798,10 @@ export const useLayerStore = defineStore('layerStore', () => {
         'folder-district': true,
     });
 
-    // ========== Map Swipe Configuration ==========
-    // 管理地图对比滑块（Map Swipe/Roller）功能的状态
-    // 从 localStorage 恢复持久化的卷帘状态（如果有）
-    const _persistKey = 'webgis_swipe_config_v1';
-    let persisted: any = null;
-    try {
-        if (typeof window !== 'undefined') {
-            const raw = localStorage.getItem(_persistKey);
-            if (raw) persisted = JSON.parse(raw);
-        }
-    } catch (e) {
-        persisted = null;
-    }
-
-    const swipeConfig = ref({
-        enabled: persisted?.enabled === true || false,
-        position:
-            typeof persisted?.position === 'number'
-                ? Math.max(0.05, Math.min(0.95, persisted.position))
-                : 0.5,
-        mode: (persisted?.mode === 'vertical' ? 'vertical' : 'horizontal') as
-            | 'horizontal'
-            | 'vertical',
-        targetLayerIds: Array.isArray(persisted?.targetLayerIds)
-            ? persisted.targetLayerIds
-            : ([] as string[]),
-    });
+    // ========== Map Swipe Configuration (代理到 useSwipeConfigStore) ==========
+    // 卷帘配置已拆分至独立 Store，此处保持引用以兼容现有消费者
+    const swipeStore = useSwipeConfigStore();
+    const { swipeConfig } = swipeStore;
 
     const sortedUserLayers = computed(() =>
         [...userLayers.value].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
@@ -1120,52 +1098,12 @@ export const useLayerStore = defineStore('layerStore', () => {
         findLayerTreeNodeById,
         collectLayerTreeLeafNodes,
         getLayerLeafNodesByFolder,
-        // ========== Map Swipe API ==========
-        setSwipeConfig: (config: Partial<typeof swipeConfig.value>) => {
-            swipeConfig.value = { ...swipeConfig.value, ...config };
-        },
-        updateSwipePosition: (position: number) => {
-            const clamped = Math.max(0.05, Math.min(0.95, position));
-            swipeConfig.value.position = clamped;
-            try {
-                if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value };
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
-                }
-            } catch (e) {
-                // ignore storage errors
-            }
-        },
-        updateSwipeMode: (mode: 'horizontal' | 'vertical') => {
-            swipeConfig.value.mode = mode;
-            try {
-                if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value };
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
-                }
-            } catch (e) {
-                // ignore
-            }
-        },
-        enableSwipe: (layerIds: string[] = []) => {
-            swipeConfig.value.enabled = true;
-            swipeConfig.value.targetLayerIds = layerIds;
-            try {
-                if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value };
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
-                }
-            } catch (e) {}
-        },
-        disableSwipe: () => {
-            swipeConfig.value.enabled = false;
-            try {
-                if (typeof window !== 'undefined') {
-                    const toSave = { ...swipeConfig.value };
-                    localStorage.setItem(_persistKey, JSON.stringify(toSave));
-                }
-            } catch (e) {}
-        },
+        // ========== Map Swipe API (代理到 useSwipeConfigStore) ==========
+        setSwipeConfig: swipeStore.setSwipeConfig,
+        updateSwipePosition: swipeStore.updateSwipePosition,
+        updateSwipeMode: swipeStore.updateSwipeMode,
+        enableSwipe: swipeStore.enableSwipe,
+        disableSwipe: swipeStore.disableSwipe,
         isRasterLayer,
         formatLayerDisplayName,
     };

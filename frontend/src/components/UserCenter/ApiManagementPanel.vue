@@ -545,7 +545,7 @@ onMounted(async () => {
 
 .tab-btn.active {
     color: white;
-    background: linear-gradient(135deg, #6fca7a 0%, #4caf50 100%);
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
     box-shadow: 0 4px 10px rgba(58, 129, 76, 0.2);
 }
 
@@ -598,13 +598,13 @@ onMounted(async () => {
 
 .filter-controls select:focus,
 .filter-controls input:focus {
-    border-color: #59b66a;
+    border-color: var(--brand-primary-light);
     box-shadow: 0 0 0 3px rgba(89, 182, 106, 0.15);
 }
 
 .btn-refresh {
     padding: 6px 16px;
-    background: linear-gradient(135deg, #6fca7a 0%, #4caf50 100%);
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
     color: white;
     border: none;
     border-radius: 8px;
@@ -616,7 +616,7 @@ onMounted(async () => {
 }
 
 .btn-refresh:hover {
-    background: linear-gradient(135deg, #7fd489 0%, #57b862 100%);
+    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
     transform: translateY(-1px);
 }
 
@@ -687,7 +687,7 @@ onMounted(async () => {
 }
 .role-badge.registered {
     background: rgba(76, 175, 80, 0.15);
-    color: #388e3c;
+    color: var(--brand-primary-dark);
 }
 .role-badge.admin {
     background: rgba(255, 152, 0, 0.15);
@@ -695,7 +695,7 @@ onMounted(async () => {
 }
 
 .highlight {
-    color: #3c8d4c;
+    color: var(--brand-primary-dark);
     font-weight: 700;
 }
 
@@ -705,7 +705,7 @@ onMounted(async () => {
 }
 
 .success {
-    color: #388e3c;
+    color: var(--brand-primary-dark);
     font-weight: 600;
 }
 .error {
@@ -761,7 +761,7 @@ onMounted(async () => {
     width: 18px;
     height: 18px;
     border: 2px solid rgba(76, 175, 80, 0.2);
-    border-top: 2px solid #4caf50;
+    border-top: 2px solid var(--brand-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-right: 10px;
@@ -805,7 +805,7 @@ onMounted(async () => {
 
 .btn-paging:hover:not(:disabled) {
     background: rgba(76, 175, 80, 0.1);
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
 }
 
 .btn-paging:disabled {
@@ -876,7 +876,7 @@ onMounted(async () => {
 .quota-value {
     font-size: 16px;
     font-weight: 700;
-    color: #4caf50;
+    color: var(--brand-primary);
 }
 
 .quota-note {

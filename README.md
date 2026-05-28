@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，先已进入V3.0阶段，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.1 阶段，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -51,8 +51,9 @@
 - 🌤️ 实时天气 + 趋势预报
 - 🤖 AI 空间助手（LLM 集成）
 - ⚡ 30-50% 首屏性能优化
+- 🎨 **全局主题系统**：CSS 变量驱动，支持绿色/蓝色主题一键切换
 - 🗂️ **TOC 图层管理增强**：图层重命名、透明度控制、属性查看、搜索过滤
-- 📐 **空间分析**：缓冲区/交集/并集/差集/凸包（后端 Shapely 精确计算）
+- 📐 **空间分析**：缓冲区/交集/并集/差集/凸包/**泰森多边形/空间聚合/多环缓冲区/几何简化**（后端 Shapely 精确计算）
 
 **后端功能**：
 - 📡 地理数据处理与坐标系转换
@@ -63,7 +64,7 @@
 - 💾 GIS 数据格式转换
 - ⚙️ 异步后台任务
 - 🔐 三类身份登录 + 会话鉴权（/data 持久化）
-- 📐 **空间分析 API**：基于 Shapely 2.x 的精确几何运算（缓冲区/叠加分析/凸包）
+- 📐 **空间分析 API**：基于 Shapely 2.x 的精确几何运算（缓冲区/叠加分析/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 
 ## 🚀 快速开始
 
@@ -166,10 +167,12 @@ WebGIS_Dev/
 │   │   │   ├── useLayerDataImport.js # 🔄 数据导入（KML/KMZ 样式解析修复）
 │   │   │   └── useKmzLoader.js     # KMZ 专用加载器（KML 选择 + 图片 href 重写）
 │   │   ├── assets/
-│   │   │   └── toc-theme.css       # 🆕 TOC 主题变量（统一管理设计令牌）
+│   │   │   ├── theme.css           # 🆕 全局主题变量（品牌色/文字/背景/边框，支持主题切换）
+│   │   │   └── toc-theme.css       # 🆕 TOC 主题变量（引用全局变量，统一管理设计令牌）
 │   │   ├── constants/              # 常量配置
 │   │   ├── router/                 # 路由
 │   │   ├── stores/                 # Pinia 状态管理
+│   │   │   ├── useThemeStore.ts    # 🆕 主题状态管理（绿色/蓝色切换 + localStorage 持久化）
 │   │   │   ├── useDownloadStore.ts # 🆕 在线底图下载任务状态管理
 │   │   │   ├── useLayerStore.ts    # 🔄 图层状态（支持重命名）
 │   │   │   ├── useCompassStore.ts  # 罗盘状态
@@ -190,7 +193,7 @@ WebGIS_Dev/
 │   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
 │   │   ├── download.py             # 🆕 在线底图下载任务 API（POST/GET 任务）
 │   │   ├── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
-│   │   ├── spatial.py              # 🆕 空间分析 API（缓冲区/交集/并集/差集/凸包，基于 Shapely）
+│   │   ├── spatial.py              # 🆕 空间分析 API（缓冲区/交集/并集/差集/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化，基于 Shapely）
 │   │   └── ...                     # 其余后端接口模块
 │   ├── core/                       # 🆕 核心业务逻辑模块
 │   │   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
@@ -211,6 +214,7 @@ WebGIS_Dev/
 │   └── 26-05-27/2026-05-27-spatial-analysis-backend.md # 🆕 空间分析后端化改造日志
 │   └── 26-05-27/2026-05-27-toc-improvements.md # 🆕 TOC 功能增强日志（重命名/透明度/属性/搜索）
 │   └── 26-05-27/2026-05-27-kmz-style-fix.md # 🆕 KMZ 样式解析修复日志
+│   └── 2026-05-28/2026-05-28-advanced-spatial-analysis.md # 🆕 高级空间分析功能设计文档
 ├── docker-compose.yml              # 🆕 顶级 Docker Compose（一键启动前后端）
 ├── LocalDev.bat                    # 🔄 升级：支持 Docker Compose 启动前后端
 ├── API_MANAGEMENT_GUIDE.md
@@ -358,6 +362,100 @@ LOG_LEVEL=INFO
 | 技术栈 | 5+ |
 
 ## 🔄 更新日志
+
+### V3.1.5 (2026-05-28)
+#### 🎨 主题系统工程化 + 性能优化
+
+本次版本完成 CSS 样式体系统一化，实现全局主题切换功能，并修复多项性能问题。
+
+---
+
+#### 🌟 新增功能
+
+##### 1. 全局主题系统 ✨
+- **统一 CSS 变量体系**：新建 `theme.css`，定义 40+ 全局设计令牌（品牌色/文字色/背景色/边框色/渐变/阴影）
+- **绿色系主题切换**：支持「默认绿」和「海洋蓝」两套主题，一键切换实时预览
+- **主题持久化**：通过 localStorage 保存用户偏好，刷新页面自动恢复
+- **组件全覆盖**：迁移 20+ 个 Vue 组件的硬编码色值为 CSS 变量（ControlsPanel/Shell/UserCenter/views/Routing/Chat/Weather/Map/Compass 等）
+- **TOC 主题联动**：`toc-theme.css` 主色改为引用全局变量，主题切换时 TOC 面板同步变化
+
+##### 2. 空间聚合 BBox 自动获取 ✨
+- 空间聚合分析的可视范围 BBox 支持自动获取当前地图视图范围
+- 新增「获取当前视图范围」按钮，无需手动输入经纬度
+
+#### ⚡ 性能优化
+
+| 优化项 | 预估节省 |
+|--------|----------|
+| `loadJsZip.ts` 移除静态 import，仅保留动态懒加载 | ~115KB |
+| `deferredGisAssets.js` 的 `import *` 改为动态导入 | ~80KB |
+| `lodash-es` 替换为 16 行原生 debounce 实现 | ~25KB |
+| `apiLocationTrackVisit` 超时从 8s 缩短到 3s | 首屏体验 |
+
+#### 🔧 代码质量
+
+- 修复 `useSwipeConfigStore` 的 `setSwipeConfig` 未持久化的 Bug
+- 修复 `constants/index.js` 中 `useBasemapManager` 的错误路径
+- 清理死代码：删除未使用的 `base.css` / `main.css`
+- `ControlsPanel.vue` 清理死代码 emit、修复 `message.warn` → `message.warning`
+- `backend.js` 抽取 `normalizeChatHistory` 共用函数、`syncUserRoleToUrl` 迁移至 `auth.js`
+- `spatialAnalysis` API 添加 30s 独立超时
+
+#### 📁 文件变更
+
+| 操作 | 文件 |
+|------|------|
+| 新建 | `assets/theme.css`、`stores/useThemeStore.ts` |
+| 删除 | `assets/base.css`、`assets/main.css` |
+| 修改 | 20+ 个 Vue 组件 CSS 迁移、`toc-theme.css`、`App.vue`、`stores/index.ts` 等 |
+
+---
+
+### V3.1.4 (2026-05-28)
+#### 🔹 高级空间分析功能扩展
+
+本次版本新增 4 项高级空间分析能力，将空间分析工具从 5 个扩展到 9 个，覆盖公共设施服务范围划分、宏观热点统计、辐射圈分级评估和大数据传输优化等业务场景。
+
+---
+
+#### 🌟 新增功能
+
+##### 1. 泰森多边形（Voronoi Diagram） ✨
+- **业务场景**：公共设施服务范围划分（消防栓、外卖站点、快递柜等最近邻势力范围）
+- **后端**：`shapely.ops.voronoi_diagram` 计算 Voronoi 图，自动裁剪到边界 envelope
+- **前端**：随机彩色半透明填充，蜂窝状视觉效果
+- **属性**：每个 Feature 附带 `site_index` 标识对应站点
+
+##### 2. 空间聚合分析（Spatial Aggregation） ✨
+- **业务场景**：大范围离散数据的宏观热点统计（交通事故、旅游签到等）
+- **后端**：支持方格网（Grid）和六边形网格（Hexbin）两种聚合模式
+- **前端**：根据 `count` 属性做分级色彩表达，比热力图更具空间统计严谨性
+- **参数**：BBox 范围 + 网格类型 + 网格大小
+
+##### 3. 多环缓冲区（Multi-ring Buffer） ✨
+- **业务场景**：污染源/地铁站辐射圈分级评估（核心影响区/边缘波及区/安全防护区）
+- **后端**：接收距离数组，使用 `difference` 擦除生成"甜甜圈"中空环状拓扑
+- **前端**：由深到浅的渐变同心圆环渲染
+- **属性**：每个环附带 `ring_index` 和 `distance_m`
+
+##### 4. 几何简化（Simplify） ✨
+- **业务场景**：大数据量网络传输优化（精细海岸线、省界等复杂几何的节点抽稀）
+- **后端**：Douglas-Peucker 算法 + `preserve_topology=True`，保证拓扑正确
+- **前端**：展示简化前后节点数对比和压缩比率
+- **属性**：每个 Feature 附带 `original_vertices` 和 `simplified_vertices`
+
+---
+
+#### 📁 涉及文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `backend/api/spatial.py` | 新增 4 个分析函数 + 扩展请求模型 |
+| `frontend/src/composables/map/features/useSpatialAnalysis.js` | 扩展分析类型支持 |
+| `frontend/src/components/ControlsPanel/SpatialAnalysisPanel.vue` | 新增 4 个工具卡片 UI |
+
+---
+
 ### V 3.1.3 (2026-05-28)
 #### 🔹 KML/KMZ 样式解析增强 + 编码多支持
 
@@ -753,6 +851,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-05-27 17:00
-**当前版本**：V3.1.3
+**最后更新**：2026-05-28 18:00
+**当前版本**：V3.1.5
 **项目状态**：开发中 - 持续迭代优化

@@ -7,6 +7,7 @@
  */
 
 import GeoJSON from 'ol/format/GeoJSON';
+import { toLonLat } from 'ol/proj';
 import { apiSpatialAnalysis } from '../../../api/backend';
 
 /**
@@ -34,6 +35,40 @@ export function createSpatialAnalysisFeature({
 }) {
     const gjFormat = new GeoJSON();
     let analysisSeed = 1;
+
+    /**
+     * 将米近似转换为度（基于参考纬度）
+     * @param {number} meters - 距离（米）
+     * @param {number} refLat - 参考纬度（度）
+     * @returns {number} 距离（度）
+     */
+    function metersToDegrees(meters, refLat) {
+        const latRad = (refLat * Math.PI) / 180;
+        const metersPerDegreeLat = 111320;
+        const metersPerDegreeLon = 111320 * Math.cos(latRad);
+        const metersPerDegree = (metersPerDegreeLat + metersPerDegreeLon) / 2;
+        return meters / metersPerDegree;
+    }
+
+    /**
+     * 从 OL Feature 数组中获取参考纬度（质心纬度）
+     * @param {Array} olFeatures - OL Feature 数组
+     * @returns {number} 参考纬度（度），默认 35
+     */
+    function getReferenceLat(olFeatures) {
+        for (const feat of olFeatures) {
+            const geom = feat.getGeometry();
+            if (geom) {
+                const extent = geom.getExtent();
+                // extent: [minX, minY, maxX, maxY] in EPSG:3857
+                // 取中心 Y 转为 WGS84 纬度
+                const centerY3857 = (extent[1] + extent[3]) / 2;
+                const [, lat] = toLonLat([0, centerY3857]);
+                return lat;
+            }
+        }
+        return 35; // 默认中纬度
+    }
 
     /**
      * 获取指定图层的所有 OL Feature（EPSG:3857）
@@ -80,12 +115,17 @@ export function createSpatialAnalysisFeature({
     /**
      * 执行空间分析（调用后端 API）
      * @param {Object} params - 分析参数
-     * @param {string} params.type - 分析类型：buffer/overlay/convexHull
-     * @param {string} [params.targetLayerId] - 目标图层 ID（buffer/convexHull 使用）
+     * @param {string} params.type - 分析类型：buffer/overlay/convexHull/voronoi/aggregation/multiRingBuffer/simplify
+     * @param {string} [params.targetLayerId] - 目标图层 ID
      * @param {number} [params.radius] - 缓冲半径（米）（buffer 使用）
      * @param {string} [params.operation] - 叠加操作：intersection/union/difference（overlay 使用）
      * @param {string} [params.layerA] - 图层 A ID（overlay 使用）
      * @param {string} [params.layerB] - 图层 B ID（overlay 使用）
+     * @param {number[]} [params.distances] - 多环缓冲区距离数组（米）
+     * @param {number} [params.tolerance] - 几何简化容差（度）
+     * @param {number[]} [params.bbox] - 可视范围 [minLon, minLat, maxLon, maxLat]
+     * @param {string} [params.gridType] - 网格类型：grid/hexbin
+     * @param {number} [params.gridSize] - 网格大小（度）
      */
     async function runSpatialAnalysis(params = {}) {
         const { type } = params;
@@ -146,6 +186,75 @@ export function createSpatialAnalysisFeature({
                 }
                 operation = 'convexHull';
                 layerName = `凸包分析_${analysisSeed++}`;
+            } else if (type === 'voronoi') {
+                const { targetLayerId } = params;
+                if (!targetLayerId) {
+                    message.warning('请选择目标图层');
+                    return;
+                }
+                featuresA = getLayerFeatures(targetLayerId);
+                if (!featuresA.length) {
+                    message.warning('目标图层无要素');
+                    return;
+                }
+                if (featuresA.length < 2) {
+                    message.warning('泰森多边形分析至少需要 2 个点要素');
+                    return;
+                }
+                operation = 'voronoi';
+                layerName = `泰森多边形_${analysisSeed++}`;
+            } else if (type === 'aggregation') {
+                const { targetLayerId, bbox, gridType = 'grid', gridSize = 0.01 } = params;
+                if (!targetLayerId) {
+                    message.warning('请选择目标图层');
+                    return;
+                }
+                if (!bbox || bbox.length !== 4) {
+                    message.warning('请先框选可视范围或手动输入 BBox');
+                    return;
+                }
+                featuresA = getLayerFeatures(targetLayerId);
+                if (!featuresA.length) {
+                    message.warning('目标图层无要素');
+                    return;
+                }
+                operation = 'aggregation';
+                const gridLabel = gridType === 'hexbin' ? '六边形' : '方格';
+                layerName = `${gridLabel}聚合_${analysisSeed++}`;
+            } else if (type === 'multiRingBuffer') {
+                const { targetLayerId, distances } = params;
+                if (!targetLayerId) {
+                    message.warning('请选择目标图层');
+                    return;
+                }
+                if (!distances || !distances.length) {
+                    message.warning('请输入至少一个缓冲距离');
+                    return;
+                }
+                featuresA = getLayerFeatures(targetLayerId);
+                if (!featuresA.length) {
+                    message.warning('目标图层无要素');
+                    return;
+                }
+                operation = 'multiRingBuffer';
+                layerName = `多环缓冲区_${analysisSeed++}`;
+            } else if (type === 'simplify') {
+                const { targetLayerId, tolerance } = params;
+                if (!targetLayerId) {
+                    message.warning('请选择目标图层');
+                    return;
+                }
+                if (!tolerance || tolerance <= 0) {
+                    message.warning('请输入有效的简化容差');
+                    return;
+                }
+                featuresA = getLayerFeatures(targetLayerId);
+                if (!featuresA.length) {
+                    message.warning('目标图层无要素');
+                    return;
+                }
+                operation = 'simplify';
+                layerName = `几何简化_${analysisSeed++}`;
             } else {
                 message.warning(`不支持的分析类型：${type}`);
                 return;
@@ -165,6 +274,20 @@ export function createSpatialAnalysisFeature({
             }
             if (geojsonB) {
                 payload.features_b = geojsonB;
+            }
+            // 高级分析参数
+            if (type === 'multiRingBuffer' && params.distances) {
+                payload.distances = params.distances;
+            }
+            if (type === 'simplify' && params.tolerance) {
+                // 前端传入的容差单位为米，需转换为度供后端 Shapely 使用
+                const refLat = getReferenceLat(featuresA);
+                payload.tolerance = metersToDegrees(params.tolerance, refLat);
+            }
+            if (type === 'aggregation') {
+                payload.bbox = params.bbox;
+                payload.grid_type = params.gridType || 'grid';
+                payload.grid_size = params.gridSize || 0.01;
             }
 
             message.info('正在执行空间分析...');
@@ -194,7 +317,16 @@ export function createSpatialAnalysisFeature({
 
             emitGraphicsOverview();
             emitUserLayersChange();
-            message.success(`${layerName} 完成，共 ${resultFeatures.length} 个要素`);
+
+            // 构建结果提示信息
+            let resultMsg = `${layerName} 完成，共 ${resultFeatures.length} 个要素`;
+            if (type === 'simplify' && resultGeoJSON.total_original_vertices) {
+                const orig = resultGeoJSON.total_original_vertices;
+                const simp = resultGeoJSON.total_simplified_vertices;
+                const ratio = ((1 - simp / orig) * 100).toFixed(1);
+                resultMsg += `（节点 ${orig} → ${simp}，减少 ${ratio}%）`;
+            }
+            message.success(resultMsg);
         } catch (error) {
             const detail = error?.response?.data?.detail;
             const errMsg = detail || error?.message || '空间分析请求失败';

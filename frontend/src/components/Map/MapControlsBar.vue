@@ -541,7 +541,7 @@ onUnmounted(() => {
 
 <style scoped>
 .map-controls-group {
-    --brand-color: #309441;
+    --brand-color: var(--brand-primary-dark);
     --brand-color-rgb: 48, 148, 65;
     --glass-bg: linear-gradient(
         135deg,
@@ -751,7 +751,7 @@ onUnmounted(() => {
 
 .format-option.active {
     background: rgba(48, 148, 65, 0.15);
-    border-color: #309441;
+    border-color: var(--brand-primary-dark);
     box-shadow: inset 0 0 0 1px rgba(48, 148, 65, 0.3);
 }
 
@@ -759,7 +759,7 @@ onUnmounted(() => {
     display: block;
     font-size: 12px;
     font-weight: 600;
-    color: #309441;
+    color: var(--brand-primary-dark);
     margin-bottom: 2px;
 }
 
@@ -805,8 +805,8 @@ onUnmounted(() => {
 
 .decimal-option.active {
     background: rgba(48, 148, 65, 0.2);
-    border-color: #309441;
-    color: #309441;
+    border-color: var(--brand-primary-dark);
+    color: var(--brand-primary-dark);
     box-shadow: 0 0 0 2px rgba(48, 148, 65, 0.1);
 }
 

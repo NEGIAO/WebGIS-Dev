@@ -1,14 +1,14 @@
 import { loadMapRuntimeDeps } from './mapRuntimeDeps';
-import * as geotiffRuntimeModule from 'geotiff';
 
 let geotiffRuntimePromise = null;
 
 /**
  * Warm geotiff runtime in background for upload workflows.
+ * Uses dynamic import for code splitting — geotiff (~80KB) stays out of the main chunk.
  */
 export function loadGeotiffRuntime() {
     if (!geotiffRuntimePromise) {
-        geotiffRuntimePromise = Promise.resolve(geotiffRuntimeModule);
+        geotiffRuntimePromise = import('geotiff');
     }
     return geotiffRuntimePromise;
 }

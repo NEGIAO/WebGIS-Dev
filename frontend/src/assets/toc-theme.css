@@ -5,11 +5,11 @@
  */
 
 :root {
-    /* ===== 主色调 ===== */
-    --toc-primary: #1f7b49;
-    --toc-primary-light: #2f9a57;
-    --toc-primary-lighter: #56ab56;
-    --toc-primary-dark: #1d7541;
+    /* ===== 主色调（引用全局品牌变量） ===== */
+    --toc-primary: var(--brand-primary-dark);
+    --toc-primary-light: var(--brand-primary);
+    --toc-primary-lighter: var(--brand-primary-light);
+    --toc-primary-dark: var(--brand-accent-dark);
     --toc-primary-bg: rgba(31, 123, 73, 0.06);
     --toc-primary-bg-hover: rgba(31, 123, 73, 0.12);
 
@@ -73,8 +73,8 @@
     --toc-card-title-dark: #2e4b3a;
 
     /* ===== 工具按钮 ===== */
-    --toc-btn-primary: #56ab56;
-    --toc-btn-primary-hover: #4a944a;
+    --toc-btn-primary: var(--brand-primary-light);
+    --toc-btn-primary-hover: var(--brand-primary);
     --toc-btn-warning: #f8b600;
     --toc-btn-warning-hover: #e0a400;
     --toc-btn-reverse-bg: #e9f5e9;
@@ -98,7 +98,7 @@
     --toc-tab-border: rgba(130, 176, 146, 0.18);
     --toc-tab-bg: rgba(255, 255, 255, 0.42);
     --toc-tab-text: #4e6656;
-    --toc-tab-active-bg: linear-gradient(135deg, rgba(48, 157, 88, 0.92) 0%, rgba(44, 133, 76, 0.92) 100%);
+    --toc-tab-active-bg: var(--brand-gradient);
     --toc-tab-active-border: rgba(33, 128, 72, 0.84);
 
     /* ===== 上传区域 ===== */
@@ -118,7 +118,7 @@
     --toc-toolbox-bg: linear-gradient(180deg, #fdfefd 0%, #f3f8f5 100%);
     --toc-toolbox-text: #2f3a45;
     --toc-header-border: #dde9e2;
-    --toc-title: #2b8a4b;
+    --toc-title: var(--brand-primary-dark);
     --toc-subtitle: #72897a;
 
     /* ===== 间距 ===== */
@@ -150,4 +150,13 @@
     --toc-transition-fast: 0.12s ease;
     --toc-transition-normal: 0.16s cubic-bezier(0.4, 0, 0.2, 1);
     --toc-transition-slow: 0.2s ease-out;
+}
+
+/* ===== 蓝色主题覆盖 ===== */
+[data-theme="blue"] {
+    --toc-primary-bg: rgba(13, 71, 161, 0.06);
+    --toc-primary-bg-hover: rgba(13, 71, 161, 0.12);
+    --toc-bg-hover: linear-gradient(135deg, rgba(100, 181, 246, 0.5) 0%, rgba(187, 222, 251, 0.8) 100%);
+    --toc-bg-active: linear-gradient(135deg, rgba(144, 202, 249, 0.5) 0%, rgba(144, 202, 249, 0.5) 100%);
+    --toc-bg-folder: rgba(21, 101, 192, 0.566);
 }

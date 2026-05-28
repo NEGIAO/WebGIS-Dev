@@ -25,7 +25,9 @@ export const BACKEND_BASE_URL = String(
 
 const backendURL = BACKEND_BASE_URL;
 
-console.log('后端 URL:', backendURL);
+if (import.meta.env.DEV) {
+    console.warn('[Backend] 后端 URL:', backendURL);
+}
 
 /**
  * 后端 API 客户端实例
@@ -460,6 +462,8 @@ export async function apiLocationTrackVisit(options = {}) {
         .post('/api/v1/location/track-visit', {
             user_agent: options.userAgent || navigator?.userAgent || '',
             referrer: options.referrer || document?.referrer || '',
+        }, {
+            timeout: 3000, // 非关键请求，缩短超时避免阻塞首屏
         })
         .catch((error) => {
             // 定位追踪失败不影响正常业务流程，静默处理
@@ -559,16 +563,24 @@ export async function apiAgentUpdateUserConfig(payload = {}) {
     return backendAPI.post('/api/agent/user-config', safePayload);
 }
 
+/**
+ * 规范化聊天历史：清洗、过滤无效消息、截断到最近 12 条
+ * @param {Array} rawHistory - 原始历史消息
+ * @returns {Array<{role: string, content: string}>}
+ */
+function normalizeChatHistory(rawHistory) {
+    if (!Array.isArray(rawHistory)) return [];
+    return rawHistory
+        .map((item) => ({
+            role: String(item?.role || '').trim(),
+            content: String(item?.content || '').trim(),
+        }))
+        .filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content)
+        .slice(-12);
+}
+
 export async function apiAgentChatCompletions(payload = {}) {
-    const history = Array.isArray(payload.history)
-        ? payload.history
-              .map((item) => ({
-                  role: String(item?.role || '').trim(),
-                  content: String(item?.content || '').trim(),
-              }))
-              .filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content)
-              .slice(-12)
-        : [];
+    const history = normalizeChatHistory(payload.history);
 
     const body = {
         message: String(payload.message || '').trim(),
@@ -639,15 +651,7 @@ export async function apiAgentSaveModelPreference(preferredModel) {
 export async function apiAgentChatProxy(payload = {}) {
     const body = {
         message: String(payload.message || '').trim(),
-        history: Array.isArray(payload.history)
-            ? payload.history
-                  .map((item) => ({
-                      role: String(item?.role || '').trim(),
-                      content: String(item?.content || '').trim(),
-                  }))
-                  .filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content)
-                  .slice(-12)
-            : [],
+        history: normalizeChatHistory(payload.history),
         location_context: String(payload.location_context || '').trim(),
         api_key: String(payload.api_key || '').trim(),
         base_url: String(payload.base_url || '').trim(),
@@ -865,35 +869,9 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
  * @returns {Promise<Object>} { code, data: FeatureCollection, message }
  */
 export async function apiSpatialAnalysis(payload) {
-    return backendAPI.post('/api/v1/spatial/analysis', payload);
+    return backendAPI.post('/api/v1/spatial/analysis', payload, {
+        timeout: 30000, // 空间分析为重计算操作，给予 30 秒超时
+    });
 }
 
-export function syncUserRoleToUrl(user) {
-    if (typeof window === 'undefined') return;
-
-    const roleRaw = String(user?.role || '')
-        .trim()
-        .toLowerCase();
-    const role = roleRaw === 'admin' ? 'admin' : roleRaw === 'guest' ? 'guest' : 'registered';
-
-    try {
-        const hash = String(window.location.hash || '#/home');
-        const hashWithoutSharp = hash.startsWith('#') ? hash.slice(1) : hash;
-        const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
-        const hashPath = hashPathRaw || '/home';
-        const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
-        const params = new URLSearchParams(hashQueryRaw);
-
-        params.set('ut', role);
-
-        const nextHashQuery = params.toString();
-        const nextHash = nextHashQuery
-            ? `#${normalizedHashPath}?${nextHashQuery}`
-            : `#${normalizedHashPath}`;
-
-        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
-        window.history.replaceState(window.history.state, '', nextUrl);
-    } catch {
-        // ignore URL sync errors
-    }
-}
+// syncUserRoleToUrl 已迁移至 utils/auth.js

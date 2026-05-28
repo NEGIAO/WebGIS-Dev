@@ -767,7 +767,7 @@ onMounted(async () => {
     width: 12px;
     height: 12px;
     border: 2px solid rgba(76, 175, 80, 0.1);
-    border-top: 2px solid #4caf50;
+    border-top: 2px solid var(--brand-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
     margin-right: 8px;
@@ -800,7 +800,7 @@ onMounted(async () => {
 }
 
 .key-header {
-    background: linear-gradient(135deg, #6fca7a 0%, #4caf50 100%);
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
     color: white;
     padding: 16px;
     display: flex;
@@ -867,14 +867,14 @@ onMounted(async () => {
 }
 
 .key-hint a {
-    color: #4caf50;
+    color: var(--brand-primary);
     text-decoration: none;
     font-weight: bold;
 }
 
 .key-hint a:hover {
     text-decoration: underline;
-    color: #388e3c;
+    color: var(--brand-primary-dark);
 }
 
 .edit-form {
@@ -898,7 +898,7 @@ onMounted(async () => {
 
 .key-input:focus {
     outline: none;
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
 }
 
@@ -920,12 +920,12 @@ onMounted(async () => {
 
 .btn-edit {
     background: rgba(76, 175, 80, 0.1);
-    color: #4caf50;
-    border: 1px solid #4caf50;
+    color: var(--brand-primary);
+    border: 1px solid var(--brand-primary);
 }
 
 .btn-edit:hover {
-    background: #4caf50;
+    background: var(--brand-primary);
     color: white;
 }
 
@@ -941,12 +941,12 @@ onMounted(async () => {
 }
 
 .btn-save {
-    background: #4caf50;
+    background: var(--brand-primary);
     color: white;
 }
 
 .btn-save:hover {
-    background: #388e3c;
+    background: var(--brand-primary-dark);
 }
 
 .btn-cancel {

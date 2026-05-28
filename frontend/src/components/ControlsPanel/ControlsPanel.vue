@@ -47,6 +47,7 @@
         <SpatialAnalysisPanel
             v-if="spatialPanelVisible"
             :available-layers="userLayers"
+            :get-map-extent="getMapExtent"
             @analysis="handleSpatialAnalysis"
             @close="spatialPanelVisible = false"
         />
@@ -176,6 +177,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    getMapExtent: {
+        type: Function,
+        default: null,
+    },
 });
 
 // ========== 卷帘分析支持的底图 ==========
@@ -194,13 +199,8 @@ const emit = defineEmits([
     'open-tab',
     'open-toolbox-tab',
     'map-interaction',
-    'show-analysis',
     'district-select',
     'enable-basemap-swipe',
-    'draw-type',
-    'clear-draw',
-    'measure-type',
-    'clear-measure',
     'spatial-analysis',
 ]);
 
@@ -219,9 +219,24 @@ const menuItems = [
     { id: 'more', label: '卷帘分析', icon: Columns2, action: 'toggleMore' },
     { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
     { id: 'download', label: '下载底图', icon: Download, action: 'toggleDownload' },
-    { id: 'log', label: '日志监控', icon: Activity, action: 'toggleLog' },
     { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
+    { id: 'log', label: '日志监控', icon: Activity, action: 'toggleLog' },
 ];
+
+/** 关闭与当前激活项不相关的子面板 */
+function closeIrrelevantPanels(activePanelId) {
+    const panelMap = {
+        adcode: districtPanelVisible,
+        draw: drawPanelVisible,
+        measure: measurePanelVisible,
+        analyze: spatialPanelVisible,
+    };
+    for (const [panelId, visRef] of Object.entries(panelMap)) {
+        if (panelId !== activePanelId && visRef.value) {
+            visRef.value = false;
+        }
+    }
+}
 
 const handleSelect = (id) => {
     const currentItem = menuItems.find((item) => item.id === id);
@@ -242,18 +257,7 @@ const handleSelect = (id) => {
     activeId.value = id;
 
     // 关闭不相关的子面板
-    if (id !== 'adcode' && districtPanelVisible.value) {
-        districtPanelVisible.value = false;
-    }
-    if (id !== 'draw' && drawPanelVisible.value) {
-        drawPanelVisible.value = false;
-    }
-    if (id !== 'measure' && measurePanelVisible.value) {
-        measurePanelVisible.value = false;
-    }
-    if (id !== 'analyze' && spatialPanelVisible.value) {
-        spatialPanelVisible.value = false;
-    }
+    closeIrrelevantPanels(id);
 
     // 2. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
     switch (currentItem.action) {
@@ -306,6 +310,7 @@ const handleSelect = (id) => {
             if (layerStore.swipeConfig.enabled) {
                 // 已启用，关闭
                 layerStore.disableSwipe();
+                activeId.value = 'layers';
                 message.success('卷帘分析已关闭');
             } else {
                 // 未启用，打开对话框让用户选择左右底图
@@ -320,7 +325,7 @@ const handleSelect = (id) => {
             break;
 
         default:
-            message.warn('未识别的 Action:', currentItem.action);
+            message.warning('未识别的 Action:', currentItem.action);
             break;
     }
 };
@@ -377,12 +382,12 @@ const handleSpatialAnalysis = (payload) => {
  */
 const confirmSwipeConfig = () => {
     if (!leftBasemap.value || !rightBasemap.value) {
-        message.warn('请选择左右两个不同的底图');
+        message.warning('请选择左右两个不同的底图');
         return;
     }
 
     if (leftBasemap.value === rightBasemap.value) {
-        message.warn('左右底图不能相同');
+        message.warning('左右底图不能相同');
         return;
     }
 
@@ -448,7 +453,8 @@ const getBasemapLabel = (id) => {
     align-items: center;
     flex-wrap: nowrap;
     overflow-y: auto;
-    overflow-x: hidden; /* 防止出现横向滚动条 */
+    overflow-x: hidden;
+    /* 防止出现横向滚动条 */
 
     /* 3. 间距：底部 padding 给大一点，确保最后一个按钮滚动后离边缘有距离 */
     padding-top: 15px;
@@ -474,17 +480,19 @@ const getBasemapLabel = (id) => {
 }
 
 .sidebar-item {
-    flex-shrink: 0; /* 强制不被压缩 */
+    flex-shrink: 0;
+    /* 强制不被压缩 */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     width: 56px;
-    min-height: 60px; /* 使用 min-height 确保高度 */
+    min-height: 60px;
+    /* 使用 min-height 确保高度 */
     cursor: pointer;
     transition: all 0.3s ease;
     border-radius: 12px;
-    color: #397d39;
+    color: var(--brand-accent-muted);
 }
 
 .icon-wrapper {
@@ -505,7 +513,7 @@ const getBasemapLabel = (id) => {
 
 /* 激活状态 - 亮绿色渐变 */
 .sidebar-item.active {
-    background: linear-gradient(200deg, #6a9e98 0%, #57b861 100%);
+    background: linear-gradient(200deg, #6a9e98 0%, var(--brand-accent) 100%);
     color: #fff;
     box-shadow: 0 4px 15px rgba(0, 191, 165, 0.4);
 }
@@ -557,7 +565,7 @@ const getBasemapLabel = (id) => {
     align-items: center;
     padding: 20px;
     border-bottom: 1px solid #f0f0f0;
-    background: linear-gradient(135deg, #0d972fc8 0%, #0a6815c1 100%);
+    background: var(--brand-gradient-header);
     color: white;
 }
 
@@ -687,7 +695,7 @@ const getBasemapLabel = (id) => {
 }
 
 .confirm-btn {
-    background: linear-gradient(135deg, #139647 0%, #0f995b 100%);
+    background: linear-gradient(135deg, var(--brand-accent-dark) 0%, #0f995b 100%);
     border-color: #1b963c;
     color: white;
 }

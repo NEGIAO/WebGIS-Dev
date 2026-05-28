@@ -866,7 +866,7 @@ onBeforeUnmount(() => {
 .mode-option input[type="radio"] {
     margin-top: 3px;
     cursor: pointer;
-    accent-color: #1f7a4d;
+    accent-color: var(--brand-primary-dark);
 }
 
 .mode-label {
@@ -893,7 +893,7 @@ onBeforeUnmount(() => {
 .primary-btn {
     border: none;
     border-radius: 9px;
-    background: #1f7a4d;
+    background: var(--brand-primary-dark);
     color: #fff;
     font-weight: 700;
     padding: 8px 14px;
@@ -958,7 +958,7 @@ onBeforeUnmount(() => {
 .progress-bar {
     height: 100%;
     border-radius: 999px;
-    background: linear-gradient(90deg, #2faa66 0%, #1f7a4d 100%);
+    background: linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
     transition: width 0.3s ease;
 }
 

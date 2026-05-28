@@ -226,12 +226,12 @@ import {
     apiAuthLogin,
     apiAuthRegister,
     apiLocationTrackVisit,
-    syncUserRoleToUrl,
 } from '../api/backend';
 import {
     consumePersistedPositionCode,
     getAuthToken,
     getOrCreateGuestDeviceId,
+    syncUserRoleToUrl,
     injectPositionCodeToPath,
     peekPersistedPositionCode,
     setAuthSession,
@@ -646,10 +646,10 @@ watch(username, (nextUsername) => {
 }
 
 :root {
-    --primary-color: #4caf50;
-    --primary-hover: #45a049;
+    --primary-color: var(--brand-primary);
+    --primary-hover: var(--brand-primary-dark);
     --error-color: #f44336;
-    --success-color: #4caf50;
+    --success-color: var(--brand-primary);
     --text-color: #333;
     --light-bg: #f9f9f9;
     --border-color: #e0e0e0;
@@ -683,7 +683,7 @@ watch(username, (nextUsername) => {
 }
 
 .form-header {
-    background: linear-gradient(135deg, #4caf50, #2e7d32);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
     color: white;
     padding: 25px;
     text-align: center;
@@ -749,7 +749,7 @@ watch(username, (nextUsername) => {
 }
 
 .mode-btn.active {
-    background: #4caf50;
+    background: var(--brand-primary);
     color: #fff;
 }
 
@@ -774,7 +774,7 @@ label {
 }
 
 .form-group:hover label {
-    color: #4caf50;
+    color: var(--brand-primary);
 }
 
 .input-group {
@@ -800,7 +800,7 @@ input {
 
 input:focus {
     outline: none;
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
 }
 
@@ -823,7 +823,7 @@ input:focus {
 }
 
 .username-check.success {
-    color: #2e7d32;
+    color: var(--brand-primary-dark);
 }
 
 .username-check.error {
@@ -855,12 +855,12 @@ input:focus {
 
 .avatar-item:hover {
     transform: translateY(-1px);
-    border-color: #7cb87c;
+    border-color: var(--brand-primary-light);
     background: #f1f8f1;
 }
 
 .avatar-item.active {
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
     background: #edf7ed;
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
 }
@@ -889,7 +889,7 @@ input:focus {
 }
 
 .validation-message.success {
-    color: #4caf50;
+    color: var(--brand-primary);
     display: block;
 }
 
@@ -923,31 +923,31 @@ input:focus {
 
 .quick-btn:hover:not(:disabled) {
     background: #edf7ed;
-    border-color: #7cb87c;
+    border-color: var(--brand-primary-light);
     transform: translateY(-1px);
 }
 
 .quick-btn.guest-login {
-    background: linear-gradient(135deg, #e8f5e9 0%, #f1f8f1 100%);
-    border-color: #81c784;
+    background: linear-gradient(135deg, var(--bg-brand-light) 0%, #f1f8f1 100%);
+    border-color: var(--brand-primary-light);
 }
 
 .quick-btn.guest-login:hover:not(:disabled) {
-    background: linear-gradient(135deg, #dceee4 0%, #e8f5e9 100%);
-    border-color: #66bb6a;
+    background: linear-gradient(135deg, #dceee4 0%, var(--bg-brand-light) 100%);
+    border-color: var(--brand-primary-light);
     box-shadow: 0 2px 6px rgba(76, 175, 80, 0.2);
 }
 
 .quick-btn.confirm-login {
-    background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%);
-    border-color: #66bb6a;
+    background: linear-gradient(135deg, var(--bg-brand-lighter) 0%, var(--brand-primary-lighter) 100%);
+    border-color: var(--brand-primary-light);
     color: #1b5e20;
     font-weight: 600;
 }
 
 .quick-btn.confirm-login:hover:not(:disabled) {
-    background: linear-gradient(135deg, #a5d6a7 0%, #81c784 100%);
-    border-color: #558b2f;
+    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-primary-light) 100%);
+    border-color: var(--brand-accent-dark);
     box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
 }
 
@@ -959,7 +959,7 @@ input:focus {
 .btn {
     display: block;
     width: 100%;
-    background-color: #4caf50;
+    background-color: var(--brand-primary);
     color: white;
     border: none;
     padding: 14px;
@@ -973,7 +973,7 @@ input:focus {
 }
 
 .btn:hover {
-    background-color: #45a049;
+    background-color: var(--brand-primary-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
 }
@@ -997,7 +997,7 @@ input:focus {
 }
 
 .login-link a {
-    color: #4caf50;
+    color: var(--brand-primary);
     text-decoration: none;
     font-weight: 500;
 }

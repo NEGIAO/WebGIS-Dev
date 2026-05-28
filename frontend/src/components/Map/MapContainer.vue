@@ -1126,7 +1126,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.3)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.5)', { duration: 3000 });
     }
 
     // ========== 并行执行：Google 主机测速（非阻塞） ==========
@@ -1808,6 +1808,25 @@ exportLayerCoordinates = (payload) => {
 // [隶属] 组件交互-对外能力暴露
 // [作用] 向父组件公开地图核心动作（导入、绘制、路线、图层管理等）。
 // [交互] HomeView 等父组件通过 ref 调用这些方法。
+/**
+ * 获取当前地图视图的可视范围（BBox）
+ * @returns {{ minLon: number, minLat: number, maxLon: number, maxLat: number } | null}
+ */
+function getMapExtent() {
+    if (!mapInstance.value) return null;
+    const view = mapInstance.value.getView();
+    const extent = view.calculateExtent(mapInstance.value.getSize());
+    if (!extent || extent.length < 4) return null;
+    const [minLon, minLat] = toLonLat([extent[0], extent[1]]);
+    const [maxLon, maxLat] = toLonLat([extent[2], extent[3]]);
+    return {
+        minLon: Math.min(minLon, maxLon),
+        minLat: Math.min(minLat, maxLat),
+        maxLon: Math.max(minLon, maxLon),
+        maxLat: Math.max(minLat, maxLat),
+    };
+}
+
 defineExpose({
     updateViewByParams,
     locateAddress,
@@ -1850,6 +1869,7 @@ defineExpose({
     exportLayerCoordinates,
     enableBasemapSwipe,
     runSpatialAnalysis,
+    getMapExtent,
 });
 </script>
 

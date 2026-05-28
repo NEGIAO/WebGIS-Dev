@@ -165,7 +165,7 @@ frontend/
     │   │   ├── DrawPanel.vue                       # 绘制子面板（点/线/面选择）
     │   │   ├── LogMonitor.vue                      # 日志监控组件
     │   │   ├── MeasurePanel.vue                    # 测量子面板（测距/测面选择）
-    │   │   └── SpatialAnalysisPanel.vue            # 空间分析面板（缓冲区/叠加/凸包）
+    │   │   └── SpatialAnalysisPanel.vue            # 空间分析面板（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
     │   │
     │   ├── feng-shui-compass-svg/
     │   │   ├── feng-shui-compass-svg.vue           # 罗盘 SVG 主组件
@@ -278,7 +278,7 @@ frontend/
     │       │   ├── useRouteRendering.js          # 路线渲染
     │       │   ├── useRouteStepInteraction.js    # 路线步骤交互
     │       │   ├── useRouteStepStyles.js         # 路线步骤样式
-    │       │   ├── useSpatialAnalysis.js         # 空间分析（缓冲区/叠加/凸包）
+    │       │   ├── useSpatialAnalysis.js         # 空间分析（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
     │       │   ├── useStartupTaskScheduler.js    # 启动任务调度
     │       │   └── useUserLayerApiFacade.js      # 用户图层 API 门面
     │       │

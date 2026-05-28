@@ -672,7 +672,7 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     box-sizing: border-box;
-    background: #4caf50;
+    background: var(--brand-primary);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -742,7 +742,7 @@ onBeforeUnmount(() => {
     right: 0;
     top: calc(100% + 8px);
     min-width: 168px;
-    background: #438a45d1;
+    background: var(--brand-primary-dark);
     border-radius: 10px;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
     border: 1px solid rgba(255, 255, 255, 0.18);

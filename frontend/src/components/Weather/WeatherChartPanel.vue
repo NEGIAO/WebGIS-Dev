@@ -587,6 +587,7 @@ function renderTrendChart() {
     const yMin = validTemps.length ? Math.max(-50, Math.floor(Math.min(...validTemps) - 2)) : 0;
     const yMax = validTemps.length ? Math.min(60, Math.ceil(Math.max(...validTemps) + 2)) : 40;
 
+    // NOTE: ECharts JS 内的颜色值无法使用 CSS 变量，如需同步主题色请手动与 theme.css 中的变量保持一致
     const option = {
         backgroundColor: 'transparent',
         animationDuration: 420,
@@ -813,6 +814,7 @@ function renderWindChart() {
     const axisMax = Math.max(8, Math.min(12, Math.ceil(forecastMaxPower + 1)));
     const xLabelRotate = dateLabels.some((item) => String(item || '').length > 5) ? 12 : 0;
 
+    // NOTE: ECharts JS 内的颜色值无法使用 CSS 变量，如需同步主题色请手动与 theme.css 中的变量保持一致
     const option = {
         backgroundColor: 'transparent',
         animationDuration: 420,
@@ -1285,7 +1287,7 @@ onBeforeUnmount(() => {
     background:
         radial-gradient(circle at 20% 10%, rgba(86, 184, 118, 0.24), transparent 40%),
         radial-gradient(circle at 90% 80%, rgba(44, 133, 76, 0.22), transparent 35%),
-        linear-gradient(145deg, #f4fbf6 0%, #e9f5ed 100%);
+        linear-gradient(145deg, var(--bg-brand-light) 0%, var(--bg-brand-light) 100%);
     border-radius: 12px;
     overflow: auto;
 }
@@ -1306,13 +1308,13 @@ onBeforeUnmount(() => {
     margin: 0;
     font-size: 20px;
     line-height: 1.2;
-    color: #1f5a37;
+    color: var(--brand-accent-dark);
 }
 
 .weather-subtitle {
     margin: 4px 0 0;
     font-size: 12px;
-    color: #4e7b60;
+    color: var(--brand-accent-muted);
 }
 
 .weather-toolbar-right {
@@ -1321,9 +1323,9 @@ onBeforeUnmount(() => {
 }
 
 .toolbar-btn {
-    border: 1px solid #5ba679;
+    border: 1px solid var(--brand-primary-light);
     border-radius: 8px;
-    background: linear-gradient(135deg, #41a668 0%, #2f8551 100%);
+    background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
     color: #fff;
     height: 34px;
     padding: 0 14px;
@@ -1357,7 +1359,7 @@ onBeforeUnmount(() => {
 
 .query-block label {
     font-size: 12px;
-    color: #356749;
+    color: var(--brand-primary-dark);
     font-weight: 600;
 }
 
@@ -1368,28 +1370,28 @@ onBeforeUnmount(() => {
 }
 
 .query-input {
-    border: 1px solid #9dcdb0;
+    border: 1px solid var(--brand-primary-lighter);
     border-radius: 8px;
     height: 32px;
     padding: 0 10px;
     font-size: 12px;
-    color: #234d35;
+    color: var(--brand-primary-dark);
     background: #fff;
 }
 
 .query-input:focus {
     outline: none;
-    border-color: #3ca565;
+    border-color: var(--brand-primary);
     box-shadow: 0 0 0 2px rgba(60, 165, 101, 0.15);
 }
 
 .query-btn {
-    border: 1px solid #7db898;
+    border: 1px solid var(--brand-primary-light);
     border-radius: 8px;
     min-width: 58px;
     height: 32px;
-    background: #ebf7ef;
-    color: #1f6b42;
+    background: var(--bg-brand-light);
+    color: var(--brand-accent-dark);
     font-size: 12px;
     cursor: pointer;
 }
@@ -1430,7 +1432,7 @@ onBeforeUnmount(() => {
 .live-city {
     font-size: 15px;
     font-weight: 700;
-    color: #204f35;
+    color: var(--brand-primary-dark);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1439,19 +1441,19 @@ onBeforeUnmount(() => {
 .live-weather-text {
     margin-top: 3px;
     font-size: 12px;
-    color: #48725a;
+    color: var(--brand-accent-muted);
 }
 
 .live-report-time {
     margin-top: 2px;
     font-size: 11px;
-    color: #6a8b77;
+    color: var(--brand-accent-muted);
 }
 
 .live-temp {
     font-size: 28px;
     font-weight: 700;
-    color: #28874f;
+    color: var(--brand-primary-dark);
     flex-shrink: 0;
 }
 
@@ -1468,13 +1470,13 @@ onBeforeUnmount(() => {
 
 .mini-label {
     font-size: 11px;
-    color: #5f836e;
+    color: var(--brand-accent-muted);
 }
 
 .mini-value {
     font-size: 15px;
     font-weight: 700;
-    color: #25583b;
+    color: var(--brand-primary-dark);
     word-break: break-word;
 }
 
@@ -1521,13 +1523,13 @@ onBeforeUnmount(() => {
 .rain-focus-title {
     font-size: 15px;
     font-weight: 700;
-    color: #1f4f35;
+    color: var(--brand-accent-dark);
 }
 
 .rain-focus-subtitle {
     margin-top: 3px;
     font-size: 12px;
-    color: #4b7461;
+    color: var(--brand-accent-muted);
 }
 
 .rain-focus-right {
@@ -1545,7 +1547,7 @@ onBeforeUnmount(() => {
     padding: 3px 10px;
     border-radius: 999px;
     border: 1px solid rgba(54, 147, 88, 0.35);
-    color: #1f6d45;
+    color: var(--brand-accent-dark);
     font-size: 12px;
     font-weight: 700;
     background: rgba(255, 255, 255, 0.75);
@@ -1563,14 +1565,14 @@ onBeforeUnmount(() => {
     border-radius: 999px;
     border: 1px solid rgba(54, 147, 88, 0.25);
     background: rgba(255, 255, 255, 0.75);
-    color: #1f5b3b;
+    color: var(--brand-accent-dark);
     font-size: 11px;
     white-space: nowrap;
 }
 
 .rain-hit.empty {
     border-style: dashed;
-    color: #597a68;
+    color: var(--brand-accent-muted);
 }
 
 .charts-layout {
@@ -1596,7 +1598,7 @@ onBeforeUnmount(() => {
     padding: 10px 12px 4px;
     font-size: 13px;
     font-weight: 700;
-    color: #25583b;
+    color: var(--brand-primary-dark);
 }
 
 .chart-canvas {
@@ -1628,7 +1630,7 @@ onBeforeUnmount(() => {
     margin: 0 0 8px;
     font-size: 13px;
     font-weight: 700;
-    color: #25583b;
+    color: var(--brand-primary-dark);
 }
 
 .meta-grid {
@@ -1648,7 +1650,7 @@ onBeforeUnmount(() => {
 .meta-item {
     border: 1px solid rgba(83, 157, 112, 0.2);
     border-radius: 8px;
-    background: #f4fbf6;
+    background: var(--bg-brand-light);
     padding: 6px 8px;
     min-width: 0;
 }
@@ -1656,13 +1658,13 @@ onBeforeUnmount(() => {
 .meta-key {
     display: block;
     font-size: 11px;
-    color: #5b846f;
+    color: var(--brand-accent-muted);
 }
 
 .meta-val {
     display: block;
     margin-top: 2px;
-    color: #22573a;
+    color: var(--brand-primary-dark);
     font-size: 13px;
     font-weight: 600;
     word-break: break-word;
@@ -1685,20 +1687,20 @@ onBeforeUnmount(() => {
     padding: 6px 7px;
     text-align: left;
     font-size: 12px;
-    color: #24563a;
+    color: var(--brand-primary-dark);
     background: rgba(255, 255, 255, 0.78);
     white-space: nowrap;
 }
 
 .forecast-table th {
     background: rgba(222, 242, 230, 0.92);
-    color: #1e5638;
+    color: var(--brand-primary-dark);
     font-weight: 700;
 }
 
 .forecast-empty {
     text-align: center;
-    color: #638773;
+    color: var(--brand-accent-muted);
     font-style: italic;
 }
 
@@ -1711,7 +1713,7 @@ onBeforeUnmount(() => {
 
 .raw-details summary {
     cursor: pointer;
-    color: #1f5f3f;
+    color: var(--brand-accent-dark);
     font-size: 13px;
     font-weight: 700;
 }
@@ -1722,7 +1724,7 @@ onBeforeUnmount(() => {
 
 .raw-block h4 {
     margin: 0 0 6px;
-    color: #24563a;
+    color: var(--brand-primary-dark);
     font-size: 12px;
 }
 
@@ -1731,7 +1733,7 @@ onBeforeUnmount(() => {
     max-height: 220px;
     overflow: auto;
     background: rgba(10, 48, 30, 0.9);
-    color: #dff9ea;
+    color: var(--bg-brand-light);
     border-radius: 8px;
     padding: 8px;
     font-size: 11px;

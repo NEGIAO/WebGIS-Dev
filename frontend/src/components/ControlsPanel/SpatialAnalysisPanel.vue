@@ -127,6 +127,162 @@
             </button>
         </div>
 
+        <!-- 泰森多边形分析参数 -->
+        <div v-if="activeTool === 'voronoi'" class="params-section">
+            <div class="param-group">
+                <label class="param-label">目标图层（点要素）</label>
+                <select v-model="targetLayerId" class="param-select">
+                    <option value="">-- 选择图层 --</option>
+                    <option
+                        v-for="layer in availableLayers"
+                        :key="layer.id"
+                        :value="layer.id"
+                    >
+                        {{ layer.name }}
+                    </option>
+                </select>
+            </div>
+            <button class="run-btn" @click="runVoronoi" :disabled="!targetLayerId">
+                <Play :size="14" />
+                执行分析
+            </button>
+        </div>
+
+        <!-- 空间聚合分析参数 -->
+        <div v-if="activeTool === 'aggregation'" class="params-section">
+            <div class="param-group">
+                <label class="param-label">目标图层（点要素）</label>
+                <select v-model="targetLayerId" class="param-select">
+                    <option value="">-- 选择图层 --</option>
+                    <option
+                        v-for="layer in availableLayers"
+                        :key="layer.id"
+                        :value="layer.id"
+                    >
+                        {{ layer.name }}
+                    </option>
+                </select>
+            </div>
+            <div class="param-group">
+                <label class="param-label">网格类型</label>
+                <div class="overlay-mode-grid">
+                    <button
+                        class="mode-btn"
+                        :class="{ active: gridType === 'grid' }"
+                        @click="gridType = 'grid'"
+                    >
+                        方格网
+                    </button>
+                    <button
+                        class="mode-btn"
+                        :class="{ active: gridType === 'hexbin' }"
+                        @click="gridType = 'hexbin'"
+                    >
+                        六边形
+                    </button>
+                </div>
+            </div>
+            <div class="param-group">
+                <label class="param-label">网格大小（度）</label>
+                <input
+                    v-model.number="gridSize"
+                    type="number"
+                    class="param-input"
+                    min="0.0001"
+                    max="10"
+                    step="0.001"
+                    placeholder="默认 0.01"
+                />
+            </div>
+            <div class="param-group">
+                <label class="param-label">可视范围 BBox</label>
+                <div class="bbox-inputs">
+                    <input v-model.number="bboxMinLon" type="number" class="param-input bbox-input" placeholder="最小经度" step="0.1" />
+                    <input v-model.number="bboxMinLat" type="number" class="param-input bbox-input" placeholder="最小纬度" step="0.1" />
+                    <input v-model.number="bboxMaxLon" type="number" class="param-input bbox-input" placeholder="最大经度" step="0.1" />
+                    <input v-model.number="bboxMaxLat" type="number" class="param-input bbox-input" placeholder="最大纬度" step="0.1" />
+                </div>
+                <button
+                    class="fetch-bbox-btn"
+                    :disabled="!getMapExtent"
+                    @click="fillBboxFromMapExtent"
+                    title="自动获取当前地图可视范围"
+                >
+                    <Crosshair :size="12" />
+                    获取当前视图范围
+                </button>
+            </div>
+            <button class="run-btn" @click="runAggregation" :disabled="!canRunAggregation">
+                <Play :size="14" />
+                执行分析
+            </button>
+        </div>
+
+        <!-- 多环缓冲区分析参数 -->
+        <div v-if="activeTool === 'multiRingBuffer'" class="params-section">
+            <div class="param-group">
+                <label class="param-label">目标图层</label>
+                <select v-model="targetLayerId" class="param-select">
+                    <option value="">-- 选择图层 --</option>
+                    <option
+                        v-for="layer in availableLayers"
+                        :key="layer.id"
+                        :value="layer.id"
+                    >
+                        {{ layer.name }}
+                    </option>
+                </select>
+            </div>
+            <div class="param-group">
+                <label class="param-label">缓冲距离（米，逗号分隔）</label>
+                <input
+                    v-model="distancesInput"
+                    type="text"
+                    class="param-input"
+                    placeholder="例如：100, 300, 500"
+                />
+                <span class="param-hint">由内到外依次递增，如 100, 300, 500</span>
+            </div>
+            <button class="run-btn" @click="runMultiRingBuffer" :disabled="!canRunMultiRing">
+                <Play :size="14" />
+                执行分析
+            </button>
+        </div>
+
+        <!-- 几何简化分析参数 -->
+        <div v-if="activeTool === 'simplify'" class="params-section">
+            <div class="param-group">
+                <label class="param-label">目标图层</label>
+                <select v-model="targetLayerId" class="param-select">
+                    <option value="">-- 选择图层 --</option>
+                    <option
+                        v-for="layer in availableLayers"
+                        :key="layer.id"
+                        :value="layer.id"
+                    >
+                        {{ layer.name }}
+                    </option>
+                </select>
+            </div>
+            <div class="param-group">
+                <label class="param-label">简化容差（米）</label>
+                <input
+                    v-model.number="simplifyTolerance"
+                    type="number"
+                    class="param-input"
+                    min="0.1"
+                    max="100000"
+                    step="1"
+                    placeholder="例如：100"
+                />
+                <span class="param-hint">值越大简化程度越高，推荐 10 ~ 1000 米</span>
+            </div>
+            <button class="run-btn" @click="runSimplify" :disabled="!canRunSimplify">
+                <Play :size="14" />
+                执行分析
+            </button>
+        </div>
+
         <!-- 结果信息 -->
         <div v-if="resultMessage" class="result-section" :class="resultType">
             <component :is="resultType === 'success' ? CheckCircle2 : AlertCircle" :size="14" />
@@ -151,6 +307,11 @@ import {
     CircleDot,
     Combine,
     BoxSelect,
+    Network,
+    LayoutGrid,
+    Target,
+    Shrink,
+    Crosshair,
 } from 'lucide-vue-next';
 
 const emit = defineEmits(['analysis', 'close']);
@@ -159,6 +320,11 @@ const props = defineProps({
     availableLayers: {
         type: Array,
         default: () => [],
+    },
+    /** 获取当前地图可视范围的函数，返回 { minLon, minLat, maxLon, maxLat } */
+    getMapExtent: {
+        type: Function,
+        default: null,
     },
 });
 
@@ -185,6 +351,34 @@ const analysisTools = [
         icon: BoxSelect,
         color: '#fa8c16',
     },
+    {
+        id: 'voronoi',
+        label: '泰森多边形',
+        description: '计算点集的最近邻服务范围',
+        icon: Network,
+        color: '#722ed1',
+    },
+    {
+        id: 'aggregation',
+        label: '空间聚合',
+        description: '网格化统计离散点密度',
+        icon: LayoutGrid,
+        color: '#13c2c2',
+    },
+    {
+        id: 'multiRingBuffer',
+        label: '多环缓冲区',
+        description: '生成多级同心环辐射圈',
+        icon: Target,
+        color: '#eb2f96',
+    },
+    {
+        id: 'simplify',
+        label: '几何简化',
+        description: '抽稀复杂几何降低节点数',
+        icon: Shrink,
+        color: '#faad14',
+    },
 ];
 
 // 叠加模式
@@ -204,12 +398,62 @@ const overlayMode = ref('intersection');
 const resultMessage = ref('');
 const resultType = ref('');
 
+// 泰森多边形 - 无额外参数
+
+// 空间聚合参数
+const gridType = ref('grid');
+const gridSize = ref(0.01);
+const bboxMinLon = ref(null);
+const bboxMinLat = ref(null);
+const bboxMaxLon = ref(null);
+const bboxMaxLat = ref(null);
+
+// 多环缓冲区参数
+const distancesInput = ref('');
+
+// 几何简化参数
+const simplifyTolerance = ref(100);
+
+// 辅助函数：验证 bbox 值是否为有效数字
+function isValidBboxVal(v) {
+    return v !== null && v !== '' && typeof v === 'number' && !isNaN(v);
+}
+
+// 计算属性
 const canRun = computed(() => targetLayerId.value && bufferRadius.value > 0);
 const canRunOverlay = computed(() => layerA.value && layerB.value && overlayMode.value);
+const canRunAggregation = computed(() =>
+    targetLayerId.value &&
+    isValidBboxVal(bboxMinLon.value) &&
+    isValidBboxVal(bboxMinLat.value) &&
+    isValidBboxVal(bboxMaxLon.value) &&
+    isValidBboxVal(bboxMaxLat.value)
+);
+const canRunMultiRing = computed(() => {
+    if (!targetLayerId.value || !distancesInput.value) return false;
+    const parts = distancesInput.value.split(/[,，\s]+/).filter(Boolean);
+    return parts.every((p) => !isNaN(Number(p)) && Number(p) > 0);
+});
+const canRunSimplify = computed(() => targetLayerId.value && simplifyTolerance.value > 0);
 
 function selectTool(id) {
     activeTool.value = activeTool.value === id ? '' : id;
     resultMessage.value = '';
+    // 选择空间聚合工具时，自动从当前视图获取 BBox
+    if (id === 'aggregation' && activeTool.value === 'aggregation') {
+        fillBboxFromMapExtent();
+    }
+}
+
+/** 从当前地图视图获取可视范围并填充 BBox 输入框 */
+function fillBboxFromMapExtent() {
+    if (!props.getMapExtent) return;
+    const extent = props.getMapExtent();
+    if (!extent) return;
+    bboxMinLon.value = Math.round(extent.minLon * 1e6) / 1e6;
+    bboxMinLat.value = Math.round(extent.minLat * 1e6) / 1e6;
+    bboxMaxLon.value = Math.round(extent.maxLon * 1e6) / 1e6;
+    bboxMaxLat.value = Math.round(extent.maxLat * 1e6) / 1e6;
 }
 
 function runBuffer() {
@@ -247,6 +491,53 @@ function runConvexHull() {
     showResult('success', '凸包分析已提交');
 }
 
+function runVoronoi() {
+    if (!targetLayerId.value) return;
+    emit('analysis', {
+        type: 'voronoi',
+        targetLayerId: targetLayerId.value,
+    });
+    showResult('success', '泰森多边形分析已提交');
+}
+
+function runAggregation() {
+    if (!canRunAggregation.value) return;
+    emit('analysis', {
+        type: 'aggregation',
+        targetLayerId: targetLayerId.value,
+        bbox: [bboxMinLon.value, bboxMinLat.value, bboxMaxLon.value, bboxMaxLat.value],
+        gridType: gridType.value,
+        gridSize: gridSize.value,
+    });
+    const gridLabel = gridType.value === 'hexbin' ? '六边形' : '方格';
+    showResult('success', `${gridLabel}聚合分析已提交`);
+}
+
+function runMultiRingBuffer() {
+    if (!canRunMultiRing.value) return;
+    const distances = distancesInput.value
+        .split(/[,，\s]+/)
+        .filter(Boolean)
+        .map(Number)
+        .sort((a, b) => a - b);
+    emit('analysis', {
+        type: 'multiRingBuffer',
+        targetLayerId: targetLayerId.value,
+        distances,
+    });
+    showResult('success', `多环缓冲区分析已提交（${distances.length} 环）`);
+}
+
+function runSimplify() {
+    if (!canRunSimplify.value) return;
+    emit('analysis', {
+        type: 'simplify',
+        targetLayerId: targetLayerId.value,
+        tolerance: simplifyTolerance.value,
+    });
+    showResult('success', `几何简化分析已提交（容差 ${simplifyTolerance.value}m）`);
+}
+
 function showResult(type, msg) {
     resultType.value = type;
     resultMessage.value = msg;
@@ -258,7 +549,7 @@ function showResult(type, msg) {
 
 <style scoped>
 .spatial-panel {
-    width: 200px;
+    width: 220px;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(12px);
     border-radius: 12px;
@@ -295,7 +586,7 @@ function showResult(type, msg) {
     justify-content: space-between;
     align-items: center;
     padding: 10px 12px;
-    background: linear-gradient(135deg, #0d972fc8 0%, #0a6815c1 100%);
+    background: var(--brand-gradient-header);
     color: white;
 }
 
@@ -344,14 +635,14 @@ function showResult(type, msg) {
 }
 
 .analysis-item:hover {
-    border-color: #57b861;
-    background: rgba(87, 184, 97, 0.05);
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
 }
 
 .analysis-item.active {
-    border-color: #57b861;
-    background: rgba(87, 184, 97, 0.1);
-    box-shadow: 0 2px 8px rgba(87, 184, 97, 0.15);
+    border-color: var(--brand-accent);
+    background: var(--bg-active);
+    box-shadow: 0 2px 8px var(--bg-active);
 }
 
 .item-icon {
@@ -422,8 +713,50 @@ function showResult(type, msg) {
 .param-input:focus,
 .param-select:focus {
     outline: none;
-    border-color: #57b861;
-    box-shadow: 0 0 0 2px rgba(87, 184, 97, 0.15);
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 2px var(--bg-active);
+}
+
+.param-hint {
+    font-size: 11px;
+    color: #999;
+    margin-top: 2px;
+}
+
+.bbox-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+}
+
+.bbox-input {
+    min-width: 0;
+}
+
+.fetch-bbox-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px 8px;
+    margin-top: 4px;
+    border: 1px dashed var(--brand-accent);
+    border-radius: 4px;
+    background: var(--bg-hover);
+    color: var(--brand-accent-muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fetch-bbox-btn:hover:not(:disabled) {
+    background: var(--bg-active);
+    border-color: var(--brand-accent-dark);
+}
+
+.fetch-bbox-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
 .overlay-mode-grid {
@@ -445,14 +778,14 @@ function showResult(type, msg) {
 }
 
 .mode-btn:hover {
-    border-color: #57b861;
-    color: #397d39;
+    border-color: var(--brand-accent);
+    color: var(--brand-accent-muted);
 }
 
 .mode-btn.active {
-    border-color: #57b861;
-    background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, rgba(87, 184, 97, 0.15) 100%);
-    color: #0a6815;
+    border-color: var(--brand-accent);
+    background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, var(--bg-active) 100%);
+    color: var(--brand-accent-dark);
 }
 
 .run-btn {
@@ -461,7 +794,7 @@ function showResult(type, msg) {
     justify-content: center;
     gap: 6px;
     padding: 8px 16px;
-    background: linear-gradient(135deg, #139647 0%, #0f995b 100%);
+    background: linear-gradient(135deg, var(--brand-accent-dark) 0%, #0f995b 100%);
     border: none;
     border-radius: 6px;
     color: white;
@@ -494,7 +827,7 @@ function showResult(type, msg) {
 
 .result-section.success {
     background: #f0faf0;
-    color: #2d8a4f;
+    color: var(--brand-primary-dark);
 }
 
 .result-section.error {

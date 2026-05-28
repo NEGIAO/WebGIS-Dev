@@ -97,7 +97,7 @@ function handleClear() {
     justify-content: space-between;
     align-items: center;
     padding: 10px 12px;
-    background: linear-gradient(135deg, #0d972fc8 0%, #0a6815c1 100%);
+    background: var(--brand-gradient-header);
     color: white;
 }
 
@@ -140,20 +140,20 @@ function handleClear() {
     border: 2px solid #e8f0e8;
     border-radius: 8px;
     background: white;
-    color: #397d39;
+    color: var(--brand-accent-muted);
     cursor: pointer;
     transition: all 0.2s;
 }
 
 .tool-btn:hover {
-    border-color: #57b861;
-    background: rgba(87, 184, 97, 0.08);
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
 }
 
 .tool-btn.active {
-    border-color: #57b861;
-    background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, rgba(87, 184, 97, 0.15) 100%);
-    color: #0a6815;
+    border-color: var(--brand-accent);
+    background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, var(--bg-active) 100%);
+    color: var(--brand-accent-dark);
     box-shadow: 0 2px 8px rgba(87, 184, 97, 0.25);
 }
 

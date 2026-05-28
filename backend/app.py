@@ -8,13 +8,14 @@ WebGIS Backend - FastAPI 主应用入口
 """
 
 import httpx
-import pandas as pd
 import logging
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
 from starlette.background import BackgroundTasks
 from api.proxy import router as proxy_router, build_http_client
 from api.external_proxy import router as external_proxy_router
@@ -24,11 +25,11 @@ from api.auth import init_auth_storage, router as auth_router
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router
-from api.agent_chat import router as agent_chat_router
+from api.agent_chat import router as agent_chat_router, admin_router as agent_chat_admin_router
 from download_xyz.download import router as download_router
 from download_xyz.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
 from download_xyz.download_task import init_download_task_db
-from api.minitor import init_monitor_log_streaming, router as monitor_router
+from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 
 # ==================== 日志配置 ====================
@@ -38,12 +39,53 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== 统一响应模型 ====================
+
+
+class ApiResponse(BaseModel):
+    """统一 API 响应格式"""
+    code: int = 200
+    message: str = "success"
+    data: Any = None
+
+
+# ==================== 生命周期管理 ====================
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    应用生命周期上下文管理器
+    替代已废弃的 @app.on_event("startup") / @app.on_event("shutdown")
+    """
+    # ---- Startup ----
+    logger.info("WebGIS Backend 启动...")
+    app.state.log_stream_mode = init_monitor_log_streaming()
+    await init_auth_storage()
+    init_download_task_db()
+    app.state.task_scheduler = start_task_cleanup_scheduler()
+    app.state.http_client = build_http_client()
+    logger.info("HTTP 客户端初始化完成")
+    yield
+    # ---- Shutdown ----
+    logger.info("WebGIS Backend 关闭...")
+    scheduler = getattr(app.state, "task_scheduler", None)
+    if scheduler is not None:
+        shutdown_task_cleanup_scheduler(scheduler)
+    client = getattr(app.state, "http_client", None)
+    if client is not None:
+        await client.aclose()
+        logger.info("HTTP 客户端已关闭")
+
+
 # ==================== FastAPI 应用初始化 ====================
+
 
 app = FastAPI(
     title="WebGIS Backend",
     description="WebGIS 后端 API 服务",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # ==================== CORS 中间件配置 ====================
@@ -71,37 +113,26 @@ app.add_middleware(
 #     allow_headers=["*"],
 # )
 
-# ==================== 生命周期事件 ====================
+# ==================== 全局异常处理器 ====================
 
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    应用启动事件：初始化全局 HTTP 客户端
-    """
-    logger.info("WebGIS Backend 启动...")
-    app.state.log_stream_mode = init_monitor_log_streaming()
-    await init_auth_storage()
-    init_download_task_db()
-    app.state.task_scheduler = start_task_cleanup_scheduler()
-    # 为瓦片代理创建共享的异步 HTTP 客户端
-    app.state.http_client = build_http_client()
-    logger.info("HTTP 客户端初始化完成")
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """捕获所有未处理的异常，返回统一错误响应格式"""
+    logger.error(f"未处理异常 [{request.method} {request.url.path}]: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"code": 500, "message": "内部服务器错误", "data": None},
+    )
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """
-    应用关闭事件：清理资源
-    """
-    logger.info("WebGIS Backend 关闭...")
-    scheduler = getattr(app.state, "task_scheduler", None)
-    if scheduler is not None:
-        shutdown_task_cleanup_scheduler(scheduler)
-    client = getattr(app.state, "http_client", None)
-    if client is not None:
-        await client.aclose()
-        logger.info("HTTP 客户端已关闭")
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """将 HTTPException 也包装为统一响应格式"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.status_code, "message": str(exc.detail), "data": None},
+    )
 
 
 # ==================== 路由挂载 ====================
@@ -140,6 +171,7 @@ logger.info("已注册 API 密钥管理路由")
 
 # 挂载 Agent 对话路由
 app.include_router(agent_chat_router)
+app.include_router(agent_chat_admin_router)
 logger.info("已注册 Agent 对话路由")
 
 # 挂载下载任务路由

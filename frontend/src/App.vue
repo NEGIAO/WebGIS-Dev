@@ -47,6 +47,11 @@
 <script setup>
 import { RouterView } from 'vue-router';
 import GlobalLoading from './components/Shell/GlobalLoading.vue';
+import { useThemeStore } from './stores/useThemeStore';
+
+// 初始化主题（从 localStorage 恢复）
+const themeStore = useThemeStore();
+themeStore.init();
 </script>
 
 <template>
@@ -55,6 +60,7 @@ import GlobalLoading from './components/Shell/GlobalLoading.vue';
 </template>
 
 <style>
+@import './assets/theme.css';
 @import './assets/toc-theme.css';
 
 /* Global Styles */
@@ -64,11 +70,11 @@ body {
     padding: 0;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 14px;
-    color: #333;
-    background: #ffffff;
+    color: var(--text-primary);
+    background: var(--bg-primary);
     height: 100%;
     width: 100%;
-    overflow: hidden; /* Prevent scroll on body, let containers handle it */
+    overflow: hidden;
 }
 
 #app {

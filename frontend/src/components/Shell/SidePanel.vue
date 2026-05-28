@@ -521,13 +521,13 @@ onUnmounted(() => {
 }
 
 .toggle-handle:hover {
-    background: #03431fc1;
+    background: var(--brand-accent-dark);
     width: 30px;
 }
 
 .handle-icon {
     font-size: 12px;
-    color: #0fb549;
+    color: var(--brand-accent);
     font-weight: bold;
     width: 20px;
     height: 20px;
@@ -553,8 +553,8 @@ onUnmounted(() => {
 
 .active-feature-banner {
     padding: 8px 14px;
-    background: linear-gradient(30deg, rgba(235, 222, 222, 0), #26bd58a3);
-    color: #239c42;
+    background: linear-gradient(30deg, rgba(235, 222, 222, 0), var(--brand-accent));
+    color: var(--brand-primary-dark);
     font-size: 12px;
     font-weight: 600;
 }
@@ -650,7 +650,7 @@ onUnmounted(() => {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 24px;
     font-weight: 700;
-    background: linear-gradient(135deg, #07ac4c, #239c42);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -857,7 +857,7 @@ onUnmounted(() => {
 }
 
 .footer-status.live {
-    color: #4caf50;
+    color: var(--brand-primary);
 }
 
 .status-dot {

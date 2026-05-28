@@ -380,13 +380,13 @@ async function useGps() {
 .panel-title {
     font-size: 16px;
     font-weight: 700;
-    color: #1f5e2a;
+    color: var(--brand-accent-dark);
 }
 
 .panel-subtitle {
     margin-top: 2px;
     font-size: 12px;
-    color: #568362;
+    color: var(--brand-accent-muted);
 }
 
 .ghost-btn {
@@ -395,7 +395,7 @@ async function useGps() {
     border: 1px solid #a2cda9;
     border-radius: 8px;
     background: #ffffff;
-    color: #2f6940;
+    color: var(--brand-primary-dark);
     cursor: pointer;
 }
 
@@ -418,7 +418,7 @@ async function useGps() {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #285d39;
+    color: var(--brand-accent-dark);
     font-size: 13px;
 }
 
@@ -435,7 +435,7 @@ async function useGps() {
 }
 
 .field label {
-    color: #2f6940;
+    color: var(--brand-primary-dark);
     font-size: 12px;
     font-weight: 600;
 }
@@ -475,7 +475,7 @@ input[type='range'] {
     border-radius: 8px;
     padding: 0 12px;
     cursor: pointer;
-    background: #2f9d52;
+    background: var(--brand-primary);
     color: #fff;
     font-weight: 600;
 }
@@ -486,7 +486,7 @@ input[type='range'] {
 }
 
 .action-muted {
-    background: #4d6f5a;
+    background: var(--brand-accent-muted);
 }
 
 .compact-row {
@@ -499,7 +499,7 @@ input[type='range'] {
     font-size: 12px;
     font-weight: 600;
     background: rgba(35, 129, 67, 0.16);
-    color: #2b6e3f;
+    color: var(--brand-primary-dark);
 }
 
 .status-granted {

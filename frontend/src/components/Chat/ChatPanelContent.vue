@@ -1293,12 +1293,12 @@ onMounted(async () => {
 }
 
 .model-input:hover {
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
 }
 
 .model-input:focus {
     outline: none;
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
 }
 
@@ -1313,7 +1313,7 @@ onMounted(async () => {
 }
 
 .refresh-models-btn:hover:not(:disabled) {
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
     background-color: #f0f7f2;
 }
 
@@ -1333,7 +1333,7 @@ onMounted(async () => {
     border: none;
     border-radius: 6px;
     padding: 6px 10px;
-    background: #4caf50;
+    background: var(--brand-primary);
     color: #fff;
     cursor: pointer;
     font-size: 12px;
@@ -1370,7 +1370,7 @@ onMounted(async () => {
 }
 
 .status-ready {
-    color: #2e7d32;
+    color: var(--brand-primary-dark);
 }
 
 .status-unready {
@@ -1407,7 +1407,7 @@ onMounted(async () => {
 
 .mode-toggle-btn.mode-direct:hover {
     background: #bbdefb;
-    border-color: #42a5f5;
+    border-color: var(--info);
 }
 
 .mode-toggle-btn.mode-proxy {
@@ -1445,7 +1445,7 @@ onMounted(async () => {
 .chat-title {
     font-weight: bold;
     font-size: 1em;
-    color: #4caf50;
+    color: var(--brand-primary);
 }
 
 .header-controls .icon-btn {
@@ -1497,7 +1497,7 @@ onMounted(async () => {
 }
 
 .message.user .message-content {
-    background: #4caf50;
+    background: var(--brand-primary);
     color: white;
     border-bottom-right-radius: 2px;
 }
@@ -1556,13 +1556,13 @@ textarea {
 }
 
 textarea:focus {
-    border-color: #4caf50;
+    border-color: var(--brand-primary);
 }
 
 .chat-footer button {
     padding: 0 16px;
     height: 40px;
-    background: #4caf50;
+    background: var(--brand-primary);
     color: white;
     border: none;
     border-radius: 6px;
@@ -1572,7 +1572,7 @@ textarea:focus {
 }
 
 .chat-footer button:hover {
-    background: #43a047;
+    background: var(--brand-primary);
 }
 
 .chat-footer button:disabled {
