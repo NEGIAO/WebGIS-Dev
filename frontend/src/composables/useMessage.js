@@ -1,5 +1,5 @@
 import { h, reactive, render, readonly } from 'vue';
-import Message from '../components/Message.vue';
+import Message from '../components/Shell/Message.vue';
 import { GOLDEN_SOUP_QUOTES } from '../constants/goldenSoupQuotes';
 
 const MAX_VISIBLE = 3;

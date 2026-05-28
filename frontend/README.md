@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-05-22 更新）
+## 目录结构（2026-05-28 更新）
 
 以下结构按当前工程实际文件更新，尽量做到逐文件注释。
 
@@ -142,76 +142,84 @@ frontend/
     │   └── main.css                      # 应用主样式
     │
     ├── components/
-    │   ├── AmapAoiInjectDialog.vue              # 高德 AOI 手动注入弹窗
-    │   ├── AttributeTable.vue                   # 属性表组件（字段/筛选/联动）
-    │   ├── BusPlannerPanel.vue                  # 公交路径规划面板
-    │   ├── ChatPanelContent.vue                 # AI 聊天面板
-    │   ├── CompassControlPanel.vue              # 罗盘控制面板（主题本地切换，分享状态不走后端）
-    │   ├── DrivingPlannerPanel.vue              # 驾车路径规划面板
-    │   ├── FloatingAccountPanel.vue             # 账号悬浮入口（兼容旧引用）
-    │   ├── GlobalLoading.vue                    # 全局加载遮罩
-    │   ├── LayerControlPanel.vue                # 地图右上角底图控制面板
-    │   ├── LayerPanel.vue                       # TOC 树容器
-    │   ├── LocationSearch.vue                   # 地点搜索组件
-    │   ├── MagicCursor.vue                      # 首屏特效组件
-    │   ├── MapContainer.vue                     # 地图容器与能力暴露核心组件
-    │   ├── MapControlsBar.vue                   # 底部坐标/缩放/定位工具栏
-    │   ├── MapEasterEgg.vue                     # 地图彩蛋组件
-    │   ├── MapDownloader.vue                    # 在线底图导出面板（支持传输进度/总大小/失败重试）
-    │   ├── MapPointPickerCard.vue               # 地图点选卡片
-    │   ├── MapSwipeController.vue               # 地图对比滑块组件（仅裁剪在线底图，不影响业务图层）
-    │   ├── Message.vue                          # 全局消息条
-    │   ├── PersistentAnnouncementBar.vue        # 顶部公告条
-    │   ├── SharedResourceTreeItem.vue           # 共享资源树节点
-    │   ├── SidePanel.vue                        # 右侧综合侧栏（资讯/TOC/聊天/路线）
-    │   ├── TOCPanel.vue                         # TOC 与图层工具主面板
-    │   ├── TOCTreeItem.vue                      # TOC 递归节点（右键菜单入口）
-    │   ├── PalaceExplanationPanel.vue           # 罗盘宫位解释面板（点击选中宫位后显示风水解释）
-    │   ├── TopBar.vue                           # 顶栏组件
-    │   ├── LogMonitor.vue                       # 日志监控组件
-    │   ├── WeatherChartPanel.vue                # 天气可视化组件
-    │   │
-    │   ├── ControlsPanel/                      # 左侧控制栏功能域
-    │   │   ├── ControlsPanel.vue               # 左侧工具总面板（主入口）
-    │   │   ├── AdministrativeDivisionPanel.vue # 行政区面板（选区、触发边界加载）
-    │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区树节点（递归渲染）
-    │   │   ├── DrawPanel.vue                   # 绘制子面板（点/线/面选择）
-    │   │   ├── MeasurePanel.vue                # 测量子面板（测距/测面选择）
-    │   │   └── SpatialAnalysisPanel.vue        # 空间分析面板（缓冲区/叠加/凸包）
+    │   ├── Chat/                                   # AI 聊天助手
+    │   │   └── ChatPanelContent.vue                # AI 聊天面板
     │   │
     │   ├── Cesium/
-    │   │   ├── CesiumAdvancedEffects.vue        # Cesium 高级特效
-    │   │   ├── CesiumContainer.vue              # 3D 容器组件
-    │   │   ├── Wind2D.js                        # 2D 风场渲染核心
-    │   │   └── terrain/                         # 地形与标注 Provider
-    │   │       ├── GeoTerrainProvider.js        # 自定义地形 Provider
-    │   │       ├── GeoWTFS.js                   # 自定义 WTFS 标注 Provider
-    │   │       └── util.js                      # Protobuf 工具
+    │   │   ├── CesiumAdvancedEffects.vue           # Cesium 高级特效
+    │   │   ├── CesiumContainer.vue                 # 3D 容器组件
+    │   │   ├── Wind2D.js                           # 2D 风场渲染核心
+    │   │   └── terrain/                            # 地形与标注 Provider
+    │   │       ├── GeoTerrainProvider.js           # 自定义地形 Provider
+    │   │       ├── GeoWTFS.js                      # 自定义 WTFS 标注 Provider
+    │   │       └── util.js                         # Protobuf 工具
+    │   │
+    │   ├── Compass/                                # 罗盘控制面板
+    │   │   ├── CompassControlPanel.vue             # 罗盘控制面板（主题本地切换，分享状态不走后端）
+    │   │   └── PalaceExplanationPanel.vue          # 罗盘宫位解释面板（点击选中宫位后显示风水解释）
+    │   │
+    │   ├── ControlsPanel/                          # 左侧控制栏功能域
+    │   │   ├── ControlsPanel.vue                   # 左侧工具总面板（主入口）
+    │   │   ├── AdministrativeDivisionPanel.vue     # 行政区面板（选区、触发边界加载）
+    │   │   ├── AdministrativeDivisionTreeNode.vue  # 行政区树节点（递归渲染）
+    │   │   ├── DrawPanel.vue                       # 绘制子面板（点/线/面选择）
+    │   │   ├── LogMonitor.vue                      # 日志监控组件
+    │   │   ├── MeasurePanel.vue                    # 测量子面板（测距/测面选择）
+    │   │   └── SpatialAnalysisPanel.vue            # 空间分析面板（缓冲区/叠加/凸包）
     │   │
     │   ├── feng-shui-compass-svg/
-    │   │   ├── feng-shui-compass-svg.vue        # 罗盘 SVG 主组件
-    │   │   ├── data/                            # 罗盘静态数据
-    │   │   ├── themes/                          # 罗盘主题配置（5种主题配置）
-    │   │   ├── types/                           # 罗盘类型定义
-    │   │   └── Explanation/                     # 宫位解释 JSON 数据
+    │   │   ├── feng-shui-compass-svg.vue           # 罗盘 SVG 主组件
+    │   │   ├── data/                               # 罗盘静态数据
+    │   │   ├── themes/                             # 罗盘主题配置（5种主题配置）
+    │   │   ├── types/                              # 罗盘类型定义
+    │   │   └── Explanation/                        # 宫位解释 JSON 数据
     │   │       ├── compass_explanation_standard.json       # 标准罗盘宫位解释
     │   │       ├── polygon_explanation_standard.json       # 多边形主题宫位解释
     │   │       ├── circle_explanation_standard.json        # 圆形主题宫位解释
     │   │       ├── dark_explanation_standard.json          # 暗黑主题宫位解释
     │   │       └── simple_explanation_standard.json        # 简洁主题宫位解释
     │   │
-    │   ├── icons/                                          # 图标组件（未实现）
-    │   │   ├── IconCommunity.vue                
-    │   │   ├── IconDocumentation.vue            
-    │   │   ├── IconEcosystem.vue                
-    │   │   ├── IconSupport.vue                  
-    │   │   └── IconTooling.vue                  
+    │   ├── Layer/                                  # 图层管理系统
+    │   │   ├── TOCPanel.vue                        # TOC 与图层工具主面板
+    │   │   ├── LayerPanel.vue                      # TOC 树容器
+    │   │   ├── TOCTreeItem.vue                     # TOC 递归节点（右键菜单入口）
+    │   │   ├── LayerControlPanel.vue               # 地图右上角底图控制面板
+    │   │   ├── LayerPropertiesDialog.vue           # 图层属性弹窗
+    │   │   ├── AttributeTable.vue                  # 属性表组件（字段/筛选/联动）
+    │   │   └── SharedResourceTreeItem.vue          # 共享资源树节点
     │   │
-    │   └── UserCenter/
-    │       ├── AdminControlPanel.vue            # 管理员控制台
-    │       ├── ApiKeysManagementPanel.vue       # API 密钥管理面板
-    │       ├── ApiManagementPanel.vue           # API 使用管理面板
-    │       └── FloatingAccountPanel.vue         # 用户中心浮层主组件
+    │   ├── Map/                                    # 地图核心与控制器
+    │   │   ├── MapContainer.vue                    # 地图容器与能力暴露核心组件
+    │   │   ├── MapControlsBar.vue                  # 底部坐标/缩放/定位工具栏
+    │   │   ├── MapSwipeController.vue              # 地图对比滑块组件（仅裁剪在线底图，不影响业务图层）
+    │   │   ├── MapDownloader.vue                   # 在线底图导出面板（支持传输进度/总大小/失败重试）
+    │   │   └── MapEasterEgg.vue                    # 地图彩蛋组件
+    │   │
+    │   ├── Routing/                                # 路线规划
+    │   │   ├── BusPlannerPanel.vue                 # 公交路径规划面板
+    │   │   ├── DrivingPlannerPanel.vue             # 驾车路径规划面板
+    │   │   └── MapPointPickerCard.vue              # 地图点选卡片（被前两者共享）
+    │   │
+    │   ├── Search/                                 # 搜索与数据注入
+    │   │   ├── LocationSearch.vue                  # 地点搜索组件
+    │   │   └── AmapAoiInjectDialog.vue             # 高德 AOI 手动注入弹窗
+    │   │
+    │   ├── Shell/                                  # 应用壳层/全局 UI
+    │   │   ├── TopBar.vue                          # 顶栏组件
+    │   │   ├── SidePanel.vue                       # 右侧综合侧栏（资讯/TOC/聊天/路线）
+    │   │   ├── GlobalLoading.vue                   # 全局加载遮罩
+    │   │   ├── Message.vue                         # 全局消息条
+    │   │   ├── PersistentAnnouncementBar.vue       # 顶部公告条
+    │   │   └── MagicCursor.vue                     # 首屏特效组件
+    │   │
+    │   ├── Weather/                                # 天气面板
+    │   │   └── WeatherChartPanel.vue               # 天气可视化组件
+    │   │
+    │   └── UserCenter/                             # 用户中心
+    │       ├── AdminControlPanel.vue               # 管理员控制台
+    │       ├── ApiKeysManagementPanel.vue          # API 密钥管理面板
+    │       ├── ApiManagementPanel.vue              # API 使用管理面板
+    │       └── FloatingAccountPanel.vue            # 用户中心浮层主组件
     │
     ├── composables/
     │   ├── useGisLoader.ts                      # GIS 数据加载调度入口

@@ -38,15 +38,55 @@ function normalizeType(type, name = '') {
     return normalizedType;
 }
 
+/**
+ * 改进的 Buffer 解码函数，支持多种编码
+ * 特别针对 KMZ 中的 KML 文件可能采用不同编码的情况进行优化
+ * @param {ArrayBuffer} buffer - 输入的二进制数据
+ * @returns {string} 解码后的文本
+ */
 function decodeBufferToText(buffer) {
     if (!(buffer instanceof ArrayBuffer)) return '';
-    const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
-    if (!utf8.includes('\uFFFD')) return utf8;
-    try {
-        return new TextDecoder('gbk', { fatal: false }).decode(buffer);
-    } catch {
-        return utf8;
+    
+    // 尝试多种编码，选择替代字符最少的那个
+    const candidates = [];
+    
+    // 候选编码列表（优先级顺序）
+    const encodings = ['utf-8', 'utf-16le', 'utf-16be', 'gbk'];
+    
+    for (const encoding of encodings) {
+        try {
+            const text = new TextDecoder(encoding, { fatal: false }).decode(buffer);
+            // 计算替代字符数量（无效字符）
+            const invalidCount = (text.match(/\uFFFD/g) || []).length;
+            candidates.push({
+                encoding,
+                text,
+                invalidCount,
+            });
+        } catch (err) {
+            // 某些编码可能不支持，忽略错误
+            continue;
+        }
     }
+    
+    if (!candidates.length) {
+        // 如果所有编码都失败，返回空字符串
+        console.warn('[dataDispatcher] 所有编码尝试均失败，返回空字符串');
+        return '';
+    }
+    
+    // 按替代字符数量排序，选择最少的那个
+    candidates.sort((a, b) => a.invalidCount - b.invalidCount);
+    const best = candidates[0];
+    
+    if (best.invalidCount > 0) {
+        console.warn(
+            `[dataDispatcher] 使用编码 ${best.encoding}，包含 ${best.invalidCount} 个替代字符`,
+            `候选: ${candidates.map((c) => `${c.encoding}(${c.invalidCount})`).join(', ')}`,
+        );
+    }
+    
+    return best.text;
 }
 
 function normalizePath(path = '') {

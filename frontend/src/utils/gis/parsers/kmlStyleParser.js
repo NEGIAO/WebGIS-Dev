@@ -27,7 +27,7 @@ export function parseKmlColor(kmlColor) {
         return null;
     }
 
-    const hex = String(kmlColor).trim().toUpperCase();
+    const hex = String(kmlColor).trim().replace(/^#/, '').toUpperCase();
     
     // KML color 应为 8 位十六进制（AABBGGRR）
     if (!/^[0-9A-F]{8}$/.test(hex)) {
@@ -45,7 +45,9 @@ export function parseKmlColor(kmlColor) {
         const alphaDecimal = alpha / 255;
 
         // CSS hex 格式（#RRGGBB）
-        const cssHex = `#${String(red).padStart(2, '0')}${String(green).padStart(2, '0')}${String(blue).padStart(2, '0')}`.toUpperCase();
+        const cssHex = `#${red.toString(16).padStart(2, '0')}${green
+            .toString(16)
+            .padStart(2, '0')}${blue.toString(16).padStart(2, '0')}`.toUpperCase();
 
         // RGBA CSS 字符串
         const cssRgba = `rgba(${red}, ${green}, ${blue}, ${alphaDecimal.toFixed(2)})`;
@@ -198,8 +200,8 @@ function parseKmlPolyStyle(polyEl) {
         const colorParsed = colorText ? parseKmlColor(colorText) : null;
 
         return {
-            fill: fill === '1' || fill === 'true',
-            outline: outline !== '0' && outline !== 'false', // 默认 true
+            fill: fill == null ? true : fill === '1' || fill === 'true',
+            outline: outline == null ? true : outline !== '0' && outline !== 'false',
             color: colorText || null,
             colorParsed,
         };

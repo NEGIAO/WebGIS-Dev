@@ -36,14 +36,14 @@ const layerStore = useLayerStore();
 
 // ========== 1. 组件导入 ==========
 // 同步导入：核心 2D 地图及 UI 组件 (保证首屏速度)
-import TopBar from '../components/TopBar.vue';
+import TopBar from '../components/Shell/TopBar.vue';
 import ControlsPanel from '@/components/ControlsPanel/ControlsPanel.vue';
-import MapContainer from '../components/MapContainer.vue';
-import MagicCursor from '../components/MagicCursor.vue';
+import MapContainer from '../components/Map/MapContainer.vue';
+import MagicCursor from '../components/Shell/MagicCursor.vue';
 import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
-import PersistentAnnouncementBar from '../components/PersistentAnnouncementBar.vue';
-import WeatherChartPanel from '../components/WeatherChartPanel.vue';
-import LogMonitor from '../components/LogMonitor.vue';
+import PersistentAnnouncementBar from '../components/Shell/PersistentAnnouncementBar.vue';
+import WeatherChartPanel from '../components/Weather/WeatherChartPanel.vue';
+import LogMonitor from '../components/ControlsPanel/LogMonitor.vue';
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
@@ -60,7 +60,7 @@ const SidePanelLoading = {
 
 // 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
 const SidePanel = defineAsyncComponent({
-    loader: () => import('../components/SidePanel.vue'),
+    loader: () => import('../components/Shell/SidePanel.vue'),
     loadingComponent: SidePanelLoading,
     delay: 0,
     timeout: 15000,

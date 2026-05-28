@@ -46,7 +46,7 @@
 -->
 <script setup>
 import { RouterView } from 'vue-router';
-import GlobalLoading from './components/GlobalLoading.vue';
+import GlobalLoading from './components/Shell/GlobalLoading.vue';
 </script>
 
 <template>

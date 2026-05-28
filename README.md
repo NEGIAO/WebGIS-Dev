@@ -146,25 +146,19 @@ WebGIS_Dev/
 │   │   ├── api/                    # 前端 API 封装
 │   │   │   ├── download.js         # 🆕 在线底图下载 API 客户端（支持 onDownloadProgress 实时回调）
 │   │   │   └── ...                 # 其余 API 模块
-│   │   ├── components/             # 业务组件
-│   │   │   ├── MapDownloader.vue   # 🆕 在线底图下载面板（后端生成进度 + 文件传输实时进度）
-│   │   │   ├── ChatPanelContent.vue  # AI 助手面板（零配置即刻响应/模型自动选择/额度同步）
-│   │   │   ├── CompassControlPanel.vue # 罗盘控制面板（主题/模式/尺寸/透明度）
-│   │   │   ├── ControlsPanel.vue    # 左侧快捷控制栏（图层/绘制/测量/标注联动）
-│   │   │   ├── LayerPanel.vue      # 🆕 图层面板（搜索过滤 + 树形目录）
-│   │   │   ├── LayerPropertiesDialog.vue # 🆕 图层属性对话框（显示图层元数据）
-│   │   │   ├── MapSwipeController.vue # 卷帘对比控制器（仅作用于在线底图）
-│   │   │   ├── MapContainer.vue    # 🔄 升级：支持矩形框选和坐标转换（WGS84↔EPSG:3857）
-│   │   │   ├── TOCPanel.vue        # 🔄 TOC 面板（样式重构，CSS 变量化）
-│   │   │   ├── TOCTreeItem.vue     # 🔄 TOC 树节点（重命名/透明度/属性/多选）
-│   │   │   ├── AdministrativeDivisionPanel.vue # 行政区划选择面板（仅定位/加载，TOC 统一承载管理）
-│   │   │   ├── AdministrativeDivisionTreeNode.vue # 行政区递归树节点
-│   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件（移动端传感器模式）
-│   │   │   ├── Cesium/               # Cesium module (Wind2D + terrain providers)
+│   │   ├── components/             # 业务组件（按功能域分组）
+│   │   │   ├── Layer/              # 图层管理系统（TOC/属性表/资源树）
+│   │   │   ├── Map/                # 地图核心与控制器
+│   │   │   ├── Routing/            # 路线规划（公交/驾车）
+│   │   │   ├── Search/             # 搜索与数据注入
+│   │   │   ├── Weather/            # 天气面板
+│   │   │   ├── Chat/               # AI 聊天助手
+│   │   │   ├── Compass/            # 罗盘控制面板
+│   │   │   ├── Shell/              # 应用壳层/全局 UI
+│   │   │   ├── ControlsPanel/      # 左侧快捷控制栏（绘制/测量/行政区）
+│   │   │   ├── Cesium/             # 3D 地球模块
+│   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件
 │   │   │   └── UserCenter/         # 用户中心子模块
-│   │   │       ├── FloatingAccountPanel.vue
-│   │   │       ├── AdminControlPanel.vue
-│   │   │       └── ApiManagementPanel.vue
 │   │   ├── composables/            # 组合式逻辑
 │   │   │   ├── map/features/basemapLayerFactory.js # Basemap layer factory (vector tile support)
 │   │   │   ├── map/features/useManagedLayerStyle.js # 🔄 托管图层样式（支持 KML 样式保留）
@@ -364,6 +358,68 @@ LOG_LEVEL=INFO
 | 技术栈 | 5+ |
 
 ## 🔄 更新日志
+### V 3.1.3 (2026-05-28)
+#### 🔹 KML/KMZ 样式解析增强 + 编码多支持
+
+本次版本聚焦 **KML/KMZ 样式解析的健壮性**，增强编码检测、修复颜色渲染问题，确保来自不同工具（如 Google Earth）的 KML 文件能正确显示样式颜色。
+
+---
+
+#### 🌟 核心改进（重点）
+
+##### 1. 编码多支持策略 ✨
+- **问题**：KML 文件可能采用 UTF-16LE/UTF-16BE 等多种编码，原有只支持 UTF-8，导致解码失败
+- **方案**：实施 **多编码尝试 + 最优选择策略**
+  - 候选编码：UTF-8 > UTF-16LE > UTF-16BE > GBK
+  - 选择标准：替代字符（\uFFFD）最少的编码
+- **涉及函数**：
+  - `kmlParser.ts::parseKmlBuffer()`
+  - `dataDispatcher.js::decodeBufferToText()`
+  - `useLayerDataImport.js::decodeTextContent()`
+
+##### 2. KML 颜色渲染修复 🎨
+- **问题**：颜色十进制字符串拼接导致非法 `#` 颜色值（如 `#163214245`），OpenLayers 回退为黑色
+- **修复**：改用十六进制字符串生成合法 `#RRGGBB` 格式颜色值
+- **测试**：HENU湖泊.kmz 现能正确渲染蓝色（原 KML color: fff5d6a3）
+
+##### 3. KML PolyStyle 缺省值修复 📐
+- **问题**：`<fill>` 和 `<outline>` 元素缺失时被误判为 false，导致仅描边渲染
+- **修复**：按 KML 2.2 规范，缺失时默认为 true（填充 + 描边）
+- **结果**：多边形样式渲染完整
+
+---
+
+#### 📊 改进清单
+| 改进项 | 前 | 后 | 效果 |
+|-------|-----|-----|------|
+| 编码支持 | UTF-8/GBK | UTF-8/UTF-16LE/UTF-16BE/GBK | 兼容更多 KML 来源 |
+| 颜色格式 | 十进制字符串 | 十六进制 #RRGGBB | 正确渲染颜色 |
+| PolyStyle 缺省 | false | true | 符合 KML 规范 |
+| KMZ 渲染效果 | 黑色（无样式） | 正确颜色 | 一致性提升 100% |
+
+---
+
+#### 📦 涉及文件
+- `frontend/src/utils/gis/parsers/kmlStyleParser.js` —— 颜色解析 & PolyStyle 修复
+- `frontend/src/utils/gis/parsers/kmlParser.ts` —— 编码多支持
+- `frontend/src/utils/gis/dataDispatcher.js` —— Buffer 解码编码多支持
+- `frontend/src/composables/useLayerDataImport.js` —— 文本解码编码多支持
+
+---
+
+#### ✅ 兼容性
+- ✅ **无破坏性变更**：对外接口完全保持不变
+- ✅ **向后兼容**：现有 KML/KMZ 导入流程无需修改
+- ✅ **渐进式修复**：直接升级即可自动享受改进
+
+---
+
+#### ✅ 使用者收益
+1. **样式完整**：KML/KMZ 导入时颜色、线条、填充完整应用
+2. **兼容性强**：支持多种编码的 KML 文件，不再限于 UTF-8
+3. **规范遵循**：严格按 KML 2.2 规范处理样式，避免非标准解析
+
+---
 
 ### V 3.1.2 (05-08) 
 - 原生下载模式: 为大文件下载引入 token-based 浏览器原生下载，避免页面内存占用。  

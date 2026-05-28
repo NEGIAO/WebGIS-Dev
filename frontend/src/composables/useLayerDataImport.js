@@ -758,10 +758,43 @@ export function useLayerDataImport({
         );
     }
 
+    /**
+     * 改进的文本内容解码函数，支持多种编码
+     * 对于 KML/KMZ 等可能包含非 UTF-8 编码的文件进行处理
+     */
     function decodeTextContent(content) {
         if (typeof content === 'string') return content;
         if (content instanceof ArrayBuffer) {
-            return new TextDecoder('utf-8', { fatal: false }).decode(content);
+            // 尝试多种编码，选择替代字符最少的那个
+            const candidates = [];
+            const encodings = ['utf-8', 'utf-16le', 'utf-16be', 'gbk'];
+            
+            for (const encoding of encodings) {
+                try {
+                    const text = new TextDecoder(encoding, { fatal: false }).decode(content);
+                    const invalidCount = (text.match(/\uFFFD/g) || []).length;
+                    candidates.push({ encoding, text, invalidCount });
+                } catch (err) {
+                    continue;
+                }
+            }
+            
+            if (!candidates.length) {
+                // 降级方案：使用 UTF-8
+                console.warn('[useLayerDataImport] 所有编码尝试均失败，使用 UTF-8 降级');
+                return new TextDecoder('utf-8', { fatal: false }).decode(content);
+            }
+            
+            candidates.sort((a, b) => a.invalidCount - b.invalidCount);
+            const best = candidates[0];
+            
+            if (best.invalidCount > 0) {
+                console.warn(
+                    `[useLayerDataImport] 使用编码 ${best.encoding}，包含 ${best.invalidCount} 个替代字符`
+                );
+            }
+            
+            return best.text;
         }
         return String(content || '');
     }
