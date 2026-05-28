@@ -2037,7 +2037,7 @@ input:checked + .slider:before {
 .theme-option.selected {
     border-color: var(--brand-primary);
     background: var(--bg-active);
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+    box-shadow: 0 0 0 2px var(--bg-hover);
 }
 
 .theme-preview {

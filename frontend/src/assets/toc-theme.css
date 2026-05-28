@@ -159,4 +159,9 @@
     --toc-bg-hover: linear-gradient(135deg, rgba(100, 181, 246, 0.5) 0%, rgba(187, 222, 251, 0.8) 100%);
     --toc-bg-active: linear-gradient(135deg, rgba(144, 202, 249, 0.5) 0%, rgba(144, 202, 249, 0.5) 100%);
     --toc-bg-folder: rgba(21, 101, 192, 0.566);
+    --toc-text-primary: #1a3a5c;
+    --toc-btn-reverse-bg: #e3f2fd;
+    --toc-btn-reverse-border: #64b5f6;
+    --toc-btn-reverse-text: #1565c0;
+    --toc-input-focus: #1976d2;
 }

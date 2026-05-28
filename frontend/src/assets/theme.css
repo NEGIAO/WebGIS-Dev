@@ -5,8 +5,8 @@
  * 切换主题只需修改 [data-theme] 属性，变量自动联动。
  *
  * 主题方案：
- *   - :root（默认）= 浅绿主题
- *   - [data-theme="dark-green"] = 深绿主题
+ *   - :root（默认）= 绿色主题
+ *   - [data-theme="blue"] = 蓝色主题
  */
 
 :root {
