@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from shapely.geometry import shape, mapping, box, MultiPoint, Polygon
 from shapely.ops import unary_union, voronoi_diagram
+from shapely import STRtree
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,19 @@ def shapely_geoms_to_geojson_featurecollection(
         "analysis_type": analysis_type,
         "feature_count": len(features),
     }
+
+
+def _count_vertices(geom) -> int:
+    """统计几何对象的节点数"""
+    if geom.geom_type == "Polygon":
+        return len(geom.exterior.coords) + sum(len(i.coords) for i in geom.interiors)
+    elif geom.geom_type == "LineString":
+        return len(geom.coords)
+    elif geom.geom_type == "MultiPolygon":
+        return sum(_count_vertices(p) for p in geom.geoms)
+    elif geom.geom_type == "MultiLineString":
+        return sum(len(ls.coords) for ls in geom.geoms)
+    return 0
 
 
 # ==================== 分析操作实现 ====================
@@ -338,11 +352,20 @@ def do_spatial_aggregation(
     bbox_poly = box(min_lon, min_lat, max_lon, max_lat)
 
     grid_cells = []
+    MAX_GRID_CELLS = 100000
 
     if grid_type == "hexbin":
         # 六边形网格（平顶六边形，奇数行偏移半列实现蜂窝交错）
         hex_width = grid_size
         hex_height = grid_size * math.sqrt(3) / 2.0
+
+        # 预估网格数量，防止 OOM
+        est_cols = max(1, math.ceil((max_lon - min_lon) / (hex_width * 3 / 4))) if hex_width > 0 else 0
+        est_rows = max(1, math.ceil((max_lat - min_lat) / hex_height)) if hex_height > 0 else 0
+        if est_cols * est_rows > MAX_GRID_CELLS:
+            raise ValueError(
+                f"预估网格数量 {est_cols * est_rows} 超过上限 {MAX_GRID_CELLS}，请增大 grid_size"
+            )
 
         row = 0
         y = min_lat
@@ -366,8 +389,8 @@ def do_spatial_aggregation(
                         clipped = hex_poly.intersection(bbox_poly)
                         if not clipped.is_empty:
                             grid_cells.append(clipped)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"跳过退化六边形: {e}")
                 x += hex_width * 3 / 4
             y += hex_height
             row += 1
@@ -375,6 +398,10 @@ def do_spatial_aggregation(
         # 方格网（默认），使用整数计数器避免浮点累积误差
         n_cols = max(1, math.ceil((max_lon - min_lon) / grid_size))
         n_rows = max(1, math.ceil((max_lat - min_lat) / grid_size))
+        if n_cols * n_rows > MAX_GRID_CELLS:
+            raise ValueError(
+                f"网格数量 {n_cols * n_rows} 超过上限 {MAX_GRID_CELLS}，请增大 grid_size"
+            )
         for col in range(n_cols):
             x = min_lon + col * grid_size
             for row_i in range(n_rows):
@@ -385,13 +412,13 @@ def do_spatial_aggregation(
     if not grid_cells:
         raise ValueError("未生成有效网格")
 
-    # 统计每个网格内的点数
+    # 使用 STRtree 空间索引统计每个网格内的点数（O(N*logN) 替代 O(N*M)）
+    tree = STRtree(points)
     result_features = []
     for cell in grid_cells:
-        count = 0
-        for pt in points:
-            if cell.contains(pt):
-                count += 1
+        # query 返回与 cell 相交的点的索引，再验证精确包含关系
+        candidate_indices = tree.query(cell, predicate="contains")
+        count = len(candidate_indices)
         if count > 0:
             result_features.append({
                 "type": "Feature",
@@ -490,44 +517,13 @@ def do_simplify(geoms_a: list, tolerance: float) -> dict:
         if geom is None or geom.is_empty:
             continue
 
-        # 统计原始节点数
-        if geom.geom_type == "Polygon":
-            original_count = len(geom.exterior.coords)
-            for interior in geom.interiors:
-                original_count += len(interior.coords)
-        elif geom.geom_type == "LineString":
-            original_count = len(geom.coords)
-        elif geom.geom_type == "MultiPolygon":
-            original_count = sum(
-                len(p.exterior.coords) + sum(len(i.coords) for i in p.interiors)
-                for p in geom.geoms
-            )
-        elif geom.geom_type == "MultiLineString":
-            original_count = sum(len(ls.coords) for ls in geom.geoms)
-        else:
-            original_count = 0
+        original_count = _count_vertices(geom)
 
         simplified = geom.simplify(tolerance, preserve_topology=True)
         if simplified.is_empty:
             continue
 
-        # 统计简化后节点数
-        if simplified.geom_type == "Polygon":
-            simplified_count = len(simplified.exterior.coords)
-            for interior in simplified.interiors:
-                simplified_count += len(interior.coords)
-        elif simplified.geom_type == "LineString":
-            simplified_count = len(simplified.coords)
-        elif simplified.geom_type == "MultiPolygon":
-            simplified_count = sum(
-                len(p.exterior.coords) + sum(len(i.coords) for i in p.interiors)
-                for p in simplified.geoms
-            )
-        elif simplified.geom_type == "MultiLineString":
-            simplified_count = sum(len(ls.coords) for ls in simplified.geoms)
-        else:
-            simplified_count = 0
-
+        simplified_count = _count_vertices(simplified)
         total_original += original_count
         total_simplified += simplified_count
 
