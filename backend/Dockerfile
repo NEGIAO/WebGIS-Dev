@@ -1,5 +1,5 @@
 # 使用官方 Python 运行时作为基础镜像
-FROM python:3.9-slim
+FROM python:3.12-slim
 
 # 1. 安装 uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

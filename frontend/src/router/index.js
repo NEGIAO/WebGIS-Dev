@@ -86,8 +86,6 @@ function cacheRoutePositionCode(route) {
     persistPositionCodeFromUrl();
 }
 
-let lastNavigationPath = null;
-
 router.beforeEach(async (to, from) => {
     const requiresAuth = !!to.meta?.requiresAuth;
     const shareModeEnabled = readShareFlagFromRoute(to);
@@ -146,8 +144,6 @@ router.beforeEach(async (to, from) => {
     const authStore = useAuthStore();
     authStore.beginAuthCheck();
     showLoading('正在验证登录状态...');
-    lastNavigationPath = to.path;
-
     try {
         const isLoggedIn = await authStore.ensureValidSession();
 

@@ -1,4 +1,4 @@
-export { dispatchGisData } from '../gis/dataDispatcher';
+export { dispatchGisData, revokeAllBlobUrls } from '../gis/dataDispatcher';
 
 export { flattenResources, flattenUploadInput } from '../gis/decompressor';
 

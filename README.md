@@ -851,6 +851,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-05-28 18:00
+**最后更新**：2026-05-28 23:00
 **当前版本**：V3.1.5
 **项目状态**：开发中 - 持续迭代优化

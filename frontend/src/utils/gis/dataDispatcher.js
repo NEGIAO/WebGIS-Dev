@@ -493,6 +493,22 @@ async function buildArchivePackets({ archive, sourceType, sourceName }) {
     };
 }
 
+/**
+ * Revokes an array of blob URLs to free memory.
+ * Call this when the blob URLs are no longer needed (e.g. layer removed, component unmounted).
+ * @param {string[]} urls - Array of blob URLs to revoke
+ */
+export function revokeAllBlobUrls(urls) {
+    if (!Array.isArray(urls)) return;
+    for (const url of urls) {
+        try {
+            URL.revokeObjectURL(url);
+        } catch {
+            // ignore revoke failures (already revoked or invalid)
+        }
+    }
+}
+
 function guessMimeByPath(path) {
     const lower = String(path || '').toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
@@ -507,6 +523,13 @@ function guessMimeByPath(path) {
     return 'application/octet-stream';
 }
 
+/**
+ * Creates blob URLs for resource entries (images, CSS, JS, etc.).
+ * IMPORTANT: Callers MUST revoke returned URLs via revokeAllBlobUrls() when no longer needed
+ * to avoid memory leaks.
+ * @param {Array} entries - Archive entries with buffer and extension
+ * @returns {{ urls: string[], resources: Array<{ path: string, blobUrl: string, mimeType: string }> }}
+ */
 function buildResourceBlobUrls(entries) {
     const urls = [];
     const resources = [];

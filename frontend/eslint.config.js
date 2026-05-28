@@ -29,6 +29,8 @@ export default [
             // Vue 相关：为了 GIS 开发的灵活性关掉部分限制
             'vue/block-lang': 'off',
             'vue/multi-word-component-names': 'off',
+            'vue/no-v-html': 'warn',
+            'vue/require-explicit-emits': 'warn',
 
             // 代码质量相关
             'no-unused-vars': 'warn', // 提醒清理未使用的变量

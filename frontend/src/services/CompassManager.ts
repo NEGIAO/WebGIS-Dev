@@ -234,6 +234,9 @@ export class CompassManager {
     // ==================== 渲染相关 ====================
     private readonly style: Style; // 自定义 Canvas 渲染样式
 
+    // ==================== 重入保护 ====================
+    private isSyncingGeometry = false; // 防止 syncFeatureGeometry → setPosition 递归触发 watch
+
     /**
      * 构造函数
      * @param options - 管理器初始化选项
@@ -399,6 +402,7 @@ export class CompassManager {
             watch(
                 () => [this.store.position.lng, this.store.position.lat],
                 () => {
+                    if (this.isSyncingGeometry) return;
                     this.syncFeatureGeometry();
                     this.scheduleUrlSync();
                 },
@@ -494,7 +498,9 @@ export class CompassManager {
             if (Array.isArray(center) && center.length >= 2) {
                 const [lng, lat] = toLonLat(center);
                 if (Number.isFinite(lng) && Number.isFinite(lat)) {
+                    this.isSyncingGeometry = true;
                     this.store.setPosition(lng, lat);
+                    this.isSyncingGeometry = false;
                 }
             }
         }

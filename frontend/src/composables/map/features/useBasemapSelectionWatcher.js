@@ -352,6 +352,7 @@ export function createBasemapSelectionWatcher({
                 selectedLayerRef.value = nextFallbackOption;
                 message?.info?.(`已自动切换至${nextFallbackOption}底图`);
             } catch (e) {
+                controller.abort();
                 ongoingValidations.delete(val);
             }
         })();

@@ -497,12 +497,21 @@ export function useLayerDataImport({
                       center[1] + (height * resolution) / 2,
                   ];
 
+        const imageSource = new ImageStatic({
+            url: pngUrl,
+            imageExtent: extent,
+            projection: layerProjection,
+        });
+        // Revoke the Blob URL once the image has been loaded to free memory
+        imageSource.once('imageloadend', () => {
+            URL.revokeObjectURL(pngUrl);
+        });
+        imageSource.once('imageloaderror', () => {
+            URL.revokeObjectURL(pngUrl);
+        });
+
         const layer = new ImageLayer({
-            source: new ImageStatic({
-                url: pngUrl,
-                imageExtent: extent,
-                projection: layerProjection,
-            }),
+            source: imageSource,
             zIndex: 120,
             properties: { name },
         });
@@ -916,6 +925,15 @@ export function useLayerDataImport({
                 console.error('[KML样式] 样式应用异常:', err);
                 // 继续返回 features，即使样式应用失败
             }
+
+            // 兜底：清除 extractStyles:false 产生的无效样式（空数组、undefined 等），
+            // 确保图层样式函数能正确接管渲染
+            for (const feature of features) {
+                const s = feature.getStyle();
+                if (!s || (Array.isArray(s) && s.length === 0)) {
+                    feature.setStyle(null);
+                }
+            }
         }
 
         return features;
@@ -971,6 +989,14 @@ export function useLayerDataImport({
             } catch (err) {
                 console.error('[KML样式] 样式应用异常:', err);
                 // 继续返回 features，即使样式应用失败
+            }
+
+            // 公共兜底：清除 extractStyles:false 产生的无效样式
+            for (const feature of features) {
+                const s = feature.getStyle();
+                if (!s || (Array.isArray(s) && s.length === 0)) {
+                    feature.setStyle(null);
+                }
             }
         }
 

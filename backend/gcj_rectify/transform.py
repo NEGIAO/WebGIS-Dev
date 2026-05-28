@@ -79,11 +79,14 @@ def gcj2wgs(gcjLon, gcjLat):
     g1 = wgs2gcj(w0[0], w0[1])
     w1 = tuple([x[0] - (x[1] - x[2]) for x in zip(w0, g1, g0)])
     delta = tuple([x[0] - x[1] for x in zip(w1, w0)])
-    while abs(delta[0]) >= 1e-6 or abs(delta[1]) >= 1e-6:
+    max_iterations = 20
+    iteration = 0
+    while (abs(delta[0]) >= 1e-6 or abs(delta[1]) >= 1e-6) and iteration < max_iterations:
         w0 = w1
         g1 = wgs2gcj(w0[0], w0[1])
         w1 = tuple([x[0] - (x[1] - x[2]) for x in zip(w0, g1, g0)])
         delta = tuple([x[0] - x[1] for x in zip(w1, w0)])
+        iteration += 1
     return w1
 
 

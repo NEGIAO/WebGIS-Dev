@@ -83,6 +83,25 @@ function stripKmlDefaultNamespace(kmlText) {
         .replace(/\s+xsi:schemaLocation\s*=\s*(['"]).*?\1/gi, '');
 }
 
+function normalizeStyleUrl(rawValue) {
+    const text = String(rawValue || '').trim();
+    if (!text) return '';
+    const hashIndex = text.lastIndexOf('#');
+    const fragment = hashIndex >= 0 ? text.slice(hashIndex + 1) : text;
+    return fragment.replace(/^#/, '').trim();
+}
+
+function isLikelyIconHref(rawValue) {
+    const value = String(rawValue || '').trim();
+    if (!value) return false;
+    if (/^data:image\//i.test(value)) return true;
+    if (/^blob:/i.test(value)) return true;
+    if (/^https?:\/\//i.test(value)) return true;
+    if (/[\/\\]/.test(value) && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(value)) return true;
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(value)) return true;
+    return false;
+}
+
 /**
  * 从 KML XML 文本中提取样式定义
  * 支持两种方式：
@@ -132,7 +151,7 @@ export function extractKmlStyleDefinitions(kmlText) {
             if (normalPair) {
                 const styleUrl = normalPair.querySelector('styleUrl');
                 if (styleUrl) {
-                    const refId = String(styleUrl.textContent || '').trim().replace(/^#/, '');
+                    const refId = normalizeStyleUrl(styleUrl.textContent || '');
                     if (refId && styleMap.has(refId)) {
                         styleMap.set(smId, styleMap.get(refId));
                         return;
@@ -287,10 +306,7 @@ export function extractPlacemarkStyle(placemarkEl, globalStyles = new Map()) {
         // 其次尝试 styleUrl 引用
         const styleUrlEl = placemarkEl.querySelector('styleUrl');
         if (styleUrlEl) {
-            let styleUrl = String(styleUrlEl.textContent || '').trim();
-            // 移除 URL fragment (#)
-            styleUrl = styleUrl.replace(/^#/, '');
-            
+            const styleUrl = normalizeStyleUrl(styleUrlEl.textContent || '');
             if (styleUrl && globalStyles.has(styleUrl)) {
                 return globalStyles.get(styleUrl);
             }
@@ -341,9 +357,12 @@ export function convertKmlStyleToOlStyle(styleDef, options = {}) {
                 fill = new Fill(defaultFill);
             }
 
-            // 提取描边
+            // 提取描边（alpha=0 时使用默认描边颜色）
             if (polyStyle.outline) {
-                const outlineColor = polyStyle.colorParsed?.hex || defaultStroke.color;
+                const outlineAlpha = polyStyle.colorParsed?.a ?? 1;
+                const outlineColor = outlineAlpha > 0
+                    ? (polyStyle.colorParsed?.hex || defaultStroke.color)
+                    : defaultStroke.color;
                 stroke = new Stroke({
                     color: outlineColor,
                     width: defaultStroke.width || 1,
@@ -364,19 +383,25 @@ export function convertKmlStyleToOlStyle(styleDef, options = {}) {
         // 处理 IconStyle（点图标）
         if (styleDef.icon && styleDef.icon.href) {
             const iconStyle = styleDef.icon;
+            if (!isLikelyIconHref(iconStyle.href)) {
+                // 非标准图标引用（如字体编码或自定义协议），跳过图标并回退到圆点
+                iconStyle.href = null;
+            }
             try {
-                image = new Icon({
-                    src: iconStyle.href,
-                    scale: Math.max(0.1, iconStyle.scale || 1),
-                    // 容错处理：如果图标加载失败，回退到圆形
-                    onLoad: (img) => {
-                        // 图标成功加载
-                    },
-                    onError: () => {
-                        console.warn(`[kmlStyleParser] 图标加载失败: ${iconStyle.href}`);
-                        // 图标加载失败时的处理由使用端决定
-                    },
-                });
+                if (iconStyle.href) {
+                    image = new Icon({
+                        src: iconStyle.href,
+                        scale: Math.max(0.1, iconStyle.scale || 1),
+                        // 容错处理：如果图标加载失败，回退到圆形
+                        onLoad: () => {
+                            // 图标成功加载
+                        },
+                        onError: () => {
+                            console.warn(`[kmlStyleParser] 图标加载失败: ${iconStyle.href}`);
+                            // 图标加载失败时的处理由使用端决定
+                        },
+                    });
+                }
             } catch (err) {
                 console.warn('[kmlStyleParser] Icon 转换失败', err);
                 // 继续处理其他样式
@@ -395,6 +420,17 @@ export function convertKmlStyleToOlStyle(styleDef, options = {}) {
                 fill: pointFill,
                 stroke: stroke || new Stroke({ color: '#2f7d3c', width: 1 }),
             });
+        }
+
+        // 检测透明样式：alpha=0 的 fill/stroke 视为无效，回退到默认样式
+        const polyAlpha = styleDef.poly?.colorParsed?.a ?? 1;
+        const lineAlpha = styleDef.line?.colorParsed?.a ?? 1;
+
+        if (fill && polyAlpha === 0) {
+            fill = defaultFill ? new Fill(defaultFill) : null;
+        }
+        if (stroke && lineAlpha === 0 && !styleDef.poly?.outline) {
+            stroke = defaultStroke ? new Stroke({ ...defaultStroke, width: defaultStroke.width || 1 }) : null;
         }
 
         // 至少需要有一个有效样式
@@ -476,32 +512,69 @@ export function applyKmlStylesToFeatures(features, kmlText) {
             return result;
         }
 
-        const placemarks = xmlDoc.querySelectorAll('Placemark');
+        const placemarks = Array.from(xmlDoc.querySelectorAll('Placemark'));
+        const placemarkById = new Map();
+        const placemarkByName = new Map();
+        const placemarkEntries = placemarks.map((placemarkEl) => {
+            const id = String(placemarkEl.getAttribute('id') || '').trim();
+            const name = String(placemarkEl.querySelector('name')?.textContent || '').trim();
+            const styleDef = extractPlacemarkStyle(placemarkEl, globalStyles);
+
+            if (styleDef) {
+                if (id) placemarkById.set(id, styleDef);
+                if (name) {
+                    const list = placemarkByName.get(name) || [];
+                    list.push(styleDef);
+                    placemarkByName.set(name, list);
+                }
+            }
+
+            return { id, name, styleDef };
+        });
+        const placemarkNameCursor = new Map();
 
         // 第三步：为每个 feature 应用样式
         features.forEach((feature, index) => {
             try {
-                // 尽量找到对应的 Placemark 元素（通过索引或 ID）
-                let correspondingPlacemark = null;
-                
-                if (index < placemarks.length) {
-                    correspondingPlacemark = placemarks[index];
-                } else if (feature.getId) {
-                    const featureId = feature.getId();
-                    if (featureId) {
-                        correspondingPlacemark = xmlDoc.querySelector(
-                            `Placemark[id="${featureId}"], Placemark > name:contains("${featureId}")`
-                        );
-                    }
+                const geometryType = feature?.getGeometry?.()?.getType?.() || '';
+                const isPoint = ['Point', 'MultiPoint'].includes(geometryType);
+                const isLine = ['LineString', 'MultiLineString'].includes(geometryType);
+                const isPolygon = ['Polygon', 'MultiPolygon'].includes(geometryType);
+
+                const featureId = feature?.getId?.() || feature?.get?.('id');
+                const featureName =
+                    feature?.get?.('name') ||
+                    feature?.get?.('Name') ||
+                    feature?.get?.('NAME') ||
+                    feature?.get?.('title') ||
+                    feature?.get?.('Title') ||
+                    feature?.get?.('TITLE');
+                const featureStyleUrl = normalizeStyleUrl(
+                    feature?.get?.('styleUrl') || feature?.get?.('StyleUrl') || ''
+                );
+
+                let styleDef = null;
+
+                if (featureStyleUrl && globalStyles.has(featureStyleUrl)) {
+                    styleDef = globalStyles.get(featureStyleUrl);
+                } else if (featureId && placemarkById.has(featureId)) {
+                    styleDef = placemarkById.get(featureId);
+                } else if (featureName && placemarkByName.has(featureName)) {
+                    const list = placemarkByName.get(featureName) || [];
+                    const used = placemarkNameCursor.get(featureName) || 0;
+                    styleDef = list[Math.min(used, list.length - 1)] || null;
+                    placemarkNameCursor.set(featureName, used + 1);
+                } else if (index < placemarkEntries.length) {
+                    styleDef = placemarkEntries[index]?.styleDef || null;
                 }
 
-                if (!correspondingPlacemark && index < placemarks.length) {
-                    correspondingPlacemark = placemarks[index];
-                }
+                if (styleDef) {
+                    const hasIcon = !!styleDef.icon?.href;
+                    const hasLine = !!styleDef.line;
+                    const hasPoly = !!styleDef.poly;
+                    const incompatibleIconOnly = (isLine || isPolygon) && hasIcon && !hasLine && !hasPoly;
 
-                if (correspondingPlacemark) {
-                    const styleDef = extractPlacemarkStyle(correspondingPlacemark, globalStyles);
-                    if (styleDef && applyKmlStyleToFeature(feature, styleDef)) {
+                    if (!incompatibleIconOnly && applyKmlStyleToFeature(feature, styleDef)) {
                         result.successCount += 1;
                         return;
                     }

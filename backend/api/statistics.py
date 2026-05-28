@@ -288,18 +288,24 @@ def extract_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-async def fetch_geolocation(ip: str) -> Optional[dict]:
+async def fetch_geolocation(ip: str, client: Optional[httpx.AsyncClient] = None) -> Optional[dict]:
     endpoint = f"{IPAPI_ENDPOINT}/{ip}/json/"
 
     try:
-        async with httpx.AsyncClient(
-            timeout=HTTP_CLIENT_TIMEOUT,
-            limits=HTTP_CLIENT_LIMITS,
-        ) as client:
+        if client is not None:
             response = await client.get(
                 endpoint,
                 headers={"User-Agent": "WebGIS-Backend/1.0"},
             )
+        else:
+            async with httpx.AsyncClient(
+                timeout=HTTP_CLIENT_TIMEOUT,
+                limits=HTTP_CLIENT_LIMITS,
+            ) as new_client:
+                response = await new_client.get(
+                    endpoint,
+                    headers={"User-Agent": "WebGIS-Backend/1.0"},
+                )
 
         if response.status_code != 200:
             logger.warning("ipapi.co 返回非 200 状态: %s", response.status_code)
@@ -1024,7 +1030,8 @@ async def log_visit(
         user_agent = request.headers.get("User-Agent", "Unknown")
         visit_time = get_current_shanghai_time()
 
-        geo_data = await fetch_geolocation(client_ip)
+        http_client = getattr(request.app.state, "http_client", None)
+        geo_data = await fetch_geolocation(client_ip, client=http_client)
 
         gps_lng = visit_payload.gps_lng if visit_payload else None
         gps_lat = visit_payload.gps_lat if visit_payload else None

@@ -28,9 +28,23 @@ async def close_async_client_async() -> None:
 
 
 def close_async_client() -> None:
-    """Close the module-level HTTP client (sync placeholder)."""
+    """Close the module-level HTTP client (sync wrapper)."""
     global _async_client
-    _async_client = None
+    if _async_client is not None:
+        try:
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Event loop is already running; schedule the close and let caller await later.
+                # Fall back to just dropping the reference so it can be garbage-collected.
+                pass
+            else:
+                loop.run_until_complete(_async_client.aclose())
+        except Exception:
+            pass
+        finally:
+            _async_client = None
 
 
 async def fetch_tile(url: str, client: Optional[AsyncClient] = None) -> bytes:

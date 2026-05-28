@@ -20,7 +20,6 @@ export interface DbfFieldDef {
     length: number;         // 字段长度（字节数）
     decimals: number;       // 小数位数（仅用于数值类型）
     address: number;        // 字段地址（忽略）
-    raw: Uint8Array;        // 原始32字节数据
 }
 
 /**
@@ -41,7 +40,6 @@ export interface DbfHeader {
 export interface DbfRecord {
     isDeleted: boolean;     // 是否被删除标记
     values: Record<string, any>;  // 字段名 -> 值的映射
-    raw: Uint8Array;        // 原始字节数据
 }
 
 /**
@@ -365,7 +363,6 @@ function parseDbfFields(
             length: fieldLength,
             decimals: Math.max(0, decimals),
             address: 0,  // DBF 规范定义但我们不需要
-            raw: fieldBytes,
         });
 
         offset += 32;
@@ -389,7 +386,6 @@ function parseDbfRecord(
     const record: DbfRecord = {
         isDeleted: recordBytes[0] === 0x2a,  // 0x2A = deleted marker
         values: {},
-        raw: recordBytes,
     };
 
     let offset = 1;  // 跳过删除标记

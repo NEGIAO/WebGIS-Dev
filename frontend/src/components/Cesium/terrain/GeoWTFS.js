@@ -162,7 +162,11 @@ function parseData(data) {
             message = proto1.decode(bytes);
         } catch (error) {
             console.error(error.message);
-            message = proto.decode(bytes);
+            try {
+                message = proto.decode(bytes);
+            } catch (innerError) {
+                console.error(innerError.message);
+            }
         }
     }
 
@@ -354,7 +358,6 @@ export default function createGeoWTFS(Cesium) {
         }
 
         compareArray(tiles, latelyGrid) {
-            let diff = false;
             for (let t = 0; t < tiles.length; t++) {
                 let exists = false;
                 for (let i = 0; i < latelyGrid.length; i++) {
@@ -368,11 +371,26 @@ export default function createGeoWTFS(Cesium) {
                     }
                 }
                 if (!exists) {
-                    diff = true;
-                    break;
+                    return false;
                 }
             }
-            return !diff;
+            for (let i = 0; i < latelyGrid.length; i++) {
+                let exists = false;
+                for (let t = 0; t < tiles.length; t++) {
+                    if (
+                        latelyGrid[i].x === tiles[t].x &&
+                        latelyGrid[i].y === tiles[t].y &&
+                        latelyGrid[i].level === tiles[t].level
+                    ) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         _queueCall(tiles) {
@@ -645,10 +663,10 @@ export default function createGeoWTFS(Cesium) {
                     } else {
                         entityOption.label.font += 'sans-serif';
                     }
-                    if (!this.labelGraphics.bold && (poi.fontStyle !== 1 || poi.fontStyle !== 3)) {
+                    if (!this.labelGraphics.bold && (poi.fontStyle !== 1 && poi.fontStyle !== 3)) {
                         entityOption.label.font = `bold ${entityOption.label.font}`;
                     }
-                    if (poi.fontStyle !== 2 || poi.fontStyle !== 3) {
+                    if (poi.fontStyle !== 2 && poi.fontStyle !== 3) {
                         entityOption.label.font = `italic ${entityOption.label.font}`;
                     }
                 }

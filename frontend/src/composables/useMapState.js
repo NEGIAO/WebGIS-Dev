@@ -1067,8 +1067,9 @@ export function useMapState(mapInstance, options = {}) {
      * 停止经纬网和中心点，隐藏并清理资源
      */
     function stopGraticule() {
-        if (graticuleLayer) {
-            graticuleLayer.setVisible(false);
+        if (graticuleLayer && mapInstance?.value) {
+            mapInstance.value.removeLayer(graticuleLayer);
+            graticuleLayer = null;
         }
         if (centerPointLayer) {
             centerPointLayer.setVisible(false);

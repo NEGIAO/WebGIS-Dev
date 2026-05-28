@@ -54,7 +54,6 @@ export function useManagedLayerRegistry({ emit, userDataLayers, drawSource, styl
                 name: item.name,
                 visible: item.visible,
                 featureCount: item.featureCount,
-                features: Array.isArray(item.features) ? item.features : [],
             })),
         });
     }

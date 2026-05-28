@@ -10,6 +10,7 @@ import { Draw, Snap } from 'ol/interaction';
 import Overlay from 'ol/Overlay';
 import { Polygon } from 'ol/geom';
 import { getArea, getLength } from 'ol/sphere';
+import { unByKey } from 'ol/Observable';
 
 /**
  * 工厂函数 - 返回绘图与测量相关的导出函数
@@ -47,6 +48,7 @@ export function createDrawMeasureFeature({
     let helpTooltipEl = null;
     let helpTooltipOverlay = null;
     let sketchFeature = null;
+    let geometryChangeKey = null;
 
     /**
      * 格式化线长度显示文本
@@ -91,6 +93,10 @@ export function createDrawMeasureFeature({
         tooltipRef.helpTooltipEl = helpTooltipEl;
         tooltipRef.helpTooltipOverlay = helpTooltipOverlay;
 
+        if (measureTooltipOverlay && map) {
+            map.removeOverlay(measureTooltipOverlay);
+        }
+
         measureTooltipEl = document.createElement('div');
         measureTooltipEl.className = 'ol-tooltip ol-tooltip-measure';
         measureTooltipOverlay = new Overlay({
@@ -112,6 +118,15 @@ export function createDrawMeasureFeature({
         if (drawInteraction) map.removeInteraction(drawInteraction);
         if (snapInteraction) map.removeInteraction(snapInteraction);
         if (helpTooltipOverlay) map.removeOverlay(helpTooltipOverlay);
+        if (measureTooltipOverlay) {
+            map.removeOverlay(measureTooltipOverlay);
+            measureTooltipOverlay = null;
+        }
+
+        if (geometryChangeKey) {
+            unByKey(geometryChangeKey);
+            geometryChangeKey = null;
+        }
 
         drawInteraction = null;
         snapInteraction = null;
@@ -150,7 +165,7 @@ export function createDrawMeasureFeature({
             createTooltips();
             drawInteraction.on('drawstart', (evt) => {
                 sketchFeature = evt.feature;
-                sketchFeature.getGeometry().on('change', (e) => {
+                geometryChangeKey = sketchFeature.getGeometry().on('change', (e) => {
                     const geom = e.target;
                     let output, tooltipCoord;
                     if (geom instanceof Polygon) {

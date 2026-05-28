@@ -15,6 +15,9 @@ export function createMapUIEventHandlers({
     attrStoreRef,
     emit,
     highlightManagedFeature,
+    clearManagedFeatureHighlight,
+    getCurrentHighlightedFeature,
+    setCurrentHighlightedFeature,
     zoomToManagedFeature,
     toggleGraticule,
     showDynamicSplitLinesRef,
@@ -63,10 +66,19 @@ export function createMapUIEventHandlers({
     }
 
     /**
-     * 属性表：高亮要素
+     * 属性表：高亮要素（featureId 为 null 时清除高亮）
      */
     function handleAttributeTableHighlightFeature(payload) {
-        if (!payload?.layerId || !payload?.featureId) return;
+        if (!payload?.layerId) return;
+        if (!payload.featureId) {
+            // 清除当前高亮并重置引用
+            const current = getCurrentHighlightedFeature?.();
+            if (current) {
+                clearManagedFeatureHighlight?.(current);
+                setCurrentHighlightedFeature?.(null);
+            }
+            return;
+        }
         highlightManagedFeature?.(payload);
     }
 

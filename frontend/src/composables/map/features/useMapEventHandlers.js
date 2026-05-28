@@ -30,6 +30,7 @@
 import { toLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 import { Point, Polygon } from 'ol/geom';
+import { unByKey } from 'ol/Observable';
 // 新增：导入 Vue nextTick 解决生命周期时序问题
 import { nextTick } from 'vue';
 
@@ -85,7 +86,8 @@ export function createMapEventHandlers({
         };
 
         // ✅ 修复 Canvas 警告（正确时机：地图渲染后）
-        map.on('postrender', () => {
+        const olKeys = [];
+        olKeys.push(map.on('postrender', () => {
             const canvas = viewport.querySelector('canvas');
             if (canvas) {
                 const ctx = canvas.getContext('2d');
@@ -93,10 +95,10 @@ export function createMapEventHandlers({
                     ctx.willReadFrequently = true;
                 }
             }
-        });
+        }));
 
         // ========== pointermove 事件 ==========
-        map.on('pointermove', (evt) => {
+        olKeys.push(map.on('pointermove', (evt) => {
             if (evt.dragging) return;
             const coordinate = evt.coordinate;
             if (tooltipRef?.helpTooltipEl) {
@@ -110,13 +112,13 @@ export function createMapEventHandlers({
                 tooltipRef.helpTooltipOverlay?.setPosition?.(coordinate);
                 tooltipRef.helpTooltipEl.classList.remove('hidden');
             }
-        });
+        }));
 
         // ========== mouseout 事件 ==========
         viewport.addEventListener('mouseout', _mouseoutHandler);
 
         // ========== singleclick 事件 ==========
-        map.on('singleclick', async (evt) => {
+        olKeys.push(map.on('singleclick', async (evt) => {
             const pendingBusPick = pendingBusPickRef?.value;
             if (pendingBusPick) {
                 const lonLat = toLonLat(evt.coordinate);
@@ -171,28 +173,28 @@ export function createMapEventHandlers({
                 const rasterInfo = await queryRasterFn(evt.coordinate);
                 rasterInfo && emit?.('feature-selected', rasterInfo);
             }
-        });
+        }));
 
         // ========== contextmenu 事件 ==========
         viewport.addEventListener('contextmenu', _contextmenuHandler);
 
         // ========== 缩放/中心事件 ==========
-        map.getView().on('change:resolution', () => {
+        olKeys.push(map.getView().on('change:resolution', () => {
             const zoom = map.getView().getZoom();
             zoom !== undefined && (currentZoomRef.value = Math.round(zoom));
-        });
+        }));
 
-        map.getView().on('change:center', () => {
+        olKeys.push(map.getView().on('change:center', () => {
             updateCurrentCoordinate(map.getView().getCenter());
-        });
+        }));
 
         // ✅ 修复 宽高0 警告（nextTick 等待 DOM 渲染完成）
-        map.on('moveend', async () => {
+        olKeys.push(map.on('moveend', async () => {
             updateCurrentCoordinate(map.getView().getCenter());
             syncAttributeTableMapExtent?.();
             await nextTick();
             map.updateSize();
-        });
+        }));
 
         // ========== 移动端触摸事件 ==========
         viewport.addEventListener('touchmove', _touchmoveHandler, false);
@@ -202,6 +204,8 @@ export function createMapEventHandlers({
             viewport.removeEventListener('mouseout', _mouseoutHandler);
             viewport.removeEventListener('contextmenu', _contextmenuHandler);
             viewport.removeEventListener('touchmove', _touchmoveHandler);
+            olKeys.forEach((key) => unByKey(key));
+            olKeys.length = 0;
         };
     }
 

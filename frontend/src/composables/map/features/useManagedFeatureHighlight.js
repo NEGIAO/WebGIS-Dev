@@ -54,7 +54,7 @@ export function createManagedFeatureHighlightFeature({ findManagedFeature = () =
     function clearManagedFeatureHighlight(feature) {
         if (!feature) return;
         if (typeof feature.setStyle === 'function') {
-            feature.setStyle(undefined);
+            feature.setStyle(null);
         }
     }
 

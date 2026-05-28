@@ -170,6 +170,8 @@ const TDT_LABEL_INIT_TILES = [
 let viewer = null;
 let handler = null;
 let wtfs = null;
+let creditCheckIntervalId = null;
+let creditOverrideStyleEl = null;
 const wind2D = ref(null); // Wind2D 实例
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 const shouldLoadAdvancedEffects = ref(false);
@@ -215,11 +217,16 @@ onUnmounted(() => {
     }
     clearWind2D();
     clearWTFS();
+    if (creditCheckIntervalId) {
+        clearInterval(creditCheckIntervalId);
+        creditCheckIntervalId = null;
+    }
+    if (creditOverrideStyleEl) {
+        creditOverrideStyleEl.remove();
+        creditOverrideStyleEl = null;
+    }
     if (viewer) {
         try {
-            if (viewer._creditCheckInterval) {
-                clearInterval(viewer._creditCheckInterval);
-            }
             viewer.destroy();
         } catch (e) {
             console.warn('Cesium viewer destroy warning:', e);
@@ -328,7 +335,7 @@ function initViewer() {
     };
     hideCreditsAggressive();
 
-    const creditCheckInterval = setInterval(() => {
+    creditCheckIntervalId = setInterval(() => {
         const creditContainer = document.querySelector('.cesium-credit-container');
         if (creditContainer && creditContainer.innerHTML.length > 0) {
             creditContainer.innerHTML = '';
@@ -336,7 +343,6 @@ function initViewer() {
                 'display: none !important; visibility: hidden !important; width: 0 !important; height: 0 !important;';
         }
     }, 500);
-    viewer._creditCheckInterval = creditCheckInterval;
 
     if (!document.getElementById('cesium-credit-override')) {
         const style = document.createElement('style');
@@ -348,6 +354,7 @@ function initViewer() {
       [class*="credit"] { display: none !important; visibility: hidden !important; }
     `;
         document.head.appendChild(style);
+        creditOverrideStyleEl = style;
     }
 }
 
@@ -383,8 +390,8 @@ function setupInteractions() {
             // Rotate around center of globe
             const camera = viewer.camera;
             const moveRate = 0.002;
-            camera.rotate(Cesium.Cartesian3.UNIT_X, -moveRate * (deltaMove.endPosition.y - deltaMove.startPosition.y));
-            camera.rotate(Cesium.Cartesian3.UNIT_Y, -moveRate * (deltaMove.endPosition.x - deltaMove.startPosition.x));
+            camera.rotate(Cesium.Cartesian3.UNIT_X, -moveRate * (deltaMove.y - startPosition.y));
+            camera.rotate(Cesium.Cartesian3.UNIT_Y, -moveRate * (deltaMove.x - startPosition.x));
         }
     }, Cesium.ScreenSpaceEventType.RIGHT_DRAG);
     

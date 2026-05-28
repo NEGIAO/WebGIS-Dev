@@ -73,7 +73,7 @@ function parseTransitLinePoint(linePointRaw) {
 }
 
 function markerCoordKey(coord) {
-    return `${coord[0].toFixed(2)},${coord[1].toFixed(2)}`;
+    return `${coord[0].toFixed(4)},${coord[1].toFixed(4)}`;
 }
 
 function addOrMergeMarker(markerMap, coord, markerRole, stepIndex, stationName) {

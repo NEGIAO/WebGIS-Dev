@@ -141,7 +141,7 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
             return (feature) => {
                 const existingStyle = feature.getStyle();
-                if (existingStyle && !(existingStyle instanceof Function)) {
+                if (existingStyle && !(existingStyle instanceof Function) && !(Array.isArray(existingStyle) && existingStyle.length === 0)) {
                     return existingStyle;
                 }
                 return createStyleFromConfig(baseStyleConfig, { labelText: '' });
@@ -154,7 +154,7 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
             const labelText = String(rawLabel || '').trim();
 
             const existingStyle = feature.getStyle();
-            if (existingStyle && !(existingStyle instanceof Function)) {
+            if (existingStyle && !(existingStyle instanceof Function) && !(Array.isArray(existingStyle) && existingStyle.length === 0)) {
                 if (!labelText) return existingStyle;
                 const labelOnly = createStyleFromConfig(baseStyleConfig, { labelText });
                 return [existingStyle, labelOnly];

@@ -299,8 +299,7 @@ export function buildReprojectionDebugSnapshot(
 
 function assignFeatureIds(featureCollection: any): any {
     if (!featureCollection) return featureCollection;
-    const clone = JSON.parse(JSON.stringify(featureCollection));
-    const features = Array.isArray(clone?.features) ? clone.features : [];
+    const features = Array.isArray(featureCollection?.features) ? featureCollection.features : [];
 
     features.forEach((feature: any, index: number) => {
         const gid =
@@ -314,7 +313,7 @@ function assignFeatureIds(featureCollection: any): any {
         feature.properties._gid = gid;
     });
 
-    return clone;
+    return featureCollection;
 }
 
 /**

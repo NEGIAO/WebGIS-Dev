@@ -251,6 +251,7 @@
                                         gridTemplateColumns,
                                     }"
                                     @mouseenter="previewFeature(item.row)"
+                                    @mouseleave="clearPreview"
                                     @click="focusFeature(item.row)"
                                 >
                                     <div class="cell id-col">{{ item.index + 1 }}</div>
@@ -630,6 +631,12 @@ function previewFeature(row: AttrRow) {
     emit('highlight-feature', { layerId, featureId: row.featureId });
 }
 
+function clearPreview() {
+    const layerId = store.activeLayerId;
+    if (!layerId) return;
+    emit('highlight-feature', { layerId, featureId: null });
+}
+
 function focusFeature(row: AttrRow) {
     const layerId = store.activeLayerId;
     if (!layerId) return;
@@ -700,7 +707,7 @@ onBeforeUnmount(() => {
 });
 </script>
 
-<style scoped>
+<style>
 /** GIS 主题控制配色映射：以截图中The Science of Where标准绿色和GIS专业应用为原形搭配色块 **/
 :root {
     --arc-pro-bg: #fefefe;
@@ -722,6 +729,9 @@ onBeforeUnmount(() => {
     --arc-pro-font-def: 'Segoe UI', 'Microsoft Yahei', sans-serif;
     --arc-pro-text: #2a342f;
 }
+</style>
+
+<style scoped>
 
 .pro-float-window {
     position: absolute;

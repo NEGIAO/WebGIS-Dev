@@ -93,7 +93,17 @@ export function useCreateManagedVectorLayer({
             labelStyleCache: new globalThis.Map(),
         };
 
-        // 4. 创建 VectorLayer
+        // 4. 清除要素上的残留样式（如 KML 解析器设置的空数组/透明样式），
+        //    确保图层的 buildManagedLayerStyle 样式函数生效
+        features.forEach((f) => {
+            const s = f.getStyle();
+            // 清除：undefined、null、空数组、Function（让图层样式函数接管）
+            if (!s || (Array.isArray(s) && s.length === 0) || typeof s === 'function') {
+                f.setStyle(null);
+            }
+        });
+
+        // 5. 创建 VectorLayer
         const layer = new VectorLayer({
             source: new VectorSource({ features }),
             zIndex: 120,

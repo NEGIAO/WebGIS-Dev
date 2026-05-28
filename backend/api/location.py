@@ -149,13 +149,19 @@ async def amap_ip_locate(ip: str, client: httpx.AsyncClient) -> Optional[Dict[st
         data = response.json()
 
         if data.get("status") == "1":
-            rectangle = data.get("rectangle", "0,0,0,0").split(",")
+            parts = data.get("rectangle", "0,0,0,0").split(",")
+            if len(parts) < 4:
+                parts.extend(["0"] * (4 - len(parts)))
+            try:
+                extent = [float(parts[i]) for i in range(4)]
+            except (ValueError, IndexError):
+                extent = [0.0, 0.0, 0.0, 0.0]
             return {
                 "city": data.get("city"),
                 "province": data.get("province"),
                 "country": data.get("country", "中国"),
                 "adcode": data.get("adcode"),
-                "extent": [float(rectangle[i]) for i in range(4)],
+                "extent": extent,
             }
         else:
             error_msg = data.get("info", "未知错误")
@@ -448,10 +454,11 @@ async def track_visit(
     
     # 尝试保存到数据库
     user_id = current_user.get("id") if current_user else None
+    conn = None
     try:
         conn = get_auth_db_connection()
         cursor = conn.cursor()
-        
+
         # 创建表（如果不存在）
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS visit_tracking (
@@ -467,16 +474,15 @@ async def track_visit(
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
-        
+
         # 插入记录
         cursor.execute("""
             INSERT INTO visit_tracking (ip, city, province, country, user_agent, referrer, user_id)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (ip, city, province, country, request_data.user_agent[:500], request_data.referrer[:500], user_id))
-        
+
         conn.commit()
-        conn.close()
-        
+
         return {
             "code": 200,
             "data": {
@@ -504,3 +510,9 @@ async def track_visit(
             },
             "message": "location detected but not persisted"
         }
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
