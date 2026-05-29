@@ -58,7 +58,10 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
      * @param config - 部分配置对象，将与现有配置合并
      */
     function setSwipeConfig(config: Partial<typeof swipeConfig.value>): void {
-        swipeConfig.value = { ...swipeConfig.value, ...config };
+        if (config.enabled !== undefined) swipeConfig.value.enabled = config.enabled;
+        if (config.position !== undefined) swipeConfig.value.position = config.position;
+        if (config.mode !== undefined) swipeConfig.value.mode = config.mode;
+        if (config.targetLayerIds !== undefined) swipeConfig.value.targetLayerIds = config.targetLayerIds;
         persistConfig(swipeConfig.value);
     }
 

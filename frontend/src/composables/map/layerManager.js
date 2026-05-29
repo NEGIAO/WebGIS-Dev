@@ -1,5 +1,6 @@
 export { useCreateManagedVectorLayer } from './features/useCreateManagedVectorLayer';
 export { createDeferredUserLayerApis } from './features/useDeferredUserLayerApis';
+export { createDistrictManagerFeature } from './features/useDistrictManager';
 export { useLayerContextMenuActions } from './features/useLayerContextMenuActions';
 export { createLayerControlHandlers } from './features/useLayerControlHandlers';
 export { createLayerMetadataNormalizationFeature } from './features/useLayerMetadataNormalization';

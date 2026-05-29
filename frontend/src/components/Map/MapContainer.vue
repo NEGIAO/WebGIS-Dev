@@ -103,10 +103,12 @@ import {
     createBasemapResilience,
     createBasemapSelectionWatcher,
     createBasemapStateManagementFeature,
+    createBasemapSwipe,
     createBasemapUrlMappingFeature,
     createCoordinateSystemConversionFeature,
     useCreateManagedVectorLayer,
     createDeferredUserLayerApis,
+    createDistrictManagerFeature,
     createDrawMeasureFeature,
     useLayerContextMenuActions,
     createLayerControlHandlers,
@@ -116,6 +118,7 @@ import {
     createManagedFeatureSerializationFeature,
     createManagedLayerStyleFeature,
     createMapEventHandlers,
+    createMapInteractionPickers,
     createMapSearchAndCoordinateInputFeature,
     createMapUIEventHandlers,
     createRightDragZoomController,
@@ -159,7 +162,6 @@ import {
     useLayerStore,
 } from '../../stores';
 import { CompassManager } from '../../services/CompassManager';
-import { DistrictManager } from '../../services/DistrictManager';
 
 const message = useMessage();
 const attrStore = useAttrStore();
@@ -168,214 +170,6 @@ const compassStore = useCompassStore();
 const tocStore = useTOCStore();
 const layerStore = useLayerStore();
 
-// ========== Map Swipe Setup ==========
-const SWIPE_COMPARE_LAYER_PREFIX = '__swipe_compare_layer__';
-const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom', 'local_tiles_preset']);
-
-function resolveSwipeLayerIds(presetId) {
-    const layerIds = resolvePresetLayerIds(presetId).filter((id) => {
-        const layerConfig = LAYER_CONFIGS.find((cfg) => cfg.id === id);
-        return !!layerConfig?.createSource;
-    });
-
-    return layerIds;
-}
-
-function createSwipeSourceByLayerId(layerId) {
-    const layerConfig = LAYER_CONFIGS.find((cfg) => cfg.id === layerId);
-    if (!layerConfig) return null;
-
-    const layerFactoryContext = {
-        normBase: NORM_BASE,
-        tiandituTk: TIANDITU_TK,
-        customUrl: customMapUrl.value || '',
-    };
-
-    return layerConfig.createSource?.(layerFactoryContext) || null;
-}
-
-function clearSwipeCompareLayers() {
-    if (!mapInstance.value) return;
-
-    const toRemove = mapInstance.value
-        .getLayers()
-        .getArray()
-        .filter((layer) => String(layer.get('name') || '').startsWith(SWIPE_COMPARE_LAYER_PREFIX));
-
-    toRemove.forEach((layer) => mapInstance.value.removeLayer(layer));
-}
-
-/**
- * 直接获取图层，不做任何检查
- * 简化逻辑，直接从 layerInstances 或 map.getLayers() 中找到图层就使用
- */
-function resolveVisibleTileLayersByIds(layerIds) {
-    if (!mapInstance.value) return [];
-
-    const mapLayers = mapInstance.value.getLayers().getArray();
-    const result = [];
-
-    (layerIds || []).forEach((layerId) => {
-        // 策略1：从 layerInstances 获取
-        let layer = layerInstances[layerId];
-        if (layer) {
-            result.push(layer);
-            return;
-        }
-
-        // 策略2：从 map.getLayers() 中查找
-        layer = mapLayers.find((l) => {
-            const name = l.get?.('name');
-            const id = l.get?.('id');
-            return name === layerId || id === layerId;
-        });
-        if (layer) {
-            layerInstances[layerId] = layer;
-            result.push(layer);
-            return;
-        }
-    });
-
-    return result;
-}
-
-// 启用双底图对比功能 (卷帘分析)
-async function enableBasemapSwipe(config = {}) {
-    const { leftBasemapId, rightBasemapId, mode = 'horizontal' } = config;
-
-    if (!mapInstance.value) {
-        throw new Error('地图尚未初始化');
-    }
-
-    if (!leftBasemapId || !rightBasemapId) {
-        throw new Error('左右底图 ID 不能为空');
-    }
-
-    if (
-        SWIPE_UNSUPPORTED_PRESETS.has(leftBasemapId) ||
-        SWIPE_UNSUPPORTED_PRESETS.has(rightBasemapId)
-    ) {
-        const errorMsg = '不支持的底图类型。卷帘分析仅支持标准在线底图，请选择其他底图选项。';
-        console.error('[enableBasemapSwipe] Error:', errorMsg);
-        message.error(errorMsg);
-        throw new Error(errorMsg);
-    }
-
-    try {
-        console.log('[enableBasemapSwipe] Starting with:', { leftBasemapId, rightBasemapId, mode });
-
-        // 先将左侧预设设为当前主底图，确保左侧完整显示的是“底图组”而非单层。
-        if (typeof switchLayerById === 'function') {
-            switchLayerById(leftBasemapId, {
-                onUpdated: () => {
-                    selectedLayer.value = leftBasemapId;
-                },
-            });
-            if (typeof emitBaseLayersChangeBatched === 'function') {
-                emitBaseLayersChangeBatched();
-            }
-        }
-
-        // 清理旧状态，避免重复附着与旧图层残留。
-        detachSwipeFromLayers();
-        clearSwipeCompareLayers();
-
-        const leftLayerIds = resolveSwipeLayerIds(leftBasemapId);
-        const rightLayerIds = resolveSwipeLayerIds(rightBasemapId);
-
-        if (!leftLayerIds.length) {
-            throw new Error(`左侧底图组 ${leftBasemapId} 没有可用图层`);
-        }
-        if (!rightLayerIds.length) {
-            throw new Error(`右侧底图组 ${rightBasemapId} 没有可用图层`);
-        }
-
-        // ========== [修复] 解决部署环境的异步初始化问题 ==========
-        // 等待一个 requestAnimationFrame 周期确保状态已同步
-        await new Promise((resolve) => {
-            if (typeof requestAnimationFrame === 'function') {
-                requestAnimationFrame(resolve);
-            } else {
-                setTimeout(resolve, 0);
-            }
-        });
-
-        // 直接获取图层，不做检查
-        const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);
-        if (!leftTileLayers.length) {
-            throw new Error(`左侧底图组 ${leftBasemapId} 未找到`);
-        }
-
-        const rightCompareLayers = [];
-
-        rightLayerIds.forEach((layerId, index) => {
-            const source = createSwipeSourceByLayerId(layerId);
-            if (!source) {
-                throw new Error(`无法为右侧图层 ${layerId} 创建 source`);
-            }
-
-            // 卷帘 compare 图层只负责底图对比，必须低于业务图层的 zIndex，避免遮挡 TOC/矢量数据。
-            const compareLayer = createBasemapLayerFromSource(source, {
-                visible: true,
-                zIndex: 100 + index,
-            });
-
-            compareLayer.setProperties({
-                name: `${SWIPE_COMPARE_LAYER_PREFIX}_${index}_${layerId}`,
-                layerType: 'basemap-swipe-compare',
-                swipeCompareLayer: true,
-                swipeSide: 'right',
-                swipeLayerId: layerId,
-            });
-            mapInstance.value.addLayer(compareLayer);
-            rightCompareLayers.push(compareLayer);
-        });
-
-        if (!rightCompareLayers.length) {
-            throw new Error('右侧底图组创建失败');
-        }
-
-        const swipeBindings = [
-            ...leftTileLayers.map((layer) => ({ layer, side: 'left' })),
-            ...rightCompareLayers.map((layer) => ({ layer, side: 'right' })),
-        ];
-
-        attachSwipeToLayers(mapInstance.value, swipeBindings);
-        updateSwipeMode(mode);
-
-        layerStore.setSwipeConfig({
-            enabled: true,
-            position: 0.5,
-            mode,
-            targetLayerIds: [...leftLayerIds, ...rightLayerIds],
-        });
-
-        mapInstance.value.render();
-
-        message.success('卷帘分析已启用，拖拽分割线对比两个底图组');
-
-        return {
-            success: true,
-            message: '已启用卷帘分析对比',
-        };
-    } catch (error) {
-        console.error('[enableBasemapSwipe] Error:', error);
-        clearSwipeCompareLayers();
-        detachSwipeFromLayers();
-        layerStore.disableSwipe();
-        message.error(String(error?.message || error || '启用失败'));
-        throw error;
-    }
-}
-const {
-    attachToLayers: attachSwipeToLayers,
-    detachFromLayers: detachSwipeFromLayers,
-    updateSwipePosition,
-    updateSwipeMode,
-} = useMapSwipe();
-
-const mapContainerRect = ref(null);
-
 const store = useCompassStore();
 const selectedPalace = computed(() => store.selectedPalace);
 
@@ -383,24 +177,6 @@ const selectedPalace = computed(() => store.selectedPalace);
 const handleCloseExplanation = () => {
     store.setSelectedPalace(null);
 };
-
-// ========== Map Swipe Event Handlers ==========
-function handleSwipePositionUpdate(position) {
-    layerStore.updateSwipePosition(position);
-    updateSwipePosition(position);
-}
-
-function handleSwipeModeUpdate(mode) {
-    layerStore.updateSwipeMode(mode);
-    updateSwipeMode(mode);
-}
-
-function handleSwipeClose() {
-    layerStore.disableSwipe();
-    detachSwipeFromLayers();
-    clearSwipeCompareLayers();
-    mapInstance.value?.render?.();
-}
 
 // ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
@@ -545,6 +321,32 @@ const layerList = ref(
 );
 const layerInstances = {}; // 存储所有底图层实例 (TileLayer/VectorTileLayer)
 
+// ========== Map Swipe Setup (via composable) ==========
+const {
+    mapContainerRect,
+    enableBasemapSwipe,
+    restoreSwipe,
+    clearSwipeCompareLayers,
+    detachSwipeFromLayers,
+    handleSwipePositionUpdate,
+    handleSwipeModeUpdate,
+    handleSwipeClose,
+} = createBasemapSwipe({
+    mapInstance,
+    layerStore,
+    resolvePresetLayerIds,
+    createBasemapLayerFromSource,
+    LAYER_CONFIGS,
+    NORM_BASE,
+    TIANDITU_TK,
+    customMapUrl,
+    layerInstances,
+    switchLayerById: (id, opts) => switchLayerById?.(id, opts),
+    emitBaseLayersChangeBatched: () => emitBaseLayersChangeBatched?.(),
+    selectedLayer,
+    message,
+});
+
 const { handleLayerContextAction } = useLayerContextMenuActions({
     layerInstances,
     getLayerConfigs: () => LAYER_CONFIGS,
@@ -567,15 +369,23 @@ const { initializeBasemapLayers } = createBasemapLayerBootstrap({
 
 // --- 全局变量 (非响应式) ---
 const componentUnmountedRef = ref(false);
-const pendingBusPickRef = ref(null);
-const pendingReverseGeocodePickRef = ref(null);
-const pendingDownloadBoxPickRef = ref(null);
-let downloadBoxInteraction = null;
+
+// ========== 交互选点功能 (via composable) ==========
+const {
+    pendingBusPickRef,
+    pendingReverseGeocodePickRef,
+    pendingDownloadBoxPickRef,
+    startBusPointPick,
+    startReverseGeocodePick,
+    cancelDownloadBoxPick,
+    pickDownloadExtent,
+    disposeAll: disposeInteractionPickers,
+} = createMapInteractionPickers({ mapInstance });
+
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
 let compassManagerRef = null;
-let districtManagerRef = null;
 
 // 图层引用
 let baseLayer, labelLayer;
@@ -1075,6 +885,12 @@ onMounted(async () => {
             }
         }
 
+        // ========== Phase 3.1: 恢复持久化的卷帘状态 ==========
+        // 如果 localStorage 中 swipeConfig.enabled 为 true，重新附加裁剪效果
+        if (!componentUnmountedRef.value) {
+            restoreSwipe();
+        }
+
         // ========== Phase 4: 立即应用 URL 参数（移除人为延迟） ==========
         // 之前有短暂延迟以确保瓦片请求到达网络层，但为了保证底图请求
         // 立即触发，这里移除任意人为延迟，改为依赖 prioritizeTileSourceRequest
@@ -1193,8 +1009,8 @@ onUnmounted(() => {
     stopMapViewSync();
     stopGraticule();
     detachSwipeFromLayers();
-    districtManagerRef?.dispose?.();
-    districtManagerRef = null;
+    disposeDistrictManager();
+    disposeInteractionPickers();
     compassManagerRef?.dispose?.();
     compassManagerRef = null;
     rightDragZoomController?.dispose?.();
@@ -1207,14 +1023,6 @@ onUnmounted(() => {
     _cleanupMapEventHandlers?.();
     _cleanupMapEventHandlers = null;
     attrStore.setMapExtent(null);
-    if (pendingBusPickRef.value?.reject) {
-        pendingBusPickRef.value.reject(new Error('地图已卸载'));
-        pendingBusPickRef.value = null;
-    }
-    if (pendingReverseGeocodePickRef.value?.reject) {
-        pendingReverseGeocodePickRef.value.reject(new Error('地图已卸载'));
-        pendingReverseGeocodePickRef.value = null;
-    }
     if (mapInstance.value) mapInstance.value.setTarget(null);
 });
 
@@ -1461,106 +1269,7 @@ function refreshLayersState() {
     emitBaseLayersChangeBatched();
 }
 
-// [隶属] 组件交互-路径选点
-// [作用] 启动地图点选 Promise，用于公交起终点拾取。
-// [交互] 由外部组件通过 defineExpose 调用。
-function startBusPointPick(type) {
-    if (!mapInstance.value) {
-        return Promise.reject(new Error('地图尚未初始化'));
-    }
-
-    if (pendingReverseGeocodePickRef.value?.reject) {
-        pendingReverseGeocodePickRef.value.reject(new Error('逆地理编码选点已取消'));
-        pendingReverseGeocodePickRef.value = null;
-    }
-
-    const pickType = type === 'end' ? 'end' : 'start';
-
-    if (pendingBusPickRef.value?.reject) {
-        pendingBusPickRef.value.reject(new Error('上一次选点已取消'));
-    }
-
-    return new Promise((resolve, reject) => {
-        pendingBusPickRef.value = { type: pickType, resolve, reject };
-    });
-}
-
-// [隶属] 组件交互-逆地理编码选点
-// [作用] 启动地图点选 Promise，用于单击拾点后执行逆地理编码落图。
-function startReverseGeocodePick() {
-    if (!mapInstance.value) {
-        return Promise.reject(new Error('地图尚未初始化'));
-    }
-
-    if (pendingReverseGeocodePickRef.value?.reject) {
-        pendingReverseGeocodePickRef.value.reject(new Error('上一次逆地理编码选点已取消'));
-    }
-
-    return new Promise((resolve, reject) => {
-        pendingReverseGeocodePickRef.value = { resolve, reject };
-    });
-}
-
-function cancelDownloadBoxPick(reason = '下载范围选择已取消') {
-    if (downloadBoxInteraction && mapInstance.value) {
-        mapInstance.value.removeInteraction(downloadBoxInteraction);
-    }
-    downloadBoxInteraction = null;
-    if (pendingDownloadBoxPickRef.value?.reject) {
-        pendingDownloadBoxPickRef.value.reject(new Error(reason));
-    }
-    pendingDownloadBoxPickRef.value = null;
-}
-
-function pickDownloadExtent() {
-    if (!mapInstance.value) {
-        return Promise.reject(new Error('地图尚未初始化'));
-    }
-
-    if (pendingDownloadBoxPickRef.value?.reject) {
-        pendingDownloadBoxPickRef.value.reject(new Error('上一次范围选择已取消'));
-    }
-
-    return new Promise((resolve, reject) => {
-        pendingDownloadBoxPickRef.value = { resolve, reject };
-        downloadBoxInteraction = new DragBox({
-            condition: () => true,
-        });
-        mapInstance.value.addInteraction(downloadBoxInteraction);
-
-        downloadBoxInteraction.on('boxend', () => {
-            const geometry = downloadBoxInteraction?.getGeometry?.();
-            const extent = geometry?.getExtent?.();
-            if (downloadBoxInteraction && mapInstance.value) {
-                mapInstance.value.removeInteraction(downloadBoxInteraction);
-            }
-            downloadBoxInteraction = null;
-            const pending = pendingDownloadBoxPickRef.value;
-            pendingDownloadBoxPickRef.value = null;
-
-            if (!extent || extent.length < 4) {
-                pending?.reject?.(new Error('下载范围获取失败'));
-                return;
-            }
-
-            // extent 当前是 EPSG:3857 格式 [minX, minY, maxX, maxY]
-            // 转换为 WGS84 格式 (EPSG:4326)
-            const [minX_3857, minY_3857, maxX_3857, maxY_3857] = extent;
-
-            // 使用 toLonLat 将两个角的坐标转换
-            const [minLon, minLat] = toLonLat([minX_3857, minY_3857]);
-            const [maxLon, maxLat] = toLonLat([maxX_3857, maxY_3857]);
-
-            // 构建 WGS84 坐标系下的 extent [minLon, minLat, maxLon, maxLat]
-            const wgs84Extent = [minLon, minLat, maxLon, maxLat];
-
-            pending?.resolve?.({
-                extent: wgs84Extent,
-                crs: 'EPSG:4326', // 返回的是 WGS84 坐标
-            });
-        });
-    });
-}
+// ========== 交互选点功能已移至 createMapInteractionPickers composable ==========
 
 async function startReverseGeocodePickAndDraw() {
     const picked = await startReverseGeocodePick();
@@ -1727,57 +1436,21 @@ function activateInteraction(type) {
     activateDrawMeasure(type, (props) => emit('feature-selected', props));
 }
 
-function ensureDistrictManager() {
-    if (!mapInstance.value) return null;
-
-    if (!districtManagerRef) {
-        districtManagerRef = new DistrictManager({
-            map: mapInstance.value,
-            tocStore,
-            userDataLayers,
-            emitUserLayersChange,
-            emitGraphicsOverview,
-            serializeManagedFeatures,
-        });
-    }
-
-    return districtManagerRef;
-}
-
-// [隶属] 行政区划-边界加载
-// [作用] 根据 adcode 加载边界 GeoJSON，执行 GCJ02->WGS84 纠偏并自动聚焦。
-// [交互] 由 HomeView 接收 ControlsPanel 树节点事件后调用。
-async function focusDistrictByAdcode(payload = {}) {
-    const adcode = String(payload?.adcode || payload?.value || '').trim();
-    if (!/^\d{6}$/.test(adcode)) {
-        throw new Error('行政区 adcode 必须是 6 位数字');
-    }
-
-    const manager = ensureDistrictManager();
-    if (!manager) {
-        throw new Error('地图尚未初始化');
-    }
-
-    return manager.loadBoundary({
-        adcode,
-        name: String(payload?.name || payload?.label || '').trim(),
-        fit: payload?.fit !== false,
-    });
-}
-
-function setDistrictLayerVisibility(adcode, visible) {
-    const manager = ensureDistrictManager();
-    if (manager) {
-        manager.setDistrictLayerVisibility(adcode, visible);
-    }
-}
-
-function removeDistrictLayer(adcode) {
-    const manager = ensureDistrictManager();
-    if (manager) {
-        manager.removeDistrictLayer(adcode);
-    }
-}
+// ========== 行政区划管理 (via composable) ==========
+const {
+    ensureDistrictManager,
+    focusDistrictByAdcode,
+    setDistrictLayerVisibility,
+    removeDistrictLayer,
+    disposeDistrictManager,
+} = createDistrictManagerFeature({
+    mapInstance,
+    tocStore,
+    userDataLayers,
+    emitUserLayersChange,
+    emitGraphicsOverview,
+    serializeManagedFeatures,
+});
 
 // [隶属] 组件交互-绘图与测量
 // [作用] 清理当前激活的绘图/捕捉交互和提示覆盖物。

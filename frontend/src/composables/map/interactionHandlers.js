@@ -1,6 +1,7 @@
 export { createCoordinateSystemConversionFeature } from './features/useCoordinateSystemConversion';
 export { createDrawMeasureFeature } from './features/useDrawMeasure';
 export { createMapEventHandlers } from './features/useMapEventHandlers';
+export { createMapInteractionPickers } from './features/useMapInteractionPickers';
 export { createMapSearchAndCoordinateInputFeature } from './features/useMapSearchAndCoordinateInput';
 export { createMapUIEventHandlers } from './features/useMapUIEventHandlers';
 export { createRightDragZoomController } from './features/useRightDragZoom';

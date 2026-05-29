@@ -260,6 +260,7 @@ frontend/
     │       │   ├── index.js                     # features 聚合导出
     │       │   ├── basemapLayerFactory.js        # Basemap layer factory (raster vs vector tile)
     │       │   ├── useBasemapLayerBootstrap.js  # 底图初始化
+    │       │   ├── useBasemapSwipe.js           # 🆕 底图卷帘分析 composable（双底图对比裁剪）
     │       │   ├── useBasemapResilience.js      # 底图容灾与兜底
     │       │   ├── useBasemapSelectionWatcher.js # 底图切换监听
     │       │   ├── useBasemapStateManagement.js # 底图状态管理
@@ -267,6 +268,7 @@ frontend/
     │       │   ├── useCoordinateSystemConversion.js # CRS 转换
     │       │   ├── useCreateManagedVectorLayer.js   # 托管矢量图层创建
     │       │   ├── useDeferredUserLayerApis.js      # 图层 API 延迟加载
+    │       │   ├── useDistrictManager.js         # 🆕 行政区划管理 composable（边界加载/聚焦/可见性）
     │       │   ├── useDrawMeasure.js             # 绘制与测量
     │       │   ├── useLayerContextMenuActions.js # 图层上下文菜单动作
     │       │   ├── useLayerControlHandlers.js    # 图层控制处理
@@ -276,6 +278,7 @@ frontend/
     │       │   ├── useManagedFeatureSerialization.js # 要素序列化
     │       │   ├── useManagedLayerStyle.js       # 图层样式
     │       │   ├── useMapEventHandlers.js        # 地图事件处理
+    │       │   ├── useMapInteractionPickers.js   # 🆕 地图交互选点 composable（公交/逆地编/下载框选）
     │       │   ├── useMapSearchAndCoordinateInput.js # 搜索与坐标输入
     │       │   ├── useMapUIEventHandlers.js      # UI 事件处理
     │       │   ├── useRightDragZoom.js           # 右键拖拽缩放
