@@ -392,7 +392,7 @@ async function useGps() {
 .ghost-btn {
     height: 30px;
     padding: 0 10px;
-    border: 1px solid #a2cda9;
+    border: 1px solid var(--border-brand);
     border-radius: 8px;
     background: #ffffff;
     color: var(--brand-primary-dark);
@@ -400,7 +400,7 @@ async function useGps() {
 }
 
 .card-row {
-    border: 1px solid rgba(49, 133, 70, 0.18);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
     background: rgba(255, 255, 255, 0.92);
     border-radius: 10px;
     padding: 10px;
@@ -449,10 +449,10 @@ button {
 input[type='number'],
 select {
     height: 34px;
-    border: 1px solid #bfdac5;
+    border: 1px solid var(--border-brand-light);
     border-radius: 8px;
     padding: 0 10px;
-    color: #1f3b28;
+    color: var(--text-brand-dark);
     background: #fff;
 }
 

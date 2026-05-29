@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 .large-image {
     max-width: 90%;
     max-height: 90%;
-    border: 2px solid rgba(48, 148, 65, 0.78);
+    border: 2px solid rgba(var(--brand-primary-rgb), 0.78);
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
@@ -265,8 +265,8 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 20px;
     right: 20px;
-    background: rgba(48, 148, 65, 0.2);
-    border: 1px solid rgba(48, 148, 65, 0.75);
+    background: rgba(var(--brand-primary-rgb), 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.75);
     border-radius: 8px;
     color: #fff;
     font-size: 40px;

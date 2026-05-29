@@ -734,7 +734,7 @@ onMounted(async () => {
     margin: 0 auto;
     background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     box-shadow: 0 8px 32px rgba(33, 74, 49, 0.05);
     border-radius: 12px;
 }
@@ -766,7 +766,7 @@ onMounted(async () => {
     display: inline-block;
     width: 12px;
     height: 12px;
-    border: 2px solid rgba(76, 175, 80, 0.1);
+    border: 2px solid rgba(var(--brand-primary-rgb), 0.1);
     border-top: 2px solid var(--brand-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
@@ -793,7 +793,7 @@ onMounted(async () => {
     background: rgba(255, 255, 255, 0.9);
     border-radius: 8px;
     overflow: hidden;
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     box-shadow: 0 4px 12px rgba(33, 74, 49, 0.05);
     display: flex;
     flex-direction: column;
@@ -844,12 +844,12 @@ onMounted(async () => {
 }
 
 .key-value {
-    background: rgba(76, 175, 80, 0.05);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     padding: 12px;
     border-radius: 4px;
     font-family: monospace;
     color: #214a31;
-    border: 1px solid rgba(76, 175, 80, 0.1);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.1);
     margin: 0 0 12px 0;
     word-break: break-all;
 }
@@ -886,7 +886,7 @@ onMounted(async () => {
 .key-input {
     width: 100%;
     padding: 10px;
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 4px;
     font-family: monospace;
     font-size: 12px;
@@ -899,7 +899,7 @@ onMounted(async () => {
 .key-input:focus {
     outline: none;
     border-color: var(--brand-primary);
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.2);
 }
 
 .button-group {
@@ -919,7 +919,7 @@ onMounted(async () => {
 }
 
 .btn-edit {
-    background: rgba(76, 175, 80, 0.1);
+    background: rgba(var(--brand-primary-rgb), 0.1);
     color: var(--brand-primary);
     border: 1px solid var(--brand-primary);
 }
@@ -950,8 +950,8 @@ onMounted(async () => {
 }
 
 .btn-cancel {
-    background: #e0e0e0;
-    color: #333;
+    background: var(--border-light);
+    color: var(--text-primary);
 }
 
 .btn-cancel:hover {
@@ -959,9 +959,9 @@ onMounted(async () => {
 }
 
 .key-footer {
-    background: rgba(76, 175, 80, 0.02);
+    background: rgba(var(--brand-primary-rgb), 0.02);
     padding: 8px 16px;
-    border-top: 1px solid rgba(76, 175, 80, 0.1);
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.1);
     font-size: 11px;
     color: #6c9e78;
 }
@@ -969,7 +969,7 @@ onMounted(async () => {
 .agent-config-section {
     margin-top: 16px;
     background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 8px;
     padding: 16px;
 }

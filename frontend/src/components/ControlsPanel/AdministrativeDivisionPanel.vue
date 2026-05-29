@@ -210,13 +210,13 @@ watch(
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid #e0eee0;
+    border: 1px solid var(--border-brand-light);
     z-index: 1060;
 }
 
 /* 头部：使用 #56AB56 鲜艳绿 */
 .eco-header {
-    background-color: #56ab56;
+    background-color: var(--brand-accent);
     padding: 14px 16px;
     display: flex;
     justify-content: space-between;
@@ -268,11 +268,11 @@ watch(
 .eco-input {
     width: 100%;
     height: 38px;
-    background: #f1f8f1;
-    border: 1px solid #d5e8d5;
+    background: var(--bg-brand-light);
+    border: 1px solid var(--border-brand-light);
     border-radius: 12px;
     padding: 0 35px 0 12px;
-    color: #2c3e50;
+    color: var(--text-brand-dark);
     font-size: 13px;
     outline: none;
     transition: all 0.2s;
@@ -280,8 +280,8 @@ watch(
 
 .eco-input:focus {
     background: #ffffff;
-    border-color: #56ab56;
-    box-shadow: 0 0 0 3px rgba(86, 171, 86, 0.15);
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 3px rgba(var(--brand-accent-rgb), 0.15);
 }
 
 .search-icon {
@@ -298,13 +298,13 @@ watch(
 }
 
 .eco-stats {
-    background: #e9f5e9;
+    background: var(--bg-brand-light);
     padding: 6px 14px;
     border-radius: 20px;
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    color: #468a46;
+    color: var(--text-brand);
     font-size: 11px;
     font-weight: bold;
 }
@@ -312,7 +312,7 @@ watch(
 .stat-divider {
     width: 1px;
     height: 10px;
-    background: #c5dcc5;
+    background: var(--border-brand-light);
 }
 
 /* 列表主体 */
@@ -328,7 +328,7 @@ watch(
 }
 
 .eco-panel-body::-webkit-scrollbar-thumb {
-    background: #56ab56;
+    background: var(--brand-accent);
     border-radius: 10px;
 }
 
@@ -342,11 +342,11 @@ watch(
 .eco-loading {
     padding: 40px 0;
     text-align: center;
-    color: #88a088;
+    color: var(--text-muted);
 }
 
 .eco-retry-btn {
-    background: #56ab56;
+    background: var(--brand-accent);
     color: white;
     border: none;
     padding: 6px 16px;
@@ -357,7 +357,7 @@ watch(
 
 .eco-empty-state {
     text-align: center;
-    color: #adc0ad;
+    color: var(--text-muted);
     padding: 40px 0;
     font-size: 13px;
 }

@@ -648,18 +648,18 @@ watch(username, (nextUsername) => {
 :root {
     --primary-color: var(--brand-primary);
     --primary-hover: var(--brand-primary-dark);
-    --error-color: #f44336;
+    --error-color: var(--danger);
     --success-color: var(--brand-primary);
-    --text-color: #333;
-    --light-bg: #f9f9f9;
-    --border-color: #e0e0e0;
+    --text-color: var(--text-primary);
+    --light-bg: var(--bg-secondary);
+    --border-color: var(--border-light);
 }
 
 .register-container {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
-    color: #333;
-    background-color: #f9f9f9;
+    color: var(--text-primary);
+    background-color: var(--bg-secondary);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -731,7 +731,7 @@ watch(username, (nextUsername) => {
 .mode-switch {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    border: 1px solid #dfe8df;
+    border: 1px solid var(--border-brand-light);
     border-radius: 8px;
     overflow: hidden;
     margin-bottom: 22px;
@@ -739,8 +739,8 @@ watch(username, (nextUsername) => {
 
 .mode-btn {
     border: none;
-    background: #f4f8f4;
-    color: #406040;
+    background: var(--bg-brand-light);
+    color: var(--text-brand-dark);
     padding: 10px 12px;
     font-size: 14px;
     font-weight: 600;
@@ -768,7 +768,7 @@ label {
     margin-bottom: 10px;
     font-weight: 500;
     font-size: 15px;
-    color: #444;
+    color: var(--text-primary);
     letter-spacing: 0.3px;
     transition: color 0.3s ease;
 }
@@ -786,13 +786,13 @@ label {
     left: 12px;
     top: 50%;
     transform: translateY(-50%);
-    color: #999;
+    color: var(--text-muted);
 }
 
 input {
     width: 100%;
     padding: 12px 12px 12px 40px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--border-light);
     border-radius: 5px;
     transition: all 0.3s ease;
     font-size: 15px;
@@ -801,7 +801,7 @@ input {
 input:focus {
     outline: none;
     border-color: var(--brand-primary);
-    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.15);
 }
 
 .hint {
@@ -809,7 +809,7 @@ input:focus {
     align-items: center;
     margin-top: 6px;
     font-size: 13px;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .hint i {
@@ -827,7 +827,7 @@ input:focus {
 }
 
 .username-check.error {
-    color: #d32f2f;
+    color: var(--danger);
 }
 
 .username-check.loading {
@@ -841,10 +841,10 @@ input:focus {
 }
 
 .avatar-item {
-    border: 1px solid #dfe7df;
+    border: 1px solid var(--border-brand-light);
     border-radius: 10px;
     background: #f8fbf8;
-    color: #2e402e;
+    color: var(--text-brand-dark);
     padding: 8px;
     display: grid;
     justify-items: center;
@@ -856,13 +856,13 @@ input:focus {
 .avatar-item:hover {
     transform: translateY(-1px);
     border-color: var(--brand-primary-light);
-    background: #f1f8f1;
+    background: var(--bg-brand-light);
 }
 
 .avatar-item.active {
     border-color: var(--brand-primary);
-    background: #edf7ed;
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+    background: var(--bg-brand-light);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.15);
 }
 
 .avatar-item img {
@@ -884,7 +884,7 @@ input:focus {
 }
 
 .validation-message.error {
-    color: #f44336;
+    color: var(--danger);
     display: block;
 }
 
@@ -902,9 +902,9 @@ input:focus {
 }
 
 .quick-btn {
-    border: 1px solid #9ab79a;
-    background: #f7fbf7;
-    color: #2b5a2b;
+    border: 1px solid var(--border-brand-light);
+    background: var(--bg-brand-light);
+    color: var(--text-brand-dark);
     border-radius: 5px;
     padding: 11px 8px;
     font-size: 14px;
@@ -922,33 +922,33 @@ input:focus {
 }
 
 .quick-btn:hover:not(:disabled) {
-    background: #edf7ed;
+    background: var(--bg-brand-light);
     border-color: var(--brand-primary-light);
     transform: translateY(-1px);
 }
 
 .quick-btn.guest-login {
-    background: linear-gradient(135deg, var(--bg-brand-light) 0%, #f1f8f1 100%);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-brand-light) 100%);
     border-color: var(--brand-primary-light);
 }
 
 .quick-btn.guest-login:hover:not(:disabled) {
-    background: linear-gradient(135deg, #dceee4 0%, var(--bg-brand-light) 100%);
+    background: linear-gradient(135deg, var(--bg-brand-lighter) 0%, var(--bg-brand-light) 100%);
     border-color: var(--brand-primary-light);
-    box-shadow: 0 2px 6px rgba(76, 175, 80, 0.2);
+    box-shadow: 0 2px 6px rgba(var(--brand-primary-rgb), 0.2);
 }
 
 .quick-btn.confirm-login {
     background: linear-gradient(135deg, var(--bg-brand-lighter) 0%, var(--brand-primary-lighter) 100%);
     border-color: var(--brand-primary-light);
-    color: #1b5e20;
+    color: var(--text-brand-dark);
     font-weight: 600;
 }
 
 .quick-btn.confirm-login:hover:not(:disabled) {
     background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-primary-light) 100%);
     border-color: var(--brand-accent-dark);
-    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+    box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.3);
 }
 
 .quick-btn:disabled {
@@ -993,7 +993,7 @@ input:focus {
     text-align: center;
     margin-top: 20px;
     font-size: 14px;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .login-link a {
@@ -1025,10 +1025,10 @@ input:focus {
 .form-footer {
     padding: 15px 30px;
     text-align: center;
-    background-color: #f7f7f7;
-    border-top: 1px solid #eee;
+    background-color: var(--bg-secondary);
+    border-top: 1px solid var(--border-light);
     font-size: 13px;
-    color: #777;
+    color: var(--text-muted);
     flex-shrink: 0;
 }
 

@@ -661,7 +661,7 @@ onUnmounted(() => {
 .news-subtitle {
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
-    color: #999;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
 }
@@ -680,7 +680,7 @@ onUnmounted(() => {
     border: 1px solid #ddd;
     border-radius: 20px;
     background: transparent;
-    color: #999;
+    color: var(--text-muted);
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
     cursor: pointer;
@@ -705,7 +705,7 @@ onUnmounted(() => {
     justify-content: center;
     gap: 12px;
     padding: 40px 16px;
-    color: #999;
+    color: var(--text-muted);
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
 }
@@ -762,7 +762,7 @@ onUnmounted(() => {
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
     font-weight: 600;
-    color: #999;
+    color: var(--text-muted);
     border-radius: 4px;
     background: rgba(0, 0, 0, 0.08);
 }
@@ -791,7 +791,7 @@ onUnmounted(() => {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 14px;
     font-weight: 500;
-    color: #333;
+    color: var(--text-primary);
     line-height: 1.45;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -811,7 +811,7 @@ onUnmounted(() => {
 .news-desc {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 12px;
-    color: #999;
+    color: var(--text-muted);
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -826,7 +826,7 @@ onUnmounted(() => {
 .score-value {
     font-family: 'Courier New', Courier, monospace;
     font-size: 10px;
-    color: #999;
+    color: var(--text-muted);
     background: rgba(0, 0, 0, 0.08);
     padding: 2px 8px;
     border-radius: 10px;
@@ -836,7 +836,7 @@ onUnmounted(() => {
 .news-empty {
     padding: 40px 16px;
     text-align: center;
-    color: #999;
+    color: var(--text-muted);
     font-family: 'Courier New', Courier, monospace;
     font-size: 12px;
 }
@@ -853,7 +853,7 @@ onUnmounted(() => {
     gap: 6px;
     font-family: 'Courier New', Courier, monospace;
     font-size: 10px;
-    color: #999;
+    color: var(--text-muted);
 }
 
 .footer-status.live {

@@ -734,7 +734,7 @@ onBeforeUnmount(() => {
 .header-title {
     font-size: 15px;
     font-weight: 700;
-    color: #1f6b46;
+    color: var(--text-brand-dark);
 }
 
 .header-subtitle {
@@ -755,7 +755,7 @@ onBeforeUnmount(() => {
     padding: 4px 10px;
     border-radius: 999px;
     background: rgba(46, 126, 78, 0.12);
-    color: #1f6b46;
+    color: var(--text-brand-dark);
 }
 
 .status-chip.status-success {
@@ -818,13 +818,13 @@ onBeforeUnmount(() => {
 .form-row label,
 .form-field label {
     font-size: 12px;
-    color: #2f5b47;
+    color: var(--text-brand-dark);
     font-weight: 600;
 }
 
 .field-hint {
     font-size: 11px;
-    color: #5b7a68;
+    color: var(--text-secondary);
 }
 
 .form-input,
@@ -834,12 +834,12 @@ onBeforeUnmount(() => {
     background: rgba(255, 255, 255, 0.92);
     padding: 8px 10px;
     font-size: 12px;
-    color: #1f2e28;
+    color: var(--text-brand-dark);
 }
 
 .form-input:disabled {
     background: rgba(233, 241, 236, 0.7);
-    color: #799183;
+    color: var(--text-muted);
 }
 
 .bbox-grid {
@@ -874,13 +874,13 @@ onBeforeUnmount(() => {
     flex-direction: column;
     gap: 2px;
     font-size: 12px;
-    color: #1f2e28;
+    color: var(--text-brand-dark);
     font-weight: 500;
 }
 
 .mode-hint {
     font-size: 11px;
-    color: #5b7a68;
+    color: var(--text-secondary);
     font-weight: 400;
 }
 
@@ -917,7 +917,7 @@ onBeforeUnmount(() => {
     border: 1px solid rgba(31, 122, 77, 0.3);
     border-radius: 9px;
     background: rgba(255, 255, 255, 0.9);
-    color: #1f6b46;
+    color: var(--text-brand-dark);
     font-weight: 600;
     padding: 8px 12px;
     cursor: pointer;
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
     display: flex;
     justify-content: space-between;
     font-size: 12px;
-    color: #1f6b46;
+    color: var(--text-brand-dark);
     font-weight: 700;
 }
 
@@ -976,16 +976,16 @@ onBeforeUnmount(() => {
     background: rgba(240, 248, 255, 0.85);
 }
 .transfer-card .progress-head {
-    color: #1e40af;
+    color: var(--info);
 }
 .transfer-track {
     background: rgba(37, 99, 235, 0.12);
 }
 .transfer-bar {
-    background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
+    background: linear-gradient(90deg, #60a5fa 0%, var(--info) 100%);
 }
 .transfer-meta {
-    color: #1e3a8a;
+    color: var(--info);
 }
 .transfer-actions {
     display: flex;
@@ -994,14 +994,14 @@ onBeforeUnmount(() => {
 }
 .cancel-btn {
     border-color: rgba(220, 38, 38, 0.4);
-    color: #dc2626;
+    color: var(--danger);
     padding: 6px 12px;
 }
 .cancel-btn:hover {
     background: rgba(220, 38, 38, 0.1);
 }
 .re-download-btn {
-    background: #2563eb;
+    background: var(--info);
     padding: 6px 12px;
     font-size: 12px;
 }
@@ -1025,7 +1025,7 @@ onBeforeUnmount(() => {
 }
 
 .error-text {
-    color: #c0392b;
+    color: var(--danger);
     font-weight: 600;
 }
 

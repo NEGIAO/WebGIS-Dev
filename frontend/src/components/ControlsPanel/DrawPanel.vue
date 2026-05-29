@@ -157,7 +157,7 @@ function handleClear() {
     border-color: var(--brand-accent);
     background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, var(--bg-active) 100%);
     color: var(--brand-accent-dark);
-    box-shadow: 0 2px 8px rgba(87, 184, 97, 0.25);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-accent) 25%, transparent);
 }
 
 .tool-label {

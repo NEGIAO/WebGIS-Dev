@@ -279,7 +279,7 @@ async function handlePasteJson() {
     max-height: unset;
     overflow: auto;
     border-radius: 12px;
-    background: linear-gradient(180deg, #f4fff8 0%, #ebf9f1 100%);
+    background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-brand-light) 100%);
     border: 1px solid rgba(38, 122, 78, 0.22);
     box-shadow: 0 10px 24px rgba(36, 105, 67, 0.16);
     padding: 14px;
@@ -295,20 +295,20 @@ async function handlePasteJson() {
 .aoi-dialog-title {
     font-size: 15px;
     font-weight: 700;
-    color: #1f6b46;
+    color: var(--text-brand-dark);
 }
 
 .aoi-dialog-close {
     border: none;
     background: transparent;
-    color: #3f6b55;
+    color: var(--text-brand);
     font-size: 20px;
     cursor: pointer;
 }
 
 .aoi-dialog-tip {
     font-size: 12px;
-    color: #4b6d5a;
+    color: var(--text-secondary);
     line-height: 1.5;
     margin-bottom: 10px;
 }
@@ -322,18 +322,18 @@ async function handlePasteJson() {
 
 .aoi-dialog-label {
     font-size: 12px;
-    color: #2f5a45;
+    color: var(--text-brand-dark);
     font-weight: 600;
 }
 
 .aoi-dialog-input,
 .aoi-dialog-textarea {
     width: 100%;
-    border: 1px solid #b8d9c4;
+    border: 1px solid var(--border-brand-light);
     border-radius: 8px;
     padding: 8px 10px;
     font-size: 12px;
-    color: #275240;
+    color: var(--text-brand-dark);
     background: #ffffff;
     box-sizing: border-box;
 }
@@ -347,8 +347,8 @@ async function handlePasteJson() {
 .aoi-dialog-input:focus,
 .aoi-dialog-textarea:focus {
     outline: none;
-    border-color: #2b9a62;
-    box-shadow: 0 0 0 2px rgba(43, 154, 98, 0.16);
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.16);
 }
 
 .aoi-dialog-actions-row {
@@ -363,36 +363,36 @@ async function handlePasteJson() {
 }
 
 .aoi-dialog-mini-btn {
-    border: 1px solid #8fc5a6;
+    border: 1px solid var(--border-brand);
     border-radius: 6px;
-    background: #f0fbf4;
-    color: #1f6b46;
+    background: var(--bg-brand-light);
+    color: var(--text-brand-dark);
     padding: 4px 8px;
     font-size: 11px;
     cursor: pointer;
 }
 
 .aoi-dialog-mini-btn:hover {
-    border-color: #6fb68e;
-    background: #e5f7ed;
+    border-color: var(--border-brand);
+    background: var(--bg-brand-light);
 }
 
 .aoi-dialog-link {
     display: inline-block;
     font-size: 11px;
     line-height: 1.4;
-    color: #1d7f4e;
+    color: var(--text-brand);
     word-break: break-all;
 }
 
 .aoi-dialog-source {
     font-size: 11px;
-    color: #52735f;
+    color: var(--text-secondary);
     margin-bottom: 8px;
 }
 
 .aoi-dialog-error {
-    color: #b84141;
+    color: var(--danger);
     font-size: 12px;
     margin-bottom: 8px;
 }
@@ -404,29 +404,29 @@ async function handlePasteJson() {
 }
 
 .aoi-dialog-btn {
-    border: 1px solid #9bc9ad;
+    border: 1px solid var(--border-brand);
     border-radius: 8px;
-    background: #f2fbf6;
-    color: #225f40;
+    background: var(--bg-brand-light);
+    color: var(--text-brand-dark);
     padding: 6px 12px;
     font-size: 12px;
     cursor: pointer;
 }
 
 .aoi-dialog-btn:hover {
-    border-color: #6cb88c;
-    background: #e7f7ef;
+    border-color: var(--border-brand);
+    background: var(--bg-brand-light);
 }
 
 .aoi-dialog-btn-primary {
-    border-color: #2c9a63;
-    background: #2c9a63;
+    border-color: var(--brand-accent);
+    background: var(--brand-accent);
     color: #ffffff;
 }
 
 .aoi-dialog-btn-primary:hover {
-    border-color: #247f52;
-    background: #247f52;
+    border-color: var(--brand-accent-dark);
+    background: var(--brand-accent-dark);
 }
 
 .aoi-dialog-btn-ghost {

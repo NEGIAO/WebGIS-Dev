@@ -468,7 +468,7 @@ onMounted(async () => {
 }
 
 .admin-card {
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.55);
     padding: 12px;
@@ -503,7 +503,7 @@ onMounted(async () => {
 }
 
 .overview-item {
-    border: 1px solid rgba(76, 175, 80, 0.15);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
     border-radius: 10px;
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.8);
@@ -536,7 +536,7 @@ onMounted(async () => {
 .admin-textarea {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 8px;
     background: #ffffff;
     color: #333333;
@@ -600,7 +600,7 @@ onMounted(async () => {
 }
 
 .admin-mini-btn.danger {
-    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    background: linear-gradient(135deg, #f87171 0%, var(--danger) 100%);
     border-color: rgba(220, 38, 38, 0.5);
 }
 
@@ -639,12 +639,12 @@ onMounted(async () => {
 }
 
 .rows-wrap::-webkit-scrollbar-thumb {
-    background: rgba(76, 175, 80, 0.3);
+    background: rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 4px;
 }
 
 .row-item {
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.8);
     padding: 10px;
@@ -661,7 +661,7 @@ onMounted(async () => {
     background: rgba(243, 255, 247, 0.8);
     padding: 8px;
     border-radius: 6px;
-    border: 1px dashed rgba(76, 175, 80, 0.2);
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.2);
 }
 
 .row-actions {
@@ -673,7 +673,7 @@ onMounted(async () => {
 
 .rows-empty {
     margin-top: 10px;
-    border: 1px dashed rgba(76, 175, 80, 0.4);
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.4);
     border-radius: 10px;
     padding: 16px;
     font-size: 13px;

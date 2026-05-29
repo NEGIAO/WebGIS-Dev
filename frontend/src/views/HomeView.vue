@@ -1208,7 +1208,8 @@ onMounted(async () => {
     height: 100%;
     width: 100%;
     box-sizing: border-box;
-    background: #368a3a9e;
+    background: rgba(var(--brand-primary-rgb), 0.62);
+    background: color-mix(in srgb, var(--brand-primary) 62%, transparent);
     overflow: hidden;
 }
 
@@ -1269,7 +1270,8 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(180deg, rgba(236, 248, 238, 0.9), rgba(216, 239, 220, 0.88));
+    background: var(--bg-brand-light);
+    background: color-mix(in srgb, var(--bg-brand-light) 90%, transparent);
     color: var(--brand-accent-dark);
     font-size: 15px;
     font-weight: 600;
@@ -1371,8 +1373,9 @@ onMounted(async () => {
     justify-content: center;
     flex-direction: column;
     gap: 10px;
-    background: rgba(31, 109, 56, 0.15);
-    color: #1f5a37;
+    background: rgba(var(--brand-primary-rgb), 0.15);
+    background: color-mix(in srgb, var(--brand-primary) 15%, transparent);
+    color: var(--text-brand);
     z-index: 22;
 }
 
@@ -1380,7 +1383,8 @@ onMounted(async () => {
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    border: 3px solid rgba(44, 133, 76, 0.22);
+    border: 3px solid rgba(var(--brand-primary-dark-rgb), 0.22);
+    border: 3px solid color-mix(in srgb, var(--brand-primary-dark) 22%, transparent);
     border-top-color: var(--brand-primary-dark);
     animation: weather-spin 0.9s linear infinite;
 }
@@ -1388,7 +1392,7 @@ onMounted(async () => {
 .weather-loading-text {
     font-size: 13px;
     font-weight: 600;
-    color: #2d6a46;
+    color: var(--text-brand);
 }
 
 @keyframes weather-spin {
@@ -1412,7 +1416,7 @@ onMounted(async () => {
     /* 大圆角，匹配导航栏风格 */
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
     overflow: hidden;
-    border: 1px solid #e0eee0;
+    border: 1px solid var(--bg-brand-lighter);
     z-index: 2000;
 }
 
@@ -1469,15 +1473,13 @@ onMounted(async () => {
 }
 
 .eco-tag {
-    background: #e9f5e9;
-    /* 浅绿背景 */
-    color: #468a46;
-    /* 深绿文字 */
+    background: var(--bg-brand-light);
+    color: var(--text-brand);
     padding: 4px 12px;
     border-radius: 20px;
     font-size: 11px;
     font-weight: bold;
-    border: 1px solid #d5e8d5;
+    border: 1px solid var(--border-brand-light);
 }
 
 /* 属性列表 */
@@ -1512,14 +1514,14 @@ onMounted(async () => {
 
 .eco-key {
     font-size: 11px;
-    color: #88a088;
+    color: var(--text-muted);
     text-transform: uppercase;
     font-weight: bold;
 }
 
 .eco-val {
     font-size: 13px;
-    color: #333;
+    color: var(--text-primary);
     font-weight: 500;
     word-break: break-all;
 }
@@ -1527,7 +1529,7 @@ onMounted(async () => {
 /* 空状态 */
 .eco-empty {
     text-align: center;
-    color: #adc0ad;
+    color: var(--text-muted);
     font-size: 12px;
     padding: 20px 0;
 }

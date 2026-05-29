@@ -675,7 +675,7 @@ async function startTransitPlan() {
 }
 
 .status-line.error {
-    color: #c62828;
+    color: var(--danger);
 }
 
 .debug-box {

@@ -665,7 +665,7 @@ function showResult(type, msg) {
 .item-label {
     font-size: 13px;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .item-desc {
@@ -701,11 +701,11 @@ function showResult(type, msg) {
 .param-select {
     width: 100%;
     padding: 7px 10px;
-    border: 1px solid #d0d8d0;
+    border: 1px solid var(--border-light);
     border-radius: 6px;
     font-size: 13px;
     background: white;
-    color: #333;
+    color: var(--text-primary);
     box-sizing: border-box;
     transition: border-color 0.2s;
 }
@@ -719,7 +719,7 @@ function showResult(type, msg) {
 
 .param-hint {
     font-size: 11px;
-    color: #999;
+    color: var(--text-muted);
     margin-top: 2px;
 }
 
@@ -767,10 +767,10 @@ function showResult(type, msg) {
 .mode-btn {
     flex: 1;
     padding: 6px 8px;
-    border: 1px solid #d0d8d0;
+    border: 1px solid var(--border-light);
     border-radius: 6px;
     background: white;
-    color: #666;
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;

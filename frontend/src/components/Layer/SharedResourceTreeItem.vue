@@ -144,7 +144,7 @@ function forwardLoad(resource) {
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    color: #5f7e6d;
+    color: var(--text-secondary);
     cursor: pointer;
     padding: 0;
 }
@@ -175,7 +175,7 @@ function forwardLoad(resource) {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    color: #2f4f3e;
+    color: var(--text-brand-dark);
     cursor: pointer;
 }
 
@@ -184,7 +184,7 @@ function forwardLoad(resource) {
     flex: 1;
     border: 1px solid rgba(153, 195, 170, 0.28);
     background: rgba(255, 255, 255, 0.68);
-    color: #2f4f3e;
+    color: var(--text-brand-dark);
     border-radius: 7px;
     padding: 6px 8px;
     display: flex;
@@ -196,9 +196,9 @@ function forwardLoad(resource) {
 }
 
 .shared-tree-file-btn:hover {
-    border-color: #2f9a57;
-    background: #f4faf7;
-    color: #1d7541;
+    border-color: var(--border-brand);
+    background: var(--bg-brand-light);
+    color: var(--text-brand);
 }
 
 .shared-tree-type {
@@ -206,7 +206,7 @@ function forwardLoad(resource) {
     min-width: 34px;
     height: 18px;
     border-radius: 4px;
-    background: linear-gradient(135deg, #68c282 0%, #4fb373 100%);
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-accent) 100%);
     color: #ffffff;
     font-size: 10px;
     line-height: 18px;
@@ -225,8 +225,8 @@ function forwardLoad(resource) {
 .shared-tree-count {
     flex-shrink: 0;
     font-size: 10px;
-    color: #5f7e6d;
-    border: 1px solid #d4e6db;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-brand-light);
     border-radius: 10px;
     padding: 1px 6px;
     line-height: 1.4;

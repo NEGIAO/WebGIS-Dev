@@ -729,13 +729,13 @@ onBeforeUnmount(() => {
     position: absolute;
     top: 8px;
     right: 8px;
-    background: rgb(48, 148, 65);
+    background: var(--brand-primary-dark);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(14, 178, 71, 0.35);
+    border: 1px solid rgba(var(--brand-accent-rgb), 0.35);
     padding: 4px;
     border-radius: 8px;
-    box-shadow: 0 10px 24px rgba(16, 65, 41, 0.22);
+    box-shadow: 0 10px 24px rgba(var(--brand-primary-dark-rgb), 0.22);
     z-index: 10;
 }
 
@@ -760,7 +760,7 @@ onBeforeUnmount(() => {
 
 .custom-select-trigger {
     padding: 4px 10px;
-    border: 1px solid rgba(22, 158, 69, 0.45);
+    border: 1px solid var(--border-brand);
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.85);
     color: #0f172a;
@@ -775,7 +775,7 @@ onBeforeUnmount(() => {
 
 .custom-select-trigger:hover {
     background: rgba(255, 255, 255, 1);
-    box-shadow: 0 0 4px rgba(22, 158, 69, 0.2);
+    box-shadow: 0 0 4px rgba(var(--brand-primary-rgb), 0.2);
 }
 
 .dropdown-arrow {
@@ -796,7 +796,7 @@ onBeforeUnmount(() => {
     min-width: 100%;
     max-height: 450px;
     background: rgba(255, 255, 255, 0.98);
-    border: 1px solid var(--bg-brand-lighter);
+    border: 1px solid var(--border-brand-light);
     border-radius: 6px;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
     z-index: 2200;
@@ -845,7 +845,7 @@ onBeforeUnmount(() => {
 
 .layer-select {
     padding: 4px 8px;
-    border: 1px solid rgba(22, 158, 69, 0.45);
+    border: 1px solid var(--border-brand);
     border-radius: 4px;
     outline: none;
     display: inline-block;
@@ -878,10 +878,10 @@ onBeforeUnmount(() => {
     width: 160px;
     padding: 4px;
     border-radius: 4px;
-    border: 1px solid rgba(220, 252, 231, 0.35);
+    border: 1px solid var(--border-brand-light);
     font-size: 12px;
     background: rgba(255, 255, 255, 0.18);
-    color: var(--bg-brand-light);
+    color: var(--brand-primary-lighter);
 }
 
 .custom-url-input::placeholder {
@@ -901,7 +901,7 @@ onBeforeUnmount(() => {
 .detected-format-hint {
     margin-top: 4px;
     padding: 4px 6px;
-    background: rgba(34, 197, 94, 0.15);
+    background: rgba(var(--brand-primary-rgb), 0.15);
     border-left: 3px solid var(--brand-primary);
     border-radius: 2px;
     color: var(--brand-primary-lighter);
@@ -927,8 +927,8 @@ onBeforeUnmount(() => {
 
 .graticule-btn {
     background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(220, 252, 231, 0.45);
-    color: var(--bg-brand-light);
+    border: 1px solid var(--border-brand-light);
+    color: var(--brand-primary-lighter);
     border-radius: 4px;
     cursor: pointer;
     padding: 3px 8px;
@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
 .graticule-btn.active {
     background: var(--bg-brand-light);
     color: var(--brand-accent-dark);
-    border-color: var(--bg-brand-light);
+    border-color: var(--border-brand-light);
     font-weight: 700;
 }
 
@@ -1017,7 +1017,7 @@ onBeforeUnmount(() => {
 }
 
 .close-panel-btn:hover {
-    color: #ef4444;
+    color: var(--danger);
 }
 
 .layer-list {
@@ -1032,8 +1032,8 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 8px;
     padding: 4px;
-    background: #f9f9f9;
-    border: 1px solid #eee;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
     border-radius: 4px;
     cursor: move;
     font-size: 13px;
@@ -1048,12 +1048,12 @@ onBeforeUnmount(() => {
 
 .layer-item.dragging {
     opacity: 0.5;
-    background: #e0e0e0;
+    background: var(--border-light);
 }
 
 .drag-handle {
     cursor: grab;
-    color: #999;
+    color: var(--text-muted);
     font-weight: bold;
     padding-right: 4px;
 }
@@ -1074,7 +1074,7 @@ onBeforeUnmount(() => {
     position: fixed;
     min-width: 152px;
     background: rgba(255, 255, 255, 0.98);
-    border: 1px solid var(--bg-brand-lighter);
+    border: 1px solid var(--border-brand-light);
     border-radius: 6px;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
     padding: 4px;
@@ -1110,7 +1110,7 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 6px;
     padding: 6px 8px;
-    background: #f5f5f5;
+    background: var(--bg-brand-light);
 }
 
 .opacity-label {
@@ -1167,7 +1167,7 @@ onBeforeUnmount(() => {
     position: absolute;
     min-width: 136px;
     background: rgba(255, 255, 255, 0.99);
-    border: 1px solid var(--bg-brand-lighter);
+    border: 1px solid var(--border-brand-light);
     border-radius: 6px;
     box-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
     padding: 4px;

@@ -542,7 +542,7 @@ onUnmounted(() => {
 <style scoped>
 .map-controls-group {
     --brand-color: var(--brand-primary-dark);
-    --brand-color-rgb: 48, 148, 65;
+    --brand-color-rgb: var(--brand-primary-dark-rgb);
     --glass-bg: linear-gradient(
         135deg,
         rgba(var(--brand-color-rgb), 0.85),
@@ -722,7 +722,7 @@ onUnmounted(() => {
 .menu-label {
     font-size: 12px;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     padding: 0 4px;
@@ -736,7 +736,7 @@ onUnmounted(() => {
 
 .format-option {
     padding: 6px 8px;
-    border: 1px solid rgba(48, 148, 65, 0.2);
+    border: 1px solid var(--border-brand-light);
     border-radius: 8px;
     background: transparent;
     cursor: pointer;
@@ -745,14 +745,14 @@ onUnmounted(() => {
 }
 
 .format-option:hover {
-    background: rgba(48, 148, 65, 0.08);
-    border-color: rgba(48, 148, 65, 0.4);
+    background: var(--bg-hover);
+    border-color: var(--border-brand);
 }
 
 .format-option.active {
-    background: rgba(48, 148, 65, 0.15);
+    background: var(--bg-active);
     border-color: var(--brand-primary-dark);
-    box-shadow: inset 0 0 0 1px rgba(48, 148, 65, 0.3);
+    box-shadow: inset 0 0 0 1px var(--bg-active);
 }
 
 .format-label {
@@ -766,7 +766,7 @@ onUnmounted(() => {
 .format-example {
     display: block;
     font-size: 11px;
-    color: #666;
+    color: var(--text-secondary);
     font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -775,7 +775,7 @@ onUnmounted(() => {
 
 .menu-divider {
     height: 1px;
-    background: rgba(48, 148, 65, 0.1);
+    background: rgba(var(--brand-primary-rgb), 0.1);
     margin: 8px 0;
 }
 
@@ -787,27 +787,27 @@ onUnmounted(() => {
 
 .decimal-option {
     padding: 8px 12px;
-    border: 1px solid rgba(48, 148, 65, 0.2);
+    border: 1px solid var(--border-brand-light);
     border-radius: 8px;
     background: transparent;
     cursor: pointer;
     text-align: center;
     font-size: 12px;
     font-weight: 600;
-    color: #333;
+    color: var(--text-primary);
     transition: all 0.2s var(--trans-curve);
 }
 
 .decimal-option:hover {
-    background: rgba(48, 148, 65, 0.08);
-    border-color: rgba(48, 148, 65, 0.4);
+    background: var(--bg-hover);
+    border-color: var(--border-brand);
 }
 
 .decimal-option.active {
-    background: rgba(48, 148, 65, 0.2);
+    background: var(--bg-active);
     border-color: var(--brand-primary-dark);
     color: var(--brand-primary-dark);
-    box-shadow: 0 0 0 2px rgba(48, 148, 65, 0.1);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.1);
 }
 
 .coordinate-input {

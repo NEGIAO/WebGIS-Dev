@@ -12,15 +12,19 @@
 :root {
     /* ===== 品牌主色 ===== */
     --brand-primary: #4caf50;
+    --brand-primary-rgb: 76, 175, 80;
     --brand-primary-dark: #2e7d32;
+    --brand-primary-dark-rgb: 46, 125, 50;
     --brand-primary-light: #81c784;
     --brand-primary-lighter: #a5d6a7;
     --brand-primary-bg: #e8f5e9;
 
     /* ===== 品牌强调色 ===== */
     --brand-accent: #57b861;
+    --brand-accent-rgb: 87, 184, 97;
     --brand-accent-dark: #0a6815;
     --brand-accent-light: #5bcf89;
+    --brand-accent-light-rgb: 91, 207, 137;
     --brand-accent-muted: #397d39;
 
     /* ===== 渐变 ===== */
@@ -51,10 +55,14 @@
 
     /* ===== 功能色（不随主题变化） ===== */
     --danger: #ef4444;
+    --danger-rgb: 239, 68, 68;
     --danger-light: #fecaca;
     --warning: #f8b600;
+    --warning-rgb: 248, 182, 0;
     --info: #1890ff;
+    --info-rgb: 24, 144, 255;
     --success: #52c41a;
+    --success-rgb: 82, 196, 26;
 
     /* ===== 圆角 ===== */
     --radius-sm: 4px;
@@ -71,14 +79,18 @@
 /* ===== 蓝色主题 ===== */
 [data-theme="blue"] {
     --brand-primary: #1976d2;
+    --brand-primary-rgb: 25, 118, 210;
     --brand-primary-dark: #0d47a1;
+    --brand-primary-dark-rgb: 13, 71, 161;
     --brand-primary-light: #64b5f6;
     --brand-primary-lighter: #bbdefb;
     --brand-primary-bg: #e3f2fd;
 
     --brand-accent: #2196f3;
+    --brand-accent-rgb: 33, 150, 243;
     --brand-accent-dark: #0d47a1;
     --brand-accent-light: #90caf9;
+    --brand-accent-light-rgb: 144, 202, 249;
     --brand-accent-muted: #1565c0;
 
     --brand-gradient: linear-gradient(135deg, #1976d2 0%, #0d47a1 100%);

@@ -710,10 +710,10 @@ onBeforeUnmount(() => {
 <style>
 /** GIS 主题控制配色映射：以截图中The Science of Where标准绿色和GIS专业应用为原形搭配色块 **/
 :root {
-    --arc-pro-bg: #fefefe;
+    --arc-pro-bg: var(--bg-primary);
     --arc-pro-panel-base: #f0f3f2;
-    --arc-pro-topbar-green: #52a751; /* 主题Logo顶板色系 */
-    --arc-pro-win-hover-red: #d13c41;
+    --arc-pro-topbar-green: var(--brand-accent); /* 主题Logo顶板色系 */
+    --arc-pro-win-hover-red: var(--danger);
     --arc-pro-toolbar-line: #cdcece;
     --arc-pro-ribbon-btn-bg: transparent;
     --arc-pro-ribbon-hover: #dbefdc; /* 操作栏按住焦点和光标指引浅亮主绿区搭配 */
@@ -742,15 +742,15 @@ onBeforeUnmount(() => {
     min-height: 280px;
 
     /* 强切面原生操作外边样式设计而非圆滑过渡浮片体系。这更迎合工业设计质感。 */
-    background: #fefefe;
+    background: var(--bg-primary);
     border-radius: 4px;
     box-shadow:
         0 4px 18px rgba(0, 0, 0, 0.18),
         0 1px 4px rgba(0, 0, 0, 0.1),
         0 0 1px rgba(0, 0, 0, 0.4);
     font-family: var(--arc-pro-font-def, 'Segoe UI', Tahoma, sans-serif);
-    color: #2b302c;
-    border: 1px solid #758679;
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
     overflow: hidden;
 }
 
@@ -766,7 +766,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #4ea84c; /* 完全替换成同UI的纯实体偏饱和标准图文配色主题绿顶横线! 不要光玻璃和繁杂花色渲染! */
+    background: var(--brand-accent); /* 完全替换成同UI的纯实体偏饱和标准图文配色主题绿顶横线! 不要光玻璃和繁杂花色渲染! */
     color: #fff;
     user-select: none;
     flex-shrink: 0;
@@ -819,7 +819,7 @@ onBeforeUnmount(() => {
     background: rgba(255, 255, 255, 0.3);
 }
 .win-close:hover {
-    background: #d71526;
+    background: var(--danger);
 } /* Standard close behavior (Red on OS) */
 
 /* --------------- */
@@ -830,7 +830,7 @@ onBeforeUnmount(() => {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: #fdfdfd;
+    background: var(--bg-primary);
 }
 
 /* --------------- */
@@ -839,14 +839,14 @@ onBeforeUnmount(() => {
 .pro-toolbar {
     height: 42px;
     flex-shrink: 0;
-    background: #f1f3f1;
-    border-bottom: 1px solid #dcdfdc;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
     padding: 0 10px;
     display: flex;
     align-items: center;
     gap: 16px;
     font-size: 12px;
-    color: #38423b;
+    color: var(--text-primary);
     /* BoxShadow形成微微分离深度视觉表现力：类似顶部Ribbon板和正内容间分隔。  */
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
@@ -864,8 +864,8 @@ onBeforeUnmount(() => {
 .divider {
     height: 24px;
     width: 1px;
-    background-color: #cdcfcd;
-    box-shadow: 1px 0 0 #fdfdfd;
+    background-color: var(--border-light);
+    box-shadow: 1px 0 0 var(--bg-primary);
 }
 
 /* 自定义选框和普通Button呈现极简化无厚黑边款的高逼格专业控制按钮特征 */
@@ -883,7 +883,7 @@ onBeforeUnmount(() => {
     width: 14px;
     height: 14px;
     margin-right: 6px;
-    border: 1px solid #728178;
+    border: 1px solid var(--border-light);
     background: #fff;
     border-radius: 2px; /* Pro微小转角方方格 */
     display: flex;
@@ -893,14 +893,14 @@ onBeforeUnmount(() => {
 .icon-check {
     width: 10px;
     height: 10px;
-    fill: #4ea84c;
+    fill: var(--brand-accent);
 }
 .pro-toggle input:checked + .pro-toggle-box {
-    border-color: #4ea84c;
-    background: #eef7ee;
+    border-color: var(--brand-accent);
+    background: var(--bg-brand-light);
 }
 .pro-toggle:hover .pro-toggle-box {
-    border-color: #278627;
+    border-color: var(--brand-primary-dark);
 }
 
 .pro-toolbar-btn {
@@ -913,7 +913,7 @@ onBeforeUnmount(() => {
     gap: 6px;
     border-radius: 2px;
     font-size: 12px;
-    color: #38403b;
+    color: var(--text-primary);
     cursor: pointer;
     outline: none;
     transition: all 0.15s ease-out;
@@ -924,14 +924,14 @@ onBeforeUnmount(() => {
     fill: currentColor;
 }
 .pro-toolbar-btn:hover {
-    background: #e3efea;
-    border-color: #afceba;
-    color: #2d6b35;
+    background: var(--bg-brand-light);
+    border-color: var(--border-brand-light);
+    color: var(--text-brand);
 }
 .pro-toolbar-btn.active {
-    background: #dcece1;
-    border-color: #a4cead;
-    color: #17541f;
+    background: var(--bg-brand-light);
+    border-color: var(--border-brand);
+    color: var(--text-brand-dark);
 }
 
 /* 分组聚合级运算小组件面板展示优化方案,匹配传统软件状态反馈栏质地 */

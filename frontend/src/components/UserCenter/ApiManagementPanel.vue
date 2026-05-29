@@ -521,7 +521,7 @@ onMounted(async () => {
     flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 20px;
-    border-bottom: 1px solid rgba(76, 175, 80, 0.2);
+    border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     padding-bottom: 10px;
 }
 
@@ -540,7 +540,7 @@ onMounted(async () => {
 
 .tab-btn:hover {
     color: var(--acc-text-main, #2c5f3e);
-    background: rgba(91, 207, 137, 0.15);
+    background: rgba(var(--brand-accent-light-rgb), 0.15);
 }
 
 .tab-btn.active {
@@ -552,7 +552,7 @@ onMounted(async () => {
 /* Tab Content */
 .tab-panel {
     background: rgba(255, 255, 255, 0.6);
-    border: 1px solid rgba(76, 175, 80, 0.15);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 4px 16px rgba(49, 111, 69, 0.05);
@@ -587,11 +587,11 @@ onMounted(async () => {
 .filter-controls select,
 .filter-controls input {
     padding: 6px 12px;
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 8px;
     font-size: 13px;
     background: rgba(255, 255, 255, 0.9);
-    color: #333;
+    color: var(--text-primary);
     outline: none;
     transition: border-color 0.2s;
 }
@@ -624,7 +624,7 @@ onMounted(async () => {
 .data-table-wrapper {
     overflow-x: auto;
     border-radius: 8px;
-    border: 1px solid rgba(76, 175, 80, 0.15);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
 }
 
 .data-table {
@@ -635,8 +635,8 @@ onMounted(async () => {
 }
 
 .data-table thead {
-    background: rgba(76, 175, 80, 0.1);
-    border-bottom: 2px solid rgba(76, 175, 80, 0.2);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    border-bottom: 2px solid rgba(var(--brand-primary-rgb), 0.2);
 }
 
 .data-table th {
@@ -648,7 +648,7 @@ onMounted(async () => {
 
 .data-table td {
     padding: 12px;
-    border-bottom: 1px solid rgba(76, 175, 80, 0.1);
+    border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.1);
     color: #444;
 }
 
@@ -667,7 +667,7 @@ onMounted(async () => {
         monospace;
     color: #444;
     word-break: break-all;
-    background: rgba(76, 175, 80, 0.08);
+    background: rgba(var(--brand-primary-rgb), 0.08);
     padding: 2px 6px;
     border-radius: 4px;
 }
@@ -686,7 +686,7 @@ onMounted(async () => {
     color: #1976d2;
 }
 .role-badge.registered {
-    background: rgba(76, 175, 80, 0.15);
+    background: rgba(var(--brand-primary-rgb), 0.15);
     color: var(--brand-primary-dark);
 }
 .role-badge.admin {
@@ -732,7 +732,7 @@ onMounted(async () => {
 }
 
 .status-code.success {
-    background: rgba(76, 175, 80, 0.15);
+    background: rgba(var(--brand-primary-rgb), 0.15);
     color: #1b5e20;
 }
 .status-code.client-error {
@@ -760,7 +760,7 @@ onMounted(async () => {
     display: inline-block;
     width: 18px;
     height: 18px;
-    border: 2px solid rgba(76, 175, 80, 0.2);
+    border: 2px solid rgba(var(--brand-primary-rgb), 0.2);
     border-top: 2px solid var(--brand-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
@@ -795,7 +795,7 @@ onMounted(async () => {
 .btn-paging {
     padding: 6px 16px;
     background: white;
-    border: 1px solid rgba(76, 175, 80, 0.3);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 6px;
     cursor: pointer;
     font-weight: 500;
@@ -804,7 +804,7 @@ onMounted(async () => {
 }
 
 .btn-paging:hover:not(:disabled) {
-    background: rgba(76, 175, 80, 0.1);
+    background: rgba(var(--brand-primary-rgb), 0.1);
     border-color: var(--brand-primary);
 }
 
@@ -829,7 +829,7 @@ onMounted(async () => {
 
 .quota-card {
     background: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(76, 175, 80, 0.2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 12px;
     padding: 20px;
     transition: all 0.3s ease;
@@ -846,7 +846,7 @@ onMounted(async () => {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
-    border-bottom: 1px solid rgba(76, 175, 80, 0.1);
+    border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.1);
     padding-bottom: 10px;
 }
 

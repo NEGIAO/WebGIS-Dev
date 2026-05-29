@@ -507,14 +507,14 @@ const getBasemapLabel = (id) => {
 
 /* 悬停效果 */
 .sidebar-item:hover {
-    background: rgba(14, 149, 41, 0.292);
-    color: #d12f2f;
+    background: rgba(var(--brand-primary-rgb), 0.15);
+    color: var(--danger);
 }
 
 /* 激活状态 - 亮绿色渐变 */
 .sidebar-item.active {
     background: linear-gradient(200deg, #6a9e98 0%, var(--brand-accent) 100%);
-    color: #fff;
+    color: var(--text-on-brand);
     box-shadow: 0 4px 15px rgba(0, 191, 165, 0.4);
 }
 
@@ -564,7 +564,7 @@ const getBasemapLabel = (id) => {
     justify-content: space-between;
     align-items: center;
     padding: 20px;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-light);
     background: var(--brand-gradient-header);
     color: white;
 }
@@ -610,29 +610,29 @@ const getBasemapLabel = (id) => {
     display: block;
     font-weight: 600;
     margin-bottom: 8px;
-    color: #333;
+    color: var(--text-primary);
     font-size: 14px;
 }
 
 .basemap-select {
     width: 100%;
     padding: 10px 12px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--border-light);
     border-radius: 6px;
     font-size: 14px;
     background: white;
-    color: #333;
+    color: var(--text-primary);
     cursor: pointer;
     transition: all 0.3s;
 }
 
 .basemap-select:hover {
-    border-color: #108e23;
+    border-color: var(--brand-accent);
 }
 
 .basemap-select:focus {
     outline: none;
-    border-color: #039c4b;
+    border-color: var(--brand-accent);
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
@@ -644,39 +644,39 @@ const getBasemapLabel = (id) => {
 .mode-btn {
     flex: 1;
     padding: 10px 16px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--border-light);
     border-radius: 6px;
-    background: white;
-    color: #666;
+    background: var(--bg-primary);
+    color: var(--text-secondary);
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s;
 }
 
 .mode-btn:hover {
-    border-color: #1a944f;
-    color: #049924;
+    border-color: var(--brand-accent);
+    color: var(--brand-accent-dark);
 }
 
 .mode-btn.active {
-    background: linear-gradient(135deg, #089414 0%, #18a83c 100%);
-    border-color: #15a852;
-    color: white;
+    background: var(--brand-gradient);
+    border-color: var(--brand-accent);
+    color: var(--text-on-brand);
 }
 
 .dialog-footer {
     display: flex;
     gap: 12px;
     padding: 16px 24px;
-    border-top: 1px solid #f0f0f0;
-    background: #f9f9f9;
+    border-top: 1px solid var(--border-light);
+    background: var(--bg-secondary);
 }
 
 .cancel-btn,
 .confirm-btn {
     flex: 1;
     padding: 12px 20px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--border-light);
     border-radius: 6px;
     font-size: 14px;
     font-weight: 600;
@@ -686,18 +686,18 @@ const getBasemapLabel = (id) => {
 
 .cancel-btn {
     background: white;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .cancel-btn:hover {
-    border-color: #999;
-    background: #f5f5f5;
+    border-color: var(--text-muted);
+    background: var(--bg-secondary);
 }
 
 .confirm-btn {
-    background: linear-gradient(135deg, var(--brand-accent-dark) 0%, #0f995b 100%);
-    border-color: #1b963c;
-    color: white;
+    background: var(--brand-gradient);
+    border-color: var(--brand-accent);
+    color: var(--text-on-brand);
 }
 
 .confirm-btn:hover {

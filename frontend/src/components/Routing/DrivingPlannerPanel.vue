@@ -455,7 +455,7 @@ async function startDriveSearch(): Promise<void> {
     font-size: 18px;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #1e3a8a;
+    color: var(--info);
 }
 
 .title-sub {
@@ -512,13 +512,13 @@ async function startDriveSearch(): Promise<void> {
 .plan-btn {
     border: 1px solid rgba(59, 130, 246, 0.46);
     border-radius: 8px;
-    background: linear-gradient(145deg, #2563eb, #1d4ed8);
+    background: linear-gradient(145deg, #2563eb, var(--info));
     color: #fff;
     padding: 8px 12px;
     cursor: pointer;
     font-weight: 600;
     white-space: nowrap;
-    box-shadow: 0 6px 14px rgba(29, 78, 216, 0.25);
+    box-shadow: 0 6px 14px rgba(var(--info-rgb), 0.25);
     transition:
         transform 0.15s ease,
         box-shadow 0.2s ease;
@@ -526,7 +526,7 @@ async function startDriveSearch(): Promise<void> {
 
 .plan-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 10px 18px rgba(29, 78, 216, 0.3);
+    box-shadow: 0 10px 18px rgba(var(--info-rgb), 0.3);
 }
 
 .plan-btn:disabled {
@@ -540,7 +540,7 @@ async function startDriveSearch(): Promise<void> {
 }
 
 .status-line.error {
-    color: #c62828;
+    color: var(--danger);
 }
 
 .debug-box {
@@ -579,7 +579,7 @@ async function startDriveSearch(): Promise<void> {
 .route-title {
     font-size: 13px;
     font-weight: 700;
-    color: #1d4ed8;
+    color: var(--info);
     margin: 2px 2px 8px;
 }
 
@@ -610,7 +610,7 @@ async function startDriveSearch(): Promise<void> {
     margin-top: 2px;
     font-size: 13px;
     font-weight: 700;
-    color: #1e3a8a;
+    color: var(--info);
 }
 
 .route-line-raw {
@@ -649,7 +649,7 @@ async function startDriveSearch(): Promise<void> {
 .route-name {
     font-size: 13px;
     font-weight: 700;
-    color: #1e3a8a;
+    color: var(--info);
     line-height: 1.35;
 }
 
@@ -658,7 +658,7 @@ async function startDriveSearch(): Promise<void> {
     border-radius: 999px;
     border: 1px solid rgba(59, 130, 246, 0.22);
     background: rgba(255, 255, 255, 0.85);
-    color: #1d4ed8;
+    color: var(--info);
     padding: 2px 8px;
     font-size: 11px;
     font-weight: 700;

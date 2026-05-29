@@ -709,7 +709,7 @@ onBeforeUnmount(() => {
     font-size: 30px;
     font-weight: 700;
     letter-spacing: 1px;
-    background: linear-gradient(to bottom, #fff, #e0e0e0);
+    background: linear-gradient(to bottom, #fff, var(--border-light));
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -849,13 +849,13 @@ onBeforeUnmount(() => {
 
 .account-btn {
     background: rgba(186, 199, 191, 0.292);
-    border-color: rgba(91, 207, 137, 0.35);
+    border-color: rgba(var(--brand-accent-light-rgb), 0.35);
 }
 
 .account-btn:hover {
-    background: rgba(91, 207, 137, 0.24);
-    border-color: rgba(91, 207, 137, 0.55);
-    text-shadow: 0 0 8px rgba(91, 207, 137, 0.45);
+    background: rgba(var(--brand-accent-light-rgb), 0.24);
+    border-color: rgba(var(--brand-accent-light-rgb), 0.55);
+    text-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.45);
 }
 
 .highlight-magic {

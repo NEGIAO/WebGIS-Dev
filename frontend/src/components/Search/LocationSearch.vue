@@ -378,7 +378,7 @@ onBeforeUnmount(() => {
     border-radius: 6px;
     padding: 7px 8px;
     font-size: 12px;
-    color: #2b3e34;
+    color: var(--text-brand-dark);
     cursor: pointer;
 }
 
@@ -394,7 +394,7 @@ onBeforeUnmount(() => {
 }
 
 .status.loading {
-    color: #16553a;
+    color: var(--text-brand);
     background: rgba(221, 247, 232, 0.9);
 }
 
@@ -430,7 +430,7 @@ onBeforeUnmount(() => {
 
 .name {
     font-size: 13px;
-    color: #213a2d;
+    color: var(--text-brand-dark);
     font-weight: 600;
 }
 
@@ -444,7 +444,7 @@ onBeforeUnmount(() => {
 .copy-poi-btn {
     border: 1px solid rgba(0, 0, 0, 0.14);
     background: #ffffff;
-    color: #2f4f3e;
+    color: var(--text-brand-dark);
     border-radius: 6px;
     padding: 2px 7px;
     font-size: 11px;
@@ -454,21 +454,21 @@ onBeforeUnmount(() => {
 }
 
 .copy-poi-btn:hover {
-    border-color: #5ca67b;
-    background: #eef8f2;
-    color: #1f6e45;
+    border-color: var(--border-brand);
+    background: var(--bg-brand-light);
+    color: var(--text-brand);
 }
 
 .address {
     margin-top: 2px;
     font-size: 12px;
-    color: #5f7266;
+    color: var(--text-secondary);
 }
 
 .poi-id {
     margin-top: 3px;
     font-size: 11px;
-    color: #8fa399;
+    color: var(--text-muted);
     font-family: 'Courier New', monospace;
     word-break: break-all;
 }

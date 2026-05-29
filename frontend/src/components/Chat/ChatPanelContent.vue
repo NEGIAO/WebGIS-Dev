@@ -1235,7 +1235,7 @@ onMounted(async () => {
 
 .chat-header {
     background: white;
-    color: #333;
+    color: var(--text-primary);
     padding: 10px 15px;
     display: flex;
     justify-content: space-between;
@@ -1301,7 +1301,7 @@ onMounted(async () => {
 .model-input:focus {
     outline: none;
     border-color: var(--brand-primary);
-    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.1);
 }
 
 .refresh-models-btn {
@@ -1453,7 +1453,7 @@ onMounted(async () => {
 .header-controls .icon-btn {
     background: none;
     border: none;
-    color: #666;
+    color: var(--text-secondary);
     cursor: pointer;
     margin-left: 15px;
     font-size: 1.1em;
@@ -1463,7 +1463,7 @@ onMounted(async () => {
 
 .header-controls .icon-btn:hover {
     opacity: 1;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .chat-body {
@@ -1506,9 +1506,9 @@ onMounted(async () => {
 
 .message.assistant .message-content {
     background: white;
-    color: #333;
+    color: var(--text-primary);
     border-bottom-left-radius: 2px;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--border-light);
 }
 
 .think-panel {
@@ -1583,7 +1583,7 @@ textarea:focus {
 }
 
 .hint {
-    color: #666;
+    color: var(--text-secondary);
     font-size: 0.85em;
     margin-top: 4px;
     display: block;

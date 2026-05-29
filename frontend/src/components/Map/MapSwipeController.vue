@@ -300,26 +300,26 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(90deg, rgba(91, 207, 137, 0.1), rgba(91, 207, 137, 0.3));
+    background: linear-gradient(90deg, rgba(var(--brand-accent-light-rgb), 0.1), rgba(var(--brand-accent-light-rgb), 0.3));
     backdrop-filter: blur(4px);
-    border-left: 1px solid rgba(91, 207, 137, 0.5);
-    border-right: 1px solid rgba(91, 207, 137, 0.3);
+    border-left: 1px solid rgba(var(--brand-accent-light-rgb), 0.5);
+    border-right: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
     pointer-events: auto;
-    box-shadow: 0 0 8px rgba(91, 207, 137, 0.2);
+    box-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.2);
     transition: box-shadow 0.2s ease-out;
 }
 
 .swipe-splitter:hover,
 .swipe-splitter:focus {
-    box-shadow: 0 0 16px rgba(91, 207, 137, 0.4);
+    box-shadow: 0 0 16px rgba(var(--brand-accent-light-rgb), 0.4);
     outline: none;
 }
 
 .swipe-splitter.vertical {
     border-left: none;
     border-right: none;
-    border-top: 1px solid rgba(91, 207, 137, 0.5);
-    border-bottom: 1px solid rgba(91, 207, 137, 0.3);
+    border-top: 1px solid rgba(var(--brand-accent-light-rgb), 0.5);
+    border-bottom: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
 }
 
 /* ========== 句柄样式 ========== */
@@ -329,23 +329,23 @@ onUnmounted(() => {
     justify-content: center;
     width: 40px;
     height: 40px;
-    background: rgba(91, 207, 137, 0.8);
+    background: rgba(var(--brand-accent-light-rgb), 0.8);
     border-radius: 4px;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     transition: all 0.2s ease-out;
-    color: white;
+    color: var(--text-on-brand);
 }
 
 .swipe-splitter:hover .swipe-handle {
-    background: rgba(91, 207, 137, 1);
-    box-shadow: 0 4px 16px rgba(91, 207, 137, 0.3);
+    background: rgba(var(--brand-accent-light-rgb), 1);
+    box-shadow: 0 4px 16px rgba(var(--brand-accent-light-rgb), 0.3);
 }
 
 .handle-icon {
     width: 20px;
     height: 20px;
-    color: white;
+    color: var(--text-on-brand);
     opacity: 0.9;
 }
 
@@ -368,10 +368,10 @@ onUnmounted(() => {
     width: 36px;
     height: 36px;
     padding: 0;
-    background: rgba(91, 207, 137, 0.85);
+    background: rgba(var(--brand-accent-light-rgb), 0.85);
     border: none;
     border-radius: 4px;
-    color: white;
+    color: var(--text-on-brand);
     cursor: pointer;
     transition: all 0.2s ease-out;
     backdrop-filter: blur(8px);
@@ -379,8 +379,8 @@ onUnmounted(() => {
 }
 
 .control-btn:hover {
-    background: rgba(91, 207, 137, 1);
-    box-shadow: 0 4px 12px rgba(91, 207, 137, 0.3);
+    background: rgba(var(--brand-accent-light-rgb), 1);
+    box-shadow: 0 4px 12px rgba(var(--brand-accent-light-rgb), 0.3);
     transform: translateY(-2px);
 }
 
@@ -399,8 +399,8 @@ onUnmounted(() => {
     top: 20px;
     left: 20px;
     padding: 6px 12px;
-    background: rgba(91, 207, 137, 0.85);
-    color: white;
+    background: rgba(var(--brand-accent-light-rgb), 0.85);
+    color: var(--text-on-brand);
     border-radius: 4px;
     font-size: 12px;
     font-weight: 600;
@@ -444,14 +444,14 @@ onUnmounted(() => {
 /* ========== 暗黑模式适配 ========== */
 @media (prefers-color-scheme: dark) {
     .swipe-splitter {
-        background: linear-gradient(90deg, rgba(91, 207, 137, 0.15), rgba(91, 207, 137, 0.25));
-        border-left-color: rgba(91, 207, 137, 0.6);
-        border-right-color: rgba(91, 207, 137, 0.4);
+        background: linear-gradient(90deg, rgba(var(--brand-accent-light-rgb), 0.15), rgba(var(--brand-accent-light-rgb), 0.25));
+        border-left-color: rgba(var(--brand-accent-light-rgb), 0.6);
+        border-right-color: rgba(var(--brand-accent-light-rgb), 0.4);
     }
 
     .swipe-splitter.vertical {
-        border-top-color: rgba(91, 207, 137, 0.6);
-        border-bottom-color: rgba(91, 207, 137, 0.4);
+        border-top-color: rgba(var(--brand-accent-light-rgb), 0.6);
+        border-bottom-color: rgba(var(--brand-accent-light-rgb), 0.4);
     }
 }
 </style>

@@ -221,22 +221,22 @@ function formatTextWithFonts(text) {
 }
 
 .toast-success .toast-icon {
-    background: #34c759;
+    background: var(--success);
     color: #000000;
 }
 
 .toast-error .toast-icon {
-    background: #ff3b30;
+    background: var(--danger);
     color: #ffffff;
 }
 
 .toast-warning .toast-icon {
-    background: #ffcc00;
+    background: var(--warning);
     color: #000000;
 }
 
 .toast-info .toast-icon {
-    background: #0a84ff;
+    background: var(--info);
     color: #ffffff;
 }
 

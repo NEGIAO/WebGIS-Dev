@@ -1446,7 +1446,7 @@ async function loadSharedResource(resource) {
 .section-dot {
     width: 4px;
     height: 14px;
-    background: #56ab56;
+    background: var(--brand-accent);
     border-radius: 4px;
 }
 
@@ -1478,7 +1478,7 @@ async function loadSharedResource(resource) {
     background: var(--toc-btn-primary);
     color: #fff;
     border-color: var(--toc-btn-primary);
-    box-shadow: 0 4px 10px rgba(86, 171, 86, 0.3);
+    box-shadow: 0 4px 10px rgba(var(--brand-primary-rgb), 0.3);
 }
 
 /* 输入框组合样式 */
@@ -1576,13 +1576,13 @@ async function loadSharedResource(resource) {
     background-color: var(--toc-btn-primary);
     border: var(--toc-primary-dark);
     color: #ffffff;
-    box-shadow: 0 4px 12px rgba(86, 171, 86, 0.2);
+    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.2);
 }
 
 .eco-btn-op.primary:hover {
     background-color: var(--toc-btn-primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 6px 15px rgba(86, 171, 86, 0.3);
+    box-shadow: 0 6px 15px rgba(var(--brand-primary-rgb), 0.3);
 }
 
 /* “清空画布” - 采用柔和的橙黄色，避免过于突兀 */

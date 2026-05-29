@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    filter: drop-shadow(0 0 15px rgba(91, 207, 137, 0.4));
+    filter: drop-shadow(0 0 15px rgba(var(--brand-accent-light-rgb), 0.4));
 }
 
 /* Sci-fi SVG Ring */
@@ -156,7 +156,7 @@ onBeforeUnmount(() => {
 
 .ring-outer {
     fill: none;
-    stroke: rgba(91, 207, 137, 0.4);
+    stroke: rgba(var(--brand-accent-light-rgb), 0.4);
     stroke-width: 1.5;
     stroke-dasharray: 4 4 12 4;
     transform-origin: center;
@@ -174,8 +174,8 @@ onBeforeUnmount(() => {
 }
 
 .ring-inner {
-    fill: rgba(63, 181, 109, 0.15);
-    stroke: #3fb56d;
+    fill: rgba(var(--brand-accent-rgb), 0.15);
+    stroke: var(--brand-accent);
     stroke-width: 1.5;
     transform-origin: center;
     animation: pulse-triangle 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
     width: 72px;
     height: 72px;
     border-radius: 50%;
-    background: conic-gradient(from 0deg, transparent 70%, rgba(91, 207, 137, 0.5) 100%);
+    background: conic-gradient(from 0deg, transparent 70%, rgba(var(--brand-accent-light-rgb), 0.5) 100%);
     animation: rotate-clockwise 1.5s linear infinite;
     mask-image: radial-gradient(circle, transparent 40%, black 100%);
     -webkit-mask-image: radial-gradient(circle, transparent 40%, black 100%);
@@ -212,12 +212,12 @@ onBeforeUnmount(() => {
     padding: 12px 28px;
     border-radius: 6px;
     border-left: 2px solid var(--brand-accent-light);
-    border-right: 2px solid rgba(91, 207, 137, 0.3);
+    border-right: 2px solid rgba(var(--brand-accent-light-rgb), 0.3);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.4),
-        inset 0 0 15px rgba(91, 207, 137, 0.15);
+        inset 0 0 15px rgba(var(--brand-accent-light-rgb), 0.15);
     position: relative;
     overflow: hidden;
     clip-path: polygon(
@@ -247,7 +247,7 @@ onBeforeUnmount(() => {
     font-weight: 600;
     letter-spacing: 2px;
     text-transform: uppercase;
-    text-shadow: 0 0 10px rgba(91, 207, 137, 0.8);
+    text-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.8);
     position: relative;
 }
 
@@ -291,12 +291,12 @@ onBeforeUnmount(() => {
     100% {
         transform: scale(0.85);
         opacity: 0.6;
-        filter: drop-shadow(0 0 4px rgba(63, 181, 109, 0.5));
+        filter: drop-shadow(0 0 4px rgba(var(--brand-accent-rgb), 0.5));
     }
     50% {
         transform: scale(1.05) rotate(180deg);
         opacity: 1;
-        filter: drop-shadow(0 0 12px rgba(63, 181, 109, 0.9));
+        filter: drop-shadow(0 0 12px rgba(var(--brand-accent-rgb), 0.9));
     }
 }
 

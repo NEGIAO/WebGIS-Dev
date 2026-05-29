@@ -752,7 +752,7 @@ async function loadCustomTileset() {
     background: none;
     border: none;
     font-size: 20px;
-    color: #666;
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
