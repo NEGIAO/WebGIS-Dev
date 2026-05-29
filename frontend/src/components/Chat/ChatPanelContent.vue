@@ -328,7 +328,7 @@ const isDirectMode = computed(() => {
  * 切换路由模式
  * 在直连模式和代理模式之间切换，自动同步配置到配置面板
  */
-const toggleRoutingMode = () => {
+const toggleRoutingMode = async () => {
     if (isDirectMode.value) {
         // 当前是直连 → 切换到代理：清空直连配置
         directConfig.value = {
@@ -340,7 +340,7 @@ const toggleRoutingMode = () => {
             max_tokens: 8192,
             temperature: 0.2,
         };
-                message.success('已切换为后端代理模式');
+        message.success('已切换为后端代理模式');
     } else {
         // 当前是代理 → 切换到个人 Key 模式：使用默认直连配置
         directConfig.value = {
@@ -357,6 +357,8 @@ const toggleRoutingMode = () => {
     // 同步到配置面板
     syncDraftFromDirectConfig();
     updateWelcomeMessageIfNeeded();
+    // 重新加载 Agent 配置以同步模型名称（切换模式后 URL 和 Model 完全不同）
+    await reloadAgentConfig(false);
 };
 
 /**

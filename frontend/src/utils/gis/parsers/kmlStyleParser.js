@@ -97,8 +97,8 @@ function isLikelyIconHref(rawValue) {
     if (/^data:image\//i.test(value)) return true;
     if (/^blob:/i.test(value)) return true;
     if (/^https?:\/\//i.test(value)) return true;
-    if (/[\/\\]/.test(value) && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(value)) return true;
-    if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(value)) return true;
+    if (/[\/\\]/.test(value) && /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(value)) return true;
+    if (/\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(value)) return true;
     return false;
 }
 
@@ -383,21 +383,19 @@ export function convertKmlStyleToOlStyle(styleDef, options = {}) {
         // 处理 IconStyle（点图标）
         if (styleDef.icon && styleDef.icon.href) {
             const iconStyle = styleDef.icon;
-            if (!isLikelyIconHref(iconStyle.href)) {
-                // 非标准图标引用（如字体编码或自定义协议），跳过图标并回退到圆点
-                iconStyle.href = null;
-            }
+            // 使用局部变量，避免修改共享的 styleDef 对象（globalStyles Map 中的引用）
+            const validHref = isLikelyIconHref(iconStyle.href) ? iconStyle.href : null;
             try {
-                if (iconStyle.href) {
+                if (validHref) {
                     image = new Icon({
-                        src: iconStyle.href,
+                        src: validHref,
                         scale: Math.max(0.1, iconStyle.scale || 1),
                         // 容错处理：如果图标加载失败，回退到圆形
                         onLoad: () => {
                             // 图标成功加载
                         },
                         onError: () => {
-                            console.warn(`[kmlStyleParser] 图标加载失败: ${iconStyle.href}`);
+                            console.warn(`[kmlStyleParser] 图标加载失败: ${validHref}`);
                             // 图标加载失败时的处理由使用端决定
                         },
                     });

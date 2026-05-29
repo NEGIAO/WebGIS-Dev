@@ -608,7 +608,9 @@ export async function apiAgentChatCompletions(payload = {}) {
         body.override_temperature = Number(payload.override_temperature);
     }
 
-    return backendAPI.post('/api/agent/chat/completions', body);
+    return backendAPI.post('/api/agent/chat/completions', body, {
+        timeout: 60000, // LLM 推理可能需要较长时间
+    });
 }
 
 export async function apiAgentListModels(options = {}) {
@@ -666,7 +668,9 @@ export async function apiAgentChatProxy(payload = {}) {
     if (typeof payload.temperature !== 'undefined' && payload.temperature !== null)
         body.temperature = Number(payload.temperature);
 
-    return backendAPI.post('/api/agent/chat/proxy', body);
+    return backendAPI.post('/api/agent/chat/proxy', body, {
+        timeout: 60000, // LLM 推理可能需要较长时间
+    });
 }
 
 export async function apiStatisticsRealtime() {
