@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-05-28 更新）
+## 目录结构（2026-05-29 更新）
 
 以下结构按当前工程实际文件更新，尽量做到逐文件注释。
 
@@ -222,9 +222,13 @@ frontend/
     │       └── FloatingAccountPanel.vue            # 用户中心浮层主组件
     │
     ├── composables/
+    │   ├── dataImport/                          # 🆕 数据导入模块（拆分自 useLayerDataImport.js）
+    │   │   ├── rasterUtils.js                   # 栅格工具函数（波段统计/拉伸/NoData/采样器）
+    │   │   ├── vectorUtils.js                   # 矢量工具函数（解码/类型识别/标签字段）
+    │   │   └── index.js                         # barrel export
     │   ├── useGisLoader.ts                      # GIS 数据加载调度入口
     │   ├── useKmzLoader.js                      # KMZ 解析工具
-    │   ├── useLayerDataImport.js                # 导入数据转图层主流程
+    │   ├── useLayerDataImport.js                # 🔄 导入数据转图层主流程（已拆分工具函数）
     │   ├── useManagedLayerRegistry.js           # 托管图层注册/广播
     │   ├── useMapState.js                       # 地图状态与视图状态管理
     │   ├── useMapSwipe.ts                       # 地图对比滑块 Canvas 裁剪逻辑（仅作用于底图层）
@@ -295,11 +299,14 @@ frontend/
     │               └── contextMenu.js           # 右键菜单构建
     │
     ├── constants/
+    │   ├── basemap/                             # 🆕 底图配置模块（拆分自 useBasemapManager.ts）
+    │   │   ├── basemapConfig.ts                 # 图源定义 + 预设配置（合并配置，方便维护）
+    │   │   ├── basemapResolver.ts               # 解析逻辑（创建配置/解析预设）
+    │   │   └── index.ts                         # barrel export
     │   ├── goldenSoupQuotes.js                  # 语录常量
     │   ├── index.js                             # 常量聚合导出
     │   ├── mapStyles.js                         # 地图样式与模板
     │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts # 非标 XYZ 示例
-    │   ├── useBasemapManager.ts                 # 底图源管理
     │   └── useStyleEditor.js                    # 样式编辑模板
     │
     ├── router/
@@ -312,13 +319,17 @@ frontend/
     │   └── DistrictManager.ts                   # 行政区边界加载与 TOC/图层同步
     │
     ├── stores/
+    │   ├── layer/                               # 🆕 图层模块（拆分自 useLayerStore.ts）
+    │   │   ├── layerHelpers.ts                  # 图层工具函数 + 类型定义
+    │   │   ├── layerTreeBuilder.ts              # 图层树构建器
+    │   │   └── index.ts                         # barrel export
     │   ├── index.ts                             # Store 聚合导出
     │   ├── useAppStore.ts                       # 全局应用状态
     │   ├── useAttrStore.ts                      # 属性表状态
     │   ├── useAuthStore.ts                      # 登录认证状态
     │   ├── useCompassStore.ts                   # 罗盘状态（纯前端本地主题配置）
     │   ├── useDownloadStore.ts                  # 底图下载任务状态
-    │   ├── useLayerStore.ts                     # 图层树与图层交互状态
+    │   ├── useLayerStore.ts                     # 🔄 图层树与图层交互状态（已拆分工具函数）
     │   ├── useTOCStore.ts                       # TOC 元数据与行政区树状态
     │   ├── useUrlParamStore.ts                  # URL 参数状态
     │   ├── useUserPreferencesStore.ts           # 用户偏好状态

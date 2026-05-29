@@ -24,6 +24,19 @@ import { applyKmlStylesToFeatures } from '../utils/gis/parsers/kmlStyleParser';
 import { createStandardItem } from './map/toc/factory';
 import { useGisLoader } from './useGisLoader';
 import { useMessage } from './useMessage';
+import {
+    getBandMinMax,
+    stretchToByte,
+    isNoDataValue,
+    computePercentileStretch,
+    inferFallbackNoDataValue,
+    isRasterUploadLayer,
+    isTiffType,
+    decodeTextContent,
+    getNormalizedUploadType,
+    getLayerNameFromEntry,
+    pickFeatureLabelField,
+} from './dataImport';
 
 export function useLayerDataImport({
     mapInstance,
@@ -36,17 +49,6 @@ export function useLayerDataImport({
 }) {
     let cachedGeotiffFromBlob = null;
     let cachedGeoTIFFSourceCtor = null;
-    const LABEL_FIELD_CANDIDATES = [
-        'name',
-        'Name',
-        'NAME',
-        '名称',
-        'title',
-        'Title',
-        'TITLE',
-        'label',
-        'Label',
-    ];
     const gisInlet = useGisLoader();
     const message = useMessage();
 
@@ -97,104 +99,6 @@ export function useLayerDataImport({
             cachedGeoTIFFSourceCtor = mod.default;
         }
         return cachedGeoTIFFSourceCtor;
-    }
-
-    function getBandMinMax(data) {
-        let min = Number.POSITIVE_INFINITY;
-        let max = Number.NEGATIVE_INFINITY;
-        for (let i = 0; i < data.length; i++) {
-            const v = data[i];
-            if (!Number.isFinite(v)) continue;
-            if (v < min) min = v;
-            if (v > max) max = v;
-        }
-        if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-            return { min: 0, max: 1 };
-        }
-        return { min, max };
-    }
-
-    function stretchToByte(value, min, max) {
-        if (!Number.isFinite(value)) return 0;
-        const n = (value - min) / (max - min);
-        return Math.max(0, Math.min(255, Math.round(n * 255)));
-    }
-
-    function isNoDataValue(value, nodataValue) {
-        if (nodataValue === null || nodataValue === undefined || !Number.isFinite(value))
-            return false;
-        const eps = Math.max(1e-9, Math.abs(nodataValue) * 1e-9);
-        return Math.abs(value - nodataValue) <= eps;
-    }
-
-    function computePercentileStretch(data, nodataValue, lowPct = 2, highPct = 98) {
-        if (!data?.length) return { min: 0, max: 1 };
-
-        const maxSamples = 200000;
-        const step = Math.max(1, Math.floor(data.length / maxSamples));
-        const values = [];
-
-        for (let i = 0; i < data.length; i += step) {
-            const v = data[i];
-            if (!Number.isFinite(v) || isNoDataValue(v, nodataValue)) continue;
-            values.push(v);
-        }
-
-        if (!values.length) return { min: 0, max: 1 };
-
-        values.sort((a, b) => a - b);
-        const lowIndex = Math.max(0, Math.floor((values.length - 1) * (lowPct / 100)));
-        const highIndex = Math.max(0, Math.floor((values.length - 1) * (highPct / 100)));
-
-        let min = values[lowIndex];
-        let max = values[highIndex];
-        if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-            min = values[0];
-            max = values[values.length - 1];
-        }
-        if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-            return { min: 0, max: 1 };
-        }
-        return { min, max };
-    }
-
-    function inferFallbackNoDataValue(data, explicitNoDataValue) {
-        if (Number.isFinite(explicitNoDataValue)) return explicitNoDataValue;
-        if (!data?.length) return null;
-
-        const sentinelCandidates = [0, -9999, -32768, 32767, 65535];
-        const counts = new Map(sentinelCandidates.map((v) => [v, 0]));
-
-        const maxSamples = 200000;
-        const step = Math.max(1, Math.floor(data.length / maxSamples));
-        let sampled = 0;
-
-        for (let i = 0; i < data.length; i += step) {
-            const v = data[i];
-            if (!Number.isFinite(v)) continue;
-            sampled += 1;
-            if (counts.has(v)) {
-                counts.set(v, counts.get(v) + 1);
-            }
-        }
-
-        if (!sampled) return null;
-
-        let bestValue = null;
-        let bestCount = 0;
-        for (const [value, count] of counts.entries()) {
-            if (count > bestCount) {
-                bestValue = value;
-                bestCount = count;
-            }
-        }
-
-        return bestCount / sampled >= 0.05 ? bestValue : null;
-    }
-
-    function isRasterUploadLayer(item) {
-        const t = String(item?.type || '').toLowerCase();
-        return item?.sourceType === 'upload' && (t === 'tif' || t === 'tiff');
     }
 
     function toProjectionObject(input) {
@@ -746,11 +650,6 @@ export function useLayerDataImport({
         return id;
     }
 
-    function isTiffType(type) {
-        const normalized = String(type || '').toLowerCase();
-        return normalized === 'tif' || normalized === 'tiff';
-    }
-
     async function resolveSupportedProjection(
         rawProjection,
         fallbackProjection = 'EPSG:4326',
@@ -765,74 +664,6 @@ export function useLayerDataImport({
         throw new Error(
             `${label}坐标系 ${normalized} 当前不支持，请提供可识别 EPSG 定义或先转换为 EPSG:4326 / EPSG:3857。`,
         );
-    }
-
-    /**
-     * 改进的文本内容解码函数，支持多种编码
-     * 对于 KML/KMZ 等可能包含非 UTF-8 编码的文件进行处理
-     */
-    function decodeTextContent(content) {
-        if (typeof content === 'string') return content;
-        if (content instanceof ArrayBuffer) {
-            // 尝试多种编码，选择替代字符最少的那个
-            const candidates = [];
-            const encodings = ['utf-8', 'utf-16le', 'utf-16be', 'gbk'];
-            
-            for (const encoding of encodings) {
-                try {
-                    const text = new TextDecoder(encoding, { fatal: false }).decode(content);
-                    const invalidCount = (text.match(/\uFFFD/g) || []).length;
-                    candidates.push({ encoding, text, invalidCount });
-                } catch (err) {
-                    continue;
-                }
-            }
-            
-            if (!candidates.length) {
-                // 降级方案：使用 UTF-8
-                console.warn('[useLayerDataImport] 所有编码尝试均失败，使用 UTF-8 降级');
-                return new TextDecoder('utf-8', { fatal: false }).decode(content);
-            }
-            
-            candidates.sort((a, b) => a.invalidCount - b.invalidCount);
-            const best = candidates[0];
-            
-            if (best.invalidCount > 0) {
-                console.warn(
-                    `[useLayerDataImport] 使用编码 ${best.encoding}，包含 ${best.invalidCount} 个替代字符`
-                );
-            }
-            
-            return best.text;
-        }
-        return String(content || '');
-    }
-
-    function getNormalizedUploadType(type, name = '') {
-        const normalizedType = String(type || '').toLowerCase();
-        const filename = String(name || '')
-            .trim()
-            .toLowerCase();
-        const ext = filename.includes('.') ? filename.split('.').pop() : '';
-
-        if (ext === 'kmz') return 'kmz';
-        if (ext === 'kml') return 'kml';
-        if (ext === 'geojson' || ext === 'json') return ext;
-        if (ext === 'tif' || ext === 'tiff') return ext;
-        if (ext === 'zip' || ext === 'shp') return ext;
-        return normalizedType;
-    }
-
-    function getLayerNameFromEntry(entryName, fallbackName = '上传图层') {
-        const normalized = String(entryName || '')
-            .replace(/\\/g, '/')
-            .trim();
-        if (!normalized) return fallbackName;
-
-        const filename = normalized.split('/').pop() || normalized;
-        const idx = filename.lastIndexOf('.');
-        const stem = idx > 0 ? filename.slice(0, idx) : filename;
-        return stem || fallbackName;
     }
 
     function reportImportProgress(state = {}) {
@@ -851,30 +682,6 @@ export function useLayerDataImport({
         });
     }
 
-    function pickFeatureLabelField(features = []) {
-        if (!Array.isArray(features) || !features.length) return null;
-
-        for (const key of LABEL_FIELD_CANDIDATES) {
-            const hasValue = features.some((feature) => {
-                const v = feature?.get?.(key);
-                return v !== null && v !== undefined && String(v).trim();
-            });
-            if (hasValue) return key;
-        }
-
-        const firstFeature = features[0];
-        const props =
-            typeof firstFeature?.getProperties === 'function' ? firstFeature.getProperties() : null;
-        if (!props) return null;
-
-        const firstUsableKey = Object.keys(props).find((key) => {
-            if (key === 'geometry' || key === 'style' || String(key).startsWith('_')) return false;
-            const value = props[key];
-            return value !== null && value !== undefined && String(value).trim();
-        });
-
-        return firstUsableKey || null;
-    }
 
     /**
      * 解析 KML 文本为 features，并应用 KML 中定义的样式

@@ -1,9 +1,8 @@
 /**
- * 底图管理常量配置
- * 本文件仅维护图层 URL、分组、组合栈与轻量映射。
- * 协议识别与建源逻辑请见 src/composables/useTileSourceFactory.ts
+ * 底图配置文件
+ * 集中管理图层源定义和底图预设配置
+ * 新增图源时只需编辑此文件的 LAYER_SOURCE_DEFINITIONS 和 BASEMAP_PRESETS
  */
-// import { anonymousTileLoader } from '@/composables/useTileSourceFactory';
 
 import { ref } from 'vue';
 import XYZ from 'ol/source/XYZ';
@@ -12,41 +11,16 @@ import type {
     ConfiguredTileServiceDefinition,
     NonStandardXYZAdapter,
     TileSourceLike,
-} from '../composables/useTileSourceFactory';
+} from '../../composables/useTileSourceFactory';
 import {
     buildMapsForFreeAdapter,
     createConfiguredServiceSource,
     createVectorTileSourceFromUrl,
     createXYZSourceFromUrl,
     prioritizeTileSourceRequest,
-} from '../composables/useTileSourceFactory';
-
-export {
-    createAutoTileSourceFromUrl,
-    detectCustomTileServiceKind,
-    detectNonStandardXYZ,
-    normalizeTileY,
-    toQuadKey,
-} from '../composables/useTileSourceFactory';
-
-export type {
-    TileYNormalizeMode,
-    CustomTileSourceKind,
-    AutoTileSourceResult,
-} from '../composables/useTileSourceFactory';
-
-// ========== 主机配置常量 ==========
-export const TILE_HOSTS = {
-    tianditu: 't0.tianditu.gov.cn',
-    googleCandidates: ['mt3v.gggis.com', 'gac-geo.googlecnapps.club'],
-};
-
-export const GOOGLE_HOST_STRATEGY = 'manual' as const;
-export const GOOGLE_MANUAL_HOST = TILE_HOSTS.googleCandidates[1];
-export const GOOGLE_PROBE_TIMEOUT_MS = 1200;
+} from '../../composables/useTileSourceFactory';
 
 // ========== 类型定义 ==========
-// 六大类型：注记(label)、影像(imagery)、地形(terrain)、矢量(vector)、专题(theme)、自定义(custom)
 export type LayerCategory = 'label' | 'imagery' | 'terrain' | 'vector' | 'theme' | 'custom';
 export type LayerGroup =
     | '自定义'
@@ -72,15 +46,15 @@ export type LayerGroup =
     | 'Specialty'
     | 'World';
 
-type TileSourceInstance = TileSourceLike | OSM | null;
+export type TileSourceInstance = TileSourceLike | OSM | null;
 
-type LayerFactoryContext = {
+export type LayerFactoryContext = {
     normBase: string;
     tiandituTk: string;
     customUrl: string;
 };
 
-type LayerSourceDefinition = {
+export type LayerSourceDefinition = {
     id: string;
     name: string;
     category: LayerCategory;
@@ -89,86 +63,32 @@ type LayerSourceDefinition = {
     createSource: (ctx: LayerFactoryContext) => TileSourceInstance;
 };
 
-type BasemapPresetDefinition = {
+export type BasemapPresetDefinition = {
     id: string;
     label: string;
-    // 从下到上的图层顺序
     stack: string[];
 };
 
-type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
+export type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
     category?: LayerCategory;
     group?: LayerGroup;
     defaultVisible?: boolean;
 };
 
-/** 
-    默认底图预设 ID
-    Default Basemap Preset ID
- */
-// export const DEFAULT_BASEMAP_PRESET_ID = 'tianDiTu';
-// export const DEFAULT_BASEMAP_PRESET_ID = 'local';
-// export const DEFAULT_BASEMAP_PRESET_ID = 'google';
-// export const DEFAULT_BASEMAP_PRESET_ID = 'custom_mapbox_unlabeled_preset';
+// ========== 主机配置常量 ==========
+export const TILE_HOSTS = {
+    tianditu: 't0.tianditu.gov.cn',
+};
+
+export const GOOGLE_MANUAL_HOST = 'gac-geo.googlecnapps.club';
+
+/** 默认底图预设 ID */
 export const DEFAULT_BASEMAP_PRESET_ID = 'custom_China_Blender_preset_2';
-// //gac谷歌
-// ========== 响应式状态 ==========
+
 /** Google 主机选择状态（全局单例） */
 export const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
 
-// ========== 轻量工具函数（主机选择） ==========
-export function probeGoogleHostLatency(host: string, timeoutMs: number = GOOGLE_PROBE_TIMEOUT_MS) {
-    return new Promise((resolve) => {
-        const start = performance.now();
-        const img = new Image();
-        let settled = false;
-
-        const end = (latency: number) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            img.onload = null;
-            img.onerror = null;
-            resolve(latency);
-        };
-
-        const timer = setTimeout(() => end(Number.POSITIVE_INFINITY), timeoutMs);
-        img.onload = () => end(performance.now() - start);
-        img.onerror = () => end(Number.POSITIVE_INFINITY);
-        img.src = `https://${host}/maps/vt?lyrs=s&x=0&y=0&z=1&_probe=${Date.now()}`;
-    });
-}
-
-export async function resolvePreferredGoogleHost() {
-    if (GOOGLE_HOST_STRATEGY !== ('fastest' as any)) return GOOGLE_MANUAL_HOST;
-
-    const candidates = TILE_HOSTS.googleCandidates || [];
-    if (!candidates.length) return GOOGLE_MANUAL_HOST;
-
-    const measured = await Promise.all(
-        candidates.map(async (host) => ({
-            host,
-            latency: await probeGoogleHostLatency(host),
-        })),
-    );
-
-    measured.sort((a, b) => (a.latency as number) - (b.latency as number));
-    const best = measured[0];
-    return Number.isFinite(best?.latency as number) ? best.host : GOOGLE_MANUAL_HOST;
-}
-
-/** 拼接 Google 瓦片服务 URL。 */
-export const buildGoogleTileUrl = (pathAndQuery: string) =>
-    `https://${activeGoogleTileHost.value}${pathAndQuery}`;
-
-/** 拼接天地图瓦片服务 URL。 */
-export const buildTiandituUrl = (pathAndQuery: string, tiandituTk: string): string => {
-    const hasQuery = pathAndQuery.includes('?');
-    const separator = hasQuery ? '&' : '?';
-    return `https://${TILE_HOSTS.tianditu}${pathAndQuery}${separator}tk=${tiandituTk}`;
-};
-
-// 非标准 XYZ 图源适配器（内部工具，在配置1中使用）
+// ========== 非标准 XYZ 图源适配器 ==========
 const NON_STANDARD_XYZ_ADAPTERS: Record<string, NonStandardXYZAdapter> = {
     'maps-for-free-relief': buildMapsForFreeAdapter('relief', '地形浮雕(MFF)', 'jpg'),
     'maps-for-free-water': buildMapsForFreeAdapter('water', '水体(MFF)'),
@@ -184,19 +104,20 @@ const NON_STANDARD_XYZ_ADAPTERS: Record<string, NonStandardXYZAdapter> = {
     'maps-for-free-ice': buildMapsForFreeAdapter('ice', '冰川(MFF)'),
 };
 
-// ========== 配置已统一到配置1（图层）和配置2（预设） ===========
+// ========== 拼接 URL 工具函数 ==========
+/** 拼接 Google 瓦片服务 URL */
+export const buildGoogleTileUrl = (pathAndQuery: string) =>
+    `https://${activeGoogleTileHost.value}${pathAndQuery}`;
 
-// ========== 单文件集中配置（图层源 + 预设） ==========
-// 设计原则：一处配置、全局生效
-// 配置1：在 LAYER_SOURCE_DEFINITIONS 中直接配置所有 URL 和属性 => 自动显示在图层列表
-// 配置2：在 BASEMAP_PRESETS 中直接配置图层叠置和顺序 => 自动显示在下拉菜单
-// 新增图源时：仅在配置1和2中直接编辑即可，所有URL直接inline，禁止使用变量引用
+/** 拼接天地图瓦片服务 URL */
+export const buildTiandituUrl = (pathAndQuery: string, tiandituTk: string): string => {
+    const hasQuery = pathAndQuery.includes('?');
+    const separator = hasQuery ? '&' : '?';
+    return `https://${TILE_HOSTS.tianditu}${pathAndQuery}${separator}tk=${tiandituTk}`;
+};
 
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-// 配置1：图层URL、属性设置
-const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
+// ========== 配置1：图层源定义 ==========
+export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     // 1、注记图层
     {
         id: 'label_tianditu',
@@ -253,6 +174,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
 
+    // 2、地形图层
     {
         id: 'terrain_gac',
         name: 'Google山体阴影(gac)',
@@ -278,7 +200,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
 
-    // 2、影像图层
+    // 3、影像图层
     {
         id: 'imagery_tianditu',
         name: '天地图影像',
@@ -338,7 +260,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    // tilePixelRatio: 2,
                     url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
                     maxZoom: 20,
                 }),
@@ -376,8 +297,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         group: '影像',
         createSource: () =>
             prioritizeTileSourceRequest(
-                new XYZ({ 
-                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga' 
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga'
                 }),
             ),
     },
@@ -403,11 +324,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 new XYZ({ url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}' }),
             ),
     },
-    // 3、专题图层
-    // ========== 配置1：用户自定义 WMS/WMTS/XYZ 图层==========
-    // 在此直接添加新的WMS、WMTS、XYZ服务，然后在配置2（BASEMAP_PRESETS）中添加堆叠预设
 
-    // 广东基本农田 (WMS)
+    // 4、专题图层 - WMS/WMTS
     {
         id: 'theme_gd_basic_farmland_wms',
         name: '广东基本农田(WMS)',
@@ -432,8 +350,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 { adapters: NON_STANDARD_XYZ_ADAPTERS },
             ),
     },
-
-    // 河南基本农田 (WMTS)
     {
         id: 'theme_hn_basic_farmland_wmts',
         name: '河南基本农田(WMTS)',
@@ -457,8 +373,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 { adapters: NON_STANDARD_XYZ_ADAPTERS },
             ),
     },
-
-    // 河南耕地现状 (WMTS)
     {
         id: 'theme_hn_farmland_wmts',
         name: '河南耕地(WMTS)',
@@ -482,9 +396,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 { adapters: NON_STANDARD_XYZ_ADAPTERS },
             ),
     },
-    // ===============================================================================================================================================
-    // Arcgis Online 服务25个
-    // --- Canvas 分类 ---
+
+    // 5、ArcGIS Online 服务
     {
         id: 'theme_arcgis_canvas_dark_base',
         name: 'ESRI深灰色底图',
@@ -533,10 +446,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
-    // --- Elevation 分类 ---
-
-    // --- Ocean 分类 ---
     {
         id: 'theme_arcgis_ocean_base',
         name: 'ESRI海洋底图',
@@ -561,8 +470,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
-    // --- Polar 分类 (极地) ---
     {
         id: 'imagery_arcgis_polar_ant_img',
         name: 'ESRI南极影像',
@@ -611,8 +518,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
-    // --- Reference 分类 ---
     {
         id: 'theme_arcgis_ref_boundaries',
         name: 'ESRI世界边界地名',
@@ -661,8 +566,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
-    // --- Specialty 分类 ---
     {
         id: 'theme_arcgis_spec_nav',
         name: 'ESRI世界航海图',
@@ -675,8 +578,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
-    // --- Root 根目录 ---
     {
         id: 'theme_arcgis_natgeo_world',
         name: '国家地理世界地图',
@@ -701,7 +602,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
     {
         id: 'theme_arcgis_physical_root',
         name: '世界自然地理图',
@@ -762,8 +662,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-    // ===============================================================================================================================================
 
+    // 6、其他专题图层
     {
         id: 'terrain_esa',
         name: '欧空局地形',
@@ -823,7 +723,7 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
 
-    // MFF 专题层（直接inline URL，禁止使用函数生成）
+    // 7、MFF 专题层
     {
         id: 'theme_mff_water',
         name: 'MFF水体',
@@ -956,8 +856,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 { adapters: NON_STANDARD_XYZ_ADAPTERS },
             ),
     },
-    // ===================================================================
-    // 4、矢量图层
+
+    // 8、矢量图层
     {
         id: 'vector_tianditu',
         name: '天地图矢量',
@@ -1009,7 +909,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
     {
         id: 'vector_tengxun',
         name: '腾讯地图(GCJ)',
@@ -1030,8 +929,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    //原版简洁  url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off,s.t:3|s.e.g|p.v:off',
-                    //代理简洁  url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off',
                     url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
                 }),
             ),
@@ -1129,8 +1026,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 'https://webgis.henu.edu.cn/server/rest/services/Hosted/Border_Vector/VectorTileServer/tile/{z}/{y}/{x}.pbf',
             ),
     },
-    // ===================================================================
-    // 5、地形图层
+
+    // 9、地形图层
     {
         id: 'terrain_opentopomap',
         name: '地形图',
@@ -1141,24 +1038,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' }),
             ),
     },
-    // {
-    //     id:'terrain_google',
-    //     name: 'Google山体阴影',
-    //     category: 'terrain',
-    //     group: '地形',
-    //     createSource: () => new XYZ({
-    //         url:'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5'
-    //     })
-    // },
-    // {
-    //     id:'terrain_gac',
-    //     name: 'Google山体阴影(gac)',
-    //     category: 'terrain',
-    //     group: '地形',
-    //     createSource: () => new XYZ({
-    //         url:"https://gac-geo.googlecnapps.club/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5"
-    //     })
-    // },
     {
         id: 'terrain_arcgis_elev_hillshade',
         name: 'ESRI世界山体阴影',
@@ -1183,8 +1062,8 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-    // ===================================================================
-    // 6、自定义图层custom
+
+    // 10、自定义图层
     {
         id: 'local_tiles',
         name: '自定义瓦片',
@@ -1227,9 +1106,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-    // 待修复
-    // 盗用的token，有风险，会被mapbox后台检测到，为避免被溯源，需要隐藏referrer，
-    // 且不允许用户修改URL（因为用户修改后可能会暴露token）
     {
         id: 'custom_mapbox_labeled',
         name: 'Mapbox 自定义',
@@ -1239,9 +1115,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             prioritizeTileSourceRequest(
                 new XYZ({
                     url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-                    // crossOrigin: 'anonymous',
-                    // // 关键：在这里直接指定加载函数
-                    // tileLoadFunction: (tile, src) => anonymousTileLoader(tile, src)
                 }),
             ),
     },
@@ -1254,9 +1127,6 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             prioritizeTileSourceRequest(
                 new XYZ({
                     url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-                    // crossOrigin: 'anonymous',
-                    // // 关键：在这里直接指定加载函数
-                    // tileLoadFunction: (tile, src) => anonymousTileLoader(tile, src)
                 }),
             ),
     },
@@ -1272,18 +1142,14 @@ const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-
 ];
 
-// 配置2：多底图叠置预设（下拉菜单显示用）
-// label不超过7个汉字，否则会样式会遮挡鹰眼视图
-// 配置2：多底图叠置预设（同步更新后的版本）
-const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
+// ========== 配置2：底图预设 ==========
+export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'local_tiles_preset', label: '本地瓦片', stack: ['local_tiles'] },
     { id: 'custom', label: '自定义URL', stack: ['custom'] },
-    // ==========================================
-    // 1. 天地图系列 (Tianditu - 国家地理信息公共服务平台)
-    // ==========================================
+
+    // 天地图系列
     {
         id: 'imagery_tianditu_preset',
         label: '天地图影像',
@@ -1295,16 +1161,11 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['vector_tianditu', 'label_tianditu_vector'],
     },
 
-    // ==========================================
-    // 2. 星图地球系列 (Geovis/Tuxin - 图新)
-    // ==========================================
+    // 图新系列
     { id: 'imagery_tuxin_preset', label: '图新影像', stack: ['imagery_tuxin', 'label_tuxin'] },
     { id: 'vector_tuxin_preset', label: '图新矢量', stack: ['vector_tuxin', 'label_tuxin'] },
 
-    // ==========================================
-    // 3. 互联网商业地图 (Google, Amap, OSM, Mapbox)
-    // ==========================================
-    // --- 影像类 ---
+    // 互联网商业地图
     { id: 'imagery_gac_preset', label: 'Google(gac)', stack: ['imagery_gac', 'label_tianditu'] },
     {
         id: 'imagery_google_preset',
@@ -1320,9 +1181,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
     { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
-    { id: 'imagery_mapbox_preset', label: 'Mapbox影像', stack: ['imagery_mapbox','label_tuxin'] },
-
-    // --- 矢量类 ---
+    { id: 'imagery_mapbox_preset', label: 'Mapbox影像', stack: ['imagery_mapbox', 'label_tuxin'] },
     {
         id: 'imagery_google_standard_preset',
         label: 'Google标准',
@@ -1332,20 +1191,24 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'vector_amap_preset', label: '高德地图', stack: ['vector_amap'] },
     { id: 'vector_tengxun_preset', label: '腾讯地图', stack: ['vector_tengxun'] },
     { id: 'vector_osm_preset', label: 'OSM标准', stack: ['vector_osm'] },
-
-    // --- 艺术风格/Mapbox ---
     { id: 'custom_mapbox_labeled_preset', label: 'Mapbox自定义', stack: ['custom_mapbox_labeled'] },
-    { id: 'custom_mapbox_unlabeled_preset',label: 'Mapbox(无注记)',stack: ['custom_mapbox_unlabeled', 'label_tuxin'],},
-    { id: 'custom_China_Blender_preset', label: 'China Blender1', stack: ['custom_China_Blender','terrain_google'] },
-        { id: 'custom_China_Blender_preset_2', label: 'China Blender2', stack: ['custom_China_Blender'] },
+    {
+        id: 'custom_mapbox_unlabeled_preset',
+        label: 'Mapbox(无注记)',
+        stack: ['custom_mapbox_unlabeled', 'label_tuxin'],
+    },
+    {
+        id: 'custom_China_Blender_preset',
+        label: 'China Blender1',
+        stack: ['custom_China_Blender', 'terrain_google'],
+    },
+    { id: 'custom_China_Blender_preset_2', label: 'China Blender2', stack: ['custom_China_Blender'] },
     { id: 'vector_carton_light_preset', label: 'Carto浅色', stack: ['vector_carton_light'] },
     { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
     { id: 'vector_alidade_preset', label: '清爽风格', stack: ['vector_alidade'] },
 
-    // ==========================================
-    // 4. ArcGIS (ESRI) 系列
-    // ==========================================
+    // ArcGIS (ESRI) 系列
     {
         id: 'arcgis_imagery_preset',
         label: 'ESRI影像',
@@ -1366,10 +1229,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'arcgis_natgeo_preset', label: '国家地理', stack: ['theme_arcgis_natgeo_world'] },
     { id: 'arcgis_physical_preset', label: '自然地理', stack: ['theme_arcgis_physical_root'] },
 
-    // ==========================================
-    // 5. 地形与专题系列 (Terrain & Themes)
-    // ==========================================
-    // --- 山体渲染 ---
+    // 地形与专题系列
     {
         id: 'arcgis_elev_hillshade_preset',
         label: '山体阴影',
@@ -1384,7 +1244,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'terrain_opentopomap_preset', label: '开放地形', stack: ['terrain_opentopomap'] },
     { id: 'terrain_esa_preset', label: '欧空局地形', stack: ['terrain_esa'] },
 
-    // --- 农田专题 (河南/广东) ---
+    // 农田专题
     {
         id: 'hn_basic_farmland_preset',
         label: '河南基本农田',
@@ -1401,16 +1261,14 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['imagery_tianditu', 'theme_gd_basic_farmland_wms', 'label_tianditu'],
     },
 
-    // --- Windy 气象系列 ---
+    // Windy 气象系列
     { id: 'ship66_preset', label: '船舶网', stack: ['ships66'] },
     { id: 'windy_preset', label: 'Windy户外', stack: ['theme_windy'] },
     { id: 'windy2_preset', label: 'Windy冬季', stack: ['theme_windy2'] },
     { id: 'windy_outer_preset', label: 'Windy轮廓', stack: ['theme_windy_outer'] },
     { id: 'windy_greenland_preset', label: 'Windy灰色', stack: ['theme_windy_greenland'] },
 
-    // ==========================================
-    // 6. 极地与海洋系列 (Polar & Ocean)
-    // ==========================================
+    // 极地与海洋系列
     {
         id: 'arcgis_ocean_preset',
         label: 'ESRI海洋',
@@ -1429,9 +1287,7 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['theme_arcgis_polar_arc_base', 'label_arcgis_polar_arc_ref'],
     },
 
-    // ==========================================
-    // 7. Maps For Free (MFF) 浮雕系列
-    // ==========================================
+    // Maps For Free (MFF) 浮雕系列
     { id: 'mff_relief_preset', label: '地形浮雕', stack: ['terrain_relief', 'label_tianditu'] },
     {
         id: 'mff_water_preset',
@@ -1454,134 +1310,8 @@ const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['terrain_relief', 'theme_mff_forest', 'label_tianditu'],
     },
 
-    // ==========================================
-    // 8. 其他与自定义
-    // ==========================================
+    // 其他与自定义
     { id: 'vector_geoq_gray_preset', label: 'GeoQ灰', stack: ['vector_geoq_gray'] },
     { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
     { id: 'vector_henu_border_preset', label: '矢量边界', stack: ['vector_henu_border_pbf'] },
 ];
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
-const LAYER_SOURCE_MAP = new Map(LAYER_SOURCE_DEFINITIONS.map((item) => [item.id, item]));
-const BASEMAP_PRESET_MAP = new Map(BASEMAP_PRESETS.map((item) => [item.id, item]));
-
-function resolveDefaultBasemapLayerIndex(): number {
-    const index = BASEMAP_PRESETS.findIndex((preset) => preset.id === DEFAULT_BASEMAP_PRESET_ID);
-    return index >= 0 ? index : 0;
-}
-
-function resolveDefaultVisibleLayerIdSet(): Set<string> {
-    const preset = BASEMAP_PRESET_MAP.get(String(DEFAULT_BASEMAP_PRESET_ID || ''));
-    const stack =
-        Array.isArray(preset?.stack) && preset.stack.length
-            ? preset.stack
-            : [String(DEFAULT_BASEMAP_PRESET_ID || '')];
-
-    const visibleLayerIdSet = new Set<string>();
-    stack.forEach((id) => {
-        const normalized = String(id || '').trim();
-        if (!normalized) return;
-        if (!LAYER_SOURCE_MAP.has(normalized)) return;
-        visibleLayerIdSet.add(normalized);
-    });
-
-    return visibleLayerIdSet;
-}
-
-/** 默认底图在 URL_LAYER_OPTIONS 中的索引。 */
-export const DEFAULT_BASEMAP_LAYER_INDEX = resolveDefaultBasemapLayerIndex();
-
-const DEFAULT_VISIBLE_LAYER_ID_SET = resolveDefaultVisibleLayerIdSet();
-
-/** URL 图层选项列表：用于 URL 参数中的图层索引映射。 */
-export const URL_LAYER_OPTIONS = BASEMAP_PRESETS.map((preset) => preset.id);
-
-/** 预设底图选项列表（用于 UI 下拉菜单）。 */
-export const BASEMAP_OPTIONS = BASEMAP_PRESETS.map((preset) => ({
-    value: preset.id,
-    label: preset.label,
-}));
-
-/** 获取一个 option 对应的真实图层堆叠（去重，保序）。 */
-export function resolvePresetLayerIds(optionId: string): string[] {
-    const preset = BASEMAP_PRESET_MAP.get(String(optionId || ''));
-    const stack =
-        Array.isArray(preset?.stack) && preset.stack.length
-            ? preset.stack
-            : [String(optionId || '')];
-
-    const deduped: string[] = [];
-    const seen = new Set<string>();
-
-    stack.forEach((id) => {
-        const normalized = String(id || '').trim();
-        if (!normalized || seen.has(normalized)) return;
-        if (!LAYER_SOURCE_MAP.has(normalized)) return;
-
-        seen.add(normalized);
-        deduped.push(normalized);
-    });
-
-    return deduped;
-}
-
-/** 获取 option 的展示名称。 */
-export function getBasemapOptionLabel(optionId: string): string {
-    const preset = BASEMAP_PRESET_MAP.get(String(optionId || ''));
-    return preset?.label || String(optionId || '');
-}
-
-/** 获取图层分类（用于外部状态同步）。 */
-export function getLayerCategory(layerId: string): LayerCategory {
-    return LAYER_SOURCE_MAP.get(String(layerId || ''))?.category || 'theme';
-}
-
-/** 获取图层分组（用于外部状态同步）。 */
-export function getLayerGroup(layerId: string): LayerGroup {
-    return LAYER_SOURCE_MAP.get(String(layerId || ''))?.group || '专题';
-}
-
-/**
- * 创建底图配置列表（由本文件集中配置驱动）。
- */
-export function createLayerConfigs(
-    normBase: string = '/',
-    tiandituTk: string = '',
-    customUrl: string = '',
-) {
-    const context: LayerFactoryContext = {
-        normBase,
-        tiandituTk,
-        customUrl,
-    };
-
-    return LAYER_SOURCE_DEFINITIONS.map((definition) => ({
-        id: definition.id,
-        name: definition.name,
-        category: definition.category,
-        group: definition.group,
-        visible:
-            DEFAULT_VISIBLE_LAYER_ID_SET.size > 0
-                ? DEFAULT_VISIBLE_LAYER_ID_SET.has(definition.id)
-                : !!definition.defaultVisible,
-        createSource: () => definition.createSource(context),
-    }));
-}
-
-/** 导出主要管理功能 */
-export function useBasemapManager() {
-    return {
-        activeGoogleTileHost,
-        probeGoogleHostLatency,
-        resolvePreferredGoogleHost,
-        buildGoogleTileUrl,
-        buildTiandituUrl,
-        createLayerConfigs,
-        resolvePresetLayerIds,
-        getBasemapOptionLabel,
-        getLayerCategory,
-        getLayerGroup,
-    };
-}

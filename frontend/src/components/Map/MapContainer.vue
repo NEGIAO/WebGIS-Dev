@@ -130,8 +130,6 @@ import { prioritizeTileSourceRequest } from '../../composables/useTileSourceFact
 import {
     DEFAULT_BASEMAP_PRESET_ID,
     URL_LAYER_OPTIONS,
-    activeGoogleTileHost as globalActiveGoogleTileHost,
-    resolvePreferredGoogleHost,
     createLayerConfigs,
     resolvePresetLayerIds,
     getBasemapOptionLabel,
@@ -408,8 +406,6 @@ function handleSwipeClose() {
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
 // URL_LAYER_OPTIONS：用于 URL 参数中的图层索引映射（与 BASEMAP_OPTIONS 对应）
 // createLayerConfigs：工厂函数，根据参数生成全部底图源配置
-// 使用全局共享的 Google 主机 ref，支持主机切换后的动态更新
-const activeGoogleTileHost = globalActiveGoogleTileHost;
 
 // OpenLayers 运行时依赖按需动态加载，避免进入登录页首屏预加载图。
 const {
@@ -817,7 +813,7 @@ const { drawRouteOnMap, drawDriveRouteOnMap, syncRouteManagedLayer } = createRou
 });
 
 // 底图状态管理
-const { emitBaseLayersChange, emitBaseLayersChangeBatched, refreshGoogleLayerSources } =
+const { emitBaseLayersChange, emitBaseLayersChangeBatched } =
     createBasemapStateManagementFeature({
         layerList,
         selectedLayer,
@@ -1129,19 +1125,8 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.5)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.1.6)', { duration: 3000 });
     }
-
-    // ========== 并行执行：Google 主机测速（非阻塞） ==========
-    // 注意：这里使用 Promise 而不是 await，避免阻塞后续定位逻辑
-    resolvePreferredGoogleHost()
-        .then((host) => {
-            if (componentUnmountedRef.value) return;
-            if (!host || host === activeGoogleTileHost.value) return;
-            activeGoogleTileHost.value = host;
-            refreshGoogleLayerSources();
-        })
-        .catch(() => {});
 
     // ========== 用户定位 ==========
     // 分享进入时静默定位且不跳转视图，仅用于更新定位上下文与 URL 参数。
@@ -1939,7 +1924,7 @@ defineExpose({
 }
 
 :deep(.ol-custom-overviewmap:not(.ol-collapsed)) {
-    border: 2px solid rgba(20, 156, 49, 0.729);
+    border: 2px solid rgba(var(--brand-primary-rgb), 0.729);
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.9);
 }
@@ -1951,7 +1936,7 @@ defineExpose({
 }
 
 :deep(.ol-custom-overviewmap .ol-overviewmap-box) {
-    border: 2px solid #20cd2b;
+    border: 2px solid var(--brand-accent);
     background: rgba(0, 170, 255, 0.2);
 }
 

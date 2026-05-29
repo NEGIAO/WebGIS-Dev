@@ -1,3 +1,3 @@
 export * from './mapStyles';
-export * from './useBasemapManager';
+export * from './basemap';
 export * from './useStyleEditor';

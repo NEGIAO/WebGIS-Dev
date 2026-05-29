@@ -16,7 +16,7 @@
             @contextmenu.prevent="openContextMenuFromEvent"
             :draggable="!!node.draggable"
             @dragstart="handleDragStart"
-            @dragover.prevent="handleDragOver"
+            @dragover.prevent
             @drop="handleDrop"
         >
             <button
@@ -155,31 +155,13 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { isValidLabel } from '../../utils/biz';
 import {
     resolveFolderSelectionState,
     buildContextMenuItems,
     dispatchContextMenuCommand,
 } from '../../composables/map/toc';
-
-/**
- * TOCTreeItem - 地理信息系统图层树节点组件
- *
- * 标注内容验证规则（isValidLabel）：
- * ✅ 显示标注菜单项的条件：
- *   - 标注内容不为 null/undefined
- *   - 不是空字符串
- *   - 长度不超过100字符（可配置）
- *   - 不包含乱码或过多特殊字符（特殊字符比例 < 50%）
- *   - 不包含过多连续的无效符号序列
- * ❌ 不予显示的情况：
- *   - 标注为 null 或 undefined
- *   - 空字符串或仅空格
- *   - 超过最大长度限制
- *   - 检测为乱码或控制字符过多
- *   - 特殊符号比例过高
- */
 
 defineOptions({ name: 'TOCTreeItem' });
 
@@ -403,26 +385,13 @@ function handleDragStart() {
     emitAction('drag-layer-start', { layerId: props.node.id });
 }
 
-function handleDragOver() {
-    if (!props.node.droppable) return;
-}
-
 function handleDrop() {
     if (!props.node.droppable) return;
     emitAction('drop-layer', { layerId: props.node.id });
 }
 
-onMounted(() => {
-    window.addEventListener('pointerdown', handleGlobalPointerDown);
-    window.addEventListener('resize', closeContextMenu);
-    window.addEventListener('scroll', closeContextMenu, true);
-});
-
-onBeforeUnmount(() => {
-    window.removeEventListener('pointerdown', handleGlobalPointerDown);
-    window.removeEventListener('resize', closeContextMenu);
-    window.removeEventListener('scroll', closeContextMenu, true);
-});
+// 暴露 closeContextMenu 给父组件使用（事件委托模式）
+defineExpose({ closeContextMenu });
 </script>
 
 <style scoped>

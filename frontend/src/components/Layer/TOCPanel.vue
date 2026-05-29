@@ -1140,7 +1140,7 @@ watch(
         attrStore.syncLayers(layers || []);
         pruneMultiSelectedLayerIds();
     },
-    { immediate: true, deep: true },
+    { immediate: true },
 );
 
 watch(

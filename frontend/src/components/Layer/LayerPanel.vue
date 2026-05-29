@@ -40,7 +40,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useLayerStore } from '../../stores';
 import TOCTreeItem from './TOCTreeItem.vue';
 
@@ -130,6 +130,30 @@ function handleTreeAction(evt) {
 
     emit('action', evt);
 }
+
+// 事件委托：全局监听点击事件，关闭所有右键菜单
+function handleGlobalPointerDown(event) {
+    // 检查点击是否在菜单外部
+    const menuElements = document.querySelectorAll('.toc-context-menu');
+    for (const menuEl of menuElements) {
+        if (menuEl.contains(event.target)) {
+            return; // 点击在菜单内部，不关闭
+        }
+    }
+    // 点击在菜单外部，关闭所有菜单
+    // 通过 CSS 类选择器找到所有打开的菜单并隐藏
+    menuElements.forEach((el) => {
+        el.style.display = 'none';
+    });
+}
+
+onMounted(() => {
+    window.addEventListener('pointerdown', handleGlobalPointerDown);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('pointerdown', handleGlobalPointerDown);
+});
 </script>
 
 <style scoped>
