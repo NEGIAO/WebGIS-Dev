@@ -74,12 +74,13 @@ export function useMapSwipe() {
             return;
         }
 
-        activeMapInstance.value = mapInstance;
-
         console.log('[useMapSwipe] attachToLayers called with', layers.length, 'layers');
 
         // 清除之前的附加
         detachFromLayers();
+
+        // detachFromLayers 会清空 activeMapInstance，必须在之后重新设置
+        activeMapInstance.value = mapInstance;
 
         console.log('[useMapSwipe] Swipe handlers will be attached by side (left/right)');
 
@@ -301,9 +302,16 @@ export function useMapSwipe() {
     }
 
     // ========== 清理 ==========
-    onUnmounted(() => {
+    // 注意：不使用 onUnmounted，因为此 composable 可能在工厂函数中调用
+    // 调用方需在组件卸载时手动调用 dispose()
+
+    /**
+     * 释放所有资源：移除 OL 事件监听、清空状态
+     * 组件 onUnmounted 时必须调用
+     */
+    function dispose() {
         detachFromLayers();
-    });
+    }
 
     // ========== 导出接口 ==========
     return {
@@ -320,5 +328,6 @@ export function useMapSwipe() {
         updateSwipePosition,
         updateSwipeMode,
         toggleSwipeMode,
+        dispose,
     };
 }

@@ -26,7 +26,12 @@ function loadPersistedConfig(): Record<string, any> | null {
 }
 
 /** 将当前配置持久化到 localStorage */
-function persistConfig(config: { enabled: boolean; position: number; mode: string; targetLayerIds: string[] }): void {
+function persistConfig(config: {
+    enabled: boolean;
+    position: number;
+    mode: string;
+    targetLayerIds: string[];
+}): void {
     try {
         if (typeof window !== 'undefined') {
             localStorage.setItem(PERSIST_KEY, JSON.stringify(config));
@@ -61,18 +66,22 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
         if (config.enabled !== undefined) swipeConfig.value.enabled = config.enabled;
         if (config.position !== undefined) swipeConfig.value.position = config.position;
         if (config.mode !== undefined) swipeConfig.value.mode = config.mode;
-        if (config.targetLayerIds !== undefined) swipeConfig.value.targetLayerIds = config.targetLayerIds;
+        if (config.targetLayerIds !== undefined)
+            swipeConfig.value.targetLayerIds = config.targetLayerIds;
         persistConfig(swipeConfig.value);
     }
 
     /**
      * 更新卷帘滑块位置（自动限制在 0.05-0.95 范围内并持久化）
+     * 拖拽时高频调用，持久化操作已防抖（300ms）
      * @param position - 新位置值
      */
+    let persistPositionTimer: ReturnType<typeof setTimeout> | null = null;
     function updateSwipePosition(position: number): void {
         const clamped = Math.max(0.05, Math.min(0.95, position));
         swipeConfig.value.position = clamped;
-        persistConfig(swipeConfig.value);
+        if (persistPositionTimer) clearTimeout(persistPositionTimer);
+        persistPositionTimer = setTimeout(() => persistConfig(swipeConfig.value), 300);
     }
 
     /**
