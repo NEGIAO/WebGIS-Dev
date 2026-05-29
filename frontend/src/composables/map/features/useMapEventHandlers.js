@@ -87,15 +87,20 @@ export function createMapEventHandlers({
 
         // ✅ 修复 Canvas 警告（正确时机：地图渲染后）
         const olKeys = [];
-        olKeys.push(map.on('postrender', () => {
+        const postrenderKey = map.on('postrender', () => {
             const canvas = viewport.querySelector('canvas');
             if (canvas) {
                 const ctx = canvas.getContext('2d');
                 if (ctx && !ctx.willReadFrequently) {
                     ctx.willReadFrequently = true;
+                    // [C8] 设置成功后移除 postrender 监听器，避免每帧执行
+                    unByKey(postrenderKey);
+                    const idx = olKeys.indexOf(postrenderKey);
+                    if (idx !== -1) olKeys.splice(idx, 1);
                 }
             }
-        }));
+        });
+        olKeys.push(postrenderKey);
 
         // ========== pointermove 事件 ==========
         olKeys.push(map.on('pointermove', (evt) => {

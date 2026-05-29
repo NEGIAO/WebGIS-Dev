@@ -49,6 +49,7 @@ export function createDrawMeasureFeature({
     let helpTooltipOverlay = null;
     let sketchFeature = null;
     let geometryChangeKey = null;
+    const drawListenerKeys = []; // [C7] 存储 drawstart/drawend 监听器 key
 
     /**
      * 格式化线长度显示文本
@@ -128,6 +129,10 @@ export function createDrawMeasureFeature({
             geometryChangeKey = null;
         }
 
+        // [C7] 清理 drawstart/drawend 监听器
+        drawListenerKeys.forEach((key) => unByKey(key));
+        drawListenerKeys.length = 0;
+
         drawInteraction = null;
         snapInteraction = null;
         helpTooltipEl = null;
@@ -163,7 +168,7 @@ export function createDrawMeasureFeature({
 
         if (isMeasure) {
             createTooltips();
-            drawInteraction.on('drawstart', (evt) => {
+            drawListenerKeys.push(drawInteraction.on('drawstart', (evt) => {
                 sketchFeature = evt.feature;
                 geometryChangeKey = sketchFeature.getGeometry().on('change', (e) => {
                     const geom = e.target;
@@ -182,8 +187,8 @@ export function createDrawMeasureFeature({
                         measureTooltipOverlay.setPosition(tooltipCoord);
                     }
                 });
-            });
-            drawInteraction.on('drawend', () => {
+            }));
+            drawListenerKeys.push(drawInteraction.on('drawend', () => {
                 if (measureTooltipEl) {
                     measureTooltipEl.className = 'ol-tooltip ol-tooltip-static';
                 }
@@ -194,9 +199,9 @@ export function createDrawMeasureFeature({
                 measureTooltipEl = null;
                 createTooltips();
                 emitGraphicsOverview();
-            });
+            }));
         } else {
-            drawInteraction.on('drawend', (evt) => {
+            drawListenerKeys.push(drawInteraction.on('drawend', (evt) => {
                 const feature = evt.feature;
                 const geom = feature.getGeometry();
                 const geomType = geom?.getType?.() || drawType;
@@ -211,7 +216,7 @@ export function createDrawMeasureFeature({
                     fitView: false,
                 });
                 emitGraphicsOverview();
-            });
+            }));
         }
     }
 

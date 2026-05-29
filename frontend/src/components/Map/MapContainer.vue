@@ -170,12 +170,11 @@ const compassStore = useCompassStore();
 const tocStore = useTOCStore();
 const layerStore = useLayerStore();
 
-const store = useCompassStore();
-const selectedPalace = computed(() => store.selectedPalace);
+const selectedPalace = computed(() => compassStore.selectedPalace);
 
 // 关闭宫位解释面板
 const handleCloseExplanation = () => {
-    store.setSelectedPalace(null);
+    compassStore.setSelectedPalace(null);
 };
 
 // ========== 底图管理 Composable ==========
@@ -268,10 +267,10 @@ function parseSharedEntryFlagFromUrl() {
     // 兼容旧版分享链接。
     const legacyMarker = String(
         hashParams.get('from') ||
-            hashParams.get('shared') ||
-            searchParams.get('from') ||
-            searchParams.get('shared') ||
-            '',
+        hashParams.get('shared') ||
+        searchParams.get('from') ||
+        searchParams.get('shared') ||
+        '',
     )
         .trim()
         .toLowerCase();
@@ -331,6 +330,7 @@ const {
     handleSwipePositionUpdate,
     handleSwipeModeUpdate,
     handleSwipeClose,
+    dispose: disposeSwipe,
 } = createBasemapSwipe({
     mapInstance,
     layerStore,
@@ -354,7 +354,7 @@ const { handleLayerContextAction } = useLayerContextMenuActions({
     message,
 });
 
-const { validateBaseLayerSwitch, createBaseLayerFallbackManager, monitorLayerTimeout } =
+const { validateBaseLayerSwitch, createBaseLayerFallbackManager, monitorLayerTimeout, disposeAllMonitors } =
     createBasemapResilience({ message });
 
 const { initializeBasemapLayers } = createBasemapLayerBootstrap({
@@ -481,7 +481,7 @@ const { ensureFeatureId, serializeManagedFeature, serializeManagedFeatures } =
 const { getFeatureRepresentativeLonLat, inferLayerRepresentativeLonLat, normalizeLayerMetadata } =
     createLayerMetadataNormalizationFeature();
 
-const { scheduleLowPriorityTask, waitForCriticalTileReady } = createStartupTaskSchedulerFeature({
+const { scheduleLowPriorityTask, waitForCriticalTileReady, cancelScheduledTasks } = createStartupTaskSchedulerFeature({
     componentUnmountedRef,
     criticalTileReadyTimeoutMs: CRITICAL_TILE_READY_TIMEOUT_MS,
     mapInstanceRef: mapInstance,
@@ -650,7 +650,7 @@ const { loadCustomMap, handleLayerChange, handleLayerOrderUpdate } = createLayer
 const queryRasterValueAtCoordinateRef = ref(null);
 
 // 属性表范围同步函数桥接（用于解决 setup 初始化顺序依赖）
-let syncAttributeTableMapExtentImpl = () => {};
+let syncAttributeTableMapExtentImpl = () => { };
 
 function syncAttributeTableMapExtent() {
     syncAttributeTableMapExtentImpl?.();
@@ -740,7 +740,7 @@ const {
 
 fitToLonLatExtentByMapState = (...args) => fitToLonLatExtent(...args);
 
-const { bindBasemapSelectionWatcher, resetBasemapChain } = createBasemapSelectionWatcher({
+const { bindBasemapSelectionWatcher, resetBasemapChain, dispose: disposeSelectionWatcher } = createBasemapSelectionWatcher({
     selectedLayerRef: selectedLayer,
     switchLayerById,
     resolvePresetLayerIds,
@@ -908,7 +908,7 @@ onMounted(async () => {
         // Google 主机测速、用户定位、IP 定位等都延后到这里
         // 使用 scheduleLowPriorityTask 确保在浏览器空闲时执行
         scheduleLowPriorityTask(() => {
-            runDeferredStartupTasks().catch(() => {});
+            runDeferredStartupTasks().catch(() => { });
         });
     } catch (error) {
         const detail = String(error?.message || error || '地图核心初始化异常').trim();
@@ -1008,7 +1008,7 @@ onUnmounted(() => {
     componentUnmountedRef.value = true;
     stopMapViewSync();
     stopGraticule();
-    detachSwipeFromLayers();
+    disposeSwipe();
     disposeDistrictManager();
     disposeInteractionPickers();
     compassManagerRef?.dispose?.();
@@ -1016,6 +1016,11 @@ onUnmounted(() => {
     rightDragZoomController?.dispose?.();
     clearRouteStepStyleCache?.();
     rightDragZoomController = null;
+    // 清理 composable 暴露的资源句柄
+    disposeAllMonitors?.();
+    disposeSelectionWatcher?.();
+    emitBaseLayersChangeBatched.cancel?.();
+    cancelScheduledTasks?.();
     // 清理 resize 和 viewport 事件监听器，避免内存泄漏
     if (typeof window !== 'undefined') {
         window.removeEventListener('resize', _handleResize);
@@ -1293,9 +1298,9 @@ async function startReverseGeocodePickAndDraw() {
         formattedAddress || `逆编码点_${picked.lng.toFixed(6)}_${picked.lat.toFixed(6)}`;
     const businessAreaText = Array.isArray(reverseResult?.businessAreas)
         ? reverseResult.businessAreas
-              .map((item) => String(item?.name || '').trim())
-              .filter(Boolean)
-              .join('、')
+            .map((item) => String(item?.name || '').trim())
+            .filter(Boolean)
+            .join('、')
         : '';
 
     drawPointByCoordinatesInput({

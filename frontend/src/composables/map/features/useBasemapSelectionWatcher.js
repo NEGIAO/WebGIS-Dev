@@ -33,6 +33,7 @@ export function createBasemapSelectionWatcher({
     let isAutoSwitchingLayer = false;
     let switchTimer = null;
     let switchSeq = 0;
+    let watchStopHandle = null; // [C5] 保存 watch 停止句柄
 
     const failureStateMap = new Map();
 
@@ -360,7 +361,7 @@ export function createBasemapSelectionWatcher({
 
     function bindBasemapSelectionWatcher() {
         // Immediate reaction to selection changes: do not debounce baseline basemap switches
-        return watch(
+        watchStopHandle = watch(
             selectedLayerRef,
             (val, prevVal, onCleanup) => {
                 clearSwitchTimer();
@@ -373,10 +374,27 @@ export function createBasemapSelectionWatcher({
             },
             { immediate: true },
         );
+        return watchStopHandle;
+    }
+
+    /**
+     * [C5] 停止 watcher 并清理定时器
+     * 组件卸载时调用，防止内存泄漏
+     */
+    function dispose() {
+        clearSwitchTimer();
+        if (watchStopHandle) {
+            watchStopHandle();
+            watchStopHandle = null;
+        }
+        // 中止所有进行中的验证
+        ongoingValidations.forEach((controller) => controller.abort());
+        ongoingValidations.clear();
     }
 
     return {
         bindBasemapSelectionWatcher,
         resetBasemapChain,
+        dispose,
     };
 }

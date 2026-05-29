@@ -705,7 +705,7 @@ async function handleLookup() {
 }
 
 onBeforeUnmount(() => {
-    store.stopPolling();
+    store.dispose();
     cancelTransfer();
     stopCountdown();
 });

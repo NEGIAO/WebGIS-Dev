@@ -248,7 +248,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, nextTick } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, nextTick } from 'vue';
 import {
     apiAgentChatCompletions,
     apiAgentChatProxy,
@@ -479,116 +479,6 @@ const updateWelcomeMessageIfNeeded = () => {
     if (shouldReplace) {
         messages.value[0] = initWelcomeMessage();
     }
-};
-
-/**
- * 前端直连调用 LLM API（OpenAI 兼容格式）
- *
- * 当用户配置了个人 API Key 时，直接从前端发起 HTTP 请求到 LLM 服务端点，
- * 绕过后端代理。适用于用户使用自己申请的 API Key 场景。
- *
- * @param {Object} options - 调用参数
- * @param {string} options.baseUrl - LLM API 基础地址
- * @param {string} options.apiKey - API 密钥
- * @param {string} options.model - 模型名称
- * @param {Array} options.messages - 消息列表 [{role, content}]
- * @param {number} options.maxTokens - 最大生成 token 数
- * @param {number} options.temperature - 采样温度
- * @param {number} options.timeoutSeconds - 超时秒数
- * @returns {Promise<Object>} OpenAI 兼容的响应数据
- */
-const callDirectLLM = async ({ baseUrl, apiKey, model, messages: apiMessages, maxTokens, temperature, timeoutSeconds }) => {
-    const cleanBase = String(baseUrl || '').replace(/\/+$/, '');
-    const endpoint = `${cleanBase}/chat/completions`;
-
-    const controller = new AbortController();
-    const timeoutMs = Math.max(5000, Math.min(180000, (timeoutSeconds || 45) * 1000));
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-                model,
-                messages: apiMessages,
-                max_tokens: maxTokens || 512,
-                temperature: temperature ?? 0.2,
-                stream: false,
-            }),
-            signal: controller.signal,
-        });
-
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            const errMsg =
-                errData?.error?.message ||
-                errData?.message ||
-                errData?.detail ||
-                `HTTP ${response.status}`;
-            throw new Error(errMsg);
-        }
-
-        return await response.json();
-    } catch (err) {
-        if (err.name === 'AbortError') {
-            throw new Error('请求超时，请增加 Timeout 设置或稍后重试');
-        }
-        throw err;
-    } finally {
-        clearTimeout(timeoutId);
-    }
-};
-
-/**
- * 直接从用户配置的 LLM 端点获取可用模型列表
- *
- * 尝试请求 {baseUrl}/models 和 {baseUrl}/v1/models 两个端点，
- * 返回第一个成功响应的模型列表。
- *
- * @param {string} baseUrl - LLM API 基础地址
- * @param {string} apiKey - API 密钥
- * @returns {Promise<Array>} 标准化的模型对象列表
- */
-const fetchDirectModels = async (baseUrl, apiKey) => {
-    const cleanBase = String(baseUrl || '').replace(/\/+$/, '');
-    const endpoints = [`${cleanBase}/models`];
-    if (!cleanBase.endsWith('/v1')) {
-        endpoints.push(`${cleanBase}/v1/models`);
-    }
-
-    for (const endpoint of endpoints) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-            const response = await fetch(endpoint, {
-                headers: {
-                    Authorization: `Bearer ${apiKey}`,
-                    Accept: 'application/json',
-                },
-                signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-                const data = await response.json();
-                const rawList =
-                    data?.data || data?.models || data?.result || (Array.isArray(data) ? data : []);
-                return rawList.map((m) => ({
-                    id: m.id || m.name || String(m),
-                    name: m.name || m.id || String(m),
-                    source: 'upstream',
-                    chat_compatible: true,
-                }));
-            }
-        } catch {
-            continue;
-        }
-    }
-    return [];
 };
 
 /**
@@ -825,14 +715,6 @@ const loadAvailableModels = async () => {
     } finally {
         isLoadingModels.value = false;
     }
-};
-
-const formatModelOptionLabel = (model = {}) => {
-    const name = String(model?.name || model?.id || '').trim() || 'unknown-model';
-    if (model?.chat_compatible === false) {
-        return `${name}（不支持 chat/completions）`;
-    }
-    return name;
 };
 
 /**
@@ -1215,6 +1097,13 @@ const sendMessage = async () => {
         scrollToBottom();
     }
 };
+
+onBeforeUnmount(() => {
+    if (clearConfirmTimer) {
+        clearTimeout(clearConfirmTimer);
+        clearConfirmTimer = null;
+    }
+});
 
 onMounted(async () => {
     // 启动时自动预加载模型列表

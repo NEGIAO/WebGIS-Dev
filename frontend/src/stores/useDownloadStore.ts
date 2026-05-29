@@ -186,6 +186,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     let pollInFlight = false;
     let downloadTriggered = false;
 
+    function dispose(): void {
+        stopPolling();
+    }
+
     const hasActiveTask = computed(() => Boolean(taskId.value));
     const isRunning = computed(() =>
         ['pending', 'downloading', 'stitching'].includes(status.value),
@@ -438,5 +442,6 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         resetTask,
         fetchTaskById,
         applyBboxFromExtent,
+        dispose,
     };
 });

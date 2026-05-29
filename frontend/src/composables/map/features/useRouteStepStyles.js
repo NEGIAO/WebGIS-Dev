@@ -9,7 +9,19 @@ const DRIVE_STEP_COLOR_PALETTE = ['#10B981', '#0EA5E9', '#F59E0B', '#8B5CF6', '#
  * 职责：公交/驾车步骤样式生成与缓存，不关心业务数据来源。
  */
 export function createRouteStepStyles() {
+    const MAX_CACHE_SIZE = 200; // [C9] 样式缓存上限
     const styleCache = new globalThis.Map();
+
+    // [C9] 缓存超出上限时清理最旧的条目（Map 迭代顺序即插入顺序）
+    function evictIfNeeded() {
+        if (styleCache.size > MAX_CACHE_SIZE) {
+            const evictCount = styleCache.size - MAX_CACHE_SIZE;
+            const keys = styleCache.keys();
+            for (let i = 0; i < evictCount; i++) {
+                styleCache.delete(keys.next().value);
+            }
+        }
+    }
 
     const hexToRgba = (hexColor, alpha = 1) => {
         const hex = String(hexColor || '')
@@ -53,6 +65,7 @@ export function createRouteStepStyles() {
         });
 
         styleCache.set(key, style);
+        evictIfNeeded();
         return style;
     };
 
@@ -108,6 +121,7 @@ export function createRouteStepStyles() {
             });
 
             styleCache.set(key, style);
+            evictIfNeeded();
             return style;
         }
 
@@ -127,6 +141,7 @@ export function createRouteStepStyles() {
         });
 
         styleCache.set(key, style);
+        evictIfNeeded();
         return style;
     };
 

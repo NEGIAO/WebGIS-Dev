@@ -46,6 +46,7 @@ export function createBasemapSwipe({
         detachFromLayers: detachSwipeFromLayers,
         updateSwipePosition,
         updateSwipeMode,
+        dispose: disposeSwipe,
     } = useMapSwipe();
 
     const mapContainerRect = ref(null);
@@ -255,7 +256,10 @@ export function createBasemapSwipe({
         if (!config?.enabled || !mapInstance.value) return;
 
         const targetLayerIds = config.targetLayerIds || [];
-        if (!targetLayerIds.length) return;
+        if (!targetLayerIds.length) {
+            layerStore.disableSwipe();
+            return;
+        }
 
         // 从 targetLayerIds 中区分左右图层（前半为左，后半为右）
         const midIndex = Math.ceil(targetLayerIds.length / 2);
@@ -264,7 +268,10 @@ export function createBasemapSwipe({
 
         try {
             const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);
-            if (!leftTileLayers.length) return;
+            if (!leftTileLayers.length) {
+                layerStore.disableSwipe();
+                return;
+            }
 
             const rightCompareLayers = [];
             rightLayerIds.forEach((layerId, index) => {
@@ -285,7 +292,10 @@ export function createBasemapSwipe({
                 rightCompareLayers.push(compareLayer);
             });
 
-            if (!rightCompareLayers.length) return;
+            if (!rightCompareLayers.length) {
+                layerStore.disableSwipe();
+                return;
+            }
 
             const swipeBindings = [
                 ...leftTileLayers.map((layer) => ({ layer, side: 'left' })),
@@ -299,6 +309,7 @@ export function createBasemapSwipe({
             console.warn('[restoreSwipe] 恢复卷帘状态失败:', e);
             clearSwipeCompareLayers();
             detachSwipeFromLayers();
+            layerStore.disableSwipe();
         }
     }
 
@@ -311,5 +322,6 @@ export function createBasemapSwipe({
         handleSwipePositionUpdate,
         handleSwipeModeUpdate,
         handleSwipeClose,
+        dispose: disposeSwipe,
     };
 }

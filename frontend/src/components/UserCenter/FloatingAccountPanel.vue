@@ -442,6 +442,7 @@ function resetPasswordForm() {
 }
 
 function handleDocumentClick(event) {
+    if (!isOpen.value) return;
     const root = event.target?.closest?.('.floating-account-manager');
     if (!root) {
         closePanel();
@@ -1320,33 +1321,6 @@ onBeforeUnmount(() => {
     z-index: 1;
     transform-origin: center;
     /* background defaults to panel gradient */
-}
-
-.account-panel.is-fullscreen .panel-header {
-    padding: 16px 20px;
-}
-
-.account-panel.is-fullscreen .panel-nav {
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.account-panel.is-fullscreen .nav-tab {
-    flex: 0 1 calc(25% - 6px);
-    padding: 10px 12px;
-}
-
-.account-panel.is-fullscreen .panel-body {
-    height: auto;
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-}
-
-.account-panel.is-fullscreen .panel-footer {
-    position: sticky;
-    bottom: 0;
-    padding: 12px 20px;
 }
 
 .account-panel.is-fullscreen .panel-header {

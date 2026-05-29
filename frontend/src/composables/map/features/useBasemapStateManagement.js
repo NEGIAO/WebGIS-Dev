@@ -41,7 +41,7 @@ export function createBasemapStateManagementFeature({
         let pending = false;
         let timer = null;
 
-        return (...args) => {
+        const batched = (...args) => {
             if (pending) return;
 
             pending = true;
@@ -52,6 +52,17 @@ export function createBasemapStateManagementFeature({
                 pending = false;
             }, batchWindow);
         };
+
+        // [C6] 暴露 cancel 方法，支持组件卸载时取消待执行的批量任务
+        batched.cancel = () => {
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            pending = false;
+        };
+
+        return batched;
     };
 
     /**

@@ -3,6 +3,8 @@
  * 职责：底图切换验证、加载监测、异常降级策略。
  */
 export function createBasemapResilience({ message }) {
+    // [C4] 追踪所有活跃的超时监测器，支持统一清理
+    const activeMonitors = new Map(); // layerId -> { cleanup, layer }
     /**
      * [改进] 验证底图加载状态
      * - 前置检查立即返回（同步）
@@ -243,11 +245,28 @@ export function createBasemapResilience({ message }) {
         source.on('tileloadstart', onTileLoadStart);
         source.on('tileloadend', onTileLoadEnd);
         source.on('tileloaderror', onTileLoadError);
+
+        // [C4] 注册监测器以便统一清理
+        activeMonitors.set(layerId, { cleanup: cleanUp, layer });
     };
+
+    /**
+     * [C4] 清理所有活跃的超时监测器
+     * 组件卸载时调用，防止 timer 和事件监听器泄漏
+     */
+    function disposeAllMonitors() {
+        activeMonitors.forEach(({ cleanup, layer }, layerId) => {
+            cleanup();
+            const monitorKey = `_isTimeoutMonitored_${layerId}`;
+            layer?.set?.(monitorKey, false);
+        });
+        activeMonitors.clear();
+    }
 
     return {
         validateBaseLayerSwitch,
         createBaseLayerFallbackManager,
         monitorLayerTimeout,
+        disposeAllMonitors,
     };
 }

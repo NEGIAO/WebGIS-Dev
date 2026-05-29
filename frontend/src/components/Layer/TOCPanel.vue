@@ -529,7 +529,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { useGisLoader } from '../../composables/useGisLoader';
 import { useSharedResourceLoader } from '../../composables/useSharedResourceLoader';
@@ -1148,7 +1148,7 @@ watch(
     (overview) => {
         layerStore.syncLayers(props.userLayers || [], overview || {});
     },
-    { immediate: true, deep: true },
+    { immediate: true },
 );
 
 watch(
@@ -1182,6 +1182,11 @@ layerStore.bindHandlers({
     onHighlightFeature: (payload) => emit('highlight-attribute-feature', payload),
     onZoomFeature: (payload) => emit('zoom-attribute-feature', payload),
     onViewFeature: (payload) => emit('zoom-attribute-feature', payload),
+});
+
+onBeforeUnmount(() => {
+    // 无参调用 bindHandlers 将所有回调设为 undefined，清除事件绑定
+    layerStore.bindHandlers();
 });
 
 function triggerFileUpload() {

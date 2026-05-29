@@ -21,6 +21,10 @@ export function createStartupTaskSchedulerFeature({
     criticalTileReadyTimeoutMs = 3000,
     mapInstanceRef = null,
 }) {
+    // [C10] 追踪所有待执行的调度任务句柄
+    const pendingHandles = [];
+    const isIdleCallback = typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function';
+
     /**
      * 在首屏关键瓦片加载后调度非关键任务
      * 避免阻塞首次渲染，提升首屏加载体验
@@ -28,18 +32,40 @@ export function createStartupTaskSchedulerFeature({
      * @param {Function} task - 待调度的任务函数
      */
     function scheduleLowPriorityTask(task) {
-        if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-            window.requestIdleCallback(
+        if (isIdleCallback) {
+            const handle = window.requestIdleCallback(
                 () => {
+                    // 任务执行后移除追踪
+                    const idx = pendingHandles.indexOf(handle);
+                    if (idx !== -1) pendingHandles.splice(idx, 1);
                     if (!componentUnmountedRef.value) task();
                 },
                 { timeout: 1500 },
             );
+            pendingHandles.push(handle);
             return;
         }
-        setTimeout(() => {
+        const handle = setTimeout(() => {
+            const idx = pendingHandles.indexOf(handle);
+            if (idx !== -1) pendingHandles.splice(idx, 1);
             if (!componentUnmountedRef.value) task();
         }, 0);
+        pendingHandles.push(handle);
+    }
+
+    /**
+     * [C10] 取消所有待执行的调度任务
+     * 组件卸载时调用，防止回调在卸载后执行
+     */
+    function cancelScheduledTasks() {
+        pendingHandles.forEach((handle) => {
+            if (isIdleCallback) {
+                window.cancelIdleCallback(handle);
+            } else {
+                clearTimeout(handle);
+            }
+        });
+        pendingHandles.length = 0;
     }
 
     /**
@@ -72,5 +98,6 @@ export function createStartupTaskSchedulerFeature({
     return {
         scheduleLowPriorityTask,
         waitForCriticalTileReady,
+        cancelScheduledTasks,
     };
 }

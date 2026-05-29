@@ -474,14 +474,20 @@ export const useAttrStore = defineStore('attrStore', () => {
         const dataset = activeDataset.value;
         if (!dataset) return;
         if (!dataset.fieldConfig[fieldKey]) return;
-        dataset.fieldConfig[fieldKey].alias = String(alias || fieldKey);
+        dataset.fieldConfig[fieldKey] = {
+            ...dataset.fieldConfig[fieldKey],
+            alias: String(alias || fieldKey),
+        };
     }
 
     function setFieldVisibility(fieldKey: string, visibleFlag: boolean): void {
         const dataset = activeDataset.value;
         if (!dataset) return;
         if (!dataset.fieldConfig[fieldKey]) return;
-        dataset.fieldConfig[fieldKey].visible = !!visibleFlag;
+        dataset.fieldConfig[fieldKey] = {
+            ...dataset.fieldConfig[fieldKey],
+            visible: !!visibleFlag,
+        };
     }
 
     function setPanelRect(nextRect: Partial<PanelRect>): void {
