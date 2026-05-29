@@ -35,14 +35,7 @@ const router = createRouter({
     ],
 });
 
-function normalizeBinaryFlag(value, fallback = '0') {
-    const raw = String(value ?? '')
-        .trim()
-        .toLowerCase();
-    if (raw === '1' || raw === 'true') return '1';
-    if (raw === '0' || raw === 'false') return '0';
-    return fallback === '1' ? '1' : '0';
-}
+import { normalizeBinaryFlag } from '@/utils/normalize';
 
 function readRouteQueryValue(route, key) {
     const raw = route?.query?.[key];

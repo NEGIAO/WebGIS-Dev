@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.0.8
+# WebGIS 前端项目 — v3.1.7
 
 ## 📋 项目概述
 
@@ -90,306 +90,205 @@ VITE_BASE_URL=/WebGIS-Dev/ npm run build
 
 ## 目录结构（2026-05-29 更新）
 
-以下结构按当前工程实际文件更新，尽量做到逐文件注释。
+以下结构按当前工程实际文件更新。
 
 ```text
-frontend/
-├── .env.example                          # 环境变量模板
-├── .env.local                            # 本地开发环境变量（不建议提交）
-├── .env.production                       # 生产环境变量
-├── .prettierrc                           # Prettier 格式化配置
-├── eslint.config.js                      # ESLint 规则配置
-├── index.html                            # Vite HTML 入口
-├── jsconfig.json                         # JS/路径别名配置
-├── package.json                          # 依赖与脚本入口
-├── package-lock.json                     # 依赖锁文件
-├── README.md                             # 当前文档
-├── stats.html                            # 打包体积分析结果（生成文件）
-├── vite.config.js                        # Vite 构建配置（分包、别名、优化等）
-├── dist/                                 # 构建产物目录（生成文件）
-├── node_modules/                         # 依赖目录（生成文件）
+frontend/src/
+├── App.vue                                   # 根组件
+├── main.js                                   # 应用入口（挂载 Router/Pinia）
 │
-├── public/                               # 静态资源目录
-│   ├── adcode.json                       # 行政区划树数据（行政区面板使用）
-│   ├── favicon.ico                       # Vue 图标
-│   ├── min-enhanced.js                   # 统计/增强脚本
-│   ├── ol.css                            # OpenLayers 备用样式
-│   ├── ol.js                             # OpenLayers 备用脚本
-│   ├── avatars/                          # 用户头像
-│   ├── images/                           # 图片资源（含校园/Logo/罗盘素材）
-│   ├── ShareData/                        # 共享 GIS 数据
-│   └── tiles/                            # 本地瓦片目录（z/x/y）
+├── api/                                      # API 客户端封装
+│   ├── backend.js                            # 后端通用请求封装 + 鉴权拦截
+│   ├── download.js                           # 底图下载任务 API
+│   ├── geocoding.js                          # 天地图/高德地理编码
+│   ├── index.js                              # barrel export
+│   ├── ipLocation.js                         # IP 定位 API
+│   ├── locationSearch.js                     # 地点搜索 API
+│   ├── map.js                                # 地图业务 API
+│   └── weather.js                            # 天气 API
 │
-├── scripts/
-│   └── generate-boundary-index.mjs       # 边界索引文档生成脚本
+├── assets/                                   # 全局样式
+│   ├── theme.css                             # 全局主题变量（品牌色/文字/背景/边框）
+│   └── toc-theme.css                         # TOC 主题变量（引用全局变量）
 │
-└── src/
-    ├── App.vue                           # 根组件
-    ├── main.js                           # 应用入口（挂载 Router/Pinia）
-    │
-    ├── api/
-    │   ├── backend.js                    # 前后端通信 API 枢纽（用户鉴权/异常处理）
-    │   ├── download.js                   # 底图下载任务 API（支持 onDownloadProgress 与 Blob 下载）
-    │   ├── geocoding.js                  # 地理编码/逆地理编码 API
-    │   ├── index.js                      # API 聚合导出
-    │   ├── ipLocation.js                 # IP 定位 API
-    │   ├── locationSearch.js             # 地点检索 API
-    │   ├── map.js                        # 地图业务 API（含 AOI）
-    │   └── weather.js                    # 天气 API
-    │
-    ├── assets/
-    │   ├── base.css                      # 全局基础样式
-    │   └── main.css                      # 应用主样式
-    │
-    ├── components/
-    │   ├── Chat/                                   # AI 聊天助手
-    │   │   └── ChatPanelContent.vue                # AI 聊天面板
-    │   │
-    │   ├── Cesium/
-    │   │   ├── CesiumAdvancedEffects.vue           # Cesium 高级特效
-    │   │   ├── CesiumContainer.vue                 # 3D 容器组件
-    │   │   ├── Wind2D.js                           # 2D 风场渲染核心
-    │   │   └── terrain/                            # 地形与标注 Provider
-    │   │       ├── GeoTerrainProvider.js           # 自定义地形 Provider
-    │   │       ├── GeoWTFS.js                      # 自定义 WTFS 标注 Provider
-    │   │       └── util.js                         # Protobuf 工具
-    │   │
-    │   ├── Compass/                                # 罗盘控制面板
-    │   │   ├── CompassControlPanel.vue             # 罗盘控制面板（主题本地切换，分享状态不走后端）
-    │   │   └── PalaceExplanationPanel.vue          # 罗盘宫位解释面板（点击选中宫位后显示风水解释）
-    │   │
-    │   ├── ControlsPanel/                          # 左侧控制栏功能域
-    │   │   ├── ControlsPanel.vue                   # 左侧工具总面板（主入口）
-    │   │   ├── AdministrativeDivisionPanel.vue     # 行政区面板（选区、触发边界加载）
-    │   │   ├── AdministrativeDivisionTreeNode.vue  # 行政区树节点（递归渲染）
-    │   │   ├── DrawPanel.vue                       # 绘制子面板（点/线/面选择）
-    │   │   ├── LogMonitor.vue                      # 日志监控组件
-    │   │   ├── MeasurePanel.vue                    # 测量子面板（测距/测面选择）
-    │   │   └── SpatialAnalysisPanel.vue            # 空间分析面板（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
-    │   │
-    │   ├── feng-shui-compass-svg/
-    │   │   ├── feng-shui-compass-svg.vue           # 罗盘 SVG 主组件
-    │   │   ├── data/                               # 罗盘静态数据
-    │   │   ├── themes/                             # 罗盘主题配置（5种主题配置）
-    │   │   ├── types/                              # 罗盘类型定义
-    │   │   └── Explanation/                        # 宫位解释 JSON 数据
-    │   │       ├── compass_explanation_standard.json       # 标准罗盘宫位解释
-    │   │       ├── polygon_explanation_standard.json       # 多边形主题宫位解释
-    │   │       ├── circle_explanation_standard.json        # 圆形主题宫位解释
-    │   │       ├── dark_explanation_standard.json          # 暗黑主题宫位解释
-    │   │       └── simple_explanation_standard.json        # 简洁主题宫位解释
-    │   │
-    │   ├── Layer/                                  # 图层管理系统
-    │   │   ├── TOCPanel.vue                        # TOC 与图层工具主面板
-    │   │   ├── LayerPanel.vue                      # TOC 树容器
-    │   │   ├── TOCTreeItem.vue                     # TOC 递归节点（右键菜单入口）
-    │   │   ├── LayerControlPanel.vue               # 地图右上角底图控制面板
-    │   │   ├── LayerPropertiesDialog.vue           # 图层属性弹窗
-    │   │   ├── AttributeTable.vue                  # 属性表组件（字段/筛选/联动）
-    │   │   └── SharedResourceTreeItem.vue          # 共享资源树节点
-    │   │
-    │   ├── Map/                                    # 地图核心与控制器
-    │   │   ├── MapContainer.vue                    # 地图容器与能力暴露核心组件
-    │   │   ├── MapControlsBar.vue                  # 底部坐标/缩放/定位工具栏
-    │   │   ├── MapSwipeController.vue              # 地图对比滑块组件（仅裁剪在线底图，不影响业务图层）
-    │   │   ├── MapDownloader.vue                   # 在线底图导出面板（支持传输进度/总大小/失败重试）
-    │   │   └── MapEasterEgg.vue                    # 地图彩蛋组件
-    │   │
-    │   ├── Routing/                                # 路线规划
-    │   │   ├── BusPlannerPanel.vue                 # 公交路径规划面板
-    │   │   ├── DrivingPlannerPanel.vue             # 驾车路径规划面板
-    │   │   └── MapPointPickerCard.vue              # 地图点选卡片（被前两者共享）
-    │   │
-    │   ├── Search/                                 # 搜索与数据注入
-    │   │   ├── LocationSearch.vue                  # 地点搜索组件
-    │   │   └── AmapAoiInjectDialog.vue             # 高德 AOI 手动注入弹窗
-    │   │
-    │   ├── Shell/                                  # 应用壳层/全局 UI
-    │   │   ├── TopBar.vue                          # 顶栏组件
-    │   │   ├── SidePanel.vue                       # 右侧综合侧栏（资讯/TOC/聊天/路线）
-    │   │   ├── GlobalLoading.vue                   # 全局加载遮罩
-    │   │   ├── Message.vue                         # 全局消息条
-    │   │   ├── PersistentAnnouncementBar.vue       # 顶部公告条
-    │   │   └── MagicCursor.vue                     # 首屏特效组件
-    │   │
-    │   ├── Weather/                                # 天气面板
-    │   │   └── WeatherChartPanel.vue               # 天气可视化组件
-    │   │
-    │   └── UserCenter/                             # 用户中心
-    │       ├── AdminControlPanel.vue               # 管理员控制台
-    │       ├── ApiKeysManagementPanel.vue          # API 密钥管理面板
-    │       ├── ApiManagementPanel.vue              # API 使用管理面板
-    │       └── FloatingAccountPanel.vue            # 用户中心浮层主组件
-    │
-    ├── composables/
-    │   ├── dataImport/                          # 🆕 数据导入模块（拆分自 useLayerDataImport.js）
-    │   │   ├── rasterUtils.js                   # 栅格工具函数（波段统计/拉伸/NoData/采样器）
-    │   │   ├── vectorUtils.js                   # 矢量工具函数（解码/类型识别/标签字段）
-    │   │   └── index.js                         # barrel export
-    │   ├── useGisLoader.ts                      # GIS 数据加载调度入口
-    │   ├── useKmzLoader.js                      # KMZ 解析工具
-    │   ├── useLayerDataImport.js                # 🔄 导入数据转图层主流程（已拆分工具函数）
-    │   ├── useManagedLayerRegistry.js           # 托管图层注册/广播
-    │   ├── useMapState.js                       # 地图状态与视图状态管理
-    │   ├── useMapSwipe.ts                       # 地图对比滑块 Canvas 裁剪逻辑（仅作用于底图层）
-    │   ├── useMapSwipeTest.ts                   # 地图对比滑块测试与调试工具（验证底图/业务图层分离）
-    │   ├── useMessage.js                        # 消息系统 composable
-    │   ├── useMessageIslandMotion.js            # 消息动效行为控制
-    │   ├── useSharedResourceLoader.ts           # 共享资源扫描/加载
-    │   ├── useTileSourceFactory.ts              # 瓦片源工厂
-    │   ├── useUserLayerActions.js               # 用户图层动作集合
-    │   ├── useUserLocation.js                   # 用户定位能力
-    │   │
-    │   ├── Magic/
-    │   │   ├── useDelaunay.js                   # Delaunay 特效
-    │   │   ├── useFluid.js                      # 流体特效
-    │   │   ├── useGravity.js                    # 重力特效
-    │   │   ├── useSingularity.js                # 奇点特效
-    │   │   └── useWave.js                       # 波动特效
-    │   │
-    │   └── map/
-    │       ├── basemapSystem.js                 # 底图系统聚合出口
-    │       ├── index.js                         # map 域聚合导出
-    │       ├── interactionHandlers.js           # 交互处理聚合出口
-    │       ├── layerManager.js                  # 图层管理聚合出口
-    │       ├── routeService.js                  # 路线服务聚合出口
-    │       ├── usePositionCodeTool.js           # p 参数工具
-    │       │
-    │       ├── features/
-    │       │   ├── README.md                    # features 子模块说明
-    │       │   ├── index.js                     # features 聚合导出
-    │       │   ├── basemapLayerFactory.js        # Basemap layer factory (raster vs vector tile)
-    │       │   ├── useBasemapLayerBootstrap.js  # 底图初始化
-    │       │   ├── useBasemapSwipe.js           # 🆕 底图卷帘分析 composable（双底图对比裁剪）
-    │       │   ├── useBasemapResilience.js      # 底图容灾与兜底
-    │       │   ├── useBasemapSelectionWatcher.js # 底图切换监听
-    │       │   ├── useBasemapStateManagement.js # 底图状态管理
-    │       │   ├── useBasemapUrlMapping.js      # 底图 URL 映射
-    │       │   ├── useCoordinateSystemConversion.js # CRS 转换
-    │       │   ├── useCreateManagedVectorLayer.js   # 托管矢量图层创建
-    │       │   ├── useDeferredUserLayerApis.js      # 图层 API 延迟加载
-    │       │   ├── useDistrictManager.js         # 🆕 行政区划管理 composable（边界加载/聚焦/可见性）
-    │       │   ├── useDrawMeasure.js             # 绘制与测量
-    │       │   ├── useLayerContextMenuActions.js # 图层上下文菜单动作
-    │       │   ├── useLayerControlHandlers.js    # 图层控制处理
-    │       │   ├── useLayerMetadataNormalization.js # 图层元数据标准化
-    │       │   ├── useManagedFeatureHighlight.js # 要素高亮
-    │       │   ├── useManagedFeatureOperations.js # 要素操作
-    │       │   ├── useManagedFeatureSerialization.js # 要素序列化
-    │       │   ├── useManagedLayerStyle.js       # 图层样式
-    │       │   ├── useMapEventHandlers.js        # 地图事件处理
-    │       │   ├── useMapInteractionPickers.js   # 🆕 地图交互选点 composable（公交/逆地编/下载框选）
-    │       │   ├── useMapSearchAndCoordinateInput.js # 搜索与坐标输入
-    │       │   ├── useMapUIEventHandlers.js      # UI 事件处理
-    │       │   ├── useRightDragZoom.js           # 右键拖拽缩放
-    │       │   ├── useRouteRendering.js          # 路线渲染
-    │       │   ├── useRouteStepInteraction.js    # 路线步骤交互
-    │       │   ├── useRouteStepStyles.js         # 路线步骤样式
-    │       │   ├── useSpatialAnalysis.js         # 空间分析（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
-    │       │   ├── useStartupTaskScheduler.js    # 启动任务调度
-    │       │   └── useUserLayerApiFacade.js      # 用户图层 API 门面
-    │       │
-    │       └── toc/
-    │           ├── factory.js                    # TOC 标准节点工厂
-    │           ├── index.js                      # TOC 域聚合导出
-    │           ├── protocol.js                   # TOC 协议层（命令、格式、能力）
-    │           ├── actions/
-    │           │   ├── contextActionManager.js  # TOC 事件执行器
-    │           │   ├── exportService.js         # TOC 导出服务
-    │           │   └── selectionManager.js      # TOC 多选/批处理
-    │           └── menu/
-    │               ├── commandDispatcher.js     # 菜单命令分发
-    │               └── contextMenu.js           # 右键菜单构建
-    │
-    ├── constants/
-    │   ├── basemap/                             # 🆕 底图配置模块（拆分自 useBasemapManager.ts）
-    │   │   ├── basemapConfig.ts                 # 图源定义 + 预设配置（合并配置，方便维护）
-    │   │   ├── basemapResolver.ts               # 解析逻辑（创建配置/解析预设）
-    │   │   └── index.ts                         # barrel export
-    │   ├── goldenSoupQuotes.js                  # 语录常量
-    │   ├── index.js                             # 常量聚合导出
-    │   ├── mapStyles.js                         # 地图样式与模板
-    │   ├── NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts # 非标 XYZ 示例
-    │   └── useStyleEditor.js                    # 样式编辑模板
-    │
-    ├── router/
-    │   ├── index.js                             # 路由与守卫
-    │   └── lazyHomeViewLoader.js                # HomeView 二段式懒加载
-    │
-    ├── services/
-    │   ├── CompassManager.ts                    # 罗盘管理服务（罗盘绘制的主要实现逻辑）
-    │   ├── compassUrlState.ts                   # 罗盘 URL 单参数加密状态（cs）编解码
-    │   └── DistrictManager.ts                   # 行政区边界加载与 TOC/图层同步
-    │
-    ├── stores/
-    │   ├── layer/                               # 🆕 图层模块（拆分自 useLayerStore.ts）
-    │   │   ├── layerHelpers.ts                  # 图层工具函数 + 类型定义
-    │   │   ├── layerTreeBuilder.ts              # 图层树构建器
-    │   │   └── index.ts                         # barrel export
-    │   ├── index.ts                             # Store 聚合导出
-    │   ├── useAppStore.ts                       # 全局应用状态
-    │   ├── useAttrStore.ts                      # 属性表状态
-    │   ├── useAuthStore.ts                      # 登录认证状态
-    │   ├── useCompassStore.ts                   # 罗盘状态（纯前端本地主题配置）
-    │   ├── useDownloadStore.ts                  # 底图下载任务状态
-    │   ├── useLayerStore.ts                     # 🔄 图层树与图层交互状态（已拆分工具函数）
-    │   ├── useTOCStore.ts                       # TOC 元数据与行政区树状态
-    │   ├── useUrlParamStore.ts                  # URL 参数状态
-    │   ├── useUserPreferencesStore.ts           # 用户偏好状态
-    │   └── useWeatherStore.ts                   # 天气状态
-    │
-    ├── utils/
-    │   ├── amapRectangle.js                     # 矩形范围工具
-    │   ├── auth.js                              # 认证辅助工具
-    │   ├── coordinateFormatter.js               # 坐标格式化
-    │   ├── coordinateInputHandler.js            # 坐标输入解析
-    │   ├── coordTransform.js                    # 坐标转换工具
-    │   ├── crsUtils.js                          # CRS 工具
-    │   ├── drawTransitRoute.ts                  # 公交路径绘制
-    │   ├── driveXmlParser.ts                    # 驾车 XML 解析
-    │   ├── explanationLookup.ts                 # 罗盘宫位解释查询引擎（精确映射 + 回退策略）
-    │   ├── index.js                             # utils 聚合导出
-    │   ├── labelValidator.ts                    # 标注内容校验
-    │   ├── layerExportService.js                # 图层导出服务
-    │   ├── loading.js                           # 全局 loading 控制
-    │   ├── loadTiandituSdk.js                   # 天地图 SDK 加载
-    │   ├── themeExplanationMapper.ts            # 罗盘主题→解释数据映射器（主题识别与标准化导入）
-    │   ├── transitRouteBuilder.js               # 路线构建器
-    │   ├── urlCrypto.js                         # URL 编解码辅助
-    │   ├── userLocationContext.js               # 用户定位上下文
-    │   ├── userPositionCache.js                 # 定位缓存
-    │   ├── biz/
-    │   │   └── index.js                         # 业务工具聚合导出
-    │   ├── echarts/
-    │   │   ├── cesiumFxRuntime.js               # Cesium 图表运行时
-    │   │   └── weatherRuntime.js                # 天气图表运行时
-    │   ├── geo/
-    │   │   └── index.js                         # 地理工具聚合导出
-    │   ├── io/
-    │   │   └── index.js                         # 文件 IO 工具聚合导出
-    │   └── gis/
-    │       ├── batchProcessor.js                # 批处理引擎
-    │       ├── crs-engine.ts                    # CRS 引擎
-    │       ├── crsAware.js                      # CRS 识别
-    │       ├── dataDispatcher.js                # 数据分发器
-    │       ├── decompressFile.js                # 单文件解压
-    │       ├── decompressor.ts                  # 递归解压
-    │       ├── deferredGisAssets.js             # GIS 依赖预热
-    │       ├── deferredGisWarmupLauncher.js     # GIS 预热触发
-    │       ├── loadJsZip.ts                     # JSZip 懒加载
-    │       ├── mapRuntimeDeps.js                # OpenLayers 运行时依赖加载
-    │       └── parsers/
-    │           ├── amapAoiParser.js             # AOI 解析器
-    │           ├── dbfParser.js                 # DBF 解析器
-    │           ├── kmlParser.ts                 # KML/KMZ 解析器
-    │           ├── kmlStyleParser.ts            # KML/KMZ 样式解析器
-    │           ├── shpParser.ts                 # SHP 解析器
-    │           ├── unifiedParser.ts             # 统一解析器
-    │           └── tifLoader.ts                 # GeoTIFF 解析器
-    │
-    └── views/
-        ├── HomeView.vue                         # 主页面（地图与侧栏总编排）
-        └── RegisterView.vue                     # 登录/注册页
+├── components/                               # 业务组件（按功能域分组）
+│   ├── Cesium/                               # 3D 地球模块
+│   │   ├── CesiumContainer.vue               # Cesium 容器
+│   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/Bloom）
+│   │   ├── Wind2D.js                         # 2D 风场渲染
+│   │   └── terrain/                          # 自定义地形 Provider
+│   │       ├── GeoTerrainProvider.js
+│   │       ├── GeoWTFS.js
+│   │       └── util.js
+│   ├── Chat/
+│   │   └── ChatPanelContent.vue              # AI 聊天面板
+│   ├── Compass/
+│   │   ├── CompassControlPanel.vue           # 罗盘控制面板
+│   │   └── PalaceExplanationPanel.vue        # 宫位解释面板
+│   ├── ControlsPanel/                        # 左侧控制栏
+│   │   ├── ControlsPanel.vue                 # 总面板入口
+│   │   ├── AdministrativeDivisionPanel.vue   # 行政区面板
+│   │   ├── AdministrativeDivisionTreeNode.vue
+│   │   ├── DrawPanel.vue                     # 绘制面板
+│   │   ├── LogMonitor.vue                    # 日志监控
+│   │   ├── MeasurePanel.vue                  # 测量面板
+│   │   └── SpatialAnalysisPanel.vue          # 空间分析面板
+│   ├── feng-shui-compass-svg/                # 罗盘 SVG HUD
+│   │   ├── feng-shui-compass-svg.vue
+│   │   ├── data/                             # 罗盘静态数据
+│   │   ├── themes/                           # 5 种主题配置
+│   │   ├── types/                            # TypeScript 类型
+│   │   └── Explanation/                      # 宫位解释 JSON
+│   ├── Layer/                                # 图层管理
+│   │   ├── TOCPanel.vue                      # TOC 主面板
+│   │   ├── LayerPanel.vue                    # TOC 树容器
+│   │   ├── TOCTreeItem.vue                   # 递归树节点
+│   │   ├── LayerControlPanel.vue             # 底图控制面板
+│   │   ├── LayerPropertiesDialog.vue         # 图层属性弹窗
+│   │   ├── AttributeTable.vue                # 属性表
+│   │   └── SharedResourceTreeItem.vue        # 共享资源树节点
+│   ├── Map/                                  # 地图核心
+│   │   ├── MapContainer.vue                  # 地图容器（能力暴露核心）
+│   │   ├── MapControlsBar.vue                # 底部坐标/缩放工具栏
+│   │   ├── MapSwipeController.vue            # 卷帘对比滑块
+│   │   ├── MapDownloader.vue                 # 底图下载面板
+│   │   └── MapEasterEgg.vue                  # 彩蛋组件
+│   ├── Routing/
+│   │   ├── BusPlannerPanel.vue               # 公交规划
+│   │   ├── DrivingPlannerPanel.vue           # 驾车规划
+│   │   └── MapPointPickerCard.vue            # 地图点选卡片
+│   ├── Search/
+│   │   ├── LocationSearch.vue                # 地点搜索
+│   │   └── AmapAoiInjectDialog.vue           # 高德 AOI 注入弹窗
+│   ├── Shell/                                # 应用壳层
+│   │   ├── TopBar.vue                        # 顶栏
+│   │   ├── SidePanel.vue                     # 右侧综合侧栏
+│   │   ├── GlobalLoading.vue                 # 全局加载遮罩
+│   │   ├── Message.vue                       # 全局消息条
+│   │   ├── PersistentAnnouncementBar.vue     # 顶部公告条
+│   │   └── MagicCursor.vue                   # 首屏特效
+│   ├── Weather/
+│   │   └── WeatherChartPanel.vue             # 天气可视化
+│   └── UserCenter/
+│       ├── AdminControlPanel.vue             # 管理员控制台
+│       ├── ApiKeysManagementPanel.vue        # API 密钥管理
+│       ├── ApiManagementPanel.vue            # API 使用管理
+│       └── FloatingAccountPanel.vue          # 用户中心浮层
+│
+├── composables/                              # 组合式函数
+│   ├── Magic/                                # 首屏视觉特效
+│   │   ├── useDelaunay.js
+│   │   ├── useFluid.js
+│   │   ├── useGravity.js
+│   │   ├── useSingularity.js
+│   │   └── useWave.js
+│   ├── dataImport/                           # 数据导入工具
+│   │   ├── rasterUtils.js                    # 栅格工具（波段统计/拉伸/NoData）
+│   │   ├── vectorUtils.js                    # 矢量工具（解码/类型识别）
+│   │   └── index.js
+│   ├── map/                                  # 地图核心 composables
+│   │   ├── features/                         # 功能模块（30+ 文件）
+│   │   │   ├── basemapLayerFactory.js        # 底图图层工厂
+│   │   │   ├── useBasemapLayerBootstrap.js   # 底图初始化
+│   │   │   ├── useBasemapResilience.js       # 底图容错与降级
+│   │   │   ├── useBasemapSelectionWatcher.js # 底图选择监听
+│   │   │   ├── useBasemapStateManagement.js  # 底图状态批处理
+│   │   │   ├── useBasemapSwipe.js            # 卷帘对比
+│   │   │   ├── useDrawMeasure.js             # 绘制与测量
+│   │   │   ├── useMapEventHandlers.js        # 地图事件处理
+│   │   │   ├── useMapInteractionPickers.js   # 交互选点
+│   │   │   ├── useRouteStepStyles.js         # 路线步骤样式缓存
+│   │   │   ├── useSpatialAnalysis.js         # 空间分析
+│   │   │   ├── useStartupTaskScheduler.js    # 启动任务调度
+│   │   │   └── ...                           # 其余 features
+│   │   ├── toc/                              # TOC 模块
+│   │   │   ├── actions/                      # 右键菜单动作
+│   │   │   └── menu/                         # 菜单调度
+│   │   ├── basemapSystem.js                  # 底图系统入口
+│   │   ├── index.js                          # barrel export
+│   │   └── usePositionCodeTool.js            # p 参数工具
+│   ├── useMapState.js                        # 地图状态（视图同步/经纬图层）
+│   ├── useMapSwipe.ts                        # 卷帘核心逻辑
+│   ├── useMessage.js                         # 全局消息提示
+│   ├── useTileSourceFactory.ts               # 瓦片源工厂（XYZ/WMTS/矢量瓦片）
+│   ├── useUserLocation.js                    # 用户定位
+│   └── ...
+│
+├── config/                                   # 环境变量集中管理
+│   └── env.ts                                # TIANDITU_TOKEN / AMAP_WEB_KEY / BACKEND_BASE_URL
+│
+├── constants/                                # 常量配置
+│   ├── basemap/                              # 底图配置模块
+│   │   ├── basemapConfig.ts                  # 图源定义 + 预设配置
+│   │   ├── basemapResolver.ts                # 解析逻辑
+│   │   └── index.ts
+│   ├── index.js                              # barrel export
+│   └── mapStyles.js                          # 地图样式常量
+│
+├── router/
+│   ├── index.js                              # 路由与守卫
+│   └── lazyHomeViewLoader.js                 # HomeView 二段式懒加载
+│
+├── services/
+│   ├── CompassManager.ts                     # 罗盘管理器
+│   ├── compassUrlState.ts                    # 罗盘 URL 状态编解码
+│   └── DistrictManager.ts                    # 行政区划管理器
+│
+├── stores/                                   # Pinia 状态管理
+│   ├── layer/                                # 图层模块
+│   │   ├── layerHelpers.ts                   # 图层工具函数
+│   │   ├── layerTreeBuilder.ts               # 图层树构建器
+│   │   └── index.ts
+│   ├── index.ts                              # barrel export
+│   ├── useAppStore.ts                        # 全局应用状态
+│   ├── useAttrStore.ts                       # 属性表状态
+│   ├── useAuthStore.ts                       # 鉴权状态
+│   ├── useCompassStore.ts                    # 罗盘状态
+│   ├── useDownloadStore.ts                   # 下载任务状态
+│   ├── useLayerStore.ts                      # 图层状态
+│   ├── useSwipeConfigStore.ts                # 卷帘配置（localStorage 持久化）
+│   ├── useThemeStore.ts                      # 主题状态（绿/蓝切换）
+│   ├── useTOCStore.ts                        # TOC 元数据状态
+│   ├── useUrlParamStore.ts                   # URL 参数管理
+│   ├── useUserPreferencesStore.ts            # 用户偏好
+│   └── useWeatherStore.ts                    # 天气状态
+│
+├── utils/                                    # 工具函数
+│   ├── gis/                                  # GIS 工具库
+│   │   ├── parsers/                          # 数据解析器
+│   │   │   ├── kmlParser.ts                  # KML/KMZ 解析
+│   │   │   ├── kmlStyleParser.js             # KML 样式解析
+│   │   │   ├── shpParser.ts                  # Shapefile 解析
+│   │   │   ├── tifLoader.ts                  # GeoTIFF 加载
+│   │   │   ├── dbfParser.ts                  # DBF 解析
+│   │   │   └── amapAoiParser.js              # 高德 AOI 解析
+│   │   ├── dataDispatcher.js                 # 数据分发调度
+│   │   ├── mapRuntimeDeps.js                 # OL 运行时依赖
+│   │   ├── crs-engine.ts                     # CRS 引擎
+│   │   └── ...
+│   ├── biz/
+│   │   └── index.js                          # 业务工具（坐标格式化/解析）
+│   ├── echarts/
+│   │   ├── cesiumFxRuntime.js                # Cesium 图表运行时
+│   │   └── weatherRuntime.js                 # 天气图表运行时
+│   ├── geo/
+│   │   └── index.js                          # 地理工具（坐标转换）
+│   ├── io/
+│   │   └── index.js                          # 文件 IO 工具
+│   ├── auth.js                               # 鉴权工具
+│   ├── normalize.ts                          # 共享工具（normalizeBinaryFlag）
+│   ├── coordTransform.js                     # 坐标转换（GCJ-02/WGS84）
+│   ├── layerExportService.js                 # 图层导出服务
+│   ├── index.js                              # barrel export
+│   └── ...
+│
+└── views/
+    ├── HomeView.vue                          # 主页面（地图 + 侧栏）
+    ├── RegisterView.vue                      # 注册页
+    └── home/                                 # HomeView 拆分模块
+        ├── useDistrictLayer.ts               # 行政区划图层
+        ├── useLayerOperations.ts             # 图层操作
+        └── useSidePanel.ts                   # 侧边栏逻辑
 ```
 
 ## V3.1.2 
@@ -575,7 +474,7 @@ MIT
 
 ---
 
-最后更新：2026-05-04 12:00
+最后更新：2026-05-29
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -595,6 +494,23 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.1.7 (2026-05-29)
+#### 🔧 Code Review 修复 + ESLint TypeScript 支持 + 环境变量集中管理
+
+- **Code Review**：修复 34 项 composable/store/component 问题（资源泄漏、死代码、性能）
+- **ESLint**：启用 `typescript-eslint`，`.vue` 文件正确解析 TS 语法
+- **环境变量**：新建 `config/env.ts` 集中管理 `TIANDITU_TOKEN` / `AMAP_WEB_KEY` / `BACKEND_BASE_URL`
+- **工具函数**：`normalizeBinaryFlag` 提取到 `utils/normalize.ts`，消除 5 处重复实现
+- **MapContainer**：`await loadMapRuntimeDeps()` 改为静态 import，修复 `defineExpose after await` 编译错误
+
+### V3.1.6 (2026-05-29)
+#### 🔧 超大文件拆分 + 图层拖拽性能优化
+
+- 底图/数据导入/图层 Store 模块化拆分
+- `useBasemapManager.ts` 1587 行 → ~400 行
+- `useLayerStore.ts` 1110 行 → 344 行
+- 拖拽排序响应速度提升 90%+
 
 ### V3.0.7 (2026-05-01)
 #### 🔹 在线地图性能优化与功能完善

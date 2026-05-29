@@ -3,14 +3,7 @@ const AUTH_USER_KEY = 'webgis_auth_user';
 const GUEST_DEVICE_ID_KEY = 'webgis_guest_device_id';
 const PENDING_POSITION_CODE_KEY = 'webgis_pending_position_code';
 
-function normalizeBinaryFlag(value, fallback = '0') {
-    const raw = String(value ?? '')
-        .trim()
-        .toLowerCase();
-    if (raw === '1' || raw === 'true') return '1';
-    if (raw === '0' || raw === 'false') return '0';
-    return fallback === '1' ? '1' : '0';
-}
+import { normalizeBinaryFlag } from '@/utils/normalize';
 
 function readUrlParams() {
     if (typeof window === 'undefined') {

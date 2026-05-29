@@ -89,7 +89,7 @@ const locationInfo = reactive({
 
 // UI 状态
 const selectedImage = ref('');
-const currentNewsIndex = ref(0);
+// const currentNewsIndex = ref(0);
 const is3DMode = ref(false);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
@@ -138,28 +138,6 @@ function handleLocationChange(locationData) {
             source: String(locationData?.source || 'location-change'),
         });
     }
-}
-
-function handleMapClick(locationData) {
-    const lon = Number(locationData?.lon);
-    const lat = Number(locationData?.lat);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
-
-    weatherStore.setMapPointTrigger({
-        lon,
-        lat,
-        source: String(locationData?.source || 'map-click'),
-    });
-}
-
-/** 更新新闻图片 */
-function handleUpdateNewsImage(imageSrc) {
-    selectedImage.value = imageSrc;
-}
-
-/** 新闻切换处理 */
-function handleNewsChanged(newsIndex) {
-    currentNewsIndex.value = newsIndex;
 }
 
 /** 切换侧边栏展开/收起 */
@@ -980,8 +958,8 @@ onMounted(async () => {
                     将用户中心面板移动到 MapContainer 内部/同级，并通过 CSS 设置其位于顶部，避免被底部控件遮挡
                 -->
                 <FloatingAccountPanel
-                    class="home-account-panel"
                     v-model:open="isAccountPanelOpen"
+                    class="home-account-panel"
                     :show-fab="false"
                     @fullscreen-change="handleAccountPanelFullscreenChange"
                 />
@@ -993,8 +971,8 @@ onMounted(async () => {
                 <Suspense>
                     <template #default>
                         <MapContainer
-                            ref="mapContainerRef"
                             v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            ref="mapContainerRef"
                             @map-core-ready="handleMapCoreReady"
                             @map-core-failed="handleMapCoreFailed"
                             @location-change="handleLocationChange"
@@ -1159,16 +1137,9 @@ onMounted(async () => {
                     @export-layer-data="handleExportLayerData"
                     @switch-tab="handleSwitchSidePanelTab"
                     @request-download-extent="handleRequestDownloadExtent"
-                    @news-changed="handleNewsChanged"
                     @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat"
                 >
-                    <template v-slot:extra-content>
-                        <div class="extra-info">
-                            <h3>提示</h3>
-                            <p>缩放地图以查看更多细节</p>
-                        </div>
-                    </template>
                 </SidePanel>
                 <!-- 未加载时显示展开提示 -->
                 <div
@@ -1674,6 +1645,7 @@ onMounted(async () => {
     border-radius: 4px;
     margin-top: 10px;
 }
+
 @keyframes sidepanel-spin {
     from {
         transform: rotate(0deg);

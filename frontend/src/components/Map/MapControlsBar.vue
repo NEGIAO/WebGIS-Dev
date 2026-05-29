@@ -8,10 +8,10 @@
             <div
                 class="coordinate-display"
                 :class="{ editing: isCoordinateEditing, invalid: isInputInvalid }"
+                title="单击输入经纬度并回车跳转"
                 @mouseenter="isCoordinateHover = true"
                 @mouseleave="isCoordinateHover = false"
                 @click="startCoordinateInput"
-                title="单击输入经纬度并回车跳转"
             >
                 <template v-if="!isCoordinateEditing">
                     <span class="coordinate-text">{{ displayCoordinateText }}</span>
@@ -136,8 +136,8 @@
         <button
             class="home-btn"
             :class="{ rippling: homeButtonRippling }"
-            @click="handleHomeInteract"
             title="单击复位 / 双击定位"
+            @click="handleHomeInteract"
             type="button"
         >
             <svg
@@ -210,7 +210,7 @@ const props = defineProps({
     },
     coordinateText: {
         type: String,
-        default: COORDINATE_PLACEHOLDER,
+        default: 'Lon, Lat',
     },
     currentZoom: {
         type: [Number, String],
@@ -342,7 +342,7 @@ const copyCurrentCoordinate = async () => {
             // 如果不支持 API，手动抛错进入 catch 执行回退逻辑
             throw new Error('Clipboard API unavailable');
         }
-    } catch (error) {
+    } catch {
         // ========== 回退逻辑 (Fallback) ==========
         const fallbackInput = document.createElement('textarea');
         fallbackInput.value = textToCopy;

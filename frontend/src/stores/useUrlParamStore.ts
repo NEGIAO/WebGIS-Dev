@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
+import { normalizeBinaryFlag } from '@/utils/normalize';
 
 /**
  * @description URL 路由参数持久化 & 延迟应用仓库
@@ -246,17 +247,4 @@ function validateLayerIndex(value: unknown): number | null {
     return num;
 }
 
-/**
- * @description 二元标识格式化（s / loc 共用）
- * @param value 原始url 0/1/true/false 字符
- * @param fallback 兜底默认值
- * @returns 严格 '0' | '1' 固定枚举值
- */
-function normalizeBinaryFlag(value: unknown, fallback: '0' | '1' = '0'): '0' | '1' {
-    const raw = String(value ?? '')
-        .trim()
-        .toLowerCase();
-    if (raw === '1' || raw === 'true') return '1';
-    if (raw === '0' || raw === 'false') return '0';
-    return fallback;
-}
+// normalizeBinaryFlag 已迁移至 src/utils/normalize.ts

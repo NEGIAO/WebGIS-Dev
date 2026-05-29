@@ -140,98 +140,165 @@ docker-compose up
 
 ```
 WebGIS_Dev/
-├── .github/
-│   └── workflows/                  # CI/CD 配置
-├── frontend/                       # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
+├── .github/                              # CI/CD 配置
+│   └── workflows/
+├── frontend/                             # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
 │   ├── src/
-│   │   ├── api/                    # 前端 API 封装
-│   │   │   ├── download.js         # 🆕 在线底图下载 API 客户端（支持 onDownloadProgress 实时回调）
-│   │   │   └── ...                 # 其余 API 模块
-│   │   ├── components/             # 业务组件（按功能域分组）
-│   │   │   ├── Layer/              # 图层管理系统（TOC/属性表/资源树）
-│   │   │   ├── Map/                # 地图核心与控制器
-│   │   │   ├── Routing/            # 路线规划（公交/驾车）
-│   │   │   ├── Search/             # 搜索与数据注入
-│   │   │   ├── Weather/            # 天气面板
-│   │   │   ├── Chat/               # AI 聊天助手
-│   │   │   ├── Compass/            # 罗盘控制面板
-│   │   │   ├── Shell/              # 应用壳层/全局 UI
-│   │   │   ├── ControlsPanel/      # 左侧快捷控制栏（绘制/测量/行政区）
-│   │   │   ├── Cesium/             # 3D 地球模块
-│   │   │   ├── feng-shui-compass-svg/ # 罗盘 HUD 组件
-│   │   │   └── UserCenter/         # 用户中心子模块
-│   │   ├── composables/            # 组合式逻辑
-│   │   │   ├── dataImport/         # 🆕 数据导入模块（拆分自 useLayerDataImport.js）
-│   │   │   │   ├── rasterUtils.js  # 栅格工具函数（波段统计/拉伸/NoData/采样器）
-│   │   │   │   ├── vectorUtils.js  # 矢量工具函数（解码/类型识别/标签字段）
-│   │   │   │   └── index.js        # barrel export
-│   │   │   ├── map/features/basemapLayerFactory.js # Basemap layer factory (vector tile support)
-│   │   │   ├── map/features/useManagedLayerStyle.js # 🔄 托管图层样式（支持 KML 样式保留）
-│   │   │   ├── map/toc/            # TOC 模块（protocol/contextMenu/commandDispatcher）
-│   │   │   ├── useLayerDataImport.js # 🔄 数据导入（已拆分工具函数到 dataImport/）
-│   │   │   └── useKmzLoader.js     # KMZ 专用加载器（KML 选择 + 图片 href 重写）
-│   │   ├── assets/
-│   │   │   ├── theme.css           # 🆕 全局主题变量（品牌色/文字/背景/边框，支持主题切换）
-│   │   │   └── toc-theme.css       # 🆕 TOC 主题变量（引用全局变量，统一管理设计令牌）
-│   │   ├── constants/              # 常量配置
-│   │   │   ├── basemap/            # 🆕 底图配置模块（拆分自 useBasemapManager.ts）
-│   │   │   │   ├── basemapConfig.ts # 图源定义 + 预设配置（合并配置，方便维护）
-│   │   │   │   ├── basemapResolver.ts # 解析逻辑（创建配置/解析预设）
-│   │   │   │   └── index.ts        # barrel export
-│   │   ├── router/                 # 路由
-│   │   ├── stores/                 # Pinia 状态管理
-│   │   │   ├── layer/              # 🆕 图层模块（拆分自 useLayerStore.ts）
-│   │   │   │   ├── layerHelpers.ts # 图层工具函数 + 类型定义
-│   │   │   │   ├── layerTreeBuilder.ts # 图层树构建器
-│   │   │   │   └── index.ts        # barrel export
-│   │   │   ├── useThemeStore.ts    # 🆕 主题状态管理（绿色/蓝色切换 + localStorage 持久化）
-│   │   │   ├── useDownloadStore.ts # 🆕 在线底图下载任务状态管理
-│   │   │   ├── useLayerStore.ts    # 🔄 图层状态（已拆分工具函数到 layer/）
-│   │   │   ├── useCompassStore.ts  # 罗盘状态
-│   │   │   ├── useTOCStore.ts      # 图层树状态
-│   │   │   └── ...                 # 其余 Pinia stores
-│   │   ├── services/               # 业务服务（DistrictManager 负责行政区划边界加载并同步 TOC 元数据）
-│   │   ├── utils/                  # 工具函数
-│   │   │   └── gis/                # GIS 工具库
-│   │   │       ├── parsers/kmlStyleParser.js # 🔄 KML 样式解析器（PolyStyle/LineStyle/IconStyle）
-│   │   │       └── mapRuntimeDeps.js # OpenLayers 运行时依赖（包含 DragBox 等）
-│   │   └── views/                  # 页面（HomeView / RegisterView）
-│   ├── public/                     # 静态资源（tiles/images/ShareData/adcode.json）
-│   ├── scripts/                    # 构建与维护脚本
+│   │   ├── api/                          # API 客户端封装
+│   │   │   ├── backend.js                # 后端通用请求封装 + 鉴权拦截
+│   │   │   ├── download.js               # 在线底图下载 API
+│   │   │   ├── geocoding.js              # 天地图/高德地理编码
+│   │   │   ├── weather.js                # 天气数据 API
+│   │   │   ├── ipLocation.js             # IP 定位 API
+│   │   │   ├── locationSearch.js         # 地点搜索 API
+│   │   │   ├── map.js                    # 地图相关 API
+│   │   │   └── index.js                  # barrel export
+│   │   ├── assets/                       # 全局样式
+│   │   │   ├── theme.css                 # 全局主题变量（绿/蓝切换）
+│   │   │   └── toc-theme.css             # TOC 主题变量
+│   │   ├── components/                   # 业务组件（按功能域分组）
+│   │   │   ├── Cesium/                   # 3D 地球模块
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器
+│   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果
+│   │   │   │   ├── Wind2D.js             # 2D 风场模拟
+│   │   │   │   └── terrain/              # 自定义地形提供者
+│   │   │   ├── Chat/                     # AI 聊天助手
+│   │   │   ├── Compass/                  # 罗盘控制面板
+│   │   │   ├── ControlsPanel/            # 左侧控制栏（绘制/测量/空间分析/行政区）
+│   │   │   ├── Layer/                    # 图层管理（TOC/属性表/资源树）
+│   │   │   ├── Map/                      # 地图核心容器与控制器
+│   │   │   ├── Routing/                  # 路线规划（公交/驾车）
+│   │   │   ├── Search/                   # 搜索与数据注入
+│   │   │   ├── Shell/                    # 应用壳层（TopBar/SidePanel/Loading/Message）
+│   │   │   ├── UserCenter/               # 用户中心（登录/管理/API Key）
+│   │   │   ├── Weather/                  # 天气面板
+│   │   │   └── feng-shui-compass-svg/    # 罗盘 SVG HUD 组件
+│   │   │       ├── data/                 # 罗盘数据
+│   │   │       ├── themes/               # 主题配置
+│   │   │       ├── types/                # TypeScript 类型
+│   │   │       └── Explanation/          # 宫位解释 JSON
+│   │   ├── composables/                  # 组合式函数（逻辑复用）
+│   │   │   ├── Magic/                    # 首屏视觉特效
+│   │   │   │   ├── useDelaunay.js        # Delaunay 三角形特效
+│   │   │   │   ├── useFluid.js           # 流体模拟特效
+│   │   │   │   ├── useGravity.js         # 重力粒子特效
+│   │   │   │   ├── useSingularity.js     # 奇点特效
+│   │   │   │   └── useWave.js            # 波纹特效
+│   │   │   ├── dataImport/               # 数据导入工具
+│   │   │   │   ├── rasterUtils.js        # 栅格工具（波段统计/拉伸/NoData）
+│   │   │   │   ├── vectorUtils.js        # 矢量工具（解码/类型识别）
+│   │   │   │   └── index.js
+│   │   │   ├── map/                      # 地图核心 composables
+│   │   │   │   ├── features/             # 功能模块（30+ 文件）
+│   │   │   │   │   ├── useBasemapResilience.js       # 底图容错与降级
+│   │   │   │   │   ├── useBasemapSelectionWatcher.js  # 底图选择监听
+│   │   │   │   │   ├── useBasemapStateManagement.js   # 底图状态批处理
+│   │   │   │   │   ├── useBasemapSwipe.js             # 卷帘对比
+│   │   │   │   │   ├── useDrawMeasure.js              # 绘制与测量
+│   │   │   │   │   ├── useMapEventHandlers.js         # 地图事件处理
+│   │   │   │   │   ├── useRouteStepStyles.js          # 路线步骤样式缓存
+│   │   │   │   │   ├── useSpatialAnalysis.js          # 空间分析
+│   │   │   │   │   ├── useStartupTaskScheduler.js     # 启动任务调度
+│   │   │   │   │   ├── basemapLayerFactory.js         # 底图图层工厂
+│   │   │   │   │   └── ...
+│   │   │   │   ├── toc/                  # TOC 模块
+│   │   │   │   │   ├── actions/          # 右键菜单动作
+│   │   │   │   │   └── menu/             # 菜单调度
+│   │   │   │   ├── basemapSystem.js      # 底图系统入口
+│   │   │   │   └── index.js              # barrel export
+│   │   │   ├── useMapState.js            # 地图状态（视图同步/经纬图层）
+│   │   │   ├── useMapSwipe.ts            # 卷帘核心逻辑
+│   │   │   ├── useMessage.js             # 全局消息提示
+│   │   │   ├── useTileSourceFactory.ts   # 瓦片源工厂（XYZ/WMTS/矢量瓦片）
+│   │   │   ├── useUserLocation.js        # 用户定位
+│   │   │   └── ...
+│   │   ├── config/                       # 🔹 环境变量集中管理
+│   │   │   └── env.ts                    # TIANDITU_TOKEN / AMAP_WEB_KEY / BACKEND_BASE_URL
+│   │   ├── constants/                    # 常量配置
+│   │   │   ├── basemap/                  # 底图配置模块
+│   │   │   │   ├── basemapConfig.ts      # 图源定义 + 预设配置
+│   │   │   │   ├── basemapResolver.ts    # 解析逻辑
+│   │   │   │   └── index.ts
+│   │   │   ├── index.js                  # barrel export
+│   │   │   └── mapStyles.js              # 地图样式常量
+│   │   ├── router/                       # Vue Router 路由
+│   │   ├── services/                     # 业务服务
+│   │   │   ├── CompassManager.ts         # 罗盘管理器
+│   │   │   └── DistrictManager.ts        # 行政区划管理器
+│   │   ├── stores/                       # Pinia 状态管理
+│   │   │   ├── layer/                    # 图层模块
+│   │   │   │   ├── layerHelpers.ts       # 图层工具函数
+│   │   │   │   ├── layerTreeBuilder.ts   # 图层树构建器
+│   │   │   │   └── index.ts
+│   │   │   ├── useAppStore.ts            # 全局应用状态
+│   │   │   ├── useAttrStore.ts           # 属性表状态
+│   │   │   ├── useAuthStore.ts           # 鉴权状态
+│   │   │   ├── useCompassStore.ts        # 罗盘状态
+│   │   │   ├── useDownloadStore.ts       # 下载任务状态
+│   │   │   ├── useLayerStore.ts          # 图层状态
+│   │   │   ├── useSwipeConfigStore.ts    # 卷帘配置（localStorage 持久化）
+│   │   │   ├── useThemeStore.ts          # 主题状态（绿/蓝切换）
+│   │   │   ├── useUrlParamStore.ts       # URL 参数管理
+│   │   │   └── ...
+│   │   ├── utils/                        # 工具函数
+│   │   │   ├── gis/                      # GIS 工具库
+│   │   │   │   ├── parsers/              # 数据解析器
+│   │   │   │   │   ├── kmlParser.ts      # KML/KMZ 解析
+│   │   │   │   │   ├── kmlStyleParser.js # KML 样式解析
+│   │   │   │   │   ├── shpParser.ts      # Shapefile 解析
+│   │   │   │   │   ├── tifLoader.ts      # GeoTIFF 加载
+│   │   │   │   │   └── ...
+│   │   │   │   ├── dataDispatcher.js     # 数据分发调度
+│   │   │   │   ├── mapRuntimeDeps.js     # OL 运行时依赖
+│   │   │   │   └── ...
+│   │   │   ├── normalize.ts              # 共享工具（normalizeBinaryFlag）
+│   │   │   ├── auth.js                   # 鉴权工具
+│   │   │   ├── coordTransform.js         # 坐标转换（GCJ-02/WGS84）
+│   │   │   ├── layerExportService.js     # 图层导出服务
+│   │   │   └── ...
+│   │   ├── views/                        # 页面
+│   │   │   ├── HomeView.vue              # 主页（地图 + 侧边栏）
+│   │   │   ├── RegisterView.vue          # 注册页
+│   │   │   └── home/                     # HomeView 拆分模块
+│   │   │       ├── useDistrictLayer.ts   # 行政区划图层
+│   │   │       ├── useLayerOperations.ts # 图层操作
+│   │   │       └── useSidePanel.ts       # 侧边栏逻辑
+│   │   ├── App.vue
+│   │   └── main.js
+│   ├── public/                           # 静态资源
 │   ├── package.json
 │   ├── vite.config.js
-│   └── README.md                   # 🔹 前端详细文档
-├── backend/                        # 🔹 后端（FastAPI）
-│   ├── api/                        # 接口模块（auth/statistics/location/proxy...）
-│   │   ├── download.py             # 🆕 在线底图下载任务 API（POST/GET 任务）
-│   │   ├── agent_chat.py           # ✨ V3.0.4 零配置即刻响应 + 模型缓存降级 + 偏好持久化
-│   │   ├── spatial.py              # 🆕 空间分析 API（缓冲区/交集/并集/差集/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化，基于 Shapely）
-│   │   └── ...                     # 其余后端接口模块
-│   ├── core/                       # 🆕 核心业务逻辑模块
-│   │   ├── tile_engine.py          # 🆕 瓦片下载 + Rasterio GeoTIFF 拼接引擎
-│   │   └── task_scheduler.py       # 🆕 过期任务清理调度器（30分钟保留期）
-│   ├── models/                     # 🆕 数据模型层
-│   │   └── download_task.py        # 🆕 SQLModel 下载任务表（支持 SQLite 持久化）
-│   ├── app.py                      # FastAPI 入口（集成下载路由和调度器）
-│   ├── data/                       # 本地/挂载数据目录
-│   ├── Dockerfile                  # 后端镜像构建
-│   ├── docker-compose.yml          # 🆕 Docker Compose 编排（前后端容器化）
-│   ├── pyproject.toml              # 依赖与项目配置（uv，新增 rasterio/sqlmodel/apscheduler）
-│   ├── uv.lock                     # 锁文件
-│   ├── .env.example
-│   ├── .python-version
-│   └── README.md                   # 🔹 后端详细文档
-├── Docs/                          # 开发维护日志与强制执行规范
-│   └── 26-05-22/2026-05-22-enhance-custom-basemap-vector-tile.md # Log: custom basemap + vector tile
-│   └── 26-05-27/2026-05-27-spatial-analysis-backend.md # 🆕 空间分析后端化改造日志
-│   └── 26-05-27/2026-05-27-toc-improvements.md # 🆕 TOC 功能增强日志（重命名/透明度/属性/搜索）
-│   └── 26-05-27/2026-05-27-kmz-style-fix.md # 🆕 KMZ 样式解析修复日志
-│   └── 2026-05-28/2026-05-28-advanced-spatial-analysis.md # 🆕 高级空间分析功能设计文档
-│   └── 26-05-29/2026-05-29-refactor-large-files-split.md # 🆕 超大文件拆分重构日志
-├── docker-compose.yml              # 🆕 顶级 Docker Compose（一键启动前后端）
-├── LocalDev.bat                    # 🔄 升级：支持 Docker Compose 启动前后端
-├── API_MANAGEMENT_GUIDE.md
-└── README.md                       # 本文件（项目概述）
+│   ├── eslint.config.js                  # ESLint 配置（含 TypeScript 支持）
+│   └── README.md
+├── backend/                              # 🔹 后端（FastAPI + Python）
+│   ├── api/                              # 接口模块
+│   │   ├── auth.py                       # 鉴权（登录/注册/会话）
+│   │   ├── agent_chat.py                 # AI 对话代理
+│   │   ├── spatial.py                    # 空间分析 API
+│   │   ├── proxy.py                      # 瓦片代理 + 坐标纠偏
+│   │   ├── download.py                   # 底图下载任务 API
+│   │   ├── monitor.py                    # 日志监控
+│   │   ├── statistics.py                 # 访问统计
+│   │   └── ...
+│   ├── core/                             # 核心业务逻辑
+│   │   ├── tile_engine.py                # 瓦片下载 + GeoTIFF 拼接
+│   │   └── task_scheduler.py             # 过期任务清理
+│   ├── models/                           # 数据模型
+│   │   └── download_task.py              # SQLModel 下载任务表
+│   ├── gcj_rectify/                      # GCJ-02 坐标纠偏
+│   ├── download_xyz/                     # XYZ 瓦片下载
+│   ├── app.py                            # FastAPI 入口
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── pyproject.toml
+│   └── README.md
+├── Docs/                                 # 开发日志
+│   ├── 26-05-27/                         # 空间分析/TOC/KMZ 修复日志
+│   ├── 26-05-28/                         # 高级空间分析文档
+│   └── 26-05-29/                         # Code Review + 文件拆分重构日志
+├── docker-compose.yml                    # 顶级 Docker Compose
+├── LocalDev.bat                          # 一键启动脚本
+└── README.md                             # 本文件
 ```
 
 ## 📚 文档导航
@@ -898,6 +965,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-05-28 23:00
-**当前版本**：V3.1.6
+**最后更新**：2026-05-29
+**当前版本**：V3.1.7
 **项目状态**：开发中 - 持续迭代优化
