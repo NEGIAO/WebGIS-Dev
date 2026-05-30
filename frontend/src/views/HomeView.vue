@@ -334,6 +334,11 @@ async function handleRequestDownloadExtent() {
     }
 }
 
+function handleClearDownloadExtent() {
+    mapContainerRef.value?.clearExtentOverlay?.();
+    downloadStore.clearExtent();
+}
+
 async function handleControlsDistrictSelect(payload) {
     const adcode = String(payload?.value || '').trim();
     const districtName = String(payload?.label || '').trim() || adcode;
@@ -1137,6 +1142,7 @@ onMounted(async () => {
                     @export-layer-data="handleExportLayerData"
                     @switch-tab="handleSwitchSidePanelTab"
                     @request-download-extent="handleRequestDownloadExtent"
+                    @clear-download-extent="handleClearDownloadExtent"
                     @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat"
                 >
@@ -1393,7 +1399,7 @@ onMounted(async () => {
 
 /* 头部：对标0的绿色顶栏 */
 .eco-header {
-    background-color: var(--brand-primary-light);
+    background-color: var(--brand-primary-dark);
     /* 匹配0截图顶栏的绿色 */
     padding: 12px 16px;
     display: flex;

@@ -1,5 +1,4 @@
 // useFluid.js
- 'vue';
 
 export function useFluid(canvasRef, props) {
     let ctx, offscreenCanvas, offscreenCtx, imageData, data;

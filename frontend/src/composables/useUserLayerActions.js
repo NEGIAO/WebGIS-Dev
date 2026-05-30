@@ -93,6 +93,8 @@ export function useUserLayerActions({
         features.forEach((feature) => {
             feature.setStyle(undefined);
         });
+        // 样式配置变化时清空标签缓存，确保新样式生效
+        target.labelStyleCache = new globalThis.Map();
         applyManagedLayerStyle(target);
         emitUserLayersChange();
     }

@@ -62,7 +62,7 @@ export function useManagedLayerRegistry({ emit, userDataLayers, drawSource, styl
         userDataLayers.forEach((item, index) => {
             item.order = index;
             const zIndex = item?.sourceType === 'district-boundary' ? 1180 + index : 120 + index;
-            item.layer.setZIndex(zIndex);
+            item.layer?.setZIndex?.(zIndex);
         });
     }
 

@@ -171,7 +171,24 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         };
     };
 
+    /**
+     * 应用托管图层样式
+     * [性能优化] 保留已有的 labelStyleCache，避免不必要的缓存清空
+     * 只在缓存不存在时初始化，样式函数内部会复用已有缓存
+     */
     const applyManagedLayerStyle = (layerItem) => {
+        if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
+        if (!layerItem.labelStyleCache) {
+            layerItem.labelStyleCache = new globalThis.Map();
+        }
+        layerItem.layer.setStyle(buildManagedLayerStyle(layerItem));
+    };
+
+    /**
+     * 强制重建图层样式（清空缓存）
+     * 仅在样式配置真正变化时调用，如用户修改了填充色、边框色等
+     */
+    const forceRebuildStyle = (layerItem) => {
         if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
         layerItem.labelStyleCache = new globalThis.Map();
         layerItem.layer.setStyle(buildManagedLayerStyle(layerItem));
@@ -183,5 +200,6 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         mergeStyleConfig,
         buildManagedLayerStyle,
         applyManagedLayerStyle,
+        forceRebuildStyle,
     };
 }

@@ -98,7 +98,18 @@ frontend/src/
 ├── main.js                                   # 应用入口（挂载 Router/Pinia）
 │
 ├── api/                                      # API 客户端封装
-│   ├── backend.js                            # 后端通用请求封装 + 鉴权拦截
+│   ├── backend.js                            # 后端 API barrel re-export
+│   ├── backend/                              # 后端 API 按业务域拆分
+│   │   ├── client.js                         # axios 实例、拦截器、错误处理
+│   │   ├── auth.js                           # 鉴权接口（9 个函数）
+│   │   ├── location.js                       # 地理编码/定位接口
+│   │   ├── weather.js                        # 天气接口
+│   │   ├── routing.js                        # 路线规划接口
+│   │   ├── agent.js                          # AI Agent 接口
+│   │   ├── statistics.js                     # 统计/消息/公告
+│   │   ├── admin.js                          # 管理后台接口
+│   │   ├── spatial.js                        # 空间分析接口
+│   │   └── index.js                          # barrel export
 │   ├── download.js                           # 底图下载任务 API
 │   ├── geocoding.js                          # 天地图/高德地理编码
 │   ├── index.js                              # barrel export
@@ -210,7 +221,15 @@ frontend/src/
 │   ├── useMapState.js                        # 地图状态（视图同步/经纬图层）
 │   ├── useMapSwipe.ts                        # 卷帘核心逻辑
 │   ├── useMessage.js                         # 全局消息提示
-│   ├── useTileSourceFactory.ts               # 瓦片源工厂（XYZ/WMTS/矢量瓦片）
+│   ├── useTileSourceFactory.ts               # 瓦片源工厂 barrel re-export
+│   ├── tileSource/                           # 瓦片源工厂拆分模块
+│   │   ├── types.ts                          # 类型定义与常量
+│   │   ├── urlUtils.ts                       # URL 工具函数
+│   │   ├── tileLifecycle.ts                  # 请求生命周期管理
+│   │   ├── wmsSource.ts                      # WMS 源创建
+│   │   ├── wmtsSource.ts                     # WMTS 源创建
+│   │   ├── xyzSource.ts                      # XYZ 源 + 自动检测
+│   │   └── index.ts                          # barrel export
 │   ├── useUserLocation.js                    # 用户定位
 │   └── ...
 │
@@ -262,7 +281,9 @@ frontend/src/
 │   │   │   ├── tifLoader.ts                  # GeoTIFF 加载
 │   │   │   ├── dbfParser.ts                  # DBF 解析
 │   │   │   └── amapAoiParser.js              # 高德 AOI 解析
-│   │   ├── dataDispatcher.js                 # 数据分发调度
+│   │   ├── dataDispatcher.js                 # 数据格式分发（路由）
+│   │   ├── archiveProcessor.js               # 归档解包、SHP 分组、资源 URL
+│   │   ├── shpPacketBuilder.js               # 浏览器文件 SHP 包构建
 │   │   ├── mapRuntimeDeps.js                 # OL 运行时依赖
 │   │   ├── crs-engine.ts                     # CRS 引擎
 │   │   └── ...
@@ -474,7 +495,7 @@ MIT
 
 ---
 
-最后更新：2026-05-29
+最后更新：2026-05-30
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -494,6 +515,16 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.1.8 (2026-05-30)
+#### 🔧 ESLint 全项目修复 + 超大文件拆分
+
+- **ESLint**：389 → 0 errors，修复全部未使用变量、空 catch 块、console 语句、无用转义等
+- **TypeScript**：新建 `tsconfig.json`，修复 12 个类型错误
+- **拆分 `api/backend.js`** (881 行 → 10 文件)：按业务域拆为 `backend/{client,auth,location,weather,routing,agent,statistics,admin,spatial}.js`
+- **拆分 `useTileSourceFactory.ts`** (1099 行 → 8 文件)：按职责拆为 `tileSource/{types,urlUtils,tileLifecycle,wmsSource,wmtsSource,xyzSource}.ts`
+- **拆分 `dataDispatcher.js`** (696 行 → 3 文件)：提取 `archiveProcessor.js` + `shpPacketBuilder.js`
+- **修复构建警告**：`useFluid.js`、`useMapUIEventHandlers.js` 导入语句修复
 
 ### V3.1.7 (2026-05-29)
 #### 🔧 Code Review 修复 + ESLint TypeScript 支持 + 环境变量集中管理

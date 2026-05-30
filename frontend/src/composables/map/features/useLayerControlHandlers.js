@@ -17,6 +17,7 @@ export function createLayerControlHandlers({
     createAutoTileSourceFromUrl,
     message,
     mapInstanceRef,
+    emitBaseLayersChange,
 }) {
     /**
      * 【关键改动 1】：内部助手函数
@@ -172,7 +173,8 @@ export function createLayerControlHandlers({
     }
 
     /**
-     * 处理图层排序、可见性和透明度更新（这部分逻辑保持现状即可）
+     * 处理图层排序、可见性和透明度更新
+     * [性能优化] 按操作类型走不同刷新路径，避免全量刷新
      */
     function handleLayerOrderUpdate(payload = {}) {
         const list = layerListRef?.value;
@@ -188,6 +190,7 @@ export function createLayerControlHandlers({
 
             const moved = list.splice(dragIndex, 1)[0];
             list.splice(dropIndex, 0, moved);
+            // 排序需要全量刷新 zIndex
             refreshLayersState?.();
             return;
         }
@@ -196,7 +199,11 @@ export function createLayerControlHandlers({
             const target = list.find((item) => item.id === payload.layerId);
             if (!target) return;
             target.visible = !!payload.visible;
-            refreshLayersState?.();
+            // 只设置 OL 图层可见性，不遍历全部图层
+            const layer = layerInstances?.[payload.layerId];
+            layer?.setVisible?.(target.visible);
+            // 通知底图面板状态变化
+            emitBaseLayersChange?.();
             return;
         }
 
@@ -208,7 +215,9 @@ export function createLayerControlHandlers({
             const target = list.find((item) => item.id === layerId);
             if (!target) return;
             target.opacity = opacity;
-            refreshLayersState?.();
+            // 只设置 OL 图层透明度，最轻量路径
+            const layer = layerInstances?.[layerId];
+            layer?.setOpacity?.(opacity);
         }
     }
 

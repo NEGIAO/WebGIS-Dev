@@ -8,7 +8,6 @@
  * 注：复杂的图层控制逻辑（handleLayerChange/OrderUpdate）保留在 MapContainer
  */
 
- 'ol/proj';
 
 export function createMapUIEventHandlers({
     mapInstanceRef,

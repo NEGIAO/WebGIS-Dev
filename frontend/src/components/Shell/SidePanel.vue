@@ -96,6 +96,7 @@
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
                     @export-layer-data="$emit('export-layer-data', $event)"
                     @request-download-extent="$emit('request-download-extent')"
+                    @clear-download-extent="$emit('clear-download-extent')"
                     @rename-layer="$emit('rename-layer', $event)"
                     @layer-selected="$emit('layer-selected', $event)"
                 />
@@ -426,6 +427,7 @@ defineEmits([
     'toggle-layer-crs',
     'export-layer-data',
     'request-download-extent',
+    'clear-download-extent',
     'rename-layer',
     'layer-selected',
 ]);

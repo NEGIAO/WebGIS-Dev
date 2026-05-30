@@ -370,6 +370,7 @@ const {
     startReverseGeocodePick,
     cancelDownloadBoxPick,
     pickDownloadExtent,
+    clearExtentOverlay,
     disposeAll: disposeInteractionPickers,
 } = createMapInteractionPickers({ mapInstance });
 
@@ -601,7 +602,7 @@ const {
 // 路线绘制交互
 const { drawRouteOnMap, drawDriveRouteOnMap } = createRouteRenderingFeature({
     mapInstanceRef: mapInstance,
-    busRouteLayerRef,
+    getBusRouteLayer: () => busRouteLayerRef,
     busRouteSource,
     resetRouteStepStates,
     ensureRouteBuilderApi,
@@ -634,6 +635,7 @@ const { handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers
     createAutoTileSourceFromUrl,
     message,
     mapInstanceRef: mapInstance,
+    emitBaseLayersChange: emitBaseLayersChangeBatched,
 });
 
 // 栅格值查询函数的 ref 包装（用于延迟初始化）
@@ -1335,6 +1337,8 @@ function setDrawStyle(styleCfg) {
         .filter((item) => item.sourceType === 'draw')
         .forEach((item) => {
             item.styleConfig = mergeStyleConfig(item.styleConfig, styleCfg);
+            // 样式配置变化时清空标签缓存
+            item.labelStyleCache = new globalThis.Map();
             applyManagedLayerStyle(item);
         });
     emitUserLayersChange();
@@ -1516,6 +1520,7 @@ defineExpose({
     drawPointByCoordinatesInput,
     drawAmapAoiByDetailJsonInput,
     pickDownloadExtent,
+    clearExtentOverlay,
     toggleLayerCRS,
     toggleSearchLayerCRS,
     exportLayerCoordinates,

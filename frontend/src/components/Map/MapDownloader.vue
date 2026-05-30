@@ -150,15 +150,35 @@
                 </div>
             </div>
 
+            <label class="clip-option">
+                <input
+                    v-model="store.clipToExtent"
+                    type="checkbox"
+                />
+                <span class="clip-label">
+                    裁剪到精确范围
+                    <span class="mode-hint">下载后按框选范围裁剪，去除瓦片对齐的多余区域</span>
+                </span>
+            </label>
+
             <div class="action-row">
                 <button
                     class="ghost-btn"
                     type="button"
                     @click="emit('request-extent')"
                 >
-                    地图框选范围
+                    {{ hasExtent ? '重新框选' : '地图框选范围' }}
                 </button>
-                <span class="field-hint">在地图拖拽矩形框选下载范围</span>
+                <button
+                    v-if="hasExtent"
+                    class="ghost-btn clear-extent-btn"
+                    type="button"
+                    @click="emit('clear-extent')"
+                >
+                    清除选区
+                </button>
+                <span v-if="!hasExtent" class="field-hint">在地图拖拽矩形框选下载范围</span>
+                <span v-else class="field-hint extent-active">✓ 已框选范围，地图上显示绿色虚线矩形</span>
             </div>
 
             <div class="action-row">
@@ -293,9 +313,11 @@ defineProps({
     visible: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(['close', 'request-extent']);
+const emit = defineEmits(['close', 'request-extent', 'clear-extent']);
 const message = useMessage();
 const store = useDownloadStore();
+
+const hasExtent = computed(() => store.extentSet);
 
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
 const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
@@ -664,7 +686,8 @@ async function handleSubmit() {
 
     const ok = await store.submitTask();
     if (ok) {
-        message.success('下载任务已提交');
+        const clipHint = store.clipToExtent ? '（将裁剪到精确范围）' : '（按瓦片网格对齐）';
+        message.success(`下载任务已提交${clipHint}`);
         // 倒计时将在实际下载开始时根据模式启动
     } else if (store.lastError) {
         message.error(store.lastError);
@@ -884,6 +907,33 @@ onBeforeUnmount(() => {
     font-weight: 400;
 }
 
+.clip-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(31, 122, 77, 0.15);
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.clip-option input[type="checkbox"] {
+    margin-top: 2px;
+    cursor: pointer;
+    accent-color: var(--brand-primary-dark);
+}
+
+.clip-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--text-brand-dark);
+    font-weight: 500;
+}
+
 .action-row {
     display: flex;
     flex-wrap: wrap;
@@ -927,6 +977,21 @@ onBeforeUnmount(() => {
     color: #9bb2a5;
     border-color: rgba(31, 122, 77, 0.15);
     cursor: not-allowed;
+}
+
+.clear-extent-btn {
+    border-color: rgba(220, 38, 38, 0.3);
+    color: #b91c1c;
+}
+
+.clear-extent-btn:hover {
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.5);
+}
+
+.extent-active {
+    color: #0f7a3b;
+    font-weight: 500;
 }
 
 /* 原有的进度条卡片 */

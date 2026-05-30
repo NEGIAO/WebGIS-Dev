@@ -75,7 +75,8 @@ function buildTaskPayload(
     bbox: BBoxInput,
     resolutionM: number,
     bboxCrs: string,
-): { tile_url_template: string; bbox: number[]; resolution_m: number; bbox_crs: string } {
+    clipToExtent: boolean = false,
+): { tile_url_template: string; bbox: number[]; resolution_m: number; bbox_crs: string; clip_to_extent: boolean } {
     // Validate inputs and build the backend payload.
     const template = String(tileUrlTemplate || '').trim();
     if (!template) {
@@ -136,6 +137,7 @@ function buildTaskPayload(
         ],
         resolution_m: normalizedResolution,
         bbox_crs: String(bboxCrs || 'EPSG:4326').trim() || 'EPSG:4326',
+        clip_to_extent: clipToExtent,
     };
 }
 
@@ -161,7 +163,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         maxLat: 39.9,
     });
     const bboxCrs = ref<'EPSG:4326' | 'EPSG:3857'>('EPSG:4326');
+    const extentSet = ref(false); // 用户是否已框选过范围
     const resolutionM = ref(DEFAULT_RESOLUTION);
+    const clipToExtent = ref(false);
 
     // Download mode: 'native' (default) or 'progressive'
     const downloadMode = ref<DownloadMode>('native');
@@ -253,6 +257,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 bbox.value,
                 resolutionM.value,
                 bboxCrs.value,
+                clipToExtent.value,
             );
             const response = await apiDownloadCreateTask(payload);
 
@@ -410,6 +415,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             maxLon: maxX,
             maxLat: maxY,
         };
+        extentSet.value = true;
         return true;
     }
 
@@ -419,6 +425,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         bboxCrs,
         resolutionM,
         downloadMode,
+        clipToExtent,
         taskId,
         status,
         progress,
@@ -442,6 +449,12 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         resetTask,
         fetchTaskById,
         applyBboxFromExtent,
+        extentSet,
+        clearExtent() {
+            extentSet.value = false;
+            bbox.value = { minLon: 116.2, minLat: 39.8, maxLon: 116.3, maxLat: 39.9 };
+            bboxCrs.value = 'EPSG:4326';
+        },
         dispose,
     };
 });

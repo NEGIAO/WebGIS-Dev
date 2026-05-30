@@ -705,6 +705,7 @@ export function useMapState(mapInstance, options = {}) {
 
     /**
      * 刷新所有图层实例的显示状态和层级
+     * [性能优化] 值未变化时跳过 OL 方法调用，减少不必要的内部重排序
      * @param {Object} options - 配置对象
      * @param {Array} [options.layerList] - 图层列表（来自 layerListRef.value）
      * @param {Object} [options.instanceMap] - 图层实例映射
@@ -725,12 +726,21 @@ export function useMapState(mapInstance, options = {}) {
                 ensureLayerSourceById(item.id, instanceMap, configs);
             }
 
-            layer.setVisible(!!item.visible);
-            layer.setZIndex(layerList.length - index);
+            // 只在值实际变化时才调用 OL 方法，避免触发内部重排序
+            const targetVisible = !!item.visible;
+            if (layer.getVisible() !== targetVisible) {
+                layer.setVisible(targetVisible);
+            }
 
-            // 应用透明度设置
+            const targetZIndex = layerList.length - index;
+            if (layer.getZIndex() !== targetZIndex) {
+                layer.setZIndex(targetZIndex);
+            }
+
             if (typeof item.opacity === 'number' && item.opacity >= 0 && item.opacity <= 1) {
-                layer.setOpacity(item.opacity);
+                if (Math.abs((layer.getOpacity() ?? 1) - item.opacity) > 0.001) {
+                    layer.setOpacity(item.opacity);
+                }
             }
         });
     }

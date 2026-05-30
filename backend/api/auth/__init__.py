@@ -14,13 +14,14 @@ from .constants import (
     ROLE_REGISTERED,
     _extract_client_ip,
     _extract_token,
+    _normalize_avatar_index,
     get_role_daily_quota,
     normalize_role,
     resolve_quota_subject,
 )
 
 # ─── 数据库 ───
-from .db import AUTH_DB_PATH, get_auth_db_connection
+from .db import AUTH_DB_PATH, _iso, _safe_parse_iso, _utc_now, get_auth_db_connection
 
 # ─── Schema / 初始化 ───
 from .schema import init_auth_storage

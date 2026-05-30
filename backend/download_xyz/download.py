@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from api.auth import require_api_access
 
-from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles
+from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles, clip_geotiff_to_bbox
 from .download_task import DownloadTask, create_task, get_task, update_task
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,7 @@ class CreateDownloadTaskRequest(BaseModel):
     bbox: List[float] = Field(..., min_items=4, max_items=4)
     resolution_m: float = Field(..., gt=0.3, le=1000)
     bbox_crs: str = Field(default="EPSG:4326", min_length=1, max_length=50)
+    clip_to_extent: bool = Field(default=False)
 
 
 class DownloadTaskStatusResponse(BaseModel):
@@ -322,7 +323,28 @@ async def _process_download_task(
 
         logger.info("输出文件校验通过：%s | 大小：%d 字节", output_path, file_size)
 
-        update_task(task_id, status="success", progress=100, message="Ready")
+        # 按用户选择裁剪到精确范围
+        clip_message = ""
+        if payload.clip_to_extent:
+            try:
+                update_task(task_id, status="stitching", progress=98, message="正在裁剪到精确范围")
+                clip_geotiff_to_bbox(output_path, bbox_4326)
+                clipped_size = os.path.getsize(output_path)
+                clip_message = "（已裁剪到精确范围）"
+                logger.info(
+                    "裁剪完成：%s | 裁剪前：%d 字节 | 裁剪后：%d 字节",
+                    output_path, file_size, clipped_size,
+                )
+            except Exception as clip_exc:
+                logger.warning("裁剪失败，保留原始范围：%s", str(clip_exc))
+                clip_message = "（裁剪失败，保留瓦片对齐范围）"
+
+        update_task(
+            task_id,
+            status="success",
+            progress=100,
+            message=f"Ready{clip_message}",
+        )
     except Exception as exc:
         logger.exception("下载任务失败：%s | 错误：%s", task_id, str(exc))
         error_msg = str(exc)[:200]

@@ -145,7 +145,18 @@ WebGIS_Dev/
 ├── frontend/                             # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
 │   ├── src/
 │   │   ├── api/                          # API 客户端封装
-│   │   │   ├── backend.js                # 后端通用请求封装 + 鉴权拦截
+│   │   │   ├── backend.js                # 后端 API barrel re-export
+│   │   │   ├── backend/                  # 后端 API 按业务域拆分
+│   │   │   │   ├── client.js             # axios 实例、拦截器、错误处理
+│   │   │   │   ├── auth.js               # 鉴权接口（9 个函数）
+│   │   │   │   ├── location.js           # 地理编码/定位接口
+│   │   │   │   ├── weather.js            # 天气接口
+│   │   │   │   ├── routing.js            # 路线规划接口
+│   │   │   │   ├── agent.js              # AI Agent 接口
+│   │   │   │   ├── statistics.js         # 统计/消息/公告
+│   │   │   │   ├── admin.js              # 管理后台接口
+│   │   │   │   ├── spatial.js            # 空间分析接口
+│   │   │   │   └── index.js              # barrel export
 │   │   │   ├── download.js               # 在线底图下载 API
 │   │   │   ├── geocoding.js              # 天地图/高德地理编码
 │   │   │   ├── weather.js                # 天气数据 API
@@ -209,7 +220,15 @@ WebGIS_Dev/
 │   │   │   ├── useMapState.js            # 地图状态（视图同步/经纬图层）
 │   │   │   ├── useMapSwipe.ts            # 卷帘核心逻辑
 │   │   │   ├── useMessage.js             # 全局消息提示
-│   │   │   ├── useTileSourceFactory.ts   # 瓦片源工厂（XYZ/WMTS/矢量瓦片）
+│   │   │   ├── useTileSourceFactory.ts   # 瓦片源工厂 barrel re-export
+│   │   │   ├── tileSource/               # 瓦片源工厂拆分模块
+│   │   │   │   ├── types.ts              # 类型定义与常量
+│   │   │   │   ├── urlUtils.ts           # URL 工具函数
+│   │   │   │   ├── tileLifecycle.ts      # 请求生命周期管理
+│   │   │   │   ├── wmsSource.ts          # WMS 源创建
+│   │   │   │   ├── wmtsSource.ts         # WMTS 源创建
+│   │   │   │   ├── xyzSource.ts          # XYZ 源 + 自动检测
+│   │   │   │   └── index.ts              # barrel export
 │   │   │   ├── useUserLocation.js        # 用户定位
 │   │   │   └── ...
 │   │   ├── config/                       # 🔹 环境变量集中管理
@@ -248,7 +267,9 @@ WebGIS_Dev/
 │   │   │   │   │   ├── shpParser.ts      # Shapefile 解析
 │   │   │   │   │   ├── tifLoader.ts      # GeoTIFF 加载
 │   │   │   │   │   └── ...
-│   │   │   │   ├── dataDispatcher.js     # 数据分发调度
+│   │   │   │   ├── dataDispatcher.js     # 数据格式分发（路由）
+│   │   │   │   ├── archiveProcessor.js   # 归档解包、SHP 分组、资源 URL
+│   │   │   │   ├── shpPacketBuilder.js   # 浏览器文件 SHP 包构建
 │   │   │   │   ├── mapRuntimeDeps.js     # OL 运行时依赖
 │   │   │   │   └── ...
 │   │   │   ├── normalize.ts              # 共享工具（normalizeBinaryFlag）
@@ -317,7 +338,7 @@ WebGIS_Dev/
 │   ├── 26-05-27/                         # 空间分析/TOC/KMZ 修复日志
 │   ├── 26-05-28/                         # 高级空间分析文档
 │   ├── 26-05-29/                         # Code Review + 文件拆分重构日志
-│   └── 26-05-30/                         # 后端模块化拆分日志
+│   └── 26-05-30/                         # ESLint 全项目修复 + 超大文件拆分
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本
 └── README.md                             # 本文件
@@ -456,14 +477,59 @@ LOG_LEVEL=INFO
 | 指标 | 数值 |
 |------|------|
 | 前端组件数 | 30+ |
-| 后端 API 端点 | 待开发 |
-| 代码行数 | 10K+ |
+| 后端 API 端点 | 45+ |
+| 前端源码行数 | 77K+ |
 | 构建体积优化 | -35% |
 | 首屏加速 | 30-50% |
 | 支持的数据格式 | 8+ |
 | 技术栈 | 5+ |
+| ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.1.7 (2026-05-30)
+#### 🔧 ESLint 全项目修复 + 超大文件拆分重构
+
+本次版本对前端代码质量进行全面治理，并将 3 个超大模块拆分为更小的文件。
+
+---
+
+#### 🌟 代码质量
+
+##### 1. ESLint 全项目修复（389 → 0 errors）
+- 修复全部 ESLint 错误：未使用变量、空 catch 块、console 语句、无用转义、属性排序等
+- 配置 `@typescript-eslint/no-unused-vars` 忽略 `_` 前缀变量
+- 添加 `globals.node` 支持 Node.js 脚本文件
+- 新建 `tsconfig.json`，关闭 `noImplicitAny`，修复 12 个 TypeScript 类型错误
+
+##### 2. 构建警告修复
+- `useFluid.js`：修复被 ESLint 自动修复破坏的导入语句
+- `useMapUIEventHandlers.js`：同上
+
+---
+
+#### 📦 超大文件拆分
+
+| 原文件 | 原行数 | 拆分结果 | 文件数 |
+|--------|--------|---------|--------|
+| `api/backend.js` | 881 | `backend/` 子目录 | 10 |
+| `utils/gis/dataDispatcher.js` | 696 | + archiveProcessor + shpPacketBuilder | 3 |
+| `composables/useTileSourceFactory.ts` | 1099 | `tileSource/` 子目录 | 8 |
+
+**拆分原则**：原文件变为 barrel re-export，所有消费方 import 路径不变。
+
+---
+
+#### 📁 文件变更
+
+| 操作 | 文件 |
+|------|------|
+| 新建 | `api/backend/{client,auth,location,weather,routing,agent,statistics,admin,spatial,index}.js` |
+| 新建 | `composables/tileSource/{types,urlUtils,tileLifecycle,wmsSource,wmtsSource,xyzSource,index}.ts` |
+| 新建 | `utils/gis/archiveProcessor.js`、`utils/gis/shpPacketBuilder.js` |
+| 新建 | `tsconfig.json` |
+| 修改 | `eslint.config.js`（添加 globals.node + no-unused-vars 配置） |
+| 修改 | 50+ 个源文件（ESLint 修复） |
 
 ### V3.1.6 (2026-05-29)
 #### 🔧 超大文件拆分 + 图层拖拽性能优化
@@ -987,6 +1053,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-05-29
-**当前版本**：V3.1.7
+**最后更新**：2026-05-30
+**当前版本**：V3.1.8
 **项目状态**：开发中 - 持续迭代优化

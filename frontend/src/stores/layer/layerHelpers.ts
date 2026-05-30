@@ -95,8 +95,10 @@ export function formatLayerDisplayName(name: string): string {
 
 /**
  * 判断图层是否有属性要素
+ * [性能优化] 优先检查 featureCount（O(1)），避免频繁访问 features 数组
  */
 export function hasAttributeFeatures(layer: any): boolean {
+    if (typeof layer?.featureCount === 'number' && layer.featureCount > 0) return true;
     return Array.isArray(layer?.features) && layer.features.length > 0;
 }
 
@@ -127,9 +129,15 @@ export function supportsCoordinateOperations(layer: any): boolean {
 
 /**
  * 获取图层 POI ID
+ * [性能优化] 优先从 metadata 读取，避免遍历 features 数组
  */
 export function getLayerPoiId(layer: any): string {
+    // 快速路径：从 metadata 中读取（图层导入时已提取）
+    const metaPoi = layer?.metadata?.poiId || layer?.metadata?.POI_ID;
+    if (metaPoi) return String(metaPoi).trim();
+
     const features = Array.isArray(layer?.features) ? layer.features : [];
+    if (!features.length) return '';
     const firstFeature = features[0] || {};
     const properties =
         firstFeature?.properties && typeof firstFeature.properties === 'object'

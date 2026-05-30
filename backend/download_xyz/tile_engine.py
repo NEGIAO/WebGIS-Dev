@@ -401,3 +401,95 @@ def _clamp(value: float, min_value: float, max_value: float) -> float:
 
 def _clamp_int(value: int, min_value: int, max_value: int) -> int:
     return max(min_value, min(value, max_value))
+
+
+def clip_geotiff_to_bbox(
+    input_path: str,
+    bbox_4326: Tuple[float, float, float, float],
+    output_path: str | None = None,
+) -> str:
+    """将 GeoTIFF 裁剪到精确的 WGS84 范围。
+
+    Args:
+        input_path: 源 GeoTIFF 路径（EPSG:3857）
+        bbox_4326: 精确裁剪范围 (min_lon, min_lat, max_lon, max_lat)
+        output_path: 输出路径，None 则覆盖原文件
+
+    Returns:
+        裁剪后的文件路径
+    """
+    import os
+    from rasterio.windows import from_bounds as window_from_bounds
+
+    min_lon, min_lat, max_lon, max_lat = _normalize_bbox_4326(bbox_4326)
+
+    # WGS84 → EPSG:3857
+    min_x_3857 = min_lon * WEB_MERCATOR_EXTENT / 180.0
+    max_x_3857 = max_lon * WEB_MERCATOR_EXTENT / 180.0
+    min_y_3857 = (
+        WEB_MERCATOR_EXTENT
+        / math.pi
+        * math.log(math.tan(math.pi / 4 + math.radians(min_lat) / 2))
+    )
+    max_y_3857 = (
+        WEB_MERCATOR_EXTENT
+        / math.pi
+        * math.log(math.tan(math.pi / 4 + math.radians(max_lat) / 2))
+    )
+
+    # 保证顺序正确
+    clip_left = min(min_x_3857, max_x_3857)
+    clip_right = max(min_x_3857, max_x_3857)
+    clip_bottom = min(min_y_3857, max_y_3857)
+    clip_top = max(min_y_3857, max_y_3857)
+
+    should_replace = output_path is None
+    if output_path is None:
+        output_path = input_path + ".clip.tif"
+
+    with rasterio.open(input_path) as src:
+        # 计算精确裁剪窗口
+        window = window_from_bounds(
+            clip_left, clip_bottom, clip_right, clip_top,
+            transform=src.transform,
+        )
+
+        # 取整并限制在源数据范围内
+        col_off = max(0, int(math.floor(window.col_off)))
+        row_off = max(0, int(math.floor(window.row_off)))
+        col_end = min(src.width, int(math.ceil(window.col_off + window.width)))
+        row_end = min(src.height, int(math.ceil(window.row_off + window.height)))
+
+        win_width = col_end - col_off
+        win_height = row_end - row_off
+
+        if win_width <= 0 or win_height <= 0:
+            logger.warning("裁剪窗口为空，跳过裁剪")
+            return input_path
+
+        clipped_window = rasterio.windows.Window(col_off, row_off, win_width, win_height)
+        data = src.read(window=clipped_window)
+
+        # 计算裁剪后的仿射变换
+        new_transform = rasterio.windows.transform(clipped_window, src.transform)
+
+        profile = src.profile.copy()
+        profile.update(
+            width=win_width,
+            height=win_height,
+            transform=new_transform,
+        )
+
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(data)
+
+    logger.info(
+        "GeoTIFF 已裁剪到精确范围：[%s, %s, %s, %s] → %s",
+        min_lon, min_lat, max_lon, max_lat, output_path,
+    )
+
+    if should_replace:
+        os.replace(output_path, input_path)
+        return input_path
+
+    return output_path

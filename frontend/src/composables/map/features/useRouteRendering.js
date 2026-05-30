@@ -13,7 +13,7 @@ import { isEmpty as isExtentEmpty } from 'ol/extent';
  * 工厂函数 - 返回路线绘制相关的导出函数
  * @param {Object} options 配置选项
  * @param {Object} options.mapInstanceRef - 地图实例ref
- * @param {Object} options.busRouteLayerRef - 公交路线图层ref
+ * @param {Function} options.getBusRouteLayer - 获取公交路线图层的 getter 函数
  * @param {Object} options.busRouteSource - 公交路线数据源
  * @param {Function} options.resetRouteStepStates - 重置路线步骤状态
  * @param {Function} options.ensureRouteBuilderApi - 确保路由构建器API就绪
@@ -26,7 +26,7 @@ import { isEmpty as isExtentEmpty } from 'ol/extent';
  */
 export function createRouteRenderingFeature({
     mapInstanceRef = { value: null },
-    busRouteLayerRef = null,
+    getBusRouteLayer = () => null,
     busRouteSource = null,
     resetRouteStepStates = () => {},
     ensureRouteBuilderApi = async () => ({}),
@@ -46,12 +46,13 @@ export function createRouteRenderingFeature({
             ? userDataLayers.find((item) => item.id === busRouteManagedLayerIdRef.value)
             : null;
 
-        if (!managedItem && busRouteLayerRef) {
+        const routeLayer = getBusRouteLayer();
+        if (!managedItem && routeLayer) {
             busRouteManagedLayerIdRef.value = addManagedLayerRecord({
                 name,
                 type,
                 sourceType: 'search',
-                layer: busRouteLayerRef,
+                layer: routeLayer,
                 featureCount: routeFeatureCount,
                 styleConfig: null,
                 metadata: { category },
@@ -80,8 +81,9 @@ export function createRouteRenderingFeature({
             throw new Error('地图尚未初始化');
         }
 
-        if (busRouteLayerRef && !map.getLayers().getArray().includes(busRouteLayerRef)) {
-            map.addLayer(busRouteLayerRef);
+        const routeLayer = getBusRouteLayer();
+        if (routeLayer && !map.getLayers().getArray().includes(routeLayer)) {
+            map.addLayer(routeLayer);
         }
 
         // 只清理旧线路，保留起终点 marker
@@ -118,7 +120,7 @@ export function createRouteRenderingFeature({
             });
         }
 
-        busRouteLayerRef?.changed?.();
+        getBusRouteLayer()?.changed?.();
 
         syncRouteManagedLayer({
             name: '公交规划路线',
@@ -139,8 +141,9 @@ export function createRouteRenderingFeature({
             throw new Error('地图尚未初始化');
         }
 
-        if (busRouteLayerRef && !map.getLayers().getArray().includes(busRouteLayerRef)) {
-            map.addLayer(busRouteLayerRef);
+        const routeLayer = getBusRouteLayer();
+        if (routeLayer && !map.getLayers().getArray().includes(routeLayer)) {
+            map.addLayer(routeLayer);
         }
 
         // 清理旧路线，保留起终点 marker
@@ -169,7 +172,7 @@ export function createRouteRenderingFeature({
             });
         }
 
-        busRouteLayerRef?.changed?.();
+        getBusRouteLayer()?.changed?.();
 
         syncRouteManagedLayer({
             name: '驾车规划路线',

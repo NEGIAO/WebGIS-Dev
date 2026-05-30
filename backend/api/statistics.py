@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -15,6 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from api.auth import (
+    _extract_client_ip,
+    _iso,
+    _normalize_avatar_index,
+    _safe_parse_iso,
+    _utc_now,
     get_auth_db_connection,
     get_user_quota_snapshot_sync,
     normalize_role,
@@ -174,24 +179,6 @@ def _db_connection() -> sqlite3.Connection:
     return get_auth_db_connection()
 
 
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
-def _iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat()
-
-
-def _safe_parse_iso(text: str) -> Optional[datetime]:
-    try:
-        parsed = datetime.fromisoformat(str(text or ""))
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
-    except Exception:
-        return None
-
-
 def _normalize_geo_permission(raw_value: Any) -> str:
     value = str(raw_value or "unknown").strip().lower()
     if value in GEO_PERMISSION_ALLOWED:
@@ -277,15 +264,7 @@ def encode_pos(lng: Any, lat: Any) -> str:
 
 
 def extract_client_ip(request: Request) -> str:
-    x_forwarded_for = request.headers.get("X-Forwarded-For")
-    if x_forwarded_for:
-        return x_forwarded_for.split(",")[0].strip()
-
-    x_real_ip = request.headers.get("X-Real-IP")
-    if x_real_ip:
-        return x_real_ip
-
-    return request.client.host if request.client else "unknown"
+    return _extract_client_ip(request)
 
 
 async def fetch_geolocation(ip: str, client: Optional[httpx.AsyncClient] = None) -> Optional[dict]:
@@ -344,19 +323,6 @@ def _get_admin_contact_sync() -> str:
     return str(dict(row).get("value") or "管理员联系方式：请联系系统管理员")
 
 
-def _normalize_avatar_index(raw_avatar_index: Any) -> int:
-    try:
-        value = int(raw_avatar_index)
-    except Exception:
-        return 0
-
-    if value < 0:
-        return 0
-
-    if value > 11:
-        return 11
-
-    return value
 
 
 def _record_visit_sync(username: str, visit_record: Dict[str, Any]) -> None:
@@ -388,23 +354,17 @@ def _record_visit_sync(username: str, visit_record: Dict[str, Any]) -> None:
             ),
         )
 
+        # 使用 ON CONFLICT DO UPDATE 合并 INSERT 和 UPDATE，减少一次数据库操作
         conn.execute(
             """
-            INSERT INTO user_metrics (username, updated_at)
-            VALUES (?, ?)
-            ON CONFLICT(username) DO NOTHING
+            INSERT INTO user_metrics (username, total_visit_count, updated_at)
+            VALUES (?, 1, ?)
+            ON CONFLICT(username)
+            DO UPDATE SET
+                total_visit_count = user_metrics.total_visit_count + 1,
+                updated_at = excluded.updated_at
             """,
             (username, now_iso),
-        )
-
-        conn.execute(
-            """
-            UPDATE user_metrics
-            SET total_visit_count = total_visit_count + 1,
-                updated_at = ?
-            WHERE username = ?
-            """,
-            (now_iso, username),
         )
         conn.commit()
 
@@ -522,12 +482,7 @@ def _upsert_guest_identity_record_sync(record: Dict[str, Any]) -> None:
         ).fetchone()
 
         if existing is None:
-            # 获取下一个 id 用于生成用户名
-            max_id_row = conn.execute("SELECT MAX(id) FROM guest_identity_records").fetchone()
-            next_id = (dict(max_id_row).get("MAX(id)") or 0) + 1
-            # 使用 id 生成用户名，格式为 "user_1", "user_2" 等
-            generated_username = f"user_{next_id}"
-            
+            # 使用子查询原子获取下一个 id，避免并发竞态
             conn.execute(
                 """
                 INSERT INTO guest_identity_records (
@@ -545,11 +500,10 @@ def _upsert_guest_identity_record_sync(record: Dict[str, Any]) -> None:
                     visit_count,
                     first_seen_at,
                     last_seen_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                ) VALUES (?, 'user_' || (SELECT COALESCE(MAX(id), 0) + 1 FROM guest_identity_records), ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     guest_uid,
-                    generated_username,
                     role,
                     guest_device_id,
                     ip,
@@ -1198,10 +1152,9 @@ async def log_visit(
 
     except Exception as exc:
         logger.error("log_visit 异常: %s", str(exc))
-        return VisitLogResponse(
-            status="failed",
-            message=f"记录访问失败: {str(exc)}",
-            data=None,
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="记录访问失败，请稍后重试",
         )
 
 
@@ -1220,12 +1173,15 @@ async def get_center_statistics(
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
     token = str(session.get("token") or "")
 
-    quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
-    self_stats = await asyncio.to_thread(_get_self_stats_sync, username, token)
-    realtime = await asyncio.to_thread(_get_realtime_global_stats_sync)
-    admin_contact = await asyncio.to_thread(_get_admin_contact_sync)
-    messages = await asyncio.to_thread(_list_recent_messages_sync, 30)
-    announcement = await asyncio.to_thread(_get_active_announcement_sync, username)
+    # 并行执行所有独立的数据库查询，提升响应速度
+    quota, self_stats, realtime, admin_contact, messages, announcement = await asyncio.gather(
+        asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject),
+        asyncio.to_thread(_get_self_stats_sync, username, token),
+        asyncio.to_thread(_get_realtime_global_stats_sync),
+        asyncio.to_thread(_get_admin_contact_sync),
+        asyncio.to_thread(_list_recent_messages_sync, 30),
+        asyncio.to_thread(_get_active_announcement_sync, username),
+    )
 
     return {
         "status": "success",
