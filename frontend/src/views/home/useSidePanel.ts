@@ -128,7 +128,7 @@ export function useSidePanel({ compassStore, message }) {
      * 处理控制面板打开工具箱 Tab 的请求
      * @param {string} tab - 工具箱内的 Tab
      */
-    function handleControlsOpenToolboxTab(tab) {
+    function handleControlsOpenToolboxTab(_tab) {
         openToolbox();
         // 可以进一步切换工具箱内的 Tab
     }

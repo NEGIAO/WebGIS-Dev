@@ -1,7 +1,7 @@
 <template>
     <div
-        class="location-search"
         ref="rootRef"
+        class="location-search"
     >
         <form
             class="search-form"
@@ -290,7 +290,7 @@ watch(service, (val) => {
     if (props.storageKey) {
         try {
             window.localStorage.setItem(props.storageKey, val);
-        } catch {}
+        } catch { /* localStorage 写入失败 */ }
     }
 
     if (String(keywords.value || '').trim()) {
@@ -306,7 +306,7 @@ onMounted(() => {
         if (val && props.services.some((item) => item.value === val)) {
             service.value = val;
         }
-    } catch {}
+    } catch { /* localStorage 读取失败 */ }
 
     document.addEventListener('click', handleOutsideClick);
 });

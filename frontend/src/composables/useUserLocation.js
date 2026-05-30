@@ -8,7 +8,7 @@ import { saveUserPositionToCache } from '../utils/userPositionCache';
 import { setGlobalUserLocationContext } from '../utils/userLocationContext';
 // import { useMessage } from './useMessage';
 
-const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
+const _TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
 export function useUserLocation({
     mapInstance,

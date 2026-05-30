@@ -18,11 +18,11 @@ export function useSingularity(canvasRef, options = {}) {
 
     // --- 1. 粒子系统 (DoD 数据驱动设计) ---
     const NUM_PARTICLES = 450;
-    let px = new Float32Array(NUM_PARTICLES);
-    let py = new Float32Array(NUM_PARTICLES);
-    let vx = new Float32Array(NUM_PARTICLES);
-    let vy = new Float32Array(NUM_PARTICLES);
-    let mass = new Float32Array(NUM_PARTICLES);
+    const px = new Float32Array(NUM_PARTICLES);
+    const py = new Float32Array(NUM_PARTICLES);
+    const vx = new Float32Array(NUM_PARTICLES);
+    const vy = new Float32Array(NUM_PARTICLES);
+    const mass = new Float32Array(NUM_PARTICLES);
 
     // --- 2. 空间流体网格 (Vortex Field) ---
     const GRID_SIZE = 40;
@@ -30,8 +30,8 @@ export function useSingularity(canvasRef, options = {}) {
     let fieldX, fieldY;
 
     // --- 3. 交互状态 ---
-    let mouse = { x: -1000, y: -1000, active: false };
-    let lastMouse = { x: -1000, y: -1000 };
+    const mouse = { x: -1000, y: -1000, active: false };
+    const lastMouse = { x: -1000, y: -1000 };
     let smoothMouseVx = 0;
     let smoothMouseVy = 0;
 
@@ -111,26 +111,26 @@ export function useSingularity(canvasRef, options = {}) {
 
         if (!mouse.active) return;
 
-        let gx = Math.floor(mouse.x / GRID_SIZE);
-        let gy = Math.floor(mouse.y / GRID_SIZE);
-        let r = 4; // 影响网格半径
-        let speed = Math.hypot(smoothMouseVx, smoothMouseVy);
+        const gx = Math.floor(mouse.x / GRID_SIZE);
+        const gy = Math.floor(mouse.y / GRID_SIZE);
+        const r = 4; // 影响网格半径
+        const speed = Math.hypot(smoothMouseVx, smoothMouseVy);
 
         for (let y = gy - r; y <= gy + r; y++) {
             for (let x = gx - r; x <= gx + r; x++) {
                 if (x >= 0 && x < cols && y >= 0 && y < rows) {
-                    let idx = x + y * cols;
-                    let cellX = x * GRID_SIZE + GRID_SIZE / 2;
-                    let cellY = y * GRID_SIZE + GRID_SIZE / 2;
-                    let dx = mouse.x - cellX;
-                    let dy = mouse.y - cellY;
-                    let distSq = dx * dx + dy * dy;
-                    let dist = Math.sqrt(distSq) || 1;
+                    const idx = x + y * cols;
+                    const cellX = x * GRID_SIZE + GRID_SIZE / 2;
+                    const cellY = y * GRID_SIZE + GRID_SIZE / 2;
+                    const dx = mouse.x - cellX;
+                    const dy = mouse.y - cellY;
+                    const distSq = dx * dx + dy * dy;
+                    const dist = Math.sqrt(distSq) || 1;
 
                     if (dist < r * GRID_SIZE) {
-                        let falloff = 1 - dist / (r * GRID_SIZE);
+                        const falloff = 1 - dist / (r * GRID_SIZE);
                         // 向量叉乘构造涡流切线
-                        let swirlForce = 0.5 * speed * falloff;
+                        const swirlForce = 0.5 * speed * falloff;
                         fieldX[idx] += (-dy / dist) * swirlForce;
                         fieldY[idx] += (dx / dist) * swirlForce;
                         // 直线拖拽力
@@ -171,31 +171,31 @@ export function useSingularity(canvasRef, options = {}) {
 
         updateVortexField();
 
-        let targetX = mouse.active ? mouse.x : width / 2;
-        let targetY = mouse.active ? mouse.y : height / 2;
+        const targetX = mouse.active ? mouse.x : width / 2;
+        const targetY = mouse.active ? mouse.y : height / 2;
 
         // 2. 物理求解与元球光晕绘制
         for (let i = 0; i < NUM_PARTICLES; i++) {
-            let dx = targetX - px[i];
-            let dy = targetY - py[i];
-            let distSq = dx * dx + dy * dy;
-            let dist = Math.sqrt(distSq);
+            const dx = targetX - px[i];
+            const dy = targetY - py[i];
+            const distSq = dx * dx + dy * dy;
+            const dist = Math.sqrt(distSq);
 
             // A. 万有引力 (Softened Gravity)
-            let gravity = (config.gravityForce * mass[i]) / (distSq + 2500);
+            const gravity = (config.gravityForce * mass[i]) / (distSq + 2500);
             vx[i] += (dx / dist) * gravity;
             vy[i] += (dy / dist) * gravity;
 
             // B. 星系盘旋力 (切向公转)
-            let orbit = gravity * 0.6;
+            const orbit = gravity * 0.6;
             vx[i] += (-dy / dist) * orbit;
             vy[i] += (dx / dist) * orbit;
 
             // C. 流体网格场干涉
-            let gx = Math.floor(px[i] / GRID_SIZE);
-            let gy = Math.floor(py[i] / GRID_SIZE);
+            const gx = Math.floor(px[i] / GRID_SIZE);
+            const gy = Math.floor(py[i] / GRID_SIZE);
             if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) {
-                let idx = gx + gy * cols;
+                const idx = gx + gy * cols;
                 vx[i] += fieldX[idx] * 0.1;
                 vy[i] += fieldY[idx] * 0.1;
             }
@@ -214,9 +214,9 @@ export function useSingularity(canvasRef, options = {}) {
             if (py[i] > height + 100) py[i] = -100;
 
             // --- 视觉映射 (Thermodynamic Coloring) ---
-            let speed = Math.hypot(vx[i], vy[i]);
-            let hue = 270 - Math.max(0, 90 * (1 - dist / (width * 0.4))) + speed * 1.5;
-            let lightness = Math.min(90, 30 + speed * 3 + Math.max(0, 50 * (1 - dist / 200)));
+            const speed = Math.hypot(vx[i], vy[i]);
+            const hue = 270 - Math.max(0, 90 * (1 - dist / (width * 0.4))) + speed * 1.5;
+            const lightness = Math.min(90, 30 + speed * 3 + Math.max(0, 50 * (1 - dist / 200)));
 
             offCtx.fillStyle = `hsl(${hue}, 100%, ${lightness}%)`;
             offCtx.beginPath();

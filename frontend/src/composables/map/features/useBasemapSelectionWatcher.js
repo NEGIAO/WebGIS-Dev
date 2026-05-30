@@ -25,7 +25,7 @@ export function createBasemapSelectionWatcher({
     message,
     defaultLayerId = 'google',
     validationTimeoutMs = 3000,
-    switchDebounceMs = 300,
+    _switchDebounceMs = 300,
     circuitBreakThreshold = 3,
     onCircuitBreak,
     onCircuitReset,
@@ -352,7 +352,8 @@ export function createBasemapSelectionWatcher({
                 isAutoSwitchingLayer = true;
                 selectedLayerRef.value = nextFallbackOption;
                 message?.info?.(`已自动切换至${nextFallbackOption}底图`);
-            } catch (e) {
+            } catch { /* ignored */
+
                 controller.abort();
                 ongoingValidations.delete(val);
             }

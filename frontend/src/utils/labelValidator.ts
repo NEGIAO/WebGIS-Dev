@@ -122,6 +122,7 @@ export function isValidLabel(
 
     // 检查是否为乱码（检查是否包含过多的特殊字符或控制字符）
     // 匹配控制字符、不可打印字符、代理对等
+    // eslint-disable-next-line no-control-regex
     const specialCharMatch = labelStr.match(/[\x00-\x1F\x7F-\x9F\uD800-\uDFFF]/g);
     const specialCharRatio = specialCharMatch ? specialCharMatch.length / labelStr.length : 0;
 
@@ -135,7 +136,8 @@ export function isValidLabel(
     // 检查是否包含过多的连续特殊符号或无效序列
     // 允许常见标点、中文、英文、数字，但连续的特殊符号超过2个视为异常
     const consecutiveSpecialMatch = labelStr.match(
-        /[^\w\s\u4E00-\u9FA5\u3400-\u4DBF\.\,\?\!\！；:\-\(\)（）、，。？！；：\-—·ň\.]/g,
+    // eslint-disable-next-line no-useless-escape
+        /[^\w\s\u4E00-\u9FA5\u3400-\u4DBF.,?!\！；\uFF1A\-()\uFF08\uFF09\u3001\uFF0C\u3002\uFF1F\uFF01\uFF1B\uFF1A\-\u2014\u00B7ň.]/g,
     );
 
     if (consecutiveSpecialMatch && consecutiveSpecialMatch.length > 1) {

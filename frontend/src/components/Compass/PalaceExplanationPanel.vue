@@ -19,8 +19,8 @@
                     <div class="header-top">
                         <button
                             class="btn-close"
-                            @click="handleClose"
                             title="关闭"
+                            @click="handleClose"
                         >
                             ✕
                         </button>
@@ -132,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import type { SelectedPalace } from '../../stores/useCompassStore';
 import { getThemeExplanationByConfig } from '../../utils/themeExplanationMapper';
 import { ExplanationLookup, type ExplanationResult } from '../../utils/explanationLookup';

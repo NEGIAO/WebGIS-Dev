@@ -202,7 +202,7 @@ export function isVectorManagedLayer(layerData) {
  * CSV/TXT：折点导出（每条顶点一行）
  * GeoJSON/KML：保持原始几何导出（Point/LineString/Polygon等）
  */
-export function createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 }) {
+export function createLayerExporter({ message, _gcj02ToWgs84, _wgs84ToGcj02 }) {
     return function exportLayerCoordinates(payload, { userDataLayers }) {
         if (!payload?.layerId) return;
 

@@ -512,7 +512,7 @@ export function useLayerDataImport({
                 nodataValue = inferFallbackNoDataValue(singleBandData, nodataValue);
                 singleBandStretch = computePercentileStretch(singleBandData, nodataValue, 2, 98);
             }
-        } catch (e) {
+        } catch (_e) {
             sampleBandCount = 0;
             nodataValue = null;
             singleBandStretch = null;
@@ -535,7 +535,7 @@ export function useLayerDataImport({
             hasGeorefExtent = !!(
                 viewCfg?.extent && viewCfg.extent.every((v) => Number.isFinite(v))
             );
-        } catch (e) {
+        } catch (_e) {
             hasGeorefExtent = false;
         }
 
@@ -721,7 +721,7 @@ export function useLayerDataImport({
             try {
                 const styleResult = applyKmlStylesToFeatures(features, kmlTextForStyle);
                 if (styleResult.successCount > 0) {
-                    console.info(
+                    console.warn(
                         `[KML样式] 成功应用 ${styleResult.successCount}/${features.length} 个特征的样式`
                     );
                 }
@@ -786,7 +786,7 @@ export function useLayerDataImport({
             try {
                 const styleResult = applyKmlStylesToFeatures(features, kmlTextForStyle);
                 if (styleResult.successCount > 0) {
-                    console.info(
+                    console.warn(
                         `[KML样式] 成功应用 ${styleResult.successCount}/${features.length} 个特征的样式`
                     );
                 }

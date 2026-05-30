@@ -7,14 +7,14 @@
         <div
             class="swipe-splitter"
             :style="splitterStyle"
-            @mousedown="handleSplitterMouseDown"
-            @touchstart="handleSplitterTouchStart"
             role="slider"
             :aria-label="`Map swipe ${swipeMode === 'horizontal' ? 'horizontal' : 'vertical'} slider`"
             :aria-valuenow="Math.round(swipePosition * 100)"
             aria-valuemin="0"
             aria-valuemax="100"
             tabindex="0"
+            @mousedown="handleSplitterMouseDown"
+            @touchstart="handleSplitterTouchStart"
             @keydown="handleSplitterKeyDown"
         >
             <!-- 分割线句柄 -->
@@ -50,9 +50,9 @@
             <!-- 模式切换按钮 -->
             <button
                 class="control-btn mode-toggle-btn"
-                @click="toggleMode"
                 title="模式切换（水平/垂直）"
                 aria-label="Toggle swipe mode"
+                @click="toggleMode"
             >
                 <svg
                     viewBox="0 0 24 24"
@@ -70,9 +70,9 @@
             <!-- 关闭按钮 -->
             <button
                 class="control-btn close-btn"
-                @click="closeSwipe"
                 title="关闭卷帘模式"
                 aria-label="关闭卷帘模式"
+                @click="closeSwipe"
             >
                 <svg
                     viewBox="0 0 24 24"

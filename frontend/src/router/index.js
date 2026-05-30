@@ -7,7 +7,6 @@ import {
     persistPositionCodeFromUrl,
     readPositionCodeFromUrl,
     injectGuestTokenForShareMode,
-    readShareModeFromUrl,
     getAuthToken,
 } from '../utils/auth';
 
@@ -97,7 +96,7 @@ router.beforeEach(async (to, from) => {
     if (shareModeEnabled && !getAuthToken()) {
         const guestInjected = injectGuestTokenForShareMode();
         if (guestInjected) {
-            console.info('[Router] Share mode detected: Guest token injected');
+            console.warn('[Router] Share mode detected: Guest token injected');
             // 继续到下一步（参数提取）
         } else {
             console.warn('[Router] Failed to inject guest token for share mode');
@@ -120,7 +119,7 @@ router.beforeEach(async (to, from) => {
     if (isHomeRoute) {
         // 在路由阶段就提取 URL 参数，等待 MapContainer 挂载后再应用
         urlParamStore.extractAndStorePendingParams(routeQueryParams);
-        console.info('[Router] URL params extracted and stored for deferred application');
+        console.warn('[Router] URL params extracted and stored for deferred application');
     }
 
     // Guard 3: After GIS init completes, prevent re-showing loading for home route

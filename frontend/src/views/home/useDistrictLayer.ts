@@ -70,7 +70,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * 同步行政区图层可见性
      * @param {string} layerId - 图层 ID
      */
-    function syncDistrictLayerVisibility(layerId) {
+    function syncDistrictLayerVisibility(_layerId) {
         // 可以在这里添加同步逻辑
     }
 

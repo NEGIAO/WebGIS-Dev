@@ -751,7 +751,7 @@ export function useMapState(mapInstance, options = {}) {
             try {
                 source.clear();
             } catch (e) {
-                console.debug('[OL-Queue-Clear] Error clearing source:', e);
+                console.warn('[OL-Queue-Clear] Error clearing source:', e);
             }
         }
         // 断开 layer 与 source 的关联

@@ -368,7 +368,7 @@ async function handleControlsDistrictSelect(payload) {
 async function handleEnableBasemapSwipe(payload) {
     const { leftBasemap, rightBasemap, mode } = payload || {};
 
-    console.log('[handleEnableBasemapSwipe] Received payload:', {
+    console.warn('[handleEnableBasemapSwipe] Received payload:', {
         leftBasemap,
         rightBasemap,
         mode,
@@ -381,14 +381,14 @@ async function handleEnableBasemapSwipe(payload) {
     }
 
     try {
-        console.log('[handleEnableBasemapSwipe] Calling mapContainerRef.enableBasemapSwipe');
+        console.warn('[handleEnableBasemapSwipe] Calling mapContainerRef.enableBasemapSwipe');
         // 调用MapContainer的swipe相关方法
         const result = await mapContainerRef.value?.enableBasemapSwipe?.({
             leftBasemapId: leftBasemap,
             rightBasemapId: rightBasemap,
             mode: mode || 'horizontal',
         });
-        console.log('[handleEnableBasemapSwipe] Result:', result);
+        console.warn('[handleEnableBasemapSwipe] Result:', result);
     } catch (error) {
         console.error('[handleEnableBasemapSwipe] Error:', error);
         const detail = String(error?.message || '').trim();
@@ -1092,15 +1092,15 @@ onMounted(async () => {
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel
                     v-if="shouldLoadSidePanel"
-                    :locationInfo="locationInfo"
-                    :selectedImage="selectedImage"
-                    :isCollapsed="isSidePanelCollapsed"
-                    :activeTab="activeSidePanelTab"
-                    :activeFeature="activeFeature"
-                    :userLayers="userLayers"
-                    :baseLayers="baseLayers"
-                    :toolboxOverview="toolboxOverview"
-                    :uploadProgress="uploadProgress"
+                    :location-info="locationInfo"
+                    :selected-image="selectedImage"
+                    :is-collapsed="isSidePanelCollapsed"
+                    :active-tab="activeSidePanelTab"
+                    :active-feature="activeFeature"
+                    :user-layers="userLayers"
+                    :base-layers="baseLayers"
+                    :toolbox-overview="toolboxOverview"
+                    :upload-progress="uploadProgress"
                     :latest-search-poi="latestSearchPoi"
                     :get-user-location="getMapUserLocation"
                     :start-bus-point-pick="startBusPointPick"

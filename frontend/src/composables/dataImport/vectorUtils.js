@@ -33,7 +33,8 @@ export function decodeTextContent(content) {
                 const text = new TextDecoder(encoding, { fatal: false }).decode(content);
                 const invalidCount = (text.match(/�/g) || []).length;
                 candidates.push({ encoding, text, invalidCount });
-            } catch (err) {
+            } catch { /* ignored */
+
                 continue;
             }
         }

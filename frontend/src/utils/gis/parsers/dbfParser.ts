@@ -59,7 +59,7 @@ export interface DbfData {
 
 const SUPPORTED_DBF_VERSIONS = new Set([0x03, 0x83, 0x8b, 0xcb, 0x8c, 0xcc]);
 
-const DBF_FIELD_TYPE_NAMES: Record<string, string> = {
+const _DBF_FIELD_TYPE_NAMES: Record<string, string> = {
     'C': '字符串 (Character)',
     'N': '数值 (Numeric)',
     'D': '日期 (Date)',
@@ -91,10 +91,10 @@ const ENCODING_LDID_MAP: Record<number, string> = {
  * 检测字符串编码
  * 通过观察特征字符来推断编码方式
  */
-function detectEncoding(buffer: ArrayBuffer, ldid: number): string {
+function detectEncoding(buffer: ArrayBuffer, _ldid: number): string {
     // 优先使用 DBF 文件头中的 LDID 编码标识
-    if (ENCODING_LDID_MAP[ldid]) {
-        return ENCODING_LDID_MAP[ldid];
+    if (ENCODING_LDID_MAP[_ldid]) {
+        return ENCODING_LDID_MAP[_ldid];
     }
 
     // 降级方案：采样前1KB检测
@@ -109,10 +109,10 @@ function detectEncoding(buffer: ArrayBuffer, ldid: number): string {
     // 检测 GBK 特征（两字节编码）
     let gbkScore = 0;
     for (let i = 0; i < sample.length - 1; i++) {
-        const byte1 = sample[i];
-        const byte2 = sample[i + 1];
+        const _byte1 = sample[i];
+        const _byte2 = sample[i + 1];
         // GBK 范围：0x81-0xFE (首字节) + 0x40-0x7E, 0x80-0xFE (次字节)
-        if (byte1 >= 0x81 && byte1 <= 0xfe && ((byte2 >= 0x40 && byte2 <= 0x7e) || (byte2 >= 0x80 && byte2 <= 0xfe))) {
+        if (_byte1 >= 0x81 && _byte1 <= 0xfe && ((_byte2 >= 0x40 && _byte2 <= 0x7e) || (_byte2 >= 0x80 && _byte2 <= 0xfe))) {
             gbkScore += 1;
         }
     }
@@ -173,8 +173,8 @@ function decodeString(buffer: Uint8Array, encoding: string): string {
                     result += String.fromCharCode(byte);
                 } else if (i + 1 < slice.length) {
                     // 两字节字符，先转换为 Unicode 代码点
-                    const byte1 = byte;
-                    const byte2 = slice[i + 1];
+                    const _byte1 = byte;
+                    const _byte2 = slice[i + 1];
                     // 简单的 GBK 转换（完整的转换需要 iconv-lite）
                     result += `\u25a0`;  // 暂用方块符表示未知字符
                     i++; // 跳过下一个字节
@@ -187,7 +187,8 @@ function decodeString(buffer: Uint8Array, encoding: string): string {
 
         // 默认 UTF-8
         return new TextDecoder('UTF-8', { fatal: false }).decode(slice);
-    } catch (err) {
+    } catch (err) { /* ignored */
+
         console.warn(`[dbfParser] 字符串解码失败 (encoding=${encoding}):`, err);
         return '';
     }
@@ -256,7 +257,7 @@ export function parseDbfHeader(buffer: ArrayBuffer): { header: DbfHeader; warnin
     }
 
     const view = new DataView(buffer);
-    const headerBytes = new Uint8Array(buffer, 0, 32);
+    const _headerBytes = new Uint8Array(buffer, 0, 32);
 
     // 解析版本
     const version = view.getUint8(0);
@@ -293,7 +294,7 @@ export function parseDbfHeader(buffer: ArrayBuffer): { header: DbfHeader; warnin
     }
 
     // LDID（逻辑驱动器标识）
-    const ldid = view.getUint8(29);
+    const _ldid = view.getUint8(29);
 
     return {
         header: {
@@ -434,7 +435,8 @@ function parseDbfRecord(
                 default:
                     value = trimString(fieldString);
             }
-        } catch (err) {
+        } catch (err) { /* ignored */
+
             console.warn(`[dbfParser] 字段 '${field.name}' 解析异常:`, err);
             value = trimString(fieldString) || null;
         }
@@ -474,11 +476,11 @@ export function parseDbfBuffer(dbfBuffer: ArrayBuffer, cpgText: string = ''): Db
 
     // 检测编码
     const cpgEncoding = normalizeEncodingName(cpgText);
-    const ldid = new DataView(dbfBuffer).getUint8(29);
-    const encodingFromLdid = detectEncoding(dbfBuffer, ldid);
+    const _ldid = new DataView(dbfBuffer).getUint8(29);
+    const encodingFromLdid = detectEncoding(dbfBuffer, _ldid);
     const encoding = cpgEncoding || encodingFromLdid || 'utf-8';
 
-    console.info(`[dbfParser] 检测编码: ${encoding} (CPG: ${cpgEncoding || 'none'}, LDID: 0x${ldid.toString(16).toUpperCase()})`);
+    console.warn(`[dbfParser] 检测编码: ${encoding} (CPG: ${cpgEncoding || 'none'}, LDID: 0x${_ldid.toString(16).toUpperCase()})`);
 
     // 解析字段定义
     const { fields, warnings: fieldWarnings } = parseDbfFields(
@@ -492,7 +494,7 @@ export function parseDbfBuffer(dbfBuffer: ArrayBuffer, cpgText: string = ''): Db
         throw new Error(`DBF 文件无字段定义，无法继续解析（headerLength=${header.headerLength})`);
     }
 
-    console.info(`[dbfParser] 解析 ${fields.length} 个字段，预期 ${header.recordCount} 条记录`);
+    console.warn(`[dbfParser] 解析 ${fields.length} 个字段，预期 ${header.recordCount} 条记录`);
 
     // 解析数据记录
     const records: DbfRecord[] = [];
@@ -526,13 +528,13 @@ export function parseDbfBuffer(dbfBuffer: ArrayBuffer, cpgText: string = ''): Db
     // 给出已跳过的记录数警告
     const totalRecords = header.recordCount;
     if (skippedDeleted > 0) {
-        console.info(`[dbfParser] 跳过 ${skippedDeleted} 条已删除记录`);
+        console.warn(`[dbfParser] 跳过 ${skippedDeleted} 条已删除记录`);
     }
     if (recordLimit < totalRecords) {
         warnings.push(`仅解析前 ${recordLimit} / ${totalRecords} 条记录（性能优化）`);
     }
 
-    console.info(`[dbfParser] 成功解析 ${records.length} 条有效属性记录`);
+    console.warn(`[dbfParser] 成功解析 ${records.length} 条有效属性记录`);
 
     return {
         header,

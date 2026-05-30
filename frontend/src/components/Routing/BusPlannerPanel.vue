@@ -52,20 +52,20 @@
         </div>
 
         <div
-            class="status-line error"
             v-if="errorMsg"
+            class="status-line error"
         >
             {{ errorMsg }}
         </div>
         <div
-            class="status-line"
             v-else-if="pickMode === 'start'"
+            class="status-line"
         >
             请在主地图上单击一个位置设置起点
         </div>
         <div
-            class="status-line"
             v-else-if="pickMode === 'end'"
+            class="status-line"
         >
             请在主地图上单击一个位置设置终点
         </div>
@@ -284,9 +284,9 @@ const selectedRoute = computed<RouteCandidate | null>(() => {
 });
 
 function parseSegmentMetrics(segment: TransitSegment) {
-    const firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
-    const t = Number(firstLine?.segmentTime ?? 0);
-    const d = Number(firstLine?.segmentDistance ?? 0);
+    const _firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
+    const t = Number(_firstLine?.segmentTime ?? 0);
+    const d = Number(_firstLine?.segmentDistance ?? 0);
     return {
         time: Number.isFinite(t) ? t : 0,
         distance: Number.isFinite(d) ? d : 0,
@@ -308,8 +308,8 @@ function resolveStationName(
 }
 
 function getSegmentDisplayName(segment: TransitSegment, stepIndex: number): string {
-    const firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
-    const lineName = String(firstLine?.lineName || '').trim();
+    const _firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
+    const lineName = String(_firstLine?.lineName || '').trim();
     if (Number(segment?.segmentType ?? 0) === 1) {
         return lineName || '步行';
     }
@@ -337,7 +337,7 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
                 .replace(/\s*\|\s*$/, '')
                 .trim() || `方案 ${idx + 1}`;
         const steps: StepInfo[] = segmentList.map((segment, segmentIndex) => {
-            const firstLine = Array.isArray(segment?.segmentLine)
+            const _firstLine = Array.isArray(segment?.segmentLine)
                 ? segment.segmentLine[0]
                 : undefined;
             const metrics = parseSegmentMetrics(segment);

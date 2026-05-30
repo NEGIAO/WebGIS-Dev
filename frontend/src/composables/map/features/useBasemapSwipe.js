@@ -3,7 +3,7 @@
  * 支持双底图对比，拖拽分割线查看不同底图
  */
 
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 import { useMapSwipe } from '../../useMapSwipe';
 
 const SWIPE_COMPARE_LAYER_PREFIX = '__swipe_compare_layer__';

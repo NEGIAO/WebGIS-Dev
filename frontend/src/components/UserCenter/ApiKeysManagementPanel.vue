@@ -508,7 +508,7 @@ function formatTime(isoString) {
             minute: '2-digit',
             second: '2-digit',
         });
-    } catch (e) {
+    } catch (_e) {
         return isoString;
     }
 }

@@ -3,14 +3,14 @@
         <LocationSearch
             :fetcher="fetchLocationResults"
             :services="serviceOptions"
-            storageKey="map_search_selected_service"
+            storage-key="map_search_selected_service"
             @select-result="handleSearchJump"
         />
 
         <div class="layer-label">选择底图</div>
         <div
-            class="custom-select-container"
             ref="customSelectRef"
+            class="custom-select-container"
             @click="toggleSelectDropdown"
         >
             <div class="custom-select-trigger">
@@ -33,8 +33,8 @@
         <button
             ref="layerManageButtonRef"
             class="layer-manage-btn"
-            @click="toggleLayerManager"
             title="图层管理"
+            @click="toggleLayerManager"
         >
             <svg
                 viewBox="0 0 24 24"
@@ -51,8 +51,8 @@
         <button
             class="graticule-btn"
             :class="{ active: activeGraticule }"
-            @click="emit('toggle-graticule')"
             title="经纬度分割线"
+            @click="emit('toggle-graticule')"
         >
             经纬线
         </button>
@@ -60,8 +60,8 @@
         <button
             v-if="basemapCircuitOpen"
             class="basemap-reset-btn"
-            @click="emit('reset-basemap-chain')"
             title="当前网络异常，点击重置底图链路"
+            @click="emit('reset-basemap-chain')"
         >
             重置链路
         </button>
@@ -77,8 +77,8 @@
             />
             <button
                 class="custom-url-btn"
-                @click="submitCustomUrl"
                 title="加载"
+                @click="submitCustomUrl"
             >
                 ok
             </button>
@@ -110,6 +110,7 @@
                         :key="layer.id"
                         class="layer-item"
                         :draggable="!isTouchDevice"
+                        :class="{ dragging: draggingIndex === index }"
                         @dragstart="onDragStart($event, index)"
                         @dragend="onDragEnd"
                         @dragover.prevent
@@ -118,17 +119,16 @@
                         @touchstart="onLayerTouchStart(layer, index, $event)"
                         @touchmove="onLayerTouchMove"
                         @touchend="onLayerTouchEnd"
-                        :class="{ dragging: draggingIndex === index }"
                     >
                         <div
-                            class="drag-handle"
                             v-if="!isTouchDevice"
+                            class="drag-handle"
                         >
                             ⋮⋮
                         </div>
                         <div
-                            class="drag-handle mobile-hint"
                             v-if="isTouchDevice"
+                            class="drag-handle mobile-hint"
                         >
                             ⋯
                         </div>
@@ -185,9 +185,9 @@
                         min="0"
                         max="100"
                         :value="Math.round((layerOpacityMap.get(contextMenuLayer?.id) ?? 1) * 100)"
-                        @input="updateLayerOpacity($event)"
                         class="opacity-slider"
                         title="调整图层透明度"
+                        @input="updateLayerOpacity($event)"
                     />
                     <span class="opacity-value"
                         >{{
@@ -346,7 +346,7 @@ const currentLayerLabel = computed(() => {
     return found ? found.label : '选择底图';
 });
 
-function toggleSelectDropdown(event) {
+function toggleSelectDropdown(_event) {
     isSelectDropdownOpen.value = !isSelectDropdownOpen.value;
 }
 

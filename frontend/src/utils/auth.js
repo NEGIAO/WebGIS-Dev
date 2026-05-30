@@ -230,7 +230,7 @@ export function injectGuestTokenForShareMode() {
             user: guestUser,
         });
 
-        console.info('[Auth] Guest token injected for share mode', {
+        console.warn('[Auth] Guest token injected for share mode', {
             guestDeviceId,
             timestamp,
             user: guestUser.username,

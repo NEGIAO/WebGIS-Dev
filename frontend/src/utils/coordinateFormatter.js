@@ -196,7 +196,7 @@ export function parseCoordinate(input, formatId = null) {
     if (!input || typeof input !== 'string') return null;
 
     // 标准化：中文逗号替换为英文逗号
-    let normalized = String(input).trim().replace(/，/g, ',');
+    const normalized = String(input).trim().replace(/，/g, ',');
 
     // ========== 第一种格式：度分秒 ==========
     // 匹配格式如：114°18'08.64"E, 34°48'52.56"N

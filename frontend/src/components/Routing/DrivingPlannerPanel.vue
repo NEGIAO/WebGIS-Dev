@@ -56,20 +56,20 @@
         </div>
 
         <div
-            class="status-line error"
             v-if="error"
+            class="status-line error"
         >
             {{ error }}
         </div>
         <div
-            class="status-line"
             v-else-if="pickMode === 'start'"
+            class="status-line"
         >
             请在主地图上单击一个位置设置起点
         </div>
         <div
-            class="status-line"
             v-else-if="pickMode === 'end'"
+            class="status-line"
         >
             请在主地图上单击一个位置设置终点
         </div>
@@ -97,8 +97,8 @@
         </details>
 
         <div
-            class="planner-main"
             v-if="routeResult"
+            class="planner-main"
         >
             <aside
                 class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"

@@ -17,8 +17,8 @@
         <div class="divider"></div>
         <button
             class="home-btn"
-            @click="flyToHome"
             title="回到初始位置"
+            @click="flyToHome"
         >
             <svg
                 viewBox="0 0 24 24"
@@ -33,20 +33,20 @@
 
     <div class="cesium-controls">
         <button
-            @click="flyToEverest"
             class="fly-btn"
+            @click="flyToEverest"
         >
             🏔️ 飞越珠穆朗玛峰
         </button>
         <button
-            @click="loadCustomTileset"
             class="fly-btn"
+            @click="loadCustomTileset"
         >
             🏢 加载3D模型
         </button>
         <button
-            @click="loadSimulatedWind"
             class="fly-btn"
+            @click="loadSimulatedWind"
         >
             🌬️ 加载模拟风场
         </button>
@@ -59,52 +59,52 @@
     >
         <button
             class="close-btn"
-            @click="wind2D = false"
             title="关闭控制面板"
+            @click="wind2D = false"
         >
             ×
         </button>
         <div class="param-row">
             <label>速度因子: {{ speedFactor.toFixed(1) }}</label>
             <input
+                v-model.number="speedFactor"
                 type="range"
                 min="0.1"
                 max="5"
                 step="0.1"
-                v-model.number="speedFactor"
                 @input="onParamChange"
             />
         </div>
         <div class="param-row">
             <label>箭头长度: {{ arrowLength / 1000 }}km</label>
             <input
+                v-model.number="arrowLength"
                 type="range"
                 min="5000"
                 max="50000"
                 step="1000"
-                v-model.number="arrowLength"
                 @input="onParamChange"
             />
         </div>
         <div class="param-row">
             <label>尾迹长度: {{ trailLength / 1000 }}km</label>
             <input
+                v-model.number="trailLength"
                 type="range"
                 min="5000"
                 max="80000"
                 step="1000"
-                v-model.number="trailLength"
                 @input="onParamChange"
             />
         </div>
         <div class="param-row">
             <label>透明度: {{ alphaFactor.toFixed(2) }}</label>
             <input
+                v-model.number="alphaFactor"
                 type="range"
                 min="0.1"
                 max="1"
                 step="0.05"
-                v-model.number="alphaFactor"
                 @input="onParamChange"
             />
         </div>

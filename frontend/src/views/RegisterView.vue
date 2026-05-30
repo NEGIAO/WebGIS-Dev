@@ -41,9 +41,9 @@
                         <div class="input-group">
                             <i class="icon fas fa-user"></i>
                             <input
-                                type="text"
                                 id="username"
                                 v-model="username"
+                                type="text"
                                 :placeholder="mode === 'login'
                                         ? '请输入用户名（游客请输入 user）'
                                         : '3-24位：字母/数字/下划线'
@@ -53,15 +53,15 @@
                             />
                         </div>
                         <div
-                            class="hint"
                             v-if="mode === 'login'"
+                            class="hint"
                         >
                             <i class="fas fa-info-circle"></i>
                             登录角色由后端统一校验（游客/注册用户/管理员）
                         </div>
                         <div
-                            class="hint"
                             v-else
+                            class="hint"
                         >
                             <i class="fas fa-user-plus"></i>
                             user/admin 为保留用户名，不能注册
@@ -81,24 +81,24 @@
                         <div class="input-group">
                             <i class="icon fas fa-lock"></i>
                             <input
-                                type="password"
                                 id="password"
                                 v-model="password"
+                                type="password"
                                 :placeholder="mode === 'login' ? '请输入密码' : '6-64位，至少包含字母和数字'
                                     "
                                 required
                             />
                         </div>
                         <div
-                            class="hint"
                             v-if="mode === 'login'"
+                            class="hint"
                         >
                             <i class="fas fa-shield-alt"></i>
                             游客默认一键登陆，无需密码，注册用户请使用注册时设置的密码登录
                         </div>
                         <div
-                            class="hint"
                             v-else
+                            class="hint"
                         >
                             <i class="fas fa-shield-alt"></i>
                             注册密码必须包含字母和数字
@@ -106,16 +106,16 @@
                     </div>
 
                     <div
-                        class="form-group"
                         v-if="mode === 'register'"
+                        class="form-group"
                     >
                         <label for="confirmPassword">确认密码</label>
                         <div class="input-group">
                             <i class="icon fas fa-check-circle"></i>
                             <input
-                                type="password"
                                 id="confirmPassword"
                                 v-model="confirmPassword"
+                                type="password"
                                 placeholder="再次输入密码"
                                 required
                             />
@@ -123,8 +123,8 @@
                     </div>
 
                     <div
-                        class="form-group"
                         v-if="mode === 'register'"
+                        class="form-group"
                     >
                         <label>选择头像</label>
                         <div
@@ -153,8 +153,8 @@
                     </div>
 
                     <div
-                        class="quick-action-row"
                         v-if="mode === 'login'"
+                        class="quick-action-row"
                     >
                         <button
                             type="button"
@@ -316,7 +316,7 @@ function switchMode(nextMode) {
     }
 }
 
-function fillGuestAccount() {
+function _fillGuestAccount() {
     mode.value = 'login';
     username.value = 'user';
     password.value = '123';
@@ -582,7 +582,7 @@ onMounted(async () => {
     })
         .then((result) => {
             if (result?.tracked) {
-                console.log('[Location Tracking] 访问已记录:', {
+                console.warn('[Location Tracking] 访问已记录:', {
                     ip: result?.ip,
                     city: result?.city,
                     province: result?.province,

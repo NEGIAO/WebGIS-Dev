@@ -3,7 +3,7 @@
  * 提供图层配置解析、预设解析等功能
  */
 
-import type { LayerCategory, LayerGroup, LayerFactoryContext, LayerSourceDefinition, BasemapPresetDefinition } from './basemapConfig';
+import type { LayerCategory, LayerGroup, LayerFactoryContext } from './basemapConfig';
 import {
     LAYER_SOURCE_DEFINITIONS,
     BASEMAP_PRESETS,

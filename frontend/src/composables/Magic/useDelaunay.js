@@ -7,10 +7,10 @@ export function useDelaunay(canvasRef, props) {
     let points = [];
 
     // 数据涟漪 (Ripples) - 用于交互式空间畸变
-    let ripples = [];
+    const ripples = [];
 
     // 动态引力点/鼠标节点 (The Dynamic Vertex)
-    let mouse = { x: -1000, y: -1000, id: 'mouse', active: false };
+    const mouse = { x: -1000, y: -1000, id: 'mouse', active: false };
 
     function initGrid() {
         if (!canvasRef.value) return;
@@ -75,7 +75,7 @@ export function useDelaunay(canvasRef, props) {
         // 2. 逐一插入顶点，动态更新网格
         for (let i = 0; i < vertices.length; i++) {
             const p = vertices[i];
-            let badTriangles = [];
+            const badTriangles = [];
 
             // 找出外接圆包含当前插入点的“坏三角形”
             for (let j = 0; j < triangles.length; j++) {
@@ -90,7 +90,7 @@ export function useDelaunay(canvasRef, props) {
             }
 
             // 寻找多边形空洞的边界边 (Boundary Edges)
-            let polygon = new Map();
+            const polygon = new Map();
             for (let j = 0; j < badTriangles.length; j++) {
                 const t = badTriangles[j];
                 const edges = [
@@ -152,7 +152,7 @@ export function useDelaunay(canvasRef, props) {
 
         // 更新节点位置
         for (let i = 0; i < points.length; i++) {
-            let p = points[i];
+            const p = points[i];
             p.x += p.vx;
             p.y += p.vy;
             // 空间折叠/边缘反弹
@@ -161,7 +161,7 @@ export function useDelaunay(canvasRef, props) {
         }
 
         // 将鼠标作为极其活跃的动态顶点注入空间
-        let currentVertices = [...points];
+        const currentVertices = [...points];
         if (mouse.active) currentVertices.push(mouse);
 
         // 实时三角剖分 (每秒计算 60 次网格拓扑)
@@ -176,14 +176,14 @@ export function useDelaunay(canvasRef, props) {
             const cy = (p1.y + p2.y + p3.y) / 3;
 
             // 距离计算：判断三角形距鼠标有多远，产生畸变和高亮感
-            let distToMouse = mouse.active ? Math.hypot(cx - mouse.x, cy - mouse.y) : 1000;
-            let hoverGlow = Math.max(0, 1 - distToMouse / 250); // 鼠标周围 250px 泛光
+            const distToMouse = mouse.active ? Math.hypot(cx - mouse.x, cy - mouse.y) : 1000;
+            const hoverGlow = Math.max(0, 1 - distToMouse / 250); // 鼠标周围 250px 泛光
 
             // 叠加数据涟漪 (Data Ripples) 影响
             let rippleIntensity = 0;
             for (let r = 0; r < ripples.length; r++) {
-                let rp = ripples[r];
-                let d = Math.hypot(cx - rp.x, cy - rp.y);
+                const rp = ripples[r];
+                const d = Math.hypot(cx - rp.x, cy - rp.y);
                 // 波环效应 (Wave ring)
                 if (Math.abs(d - rp.radius) < 40) {
                     rippleIntensity += rp.alpha * (1 - Math.abs(d - rp.radius) / 40);
@@ -191,9 +191,9 @@ export function useDelaunay(canvasRef, props) {
             }
 
             // 时间驱动的呼吸感与 Z 轴伪深度映射
-            let zBase = ((p1.z || 0) + (p2.z || 0) + (p3.z || 0)) / 3;
-            let wave = Math.sin(time + cx * 0.01 + cy * 0.01) * 15;
-            let lightness = 8 + wave + hoverGlow * 20 + rippleIntensity * 40;
+            const _zBase = ((p1.z || 0) + (p2.z || 0) + (p3.z || 0)) / 3;
+            const wave = Math.sin(time + cx * 0.01 + cy * 0.01) * 15;
+            const lightness = 8 + wave + hoverGlow * 20 + rippleIntensity * 40;
 
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
@@ -212,7 +212,7 @@ export function useDelaunay(canvasRef, props) {
 
         // 更新和渲染数据涟漪
         for (let i = ripples.length - 1; i >= 0; i--) {
-            let r = ripples[i];
+            const r = ripples[i];
             r.radius += 8; // 扩散速度
             r.alpha -= 0.015; // 衰减
             if (r.alpha <= 0) {

@@ -472,8 +472,7 @@ async function handleLogout() {
 
     try {
         await apiAuthLogout();
-    } catch {
-    } finally {
+    } catch { /* ignored */ } finally {
         isSubmitting.value = false;
     }
 
@@ -722,8 +721,8 @@ onBeforeUnmount(() => {
                     >
                         <div
                             v-if="activeMenu === 'overview'"
-                            class="view-content overview-view"
                             key="overview"
+                            class="view-content overview-view"
                         >
                             <div class="info-card">
                                 <div class="info-row">
@@ -865,8 +864,8 @@ onBeforeUnmount(() => {
                         <!-- View 2: Security -->
                         <div
                             v-else-if="activeMenu === 'security'"
-                            class="view-content security-view"
                             key="security"
+                            class="view-content security-view"
                         >
                             <div
                                 v-if="user?.role === 'guest'"
@@ -936,8 +935,8 @@ onBeforeUnmount(() => {
                         <!-- View 3: Admin -->
                         <div
                             v-else-if="activeMenu === 'admin' && isAdmin"
-                            class="view-content admin-view"
                             key="admin"
+                            class="view-content admin-view"
                         >
                             <AdminControlPanel />
                         </div>
@@ -945,8 +944,8 @@ onBeforeUnmount(() => {
                         <!-- View 4: API Management -->
                         <div
                             v-else-if="activeMenu === 'api-management' && isAdmin"
-                            class="view-content api-mgmt-view"
                             key="api-management"
+                            class="view-content api-mgmt-view"
                         >
                             <ApiManagementPanel />
                         </div>
@@ -954,8 +953,8 @@ onBeforeUnmount(() => {
                         <!-- View 5: Preferences -->
                         <div
                             v-else-if="activeMenu === 'preferences'"
-                            class="view-content prefs-view"
                             key="preferences"
+                            class="view-content prefs-view"
                         >
                             <div class="pref-list">
                                 <div class="pref-item">
@@ -1110,8 +1109,8 @@ onBeforeUnmount(() => {
                                 <button
                                     v-if="selectedAvatarIndex !== (user?.avatar_index || 0)"
                                     class="avatar-save-btn"
-                                    @click="handleSaveAvatar"
                                     :disabled="avatarSaving"
+                                    @click="handleSaveAvatar"
                                 >
                                     <i class="fas fa-save"></i>
                                     {{ avatarSaving ? '保存中...' : '保存头像' }}
@@ -1133,8 +1132,8 @@ onBeforeUnmount(() => {
                         class="btn-logout"
                         type="button"
                         :disabled="isSubmitting"
-                        @click="handleLogout"
                         title="安全退出"
+                        @click="handleLogout"
                     >
                         <i class="fas fa-sign-out-alt"></i>
                         退出系统

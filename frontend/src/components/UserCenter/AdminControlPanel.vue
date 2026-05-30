@@ -405,8 +405,8 @@ onMounted(async () => {
             </div>
 
             <div
-                class="rows-wrap"
                 v-if="tableRows.length > 0"
+                class="rows-wrap"
             >
                 <div
                     v-for="row in tableRows"

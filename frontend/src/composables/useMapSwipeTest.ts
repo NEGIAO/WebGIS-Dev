@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Map Swipe Testing Composable
  *
@@ -134,13 +135,14 @@ export function useMapSwipeTest() {
                 const observer = new PerformanceObserver((list) => {
                     const entries = list.getEntries();
                     entries.forEach((entry) => {
+                        const resourceEntry = entry as PerformanceResourceTiming;
                         if (
-                            entry.initiatorType === 'fetch' ||
-                            entry.initiatorType === 'xmlhttprequest'
+                            resourceEntry.initiatorType === 'fetch' ||
+                            resourceEntry.initiatorType === 'xmlhttprequest'
                         ) {
                             const details = {
-                                name: entry.name,
-                                type: entry.initiatorType,
+                                name: resourceEntry.name,
+                                type: resourceEntry.initiatorType,
                                 duration: entry.duration.toFixed(2),
                                 timestamp: entry.startTime.toFixed(2),
                             };

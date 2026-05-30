@@ -137,8 +137,8 @@
             class="home-btn"
             :class="{ rippling: homeButtonRippling }"
             title="单击复位 / 双击定位"
-            @click="handleHomeInteract"
             type="button"
+            @click="handleHomeInteract"
         >
             <svg
                 viewBox="0 0 24 24"

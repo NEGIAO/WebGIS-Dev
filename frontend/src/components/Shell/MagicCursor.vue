@@ -1,7 +1,7 @@
 <template>
     <div
-        class="magic-cursor-wrapper"
         v-if="active"
+        class="magic-cursor-wrapper"
     >
         <!-- 物理特效画布 -->
         <canvas
@@ -25,7 +25,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['toggle-active']);
+defineEmits(['toggle-active']);
 
 const canvasRef = ref(null);
 const isLoading = ref(false);
@@ -118,7 +118,7 @@ async function switchEffect(effectName) {
 
 watch(
     () => [props.active, props.effectName],
-    async ([newActive, newEffectName], [oldActive, oldEffectName]) => {
+    async ([newActive, newEffectName], [_oldActive, oldEffectName]) => {
         if (newActive) {
             // 激活或切换了特效
             if (!activeEngine || newEffectName !== oldEffectName) {

@@ -108,8 +108,8 @@
                     </div>
 
                     <div
-                        class="toolbar-group layout-end"
                         v-if="numericFields.length"
+                        class="toolbar-group layout-end"
                     >
                         <div class="pro-stats-panel">
                             <span class="label">分析汇总：</span>

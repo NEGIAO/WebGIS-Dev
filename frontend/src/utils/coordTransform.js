@@ -2,6 +2,7 @@
 
 const PI = Math.PI;
 const A = 6378245.0;
+    // eslint-disable-next-line no-loss-of-precision
 const EE = 0.00669342162296594323;
 
 function outOfChina(lon, lat) {

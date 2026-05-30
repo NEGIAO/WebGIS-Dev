@@ -16,13 +16,13 @@
 
         <div class="controls">
             <div
-                class="menu-host"
                 ref="menuHostRef"
+                class="menu-host"
             >
                 <button
                     class="nav-btn"
-                    @click="toggleToolMenu"
                     title="菜单项"
+                    @click="toggleToolMenu"
                 >
                     <span class="btn-icon">
                         <list-icon
@@ -116,8 +116,8 @@
                     <div class="menu-divider"></div>
                     <button
                         class="menu-item"
-                        @click="handleSoup"
                         title="来点鸡汤"
+                        @click="handleSoup"
                     >
                         <smile-icon
                             :size="16"
@@ -131,8 +131,8 @@
 
             <button
                 class="nav-btn"
-                @click="handleShareView"
                 title="分享当前视角"
+                @click="handleShareView"
             >
                 <span class="btn-icon">
                     <share-2-icon
@@ -146,8 +146,8 @@
 
             <button
                 class="nav-btn"
-                @click="handleOpenChat"
                 title="AI 助手"
+                @click="handleOpenChat"
             >
                 <span class="btn-icon">
                     <bot-icon
@@ -161,8 +161,8 @@
 
             <button
                 class="nav-btn"
-                @click="handleToggle3D"
                 title="切换2D/3D视图"
+                @click="handleToggle3D"
             >
                 <span class="btn-icon">
                     <GlobeIcon
@@ -178,8 +178,8 @@
 
             <button
                 class="nav-btn"
-                @click="handleToggleAccountCenter"
                 title="用户中心"
+                @click="handleToggleAccountCenter"
             >
                 <span class="btn-icon">
                     <user-icon
@@ -192,13 +192,13 @@
             </button>
 
             <div
-                class="menu-host"
                 ref="magicMenuHostRef"
+                class="menu-host"
             >
                 <button
                     class="nav-btn magic-btn"
-                    @click="toggleMagicMenu"
                     title="魔法特效选项"
+                    @click="toggleMagicMenu"
                 >
                     <span class="btn-icon">
                         <sparkles-icon
@@ -475,7 +475,7 @@ function fallbackCopyViaExecCommand(text) {
     let succeeded = false;
     try {
         succeeded = document.execCommand('copy');
-    } catch (e) {
+    } catch (_e) {
         succeeded = false;
     }
 

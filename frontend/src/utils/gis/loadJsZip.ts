@@ -1,4 +1,4 @@
-type JSZipCtor = typeof import('jszip')['default'];
+type JSZipCtor = typeof import('jszip');
 let jsZipPromise: Promise<JSZipCtor> | null = null;
 
 function shouldForceReload(messageText: string): boolean {

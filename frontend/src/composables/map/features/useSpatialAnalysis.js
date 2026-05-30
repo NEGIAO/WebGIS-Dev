@@ -13,23 +13,23 @@ import { apiSpatialAnalysis } from '../../../api/backend';
 /**
  * 工厂函数 - 返回空间分析相关的导出函数
  * @param {Object} options 配置选项
- * @param {Object} options.mapInstanceRef - 地图实例 ref
+ * @param {Object} options._mapInstanceRef - 地图实例 ref
  * @param {Function} options.createManagedVectorLayer - 创建托管矢量图层函数
  * @param {Function} options.emitGraphicsOverview - 发出图形概览事件
  * @param {Function} options.emitUserLayersChange - 发出用户图层变化事件
- * @param {Function} options.refreshUserLayerZIndex - 刷新图层 z-index
+ * @param {Function} options._refreshUserLayerZIndex - 刷新图层 z-index
  * @param {Array} options.userDataLayers - 用户数据图层数组
  * @param {Object} options.message - 消息通知对象
  * @returns {Object} 包含空间分析函数的对象
  */
 export function createSpatialAnalysisFeature({
-    // eslint-disable-next-line no-unused-vars -- 保持接口兼容
-    mapInstanceRef = { value: null },
+     
+    _mapInstanceRef = { value: null },
     createManagedVectorLayer = () => null,
     emitGraphicsOverview = () => {},
     emitUserLayersChange = () => {},
-    // eslint-disable-next-line no-unused-vars -- 保持接口兼容
-    refreshUserLayerZIndex = () => {},
+     
+    _refreshUserLayerZIndex = () => {},
     userDataLayers = [],
     message = { info: () => {}, success: () => {}, warning: () => {}, error: () => {} },
 }) {
@@ -125,7 +125,7 @@ export function createSpatialAnalysisFeature({
      * @param {number} [params.tolerance] - 几何简化容差（度）
      * @param {number[]} [params.bbox] - 可视范围 [minLon, minLat, maxLon, maxLat]
      * @param {string} [params.gridType] - 网格类型：grid/hexbin
-     * @param {number} [params.gridSize] - 网格大小（度）
+     * @param {number} [params._gridSize] - 网格大小（度）
      */
     async function runSpatialAnalysis(params = {}) {
         const { type } = params;
@@ -204,7 +204,7 @@ export function createSpatialAnalysisFeature({
                 operation = 'voronoi';
                 layerName = `泰森多边形_${analysisSeed++}`;
             } else if (type === 'aggregation') {
-                const { targetLayerId, bbox, gridType = 'grid', gridSize = 0.01 } = params;
+                const { targetLayerId, bbox, gridType = 'grid', _gridSize = 0.01 } = params;
                 if (!targetLayerId) {
                     message.warning('请选择目标图层');
                     return;
@@ -287,7 +287,7 @@ export function createSpatialAnalysisFeature({
             if (type === 'aggregation') {
                 payload.bbox = params.bbox;
                 payload.grid_type = params.gridType || 'grid';
-                payload.grid_size = params.gridSize || 0.01;
+                payload.grid_size = params._gridSize || 0.01;
             }
 
             message.info('正在执行空间分析...');

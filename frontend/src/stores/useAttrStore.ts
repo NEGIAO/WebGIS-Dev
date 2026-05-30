@@ -46,7 +46,7 @@ type PanelRect = {
     initialized: boolean;
 };
 
-const { flattenAttributes, inferValueType, normalizeLayerAttributeSnapshot } =
+const { flattenAttributes: _flattenAttributes, inferValueType, normalizeLayerAttributeSnapshot } =
     createLayerMetadataNormalizationFeature();
 
 function toFeatureId(feature: any, index: number): string {

@@ -74,8 +74,8 @@
 
                 <button
                     type="button"
-                    @click="toggleConnection"
                     :class="['action-btn', streamDesired ? 'danger' : 'success']"
+                    @click="toggleConnection"
                 >
                     <component
                         :is="streamDesired ? Square : Play"
@@ -94,8 +94,8 @@
                 v-for="(log, index) in logEntries"
                 :key="index"
                 class="log-line"
-                @dblclick="copySingleLine(log.message)"
                 title="双击复制此行内容"
+                @dblclick="copySingleLine(log.message)"
             >
                 <span class="line-number">{{ index + 1 }}</span>
                 <span class="timestamp">{{ log.time }}</span>
@@ -113,7 +113,7 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted, nextTick, computed } from 'vue';
+import { ref, onUnmounted, computed } from 'vue';
 import { Terminal, Play, Square, Trash2, Copy, Check } from 'lucide-vue-next';
 import { BACKEND_BASE_URL } from '../../api/backend';
 

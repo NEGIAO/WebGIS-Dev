@@ -258,7 +258,7 @@ async function handlePasteJson() {
             emit('update:jsonText', String(text || ''));
             return;
         }
-    } catch {}
+    } catch { /* ignored */ }
 
     if (typeof window.prompt === 'function') {
         const fallbackText = window.prompt('请粘贴 JSON：', props.jsonText || '');

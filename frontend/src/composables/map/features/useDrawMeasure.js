@@ -145,9 +145,9 @@ export function createDrawMeasureFeature({
     /**
      * 激活指定类型的交互（绘图或测量）
      * @param {string} type - 交互类型：Point/LineString/Polygon/MeasureDistance/MeasureArea
-     * @param {Function} emitFeatureSelected - 发出要素选中事件的回调
+     * @param {Function} _emitFeatureSelected - 发出要素选中事件的回调
      */
-    function activateInteraction(type, emitFeatureSelected = () => {}) {
+    function activateInteraction(type, _emitFeatureSelected = () => {}) {
         clearInteractions();
         const map = mapInstanceRef.value;
         if (!map || !drawSource) return;

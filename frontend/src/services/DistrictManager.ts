@@ -153,19 +153,19 @@ export class DistrictManager {
     private createLayerForDistrict(
         adcode: string,
         name: string,
-    ): { layer: VectorLayer<VectorSource>; source: VectorSource } {
+    ): { _layer: VectorLayer<VectorSource>; source: VectorSource } {
         const layerId = `district_${adcode}`;
 
         // 如果已经存在，直接返回
         if (this.districtLayers.has(layerId)) {
             return {
-                layer: this.districtLayers.get(layerId)!,
+                _layer: this.districtLayers.get(layerId)!,
                 source: this.districtSources.get(layerId)!,
             };
         }
 
         const source = new VectorSource();
-        const layer = new VectorLayer({
+        const _layer = new VectorLayer({
             source,
             zIndex: 1180,
             style: (feature) => {
@@ -196,16 +196,16 @@ export class DistrictManager {
             },
         });
 
-        layer.set('layerId', layerId);
-        layer.set('sourceType', 'district-boundary');
-        layer.set('name', name);
-        layer.set('adcode', adcode);
+        _layer.set('layerId', layerId);
+        _layer.set('sourceType', 'district-boundary');
+        _layer.set('name', name);
+        _layer.set('adcode', adcode);
 
-        this.map.addLayer(layer);
-        this.districtLayers.set(layerId, layer);
+        this.map.addLayer(_layer);
+        this.districtLayers.set(layerId, _layer);
         this.districtSources.set(layerId, source);
 
-        return { layer, source };
+        return { _layer, source };
     }
 
     private pushLayerMeta(
@@ -221,14 +221,14 @@ export class DistrictManager {
             features?: any[];
         },
     ): void {
-        const layer = this.districtLayers.get(layerId);
+        const _layer = this.districtLayers.get(layerId);
         this.tocStore.upsertLayerMeta({
             id: layerId,
             name: meta.name,
             adcode: meta.adcode,
             sourceType: 'district-boundary',
             sourceUrl: meta.sourceUrl,
-            visible: layer?.getVisible() !== false,
+            visible: _layer?.getVisible() !== false,
             featureCount: Number(meta.featureCount) || 0,
             extent: meta.extent,
             longitude: meta.longitude,
@@ -249,8 +249,8 @@ export class DistrictManager {
         features: any[],
         extent: number[],
     ): void {
-        const layer = this.districtLayers.get(layerId);
-        if (!layer) return;
+        const _layer = this.districtLayers.get(layerId);
+        if (!_layer) return;
 
         const geometryCenter =
             Array.isArray(extent) && extent.length >= 4
@@ -289,7 +289,7 @@ export class DistrictManager {
                 existingIndex >= 0
                     ? this.userDataLayers[existingIndex].order
                     : this.userDataLayers.length,
-            visible: layer.getVisible() !== false,
+            visible: _layer.getVisible() !== false,
             opacity: 1,
             featureCount: features.length,
             features: serializedFeatures,
@@ -300,13 +300,13 @@ export class DistrictManager {
             metadata: {
                 ...(existingIndex >= 0 ? this.userDataLayers[existingIndex].metadata || {} : {}),
                 category: 'administrative-division',
-                adcode: layer.get('adcode') || layerId.replace(/^district_/, ''),
+                adcode: _layer.get('adcode') || layerId.replace(/^district_/, ''),
                 longitude,
                 latitude,
                 crs: 'wgs84',
                 sourceProjection: 'EPSG:4326',
             },
-            layer,
+            _layer,
         };
 
         if (existingIndex >= 0) {
@@ -338,7 +338,7 @@ export class DistrictManager {
         const layerName = String(options?.name || `行政区-${adcode}`).trim();
 
         // 创建或获取图层和数据源
-        const { layer, source } = this.createLayerForDistrict(adcode, layerName);
+        const { _layer, source } = this.createLayerForDistrict(adcode, layerName);
 
         const response = await fetch(sourceUrl, {
             method: 'GET',
@@ -408,9 +408,9 @@ export class DistrictManager {
 
     setDistrictLayerVisibility(adcode: string, visible: boolean): void {
         const layerId = `district_${adcode}`;
-        const layer = this.districtLayers.get(layerId);
-        if (layer) {
-            layer.setVisible(visible);
+        const _layer = this.districtLayers.get(layerId);
+        if (_layer) {
+            _layer.setVisible(visible);
             const meta = this.tocStore.getLayerMeta(layerId);
             if (meta) {
                 this.tocStore.upsertLayerMeta({
@@ -423,11 +423,11 @@ export class DistrictManager {
 
     removeDistrictLayer(adcode: string): void {
         const layerId = `district_${adcode}`;
-        const layer = this.districtLayers.get(layerId);
+        const _layer = this.districtLayers.get(layerId);
         const source = this.districtSources.get(layerId);
 
-        if (layer) {
-            this.map.removeLayer(layer);
+        if (_layer) {
+            this.map.removeLayer(_layer);
             this.districtLayers.delete(layerId);
         }
 
@@ -442,9 +442,9 @@ export class DistrictManager {
 
     clear(): void {
         Array.from(this.districtLayers.keys()).forEach((layerId) => {
-            const layer = this.districtLayers.get(layerId);
-            if (layer) {
-                this.map.removeLayer(layer);
+            const _layer = this.districtLayers.get(layerId);
+            if (_layer) {
+                this.map.removeLayer(_layer);
             }
         });
 

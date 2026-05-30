@@ -8,9 +8,6 @@ import { fetchLocationResultsByService } from './locationSearch';
 import { getIpLocation } from './ipLocation';
 import { getWeather } from './weather';
 import backendAPI, {
-    apiLocationIpLocate,
-    apiLocationReverse,
-    apiLocationTrackVisit,
 } from './backend';
 
 export * from './map';

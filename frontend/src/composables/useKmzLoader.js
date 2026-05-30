@@ -221,7 +221,7 @@ export async function extractKmlFromKmz(kmzInput, options = {}) {
     }
 
     if (debug && IS_DEV) {
-        console.info('[kmz-loader]', {
+        console.warn('[kmz-loader]', {
             mainKmlEntry: mainKmlEntry.name,
             totalEntries: entries.length,
             kmlEntryCount: kmlEntries.length,

@@ -6,8 +6,8 @@
         <!-- 折叠开关 -->
         <div
             class="toggle-handle"
-            @click="$emit('toggle-panel')"
             :title="isCollapsed ? '展开面板' : '收起面板'"
+            @click="$emit('toggle-panel')"
         >
             <!-- 只用一个向左的箭头，通过动态 class 控制旋转 -->
             <svg
@@ -34,8 +34,8 @@
 
         <!-- 面板内容区域 -->
         <div
-            class="panel-content"
             v-show="!isCollapsed"
+            class="panel-content"
             :class="{
                 'no-padding':
                     activeTab === 'chat' ||
@@ -47,8 +47,8 @@
             }"
         >
             <div
-                class="active-feature-banner"
                 v-if="activeFeature?.label && activeTab !== 'info'"
+                class="active-feature-banner"
             >
                 当前激活功能：{{ activeFeature.label }}
             </div>
@@ -67,11 +67,11 @@
                 class="toolbox-content"
             >
                 <ToolboxPanel
-                    :userLayers="userLayers"
-                    :baseLayers="baseLayers"
+                    :user-layers="userLayers"
+                    :base-layers="baseLayers"
                     :overview="toolboxOverview"
                     :default-tab="toolboxTab"
-                    :uploadProgress="uploadProgress"
+                    :upload-progress="uploadProgress"
                     :latest-search-poi="latestSearchPoi"
                     @close="$emit('switch-tab', 'info')"
                     @upload-data="$emit('upload-data', $event)"
@@ -197,15 +197,15 @@
                         <div class="news-body">
                             <div class="news-title">{{ item.title }}</div>
                             <div
-                                class="news-meta"
                                 v-if="item.desc || item.content"
+                                class="news-meta"
                             >
                                 <span class="news-desc">{{ item.desc || item.content }}</span>
                             </div>
                         </div>
                         <div
-                            class="news-score"
                             v-if="item.score || item.publish_time"
+                            class="news-score"
                         >
                             <span class="score-value">{{
                                 item.publish_time
@@ -400,7 +400,7 @@ function rankClass(idx) {
     return '';
 }
 
-const emit = defineEmits([
+defineEmits([
     'toggle-panel',
     'close-chat',
     'switch-tab',

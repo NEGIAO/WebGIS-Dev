@@ -431,9 +431,9 @@
                 <div class="card-title">样式模板</div>
                 <div class="template-chip-row">
                     <button
-                        class="template-chip"
                         v-for="t in styleTemplates"
                         :key="t.id"
+                        class="template-chip"
                         @click="applyTemplate(t.id)"
                     >
                         <span
@@ -468,17 +468,17 @@
                     <div class="field">
                         <label>填充色</label>
                         <input
+                            v-model="styleForm.fillColor"
                             type="color"
                             class="style-color"
-                            v-model="styleForm.fillColor"
                         />
                     </div>
                     <div class="field">
                         <label>边框色</label>
                         <input
+                            v-model="styleForm.strokeColor"
                             type="color"
                             class="style-color"
-                            v-model="styleForm.strokeColor"
                         />
                     </div>
                 </div>
@@ -489,11 +489,11 @@
                             <span>{{ styleForm.fillOpacityPct }}%</span>
                         </div>
                         <input
+                            v-model.number="styleForm.fillOpacityPct"
                             class="style-slider"
                             type="range"
                             min="0"
                             max="100"
-                            v-model.number="styleForm.fillOpacityPct"
                         />
                     </div>
                     <div class="field">
@@ -502,12 +502,12 @@
                             <span>{{ styleForm.strokeWidth }}</span>
                         </div>
                         <input
+                            v-model.number="styleForm.strokeWidth"
                             class="style-slider"
                             type="range"
                             min="1"
                             max="8"
                             step="0.5"
-                            v-model.number="styleForm.strokeWidth"
                         />
                     </div>
                 </div>
@@ -786,7 +786,7 @@ function clearPositionCodeInput() {
     coordInputPError.value = '';
 }
 
-function clearGeocodeInput() {
+function _clearGeocodeInput() {
     geocodeAddressInput.value = '';
     geocodeCityInput.value = '';
     geocodeToolError.value = '';

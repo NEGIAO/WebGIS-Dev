@@ -136,8 +136,8 @@
             </div>
 
             <div
-                class="field full-width"
                 v-if="compassStore.mode === 'vector'"
+                class="field full-width"
             >
                 <label
                     >自动隐藏阈值 (Res)：{{ Number(compassStore.minResolution).toFixed(0) }}</label
@@ -155,8 +155,8 @@
             </div>
 
             <div
-                class="field full-width"
                 v-if="compassStore.mode === 'hud'"
+                class="field full-width"
             >
                 <label>HUD 尺寸：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
                 <input
@@ -220,14 +220,14 @@
                 {{ sensorStatusText }}
             </div>
             <div
-                class="status-chip"
                 v-if="compassStore.isConfigLoading"
+                class="status-chip"
             >
                 配置加载中...
             </div>
             <div
-                class="status-chip status-error"
                 v-if="compassStore.configError"
+                class="status-chip status-error"
             >
                 {{ compassStore.configError }}
             </div>

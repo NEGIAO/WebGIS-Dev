@@ -22,7 +22,7 @@
  * 依赖：OpenLayers 6+
  */
 
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 
 type SwipeMode = 'horizontal' | 'vertical';
 
@@ -74,7 +74,7 @@ export function useMapSwipe() {
             return;
         }
 
-        console.log('[useMapSwipe] attachToLayers called with', layers.length, 'layers');
+        console.warn('[useMapSwipe] attachToLayers called with', layers.length, 'layers');
 
         // 清除之前的附加
         detachFromLayers();
@@ -82,7 +82,7 @@ export function useMapSwipe() {
         // detachFromLayers 会清空 activeMapInstance，必须在之后重新设置
         activeMapInstance.value = mapInstance;
 
-        console.log('[useMapSwipe] Swipe handlers will be attached by side (left/right)');
+        console.warn('[useMapSwipe] Swipe handlers will be attached by side (left/right)');
 
         const descriptors: SwipeLayerDescriptor[] = layers
             .map((item, idx): SwipeLayerDescriptor => {
@@ -101,7 +101,7 @@ export function useMapSwipe() {
             const side: SwipeSide = descriptor.side === 'right' ? 'right' : 'left';
 
             try {
-                console.log(
+                console.warn(
                     '[useMapSwipe] Attaching to layer',
                     idx,
                     ':',
@@ -119,14 +119,14 @@ export function useMapSwipe() {
                     layer,
                     handlers: layerHandlers,
                 });
-                console.log('[useMapSwipe] Successfully attached to layer', idx, 'side:', side);
+                console.warn('[useMapSwipe] Successfully attached to layer', idx, 'side:', side);
             } catch (error) {
                 console.warn('[useMapSwipe] Error attaching to layer', idx, ':', error);
             }
         });
 
         enabled.value = true;
-        console.log(
+        console.warn(
             '[useMapSwipe] Swipe enabled with',
             attachedLayers.value.length,
             'attached layers',

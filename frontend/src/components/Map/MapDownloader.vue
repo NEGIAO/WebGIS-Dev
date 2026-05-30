@@ -289,7 +289,7 @@ import { useMessage } from '../../composables/useMessage';
 import { useDownloadStore } from '../../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../../constants';
 
-const props = defineProps({
+defineProps({
     visible: { type: Boolean, default: true },
 });
 
@@ -361,7 +361,7 @@ function buildReadableFilename() {
     const activePreset = layerConfigMap.get(selectedPreset.value);
     const presetName = String(activePreset?.label || selectedPreset.value || 'basemap')
         .trim()
-        .replace(/[\/:*?"<>|]+/g, '_')
+        .replace(/[/:*?"<>|]+/g, '_')
         .replace(/\s+/g, '_')
         .replace(/_+/g, '_')
         .replace(/^_+|_+$/g, '');

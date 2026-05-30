@@ -1,4 +1,4 @@
-import type { Layer, FengShuiCompassConfig } from './compass';
+import type { FengShuiCompassConfig } from './compass';
 // 主题相关类型定义
 
 // 主题信息

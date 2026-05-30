@@ -310,7 +310,7 @@ function transformCoordinates(coords: any, sourceCrs: string, targetCrs: string)
     return coords.map((child) => transformCoordinates(child, sourceCrs, targetCrs));
 }
 
-export function reprojectGeoJSON<T extends any>(
+export function reprojectGeoJSON<T>(
     geojson: T,
     sourceCrs: string,
     targetCrs: 'EPSG:4326' | 'EPSG:3857' = 'EPSG:4326',

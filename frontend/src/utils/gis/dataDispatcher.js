@@ -63,7 +63,8 @@ function decodeBufferToText(buffer) {
                 text,
                 invalidCount,
             });
-        } catch (err) {
+        } catch { /* ignored */
+
             // 某些编码可能不支持，忽略错误
             continue;
         }

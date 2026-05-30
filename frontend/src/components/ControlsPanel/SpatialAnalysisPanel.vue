@@ -52,7 +52,7 @@
                     </option>
                 </select>
             </div>
-            <button class="run-btn" @click="runBuffer" :disabled="!canRun">
+            <button class="run-btn" :disabled="!canRun" @click="runBuffer">
                 <Play :size="14" />
                 执行分析
             </button>
@@ -100,7 +100,7 @@
                     </option>
                 </select>
             </div>
-            <button class="run-btn" @click="runOverlay" :disabled="!canRunOverlay">
+            <button class="run-btn" :disabled="!canRunOverlay" @click="runOverlay">
                 <Play :size="14" />
                 执行分析
             </button>
@@ -121,7 +121,7 @@
                     </option>
                 </select>
             </div>
-            <button class="run-btn" @click="runConvexHull" :disabled="!targetLayerId">
+            <button class="run-btn" :disabled="!targetLayerId" @click="runConvexHull">
                 <Play :size="14" />
                 执行分析
             </button>
@@ -142,7 +142,7 @@
                     </option>
                 </select>
             </div>
-            <button class="run-btn" @click="runVoronoi" :disabled="!targetLayerId">
+            <button class="run-btn" :disabled="!targetLayerId" @click="runVoronoi">
                 <Play :size="14" />
                 执行分析
             </button>
@@ -205,14 +205,14 @@
                 <button
                     class="fetch-bbox-btn"
                     :disabled="!getMapExtent"
-                    @click="fillBboxFromMapExtent"
                     title="自动获取当前地图可视范围"
+                    @click="fillBboxFromMapExtent"
                 >
                     <Crosshair :size="12" />
                     获取当前视图范围
                 </button>
             </div>
-            <button class="run-btn" @click="runAggregation" :disabled="!canRunAggregation">
+            <button class="run-btn" :disabled="!canRunAggregation" @click="runAggregation">
                 <Play :size="14" />
                 执行分析
             </button>
@@ -243,7 +243,7 @@
                 />
                 <span class="param-hint">由内到外依次递增，如 100, 300, 500</span>
             </div>
-            <button class="run-btn" @click="runMultiRingBuffer" :disabled="!canRunMultiRing">
+            <button class="run-btn" :disabled="!canRunMultiRing" @click="runMultiRingBuffer">
                 <Play :size="14" />
                 执行分析
             </button>
@@ -277,7 +277,7 @@
                 />
                 <span class="param-hint">值越大简化程度越高，推荐 10 ~ 1000 米</span>
             </div>
-            <button class="run-btn" @click="runSimplify" :disabled="!canRunSimplify">
+            <button class="run-btn" :disabled="!canRunSimplify" @click="runSimplify">
                 <Play :size="14" />
                 执行分析
             </button>

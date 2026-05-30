@@ -1,5 +1,5 @@
 // useFluid.js
-import { ref, onUnmounted } from 'vue';
+ 'vue';
 
 export function useFluid(canvasRef, props) {
     let ctx, offscreenCanvas, offscreenCtx, imageData, data;
@@ -11,20 +11,20 @@ export function useFluid(canvasRef, props) {
     let u, v, u_prev, v_prev, dens, dens_prev, hue;
 
     let animationId = null;
-    let colorTable = new Uint8Array(360 * 3);
+    const colorTable = new Uint8Array(360 * 3);
     let globalHue = 0;
 
-    let mouse = { x: 0, y: 0, vx: 0, vy: 0, isDown: false, active: false };
-    let lastMouse = { x: 0, y: 0 };
+    const mouse = { x: 0, y: 0, vx: 0, vy: 0, isDown: false, active: false };
+    const lastMouse = { x: 0, y: 0 };
 
     // 1. 预计算颜色查找表 (极速渲染核心)
     function initColorTable() {
         for (let i = 0; i < 360; i++) {
-            let s = 1.0,
+            const s = 1.0,
                 l = 0.6;
-            let c = (1 - Math.abs(2 * l - 1)) * s;
-            let x = c * (1 - Math.abs(((i / 60) % 2) - 1));
-            let m = l - c / 2;
+            const c = (1 - Math.abs(2 * l - 1)) * s;
+            const x = c * (1 - Math.abs(((i / 60) % 2) - 1));
+            const m = l - c / 2;
             let r, g, b;
             if (i < 60) {
                 r = c;
@@ -77,7 +77,7 @@ export function useFluid(canvasRef, props) {
         imageData = offscreenCtx.createImageData(cols, rows);
         data = imageData.data;
 
-        let size = cols * rows;
+        const size = cols * rows;
         u = new Float32Array(size);
         v = new Float32Array(size);
         u_prev = new Float32Array(size);
@@ -92,7 +92,7 @@ export function useFluid(canvasRef, props) {
         let i0, j0, i1, j1, x, y, s0, t0, s1, t1;
         for (let j = 1; j < rows - 1; j++) {
             for (let i = 1; i < cols - 1; i++) {
-                let idx = i + j * cols;
+                const idx = i + j * cols;
                 x = i - dt * u[idx];
                 y = j - dt * v[idx];
                 if (x < 0.5) x = 0.5;
@@ -119,7 +119,7 @@ export function useFluid(canvasRef, props) {
     function project(u, v, p, div) {
         for (let j = 1; j < rows - 1; j++) {
             for (let i = 1; i < cols - 1; i++) {
-                let idx = i + j * cols;
+                const idx = i + j * cols;
                 div[idx] =
                     -0.5 *
                     (u[i + 1 + j * cols] -
@@ -132,7 +132,7 @@ export function useFluid(canvasRef, props) {
         for (let k = 0; k < ITERATIONS; k++) {
             for (let j = 1; j < rows - 1; j++) {
                 for (let i = 1; i < cols - 1; i++) {
-                    let idx = i + j * cols;
+                    const idx = i + j * cols;
                     p[idx] =
                         (div[idx] +
                             p[i - 1 + j * cols] +
@@ -145,7 +145,7 @@ export function useFluid(canvasRef, props) {
         }
         for (let j = 1; j < rows - 1; j++) {
             for (let i = 1; i < cols - 1; i++) {
-                let idx = i + j * cols;
+                const idx = i + j * cols;
                 u[idx] -= 0.5 * (p[i + 1 + j * cols] - p[i - 1 + j * cols]);
                 v[idx] -= 0.5 * (p[i + (j + 1) * cols] - p[i + (j - 1) * cols]);
             }
@@ -156,23 +156,23 @@ export function useFluid(canvasRef, props) {
     function applyForces() {
         if (!mouse.active) return;
 
-        let cx = Math.floor(mouse.x / CELL_SIZE);
-        let cy = Math.floor(mouse.y / CELL_SIZE);
-        let r = 3; // 笔刷半径
-        let speed = Math.hypot(mouse.vx, mouse.vy);
+        const cx = Math.floor(mouse.x / CELL_SIZE);
+        const cy = Math.floor(mouse.y / CELL_SIZE);
+        const r = 3; // 笔刷半径
+        const speed = Math.hypot(mouse.vx, mouse.vy);
 
         // 悬停向心吸附力 vs 快速滑动湍流
         const isHover = speed < 2;
 
         for (let j = -r; j <= r; j++) {
             for (let i = -r; i <= r; i++) {
-                let nx = cx + i;
-                let ny = cy + j;
+                const nx = cx + i;
+                const ny = cy + j;
                 if (nx >= 1 && nx < cols - 1 && ny >= 1 && ny < rows - 1) {
-                    let idx = nx + ny * cols;
-                    let dist = Math.sqrt(i * i + j * j);
+                    const idx = nx + ny * cols;
+                    const dist = Math.sqrt(i * i + j * j);
                     if (dist <= r) {
-                        let falloff = 1 - dist / r;
+                        const falloff = 1 - dist / r;
 
                         // 注入浓度和颜色
                         dens[idx] += 100 * falloff;
@@ -216,7 +216,7 @@ export function useFluid(canvasRef, props) {
             cancelAnimationFrame(animationId);
         }
 
-        let dt = 1.0;
+        const dt = 1.0;
         u_prev.set(u);
         v_prev.set(v);
 
@@ -242,18 +242,18 @@ export function useFluid(canvasRef, props) {
         // 极速映射到 ImageData
         for (let j = 0; j < rows; j++) {
             for (let i = 0; i < cols; i++) {
-                let idx = i + j * cols;
+                const idx = i + j * cols;
                 dens[idx] *= decay; // 烟雾消散
 
-                let d = dens[idx];
-                let px = idx * 4;
+                const d = dens[idx];
+                const px = idx * 4;
 
                 if (d > 0.5) {
                     // 阈值优化
                     let h = Math.floor(hue[idx]) % 360;
                     if (h < 0) h += 360;
 
-                    let hIdx = h * 3;
+                    const hIdx = h * 3;
                     data[px] = colorTable[hIdx]; // R
                     data[px + 1] = colorTable[hIdx + 1]; // G
                     data[px + 2] = colorTable[hIdx + 2]; // B

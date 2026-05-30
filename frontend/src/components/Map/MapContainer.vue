@@ -1,6 +1,7 @@
 <template>
     <div
         id="map-container"
+        ref="mapContainerRef"
         class="map-container"
         :class="{
             'compass-placement-mode':
@@ -8,7 +9,6 @@
                 compassStore.mode === 'vector' &&
                 compassStore.placementMode,
         }"
-        ref="mapContainerRef"
     >
         <div
             id="map"
@@ -94,10 +94,10 @@
 import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 import { useManagedLayerRegistry } from '../../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../../composables/useUserLocation';
-import { useMapSwipe } from '../../composables/useMapSwipe';
 import { useMessage } from '../../composables/useMessage';
 import { useMapState } from '../../composables/useMapState';
-import { loadMapRuntimeDeps } from '../../utils/gis/mapRuntimeDeps';
+// OpenLayers 依赖直接导入（原 loadMapRuntimeDeps 仅是静态导入的 Promise 缓存包装）
+// 直接导入可避免 top-level await，使 defineExpose 能正常工作
 import {
     createBasemapLayerBootstrap,
     createBasemapResilience,
@@ -182,24 +182,16 @@ const handleCloseExplanation = () => {
 // URL_LAYER_OPTIONS：用于 URL 参数中的图层索引映射（与 BASEMAP_OPTIONS 对应）
 // createLayerConfigs：工厂函数，根据参数生成全部底图源配置
 
-// OpenLayers 运行时依赖按需动态加载，避免进入登录页首屏预加载图。
-const {
-    Map,
-    View,
-    fromLonLat,
-    toLonLat,
-    defaultControls,
-    ScaleLine,
-    OverviewMap,
-    createEmpty,
-    extendExtent,
-    isExtentEmpty,
-    TileLayer,
-    VectorLayer,
-    XYZ,
-    VectorSource,
-    DragBox,
-} = await loadMapRuntimeDeps();
+// OpenLayers 运行时依赖（直接从模块导入，避免 top-level await）
+import Map from 'ol/Map';
+import View from 'ol/View';
+import { fromLonLat, toLonLat } from 'ol/proj';
+import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
+import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
+import TileLayer from 'ol/layer/Tile';
+import VectorLayer from 'ol/layer/Vector';
+import XYZ from 'ol/source/XYZ';
+import VectorSource from 'ol/source/Vector';
 
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../../utils/geo';
 import { createLayerExporter, isVectorManagedLayer } from '../../utils/layerExportService';
@@ -374,7 +366,6 @@ const componentUnmountedRef = ref(false);
 const {
     pendingBusPickRef,
     pendingReverseGeocodePickRef,
-    pendingDownloadBoxPickRef,
     startBusPointPick,
     startReverseGeocodePick,
     cancelDownloadBoxPick,
@@ -388,7 +379,6 @@ let rightDragZoomController = null;
 let compassManagerRef = null;
 
 // 图层引用
-let baseLayer, labelLayer;
 const drawSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const busPickSource = new VectorSource();
@@ -423,7 +413,7 @@ const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
 const isAttributeQueryEnabled = ref(true);
 const userDataLayers = [];
 let drawLayerInstance = null;
-let tooltipRef = {
+const tooltipRef = {
     helpTooltipEl: null,
     helpTooltipOverlay: null,
 };
@@ -474,11 +464,11 @@ const {
     ensureRouteBuilderApi,
 });
 
-const { ensureFeatureId, serializeManagedFeature, serializeManagedFeatures } =
+const { ensureFeatureId, serializeManagedFeatures } =
     createManagedFeatureSerializationFeature();
 
 // 图层元数据规范化（必须在使用前定义）
-const { getFeatureRepresentativeLonLat, inferLayerRepresentativeLonLat, normalizeLayerMetadata } =
+const { getFeatureRepresentativeLonLat, normalizeLayerMetadata } =
     createLayerMetadataNormalizationFeature();
 
 const { scheduleLowPriorityTask, waitForCriticalTileReady, cancelScheduledTasks } = createStartupTaskSchedulerFeature({
@@ -487,14 +477,14 @@ const { scheduleLowPriorityTask, waitForCriticalTileReady, cancelScheduledTasks 
     mapInstanceRef: mapInstance,
 });
 
-const { getLayerIdByIndex, getLayerIndexById, getLayerCategory, getLayerGroup } =
+const { getLayerIdByIndex, getLayerIndexById, getLayerCategory } =
     createBasemapUrlMappingFeature({
         urlLayerOptions: URL_LAYER_OPTIONS,
         getLayerCategoryById,
         getLayerGroupById,
     });
 
-const { applyCrsConversionToFeature, toggleLayerCRS, toggleSearchLayerCRS } =
+const { toggleLayerCRS, toggleSearchLayerCRS } =
     createCoordinateSystemConversionFeature({
         userDataLayers,
         message,
@@ -565,7 +555,7 @@ const {
 });
 
 // 托管要素操作
-const { findManagedFeature, zoomToManagedFeature } = createManagedFeatureOperationsFeature({
+const { zoomToManagedFeature } = createManagedFeatureOperationsFeature({
     mapInstanceRef: mapInstance,
     userDataLayers,
     getCurrentHighlightedFeature,
@@ -575,7 +565,7 @@ const { findManagedFeature, zoomToManagedFeature } = createManagedFeatureOperati
 });
 
 // 绘图与测量交互
-let drawGraphicSeedRef = { value: 1 };
+const drawGraphicSeedRef = { value: 1 };
 
 // 空间分析交互
 const { runSpatialAnalysis } = createSpatialAnalysisFeature({
@@ -609,7 +599,7 @@ const {
 });
 
 // 路线绘制交互
-const { drawRouteOnMap, drawDriveRouteOnMap, syncRouteManagedLayer } = createRouteRenderingFeature({
+const { drawRouteOnMap, drawDriveRouteOnMap } = createRouteRenderingFeature({
     mapInstanceRef: mapInstance,
     busRouteLayerRef,
     busRouteSource,
@@ -623,7 +613,7 @@ const { drawRouteOnMap, drawDriveRouteOnMap, syncRouteManagedLayer } = createRou
 });
 
 // 底图状态管理
-const { emitBaseLayersChange, emitBaseLayersChangeBatched } =
+const { emitBaseLayersChangeBatched } =
     createBasemapStateManagementFeature({
         layerList,
         selectedLayer,
@@ -635,7 +625,7 @@ const { emitBaseLayersChange, emitBaseLayersChangeBatched } =
     });
 
 // 图层控制面板事件（切换/排序/自定义 URL）
-const { loadCustomMap, handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers({
+const { handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers({
     selectedLayerRef: selectedLayer,
     customMapUrlRef: customMapUrl,
     layerListRef: layerList,
@@ -677,8 +667,6 @@ const { bindMapEvents } = createMapEventHandlers({
 
 // UI 事件处理器（简单转发 + 属性表同步）
 const {
-    handleEasterEggImageOpen,
-    handleEasterEggLocationChange,
     syncAttributeTableMapExtent: syncAttributeTableMapExtentFromUI,
     handleAttributeTableFocusFeature,
     handleAttributeTableHighlightFeature,
@@ -809,7 +797,7 @@ function applyDeferredUrlParams() {
     }
 
     try {
-        console.info('[MapContainer] Applying deferred URL params:', validParams);
+        console.warn('[MapContainer] Applying deferred URL params:', validParams);
 
         // 应用坐标、缩放、图层索引
         flyToView({
@@ -822,7 +810,7 @@ function applyDeferredUrlParams() {
 
         // 标记为已应用
         urlParamStore.markParamsAsApplied();
-        console.info('[MapContainer] Deferred URL params applied successfully');
+        console.warn('[MapContainer] Deferred URL params applied successfully');
     } catch (error) {
         console.error('[MapContainer] Failed to apply deferred URL params:', error);
         urlParamStore.markParamsAsApplied(); // 即使失败也标记已应用，防止重复尝试
@@ -1332,7 +1320,6 @@ async function startReverseGeocodePickAndDraw() {
 // [隶属] 组件交互-图层坐标导出
 // [作用] 将当前图层按当前坐标系导出为 CSV/TXT/GeoJSON。
 // [交互] 由外部组件调用，委托 layerExportService 处理。
-let exportLayerCoordinates;
 
 // --- 4. 外部接口 (文件导入/绘图) ---
 
@@ -1443,7 +1430,6 @@ function activateInteraction(type) {
 
 // ========== 行政区划管理 (via composable) ==========
 const {
-    ensureDistrictManager,
     focusDistrictByAdcode,
     setDistrictLayerVisibility,
     removeDistrictLayer,
@@ -1467,7 +1453,7 @@ function clearInteractions() {
 
 // 初始化图层导出服务并包装为适配本组件的调用方式
 const exporterFn = createLayerExporter({ message, gcj02ToWgs84, wgs84ToGcj02 });
-exportLayerCoordinates = (payload) => {
+const exportLayerCoordinates = (payload) => {
     exporterFn(payload, { userDataLayers });
 };
 

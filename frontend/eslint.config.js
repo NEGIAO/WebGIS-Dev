@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import vue from 'eslint-plugin-vue';
 import tseslint from 'typescript-eslint';
+import globals from 'globals';
 
 export default [
     // 1. 全局忽略配置
@@ -47,12 +48,25 @@ export default [
 
             // 代码质量
             'prefer-const': 'error',
+            '@typescript-eslint/no-unused-vars': ['error', {
+                argsIgnorePattern: '^_',
+                varsIgnorePattern: '^_',
+                caughtErrorsIgnorePattern: '^_',
+            }],
 
             // TypeScript：放宽部分限制
             '@typescript-eslint/no-explicit-any': 'off',
         },
     },
 
-    // 7. Prettier（最后）
+    // 7. Node.js 脚本和配置文件
+    {
+        files: ['scripts/**/*.mjs', 'vite.config.js', '*.config.{js,mjs,ts}'],
+        languageOptions: {
+            globals: globals.node,
+        },
+    },
+
+    // 8. Prettier（最后）
     prettier,
 ];

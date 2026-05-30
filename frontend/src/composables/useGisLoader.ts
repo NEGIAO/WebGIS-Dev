@@ -9,7 +9,6 @@ import {
 } from '../utils/io';
 import type { FlattenedResource } from '../utils/gis/decompressor';
 import {
-    createUnsupportedProjectedCrsError,
     isUnsupportedProjectedCrsError,
     reprojectGeoJSON,
     resolveDatasetProjection,
@@ -40,7 +39,7 @@ type PacketSummary = {
 
 const SHP_SIDECAR_EXTENSIONS = new Set(['shp', 'shx', 'dbf', 'prj', 'cpg']);
 
-function extOf(path = ''): string {
+function _extOf(path = ''): string {
     const normalized = String(path || '').toLowerCase();
     const idx = normalized.lastIndexOf('.');
     if (idx < 0 || idx === normalized.length - 1) return '';

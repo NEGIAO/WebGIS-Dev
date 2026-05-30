@@ -11,30 +11,30 @@
             </span>
             <div class="header-controls">
                 <button
-                    @click="toggleUserConfig"
                     class="icon-btn"
                     title="我的 Agent 配置"
+                    @click="toggleUserConfig"
                 >
                     ⚙️
                 </button>
                 <button
-                    @click="reloadAgentConfig(true)"
                     class="icon-btn"
                     title="刷新状态"
+                    @click="reloadAgentConfig(true)"
                 >
                     🔄
                 </button>
                 <button
-                    @click="clearHistory"
                     class="icon-btn"
                     title="清除历史"
+                    @click="clearHistory"
                 >
                     🧹
                 </button>
                 <button
-                    @click="emit('close-chat')"
                     class="icon-btn"
                     title="退出AI"
+                    @click="emit('close-chat')"
                 >
                     ✖️
                 </button>
@@ -78,10 +78,10 @@
                             >{{ m.name || m.id }}</option>
                         </datalist>
                         <button
-                            @click="reloadAgentConfig(true)"
                             class="refresh-models-btn"
                             :disabled="isLoadingModels"
                             title="刷新模型列表"
+                            @click="reloadAgentConfig(true)"
                         >
                             {{ isLoadingModels ? '⏳' : '🔄' }}
                         </button>
@@ -128,22 +128,22 @@
 
             <div class="user-config-actions">
                 <button
-                    @click="saveUserConfig"
                     :disabled="userConfigSaving"
+                    @click="saveUserConfig"
                 >
                     {{ userConfigSaving ? '保存中...' : '保存我的配置' }}
                 </button>
                 <button
-                    @click="clearPersonalKey"
                     :disabled="userConfigSaving"
                     class="secondary"
+                    @click="clearPersonalKey"
                 >
                     清除我的 Key
                 </button>
                 <button
-                    @click="resetProviderOverrides"
                     :disabled="userConfigSaving"
                     class="secondary"
+                    @click="resetProviderOverrides"
                 >
                     恢复平台默认参数
                 </button>
@@ -158,9 +158,9 @@
             <div class="status-line">
                 <span class="status-label">路由模式:</span>
                 <button
-                    @click="toggleRoutingMode"
                     :class="['mode-toggle-btn', isDirectMode ? 'mode-direct' : 'mode-proxy']"
                     title="点击切换路由模式"
+                    @click="toggleRoutingMode"
                 >
                     {{ isDirectMode ? '🔑 个人 Key 模式' : '🛡️ 后端代理' }}
                     <span class="mode-toggle-hint">（点击切换）</span>
@@ -197,8 +197,8 @@
         </div>
 
         <div
-            class="chat-body"
             ref="chatBody"
+            class="chat-body"
         >
             <div
                 v-for="(msg, index) in messages"
@@ -233,13 +233,13 @@
         <div class="chat-footer">
             <textarea
                 v-model="inputMessage"
-                @keydown.enter.prevent="sendMessage"
                 :placeholder="inputPlaceholder"
                 rows="1"
+                @keydown.enter.prevent="sendMessage"
             ></textarea>
             <button
-                @click="sendMessage"
                 :disabled="sendDisabled"
+                @click="sendMessage"
             >
                 发送
             </button>
@@ -488,7 +488,7 @@ const updateWelcomeMessageIfNeeded = () => {
  * @param {string} locationContext - 用户位置上下文信息
  * @returns {string} 合并后的完整系统提示词
  */
-const buildSystemPrompt = (basePrompt, locationContext) => {
+const _buildSystemPrompt = (basePrompt, locationContext) => {
     let prompt = basePrompt || 'You are a helpful AI assistant. Reply in concise Chinese unless the user asks for another language.';
     const locationText = String(locationContext || '').trim();
     if (locationText) {

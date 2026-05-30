@@ -12,7 +12,7 @@ import { fromLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import Polygon from 'ol/geom/Polygon';
-import { fetchAmapPoiDetailAoi, parseAmapDetailAoiFromPayload } from '../../../api/map';
+import { fetchAmapPoiDetailAoi } from '../../../api/map';
 
 const SEARCH_AOI_LAYER_NAME = '搜索 AOI 结果';
 
@@ -90,7 +90,7 @@ export function createMapSearchAndCoordinateInputFeature({
     gcj02ToWgs84 = () => [0, 0],
     searchResultStyle = {},
     searchAoiStyle = {},
-    amapExtractAoiStyle = {
+    _amapExtractAoiStyle = {
         fillColor: '#0099ff',
         fillOpacity: 0.2,
         strokeColor: '#005b99',
@@ -346,7 +346,7 @@ export function createMapSearchAndCoordinateInputFeature({
         };
     }
 
-    async function fetchAndDrawSearchAoi(payload, pointLayerName) {
+    async function _fetchAndDrawSearchAoi(payload, pointLayerName) {
         const selectedService = String(payload?.service || payload?.raw?._service || '')
             .trim()
             .toLowerCase();
@@ -420,7 +420,7 @@ export function createMapSearchAndCoordinateInputFeature({
     //             type: 'search_aoi',
     //             sourceType: 'search',
     //             features: [aoiFeature],
-    //             styleConfig: amapExtractAoiStyle,
+    //             styleConfig: _amapExtractAoiStyle,
     //             autoLabel: true,
     //             metadata: {
     //                 ...buildAoiMetadata(detail, payload),
@@ -464,7 +464,7 @@ export function createMapSearchAndCoordinateInputFeature({
             // 3. 执行地图渲染逻辑 (注意坐标系的选择)
             // 假设的地图需要的是 WGS84 坐标，使用 detail.ringsWgs84
             // 如果是高德底图（GCJ02），使用 detail.ringsGcj02
-            let mapRings = convertWgsRingsToMapRings(detail.ringsWgs84);
+            const mapRings = convertWgsRingsToMapRings(detail.ringsWgs84);
 
             if (!mapRings.length) {
                 message.warning?.('未发现边界数据');

@@ -78,7 +78,7 @@ export function createMapEventHandlers({
             const pixel = map.getEventPixel(e);
             const feature = map.forEachFeatureAtPixel(pixel, (f) => f);
             if (!feature) return;
-            const { geometry, style, ...props } = feature.getProperties();
+            const { geometry: _geometry, style: _style, ...props } = feature.getProperties();
             emit?.('feature-selected', { ...props, 操作提示: '右键选择，可在工具箱中编辑样式' });
         };
         const _touchmoveHandler = () => {
@@ -168,7 +168,7 @@ export function createMapEventHandlers({
 
             const feature = map.forEachFeatureAtPixel(evt.pixel, (f) => f);
             if (feature) {
-                const { geometry, style, ...props } = feature.getProperties();
+                const { geometry: _geometry, style: _style, ...props } = feature.getProperties();
                 emit?.('feature-selected', props);
                 return;
             }
@@ -176,7 +176,7 @@ export function createMapEventHandlers({
             const queryRasterFn = queryRasterValueAtCoordinateRef?.value;
             if (queryRasterFn) {
                 const rasterInfo = await queryRasterFn(evt.coordinate);
-                rasterInfo && emit?.('feature-selected', rasterInfo);
+                if (rasterInfo) emit?.('feature-selected', rasterInfo);
             }
         }));
 
@@ -186,7 +186,7 @@ export function createMapEventHandlers({
         // ========== 缩放/中心事件 ==========
         olKeys.push(map.getView().on('change:resolution', () => {
             const zoom = map.getView().getZoom();
-            zoom !== undefined && (currentZoomRef.value = Math.round(zoom));
+            if (zoom !== undefined) currentZoomRef.value = Math.round(zoom);
         }));
 
         olKeys.push(map.getView().on('change:center', () => {

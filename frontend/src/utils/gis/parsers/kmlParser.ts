@@ -21,7 +21,8 @@ export function parseKmlBuffer(buffer: ArrayBuffer): KmlParsed {
             const text = new TextDecoder(encoding, { fatal: false }).decode(buffer);
             const invalidCount = (text.match(/\uFFFD/g) || []).length;
             candidates.push({ encoding, text, invalidCount });
-        } catch (err) {
+        } catch { /* ignored */
+
             continue;
         }
     }

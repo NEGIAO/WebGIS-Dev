@@ -19,14 +19,14 @@ function parsePayloadToObject(payload) {
     try {
         const direct = JSON.parse(text);
         if (direct) return direct;
-    } catch (e) {}
+    } catch { /* JSON 解析失败，继续尝试提取 */ }
 
     const jsonStart = text.indexOf('{');
     const jsonEnd = text.lastIndexOf('}');
     if (jsonStart >= 0 && jsonEnd > jsonStart) {
         try {
             return JSON.parse(text.slice(jsonStart, jsonEnd + 1));
-        } catch (e) {}
+        } catch { /* 片段 JSON 解析失败 */ }
     }
     throw createParserError('INVALID_JSON', '不是有效的 JSON');
 }
@@ -138,7 +138,7 @@ export function parseStandardGeoJson(payload) {
     let poiid = '';
     let name = '';
 
-    data.features.forEach((feature, index) => {
+    data.features.forEach((feature, _index) => {
         if (feature.type !== 'Feature') return;
 
         const geometry = feature.geometry;
@@ -230,13 +230,16 @@ export function parseStandardGeoJson(payload) {
 export function universalAmapParser(payload) {
     try {
         return parseAmapDetailAoi(payload);
-    } catch (e) {
+    } catch { /* ignored */
+
         try {
             return parseAmapSearchAoi(payload);
-        } catch (e2) {
+        } catch { /* ignored */
+
             try {
                 return parseStandardGeoJson(payload);
-            } catch (e3) {
+            } catch { /* ignored */
+
                 throw new Error(
                     '所有解析尝试均已失败，请检查输入格式（支持高德详情、高德搜索AOI或标准GeoJSON）',
                 );

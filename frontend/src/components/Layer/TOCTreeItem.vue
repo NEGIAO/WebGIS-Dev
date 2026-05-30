@@ -12,9 +12,9 @@
                 'is-active': node.type === 'layer' && node.id === activeLayerId,
                 'is-multi-selected': isLayerMultiSelected,
             }"
+            :draggable="!!node.draggable"
             @click="handlePrimaryClick"
             @contextmenu.prevent="openContextMenuFromEvent"
-            :draggable="!!node.draggable"
             @dragstart="handleDragStart"
             @dragover.prevent
             @drop="handleDrop"
@@ -47,9 +47,9 @@
             >
                 <input
                     v-if="node.showCheckbox !== false"
+                    :ref="node.type === 'folder' ? setFolderCheckboxRef : null"
                     type="checkbox"
                     :checked="!!node.visible"
-                    :ref="node.type === 'folder' ? setFolderCheckboxRef : null"
                     @change="handleToggleVisibility"
                 />
                 <span
@@ -344,7 +344,7 @@ function handlePrimaryClick() {
     }
 }
 
-function handleGlobalPointerDown(event) {
+function _handleGlobalPointerDown(event) {
     if (!menuVisible.value) return;
     const menuEl = menuRef.value;
     if (menuEl && menuEl.contains(event.target)) {

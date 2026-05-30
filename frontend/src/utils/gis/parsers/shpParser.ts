@@ -6,7 +6,7 @@ import {
     resolveDatasetProjection,
     UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '../crs-engine';
-import { parseDbfBuffer, dbfToProperties, type DbfData } from './dbfParser';
+import { parseDbfBuffer, type DbfData } from './dbfParser';
 import { useMessage } from '../../../composables/useMessage';
 
 export type ShpDataset = {
@@ -350,7 +350,7 @@ function enrichFeaturesWithDbfAttributes(featureCollection: any, dbfData: DbfDat
     features.forEach((feature: any, index: number) => {
         if (index < dbfRecords.length) {
             const dbfRecord = dbfRecords[index];
-            const originalPropsCount = Object.keys(feature.properties || {}).length;
+            const _originalPropsCount = Object.keys(feature.properties || {}).length;
             
             // 保留原有属性，使用 DBF 属性进行补充和覆盖
             feature.properties = {
@@ -377,7 +377,7 @@ function enrichFeaturesWithDbfAttributes(featureCollection: any, dbfData: DbfDat
         );
     }
 
-    console.info(
+    console.warn(
         `[SHP] 属性增强完成：${successCount}/${features.length} 个 feature 获得 DBF 属性\n` +
         `字段数: ${dbfData.fields.length}, 编码: ${dbfData.encoding}`
     );
@@ -503,7 +503,7 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
     const prjText = String(parts?.prjText || '').trim() || decodeMaybeText(prjBuffer).trim();
     const cpgText = String(parts?.cpgText || '').trim() || decodeMaybeText(cpgBuffer).trim();
     
-    console.info('[SHP] 开始属性解析链路 -', {
+    console.warn('[SHP] 开始属性解析链路 -', {
         hasDbf: dbfBuffer instanceof ArrayBuffer,
         hasCpg: cpgBuffer instanceof ArrayBuffer,
         cpgText: cpgText ? cpgText.substring(0, 20) : 'none',
@@ -516,7 +516,7 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
     let dbfData: DbfData | null = null;
     if (dbfBuffer instanceof ArrayBuffer && !usedAttempt?.usesDbf) {
         try {
-            console.info('[SHP] 启动自定义 DBF 解析...');
+            console.warn('[SHP] 启动自定义 DBF 解析...');
             dbfData = parseDbfBuffer(dbfBuffer, cpgText);
             
             if (dbfData.warnings.length > 0) {
@@ -525,7 +525,7 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
             
             // 将 DBF 属性与 GeoJSON feature 关联
             featureCollection = enrichFeaturesWithDbfAttributes(featureCollection, dbfData);
-            console.info(
+            console.warn(
                 `[SHP] ✓ 完成属性增强\n` +
                 `  - 记录数: ${dbfData.records.length}\n` +
                 `  - 字段数: ${dbfData.fields.length}\n` +
@@ -537,9 +537,9 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
             // 不中断流程，继续使用 shpjs 的属性
         }
     } else if (dbfBuffer instanceof ArrayBuffer && usedAttempt?.usesDbf) {
-        console.info('[SHP] shpjs 已成功解析 DBF，使用其提供的属性');
+        console.warn('[SHP] shpjs 已成功解析 DBF，使用其提供的属性');
     } else if (!dbfBuffer) {
-        console.info('[SHP] 未提供 DBF 文件，仅导入几何数据');
+        console.warn('[SHP] 未提供 DBF 文件，仅导入几何数据');
     }
     
     const encodingHint = detectDbfEncodingHint(cpgText, dbfBuffer);

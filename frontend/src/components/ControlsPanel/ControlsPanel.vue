@@ -2,9 +2,9 @@
     <div class="sidebar-shell">
         <div class="sidebar-container">
             <div
-                class="sidebar-item"
                 v-for="item in menuItems"
                 :key="item.id"
+                class="sidebar-item"
                 :class="{
                     active: activeId === item.id || (item.id === 'log' && logMonitorVisible),
                 }"
@@ -172,7 +172,7 @@ const appStore = useAppStore();
 const { logMonitorVisible } = storeToRefs(appStore);
 
 // ========== Props ==========
-const props = defineProps({
+defineProps({
     userLayers: {
         type: Array,
         default: () => [],

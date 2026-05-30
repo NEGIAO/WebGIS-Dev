@@ -26,20 +26,20 @@
             <div class="coord-card">
                 <div class="coord-title">{{ startTitle }}</div>
                 <div
-                    class="coord-value"
                     v-if="hasStart"
+                    class="coord-value"
                 >
                     {{ Number(startPoint.lng).toFixed(6) }}, {{ Number(startPoint.lat).toFixed(6) }}
                 </div>
                 <div
-                    class="coord-address"
                     v-if="hasStartAddress"
+                    class="coord-address"
                 >
                     {{ startAddress }}
                 </div>
                 <div
-                    class="coord-empty"
                     v-else
+                    class="coord-empty"
                 >
                     未设置
                 </div>
@@ -48,20 +48,20 @@
             <div class="coord-card">
                 <div class="coord-title">{{ endTitle }}</div>
                 <div
-                    class="coord-value"
                     v-if="hasEnd"
+                    class="coord-value"
                 >
                     {{ Number(endPoint.lng).toFixed(6) }}, {{ Number(endPoint.lat).toFixed(6) }}
                 </div>
                 <div
-                    class="coord-address"
                     v-if="hasEndAddress"
+                    class="coord-address"
                 >
                     {{ endAddress }}
                 </div>
                 <div
-                    class="coord-empty"
                     v-else
+                    class="coord-empty"
                 >
                     未设置
                 </div>

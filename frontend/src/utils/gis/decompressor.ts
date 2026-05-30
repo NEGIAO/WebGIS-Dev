@@ -108,11 +108,11 @@ async function flattenArchive(
         return candidate;
     }
 
-    const entries = Object.values(zip.files).filter((item) => !item.dir);
+    const entries = Object.values(zip.files).filter((item: any) => !item.dir);
     for (const entry of entries) {
-        const entryPath = normalizePath(entry.name);
+        const entryPath = normalizePath((entry as any).name);
         const entryExt = extOf(entryPath);
-        const entryBuffer = await entry.async('arraybuffer');
+        const entryBuffer = await (entry as any).async('arraybuffer');
 
         // KMZ 的主 KML 常见文件名为 doc.kml。这里将其映射为“容器基名.kml”，
         // 确保后续 TOC 图层名保持为原始 KMZ 文件名，而不是 doc/乱码名。

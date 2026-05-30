@@ -17,7 +17,7 @@ export interface DataLayer {
 
 export interface PalaceQueryInput {
     layerIndex: number;
-    segmentIndex: number;
+    _segmentIndex: number;
     palaceName: string;
 }
 
@@ -35,7 +35,7 @@ export class ExplanationLookup {
         explanationData: any,
         query: PalaceQueryInput,
     ): ExplanationResult | null {
-        const { layerIndex, segmentIndex, palaceName } = query;
+        const { layerIndex, _segmentIndex, palaceName } = query;
 
         if (
             !Array.isArray(themeLayers) ||
@@ -47,13 +47,13 @@ export class ExplanationLookup {
         }
 
         const layer = themeLayers[layerIndex];
-        const sectionKey = this.getSectionKey(layer?.name, segmentIndex);
+        const sectionKey = this.getSectionKey(layer?.name, _segmentIndex);
         const section = this.getSection(explanationData, sectionKey);
 
-        const exact = this.extractExactExplanation(section, palaceName, segmentIndex);
+        const exact = this.extractExactExplanation(section, palaceName, _segmentIndex);
         if (exact) {
             return {
-                category: this.getCategoryName(layer?.name, segmentIndex),
+                category: this.getCategoryName(layer?.name, _segmentIndex),
                 title: palaceName,
                 meaning: exact,
             };
@@ -66,22 +66,22 @@ export class ExplanationLookup {
      * 查询指定的宫位解释
      * @param layers - 主题的所有数据层
      * @param layerIndex - 要查询的层级索引
-     * @param segmentIndex - 该层级中的分段索引
+     * @param _segmentIndex - 该层级中的分段索引
      * @param palaceName - 要查找的宫位名称
      * @returns 解释结果或 null
      */
     static query(
         layers: any[],
         layerIndex: number,
-        segmentIndex: number,
+        _segmentIndex: number,
         palaceName: string,
     ): ExplanationResult | null {
         if (!layers || layerIndex < 0 || layerIndex >= layers.length) return null;
         const layer = layers[layerIndex];
         if (!layer || !layer.data) return null;
 
-        const categoryName = this.getCategoryName(layer.name, segmentIndex);
-        const result = this.queryFromData(layer.data, segmentIndex, palaceName);
+        const categoryName = this.getCategoryName(layer.name, _segmentIndex);
+        const result = this.queryFromData(layer.data, _segmentIndex, palaceName);
         if (!result) return null;
 
         return { category: categoryName, title: palaceName, meaning: result };
@@ -96,7 +96,7 @@ export class ExplanationLookup {
      */
     private static queryFromData(
         data: any[],
-        segmentIndex: number,
+        _segmentIndex: number,
         palaceName: string,
     ): string | null {
         if (!Array.isArray(data) || data.length === 0) {
@@ -117,10 +117,10 @@ export class ExplanationLookup {
         }
 
         // 情况2：多维数组 - 支持跨分段拼接/包含匹配
-        if (Array.isArray(data[0]) && segmentIndex >= 0) {
+        if (Array.isArray(data[0]) && _segmentIndex >= 0) {
             // 方案1：指定分段内的包含匹配
-            if (segmentIndex < data.length) {
-                const segment = data[segmentIndex];
+            if (_segmentIndex < data.length) {
+                const segment = data[_segmentIndex];
                 if (Array.isArray(segment)) {
                     const exactMatch = segment.find((item) => String(item) === palaceName);
                     if (exactMatch) return String(exactMatch);
@@ -163,7 +163,7 @@ export class ExplanationLookup {
 
     private static getSectionKey(
         name: string | string[] | undefined,
-        segmentIndex: number,
+        _segmentIndex: number,
     ): string {
         if (Array.isArray(name)) {
             if (name.length === 1) return String(name[0] || '');
@@ -183,7 +183,7 @@ export class ExplanationLookup {
     private static extractExactExplanation(
         section: any,
         palaceName: string,
-        segmentIndex: number,
+        _segmentIndex: number,
     ): string | null {
         if (!section || !palaceName) return null;
 
@@ -192,7 +192,7 @@ export class ExplanationLookup {
         }
 
         if (Array.isArray(section)) {
-            const segment = section[segmentIndex];
+            const segment = section[_segmentIndex];
             // 处理数组中的对象 - 包含匹配
             if (segment && typeof segment === 'object' && !Array.isArray(segment)) {
                 const matchedKey = Object.keys(segment).find(
@@ -247,10 +247,10 @@ export class ExplanationLookup {
      * 从层级名称中提取分类名称
      * 名称可能是单字符串或数组（多级名称）
      */
-    private static getCategoryName(name: string | string[], segmentIndex: number): string {
+    private static getCategoryName(name: string | string[], _segmentIndex: number): string {
         if (Array.isArray(name)) {
-            if (segmentIndex >= 0 && segmentIndex < name.length) {
-                return name[segmentIndex];
+            if (_segmentIndex >= 0 && _segmentIndex < name.length) {
+                return name[_segmentIndex];
             }
             return name[0] || '信息';
         }

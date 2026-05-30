@@ -113,7 +113,7 @@
 // ============================================================================
 
 // 4.1 PolyStyle 示例
-const polyStyleExample = `
+const _polyStyleExample = `
 <Style id="polygonStyle">
   <PolyStyle>
     <color>7D0080FF</color>    <!-- 半透明红色 -->
@@ -124,7 +124,7 @@ const polyStyleExample = `
 `
 
 // 4.2 LineStyle 示例
-const lineStyleExample = `
+const _lineStyleExample = `
 <Style id="lineStyle">
   <LineStyle>
     <color>FF00FF00</color>     <!-- 完全不透明的绿色 -->
@@ -134,7 +134,7 @@ const lineStyleExample = `
 `
 
 // 4.3 IconStyle 示例
-const iconStyleExample = `
+const _iconStyleExample = `
 <Style id="pointStyle">
   <IconStyle>
     <href>http://example.com/marker.png</href>
@@ -204,4 +204,4 @@ const iconStyleExample = `
 // Q4: 某些特征没有样式
 // A: 正常现象，module 自动使用默认样式；检查错误日志了解原因
 
-export { default as kmlStyleParserDoc };
+// 本文件为纯文档，无导出

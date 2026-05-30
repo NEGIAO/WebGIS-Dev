@@ -8,7 +8,7 @@ export function useWave(canvasRef, props) {
     const SEGS_COUNT = 100;
 
     let waves = [];
-    let mouse = { x: -1000, y: -1000, active: false };
+    const mouse = { x: -1000, y: -1000, active: false };
     let time = 0;
 
     function initWaves() {
@@ -52,33 +52,33 @@ export function useWave(canvasRef, props) {
         time += 0.5; // 减缓时间使其更玄幻
 
         // 如果鼠标不活跃，让基准线回到中间下偏
-        let targetBaseY = mouse.active ? mouse.y : height / 2;
-        let targetBaseX = mouse.active ? mouse.x : width / 2;
+        const targetBaseY = mouse.active ? mouse.y : height / 2;
+        const targetBaseX = mouse.active ? mouse.x : width / 2;
 
         for (let i = 0; i < WAVES_COUNT; i++) {
-            let wave = waves[i];
+            const wave = waves[i];
 
             ctx.beginPath();
             ctx.lineWidth = 1.5 + i * 0.5;
             ctx.strokeStyle = wave.color;
 
             for (let j = 0; j <= SEGS_COUNT; j++) {
-                let xPos = (j / SEGS_COUNT) * width;
+                const xPos = (j / SEGS_COUNT) * width;
 
-                let dx = targetBaseX - xPos;
-                let dist = Math.abs(dx);
+                const dx = targetBaseX - xPos;
+                const dist = Math.abs(dx);
 
                 // 鼠标附近振幅增大 (量子干涉)
-                let mouseInfluence = mouse.active ? Math.max(0, 400 - dist) / 400 : 0.1;
-                let currentAmp = wave.amplitude * (1 + mouseInfluence * 3);
+                const mouseInfluence = mouse.active ? Math.max(0, 400 - dist) / 400 : 0.1;
+                const currentAmp = wave.amplitude * (1 + mouseInfluence * 3);
 
                 // 波函数公式
-                let phaseBase = xPos * wave.frequency + time * wave.speed + wave.phase;
-                let yPosOffset =
+                const phaseBase = xPos * wave.frequency + time * wave.speed + wave.phase;
+                const yPosOffset =
                     Math.sin(phaseBase) * currentAmp +
                     Math.cos(phaseBase * 1.5 - time * 0.02) * (currentAmp * 0.5);
 
-                let yPos = targetBaseY + wave.yOffset * (1 - mouseInfluence) + yPosOffset;
+                const yPos = targetBaseY + wave.yOffset * (1 - mouseInfluence) + yPosOffset;
 
                 if (j === 0) {
                     ctx.moveTo(xPos, yPos);
@@ -91,7 +91,7 @@ export function useWave(canvasRef, props) {
 
         // 中心光晕 (量子纠缠点)
         if (mouse.active) {
-            let gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 80);
+            const gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 80);
             gradient.addColorStop(0, 'rgba(0, 255, 128, 0.4)');
             gradient.addColorStop(0.5, 'rgba(0, 200, 255, 0.1)');
             gradient.addColorStop(1, 'rgba(0, 255, 128, 0)');

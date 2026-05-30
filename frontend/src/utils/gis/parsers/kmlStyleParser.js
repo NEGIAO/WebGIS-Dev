@@ -97,7 +97,7 @@ function isLikelyIconHref(rawValue) {
     if (/^data:image\//i.test(value)) return true;
     if (/^blob:/i.test(value)) return true;
     if (/^https?:\/\//i.test(value)) return true;
-    if (/[\/\\]/.test(value) && /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(value)) return true;
+    if (/[/\\]/.test(value) && /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(value)) return true;
     if (/\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(value)) return true;
     return false;
 }
@@ -535,7 +535,7 @@ export function applyKmlStylesToFeatures(features, kmlText) {
         features.forEach((feature, index) => {
             try {
                 const geometryType = feature?.getGeometry?.()?.getType?.() || '';
-                const isPoint = ['Point', 'MultiPoint'].includes(geometryType);
+                const _isPoint = ['Point', 'MultiPoint'].includes(geometryType);
                 const isLine = ['LineString', 'MultiLineString'].includes(geometryType);
                 const isPolygon = ['Polygon', 'MultiPolygon'].includes(geometryType);
 

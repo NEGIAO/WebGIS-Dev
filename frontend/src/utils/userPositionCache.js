@@ -13,7 +13,8 @@ export function saveUserPositionToCache(pos) {
                 timestamp: Date.now(),
             }),
         );
-    } catch (e) {
+    } catch { /* ignored */
+
         // Ignore storage failures to avoid breaking map/chat flow.
     }
 }
@@ -31,7 +32,8 @@ export function readUserPositionFromCache() {
             accuracy: Number(parsed.accuracy || 0),
             timestamp: Number(parsed.timestamp || 0),
         };
-    } catch (e) {
+    } catch { /* ignored */
+
         return null;
     }
 }

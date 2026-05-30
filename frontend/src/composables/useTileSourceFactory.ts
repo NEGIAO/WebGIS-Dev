@@ -142,13 +142,13 @@ function toErrorMessage(error: unknown): string {
     return String(error || '未知错误');
 }
 
-function toFiniteZoom(value: unknown): number | null {
+function _toFiniteZoom(value: unknown): number | null {
     const num = Number(value);
     if (!Number.isFinite(num) || num < 0) return null;
     return Math.floor(num);
 }
 
-function fillXYZTemplate(template: string, z: number, x: number, y: number): string {
+function _fillXYZTemplate(template: string, z: number, x: number, y: number): string {
     const max = Math.max(0, Math.pow(2, z) - 1);
     return String(template || '')
         .replace(/\{z\}/gi, String(z))
@@ -242,7 +242,7 @@ async function fetchTextWithTimeout(
     }
 }
 
-function applyHighPriorityTileLoadFunction(tile: any, src: string): void {
+function _applyHighPriorityTileLoadFunction(tile: any, src: string): void {
     const image = tile?.getImage?.();
     if (!image) return;
 
@@ -391,7 +391,6 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
         // 使用 fetch 替代隐式的 image.src 请求
         fetch(src, {
             signal: timeoutController.signal,
-            // @ts-ignore
             priority: 'high', // 提示浏览器这是高优先级请求
         })
             .then((response) => {
@@ -417,7 +416,7 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
             .catch((error) => {
                 // 无论是网络报错还是主动中止，都必须释放 OL 的 loading 队列占位。
                 if (error?.name !== 'AbortError') {
-                    console.debug('瓦片请求失败:', src, error);
+                    console.warn('瓦片请求失败:', src, error);
                 }
                 markTileAsError(tile);
             })
@@ -1033,7 +1032,7 @@ export function abortTileSourceRequests(source: any): void {
     // 这是关键操作：OL 会根据 tile.setState() 来管理加载队列，如果不标记，OL 会认为这些 tiles 仍在加载
     try {
         markAllSourceTilesAsError(source);
-    } catch (e) {
+    } catch (_e) {
         // best-effort only
     }
 

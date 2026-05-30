@@ -3,7 +3,7 @@
  * 负责构建 TOC 面板的树形结构
  */
 
-import type { LayerStoreLayer, StandardTOCItem } from './layerHelpers';
+import type { LayerStoreLayer } from './layerHelpers';
 import {
     formatLayerDisplayName,
     getLayerStandardItem,

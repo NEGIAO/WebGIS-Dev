@@ -71,8 +71,8 @@
                             ? getLatticeFillColor(latticeIndex, layerIndex)
                             : 'transparent'
                     "
-                    @click="handleLatticeClick(latticeIndex, layerIndex)"
                     style="cursor: pointer"
+                    @click="handleLatticeClick(latticeIndex, layerIndex)"
                 />
                 <!-- 层文字 -->
                 <g
@@ -93,8 +93,8 @@
                         text-anchor="middle"
                         dominant-baseline="middle"
                         font-family="楷书"
-                        @click="handleLatticeClick(textIndex, layerIndex)"
                         style="cursor: pointer"
+                        @click="handleLatticeClick(textIndex, layerIndex)"
                     >
                         {{ text }}
                     </text>
@@ -118,8 +118,8 @@
                             text-anchor="middle"
                             dominant-baseline="middle"
                             font-family="楷书"
-                            @click="handleLatticeClick(textIndex, layerIndex)"
                             style="cursor: pointer"
+                            @click="handleLatticeClick(textIndex, layerIndex)"
                         >
                             {{ subText }}
                         </text>
@@ -443,7 +443,7 @@ function getLatticePath(latticeIndex: number, layerIndex: number) {
         const startAngle = rads((360 / count) * latticeIndex);
         const endAngle = rads((360 / count) * (latticeIndex + 1));
 
-        let path = [];
+        const path = [];
         // 绘制外圈路径
         const x1 = centerPoint.value.x + outerRadius * Math.cos(startAngle);
         const y1 = centerPoint.value.y + outerRadius * Math.sin(startAngle);
@@ -473,7 +473,7 @@ const baseFontSize = computed(() => {
     // 取罗盘半径的1/20作为基准字体大小
     const baseFontSize = radius.value / 20;
     // 限制最小和最大字体大小
-    if (m.value.autoFontSize || !Boolean(m.value.autoFontSize))
+    if (m.value.autoFontSize || !m.value.autoFontSize)
         return Math.min(Math.max(baseFontSize, 12), 40);
     // 根据罗盘半径和每层高度计算合适的字体大小
     const layerIndex = m.value.data.length - 1;
@@ -568,7 +568,7 @@ function getLayerBorderPath(layerIndex: number) {
     const layer = m.value.data[layerIndex];
     const sides = layer.data.length;
     const radius = getLayerRadius(layerIndex + 1);
-    let path = [];
+    const path = [];
 
     // 检查当前层是否为多边形
     if (layer.shape !== 'circle' && layer.shape) {
@@ -768,7 +768,7 @@ watch(
         cachedResults.clear();
 
         // 检查多边形模式下的startAngle设置
-        Array.isArray(newData) &&
+        void (Array.isArray(newData) &&
             newData.forEach((layer: any, index: number) => {
                 if (layer.shape === 'polygon' && layer.startAngle) {
                     console.warn(
@@ -776,7 +776,7 @@ watch(
                     );
                     layer.startAngle = 0;
                 }
-            });
+            }));
     },
     { deep: true },
 );
