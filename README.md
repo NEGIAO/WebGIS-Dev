@@ -272,8 +272,29 @@ WebGIS_Dev/
 │   └── README.md
 ├── backend/                              # 🔹 后端（FastAPI + Python）
 │   ├── api/                              # 接口模块
-│   │   ├── auth.py                       # 鉴权（登录/注册/会话）
-│   │   ├── agent_chat.py                 # AI 对话代理
+│   │   ├── auth/                         # 鉴权模块（模块化拆分）
+│   │   │   ├── __init__.py               # 门面 re-export
+│   │   │   ├── constants.py              # 常量、角色、正则
+│   │   │   ├── db.py                     # 数据库连接工厂
+│   │   │   ├── schema.py                 # DDL 建表与迁移
+│   │   │   ├── password.py               # 密码哈希/验证
+│   │   │   ├── models.py                 # Pydantic 请求模型
+│   │   │   ├── user.py                   # 用户 CRUD
+│   │   │   ├── session.py                # 会话管理
+│   │   │   ├── preferences.py            # 用户偏好
+│   │   │   ├── quota.py                  # 配额追踪
+│   │   │   ├── system_config.py          # 系统配置
+│   │   │   ├── dependencies.py           # FastAPI 依赖注入
+│   │   │   └── routes.py                 # 路由处理函数
+│   │   ├── agent_chat/                   # AI 对话代理（模块化拆分）
+│   │   │   ├── __init__.py               # 门面 re-export
+│   │   │   ├── constants.py              # 常量、环境变量
+│   │   │   ├── schemas.py                # Pydantic 模型
+│   │   │   ├── utils.py                  # 纯工具函数
+│   │   │   ├── db.py                     # DB schema、config CRUD
+│   │   │   ├── quota.py                  # 配额管理
+│   │   │   ├── upstream.py               # 上游 LLM API 调用
+│   │   │   └── routes.py                 # 路由处理函数
 │   │   ├── spatial.py                    # 空间分析 API
 │   │   ├── proxy.py                      # 瓦片代理 + 坐标纠偏
 │   │   ├── download.py                   # 底图下载任务 API
@@ -295,7 +316,8 @@ WebGIS_Dev/
 ├── Docs/                                 # 开发日志
 │   ├── 26-05-27/                         # 空间分析/TOC/KMZ 修复日志
 │   ├── 26-05-28/                         # 高级空间分析文档
-│   └── 26-05-29/                         # Code Review + 文件拆分重构日志
+│   ├── 26-05-29/                         # Code Review + 文件拆分重构日志
+│   └── 26-05-30/                         # 后端模块化拆分日志
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本
 └── README.md                             # 本文件
