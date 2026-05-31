@@ -85,10 +85,17 @@
 双击 LocalDev.bat
 
 # 脚本会自动执行：
-# 1. npm install （前端依赖）
-# 2. npm run dev （前端开发服务器：http://localhost:5173）
-# 3. docker-compose up （后端容器：http://localhost:7860）
+# 1. 检测环境依赖（Node.js / Docker / docker compose）
+# 2. 自动配置前端 .env.local
+# 3. 智能检测 Docker 镜像状态：
+#    - 首次运行（无镜像）→ 自动构建
+#    - 仅修改代码 → 跳过构建，靠 volume + reload 热重载
+#    - Dockerfile 变更 → 提示用户选择是否重建
+# 4. 启动前端开发服务器（http://localhost:5173）
+# 5. 自动打开浏览器
 ```
+
+> **说明**：`LocalDev.bat` 为纯 ASCII 编码，兼容 GBK/UTF-8 系统；中文彩色输出由 `Write-Color.ps1` 提供，两个文件需在同一目录下。
 
 **访问地址**：
 - 前端：http://localhost:5173
@@ -343,7 +350,8 @@ WebGIS_Dev/
 │   ├── 26-05-29/                         # Code Review + 文件拆分重构日志
 │   └── 26-05-30/                         # ESLint 全项目修复 + 超大文件拆分
 ├── docker-compose.yml                    # 顶级 Docker Compose
-├── LocalDev.bat                          # 一键启动脚本
+├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
+├── Write-Color.ps1                       # 彩色输出辅助脚本（中文消息 + ANSI 颜色）
 └── README.md                             # 本文件
 ```
 
@@ -489,6 +497,51 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.1.8 (2026-05-31)
+#### 🔧 LocalDev.bat 智能构建检测 + 彩色输出 + 编码兼容
+
+优化本地开发启动脚本，解决跨系统编码兼容性问题，增加智能 Docker 镜像管理。
+
+---
+
+#### 🌟 新增功能
+
+##### 1. 智能 Docker 镜像构建检测
+- **首次运行**（无镜像）→ 自动 `--build` 构建
+- **仅修改代码** → 跳过构建，靠 volume 映射 + uvicorn `--reload` 热重载
+- **Dockerfile 变更** → 检测到镜像与 Dockerfile 时间不一致，提示用户选择是否重建
+- 通过比较 Dockerfile 修改时间与镜像创建时间判断是否需要重建
+
+##### 2. ANSI 彩色输出
+- 步骤标题（MAGENTA）、成功（GREEN）、错误（RED）、警告（YELLOW）、信息（CYAN）、辅助（DIM）
+- 自动检测并启用 Windows Terminal VT100 支持，老终端降级为纯文本
+
+##### 3. 编码兼容架构
+- `LocalDev.bat` 保持 100% 纯 ASCII，兼容任意系统 OEM 代码页（GBK/UTF-8/其他）
+- 中文消息集中到 `Write-Color.ps1`（UTF-8 BOM），通过数字 ID 调用
+- 错误处理全部使用 `goto` 跳转，避免括号块内中文解析问题
+
+---
+
+#### 📁 新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `Write-Color.ps1` | 彩色输出辅助脚本，集中定义所有中文消息 + ANSI 颜色 |
+
+---
+
+#### 🔧 优化项
+
+| 项目 | 优化前 | 优化后 |
+|------|--------|--------|
+| Docker 构建 | 每次 `up -d` 不感知镜像状态 | 智能三段式检测 |
+| 编码兼容 | UTF-8 中文在 GBK 系统闪退 | 纯 ASCII .bat + PS1 分离 |
+| 终端颜色 | 无 | ANSI 彩色输出 |
+| 错误处理 | 括号块内中文 echo | goto 跳转 + ASCII echo |
+
+---
 
 ### V3.1.7 (2026-05-30)
 #### 🔧 ESLint 全项目修复 + 超大文件拆分重构
