@@ -99,3 +99,6 @@ coverage
 
 /cypress/videos/
 /cypress/screenshots/
+
+# Root lockfile (no root package.json)
+/package-lock.json
