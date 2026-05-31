@@ -175,17 +175,75 @@ if not exist "docker-compose.yml" (
 )
 
 REM --------------------------------------------------
-REM 2. 启动容器（后台模式）
+REM 2. Smart image build detection
+REM    - No image: auto build
+REM    - Code only: skip build, use volume + reload
+REM    - Dockerfile changed: prompt user to rebuild
 REM --------------------------------------------------
-echo   正在启动后端容器...
+echo   正在检测镜像状态...
 echo.
 
-docker compose up -d
+set DOCKER_ACTION=up
+set IMAGE_NAME=backend-api
+
+REM 获取 compose 项目中镜像名
+for /f "tokens=*" %%i in ('docker compose config --images 2^>nul') do (
+    set IMAGE_NAME=%%i
+    goto :GOT_IMAGE
+)
+:GOT_IMAGE
+
+REM 检查镜像是否存在
+docker image inspect !IMAGE_NAME! >nul 2>&1
+if errorlevel 1 (
+    echo   [信息] 未找到本地镜像 '!IMAGE_NAME!'，将首次构建...
+    set DOCKER_ACTION=build
+    goto :DO_DOCKER
+)
+
+REM Image exists, compare Dockerfile time vs image creation time
+for /f "tokens=*" %%t in ('docker inspect --format "{{.Created}}" !IMAGE_NAME! 2^>nul') do set IMG_TIME=%%t
+
+REM 用 PowerShell 比较时间（bat 原生日期处理太弱）
+powershell -NoProfile -Command ^
+    "$img = [DateTime]::Parse('%IMG_TIME%');" ^
+    "$file = (Get-Item 'Dockerfile').LastWriteTime;" ^
+    "if ($file -gt $img) { exit 1 } else { exit 0 }"
 
 if errorlevel 1 (
-    echo [错误] 后端启动失败！（docker compose up 执行失败）
-    pause
-    exit /b 1
+    echo.
+    echo   [!] 检测到 Dockerfile 已修改（可能有新的环境依赖）
+    echo       镜像创建时间: %IMG_TIME%
+    echo       Dockerfile 修改时间更新，建议重新构建以匹配新环境
+    echo.
+    choice /C YN /M "  是否重新构建镜像？(Y=重新构建 / N=跳过，使用旧镜像)"
+    if !errorlevel! equ 1 (
+        set DOCKER_ACTION=build
+    ) else (
+        echo   [信息] 跳过构建，使用现有镜像（如遇问题请手动运行 docker compose up --build -d）
+    )
+) else (
+    echo   ✓ 镜像与 Dockerfile 同步，无需重新构建
+)
+
+:DO_DOCKER
+echo.
+echo   正在启动后端容器...
+
+if "!DOCKER_ACTION!"=="build" (
+    docker compose up --build -d
+    if errorlevel 1 (
+        echo [错误] 后端启动失败！（docker compose up --build 执行失败）
+        pause
+        exit /b 1
+    )
+) else (
+    docker compose up -d
+    if errorlevel 1 (
+        echo [错误] 后端启动失败！（docker compose up 执行失败）
+        pause
+        exit /b 1
+    )
 )
 
 REM --------------------------------------------------
