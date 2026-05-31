@@ -47,7 +47,7 @@
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
 - 🎨 电影级视觉效果、数据可视化、首屏特效
 - 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步）
-- 🔍 绘制、测量、路线规划、地点搜索、**双底图对比（Map Swipe，仅裁剪在线底图，不影响业务图层）**
+- 🔍 绘制、测量、路线规划、地点搜索、**卷帘分析**
 - 🌤️ 实时天气 + 趋势预报
 - 🤖 AI 空间助手（LLM 集成）
 - ⚡ 30-50% 首屏性能优化
@@ -116,6 +116,9 @@ npm run dev
 
 ```bash
 # 1. 启动 Docker Compose（包含后端服务）
+docker-compose up --build 
+# 首次运行需要 --build 参数构建镜像，文件较大需等待几分钟下载
+
 docker-compose up
 
 # 2. 等待容器启动完成
@@ -356,21 +359,21 @@ WebGIS_Dev/
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                      前端 (Vue 3)                        │
+│                      前端 ( Vue 3 )                     │
 │                   http://localhost:5173                 │
 │  ┌───────────────────────────────────────────────────┐  │
-│  │  Components (UI) → Composables (Logic) → Stores  │  │
-│  │                       ↓                            │  │
-│  │              API Service Layer                     │  │
+│  │  Components (UI) → Composables (Logic) → Stores   │  │
+│  │                       ↓                           │  │
+│  │              API Service Layer                    │  │
 │  └───────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────┘
                          │ HTTP/REST
                          ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   后端 (FastAPI)                        │
-│                   http://localhost:7860                │
+│                   http://localhost:7860                 │
 │  ┌───────────────────────────────────────────────────┐  │
-│  │  Routes → Services (Business Logic) → Utils      │  │
+│  │  Routes → Services (Business Logic) → Utils       │  │
 │  │           ↓                                       │  │
 │  │     External APIs / Databases                     │  │
 │  └───────────────────────────────────────────────────┘  │
@@ -429,7 +432,7 @@ docker build -t webgis-backend:latest -f Dockerfile .
 docker run -p 7860:7860 webgis-backend:latest
 
 # 或使用 docker-compose
-docker-compose up
+docker-compose up --build
 ```
 
 ## 🔑 环境变量配置
