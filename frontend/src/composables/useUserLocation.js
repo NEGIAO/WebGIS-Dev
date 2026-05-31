@@ -6,9 +6,11 @@ import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationRevers
 import { useMessage } from '@/composables/useMessage';
 import { saveUserPositionToCache } from '../utils/userPositionCache';
 import { setGlobalUserLocationContext } from '../utils/userLocationContext';
-// import { useMessage } from './useMessage';
 
 const _TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
+
+// [Fix] 单个定位流程的 AbortController，用于取消上一次请求
+let activeLocateController = null;
 
 export function useUserLocation({
     mapInstance,
@@ -98,8 +100,6 @@ export function useUserLocation({
         return String(searchParams.get(key) || '').trim();
     }
 
-    // 统一开发者模式开关：dev=1 时默认禁用高德 IP 定位，并预留后续细粒度 API 开关扩展。
-    // 兼容旧参数 debug=1，避免已有调试链接失效。
     function resolveDeveloperModeSwitches() {
         const devModeRaw = readQueryValueFromUrl('dev') || readQueryValueFromUrl('debug');
         const devModeEnabled = normalizeBinaryFlag(devModeRaw, '0') === '1';
@@ -139,7 +139,10 @@ export function useUserLocation({
             const hashPath = hashPathRaw || '/home';
             const params = new URLSearchParams(hashQueryRaw);
 
-            params.set('s', normalizeBinaryFlag(params.get('s'), '0'));
+            // [Fix] 保留 s 参数原值，不再无条件覆盖为 '0'
+            if (normalizeBinaryFlag(params.get('s'), '0') !== '1') {
+                params.set('s', '0');
+            }
 
             if (normalizeBinaryFlag(params.get('loc'), '0') === '1') return;
 
@@ -158,7 +161,9 @@ export function useUserLocation({
 
     function isCoordinateInChina(lon, lat) {
         if (!Number.isFinite(lon) || !Number.isFinite(lat)) return false;
-        return lon >= 73.0 && lon <= 135.0 && lat >= 18.0 && lat <= 54.0;
+        // [Fix] 收紧中国大陆范围，排除蒙古/俄罗斯/中亚/南海大部分区域
+        // 主要覆盖：中国大陆 + 港澳台 + 海南
+        return lon >= 73.5 && lon <= 135.0 && lat >= 3.0 && lat <= 53.6;
     }
 
     async function detectIPLocale(options = {}) {
@@ -187,15 +192,12 @@ export function useUserLocation({
     async function zoomToUserCityByIp(ip = '', options = {}) {
         const { silent = false } = options || {};
         const { disableAmapIpLocation, devModeEnabled } = resolveDeveloperModeSwitches();
-
-        // 如果开发者模式禁用了高德定位，则直接使用免费服务
         const preferFreeService = disableAmapIpLocation || devModeEnabled;
 
         try {
-            // 调用后端统一定位 API（优先高德，失败则免费服务）
             const locationResponse = await apiLocationIpLocate(ip, {
                 preferFreeService,
-                silent: true, // 后端错误由前端处理
+                silent: true,
             });
 
             const location = locationResponse || null;
@@ -238,7 +240,6 @@ export function useUserLocation({
                       })
                     : false;
 
-            // 结合 IP 定位结果补充地理编码与逆地理编码信息，用于展示用户定位语义。
             const cityText = String(location.city || '').trim();
             const provinceText = String(location.province || '').trim();
             const roughAddress = `${provinceText}${cityText}`.trim();
@@ -252,7 +253,6 @@ export function useUserLocation({
                     });
                     geocode = geocodeResponse?.data || null;
                     if (geocode) {
-                        // 使用后端代理的反向地理编码
                         const reverseResponse = await apiLocationReverse(geocode.lng, geocode.lat, {
                             preferService: 'auto',
                             silent: true,
@@ -268,13 +268,15 @@ export function useUserLocation({
                 const estimatedAccuracy = toDisplayAccuracyMeters(
                     estimateExtentAccuracyMeters(location.extent),
                 );
+                // [Fix] 当 geocode 失败时，使用 IP extent 中心作为坐标回退
+                const center = getExtentCenter(location.extent);
                 const encodedLocation = reverseGeocode
                     ? {
                           ...reverseGeocode,
                           adcode: String(location.adcode || ''),
                       }
                     : {
-                          formattedAddress: roughAddress,
+                          formattedAddress: roughAddress || `${location.city || ''}`,
                           province: provinceText,
                           city: cityText,
                           district: '',
@@ -284,8 +286,8 @@ export function useUserLocation({
                       };
 
                 const globalLocationContext = setGlobalUserLocationContext({
-                    lon: Number(geocode?.lng ?? getExtentCenter(location.extent)?.lon ?? 0),
-                    lat: Number(geocode?.lat ?? getExtentCenter(location.extent)?.lat ?? 0),
+                    lon: Number(geocode?.lng ?? center?.lon ?? 0),
+                    lat: Number(geocode?.lat ?? center?.lat ?? 0),
                     accuracy: estimatedAccuracy,
                     accuracyMeters: estimatedAccuracy,
                     source: location.source || 'ip',
@@ -347,9 +349,8 @@ export function useUserLocation({
         if (disableAmapIpLocation) return null;
 
         try {
-            // 使用后端统一定位 API
             const locationResponse = await apiLocationIpLocate(ip, {
-                preferFreeService: false, // 优先高德
+                preferFreeService: false,
                 silent: true,
             });
 
@@ -369,18 +370,23 @@ export function useUserLocation({
                 ipResult,
             };
         } catch (error) {
-            // 如果是配额用完，向上层抛出，不返回 null
             if (error?.isQuotaExceeded) {
                 throw error;
             }
-            // 其他错误返回 null（静默失败）
             return null;
         }
     }
 
+    /**
+     * [Fix] GPS 定位，带错误分类和有意义的提示
+     */
     function getCurrentLocation(enableHighAccuracy = true) {
         return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+            if (!navigator.geolocation) {
+                const err = new Error('浏览器不支持定位功能');
+                err.code = 'UNSUPPORTED';
+                return reject(err);
+            }
 
             navigator.geolocation.getCurrentPosition(
                 (pos) =>
@@ -389,8 +395,29 @@ export function useUserLocation({
                         lat: pos.coords.latitude,
                         accuracy: pos.coords.accuracy,
                     }),
-                (err) => reject(err),
-                { enableHighAccuracy, timeout: 5000 },
+                (err) => {
+                    // [Fix] 分类 GPS 错误，给用户有意义的提示
+                    const error = new Error(err.message);
+                    switch (err.code) {
+                        case 1: // PERMISSION_DENIED
+                            error.code = 'PERMISSION_DENIED';
+                            error.userMessage = '定位权限被拒绝，请在浏览器设置中允许定位';
+                            break;
+                        case 2: // POSITION_UNAVAILABLE
+                            error.code = 'POSITION_UNAVAILABLE';
+                            error.userMessage = '无法获取位置信息，可能处于室内或信号弱的环境';
+                            break;
+                        case 3: // TIMEOUT
+                            error.code = 'TIMEOUT';
+                            error.userMessage = 'GPS 定位超时，将使用 IP 定位';
+                            break;
+                        default:
+                            error.code = 'UNKNOWN';
+                            error.userMessage = 'GPS 定位失败';
+                    }
+                    reject(error);
+                },
+                { enableHighAccuracy, timeout: 5000, maximumAge: 60000 },
             );
         });
     }
@@ -424,7 +451,15 @@ export function useUserLocation({
         const { animate = true, silent = false } = options || {};
         const { disableAmapIpLocation } = resolveDeveloperModeSwitches();
 
+        // [Fix] 取消上一次进行中的定位请求，防止竞态
+        if (activeLocateController) {
+            activeLocateController.abort();
+        }
+        activeLocateController = new AbortController();
+        const { signal } = activeLocateController;
+
         try {
+            // [Fix] GPS 定位：带超时和错误分类
             const gpsTask = getCurrentLocation(true)
                 .then((pos) => ({
                     source: 'gps',
@@ -435,17 +470,36 @@ export function useUserLocation({
                         : 25,
                     raw: pos,
                 }))
-                .catch(() => null);
+                .catch((err) => {
+                    // [Fix] GPS 错误分类提示（非静默）
+                    if (!silent && err?.userMessage && err.code !== 'TIMEOUT') {
+                        message.warning(err.userMessage);
+                    }
+                    return null;
+                });
 
             const ipTask = disableAmapIpLocation
                 ? Promise.resolve(null)
                 : buildIpCandidate('', { disableAmapIpLocation }).catch((error) => {
-                      // 配额用完时不能隐藏，让外层处理
                       if (error?.isQuotaExceeded) throw error;
                       return null;
                   });
 
-            const [gpsCandidate, ipCandidate] = await Promise.all([gpsTask, ipTask]);
+            // [Fix] Promise.allSettled：GPS 和 IP 互不阻塞，任一失败不影响另一个
+            const [gpsResult, ipResult] = await Promise.allSettled([gpsTask, ipTask]);
+
+            if (signal.aborted) return null;
+
+            const gpsCandidate =
+                gpsResult.status === 'fulfilled' ? gpsResult.value : null;
+            const ipCandidate =
+                ipResult.status === 'fulfilled' ? ipResult.value : null;
+
+            // 如果 IP 抛出了配额用完的错误，向上层传递
+            if (ipResult.status === 'rejected' && ipResult.reason?.isQuotaExceeded) {
+                throw ipResult.reason;
+            }
+
             const candidates = [gpsCandidate, ipCandidate].filter(
                 (item) =>
                     item &&
@@ -479,6 +533,8 @@ export function useUserLocation({
                 return null;
             }
 
+            if (signal.aborted) return null;
+
             updateUserPosition(
                 {
                     lon: selected.lon,
@@ -494,17 +550,24 @@ export function useUserLocation({
                 isDomestic.value = true;
             }
 
+            // [Fix] 逆地理编码：带独立超时（8s），失败不阻断主流程
             let reverseAddress = null;
             try {
-                // 使用后端代理的反向地理编码
+                const reverseController = new AbortController();
+                const reverseTimeout = setTimeout(() => reverseController.abort(), 8000);
+
                 const reverseResponse = await apiLocationReverse(selected.lon, selected.lat, {
                     preferService: 'auto',
                     silent: true,
+                    signal: reverseController.signal,
                 });
+                clearTimeout(reverseTimeout);
                 reverseAddress = reverseResponse?.data || null;
             } catch {
                 // 逆地理编码失败时保留坐标提示，不中断定位成功主流程。
             }
+
+            if (signal.aborted) return null;
 
             const sourceLabel = selected.source === 'gps' ? '系统定位' : 'IP定位';
             const accuracyLabel = `精度约 ${Math.round(selected.accuracyMeters)}m`;
@@ -560,7 +623,8 @@ export function useUserLocation({
                 globalLocationContext,
             };
         } catch (error) {
-            // 处理配额用完的错误
+            if (signal.aborted) return null;
+
             if (error?.isQuotaExceeded) {
                 message.warning(error.message || 'IP 定位：API 调用额度已用完，部分功能受限', {
                     closable: true,

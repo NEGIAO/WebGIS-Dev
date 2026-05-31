@@ -348,7 +348,8 @@ WebGIS_Dev/
 │   ├── 26-05-27/                         # 空间分析/TOC/KMZ 修复日志
 │   ├── 26-05-28/                         # 高级空间分析文档
 │   ├── 26-05-29/                         # Code Review + 文件拆分重构日志
-│   └── 26-05-30/                         # ESLint 全项目修复 + 超大文件拆分
+│   ├── 26-05-30/                         # ESLint 全项目修复 + 超大文件拆分
+│   └── 26-05-31/                         # 底图容灾/用户定位鲁棒性/LocalDev.bat 重构
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
 ├── Write-Color.ps1                       # 彩色输出辅助脚本（中文消息 + ANSI 颜色）
@@ -540,6 +541,65 @@ LOG_LEVEL=INFO
 | 编码兼容 | UTF-8 中文在 GBK 系统闪退 | 纯 ASCII .bat + PS1 分离 |
 | 终端颜色 | 无 | ANSI 彩色输出 |
 | 错误处理 | 括号块内中文 echo | goto 跳转 + ASCII echo |
+
+---
+
+#### 🛡️ 底图容灾模块修复
+
+##### 1. FallbackManager 单例化
+- **问题**：每次调用 `createBaseLayerFallbackManager` 创建新实例，降级计数器重置，降级链永远从头开始（`tianDiTu → tianDiTu → ...`）
+- **修复**：`getFallbackManager(layerId)` 按 layerId 缓存实例，降级链正确推进（`tianDiTu → local`）
+- 同时跳过当前失败的 layerId，避免降级到同一个图层
+
+##### 2. 瓦片验证逻辑修正
+- **问题**：`Promise.race` 中 1.5s 硬编码超时永远赢过 3s 的 `checkTimeoutMs`，参数失效
+- **修复**：移除 `Promise.race`，使用 `checkTimeoutMs` 作为唯一超时
+- 新增 `tileloadstart` 监听，要求至少 1 次 start + 1 次 end 才算成功，避免缓存假阳性
+
+##### 3. 内存泄漏修复
+- `cleanUp()` 时从 `activeMonitors` Map 中移除条目并重置 monitorKey
+- `disposeAllMonitors()` 同时清理 `fallbackManagers` Map
+- `loadingTilesCount` 改为 `Math.max(0, count - 1)` 防止负数
+
+---
+
+#### 📍 用户定位模块鲁棒性增强
+
+##### 1. GPS 错误分类
+- 区分 4 种错误：权限拒绝、信号弱、超时、未知
+- 每种错误给用户有意义的中文提示，不再静默吞掉
+
+##### 2. 请求竞态防护
+- `activeLocateController` 全局单例，新定位请求自动 abort 旧的
+- 多次快速点击"定位"不会产生竞态覆盖
+
+##### 3. 并行策略优化
+- `Promise.all` → `Promise.allSettled`，GPS 和 IP 定位互不阻塞
+- IP 抛出配额用完错误时正确向上层传递
+
+##### 4. 逆地理编码超时
+- 独立 `AbortController` + 8s 超时，避免 Nominatim 等慢服务阻塞
+- `apiLocationReverse` 和 `addressToLocation` 均支持 `signal` 参数透传
+
+##### 5. 其他修复
+- `markLocationSuccessFlagInUrl`：不再无条件覆盖 `s` 参数
+- `isCoordinateInChina`：收紧边界框（lat 18→3），正确覆盖南海诸岛
+- `getCurrentLocation`：添加 `maximumAge: 60000` 允许复用缓存位置，加速定位
+- `zoomToUserCityByIp`：geocode 失败时使用 IP extent 中心作为坐标回退
+
+---
+
+#### 📁 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `frontend/src/composables/map/features/useBasemapResilience.js` | FallbackManager 单例、瓦片验证修正、内存泄漏修复 |
+| `frontend/src/composables/map/features/useBasemapSelectionWatcher.js` | 适配 `getFallbackManager` API |
+| `frontend/src/components/Map/MapContainer.vue` | 适配 API 重命名 |
+| `frontend/src/composables/useUserLocation.js` | GPS 错误分类、竞态防护、超时控制、边界修复 |
+| `frontend/src/api/backend/location.js` | `apiLocationReverse` 支持 AbortSignal |
+| `frontend/src/api/geocoding.js` | `addressToLocation` 支持 AbortSignal |
+| `Docs/26-05-31/code-review-basemap-resilience-2026-05-31.md` | 底图容灾模块 Code Review 报告 |
 
 ---
 

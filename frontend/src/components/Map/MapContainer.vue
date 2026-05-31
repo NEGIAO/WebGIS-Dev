@@ -346,7 +346,7 @@ const { handleLayerContextAction } = useLayerContextMenuActions({
     message,
 });
 
-const { validateBaseLayerSwitch, createBaseLayerFallbackManager, monitorLayerTimeout, disposeAllMonitors } =
+const { validateBaseLayerSwitch, getFallbackManager, monitorLayerTimeout, disposeAllMonitors } =
     createBasemapResilience({ message });
 
 const { initializeBasemapLayers } = createBasemapLayerBootstrap({
@@ -750,7 +750,7 @@ const { bindBasemapSelectionWatcher, resetBasemapChain, dispose: disposeSelectio
     layerInstances,
     syncUrlFromMap,
     validateBaseLayerSwitch,
-    createBaseLayerFallbackManager,
+    getFallbackManager,
     getBasemapOptionLabel,
     message,
     defaultLayerId: DEFAULT_BASEMAP_PRESET_ID,

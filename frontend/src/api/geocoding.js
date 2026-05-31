@@ -166,12 +166,17 @@ export async function addressToLocation(address, city = '', options = {}) {
     }
 
     try {
-        const response = await backendAPI.get('/api/proxy/amap/geocode/geo', {
+        const config = {
             params: {
                 address: normalizedAddress,
                 city: String(city || '').trim(),
             },
-        });
+        };
+        // [Fix] 支持 AbortSignal 超时控制
+        if (options?.signal) {
+            config.signal = options.signal;
+        }
+        const response = await backendAPI.get('/api/proxy/amap/geocode/geo', config);
 
         const data = response || {};
         const status = String(data?.status ?? '0');

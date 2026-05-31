@@ -20,7 +20,7 @@ export function createBasemapSelectionWatcher({
     layerInstances,
     syncUrlFromMap,
     validateBaseLayerSwitch,
-    createBaseLayerFallbackManager,
+    getFallbackManager,
     getBasemapOptionLabel,
     message,
     defaultLayerId = 'google',
@@ -325,8 +325,8 @@ export function createBasemapSelectionWatcher({
                 const isDefaultBaseLayer = val === defaultLayerId;
 
                 if (failCount >= circuitBreakThreshold) {
-                    message?.error?.('当前网络异常，请尝试手动重试。可点击“重置链路”按钮。');
-                    const fallbackManager = createBaseLayerFallbackManager?.(val, true);
+                    message?.error?.('当前网络异常，请尝试手动重试。可点击”重置链路”按钮。');
+                    const fallbackManager = getFallbackManager?.(val, isDefaultBaseLayer);
                     const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
                     if (nextFallbackOption && nextFallbackOption !== val) {
                         isAutoSwitchingLayer = true;
@@ -342,7 +342,7 @@ export function createBasemapSelectionWatcher({
                 }
 
                 // Try fallback chain for default base layer
-                const fallbackManager = createBaseLayerFallbackManager?.(val, true);
+                const fallbackManager = getFallbackManager?.(val, true);
                 const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
                 if (!nextFallbackOption) {
                     message?.error?.('所有兜底底图均不可用，请检查网络或重新选择底图');

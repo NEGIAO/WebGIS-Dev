@@ -120,12 +120,17 @@ export async function apiLocationIpLocate(ip = '', options = {}) {
  * - 通过后端统一调度多个服务（高德、天地图、Nominatim 等）
  */
 export async function apiLocationReverse(lng, lat, options = {}) {
+    const config = {};
+    // [Fix] 支持 AbortSignal 超时控制
+    if (options.signal) {
+        config.signal = options.signal;
+    }
     return backendAPI.post('/api/v1/location/reverse', {
         lng,
         lat,
         prefer_service: options.preferService || 'auto',
         silent: options.silent || false,
-    });
+    }, config);
 }
 
 /**

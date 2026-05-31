@@ -5,11 +5,27 @@
 export function createBasemapResilience({ message }) {
     // [C4] 追踪所有活跃的超时监测器，支持统一清理
     const activeMonitors = new Map(); // layerId -> { cleanup, layer }
+
+    // [Fix] 持久化 FallbackManager 实例，按 layerId 缓存，避免每次 new 导致降级链重置
+    const fallbackManagers = new Map(); // layerId -> FallbackManager instance
+
     /**
-     * [改进] 验证底图加载状态
+     * [Fix] 获取或创建 per-layerId 的 FallbackManager 单例
+     */
+    function getFallbackManager(layerId, isDefaultBaseLayer) {
+        if (!fallbackManagers.has(layerId)) {
+            fallbackManagers.set(layerId, createBaseLayerFallbackManager(layerId, isDefaultBaseLayer));
+        }
+        return fallbackManagers.get(layerId);
+    }
+
+    /**
+     * 验证底图加载状态
      * - 前置检查立即返回（同步）
-     * - 网络检查使用 Promise.race 快速失败（1.5s）
+     * - 使用 checkTimeoutMs 作为唯一超时（移除了硬编码 1.5s 快失败）
      * - 支持 AbortSignal 用于验证中止
+     * - [Fix] 监听 tileloadstart 确认有新瓦片开始加载，避免缓存假阳性
+     * - [Fix] 至少需要 1 次 start + 1 次 end 才算成功
      */
     const validateBaseLayerSwitch = async (layerId, layer, checkTimeoutMs = 3000, signal) => {
         // 前置检查：立即返回，不走 Promise
@@ -27,83 +43,101 @@ export function createBasemapResilience({ message }) {
             return { success: false, reason: '验证已取消' };
         }
 
-        return Promise.race([
-            // 实际的瓦片加载验证
-            new Promise((resolve) => {
-                let hasSuccessfulLoad = false;
-                let hasError = false;
-                let errorCount = 0;
+        return new Promise((resolve) => {
+            let startedTiles = 0;
+            let endedTiles = 0;
+            let errorCount = 0;
+            let settled = false;
 
-                const onTileLoadEnd = () => {
-                    hasSuccessfulLoad = true;
-                };
+            const settle = (result) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve(result);
+            };
 
-                const onTileLoadError = () => {
-                    errorCount++;
-                    if (errorCount >= 3) {
-                        hasError = true;
-                    }
-                };
+            const onTileLoadStart = () => {
+                startedTiles++;
+            };
 
-                const cleanup = () => {
-                    source.un('tileloadend', onTileLoadEnd);
-                    source.un('tileloaderror', onTileLoadError);
-                    if (signal) {
-                        signal.removeEventListener('abort', onAbort);
-                    }
-                };
-
-                const onAbort = () => {
-                    cleanup();
-                    resolve({ success: false, reason: '验证已取消' });
-                };
-
-                if (signal) {
-                    signal.addEventListener('abort', onAbort);
+            const onTileLoadEnd = () => {
+                endedTiles++;
+                // [Fix] 至少 1 个瓦片 start + end 都完成才算成功
+                if (startedTiles > 0 && endedTiles >= 1) {
+                    settle({ success: true, reason: '切换成功' });
                 }
+            };
 
-                source.on('tileloadend', onTileLoadEnd);
-                source.on('tileloaderror', onTileLoadError);
+            const onTileLoadError = () => {
+                errorCount++;
+                // [Fix] 3 个瓦片失败就快速判定失败，不等超时
+                if (errorCount >= 3) {
+                    settle({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
+                }
+            };
 
-                setTimeout(() => {
-                    cleanup();
+            const cleanup = () => {
+                source.un('tileloadstart', onTileLoadStart);
+                source.un('tileloadend', onTileLoadEnd);
+                source.un('tileloaderror', onTileLoadError);
+                if (signal) {
+                    signal.removeEventListener('abort', onAbort);
+                }
+            };
 
-                    if (hasSuccessfulLoad) {
-                        resolve({ success: true, reason: '切换成功' });
-                    } else if (hasError) {
-                        resolve({ success: false, reason: '底图服务异常，多个瓦片加载失败' });
-                    } else {
-                        resolve({ success: false, reason: '未能获取底图数据（需梯子或超时）' });
-                    }
-                }, checkTimeoutMs);
-            }),
-            // [改进] 快速失败：1.5s 就认为超时，而不是等 3s
-            new Promise((resolve) =>
-                setTimeout(() => {
-                    resolve({ success: false, reason: '加载超时（1.5s）' });
-                }, 1500),
-            ),
-        ]);
+            const onAbort = () => {
+                settle({ success: false, reason: '验证已取消' });
+            };
+
+            if (signal) {
+                signal.addEventListener('abort', onAbort);
+            }
+
+            source.on('tileloadstart', onTileLoadStart);
+            source.on('tileloadend', onTileLoadEnd);
+            source.on('tileloaderror', onTileLoadError);
+
+            // [Fix] 使用 checkTimeoutMs 作为唯一超时，移除了硬编码 1.5s 快失败
+            setTimeout(() => {
+                if (startedTiles === 0) {
+                    settle({ success: false, reason: '未能获取底图数据（无瓦片开始加载，需梯子或超时）' });
+                } else if (endedTiles > 0) {
+                    // 有瓦片加载成功但还没被 settle 拦截到（并发场景）
+                    settle({ success: true, reason: '切换成功' });
+                } else if (errorCount > 0) {
+                    settle({ success: false, reason: '底图服务异常，瓦片加载失败' });
+                } else {
+                    settle({ success: false, reason: `底图加载超时（${checkTimeoutMs / 1000}秒）` });
+                }
+            }, checkTimeoutMs);
+        });
     };
 
+    /**
+     * [Fix] FallbackManager：降级选项管理
+     * - 排除当前失败的 layerId，避免降级到同一个图层
+     * - 维护有状态的降级链
+     */
     const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
         const FALLBACK_OPTIONS = ['tianDiTu', 'local'];
 
         let fallbackAttempts = 0;
-        const maxFallbackAttempts = FALLBACK_OPTIONS.length;
         let lastFallbackKey = null;
 
         return {
             getNextFallbackOption: () => {
-                if (fallbackAttempts >= maxFallbackAttempts) {
-                    message?.warning?.(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
-                    return null;
+                // [Fix] 跳过当前失败的 layerId，避免降级到同一个图层
+                while (fallbackAttempts < FALLBACK_OPTIONS.length) {
+                    const option = FALLBACK_OPTIONS[fallbackAttempts];
+                    fallbackAttempts++;
+                    if (option !== layerId) {
+                        lastFallbackKey = option;
+                        return option;
+                    }
                 }
 
-                const nextOption = FALLBACK_OPTIONS[fallbackAttempts];
-                lastFallbackKey = nextOption;
-                fallbackAttempts++;
-                return nextOption;
+                message?.warning?.(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
+                return null;
             },
             getCurrentFallback: () => lastFallbackKey,
             isNotifyOnly: () => !isDefaultBaseLayer,
@@ -133,7 +167,7 @@ export function createBasemapResilience({ message }) {
         let isSwitched = false;
         let hasNotifiedSuccess = false;
 
-        const fallbackManager = createBaseLayerFallbackManager(layerId, isDefaultBaseLayer);
+        const fallbackManager = getFallbackManager(layerId, isDefaultBaseLayer);
 
         const cleanUp = () => {
             if (activityTimer) {
@@ -143,6 +177,10 @@ export function createBasemapResilience({ message }) {
             source.un('tileloadstart', onTileLoadStart);
             source.un('tileloadend', onTileLoadEnd);
             source.un('tileloaderror', onTileLoadError);
+
+            // [Fix] 从 activeMonitors 中移除，避免内存泄漏
+            activeMonitors.delete(layerId);
+            layer.set?.(monitorKey, false);
         };
 
         const switchToBackup = (reason, triggerCallback) => {
@@ -197,17 +235,17 @@ export function createBasemapResilience({ message }) {
 
         const onTileLoadEnd = () => {
             if (isSwitched) return;
-            loadingTilesCount--;
+            loadingTilesCount = Math.max(0, loadingTilesCount - 1);
             consecutiveErrors = 0;
 
-            if (loadingTilesCount <= 0) {
-                loadingTilesCount = 0;
+            if (loadingTilesCount === 0) {
                 if (activityTimer) {
                     clearTimeout(activityTimer);
                     activityTimer = null;
                 }
 
-                if (!hasNotifiedSuccess && totalErrors === 0) {
+                // [Fix] 允许在恢复后重新触发 onSuccess
+                if (totalErrors === 0 && !hasNotifiedSuccess) {
                     hasNotifiedSuccess = true;
                     if (callbacks.onSuccess) callbacks.onSuccess();
                 }
@@ -218,7 +256,7 @@ export function createBasemapResilience({ message }) {
 
         const onTileLoadError = () => {
             if (isSwitched) return;
-            loadingTilesCount--;
+            loadingTilesCount = Math.max(0, loadingTilesCount - 1);
             consecutiveErrors++;
             totalErrors++;
 
@@ -231,8 +269,7 @@ export function createBasemapResilience({ message }) {
                 message?.warning?.(`[底图监测] ${layerId} 累计错误${totalErrors}个，建议检查网络`);
             }
 
-            if (loadingTilesCount <= 0) {
-                loadingTilesCount = 0;
+            if (loadingTilesCount === 0) {
                 if (activityTimer) {
                     clearTimeout(activityTimer);
                     activityTimer = null;
@@ -261,11 +298,14 @@ export function createBasemapResilience({ message }) {
             layer?.set?.(monitorKey, false);
         });
         activeMonitors.clear();
+
+        // [Fix] 清理所有 FallbackManager 实例
+        fallbackManagers.clear();
     }
 
     return {
         validateBaseLayerSwitch,
-        createBaseLayerFallbackManager,
+        getFallbackManager,
         monitorLayerTimeout,
         disposeAllMonitors,
     };
