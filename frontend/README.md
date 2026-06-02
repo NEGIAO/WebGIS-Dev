@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-05-29 更新）
+## 目录结构（2026-06-02 更新）
 
 以下结构按当前工程实际文件更新。
 
@@ -495,7 +495,7 @@ MIT
 
 ---
 
-最后更新：2026-05-30
+最后更新：2026-06-02
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）

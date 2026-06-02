@@ -349,7 +349,8 @@ WebGIS_Dev/
 │   ├── 26-05-28/                         # 高级空间分析文档
 │   ├── 26-05-29/                         # Code Review + 文件拆分重构日志
 │   ├── 26-05-30/                         # ESLint 全项目修复 + 超大文件拆分
-│   └── 26-05-31/                         # 底图容灾/用户定位鲁棒性/LocalDev.bat 重构
+│   ├── 26-05-31/                         # 底图容灾/用户定位鲁棒性/LocalDev.bat 重构
+│   └── 26-06-02/                         # Code Review 安全加固 + 卷帘持久化修复
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
 ├── Write-Color.ps1                       # 彩色输出辅助脚本（中文消息 + ANSI 颜色）
@@ -498,6 +499,50 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.1.9 (2026-06-02)
+#### 🔒 安全加固 + 卷帘持久化修复
+
+本次版本修复 XSS 注入风险、增强代理 SSRF 防护、修复卷帘状态恢复逻辑。
+
+---
+
+#### 🛡️ 安全加固
+
+##### 1. 全局消息 XSS 修复
+- `Message.vue` 新增 `escapeHtml()` 函数，对所有 `v-html` 渲染的文本进行五字符转义（`&`/`<`/`>`/`"`/`'`）
+- 覆盖项目唯一的 `v-html` 攻击面
+
+##### 2. 代理 SSRF 防护
+- `proxy.py` 新增 `_is_private_host()` 校验，阻断 localhost/私网 IP/链路本地/保留地址
+- 默认开启 TLS 校验（`PROXY_VERIFY_SSL=true`），通过环境变量兼容特殊部署
+- `follow_redirects=False` 防止重定向型 SSRF 绕过
+
+---
+
+#### 📊 卷帘持久化修复
+
+##### 1. 新增显式左右图层持久化
+- `useSwipeConfigStore` 新增 `leftLayerIds`/`rightLayerIds` 字段
+- `enableBasemapSwipe` 启用时同时写入显式左右列表，不再仅依赖拼接后的 `targetLayerIds`
+
+##### 2. 恢复逻辑增强
+- `restoreSwipe` 优先读取持久化的 `leftLayerIds`/`rightLayerIds`
+- 兼容旧数据：无显式左右列表时回退到 midIndex 拆分（原有行为）
+
+---
+
+#### 📁 修改文件
+
+| 文件 | 变更 |
+|------|------|
+| `frontend/src/components/Shell/Message.vue` | XSS 转义修复 |
+| `backend/api/proxy.py` | SSRF 防护 + TLS 默认开启 |
+| `frontend/src/composables/map/features/useBasemapSwipe.js` | 接入 leftLayerIds/rightLayerIds |
+| `frontend/src/stores/useSwipeConfigStore.ts` | 新增左右字段 + 显式类型标注 |
+| `README.md`、`frontend/README.md`、`backend/README.md` | 文档同步 |
+
+---
 
 ### V3.1.8 (2026-05-31)
 #### 🔧 LocalDev.bat 智能构建检测 + 彩色输出 + 编码兼容
@@ -1169,6 +1214,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-05-30
-**当前版本**：V3.1.8
+**最后更新**：2026-06-02
+**当前版本**：V3.1.9
 **项目状态**：开发中 - 持续迭代优化

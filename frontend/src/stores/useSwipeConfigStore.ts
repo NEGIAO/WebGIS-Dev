@@ -14,6 +14,21 @@ import { defineStore } from 'pinia';
 
 const PERSIST_KEY = 'webgis_swipe_config_v1';
 
+type SwipeMode = 'horizontal' | 'vertical';
+type SwipeConfig = {
+    enabled: boolean;
+    position: number;
+    mode: SwipeMode;
+    targetLayerIds: string[];
+    leftLayerIds: string[];
+    rightLayerIds: string[];
+};
+
+function normalizeLayerIdList(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value.filter((item) => typeof item === 'string');
+}
+
 /** 从 localStorage 恢复持久化的卷帘配置 */
 function loadPersistedConfig(): Record<string, any> | null {
     try {
@@ -26,12 +41,7 @@ function loadPersistedConfig(): Record<string, any> | null {
 }
 
 /** 将当前配置持久化到 localStorage */
-function persistConfig(config: {
-    enabled: boolean;
-    position: number;
-    mode: string;
-    targetLayerIds: string[];
-}): void {
+function persistConfig(config: SwipeConfig): void {
     try {
         if (typeof window !== 'undefined') {
             localStorage.setItem(PERSIST_KEY, JSON.stringify(config));
@@ -44,18 +54,16 @@ function persistConfig(config: {
 export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
     const persisted = loadPersistedConfig();
 
-    const swipeConfig = ref({
+    const swipeConfig = ref<SwipeConfig>({
         enabled: persisted?.enabled === true || false,
         position:
             typeof persisted?.position === 'number'
                 ? Math.max(0.05, Math.min(0.95, persisted.position))
                 : 0.5,
-        mode: (persisted?.mode === 'vertical' ? 'vertical' : 'horizontal') as
-            | 'horizontal'
-            | 'vertical',
-        targetLayerIds: Array.isArray(persisted?.targetLayerIds)
-            ? persisted.targetLayerIds.filter((v) => typeof v === 'string')
-            : [],
+        mode: (persisted?.mode === 'vertical' ? 'vertical' : 'horizontal') as SwipeMode,
+        targetLayerIds: normalizeLayerIdList(persisted?.targetLayerIds),
+        leftLayerIds: normalizeLayerIdList(persisted?.leftLayerIds),
+        rightLayerIds: normalizeLayerIdList(persisted?.rightLayerIds),
     });
 
     /**
@@ -66,8 +74,24 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
         if (config.enabled !== undefined) swipeConfig.value.enabled = config.enabled;
         if (config.position !== undefined) swipeConfig.value.position = config.position;
         if (config.mode !== undefined) swipeConfig.value.mode = config.mode;
-        if (config.targetLayerIds !== undefined)
-            swipeConfig.value.targetLayerIds = config.targetLayerIds;
+        if (config.targetLayerIds !== undefined) {
+            swipeConfig.value.targetLayerIds = normalizeLayerIdList(config.targetLayerIds);
+        }
+        if (config.leftLayerIds !== undefined) {
+            swipeConfig.value.leftLayerIds = normalizeLayerIdList(config.leftLayerIds);
+        }
+        if (config.rightLayerIds !== undefined) {
+            swipeConfig.value.rightLayerIds = normalizeLayerIdList(config.rightLayerIds);
+        }
+        if (
+            config.targetLayerIds === undefined &&
+            (config.leftLayerIds !== undefined || config.rightLayerIds !== undefined)
+        ) {
+            swipeConfig.value.targetLayerIds = [
+                ...swipeConfig.value.leftLayerIds,
+                ...swipeConfig.value.rightLayerIds,
+            ];
+        }
         persistConfig(swipeConfig.value);
     }
 
@@ -88,7 +112,7 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
      * 更新卷帘方向模式并持久化
      * @param mode - 'horizontal' | 'vertical'
      */
-    function updateSwipeMode(mode: 'horizontal' | 'vertical'): void {
+    function updateSwipeMode(mode: SwipeMode): void {
         swipeConfig.value.mode = mode;
         persistConfig(swipeConfig.value);
     }
@@ -99,7 +123,9 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
      */
     function enableSwipe(layerIds: string[] = []): void {
         swipeConfig.value.enabled = true;
-        swipeConfig.value.targetLayerIds = layerIds;
+        swipeConfig.value.targetLayerIds = normalizeLayerIdList(layerIds);
+        swipeConfig.value.leftLayerIds = [];
+        swipeConfig.value.rightLayerIds = [];
         persistConfig(swipeConfig.value);
     }
 
