@@ -124,16 +124,27 @@ function getTypeTitle(type) {
     return '提示';
 }
 
+// HTML 转义，避免 v-html 注入风险。
+function escapeHtml(input) {
+    return String(input)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // 根据字符类型（中英文）分别包装，以便 CSS 中区分字体
 function formatTextWithFonts(text) {
-    return text.replace(/([a-zA-Z]+)|([\u4E00-\u9FFF]+)|(.)/g, (match, en, zh) => {
+    const safeText = String(text ?? '');
+    return safeText.replace(/([a-zA-Z]+)|([\u4E00-\u9FFF]+)|(.)/g, (match, en, zh) => {
         if (en) {
-            return `<span class="toast-text-en">${en}</span>`;
+            return `<span class="toast-text-en">${escapeHtml(en)}</span>`;
         }
         if (zh) {
-            return `<span class="toast-text-zh">${zh}</span>`;
+            return `<span class="toast-text-zh">${escapeHtml(zh)}</span>`;
         }
-        return match; // 保留其他字符（包括换行符、数字、符号等）
+        return escapeHtml(match); // 保留其他字符（包括换行符、数字、符号等）
     });
 }
 </script>

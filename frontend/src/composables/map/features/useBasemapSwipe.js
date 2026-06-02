@@ -212,6 +212,8 @@ export function createBasemapSwipe({
                 position: 0.5,
                 mode,
                 targetLayerIds: [...leftLayerIds, ...rightLayerIds],
+                leftLayerIds,
+                rightLayerIds,
             });
 
             mapInstance.value.render();
@@ -261,10 +263,16 @@ export function createBasemapSwipe({
             return;
         }
 
-        // 从 targetLayerIds 中区分左右图层（前半为左，后半为右）
-        const midIndex = Math.ceil(targetLayerIds.length / 2);
-        const leftLayerIds = targetLayerIds.slice(0, midIndex);
-        const rightLayerIds = targetLayerIds.slice(midIndex);
+        // 优先使用显式持久化的左右列表，兼容旧数据回退到 midIndex 拆分
+        let leftLayerIds, rightLayerIds;
+        if (config.leftLayerIds?.length && config.rightLayerIds?.length) {
+            leftLayerIds = config.leftLayerIds;
+            rightLayerIds = config.rightLayerIds;
+        } else {
+            const midIndex = Math.ceil(targetLayerIds.length / 2);
+            leftLayerIds = targetLayerIds.slice(0, midIndex);
+            rightLayerIds = targetLayerIds.slice(midIndex);
+        }
 
         try {
             const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);

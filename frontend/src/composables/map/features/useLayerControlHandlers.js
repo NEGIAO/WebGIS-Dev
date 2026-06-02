@@ -199,9 +199,20 @@ export function createLayerControlHandlers({
             const target = list.find((item) => item.id === payload.layerId);
             if (!target) return;
             target.visible = !!payload.visible;
-            // 只设置 OL 图层可见性，不遍历全部图层
-            const layer = layerInstances?.[payload.layerId];
-            layer?.setVisible?.(target.visible);
+
+            // [Bug Fix] 当图层被设置为可见时，需要确保 source 已初始化。
+            // 问题背景：switchLayerById 会调用 clearLayerSourceForced 清除非当前底图的 source，
+            // 导致后续在面板中勾选图层时，即使设置了 visible = true，由于 source 已被清除，
+            // 图层无法显示内容。
+            // 解决方案：调用 refreshLayersState 确保所有图层的 source 被正确初始化，
+            // 同时同步 zIndex 和可见性状态。
+            if (target.visible) {
+                refreshLayersState?.();
+            } else {
+                // 只设置 OL 图层可见性，不遍历全部图层（隐藏时无需初始化 source）
+                const layer = layerInstances?.[payload.layerId];
+                layer?.setVisible?.(false);
+            }
             // 通知底图面板状态变化
             emitBaseLayersChange?.();
             return;

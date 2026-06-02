@@ -1,6 +1,9 @@
 import httpx
+import ipaddress
 import logging
+import os
 from typing import Any, Dict, Tuple
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -17,6 +20,18 @@ router = APIRouter()
 # 定义日志记录器（可选，建议保留）
 logger = logging.getLogger(__name__)
 
+
+# 解析布尔环境变量，支持常见开关值。
+def _parse_env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+PROXY_ALLOW_PRIVATE_HOSTS = _parse_env_flag("PROXY_ALLOW_PRIVATE_HOSTS", False)
+PROXY_VERIFY_SSL = _parse_env_flag("PROXY_VERIFY_SSL", True)
+
 def build_http_client():
     """
     创建并配置全局异步 HTTP 客户端
@@ -25,7 +40,7 @@ def build_http_client():
         timeout=httpx.Timeout(20.0, connect=5.0), # 设置超时时间
         follow_redirects=False,
         limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
-        verify=False # 如果代理某些自签名证书的瓦片服务，可能需要设为 False
+        verify=PROXY_VERIFY_SSL, # 默认启用 TLS 校验，必要时可通过环境变量关闭
     )
 # ==================== 通用流式代理 ====================
 # =====================================================
@@ -66,6 +81,38 @@ PROXY_DEFAULT_REQUEST_HEADERS = {
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Accept-Encoding": "gzip, deflate, br",
 }
+
+
+# 判定目标主机是否为本地或私网地址。
+def _is_private_host(hostname: str) -> bool:
+    if not hostname:
+        return True
+    lower = hostname.lower()
+    if lower == "localhost" or lower.endswith(".local"):
+        return True
+    try:
+        ip = ipaddress.ip_address(lower)
+    except ValueError:
+        return False
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+# 校验代理目标 URL，阻止非 http(s) 与私网/本地访问。
+def _validate_proxy_target_url(upstream_url: str) -> None:
+    parsed = urlparse(upstream_url)
+    if parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=400, detail="Only http/https targets are allowed")
+    if not parsed.hostname:
+        raise HTTPException(status_code=400, detail="Target host is missing")
+    if not PROXY_ALLOW_PRIVATE_HOSTS and _is_private_host(parsed.hostname):
+        raise HTTPException(status_code=403, detail="Target host is not allowed")
 # 构建上游 URL 的函数，支持协议补全和查询参数拼接
 def _build_proxy_target_url(target_url: str, query: str) -> str:
     normalized_target = str(target_url or "").strip().lstrip("/")
@@ -83,6 +130,7 @@ def _build_proxy_target_url(target_url: str, query: str) -> str:
         glue = "&" if "?" in upstream_url else "?"
         upstream_url = f"{upstream_url}{glue}{compact_query}"
 
+    _validate_proxy_target_url(upstream_url)
     return upstream_url
 # 构建代理请求头的函数，保留关键头部以增强兼容性，同时使用默认值确保基本功能。
 def _build_proxy_request_headers(request: Request) -> Dict[str, str]:

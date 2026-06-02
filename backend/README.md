@@ -22,7 +22,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 
-## 0. 项目结构（2026-05-22 校验）
+## 0. 项目结构（2026-06-02 校验）
 
 ```text
 backend/                                           
@@ -246,6 +246,10 @@ Agent 对话可选配置：
 - AGENT_MODEL=deepseek-V3-0324
 - AGENT_CHAT_GUEST_DAILY_QUOTA=10
 - AGENT_CHAT_REGISTERED_DAILY_QUOTA=100
+
+代理安全可选配置：
+- PROXY_VERIFY_SSL=true
+- PROXY_ALLOW_PRIVATE_HOSTS=false
 
 示例（.env）：
 ```bash
