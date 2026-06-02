@@ -3,6 +3,7 @@ FastAPI 依赖注入：require_login、require_api_access、require_admin。
 """
 
 import asyncio
+import logging
 import secrets
 from datetime import timedelta
 from typing import Any, Dict
@@ -25,6 +26,8 @@ from .quota import _consume_api_quota_sync
 from .schema import init_auth_storage
 from .session import _create_session_sync, _get_session_sync
 from .user import _get_or_create_guest_username_sync
+
+logger = logging.getLogger(__name__)
 
 
 async def _build_temporary_guest_session_async(request: Request) -> Dict[str, Any]:
@@ -58,7 +61,14 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
 
 
 async def require_login(request: Request) -> Dict[str, Any]:
-    await init_auth_storage()
+    try:
+        await init_auth_storage()
+    except Exception as e:
+        logger.error("require_login: 数据库初始化失败: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="数据库服务暂时不可用，请稍后重试",
+        )
 
     token = _extract_token(request)
     if not token:
@@ -70,7 +80,15 @@ async def require_login(request: Request) -> Dict[str, Any]:
             detail="请先登录后再访问",
         )
 
-    session = await asyncio.to_thread(_get_session_sync, token)
+    try:
+        session = await asyncio.to_thread(_get_session_sync, token)
+    except Exception as e:
+        logger.error("require_login: 会话查询失败: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="会话验证失败，请重新登录",
+        )
+
     if session is None:
         if _is_guest_allow_request(request):
             return await _build_temporary_guest_session_async(request)

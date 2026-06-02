@@ -12,6 +12,82 @@ logger = logging.getLogger(__name__)
 _auth_storage_lock = asyncio.Lock()
 
 
+def _rebuild_guest_identity_records_table(conn) -> None:
+    """
+    重建 guest_identity_records 表以添加 id PRIMARY KEY 列。
+    SQLite 不支持 ALTER TABLE ADD COLUMN ... PRIMARY KEY，必须通过重建表实现。
+
+    使用显式事务控制：成功则 COMMIT，失败则 ROLLBACK 保证原表安全。
+    """
+    # 1. 检查旧表是否存在
+    old_table = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='guest_identity_records'"
+    ).fetchone()
+    if old_table is None:
+        return
+
+    try:
+        # 2. 清理可能的残留临时表，然后创建新表（带 id 列）
+        conn.execute("DROP TABLE IF EXISTS guest_identity_records_new")
+        conn.execute("""
+            CREATE TABLE guest_identity_records_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guest_uid TEXT UNIQUE NOT NULL,
+                username TEXT NOT NULL DEFAULT 'user',
+                role TEXT NOT NULL DEFAULT 'guest',
+                guest_device_id TEXT,
+                ip TEXT,
+                coord_source TEXT NOT NULL DEFAULT 'unknown',
+                geo_permission TEXT NOT NULL DEFAULT 'unknown',
+                encoded_pos TEXT NOT NULL DEFAULT '0',
+                last_latitude REAL,
+                last_longitude REAL,
+                user_agent TEXT,
+                visit_count INTEGER NOT NULL DEFAULT 0,
+                first_seen_at TEXT NOT NULL DEFAULT '',
+                last_seen_at TEXT NOT NULL DEFAULT ''
+            )
+        """)
+
+        # 3. 迁移数据（从旧表读取可用列）
+        old_columns_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()
+        old_column_names = [str(dict(row).get("name") or "") for row in old_columns_rows]
+
+        # 新表的目标列（不含 id，它是自增的）
+        new_columns = [
+            "guest_uid", "username", "role", "guest_device_id", "ip",
+            "coord_source", "geo_permission", "encoded_pos",
+            "last_latitude", "last_longitude", "user_agent",
+            "visit_count", "first_seen_at", "last_seen_at",
+        ]
+        # 只选择旧表中实际存在的列
+        common_columns = [c for c in new_columns if c in old_column_names]
+
+        if common_columns:
+            col_list = ", ".join(common_columns)
+            conn.execute(f"""
+                INSERT INTO guest_identity_records_new ({col_list})
+                SELECT {col_list} FROM guest_identity_records
+            """)
+
+        # 4. 替换旧表
+        conn.execute("DROP TABLE guest_identity_records")
+        conn.execute("ALTER TABLE guest_identity_records_new RENAME TO guest_identity_records")
+        conn.commit()
+        logger.info("guest_identity_records 表重建迁移完成")
+    except Exception as e:
+        logger.error("guest_identity_records 表重建失败，已回滚: %s", str(e))
+        # 回滚所有变更，恢复原表
+        conn.rollback()
+        # 清理可能残留的临时表（在新事务中）
+        try:
+            conn.execute("DROP TABLE IF EXISTS guest_identity_records_new")
+            conn.commit()
+        except Exception:
+            pass
+        raise
+
+
 def _init_auth_storage_sync() -> None:
     """
     幂等数据库初始化与迁移。
@@ -181,7 +257,7 @@ def _init_auth_storage_sync() -> None:
             CREATE TABLE IF NOT EXISTS guest_identity_records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guest_uid TEXT UNIQUE NOT NULL,
-                username TEXT NOT NULL,
+                username TEXT NOT NULL DEFAULT 'user',
                 role TEXT NOT NULL DEFAULT 'guest',
                 guest_device_id TEXT,
                 ip TEXT,
@@ -192,14 +268,20 @@ def _init_auth_storage_sync() -> None:
                 last_longitude REAL,
                 user_agent TEXT,
                 visit_count INTEGER NOT NULL DEFAULT 0,
-                first_seen_at TEXT NOT NULL,
-                last_seen_at TEXT NOT NULL
+                first_seen_at TEXT NOT NULL DEFAULT '',
+                last_seen_at TEXT NOT NULL DEFAULT ''
             )
         """)
         guest_identity_column_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()
         guest_identity_columns = {str(dict(row).get("name") or "") for row in guest_identity_column_rows}
+        # 注意：SQLite 不支持通过 ALTER TABLE 添加 PRIMARY KEY 列。
+        # 如果旧表缺少 id 列，需要用重建表的方式迁移。
         if "id" not in guest_identity_columns:
-            _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN id INTEGER")
+            logger.info("guest_identity_records 缺少 id 列，执行表重建迁移...")
+            _rebuild_guest_identity_records_table(conn)
+            # 重建后重新读取列信息
+            guest_identity_column_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()
+            guest_identity_columns = {str(dict(row).get("name") or "") for row in guest_identity_column_rows}
         if "username" not in guest_identity_columns:
             _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN username TEXT NOT NULL DEFAULT 'user'")
         if "role" not in guest_identity_columns:
@@ -316,6 +398,10 @@ async def init_auth_storage() -> None:
         if _db_module._auth_storage_ready:
             return
 
-        await asyncio.to_thread(_init_auth_storage_sync)
-        _db_module._auth_storage_ready = True
-        logger.info("认证存储已初始化: %s", str(AUTH_DB_PATH))
+        try:
+            await asyncio.to_thread(_init_auth_storage_sync)
+            _db_module._auth_storage_ready = True
+            logger.info("认证存储已初始化: %s", str(AUTH_DB_PATH))
+        except Exception as e:
+            logger.error("认证存储初始化失败 (path=%s): %s", str(AUTH_DB_PATH), str(e), exc_info=True)
+            raise

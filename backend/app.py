@@ -60,12 +60,34 @@ async def lifespan(app: FastAPI):
     """
     # ---- Startup ----
     logger.info("WebGIS Backend 启动...")
+    app.state.startup_error = None
     app.state.log_stream_mode = init_monitor_log_streaming()
-    await init_auth_storage()
-    init_download_task_db()
-    app.state.task_scheduler = start_task_cleanup_scheduler()
+
+    try:
+        await init_auth_storage()
+        logger.info("认证存储初始化成功")
+    except Exception as e:
+        logger.error("认证存储初始化失败: %s", str(e), exc_info=True)
+        app.state.startup_error = f"数据库初始化失败: {str(e)}"
+
+    try:
+        init_download_task_db()
+    except Exception as e:
+        logger.error("下载任务数据库初始化失败: %s", str(e), exc_info=True)
+
+    try:
+        app.state.task_scheduler = start_task_cleanup_scheduler()
+    except Exception as e:
+        logger.error("任务调度器启动失败: %s", str(e), exc_info=True)
+
     app.state.http_client = build_http_client()
     logger.info("HTTP 客户端初始化完成")
+
+    if app.state.startup_error:
+        logger.warning("应用以降级模式启动: %s", app.state.startup_error)
+    else:
+        logger.info("WebGIS Backend 启动完成")
+
     yield
     # ---- Shutdown ----
     logger.info("WebGIS Backend 关闭...")
@@ -113,16 +135,50 @@ app.add_middleware(
 #     allow_headers=["*"],
 # )
 
+# ==================== 启动状态检查中间件 ====================
+
+
+@app.middleware("http")
+async def check_startup_state(request: Request, call_next):
+    """如果数据库初始化失败，对非健康检查端点返回 503。"""
+    if getattr(request.app.state, "startup_error", None):
+        # 健康检查、API 文档和信息服务不受影响
+        allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info"}
+        if request.url.path not in allowlist:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "code": 503,
+                    "message": "服务降级：数据库未就绪",
+                    "detail": request.app.state.startup_error,
+                    "data": None,
+                },
+            )
+    return await call_next(request)
+
+
 # ==================== 全局异常处理器 ====================
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """捕获所有未处理的异常，返回统一错误响应格式"""
-    logger.error(f"未处理异常 [{request.method} {request.url.path}]: {exc}", exc_info=True)
+    error_type = type(exc).__name__
+    error_detail = str(exc)[:500]
+    logger.error(
+        "未处理异常 [%s %s]: %s: %s",
+        request.method, request.url.path, error_type, error_detail,
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=500,
-        content={"code": 500, "message": "内部服务器错误", "data": None},
+        content={
+            "code": 500,
+            "message": "内部服务器错误",
+            "error_type": error_type,
+            "detail": error_detail,
+            "data": None,
+        },
     )
 
 

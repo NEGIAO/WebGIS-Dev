@@ -17,6 +17,7 @@ def _default_auth_db_path() -> Path:
     """默认路径策略：HF 使用 /data；本地开发优先项目 data 目录。"""
     space_id = str(os.getenv("SPACE_ID") or os.getenv("HF_SPACE_ID") or "").strip()
     if space_id:
+        logger.info("检测到 HuggingFace Space 环境 (SPACE_ID=%s)，使用 /data/webgis_auth.db", space_id)
         return Path("/data/webgis_auth.db")
 
     if os.name != "nt":
@@ -36,15 +37,22 @@ def _resolve_auth_db_path() -> Path:
 
     try:
         preferred.parent.mkdir(parents=True, exist_ok=True)
+        # 验证目录可写
+        test_file = preferred.parent / ".write_test"
+        test_file.touch()
+        test_file.unlink()
+        logger.info("数据库路径解析成功: %s", str(preferred))
         return preferred
-    except Exception:
+    except Exception as e:
+        logger.warning("AUTH_DB_PATH (%s) 不可写: %s，尝试回退...", str(preferred), str(e))
         fallback = Path.cwd() / "data" / preferred.name
-        fallback.parent.mkdir(parents=True, exist_ok=True)
-        logger.warning(
-            "AUTH_DB_PATH 不可写，已回退到本地路径: %s",
-            str(fallback),
-        )
-        return fallback
+        try:
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            logger.info("已回退到本地路径: %s", str(fallback))
+            return fallback
+        except Exception as e2:
+            logger.error("回退路径也不可用: %s，使用 /tmp 兜底", str(e2))
+            return Path("/tmp") / preferred.name
 
 
 AUTH_DB_PATH = _resolve_auth_db_path()
@@ -52,9 +60,18 @@ _auth_storage_ready = False
 
 # ─── 连接工厂 ───
 def _db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(AUTH_DB_PATH), timeout=10, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """创建数据库连接。每次调用创建新连接，支持多线程并发访问。"""
+    try:
+        conn = sqlite3.connect(str(AUTH_DB_PATH), timeout=15, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        # 启用 WAL 模式（每次连接设置，确保一致）
+        conn.execute("PRAGMA journal_mode=WAL;")
+        # 启用外键约束
+        conn.execute("PRAGMA foreign_keys=ON;")
+        return conn
+    except Exception as e:
+        logger.error("数据库连接失败 (path=%s): %s", str(AUTH_DB_PATH), str(e))
+        raise
 
 
 def get_auth_db_connection() -> sqlite3.Connection:

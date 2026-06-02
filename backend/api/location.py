@@ -24,6 +24,8 @@ from api.auth import (
 
 logger = logging.getLogger(__name__)
 
+_visit_tracking_table_ready = False
+
 
 async def require_api_access_optional(request: Request) -> Optional[Dict[str, Any]]:
     """
@@ -453,33 +455,35 @@ async def track_visit(
         city = province = country = None
     
     # 尝试保存到数据库
-    user_id = current_user.get("id") if current_user else None
+    global _visit_tracking_table_ready
+    username = str(current_user.get("username") or "") if current_user else ""
     conn = None
     try:
         conn = get_auth_db_connection()
         cursor = conn.cursor()
 
-        # 创建表（如果不存在）
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS visit_tracking (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ip VARCHAR(50) NOT NULL,
-                city VARCHAR(100),
-                province VARCHAR(100),
-                country VARCHAR(100),
-                user_agent TEXT,
-                referrer TEXT,
-                user_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        """)
+        # 创建表（如果不存在），使用模块级标志避免每次请求执行 DDL
+        if not _visit_tracking_table_ready:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS visit_tracking (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ip VARCHAR(50) NOT NULL,
+                    city VARCHAR(100),
+                    province VARCHAR(100),
+                    country VARCHAR(100),
+                    user_agent TEXT,
+                    referrer TEXT,
+                    username TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            _visit_tracking_table_ready = True
 
         # 插入记录
         cursor.execute("""
-            INSERT INTO visit_tracking (ip, city, province, country, user_agent, referrer, user_id)
+            INSERT INTO visit_tracking (ip, city, province, country, user_agent, referrer, username)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (ip, city, province, country, request_data.user_agent[:500], request_data.referrer[:500], user_id))
+        """, (ip, city, province, country, request_data.user_agent[:500], request_data.referrer[:500], username or None))
 
         conn.commit()
 

@@ -58,6 +58,15 @@ def _get_api_key_from_db_sync(key_name: str) -> Optional[str]:
     """从数据库获取 API 密钥"""
     try:
         with get_auth_db_connection() as conn:
+            # 确保 api_keys 表存在（可能尚未被 agent_chat 模块初始化）
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS api_keys (
+                    key_name TEXT PRIMARY KEY,
+                    key_value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    updated_by TEXT
+                )
+            """)
             row = conn.execute(
                 "SELECT key_value FROM api_keys WHERE key_name = ?",
                 (key_name,)
