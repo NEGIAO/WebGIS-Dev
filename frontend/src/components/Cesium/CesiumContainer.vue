@@ -116,7 +116,7 @@
 // Terrain and label providers are registered after Cesium is available.
 import { onMounted, onUnmounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
-import { showLoading, hideLoading } from '../../utils/loading';
+import { showLoading, hideLoading } from '../../utils/ui/loading';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import Wind2D from './Wind2D';
 import createGeoTerrainProvider from './terrain/GeoTerrainProvider';

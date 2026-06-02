@@ -258,8 +258,8 @@ import {
     apiAgentListModels,
     apiAgentSaveModelPreference,
 } from '../../api/backend';
-import { readUserPositionFromCache } from '../../utils/userPositionCache';
-import { getGlobalUserLocationContext } from '../../utils/userLocationContext';
+import { readUserPositionFromCache } from '../../services/userPositionCache';
+import { getGlobalUserLocationContext } from '../../services/userLocationContext';
 import { useMessage } from '../../composables/useMessage';
 import { Bot as BotIcon } from 'lucide-vue-next';
 

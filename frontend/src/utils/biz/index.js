@@ -27,7 +27,7 @@ export {
     validateLabels,
 } from '../labelValidator';
 
-export { decodePos, encodePos } from '../urlCrypto';
+export { decodePos, encodePos } from '../url/crypto';
 
 export { parseAmapRectangleToExtent } from '../amapRectangle';
 
@@ -36,6 +36,6 @@ export {
     setGlobalUserLocationContext,
     clearGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
-} from '../userLocationContext';
+} from '../../services/userLocationContext';
 
-export { saveUserPositionToCache, readUserPositionFromCache } from '../userPositionCache';
+export { saveUserPositionToCache, readUserPositionFromCache } from '../../services/userPositionCache';

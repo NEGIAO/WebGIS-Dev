@@ -235,7 +235,7 @@ import {
     injectPositionCodeToPath,
     peekPersistedPositionCode,
     setAuthSession,
-} from '../utils/auth';
+} from '../services/auth';
 
 const router = useRouter();
 const route = useRoute();

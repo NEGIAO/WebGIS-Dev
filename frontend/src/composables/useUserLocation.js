@@ -4,8 +4,8 @@ import CircleGeom from 'ol/geom/Circle';
 import { fromLonLat } from 'ol/proj';
 import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationReverse } from '@/api';
 import { useMessage } from '@/composables/useMessage';
-import { saveUserPositionToCache } from '../utils/userPositionCache';
-import { setGlobalUserLocationContext } from '../utils/userLocationContext';
+import { saveUserPositionToCache } from '../services/userPositionCache';
+import { setGlobalUserLocationContext } from '../services/userLocationContext';
 
 const _TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 

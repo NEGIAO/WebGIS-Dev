@@ -11,7 +11,7 @@ import {
     getAuthToken,
     getOrCreateGuestDeviceId,
     readShareModeFromUrl,
-} from '../../utils/auth';
+} from '../../services/auth';
 
 /** 与 Vite 环境变量一致的后端根地址（无尾部斜杠），供 axios 与 SSE 等共用 */
 export const BACKEND_BASE_URL = String(

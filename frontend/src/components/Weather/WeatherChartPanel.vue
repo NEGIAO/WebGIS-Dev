@@ -316,7 +316,7 @@ import { apiAddressGeocode, apiReverseGeocodeWithFallback, apiWeather } from '..
 import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
-} from '../../utils/userLocationContext';
+} from '../../services/userLocationContext';
 import { useWeatherStore } from '../../stores';
 
 const message = useMessage();

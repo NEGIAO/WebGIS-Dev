@@ -542,7 +542,7 @@ import {
     handleLayerTreeContextAction,
 } from '../../composables/map/toc';
 import { useLayerStore, useAttrStore } from '../../stores';
-import { useStyleEditor } from '../../constants';
+import { useStyleEditor } from '../../composables/useStyleEditor';
 import {
     COORDINATE_FORMATS,
     DECIMAL_PLACES,

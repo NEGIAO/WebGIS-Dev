@@ -184,7 +184,7 @@ import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { useMessage } from '../../composables/useMessage';
 import { locationToAddress } from '../../api';
-import { showLoading, hideLoading } from '../../utils/loading';
+import { showLoading, hideLoading } from '../../utils/ui/loading';
 
 const message = useMessage();
 

@@ -230,6 +230,7 @@ WebGIS_Dev/
 │   │   │   ├── useMapState.js            # 地图状态（视图同步/经纬图层）
 │   │   │   ├── useMapSwipe.ts            # 卷帘核心逻辑
 │   │   │   ├── useMessage.js             # 全局消息提示
+│   │   │   ├── useStyleEditor.js         # 样式编辑器 composable
 │   │   │   ├── useTileSourceFactory.ts   # 瓦片源工厂 barrel re-export
 │   │   │   ├── tileSource/               # 瓦片源工厂拆分模块
 │   │   │   │   ├── types.ts              # 类型定义与常量
@@ -251,9 +252,15 @@ WebGIS_Dev/
 │   │   │   ├── index.js                  # barrel export
 │   │   │   └── mapStyles.js              # 地图样式常量
 │   │   ├── router/                       # Vue Router 路由
-│   │   ├── services/                     # 业务服务
-│   │   │   ├── CompassManager.ts         # 罗盘管理器
-│   │   │   └── DistrictManager.ts        # 行政区划管理器
+│   │   ├── services/                     # 业务服务层
+│   │   │   ├── auth.js                   # 鉴权服务（登录/注册/会话管理）
+│   │   │   ├── compass/                  # 罗盘服务模块
+│   │   │   │   ├── urlState.ts           # 罗盘 URL 状态读写
+│   │   │   │   └── index.js              # barrel export
+│   │   │   ├── CompassManager.ts         # 罗盘管理器（地图集成）
+│   │   │   ├── DistrictManager.ts        # 行政区划管理器
+│   │   │   ├── userLocationContext.js    # 用户定位上下文（全局状态）
+│   │   │   └── userPositionCache.js      # 用户位置缓存（localStorage）
 │   │   ├── stores/                       # Pinia 状态管理
 │   │   │   ├── layer/                    # 图层模块
 │   │   │   │   ├── layerHelpers.ts       # 图层工具函数
@@ -282,8 +289,13 @@ WebGIS_Dev/
 │   │   │   │   ├── shpPacketBuilder.js   # 浏览器文件 SHP 包构建
 │   │   │   │   ├── mapRuntimeDeps.js     # OL 运行时依赖
 │   │   │   │   └── ...
+│   │   │   ├── url/                      # URL 相关工具
+│   │   │   │   ├── crypto.js             # URL 编码解码（Base62）
+│   │   │   │   └── index.js              # barrel export
+│   │   │   ├── ui/                       # UI 相关工具
+│   │   │   │   ├── loading.js            # 全局加载动画
+│   │   │   │   └── index.js              # barrel export
 │   │   │   ├── normalize.ts              # 共享工具（normalizeBinaryFlag）
-│   │   │   ├── auth.js                   # 鉴权工具
 │   │   │   ├── coordTransform.js         # 坐标转换（GCJ-02/WGS84）
 │   │   │   ├── layerExportService.js     # 图层导出服务
 │   │   │   └── ...

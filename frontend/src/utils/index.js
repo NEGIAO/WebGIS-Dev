@@ -5,4 +5,4 @@ export * as bizUtils from './biz';
 export * from './geo';
 export * from './io';
 export * from './biz';
-export * from './loading';
+export * from './ui/loading';

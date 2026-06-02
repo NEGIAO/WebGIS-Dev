@@ -1,4 +1,4 @@
-import { decodeCompassState, encodeCompassState } from '../utils/urlCrypto';
+import { decodeCompassState, encodeCompassState } from '../../utils/url/crypto';
 
 export type CompassUrlPayload = {
     lng?: number | null;

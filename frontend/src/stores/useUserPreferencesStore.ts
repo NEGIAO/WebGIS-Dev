@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiAuthGetPreferences, apiAuthUpdatePreferences } from '../api/backend';
-import { getAuthToken } from '../utils/auth';
+import { getAuthToken } from '../services/auth';
 
 const USER_PREFERENCES_STORAGE_KEY = 'webgis_user_preferences_cache';
 export const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';

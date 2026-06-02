@@ -290,6 +290,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '../../constants';
+import { normalizeBinaryFlag } from '../../utils/normalize';
 // import { hideLoading, showLoading } from '@/utils';
 import {
     List as ListIcon,
@@ -491,15 +492,6 @@ function fallbackCopyViaExecCommand(text) {
     }
 }
 
-function normalizeBinaryFlag(value, fallback = '0') {
-    const text = String(value ?? '')
-        .trim()
-        .toLowerCase();
-    if (text === '1' || text === 'true') return '1';
-    if (text === '0' || text === 'false') return '0';
-    return fallback === '1' ? '1' : '0';
-}
-
 function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_LAYER_INDEX) {
     const parsed = Number(String(value ?? '').trim());
     if (Number.isInteger(parsed) && parsed >= 0) return String(parsed);
@@ -586,7 +578,7 @@ function buildShareMarkedUrl(rawHref) {
         const hashPath = hashPathRaw || '/home';
         const hashParams = new URLSearchParams(hashQueryRaw);
 
-        // 标记该链接来自“分享”入口，供启动流程识别。
+        // 标记该链接来自”分享”入口，供启动流程识别。
         hashParams.delete('from');
         hashParams.delete('shared');
         hashParams.set('s', '1');
@@ -600,6 +592,11 @@ function buildShareMarkedUrl(rawHref) {
             ),
         );
         hashParams.delete('layer');
+
+        // [Bug Fix] 保留罗盘参数 cs
+        // 问题背景：分享链接时会丢失罗盘参数，导致接收者无法看到罗盘状态
+        // 解决方案：保留原始 URL 中的 cs 参数
+        // 注意：cs 参数由 compassUrlState.ts 管理，这里只做透传
 
         const nextHashQuery = hashParams.toString();
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;

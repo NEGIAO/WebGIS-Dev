@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiAuthMe } from '../api/backend';
-import { clearAuthSession, getAuthToken } from '../utils/auth';
+import { clearAuthSession, getAuthToken } from '../services/auth';
 
 type AuthUser = {
     username?: string;

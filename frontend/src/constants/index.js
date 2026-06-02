@@ -1,3 +1,3 @@
 export * from './mapStyles';
 export * from './basemap';
-export * from './useStyleEditor';
+// useStyleEditor 已移至 composables/useStyleEditor.js

@@ -24,7 +24,7 @@ import { apiAddressGeocode } from '../api';
 import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
-} from '../utils/userLocationContext';
+} from '../services/userLocationContext';
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
 import { prioritizeTileSourceRequest } from './useTileSourceFactory';

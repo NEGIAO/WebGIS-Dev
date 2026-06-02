@@ -42,7 +42,8 @@ interface PendingParams {
  * @property loc: 定位授权标记 ('0' | '1')
  * @property p: 加密位置编码
  * @property ut: 用户类型（guest|admin|registered）
- * @property cs: 罗盘参数（加密字符串）
+ *
+ * 注意：罗盘参数 (cs) 由 compassUrlState.ts 独立管理，不在此接口中定义
  */
 interface QueryParams {
     lng?: string | number | null;
@@ -53,7 +54,6 @@ interface QueryParams {
     loc?: string | number | null;
     p?: string | null;
     ut?: string;
-    cs?: string;
 }
 
 // ====================== Store 实例 ======================

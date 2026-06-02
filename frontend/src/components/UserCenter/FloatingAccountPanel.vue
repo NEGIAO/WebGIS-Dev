@@ -13,7 +13,7 @@ import {
     apiStatisticsCenter,
     apiStatisticsRealtime,
 } from '../../api/backend';
-import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '../../utils/auth';
+import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '../../services/auth';
 import { BASEMAP_OPTIONS } from '../../constants';
 import { useUserPreferencesStore, useThemeStore } from '../../stores';
 

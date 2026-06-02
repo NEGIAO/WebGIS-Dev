@@ -155,7 +155,7 @@ import { reactive, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../../utils/driveXmlParser';
 import { locationToAddress } from '../../api';
-import { showLoading, hideLoading } from '../../utils/loading';
+import { showLoading, hideLoading } from '../../utils/ui/loading';
 
 interface ParsedRouteResult {
     distanceKm: string;

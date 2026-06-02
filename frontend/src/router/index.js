@@ -1,14 +1,14 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import RegisterView from '../views/RegisterView.vue';
 import { useAuthStore, useAppStore, useUrlParamStore } from '../stores';
-import { hideLoading, showLoading } from '../utils/loading';
+import { hideLoading, showLoading } from '../utils/ui/loading';
 import {
     persistPositionCode,
     persistPositionCodeFromUrl,
     readPositionCodeFromUrl,
     injectGuestTokenForShareMode,
     getAuthToken,
-} from '../utils/auth';
+} from '../services/auth';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
 

@@ -1,5 +1,5 @@
 import { getActivePinia } from 'pinia';
-import { useAppStore } from '../stores';
+import { useAppStore } from '../../stores';
 
 function resolveAppStore() {
     if (!getActivePinia()) return null;

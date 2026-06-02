@@ -20,7 +20,7 @@ import {
     useDownloadStore,
     useLayerStore,
 } from '../stores';
-import { showLoading, hideLoading } from '../utils/loading';
+import { showLoading, hideLoading } from '../utils/ui/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
 const { logMonitorVisible } = storeToRefs(useAppStore());

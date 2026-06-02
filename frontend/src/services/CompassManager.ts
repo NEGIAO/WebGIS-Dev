@@ -24,7 +24,7 @@ import { offset as offsetLonLat } from 'ol/sphere';
 import { unByKey } from 'ol/Observable';
 import type { useCompassStore } from '../stores/useCompassStore';
 import type { FengShuiCompassConfig, Layer } from '../components/feng-shui-compass-svg/types';
-import { readCompassUrlState, writeCompassUrlState } from './compassUrlState';
+import { readCompassUrlState, writeCompassUrlState } from './compass/urlState';
 
 type CompassStore = ReturnType<typeof useCompassStore>;
 
@@ -631,6 +631,11 @@ export class CompassManager {
      * 调度 URL 状态同步（防抖）
      * 将指南针位置信息写入 URL 参数，用于页面刷新时保持状态
      * 使用 120ms 防抖延迟避免频繁更新
+     *
+     * [Bug Fix] 只在罗盘启用时才写入 URL 参数
+     * 问题背景：默认情况下 syncFeatureGeometry() 会将地图中心设置为罗盘位置，
+     * 导致 URL 中默认就有 cs 参数。
+     * 解决方案：只有当 enabled=true 时才写入 URL 参数，否则删除 cs 参数。
      */
     private scheduleUrlSync(): void {
         if (typeof window === 'undefined') return;
@@ -642,11 +647,21 @@ export class CompassManager {
         this.urlSyncTimer = window.setTimeout(() => {
             this.urlSyncTimer = null;
 
-            writeCompassUrlState({
-                lng: Number(this.store.position?.lng),
-                lat: Number(this.store.position?.lat),
-                radius: Number(this.store.physicalRadiusMeters || 10000),
-            });
+            // 只在罗盘启用时才写入 URL 参数
+            if (this.store.enabled) {
+                writeCompassUrlState({
+                    lng: Number(this.store.position?.lng),
+                    lat: Number(this.store.position?.lat),
+                    radius: Number(this.store.physicalRadiusMeters || 10000),
+                });
+            } else {
+                // 罗盘未启用时，删除 URL 中的 cs 参数
+                writeCompassUrlState({
+                    lng: null,
+                    lat: null,
+                    radius: null,
+                });
+            }
         }, 120);
     }
 
