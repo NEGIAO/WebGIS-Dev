@@ -1,46 +1,8 @@
 import { ref } from 'vue';
+import { normalizePath, splitDirAndFile, resolveRelativePath } from '../utils/pathUtils.js';
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
 const IS_DEV = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV;
-
-function normalizePath(path) {
-    return String(path || '')
-        .replace(/\\/g, '/')
-        .replace(/^\.\//, '')
-        .trim();
-}
-
-function splitDirAndFile(path) {
-    const normalized = normalizePath(path);
-    const idx = normalized.lastIndexOf('/');
-    if (idx < 0) return { dir: '', file: normalized };
-    return {
-        dir: normalized.slice(0, idx),
-        file: normalized.slice(idx + 1),
-    };
-}
-
-function resolveRelativePath(basePath, relativePath) {
-    const rel = normalizePath(relativePath);
-    if (!rel || /^([a-z]+:)?\/\//i.test(rel) || rel.startsWith('data:') || rel.startsWith('#')) {
-        return rel;
-    }
-
-    const { dir } = splitDirAndFile(basePath);
-    const seed = dir ? `${dir}/${rel}` : rel;
-    const parts = seed.split('/');
-    const out = [];
-
-    for (const part of parts) {
-        if (!part || part === '.') continue;
-        if (part === '..') {
-            if (out.length) out.pop();
-            continue;
-        }
-        out.push(part);
-    }
-    return out.join('/');
-}
 
 function detectMimeType(path) {
     const lower = String(path || '').toLowerCase();

@@ -1,41 +1,4 @@
-function normalizePath(path) {
-    return String(path || '')
-        .replace(/\\/g, '/')
-        .replace(/^\.\//, '')
-        .trim();
-}
-
-function getExtension(path) {
-    const normalized = normalizePath(path).toLowerCase();
-    const idx = normalized.lastIndexOf('.');
-    if (idx < 0 || idx === normalized.length - 1) return '';
-    return normalized.slice(idx + 1);
-}
-
-function getStem(path) {
-    const normalized = normalizePath(path).toLowerCase();
-    const idx = normalized.lastIndexOf('.');
-    return idx > 0 ? normalized.slice(0, idx) : normalized;
-}
-
-function getDir(path) {
-    const normalized = normalizePath(path).toLowerCase();
-    const idx = normalized.lastIndexOf('/');
-    return idx > 0 ? normalized.slice(0, idx) : '';
-}
-
-function getBaseStem(path) {
-    const normalized = normalizePath(path).toLowerCase();
-    const base = normalized.split('/').pop() || normalized;
-    const idx = base.lastIndexOf('.');
-    return idx > 0 ? base.slice(0, idx) : base;
-}
-
-function makeShpGroupKey(path) {
-    const dir = getDir(path);
-    const stem = getBaseStem(path);
-    return dir ? `${dir}/${stem}` : stem;
-}
+import { normalizePath, getExtension, getStem, getBaseStem, makeShpGroupKey } from '../pathUtils.js';
 
 export function buildResourcePool(entries = []) {
     const pool = new Map();

@@ -1,3 +1,9 @@
+/**
+ * 地理工具 barrel — 仅聚合 CRS（坐标参考系统）相关模块
+ *
+ * 包含：坐标转换（GCJ-02/WGS-84）、CRS 检测、投影注册、重投影
+ */
+
 export { gcj02ToWgs84, wgs84ToGcj02 } from '../coordTransform';
 
 export {
@@ -24,16 +30,3 @@ export {
     precheckArchiveCrs,
     resolveProjectionOrDefault,
 } from '../gis/crsAware';
-
-export { parseAmapAoiPayload, extractAmapPoiId } from '../gis/parsers/amapAoiParser';
-
-export { parseDriveRouteXml, parseAndDrawDriveRoute } from '../driveXmlParser';
-
-export { drawTransitRoute } from '../drawTransitRoute';
-
-export {
-    buildBusRouteRenderData,
-    buildDriveRouteRenderData,
-    buildRouteRenderData,
-    fitExtentToCoverage,
-} from '../transitRouteBuilder';

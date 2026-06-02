@@ -1,6 +1,6 @@
 import { h, reactive, render, readonly } from 'vue';
 import Message from '../components/Shell/Message.vue';
-import { GOLDEN_SOUP_QUOTES } from '../constants/goldenSoupQuotes';
+import { GOLDEN_SOUP_QUOTES } from '../data/goldenSoupQuotes';
 
 const MAX_VISIBLE = 3;
 //默认持续时间，单位毫秒

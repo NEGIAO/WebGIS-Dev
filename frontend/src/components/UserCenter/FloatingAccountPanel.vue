@@ -19,6 +19,9 @@ import { useUserPreferencesStore, useThemeStore } from '../../stores';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
+const OverviewTab = defineAsyncComponent(() => import('./tabs/OverviewTab.vue'));
+const SecurityTab = defineAsyncComponent(() => import('./tabs/SecurityTab.vue'));
+const PreferencesTab = defineAsyncComponent(() => import('./tabs/PreferencesTab.vue'));
 
 const router = useRouter();
 const message = useMessage();
@@ -73,16 +76,12 @@ const centerData = ref({
     messages: [],
 });
 
-const newMessageText = ref('');
-
-// Password Form
-const currentPassword = ref('');
-const nextPassword = ref('');
-const confirmPassword = ref('');
-
 // Avatar Management
 const selectedAvatarIndex = ref(0);
 const avatarSaving = ref(false);
+
+// Ref to SecurityTab component for form reset
+const securityTabRef = ref(null);
 
 const preferenceDraft = ref({
     default_basemap: '',
@@ -124,10 +123,6 @@ const userAvatarIndex = computed(() => {
 const userAvatarSrc = computed(() => {
     return resolvePublicAssetPath(`avatars/avatar-${userAvatarIndex.value}.svg`);
 });
-
-const getAvatarSrc = (avatarIndex) => {
-    return resolvePublicAssetPath(`avatars/avatar-${avatarIndex}.svg`);
-};
 
 const roleText = computed(() => {
     const role = String(user.value?.role || '').trim();
@@ -185,26 +180,6 @@ function formatDuration(totalSeconds) {
         return `${minute}分钟 ${second}秒`;
     }
     return `${second}秒`;
-}
-
-function formatDateTime(value) {
-    const raw = String(value || '').trim();
-    if (!raw) return '-';
-
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) {
-        return raw;
-    }
-
-    return parsed.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
 }
 
 async function syncCurrentUser() {
@@ -436,9 +411,7 @@ async function handleSavePreferences() {
 }
 
 function resetPasswordForm() {
-    currentPassword.value = '';
-    nextPassword.value = '';
-    confirmPassword.value = '';
+    securityTabRef.value?.resetForm();
 }
 
 function handleDocumentClick(event) {
@@ -479,32 +452,25 @@ async function handleLogout() {
     await forceBackToLogin('已退出登录');
 }
 
-async function handleChangePassword() {
+async function handleChangePassword(payload) {
     if (isSubmitting.value) return;
 
-    const oldPass = String(currentPassword.value || '').trim();
-    const newPass = String(nextPassword.value || '').trim();
-    const confirmPass = String(confirmPassword.value || '').trim();
+    // Handle validation errors emitted from SecurityTab
+    if (payload?.error) {
+        message.error(payload.error);
+        return;
+    }
 
-    if (!oldPass || !newPass || !confirmPass) {
+    const { oldPassword, newPassword } = payload || {};
+    if (!oldPassword || !newPassword) {
         message.error('请完整填写密码信息');
-        return;
-    }
-
-    if (newPass !== confirmPass) {
-        message.error('两次输入的新密码不一致');
-        return;
-    }
-
-    if (newPass.length < 6) {
-        message.error('新密码长度至少为 6 位');
         return;
     }
 
     isSubmitting.value = true;
 
     try {
-        await apiAuthChangePassword(oldPass, newPass);
+        await apiAuthChangePassword(oldPassword, newPassword);
         resetPasswordForm();
         await forceBackToLogin('密码已修改，请重新登录');
     } catch (error) {
@@ -542,10 +508,9 @@ async function handleSaveAvatar() {
     }
 }
 
-async function handleSubmitUserMessage() {
+async function handleSubmitUserMessage(content) {
     if (isPostingMessage.value) return;
 
-    const content = String(newMessageText.value || '').trim();
     if (!content) {
         message.warning('留言内容不能为空');
         return;
@@ -554,7 +519,6 @@ async function handleSubmitUserMessage() {
     isPostingMessage.value = true;
     try {
         await apiCreateUserMessage(content);
-        newMessageText.value = '';
         message.success('留言已发布');
         await refreshMessages();
         await refreshRealtimeData({ silent: true });
@@ -719,218 +683,30 @@ onBeforeUnmount(() => {
                         name="fade-slide"
                         mode="out-in"
                     >
-                        <div
+                        <!-- View 1: Overview -->
+                        <OverviewTab
                             v-if="activeMenu === 'overview'"
                             key="overview"
-                            class="view-content overview-view"
-                        >
-                            <div class="info-card">
-                                <div class="info-row">
-                                    <span class="info-label">注册时间</span>
-                                    <span class="info-value">{{
-                                        formatDateTime(selfStats.registered_at)
-                                    }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">上次登录</span>
-                                    <span class="info-value">{{
-                                        formatDateTime(selfStats.last_login_at)
-                                    }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">本次在线时长</span>
-                                    <span class="info-value">{{ sessionDurationText }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">当前 API 配额</span>
-                                    <span class="info-value">{{ quotaText }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">当前状态</span>
-                                    <span class="info-value text-success">
-                                        <i class="fas fa-circle active-dot"></i> 在线
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="stats-grid">
-                                <div class="stat-box">
-                                    <i class="fas fa-sign-in-alt stat-icon"></i>
-                                    <span class="stat-num">{{ selfStats.login_count || 0 }}</span>
-                                    <span class="stat-name">登录次数</span>
-                                </div>
-                                <div class="stat-box">
-                                    <i class="fas fa-chart-line stat-icon"></i>
-                                    <span class="stat-num">{{
-                                        selfStats.total_visit_count || 0
-                                    }}</span>
-                                    <span class="stat-name">访问次数</span>
-                                </div>
-                                <div class="stat-box">
-                                    <i class="fas fa-bolt stat-icon"></i>
-                                    <span class="stat-num">{{
-                                        selfStats.total_api_calls || 0
-                                    }}</span>
-                                    <span class="stat-name">API 调用</span>
-                                </div>
-                            </div>
-
-                            <div class="info-card account-extra-card">
-                                <div class="info-row">
-                                    <span class="info-label">全站在线用户</span>
-                                    <span class="info-value">{{
-                                        realtimeStats.online_users || 0
-                                    }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">全站总浏览量</span>
-                                    <span class="info-value">{{
-                                        realtimeStats.total_visit_count || 0
-                                    }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">全站总 API 调用</span>
-                                    <span class="info-value">{{
-                                        realtimeStats.total_api_calls || 0
-                                    }}</span>
-                                </div>
-                                <div class="info-row">
-                                    <span class="info-label">注册用户总数</span>
-                                    <span class="info-value">{{
-                                        realtimeStats.total_registered_users || 0
-                                    }}</span>
-                                </div>
-                            </div>
-
-                            <div class="info-card account-extra-card">
-                                <div class="info-row">
-                                    <span class="info-label">管理员联系方式</span>
-                                    <span class="info-value break-text">{{
-                                        adminContact || '未配置'
-                                    }}</span>
-                                </div>
-                            </div>
-
-                            <div class="info-card account-extra-card">
-                                <div class="compose-title">用户留言</div>
-                                <textarea
-                                    v-model="newMessageText"
-                                    class="user-message-input"
-                                    placeholder="请输入你的建议或反馈，发布后所有用户都能看到"
-                                ></textarea>
-                                <button
-                                    class="btn-primary w-100"
-                                    type="button"
-                                    :disabled="isPostingMessage"
-                                    @click="handleSubmitUserMessage"
-                                >
-                                    <i
-                                        class="fas"
-                                        :class="
-                                            isPostingMessage
-                                                ? 'fa-spinner fa-spin'
-                                                : 'fa-paper-plane'
-                                        "
-                                    ></i>
-                                    {{ isPostingMessage ? '发布中...' : '发布留言' }}
-                                </button>
-
-                                <div class="message-list">
-                                    <div
-                                        v-if="recentMessages.length === 0"
-                                        class="message-empty"
-                                    >
-                                        暂无留言
-                                    </div>
-                                    <div
-                                        v-for="item in recentMessages"
-                                        :key="item.id"
-                                        class="message-item"
-                                    >
-                                        <div class="message-item-meta">
-                                            <span class="message-author">{{
-                                                item.username || '匿名'
-                                            }}</span>
-                                            <span class="message-time">{{
-                                                formatDateTime(item.created_at)
-                                            }}</span>
-                                        </div>
-                                        <div class="message-item-content">{{ item.content }}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                            :self-stats="selfStats"
+                            :quota-info="quotaInfo"
+                            :realtime-stats="realtimeStats"
+                            :admin-contact="adminContact"
+                            :recent-messages="recentMessages"
+                            :quota-text="quotaText"
+                            :session-duration-text="sessionDurationText"
+                            :is-posting-message="isPostingMessage"
+                            @submit-message="handleSubmitUserMessage"
+                        />
 
                         <!-- View 2: Security -->
-                        <div
+                        <SecurityTab
                             v-else-if="activeMenu === 'security'"
                             key="security"
-                            class="view-content security-view"
-                        >
-                            <div
-                                v-if="user?.role === 'guest'"
-                                class="guest-warning"
-                            >
-                                <i class="fas fa-exclamation-triangle"></i>
-                                <p>游客账号不支持修改密码，请注册正式账号享受完整功能。</p>
-                            </div>
-                            <div
-                                v-else-if="user?.role === 'admin'"
-                                class="guest-warning"
-                            >
-                                <i class="fas fa-user-shield"></i>
-                                <p>
-                                    管理员密码优先由 SUPER_USER 控制（本地未配置时默认
-                                    123456），不支持在线修改。
-                                </p>
-                            </div>
-                            <div
-                                v-else
-                                class="password-form-container"
-                            >
-                                <h4 class="section-title">修改密码</h4>
-                                <div class="modern-input-group">
-                                    <i class="fas fa-lock input-icon"></i>
-                                    <input
-                                        v-model="currentPassword"
-                                        type="password"
-                                        autocomplete="current-password"
-                                        placeholder="当前密码"
-                                    />
-                                </div>
-                                <div class="modern-input-group">
-                                    <i class="fas fa-key input-icon"></i>
-                                    <input
-                                        v-model="nextPassword"
-                                        type="password"
-                                        autocomplete="new-password"
-                                        placeholder="新密码 (至少6位)"
-                                    />
-                                </div>
-                                <div class="modern-input-group">
-                                    <i class="fas fa-check-double input-icon"></i>
-                                    <input
-                                        v-model="confirmPassword"
-                                        type="password"
-                                        autocomplete="new-password"
-                                        placeholder="确认新密码"
-                                    />
-                                </div>
-
-                                <button
-                                    class="btn-primary w-100"
-                                    type="button"
-                                    :disabled="isSubmitting"
-                                    @click="handleChangePassword"
-                                >
-                                    <i
-                                        class="fas"
-                                        :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'"
-                                    ></i>
-                                    {{ isSubmitting ? '正在提交...' : '保存新密码' }}
-                                </button>
-                            </div>
-                        </div>
+                            ref="securityTabRef"
+                            :user="user"
+                            :is-submitting="isSubmitting"
+                            @change-password="handleChangePassword"
+                        />
 
                         <!-- View 3: Admin -->
                         <div
@@ -951,178 +727,23 @@ onBeforeUnmount(() => {
                         </div>
 
                         <!-- View 5: Preferences -->
-                        <div
+                        <PreferencesTab
                             v-else-if="activeMenu === 'preferences'"
                             key="preferences"
-                            class="view-content prefs-view"
-                        >
-                            <div class="pref-list">
-                                <div class="pref-item">
-                                    <div class="pref-info">
-                                        <span class="pref-title"
-                                            ><i class="fas fa-map"></i> 默认底图</span
-                                        >
-                                        <span class="pref-desc">刷新后自动应用当前选择的底图</span>
-                                    </div>
-                                    <select
-                                        v-model="preferenceDraft.default_basemap"
-                                        class="pref-select"
-                                    >
-                                        <option value="">跟随系统默认</option>
-                                        <option
-                                            v-for="option in basemapPreferenceOptions"
-                                            :key="option.value"
-                                            :value="option.value"
-                                        >
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="pref-item">
-                                    <div class="pref-info">
-                                        <span class="pref-title"
-                                            ><i class="fas fa-language"></i> 界面语言</span
-                                        >
-                                        <span class="pref-desc">设置账号默认语言偏好</span>
-                                    </div>
-                                    <select
-                                        v-model="preferenceDraft.language"
-                                        class="pref-select"
-                                    >
-                                        <option value="zh-CN">简体中文</option>
-                                        <option value="en-US">English</option>
-                                    </select>
-                                </div>
-
-                                <div class="pref-item">
-                                    <div class="pref-info">
-                                        <span class="pref-title"
-                                            ><i class="fas fa-ruler-combined"></i> 单位制</span
-                                        >
-                                        <span class="pref-desc">控制距离等数值默认单位</span>
-                                    </div>
-                                    <select
-                                        v-model="preferenceDraft.unit_system"
-                                        class="pref-select"
-                                    >
-                                        <option value="metric">公制 (km / m)</option>
-                                        <option value="imperial">英制 (mi / ft)</option>
-                                    </select>
-                                </div>
-
-                                <div class="pref-item">
-                                    <div class="pref-info">
-                                        <span class="pref-title"
-                                            ><i class="fas fa-robot"></i> 偏好 Agent 模型</span
-                                        >
-                                        <span class="pref-desc"
-                                            >设置后将锁定优先使用该模型（若可用）</span
-                                        >
-                                    </div>
-                                    <select
-                                        v-model="preferenceDraft.preferred_agent_model"
-                                        class="pref-select"
-                                    >
-                                        <option value="">自动调度（后端随机）</option>
-                                        <option
-                                            v-for="modelId in preferenceModelOptions"
-                                            :key="modelId"
-                                            :value="modelId"
-                                        >
-                                            {{ modelId }}
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <!-- 主题切换 -->
-                                <div class="pref-item">
-                                    <div class="pref-info">
-                                        <span class="pref-title"
-                                            ><i class="fas fa-palette"></i> 主题风格</span
-                                        >
-                                        <span class="pref-desc">选择界面主题色调</span>
-                                    </div>
-                                </div>
-                                <div class="theme-grid">
-                                    <div
-                                        class="theme-option"
-                                        :class="{ selected: themeStore.theme === 'default' }"
-                                        @click="themeStore.setTheme('default')"
-                                    >
-                                        <div
-                                            class="theme-preview"
-                                            style="background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark))"
-                                        ></div>
-                                        <span class="theme-label">默认绿</span>
-                                    </div>
-                                    <div
-                                        class="theme-option"
-                                        :class="{ selected: themeStore.theme === 'blue' }"
-                                        @click="themeStore.setTheme('blue')"
-                                    >
-                                        <div
-                                            class="theme-preview"
-                                            style="background: linear-gradient(135deg, #1976d2, #0d47a1)"
-                                        ></div>
-                                        <span class="theme-label">海洋蓝</span>
-                                    </div>
-                                </div>
-
-                                <button
-                                    class="btn-primary w-100"
-                                    type="button"
-                                    :disabled="preferenceSaving"
-                                    @click="handleSavePreferences"
-                                >
-                                    <i
-                                        class="fas"
-                                        :class="preferenceSaving ? 'fa-spinner fa-spin' : 'fa-save'"
-                                    ></i>
-                                    {{ preferenceSaving ? '保存中...' : '保存偏好设置' }}
-                                </button>
-
-                                <!-- 头像选择器 -->
-                                <div class="pref-item avatar-selector-item">
-                                    <div class="pref-info">
-                                        <span class="pref-title"
-                                            ><i class="fas fa-image"></i> 个人头像</span
-                                        >
-                                        <span class="pref-desc">选择你喜欢的头像样式</span>
-                                    </div>
-                                </div>
-
-                                <div class="avatar-grid">
-                                    <div
-                                        v-for="index in 12"
-                                        :key="index - 1"
-                                        class="avatar-option"
-                                        :class="{ selected: selectedAvatarIndex === index - 1 }"
-                                        @click="selectedAvatarIndex = index - 1"
-                                    >
-                                        <img
-                                            :src="getAvatarSrc(index - 1)"
-                                            :alt="`Avatar ${index}`"
-                                        />
-                                    </div>
-                                </div>
-                                <button
-                                    v-if="selectedAvatarIndex !== (user?.avatar_index || 0)"
-                                    class="avatar-save-btn"
-                                    :disabled="avatarSaving"
-                                    @click="handleSaveAvatar"
-                                >
-                                    <i class="fas fa-save"></i>
-                                    {{ avatarSaving ? '保存中...' : '保存头像' }}
-                                </button>
-                                <div
-                                    v-else
-                                    class="avatar-status"
-                                >
-                                    <i class="fas fa-check-circle"></i> 当前头像
-                                </div>
-                            </div>
-                        </div>
+                            :preference-draft="preferenceDraft"
+                            :preference-saving="preferenceSaving"
+                            :preference-model-options="preferenceModelOptions"
+                            :basemap-preference-options="basemapPreferenceOptions"
+                            :selected-avatar-index="selectedAvatarIndex"
+                            :avatar-saving="avatarSaving"
+                            :user="user"
+                            :current-theme="themeStore.theme"
+                            @update:preference-draft="({ key, value }) => { preferenceDraft[key] = value }"
+                            @save-preferences="handleSavePreferences"
+                            @update:selected-avatar-index="(idx) => { selectedAvatarIndex = idx }"
+                            @save-avatar="handleSaveAvatar"
+                            @set-theme="(t) => themeStore.setTheme(t)"
+                        />
                     </transition>
                 </div>
 
@@ -1532,186 +1153,7 @@ onBeforeUnmount(() => {
     background-color: rgba(var(--brand-accent-light-rgb), 0.7);
 }
 
-/* View: Overview */
-.info-card {
-    background: rgba(16, 32, 22, 0.6);
-    border-radius: 10px;
-    padding: 16px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.2);
-    margin-bottom: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
-}
-
-.info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-}
-
-.info-label {
-    color: #8fbc9f;
-}
-
-.info-value {
-    font-weight: 600;
-    color: #ffffff;
-}
-
-.text-success {
-    color: var(--brand-accent-light);
-    text-shadow: 0 0 6px rgba(var(--brand-accent-light-rgb), 0.5);
-}
-.active-dot {
-    font-size: 10px;
-    margin-right: 6px;
-    vertical-align: middle;
-    box-shadow: 0 0 8px var(--brand-accent-light);
-    border-radius: 50%;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-}
-
-.stat-box {
-    background: rgba(16, 32, 22, 0.6);
-    border-radius: 10px;
-    padding: 16px 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.2);
-    transition:
-        transform 0.3s ease,
-        border-color 0.3s ease,
-        background 0.3s ease;
-    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.3);
-}
-
-.stat-box:hover {
-    transform: translateY(-3px);
-    border-color: var(--brand-accent-light);
-    background: rgba(22, 44, 30, 0.8);
-    box-shadow:
-        inset 0 0 12px rgba(0, 0, 0, 0.3),
-        0 6px 16px rgba(var(--brand-accent-light-rgb), 0.15);
-}
-
-.stat-icon {
-    font-size: 20px;
-    color: var(--brand-accent-light);
-    filter: drop-shadow(0 0 6px rgba(var(--brand-accent-light-rgb), 0.5));
-}
-
-.stat-num {
-    font-size: 18px;
-    font-weight: 700;
-    color: #ffffff;
-    text-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
-}
-
-.stat-name {
-    font-size: 12px;
-    color: #8fbc9f;
-}
-
-.account-extra-card {
-    margin-top: 12px;
-}
-
-.break-text {
-    max-width: 200px;
-    text-align: right;
-    word-break: break-word;
-}
-
-.compose-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #b9f7d8;
-    margin-bottom: 4px;
-}
-
-.user-message-input {
-    width: 100%;
-    min-height: 86px;
-    box-sizing: border-box;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 14px;
-    resize: vertical;
-    color: #fff;
-    background: rgba(8, 20, 14, 0.6);
-    transition: all 0.3s ease;
-}
-
-.user-message-input:focus {
-    outline: none;
-    border-color: var(--brand-accent-light);
-    box-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.3);
-    background: rgba(12, 28, 18, 0.9);
-}
-
-.message-list {
-    max-height: 200px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 8px;
-}
-
-.message-empty {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
-    text-align: center;
-    border: 1px dashed rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    padding: 12px;
-}
-
-.message-item {
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.25);
-    border-radius: 8px;
-    background: rgba(4, 12, 8, 0.4);
-    padding: 10px 12px;
-    transition: border-color 0.2s ease;
-}
-
-.message-item:hover {
-    border-color: rgba(var(--brand-accent-light-rgb), 0.4);
-}
-
-.message-item-meta {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.message-author {
-    color: #8df3b9;
-    font-weight: 700;
-}
-
-.message-item-content {
-    margin-top: 6px;
-    font-size: 13px;
-    line-height: 1.5;
-    color: #f2fff8;
-    word-break: break-word;
-}
-
+/* Admin & API Management views */
 .admin-view {
     display: flex;
     flex-direction: column;
@@ -1720,416 +1162,6 @@ onBeforeUnmount(() => {
 .api-mgmt-view {
     display: flex;
     flex-direction: column;
-}
-
-/* View: Security */
-.password-form-container {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.section-title {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: 700;
-    color: #a0ddb6;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-left: 3px solid var(--brand-accent-light);
-    padding-left: 10px;
-}
-
-.modern-input-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.input-icon {
-    position: absolute;
-    left: 16px;
-    color: #6a9c7e;
-    font-size: 16px;
-}
-
-.modern-input-group input {
-    width: 100%;
-    height: 48px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    padding: 0 16px 0 44px;
-    font-size: 14px;
-    color: #ffffff;
-    transition: all 0.3s ease;
-    background: rgba(8, 20, 14, 0.6);
-}
-
-.modern-input-group input::placeholder {
-    color: #4b6a57;
-}
-
-.modern-input-group input:focus {
-    outline: none;
-    border-color: var(--brand-accent-light);
-    box-shadow:
-        0 0 10px rgba(var(--brand-accent-light-rgb), 0.3),
-        inset 0 0 6px rgba(var(--brand-accent-light-rgb), 0.15);
-    background: rgba(12, 28, 18, 0.9);
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, rgba(var(--brand-accent-light-rgb), 0.85) 0%, var(--brand-primary-dark) 100%);
-    color: white;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.6);
-    height: 48px;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
-    transition: all 0.3s ease;
-    margin-top: 8px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-}
-
-.btn-primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(var(--brand-accent-light-rgb), 0.35);
-    border-color: var(--brand-accent-light);
-    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-primary) 100%);
-}
-
-.btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    filter: grayscale(0.5);
-}
-
-.w-100 {
-    width: 100%;
-}
-
-.guest-warning {
-    background: rgba(60, 20, 20, 0.7);
-    border: 1px solid rgba(239, 68, 68, 0.5);
-    color: #fca5a5;
-    padding: 20px;
-    border-radius: 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 16px;
-    box-shadow: inset 0 0 12px rgba(239, 68, 68, 0.1);
-}
-
-.guest-warning i {
-    font-size: 28px;
-    color: var(--danger);
-    text-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
-}
-
-.guest-warning p {
-    margin: 0;
-    font-size: 14px;
-    line-height: 1.6;
-}
-
-/* View: Preferences */
-.pref-list {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-}
-
-.pref-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: rgba(16, 32, 22, 0.6);
-    padding: 16px;
-    border-radius: 10px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.25);
-    transition: border-color 0.3s ease;
-}
-
-.pref-item:hover {
-    border-color: rgba(var(--brand-accent-light-rgb), 0.4);
-}
-
-.pref-info {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.pref-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.pref-title i {
-    color: var(--brand-accent-light);
-}
-
-.pref-desc {
-    font-size: 13px;
-    color: #8fbc9f;
-}
-
-.pref-select {
-    min-width: 150px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.35);
-    border-radius: 8px;
-    background: rgba(8, 20, 14, 0.7);
-    color: #e6fff1;
-    padding: 8px 10px;
-}
-
-.pref-select:focus {
-    outline: none;
-    border-color: var(--brand-accent-light);
-    box-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.2);
-}
-
-.modern-toggle {
-    position: relative;
-    display: inline-block;
-    width: 48px;
-    height: 26px;
-}
-
-.modern-toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.slider {
-    position: absolute;
-    cursor: not-allowed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(var(--brand-accent-light-rgb), 0.2);
-    transition: 0.4s;
-    border-radius: 34px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.4);
-}
-
-.slider:before {
-    position: absolute;
-    content: '';
-    height: 18px;
-    width: 18px;
-    left: 4px;
-    bottom: 3px;
-    background-color: #6a9c7e;
-    transition: 0.4s;
-    border-radius: 50%;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-
-input:checked + .slider {
-    background-color: rgba(var(--brand-accent-light-rgb), 0.4);
-    border-color: var(--brand-accent-light);
-}
-input:checked + .slider:before {
-    transform: translateX(20px);
-    background-color: var(--brand-accent-light);
-    box-shadow: 0 0 10px var(--brand-accent-light);
-}
-
-.coming-soon {
-    text-align: center;
-    margin-top: 30px;
-    color: #4b6a57;
-    font-size: 13px;
-    font-style: italic;
-    position: relative;
-}
-
-.coming-soon::before,
-.coming-soon::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    width: 25%;
-    height: 1px;
-    background: rgba(var(--brand-accent-light-rgb), 0.25);
-}
-
-.coming-soon::before {
-    left: 0;
-}
-.coming-soon::after {
-    right: 0;
-}
-
-/* Avatar Selector */
-.avatar-selector-item {
-    border-bottom: 1px solid rgba(var(--brand-accent-light-rgb), 0.1);
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-}
-
-/* 主题选择器 */
-.theme-grid {
-    display: flex;
-    gap: 12px;
-    padding: 8px 0 16px;
-}
-
-.theme-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border: 2px solid var(--border-light);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    background: var(--bg-primary);
-}
-
-.theme-option:hover {
-    border-color: var(--brand-primary-light);
-    background: var(--bg-hover);
-}
-
-.theme-option.selected {
-    border-color: var(--brand-primary);
-    background: var(--bg-active);
-    box-shadow: 0 0 0 2px var(--bg-hover);
-}
-
-.theme-preview {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    flex-shrink: 0;
-}
-
-.theme-label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.avatar-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    padding: 16px 0;
-    margin: 12px 0;
-}
-
-.avatar-option {
-    position: relative;
-    aspect-ratio: 1;
-    border: 2px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 12px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    background: rgba(var(--brand-accent-light-rgb), 0.05);
-}
-
-.avatar-option img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.3s ease;
-}
-
-.avatar-option:hover {
-    border-color: rgba(var(--brand-accent-light-rgb), 0.6);
-    background: rgba(var(--brand-accent-light-rgb), 0.15);
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(var(--brand-accent-light-rgb), 0.2);
-}
-
-.avatar-option.selected {
-    border-color: var(--brand-accent-light);
-    background: rgba(var(--brand-accent-light-rgb), 0.25);
-    box-shadow:
-        0 0 0 3px rgba(var(--brand-accent-light-rgb), 0.1),
-        inset 0 0 0 2px var(--brand-accent-light);
-}
-
-.avatar-option.selected::after {
-    content: '✓';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 20px;
-    color: var(--brand-accent-light);
-    font-weight: bold;
-    background: rgba(255, 255, 255, 0.9);
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 8px rgba(var(--brand-accent-light-rgb), 0.3);
-}
-
-.avatar-save-btn {
-    width: 100%;
-    padding: 10px;
-    margin-top: 12px;
-    background: linear-gradient(135deg, rgba(var(--brand-accent-light-rgb), 0.8), rgba(var(--brand-accent-light-rgb), 0.6));
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.4);
-    color: white;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
-.avatar-save-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, rgba(var(--brand-accent-light-rgb), 1), rgba(var(--brand-accent-light-rgb), 0.8));
-    border-color: rgba(var(--brand-accent-light-rgb), 0.7);
-    box-shadow: 0 6px 16px rgba(var(--brand-accent-light-rgb), 0.3);
-    transform: translateY(-2px);
-}
-
-.avatar-save-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.avatar-status {
-    text-align: center;
-    color: var(--brand-accent-light);
-    font-size: 13px;
-    padding: 8px;
-    margin-top: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-}
-
-.avatar-status i {
-    font-size: 14px;
 }
 
 /* Footer Action */
@@ -2308,8 +1340,6 @@ input:checked + .slider:before {
 }
 
 .profile-role i,
-.pref-title i,
-.stat-icon,
 .nav-tab.active i {
     color: var(--acc-mint-700);
 }
@@ -2344,93 +1374,6 @@ input:checked + .slider:before {
 
 .styled-scrollbar::-webkit-scrollbar-thumb {
     background-color: rgba(var(--brand-primary-rgb), 0.42);
-}
-
-.info-card,
-.stat-box,
-.pref-item,
-.message-item {
-    background: rgba(255, 255, 255, 0.72);
-    border-color: rgba(var(--brand-primary-rgb), 0.2);
-    box-shadow: 0 4px 12px rgba(76, 130, 88, 0.08);
-}
-
-.stat-box:hover,
-.pref-item:hover,
-.message-item:hover {
-    background: rgba(252, 255, 253, 0.95);
-    border-color: rgba(var(--brand-primary-rgb), 0.35);
-}
-
-.info-label,
-.stat-name,
-.pref-desc,
-.message-item-meta,
-.coming-soon,
-.message-empty {
-    color: var(--acc-text-soft);
-}
-
-.info-value,
-.stat-num,
-.pref-title,
-.message-item-content,
-.message-author,
-.compose-title {
-    color: var(--acc-text-strong);
-    text-shadow: none;
-}
-
-.text-success {
-    color: var(--acc-mint-700);
-    text-shadow: none;
-}
-
-.active-dot {
-    color: var(--acc-mint-600);
-    box-shadow: none;
-}
-
-.user-message-input,
-.modern-input-group input {
-    color: var(--acc-text-strong);
-    background: rgba(255, 255, 255, 0.92);
-    border-color: rgba(var(--brand-primary-rgb), 0.3);
-}
-
-.user-message-input::placeholder,
-.modern-input-group input::placeholder {
-    color: #88a797;
-}
-
-.user-message-input:focus,
-.modern-input-group input:focus {
-    border-color: rgba(var(--brand-primary-rgb), 0.52);
-    box-shadow: 0 0 0 3px rgba(var(--brand-accent-light-rgb), 0.18);
-    background: #ffffff;
-}
-
-.input-icon {
-    color: #6e9c80;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    border-color: rgba(63, 148, 75, 0.55);
-    color: #f8fff9;
-    box-shadow: 0 6px 16px rgba(58, 129, 76, 0.24);
-    text-shadow: none;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
-    box-shadow: 0 8px 18px rgba(58, 129, 76, 0.3);
-}
-
-.guest-warning {
-    background: rgba(255, 244, 244, 0.86);
-    border-color: rgba(239, 68, 68, 0.3);
-    color: #9b3f3f;
 }
 
 .btn-logout {

@@ -6,7 +6,7 @@
 import polygonExplanationData from '../components/feng-shui-compass-svg/Explanation/polygon_explanation.json';
 import compassExplanationData from '../components/feng-shui-compass-svg/Explanation/compass_explanation.json';
 import circleExplanationData from '../components/feng-shui-compass-svg/Explanation/circle_explanation.json';
-import darkExplanationData from '../components/feng-shui-compass-svg/Explanation/dark_explantion.json';
+import darkExplanationData from '../components/feng-shui-compass-svg/Explanation/dark_explanation.json';
 import simpleExplanationData from '../components/feng-shui-compass-svg/Explanation/simple_explanation.json';
 
 /**
@@ -49,7 +49,7 @@ export const THEME_EXPLANATIONS: Record<string, ThemeExplanationConfig> = {
         themeIndex: 2,
         themeId: 3,
         themeName: '三',
-        explanationFile: 'dark_explantion.json',
+        explanationFile: 'dark_explanation.json',
         data: darkExplanationData,
     },
     // 索引 3：polygon 主题

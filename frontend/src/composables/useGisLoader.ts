@@ -37,30 +37,13 @@ type PacketSummary = {
     };
 };
 
+import { getNameStem, getStemKey } from '../utils/pathUtils.js';
+
 const SHP_SIDECAR_EXTENSIONS = new Set(['shp', 'shx', 'dbf', 'prj', 'cpg']);
 
-function _extOf(path = ''): string {
-    const normalized = String(path || '').toLowerCase();
-    const idx = normalized.lastIndexOf('.');
-    if (idx < 0 || idx === normalized.length - 1) return '';
-    return normalized.slice(idx + 1);
-}
-
-function stemOf(path = ''): string {
-    const normalized = String(path || '').replace(/\\/g, '/');
-    const base = normalized.split('/').pop() || normalized;
-    const idx = base.lastIndexOf('.');
-    if (idx < 0) return base;
-    return base.slice(0, idx);
-}
-
-function stemKeyOf(path = ''): string {
-    const normalized = String(path || '')
-        .replace(/\\/g, '/')
-        .trim();
-    const idx = normalized.lastIndexOf('.');
-    return (idx > 0 ? normalized.slice(0, idx) : normalized).toLowerCase();
-}
+// 向后兼容的别名
+const stemOf = getNameStem;
+const stemKeyOf = getStemKey;
 
 function parseJsonBuffer(buffer: ArrayBuffer): any {
     const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);

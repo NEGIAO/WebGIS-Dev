@@ -22,46 +22,74 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 
-## 0. 项目结构（2026-06-02 校验）
+## 0. 项目结构（2026-06-02 更新）
 
 ```text
-backend/                                           
-├── api/                                           # api 路由模块
-│   ├── __init__.py                                # 
+backend/
+├── api/                                           # API 路由模块
+│   ├── __init__.py                                # 路由注册入口
 │   ├── admin.py                                   # 管理员相关接口
-│   ├── agent_chat.py                              # Agent 对话接口
-│   ├── api_keys_management.py                     # API密钥管理接口
-│   ├── api_management.py                          # API管理接口
-│   ├── auth.py                                    # 认证接口
+│   ├── agent_chat/                                # AI 对话代理（模块化拆分）
+│   │   ├── __init__.py                            # 门面 re-export
+│   │   ├── constants.py                           # 常量、环境变量
+│   │   ├── schemas.py                             # Pydantic 模型
+│   │   ├── utils.py                               # 纯工具函数
+│   │   ├── db.py                                  # DB schema、config CRUD
+│   │   ├── quota.py                               # 配额管理
+│   │   ├── upstream.py                            # 上游 LLM API 调用
+│   │   └── routes.py                              # 路由处理函数
+│   ├── auth/                                      # 鉴权模块（模块化拆分）
+│   │   ├── __init__.py                            # 门面 re-export
+│   │   ├── constants.py                           # 常量、角色、正则
+│   │   ├── db.py                                  # 数据库连接工厂
+│   │   ├── schema.py                              # DDL 建表与迁移
+│   │   ├── password.py                            # 密码哈希/验证
+│   │   ├── models.py                              # Pydantic 请求模型
+│   │   ├── user.py                                # 用户 CRUD
+│   │   ├── session.py                             # 会话管理
+│   │   ├── preferences.py                         # 用户偏好
+│   │   ├── quota.py                               # 配额追踪
+│   │   ├── system_config.py                       # 系统配置
+│   │   ├── dependencies.py                        # FastAPI 依赖注入
+│   │   └── routes.py                              # 路由处理函数
+│   ├── api_keys_management.py                     # API 密钥管理接口
+│   ├── api_management.py                          # API 使用管理接口
 │   ├── external_proxy.py                          # 外部代理接口
 │   ├── location.py                                # 定位相关接口
-│   ├── monitor.py                                 # 监控接口
-│   ├── proxy.py                                   # 通用代理XYZ瓦片
+│   ├── monitor.py                                 # 日志监控接口
+│   ├── proxy.py                                   # 通用代理 + GCJ-02 纠偏
 │   ├── spatial.py                                 # 空间分析 API（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
-│   └── statistics.py                              # 统计接口
-│                                                  # 
+│   └── statistics.py                              # 访问统计接口
+│
+├── core/                                          # 核心业务逻辑
+│   ├── tile_engine.py                             # 瓦片下载 + GeoTIFF 拼接
+│   └── task_scheduler.py                          # 过期任务清理调度器
+│
+├── models/                                        # 数据模型
+│   └── download_task.py                           # SQLModel 下载任务表
+│
 ├── download_xyz/                                  # 在线底图下载模块
 │   ├── download.py                                # 下载逻辑
 │   ├── download_task.py                           # 下载任务
 │   ├── task_scheduler.py                          # 任务调度器
 │   └── tile_engine.py                             # 瓦片引擎
-│                                                  # 
-├── gcj_rectify/                                   # GCJ-02 纠偏模块
-│   ├── __init__.py                                # 
+│
+├── gcj_rectify/                                   # GCJ-02 坐标纠偏模块
+│   ├── __init__.py                                # 模块入口
 │   ├── fetch.py                                   # 数据获取
 │   ├── rectify.py                                 # 纠偏逻辑
 │   ├── transform.py                               # 坐标转换
-│   ├── url_template.py                            # URL模板
-│   └── utils.py                                   # 
-│                                                  # 
-├── .dockerignore                                  # dockerignore 文件
-├── .env.example                                   # 环境变量模板
-├── app.py                                         # 主应用文件
+│   ├── url_template.py                            # URL 模板
+│   └── utils.py                                   # 工具函数
+│
+├── app.py                                         # FastAPI 主入口
+├── Dockerfile                                     # Docker 构建文件
 ├── docker-compose.yml                             # Docker Compose 配置
-├── Dockerfile                                     # Dockerfile
-├── pyproject.toml                                 # 项目依赖配置
-├── README.md                                      # 项目说明文档
-└── uv.lock                                        # uv依赖锁定文件
+├── pyproject.toml                                 # Python 项目依赖
+├── uv.lock                                        # uv 依赖锁定文件
+├── .env.example                                   # 环境变量模板
+├── .dockerignore                                  # Docker 忽略文件
+└── README.md                                      # 本文件
 ```
 
 ## 1. 认证系统

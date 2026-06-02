@@ -6,6 +6,7 @@ import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationRevers
 import { useMessage } from '@/composables/useMessage';
 import { saveUserPositionToCache } from '../services/userPositionCache';
 import { setGlobalUserLocationContext } from '../services/userLocationContext';
+import { normalizeBinaryFlag } from '../utils/normalize';
 
 const _TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
@@ -72,15 +73,6 @@ export function useUserLocation({
     function toDisplayAccuracyMeters(value) {
         if (!Number.isFinite(value) || value <= 0) return 30;
         return Math.min(Math.max(value, 20), 5000);
-    }
-
-    function normalizeBinaryFlag(value, fallback = '0') {
-        const text = String(value ?? '')
-            .trim()
-            .toLowerCase();
-        if (text === '1' || text === 'true') return '1';
-        if (text === '0' || text === 'false') return '0';
-        return fallback === '1' ? '1' : '0';
     }
 
     function readQueryValueFromUrl(key) {

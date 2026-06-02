@@ -28,6 +28,7 @@ import {
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
 import { prioritizeTileSourceRequest } from './useTileSourceFactory';
+import { normalizeBinaryFlag } from '../utils/normalize';
 // 新增：中心点标记所需导入
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
@@ -81,21 +82,6 @@ function formatNumber(value, fractionDigits) {
     const numberValue = Number(value);
     if (!Number.isFinite(numberValue)) return null;
     return numberValue.toFixed(fractionDigits);
-}
-
-/**
- * 规范化持久化二值标记（0/1）
- * @param {*} value - 原始标记值
- * @param {'0'|'1'} [fallback='0'] - 默认值
- * @returns {'0'|'1'} 规范化后的标记
- */
-function normalizeBinaryFlag(value, fallback = '0') {
-    const raw = String(getFirstValue(value) ?? '')
-        .trim()
-        .toLowerCase();
-    if (raw === '1' || raw === 'true') return '1';
-    if (raw === '0' || raw === 'false') return '0';
-    return fallback === '1' ? '1' : '0';
 }
 
 /**

@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { useMessage } from './useMessage';
+import { getExtension as _getExtension } from '../utils/pathUtils.js';
 
 /**
  * 共享资源加载器 - 用于从 public/ShareData 目录加载预配置的地理数据资源
@@ -167,11 +168,7 @@ export function useSharedResourceLoader() {
     /**
      * 从文件名提取扩展名
      */
-    function getExtension(filename: string): string {
-        const dot = filename.lastIndexOf('.');
-        if (dot <= 0) return '';
-        return filename.slice(dot + 1).toLowerCase();
-    }
+    const getExtension = _getExtension;
 
     /**
      * 扫描共享资源目录（支持两种实现方式）

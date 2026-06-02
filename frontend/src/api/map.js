@@ -1,5 +1,5 @@
 import backendAPI from './backend';
-import { parseAmapAoiPayload } from '../utils/geo';
+import { parseAmapAoiPayload } from '../utils/gis/parsers/amapAoiParser';
 
 export {
     reverseGeocodeTianditu,

@@ -1,16 +1,4 @@
-function normalizePath(path) {
-    return String(path || '')
-        .replace(/\\/g, '/')
-        .replace(/^\.\//, '')
-        .trim();
-}
-
-function getExtension(path) {
-    const normalized = normalizePath(path).toLowerCase();
-    const idx = normalized.lastIndexOf('.');
-    if (idx < 0 || idx === normalized.length - 1) return '';
-    return normalized.slice(idx + 1);
-}
+import { normalizePath, getExtension } from '../pathUtils.js';
 
 function detectMagicTypeFromBytes(bytes) {
     if (!bytes?.length) return 'unknown';

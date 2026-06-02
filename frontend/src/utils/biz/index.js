@@ -1,3 +1,7 @@
+/**
+ * 业务工具 barrel — 聚合坐标格式化、输入处理、标签校验等纯工具函数
+ */
+
 export {
     COORDINATE_FORMATS,
     DECIMAL_PLACES,
@@ -30,12 +34,3 @@ export {
 export { decodePos, encodePos } from '../url/crypto';
 
 export { parseAmapRectangleToExtent } from '../amapRectangle';
-
-export {
-    getGlobalUserLocationContext,
-    setGlobalUserLocationContext,
-    clearGlobalUserLocationContext,
-    USER_LOCATION_CONTEXT_CHANGE_EVENT,
-} from '../../services/userLocationContext';
-
-export { saveUserPositionToCache, readUserPositionFromCache } from '../../services/userPositionCache';

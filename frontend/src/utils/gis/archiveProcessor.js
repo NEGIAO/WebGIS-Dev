@@ -6,75 +6,23 @@
 
 import { detectGeoJsonProjection, detectKmlProjectionHint, detectShpProjectionFromPrj, resolveProjectionOrDefault } from './crsAware.js';
 import { buildResourcePool, classifyArchiveDatasets } from './batchProcessor.js';
+import { normalizePath, getExtension, getStem, getNameStem } from '../pathUtils.js';
+import { decodeTextContent } from '../textDecoder.js';
 
 export const RESOURCE_EXTENSIONS = new Set([
     'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'css', 'js', 'html', 'htm',
 ]);
 export const SHP_EXTENSIONS = new Set(['shp', 'dbf', 'shx', 'prj', 'cpg']);
 
-// ==================== 路径工具函数 ====================
+// 向后兼容的本地别名（export { X as Y } 不创建本地绑定，需先创建 const）
+const extOf = getExtension;
+const stemOf = getStem;
+const nameStemOf = getNameStem;
+const decodeBufferToText = decodeTextContent;
 
-export function normalizePath(path = '') {
-    return String(path || '')
-        .replace(/\\/g, '/')
-        .replace(/^\.\/?/, '')
-        .trim();
-}
-
-export function extOf(path = '') {
-    const lower = String(path || '').trim().toLowerCase();
-    return lower.includes('.') ? lower.split('.').pop() : '';
-}
-
-export function stemOf(path = '') {
-    const normalized = normalizePath(path);
-    const idx = normalized.lastIndexOf('.');
-    return idx > 0 ? normalized.slice(0, idx) : normalized;
-}
-
-export function nameStemOf(path = '') {
-    const normalized = normalizePath(path);
-    const idx = normalized.lastIndexOf('.');
-    const withoutExt = idx > 0 ? normalized.slice(0, idx) : normalized;
-    const slashIdx = withoutExt.lastIndexOf('/');
-    return slashIdx >= 0 ? withoutExt.slice(slashIdx + 1) : withoutExt;
-}
-
-// ==================== Buffer 解码 ====================
-
-export function decodeBufferToText(buffer) {
-    if (!(buffer instanceof ArrayBuffer)) return '';
-
-    const candidates = [];
-    const encodings = ['utf-8', 'utf-16le', 'utf-16be', 'gbk'];
-
-    for (const encoding of encodings) {
-        try {
-            const text = new TextDecoder(encoding, { fatal: false }).decode(buffer);
-            const invalidCount = (text.match(/�/g) || []).length;
-            candidates.push({ encoding, text, invalidCount });
-        } catch { /* ignored */
-            continue;
-        }
-    }
-
-    if (!candidates.length) {
-        console.warn('[dataDispatcher] 所有编码尝试均失败，返回空字符串');
-        return '';
-    }
-
-    candidates.sort((a, b) => a.invalidCount - b.invalidCount);
-    const best = candidates[0];
-
-    if (best.invalidCount > 0) {
-        console.warn(
-            `[dataDispatcher] 使用编码 ${best.encoding}，包含 ${best.invalidCount} 个替代字符`,
-            `候选: ${candidates.map((c) => `${c.encoding}(${c.invalidCount})`).join(', ')}`,
-        );
-    }
-
-    return best.text;
-}
+export { normalizePath, extOf, stemOf, nameStemOf, decodeBufferToText };
+// 也导出规范名称，供新代码使用
+export { getExtension, getStem, getNameStem, decodeTextContent };
 
 // ==================== GeoJSON 解析 ====================
 

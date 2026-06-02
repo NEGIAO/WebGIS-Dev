@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.1.7
+# WebGIS 前端项目 — v3.1.9
 
 ## 📋 项目概述
 
@@ -88,9 +88,9 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-02 更新）
+## 目录结构（2026-06-02 重构更新）
 
-以下结构按当前工程实际文件更新。
+以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
 ```text
 frontend/src/
@@ -118,9 +118,14 @@ frontend/src/
 │   ├── map.js                                # 地图业务 API
 │   └── weather.js                            # 天气 API
 │
-├── assets/                                   # 全局样式
+├── assets/                                   # 全局样式与静态数据
+│   ├── logo.svg                              # 项目 Logo
 │   ├── theme.css                             # 全局主题变量（品牌色/文字/背景/边框）
-│   └── toc-theme.css                         # TOC 主题变量（引用全局变量）
+│   ├── toc-theme.css                         # TOC 主题变量（引用全局变量）
+│   └── data/                                 # 静态数据
+│       └── compass-metadata/                 # 罗盘元数据
+│           ├── compass-data.ts               # 罗盘基础数据
+│           └── twentyEightConstellations.ts   # 二十八星宿数据（4323 行）
 │
 ├── components/                               # 业务组件（按功能域分组）
 │   ├── Cesium/                               # 3D 地球模块
@@ -145,13 +150,12 @@ frontend/src/
 │   │   ├── MeasurePanel.vue                  # 测量面板
 │   │   └── SpatialAnalysisPanel.vue          # 空间分析面板
 │   ├── feng-shui-compass-svg/                # 罗盘 SVG HUD
-│   │   ├── feng-shui-compass-svg.vue
-│   │   ├── data/                             # 罗盘静态数据
-│   │   ├── themes/                           # 5 种主题配置
-│   │   ├── types/                            # TypeScript 类型
-│   │   └── Explanation/                      # 宫位解释 JSON
+│   │   ├── feng-shui-compass-svg.vue         # 罗盘主组件
+│   │   ├── Explanation/                      # 宫位解释 JSON（5 种主题）
+│   │   ├── themes/                           # 5 种主题配置 + 预览图
+│   │   └── types/                            # TypeScript 类型定义
 │   ├── Layer/                                # 图层管理
-│   │   ├── TOCPanel.vue                      # TOC 主面板
+│   │   ├── TOCPanel.vue                      # TOC 主面板（工具箱入口）
 │   │   ├── LayerPanel.vue                    # TOC 树容器
 │   │   ├── TOCTreeItem.vue                   # 递归树节点
 │   │   ├── LayerControlPanel.vue             # 底图控制面板
@@ -179,12 +183,18 @@ frontend/src/
 │   │   ├── PersistentAnnouncementBar.vue     # 顶部公告条
 │   │   └── MagicCursor.vue                   # 首屏特效
 │   ├── Weather/
-│   │   └── WeatherChartPanel.vue             # 天气可视化
+│   │   ├── WeatherChartPanel.vue             # 天气可视化主面板
+│   │   ├── WeatherLiveCards.vue              # 实况天气卡片
+│   │   └── WeatherForecastTable.vue          # 预报表格
 │   └── UserCenter/
+│       ├── FloatingAccountPanel.vue          # 用户中心浮层壳
 │       ├── AdminControlPanel.vue             # 管理员控制台
 │       ├── ApiKeysManagementPanel.vue        # API 密钥管理
 │       ├── ApiManagementPanel.vue            # API 使用管理
-│       └── FloatingAccountPanel.vue          # 用户中心浮层
+│       └── tabs/                             # 用户中心子面板
+│           ├── OverviewTab.vue               # 总览标签（统计/消息板）
+│           ├── SecurityTab.vue               # 安全标签（修改密码）
+│           └── PreferencesTab.vue            # 偏好标签（主题/头像）
 │
 ├── composables/                              # 组合式函数
 │   ├── Magic/                                # 首屏视觉特效
@@ -230,6 +240,9 @@ frontend/src/
 │   │   ├── wmtsSource.ts                     # WMTS 源创建
 │   │   ├── xyzSource.ts                      # XYZ 源 + 自动检测
 │   │   └── index.ts                          # barrel export
+│   ├── weather/                              # 天气相关 composables
+│   │   ├── useWeatherData.js                 # 天气数据获取与查询
+│   │   └── useWeatherCharts.js               # ECharts 图表渲染
 │   ├── useUserLocation.js                    # 用户定位
 │   └── ...
 │
@@ -238,11 +251,12 @@ frontend/src/
 │
 ├── constants/                                # 常量配置
 │   ├── basemap/                              # 底图配置模块
-│   │   ├── basemapConfig.ts                  # 图源定义 + 预设配置
+│   │   ├── basemapConfig.ts                  # 图源定义 + 预设配置（1317 行）
 │   │   ├── basemapResolver.ts                # 解析逻辑
 │   │   └── index.ts
 │   ├── index.js                              # barrel export
-│   └── mapStyles.js                          # 地图样式常量
+│   ├── mapStyles.js                          # 地图样式常量
+│   └── tileSourceAdapters.ts                 # 非标准瓦片源适配器
 │
 ├── router/
 │   ├── index.js                              # 路由与守卫
@@ -250,8 +264,13 @@ frontend/src/
 │
 ├── services/
 │   ├── CompassManager.ts                     # 罗盘管理器
-│   ├── compassUrlState.ts                    # 罗盘 URL 状态编解码
-│   └── DistrictManager.ts                    # 行政区划管理器
+│   ├── DistrictManager.ts                    # 行政区划管理器
+│   ├── auth.js                               # 鉴权工具
+│   ├── userLocationContext.js                # 用户定位上下文
+│   ├── userPositionCache.js                  # 用户位置缓存
+│   └── compass/                              # 罗盘服务
+│       ├── index.js                          # barrel export
+│       └── urlState.ts                       # 罗盘 URL 状态编解码
 │
 ├── stores/                                   # Pinia 状态管理
 │   ├── layer/                                # 图层模块
@@ -272,36 +291,66 @@ frontend/src/
 │   ├── useUserPreferencesStore.ts            # 用户偏好
 │   └── useWeatherStore.ts                    # 天气状态
 │
+├── data/                                     # 应用数据（纯数据模块）
+│   └── goldenSoupQuotes.js                   # 励志语录数据（1454 行，懒加载）
+│
 ├── utils/                                    # 工具函数
-│   ├── gis/                                  # GIS 工具库
-│   │   ├── parsers/                          # 数据解析器
-│   │   │   ├── kmlParser.ts                  # KML/KMZ 解析
-│   │   │   ├── kmlStyleParser.js             # KML 样式解析
-│   │   │   ├── shpParser.ts                  # Shapefile 解析
-│   │   │   ├── tifLoader.ts                  # GeoTIFF 加载
-│   │   │   ├── dbfParser.ts                  # DBF 解析
-│   │   │   └── amapAoiParser.js              # 高德 AOI 解析
-│   │   ├── dataDispatcher.js                 # 数据格式分发（路由）
-│   │   ├── archiveProcessor.js               # 归档解包、SHP 分组、资源 URL
-│   │   ├── shpPacketBuilder.js               # 浏览器文件 SHP 包构建
-│   │   ├── mapRuntimeDeps.js                 # OL 运行时依赖
-│   │   ├── crs-engine.ts                     # CRS 引擎
-│   │   └── ...
+│   ├── pathUtils.js                          # 路径工具（统一 normalizePath/getExtension/getStem）
+│   ├── textDecoder.js                        # 文本解码（多编码自动检测）
+│   ├── normalize.ts                          # 二值标记规范化（normalizeBinaryFlag）
+│   ├── coordTransform.js                     # 坐标转换（GCJ-02/WGS84）
+│   ├── crsUtils.js                           # CRS 检测与注册（EPSG/WKT/proj4）
+│   ├── coordinateFormatter.js                # 坐标格式化（DMS/十进制）
+│   ├── coordinateInputHandler.js             # 坐标输入处理
+│   ├── labelValidator.ts                     # 标签校验
+│   ├── amapRectangle.js                      # 高德矩形范围解析
+│   ├── drawTransitRoute.ts                   # 公交路线绘制
+│   ├── driveXmlParser.ts                     # 驾车路线 XML 解析
+│   ├── transitRouteBuilder.js                # 路线渲染数据构建
+│   ├── explanationLookup.ts                  # 罗盘宫位解释查询
+│   ├── themeExplanationMapper.ts             # 主题-解释文件映射
+│   ├── layerExportService.js                 # 图层导出服务
+│   ├── loadTiandituSdk.js                    # 天地图 SDK 加载
+│   ├── index.js                              # barrel export
+│   ├── geo/
+│   │   └── index.js                          # CRS 相关 barrel（坐标转换/检测/重投影）
 │   ├── biz/
-│   │   └── index.js                          # 业务工具（坐标格式化/解析）
+│   │   └── index.js                          # 业务工具 barrel（坐标格式化/标签校验/加密）
+│   ├── io/
+│   │   └── index.js                          # GIS IO barrel（数据分发/解压/解析）
+│   ├── ui/
+│   │   ├── index.js
+│   │   └── loading.js                        # 全局 loading 控制
+│   ├── url/
+│   │   ├── index.js
+│   │   └── crypto.js                         # URL 参数加解密
 │   ├── echarts/
 │   │   ├── cesiumFxRuntime.js                # Cesium 图表运行时
 │   │   └── weatherRuntime.js                 # 天气图表运行时
-│   ├── geo/
-│   │   └── index.js                          # 地理工具（坐标转换）
-│   ├── io/
-│   │   └── index.js                          # 文件 IO 工具
-│   ├── auth.js                               # 鉴权工具
-│   ├── normalize.ts                          # 共享工具（normalizeBinaryFlag）
-│   ├── coordTransform.js                     # 坐标转换（GCJ-02/WGS84）
-│   ├── layerExportService.js                 # 图层导出服务
-│   ├── index.js                              # barrel export
-│   └── ...
+│   ├── weather/
+│   │   └── weatherUtils.js                   # 天气工具函数（图标/风力/格式化）
+│   └── gis/                                  # GIS 工具库
+│       ├── parsers/                          # 数据解析器
+│       │   ├── kmlParser.ts                  # KML/KMZ 解析
+│       │   ├── kmlStyleParser.js             # KML 样式解析
+│       │   ├── kmlStyleParser.doc.md         # KML 样式解析文档
+│       │   ├── shpParser.ts                  # Shapefile 解析
+│       │   ├── tifLoader.ts                  # GeoTIFF 加载
+│       │   ├── dbfParser.ts                  # DBF 解析
+│       │   ├── amapAoiParser.js              # 高德 AOI 解析
+│       │   └── universalAmapParser.js        # 通用高德解析
+│       ├── dataDispatcher.js                 # 数据格式分发（路由）
+│       ├── archiveProcessor.js               # 归档解包、SHP 分组、资源 URL
+│       ├── batchProcessor.js                 # 批量数据分类
+│       ├── shpPacketBuilder.js               # 浏览器文件 SHP 包构建
+│       ├── decompressFile.js                 # ZIP 解压
+│       ├── decompressor.ts                   # 通用解压器
+│       ├── crs-engine.ts                     # CRS 引擎（proj4 重投影）
+│       ├── crsAware.js                       # CRS 感知层（检测 + 注册）
+│       ├── loadJsZip.ts                      # JSZip 动态加载
+│       ├── mapRuntimeDeps.js                 # OL 运行时依赖
+│       ├── deferredGisAssets.js              # 延迟 GIS 资源
+│       └── deferredGisWarmupLauncher.js      # GIS 预热启动
 │
 └── views/
     ├── HomeView.vue                          # 主页面（地图 + 侧栏）
@@ -515,6 +564,37 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.1.9 (2026-06-02)
+#### 🧹 项目文件重构 — 清理/去重/拆分/重组
+
+**Phase 1 — 清理死代码（-1.5MB 构建产物）**
+- 删除 vendored `public/ol.js` + `public/ol.css`（~1.5MB 死代码，项目已通过 npm 引入 OL）
+- 移动 `public/images/images_to_webp.py` → `scripts/`（Python 脚本不应部署到生产）
+- 重命名 `kmlStyleParser.doc.js` → `kmlStyleParser.doc.md`（文档文件不应使用 .js 扩展名）
+- 删除空目录：`src/components/Widgets/`、`feng-shui-compass-svg/data/`、`src/gis/`（整个空壳 scaffold）
+- 修复拼写错误：`dark_explantion.json` → `dark_explanation.json`
+
+**Phase 2 — 消除重复工具函数（6+ 处 → 1 处）**
+- 新建 `src/utils/pathUtils.js`：统一 `normalizePath`、`getExtension`、`getStem`、`getNameStem`、`getDir`、`splitDirAndFile`、`resolveRelativePath` 等路径工具
+- 新建 `src/utils/textDecoder.js`：统一 `decodeTextContent`（多编码自动检测）和 `decodeBufferSimple`（UTF-8+GBK 快速版）
+- 消除 `normalizeBinaryFlag` 重复：`useMapState.js`、`useUserLocation.js` 改为导入 `utils/normalize.ts`
+- 更新 6 个文件改用共享模块：`archiveProcessor.js`、`batchProcessor.js`、`decompressFile.js`、`useGisLoader.ts`、`useKmzLoader.js`、`useSharedResourceLoader.ts`
+
+**Phase 3 — 数据文件重组**
+- 移动 `constants/goldenSoupQuotes.js` → `src/data/goldenSoupQuotes.js`（1454 行语录数据不属于常量配置）
+- 重命名 `NON_STANDARD_XYZ_ADAPTER_EXAMPLES.ts` → `tileSourceAdapters.ts`（文件名与实际内容匹配）
+
+**Phase 4 — 超大组件拆分**
+- `FloatingAccountPanel.vue` (2520 → 1463 行, -42%)：提取 `OverviewTab.vue`(492行)、`SecurityTab.vue`(289行)、`PreferencesTab.vue`(562行)，子组件通过 `defineAsyncComponent` 懒加载
+- `WeatherChartPanel.vue` (1883 → 452 行, -76%)：提取 `useWeatherData.js`、`useWeatherCharts.js`、`weatherUtils.js`、`WeatherLiveCards.vue`、`WeatherForecastTable.vue`
+
+**Phase 5 — Barrel 清理**
+- `utils/geo/index.js`：移除不相关的 re-export（amapAoiParser、driveXmlParser、drawTransitRoute、transitRouteBuilder），仅保留 CRS 相关模块
+- `utils/biz/index.js`：移除服务层 re-export（userLocationContext、userPositionCache），仅保留纯工具函数
+
+**Phase 6 — 文档同步**
+- 更新 README 目录结构树，反映所有变更
 
 ### V3.1.8 (2026-05-30)
 #### 🔧 ESLint 全项目修复 + 超大文件拆分

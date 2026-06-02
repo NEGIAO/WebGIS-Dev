@@ -3,6 +3,8 @@
  * 纯函数，不依赖外部状态
  */
 
+import { decodeTextContent as _decodeTextContent } from '../../utils/textDecoder.js';
+
 /** 标签字段候选列表 */
 const LABEL_FIELD_CANDIDATES = [
     'name',
@@ -23,39 +25,7 @@ const LABEL_FIELD_CANDIDATES = [
  * @returns {string} 解码后的文本
  */
 export function decodeTextContent(content) {
-    if (typeof content === 'string') return content;
-    if (content instanceof ArrayBuffer) {
-        const candidates = [];
-        const encodings = ['utf-8', 'utf-16le', 'utf-16be', 'gbk'];
-
-        for (const encoding of encodings) {
-            try {
-                const text = new TextDecoder(encoding, { fatal: false }).decode(content);
-                const invalidCount = (text.match(/�/g) || []).length;
-                candidates.push({ encoding, text, invalidCount });
-            } catch { /* ignored */
-
-                continue;
-            }
-        }
-
-        if (!candidates.length) {
-            console.warn('[vectorUtils] 所有编码尝试均失败，使用 UTF-8 降级');
-            return new TextDecoder('utf-8', { fatal: false }).decode(content);
-        }
-
-        candidates.sort((a, b) => a.invalidCount - b.invalidCount);
-        const best = candidates[0];
-
-        if (best.invalidCount > 0) {
-            console.warn(
-                `[vectorUtils] 使用编码 ${best.encoding}，包含 ${best.invalidCount} 个替代字符`
-            );
-        }
-
-        return best.text;
-    }
-    return String(content || '');
+    return _decodeTextContent(content, { label: 'vectorUtils' });
 }
 
 /**

@@ -6,3 +6,6 @@ export * from './geo';
 export * from './io';
 export * from './biz';
 export * from './ui/loading';
+export * from './pathUtils';
+export * from './textDecoder';
+export * from './normalize';

@@ -174,9 +174,10 @@ WebGIS_Dev/
 │   │   │   ├── locationSearch.js         # 地点搜索 API
 │   │   │   ├── map.js                    # 地图相关 API
 │   │   │   └── index.js                  # barrel export
-│   │   ├── assets/                       # 全局样式
+│   │   ├── assets/                       # 全局样式与静态数据
 │   │   │   ├── theme.css                 # 全局主题变量（绿/蓝切换）
-│   │   │   └── toc-theme.css             # TOC 主题变量
+│   │   │   ├── toc-theme.css             # TOC 主题变量
+│   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
 │   │   │   │   ├── CesiumContainer.vue   # Cesium 容器
@@ -192,9 +193,13 @@ WebGIS_Dev/
 │   │   │   ├── Search/                   # 搜索与数据注入
 │   │   │   ├── Shell/                    # 应用壳层（TopBar/SidePanel/Loading/Message）
 │   │   │   ├── UserCenter/               # 用户中心（登录/管理/API Key）
+│   │   │   │   ├── tabs/                 # 用户中心子面板（OverviewTab/SecurityTab/PreferencesTab）
+│   │   │   │   └── ...
 │   │   │   ├── Weather/                  # 天气面板
+│   │   │   │   ├── WeatherChartPanel.vue # 天气主面板（壳）
+│   │   │   │   ├── WeatherLiveCards.vue  # 实况天气卡片
+│   │   │   │   └── WeatherForecastTable.vue # 预报表格
 │   │   │   └── feng-shui-compass-svg/    # 罗盘 SVG HUD 组件
-│   │   │       ├── data/                 # 罗盘数据
 │   │   │       ├── themes/               # 主题配置
 │   │   │       ├── types/                # TypeScript 类型
 │   │   │       └── Explanation/          # 宫位解释 JSON
@@ -240,6 +245,9 @@ WebGIS_Dev/
 │   │   │   │   ├── wmtsSource.ts         # WMTS 源创建
 │   │   │   │   ├── xyzSource.ts          # XYZ 源 + 自动检测
 │   │   │   │   └── index.ts              # barrel export
+│   │   │   ├── weather/                  # 天气相关 composables
+│   │   │   │   ├── useWeatherData.js     # 天气数据获取与查询
+│   │   │   │   └── useWeatherCharts.js   # ECharts 图表渲染
 │   │   │   ├── useUserLocation.js        # 用户定位
 │   │   │   └── ...
 │   │   ├── config/                       # 🔹 环境变量集中管理
@@ -250,7 +258,8 @@ WebGIS_Dev/
 │   │   │   │   ├── basemapResolver.ts    # 解析逻辑
 │   │   │   │   └── index.ts
 │   │   │   ├── index.js                  # barrel export
-│   │   │   └── mapStyles.js              # 地图样式常量
+│   │   │   ├── mapStyles.js              # 地图样式常量
+│   │   │   └── tileSourceAdapters.ts     # 非标准瓦片源适配器
 │   │   ├── router/                       # Vue Router 路由
 │   │   ├── services/                     # 业务服务层
 │   │   │   ├── auth.js                   # 鉴权服务（登录/注册/会话管理）
@@ -276,7 +285,16 @@ WebGIS_Dev/
 │   │   │   ├── useThemeStore.ts          # 主题状态（绿/蓝切换）
 │   │   │   ├── useUrlParamStore.ts       # URL 参数管理
 │   │   │   └── ...
+│   │   ├── data/                         # 应用数据（纯数据模块）
+│   │   │   └── goldenSoupQuotes.js       # 励志语录数据（懒加载）
 │   │   ├── utils/                        # 工具函数
+│   │   │   ├── pathUtils.js              # 路径工具（统一 normalizePath/getExtension/getStem）
+│   │   │   ├── textDecoder.js            # 文本解码（多编码自动检测）
+│   │   │   ├── normalize.ts              # 二值标记规范化
+│   │   │   ├── coordTransform.js         # 坐标转换（GCJ-02/WGS84）
+│   │   │   ├── crsUtils.js              # CRS 检测与注册
+│   │   │   ├── weather/                  # 天气工具函数
+│   │   │   │   └── weatherUtils.js       # 图标/风力/格式化
 │   │   │   ├── gis/                      # GIS 工具库
 │   │   │   │   ├── parsers/              # 数据解析器
 │   │   │   │   │   ├── kmlParser.ts      # KML/KMZ 解析
@@ -287,18 +305,17 @@ WebGIS_Dev/
 │   │   │   │   ├── dataDispatcher.js     # 数据格式分发（路由）
 │   │   │   │   ├── archiveProcessor.js   # 归档解包、SHP 分组、资源 URL
 │   │   │   │   ├── shpPacketBuilder.js   # 浏览器文件 SHP 包构建
+│   │   │   │   ├── crs-engine.ts         # CRS 引擎（proj4 重投影）
+│   │   │   │   ├── crsAware.js           # CRS 感知层
 │   │   │   │   ├── mapRuntimeDeps.js     # OL 运行时依赖
 │   │   │   │   └── ...
-│   │   │   ├── url/                      # URL 相关工具
-│   │   │   │   ├── crypto.js             # URL 编码解码（Base62）
-│   │   │   │   └── index.js              # barrel export
-│   │   │   ├── ui/                       # UI 相关工具
-│   │   │   │   ├── loading.js            # 全局加载动画
-│   │   │   │   └── index.js              # barrel export
-│   │   │   ├── normalize.ts              # 共享工具（normalizeBinaryFlag）
-│   │   │   ├── coordTransform.js         # 坐标转换（GCJ-02/WGS84）
-│   │   │   ├── layerExportService.js     # 图层导出服务
-│   │   │   └── ...
+│   │   │   ├── geo/                      # CRS 相关 barrel
+│   │   │   ├── biz/                      # 业务工具 barrel
+│   │   │   ├── io/                       # GIS IO barrel
+│   │   │   ├── url/                      # URL 工具（加密）
+│   │   │   ├── ui/                       # UI 工具（loading）
+│   │   │   ├── echarts/                  # ECharts 运行时
+│   │   │   └── layerExportService.js     # 图层导出服务
 │   │   ├── views/                        # 页面
 │   │   │   ├── HomeView.vue              # 主页（地图 + 侧边栏）
 │   │   │   ├── RegisterView.vue          # 注册页
@@ -362,7 +379,7 @@ WebGIS_Dev/
 │   ├── 26-05-29/                         # Code Review + 文件拆分重构日志
 │   ├── 26-05-30/                         # ESLint 全项目修复 + 超大文件拆分
 │   ├── 26-05-31/                         # 底图容灾/用户定位鲁棒性/LocalDev.bat 重构
-│   └── 26-06-02/                         # Code Review 安全加固 + 卷帘持久化修复
+│   └── 26-06-02/                         # 前端文件重构 + 安全加固 + 卷帘持久化修复
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
 ├── Write-Color.ps1                       # 彩色输出辅助脚本（中文消息 + ANSI 颜色）
@@ -513,9 +530,19 @@ LOG_LEVEL=INFO
 ## 🔄 更新日志
 
 ### V3.1.9 (2026-06-02)
-#### 🔒 安全加固 + 卷帘持久化修复
+#### 🧹 前端文件重构 + 🔒 安全加固 + 卷帘持久化修复
 
-本次版本修复 XSS 注入风险、增强代理 SSRF 防护、修复卷帘状态恢复逻辑。
+本次版本包含前端项目全面文件重构、XSS/SSRF 安全修复、卷帘状态恢复逻辑修复。
+
+---
+
+#### 🧹 前端文件重构（详见 [前端文档](./frontend/README.md#v319-2026-06-02)）
+
+- **清理死代码**：删除 vendored ol.js/ol.css (~1.5MB)、空目录、误放文件
+- **消除重复**：新建 `pathUtils.js`、`textDecoder.js` 共享模块，消除 6+ 处重复实现
+- **组件拆分**：FloatingAccountPanel (2520→1463行, -42%)、WeatherChartPanel (1883→460行, -76%)
+- **数据重组**：goldenSoupQuotes 迁移至 `data/`、重命名误导性常量文件
+- **Barrel 清理**：`geo/index.js`、`biz/index.js` 移除不相关 re-export
 
 ---
 
