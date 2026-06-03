@@ -823,8 +823,8 @@ async function handleSendCode() {
         emailCheckStatus.value = 'success';
         emailCheckMessage.value = '验证码已发送，请查收邮箱';
         message.success('验证码已发送至您的邮箱');
-        // 启动 60 秒倒计时
-        codeCountdown.value = 60;
+        // 启动 30 秒倒计时
+        codeCountdown.value = 30;
         countdownTimer = setInterval(() => {
             codeCountdown.value--;
             if (codeCountdown.value <= 0) {
@@ -928,7 +928,7 @@ async function handleResetSendCode() {
         await apiAuthSendCode(normalizedEmail, 'reset_password');
         message.success('验证码已发送至您的邮箱');
         resetStep.value = 2;
-        resetCodeCountdown.value = 60;
+        resetCodeCountdown.value = 30;
         resetCountdownTimer = setInterval(() => {
             resetCodeCountdown.value--;
             if (resetCodeCountdown.value <= 0) {
