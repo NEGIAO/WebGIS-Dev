@@ -1,10 +1,13 @@
 """
 认证数据库路径解析、连接工厂、时间工具函数。
+包含数据库损坏自动检测与恢复机制。
 """
 
 import logging
 import os
+import shutil
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -57,20 +60,142 @@ def _resolve_auth_db_path() -> Path:
 
 AUTH_DB_PATH = _resolve_auth_db_path()
 _auth_storage_ready = False
+_recovery_lock = threading.Lock()
+
+# ─── 数据库损坏恢复 ───
+def _attempt_db_recovery(db_path: Path) -> None:
+    """
+    数据库损坏恢复：备份损坏文件 → 删除 → 重置初始化标志。
+    使用 threading.Lock 保证同一进程内只执行一次恢复。
+    """
+    global _auth_storage_ready
+
+    with _recovery_lock:
+        # 二次检查：可能另一个线程已完成恢复
+        if not db_path.exists():
+            return
+
+        backup_path = db_path.with_suffix(
+            f"{db_path.suffix}.corrupted.{int(datetime.now(timezone.utc).timestamp())}"
+        )
+
+        # 备份损坏的数据库主文件（WAL 模式下备份不包含 WAL 数据，仅供事后分析）
+        try:
+            if db_path.exists():
+                shutil.copy2(str(db_path), str(backup_path))
+                logger.warning("已备份损坏的数据库文件: %s → %s", str(db_path), str(backup_path))
+        except Exception as backup_err:
+            logger.error("备份损坏数据库失败: %s", str(backup_err))
+
+        # 删除损坏的主文件、WAL 和 SHM
+        for suffix in ("", "-wal", "-shm"):
+            target = Path(str(db_path) + suffix)
+            try:
+                if target.exists():
+                    target.unlink()
+                    logger.info("已删除损坏文件: %s", str(target))
+            except Exception as del_err:
+                logger.error("删除损坏文件失败 (%s): %s", str(target), str(del_err))
+
+        # 重置初始化标志
+        _auth_storage_ready = False
+        logger.warning("数据库损坏恢复完成，等待 schema 重建")
+
+
+def _db_file_is_corrupted(db_path: Path) -> bool:
+    """通过 PRAGMA quick_check 快速检测数据库文件是否损坏。"""
+    try:
+        if not db_path.exists():
+            return False
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        try:
+            result = conn.execute("PRAGMA quick_check(1)").fetchone()
+            is_bad = result is None or str(result[0]).lower() != "ok"
+            if is_bad:
+                logger.warning("quick_check 检测到数据库异常: %s", result)
+            return is_bad
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return True
+    except Exception:
+        return False
+
 
 # ─── 连接工厂 ───
-def _db_connection() -> sqlite3.Connection:
-    """创建数据库连接。每次调用创建新连接，支持多线程并发访问。"""
+def _try_connect(db_path: Path) -> sqlite3.Connection:
+    """尝试连接数据库，执行基本 PRAGMA 设置。"""
+    conn = sqlite3.connect(str(db_path), timeout=15, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA foreign_keys=ON;")
+    return conn
+
+
+def _ensure_schema() -> None:
+    """
+    确保数据库表结构存在（幂等）。
+    直接使用 _try_connect 建立连接，避免通过 _db_connection() 造成无限递归。
+    """
+    from .schema import init_auth_tables_sync
+
+    conn = _try_connect(AUTH_DB_PATH)
     try:
-        conn = sqlite3.connect(str(AUTH_DB_PATH), timeout=15, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        # 启用 WAL 模式（每次连接设置，确保一致）
-        conn.execute("PRAGMA journal_mode=WAL;")
-        # 启用外键约束
-        conn.execute("PRAGMA foreign_keys=ON;")
-        return conn
+        init_auth_tables_sync(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    global _auth_storage_ready
+    _auth_storage_ready = True
+    logger.info("数据库 schema 重建完成: %s", str(AUTH_DB_PATH))
+
+
+def _db_connection() -> sqlite3.Connection:
+    """
+    创建数据库连接。每次调用创建新连接，支持多线程并发访问。
+    内置损坏自动检测与恢复：
+      1. 检测到 malformed/corrupt → 备份 → 删除 → 重建 schema → 重试
+      2. schema 未初始化 → 重建 → 重试
+    """
+    global _auth_storage_ready
+
+    # 正常路径：schema 已就绪
+    if _auth_storage_ready:
+        try:
+            return _try_connect(AUTH_DB_PATH)
+        except sqlite3.DatabaseError as e:
+            error_msg = str(e).lower()
+            if "malformed" not in error_msg and "corrupt" not in error_msg:
+                logger.error("数据库连接失败 (path=%s): %s", str(AUTH_DB_PATH), str(e))
+                raise
+            # 损坏：进入恢复流程（不 return，继续往下走）
+            logger.error("数据库损坏检测 (path=%s): %s，启动自动恢复...", str(AUTH_DB_PATH), str(e))
+            _auth_storage_ready = False
+        except Exception as e:
+            logger.error("数据库连接失败 (path=%s): %s", str(AUTH_DB_PATH), str(e))
+            raise
+
+    # 恢复路径：_auth_storage_ready == False（首次启动或损坏恢复后）
+    # 检测并修复损坏文件（_attempt_db_recovery 内部有锁保护，防止并发恢复）
+    if _db_file_is_corrupted(AUTH_DB_PATH):
+        _attempt_db_recovery(AUTH_DB_PATH)
+
+    # 重建 schema（CREATE TABLE IF NOT EXISTS 天然幂等）
+    try:
+        _ensure_schema()
     except Exception as e:
-        logger.error("数据库连接失败 (path=%s): %s", str(AUTH_DB_PATH), str(e))
+        logger.error("数据库 schema 重建失败: %s", str(e), exc_info=True)
+        raise
+
+    # 重试连接
+    try:
+        return _try_connect(AUTH_DB_PATH)
+    except sqlite3.DatabaseError as e:
+        logger.error("恢复后仍无法连接数据库 (path=%s): %s", str(AUTH_DB_PATH), str(e))
         raise
 
 

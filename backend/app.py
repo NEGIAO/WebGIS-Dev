@@ -145,20 +145,30 @@ app.add_middleware(
 
 @app.middleware("http")
 async def check_startup_state(request: Request, call_next):
-    """如果数据库初始化失败，对非健康检查端点返回 503。"""
+    """
+    如果数据库初始化失败，尝试自动恢复后重试。
+    恢复成功则清除降级状态继续处理；恢复失败则返回 503。
+    """
     if getattr(request.app.state, "startup_error", None):
         # 健康检查、API 文档和信息服务不受影响
         allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info"}
         if request.url.path not in allowlist:
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "code": 503,
-                    "message": "服务降级：数据库未就绪",
-                    "detail": request.app.state.startup_error,
-                    "data": None,
-                },
-            )
+            # 尝试自动恢复：重新初始化认证存储
+            try:
+                await init_auth_storage()
+                # 恢复成功，清除降级状态
+                logger.info("数据库自动恢复成功，清除降级状态")
+                request.app.state.startup_error = None
+            except Exception as recovery_err:
+                logger.error("数据库自动恢复失败: %s", str(recovery_err), exc_info=True)
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "code": 503,
+                        "message": "服务暂时不可用，请稍后重试",
+                        "data": None,
+                    },
+                )
     return await call_next(request)
 
 

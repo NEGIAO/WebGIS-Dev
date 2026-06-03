@@ -98,15 +98,18 @@ async def fetch_tile(url: str, client: Optional[AsyncClient] = None) -> bytes:
 
             # 判断是否需要重试的错误类型
             is_timeout = isinstance(exc, (httpx.TimeoutException, httpx.ConnectTimeout))
+            is_remote_error = isinstance(exc, httpx.RemoteProtocolError)
             is_event_loop_error = (
                 "Event loop is closed" in message
                 or "Cannot run the event loop while another loop is running" in message
             )
 
-            # 超时错误：重试（使用指数退避）
-            if is_timeout and attempt < MAX_RETRIES:
+            # 超时或远程协议错误：重试（使用指数退避）
+            # RemoteProtocolError 表示服务器关闭了连接（限流）
+            if (is_timeout or is_remote_error) and attempt < MAX_RETRIES:
                 wait_time = 0.5 * (attempt + 1)  # 0.5s, 1.0s
-                logger.debug("Timeout fetching tile, retrying in %.1fs (%d/%d): %s",
+                logger.debug("Request failed (%s), retrying in %.1fs (%d/%d): %s",
+                           "timeout" if is_timeout else "remote_error",
                            wait_time, attempt + 1, MAX_RETRIES, url)
                 import asyncio
                 await asyncio.sleep(wait_time)

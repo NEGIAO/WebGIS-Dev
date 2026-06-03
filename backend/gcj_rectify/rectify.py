@@ -21,10 +21,8 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
-# 并发数：平衡性能和限流风险
-# 过高（>16）：可能被高德等服务限流
-# 过低（<4）：批次过多，响应慢
-MAX_CONCURRENCY = 12
+# 并发数：不限制，依赖 fetch.py 的重试机制处理限流错误
+MAX_CONCURRENCY = 100  # 实际上不限制并发
 
 
 def _tile_cache_path(
@@ -168,8 +166,8 @@ async def _fetch_tile_grid(
 ) -> List[bytes]:
     """并发获取瓦片网格
 
-    使用 Semaphore 限制并发数，单个瓦片失败时返回空白瓦片而非中断整个请求。
-    并发控制已足够避免限流，无需额外延迟。
+    不限制并发，依赖 fetch.py 的重试机制处理限流错误（RemoteProtocolError）。
+    单个瓦片失败时返回空白瓦片而非中断整个请求。
     """
     semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
 
@@ -191,7 +189,7 @@ async def _fetch_tile_grid(
     if total_tiles > 9:
         logger.info("Fetching %d tiles for %s z=%d (grid: %dx%d)", total_tiles, category, z, x_count, y_count)
 
-    # 创建所有任务（无延迟，依赖并发控制）
+    # 创建所有任务（无延迟，无并发限制）
     tasks = [
         asyncio.create_task(_run(ax, ay))
         for ax in range(x_min, x_max + 1)
