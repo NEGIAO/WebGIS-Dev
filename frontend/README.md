@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.1.9
+# WebGIS 前端项目 — v3.2.0
 
 ## 📋 项目概述
 
@@ -198,11 +198,12 @@ frontend/src/
 │
 ├── composables/                              # 组合式函数
 │   ├── Magic/                                # 首屏视觉特效
-│   │   ├── useDelaunay.js
-│   │   ├── useFluid.js
-│   │   ├── useGravity.js
-│   │   ├── useSingularity.js
-│   │   └── useWave.js
+│   │   ├── useDelaunay.js                    # Delaunay 三角形特效
+│   │   ├── useFluid.js                       # 流体模拟特效
+│   │   ├── useGravity.js                     # 重力粒子特效
+│   │   ├── useRingExplosion.js               # 圆环粒子迸溅特效（Apple Watch 风格 + 鼠标交互）
+│   │   ├── useSingularity.js                 # 奇点特效
+│   │   └── useWave.js                        # 波纹特效
 │   ├── dataImport/                           # 数据导入工具
 │   │   ├── rasterUtils.js                    # 栅格工具（波段统计/拉伸/NoData）
 │   │   ├── vectorUtils.js                    # 矢量工具（解码/类型识别）
@@ -564,6 +565,31 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.2.0 (2026-06-03)
+#### ✨ 圆环粒子特效鼠标交互 + 🔧 GCJ-02 纠偏模块优化
+
+**新增功能：**
+- 新增 `useRingExplosion.js` 圆环粒子迸溅特效（Apple Watch 风格）
+- 鼠标跟随：圆环平滑跟随鼠标移动（缓动插值系数 0.08）
+- 悬停增强：鼠标进入圆环范围时亮度提升 1.4 倍，颜色粉色→蓝色平滑渐变
+- 点击迸发：鼠标点击瞬间爆发 30 个高速粒子（2.5x 速度）
+- 拖拽旋转：鼠标拖拽时计算角速度，影响粒子切向速度方向
+- 悬停渐变：hoverFactor [0,1] 平滑过渡，HSL 插值，进入速度 0.06，退出 0.04
+
+**技术实现：**
+- 鼠标状态对象统一管理交互状态
+- 平滑跟随使用线性插值避免卡顿
+- 悬停检测使用距离判断（RING_RADIUS + 30 缓冲区）
+- 角速度计算处理 ±PI 跨越问题
+- 事件监听在 destroy 时正确移除避免内存泄漏
+
+**后端优化 - GCJ-02 纠偏模块：**
+- **P0 修复**：`fetch_tile()` 移除递归调用，改为循环+重试（MAX_RETRIES=2）
+- **P1 性能**：缓存命中时直接 `read_bytes()` 返回，避免解码/编码（预期 -50% I/O）
+- **P1 性能**：添加 `_is_valid_image_bytes()` 魔数快速验证，避免不必要 PIL 解码
+- **P2 质量**：`transform.py` 代码全面重构（命名、文档、类型注解、收敛警告）
+- **健壮性**：WebP 格式检查长度验证、瓦片获取异常处理、变量初始化
 
 ### V3.1.9 (2026-06-02)
 #### 🧹 项目文件重构 — 清理/去重/拆分/重组

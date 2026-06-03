@@ -22,7 +22,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 
-## 0. 项目结构（2026-06-02 更新）
+## 0. 项目结构（2026-06-03 更新）
 
 ```text
 backend/
@@ -91,6 +91,65 @@ backend/
 ├── .dockerignore                                  # Docker 忽略文件
 └── README.md                                      # 本文件
 ```
+
+## 0.1 GCJ-02 纠偏模块优化记录 (2026-06-03)
+
+### 优化概览
+
+| 优先级 | 问题 | 优化措施 | 预期收益 |
+|--------|------|----------|----------|
+| P0 | `fetch_tile()` 递归调用 | 改为循环+重试（MAX_RETRIES=2） | 避免栈溢出风险 |
+| P1 | 缓存读取双重转换 | 直接 `read_bytes()` 返回 | -50% I/O |
+| P1 | 瓦片获取无异常处理 | 单个失败返回空白瓦片 | 提高可用性 |
+| P2 | 代码质量 | 命名/文档/类型注解改进 | 可维护性提升 |
+
+### 关键变更
+
+**1. fetch.py - 重试机制**
+```python
+# 之前：递归调用（危险）
+async def fetch_tile(url, client=None):
+    ...
+    return await fetch_tile(url, client=None)  # 递归！
+
+# 之后：循环重试（安全）
+for attempt in range(MAX_RETRIES + 1):
+    try:
+        ...
+    except Exception:
+        if is_event_loop_error and attempt < MAX_RETRIES:
+            reset_async_client()
+            continue
+        raise
+```
+
+**2. rectify.py - 缓存优化**
+```python
+# 之前：解码+编码（浪费）
+if tile_path.exists():
+    with Image.open(tile_path) as image:
+        image.load()
+        return image_to_bytes(image)
+
+# 之后：直接返回字节（高效）
+if tile_path.exists():
+    return tile_path.read_bytes()
+```
+
+**3. transform.py - 代码质量**
+```python
+# 之前：魔法数字
+a = 6378245.0
+f = 1 / 298.3
+ee = 1 - (b * b) / (a * a)
+
+# 之后：命名常量
+WGS84_SEMI_MAJOR_AXIS = 6378245.0
+WGS84_FLATTENING = 1 / 298.3
+WGS84_ECCENTRICITY_SQ = 1 - (WGS84_SEMI_MINOR_AXIS ** 2) / (WGS84_SEMI_MAJOR_AXIS ** 2)
+```
+
+详见：[GCJ-02 Code Review 报告](../Docs/26-06/2026-06-03-gcj-rectify-code-review.md)
 
 ## 1. 认证系统
 
