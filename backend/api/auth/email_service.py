@@ -1,23 +1,28 @@
 """
-邮件发送服务 — 通过 Resend HTTP API 发送验证码邮件。
+邮件发送服务 — 基于 SMTP 协议发送验证码邮件（阿里云邮件推送）。
 
-不依赖 SMTP 端口，适用于 Hugging Face Spaces 等封锁 SMTP 出站的环境。
+使用 Python 内置 smtplib + email 模块，无需额外依赖。
+端口 80 明文连接（HF 环境不封锁 80 端口）。
 """
 
 import logging
 import os
+import smtplib
 import asyncio
-
-import resend
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
 from dotenv import load_dotenv
 
 load_dotenv(override=False)
 
 logger = logging.getLogger(__name__)
 
-# Resend 配置（从环境变量读取）
-resend.api_key = os.environ.get("RESEND_API_KEY", "")
-RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+# SMTP 配置（阿里云邮件推送，端口 80 明文）
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtpdm.aliyun.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "80"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
 
 # 验证码用途中文映射
 _PURPOSE_LABELS = {
@@ -28,7 +33,6 @@ _PURPOSE_LABELS = {
 
 
 def _build_verification_html(code: str, purpose: str, expire_minutes: int = 5) -> str:
-    """构建验证码邮件的 HTML 内容。"""
     """构建验证码邮件的 HTML 内容。"""
     purpose_label = _PURPOSE_LABELS.get(purpose, "验证身份")
 
@@ -90,24 +94,38 @@ def _build_verification_html(code: str, purpose: str, expire_minutes: int = 5) -
 
 def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
     """
-    通过 Resend HTTP API 发送邮件（不依赖 SMTP 端口）。
+    通过阿里云邮件推送 SMTP 发送邮件。
+    端口 80 明文连接（HF 环境不封锁 80 端口）。
     """
-    if not resend.api_key:
-        logger.error("RESEND_API_KEY 未配置")
+    if not SMTP_USER or not SMTP_PASSWORD:
+        logger.error("SMTP 配置不完整：SMTP_USER 或 SMTP_PASSWORD 未设置")
         return False
 
+    # 构建邮件
+    msg = MIMEMultipart("alternative")
+    msg["From"] = formataddr(("WebGIS", SMTP_USER))
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    # 发送（与桌面端测试脚本完全一致）
+    server = None
     try:
-        resend.Emails.send({
-            "from": RESEND_FROM_EMAIL,
-            "to": [to_email],
-            "subject": subject,
-            "html": html_body,
-        })
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        server.ehlo()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(SMTP_USER, [to_email], msg.as_string())
         logger.info("验证码邮件已发送至 %s", to_email)
         return True
     except Exception as e:
         logger.error("邮件发送失败: %s (类型: %s)", str(e), type(e).__name__)
         return False
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
 
 async def send_verification_email(
@@ -117,7 +135,6 @@ async def send_verification_email(
     expire_minutes: int = 5,
 ) -> bool:
     """异步发送验证码邮件。"""
-    """异步发送验证码邮件。"""
     purpose_label = _PURPOSE_LABELS.get(purpose, "验证身份")
     subject = f"【WebGIS】{purpose_label}验证码：{code}"
     html_body = _build_verification_html(code, purpose, expire_minutes)
@@ -126,5 +143,5 @@ async def send_verification_email(
 
 
 def check_smtp_configured() -> bool:
-    """检查邮件服务配置是否完整（兼容旧接口名）。"""
-    return bool(resend.api_key)
+    """检查邮件服务配置是否完整。"""
+    return bool(SMTP_USER and SMTP_PASSWORD)

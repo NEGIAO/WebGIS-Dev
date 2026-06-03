@@ -19,7 +19,6 @@ dependencies = [
     "python-multipart>=0.0.6",
     "shapely>=2.0.0",
     "python-dotenv>=1.0.0",
-    "resend>=2.0.0",
 ]
 
 [tool.uv]
