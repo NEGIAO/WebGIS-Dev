@@ -25,7 +25,7 @@ def _create_user_sync(
     avatar_index: int = 0,
     email: str = "",
     email_verified: int = 0,
-) -> bool:
+) -> str:
     """
     创建注册用户。
 
@@ -37,7 +37,9 @@ def _create_user_sync(
     - email_verified: 邮箱是否已验证（0/1）
 
     返回：
-    - True 创建成功，False 用户名已存在
+    - "ok" 创建成功
+    - "username_taken" 用户名已存在
+    - "email_taken" 邮箱已被绑定
     """
     created_at = _iso(_utc_now())
     password_hash = _hash_password(password)
@@ -54,9 +56,12 @@ def _create_user_sync(
                 (username, password_hash, normalized_avatar_index, normalized_email, email_verified, created_at),
             )
             conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        return False
+        return "ok"
+    except sqlite3.IntegrityError as e:
+        error_msg = str(e).lower()
+        if "email" in error_msg:
+            return "email_taken"
+        return "username_taken"
 
 
 def _get_or_create_guest_username_sync(guest_uid: str) -> str:

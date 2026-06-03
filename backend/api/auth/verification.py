@@ -10,7 +10,7 @@
 import logging
 import secrets
 from datetime import timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from .db import _db_connection, _iso, _utc_now
 from .constants import (
@@ -80,8 +80,10 @@ def rate_limit_check(email: str) -> Dict[str, Any]:
     频率限制检查。
 
     规则：
-    1. 同一邮箱 60 秒内仅允许发送 1 次
-    2. 同一邮箱每天最多发送 10 次
+    1. 同一邮箱 30 秒内仅允许发送 1 次（仅统计未过期且未使用的验证码）
+    2. 同一邮箱每天最多发送 10 次（仅统计未过期且未使用的验证码）
+
+    副作用：顺带清理已过期的验证码记录，防止表膨胀。
 
     参数：
     - email: 目标邮箱地址
@@ -93,18 +95,25 @@ def rate_limit_check(email: str) -> Dict[str, Any]:
     """
     normalized_email = email.lower().strip()
     now = _utc_now()
-    # 在 Python 侧计算时间边界（纯 UTC 格式，避免 SQLite datetime() 不支持时区后缀）
+    now_iso = _iso(now)
     cutoff_60s = _iso(now - timedelta(seconds=VERIFICATION_RATE_LIMIT_SECONDS))
     today_start = _iso(now.replace(hour=0, minute=0, second=0, microsecond=0))
 
     with _db_connection() as conn:
-        # 检查 60 秒内是否有发送记录
+        # 清理已过期的验证码记录（防止表膨胀）
+        conn.execute(
+            "DELETE FROM email_verification_codes WHERE expires_at < ?",
+            (now_iso,),
+        )
+        conn.commit()
+
+        # 检查 30 秒内是否有未过期、未使用的验证码
         count_recent = conn.execute(
             """
             SELECT COUNT(*) as cnt FROM email_verification_codes
-            WHERE email = ? AND created_at > ?
+            WHERE email = ? AND created_at > ? AND used = 0 AND expires_at > ?
             """,
-            (normalized_email, cutoff_60s),
+            (normalized_email, cutoff_60s, now_iso),
         ).fetchone()
 
         if count_recent and dict(count_recent).get("cnt", 0) > 0:
@@ -114,13 +123,13 @@ def rate_limit_check(email: str) -> Dict[str, Any]:
                 "retry_after": VERIFICATION_RATE_LIMIT_SECONDS,
             }
 
-        # 检查每日发送上限
+        # 检查每日发送上限（仅统计未过期、未使用的验证码）
         count_today = conn.execute(
             """
             SELECT COUNT(*) as cnt FROM email_verification_codes
-            WHERE email = ? AND created_at >= ?
+            WHERE email = ? AND created_at >= ? AND used = 0 AND expires_at > ?
             """,
-            (normalized_email, today_start),
+            (normalized_email, today_start, now_iso),
         ).fetchone()
 
         if count_today and dict(count_today).get("cnt", 0) >= VERIFICATION_DAILY_LIMIT:
@@ -131,6 +140,42 @@ def rate_limit_check(email: str) -> Dict[str, Any]:
             }
 
     return {"allowed": True, "message": "", "retry_after": 0}
+
+
+def rate_limit_check_for_verify(email: str, purpose: str) -> Dict[str, Any]:
+    """
+    验证码校验频率限制（防止暴力破解）。
+
+    规则：同一邮箱同一用途，1 分钟内最多尝试 5 次。
+
+    参数：
+    - email: 目标邮箱地址
+    - purpose: 用途标识
+
+    返回：
+    - allowed: bool 是否允许验证
+    - message: str 提示信息
+    """
+    normalized_email = email.lower().strip()
+    cutoff_60s = _iso(_utc_now() - timedelta(seconds=60))
+
+    with _db_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT SUM(attempt_count) as total FROM email_verification_codes
+            WHERE email = ? AND purpose = ? AND created_at > ?
+            """,
+            (normalized_email, purpose, cutoff_60s),
+        ).fetchone()
+
+        total = int(dict(row).get("total") or 0) if row else 0
+        if total >= VERIFICATION_MAX_ATTEMPTS * 2:
+            return {
+                "allowed": False,
+                "message": "验证码校验过于频繁，请 1 分钟后再试",
+            }
+
+    return {"allowed": True, "message": ""}
 
 
 def verify_code(email: str, code: str, purpose: str) -> Dict[str, Any]:
@@ -224,6 +269,41 @@ def verify_code(email: str, code: str, purpose: str) -> Dict[str, Any]:
             "message": "验证成功",
             "username": associated_username,
         }
+
+
+def delete_unused_codes(email: str, purpose: str) -> bool:
+    """
+    删除指定邮箱和用途的所有未使用验证码记录。
+
+    用于邮件发送失败时清理已存储的验证码，
+    避免频率限制误拦截（数据库中有记录但用户未收到邮件）。
+
+    参数：
+    - email: 目标邮箱地址
+    - purpose: 用途标识
+
+    返回：
+    - True 有记录被删除，False 无记录或删除失败
+    """
+    normalized_email = email.lower().strip()
+    try:
+        with _db_connection() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM email_verification_codes
+                WHERE email = ? AND purpose = ? AND used = 0
+                """,
+                (normalized_email, purpose),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception as e:
+        logger.error("验证码记录清理失败: %s", str(e), exc_info=True)
+        return False
+
+
+# 向后兼容别名
+delete_latest_code = delete_unused_codes
 
 
 def is_email_verified_for_purpose(email: str, purpose: str) -> bool:

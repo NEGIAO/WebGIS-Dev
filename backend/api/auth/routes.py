@@ -59,7 +59,7 @@ from .system_config import _set_admin_avatar_index_sync
 from .password import _verify_password
 from .user import _create_user_sync, _get_or_create_guest_username_sync, _get_user_sync, _record_login_sync
 from .email_service import check_smtp_configured, send_verification_email
-from .verification import generate_code, store_code, rate_limit_check, verify_code, is_email_verified_for_purpose
+from .verification import generate_code, store_code, rate_limit_check, rate_limit_check_for_verify, verify_code, is_email_verified_for_purpose, delete_unused_codes
 from .constants import (
     _normalize_email,
     _validate_email,
@@ -151,6 +151,9 @@ async def send_verification_code(
         expire_minutes=VERIFICATION_CODE_EXPIRE_MINUTES,
     )
     if not sent:
+        # 邮件发送失败：清理已存储的验证码记录，避免频率限制误拦截
+        # （数据库中有记录但用户未收到邮件，会导致下次请求被 30 秒频率限制拦截）
+        await asyncio.to_thread(delete_unused_codes, email, payload.purpose)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="验证码邮件发送失败，请稍后重试",
@@ -180,6 +183,14 @@ async def verify_verification_code(payload: VerifyCodeRequest) -> Dict[str, Any]
     email = _normalize_email(payload.email)
     _validate_email(email)
     _validate_verification_purpose(payload.purpose)
+
+    # 频率限制：防止暴力破解验证码
+    verify_rate = await asyncio.to_thread(rate_limit_check_for_verify, email, payload.purpose)
+    if not verify_rate.get("allowed", True):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=verify_rate.get("message", "验证码校验过于频繁，请稍后再试"),
+        )
 
     result = await asyncio.to_thread(
         verify_code, email, payload.code.strip(), payload.purpose
@@ -271,7 +282,12 @@ async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
         email,
         email_verified,
     )
-    if not created:
+    if created == "email_taken":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="该邮箱已被其他账号绑定",
+        )
+    if created == "username_taken":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="用户名已存在，请更换后重试",

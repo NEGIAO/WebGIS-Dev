@@ -83,7 +83,7 @@ export async function apiAuthSendCode(email, purpose, username) {
     if (username) {
         payload.username = String(username).trim();
     }
-    return backendAPI.post('/api/auth/send-code', payload, { timeout: 20000 });
+    return backendAPI.post('/api/auth/send-code', payload, { timeout: 30000 });
 }
 
 /**
