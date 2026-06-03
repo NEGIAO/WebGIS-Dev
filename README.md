@@ -64,6 +64,7 @@
 - 💾 GIS 数据格式转换
 - ⚙️ 异步后台任务
 - 🔐 三类身份登录 + 会话鉴权（/data 持久化）
+- 📧 **邮箱验证码系统**：注册邮箱绑定 + 密码重置（SMTP 发送，60秒频率限制，5分钟有效期）
 - 📐 **空间分析 API**：基于 Shapely 2.x 的精确几何运算（缓冲区/叠加分析/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 
 ## 🚀 快速开始
@@ -320,6 +321,8 @@ WebGIS_Dev/
 │   │   ├── views/                        # 页面
 │   │   │   ├── HomeView.vue              # 主页（地图 + 侧边栏）
 │   │   │   ├── RegisterView.vue          # 注册页
+│   │   │   ├── TermsOfService.vue        # 服务条款页
+│   │   │   ├── PrivacyPolicy.vue         # 隐私政策页
 │   │   │   └── home/                     # HomeView 拆分模块
 │   │   │       ├── useDistrictLayer.ts   # 行政区划图层
 │   │   │       ├── useLayerOperations.ts # 图层操作
@@ -335,13 +338,15 @@ WebGIS_Dev/
 │   ├── api/                              # 接口模块
 │   │   ├── auth/                         # 鉴权模块（模块化拆分）
 │   │   │   ├── __init__.py               # 门面 re-export
-│   │   │   ├── constants.py              # 常量、角色、正则
+│   │   │   ├── constants.py              # 常量、角色、正则、邮箱验证常量
 │   │   │   ├── db.py                     # 数据库连接工厂
 │   │   │   ├── schema.py                 # DDL 建表与迁移
 │   │   │   ├── password.py               # 密码哈希/验证
 │   │   │   ├── models.py                 # Pydantic 请求模型
 │   │   │   ├── user.py                   # 用户 CRUD
-│   │   │   ├── session.py                # 会话管理
+│   │   │   ├── session.py                # 会话管理、邮箱相关 CRUD
+│   │   │   ├── email_service.py          # SMTP 邮件发送服务
+│   │   │   ├── verification.py           # 验证码生成/存储/校验/频率限制
 │   │   │   ├── preferences.py            # 用户偏好
 │   │   │   ├── quota.py                  # 配额追踪
 │   │   │   ├── system_config.py          # 系统配置
@@ -529,6 +534,38 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.2.1 (2026-06-03)
+#### 📧 邮箱验证码系统 + 密码重置 + 认证安全增强
+
+**后端新增：**
+- ✅ `email_service.py`：SMTP 邮件发送服务（QQ邮箱 SSL，HTML 验证码模板，异步发送，零额外依赖）
+- ✅ `verification.py`：验证码核心逻辑（secrets 安全生成、频率限制 60秒/次、每日上限 10次、5次尝试上限、5分钟有效期）
+- ✅ `email_verification_codes` 表 + users 表 email/email_verified 字段 + 邮箱部分唯一索引
+- ✅ 新增 SendCodeRequest / VerifyCodeRequest / ResetPasswordRequest 请求模型
+- ✅ 新增 POST `/api/auth/send-code`、`/verify-code`、`/reset-password` 接口
+- ✅ 改造 POST `/api/auth/register` 支持邮箱绑定（可选）
+- ✅ 新增邮箱 CRUD 函数（_get_user_by_email_sync / _check_email_taken_sync / _update_user_password_by_email_sync 等）
+
+**前端新增：**
+- ✅ 新增 `apiAuthSendCode` / `apiAuthVerifyCode` / `apiAuthResetPassword` API 函数
+- ✅ 注册表新增邮箱输入框 + 验证码行（发送/验证/已验证徽章）
+- ✅ 登录模式新增"忘记密码？"链接 + 密码重置弹窗（两步：邮箱→验证码+新密码）
+
+**安全设计：**
+- 🔒 6位数字验证码（secrets 模块安全生成）
+- 🔒 60秒发送间隔限制 + 每日上限 10 次
+- 🔒 5分钟有效期 + 最多 5 次验证尝试
+- 🔒 邮箱部分唯一索引（防并发注册竞态）
+- 🔒 密码重置后注销该账号全部会话
+
+**Code Review 修复：**
+- schema.py 新增邮箱唯一索引（`idx_users_email_unique`），防止并发注册竞态
+- auth.js 移除密码字段 trim，保留用户输入意图
+
+详见 [前端文档](./frontend/README.md#v321-2026-06-03) | [开发日志](./Docs/26-06/2026-06-03-邮箱验证码与密码重置.md)
+
+---
 
 ### V3.2.0 (2026-06-03)
 #### ✨ 圆环粒子特效鼠标交互 + 🔧 GCJ-02 纠偏模块优化
@@ -1272,6 +1309,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-02
-**当前版本**：V3.2.0
+**最后更新**：2026-06-03
+**当前版本**：V3.2.1
 **项目状态**：开发中 - 持续迭代优化

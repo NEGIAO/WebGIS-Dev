@@ -122,6 +122,91 @@
                         </div>
                     </div>
 
+                    <!-- 注册模式：邮箱 & 验证码 -->
+                    <div
+                        v-if="mode === 'register'"
+                        class="form-group"
+                    >
+                        <label for="email">绑定邮箱</label>
+                        <div class="input-group">
+                            <i class="icon fas fa-envelope"></i>
+                            <input
+                                id="email"
+                                v-model="email"
+                                type="email"
+                                placeholder="请输入邮箱地址（可选，用于密码找回）"
+                            />
+                        </div>
+                        <div
+                            v-if="emailCheckMessage"
+                            class="hint username-check"
+                            :class="emailCheckStatus"
+                        >
+                            <i
+                                :class="emailCheckStatus === 'success'
+                                    ? 'fas fa-check-circle'
+                                    : emailCheckStatus === 'loading'
+                                        ? 'fas fa-spinner fa-spin'
+                                        : 'fas fa-exclamation-circle'"
+                            ></i>
+                            {{ emailCheckMessage }}
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="mode === 'register' && email"
+                        class="form-group"
+                    >
+                        <label for="emailCode">邮箱验证码</label>
+                        <div class="email-code-row">
+                            <div class="input-group email-code-input">
+                                <i class="icon fas fa-shield-alt"></i>
+                                <input
+                                    id="emailCode"
+                                    v-model="emailCode"
+                                    type="text"
+                                    inputmode="numeric"
+                                    pattern="[0-9]*"
+                                    maxlength="6"
+                                    placeholder="6位验证码"
+                                    :disabled="emailVerified"
+                                />
+                            </div>
+                            <button
+                                v-if="!emailVerified"
+                                type="button"
+                                class="send-code-btn"
+                                :disabled="isSendingCode || codeCountdown > 0"
+                                @click="handleSendCode"
+                            >
+                                <i
+                                    class="fas"
+                                    :class="isSendingCode ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
+                                ></i>
+                                {{ codeCountdown > 0 ? `${codeCountdown}s` : '发送验证码' }}
+                            </button>
+                            <button
+                                v-if="!emailVerified && emailCode.length === 6"
+                                type="button"
+                                class="verify-code-btn"
+                                :disabled="isVerifyingCode"
+                                @click="handleVerifyCode"
+                            >
+                                <i
+                                    class="fas"
+                                    :class="isVerifyingCode ? 'fa-spinner fa-spin' : 'fa-check'"
+                                ></i>
+                                验证
+                            </button>
+                            <span
+                                v-if="emailVerified"
+                                class="verified-badge"
+                            >
+                                <i class="fas fa-check-circle"></i> 已验证
+                            </span>
+                        </div>
+                    </div>
+
                     <div
                         v-if="mode === 'register'"
                         class="form-group"
@@ -175,6 +260,21 @@
                         </button>
                     </div>
 
+                    <!-- 登录模式：忘记密码链接 -->
+                    <div
+                        v-if="mode === 'login'"
+                        class="forgot-password-row"
+                    >
+                        <a
+                            href="#"
+                            class="forgot-link"
+                            @click.prevent="openResetPanel"
+                        >
+                            <i class="fas fa-key"></i>
+                            忘记密码？
+                        </a>
+                    </div>
+
                     <div
                         v-if="formMessage"
                         :class="['validation-message', formStatus]"
@@ -210,8 +310,108 @@
                 </form>
             </div>
 
+            <!-- 密码重置弹窗 -->
+            <div
+                v-if="showResetPanel"
+                class="reset-overlay"
+            >
+                <div class="reset-panel">
+                    <div class="reset-header">
+                        <h3><i class="fas fa-unlock-alt"></i> 密码重置</h3>
+                        <button
+                            type="button"
+                            class="reset-close"
+                            @click="closeResetPanel"
+                        >
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <!-- Step 1: 输入邮箱 -->
+                    <div
+                        v-if="resetStep === 1"
+                        class="reset-body"
+                    >
+                        <p class="reset-desc">请输入您注册时绑定的邮箱，我们将发送验证码</p>
+                        <div class="input-group">
+                            <i class="icon fas fa-envelope"></i>
+                            <input
+                                v-model="resetEmail"
+                                type="email"
+                                placeholder="请输入绑定的邮箱地址"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            class="btn reset-btn"
+                            :disabled="isResetSubmitting"
+                            @click="handleResetSendCode"
+                        >
+                            <i
+                                class="fas"
+                                :class="isResetSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
+                            ></i>
+                            {{ isResetSubmitting ? '发送中...' : '发送验证码' }}
+                        </button>
+                    </div>
+
+                    <!-- Step 2: 输入验证码 + 新密码 -->
+                    <div
+                        v-if="resetStep === 2"
+                        class="reset-body"
+                    >
+                        <p class="reset-desc">
+                            验证码已发送至 <strong>{{ resetEmail }}</strong>
+                        </p>
+                        <div class="input-group">
+                            <i class="icon fas fa-shield-alt"></i>
+                            <input
+                                v-model="resetCode"
+                                type="text"
+                                maxlength="6"
+                                placeholder="6位验证码"
+                            />
+                        </div>
+                        <div class="input-group">
+                            <i class="icon fas fa-lock"></i>
+                            <input
+                                v-model="resetNewPassword"
+                                type="password"
+                                placeholder="新密码（6-64位，含字母和数字）"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            class="btn reset-btn"
+                            :disabled="isResetSubmitting"
+                            @click="handleResetSubmit"
+                        >
+                            <i
+                                class="fas"
+                                :class="isResetSubmitting ? 'fa-spinner fa-spin' : 'fa-check'"
+                            ></i>
+                            {{ isResetSubmitting ? '提交中...' : '重置密码' }}
+                        </button>
+                        <button
+                            v-if="resetCodeCountdown <= 0"
+                            type="button"
+                            class="resend-btn"
+                            @click="handleResetSendCode"
+                        >
+                            重新发送验证码
+                        </button>
+                        <span
+                            v-else
+                            class="countdown-text"
+                        >
+                            {{ resetCodeCountdown }}s 后可重新发送
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             <div class="form-footer">
-                登录即表示您同意我们的 <a href="#">服务条款</a> 和 <a href="#">隐私政策</a>
+                登录即表示您同意我们的 <router-link to="/terms">服务条款</router-link> 和 <router-link to="/privacy">隐私政策</router-link>
             </div>
         </div>
     </div>
@@ -225,6 +425,9 @@ import {
     apiAuthCheckUsername,
     apiAuthLogin,
     apiAuthRegister,
+    apiAuthSendCode,
+    apiAuthVerifyCode,
+    apiAuthResetPassword,
     apiLocationTrackVisit,
 } from '../api/backend';
 import {
@@ -254,6 +457,29 @@ const usernameCheckStatus = ref('');
 const usernameCheckMessage = ref('');
 const lastCheckedUsername = ref('');
 let gisPrewarmTimer = null;
+
+// ─── 邮箱 & 验证码 ───
+const email = ref('');
+const emailCode = ref('');
+const isSendingCode = ref(false);
+const isVerifyingCode = ref(false);
+const codeCountdown = ref(0);
+const emailVerified = ref(false);
+const emailCheckStatus = ref('');
+const emailCheckMessage = ref('');
+let countdownTimer = null;
+
+// ─── 密码重置 ───
+const showResetPanel = ref(false);
+const resetEmail = ref('');
+const resetCode = ref('');
+const resetNewPassword = ref('');
+const resetStep = ref(1); // 1=输入邮箱, 2=输入验证码+新密码
+const isResetSubmitting = ref(false);
+const resetCodeCountdown = ref(0);
+let resetCountdownTimer = null;
+
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 const usernameRegex = /^[A-Za-z0-9_]{3,24}$/;
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
@@ -498,6 +724,7 @@ async function handleRegister() {
     const normalizedUsername = normalizeUsername(username.value);
     const normalizedPassword = String(password.value || '').trim();
     const normalizedConfirmPassword = String(confirmPassword.value || '').trim();
+    const normalizedEmail = String(email.value || '').trim().toLowerCase();
 
     if (!normalizedUsername) {
         setFormState('error', '请填写用户名');
@@ -536,7 +763,13 @@ async function handleRegister() {
     setFormState('', '');
 
     try {
-        await apiAuthRegister(normalizedUsername, normalizedPassword, selectedAvatarIndex.value);
+        await apiAuthRegister(
+            normalizedUsername,
+            normalizedPassword,
+            selectedAvatarIndex.value,
+            normalizedEmail,
+            emailCode.value,
+        );
         message.success('注册成功，请使用新账号登录');
         password.value = '';
         confirmPassword.value = '';
@@ -565,6 +798,210 @@ async function handleSubmit() {
     }
     await handleLogin();
 }
+
+// ─── 邮箱验证码逻辑 ───
+
+/**
+ * 发送邮箱验证码（注册用）
+ * 校验邮箱格式 → 调用后端发送接口 → 启动 60 秒倒计时
+ */
+async function handleSendCode() {
+    const normalizedEmail = String(email.value || '').trim().toLowerCase();
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
+        return;
+    }
+    if (codeCountdown.value > 0) return;
+
+    isSendingCode.value = true;
+    emailCheckStatus.value = 'loading';
+    emailCheckMessage.value = '正在发送验证码...';
+    setFormState('', '');
+
+    try {
+        await apiAuthSendCode(normalizedEmail, 'register', normalizeUsername(username.value));
+        emailCheckStatus.value = 'success';
+        emailCheckMessage.value = '验证码已发送，请查收邮箱';
+        message.success('验证码已发送至您的邮箱');
+        // 启动 60 秒倒计时
+        codeCountdown.value = 60;
+        countdownTimer = setInterval(() => {
+            codeCountdown.value--;
+            if (codeCountdown.value <= 0) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }, 1000);
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message || '验证码发送失败，请稍后重试',
+        );
+        emailCheckStatus.value = 'error';
+        emailCheckMessage.value = detail;
+        setFormState('error', detail);
+    } finally {
+        isSendingCode.value = false;
+    }
+}
+
+/**
+ * 校验邮箱验证码（注册用）
+ * 调用后端 verify-code 接口，成功后标记邮箱已验证
+ */
+async function handleVerifyCode() {
+    const normalizedEmail = String(email.value || '').trim().toLowerCase();
+    const code = String(emailCode.value || '').trim();
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
+        return;
+    }
+    if (!code || code.length !== 6) {
+        setFormState('error', '请输入 6 位验证码');
+        return;
+    }
+
+    isVerifyingCode.value = true;
+    setFormState('', '');
+
+    try {
+        await apiAuthVerifyCode(normalizedEmail, code, 'register');
+        emailVerified.value = true;
+        emailCheckStatus.value = 'success';
+        emailCheckMessage.value = '✅ 邮箱验证成功';
+        message.success('邮箱验证成功');
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message || '验证码校验失败',
+        );
+        emailCheckStatus.value = 'error';
+        emailCheckMessage.value = detail;
+        setFormState('error', detail);
+    } finally {
+        isVerifyingCode.value = false;
+    }
+}
+
+// ─── 密码重置逻辑 ───
+
+/**
+ * 打开密码重置面板
+ */
+function openResetPanel() {
+    showResetPanel.value = true;
+    resetStep.value = 1;
+    resetEmail.value = '';
+    resetCode.value = '';
+    resetNewPassword.value = '';
+    setFormState('', '');
+}
+
+/**
+ * 关闭密码重置面板
+ */
+function closeResetPanel() {
+    showResetPanel.value = false;
+    resetStep.value = 1;
+    if (resetCountdownTimer) {
+        clearInterval(resetCountdownTimer);
+        resetCountdownTimer = null;
+    }
+    setFormState('', '');
+}
+
+/**
+ * 发送密码重置验证码
+ */
+async function handleResetSendCode() {
+    const normalizedEmail = String(resetEmail.value || '').trim().toLowerCase();
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
+        return;
+    }
+    if (resetCodeCountdown.value > 0) return;
+
+    isResetSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        await apiAuthSendCode(normalizedEmail, 'reset_password');
+        message.success('验证码已发送至您的邮箱');
+        resetStep.value = 2;
+        resetCodeCountdown.value = 60;
+        resetCountdownTimer = setInterval(() => {
+            resetCodeCountdown.value--;
+            if (resetCodeCountdown.value <= 0) {
+                clearInterval(resetCountdownTimer);
+                resetCountdownTimer = null;
+            }
+        }, 1000);
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message || '验证码发送失败',
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isResetSubmitting.value = false;
+    }
+}
+
+/**
+ * 提交密码重置
+ */
+async function handleResetSubmit() {
+    const normalizedEmail = String(resetEmail.value || '').trim().toLowerCase();
+    const code = String(resetCode.value || '').trim();
+    const newPass = String(resetNewPassword.value || '').trim();
+
+    if (!code || code.length !== 6) {
+        setFormState('error', '请输入 6 位验证码');
+        return;
+    }
+    if (!passwordRegex.test(newPass)) {
+        setFormState('error', '新密码需包含字母和数字，长度 6-64 位');
+        return;
+    }
+
+    isResetSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        await apiAuthResetPassword(normalizedEmail, code, newPass);
+        message.success('密码已重置，请使用新密码登录');
+        closeResetPanel();
+        setFormState('success', '密码重置成功，请使用新密码登录');
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message || '密码重置失败',
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isResetSubmitting.value = false;
+    }
+}
+
+/**
+ * 邮箱输入变化时重置验证状态
+ */
+watch(email, () => {
+    if (emailVerified.value) {
+        emailVerified.value = false;
+        emailCheckStatus.value = '';
+        emailCheckMessage.value = '';
+        emailCode.value = '';
+    }
+    // 邮箱变更时重置倒计时
+    if (countdownTimer !== null) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+    }
+    codeCountdown.value = 0;
+});
 
 onMounted(async () => {
     const token = getAuthToken();
@@ -616,6 +1053,14 @@ onUnmounted(() => {
     if (gisPrewarmTimer !== null && typeof window !== 'undefined') {
         window.clearTimeout(gisPrewarmTimer);
         gisPrewarmTimer = null;
+    }
+    if (countdownTimer !== null) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+    }
+    if (resetCountdownTimer !== null) {
+        clearInterval(resetCountdownTimer);
+        resetCountdownTimer = null;
     }
 });
 
@@ -1076,5 +1521,176 @@ input:focus {
     .avatar-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+}
+
+/* ─── 邮箱验证码行 ─── */
+.email-code-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.email-code-input {
+    flex: 1;
+}
+
+.send-code-btn,
+.verify-code-btn {
+    white-space: nowrap;
+    padding: 10px 14px;
+    border: 1px solid var(--border-brand-light);
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--bg-brand-lighter), var(--bg-brand-light));
+    color: var(--text-brand-dark);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.send-code-btn:hover:not(:disabled),
+.verify-code-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--brand-primary-lighter), var(--brand-primary-light));
+    border-color: var(--brand-primary);
+    transform: translateY(-1px);
+}
+
+.send-code-btn:disabled,
+.verify-code-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.verified-badge {
+    color: var(--brand-primary-dark);
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ─── 忘记密码链接 ─── */
+.forgot-password-row {
+    text-align: right;
+    margin-top: -12px;
+    margin-bottom: 12px;
+}
+
+.forgot-link {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.forgot-link:hover {
+    color: var(--brand-primary);
+    text-decoration: underline;
+}
+
+.forgot-link i {
+    margin-right: 3px;
+}
+
+/* ─── 密码重置弹窗 ─── */
+.reset-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(3px);
+}
+
+.reset-panel {
+    background: #fff;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    animation: fadeIn 0.3s ease;
+}
+
+.reset-header {
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    color: #fff;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.reset-header h3 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+.reset-header h3 i {
+    margin-right: 6px;
+}
+
+.reset-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.reset-close:hover {
+    opacity: 1;
+}
+
+.reset-body {
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.reset-desc {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.reset-btn {
+    margin-top: 8px;
+}
+
+.resend-btn {
+    display: block;
+    width: 100%;
+    background: none;
+    border: 1px dashed var(--border-light);
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.resend-btn:hover {
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
+}
+
+.countdown-text {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
 }
 </style>

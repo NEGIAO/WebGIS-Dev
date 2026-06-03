@@ -19,16 +19,39 @@ def _get_user_sync(username: str) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def _create_user_sync(username: str, password: str, avatar_index: int = 0) -> bool:
+def _create_user_sync(
+    username: str,
+    password: str,
+    avatar_index: int = 0,
+    email: str = "",
+    email_verified: int = 0,
+) -> bool:
+    """
+    创建注册用户。
+
+    参数：
+    - username: 用户名
+    - password: 明文密码（内部自动哈希）
+    - avatar_index: 头像索引
+    - email: 绑定邮箱（可为空）
+    - email_verified: 邮箱是否已验证（0/1）
+
+    返回：
+    - True 创建成功，False 用户名已存在
+    """
     created_at = _iso(_utc_now())
     password_hash = _hash_password(password)
     normalized_avatar_index = _normalize_avatar_index(avatar_index)
+    normalized_email = email.lower().strip() if email else ""
 
     try:
         with _db_connection() as conn:
             conn.execute(
-                "INSERT INTO users (username, password_hash, role, avatar_index, created_at) VALUES (?, ?, 'registered', ?, ?)",
-                (username, password_hash, normalized_avatar_index, created_at),
+                """
+                INSERT INTO users (username, password_hash, role, avatar_index, email, email_verified, created_at)
+                VALUES (?, ?, 'registered', ?, ?, ?, ?)
+                """,
+                (username, password_hash, normalized_avatar_index, normalized_email, email_verified, created_at),
             )
             conn.commit()
         return True

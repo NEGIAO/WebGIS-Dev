@@ -116,6 +116,11 @@ def init_auth_tables_sync(conn) -> None:
     user_columns = {str(dict(row).get("name") or "") for row in user_column_rows}
     if "avatar_index" not in user_columns:
         _safe_execute(conn, "ALTER TABLE users ADD COLUMN avatar_index INTEGER NOT NULL DEFAULT 0")
+    # 新增：邮箱字段与邮箱验证状态
+    if "email" not in user_columns:
+        _safe_execute(conn, "ALTER TABLE users ADD COLUMN email TEXT")
+    if "email_verified" not in user_columns:
+        _safe_execute(conn, "ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
 
     # 表：sessions
     conn.execute("""
@@ -383,6 +388,27 @@ def init_auth_tables_sync(conn) -> None:
         VALUES ('admin_contact', ?, ?)
         ON CONFLICT(key) DO NOTHING
     """, (default_contact, now_iso))
+
+    # 邮箱唯一索引（排除空字符串，避免多用户未绑定邮箱时冲突）
+    _safe_execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email) WHERE email != '' AND email IS NOT NULL")
+
+    # 表：email_verification_codes（邮箱验证码）
+    _safe_execute(conn, """
+        CREATE TABLE IF NOT EXISTS email_verification_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            code TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            username TEXT,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            expires_at TEXT NOT NULL,
+            used INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    """)
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_verification_codes(email)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_expires ON email_verification_codes(expires_at)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_purpose ON email_verification_codes(purpose)")
 
 
 def _init_auth_storage_sync() -> None:

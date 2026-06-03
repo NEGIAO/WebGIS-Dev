@@ -284,3 +284,65 @@ def _is_guest_allow_request(request: Request) -> bool:
 def _get_admin_password() -> str:
     configured = str(os.getenv(ADMIN_PASSWORD_ENV_NAME, "")).strip()
     return configured or DEFAULT_ADMIN_PASSWORD_LOCAL
+
+
+# ─── 邮箱验证码常量 ───
+VERIFICATION_CODE_LENGTH = 6
+VERIFICATION_CODE_EXPIRE_MINUTES = 5
+VERIFICATION_RATE_LIMIT_SECONDS = 60
+VERIFICATION_DAILY_LIMIT = 10
+VERIFICATION_MAX_ATTEMPTS = 5
+
+# 邮箱格式校验正则
+EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+# 验证码用途枚举
+VERIFICATION_PURPOSES = {"register", "reset_password", "bind_email"}
+
+
+def _normalize_email(raw_email: Optional[str]) -> str:
+    """
+    规范化邮箱地址：去空格、转小写、截断超长输入。
+
+    参数：
+    - raw_email: 原始邮箱字符串
+
+    返回：
+    - 规范化后的邮箱地址，无效时返回空字符串
+    """
+    value = str(raw_email or "").strip().lower()
+    if not value:
+        return ""
+    if len(value) > 120:
+        value = value[:120]
+    if EMAIL_PATTERN.fullmatch(value):
+        return value
+    return ""
+
+
+def _validate_email(email: str) -> None:
+    """
+    校验邮箱格式，无效时抛出 HTTP 400 异常。
+
+    参数：
+    - email: 已规范化的邮箱地址
+    """
+    if not email or not EMAIL_PATTERN.fullmatch(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请输入有效的邮箱地址",
+        )
+
+
+def _validate_verification_purpose(purpose: str) -> None:
+    """
+    校验验证码用途，无效时抛出 HTTP 400 异常。
+
+    参数：
+    - purpose: 用途标识
+    """
+    if purpose not in VERIFICATION_PURPOSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的验证码用途: {purpose}",
+        )

@@ -40,13 +40,15 @@ backend/
 │   │   └── routes.py                              # 路由处理函数
 │   ├── auth/                                      # 鉴权模块（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
-│   │   ├── constants.py                           # 常量、角色、正则
+│   │   ├── constants.py                           # 常量、角色、正则、邮箱验证常量
 │   │   ├── db.py                                  # 数据库连接工厂
 │   │   ├── schema.py                              # DDL 建表与迁移
 │   │   ├── password.py                            # 密码哈希/验证
 │   │   ├── models.py                              # Pydantic 请求模型
 │   │   ├── user.py                                # 用户 CRUD
-│   │   ├── session.py                             # 会话管理
+│   │   ├── session.py                             # 会话管理、邮箱相关 CRUD
+│   │   ├── email_service.py                       # SMTP 邮件发送服务
+│   │   ├── verification.py                        # 验证码生成/存储/校验/频率限制
 │   │   ├── preferences.py                         # 用户偏好
 │   │   ├── quota.py                               # 配额追踪
 │   │   ├── system_config.py                       # 系统配置

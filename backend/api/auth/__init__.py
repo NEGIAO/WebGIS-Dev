@@ -32,7 +32,10 @@ from .models import (
     ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
+    ResetPasswordRequest,
+    SendCodeRequest,
     UpdatePreferencesRequest,
+    VerifyCodeRequest,
 )
 
 # ─── 密码 ───
@@ -62,11 +65,16 @@ from .user import (
 
 # ─── 会话管理 ───
 from .session import (
+    _check_email_taken_sync,
     _create_session_sync,
     _delete_session_sync,
+    _delete_sessions_by_email_sync,
     _delete_sessions_by_username_sync,
     _get_session_sync,
+    _get_user_by_email_sync,
     _update_user_avatar_index_sync,
+    _update_user_email_sync,
+    _update_user_password_by_email_sync,
     _update_user_password_sync,
 )
 

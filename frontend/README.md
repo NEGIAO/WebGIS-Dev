@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.2.0
+# WebGIS 前端项目 — v3.2.1
 
 ## 📋 项目概述
 
@@ -101,7 +101,7 @@ frontend/src/
 │   ├── backend.js                            # 后端 API barrel re-export
 │   ├── backend/                              # 后端 API 按业务域拆分
 │   │   ├── client.js                         # axios 实例、拦截器、错误处理
-│   │   ├── auth.js                           # 鉴权接口（9 个函数）
+│   │   ├── auth.js                           # 鉴权接口（12 个函数，含验证码/密码重置）
 │   │   ├── location.js                       # 地理编码/定位接口
 │   │   ├── weather.js                        # 天气接口
 │   │   ├── routing.js                        # 路线规划接口
@@ -356,6 +356,8 @@ frontend/src/
 └── views/
     ├── HomeView.vue                          # 主页面（地图 + 侧栏）
     ├── RegisterView.vue                      # 注册页
+    ├── TermsOfService.vue                    # 服务条款页
+    ├── PrivacyPolicy.vue                     # 隐私政策页
     └── home/                                 # HomeView 拆分模块
         ├── useDistrictLayer.ts               # 行政区划图层
         ├── useLayerOperations.ts             # 图层操作
@@ -545,7 +547,7 @@ MIT
 
 ---
 
-最后更新：2026-06-02
+最后更新：2026-06-03
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -565,6 +567,38 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.2.1 (2026-06-03)
+#### 📧 邮箱验证码系统 + 密码重置 + 认证安全增强
+
+**后端新增：**
+- 新增 `email_service.py`：SMTP 邮件发送服务（QQ邮箱 SSL，HTML 验证码模板，异步发送）
+- 新增 `verification.py`：验证码核心逻辑（secrets 安全生成、频率限制 60秒/次、每日上限 10次、5次尝试上限、5分钟有效期）
+- 新增 `email_verification_codes` 表 + users 表 email/email_verified 字段 + 邮箱部分唯一索引
+- 新增 SendCodeRequest / VerifyCodeRequest / ResetPasswordRequest 请求模型
+- 新增 POST `/send-code`、`/verify-code`、`/reset-password` 接口
+- 改造 POST `/register` 支持邮箱绑定（可选）
+- 新增 `_get_user_by_email_sync` / `_check_email_taken_sync` / `_update_user_password_by_email_sync` 等邮箱 CRUD
+
+**前端新增：**
+- 新增 `apiAuthSendCode` / `apiAuthVerifyCode` / `apiAuthResetPassword` API 函数
+- `apiAuthRegister` 扩展 email/emailCode 参数
+- 注册表新增邮箱输入框 + 验证码行（发送/验证/已验证徽章）
+- 登录模式新增"忘记密码？"链接 + 密码重置弹窗（两步：邮箱→验证码+新密码）
+- 新增完整 CSS 样式（邮箱验证码行、忘记密码链接、密码重置弹窗）
+
+**安全设计：**
+- 6位数字验证码（secrets 模块安全生成）
+- 60秒发送间隔限制 + 每日上限 10 次
+- 5分钟有效期 + 最多 5 次验证尝试
+- 邮箱部分唯一索引（防并发注册竞态）
+- 密码重置后注销该账号全部会话
+
+**Code Review 修复：**
+- schema.py 新增邮箱唯一索引（`idx_users_email_unique`），防止并发注册竞态
+- auth.js 移除密码字段 trim，保留用户输入意图
+
+---
 
 ### V3.2.0 (2026-06-03)
 #### ✨ 圆环粒子特效鼠标交互 + 🔧 GCJ-02 纠偏模块优化
@@ -1181,6 +1215,36 @@ MIT
 欢迎继续扩展功能，例如添加更多兴趣点、天气信息或 3D 建筑模型。若遇到问题，欢迎提 Issue 讨论。祝学习 顺利！
 ```
 
+
+## 🔐 邮箱验证码与密码重置系统（V3.3.0）
+
+前端认证页面集成了完整的邮箱验证码和密码重置功能：
+
+### 注册流程
+- 注册时可选绑定邮箱（输入邮箱 → 发送验证码 → 校验 → 提交注册）
+- 验证码 60 秒倒计时，显示已验证状态徽章
+
+### 密码重置流程
+- 登录页新增"忘记密码？"入口
+- 两步重置：输入邮箱发送验证码 → 输入验证码+新密码
+
+### 相关前端文件
+
+| 文件 | 说明 |
+|------|------|
+| `api/backend/auth.js` | 新增 `apiAuthSendCode`、`apiAuthVerifyCode`、`apiAuthResetPassword` |
+| `views/RegisterView.vue` | 邮箱输入框、验证码行、忘记密码链接、密码重置弹窗 |
+
+### 相关后端接口
+
+| 方法 | 路由 | 说明 |
+|------|------|------|
+| POST | `/api/auth/send-code` | 发送邮箱验证码 |
+| POST | `/api/auth/verify-code` | 校验邮箱验证码 |
+| POST | `/api/auth/reset-password` | 通过邮箱验证码重置密码 |
+| POST | `/api/auth/register` | 改造：新增 email/email_code 参数 |
+
+---
 
 ## 🤖 后端 Agent Chat 系统（V3.0.2）
 

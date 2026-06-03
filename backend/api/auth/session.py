@@ -204,3 +204,106 @@ def _update_user_avatar_index_sync(username: str, avatar_index: int) -> bool:
         )
         conn.commit()
         return int(cursor.rowcount or 0) > 0
+
+
+def _get_user_by_email_sync(email: str) -> Optional[Dict[str, Any]]:
+    """
+    通过邮箱查询用户信息。
+
+    参数：
+    - email: 邮箱地址
+
+    返回：
+    - 用户字典（username, password_hash, role, avatar_index, email, email_verified, created_at），未找到返回 None
+    """
+    normalized_email = email.lower().strip()
+    with _db_connection() as conn:
+        row = conn.execute(
+            "SELECT username, password_hash, role, avatar_index, email, email_verified, created_at FROM users WHERE email = ?",
+            (normalized_email,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def _check_email_taken_sync(email: str) -> bool:
+    """
+    检查邮箱是否已被其他用户绑定。
+
+    参数：
+    - email: 邮箱地址
+
+    返回：
+    - True 已被占用，False 可用
+    """
+    normalized_email = email.lower().strip()
+    if not normalized_email:
+        return False
+    with _db_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM users WHERE email = ? AND email != ''",
+            (normalized_email,),
+        ).fetchone()
+        return row is not None
+
+
+def _update_user_password_by_email_sync(email: str, new_password: str) -> bool:
+    """
+    通过邮箱更新用户密码（用于密码重置流程）。
+
+    参数：
+    - email: 用户绑定的邮箱
+    - new_password: 新的明文密码（内部自动哈希）
+
+    返回：
+    - True 更新成功，False 未找到用户或更新失败
+    """
+    normalized_email = email.lower().strip()
+    password_hash = _hash_password(new_password)
+
+    try:
+        with _db_connection() as conn:
+            cursor = conn.execute(
+                "UPDATE users SET password_hash = ? WHERE email = ? AND email != ''",
+                (password_hash, normalized_email),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+    except Exception:
+        return False
+
+
+def _update_user_email_sync(username: str, email: str, email_verified: int = 1) -> bool:
+    """
+    更新用户的绑定邮箱。
+
+    参数：
+    - username: 用户名
+    - email: 新邮箱地址
+    - email_verified: 是否已验证（默认 1）
+
+    返回：
+    - True 更新成功，False 更新失败
+    """
+    normalized_email = email.lower().strip()
+    try:
+        with _db_connection() as conn:
+            conn.execute(
+                "UPDATE users SET email = ?, email_verified = ? WHERE username = ?",
+                (normalized_email, email_verified, username),
+            )
+            conn.commit()
+            return True
+    except Exception:
+        return False
+
+
+def _delete_sessions_by_email_sync(email: str) -> None:
+    """
+    通过邮箱查找用户并注销该账号全部会话（用于密码重置后安全注销）。
+
+    参数：
+    - email: 用户绑定的邮箱
+    """
+    user = _get_user_by_email_sync(email)
+    if user:
+        _delete_sessions_by_username_sync(str(user.get("username", "")))
