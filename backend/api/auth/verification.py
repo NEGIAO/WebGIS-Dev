@@ -10,7 +10,7 @@
 import logging
 import secrets
 from datetime import timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .db import _db_connection, _iso, _utc_now
 from .constants import (
