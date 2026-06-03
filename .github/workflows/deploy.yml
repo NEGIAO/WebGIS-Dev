@@ -16,6 +16,10 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+# 强制使用 Node.js 24 运行时（解决 Node.js 20 弃用警告）
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ==========================================
   # 第一步：构建 (Build)
@@ -44,7 +48,7 @@ jobs:
 
       # 1. 为“自己”的 GitHub Pages 准备 artifact
       - name: Upload pages artifact (for self)
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: frontend/dist
 
@@ -67,7 +71,7 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
   # ==========================================
   # 第三步：同步到 NEGIAO.github.io中的WebGIS目录

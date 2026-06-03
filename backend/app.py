@@ -94,6 +94,11 @@ async def lifespan(app: FastAPI):
     scheduler = getattr(app.state, "task_scheduler", None)
     if scheduler is not None:
         shutdown_task_cleanup_scheduler(scheduler)
+
+    # 关闭 IP 定位服务（释放连接池，打印缓存统计）
+    from services import ip_geo_service
+    await ip_geo_service.close()
+
     client = getattr(app.state, "http_client", None)
     if client is not None:
         await client.aclose()

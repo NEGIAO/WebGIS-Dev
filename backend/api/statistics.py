@@ -28,6 +28,7 @@ from api.auth import (
     require_login,
     resolve_quota_subject,
 )
+from services import ip_geo_service
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,6 @@ SUPABASE_VISITS_TABLE = str(
     or "visit_tracking_events"
 ).strip()
 
-IPAPI_ENDPOINT = "https://ipapi.co"
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
 HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
 HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=50)
@@ -267,43 +267,30 @@ def extract_client_ip(request: Request) -> str:
     return _extract_client_ip(request)
 
 
-async def fetch_geolocation(ip: str, client: Optional[httpx.AsyncClient] = None) -> Optional[dict]:
-    endpoint = f"{IPAPI_ENDPOINT}/{ip}/json/"
+async def fetch_geolocation(ip: str) -> Optional[dict]:
+    """
+    获取 IP 地理位置信息
 
-    try:
-        if client is not None:
-            response = await client.get(
-                endpoint,
-                headers={"User-Agent": "WebGIS-Backend/1.0"},
-            )
-        else:
-            async with httpx.AsyncClient(
-                timeout=HTTP_CLIENT_TIMEOUT,
-                limits=HTTP_CLIENT_LIMITS,
-            ) as new_client:
-                response = await new_client.get(
-                    endpoint,
-                    headers={"User-Agent": "WebGIS-Backend/1.0"},
-                )
+    使用统一的 IP 定位服务，支持多服务降级和缓存。
 
-        if response.status_code != 200:
-            logger.warning("ipapi.co 返回非 200 状态: %s", response.status_code)
-            return None
+    Args:
+        ip: IP 地址
 
-        data = response.json()
-        latitude = _coerce_float(data.get("latitude"))
-        longitude = _coerce_float(data.get("longitude"))
+    Returns:
+        包含 ip, city, region, country, latitude, longitude 的字典，失败返回 None
+    """
+    result = await ip_geo_service.locate(ip=ip, prefer_amap=False, use_cache=True)
+
+    if result:
         return {
-            "ip": data.get("ip", ip),
-            "city": data.get("city", "Unknown"),
-            "region": data.get("region") or data.get("region_name") or "Unknown",
-            "country": data.get("country_name") or data.get("country") or "Unknown",
-            "latitude": latitude,
-            "longitude": longitude,
+            "ip": result.ip,
+            "city": result.city or "Unknown",
+            "region": result.region or "Unknown",
+            "country": result.country or "Unknown",
+            "latitude": result.latitude,
+            "longitude": result.longitude,
         }
-    except Exception as exc:
-        logger.warning("获取地理位置失败 (IP=%s): %s", ip, str(exc))
-        return None
+    return None
 
 
 def get_current_shanghai_time() -> str:
@@ -984,8 +971,7 @@ async def log_visit(
         user_agent = request.headers.get("User-Agent", "Unknown")
         visit_time = get_current_shanghai_time()
 
-        http_client = getattr(request.app.state, "http_client", None)
-        geo_data = await fetch_geolocation(client_ip, client=http_client)
+        geo_data = await fetch_geolocation(client_ip)
 
         gps_lng = visit_payload.gps_lng if visit_payload else None
         gps_lat = visit_payload.gps_lat if visit_payload else None

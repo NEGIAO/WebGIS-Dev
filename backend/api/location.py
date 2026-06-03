@@ -2,7 +2,7 @@
 地理定位服务模块
 
 功能：
-- IP 定位：支持高德优先、配额超限自动降级到免费服务
+- IP 定位：通过 services/ip_geo 统一服务（支持多服务降级 + 缓存）
 - 反向地理编码：后端代理多服务选择
 - 访问追踪：记录用户访问时的位置和设备信息
 """
@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from api.auth import (
@@ -21,6 +21,7 @@ from api.auth import (
     _extract_token,
     _get_session_sync,
 )
+from services import ip_geo_service
 
 logger = logging.getLogger(__name__)
 
@@ -48,9 +49,6 @@ async def require_api_access_optional(request: Request) -> Optional[Dict[str, An
 
 AMAP_KEY = os.getenv("AMAP_WEB_SERVICE_KEY", "")
 NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org"
-IPAPI_ENDPOINT = "https://ipapi.co"
-HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
-HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=100, max_keepalive_connections=50)
 
 # ==================== 请求/响应模型 ====================
 
@@ -120,88 +118,6 @@ def get_client_ip(request: Request) -> str:
     if "x-real-ip" in request.headers:
         return request.headers["x-real-ip"]
     return request.client.host if request.client else "127.0.0.1"
-
-
-async def _get_http_client(request: Request) -> httpx.AsyncClient:
-    """从 app.state 获取共享 httpx 客户端，不存在时新建。"""
-    client = getattr(request.app.state, "http_client", None)
-    if client is not None:
-        return client
-    return httpx.AsyncClient(timeout=HTTP_CLIENT_TIMEOUT)
-
-
-async def amap_ip_locate(ip: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-    """
-    调用高德 IP 定位 API
-
-    Args:
-        ip: IP 地址
-        client: 共享 httpx 客户端
-
-    Returns:
-        成功时返回 {city, province, adcode, extent}，失败时返回 None
-    """
-    if not AMAP_KEY:
-        logger.warning("AMAP_KEY 未配置")
-        return None
-
-    try:
-        url = f"https://restapi.amap.com/v3/ip"
-        response = await client.get(url, params={"ip": ip, "key": AMAP_KEY})
-        data = response.json()
-
-        if data.get("status") == "1":
-            parts = data.get("rectangle", "0,0,0,0").split(",")
-            if len(parts) < 4:
-                parts.extend(["0"] * (4 - len(parts)))
-            try:
-                extent = [float(parts[i]) for i in range(4)]
-            except (ValueError, IndexError):
-                extent = [0.0, 0.0, 0.0, 0.0]
-            return {
-                "city": data.get("city"),
-                "province": data.get("province"),
-                "country": data.get("country", "中国"),
-                "adcode": data.get("adcode"),
-                "extent": extent,
-            }
-        else:
-            error_msg = data.get("info", "未知错误")
-            logger.warning(f"高德 IP 定位错误: {error_msg}")
-            if "日查询次数" in error_msg or "服务次数" in error_msg:
-                raise HTTPException(status_code=429, detail="IP 定位：API 调用额度已用完，部分功能受限")
-            return None
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"高德 IP 定位异常: {str(e)}")
-        return None
-
-
-async def free_service_ip_locate(ip: str, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
-    """
-    使用免费服务进行 IP 定位（ipapi.co）
-
-    Args:
-        ip: IP 地址
-        client: 共享 httpx 客户端
-
-    Returns:
-        成功时返回 {city, province, country, adcode}，失败时返回 None
-    """
-    try:
-        response = await client.get(f"{IPAPI_ENDPOINT}/{ip}/json/")
-        data = response.json()
-        return {
-            "city": data.get("city"),
-            "province": data.get("region"),
-            "country": data.get("country_name", "Unknown"),
-            "adcode": "",
-            "extent": None,
-        }
-    except Exception as e:
-        logger.error(f"免费 IP 定位异常: {str(e)}")
-        return None
 
 
 async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
@@ -288,81 +204,41 @@ async def ip_locate(
 ):
     """
     统一 IP 定位接口
-    
-    优先级：
-    1. 如果 prefer_free_service=true，直接跳到第 3 步
-    2. 优先使用高德 API：
-       - 检查用户单日配额
-       - 调用高德 IP 定位 API
-       - 成功 → 返回 source="amap"
-       - 配额用完 → HTTP 429，继续第 3 步
-       - 其他错误 → 继续第 3 步
-    3. 降级到免费服务（ipapi.co）
-       - 返回 source="free"
+
+    使用统一的 IP 定位服务，支持：
+    - 多服务降级：高德 → ip-api.com → ipapi.co
+    - 内存缓存（TTL 1小时）
+    - 自动选择最优服务
     """
     ip = request_data.ip.strip() or get_client_ip(request)
-    client = await _get_http_client(request)
 
-    # 跳过高德（开发者模式或用户设置）
-    if request_data.prefer_free_service:
-        result = await free_service_ip_locate(ip, client)
-        if result:
-            return {
-                "code": 200,
-                "data": {
-                    "ok": True,
-                    "status": "1",
-                    "source": "free",
-                    **result
-                },
-                "message": "success"
-            }
-        else:
-            return {
-                "code": 400,
-                "data": {"ok": False},
-                "message": "IP 定位失败"
-            }
-    
-    # 尝试高德 API
-    try:
-        result = await amap_ip_locate(ip, client)
-        if result:
-            return {
-                "code": 200,
-                "data": {
-                    "ok": True,
-                    "status": "1",
-                    "source": "amap",
-                    **result
-                },
-                "message": "success"
-            }
-    except HTTPException as e:
-        # 配额用完，返回 429
-        logger.info(f"高德 API 配额用完，IP: {ip}")
-        if not request_data.silent:
-            raise e
-        # 继续降级...
-    except Exception as e:
-        logger.error(f"高德 API 异常: {str(e)}")
-        # 继续降级...
-        pass
-    
-    # 降级到免费服务
-    result = await free_service_ip_locate(ip, client)
+    # 使用统一的 IP 定位服务
+    result = await ip_geo_service.locate(
+        ip=ip,
+        prefer_amap=not request_data.prefer_free_service,
+        use_cache=True,
+    )
+
     if result:
         return {
             "code": 200,
             "data": {
                 "ok": True,
                 "status": "1",
-                "source": "free",
-                **result
+                "source": result.source,
+                "ip": result.ip,
+                "city": result.city,
+                "province": result.region,
+                "country": result.country,
+                "country_code": result.country_code,
+                "adcode": "",  # 高德特有字段，其他服务为空
+                "extent": None,
+                "latitude": result.latitude,
+                "longitude": result.longitude,
             },
             "message": "success"
         }
-    
+
     return {
         "code": 400,
         "data": {"ok": False},
@@ -434,23 +310,22 @@ async def track_visit(
 ):
     """
     记录用户访问时的位置信息
-    
-    - 优先使用 IP 定位（快速，精度可接受）
+
+    - 使用统一的 IP 定位服务（带缓存）
     - 记录到数据库
     - 与用户关联（如已登陆）
     """
-    
+
     ip = get_client_ip(request)
     timestamp = datetime.now(timezone.utc).isoformat()
-    client = await _get_http_client(request)
 
-    # IP 定位（使用免费服务，快速）
-    location = await free_service_ip_locate(ip, client)
-    
+    # IP 定位（使用统一服务，带缓存）
+    location = await ip_geo_service.locate(ip=ip, prefer_amap=False, use_cache=True)
+
     if location:
-        city = location.get("city")
-        province = location.get("province")
-        country = location.get("country")
+        city = location.city
+        province = location.region
+        country = location.country
     else:
         city = province = country = None
     

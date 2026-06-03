@@ -7,22 +7,20 @@
 3) 保持与前端既有数据结构兼容，尽量减少改动面。
 """
 
-import asyncio
 import os
 import re
-import sqlite3
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from api.auth import require_api_access, get_auth_db_connection
+from services import ip_geo_service
 
 AMAP_REST_ROOT = "https://restapi.amap.com"
 AMAP_WEB_DETAIL_ROOT = "https://www.amap.com/detail/get/detail"
 NOMINATIM_SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 EPSG_PROJ4_ENDPOINT = "https://epsg.io/{code}.proj4"
-IPAPI_ENDPOINT = "https://ipapi.co"
 AMAP_SUCCESS_STATUS = "1"
 AMAP_SUCCESS_INFOCODE = "10000"
 
@@ -570,6 +568,11 @@ async def proxy_ipapi_country(
     """
     功能：IP 所属国家/城市信息代理（ipapi）。
 
+    特性：
+    - 使用统一的 IP 定位服务
+    - 内存缓存（TTL 1小时），避免重复请求触发速率限制
+    - 多服务降级：高德 → ip-api.com → ipapi.co
+
     参数：
     - ip: 可选，留空时自动使用客户端 IP。
 
@@ -577,14 +580,20 @@ async def proxy_ipapi_country(
     - 标准化后的国家、地区、城市信息。
     """
     normalized_ip = str(ip or "").strip() or _extract_client_ip(request)
-    endpoint = f"{IPAPI_ENDPOINT}/{normalized_ip}/json/" if normalized_ip else f"{IPAPI_ENDPOINT}/json/"
 
-    data = await _request_upstream_json(request, endpoint, headers=DEFAULT_HEADERS)
-    return {
-        "ip": str(data.get("ip") or normalized_ip),
-        "country": str(data.get("country") or "").strip(),
-        "country_code": str(data.get("country_code") or "").strip(),
-        "country_name": str(data.get("country_name") or "").strip(),
-        "region": str(data.get("region") or "").strip(),
-        "city": str(data.get("city") or "").strip(),
-    }
+    result = await ip_geo_service.locate(ip=normalized_ip, prefer_amap=False, use_cache=True)
+
+    if result:
+        return {
+            "ip": result.ip,
+            "country": result.country,
+            "country_code": result.country_code,
+            "country_name": result.country,
+            "region": result.region,
+            "city": result.city,
+        }
+
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="IP 地理位置服务暂不可用",
+    )
