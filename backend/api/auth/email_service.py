@@ -29,6 +29,7 @@ _PURPOSE_LABELS = {
 
 def _build_verification_html(code: str, purpose: str, expire_minutes: int = 5) -> str:
     """构建验证码邮件的 HTML 内容。"""
+    """构建验证码邮件的 HTML 内容。"""
     purpose_label = _PURPOSE_LABELS.get(purpose, "验证身份")
 
     return f"""
@@ -115,6 +116,7 @@ async def send_verification_email(
     purpose: str,
     expire_minutes: int = 5,
 ) -> bool:
+    """异步发送验证码邮件。"""
     """异步发送验证码邮件。"""
     purpose_label = _PURPOSE_LABELS.get(purpose, "验证身份")
     subject = f"【WebGIS】{purpose_label}验证码：{code}"
