@@ -87,10 +87,7 @@ env/
 # hf 不能push 二进制文件，所以需要忽略数据库文件
 backend/data/*.db
 backend/data/
-backend/data/*.db
-backend/data/
 **/*.db
-**/data/
 
 
 # ========== IDE ==========
