@@ -108,10 +108,11 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
     msg["Subject"] = subject
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    # 发送（与桌面端测试脚本完全一致）
+    # 发送（与桌面端测试脚本完全一致，增加 10 秒连接超时）
     server = None
     try:
-        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+        logger.info("SMTP 开始连接 %s:%s -> %s", SMTP_HOST, SMTP_PORT, to_email)
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10)
         server.ehlo()
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(SMTP_USER, [to_email], msg.as_string())
@@ -139,7 +140,10 @@ async def send_verification_email(
     subject = f"【WebGIS】{purpose_label}验证码：{code}"
     html_body = _build_verification_html(code, purpose, expire_minutes)
 
-    return await asyncio.to_thread(_send_email_sync, to_email, subject, html_body)
+    logger.info("准备发送验证码邮件: %s (用途: %s)", to_email, purpose)
+    result = await asyncio.to_thread(_send_email_sync, to_email, subject, html_body)
+    logger.info("验证码邮件发送结果: %s -> %s", to_email, "成功" if result else "失败")
+    return result
 
 
 def check_smtp_configured() -> bool:

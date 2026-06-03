@@ -541,7 +541,7 @@ LOG_LEVEL=INFO
 #### 📧 邮箱验证码系统 + 密码重置 + 认证安全增强
 
 **后端新增：**
-- ✅ `email_service.py`：SMTP 邮件发送服务（QQ邮箱 SSL，HTML 验证码模板，异步发送，零额外依赖）
+- ✅ `email_service.py`：SMTP 邮件发送服务（阿里云邮件推送代理转发，HTML 验证码模板，异步发送，零额外依赖）
 - ✅ `verification.py`：验证码核心逻辑（secrets 安全生成、频率限制 60秒/次、每日上限 10次、5次尝试上限、5分钟有效期）
 - ✅ `email_verification_codes` 表 + users 表 email/email_verified 字段 + 邮箱部分唯一索引
 - ✅ 新增 SendCodeRequest / VerifyCodeRequest / ResetPasswordRequest 请求模型

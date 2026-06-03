@@ -368,6 +368,8 @@
                             <input
                                 v-model="resetCode"
                                 type="text"
+                                inputmode="numeric"
+                                pattern="[0-9]*"
                                 maxlength="6"
                                 placeholder="6位验证码"
                             />
@@ -378,6 +380,14 @@
                                 v-model="resetNewPassword"
                                 type="password"
                                 placeholder="新密码（6-64位，含字母和数字）"
+                            />
+                        </div>
+                        <div class="input-group">
+                            <i class="icon fas fa-check-circle"></i>
+                            <input
+                                v-model="resetConfirmPassword"
+                                type="password"
+                                placeholder="再次输入新密码"
                             />
                         </div>
                         <button
@@ -393,7 +403,7 @@
                             {{ isResetSubmitting ? '提交中...' : '重置密码' }}
                         </button>
                         <button
-                            v-if="resetCodeCountdown <= 0"
+                            v-if="resetCodeSent && resetCodeCountdown <= 0"
                             type="button"
                             class="resend-btn"
                             @click="handleResetSendCode"
@@ -401,7 +411,7 @@
                             重新发送验证码
                         </button>
                         <span
-                            v-else
+                            v-if="resetCodeCountdown > 0"
                             class="countdown-text"
                         >
                             {{ resetCodeCountdown }}s 后可重新发送
@@ -474,9 +484,11 @@ const showResetPanel = ref(false);
 const resetEmail = ref('');
 const resetCode = ref('');
 const resetNewPassword = ref('');
+const resetConfirmPassword = ref('');
 const resetStep = ref(1); // 1=输入邮箱, 2=输入验证码+新密码
 const isResetSubmitting = ref(false);
 const resetCodeCountdown = ref(0);
+const resetCodeSent = ref(false);
 let resetCountdownTimer = null;
 
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -933,6 +945,8 @@ function openResetPanel() {
     resetEmail.value = '';
     resetCode.value = '';
     resetNewPassword.value = '';
+    resetConfirmPassword.value = '';
+    resetCodeSent.value = false;
     setFormState('', '');
 }
 
@@ -942,11 +956,12 @@ function openResetPanel() {
 function closeResetPanel() {
     showResetPanel.value = false;
     resetStep.value = 1;
+    resetCodeSent.value = false;
     if (resetCountdownTimer) {
         clearInterval(resetCountdownTimer);
         resetCountdownTimer = null;
     }
-    setFormState('', '');
+    resetCodeCountdown.value = 0;
 }
 
 /**
@@ -967,6 +982,7 @@ async function handleResetSendCode() {
         await apiAuthSendCode(normalizedEmail, 'reset_password');
         message.success('验证码已发送至您的邮箱');
         resetStep.value = 2;
+        resetCodeSent.value = true;
         startResetCountdown();
     } catch (error) {
         const isTimeout = error?.code === 'ECONNABORTED'
@@ -987,6 +1003,7 @@ async function handleResetSendCode() {
                 message.warning('请求超时，邮件可能正在发送中，请稍后查收邮箱');
             }
             resetStep.value = 2;
+            resetCodeSent.value = true;
             startResetCountdown();
         } else {
             setFormState('error', detail);
@@ -1004,13 +1021,22 @@ async function handleResetSubmit() {
     const normalizedEmail = String(resetEmail.value || '').trim().toLowerCase();
     const code = String(resetCode.value || '').trim();
     const newPass = String(resetNewPassword.value || '').trim();
+    const confirmPass = String(resetConfirmPassword.value || '').trim();
 
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
+        return;
+    }
     if (!code || code.length !== 6) {
         setFormState('error', '请输入 6 位验证码');
         return;
     }
     if (!passwordRegex.test(newPass)) {
         setFormState('error', '新密码需包含字母和数字，长度 6-64 位');
+        return;
+    }
+    if (newPass !== confirmPass) {
+        setFormState('error', '两次输入的密码不一致');
         return;
     }
 
@@ -1020,8 +1046,8 @@ async function handleResetSubmit() {
     try {
         await apiAuthResetPassword(normalizedEmail, code, newPass);
         message.success('密码已重置，请使用新密码登录');
-        closeResetPanel();
         setFormState('success', '密码重置成功，请使用新密码登录');
+        closeResetPanel();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
@@ -1050,6 +1076,24 @@ watch(email, () => {
         countdownTimer = null;
     }
     codeCountdown.value = 0;
+});
+
+/**
+ * 重置密码邮箱变更时回退到 step 1（验证码已失效）
+ */
+watch(resetEmail, () => {
+    if (resetStep.value === 2) {
+        resetStep.value = 1;
+        resetCode.value = '';
+        resetNewPassword.value = '';
+        resetConfirmPassword.value = '';
+        resetCodeSent.value = false;
+        if (resetCountdownTimer) {
+            clearInterval(resetCountdownTimer);
+            resetCountdownTimer = null;
+        }
+        resetCodeCountdown.value = 0;
+    }
 });
 
 onMounted(async () => {

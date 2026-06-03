@@ -47,7 +47,7 @@ backend/
 │   │   ├── models.py                              # Pydantic 请求模型
 │   │   ├── user.py                                # 用户 CRUD
 │   │   ├── session.py                             # 会话管理、邮箱相关 CRUD
-│   │   ├── email_service.py                       # SMTP 邮件发送服务
+│   │   ├── email_service.py                       # 阿里云邮件推送 SMTP 代理转发服务
 │   │   ├── verification.py                        # 验证码生成/存储/校验/频率限制
 │   │   ├── preferences.py                         # 用户偏好
 │   │   ├── quota.py                               # 配额追踪
