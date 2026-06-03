@@ -80,7 +80,7 @@ def rate_limit_check(email: str) -> Dict[str, Any]:
     频率限制检查。
 
     规则：
-    1. 同一邮箱 60 秒内仅允许发送 1 次
+    1. 同一邮箱 30 秒内仅允许发送 1 次
     2. 同一邮箱每天最多发送 10 次
 
     参数：
@@ -224,6 +224,45 @@ def verify_code(email: str, code: str, purpose: str) -> Dict[str, Any]:
             "message": "验证成功",
             "username": associated_username,
         }
+
+
+def delete_latest_code(email: str, purpose: str) -> bool:
+    """
+    删除指定邮箱和用途的最新验证码记录。
+
+    用于邮件发送失败时清理已存储的验证码，
+    避免频率限制误拦截（数据库中有记录但用户未收到邮件）。
+
+    参数：
+    - email: 目标邮箱地址
+    - purpose: 用途标识
+
+    返回：
+    - True 删除成功，False 删除失败或无记录
+    """
+    normalized_email = email.lower().strip()
+    try:
+        with _db_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT id FROM email_verification_codes
+                WHERE email = ? AND purpose = ? AND used = 0
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (normalized_email, purpose),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "DELETE FROM email_verification_codes WHERE id = ?",
+                    (dict(row)["id"],),
+                )
+                conn.commit()
+                return True
+        return False
+    except Exception as e:
+        logger.error("验证码记录清理失败: %s", str(e), exc_info=True)
+        return False
 
 
 def is_email_verified_for_purpose(email: str, purpose: str) -> bool:

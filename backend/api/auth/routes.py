@@ -59,7 +59,7 @@ from .system_config import _set_admin_avatar_index_sync
 from .password import _verify_password
 from .user import _create_user_sync, _get_or_create_guest_username_sync, _get_user_sync, _record_login_sync
 from .email_service import check_smtp_configured, send_verification_email
-from .verification import generate_code, store_code, rate_limit_check, verify_code, is_email_verified_for_purpose
+from .verification import generate_code, store_code, rate_limit_check, verify_code, is_email_verified_for_purpose, delete_latest_code
 from .constants import (
     _normalize_email,
     _validate_email,
@@ -151,6 +151,9 @@ async def send_verification_code(
         expire_minutes=VERIFICATION_CODE_EXPIRE_MINUTES,
     )
     if not sent:
+        # 邮件发送失败：清理已存储的验证码记录，避免频率限制误拦截
+        # （数据库中有记录但用户未收到邮件，会导致下次请求被 30 秒频率限制拦截）
+        await asyncio.to_thread(delete_latest_code, email, payload.purpose)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="验证码邮件发送失败，请稍后重试",

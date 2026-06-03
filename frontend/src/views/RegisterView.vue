@@ -802,8 +802,36 @@ async function handleSubmit() {
 // ─── 邮箱验证码逻辑 ───
 
 /**
+ * 启动 30 秒发送倒计时
+ */
+function startSendCountdown() {
+    codeCountdown.value = 30;
+    countdownTimer = setInterval(() => {
+        codeCountdown.value--;
+        if (codeCountdown.value <= 0) {
+            clearInterval(countdownTimer);
+            countdownTimer = null;
+        }
+    }, 1000);
+}
+
+/**
+ * 启动重置密码 30 秒发送倒计时
+ */
+function startResetCountdown() {
+    resetCodeCountdown.value = 30;
+    resetCountdownTimer = setInterval(() => {
+        resetCodeCountdown.value--;
+        if (resetCodeCountdown.value <= 0) {
+            clearInterval(resetCountdownTimer);
+            resetCountdownTimer = null;
+        }
+    }, 1000);
+}
+
+/**
  * 发送邮箱验证码（注册用）
- * 校验邮箱格式 → 调用后端发送接口 → 启动 60 秒倒计时
+ * 校验邮箱格式 → 调用后端发送接口 → 成功后启动 30 秒倒计时
  */
 async function handleSendCode() {
     const normalizedEmail = String(email.value || '').trim().toLowerCase();
@@ -823,23 +851,34 @@ async function handleSendCode() {
         emailCheckStatus.value = 'success';
         emailCheckMessage.value = '验证码已发送，请查收邮箱';
         message.success('验证码已发送至您的邮箱');
-        // 启动 30 秒倒计时
-        codeCountdown.value = 30;
-        countdownTimer = setInterval(() => {
-            codeCountdown.value--;
-            if (codeCountdown.value <= 0) {
-                clearInterval(countdownTimer);
-                countdownTimer = null;
-            }
-        }, 1000);
+        startSendCountdown();
     } catch (error) {
+        const isTimeout = error?.code === 'ECONNABORTED'
+            || /timeout/i.test(String(error?.message || ''));
         const detail = String(
             error?.originalError?.response?.data?.detail ||
             error?.message || '验证码发送失败，请稍后重试',
         );
-        emailCheckStatus.value = 'error';
-        emailCheckMessage.value = detail;
-        setFormState('error', detail);
+
+        const isRateLimited = error?.isQuotaExceeded
+            || error?.originalError?.response?.status === 429;
+
+        if (isTimeout || isRateLimited) {
+            // 超时或频率限制：后端可能已收到请求或需要等待，启动倒计时防止重复发送
+            if (isRateLimited) {
+                emailCheckStatus.value = 'loading';
+                emailCheckMessage.value = detail || '发送过于频繁，请稍后再试';
+                message.warning(detail || '发送过于频繁，请稍后再试');
+            } else {
+                emailCheckStatus.value = 'loading';
+                emailCheckMessage.value = '请求超时，邮件可能正在发送中，请稍后查收邮箱';
+            }
+            startSendCountdown();
+        } else {
+            emailCheckStatus.value = 'error';
+            emailCheckMessage.value = detail;
+            setFormState('error', detail);
+        }
     } finally {
         isSendingCode.value = false;
     }
@@ -928,21 +967,31 @@ async function handleResetSendCode() {
         await apiAuthSendCode(normalizedEmail, 'reset_password');
         message.success('验证码已发送至您的邮箱');
         resetStep.value = 2;
-        resetCodeCountdown.value = 30;
-        resetCountdownTimer = setInterval(() => {
-            resetCodeCountdown.value--;
-            if (resetCodeCountdown.value <= 0) {
-                clearInterval(resetCountdownTimer);
-                resetCountdownTimer = null;
-            }
-        }, 1000);
+        startResetCountdown();
     } catch (error) {
+        const isTimeout = error?.code === 'ECONNABORTED'
+            || /timeout/i.test(String(error?.message || ''));
         const detail = String(
             error?.originalError?.response?.data?.detail ||
             error?.message || '验证码发送失败',
         );
-        setFormState('error', detail);
-        message.error(detail);
+
+        const isRateLimited = error?.isQuotaExceeded
+            || error?.originalError?.response?.status === 429;
+
+        if (isTimeout || isRateLimited) {
+            // 超时或频率限制：后端可能已收到请求或需要等待，启动倒计时防止重复发送
+            if (isRateLimited) {
+                message.warning(detail || '发送过于频繁，请稍后再试');
+            } else {
+                message.warning('请求超时，邮件可能正在发送中，请稍后查收邮箱');
+            }
+            resetStep.value = 2;
+            startResetCountdown();
+        } else {
+            setFormState('error', detail);
+            message.error(detail);
+        }
     } finally {
         isResetSubmitting.value = false;
     }
