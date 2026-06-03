@@ -268,6 +268,17 @@
                         />
                         黑洞引力
                     </button>
+                    <button
+                        class="menu-item"
+                        @click="handleActivateMagic('ring-explosion')"
+                    >
+                        <circle-icon
+                            :size="16"
+                            color="#FF2D55"
+                            class="m-icon"
+                        />
+                        圆环爆破
+                    </button>
                     <div class="menu-divider"></div>
                     <button
                         class="menu-item magic-close-btn"
@@ -312,6 +323,7 @@ import {
     Waves as WavesIcon,
     CircleDot as CircleDotIcon,
     CircleX as CircleXIcon,
+    Circle as CircleIcon,
     User as UserIcon,
 } from 'lucide-vue-next';
 import { Globe as GlobeIcon } from 'lucide-vue-next';

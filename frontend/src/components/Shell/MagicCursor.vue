@@ -62,6 +62,9 @@ async function dynamicImportEffect(effectName) {
             case 'singularity':
                 moduleLoader = () => import('../../composables/Magic/useSingularity.js');
                 break;
+            case 'ring-explosion':
+                moduleLoader = () => import('../../composables/Magic/useRingExplosion.js');
+                break;
             default:
                 moduleLoader = () => import('../../composables/Magic/useGravity.js');
         }
@@ -78,7 +81,9 @@ async function dynamicImportEffect(effectName) {
                       ? 'useWave'
                       : effectName === 'singularity'
                         ? 'useSingularity'
-                        : 'useGravity';
+                        : effectName === 'ring-explosion'
+                          ? 'useRingExplosion'
+                          : 'useGravity';
 
         importedModules[effectName] = module[composableName];
         return importedModules[effectName];
