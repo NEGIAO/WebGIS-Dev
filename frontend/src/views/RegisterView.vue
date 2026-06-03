@@ -1492,34 +1492,78 @@ input:focus {
 @media (max-width: 768px) {
     .register-container {
         align-items: stretch;
-        padding: 8px;
+        padding: 0;
     }
 
     .container {
         max-width: 100%;
-        border-radius: 8px;
-        max-height: none;
-        min-height: calc(100dvh - 16px);
+        border-radius: 0;
+        max-height: 100dvh;
+        min-height: 100dvh;
     }
 
     .form-body {
-        padding: 18px;
+        padding: 18px 16px;
     }
 
     .form-header {
-        padding: 18px;
+        padding: 20px 16px;
+        padding-top: max(20px, env(safe-area-inset-top));
     }
 
     .form-title {
-        font-size: 24px;
+        font-size: 22px;
+    }
+
+    .form-subtitle {
+        font-size: 13px;
     }
 
     .form-footer {
         padding: 12px 16px;
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group:hover {
+        transform: none;
     }
 
     .avatar-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .email-code-row {
+        flex-wrap: wrap;
+    }
+
+    .send-code-btn,
+    .verify-code-btn {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .quick-action-row {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-btn {
+        padding: 12px 8px;
+        font-size: 13px;
+    }
+
+    /* 密码重置弹窗适配 */
+    .reset-panel {
+        width: 94%;
+        max-height: 90dvh;
+        overflow-y: auto;
+    }
+
+    .reset-body {
+        padding: 18px 16px;
     }
 }
 

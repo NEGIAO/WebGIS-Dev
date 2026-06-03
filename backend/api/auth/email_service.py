@@ -11,7 +11,10 @@ import smtplib
 import asyncio
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional
+from dotenv import load_dotenv
+
+# 加载 .env 文件（仅本地开发用；Docker 环境已通过 env 注入，.env 存在才会加载）
+load_dotenv(override=False)
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +115,7 @@ def _send_email_sync(to_email: str, subject: str, html_body: str, plain_code: st
     - to_email: 收件人邮箱地址
     - subject: 邮件主题
     - html_body: HTML 格式正文
-    - plain_code: 验证码纯文本（用于纯文本降级）
+    - plain_code: 验证码纯文本（用于纯文本降级，部分客户端不渲染 HTML）
 
     返回：
     - True 发送成功，False 发送失败
@@ -122,29 +125,35 @@ def _send_email_sync(to_email: str, subject: str, html_body: str, plain_code: st
         return False
 
     try:
+        # multipart/alternative：HTML 优先，纯文本降级
         msg = MIMEMultipart("alternative")
         msg["From"] = f"WebGIS 系统 <{SMTP_USER}>"
         msg["To"] = to_email
         msg["Subject"] = subject
 
-        # 附带纯文本降级版本（仅验证码，不含 HTML 源码）
-        text_body = f"您的验证码是：{plain_code}，有效期 5 分钟。请勿泄露给他人。"
-        msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        # 纯文本降级版本
+        if plain_code:
+            text_body = f"您的验证码是：{plain_code}，有效期 5 分钟。请勿泄露给他人。"
+            msg.attach(MIMEText(text_body, "plain", "utf-8"))
         msg.attach(MIMEText(html_body, "html", "utf-8"))
 
+        # 根据 SMTP_USE_SSL 选择连接方式
         if SMTP_USE_SSL:
-            # SSL 连接（端口 465）
             server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=15)
         else:
-            # TLS 连接（端口 587）
             server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15)
             server.ehlo()
             server.starttls()
             server.ehlo()
 
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_USER, [to_email], msg.as_string())
-        server.quit()
+        try:
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_USER, [to_email], msg.as_string())
+        finally:
+            try:
+                server.quit()
+            except Exception:
+                pass  # 连接已断开时忽略
 
         logger.info("验证码邮件已发送至 %s（用途: %s）", to_email, subject)
         return True

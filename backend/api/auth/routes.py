@@ -6,7 +6,7 @@ import asyncio
 import hmac
 from typing import Any, Dict
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from .constants import (
     ADMIN_USERNAME,
@@ -73,7 +73,6 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/send-code")
 async def send_verification_code(
     payload: SendCodeRequest,
-    background_tasks: BackgroundTasks,
 ) -> Dict[str, Any]:
     """
     功能：发送邮箱验证码。
@@ -92,7 +91,7 @@ async def send_verification_code(
     3. 检查频率限制（30秒/次，每天10次）；
     4. 对于注册用途，检查邮箱是否已被绑定；
     5. 生成验证码并存入数据库；
-    6. 通过 BackgroundTasks 异步发送邮件（接口立即返回）。
+    6. 同步发送邮件，根据实际发送结果返回成功或失败。
     """
     await init_auth_storage()
 
@@ -144,14 +143,18 @@ async def send_verification_code(
             detail="验证码生成失败，请稍后重试",
         )
 
-    # 通过 BackgroundTasks 异步发送邮件（接口立即返回，不阻塞用户）
-    background_tasks.add_task(
-        send_verification_email,
+    # 同步等待邮件发送结果（用户正在等待验证码，1-2秒延迟可接受）
+    sent = await send_verification_email(
         to_email=email,
         code=code,
         purpose=payload.purpose,
         expire_minutes=VERIFICATION_CODE_EXPIRE_MINUTES,
     )
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="验证码邮件发送失败，请稍后重试",
+        )
 
     return {
         "status": "success",
