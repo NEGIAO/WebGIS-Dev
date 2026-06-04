@@ -1006,7 +1006,7 @@ export function useLayerDataImport({
                         dispatchEntry: packet.entryName || '',
                     },
                 });
-                createManagedVectorLayer({
+                await createManagedVectorLayer({
                     name: layerName,
                     type: layerType,
                     sourceType: 'upload',
@@ -1184,7 +1184,7 @@ export function useLayerDataImport({
                 },
             });
 
-            createManagedVectorLayer({
+            await createManagedVectorLayer({
                 name,
                 type: normalizedType,
                 sourceType: 'upload',

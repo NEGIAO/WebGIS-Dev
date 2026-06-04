@@ -172,7 +172,7 @@ export function createSpatialAnalysisFeature({
                 operation = 'voronoi';
                 layerName = `泰森多边形_${analysisSeed++}`;
             } else if (type === 'aggregation') {
-                const { targetLayerId, bbox, gridType = 'grid', gridSize = 500 } = params;
+                const { targetLayerId, bbox, gridType = 'grid' } = params;
                 if (!targetLayerId) {
                     message.warning('请选择目标图层');
                     return;
@@ -263,7 +263,7 @@ export function createSpatialAnalysisFeature({
                     message.warning('渔网结果要素解析失败');
                     return;
                 }
-                createManagedVectorLayer({
+                await createManagedVectorLayer({
                     name: layerName,
                     type: resultFeatures[0]?.getGeometry?.()?.getType?.() || 'Polygon',
                     sourceType: 'upload',
@@ -276,7 +276,7 @@ export function createSpatialAnalysisFeature({
                     const pointFeatures = geoJSONToFeatures(resultGeoJSON.center_points);
                     if (pointFeatures.length) {
                         const pointLayerName = `渔网_${gridSizeMeters}m_点`;
-                        createManagedVectorLayer({
+                        await createManagedVectorLayer({
                             name: pointLayerName,
                             type: 'Point',
                             sourceType: 'upload',
@@ -346,7 +346,7 @@ export function createSpatialAnalysisFeature({
             }
 
             // 创建结果图层（sourceType 用 'upload' 以匹配 TOC 分类规则）
-            createManagedVectorLayer({
+            await createManagedVectorLayer({
                 name: layerName,
                 type: resultFeatures[0]?.getGeometry?.()?.getType?.() || 'Polygon',
                 sourceType: 'upload',

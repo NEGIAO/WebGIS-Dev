@@ -1,11 +1,26 @@
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 
+// WebGL 渲染阈值：当要素数量超过此值时自动使用 WebGL 渲染
+const WEBGL_RENDER_THRESHOLD = 5000;
+
+// WebGL 默认样式（与 Canvas 样式兼容）
+const WEBGL_DEFAULT_STYLE = {
+    'fill-color': 'rgba(14, 119, 184, 0.3)',
+    'stroke-color': '#0e77b8',
+    'stroke-width': 1,
+};
+
 /**
  * [Phase 19]: Managed Vector Layer Creation Composable
  *
  * 提取创建托管矢量图层的生命周期逻辑
  * 职责：图层创建、要素规范化、样式应用、数据登记
+ *
+ * 架构说明：
+ * - 数据层：DataManager 管理所有数据（GeoJSON），支持导出/查询
+ * - 渲染层：OL VectorLayer/WebGLVectorLayer 负责可视化
+ * - TOC 管理：基于 DataManager，不依赖渲染方式
  *
  * @param {Object} config - Configuration object
  * @param {Ref} config.mapInstanceRef - Map instance reference
@@ -15,6 +30,7 @@ import VectorSource from 'ol/source/Vector';
  * @param {Object} config.metadataHelpers - Metadata normalization functions
  * @param {Object} config.registryHelpers - Layer registry functions
  * @param {Object} config.styleTemplates - Predefined style templates
+ * @param {Object} [config.dataManager] - DataManager instance (optional, for data/render separation)
  * @returns {Object} Contains createManagedVectorLayer function
  */
 export function useCreateManagedVectorLayer({
@@ -25,6 +41,7 @@ export function useCreateManagedVectorLayer({
     metadataHelpers,
     registryHelpers,
     styleTemplates,
+    dataManager = null, // 可选的 DataManager 实例
 }) {
     const { normalizeStyleConfig, buildManagedLayerStyle } = styleHelpers;
 
@@ -45,7 +62,7 @@ export function useCreateManagedVectorLayer({
      * [流程]:
      * 1. 验证 map 实例和要素数据
      * 2. 规范化样式配置和元数据
-     * 3. 创建 VectorLayer 和 VectorSource
+     * 3. 创建 VectorLayer 和 VectorSource（大数据量自动使用 WebGL）
      * 4. 序列化要素并注册 ID
      * 5. 将图层添加到地图
      * 6. 创建层数据记录并登记到 userDataLayers
@@ -62,9 +79,9 @@ export function useCreateManagedVectorLayer({
      * @param {boolean} params.autoLabel - Whether to enable auto labels
      * @param {Object} params.metadata - Layer metadata
      * @param {boolean} params.fitView - Whether to fit map view to layer extent
-     * @returns {string|null} Layer ID if created, null if creation failed
+     * @returns {Promise<string|null>} Layer ID if created, null if creation failed
      */
-    function createManagedVectorLayer({
+    async function createManagedVectorLayer({
         name,
         type,
         sourceType,
@@ -103,23 +120,51 @@ export function useCreateManagedVectorLayer({
             }
         });
 
-        // 5. 创建 VectorLayer
-        const layer = new VectorLayer({
-            source: new VectorSource({ features }),
-            zIndex: 120,
-            style: buildManagedLayerStyle(managedLayerState),
-            properties: { name },
-        });
+        // 5. 创建 VectorLayer（根据要素数量选择 Canvas 或 WebGL 渲染）
+        const useWebGL = features.length > WEBGL_RENDER_THRESHOLD;
+        let layer;
 
-        // 5. 序列化要素并应用 ID
+        if (useWebGL) {
+            // WebGL 渲染：性能更好，适合大数据量
+            const { default: WebGLVectorLayer } = await import('ol/layer/WebGLVector');
+            layer = new WebGLVectorLayer({
+                source: new VectorSource({ features }),
+                zIndex: 120,
+                style: WEBGL_DEFAULT_STYLE,
+                properties: { name, _useWebGL: true },
+            });
+        } else {
+            // Canvas 渲染：功能完整，适合小数据量
+            layer = new VectorLayer({
+                source: new VectorSource({ features }),
+                zIndex: 120,
+                style: buildManagedLayerStyle(managedLayerState),
+                properties: { name },
+            });
+        }
+
+        // 6. 序列化要素并应用 ID
         const serializedFeatures = serializeManagedFeatures(features, name);
         features.forEach((feature, index) => ensureFeatureId(feature, name, index));
 
-        // 6. 将图层添加到地图
+        // 7. 将图层添加到地图
         mapInstanceRef.value.addLayer(layer);
 
-        // 7. 创建及登记层数据记录
+        // 8. 创建及登记层数据记录
         const id = createManagedLayerId();
+
+        // 同时更新 DataManager（数据与渲染分离架构）
+        let dataManagerId = null;
+        if (dataManager) {
+            dataManagerId = dataManager.addLayer({
+                name,
+                type,
+                sourceType,
+                features,
+                metadata: normalizedMetadata,
+            });
+        }
+
         userDataLayers.push({
             id,
             name,
@@ -136,6 +181,7 @@ export function useCreateManagedVectorLayer({
             styleConfig: normalizedStyle,
             labelStyleCache: managedLayerState.labelStyleCache,
             layer,
+            dataManagerId, // 保存 DataManager 的 ID，用于数据操作
         });
 
         // 8. 触发层索引刷新和外部事件

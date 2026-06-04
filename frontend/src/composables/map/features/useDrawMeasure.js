@@ -201,13 +201,13 @@ export function createDrawMeasureFeature({
                 emitGraphicsOverview();
             }));
         } else {
-            drawListenerKeys.push(drawInteraction.on('drawend', (evt) => {
+            drawListenerKeys.push(drawInteraction.on('drawend', async (evt) => {
                 const feature = evt.feature;
                 const geom = feature.getGeometry();
                 const geomType = geom?.getType?.() || drawType;
                 drawSource.removeFeature(feature);
 
-                createManagedVectorLayer({
+                await createManagedVectorLayer({
                     name: `绘制_${geomType}_${drawGraphicSeedRef.value++}`,
                     type: geomType,
                     sourceType: 'draw',

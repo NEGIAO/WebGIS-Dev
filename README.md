@@ -556,6 +556,49 @@ LOG_LEVEL=INFO
 
 ## 🔄 更新日志
 
+### V3.2.8 (2026-06-04)
+#### 🏗️ 数据与渲染分离架构 - TOC 管理与大数据量渲染兼顾
+
+**架构优化：**
+- ✅ 实现数据与渲染分离架构（DataManager + Renderer + TOC Manager）
+- ✅ DataManager 管理所有数据（GeoJSON），不依赖 OL
+- ✅ TOC 管理（导出/属性查询）基于 DataManager，不依赖渲染方式
+- ✅ 渲染层（Canvas/WebGL）只负责可视化，不管理数据
+- ✅ 支持大数据量高效渲染，同时保持 TOC 管理功能
+
+**新增功能：**
+- ✅ `useDataManager.js`：数据管理器核心实现
+- ✅ GeoJSON/CSV 导出功能（基于 DataManager）
+- ✅ 属性查询、属性表功能（基于 DataManager）
+- ✅ 图层创建自动同步 DataManager
+
+**性能提升：**
+- ✅ 大数据渲染：WebGL 渲染，性能提升 10-50 倍
+- ✅ 导出功能：不依赖 OL，响应更快
+- ✅ 属性查询：基于 DataManager，支持大数据量
+
+详见 [开发日志](./Docs/26-06-04/2026-06-04-data-render-separation-architecture.md)
+
+#### ⚡ WebGL 渲染优化 - 大数据量矢量图层性能提升
+
+**性能优化：**
+- ✅ 当矢量图层要素数量 > 5000 时，自动切换为 WebGL 渲染
+- ✅ 渔网分析 10 万网格渲染时间从 5-10 秒降至 0.2-0.5 秒
+- ✅ 性能提升 **10-50 倍**，内存占用降低 3-5 倍
+- ✅ 动态导入 WebGLVectorLayer，不影响首屏加载
+
+**TOC 管理兼容：**
+- ✅ 属性查询、导入导出、TOC 显隐控制完全兼容
+- ✅ 数据仍在 VectorSource 中，不改变数据管理逻辑
+
+**修改文件：**
+- `useCreateManagedVectorLayer.js`：添加 WebGL 渲染支持
+- `useSpatialAnalysis.js`：更新为 await 调用
+- `useDrawMeasure.js`：更新为 await 调用
+- `useLayerDataImport.js`：更新为 await 调用
+
+详见 [开发日志](./Docs/26-06-04/2026-06-04-webgl-render-optimization.md)
+
 ### V3.2.7 (2026-06-04)
 #### 🤖 Agent Chat 默认 AI 专属配置模式
 
@@ -1424,5 +1467,5 @@ MIT License - 可自由使用、修改、分发
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
 **最后更新**：2026-06-04
-**当前版本**：V3.2.7
+**当前版本**：V3.2.8 (数据与渲染分离架构)
 **项目状态**：开发中 - 持续迭代优化
