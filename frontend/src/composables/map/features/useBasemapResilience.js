@@ -48,10 +48,15 @@ export function createBasemapResilience({ message }) {
             let endedTiles = 0;
             let errorCount = 0;
             let settled = false;
+            let timeoutId = null;
 
             const settle = (result) => {
                 if (settled) return;
                 settled = true;
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
                 cleanup();
                 resolve(result);
             };
@@ -77,6 +82,10 @@ export function createBasemapResilience({ message }) {
             };
 
             const cleanup = () => {
+                if (timeoutId !== null) {
+                    clearTimeout(timeoutId);
+                    timeoutId = null;
+                }
                 source.un('tileloadstart', onTileLoadStart);
                 source.un('tileloadend', onTileLoadEnd);
                 source.un('tileloaderror', onTileLoadError);
@@ -98,7 +107,7 @@ export function createBasemapResilience({ message }) {
             source.on('tileloaderror', onTileLoadError);
 
             // [Fix] 使用 checkTimeoutMs 作为唯一超时，移除了硬编码 1.5s 快失败
-            setTimeout(() => {
+            timeoutId = setTimeout(() => {
                 if (startedTiles === 0) {
                     settle({ success: false, reason: '未能获取底图数据（无瓦片开始加载，需梯子或超时）' });
                 } else if (endedTiles > 0) {

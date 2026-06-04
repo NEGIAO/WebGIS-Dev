@@ -113,6 +113,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { Search as SearchIcon } from 'lucide-vue-next';
+import { globalAbortManager } from '@/utils/abortManager';
 
 const props = defineProps({
     fetcher: {
@@ -216,16 +217,22 @@ async function runSearch(targetPage = 1) {
     page.value = targetPage;
 
     try {
-        const result = await props.fetcher({
-            service: service.value,
-            keywords: q,
-            page: targetPage,
-            pageSize: props.pageSize,
-        });
+        // 使用 AbortManager：新搜索自动 abort 上一次，释放浏览器连接槽位
+        const result = await globalAbortManager.run('location-search', (signal) =>
+            props.fetcher({
+                service: service.value,
+                keywords: q,
+                page: targetPage,
+                pageSize: props.pageSize,
+                signal,
+            }),
+        );
 
         items.value = Array.isArray(result?.items) ? result.items : [];
         total.value = Number(result?.total || 0);
     } catch (error) {
+        // AbortError 表示被新请求取代，静默忽略
+        if (error?.name === 'AbortError') return;
         console.error('location search failed', error);
         message.warning('地点搜索失败，请稍后重试');
         items.value = [];

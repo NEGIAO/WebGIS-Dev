@@ -3,9 +3,16 @@
  *
  * 从 useTileSourceFactory.ts 拆分。
  * 负责瓦片请求优先级控制、错误标记、中断管理。
+ *
+ * 核心机制：
+ * - 每个源绑定一个 AbortController，tileLoadFunction 通过 fetch() + signal 加载瓦片
+ * - abort() 会真正中断浏览器底层 TCP 连接（而非仅标记）
+ * - epoch 计数器防止过期请求的结果被采纳
  */
 
-import { TILE_STATE_ERROR } from './types';
+import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
+
+// ==================== 内部工具函数 ====================
 
 function markTileAsError(tile: any): void {
     if (tile && typeof tile.setState === 'function') {
@@ -18,14 +25,13 @@ function markAllSourceTilesAsError(source: any): void {
     const cache = source.getTileCache();
     if (!cache) return;
 
-    // 遍历缓存中的所有 tile 并标记为错误
     const keys: string[] = [];
     try {
         cache.forEach((value: any, key: string) => {
             keys.push(key);
         });
     } catch {
-        // 某些 OL 版本的 cache 不支持 forEach
+        // 某些 OL 版本的 tileCache 不支持 forEach（如 ol <7 的 LRUCache）
     }
 
     for (const key of keys) {
@@ -46,8 +52,44 @@ function getSourceEpoch(source: any): number {
 }
 
 /**
+ * 用 fetch() 加载图片并绑定 AbortSignal，使 abort() 能真正中断 TCP 连接。
+ * 成功时返回 blob URL，失败/中断时返回 null。
+ *
+ * 为什么不用 img.src？
+ * - 浏览器对 <img> 的 HTTP 请求由内核管理，JS 无法中途取消
+ * - 被墙的源会阻塞 30-60 秒占据并发连接槽位
+ * - fetch() + AbortController 可以立即释放底层连接
+ */
+async function fetchTileAsBlobUrl(
+    srcUrl: string,
+    signal: AbortSignal,
+): Promise<string | null> {
+    try {
+        const resp = await fetch(srcUrl, {
+            signal,
+            mode: 'cors',
+            credentials: 'omit',
+        });
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        return URL.createObjectURL(blob);
+    } catch {
+        // AbortError / TypeError / 网络错误 → 返回 null
+        return null;
+    }
+}
+
+// ==================== 公开 API ====================
+
+/**
  * 给瓦片源的 tileLoadFunction 注入 AbortController，
- * 使浏览器优先发送瓦片请求，并支持中断。
+ * 通过 fetch() + signal 实现真正的网络级中断。
+ *
+ * 工作流程：
+ * 1. 每次 tile 加载前检查 epoch（防止过期请求的结果被采纳）
+ * 2. 检查 signal.aborted（已被 abort 的请求直接标记错误）
+ * 3. 用 fetch() + signal 加载图片（abort 时立即释放 TCP 连接）
+ * 4. 成功后创建 blob URL 赋给 img.src
  */
 export function prioritizeTileSourceRequest<T>(source: T): T {
     const src = source as any;
@@ -74,9 +116,60 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
 
             const img = tile.getImage?.();
             if (img instanceof HTMLImageElement) {
-                img.addEventListener('error', () => markTileAsError(tile), { once: true });
-                img.src = srcUrl;
+                // 用 fetch() + AbortSignal 加载，使 abort() 能中断底层连接
+                let blobUrl: string | null = null;
+
+                // 监听 abort 信号：释放 blob URL 防止内存泄漏
+                const onAbort = () => {
+                    if (blobUrl) {
+                        URL.revokeObjectURL(blobUrl);
+                        blobUrl = null;
+                    }
+                    markTileAsError(tile);
+                };
+                signal.addEventListener('abort', onAbort, { once: true });
+
+                // 带超时的 fetch（防止被墙请求无限挂起）
+                const timeoutMs = TILE_REQUEST_TIMEOUT_MS;
+                const timeoutId = setTimeout(() => {
+                    // 超时后不主动 abort（由上层 abortTileSourceRequests 统一管理）
+                    // 仅标记 tile 为错误状态
+                    markTileAsError(tile);
+                }, timeoutMs);
+
+                fetchTileAsBlobUrl(srcUrl, signal)
+                    .then((url) => {
+                        clearTimeout(timeoutId);
+                        signal.removeEventListener('abort', onAbort);
+
+                        // 再次检查 epoch 和 signal（fetch 期间可能已 abort）
+                        const latestEpoch = getSourceEpoch(src);
+                        const tileEpochNow = Number(tile.get?.('epoch') || 0);
+                        if (tileEpochNow < latestEpoch || signal.aborted) {
+                            if (url) URL.revokeObjectURL(url);
+                            markTileAsError(tile);
+                            return;
+                        }
+
+                        if (url) {
+                            blobUrl = url;
+                            img.addEventListener('error', () => {
+                                markTileAsError(tile);
+                                URL.revokeObjectURL(url);
+                            }, { once: true });
+                            img.src = url;
+                        } else {
+                            markTileAsError(tile);
+                        }
+                    })
+                    .catch(() => {
+                        clearTimeout(timeoutId);
+                        signal.removeEventListener('abort', onAbort);
+                        markTileAsError(tile);
+                    });
             } else {
+                // 非 HTMLImageElement（如 Canvas），回退到原始 loadFunction
+                // 仍然检查 epoch 防止过期结果
                 originalTileLoadFn(tile, srcUrl);
             }
         });
@@ -87,28 +180,37 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
 
 /**
  * 阻断该图源所有正在进行的网络请求
- * 三层级联释放：(1) 发送 abort signal，(2) 标记所有缓存/loading 的 tiles，(3) clear 源
+ *
+ * 四层级联释放：
+ *   1. epoch++：所有进行中的 tileLoadFunction 在 fetch 回调时发现 epoch 过期，丢弃结果
+ *   2. controller.abort()：中断所有正在进行的 fetch() 请求，立即释放 TCP 连接
+ *   3. 标记所有缓存 tile 为 ERROR 状态
+ *   4. source.clear()：清空 OL 内部瓦片缓存
  */
 export function abortTileSourceRequests(source: any): void {
     if (!source || typeof source.get !== 'function') return;
 
+    // ① epoch 递增：使进行中的异步回调失效
     const currentEpoch = getSourceEpoch(source);
     if (typeof source.set === 'function') {
         source.set('abortEpoch', currentEpoch + 1);
     }
 
+    // ② AbortController：中断所有 fetch() 请求，释放 TCP 连接
     const controller = source.get('abortController');
     if (controller instanceof AbortController) {
-        controller.abort();
+        controller.abort('tile-source-aborted');
         source.set('abortController', new AbortController());
     }
 
+    // ③ 标记缓存 tile 为错误
     try {
         markAllSourceTilesAsError(source);
     } catch {
-        // best-effort only
+        // best-effort
     }
 
+    // ④ 清空源缓存
     if (typeof source.clear === 'function') {
         try {
             source.clear();

@@ -2,6 +2,7 @@ import axios from 'axios';
 import backendAPI, { handleApiError } from './backend';
 import { useMessage } from '@/composables/useMessage';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@/utils/coordTransform.js';
+import { getAmapErrorMessage } from './httpStatusMap';
 
 const AMAP_SUCCESS_STATUS = '1';
 const AMAP_SUCCESS_INFOCODE = '10000';
@@ -185,7 +186,9 @@ export async function addressToLocation(address, city = '', options = {}) {
             status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
-            const reason = data?.info || data?.message || '高德地理编码失败';
+            const reason = getAmapErrorMessage(infocode).includes('未知')
+                ? data?.info || data?.message || '高德地理编码失败'
+                : getAmapErrorMessage(infocode);
             if (!silent) {
                 message.error(`地理编码失败：${reason}`, { closable: true, duration: 5500 });
             }
@@ -227,8 +230,9 @@ export async function addressToLocation(address, city = '', options = {}) {
             handleApiError(error, message, '地理编码：API 调用额度已用完');
         } else {
             const detail = error instanceof Error ? error.message : '网络异常';
+            const statusTag = error?.status ? ` [${error.status} ${getAmapErrorMessage(error.status) || ''}]` : '';
             if (!error?.__notified && !silent) {
-                message.error(`地理编码请求异常：${detail}`, { closable: true, duration: 6000 });
+                message.error(`地理编码请求异常：${detail}${statusTag}`, { closable: true, duration: 6000 });
             }
         }
         throw error instanceof Error ? error : new Error('地理编码失败');
@@ -280,7 +284,9 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
             status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
-            const reason = data?.info || data?.message || '高德逆地理编码失败';
+            const reason = getAmapErrorMessage(infocode).includes('未知')
+                ? data?.info || data?.message || '高德逆地理编码失败'
+                : getAmapErrorMessage(infocode);
             if (!silent) {
                 message.error(`逆地理编码失败：${reason}`, { closable: true, duration: 5500 });
             }
@@ -322,8 +328,9 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
             handleApiError(error, message, '逆地理编码：API 调用额度已用完');
         } else {
             const detail = error instanceof Error ? error.message : '网络异常';
+            const statusTag = error?.status ? ` [${error.status} ${getAmapErrorMessage(error.status) || ''}]` : '';
             if (!error?.__notified && !silent) {
-                message.error(`逆地理编码请求异常：${detail}`, { closable: true, duration: 6000 });
+                message.error(`逆地理编码请求异常：${detail}${statusTag}`, { closable: true, duration: 6000 });
             }
         }
         throw error instanceof Error ? error : new Error('逆地理编码失败');

@@ -1,5 +1,6 @@
 import { useMessage } from '@/composables/useMessage';
 import backendAPI, { handleApiError } from './backend';
+import { getAmapErrorMessage } from './httpStatusMap';
 
 const AMAP_SUCCESS_STATUS = '1';
 const AMAP_SUCCESS_INFOCODE = '10000';
@@ -70,7 +71,7 @@ function normalizeForecast(forecast = {}) {
  *   raw: any
  * }>} 标准化结果
  */
-export async function getWeather(adcode, type = 'base') {
+export async function getWeather(adcode, type = 'base', options = {}) {
     const message = useMessage();
     const normalizedAdcode = String(adcode ?? '').trim();
     const normalizedType = type === 'all' ? 'all' : 'base';
@@ -87,6 +88,7 @@ export async function getWeather(adcode, type = 'base') {
                 city: normalizedAdcode,
                 extensions: normalizedType,
             },
+            signal: options?.signal,
         });
 
         const data = response || {};
@@ -96,7 +98,9 @@ export async function getWeather(adcode, type = 'base') {
             status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
-            const reason = data?.info || data?.message || '高德天气接口返回失败';
+            const reason = getAmapErrorMessage(infocode).includes('未知')
+                ? data?.info || data?.message || '高德天气接口返回失败'
+                : getAmapErrorMessage(infocode);
             throw new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
         }
 
@@ -124,12 +128,15 @@ export async function getWeather(adcode, type = 'base') {
             raw: data,
         };
     } catch (error) {
+        // AbortError 表示被新请求取代，静默传递（不弹通知）
+        if (error?.name === 'AbortError') throw error;
         if (error?.isQuotaExceeded) {
             // 配额用完：使用友好提示
             handleApiError(error, message, '天气查询：API 调用额度已用完');
         } else {
             const detail = error instanceof Error ? error.message : '网络异常';
-            message.error(`天气查询失败：${detail}`, { closable: true, duration: 6000 });
+            const statusTag = error?.status ? ` [${error.status}]` : '';
+            message.error(`天气查询失败：${detail}${statusTag}`, { closable: true, duration: 6000 });
         }
         throw error instanceof Error ? error : new Error('天气查询失败');
     }

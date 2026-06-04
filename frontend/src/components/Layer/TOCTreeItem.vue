@@ -155,7 +155,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { isValidLabel } from '../../utils/biz';
 import {
     resolveFolderSelectionState,
@@ -316,17 +316,21 @@ function handleMenuCommand(key) {
         return;
     }
 
-    const events = dispatchContextMenuCommand({
-        key,
-        node: props.node,
-        selectedLayerIds: Array.from(selectedLayerIdSet.value),
-    });
+    try {
+        const events = dispatchContextMenuCommand({
+            key,
+            node: props.node,
+            selectedLayerIds: Array.from(selectedLayerIdSet.value),
+        });
 
-    events.forEach((evt) => {
-        emitAction(evt.type, evt.payload || {});
-    });
-
-    closeContextMenu();
+        events.forEach((evt) => {
+            emitAction(evt.type, evt.payload || {});
+        });
+    } catch (error) {
+        console.error('[TOCTreeItem] 菜单命令执行失败:', error);
+    } finally {
+        closeContextMenu();
+    }
 }
 
 function handleToggleVisibility(event) {
@@ -389,6 +393,14 @@ function handleDrop() {
     if (!props.node.droppable) return;
     emitAction('drop-layer', { layerId: props.node.id });
 }
+
+// 注册全局点击监听器：点击菜单外部时自动关闭
+onMounted(() => {
+    document.addEventListener('pointerdown', _handleGlobalPointerDown, true);
+});
+onBeforeUnmount(() => {
+    document.removeEventListener('pointerdown', _handleGlobalPointerDown, true);
+});
 
 // 暴露 closeContextMenu 给父组件使用（事件委托模式）
 defineExpose({ closeContextMenu });

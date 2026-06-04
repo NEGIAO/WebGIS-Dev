@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.2.1
+# WebGIS 前端项目 — v3.2.2
 
 ## 📋 项目概述
 
@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-02 重构更新）
+## 目录结构（2026-06-04 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -112,6 +112,7 @@ frontend/src/
 │   │   └── index.js                          # barrel export
 │   ├── download.js                           # 底图下载任务 API
 │   ├── geocoding.js                          # 天地图/高德地理编码
+│   ├── httpStatusMap.js                      # HTTP 状态码 + 高德 infocode 统一映射
 │   ├── index.js                              # barrel export
 │   ├── ipLocation.js                         # IP 定位 API
 │   ├── locationSearch.js                     # 地点搜索 API
@@ -296,6 +297,7 @@ frontend/src/
 │   └── goldenSoupQuotes.js                   # 励志语录数据（1454 行，懒加载）
 │
 ├── utils/                                    # 工具函数
+│   ├── abortManager.js                       # 通用请求中断管理器（AbortController 封装）
 │   ├── pathUtils.js                          # 路径工具（统一 normalizePath/getExtension/getStem）
 │   ├── textDecoder.js                        # 文本解码（多编码自动检测）
 │   ├── normalize.ts                          # 二值标记规范化（normalizeBinaryFlag）
@@ -567,6 +569,19 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.2.2 (2026-06-04)
+#### 🔧 统一 HTTP 状态码映射 + 日志监控修复 + 瓦片请求中断修复
+
+**新增：**
+- `api/httpStatusMap.js`：统一 HTTP 状态码映射模块（80+ 标准 HTTP 码 + 40+ 高德 infocode）
+
+**修复：**
+- axios 拦截器错误处理使用状态码映射，`apiError` 新增 `status`/`statusText`
+- 统一 geocoding / weather / ipLocation / map / locationSearch 的 infocode 错误映射
+- LogMonitor `getLogClass()` HTTP 状态码正则检测优先于 `INFO`，5xx 红色 / 4xx 黄色
+- `tileLifecycle.ts` 用 `fetch()` + `AbortController.signal` 替代 `img.src`，abort 立即释放 TCP
+- 修复 `useBasemapResilience` 的 `validateBaseLayerSwitch` setTimeout 泄漏
 
 ### V3.2.1 (2026-06-03)
 #### 📧 邮箱验证码系统 + 密码重置 + 认证安全增强

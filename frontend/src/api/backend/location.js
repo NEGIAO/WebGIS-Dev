@@ -3,6 +3,7 @@
  */
 
 import backendAPI from './client';
+import { useMessage } from '../../composables/useMessage';
 
 /**
  * 地理编码 - 地址→坐标
@@ -149,6 +150,8 @@ export async function apiLocationTrackVisit(options = {}) {
         .catch((error) => {
             // 定位追踪失败不影响正常业务流程，静默处理
             console.warn('[Location Tracking] 访问追踪失败:', error.message);
+            const { warning: showWarning } = useMessage();
+            showWarning(`访问追踪失败: ${error.message || '未知错误'}`);
             return null;
         });
 }

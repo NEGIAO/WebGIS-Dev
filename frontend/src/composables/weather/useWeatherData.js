@@ -8,6 +8,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../useMessage';
 import { apiAddressGeocode, apiReverseGeocodeWithFallback, apiWeather } from '../../api';
+import { globalAbortManager } from '@/utils/abortManager';
 import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
@@ -269,11 +270,13 @@ export function useWeatherData(chartCallbacks = {}) {
             await invokeChartCallback('ensureChartInstances');
             invokeChartCallback('showChartsLoading');
 
-            // 并行请求实况与预报
-            const [baseResponse, allResponse] = await Promise.all([
-                apiWeather(normalizedAdcode, 'base'),
-                apiWeather(normalizedAdcode, 'all'),
-            ]);
+            // 并行请求实况与预报（AbortManager：新 adcode 自动 abort 上一次，释放连接槽位）
+            const [baseResponse, allResponse] = await globalAbortManager.run('weather', (signal) =>
+                Promise.all([
+                    apiWeather(normalizedAdcode, 'base', { signal }),
+                    apiWeather(normalizedAdcode, 'all', { signal }),
+                ]),
+            );
             const baseResult = baseResponse?.data || null;
             const allResult = allResponse?.data || null;
 
@@ -312,7 +315,9 @@ export function useWeatherData(chartCallbacks = {}) {
             invokeChartCallback('resizeCharts');
             invokeChartCallback('renderTrendChart');
             invokeChartCallback('renderWindChart');
-        } catch {
+        } catch (error) {
+            // AbortError 表示被新 adcode 请求取代，静默忽略
+            if (error?.name === 'AbortError') return;
             // getWeather 内部已完成错误提示，这里吞掉异常以避免 watcher 链路产生未处理拒绝
         } finally {
             if (requestId === lastWeatherRequestId) {

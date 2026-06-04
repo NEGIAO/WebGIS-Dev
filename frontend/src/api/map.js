@@ -1,5 +1,6 @@
 import backendAPI from './backend';
 import { parseAmapAoiPayload } from '../utils/gis/parsers/amapAoiParser';
+import { getAmapErrorMessage } from './httpStatusMap';
 
 export {
     reverseGeocodeTianditu,
@@ -244,8 +245,11 @@ export async function fetchAmapPoiDetailAoi({ poiid, extensions = 'all' }) {
         if (webData && typeof webData === 'object') {
             const status = String(webData?.status ?? '1');
             if (status !== '1') {
-                const reason = webData?.info || webData?.message || '高德 Web 详情查询失败';
-                throw new Error(`${reason} (status=${status})`);
+                const infocode = String(webData?.infocode ?? '');
+                const reason = getAmapErrorMessage(infocode).includes('未知')
+                    ? webData?.info || webData?.message || '高德 Web 详情查询失败'
+                    : getAmapErrorMessage(infocode);
+                throw new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
             }
             data = webData;
         } else if (isLikelyHtmlPayload(rawPayload)) {
@@ -273,8 +277,11 @@ export async function fetchAmapPoiDetailAoi({ poiid, extensions = 'all' }) {
             const restData = restResponse || {};
             const status = String(restData?.status ?? '0');
             if (status !== '1') {
-                const reason = restData?.info || restData?.message || '高德详情查询失败';
-                throw new Error(`${reason} (status=${status})`);
+                const infocode = String(restData?.infocode ?? '');
+                const reason = getAmapErrorMessage(infocode).includes('未知')
+                    ? restData?.info || restData?.message || '高德详情查询失败'
+                    : getAmapErrorMessage(infocode);
+                throw new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
             }
 
             data = restData;

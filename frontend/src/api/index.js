@@ -17,6 +17,7 @@ export * from './ipLocation';
 export * from './weather';
 export * from './backend';
 export * from './download';
+export * from './httpStatusMap';
 
 /**
  * 统一地址地理编码入口。
@@ -97,8 +98,8 @@ export async function apiIpCountry(ip = '') {
 /**
  * 统一天气查询入口。
  */
-export async function apiWeather(adcode, type = 'base') {
-    const data = await getWeather(adcode, type);
+export async function apiWeather(adcode, type = 'base', options = {}) {
+    const data = await getWeather(adcode, type, options);
     return {
         ok: true,
         service: 'amap-weather',

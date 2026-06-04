@@ -140,19 +140,34 @@ const logsStreamUrl = computed(() => {
     return `${base}/monitor/logs/stream?type=${currentType.value}`;
 });
 
+// 匹配 HTTP 状态码模式：如 " 503 ", " 404 ", "HTTP/1.1\" 500" 等
+const HTTP_STATUS_RE = /\b([1-5]\d{2})\b/g;
+
 function getLogClass(msg) {
     const text = msg.toUpperCase();
 
     // 1. 优先识别严重错误 (包含 FAILED, ERROR)
     if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
 
-    // 2. 识别警告 (WARNING)
+    // 2. 识别 HTTP 错误状态码（4xx / 5xx）—— 优先于 INFO/WARN 关键字
+    //    uvicorn 格式: INFO: 10.x.x.x:port - "GET /path HTTP/1.1" 503 Service Unavailable
+    //    其中 503 不含 ERROR 字样，但属于明确的服务端错误
+    const statusMatches = [...msg.matchAll(HTTP_STATUS_RE)];
+    if (statusMatches.length > 0) {
+        // 取最后一个匹配的状态码（通常在行尾，如 "200 OK" 或 "503 Service Unavailable"）
+        const lastCode = Number(statusMatches[statusMatches.length - 1][1]);
+        if (lastCode >= 500) return 'log-error';       // 5xx 服务端错误 → 红色
+        if (lastCode >= 400) return 'log-warning';      // 4xx 客户端错误 → 黄色
+        if (lastCode >= 200 && lastCode < 300) return 'log-success'; // 2xx 成功 → 绿色
+    }
+
+    // 3. 识别通用警告 (WARNING)
     if (text.includes('WARN')) return 'log-warning';
 
-    // 3. 识别成功状态
-    if (text.includes('SUCCESS') || text.includes('200 OK')) return 'log-success';
+    // 4. 识别成功状态（非 HTTP 日志的 SUCCESS 关键字）
+    if (text.includes('SUCCESS')) return 'log-success';
 
-    // 4. 最后识别业务流程标签
+    // 5. 业务流程标签
     if (text.includes('[BUILD]')) return 'log-build';
     if (text.includes('[RUN]')) return 'log-run';
     if (text.includes('INFO')) return 'log-info';

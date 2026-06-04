@@ -170,6 +170,7 @@ WebGIS_Dev/
 │   │   │   │   └── index.js              # barrel export
 │   │   │   ├── download.js               # 在线底图下载 API
 │   │   │   ├── geocoding.js              # 天地图/高德地理编码
+│   │   │   ├── httpStatusMap.js          # HTTP 状态码 + 高德 infocode 统一映射
 │   │   │   ├── weather.js                # 天气数据 API
 │   │   │   ├── ipLocation.js             # IP 定位 API
 │   │   │   ├── locationSearch.js         # 地点搜索 API
@@ -290,6 +291,7 @@ WebGIS_Dev/
 │   │   ├── data/                         # 应用数据（纯数据模块）
 │   │   │   └── goldenSoupQuotes.js       # 励志语录数据（懒加载）
 │   │   ├── utils/                        # 工具函数
+│   │   │   ├── abortManager.js           # 通用请求中断管理器（AbortController 封装）
 │   │   │   ├── pathUtils.js              # 路径工具（统一 normalizePath/getExtension/getStem）
 │   │   │   ├── textDecoder.js            # 文本解码（多编码自动检测）
 │   │   │   ├── normalize.ts              # 二值标记规范化
@@ -536,6 +538,20 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.2.2 (2026-06-04)
+#### 🔧 统一 HTTP 状态码映射 + 日志监控修复 + 瓦片请求中断修复
+
+**前端新增：**
+- ✅ `httpStatusMap.js`：统一 HTTP 状态码映射模块（80+ 标准 HTTP 码 + 40+ 高德 infocode 中文描述）
+- ✅ `getHttpStatusMessage()` / `getAmapErrorMessage()` / `buildHttpErrorMessage()` / `classifyHttpStatus()` / `isRetryable()` 辅助函数
+
+**前端修复：**
+- ✅ axios 响应拦截器：错误日志附带 `[503 服务暂不可用]` 标签，`apiError` 新增 `status`/`statusText`
+- ✅ 统一 geocoding / weather / ipLocation / map / locationSearch 的高德 infocode 错误映射
+- ✅ LogMonitor `getLogClass()`：HTTP 状态码正则检测优先于 `INFO` 关键字，5xx 红色 / 4xx 黄色 / 2xx 绿色
+- ✅ `tileLifecycle.ts`：`fetch()` + `AbortController.signal` 替代 `img.src`，abort 立即释放 TCP 连接
+- ✅ 修复 `useBasemapResilience` 的 `validateBaseLayerSwitch` setTimeout 泄漏
 
 ### V3.2.1 (2026-06-03)
 #### 📧 邮箱验证码系统 + 密码重置 + 认证安全增强
@@ -1311,6 +1327,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-03
-**当前版本**：V3.2.1
+**最后更新**：2026-06-04
+**当前版本**：V3.2.2
 **项目状态**：开发中 - 持续迭代优化

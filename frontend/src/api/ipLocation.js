@@ -1,6 +1,7 @@
 import { useMessage } from '@/composables/useMessage';
 import { parseAmapRectangleToExtent } from '@/utils/amapRectangle';
 import backendAPI, { handleApiError } from './backend';
+import { getAmapErrorMessage, getHttpStatusMessage } from './httpStatusMap';
 
 function normalizeText(value) {
     if (Array.isArray(value)) {
@@ -52,7 +53,10 @@ export async function getIpLocation(ip = '', options = {}) {
         const normalized = buildNormalizedResult(raw);
 
         if (!normalized.ok) {
-            const reason = normalized.info || '未知错误';
+            const infocode = normalized.infocode || '';
+            const reason = getAmapErrorMessage(infocode).includes('未知')
+                ? normalized.info || '未知错误'
+                : getAmapErrorMessage(infocode);
             if (!silent) {
                 message.warning(`IP 定位失败：${reason}`, { closable: true, duration: 5000 });
             }
@@ -65,14 +69,16 @@ export async function getIpLocation(ip = '', options = {}) {
         return normalized;
     } catch (error) {
         let errorMessage = '网络异常';
+        const httpStatus = error?.status || 0;
         if (error?.isQuotaExceeded) {
             // 配额用完：使用友好提示
             handleApiError(error, message, 'IP 定位：API 调用额度已用完');
             errorMessage = String(error?.message || 'IP 定位：API 调用额度已用完');
         } else {
             errorMessage = error instanceof Error ? error.message : '网络异常';
+            const statusTag = httpStatus ? ` [${httpStatus} ${getHttpStatusMessage(httpStatus)}]` : '';
             if (!silent) {
-                message.error(`IP 定位网络异常：${errorMessage}`, {
+                message.error(`IP 定位网络异常：${errorMessage}${statusTag}`, {
                     closable: true,
                     duration: 6000,
                 });
