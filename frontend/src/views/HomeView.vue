@@ -8,7 +8,7 @@
  * - 新闻侧边栏展示
  * - 鼠标特效
  */
-import { ref, reactive, defineAsyncComponent, onMounted, onUnmounted, h, nextTick } from 'vue';
+import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUnmounted, h, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '../composables/useMessage';
 import {
@@ -17,7 +17,6 @@ import {
     useAppStore,
     useCompassStore,
     useTOCStore,
-    useDownloadStore,
     useLayerStore,
 } from '../stores';
 import { showLoading, hideLoading } from '../utils/ui/loading';
@@ -28,7 +27,6 @@ const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
 const compassStore = useCompassStore();
 const tocStore = useTOCStore();
-const downloadStore = useDownloadStore();
 const layerStore = useLayerStore();
 
 // 首屏地图初始化 Loading 已由路由守卫管理（Loading Relay）
@@ -115,6 +113,9 @@ const isAccountPanelFullscreen = ref(false);
 
 // 组件引用
 const mapContainerRef = ref(null);
+// 从 MapContainer 暴露的 mapInstance 提供给全页面子组件（如 ExtentPicker）
+const olMap = computed(() => mapContainerRef.value?.mapInstance ?? null);
+provide('olMap', olMap);
 const mapCoreLoadingSettled = ref(false);
 let sidePanelWarmupTimer = null;
 let sidePanelWarmupIdleId = null;
@@ -206,11 +207,6 @@ function openDrivePlanner() {
 
 function getMapUserLocation(enableHighAccuracy = true) {
     return mapContainerRef.value?.getCurrentLocation?.(enableHighAccuracy);
-}
-
-/** 获取当前地图可视范围（BBox），返回 { minLon, minLat, maxLon, maxLat } */
-function getMapExtent() {
-    return mapContainerRef.value?.getMapExtent?.() || null;
 }
 
 function startBusPointPick(type) {
@@ -309,40 +305,6 @@ function handleSpatialAnalysis(payload) {
 
     // 转发到 MapContainer 执行
     mapContainerRef.value?.runSpatialAnalysis?.(payload);
-}
-
-/** 通用框选范围（供渔网分析等工具使用） */
-async function pickExtentForAnalysis() {
-    message.info('请在地图上拖拽框选分析范围');
-    return mapContainerRef.value?.pickBoxExtent?.();
-}
-
-async function handleRequestDownloadExtent() {
-    try {
-        message.info('请在地图上拖拽框选下载范围');
-        const result = await mapContainerRef.value?.pickDownloadExtent?.();
-        const extent = result?.extent;
-        if (!extent) {
-            message.warning('未获取到下载范围');
-            return;
-        }
-        const ok = downloadStore.applyBboxFromExtent(extent, result?.crs || 'EPSG:3857');
-        if (ok) {
-            message.success('已更新下载范围');
-        } else {
-            message.warning('下载范围解析失败');
-        }
-    } catch (error) {
-        const detail = String(error?.message || '').trim();
-        if (detail && !/(取消|cancel)/i.test(detail)) {
-            message.error(detail || '获取下载范围失败');
-        }
-    }
-}
-
-function handleClearDownloadExtent() {
-    mapContainerRef.value?.clearExtentOverlay?.();
-    downloadStore.clearExtent();
 }
 
 async function handleControlsDistrictSelect(payload) {
@@ -946,8 +908,6 @@ onMounted(async () => {
             <div class="Control-panel">
                 <ControlsPanel
                     :user-layers="userLayers"
-                    :get-map-extent="getMapExtent"
-                    :pick-extent="pickExtentForAnalysis"
                     @open-tab="handleControlsOpenTab"
                     @open-toolbox-tab="handleControlsOpenToolboxTab"
                     @map-interaction="handleControlsMapInteraction"
@@ -1148,8 +1108,6 @@ onMounted(async () => {
                     @toggle-layer-crs="handleToggleLayerCRS"
                     @export-layer-data="handleExportLayerData"
                     @switch-tab="handleSwitchSidePanelTab"
-                    @request-download-extent="handleRequestDownloadExtent"
-                    @clear-download-extent="handleClearDownloadExtent"
                     @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat"
                 >

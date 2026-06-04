@@ -162,23 +162,11 @@
             </label>
 
             <div class="action-row">
-                <button
-                    class="ghost-btn"
-                    type="button"
-                    @click="emit('request-extent')"
-                >
-                    {{ hasExtent ? '重新框选' : '地图框选范围' }}
-                </button>
-                <button
-                    v-if="hasExtent"
-                    class="ghost-btn clear-extent-btn"
-                    type="button"
-                    @click="emit('clear-extent')"
-                >
-                    清除选区
-                </button>
-                <span v-if="!hasExtent" class="field-hint">在地图拖拽矩形框选下载范围</span>
-                <span v-else class="field-hint extent-active">✓ 已框选范围，地图上显示绿色虚线矩形</span>
+                <ExtentPicker
+                    :show-overlay="true"
+                    @extent-change="applyExtentFromPicker"
+                    @extent-clear="handleClearExtent"
+                />
             </div>
 
             <div class="action-row">
@@ -308,16 +296,32 @@ import { apiDownloadTaskFile, apiDownloadTaskFileUrl } from '../../api/download'
 import { useMessage } from '../../composables/useMessage';
 import { useDownloadStore } from '../../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../../constants';
+import ExtentPicker from '../Common/ExtentPicker.vue';
 
 defineProps({
     visible: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(['close', 'request-extent', 'clear-extent']);
+const emit = defineEmits(['close']);
 const message = useMessage();
 const store = useDownloadStore();
 
-const hasExtent = computed(() => store.extentSet);
+/**
+ * 接收 ExtentPicker 的 extent-change 事件，将框选范围应用到 store
+ * @param {{ extent: number[] }} param0 - extent 为 [minX, minY, maxX, maxY] 四元组 (EPSG:4326)
+ */
+function applyExtentFromPicker({ extent }) {
+    if (extent?.length === 4) {
+        store.applyBboxFromExtent(extent, 'EPSG:4326');
+    }
+}
+
+/**
+ * 接收 ExtentPicker 的 extent-clear 事件，清除已有的范围
+ */
+function handleClearExtent() {
+    store.clearExtent();
+}
 
 const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
 const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');

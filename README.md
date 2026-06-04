@@ -187,6 +187,8 @@ WebGIS_Dev/
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
 │   │   │   │   └── terrain/              # 自定义地形提供者
 │   │   │   ├── Chat/                     # AI 聊天助手
+│   │   │   ├── Common/                   # 通用可复用组件
+│   │   │   │   └── ExtentPicker.vue      # 框选范围组件（开始/重新/清除/提示）
 │   │   │   ├── Compass/                  # 罗盘控制面板
 │   │   │   ├── ControlsPanel/            # 左侧控制栏（绘制/测量/空间分析/行政区）
 │   │   │   ├── Layer/                    # 图层管理（TOC/属性表/资源树）
@@ -551,6 +553,21 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.2.6 (2026-06-04)
+#### 🧩 可复用 ExtentPicker 框选组件 + Code Review 修复
+
+**前端新增：**
+- ✅ `Common/ExtentPicker.vue`：通用框选范围组件（开始框选/重新框选/清除选区/状态提示/坐标标签）
+- ✅ SpatialAnalysisPanel 渔网分析集成 ExtentPicker（新增清除功能 + 状态提示）
+- ✅ MapDownloader 框选 UI 统一替换为 ExtentPicker（消除重复代码）
+
+**后端修复（Code Review）：**
+- ✅ `router.py` bbox 转换复用 `_get_transformer` 缓存，避免每次请求新建 Transformer
+- ✅ `utils.py` 修复 `_reproject_features` 循环变量遮蔽
+- ✅ `MAX_GRID_CELLS` 提取为 `utils.py` 共享常量，消除 aggregation/fishnet 重复定义
+
+详见 [变更日志](./Docs/26-06/26-06-04/v3.2.6-extent-picker-component.md)
 
 ### V3.2.5 (2026-06-04)
 #### 🌐 空间分析统一 EPSG:3857 平面坐标系

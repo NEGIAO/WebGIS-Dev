@@ -139,6 +139,8 @@ frontend/src/
 │   │       └── util.js
 │   ├── Chat/
 │   │   └── ChatPanelContent.vue              # AI 聊天面板
+│   ├── Common/                               # 通用可复用组件
+│   │   └── ExtentPicker.vue                  # 框选范围组件（开始/重新/清除/提示）
 │   ├── Compass/
 │   │   ├── CompassControlPanel.vue           # 罗盘控制面板
 │   │   └── PalaceExplanationPanel.vue        # 宫位解释面板
@@ -569,6 +571,17 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.2.6 (2026-06-04)
+#### 🧩 可复用 ExtentPicker 框选组件
+
+**新增：**
+- `components/Common/ExtentPicker.vue`：通用框选范围组件（开始框选/重新框选/清除选区/状态提示/坐标标签）
+- Props: `hasExtent` / `disabled` / `extentLabel`；Events: `pick-extent` / `clear-extent`
+
+**重构：**
+- SpatialAnalysisPanel 渔网分析：内联"地图选取"按钮 → `ExtentPicker`（新增清除功能 + 状态提示）
+- MapDownloader：内联 3 个按钮 + hint → `ExtentPicker`（统一交互体验）
 
 ### V3.2.5 (2026-06-04)
 #### 🌐 空间分析统一 EPSG:3857 + 渔网分析 + 模块化拆分

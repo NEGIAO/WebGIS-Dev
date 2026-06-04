@@ -57,7 +57,7 @@ backend/
 │   ├── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）
 │   │   ├── __init__.py                            # 门面 re-export router
 │   │   ├── models.py                              # Pydantic 请求/响应模型
-│   │   ├── utils.py                               # 坐标重投影（pyproj）+ 几何格式转换
+│   │   ├── utils.py                               # 坐标重投影（pyproj）+ 几何格式转换 + MAX_GRID_CELLS 常量
 │   │   ├── router.py                              # 路由 + 端点分发 + CRS 统一转换
 │   │   └── operations/                            # 分析操作实现（纯 EPSG:3857）
 │   │       ├── __init__.py                        # re-export 所有 do_* 函数

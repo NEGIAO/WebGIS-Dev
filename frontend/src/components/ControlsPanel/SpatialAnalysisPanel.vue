@@ -202,15 +202,10 @@
                     <input v-model.number="bboxMaxLon" type="number" class="param-input bbox-input" placeholder="最大经度" step="0.1" />
                     <input v-model.number="bboxMaxLat" type="number" class="param-input bbox-input" placeholder="最大纬度" step="0.1" />
                 </div>
-                <button
-                    class="fetch-bbox-btn"
-                    :disabled="!getMapExtent"
-                    title="自动获取当前地图可视范围"
-                    @click="fillBboxFromMapExtent"
-                >
-                    <Crosshair :size="12" />
-                    获取当前视图范围
-                </button>
+                <ExtentPicker
+                    @extent-change="fillAggregationBbox"
+                    @extent-clear="clearAggregationBbox"
+                />
             </div>
             <button class="run-btn" :disabled="!canRunAggregation" @click="runAggregation">
                 <Play :size="14" />
@@ -293,26 +288,10 @@
                     <input v-model.number="fishnetMaxLon" type="number" class="param-input bbox-input" placeholder="最大经度" step="0.1" />
                     <input v-model.number="fishnetMaxLat" type="number" class="param-input bbox-input" placeholder="最大纬度" step="0.1" />
                 </div>
-                <div class="bbox-actions">
-                    <button
-                        class="fetch-bbox-btn"
-                        :disabled="!getMapExtent"
-                        title="自动获取当前地图可视范围"
-                        @click="fillFishnetBboxFromMapExtent"
-                    >
-                        <Crosshair :size="12" />
-                        当前视图
-                    </button>
-                    <button
-                        class="fetch-bbox-btn pick-extent-btn"
-                        :disabled="!pickExtent"
-                        title="在地图上拖拽框选范围"
-                        @click="handlePickExtent"
-                    >
-                        <SquareMousePointer :size="12" />
-                        地图选取
-                    </button>
-                </div>
+                <ExtentPicker
+                    @extent-change="fillFishnetBbox"
+                    @extent-clear="clearFishnetBbox"
+                />
             </div>
             <div class="param-group">
                 <label class="param-label">网格大小（米）<span class="required">*</span></label>
@@ -384,27 +363,17 @@ import {
     LayoutGrid,
     Target,
     Shrink,
-    Crosshair,
     Grid3x3,
-    SquareMousePointer,
 } from 'lucide-vue-next';
+import ExtentPicker from '../Common/ExtentPicker.vue';
+import { formatCoordinateValue } from '../../utils/coordinateFormatter';
 
 const emit = defineEmits(['analysis', 'close']);
 
-const props = defineProps({
+defineProps({
     availableLayers: {
         type: Array,
         default: () => [],
-    },
-    /** 获取当前地图可视范围的函数，返回 { minLon, minLat, maxLon, maxLat } */
-    getMapExtent: {
-        type: Function,
-        default: null,
-    },
-    /** 通用框选范围函数，返回 Promise<{ extent: [minLon, minLat, maxLon, maxLat], crs }> */
-    pickExtent: {
-        type: Function,
-        default: null,
     },
 });
 
@@ -538,29 +507,9 @@ const canRunFishnet = computed(() =>
     isValidBboxVal(fishnetMaxLat.value) &&
     fishnetGridSize.value > 0
 );
-
 function selectTool(id) {
     activeTool.value = activeTool.value === id ? '' : id;
     resultMessage.value = '';
-    // 选择空间聚合工具时，自动从当前视图获取 BBox
-    if (id === 'aggregation' && activeTool.value === 'aggregation') {
-        fillBboxFromMapExtent();
-    }
-    // 选择渔网工具时，自动从当前视图获取 BBox
-    if (id === 'fishnet' && activeTool.value === 'fishnet') {
-        fillFishnetBboxFromMapExtent();
-    }
-}
-
-/** 从当前地图视图获取可视范围并填充 BBox 输入框 */
-function fillBboxFromMapExtent() {
-    if (!props.getMapExtent) return;
-    const extent = props.getMapExtent();
-    if (!extent) return;
-    bboxMinLon.value = Math.round(extent.minLon * 1e6) / 1e6;
-    bboxMinLat.value = Math.round(extent.minLat * 1e6) / 1e6;
-    bboxMaxLon.value = Math.round(extent.maxLon * 1e6) / 1e6;
-    bboxMaxLat.value = Math.round(extent.maxLat * 1e6) / 1e6;
 }
 
 function runBuffer() {
@@ -645,31 +594,50 @@ function runSimplify() {
     showResult('success', `几何简化分析已提交（容差 ${simplifyTolerance.value}m）`);
 }
 
-/** 从当前地图视图获取可视范围并填充渔网 BBox 输入框 */
-function fillFishnetBboxFromMapExtent() {
-    if (!props.getMapExtent) return;
-    const extent = props.getMapExtent();
-    if (!extent) return;
-    fishnetMinLon.value = Math.round(extent.minLon * 1e6) / 1e6;
-    fishnetMinLat.value = Math.round(extent.minLat * 1e6) / 1e6;
-    fishnetMaxLon.value = Math.round(extent.maxLon * 1e6) / 1e6;
-    fishnetMaxLat.value = Math.round(extent.maxLat * 1e6) / 1e6;
+/**
+ * 从 ExtentPicker 接收渔网分析的 BBox 范围
+ * @param {{ extent: number[] }} param0 - extent 为 [minLon, minLat, maxLon, maxLat] 四元组
+ */
+function fillFishnetBbox({ extent }) {
+    if (extent?.length === 4) {
+        fishnetMinLon.value = formatCoordinateValue(extent[0]);
+        fishnetMinLat.value = formatCoordinateValue(extent[1]);
+        fishnetMaxLon.value = formatCoordinateValue(extent[2]);
+        fishnetMaxLat.value = formatCoordinateValue(extent[3]);
+    }
 }
 
-/** 通过地图交互框选范围 */
-async function handlePickExtent() {
-    if (!props.pickExtent) return;
-    try {
-        const result = await props.pickExtent();
-        if (result?.extent && result.extent.length === 4) {
-            fishnetMinLon.value = Math.round(result.extent[0] * 1e6) / 1e6;
-            fishnetMinLat.value = Math.round(result.extent[1] * 1e6) / 1e6;
-            fishnetMaxLon.value = Math.round(result.extent[2] * 1e6) / 1e6;
-            fishnetMaxLat.value = Math.round(result.extent[3] * 1e6) / 1e6;
-        }
-    } catch {
-        // 用户取消框选，静默处理
+/**
+ * 清除渔网分析的 BBox 范围
+ */
+function clearFishnetBbox() {
+    fishnetMinLon.value = null;
+    fishnetMinLat.value = null;
+    fishnetMaxLon.value = null;
+    fishnetMaxLat.value = null;
+}
+
+/**
+ * 从 ExtentPicker 接收空间聚合的 BBox 范围
+ * @param {{ extent: number[] }} param0 - extent 为 [minLon, minLat, maxLon, maxLat] 四元组
+ */
+function fillAggregationBbox({ extent }) {
+    if (extent?.length === 4) {
+        bboxMinLon.value = formatCoordinateValue(extent[0]);
+        bboxMinLat.value = formatCoordinateValue(extent[1]);
+        bboxMaxLon.value = formatCoordinateValue(extent[2]);
+        bboxMaxLat.value = formatCoordinateValue(extent[3]);
     }
+}
+
+/**
+ * 清除空间聚合的 BBox 范围
+ */
+function clearAggregationBbox() {
+    bboxMinLon.value = null;
+    bboxMinLat.value = null;
+    bboxMaxLon.value = null;
+    bboxMaxLat.value = null;
 }
 
 function runFishnet() {

@@ -4,6 +4,18 @@
  */
 
 /**
+ * 格式化坐标值，保留指定小数位数
+ * 用于 BBox 输入框、坐标显示等场景
+ * @param {number} n - 坐标值
+ * @param {number} decimals - 小数位数，默认 6
+ * @returns {number} 格式化后的坐标值
+ */
+export function formatCoordinateValue(n, decimals = 6) {
+    const factor = Math.pow(10, decimals);
+    return Math.round(n * factor) / factor;
+}
+
+/**
  * 坐标格式配置
  */
 export const COORDINATE_FORMATS = {

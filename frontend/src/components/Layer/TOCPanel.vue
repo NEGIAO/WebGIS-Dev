@@ -419,8 +419,6 @@
             <MapDownloader
                 :visible="true"
                 @close="activeTab = 'layers'"
-                @request-extent="emit('request-download-extent')"
-                @clear-extent="emit('clear-download-extent')"
             />
         </div>
 
@@ -590,8 +588,6 @@ const emit = defineEmits([
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data',
-    'request-download-extent',
-    'clear-download-extent',
     'rename-layer',
     'show-layer-properties',
 ]);
