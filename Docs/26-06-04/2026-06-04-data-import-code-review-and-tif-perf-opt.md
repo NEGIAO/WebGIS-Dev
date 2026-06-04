@@ -6,6 +6,7 @@
 - 对 `useLayerDataImport.js` 及其依赖模块进行全面 Code Review
 - **新增 WebGL 着色器渲染器**：用 GPU 并行替代 CPU 逐像素循环，非地理配准 TIF 渲染性能提升 10-100 倍
 - 代码质量优化：采样器合并、KML 解析合并、常量提取、JSDoc
+- **前端构建优化**：Gzip/Brotli 预压缩、阻塞脚本修复、资源预连接、chunk 拆分
 
 **修改原因**：
 - TIF 栅格数据（特别是大尺寸 DEM/遥感影像）在浏览器端处理存在严重的主线程阻塞和内存问题
@@ -249,11 +250,13 @@ const pngBlob = await new Promise(...);
 
 ## 四、修改的文件路径
 
-- `d:\Dev\GitHub\WebGIS_Dev\frontend\src\composables\useLayerDataImport.js` — 核心重构：采样器合并、KML 解析合并、WebGL 集成、常量提取、JSDoc
+- `d:\Dev\GitHub\WebGIS_Dev\frontend\src\composables\useLayerDataImport.js` — 核心重构：采样器合并、KML 解析合并、WebGL 集成、Worker Pool、URL 直传 GeoTIFFSource
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\src\composables\dataImport\rasterUtils.js` — getBandMinMax 添加 20 万采样上限
-- `d:\Dev\GitHub\WebGIS_Dev\frontend\src\composables\dataImport\webglRasterRenderer.js` — **新增** WebGL 栅格着色器渲染器
+- `d:\Dev\GitHub\WebGIS_Dev\frontend\src\composables\dataImport\webglRasterRenderer.js` — **新增** WebGL 栅格着色器渲染器（含资源释放）
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\src\composables\dataImport\index.js` — 新增 renderBandsToCanvas 导出
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\src\main.js` — WebGL 高性能 GPU 选择补丁
+- `d:\Dev\GitHub\WebGIS_Dev\frontend\vite.config.js` — Gzip/Brotli 预压缩、vendor-toast 拆分、modulePreload 启用
+- `d:\Dev\GitHub\WebGIS_Dev\frontend\index.html` — min-enhanced.js defer、CDN preconnect
 - `d:\Dev\GitHub\WebGIS_Dev\README.md` — 添加 V3.2.9 版本记录
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\README.md` — 添加 V3.2.9 版本记录
 

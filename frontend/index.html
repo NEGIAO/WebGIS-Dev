@@ -29,6 +29,9 @@
             href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
         />
 
+        <!-- 关键资源预加载：减少首屏渲染等待 -->
+        <link rel="preconnect" href="https://cdn.bootcdn.net" crossorigin />
+
         <title>NEGIAO's WebGIS</title>
     </head>
 
@@ -40,10 +43,10 @@
         ></script>
         <!-- 导入js文件 -->
 
-        <script src="./min-enhanced.js"></script>
-        <!-- 
-        导入增强功能的js文件（51.la立即执行，其他延迟3秒 ） 
-        不声明为module，确保立即执行，且不受模块作用域限制
+        <script defer src="./min-enhanced.js"></script>
+        <!--
+        导入增强功能的js文件（51.la立即执行，其他延迟3秒 ）
+        defer：不阻塞 HTML 解析，DOMContentLoaded 前按顺序执行
      -->
     </body>
 </html>

@@ -572,11 +572,20 @@ LOG_LEVEL=INFO
 - ✅ `getBandMinMax` 添加 20 万采样上限
 - ✅ 提取 7 个魔法数字为语义化常量，添加 15+ JSDoc 注释
 
+**前端构建优化：**
+- ✅ Gzip/Brotli 预压缩：传输体积减少 60-80%
+- ✅ `min-enhanced.js` 改为 `defer`：不再阻塞 HTML 解析
+- ✅ CDN `preconnect`：减少 Font Awesome 首次连接延迟
+- ✅ `modulePreload` 启用：关键模块提前加载
+- ✅ `vendor-toast` chunk 拆分：vendor-libs 体积降低
+
 **修改文件：**
 - `dataImport/webglRasterRenderer.js`：**新增** WebGL 栅格着色器渲染器
-- `useLayerDataImport.js`：核心重构 + WebGL 集成
+- `useLayerDataImport.js`：核心重构 + WebGL 集成 + Worker Pool + URL 直传
 - `dataImport/rasterUtils.js`：采样优化
 - `main.js`：GPU 高性能选择
+- `vite.config.js`：Gzip/Brotli 压缩 + chunk 拆分 + modulePreload
+- `index.html`：defer + preconnect
 
 详见 [开发日志](./Docs/26-06-04/2026-06-04-data-import-code-review-and-tif-perf-opt.md)
 

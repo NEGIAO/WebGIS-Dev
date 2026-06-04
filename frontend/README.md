@@ -377,6 +377,8 @@ frontend/src/
 ###   - 合并重复的栅格采样器（消除 ~90 行）和 KML 解析函数（消除 ~60 行）
 ###   - 提取常量、添加 JSDoc
 ### - `main.js`：注入 `powerPreference: 'high-performance'` 强制使用独立显卡
+### - `vite.config.js`：Gzip/Brotli 预压缩 + vendor-toast 拆分 + modulePreload 启用
+### - `index.html`：min-enhanced.js defer 改写 + CDN preconnect
 ### - `dataImport/rasterUtils.js`：`getBandMinMax` 添加 20 万采样上限
 
 ## V3.1.2

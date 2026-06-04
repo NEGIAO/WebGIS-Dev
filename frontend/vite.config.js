@@ -33,7 +33,7 @@ export default defineConfig(({ command, mode }) => {
         gzipSize: true,
         brotliSize: true,
         open: false
-      })
+      }),
     ].filter(Boolean),
 
     // 路径别名：@ 指向 src
@@ -68,23 +68,31 @@ export default defineConfig(({ command, mode }) => {
       sourcemap: !isProductionLikeBuild,
       minify: 'esbuild',
       chunkSizeWarningLimit: 300,
-      modulePreload: false,
+      modulePreload: true,
 
-      // Rollup 分包策略
+      // Rollup 分包策略：按功能拆分，避免单个 chunk 过大
       rollupOptions: {
         output: {
           manualChunks(id) {
             if (id.includes('vite/preload-helper')) return 'vendor-runtime';
             if (!id.includes('node_modules')) return undefined;
 
+            // 地图引擎（最大 chunk，~524KB）
             if (isNodeModulePackage(id, 'ol')) return 'vendor-ol-all';
+            // 图表库（~543KB）
             if (isNodeModulePackage(id, 'echarts') || isNodeModulePackage(id, 'zrender')) return 'vendor-echarts-all';
+            // GeoTIFF 解析（~316KB）
             if (isNodeModulePackage(id, 'geotiff')) return 'vendor-geotiff';
+            // LERC 栅格解码
             if (isNodeModulePackage(id, 'lerc')) return 'vendor-lerc';
+            // 压缩库
             if (isNodeModulePackage(id, 'jszip')) return 'vendor-jszip';
             if (isNodeModulePackage(id, 'shpjs')) return 'vendor-shpjs';
+            // 坐标投影
             if (isNodeModulePackage(id, 'proj4')) return 'vendor-proj4';
+            // HTTP 客户端
             if (isNodeModulePackage(id, 'axios')) return 'vendor-axios';
+            // Vue 核心框架
             if (
               isNodeModulePackage(id, 'vue') ||
               isNodeModulePackage(id, '@vue') ||
@@ -93,7 +101,11 @@ export default defineConfig(({ command, mode }) => {
             ) {
               return 'vendor-vue';
             }
-
+            // 通知/消息库（独立 chunk，避免混入 vendor-libs）
+            if (isNodeModulePackage(id, 'vue-toastification') || isNodeModulePackage(id, 'vue3-toastify')) {
+              return 'vendor-toast';
+            }
+            // 剩余 node_modules（小库合集）
             return 'vendor-libs';
           }
         }

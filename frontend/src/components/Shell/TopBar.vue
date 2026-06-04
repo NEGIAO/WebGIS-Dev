@@ -6,7 +6,7 @@
                 class="logo-link"
             >
                 <img
-                    :src="`${normalizedBase}images/icon.webp`"
+                    :src="faviconUrl"
                     alt="Icon"
                     class="logo-icon"
                 />
@@ -357,6 +357,9 @@ const magicMenuHostRef = ref(null);
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+
+// 复用 index.html 中已加载的 favicon，避免重复请求同一资源
+const faviconUrl = document.querySelector('link[rel="icon"]')?.href || `${normalizedBase}images/icon.webp`;
 
 const message = useMessage();
 
