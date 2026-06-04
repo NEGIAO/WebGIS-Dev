@@ -311,6 +311,12 @@ function handleSpatialAnalysis(payload) {
     mapContainerRef.value?.runSpatialAnalysis?.(payload);
 }
 
+/** 通用框选范围（供渔网分析等工具使用） */
+async function pickExtentForAnalysis() {
+    message.info('请在地图上拖拽框选分析范围');
+    return mapContainerRef.value?.pickBoxExtent?.();
+}
+
 async function handleRequestDownloadExtent() {
     try {
         message.info('请在地图上拖拽框选下载范围');
@@ -941,6 +947,7 @@ onMounted(async () => {
                 <ControlsPanel
                     :user-layers="userLayers"
                     :get-map-extent="getMapExtent"
+                    :pick-extent="pickExtentForAnalysis"
                     @open-tab="handleControlsOpenTab"
                     @open-toolbox-tab="handleControlsOpenToolboxTab"
                     @map-interaction="handleControlsMapInteraction"

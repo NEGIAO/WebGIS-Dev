@@ -370,6 +370,7 @@ const {
     startReverseGeocodePick,
     cancelDownloadBoxPick,
     pickDownloadExtent,
+    pickBoxExtent,
     clearExtentOverlay,
     disposeAll: disposeInteractionPickers,
 } = createMapInteractionPickers({ mapInstance });
@@ -1520,6 +1521,7 @@ defineExpose({
     drawPointByCoordinatesInput,
     drawAmapAoiByDetailJsonInput,
     pickDownloadExtent,
+    pickBoxExtent,
     clearExtentOverlay,
     toggleLayerCRS,
     toggleSearchLayerCRS,

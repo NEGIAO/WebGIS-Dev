@@ -7,7 +7,6 @@
  */
 
 import GeoJSON from 'ol/format/GeoJSON';
-import { toLonLat } from 'ol/proj';
 import { apiSpatialAnalysis } from '../../../api/backend';
 
 /**
@@ -35,40 +34,6 @@ export function createSpatialAnalysisFeature({
 }) {
     const gjFormat = new GeoJSON();
     let analysisSeed = 1;
-
-    /**
-     * 将米近似转换为度（基于参考纬度）
-     * @param {number} meters - 距离（米）
-     * @param {number} refLat - 参考纬度（度）
-     * @returns {number} 距离（度）
-     */
-    function metersToDegrees(meters, refLat) {
-        const latRad = (refLat * Math.PI) / 180;
-        const metersPerDegreeLat = 111320;
-        const metersPerDegreeLon = 111320 * Math.cos(latRad);
-        const metersPerDegree = (metersPerDegreeLat + metersPerDegreeLon) / 2;
-        return meters / metersPerDegree;
-    }
-
-    /**
-     * 从 OL Feature 数组中获取参考纬度（质心纬度）
-     * @param {Array} olFeatures - OL Feature 数组
-     * @returns {number} 参考纬度（度），默认 35
-     */
-    function getReferenceLat(olFeatures) {
-        for (const feat of olFeatures) {
-            const geom = feat.getGeometry();
-            if (geom) {
-                const extent = geom.getExtent();
-                // extent: [minX, minY, maxX, maxY] in EPSG:3857
-                // 取中心 Y 转为 WGS84 纬度
-                const centerY3857 = (extent[1] + extent[3]) / 2;
-                const [, lat] = toLonLat([0, centerY3857]);
-                return lat;
-            }
-        }
-        return 35; // 默认中纬度
-    }
 
     /**
      * 获取指定图层的所有 OL Feature（EPSG:3857）
@@ -122,10 +87,13 @@ export function createSpatialAnalysisFeature({
      * @param {string} [params.layerA] - 图层 A ID（overlay 使用）
      * @param {string} [params.layerB] - 图层 B ID（overlay 使用）
      * @param {number[]} [params.distances] - 多环缓冲区距离数组（米）
-     * @param {number} [params.tolerance] - 几何简化容差（度）
-     * @param {number[]} [params.bbox] - 可视范围 [minLon, minLat, maxLon, maxLat]
+     * @param {number} [params.tolerance] - 几何简化容差（米）
+     * @param {number[]} [params.bbox] - 可视范围 [minLon, minLat, maxLon, maxLat]（EPSG:4326）
      * @param {string} [params.gridType] - 网格类型：grid/hexbin
-     * @param {number} [params._gridSize] - 网格大小（度）
+     * @param {number} [params.gridSize] - 网格大小（米），aggregation/fishnet 使用
+     * @param {number} [params.gridSizeMeters] - 渔网网格大小（米）（fishnet 使用）
+     * @param {string} [params.geometryType] - 渔网几何类型：polygon/line（fishnet 使用）
+     * @param {boolean} [params.createCenterPoints] - 是否创建渔网中心点（fishnet 使用）
      */
     async function runSpatialAnalysis(params = {}) {
         const { type } = params;
@@ -204,7 +172,7 @@ export function createSpatialAnalysisFeature({
                 operation = 'voronoi';
                 layerName = `泰森多边形_${analysisSeed++}`;
             } else if (type === 'aggregation') {
-                const { targetLayerId, bbox, gridType = 'grid', _gridSize = 0.01 } = params;
+                const { targetLayerId, bbox, gridType = 'grid', gridSize = 500 } = params;
                 if (!targetLayerId) {
                     message.warning('请选择目标图层');
                     return;
@@ -255,6 +223,79 @@ export function createSpatialAnalysisFeature({
                 }
                 operation = 'simplify';
                 layerName = `几何简化_${analysisSeed++}`;
+            } else if (type === 'fishnet') {
+                // 渔网分析不需要输入图层，直接在 catch 外处理
+                const { bbox, gridSizeMeters, geometryType = 'polygon', createCenterPoints = false } = params;
+                if (!bbox || bbox.length !== 4) {
+                    message.warning('请先框选范围或手动输入四至范围');
+                    return;
+                }
+                if (!gridSizeMeters || gridSizeMeters <= 0) {
+                    message.warning('请输入有效的网格大小（米）');
+                    return;
+                }
+                operation = 'fishnet';
+                const typeLabel = geometryType === 'polygon' ? '面' : '线';
+                layerName = `渔网_${gridSizeMeters}m_${typeLabel}`;
+
+                // 渔网不需要输入要素，传空集合
+                const geojsonA = { type: 'FeatureCollection', features: [] };
+                const payload = {
+                    operation: 'fishnet',
+                    features_a: geojsonA,
+                    bbox,
+                    grid_size: gridSizeMeters,
+                    geometry_type: geometryType,
+                    create_center_points: createCenterPoints,
+                };
+
+                message.info('正在生成渔网...');
+                const resultGeoJSON = await apiSpatialAnalysis(payload);
+
+                if (!resultGeoJSON || !resultGeoJSON.features || !resultGeoJSON.features.length) {
+                    message.warning('渔网分析未生成结果要素');
+                    return;
+                }
+
+                // 创建主图层（面或线）
+                const resultFeatures = geoJSONToFeatures(resultGeoJSON);
+                if (!resultFeatures.length) {
+                    message.warning('渔网结果要素解析失败');
+                    return;
+                }
+                createManagedVectorLayer({
+                    name: layerName,
+                    type: resultFeatures[0]?.getGeometry?.()?.getType?.() || 'Polygon',
+                    sourceType: 'upload',
+                    features: resultFeatures,
+                    fitView: true,
+                });
+
+                // 如果有中心点，创建点图层
+                if (resultGeoJSON.center_points && resultGeoJSON.center_points.features?.length) {
+                    const pointFeatures = geoJSONToFeatures(resultGeoJSON.center_points);
+                    if (pointFeatures.length) {
+                        const pointLayerName = `渔网_${gridSizeMeters}m_点`;
+                        createManagedVectorLayer({
+                            name: pointLayerName,
+                            type: 'Point',
+                            sourceType: 'upload',
+                            features: pointFeatures,
+                            fitView: false,
+                        });
+                    }
+                }
+
+                emitGraphicsOverview();
+                emitUserLayersChange();
+
+                const pointCount = resultGeoJSON.center_points?.feature_count || 0;
+                let resultMsg = `${layerName} 完成，共 ${resultFeatures.length} 个网格`;
+                if (pointCount > 0) {
+                    resultMsg += `，${pointCount} 个中心点`;
+                }
+                message.success(resultMsg);
+                return; // fishnet 已单独处理结果，提前返回
             } else {
                 message.warning(`不支持的分析类型：${type}`);
                 return;
@@ -280,14 +321,12 @@ export function createSpatialAnalysisFeature({
                 payload.distances = params.distances;
             }
             if (type === 'simplify' && params.tolerance) {
-                // 前端传入的容差单位为米，需转换为度供后端 Shapely 使用
-                const refLat = getReferenceLat(featuresA);
-                payload.tolerance = metersToDegrees(params.tolerance, refLat);
+                payload.tolerance = params.tolerance;  // 直接传米，后端在 3857 下处理
             }
             if (type === 'aggregation') {
                 payload.bbox = params.bbox;
                 payload.grid_type = params.gridType || 'grid';
-                payload.grid_size = params._gridSize || 0.01;
+                payload.grid_size = params.gridSize || 500;  // 米
             }
 
             message.info('正在执行空间分析...');

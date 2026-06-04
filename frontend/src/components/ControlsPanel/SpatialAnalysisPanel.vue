@@ -183,15 +183,15 @@
                 </div>
             </div>
             <div class="param-group">
-                <label class="param-label">网格大小（度）</label>
+                <label class="param-label">网格大小（米）</label>
                 <input
                     v-model.number="gridSize"
                     type="number"
                     class="param-input"
-                    min="0.0001"
-                    max="10"
-                    step="0.001"
-                    placeholder="默认 0.01"
+                    min="1"
+                    max="1000000"
+                    step="100"
+                    placeholder="默认 500"
                 />
             </div>
             <div class="param-group">
@@ -283,6 +283,79 @@
             </button>
         </div>
 
+        <!-- 渔网分析参数 -->
+        <div v-if="activeTool === 'fishnet'" class="params-section">
+            <div class="param-group">
+                <label class="param-label">四至范围</label>
+                <div class="bbox-inputs">
+                    <input v-model.number="fishnetMinLon" type="number" class="param-input bbox-input" placeholder="最小经度" step="0.1" />
+                    <input v-model.number="fishnetMinLat" type="number" class="param-input bbox-input" placeholder="最小纬度" step="0.1" />
+                    <input v-model.number="fishnetMaxLon" type="number" class="param-input bbox-input" placeholder="最大经度" step="0.1" />
+                    <input v-model.number="fishnetMaxLat" type="number" class="param-input bbox-input" placeholder="最大纬度" step="0.1" />
+                </div>
+                <div class="bbox-actions">
+                    <button
+                        class="fetch-bbox-btn"
+                        :disabled="!getMapExtent"
+                        title="自动获取当前地图可视范围"
+                        @click="fillFishnetBboxFromMapExtent"
+                    >
+                        <Crosshair :size="12" />
+                        当前视图
+                    </button>
+                    <button
+                        class="fetch-bbox-btn pick-extent-btn"
+                        :disabled="!pickExtent"
+                        title="在地图上拖拽框选范围"
+                        @click="handlePickExtent"
+                    >
+                        <SquareMousePointer :size="12" />
+                        地图选取
+                    </button>
+                </div>
+            </div>
+            <div class="param-group">
+                <label class="param-label">网格大小（米）<span class="required">*</span></label>
+                <input
+                    v-model.number="fishnetGridSize"
+                    type="number"
+                    class="param-input"
+                    min="1"
+                    max="1000000"
+                    placeholder="例如：500"
+                />
+            </div>
+            <div class="param-group">
+                <label class="param-label">几何类型</label>
+                <div class="overlay-mode-grid">
+                    <button
+                        class="mode-btn"
+                        :class="{ active: fishnetGeometryType === 'polygon' }"
+                        @click="fishnetGeometryType = 'polygon'"
+                    >
+                        面
+                    </button>
+                    <button
+                        class="mode-btn"
+                        :class="{ active: fishnetGeometryType === 'line' }"
+                        @click="fishnetGeometryType = 'line'"
+                    >
+                        线
+                    </button>
+                </div>
+            </div>
+            <div class="param-group">
+                <label class="param-label checkbox-label">
+                    <input v-model="fishnetCreatePoints" type="checkbox" class="param-checkbox" />
+                    创建渔网中心点
+                </label>
+            </div>
+            <button class="run-btn" :disabled="!canRunFishnet" @click="runFishnet">
+                <Play :size="14" />
+                执行分析
+            </button>
+        </div>
+
         <!-- 结果信息 -->
         <div v-if="resultMessage" class="result-section" :class="resultType">
             <component :is="resultType === 'success' ? CheckCircle2 : AlertCircle" :size="14" />
@@ -312,6 +385,8 @@ import {
     Target,
     Shrink,
     Crosshair,
+    Grid3x3,
+    SquareMousePointer,
 } from 'lucide-vue-next';
 
 const emit = defineEmits(['analysis', 'close']);
@@ -323,6 +398,11 @@ const props = defineProps({
     },
     /** 获取当前地图可视范围的函数，返回 { minLon, minLat, maxLon, maxLat } */
     getMapExtent: {
+        type: Function,
+        default: null,
+    },
+    /** 通用框选范围函数，返回 Promise<{ extent: [minLon, minLat, maxLon, maxLat], crs }> */
+    pickExtent: {
         type: Function,
         default: null,
     },
@@ -379,6 +459,13 @@ const analysisTools = [
         icon: Shrink,
         color: '#faad14',
     },
+    {
+        id: 'fishnet',
+        label: '渔网分析',
+        description: '在指定范围内生成规则网格',
+        icon: Grid3x3,
+        color: '#8b5cf6',
+    },
 ];
 
 // 叠加模式
@@ -402,7 +489,7 @@ const resultType = ref('');
 
 // 空间聚合参数
 const gridType = ref('grid');
-const gridSize = ref(0.01);
+const gridSize = ref(500);
 const bboxMinLon = ref(null);
 const bboxMinLat = ref(null);
 const bboxMaxLon = ref(null);
@@ -413,6 +500,15 @@ const distancesInput = ref('');
 
 // 几何简化参数
 const simplifyTolerance = ref(100);
+
+// 渔网分析参数
+const fishnetMinLon = ref(null);
+const fishnetMinLat = ref(null);
+const fishnetMaxLon = ref(null);
+const fishnetMaxLat = ref(null);
+const fishnetGridSize = ref(null);
+const fishnetGeometryType = ref('polygon');
+const fishnetCreatePoints = ref(false);
 
 // 辅助函数：验证 bbox 值是否为有效数字
 function isValidBboxVal(v) {
@@ -435,6 +531,13 @@ const canRunMultiRing = computed(() => {
     return parts.every((p) => !isNaN(Number(p)) && Number(p) > 0);
 });
 const canRunSimplify = computed(() => targetLayerId.value && simplifyTolerance.value > 0);
+const canRunFishnet = computed(() =>
+    isValidBboxVal(fishnetMinLon.value) &&
+    isValidBboxVal(fishnetMinLat.value) &&
+    isValidBboxVal(fishnetMaxLon.value) &&
+    isValidBboxVal(fishnetMaxLat.value) &&
+    fishnetGridSize.value > 0
+);
 
 function selectTool(id) {
     activeTool.value = activeTool.value === id ? '' : id;
@@ -442,6 +545,10 @@ function selectTool(id) {
     // 选择空间聚合工具时，自动从当前视图获取 BBox
     if (id === 'aggregation' && activeTool.value === 'aggregation') {
         fillBboxFromMapExtent();
+    }
+    // 选择渔网工具时，自动从当前视图获取 BBox
+    if (id === 'fishnet' && activeTool.value === 'fishnet') {
+        fillFishnetBboxFromMapExtent();
     }
 }
 
@@ -536,6 +643,47 @@ function runSimplify() {
         tolerance: simplifyTolerance.value,
     });
     showResult('success', `几何简化分析已提交（容差 ${simplifyTolerance.value}m）`);
+}
+
+/** 从当前地图视图获取可视范围并填充渔网 BBox 输入框 */
+function fillFishnetBboxFromMapExtent() {
+    if (!props.getMapExtent) return;
+    const extent = props.getMapExtent();
+    if (!extent) return;
+    fishnetMinLon.value = Math.round(extent.minLon * 1e6) / 1e6;
+    fishnetMinLat.value = Math.round(extent.minLat * 1e6) / 1e6;
+    fishnetMaxLon.value = Math.round(extent.maxLon * 1e6) / 1e6;
+    fishnetMaxLat.value = Math.round(extent.maxLat * 1e6) / 1e6;
+}
+
+/** 通过地图交互框选范围 */
+async function handlePickExtent() {
+    if (!props.pickExtent) return;
+    try {
+        const result = await props.pickExtent();
+        if (result?.extent && result.extent.length === 4) {
+            fishnetMinLon.value = Math.round(result.extent[0] * 1e6) / 1e6;
+            fishnetMinLat.value = Math.round(result.extent[1] * 1e6) / 1e6;
+            fishnetMaxLon.value = Math.round(result.extent[2] * 1e6) / 1e6;
+            fishnetMaxLat.value = Math.round(result.extent[3] * 1e6) / 1e6;
+        }
+    } catch {
+        // 用户取消框选，静默处理
+    }
+}
+
+function runFishnet() {
+    if (!canRunFishnet.value) return;
+    emit('analysis', {
+        type: 'fishnet',
+        bbox: [fishnetMinLon.value, fishnetMinLat.value, fishnetMaxLon.value, fishnetMaxLat.value],
+        gridSizeMeters: fishnetGridSize.value,
+        geometryType: fishnetGeometryType.value,
+        createCenterPoints: fishnetCreatePoints.value,
+    });
+    const typeLabel = fishnetGeometryType.value === 'polygon' ? '面' : '线';
+    const pointLabel = fishnetCreatePoints.value ? '含中心点' : '';
+    showResult('success', `渔网分析已提交（${fishnetGridSize.value}m ${typeLabel} ${pointLabel}）`);
 }
 
 function showResult(type, msg) {
@@ -844,5 +992,36 @@ function showResult(type, msg) {
     color: #6b8c6b;
     font-size: 11px;
     border-top: 1px solid #e8f0e8;
+}
+
+.bbox-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.bbox-actions .fetch-bbox-btn {
+    flex: 1;
+    margin-top: 0;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.param-checkbox {
+    width: 14px;
+    height: 14px;
+    accent-color: var(--brand-accent);
+    cursor: pointer;
+}
+
+.required {
+    color: #e74c3c;
+    margin-left: 2px;
 }
 </style>

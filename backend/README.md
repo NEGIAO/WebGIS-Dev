@@ -20,9 +20,9 @@ WebGIS 后端服务，当前包含五大核心能力：
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
-- 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
+- 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-03 更新）
+## 0. 项目结构（2026-06-04 更新）
 
 ```text
 backend/
@@ -54,13 +54,27 @@ backend/
 │   │   ├── system_config.py                       # 系统配置
 │   │   ├── dependencies.py                        # FastAPI 依赖注入
 │   │   └── routes.py                              # 路由处理函数
+│   ├── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）
+│   │   ├── __init__.py                            # 门面 re-export router
+│   │   ├── models.py                              # Pydantic 请求/响应模型
+│   │   ├── utils.py                               # 坐标重投影（pyproj）+ 几何格式转换
+│   │   ├── router.py                              # 路由 + 端点分发 + CRS 统一转换
+│   │   └── operations/                            # 分析操作实现（纯 EPSG:3857）
+│   │       ├── __init__.py                        # re-export 所有 do_* 函数
+│   │       ├── buffer.py                          # 缓冲区分析
+│   │       ├── overlay.py                         # 叠加分析（交集/并集/差集）
+│   │       ├── convex_hull.py                     # 凸包分析
+│   │       ├── voronoi.py                         # 泰森多边形
+│   │       ├── aggregation.py                     # 空间聚合（网格化/蜂窝化）
+│   │       ├── multi_ring_buffer.py               # 多环缓冲区
+│   │       ├── simplify.py                        # 几何简化
+│   │       └── fishnet.py                         # 渔网分析
 │   ├── api_keys_management.py                     # API 密钥管理接口
 │   ├── api_management.py                          # API 使用管理接口
 │   ├── external_proxy.py                          # 外部代理接口
 │   ├── location.py                                # 定位相关接口
 │   ├── monitor.py                                 # 日志监控接口
 │   ├── proxy.py                                   # 通用代理 + GCJ-02 纠偏
-│   ├── spatial.py                                 # 空间分析 API（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
 │   └── statistics.py                              # 访问统计接口
 │
 ├── core/                                          # 核心业务逻辑

@@ -48,6 +48,7 @@
             v-if="spatialPanelVisible"
             :available-layers="userLayers"
             :get-map-extent="getMapExtent"
+            :pick-extent="pickExtent"
             @analysis="handleSpatialAnalysis"
             @close="spatialPanelVisible = false"
         />
@@ -178,6 +179,11 @@ defineProps({
         default: () => [],
     },
     getMapExtent: {
+        type: Function,
+        default: null,
+    },
+    /** 通用框选范围函数，供渔网分析等工具使用 */
+    pickExtent: {
         type: Function,
         default: null,
     },

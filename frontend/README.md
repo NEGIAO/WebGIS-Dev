@@ -570,6 +570,21 @@ MIT
 
 ## 版本记录
 
+### V3.2.5 (2026-06-04)
+#### 🌐 空间分析统一 EPSG:3857 + 渔网分析 + 模块化拆分
+
+**新增：**
+- 空间分析面板新增"渔网分析"工具（四至输入 + 地图框选/当前视图 + 网格大小 + 面/线 + 中心点）
+- 通用 `pickBoxExtent()` 框选函数（`useMapInteractionPickers.js`），从下载专用逻辑中解耦
+- `pickExtent` prop 逐层传递：HomeView → ControlsPanel → SpatialAnalysisPanel
+
+**重构：**
+- 删除前端 `metersToDegrees`/`getReferenceLat`/`toLonLat` 重复转换函数
+- aggregation `_gridSize` → `gridSize`（修复命名 bug：用户输入被静默忽略）
+- aggregation 标签"度"→"米"，默认值 0.01→500
+- simplify tolerance 直接传米（后端在 3857 下处理）
+- fishnet payload `grid_size_meters` → `grid_size`（统一字段名）
+
 ### V3.2.2 (2026-06-04)
 #### 🔧 统一 HTTP 状态码映射 + 日志监控修复 + 瓦片请求中断修复
 

@@ -22,6 +22,10 @@ export function createMapInteractionPickers({ mapInstance }) {
     const pendingDownloadBoxPickRef = ref(null);
     let downloadBoxInteraction = null;
 
+    // 通用框选（供渔网分析等复用）
+    const pendingBoxExtentPickRef = ref(null);
+    let boxExtentInteraction = null;
+
     // 下载框选选区覆盖层
     let extentOverlayLayer = null;
     let extentOverlaySource = null;
@@ -237,6 +241,86 @@ export function createMapInteractionPickers({ mapInstance }) {
     }
 
     /**
+     * 取消通用框选
+     * @param {string} reason - 取消原因
+     */
+    function cancelBoxExtentPick(reason = '范围选择已取消') {
+        if (boxExtentInteraction && mapInstance.value) {
+            mapInstance.value.removeInteraction(boxExtentInteraction);
+        }
+        boxExtentInteraction = null;
+        removePreviewLayer();
+        if (pendingBoxExtentPickRef.value?.reject) {
+            pendingBoxExtentPickRef.value.reject(new Error(reason));
+        }
+        pendingBoxExtentPickRef.value = null;
+    }
+
+    /**
+     * 启动通用范围框选（供渔网分析等场景复用）
+     * 拖拽过程中实时显示预览矩形，完成后返回 WGS84 范围
+     * @param {Object} [options] - 配置项
+     * @param {boolean} [options.showOverlay=false] - 完成后是否显示持久化覆盖层
+     * @returns {Promise<{extent: number[], crs: string}>} 框选结果
+     */
+    function pickBoxExtent(options = {}) {
+        if (!mapInstance.value) {
+            return Promise.reject(new Error('地图尚未初始化'));
+        }
+
+        // 取消进行中的通用框选
+        if (pendingBoxExtentPickRef.value?.reject) {
+            cancelBoxExtentPick('上一次范围选择已取消');
+        }
+
+        return new Promise((resolve, reject) => {
+            pendingBoxExtentPickRef.value = { resolve, reject };
+            boxExtentInteraction = new DragBox({ condition: () => true });
+            mapInstance.value.addInteraction(boxExtentInteraction);
+
+            boxExtentInteraction.on('boxdrag', () => {
+                const geometry = boxExtentInteraction?.getGeometry?.();
+                if (geometry) {
+                    ensurePreviewLayer();
+                    updatePreviewGeometry(geometry);
+                }
+            });
+
+            boxExtentInteraction.on('boxend', () => {
+                const geometry = boxExtentInteraction?.getGeometry?.();
+                const extent = geometry?.getExtent?.();
+
+                if (boxExtentInteraction && mapInstance.value) {
+                    mapInstance.value.removeInteraction(boxExtentInteraction);
+                }
+                boxExtentInteraction = null;
+                removePreviewLayer();
+
+                const pending = pendingBoxExtentPickRef.value;
+                pendingBoxExtentPickRef.value = null;
+
+                if (!extent || extent.length < 4) {
+                    pending?.reject?.(new Error('范围获取失败'));
+                    return;
+                }
+
+                if (options.showOverlay && geometry) {
+                    showExtentOverlay(geometry);
+                }
+
+                const [minX_3857, minY_3857, maxX_3857, maxY_3857] = extent;
+                const [minLon, minLat] = toLonLat([minX_3857, minY_3857]);
+                const [maxLon, maxLat] = toLonLat([maxX_3857, maxY_3857]);
+
+                pending?.resolve?.({
+                    extent: [minLon, minLat, maxLon, maxLat],
+                    crs: 'EPSG:4326',
+                });
+            });
+        });
+    }
+
+    /**
      * 销毁所有交互选点状态
      * 组件卸载时调用，清理残留的 DragBox 交互和未完成的 Promise
      */
@@ -245,6 +329,10 @@ export function createMapInteractionPickers({ mapInstance }) {
             mapInstance.value.removeInteraction(downloadBoxInteraction);
         }
         downloadBoxInteraction = null;
+        if (boxExtentInteraction && mapInstance.value) {
+            mapInstance.value.removeInteraction(boxExtentInteraction);
+        }
+        boxExtentInteraction = null;
         removePreviewLayer();
         clearExtentOverlay();
         if (pendingBusPickRef.value?.reject) {
@@ -259,16 +347,23 @@ export function createMapInteractionPickers({ mapInstance }) {
             pendingDownloadBoxPickRef.value.reject(new Error('地图已卸载'));
             pendingDownloadBoxPickRef.value = null;
         }
+        if (pendingBoxExtentPickRef.value?.reject) {
+            pendingBoxExtentPickRef.value.reject(new Error('地图已卸载'));
+            pendingBoxExtentPickRef.value = null;
+        }
     }
 
     return {
         pendingBusPickRef,
         pendingReverseGeocodePickRef,
         pendingDownloadBoxPickRef,
+        pendingBoxExtentPickRef,
         startBusPointPick,
         startReverseGeocodePick,
         cancelDownloadBoxPick,
         pickDownloadExtent,
+        cancelBoxExtentPick,
+        pickBoxExtent,
         clearExtentOverlay,
         disposeAll,
     };

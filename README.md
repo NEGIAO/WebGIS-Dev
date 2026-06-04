@@ -53,7 +53,7 @@
 - ⚡ 30-50% 首屏性能优化
 - 🎨 **全局主题系统**：CSS 变量驱动，支持绿色/蓝色主题一键切换
 - 🗂️ **TOC 图层管理增强**：图层重命名、透明度控制、属性查看、搜索过滤
-- 📐 **空间分析**：缓冲区/交集/并集/差集/凸包/**泰森多边形/空间聚合/多环缓冲区/几何简化**（后端 Shapely 精确计算）
+- 📐 **空间分析**：缓冲区/交集/并集/差集/凸包/**泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析**（后端 Shapely 精确计算，统一 EPSG:3857 平面坐标）
 
 **后端功能**：
 - 📡 地理数据处理与坐标系转换
@@ -65,7 +65,7 @@
 - ⚙️ 异步后台任务
 - 🔐 三类身份登录 + 会话鉴权（/data 持久化）
 - 📧 **邮箱验证码系统**：注册邮箱绑定 + 密码重置（SMTP 发送，60秒频率限制，5分钟有效期）
-- 📐 **空间分析 API**：基于 Shapely 2.x 的精确几何运算（缓冲区/叠加分析/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化）
+- 📐 **空间分析 API**：基于 Shapely 2.x + pyproj 的精确几何运算（缓冲区/叠加分析/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系
 
 ## 🚀 快速开始
 
@@ -363,7 +363,20 @@ WebGIS_Dev/
 │   │   │   ├── quota.py                  # 配额管理
 │   │   │   ├── upstream.py               # 上游 LLM API 调用
 │   │   │   └── routes.py                 # 路由处理函数
-│   │   ├── spatial.py                    # 空间分析 API
+│   │   ├── spatial/                      # 空间分析 API（模块化拆分）
+│   │   │   ├── __init__.py               # 门面 re-export router
+│   │   │   ├── models.py                 # Pydantic 请求/响应模型
+│   │   │   ├── utils.py                  # 坐标重投影 + 几何格式转换
+│   │   │   ├── router.py                 # 路由 + 端点分发
+│   │   │   └── operations/               # 分析操作实现
+│   │   │       ├── buffer.py             # 缓冲区分析
+│   │   │       ├── overlay.py            # 叠加分析（交集/并集/差集）
+│   │   │       ├── convex_hull.py        # 凸包分析
+│   │   │       ├── voronoi.py            # 泰森多边形
+│   │   │       ├── aggregation.py        # 空间聚合
+│   │   │       ├── multi_ring_buffer.py  # 多环缓冲区
+│   │   │       ├── simplify.py           # 几何简化
+│   │   │       └── fishnet.py            # 渔网分析
 │   │   ├── proxy.py                      # 瓦片代理 + 坐标纠偏
 │   │   ├── download.py                   # 底图下载任务 API
 │   │   ├── monitor.py                    # 日志监控
@@ -538,6 +551,49 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.2.5 (2026-06-04)
+#### 🌐 空间分析统一 EPSG:3857 平面坐标系
+
+**后端重构：**
+- ✅ `router.py` 统一收口 CRS 转换：输入 GeoJSON(4326) → pyproj 转 3857 → operation(纯 3857) → 转回 4326
+- ✅ 所有空间分析参数统一为米（buffer 半径、聚合网格大小、简化容差、渔网网格大小）
+- ✅ 删除 `meters_to_degrees_approx` 近似转换，buffer/multiRingBuffer 在 3857 下直接用米计算
+- ✅ 新增 `pyproj>=3.6.0` 依赖，`utils.py` 提供 `reproject_geoms_to_3857/4326` 重投影函数
+- ✅ 合并 fishnet 专用 `grid_size_meters` 到通用 `grid_size` 字段
+
+**前端修复：**
+- ✅ 修复 aggregation `_gridSize` 命名 bug（用户输入的网格大小被静默忽略，始终用默认值 0.01 度）
+- ✅ 删除前端 `metersToDegrees`/`getReferenceLat` 重复转换函数
+- ✅ aggregation 标签从"度"改为"米"，默认值 0.01→500
+
+详见 [变更日志](./Docs/26-06/26-06-04/v3.2.5-spatial-crs-unification.md)
+
+### V3.2.4 (2026-06-04)
+#### 📦 空间分析模块化拆分
+
+- ✅ 将单文件 `api/spatial.py`（784 行）拆分为 `api/spatial/` 模块化目录（14 个文件）
+- ✅ `utils.py` 公共工具函数、`models.py` Pydantic 模型、`router.py` 路由分发
+- ✅ `operations/` 子目录：buffer / overlay / convex_hull / voronoi / aggregation / multi_ring_buffer / simplify / fishnet
+- ✅ `__init__.py` 门面保持 `from api.spatial import router` 完全兼容
+
+详见 [变更日志](./Docs/26-06/26-06-04/v3.2.4-spatial-module-refactor.md)
+
+### V3.2.3 (2026-06-04)
+#### 🐟 渔网分析功能 + 通用框选复用
+
+**后端新增：**
+- ✅ `do_fishnet()` 渔网分析：在指定四至范围内按固定间距（米）生成规则网格
+- ✅ 支持面（Polygon）/ 线（LineString）输出，可选创建每个网格中心点
+- ✅ 使用 pyproj 在 EPSG:3857 下精确计算，MAX_GRID_CELLS = 100000 安全限制
+
+**前端新增：**
+- ✅ 空间分析面板新增"渔网分析"工具（四至输入 + 地图框选 + 当前视图三种范围获取）
+- ✅ 抽取通用 `pickBoxExtent()` 框选函数，从 MapDownloader 下载专用逻辑中解耦
+- ✅ 事件通道：ControlsPanel → HomeView → MapContainer.pickBoxExtent()
+- ✅ 图层命名：`渔网_{size}m_{面/线/点}`，自动加入 TOC 管理
+
+详见 [变更日志](./Docs/26-06/26-06-04/v3.2.3-fishnet-analysis.md)
 
 ### V3.2.2 (2026-06-04)
 #### 🔧 统一 HTTP 状态码映射 + 日志监控修复 + 瓦片请求中断修复
