@@ -20,3 +20,6 @@ export {
     getLayerNameFromEntry,
     pickFeatureLabelField,
 } from './vectorUtils';
+
+// WebGL 栅格渲染器
+export { renderBandsToCanvas } from './webglRasterRenderer';

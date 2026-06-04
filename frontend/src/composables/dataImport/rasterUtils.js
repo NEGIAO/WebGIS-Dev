@@ -5,13 +5,19 @@
 
 /**
  * 计算波段数据的最小最大值
+ * 对大数据集自动采样以避免全量遍历的性能开销
  * @param {Array|TypedArray} data - 波段数据
+ * @param {number} [maxSamples=200000] - 最大采样数，与 computePercentileStretch 保持一致
  * @returns {{ min: number, max: number }} 最小最大值
  */
-export function getBandMinMax(data) {
+export function getBandMinMax(data, maxSamples = 200000) {
+    if (!data?.length) return { min: 0, max: 1 };
+
+    const step = Math.max(1, Math.floor(data.length / maxSamples));
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
-    for (let i = 0; i < data.length; i++) {
+
+    for (let i = 0; i < data.length; i += step) {
         const v = data[i];
         if (!Number.isFinite(v)) continue;
         if (v < min) min = v;
