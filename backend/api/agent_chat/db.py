@@ -21,6 +21,9 @@ from .constants import (
     CONFIG_KEY_BASE_URL,
     CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
     CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
+    CONFIG_KEY_DEFAULT_AI_API_KEY,
+    CONFIG_KEY_DEFAULT_AI_BASE_URL,
+    CONFIG_KEY_DEFAULT_AI_MODEL,
     CONFIG_KEY_MAX_TOKENS,
     CONFIG_KEY_MODEL,
     CONFIG_KEY_SYSTEM_PROMPT,
@@ -682,3 +685,78 @@ def _cache_available_models_sync(models: List[Dict[str, Any]]) -> None:
             logger.debug(f"Cached {len(model_ids)} models to system_config")
     except Exception as e:
         logger.warning(f"Failed to cache available models: {e}")
+
+
+def _get_default_ai_config_sync() -> Dict[str, Any]:
+    """读取管理员配置的默认 AI 专属配置（base_url, model, api_key）。
+
+    从 system_config 表读取 default_ai_api_key / default_ai_base_url / default_ai_model，
+    返回配置字典。api_key 仅在内部使用，不对外暴露完整值。
+    """
+    _ensure_agent_chat_tables_sync()
+    config_values = _get_system_config_values_sync(
+        [
+            CONFIG_KEY_DEFAULT_AI_API_KEY,
+            CONFIG_KEY_DEFAULT_AI_BASE_URL,
+            CONFIG_KEY_DEFAULT_AI_MODEL,
+        ]
+    )
+
+    api_key = str(config_values.get(CONFIG_KEY_DEFAULT_AI_API_KEY, "")).strip()
+    base_url = str(config_values.get(CONFIG_KEY_DEFAULT_AI_BASE_URL, "")).strip()
+    model = str(config_values.get(CONFIG_KEY_DEFAULT_AI_MODEL, "")).strip()
+
+    return {
+        "api_key": api_key,
+        "base_url": base_url,
+        "model": model,
+        "is_configured": bool(api_key and base_url and model),
+    }
+
+
+def _set_default_ai_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
+    """管理员更新默认 AI 专属配置（base_url, model, api_key）到 system_config 表。
+
+    Args:
+        updates: 包含可选字段 api_key, base_url, model 的字典
+
+    Returns:
+        更新后的完整默认 AI 配置
+    """
+    _ensure_agent_chat_tables_sync()
+
+    now_iso = _iso_now()
+    rows_to_upsert: List[Tuple[str, str, str]] = []
+
+    if "api_key" in updates:
+        api_key = str(updates["api_key"] or "").strip()
+        rows_to_upsert.append((CONFIG_KEY_DEFAULT_AI_API_KEY, api_key, now_iso))
+    if "base_url" in updates:
+        base_url = _normalize_base_url(str(updates["base_url"] or ""))
+        rows_to_upsert.append((CONFIG_KEY_DEFAULT_AI_BASE_URL, base_url, now_iso))
+    if "model" in updates:
+        model = _normalize_model(str(updates["model"] or ""))
+        rows_to_upsert.append((CONFIG_KEY_DEFAULT_AI_MODEL, model, now_iso))
+
+    if rows_to_upsert:
+        try:
+            with _db_connection() as conn:
+                _ensure_system_config_table_sync(conn)
+                conn.executemany(
+                    """
+                    INSERT INTO system_config (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key)
+                    DO UPDATE SET
+                        value = excluded.value,
+                        updated_at = excluded.updated_at
+                    """,
+                    rows_to_upsert,
+                )
+                conn.commit()
+                logger.info(f"Default AI config updated with {len(rows_to_upsert)} rows")
+        except Exception as e:
+            logger.error(f"Failed to set default AI config: {e}")
+            raise
+
+    return _get_default_ai_config_sync()

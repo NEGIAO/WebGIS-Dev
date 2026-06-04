@@ -158,24 +158,25 @@
             <div class="status-line">
                 <span class="status-label">路由模式:</span>
                 <button
-                    :class="['mode-toggle-btn', isDirectMode ? 'mode-direct' : 'mode-proxy']"
+                    :class="['mode-toggle-btn', isDefaultAIMode ? 'mode-default-ai' : isDirectMode ? 'mode-direct' : 'mode-proxy']"
                     title="点击切换路由模式"
                     @click="toggleRoutingMode"
                 >
-                    {{ isDirectMode ? '🔑 个人 Key 模式' : '🛡️ 后端代理' }}
+                    {{ isDefaultAIMode ? '🤖 默认 AI 模式' : isDirectMode ? '🔑 个人 Key 模式' : '🛡️ 后端代理' }}
                     <span class="mode-toggle-hint">（点击切换）</span>
                 </button>
             </div>
             <div class="status-line">
                 <span class="status-label">服务状态:</span>
                 <span :class="['status-value', serviceReady ? 'status-ready' : 'status-unready']">
-                    {{ serviceReady ? (isDirectMode ? '个人 API 已配置（经后端代理）' : '已连接后端 Agent') : '未就绪（请配置 API Key 或联系管理员）' }}
+                    {{ serviceReady ? (isDefaultAIMode ? '默认 AI 已就绪（管理员配置）' : isDirectMode ? '个人 API 已配置（经后端代理）' : '已连接后端 Agent') : '未就绪（请配置 API Key 或联系管理员）' }}
                 </span>
             </div>
             <div class="status-line">
                 <span class="status-label">当前模型:</span>
                 <span class="status-value">{{ modelName || '未配置' }}
-                    <span v-if="directConfig.model && isDirectMode" class="model-source-tag">个人Key</span>
+                    <span v-if="isDefaultAIMode" class="model-source-tag default-ai">管理员配置</span>
+                    <span v-else-if="directConfig.model && isDirectMode" class="model-source-tag">个人Key</span>
                     <span v-else-if="modelName" class="model-source-tag proxy">代理</span>
                 </span>
             </div>
@@ -187,7 +188,14 @@
                 <span class="status-value">{{ quotaText }}</span>
             </div>
             <div
-                v-if="isDirectMode"
+                v-if="isDefaultAIMode"
+                class="status-line"
+            >
+                <span class="status-label">额度:</span>
+                <span class="status-value status-default-ai">管理员配额（经后端代理）</span>
+            </div>
+            <div
+                v-else-if="isDirectMode"
                 class="status-line"
             >
                 <span class="status-label">额度:</span>
@@ -252,11 +260,13 @@ import { computed, onBeforeUnmount, onMounted, ref, nextTick } from 'vue';
 import {
     apiAgentChatCompletions,
     apiAgentChatProxy,
+    apiAgentChatDefaultProxy,
     apiAgentGetChatConfig,
     apiAgentGetUserConfig,
     apiAgentUpdateUserConfig,
     apiAgentListModels,
     apiAgentSaveModelPreference,
+    apiGetDefaultAIConfig,
 } from '../../api/backend';
 import { readUserPositionFromCache } from '../../services/userPositionCache';
 import { getGlobalUserLocationContext } from '../../services/userLocationContext';
@@ -303,25 +313,32 @@ const allModels = computed(() => {
 });
 
 /**
- * 前端直连模式配置（仅保存在内存，不持久化，刷新页面后需重新输入 API Key）
- * 默认值指向 mimo-v2.5-pro，用户可自由修改。
+ * 直连模式配置（用户个人 Key 或管理员默认 AI 配置）
+ * 用户个人 Key 仅保存在内存，不持久化；管理员默认配置从后端加载。
  */
 const directConfig = ref({
-    api_key: 'tp-cs24lphikpjnqg0kkctxl167xhnkv4writnf46j3cv4y0nsw',
-    base_url: 'https://token-plan-cn.xiaomimimo.com/v1',
-    model: 'mimo-v2.5-pro',
+    api_key: '',
+    base_url: '',
+    model: '',
     system_prompt: '',
     timeout_seconds: 45,
     max_tokens: 8192,
     temperature: 0.2,
 });
 
+/** 当前是否使用管理员配置的默认 AI 模式（api_key 存储在后端数据库，前端不持有） */
+const isDefaultAIMode = ref(false);
+
+/** 管理员默认 AI 配置是否已就绪（base_url + model + api_key 均已配置），内部使用 */
+const _defaultAIReady = ref(false);
+
 /**
- * 是否处于前端直连模式
- * 条件：用户配置了个人 API Key 且填写了 Base URL
+ * 是否处于直连模式（包含默认 AI 模式和个人 Key 模式）
+ * - 默认 AI 模式：管理员配置了专属 key/base_url/model，前端通过后端代理转发
+ * - 个人 Key 模式：用户填写了自己的 API Key
  */
 const isDirectMode = computed(() => {
-    return !!(directConfig.value.api_key && directConfig.value.base_url);
+    return isDefaultAIMode.value || !!(directConfig.value.api_key && directConfig.value.base_url);
 });
 
 /**
@@ -330,7 +347,8 @@ const isDirectMode = computed(() => {
  */
 const toggleRoutingMode = async () => {
     if (isDirectMode.value) {
-        // 当前是直连 → 切换到代理：清空直连配置
+        // 当前是直连 → 切换到代理：清空直连配置和默认 AI 模式
+        isDefaultAIMode.value = false;
         directConfig.value = {
             api_key: '',
             base_url: '',
@@ -342,17 +360,13 @@ const toggleRoutingMode = async () => {
         };
         message.success('已切换为后端代理模式');
     } else {
-        // 当前是代理 → 切换到个人 Key 模式：使用默认直连配置
-        directConfig.value = {
-            api_key: 'tp-cs24lphikpjnqg0kkctxl167xhnkv4writnf46j3cv4y0nsw',
-            base_url: 'https://token-plan-cn.xiaomimimo.com/v1',
-            model: 'mimo-v2.5-pro',
-            system_prompt: '',
-            timeout_seconds: 45,
-            max_tokens: 8192,
-            temperature: 0.2,
-        };
-        message.success('已切换为个人 Key 模式（默认 mimo-v2.5-pro，经后端代理转发）');
+        // 当前是代理 → 切换到默认 AI 模式（从后端加载管理员配置）
+        await _loadDefaultAIConfig();
+        if (isDefaultAIMode.value) {
+            message.success('已切换为默认 AI 模式（使用管理员配置的专属 Key，经后端代理转发）');
+        } else {
+            message.warning('管理员尚未配置默认 AI 专属参数，请在个人配置中填写 API Key');
+        }
     }
     // 同步到配置面板
     syncDraftFromDirectConfig();
@@ -388,6 +402,12 @@ const MAX_CHARS_PER_MESSAGE = 600;
 const AUTO_PRUNE_AFTER_TURNS = 12;
 
 const initWelcomeMessage = () => {
+    if (isDefaultAIMode.value) {
+        return {
+            role: 'assistant',
+            content: `您好！当前为默认 AI 模式，使用管理员配置的 ${modelName.value || directConfig.value.model}，消息经后端代理转发。`,
+        };
+    }
     if (isDirectMode.value) {
         return {
             role: 'assistant',
@@ -441,6 +461,9 @@ const quotaExhausted = computed(() => {
 });
 
 const inputPlaceholder = computed(() => {
+    if (isDefaultAIMode.value) {
+        return '请输入您的问题（默认 AI 模式，经后端代理）...';
+    }
     if (isDirectMode.value) {
         return '请输入您的问题（个人 Key 模式，经后端代理）...';
     }
@@ -474,6 +497,7 @@ const updateWelcomeMessageIfNeeded = () => {
         text.includes('AI 服务暂未就绪') ||
         text.includes('由后端代理的 AI 助手') ||
         text.includes('个人 Key 模式') ||
+        text.includes('默认 AI 模式') ||
         text.includes('初始化中');
 
     if (shouldReplace) {
@@ -497,9 +521,48 @@ const _buildSystemPrompt = (basePrompt, locationContext) => {
     return prompt;
 };
 
+/**
+ * 从后端加载管理员配置的默认 AI 专属配置（base_url / model）。
+ * api_key 存储在后端数据库中，前端仅获取 base_url 和 model 用于展示。
+ * 聊天时通过 /chat/default-proxy 端点由后端读取 api_key 转发。
+ */
+const _loadDefaultAIConfig = async () => {
+    try {
+        const result = await apiGetDefaultAIConfig();
+        const data = result?.data || result || {};
+        if (data.is_configured && data.base_url && data.model) {
+            isDefaultAIMode.value = true;
+            _defaultAIReady.value = true;
+            directConfig.value = {
+                api_key: '', // 不持有 key，由后端读取
+                base_url: String(data.base_url || ''),
+                model: String(data.model || ''),
+                system_prompt: '',
+                timeout_seconds: 45,
+                max_tokens: 8192,
+                temperature: 0.2,
+            };
+            modelName.value = data.model;
+            serviceReady.value = true;
+            statusHint.value = `默认 AI 模式：使用管理员配置的 ${data.model}（经后端代理转发，Key 安全存储在后端）。`;
+        } else {
+            isDefaultAIMode.value = false;
+            _defaultAIReady.value = false;
+        }
+    } catch {
+        isDefaultAIMode.value = false;
+        _defaultAIReady.value = false;
+    }
+};
+
 const reloadAgentConfig = async (showToast = false) => {
     try {
-        if (isDirectMode.value) {
+        if (isDefaultAIMode.value) {
+            // 默认 AI 模式：管理员已配置，无需获取模型列表，直接标记就绪
+            serviceReady.value = true;
+            modelName.value = directConfig.value.model || modelName.value || '未配置';
+            statusHint.value = `默认 AI 模式：使用管理员配置的 ${modelName.value}（经后端代理转发，Key 安全存储在后端）。`;
+        } else if (isDirectMode.value) {
             // 个人 Key 模式：从后端代理获取可用模型列表并随机选择一个
             serviceReady.value = true;
             statusHint.value = '个人 Key 模式：使用个人 API Key 经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。';
@@ -742,7 +805,8 @@ const saveUserConfig = async () => {
 
         // API Key 不发送到后端
         if (personalApiKey) {
-            // 直连模式：Key 仅保存在前端内存
+            // 用户提供个人 Key → 退出默认 AI 模式，启用个人 Key 模式
+            isDefaultAIMode.value = false;
             directConfig.value = {
                 api_key: personalApiKey,
                 ...backendPayload,
@@ -796,7 +860,8 @@ const saveUserConfig = async () => {
 const clearPersonalKey = async () => {
     userConfigSaving.value = true;
     try {
-        // 清空前端直连配置
+        // 清空前端直连配置和默认 AI 模式
+        isDefaultAIMode.value = false;
         directConfig.value = {
             api_key: '',
             base_url: '',
@@ -1019,7 +1084,20 @@ const sendMessage = async () => {
         let reply = '';
         let usedModel = '';
 
-        if (isDirectMode.value) {
+        if (isDefaultAIMode.value) {
+            // ============= 管理员默认 AI 模式（api_key 存储在后端，前端无需传 key） =============
+            const dc = directConfig.value;
+            const result = await apiAgentChatDefaultProxy({
+                message: userMsg,
+                history: requestHistory,
+                location_context: locationContextText,
+                override_model: dc.model || undefined,
+            });
+
+            const data = result?.data || result || {};
+            reply = String(data?.reply || '').trim();
+            usedModel = String(data?.model || dc.model || '');
+        } else if (isDirectMode.value) {
             // ==================== 个人 Key 模式（经后端代理转发） ====================
             const dc = directConfig.value;
 
@@ -1106,7 +1184,9 @@ onBeforeUnmount(() => {
 });
 
 onMounted(async () => {
-    // 启动时自动预加载模型列表
+    // 启动时先尝试加载管理员配置的默认 AI 配置
+    await _loadDefaultAIConfig();
+    // 自动预加载模型列表
     loadAvailableModels();
     await reloadAgentConfig(false);
 });
@@ -1276,6 +1356,10 @@ onMounted(async () => {
     color: #6a1b9a;
 }
 
+.status-default-ai {
+    color: #2e7d32;
+}
+
 .mode-toggle-btn {
     background: none;
     border: 1px solid #d7e5dc;
@@ -1312,6 +1396,17 @@ onMounted(async () => {
     border-color: #ab47bc;
 }
 
+.mode-toggle-btn.mode-default-ai {
+    color: #2e7d32;
+    border-color: #81c784;
+    background: #e8f5e9;
+}
+
+.mode-toggle-btn.mode-default-ai:hover {
+    background: #c8e6c9;
+    border-color: #43a047;
+}
+
 .mode-toggle-hint {
     font-size: 0.85em;
     font-weight: 400;
@@ -1331,6 +1426,11 @@ onMounted(async () => {
 .model-source-tag.proxy {
     color: #6a1b9a;
     background: #f3e5f5;
+}
+
+.model-source-tag.default-ai {
+    color: #2e7d32;
+    background: #e8f5e9;
 }
 
 .chat-title {

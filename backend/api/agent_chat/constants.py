@@ -59,4 +59,9 @@ CONFIG_KEY_TEMPERATURE = "agent_temperature"
 CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA = "agent_chat_guest_daily_quota"
 CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA = "agent_chat_registered_daily_quota"
 
+# 默认 AI 专属配置键（管理员配置，前端默认使用的 base_url / model / api_key）
+CONFIG_KEY_DEFAULT_AI_API_KEY = "default_ai_api_key"
+CONFIG_KEY_DEFAULT_AI_BASE_URL = "default_ai_base_url"
+CONFIG_KEY_DEFAULT_AI_MODEL = "default_ai_model"
+
 USER_CONFIG_TABLE = "agent_user_config"

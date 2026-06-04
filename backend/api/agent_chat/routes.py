@@ -26,10 +26,12 @@ from .db import (
     _get_agent_chat_quota_policy_sync,
     _get_agent_key_status_sync,
     _get_agent_provider_config_sync,
+    _get_default_ai_config_sync,
     _get_system_config_values_sync,
     _read_agent_user_config_row_sync,
     _resolve_effective_agent_runtime_sync,
     _set_agent_provider_config_sync,
+    _set_default_ai_config_sync,
     _upsert_agent_user_config_sync,
     _db_connection,
     _ensure_agent_chat_tables_sync,
@@ -44,6 +46,7 @@ from .schemas import (
     AgentChatRequest,
     AgentConfigUpdateRequest,
     AgentUserConfigUpdateRequest,
+    DefaultAIConfigUpdateRequest,
 )
 from .upstream import (
     _call_upstream_chat,
@@ -300,6 +303,180 @@ async def admin_update_agent_config(
             "chat_quota": chat_quota,
         },
     }
+
+
+@admin_router.get("/default-ai-config")
+async def admin_get_default_ai_config(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """管理员读取默认 AI 专属配置（含 api_key 完整值）。"""
+    config = await asyncio.to_thread(_get_default_ai_config_sync)
+
+    return {
+        "status": "success",
+        "data": {
+            "api_key": config.get("api_key", ""),
+            "base_url": config.get("base_url", ""),
+            "model": config.get("model", ""),
+            "is_configured": bool(config.get("is_configured")),
+        },
+    }
+
+
+@admin_router.post("/default-ai-config")
+async def admin_update_default_ai_config(
+    payload: DefaultAIConfigUpdateRequest,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """管理员更新默认 AI 专属配置（base_url / model / api_key）。
+    
+    这些配置用于前端默认的"个人 Key 模式"，前端无需硬编码敏感信息。
+    api_key 存储在后端数据库中，前端通过后端代理转发请求，不直接暴露 key。
+    """
+    updates = _model_dump_compat(payload, exclude_none=True, exclude_unset=True)
+
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No default AI config fields provided. Please set api_key, base_url, or model.",
+        )
+
+    saved = await asyncio.to_thread(_set_default_ai_config_sync, updates)
+
+    return {
+        "status": "success",
+        "message": "Default AI config updated.",
+        "data": {
+            "base_url": saved.get("base_url", ""),
+            "model": saved.get("model", ""),
+            "is_configured": bool(saved.get("is_configured")),
+        },
+    }
+
+
+@router.get("/default-ai-config")
+async def get_default_ai_config(
+) -> Dict[str, Any]:
+    """公开端点：获取默认 AI 配置（不含 api_key，仅供前端展示和构建代理请求）。"""
+    config = await asyncio.to_thread(_get_default_ai_config_sync)
+
+    return {
+        "status": "success",
+        "data": {
+            "base_url": config.get("base_url", ""),
+            "model": config.get("model", ""),
+            "is_configured": bool(config.get("is_configured")),
+        },
+    }
+
+
+@router.post("/chat/default-proxy")
+async def agent_chat_default_proxy(
+    payload: AgentChatRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）。
+
+    与 /chat/proxy 不同，此端点从数据库读取管理员配置的 api_key / base_url / model，
+    前端只需发送消息内容，无需知道或传递 API Key。
+    """
+    username = str(session.get("username") or "anonymous")
+    role = normalize_role(session.get("role"), username)
+
+    # 从数据库读取管理员配置的默认 AI 配置
+    default_config = await asyncio.to_thread(_get_default_ai_config_sync)
+    if not default_config.get("is_configured"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="默认 AI 专属配置未完成，请联系管理员配置 api_key / base_url / model。",
+        )
+
+    api_key = str(default_config.get("api_key") or "").strip()
+    base_url = str(default_config.get("base_url") or "").strip()
+    model = str(default_config.get("model") or "").strip()
+
+    # 允许前端覆盖 model（但不允许覆盖 api_key 和 base_url）
+    override_model = str(payload.override_model or "").strip()
+    if override_model:
+        model = override_model
+
+    override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else DEFAULT_AGENT_TIMEOUT_SECONDS
+    override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else DEFAULT_AGENT_MAX_TOKENS
+    override_temp = float(payload.override_temperature) if payload.override_temperature is not None else DEFAULT_AGENT_TEMPERATURE
+
+    history_items = _sanitize_history(payload.history)
+
+    location_context = str(payload.location_context or "").strip()
+    if not location_context:
+        client_ip = _extract_client_ip(request)
+        ip_location = await _try_get_location_from_ip_async(client_ip)
+        if ip_location:
+            location_context = ip_location
+
+    system_prompt = _join_system_prompt(
+        DEFAULT_AGENT_SYSTEM_PROMPT,
+        location_context,
+    )
+
+    request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    request_messages.extend(history_items)
+    request_messages.append({"role": "user", "content": str(payload.message or "").strip()})
+
+    request_params = json.dumps(
+        {
+            "endpoint": "/api/agent/chat/default-proxy",
+            "model": model,
+            "base_url": base_url,
+            "history_len": len(history_items),
+            "has_location_context": bool(location_context),
+            "has_model_override": bool(override_model),
+        },
+        ensure_ascii=False,
+    )
+
+    started_at = time.perf_counter()
+    upstream_status = 200
+    try:
+        upstream_data = await _call_upstream_chat(
+            request,
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            messages=request_messages,
+            timeout_seconds=override_timeout,
+            max_tokens=override_max_tokens,
+            temperature=override_temp,
+        )
+
+        reply = _extract_assistant_reply(upstream_data)
+        if not reply:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Agent upstream returned empty content.",
+            )
+
+        return {
+            "status": "success",
+            "data": {
+                "reply": reply,
+                "model": model,
+                "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+                "mode": "default-proxy",
+            },
+        }
+    except HTTPException as exc:
+        upstream_status = int(exc.status_code)
+        raise
+    finally:
+        elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+        await _record_agent_call_safe(
+            username=username,
+            role=role,
+            status_code=upstream_status,
+            elapsed_ms=elapsed_ms,
+            request_params=request_params,
+        )
 
 
 @router.get("/user-config")

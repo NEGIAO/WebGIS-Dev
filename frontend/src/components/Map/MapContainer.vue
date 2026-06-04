@@ -928,7 +928,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.2.2)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.2.7)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1449,7 +1449,6 @@ const {
 // [交互] 被 activateInteraction 与外部调用复用。
 function clearInteractions() {
     clearDrawMeasureInteractions();
-    cancelDownloadBoxPick();
 }
 
 // 初始化图层导出服务并包装为适配本组件的调用方式

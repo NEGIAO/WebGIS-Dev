@@ -61,3 +61,10 @@ class AgentUserConfigUpdateRequest(BaseModel):
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     clear_personal_key: bool = Field(default=False)
     reset_provider_overrides: bool = Field(default=False)
+
+
+class DefaultAIConfigUpdateRequest(BaseModel):
+    """管理员更新默认 AI 专属配置请求（base_url / model / api_key）。"""
+    api_key: Optional[str] = Field(default=None, max_length=5000, description="专属 API Key")
+    base_url: Optional[str] = Field(default=None, max_length=240, description="LLM 端点地址")
+    model: Optional[str] = Field(default=None, max_length=160, description="默认模型名称")

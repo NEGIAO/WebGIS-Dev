@@ -431,6 +431,119 @@
             </div>
         </div>
 
+        <!-- 默认 AI 专属配置 -->
+        <div class="agent-config-section">
+            <div class="section-header-row">
+                <h3>🤖 默认 AI 专属配置</h3>
+                <span
+                    :class="['status-badge', defaultAIConfig.is_configured ? 'set' : 'unset']"
+                >
+                    {{ defaultAIConfig.is_configured ? '已配置' : '未配置' }}
+                </span>
+                <div class="section-actions">
+                    <button
+                        class="btn btn-edit"
+                        @click="loadDefaultAIConfig"
+                    >
+                        刷新
+                    </button>
+                    <button
+                        v-if="!editingDefaultAI"
+                        class="btn btn-edit"
+                        @click="startEditDefaultAI"
+                    >
+                        编辑配置
+                    </button>
+                </div>
+            </div>
+
+            <p class="config-note" style="margin-bottom: 12px">
+                配置前端用户默认使用的 AI 模型专属参数。用户打开 AI 助手时将自动使用此配置，无需手动输入 API Key。
+                api_key 安全存储在后端数据库中，前端不会暴露。
+            </p>
+
+            <div
+                v-if="defaultAILoading"
+                class="loading-state"
+            >
+                <span class="spinner"></span> 加载配置中...
+            </div>
+
+            <div
+                v-else-if="editingDefaultAI"
+                class="edit-form"
+            >
+                <div class="config-grid">
+                    <label class="config-item config-item-full">
+                        <span>API Key</span>
+                        <input
+                            v-model="defaultAIDraft.api_key"
+                            type="password"
+                            class="key-input"
+                            placeholder="sk-... 或 tp-...（专属 LLM 服务密钥）"
+                        />
+                    </label>
+                    <label class="config-item">
+                        <span>Base URL</span>
+                        <input
+                            v-model="defaultAIDraft.base_url"
+                            class="key-input"
+                            placeholder="https://token-plan-cn.xiaomimimo.com/v1"
+                        />
+                    </label>
+                    <label class="config-item">
+                        <span>Model</span>
+                        <input
+                            v-model="defaultAIDraft.model"
+                            class="key-input"
+                            placeholder="mimo-v2.5-pro"
+                        />
+                    </label>
+                </div>
+
+                <div class="button-group">
+                    <button
+                        class="btn btn-save"
+                        @click="saveDefaultAIConfig"
+                    >
+                        保存配置
+                    </button>
+                    <button
+                        class="btn btn-cancel"
+                        @click="cancelEditDefaultAI"
+                    >
+                        取消
+                    </button>
+                </div>
+            </div>
+
+            <div
+                v-else
+                class="config-view"
+            >
+                <div class="config-grid">
+                    <div class="config-item config-item-full">
+                        <span>API Key</span>
+                        <strong>{{ defaultAIConfig.api_key ? '●●●●●●●●●●（已设置）' : '未配置' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Base URL</span>
+                        <strong>{{ defaultAIConfig.base_url || '未配置' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Model</span>
+                        <strong>{{ defaultAIConfig.model || '未配置' }}</strong>
+                    </div>
+                </div>
+
+                <p class="config-note">
+                    {{ defaultAIConfig.is_configured
+                        ? '✅ 前端用户打开 AI 助手时将自动使用此配置（默认 AI 模式），api_key 不会暴露到前端。'
+                        : '⚠️ 尚未配置。前端用户需手动填写个人 API Key 或使用后端代理模式。' }}
+                </p>
+            </div>
+        </div>
+
         <!-- 提示信息 -->
         <div class="warning-box">
             <span class="warning-icon">⚠️</span>
@@ -456,6 +569,8 @@ import {
     apiAdminDeleteApiKey,
     apiAdminSetApiKey,
     apiAdminUpdateAgentConfig,
+    apiAdminGetDefaultAIConfig,
+    apiAdminUpdateDefaultAIConfig,
 } from '../../api/backend';
 
 const message = useMessage();
@@ -494,6 +609,21 @@ const agentConfigDraft = ref({
 const agentQuota = ref({
     guest: 10,
     registered: 100,
+});
+
+// 默认 AI 专属配置状态
+const defaultAILoading = ref(false);
+const editingDefaultAI = ref(false);
+const defaultAIConfig = ref({
+    api_key: '',
+    base_url: '',
+    model: '',
+    is_configured: false,
+});
+const defaultAIDraft = ref({
+    api_key: '',
+    base_url: '',
+    model: '',
 });
 
 function formatTime(isoString) {
@@ -721,9 +851,84 @@ async function deleteKey(keyName) {
     }
 }
 
+/**
+ * 加载管理员配置的默认 AI 专属配置
+ */
+async function loadDefaultAIConfig() {
+    defaultAILoading.value = true;
+    try {
+        const result = await apiAdminGetDefaultAIConfig();
+        const data = result?.data || {};
+        defaultAIConfig.value = {
+            api_key: String(data.api_key || ''),
+            base_url: String(data.base_url || ''),
+            model: String(data.model || ''),
+            is_configured: !!data.is_configured,
+        };
+        defaultAIDraft.value = {
+            api_key: String(data.api_key || ''),
+            base_url: String(data.base_url || ''),
+            model: String(data.model || ''),
+        };
+    } catch (error) {
+        message.error(`加载默认 AI 配置失败: ${error.message}`);
+    } finally {
+        defaultAILoading.value = false;
+    }
+}
+
+function startEditDefaultAI() {
+    editingDefaultAI.value = true;
+    defaultAIDraft.value = {
+        api_key: String(defaultAIConfig.value.api_key || ''),
+        base_url: String(defaultAIConfig.value.base_url || ''),
+        model: String(defaultAIConfig.value.model || ''),
+    };
+}
+
+function cancelEditDefaultAI() {
+    editingDefaultAI.value = false;
+    defaultAIDraft.value = {
+        api_key: String(defaultAIConfig.value.api_key || ''),
+        base_url: String(defaultAIConfig.value.base_url || ''),
+        model: String(defaultAIConfig.value.model || ''),
+    };
+}
+
+async function saveDefaultAIConfig() {
+    const apiKey = String(defaultAIDraft.value.api_key || '').trim();
+    const baseUrl = String(defaultAIDraft.value.base_url || '').trim();
+    const model = String(defaultAIDraft.value.model || '').trim();
+
+    if (!apiKey || !baseUrl || !model) {
+        message.error('API Key、Base URL、Model 均不能为空');
+        return;
+    }
+
+    try {
+        const result = await apiAdminUpdateDefaultAIConfig({
+            api_key: apiKey,
+            base_url: baseUrl,
+            model: model,
+        });
+        const data = result?.data || {};
+        defaultAIConfig.value = {
+            api_key: apiKey,
+            base_url: String(data.base_url || baseUrl),
+            model: String(data.model || model),
+            is_configured: !!data.is_configured,
+        };
+        editingDefaultAI.value = false;
+        message.success('默认 AI 专属配置已保存，前端用户将自动使用该配置');
+    } catch (error) {
+        message.error(`保存默认 AI 配置失败: ${error.message}`);
+    }
+}
+
 onMounted(async () => {
     await loadKeysStatus();
     await loadAgentConfig();
+    await loadDefaultAIConfig();
 });
 </script>
 

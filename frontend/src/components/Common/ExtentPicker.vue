@@ -5,13 +5,13 @@
  * 完全自包含的框选组件，内置 DragBox 交互、红色预览、蓝色覆盖层。
  * 通过 provide('olMap') 自动获取地图实例，无需传入 props。
  *
- * @example 分析场景（不保留覆盖层）
+ * @example 默认场景（保留蓝色覆盖层）
  * <ExtentPicker @extent-change="fillBbox" @extent-clear="clearBbox" />
  *
- * @example 下载场景（保留蓝色覆盖层）
- * <ExtentPicker :show-overlay="true" @extent-change="applyBbox" />
+ * @example 不保留覆盖层场景
+ * <ExtentPicker :show-overlay="false" @extent-change="fillBbox" />
  *
- * @prop {boolean} showOverlay - 框选完成后是否保留蓝色覆盖层（默认 false）
+ * @prop {boolean} showOverlay - 框选完成后是否保留蓝色覆盖层（默认 true）
  * @prop {boolean} disabled - 按钮禁用状态（默认 false）
  *
  * @event extent-change - 框选完成或获取视图范围后触发
@@ -77,10 +77,10 @@ import { Crosshair, Eraser, Eye } from 'lucide-vue-next';
 import { formatCoordinateValue } from '../../utils/coordinateFormatter';
 
 const props = defineProps({
-    /** 框选完成后是否保留蓝色覆盖层（下载场景=true，分析场景=false） */
+    /** 框选完成后是否保留蓝色覆盖层（默认 true，所有场景都显示） */
     showOverlay: {
         type: Boolean,
-        default: false,
+        default: true,
     },
     /** 按钮禁用状态 */
     disabled: {

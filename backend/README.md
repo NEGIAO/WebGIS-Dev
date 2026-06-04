@@ -24,6 +24,28 @@ WebGIS 后端服务，当前包含五大核心能力：
 
 ## 0. 项目结构（2026-06-04 更新）
 
+### V3.2.7 (2026-06-04) - Agent Chat 默认 AI 专属配置
+
+**新增端点：**
+
+| 方法 | 路由 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/admin/agent/default-ai-config` | admin | 管理员读取默认 AI 配置（含 api_key） |
+| POST | `/api/admin/agent/default-ai-config` | admin | 管理员更新默认 AI 配置 |
+| GET | `/api/agent/default-ai-config` | login | 公开读取默认 AI 配置（不含 api_key） |
+| POST | `/api/agent/chat/default-proxy` | login | 使用默认 AI 配置代理聊天 |
+
+**新增函数：**
+- `db.py::_get_default_ai_config_sync()` — 读取管理员配置的默认 AI 专属配置
+- `db.py::_set_default_ai_config_sync()` — 更新默认 AI 配置到 system_config 表
+
+**配置键：**
+- `default_ai_api_key` — 管理员配置的专属 API Key
+- `default_ai_base_url` — LLM 端点地址
+- `default_ai_model` — 默认模型名称
+
+
+
 ```text
 backend/
 ├── api/                                           # API 路由模块

@@ -404,6 +404,8 @@ WebGIS_Dev/
 │   │   ├── 26-06-03/                     # 邮箱验证码发送逻辑修复
 │   │   │   └── 2026-06-03-fix-email-send-logic.md  # 修复axios拦截/倒计时/429处理
 │   │   └── 2026-06-03-ring-explosion-effect.md  # 圆环粒子特效开发日志
+│   ├── 26-06-04/                         # Agent Chat 默认 AI 配置
+│   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
 │   └── TODO/                             # 待办事项
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
@@ -553,6 +555,27 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.2.7 (2026-06-04)
+#### 🤖 Agent Chat 默认 AI 专属配置模式
+
+**后端新增：**
+- ✅ `constants.py`：新增 `CONFIG_KEY_DEFAULT_AI_API_KEY` / `CONFIG_KEY_DEFAULT_AI_BASE_URL` / `CONFIG_KEY_DEFAULT_AI_MODEL` 常量
+- ✅ `db.py`：新增 `_get_default_ai_config_sync()` 和 `_set_default_ai_config_sync()` 函数
+- ✅ `routes.py`：新增 4 个端点（admin 读/写、公开读取、default-proxy 聊天）
+- ✅ `schemas.py`：新增 `DefaultAIConfigUpdateRequest` Pydantic 模型
+
+**前端新增：**
+- ✅ `agent.js`：新增 4 个 API 函数（admin 读/写、公开读取、default-proxy 聊天）
+- ✅ `ChatPanelContent.vue`：支持三种路由模式（默认 AI / 个人 Key / 后端代理）
+- ✅ `ApiKeysManagementPanel.vue`：新增默认 AI 配置管理面板（查看/编辑/保存/取消）
+
+**安全设计：**
+- 🔒 api_key 存储在后端数据库，前端不持有
+- 🔒 管理员端点需要 `require_admin` 权限
+- 🔒 公开端点只返回 base_url / model，不返回 api_key
+
+详见 [开发日志](./Docs/26-06-04/2026-06-04-agent-chat-default-ai-config.md)
 
 ### V3.2.6 (2026-06-04)
 #### 🧩 可复用 ExtentPicker 框选组件 + Code Review 修复
@@ -1401,5 +1424,5 @@ MIT License - 可自由使用、修改、分发
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
 **最后更新**：2026-06-04
-**当前版本**：V3.2.2
+**当前版本**：V3.2.7
 **项目状态**：开发中 - 持续迭代优化

@@ -1,8 +1,62 @@
-/**
+ /**
  * AI Agent / 聊天接口
  */
 
 import backendAPI from './client';
+
+/**
+ * 管理员：获取默认 AI 专属配置（含 api_key 完整值）
+ * @returns {Promise<{data: {api_key: string, base_url: string, model: string, is_configured: boolean}}>}
+ */
+export async function apiAdminGetDefaultAIConfig() {
+    return backendAPI.get('/api/admin/agent/default-ai-config');
+}
+
+/**
+ * 管理员：更新默认 AI 专属配置（api_key / base_url / model）
+ * @param {Object} payload - { api_key?, base_url?, model? }
+ * @returns {Promise}
+ */
+export async function apiAdminUpdateDefaultAIConfig(payload = {}) {
+    const body = {};
+    if (payload.api_key !== undefined) body.api_key = String(payload.api_key || '').trim();
+    if (payload.base_url !== undefined) body.base_url = String(payload.base_url || '').trim();
+    if (payload.model !== undefined) body.model = String(payload.model || '').trim();
+    return backendAPI.post('/api/admin/agent/default-ai-config', body);
+}
+
+/**
+ * 获取默认 AI 配置（不含 api_key，仅供前端展示和构建代理请求）
+ * @returns {Promise<{data: {base_url: string, model: string, is_configured: boolean}}>}
+ */
+export async function apiGetDefaultAIConfig() {
+    return backendAPI.get('/api/agent/default-ai-config');
+}
+
+/**
+ * 使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）
+ * @param {Object} payload - { message, history, location_context?, override_model? }
+ * @returns {Promise}
+ */
+export async function apiAgentChatDefaultProxy(payload = {}) {
+    const body = {
+        message: String(payload.message || '').trim(),
+        history: normalizeChatHistory(payload.history),
+        location_context: String(payload.location_context || '').trim(),
+    };
+
+    if (payload.override_model) body.override_model = String(payload.override_model).trim();
+    if (typeof payload.override_timeout_seconds !== 'undefined' && payload.override_timeout_seconds !== null)
+        body.override_timeout_seconds = Number(payload.override_timeout_seconds);
+    if (typeof payload.override_max_tokens !== 'undefined' && payload.override_max_tokens !== null)
+        body.override_max_tokens = Number(payload.override_max_tokens);
+    if (typeof payload.override_temperature !== 'undefined' && payload.override_temperature !== null)
+        body.override_temperature = Number(payload.override_temperature);
+
+    return backendAPI.post('/api/agent/chat/default-proxy', body, {
+        timeout: 60000,
+    });
+}
 
 /**
  * 规范化聊天历史：清洗、过滤无效消息、截断到最近 12 条

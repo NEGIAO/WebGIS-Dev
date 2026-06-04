@@ -551,7 +551,7 @@ MIT
 
 ---
 
-最后更新：2026-06-03
+最后更新：2026-06-04
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -571,6 +571,27 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.2.7 (2026-06-04)
+#### 🤖 Agent Chat 默认 AI 专属配置模式
+
+**新增：**
+- `api/backend/agent.js`：新增 4 个 API 函数
+  - `apiAdminGetDefaultAIConfig()` — 管理员获取默认 AI 配置（含 api_key）
+  - `apiAdminUpdateDefaultAIConfig()` — 管理员更新默认 AI 配置
+  - `apiGetDefaultAIConfig()` — 公开获取默认 AI 配置（不含 api_key）
+  - `apiAgentChatDefaultProxy()` — 使用默认 AI 配置代理聊天
+
+- `components/Chat/ChatPanelContent.vue`：
+  - 新增第三种路由模式：默认 AI 模式（`isDefaultAIMode`）
+  - 启动时自动加载管理员配置的默认 AI 配置
+  - 模式切换：默认 AI → 个人 Key → 后端代理
+  - UI 状态展示区分三种模式
+
+- `components/UserCenter/ApiKeysManagementPanel.vue`：
+  - 新增"默认 AI 专属配置"管理面板
+  - 支持查看/编辑/保存/取消操作
+  - API Key 掩码显示
 
 ### V3.2.6 (2026-06-04)
 #### 🧩 可复用 ExtentPicker 框选组件
