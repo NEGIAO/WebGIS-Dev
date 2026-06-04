@@ -260,7 +260,7 @@ async def reverse_geocode(
     - "amap": 仅使用高德
     - "nominatim": 仅使用 Nominatim
     """
-    client = await _get_http_client(request)
+    client = request.app.state.http_client
 
     if request_data.prefer_service == "auto":
         # 自动选择：尝试高德 → Nominatim
