@@ -366,6 +366,7 @@ frontend/src/
 └── views/
     ├── HomeView.vue                          # 主页面（地图 + 侧栏）
     ├── RegisterView.vue                      # 注册页
+    ├── NotFoundView.vue                      # 404 兜底页面（自动倒计时返回首页）
     ├── TermsOfService.vue                    # 服务条款页
     ├── PrivacyPolicy.vue                     # 隐私政策页
     └── home/                                 # HomeView 拆分模块
@@ -373,6 +374,21 @@ frontend/src/
         ├── useLayerOperations.ts             # 图层操作
         └── useSidePanel.ts                   # 侧边栏逻辑
 ```
+
+## V3.3.0 (2026-06-05)
+### 🛡️ 前端 404 兜底页面
+- ✅ 新增 `NotFoundView.vue` 404 错误页面组件
+- ✅ 现代化 UI 设计：渐变背景 + 毛玻璃效果 + 浮动装饰动画
+- ✅ 5 秒自动倒计时返回首页，带进度条可视化
+- ✅ 提供"立即返回首页"按钮供用户主动操作
+- ✅ 响应式布局，适配移动端和桌面端
+- ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
+
+**修改文件：**
+- `src/views/NotFoundView.vue`：**新增** 404 页面组件
+- `src/router/index.js`：添加 catch-all 路由
+
+---
 
 ## V3.2.9 (2026-06-04)
 ### - 🚀 `dataImport/webglRasterRenderer.js`：**新增** WebGL 栅格着色器渲染器

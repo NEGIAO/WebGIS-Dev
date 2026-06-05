@@ -330,6 +330,7 @@ WebGIS_Dev/
 │   │   ├── views/                        # 页面
 │   │   │   ├── HomeView.vue              # 主页（地图 + 侧边栏）
 │   │   │   ├── RegisterView.vue          # 注册页
+│   │   │   ├── NotFoundView.vue          # 404 兜底页面（自动倒计时返回首页）
 │   │   │   ├── TermsOfService.vue        # 服务条款页
 │   │   │   ├── PrivacyPolicy.vue         # 隐私政策页
 │   │   │   └── home/                     # HomeView 拆分模块
@@ -560,6 +561,31 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.3.0 (2026-06-05)
+#### 🛡️ 前端 404 兜底页面
+
+**新增功能：**
+- ✅ 新增 `NotFoundView.vue` 404 错误页面组件
+- ✅ 现代化 UI 设计：渐变背景 + 毛玻璃效果 + 浮动装饰动画
+- ✅ 5 秒自动倒计时返回首页，带进度条可视化
+- ✅ 提供"立即返回首页"按钮供用户主动操作
+- ✅ 响应式布局，适配移动端和桌面端
+- ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
+
+**技术实现：**
+- Vue 3 Composition API (`<script setup>`)
+- `computed` 计算属性控制进度条
+- `onMounted` / `onUnmounted` 生命周期管理定时器
+- 组件卸载时自动清理定时器，防止内存泄漏
+
+**修改文件：**
+- `frontend/src/views/NotFoundView.vue`：**新增** 404 页面组件
+- `frontend/src/router/index.js`：添加 catch-all 路由
+
+详见 [开发日志](./Docs/26-06-05/2026-06-05-frontend-404-fallback.md)
+
+---
 
 ### V3.2.9 (2026-06-04)
 #### 🚀 TIF 栅格渲染 GPU 加速 + 数据导入模块 Code Review
