@@ -53,6 +53,7 @@ from .upstream import (
     _call_upstream_models,
     _extract_assistant_reply,
     _extract_client_ip,
+    _extract_reply_and_tools,
     _join_system_prompt,
     _record_agent_call_safe,
     _sanitize_history,
@@ -194,10 +195,14 @@ async def agent_chat_completions(
             timeout_seconds=override_timeout,
             max_tokens=override_max_tokens,
             temperature=override_temp,
+            tools=payload.tools,
+            tool_choice=payload.tool_choice,
         )
 
-        reply = _extract_assistant_reply(upstream_data)
-        if not reply:
+        reply, tool_calls = _extract_reply_and_tools(upstream_data)
+
+        # 当有 tool_calls 时，reply 可能为空（LLM 只返回工具调用），这是正常的
+        if not reply and not tool_calls:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Agent upstream returned empty content.",
@@ -220,17 +225,18 @@ async def agent_chat_completions(
                 "quota_subject": quota_snapshot.get("quota_subject"),
             }
 
-        return {
-            "status": "success",
-            "data": {
-                "reply": reply,
-                "model": runtime_model,
-                "model_source": str(runtime.get("model_source") or "unknown"),
-                "quota": quota_after,
-                "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
-                "api_key_source": str(runtime.get("api_key_source") or "unknown"),
-            },
+        data = {
+            "reply": reply,
+            "model": runtime_model,
+            "model_source": str(runtime.get("model_source") or "unknown"),
+            "quota": quota_after,
+            "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+            "api_key_source": str(runtime.get("api_key_source") or "unknown"),
         }
+        if tool_calls:
+            data["tool_calls"] = tool_calls
+
+        return {"status": "success", "data": data}
     except HTTPException as exc:
         detail_text = str(exc.detail or "")
         if (
@@ -447,24 +453,28 @@ async def agent_chat_default_proxy(
             timeout_seconds=override_timeout,
             max_tokens=override_max_tokens,
             temperature=override_temp,
+            tools=payload.tools,
+            tool_choice=payload.tool_choice,
         )
 
-        reply = _extract_assistant_reply(upstream_data)
-        if not reply:
+        reply, tool_calls = _extract_reply_and_tools(upstream_data)
+
+        if not reply and not tool_calls:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Agent upstream returned empty content.",
             )
 
-        return {
-            "status": "success",
-            "data": {
-                "reply": reply,
-                "model": model,
-                "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
-                "mode": "default-proxy",
-            },
+        data = {
+            "reply": reply,
+            "model": model,
+            "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+            "mode": "default-proxy",
         }
+        if tool_calls:
+            data["tool_calls"] = tool_calls
+
+        return {"status": "success", "data": data}
     except HTTPException as exc:
         upstream_status = int(exc.status_code)
         raise
@@ -814,24 +824,28 @@ async def agent_chat_proxy(
             timeout_seconds=int(payload.timeout_seconds),
             max_tokens=int(payload.max_tokens),
             temperature=float(payload.temperature),
+            tools=payload.tools,
+            tool_choice=payload.tool_choice,
         )
 
-        reply = _extract_assistant_reply(upstream_data)
-        if not reply:
+        reply, tool_calls = _extract_reply_and_tools(upstream_data)
+
+        if not reply and not tool_calls:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Agent upstream returned empty content.",
             )
 
-        return {
-            "status": "success",
-            "data": {
-                "reply": reply,
-                "model": model,
-                "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
-                "mode": "personal-proxy",
-            },
+        data = {
+            "reply": reply,
+            "model": model,
+            "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+            "mode": "personal-proxy",
         }
+        if tool_calls:
+            data["tool_calls"] = tool_calls
+
+        return {"status": "success", "data": data}
     except HTTPException as exc:
         upstream_status = int(exc.status_code)
         raise

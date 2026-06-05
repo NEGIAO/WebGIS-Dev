@@ -16,18 +16,33 @@ from .constants import DEFAULT_AGENT_SYSTEM_PROMPT, logger
 from .schemas import AgentChatHistoryItem
 
 
-def _sanitize_history(history: List[AgentChatHistoryItem]) -> List[Dict[str, str]]:
-    items: List[Dict[str, str]] = []
+def _sanitize_history(history: List[AgentChatHistoryItem]) -> List[Dict[str, Any]]:
+    """
+    清洗聊天历史。
+
+    - 过滤 system 角色（后端自行构建 system prompt，避免重复）
+    - 保留 user/assistant/tool 角色
+    - tool 角色消息必须携带 tool_call_id
+    """
+    items: List[Dict[str, Any]] = []
     for item in history:
         role = str(item.role or "").strip().lower()
         content = str(item.content or "").strip()
-        if role not in {"user", "assistant"}:
+        # system 角色由后端统一管理，不从前端 history 中透传
+        if role not in {"user", "assistant", "tool"}:
             continue
-        if not content:
+        # user/assistant 必须有内容；tool 允许空内容（工具可能无输出）
+        if role in {"user", "assistant"} and not content:
             continue
-        items.append({"role": role, "content": content})
+        entry: Dict[str, Any] = {"role": role, "content": content}
+        # tool 角色消息必须关联 tool_call_id
+        if role == "tool":
+            tc_id = str(getattr(item, "tool_call_id", None) or "").strip()
+            if tc_id:
+                entry["tool_call_id"] = tc_id
+        items.append(entry)
 
-    return items[-12:]
+    return items[-20:]
 
 
 def _extract_client_ip(request: Request) -> str:
@@ -138,6 +153,62 @@ def _extract_assistant_reply(payload: Dict[str, Any]) -> str:
     return ""
 
 
+def _extract_tool_calls(payload: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
+    """
+    从上游 LLM 响应中提取 tool_calls（OpenAI Function Calling 格式）。
+
+    返回格式：[{"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}, ...]
+    若无 tool_calls 则返回 None。
+    """
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+
+    first = choices[0] if isinstance(choices[0], dict) else {}
+    message_data = first.get("message") if isinstance(first, dict) else None
+    if not isinstance(message_data, dict):
+        return None
+
+    raw_tool_calls = message_data.get("tool_calls")
+    if not isinstance(raw_tool_calls, list) or not raw_tool_calls:
+        return None
+
+    # 标准化 tool_calls 格式，过滤无效条目
+    result = []
+    for tc in raw_tool_calls:
+        if not isinstance(tc, dict):
+            continue
+        func = tc.get("function", {})
+        tc_id = str(tc.get("id") or "").strip()
+        tc_name = str(func.get("name") or "").strip()
+        # 过滤空 id 或空 name 的无效 tool_call
+        if not tc_id or not tc_name:
+            logger.warning("Skipping invalid tool_call: id=%r, name=%r", tc_id, tc_name)
+            continue
+        result.append({
+            "id": tc_id,
+            "type": str(tc.get("type") or "function"),
+            "function": {
+                "name": tc_name,
+                "arguments": str(func.get("arguments") or "{}"),
+            },
+        })
+
+    return result if result else None
+
+
+def _extract_reply_and_tools(payload: Dict[str, Any]) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
+    """
+    从上游 LLM 响应中同时提取文本回复和 tool_calls。
+
+    Returns:
+        (reply_text, tool_calls_or_none)
+    """
+    reply = _extract_assistant_reply(payload)
+    tool_calls = _extract_tool_calls(payload)
+    return reply, tool_calls
+
+
 async def _call_upstream_chat(
     request: Request,
     *,
@@ -148,6 +219,8 @@ async def _call_upstream_chat(
     timeout_seconds: int,
     max_tokens: int,
     temperature: float,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[str] = None,
 ) -> Dict[str, Any]:
     endpoint = f"{base_url.rstrip('/')}/chat/completions"
 
@@ -158,6 +231,15 @@ async def _call_upstream_chat(
         "max_tokens": int(max_tokens),
         "temperature": float(temperature),
     }
+
+    # Function Calling 支持：透传 tools 声明给上游 LLM
+    if tools and isinstance(tools, list) and len(tools) > 0:
+        payload["tools"] = tools
+        # tool_choice 支持字符串 ("auto"/"none"/"required") 或对象格式
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+        else:
+            payload["tool_choice"] = "auto"
 
     headers = {
         "Content-Type": "application/json",

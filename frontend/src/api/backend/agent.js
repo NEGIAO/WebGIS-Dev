@@ -35,7 +35,9 @@ export async function apiGetDefaultAIConfig() {
 
 /**
  * 使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）
- * @param {Object} payload - { message, history, location_context?, override_model? }
+ * @param {Object} payload - { message, history, location_context?, override_model?, tools?, tool_choice? }
+ * @param {Array} [payload.tools] - Function Calling 工具声明（OpenAI 格式），后端支持时透传给 LLM
+ * @param {string} [payload.tool_choice] - 工具选择策略，如 'auto'、'none'、'required'
  * @returns {Promise}
  */
 export async function apiAgentChatDefaultProxy(payload = {}) {
@@ -53,13 +55,22 @@ export async function apiAgentChatDefaultProxy(payload = {}) {
     if (typeof payload.override_temperature !== 'undefined' && payload.override_temperature !== null)
         body.override_temperature = Number(payload.override_temperature);
 
+    // Function Calling 支持：透传工具声明给后端
+    if (Array.isArray(payload.tools) && payload.tools.length > 0) {
+        body.tools = payload.tools;
+    }
+    if (payload.tool_choice) {
+        body.tool_choice = String(payload.tool_choice).trim();
+    }
+
     return backendAPI.post('/api/agent/chat/default-proxy', body, {
         timeout: 60000,
     });
 }
 
 /**
- * 规范化聊天历史：清洗、过滤无效消息、截断到最近 12 条
+ * 规范化聊天历史：清洗、过滤无效消息、截断到最近 20 条
+ * 允许 user/assistant 两种角色（system 由后端统一管理，tool 角色暂未使用）
  * @param {Array} rawHistory - 原始历史消息
  * @returns {Array<{role: string, content: string}>}
  */
@@ -71,7 +82,7 @@ function normalizeChatHistory(rawHistory) {
             content: String(item?.content || '').trim(),
         }))
         .filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content)
-        .slice(-12);
+        .slice(-20);
 }
 
 export async function apiAgentGetChatConfig() {
@@ -103,6 +114,13 @@ export async function apiAgentUpdateUserConfig(payload = {}) {
     return backendAPI.post('/api/agent/user-config', safePayload);
 }
 
+/**
+ * 后端代理模式聊天
+ * @param {Object} payload - { message, history, location_context?, tools?, tool_choice?, ... }
+ * @param {Array} [payload.tools] - Function Calling 工具声明（OpenAI 格式）
+ * @param {string} [payload.tool_choice] - 工具选择策略
+ * @returns {Promise}
+ */
 export async function apiAgentChatCompletions(payload = {}) {
     const history = normalizeChatHistory(payload.history);
 
@@ -130,6 +148,14 @@ export async function apiAgentChatCompletions(payload = {}) {
     }
     if (typeof payload.override_temperature !== 'undefined' && payload.override_temperature !== null) {
         body.override_temperature = Number(payload.override_temperature);
+    }
+
+    // Function Calling 支持：透传工具声明给后端
+    if (Array.isArray(payload.tools) && payload.tools.length > 0) {
+        body.tools = payload.tools;
+    }
+    if (payload.tool_choice) {
+        body.tool_choice = String(payload.tool_choice).trim();
     }
 
     return backendAPI.post('/api/agent/chat/completions', body, {
@@ -160,6 +186,11 @@ export async function apiAgentSaveModelPreference(preferredModel) {
  * 当用户配置了个人 API Key 时，通过后端代理转发 LLM 请求，
  * 避免浏览器直接调用外部 LLM API 遇到 CORS 拦截。
  * 不消耗平台配额（用户使用自己的 API Key）。
+ *
+ * @param {Object} payload - { message, history, api_key, base_url, model, tools?, tool_choice?, ... }
+ * @param {Array} [payload.tools] - Function Calling 工具声明（OpenAI 格式）
+ * @param {string} [payload.tool_choice] - 工具选择策略
+ * @returns {Promise}
  */
 export async function apiAgentChatProxy(payload = {}) {
     const body = {
@@ -178,6 +209,14 @@ export async function apiAgentChatProxy(payload = {}) {
         body.max_tokens = Number(payload.max_tokens);
     if (typeof payload.temperature !== 'undefined' && payload.temperature !== null)
         body.temperature = Number(payload.temperature);
+
+    // Function Calling 支持：透传工具声明给后端
+    if (Array.isArray(payload.tools) && payload.tools.length > 0) {
+        body.tools = payload.tools;
+    }
+    if (payload.tool_choice) {
+        body.tool_choice = String(payload.tool_choice).trim();
+    }
 
     return backendAPI.post('/api/agent/chat/proxy', body, {
         timeout: 60000, // LLM 推理可能需要较长时间

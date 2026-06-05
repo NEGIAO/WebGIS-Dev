@@ -22,7 +22,24 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-04 更新）
+## 0. 项目结构（2026-06-05 更新）
+
+### V3.3.0 (2026-06-05) - Chat Function Calling GIS
+
+**修改文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `api/agent_chat/schemas.py` | 新增 tools/tool_choice 字段（Function Calling 支持） |
+| `api/agent_chat/upstream.py` | 透传 tools 给上游 LLM + 提取 tool_calls |
+| `api/agent_chat/routes.py` | 支持 tool_calls 返回 |
+
+**功能说明：**
+- 支持 OpenAI Function Calling 格式的 tools 参数透传
+- 支持从上游 LLM 响应中提取 tool_calls
+- 支持 tool_calls 与文本回复的同时返回
+
+---
 
 ### V3.2.7 (2026-06-04) - Agent Chat 默认 AI 专属配置
 

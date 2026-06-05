@@ -2,19 +2,21 @@
 Agent Chat Pydantic 请求/响应模型。
 """
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
 
 class AgentChatHistoryItem(BaseModel):
-    role: str = Field(..., pattern="^(user|assistant)$")
-    content: str = Field(..., min_length=1, max_length=2000)
+    role: str = Field(..., pattern="^(user|assistant|tool)$")
+    content: str = Field(default="", max_length=8000)
+    # tool 角色消息必须携带 tool_call_id，用于关联对应的 tool_call
+    tool_call_id: Optional[str] = Field(default=None, max_length=128)
 
 
 class AgentChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
-    history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=12)
+    history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=20)
     location_context: Optional[str] = Field(default=None, max_length=1000)
     override_base_url: Optional[str] = Field(default=None, max_length=240)
     override_api_key: Optional[str] = Field(default=None, max_length=5000)
@@ -22,20 +24,25 @@ class AgentChatRequest(BaseModel):
     override_timeout_seconds: Optional[int] = Field(default=None, ge=5, le=180)
     override_max_tokens: Optional[int] = Field(default=None, ge=1, le=8192)
     override_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    tools: Optional[List[Dict[str, Any]]] = Field(default=None, description="Function Calling 工具声明（OpenAI 格式）")
+    # tool_choice 支持字符串 ("auto"/"none"/"required") 或对象 ({"type":"function","function":{"name":"xxx"}})
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="工具选择策略")
 
 
 class AgentChatProxyRequest(BaseModel):
     """用户个人 API Key 代理聊天请求（绕过平台配额限制）。"""
     message: str = Field(..., min_length=1, max_length=2000)
-    history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=12)
+    history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=20)
     location_context: Optional[str] = Field(default=None, max_length=1000)
     api_key: str = Field(..., min_length=1, max_length=5000)
     base_url: str = Field(..., min_length=1, max_length=240)
     model: str = Field(..., min_length=1, max_length=160)
-    system_prompt: Optional[str] = Field(default=None, max_length=2000)
+    system_prompt: Optional[str] = Field(default=None, max_length=8000)
     timeout_seconds: int = Field(default=45, ge=5, le=180)
     max_tokens: int = Field(default=8192, ge=1, le=8192)
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    tools: Optional[List[Dict[str, Any]]] = Field(default=None, description="Function Calling 工具声明（OpenAI 格式）")
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="工具选择策略")
 
 
 class AgentConfigUpdateRequest(BaseModel):

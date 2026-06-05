@@ -213,7 +213,29 @@
                 :key="index"
                 :class="['message', msg.role]"
             >
-                <template v-if="msg.role === 'assistant'">
+                <!-- 工具调用状态卡片 -->
+                <template v-if="msg.isToolStatus && msg.toolCalls">
+                    <div class="tool-status-card">
+                        <div
+                            v-for="(tc, tcIdx) in msg.toolCalls"
+                            :key="tcIdx"
+                            class="tool-status-item"
+                        >
+                            <span v-if="tc.status === 'executing'" class="tool-status-icon">🔧</span>
+                            <span v-else-if="tc.status === 'success'" class="tool-status-icon">✅</span>
+                            <span v-else class="tool-status-icon">❌</span>
+                            <span class="tool-status-label">{{ tc.label }}</span>
+                            <span
+                                v-if="tc.message"
+                                class="tool-status-message"
+                            >
+                                {{ tc.message }}
+                            </span>
+                        </div>
+                    </div>
+                </template>
+                <!-- 普通 Assistant 消息 -->
+                <template v-else-if="msg.role === 'assistant'">
                     <div class="message-content">{{ getAnswerContent(msg.content) }}</div>
                     <details
                         v-if="hasThinkContent(msg.content)"
@@ -256,7 +278,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, nextTick } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, nextTick, inject, watch } from 'vue';
 import {
     apiAgentChatCompletions,
     apiAgentChatProxy,
@@ -272,9 +294,34 @@ import { readUserPositionFromCache } from '../../services/userPositionCache';
 import { getGlobalUserLocationContext } from '../../services/userLocationContext';
 import { useMessage } from '../../composables/useMessage';
 import { Bot as BotIcon } from 'lucide-vue-next';
+import { createGISCommander } from '../../composables/map/GISCommander';
+import { AgentExecutor } from '../../services/agent/AgentExecutor';
+import {
+    AGENT_TOOLS,
+    buildSystemPromptWithTools,
+} from '../../constants/agentToolsSchema';
+import { useChatStore } from '../../stores/useChatStore';
 
 const emit = defineEmits(['close-chat']);
 const message = useMessage();
+const chatStore = useChatStore();
+
+// ============================================================
+//  GIS Commander & Agent Executor（工具调用基础设施）
+// ============================================================
+
+/** 通过 inject 获取地图实例和底图切换能力（由 HomeView provide） */
+const olMapRef = inject('olMap', ref(null));
+const setCustomBasemapByUrl = inject('setCustomBasemapByUrl', null);
+
+/** GISCommander 实例 */
+const gisCommander = ref(null);
+
+/** AgentExecutor 实例 */
+const agentExecutor = ref(null);
+
+/** 工具调用状态消息（嵌入到消息流中） */
+const toolCallStatusMessages = ref(new Map());
 
 const inputMessage = ref('');
 const isLoading = ref(false);
@@ -1058,11 +1105,337 @@ const clearHistory = () => {
 };
 
 /**
- * 发送消息
+ * 将工具说明注入到消息历史中（降级方案）
  *
- * 根据当前模式选择调用路径：
- * - 个人 Key 模式：经后端代理转发（apiAgentChatProxy），避免浏览器 CORS 限制
- * - 代理模式：通过后端转发（apiAgentChatCompletions）
+ * 当后端 API 不支持 system_prompt 参数时，将工具说明作为第一条用户消息
+ * 注入到历史记录中，确保 LLM 能感知到可用工具。
+ *
+ * @private
+ * @param {Array} history - 原始对话历史
+ * @param {string} toolPrompt - 工具说明提示词
+ * @returns {Array} 注入工具说明后的历史
+ */
+const _injectToolPromptIntoHistory = (history, toolPrompt) => {
+    if (!toolPrompt) return history;
+    // 后端 _sanitize_history 会过滤 system 角色（避免与后端 system prompt 重复），
+    // 因此工具说明以 user 角色注入，确保能通过后端校验并送达 LLM
+    return [{ role: 'user', content: `[系统指令] 以下是你可以使用的工具说明，请严格按照此格式调用工具：\n\n${toolPrompt}` }, ...history];
+};
+
+/**
+ * GIS 意图关键词检测（降级方案）
+ *
+ * 当 LLM 未输出 tool_call JSON 块时，通过关键词匹配检测用户的 GIS 操作意图。
+ * 这是工具调用的最后防线，确保即使后端/LLM 不支持 Function Calling，地图也能响应。
+ *
+ * @private
+ * @param {string} userMsg - 用户消息
+ * @returns {{name: string, arguments: Object}|null} 检测到的工具调用，无则返回 null
+ */
+const _detectGISIntent = (userMsg) => {
+    const rawMsg = String(userMsg || '').trim();
+    const msg = rawMsg.toLowerCase();
+    if (!rawMsg) return null;
+
+    // 模式 1：搜索/定位意图
+    // 匹配：定位到XXX、搜索XXX、找到XXX、去到XXX、飞到XXX、显示XXX位置、XXX在哪里
+    const searchPatterns = [
+        /(?:定位到?|搜索|查找?|去到?|飞到?|缩放到|前往|移动到?|显示)\s*[「"']?(.+?)[」"']?\s*(?:的位置|地方|在哪里|的范围)?$/,
+        /^(.+?)(?:在哪里|在哪儿|怎么去|的坐标|的位置)$/,
+        /(?:看看|查看)\s*(.+?)$/,
+    ];
+
+    for (const pattern of searchPatterns) {
+        const match = msg.match(pattern);
+        if (match && match[1] && match[1].length >= 2) {
+            const query = match[1].trim();
+            // 排除常见非地名词汇
+            const excludeWords = ['一下', '一下下', '这个', '那个', '什么', '怎么', '为什么', '地图', '底图'];
+            if (!excludeWords.includes(query)) {
+                return { name: 'search_and_zoom', arguments: { query, zoom: 16 } };
+            }
+        }
+    }
+
+    // 模式 2：底图切换意图
+    // 匹配：切换到XXX底图、换成XXX地图、使用XXX图源
+    const basemapPatterns = [
+        /(?:切换到?|换成?|使用|启用|换上|加载)\s*[「"']?(.+?)[」"']?\s*(?:底图|地图|图源|卫星)?$/,
+        /(?:底图|地图|图源)\s*(?:切换到?|换成?|使用)\s*[「"']?(.+?)[」"']?$/,
+    ];
+
+    // Chat 底图切换只允许走 HTTPS XYZ URL -> custom 底图（l=1）。
+    const basemapUrlMapping = {
+        '高德卫星': {
+            url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+            name: '高德卫星',
+        },
+        '高德': {
+            url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+            name: '高德卫星',
+        },
+        'amap': {
+            url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+            name: '高德卫星',
+        },
+        '高德路网': {
+            url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+            name: '高德路网',
+        },
+        'osm标准': {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name: 'OpenStreetMap',
+        },
+        'carto暗色': {
+            url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+            name: 'CartoDB 暗色',
+        },
+        'carto亮色': {
+            url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+            name: 'CartoDB 亮色',
+        },
+        '谷歌矢量': {
+            url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+            name: '谷歌矢量',
+        },
+        'google': {
+            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            name: '谷歌卫星',
+        },
+        '谷歌': {
+            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            name: '谷歌卫星',
+        },
+        '谷歌卫星': {
+            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            name: '谷歌卫星',
+        },
+        '卫星': {
+            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+            name: '谷歌卫星',
+        },
+        '谷歌地形': {
+            url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+            name: '谷歌地形',
+        },
+        '地形': {
+            url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+            name: 'OpenTopoMap',
+        },
+        '矢量': {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name: 'OpenStreetMap',
+        },
+        'osm': {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name: 'OpenStreetMap',
+        },
+        'openstreetmap': {
+            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            name: 'OpenStreetMap',
+        },
+        '天地图': {
+            url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=img&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={level}&TILEROW={row}&TILECOL={col}&tk=4267820f43926eaf808d61dc07269beb',
+            name: '天地图卫星',
+        },
+        '中国渲染':{
+            url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+            name:'中国渲染'
+        }
+    };
+
+    // 模式 2a：用户直接提供了 URL
+    const urlMatch = rawMsg.match(/https?:\/\/[^\s]+/i);
+    if (urlMatch) {
+        const url = urlMatch[0];
+        // 检查是否是 XYZ URL（包含 {x} {y} {z} 或类似模式）
+        if (url.includes('{x}') || url.includes('{y}') || url.includes('{z}') || url.includes('{0-7}')) {
+            const normalizedUrl = url.replace(/\{0-7\}/, '01'); // 天地图服务器编号降级
+            return {
+                name: 'switch_basemap',
+                arguments: { url: normalizedUrl, name: '自定义图源' },
+            };
+        }
+    }
+
+    for (const pattern of basemapPatterns) {
+        const match = msg.match(pattern);
+        if (match && match[1]) {
+            const target = match[1].trim().toLowerCase();
+
+            for (const [keyword, xyzConfig] of Object.entries(basemapUrlMapping)) {
+                if (target.includes(keyword.toLowerCase())) {
+                    return {
+                        name: 'switch_basemap',
+                        arguments: { url: xyzConfig.url, name: xyzConfig.name },
+                    };
+                }
+            }
+        }
+    }
+
+    return null;
+};
+
+/**
+ * 执行工具调用并更新 UI 状态
+ *
+ * @private
+ * @param {Array} toolCalls - 工具调用列表
+ * @param {number} assistantMsgIndex - 占位 assistant 消息的索引
+ * @returns {Promise<{toolResults: Array, toolResultSummary: string}>}
+ */
+const _executeToolsAndUpdateUI = async (toolCalls, assistantMsgIndex) => {
+    // 插入工具执行状态消息
+    const statusMsgIndex =
+        messages.value.push({
+            role: 'assistant',
+            content: '',
+            isToolStatus: true,
+            toolCalls: toolCalls.map((tc) => ({
+                name: tc.name,
+                label: _getToolDisplayName(tc.name, tc.arguments),
+                status: 'executing',
+            })),
+        }) - 1;
+
+    scrollToBottom();
+
+    // 执行工具调用
+    const toolResults = await agentExecutor.value.executeToolCalls(toolCalls);
+
+    // 更新工具状态消息
+    messages.value[statusMsgIndex].toolCalls = toolCalls.map((tc, idx) => {
+        const result = toolResults[idx];
+        return {
+            name: tc.name,
+            label: _getToolDisplayName(tc.name, tc.arguments),
+            status: result?.result?.success ? 'success' : 'error',
+            message: result?.result?.message || '',
+        };
+    });
+
+    // 清理空的占位 assistant 消息
+    if (!messages.value[assistantMsgIndex].content) {
+        messages.value.splice(assistantMsgIndex, 1);
+    }
+
+    scrollToBottom();
+
+    const toolResultSummary = AgentExecutor.buildResultSummary(toolResults);
+    return { toolResults, toolResultSummary };
+};
+
+/**
+ * 调用 LLM API（统一入口，支持三种模式）
+ *
+ * @private
+ * @param {Object} params
+ * @param {string} params.message - 用户消息
+ * @param {Array} params.history - 对话历史
+ * @param {string} params.locationContext - 位置上下文
+ * @param {string} [params.systemPrompt] - 系统提示词（含工具说明）
+ * @returns {Promise<{reply: string, usedModel: string, toolCalls?: Array, quota?: Object}>}
+ */
+const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemPrompt }) => {
+    let reply = '';
+    let usedModel = '';
+    let toolCalls = null;
+    let quotaData = null;
+
+    // 将工具说明注入历史（确保 LLM 感知工具，即使后端不支持 system_prompt）
+    const enhancedHistory = systemPrompt
+        ? _injectToolPromptIntoHistory(history, systemPrompt)
+        : history;
+
+    if (isDefaultAIMode.value) {
+        // ============= 管理员默认 AI 模式 =============
+        const dc = directConfig.value;
+        const result = await apiAgentChatDefaultProxy({
+            message: userMsg,
+            history: enhancedHistory,
+            location_context: locationContext,
+            override_model: dc.model || undefined,
+            tools: AGENT_TOOLS,
+            tool_choice: 'auto',
+        });
+        const data = result?.data || result || {};
+        reply = String(data?.reply || '').trim();
+        usedModel = String(data?.model || dc.model || '');
+        toolCalls = AgentExecutor.extractToolCalls(data);
+    } else if (isDirectMode.value) {
+        // ==================== 个人 Key 模式 ====================
+        const dc = directConfig.value;
+        // 合并工具说明与用户自定义 system prompt
+        const mergedSystemPrompt = systemPrompt
+            ? (dc.system_prompt ? `${systemPrompt}\n\n---\n\n${dc.system_prompt}` : systemPrompt)
+            : dc.system_prompt || undefined;
+
+        const result = await apiAgentChatProxy({
+            message: userMsg,
+            history: enhancedHistory,
+            location_context: locationContext,
+            api_key: dc.api_key,
+            base_url: dc.base_url,
+            model: dc.model,
+            system_prompt: mergedSystemPrompt,
+            timeout_seconds: dc.timeout_seconds,
+            max_tokens: dc.max_tokens,
+            temperature: dc.temperature,
+            tools: AGENT_TOOLS,
+            tool_choice: 'auto',
+        });
+        const data = result?.data || result || {};
+        reply = String(data?.reply || '').trim();
+        usedModel = String(data?.model || dc.model || '');
+        toolCalls = AgentExecutor.extractToolCalls(data);
+    } else {
+        // ==================== 后端代理模式 ====================
+        const chatPayload = {
+            message: userMsg,
+            history: enhancedHistory,
+            location_context: locationContext,
+            tools: AGENT_TOOLS,
+            tool_choice: 'auto',
+        };
+
+        const draftBaseUrl = String(userConfigDraft.value.base_url || '').trim();
+        const draftApiKey = String(userConfigDraft.value.api_key || '').trim();
+        const draftModel = String(userConfigDraft.value.model || '').trim();
+        const draftTimeout = userConfigDraft.value.timeout_seconds;
+        const draftMaxTokens = userConfigDraft.value.max_tokens;
+        const draftTemperature = userConfigDraft.value.temperature;
+
+        if (draftBaseUrl) chatPayload.override_base_url = draftBaseUrl;
+        if (draftApiKey) chatPayload.override_api_key = draftApiKey;
+        if (draftModel) chatPayload.override_model = draftModel;
+        if (typeof draftTimeout === 'number' && draftTimeout > 0)
+            chatPayload.override_timeout_seconds = draftTimeout;
+        if (typeof draftMaxTokens === 'number' && draftMaxTokens > 0)
+            chatPayload.override_max_tokens = draftMaxTokens;
+        if (typeof draftTemperature === 'number')
+            chatPayload.override_temperature = draftTemperature;
+
+        const result = await apiAgentChatCompletions(chatPayload);
+        const data = result?.data || result || {};
+        reply = String(data?.reply || '').trim();
+        usedModel = String(data?.model || '');
+        toolCalls = AgentExecutor.extractToolCalls(data);
+        if (data?.quota) quotaData = data.quota;
+    }
+
+    return { reply, usedModel, toolCalls, quota: quotaData };
+};
+
+/**
+ * 发送消息（支持工具调用 + 降级意图检测）
+ *
+ * 三级工具调用策略：
+ * 1. 原生 Function Calling：后端返回 tool_calls 字段
+ * 2. 降级文本解析：LLM 在回复中输出 ```tool_call JSON 块
+ * 3. 关键词意图检测：从用户消息中直接识别 GIS 操作意图（最终防线）
+ *
+ * 工具执行后，将结果回传 LLM 获取自然语言回复。
  */
 const sendMessage = async () => {
     if (sendDisabled.value) return;
@@ -1081,83 +1454,89 @@ const sendMessage = async () => {
     const assistantMsgIndex = messages.value.push({ role: 'assistant', content: '' }) - 1;
 
     try {
-        let reply = '';
-        let usedModel = '';
+        // 构建含工具说明的系统提示词
+        const systemPrompt = buildSystemPromptWithTools();
 
-        if (isDefaultAIMode.value) {
-            // ============= 管理员默认 AI 模式（api_key 存储在后端，前端无需传 key） =============
-            const dc = directConfig.value;
-            const result = await apiAgentChatDefaultProxy({
-                message: userMsg,
-                history: requestHistory,
-                location_context: locationContextText,
-                override_model: dc.model || undefined,
-            });
+        // ===== 第一轮：调用 LLM =====
+        const { reply, usedModel, toolCalls: llmToolCalls, quota: quotaData } = await _callLLMAPI({
+            message: userMsg,
+            history: requestHistory,
+            locationContext: locationContextText,
+            systemPrompt,
+        });
 
-            const data = result?.data || result || {};
-            reply = String(data?.reply || '').trim();
-            usedModel = String(data?.model || dc.model || '');
-        } else if (isDirectMode.value) {
-            // ==================== 个人 Key 模式（经后端代理转发） ====================
-            const dc = directConfig.value;
+        if (quotaData) quota.value = normalizeQuota(quotaData);
+        if (usedModel) modelName.value = usedModel;
 
-            const result = await apiAgentChatProxy({
-                message: userMsg,
-                history: requestHistory,
-                location_context: locationContextText,
-                api_key: dc.api_key,
-                base_url: dc.base_url,
-                model: dc.model,
-                system_prompt: dc.system_prompt || undefined,
-                timeout_seconds: dc.timeout_seconds,
-                max_tokens: dc.max_tokens,
-                temperature: dc.temperature,
-            });
+        // ===== 工具调用检测（三级策略） =====
+        let finalToolCalls = llmToolCalls;
+        let isIntentFallback = false;
 
-            const data = result?.data || result || {};
-            reply = String(data?.reply || '').trim();
-            usedModel = String(data?.model || dc.model || '');
-        } else {
-            // ==================== 后端代理模式 ====================
-            const chatPayload = {
-                message: userMsg,
-                history: requestHistory,
-                location_context: locationContextText,
-            };
-
-            // 传递用户配置面板中尚未保存的参数覆盖
-            const draftBaseUrl = String(userConfigDraft.value.base_url || '').trim();
-            const draftApiKey = String(userConfigDraft.value.api_key || '').trim();
-            const draftModel = String(userConfigDraft.value.model || '').trim();
-            const draftTimeout = userConfigDraft.value.timeout_seconds;
-            const draftMaxTokens = userConfigDraft.value.max_tokens;
-            const draftTemperature = userConfigDraft.value.temperature;
-
-            if (draftBaseUrl) chatPayload.override_base_url = draftBaseUrl;
-            if (draftApiKey) chatPayload.override_api_key = draftApiKey;
-            if (draftModel) chatPayload.override_model = draftModel;
-            if (typeof draftTimeout === 'number' && draftTimeout > 0)
-                chatPayload.override_timeout_seconds = draftTimeout;
-            if (typeof draftMaxTokens === 'number' && draftMaxTokens > 0)
-                chatPayload.override_max_tokens = draftMaxTokens;
-            if (typeof draftTemperature === 'number')
-                chatPayload.override_temperature = draftTemperature;
-
-            const result = await apiAgentChatCompletions(chatPayload);
-            const data = result?.data || result || {};
-
-            reply = String(data?.reply || '').trim();
-            usedModel = String(data?.model || '');
-
-            if (data?.quota) {
-                quota.value = normalizeQuota(data.quota);
+        // 策略 1+2：LLM 返回了 tool_calls（原生或文本解析）
+        // 策略 3：LLM 未返回 tool_calls，尝试关键词意图检测
+        if ((!finalToolCalls || finalToolCalls.length === 0) && agentExecutor.value) {
+            const intentToolCall = _detectGISIntent(userMsg);
+            if (intentToolCall) {
+                finalToolCalls = [intentToolCall];
+                isIntentFallback = true;
             }
         }
 
-        messages.value[assistantMsgIndex].content = reply || '（未返回有效内容）';
+        // ===== 执行工具调用 =====
+        if (finalToolCalls && finalToolCalls.length > 0 && agentExecutor.value) {
+            // 从回复文本中移除 tool_call JSON 块（降级模式清理）
+            const cleanReply = AgentExecutor.stripToolCallBlocks(reply);
 
-        if (usedModel) {
-            modelName.value = usedModel;
+            // 仅当工具调用来自 LLM 自身时才显示其文字回复
+            // Strategy 3（意图检测）时 LLM 未真正调用工具，其文字可能是误导性的
+            if (!isIntentFallback && cleanReply && cleanReply.length > 5) {
+                messages.value[assistantMsgIndex].content = cleanReply;
+            }
+
+            // 执行工具并更新 UI
+            const { toolResultSummary } = await _executeToolsAndUpdateUI(finalToolCalls, assistantMsgIndex);
+
+            // ===== 第二轮：将工具结果回传 LLM 获取自然语言回复 =====
+            const toolRoundHistory = [
+                ...requestHistory,
+                { role: 'user', content: userMsg },
+                {
+                    role: 'assistant',
+                    content: cleanReply
+                        ? `${cleanReply}\n\n[工具调用已执行]`
+                        : '[工具调用已执行]',
+                },
+                {
+                    role: 'user',
+                    content: `[工具执行结果]\n${toolResultSummary}\n\n请根据工具执行结果给用户一个简洁友好的回复。如果工具执行成功，告诉用户已完成什么操作；如果失败，告诉用户失败原因和建议。`,
+                },
+            ];
+
+            try {
+                const secondRound = await _callLLMAPI({
+                    message: '请根据上述工具执行结果回复用户。',
+                    history: toolRoundHistory.slice(-6),
+                    locationContext: '',
+                    systemPrompt: '',
+                });
+
+                const finalReply = secondRound.reply || '';
+                if (secondRound.quota) quota.value = normalizeQuota(secondRound.quota);
+                if (secondRound.usedModel) modelName.value = secondRound.usedModel;
+
+                if (finalReply) {
+                    messages.value.push({ role: 'assistant', content: finalReply });
+                } else {
+                    // LLM 未返回回复，用工具结果摘要作为兜底
+                    messages.value.push({ role: 'assistant', content: `✅ 操作完成：\n${toolResultSummary}` });
+                }
+            } catch {
+                // 第二轮失败时，用工具结果作为回复
+                messages.value.push({ role: 'assistant', content: `✅ 操作完成：\n${toolResultSummary}` });
+            }
+        } else {
+            // 无工具调用：直接显示 LLM 回复
+            messages.value[assistantMsgIndex].content = reply || '（未返回有效内容）';
         }
 
         if (!isDirectMode.value && quotaExhausted.value) {
@@ -1181,7 +1560,70 @@ onBeforeUnmount(() => {
         clearTimeout(clearConfirmTimer);
         clearConfirmTimer = null;
     }
+    // 清理 GISCommander 资源
+    gisCommander.value?.dispose?.();
 });
+
+/**
+ * 初始化 GIS Commander 和 Agent Executor
+ * 在地图实例就绪后创建，提供工具调用能力
+ */
+const initGISCommander = () => {
+    if (!olMapRef?.value) return;
+
+    try {
+        gisCommander.value = createGISCommander({
+            mapInstanceRef: olMapRef,
+            // 注入自定义 XYZ 底图切换方法（复用 custom 图层机制）
+            onCustomXYZSwitch: setCustomBasemapByUrl,
+        });
+
+        agentExecutor.value = new AgentExecutor({
+            gisCommander: gisCommander.value,
+            onToolStart: ({ toolCallId, name, arguments: args }) => {
+                const label = _getToolDisplayName(name, args);
+                toolCallStatusMessages.value.set(toolCallId, {
+                    status: 'executing',
+                    label,
+                    startTime: Date.now(),
+                });
+            },
+            onToolComplete: ({ toolCallId, name: _name, result }) => {
+                const existing = toolCallStatusMessages.value.get(toolCallId);
+                if (existing) {
+                    existing.status = result.success ? 'success' : 'error';
+                    existing.message = result.message;
+                    existing.endTime = Date.now();
+                }
+            },
+            onError: ({ toolCallId, error }) => {
+                const existing = toolCallStatusMessages.value.get(toolCallId);
+                if (existing) {
+                    existing.status = 'error';
+                    existing.message = error;
+                    existing.endTime = Date.now();
+                }
+            },
+        });
+
+        chatStore.setExecutor(agentExecutor.value);
+    } catch (err) {
+        console.warn('[ChatPanelContent] GIS Commander 初始化失败:', err);
+    }
+};
+
+/**
+ * 获取工具的中文显示名称
+ * @private
+ */
+const _getToolDisplayName = (name, args = {}) => {
+    const displayNames = {
+        zoom_to_extent: '缩放到指定范围',
+        search_and_zoom: `定位到 "${args.query || '未知位置'}"`,
+        switch_basemap: `切换到底图：${args.name || '自定义图源'}`,
+    };
+    return displayNames[name] || `执行工具：${name}`;
+};
 
 onMounted(async () => {
     // 启动时先尝试加载管理员配置的默认 AI 配置
@@ -1189,7 +1631,22 @@ onMounted(async () => {
     // 自动预加载模型列表
     loadAvailableModels();
     await reloadAgentConfig(false);
+
+    // 初始化 GIS Commander（如果地图已就绪）
+    initGISCommander();
 });
+
+// 监听地图实例变化，延迟初始化 GIS Commander
+// 地图可能在 Chat 组件挂载后才完成初始化
+watch(
+    () => olMapRef?.value,
+    (newMap) => {
+        if (newMap && !gisCommander.value) {
+            initGISCommander();
+        }
+    },
+    { immediate: false },
+);
 </script>
 
 <style scoped>
@@ -1474,6 +1931,42 @@ onMounted(async () => {
 
 .message.assistant {
     align-items: flex-start;
+}
+
+/* ========== 工具调用状态卡片 ========== */
+.tool-status-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #f0f7ff;
+    border: 1px solid #d0e3f7;
+    font-size: 0.88em;
+    max-width: 90%;
+}
+
+.tool-status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tool-status-icon {
+    font-size: 1em;
+    flex-shrink: 0;
+}
+
+.tool-status-label {
+    color: #333;
+    font-weight: 500;
+}
+
+.tool-status-message {
+    color: #666;
+    font-size: 0.9em;
+    word-break: break-all;
 }
 
 .message-content {

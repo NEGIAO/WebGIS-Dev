@@ -638,6 +638,89 @@ const { handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers
 // 栅格值查询函数的 ref 包装（用于延迟初始化）
 const queryRasterValueAtCoordinateRef = ref(null);
 
+/**
+ * 通过 XYZ URL 切换到自定义底图
+ *
+ * 复用现有的 custom 底图机制（l=1）：
+ * 1. 设置自定义 URL 到 customMapUrl
+ * 2. 触发 handleLayerChange 切换到 custom 图层
+ * 3. loadCustomMap 自动识别 URL 类型并创建瓦片源
+ *
+ * @param {string} url - XYZ 瓦片 URL（含 {x},{y},{z} 占位符）
+ * @returns {Promise<{success: boolean, message: string, layerId?: string, layerIndex?: number, url?: string}>}
+ */
+async function setCustomBasemapByUrl(url) {
+    const normalizedUrl = String(url || '').trim();
+    const customLayerIndex = getLayerIndexById('custom');
+
+    if (!normalizedUrl) {
+        return {
+            success: false,
+            message: '自定义 XYZ 底图 URL 不能为空',
+            layerId: 'custom',
+            layerIndex: customLayerIndex,
+        };
+    }
+
+    if (customLayerIndex !== 1) {
+        return {
+            success: false,
+            message: `自定义底图索引配置异常：期望 l=1，当前为 l=${customLayerIndex}`,
+            layerId: 'custom',
+            layerIndex: customLayerIndex,
+            url: normalizedUrl,
+        };
+    }
+
+    try {
+        const switchResult = await handleLayerChange({
+            layerId: 'custom',
+            source: 'custom-url',
+            customUrl: normalizedUrl,
+        });
+
+        if (switchResult?.success === false) {
+            return {
+                ...switchResult,
+                layerId: 'custom',
+                layerIndex: customLayerIndex,
+                url: normalizedUrl,
+            };
+        }
+
+        if (selectedLayer.value !== 'custom') {
+            return {
+                success: false,
+                message: '自定义底图图源已加载，但当前底图未切换到 custom',
+                layerId: selectedLayer.value,
+                layerIndex: getLayerIndexById(selectedLayer.value),
+                url: normalizedUrl,
+            };
+        }
+
+        // Agent 切换自定义底图时必须落到 URL 索引 l=1，便于分享链接和状态恢复。
+        syncUrlFromMap?.();
+        mapInstance.value?.updateSize?.();
+
+        return {
+            success: true,
+            message: `已切换到自定义 XYZ 底图（URL 图层索引 l=${customLayerIndex}）`,
+            layerId: 'custom',
+            layerIndex: customLayerIndex,
+            url: normalizedUrl,
+            customLoadResult: switchResult?.customLoadResult || null,
+        };
+    } catch (error) {
+        return {
+            success: false,
+            message: `切换自定义 XYZ 底图失败：${error?.message || '未知错误'}`,
+            layerId: 'custom',
+            layerIndex: customLayerIndex,
+            url: normalizedUrl,
+        };
+    }
+}
+
 // 属性表范围同步函数桥接（用于解决 setup 初始化顺序依赖）
 let syncAttributeTableMapExtentImpl = () => { };
 
@@ -1522,6 +1605,7 @@ defineExpose({
     enableBasemapSwipe,
     runSpatialAnalysis,
     getMapExtent,
+    setCustomBasemapByUrl,
 });
 </script>
 

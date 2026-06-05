@@ -145,7 +145,15 @@
                 />
             </div>
 
-            <!-- 模式 6: 热点新闻 -->
+            <!-- 模式 6: 天气看板 -->
+            <div
+                v-show="activeTab === 'weather'"
+                class="toolbox-content weather-tab-content"
+            >
+                <WeatherChartPanel v-if="shouldLoadWeather" />
+            </div>
+
+            <!-- 模式 7: 热点新闻 -->
             <div
                 v-show="activeTab === 'info'"
                 class="news-dashboard"
@@ -270,6 +278,7 @@ import ToolboxPanel from '../Layer/TOCPanel.vue';
 import BusPlannerPanel from '../Routing/BusPlannerPanel.vue';
 import DrivingPlannerPanel from '../Routing/DrivingPlannerPanel.vue';
 import CompassControlPanel from '../Compass/CompassControlPanel.vue';
+import WeatherChartPanel from '../Weather/WeatherChartPanel.vue';
 
 // ========== 1. 热点新闻平台配置 ==========
 const NEWS_PLATFORMS = [
@@ -381,6 +390,11 @@ const props = defineProps({
     clearDriveRouteStepPreview: {
         type: Function,
         default: null,
+    },
+    /** 是否加载天气看板组件（延迟加载优化） */
+    shouldLoadWeather: {
+        type: Boolean,
+        default: false,
     },
 });
 
@@ -797,6 +811,7 @@ onUnmounted(() => {
     line-height: 1.45;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     transition: color 0.2s ease;
@@ -817,6 +832,7 @@ onUnmounted(() => {
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }

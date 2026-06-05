@@ -88,7 +88,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-04 更新）
+## 目录结构（2026-06-05 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -181,6 +181,7 @@ frontend/src/
 │   ├── Shell/                                # 应用壳层
 │   │   ├── TopBar.vue                        # 顶栏
 │   │   ├── SidePanel.vue                     # 右侧综合侧栏
+│   │   ├── ResizeHandle.vue                  # 🆕 可拖拽分割条（侧边栏宽度调整）
 │   │   ├── GlobalLoading.vue                 # 全局加载遮罩
 │   │   ├── Message.vue                       # 全局消息条
 │   │   ├── PersistentAnnouncementBar.vue     # 顶部公告条
@@ -230,6 +231,7 @@ frontend/src/
 │   │   │   ├── actions/                      # 右键菜单动作
 │   │   │   └── menu/                         # 菜单调度
 │   │   ├── basemapSystem.js                  # 底图系统入口
+│   │   ├── GISCommander.js                   # Agent GIS 功能封装（缩放/搜索/底图切换）
 │   │   ├── index.js                          # barrel export
 │   │   └── usePositionCodeTool.js            # p 参数工具
 │   ├── useMapState.js                        # 地图状态（视图同步/经纬图层）
@@ -258,6 +260,7 @@ frontend/src/
 │   │   ├── basemapConfig.ts                  # 图源定义 + 预设配置（1317 行）
 │   │   ├── basemapResolver.ts                # 解析逻辑
 │   │   └── index.ts
+│   ├── agentToolsSchema.js                   # Agent Function Calling 工具声明 + 系统提示词
 │   ├── index.js                              # barrel export
 │   ├── mapStyles.js                          # 地图样式常量
 │   └── tileSourceAdapters.ts                 # 非标准瓦片源适配器
@@ -267,6 +270,8 @@ frontend/src/
 │   └── lazyHomeViewLoader.js                 # HomeView 二段式懒加载
 │
 ├── services/
+│   ├── agent/                                # Agent 服务
+│   │   └── AgentExecutor.js                  # Agent 响应拦截与工具调用执行路由
 │   ├── CompassManager.ts                     # 罗盘管理器
 │   ├── DistrictManager.ts                    # 行政区划管理器
 │   ├── auth.js                               # 鉴权工具
@@ -285,6 +290,7 @@ frontend/src/
 │   ├── useAppStore.ts                        # 全局应用状态
 │   ├── useAttrStore.ts                       # 属性表状态
 │   ├── useAuthStore.ts                       # 鉴权状态
+│   ├── useChatStore.ts                       # Chat 工具调用状态管理
 │   ├── useCompassStore.ts                    # 罗盘状态
 │   ├── useDownloadStore.ts                   # 下载任务状态
 │   ├── useLayerStore.ts                      # 图层状态
@@ -376,15 +382,26 @@ frontend/src/
 ```
 
 ## V3.3.0 (2026-06-05)
-### 🛡️ 前端 404 兜底页面 - 赛博朋克风格
-- ✅ 新增 `NotFoundView.vue` 404 错误页面组件
-- ✅ 赛博朋克 / 高科技 UI 设计
-- ✅ CRT 扫描线 + 绿色霓虹网格 + 脉动光晕
-- ✅ 磨砂玻璃卡片 + Glitch 抖动文字特效
-- ✅ SVG 环形倒计时进度条 + 25 个浮动微尘粒子
-- ✅ 二进制数据流装饰 + 实时错误路径显示
-- ✅ 按钮交互：悬停发光 + 内部光晕扩散
-- ✅ 响应式布局 + 移动端适配
+### 🤖 Chat Function Calling GIS 架构 + 🛡️ 前端 404 兜底页面
+
+**核心架构（Chat Function Calling GIS）：**
+- ✅ 实现三层降级的 Function Calling 架构（原生 → 文本解析 → 关键词意图检测）
+- ✅ 新增 `constants/agentToolsSchema.js`：Agent 工具声明（zoom_to_extent/search_and_zoom/switch_basemap）
+- ✅ 新增 `services/agent/AgentExecutor.js`：Agent 响应拦截与工具调用执行路由
+- ✅ 新增 `composables/map/GISCommander.js`：Agent GIS 功能封装（缩放/搜索/底图切换）
+- ✅ 新增 `stores/useChatStore.ts`：Chat 工具调用状态管理
+- ✅ 新增 `components/Shell/ResizeHandle.vue`：侧边栏可拖拽调整宽度
+
+**修改文件：**
+- ✅ `components/Chat/ChatPanelContent.vue`：核心改造，新增工具调用流程 + 意图检测
+- ✅ `api/backend/agent.js`：API 层新增 tools/tool_choice 参数透传
+- ✅ `components/Map/MapContainer.vue`：新增 setCustomBasemapByUrl 方法
+- ✅ `views/HomeView.vue`：新增 provide/inject 底图切换能力 + ResizeHandle 集成
+- ✅ `components/Shell/SidePanel.vue`：新增天气 tab + shouldLoadWeather prop
+- ✅ `composables/map/features/useLayerControlHandlers.js`：handleLayerChange 改为 async
+
+**404 兜底页面：**
+- ✅ 新增 `views/NotFoundView.vue` 404 错误页面组件（赛博朋克风格）
 - ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
 
 **修改文件：**

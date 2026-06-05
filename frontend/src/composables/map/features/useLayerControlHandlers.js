@@ -94,7 +94,16 @@ export function createLayerControlHandlers({
      * 加载自定义 URL 底图
      */
     async function loadCustomMap() {
-        if (!customMapUrlRef?.value) return;
+        const normalizedUrl = String(customMapUrlRef?.value || '').trim();
+        if (!normalizedUrl) {
+            const emptyMessage = '自定义图源 URL 为空';
+            message?.warning?.(emptyMessage);
+            return {
+                success: false,
+                message: emptyMessage,
+                layerId: 'custom',
+            };
+        }
 
         try {
             /**
@@ -103,7 +112,7 @@ export function createLayerControlHandlers({
              */
             stopLayerNetworkRequests('custom');
 
-            const detected = await createAutoTileSourceFromUrl(customMapUrlRef.value);
+            const detected = await createAutoTileSourceFromUrl(normalizedUrl);
             const customLayer = layerInstances?.custom;
             const layerState = resolveLayerPresentation('custom', customLayer);
 
@@ -115,7 +124,9 @@ export function createLayerControlHandlers({
                 'vector-tile': '矢量切片',
             };
 
-            message?.success?.(`自动识别图源: ${kindTextMap[detected.kind]}（${detected.detail}）`);
+            const kindText = kindTextMap[detected.kind] || detected.kind || '未知图源';
+            const successMessage = `自动识别图源: ${kindText}（${detected.detail}）`;
+            message?.success?.(successMessage);
 
             const isVectorTile = detected.kind === 'vector-tile';
 
@@ -140,27 +151,62 @@ export function createLayerControlHandlers({
                 target.visible = true;
                 refreshLayersState?.();
             }
+
+            emitBaseLayersChange?.();
+
+            return {
+                success: true,
+                message: successMessage,
+                layerId: 'custom',
+                kind: detected.kind,
+                detail: detected.detail,
+                url: normalizedUrl,
+            };
         } catch (error) {
             const errorMessage =
                 error instanceof Error ? error.message : String(error || 'URL格式错误或无法解析');
-            message?.error?.(`加载自定义图源失败: ${errorMessage}`);
+            const failedMessage = `加载自定义图源失败: ${errorMessage}`;
+            message?.error?.(failedMessage);
+            return {
+                success: false,
+                message: failedMessage,
+                layerId: 'custom',
+                url: normalizedUrl,
+            };
         }
     }
 
     /**
      * 统一接收图层切换与自定义 URL 加载
      */
-    function handleLayerChange(payload = {}) {
+    async function handleLayerChange(payload = {}) {
         const nextLayerId = String(payload.layerId || '').trim();
-        if (nextLayerId) {
-            applyBasemapSelection(nextLayerId);
-        }
+        let customLoadResult = null;
 
         if (payload.source === 'custom-url' && customMapUrlRef) {
             customMapUrlRef.value = String(payload.customUrl || '').trim();
             if (customMapUrlRef.value) {
-                void loadCustomMap();
+                customLoadResult = await loadCustomMap();
+            } else {
+                customLoadResult = {
+                    success: false,
+                    message: '自定义图源 URL 为空',
+                    layerId: 'custom',
+                };
             }
+
+            if (customLoadResult?.success === false) {
+                return {
+                    success: false,
+                    message: customLoadResult.message,
+                    layerId: nextLayerId || selectedLayerRef?.value || '',
+                    customLoadResult,
+                };
+            }
+        }
+
+        if (nextLayerId) {
+            applyBasemapSelection(nextLayerId);
         }
 
         if (
@@ -168,8 +214,15 @@ export function createLayerControlHandlers({
             customMapUrlRef?.value &&
             payload.source !== 'custom-url'
         ) {
-            void loadCustomMap();
+            customLoadResult = await loadCustomMap();
         }
+
+        return {
+            success: customLoadResult?.success ?? true,
+            message: customLoadResult?.message || '图层状态已更新',
+            layerId: nextLayerId || selectedLayerRef?.value || '',
+            customLoadResult,
+        };
     }
 
     /**

@@ -196,6 +196,13 @@ WebGIS_Dev/
 │   │   │   ├── Routing/                  # 路线规划（公交/驾车）
 │   │   │   ├── Search/                   # 搜索与数据注入
 │   │   │   ├── Shell/                    # 应用壳层（TopBar/SidePanel/Loading/Message）
+│   │   │   │   ├── TopBar.vue            # 顶栏
+│   │   │   │   ├── SidePanel.vue         # 右侧综合侧栏
+│   │   │   │   ├── ResizeHandle.vue      # 🆕 可拖拽分割条（侧边栏宽度调整）
+│   │   │   │   ├── GlobalLoading.vue     # 全局加载遮罩
+│   │   │   │   ├── Message.vue           # 全局消息条
+│   │   │   │   ├── PersistentAnnouncementBar.vue # 顶部公告条
+│   │   │   │   └── MagicCursor.vue       # 首屏特效
 │   │   │   ├── UserCenter/               # 用户中心（登录/管理/API Key）
 │   │   │   │   ├── tabs/                 # 用户中心子面板（OverviewTab/SecurityTab/PreferencesTab）
 │   │   │   │   └── ...
@@ -236,6 +243,7 @@ WebGIS_Dev/
 │   │   │   │   │   ├── actions/          # 右键菜单动作
 │   │   │   │   │   └── menu/             # 菜单调度
 │   │   │   │   ├── basemapSystem.js      # 底图系统入口
+│   │   │   │   ├── GISCommander.js       # Agent GIS 功能封装（缩放/搜索/底图切换）
 │   │   │   │   └── index.js              # barrel export
 │   │   │   ├── useMapState.js            # 地图状态（视图同步/经纬图层）
 │   │   │   ├── useMapSwipe.ts            # 卷帘核心逻辑
@@ -262,11 +270,14 @@ WebGIS_Dev/
 │   │   │   │   ├── basemapConfig.ts      # 图源定义 + 预设配置
 │   │   │   │   ├── basemapResolver.ts    # 解析逻辑
 │   │   │   │   └── index.ts
+│   │   │   ├── agentToolsSchema.js       # Agent Function Calling 工具声明 + 系统提示词
 │   │   │   ├── index.js                  # barrel export
 │   │   │   ├── mapStyles.js              # 地图样式常量
 │   │   │   └── tileSourceAdapters.ts     # 非标准瓦片源适配器
 │   │   ├── router/                       # Vue Router 路由
 │   │   ├── services/                     # 业务服务层
+│   │   │   ├── agent/                    # Agent 服务
+│   │   │   │   └── AgentExecutor.js      # Agent 响应拦截与工具调用执行路由
 │   │   │   ├── auth.js                   # 鉴权服务（登录/注册/会话管理）
 │   │   │   ├── compass/                  # 罗盘服务模块
 │   │   │   │   ├── urlState.ts           # 罗盘 URL 状态读写
@@ -283,6 +294,7 @@ WebGIS_Dev/
 │   │   │   ├── useAppStore.ts            # 全局应用状态
 │   │   │   ├── useAttrStore.ts           # 属性表状态
 │   │   │   ├── useAuthStore.ts           # 鉴权状态
+│   │   │   ├── useChatStore.ts           # Chat 工具调用状态管理
 │   │   │   ├── useCompassStore.ts        # 罗盘状态
 │   │   │   ├── useDownloadStore.ts       # 下载任务状态
 │   │   │   ├── useLayerStore.ts          # 图层状态
@@ -563,7 +575,30 @@ LOG_LEVEL=INFO
 ## 🔄 更新日志
 
 ### V3.3.0 (2026-06-05)
-#### 🛡️ 前端 404 兜底页面 - 赛博朋克风格
+#### 🤖 Chat Function Calling GIS 架构 + 🛡️ 前端 404 兜底页面
+
+**核心架构（Chat Function Calling GIS）：**
+- ✅ 实现三层降级的 Function Calling 架构（原生 → 文本解析 → 关键词意图检测）
+- ✅ 新增 `agentToolsSchema.js`：Agent 工具声明（zoom_to_extent/search_and_zoom/switch_basemap）
+- ✅ 新增 `AgentExecutor.js`：Agent 响应拦截与工具调用执行路由
+- ✅ 新增 `GISCommander.js`：Agent GIS 功能封装（缩放/搜索/底图切换）
+- ✅ 新增 `useChatStore.ts`：Chat 工具调用状态管理
+- ✅ 新增 `ResizeHandle.vue`：侧边栏可拖拽调整宽度
+
+**后端增强（Function Calling 支持）：**
+- ✅ `schemas.py`：新增 tools/tool_choice 字段
+- ✅ `upstream.py`：透传 tools 给上游 LLM + 提取 tool_calls
+- ✅ `routes.py`：支持 tool_calls 返回
+
+**前端增强：**
+- ✅ `ChatPanelContent.vue`：核心改造，新增工具调用流程 + 意图检测
+- ✅ `agent.js`：API 层新增 tools/tool_choice 参数透传
+- ✅ `MapContainer.vue`：新增 setCustomBasemapByUrl 方法
+- ✅ `HomeView.vue`：新增 provide/inject 底图切换能力 + ResizeHandle 集成
+
+**404 兜底页面：**
+- ✅ 新增 `NotFoundView.vue` 404 错误页面组件（赛博朋克风格）
+- ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
 
 **新增功能：**
 - ✅ 新增 `NotFoundView.vue` 404 错误页面组件
@@ -1535,6 +1570,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-04
-**当前版本**：V3.2.8 (数据与渲染分离架构)
+**最后更新**：2026-06-05
+**当前版本**：V3.3.0 (Chat Function Calling GIS)
 **项目状态**：开发中 - 持续迭代优化

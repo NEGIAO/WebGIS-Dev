@@ -40,8 +40,8 @@ import MapContainer from '../components/Map/MapContainer.vue';
 import MagicCursor from '../components/Shell/MagicCursor.vue';
 import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
 import PersistentAnnouncementBar from '../components/Shell/PersistentAnnouncementBar.vue';
-import WeatherChartPanel from '../components/Weather/WeatherChartPanel.vue';
 import LogMonitor from '../components/ControlsPanel/LogMonitor.vue';
+import ResizeHandle from '../components/Shell/ResizeHandle.vue';
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
@@ -111,11 +111,52 @@ const activeFeature = ref({ key: 'info', label: '新闻' });
 const isAccountPanelOpen = ref(false);
 const isAccountPanelFullscreen = ref(false);
 
+// ========== 侧边面板拖拽调整比例 ==========
+const DEFAULT_SIDE_PANEL_RATIO = 30; // 默认侧边面板占可用空间的 30%
+const MIN_SIDE_PANEL_RATIO = 20;     // 最小占比 20%
+const MAX_SIDE_PANEL_RATIO = 70;     // 最大占比 70%
+const sidePanelRatio = ref(DEFAULT_SIDE_PANEL_RATIO); // 侧边面板宽度占比 (%)
+const isPanelDragging = ref(false); // 是否正在拖拽分割条
+
+/**
+ * 处理拖拽调整比例
+ * ResizeHandle 的 resize 事件返回鼠标位置占 content-section 的百分比（左侧占比）
+ * 侧边面板占比 = 100 - 鼠标左侧占比
+ * @param {number} leftRatio - 鼠标位置占父容器宽度的百分比 (0-100)
+ */
+function handlePanelResize(leftRatio) {
+    isPanelDragging.value = true;
+    const rightRatio = 100 - leftRatio;
+    sidePanelRatio.value = Math.max(MIN_SIDE_PANEL_RATIO, Math.min(MAX_SIDE_PANEL_RATIO, rightRatio));
+}
+
+/** 拖拽结束后通知地图更新尺寸 */
+function handlePanelResizeEnd() {
+    isPanelDragging.value = false;
+    // OpenLayers 地图需要在容器尺寸变化后更新视图
+    nextTick(() => {
+        mapContainerRef.value?.updateSize?.();
+    });
+}
+
 // 组件引用
 const mapContainerRef = ref(null);
 // 从 MapContainer 暴露的 mapInstance 提供给全页面子组件（如 ExtentPicker）
 const olMap = computed(() => mapContainerRef.value?.mapInstance ?? null);
 provide('olMap', olMap);
+
+// 向子组件提供自定义 XYZ 底图切换能力（供 Chat GISCommander 调用）
+const setCustomBasemapByUrl = (url) => {
+    const handler = mapContainerRef.value?.setCustomBasemapByUrl;
+    if (typeof handler !== 'function') {
+        return {
+            success: false,
+            message: '地图容器未就绪，暂时无法切换自定义 XYZ 底图',
+        };
+    }
+    return handler(url);
+};
+provide('setCustomBasemapByUrl', setCustomBasemapByUrl);
 const mapCoreLoadingSettled = ref(false);
 let sidePanelWarmupTimer = null;
 let sidePanelWarmupIdleId = null;
@@ -523,18 +564,24 @@ function handleCloseChat() {
 function toggleWeatherBoardMode() {
     const openingWeather = !isWeatherBoardMode.value;
 
-    if (openingWeather && !shouldLoadWeatherChartPanel.value) {
-        shouldLoadWeatherChartPanel.value = true;
-    }
-
-    isWeatherBoardMode.value = openingWeather;
-
     if (openingWeather) {
+        // 打开天气看板：加载组件、展开 SidePanel 并切换到 weather tab
+        if (!shouldLoadWeatherChartPanel.value) {
+            shouldLoadWeatherChartPanel.value = true;
+        }
+        if (!shouldLoadSidePanel.value) {
+            shouldLoadSidePanel.value = true;
+        }
+        activeSidePanelTab.value = 'weather';
+        isSidePanelCollapsed.value = false;
         is3DMode.value = false;
         activeFeature.value = { key: 'weather-board', label: '天气看板' };
     } else {
+        // 关闭天气看板：切回默认新闻 tab
+        activeSidePanelTab.value = 'info';
         activeFeature.value = { key: 'map', label: '地图视图' };
     }
+    isWeatherBoardMode.value = openingWeather;
 }
 
 /** 切换 2D/3D 视图 */
@@ -943,7 +990,7 @@ onMounted(async () => {
                 <Suspense>
                     <template #default>
                         <MapContainer
-                            v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            v-show="!is3DMode && !isAccountPanelFullscreen"
                             ref="mapContainerRef"
                             @map-core-ready="handleMapCoreReady"
                             @map-core-failed="handleMapCoreFailed"
@@ -958,7 +1005,7 @@ onMounted(async () => {
                     </template>
                     <template #fallback>
                         <div
-                            v-show="!is3DMode && !isWeatherBoardMode && !isAccountPanelFullscreen"
+                            v-show="!is3DMode && !isAccountPanelFullscreen"
                             class="map-runtime-loading"
                         >
                             地图核心资源加载中...
@@ -966,22 +1013,11 @@ onMounted(async () => {
                     </template>
                 </Suspense>
 
-                <component
-                    :is="WeatherChartPanel"
-                    v-if="
-                        isWeatherBoardMode &&
-                        shouldLoadWeatherChartPanel &&
-                        !isAccountPanelFullscreen
-                    "
-                    class="weather-board-surface"
-                />
-
                 <transition name="query-panel-fade">
                     <div
                         v-if="
                             showQueryPanel &&
                             !is3DMode &&
-                            !isWeatherBoardMode &&
                             !isAccountPanelFullscreen
                         "
                         class="eco-query-panel"
@@ -1056,10 +1092,27 @@ onMounted(async () => {
                 :visible="logMonitorVisible"
             />
 
+            <!-- 可拖拽分割条：仅在侧边面板展开时显示 -->
+            <ResizeHandle
+                v-if="!isSidePanelCollapsed"
+                direction="horizontal"
+                :min-size="MIN_SIDE_PANEL_RATIO"
+                :max-size="MAX_SIDE_PANEL_RATIO"
+                :initial-ratio="DEFAULT_SIDE_PANEL_RATIO"
+                class="panel-resize-handle"
+                @resize="handlePanelResize"
+                @resize-end="handlePanelResizeEnd"
+            />
+
             <!-- 侧边容器栏（右）-->
             <div
                 class="side-panel-wrapper"
-                :class="{ collapsed: isSidePanelCollapsed, 'weather-mode': isWeatherBoardMode }"
+                :class="{
+                    collapsed: isSidePanelCollapsed,
+                    'weather-mode': isWeatherBoardMode,
+                    'is-dragging': isPanelDragging
+                }"
+                :style="!isSidePanelCollapsed ? { width: sidePanelRatio + '%' } : {}"
             >
                 <!-- 使用v-if延迟加载SidePanel，避免初始化时加载大量图片资源 -->
                 <SidePanel
@@ -1074,6 +1127,7 @@ onMounted(async () => {
                     :toolbox-overview="toolboxOverview"
                     :upload-progress="uploadProgress"
                     :latest-search-poi="latestSearchPoi"
+                    :should-load-weather="shouldLoadWeatherChartPanel"
                     :get-user-location="getMapUserLocation"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
@@ -1489,7 +1543,7 @@ onMounted(async () => {
 }
 
 .side-panel-wrapper {
-    width: 400px;
+    width: 30%;
     flex-shrink: 0;
     background: #f5f5f5;
     border-radius: 10px;
@@ -1501,10 +1555,24 @@ onMounted(async () => {
         width 0.3s ease,
         height 0.3s ease;
     z-index: 2;
+    min-width: 200px;
 }
 
 .side-panel-wrapper.collapsed {
     width: 0px;
+    min-width: 0;
+    transition: width 0.3s ease, min-width 0.3s ease;
+}
+
+/* 拖拽过程中禁用过渡动画，避免延迟 */
+.side-panel-wrapper.is-dragging {
+    transition: none;
+}
+
+/* 可拖拽分割条样式 */
+.panel-resize-handle {
+    height: 100%;
+    flex-shrink: 0;
 }
 
 /* 侧边栏占位符样式 */
