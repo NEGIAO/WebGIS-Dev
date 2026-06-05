@@ -126,10 +126,9 @@
 
 <script setup>
 import { onMounted } from 'vue';
-import { getAuthToken } from '../services/auth';
 import { useRouter } from 'vue-router';
 
-const router = useRouter();
+useRouter();
 
 onMounted(() => {
     document.title = '服务条款 - NEGIAO\'s WebGIS';

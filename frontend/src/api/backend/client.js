@@ -34,7 +34,7 @@ if (import.meta.env.DEV) {
  */
 const backendAPI = axios.create({
     baseURL: backendURL,
-    timeout: 8000,
+    timeout: 20000,
     headers: {
         'Content-Type': 'application/json',
     },

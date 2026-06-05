@@ -6,9 +6,9 @@
   Parent passes draft state and options; save actions bubble up via emits.
 -->
 <script setup>
-import { computed } from 'vue';
+// PreferencesTab — no extra imports needed
 
-const props = defineProps({
+defineProps({
     /** Draft preferences object { default_basemap, language, unit_system, preferred_agent_model } */
     preferenceDraft: {
         type: Object,

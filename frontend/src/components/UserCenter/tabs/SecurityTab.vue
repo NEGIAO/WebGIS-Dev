@@ -9,7 +9,7 @@
 <script setup>
 import { ref } from 'vue';
 
-const props = defineProps({
+defineProps({
     /** Current user object (used to check role) */
     user: {
         type: Object,

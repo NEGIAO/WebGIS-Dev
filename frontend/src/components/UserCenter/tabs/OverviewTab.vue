@@ -6,9 +6,9 @@
   Parent passes data via props; user interactions bubble up via emits.
 -->
 <script setup>
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 
-const props = defineProps({
+defineProps({
     /** Personal statistics object (registered_at, login_count, etc.) */
     selfStats: {
         type: Object,
