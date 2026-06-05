@@ -298,6 +298,10 @@ frontend/src/
 ├── data/                                     # 应用数据（纯数据模块）
 │   └── goldenSoupQuotes.js                   # 励志语录数据（1454 行，懒加载）
 │
+├── workers/                                  # Web Worker（后台线程处理）
+│   ├── tiffWorker.js                         # TIF 解码 Worker（geotiff.js 多线程解码）
+│   └── shpWorker.js                          # Shapefile 解析 Worker（shpjs 后台解析）
+│
 ├── utils/                                    # 工具函数
 │   ├── abortManager.js                       # 通用请求中断管理器（AbortController 封装）
 │   ├── pathUtils.js                          # 路径工具（统一 normalizePath/getExtension/getStem）
@@ -305,6 +309,8 @@ frontend/src/
 │   ├── normalize.ts                          # 二值标记规范化（normalizeBinaryFlag）
 │   ├── coordTransform.js                     # 坐标转换（GCJ-02/WGS84）
 │   ├── crsUtils.js                           # CRS 检测与注册（EPSG/WKT/proj4）
+│   ├── tifUtils.js                           # TIF 工具（Worker 调用/图层创建/样式生成）
+│   ├── vectorWorkerUtils.js                  # 矢量 Worker 工具（SHP Worker/requestIdleCallback）
 │   ├── coordinateFormatter.js                # 坐标格式化（DMS/十进制）
 │   ├── coordinateInputHandler.js             # 坐标输入处理
 │   ├── labelValidator.ts                     # 标签校验

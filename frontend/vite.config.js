@@ -63,6 +63,11 @@ export default defineConfig(({ command, mode }) => {
       }
       : undefined,
 
+    // Web Worker 配置：使用 ES 模块格式（支持 code-splitting）
+    worker: {
+      format: 'es',
+    },
+
     // 构建配置
     build: {
       sourcemap: !isProductionLikeBuild,

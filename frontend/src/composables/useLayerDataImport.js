@@ -38,6 +38,7 @@ import {
     pickFeatureLabelField,
     renderBandsToCanvas,
 } from './dataImport';
+import { loadTifInWorker, isLargeFile } from '../utils/tifUtils';
 
 /** 栅格图层默认 z-index，确保栅格在矢量之下 */
 const RASTER_LAYER_Z_INDEX = 120;
@@ -535,21 +536,49 @@ export function useLayerDataImport({
         nodataValue = null,
         stretchRange = null,
         packet = null,
+        /** 传入 File 对象时，大文件走 Worker 解码路径 */
+        file = null,
     }) {
         if (!mapInstance.value) return null;
 
-        const geotiffFromBlob = await getGeotiffFromBlob();
-        const pool = await getPool();
-        const tiff = await geotiffFromBlob(blob);
-        const image = await tiff.getImage();
-        const width = image.getWidth();
-        const height = image.getHeight();
+        let width, height, bands, workerNodata;
 
-        // 使用 Worker Pool 多线程解码 TIF（LZW/Deflate 解压在后台线程执行）
-        const readOpts = pool ? { pool } : {};
-        const rasters = await image.readRasters(readOpts);
+        // 大文件（>50MB）：用 Worker 解码，不阻塞主线程
+        if (file && isLargeFile(file)) {
+            reportImportProgress({
+                phase: 'decoding',
+                message: `正在后台解码大 TIF 文件：${name}（0%）`,
+            });
+            const decoded = await loadTifInWorker(file, (progress, phase) => {
+                reportImportProgress({
+                    phase: phase || 'decoding',
+                    message: `正在后台解码大 TIF 文件：${name}（${progress}%）`,
+                });
+            });
+            width = decoded.width;
+            height = decoded.height;
+            bands = decoded.data; // Float32Array[]
+            workerNodata = decoded.nodata;
+            if (nodataValue === null && workerNodata !== null && workerNodata !== undefined) {
+                nodataValue = workerNodata;
+            }
+            reportImportProgress({
+                phase: 'decoding',
+                message: `解码完成：${name}（${decoded.elapsed}ms）`,
+            });
+        } else {
+            // 小文件：主线程直接解码，使用 Worker Pool 并行解压
+            const geotiffFromBlob = await getGeotiffFromBlob();
+            const pool = await getPool();
+            const tiff = await geotiffFromBlob(blob);
+            const image = await tiff.getImage();
+            width = image.getWidth();
+            height = image.getHeight();
 
-        const bands = Array.isArray(rasters) ? rasters : [rasters];
+            const readOpts = pool ? { pool } : {};
+            const rasters = await image.readRasters(readOpts);
+            bands = Array.isArray(rasters) ? rasters : [rasters];
+        }
         const bandStats = bands.slice(0, 3).map(getBandMinMax);
         const alphaStats = bands.length >= 4 ? getBandMinMax(bands[3]) : null;
         const isSingleBand = bands.length === 1;
@@ -739,6 +768,8 @@ export function useLayerDataImport({
         url = null,
         fitView = false,
         packet = null,
+        /** 传入原始 File 对象，用于大文件 Worker 解码路径 */
+        file = null,
     }) {
         if (!mapInstance.value) return null;
         if (!url && !(data instanceof ArrayBuffer)) return null;
@@ -837,6 +868,7 @@ export function useLayerDataImport({
                 nodataValue,
                 stretchRange: singleBandStretch,
                 packet,
+                file,
             });
         }
 
@@ -1144,7 +1176,7 @@ export function useLayerDataImport({
         throw new Error(`不支持的文件类型: ${normalizedType || type}`);
     }
 
-    async function importDispatchedPackets(dispatched, normalizedType, name, batchLabel) {
+    async function importDispatchedPackets(dispatched, normalizedType, name, batchLabel, tifFile = null) {
         const packets = Array.isArray(dispatched.packets)
             ? dispatched.packets
             : dispatched.packet
@@ -1186,6 +1218,7 @@ export function useLayerDataImport({
                         data: packet.arrayBuffer,
                         fitView: importedCount === 0,
                         packet,
+                        file: tifFile,
                     });
                     importedCount += 1;
                     continue;
@@ -1359,13 +1392,22 @@ export function useLayerDataImport({
      * @param {string} params.name - 文件名
      * @param {Array|null} [params.resources=null] - 文件夹导入时的资源列表
      */
-    async function addUserDataLayer({ content, type, name, resources }) {
+    async function addUserDataLayer({ content, type, name, resources, file = null }) {
         if (!mapInstance.value) return;
         try {
             const isFolderImport = Array.isArray(resources) && resources.length > 0;
             const normalizedType = isFolderImport
                 ? 'directory'
                 : getNormalizedUploadType(type, name);
+
+            // 从 resources 中提取 TIF File 对象，用于大文件 Worker 解码路径
+            let tifFile = file;
+            if (!tifFile && isFolderImport && resources.length === 1) {
+                const rName = resources[0]?.name || '';
+                if (/\.(tiff?|tif)$/i.test(rName)) {
+                    tifFile = resources[0];
+                }
+            }
             reportImportProgress({
                 phase: 'validating',
                 message: `正在校验文件：${name || (isFolderImport ? '文件夹导入' : '未命名文件')}`,
@@ -1394,6 +1436,7 @@ export function useLayerDataImport({
                         : normalizedType === 'kmz'
                           ? 'KMZ 批量导入'
                           : 'ZIP 批量导入',
+                    tifFile,
                 );
 
                 return;
@@ -1410,6 +1453,7 @@ export function useLayerDataImport({
                     sourceType: 'upload',
                     data: buffer,
                     fitView: true,
+                    file,
                 });
                 reportImportProgress({
                     phase: 'done',
