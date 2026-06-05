@@ -52,7 +52,9 @@ export function looksLikeXYZTemplate(url: string): boolean {
 }
 
 export function looksLikeVectorTileUrl(url: string): boolean {
-    return /\.pbf(\?|$)/i.test(url) || /\.mvt(\?|$)/i.test(url) || /\/tiles?\//i.test(url);
+    // 仅基于文件扩展名(.pbf/.mvt)检测矢量切片
+    // 移除过于宽泛的 /tile(s)?/ 检测，避免误判标准 XYZ 栅格切片（如 ArcGIS tile 服务）
+    return /\.pbf(\?|$)/i.test(url) || /\.mvt(\?|$)/i.test(url);
 }
 
 export function toErrorMessage(error: unknown): string {
