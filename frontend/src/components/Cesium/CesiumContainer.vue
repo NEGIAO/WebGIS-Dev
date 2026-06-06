@@ -825,6 +825,18 @@ async function loadCustomTileset() {
     white-space: nowrap;
 }
 
+/* 平板适配 */
+@media (max-width: 1024px) {
+    .wind-controls {
+        min-width: auto;
+        width: 85%;
+    }
+
+    .map-controls-group {
+        width: 85%;
+    }
+}
+
 @media (max-width: 768px) {
     .map-controls-group {
         width: 90%;

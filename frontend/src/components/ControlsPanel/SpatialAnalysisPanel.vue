@@ -968,6 +968,13 @@ function showResult(type, msg) {
     margin-top: 4px;
 }
 
+/* 平板/移动端适配 */
+@media (max-width: 768px) {
+    .spatial-panel {
+        width: 180px;
+    }
+}
+
 .bbox-actions .fetch-bbox-btn {
     flex: 1;
     margin-top: 0;

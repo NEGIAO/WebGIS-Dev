@@ -347,6 +347,19 @@ defineProps({
     line-height: 1.45;
 }
 
+/* 平板适配：缩小表格最小宽度，减少水平滚动 */
+@media (max-width: 1024px) {
+    .forecast-table {
+        min-width: 700px;
+    }
+
+    .forecast-table th,
+    .forecast-table td {
+        padding: 4px 5px;
+        font-size: 11px;
+    }
+}
+
 /* 响应式 */
 @media (max-width: 1200px) {
     .details-layout {

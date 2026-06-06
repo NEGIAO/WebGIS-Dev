@@ -538,6 +538,8 @@ const getBasemapLabel = (id) => {
     border-radius: 12px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     min-width: 380px;
+    max-width: 90vw;
+    /* 安全兜底：防止在窄屏幕上溢出 */
     overflow: hidden;
     animation: dialogSlideIn 0.3s ease-out;
 }

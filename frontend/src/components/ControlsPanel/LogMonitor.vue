@@ -554,6 +554,47 @@ onUnmounted(() => closeConnection());
     }
 }
 
+/* 平板适配 (Pad: 769px ~ 1024px) */
+@media (max-width: 1024px) {
+    .webgis-log-panel {
+        width: 60%;
+        /* Pad 上比 PC 端更宽，保证日志可读 */
+    }
+
+    .panel-header {
+        padding: 6px 8px;
+        gap: 6px;
+    }
+
+    .status-info {
+        gap: 6px;
+    }
+
+    .header-actions {
+        gap: 4px;
+    }
+
+    .action-btn {
+        padding: 3px 8px;
+        font-size: 10px;
+    }
+
+    /* Pad 上隐藏分隔线节省空间 */
+    .divider {
+        display: none;
+    }
+
+    .log-line {
+        font-size: 11px;
+        gap: 8px;
+        padding: 1px 8px;
+    }
+
+    .lock-text {
+        font-size: 10px;
+    }
+}
+
 /* 移动端适配 */
 @media (max-width: 768px) {
     .webgis-log-panel {

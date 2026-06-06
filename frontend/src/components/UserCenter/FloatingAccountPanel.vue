@@ -1294,7 +1294,8 @@ onBeforeUnmount(() => {
 }
 
 .account-panel {
-    width: 420px;
+    width: min(420px, 96vw);
+    /* 安全兜底：防止在窄屏设备上溢出 */
     border: 1px solid rgba(var(--brand-primary-rgb), 0.28);
     border-radius: 14px;
     background: linear-gradient(

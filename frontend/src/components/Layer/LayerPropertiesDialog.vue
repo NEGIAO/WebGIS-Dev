@@ -137,7 +137,8 @@ const extent = computed(() => {
     border-radius: var(--toc-radius-lg);
     box-shadow: var(--toc-shadow-dialog);
     min-width: 360px;
-    max-width: 480px;
+    max-width: min(480px, 90vw);
+    /* 安全兜底：防止在窄屏幕上溢出 */
     overflow: hidden;
     animation: dialogSlideIn var(--toc-transition-slow);
 }

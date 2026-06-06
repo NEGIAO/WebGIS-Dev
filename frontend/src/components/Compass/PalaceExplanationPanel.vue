@@ -592,6 +592,13 @@ $feng-shui-green: #2d5016;
     }
 }
 
+// 平板适配
+@media (max-width: 1024px) {
+    .palace-panel-wrapper {
+        width: 320px;
+    }
+}
+
 // 响应式
 @media (max-width: 768px) {
     .palace-panel-wrapper {

@@ -175,8 +175,8 @@ function handleSplitterTouchStart(e: TouchEvent) {
     isDragging.value = true;
     const touch = e.touches[0];
     dragStartPos.value = { x: touch.clientX, y: touch.clientY };
-    document.addEventListener('touchmove', handleTouchMove);
-    document.addEventListener('touchend', handleTouchEnd);
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
     e.preventDefault();
 }
 
@@ -189,6 +189,7 @@ function handleTouchMove(e: TouchEvent) {
     if (!isDragging.value || !props.containerRect) return;
     const touch = e.touches[0];
     updateSwipePositionFromEvent(touch.clientX, touch.clientY);
+    e.preventDefault(); // 阻止页面滚动，确保拖拽滑块时地图不跟随移动
 }
 
 function handleMouseUp() {
@@ -307,6 +308,27 @@ onUnmounted(() => {
     pointer-events: auto;
     box-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.2);
     transition: box-shadow 0.2s ease-out;
+    touch-action: none;
+}
+
+/* 移动端触摸热区扩展：通过伪元素增加可触摸区域 */
+.swipe-splitter::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 24px;
+    height: 100%;
+    z-index: -1;
+}
+
+.swipe-splitter.vertical::before {
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    width: 100%;
+    height: 24px;
 }
 
 .swipe-splitter:hover,
@@ -376,6 +398,8 @@ onUnmounted(() => {
     transition: all 0.2s ease-out;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .control-btn:hover {
@@ -413,24 +437,41 @@ onUnmounted(() => {
 /* ========== 响应式设计 ========== */
 @media (max-width: 576px) {
     .swipe-handle {
-        width: 32px;
-        height: 32px;
+        width: 40px;
+        height: 40px;
     }
 
     .handle-icon {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
+    }
+
+    /* 移动端触摸热区扩展至 36px */
+    .swipe-splitter::before {
+        width: 36px;
+    }
+
+    .swipe-splitter.vertical::before {
+        width: 100%;
+        height: 36px;
     }
 
     .swipe-controls {
         bottom: 12px;
         left: 12px;
-        gap: 6px;
+        gap: 10px;
     }
 
+    /* 移动端按钮保持符合触摸规范的尺寸 (>= 44px 含间距) */
     .control-btn {
-        width: 32px;
-        height: 32px;
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+    }
+
+    .control-btn svg {
+        width: 20px;
+        height: 20px;
     }
 
     .position-label {
