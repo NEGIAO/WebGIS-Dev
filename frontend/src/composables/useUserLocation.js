@@ -7,6 +7,7 @@ import { useMessage } from '@/composables/useMessage';
 import { saveUserPositionToCache } from '../services/userPositionCache';
 import { setGlobalUserLocationContext } from '../services/userLocationContext';
 import { normalizeBinaryFlag } from '../utils/normalize';
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
 
 const _TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
 
@@ -245,7 +246,9 @@ export function useUserLocation({
                     });
                     geocode = geocodeResponse?.data || null;
                     if (geocode) {
-                        const reverseResponse = await apiLocationReverse(geocode.lng, geocode.lat, {
+                        // 高德逆地理编码要求 GCJ-02 坐标，geocode 坐标已为 WGS-84，需转换
+                        const [gcjLng, gcjLat] = wgs84ToGcj02(geocode.lng, geocode.lat);
+                        const reverseResponse = await apiLocationReverse(gcjLng, gcjLat, {
                             preferService: 'auto',
                             silent: true,
                         });
@@ -261,7 +264,11 @@ export function useUserLocation({
                     estimateExtentAccuracyMeters(location.extent),
                 );
                 // [Fix] 当 geocode 失败时，使用 IP extent 中心作为坐标回退
-                const center = getExtentCenter(location.extent);
+                // 高德 IP 定位 extent 为 GCJ-02，需转换为 WGS-84
+                const rawCenter = getExtentCenter(location.extent);
+                const center = rawCenter
+                    ? (() => { const [cLon, cLat] = gcj02ToWgs84(rawCenter.lon, rawCenter.lat); return { lon: cLon, lat: cLat }; })()
+                    : null;
                 const encodedLocation = reverseGeocode
                     ? {
                           ...reverseGeocode,
@@ -354,10 +361,12 @@ export function useUserLocation({
                 return null;
 
             const accuracyMeters = estimateExtentAccuracyMeters(ipResult.extent);
+            // 高德 IP 定位返回 GCJ-02 坐标，统一转换为 WGS-84 以保持坐标系一致性
+            const [wgsLon, wgsLat] = gcj02ToWgs84(center.lon, center.lat);
             return {
                 source: 'ip',
-                lon: center.lon,
-                lat: center.lat,
+                lon: wgsLon,
+                lat: wgsLat,
                 accuracyMeters,
                 ipResult,
             };
@@ -548,7 +557,9 @@ export function useUserLocation({
                 const reverseController = new AbortController();
                 const reverseTimeout = setTimeout(() => reverseController.abort(), 8000);
 
-                const reverseResponse = await apiLocationReverse(selected.lon, selected.lat, {
+                // 高德逆地理编码要求 GCJ-02 坐标，selected 坐标已统一为 WGS-84，需转换
+                const [gcjLng, gcjLat] = wgs84ToGcj02(selected.lon, selected.lat);
+                const reverseResponse = await apiLocationReverse(gcjLng, gcjLat, {
                     preferService: 'auto',
                     silent: true,
                     signal: reverseController.signal,
