@@ -333,17 +333,21 @@ onUnmounted(() => closeConnection());
 .panel-header {
     background: #18181b;
     padding: 6px 12px;
-    height: 36px;
+    min-height: 36px;
+    height: auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid #27272a;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 
 .status-info {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: wrap;
 }
 
 .title {
@@ -370,6 +374,7 @@ onUnmounted(() => closeConnection());
 .header-actions {
     display: flex;
     gap: 6px;
+    flex-wrap: wrap;
 }
 
 .action-btn {
@@ -382,6 +387,10 @@ onUnmounted(() => closeConnection());
     cursor: pointer;
     transition: all 0.2s;
     border: 1px solid transparent;
+    white-space: nowrap;
+    /* 防止按钮文字换行 */
+    flex-shrink: 0;
+    /* 防止按钮被压缩 */
 }
 
 .action-btn.secondary {
@@ -496,6 +505,8 @@ onUnmounted(() => closeConnection());
     cursor: pointer;
     padding: 2px 4px;
     user-select: none;
+    white-space: nowrap;
+    /* 防止文字换行 */
 }
 
 .custom-checkbox {
@@ -554,16 +565,73 @@ onUnmounted(() => closeConnection());
     }
 }
 
-/* 平板适配 (Pad: 769px ~ 1024px) */
-@media (max-width: 1024px) {
+/* 平板横屏适配 (iPad 横屏: 1024px ~ 1366px) */
+@media (min-width: 1024px) and (max-width: 1366px) {
+    .webgis-log-panel {
+        width: 50%;
+        /* iPad 横屏适中宽度 */
+        min-width: 400px;
+        /* 增加最小宽度，确保按钮有足够空间 */
+    }
+
+    .panel-header {
+        padding: 8px 12px;
+        gap: 8px;
+        min-height: 44px;
+        /* 增加最小高度 */
+    }
+
+    .status-info {
+        gap: 10px;
+    }
+
+    .header-actions {
+        gap: 10px;
+        flex-wrap: nowrap;
+        /* 防止按钮换行 */
+    }
+
+    .action-btn {
+        padding: 6px 14px;
+        font-size: 12px;
+        min-height: 34px;
+        /* 增加触摸区域 */
+        white-space: nowrap;
+        /* 防止文字换行 */
+        flex-shrink: 0;
+        /* 防止按钮被压缩 */
+    }
+
+    /* 隐藏 Lock scroll 节省空间 */
+    .lock-scroll-option {
+        display: none;
+    }
+
+    /* 隐藏分隔线节省空间 */
+    .divider {
+        display: none;
+    }
+
+    .log-line {
+        font-size: 12px;
+        gap: 10px;
+        padding: 2px 12px;
+    }
+}
+
+/* 平板竖屏适配 (Pad: 769px ~ 1023px) */
+@media (min-width: 769px) and (max-width: 1023px) {
     .webgis-log-panel {
         width: 60%;
         /* Pad 上比 PC 端更宽，保证日志可读 */
+        min-width: 280px;
+        /* 最小宽度保证 */
     }
 
     .panel-header {
         padding: 6px 8px;
         gap: 6px;
+        min-height: 36px;
     }
 
     .status-info {
@@ -571,16 +639,24 @@ onUnmounted(() => closeConnection());
     }
 
     .header-actions {
-        gap: 4px;
+        gap: 6px;
     }
 
     .action-btn {
-        padding: 3px 8px;
-        font-size: 10px;
+        padding: 5px 10px;
+        font-size: 11px;
+        min-height: 30px;
+        /* 保证触摸区域 */
+        white-space: nowrap;
+        /* 防止文字换行 */
     }
 
-    /* Pad 上隐藏分隔线节省空间 */
+    /* Pad 上隐藏分隔线和 Lock scroll 节省空间 */
     .divider {
+        display: none;
+    }
+
+    .lock-scroll-option {
         display: none;
     }
 
@@ -600,8 +676,10 @@ onUnmounted(() => closeConnection());
     .webgis-log-panel {
         width: 100%;
         /* 移动端占满宽度 */
-        height: 50vh;
-        /* 在移动端通常作为底部面板，占半屏高度 */
+        height: 35vh;
+        /* 移动端更紧凑，避免与其他面板冲突 */
+        min-height: 200px;
+        /* 最小高度保证基本可用 */
         border-radius: 0;
         /* 移动端边缘通常不需要圆角 */
     }
@@ -628,15 +706,18 @@ onUnmounted(() => closeConnection());
         width: 100%;
         justify-content: space-between;
         /* 按钮横向平铺 */
+        gap: 8px;
     }
 
-    /* 移动端缩小按钮间距和文字，腾出空间 */
+    /* 移动端按钮优化：更大的触摸区域 */
     .action-btn {
-        padding: 4px 8px;
+        padding: 8px 12px;
         flex: 1;
         /* 让按钮平分宽度 */
         justify-content: center;
-        font-size: 10px;
+        font-size: 12px;
+        min-height: 36px;
+        /* 保证触摸区域足够大 */
     }
 
     /* 隐藏一些次要的装饰元素，节省空间 */
@@ -644,21 +725,35 @@ onUnmounted(() => closeConnection());
         display: none;
     }
 
-    .lock-text {
-        font-size: 10px;
+    .lock-scroll-option {
+        padding: 4px;
     }
 
-    /* 针对极窄屏幕（如 iPhone SE）进一步优化 */
-    @media (max-width: 380px) {
-        .title {
-            display: none;
-            /* 隐藏 TERMINAL 字样，保留图标 */
-        }
+    .lock-text {
+        font-size: 11px;
+    }
 
-        .action-btn span {
-            display: none;
-            /* 只显示图标，隐藏按钮文字 */
-        }
+    .custom-checkbox {
+        width: 16px;
+        height: 16px;
+    }
+}
+
+/* 针对极窄屏幕（如 iPhone SE）进一步优化 */
+@media (max-width: 380px) {
+    .webgis-log-panel .title {
+        display: none;
+        /* 隐藏 TERMINAL 字样，保留图标 */
+    }
+
+    .webgis-log-panel .action-btn .btn-label {
+        display: none;
+        /* 只显示图标，隐藏按钮文字 */
+    }
+
+    .webgis-log-panel .action-btn {
+        padding: 8px;
+        min-width: 36px;
     }
 }
 </style>

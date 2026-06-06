@@ -424,6 +424,8 @@ WebGIS_Dev/
 │   │   └── 2026-06-03-ring-explosion-effect.md  # 圆环粒子特效开发日志
 │   ├── 26-06-04/                         # Agent Chat 默认 AI 配置
 │   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
+│   ├── 06-06/                            # 2026年6月6日日志
+│   │   └── 2026-06-06-log-monitor-mobile-pad-fix.md  # LogMonitor 移动端/Pad 适配修复
 │   └── TODO/                             # 待办事项
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
@@ -573,6 +575,29 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.3.1 (2026-06-06)
+#### 📱 LogMonitor + MapSwipeController 移动端/Pad 适配修复
+
+**问题修复：**
+- ✅ 修复移动端无法打开日志监控面板的问题（ControlsPanel 在移动端被隐藏）
+- ✅ 在 TopBar 菜单中新增日志监控入口，移动端用户可直接访问
+- ✅ 优化 LogMonitor 在 Pad 上的面板头部布局，支持自动换行
+- ✅ 增大移动端按钮触摸区域（min-height: 36px），提升触控体验
+- ✅ 移动端面板高度调整为 35vh，避免与 SidePanel 布局冲突
+- ✅ 极窄屏幕（≤380px）隐藏按钮文字，只显示图标
+- ✅ 新增 MapSwipeController 移动端控制面板（预设按钮 + 滑块）
+- ✅ 移动端卷帘分析支持快速切换 25%、50%、75% 位置
+- ✅ 修复 iPad 横屏（1024px ~ 1366px）按钮文字换行问题，增加面板最小宽度
+
+**修改文件：**
+- `frontend/src/components/Shell/TopBar.vue`：新增日志监控菜单入口
+- `frontend/src/components/ControlsPanel/LogMonitor.vue`：响应式布局优化
+- `frontend/src/components/Map/MapSwipeController.vue`：新增移动端控制面板
+
+详见 [开发日志](./Docs/06-06/2026-06-06-log-monitor-mobile-pad-fix.md)
+
+---
 
 ### V3.3.0 (2026-06-05)
 #### 🤖 Chat Function Calling GIS 架构 + 🛡️ 前端 404 兜底页面
@@ -1570,6 +1595,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-05
-**当前版本**：V3.3.0 (Chat Function Calling GIS)
+**最后更新**：2026-06-06
+**当前版本**：V3.3.1 (LogMonitor 移动端/Pad 适配)
 **项目状态**：开发中 - 持续迭代优化

@@ -627,6 +627,42 @@ MIT
 
 ## 版本记录
 
+### V3.3.1 (2026-06-06)
+#### 📱 LogMonitor 移动端/Pad 适配修复
+
+**修改：**
+- `components/Shell/TopBar.vue`：
+  - 新增 `ActivityIcon` 图标导入
+  - 新增 `useAppStore` 和 `storeToRefs` 导入
+  - 新增 `logMonitorVisible` 响应式状态
+  - 新增 `handleToggleLogMonitor()` 函数
+  - 浮动菜单中新增"日志监控"入口按钮
+
+- `components/ControlsPanel/LogMonitor.vue`：
+  - **基础样式重构**：`.panel-header` 改为 `min-height: 36px` + `height: auto` + `flex-wrap: wrap`
+  - **按钮防换行**：`.action-btn` 添加 `white-space: nowrap` + `flex-shrink: 0`
+  - **iPad 横屏适配**（1024px ~ 1366px）：50% 宽度 + 最小宽度 400px + 按钮优化
+  - **Pad 竖屏适配**（769px ~ 1023px）：60% 宽度 + 隐藏 Lock scroll
+  - **移动端适配**（≤768px）：面板高度 35vh + 按钮 min-height: 36px
+  - **极窄屏适配**（≤380px）：隐藏按钮文字，只显示图标
+  - **iPad 横屏按钮修复**：增加面板最小宽度，优化按钮内边距，防止"复制全部"和"开启"按钮文字换行
+
+- `components/Map/MapSwipeController.vue`：
+  - **新增移动端控制面板**：预设位置按钮（25%、50%、75%）+ 滑块控件
+  - **新增函数**：`setPresetPosition()` 预设切换、`handleSliderInput()` 滑块处理
+  - **新增样式**：`.mobile-controls`、`.preset-buttons`、`.slider-control` 等
+  - **响应式显示**：仅在移动端（≤576px）显示控制面板
+
+**解决的问题：**
+- 移动端用户无法打开日志监控面板（ControlsPanel 被隐藏）
+- iPad 横屏"复制全部"文字垂直显示
+- "开启"开关在 Pad 上无法显示
+- 移动端卷帘分析滑块操作困难，需要长按才能拖拽
+
+详见 [开发日志](../Docs/06-06/2026-06-06-log-monitor-mobile-pad-fix.md)
+
+---
+
 ### V3.2.7 (2026-06-04)
 #### 🤖 Agent Chat 默认 AI 专属配置模式
 

@@ -96,6 +96,18 @@
                         {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
                     </button>
 
+                    <button
+                        class="menu-item"
+                        @click="handleToggleLogMonitor"
+                    >
+                        <activity-icon
+                            :size="16"
+                            :color="logMonitorVisible ? '#4ADE80' : '#94A3B8'"
+                            class="m-icon"
+                        />
+                        {{ logMonitorVisible ? '关闭日志监控' : '日志监控' }}
+                    </button>
+
                     <div class="menu-divider"></div>
                     <div class="menu-group-title">常用地点</div>
                     <button
@@ -325,8 +337,11 @@ import {
     CircleX as CircleXIcon,
     Circle as CircleIcon,
     User as UserIcon,
+    Activity as ActivityIcon,
 } from 'lucide-vue-next';
 import { Globe as GlobeIcon } from 'lucide-vue-next';
+import { useAppStore } from '../../stores/useAppStore';
+import { storeToRefs } from 'pinia';
 
 const props = defineProps({
     isWeatherBoardMode: {
@@ -354,6 +369,10 @@ const showToolMenu = ref(false);
 const showMagicMenu = ref(false);
 const menuHostRef = ref(null);
 const magicMenuHostRef = ref(null);
+
+// 日志监控状态
+const appStore = useAppStore();
+const { logMonitorVisible } = storeToRefs(appStore);
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -458,6 +477,12 @@ function handleJump(location) {
 function handleSoup() {
     showToolMenu.value = false;
     message.soup();
+}
+
+function handleToggleLogMonitor() {
+    showToolMenu.value = false;
+    appStore.toggleLogMonitor();
+    message.info(logMonitorVisible.value ? '日志监控面板已打开' : '日志监控面板已关闭');
 }
 
 function handleDocumentClick(event) {
