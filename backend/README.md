@@ -22,7 +22,33 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-05 更新）
+## 0. 项目结构（2026-06-09 更新）
+
+### V3.3.2 (2026-06-09) - SQLite 恢复修复 + 北京时间日志 + 整点报时
+
+**新增文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `utils/__init__.py` | 工具包初始化 |
+| `utils/time_utils.py` | 北京时间获取函数 + 整点报时异步任务（含异常保护） |
+
+**修改文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `api/auth/db.py` | 恢复机制增强：`.dump` INSERT 校验 + 数据暂存导入 + WAL 清理 + 连接泄漏修复 + SQL 标识符引用 |
+| `app.py` | 路由注册日志追加北京时间后缀；lifespan 启动/关闭阶段日志附带北京时间；创建整点报时后台任务 |
+
+**功能说明：**
+- 所有路由注册日志附带 `[北京时间: YYYY-MM-DD HH:MM:SS]` 后缀
+- lifespan startup 阶段启动整点报时后台任务，精确 sleep 到下一整点
+- lifespan shutdown 阶段安全取消整点报时任务
+- 整点报时任务内置 `try/except` 异常保护，单次异常不会终止整个任务
+- 启动时自动清理孤立的 `-wal`/`-shm` 文件，防止外部替换 db 后读到旧数据
+- 数据库损坏恢复完整链路：备份 → `.dump`/逐表恢复 → 暂存 → 删除 → 重建 schema → 导入恢复数据
+
+---
 
 ### V3.3.0 (2026-06-05) - Chat Function Calling GIS
 
@@ -80,7 +106,7 @@ backend/
 │   ├── auth/                                      # 鉴权模块（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
 │   │   ├── constants.py                           # 常量、角色、正则、邮箱验证常量
-│   │   ├── db.py                                  # 数据库连接工厂
+│   │   ├── db.py                                  # 数据库连接工厂 + 损坏自动恢复 + WAL 清理
 │   │   ├── schema.py                              # DDL 建表与迁移
 │   │   ├── password.py                            # 密码哈希/验证
 │   │   ├── models.py                              # Pydantic 请求模型
@@ -115,6 +141,10 @@ backend/
 │   ├── monitor.py                                 # 日志监控接口
 │   ├── proxy.py                                   # 通用代理 + GCJ-02 纠偏
 │   └── statistics.py                              # 访问统计接口
+│
+├── utils/                                         # 通用工具模块
+│   ├── __init__.py                                # 包初始化
+│   └── time_utils.py                              # 北京时间工具 + 整点报时后台任务
 │
 ├── core/                                          # 核心业务逻辑
 │   ├── tile_engine.py                             # 瓦片下载 + GeoTIFF 拼接

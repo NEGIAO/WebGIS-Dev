@@ -7,10 +7,13 @@ WebGIS Backend - FastAPI 主应用入口
 - 通用接口：新闻、数据处理、健康检查等
 """
 
+import asyncio
 import httpx
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
+
+from utils.time_utils import get_beijing_now_str, hourly_chime_task
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,19 +62,20 @@ async def lifespan(app: FastAPI):
     替代已废弃的 @app.on_event("startup") / @app.on_event("shutdown")
     """
     # ---- Startup ----
-    logger.info("WebGIS Backend 启动...")
+    logger.info("WebGIS Backend 启动... [北京时间: %s]", get_beijing_now_str())
     app.state.startup_error = None
     app.state.log_stream_mode = init_monitor_log_streaming()
 
     try:
         await init_auth_storage()
-        logger.info("认证存储初始化成功")
+        logger.info("认证存储初始化成功 [北京时间: %s]", get_beijing_now_str())
     except Exception as e:
         logger.error("认证存储初始化失败: %s", str(e), exc_info=True)
         app.state.startup_error = f"数据库初始化失败: {str(e)}"
 
     try:
         init_download_task_db()
+        logger.info("下载任务数据库初始化成功 [北京时间: %s]", get_beijing_now_str())
     except Exception as e:
         logger.error("下载任务数据库初始化失败: %s", str(e), exc_info=True)
 
@@ -81,7 +85,11 @@ async def lifespan(app: FastAPI):
         logger.error("任务调度器启动失败: %s", str(e), exc_info=True)
 
     app.state.http_client = build_http_client()
-    logger.info("HTTP 客户端初始化完成")
+    logger.info("HTTP 客户端初始化完成 [北京时间: %s]", get_beijing_now_str())
+
+    # 启动整点报时后台任务
+    app.state.hourly_chime = asyncio.create_task(hourly_chime_task())
+    logger.info("整点报时后台任务已创建 [北京时间: %s]", get_beijing_now_str())
 
     if app.state.startup_error:
         logger.warning("应用以降级模式启动: %s", app.state.startup_error)
@@ -90,7 +98,17 @@ async def lifespan(app: FastAPI):
 
     yield
     # ---- Shutdown ----
-    logger.info("WebGIS Backend 关闭...")
+    logger.info("WebGIS Backend 关闭... [北京时间: %s]", get_beijing_now_str())
+    # 取消整点报时任务
+    chime_task = getattr(app.state, "hourly_chime", None)
+    if chime_task is not None:
+        chime_task.cancel()
+        try:
+            await chime_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("整点报时后台任务已停止 [北京时间: %s]", get_beijing_now_str())
+
     scheduler = getattr(app.state, "task_scheduler", None)
     if scheduler is not None:
         shutdown_task_cleanup_scheduler(scheduler)
@@ -208,54 +226,56 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 # ==================== 路由挂载 ====================
 
+_beijing_time = get_beijing_now_str()
+
 # 挂载瓦片代理路由
 app.include_router(proxy_router)
-logger.info("已注册瓦片代理路由")
+logger.info("已注册瓦片代理路由 [北京时间: %s]", _beijing_time)
 
 # 挂载外部服务代理路由（高德/Nominatim/EPSG/IP）
 app.include_router(external_proxy_router)
-logger.info("已注册外部服务代理路由")
+logger.info("已注册外部服务代理路由 [北京时间: %s]", _beijing_time)
 
 # 挂载认证路由
 app.include_router(auth_router)
-logger.info("已注册认证路由")
+logger.info("已注册认证路由 [北京时间: %s]", _beijing_time)
 
 # 挂载访客统计路由
 app.include_router(statistics_router)
-logger.info("已注册访客统计路由")
+logger.info("已注册访客统计路由 [北京时间: %s]", _beijing_time)
 
 # 挂载位置服务路由
 app.include_router(location_router)
-logger.info("已注册位置服务路由")
+logger.info("已注册位置服务路由 [北京时间: %s]", _beijing_time)
 
 # 挂载管理员路由
 app.include_router(admin_router)
-logger.info("已注册管理员路由")
+logger.info("已注册管理员路由 [北京时间: %s]", _beijing_time)
 
 # 挂载 API 管理路由
 app.include_router(api_management_router)
-logger.info("已注册 API 管理路由")
+logger.info("已注册 API 管理路由 [北京时间: %s]", _beijing_time)
 
 # 挂载 API 密钥管理路由
 app.include_router(api_keys_router)
-logger.info("已注册 API 密钥管理路由")
+logger.info("已注册 API 密钥管理路由 [北京时间: %s]", _beijing_time)
 
 # 挂载 Agent 对话路由
 app.include_router(agent_chat_router)
 app.include_router(agent_chat_admin_router)
-logger.info("已注册 Agent 对话路由")
+logger.info("已注册 Agent 对话路由 [北京时间: %s]", _beijing_time)
 
 # 挂载下载任务路由
 app.include_router(download_router)
-logger.info("已注册下载任务路由")
+logger.info("已注册下载任务路由 [北京时间: %s]", _beijing_time)
 
 # 挂载监控路由
 app.include_router(monitor_router)
-logger.info("已注册监控路由")
+logger.info("已注册监控路由 [北京时间: %s]", _beijing_time)
 
 # 挂载空间分析路由
 app.include_router(spatial_router)
-logger.info("已注册空间分析路由")
+logger.info("已注册空间分析路由 [北京时间: %s]", _beijing_time)
 
 # --- 功能：健康检查 ---
 @app.get("/")

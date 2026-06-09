@@ -361,7 +361,7 @@ WebGIS_Dev/
 │   │   ├── auth/                         # 鉴权模块（模块化拆分）
 │   │   │   ├── __init__.py               # 门面 re-export
 │   │   │   ├── constants.py              # 常量、角色、正则、邮箱验证常量
-│   │   │   ├── db.py                     # 数据库连接工厂
+│   │   │   ├── db.py                     # 数据库连接工厂 + 损坏自动恢复 + WAL 清理
 │   │   │   ├── schema.py                 # DDL 建表与迁移
 │   │   │   ├── password.py               # 密码哈希/验证
 │   │   │   ├── models.py                 # Pydantic 请求模型
@@ -402,6 +402,9 @@ WebGIS_Dev/
 │   │   ├── monitor.py                    # 日志监控
 │   │   ├── statistics.py                 # 访问统计
 │   │   └── ...
+│   ├── utils/                            # 通用工具模块
+│   │   ├── __init__.py                   # 包初始化
+│   │   └── time_utils.py                 # 北京时间工具 + 整点报时后台任务
 │   ├── core/                             # 核心业务逻辑
 │   │   ├── tile_engine.py                # 瓦片下载 + GeoTIFF 拼接
 │   │   └── task_scheduler.py             # 过期任务清理
@@ -426,6 +429,9 @@ WebGIS_Dev/
 │   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
 │   ├── 06-06/                            # 2026年6月6日日志
 │   │   └── 2026-06-06-log-monitor-mobile-pad-fix.md  # LogMonitor 移动端/Pad 适配修复
+│   ├── 06-09/                            # 2026年6月9日日志
+│   │   ├── 2026-06-09-fix-db-recovery-data-loss.md  # SQLite 损坏恢复数据丢失修复
+│   │   └── 2026-06-09-beijing-time-and-hourly-chime.md  # 北京时间日志 + 整点报时
 │   └── TODO/                             # 待办事项
 ├── docker-compose.yml                    # 顶级 Docker Compose
 ├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
@@ -575,6 +581,38 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.3.2 (2026-06-09)
+#### 🛡️ SQLite 损坏恢复数据丢失修复 + 北京时间日志增强 + 整点报时
+
+**后端修复（数据安全）：**
+- ✅ 修复数据库损坏恢复后数据全丢的严重问题（备份 → 恢复 → 删除 → 重建 → 导入完整链路）
+- ✅ `.dump` 输出校验 INSERT 语句数量，不再被空 dump 误判为成功
+- ✅ 新增 `_pending_recovery_data` 全局暂存，schema 重建后自动导入恢复数据
+- ✅ dump 导入仅提取 INSERT 语句（跳过 DDL），避免 `CREATE TABLE` 冲突
+- ✅ 新增 `_cleanup_orphaned_wal_files()` 启动时清理孤立 `-wal`/`-shm` 文件
+- ✅ 修复 `_try_dump_database` 连接泄漏（异常路径未关闭连接）
+- ✅ 修复 `_db_connection` 导入连接异常路径泄漏
+- ✅ SQL 标识符引用（表名/列名加双引号，防特殊字符报错）
+
+**后端新增（北京时间日志 + 整点报时）：**
+- ✅ 新增 `utils/time_utils.py`：北京时间获取函数 + 整点报时异步任务
+- ✅ `app.py` 所有路由注册日志追加 `[北京时间: YYYY-MM-DD HH:MM:SS]` 后缀
+- ✅ lifespan startup 阶段启动整点报时后台任务（精确 sleep 到下一整点）
+- ✅ 整点报时任务内置异常保护，单次异常不会终止整个任务
+- ✅ lifespan shutdown 阶段安全取消整点报时任务
+
+**新增文件：**
+- `backend/utils/__init__.py` — 工具包初始化
+- `backend/utils/time_utils.py` — 北京时间工具 + 整点报时后台任务
+
+**修改文件：**
+- `backend/api/auth/db.py` — 恢复机制增强 + WAL 清理 + 连接泄漏修复
+- `backend/app.py` — 北京时间日志 + 整点报时任务生命周期管理
+
+详见 [DB 恢复日志](./Docs/06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/06-09/2026-06-09-beijing-time-and-hourly-chime.md)
+
+---
 
 ### V3.3.1 (2026-06-06)
 #### 📱 LogMonitor + MapSwipeController 移动端/Pad 适配修复
@@ -1595,6 +1633,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-06
-**当前版本**：V3.3.1 (LogMonitor 移动端/Pad 适配)
+**最后更新**：2026-06-09
+**当前版本**：V3.3.2 (SQLite 恢复修复 + 北京时间日志)
 **项目状态**：开发中 - 持续迭代优化
