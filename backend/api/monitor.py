@@ -19,6 +19,8 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from utils.time_utils import BeijingTimeFormatter
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
@@ -163,7 +165,7 @@ def _ensure_broadcast_handler() -> None:
     handler = _LogBroadcastHandler()
     handler.setLevel(logging.DEBUG)
     handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        BeijingTimeFormatter("%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s")
     )
     root = logging.getLogger()
     root.addHandler(handler)

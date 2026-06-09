@@ -31,16 +31,21 @@ WebGIS 后端服务，当前包含五大核心能力：
 | 文件 | 说明 |
 |------|------|
 | `utils/__init__.py` | 工具包初始化 |
-| `utils/time_utils.py` | 北京时间获取函数 + 整点报时异步任务（含异常保护） |
+| `utils/time_utils.py` | 北京时间获取函数 + 整点报时异步任务（含异常保护）+ BeijingTimeFormatter |
 
 **修改文件：**
 
 | 文件 | 说明 |
 |------|------|
 | `api/auth/db.py` | 恢复机制增强：`.dump` INSERT 校验 + 数据暂存导入 + WAL 清理 + 连接泄漏修复 + SQL 标识符引用 |
-| `app.py` | 路由注册日志追加北京时间后缀；lifespan 启动/关闭阶段日志附带北京时间；创建整点报时后台任务 |
+| `app.py` | 路由注册日志追加北京时间后缀；lifespan 启动/关闭阶段日志附带北京时间；创建整点报时后台任务；日志配置使用 BeijingTimeFormatter |
+| `api/monitor.py` | SSE 日志流广播使用 BeijingTimeFormatter |
 
 **功能说明：**
+- 自定义 `BeijingTimeFormatter` 重写 `formatTime` 方法，使用 `get_beijing_now()` 获取北京时间
+- 日志格式统一为：`2026-06-09 15:30:00,123 [北京时间] - logger - LEVEL - message`
+- 解决海外服务器（如 HuggingFace Space）日志时间显示为 UTC 的问题
+- 所有日志输出（控制台 + SSE 广播）时间统一为北京时间（UTC+8）
 - 所有路由注册日志附带 `[北京时间: YYYY-MM-DD HH:MM:SS]` 后缀
 - lifespan startup 阶段启动整点报时后台任务，精确 sleep 到下一整点
 - lifespan shutdown 阶段安全取消整点报时任务

@@ -596,7 +596,10 @@ LOG_LEVEL=INFO
 - ✅ SQL 标识符引用（表名/列名加双引号，防特殊字符报错）
 
 **后端新增（北京时间日志 + 整点报时）：**
-- ✅ 新增 `utils/time_utils.py`：北京时间获取函数 + 整点报时异步任务
+- ✅ 新增 `utils/time_utils.py`：北京时间获取函数 + 整点报时异步任务 + `BeijingTimeFormatter`
+- ✅ 自定义 `BeijingTimeFormatter` 重写 `formatTime` 方法，使用北京时间（UTC+8）
+- ✅ 日志格式统一为：`2026-06-09 15:30:00,123 [北京时间] - logger - LEVEL - message`
+- ✅ 解决海外服务器（如 HuggingFace Space）日志时间显示为 UTC 的问题
 - ✅ `app.py` 所有路由注册日志追加 `[北京时间: YYYY-MM-DD HH:MM:SS]` 后缀
 - ✅ lifespan startup 阶段启动整点报时后台任务（精确 sleep 到下一整点）
 - ✅ 整点报时任务内置异常保护，单次异常不会终止整个任务
@@ -604,13 +607,14 @@ LOG_LEVEL=INFO
 
 **新增文件：**
 - `backend/utils/__init__.py` — 工具包初始化
-- `backend/utils/time_utils.py` — 北京时间工具 + 整点报时后台任务
+- `backend/utils/time_utils.py` — 北京时间工具 + 整点报时后台任务 + BeijingTimeFormatter
 
 **修改文件：**
 - `backend/api/auth/db.py` — 恢复机制增强 + WAL 清理 + 连接泄漏修复
-- `backend/app.py` — 北京时间日志 + 整点报时任务生命周期管理
+- `backend/app.py` — 北京时间日志 + 整点报时任务生命周期管理 + BeijingTimeFormatter
+- `backend/api/monitor.py` — SSE 日志流广播使用 BeijingTimeFormatter
 
-详见 [DB 恢复日志](./Docs/06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/06-09/2026-06-09-beijing-time-and-hourly-chime.md)
+详见 [DB 恢复日志](./Docs/06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06-09/2026-06-09-logging-beijing-time.md)
 
 ---
 

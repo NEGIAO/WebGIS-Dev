@@ -13,7 +13,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from utils.time_utils import get_beijing_now_str, hourly_chime_task
+from utils.time_utils import get_beijing_now_str, hourly_chime_task, BeijingTimeFormatter
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,10 +36,13 @@ from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 
 # ==================== 日志配置 ====================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+# 使用北京时间 Formatter，确保日志时间统一为北京时间（UTC+8）
+_beijing_formatter = BeijingTimeFormatter(
+    fmt="%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s"
 )
+_handler = logging.StreamHandler()
+_handler.setFormatter(_beijing_formatter)
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 logger = logging.getLogger(__name__)
 
 # ==================== 统一响应模型 ====================
