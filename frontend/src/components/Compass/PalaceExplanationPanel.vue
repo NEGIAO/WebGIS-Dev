@@ -243,7 +243,7 @@ function getExplanationByPalace(palace: SelectedPalace, themeLayers: any, explan
         typeof data === 'string' ? data : Array.isArray(data) ? data.filter(Boolean).join('') : '';
     const exactResult = ExplanationLookup.lookupThemeLayer(themeLayers, explanationJson, {
         layerIndex,
-        segmentIndex,
+        _segmentIndex: segmentIndex,
         palaceName,
     });
 

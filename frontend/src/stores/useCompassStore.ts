@@ -296,7 +296,8 @@ export const useCompassStore = defineStore('compassStore', () => {
     const hudRenderConfig = computed<FengShuiCompassConfig>(() => {
         const baseConfig = vectorRenderConfig.value;
         const size = Math.round(clamp(hudSizePx.value, HUD_MIN_SIZE, HUD_MAX_SIZE));
-        return createHudRenderConfig(baseConfig, size, rotation.value);
+        // HUD 模式：罗盘固定在屏幕上，设备旋转时罗盘需反向旋转以保持北方指向不变
+        return createHudRenderConfig(baseConfig, size, -rotation.value);
     });
 
     const renderCacheToken = computed(
