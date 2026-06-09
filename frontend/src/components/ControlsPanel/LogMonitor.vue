@@ -47,6 +47,18 @@
                     ]"
                 ></span>
                 <span class="env-hint">{{ displaySourceLabel }}</span>
+                <div class="color-legend-wrap">
+                    <CircleHelp :size="13" class="legend-icon" />
+                    <div class="color-legend">
+                        <div class="legend-title">日志颜色说明</div>
+                        <div class="legend-item"><span class="dot" style="background:#f87171"></span>ERROR / FAILED / 5xx 服务端错误</div>
+                        <div class="legend-item"><span class="dot" style="background:#fbbf24"></span>WARN / 4xx 客户端错误</div>
+                        <div class="legend-item"><span class="dot" style="background:#109942"></span>INFO 普通信息</div>
+                        <div class="legend-item"><span class="dot" style="background:#4ade80"></span>SUCCESS / 2xx 成功</div>
+                        <div class="legend-item"><span class="dot" style="background:#818cf8"></span>[BUILD] 构建流程</div>
+                        <div class="legend-item"><span class="dot" style="background:#1ab142"></span>[RUN] 运行流程</div>
+                    </div>
+                </div>
             </div>
             <div class="header-actions">
                 <button
@@ -114,11 +126,10 @@
 
 <script setup>
 import { ref, onUnmounted, computed } from 'vue';
-import { Terminal, Play, Square, Trash2, Copy, Check } from 'lucide-vue-next';
+import { Terminal, Play, Square, Trash2, Copy, Check, CircleHelp } from 'lucide-vue-next';
 import { BACKEND_BASE_URL } from '../../api/backend';
 
 const props = defineProps({
-    visible: { type: Boolean, default: true },
     maxLines: { type: Number, default: 2500 },
 });
 
@@ -140,8 +151,11 @@ const logsStreamUrl = computed(() => {
     return `${base}/monitor/logs/stream?type=${currentType.value}`;
 });
 
-// 匹配 HTTP 状态码模式：如 " 503 ", " 404 ", "HTTP/1.1\" 500" 等
-const HTTP_STATUS_RE = /\b([1-5]\d{2})\b/g;
+// 匹配 HTTP 响应状态码，仅识别 uvicorn/httpx 等标准 HTTP 日志格式：
+//   uvicorn:  INFO: 10.x.x.x:port - "GET /path HTTP/1.1" 400 Bad Request
+//   httpx:    HTTP Request: GET https://... "HTTP/1.1 400 "
+// 使用 (?<="\\s) 限定状态码紧跟在引号+空格之后，避免误匹配时间戳中的数字（如 10:46:19.444）
+const HTTP_STATUS_RE = /(?<="\s)([1-5]\d{2})\b/g;
 
 function getLogClass(msg) {
     const text = msg.toUpperCase();
@@ -150,11 +164,8 @@ function getLogClass(msg) {
     if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
 
     // 2. 识别 HTTP 错误状态码（4xx / 5xx）—— 优先于 INFO/WARN 关键字
-    //    uvicorn 格式: INFO: 10.x.x.x:port - "GET /path HTTP/1.1" 503 Service Unavailable
-    //    其中 503 不含 ERROR 字样，但属于明确的服务端错误
     const statusMatches = [...msg.matchAll(HTTP_STATUS_RE)];
     if (statusMatches.length > 0) {
-        // 取最后一个匹配的状态码（通常在行尾，如 "200 OK" 或 "503 Service Unavailable"）
         const lastCode = Number(statusMatches[statusMatches.length - 1][1]);
         if (lastCode >= 500) return 'log-error';       // 5xx 服务端错误 → 红色
         if (lastCode >= 400) return 'log-warning';      // 4xx 客户端错误 → 黄色
@@ -287,7 +298,11 @@ function openConnection() {
     eventSource.onerror = () => closeConnection();
 }
 
-onUnmounted(() => closeConnection());
+onUnmounted(() => {
+    closeConnection();
+    logBuffer = [];
+    renderPending = false;
+});
 </script>
 
 <style scoped>
@@ -369,6 +384,65 @@ onUnmounted(() => closeConnection());
     padding: 1px 6px;
     border-radius: 4px;
     color: #71717a;
+}
+
+.color-legend-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.legend-icon {
+    color: #52525b;
+    transition: color 0.2s;
+}
+
+.color-legend-wrap:hover .legend-icon {
+    color: #a1a1aa;
+}
+
+.color-legend {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    padding: 8px 12px;
+    z-index: 100;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.color-legend-wrap:hover .color-legend {
+    display: block;
+}
+
+.legend-title {
+    font-size: 10px;
+    color: #71717a;
+    margin-bottom: 6px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #a1a1aa;
+    padding: 2px 0;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
 .header-actions {
@@ -454,29 +528,29 @@ onUnmounted(() => closeConnection());
 }
 
 .log-error {
-    color: #f87171 !important;
+    color: #f87171;
     font-weight: 500;
 }
 
 .log-warning {
-    color: #fbbf24 !important;
+    color: #fbbf24;
 }
 
 .log-info {
-    color: #109942 !important;
+    color: #109942;
 }
 
 .log-success {
-    color: #4ade80 !important;
+    color: #4ade80;
 }
 
 .log-build {
-    color: #0e13a3 !important;
+    color: #818cf8;
     font-weight: 500;
 }
 
 .log-run {
-    color: #1ab142 !important;
+    color: #1ab142;
     font-weight: 500;
 }
 
@@ -744,6 +818,10 @@ onUnmounted(() => closeConnection());
     .webgis-log-panel .title {
         display: none;
         /* 隐藏 TERMINAL 字样，保留图标 */
+    }
+
+    .webgis-log-panel .color-legend-wrap {
+        display: none;
     }
 
     .webgis-log-panel .action-btn .btn-label {

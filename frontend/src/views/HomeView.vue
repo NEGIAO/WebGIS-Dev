@@ -1089,7 +1089,6 @@ onMounted(async () => {
             <!-- 日志监控面板 -->
             <LogMonitor
                 v-show="logMonitorVisible"
-                :visible="logMonitorVisible"
             />
 
             <!-- 可拖拽分割条：仅在侧边面板展开时显示 -->
