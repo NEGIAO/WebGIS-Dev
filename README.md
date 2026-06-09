@@ -189,10 +189,10 @@ WebGIS_Dev/
 │   │   │   ├── Chat/                     # AI 聊天助手
 │   │   │   ├── Common/                   # 通用可复用组件
 │   │   │   │   └── ExtentPicker.vue      # 框选范围组件（开始/重新/清除/提示）
-│   │   │   ├── Compass/                  # 罗盘控制面板
+│   │   │   ├── Compass/                  # 罗盘控制面板（HUD 尺寸控制）
 │   │   │   ├── ControlsPanel/            # 左侧控制栏（绘制/测量/空间分析/行政区）
 │   │   │   ├── Layer/                    # 图层管理（TOC/属性表/资源树）
-│   │   │   ├── Map/                      # 地图核心容器与控制器
+│   │   │   ├── Map/                      # 地图核心容器与控制器（含罗盘 HUD 浮层）
 │   │   │   ├── Routing/                  # 路线规划（公交/驾车）
 │   │   │   ├── Search/                   # 搜索与数据注入
 │   │   │   ├── Shell/                    # 应用壳层（TopBar/SidePanel/Loading/Message）
@@ -207,10 +207,10 @@ WebGIS_Dev/
 │   │   │   │   ├── tabs/                 # 用户中心子面板（OverviewTab/SecurityTab/PreferencesTab）
 │   │   │   │   └── ...
 │   │   │   ├── Weather/                  # 天气面板
-│   │   │   │   ├── WeatherChartPanel.vue # 天气主面板（壳）
+│   │   │   │   ├── WeatherChartPanel.vue # 天气主面板（容器查询 + 响应式图表壳）
 │   │   │   │   ├── WeatherLiveCards.vue  # 实况天气卡片
 │   │   │   │   └── WeatherForecastTable.vue # 预报表格
-│   │   │   └── feng-shui-compass-svg/    # 罗盘 SVG HUD 组件
+│   │   │   └── feng-shui-compass-svg/    # 罗盘 SVG HUD 组件（小尺寸渲染适配）
 │   │   │       ├── themes/               # 主题配置
 │   │   │       ├── types/                # TypeScript 类型
 │   │   │       └── Explanation/          # 宫位解释 JSON
@@ -253,14 +253,14 @@ WebGIS_Dev/
 │   │   │   ├── tileSource/               # 瓦片源工厂拆分模块
 │   │   │   │   ├── types.ts              # 类型定义与常量
 │   │   │   │   ├── urlUtils.ts           # URL 工具函数
-│   │   │   │   ├── tileLifecycle.ts      # 请求生命周期管理
+│   │   │   │   ├── tileLifecycle.ts      # 请求生命周期管理 + 外部瓦片代理改写
 │   │   │   │   ├── wmsSource.ts          # WMS 源创建
 │   │   │   │   ├── wmtsSource.ts         # WMTS 源创建
 │   │   │   │   ├── xyzSource.ts          # XYZ 源 + 自动检测
 │   │   │   │   └── index.ts              # barrel export
 │   │   │   ├── weather/                  # 天气相关 composables
 │   │   │   │   ├── useWeatherData.js     # 天气数据获取与查询
-│   │   │   │   └── useWeatherCharts.js   # ECharts 图表渲染
+│   │   │   │   └── useWeatherCharts.js   # ECharts 图表渲染 + 容器自适应布局
 │   │   │   ├── useUserLocation.js        # 用户定位
 │   │   │   └── ...
 │   │   ├── config/                       # 🔹 环境变量集中管理
@@ -295,7 +295,7 @@ WebGIS_Dev/
 │   │   │   ├── useAttrStore.ts           # 属性表状态
 │   │   │   ├── useAuthStore.ts           # 鉴权状态
 │   │   │   ├── useChatStore.ts           # Chat 工具调用状态管理
-│   │   │   ├── useCompassStore.ts        # 罗盘状态
+│   │   │   ├── useCompassStore.ts        # 罗盘状态（HUD 专用配置缩放）
 │   │   │   ├── useDownloadStore.ts       # 下载任务状态
 │   │   │   ├── useLayerStore.ts          # 图层状态
 │   │   │   ├── useSwipeConfigStore.ts    # 卷帘配置（localStorage 持久化）
@@ -544,6 +544,10 @@ VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
 
 # 后端 API 地址
 VITE_BACKEND_URL=http://localhost:7860
+
+# 瓦片代理根地址（默认复用 VITE_BACKEND_URL；线上可设为 https://negiao-webgis.hf.space）
+VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
+VITE_TILE_PROXY_MODE=fallback
 ```
 
 ### 后端环境变量（backend/.env）
@@ -583,7 +587,7 @@ LOG_LEVEL=INFO
 ## 🔄 更新日志
 
 ### V3.3.2 (2026-06-09)
-#### 🛡️ SQLite 损坏恢复数据丢失修复 + 北京时间日志增强 + 整点报时
+#### 🛡️ SQLite 损坏恢复数据丢失修复 + 北京时间日志增强 + 整点报时 + 天气图表响应式/风力仪表 UI
 
 **后端修复（数据安全）：**
 - ✅ 修复数据库损坏恢复后数据全丢的严重问题（备份 → 恢复 → 删除 → 重建 → 导入完整链路）
@@ -605,6 +609,26 @@ LOG_LEVEL=INFO
 - ✅ 整点报时任务内置异常保护，单次异常不会终止整个任务
 - ✅ lifespan shutdown 阶段安全取消整点报时任务
 
+**前端优化（天气组件响应式）：**
+- ✅ 天气图表容器由固定高度改为容器查询 + grid 自适应尺寸
+- ✅ 使用 `ResizeObserver` + `requestAnimationFrame` 监听容器大小变化，动态触发图表 resize
+- ✅ 侧边栏折叠/面板展开时图表自动重新适配
+- ✅ 实况天气卡片使用 CSS 容器查询实现父组件尺寸自适应
+- ✅ 风力图改为上下 50% 分区：上半区仅显示轻量风力仪表，下半区独立显示预报风级柱线图
+- ✅ 预报风级纵轴改为按返回数据值域动态计算，低风级数据不再被固定 0-8 级范围压扁
+- ✅ 城市解析查询优先复用正地理编码返回的 adcode，并避免 `setAdcode` watcher 与手动加载造成重复天气请求
+
+**前端优化（罗盘 HUD）：**
+- ✅ 固定屏幕 HUD 新增小尺寸专用渲染配置，按 HUD 尺寸缩放刻度线、刻度数字、分层文字、天池半径和天心十字线
+- ✅ 高密度 24/60 分宫图层设置更小字号上限，减少小 HUD 中的文字遮挡和环层塌陷
+- ✅ HUD 默认尺寸提升到 340px，控制面板滑杆范围与 store 限制统一为 240-560px
+- ✅ 地图 HUD 浮层增加圆形背景、响应式边距、drop shadow 和 SVG overflow 保护
+
+**前端优化（瓦片 CORS）：**
+- ✅ 外部 HTTP(S) 瓦片请求直连优先，直连失败后兜底请求既有 `/proxy/{URL}` 后端代理，解决 `maps-for-free.com` 等图源缺少 CORS 响应头导致的加载失败
+- ✅ 已经是后端代理、当前站点同源、`/proxy/` 或 `/tiles/` 的地址不会二次代理
+- ✅ 新增 `VITE_TILE_PROXY_BASE_URL` 与 `VITE_TILE_PROXY_MODE`，支持按环境指定瓦片代理根地址、强制代理或关闭自动代理
+
 **新增文件：**
 - `backend/utils/__init__.py` — 工具包初始化
 - `backend/utils/time_utils.py` — 北京时间工具 + 整点报时后台任务 + BeijingTimeFormatter
@@ -613,8 +637,17 @@ LOG_LEVEL=INFO
 - `backend/api/auth/db.py` — 恢复机制增强 + WAL 清理 + 连接泄漏修复
 - `backend/app.py` — 北京时间日志 + 整点报时任务生命周期管理 + BeijingTimeFormatter
 - `backend/api/monitor.py` — SSE 日志流广播使用 BeijingTimeFormatter
+- `frontend/src/components/Weather/WeatherChartPanel.vue` — 图表容器查询与响应式 grid 布局
+- `frontend/src/composables/weather/useWeatherCharts.js` — ResizeObserver 调度、容器尺寸布局、风力仪表 UI 优化
+- `frontend/src/composables/weather/useWeatherData.js` — 城市解析查询去重，减少不必要逆地理编码与重复天气请求
+- `frontend/src/components/Weather/WeatherLiveCards.vue` — 容器查询响应式
+- `frontend/src/stores/useCompassStore.ts` — 罗盘 HUD 小尺寸专用渲染配置与缩放参数
+- `frontend/src/components/Map/MapContainer.vue` — 固定屏幕 HUD 浮层样式与 SVG overflow 保护
+- `frontend/src/components/Compass/CompassControlPanel.vue` — HUD 尺寸滑杆范围同步
+- `frontend/src/composables/tileSource/tileLifecycle.ts` — 外部瓦片直连失败后兜底请求既有 `/proxy/{URL}` 代理，保留 AbortController 中断能力
+- `frontend/.env.example` — 补充瓦片代理环境变量示例
 
-详见 [DB 恢复日志](./Docs/06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06-09/2026-06-09-logging-beijing-time.md)
+详见 [DB 恢复日志](./Docs/26-06/26-06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/26-06/26-06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06/26-06-09/2026-06-09-logging-beijing-time.md) | [天气组件响应式与风力仪表 UI](./Docs/26-06/26-06-09/2026-06-09-weather-chart-responsive.md)
 
 ---
 
@@ -1638,5 +1671,5 @@ MIT License - 可自由使用、修改、分发
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
 **最后更新**：2026-06-09
-**当前版本**：V3.3.2 (SQLite 恢复修复 + 北京时间日志)
+**当前版本**：V3.3.2 (SQLite 恢复修复 + 北京时间日志 + 天气图表响应式/风力仪表 UI)
 **项目状态**：开发中 - 持续迭代优化

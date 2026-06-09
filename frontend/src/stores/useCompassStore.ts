@@ -47,6 +47,10 @@ const LOCAL_THEME_INDEX_BY_CID: Record<string, number> = {
     'cyber-blueprint': 3,
 };
 
+const HUD_MIN_SIZE = 240;
+const HUD_MAX_SIZE = 560;
+const HUD_DEFAULT_SIZE = 340;
+
 function deepClone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value));
 }
@@ -68,6 +72,81 @@ function toLayerArray(data: FengShuiCompassConfig['data']): Layer[] {
     if (Array.isArray(data)) return deepClone(data);
     if (data && typeof data === 'object') return [deepClone(data as Layer)];
     return [];
+}
+
+// 将主题中的大尺寸数值按 HUD 比例压缩，并限制在可读范围内。
+function scaleHudNumber(value: unknown, scale: number, minValue: number, maxValue: number): number {
+    const numeric = Number(value);
+    const source = Number.isFinite(numeric) ? numeric : maxValue;
+    return Math.round(clamp(source * scale, minValue, maxValue));
+}
+
+// 密集分层或 24/60 分宫数据需要更小字号，避免固定屏幕 HUD 中互相挤压。
+function getHudLayerFontLimit(layer: Layer, layerCount: number): number {
+    const segmentCount = Array.isArray(layer?.data) ? layer.data.length : 0;
+    if (segmentCount >= 60) return 6;
+    if (segmentCount >= 24) return 8;
+    if (layerCount >= 8) return 9;
+    return 12;
+}
+
+// 基于 HUD 缩放比例生成每一层的字号配置，保留原始层数据与配色。
+function createHudLayers(data: FengShuiCompassConfig['data'], scale: number): Layer[] {
+    const layers = toLayerArray(data);
+    return layers.map((layer) => {
+        const fontLimit = getHudLayerFontLimit(layer, layers.length);
+        const sourceFontSize = Number(layer.fontSize || 14);
+        return {
+            ...layer,
+            fontSize: Math.round(
+                clamp(
+                    (Number.isFinite(sourceFontSize) ? sourceFontSize : 14) * scale,
+                    5,
+                    fontLimit,
+                ),
+            ),
+        };
+    });
+}
+
+// 生成固定屏幕 HUD 专用配置，避免 800/1000px 主题参数压缩后出现刻度和文字塌陷。
+function createHudRenderConfig(
+    baseConfig: FengShuiCompassConfig,
+    size: number,
+    rotation: number,
+): FengShuiCompassConfig {
+    const sourceWidth = Number(baseConfig?.compassSize?.width || 800);
+    const sourceHeight = Number(baseConfig?.compassSize?.height || 800);
+    const sourceSize = Math.max(Math.min(sourceWidth, sourceHeight), 1);
+    const scale = clamp(size / sourceSize, 0.25, 0.78);
+    const scaleStyle = baseConfig.scaclStyle || {
+        minLineHeight: 10,
+        midLineHeight: 15,
+        maxLineHeight: 20,
+        numberFontSize: 12,
+    };
+
+    return {
+        ...deepClone(baseConfig),
+        compassSize: {
+            ...(baseConfig?.compassSize || {}),
+            width: size,
+            height: size,
+            tianChiRadius: Math.round(clamp(size * 0.055, 10, 24)),
+        },
+        data: createHudLayers(baseConfig.data, scale),
+        rotate: normalizeAngle(rotation),
+        autoFontSize: false,
+        scaclStyle: {
+            ...scaleStyle,
+            minLineHeight: scaleHudNumber(scaleStyle.minLineHeight, scale, 2, 6),
+            midLineHeight: scaleHudNumber(scaleStyle.midLineHeight, scale, 3, 8),
+            maxLineHeight: scaleHudNumber(scaleStyle.maxLineHeight, scale, 4, 10),
+            numberFontSize: scaleHudNumber(scaleStyle.numberFontSize || 12, scale, 6, 10),
+        },
+        tianxinCrossWidth: scaleHudNumber(baseConfig.tianxinCrossWidth || 2, scale, 1, 3),
+        tianxinCrossLengthRatio: clamp(Number(baseConfig?.tianxinCrossLengthRatio || 1 / 3), 0.1, 0.72),
+    } as FengShuiCompassConfig;
 }
 
 function normalizeCompassConfig(
@@ -180,7 +259,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     const physicalRadiusMeters = ref(1000);
     const opacity = ref(0.9);
     const minResolution = ref(99999);
-    const hudSizePx = ref(280);
+    const hudSizePx = ref(HUD_DEFAULT_SIZE);
 
     // ==================== 2. 交互状态 (🔴 新增) ====================
     // 当前被点击选中的宫位信息
@@ -216,21 +295,8 @@ export const useCompassStore = defineStore('compassStore', () => {
 
     const hudRenderConfig = computed<FengShuiCompassConfig>(() => {
         const baseConfig = vectorRenderConfig.value;
-        const size = Math.round(clamp(hudSizePx.value, 180, 520));
-        return {
-            ...deepClone(baseConfig),
-            compassSize: {
-                ...(baseConfig?.compassSize || {}),
-                width: size,
-                height: size,
-            },
-            rotate: normalizeAngle(rotation.value),
-            tianxinCrossLengthRatio: clamp(
-                Number(baseConfig?.tianxinCrossLengthRatio || 1 / 3),
-                0.1,
-                1,
-            ),
-        } as FengShuiCompassConfig;
+        const size = Math.round(clamp(hudSizePx.value, HUD_MIN_SIZE, HUD_MAX_SIZE));
+        return createHudRenderConfig(baseConfig, size, rotation.value);
     });
 
     const renderCacheToken = computed(
@@ -315,7 +381,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     }
 
     function setHudSize(nextSize: number): void {
-        hudSizePx.value = clamp(Number(nextSize), 180, 520);
+        hudSizePx.value = clamp(Number(nextSize), HUD_MIN_SIZE, HUD_MAX_SIZE);
     }
 
     function replaceConfig(

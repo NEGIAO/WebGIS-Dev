@@ -1625,11 +1625,28 @@ defineExpose({
 
 .compass-hud-wrapper {
     position: absolute;
-    right: 18px;
-    bottom: 18px;
+    right: clamp(12px, 2vw, 24px);
+    bottom: clamp(12px, 2vw, 24px);
     z-index: 1210;
     pointer-events: none;
+    display: grid;
+    place-items: center;
+    width: max-content;
+    height: max-content;
+    padding: clamp(6px, 1.2vw, 12px);
+    border-radius: 999px;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(18, 24, 18, 0.42), rgba(18, 24, 18, 0.14) 58%, transparent 74%);
+    filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.26));
+    overflow: visible;
     transform: translateZ(0);
+}
+
+.compass-hud-wrapper :deep(.feng-shui-compass-svg),
+.compass-hud-wrapper :deep(.feng-shui-compass-svg svg) {
+    display: block;
+    flex: 0 0 auto;
+    overflow: visible;
 }
 
 .map-container.compass-placement-mode :deep(#map),
@@ -1705,6 +1722,12 @@ defineExpose({
 
 /* 移动端适配鹰眼视图 */
 @media (max-width: 768px) {
+    .compass-hud-wrapper {
+        right: 10px;
+        bottom: 10px;
+        padding: 6px;
+    }
+
     :deep(.ol-custom-overviewmap .ol-overviewmap-map) {
         width: 120px;
         height: 120px;

@@ -71,6 +71,8 @@ npm run build:analyze
 
 ```env
 VITE_BACKEND_URL=http://localhost:8000
+VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
+VITE_TILE_PROXY_MODE=fallback
 VITE_TIANDITU_TK=your_tianditu_token
 VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
 VITE_BASE_URL=./
@@ -142,7 +144,7 @@ frontend/src/
 │   ├── Common/                               # 通用可复用组件
 │   │   └── ExtentPicker.vue                  # 框选范围组件（开始/重新/清除/提示）
 │   ├── Compass/
-│   │   ├── CompassControlPanel.vue           # 罗盘控制面板
+│   │   ├── CompassControlPanel.vue           # 罗盘控制面板（HUD 尺寸控制）
 │   │   └── PalaceExplanationPanel.vue        # 宫位解释面板
 │   ├── ControlsPanel/                        # 左侧控制栏
 │   │   ├── ControlsPanel.vue                 # 总面板入口
@@ -152,7 +154,7 @@ frontend/src/
 │   │   ├── LogMonitor.vue                    # 日志监控
 │   │   ├── MeasurePanel.vue                  # 测量面板
 │   │   └── SpatialAnalysisPanel.vue          # 空间分析面板
-│   ├── feng-shui-compass-svg/                # 罗盘 SVG HUD
+│   ├── feng-shui-compass-svg/                # 罗盘 SVG HUD（小尺寸渲染适配）
 │   │   ├── feng-shui-compass-svg.vue         # 罗盘主组件
 │   │   ├── Explanation/                      # 宫位解释 JSON（5 种主题）
 │   │   ├── themes/                           # 5 种主题配置 + 预览图
@@ -166,7 +168,7 @@ frontend/src/
 │   │   ├── AttributeTable.vue                # 属性表
 │   │   └── SharedResourceTreeItem.vue        # 共享资源树节点
 │   ├── Map/                                  # 地图核心
-│   │   ├── MapContainer.vue                  # 地图容器（能力暴露核心）
+│   │   ├── MapContainer.vue                  # 地图容器（能力暴露核心 + 罗盘 HUD 浮层）
 │   │   ├── MapControlsBar.vue                # 底部坐标/缩放工具栏
 │   │   ├── MapSwipeController.vue            # 卷帘对比滑块
 │   │   ├── MapDownloader.vue                 # 底图下载面板
@@ -187,7 +189,7 @@ frontend/src/
 │   │   ├── PersistentAnnouncementBar.vue     # 顶部公告条
 │   │   └── MagicCursor.vue                   # 首屏特效
 │   ├── Weather/
-│   │   ├── WeatherChartPanel.vue             # 天气可视化主面板
+│   │   ├── WeatherChartPanel.vue             # 天气可视化主面板（容器查询 + 响应式图表壳）
 │   │   ├── WeatherLiveCards.vue              # 实况天气卡片
 │   │   └── WeatherForecastTable.vue          # 预报表格
 │   └── UserCenter/
@@ -241,14 +243,14 @@ frontend/src/
 │   ├── tileSource/                           # 瓦片源工厂拆分模块
 │   │   ├── types.ts                          # 类型定义与常量
 │   │   ├── urlUtils.ts                       # URL 工具函数
-│   │   ├── tileLifecycle.ts                  # 请求生命周期管理
+│   │   ├── tileLifecycle.ts                  # 请求生命周期管理 + 外部瓦片代理改写
 │   │   ├── wmsSource.ts                      # WMS 源创建
 │   │   ├── wmtsSource.ts                     # WMTS 源创建
 │   │   ├── xyzSource.ts                      # XYZ 源 + 自动检测
 │   │   └── index.ts                          # barrel export
 │   ├── weather/                              # 天气相关 composables
 │   │   ├── useWeatherData.js                 # 天气数据获取与查询
-│   │   └── useWeatherCharts.js               # ECharts 图表渲染
+│   │   └── useWeatherCharts.js               # ECharts 图表渲染 + 容器自适应布局
 │   ├── useUserLocation.js                    # 用户定位
 │   └── ...
 │
@@ -291,7 +293,7 @@ frontend/src/
 │   ├── useAttrStore.ts                       # 属性表状态
 │   ├── useAuthStore.ts                       # 鉴权状态
 │   ├── useChatStore.ts                       # Chat 工具调用状态管理
-│   ├── useCompassStore.ts                    # 罗盘状态
+│   ├── useCompassStore.ts                    # 罗盘状态（HUD 专用配置缩放）
 │   ├── useDownloadStore.ts                   # 下载任务状态
 │   ├── useLayerStore.ts                      # 图层状态
 │   ├── useSwipeConfigStore.ts                # 卷帘配置（localStorage 持久化）
@@ -626,6 +628,70 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.3.2 (2026-06-09)
+#### 📊 天气组件动态适配父组件尺寸 + 风力仪表 UI 优化
+
+**修改：**
+- `components/Weather/WeatherChartPanel.vue`：
+  - 启用 CSS 容器查询 `container-type: inline-size; container-name: weather-panel`
+  - 将媒体查询重构为容器查询 `@container weather-panel`
+  - `.charts-layout` 改为响应式 grid，宽屏并排、窄面板堆叠
+  - `.chart-canvas` 适配父容器真实尺寸，避免 ECharts 初始化拿到固定高度
+
+- `composables/weather/useWeatherCharts.js`：
+  - 新增 `ResizeObserver` 监听图表容器、图表面板及天气面板大小变化
+  - 容器尺寸变化时通过防抖 + `requestAnimationFrame` 触发 resize + 重新渲染
+  - 气温趋势图和风力图均基于图表 DOM 真实宽高计算 legend、grid、字号、标记点
+  - 气温趋势图恢复最高/最低标注，白天与晚间两条曲线均显示温度标注
+  - 风力图改为上下 50% 分区：上半区仅显示轻量风力仪表，下半区独立显示预报风级柱线图
+  - 预报风级纵轴改为按白天/夜间/平均风力返回值域动态计算，低风级数据对比更明显
+  - `setupResizeObserver()` 在图表实例创建时自动调用
+  - 组件卸载时清理 ResizeObserver
+
+- `composables/weather/useWeatherData.js`：
+  - 城市名称解析优先使用高德正地理编码返回的 adcode，只有缺失 adcode 时才逆地理编码兜底
+  - 手动 adcode 查询和城市解析查询不再先 `setAdcode`，避免 store watcher 与手动加载重复触发天气请求
+
+- `components/Weather/WeatherLiveCards.vue`：
+  - 启用 CSS 容器查询 `container-type: inline-size`
+  - 主卡片最小宽度从 260px 降为 180px
+  - 降雨面板右侧最小宽度从 260px 降为 200px
+  - 添加 `@container` 查询，根据父容器宽度自适应布局
+
+- `stores/useCompassStore.ts`：
+  - 新增固定屏幕 HUD 专用渲染配置生成逻辑
+  - 按 HUD 尺寸缩放刻度线高度、刻度数字字号、分层文字字号、天池半径和天心十字线宽度
+  - 对 24/60 分宫等高密度图层设置更小字号上限，减少小 HUD 中的文字遮挡和环层塌陷
+  - HUD 默认尺寸提升到 340px，并将尺寸范围统一为 240-560px
+
+- `components/Map/MapContainer.vue`：
+  - 固定屏幕 HUD 浮层增加圆形背景、响应式边距和 drop shadow
+  - 为罗盘 SVG 增加 `overflow: visible` 显示保护，避免边缘被裁切
+
+- `components/Compass/CompassControlPanel.vue`：
+  - HUD 尺寸滑杆范围同步为 240-560px，和 store 的实际 clamp 保持一致
+
+- `composables/tileSource/tileLifecycle.ts`：
+  - 外部 HTTP(S) 瓦片请求直连优先，直连失败后兜底请求既有 `/proxy/{URL}` 后端代理
+  - 保留 `fetch + AbortController` 中断请求能力，同时避免第三方瓦片缺少 CORS 响应头导致图源完全不可用
+  - 已经是后端代理、当前站点同源、`/proxy/` 或 `/tiles/` 的地址不再二次代理
+  - 支持 `VITE_TILE_PROXY_BASE_URL` 指定代理根地址，`VITE_TILE_PROXY_MODE=always` 强制代理，`off` 关闭兜底代理
+
+- `.env.example`：
+  - 补充 `VITE_TILE_PROXY_BASE_URL` 和 `VITE_TILE_PROXY_MODE` 示例配置
+
+**解决的问题：**
+- 图表容器高度写死 `clamp(240px, 34vh, 340px)`，不随父组件变化
+- 只监听 `window.resize`，侧边栏折叠/面板展开时图表不重新适配
+- 风力仪表的指针、刻度、图例与柱状图区在窄面板中互相遮挡
+- 实况卡片固定 `min-width: 260px`，窄屏下布局溢出
+- 媒体查询只响应视口宽度，不响应父容器实际宽度
+- 罗盘 HUD 固定屏幕模式直接压缩大尺寸主题参数，导致刻度、文字和中心盘挤压塌陷
+- HUD 尺寸滑杆展示范围与 store 实际限制不一致，调整反馈不直观
+- `maps-for-free.com` 等第三方瓦片服务不返回 CORS 响应头时，统一瓦片 `fetch` 直连会被浏览器拦截，需要代理兜底
+
+---
 
 ### V3.3.1 (2026-06-06)
 #### 📱 LogMonitor 移动端/Pad 适配修复

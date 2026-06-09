@@ -4,6 +4,7 @@
  * - 管理 ECharts 运行时加载与图表实例生命周期
  * - 封装气温趋势图、风力仪表+柱状组合图的渲染逻辑
  * - 处理响应式布局与 resize
+ * - 使用 ResizeObserver 监听容器大小变化，动态适应父组件尺寸
  */
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { useMessage } from '../useMessage';
@@ -52,6 +53,10 @@ export function useWeatherCharts(weatherData) {
     let windChart = null;
     /** resize 防抖定时器 */
     let resizeDebounceTimer = null;
+    /** resize 动画帧 id */
+    let resizeFrameId = null;
+    /** ResizeObserver 实例（监听容器大小变化） */
+    let resizeObserver = null;
 
     /* ------------------------------------------------------------ */
     /*  ECharts 运行时管理                                             */
@@ -111,6 +116,9 @@ export function useWeatherCharts(weatherData) {
         if (!windChart && windChartRef.value) {
             windChart = echartsModule.init(windChartRef.value);
         }
+
+        // 初始化 ResizeObserver 监听容器大小变化
+        setupResizeObserver();
     }
 
     /* ------------------------------------------------------------ */
@@ -130,6 +138,92 @@ export function useWeatherCharts(weatherData) {
     }
 
     /* ------------------------------------------------------------ */
+    /*  图表布局尺寸计算                                                */
+    /* ------------------------------------------------------------ */
+
+    /**
+     * 读取图表容器的实际尺寸，优先使用 DOM 尺寸，避免 ECharts 缓存尺寸滞后。
+     * @param {Object|null} chart ECharts 实例
+     * @param {import('vue').Ref<HTMLElement|null>} chartRef 图表 DOM ref
+     * @param {Object} fallback 兜底尺寸
+     * @returns {{width: number, height: number, ratio: number, narrow: boolean, short: boolean, tiny: boolean}}
+     */
+    function getChartBoxMetrics(chart, chartRef, fallback = {}) {
+        const rect = chartRef.value?.getBoundingClientRect?.();
+        const rectWidth = Number(rect?.width);
+        const rectHeight = Number(rect?.height);
+        const width = Math.max(
+            1,
+            Math.round(
+                rectWidth ||
+                    chartRef.value?.clientWidth ||
+                    chart?.getWidth?.() ||
+                    fallback.width ||
+                    640,
+            ),
+        );
+        const height = Math.max(
+            1,
+            Math.round(
+                rectHeight ||
+                    chartRef.value?.clientHeight ||
+                    chart?.getHeight?.() ||
+                    fallback.height ||
+                    280,
+            ),
+        );
+
+        return {
+            width,
+            height,
+            ratio: width / Math.max(height, 1),
+            narrow: width < 460,
+            short: height < 240,
+            tiny: width < 360 || height < 210,
+        };
+    }
+
+    /**
+     * 气温趋势图布局参数。
+     * @returns {Object} 趋势图响应式布局参数
+     */
+    function getTrendLayoutMetrics() {
+        const box = getChartBoxMetrics(trendChart, trendChartRef, {
+            width: 640,
+            height: 260,
+        });
+        const mobile = weatherData.isMobile?.value ?? false;
+        const narrow = box.narrow || mobile;
+        const short = box.short;
+
+        const axisFontSize = clampValue(Math.round(box.width * 0.02), 10, 13);
+        const legendFontSize = clampValue(Math.round(box.width * 0.019), 10, 13);
+        const legendTop = clampValue(Math.round(box.height * 0.025), 4, 10);
+        const gridTop = clampValue(Math.round(box.height * (short ? 0.21 : 0.18)), 42, 58);
+        const gridBottom = clampValue(Math.round(box.height * (narrow ? 0.15 : 0.12)), 26, 44);
+
+        return {
+            ...box,
+            legendTop,
+            legendFontSize,
+            legendItemWidth: clampValue(Math.round(box.width * 0.026), 9, 15),
+            legendItemHeight: clampValue(Math.round(box.height * 0.026), 5, 8),
+            gridLeft: clampValue(Math.round(box.width * 0.066), 30, 52),
+            gridRight: clampValue(Math.round(box.width * 0.032), 10, 22),
+            gridTop,
+            gridBottom,
+            axisFontSize,
+            axisNameFontSize: clampValue(axisFontSize - 1, 9, 12),
+            lineWidth: clampValue(Math.round(box.width * 0.006), 2, 3),
+            symbolSize: clampValue(Math.round(box.width * 0.012), 5, 8),
+            markPointSize: clampValue(Math.round(box.width * 0.048), 20, 34),
+            showSymbols: !narrow && !short,
+            markPointFontSize: clampValue(Math.round(box.width * 0.018), 9, 11),
+            xLabelRotate: narrow || (weatherData.isCompact?.value ?? false) ? 16 : 0,
+        };
+    }
+
+    /* ------------------------------------------------------------ */
     /*  气温趋势图渲染                                                  */
     /* ------------------------------------------------------------ */
 
@@ -140,8 +234,7 @@ export function useWeatherCharts(weatherData) {
     function renderTrendChart() {
         if (!trendChart || !echartsModule) return;
 
-        const mobile = weatherData.isMobile?.value ?? false;
-        const compact = weatherData.isCompact?.value ?? false;
+        const metrics = getTrendLayoutMetrics();
         const castsList = weatherData.casts?.value ?? [];
 
         const dates = castsList.map((item) => formatDateLabel(item.date));
@@ -163,6 +256,7 @@ export function useWeatherCharts(weatherData) {
             animationDurationUpdate: 300,
             tooltip: {
                 trigger: 'axis',
+                confine: true,
                 backgroundColor: 'rgba(16, 44, 31, 0.88)',
                 borderColor: 'rgba(101, 183, 132, 0.65)',
                 borderWidth: 1,
@@ -184,17 +278,19 @@ export function useWeatherCharts(weatherData) {
             },
             legend: {
                 data: ['白天气温', '晚间气温'],
-                top: 8,
+                top: metrics.legendTop,
+                left: 'center',
                 icon: 'roundRect',
-                itemWidth: mobile ? 10 : 14,
-                itemHeight: mobile ? 6 : 8,
-                textStyle: { color: '#2a5a3f', fontSize: mobile ? 11 : 12 },
+                itemWidth: metrics.legendItemWidth,
+                itemHeight: metrics.legendItemHeight,
+                itemGap: metrics.narrow ? 10 : 14,
+                textStyle: { color: '#2a5a3f', fontSize: metrics.legendFontSize },
             },
             grid: {
-                left: mobile ? 34 : 42,
-                right: mobile ? 14 : 18,
-                top: mobile ? 46 : 48,
-                bottom: mobile ? 34 : 30,
+                left: metrics.gridLeft,
+                right: metrics.gridRight,
+                top: metrics.gridTop,
+                bottom: metrics.gridBottom,
                 containLabel: true,
             },
             xAxis: {
@@ -203,8 +299,8 @@ export function useWeatherCharts(weatherData) {
                 axisLine: { lineStyle: { color: '#7fb79a' } },
                 axisLabel: {
                     color: '#2c6045',
-                    fontSize: mobile ? 11 : 12,
-                    rotate: compact ? 14 : 0,
+                    fontSize: metrics.axisFontSize,
+                    rotate: metrics.xLabelRotate,
                 },
                 axisTick: { alignWithLabel: true },
             },
@@ -214,8 +310,8 @@ export function useWeatherCharts(weatherData) {
                 min: yMin,
                 max: yMax,
                 axisLine: { show: false },
-                axisLabel: { color: '#2c6045', fontSize: mobile ? 11 : 12 },
-                nameTextStyle: { color: '#2c6045', fontSize: mobile ? 10 : 11 },
+                axisLabel: { color: '#2c6045', fontSize: metrics.axisFontSize },
+                nameTextStyle: { color: '#2c6045', fontSize: metrics.axisNameFontSize },
                 splitLine: { lineStyle: { color: 'rgba(90, 150, 110, 0.18)' } },
             },
             series: [
@@ -223,11 +319,11 @@ export function useWeatherCharts(weatherData) {
                     name: '白天气温',
                     type: 'line',
                     smooth: true,
-                    showSymbol: !mobile,
-                    symbolSize: mobile ? 6 : 8,
+                    showSymbol: metrics.showSymbols,
+                    symbolSize: metrics.symbolSize,
                     data: dayTemps,
                     connectNulls: true,
-                    lineStyle: { width: mobile ? 2.5 : 3, color: '#3cb46b' },
+                    lineStyle: { width: metrics.lineWidth, color: '#3cb46b' },
                     itemStyle: { color: '#3cb46b' },
                     areaStyle: {
                         color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
@@ -236,27 +332,32 @@ export function useWeatherCharts(weatherData) {
                         ]),
                     },
                     emphasis: { focus: 'series' },
-                    markPoint: mobile
-                        ? undefined
-                        : {
-                              symbolSize: 34,
-                              label: { color: '#ffffff', fontSize: 10 },
-                              itemStyle: { color: '#2f9b58' },
-                              data: [
-                                  { type: 'max', name: '最高' },
-                                  { type: 'min', name: '最低' },
-                              ],
-                          },
+                    markPoint: {
+                        symbolSize: metrics.markPointSize,
+                        label: {
+                            color: '#ffffff',
+                            fontSize: metrics.markPointFontSize,
+                            formatter(params) {
+                                const value = Number(params?.value);
+                                return Number.isFinite(value) ? `${value}°` : '';
+                            },
+                        },
+                        itemStyle: { color: '#2f9b58' },
+                        data: [
+                            { type: 'max', name: '最高' },
+                            { type: 'min', name: '最低' },
+                        ],
+                    },
                 },
                 {
                     name: '晚间气温',
                     type: 'line',
                     smooth: true,
-                    showSymbol: !mobile,
-                    symbolSize: mobile ? 6 : 8,
+                    showSymbol: metrics.showSymbols,
+                    symbolSize: metrics.symbolSize,
                     data: nightTemps,
                     connectNulls: true,
-                    lineStyle: { width: mobile ? 2.5 : 3, color: '#2d8cff' },
+                    lineStyle: { width: metrics.lineWidth, color: '#2d8cff' },
                     itemStyle: { color: '#2d8cff' },
                     areaStyle: {
                         color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
@@ -265,6 +366,22 @@ export function useWeatherCharts(weatherData) {
                         ]),
                     },
                     emphasis: { focus: 'series' },
+                    markPoint: {
+                        symbolSize: metrics.markPointSize,
+                        label: {
+                            color: '#ffffff',
+                            fontSize: metrics.markPointFontSize,
+                            formatter(params) {
+                                const value = Number(params?.value);
+                                return Number.isFinite(value) ? `${value}°` : '';
+                            },
+                        },
+                        itemStyle: { color: '#1f73d6' },
+                        data: [
+                            { type: 'max', name: '最高' },
+                            { type: 'min', name: '最低' },
+                        ],
+                    },
                 },
             ],
         };
@@ -282,71 +399,71 @@ export function useWeatherCharts(weatherData) {
      * @returns {Object} 布局尺寸参数集
      */
     function getWindLayoutMetrics() {
-        const rawWidth = Number(
-            windChart?.getWidth?.() || windChartRef.value?.clientWidth || 640,
-        );
-        const rawHeight = Number(
-            windChart?.getHeight?.() || windChartRef.value?.clientHeight || 280,
-        );
+        const box = getChartBoxMetrics(windChart, windChartRef, {
+            width: 640,
+            height: 280,
+        });
+        const { width, height, narrow, short, tiny } = box;
+        const splitYPx = Math.round(height * 0.5);
+        const showLegend = !tiny && !short && width >= 430;
 
-        const width = Math.max(320, rawWidth);
-        const height = Math.max(200, rawHeight);
-        const ratio = width / Math.max(height, 1);
+        const legendTopPx = splitYPx + clampValue(Math.round(height * 0.012), 2, 6);
+        const legendFontSize = clampValue(Math.round(width * 0.017), 10, 12);
+        const legendItemWidth = clampValue(Math.round(width * 0.022), 8, 13);
+        const legendItemHeight = clampValue(Math.round(height * 0.022), 5, 7);
 
-        const legendTopPx = clampValue(Math.round(height * 0.03), 4, 12);
-        const legendFontSize = clampValue(Math.round(width * 0.018), 10, 14);
-        const legendItemWidth = clampValue(Math.round(width * 0.02), 8, 16);
-        const legendItemHeight = clampValue(Math.round(height * 0.022), 5, 9);
-
-        const preferredGaugeByWidth = ratio >= 2.2 ? width * 0.12 : width * 0.15;
-        const preferredGaugeByHeight = height * 0.3;
+        const preferredGaugeByWidth = width * (narrow ? 0.17 : 0.14);
+        const preferredGaugeByHeight = splitYPx * 0.48;
         const gaugeRadiusPx = clampValue(
             Math.round(Math.min(preferredGaugeByWidth, preferredGaugeByHeight)),
-            46,
-            96,
+            tiny ? 34 : 42,
+            92,
         );
         const gaugeCenterYPx = clampValue(
-            Math.round(legendTopPx + 16 + gaugeRadiusPx * 0.85),
-            60,
-            Math.round(height * 0.42),
+            Math.round(splitYPx * 0.5),
+            Math.round(gaugeRadiusPx + 2),
+            Math.round(splitYPx - gaugeRadiusPx - 2),
         );
 
         const minSide = Math.min(width, height);
         const gaugeRadiusPercent = `${clampValue(
             (gaugeRadiusPx / minSide) * 100,
-            14,
-            34,
+            12,
+            narrow ? 38 : 34,
         ).toFixed(2)}%`;
         const gaugeCenterYPercent = `${((gaugeCenterYPx / height) * 100).toFixed(2)}%`;
 
-        const gaugeStroke = clampValue(Math.round(gaugeRadiusPx * 0.15), 6, 11);
-        const gaugeSplitLength = clampValue(Math.round(gaugeRadiusPx * 0.15), 6, 11);
-        const gaugeAxisFontSize = clampValue(Math.round(gaugeRadiusPx * 0.16), 8, 12);
-        const gaugeDetailFontSize = clampValue(Math.round(gaugeRadiusPx * 0.35), 14, 24);
-        const gaugeSplitNumber = gaugeRadiusPx >= 74 ? 6 : 4;
-        const gaugeLabelStep = gaugeSplitNumber === 6 ? 2 : 4;
-        const gaugeLabelDistance = clampValue(Math.round(gaugeRadiusPx * 0.2), 8, 18);
+        const gaugeStroke = clampValue(Math.round(gaugeRadiusPx * 0.15), 7, 13);
+        const gaugeSplitLength = 0;
+        const gaugeAxisFontSize = 0;
+        const gaugeDetailFontSize = clampValue(Math.round(gaugeRadiusPx * 0.36), 15, 25);
+        const gaugeTitleFontSize = clampValue(Math.round(gaugeRadiusPx * 0.18), 10, 13);
+        const gaugeSplitNumber = 4;
+        const gaugeLabelStep = gaugeSplitNumber === 6 && !short ? 2 : 4;
+        const gaugeLabelDistance = 0;
 
         const barsTopPx = clampValue(
-            Math.round(gaugeCenterYPx + gaugeRadiusPx * 0.45 + height * 0.06),
-            120,
+            splitYPx + (showLegend ? legendFontSize + 14 : 4),
+            splitYPx + 4,
             Math.round(height * 0.6),
         );
         const barsTopPercent = `${((barsTopPx / height) * 100).toFixed(2)}%`;
 
-        const gridLeft = clampValue(Math.round(width * 0.055), 26, 52);
-        const gridRight = clampValue(Math.round(width * 0.03), 12, 22);
-        const gridBottom = clampValue(Math.round(height * 0.09), 24, 40);
+        const gridLeft = clampValue(Math.round(width * 0.05), 24, 46);
+        const gridRight = clampValue(Math.round(width * 0.026), 8, 18);
+        const gridBottom = clampValue(Math.round(height * 0.07), 18, 28);
         const axisFontSize = clampValue(Math.round(width * 0.017), 10, 13);
         const yNameFontSize = clampValue(axisFontSize - 1, 9, 12);
-        const barMaxWidth = clampValue(Math.round(width * 0.028), 8, 20);
-        const lineSymbolSize = clampValue(Math.round(width * 0.011), 4, 7);
+        const barMaxWidth = clampValue(Math.round(width * (narrow ? 0.036 : 0.028)), 8, 20);
+        const lineSymbolSize = clampValue(Math.round(width * 0.012), 4, 7);
 
         return {
+            ...box,
             legendTopPx,
             legendFontSize,
             legendItemWidth,
             legendItemHeight,
+            legendItemGap: tiny ? 8 : 12,
             gaugeRadiusPercent,
             gaugeCenterYPercent,
             gaugeRadiusPx,
@@ -357,6 +474,7 @@ export function useWeatherCharts(weatherData) {
             gaugeLabelDistance,
             gaugeAxisFontSize,
             gaugeDetailFontSize,
+            gaugeTitleFontSize,
             barsTopPercent,
             gridLeft,
             gridRight,
@@ -365,6 +483,11 @@ export function useWeatherCharts(weatherData) {
             yNameFontSize,
             barMaxWidth,
             lineSymbolSize,
+            showLegend,
+            splitYPercent: `${((splitYPx / height) * 100).toFixed(2)}%`,
+            showGaugeLabels: false,
+            splitLineWidth: tiny ? 1 : 1.4,
+            showLineSymbol: !tiny,
         };
     }
 
@@ -399,8 +522,14 @@ export function useWeatherCharts(weatherData) {
             return Number(((dayPower + nightPower) / 2).toFixed(1));
         });
 
-        const forecastMaxPower = Math.max(0, ...dayPowers, ...nightPowers);
-        const axisMax = Math.max(8, Math.min(12, Math.ceil(forecastMaxPower + 1)));
+        const forecastPowers = [...dayPowers, ...nightPowers, ...averagePowers].filter((value) =>
+            Number.isFinite(value),
+        );
+        const forecastMinPower = forecastPowers.length ? Math.min(...forecastPowers) : 0;
+        const forecastMaxPower = forecastPowers.length ? Math.max(...forecastPowers) : 3;
+        const axisMin = Math.max(0, Math.floor(forecastMinPower - 1));
+        const axisMax = Math.min(12, Math.max(axisMin + 2, Math.ceil(forecastMaxPower + 1)));
+        const axisInterval = clampValue(Math.ceil((axisMax - axisMin) / 4), 1, 3);
         const xLabelRotate = dateLabels.some((item) => String(item || '').length > 5) ? 12 : 0;
 
         // NOTE: ECharts JS 内的颜色值无法使用 CSS 变量，如需同步主题色请手动与 theme.css 中的变量保持一致
@@ -409,11 +538,14 @@ export function useWeatherCharts(weatherData) {
             animationDuration: 420,
             animationDurationUpdate: 300,
             legend: {
+                show: metrics.showLegend,
                 data: ['白天风力', '夜间风力', '平均风力'],
                 top: metrics.legendTopPx,
+                left: 'center',
                 icon: 'roundRect',
                 itemWidth: metrics.legendItemWidth,
                 itemHeight: metrics.legendItemHeight,
+                itemGap: metrics.legendItemGap,
                 textStyle: { color: '#2a5a3f', fontSize: metrics.legendFontSize },
             },
             grid: {
@@ -430,21 +562,29 @@ export function useWeatherCharts(weatherData) {
                     color: '#2c6045',
                     fontSize: metrics.axisFontSize,
                     rotate: xLabelRotate,
+                    margin: 10,
                 },
                 axisLine: { lineStyle: { color: '#7fb79a' } },
             },
             yAxis: {
                 type: 'value',
                 name: '级',
-                min: 0,
+                min: axisMin,
                 max: axisMax,
-                axisLabel: { color: '#2c6045', fontSize: metrics.axisFontSize },
+                interval: axisInterval,
+                axisLabel: {
+                    color: '#2c6045',
+                    fontSize: metrics.axisFontSize,
+                    margin: 8,
+                },
+                nameGap: 10,
                 nameTextStyle: { color: '#2c6045', fontSize: metrics.yNameFontSize },
                 splitLine: { lineStyle: { color: 'rgba(90, 150, 110, 0.18)' } },
             },
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
+                confine: true,
                 backgroundColor: 'rgba(16, 44, 31, 0.88)',
                 borderColor: 'rgba(101, 183, 132, 0.65)',
                 borderWidth: 1,
@@ -472,8 +612,8 @@ export function useWeatherCharts(weatherData) {
             series: [
                 {
                     type: 'gauge',
-                    startAngle: 210,
-                    endAngle: -30,
+                    startAngle: 215,
+                    endAngle: -35,
                     tooltip: {
                         trigger: 'item',
                         formatter: `当前实况风力：${currentWind} 级`,
@@ -487,10 +627,12 @@ export function useWeatherCharts(weatherData) {
                         show: true,
                         width: metrics.gaugeStroke,
                         roundCap: true,
+                        overlap: false,
                         itemStyle: {
                             color: new echartsModule.graphic.LinearGradient(0, 0, 1, 0, [
-                                { offset: 0, color: '#73c990' },
-                                { offset: 1, color: '#24864c' },
+                                { offset: 0, color: '#8ddca6' },
+                                { offset: 0.58, color: '#42b970' },
+                                { offset: 1, color: '#207a46' },
                             ]),
                         },
                     },
@@ -503,11 +645,17 @@ export function useWeatherCharts(weatherData) {
                     },
                     axisTick: { show: false },
                     splitLine: {
+                        show: metrics.showGaugeLabels,
                         length: metrics.gaugeSplitLength,
-                        lineStyle: { color: '#7fb79a', width: 2 },
+                        distance: 3,
+                        lineStyle: {
+                            color: 'rgba(78, 142, 104, 0.42)',
+                            width: metrics.splitLineWidth,
+                        },
                     },
                     axisLabel: {
-                        color: '#5b846f',
+                        show: metrics.showGaugeLabels,
+                        color: '#6a907a',
                         fontSize: metrics.gaugeAxisFontSize,
                         distance: metrics.gaugeLabelDistance,
                         formatter(value) {
@@ -519,28 +667,36 @@ export function useWeatherCharts(weatherData) {
                         },
                     },
                     pointer: {
-                        itemStyle: { color: '#2d8253' },
-                        length: '45%',
-                        width: Math.max(3, metrics.gaugeStroke * 0.4),
+                        show: false,
                     },
-                    title: { show: false },
+                    anchor: { show: false },
+                    title: {
+                        show: true,
+                        offsetCenter: [0, '62%'],
+                        color: '#5d856c',
+                        fontSize: metrics.gaugeTitleFontSize,
+                        fontWeight: 600,
+                    },
                     detail: {
                         valueAnimation: true,
                         fontSize: metrics.gaugeDetailFontSize,
                         fontWeight: 800,
                         color: '#1f5a37',
-                        offsetCenter: [0, '52%'],
+                        lineHeight: metrics.gaugeDetailFontSize + 2,
+                        offsetCenter: [0, '18%'],
                         formatter: '{value} 级',
                     },
-                    data: [{ value: currentWind }],
+                    data: [{ value: currentWind, name: '当前实况' }],
                 },
                 {
                     name: '白天风力',
                     type: 'bar',
                     barMaxWidth: metrics.barMaxWidth,
+                    barGap: '20%',
+                    barCategoryGap: '42%',
                     data: dayPowers,
                     itemStyle: {
-                        borderRadius: [5, 5, 0, 0],
+                        borderRadius: [4, 4, 0, 0],
                         color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                             { offset: 0, color: 'rgba(63, 183, 110, 0.92)' },
                             { offset: 1, color: 'rgba(63, 183, 110, 0.48)' },
@@ -551,9 +707,11 @@ export function useWeatherCharts(weatherData) {
                     name: '夜间风力',
                     type: 'bar',
                     barMaxWidth: metrics.barMaxWidth,
+                    barGap: '20%',
+                    barCategoryGap: '42%',
                     data: nightPowers,
                     itemStyle: {
-                        borderRadius: [5, 5, 0, 0],
+                        borderRadius: [4, 4, 0, 0],
                         color: new echartsModule.graphic.LinearGradient(0, 0, 0, 1, [
                             { offset: 0, color: 'rgba(43, 139, 255, 0.9)' },
                             { offset: 1, color: 'rgba(43, 139, 255, 0.45)' },
@@ -564,10 +722,10 @@ export function useWeatherCharts(weatherData) {
                     name: '平均风力',
                     type: 'line',
                     smooth: true,
-                    showSymbol: true,
+                    showSymbol: metrics.showLineSymbol,
                     symbolSize: metrics.lineSymbolSize,
                     data: averagePowers,
-                    lineStyle: { width: 2.2, color: '#2f7f58', type: 'dashed' },
+                    lineStyle: { width: 2, color: '#2f7f58', type: 'dashed' },
                     itemStyle: { color: '#2f7f58' },
                 },
             ],
@@ -586,22 +744,84 @@ export function useWeatherCharts(weatherData) {
         windChart?.resize?.();
     }
 
+    /**
+     * 延迟到布局稳定后再 resize + render，适配侧栏拖拽、折叠动画和容器查询换行。
+     * @param {Object} options 调度选项
+     * @param {number} options.delay 防抖延迟
+     * @param {boolean} options.updateViewport 是否同步视口宽度
+     */
+    function scheduleChartsResizeAndRender(options = {}) {
+        if (typeof window === 'undefined') return;
+
+        const delay = Number.isFinite(options.delay) ? options.delay : 90;
+
+        if (resizeDebounceTimer !== null) {
+            window.clearTimeout(resizeDebounceTimer);
+            resizeDebounceTimer = null;
+        }
+
+        if (resizeFrameId !== null) {
+            window.cancelAnimationFrame(resizeFrameId);
+            resizeFrameId = null;
+        }
+
+        resizeDebounceTimer = window.setTimeout(() => {
+            resizeDebounceTimer = null;
+
+            if (options.updateViewport && weatherData.viewportWidth) {
+                weatherData.viewportWidth.value = window.innerWidth;
+            }
+
+            resizeFrameId = window.requestAnimationFrame(() => {
+                resizeFrameId = null;
+                resizeCharts();
+                renderTrendChart();
+                renderWindChart();
+            });
+        }, delay);
+    }
+
+    /**
+     * 设置 ResizeObserver 监听图表容器大小变化
+     * 当父组件尺寸改变时（如侧边栏折叠、面板展开），自动触发图表 resize
+     */
+    function setupResizeObserver() {
+        // 如果已经设置过，先断开
+        if (resizeObserver) {
+            resizeObserver.disconnect();
+            resizeObserver = null;
+        }
+
+        // 浏览器不支持 ResizeObserver 时降级到窗口监听
+        if (typeof ResizeObserver === 'undefined') {
+            return;
+        }
+
+        resizeObserver = new ResizeObserver(() => {
+            scheduleChartsResizeAndRender({ delay: 90 });
+        });
+
+        const observedElements = new Set(
+            [
+                trendChartRef.value,
+                windChartRef.value,
+                trendChartRef.value?.parentElement,
+                windChartRef.value?.parentElement,
+                trendChartRef.value?.parentElement?.parentElement,
+                trendChartRef.value?.parentElement?.parentElement?.parentElement,
+            ].filter(Boolean),
+        );
+
+        for (const element of observedElements) {
+            resizeObserver.observe(element);
+        }
+    }
+
     /** 防抖窗口 resize 处理（同时更新视口宽度并重绘图表） */
     function handleWindowResize() {
         if (typeof window === 'undefined') return;
 
-        if (resizeDebounceTimer !== null) {
-            window.clearTimeout(resizeDebounceTimer);
-        }
-
-        resizeDebounceTimer = window.setTimeout(() => {
-            if (weatherData.viewportWidth) {
-                weatherData.viewportWidth.value = window.innerWidth;
-            }
-            resizeCharts();
-            renderTrendChart();
-            renderWindChart();
-        }, 120);
+        scheduleChartsResizeAndRender({ delay: 120, updateViewport: true });
     }
 
     /* ------------------------------------------------------------ */
@@ -609,11 +829,21 @@ export function useWeatherCharts(weatherData) {
     /* ------------------------------------------------------------ */
 
     onBeforeUnmount(() => {
+        // 清理 ResizeObserver
+        if (resizeObserver) {
+            resizeObserver.disconnect();
+            resizeObserver = null;
+        }
+
         if (typeof window !== 'undefined') {
             window.removeEventListener('resize', handleWindowResize);
             if (resizeDebounceTimer !== null) {
                 window.clearTimeout(resizeDebounceTimer);
                 resizeDebounceTimer = null;
+            }
+            if (resizeFrameId !== null) {
+                window.cancelAnimationFrame(resizeFrameId);
+                resizeFrameId = null;
             }
         }
 
@@ -646,5 +876,7 @@ export function useWeatherCharts(weatherData) {
         // Resize
         resizeCharts,
         handleWindowResize,
+        scheduleChartsResizeAndRender,
+        setupResizeObserver,
     };
 }

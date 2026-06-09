@@ -14,6 +14,13 @@ import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
 
 // ==================== 内部工具函数 ====================
 
+const TILE_PROXY_BASE_URL = String(
+    import.meta.env.VITE_TILE_PROXY_BASE_URL ||
+        import.meta.env.VITE_BACKEND_URL ||
+        'https://negiao-webgis.hf.space',
+).replace(/\/$/, '');
+const TILE_PROXY_MODE = String(import.meta.env.VITE_TILE_PROXY_MODE || 'fallback').toLowerCase();
+
 function markTileAsError(tile: any): void {
     if (tile && typeof tile.setState === 'function') {
         tile.setState(TILE_STATE_ERROR);
@@ -51,6 +58,54 @@ function getSourceEpoch(source: any): number {
     return 0;
 }
 
+function isHttpUrl(value: string): boolean {
+    return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function canProxyTileUrl(srcUrl: string): boolean {
+    if (TILE_PROXY_MODE === 'off') return false;
+    if (!isHttpUrl(srcUrl)) return false;
+
+    try {
+        const tileUrl = new URL(srcUrl);
+        const backendUrl = new URL(TILE_PROXY_BASE_URL);
+        if (tileUrl.origin === backendUrl.origin) return false;
+        if (typeof window !== 'undefined' && tileUrl.origin === window.location.origin) return false;
+        if (tileUrl.pathname.startsWith('/proxy/') || tileUrl.pathname.startsWith('/tiles/')) {
+            return false;
+        }
+    } catch {
+        return false;
+    }
+
+    return true;
+}
+
+// 复用既有后端 /proxy/{URL}，仅在 fallback/always 模式下处理第三方 CORS 问题。
+function buildTileProxyUrl(srcUrl: string): string | null {
+    if (!canProxyTileUrl(srcUrl)) return null;
+    return `${TILE_PROXY_BASE_URL}/proxy/${srcUrl}`;
+}
+
+async function requestTileAsBlobUrl(
+    requestUrl: string,
+    signal: AbortSignal,
+): Promise<string | null> {
+    try {
+        const resp = await fetch(requestUrl, {
+            signal,
+            mode: 'cors',
+            credentials: 'omit',
+        });
+        if (!resp.ok) return null;
+        const blob = await resp.blob();
+        return URL.createObjectURL(blob);
+    } catch {
+        // AbortError / TypeError(CORS) / 网络错误 → 返回 null
+        return null;
+    }
+}
+
 /**
  * 用 fetch() 加载图片并绑定 AbortSignal，使 abort() 能真正中断 TCP 连接。
  * 成功时返回 blob URL，失败/中断时返回 null。
@@ -64,19 +119,16 @@ async function fetchTileAsBlobUrl(
     srcUrl: string,
     signal: AbortSignal,
 ): Promise<string | null> {
-    try {
-        const resp = await fetch(srcUrl, {
-            signal,
-            mode: 'cors',
-            credentials: 'omit',
-        });
-        if (!resp.ok) return null;
-        const blob = await resp.blob();
-        return URL.createObjectURL(blob);
-    } catch {
-        // AbortError / TypeError / 网络错误 → 返回 null
-        return null;
+    const proxyUrl = buildTileProxyUrl(srcUrl);
+
+    if (TILE_PROXY_MODE === 'always' && proxyUrl) {
+        return requestTileAsBlobUrl(proxyUrl, signal);
     }
+
+    const directUrl = await requestTileAsBlobUrl(srcUrl, signal);
+    if (directUrl || TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return directUrl;
+
+    return requestTileAsBlobUrl(proxyUrl, signal);
 }
 
 // ==================== 公开 API ====================

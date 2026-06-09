@@ -122,7 +122,7 @@
  *   4. 用 watchEffect 将真实数据同步到占位 ref
  *   这样图表渲染函数被回调触发时，读到的始终是最新数据
  */
-import { computed, ref, watchEffect } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useWeatherStore } from '../../stores';
 import { useWeatherCharts } from '../../composables/weather/useWeatherCharts';
 import { useWeatherData } from '../../composables/weather/useWeatherData';
@@ -218,15 +218,24 @@ const {
 /* ------------------------------------------------------------ */
 /*  注册窗口 resize 监听                                            */
 /* ------------------------------------------------------------ */
-if (typeof window !== 'undefined') {
-    window.addEventListener('resize', handleWindowResize);
-}
+onMounted(() => {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('resize', handleWindowResize, { passive: true });
+});
+
+onBeforeUnmount(() => {
+    if (typeof window === 'undefined') return;
+    window.removeEventListener('resize', handleWindowResize);
+});
 </script>
 
 <style scoped>
+/* 天气面板 - 启用容器查询 */
 .weather-panel {
     height: 100%;
     width: 100%;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -238,6 +247,11 @@ if (typeof window !== 'undefined') {
         linear-gradient(145deg, var(--bg-brand-light) 0%, var(--bg-brand-light) 100%);
     border-radius: 12px;
     overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    /* 启用容器查询，让子组件根据面板宽度自适应 */
+    container-type: inline-size;
+    container-name: weather-panel;
 }
 
 .weather-toolbar {
@@ -252,17 +266,25 @@ if (typeof window !== 'undefined') {
     backdrop-filter: blur(6px);
 }
 
+.weather-toolbar-left {
+    min-width: 0;
+}
+
 .weather-title {
     margin: 0;
     font-size: 20px;
     line-height: 1.2;
     color: var(--brand-accent-dark);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .weather-subtitle {
     margin: 4px 0 0;
     font-size: 12px;
     color: var(--brand-accent-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .weather-toolbar-right {
@@ -293,6 +315,7 @@ if (typeof window !== 'undefined') {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
+    min-width: 0;
 }
 
 .query-block {
@@ -303,6 +326,7 @@ if (typeof window !== 'undefined') {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
 }
 
 .query-block label {
@@ -325,6 +349,7 @@ if (typeof window !== 'undefined') {
     font-size: 12px;
     color: var(--brand-primary-dark);
     background: #fff;
+    min-width: 0;
 }
 
 .query-input:focus {
@@ -347,34 +372,75 @@ if (typeof window !== 'undefined') {
 /* 图表布局 */
 .charts-layout {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.92fr);
+    grid-auto-rows: minmax(clamp(230px, 32dvh, 390px), 1fr);
     gap: 10px;
     align-items: stretch;
     position: relative;
+    width: 100%;
+    min-width: 0;
+    /* 图表区随可用页面高度伸缩，同时保留详情区的滚动空间 */
+    flex: 0 0 auto;
+    min-height: clamp(250px, 34dvh, 410px);
+    container-type: inline-size;
+    container-name: weather-charts;
 }
 
 .chart-panel {
     border: 1px solid rgba(57, 142, 87, 0.2);
     border-radius: 10px;
-    background: #ffffff;
+    background:
+        linear-gradient(180deg, rgba(246, 253, 248, 0.98) 0%, rgba(255, 255, 255, 0.98) 44%),
+        #ffffff;
     display: flex;
     flex-direction: column;
+    min-width: 0;
     min-height: 0;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 10px 26px rgba(35, 105, 61, 0.08);
+}
+
+.chart-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--chart-accent, #3cb46b), transparent);
+    pointer-events: none;
+}
+
+.trend-panel {
+    --chart-accent: #3cb46b;
+}
+
+.side-panel {
+    --chart-accent: #2d8cff;
 }
 
 .chart-title {
-    padding: 10px 12px 4px;
+    padding: 11px 12px 5px;
     font-size: 13px;
     font-weight: 700;
     color: var(--brand-primary-dark);
+    flex-shrink: 0;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .chart-canvas {
     width: 100%;
-    height: clamp(240px, 34vh, 340px);
-    min-height: 240px;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+    /* 占满 chart-panel 减去 title 的剩余空间 */
+    flex: 1 1 auto;
 }
 
 /* 禁用状态 */
@@ -384,25 +450,16 @@ if (typeof window !== 'undefined') {
     cursor: not-allowed;
 }
 
-/* 响应式 */
-@media (max-width: 1200px) {
+/* 容器查询 - 根据父容器宽度自适应（优先级高于媒体查询） */
+@container weather-panel (max-width: 900px) {
     .charts-layout {
         grid-template-columns: 1fr;
-    }
-
-    .chart-canvas {
-        height: clamp(228px, 32vh, 300px);
-        min-height: 228px;
+        grid-auto-rows: minmax(clamp(220px, 38dvh, 340px), auto);
+        min-height: 0;
     }
 }
 
-@media (max-width: 768px) {
-    .weather-panel {
-        padding: 9px;
-        gap: 8px;
-        border-radius: 10px;
-    }
-
+@container weather-panel (max-width: 600px) {
     .weather-toolbar {
         flex-direction: column;
         align-items: flex-start;
@@ -429,17 +486,17 @@ if (typeof window !== 'undefined') {
         grid-template-columns: 1fr;
     }
 
-    .chart-canvas {
-        height: 230px;
-        min-height: 210px;
+    .charts-layout {
+        gap: 8px;
+        grid-auto-rows: minmax(clamp(190px, 50cqw, 280px), auto);
+    }
+
+    .chart-title {
+        padding: 9px 10px 4px;
     }
 }
 
-@media (max-width: 480px) {
-    .weather-panel {
-        padding: 8px;
-    }
-
+@container weather-panel (max-width: 400px) {
     .weather-title {
         font-size: 16px;
     }
@@ -452,9 +509,22 @@ if (typeof window !== 'undefined') {
         font-size: 12px;
     }
 
-    .chart-canvas {
-        height: 212px;
-        min-height: 200px;
+    .charts-layout {
+        grid-auto-rows: minmax(clamp(170px, 58cqw, 240px), auto);
+    }
+}
+
+/* 媒体查询 - 作为兜底（视口级响应） */
+@media (max-width: 768px) {
+    .weather-panel {
+        padding: 9px;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .weather-panel {
+        padding: 8px;
     }
 }
 </style>

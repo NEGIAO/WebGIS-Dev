@@ -24,7 +24,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 
 ## 0. 项目结构（2026-06-09 更新）
 
-### V3.3.2 (2026-06-09) - SQLite 恢复修复 + 北京时间日志 + 整点报时
+### V3.3.2 (2026-06-09) - SQLite 恢复修复 + 北京时间日志 + 整点报时 + 前端天气图表/罗盘 HUD UI
 
 **新增文件：**
 
@@ -40,6 +40,17 @@ WebGIS 后端服务，当前包含五大核心能力：
 | `api/auth/db.py` | 恢复机制增强：`.dump` INSERT 校验 + 数据暂存导入 + WAL 清理 + 连接泄漏修复 + SQL 标识符引用 |
 | `app.py` | 路由注册日志追加北京时间后缀；lifespan 启动/关闭阶段日志附带北京时间；创建整点报时后台任务；日志配置使用 BeijingTimeFormatter |
 | `api/monitor.py` | SSE 日志流广播使用 BeijingTimeFormatter |
+
+**前端同步记录（本次无后端结构变更）：**
+- 天气看板风力图改为上下 50% 分区，上半区仅显示轻量风力仪表，下半区独立显示预报风级柱线图
+- 气温趋势图恢复最高/最低温度标注，白天与晚间两条曲线均显示标注
+- 预报风级纵轴改为按返回数据值域动态计算，避免低风级数据被固定 0-8 级范围压扁
+- 城市解析查询优先使用正地理编码返回的 adcode，并避免 store watcher 与手动加载重复触发天气请求
+- 天气图表基于容器真实宽高动态计算 ECharts legend/grid/字号/仪表半径
+- 罗盘固定屏幕 HUD 新增小尺寸专用渲染配置，按 HUD 尺寸缩放刻度、字体、天池半径和天心十字线，减少塌陷折叠
+- 地图 HUD 浮层增加圆形背景、响应式边距、drop shadow 和 SVG overflow 保护，控制面板 HUD 尺寸范围与 store 限制对齐
+- 外部 HTTP(S) 瓦片请求直连优先，直连失败后兜底请求既有 `/proxy/{URL}` 后端代理，解决 `maps-for-free.com` 等图源缺少 CORS 响应头导致的加载失败
+- 本次前端同步修改 `frontend/src/components/Weather/WeatherChartPanel.vue`、`frontend/src/composables/weather/useWeatherCharts.js`、`frontend/src/composables/weather/useWeatherData.js`、`frontend/src/components/Weather/WeatherLiveCards.vue`、`frontend/src/stores/useCompassStore.ts`、`frontend/src/components/Map/MapContainer.vue`、`frontend/src/components/Compass/CompassControlPanel.vue`、`frontend/src/composables/tileSource/tileLifecycle.ts`、`frontend/.env.example`，后端文件树无新增/删除
 
 **功能说明：**
 - 自定义 `BeijingTimeFormatter` 重写 `formatTime` 方法，使用 `get_beijing_now()` 获取北京时间

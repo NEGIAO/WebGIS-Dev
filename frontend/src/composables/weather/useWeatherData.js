@@ -389,13 +389,13 @@ export function useWeatherData(chartCallbacks = {}) {
             return;
         }
 
-        weatherStore.setAdcode(nextAdcode, { source: 'manual-adcode' });
         await loadWeatherByAdcode(nextAdcode, { force: true, source: 'manual-adcode' });
     }
 
     /**
      * 城市名称解析并查询天气
-     * 流程：城市名 → 正地理编码 → 逆地理编码获取 adcode → 加载天气
+     * 流程：城市名 → 正地理编码获取 adcode → 加载天气
+     * 仅当正地理编码缺少 adcode 时，才使用逆地理编码兜底。
      */
     async function resolveCityAndQuery() {
         const cityText = String(cityInput.value || '').trim();
@@ -408,30 +408,26 @@ export function useWeatherData(chartCallbacks = {}) {
         try {
             const geocodeResponse = await apiAddressGeocode(cityText, cityText, { silent: true });
             const geocode = geocodeResponse?.data || null;
-            if (!geocode || !Number.isFinite(geocode.lng) || !Number.isFinite(geocode.lat)) {
-                throw new Error('未解析到有效坐标');
+            let nextAdcode = String(geocode?.adcode || '').trim();
+
+            if (
+                !/^\d{6}$/.test(nextAdcode) &&
+                Number.isFinite(geocode?.lng) &&
+                Number.isFinite(geocode?.lat)
+            ) {
+                const reverseResponse = await apiReverseGeocodeWithFallback(
+                    geocode.lng,
+                    geocode.lat,
+                    { tiandituTk: TIANDITU_TK, silent: true },
+                );
+                const reverseResult = reverseResponse?.data || null;
+                nextAdcode = String(reverseResult?.adcode || '').trim();
             }
 
-            const reverseResponse = await apiReverseGeocodeWithFallback(
-                geocode.lng,
-                geocode.lat,
-                { tiandituTk: TIANDITU_TK, silent: true },
-            );
-            const reverseResult = reverseResponse?.data || null;
-
-            const nextAdcode = String(
-                geocode?.adcode || reverseResult?.adcode || '',
-            ).trim();
             if (!/^\d{6}$/.test(nextAdcode)) {
                 message.warning('未解析到有效 adcode，请尝试更详细的地名');
                 return;
             }
-
-            weatherStore.setAdcode(nextAdcode, {
-                city: reverseResult?.city || cityText,
-                province: reverseResult?.province || weatherStore.currentProvince,
-                source: 'city-input',
-            });
 
             adcodeInput.value = nextAdcode;
             await loadWeatherByAdcode(nextAdcode, { force: true, source: 'city-input' });

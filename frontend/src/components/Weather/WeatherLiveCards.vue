@@ -110,10 +110,16 @@ defineProps({
 </script>
 
 <style scoped>
+/* 实况卡片容器 - 启用容器查询 */
+.live-cards-wrapper {
+    container-type: inline-size;
+    container-name: live-cards;
+}
+
 /* 实况卡片组 */
 .live-cards {
     display: grid;
-    grid-template-columns: minmax(260px, 2.1fr) repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(180px, 2.1fr) repeat(4, minmax(0, 1fr));
     gap: 8px;
 }
 
@@ -253,7 +259,7 @@ defineProps({
     flex-direction: column;
     align-items: flex-end;
     gap: 6px;
-    min-width: 260px;
+    min-width: 200px;
 }
 
 .rain-badge {
@@ -344,6 +350,60 @@ defineProps({
 
     .mini-value {
         font-size: 14px;
+    }
+}
+
+/* 容器查询 - 根据父容器宽度自适应（优先级高于媒体查询） */
+@container live-cards (max-width: 600px) {
+    .live-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .live-main-card {
+        grid-column: auto;
+    }
+
+    .live-main-icon {
+        width: 42px;
+        height: 42px;
+        font-size: 24px;
+    }
+
+    .live-temp {
+        font-size: 24px;
+    }
+
+    .rain-focus-panel {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .rain-focus-right {
+        min-width: 0;
+        width: 100%;
+        align-items: flex-start;
+    }
+
+    .rain-hit-list {
+        justify-content: flex-start;
+    }
+}
+
+@container live-cards (max-width: 400px) {
+    .live-city {
+        font-size: 14px;
+    }
+
+    .mini-value {
+        font-size: 14px;
+    }
+
+    .rain-focus-title {
+        font-size: 14px;
+    }
+
+    .rain-focus-subtitle {
+        font-size: 11px;
     }
 }
 </style>

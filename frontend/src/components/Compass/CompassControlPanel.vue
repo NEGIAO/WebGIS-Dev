@@ -161,8 +161,8 @@
                 <label>HUD 尺寸：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
                 <input
                     type="range"
-                    min="300"
-                    max="1200"
+                    min="240"
+                    max="560"
                     step="1"
                     class="compass-slider"
                     :disabled="!compassStore.enabled"
