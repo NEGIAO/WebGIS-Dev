@@ -243,7 +243,7 @@ frontend/src/
 │   ├── tileSource/                           # 瓦片源工厂拆分模块
 │   │   ├── types.ts                          # 类型定义与常量
 │   │   ├── urlUtils.ts                       # URL 工具函数
-│   │   ├── tileLifecycle.ts                  # 请求生命周期管理 + 外部瓦片代理改写
+│   │   ├── tileLifecycle.ts                  # 请求生命周期管理 + 外部瓦片代理改写 + 消息通知
 │   │   ├── wmsSource.ts                      # WMS 源创建
 │   │   ├── wmtsSource.ts                     # WMTS 源创建
 │   │   ├── xyzSource.ts                      # XYZ 源 + 自动检测

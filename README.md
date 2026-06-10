@@ -253,7 +253,7 @@ WebGIS_Dev/
 │   │   │   ├── tileSource/               # 瓦片源工厂拆分模块
 │   │   │   │   ├── types.ts              # 类型定义与常量
 │   │   │   │   ├── urlUtils.ts           # URL 工具函数
-│   │   │   │   ├── tileLifecycle.ts      # 请求生命周期管理 + 外部瓦片代理改写
+│   │   │   │   ├── tileLifecycle.ts      # 请求生命周期管理 + 外部瓦片代理改写 + 消息通知
 │   │   │   │   ├── wmsSource.ts          # WMS 源创建
 │   │   │   │   ├── wmtsSource.ts         # WMTS 源创建
 │   │   │   │   ├── xyzSource.ts          # XYZ 源 + 自动检测
@@ -628,6 +628,7 @@ LOG_LEVEL=INFO
 - ✅ 外部 HTTP(S) 瓦片请求直连优先，直连失败后兜底请求既有 `/proxy/{URL}` 后端代理，解决 `maps-for-free.com` 等图源缺少 CORS 响应头导致的加载失败
 - ✅ 已经是后端代理、当前站点同源、`/proxy/` 或 `/tiles/` 的地址不会二次代理
 - ✅ 新增 `VITE_TILE_PROXY_BASE_URL` 与 `VITE_TILE_PROXY_MODE`，支持按环境指定瓦片代理根地址、强制代理或关闭自动代理
+- ✅ 代理触发时通过全局 Message 组件弹出 toast 通知（fallback 模式 / always 模式），5s 防抖去重，不打断快速切换瓦片的 fetch + AbortController 逻辑
 
 **新增文件：**
 - `backend/utils/__init__.py` — 工具包初始化

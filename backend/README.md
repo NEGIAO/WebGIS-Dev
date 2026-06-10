@@ -50,6 +50,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 罗盘固定屏幕 HUD 新增小尺寸专用渲染配置，按 HUD 尺寸缩放刻度、字体、天池半径和天心十字线，减少塌陷折叠
 - 地图 HUD 浮层增加圆形背景、响应式边距、drop shadow 和 SVG overflow 保护，控制面板 HUD 尺寸范围与 store 限制对齐
 - 外部 HTTP(S) 瓦片请求直连优先，直连失败后兜底请求既有 `/proxy/{URL}` 后端代理，解决 `maps-for-free.com` 等图源缺少 CORS 响应头导致的加载失败
+- 代理触发时通过全局 Message 组件弹出 toast 通知（fallback 模式提示"已自动切换至后端代理"，always 模式提示"已启用后端代理模式"），5s 防抖去重避免快速切换时重复弹窗
 - 本次前端同步修改 `frontend/src/components/Weather/WeatherChartPanel.vue`、`frontend/src/composables/weather/useWeatherCharts.js`、`frontend/src/composables/weather/useWeatherData.js`、`frontend/src/components/Weather/WeatherLiveCards.vue`、`frontend/src/stores/useCompassStore.ts`、`frontend/src/components/Map/MapContainer.vue`、`frontend/src/components/Compass/CompassControlPanel.vue`、`frontend/src/composables/tileSource/tileLifecycle.ts`、`frontend/.env.example`，后端文件树无新增/删除
 
 **功能说明：**

@@ -2,17 +2,21 @@
  * 瓦片源工厂 — 请求生命周期管理
  *
  * 从 useTileSourceFactory.ts 拆分。
- * 负责瓦片请求优先级控制、错误标记、中断管理。
+ * 负责瓦片请求优先级控制、错误标记、中断管理、后端代理兜底。
  *
  * 核心机制：
  * - 每个源绑定一个 AbortController，tileLoadFunction 通过 fetch() + signal 加载瓦片
  * - abort() 会真正中断浏览器底层 TCP 连接（而非仅标记）
  * - epoch 计数器防止过期请求的结果被采纳
+ * - 外部瓦片直连失败时自动走后端 /proxy/{URL} 代理（fallback 模式）
+ * - 支持 VITE_TILE_PROXY_MODE=always 强制所有外部瓦片走代理
+ * - 代理触发时通过 Message 组件弹出 toast 通知（5s 防抖去重）
  */
 
 import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
+import { useMessage } from '../useMessage';
 
-// ==================== 内部工具函数 ====================
+// ==================== 环境变量 ====================
 
 const TILE_PROXY_BASE_URL = String(
     import.meta.env.VITE_TILE_PROXY_BASE_URL ||
@@ -20,6 +24,44 @@ const TILE_PROXY_BASE_URL = String(
         'https://negiao-webgis.hf.space',
 ).replace(/\/$/, '');
 const TILE_PROXY_MODE = String(import.meta.env.VITE_TILE_PROXY_MODE || 'fallback').toLowerCase();
+
+// ==================== 代理通知（去重防抖） ====================
+
+let lastProxyNotifyAt = 0;
+const PROXY_NOTIFY_DEBOUNCE_MS = 5000;
+
+/**
+ * 直连失败 → 后端代理兜底时弹出提示
+ * 5s 防抖：快速切换底图时只弹一次，不打断用户操作
+ */
+function notifyProxyFallback(): void {
+    const now = Date.now();
+    if (now - lastProxyNotifyAt < PROXY_NOTIFY_DEBOUNCE_MS) return;
+    lastProxyNotifyAt = now;
+    try {
+        const { info } = useMessage();
+        info('部分瓦片直连失败，已自动切换至后端代理加速加载', { duration: 4000 });
+    } catch {
+        // 非 Vue 上下文（SSR/测试）静默
+    }
+}
+
+/**
+ * always 模式下首次请求时弹出提示
+ */
+function notifyAlwaysProxy(): void {
+    const now = Date.now();
+    if (now - lastProxyNotifyAt < PROXY_NOTIFY_DEBOUNCE_MS) return;
+    lastProxyNotifyAt = now;
+    try {
+        const { info } = useMessage();
+        info('已启用后端代理模式，所有瓦片请求将通过后端转发', { duration: 4000 });
+    } catch {
+        // 非 Vue 上下文（SSR/测试）静默
+    }
+}
+
+// ==================== 内部工具函数 ====================
 
 function markTileAsError(tile: any): void {
     if (tile && typeof tile.setState === 'function') {
@@ -121,13 +163,17 @@ async function fetchTileAsBlobUrl(
 ): Promise<string | null> {
     const proxyUrl = buildTileProxyUrl(srcUrl);
 
+    // always 模式：所有可代理的瓦片统一走后端
     if (TILE_PROXY_MODE === 'always' && proxyUrl) {
+        notifyAlwaysProxy();
         return requestTileAsBlobUrl(proxyUrl, signal);
     }
 
+    // fallback 模式：直连优先，失败后走后端代理
     const directUrl = await requestTileAsBlobUrl(srcUrl, signal);
     if (directUrl || TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return directUrl;
 
+    notifyProxyFallback();
     return requestTileAsBlobUrl(proxyUrl, signal);
 }
 
