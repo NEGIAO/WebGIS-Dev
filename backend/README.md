@@ -42,6 +42,8 @@ WebGIS 后端服务，当前包含五大核心能力：
 | `api/auth/session.py` | 会话绑定状态、邮箱用户查询、受限 session 识别 |
 | `api/auth/dependencies.py` | 受限绑定 session 返回 `403 EMAIL_BINDING_REQUIRED` |
 | `api/auth/routes.py` | 邮箱注册/登录/绑定/重置、泛化重置提示、统一用户响应字段 |
+| `api/auth/system_config.py` | 系统配置读写，含管理员头像索引持久化读取 |
+| `api/statistics.py` | 用户中心统计接口补齐昵称、邮箱、头像和绑定状态字段，避免覆盖认证用户对象 |
 | `api/auth/__init__.py` | 导出新增请求模型和认证辅助函数 |
 
 **功能说明：**
@@ -50,9 +52,11 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 无邮箱旧用户可用旧用户名和密码登录一次，但只获得受限 session，用于绑定邮箱。
 - 旧数据库无需强制重建；首次检测到旧 schema 时会先备份到 `migration_backups/`，再通过 `ALTER TABLE` 原地迁移并回填昵称。
 - 绑定邮箱成功后注销该账号所有旧 token 并签发完整 session；后续使用邮箱登录和密码重置。
+- 用户中心统计接口返回完整认证用户字段，中文昵称和自定义头像索引不会被聚合刷新覆盖。
+- 管理员头像索引从 `system_config.admin_avatar_index` 统一回读，避免保存后被刷新回默认头像。
 - 游客 `user/123` 和管理员账号流程保持兼容。
 
-详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md)
+详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md) | [`../Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md`](../Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md)
 
 ### V3.3.2 (2026-06-09) - SQLite 恢复修复 + 北京时间日志 + 整点报时 + 前端天气图表/罗盘 HUD UI
 

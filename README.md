@@ -666,6 +666,8 @@ LOG_LEVEL=INFO
 - ✅ 受限 session 调用受保护 API 返回 `403 EMAIL_BINDING_REQUIRED`，防止绕过前端绑定页
 - ✅ 绑定邮箱成功后注销该账号所有旧 session 并签发完整 session，后续使用邮箱登录和密码重置
 - ✅ 旧数据库无需强制重建；首次 schema 迁移前自动备份认证库，再原地新增列并回填旧 `username` 为昵称
+- ✅ 修复账号中心刷新覆盖 `display_name` 和 `avatar_index` 的问题，中文昵称与自定义头像索引可稳定持久化
+- ✅ 管理员头像索引从 `system_config` 统一回读，登录、`/me` 与用户中心刷新保持一致
 
 **修改文件：**
 - `backend/api/auth/schema.py` — 新增 `display_name` 与 `sessions.requires_email_binding` 迁移
@@ -674,14 +676,17 @@ LOG_LEVEL=INFO
 - `backend/api/auth/user.py` — 邮箱账号创建、旧 username 兼容键生成、昵称更新
 - `backend/api/auth/session.py` — 会话绑定状态与邮箱用户查询
 - `backend/api/auth/routes.py` — 邮箱注册/登录/绑定/重置与响应字段统一
+- `backend/api/auth/system_config.py` — 管理员头像索引读写
+- `backend/api/auth/__init__.py` — 导出管理员头像读取辅助函数
+- `backend/api/statistics.py` — 用户中心统计接口补齐昵称/邮箱/头像字段
 - `backend/api/auth/dependencies.py` — 受限绑定 session 访问拦截
 - `frontend/src/views/RegisterView.vue` — 邮箱注册/登录、旧用户名绑定邮箱面板
 - `frontend/src/composables/auth/useAuthIdentity.js` — 邮箱、昵称、密码校验与展示名工具
 - `frontend/src/api/backend/auth.js` — 绑定邮箱和昵称修改 API
-- `frontend/src/components/UserCenter/FloatingAccountPanel.vue` — 账号中心展示昵称和邮箱
+- `frontend/src/components/UserCenter/FloatingAccountPanel.vue` — 账号中心展示昵称和邮箱，合并用户状态避免覆盖中文昵称/头像
 - `frontend/src/components/UserCenter/tabs/SecurityTab.vue` — 安全页昵称修改入口
 
-详见 [邮箱账号迁移日志](./Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md)
+详见 [邮箱账号迁移日志](./Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md) | [昵称头像持久化修复日志](./Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md)
 
 ---
 

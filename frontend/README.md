@@ -641,13 +641,15 @@ MIT
 - `composables/auth/useAuthIdentity.js`：封装邮箱、昵称、密码校验和用户显示名解析，避免认证身份逻辑继续堆在注册页
 - `components/UserCenter/FloatingAccountPanel.vue`：账号中心优先展示 `display_name` 和邮箱，并接入昵称修改
 - `components/UserCenter/tabs/SecurityTab.vue`：安全页增加昵称修改入口
+- `components/UserCenter/FloatingAccountPanel.vue`：合并认证用户对象，避免统计中心旧结构覆盖中文昵称和头像索引；缺失头像字段的响应不再覆盖本地头像状态
 
 **交互变化：**
 - 新用户必须使用已验证邮箱完成注册，后续用邮箱登录和重置密码
 - 无邮箱旧用户仍可用旧用户名和密码登录一次，但会被限制在绑定邮箱流程中
 - 绑定邮箱成功后前端保存后端签发的新 token 并进入正式系统
+- 中文昵称修改后持续展示，自定义头像索引保存后立即刷新并写回本地会话；管理员头像刷新也会保持已保存索引
 
-详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md)
+详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md) | [`../Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md`](../Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md)
 
 ### V3.3.2 (2026-06-09)
 #### 📊 天气组件动态适配父组件尺寸 + 风力仪表 UI 优化

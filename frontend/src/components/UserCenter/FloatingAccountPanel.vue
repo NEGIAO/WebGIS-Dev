@@ -186,18 +186,49 @@ function formatDuration(totalSeconds) {
     return `${second}秒`;
 }
 
+function mergeUserPatch(nextUser = {}) {
+    const source = nextUser && typeof nextUser === 'object' ? nextUser : {};
+    const current = user.value || {};
+    const hasAvatarIndex = Object.prototype.hasOwnProperty.call(source, 'avatar_index');
+    const merged = {
+        ...current,
+        ...source,
+    };
+
+    if (!Object.prototype.hasOwnProperty.call(source, 'display_name')) {
+        merged.display_name = current.display_name || source.username || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(source, 'email')) {
+        merged.email = current.email || '';
+    }
+    if (!Object.prototype.hasOwnProperty.call(source, 'email_verified')) {
+        merged.email_verified = current.email_verified || false;
+    }
+    if (!Object.prototype.hasOwnProperty.call(source, 'requires_email_binding')) {
+        merged.requires_email_binding = current.requires_email_binding || false;
+    }
+    if (!hasAvatarIndex) {
+        merged.avatar_index = current.avatar_index ?? selectedAvatarIndex.value;
+    }
+
+    user.value = merged;
+    if (hasAvatarIndex) {
+        selectedAvatarIndex.value = Number(merged.avatar_index ?? selectedAvatarIndex.value);
+    }
+    syncUserRoleToUrl(merged);
+    const token = getAuthToken();
+    if (token) {
+        setAuthSession({ token, user: merged });
+    }
+    return merged;
+}
+
 async function syncCurrentUser() {
     try {
         const result = await apiAuthMe();
         if (!result?.user) return;
 
-        user.value = result.user;
-        selectedAvatarIndex.value = Number(result?.user?.avatar_index ?? selectedAvatarIndex.value);
-        syncUserRoleToUrl(result.user);
-        const token = getAuthToken();
-        if (token) {
-            setAuthSession({ token, user: result.user });
-        }
+        mergeUserPatch(result.user);
     } catch {
         // handled by interceptor
     }
@@ -211,15 +242,7 @@ async function loadCenterData({ silent = false } = {}) {
         const result = await apiStatisticsCenter();
 
         if (result?.user) {
-            user.value = result.user;
-            selectedAvatarIndex.value = Number(
-                result?.user?.avatar_index ?? selectedAvatarIndex.value,
-            );
-            syncUserRoleToUrl(result.user);
-            const token = getAuthToken();
-            if (token) {
-                setAuthSession({ token, user: result.user });
-            }
+            mergeUserPatch(result.user);
         }
 
         centerData.value = {
@@ -503,11 +526,7 @@ async function handleChangeDisplayName(payload) {
     try {
         const result = await apiAuthChangeDisplayName(displayName);
         if (result?.user) {
-            user.value = result.user;
-            const token = getAuthToken();
-            if (token) {
-                setAuthSession({ token, user: result.user });
-            }
+            mergeUserPatch(result.user);
         }
         message.success('昵称已更新');
     } catch (error) {
@@ -526,14 +545,9 @@ async function handleSaveAvatar() {
         const result = await apiAuthChangeAvatar(selectedAvatarIndex.value);
         if (result?.status === 'success') {
             message.success('头像已更新');
-            // 更新本地用户对象
-            if (user.value) {
-                user.value.avatar_index = Number(result?.avatar_index ?? selectedAvatarIndex.value);
-                const token = getAuthToken();
-                if (token) {
-                    setAuthSession({ token, user: user.value });
-                }
-            }
+            mergeUserPatch(result?.user || {
+                avatar_index: Number(result?.avatar_index ?? selectedAvatarIndex.value),
+            });
         } else {
             message.error('头像更新失败，请稍后重试');
         }
@@ -784,7 +798,7 @@ onBeforeUnmount(() => {
                             :current-theme="themeStore.theme"
                             @update:preference-draft="({ key, value }) => { preferenceDraft[key] = value }"
                             @save-preferences="handleSavePreferences"
-                            @update:selected-avatar-index="(idx) => { selectedAvatarIndex.value = idx }"
+                            @update:selected-avatar-index="(idx) => { selectedAvatarIndex = idx }"
                             @save-avatar="handleSaveAvatar"
                             @set-theme="(t) => themeStore.setTheme(t)"
                         />
