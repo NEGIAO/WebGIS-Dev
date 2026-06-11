@@ -82,7 +82,7 @@ from .session import (
 from .quota import _consume_api_quota_sync, get_user_quota_snapshot_sync
 
 # ─── FastAPI 依赖 ───
-from .dependencies import require_admin, require_api_access, require_login
+from .dependencies import require_admin, require_api_access, require_api_access_or_guest, require_login
 
 # ─── 路由 ───
 from .routes import router
@@ -140,6 +140,7 @@ __all__ = [
     # 依赖
     "require_login",
     "require_api_access",
+    "require_api_access_or_guest",
     "require_admin",
     # 路由
     "router",

@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
-from api.auth import require_api_access, get_auth_db_connection
+from api.auth import require_api_access_or_guest, get_auth_db_connection
 from services import ip_geo_service
 
 AMAP_REST_ROOT = "https://restapi.amap.com"
@@ -287,7 +287,7 @@ async def proxy_amap_place_text(
     page: int = Query(default=1, ge=1, le=100),
     offset: int = Query(default=10, ge=1, le=50),
     extensions: str = Query(default="base", pattern="^(base|all)$"),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：高德 POI 关键词检索代理（文本搜索）。
@@ -325,7 +325,7 @@ async def proxy_amap_place_detail(
     request: Request,
     id: str = Query(..., min_length=1, max_length=96),
     extensions: str = Query(default="all", pattern="^(base|all)$"),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：高德 POI 详情代理。
@@ -353,7 +353,7 @@ async def proxy_amap_geocode_geo(
     request: Request,
     address: str = Query(..., min_length=1, max_length=200),
     city: str = Query(default="", max_length=40),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：地理编码（地址 -> 坐标）后端代理。
@@ -383,7 +383,7 @@ async def proxy_amap_geocode_regeo(
     extensions: str = Query(default="base", pattern="^(base|all)$"),
     radius: int = Query(default=1000, ge=0, le=3000),
     batch: bool = Query(default=False),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：逆地理编码（坐标 -> 地址）后端代理。
@@ -415,7 +415,7 @@ async def proxy_amap_weather(
     request: Request,
     city: str = Query(..., min_length=1, max_length=32),
     extensions: str = Query(default="base", pattern="^(base|all)$"),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：高德天气查询代理。
@@ -449,7 +449,7 @@ async def proxy_amap_weather(
 async def proxy_amap_ip_location(
     request: Request,
     ip: str = Query(default="", max_length=64),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：高德 IP 定位代理。
@@ -478,7 +478,7 @@ async def proxy_amap_ip_location(
 async def proxy_amap_web_detail(
     request: Request,
     id: str = Query(..., min_length=1, max_length=96),
-    _current_user: Dict[str, Any] = Depends(require_api_access),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Response:
     """
     功能：高德 Web 详情页接口代理（文本响应）。
@@ -504,7 +504,7 @@ async def proxy_nominatim_search(
     request: Request,
     keywords: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(default=10, ge=1, le=50),
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_api_access_or_guest),
 ):
     """
     功能：Nominatim 国际地名搜索代理（需鉴权）。
@@ -532,7 +532,7 @@ async def proxy_nominatim_search(
 async def proxy_epsg_proj4(
     request: Request,
     epsg_code: str,
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_api_access_or_guest),
 ) -> Response:
     """
     功能：查询 EPSG 的 Proj4 定义文本。

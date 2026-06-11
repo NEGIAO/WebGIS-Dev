@@ -24,7 +24,7 @@ from api.auth import (
     get_user_quota_snapshot_sync,
     normalize_role,
     require_admin,
-    require_api_access,
+    require_api_access_or_guest,
     require_login,
     resolve_quota_subject,
 )
@@ -943,7 +943,7 @@ router = APIRouter(prefix="/api", tags=["statistics"])
 async def log_visit(
     request: Request,
     visit_payload: Optional[VisitLogRequest] = None,
-    session: Dict[str, Any] = Depends(require_api_access),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> VisitLogResponse:
     """
     功能：记录访问日志（IP/GPS）并写入本地统计表，可选同步 Supabase。
@@ -1202,7 +1202,7 @@ async def get_realtime_statistics(
 @router.post("/statistics/messages")
 async def create_user_message(
     payload: UserMessageCreateRequest,
-    session: Dict[str, Any] = Depends(require_api_access),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """
     功能：发布用户留言。

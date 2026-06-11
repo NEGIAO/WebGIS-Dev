@@ -652,6 +652,27 @@ LOG_LEVEL=INFO
 
 ---
 
+### V3.3.2 (2026-06-11) 补充
+#### 🔐 游客配额权限修复 + 结构化认证错误
+
+**问题修复：**
+- ✅ 游客身份请求 API 不再被直接 401 拒绝，改为走配额制度（100 次/天）
+- ✅ 后端 401 响应返回结构化 `{code, message}`，前端根据 code 差异化处理
+- ✅ 新增 `require_api_access_or_guest` 依赖：无 token 自动创建 guest session + 配额检查
+- ✅ Agent Chat / 天气 / 搜索 / 地理编码等端点全部支持游客配额访问
+- ✅ 前端 401 区分"会话过期"（清除+跳转）和"游客权限不足"（warning 提示）
+
+**修改文件：**
+- `backend/api/auth/dependencies.py` — 结构化 detail + 新依赖
+- `backend/api/agent_chat/routes.py` — 7 端点改用 guest 配额
+- `backend/api/external_proxy.py` — 9 端点改用 guest 配额
+- `backend/api/statistics.py` — 2 端点改用 guest 配额
+- `frontend/src/api/backend/client.js` — 401 差异化处理
+
+详见 [游客配额权限修复日志](./Docs/26-06-11/2026-06-11-游客配额权限与结构化认证错误.md)
+
+---
+
 ### V3.3.2 (2026-06-10) 补充
 #### 🧭 风水罗盘显示优化 + 动画 + 背景色自定义
 

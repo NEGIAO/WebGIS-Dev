@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from api.auth import normalize_role, require_admin, require_login, resolve_quota_subject
+from api.auth import normalize_role, require_admin, require_api_access_or_guest, require_login, resolve_quota_subject
 
 from .constants import (
     CONFIG_KEY_AVAILABLE_MODELS,
@@ -72,7 +72,7 @@ admin_router = APIRouter(prefix="/api/admin/agent", tags=["agent-chat-admin"])
 
 @router.get("/chat/config")
 async def get_agent_chat_config(
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """获取当前登录用户的 Agent 服务状态、模型和当日配额快照。"""
     username = str(session.get("username") or "")
@@ -110,7 +110,7 @@ async def get_agent_chat_config(
 async def agent_chat_completions(
     payload: AgentChatRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """代理用户对话请求到上游 LLM，并执行配额与安全控制。"""
     username = str(session.get("username") or "")
@@ -380,7 +380,7 @@ async def get_default_ai_config(
 async def agent_chat_default_proxy(
     payload: AgentChatRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）。
 
@@ -491,7 +491,7 @@ async def agent_chat_default_proxy(
 
 @router.get("/user-config")
 async def get_agent_user_config(
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """读取当前用户的 Agent 配置（个人覆盖 + 生效结果）。"""
     username = str(session.get("username") or "")
@@ -572,7 +572,7 @@ async def update_agent_user_config(
 @router.get("/models")
 async def get_available_models(
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
     override_base_url: Optional[str] = None,
     override_api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -709,7 +709,7 @@ async def _cache_models_async(models: List[Dict[str, Any]]) -> None:
 @router.patch("/user/preference")
 async def update_user_model_preference(
     payload: Dict[str, Any],
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """保存用户的模型偏好设置到 user_preferences 表。"""
     username = str(session.get("username") or "")
@@ -766,7 +766,7 @@ async def update_user_model_preference(
 async def agent_chat_proxy(
     payload: AgentChatProxyRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest),
 ) -> Dict[str, Any]:
     """用户个人 API Key 代理聊天端点（绕过浏览器 CORS 限制，不消耗平台配额）。"""
     username = str(session.get("username") or "anonymous")
