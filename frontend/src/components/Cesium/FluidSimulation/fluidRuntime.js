@@ -4,7 +4,7 @@
     }
 
     function getSceneView(scene) {
-        return scene?.view || scene?._view;
+        return scene?._view || scene?.view;
     }
 
     function getScenePassState(scene) {
@@ -17,7 +17,7 @@
 
     function getFrustumCommandsList(scene) {
         const view = getSceneView(scene);
-        return view?.frustumCommandsList || [];
+        return view?.frustumCommandsList || view?._frustumCommandsList || [];
     }
 
     const Command = `
@@ -200,7 +200,7 @@ vec2 readHeight(ivec2 p)
 float computeOutFlowDir(vec2 centerHeight, ivec2 pos)
 {
 	vec2 dirHeight = readHeight(pos);
-	return max(0.0f, (centerHeight.x + centerHeight.y) - (dirHeight.x + dirHeight.y));
+	return max(0.0, (centerHeight.x + centerHeight.y) - (dirHeight.x + dirHeight.y));
 }
 
 void main()
@@ -302,7 +302,7 @@ vec2 readHeight(ivec2 p)
 float computeOutFlowDir(vec2 centerHeight, ivec2 pos)
 {
 	vec2 dirHeight = readHeight(pos);
-	return max(0.0f, (centerHeight.x + centerHeight.y) - (dirHeight.x + dirHeight.y));
+	return max(0.0, (centerHeight.x + centerHeight.y) - (dirHeight.x + dirHeight.y));
 }
 
 void main( )
@@ -631,9 +631,14 @@ void main()
 
         destroy() {
             if (Cesium.defined(this.commandToExecute)) {
-                this.commandToExecute.shaderProgram =
-                    this.commandToExecute.shaderProgram &&
-                    this.commandToExecute.shaderProgram.destroy();
+                if (Cesium.defined(this.commandToExecute.shaderProgram)) {
+                    this.commandToExecute.shaderProgram =
+                        this.commandToExecute.shaderProgram.destroy();
+                }
+                if (Cesium.defined(this.commandToExecute.vertexArray)) {
+                    this.commandToExecute.vertexArray =
+                        this.commandToExecute.vertexArray.destroy();
+                }
             }
             return Cesium.destroyObject(this);
         }
@@ -722,17 +727,20 @@ void main()
                     height: height,
                     format: Cesium.RenderbufferFormat.DEPTH_COMPONENT16,
                 }),
-                destroyAttachments: false,
+                destroyAttachments: true,
             });
         }
 
-        static createFramebuffer(context, colorTexture, depthTexture) {
-            const framebuffer = new Cesium.Framebuffer({
+        static createFramebuffer(context, colorTexture, depthTexture, destroyAttachments = false) {
+            const options = {
                 context: context,
                 colorTextures: [colorTexture],
-                depthTexture: depthTexture,
-            });
-            return framebuffer;
+                destroyAttachments,
+            };
+            if (depthTexture) {
+                options.depthTexture = depthTexture;
+            }
+            return new Cesium.Framebuffer(options);
         }
 
         static createRawRenderState(options) {
@@ -859,43 +867,67 @@ void main()
             );
 
             // 保存原始状态
+            const scene = this.viewer.scene;
+            const frameState = scene.frameState;
             const passState = getScenePassState(this.viewer.scene);
-            const originalCamera = this.viewer.scene.camera;
-            const originalFramebuffer = context._currentFramebuffer;
-            const originalViewport = passState.viewport;
-            // 配置渲染状态
-            passState.viewport.x = 0;
-            passState.viewport.y = 0;
-            passState.viewport.width = this.config.resolution.x;
-            passState.viewport.height = this.config.resolution.y;
-            passState.framebuffer = fbo;
-            this.viewer.scene.camera = this.heightMapCamera;
+            const originalCamera = scene.camera;
+            const originalFrameStateCamera = frameState.camera;
+            const originalFramebuffer = passState.framebuffer;
+            const originalViewport = Cesium.BoundingRectangle.clone(
+                passState.viewport,
+                new Cesium.BoundingRectangle()
+            );
+            let copyFBO = null;
+            let patchedCommands = [];
 
-            // 在渲染深度预处理前添加着色器处理
-            this._processHeightMapShaders();
-            // 执行深度渲染
-            this._renderDepthPrepass(passState);
+            try {
+                // 配置渲染状态
+                passState.viewport.x = 0;
+                passState.viewport.y = 0;
+                passState.viewport.width = this.config.resolution.x;
+                passState.viewport.height = this.config.resolution.y;
+                passState.framebuffer = fbo;
+                scene.camera = this.heightMapCamera;
+                frameState.camera = this.heightMapCamera;
+                frameState.context.uniformState.updateCamera(this.heightMapCamera);
 
-            // 创建高度图纹理
-            const heightMap = RenderUtil.createTexture({
-                context: context,
-                width: this.config.resolution.x,
-                height: this.config.resolution.y,
-                flipY: false,
-                pixelFormat: Cesium.PixelFormat.RGBA,
-                pixelDatatype: Cesium.PixelDatatype.FLOAT,
-            });
+                // 在渲染深度预处理前添加着色器处理
+                patchedCommands = this._processHeightMapShaders();
+                // 执行深度渲染
+                this._renderDepthPrepass(passState);
 
-            // 拷贝数据到高度图纹理
-            const copyFBO = RenderUtil.createFramebuffer(context, heightMap);
-            this._copyTexture(fbo.getColorTexture(0), copyFBO);
+                // 创建高度图纹理
+                const heightMap = RenderUtil.createTexture({
+                    context: context,
+                    width: this.config.resolution.x,
+                    height: this.config.resolution.y,
+                    flipY: false,
+                    pixelFormat: Cesium.PixelFormat.RGBA,
+                    pixelDatatype: Cesium.PixelDatatype.FLOAT,
+                });
 
-            // 恢复原始状态
-            passState.framebuffer = originalFramebuffer;
-            passState.viewport = originalViewport;
-            this.viewer.scene.camera = originalCamera;
+                // 拷贝数据到高度图纹理
+                copyFBO = RenderUtil.createFramebuffer(context, heightMap);
+                this._copyTexture(fbo.getColorTexture(0), copyFBO);
 
-            return heightMap;
+                return heightMap;
+            } finally {
+                this._restoreHeightMapShaders(patchedCommands);
+                passState.framebuffer = originalFramebuffer;
+                Cesium.BoundingRectangle.clone(originalViewport, passState.viewport);
+                scene.camera = originalCamera;
+                frameState.camera = originalFrameStateCamera;
+                if (originalFrameStateCamera) {
+                    frameState.context.uniformState.updateCamera(originalFrameStateCamera);
+                }
+
+                if (copyFBO && !copyFBO.isDestroyed?.()) {
+                    copyFBO.destroy();
+                }
+                if (fbo && !fbo.isDestroyed?.()) {
+                    fbo.destroy();
+                }
+            }
         }
 
         // 执行深度预渲染
@@ -1126,18 +1158,35 @@ void main()
         // 销毁资源
         destroy() {
             this._isActive = false;
-            this.viewer.scene.postRender.removeEventListener(
-                this.postRenderHandler
-            );
+            if (typeof this.postRenderHandler === "function") {
+                this.postRenderHandler();
+                this.postRenderHandler = null;
+            }
 
-            [this.mainRenderPass, ...this.computePasses].forEach((p) =>
-                this.viewer.scene.primitives.remove(p)
-            );
+            [this.mainRenderPass, ...(this.computePasses || [])].forEach((p) => {
+                if (p) {
+                    this.viewer.scene.primitives.remove(p);
+                }
+            });
+            this.mainRenderPass = null;
+            this.computePasses = [];
 
-            this.viewer.entities.remove(this.debugEntity);
+            if (this.debugEntity) {
+                this.viewer.entities.remove(this.debugEntity);
+                this.debugEntity = null;
+            }
 
-            Object.values(this.textures).forEach((tex) => tex.destroy());
-            this._heightMap.destroy();
+            Object.values(this.textures || {}).forEach((tex) => {
+                if (tex && !tex.isDestroyed?.()) {
+                    tex.destroy();
+                }
+            });
+            this.textures = {};
+
+            if (this._heightMap && !this._heightMap.isDestroyed?.()) {
+                this._heightMap.destroy();
+                this._heightMap = null;
+            }
         }
 
         /* 纹理拷贝方法 */
@@ -1176,9 +1225,10 @@ void main()
             const frustumCommandsList = getFrustumCommandsList(this.viewer.scene);
             for (let i = 0; i < frustumCommandsList.length; ++i) {
                 const frustumCommands = frustumCommandsList[i];
-                const length = frustumCommands.indices[2];
-                if (length > 0) {
-                    commands.push(...frustumCommands.commands[2].slice(0, length));
+                const passCommands = frustumCommands?.commands?.[2];
+                const length = frustumCommands?.indices?.[2] ?? passCommands?.length ?? 0;
+                if (passCommands && length > 0) {
+                    commands.push(...passCommands.slice(0, length));
                 }
             }
             return commands;
@@ -1186,6 +1236,7 @@ void main()
 
         /* 高度图着色器处理 */
         _processHeightMapShaders() {
+            const patchedCommands = [];
             // 计算逆ENU矩阵
             const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(
                 Cesium.Cartesian3.fromDegrees(...this.config.lonLat, this.config.baseHeight)
@@ -1205,6 +1256,17 @@ void main()
             const commands = this._getDepthRenderCommands();
             
             commands.forEach((command) => {
+                if (!command?.shaderProgram?.fragmentShaderSource || !command.uniformMap) {
+                    return;
+                }
+
+                const hadInverseUniform = Object.prototype.hasOwnProperty.call(
+                    command.uniformMap,
+                    "u_inverseEnuMatrix"
+                );
+                const originalInverseUniform = command.uniformMap.u_inverseEnuMatrix;
+                const originalShaderProgram = command.shaderProgram;
+
                 command.uniformMap.u_inverseEnuMatrix = () =>
                     this._inverseEnuMatrix;
                 if (!command.heightMap_ShaderProgram) {
@@ -1215,6 +1277,28 @@ void main()
                     );
                 }
                 command.shaderProgram = command.heightMap_ShaderProgram;
+                patchedCommands.push({
+                    command,
+                    hadInverseUniform,
+                    originalInverseUniform,
+                    originalShaderProgram,
+                });
+            });
+
+            return patchedCommands;
+        }
+
+        _restoreHeightMapShaders(patchedCommands) {
+            patchedCommands.forEach((patch) => {
+                const {command, hadInverseUniform, originalInverseUniform, originalShaderProgram} = patch;
+                if (!command?.uniformMap) return;
+
+                command.shaderProgram = originalShaderProgram;
+                if (hadInverseUniform) {
+                    command.uniformMap.u_inverseEnuMatrix = originalInverseUniform;
+                } else {
+                    delete command.uniformMap.u_inverseEnuMatrix;
+                }
             });
         }
 
@@ -1294,7 +1378,7 @@ void main()
 
         /* 创建渲染状态配置 */
         _createRenderState() {
-            return Cesium.RenderState.fromCache({
+            return {
                 cull: {
                     enabled: false,
                     face: Cesium.CullFace.BACK,
@@ -1308,7 +1392,7 @@ void main()
                     blue: true,
                     alpha: true,
                 },
-            });
+            };
         }
 
         /* 顶点着色器生成 */

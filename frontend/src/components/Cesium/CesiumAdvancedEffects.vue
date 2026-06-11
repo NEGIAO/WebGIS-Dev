@@ -80,10 +80,10 @@ const props = defineProps({
 const message = useMessage();
 const chartRef = ref(null);
 
-const fogEnabled = ref(true);
+const fogEnabled = ref(false);
 const hbaoEnabled = ref(false);
-const tiltShiftEnabled = ref(true);
-const atmosphereEnabled = ref(true);
+const tiltShiftEnabled = ref(false);
+const atmosphereEnabled = ref(false);
 const chartVisible = ref(false);
 
 let fogStage = null;

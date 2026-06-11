@@ -144,10 +144,10 @@ const terrainOptions = [
 ];
 
 const advancedEffectControls = ref({
-    fog: true,
+    fog: false,
     hbao: false,
-    tiltShift: true,
-    atmosphere: true,
+    tiltShift: false,
+    atmosphere: false,
 });
 
 // 风场参数绑定（与 Wind2D 实例同步）
