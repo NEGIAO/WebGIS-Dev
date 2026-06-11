@@ -74,10 +74,10 @@ jobs:
             });
 
             // ========================
-            // 4. 获取“前天”的日期 (T-2)，因为昨天的数据可能有延迟
+            // 4. 获取“大前天”的日期 (T-3)，因为Github的数据延迟很多
             // ========================
             const targetDate = new Date();
-            targetDate.setUTCDate(targetDate.getUTCDate() - 2); 
+            targetDate.setUTCDate(targetDate.getUTCDate() - 3); 
             const targetDateStr = targetDate.toISOString().split('T')[0];
 
             const targetViewsObj = views.data.views.find(v => v.timestamp.startsWith(targetDateStr));
