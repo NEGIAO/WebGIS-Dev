@@ -674,6 +674,26 @@ MIT
 
 详见 [`../Docs/26-06/26-06-11/2026-06-11-cesium-tool-panel-fluid-simulation.md`](../Docs/26-06/26-06-11/2026-06-11-cesium-tool-panel-fluid-simulation.md)
 
+### V3.3.3 (2026-06-11)
+#### 🔧 流体模拟范围修复 + 特效默认关闭
+
+**修复（fluidRuntime.js 8 项）：**
+- UI 参数（threshold/blend/lightStrength）同步写入 `fluidParam`，真正控制流体模拟行为
+- `terrainColor()` UV 映射修正：`p.xz` → `p.xz + 0.5`
+- `terrainColor` 改采样 `iChannel0`（含水面数据）而非原始高度图
+- `getHeight()` 改用 `texelFetch()` 避免线性插值伪影
+- 正交相机 `frustum.far` 动态计算，覆盖高耸地形不裁剪
+- Ray March 步长 0.1→0.3，80 次迭代足够穿越整个 box
+- 移除未使用的 `waterSize` uniform
+- 初始水深改用 `fluidParam.w` 控制（默认 3%）
+
+**修复（特效默认值）：**
+- `CesiumAdvancedEffects.vue`：fog/hbao/tiltShift/atmosphere 默认值全部改为 `false`
+- `CesiumContainer.vue`：`advancedEffectControls` 默认值全部改为 `false`
+- `initCinematicEffects` 中 `applyAtmosphereEnhancement` 改为条件调用
+
+详见 [`../Docs/26-06/26-06-11/2026-06-11-fix-fluid-simulation-range-and-effects-defaults.md`](../Docs/26-06/26-06-11/2026-06-11-fix-fluid-simulation-range-and-effects-defaults.md)
+
 ### V3.3.2 (2026-06-09)
 #### 📊 天气组件动态适配父组件尺寸 + 风力仪表 UI 优化
 

@@ -245,7 +245,13 @@ function initCinematicEffects(viewer, Cesium) {
     initHeightFogStage(viewer, Cesium);
     initAmbientOcclusion(viewer, Cesium);
     initTiltShiftStage(viewer, Cesium);
-    applyAtmosphereEnhancement(viewer, 1200);
+
+    // 仅在用户已开启大气效果时应用，否则恢复原始状态
+    if (atmosphereEnabled.value) {
+        applyAtmosphereEnhancement(viewer, 1200);
+    } else {
+        restoreAtmosphereState(viewer);
+    }
 }
 
 function initRenderErrorGuard(viewer) {

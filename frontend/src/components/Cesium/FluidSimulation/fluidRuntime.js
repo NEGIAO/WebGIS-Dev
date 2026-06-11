@@ -33,10 +33,10 @@ const int octaves = 7;
 // const float attenuation = 0.995;
 // const float strenght = 0.25;
 // const float minTotalFlow = 0.0001;
-const float initialWaterLevel = 0.03;
+// fluidParam: x=attenuation, y=strength, z=minTotalFlow, w=initialWaterLevel
+// customParam: x=threshold(fogDist), y=blend(specPower), z=lightStrength(specIntensity), w=reserved
 uniform vec4 fluidParam;
 uniform vec4 customParam;
-uniform float waterSize;
 
 mat2 rot(in float ang) 
 {
@@ -165,8 +165,8 @@ void main( )
     terrainElevation = (terrainElevation - (minHeight)) / (maxHeight - (minHeight));
 
     // Water
-    // 默认全局水深，可自定义水源点
-    float waterDept = initialWaterLevel;
+    // 默认全局水深，由 fluidParam.w 控制
+    float waterDept = fluidParam.w;
     if(iFrame != 0)
     {
     ivec2 p = ivec2(gl_FragCoord.xy);
@@ -358,13 +358,13 @@ const vec3 light = vec3(0.,4.,2.);
 const vec3 boxSize = vec3(0.5);
 vec2 getHeight(in vec3 p)
 {
-    p = (p + 1.0) - 0.5;
-    vec2 p2 = p.xz * vec2(float(textureSize)) / iResolution.xy;
-    p2 = min(p2, vec2(float(textureSize) - 0.5) / iResolution.xy);
-    vec2 h = texture(iChannel0, p2 ).xy; // * 1.33333
+    // 局部坐标 [-0.5, 0.5] → [0, 1] → texel 坐标 [0, textureSize)
+    vec2 uv = p.xz + 0.5;
+    ivec2 texel = ivec2(clamp(uv * vec2(textureSize), vec2(0.0), vec2(float(textureSize - 1))));
+    vec2 h = texelFetch(iChannel0, texel, 0).xy;
     h.y += h.x;
-	return h - boxSize.z;
-} 
+    return h - boxSize.z;
+}
 
 vec3 getNormal(in vec3 p, int comp)
 {
@@ -377,17 +377,15 @@ vec3 getNormal(in vec3 p, int comp)
 
 vec3 terrainColor(in vec3 p, in vec3 n, out float spec)
 {
-    // spec = 0.1;
-    // vec3 c = vec3(0.21, 0.50, 0.07);
-    // float cliff = smoothstep(0.8, 0.3, n.y);
-    // c = mix(c, vec3(0.25), cliff);
-    // spec = mix(spec, 0.3, cliff);
-    // float snow = smoothstep(0.05, 0.25, p.y) * smoothstep(0.5, 0.7, n.y);
-    // c = mix(c, vec3(0.95, 0.95, 0.85), snow);
-    // spec = mix(spec, 0.4, snow);
-    // vec3 t = texture(iChannel1, p.xz * 5.0).xyz;
-    // return mix(c, c * t, 0.75);
-    return texture(heightMap, p.xz).yzw;
+    // p.xz 为局部坐标 [-0.5, 0.5]，需转换为 UV [0, 1]
+    vec2 uv = p.xz + 0.5;
+    // 采样模拟输出（含 terrainElevation + waterDepth），而非原始高度图
+    vec2 simData = texture(iChannel0, uv).xy;
+    // 简单地形着色：水面区域蓝色，陆地区域灰绿
+    float waterDepth = max(0.0, simData.y - simData.x);
+    vec3 landColor = vec3(0.25, 0.45, 0.18);
+    vec3 waterColor = vec3(0.05, 0.15, 0.45);
+    return mix(landColor, waterColor, smoothstep(0.001, 0.02, waterDepth));
 }
 
 vec3 undergroundColor(float d)
@@ -429,13 +427,11 @@ vec3 Render(in vec3 ro, in vec3 rd)
             float h = p.y - getHeight(p).x;
             if (h < 0.0002 || tt > ret.y)
                 break;
-            tt += h * 0.1;
+            tt += h * 0.3;
         }
         // tn = getNormal(ro + rd * tt, 0);
         // tc = terrainColor(ro + rd * tt, tn, spec);
         vec3 p =  ro + rd * tt;
-        p = (p + 1.0) - 0.5;
-        // tc = texture(heightMap, p.xz).yzw * czm_lightColor;
         vec2 uv = gl_FragCoord.xy / czm_viewport.zw;
         tc = texture(colorTexture, uv).rgb;
     }
@@ -468,7 +464,7 @@ vec3 Render(in vec3 ro, in vec3 rd)
             float h = p.y - getHeight(p).y;
             if (h < 0.0002 || wt > min(tt, ret.y))
                 break;
-            wt += h * 0.1;
+            wt += h * 0.3;
         }
         waterNormal = getNormal(ro + rd * wt, 1);
     }
@@ -772,11 +768,12 @@ void main()
             dimensions: new Cesium.Cartesian3(2500, 2500, 2500),
             heightRange: [0, 2000],
             baseHeight: 0,
-            fluidParams: new Cesium.Cartesian4(0.995, 0.25, 0.0001, 0.1),
+            // x=attenuation, y=strength, z=minTotalFlow, w=initialWaterLevel
+            fluidParams: new Cesium.Cartesian4(0.995, 0.25, 0.0001, 0.03),
             customParams: new Cesium.Cartesian4(10, 20, 0.2, 10),
             lonLat: [120.20998865783179, 30.13650797533829],
             timeStep: 0.3,
-            waterSize: 0.005,
+            heightMapSource: null,
         };
 
         constructor(viewer, options = {}) {
@@ -810,7 +807,8 @@ void main()
                     FluidRenderer.DEFAULTS.customParams.clone(),
                 lonLat: options.lonLat || [...FluidRenderer.DEFAULTS.lonLat],
                 timeStep: options.timeStep || FluidRenderer.DEFAULTS.timeStep,
-                waterSize: options.waterSize || FluidRenderer.DEFAULTS.waterSize,
+                heightMapSource:
+                    options.heightMapSource || FluidRenderer.DEFAULTS.heightMapSource,
             };
         }
 
@@ -854,7 +852,31 @@ void main()
         // 设置高度图系统
         _setupHeightMap() {
             this.heightMapCamera = this._createOrthographicCamera();
-            this._heightMap = this._generateHeightMapTexture();
+            this._heightMap = this.config.heightMapSource
+                ? this._createHeightMapTexture(this.config.heightMapSource)
+                : this._generateHeightMapTexture();
+        }
+
+        _createHeightMapTexture(source) {
+            if (!source?.arrayBufferView || !source.width || !source.height) {
+                throw new Error("Invalid height map source.");
+            }
+
+            return RenderUtil.createTexture({
+                context: this.viewer.scene.context,
+                width: source.width,
+                height: source.height,
+                flipY: false,
+                pixelFormat: Cesium.PixelFormat.RGBA,
+                pixelDatatype: Cesium.PixelDatatype.FLOAT,
+                arrayBufferView: source.arrayBufferView,
+                sampler: new Cesium.Sampler({
+                    wrapS: Cesium.TextureWrap.CLAMP_TO_EDGE,
+                    wrapT: Cesium.TextureWrap.CLAMP_TO_EDGE,
+                    minificationFilter: Cesium.TextureMinificationFilter.LINEAR,
+                    magnificationFilter: Cesium.TextureMagnificationFilter.LINEAR,
+                }),
+            });
         }
 
         // 生成高度图纹理
@@ -976,7 +998,6 @@ void main()
                 iTime: () => this._time,
                 iFrame: () => this._frameCount,
                 resolution: () => this.config.resolution,
-                waterSize: () => this.config.waterSize,
                 fluidParam: () => this.config.fluidParams,
                 customParam: () => this.config.customParams,
                 minHeight: () => this.config.heightRange.min,
@@ -1111,9 +1132,14 @@ void main()
             const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
 
             // 配置视锥体
+            // far plane 必须覆盖 baseHeight 到 maxHeight 的完整范围
+            // 再加上 dimensions.z 的余量确保不裁剪
             const frustum = camera.frustum;
             frustum.near = 0.01;
-            frustum.far = this.config.dimensions.z * 2;
+            frustum.far = Math.max(
+                this.config.dimensions.z * 2,
+                (this.config.heightRange.max - this.config.heightRange.min) + this.config.dimensions.z
+            );
             frustum.left = -this.config.dimensions.x / 2;
             frustum.right = this.config.dimensions.x / 2;
             frustum.bottom = -this.config.dimensions.y / 2;
@@ -1245,13 +1271,6 @@ void main()
                 enuMatrix,
                 new Cesium.Matrix4()
             );
-
-            // 计算合成矩阵
-            this._inverseEnuMatrix = Cesium.Matrix4.multiply(
-                localMat4,
-                this.viewer.scene.frameState.context.uniformState.model, // 当前模型矩阵
-                new Cesium.Matrix4()
-            );
             const frameState = this.viewer.scene.frameState;
             const commands = this._getDepthRenderCommands();
             
@@ -1266,9 +1285,16 @@ void main()
                 );
                 const originalInverseUniform = command.uniformMap.u_inverseEnuMatrix;
                 const originalShaderProgram = command.shaderProgram;
+                const inverseEnuMatrix = new Cesium.Matrix4();
 
-                command.uniformMap.u_inverseEnuMatrix = () =>
-                    this._inverseEnuMatrix;
+                command.uniformMap.u_inverseEnuMatrix = () => {
+                    const modelMatrix = command.modelMatrix || Cesium.Matrix4.IDENTITY;
+                    return Cesium.Matrix4.multiply(
+                        localMat4,
+                        modelMatrix,
+                        inverseEnuMatrix
+                    );
+                };
                 if (!command.heightMap_ShaderProgram) {
                     command.heightMap_ShaderProgram = this._getDerivedShaderProgram(
                         frameState.context,

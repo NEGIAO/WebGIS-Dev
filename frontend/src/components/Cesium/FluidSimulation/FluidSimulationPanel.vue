@@ -104,6 +104,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useMessage } from '../../../composables/useMessage';
+import { showLoading, hideLoading } from '../../../utils/ui/loading';
 import { createFluidRuntime } from './fluidRuntime';
 
 const props = defineProps({
@@ -129,6 +130,13 @@ const emit = defineEmits(['close', 'state-change']);
 
 const message = useMessage();
 
+const FLUID_TEXTURE_SIZE = 1024;
+const FLUID_HORIZONTAL_SIZE = 10000;
+const FLUID_DEPTH = 1200;
+const TERRAIN_SAMPLE_TARGET_SPACING = 60;
+const TERRAIN_SAMPLE_MIN_SIZE = 64;
+const TERRAIN_SAMPLE_MAX_SIZE = 160;
+
 const threshold = ref(10);
 const blend = ref(20);
 const lightStrength = ref(3);
@@ -143,6 +151,7 @@ let pickHandler = null;
 let fluidRenderer = null;
 let skyStage = null;
 let sceneSnapshot = null;
+let fluidCreationId = 0;
 
 const selectedText = computed(() => {
     if (!Number.isFinite(selectedLon.value) || !Number.isFinite(selectedLat.value)) {
@@ -217,55 +226,215 @@ function startPickHeightMap() {
     isPicking.value = true;
     pickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     pickHandler.setInputAction((movement) => {
-        createFluidAtScreenPosition(viewer, Cesium, movement.position);
+        void createFluidAtScreenPosition(viewer, Cesium, movement.position);
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 }
 
-function createFluidAtScreenPosition(viewer, Cesium, position) {
+async function createFluidAtScreenPosition(viewer, Cesium, position) {
     const cartesian = pickCartesian(viewer, position);
     if (!cartesian) {
         message.warning('未选中可用地形位置。');
         return;
     }
 
+    const creationId = ++fluidCreationId;
+    stopPicking();
+
     const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
     const lon = Cesium.Math.toDegrees(cartographic.longitude);
     const lat = Cesium.Math.toDegrees(cartographic.latitude);
     const groundHeight = Math.max(0, Number(cartographic.height) || 0);
     const bottomPadding = 100;
-    const fluidDepth = 1200;
+    const fluidDepth = FLUID_DEPTH;
     const baseHeight = Math.max(0, groundHeight - bottomPadding);
+    const dimensions = new Cesium.Cartesian3(
+        FLUID_HORIZONTAL_SIZE,
+        FLUID_HORIZONTAL_SIZE,
+        fluidDepth,
+    );
 
+    showLoading('正在请求模拟范围高度数据...');
     try {
         destroyFluidOnly();
 
+        const t = Number(threshold.value) || 0;
+        const b = Number(blend.value) || 0;
+        const l = Number(lightStrength.value) || 0;
+        const heightMapSource = await createTerrainHeightMapSource(viewer, Cesium, {
+            lon,
+            lat,
+            baseHeight,
+            dimensions,
+        });
+
+        if (creationId !== fluidCreationId) return;
+
+        if (!heightMapSource) {
+            message.warning('范围高度预请求不可用，已回退到当前场景捕捉。', {
+                duration: 4200,
+            });
+        }
+
         fluidRenderer = new FluidRenderer(viewer, {
             lonLat: [lon, lat],
-            width: 1024,
-            height: 1024,
-            dimensions: new Cesium.Cartesian3(10000, 10000, fluidDepth),
+            width: FLUID_TEXTURE_SIZE,
+            height: FLUID_TEXTURE_SIZE,
+            dimensions,
             baseHeight,
             minHeight: 0,
             maxHeight: fluidDepth,
-            customParams: new Cesium.Cartesian4(
-                Number(threshold.value),
-                Number(blend.value),
-                Number(lightStrength.value),
-                10,
+            heightMapSource,
+            // 渲染参数：雾距/高光强度/高光衰减
+            customParams: new Cesium.Cartesian4(t, b, l, 10),
+            // 模拟参数：attenuation/strength/minTotalFlow/initialWaterLevel
+            fluidParams: new Cesium.Cartesian4(
+                0.9 + (l / 10) * 0.099,   // attenuation
+                Math.min(1, b / 50),        // strength
+                t / 50000,                   // minTotalFlow
+                0.03,                        // initialWaterLevel (3%)
             ),
         });
 
         selectedLon.value = lon;
         selectedLat.value = lat;
         hasFluid.value = true;
-        stopPicking();
         viewer.scene.requestRender?.();
         message.success('水体流体已创建。');
     } catch (error) {
-        stopPicking();
         message.error('水体流体创建失败', error);
         message.warning('当前显卡或 Cesium 版本可能不支持该流体渲染管线。', { closable: true });
+    } finally {
+        hideLoading();
     }
+}
+
+async function createTerrainHeightMapSource(viewer, Cesium, options) {
+    const terrainProvider = viewer?.terrainProvider;
+    const size = chooseTerrainSampleSize(options.dimensions);
+
+    if (!terrainProvider) return null;
+
+    if (Cesium.EllipsoidTerrainProvider && terrainProvider instanceof Cesium.EllipsoidTerrainProvider) {
+        return createFlatHeightMapSource(size);
+    }
+
+    if (typeof Cesium.sampleTerrain !== 'function' && typeof Cesium.sampleTerrainMostDetailed !== 'function') {
+        return null;
+    }
+
+    try {
+        return await sampleTerrainHeightMapSource(viewer, Cesium, options, size);
+    } catch (error) {
+        console.warn('Fluid terrain sampling warning:', error);
+        if (size <= TERRAIN_SAMPLE_MIN_SIZE) throw error;
+        return sampleTerrainHeightMapSource(viewer, Cesium, options, TERRAIN_SAMPLE_MIN_SIZE);
+    }
+}
+
+async function sampleTerrainHeightMapSource(viewer, Cesium, options, size) {
+    const positions = createTerrainSamplePositions(Cesium, options, size);
+    const sampledPositions = await sampleTerrainPositions(
+        Cesium,
+        viewer.terrainProvider,
+        positions,
+    );
+    return createSampledHeightMapSource(sampledPositions || positions, {
+        baseHeight: options.baseHeight,
+        fluidDepth: options.dimensions.z,
+        size,
+    });
+}
+
+function chooseTerrainSampleSize(dimensions) {
+    const horizontalSize = Math.max(Number(dimensions?.x) || 0, Number(dimensions?.y) || 0);
+    const targetSize = Math.ceil(horizontalSize / TERRAIN_SAMPLE_TARGET_SPACING) + 1;
+    return clampInteger(targetSize, TERRAIN_SAMPLE_MIN_SIZE, TERRAIN_SAMPLE_MAX_SIZE);
+}
+
+function clampInteger(value, min, max) {
+    return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function createTerrainSamplePositions(Cesium, { lon, lat, baseHeight, dimensions }, size) {
+    const center = Cesium.Cartesian3.fromDegrees(lon, lat, baseHeight);
+    const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+    const positions = [];
+    const denominator = Math.max(1, size - 1);
+
+    for (let row = 0; row < size; row++) {
+        const v = row / denominator;
+        const north = (0.5 - v) * dimensions.y;
+
+        for (let col = 0; col < size; col++) {
+            const u = col / denominator;
+            const east = (u - 0.5) * dimensions.x;
+            const local = new Cesium.Cartesian3(east, north, 0);
+            const world = Cesium.Matrix4.multiplyByPoint(
+                enuMatrix,
+                local,
+                new Cesium.Cartesian3(),
+            );
+            positions.push(Cesium.Cartographic.fromCartesian(world));
+        }
+    }
+
+    return positions;
+}
+
+async function sampleTerrainPositions(Cesium, terrainProvider, positions) {
+    const sampleLevel = getExplicitTerrainSampleLevel(terrainProvider);
+
+    if (Number.isInteger(sampleLevel) && typeof Cesium.sampleTerrain === 'function') {
+        return Cesium.sampleTerrain(terrainProvider, sampleLevel, positions);
+    }
+
+    if (typeof Cesium.sampleTerrainMostDetailed === 'function') {
+        return Cesium.sampleTerrainMostDetailed(terrainProvider, positions);
+    }
+
+    return Cesium.sampleTerrain(terrainProvider, 10, positions);
+}
+
+function getExplicitTerrainSampleLevel(terrainProvider) {
+    const bottomLevel = Number(terrainProvider?._bottomLevel);
+    if (Number.isFinite(bottomLevel)) {
+        return Math.max(0, bottomLevel - 1);
+    }
+    return null;
+}
+
+function createSampledHeightMapSource(positions, { baseHeight, fluidDepth, size }) {
+    const data = new Float32Array(size * size * 4);
+
+    for (let i = 0; i < positions.length; i++) {
+        const height = Number(positions[i]?.height);
+        const relativeHeight = Number.isFinite(height)
+            ? clampNumber(height - baseHeight, 0, fluidDepth)
+            : 0;
+        const offset = i * 4;
+        data[offset] = relativeHeight;
+        data[offset + 1] = 0;
+        data[offset + 2] = 0;
+        data[offset + 3] = 1;
+    }
+
+    return {
+        width: size,
+        height: size,
+        arrayBufferView: data,
+    };
+}
+
+function createFlatHeightMapSource(size) {
+    return {
+        width: size,
+        height: size,
+        arrayBufferView: new Float32Array(size * size * 4),
+    };
+}
+
+function clampNumber(value, min, max) {
+    return Math.max(min, Math.min(max, value));
 }
 
 function pickCartesian(viewer, position) {
@@ -281,12 +450,39 @@ function pickCartesian(viewer, position) {
     return viewer.scene.globe.pick(ray, viewer.scene);
 }
 
+/**
+ * 将 UI 参数同步到流体渲染器
+ * - customParam: 渲染参数（雾距/高光强度/高光衰减）
+ * - fluidParam: 模拟参数（衰减/流出强度/最小流量阈值/初始水深）
+ *
+ * UI 映射关系：
+ *   threshold  → fluidParam.z (minTotalFlow)    → 值越大，越难开始流动
+ *   blend      → fluidParam.y (strength)        → 值越大，流出越强
+ *   lightStrength → fluidParam.x (attenuation)  → 值越大，衰减越慢（水走得更远）
+ */
 function applyFluidParams() {
-    if (!fluidRenderer?.config?.customParams) return;
+    if (!fluidRenderer?.config) return;
 
-    fluidRenderer.config.customParams.x = Number(threshold.value) || 0;
-    fluidRenderer.config.customParams.y = Number(blend.value) || 0;
-    fluidRenderer.config.customParams.z = Number(lightStrength.value) || 0;
+    const t = Number(threshold.value) || 0;
+    const b = Number(blend.value) || 0;
+    const l = Number(lightStrength.value) || 0;
+
+    // 渲染参数（customParam 控制雾距/高光）
+    if (fluidRenderer.config.customParams) {
+        fluidRenderer.config.customParams.x = t;
+        fluidRenderer.config.customParams.y = b;
+        fluidRenderer.config.customParams.z = l;
+    }
+
+    // 模拟参数（fluidParam 控制流体行为）
+    if (fluidRenderer.config.fluidParams) {
+        // attenuation: 0.9~0.999，lightStrength 0~10 → 映射到 0.9~0.999
+        fluidRenderer.config.fluidParams.x = 0.9 + (l / 10) * 0.099;
+        // strength: blend 0~50 → 映射到 0~1
+        fluidRenderer.config.fluidParams.y = Math.min(1, b / 50);
+        // minTotalFlow: threshold 0~500 → 映射到 0~0.01
+        fluidRenderer.config.fluidParams.z = t / 50000;
+    }
 }
 
 function prepareScene(viewer, Cesium) {
@@ -370,6 +566,7 @@ function destroyFluidOnly() {
 function cleanup(restoreSceneState) {
     const viewer = props.getViewer?.();
 
+    fluidCreationId += 1;
     stopPicking();
     destroyFluidOnly();
     selectedLon.value = null;
