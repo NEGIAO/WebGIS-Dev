@@ -28,7 +28,9 @@ from .schema import init_auth_storage
 
 # ─── Pydantic 模型 ───
 from .models import (
+    BindEmailRequest,
     ChangeAvatarRequest,
+    ChangeDisplayNameRequest,
     ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
@@ -59,8 +61,10 @@ from .preferences import (
 from .user import (
     _create_user_sync,
     _get_or_create_guest_username_sync,
+    _get_user_by_id_sync,
     _get_user_sync,
     _record_login_sync,
+    _update_user_display_name_sync,
 )
 
 # ─── 会话管理 ───
@@ -108,7 +112,9 @@ __all__ = [
     # 模型
     "RegisterRequest",
     "LoginRequest",
+    "BindEmailRequest",
     "ChangePasswordRequest",
+    "ChangeDisplayNameRequest",
     "ChangeAvatarRequest",
     "UpdatePreferencesRequest",
     # 密码
@@ -124,9 +130,11 @@ __all__ = [
     "_upsert_user_preferences_sync",
     # 用户
     "_get_user_sync",
+    "_get_user_by_id_sync",
     "_create_user_sync",
     "_get_or_create_guest_username_sync",
     "_record_login_sync",
+    "_update_user_display_name_sync",
     # 会话
     "_create_session_sync",
     "_get_session_sync",

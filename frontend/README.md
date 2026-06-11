@@ -90,7 +90,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-09 更新）
+## 目录结构（2026-06-11 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -103,7 +103,7 @@ frontend/src/
 │   ├── backend.js                            # 后端 API barrel re-export
 │   ├── backend/                              # 后端 API 按业务域拆分
 │   │   ├── client.js                         # axios 实例、拦截器、错误处理
-│   │   ├── auth.js                           # 鉴权接口（12 个函数，含验证码/密码重置）
+│   │   ├── auth.js                           # 鉴权接口（14 个函数，含邮箱账号/绑定/昵称）
 │   │   ├── location.js                       # 地理编码/定位接口
 │   │   ├── weather.js                        # 天气接口
 │   │   ├── routing.js                        # 路线规划接口
@@ -199,10 +199,12 @@ frontend/src/
 │       ├── ApiManagementPanel.vue            # API 使用管理
 │       └── tabs/                             # 用户中心子面板
 │           ├── OverviewTab.vue               # 总览标签（统计/消息板）
-│           ├── SecurityTab.vue               # 安全标签（修改密码）
+│           ├── SecurityTab.vue               # 安全标签（昵称/密码修改）
 │           └── PreferencesTab.vue            # 偏好标签（主题/头像）
 │
 ├── composables/                              # 组合式函数
+│   ├── auth/                                 # 认证身份校验与展示工具
+│   │   └── useAuthIdentity.js                # 邮箱/昵称/密码校验 + display_name 展示
 │   ├── Magic/                                # 首屏视觉特效
 │   │   ├── useDelaunay.js                    # Delaunay 三角形特效
 │   │   ├── useFluid.js                       # 流体模拟特效
@@ -373,7 +375,7 @@ frontend/src/
 │
 └── views/
     ├── HomeView.vue                          # 主页面（地图 + 侧栏）
-    ├── RegisterView.vue                      # 注册页
+    ├── RegisterView.vue                      # 邮箱账号注册/登录 + 旧用户名绑定邮箱
     ├── NotFoundView.vue                      # 404 兜底页面（自动倒计时返回首页）
     ├── TermsOfService.vue                    # 服务条款页
     ├── PrivacyPolicy.vue                     # 隐私政策页
@@ -608,7 +610,7 @@ MIT
 
 ---
 
-最后更新：2026-06-09
+最后更新：2026-06-11
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -628,6 +630,24 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.3.3 (2026-06-11)
+#### 📧 邮箱账号化 + 旧用户绑定迁移
+
+**修改：**
+- `views/RegisterView.vue`：注册表单改为邮箱、昵称、密码和验证码；登录框文案调整为“邮箱/旧用户名”；旧用户名登录后展示绑定邮箱面板而不是直接进入 `/home`
+- `api/backend/auth.js`：新增 `apiAuthBindEmail`、`apiAuthChangeDisplayName`，注册接口兼容对象 payload
+- `api/backend/client.js`：识别 `403 EMAIL_BINDING_REQUIRED`，供受限绑定态前端处理
+- `composables/auth/useAuthIdentity.js`：封装邮箱、昵称、密码校验和用户显示名解析，避免认证身份逻辑继续堆在注册页
+- `components/UserCenter/FloatingAccountPanel.vue`：账号中心优先展示 `display_name` 和邮箱，并接入昵称修改
+- `components/UserCenter/tabs/SecurityTab.vue`：安全页增加昵称修改入口
+
+**交互变化：**
+- 新用户必须使用已验证邮箱完成注册，后续用邮箱登录和重置密码
+- 无邮箱旧用户仍可用旧用户名和密码登录一次，但会被限制在绑定邮箱流程中
+- 绑定邮箱成功后前端保存后端签发的新 token 并进入正式系统
+
+详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md)
 
 ### V3.3.2 (2026-06-09)
 #### 📊 天气组件动态适配父组件尺寸 + 风力仪表 UI 优化
@@ -1437,13 +1457,19 @@ MIT
 ```
 
 
-## 🔐 邮箱验证码与密码重置系统（V3.3.0）
+## 🔐 邮箱账号、验证码与密码重置系统（V3.3.3）
 
-前端认证页面集成了完整的邮箱验证码和密码重置功能：
+前端认证页面集成邮箱账号注册、邮箱验证码、旧用户绑定邮箱和密码重置功能：
 
 ### 注册流程
-- 注册时可选绑定邮箱（输入邮箱 → 发送验证码 → 校验 → 提交注册）
+- 注册时邮箱为账号（输入邮箱 → 发送验证码 → 校验 → 填写昵称和密码 → 提交注册）
 - 验证码 60 秒倒计时，显示已验证状态徽章
+- 昵称仅作为展示名，可重复、可修改，不再作为登录账号
+
+### 旧用户绑定流程
+- 无邮箱旧用户可用旧用户名和密码登录一次
+- 进入绑定邮箱面板后完成邮箱验证码和当前密码校验
+- 绑定成功后保存新 session，后续使用邮箱登录
 
 ### 密码重置流程
 - 登录页新增"忘记密码？"入口
@@ -1453,8 +1479,10 @@ MIT
 
 | 文件 | 说明 |
 |------|------|
-| `api/backend/auth.js` | 新增 `apiAuthSendCode`、`apiAuthVerifyCode`、`apiAuthResetPassword` |
-| `views/RegisterView.vue` | 邮箱输入框、验证码行、忘记密码链接、密码重置弹窗 |
+| `api/backend/auth.js` | `apiAuthSendCode`、`apiAuthVerifyCode`、`apiAuthResetPassword`、`apiAuthBindEmail`、`apiAuthChangeDisplayName` |
+| `api/backend/client.js` | 识别 `EMAIL_BINDING_REQUIRED` |
+| `composables/auth/useAuthIdentity.js` | 邮箱/昵称/密码校验与显示名解析 |
+| `views/RegisterView.vue` | 邮箱账号注册、旧用户名绑定邮箱、忘记密码与重置弹窗 |
 
 ### 相关后端接口
 
@@ -1463,7 +1491,9 @@ MIT
 | POST | `/api/auth/send-code` | 发送邮箱验证码 |
 | POST | `/api/auth/verify-code` | 校验邮箱验证码 |
 | POST | `/api/auth/reset-password` | 通过邮箱验证码重置密码 |
-| POST | `/api/auth/register` | 改造：新增 email/email_code 参数 |
+| POST | `/api/auth/register` | 邮箱验证码注册账号 |
+| POST | `/api/auth/bind-email` | 旧用户绑定邮箱 |
+| POST | `/api/auth/change-display-name` | 修改昵称 |
 
 ---
 

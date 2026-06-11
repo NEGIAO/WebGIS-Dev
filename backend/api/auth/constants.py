@@ -54,6 +54,7 @@ REGISTERED_DAILY_API_QUOTA = 1000
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{6,64}$")
 GUEST_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{6,128}$")
+DISPLAY_NAME_CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 
 # ─── 保留名 ───
 RESERVED_USERNAMES = {
@@ -146,6 +147,14 @@ def _normalize_username(raw_username: Optional[str]) -> str:
     return str(raw_username or "").strip()
 
 
+def _normalize_display_name(raw_display_name: Optional[str]) -> str:
+    """规范化昵称：去除首尾空白、压缩中间空白并截断到 40 字符。"""
+    value = re.sub(r"\s+", " ", str(raw_display_name or "").strip())
+    if len(value) > 40:
+        value = value[:40].strip()
+    return value
+
+
 def _normalize_avatar_index(raw_avatar_index: Any) -> int:
     try:
         value = int(raw_avatar_index)
@@ -234,6 +243,36 @@ def _validate_register_payload(username: str, password: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="密码需包含字母和数字，长度 6-64 位",
+        )
+
+
+def _validate_display_name(display_name: str) -> None:
+    """校验昵称。昵称只承担展示职责，允许重复，但不能为空或包含控制字符。"""
+    if not display_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="昵称不能为空",
+        )
+
+    if len(display_name) > 40:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="昵称长度不能超过 40 个字符",
+        )
+
+    if DISPLAY_NAME_CONTROL_PATTERN.search(display_name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="昵称不能包含控制字符",
+        )
+
+
+def _validate_password(password: str, field_name: str = "密码") -> None:
+    """统一校验登录注册密码规则。"""
+    if not PASSWORD_PATTERN.fullmatch(password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{field_name}需包含字母和数字，长度 6-64 位",
         )
 
 

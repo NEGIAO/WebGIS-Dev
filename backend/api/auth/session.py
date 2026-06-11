@@ -50,6 +50,7 @@ def _create_session_sync(
     user_agent: str,
     guest_uid: str = "",
     guest_device_id: str = "",
+    requires_email_binding: bool = False,
 ) -> Dict[str, Any]:
     now = _utc_now()
     expires_at = now + timedelta(hours=SESSION_EXPIRE_HOURS)
@@ -67,10 +68,11 @@ def _create_session_sync(
                 guest_device_id,
                 ip,
                 user_agent,
+                requires_email_binding,
                 created_at,
                 expires_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 token,
@@ -80,6 +82,7 @@ def _create_session_sync(
                 _normalize_guest_device_id(guest_device_id),
                 ip,
                 user_agent,
+                1 if requires_email_binding else 0,
                 _iso(now),
                 _iso(expires_at),
             ),
@@ -92,6 +95,7 @@ def _create_session_sync(
         "role": resolved_role,
         "guest_uid": str(guest_uid or "").strip(),
         "guest_device_id": _normalize_guest_device_id(guest_device_id),
+        "requires_email_binding": bool(requires_email_binding),
         "created_at": _iso(now),
         "expires_at": _iso(expires_at),
     }
@@ -101,7 +105,8 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
-            SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent, created_at, expires_at
+            SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent,
+                   requires_email_binding, created_at, expires_at
             FROM sessions
             WHERE token = ?
             """,
@@ -134,6 +139,42 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
                 (resolved_role, token),
             )
             conn.commit()
+
+        if resolved_role not in {"guest", "admin"}:
+            user_row = conn.execute(
+                """
+                SELECT id, username, display_name, email, email_verified, avatar_index, created_at
+                FROM users
+                WHERE username = ?
+                """,
+                (str(data.get("username") or ""),),
+            ).fetchone()
+            if user_row is not None:
+                user_data = dict(user_row)
+                email = str(user_data.get("email") or "").strip()
+                email_verified = int(user_data.get("email_verified") or 0)
+                requires_binding = not (email and email_verified == 1)
+                stored_requires = bool(int(data.get("requires_email_binding") or 0))
+                if stored_requires != requires_binding:
+                    conn.execute(
+                        "UPDATE sessions SET requires_email_binding = ? WHERE token = ?",
+                        (1 if requires_binding else 0, token),
+                    )
+                    conn.commit()
+
+                data.update(
+                    {
+                        "user_id": int(user_data.get("id") or 0),
+                        "display_name": str(user_data.get("display_name") or user_data.get("username") or ""),
+                        "email": email,
+                        "email_verified": bool(email_verified),
+                        "avatar_index": _normalize_avatar_index(user_data.get("avatar_index")),
+                        "user_created_at": str(user_data.get("created_at") or ""),
+                        "requires_email_binding": requires_binding,
+                    }
+                )
+        else:
+            data["requires_email_binding"] = False
 
         return data
 
@@ -219,7 +260,11 @@ def _get_user_by_email_sync(email: str) -> Optional[Dict[str, Any]]:
     normalized_email = email.lower().strip()
     with _db_connection() as conn:
         row = conn.execute(
-            "SELECT username, password_hash, role, avatar_index, email, email_verified, created_at FROM users WHERE email = ?",
+            """
+            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            FROM users
+            WHERE email = ?
+            """,
             (normalized_email,),
         ).fetchone()
         return dict(row) if row else None

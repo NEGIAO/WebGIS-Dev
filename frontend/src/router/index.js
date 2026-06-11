@@ -8,6 +8,7 @@ import {
     readPositionCodeFromUrl,
     injectGuestTokenForShareMode,
     getAuthToken,
+    getAuthUser,
 } from '../services/auth';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
@@ -156,6 +157,9 @@ router.beforeEach(async (to, from) => {
     showLoading('正在验证登录状态...');
     try {
         const isLoggedIn = await authStore.ensureValidSession();
+        const bindingRequired =
+            authStore.requiresEmailBinding === true ||
+            getAuthUser()?.requires_email_binding === true;
 
         // [Share Mode] 即使未登录，分享模式也允许访问（已通过访客令牌）
         if (requiresAuth && !isLoggedIn && !shareModeEnabled) {
@@ -166,7 +170,15 @@ router.beforeEach(async (to, from) => {
             };
         }
 
-        if (to.name === 'register' && isLoggedIn && !shareModeEnabled) {
+        if (requiresAuth && isLoggedIn && bindingRequired && !shareModeEnabled) {
+            cacheRoutePositionCode(to);
+            return {
+                name: 'register',
+                query: { redirect: to.fullPath },
+            };
+        }
+
+        if (to.name === 'register' && isLoggedIn && !bindingRequired && !shareModeEnabled) {
             showLoading('Loading Map Engine & Assets...');
             shouldRelayLoadingToHome = true;
             return { name: 'home' };

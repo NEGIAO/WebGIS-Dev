@@ -5,7 +5,7 @@
 import asyncio
 import logging
 
-from .db import _db_connection, _iso, _safe_execute, _utc_now, AUTH_DB_PATH
+from .db import _db_connection, _iso, _safe_execute, _utc_now, AUTH_DB_PATH, backup_auth_db_for_migration
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +100,17 @@ def init_auth_tables_sync(conn) -> None:
     """
     now_iso = _iso(_utc_now())
     default_contact = "管理员联系方式：请联系系统管理员"
+    migration_backup_reason = None
 
     # 表：users
+    users_table_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='users'"
+    ).fetchone() is not None
     conn.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL DEFAULT '',
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'registered',
             avatar_index INTEGER NOT NULL DEFAULT 0,
@@ -114,15 +119,30 @@ def init_auth_tables_sync(conn) -> None:
     """)
     user_column_rows = conn.execute("PRAGMA table_info(users)").fetchall()
     user_columns = {str(dict(row).get("name") or "") for row in user_column_rows}
+    if users_table_exists and (
+        "display_name" not in user_columns
+        or "email" not in user_columns
+        or "email_verified" not in user_columns
+    ):
+        migration_backup_reason = "users email account columns"
+        backup_auth_db_for_migration(migration_backup_reason)
+
     if "avatar_index" not in user_columns:
         _safe_execute(conn, "ALTER TABLE users ADD COLUMN avatar_index INTEGER NOT NULL DEFAULT 0")
+    if "display_name" not in user_columns:
+        conn.execute("ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''")
+        conn.execute("UPDATE users SET display_name = username WHERE display_name = ''")
     # 新增：邮箱字段与邮箱验证状态
     if "email" not in user_columns:
-        _safe_execute(conn, "ALTER TABLE users ADD COLUMN email TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_verified" not in user_columns:
-        _safe_execute(conn, "ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+        conn.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+    conn.execute("UPDATE users SET display_name = username WHERE display_name IS NULL OR display_name = ''")
 
     # 表：sessions
+    sessions_table_exists = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+    ).fetchone() is not None
     conn.execute("""
         CREATE TABLE IF NOT EXISTS sessions (
             token TEXT PRIMARY KEY,
@@ -132,16 +152,22 @@ def init_auth_tables_sync(conn) -> None:
             guest_device_id TEXT,
             ip TEXT,
             user_agent TEXT,
+            requires_email_binding INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             expires_at TEXT NOT NULL
         )
     """)
     session_column_rows = conn.execute("PRAGMA table_info(sessions)").fetchall()
     session_columns = {str(dict(row).get("name") or "") for row in session_column_rows}
+    if sessions_table_exists and "requires_email_binding" not in session_columns:
+        backup_auth_db_for_migration("sessions email binding column")
+
     if "guest_uid" not in session_columns:
         _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN guest_uid TEXT")
     if "guest_device_id" not in session_columns:
         _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN guest_device_id TEXT")
+    if "requires_email_binding" not in session_columns:
+        conn.execute("ALTER TABLE sessions ADD COLUMN requires_email_binding INTEGER NOT NULL DEFAULT 0")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_guest_uid ON sessions(guest_uid)")
@@ -282,6 +308,7 @@ def init_auth_tables_sync(conn) -> None:
     # 如果旧表缺少 id 列，需要用重建表的方式迁移。
     if "id" not in guest_identity_columns:
         logger.info("guest_identity_records 缺少 id 列，执行表重建迁移...")
+        backup_auth_db_for_migration("guest_identity_records rebuild")
         _rebuild_guest_identity_records_table(conn)
         # 重建后重新读取列信息
         guest_identity_column_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()

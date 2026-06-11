@@ -144,6 +144,15 @@ backendAPI.interceptors.response.use(
                 }
             }
 
+            if (status === 403 && detailCode === 'EMAIL_BINDING_REQUIRED') {
+                const apiError = new Error(message);
+                apiError.status = status;
+                apiError.statusText = getHttpStatusMessage(status);
+                apiError.isEmailBindingRequired = true;
+                apiError.originalError = error;
+                return Promise.reject(apiError);
+            }
+
             // ⭐ 特殊处理 429 配额用完（友好提示，不报错）
             if (status === 429) {
                 isQuotaExceeded = true;
@@ -197,6 +206,7 @@ backendAPI.interceptors.response.use(
 export function handleApiError(error, messageHandler, defaultErrorMsg = '操作失败，请稍后重试') {
     const isQuotaExceeded = error.isQuotaExceeded === true;
     const isGuestInsufficient = error.isGuestInsufficient === true;
+    const isEmailBindingRequired = error.isEmailBindingRequired === true;
     const status = error.status || 0;
     const statusText = error.statusText || '';
     const errorMessage = error.message || defaultErrorMsg;
@@ -214,6 +224,11 @@ export function handleApiError(error, messageHandler, defaultErrorMsg = '操作�
         });
     } else if (isGuestInsufficient) {
         // 游客权限不足：显示 warning，引导注册
+        messageHandler.warning(errorMessage, {
+            closable: true,
+            duration: 4000,
+        });
+    } else if (isEmailBindingRequired) {
         messageHandler.warning(errorMessage, {
             closable: true,
             duration: 4000,

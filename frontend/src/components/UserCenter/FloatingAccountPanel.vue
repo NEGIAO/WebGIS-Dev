@@ -5,6 +5,7 @@ import { useMessage } from '../../composables/useMessage';
 import {
     apiAuthChangePassword,
     apiAuthChangeAvatar,
+    apiAuthChangeDisplayName,
     apiAuthLogout,
     apiAuthMe,
     apiAgentListModels,
@@ -16,6 +17,7 @@ import {
 import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '../../services/auth';
 import { BASEMAP_OPTIONS } from '../../constants';
 import { useUserPreferencesStore, useThemeStore } from '../../stores';
+import { getUserDisplayName } from '../../composables/auth/useAuthIdentity';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
@@ -132,9 +134,11 @@ const roleText = computed(() => {
 const hasControlledOpen = computed(() => props.open !== undefined);
 
 const panelLabel = computed(() => {
-    const username = String(user.value?.username || '').trim();
-    return username ? `账号：${username}` : '账号中心';
+    const displayName = getUserDisplayName(user.value);
+    return displayName ? `账号：${displayName}` : '账号中心';
 });
+
+const displayNameText = computed(() => getUserDisplayName(user.value));
 
 const basemapPreferenceOptions = computed(() => {
     return Array.isArray(BASEMAP_OPTIONS) ? BASEMAP_OPTIONS : [];
@@ -481,6 +485,39 @@ async function handleChangePassword(payload) {
     }
 }
 
+async function handleChangeDisplayName(payload) {
+    if (isSubmitting.value) return;
+
+    if (payload?.error) {
+        message.error(payload.error);
+        return;
+    }
+
+    const displayName = String(payload?.displayName || '').trim();
+    if (!displayName) {
+        message.error('请填写昵称');
+        return;
+    }
+
+    isSubmitting.value = true;
+    try {
+        const result = await apiAuthChangeDisplayName(displayName);
+        if (result?.user) {
+            user.value = result.user;
+            const token = getAuthToken();
+            if (token) {
+                setAuthSession({ token, user: result.user });
+            }
+        }
+        message.success('昵称已更新');
+    } catch (error) {
+        const detail = String(error?.message || '').trim();
+        message.error(detail || '昵称更新失败，请稍后重试');
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+
 async function handleSaveAvatar() {
     if (avatarSaving.value) return;
 
@@ -582,13 +619,13 @@ onBeforeUnmount(() => {
                     <span class="account-avatar">
                         <img
                             :src="userAvatarSrc"
-                            :alt="`${user?.username || '用户'}头像`"
+                            :alt="`${displayNameText || '用户'}头像`"
                             loading="lazy"
                         />
                     </span>
                     <span class="status-dot"></span>
                 </div>
-                <span class="account-fab-text">{{ user?.username || '用户' }}</span>
+                <span class="account-fab-text">{{ displayNameText || '用户' }}</span>
                 <i
                     class="fas fa-chevron-up fold-icon"
                     :class="{ rotated: !isOpen }"
@@ -609,12 +646,18 @@ onBeforeUnmount(() => {
                         <div class="profile-avatar large blur-bg">
                             <img
                                 :src="userAvatarSrc"
-                                :alt="`${user?.username || '用户'}头像`"
+                                :alt="`${displayNameText || '用户'}头像`"
                                 loading="lazy"
                             />
                         </div>
                         <div class="profile-info">
-                            <h3 class="profile-name">{{ user?.username || 'unknown' }}</h3>
+                            <h3 class="profile-name">{{ displayNameText || 'unknown' }}</h3>
+                            <span
+                                v-if="user?.email"
+                                class="profile-email"
+                            >
+                                {{ user.email }}
+                            </span>
                             <span class="profile-role">
                                 <i class="fas fa-id-badge"></i> {{ roleText }}
                             </span>
@@ -705,6 +748,7 @@ onBeforeUnmount(() => {
                             ref="securityTabRef"
                             :user="user"
                             :is-submitting="isSubmitting"
+                            @change-display-name="handleChangeDisplayName"
                             @change-password="handleChangePassword"
                         />
 
@@ -740,7 +784,7 @@ onBeforeUnmount(() => {
                             :current-theme="themeStore.theme"
                             @update:preference-draft="({ key, value }) => { preferenceDraft[key] = value }"
                             @save-preferences="handleSavePreferences"
-                            @update:selected-avatar-index="(idx) => { selectedAvatarIndex = idx }"
+                            @update:selected-avatar-index="(idx) => { selectedAvatarIndex.value = idx }"
                             @save-avatar="handleSaveAvatar"
                             @set-theme="(t) => themeStore.setTheme(t)"
                         />
@@ -1039,6 +1083,13 @@ onBeforeUnmount(() => {
     color: #ffffff;
     line-height: 1.2;
     text-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.4);
+}
+
+.profile-email {
+    max-width: 220px;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    color: #7da48b;
 }
 
 .profile-role {

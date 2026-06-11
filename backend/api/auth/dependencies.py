@@ -111,6 +111,12 @@ async def require_login(request: Request) -> Dict[str, Any]:
 async def require_api_access(request: Request) -> Dict[str, Any]:
     session = await require_login(request)
 
+    if bool(session.get("requires_email_binding")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_auth_error_detail("EMAIL_BINDING_REQUIRED", "请先绑定并验证邮箱后再使用完整功能"),
+        )
+
     quota = await asyncio.to_thread(
         _consume_api_quota_sync,
         str(session.get("username") or ""),
@@ -159,6 +165,12 @@ async def require_api_access_or_guest(request: Request) -> Dict[str, Any]:
     # 无有效 session 时，自动创建临时 guest session
     if session is None:
         session = await _build_temporary_guest_session_async(request)
+
+    if bool(session.get("requires_email_binding")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_auth_error_detail("EMAIL_BINDING_REQUIRED", "请先绑定并验证邮箱后再使用完整功能"),
+        )
 
     # 统一走配额检查
     quota = await asyncio.to_thread(

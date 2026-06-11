@@ -62,15 +62,19 @@ AUTH_DB_PATH = _resolve_auth_db_path()
 _auth_storage_ready = False
 _recovery_lock = threading.Lock()
 _pending_recovery_data = None  # 存储待导入的恢复数据
+_migration_backup_done = False
 
 
 def _cleanup_orphaned_wal_files(db_path: Path) -> None:
     """
     清理孤立的 WAL/SHM 文件。
-    当数据库文件被外部替换（如手动上传新 db）时，旧的 -wal 和 -shm 文件
-    会导致 SQLite 读到旧数据或直接报 malformed。在启动时清理这些文件，
-    确保新 db 文件被干净地打开。
+    只有主库文件不存在时，才认为同名 -wal/-shm 是孤立文件。主库存在时
+    不能主动删除 WAL；其中可能包含尚未 checkpoint 的已提交事务，应交给
+    SQLite 在连接时自动恢复。
     """
+    if db_path.exists():
+        return
+
     for suffix in ("-wal", "-shm"):
         wal_path = Path(str(db_path) + suffix)
         if wal_path.exists():
@@ -79,6 +83,47 @@ def _cleanup_orphaned_wal_files(db_path: Path) -> None:
                 logger.info("已清理孤立的 WAL 文件: %s", str(wal_path))
             except Exception as e:
                 logger.warning("清理 WAL 文件失败 (%s): %s", str(wal_path), str(e))
+
+
+def backup_auth_db_for_migration(reason: str) -> Optional[Path]:
+    """
+    在兼容性 schema 迁移前备份现有 auth 数据库。
+
+    SQLite 新增列采用原地 ALTER TABLE，无需重建整库；但生产旧库首次迁移前
+    仍保留主库与 WAL/SHM 的文件级备份，方便异常时人工回滚。
+    """
+    global _migration_backup_done
+
+    if _migration_backup_done or not AUTH_DB_PATH.exists():
+        return None
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    backup_dir = AUTH_DB_PATH.parent / "migration_backups"
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error("创建迁移备份目录失败 (%s): %s", str(backup_dir), str(e))
+        return None
+
+    backup_base = backup_dir / f"{AUTH_DB_PATH.name}.pre_email_account_v333.{timestamp}"
+    copied_any = False
+    for suffix in ("", "-wal", "-shm"):
+        source = Path(str(AUTH_DB_PATH) + suffix)
+        if not source.exists():
+            continue
+        target = Path(str(backup_base) + suffix)
+        try:
+            shutil.copy2(str(source), str(target))
+            copied_any = True
+        except Exception as e:
+            logger.error("迁移备份文件失败 (%s -> %s): %s", str(source), str(target), str(e))
+
+    if copied_any:
+        _migration_backup_done = True
+        logger.warning("邮箱账号迁移前已备份认证数据库: %s (reason=%s)", str(backup_base), reason)
+        return backup_base
+
+    return None
 
 # ─── 数据库损坏恢复 ───
 def _try_dump_database(db_path: Path) -> dict:
@@ -406,7 +451,7 @@ def _ensure_schema() -> None:
     """
     from .schema import init_auth_tables_sync
 
-    # 启动时清理孤立的 WAL/SHM 文件，防止外部替换 db 后读到旧数据
+    # 启动时仅清理真正孤立的 WAL/SHM；主库存在时交给 SQLite 恢复 WAL 内容。
     _cleanup_orphaned_wal_files(AUTH_DB_PATH)
 
     conn = _try_connect(AUTH_DB_PATH)

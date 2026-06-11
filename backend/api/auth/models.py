@@ -10,15 +10,17 @@ from .constants import MAX_AVATAR_INDEX
 
 
 class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=24)
+    username: Optional[str] = Field(default=None, max_length=40)
+    display_name: Optional[str] = Field(default=None, max_length=40)
     password: str = Field(..., min_length=6, max_length=64)
     avatar_index: int = Field(default=0, ge=0, le=MAX_AVATAR_INDEX)
-    email: str = Field(default="", max_length=120)
-    email_code: str = Field(default="", max_length=6)
+    email: str = Field(..., min_length=5, max_length=120)
+    email_code: str = Field(..., min_length=6, max_length=6)
 
 
 class LoginRequest(BaseModel):
-    username: Optional[str] = Field(default=None, max_length=24)
+    username: Optional[str] = Field(default=None, max_length=120)
+    email: Optional[str] = Field(default=None, max_length=120)
     password: str = Field(..., min_length=1, max_length=128)
     guest_device_id: Optional[str] = Field(default=None, max_length=128)
 
@@ -30,6 +32,16 @@ class ChangePasswordRequest(BaseModel):
 
 class ChangeAvatarRequest(BaseModel):
     new_avatar_index: int = Field(..., ge=0, le=MAX_AVATAR_INDEX)
+
+
+class ChangeDisplayNameRequest(BaseModel):
+    display_name: str = Field(..., min_length=1, max_length=40)
+
+
+class BindEmailRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=120)
+    code: str = Field(..., min_length=6, max_length=6)
+    current_password: str = Field(..., min_length=1, max_length=128)
 
 
 class UpdatePreferencesRequest(BaseModel):

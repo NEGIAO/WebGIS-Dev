@@ -318,8 +318,7 @@ def is_email_verified_for_purpose(email: str, purpose: str) -> bool:
     - True 已通过验证，False 未验证
     """
     normalized_email = email.lower().strip()
-    # 在 Python 侧计算 5 分钟前的时间（纯 UTC 格式，避免 SQLite datetime() 时区问题）
-    cutoff = _iso(_utc_now() - timedelta(minutes=5))
+    now_iso = _iso(_utc_now())
 
     with _db_connection() as conn:
         row = conn.execute(
@@ -329,7 +328,7 @@ def is_email_verified_for_purpose(email: str, purpose: str) -> bool:
             ORDER BY created_at DESC
             LIMIT 1
             """,
-            (normalized_email, purpose, cutoff),
+            (normalized_email, purpose, now_iso),
         ).fetchone()
 
     return row is not None

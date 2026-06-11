@@ -35,21 +35,26 @@
                     </button>
                 </div>
 
-                <form @submit.prevent="handleSubmit">
+                <form
+                    v-if="!requiresEmailBinding"
+                    @submit.prevent="handleSubmit"
+                >
                     <div class="form-group">
-                        <label for="username">用户名</label>
+                        <label for="username">{{ mode === 'login' ? '邮箱账号' : '昵称' }}</label>
                         <div class="input-group">
-                            <i class="icon fas fa-user"></i>
+                            <i
+                                class="icon fas"
+                                :class="mode === 'login' ? 'fa-envelope' : 'fa-user'"
+                            ></i>
                             <input
                                 id="username"
                                 v-model="username"
                                 type="text"
                                 :placeholder="mode === 'login'
-                                        ? '请输入用户名（游客请输入 user）'
-                                        : '3-24位：字母/数字/下划线'
+                                        ? '请输入邮箱（旧用户可暂用原用户名）'
+                                        : '请输入昵称，1-40个字符'
                                     "
                                 :required="mode === 'register'"
-                                @blur="handleUsernameBlur"
                             />
                         </div>
                         <div
@@ -57,22 +62,14 @@
                             class="hint"
                         >
                             <i class="fas fa-info-circle"></i>
-                            登录角色由后端统一校验（游客/注册用户/管理员）
+                            新账号使用邮箱登录；旧账号会引导绑定邮箱
                         </div>
                         <div
                             v-else
                             class="hint"
                         >
                             <i class="fas fa-user-plus"></i>
-                            user/admin 为保留用户名，不能注册
-                        </div>
-                        <div
-                            v-if="mode === 'register' && usernameCheckMessage"
-                            class="hint username-check"
-                            :class="usernameCheckStatus"
-                        >
-                            <i :class="usernameCheckIcon"></i>
-                            {{ usernameCheckMessage }}
+                            昵称用于展示，可重复，后续可在账号中心修改
                         </div>
                     </div>
 
@@ -127,14 +124,15 @@
                         v-if="mode === 'register'"
                         class="form-group"
                     >
-                        <label for="email">绑定邮箱</label>
+                        <label for="email">邮箱账号</label>
                         <div class="input-group">
                             <i class="icon fas fa-envelope"></i>
                             <input
                                 id="email"
                                 v-model="email"
                                 type="email"
-                                placeholder="请输入邮箱地址（可选，用于密码找回）"
+                                placeholder="请输入邮箱地址"
+                                required
                             />
                         </div>
                         <div
@@ -154,7 +152,7 @@
                     </div>
 
                     <div
-                        v-if="mode === 'register' && email"
+                        v-if="mode === 'register'"
                         class="form-group"
                     >
                         <label for="emailCode">邮箱验证码</label>
@@ -308,6 +306,100 @@
                         </template>
                     </div>
                 </form>
+
+                <form
+                    v-else
+                    class="legacy-bind-form"
+                    @submit.prevent="handleBindEmailSubmit"
+                >
+                    <div class="bind-alert">
+                        <i class="fas fa-envelope-circle-check"></i>
+                        <div>
+                            <strong>需要绑定邮箱</strong>
+                            <p>你的旧账号已通过密码校验。绑定邮箱后，后续将使用邮箱进行登录、密码重置和身份验证。</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bindEmail">绑定邮箱</label>
+                        <div class="input-group">
+                            <i class="icon fas fa-envelope"></i>
+                            <input
+                                id="bindEmail"
+                                v-model="bindEmail"
+                                type="email"
+                                placeholder="请输入邮箱地址"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bindCode">邮箱验证码</label>
+                        <div class="email-code-row">
+                            <div class="input-group email-code-input">
+                                <i class="icon fas fa-shield-alt"></i>
+                                <input
+                                    id="bindCode"
+                                    v-model="bindCode"
+                                    type="text"
+                                    inputmode="numeric"
+                                    pattern="[0-9]*"
+                                    maxlength="6"
+                                    placeholder="6位验证码"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                class="send-code-btn"
+                                :disabled="isBindingCodeSending || bindCodeCountdown > 0"
+                                @click="handleBindSendCode"
+                            >
+                                <i
+                                    class="fas"
+                                    :class="isBindingCodeSending ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
+                                ></i>
+                                {{ bindCodeCountdown > 0 ? `${bindCodeCountdown}s` : '发送验证码' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bindPassword">当前密码</label>
+                        <div class="input-group">
+                            <i class="icon fas fa-lock"></i>
+                            <input
+                                id="bindPassword"
+                                v-model="bindCurrentPassword"
+                                type="password"
+                                placeholder="请输入当前账号密码"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="formMessage"
+                        :class="['validation-message', formStatus]"
+                    >
+                        {{ formMessage }}
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="btn"
+                        :disabled="isSubmitting"
+                    >
+                        {{ isSubmitting ? '绑定中...' : '绑定邮箱并进入系统' }}
+                    </button>
+
+                    <div class="login-link">
+                        <a
+                            href="#"
+                            @click.prevent="cancelBinding"
+                        >返回登录</a>
+                    </div>
+                </form>
             </div>
 
             <!-- 密码重置弹窗 -->
@@ -432,23 +524,34 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
 import {
-    apiAuthCheckUsername,
     apiAuthLogin,
     apiAuthRegister,
     apiAuthSendCode,
     apiAuthVerifyCode,
     apiAuthResetPassword,
+    apiAuthBindEmail,
     apiLocationTrackVisit,
 } from '../api/backend';
 import {
     consumePersistedPositionCode,
+    clearAuthSession,
     getAuthToken,
+    getAuthUser,
     getOrCreateGuestDeviceId,
     syncUserRoleToUrl,
     injectPositionCodeToPath,
     peekPersistedPositionCode,
     setAuthSession,
 } from '../services/auth';
+import {
+    getUserDisplayName,
+    isValidEmail,
+    isValidPassword,
+    normalizeCredential,
+    normalizeDisplayName,
+    normalizeEmail,
+    validateDisplayName,
+} from '../composables/auth/useAuthIdentity';
 
 const router = useRouter();
 const route = useRoute();
@@ -460,12 +563,8 @@ const password = ref('');
 const confirmPassword = ref('');
 const selectedAvatarIndex = ref(0);
 const isSubmitting = ref(false);
-const isCheckingUsername = ref(false);
 const formMessage = ref('');
 const formStatus = ref('');
-const usernameCheckStatus = ref('');
-const usernameCheckMessage = ref('');
-const lastCheckedUsername = ref('');
 let gisPrewarmTimer = null;
 
 // ─── 邮箱 & 验证码 ───
@@ -479,6 +578,15 @@ const emailCheckStatus = ref('');
 const emailCheckMessage = ref('');
 let countdownTimer = null;
 
+// ─── 旧账号绑定邮箱 ───
+const requiresEmailBinding = ref(false);
+const bindEmail = ref('');
+const bindCode = ref('');
+const bindCurrentPassword = ref('');
+const bindCodeCountdown = ref(0);
+const isBindingCodeSending = ref(false);
+let bindCountdownTimer = null;
+
 // ─── 密码重置 ───
 const showResetPanel = ref(false);
 const resetEmail = ref('');
@@ -491,12 +599,6 @@ const resetCodeCountdown = ref(0);
 const resetCodeSent = ref(false);
 let resetCountdownTimer = null;
 
-const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-
-const usernameRegex = /^[A-Za-z0-9_]{3,24}$/;
-const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
-const reservedNames = new Set(['user', 'admin']);
-
 const avatarOptions = computed(() => {
     return Array.from({ length: 12 }, (_, index) => ({
         index,
@@ -505,23 +607,13 @@ const avatarOptions = computed(() => {
     }));
 });
 
-const usernameCheckIcon = computed(() => {
-    if (usernameCheckStatus.value === 'success') {
-        return 'fas fa-check-circle';
-    }
-    if (usernameCheckStatus.value === 'loading') {
-        return 'fas fa-spinner fa-spin';
-    }
-    return 'fas fa-exclamation-circle';
-});
-
 function setFormState(status = '', text = '') {
     formStatus.value = status;
     formMessage.value = text;
 }
 
 function normalizeUsername(raw) {
-    return String(raw || '').trim();
+    return normalizeCredential(raw);
 }
 
 function resolvePublicAssetPath(relativePath) {
@@ -529,12 +621,6 @@ function resolvePublicAssetPath(relativePath) {
     const normalizedBase = base.endsWith('/') ? base : `${base}/`;
     const normalizedPath = String(relativePath || '').replace(/^\/+/, '');
     return `${normalizedBase}${normalizedPath}`;
-}
-
-function resetUsernameCheck() {
-    usernameCheckStatus.value = '';
-    usernameCheckMessage.value = '';
-    lastCheckedUsername.value = '';
 }
 
 function resolveRedirectTarget() {
@@ -546,10 +632,13 @@ function resolveRedirectTarget() {
 
 function switchMode(nextMode) {
     mode.value = nextMode;
+    requiresEmailBinding.value = false;
     setFormState('', '');
     if (nextMode === 'login') {
         confirmPassword.value = '';
-        resetUsernameCheck();
+        email.value = '';
+        emailCode.value = '';
+        emailVerified.value = false;
         selectedAvatarIndex.value = 0;
     }
 }
@@ -558,7 +647,6 @@ function _fillGuestAccount() {
     mode.value = 'login';
     username.value = 'user';
     password.value = '123';
-    resetUsernameCheck();
     setFormState('success', '已填入游客账号，请点击“登录系统”');
 }
 async function quickGuestLogin() {
@@ -597,94 +685,6 @@ async function quickGuestLogin() {
         isSubmitting.value = false;
     }
 }
-async function checkUsernameAvailability({ silent = false, force = false } = {}) {
-    if (mode.value !== 'register') {
-        return true;
-    }
-
-    const normalizedUsername = normalizeUsername(username.value);
-    if (!normalizedUsername) {
-        usernameCheckStatus.value = 'error';
-        usernameCheckMessage.value = '请先输入用户名';
-        lastCheckedUsername.value = '';
-        if (!silent) {
-            message.warning(usernameCheckMessage.value);
-        }
-        return false;
-    }
-
-    const lowered = normalizedUsername.toLowerCase();
-    if (reservedNames.has(lowered)) {
-        usernameCheckStatus.value = 'error';
-        usernameCheckMessage.value = 'user/admin 为系统保留用户名';
-        lastCheckedUsername.value = normalizedUsername;
-        if (!silent) {
-            message.warning(usernameCheckMessage.value);
-        }
-        return false;
-    }
-
-    if (!usernameRegex.test(normalizedUsername)) {
-        usernameCheckStatus.value = 'error';
-        usernameCheckMessage.value = '用户名仅支持字母、数字、下划线，长度 3-24 位';
-        lastCheckedUsername.value = normalizedUsername;
-        if (!silent) {
-            message.warning(usernameCheckMessage.value);
-        }
-        return false;
-    }
-
-    if (
-        !force &&
-        normalizedUsername === lastCheckedUsername.value &&
-        (usernameCheckStatus.value === 'success' || usernameCheckStatus.value === 'error')
-    ) {
-        return usernameCheckStatus.value === 'success';
-    }
-
-    isCheckingUsername.value = true;
-    usernameCheckStatus.value = 'loading';
-    usernameCheckMessage.value = '正在检查用户名可用性...';
-
-    try {
-        const result = await apiAuthCheckUsername(normalizedUsername);
-        const available = Boolean(result?.available);
-        const detail = String(result?.message || (available ? '用户名可用' : '用户名不可用'));
-
-        lastCheckedUsername.value = normalizedUsername;
-        usernameCheckStatus.value = available ? 'success' : 'error';
-        usernameCheckMessage.value = detail;
-
-        if (!silent && !available) {
-            message.warning(detail);
-        }
-
-        return available;
-    } catch (error) {
-        const detail = String(
-            error?.originalError?.response?.data?.detail ||
-            error?.message ||
-            '用户名校验失败，请稍后重试',
-        );
-        usernameCheckStatus.value = 'error';
-        usernameCheckMessage.value = detail;
-        lastCheckedUsername.value = normalizedUsername;
-        if (!silent) {
-            message.error(detail);
-        }
-        return false;
-    } finally {
-        isCheckingUsername.value = false;
-    }
-}
-
-async function handleUsernameBlur() {
-    if (mode.value !== 'register') {
-        return;
-    }
-    await checkUsernameAvailability();
-}
-
 async function handleLogin() {
     const normalizedUsername = normalizeUsername(username.value);
     const normalizedPassword = String(password.value || '').trim();
@@ -716,6 +716,14 @@ async function handleLogin() {
 
         setAuthSession({ token, user });
         syncUserRoleToUrl(user);
+        if (user?.requires_email_binding) {
+            requiresEmailBinding.value = true;
+            bindCurrentPassword.value = normalizedPassword;
+            setFormState('success', '旧账号验证成功，请绑定邮箱完成迁移');
+            message.warning('请先绑定邮箱后继续使用完整功能');
+            return;
+        }
+
         message.success(`登录成功，当前角色：${String(user.role || 'unknown')}`);
         await router.replace(resolveRedirectTarget());
         consumePersistedPositionCode();
@@ -733,27 +741,27 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-    const normalizedUsername = normalizeUsername(username.value);
+    const displayValidation = validateDisplayName(username.value);
     const normalizedPassword = String(password.value || '').trim();
     const normalizedConfirmPassword = String(confirmPassword.value || '').trim();
-    const normalizedEmail = String(email.value || '').trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email.value);
 
-    if (!normalizedUsername) {
-        setFormState('error', '请填写用户名');
+    if (!displayValidation.valid) {
+        setFormState('error', displayValidation.message);
         return;
     }
 
-    if (reservedNames.has(normalizedUsername.toLowerCase())) {
-        setFormState('error', 'user/admin 为系统保留用户名');
+    if (!isValidEmail(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
         return;
     }
 
-    if (!usernameRegex.test(normalizedUsername)) {
-        setFormState('error', '用户名仅支持字母、数字、下划线，长度 3-24 位');
+    if (!emailVerified.value) {
+        setFormState('error', '请先完成邮箱验证码验证');
         return;
     }
 
-    if (!passwordRegex.test(normalizedPassword)) {
+    if (!isValidPassword(normalizedPassword)) {
         setFormState('error', '密码需包含字母和数字，长度 6-64 位');
         return;
     }
@@ -763,32 +771,27 @@ async function handleRegister() {
         return;
     }
 
-    const isUsernameAvailable = await checkUsernameAvailability({ silent: true, force: true });
-    if (!isUsernameAvailable) {
-        const detail = usernameCheckMessage.value || '用户名不可用，请更换后重试';
-        setFormState('error', detail);
-        message.warning(detail);
-        return;
-    }
-
     isSubmitting.value = true;
     setFormState('', '');
 
     try {
-        await apiAuthRegister(
-            normalizedUsername,
-            normalizedPassword,
-            selectedAvatarIndex.value,
-            normalizedEmail,
-            emailCode.value,
-        );
-        message.success('注册成功，请使用新账号登录');
+        await apiAuthRegister({
+            email: normalizedEmail,
+            email_code: emailCode.value,
+            password: normalizedPassword,
+            display_name: displayValidation.value,
+            avatar_index: selectedAvatarIndex.value,
+        });
+        message.success('注册成功，请使用邮箱登录');
+        username.value = '';
         password.value = '';
         confirmPassword.value = '';
+        email.value = '';
+        emailCode.value = '';
+        emailVerified.value = false;
         selectedAvatarIndex.value = 0;
-        resetUsernameCheck();
         switchMode('login');
-        setFormState('success', '注册完成，请输入账号密码登录');
+        setFormState('success', '注册完成，请输入邮箱和密码登录');
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
@@ -841,13 +844,24 @@ function startResetCountdown() {
     }, 1000);
 }
 
+function startBindCountdown() {
+    bindCodeCountdown.value = 30;
+    bindCountdownTimer = setInterval(() => {
+        bindCodeCountdown.value--;
+        if (bindCodeCountdown.value <= 0) {
+            clearInterval(bindCountdownTimer);
+            bindCountdownTimer = null;
+        }
+    }, 1000);
+}
+
 /**
  * 发送邮箱验证码（注册用）
  * 校验邮箱格式 → 调用后端发送接口 → 成功后启动 30 秒倒计时
  */
 async function handleSendCode() {
-    const normalizedEmail = String(email.value || '').trim().toLowerCase();
-    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+    const normalizedEmail = normalizeEmail(email.value);
+    if (!isValidEmail(normalizedEmail)) {
         setFormState('error', '请输入有效的邮箱地址');
         return;
     }
@@ -859,7 +873,7 @@ async function handleSendCode() {
     setFormState('', '');
 
     try {
-        await apiAuthSendCode(normalizedEmail, 'register', normalizeUsername(username.value));
+        await apiAuthSendCode(normalizedEmail, 'register', normalizeDisplayName(username.value));
         emailCheckStatus.value = 'success';
         emailCheckMessage.value = '验证码已发送，请查收邮箱';
         message.success('验证码已发送至您的邮箱');
@@ -901,9 +915,9 @@ async function handleSendCode() {
  * 调用后端 verify-code 接口，成功后标记邮箱已验证
  */
 async function handleVerifyCode() {
-    const normalizedEmail = String(email.value || '').trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email.value);
     const code = String(emailCode.value || '').trim();
-    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
         setFormState('error', '请输入有效的邮箱地址');
         return;
     }
@@ -931,6 +945,102 @@ async function handleVerifyCode() {
         setFormState('error', detail);
     } finally {
         isVerifyingCode.value = false;
+    }
+}
+
+async function handleBindSendCode() {
+    const normalizedEmail = normalizeEmail(bindEmail.value);
+    if (!isValidEmail(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
+        return;
+    }
+    if (bindCodeCountdown.value > 0) return;
+
+    isBindingCodeSending.value = true;
+    setFormState('', '');
+
+    try {
+        await apiAuthSendCode(normalizedEmail, 'bind_email', getUserDisplayName(getStoredBindingUser()));
+        message.success('验证码已发送至您的邮箱');
+        startBindCountdown();
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message || '验证码发送失败，请稍后重试',
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isBindingCodeSending.value = false;
+    }
+}
+
+function getStoredBindingUser() {
+    return getAuthUser();
+}
+
+async function handleBindEmailSubmit() {
+    const normalizedEmail = normalizeEmail(bindEmail.value);
+    const code = String(bindCode.value || '').trim();
+    const currentPass = String(bindCurrentPassword.value || '').trim();
+
+    if (!isValidEmail(normalizedEmail)) {
+        setFormState('error', '请输入有效的邮箱地址');
+        return;
+    }
+    if (!code || code.length !== 6) {
+        setFormState('error', '请输入 6 位验证码');
+        return;
+    }
+    if (!currentPass) {
+        setFormState('error', '请输入当前账号密码');
+        return;
+    }
+
+    isSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        const result = await apiAuthBindEmail(normalizedEmail, code, currentPass);
+        const token = String(result?.token || '').trim();
+        const user = result?.user || null;
+        if (!token || !user) {
+            throw new Error('邮箱绑定响应异常，请稍后重试');
+        }
+
+        setAuthSession({ token, user });
+        syncUserRoleToUrl(user);
+        requiresEmailBinding.value = false;
+        message.success('邮箱绑定成功');
+        await router.replace(resolveRedirectTarget());
+        consumePersistedPositionCode();
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message || '邮箱绑定失败',
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+
+function cancelBinding() {
+    clearBindingState();
+    clearAuthSession();
+    setFormState('', '');
+}
+
+function clearBindingState() {
+    requiresEmailBinding.value = false;
+    bindEmail.value = '';
+    bindCode.value = '';
+    bindCurrentPassword.value = '';
+    bindCodeCountdown.value = 0;
+    if (bindCountdownTimer !== null) {
+        clearInterval(bindCountdownTimer);
+        bindCountdownTimer = null;
     }
 }
 
@@ -968,8 +1078,8 @@ function closeResetPanel() {
  * 发送密码重置验证码
  */
 async function handleResetSendCode() {
-    const normalizedEmail = String(resetEmail.value || '').trim().toLowerCase();
-    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+    const normalizedEmail = normalizeEmail(resetEmail.value);
+    if (!isValidEmail(normalizedEmail)) {
         setFormState('error', '请输入有效的邮箱地址');
         return;
     }
@@ -1018,12 +1128,12 @@ async function handleResetSendCode() {
  * 提交密码重置
  */
 async function handleResetSubmit() {
-    const normalizedEmail = String(resetEmail.value || '').trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(resetEmail.value);
     const code = String(resetCode.value || '').trim();
     const newPass = String(resetNewPassword.value || '').trim();
     const confirmPass = String(resetConfirmPassword.value || '').trim();
 
-    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+    if (!isValidEmail(normalizedEmail)) {
         setFormState('error', '请输入有效的邮箱地址');
         return;
     }
@@ -1031,7 +1141,7 @@ async function handleResetSubmit() {
         setFormState('error', '请输入 6 位验证码');
         return;
     }
-    if (!passwordRegex.test(newPass)) {
+    if (!isValidPassword(newPass)) {
         setFormState('error', '新密码需包含字母和数字，长度 6-64 位');
         return;
     }
@@ -1099,6 +1209,13 @@ watch(resetEmail, () => {
 onMounted(async () => {
     const token = getAuthToken();
     if (token) {
+        const storedUser = getAuthUser();
+        if (storedUser?.requires_email_binding) {
+            requiresEmailBinding.value = true;
+            setFormState('success', '请先绑定邮箱以完成旧账号迁移');
+            return;
+        }
+
         await router.replace(resolveRedirectTarget());
         consumePersistedPositionCode();
         return;
@@ -1155,22 +1272,9 @@ onUnmounted(() => {
         clearInterval(resetCountdownTimer);
         resetCountdownTimer = null;
     }
-});
-
-watch(username, (nextUsername) => {
-    if (mode.value !== 'register') {
-        return;
-    }
-
-    const normalized = normalizeUsername(nextUsername);
-    if (!normalized) {
-        resetUsernameCheck();
-        return;
-    }
-
-    if (normalized !== lastCheckedUsername.value) {
-        usernameCheckStatus.value = '';
-        usernameCheckMessage.value = '';
+    if (bindCountdownTimer !== null) {
+        clearInterval(bindCountdownTimer);
+        bindCountdownTimer = null;
     }
 });
 </script>
@@ -1429,6 +1533,43 @@ input:focus {
 .validation-message.success {
     color: var(--brand-primary);
     display: block;
+}
+
+.legacy-bind-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.bind-alert {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-brand-light);
+    border-radius: 8px;
+    background: var(--bg-brand-light);
+    color: var(--text-brand-dark);
+}
+
+.bind-alert i {
+    margin-top: 2px;
+    color: var(--brand-primary);
+    font-size: 20px;
+}
+
+.bind-alert strong {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.bind-alert p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
 }
 
 .quick-action-row {

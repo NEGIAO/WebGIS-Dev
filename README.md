@@ -64,7 +64,7 @@
 - 💾 GIS 数据格式转换
 - ⚙️ 异步后台任务
 - 🔐 三类身份登录 + 会话鉴权（/data 持久化）
-- 📧 **邮箱验证码系统**：注册邮箱绑定 + 密码重置（SMTP 发送，60秒频率限制，5分钟有效期）
+- 📧 **邮箱账号体系**：邮箱作为新用户唯一登录账号，支持验证码注册、密码重置、旧用户名登录后绑定邮箱迁移
 - 📐 **空间分析 API**：基于 Shapely 2.x + pyproj 的精确几何运算（缓冲区/叠加分析/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系
 
 ## 🚀 快速开始
@@ -159,7 +159,7 @@ WebGIS_Dev/
 │   │   │   ├── backend.js                # 后端 API barrel re-export
 │   │   │   ├── backend/                  # 后端 API 按业务域拆分
 │   │   │   │   ├── client.js             # axios 实例、拦截器、错误处理
-│   │   │   │   ├── auth.js               # 鉴权接口（9 个函数）
+│   │   │   │   ├── auth.js               # 鉴权接口（14 个函数，含邮箱账号/绑定/昵称）
 │   │   │   │   ├── location.js           # 地理编码/定位接口
 │   │   │   │   ├── weather.js            # 天气接口
 │   │   │   │   ├── routing.js            # 路线规划接口
@@ -215,6 +215,8 @@ WebGIS_Dev/
 │   │   │       ├── types/                # TypeScript 类型
 │   │   │       └── Explanation/          # 宫位解释 JSON
 │   │   ├── composables/                  # 组合式函数（逻辑复用）
+│   │   │   ├── auth/                     # 认证身份校验与展示工具
+│   │   │   │   └── useAuthIdentity.js    # 邮箱/昵称/密码校验 + display_name 展示
 │   │   │   ├── Magic/                    # 首屏视觉特效
 │   │   │   │   ├── useDelaunay.js        # Delaunay 三角形特效
 │   │   │   │   ├── useFluid.js           # 流体模拟特效
@@ -341,7 +343,7 @@ WebGIS_Dev/
 │   │   │   └── layerExportService.js     # 图层导出服务
 │   │   ├── views/                        # 页面
 │   │   │   ├── HomeView.vue              # 主页（地图 + 侧边栏）
-│   │   │   ├── RegisterView.vue          # 注册页
+│   │   │   ├── RegisterView.vue          # 邮箱账号注册/登录 + 旧用户名绑定邮箱
 │   │   │   ├── NotFoundView.vue          # 404 兜底页面（自动倒计时返回首页）
 │   │   │   ├── TermsOfService.vue        # 服务条款页
 │   │   │   ├── PrivacyPolicy.vue         # 隐私政策页
@@ -360,20 +362,20 @@ WebGIS_Dev/
 │   ├── api/                              # 接口模块
 │   │   ├── auth/                         # 鉴权模块（模块化拆分）
 │   │   │   ├── __init__.py               # 门面 re-export
-│   │   │   ├── constants.py              # 常量、角色、正则、邮箱验证常量
+│   │   │   ├── constants.py              # 常量、角色、邮箱/昵称/密码校验常量
 │   │   │   ├── db.py                     # 数据库连接工厂 + 损坏自动恢复 + WAL 清理
-│   │   │   ├── schema.py                 # DDL 建表与迁移
+│   │   │   ├── schema.py                 # DDL 建表与邮箱账号迁移
 │   │   │   ├── password.py               # 密码哈希/验证
-│   │   │   ├── models.py                 # Pydantic 请求模型
-│   │   │   ├── user.py                   # 用户 CRUD
-│   │   │   ├── session.py                # 会话管理、邮箱相关 CRUD
+│   │   │   ├── models.py                 # Pydantic 请求模型（邮箱账号/绑定/昵称）
+│   │   │   ├── user.py                   # 用户 CRUD + 旧 username 兼容键
+│   │   │   ├── session.py                # 会话管理、邮箱与受限绑定 session
 │   │   │   ├── email_service.py          # SMTP 邮件发送服务
 │   │   │   ├── verification.py           # 验证码生成/存储/校验/频率限制
 │   │   │   ├── preferences.py            # 用户偏好
 │   │   │   ├── quota.py                  # 配额追踪
 │   │   │   ├── system_config.py          # 系统配置
-│   │   │   ├── dependencies.py           # FastAPI 依赖注入
-│   │   │   └── routes.py                 # 路由处理函数
+│   │   │   ├── dependencies.py           # FastAPI 依赖注入 + EMAIL_BINDING_REQUIRED 拦截
+│   │   │   └── routes.py                 # 认证路由（邮箱注册/登录/绑定/重置）
 │   │   ├── agent_chat/                   # AI 对话代理（模块化拆分）
 │   │   │   ├── __init__.py               # 门面 re-export
 │   │   │   ├── constants.py              # 常量、环境变量
@@ -424,6 +426,8 @@ WebGIS_Dev/
 │   │   ├── 26-06-02/                     # 前端文件重构 + 安全加固 + 卷帘持久化修复
 │   │   ├── 26-06-03/                     # 邮箱验证码发送逻辑修复
 │   │   │   └── 2026-06-03-fix-email-send-logic.md  # 修复axios拦截/倒计时/429处理
+│   │   ├── 26-06-11/                     # 邮箱账号化与旧用户兼容迁移
+│   │   │   └── 2026-06-11-email-account-auth-migration.md  # 邮箱账号/昵称/旧用户绑定流程
 │   │   └── 2026-06-03-ring-explosion-effect.md  # 圆环粒子特效开发日志
 │   ├── 26-06-04/                         # Agent Chat 默认 AI 配置
 │   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
@@ -649,6 +653,35 @@ LOG_LEVEL=INFO
 - `frontend/.env.example` — 补充瓦片代理环境变量示例
 
 详见 [DB 恢复日志](./Docs/26-06/26-06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/26-06/26-06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06/26-06-09/2026-06-09-logging-beijing-time.md) | [天气组件响应式与风力仪表 UI](./Docs/26-06/26-06-09/2026-06-09-weather-chart-responsive.md)
+
+---
+
+### V3.3.3 (2026-06-11)
+#### 📧 邮箱账号化 + 旧用户绑定迁移
+
+**认证体系调整：**
+- ✅ 新注册用户以邮箱作为唯一登录账号，注册必须完成邮箱验证码校验
+- ✅ `username` 保留为内部兼容键，新增 `display_name` 承载昵称展示，昵称允许重复并支持修改
+- ✅ 旧用户无邮箱时可用旧用户名和密码登录一次，进入受限绑定邮箱流程
+- ✅ 受限 session 调用受保护 API 返回 `403 EMAIL_BINDING_REQUIRED`，防止绕过前端绑定页
+- ✅ 绑定邮箱成功后注销该账号所有旧 session 并签发完整 session，后续使用邮箱登录和密码重置
+- ✅ 旧数据库无需强制重建；首次 schema 迁移前自动备份认证库，再原地新增列并回填旧 `username` 为昵称
+
+**修改文件：**
+- `backend/api/auth/schema.py` — 新增 `display_name` 与 `sessions.requires_email_binding` 迁移
+- `backend/api/auth/db.py` — 邮箱账号迁移前自动备份旧认证数据库
+- `backend/api/auth/models.py` — 注册、绑定邮箱、昵称修改请求模型
+- `backend/api/auth/user.py` — 邮箱账号创建、旧 username 兼容键生成、昵称更新
+- `backend/api/auth/session.py` — 会话绑定状态与邮箱用户查询
+- `backend/api/auth/routes.py` — 邮箱注册/登录/绑定/重置与响应字段统一
+- `backend/api/auth/dependencies.py` — 受限绑定 session 访问拦截
+- `frontend/src/views/RegisterView.vue` — 邮箱注册/登录、旧用户名绑定邮箱面板
+- `frontend/src/composables/auth/useAuthIdentity.js` — 邮箱、昵称、密码校验与展示名工具
+- `frontend/src/api/backend/auth.js` — 绑定邮箱和昵称修改 API
+- `frontend/src/components/UserCenter/FloatingAccountPanel.vue` — 账号中心展示昵称和邮箱
+- `frontend/src/components/UserCenter/tabs/SecurityTab.vue` — 安全页昵称修改入口
+
+详见 [邮箱账号迁移日志](./Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md)
 
 ---
 
@@ -1714,6 +1747,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-09
-**当前版本**：V3.3.2 (SQLite 恢复修复 + 北京时间日志 + 天气图表响应式/风力仪表 UI)
+**最后更新**：2026-06-11
+**当前版本**：V3.3.3 (邮箱账号化 + 旧用户绑定迁移)
 **项目状态**：开发中 - 持续迭代优化

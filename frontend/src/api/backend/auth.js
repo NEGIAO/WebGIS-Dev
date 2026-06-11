@@ -11,18 +11,22 @@ export async function apiAuthCheckUsername(username) {
     });
 }
 
-export async function apiAuthRegister(username, password, avatarIndex = 0, email = '', emailCode = '') {
-    const payload = {
-        username,
-        password,
-        avatar_index: avatarIndex,
-    };
-    if (email) {
-        payload.email = email;
-    }
-    if (emailCode) {
-        payload.email_code = emailCode;
-    }
+export async function apiAuthRegister(arg1, password, avatarIndex = 0, email = '', emailCode = '') {
+    const payload = typeof arg1 === 'object' && arg1 !== null
+        ? {
+            email: String(arg1.email || '').trim(),
+            email_code: String(arg1.email_code || arg1.emailCode || '').trim(),
+            password: String(arg1.password || ''),
+            display_name: String(arg1.display_name || arg1.displayName || arg1.username || '').trim(),
+            avatar_index: Number(arg1.avatar_index ?? arg1.avatarIndex ?? 0),
+        }
+        : {
+            email: String(email || '').trim(),
+            email_code: String(emailCode || '').trim(),
+            password: String(password || ''),
+            display_name: String(arg1 || '').trim(),
+            avatar_index: Number(avatarIndex || 0),
+        };
     return backendAPI.post('/api/auth/register', payload);
 }
 
@@ -48,6 +52,20 @@ export async function apiAuthChangePassword(currentPassword, newPassword) {
 export async function apiAuthChangeAvatar(newAvatarIndex) {
     return backendAPI.post('/api/auth/change-avatar', {
         new_avatar_index: newAvatarIndex,
+    });
+}
+
+export async function apiAuthChangeDisplayName(displayName) {
+    return backendAPI.post('/api/auth/change-display-name', {
+        display_name: String(displayName || '').trim(),
+    });
+}
+
+export async function apiAuthBindEmail(email, code, currentPassword) {
+    return backendAPI.post('/api/auth/bind-email', {
+        email: String(email || '').trim(),
+        code: String(code || '').trim(),
+        current_password: String(currentPassword || ''),
     });
 }
 

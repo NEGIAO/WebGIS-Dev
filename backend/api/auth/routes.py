@@ -4,7 +4,7 @@
 
 import asyncio
 import hmac
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -22,16 +22,20 @@ from .constants import (
     _extract_client_ip,
     _get_admin_password,
     _normalize_avatar_index,
+    _normalize_display_name,
     _normalize_guest_device_id,
     _normalize_username,
-    _validate_register_payload,
+    _validate_display_name,
+    _validate_password,
     normalize_role,
     resolve_quota_subject,
 )
 from .db import AUTH_DB_PATH
 from .dependencies import require_login
 from .models import (
+    BindEmailRequest,
     ChangeAvatarRequest,
+    ChangeDisplayNameRequest,
     ChangePasswordRequest,
     LoginRequest,
     RegisterRequest,
@@ -57,7 +61,14 @@ from .session import (
 )
 from .system_config import _set_admin_avatar_index_sync
 from .password import _verify_password
-from .user import _create_user_sync, _get_or_create_guest_username_sync, _get_user_sync, _record_login_sync
+from .user import (
+    _create_user_sync,
+    _get_or_create_guest_username_sync,
+    _get_user_by_id_sync,
+    _get_user_sync,
+    _record_login_sync,
+    _update_user_display_name_sync,
+)
 from .email_service import check_smtp_configured, send_verification_email
 from .verification import generate_code, store_code, rate_limit_check, rate_limit_check_for_verify, verify_code, is_email_verified_for_purpose, delete_unused_codes
 from .constants import (
@@ -68,6 +79,102 @@ from .constants import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _is_verified_email_user(user: Dict[str, Any]) -> bool:
+    email = str(user.get("email") or "").strip()
+    return bool(email and int(user.get("email_verified") or 0) == 1)
+
+
+def _reject_binding_required(session: Dict[str, Any]) -> None:
+    """阻止旧账号受限 session 访问非绑定流程的账号功能。"""
+    if bool(session.get("requires_email_binding")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "EMAIL_BINDING_REQUIRED", "message": "请先绑定并验证邮箱后再继续操作"},
+        )
+
+
+def _public_user_payload(
+    *,
+    username: str,
+    role: str,
+    avatar_index: int = 0,
+    session: Optional[Dict[str, Any]] = None,
+    user: Optional[Dict[str, Any]] = None,
+    requires_email_binding: bool = False,
+) -> Dict[str, Any]:
+    """构造前端统一用户对象，保留 username 作为兼容键，新增邮箱账号字段。"""
+    session = session or {}
+    user = user or {}
+    resolved_role = normalize_role(role, username)
+    display_name = str(user.get("display_name") or session.get("display_name") or username or "").strip()
+    email = str(user.get("email") or session.get("email") or "").strip()
+    email_verified = bool(int(user.get("email_verified") or 0)) if user else bool(session.get("email_verified"))
+
+    return {
+        "user_id": int(user.get("id") or session.get("user_id") or 0),
+        "username": username,
+        "display_name": display_name or username,
+        "email": email,
+        "email_verified": bool(email_verified),
+        "requires_email_binding": bool(requires_email_binding),
+        "role": resolved_role,
+        "guest_uid": str(session.get("guest_uid") or ""),
+        "avatar_index": _normalize_avatar_index(user.get("avatar_index") if user else avatar_index),
+        "created_at": session.get("created_at") or user.get("created_at"),
+        "session_created_at": session.get("created_at"),
+        "expires_at": session.get("expires_at"),
+        "is_temporary": bool(session.get("is_temporary")),
+        "temporary_credential": str(session.get("temporary_credential") or ""),
+    }
+
+
+async def _build_login_response(
+    *,
+    request: Request,
+    username: str,
+    role: str,
+    avatar_index: int,
+    user: Optional[Dict[str, Any]] = None,
+    guest_uid: str = "",
+    guest_device_id: str = "",
+    requires_email_binding: bool = False,
+    message: str = "登录成功",
+) -> Dict[str, Any]:
+    request_ip = _extract_client_ip(request)
+    request_user_agent = str(request.headers.get("User-Agent", "unknown"))
+    session = await asyncio.to_thread(
+        _create_session_sync,
+        username,
+        role,
+        request_ip,
+        request_user_agent,
+        guest_uid,
+        guest_device_id,
+        requires_email_binding,
+    )
+
+    await asyncio.to_thread(_record_login_sync, username)
+    quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
+    quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
+    preferences = await asyncio.to_thread(_get_user_preferences_sync, username)
+
+    return {
+        "status": "success",
+        "message": message,
+        "token": session["token"],
+        "user": _public_user_payload(
+            username=username,
+            role=role,
+            avatar_index=avatar_index,
+            session=session,
+            user=user,
+            requires_email_binding=requires_email_binding,
+        ),
+        "preferences": preferences,
+        "quota": quota,
+    }
 
 
 @router.post("/send-code")
@@ -106,8 +213,8 @@ async def send_verification_code(
             detail="邮件服务未配置，请联系管理员",
         )
 
-    # 注册用途：检查邮箱是否已被绑定
-    if payload.purpose == "register":
+    # 注册/绑定用途：检查邮箱是否已被绑定
+    if payload.purpose in {"register", "bind_email"}:
         email_taken = await asyncio.to_thread(_check_email_taken_sync, email)
         if email_taken:
             raise HTTPException(
@@ -115,14 +222,14 @@ async def send_verification_code(
                 detail="该邮箱已被其他账号绑定",
             )
 
-    # 密码重置用途：检查邮箱是否已绑定用户
+    # 密码重置用途：用泛化响应降低账号枚举风险。
     if payload.purpose == "reset_password":
         user = await asyncio.to_thread(_get_user_by_email_sync, email)
         if user is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="该邮箱未绑定任何账号",
-            )
+            return {
+                "status": "success",
+                "message": "如果该邮箱已注册，验证码将发送至该邮箱",
+            }
 
     # 频率限制检查
     rate_result = await asyncio.to_thread(rate_limit_check, email)
@@ -211,76 +318,55 @@ async def verify_verification_code(payload: VerifyCodeRequest) -> Dict[str, Any]
 @router.post("/register")
 async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
     """
-    功能：注册普通用户账号（支持邮箱绑定）。
-
-    参数：
-    - payload.username: 用户名（3-24 位，字母数字下划线）。
-    - payload.password: 密码（6-64 位，需含字母和数字）。
-    - payload.avatar_index: 初始头像索引。
-    - payload.email: 绑定邮箱（可选，需先通过验证码验证）。
-    - payload.email_code: 邮箱验证码（提供 email 时必填）。
-
-    返回：
-    - 注册结果、用户基础信息（username/role/avatar_index/email）。
-
-    处理过程：
-    1. 校验用户名和密码规则；
-    2. 若提供邮箱，校验验证码；
-    3. 检查邮箱是否已被其他账号绑定；
-    4. 创建用户（含邮箱）。
+    功能：注册邮箱账号。邮箱是唯一登录账号，display_name/username 仅作为昵称来源。
     """
     await init_auth_storage()
 
-    username = _normalize_username(payload.username)
+    display_name = _normalize_display_name(payload.display_name or payload.username)
     password = str(payload.password or "")
     avatar_index = _normalize_avatar_index(payload.avatar_index)
     email = _normalize_email(payload.email)
     email_code = str(payload.email_code or "").strip()
 
-    _validate_register_payload(username, password)
+    _validate_display_name(display_name)
+    _validate_password(password)
+    _validate_email(email)
 
-    # 邮箱处理（可选但推荐）
-    email_verified = 0
-    if email:
-        _validate_email(email)
-        if not email_code:
+    if not email_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请提供邮箱验证码",
+        )
+
+    # 先检查邮箱是否已被绑定（避免消耗验证码后才发现邮箱不可用）
+    email_taken = await asyncio.to_thread(_check_email_taken_sync, email)
+    if email_taken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="该邮箱已被其他账号绑定",
+        )
+
+    already_verified = await asyncio.to_thread(
+        is_email_verified_for_purpose, email, "register"
+    )
+    if not already_verified:
+        verify_result = await asyncio.to_thread(
+            verify_code, email, email_code, "register"
+        )
+        if not verify_result.get("valid"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="请提供邮箱验证码",
+                detail=verify_result.get("message", "邮箱验证码无效"),
             )
-
-        # 先检查邮箱是否已被绑定（避免消耗验证码后才发现邮箱不可用）
-        email_taken = await asyncio.to_thread(_check_email_taken_sync, email)
-        if email_taken:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="该邮箱已被其他账号绑定",
-            )
-
-        # 校验验证码（前端已通过 /verify-code 验证，此处检查验证码是否已通过验证）
-        already_verified = await asyncio.to_thread(
-            is_email_verified_for_purpose, email, "register"
-        )
-        if not already_verified:
-            # 降级：如果未通过预验证，则在此处直接验证（兼容旧版前端）
-            verify_result = await asyncio.to_thread(
-                verify_code, email, email_code, "register"
-            )
-            if not verify_result.get("valid"):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=verify_result.get("message", "邮箱验证码无效"),
-                )
-
-        email_verified = 1
 
     created = await asyncio.to_thread(
         _create_user_sync,
-        username,
+        "",
         password,
         avatar_index,
         email,
-        email_verified,
+        1,
+        display_name,
     )
     if created == "email_taken":
         raise HTTPException(
@@ -290,19 +376,23 @@ async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
     if created == "username_taken":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="用户名已存在，请更换后重试",
+            detail="账号创建冲突，请稍后重试",
         )
 
+    user = await asyncio.to_thread(_get_user_by_email_sync, email)
+    username = str((user or {}).get("username") or "")
     preferences = await asyncio.to_thread(_get_user_preferences_sync, username)
 
     return {
         "status": "success",
-        "message": "注册成功，请使用新账号登录",
-        "user": {
-            "username": username,
-            "role": ROLE_REGISTERED,
-            "avatar_index": avatar_index,
-        },
+        "message": "注册成功，请使用邮箱登录",
+        "user": _public_user_payload(
+            username=username,
+            role=ROLE_REGISTERED,
+            avatar_index=avatar_index,
+            user=user,
+            requires_email_binding=False,
+        ),
         "preferences": preferences,
     }
 
@@ -380,7 +470,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
     """
     await init_auth_storage()
 
-    username = _normalize_username(payload.username)
+    credential = _normalize_username(payload.email or payload.username)
     password = str(payload.password or "")
 
     if not password:
@@ -389,21 +479,26 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
             detail="请输入密码",
         )
 
-    normalized_username = username.lower()
-    request_ip = _extract_client_ip(request)
-    request_user_agent = str(request.headers.get("User-Agent", "unknown"))
-    guest_uid = ""
-    guest_device_id = ""
+    normalized_credential = credential.lower()
 
-    if normalized_username == GUEST_USERNAME and hmac.compare_digest(password, GUEST_PASSWORD):
+    if normalized_credential == GUEST_USERNAME and hmac.compare_digest(password, GUEST_PASSWORD):
+        request_ip = _extract_client_ip(request)
+        request_user_agent = str(request.headers.get("User-Agent", "unknown"))
         guest_device_id = _normalize_guest_device_id(payload.guest_device_id)
         guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
 
         # 获取或创建游客记录，获得实际的用户名（如 "user_1", "user_2" 等）
         resolved_username = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
-        resolved_role = ROLE_GUEST
-        resolved_avatar_index = 0
-    elif normalized_username == ADMIN_USERNAME:
+        return await _build_login_response(
+            request=request,
+            username=resolved_username,
+            role=ROLE_GUEST,
+            avatar_index=0,
+            guest_uid=guest_uid,
+            guest_device_id=guest_device_id,
+        )
+
+    if normalized_credential == ADMIN_USERNAME:
         super_user_secret = _get_admin_password()
         if not super_user_secret:
             raise HTTPException(
@@ -414,69 +509,65 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         if not hmac.compare_digest(password, super_user_secret):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误",
+                detail="账号或密码错误",
             )
 
-        resolved_username = ADMIN_USERNAME
-        resolved_role = ROLE_ADMIN
-        resolved_avatar_index = 1
-    else:
-        if not username:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="请输入用户名",
-            )
+        return await _build_login_response(
+            request=request,
+            username=ADMIN_USERNAME,
+            role=ROLE_ADMIN,
+            avatar_index=1,
+        )
 
-        user = await asyncio.to_thread(_get_user_sync, username)
-        if user is None or not _verify_password(password, str(user.get("password_hash", ""))):
+    if not credential:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请输入邮箱账号",
+        )
+
+    email = _normalize_email(credential)
+    if email:
+        user = await asyncio.to_thread(_get_user_by_email_sync, email)
+        if user is None or not _is_verified_email_user(user) or not _verify_password(
+            password,
+            str(user.get("password_hash", "")),
+        ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="用户名或密码错误",
+                detail="账号或密码错误",
             )
 
-        resolved_username = str(user.get("username") or username)
-        resolved_role = ROLE_REGISTERED
-        resolved_avatar_index = _normalize_avatar_index(user.get("avatar_index"))
+        return await _build_login_response(
+            request=request,
+            username=str(user.get("username") or ""),
+            role=ROLE_REGISTERED,
+            avatar_index=_normalize_avatar_index(user.get("avatar_index")),
+            user=user,
+        )
 
-    session = await asyncio.to_thread(
-        _create_session_sync,
-        resolved_username,
-        resolved_role,
-        request_ip,
-        request_user_agent,
-        guest_uid,
-        guest_device_id,
-    )
+    # 旧账号迁移入口：仅未绑定/未验证邮箱的历史用户可用旧 username 登录。
+    legacy_user = await asyncio.to_thread(_get_user_sync, credential)
+    if legacy_user is None or not _verify_password(password, str(legacy_user.get("password_hash", ""))):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账号或密码错误",
+        )
 
-    await asyncio.to_thread(_record_login_sync, resolved_username)
-    quota_subject = resolve_quota_subject(
-        resolved_username,
-        resolved_role,
-        session.get("guest_uid"),
-    )
-    quota = await asyncio.to_thread(
-        get_user_quota_snapshot_sync,
-        resolved_username,
-        resolved_role,
-        quota_subject,
-    )
-    preferences = await asyncio.to_thread(_get_user_preferences_sync, resolved_username)
+    if _is_verified_email_user(legacy_user):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="请使用邮箱账号登录",
+        )
 
-    return {
-        "status": "success",
-        "message": "登录成功",
-        "token": session["token"],
-        "user": {
-            "username": resolved_username,
-            "role": resolved_role,
-            "guest_uid": str(session.get("guest_uid") or ""),
-            "avatar_index": resolved_avatar_index,
-            "created_at": session["created_at"],
-            "expires_at": session["expires_at"],
-        },
-        "preferences": preferences,
-        "quota": quota,
-    }
+    return await _build_login_response(
+        request=request,
+        username=str(legacy_user.get("username") or credential),
+        role=ROLE_REGISTERED,
+        avatar_index=_normalize_avatar_index(legacy_user.get("avatar_index")),
+        user=legacy_user,
+        requires_email_binding=True,
+        message="请先绑定邮箱以完成账号迁移",
+    )
 
 
 @router.get("/me")
@@ -497,19 +588,24 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> 
 
     quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
     preferences = await asyncio.to_thread(_get_user_preferences_sync, username)
+    user = None
+    if normalize_role(role, username) == ROLE_REGISTERED:
+        user_id = int(session.get("user_id") or 0)
+        if user_id:
+            user = await asyncio.to_thread(_get_user_by_id_sync, user_id)
+        if user is None and username:
+            user = await asyncio.to_thread(_get_user_sync, username)
 
     return {
         "status": "success",
-        "user": {
-            "username": username,
-            "role": normalize_role(role, username),
-            "guest_uid": str(session.get("guest_uid") or ""),
-            "avatar_index": 0,
-            "session_created_at": session.get("created_at"),
-            "expires_at": session.get("expires_at"),
-            "is_temporary": bool(session.get("is_temporary")),
-            "temporary_credential": str(session.get("temporary_credential") or ""),
-        },
+        "user": _public_user_payload(
+            username=username,
+            role=role,
+            avatar_index=_normalize_avatar_index(session.get("avatar_index")),
+            session=session,
+            user=user,
+            requires_email_binding=bool(session.get("requires_email_binding")),
+        ),
         "preferences": preferences,
         "quota": quota,
         "guest_allow": bool(session.get("guest_allow")),
@@ -548,6 +644,7 @@ async def change_password(
     """
     username = str(session.get("username") or "").strip()
     role = normalize_role(session.get("role"), username)
+    _reject_binding_required(session)
 
     if not username:
         raise HTTPException(
@@ -632,6 +729,7 @@ async def change_avatar(
     """
     username = str(session.get("username") or "").strip()
     role = normalize_role(session.get("role"), username)
+    _reject_binding_required(session)
 
     if not username:
         raise HTTPException(
@@ -664,6 +762,124 @@ async def change_avatar(
         "message": "头像已更新",
         "avatar_index": new_avatar_index,
     }
+
+
+@router.post("/change-display-name")
+async def change_display_name(
+    payload: ChangeDisplayNameRequest,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """修改当前注册用户昵称。昵称仅用于展示，允许重复。"""
+    username = str(session.get("username") or "").strip()
+    role = normalize_role(session.get("role"), username)
+    _reject_binding_required(session)
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="登录状态异常，请重新登录",
+        )
+    if role != ROLE_REGISTERED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="仅注册用户支持修改昵称",
+        )
+
+    display_name = _normalize_display_name(payload.display_name)
+    _validate_display_name(display_name)
+
+    user = await asyncio.to_thread(_update_user_display_name_sync, username, display_name)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="昵称更新失败，请稍后重试",
+        )
+
+    return {
+        "status": "success",
+        "message": "昵称已更新",
+        "user": _public_user_payload(
+            username=username,
+            role=ROLE_REGISTERED,
+            avatar_index=_normalize_avatar_index(user.get("avatar_index")),
+            session=session,
+            user=user,
+            requires_email_binding=bool(session.get("requires_email_binding")),
+        ),
+    }
+
+
+@router.post("/bind-email")
+async def bind_email(
+    payload: BindEmailRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """为旧账号绑定邮箱。成功后注销旧 session 并签发完整 session。"""
+    username = str(session.get("username") or "").strip()
+    role = normalize_role(session.get("role"), username)
+    if role != ROLE_REGISTERED or not username:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="当前账号不支持绑定邮箱",
+        )
+
+    user = await asyncio.to_thread(_get_user_sync, username)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="登录状态异常，请重新登录",
+        )
+    if _is_verified_email_user(user):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前账号已绑定邮箱",
+        )
+    if not _verify_password(str(payload.current_password or ""), str(user.get("password_hash", ""))):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="当前密码错误",
+        )
+
+    email = _normalize_email(payload.email)
+    _validate_email(email)
+    email_taken = await asyncio.to_thread(_check_email_taken_sync, email)
+    if email_taken:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="该邮箱已被其他账号绑定",
+        )
+
+    verify_result = await asyncio.to_thread(
+        verify_code,
+        email,
+        str(payload.code or "").strip(),
+        "bind_email",
+    )
+    if not verify_result.get("valid"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=verify_result.get("message", "邮箱验证码无效"),
+        )
+
+    updated = await asyncio.to_thread(_update_user_email_sync, username, email, 1)
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="邮箱绑定失败，请稍后重试",
+        )
+
+    # 绑定邮箱是身份迁移动作，注销该账号旧 session，避免其它受限 token 自动升级成完整会话。
+    await asyncio.to_thread(_delete_sessions_by_username_sync, username)
+    next_user = await asyncio.to_thread(_get_user_sync, username)
+    return await _build_login_response(
+        request=request,
+        username=username,
+        role=ROLE_REGISTERED,
+        avatar_index=_normalize_avatar_index((next_user or user).get("avatar_index")),
+        user=next_user or user,
+        requires_email_binding=False,
+        message="邮箱绑定成功",
+    )
 
 
 @router.post("/reset-password")
@@ -741,6 +957,7 @@ async def get_user_preferences(
 ) -> Dict[str, Any]:
     """功能：读取当前用户偏好设置。"""
     username = str(session.get("username") or "").strip()
+    _reject_binding_required(session)
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -761,6 +978,7 @@ async def update_user_preferences(
 ) -> Dict[str, Any]:
     """功能：更新当前用户偏好设置并持久化。"""
     username = str(session.get("username") or "").strip()
+    _reject_binding_required(session)
     if not username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

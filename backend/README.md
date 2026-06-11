@@ -16,13 +16,43 @@ WebGIS 后端服务，当前包含五大核心能力：
 - Google 瓦片代理：GET /api/tile/{z}/{x}/{y}
 - 通用流式代理：GET /proxy/{target_url:path}（Provider Agnostic）
 - 访客地理统计：POST /api/log-visit
-- 真实用户登录系统：/api/auth/*（含三类身份）
+- 真实用户登录系统：/api/auth/*（邮箱账号、旧用户绑定迁移、三类身份）
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-09 更新）
+## 0. 项目结构（2026-06-11 更新）
+
+### V3.3.3 (2026-06-11) - 邮箱账号化与旧用户绑定迁移
+
+**运行版本说明：**
+- Dockerfile 使用 `python:3.12-slim` 作为后端运行镜像。
+- `pyproject.toml` 的 `requires-python = ">=3.9"` 表示代码语法保持最低兼容线，不代表当前 Docker 运行时是 Python 3.9。
+
+**修改文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `api/auth/constants.py` | 增加昵称、邮箱、密码校验辅助函数 |
+| `api/auth/models.py` | 注册改为 `email + email_code + display_name + password`，新增绑定邮箱和修改昵称请求模型 |
+| `api/auth/db.py` | 邮箱账号迁移前自动备份旧认证数据库主文件与 WAL/SHM |
+| `api/auth/schema.py` | 旧库备份后原地新增 `users.display_name` 与 `sessions.requires_email_binding` 迁移 |
+| `api/auth/user.py` | 邮箱账号创建、旧 `username` 兼容键生成、昵称更新 |
+| `api/auth/session.py` | 会话绑定状态、邮箱用户查询、受限 session 识别 |
+| `api/auth/dependencies.py` | 受限绑定 session 返回 `403 EMAIL_BINDING_REQUIRED` |
+| `api/auth/routes.py` | 邮箱注册/登录/绑定/重置、泛化重置提示、统一用户响应字段 |
+| `api/auth/__init__.py` | 导出新增请求模型和认证辅助函数 |
+
+**功能说明：**
+- 新注册用户必须完成邮箱验证码校验，邮箱为唯一登录账号。
+- `username` 保留为内部兼容键，继续支撑历史表关联；`display_name` 用作昵称，可重复、可修改。
+- 无邮箱旧用户可用旧用户名和密码登录一次，但只获得受限 session，用于绑定邮箱。
+- 旧数据库无需强制重建；首次检测到旧 schema 时会先备份到 `migration_backups/`，再通过 `ALTER TABLE` 原地迁移并回填昵称。
+- 绑定邮箱成功后注销该账号所有旧 token 并签发完整 session；后续使用邮箱登录和密码重置。
+- 游客 `user/123` 和管理员账号流程保持兼容。
+
+详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md)
 
 ### V3.3.2 (2026-06-09) - SQLite 恢复修复 + 北京时间日志 + 整点报时 + 前端天气图表/罗盘 HUD UI
 
@@ -122,20 +152,20 @@ backend/
 │   │   └── routes.py                              # 路由处理函数
 │   ├── auth/                                      # 鉴权模块（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
-│   │   ├── constants.py                           # 常量、角色、正则、邮箱验证常量
+│   │   ├── constants.py                           # 常量、角色、邮箱/昵称/密码校验常量
 │   │   ├── db.py                                  # 数据库连接工厂 + 损坏自动恢复 + WAL 清理
-│   │   ├── schema.py                              # DDL 建表与迁移
+│   │   ├── schema.py                              # DDL 建表与邮箱账号迁移
 │   │   ├── password.py                            # 密码哈希/验证
-│   │   ├── models.py                              # Pydantic 请求模型
-│   │   ├── user.py                                # 用户 CRUD
-│   │   ├── session.py                             # 会话管理、邮箱相关 CRUD
+│   │   ├── models.py                              # Pydantic 请求模型（邮箱账号/绑定/昵称）
+│   │   ├── user.py                                # 用户 CRUD + 旧 username 兼容键
+│   │   ├── session.py                             # 会话管理、邮箱与受限绑定 session
 │   │   ├── email_service.py                       # 阿里云邮件推送 SMTP 代理转发服务
 │   │   ├── verification.py                        # 验证码生成/存储/校验/频率限制
 │   │   ├── preferences.py                         # 用户偏好
 │   │   ├── quota.py                               # 配额追踪
 │   │   ├── system_config.py                       # 系统配置
-│   │   ├── dependencies.py                        # FastAPI 依赖注入
-│   │   └── routes.py                              # 路由处理函数
+│   │   ├── dependencies.py                        # FastAPI 依赖注入 + EMAIL_BINDING_REQUIRED 拦截
+│   │   └── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置）
 │   ├── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）
 │   │   ├── __init__.py                            # 门面 re-export router
 │   │   ├── models.py                              # Pydantic 请求/响应模型
@@ -276,9 +306,9 @@ WGS84_ECCENTRICITY_SQ = 1 - (WGS84_SEMI_MINOR_AXIS ** 2) / (WGS84_SEMI_MAJOR_AXI
 - 说明：必须手动输入密码 123 才能登录
 
 2. 注册用户
-- 用户自行注册用户名和密码
+- 用户自行注册邮箱账号、昵称和密码
 - 角色：registered
-- 说明：注册后可长期登录
+- 说明：新账号必须完成邮箱验证码校验；昵称仅用于展示，可重复、可修改
 
 3. 超级管理员
 - 账号与密码由数据库 users 表维护
@@ -311,41 +341,70 @@ VALUES ('super_admin', '<pbkdf2_salt_hex$pbkdf2_digest_hex>', 'super_admin', dat
 ```bash
 curl -X POST "http://localhost:8000/api/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"username":"demo_user","password":"abc12345"}'
+  -d '{"email":"demo@example.com","email_code":"123456","display_name":"Demo","password":"abc12345"}'
 ```
 
-2) 游客登录
+2) 邮箱账号登录
+```bash
+curl -X POST "http://localhost:8000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","password":"abc12345"}'
+```
+
+3) 旧用户名登录并绑定邮箱
+```bash
+# 仅适用于无已验证邮箱的旧用户；返回 requires_email_binding=true 的受限 session
+curl -X POST "http://localhost:8000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"old_username","password":"<old_password>"}'
+
+# 使用受限 session 绑定邮箱，成功后返回新 token
+curl -X POST "http://localhost:8000/api/auth/bind-email" \
+  -H "Authorization: Bearer <restricted_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"old-user@example.com","code":"123456","current_password":"<old_password>"}'
+```
+
+4) 游客登录
 ```bash
 curl -X POST "http://localhost:8000/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"user","password":"123"}'
 ```
 
-3) 超级管理员登录
+5) 超级管理员登录
 ```bash
 curl -X POST "http://localhost:8000/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"super_admin","password":"<admin_password_from_db>"}'
 ```
 
-4) 查询当前登录用户
+6) 查询当前登录用户
 ```bash
 curl "http://localhost:8000/api/auth/me" \
   -H "Authorization: Bearer <token>"
 ```
 
-5) 退出登录
+7) 退出登录
 ```bash
 curl -X POST "http://localhost:8000/api/auth/logout" \
   -H "Authorization: Bearer <token>"
 ```
 
-6) 修改当前账号密码
+8) 修改当前账号密码
 ```bash
 curl -X POST "http://localhost:8000/api/auth/change-password" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"current_password":"<old_password>","new_password":"<new_password>"}'
+```
+
+9) 修改昵称
+```bash
+curl -X POST "http://localhost:8000/api/auth/change-display-name" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"display_name":"新的昵称"}'
 ```
 
 ## 2. 现有 API 如何使用
@@ -426,9 +485,22 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 - GET /
 - GET /health
 - GET /api/tile/{z}/{x}/{y}
+- POST /api/auth/send-code
+- POST /api/auth/verify-code
 - POST /api/auth/register
 - POST /api/auth/login
+- POST /api/auth/reset-password
 - GET /api/auth/storage-path
+
+受限绑定 session 可访问：
+- POST /api/auth/bind-email
+
+登录后可访问：
+- GET /api/auth/me
+- POST /api/auth/logout
+- POST /api/auth/change-password
+- POST /api/auth/change-avatar
+- POST /api/auth/change-display-name
 
 ## 4. 环境变量
 

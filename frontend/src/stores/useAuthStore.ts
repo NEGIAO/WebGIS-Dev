@@ -6,6 +6,7 @@ import { clearAuthSession, getAuthToken } from '../services/auth';
 type AuthUser = {
     username?: string;
     role?: string;
+    requires_email_binding?: boolean;
     guest_uid?: string;
     [key: string]: unknown;
 };
@@ -36,6 +37,7 @@ export const useAuthStore = defineStore('authStore', () => {
     const checkingCount = ref(0);
 
     const isAuthChecking = computed(() => checkingCount.value > 0);
+    const requiresEmailBinding = computed(() => user.value?.requires_email_binding === true);
 
     function beginAuthCheck() {
         checkingCount.value += 1;
@@ -82,6 +84,7 @@ export const useAuthStore = defineStore('authStore', () => {
     return {
         user,
         isAuthChecking,
+        requiresEmailBinding,
         beginAuthCheck,
         endAuthCheck,
         resetValidation,

@@ -8,6 +8,7 @@
 -->
 <script setup>
 import { ref } from 'vue';
+import { getUserDisplayName, validateDisplayName } from '../../../composables/auth/useAuthIdentity';
 
 defineProps({
     /** Current user object (used to check role) */
@@ -23,21 +24,35 @@ defineProps({
 });
 
 const emit = defineEmits([
+    /** Request parent to change display name. Payload: { displayName } */
+    'change-display-name',
     /** Request parent to change password. Payload: { oldPassword, newPassword } */
     'change-password',
 ]);
 
+const displayName = ref('');
 const currentPassword = ref('');
 const nextPassword = ref('');
 const confirmPassword = ref('');
 
 function resetForm() {
+    displayName.value = '';
     currentPassword.value = '';
     nextPassword.value = '';
     confirmPassword.value = '';
 }
 
-function handleSubmit() {
+function handleDisplayNameSubmit() {
+    const validation = validateDisplayName(displayName.value);
+    if (!validation.valid) {
+        emit('change-display-name', { error: validation.message });
+        return;
+    }
+
+    emit('change-display-name', { displayName: validation.value });
+}
+
+function handlePasswordSubmit() {
     const oldPass = String(currentPassword.value || '').trim();
     const newPass = String(nextPassword.value || '').trim();
     const confirmPass = String(confirmPassword.value || '').trim();
@@ -78,6 +93,29 @@ defineExpose({ resetForm });
             </p>
         </div>
         <div v-else class="password-form-container">
+            <h4 class="section-title">账号昵称</h4>
+            <div class="modern-input-group">
+                <i class="fas fa-user input-icon"></i>
+                <input
+                    v-model="displayName"
+                    type="text"
+                    maxlength="40"
+                    :placeholder="getUserDisplayName(user)"
+                />
+            </div>
+            <button
+                class="btn-primary w-100"
+                type="button"
+                :disabled="isSubmitting"
+                @click="handleDisplayNameSubmit"
+            >
+                <i
+                    class="fas"
+                    :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-id-card'"
+                ></i>
+                {{ isSubmitting ? '正在提交...' : '保存昵称' }}
+            </button>
+
             <h4 class="section-title">修改密码</h4>
             <div class="modern-input-group">
                 <i class="fas fa-lock input-icon"></i>
@@ -111,7 +149,7 @@ defineExpose({ resetForm });
                 class="btn-primary w-100"
                 type="button"
                 :disabled="isSubmitting"
-                @click="handleSubmit"
+                @click="handlePasswordSubmit"
             >
                 <i
                     class="fas"

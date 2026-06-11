@@ -2,10 +2,15 @@
 用户 CRUD、访客身份管理、用户指标记录。
 """
 
+import secrets
 import sqlite3
 from typing import Any, Dict, Optional
 
-from .constants import _normalize_avatar_index
+from .constants import (
+    _normalize_avatar_index,
+    _normalize_display_name,
+    _safe_username_for_path,
+)
 from .db import _db_connection, _iso, _utc_now
 from .password import _hash_password
 
@@ -13,10 +18,45 @@ from .password import _hash_password
 def _get_user_sync(username: str) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
-            "SELECT username, password_hash, role, avatar_index, created_at FROM users WHERE username = ?",
+            """
+            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            FROM users
+            WHERE username = ?
+            """,
             (username,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def _get_user_by_id_sync(user_id: int) -> Optional[Dict[str, Any]]:
+    with _db_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            FROM users
+            WHERE id = ?
+            """,
+            (int(user_id),),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def _generate_account_username_sync(conn, email: str, display_name: str) -> str:
+    """为邮箱账号生成内部兼容 username，避免昵称重复影响历史关联键。"""
+    local_part = str(email or "").split("@", 1)[0]
+    base = _safe_username_for_path(display_name or local_part or "user").lower()
+    if len(base) < 3:
+        base = f"user_{base}"
+    base = base[:18].strip("._-") or "user"
+
+    for index in range(20):
+        suffix = secrets.token_hex(3) if index == 0 else secrets.token_hex(4)
+        candidate = f"{base}_{suffix}"[:24]
+        row = conn.execute("SELECT 1 FROM users WHERE username = ?", (candidate,)).fetchone()
+        if row is None:
+            return candidate
+
+    return f"user_{secrets.token_hex(9)}"[:24]
 
 
 def _create_user_sync(
@@ -25,12 +65,13 @@ def _create_user_sync(
     avatar_index: int = 0,
     email: str = "",
     email_verified: int = 0,
+    display_name: str = "",
 ) -> str:
     """
     创建注册用户。
 
     参数：
-    - username: 用户名
+    - username: 兼容用户名，为空时自动生成内部键
     - password: 明文密码（内部自动哈希）
     - avatar_index: 头像索引
     - email: 绑定邮箱（可为空）
@@ -45,15 +86,37 @@ def _create_user_sync(
     password_hash = _hash_password(password)
     normalized_avatar_index = _normalize_avatar_index(avatar_index)
     normalized_email = email.lower().strip() if email else ""
+    normalized_display_name = _normalize_display_name(display_name or username or normalized_email.split("@", 1)[0])
 
     try:
         with _db_connection() as conn:
+            resolved_username = str(username or "").strip()
+            if not resolved_username:
+                resolved_username = _generate_account_username_sync(conn, normalized_email, normalized_display_name)
+
             conn.execute(
                 """
-                INSERT INTO users (username, password_hash, role, avatar_index, email, email_verified, created_at)
-                VALUES (?, ?, 'registered', ?, ?, ?, ?)
+                INSERT INTO users (
+                    username,
+                    display_name,
+                    password_hash,
+                    role,
+                    avatar_index,
+                    email,
+                    email_verified,
+                    created_at
+                )
+                VALUES (?, ?, ?, 'registered', ?, ?, ?, ?)
                 """,
-                (username, password_hash, normalized_avatar_index, normalized_email, email_verified, created_at),
+                (
+                    resolved_username,
+                    normalized_display_name,
+                    password_hash,
+                    normalized_avatar_index,
+                    normalized_email,
+                    email_verified,
+                    created_at,
+                ),
             )
             conn.commit()
         return "ok"
@@ -62,6 +125,21 @@ def _create_user_sync(
         if "email" in error_msg:
             return "email_taken"
         return "username_taken"
+
+
+def _update_user_display_name_sync(username: str, display_name: str) -> Optional[Dict[str, Any]]:
+    """更新注册用户昵称并返回最新用户记录。"""
+    normalized_display_name = _normalize_display_name(display_name)
+    with _db_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE users SET display_name = ? WHERE username = ?",
+            (normalized_display_name, username),
+        )
+        conn.commit()
+        if int(cursor.rowcount or 0) <= 0:
+            return None
+
+    return _get_user_sync(username)
 
 
 def _get_or_create_guest_username_sync(guest_uid: str) -> str:
