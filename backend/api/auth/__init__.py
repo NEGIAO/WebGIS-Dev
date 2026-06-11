@@ -45,6 +45,7 @@ from .password import _hash_password, _verify_password
 
 # ─── System Config ───
 from .system_config import (
+    _get_admin_avatar_index_sync,
     _get_system_config_value_sync,
     _set_admin_avatar_index_sync,
     _set_system_config_value_sync,
@@ -121,6 +122,7 @@ __all__ = [
     "_hash_password",
     "_verify_password",
     # System Config
+    "_get_admin_avatar_index_sync",
     "_get_system_config_value_sync",
     "_set_system_config_value_sync",
     "_set_admin_avatar_index_sync",

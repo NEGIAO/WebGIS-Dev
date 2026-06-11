@@ -15,7 +15,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from api.auth import (
+    ROLE_ADMIN,
     _extract_client_ip,
+    _get_admin_avatar_index_sync,
     _iso,
     _normalize_avatar_index,
     _safe_parse_iso,
@@ -788,6 +790,32 @@ def _get_active_announcement_sync(username: str) -> Optional[Dict[str, Any]]:
     return announcement
 
 
+def _build_center_user_payload(session: Dict[str, Any], username: str, role: str) -> Dict[str, Any]:
+    """构造用户中心所需用户对象，避免覆盖认证接口返回的昵称/头像字段。"""
+    display_name = str(session.get("display_name") or username or "").strip()
+    email = str(session.get("email") or "").strip()
+    avatar_index = (
+        _get_admin_avatar_index_sync()
+        if role == ROLE_ADMIN
+        else _normalize_avatar_index(session.get("avatar_index"))
+    )
+    return {
+        "user_id": int(session.get("user_id") or 0),
+        "username": username,
+        "display_name": display_name or username,
+        "email": email,
+        "email_verified": bool(session.get("email_verified")),
+        "requires_email_binding": bool(session.get("requires_email_binding")),
+        "role": role,
+        "guest_uid": str(session.get("guest_uid") or ""),
+        "avatar_index": avatar_index,
+        "session_created_at": session.get("created_at"),
+        "expires_at": session.get("expires_at"),
+        "is_temporary": bool(session.get("is_temporary")),
+        "temporary_credential": str(session.get("temporary_credential") or ""),
+    }
+
+
 def _dismiss_announcement_sync(username: str, announcement_id: int) -> None:
     now_iso = _iso(_utc_now())
 
@@ -1171,13 +1199,7 @@ async def get_center_statistics(
 
     return {
         "status": "success",
-        "user": {
-            "username": username,
-            "role": role,
-            "avatar_index": 0,
-            "session_created_at": session.get("created_at"),
-            "expires_at": session.get("expires_at"),
-        },
+        "user": _build_center_user_payload(session, username, role),
         "quota": quota,
         "self_stats": self_stats,
         "realtime": realtime,

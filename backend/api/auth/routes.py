@@ -59,7 +59,7 @@ from .session import (
     _update_user_password_by_email_sync,
     _update_user_password_sync,
 )
-from .system_config import _set_admin_avatar_index_sync
+from .system_config import _get_admin_avatar_index_sync, _set_admin_avatar_index_sync
 from .password import _verify_password
 from .user import (
     _create_user_sync,
@@ -108,6 +108,11 @@ def _public_user_payload(
     session = session or {}
     user = user or {}
     resolved_role = normalize_role(role, username)
+    resolved_avatar_index = avatar_index
+    if resolved_role == ROLE_ADMIN:
+        resolved_avatar_index = _get_admin_avatar_index_sync()
+    elif user:
+        resolved_avatar_index = user.get("avatar_index")
     display_name = str(user.get("display_name") or session.get("display_name") or username or "").strip()
     email = str(user.get("email") or session.get("email") or "").strip()
     email_verified = bool(int(user.get("email_verified") or 0)) if user else bool(session.get("email_verified"))
@@ -121,7 +126,7 @@ def _public_user_payload(
         "requires_email_binding": bool(requires_email_binding),
         "role": resolved_role,
         "guest_uid": str(session.get("guest_uid") or ""),
-        "avatar_index": _normalize_avatar_index(user.get("avatar_index") if user else avatar_index),
+        "avatar_index": _normalize_avatar_index(resolved_avatar_index),
         "created_at": session.get("created_at") or user.get("created_at"),
         "session_created_at": session.get("created_at"),
         "expires_at": session.get("expires_at"),
@@ -516,7 +521,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
             request=request,
             username=ADMIN_USERNAME,
             role=ROLE_ADMIN,
-            avatar_index=1,
+            avatar_index=await asyncio.to_thread(_get_admin_avatar_index_sync),
         )
 
     if not credential:
@@ -757,10 +762,22 @@ async def change_avatar(
             detail="头像更新失败，请稍后重试",
         )
 
+    user = None
+    if role == ROLE_REGISTERED:
+        user = await asyncio.to_thread(_get_user_sync, username)
+
     return {
         "status": "success",
         "message": "头像已更新",
         "avatar_index": new_avatar_index,
+        "user": _public_user_payload(
+            username=username,
+            role=role,
+            avatar_index=new_avatar_index,
+            session=session,
+            user=user,
+            requires_email_binding=bool(session.get("requires_email_binding")),
+        ),
     }
 
 
