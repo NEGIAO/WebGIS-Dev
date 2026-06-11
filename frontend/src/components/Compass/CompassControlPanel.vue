@@ -17,7 +17,7 @@
             <label class="switch-item">
                 <input
                     type="checkbox"
-                    :checked="compassStore.unabaled"
+                    :checked="compassStore.enabled"
                     @change="handleEnabledChange"
                 />
                 <span>启用罗盘</span>
@@ -135,24 +135,6 @@
                 />
             </div>
 
-            <div
-                v-if="compassStore.mode === 'vector'"
-                class="field full-width"
-            >
-                <label
-                    >自动隐藏阈值 (Res)：{{ Number(compassStore.minResolution).toFixed(0) }}</label
-                >
-                <input
-                    type="range"
-                    min="100"
-                    max="36000"
-                    step="10"
-                    class="compass-slider"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.minResolution"
-                    @input="(e) => compassStore.setMinResolution(Number(e.target.value))"
-                />
-            </div>
 
             <div
                 v-if="compassStore.mode === 'hud'"
@@ -169,6 +151,20 @@
                     :value="compassStore.hudSizePx"
                     @input="(e) => compassStore.setHudSize(Number(e.target.value))"
                 />
+            </div>
+
+            <div class="field full-width">
+                <label>渐变背景基色</label>
+                <div class="color-picker-row">
+                    <input
+                        type="color"
+                        class="color-input"
+                        :disabled="!compassStore.enabled"
+                        :value="compassStore.bgColor"
+                        @input="(e) => compassStore.setBgColor(e.target.value)"
+                    />
+                    <span class="color-hex">{{ compassStore.bgColor }}</span>
+                </div>
             </div>
         </div>
 
@@ -525,5 +521,32 @@ input[type='range'] {
 .status-error {
     background: rgba(220, 80, 80, 0.18);
     color: #9b2424;
+}
+
+.color-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.color-input {
+    width: 40px;
+    height: 34px;
+    border: 1px solid var(--border-brand-light);
+    border-radius: 8px;
+    padding: 2px;
+    cursor: pointer;
+    background: #fff;
+}
+
+.color-input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.color-hex {
+    font-size: 13px;
+    font-family: monospace;
+    color: var(--text-brand-dark);
 }
 </style>

@@ -56,9 +56,15 @@
         <div
             v-if="compassStore.hudVisible"
             class="compass-hud-wrapper"
-            :style="{ opacity: compassStore.opacity }"
+            :style="{
+                opacity: compassStore.opacity,
+                ...compassBgVars(compassStore.bgColor),
+            }"
         >
-            <FengShuiCompassSvg :config="compassStore.hudRenderConfig" />
+            <FengShuiCompassSvg
+                :key="compassStore.renderCacheToken"
+                :config="compassStore.hudRenderConfig"
+            />
         </div>
 
         <!-- 风水宫位解释面板 -->
@@ -168,6 +174,24 @@ const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
 const compassStore = useCompassStore();
 const tocStore = useTOCStore();
+
+/**
+ * 将 hex 颜色转换为 CSS 渐变所需的 CSS 变量对象
+ * 避免使用 color-mix()（兼容性差），直接计算 rgba 值
+ * @param {string} hex - 十六进制颜色值
+ * @returns {Object} 包含 --compass-bg-g1/g2/g3 的样式对象
+ */
+function compassBgVars(hex) {
+    const h = String(hex || '#000000').replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16) || 0;
+    const g = parseInt(h.substring(2, 4), 16) || 0;
+    const b = parseInt(h.substring(4, 6), 16) || 0;
+    return {
+        '--compass-bg-g1': `rgba(${r},${g},${b},0.45)`,
+        '--compass-bg-g2': `rgba(${r},${g},${b},0.25)`,
+        '--compass-bg-g3': `rgba(${r},${g},${b},0.10)`,
+    };
+}
 const layerStore = useLayerStore();
 
 const selectedPalace = computed(() => compassStore.selectedPalace);
@@ -1625,8 +1649,9 @@ defineExpose({
 
 .compass-hud-wrapper {
     position: absolute;
-    right: clamp(12px, 2vw, 24px);
-    bottom: clamp(12px, 2vw, 24px);
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     z-index: 1210;
     pointer-events: none;
     display: grid;
@@ -1635,11 +1660,16 @@ defineExpose({
     height: max-content;
     padding: clamp(6px, 1.2vw, 12px);
     border-radius: 999px;
+    /* 渐变背景由 --compass-bg 变量驱动，fallback 为黑色 */
     background:
-        radial-gradient(circle at 50% 50%, rgba(18, 24, 18, 0.42), rgba(18, 24, 18, 0.14) 58%, transparent 74%);
+        radial-gradient(circle at 50% 50%,
+            var(--compass-bg-g1, rgba(0,0,0,0.45)),
+            var(--compass-bg-g2, rgba(0,0,0,0.25)) 30%,
+            var(--compass-bg-g3, rgba(0,0,0,0.10)) 60%,
+            transparent 100%);
     filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.26));
     overflow: visible;
-    transform: translateZ(0);
+    will-change: transform;
 }
 
 .compass-hud-wrapper :deep(.feng-shui-compass-svg),
@@ -1723,8 +1753,6 @@ defineExpose({
 /* 移动端适配鹰眼视图 */
 @media (max-width: 768px) {
     .compass-hud-wrapper {
-        right: 10px;
-        bottom: 10px;
         padding: 6px;
     }
 

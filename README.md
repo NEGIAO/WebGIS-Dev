@@ -652,6 +652,28 @@ LOG_LEVEL=INFO
 
 ---
 
+### V3.3.2 (2026-06-10) 补充
+#### 🧭 风水罗盘显示优化 + 动画 + 背景色自定义
+
+**问题修复：**
+- ✅ 优化罗盘半径判断逻辑：圆心到视图边缘距离 ≤ 半径 × 1.5 时可见
+- ✅ 移除缩放级别限制：罗盘在任意缩放级别下都可显示
+- ✅ 增强 Vector 模式显示效果：2 倍半径径向渐变背景（可自定义基色），提高对比度
+- ✅ 调整 HUD 模式位置：从右下角调整为地图几何中心显示
+- ✅ HUD 切换主题时重新播放逐层绘制动画
+- ✅ 新增渐变背景颜色调色板，用户可自定义罗盘背景色
+
+**修改文件：**
+- `frontend/src/services/CompassManager.ts` — 罗盘核心管理服务
+- `frontend/src/components/Map/MapContainer.vue` — HUD 居中 + 渐变背景
+- `frontend/src/components/Compass/CompassControlPanel.vue` — 新增颜色选择器
+- `frontend/src/components/feng-shui-compass-svg/feng-shui-compass-svg.vue` — 动画默认启用
+- `frontend/src/stores/useCompassStore.ts` — 新增 bgColor 状态
+
+详见 [风水罗盘显示优化日志](./Docs/26-06-10/2026-06-10-风水罗盘显示优化.md)
+
+---
+
 ### V3.3.1 (2026-06-06)
 #### 📱 LogMonitor + MapSwipeController 移动端/Pad 适配修复
 

@@ -260,6 +260,7 @@ export const useCompassStore = defineStore('compassStore', () => {
     const opacity = ref(0.9);
     const minResolution = ref(99999);
     const hudSizePx = ref(HUD_DEFAULT_SIZE);
+    const bgColor = ref('#000000'); // 渐变背景基色（黑色默认）
 
     // ==================== 2. 交互状态 (🔴 新增) ====================
     // 当前被点击选中的宫位信息
@@ -385,6 +386,10 @@ export const useCompassStore = defineStore('compassStore', () => {
         hudSizePx.value = clamp(Number(nextSize), HUD_MIN_SIZE, HUD_MAX_SIZE);
     }
 
+    function setBgColor(nextColor: string): void {
+        bgColor.value = String(nextColor || '#000000');
+    }
+
     function replaceConfig(
         nextConfig: Partial<FengShuiCompassConfig> | null | undefined,
         nextCid?: string,
@@ -499,6 +504,8 @@ export const useCompassStore = defineStore('compassStore', () => {
         setOpacity,
         setMinResolution,
         setHudSize,
+        bgColor,
+        setBgColor,
         setSelectedPalace, // 🔴 暴露 Action
         replaceConfig,
         loadThemeCatalog,

@@ -274,7 +274,7 @@ frontend/src/
 ├── services/
 │   ├── agent/                                # Agent 服务
 │   │   └── AgentExecutor.js                  # Agent 响应拦截与工具调用执行路由
-│   ├── CompassManager.ts                     # 罗盘管理器
+│   ├── CompassManager.ts                     # 罗盘管理器（半径判断/缩放分级/渐变背景）
 │   ├── DistrictManager.ts                    # 行政区划管理器
 │   ├── auth.js                               # 鉴权工具
 │   ├── userLocationContext.js                # 用户定位上下文

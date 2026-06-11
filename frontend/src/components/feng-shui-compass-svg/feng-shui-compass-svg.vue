@@ -234,7 +234,7 @@ const defaultConfig: FengShuiCompassConfig = {
     },
     autoFontSize: true,
     animation: {
-        enable: false,
+        enable: true,
         duration: 500,
         delay: 300,
     },
@@ -269,7 +269,8 @@ const m = computed(() => ({
         : [(props.config?.data || defaultConfig.data) as Layer],
 }));
 
-const shouldEnableAnimation = ref(m.value.animation?.enable || false);
+// 使用 computed 确保主题切换时动画状态同步更新
+const shouldEnableAnimation = computed(() => m.value.animation?.enable !== false);
 
 // 使用计算属性获取需要的值
 const centerPoint = computed(() => ({

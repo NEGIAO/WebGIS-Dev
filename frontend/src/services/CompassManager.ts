@@ -52,6 +52,25 @@ function clamp(value: number, minValue: number, maxValue: number): number {
 }
 
 /**
+ * 将 HEX 颜色转换为 rgba 字符串
+ * 支持 3/4/6/8 位 hex 格式（如 #f00, #ff0000, #ff000080）
+ * @param hex - HEX 颜色值
+ * @param alpha - 不透明度 0~1
+ * @returns rgba 字符串
+ */
+function hexToRgba(hex: string, alpha: number): string {
+    let h = String(hex || '#000000').replace('#', '').trim();
+    // 展开 3 位短格式：f00 → ff0000
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    // 展开 4 位短格式（含 alpha）：f008 → ff000088
+    if (h.length === 4) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+    const r = parseInt(h.substring(0, 2), 16) || 0;
+    const g = parseInt(h.substring(2, 4), 16) || 0;
+    const b = parseInt(h.substring(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/**
  * 角度规范化函数
  * 将任意角度值转换为 [0, 360) 范围内的标准角度
  * @param value - 待规范化的角度值
@@ -326,8 +345,8 @@ export class CompassManager {
         this.source.addFeature(this.feature);
 
         this.layer = new VectorLayer({
-            // 做一个缓冲半径，避免指南针边缘被地图容器裁切掉（尤其在放大时）
-            renderBuffer: 2000,
+            // 缓冲半径设为 50000，覆盖极端缩放场景，避免内存浪费
+            renderBuffer: 50000,
             source: this.source,
             style: this.style,
             updateWhileAnimating: true,
@@ -522,8 +541,8 @@ export class CompassManager {
         const visible = Boolean(this.store.enabled) && this.store.mode === 'vector';
         this.layer.setVisible(visible);
 
-        // Auto-hide while zooming out: layer remains hidden above this max resolution.
-        this.layer.setMaxResolution(Number(this.store.minResolution || 450));
+        // 不限制缩放级别：罗盘在任意缩放级别下都可显示
+        // 移除 maxResolution 限制，避免放大/缩小地图时罗盘自动隐藏
     }
 
     /**
@@ -811,7 +830,10 @@ export class CompassManager {
         });
     };
 
-    // 封装一个函数，判断指南针圆是否与当前视图相交，以优化渲染性能
+    /**
+     * 判断罗盘是否在视图范围内可见
+     * 圆心到视图边缘的最近距离 ≤ 半径 × 1.5 时可见
+     */
     private isCompassVisibleInView(centerPixel: [number, number], radiusPx: number): boolean {
         const size = this.map.getSize();
         if (!Array.isArray(size) || size.length < 2) {
@@ -824,25 +846,21 @@ export class CompassManager {
             return true;
         }
 
-        // 使用“点到矩形最近距离”判断圆与视图是否相交。
-        const minX = 0;
-        const minY = 0;
-        const maxX = width;
-        const maxY = height;
-
         const centerX = Number(centerPixel[0]);
         const centerY = Number(centerPixel[1]);
         if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
             return false;
         }
 
-        const nearestX = Math.max(minX, Math.min(centerX, maxX));
-        const nearestY = Math.max(minY, Math.min(centerY, maxY));
-
+        // 计算罗盘圆心到视图矩形的最近距离（点到矩形最短距离）
+        const nearestX = Math.max(0, Math.min(centerX, width));
+        const nearestY = Math.max(0, Math.min(centerY, height));
         const dx = centerX - nearestX;
         const dy = centerY - nearestY;
+        const distanceToEdge = Math.hypot(dx, dy);
 
-        return dx * dx + dy * dy <= radiusPx * radiusPx;
+        // 罗盘可见条件：圆心到视图边缘的距离 <= 罗盘半径 × 1.5
+        return distanceToEdge <= radiusPx * 1.5;
     }
 
     /**
@@ -885,15 +903,9 @@ export class CompassManager {
                 const centerY = Number(pointPixel[1]);
                 if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return;
 
-                const minResolution = Number(this.store.minResolution || 450);
-                const resolution = Number(renderState?.resolution);
-                if (
-                    Number.isFinite(minResolution) &&
-                    Number.isFinite(resolution) &&
-                    resolution > minResolution
-                ) {
-                    return;
-                }
+                // 缩放等级可见性判断
+                // 在渲染器中不做额外的缩放限制，罗盘始终可渲染
+                // 实际的缩放显隐由 isCompassVisibleInView 和图层 maxResolution 控制
 
                 const radiusMeters = Number(this.store.physicalRadiusMeters || 10000);
                 const radiusPx = this.samplePixelRadius(centerCoord, radiusMeters);
@@ -936,6 +948,20 @@ export class CompassManager {
                 context.globalAlpha = opacity;
                 context.translate(centerX, centerY);
                 context.rotate(rotationRad);
+
+                // 渐变背景：2 倍半径的径向渐变
+                // 目的：提高罗盘与地图底图的对比度，增强可读性
+                const gradientRadius = radiusPx * 2;
+                const bgBase = this.store.bgColor || '#000000';
+                const bgGradient = context.createRadialGradient(0, 0, 0, 0, 0, gradientRadius);
+                bgGradient.addColorStop(0, hexToRgba(bgBase, 0.45));
+                bgGradient.addColorStop(0.3, hexToRgba(bgBase, 0.25));
+                bgGradient.addColorStop(0.6, hexToRgba(bgBase, 0.10));
+                bgGradient.addColorStop(1, hexToRgba(bgBase, 0));
+                context.fillStyle = bgGradient;
+                context.beginPath();
+                context.arc(0, 0, gradientRadius, 0, Math.PI * 2);
+                context.fill();
 
                 const strokeWidth = Math.max(0.8, radiusPx / 260);
                 context.lineWidth = strokeWidth;
