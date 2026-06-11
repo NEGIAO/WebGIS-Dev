@@ -132,9 +132,13 @@ frontend/src/
 │
 ├── components/                               # 业务组件（按功能域分组）
 │   ├── Cesium/                               # 3D 地球模块
-│   │   ├── CesiumContainer.vue               # Cesium 容器
-│   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/Bloom）
+│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 统一工具面板调度）
+│   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
+│   │   ├── CesiumToolPanel.vue               # 🆕 统一控制台（场景导航/特效/风场/流体参数）
 │   │   ├── Wind2D.js                         # 2D 风场渲染
+│   │   ├── FluidSimulation/                  # 🆕 水体流体模拟模块
+│   │   │   ├── FluidSimulationPanel.vue      # 流体面板（高度图捕捉 + 参数调节，支持 headless）
+│   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 后处理）
 │   │   └── terrain/                          # 自定义地形 Provider
 │   │       ├── GeoTerrainProvider.js
 │   │       ├── GeoWTFS.js
@@ -650,6 +654,25 @@ MIT
 - 中文昵称修改后持续展示，自定义头像索引保存后立即刷新并写回本地会话；管理员头像刷新也会保持已保存索引
 
 详见 [`../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md`](../Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md) | [`../Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md`](../Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md)
+
+### V3.3.3 (2026-06-11)
+#### 🎛️ Cesium 统一工具面板 + 水体流体模拟 + 底图/地形切换
+
+**新增：**
+- `CesiumToolPanel.vue`：统一控制台，管理场景导航、高级特效、风场和流体四大模块
+- `FluidSimulation/FluidSimulationPanel.vue`：水体流体面板，支持高度图捕捉和参数实时调节
+- `FluidSimulation/fluidRuntime.js`：WebGL 流体渲染引擎（GLSL 着色器 + 大气后处理）
+
+**重构：**
+- `CesiumContainer.vue`：移除内联 UI（按钮组 + 风场滑块），改为调度 CesiumToolPanel；新增天地图/Google 底图切换 + 三种地形源切换
+- `CesiumAdvancedEffects.vue`：新增 headless 模式 + `controls` prop 外部同步
+
+**交互变化：**
+- 底图支持天地图/Google 一键切换（Google 走后端代理）
+- 地形支持天地图地形/Cesium 世界地形/平面地形三种
+- 风场、特效、流体参数统一在 ToolPanel 中调节
+
+详见 [`../Docs/26-06/26-06-11/2026-06-11-cesium-tool-panel-fluid-simulation.md`](../Docs/26-06/26-06-11/2026-06-11-cesium-tool-panel-fluid-simulation.md)
 
 ### V3.3.2 (2026-06-09)
 #### 📊 天气组件动态适配父组件尺寸 + 风力仪表 UI 优化

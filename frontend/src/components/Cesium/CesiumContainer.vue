@@ -6,9 +6,33 @@
 
     <component
         :is="CesiumAdvancedEffects"
-        v-if="shouldLoadAdvancedEffects"
+        v-if="cesiumReady"
+        headless
         :get-viewer="getViewer"
         :get-cesium="getCesium"
+        :controls="advancedEffectControls"
+    />
+
+    <component
+        :is="FluidSimulationPanel"
+        v-if="cesiumReady"
+        ref="fluidPanelRef"
+        headless
+        :get-viewer="getViewer"
+        :get-cesium="getCesium"
+        :params="fluidParams"
+        @state-change="handleFluidStateChange"
+    />
+
+    <CesiumToolPanel
+        v-if="cesiumReady"
+        v-model:active-basemap="activeBasemap"
+        v-model:active-terrain="activeTerrain"
+        :basemap-options="basemapOptions"
+        :terrain-options="terrainOptions"
+        :modules="toolModules"
+        @module-action="handleToolAction"
+        @control-change="handleToolControlChange"
     />
 
     <!-- 坐标显示面板 -->
@@ -31,93 +55,18 @@
         </button>
     </div>
 
-    <div class="cesium-controls">
-        <button
-            class="fly-btn"
-            @click="flyToEverest"
-        >
-            🏔️ 飞越珠穆朗玛峰
-        </button>
-        <button
-            class="fly-btn"
-            @click="loadCustomTileset"
-        >
-            🏢 加载3D模型
-        </button>
-        <button
-            class="fly-btn"
-            @click="loadSimulatedWind"
-        >
-            🌬️ 加载模拟风场
-        </button>
-    </div>
-
-    <!-- 风场参数调节面板 -->
-    <div
-        v-if="wind2D"
-        class="wind-controls"
-    >
-        <button
-            class="close-btn"
-            title="关闭控制面板"
-            @click="wind2D = false"
-        >
-            ×
-        </button>
-        <div class="param-row">
-            <label>速度因子: {{ speedFactor.toFixed(1) }}</label>
-            <input
-                v-model.number="speedFactor"
-                type="range"
-                min="0.1"
-                max="5"
-                step="0.1"
-                @input="onParamChange"
-            />
-        </div>
-        <div class="param-row">
-            <label>箭头长度: {{ arrowLength / 1000 }}km</label>
-            <input
-                v-model.number="arrowLength"
-                type="range"
-                min="5000"
-                max="50000"
-                step="1000"
-                @input="onParamChange"
-            />
-        </div>
-        <div class="param-row">
-            <label>尾迹长度: {{ trailLength / 1000 }}km</label>
-            <input
-                v-model.number="trailLength"
-                type="range"
-                min="5000"
-                max="80000"
-                step="1000"
-                @input="onParamChange"
-            />
-        </div>
-        <div class="param-row">
-            <label>透明度: {{ alphaFactor.toFixed(2) }}</label>
-            <input
-                v-model.number="alphaFactor"
-                type="range"
-                min="0.1"
-                max="1"
-                step="0.05"
-                @input="onParamChange"
-            />
-        </div>
-    </div>
 </template>
 
 <script setup>
 // Cesium runtime is loaded on demand to keep the initial bundle lean.
 // Terrain and label providers are registered after Cesium is available.
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { BACKEND_BASE_URL } from '../../api/backend';
 import { useMessage } from '../../composables/useMessage';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
+import CesiumToolPanel from './CesiumToolPanel.vue';
+import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import Wind2D from './Wind2D';
 import createGeoTerrainProvider from './terrain/GeoTerrainProvider';
 import createGeoWTFS from './terrain/GeoWTFS';
@@ -126,6 +75,7 @@ let Cesium = null;
 
 // --- 配置常量区域 ---
 const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK;
+const CESIUM_ION_TOKEN = import.meta.env.VITE_CESIUM_ION_TOKEN;
 const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 
@@ -172,20 +122,203 @@ let handler = null;
 let wtfs = null;
 let creditCheckIntervalId = null;
 let creditOverrideStyleEl = null;
+let terrainSwitchId = 0;
 const wind2D = ref(null); // Wind2D 实例
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
-const shouldLoadAdvancedEffects = ref(false);
+const cesiumReady = ref(false);
+const fluidPanelRef = ref(null);
+const activeBasemap = ref('tianditu');
+const activeTerrain = ref('tianditu');
+const imageryLayerHandles = [];
 const message = useMessage();
 
+const basemapOptions = [
+    { value: 'tianditu', label: '天地图' },
+    { value: 'google', label: 'Google' },
+];
+
+const terrainOptions = [
+    { value: 'tianditu', label: '天地图地形' },
+    { value: 'cesiumWorld', label: 'Cesium世界地形' },
+    { value: 'ellipsoid', label: '平面地形' },
+];
+
+const advancedEffectControls = ref({
+    fog: true,
+    hbao: false,
+    tiltShift: true,
+    atmosphere: true,
+});
+
 // 风场参数绑定（与 Wind2D 实例同步）
-const speedFactor = ref(1.0);
-const arrowLength = ref(15000);
-const trailLength = ref(20000);
-const alphaFactor = ref(1.0);
+const windParams = ref({
+    speedFactor: 1.0,
+    arrowLength: 15000,
+    trailLength: 20000,
+    alphaFactor: 1.0,
+});
+
+const fluidParams = ref({
+    threshold: 10,
+    blend: 20,
+    lightStrength: 3,
+});
+
+const fluidState = ref({
+    isPicking: false,
+    hasFluid: false,
+    selectedText: '',
+});
+
+const toolModules = computed(() => [
+    {
+        id: 'scene',
+        title: '场景导航',
+        description: '相机和演示数据',
+        actions: [
+            { id: 'home', label: '回到初始视角' },
+            { id: 'everest', label: '飞越珠峰' },
+            { id: 'tileset', label: '加载3D模型' },
+        ],
+    },
+    {
+        id: 'effects',
+        title: '高级特效',
+        description: '统一控制雾效、阴影和大气',
+        status: advancedEffectControls.value.atmosphere || advancedEffectControls.value.fog ? '启用' : '关闭',
+        statusTone: advancedEffectControls.value.atmosphere || advancedEffectControls.value.fog ? 'success' : 'neutral',
+        controls: [
+            { id: 'fog', label: '高度雾', type: 'toggle', value: advancedEffectControls.value.fog },
+            { id: 'hbao', label: '微阴影', type: 'toggle', value: advancedEffectControls.value.hbao },
+            { id: 'tiltShift', label: '移轴', type: 'toggle', value: advancedEffectControls.value.tiltShift },
+            { id: 'atmosphere', label: '大气', type: 'toggle', value: advancedEffectControls.value.atmosphere },
+        ],
+    },
+    {
+        id: 'wind',
+        title: '模拟风场',
+        description: 'WebGL2 粒子风场',
+        status: wind2D.value ? '已加载' : '未加载',
+        statusTone: wind2D.value ? 'success' : 'neutral',
+        actions: [
+            { id: 'load', label: wind2D.value ? '重新加载' : '加载风场', variant: 'primary' },
+            { id: 'clear', label: '清除', variant: 'danger', disabled: !wind2D.value },
+        ],
+        controls: [
+            {
+                id: 'speedFactor',
+                label: '速度因子',
+                type: 'range',
+                min: 0.1,
+                max: 5,
+                step: 0.1,
+                value: windParams.value.speedFactor,
+                displayValue: windParams.value.speedFactor.toFixed(1),
+                disabled: !wind2D.value,
+            },
+            {
+                id: 'arrowLength',
+                label: '箭头长度',
+                type: 'range',
+                min: 5000,
+                max: 50000,
+                step: 1000,
+                value: windParams.value.arrowLength,
+                displayValue: `${Math.round(windParams.value.arrowLength / 1000)} km`,
+                disabled: !wind2D.value,
+            },
+            {
+                id: 'trailLength',
+                label: '尾迹长度',
+                type: 'range',
+                min: 5000,
+                max: 80000,
+                step: 1000,
+                value: windParams.value.trailLength,
+                displayValue: `${Math.round(windParams.value.trailLength / 1000)} km`,
+                disabled: !wind2D.value,
+            },
+            {
+                id: 'alphaFactor',
+                label: '透明度',
+                type: 'range',
+                min: 0.1,
+                max: 1,
+                step: 0.05,
+                value: windParams.value.alphaFactor,
+                displayValue: windParams.value.alphaFactor.toFixed(2),
+                disabled: !wind2D.value,
+            },
+        ],
+    },
+    {
+        id: 'fluid',
+        title: '水体流体',
+        description: '点击地形捕捉高度图并生成水体',
+        status: fluidState.value.isPicking ? '等待选点' : fluidState.value.hasFluid ? '已创建' : '未创建',
+        statusTone: fluidState.value.isPicking ? 'warning' : fluidState.value.hasFluid ? 'success' : 'neutral',
+        actions: [
+            {
+                id: 'pick',
+                label: fluidState.value.isPicking ? '等待选点' : '捕捉高度图',
+                variant: 'primary',
+                active: fluidState.value.isPicking,
+            },
+            {
+                id: 'clear',
+                label: '清除',
+                variant: 'danger',
+                disabled: !fluidState.value.hasFluid && !fluidState.value.isPicking,
+            },
+        ],
+        controls: [
+            {
+                id: 'threshold',
+                label: '阈值',
+                type: 'range',
+                min: 0,
+                max: 500,
+                step: 0.0001,
+                value: fluidParams.value.threshold,
+                displayValue: Number(fluidParams.value.threshold).toFixed(2),
+            },
+            {
+                id: 'blend',
+                label: '混合',
+                type: 'range',
+                min: 0,
+                max: 50,
+                step: 0.0001,
+                value: fluidParams.value.blend,
+                displayValue: Number(fluidParams.value.blend).toFixed(2),
+            },
+            {
+                id: 'lightStrength',
+                label: '光强',
+                type: 'range',
+                min: 0,
+                max: 10,
+                step: 0.0001,
+                value: fluidParams.value.lightStrength,
+                displayValue: Number(fluidParams.value.lightStrength).toFixed(2),
+            },
+        ],
+    },
+]);
 
 // --- 生命周期 ---
 onMounted(() => {
     bootCesium();
+});
+
+watch(activeBasemap, (value) => {
+    if (!viewer || !Cesium) return;
+    applyBasemap(value);
+});
+
+watch(activeTerrain, async (value) => {
+    if (!viewer || !Cesium) return;
+    await applyTerrain(value);
 });
 
 function clearWind2D() {
@@ -210,7 +343,7 @@ function clearWTFS() {
 }
 
 onUnmounted(() => {
-    shouldLoadAdvancedEffects.value = false;
+    cesiumReady.value = false;
     if (handler) {
         handler.destroy();
         handler = null;
@@ -245,17 +378,16 @@ async function bootCesium() {
 
         initViewer();
         setupInteractions();
-        addBaseImageryLayers();
 
-        const terrainReady = initCustomTerrain();
-        const labelsReady = initTdtLabels();
-        shouldLoadAdvancedEffects.value = true;
-        if (terrainReady) {
+        const basemapReady = addBaseImageryLayers();
+        const terrainReady = await initCustomTerrain();
+        cesiumReady.value = true;
+        if (basemapReady && terrainReady) {
             message.success('天地图基础影像与地形加载成功。');
         } else {
-            message.error('天地图地形加载失败，请检查 token 或网络。', { closable: true });
+            message.error('默认地图源或地形加载失败，请检查 token 或网络。', { closable: true });
         }
-        if (!labelsReady) {
+        if (activeBasemap.value === 'tianditu' && !wtfs) {
             console.warn('WTFS label initialization failed.');
         }
 
@@ -405,25 +537,110 @@ function setupInteractions() {
 }
 
 function addBaseImageryLayers() {
-    const imageryLayers = viewer.imageryLayers;
-    const imgLayer = new Cesium.UrlTemplateImageryProvider({
-        url: `${TDT_SERVICE_ROOT}DataServer?T=img_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
-        subdomains: TDT_SUBDOMAINS,
-        tilingScheme: new Cesium.WebMercatorTilingScheme(),
-        maximumLevel: 18,
-    });
-    imageryLayers.addImageryProvider(imgLayer);
+    return applyBasemap(activeBasemap.value);
+}
 
-    const iboLayer = new Cesium.UrlTemplateImageryProvider({
-        url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
-        subdomains: TDT_SUBDOMAINS,
-        tilingScheme: new Cesium.WebMercatorTilingScheme(),
-        maximumLevel: 10,
-    });
-    imageryLayers.addImageryProvider(iboLayer);
+function clearBaseImageryLayers() {
+    if (!viewer?.imageryLayers) return;
+
+    while (imageryLayerHandles.length) {
+        const layer = imageryLayerHandles.pop();
+        try {
+            viewer.imageryLayers.remove(layer, true);
+        } catch (error) {
+            console.warn('Imagery layer remove warning:', error);
+        }
+    }
+}
+
+function createTiandituImageryProviders() {
+    return [
+        new Cesium.UrlTemplateImageryProvider({
+            url: `${TDT_SERVICE_ROOT}DataServer?T=img_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
+            subdomains: TDT_SUBDOMAINS,
+            tilingScheme: new Cesium.WebMercatorTilingScheme(),
+            maximumLevel: 18,
+        }),
+        new Cesium.UrlTemplateImageryProvider({
+            url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
+            subdomains: TDT_SUBDOMAINS,
+            tilingScheme: new Cesium.WebMercatorTilingScheme(),
+            maximumLevel: 10,
+        }),
+    ];
+}
+
+function createGoogleImageryProviders() {
+    return [
+        new Cesium.UrlTemplateImageryProvider({
+            url: `${BACKEND_BASE_URL}/proxy/mt{s}.google.com/vt?lyrs=s&x={x}&y={y}&z={z}`,
+            subdomains: ['0', '1', '2', '3'],
+            tilingScheme: new Cesium.WebMercatorTilingScheme(),
+            maximumLevel: 20,
+        }),
+    ];
+}
+
+function applyBasemap(value) {
+    if (!viewer || !Cesium) return false;
+
+    try {
+        clearBaseImageryLayers();
+        const providers = value === 'google' ? createGoogleImageryProviders() : createTiandituImageryProviders();
+        providers.forEach((provider) => {
+            imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
+        });
+
+        if (value === 'tianditu') {
+            initTdtLabels();
+        } else {
+            clearWTFS();
+        }
+
+        viewer.scene.requestRender?.();
+        return true;
+    } catch (error) {
+        message.error('地图源切换失败', error);
+        return false;
+    }
 }
 
 function initCustomTerrain() {
+    return applyTerrain(activeTerrain.value);
+}
+
+async function applyTerrain(value) {
+    if (!viewer || !Cesium) return false;
+
+    const switchId = ++terrainSwitchId;
+
+    if (value === 'ellipsoid') {
+        viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+        viewer.scene.globe.depthTestAgainstTerrain = false;
+        viewer.scene.requestRender?.();
+        return true;
+    }
+
+    if (value === 'cesiumWorld') {
+        try {
+            const worldTerrain = await createCesiumWorldTerrainProvider();
+            if (switchId !== terrainSwitchId) return false;
+
+            viewer.terrainProvider = worldTerrain;
+            viewer.scene.globe.depthTestAgainstTerrain = true;
+            viewer.scene.requestRender?.();
+            return true;
+        } catch (error) {
+            if (switchId !== terrainSwitchId) return false;
+
+            viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+            viewer.scene.globe.depthTestAgainstTerrain = false;
+            message.warning('Cesium 世界地形加载失败，已降级为平面地形。', { closable: true });
+            message.error('Cesium 世界地形初始化失败', error);
+            return false;
+        }
+    }
+
     const GeoTerrainProvider = createGeoTerrainProvider(Cesium);
     try {
         viewer.terrainProvider = new GeoTerrainProvider({
@@ -432,16 +649,53 @@ function initCustomTerrain() {
             token: TDT_TOKEN,
         });
         viewer.scene.globe.depthTestAgainstTerrain = true;
+        viewer.scene.requestRender?.();
         return true;
     } catch (error) {
         viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+        viewer.scene.globe.depthTestAgainstTerrain = false;
         message.warning('官方地形服务加载失败，已降级为椭球地形。', { closable: true });
         message.error('官方地形初始化失败', error);
         return false;
     }
 }
 
+async function createCesiumWorldTerrainProvider() {
+    if (CESIUM_ION_TOKEN && Cesium.Ion) {
+        Cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+    }
+
+    const terrainOptions = {
+        requestWaterMask: false,
+        requestVertexNormals: true,
+    };
+
+    if (typeof Cesium.createWorldTerrainAsync === 'function') {
+        return Cesium.createWorldTerrainAsync(terrainOptions);
+    }
+
+    if (typeof Cesium.createWorldTerrain === 'function') {
+        return Cesium.createWorldTerrain(terrainOptions);
+    }
+
+    if (typeof Cesium.CesiumTerrainProvider?.fromIonAssetId === 'function') {
+        return Cesium.CesiumTerrainProvider.fromIonAssetId(1, terrainOptions);
+    }
+
+    if (Cesium.IonResource?.fromAssetId && Cesium.CesiumTerrainProvider) {
+        const ionResource = await Cesium.IonResource.fromAssetId(1);
+        return new Cesium.CesiumTerrainProvider({
+            url: ionResource,
+            ...terrainOptions,
+        });
+    }
+
+    throw new Error('当前 Cesium 运行时不支持在线世界地形。');
+}
+
 function initTdtLabels() {
+    if (wtfs) return true;
+
     try {
         const GeoWTFS = createGeoWTFS(Cesium);
         wtfs = new GeoWTFS(viewer, {
@@ -568,10 +822,10 @@ function loadSimulatedWind() {
     wind2D.value = new Wind2D(viewer, {
         maxWindSpeed: 20, // 最大风速（用于归一化）
         cesium: Cesium,
-        speedFactor: speedFactor.value,
-        arrowLength: arrowLength.value,
-        trailLength: trailLength.value,
-        alphaFactor: alphaFactor.value,
+        speedFactor: windParams.value.speedFactor,
+        arrowLength: windParams.value.arrowLength,
+        trailLength: windParams.value.trailLength,
+        alphaFactor: windParams.value.alphaFactor,
     });
 
     // 加载数据，内部会自动设置粒子数
@@ -589,12 +843,66 @@ function loadSimulatedWind() {
 /**
  * 滑块参数变化时，实时更新 Wind2D 实例
  */
-function onParamChange() {
+function applyWindParams() {
     if (!wind2D.value) return;
-    wind2D.value.speedFactor = speedFactor.value;
-    wind2D.value.arrowLength = arrowLength.value;
-    wind2D.value.trailLength = trailLength.value;
-    wind2D.value.alphaFactor = alphaFactor.value;
+    wind2D.value.speedFactor = windParams.value.speedFactor;
+    wind2D.value.arrowLength = windParams.value.arrowLength;
+    wind2D.value.trailLength = windParams.value.trailLength;
+    wind2D.value.alphaFactor = windParams.value.alphaFactor;
+}
+
+function handleToolAction({ moduleId, actionId }) {
+    const actionMap = {
+        scene: {
+            home: () => flyToHome(),
+            everest: flyToEverest,
+            tileset: loadCustomTileset,
+        },
+        wind: {
+            load: loadSimulatedWind,
+            clear: clearWind2D,
+        },
+        fluid: {
+            pick: () => fluidPanelRef.value?.startPickHeightMap?.(),
+            clear: () => fluidPanelRef.value?.clearFluid?.(),
+        },
+    };
+
+    actionMap[moduleId]?.[actionId]?.();
+}
+
+function handleToolControlChange({ moduleId, controlId, value }) {
+    if (moduleId === 'effects' && controlId in advancedEffectControls.value) {
+        advancedEffectControls.value = {
+            ...advancedEffectControls.value,
+            [controlId]: Boolean(value),
+        };
+        return;
+    }
+
+    if (moduleId === 'wind' && controlId in windParams.value) {
+        windParams.value = {
+            ...windParams.value,
+            [controlId]: Number(value),
+        };
+        applyWindParams();
+        return;
+    }
+
+    if (moduleId === 'fluid' && controlId in fluidParams.value) {
+        fluidParams.value = {
+            ...fluidParams.value,
+            [controlId]: Number(value),
+        };
+    }
+}
+
+function handleFluidStateChange(state) {
+    fluidState.value = {
+        isPicking: !!state?.isPicking,
+        hasFluid: !!state?.hasFluid,
+        selectedText: state?.selectedText || '',
+    };
 }
 
 // --- 辅助工具函数 ---
@@ -695,7 +1003,6 @@ async function loadCustomTileset() {
 </script>
 
 <style scoped>
-/* 原有样式保持不变 */
 .cesium-container {
     width: 100%;
     height: 100%;
@@ -703,108 +1010,6 @@ async function loadCustomTileset() {
     top: 0;
     left: 0;
     z-index: 1;
-}
-
-.cesium-controls {
-    position: absolute;
-    bottom: 60px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2;
-    display: flex;
-    gap: 10px;
-}
-
-.fly-btn {
-    background: rgba(42, 42, 42, 0.8);
-    color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 10px 20px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.3s;
-    backdrop-filter: blur(5px);
-}
-
-.fly-btn:hover {
-    background: rgba(66, 185, 131, 0.9);
-    transform: translateY(-2px);
-}
-
-.wind-controls {
-    position: relative;
-    /* 必须设置，作为按钮定位的基准 */
-    padding: 20px;
-    /* 留出顶部空间防止遮挡按钮 */
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    /* 其他现有的样式... */
-}
-
-.close-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 24px;
-    height: 24px;
-    background: none;
-    border: none;
-    font-size: 20px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    line-height: 1;
-    border-radius: 50%;
-}
-
-.close-btn:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-    color: #d12f2f;
-    /* 悬停变为红色提示 */
-    transform: scale(1.1);
-}
-
-/* 新增风场控制面板样式 */
-.wind-controls {
-    position: absolute;
-    bottom: 120px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 2;
-    background: rgba(20, 20, 20, 0.85);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    padding: 15px 20px;
-    color: white;
-    font-size: 13px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    min-width: 600px;
-}
-
-.param-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.param-row label {
-    min-width: 100px;
-    text-align: right;
-    font-weight: bold;
-}
-
-.param-row input[type='range'] {
-    width: 120px;
-    cursor: pointer;
-    accent-color: #42b983;
 }
 
 .map-controls-group {
@@ -827,11 +1032,6 @@ async function loadCustomTileset() {
 
 /* 平板适配 */
 @media (max-width: 1024px) {
-    .wind-controls {
-        min-width: auto;
-        width: 85%;
-    }
-
     .map-controls-group {
         width: 85%;
     }
@@ -849,12 +1049,6 @@ async function loadCustomTileset() {
         min-width: auto;
     }
 
-    .wind-controls {
-        flex-direction: column;
-        min-width: auto;
-        width: 90%;
-        bottom: 180px;
-    }
 }
 
 .mouse-position-content {

@@ -182,9 +182,13 @@ WebGIS_Dev/
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器
-│   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换）
+│   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
+│   │   │   │   ├── CesiumToolPanel.vue   # 🆕 统一控制台
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
+│   │   │   │   ├── FluidSimulation/      # 🆕 水体流体模拟
+│   │   │   │   │   ├── FluidSimulationPanel.vue
+│   │   │   │   │   └── fluidRuntime.js
 │   │   │   │   └── terrain/              # 自定义地形提供者
 │   │   │   ├── Chat/                     # AI 聊天助手
 │   │   │   ├── Common/                   # 通用可复用组件

@@ -1,5 +1,8 @@
 <template>
-    <div class="advanced-effects-root">
+    <div
+        v-if="!headless"
+        class="advanced-effects-root"
+    >
         <div class="effects-panel">
             <div class="panel-head">
                 <span class="panel-title">Cinematic FX</span>
@@ -52,10 +55,14 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 
 const props = defineProps({
+    headless: {
+        type: Boolean,
+        default: false,
+    },
     getViewer: {
         type: Function,
         required: true,
@@ -63,6 +70,10 @@ const props = defineProps({
     getCesium: {
         type: Function,
         required: true,
+    },
+    controls: {
+        type: Object,
+        default: () => ({}),
     },
 });
 
@@ -141,6 +152,29 @@ onMounted(() => {
 onUnmounted(() => {
     cleanupEffects();
 });
+
+watch(
+    () => props.controls,
+    (controls) => {
+        syncExternalControls(controls || {});
+    },
+    { deep: true, immediate: true },
+);
+
+function syncExternalControls(controls) {
+    if (Object.prototype.hasOwnProperty.call(controls, 'fog')) {
+        fogEnabled.value = !!controls.fog;
+    }
+    if (Object.prototype.hasOwnProperty.call(controls, 'hbao')) {
+        hbaoEnabled.value = !!controls.hbao;
+    }
+    if (Object.prototype.hasOwnProperty.call(controls, 'tiltShift')) {
+        tiltShiftEnabled.value = !!controls.tiltShift;
+    }
+    if (Object.prototype.hasOwnProperty.call(controls, 'atmosphere')) {
+        atmosphereEnabled.value = !!controls.atmosphere;
+    }
+}
 
 function bootstrapWhenReady() {
     let attempts = 0;

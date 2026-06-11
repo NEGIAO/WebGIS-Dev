@@ -30,7 +30,6 @@ from .constants import (
     normalize_role,
     resolve_quota_subject,
 )
-from .db import AUTH_DB_PATH
 from .dependencies import require_login
 from .models import (
     BindEmailRequest,
@@ -46,7 +45,6 @@ from .models import (
 )
 from .preferences import _get_user_preferences_sync, _upsert_user_preferences_sync
 from .quota import get_user_quota_snapshot_sync
-from .schema import init_auth_storage
 from .session import (
     _check_email_taken_sync,
     _create_session_sync,
@@ -205,7 +203,6 @@ async def send_verification_code(
     5. 生成验证码并存入数据库；
     6. 同步发送邮件，根据实际发送结果返回成功或失败。
     """
-    await init_auth_storage()
 
     email = _normalize_email(payload.email)
     _validate_email(email)
@@ -290,7 +287,6 @@ async def verify_verification_code(payload: VerifyCodeRequest) -> Dict[str, Any]
     返回：
     - 校验结果。
     """
-    await init_auth_storage()
 
     email = _normalize_email(payload.email)
     _validate_email(email)
@@ -325,7 +321,6 @@ async def register_user(payload: RegisterRequest) -> Dict[str, Any]:
     """
     功能：注册邮箱账号。邮箱是唯一登录账号，display_name/username 仅作为昵称来源。
     """
-    await init_auth_storage()
 
     display_name = _normalize_display_name(payload.display_name or payload.username)
     password = str(payload.password or "")
@@ -414,7 +409,6 @@ async def check_username_availability(username: str = "") -> Dict[str, Any]:
     - available: 是否可用。
     - message: 可读原因（保留名/格式错误/已存在等）。
     """
-    await init_auth_storage()
 
     normalized = _normalize_username(username)
     if not normalized:
@@ -473,7 +467,6 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
     2. 创建会话并记录登录；
     3. 返回 token 与配额信息。
     """
-    await init_auth_storage()
 
     credential = _normalize_username(payload.email or payload.username)
     password = str(payload.password or "")
@@ -918,7 +911,6 @@ async def reset_password(payload: ResetPasswordRequest) -> Dict[str, Any]:
     3. 通过邮箱更新用户密码；
     4. 注销该账号全部会话。
     """
-    await init_auth_storage()
 
     email = _normalize_email(payload.email)
     _validate_email(email)
@@ -1023,18 +1015,4 @@ async def update_user_preferences(
         "status": "success",
         "message": "偏好设置已保存",
         "preferences": preferences,
-    }
-
-
-@router.get("/storage-path")
-async def get_auth_storage_path() -> Dict[str, Any]:
-    """
-    功能：调试接口，返回当前认证数据库路径。
-
-    返回：
-    - path: 认证数据库实际文件路径。
-    """
-    return {
-        "status": "success",
-        "path": str(AUTH_DB_PATH),
     }

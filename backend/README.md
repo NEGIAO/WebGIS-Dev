@@ -24,6 +24,24 @@ WebGIS 后端服务，当前包含五大核心能力：
 
 ## 0. 项目结构（2026-06-11 更新）
 
+### V3.3.3 (2026-06-11) - Auth 中间件收敛 + 调试接口清理
+
+**修改文件：**
+
+| 文件 | 说明 |
+|------|------|
+| `app.py` | `check_startup_state` 中间件重构：白名单前置 + 正常路径幂等 `init_auth_storage()` |
+| `api/auth/dependencies.py` | 移除 `require_login` / `require_api_access_or_guest` 中重复的 `init_auth_storage()` |
+| `api/auth/routes.py` | 移除 7 个路由中的 `init_auth_storage()` + 删除 `/storage-path` 调试接口 |
+
+**功能说明：**
+- `init_auth_storage()` 调用从 9 处收敛到 1 处中间件，路由函数回归纯业务逻辑
+- 白名单路径（`/`、`/health`、`/docs`、`/redoc`、`/openapi.json`、`/api/info`）直接放行，不触发数据库检查
+- 正常路径幂等检查：`_auth_storage_ready=True` 时直接返回，无额外开销
+- 降级路径保持原有自动恢复逻辑
+
+详见 [`../Docs/26-06/26-06-11/2026-06-11-cesium-tool-panel-fluid-simulation.md`](../Docs/26-06/26-06-11/2026-06-11-cesium-tool-panel-fluid-simulation.md)
+
 ### V3.3.3 (2026-06-11) - 邮箱账号化与旧用户绑定迁移
 
 **运行版本说明：**
@@ -494,7 +512,6 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 - POST /api/auth/register
 - POST /api/auth/login
 - POST /api/auth/reset-password
-- GET /api/auth/storage-path
 
 受限绑定 session 可访问：
 - POST /api/auth/bind-email

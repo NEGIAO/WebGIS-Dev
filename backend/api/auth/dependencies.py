@@ -23,7 +23,6 @@ from .constants import (
 )
 from .db import _iso, _utc_now
 from .quota import _consume_api_quota_sync
-from .schema import init_auth_storage
 from .session import _create_session_sync, _get_session_sync
 from .user import _get_or_create_guest_username_sync
 
@@ -68,15 +67,6 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
 
 
 async def require_login(request: Request) -> Dict[str, Any]:
-    try:
-        await init_auth_storage()
-    except Exception as e:
-        logger.error("require_login: 数据库初始化失败: %s", str(e), exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="数据库服务暂时不可用，请稍后重试",
-        )
-
     token = _extract_token(request)
     if not token:
         if _is_guest_allow_request(request):
@@ -144,15 +134,6 @@ async def require_api_access(request: Request) -> Dict[str, Any]:
 async def require_api_access_or_guest(request: Request) -> Dict[str, Any]:
     """与 require_api_access 相同，但无 token 时自动创建 guest session 而非 401。
     适用于允许游客有限使用的端点（天气、搜索、AI 等）。"""
-    try:
-        await init_auth_storage()
-    except Exception as e:
-        logger.error("require_api_access_or_guest: 数据库初始化失败: %s", str(e), exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=_auth_error_detail("DB_UNAVAILABLE", "数据库服务暂时不可用，请稍后重试"),
-        )
-
     token = _extract_token(request)
     session = None
 
