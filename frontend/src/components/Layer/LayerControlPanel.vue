@@ -90,7 +90,10 @@
             </div>
         </div>
 
-        <Teleport to="body">
+        <Teleport
+            defer
+            to="#map-container"
+        >
             <div
                 v-if="showLayerManager"
                 class="layer-manager-panel"
@@ -143,7 +146,10 @@
             </div>
         </Teleport>
 
-        <Teleport to="body">
+        <Teleport
+            defer
+            to="#map-container"
+        >
             <div
                 v-if="showLayerContextMenu"
                 class="layer-context-menu"
@@ -320,8 +326,12 @@ const LONG_PRESS_DURATION = 500; // 长按时间阈值（毫秒）
 const LONG_PRESS_DRIFT = 10; // 移动距离阈值（像素）
 
 const PANEL_WIDTH = 200;
+const PANEL_GAP = 6;
+const PANEL_MARGIN = 8;
 const CONTEXT_MENU_WIDTH = 152;
 const CONTEXT_SUBMENU_WIDTH = 136;
+const CONTEXT_MENU_ESTIMATED_HEIGHT = 150;
+let anchorResizeObserver = null;
 
 const serviceOptions = computed(() => {
     if (Array.isArray(props.services) && props.services.length) return props.services;
@@ -368,7 +378,9 @@ const layerContextSubmenuStyle = computed(() => {
         return { left: `${CONTEXT_MENU_WIDTH - 4}px`, top: '0px' };
     }
 
-    const availableRight = window.innerWidth - layerContextMenuAnchor.value.left;
+    const containerRect = getLayerOverlayContainerRect();
+    const containerWidth = containerRect?.width ?? window.innerWidth;
+    const availableRight = containerWidth - layerContextMenuAnchor.value.left;
     const canOpenRight = availableRight > CONTEXT_MENU_WIDTH + CONTEXT_SUBMENU_WIDTH + 20;
 
     return {
@@ -474,17 +486,40 @@ function closeLayerContextMenu() {
     contextMenuLayer.value = null;
 }
 
+function clampToRange(value, min, max) {
+    const safeMax = Math.max(min, max);
+    return Math.min(Math.max(value, min), safeMax);
+}
+
+function getLayerOverlayContainerElement() {
+    if (typeof document === 'undefined') return null;
+
+    return (
+        layerManageButtonRef.value?.closest?.('.map-container') ??
+        document.getElementById('map-container')
+    );
+}
+
+function getLayerOverlayContainerRect() {
+    return getLayerOverlayContainerElement()?.getBoundingClientRect?.() ?? null;
+}
+
 function onLayerContextMenu(layer, index, event) {
     if (!layer?.id || !event) return;
 
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
-    const maxLeft = Math.max(8, viewportWidth - CONTEXT_MENU_WIDTH - 8);
-    const maxTop = Math.max(8, viewportHeight - 140);
+    const containerRect = getLayerOverlayContainerRect();
+    const fallbackWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const fallbackHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
+    const originLeft = containerRect?.left ?? 0;
+    const originTop = containerRect?.top ?? 0;
+    const containerWidth = containerRect?.width ?? fallbackWidth;
+    const containerHeight = containerRect?.height ?? fallbackHeight;
+    const maxLeft = containerWidth - CONTEXT_MENU_WIDTH - PANEL_MARGIN;
+    const maxTop = containerHeight - CONTEXT_MENU_ESTIMATED_HEIGHT - PANEL_MARGIN;
 
     layerContextMenuAnchor.value = {
-        left: Math.min(Math.max(8, event.clientX), maxLeft),
-        top: Math.min(Math.max(8, event.clientY), maxTop),
+        left: Math.round(clampToRange(event.clientX - originLeft, PANEL_MARGIN, maxLeft)),
+        top: Math.round(clampToRange(event.clientY - originTop, PANEL_MARGIN, maxTop)),
     };
 
     contextMenuLayer.value = {
@@ -676,9 +711,16 @@ function updateLayerManagerAnchor() {
     const buttonEl = layerManageButtonRef.value;
     if (!buttonEl) return;
     const rect = buttonEl.getBoundingClientRect();
+    const containerRect = getLayerOverlayContainerRect();
+    const originLeft = containerRect?.left ?? 0;
+    const originTop = containerRect?.top ?? 0;
+    const containerWidth = containerRect?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 0);
+    const maxLeft = containerWidth - PANEL_WIDTH - PANEL_MARGIN;
     layerManagerAnchor.value = {
-        top: Math.round(rect.bottom + 6),
-        left: Math.round(Math.max(8, rect.right - PANEL_WIDTH)),
+        top: Math.round(Math.max(PANEL_MARGIN, rect.bottom - originTop + PANEL_GAP)),
+        left: Math.round(
+            clampToRange(rect.right - originLeft - PANEL_WIDTH, PANEL_MARGIN, maxLeft),
+        ),
     };
 }
 
@@ -689,11 +731,19 @@ function toggleLayerManager() {
 function bindAnchorListeners() {
     window.addEventListener('resize', updateLayerManagerAnchor);
     window.addEventListener('scroll', updateLayerManagerAnchor, true);
+
+    if (typeof ResizeObserver !== 'undefined') {
+        anchorResizeObserver = new ResizeObserver(updateLayerManagerAnchor);
+        const containerEl = getLayerOverlayContainerElement();
+        if (containerEl) anchorResizeObserver.observe(containerEl);
+    }
 }
 
 function unbindAnchorListeners() {
     window.removeEventListener('resize', updateLayerManagerAnchor);
     window.removeEventListener('scroll', updateLayerManagerAnchor, true);
+    anchorResizeObserver?.disconnect();
+    anchorResizeObserver = null;
 }
 
 watch(showLayerManager, async (visible) => {
@@ -965,7 +1015,7 @@ onBeforeUnmount(() => {
 }
 
 .layer-manager-panel {
-    position: fixed;
+    position: absolute;
     width: 200px;
     background: rgba(255, 255, 255, 0.96);
     border-radius: 4px;
@@ -1071,7 +1121,7 @@ onBeforeUnmount(() => {
 }
 
 .layer-context-menu {
-    position: fixed;
+    position: absolute;
     min-width: 152px;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid var(--border-brand-light);

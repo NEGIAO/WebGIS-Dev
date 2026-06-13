@@ -26,6 +26,7 @@
 
     <CesiumToolPanel
         v-if="cesiumReady"
+        v-model:open="cesiumToolPanelOpen"
         v-model:active-basemap="activeBasemap"
         v-model:active-terrain="activeTerrain"
         :basemap-options="basemapOptions"
@@ -123,24 +124,37 @@ let wtfs = null;
 let creditCheckIntervalId = null;
 let creditOverrideStyleEl = null;
 let terrainSwitchId = 0;
+let layerPickerSubscriptions = [];
 const wind2D = ref(null); // Wind2D 实例
 const coordinateDisplay = ref('经度: 0.000000, 纬度: 0.000000, 海拔: 0.00米');
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const activeBasemap = ref('tianditu');
 const activeTerrain = ref('tianditu');
+const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
+const cesiumToolPanelOpen = ref(readStoredBoolean(CESIUM_TOOL_PANEL_OPEN_KEY, true));
 const imageryLayerHandles = [];
+const officialBasemapOptions = ref([]);
+const imageryProviderViewModelById = new Map();
+const imageryProviderIdByViewModel = new Map();
+const terrainProviderViewModelById = new Map();
+const terrainProviderIdByViewModel = new Map();
 const message = useMessage();
 
-const basemapOptions = [
-    { value: 'tianditu', label: '天地图' },
-    { value: 'google', label: 'Google' },
+const projectBasemapOptions = [
+    { value: 'tianditu', label: '天地图', description: '天地图影像与注记服务' },
+    { value: 'google', label: 'Google', description: 'Google 卫星影像代理服务' },
 ];
 
+const basemapOptions = computed(() => [
+    ...projectBasemapOptions,
+    ...officialBasemapOptions.value,
+]);
+
 const terrainOptions = [
-    { value: 'tianditu', label: '天地图地形' },
-    { value: 'cesiumWorld', label: 'Cesium世界地形' },
-    { value: 'ellipsoid', label: '平面地形' },
+    { value: 'tianditu', label: '天地图地形', description: '天地图高程地形服务' },
+    { value: 'cesiumWorld', label: 'Cesium世界地形', description: 'Cesium ion 全球地形服务' },
+    { value: 'ellipsoid', label: '平面地形', description: '无高程的椭球地形' },
 ];
 
 const advancedEffectControls = ref({
@@ -321,6 +335,10 @@ watch(activeTerrain, async (value) => {
     await applyTerrain(value);
 });
 
+watch(cesiumToolPanelOpen, (value) => {
+    writeStoredBoolean(CESIUM_TOOL_PANEL_OPEN_KEY, value);
+});
+
 function clearWind2D() {
     if (!wind2D.value) return;
     try {
@@ -358,6 +376,7 @@ onUnmounted(() => {
         creditOverrideStyleEl.remove();
         creditOverrideStyleEl = null;
     }
+    unbindLayerPickerStateSync();
     if (viewer) {
         try {
             viewer.destroy();
@@ -417,25 +436,38 @@ async function loadCesiumRuntime() {
     await loadScriptOnce(CESIUM_JS_URL, 'cesium-runtime-script');
     Cesium = window.Cesium;
     if (!Cesium) throw new Error('Cesium global 未找到');
+    applyCesiumIonToken();
+}
+
+function applyCesiumIonToken() {
+    if (CESIUM_ION_TOKEN && Cesium?.Ion) {
+        Cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
+    }
 }
 
 function initViewer() {
     const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
+    const imageryProviderViewModels = createImageryProviderViewModels();
+    const terrainProviderViewModels = createTerrainProviderViewModels();
     viewer = new mapCtor('cesiumContainer', {
-        imageryProvider: false,
-        terrainProvider: undefined,
-        baseLayerPicker: false,
-        geocoder: false,
-        homeButton: false,
-        infoBox: false,
-        selectionIndicator: false,
-        timeline: false,
-        animation: false,
-        sceneModePicker: false,
+        baseLayerPicker: true,
+        geocoder: true,
+        homeButton: true,
+        infoBox: true,
+        selectionIndicator: true,
+        timeline: true,
+        animation: true,
+        sceneModePicker: true,
         navigationHelpButton: false,
+        imageryProviderViewModels,
+        selectedImageryProviderViewModel:
+            imageryProviderViewModelById.get(activeBasemap.value) || imageryProviderViewModels[0],
+        terrainProviderViewModels,
+        selectedTerrainProviderViewModel:
+            terrainProviderViewModelById.get(activeTerrain.value) || terrainProviderViewModels[0],
         shouldAnimate: true,
     });
-
+    bindLayerPickerStateSync();
     flyToHome(0);
 
     if (viewer._cesiumWidget?._creditContainer) {
@@ -445,7 +477,7 @@ function initViewer() {
     viewer.scene.globe.terrainExaggeration = 1;
     viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
     viewer.scene.globe.showGroundAtmosphere = true;
-    viewer.scene.globe.depthTestAgainstTerrain = true;
+    applyTerrainSceneFlags(activeTerrain.value);
 
     const hideCreditsAggressive = () => {
         if (viewer._cesiumWidget?._creditContainer) {
@@ -537,7 +569,8 @@ function setupInteractions() {
 }
 
 function addBaseImageryLayers() {
-    return applyBasemap(activeBasemap.value);
+    syncBasemapSideEffects(activeBasemap.value);
+    return true;
 }
 
 function clearBaseImageryLayers() {
@@ -581,8 +614,191 @@ function createGoogleImageryProviders() {
     ];
 }
 
+function createImageryProviderViewModels() {
+    imageryProviderViewModelById.clear();
+    imageryProviderIdByViewModel.clear();
+
+    const projectProviderViewModels = projectBasemapOptions.map((option) => {
+        const viewModel = new Cesium.ProviderViewModel({
+            name: option.label,
+            tooltip: option.description || option.label,
+            category: '项目底图',
+            iconUrl: createPickerIcon(
+                option.value === 'google' ? '#5ea1ff' : '#37d67a',
+                option.value === 'google' ? 'G' : 'TD',
+            ),
+            creationFunction: () =>
+                option.value === 'google'
+                    ? createGoogleImageryProviders()
+                    : createTiandituImageryProviders(),
+        });
+        imageryProviderViewModelById.set(option.value, viewModel);
+        imageryProviderIdByViewModel.set(viewModel, option.value);
+        return viewModel;
+    });
+
+    const officialProviderViewModels = getDefaultImageryProviderViewModels();
+    officialBasemapOptions.value = officialProviderViewModels.map((viewModel, index) => {
+        const label = String(viewModel?.name || `官方底图 ${index + 1}`).trim();
+        const value = createOfficialBasemapId(label, index);
+        imageryProviderViewModelById.set(value, viewModel);
+        imageryProviderIdByViewModel.set(viewModel, value);
+        return {
+            value,
+            label: `官方 · ${label}`,
+            description: String(viewModel?.tooltip || label),
+            source: 'official',
+        };
+    });
+
+    return [
+        ...projectProviderViewModels,
+        ...officialProviderViewModels,
+    ];
+}
+
+function getDefaultImageryProviderViewModels() {
+    if (typeof Cesium?.createDefaultImageryProviderViewModels !== 'function') {
+        return [];
+    }
+
+    try {
+        return Cesium.createDefaultImageryProviderViewModels() || [];
+    } catch (error) {
+        console.warn('Cesium default imagery provider view models unavailable:', error);
+        return [];
+    }
+}
+
+function createOfficialBasemapId(label, index) {
+    const slug = label
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    return `official_${index}_${slug || 'basemap'}`;
+}
+
+function createTerrainProviderViewModels() {
+    terrainProviderViewModelById.clear();
+    terrainProviderIdByViewModel.clear();
+
+    const providerViewModels = terrainOptions.map((option) => {
+        const viewModel = new Cesium.ProviderViewModel({
+            name: option.label,
+            tooltip: option.description || option.label,
+            category: '项目地形',
+            iconUrl: createPickerIcon(
+                option.value === 'ellipsoid' ? '#a3a3a3' : '#d0a449',
+                option.value === 'cesiumWorld' ? 'CW' : option.value === 'ellipsoid' ? 'EL' : 'TE',
+            ),
+            creationFunction: () => createTerrainProviderById(option.value),
+        });
+        terrainProviderViewModelById.set(option.value, viewModel);
+        terrainProviderIdByViewModel.set(viewModel, option.value);
+        return viewModel;
+    });
+
+    return providerViewModels;
+}
+
+function createPickerIcon(color, shortLabel) {
+    const safeLabel = String(shortLabel || '').replace(/[<>&"']/g, '').slice(0, 2);
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+            <rect width="64" height="64" rx="10" fill="#0f2432"/>
+            <circle cx="32" cy="30" r="18" fill="${color}" opacity="0.9"/>
+            <text x="32" y="53" text-anchor="middle" fill="#ffffff" font-size="10" font-family="Arial">${safeLabel}</text>
+        </svg>
+    `;
+    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function createTerrainProviderById(value) {
+    if (value === 'ellipsoid') {
+        return new Cesium.EllipsoidTerrainProvider();
+    }
+
+    if (value === 'cesiumWorld') {
+        return createCesiumWorldTerrainProvider().catch((error) => {
+            message.warning('Cesium 世界地形加载失败，已降级为平面地形。', { closable: true });
+            message.error('Cesium 世界地形初始化失败', error);
+            queueTerrainFallback(value, 'ellipsoid');
+            return new Cesium.EllipsoidTerrainProvider();
+        });
+    }
+
+    const GeoTerrainProvider = createGeoTerrainProvider(Cesium);
+    try {
+        return new GeoTerrainProvider({
+            url: `${TDT_SERVICE_ROOT}mapservice/swdx?T=elv_c&tk={token}&x={x}&y={y}&l={z}`,
+            subdomains: TDT_SUBDOMAINS,
+            token: TDT_TOKEN,
+        });
+    } catch (error) {
+        message.warning('官方地形服务加载失败，已降级为椭球地形。', { closable: true });
+        message.error('官方地形初始化失败', error);
+        return new Cesium.EllipsoidTerrainProvider();
+    }
+}
+
+function bindLayerPickerStateSync() {
+    unbindLayerPickerStateSync();
+    const pickerViewModel = viewer?.baseLayerPicker?.viewModel;
+    if (!pickerViewModel || !Cesium?.knockout?.getObservable) return;
+
+    const imageryObservable = Cesium.knockout.getObservable(pickerViewModel, 'selectedImagery');
+    const terrainObservable = Cesium.knockout.getObservable(pickerViewModel, 'selectedTerrain');
+    const subscriptions = [];
+
+    const imagerySubscription = imageryObservable?.subscribe?.((viewModel) => {
+        const value = imageryProviderIdByViewModel.get(viewModel);
+        if (!value) return;
+        if (activeBasemap.value !== value) {
+            activeBasemap.value = value;
+        }
+        syncBasemapSideEffects(value);
+    });
+
+    const terrainSubscription = terrainObservable?.subscribe?.((viewModel) => {
+        const value = terrainProviderIdByViewModel.get(viewModel);
+        if (!value) return;
+        if (activeTerrain.value !== value) {
+            activeTerrain.value = value;
+        }
+        applyTerrainSceneFlags(value);
+    });
+
+    if (imagerySubscription) subscriptions.push(imagerySubscription);
+    if (terrainSubscription) subscriptions.push(terrainSubscription);
+    layerPickerSubscriptions = subscriptions;
+}
+
+function unbindLayerPickerStateSync() {
+    layerPickerSubscriptions.forEach(subscription => subscription?.dispose?.());
+    layerPickerSubscriptions = [];
+}
+
+function syncBasemapSideEffects(value) {
+    if (value === 'tianditu') {
+        initTdtLabels();
+    } else {
+        clearWTFS();
+    }
+    viewer?.scene?.requestRender?.();
+}
+
 function applyBasemap(value) {
     if (!viewer || !Cesium) return false;
+
+    const pickerViewModel = viewer.baseLayerPicker?.viewModel;
+    const providerViewModel = imageryProviderViewModelById.get(value);
+    if (pickerViewModel && providerViewModel) {
+        if (pickerViewModel.selectedImagery !== providerViewModel) {
+            pickerViewModel.selectedImagery = providerViewModel;
+        }
+        syncBasemapSideEffects(value);
+        return true;
+    }
 
     try {
         clearBaseImageryLayers();
@@ -612,11 +828,22 @@ function initCustomTerrain() {
 async function applyTerrain(value) {
     if (!viewer || !Cesium) return false;
 
+    const pickerViewModel = viewer.baseLayerPicker?.viewModel;
+    const providerViewModel = terrainProviderViewModelById.get(value);
+    if (pickerViewModel && providerViewModel) {
+        if (pickerViewModel.selectedTerrain !== providerViewModel) {
+            pickerViewModel.selectedTerrain = providerViewModel;
+        }
+        applyTerrainSceneFlags(value);
+        viewer.scene.requestRender?.();
+        return true;
+    }
+
     const switchId = ++terrainSwitchId;
 
     if (value === 'ellipsoid') {
         viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-        viewer.scene.globe.depthTestAgainstTerrain = false;
+        applyTerrainSceneFlags(value);
         viewer.scene.requestRender?.();
         return true;
     }
@@ -627,14 +854,14 @@ async function applyTerrain(value) {
             if (switchId !== terrainSwitchId) return false;
 
             viewer.terrainProvider = worldTerrain;
-            viewer.scene.globe.depthTestAgainstTerrain = true;
+            applyTerrainSceneFlags(value);
             viewer.scene.requestRender?.();
             return true;
         } catch (error) {
             if (switchId !== terrainSwitchId) return false;
 
             viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-            viewer.scene.globe.depthTestAgainstTerrain = false;
+            applyTerrainSceneFlags('ellipsoid');
             message.warning('Cesium 世界地形加载失败，已降级为平面地形。', { closable: true });
             message.error('Cesium 世界地形初始化失败', error);
             return false;
@@ -648,22 +875,33 @@ async function applyTerrain(value) {
             subdomains: TDT_SUBDOMAINS,
             token: TDT_TOKEN,
         });
-        viewer.scene.globe.depthTestAgainstTerrain = true;
+        applyTerrainSceneFlags(value);
         viewer.scene.requestRender?.();
         return true;
     } catch (error) {
         viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-        viewer.scene.globe.depthTestAgainstTerrain = false;
+        applyTerrainSceneFlags('ellipsoid');
         message.warning('官方地形服务加载失败，已降级为椭球地形。', { closable: true });
         message.error('官方地形初始化失败', error);
         return false;
     }
 }
 
+function applyTerrainSceneFlags(value) {
+    if (!viewer?.scene?.globe) return;
+    viewer.scene.globe.depthTestAgainstTerrain = value !== 'ellipsoid';
+}
+
+function queueTerrainFallback(failedValue, fallbackValue) {
+    const schedule = typeof window !== 'undefined' ? window.setTimeout : setTimeout;
+    schedule(() => {
+        if (activeTerrain.value !== failedValue) return;
+        activeTerrain.value = fallbackValue;
+    }, 0);
+}
+
 async function createCesiumWorldTerrainProvider() {
-    if (CESIUM_ION_TOKEN && Cesium.Ion) {
-        Cesium.Ion.defaultAccessToken = CESIUM_ION_TOKEN;
-    }
+    applyCesiumIonToken();
 
     const terrainOptions = {
         requestWaterMask: false,
@@ -906,6 +1144,28 @@ function handleFluidStateChange(state) {
 }
 
 // --- 辅助工具函数 ---
+function readStoredBoolean(key, fallback) {
+    if (typeof window === 'undefined') return fallback;
+
+    try {
+        const value = window.localStorage.getItem(key);
+        if (value == null) return fallback;
+        return value === 'true';
+    } catch {
+        return fallback;
+    }
+}
+
+function writeStoredBoolean(key, value) {
+    if (typeof window === 'undefined') return;
+
+    try {
+        window.localStorage.setItem(key, String(Boolean(value)));
+    } catch {
+        // Storage failures should not affect the Cesium runtime.
+    }
+}
+
 function loadScriptOnce(url, id) {
     return new Promise((resolve, reject) => {
         const existing = document.getElementById(id);
@@ -1014,7 +1274,7 @@ async function loadCustomTileset() {
 
 .map-controls-group {
     position: absolute;
-    bottom: 20px;
+    bottom: 30px;
     left: 50%;
     transform: translateX(-50%);
     background: linear-gradient(to right, rgba(10, 121, 51, 0.9), rgba(8, 96, 41, 0.9));
@@ -1041,7 +1301,7 @@ async function loadCustomTileset() {
     .map-controls-group {
         width: 90%;
         justify-content: center;
-        bottom: 15px;
+        bottom: 58px;
     }
 
     .mouse-position-content {
@@ -1082,5 +1342,27 @@ async function loadCustomTileset() {
 
 .home-btn:hover {
     background-color: rgba(255, 255, 255, 0.2);
+}
+
+:global(.cesium-viewer-toolbar),
+:global(.cesium-baseLayerPicker-dropDown),
+:global(.cesium-geocoder-searchButton),
+:global(.cesium-geocoder-searchButton:hover) {
+    z-index: 1400;
+}
+
+:global(.cesium-viewer-toolbar) {
+    top: 12px !important;
+    right: 12px !important;
+}
+
+:global(.cesium-baseLayerPicker-dropDown) {
+    top: calc(100% + 4px);
+    max-height: calc(100vh - 82px);
+    overflow-y: auto;
+}
+
+:global(.cesium-geocoder .search-results) {
+    z-index: 1401;
 }
 </style>

@@ -1343,10 +1343,6 @@ onMounted(async () => {
     left: 20px !important;
 }
 
-:deep(.cesium-viewer-toolbar) {
-    top: 80px !important;
-}
-
 .cesium-loading {
     position: absolute;
     inset: 0;
