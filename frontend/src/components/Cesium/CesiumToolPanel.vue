@@ -168,9 +168,10 @@
                                 class="option-card"
                                 :class="{ active: option.value === activeBasemap }"
                                 type="button"
+                                :disabled="option.disabled"
                                 :aria-pressed="option.value === activeBasemap"
                                 :title="option.description || option.label"
-                                @click="$emit('update:activeBasemap', option.value)"
+                                @click="selectBasemapOption(option)"
                             >
                                 <span>{{ option.label }}</span>
                                 <Check
@@ -180,6 +181,45 @@
                                 />
                             </button>
                         </div>
+
+                        <form
+                            class="custom-basemap-editor"
+                            @submit.prevent="submitCustomBasemap"
+                        >
+                            <div class="custom-basemap-input-row">
+                                <Link
+                                    class="custom-basemap-icon"
+                                    :size="15"
+                                    stroke-width="2"
+                                />
+                                <input
+                                    v-model="customBasemapDraft"
+                                    class="custom-basemap-input"
+                                    type="text"
+                                    inputmode="url"
+                                    spellcheck="false"
+                                    placeholder="https://example.com/tiles/{z}/{x}/{y}.png"
+                                />
+                                <button
+                                    class="custom-basemap-submit"
+                                    type="submit"
+                                    :disabled="!customBasemapDraft.trim()"
+                                    title="加载自定义 XYZ"
+                                >
+                                    <Send
+                                        :size="14"
+                                        stroke-width="2"
+                                    />
+                                    <span>加载</span>
+                                </button>
+                            </div>
+                            <div
+                                v-if="customBasemapUrl"
+                                class="custom-basemap-current"
+                            >
+                                {{ customBasemapUrl }}
+                            </div>
+                        </form>
                     </div>
 
                     <div
@@ -440,10 +480,12 @@ import {
     Eye,
     Home,
     Layers,
+    Link,
     Mountain,
     Navigation,
     Play,
     RotateCcw,
+    Send,
     Settings,
     SlidersHorizontal,
     Sparkles,
@@ -481,6 +523,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    customBasemapUrl: {
+        type: String,
+        default: '',
+    },
     modules: {
         type: Array,
         default: () => [],
@@ -498,12 +544,14 @@ const emit = defineEmits([
     'module-action',
     'control-change',
     'overlay-toggle',
+    'custom-basemap-submit',
 ]);
 
 const storedUiState = readStoredUiState();
 const activeTab = ref(storedUiState.activeTab || 'scene');
 const compactMode = ref(!!storedUiState.compactMode);
 const expandedModuleIds = ref(new Set(storedUiState.expandedModuleIds || ['effects']));
+const customBasemapDraft = ref(props.customBasemapUrl || '');
 
 const isPanelOpen = computed(() => props.embedded || props.open);
 const sceneModule = computed(() => props.modules.find(module => module.id === 'scene') || null);
@@ -541,6 +589,15 @@ watch(
 
 watch([activeTab, compactMode, expandedModuleIds], persistUiState, { deep: true });
 
+watch(
+    () => props.customBasemapUrl,
+    (url) => {
+        if (url !== customBasemapDraft.value) {
+            customBasemapDraft.value = url || '';
+        }
+    },
+);
+
 function setPanelOpen(value) {
     emit('update:open', value);
 }
@@ -557,6 +614,17 @@ function toggleModule(moduleId) {
         next.add(moduleId);
     }
     expandedModuleIds.value = next;
+}
+
+function selectBasemapOption(option) {
+    if (option?.disabled) return;
+    emit('update:activeBasemap', option.value);
+}
+
+function submitCustomBasemap() {
+    emit('custom-basemap-submit', {
+        url: customBasemapDraft.value,
+    });
 }
 
 function readStoredUiState() {
@@ -945,6 +1013,11 @@ function emitOverlayToggle(overlay) {
     background: rgba(255, 255, 255, 0.1);
 }
 
+.option-card:disabled {
+    cursor: not-allowed;
+    opacity: 0.46;
+}
+
 .option-card span {
     min-width: 0;
     overflow: hidden;
@@ -956,6 +1029,76 @@ function emitOverlayToggle(overlay) {
     border-color: rgba(74, 222, 128, 0.52);
     background: rgba(24, 111, 75, 0.72);
     color: #f5fff9;
+}
+
+.custom-basemap-editor {
+    display: grid;
+    gap: 6px;
+    border: 1px solid rgba(155, 216, 255, 0.14);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.custom-basemap-input-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+}
+
+.custom-basemap-icon {
+    color: rgba(190, 232, 255, 0.78);
+}
+
+.custom-basemap-input {
+    min-width: 0;
+    height: 32px;
+    border: 1px solid rgba(155, 216, 255, 0.2);
+    border-radius: 7px;
+    background: rgba(3, 18, 28, 0.88);
+    color: #eefbf3;
+    padding: 0 9px;
+    font-size: 12px;
+}
+
+.custom-basemap-input:focus {
+    border-color: rgba(74, 222, 128, 0.58);
+    outline: none;
+}
+
+.custom-basemap-input::placeholder {
+    color: rgba(220, 243, 255, 0.38);
+}
+
+.custom-basemap-submit {
+    min-width: 64px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    border: 1px solid rgba(74, 222, 128, 0.42);
+    border-radius: 7px;
+    background: rgba(21, 128, 79, 0.76);
+    color: #f5fff9;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.custom-basemap-submit:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.custom-basemap-current {
+    overflow: hidden;
+    color: rgba(220, 243, 255, 0.58);
+    font-size: 11px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .overlay-list {
@@ -1310,6 +1453,7 @@ function emitOverlayToggle(overlay) {
 .cesium-tool-shell.is-embedded .panel-subtitle,
 .cesium-tool-shell.is-embedded .module-desc,
 .cesium-tool-shell.is-embedded .overlay-desc,
+.cesium-tool-shell.is-embedded .custom-basemap-current,
 .cesium-tool-shell.is-embedded .overview-label,
 .cesium-tool-shell.is-embedded .control-value {
     color: var(--text-muted);
@@ -1325,11 +1469,22 @@ function emitOverlayToggle(overlay) {
 .cesium-tool-shell.is-embedded .module-icon,
 .cesium-tool-shell.is-embedded .overview-tile,
 .cesium-tool-shell.is-embedded .option-card,
+.cesium-tool-shell.is-embedded .custom-basemap-editor,
 .cesium-tool-shell.is-embedded .overlay-row,
 .cesium-tool-shell.is-embedded .module-item,
 .cesium-tool-shell.is-embedded .control-row {
     background: var(--bg-secondary);
     border-color: var(--border-light);
+}
+
+.cesium-tool-shell.is-embedded .custom-basemap-input {
+    border-color: var(--border-light);
+    background: #ffffff;
+    color: var(--text-primary);
+}
+
+.cesium-tool-shell.is-embedded .custom-basemap-icon {
+    color: var(--text-muted);
 }
 
 .cesium-tool-shell.is-embedded .tab-btn,

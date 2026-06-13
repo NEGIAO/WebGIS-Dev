@@ -32,10 +32,12 @@
         :basemap-options="basemapOptions"
         :terrain-options="terrainOptions"
         :overlay-options="overlayOptions"
+        :custom-basemap-url="customXyzBasemapUrl"
         :modules="toolModules"
         @module-action="handleToolAction"
         @control-change="handleToolControlChange"
         @overlay-toggle="handleOverlayToggle"
+        @custom-basemap-submit="handleCustomBasemapSubmit"
     />
 
     <!-- 坐标显示面板 -->
@@ -72,7 +74,6 @@ import CesiumToolPanel from './CesiumToolPanel.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import Wind2D from './Wind2D';
 import createGeoTerrainProvider from './terrain/GeoTerrainProvider';
-import createGeoWTFS from './terrain/GeoWTFS';
 
 let Cesium = null;
 
@@ -85,45 +86,26 @@ const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.110/Build/Cesium/';
 const CESIUM_JS_URL = `${CESIUM_BASE_URL}Cesium.js`;
 const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
-
-const TDT_LABEL_METADATA = {
-    boundBox: {
-        minX: -180,
-        minY: -90,
-        maxX: 180,
-        maxY: 90,
-    },
-    minLevel: 1,
-    maxLevel: 20,
-};
-
-const TDT_LABEL_INIT_TILES = [
-    { x: 6, y: 1, level: 2, boundBox: { minX: 90, minY: 0, maxX: 135, maxY: 45 } },
-    { x: 7, y: 1, level: 2, boundBox: { minX: 135, minY: 0, maxX: 180, maxY: 45 } },
-    { x: 6, y: 0, level: 2, boundBox: { minX: 90, minY: 45, maxX: 135, maxY: 90 } },
-    { x: 7, y: 0, level: 2, boundBox: { minX: 135, minY: 45, maxX: 180, maxY: 90 } },
-    { x: 5, y: 1, level: 2, boundBox: { minX: 45, minY: 0, maxX: 90, maxY: 45 } },
-    { x: 4, y: 1, level: 2, boundBox: { minX: 0, minY: 0, maxX: 45, maxY: 45 } },
-    { x: 5, y: 0, level: 2, boundBox: { minX: 45, minY: 45, maxX: 90, maxY: 90 } },
-    { x: 4, y: 0, level: 2, boundBox: { minX: 0, minY: 45, maxX: 45, maxY: 90 } },
-    { x: 6, y: 2, level: 2, boundBox: { minX: 90, minY: -45, maxX: 135, maxY: 0 } },
-    { x: 6, y: 3, level: 2, boundBox: { minX: 90, minY: -90, maxX: 135, maxY: -45 } },
-    { x: 7, y: 2, level: 2, boundBox: { minX: 135, minY: -45, maxX: 180, maxY: 0 } },
-    { x: 5, y: 2, level: 2, boundBox: { minX: 45, minY: -45, maxX: 90, maxY: 0 } },
-    { x: 4, y: 2, level: 2, boundBox: { minX: 0, minY: -45, maxX: 45, maxY: 0 } },
-    { x: 3, y: 1, level: 2, boundBox: { minX: -45, minY: 0, maxX: 0, maxY: 45 } },
-    { x: 3, y: 0, level: 2, boundBox: { minX: -45, minY: 45, maxX: 0, maxY: 90 } },
-    { x: 2, y: 0, level: 2, boundBox: { minX: -90, minY: 45, maxX: -45, maxY: 90 } },
-    { x: 0, y: 1, level: 2, boundBox: { minX: -180, minY: 0, maxX: -135, maxY: 45 } },
-    { x: 1, y: 0, level: 2, boundBox: { minX: -135, minY: 45, maxX: -90, maxY: 90 } },
-    { x: 0, y: 0, level: 2, boundBox: { minX: -180, minY: 45, maxX: -135, maxY: 90 } },
-];
+const CUSTOM_XYZ_BASEMAP_ID = 'custom-xyz';
+const CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
+const BEIJING_TIME_ZONE = 'Asia/Shanghai';
+const BEIJING_TIME_ZONE_LABEL = 'UTC+8';
+const BEIJING_TIME_PARTS_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: BEIJING_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+});
 
 // --- 响应式变量 ---
 let viewer = null;
 let handler = null;
-let wtfs = null;
-let tdtAnnotationLayer = null;
+let tdtBoundaryLayer = null;
+let tdtTextLabelLayer = null;
 let creditCheckIntervalId = null;
 let creditOverrideStyleEl = null;
 let terrainSwitchId = 0;
@@ -134,10 +116,19 @@ const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const activeBasemap = ref('tianditu');
 const activeTerrain = ref('tianditu');
+const customXyzBasemapUrl = ref(readStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, ''));
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
-const TDT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
+const TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
+const TDT_BOUNDARY_LAYER_VISIBLE_KEY = 'cesium_tdt_boundary_layer_visible';
+const TDT_TEXT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_text_label_layer_visible';
 const cesiumToolPanelOpen = ref(readStoredBoolean(CESIUM_TOOL_PANEL_OPEN_KEY, true));
-const tdtLabelLayerVisible = ref(readStoredBoolean(TDT_LABEL_LAYER_VISIBLE_KEY, true));
+const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, true);
+const tdtBoundaryLayerVisible = ref(
+    readStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible),
+);
+const tdtTextLabelLayerVisible = ref(
+    readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible),
+);
 const imageryLayerHandles = [];
 const officialBasemapOptions = ref([]);
 const imageryProviderViewModelById = new Map();
@@ -153,6 +144,15 @@ const projectBasemapOptions = [
 
 const basemapOptions = computed(() => [
     ...projectBasemapOptions,
+    {
+        value: CUSTOM_XYZ_BASEMAP_ID,
+        label: '自定义 XYZ',
+        description: customXyzBasemapUrl.value
+            ? customXyzBasemapUrl.value
+            : '输入 XYZ 瓦片 URL 后启用',
+        source: 'custom',
+        disabled: !customXyzBasemapUrl.value,
+    },
     ...officialBasemapOptions.value,
 ]);
 
@@ -164,10 +164,16 @@ const terrainOptions = [
 
 const overlayOptions = computed(() => [
     {
-        value: 'tdt-labels',
-        label: '天地图标注',
-        description: '独立控制天地图注记和边界标注叠加层',
-        active: tdtLabelLayerVisible.value,
+        value: 'tdt-boundaries',
+        label: '国界线',
+        description: '天地图国界、行政边界与边界注记栅格层',
+        active: tdtBoundaryLayerVisible.value,
+    },
+    {
+        value: 'tdt-text-labels',
+        label: '文字标注',
+        description: '天地图官方文字注记栅格层',
+        active: tdtTextLabelLayerVisible.value,
     },
 ]);
 
@@ -344,6 +350,10 @@ watch(activeBasemap, (value) => {
     applyBasemap(value);
 });
 
+watch(customXyzBasemapUrl, (value) => {
+    writeStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, value);
+});
+
 watch(activeTerrain, async (value) => {
     if (!viewer || !Cesium) return;
     await applyTerrain(value);
@@ -353,9 +363,14 @@ watch(cesiumToolPanelOpen, (value) => {
     writeStoredBoolean(CESIUM_TOOL_PANEL_OPEN_KEY, value);
 });
 
-watch(tdtLabelLayerVisible, (value) => {
-    writeStoredBoolean(TDT_LABEL_LAYER_VISIBLE_KEY, value);
-    syncTdtLabelLayer();
+watch(tdtBoundaryLayerVisible, (value) => {
+    writeStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, value);
+    syncTdtOverlayLayers();
+});
+
+watch(tdtTextLabelLayerVisible, (value) => {
+    writeStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, value);
+    syncTdtOverlayLayers();
 });
 
 function clearWind2D() {
@@ -369,25 +384,26 @@ function clearWind2D() {
     wind2D.value = null;
 }
 
-function clearWTFS() {
-    if (!wtfs) return;
+function clearTdtBoundaryLayer() {
+    if (!tdtBoundaryLayer || !viewer?.imageryLayers) return;
+
     try {
-        wtfs.destroy();
-    } catch (e) {
-        console.warn('WTFS destroy warning:', e);
+        viewer.imageryLayers.remove(tdtBoundaryLayer, true);
+    } catch (error) {
+        console.warn('TDT boundary layer remove warning:', error);
     }
-    wtfs = null;
+    tdtBoundaryLayer = null;
 }
 
-function clearTdtAnnotationLayer() {
-    if (!tdtAnnotationLayer || !viewer?.imageryLayers) return;
+function clearTdtTextLabelLayer() {
+    if (!tdtTextLabelLayer || !viewer?.imageryLayers) return;
 
     try {
-        viewer.imageryLayers.remove(tdtAnnotationLayer, true);
+        viewer.imageryLayers.remove(tdtTextLabelLayer, true);
     } catch (error) {
-        console.warn('TDT annotation layer remove warning:', error);
+        console.warn('TDT text label layer remove warning:', error);
     }
-    tdtAnnotationLayer = null;
+    tdtTextLabelLayer = null;
 }
 
 onUnmounted(() => {
@@ -397,8 +413,8 @@ onUnmounted(() => {
         handler = null;
     }
     clearWind2D();
-    clearWTFS();
-    clearTdtAnnotationLayer();
+    clearTdtBoundaryLayer();
+    clearTdtTextLabelLayer();
     if (creditCheckIntervalId) {
         clearInterval(creditCheckIntervalId);
         creditCheckIntervalId = null;
@@ -437,10 +453,6 @@ async function bootCesium() {
         } else {
             message.error('默认地图源或地形加载失败，请检查 token 或网络。', { closable: true });
         }
-        if (tdtLabelLayerVisible.value && !wtfs) {
-            console.warn('WTFS label initialization failed.');
-        }
-
         // 风场在初始化完毕后即可准备加载（但需要手动点击按钮或自动加载）
         // 这里不自动加载，避免占满视野，等待用户点击“加载模拟风场”
     } catch (error) {
@@ -476,6 +488,104 @@ function applyCesiumIonToken() {
     }
 }
 
+function configureBeijingTimeSystem() {
+    if (!viewer || !Cesium?.JulianDate) return;
+
+    if (viewer.animation?.viewModel) {
+        viewer.animation.viewModel.dateFormatter = formatBeijingDate;
+        viewer.animation.viewModel.timeFormatter = formatBeijingTime;
+    }
+
+    if (viewer.timeline) {
+        viewer.timeline.makeLabel = formatBeijingTimelineLabel;
+        if ('_makeLabel' in viewer.timeline) {
+            viewer.timeline._makeLabel = formatBeijingTimelineLabel;
+        }
+        viewer.timeline.updateFromClock?.();
+        viewer.timeline.zoomTo?.(viewer.clock.startTime, viewer.clock.stopTime);
+    }
+
+    viewer.scene.requestRender?.();
+}
+
+function configureSolarLighting() {
+    const scene = viewer?.scene;
+    const globe = scene?.globe;
+    if (!scene || !globe) return;
+
+    globe.enableLighting = true;
+    globe.showGroundAtmosphere = true;
+
+    if (scene.sun) {
+        scene.sun.show = true;
+    }
+    if (scene.moon) {
+        scene.moon.show = true;
+    }
+    if (scene.skyAtmosphere) {
+        scene.skyAtmosphere.show = true;
+    }
+    if ('sunBloom' in scene) {
+        scene.sunBloom = true;
+    }
+
+    scene.requestRender?.();
+}
+
+function getBeijingTimeParts(...args) {
+    const julianDate = args.find(isJulianDateLike) || viewer?.clock?.currentTime;
+    if (!julianDate) {
+        return {
+            year: '0000',
+            month: '01',
+            day: '01',
+            hour: '00',
+            minute: '00',
+            second: '00',
+        };
+    }
+
+    const date = Cesium.JulianDate.toDate(julianDate);
+    const parts = BEIJING_TIME_PARTS_FORMATTER.formatToParts(date);
+    const partMap = Object.fromEntries(
+        parts
+            .filter(({ type }) => type !== 'literal')
+            .map(({ type, value }) => [type, value]),
+    );
+
+    return {
+        year: partMap.year || '0000',
+        month: partMap.month || '01',
+        day: partMap.day || '01',
+        hour: partMap.hour || '00',
+        minute: partMap.minute || '00',
+        second: partMap.second || '00',
+    };
+}
+
+function isJulianDateLike(value) {
+    return (
+        value
+        && typeof value.dayNumber === 'number'
+        && typeof value.secondsOfDay === 'number'
+    );
+}
+
+function formatBeijingDate(...args) {
+    const { year, month, day } = getBeijingTimeParts(...args);
+    return `${year}-${month}-${day}`;
+}
+
+function formatBeijingTime(...args) {
+    const { hour, minute, second } = getBeijingTimeParts(...args);
+    return `${hour}:${minute}:${second} ${BEIJING_TIME_ZONE_LABEL}`;
+}
+
+function formatBeijingTimelineLabel(...args) {
+    const { month, day, hour, minute } = getBeijingTimeParts(...args);
+    return `${month}-${day} ${hour}:${minute}`;
+}
+
 function initViewer() {
     const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
     const imageryProviderViewModels = createImageryProviderViewModels();
@@ -498,6 +608,7 @@ function initViewer() {
             terrainProviderViewModelById.get(activeTerrain.value) || terrainProviderViewModels[0],
         shouldAnimate: true,
     });
+    configureBeijingTimeSystem();
     bindLayerPickerStateSync();
     flyToHome(0);
 
@@ -507,7 +618,7 @@ function initViewer() {
 
     viewer.scene.globe.terrainExaggeration = 1;
     viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
-    viewer.scene.globe.showGroundAtmosphere = true;
+    configureSolarLighting();
     applyTerrainSceneFlags(activeTerrain.value);
 
     const hideCreditsAggressive = () => {
@@ -628,12 +739,21 @@ function createTiandituImageryProviders() {
     ];
 }
 
-function createTdtAnnotationImageryProvider() {
+function createTdtBoundaryImageryProvider() {
     return new Cesium.UrlTemplateImageryProvider({
         url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
         subdomains: TDT_SUBDOMAINS,
         tilingScheme: new Cesium.WebMercatorTilingScheme(),
         maximumLevel: 10,
+    });
+}
+
+function createTdtTextLabelImageryProvider() {
+    return new Cesium.UrlTemplateImageryProvider({
+        url: `${TDT_SERVICE_ROOT}DataServer?T=cia_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
+        subdomains: TDT_SUBDOMAINS,
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 18,
     });
 }
 
@@ -646,6 +766,103 @@ function createGoogleImageryProviders() {
             maximumLevel: 20,
         }),
     ];
+}
+
+function createCustomXyzImageryProviders() {
+    const config = normalizeCustomXyzUrl(customXyzBasemapUrl.value);
+    if (!config.valid) {
+        throw new Error(config.message);
+    }
+
+    return [
+        new Cesium.UrlTemplateImageryProvider({
+            url: config.url,
+            subdomains: config.subdomains,
+            tilingScheme: new Cesium.WebMercatorTilingScheme(),
+            maximumLevel: 20,
+            enablePickFeatures: false,
+        }),
+    ];
+}
+
+function normalizeCustomXyzUrl(rawUrl) {
+    const source = String(rawUrl || '').trim();
+    if (!source) {
+        return {
+            valid: false,
+            message: '自定义 XYZ URL 为空',
+            url: '',
+            subdomains: [],
+        };
+    }
+
+    let url = source
+        .replace(/\{z\}/gi, '{z}')
+        .replace(/\{x\}/gi, '{x}')
+        .replace(/\{y\}/gi, '{y}')
+        .replace(/\{subdomains?\}/gi, '{s}')
+        .replace(/\{switch:[^}]+\}/gi, '{s}')
+        .replace(/\{s\}/gi, '{s}');
+
+    const subdomainRange = url.match(/\{([a-z0-9])-([a-z0-9])\}/i);
+    let subdomains = [];
+
+    if (subdomainRange) {
+        subdomains = expandSubdomainRange(subdomainRange[1], subdomainRange[2]);
+        url = url.replace(subdomainRange[0], '{s}');
+    } else if (/\{s\}/i.test(url)) {
+        subdomains = ['a', 'b', 'c'];
+    }
+
+    if (!/\{z\}/.test(url) || !/\{x\}/.test(url) || !/\{y\}/.test(url)) {
+        return {
+            valid: false,
+            message: 'URL 需要包含 {z}、{x}、{y} 占位符',
+            url,
+            subdomains,
+        };
+    }
+
+    if (!isValidCustomTileUrl(url)) {
+        return {
+            valid: false,
+            message: 'URL 格式不合法',
+            url,
+            subdomains,
+        };
+    }
+
+    return {
+        valid: true,
+        message: '',
+        url,
+        subdomains,
+    };
+}
+
+function expandSubdomainRange(start, end) {
+    const startCode = String(start || '').charCodeAt(0);
+    const endCode = String(end || '').charCodeAt(0);
+    if (!Number.isFinite(startCode) || !Number.isFinite(endCode)) return [];
+
+    const step = startCode <= endCode ? 1 : -1;
+    const values = [];
+    for (let code = startCode; step > 0 ? code <= endCode : code >= endCode; code += step) {
+        values.push(String.fromCharCode(code));
+    }
+    return values;
+}
+
+function isValidCustomTileUrl(url) {
+    if (/^(https?:)?\/\//i.test(url) || url.startsWith('/')) return true;
+
+    try {
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+        const parsed = new URL(url, baseUrl);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
 }
 
 function createImageryProviderViewModels() {
@@ -813,39 +1030,60 @@ function unbindLayerPickerStateSync() {
 }
 
 function syncBasemapSideEffects() {
-    syncTdtLabelLayer();
+    syncTdtOverlayLayers();
     viewer?.scene?.requestRender?.();
 }
 
-function syncTdtLabelLayer() {
+function syncTdtOverlayLayers() {
     if (!viewer || !Cesium) return;
 
-    if (!tdtLabelLayerVisible.value) {
-        clearTdtAnnotationLayer();
-        clearWTFS();
-        viewer.scene.requestRender?.();
-        return;
+    if (tdtBoundaryLayerVisible.value) {
+        ensureTdtBoundaryLayer();
+    } else {
+        clearTdtBoundaryLayer();
     }
 
-    ensureTdtAnnotationLayer();
-    initTdtLabels();
+    if (tdtTextLabelLayerVisible.value) {
+        ensureTdtTextLabelLayer();
+    } else {
+        clearTdtTextLabelLayer();
+    }
+
     viewer.scene.requestRender?.();
 }
 
-function ensureTdtAnnotationLayer() {
-    if (!viewer?.imageryLayers || tdtAnnotationLayer) {
-        if (tdtAnnotationLayer) {
-            viewer.imageryLayers.raiseToTop?.(tdtAnnotationLayer);
+function ensureTdtBoundaryLayer() {
+    if (!viewer?.imageryLayers || tdtBoundaryLayer) {
+        if (tdtBoundaryLayer) {
+            viewer.imageryLayers.raiseToTop?.(tdtBoundaryLayer);
         }
-        return tdtAnnotationLayer;
+        return tdtBoundaryLayer;
     }
 
     try {
-        tdtAnnotationLayer = viewer.imageryLayers.addImageryProvider(createTdtAnnotationImageryProvider());
-        viewer.imageryLayers.raiseToTop?.(tdtAnnotationLayer);
-        return tdtAnnotationLayer;
+        tdtBoundaryLayer = viewer.imageryLayers.addImageryProvider(createTdtBoundaryImageryProvider());
+        viewer.imageryLayers.raiseToTop?.(tdtBoundaryLayer);
+        return tdtBoundaryLayer;
     } catch (error) {
-        message.error('天地图标注图层加载失败', error);
+        message.error('天地图国界线图层加载失败', error);
+        return null;
+    }
+}
+
+function ensureTdtTextLabelLayer() {
+    if (!viewer?.imageryLayers || tdtTextLabelLayer) {
+        if (tdtTextLabelLayer) {
+            viewer.imageryLayers.raiseToTop?.(tdtTextLabelLayer);
+        }
+        return tdtTextLabelLayer;
+    }
+
+    try {
+        tdtTextLabelLayer = viewer.imageryLayers.addImageryProvider(createTdtTextLabelImageryProvider());
+        viewer.imageryLayers.raiseToTop?.(tdtTextLabelLayer);
+        return tdtTextLabelLayer;
+    } catch (error) {
+        message.error('天地图文字标注图层加载失败', error);
         return null;
     }
 }
@@ -853,9 +1091,14 @@ function ensureTdtAnnotationLayer() {
 function applyBasemap(value) {
     if (!viewer || !Cesium) return false;
 
+    if (value === CUSTOM_XYZ_BASEMAP_ID) {
+        return applyCustomXyzBasemap();
+    }
+
     const pickerViewModel = viewer.baseLayerPicker?.viewModel;
     const providerViewModel = imageryProviderViewModelById.get(value);
     if (pickerViewModel && providerViewModel) {
+        clearBaseImageryLayers();
         if (pickerViewModel.selectedImagery !== providerViewModel) {
             pickerViewModel.selectedImagery = providerViewModel;
         }
@@ -870,11 +1113,29 @@ function applyBasemap(value) {
             imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
         });
 
-        syncTdtLabelLayer();
+        syncTdtOverlayLayers();
         viewer.scene.requestRender?.();
         return true;
     } catch (error) {
         message.error('地图源切换失败', error);
+        return false;
+    }
+}
+
+function applyCustomXyzBasemap() {
+    try {
+        const providers = createCustomXyzImageryProviders();
+        clearBaseImageryLayers();
+        providers.forEach((provider) => {
+            imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
+        });
+
+        syncTdtOverlayLayers();
+        viewer.scene.requestRender?.();
+        return true;
+    } catch (error) {
+        message.warning(error instanceof Error ? error.message : '自定义 XYZ 图源加载失败', { closable: true });
+        message.error('自定义 XYZ 图源加载失败', error);
         return false;
     }
 }
@@ -987,58 +1248,6 @@ async function createCesiumWorldTerrainProvider() {
     }
 
     throw new Error('当前 Cesium 运行时不支持在线世界地形。');
-}
-
-function initTdtLabels() {
-    if (wtfs) return true;
-
-    try {
-        const GeoWTFS = createGeoWTFS(Cesium);
-        wtfs = new GeoWTFS(viewer, {
-            subdomains: TDT_SUBDOMAINS,
-            url: `${TDT_SERVICE_ROOT}mapservice/GetTiles?lxys={z},{x},{y}&tk=${TDT_TOKEN}&VERSION=1.0.0`,
-            icoUrl: `${TDT_SERVICE_ROOT}mapservice/GetIcon?id={id}&tk=${TDT_TOKEN}`,
-            metadata: TDT_LABEL_METADATA,
-            aotuCollide: true,
-            collisionPadding: [5, 10, 8, 5],
-            serverFirstStyle: true,
-            labelGraphics: {
-                font: '28px sans-serif',
-                fontSize: 28,
-                fillColor: Cesium.Color.WHITE,
-                scale: 0.5,
-                outlineColor: Cesium.Color.BLACK,
-                outlineWidth: 5,
-                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                showBackground: false,
-                backgroundColor: Cesium.Color.RED,
-                backgroundPadding: new Cesium.Cartesian2(10, 10),
-                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-                verticalOrigin: Cesium.VerticalOrigin.TOP,
-                eyeOffset: new Cesium.Cartesian3(0, 0, 10),
-                pixelOffset: Cesium.Cartesian2.ZERO,
-            },
-            billboardGraphics: {
-                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-                verticalOrigin: Cesium.VerticalOrigin.CENTER,
-                eyeOffset: Cesium.Cartesian3.ZERO,
-                pixelOffset: Cesium.Cartesian2.ZERO,
-                alignedAxis: Cesium.Cartesian3.ZERO,
-                color: Cesium.Color.WHITE,
-                rotation: 0,
-                scale: 1,
-                width: 18,
-                height: 18,
-            },
-        });
-        wtfs.initTDT(TDT_LABEL_INIT_TILES, () => {
-            viewer.scene.requestRender();
-        });
-        return true;
-    } catch (error) {
-        console.warn('WTFS init error:', error);
-        return false;
-    }
 }
 
 // --- 风场集成代码 ---
@@ -1194,9 +1403,35 @@ function handleToolControlChange({ moduleId, controlId, value }) {
 }
 
 function handleOverlayToggle({ overlayId, value }) {
-    if (overlayId === 'tdt-labels') {
-        tdtLabelLayerVisible.value = Boolean(value);
+    if (overlayId === 'tdt-boundaries') {
+        tdtBoundaryLayerVisible.value = Boolean(value);
+        return;
     }
+
+    if (overlayId === 'tdt-text-labels') {
+        tdtTextLabelLayerVisible.value = Boolean(value);
+    }
+}
+
+function handleCustomBasemapSubmit({ url }) {
+    const normalizedUrl = String(url || '').trim();
+    const config = normalizeCustomXyzUrl(normalizedUrl);
+    if (!config.valid) {
+        message.warning(config.message, { closable: true });
+        return;
+    }
+
+    customXyzBasemapUrl.value = normalizedUrl;
+
+    if (activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
+        if (applyBasemap(CUSTOM_XYZ_BASEMAP_ID)) {
+            message.success('已加载自定义 XYZ 图源');
+        }
+        return;
+    }
+
+    activeBasemap.value = CUSTOM_XYZ_BASEMAP_ID;
+    message.success('已切换到自定义 XYZ 图源');
 }
 
 function handleFluidStateChange(state) {
@@ -1208,6 +1443,27 @@ function handleFluidStateChange(state) {
 }
 
 // --- 辅助工具函数 ---
+function readStoredString(key, fallback = '') {
+    if (typeof window === 'undefined') return fallback;
+
+    try {
+        const value = window.localStorage.getItem(key);
+        return value == null ? fallback : value;
+    } catch {
+        return fallback;
+    }
+}
+
+function writeStoredString(key, value) {
+    if (typeof window === 'undefined') return;
+
+    try {
+        window.localStorage.setItem(key, String(value || ''));
+    } catch {
+        // Storage failures should not affect the Cesium runtime.
+    }
+}
+
 function readStoredBoolean(key, fallback) {
     if (typeof window === 'undefined') return fallback;
 
