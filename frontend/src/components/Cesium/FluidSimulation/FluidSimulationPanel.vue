@@ -509,8 +509,8 @@ function prepareScene(viewer, Cesium) {
     viewer.scene.logarithmicDepthBuffer = true;
     viewer.scene.highDynamicRange = true;
     if (viewer.scene.fog) viewer.scene.fog.enabled = true;
-    viewer.scene.globe.showGroundAtmosphere = false;
-    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = false;
+    viewer.scene.globe.showGroundAtmosphere = true;
+    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
     viewer.scene.globe.enableLighting = true;
 
     if (!skyStage && createSkyEffect) {

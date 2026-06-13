@@ -57,6 +57,11 @@
 <script setup>
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import {
+    captureRealisticAtmosphereState,
+    configureRealisticAtmosphere,
+    restoreRealisticAtmosphere,
+} from './composables/cesiumAtmosphere';
 
 const props = defineProps({
     headless: {
@@ -101,6 +106,7 @@ let resizeHandler = null;
 let preRenderListener = null;
 let renderErrorListener = null;
 let hasRenderErrorNotified = false;
+let realisticAtmosphereSnapshot = null;
 
 let frameCounter = 0;
 let fpsValue = 0;
@@ -192,7 +198,7 @@ function bootstrapWhenReady() {
                 captureSceneDefaults(viewer);
                 initRenderErrorGuard(viewer);
                 initCinematicEffects(viewer, Cesium);
-                bindFrameUpdates(viewer);
+                bindFrameUpdates(viewer, Cesium);
                 message.success('高级视觉效果已启用。');
             } catch (error) {
                 message.error('高级视觉效果初始化失败', error);
@@ -248,7 +254,7 @@ function initCinematicEffects(viewer, Cesium) {
 
     // 仅在用户已开启大气效果时应用，否则恢复原始状态
     if (atmosphereEnabled.value) {
-        applyAtmosphereEnhancement(viewer, 1200);
+        applyAtmosphereEnhancement(viewer, Cesium, 1200);
     } else {
         restoreAtmosphereState(viewer);
     }
@@ -425,7 +431,7 @@ function initTiltShiftStage(viewer, Cesium) {
     tiltShiftStage.enabled = false;
 }
 
-function bindFrameUpdates(viewer) {
+function bindFrameUpdates(viewer, Cesium) {
     const scene = viewer?.scene;
     if (!scene) return;
 
@@ -460,16 +466,21 @@ function bindFrameUpdates(viewer) {
         }
 
         if (atmosphereEnabled.value) {
-            applyAtmosphereEnhancement(viewer, height);
+            applyAtmosphereEnhancement(viewer, Cesium, height);
         } else {
             restoreAtmosphereState(viewer);
         }
     });
 }
 
-function applyAtmosphereEnhancement(viewer, cameraHeight) {
+function applyAtmosphereEnhancement(viewer, Cesium, cameraHeight) {
     const scene = viewer?.scene;
     if (!scene) return;
+
+    if (!realisticAtmosphereSnapshot) {
+        realisticAtmosphereSnapshot = captureRealisticAtmosphereState(viewer);
+    }
+    configureRealisticAtmosphere(viewer, Cesium);
 
     if (typeof scene.highDynamicRange === 'boolean') {
         scene.highDynamicRange = true;
@@ -499,6 +510,13 @@ function applyAtmosphereEnhancement(viewer, cameraHeight) {
 function restoreAtmosphereState(viewer) {
     const scene = viewer?.scene;
     if (!scene) return;
+
+    const Cesium = props.getCesium?.() || window.Cesium;
+    if (realisticAtmosphereSnapshot) {
+        restoreRealisticAtmosphere(viewer, Cesium, realisticAtmosphereSnapshot);
+        realisticAtmosphereSnapshot = null;
+        return;
+    }
 
     if (typeof scene.highDynamicRange === 'boolean' && originalSceneState.hdr !== null) {
         scene.highDynamicRange = originalSceneState.hdr;
