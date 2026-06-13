@@ -31,9 +31,11 @@
         v-model:active-terrain="activeTerrain"
         :basemap-options="basemapOptions"
         :terrain-options="terrainOptions"
+        :overlay-options="overlayOptions"
         :modules="toolModules"
         @module-action="handleToolAction"
         @control-change="handleToolControlChange"
+        @overlay-toggle="handleOverlayToggle"
     />
 
     <!-- 坐标显示面板 -->
@@ -121,6 +123,7 @@ const TDT_LABEL_INIT_TILES = [
 let viewer = null;
 let handler = null;
 let wtfs = null;
+let tdtAnnotationLayer = null;
 let creditCheckIntervalId = null;
 let creditOverrideStyleEl = null;
 let terrainSwitchId = 0;
@@ -132,7 +135,9 @@ const fluidPanelRef = ref(null);
 const activeBasemap = ref('tianditu');
 const activeTerrain = ref('tianditu');
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
+const TDT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
 const cesiumToolPanelOpen = ref(readStoredBoolean(CESIUM_TOOL_PANEL_OPEN_KEY, true));
+const tdtLabelLayerVisible = ref(readStoredBoolean(TDT_LABEL_LAYER_VISIBLE_KEY, true));
 const imageryLayerHandles = [];
 const officialBasemapOptions = ref([]);
 const imageryProviderViewModelById = new Map();
@@ -156,6 +161,15 @@ const terrainOptions = [
     { value: 'cesiumWorld', label: 'Cesium世界地形', description: 'Cesium ion 全球地形服务' },
     { value: 'ellipsoid', label: '平面地形', description: '无高程的椭球地形' },
 ];
+
+const overlayOptions = computed(() => [
+    {
+        value: 'tdt-labels',
+        label: '天地图标注',
+        description: '独立控制天地图注记和边界标注叠加层',
+        active: tdtLabelLayerVisible.value,
+    },
+]);
 
 const advancedEffectControls = ref({
     fog: false,
@@ -339,6 +353,11 @@ watch(cesiumToolPanelOpen, (value) => {
     writeStoredBoolean(CESIUM_TOOL_PANEL_OPEN_KEY, value);
 });
 
+watch(tdtLabelLayerVisible, (value) => {
+    writeStoredBoolean(TDT_LABEL_LAYER_VISIBLE_KEY, value);
+    syncTdtLabelLayer();
+});
+
 function clearWind2D() {
     if (!wind2D.value) return;
     try {
@@ -360,6 +379,17 @@ function clearWTFS() {
     wtfs = null;
 }
 
+function clearTdtAnnotationLayer() {
+    if (!tdtAnnotationLayer || !viewer?.imageryLayers) return;
+
+    try {
+        viewer.imageryLayers.remove(tdtAnnotationLayer, true);
+    } catch (error) {
+        console.warn('TDT annotation layer remove warning:', error);
+    }
+    tdtAnnotationLayer = null;
+}
+
 onUnmounted(() => {
     cesiumReady.value = false;
     if (handler) {
@@ -368,6 +398,7 @@ onUnmounted(() => {
     }
     clearWind2D();
     clearWTFS();
+    clearTdtAnnotationLayer();
     if (creditCheckIntervalId) {
         clearInterval(creditCheckIntervalId);
         creditCheckIntervalId = null;
@@ -406,7 +437,7 @@ async function bootCesium() {
         } else {
             message.error('默认地图源或地形加载失败，请检查 token 或网络。', { closable: true });
         }
-        if (activeBasemap.value === 'tianditu' && !wtfs) {
+        if (tdtLabelLayerVisible.value && !wtfs) {
             console.warn('WTFS label initialization failed.');
         }
 
@@ -569,7 +600,7 @@ function setupInteractions() {
 }
 
 function addBaseImageryLayers() {
-    syncBasemapSideEffects(activeBasemap.value);
+    syncBasemapSideEffects();
     return true;
 }
 
@@ -594,13 +625,16 @@ function createTiandituImageryProviders() {
             tilingScheme: new Cesium.WebMercatorTilingScheme(),
             maximumLevel: 18,
         }),
-        new Cesium.UrlTemplateImageryProvider({
-            url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
-            subdomains: TDT_SUBDOMAINS,
-            tilingScheme: new Cesium.WebMercatorTilingScheme(),
-            maximumLevel: 10,
-        }),
     ];
+}
+
+function createTdtAnnotationImageryProvider() {
+    return new Cesium.UrlTemplateImageryProvider({
+        url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${TDT_TOKEN}`,
+        subdomains: TDT_SUBDOMAINS,
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        maximumLevel: 10,
+    });
 }
 
 function createGoogleImageryProviders() {
@@ -756,7 +790,7 @@ function bindLayerPickerStateSync() {
         if (activeBasemap.value !== value) {
             activeBasemap.value = value;
         }
-        syncBasemapSideEffects(value);
+        syncBasemapSideEffects();
     });
 
     const terrainSubscription = terrainObservable?.subscribe?.((viewModel) => {
@@ -778,13 +812,42 @@ function unbindLayerPickerStateSync() {
     layerPickerSubscriptions = [];
 }
 
-function syncBasemapSideEffects(value) {
-    if (value === 'tianditu') {
-        initTdtLabels();
-    } else {
-        clearWTFS();
-    }
+function syncBasemapSideEffects() {
+    syncTdtLabelLayer();
     viewer?.scene?.requestRender?.();
+}
+
+function syncTdtLabelLayer() {
+    if (!viewer || !Cesium) return;
+
+    if (!tdtLabelLayerVisible.value) {
+        clearTdtAnnotationLayer();
+        clearWTFS();
+        viewer.scene.requestRender?.();
+        return;
+    }
+
+    ensureTdtAnnotationLayer();
+    initTdtLabels();
+    viewer.scene.requestRender?.();
+}
+
+function ensureTdtAnnotationLayer() {
+    if (!viewer?.imageryLayers || tdtAnnotationLayer) {
+        if (tdtAnnotationLayer) {
+            viewer.imageryLayers.raiseToTop?.(tdtAnnotationLayer);
+        }
+        return tdtAnnotationLayer;
+    }
+
+    try {
+        tdtAnnotationLayer = viewer.imageryLayers.addImageryProvider(createTdtAnnotationImageryProvider());
+        viewer.imageryLayers.raiseToTop?.(tdtAnnotationLayer);
+        return tdtAnnotationLayer;
+    } catch (error) {
+        message.error('天地图标注图层加载失败', error);
+        return null;
+    }
 }
 
 function applyBasemap(value) {
@@ -796,7 +859,7 @@ function applyBasemap(value) {
         if (pickerViewModel.selectedImagery !== providerViewModel) {
             pickerViewModel.selectedImagery = providerViewModel;
         }
-        syncBasemapSideEffects(value);
+        syncBasemapSideEffects();
         return true;
     }
 
@@ -807,12 +870,7 @@ function applyBasemap(value) {
             imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
         });
 
-        if (value === 'tianditu') {
-            initTdtLabels();
-        } else {
-            clearWTFS();
-        }
-
+        syncTdtLabelLayer();
         viewer.scene.requestRender?.();
         return true;
     } catch (error) {
@@ -1132,6 +1190,12 @@ function handleToolControlChange({ moduleId, controlId, value }) {
             ...fluidParams.value,
             [controlId]: Number(value),
         };
+    }
+}
+
+function handleOverlayToggle({ overlayId, value }) {
+    if (overlayId === 'tdt-labels') {
+        tdtLabelLayerVisible.value = Boolean(value);
     }
 }
 

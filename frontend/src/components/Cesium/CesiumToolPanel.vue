@@ -215,7 +215,52 @@
                     </div>
 
                     <div
-                        v-if="!basemapOptions.length && !terrainOptions.length"
+                        v-if="overlayOptions.length"
+                        class="option-group"
+                    >
+                        <div class="section-head">
+                            <Eye
+                                :size="16"
+                                stroke-width="2"
+                            />
+                            <span>叠加层</span>
+                        </div>
+                        <div class="overlay-list">
+                            <button
+                                v-for="overlay in overlayOptions"
+                                :key="overlay.value"
+                                class="overlay-row"
+                                :class="{ active: !!overlay.active }"
+                                type="button"
+                                :disabled="overlay.disabled"
+                                :aria-pressed="!!overlay.active"
+                                :title="overlay.description || overlay.label"
+                                @click="emitOverlayToggle(overlay)"
+                            >
+                                <span class="overlay-copy">
+                                    <span class="overlay-title">{{ overlay.label }}</span>
+                                    <span
+                                        v-if="overlay.description"
+                                        class="overlay-desc"
+                                    >
+                                        {{ overlay.description }}
+                                    </span>
+                                </span>
+                                <span
+                                    class="toggle-control"
+                                    :class="{ active: !!overlay.active }"
+                                    aria-hidden="true"
+                                >
+                                    <span class="toggle-track">
+                                        <span class="toggle-thumb"></span>
+                                    </span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="!basemapOptions.length && !terrainOptions.length && !overlayOptions.length"
                         class="empty-state"
                     >
                         暂无图层配置项
@@ -424,6 +469,10 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    overlayOptions: {
+        type: Array,
+        default: () => [],
+    },
     activeBasemap: {
         type: String,
         default: '',
@@ -448,6 +497,7 @@ const emit = defineEmits([
     'update:activeTerrain',
     'module-action',
     'control-change',
+    'overlay-toggle',
 ]);
 
 const storedUiState = readStoredUiState();
@@ -576,6 +626,14 @@ function emitControlChange(moduleId, control, rawValue) {
         moduleId,
         controlId: control.id,
         value,
+    });
+}
+
+function emitOverlayToggle(overlay) {
+    if (overlay.disabled) return;
+    emit('overlay-toggle', {
+        overlayId: overlay.value,
+        value: !overlay.active,
     });
 }
 </script>
@@ -900,6 +958,67 @@ function emitControlChange(moduleId, control, rawValue) {
     color: #f5fff9;
 }
 
+.overlay-list {
+    display: grid;
+    gap: 8px;
+}
+
+.overlay-row {
+    width: 100%;
+    min-width: 0;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid rgba(155, 216, 255, 0.16);
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(239, 250, 255, 0.86);
+    cursor: pointer;
+    text-align: left;
+}
+
+.overlay-row:hover {
+    border-color: rgba(155, 216, 255, 0.38);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.overlay-row.active {
+    border-color: rgba(74, 222, 128, 0.44);
+    background: rgba(18, 95, 68, 0.56);
+}
+
+.overlay-row:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.overlay-copy {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.overlay-title {
+    overflow: hidden;
+    color: #f6fffb;
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.overlay-desc {
+    overflow: hidden;
+    color: rgba(220, 243, 255, 0.58);
+    font-size: 11px;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .module-list {
     display: grid;
     gap: 9px;
@@ -1190,6 +1309,7 @@ function emitControlChange(moduleId, control, rawValue) {
 
 .cesium-tool-shell.is-embedded .panel-subtitle,
 .cesium-tool-shell.is-embedded .module-desc,
+.cesium-tool-shell.is-embedded .overlay-desc,
 .cesium-tool-shell.is-embedded .overview-label,
 .cesium-tool-shell.is-embedded .control-value {
     color: var(--text-muted);
@@ -1205,6 +1325,7 @@ function emitControlChange(moduleId, control, rawValue) {
 .cesium-tool-shell.is-embedded .module-icon,
 .cesium-tool-shell.is-embedded .overview-tile,
 .cesium-tool-shell.is-embedded .option-card,
+.cesium-tool-shell.is-embedded .overlay-row,
 .cesium-tool-shell.is-embedded .module-item,
 .cesium-tool-shell.is-embedded .control-row {
     background: var(--bg-secondary);
@@ -1213,6 +1334,8 @@ function emitControlChange(moduleId, control, rawValue) {
 
 .cesium-tool-shell.is-embedded .tab-btn,
 .cesium-tool-shell.is-embedded .option-card,
+.cesium-tool-shell.is-embedded .overlay-row,
+.cesium-tool-shell.is-embedded .overlay-title,
 .cesium-tool-shell.is-embedded .tool-action,
 .cesium-tool-shell.is-embedded .control-label,
 .cesium-tool-shell.is-embedded .section-head {
