@@ -10,11 +10,14 @@ import createGeoTerrainProvider from '../terrain/GeoTerrainProvider';
 
 const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
+const ARCGIS_WORLD_TERRAIN_URL = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer';
+const ARCGIS_OPEN3D_BUILDINGS_URL = 'https://basemaps3d.arcgis.com/arcgis/rest/services/Open3D_Buildings_v1/SceneServer/layers/0';
 const CUSTOM_XYZ_BASEMAP_ID = 'custom-xyz';
 const CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
 const TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
 const TDT_BOUNDARY_LAYER_VISIBLE_KEY = 'cesium_tdt_boundary_layer_visible';
 const TDT_TEXT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_text_label_layer_visible';
+const ARCGIS_OPEN3D_BUILDINGS_VISIBLE_KEY = 'cesium_arcgis_open3d_buildings_visible';
 
 const projectBasemapOptions = [
     { value: 'tianditu', label: '天地图', description: '天地图影像与注记服务' },
@@ -25,6 +28,7 @@ const projectBasemapOptions = [
 const terrainOptions = [
     { value: 'tianditu', label: '天地图地形', description: '天地图高程地形服务' },
     { value: 'cesiumWorld', label: 'Cesium世界地形', description: 'Cesium ion 全球地形服务' },
+    { value: 'arcgisWorld', label: 'ArcGIS世界地形', description: 'ArcGIS World Elevation 3D 高程服务' },
     { value: 'ellipsoid', label: '平面地形', description: '无高程的椭球地形' },
 ];
 
@@ -38,6 +42,9 @@ export function useCesiumLayers({
 }) {
     let tdtBoundaryLayer = null;
     let tdtTextLabelLayer = null;
+    let arcgisOpen3dBuildingsLayer = null;
+    let arcgisOpen3dBuildingsLoadPromise = null;
+    let arcgisOpen3dBuildingsLoadId = 0;
     let terrainSwitchId = 0;
     let layerPickerSubscriptions = [];
 
@@ -57,6 +64,9 @@ export function useCesiumLayers({
     );
     const tdtTextLabelLayerVisible = ref(
         readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible),
+    );
+    const arcgisOpen3dBuildingsVisible = ref(
+        readStoredBoolean(ARCGIS_OPEN3D_BUILDINGS_VISIBLE_KEY, false),
     );
 
     const basemapOptions = computed(() => [
@@ -87,6 +97,12 @@ export function useCesiumLayers({
             description: '天地图官方文字注记栅格层',
             active: tdtTextLabelLayerVisible.value,
         },
+        {
+            value: 'arcgis-open3d-buildings',
+            label: 'ArcGIS Open3D建筑',
+            description: 'ArcGIS Open3D Buildings 3DObject SceneServer 图层',
+            active: arcgisOpen3dBuildingsVisible.value,
+        },
     ]);
 
     watch(activeBasemap, (value) => {
@@ -111,6 +127,11 @@ export function useCesiumLayers({
     watch(tdtTextLabelLayerVisible, (value) => {
         writeStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, value);
         syncTdtOverlayLayers();
+    });
+
+    watch(arcgisOpen3dBuildingsVisible, (value) => {
+        writeStoredBoolean(ARCGIS_OPEN3D_BUILDINGS_VISIBLE_KEY, value);
+        void syncArcgisOpen3dBuildingsLayer();
     });
 
     function createImageryProviderViewModels() {
@@ -177,8 +198,8 @@ export function useCesiumLayers({
                 tooltip: option.description || option.label,
                 category: '项目地形',
                 iconUrl: createPickerIcon(
-                    option.value === 'ellipsoid' ? '#a3a3a3' : '#d0a449',
-                    option.value === 'cesiumWorld' ? 'CW' : option.value === 'ellipsoid' ? 'EL' : 'TE',
+                    getTerrainIconColor(option.value),
+                    getTerrainIconText(option.value),
                 ),
                 creationFunction: () => createTerrainProviderById(option.value),
             });
@@ -338,6 +359,7 @@ export function useCesiumLayers({
 
     function syncBasemapSideEffects() {
         syncTdtOverlayLayers();
+        void syncArcgisOpen3dBuildingsLayer();
         getViewer?.()?.scene?.requestRender?.();
     }
 
@@ -420,6 +442,71 @@ export function useCesiumLayers({
             console.warn('TDT text label layer remove warning:', error);
         }
         tdtTextLabelLayer = null;
+    }
+
+    async function syncArcgisOpen3dBuildingsLayer() {
+        const viewer = getViewer?.();
+        if (!viewer?.scene?.primitives || !getCesium?.()) return;
+
+        if (arcgisOpen3dBuildingsVisible.value) {
+            await ensureArcgisOpen3dBuildingsLayer();
+        } else {
+            clearArcgisOpen3dBuildingsLayer();
+        }
+
+        viewer.scene.requestRender?.();
+    }
+
+    async function ensureArcgisOpen3dBuildingsLayer() {
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        if (!viewer?.scene?.primitives || arcgisOpen3dBuildingsLayer) return arcgisOpen3dBuildingsLayer;
+        if (arcgisOpen3dBuildingsLoadPromise) return arcgisOpen3dBuildingsLoadPromise;
+
+        if (typeof Cesium?.I3SDataProvider?.fromUrl !== 'function') {
+            message.warning('当前 Cesium 运行时不支持 ArcGIS I3S 建筑图层。', { closable: true });
+            arcgisOpen3dBuildingsVisible.value = false;
+            return null;
+        }
+
+        const loadId = ++arcgisOpen3dBuildingsLoadId;
+        arcgisOpen3dBuildingsLoadPromise = Cesium.I3SDataProvider.fromUrl(ARCGIS_OPEN3D_BUILDINGS_URL);
+        try {
+            const provider = await arcgisOpen3dBuildingsLoadPromise;
+            if (loadId !== arcgisOpen3dBuildingsLoadId || !arcgisOpen3dBuildingsVisible.value) {
+                destroyPrimitive(provider);
+                return null;
+            }
+
+            arcgisOpen3dBuildingsLayer = viewer.scene.primitives.add(provider);
+            viewer.scene.requestRender?.();
+            return arcgisOpen3dBuildingsLayer;
+        } catch (error) {
+            if (loadId !== arcgisOpen3dBuildingsLoadId) return null;
+            arcgisOpen3dBuildingsVisible.value = false;
+            message.warning('ArcGIS Open3D 建筑图层加载失败，已关闭该叠加层。', { closable: true });
+            message.error('ArcGIS Open3D 建筑图层初始化失败', error);
+            return null;
+        } finally {
+            if (loadId === arcgisOpen3dBuildingsLoadId) {
+                arcgisOpen3dBuildingsLoadPromise = null;
+            }
+        }
+    }
+
+    function clearArcgisOpen3dBuildingsLayer() {
+        const viewer = getViewer?.();
+        arcgisOpen3dBuildingsLoadId += 1;
+        arcgisOpen3dBuildingsLoadPromise = null;
+        if (!arcgisOpen3dBuildingsLayer || !viewer?.scene?.primitives) return;
+
+        try {
+            viewer.scene.primitives.remove(arcgisOpen3dBuildingsLayer);
+        } catch (error) {
+            console.warn('ArcGIS Open3D buildings layer remove warning:', error);
+        }
+        arcgisOpen3dBuildingsLayer = null;
+        viewer.scene.requestRender?.();
     }
 
     function applyBasemap(value, options = {}) {
@@ -508,6 +595,26 @@ export function useCesiumLayers({
             }
         }
 
+        if (value === 'arcgisWorld') {
+            try {
+                const arcgisTerrain = await createArcgisWorldTerrainProvider();
+                if (switchId !== terrainSwitchId) return false;
+
+                viewer.terrainProvider = arcgisTerrain;
+                applyTerrainSceneFlags(value);
+                viewer.scene.requestRender?.();
+                return true;
+            } catch (error) {
+                if (switchId !== terrainSwitchId) return false;
+
+                viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+                applyTerrainSceneFlags('ellipsoid');
+                message.warning('ArcGIS 世界地形加载失败，已降级为平面地形。', { closable: true });
+                message.error('ArcGIS 世界地形初始化失败', error);
+                return false;
+            }
+        }
+
         const GeoTerrainProvider = createGeoTerrainProvider(Cesium);
         try {
             viewer.terrainProvider = new GeoTerrainProvider({
@@ -543,6 +650,15 @@ export function useCesiumLayers({
             return createCesiumWorldTerrainProvider().catch((error) => {
                 message.warning('Cesium 世界地形加载失败，已降级为平面地形。', { closable: true });
                 message.error('Cesium 世界地形初始化失败', error);
+                queueTerrainFallback(value, 'ellipsoid');
+                return new Cesium.EllipsoidTerrainProvider();
+            });
+        }
+
+        if (value === 'arcgisWorld') {
+            return createArcgisWorldTerrainProvider().catch((error) => {
+                message.warning('ArcGIS 世界地形加载失败，已降级为平面地形。', { closable: true });
+                message.error('ArcGIS 世界地形初始化失败', error);
                 queueTerrainFallback(value, 'ellipsoid');
                 return new Cesium.EllipsoidTerrainProvider();
             });
@@ -594,6 +710,15 @@ export function useCesiumLayers({
         throw new Error('当前 Cesium 运行时不支持在线世界地形。');
     }
 
+    async function createArcgisWorldTerrainProvider() {
+        const Cesium = getCesium?.();
+        if (typeof Cesium?.ArcGISTiledElevationTerrainProvider?.fromUrl !== 'function') {
+            throw new Error('当前 Cesium 运行时不支持 ArcGIS 高程地形。');
+        }
+
+        return Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(ARCGIS_WORLD_TERRAIN_URL);
+    }
+
     function queueTerrainFallback(failedValue, fallbackValue) {
         const schedule = typeof window !== 'undefined' ? window.setTimeout : setTimeout;
         schedule(() => {
@@ -610,6 +735,11 @@ export function useCesiumLayers({
 
         if (overlayId === 'tdt-text-labels') {
             tdtTextLabelLayerVisible.value = Boolean(value);
+            return;
+        }
+
+        if (overlayId === 'arcgis-open3d-buildings') {
+            arcgisOpen3dBuildingsVisible.value = Boolean(value);
         }
     }
 
@@ -638,6 +768,7 @@ export function useCesiumLayers({
         clearBaseImageryLayers();
         clearTdtBoundaryLayer();
         clearTdtTextLabelLayer();
+        clearArcgisOpen3dBuildingsLayer();
         unbindLayerPickerStateSync();
     }
 
@@ -661,6 +792,28 @@ export function useCesiumLayers({
         handleCustomBasemapSubmit,
         cleanupLayers,
     };
+}
+
+function getTerrainIconColor(value) {
+    if (value === 'ellipsoid') return '#a3a3a3';
+    if (value === 'arcgisWorld') return '#5ea1ff';
+    return '#d0a449';
+}
+
+function getTerrainIconText(value) {
+    if (value === 'cesiumWorld') return 'CW';
+    if (value === 'arcgisWorld') return 'AG';
+    if (value === 'ellipsoid') return 'EL';
+    return 'TE';
+}
+
+function destroyPrimitive(primitive) {
+    if (!primitive || primitive.isDestroyed?.()) return;
+    try {
+        primitive.destroy?.();
+    } catch (error) {
+        console.warn('Primitive destroy warning:', error);
+    }
 }
 
 function getBasemapTooltip(option) {

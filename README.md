@@ -3,7 +3,7 @@
 [![Vue](https://img.shields.io/badge/Vue-3.5+-4FC08D?logo=vuedotjs)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![OpenLayers](https://img.shields.io/badge/OpenLayers-10.5-FFD700?logo=openlayers)](https://openlayers.org/)
-[![Cesium](https://img.shields.io/badge/Cesium-1.110+-64B5F6?logo=cesium)](https://cesium.com/)
+[![Cesium](https://img.shields.io/badge/Cesium-1.122+-64B5F6?logo=cesium)](https://cesium.com/)
 [![Deployment](https://img.shields.io/badge/Frontend-GitHub%20Pages-black?logo=github)](https://pages.github.com/)
 [![Docker](https://img.shields.io/badge/Docker-24.x-2496ED?logo=docker)](https://www.docker.com/)
 [![Deployment](https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface)](https://huggingface.co/)
@@ -184,11 +184,14 @@ WebGIS_Dev/
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 统一工具面板调度）
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 工具面板 + FPS HUD）
 │   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
 │   │   │   │   ├── CesiumToolPanel.vue   # 统一控制面板（场景/特效/风场/流体 + 参数提示）
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
 │   │   │   │   ├── composables/           # Cesium 工具模块配置
+│   │   │   │   │   ├── cesiumRuntime.js   # Cesium CDN 运行时加载
+│   │   │   │   │   ├── useCesiumFrameRate.js # FPS 采样与折线图数据
+│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排
 │   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
 │   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
 │   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
@@ -670,6 +673,10 @@ LOG_LEVEL=INFO
 **三维分析增强：**
 - ✅ Cesium 三维模块统一控制面板继续收敛场景导航、高级视觉特效、2D 风场和水体模拟参数
 - ✅ 图层 tab 中底图源、地形、叠加层改为可折叠卡片，升级后初始状态默认收起
+- ✅ 地形新增 ArcGIS World Elevation 3D，高程源可在控制面板地形分组中切换
+- ✅ 叠加层新增 ArcGIS Open3D Buildings 3DObject SceneServer 建筑图层开关
+- ✅ Cesium 运行时升级至 1.122，修复 ArcGIS I3S Open3D 建筑场景加载兼容问题
+- ✅ 右上角新增实时 FPS 折线图性能 HUD，坐标面板保持专注显示鼠标位置
 - ✅ 参数行新增 `?` 悬浮说明，补充阈值、混合、光强、水位、水色等控制项含义
 - ✅ 水色支持调色板动态调整，当前水体颜色可实时更新
 - ✅ 水位滑杆接入高程值域，范围来自当前捕捉区域最低点到最高点
@@ -680,6 +687,10 @@ LOG_LEVEL=INFO
 
 **修改文件：**
 - `frontend/src/components/Cesium/CesiumToolPanel.vue` — 图层分组折叠、控制项提示气泡 UI 与响应式列宽
+- `frontend/src/components/Cesium/CesiumContainer.vue` — 右上角实时 FPS 折线图 HUD 与容器挂载
+- `frontend/src/components/Cesium/composables/cesiumRuntime.js` — Cesium CDN 运行时升级到 1.122
+- `frontend/src/components/Cesium/composables/useCesiumFrameRate.js` — FPS 采样、历史序列与 SVG 折线数据
+- `frontend/src/components/Cesium/composables/useCesiumLayers.js` — ArcGIS 世界地形与 Open3D 建筑叠加层接入
 - `frontend/src/components/Cesium/composables/useCesiumToolModules.js` — 流体模块状态、水位控制、提示说明与显示值格式化
 - `frontend/src/components/Cesium/FluidSimulation/FluidSimulationPanel.vue` — 高程值域外包盒、点击点初始水位、水位滑杆、水色同步
 - `frontend/src/components/Cesium/FluidSimulation/fluidRuntime.js` — 归一化绝对水位、顶部动画薄膜、重置模拟入口

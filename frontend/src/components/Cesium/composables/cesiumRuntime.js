@@ -1,4 +1,4 @@
-export const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.110/Build/Cesium/';
+export const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.122/Build/Cesium/';
 export const CESIUM_JS_URL = `${CESIUM_BASE_URL}Cesium.js`;
 export const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
 

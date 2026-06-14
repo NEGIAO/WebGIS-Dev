@@ -40,6 +40,50 @@
         @custom-basemap-submit="handleCustomBasemapSubmit"
     />
 
+    <section
+        v-if="cesiumReady"
+        class="fps-chart-panel"
+        aria-label="实时帧率折线图"
+    >
+        <div class="fps-chart-head">
+            <span>FPS</span>
+            <strong>{{ frameRateDisplay }}</strong>
+        </div>
+        <svg
+            class="fps-chart"
+            viewBox="0 0 160 48"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+        >
+            <line
+                class="fps-grid-line"
+                x1="0"
+                y1="12"
+                x2="160"
+                y2="12"
+            />
+            <line
+                class="fps-grid-line"
+                x1="0"
+                y1="24"
+                x2="160"
+                y2="24"
+            />
+            <line
+                class="fps-grid-line"
+                x1="0"
+                y1="36"
+                x2="160"
+                y2="36"
+            />
+            <polyline
+                v-if="frameRateLinePoints"
+                class="fps-line"
+                :points="frameRateLinePoints"
+            />
+        </svg>
+    </section>
+
     <!-- 坐标显示面板 -->
     <div class="map-controls-group">
         <div class="mouse-position-content">{{ coordinateDisplay }}</div>
@@ -74,6 +118,7 @@ import { configureSolarLighting } from './composables/cesiumAtmosphere';
 import { loadCesiumRuntime } from './composables/cesiumRuntime';
 import { configureBeijingTimeSystem } from './composables/cesiumTimeSystem';
 import { useCesiumCreditHider } from './composables/useCesiumCreditHider';
+import { useCesiumFrameRate } from './composables/useCesiumFrameRate';
 import { useCesiumInteractions } from './composables/useCesiumInteractions';
 import { useCesiumLayers } from './composables/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/useCesiumSceneActions';
@@ -125,6 +170,12 @@ const { coordinateDisplay, setupInteractions, cleanupInteractions } = useCesiumI
     getViewer,
     getCesium,
 });
+const {
+    frameRateDisplay,
+    frameRateLinePoints,
+    setupFrameRateMonitor,
+    cleanupFrameRateMonitor,
+} = useCesiumFrameRate({ getViewer });
 
 const { installCreditHider, cleanupCreditHider } = useCesiumCreditHider({ getViewer });
 const sceneActions = useCesiumSceneActions({
@@ -163,6 +214,7 @@ async function bootCesium() {
 
         initViewer();
         setupInteractions();
+        setupFrameRateMonitor();
 
         const basemapReady = addBaseImageryLayers();
         const terrainReady = await initCustomTerrain();
@@ -218,6 +270,7 @@ onMounted(() => {
 onUnmounted(() => {
     cesiumReady.value = false;
     cleanupInteractions();
+    cleanupFrameRateMonitor();
     cleanupTools();
     cleanupLayers();
     cleanupCreditHider();
@@ -260,6 +313,67 @@ onUnmounted(() => {
     white-space: nowrap;
 }
 
+.fps-chart-panel {
+    position: absolute;
+    top: 58px;
+    right: 12px;
+    z-index: 1150;
+    width: 188px;
+    border: 1px solid rgba(155, 216, 255, 0.26);
+    border-radius: 8px;
+    padding: 9px 10px 10px;
+    background: rgba(8, 25, 36, 0.86);
+    color: #eefbf3;
+    box-shadow: 0 14px 34px rgba(0, 7, 14, 0.32);
+    backdrop-filter: blur(14px);
+    pointer-events: none;
+}
+
+.fps-chart-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 7px;
+}
+
+.fps-chart-head span {
+    color: rgba(220, 243, 255, 0.66);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+.fps-chart-head strong {
+    color: #a7f3d0;
+    font-size: 20px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.fps-chart {
+    display: block;
+    width: 100%;
+    height: 48px;
+    overflow: visible;
+}
+
+.fps-grid-line {
+    stroke: rgba(155, 216, 255, 0.16);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.fps-line {
+    fill: none;
+    stroke: #5eead4;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    filter: drop-shadow(0 0 4px rgba(94, 234, 212, 0.45));
+}
+
 /* 平板适配 */
 @media (max-width: 1024px) {
     .map-controls-group {
@@ -279,16 +393,25 @@ onUnmounted(() => {
         min-width: auto;
     }
 
+    .fps-chart-panel {
+        top: 104px;
+        right: 10px;
+        width: 164px;
+    }
+
 }
 
 .mouse-position-content {
     font-size: 14px;
     font-weight: bold;
-    min-width: 120px;
     text-align: center;
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.mouse-position-content {
+    min-width: 120px;
 }
 
 .divider {

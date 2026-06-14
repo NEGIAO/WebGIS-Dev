@@ -645,6 +645,7 @@ MIT
 **新增与增强：**
 - `components/Cesium/CesiumToolPanel.vue`：控制项标签旁新增 `?` 提示气泡，解释阈值、混合、光强、水位、水色等参数含义
 - `components/Cesium/CesiumToolPanel.vue`：图层 tab 中底图源、地形、叠加层改为折叠卡片，并通过 UI 状态版本确保升级后默认收起
+- `components/Cesium/composables/useCesiumLayers.js`：地形新增 ArcGIS World Elevation 3D；叠加层新增 ArcGIS Open3D Buildings 3DObject SceneServer 开关
 - `components/Cesium/composables/useCesiumToolModules.js`：流体模块接入水位状态、动态值域、显示值格式化和调色板配置
 - `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：水体外包盒高度改为按采样高程最低点到最高点动态计算
 - `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：点击位置三维坐标高程作为初始水位，并纳入外包盒初始范围
@@ -657,6 +658,9 @@ MIT
 **交互变化：**
 - 用户点击三维场景后，点击点海拔会成为初始水位；水位控制滑杆从该区域最低高程到最高高程变化
 - 图层配置区默认只显示分组标题与当前摘要，点击标题行即可展开或收起对应配置项
+- 地形分组现在支持天地图地形、Cesium 世界地形、ArcGIS 世界地形和平面地形四种来源
+- 叠加层分组可一键加载/卸载 ArcGIS Open3D 建筑图层，开关状态会持久化
+- 相机可以进入水体外包盒；进入外包盒水平范围且低于盒顶时，水体主渲染 pass 会临时隐藏，离开后自动恢复
 - 水体外包盒不再使用固定高度，海拔落差直接决定模拟体高度
 - 流体参数在统一控制面板内集中调整，说明信息通过悬浮提示展示，减少参数含义猜测成本
 
