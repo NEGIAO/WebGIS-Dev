@@ -392,7 +392,18 @@
                                         class="control-row"
                                         :class="`control-${control.type}`"
                                     >
-                                        <span class="control-label">{{ control.label }}</span>
+                                        <span class="control-label">
+                                            <span class="control-label-text">{{ control.label }}</span>
+                                            <span
+                                                v-if="control.tooltip"
+                                                class="control-help"
+                                                :aria-label="control.tooltip"
+                                                :title="control.tooltip"
+                                                @click.prevent.stop
+                                            >
+                                                ?
+                                            </span>
+                                        </span>
 
                                         <template v-if="control.type === 'range'">
                                             <input
@@ -1350,7 +1361,7 @@ function emitOverlayToggle(overlay) {
 
 .control-row {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr) 64px;
+    grid-template-columns: 72px minmax(0, 1fr) 76px;
     align-items: center;
     gap: 9px;
     min-height: 34px;
@@ -1366,8 +1377,43 @@ function emitOverlayToggle(overlay) {
 }
 
 .control-label {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     color: rgba(238, 251, 243, 0.82);
     font-weight: 700;
+}
+
+.control-label-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.control-help {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(155, 216, 255, 0.32);
+    border-radius: 50%;
+    background: rgba(155, 216, 255, 0.12);
+    color: rgba(225, 244, 255, 0.86);
+    cursor: help;
+    font-size: 11px;
+    line-height: 1;
+}
+
+.control-help:hover,
+.control-help:focus-visible {
+    border-color: rgba(74, 222, 128, 0.56);
+    background: rgba(74, 222, 128, 0.18);
+    color: #f6fffb;
+    outline: none;
 }
 
 .control-range {
@@ -1392,7 +1438,7 @@ function emitOverlayToggle(overlay) {
 }
 
 .control-row.control-color {
-    grid-template-columns: 72px minmax(0, 1fr) 34px 64px;
+    grid-template-columns: 72px minmax(0, 1fr) 34px;
 }
 
 .control-color {
@@ -1556,7 +1602,11 @@ function emitOverlayToggle(overlay) {
     }
 
     .control-row {
-        grid-template-columns: 64px minmax(0, 1fr) 58px;
+        grid-template-columns: 64px minmax(0, 1fr) 70px;
+    }
+
+    .control-row.control-color {
+        grid-template-columns: 64px minmax(0, 1fr) 34px;
     }
 }
 </style>

@@ -29,11 +29,12 @@ const vec3 backgroundColor = vec3(0.2);
 const float transitionTime = 5.0;
 const float transitionPercent = 0.3;
 const int octaves = 7;
+const float minAnimatedFilmDepth = 0.003;
 // Water simulation
 // const float attenuation = 0.995;
 // const float strenght = 0.25;
 // const float minTotalFlow = 0.0001;
-// fluidParam: x=attenuation, y=strength, z=minTotalFlow, w=initialWaterLevel
+// fluidParam: x=attenuation, y=strength, z=minTotalFlow, w=initialWaterLevel(normalized absolute elevation)
 // customParam: x=threshold(fogDist), y=blend(specPower), z=lightStrength(specIntensity), w=reserved
 uniform vec4 fluidParam;
 uniform vec4 customParam;
@@ -162,11 +163,13 @@ void main( )
     // float terrainElevation = mix(Terrain(uv * 4.0, floor(t), octaves), Terrain(uv * 4.0, floor(t) + 1.0, octaves), smoothstep(1.0 - transitionPercent, 1.0, fract(t))) * 0.5;
 
     float terrainElevation = texture(heightMap, uv).r;
-    terrainElevation = (terrainElevation - (minHeight)) / (maxHeight - (minHeight));
+    float heightSpan = max(maxHeight - minHeight, 0.0001);
+    terrainElevation = clamp((terrainElevation - minHeight) / heightSpan, 0.0, 1.0);
 
     // Water
-    // 默认全局水深，由 fluidParam.w 控制
-    float waterDept = fluidParam.w;
+    // fluidParam.w is a normalized absolute water level in the current elevation range.
+    float animatedFilmDepth = min(min(fluidParam.w, minAnimatedFilmDepth), max(1.0 - terrainElevation, 0.0));
+    float waterDept = max(fluidParam.w - terrainElevation, animatedFilmDepth);
     if(iFrame != 0)
     {
     ivec2 p = ivec2(gl_FragCoord.xy);
@@ -821,6 +824,19 @@ void main()
             this._frameCount = 0;
             this._isActive = true;
             this._time = 0;
+        }
+
+        setInitialWaterLevel(normalizedWaterLevel) {
+            const level = Number(normalizedWaterLevel);
+            if (!Number.isFinite(level) || !this.config.fluidParams) return;
+
+            this.config.fluidParams.w = Math.max(0, Math.min(1, level));
+            this.resetSimulation();
+        }
+
+        resetSimulation() {
+            this._frameCount = 0;
+            this.viewer.scene.requestRender?.();
         }
 
         // 创建图形资源

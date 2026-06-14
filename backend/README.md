@@ -22,7 +22,23 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-11 更新）
+## 0. 项目结构（2026-06-14 更新）
+
+### V3.3.4 (2026-06-14) - Cesium 三维分析控制面板增强 + 掩膜分析（水体模拟）
+
+> 本次版本为前端 Cesium 三维模块增强，后端 API 与后端文件结构无变更。本 README 按项目规范同步版本与结构说明。
+
+**前端同步记录（本次无后端结构变更）：**
+- Cesium 三维模块统一控制面板继续集成场景导航、高级视觉特效、风场和水体模拟参数
+- 流体参数新增 `?` 悬浮说明，解释阈值、混合、光强、水位、水色等控制含义
+- 水体模拟支持水色调色板，颜色变化实时写入 WebGL shader uniform
+- 水体外包盒高度改为按捕捉区域高程最低点到最高点动态计算，不再使用固定高度
+- 鼠标点击点三维坐标高程作为初始水位，并参与初始外包盒高程范围
+- 水位滑杆值域来自采样高程范围，拖动后重置并重新计算流体模拟
+- 流体运行时恢复顶部薄层动画水面效果，保留绝对水位模式下的顶层动态表现
+- 本次前端同步修改 `frontend/src/components/Cesium/CesiumToolPanel.vue`、`frontend/src/components/Cesium/composables/useCesiumToolModules.js`、`frontend/src/components/Cesium/FluidSimulation/FluidSimulationPanel.vue`、`frontend/src/components/Cesium/FluidSimulation/fluidRuntime.js`、`frontend/src/components/Map/MapContainer.vue`
+
+详见 [`../Docs/26-06/26-06-14/2026-06-14-cesium-tool-panel-fluid-simulation-v334.md`](../Docs/26-06/26-06-14/2026-06-14-cesium-tool-panel-fluid-simulation-v334.md)
 
 ### V3.3.3 (2026-06-11) - Auth 中间件收敛 + 调试接口清理
 

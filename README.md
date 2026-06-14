@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.1 阶段，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.4 阶段，Cesium 三维分析、统一控制面板与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -43,6 +43,8 @@
 
 **前端功能**：
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
+- 🧭 **Cesium 三维分析增强**：统一控制面板集成场景导航、高级特效、风场、水体模拟与参数说明
+- 🌊 **掩膜分析（水体模拟）**：基于地形高程值域动态生成外包盒，支持点击点海拔初始水位、水位滑杆和水色调色板
 - Custom terrain + WTFS labels (in-repo providers, no TDT Cesium plugins)
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
 - 🎨 电影级视觉效果、数据可视化、首屏特效
@@ -182,13 +184,15 @@ WebGIS_Dev/
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换）
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 统一工具面板调度）
 │   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
-│   │   │   │   ├── CesiumToolPanel.vue   # 🆕 统一控制台
+│   │   │   │   ├── CesiumToolPanel.vue   # 统一控制面板（场景/特效/风场/流体 + 参数提示）
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
-│   │   │   │   ├── FluidSimulation/      # 🆕 水体流体模拟
-│   │   │   │   │   ├── FluidSimulationPanel.vue
-│   │   │   │   │   └── fluidRuntime.js
+│   │   │   │   ├── composables/           # Cesium 工具模块配置
+│   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
+│   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
+│   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
+│   │   │   │   │   └── fluidRuntime.js   # WebGL 流体渲染引擎与水面后处理
 │   │   │   │   └── terrain/              # 自定义地形提供者
 │   │   │   ├── Chat/                     # AI 聊天助手
 │   │   │   ├── Common/                   # 通用可复用组件
@@ -657,6 +661,30 @@ LOG_LEVEL=INFO
 - `frontend/.env.example` — 补充瓦片代理环境变量示例
 
 详见 [DB 恢复日志](./Docs/26-06/26-06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/26-06/26-06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06/26-06-09/2026-06-09-logging-beijing-time.md) | [天气组件响应式与风力仪表 UI](./Docs/26-06/26-06-09/2026-06-09-weather-chart-responsive.md)
+
+---
+
+### V3.3.4 (2026-06-14)
+#### 🧭 Cesium 三维控制面板集成增强 + 掩膜分析（水体模拟）
+
+**三维分析增强：**
+- ✅ Cesium 三维模块统一控制面板继续收敛场景导航、高级视觉特效、2D 风场和水体模拟参数
+- ✅ 参数行新增 `?` 悬浮说明，补充阈值、混合、光强、水位、水色等控制项含义
+- ✅ 水色支持调色板动态调整，当前水体颜色可实时更新
+- ✅ 水位滑杆接入高程值域，范围来自当前捕捉区域最低点到最高点
+- ✅ 鼠标点击位置的三维坐标高程作为初始水位，点击点海拔同时参与外包盒初始高程范围计算
+- ✅ 水体外包盒高度不再固定，改为依据采样高程值域动态生成，最低点到最高点即外包盒高度
+- ✅ 流体渲染恢复顶部薄层动画效果，避免绝对水位模式下水面顶层特效消失
+- ✅ 采样失败回退分支也使用真实海拔区间，保持水位滑杆、外包盒和 shader 归一化逻辑一致
+
+**修改文件：**
+- `frontend/src/components/Cesium/CesiumToolPanel.vue` — 控制项提示气泡 UI 与响应式列宽
+- `frontend/src/components/Cesium/composables/useCesiumToolModules.js` — 流体模块状态、水位控制、提示说明与显示值格式化
+- `frontend/src/components/Cesium/FluidSimulation/FluidSimulationPanel.vue` — 高程值域外包盒、点击点初始水位、水位滑杆、水色同步
+- `frontend/src/components/Cesium/FluidSimulation/fluidRuntime.js` — 归一化绝对水位、顶部动画薄膜、重置模拟入口
+- `frontend/src/components/Map/MapContainer.vue` — 欢迎提示版本号更新为 V3.3.4
+
+详见 [Cesium 控制面板与水体模拟 V3.3.4 日志](./Docs/26-06/26-06-14/2026-06-14-cesium-tool-panel-fluid-simulation-v334.md)
 
 ---
 
@@ -1756,6 +1784,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-11
-**当前版本**：V3.3.3 (邮箱账号化 + 旧用户绑定迁移)
+**最后更新**：2026-06-14
+**当前版本**：V3.3.4 (Cesium 三维控制面板集成增强 + 掩膜分析/水体模拟)
 **项目状态**：开发中 - 持续迭代优化

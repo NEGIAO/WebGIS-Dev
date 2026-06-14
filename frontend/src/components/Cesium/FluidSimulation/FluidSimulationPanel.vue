@@ -96,6 +96,27 @@
                         step="0.0001"
                     />
                 </label>
+                <label
+                    v-if="hasWaterLevelRange"
+                    class="param-row"
+                >
+                    <span>水位</span>
+                    <input
+                        v-model.number="waterLevel"
+                        type="range"
+                        :min="waterLevelMin"
+                        :max="waterLevelMax"
+                        :step="waterLevelStep"
+                    />
+                    <input
+                        v-model.number="waterLevel"
+                        class="number-input"
+                        type="number"
+                        :min="waterLevelMin"
+                        :max="waterLevelMax"
+                        :step="waterLevelStep"
+                    />
+                </label>
                 <label class="param-row color-row">
                     <span>水色</span>
                     <input
@@ -148,6 +169,7 @@ const FLUID_HORIZONTAL_SIZE = 10000;
 const FLUID_FALLBACK_DEPTH = 1200;
 const FLUID_FALLBACK_BOTTOM_PADDING = 100;
 const FLUID_MIN_VERTICAL_SPAN = 0.01;
+const FLUID_INITIAL_WATER_RATIO = 0.03;
 const TERRAIN_SAMPLE_TARGET_SPACING = 60;
 const TERRAIN_SAMPLE_MIN_SIZE = 64;
 const TERRAIN_SAMPLE_MAX_SIZE = 160;
@@ -156,6 +178,9 @@ const threshold = ref(10);
 const blend = ref(20);
 const lightStrength = ref(3);
 const waterColor = ref('#0d4fa3');
+const waterLevel = ref(null);
+const waterLevelMin = ref(null);
+const waterLevelMax = ref(null);
 const isPicking = ref(false);
 const hasFluid = ref(false);
 const selectedLon = ref(null);
@@ -177,7 +202,18 @@ const selectedText = computed(() => {
     return `经度 ${selectedLon.value.toFixed(6)} / 纬度 ${selectedLat.value.toFixed(6)}`;
 });
 
+const hasWaterLevelRange = computed(() => {
+    return Number.isFinite(waterLevelMin.value) && Number.isFinite(waterLevelMax.value);
+});
+
+const waterLevelStep = computed(() => {
+    if (!hasWaterLevelRange.value) return 1;
+    const span = Math.abs(waterLevelMax.value - waterLevelMin.value);
+    return Math.max(span / 1000, 0.01);
+});
+
 watch([threshold, blend, lightStrength, waterColor], applyFluidParams);
+watch(waterLevel, applyWaterLevelParam);
 
 watch(
     () => props.params,
@@ -187,7 +223,7 @@ watch(
     { deep: true, immediate: true },
 );
 
-watch([isPicking, hasFluid, selectedText], emitState, { immediate: true });
+watch([isPicking, hasFluid, selectedText, waterLevel, waterLevelMin, waterLevelMax], emitState, { immediate: true });
 
 onBeforeUnmount(() => {
     cleanup(true);
@@ -224,6 +260,9 @@ function syncExternalParams(params) {
     if (isValidHexColor(params.waterColor)) {
         waterColor.value = params.waterColor;
     }
+    if (Number.isFinite(Number(params.waterLevel))) {
+        waterLevel.value = Number(params.waterLevel);
+    }
 }
 
 function emitState() {
@@ -231,6 +270,9 @@ function emitState() {
         isPicking: isPicking.value,
         hasFluid: hasFluid.value,
         selectedText: selectedText.value,
+        waterLevel: waterLevel.value,
+        waterLevelMin: waterLevelMin.value,
+        waterLevelMax: waterLevelMax.value,
     });
 }
 
@@ -286,6 +328,7 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         const verticalRange = resolveFluidVerticalRange(heightMapSource, centerHeight);
         const baseHeight = verticalRange.baseHeight;
         const fluidDepth = verticalRange.depth;
+        const initialWaterLevel = resolveInitialWaterLevel(verticalRange, centerHeight);
         const dimensions = new Cesium.Cartesian3(
             FLUID_HORIZONTAL_SIZE,
             FLUID_HORIZONTAL_SIZE,
@@ -293,6 +336,10 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         );
 
         if (creationId !== fluidCreationId) return;
+
+        waterLevelMin.value = verticalRange.minHeight;
+        waterLevelMax.value = verticalRange.maxHeight;
+        waterLevel.value = initialWaterLevel;
 
         if (!heightMapSource) {
             message.warning('范围高度预请求不可用，已回退到当前场景捕捉。', {
@@ -317,7 +364,7 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
                 0.9 + (l / 10) * 0.099,   // attenuation
                 Math.min(1, b / 50),        // strength
                 t / 50000,                   // minTotalFlow
-                0.03,                        // initialWaterLevel (3%)
+                normalizeWaterLevel(initialWaterLevel, verticalRange),
             ),
         });
 
@@ -484,9 +531,14 @@ function resolveFluidVerticalRange(heightMapSource, centerHeight) {
     const sampledMaxHeight = Number(heightMapSource?.maxHeight);
 
     if (Number.isFinite(sampledMinHeight) && Number.isFinite(sampledMaxHeight)) {
-        const minHeight = Math.min(sampledMinHeight, sampledMaxHeight);
-        const sampledSpan = Math.abs(sampledMaxHeight - sampledMinHeight);
-        const depth = Math.max(sampledSpan, FLUID_MIN_VERTICAL_SPAN);
+        const pickedHeight = Number(centerHeight);
+        const minHeight = Number.isFinite(pickedHeight)
+            ? Math.min(sampledMinHeight, sampledMaxHeight, pickedHeight)
+            : Math.min(sampledMinHeight, sampledMaxHeight);
+        const maxHeight = Number.isFinite(pickedHeight)
+            ? Math.max(sampledMinHeight, sampledMaxHeight, pickedHeight)
+            : Math.max(sampledMinHeight, sampledMaxHeight);
+        const depth = Math.max(maxHeight - minHeight, FLUID_MIN_VERTICAL_SPAN);
 
         return {
             baseHeight: minHeight,
@@ -496,11 +548,40 @@ function resolveFluidVerticalRange(heightMapSource, centerHeight) {
         };
     }
 
+    const fallbackCenterHeight = Number(centerHeight);
+    const fallbackBaseHeight = Number.isFinite(fallbackCenterHeight)
+        ? fallbackCenterHeight - FLUID_FALLBACK_BOTTOM_PADDING
+        : 0;
+
     return {
-        baseHeight: centerHeight - FLUID_FALLBACK_BOTTOM_PADDING,
+        baseHeight: fallbackBaseHeight,
         depth: FLUID_FALLBACK_DEPTH,
-        minHeight: 0,
-        maxHeight: FLUID_FALLBACK_DEPTH,
+        minHeight: fallbackBaseHeight,
+        maxHeight: fallbackBaseHeight + FLUID_FALLBACK_DEPTH,
+    };
+}
+
+function resolveInitialWaterLevel(verticalRange, pickedWaterLevel) {
+    const fallbackLevel = verticalRange.minHeight + verticalRange.depth * FLUID_INITIAL_WATER_RATIO;
+    const picked = Number(pickedWaterLevel);
+    const nextWaterLevel = Number.isFinite(picked) ? picked : fallbackLevel;
+    return clampNumber(nextWaterLevel, verticalRange.minHeight, verticalRange.maxHeight);
+}
+
+function normalizeWaterLevel(absoluteWaterLevel, verticalRange) {
+    const span = verticalRange.maxHeight - verticalRange.minHeight;
+    if (!Number.isFinite(span) || span <= 0) return 0;
+    return clampNumber((absoluteWaterLevel - verticalRange.minHeight) / span, 0, 1);
+}
+
+function getCurrentWaterLevelRange() {
+    if (!Number.isFinite(waterLevelMin.value) || !Number.isFinite(waterLevelMax.value)) {
+        return null;
+    }
+
+    return {
+        minHeight: Math.min(waterLevelMin.value, waterLevelMax.value),
+        maxHeight: Math.max(waterLevelMin.value, waterLevelMax.value),
     };
 }
 
@@ -586,6 +667,28 @@ function applyFluidParams() {
 
     syncWaterColorConfig();
     fluidRenderer.viewer?.scene?.requestRender?.();
+}
+
+function applyWaterLevelParam() {
+    if (!fluidRenderer?.config?.fluidParams) return;
+
+    const range = getCurrentWaterLevelRange();
+    const rawWaterLevel = Number(waterLevel.value);
+    if (!range || !Number.isFinite(rawWaterLevel)) return;
+
+    const clampedWaterLevel = clampNumber(rawWaterLevel, range.minHeight, range.maxHeight);
+    if (clampedWaterLevel !== rawWaterLevel) {
+        waterLevel.value = clampedWaterLevel;
+        return;
+    }
+
+    const normalizedWaterLevel = normalizeWaterLevel(clampedWaterLevel, range);
+    if (typeof fluidRenderer.setInitialWaterLevel === 'function') {
+        fluidRenderer.setInitialWaterLevel(normalizedWaterLevel);
+    } else {
+        fluidRenderer.config.fluidParams.w = normalizedWaterLevel;
+        fluidRenderer.viewer?.scene?.requestRender?.();
+    }
 }
 
 function prepareScene(viewer, Cesium) {
@@ -674,6 +777,9 @@ function cleanup(restoreSceneState) {
     destroyFluidOnly();
     selectedLon.value = null;
     selectedLat.value = null;
+    waterLevel.value = null;
+    waterLevelMin.value = null;
+    waterLevelMax.value = null;
 
     if (viewer && skyStage) {
         try {

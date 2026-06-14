@@ -23,12 +23,16 @@ export function useCesiumToolModules({
         blend: 20,
         lightStrength: 3,
         waterColor: '#0d4fa3',
+        waterLevel: null,
     });
 
     const fluidState = ref({
         isPicking: false,
         hasFluid: false,
         selectedText: '',
+        waterLevel: null,
+        waterLevelMin: null,
+        waterLevelMax: null,
     });
 
     const toolModules = computed(() => [
@@ -93,7 +97,7 @@ export function useCesiumToolModules({
                     disabled: !fluidState.value.hasFluid && !fluidState.value.isPicking,
                 },
             ],
-            controls: createFluidControls(fluidParams.value),
+            controls: createFluidControls(fluidParams.value, fluidState.value),
         },
     ]);
 
@@ -144,11 +148,25 @@ export function useCesiumToolModules({
     }
 
     function handleFluidStateChange(state) {
+        const nextWaterLevel = toFiniteNumberOrNull(state?.waterLevel);
+        const nextWaterLevelMin = toFiniteNumberOrNull(state?.waterLevelMin);
+        const nextWaterLevelMax = toFiniteNumberOrNull(state?.waterLevelMax);
+
         fluidState.value = {
             isPicking: !!state?.isPicking,
             hasFluid: !!state?.hasFluid,
             selectedText: state?.selectedText || '',
+            waterLevel: nextWaterLevel,
+            waterLevelMin: nextWaterLevelMin,
+            waterLevelMax: nextWaterLevelMax,
         };
+
+        if (nextWaterLevel !== null) {
+            fluidParams.value = {
+                ...fluidParams.value,
+                waterLevel: nextWaterLevel,
+            };
+        }
     }
 
     function cleanupTools() {
@@ -217,7 +235,20 @@ function createWindControls(windParams = {}, disabled) {
     ];
 }
 
-function createFluidControls(fluidParams) {
+function createFluidControls(fluidParams, fluidState = {}) {
+    const waterLevelMin = toFiniteNumberOrNull(fluidState.waterLevelMin);
+    const waterLevelMax = toFiniteNumberOrNull(fluidState.waterLevelMax);
+    const hasWaterLevelRange = waterLevelMin !== null && waterLevelMax !== null;
+    const minWaterLevel = hasWaterLevelRange ? Math.min(waterLevelMin, waterLevelMax) : 0;
+    const maxWaterLevel = hasWaterLevelRange ? Math.max(waterLevelMin, waterLevelMax) : 0;
+    const rawWaterLevel = toFiniteNumberOrNull(fluidParams.waterLevel);
+    const waterLevel = hasWaterLevelRange
+        ? clampNumber(rawWaterLevel ?? minWaterLevel, minWaterLevel, maxWaterLevel)
+        : 0;
+    const waterLevelStep = hasWaterLevelRange
+        ? Math.max((maxWaterLevel - minWaterLevel) / 1000, 0.01)
+        : 1;
+
     return [
         {
             id: 'threshold',
@@ -228,6 +259,7 @@ function createFluidControls(fluidParams) {
             step: 0.0001,
             value: fluidParams.threshold,
             displayValue: Number(fluidParams.threshold).toFixed(2),
+            tooltip: '起流阈值。值越大，越小的水流越容易被过滤掉，水体越不容易产生细碎流动；同时会影响水体雾化距离。',
         },
         {
             id: 'blend',
@@ -238,6 +270,7 @@ function createFluidControls(fluidParams) {
             step: 0.0001,
             value: fluidParams.blend,
             displayValue: Number(fluidParams.blend).toFixed(2),
+            tooltip: '流动混合/扩散强度。值越大，相邻区域之间的水量交换越强，水流传播更快；同时会影响水面高光的锐度。',
         },
         {
             id: 'lightStrength',
@@ -248,13 +281,42 @@ function createFluidControls(fluidParams) {
             step: 0.0001,
             value: fluidParams.lightStrength,
             displayValue: Number(fluidParams.lightStrength).toFixed(2),
+            tooltip: '光照与衰减强度。值越大，水面高光越明显，模拟中的流量衰减越慢，水流会持续得更久。',
+        },
+        {
+            id: 'waterLevel',
+            label: '水位',
+            type: 'range',
+            min: minWaterLevel,
+            max: maxWaterLevel,
+            step: waterLevelStep,
+            value: waterLevel,
+            displayValue: hasWaterLevelRange ? `${formatElevation(waterLevel)} m` : '先捕捉',
+            disabled: !hasWaterLevelRange,
+            tooltip: '当前水位海拔。范围来自本次捕捉区域内的最低到最高高程，拖动后会按新水位重置并重新计算水流。',
         },
         {
             id: 'waterColor',
             label: '水色',
             type: 'color',
             value: fluidParams.waterColor,
-            displayValue: fluidParams.waterColor,
+            tooltip: '水体渲染颜色。改变后会实时更新当前水体颜色。',
         },
     ];
+}
+
+function toFiniteNumberOrNull(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
+function clampNumber(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+function formatElevation(value) {
+    const absoluteValue = Math.abs(value);
+    if (absoluteValue >= 1000) return value.toFixed(1);
+    if (absoluteValue >= 10) return value.toFixed(2);
+    return value.toFixed(3);
 }

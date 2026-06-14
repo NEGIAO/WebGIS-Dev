@@ -1,12 +1,14 @@
-# WebGIS 前端项目 — v3.3.2
+# WebGIS 前端项目 — v3.3.4
 
 ## 📋 项目概述
 
-基于 **Vue 3 + Vite + OpenLayers** 构建的专业级 WebGIS 前端应用。历经多次优化迭代，现已发展成为功能丰富、架构清晰的 WebGIS 平台。
+基于 **Vue 3 + Vite + OpenLayers + Cesium** 构建的专业级 WebGIS 前端应用。历经多次优化迭代，现已发展成为功能丰富、架构清晰的 WebGIS 平台。
 
 ### 🎯 核心功能
 
 - 🗺️ **地图引擎**：OpenLayers 6.x + Cesium 3D 地球
+- 🧭 **三维分析**：Cesium 统一控制面板集成场景导航、高级特效、风场、水体模拟和参数说明
+- 🌊 **掩膜分析（水体模拟）**：按捕捉区域高程值域生成外包盒，支持点击点高程初始水位、水位滑杆和水色调色板
 - 📊 **数据管理**：多格式导入（GeoJSON/KML/SHP/GeoTIFF/CSV），批量导出
 - 🎨 **可视化**：热力图、等高线、3D 要素、电影级效果
 - 🔍 **交互**：绘制、测量、路线规划、地点搜索
@@ -24,7 +26,7 @@
 - 地图内核：OpenLayers 2D + Cesium 3D
 - 数据能力：GeoJSON/KML/KMZ/SHP/GeoTIFF/CSV 导入，CSV/TXT/GeoJSON/KML 导出
 - 图层系统：TOC 协议层、右键菜单、多选批处理、行政区划与用户图层统一管理
-- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD
+- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD、Cesium 三维分析、水体模拟
 
 ## 快速开始
 # WebGIS 前端项目
@@ -36,7 +38,7 @@
 - 地图内核：OpenLayers 2D + Cesium 3D
 - 数据能力：GeoJSON/KML/KMZ/SHP/GeoTIFF/CSV 导入，CSV/TXT/GeoJSON/KML 导出
 - 图层系统：TOC 协议层、右键菜单、多选批处理、行政区划与用户图层统一管理
-- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD
+- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD、Cesium 三维分析、水体模拟
 
 ## 快速开始
 
@@ -90,7 +92,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-11 更新）
+## 目录结构（2026-06-14 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -134,11 +136,13 @@ frontend/src/
 │   ├── Cesium/                               # 3D 地球模块
 │   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 统一工具面板调度）
 │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
-│   │   ├── CesiumToolPanel.vue               # 🆕 统一控制台（场景导航/特效/风场/流体参数）
+│   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/特效/风场/流体参数 + ? 提示）
 │   │   ├── Wind2D.js                         # 2D 风场渲染
-│   │   ├── FluidSimulation/                  # 🆕 水体流体模拟模块
-│   │   │   ├── FluidSimulationPanel.vue      # 流体面板（高度图捕捉 + 参数调节，支持 headless）
-│   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 后处理）
+│   │   ├── composables/                      # Cesium 工具模块状态编排
+│   │   │   └── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
+│   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
+│   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
+│   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）
 │   │   └── terrain/                          # 自定义地形 Provider
 │   │       ├── GeoTerrainProvider.js
 │   │       ├── GeoWTFS.js
@@ -614,7 +618,7 @@ MIT
 
 ---
 
-最后更新：2026-06-11
+最后更新：2026-06-14
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -634,6 +638,27 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.3.4 (2026-06-14)
+#### 🧭 Cesium 三维分析控制面板增强 + 掩膜分析（水体模拟）
+
+**新增与增强：**
+- `components/Cesium/CesiumToolPanel.vue`：控制项标签旁新增 `?` 提示气泡，解释阈值、混合、光强、水位、水色等参数含义
+- `components/Cesium/composables/useCesiumToolModules.js`：流体模块接入水位状态、动态值域、显示值格式化和调色板配置
+- `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：水体外包盒高度改为按采样高程最低点到最高点动态计算
+- `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：点击位置三维坐标高程作为初始水位，并纳入外包盒初始范围
+- `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：新增水位滑杆和数值输入，值域来自当前捕捉区域高程范围
+- `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：新增水色调色板，支持实时修改水体渲染颜色
+- `components/Cesium/FluidSimulation/fluidRuntime.js`：水位改为当前高程值域内的归一化绝对海拔，并支持 `setInitialWaterLevel()` 重置模拟
+- `components/Cesium/FluidSimulation/fluidRuntime.js`：恢复顶部薄层动画水面效果，避免绝对水位模式下顶层特效消失
+- `components/Map/MapContainer.vue`：欢迎提示版本号同步到 V3.3.4
+
+**交互变化：**
+- 用户点击三维场景后，点击点海拔会成为初始水位；水位控制滑杆从该区域最低高程到最高高程变化
+- 水体外包盒不再使用固定高度，海拔落差直接决定模拟体高度
+- 流体参数在统一控制面板内集中调整，说明信息通过悬浮提示展示，减少参数含义猜测成本
+
+详见 [`../Docs/26-06/26-06-14/2026-06-14-cesium-tool-panel-fluid-simulation-v334.md`](../Docs/26-06/26-06-14/2026-06-14-cesium-tool-panel-fluid-simulation-v334.md)
 
 ### V3.3.3 (2026-06-11)
 #### 📧 邮箱账号化 + 旧用户绑定迁移
