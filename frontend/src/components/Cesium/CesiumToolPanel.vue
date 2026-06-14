@@ -153,149 +153,212 @@
                     <div
                         v-if="basemapOptions.length"
                         class="option-group"
+                        :class="{ expanded: isLayerSectionExpanded('basemap') }"
                     >
-                        <div class="section-head">
-                            <Layers
-                                :size="16"
-                                stroke-width="2"
-                            />
-                            <span>地图源</span>
-                        </div>
-                        <div class="option-grid">
-                            <button
-                                v-for="option in basemapOptions"
-                                :key="option.value"
-                                class="option-card"
-                                :class="{ active: option.value === activeBasemap }"
-                                type="button"
-                                :disabled="option.disabled"
-                                :aria-pressed="option.value === activeBasemap"
-                                :title="option.description || option.label"
-                                @click="selectBasemapOption(option)"
-                            >
-                                <span>{{ option.label }}</span>
-                                <Check
-                                    v-if="option.value === activeBasemap"
-                                    :size="15"
-                                    stroke-width="2.4"
-                                />
-                            </button>
-                        </div>
-
-                        <form
-                            class="custom-basemap-editor"
-                            @submit.prevent="submitCustomBasemap"
+                        <button
+                            class="section-head section-toggle"
+                            type="button"
+                            :aria-expanded="isLayerSectionExpanded('basemap')"
+                            @click="toggleLayerSection('basemap')"
                         >
-                            <div class="custom-basemap-input-row">
-                                <Link
-                                    class="custom-basemap-icon"
+                            <span class="section-main">
+                                <Layers
+                                    :size="16"
+                                    stroke-width="2"
+                                />
+                                <span>底图源</span>
+                            </span>
+                            <span class="section-meta">
+                                <span>{{ activeBasemapLabel }}</span>
+                                <ChevronDown
+                                    class="section-chevron"
                                     :size="15"
                                     stroke-width="2"
                                 />
-                                <input
-                                    v-model="customBasemapDraft"
-                                    class="custom-basemap-input"
-                                    type="text"
-                                    inputmode="url"
-                                    spellcheck="false"
-                                    placeholder="https://example.com/tiles/{z}/{x}/{y}.png"
-                                />
+                            </span>
+                        </button>
+                        <div
+                            v-if="isLayerSectionExpanded('basemap')"
+                            class="section-body"
+                        >
+                            <div class="option-grid">
                                 <button
-                                    class="custom-basemap-submit"
-                                    type="submit"
-                                    :disabled="!customBasemapDraft.trim()"
-                                    title="加载自定义 XYZ"
+                                    v-for="option in basemapOptions"
+                                    :key="option.value"
+                                    class="option-card"
+                                    :class="{ active: option.value === activeBasemap }"
+                                    type="button"
+                                    :disabled="option.disabled"
+                                    :aria-pressed="option.value === activeBasemap"
+                                    :title="option.description || option.label"
+                                    @click="selectBasemapOption(option)"
                                 >
-                                    <Send
-                                        :size="14"
-                                        stroke-width="2"
+                                    <span>{{ option.label }}</span>
+                                    <Check
+                                        v-if="option.value === activeBasemap"
+                                        :size="15"
+                                        stroke-width="2.4"
                                     />
-                                    <span>加载</span>
                                 </button>
                             </div>
-                            <div
-                                v-if="customBasemapUrl"
-                                class="custom-basemap-current"
+
+                            <form
+                                class="custom-basemap-editor"
+                                @submit.prevent="submitCustomBasemap"
                             >
-                                {{ customBasemapUrl }}
-                            </div>
-                        </form>
+                                <div class="custom-basemap-input-row">
+                                    <Link
+                                        class="custom-basemap-icon"
+                                        :size="15"
+                                        stroke-width="2"
+                                    />
+                                    <input
+                                        v-model="customBasemapDraft"
+                                        class="custom-basemap-input"
+                                        type="text"
+                                        inputmode="url"
+                                        spellcheck="false"
+                                        placeholder="https://example.com/tiles/{z}/{x}/{y}.png"
+                                    />
+                                    <button
+                                        class="custom-basemap-submit"
+                                        type="submit"
+                                        :disabled="!customBasemapDraft.trim()"
+                                        title="加载自定义 XYZ"
+                                    >
+                                        <Send
+                                            :size="14"
+                                            stroke-width="2"
+                                        />
+                                        <span>加载</span>
+                                    </button>
+                                </div>
+                                <div
+                                    v-if="customBasemapUrl"
+                                    class="custom-basemap-current"
+                                >
+                                    {{ customBasemapUrl }}
+                                </div>
+                            </form>
+                        </div>
                     </div>
 
                     <div
                         v-if="terrainOptions.length"
                         class="option-group"
+                        :class="{ expanded: isLayerSectionExpanded('terrain') }"
                     >
-                        <div class="section-head">
-                            <Mountain
-                                :size="16"
-                                stroke-width="2"
-                            />
-                            <span>地形</span>
-                        </div>
-                        <div class="option-grid">
-                            <button
-                                v-for="option in terrainOptions"
-                                :key="option.value"
-                                class="option-card"
-                                :class="{ active: option.value === activeTerrain }"
-                                type="button"
-                                :aria-pressed="option.value === activeTerrain"
-                                :title="option.description || option.label"
-                                @click="$emit('update:activeTerrain', option.value)"
-                            >
-                                <span>{{ option.label }}</span>
-                                <Check
-                                    v-if="option.value === activeTerrain"
-                                    :size="15"
-                                    stroke-width="2.4"
+                        <button
+                            class="section-head section-toggle"
+                            type="button"
+                            :aria-expanded="isLayerSectionExpanded('terrain')"
+                            @click="toggleLayerSection('terrain')"
+                        >
+                            <span class="section-main">
+                                <Mountain
+                                    :size="16"
+                                    stroke-width="2"
                                 />
-                            </button>
+                                <span>地形</span>
+                            </span>
+                            <span class="section-meta">
+                                <span>{{ activeTerrainLabel }}</span>
+                                <ChevronDown
+                                    class="section-chevron"
+                                    :size="15"
+                                    stroke-width="2"
+                                />
+                            </span>
+                        </button>
+                        <div
+                            v-if="isLayerSectionExpanded('terrain')"
+                            class="section-body"
+                        >
+                            <div class="option-grid">
+                                <button
+                                    v-for="option in terrainOptions"
+                                    :key="option.value"
+                                    class="option-card"
+                                    :class="{ active: option.value === activeTerrain }"
+                                    type="button"
+                                    :aria-pressed="option.value === activeTerrain"
+                                    :title="option.description || option.label"
+                                    @click="$emit('update:activeTerrain', option.value)"
+                                >
+                                    <span>{{ option.label }}</span>
+                                    <Check
+                                        v-if="option.value === activeTerrain"
+                                        :size="15"
+                                        stroke-width="2.4"
+                                    />
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <div
                         v-if="overlayOptions.length"
                         class="option-group"
+                        :class="{ expanded: isLayerSectionExpanded('overlay') }"
                     >
-                        <div class="section-head">
-                            <Eye
-                                :size="16"
-                                stroke-width="2"
-                            />
-                            <span>叠加层</span>
-                        </div>
-                        <div class="overlay-list">
-                            <button
-                                v-for="overlay in overlayOptions"
-                                :key="overlay.value"
-                                class="overlay-row"
-                                :class="{ active: !!overlay.active }"
-                                type="button"
-                                :disabled="overlay.disabled"
-                                :aria-pressed="!!overlay.active"
-                                :title="overlay.description || overlay.label"
-                                @click="emitOverlayToggle(overlay)"
-                            >
-                                <span class="overlay-copy">
-                                    <span class="overlay-title">{{ overlay.label }}</span>
-                                    <span
-                                        v-if="overlay.description"
-                                        class="overlay-desc"
-                                    >
-                                        {{ overlay.description }}
-                                    </span>
-                                </span>
-                                <span
-                                    class="toggle-control"
+                        <button
+                            class="section-head section-toggle"
+                            type="button"
+                            :aria-expanded="isLayerSectionExpanded('overlay')"
+                            @click="toggleLayerSection('overlay')"
+                        >
+                            <span class="section-main">
+                                <Eye
+                                    :size="16"
+                                    stroke-width="2"
+                                />
+                                <span>叠加层</span>
+                            </span>
+                            <span class="section-meta">
+                                <span>{{ activeOverlayCount }}/{{ overlayOptions.length }}</span>
+                                <ChevronDown
+                                    class="section-chevron"
+                                    :size="15"
+                                    stroke-width="2"
+                                />
+                            </span>
+                        </button>
+                        <div
+                            v-if="isLayerSectionExpanded('overlay')"
+                            class="section-body"
+                        >
+                            <div class="overlay-list">
+                                <button
+                                    v-for="overlay in overlayOptions"
+                                    :key="overlay.value"
+                                    class="overlay-row"
                                     :class="{ active: !!overlay.active }"
-                                    aria-hidden="true"
+                                    type="button"
+                                    :disabled="overlay.disabled"
+                                    :aria-pressed="!!overlay.active"
+                                    :title="overlay.description || overlay.label"
+                                    @click="emitOverlayToggle(overlay)"
                                 >
-                                    <span class="toggle-track">
-                                        <span class="toggle-thumb"></span>
+                                    <span class="overlay-copy">
+                                        <span class="overlay-title">{{ overlay.label }}</span>
+                                        <span
+                                            v-if="overlay.description"
+                                            class="overlay-desc"
+                                        >
+                                            {{ overlay.description }}
+                                        </span>
                                     </span>
-                                </span>
-                            </button>
+                                    <span
+                                        class="toggle-control"
+                                        :class="{ active: !!overlay.active }"
+                                        aria-hidden="true"
+                                    >
+                                        <span class="toggle-track">
+                                            <span class="toggle-thumb"></span>
+                                        </span>
+                                    </span>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -572,10 +635,17 @@ const emit = defineEmits([
     'custom-basemap-submit',
 ]);
 
+const UI_STATE_VERSION = 2;
 const storedUiState = readStoredUiState();
+const shouldRestoreExpansionState = storedUiState.uiStateVersion === UI_STATE_VERSION;
 const activeTab = ref(storedUiState.activeTab || 'scene');
 const compactMode = ref(!!storedUiState.compactMode);
-const expandedModuleIds = ref(new Set(storedUiState.expandedModuleIds || ['effects']));
+const expandedLayerSectionIds = ref(
+    new Set(shouldRestoreExpansionState ? storedUiState.expandedLayerSectionIds || [] : []),
+);
+const expandedModuleIds = ref(
+    new Set(shouldRestoreExpansionState ? storedUiState.expandedModuleIds || [] : []),
+);
 const customBasemapDraft = ref(props.customBasemapUrl || '');
 
 const isPanelOpen = computed(() => props.embedded || props.open);
@@ -586,6 +656,9 @@ const activeModuleCount = computed(() => {
     return featureModules.value.filter(
         module => module.statusTone === 'success' || module.statusTone === 'warning',
     ).length;
+});
+const activeOverlayCount = computed(() => {
+    return props.overlayOptions.filter(overlay => !!overlay.active).length;
 });
 
 const panelTabs = [
@@ -612,7 +685,7 @@ watch(
     { immediate: true },
 );
 
-watch([activeTab, compactMode, expandedModuleIds], persistUiState, { deep: true });
+watch([activeTab, compactMode, expandedLayerSectionIds, expandedModuleIds], persistUiState, { deep: true });
 
 watch(
     () => props.customBasemapUrl,
@@ -625,6 +698,20 @@ watch(
 
 function setPanelOpen(value) {
     emit('update:open', value);
+}
+
+function isLayerSectionExpanded(sectionId) {
+    return expandedLayerSectionIds.value.has(sectionId);
+}
+
+function toggleLayerSection(sectionId) {
+    const next = new Set(expandedLayerSectionIds.value);
+    if (next.has(sectionId)) {
+        next.delete(sectionId);
+    } else {
+        next.add(sectionId);
+    }
+    expandedLayerSectionIds.value = next;
 }
 
 function isModuleExpanded(moduleId) {
@@ -670,8 +757,10 @@ function persistUiState() {
         window.localStorage.setItem(
             props.storageKey,
             JSON.stringify({
+                uiStateVersion: UI_STATE_VERSION,
                 activeTab: activeTab.value,
                 compactMode: compactMode.value,
+                expandedLayerSectionIds: [...expandedLayerSectionIds.value],
                 expandedModuleIds: [...expandedModuleIds.value],
             }),
         );
@@ -994,19 +1083,90 @@ function emitOverlayToggle(overlay) {
     font-size: 12px;
 }
 
+.option-group {
+    overflow: hidden;
+    display: grid;
+    border: 1px solid rgba(155, 216, 255, 0.16);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.option-group.expanded {
+    border-color: rgba(74, 222, 128, 0.38);
+    background: rgba(10, 47, 37, 0.52);
+}
+
 .section-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
     color: rgba(238, 251, 243, 0.92);
     font-size: 12px;
     font-weight: 800;
 }
 
-.option-group {
+.section-toggle {
+    width: 100%;
+    min-height: 44px;
+    justify-content: space-between;
+    gap: 10px;
+    border: 0;
+    padding: 10px 12px;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+}
+
+.section-toggle:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.section-toggle:focus-visible {
+    outline: 2px solid rgba(74, 222, 128, 0.72);
+    outline-offset: -2px;
+}
+
+.section-main {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.section-meta {
+    min-width: 0;
+    max-width: 156px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    color: rgba(220, 243, 255, 0.6);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.section-meta span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.section-chevron {
+    flex: 0 0 auto;
+    color: rgba(220, 243, 255, 0.72);
+    transition: transform 0.18s ease;
+}
+
+.option-group.expanded .section-chevron {
+    transform: rotate(180deg);
+}
+
+.section-body {
     display: grid;
     gap: 8px;
+    padding: 0 10px 10px;
+    border-top: 1px solid rgba(155, 216, 255, 0.12);
+    background: rgba(0, 7, 12, 0.14);
 }
 
 .option-grid {

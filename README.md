@@ -669,6 +669,7 @@ LOG_LEVEL=INFO
 
 **三维分析增强：**
 - ✅ Cesium 三维模块统一控制面板继续收敛场景导航、高级视觉特效、2D 风场和水体模拟参数
+- ✅ 图层 tab 中底图源、地形、叠加层改为可折叠卡片，升级后初始状态默认收起
 - ✅ 参数行新增 `?` 悬浮说明，补充阈值、混合、光强、水位、水色等控制项含义
 - ✅ 水色支持调色板动态调整，当前水体颜色可实时更新
 - ✅ 水位滑杆接入高程值域，范围来自当前捕捉区域最低点到最高点
@@ -678,7 +679,7 @@ LOG_LEVEL=INFO
 - ✅ 采样失败回退分支也使用真实海拔区间，保持水位滑杆、外包盒和 shader 归一化逻辑一致
 
 **修改文件：**
-- `frontend/src/components/Cesium/CesiumToolPanel.vue` — 控制项提示气泡 UI 与响应式列宽
+- `frontend/src/components/Cesium/CesiumToolPanel.vue` — 图层分组折叠、控制项提示气泡 UI 与响应式列宽
 - `frontend/src/components/Cesium/composables/useCesiumToolModules.js` — 流体模块状态、水位控制、提示说明与显示值格式化
 - `frontend/src/components/Cesium/FluidSimulation/FluidSimulationPanel.vue` — 高程值域外包盒、点击点初始水位、水位滑杆、水色同步
 - `frontend/src/components/Cesium/FluidSimulation/fluidRuntime.js` — 归一化绝对水位、顶部动画薄膜、重置模拟入口
