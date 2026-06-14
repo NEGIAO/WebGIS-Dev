@@ -459,7 +459,9 @@ export function createMapSearchAndCoordinateInputFeature({
             // --------------------------------
 
             const poiid = String(payload?.poiid || detail?.poiid || '').trim();
-            const layerName = detail.name ? `${detail.name} - AOI范围` : '未知AOI';
+            const layerName = detail.name
+                ? `${detail.name} - AOI范围`
+                : `AOI_${Date.now()} - AOI范围`;
 
             // 3. 执行地图渲染逻辑 (注意坐标系的选择)
             // 假设的地图需要的是 WGS84 坐标，使用 detail.ringsWgs84

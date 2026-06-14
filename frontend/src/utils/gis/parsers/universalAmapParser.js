@@ -54,6 +54,18 @@ function splitAmapShapePoints(regionText = '') {
         .filter((point) => Array.isArray(point));
 }
 
+function stripOuterQuotes(text = '') {
+    const normalized = String(text || '').trim();
+    if (normalized.length >= 2) {
+        const first = normalized[0];
+        const last = normalized[normalized.length - 1];
+        if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+            return normalized.slice(1, -1).trim();
+        }
+    }
+    return normalized;
+}
+
 function closeRingIfNeeded(ring = []) {
     if (ring.length < 3) return [];
     const first = ring[0],
@@ -70,6 +82,30 @@ function parseShapeToGcjRings(shape = '') {
         .map((r) => splitAmapShapePoints(r))
         .map((r) => closeRingIfNeeded(r))
         .filter((r) => r.length >= 4);
+}
+
+function convertGcjRingsToWgs84WithSource(gcjRings = []) {
+    return gcjRings.map((ring) => ring.map((pt) => gcj02ToWgs84(pt[0], pt[1])));
+}
+
+function parsePlainAoiShapeText(payload) {
+    const text = stripOuterQuotes(payload);
+    if (!text) {
+        throw createParserError('AMAP_AOI_EMPTY_PAYLOAD', '请输入高德详情 JSON');
+    }
+
+    const ringsGcj02 = parseShapeToGcjRings(text);
+    if (!ringsGcj02.length) {
+        throw createParserError('AMAP_AOI_INVALID_SHAPE', '未发现边界数据');
+    }
+
+    return {
+        poiid: '',
+        name: `AOI_${Date.now()}`,
+        ringsGcj02,
+        ringsWgs84: convertGcjRingsToWgs84WithSource(ringsGcj02),
+        source: 'plain-aoi-text',
+    };
 }
 
 function convertGcjRingsToWgs84(gcjRings = []) {
@@ -233,6 +269,14 @@ export function parseStandardGeoJson(payload) {
  * 逻辑4：万能解析入口 (兜底逻辑)
  */
 export function universalAmapParser(payload) {
+    if (typeof payload === 'string') {
+        const text = stripOuterQuotes(payload);
+        const looksLikePlainShape = text.includes(',') && text.includes(';') && !text.includes('{');
+        if (looksLikePlainShape) {
+            return parsePlainAoiShapeText(text);
+        }
+    }
+
     try {
         return parseAmapDetailAoi(payload);
     } catch { /* ignored */

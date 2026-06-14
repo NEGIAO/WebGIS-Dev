@@ -80,7 +80,16 @@
 
             <div class="aoi-dialog-row">
                 <div class="aoi-dialog-row-head">
-                    <label class="aoi-dialog-label">详情 JSON</label>
+                    <div class="aoi-dialog-label-group">
+                        <label class="aoi-dialog-label">详情 JSON / AOI 坐标</label>
+                        <span
+                            class="aoi-dialog-help"
+                                title="支持 3 种输入：1) 高德详情 JSON（含 aois.polyline / mining_shape.shape）；2) 双引号包围的纯坐标串；3) 坐标对用 ; 分隔、独立区域用 @ 分隔。解析条件：每个区域至少 4 个点，系统会自动闭合首尾。"
+                                aria-label="支持的 AOI 输入格式说明"
+                        >
+                            ?
+                        </span>
+                    </div>
                     <button
                         class="aoi-dialog-mini-btn"
                         type="button"
@@ -324,6 +333,36 @@ async function handlePasteJson() {
     font-size: 12px;
     color: var(--text-brand-dark);
     font-weight: 600;
+}
+
+.aoi-dialog-label-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.aoi-dialog-help {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(24, 144, 255, 0.35);
+    background: rgba(24, 144, 255, 0.08);
+    color: #1677ff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: help;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.aoi-dialog-help:hover {
+    border-color: rgba(24, 144, 255, 0.6);
+    background: rgba(24, 144, 255, 0.14);
 }
 
 .aoi-dialog-input,

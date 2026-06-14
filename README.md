@@ -48,6 +48,7 @@
 - Custom terrain + WTFS labels (in-repo providers, no TDT Cesium plugins)
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
 - 🔎 **高德 AOI 手动注入**：支持粘贴详情 JSON / 搜索 AOI 结果，兼容 `@` 分隔的独立多区域边界
+- 🔎 **纯坐标串 AOI 注入**：支持双引号包围的坐标文本，按 `;` 分隔坐标对、按 `@` 分隔多区域，自动闭合首尾
 - 🎨 电影级视觉效果、数据可视化、首屏特效
 - 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步）
 - 🔍 绘制、测量、路线规划、地点搜索、**卷帘分析**
