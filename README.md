@@ -47,6 +47,7 @@
 - 🌊 **掩膜分析（水体模拟）**：基于地形高程值域动态生成外包盒，支持点击点海拔初始水位、水位滑杆和水色调色板
 - Custom terrain + WTFS labels (in-repo providers, no TDT Cesium plugins)
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
+- 🔎 **高德 AOI 手动注入**：支持粘贴详情 JSON / 搜索 AOI 结果，兼容 `@` 分隔的独立多区域边界
 - 🎨 电影级视觉效果、数据可视化、首屏特效
 - 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步）
 - 🔍 绘制、测量、路线规划、地点搜索、**卷帘分析**

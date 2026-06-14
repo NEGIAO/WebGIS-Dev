@@ -118,6 +118,21 @@ function parseLngLatPair(text) {
     return [lng, lat];
 }
 
+function splitAmapShapeRegions(shapeText = '') {
+    return String(shapeText || '')
+        .trim()
+        .split(/[@|]/)
+        .map((regionText) => regionText.trim())
+        .filter(Boolean);
+}
+
+function splitAmapShapePoints(regionText = '') {
+    return String(regionText || '')
+        .split(/[_;]/)
+        .map((pairText) => parseLngLatPair(pairText))
+        .filter((point) => Array.isArray(point));
+}
+
 function closeRingIfNeeded(ring = []) {
     if (ring.length < 3) return [];
 
@@ -135,16 +150,8 @@ function parseShapeToGcjRings(shape = '') {
     const normalizedShape = String(shape || '').trim();
     if (!normalizedShape) return [];
 
-    return normalizedShape
-        .split('|')
-        .map((ringText) => ringText.trim())
-        .filter(Boolean)
-        .map((ringText) =>
-            ringText
-                .split(';')
-                .map((pairText) => parseLngLatPair(pairText))
-                .filter((point) => Array.isArray(point)),
-        )
+    return splitAmapShapeRegions(normalizedShape)
+        .map((ringText) => splitAmapShapePoints(ringText))
         .map((ring) => closeRingIfNeeded(ring))
         .filter((ring) => Array.isArray(ring) && ring.length >= 4);
 }

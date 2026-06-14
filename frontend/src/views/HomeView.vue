@@ -723,6 +723,8 @@ function handleDrawPointByCoordinates(payload) {
 /**
  * 处理用户手动粘贴高德详情 JSON 并绘制 AOI
  */
+// 原始 polyline 用 @ 分割三块独立区域，因此几何类型选用 MultiPolygon；
+// 所有坐标顺序保持原始路网 / 边界顺序，首尾点闭合；
 function handleDrawAmapAoiFromJson(payload) {
     try {
         mapContainerRef.value?.drawAmapAoiByDetailJsonInput?.(payload);

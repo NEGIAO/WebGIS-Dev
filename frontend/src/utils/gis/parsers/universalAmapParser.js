@@ -39,6 +39,21 @@ function parseLngLatPair(text) {
     return [lng, lat];
 }
 
+function splitAmapShapeRegions(shapeText = '') {
+    return String(shapeText || '')
+        .trim()
+        .split(/[@|]/)
+        .map((regionText) => regionText.trim())
+        .filter(Boolean);
+}
+
+function splitAmapShapePoints(regionText = '') {
+    return String(regionText || '')
+        .split(/[_;]/)
+        .map((pairText) => parseLngLatPair(pairText))
+        .filter((point) => Array.isArray(point));
+}
+
 function closeRingIfNeeded(ring = []) {
     if (ring.length < 3) return [];
     const first = ring[0],
@@ -51,18 +66,8 @@ function closeRingIfNeeded(ring = []) {
 function parseShapeToGcjRings(shape = '') {
     const text = String(shape || '').trim();
     if (!text) return [];
-    // 自动判断分隔符：下划线或分号
-    const pointSep = text.includes('_') ? '_' : ';';
-    return text
-        .split('|')
-        .map((r) => r.trim())
-        .filter(Boolean)
-        .map((r) =>
-            r
-                .split(pointSep)
-                .map((p) => parseLngLatPair(p))
-                .filter(Boolean),
-        )
+    return splitAmapShapeRegions(text)
+        .map((r) => splitAmapShapePoints(r))
         .map((r) => closeRingIfNeeded(r))
         .filter((r) => r.length >= 4);
 }
