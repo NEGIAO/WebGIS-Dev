@@ -417,6 +417,20 @@
                                             />
                                         </template>
 
+                                        <template v-else-if="control.type === 'color'">
+                                            <input
+                                                class="control-color"
+                                                type="color"
+                                                :value="control.value"
+                                                :disabled="control.disabled"
+                                                @input="emitControlChange(module.id, control, $event.target.value)"
+                                            />
+                                            <span
+                                                class="control-color-swatch"
+                                                :style="{ backgroundColor: control.value }"
+                                            ></span>
+                                        </template>
+
                                         <select
                                             v-else-if="control.type === 'select'"
                                             class="control-select"
@@ -1375,6 +1389,33 @@ function emitOverlayToggle(overlay) {
 
 .control-select {
     grid-column: span 2;
+}
+
+.control-row.control-color {
+    grid-template-columns: 72px minmax(0, 1fr) 34px 64px;
+}
+
+.control-color {
+    width: 100%;
+    height: 28px;
+    min-width: 0;
+    border: 1px solid rgba(155, 216, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(3, 18, 28, 0.88);
+    padding: 2px;
+    cursor: pointer;
+}
+
+.control-color:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.control-color-swatch {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(238, 251, 243, 0.46);
+    border-radius: 6px;
 }
 
 .toggle-control {

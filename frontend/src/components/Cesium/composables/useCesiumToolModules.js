@@ -22,6 +22,7 @@ export function useCesiumToolModules({
         threshold: 10,
         blend: 20,
         lightStrength: 3,
+        waterColor: '#0d4fa3',
     });
 
     const fluidState = ref({
@@ -137,7 +138,7 @@ export function useCesiumToolModules({
         if (moduleId === 'fluid' && controlId in fluidParams.value) {
             fluidParams.value = {
                 ...fluidParams.value,
-                [controlId]: Number(value),
+                [controlId]: controlId === 'waterColor' ? value : Number(value),
             };
         }
     }
@@ -247,6 +248,13 @@ function createFluidControls(fluidParams) {
             step: 0.0001,
             value: fluidParams.lightStrength,
             displayValue: Number(fluidParams.lightStrength).toFixed(2),
+        },
+        {
+            id: 'waterColor',
+            label: '水色',
+            type: 'color',
+            value: fluidParams.waterColor,
+            displayValue: fluidParams.waterColor,
         },
     ];
 }

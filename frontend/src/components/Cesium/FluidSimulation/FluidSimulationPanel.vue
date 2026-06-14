@@ -96,6 +96,18 @@
                         step="0.0001"
                     />
                 </label>
+                <label class="param-row color-row">
+                    <span>水色</span>
+                    <input
+                        v-model="waterColor"
+                        class="color-input"
+                        type="color"
+                    />
+                    <span
+                        class="color-swatch"
+                        :style="{ backgroundColor: waterColor }"
+                    ></span>
+                </label>
             </div>
         </div>
     </div>
@@ -131,8 +143,11 @@ const emit = defineEmits(['close', 'state-change']);
 const message = useMessage();
 
 const FLUID_TEXTURE_SIZE = 1024;
+// 水平范围尺寸：10KM
 const FLUID_HORIZONTAL_SIZE = 10000;
-const FLUID_DEPTH = 1200;
+const FLUID_FALLBACK_DEPTH = 1200;
+const FLUID_FALLBACK_BOTTOM_PADDING = 100;
+const FLUID_MIN_VERTICAL_SPAN = 0.01;
 const TERRAIN_SAMPLE_TARGET_SPACING = 60;
 const TERRAIN_SAMPLE_MIN_SIZE = 64;
 const TERRAIN_SAMPLE_MAX_SIZE = 160;
@@ -140,6 +155,7 @@ const TERRAIN_SAMPLE_MAX_SIZE = 160;
 const threshold = ref(10);
 const blend = ref(20);
 const lightStrength = ref(3);
+const waterColor = ref('#0d4fa3');
 const isPicking = ref(false);
 const hasFluid = ref(false);
 const selectedLon = ref(null);
@@ -161,7 +177,7 @@ const selectedText = computed(() => {
     return `经度 ${selectedLon.value.toFixed(6)} / 纬度 ${selectedLat.value.toFixed(6)}`;
 });
 
-watch([threshold, blend, lightStrength], applyFluidParams);
+watch([threshold, blend, lightStrength, waterColor], applyFluidParams);
 
 watch(
     () => props.params,
@@ -205,6 +221,9 @@ function syncExternalParams(params) {
     if (Number.isFinite(Number(params.lightStrength))) {
         lightStrength.value = Number(params.lightStrength);
     }
+    if (isValidHexColor(params.waterColor)) {
+        waterColor.value = params.waterColor;
+    }
 }
 
 function emitState() {
@@ -243,14 +262,12 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
     const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
     const lon = Cesium.Math.toDegrees(cartographic.longitude);
     const lat = Cesium.Math.toDegrees(cartographic.latitude);
-    const groundHeight = Math.max(0, Number(cartographic.height) || 0);
-    const bottomPadding = 100;
-    const fluidDepth = FLUID_DEPTH;
-    const baseHeight = Math.max(0, groundHeight - bottomPadding);
-    const dimensions = new Cesium.Cartesian3(
+    const pickedHeight = Number(cartographic.height);
+    const centerHeight = Number.isFinite(pickedHeight) ? pickedHeight : 0;
+    const horizontalDimensions = new Cesium.Cartesian3(
         FLUID_HORIZONTAL_SIZE,
         FLUID_HORIZONTAL_SIZE,
-        fluidDepth,
+        0,
     );
 
     showLoading('正在请求模拟范围高度数据...');
@@ -263,9 +280,17 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         const heightMapSource = await createTerrainHeightMapSource(viewer, Cesium, {
             lon,
             lat,
-            baseHeight,
-            dimensions,
+            centerHeight,
+            dimensions: horizontalDimensions,
         });
+        const verticalRange = resolveFluidVerticalRange(heightMapSource, centerHeight);
+        const baseHeight = verticalRange.baseHeight;
+        const fluidDepth = verticalRange.depth;
+        const dimensions = new Cesium.Cartesian3(
+            FLUID_HORIZONTAL_SIZE,
+            FLUID_HORIZONTAL_SIZE,
+            fluidDepth,
+        );
 
         if (creationId !== fluidCreationId) return;
 
@@ -281,9 +306,10 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
             height: FLUID_TEXTURE_SIZE,
             dimensions,
             baseHeight,
-            minHeight: 0,
-            maxHeight: fluidDepth,
+            minHeight: verticalRange.minHeight,
+            maxHeight: verticalRange.maxHeight,
             heightMapSource,
+            waterColor: createCesiumRgb(Cesium, waterColor.value),
             // 渲染参数：雾距/高光强度/高光衰减
             customParams: new Cesium.Cartesian4(t, b, l, 10),
             // 模拟参数：attenuation/strength/minTotalFlow/initialWaterLevel
@@ -338,11 +364,7 @@ async function sampleTerrainHeightMapSource(viewer, Cesium, options, size) {
         viewer.terrainProvider,
         positions,
     );
-    return createSampledHeightMapSource(sampledPositions || positions, {
-        baseHeight: options.baseHeight,
-        fluidDepth: options.dimensions.z,
-        size,
-    });
+    return createSampledHeightMapSource(sampledPositions || positions, { size });
 }
 
 function chooseTerrainSampleSize(dimensions) {
@@ -355,8 +377,8 @@ function clampInteger(value, min, max) {
     return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function createTerrainSamplePositions(Cesium, { lon, lat, baseHeight, dimensions }, size) {
-    const center = Cesium.Cartesian3.fromDegrees(lon, lat, baseHeight);
+function createTerrainSamplePositions(Cesium, { lon, lat, centerHeight, dimensions }, size) {
+    const center = Cesium.Cartesian3.fromDegrees(lon, lat, centerHeight);
     const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
     const positions = [];
     const denominator = Math.max(1, size - 1);
@@ -403,16 +425,18 @@ function getExplicitTerrainSampleLevel(terrainProvider) {
     return null;
 }
 
-function createSampledHeightMapSource(positions, { baseHeight, fluidDepth, size }) {
+function createSampledHeightMapSource(positions, { size }) {
+    const range = getTerrainHeightRange(positions);
+    if (!range) return null;
+
     const data = new Float32Array(size * size * 4);
 
-    for (let i = 0; i < positions.length; i++) {
+    for (let i = 0; i < size * size; i++) {
         const height = Number(positions[i]?.height);
-        const relativeHeight = Number.isFinite(height)
-            ? clampNumber(height - baseHeight, 0, fluidDepth)
-            : 0;
         const offset = i * 4;
-        data[offset] = relativeHeight;
+        data[offset] = Number.isFinite(height)
+            ? clampNumber(height, range.minHeight, range.maxHeight)
+            : range.minHeight;
         data[offset + 1] = 0;
         data[offset + 2] = 0;
         data[offset + 3] = 1;
@@ -422,6 +446,8 @@ function createSampledHeightMapSource(positions, { baseHeight, fluidDepth, size 
         width: size,
         height: size,
         arrayBufferView: data,
+        minHeight: range.minHeight,
+        maxHeight: range.maxHeight,
     };
 }
 
@@ -430,6 +456,80 @@ function createFlatHeightMapSource(size) {
         width: size,
         height: size,
         arrayBufferView: new Float32Array(size * size * 4),
+        minHeight: 0,
+        maxHeight: 0,
+    };
+}
+
+function getTerrainHeightRange(positions) {
+    let minHeight = Number.POSITIVE_INFINITY;
+    let maxHeight = Number.NEGATIVE_INFINITY;
+
+    for (const position of positions || []) {
+        const height = Number(position?.height);
+        if (!Number.isFinite(height)) continue;
+        minHeight = Math.min(minHeight, height);
+        maxHeight = Math.max(maxHeight, height);
+    }
+
+    if (!Number.isFinite(minHeight) || !Number.isFinite(maxHeight)) {
+        return null;
+    }
+
+    return { minHeight, maxHeight };
+}
+
+function resolveFluidVerticalRange(heightMapSource, centerHeight) {
+    const sampledMinHeight = Number(heightMapSource?.minHeight);
+    const sampledMaxHeight = Number(heightMapSource?.maxHeight);
+
+    if (Number.isFinite(sampledMinHeight) && Number.isFinite(sampledMaxHeight)) {
+        const minHeight = Math.min(sampledMinHeight, sampledMaxHeight);
+        const sampledSpan = Math.abs(sampledMaxHeight - sampledMinHeight);
+        const depth = Math.max(sampledSpan, FLUID_MIN_VERTICAL_SPAN);
+
+        return {
+            baseHeight: minHeight,
+            depth,
+            minHeight,
+            maxHeight: minHeight + depth,
+        };
+    }
+
+    return {
+        baseHeight: centerHeight - FLUID_FALLBACK_BOTTOM_PADDING,
+        depth: FLUID_FALLBACK_DEPTH,
+        minHeight: 0,
+        maxHeight: FLUID_FALLBACK_DEPTH,
+    };
+}
+
+function createCesiumRgb(Cesium, hexColor) {
+    const rgb = parseHexColor(hexColor) || parseHexColor('#0d4fa3');
+    return new Cesium.Cartesian3(rgb.red, rgb.green, rgb.blue);
+}
+
+function syncWaterColorConfig() {
+    const rgb = parseHexColor(waterColor.value);
+    const color = fluidRenderer?.config?.waterColor;
+    if (!rgb || !color) return;
+
+    color.x = rgb.red;
+    color.y = rgb.green;
+    color.z = rgb.blue;
+}
+
+function isValidHexColor(value) {
+    return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+}
+
+function parseHexColor(value) {
+    if (!isValidHexColor(value)) return null;
+
+    return {
+        red: Number.parseInt(value.slice(1, 3), 16) / 255,
+        green: Number.parseInt(value.slice(3, 5), 16) / 255,
+        blue: Number.parseInt(value.slice(5, 7), 16) / 255,
     };
 }
 
@@ -483,6 +583,9 @@ function applyFluidParams() {
         // minTotalFlow: threshold 0~500 → 映射到 0~0.01
         fluidRenderer.config.fluidParams.z = t / 50000;
     }
+
+    syncWaterColorConfig();
+    fluidRenderer.viewer?.scene?.requestRender?.();
 }
 
 function prepareScene(viewer, Cesium) {
@@ -710,6 +813,27 @@ defineExpose({
     background: rgba(5, 18, 29, 0.72);
     color: #e8f6ff;
     padding: 0 6px;
+}
+
+.color-row {
+    grid-template-columns: 42px minmax(0, 1fr) 32px;
+}
+
+.color-input {
+    width: 100%;
+    height: 28px;
+    border: 1px solid rgba(148, 210, 255, 0.28);
+    border-radius: 6px;
+    background: rgba(5, 18, 29, 0.72);
+    padding: 2px;
+    cursor: pointer;
+}
+
+.color-swatch {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(232, 246, 255, 0.5);
+    border-radius: 6px;
 }
 
 @media (max-width: 768px) {

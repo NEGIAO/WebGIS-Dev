@@ -348,6 +348,7 @@ void main( )
 uniform sampler2D iChannel0;
 uniform sampler2D heightMap;
 uniform sampler2D colorTexture;
+uniform vec3 waterColor;
 uniform vec2     iResolution;
 uniform float     iTime;
 uniform int     iFrame;
@@ -384,8 +385,8 @@ vec3 terrainColor(in vec3 p, in vec3 n, out float spec)
     // 简单地形着色：水面区域蓝色，陆地区域灰绿
     float waterDepth = max(0.0, simData.y - simData.x);
     vec3 landColor = vec3(0.25, 0.45, 0.18);
-    vec3 waterColor = vec3(0.05, 0.15, 0.45);
-    return mix(landColor, waterColor, smoothstep(0.001, 0.02, waterDepth));
+    vec3 waterTint = vec3(0.05, 0.15, 0.45);
+    return mix(landColor, waterTint, smoothstep(0.001, 0.02, waterDepth));
 }
 
 vec3 undergroundColor(float d)
@@ -474,7 +475,7 @@ vec3 Render(in vec3 ro, in vec3 rd)
         float dist = (min(tt, ret.y) - wt);
         vec3 p = waterNormal;
         vec3 lightDir = normalize(light - (ro + rd * tt));
-        vec3 color = vec3(0.,0.,0.4);
+        vec3 color = waterColor;
         tc = applyFog( tc, color, dist * customParam.x);
         float spec = pow(max(0., dot(lightDir, reflect(rd, waterNormal))),customParam.y);
         tc += customParam.z * spec * smoothstep(0.0, 0.1, dist);
@@ -771,6 +772,7 @@ void main()
             // x=attenuation, y=strength, z=minTotalFlow, w=initialWaterLevel
             fluidParams: new Cesium.Cartesian4(0.995, 0.25, 0.0001, 0.03),
             customParams: new Cesium.Cartesian4(10, 20, 0.2, 10),
+            waterColor: new Cesium.Cartesian3(0.05, 0.31, 0.64),
             lonLat: [120.20998865783179, 30.13650797533829],
             timeStep: 0.3,
             heightMapSource: null,
@@ -805,6 +807,8 @@ void main()
                 customParams:
                     options.customParams ||
                     FluidRenderer.DEFAULTS.customParams.clone(),
+                waterColor:
+                    options.waterColor || FluidRenderer.DEFAULTS.waterColor.clone(),
                 lonLat: options.lonLat || [...FluidRenderer.DEFAULTS.lonLat],
                 timeStep: options.timeStep || FluidRenderer.DEFAULTS.timeStep,
                 heightMapSource:
@@ -1094,6 +1098,7 @@ void main()
                 iChannel0: () => this.textures.C,
                 heightMap: () => this._heightMap,
                 customParam: () => this.config.customParams,
+                waterColor: () => this.config.waterColor,
                 colorTexture: () =>
                     getSceneView(this.viewer.scene)?.globeDepth?.colorFramebufferManager
                         ?._colorTextures?.[0],
