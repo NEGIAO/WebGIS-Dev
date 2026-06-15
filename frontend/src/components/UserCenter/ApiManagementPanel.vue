@@ -47,10 +47,11 @@
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <table
+                <div
                     v-else-if="userStats.length > 0"
-                    class="data-table"
+                    class="data-table-wrapper"
                 >
+                    <table class="data-table">
                     <thead>
                         <tr>
                             <th>用户名</th>
@@ -82,7 +83,8 @@
                             <td class="timestamp">{{ formatTime(stat.last_called_at) }}</td>
                         </tr>
                     </tbody>
-                </table>
+                    </table>
+                </div>
                 <div
                     v-else
                     class="empty-state"
@@ -118,10 +120,11 @@
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <table
+                <div
                     v-else-if="endpointStats.length > 0"
-                    class="data-table"
+                    class="data-table-wrapper"
                 >
+                    <table class="data-table">
                     <thead>
                         <tr>
                             <th>API 端点</th>
@@ -153,7 +156,8 @@
                             </td>
                         </tr>
                     </tbody>
-                </table>
+                    </table>
+                </div>
                 <div
                     v-else
                     class="empty-state"
@@ -206,10 +210,11 @@
                     <span class="spinner"></span> 加载中...
                 </div>
 
-                <table
+                <div
                     v-else-if="apiLogs.length > 0"
-                    class="data-table logs-table"
+                    class="data-table-wrapper"
                 >
+                    <table class="data-table logs-table">
                     <thead>
                         <tr>
                             <th>时间</th>
@@ -248,7 +253,8 @@
                             <td>{{ log.response_time_ms?.toFixed(2) || 'N/A' }} ms</td>
                         </tr>
                     </tbody>
-                </table>
+                    </table>
+                </div>
 
                 <!-- 分页控制 -->
                 <div
@@ -508,6 +514,9 @@ onMounted(async () => {
 .api-management-container {
     padding: 0;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     color: var(--acc-text-strong, #214a31);
 }
 
@@ -526,6 +535,7 @@ onMounted(async () => {
 }
 
 .tab-btn {
+    flex: 0 0 auto;
     padding: 8px 16px;
     border: none;
     border-radius: 20px;
@@ -534,6 +544,7 @@ onMounted(async () => {
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
+    white-space: nowrap;
     transition: all 0.3s ease;
     border: 1px solid transparent;
 }
@@ -550,25 +561,35 @@ onMounted(async () => {
 }
 
 /* Tab Content */
+.tabs-content {
+    width: 100%;
+    min-width: 0;
+}
+
 .tab-panel {
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 4px 16px rgba(49, 111, 69, 0.05);
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
     margin-bottom: 16px;
+    min-width: 0;
 }
 
 .panel-header h2 {
     margin: 0;
     font-size: 16px;
     color: var(--acc-text-strong, #214a31);
+    min-width: 0;
 }
 
 .filter-controls {
@@ -576,6 +597,7 @@ onMounted(async () => {
     gap: 10px;
     align-items: center;
     flex-wrap: wrap;
+    min-width: 0;
 }
 
 .filter-controls label {
@@ -586,6 +608,7 @@ onMounted(async () => {
 
 .filter-controls select,
 .filter-controls input {
+    min-width: 0;
     padding: 6px 12px;
     border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 8px;
@@ -593,6 +616,7 @@ onMounted(async () => {
     background: rgba(255, 255, 255, 0.9);
     color: var(--text-primary);
     outline: none;
+    box-sizing: border-box;
     transition: border-color 0.2s;
 }
 
@@ -623,15 +647,22 @@ onMounted(async () => {
 /* Data Table */
 .data-table-wrapper {
     overflow-x: auto;
+    max-width: 100%;
     border-radius: 8px;
     border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
+    -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
     width: 100%;
+    min-width: 720px;
     border-collapse: collapse;
     font-size: 13px;
     background: rgba(255, 255, 255, 0.4);
+}
+
+.logs-table {
+    min-width: 760px;
 }
 
 .data-table thead {
@@ -644,12 +675,14 @@ onMounted(async () => {
     text-align: left;
     font-weight: 600;
     color: var(--acc-text-strong, #214a31);
+    white-space: nowrap;
 }
 
 .data-table td {
     padding: 12px;
     border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.1);
     color: #444;
+    vertical-align: middle;
 }
 
 .data-row:hover {
@@ -702,6 +735,7 @@ onMounted(async () => {
 .timestamp {
     color: var(--acc-text-soft, #5d7f6a);
     font-size: 12px;
+    white-space: nowrap;
 }
 
 .success {
@@ -787,6 +821,7 @@ onMounted(async () => {
     display: flex;
     justify-content: center;
     align-items: center;
+    flex-wrap: wrap;
     gap: 16px;
     margin-top: 20px;
     padding-top: 16px;
@@ -822,7 +857,7 @@ onMounted(async () => {
 
 .quota-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
     gap: 16px;
     margin-bottom: 20px;
 }
@@ -834,6 +869,8 @@ onMounted(async () => {
     padding: 20px;
     transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(49, 111, 69, 0.05);
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .quota-card:hover {
@@ -845,6 +882,7 @@ onMounted(async () => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
     margin-bottom: 16px;
     border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.1);
     padding-bottom: 10px;
@@ -866,6 +904,7 @@ onMounted(async () => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
 }
 
 .quota-item label {
@@ -887,6 +926,7 @@ onMounted(async () => {
     color: #5d4d23;
     font-size: 13px;
     line-height: 1.5;
+    overflow-wrap: anywhere;
 }
 
 .quota-note code {
@@ -900,6 +940,25 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+    .tabs-nav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 12px;
+        margin-bottom: 14px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tab-btn {
+        min-height: 36px;
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .tab-panel {
+        padding: 14px;
+        border-radius: 10px;
+    }
+
     .panel-header {
         flex-direction: column;
         align-items: flex-start;
@@ -908,18 +967,81 @@ onMounted(async () => {
 
     .filter-controls {
         width: 100%;
+        gap: 8px;
+    }
+
+    .filter-controls label {
+        width: 100%;
+    }
+
+    .filter-controls select,
+    .filter-controls input,
+    .btn-refresh {
+        width: 100%;
+        min-height: 38px;
     }
 
     .data-table {
+        min-width: 640px;
         font-size: 12px;
     }
 
-    .tabs-nav {
-        flex-wrap: wrap;
+    .logs-table {
+        min-width: 700px;
+    }
+
+    .data-table th,
+    .data-table td {
+        padding: 10px;
+    }
+
+    .pagination {
+        justify-content: stretch;
+        gap: 10px;
+    }
+
+    .btn-paging {
+        flex: 1 1 120px;
+        min-height: 38px;
+    }
+
+    .page-info {
+        order: -1;
+        width: 100%;
+        text-align: center;
     }
 
     .quota-grid {
         grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .quota-card {
+        padding: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tab-panel {
+        padding: 12px;
+    }
+
+    .data-table {
+        min-width: 580px;
+    }
+
+    .logs-table {
+        min-width: 620px;
+    }
+
+    .quota-header,
+    .quota-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .quota-value {
+        font-size: 15px;
     }
 }
 </style>

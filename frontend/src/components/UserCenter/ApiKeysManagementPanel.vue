@@ -1192,6 +1192,7 @@ onMounted(async () => {
 <style scoped>
 .api-keys-container {
     padding: 20px;
+    width: 100%;
     max-width: 1200px;
     margin: 0 auto;
     background: rgba(255, 255, 255, 0.8);
@@ -1199,6 +1200,9 @@ onMounted(async () => {
     border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     box-shadow: 0 8px 32px rgba(33, 74, 49, 0.05);
     border-radius: 12px;
+    box-sizing: border-box;
+    min-width: 0;
+    container-type: inline-size;
 }
 
 .keys-header {
@@ -1246,7 +1250,7 @@ onMounted(async () => {
 
 .keys-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
     gap: 20px;
     margin-bottom: 30px;
 }
@@ -1259,6 +1263,7 @@ onMounted(async () => {
     box-shadow: 0 4px 12px rgba(33, 74, 49, 0.05);
     display: flex;
     flex-direction: column;
+    min-width: 0;
 }
 
 .key-header {
@@ -1268,19 +1273,24 @@ onMounted(async () => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
 }
 
 .key-header h3 {
     margin: 0;
     font-size: 16px;
     font-weight: 600;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .status-badge {
+    flex: 0 0 auto;
     font-size: 12px;
     padding: 4px 12px;
     border-radius: 12px;
     font-weight: 500;
+    white-space: nowrap;
 }
 
 .status-badge.set {
@@ -1318,6 +1328,7 @@ onMounted(async () => {
 
 .key-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 12px;
 }
@@ -1347,6 +1358,7 @@ onMounted(async () => {
 
 .key-input {
     width: 100%;
+    min-width: 0;
     padding: 10px;
     border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 4px;
@@ -1358,6 +1370,10 @@ onMounted(async () => {
     color: #214a31;
 }
 
+textarea.key-input {
+    min-height: 76px;
+}
+
 .key-input:focus {
     outline: none;
     border-color: var(--brand-primary);
@@ -1366,6 +1382,7 @@ onMounted(async () => {
 
 .button-group {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -1377,7 +1394,19 @@ onMounted(async () => {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.3s ease;
-    flex: 1;
+    min-width: 0;
+    min-height: 36px;
+    white-space: normal;
+}
+
+.button-group .btn,
+.key-actions .btn {
+    flex: 1 1 120px;
+}
+
+.backup-card > .btn {
+    align-self: flex-start;
+    flex: 0 0 auto;
 }
 
 .btn-edit {
@@ -1434,30 +1463,46 @@ onMounted(async () => {
     border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 8px;
     padding: 16px;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .section-header-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 12px;
+    min-width: 0;
 }
 
 .section-header-row h3 {
+    flex: 1 1 180px;
     margin: 0;
     color: #214a31;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .section-actions {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 8px;
+    margin-left: auto;
+}
+
+.section-actions .btn {
+    flex: 0 1 auto;
+    min-width: 86px;
 }
 
 .config-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
     gap: 10px;
+    min-width: 0;
 }
 
 .config-item {
@@ -1466,6 +1511,12 @@ onMounted(async () => {
     gap: 6px;
     color: #2e5d3e;
     font-size: 13px;
+    min-width: 0;
+}
+
+.config-item span {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .config-item strong {
@@ -1473,22 +1524,31 @@ onMounted(async () => {
     font-weight: 600;
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .config-item-full {
     grid-column: 1 / -1;
 }
 
+.edit-form,
 .config-view {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-width: 0;
 }
 
 .config-note {
     margin: 0;
     font-size: 12px;
     color: #4b8b60;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.section-header-row .config-note {
+    flex: 1 1 100%;
 }
 
 .backup-token-section {
@@ -1497,12 +1557,15 @@ onMounted(async () => {
     border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 8px;
     padding: 16px;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .backup-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
     gap: 12px;
+    min-width: 0;
 }
 
 .backup-card {
@@ -1513,6 +1576,7 @@ onMounted(async () => {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    min-width: 0;
 }
 
 .backup-card-head,
@@ -1520,12 +1584,16 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 10px;
+    min-width: 0;
 }
 
 .backup-card-head strong {
     color: #214a31;
     font-size: 14px;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .backup-card-head span,
@@ -1533,6 +1601,12 @@ onMounted(async () => {
 .backup-row span {
     color: #5f8f6f;
     font-size: 12px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.backup-row span {
+    flex: 1 1 150px;
 }
 
 .backup-list,
@@ -1554,18 +1628,8 @@ onMounted(async () => {
 }
 
 .btn-compact {
-    flex: 0 0 auto;
+    flex: 0 1 auto;
     padding: 5px 10px;
-}
-
-@media (max-width: 900px) {
-    .config-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .backup-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 .warning-box {
@@ -1603,5 +1667,175 @@ onMounted(async () => {
 
 .warning-content li {
     margin: 4px 0;
+}
+
+@media (max-width: 900px) {
+    .config-grid,
+    .backup-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .api-keys-container {
+        padding: 12px;
+        border-radius: 10px;
+    }
+
+    .keys-header {
+        margin-bottom: 18px;
+    }
+
+    .keys-header h2 {
+        font-size: 20px;
+        overflow-wrap: anywhere;
+    }
+
+    .keys-grid,
+    .config-grid,
+    .backup-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .key-header,
+    .section-header-row,
+    .backup-card-head,
+    .backup-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .key-header {
+        padding: 14px;
+    }
+
+    .key-header h3 {
+        font-size: 15px;
+    }
+
+    .status-badge {
+        align-self: flex-start;
+    }
+
+    .key-body,
+    .agent-config-section,
+    .backup-token-section,
+    .warning-box {
+        padding: 12px;
+    }
+
+    .button-group,
+    .key-actions,
+    .section-actions {
+        width: 100%;
+    }
+
+    .section-actions {
+        justify-content: stretch;
+        margin-left: 0;
+    }
+
+    .btn,
+    .btn-compact,
+    .section-actions .btn {
+        min-height: 38px;
+        width: 100%;
+    }
+
+    .button-group .btn,
+    .key-actions .btn,
+    .section-actions .btn,
+    .backup-row .btn,
+    .backup-card > .btn {
+        flex: 1 1 auto;
+    }
+
+    .backup-card > .btn {
+        align-self: stretch;
+    }
+}
+
+@media (max-width: 640px), (max-width: 900px) and (orientation: portrait) {
+    .keys-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 18px;
+    }
+}
+
+@container (max-width: 640px) {
+    .keys-header {
+        margin-bottom: 18px;
+    }
+
+    .keys-header h2 {
+        font-size: 20px;
+        overflow-wrap: anywhere;
+    }
+
+    .keys-grid,
+    .config-grid,
+    .backup-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .key-header,
+    .section-header-row,
+    .backup-card-head,
+    .backup-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .key-header {
+        padding: 14px;
+    }
+
+    .key-header h3 {
+        font-size: 15px;
+    }
+
+    .status-badge {
+        align-self: flex-start;
+    }
+
+    .key-body,
+    .agent-config-section,
+    .backup-token-section,
+    .warning-box {
+        padding: 12px;
+    }
+
+    .button-group,
+    .key-actions,
+    .section-actions {
+        width: 100%;
+    }
+
+    .section-actions {
+        justify-content: stretch;
+        margin-left: 0;
+    }
+
+    .btn,
+    .btn-compact,
+    .section-actions .btn {
+        min-height: 38px;
+        width: 100%;
+    }
+
+    .button-group .btn,
+    .key-actions .btn,
+    .section-actions .btn,
+    .backup-row .btn,
+    .backup-card > .btn {
+        flex: 1 1 auto;
+    }
+
+    .backup-card > .btn {
+        align-self: stretch;
+    }
 }
 </style>
