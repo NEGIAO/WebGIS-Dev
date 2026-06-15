@@ -2,7 +2,7 @@
  * 底图容灾功能库
  * 职责：底图切换验证、加载监测、异常降级策略。
  */
-export function createBasemapResilience({ message }) {
+export function createBasemapResilience({ message, onRuntimeTokenFailure } = {}) {
     // [C4] 追踪所有活跃的超时监测器，支持统一清理
     const activeMonitors = new Map(); // layerId -> { cleanup, layer }
 
@@ -197,6 +197,16 @@ export function createBasemapResilience({ message }) {
             isSwitched = true;
 
             message?.warning?.(`[底图降级] ${layerId} - ${reason}`);
+
+            const runtimeTokenHandled = onRuntimeTokenFailure?.({
+                layerId,
+                reason,
+                isDefaultBaseLayer,
+                releaseMonitor: cleanUp,
+            });
+            if (runtimeTokenHandled) {
+                return;
+            }
 
             if (fallbackManager.isNotifyOnly()) {
                 message?.warning?.(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`);

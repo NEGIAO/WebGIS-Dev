@@ -21,6 +21,7 @@ export function createBasemapSelectionWatcher({
     syncUrlFromMap,
     validateBaseLayerSwitch,
     getFallbackManager,
+    onRuntimeTokenFailure,
     getBasemapOptionLabel,
     message,
     defaultLayerId = 'google',
@@ -321,6 +322,16 @@ export function createBasemapSelectionWatcher({
 
                 // Validation failed: mark failure and possibly fallback
                 const reason = result?.reason || '未知错误';
+                const runtimeTokenHandled = onRuntimeTokenFailure?.({
+                    layerId: val,
+                    reason,
+                    isDefaultBaseLayer: val === defaultLayerId,
+                });
+                if (runtimeTokenHandled) {
+                    isAutoSwitchingLayer = false;
+                    return;
+                }
+
                 const failCount = markLayerFailure(val);
                 const isDefaultBaseLayer = val === defaultLayerId;
 

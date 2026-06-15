@@ -291,11 +291,12 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiDownloadTaskFile, apiDownloadTaskFileUrl } from '../../api/download';
 import { useMessage } from '../../composables/useMessage';
 import { useDownloadStore } from '../../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../../constants';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
 import ExtentPicker from '../Common/ExtentPicker.vue';
 
 defineProps({
@@ -323,9 +324,21 @@ function handleClearExtent() {
     store.clearExtent();
 }
 
-const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
+const layerConfigVersion = ref(0);
 const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
-const layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
+let layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
+
+function refreshLayerConfigs(tiandituTk) {
+    const nextTiandituTk = String(tiandituTk || '').trim();
+    if (!nextTiandituTk || nextTiandituTk === TIANDITU_TK) return;
+
+    TIANDITU_TK = nextTiandituTk;
+    const nextLayerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
+    layerConfigs.splice(0, layerConfigs.length, ...nextLayerConfigs);
+    layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
+    layerConfigVersion.value += 1;
+}
 
 /* ----------- 倒计时逻辑 (新增) ----------- */
 // 半小时下载有效期，时间到自动取消下载任务
@@ -600,7 +613,8 @@ function resolvePresetTemplate(presetId) {
 }
 
 const tilePresets = computed(() => {
-    return BASEMAP_OPTIONS.map((option) => {
+    const sourceOptions = layerConfigVersion.value >= 0 ? BASEMAP_OPTIONS : [];
+    return sourceOptions.map((option) => {
         const template = resolvePresetTemplate(option.value);
         const isCustom = option.value === 'custom';
         const downloadable = isCustom || Boolean(template);
@@ -612,6 +626,11 @@ const tilePresets = computed(() => {
             isCustom,
         };
     }).filter((preset) => preset.downloadable || preset.isCustom);
+});
+
+onMounted(async () => {
+    const tokens = await loadRuntimeMapTokens();
+    refreshLayerConfigs(tokens?.tiandituTk);
 });
 
 const selectedPreset = ref('');

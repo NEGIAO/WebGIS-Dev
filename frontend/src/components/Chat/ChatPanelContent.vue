@@ -296,6 +296,7 @@ import { useMessage } from '../../composables/useMessage';
 import { Bot as BotIcon } from 'lucide-vue-next';
 import { createGISCommander } from '../../composables/map/GISCommander';
 import { AgentExecutor } from '../../services/agent/AgentExecutor';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
 import {
     AGENT_TOOLS,
     buildSystemPromptWithTools,
@@ -329,6 +330,7 @@ const chatBody = ref(null);
 const modelName = ref('');
 const statusHint = ref('正在初始化...');
 const serviceReady = ref(false);
+const runtimeTiandituTk = ref(getRuntimeMapTokensSync().tiandituTk);
 const showUserConfig = ref(false);
 const userConfigSaving = ref(false);
 const userConfigDraft = ref({
@@ -1235,7 +1237,7 @@ const _detectGISIntent = (userMsg) => {
             name: 'OpenStreetMap',
         },
         '天地图': {
-            url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=img&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={level}&TILEROW={row}&TILECOL={col}&tk=4267820f43926eaf808d61dc07269beb',
+            url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=img&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={level}&TILEROW={row}&TILECOL={col}&tk=${runtimeTiandituTk.value}`,
             name: '天地图卫星',
         },
         '中国渲染':{
@@ -1626,6 +1628,12 @@ const _getToolDisplayName = (name, args = {}) => {
 };
 
 onMounted(async () => {
+    const tokens = await loadRuntimeMapTokens();
+    const nextTiandituTk = String(tokens?.tiandituTk || '').trim();
+    if (nextTiandituTk) {
+        runtimeTiandituTk.value = nextTiandituTk;
+    }
+
     // 启动时先尝试加载管理员配置的默认 AI 配置
     await _loadDefaultAIConfig();
     // 自动预加载模型列表

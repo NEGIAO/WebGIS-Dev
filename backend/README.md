@@ -18,12 +18,27 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 访客地理统计：POST /api/log-visit
 - 真实用户登录系统：/api/auth/*（邮箱账号、旧用户绑定迁移、三类身份）
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
-- 前端 Cesium Google Photorealistic 3D Tiles：真实 3D 模型接入仍由前端直连 Google Maps API，后端无需新增接口
+- 运行时地图 Token 配置：GET /api/runtime-config/map-tokens 下发天地图/Cesium 主备 token 池，前端直连第三方服务
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-14 更新）
+## 0. 项目结构（2026-06-15 更新）
+
+### V3.3.5 (2026-06-15) - 运行时地图 Token 池 + 四类 API 备用 Token
+
+**后端变更：**
+- `api_keys_management.py` 新增 `api_key_backups` 表，支持高德、Agent、天地图、Cesium Ion 四类 API 的任意数量备用 token
+- 新增 `/api/admin/api-keys/{key_name}/backups` 系列接口，用于管理员追加、替换、删除备用 token
+- `/api/runtime-config/map-tokens` 返回天地图 TK 与 Cesium Ion Token 池，前端启动读取一次后直连第三方服务
+- 高德外部代理按主 token → 备用 token 顺序调用，遇到 key 无效、权限或配额类 infocode 自动尝试下一枚
+- Agent 平台上游调用与模型列表请求接入管理员平台 key 候选池，主 key 不可用时自动尝试备用 key
+
+**安全说明：**
+- 浏览器直连 token 无法完全隐藏，必须在天地图/Cesium ion 服务商后台限制域名、Referer、权限与配额
+- 可选环境变量 `RUNTIME_CONFIG_ALLOWED_ORIGINS` 可限制哪些前端 Origin/Referer 允许读取运行时地图 token 池
+
+详见 [`../Docs/26-06/26-06-15/2026-06-15-readme-structure-sync-v335.md`](../Docs/26-06/26-06-15/2026-06-15-readme-structure-sync-v335.md)
 
 ### V3.3.4 (2026-06-14) - Cesium 三维分析控制面板增强 + 掩膜分析（水体模拟）
 
@@ -226,7 +241,7 @@ backend/
 │   │       ├── multi_ring_buffer.py               # 多环缓冲区
 │   │       ├── simplify.py                        # 几何简化
 │   │       └── fishnet.py                         # 渔网分析
-│   ├── api_keys_management.py                     # API 密钥管理接口
+│   ├── api_keys_management.py                     # API 主/备密钥管理 + 运行时地图 token 池下发
 │   ├── api_management.py                          # API 使用管理接口
 │   ├── external_proxy.py                          # 外部代理接口
 │   ├── location.py                                # 定位相关接口
@@ -558,7 +573,7 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 - AUTH_PASSWORD_HASH_ITERATIONS=120000
 
 Agent 对话可选配置：
-- AGENT_API_KEY=your_agent_key
+- AGENT_API_KEY=your_agent_key (optional env fallback; prefer admin panel/database)
 - AGENT_BASE_URL=https://api.qnaigc.com/v1
 - AGENT_MODEL=deepseek-V3-0324
 - AGENT_CHAT_GUEST_DAILY_QUOTA=10
@@ -567,6 +582,9 @@ Agent 对话可选配置：
 代理安全可选配置：
 - PROXY_VERIFY_SSL=true
 - PROXY_ALLOW_PRIVATE_HOSTS=false
+
+运行时地图 Token 可选配置：
+- RUNTIME_CONFIG_ALLOWED_ORIGINS=https://negiao.github.io,https://your-domain.com
 
 示例（.env）：
 ```bash

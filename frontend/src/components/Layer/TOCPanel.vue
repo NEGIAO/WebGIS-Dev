@@ -528,7 +528,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { useGisLoader } from '../../composables/useGisLoader';
 import { useSharedResourceLoader } from '../../composables/useSharedResourceLoader';
@@ -549,6 +549,7 @@ import {
     processCoordinateInput,
 } from '../../utils/biz';
 import { apiAddressGeocode, apiReverseGeocodeWithFallback } from '../../api';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
 import LayerPanel from './LayerPanel.vue';
 import SharedResourceTreeItem from './SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from '../Search/AmapAoiInjectDialog.vue';
@@ -625,7 +626,7 @@ const propertiesDialogVisible = ref(false);
 const propertiesDialogLayer = ref(null);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
-const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+const tiandituTk = ref(getRuntimeMapTokensSync().tiandituTk);
 
 function normalizeTab(value) {
     const normalized = String(value || '').trim();
@@ -642,8 +643,16 @@ watch(
 );
 
 const { decodePositionCodeToPointPayload } = usePositionCodeTool({
-    tiandituTk: TIANDITU_TK,
+    tiandituTk,
     reverseGeocode: apiReverseGeocodeWithFallback,
+});
+
+onMounted(async () => {
+    const tokens = await loadRuntimeMapTokens();
+    const nextTiandituTk = String(tokens?.tiandituTk || '').trim();
+    if (nextTiandituTk) {
+        tiandituTk.value = nextTiandituTk;
+    }
 });
 
 function buildAmapDetailUrl(rawPoiId) {

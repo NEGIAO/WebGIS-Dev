@@ -38,7 +38,7 @@
             :custom-map-url="customMapUrl"
             :active-graticule="showDynamicSplitLines"
             :basemap-circuit-open="basemapCircuitOpen"
-            :tianditu-tk="TIANDITU_TK"
+            :tianditu-tk="tiandituTk"
             :is-domestic="isDomestic"
             @change-layer="handleLayerChange"
             @update-order="handleLayerOrderUpdate"
@@ -135,7 +135,10 @@ import {
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature,
 } from '../../composables/map';
-import { prioritizeTileSourceRequest } from '../../composables/useTileSourceFactory';
+import {
+    abortTileSourceRequests,
+    prioritizeTileSourceRequest,
+} from '../../composables/useTileSourceFactory';
 import {
     DEFAULT_BASEMAP_PRESET_ID,
     URL_LAYER_OPTIONS,
@@ -168,6 +171,11 @@ import {
     useLayerStore,
 } from '../../stores';
 import { CompassManager } from '../../services/CompassManager';
+import {
+    getRuntimeMapTokensSync,
+    loadRuntimeMapTokens,
+    markRuntimeMapTokenFailed,
+} from '../../services/runtimeMapTokens';
 
 const message = useMessage();
 const attrStore = useAttrStore();
@@ -226,9 +234,8 @@ const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; //初始位置
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 
-// 天地图 Token：优先使用环境变量，否则使用默认值
-// 生产环境建议在 .env 文件中配置 VITE_TIANDITU_TK
-const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK;
+let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
+const tiandituTk = ref(TIANDITU_TK);
 
 //彩蛋：判断鼠标是否进入地环院，弹出地环院的图片信息
 // const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
@@ -336,6 +343,120 @@ const layerList = ref(
 );
 const layerInstances = {}; // 存储所有底图层实例 (TileLayer/VectorTileLayer)
 
+function applyRuntimeMapTokens(tokens = {}) {
+    const nextTiandituTk = String(tokens.tiandituTk || '').trim();
+    if (!nextTiandituTk || nextTiandituTk === TIANDITU_TK) return;
+
+    const previousLayerState = new globalThis.Map(
+        (Array.isArray(layerList.value) ? layerList.value : []).map((item) => [
+            item.id,
+            {
+                visible: !!item.visible,
+                opacity: typeof item.opacity === 'number' ? item.opacity : 1,
+            },
+        ]),
+    );
+
+    TIANDITU_TK = nextTiandituTk;
+    tiandituTk.value = nextTiandituTk;
+
+    const nextLayerConfigs = createLayerConfigs(NORM_BASE, TIANDITU_TK, customMapUrl.value);
+    LAYER_CONFIGS.splice(0, LAYER_CONFIGS.length, ...nextLayerConfigs);
+    layerList.value = LAYER_CONFIGS.map((cfg) => ({
+        id: cfg.id,
+        name: cfg.name,
+        visible: previousLayerState.has(cfg.id)
+            ? previousLayerState.get(cfg.id).visible
+            : cfg.visible,
+        opacity: previousLayerState.get(cfg.id)?.opacity ?? 1,
+    }));
+}
+
+async function hydrateRuntimeMapTokens() {
+    const tokens = await loadRuntimeMapTokens({ silent: false });
+    applyRuntimeMapTokens(tokens);
+}
+
+function isTiandituLayerId(layerId) {
+    return String(layerId || '')
+        .trim()
+        .toLowerCase()
+        .includes('tianditu');
+}
+
+function resolveRuntimeTiandituLayerIds(layerId) {
+    const selectedStack = resolvePresetLayerIds(selectedLayer.value);
+    const failedLayerId = String(layerId || '').trim();
+    const failedStack = resolvePresetLayerIds(failedLayerId);
+    const sourceIds =
+        selectedStack.includes(failedLayerId) || !failedStack.length
+            ? selectedStack
+            : failedStack;
+    const candidates = sourceIds.length ? sourceIds : [failedLayerId];
+    const result = [];
+    const seen = new Set();
+
+    candidates.forEach((id) => {
+        const normalized = String(id || '').trim();
+        if (!normalized || seen.has(normalized) || !isTiandituLayerId(normalized)) return;
+        seen.add(normalized);
+        result.push(normalized);
+    });
+
+    return result;
+}
+
+function resetLayerSourceForRuntimeToken(layerId) {
+    const layer = layerInstances[layerId];
+    if (!layer || typeof layer.setSource !== 'function') return;
+
+    const source = layer.getSource?.();
+    if (source) {
+        abortTileSourceRequests(source);
+    }
+
+    layer.set?.(`_isTimeoutMonitored_${layerId}`, false);
+    layer.setSource(null);
+}
+
+function attachRuntimeTokenMonitor(layerId) {
+    const layer = layerInstances[layerId];
+    const item = Array.isArray(layerList.value)
+        ? layerList.value.find((entry) => entry.id === layerId)
+        : null;
+    if (!layer || !item?.visible) return;
+
+    layer.set?.(`_isTimeoutMonitored_${layerId}`, false);
+    monitorLayerTimeout?.(layer, layerId, selectedLayer.value === DEFAULT_BASEMAP_PRESET_ID);
+}
+
+function retryTiandituLayersWithNextToken({ layerId, reason, releaseMonitor } = {}) {
+    const affectedLayerIds = resolveRuntimeTiandituLayerIds(layerId);
+    if (!affectedLayerIds.length) return false;
+
+    const tokenSwitch = markRuntimeMapTokenFailed('tianditu_tk');
+    if (!tokenSwitch.switched) return false;
+
+    releaseMonitor?.();
+    applyRuntimeMapTokens(tokenSwitch.tokens);
+    affectedLayerIds.forEach(resetLayerSourceForRuntimeToken);
+
+    switchLayerById?.(selectedLayer.value, {
+        onUpdated: () => {
+            emitBaseLayersChangeBatched?.();
+            mapInstance.value?.updateSize?.();
+        },
+    });
+    affectedLayerIds.forEach(attachRuntimeTokenMonitor);
+
+    message?.warning?.(
+        `天地图 token 已切换到备用项，正在重试 ${affectedLayerIds.join(' + ')}${
+            reason ? `：${reason}` : ''
+        }`,
+    );
+    return true;
+}
+
 // ========== Map Swipe Setup (via composable) ==========
 const {
     mapContainerRect,
@@ -354,7 +475,7 @@ const {
     createBasemapLayerFromSource,
     LAYER_CONFIGS,
     NORM_BASE,
-    TIANDITU_TK,
+    TIANDITU_TK: tiandituTk,
     customMapUrl,
     layerInstances,
     switchLayerById: (id, opts) => switchLayerById?.(id, opts),
@@ -371,7 +492,10 @@ const { handleLayerContextAction } = useLayerContextMenuActions({
 });
 
 const { validateBaseLayerSwitch, getFallbackManager, monitorLayerTimeout, disposeAllMonitors } =
-    createBasemapResilience({ message });
+    createBasemapResilience({
+        message,
+        onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
+    });
 
 const { initializeBasemapLayers } = createBasemapLayerBootstrap({
     layerListRef: layerList,
@@ -855,6 +979,7 @@ const { bindBasemapSelectionWatcher, resetBasemapChain, dispose: disposeSelectio
     syncUrlFromMap,
     validateBaseLayerSwitch,
     getFallbackManager,
+    onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
     getBasemapOptionLabel,
     message,
     defaultLayerId: DEFAULT_BASEMAP_PRESET_ID,
@@ -951,6 +1076,8 @@ function getInitialViewState() {
 onMounted(async () => {
     componentUnmountedRef.value = false;
     try {
+        await hydrateRuntimeMapTokens();
+
         // ========== Phase 1: 同步初始化 - 快速返回，让底图加载开始 ==========
         initMap(); // 创建地图实例，底图图层已添加
         bindMapViewSync(); // 绑定视图同步（不阻塞）
@@ -1035,7 +1162,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.4)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.5)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1289,7 +1416,7 @@ function initMap() {
                 new TileLayer({
                     source: prioritizeTileSourceRequest(
                         new XYZ({
-                            url: 'https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=4267820f43926eaf808d61dc07269beb',
+                            url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}`,
                             maxZoom: 20,
                         }),
                     ),

@@ -9,8 +9,6 @@ import { setGlobalUserLocationContext } from '../services/userLocationContext';
 import { normalizeBinaryFlag } from '../utils/normalize';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
 
-const _TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '4267820f43926eaf808d61dc07269beb';
-
 // [Fix] 单个定位流程的 AbortController，用于取消上一次请求
 let activeLocateController = null;
 

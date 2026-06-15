@@ -27,7 +27,7 @@ from api.location import router as location_router
 from api.auth import init_auth_storage, router as auth_router
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
-from api.api_keys_management import router as api_keys_router
+from api.api_keys_management import router as api_keys_router, runtime_config_router
 from api.agent_chat import router as agent_chat_router, admin_router as agent_chat_admin_router
 from download_xyz.download import router as download_router
 from download_xyz.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
@@ -278,6 +278,10 @@ logger.info("已注册 API 管理路由 [北京时间: %s]", _beijing_time)
 # 挂载 API 密钥管理路由
 app.include_router(api_keys_router)
 logger.info("已注册 API 密钥管理路由 [北京时间: %s]", _beijing_time)
+
+# 挂载前端运行时配置路由
+app.include_router(runtime_config_router)
+logger.info("已注册运行时配置路由 [北京时间: %s]", _beijing_time)
 
 # 挂载 Agent 对话路由
 app.include_router(agent_chat_router)

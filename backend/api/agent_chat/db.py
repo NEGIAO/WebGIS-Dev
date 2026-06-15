@@ -563,18 +563,32 @@ def _get_api_key_row_sync(key_name: str) -> Optional[Dict[str, Any]]:
 def _resolve_agent_api_key_sync() -> Dict[str, Any]:
     primary = _get_api_key_row_sync(AGENT_API_KEY_PRIMARY)
     if primary and str(primary.get("key_value") or "").strip():
+        try:
+            from api.api_keys_management import _get_api_key_candidates_sync
+
+            candidates = _get_api_key_candidates_sync(AGENT_API_KEY_PRIMARY)
+        except Exception:
+            candidates = [str(primary.get("key_value") or "").strip()]
         return {
             "key_name": AGENT_API_KEY_PRIMARY,
             "key_value": str(primary.get("key_value") or "").strip(),
+            "key_values": candidates,
             "updated_at": str(primary.get("updated_at") or ""),
             "source": "db-primary",
         }
 
     legacy = _get_api_key_row_sync(AGENT_API_KEY_LEGACY)
     if legacy and str(legacy.get("key_value") or "").strip():
+        try:
+            from api.api_keys_management import _get_api_key_candidates_sync
+
+            candidates = _get_api_key_candidates_sync(AGENT_API_KEY_LEGACY)
+        except Exception:
+            candidates = [str(legacy.get("key_value") or "").strip()]
         return {
             "key_name": AGENT_API_KEY_LEGACY,
             "key_value": str(legacy.get("key_value") or "").strip(),
+            "key_values": candidates,
             "updated_at": str(legacy.get("updated_at") or ""),
             "source": "db-legacy",
         }
@@ -584,6 +598,7 @@ def _resolve_agent_api_key_sync() -> Dict[str, Any]:
         return {
             "key_name": "env",
             "key_value": env_key,
+            "key_values": [env_key],
             "updated_at": "",
             "source": "env",
         }
@@ -591,6 +606,7 @@ def _resolve_agent_api_key_sync() -> Dict[str, Any]:
     return {
         "key_name": AGENT_API_KEY_PRIMARY,
         "key_value": "",
+        "key_values": [],
         "updated_at": "",
         "source": "missing",
     }
@@ -603,6 +619,7 @@ def _get_agent_key_status_sync() -> Dict[str, Any]:
         "is_set": bool(str(resolved.get("key_value") or "").strip()),
         "updated_at": str(resolved.get("updated_at") or ""),
         "source": str(resolved.get("source") or "missing"),
+        "backup_count": max(0, len(resolved.get("key_values") or []) - 1),
     }
 
 
@@ -646,6 +663,7 @@ def _resolve_effective_agent_runtime_sync(username: str) -> Dict[str, Any]:
         "max_tokens": _safe_parse_int(user_cfg.get("max_tokens"), int(provider.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS), 1, 8192),
         "temperature": _safe_parse_float(user_cfg.get("temperature"), float(provider.get("temperature") or DEFAULT_AGENT_TEMPERATURE), 0.0, 2.0),
         "api_key": personal_key if use_personal_key else str(key_info.get("key_value") or "").strip(),
+        "api_key_candidates": [personal_key] if use_personal_key else list(key_info.get("key_values") or []),
         "api_key_source": "user-personal" if use_personal_key else str(key_info.get("source") or "missing"),
         "has_personal_key": use_personal_key,
     }

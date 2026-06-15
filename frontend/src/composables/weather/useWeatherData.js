@@ -13,6 +13,7 @@ import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
 } from '../../services/userLocationContext';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
 import { useWeatherStore } from '../../stores';
 import {
     hasRainSignal,
@@ -36,7 +37,7 @@ import {
 export function useWeatherData(chartCallbacks = {}) {
     const message = useMessage();
     const weatherStore = useWeatherStore();
-    const TIANDITU_TK = import.meta.env.VITE_TIANDITU_TK || '';
+    let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
 
     /* ------------------------------------------------------------ */
     /*  响应式状态                                                     */
@@ -231,6 +232,14 @@ export function useWeatherData(chartCallbacks = {}) {
         const fn = chartCallbacks[name];
         if (typeof fn === 'function') {
             return fn(...args);
+        }
+    }
+
+    async function hydrateRuntimeMapTokens() {
+        const tokens = await loadRuntimeMapTokens();
+        const nextTiandituTk = String(tokens?.tiandituTk || '').trim();
+        if (nextTiandituTk) {
+            TIANDITU_TK = nextTiandituTk;
         }
     }
 
@@ -488,6 +497,8 @@ export function useWeatherData(chartCallbacks = {}) {
     /* ------------------------------------------------------------ */
 
     onMounted(async () => {
+        await hydrateRuntimeMapTokens();
+
         const loadedFromContext = applyAdcodeFromLocationContext(
             null,
             'location-context-initial',

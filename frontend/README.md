@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.3.4
+# WebGIS 前端项目 — v3.3.5
 
 ## 📋 项目概述
 
@@ -9,6 +9,7 @@
 - 🗺️ **地图引擎**：OpenLayers 6.x + Cesium 3D 地球
 - 🧭 **三维分析**：Cesium 统一控制面板集成场景导航、高级特效、风场、水体模拟和参数说明
 - 🏙️ **Google 真实 3D 模型**：Cesium 叠加层支持 Google Photorealistic 3D Tiles 倾斜摄影接入
+- 🔐 **运行时 Token 池**：天地图 TK 与 Cesium Ion Token 由管理员后台配置，支持主/备 token 自动兜底
 - 🌊 **掩膜分析（水体模拟）**：按捕捉区域高程值域生成外包盒，支持点击点高程初始水位、水位滑杆和水色调色板
 - 📊 **数据管理**：多格式导入（GeoJSON/KML/SHP/GeoTIFF/CSV），批量导出
 - 🔎 **高德 AOI 手动注入**：支持详情 JSON 与搜索 AOI，`@` 分隔的独立区域会被拆分为多个环
@@ -78,11 +79,11 @@ npm run build:analyze
 VITE_BACKEND_URL=http://localhost:8000
 VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
 VITE_TILE_PROXY_MODE=fallback
-VITE_TIANDITU_TK=your_tianditu_token
-VITE_CESIUM_ION_TOKEN=your_cesium_ion_token
-VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
+# Amap key is configured in the admin API key panel.
 VITE_BASE_URL=./
 ```
+
+天地图 TK 与 Cesium Ion Token 由管理员在用户中心统一配置，后端写入数据库；前端启动时通过 `/api/runtime-config/map-tokens` 读取一次主/备 token 池后直连第三方服务。不要在 `VITE_TIANDITU_TK` / `VITE_CESIUM_ION_TOKEN` 中写入真实值，Vite 会把它们打进前端产物。
 
 ## 部署说明
 
@@ -96,7 +97,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-14 更新）
+## 目录结构（2026-06-15 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -117,6 +118,7 @@ frontend/src/
 │   │   ├── statistics.js                     # 统计/消息/公告
 │   │   ├── admin.js                          # 管理后台接口
 │   │   ├── spatial.js                        # 空间分析接口
+│   │   ├── runtime.js                        # 前端运行时地图 token 配置接口
 │   │   └── index.js                          # barrel export
 │   ├── download.js                           # 底图下载任务 API
 │   ├── geocoding.js                          # 天地图/高德地理编码
@@ -138,11 +140,14 @@ frontend/src/
 │
 ├── components/                               # 业务组件（按功能域分组）
 │   ├── Cesium/                               # 3D 地球模块
-│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + Google 真实3D模型叠加层 + 统一工具面板调度）
+│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + Cesium ion 3D Tiles/OSM Buildings + 统一工具面板调度）
 │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
 │   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/特效/风场/流体参数 + ? 提示）
 │   │   ├── Wind2D.js                         # 2D 风场渲染
 │   │   ├── composables/                      # Cesium 工具模块状态编排
+│   │   │   ├── cesiumRuntime.js              # Cesium CDN 运行时加载
+│   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
+│   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排与 token 兜底重载
 │   │   │   └── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
 │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
 │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
@@ -207,7 +212,7 @@ frontend/src/
 │   └── UserCenter/
 │       ├── FloatingAccountPanel.vue          # 用户中心浮层壳
 │       ├── AdminControlPanel.vue             # 管理员控制台
-│       ├── ApiKeysManagementPanel.vue        # API 密钥管理
+│       ├── ApiKeysManagementPanel.vue        # API 主/备密钥管理（高德/Agent/天地图/Cesium）
 │       ├── ApiManagementPanel.vue            # API 使用管理
 │       └── tabs/                             # 用户中心子面板
 │           ├── OverviewTab.vue               # 总览标签（统计/消息板）
@@ -291,6 +296,7 @@ frontend/src/
 │   ├── CompassManager.ts                     # 罗盘管理器（半径判断/缩放分级/渐变背景）
 │   ├── DistrictManager.ts                    # 行政区划管理器
 │   ├── auth.js                               # 鉴权工具
+│   ├── runtimeMapTokens.js                   # 运行时地图 token 池读取、缓存与备用 token 切换
 │   ├── userLocationContext.js                # 用户定位上下文
 │   ├── userPositionCache.js                  # 用户位置缓存
 │   └── compass/                              # 罗盘服务
@@ -622,7 +628,7 @@ MIT
 
 ---
 
-最后更新：2026-06-14
+最后更新：2026-06-15
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）
@@ -642,6 +648,23 @@ MIT
     - 检查是否出现跨层深链导入与重复实现。
 
 ## 版本记录
+
+### V3.3.5 (2026-06-15)
+#### 🔐 运行时地图 Token 池 + 四类 API 备用 Token
+
+**新增与增强：**
+- `api/backend/runtime.js`：新增 `/api/runtime-config/map-tokens` 运行时配置接口封装
+- `services/runtimeMapTokens.js`：新增天地图/Cesium token 池缓存、失败标记与备用 token 切换能力
+- `components/UserCenter/ApiKeysManagementPanel.vue`：新增备用 Token 池管理区，支持高德、Agent、天地图、Cesium 四类 API 任意数量备用 token
+- `components/Map/MapContainer.vue`：2D 天地图瓦片连续失败时切换备用 TK，并重建当前可见底图 source
+- `components/Cesium/CesiumContainer.vue`：Cesium 初始化失败时自动尝试备用 Cesium Ion / 天地图 token 并重建 viewer
+- `components/Cesium/composables/useCesiumLayers.js`：叠加层保留 Cesium OSM Buildings（ion asset 96188）与 Google Photorealistic 3D Tiles
+
+**安全变化：**
+- 生产构建不再从 `VITE_TIANDITU_TK` / `VITE_CESIUM_ION_TOKEN` 读取真实 token
+- 浏览器直连 token 仍会暴露给浏览器，请在天地图与 Cesium ion 后台限制域名、Referer、权限和配额
+
+详见 [`../Docs/26-06/26-06-15/2026-06-15-readme-structure-sync-v335.md`](../Docs/26-06/26-06-15/2026-06-15-readme-structure-sync-v335.md)
 
 ### V3.3.4 (2026-06-14)
 #### 🧭 Cesium 三维分析控制面板增强 + 掩膜分析（水体模拟）

@@ -3,6 +3,7 @@ import backendAPI, { handleApiError } from './backend';
 import { useMessage } from '@/composables/useMessage';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@/utils/coordTransform.js';
 import { getAmapErrorMessage } from './httpStatusMap';
+import { getRuntimeMapTokensSync } from '@/services/runtimeMapTokens';
 
 const AMAP_SUCCESS_STATUS = '1';
 const AMAP_SUCCESS_INFOCODE = '10000';
@@ -56,8 +57,8 @@ function resolveTiandituToken(preferredToken = '') {
     const preferred = String(preferredToken || '').trim();
     if (preferred) return preferred;
 
-    const envToken = String(import.meta.env.VITE_TIANDITU_TK || '').trim();
-    if (envToken) return envToken;
+    const runtimeToken = String(getRuntimeMapTokensSync().tiandituTk || '').trim();
+    if (runtimeToken) return runtimeToken;
 
     return '';
 }
@@ -66,7 +67,7 @@ function resolveTiandituToken(preferredToken = '') {
  * @typedef {Object} TiandituReverseGeocodeParams
  * @property {string|number} lon 经度，建议 WGS84，示例: 113.264385
  * @property {string|number} lat 纬度，建议 WGS84，示例: 23.129112
- * @property {string} tk 天地图 token（项目中的 VITE_TIANDITU_TK）
+ * @property {string} tk 天地图 token
  * @property {string|number} [ver='1'] 接口版本，默认 1
  * @property {'geocode'} [type='geocode'] 固定值 geocode
  * @property {number} [timeout=8000] 超时时间（毫秒）

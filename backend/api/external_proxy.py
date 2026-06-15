@@ -23,6 +23,14 @@ NOMINATIM_SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 EPSG_PROJ4_ENDPOINT = "https://epsg.io/{code}.proj4"
 AMAP_SUCCESS_STATUS = "1"
 AMAP_SUCCESS_INFOCODE = "10000"
+AMAP_KEY_RETRY_INFOCODES = {
+    "10001", "10002", "10003", "10004", "10005", "10006", "10007", "10008",
+    "10009", "10010", "10011", "10012", "10013", "10014", "10015", "10016",
+    "10017", "10018", "10019", "10020", "10021", "10022", "10026", "10027",
+    "10028", "10029", "10030", "10031", "10032", "10033", "10034", "10035",
+    "10036", "10037", "10038", "10039", "10040", "10041", "10042", "10043",
+    "10044",
+}
 
 HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
 HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=120, max_keepalive_connections=60)
@@ -78,17 +86,36 @@ def _get_api_key_from_db_sync(key_name: str) -> Optional[str]:
 
 
 def _resolve_amap_key() -> str:
-    # 优先从数据库读取
-    db_key = _get_api_key_from_db_sync("amap_key")
-    if db_key:
-        return db_key
-    
-    # 回退到环境变量
-    for env_name in ("AMAP_WEB_SERVICE_KEY", "AMAP_KEY", "GAODE_KEY", "VITE_AMAP_WEB_SERVICE_KEY"):
+    candidates = _resolve_amap_key_candidates()
+    return candidates[0] if candidates else ""
+
+
+def _resolve_amap_key_candidates() -> list[str]:
+    """按主 key、备用 key、环境变量顺序返回高德候选 key。"""
+    candidates: list[str] = []
+
+    try:
+        from api.api_keys_management import _get_api_key_candidates_sync
+
+        candidates.extend(_get_api_key_candidates_sync("amap_key"))
+    except Exception:
+        db_key = _get_api_key_from_db_sync("amap_key")
+        if db_key:
+            candidates.append(db_key)
+
+    for env_name in ("AMAP_WEB_SERVICE_KEY", "AMAP_KEY", "GAODE_KEY"):
         value = str(os.getenv(env_name, "") or "").strip()
         if value:
-            return value
-    return ""
+            candidates.append(value)
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in candidates:
+        compact = str(value or "").strip()
+        if compact and compact not in seen:
+            result.append(compact)
+            seen.add(compact)
+    return result
 
 
 def _extract_client_ip(request: Request) -> str:
@@ -260,6 +287,11 @@ def _ensure_amap_success(payload: Dict[str, Any], endpoint_name: str) -> Dict[st
     )
 
 
+def _is_amap_key_retryable(payload: Dict[str, Any]) -> bool:
+    infocode = str(payload.get("infocode") or "").strip()
+    return infocode in AMAP_KEY_RETRY_INFOCODES
+
+
 async def _request_amap_json(
     request: Request,
     endpoint_path: str,
@@ -267,16 +299,29 @@ async def _request_amap_json(
     *,
     params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    amap_key = _require_amap_key_or_503()
-    safe_params = dict(params or {})
-    safe_params["key"] = amap_key
+    amap_keys = _resolve_amap_key_candidates()
+    if not amap_keys:
+        _require_amap_key_or_503()
 
-    payload = await _request_upstream_json(
-        request,
-        f"{AMAP_REST_ROOT}{endpoint_path}",
-        params=safe_params,
-    )
-    return _ensure_amap_success(payload, endpoint_name)
+    safe_params = dict(params or {})
+    last_payload: Optional[Dict[str, Any]] = None
+
+    for index, amap_key in enumerate(amap_keys):
+        attempt_params = dict(safe_params)
+        attempt_params["key"] = amap_key
+        payload = await _request_upstream_json(
+            request,
+            f"{AMAP_REST_ROOT}{endpoint_path}",
+            params=attempt_params,
+        )
+        last_payload = payload
+        if str(payload.get("status") or "").strip() == AMAP_SUCCESS_STATUS:
+            return _ensure_amap_success(payload, endpoint_name)
+        if index < len(amap_keys) - 1 and _is_amap_key_retryable(payload):
+            continue
+        return _ensure_amap_success(payload, endpoint_name)
+
+    return _ensure_amap_success(last_payload or {}, endpoint_name)
 
 
 @router.get("/amap/place/text")

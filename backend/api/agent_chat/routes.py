@@ -50,7 +50,8 @@ from .schemas import (
 )
 from .upstream import (
     _call_upstream_chat,
-    _call_upstream_models,
+    _call_upstream_chat_with_key_candidates,
+    _call_upstream_models_with_key_candidates,
     _extract_assistant_reply,
     _extract_client_ip,
     _extract_reply_and_tools,
@@ -133,6 +134,11 @@ async def agent_chat_completions(
     override_model = str(payload.override_model or "").strip()
 
     api_key = override_api_key if override_api_key else str(runtime.get("api_key") or "").strip()
+    api_key_candidates = (
+        [override_api_key]
+        if override_api_key
+        else list(runtime.get("api_key_candidates") or [api_key])
+    )
     runtime_model = override_model if override_model else str(runtime.get("model") or "").strip()
     base_url = _normalize_base_url(override_base_url) if override_base_url else str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
     override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS)
@@ -186,10 +192,10 @@ async def agent_chat_completions(
     started_at = time.perf_counter()
     upstream_status = 200
     try:
-        upstream_data = await _call_upstream_chat(
+        upstream_data = await _call_upstream_chat_with_key_candidates(
             request,
             base_url=base_url,
-            api_key=api_key,
+            api_keys=api_key_candidates,
             model=runtime_model,
             messages=request_messages,
             timeout_seconds=override_timeout,
@@ -399,6 +405,7 @@ async def agent_chat_default_proxy(
         )
 
     api_key = str(default_config.get("api_key") or "").strip()
+    api_key_candidates = [api_key] if api_key else []
     base_url = str(default_config.get("base_url") or "").strip()
     model = str(default_config.get("model") or "").strip()
 
@@ -444,10 +451,10 @@ async def agent_chat_default_proxy(
     started_at = time.perf_counter()
     upstream_status = 200
     try:
-        upstream_data = await _call_upstream_chat(
+        upstream_data = await _call_upstream_chat_with_key_candidates(
             request,
             base_url=base_url,
-            api_key=api_key,
+            api_keys=api_key_candidates,
             model=model,
             messages=request_messages,
             timeout_seconds=override_timeout,
@@ -592,8 +599,10 @@ async def get_available_models(
 
     if override_api_key_clean:
         api_key = override_api_key_clean
+        api_key_candidates = [override_api_key_clean]
     else:
         api_key = str(runtime.get("api_key") or "").strip()
+        api_key_candidates = list(runtime.get("api_key_candidates") or [api_key])
 
     current_model = str(runtime.get("model") or "").strip()
 
@@ -607,10 +616,10 @@ async def get_available_models(
     upstream_endpoint = ""
     upstream_error = None
     try:
-        upstream_models, upstream_endpoint = await _call_upstream_models(
+        upstream_models, upstream_endpoint = await _call_upstream_models_with_key_candidates(
             request,
             base_url=base_url,
-            api_key=api_key,
+            api_keys=api_key_candidates,
             timeout_seconds=int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
         )
     except Exception as e:

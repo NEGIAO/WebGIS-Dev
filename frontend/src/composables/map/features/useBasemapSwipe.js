@@ -18,7 +18,7 @@ const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom', 'local_tiles_preset']);
  * @param {Function} deps.createBasemapLayerFromSource - 创建底图图层
  * @param {Object} deps.LAYER_CONFIGS - 图层配置列表
  * @param {string} deps.NORM_BASE - 标准化基础 URL
- * @param {string} deps.TIANDITU_TK - 天地图 Token
+ * @param {string|Function|import('vue').Ref<string>} deps.TIANDITU_TK - 天地图 Token
  * @param {import('vue').Ref} deps.customMapUrl - 自定义地图 URL
  * @param {Object} deps.layerInstances - 图层实例缓存
  * @param {Function} deps.switchLayerById - 切换图层
@@ -50,6 +50,7 @@ export function createBasemapSwipe({
     } = useMapSwipe();
 
     const mapContainerRect = ref(null);
+    const getTiandituTk = () => readRuntimeValue(TIANDITU_TK);
 
     function resolveSwipeLayerIds(presetId) {
         const layerIds = resolvePresetLayerIds(presetId).filter((id) => {
@@ -65,7 +66,7 @@ export function createBasemapSwipe({
 
         const layerFactoryContext = {
             normBase: NORM_BASE,
-            tiandituTk: TIANDITU_TK,
+            tiandituTk: getTiandituTk(),
             customUrl: customMapUrl.value || '',
         };
 
@@ -332,4 +333,16 @@ export function createBasemapSwipe({
         handleSwipeClose,
         dispose: disposeSwipe,
     };
+}
+
+function readRuntimeValue(source) {
+    if (typeof source === 'function') {
+        return String(source() || '').trim();
+    }
+
+    if (source && typeof source === 'object' && 'value' in source) {
+        return String(source.value || '').trim();
+    }
+
+    return String(source || '').trim();
 }

@@ -279,6 +279,7 @@ import BusPlannerPanel from '../Routing/BusPlannerPanel.vue';
 import DrivingPlannerPanel from '../Routing/DrivingPlannerPanel.vue';
 import CompassControlPanel from '../Compass/CompassControlPanel.vue';
 import WeatherChartPanel from '../Weather/WeatherChartPanel.vue';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
 
 // ========== 1. 热点新闻平台配置 ==========
 const NEWS_PLATFORMS = [
@@ -398,7 +399,7 @@ const props = defineProps({
     },
 });
 
-const tiandituToken = import.meta.env.VITE_TIANDITU_TK;
+const tiandituToken = ref(getRuntimeMapTokensSync().tiandituTk);
 
 function formatScore(raw) {
     const n = Number(raw);
@@ -490,6 +491,12 @@ function switchNewsPlatform(platform) {
 
 /** 生命周期钩子 */
 onMounted(() => {
+    loadRuntimeMapTokens().then((tokens) => {
+        const nextTiandituTk = String(tokens?.tiandituTk || '').trim();
+        if (nextTiandituTk) {
+            tiandituToken.value = nextTiandituTk;
+        }
+    });
     fetchNews(currentPlatform.value);
     newsTimer = setInterval(() => fetchNews(currentPlatform.value), NEWS_REFRESH_INTERVAL);
 });

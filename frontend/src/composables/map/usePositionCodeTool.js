@@ -36,6 +36,8 @@ export function usePositionCodeTool({
     tiandituTk = '',
     reverseGeocode = apiReverseGeocodeWithFallback,
 } = {}) {
+    const getTiandituTk = () => readRuntimeValue(tiandituTk);
+
     async function decodePositionCodeToPointPayload(code) {
         const normalizedCode = String(code || '').trim();
         if (!normalizedCode || normalizedCode === '0') {
@@ -56,7 +58,7 @@ export function usePositionCodeTool({
         let reverseResult = null;
         try {
             const reverseResponse = await reverseGeocode(decoded.lng, decoded.lat, {
-                tiandituTk,
+                tiandituTk: getTiandituTk(),
                 silent: true,
             });
             reverseResult = reverseResponse?.data || null;
@@ -91,4 +93,16 @@ export function usePositionCodeTool({
     return {
         decodePositionCodeToPointPayload,
     };
+}
+
+function readRuntimeValue(source) {
+    if (typeof source === 'function') {
+        return String(source() || '').trim();
+    }
+
+    if (source && typeof source === 'object' && 'value' in source) {
+        return String(source.value || '').trim();
+    }
+
+    return String(source || '').trim();
 }

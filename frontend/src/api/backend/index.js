@@ -15,3 +15,4 @@ export * from './agent';
 export * from './statistics';
 export * from './admin';
 export * from './spatial';
+export * from './runtime';

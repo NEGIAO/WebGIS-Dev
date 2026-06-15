@@ -107,9 +107,9 @@ export const AGENT_TOOLS = [
 | CartoDB Voyager | https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png |
 | Stamen 水彩 | https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg |
 | Stamen Toner | https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png |
-| 天地图矢量 | https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=4267820f43926eaf808d61dc07269beb |
-| 天地图卫星 | https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=4267820f43926eaf808d61dc07269beb |
-| 天地图标注 | https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=4267820f43926eaf808d61dc07269beb |`,
+| 天地图矢量 | https://t0.tianditu.gov.cn/vec_w/wmts?...&tk={TIANDITU_TK} |
+| 天地图卫星 | https://t0.tianditu.gov.cn/img_w/wmts?...&tk={TIANDITU_TK} |
+| 天地图标注 | https://t0.tianditu.gov.cn/cia_w/wmts?...&tk={TIANDITU_TK} |`,
             parameters: {
                 type: 'object',
                 properties: {
@@ -183,9 +183,9 @@ export function buildSystemPromptWithTools() {
 | CartoDB Voyager | https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png |
 | Stamen 水彩 | https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg |
 | Stamen Toner | https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png |
-| 天地图矢量 | https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=4267820f43926eaf808d61dc07269beb |
-| 天地图卫星 | https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=4267820f43926eaf808d61dc07269beb |
-| 天地图标注 | https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILECOL={x}&TILEROW={y}&TILEMATRIX={z}&tk=4267820f43926eaf808d61dc07269beb |
+| 天地图矢量 | https://t0.tianditu.gov.cn/vec_w/wmts?...&tk={TIANDITU_TK} |
+| 天地图卫星 | https://t0.tianditu.gov.cn/img_w/wmts?...&tk={TIANDITU_TK} |
+| 天地图标注 | https://t0.tianditu.gov.cn/cia_w/wmts?...&tk={TIANDITU_TK} |
 
 ## 调用格式
 需要调用工具时，在回复中包含 JSON 块：

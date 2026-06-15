@@ -124,27 +124,32 @@ import { useCesiumLayers } from './composables/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/useCesiumSceneActions';
 import { useCesiumToolModules } from './composables/useCesiumToolModules';
 import { useCesiumWind } from './composables/useCesiumWind';
+import {
+    getRuntimeMapTokensSync,
+    loadRuntimeMapTokens,
+    markRuntimeMapTokenFailed,
+} from '../../services/runtimeMapTokens';
 
 let Cesium = null;
 let viewer = null;
 
-const TDT_TOKEN = import.meta.env.VITE_TIANDITU_TK;
-const CESIUM_ION_TOKEN = import.meta.env.VITE_CESIUM_ION_TOKEN;
-
 const message = useMessage();
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
+const runtimeMapTokens = ref(getRuntimeMapTokensSync());
 
 const getViewer = () => viewer;
 const getCesium = () => Cesium || window.Cesium;
+const getTiandituToken = () => runtimeMapTokens.value.tiandituTk;
+const getCesiumIonToken = () => runtimeMapTokens.value.cesiumIonToken;
 
 const layers = useCesiumLayers({
     getViewer,
     getCesium,
     message,
     backendBaseUrl: BACKEND_BASE_URL,
-    tiandituToken: TDT_TOKEN,
-    cesiumIonToken: CESIUM_ION_TOKEN,
+    tiandituToken: getTiandituToken,
+    cesiumIonToken: getCesiumIonToken,
 });
 
 const {
@@ -209,21 +214,67 @@ const {
 async function bootCesium() {
     showLoading('正在初始化 3D 场景...');
     try {
-        Cesium = await loadCesiumRuntime({ ionToken: CESIUM_ION_TOKEN });
-        if (!Cesium || !document.getElementById('cesiumContainer')) return;
+        let retryCount = 0;
+        let maxRetryCount = 1;
+        while (retryCount < maxRetryCount) {
+            try {
+                runtimeMapTokens.value = await loadRuntimeMapTokens({
+                    silent: false,
+                    force: retryCount > 0,
+                });
+                maxRetryCount = Math.max(
+                    maxRetryCount,
+                    Array.isArray(runtimeMapTokens.value.tiandituTokens)
+                        ? runtimeMapTokens.value.tiandituTokens.length
+                        : 1,
+                    Array.isArray(runtimeMapTokens.value.cesiumIonTokens)
+                        ? runtimeMapTokens.value.cesiumIonTokens.length
+                        : 1,
+                    1,
+                );
+                Cesium = await loadCesiumRuntime({ ionToken: getCesiumIonToken() });
+                if (!Cesium || !document.getElementById('cesiumContainer')) return;
 
-        initViewer();
-        setupInteractions();
-        setupFrameRateMonitor();
+                initViewer();
+                setupInteractions();
+                setupFrameRateMonitor();
 
-        const basemapReady = addBaseImageryLayers();
-        const terrainReady = await initCustomTerrain();
-        cesiumReady.value = true;
-        if (basemapReady && terrainReady) {
-            message.success('天地图基础影像与地形加载成功。');
-        } else {
-            message.error('默认地图源或地形加载失败，请检查 token 或网络。', { closable: true });
+                const basemapReady = addBaseImageryLayers();
+                const terrainReady = await initCustomTerrain();
+                cesiumReady.value = true;
+                if (basemapReady && terrainReady) {
+                    message.success('天地图基础影像与地形加载成功。');
+                    return;
+                }
+
+                const switchedTianditu = !basemapReady
+                    ? markRuntimeMapTokenFailed('tianditu_tk')
+                    : { switched: false };
+                const switchedCesium = !terrainReady
+                    ? markRuntimeMapTokenFailed('cesium_ion_token')
+                    : { switched: false };
+                const switched = switchedTianditu.switched || switchedCesium.switched;
+                if (!switched) {
+                    message.error('默认地图源或地形加载失败，请检查 token 或网络。', { closable: true });
+                    return;
+                }
+
+                runtimeMapTokens.value = switchedCesium.switched
+                    ? switchedCesium.tokens
+                    : switchedTianditu.tokens;
+                resetCesiumViewerForRetry();
+                retryCount += 1;
+                message.warning('主 token 初始化失败，正在尝试备用 token。', { closable: true });
+            } catch (error) {
+                const switchedCesium = markRuntimeMapTokenFailed('cesium_ion_token');
+                if (!switchedCesium.switched) throw error;
+                runtimeMapTokens.value = switchedCesium.tokens;
+                resetCesiumViewerForRetry();
+                retryCount += 1;
+                message.warning('Cesium ion token 失败，正在尝试备用 token。', { closable: true });
+            }
         }
+        message.error('备用 token 已全部尝试，Cesium 初始化仍失败。', { closable: true });
         // 风场在初始化完毕后即可准备加载（但需要手动点击按钮或自动加载）
         // 这里不自动加载，避免占满视野，等待用户点击“加载模拟风场”
     } catch (error) {
@@ -232,6 +283,21 @@ async function bootCesium() {
     } finally {
         hideLoading();
     }
+}
+
+function resetCesiumViewerForRetry() {
+    cesiumReady.value = false;
+    cleanupInteractions();
+    cleanupFrameRateMonitor();
+    cleanupLayers();
+    cleanupCreditHider();
+    if (!viewer) return;
+    try {
+        viewer.destroy();
+    } catch (error) {
+        console.warn('Cesium viewer retry cleanup warning:', error);
+    }
+    viewer = null;
 }
 
 function initViewer() {

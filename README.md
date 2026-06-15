@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.4 阶段，Cesium 三维分析、统一控制面板与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.5 阶段，Cesium 三维分析、运行时地图 token 管理与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -44,6 +44,7 @@
 **前端功能**：
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
 - 🧭 **Cesium 三维分析增强**：统一控制面板集成场景导航、高级特效、风场、水体模拟与参数说明
+- 🔐 **运行时地图 Token 管理**：天地图 TK 与 Cesium Ion Token 由管理员后台配置，前端启动时读取一次后直连服务
 - 🌊 **掩膜分析（水体模拟）**：基于地形高程值域动态生成外包盒，支持点击点海拔初始水位、水位滑杆和水色调色板
 - Custom terrain + WTFS labels (in-repo providers, no TDT Cesium plugins)
 - 📊 多格式数据导入（GeoJSON/KML/SHP/GeoTIFF/CSV）与导出
@@ -70,6 +71,7 @@
 - 🔐 三类身份登录 + 会话鉴权（/data 持久化）
 - 📧 **邮箱账号体系**：邮箱作为新用户唯一登录账号，支持验证码注册、密码重置、旧用户名登录后绑定邮箱迁移
 - 📐 **空间分析 API**：基于 Shapely 2.x + pyproj 的精确几何运算（缓冲区/叠加分析/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系
+- 🔑 **前端运行时配置 API**：`/api/runtime-config/map-tokens` 下发天地图与 Cesium 浏览器直连 token，避免生产构建硬编码
 
 ## 🚀 快速开始
 
@@ -171,6 +173,7 @@ WebGIS_Dev/
 │   │   │   │   ├── statistics.js         # 统计/消息/公告
 │   │   │   │   ├── admin.js              # 管理后台接口
 │   │   │   │   ├── spatial.js            # 空间分析接口
+│   │   │   │   ├── runtime.js            # 前端运行时地图 token 配置接口
 │   │   │   │   └── index.js              # barrel export
 │   │   │   ├── download.js               # 在线底图下载 API
 │   │   │   ├── geocoding.js              # 天地图/高德地理编码
@@ -186,14 +189,14 @@ WebGIS_Dev/
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + Google 真实3D模型叠加层 + 工具面板 + FPS HUD）
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + Cesium ion 真实 3D Tiles/OSM Buildings + 工具面板 + FPS HUD）
 │   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
 │   │   │   │   ├── CesiumToolPanel.vue   # 统一控制面板（场景/特效/风场/流体 + 参数提示）
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
 │   │   │   │   ├── composables/           # Cesium 工具模块配置
 │   │   │   │   │   ├── cesiumRuntime.js   # Cesium CDN 运行时加载
 │   │   │   │   │   ├── useCesiumFrameRate.js # FPS 采样与折线图数据
-│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排（含 Google Photorealistic 3D Tiles）
+│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排（Cesium ion 3D Tiles + OSM Buildings）
 │   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
 │   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
 │   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
@@ -294,6 +297,7 @@ WebGIS_Dev/
 │   │   │   ├── agent/                    # Agent 服务
 │   │   │   │   └── AgentExecutor.js      # Agent 响应拦截与工具调用执行路由
 │   │   │   ├── auth.js                   # 鉴权服务（登录/注册/会话管理）
+│   │   │   ├── runtimeMapTokens.js       # 运行时地图 token 池读取、缓存与备用 token 切换
 │   │   │   ├── compass/                  # 罗盘服务模块
 │   │   │   │   ├── urlState.ts           # 罗盘 URL 状态读写
 │   │   │   │   └── index.js              # barrel export
@@ -412,6 +416,7 @@ WebGIS_Dev/
 │   │   │       ├── multi_ring_buffer.py  # 多环缓冲区
 │   │   │       ├── simplify.py           # 几何简化
 │   │   │       └── fishnet.py            # 渔网分析
+│   │   ├── api_keys_management.py        # API 主/备密钥管理 + 运行时地图 token 池下发
 │   │   ├── proxy.py                      # 瓦片代理 + 坐标纠偏
 │   │   ├── download.py                   # 底图下载任务 API
 │   │   ├── monitor.py                    # 日志监控
@@ -441,6 +446,9 @@ WebGIS_Dev/
 │   │   │   └── 2026-06-03-fix-email-send-logic.md  # 修复axios拦截/倒计时/429处理
 │   │   ├── 26-06-11/                     # 邮箱账号化与旧用户兼容迁移
 │   │   │   └── 2026-06-11-email-account-auth-migration.md  # 邮箱账号/昵称/旧用户绑定流程
+│   │   ├── 26-06-15/                     # Cesium 3D Tiles 与运行时 token 文档同步
+│   │   │   ├── 2026-06-15-google-photorealistic-3d-tiles.md
+│   │   │   └── 2026-06-15-readme-structure-sync-v335.md
 │   │   └── 2026-06-03-ring-explosion-effect.md  # 圆环粒子特效开发日志
 │   ├── 26-06-04/                         # Agent Chat 默认 AI 配置
 │   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
@@ -549,14 +557,13 @@ docker-compose up --build
 ### 前端环境变量（frontend/.env）
 
 ```bash
-# 天地图 API Token
-VITE_TIANDITU_TK=your_tianditu_token
-
-# Google Maps API Key（Google Photorealistic 3D Tiles）
-VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+# 天地图 TK 与 Cesium Ion Token
+# 生产环境由管理员后台统一配置到后端数据库，支持主 token + 任意数量备用 token。
+# 前端启动时通过 /api/runtime-config/map-tokens 读取一次运行时 token 池。
+# 不要在 VITE_* 环境变量中写入天地图/Cesium 真实 token，Vite 会把它们打进前端产物。
 
 # 高德 Web 服务 Key
-VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
+# Amap key is configured in the admin API key panel.
 
 # LLM API（AI 助手）
 # 现已改为后端代理模式：前端无需配置任何 LLM Key
@@ -574,11 +581,12 @@ VITE_TILE_PROXY_MODE=fallback
 
 ```bash
 # 第三方 API Keys
-AMAP_API_KEY=your_key
-TIANDITU_API_KEY=your_key
+# Third-party API keys are configured in the admin panel/database.
+# Optional backend env fallback:
+# AMAP_WEB_SERVICE_KEY=your_amap_key
 
 # Agent 对话（后端代理）
-AGENT_API_KEY=your_agent_key
+# AGENT_API_KEY=your_agent_key
 AGENT_BASE_URL=https://api.qnaigc.com/v1
 AGENT_MODEL=deepseek-V3-0324
 AGENT_CHAT_GUEST_DAILY_QUOTA=10
@@ -669,6 +677,34 @@ LOG_LEVEL=INFO
 - `frontend/.env.example` — 补充瓦片代理环境变量示例
 
 详见 [DB 恢复日志](./Docs/26-06/26-06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/26-06/26-06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06/26-06-09/2026-06-09-logging-beijing-time.md) | [天气组件响应式与风力仪表 UI](./Docs/26-06/26-06-09/2026-06-09-weather-chart-responsive.md)
+
+---
+
+### V3.3.5 (2026-06-15)
+#### 🔐 运行时地图 Token 池 + 四类 API 备用 Token
+
+**密钥策略调整：**
+- ✅ 管理员面板支持高德、Agent、天地图、Cesium Ion 四类 API 配置主 token 与任意数量备用 token
+- ✅ 后端新增 `api_key_backups` 存储结构，`/api/admin/api-keys/*/backups` 提供备用 token 追加、替换与删除接口
+- ✅ `/api/runtime-config/map-tokens` 下发天地图 TK 与 Cesium Ion Token 池，前端启动后直连第三方服务，不再把真实 token 写入 Vite 环境变量
+- ✅ 高德后端代理与平台 Agent 上游调用按主 token → 备用 token 顺序兜底，遇到 key 失效或上游限流时自动尝试下一枚
+- ✅ 2D 天地图底图瓦片连续失败时会切换备用 TK，并重建当前可见的 OpenLayers 底图 source
+- ✅ Cesium 初始化接入运行时 token 池，Ion 或天地图初始链路失败时会自动切换备用 token 重建场景
+
+**安全说明：**
+- 浏览器直连 token 无法做到完全隐藏，保护重点是服务商控制台的域名、Referer、配额与权限限制
+- 生产构建不要配置 `VITE_TIANDITU_TK` / `VITE_CESIUM_ION_TOKEN`，避免 token 被 Vite 内联到前端产物
+
+**修改文件：**
+- `backend/api/api_keys_management.py` — 主/备密钥存储接口、运行时地图 token 池下发
+- `backend/api/external_proxy.py` — 高德代理主/备 key 自动兜底
+- `backend/api/agent_chat/db.py`、`routes.py`、`upstream.py` — Agent 平台 key 候选池与上游兜底
+- `frontend/src/components/UserCenter/ApiKeysManagementPanel.vue` — 四类 API 备用 token 管理区
+- `frontend/src/components/Map/MapContainer.vue` — 2D 天地图 token 失败切换与底图 source 重建
+- `frontend/src/services/runtimeMapTokens.js` — 前端运行时 token 池缓存与失败切换
+- `frontend/src/components/Cesium/CesiumContainer.vue` — Cesium 初始化备用 token 重试
+
+详见 [V3.3.5 README 与结构同步日志](./Docs/26-06/26-06-15/2026-06-15-readme-structure-sync-v335.md)
 
 ---
 
@@ -1801,6 +1837,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-14
-**当前版本**：V3.3.4 (Cesium 三维控制面板集成增强 + 掩膜分析/水体模拟)
+**最后更新**：2026-06-15
+**当前版本**：V3.3.5 (运行时地图 Token 池 + 四类 API 备用 Token)
 **项目状态**：开发中 - 持续迭代优化

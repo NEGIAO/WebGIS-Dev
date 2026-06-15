@@ -52,6 +52,9 @@ export function useCesiumLayers({
     let terrainSwitchId = 0;
     let layerPickerSubscriptions = [];
 
+    const getTiandituToken = () => readRuntimeValue(tiandituToken);
+    const getCesiumIonToken = () => readRuntimeValue(cesiumIonToken);
+
     const imageryLayerHandles = [];
     const officialBasemapOptions = ref([]);
     const imageryProviderViewModelById = new Map();
@@ -259,7 +262,7 @@ export function useCesiumLayers({
         const Cesium = getCesium?.();
         return [
             new Cesium.UrlTemplateImageryProvider({
-                url: `${TDT_SERVICE_ROOT}DataServer?T=img_w&x={x}&y={y}&l={z}&tk=${tiandituToken}`,
+                url: `${TDT_SERVICE_ROOT}DataServer?T=img_w&x={x}&y={y}&l={z}&tk=${getTiandituToken()}`,
                 subdomains: TDT_SUBDOMAINS,
                 tilingScheme: new Cesium.WebMercatorTilingScheme(),
                 maximumLevel: 18,
@@ -301,7 +304,7 @@ export function useCesiumLayers({
     function createTdtBoundaryImageryProvider() {
         const Cesium = getCesium?.();
         return new Cesium.UrlTemplateImageryProvider({
-            url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${tiandituToken}`,
+            url: `${TDT_SERVICE_ROOT}DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk=${getTiandituToken()}`,
             subdomains: TDT_SUBDOMAINS,
             tilingScheme: new Cesium.WebMercatorTilingScheme(),
             maximumLevel: 10,
@@ -311,7 +314,7 @@ export function useCesiumLayers({
     function createTdtTextLabelImageryProvider() {
         const Cesium = getCesium?.();
         return new Cesium.UrlTemplateImageryProvider({
-            url: `${TDT_SERVICE_ROOT}DataServer?T=cia_w&x={x}&y={y}&l={z}&tk=${tiandituToken}`,
+            url: `${TDT_SERVICE_ROOT}DataServer?T=cia_w&x={x}&y={y}&l={z}&tk=${getTiandituToken()}`,
             subdomains: TDT_SUBDOMAINS,
             tilingScheme: new Cesium.WebMercatorTilingScheme(),
             maximumLevel: 18,
@@ -507,7 +510,7 @@ export function useCesiumLayers({
         }
 
         const loadId = ++googlePhotorealistic3DTilesetLoadId;
-        applyCesiumIonToken(Cesium, cesiumIonToken);
+        applyCesiumIonToken(Cesium, getCesiumIonToken());
         // Cesium 1.122 keeps the ion route when the legacy first argument is undefined.
         googlePhotorealistic3DTilesetLoadPromise = Cesium.createGooglePhotorealistic3DTileset(
             undefined,
@@ -583,7 +586,7 @@ export function useCesiumLayers({
         }
 
         const loadId = ++osmBuildingsLoadId;
-        applyCesiumIonToken(Cesium, cesiumIonToken);
+        applyCesiumIonToken(Cesium, getCesiumIonToken());
         await ensureCesiumWorldTerrainForOsmBuildings();
         osmBuildingsLoadPromise = createCesiumOsmBuildingsTileset(Cesium, {
             maximumScreenSpaceError: 8,
@@ -748,7 +751,7 @@ export function useCesiumLayers({
             viewer.terrainProvider = new GeoTerrainProvider({
                 url: `${TDT_SERVICE_ROOT}mapservice/swdx?T=elv_c&tk={token}&x={x}&y={y}&l={z}`,
                 subdomains: TDT_SUBDOMAINS,
-                token: tiandituToken,
+                token: getTiandituToken(),
             });
             applyTerrainSceneFlags(value);
             viewer.scene.requestRender?.();
@@ -797,7 +800,7 @@ export function useCesiumLayers({
             return new GeoTerrainProvider({
                 url: `${TDT_SERVICE_ROOT}mapservice/swdx?T=elv_c&tk={token}&x={x}&y={y}&l={z}`,
                 subdomains: TDT_SUBDOMAINS,
-                token: tiandituToken,
+                token: getTiandituToken(),
             });
         } catch (error) {
             message.warning('官方地形服务加载失败，已降级为椭球地形。', { closable: true });
@@ -808,7 +811,7 @@ export function useCesiumLayers({
 
     async function createCesiumWorldTerrainProvider() {
         const Cesium = getCesium?.();
-        applyCesiumIonToken(Cesium, cesiumIonToken);
+        applyCesiumIonToken(Cesium, getCesiumIonToken());
 
         const options = {
             requestWaterMask: false,
@@ -939,6 +942,18 @@ function getTerrainIconText(value) {
     if (value === 'arcgisWorld') return 'AG';
     if (value === 'ellipsoid') return 'EL';
     return 'TE';
+}
+
+function readRuntimeValue(source) {
+    if (typeof source === 'function') {
+        return String(source() || '').trim();
+    }
+
+    if (source && typeof source === 'object' && 'value' in source) {
+        return String(source.value || '').trim();
+    }
+
+    return String(source || '').trim();
 }
 
 function destroyPrimitive(primitive) {

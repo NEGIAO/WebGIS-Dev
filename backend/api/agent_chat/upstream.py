@@ -319,6 +319,72 @@ async def _call_upstream_chat(
     return data
 
 
+def _normalize_key_candidates(api_keys: List[str]) -> List[str]:
+    result: List[str] = []
+    seen: set[str] = set()
+    for value in api_keys or []:
+        compact = str(value or "").strip()
+        if compact and compact not in seen:
+            result.append(compact)
+            seen.add(compact)
+    return result
+
+
+def _is_agent_key_retryable_error(exc: HTTPException) -> bool:
+    if int(exc.status_code or 0) != status.HTTP_503_SERVICE_UNAVAILABLE:
+        return False
+    detail = str(exc.detail or "").lower()
+    return "key" in detail or "rate-limit" in detail or "rate-limited" in detail
+
+
+async def _call_upstream_chat_with_key_candidates(
+    request: Request,
+    *,
+    base_url: str,
+    api_keys: List[str],
+    model: str,
+    messages: List[Dict[str, str]],
+    timeout_seconds: int,
+    max_tokens: int,
+    temperature: float,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[str] = None,
+) -> Dict[str, Any]:
+    """按主 key、备用 key 顺序调用上游聊天接口。"""
+    candidates = _normalize_key_candidates(api_keys)
+    if not candidates:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent key is not configured on backend. Please contact admin.",
+        )
+
+    last_exc: Optional[HTTPException] = None
+    for index, api_key in enumerate(candidates):
+        try:
+            return await _call_upstream_chat(
+                request,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                messages=messages,
+                timeout_seconds=timeout_seconds,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                tools=tools,
+                tool_choice=tool_choice,
+            )
+        except HTTPException as exc:
+            last_exc = exc
+            if index < len(candidates) - 1 and _is_agent_key_retryable_error(exc):
+                continue
+            raise
+
+    raise last_exc or HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Agent service is unavailable.",
+    )
+
+
 def _extract_models_from_upstream_payload(payload: Any) -> List[Dict[str, Any]]:
     """从上游 `/models` 响应中提取标准化模型列表。"""
     rows: List[Any] = []
@@ -553,6 +619,42 @@ async def _call_upstream_models(
     raise HTTPException(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail=f"Agent models request failed (HTTP {last_status or 0}).{suffix}",
+    )
+
+
+async def _call_upstream_models_with_key_candidates(
+    request: Request,
+    *,
+    base_url: str,
+    api_keys: List[str],
+    timeout_seconds: int,
+) -> Tuple[List[Dict[str, Any]], str]:
+    """按主 key、备用 key 顺序请求上游模型列表。"""
+    candidates = _normalize_key_candidates(api_keys)
+    if not candidates:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent key is not configured on backend. Please contact admin.",
+        )
+
+    last_exc: Optional[HTTPException] = None
+    for index, api_key in enumerate(candidates):
+        try:
+            return await _call_upstream_models(
+                request,
+                base_url=base_url,
+                api_key=api_key,
+                timeout_seconds=timeout_seconds,
+            )
+        except HTTPException as exc:
+            last_exc = exc
+            if index < len(candidates) - 1 and _is_agent_key_retryable_error(exc):
+                continue
+            raise
+
+    raise last_exc or HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Agent models endpoint is unavailable.",
     )
 
 

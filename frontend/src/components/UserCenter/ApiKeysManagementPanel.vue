@@ -235,6 +235,162 @@
                         最后更新: {{ formatTime(keysStatus.tianditu_tk?.updated_at) }}
                     </div>
                 </div>
+
+                <!-- Cesium Ion Token -->
+                <div class="key-card">
+                    <div class="key-header">
+                        <h3>🧊 Cesium Ion Token</h3>
+                        <span
+                            :class="[
+                                'status-badge',
+                                keysStatus.cesium_ion_token?.is_set ? 'set' : 'unset',
+                            ]"
+                        >
+                            {{ keysStatus.cesium_ion_token?.is_set ? '已配置' : '未配置' }}
+                        </span>
+                    </div>
+                    <div class="key-body">
+                        <div
+                            v-if="editingKey === 'cesium_ion_token'"
+                            class="edit-form"
+                        >
+                            <textarea
+                                v-model="editValues.cesium_ion_token"
+                                placeholder="粘贴您的 Cesium Ion Access Token"
+                                rows="3"
+                                class="key-input"
+                            ></textarea>
+                            <div class="button-group">
+                                <button
+                                    class="btn btn-save"
+                                    @click="saveKey('cesium_ion_token')"
+                                >
+                                    保存
+                                </button>
+                                <button
+                                    class="btn btn-cancel"
+                                    @click="cancelEdit"
+                                >
+                                    取消
+                                </button>
+                            </div>
+                        </div>
+                        <div
+                            v-else
+                            class="key-display"
+                        >
+                            <p class="key-value">
+                                {{
+                                    keysStatus.cesium_ion_token?.is_set
+                                        ? '●●●●●●●●●●(已设置)'
+                                        : '未配置'
+                                }}
+                            </p>
+                            <div class="key-actions">
+                                <button
+                                    class="btn btn-edit"
+                                    @click="startEdit('cesium_ion_token')"
+                                >
+                                    编辑
+                                </button>
+                                <button
+                                    v-if="keysStatus.cesium_ion_token?.is_set"
+                                    class="btn btn-delete"
+                                    @click="deleteKey('cesium_ion_token')"
+                                >
+                                    删除
+                                </button>
+                            </div>
+                            <p class="key-hint">
+                                Cesium ion 资源直连使用，请在 Cesium ion 后台限制可用域名。
+                            </p>
+                        </div>
+                    </div>
+                    <div class="key-footer">
+                        最后更新: {{ formatTime(keysStatus.cesium_ion_token?.updated_at) }}
+                    </div>
+                </div>
+            </div>
+
+            <div
+                v-if="!loading"
+                class="backup-token-section"
+            >
+                <div class="section-header-row">
+                    <h3>🔁 备用 Token 池</h3>
+                    <p class="config-note">
+                        系统会按主 token → 备用 token 顺序尝试，直连类 token 请同步在服务商后台限制域名。
+                    </p>
+                </div>
+                <div class="backup-grid">
+                    <div
+                        v-for="item in managedApiKeys"
+                        :key="item.key"
+                        class="backup-card"
+                    >
+                        <div class="backup-card-head">
+                            <strong>{{ item.label }}</strong>
+                            <span>{{ getBackupCount(item.key) }} 个备用</span>
+                        </div>
+                        <div
+                            v-if="getBackups(item.key).length"
+                            class="backup-list"
+                        >
+                            <div
+                                v-for="backup in getBackups(item.key)"
+                                :key="backup.id"
+                                class="backup-row"
+                            >
+                                <span>备用 {{ Number(backup.priority || 0) + 1 }} · 已设置</span>
+                                <button
+                                    class="btn btn-delete btn-compact"
+                                    @click="deleteBackupKey(item.key, backup.id)"
+                                >
+                                    删除
+                                </button>
+                            </div>
+                        </div>
+                        <p
+                            v-else
+                            class="backup-empty"
+                        >
+                            暂无备用 token
+                        </p>
+
+                        <div
+                            v-if="editingBackupKey === item.key"
+                            class="backup-edit"
+                        >
+                            <textarea
+                                v-model="backupEditValues[item.key]"
+                                class="key-input"
+                                rows="2"
+                                :placeholder="`粘贴 ${item.label} 的备用 token`"
+                            ></textarea>
+                            <div class="button-group">
+                                <button
+                                    class="btn btn-save"
+                                    @click="saveBackupKey(item.key)"
+                                >
+                                    保存备用
+                                </button>
+                                <button
+                                    class="btn btn-cancel"
+                                    @click="cancelBackupEdit"
+                                >
+                                    取消
+                                </button>
+                            </div>
+                        </div>
+                        <button
+                            v-else
+                            class="btn btn-edit"
+                            @click="startBackupEdit(item.key)"
+                        >
+                            新增备用 token
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -550,7 +706,9 @@
             <div class="warning-content">
                 <p><strong>安全提示：</strong></p>
                 <ul>
-                    <li>密钥仅存储在后端数据库中，不会暴露到前端运行时</li>
+                    <li>LLM、高德等后端代理密钥仅存储在后端数据库中，不会暴露到前端运行时</li>
+                    <li>天地图 TK 与 Cesium Ion Token 属于浏览器直连密钥，会通过运行时配置下发给前端</li>
+                    <li>请在天地图、Cesium ion 控制台绑定生产域名或 Referer，限制 token 的可用范围</li>
                     <li>仅管理员可以修改和查看密钥</li>
                     <li>不要在前端代码中硬编码 API 密钥</li>
                     <li>定期检查密钥使用情况和安全性</li>
@@ -566,20 +724,31 @@ import { useMessage } from '../../composables/useMessage';
 import {
     apiAdminGetAgentConfig,
     apiAdminGetApiKeysStatus,
+    apiAdminAppendApiKeyBackup,
+    apiAdminDeleteApiKeyBackup,
     apiAdminDeleteApiKey,
     apiAdminSetApiKey,
     apiAdminUpdateAgentConfig,
     apiAdminGetDefaultAIConfig,
     apiAdminUpdateDefaultAIConfig,
 } from '../../api/backend';
+import { clearRuntimeMapTokensCache } from '../../services/runtimeMapTokens';
 
 const message = useMessage();
+const frontendRuntimeKeyNames = new Set(['tianditu_tk', 'cesium_ion_token']);
+const managedApiKeys = [
+    { key: 'amap_key', label: '高德地图 API Key' },
+    { key: 'agent_api_key', label: 'Agent 对话 API Key' },
+    { key: 'tianditu_tk', label: '天地图 TK' },
+    { key: 'cesium_ion_token', label: 'Cesium Ion Token' },
+];
 
 const loading = ref(false);
 const keysStatus = ref({
     amap_key: { is_set: false, updated_at: null },
     agent_api_key: { is_set: false, updated_at: null },
     tianditu_tk: { is_set: false, updated_at: null },
+    cesium_ion_token: { is_set: false, updated_at: null },
 });
 
 const editingKey = ref(null);
@@ -587,6 +756,14 @@ const editValues = ref({
     amap_key: '',
     agent_api_key: '',
     tianditu_tk: '',
+    cesium_ion_token: '',
+});
+const editingBackupKey = ref(null);
+const backupEditValues = ref({
+    amap_key: '',
+    agent_api_key: '',
+    tianditu_tk: '',
+    cesium_ion_token: '',
 });
 
 const agentConfigLoading = ref(false);
@@ -643,16 +820,36 @@ function formatTime(isoString) {
     }
 }
 
+function normalizeKeyStatus(raw = {}) {
+    const backups = Array.isArray(raw?.backups) ? raw.backups : [];
+    return {
+        is_set: Boolean(raw?.is_set),
+        updated_at: raw?.updated_at || null,
+        backup_count: Number(raw?.backup_count ?? backups.length ?? 0),
+        backups,
+    };
+}
+
+function getBackups(keyName) {
+    return Array.isArray(keysStatus.value[keyName]?.backups)
+        ? keysStatus.value[keyName].backups
+        : [];
+}
+
+function getBackupCount(keyName) {
+    return Number(keysStatus.value[keyName]?.backup_count ?? getBackups(keyName).length ?? 0);
+}
+
 async function loadKeysStatus() {
     loading.value = true;
     try {
         const result = await apiAdminGetApiKeysStatus();
         const data = result?.data || {};
         keysStatus.value = {
-            amap_key: data.amap_key || { is_set: false, updated_at: null },
-            agent_api_key: data.agent_api_key ||
-                data.agent_token || { is_set: false, updated_at: null },
-            tianditu_tk: data.tianditu_tk || { is_set: false, updated_at: null },
+            amap_key: normalizeKeyStatus(data.amap_key),
+            agent_api_key: normalizeKeyStatus(data.agent_api_key || data.agent_token),
+            tianditu_tk: normalizeKeyStatus(data.tianditu_tk),
+            cesium_ion_token: normalizeKeyStatus(data.cesium_ion_token),
         };
     } catch (error) {
         message.error(`加载密钥状态失败: ${error.message}`);
@@ -672,6 +869,7 @@ function cancelEdit() {
         amap_key: '',
         agent_api_key: '',
         tianditu_tk: '',
+        cesium_ion_token: '',
     };
 }
 
@@ -829,11 +1027,67 @@ async function saveKey(keyName) {
 
     try {
         await apiAdminSetApiKey(keyName, keyValue);
+        if (frontendRuntimeKeyNames.has(keyName)) {
+            clearRuntimeMapTokensCache();
+        }
         message.success(`密钥 ${keyName} 已保存`);
         cancelEdit();
         await loadKeysStatus();
     } catch (error) {
         message.error(`保存密钥失败: ${error.message}`);
+    }
+}
+
+function startBackupEdit(keyName) {
+    editingBackupKey.value = keyName;
+    backupEditValues.value[keyName] = '';
+}
+
+function cancelBackupEdit() {
+    editingBackupKey.value = null;
+    backupEditValues.value = {
+        amap_key: '',
+        agent_api_key: '',
+        tianditu_tk: '',
+        cesium_ion_token: '',
+    };
+}
+
+async function saveBackupKey(keyName) {
+    const keyValue = String(backupEditValues.value[keyName] || '').trim();
+
+    if (!keyValue) {
+        message.error('备用 token 不能为空');
+        return;
+    }
+
+    try {
+        await apiAdminAppendApiKeyBackup(keyName, keyValue);
+        if (frontendRuntimeKeyNames.has(keyName)) {
+            clearRuntimeMapTokensCache();
+        }
+        message.success(`已为 ${keyName} 新增备用 token`);
+        cancelBackupEdit();
+        await loadKeysStatus();
+    } catch (error) {
+        message.error(`新增备用 token 失败: ${error.message}`);
+    }
+}
+
+async function deleteBackupKey(keyName, backupId) {
+    if (!confirm(`确定要删除 ${keyName} 的这个备用 token 吗？此操作无法撤销！`)) {
+        return;
+    }
+
+    try {
+        await apiAdminDeleteApiKeyBackup(keyName, backupId);
+        if (frontendRuntimeKeyNames.has(keyName)) {
+            clearRuntimeMapTokensCache();
+        }
+        message.success(`已删除 ${keyName} 的备用 token`);
+        await loadKeysStatus();
+    } catch (error) {
+        message.error(`删除备用 token 失败: ${error.message}`);
     }
 }
 
@@ -844,6 +1098,9 @@ async function deleteKey(keyName) {
 
     try {
         await apiAdminDeleteApiKey(keyName);
+        if (frontendRuntimeKeyNames.has(keyName)) {
+            clearRuntimeMapTokensCache();
+        }
         message.success(`密钥 ${keyName} 已删除`);
         await loadKeysStatus();
     } catch (error) {
@@ -1234,8 +1491,79 @@ onMounted(async () => {
     color: #4b8b60;
 }
 
+.backup-token-section {
+    margin-top: 18px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.backup-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.backup-card {
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border-radius: 8px;
+    padding: 12px;
+    background: rgba(var(--brand-primary-rgb), 0.03);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.backup-card-head,
+.backup-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.backup-card-head strong {
+    color: #214a31;
+    font-size: 14px;
+}
+
+.backup-card-head span,
+.backup-empty,
+.backup-row span {
+    color: #5f8f6f;
+    font-size: 12px;
+}
+
+.backup-list,
+.backup-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.backup-row {
+    min-height: 32px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.75);
+}
+
+.backup-empty {
+    margin: 0;
+}
+
+.btn-compact {
+    flex: 0 0 auto;
+    padding: 5px 10px;
+}
+
 @media (max-width: 900px) {
     .config-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .backup-grid {
         grid-template-columns: 1fr;
     }
 }

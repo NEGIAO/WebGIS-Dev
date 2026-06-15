@@ -124,6 +124,24 @@ export async function apiAdminSetApiKey(keyName, keyValue) {
     });
 }
 
+export async function apiAdminAppendApiKeyBackup(keyName, keyValue) {
+    return backendAPI.post(`/api/admin/api-keys/${encodeURIComponent(keyName)}/backups`, {
+        key_value: keyValue,
+    });
+}
+
+export async function apiAdminReplaceApiKeyBackups(keyName, backupValues = []) {
+    return backendAPI.put(`/api/admin/api-keys/${encodeURIComponent(keyName)}/backups`, {
+        backup_values: Array.isArray(backupValues) ? backupValues : [],
+    });
+}
+
+export async function apiAdminDeleteApiKeyBackup(keyName, backupId) {
+    return backendAPI.delete(
+        `/api/admin/api-keys/${encodeURIComponent(keyName)}/backups/${encodeURIComponent(backupId)}`,
+    );
+}
+
 export async function apiAdminDeleteApiKey(keyName) {
     return backendAPI.delete(`/api/admin/api-keys/${encodeURIComponent(keyName)}`);
 }
