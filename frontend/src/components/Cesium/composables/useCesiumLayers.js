@@ -11,13 +11,14 @@ import createGeoTerrainProvider from '../terrain/GeoTerrainProvider';
 const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 const ARCGIS_WORLD_TERRAIN_URL = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer';
-const ARCGIS_OPEN3D_BUILDINGS_URL = 'https://basemaps3d.arcgis.com/arcgis/rest/services/Open3D_Buildings_v1/SceneServer/layers/0';
+const CESIUM_OSM_BUILDINGS_ASSET_ID = 96188;
 const CUSTOM_XYZ_BASEMAP_ID = 'custom-xyz';
 const CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
 const TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
 const TDT_BOUNDARY_LAYER_VISIBLE_KEY = 'cesium_tdt_boundary_layer_visible';
 const TDT_TEXT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_text_label_layer_visible';
-const ARCGIS_OPEN3D_BUILDINGS_VISIBLE_KEY = 'cesium_arcgis_open3d_buildings_visible';
+const CESIUM_OSM_BUILDINGS_VISIBLE_KEY = 'cesium_osm_buildings_visible';
+const GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY = 'cesium_google_photorealistic_3d_tiles_visible';
 
 const projectBasemapOptions = [
     { value: 'tianditu', label: '天地图', description: '天地图影像与注记服务' },
@@ -42,9 +43,12 @@ export function useCesiumLayers({
 }) {
     let tdtBoundaryLayer = null;
     let tdtTextLabelLayer = null;
-    let arcgisOpen3dBuildingsLayer = null;
-    let arcgisOpen3dBuildingsLoadPromise = null;
-    let arcgisOpen3dBuildingsLoadId = 0;
+    let osmBuildingsTileset = null;
+    let osmBuildingsLoadPromise = null;
+    let osmBuildingsLoadId = 0;
+    let googlePhotorealistic3DTileset = null;
+    let googlePhotorealistic3DTilesetLoadPromise = null;
+    let googlePhotorealistic3DTilesetLoadId = 0;
     let terrainSwitchId = 0;
     let layerPickerSubscriptions = [];
 
@@ -65,8 +69,11 @@ export function useCesiumLayers({
     const tdtTextLabelLayerVisible = ref(
         readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible),
     );
-    const arcgisOpen3dBuildingsVisible = ref(
-        readStoredBoolean(ARCGIS_OPEN3D_BUILDINGS_VISIBLE_KEY, false),
+    const osmBuildingsVisible = ref(
+        readStoredBoolean(CESIUM_OSM_BUILDINGS_VISIBLE_KEY, false),
+    );
+    const googlePhotorealistic3DTilesVisible = ref(
+        readStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, false),
     );
 
     const basemapOptions = computed(() => [
@@ -98,10 +105,16 @@ export function useCesiumLayers({
             active: tdtTextLabelLayerVisible.value,
         },
         {
-            value: 'arcgis-open3d-buildings',
-            label: 'ArcGIS Open3D建筑',
-            description: 'ArcGIS Open3D Buildings 3DObject SceneServer 图层',
-            active: arcgisOpen3dBuildingsVisible.value,
+            value: 'cesium-osm-buildings',
+            label: 'Cesium OSM建筑',
+            description: 'Cesium ion OpenStreetMap 3D Buildings 图层',
+            active: osmBuildingsVisible.value,
+        },
+        {
+            value: 'google-photorealistic-3d-tiles',
+            label: 'Google真实3D模型',
+            description: 'Google Photorealistic 3D Tiles 倾斜摄影模型',
+            active: googlePhotorealistic3DTilesVisible.value,
         },
     ]);
 
@@ -129,9 +142,14 @@ export function useCesiumLayers({
         syncTdtOverlayLayers();
     });
 
-    watch(arcgisOpen3dBuildingsVisible, (value) => {
-        writeStoredBoolean(ARCGIS_OPEN3D_BUILDINGS_VISIBLE_KEY, value);
-        void syncArcgisOpen3dBuildingsLayer();
+    watch(osmBuildingsVisible, (value) => {
+        writeStoredBoolean(CESIUM_OSM_BUILDINGS_VISIBLE_KEY, value);
+        void syncOsmBuildingsLayer();
+    });
+
+    watch(googlePhotorealistic3DTilesVisible, (value) => {
+        writeStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, value);
+        void syncGooglePhotorealistic3DTilesLayer();
     });
 
     function createImageryProviderViewModels() {
@@ -359,7 +377,8 @@ export function useCesiumLayers({
 
     function syncBasemapSideEffects() {
         syncTdtOverlayLayers();
-        void syncArcgisOpen3dBuildingsLayer();
+        void syncOsmBuildingsLayer();
+        void syncGooglePhotorealistic3DTilesLayer();
         getViewer?.()?.scene?.requestRender?.();
     }
 
@@ -444,69 +463,178 @@ export function useCesiumLayers({
         tdtTextLabelLayer = null;
     }
 
-    async function syncArcgisOpen3dBuildingsLayer() {
+    async function syncOsmBuildingsLayer() {
         const viewer = getViewer?.();
         if (!viewer?.scene?.primitives || !getCesium?.()) return;
 
-        if (arcgisOpen3dBuildingsVisible.value) {
-            await ensureArcgisOpen3dBuildingsLayer();
+        if (osmBuildingsVisible.value) {
+            await ensureOsmBuildingsLayer();
         } else {
-            clearArcgisOpen3dBuildingsLayer();
+            clearOsmBuildingsLayer();
         }
 
         viewer.scene.requestRender?.();
     }
 
-    async function ensureArcgisOpen3dBuildingsLayer() {
+    async function syncGooglePhotorealistic3DTilesLayer() {
+        const viewer = getViewer?.();
+        if (!viewer?.scene?.primitives || !getCesium?.()) return;
+
+        if (googlePhotorealistic3DTilesVisible.value) {
+            await ensureGooglePhotorealistic3DTilesLayer();
+        } else {
+            clearGooglePhotorealistic3DTilesLayer();
+        }
+
+        viewer.scene.requestRender?.();
+    }
+
+    async function ensureGooglePhotorealistic3DTilesLayer() {
         const viewer = getViewer?.();
         const Cesium = getCesium?.();
-        if (!viewer?.scene?.primitives || arcgisOpen3dBuildingsLayer) return arcgisOpen3dBuildingsLayer;
-        if (arcgisOpen3dBuildingsLoadPromise) return arcgisOpen3dBuildingsLoadPromise;
+        if (!viewer?.scene?.primitives) return null;
+        if (googlePhotorealistic3DTileset) {
+            viewer.scene.globe.show = false;
+            return googlePhotorealistic3DTileset;
+        }
 
-        if (typeof Cesium?.I3SDataProvider?.fromUrl !== 'function') {
-            message.warning('当前 Cesium 运行时不支持 ArcGIS I3S 建筑图层。', { closable: true });
-            arcgisOpen3dBuildingsVisible.value = false;
+        if (googlePhotorealistic3DTilesetLoadPromise) return googlePhotorealistic3DTilesetLoadPromise;
+
+        if (typeof Cesium?.createGooglePhotorealistic3DTileset !== 'function') {
+            message.warning('当前 Cesium 运行时不支持 Google Photorealistic 3D Tiles。', { closable: true });
+            googlePhotorealistic3DTilesVisible.value = false;
             return null;
         }
 
-        const loadId = ++arcgisOpen3dBuildingsLoadId;
-        arcgisOpen3dBuildingsLoadPromise = Cesium.I3SDataProvider.fromUrl(ARCGIS_OPEN3D_BUILDINGS_URL);
+        const loadId = ++googlePhotorealistic3DTilesetLoadId;
+        applyCesiumIonToken(Cesium, cesiumIonToken);
+        // Cesium 1.122 keeps the ion route when the legacy first argument is undefined.
+        googlePhotorealistic3DTilesetLoadPromise = Cesium.createGooglePhotorealistic3DTileset(
+            undefined,
+            {
+                maximumScreenSpaceError: 4,
+                cacheBytes: 1536 * 1024 * 1024,
+                enableCollision: true,
+            },
+        );
+
         try {
-            const provider = await arcgisOpen3dBuildingsLoadPromise;
-            if (loadId !== arcgisOpen3dBuildingsLoadId || !arcgisOpen3dBuildingsVisible.value) {
-                destroyPrimitive(provider);
+            const tileset = await googlePhotorealistic3DTilesetLoadPromise;
+            if (loadId !== googlePhotorealistic3DTilesetLoadId || !googlePhotorealistic3DTilesVisible.value) {
+                destroyPrimitive(tileset);
                 return null;
             }
 
-            arcgisOpen3dBuildingsLayer = viewer.scene.primitives.add(provider);
+            googlePhotorealistic3DTileset = viewer.scene.primitives.add(tileset);
+            viewer.scene.globe.show = false;
+            viewer.scene.skyAtmosphere.show = true;
             viewer.scene.requestRender?.();
-            return arcgisOpen3dBuildingsLayer;
+            return googlePhotorealistic3DTileset;
         } catch (error) {
-            if (loadId !== arcgisOpen3dBuildingsLoadId) return null;
-            arcgisOpen3dBuildingsVisible.value = false;
-            message.warning('ArcGIS Open3D 建筑图层加载失败，已关闭该叠加层。', { closable: true });
-            message.error('ArcGIS Open3D 建筑图层初始化失败', error);
+            if (loadId !== googlePhotorealistic3DTilesetLoadId) return null;
+
+            googlePhotorealistic3DTilesVisible.value = false;
+            message.warning('Google 真实 3D 模型加载失败，已关闭该叠加层。', { closable: true });
+            message.error('Google Photorealistic 3D Tiles 初始化失败', error);
             return null;
         } finally {
-            if (loadId === arcgisOpen3dBuildingsLoadId) {
-                arcgisOpen3dBuildingsLoadPromise = null;
+            if (loadId === googlePhotorealistic3DTilesetLoadId) {
+                googlePhotorealistic3DTilesetLoadPromise = null;
             }
         }
     }
 
-    function clearArcgisOpen3dBuildingsLayer() {
+    function clearGooglePhotorealistic3DTilesLayer() {
         const viewer = getViewer?.();
-        arcgisOpen3dBuildingsLoadId += 1;
-        arcgisOpen3dBuildingsLoadPromise = null;
-        if (!arcgisOpen3dBuildingsLayer || !viewer?.scene?.primitives) return;
+        googlePhotorealistic3DTilesetLoadId += 1;
+        googlePhotorealistic3DTilesetLoadPromise = null;
+        if (!googlePhotorealistic3DTileset || !viewer?.scene?.primitives) {
+            if (viewer?.scene?.globe) {
+                viewer.scene.globe.show = true;
+            }
+            return;
+        }
 
         try {
-            viewer.scene.primitives.remove(arcgisOpen3dBuildingsLayer);
+            viewer.scene.primitives.remove(googlePhotorealistic3DTileset);
         } catch (error) {
-            console.warn('ArcGIS Open3D buildings layer remove warning:', error);
+            console.warn('Google Photorealistic 3D Tiles layer remove warning:', error);
         }
-        arcgisOpen3dBuildingsLayer = null;
+
+        googlePhotorealistic3DTileset = null;
+        if (viewer?.scene?.globe) {
+            viewer.scene.globe.show = true;
+        }
+    }
+
+    async function ensureOsmBuildingsLayer() {
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        if (!viewer?.scene?.primitives || osmBuildingsTileset) return osmBuildingsTileset;
+        if (osmBuildingsLoadPromise) return osmBuildingsLoadPromise;
+
+        if (
+            typeof Cesium?.Cesium3DTileset?.fromIonAssetId !== 'function' &&
+            typeof Cesium?.createOsmBuildingsAsync !== 'function'
+        ) {
+            message.warning('当前 Cesium 运行时不支持 Cesium OSM Buildings。', { closable: true });
+            osmBuildingsVisible.value = false;
+            return null;
+        }
+
+        const loadId = ++osmBuildingsLoadId;
+        applyCesiumIonToken(Cesium, cesiumIonToken);
+        await ensureCesiumWorldTerrainForOsmBuildings();
+        osmBuildingsLoadPromise = createCesiumOsmBuildingsTileset(Cesium, {
+            maximumScreenSpaceError: 8,
+        });
+        try {
+            const tileset = await osmBuildingsLoadPromise;
+            if (loadId !== osmBuildingsLoadId || !osmBuildingsVisible.value) {
+                destroyPrimitive(tileset);
+                return null;
+            }
+
+            osmBuildingsTileset = viewer.scene.primitives.add(tileset);
+            viewer.scene.requestRender?.();
+            return osmBuildingsTileset;
+        } catch (error) {
+            if (loadId !== osmBuildingsLoadId) return null;
+            osmBuildingsVisible.value = false;
+            message.warning('Cesium OSM 建筑图层加载失败，已关闭该叠加层。', { closable: true });
+            message.error('Cesium OSM 建筑图层初始化失败', error);
+            return null;
+        } finally {
+            if (loadId === osmBuildingsLoadId) {
+                osmBuildingsLoadPromise = null;
+            }
+        }
+    }
+
+    function clearOsmBuildingsLayer() {
+        const viewer = getViewer?.();
+        osmBuildingsLoadId += 1;
+        osmBuildingsLoadPromise = null;
+        if (!osmBuildingsTileset || !viewer?.scene?.primitives) return;
+
+        try {
+            viewer.scene.primitives.remove(osmBuildingsTileset);
+        } catch (error) {
+            console.warn('Cesium OSM buildings layer remove warning:', error);
+        }
+        osmBuildingsTileset = null;
         viewer.scene.requestRender?.();
+    }
+
+    async function ensureCesiumWorldTerrainForOsmBuildings() {
+        if (activeTerrain.value === 'cesiumWorld') return true;
+
+        activeTerrain.value = 'cesiumWorld';
+        const switched = await applyTerrain('cesiumWorld');
+        if (!switched) {
+            message.warning('Cesium OSM Buildings 建议配合 Cesium 世界地形使用，当前地形可能导致建筑遮挡或高度偏移。', { closable: true });
+        }
+        return switched;
     }
 
     function applyBasemap(value, options = {}) {
@@ -738,8 +866,13 @@ export function useCesiumLayers({
             return;
         }
 
-        if (overlayId === 'arcgis-open3d-buildings') {
-            arcgisOpen3dBuildingsVisible.value = Boolean(value);
+        if (overlayId === 'cesium-osm-buildings') {
+            osmBuildingsVisible.value = Boolean(value);
+            return;
+        }
+
+        if (overlayId === 'google-photorealistic-3d-tiles') {
+            googlePhotorealistic3DTilesVisible.value = Boolean(value);
         }
     }
 
@@ -768,7 +901,8 @@ export function useCesiumLayers({
         clearBaseImageryLayers();
         clearTdtBoundaryLayer();
         clearTdtTextLabelLayer();
-        clearArcgisOpen3dBuildingsLayer();
+        clearOsmBuildingsLayer();
+        clearGooglePhotorealistic3DTilesLayer();
         unbindLayerPickerStateSync();
     }
 
@@ -814,6 +948,23 @@ function destroyPrimitive(primitive) {
     } catch (error) {
         console.warn('Primitive destroy warning:', error);
     }
+}
+
+async function createCesiumOsmBuildingsTileset(Cesium, options = {}) {
+    if (typeof Cesium?.Cesium3DTileset?.fromIonAssetId === 'function') {
+        const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(
+            CESIUM_OSM_BUILDINGS_ASSET_ID,
+            options,
+        );
+        if (!tileset.style && typeof Cesium.Cesium3DTileStyle === 'function') {
+            tileset.style = new Cesium.Cesium3DTileStyle({
+                color: "Boolean(${feature['cesium#color']}) ? color(${feature['cesium#color']}) : color('white')",
+            });
+        }
+        return tileset;
+    }
+
+    return Cesium.createOsmBuildingsAsync(options);
 }
 
 function getBasemapTooltip(option) {

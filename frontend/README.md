@@ -8,6 +8,7 @@
 
 - 🗺️ **地图引擎**：OpenLayers 6.x + Cesium 3D 地球
 - 🧭 **三维分析**：Cesium 统一控制面板集成场景导航、高级特效、风场、水体模拟和参数说明
+- 🏙️ **Google 真实 3D 模型**：Cesium 叠加层支持 Google Photorealistic 3D Tiles 倾斜摄影接入
 - 🌊 **掩膜分析（水体模拟）**：按捕捉区域高程值域生成外包盒，支持点击点高程初始水位、水位滑杆和水色调色板
 - 📊 **数据管理**：多格式导入（GeoJSON/KML/SHP/GeoTIFF/CSV），批量导出
 - 🔎 **高德 AOI 手动注入**：支持详情 JSON 与搜索 AOI，`@` 分隔的独立区域会被拆分为多个环
@@ -78,6 +79,7 @@ VITE_BACKEND_URL=http://localhost:8000
 VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
 VITE_TILE_PROXY_MODE=fallback
 VITE_TIANDITU_TK=your_tianditu_token
+VITE_CESIUM_ION_TOKEN=your_cesium_ion_token
 VITE_AMAP_WEB_SERVICE_KEY=your_amap_key
 VITE_BASE_URL=./
 ```
@@ -136,7 +138,7 @@ frontend/src/
 │
 ├── components/                               # 业务组件（按功能域分组）
 │   ├── Cesium/                               # 3D 地球模块
-│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 统一工具面板调度）
+│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + Google 真实3D模型叠加层 + 统一工具面板调度）
 │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
 │   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/特效/风场/流体参数 + ? 提示）
 │   │   ├── Wind2D.js                         # 2D 风场渲染
@@ -647,7 +649,7 @@ MIT
 **新增与增强：**
 - `components/Cesium/CesiumToolPanel.vue`：控制项标签旁新增 `?` 提示气泡，解释阈值、混合、光强、水位、水色等参数含义
 - `components/Cesium/CesiumToolPanel.vue`：图层 tab 中底图源、地形、叠加层改为折叠卡片，并通过 UI 状态版本确保升级后默认收起
-- `components/Cesium/composables/useCesiumLayers.js`：地形新增 ArcGIS World Elevation 3D；叠加层新增 ArcGIS Open3D Buildings 3DObject SceneServer 开关
+- `components/Cesium/composables/useCesiumLayers.js`：地形新增 ArcGIS World Elevation 3D；叠加层新增 Cesium OSM Buildings（ion asset 96188）开关，并支持 Google Photorealistic 3D Tiles
 - `components/Cesium/composables/useCesiumToolModules.js`：流体模块接入水位状态、动态值域、显示值格式化和调色板配置
 - `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：水体外包盒高度改为按采样高程最低点到最高点动态计算
 - `components/Cesium/FluidSimulation/FluidSimulationPanel.vue`：点击位置三维坐标高程作为初始水位，并纳入外包盒初始范围
@@ -661,7 +663,7 @@ MIT
 - 用户点击三维场景后，点击点海拔会成为初始水位；水位控制滑杆从该区域最低高程到最高高程变化
 - 图层配置区默认只显示分组标题与当前摘要，点击标题行即可展开或收起对应配置项
 - 地形分组现在支持天地图地形、Cesium 世界地形、ArcGIS 世界地形和平面地形四种来源
-- 叠加层分组可一键加载/卸载 ArcGIS Open3D 建筑图层，开关状态会持久化
+- 叠加层分组可一键加载/卸载 Cesium OSM Buildings（ion asset 96188）建筑图层，开关状态会持久化
 - 相机可以进入水体外包盒；进入外包盒水平范围且低于盒顶时，水体主渲染 pass 会临时隐藏，离开后自动恢复
 - 水体外包盒不再使用固定高度，海拔落差直接决定模拟体高度
 - 流体参数在统一控制面板内集中调整，说明信息通过悬浮提示展示，减少参数含义猜测成本

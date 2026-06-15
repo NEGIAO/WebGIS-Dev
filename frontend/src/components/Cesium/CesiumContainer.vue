@@ -240,7 +240,7 @@ function initViewer() {
     const terrainProviderViewModels = createTerrainProviderViewModels();
     viewer = new mapCtor('cesiumContainer', {
         baseLayerPicker: true,
-        geocoder: true,
+        geocoder: Cesium.IonGeocodeProviderType?.GOOGLE || true,
         homeButton: true,
         infoBox: true,
         selectionIndicator: true,

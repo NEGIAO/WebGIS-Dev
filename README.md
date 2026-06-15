@@ -186,14 +186,14 @@ WebGIS_Dev/
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 工具面板 + FPS HUD）
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + Google 真实3D模型叠加层 + 工具面板 + FPS HUD）
 │   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
 │   │   │   │   ├── CesiumToolPanel.vue   # 统一控制面板（场景/特效/风场/流体 + 参数提示）
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
 │   │   │   │   ├── composables/           # Cesium 工具模块配置
 │   │   │   │   │   ├── cesiumRuntime.js   # Cesium CDN 运行时加载
 │   │   │   │   │   ├── useCesiumFrameRate.js # FPS 采样与折线图数据
-│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排
+│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排（含 Google Photorealistic 3D Tiles）
 │   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
 │   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
 │   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
@@ -551,6 +551,9 @@ docker-compose up --build
 ```bash
 # 天地图 API Token
 VITE_TIANDITU_TK=your_tianditu_token
+
+# Google Maps API Key（Google Photorealistic 3D Tiles）
+VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 
 # 高德 Web 服务 Key
 VITE_AMAP_WEB_SERVICE_KEY=your_amap_key

@@ -18,6 +18,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 访客地理统计：POST /api/log-visit
 - 真实用户登录系统：/api/auth/*（邮箱账号、旧用户绑定迁移、三类身份）
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
+- 前端 Cesium Google Photorealistic 3D Tiles：真实 3D 模型接入仍由前端直连 Google Maps API，后端无需新增接口
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
