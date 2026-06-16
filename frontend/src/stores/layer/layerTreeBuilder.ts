@@ -438,8 +438,6 @@ export function buildLayerTree({
     searchLayers,
     uploadLayers,
     districtLayers,
-    hasDrawCard,
-    drawCount,
     expandedState,
 }: {
     drawLayers: LayerStoreLayer[];
@@ -447,55 +445,12 @@ export function buildLayerTree({
     searchLayers: LayerStoreLayer[];
     uploadLayers: LayerStoreLayer[];
     districtLayers: any[];
-    hasDrawCard: boolean;
-    drawCount: number;
     expandedState: Record<string, boolean>;
 }): any[] {
     const tree: any[] = [];
 
-    if (hasDrawCard) {
-        const drawChildren = drawLayers.length
-            ? drawLayers.map((layer) => toLayerNode(layer, 1, 'draw'))
-            : [
-                  {
-                      id: 'draw_virtual',
-                      name: '绘制图形集合',
-                      displayName: '绘制图形集合',
-                      type: 'layer',
-                      visible: true,
-                      children: [],
-                      expanded: false,
-                      level: 1,
-                      featureCount: Number(drawCount) || 0,
-                      showCheckbox: false,
-                      draggable: false,
-                      droppable: false,
-                      actions: {
-                          attribute: false,
-                          style: true,
-                          styleTarget: 'draw',
-                          label: false,
-                          copyCoordinates: false,
-                          toggleLayerCRS: false,
-                          exportLayerData: false,
-                          canExportCSV: false,
-                          canExportTXT: false,
-                          canExportGeoJSON: false,
-                          canExportKML: false,
-                          zoom: true,
-                          zoomEvent: 'interaction',
-                          zoomPayload: { interaction: 'ZoomToGraphics' },
-                          remove: true,
-                          removeTip: '清空',
-                          removeEvent: 'interaction',
-                          removePayload: { interaction: 'Clear' },
-                          viewEvent: 'interaction',
-                          viewPayload: { interaction: 'ViewGraphics' },
-                          soloEvent: 'interaction',
-                          soloPayload: { interaction: 'ZoomToGraphics' },
-                      },
-                  },
-              ];
+    if (drawLayers.length) {
+        const drawChildren = drawLayers.map((layer) => toLayerNode(layer, 1, 'draw'));
 
         tree.push(
             folderNode({

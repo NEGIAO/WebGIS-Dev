@@ -35,6 +35,7 @@ export function createDrawMeasureFeature({
     emitGraphicsOverview = () => {},
     refreshUserLayerZIndex = () => {},
     emitUserLayersChange = () => {},
+    removeManagedLayerById = null,
     drawStyleConfig = { value: {} },
     drawGraphicSeedRef = { value: 1 },
     userDataLayers = [],
@@ -223,19 +224,31 @@ export function createDrawMeasureFeature({
     /**
      * 清理所有绘制图形和用户图层中的绘制层
      */
-    function clearAllGraphics() {
+    async function clearAllGraphics() {
         const map = mapInstanceRef.value;
         if (!map || !drawSource) return;
 
         drawSource.clear();
-        for (let i = userDataLayers.length - 1; i >= 0; i--) {
-            if (userDataLayers[i].sourceType === 'draw') {
-                map.removeLayer(userDataLayers[i].layer);
-                userDataLayers.splice(i, 1);
+
+        const drawLayerIds = userDataLayers
+            .filter((item) => item?.sourceType === 'draw')
+            .map((item) => item.id)
+            .filter(Boolean);
+
+        if (typeof removeManagedLayerById === 'function') {
+            await Promise.allSettled(
+                drawLayerIds.map((layerId) => removeManagedLayerById(layerId)),
+            );
+        } else {
+            for (let i = userDataLayers.length - 1; i >= 0; i--) {
+                if (userDataLayers[i].sourceType === 'draw') {
+                    map.removeLayer(userDataLayers[i].layer);
+                    userDataLayers.splice(i, 1);
+                }
             }
+            refreshUserLayerZIndex();
+            emitUserLayersChange();
         }
-        refreshUserLayerZIndex();
-        emitUserLayersChange();
         map.getOverlays().clear();
         emitGraphicsOverview();
     }

@@ -712,6 +712,7 @@ const { zoomToManagedFeature } = createManagedFeatureOperationsFeature({
 
 // 绘图与测量交互
 const drawGraphicSeedRef = { value: 1 };
+let removeManagedLayerById = () => undefined;
 
 // 空间分析交互
 const { runSpatialAnalysis } = createSpatialAnalysisFeature({
@@ -738,6 +739,7 @@ const {
     emitGraphicsOverview,
     refreshUserLayerZIndex,
     emitUserLayersChange,
+    removeManagedLayerById: (...args) => removeManagedLayerById(...args),
     drawStyleConfig,
     drawGraphicSeedRef,
     userDataLayers,
@@ -1267,6 +1269,7 @@ const {
 } = createDeferredUserLayerApis({
     mapInstanceRef: mapInstance,
     initialView: INITIAL_VIEW,
+    drawSource,
     userDataLayers,
     addManagedLayerRecord,
     createManagedVectorLayer,
@@ -1320,6 +1323,7 @@ const {
 });
 
 // 更新栅格值查询函数 ref（解决初始化顺序问题）
+removeManagedLayerById = removeUserLayer;
 queryRasterValueAtCoordinateRef.value = queryRasterValueAtCoordinate;
 
 // --- 1. 地图核心逻辑 ---

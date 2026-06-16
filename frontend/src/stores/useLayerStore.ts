@@ -119,8 +119,6 @@ export const useLayerStore = defineStore('layerStore', () => {
                 searchLayers: searchLayers.value,
                 uploadLayers: uploadLayers.value,
                 districtLayers: districtLayers.value,
-                hasDrawCard: hasDrawCard.value,
-                drawCount: Number(overview.value?.drawCount || 0),
                 expandedState: layerTreeExpandedState.value,
             });
         }

@@ -148,10 +148,12 @@ export function useCreateManagedVectorLayer({
         features.forEach((feature, index) => ensureFeatureId(feature, name, index));
 
         // 7. 将图层添加到地图
-        mapInstanceRef.value.addLayer(layer);
 
         // 8. 创建及登记层数据记录
         const id = createManagedLayerId();
+        layer.set?.('managedLayerId', id);
+        layer.set?.('sourceType', sourceType);
+        mapInstanceRef.value.addLayer(layer);
 
         // 同时更新 DataManager（数据与渲染分离架构）
         let dataManagerId = null;

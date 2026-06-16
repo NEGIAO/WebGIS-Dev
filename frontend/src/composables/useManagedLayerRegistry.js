@@ -78,6 +78,8 @@ export function useManagedLayerRegistry({ emit, userDataLayers, drawSource, styl
         standardTocItem = null,
     }) {
         const id = createManagedLayerId();
+        layer?.set?.('managedLayerId', id);
+        layer?.set?.('sourceType', sourceType);
         // 优先使用顶层参数，回退到 metadata 内嵌的 standardTocItem
         const resolvedStandardTocItem = standardTocItem || metadata?.standardTocItem || null;
         userDataLayers.push({

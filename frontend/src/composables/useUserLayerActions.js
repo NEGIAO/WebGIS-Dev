@@ -2,6 +2,7 @@ import { useMessage } from './useMessage';
 
 export function useUserLayerActions({
     mapInstance,
+    drawSource,
     userDataLayers,
     refreshUserLayerZIndex,
     emitUserLayersChange,
@@ -21,8 +22,51 @@ export function useUserLayerActions({
 }) {
     const message = useMessage();
 
+    function normalizeLayerId(layerId) {
+        return String(layerId || '').trim();
+    }
+
     function findUserLayer(layerId) {
-        return userDataLayers.find((item) => item.id === layerId);
+        const id = normalizeLayerId(layerId);
+        return userDataLayers.find((item) => normalizeLayerId(item?.id) === id);
+    }
+
+    function findMapLayersByManagedId(layerId) {
+        const id = normalizeLayerId(layerId);
+        if (!id || !mapInstance?.value) return [];
+
+        const layers = mapInstance.value.getLayers?.().getArray?.() || [];
+        return layers.filter((layer) => normalizeLayerId(layer?.get?.('managedLayerId')) === id);
+    }
+
+    function getFeatureKey(feature) {
+        return normalizeLayerId(
+            feature?.getId?.() ||
+                feature?.get?.('_gid') ||
+                feature?.get?.('id') ||
+                feature?.get?.('name'),
+        );
+    }
+
+    function clearLayerSource(layer) {
+        layer?.getSource?.()?.clear?.();
+    }
+
+    function removeDrawSourceFeatures(removed) {
+        if (removed?.sourceType !== 'draw' || !drawSource) return;
+
+        const layerFeatures = removed.layer?.getSource?.()?.getFeatures?.() || [];
+        if (!layerFeatures.length) return;
+
+        const featureSet = new Set(layerFeatures);
+        const featureKeys = new Set(layerFeatures.map(getFeatureKey).filter(Boolean));
+
+        (drawSource.getFeatures?.() || []).forEach((feature) => {
+            const key = getFeatureKey(feature);
+            if (featureSet.has(feature) || (key && featureKeys.has(key))) {
+                drawSource.removeFeature?.(feature);
+            }
+        });
     }
 
     function setUserLayerVisibility(layerId, visible) {
@@ -45,15 +89,33 @@ export function useUserLayerActions({
     function removeUserLayer(layerId) {
         if (!mapInstance?.value) return;
 
-        const idx = userDataLayers.findIndex((item) => item.id === layerId);
-        if (idx < 0) return;
+        const id = normalizeLayerId(layerId);
+        if (!id) return;
+
+        const idx = userDataLayers.findIndex((item) => normalizeLayerId(item?.id) === id);
+        if (idx < 0) {
+            const managedLayers = findMapLayersByManagedId(id);
+            if (!managedLayers.length) return;
+            managedLayers.forEach((layer) => {
+                clearLayerSource(layer);
+                mapInstance.value.removeLayer(layer);
+            });
+            emitGraphicsOverview();
+            return;
+        }
 
         const removed = userDataLayers[idx];
-        mapInstance.value.removeLayer(removed.layer);
+        const layersToRemove = new Set([removed.layer, ...findMapLayersByManagedId(id)]);
+        removeDrawSourceFeatures(removed);
+        layersToRemove.forEach((layer) => {
+            if (!layer) return;
+            clearLayerSource(layer);
+            mapInstance.value.removeLayer(layer);
+        });
         userDataLayers.splice(idx, 1);
 
-        if (isRouteManagedLayer?.({ layerId, removed })) {
-            onRouteManagedLayerRemoved?.({ layerId, removed });
+        if (isRouteManagedLayer?.({ layerId: id, removed })) {
+            onRouteManagedLayerRemoved?.({ layerId: id, removed });
         }
 
         refreshUserLayerZIndex();

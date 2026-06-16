@@ -9,6 +9,7 @@
 export function createDeferredUserLayerApis({
     mapInstanceRef,
     initialView,
+    drawSource,
     userDataLayers,
     addManagedLayerRecord,
     createManagedVectorLayer,
@@ -57,6 +58,7 @@ export function createDeferredUserLayerApis({
             ]).then(([actionsMod, dataImportApi]) =>
                 actionsMod.useUserLayerActions({
                     mapInstance: mapInstanceRef,
+                    drawSource,
                     userDataLayers,
                     refreshUserLayerZIndex,
                     emitUserLayersChange,
