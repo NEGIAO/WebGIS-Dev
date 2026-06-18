@@ -41,13 +41,24 @@
     />
 
     <section
-        v-if="cesiumReady"
+        v-if="cesiumReady && fpsChartVisible"
         class="fps-chart-panel"
         aria-label="实时帧率折线图"
     >
         <div class="fps-chart-head">
-            <span>FPS</span>
-            <strong>{{ frameRateDisplay }}</strong>
+            <div class="fps-chart-title">
+                <span>FPS</span>
+                <strong>{{ frameRateDisplay }}</strong>
+            </div>
+            <button
+                class="fps-chart-close"
+                type="button"
+                aria-label="关闭 FPS 面板"
+                title="关闭 FPS 面板"
+                @click="closeFpsChart"
+            >
+                ×
+            </button>
         </div>
         <svg
             class="fps-chart"
@@ -83,6 +94,18 @@
             />
         </svg>
     </section>
+
+    <!-- 隐藏后用于重新打开 -->
+    <button
+        v-else-if="cesiumReady && !fpsChartVisible"
+        class="fps-chart-toggle"
+        type="button"
+        aria-label="显示 FPS 面板"
+        title="显示 FPS 面板"
+        @click="openFpsChart"
+    >
+        FPS
+    </button>
 
     <!-- 坐标显示面板 -->
     <div class="map-controls-group">
@@ -140,6 +163,16 @@ const emit = defineEmits(['view-sync']);
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const runtimeMapTokens = ref(getRuntimeMapTokensSync());
+
+const fpsChartVisible = ref(true);
+
+function closeFpsChart() {
+    fpsChartVisible.value = false;
+}
+
+function openFpsChart() {
+    fpsChartVisible.value = true;
+}
 
 const getViewer = () => viewer;
 const getCesium = () => Cesium || window.Cesium;
@@ -461,6 +494,41 @@ onUnmounted(() => {
     stroke-linejoin: round;
     vector-effect: non-scaling-stroke;
     filter: drop-shadow(0 0 4px rgba(94, 234, 212, 0.45));
+}
+
+.fps-chart-close,
+.fps-chart-toggle {
+    pointer-events: auto;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.fps-chart-close {
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-size: 16px;
+}
+
+.fps-chart-close:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.fps-chart-toggle {
+    position: absolute;
+    top: 58px;
+    right: 12px;
+    z-index: 1150;
+    padding: 6px 10px;
+    background: rgba(8, 25, 36, 0.86);
+    color: #eefbf3;
+    border: 1px solid rgba(155, 216, 255, 0.26);
+    box-shadow: 0 14px 34px rgba(0, 7, 14, 0.32);
+    backdrop-filter: blur(14px);
 }
 
 /* 平板适配 */
