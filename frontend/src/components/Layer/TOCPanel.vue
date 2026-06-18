@@ -1015,7 +1015,7 @@ async function drawPointByGeocodeAddress() {
                 geocodeResult.lng,
                 geocodeResult.lat,
                 {
-                    tiandituTk: TIANDITU_TK,
+                    tiandituTk: tiandituTk.value,
                     silent: true,
                 },
             );

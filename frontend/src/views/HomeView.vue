@@ -8,9 +8,12 @@
  * - 新闻侧边栏展示
  * - 鼠标特效
  */
-import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUnmounted, h, nextTick } from 'vue';
+import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUnmounted, h, nextTick, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '../composables/useMessage';
+import { MAP_VIEW_CESIUM, MAP_VIEW_OL, useMapViewUrlState } from '../composables/useMapViewUrlState';
+import { olZoomToCesiumHeight, cesiumHeightToOlZoom } from '../utils/map/viewScaleConverter';
+import { encodeCesiumPoseState } from '../utils/url/crypto';
 import {
     useAttrStore,
     useWeatherStore,
@@ -22,6 +25,7 @@ import {
 import { showLoading, hideLoading } from '../utils/ui/loading';
 import { apiLogVisit } from '../api/backend';
 const message = useMessage();
+const { getCurrentMapView, replaceMapView } = useMapViewUrlState();
 const { logMonitorVisible } = storeToRefs(useAppStore());
 const attrStore = useAttrStore();
 const weatherStore = useWeatherStore();
@@ -88,7 +92,7 @@ const locationInfo = reactive({
 // UI 状态
 const selectedImage = ref('');
 // const currentNewsIndex = ref(0);
-const is3DMode = ref(false);
+const is3DMode = ref(getCurrentMapView() === MAP_VIEW_CESIUM);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
 const isWeatherBoardMode = ref(false);
@@ -107,6 +111,7 @@ const toolboxOverview = ref({ drawCount: 0, uploadCount: 0, layers: [] });
 const baseLayers = ref([]);
 const uploadProgress = ref({ phase: 'idle' });
 const latestSearchPoi = ref({});
+const latestCesiumOlEquivalent = ref(null);
 const activeFeature = ref({ key: 'info', label: '新闻' });
 const isAccountPanelOpen = ref(false);
 const isAccountPanelFullscreen = ref(false);
@@ -575,6 +580,7 @@ function toggleWeatherBoardMode() {
         activeSidePanelTab.value = 'weather';
         isSidePanelCollapsed.value = false;
         is3DMode.value = false;
+        replaceMapView(MAP_VIEW_OL);
         activeFeature.value = { key: 'weather-board', label: '天气看板' };
     } else {
         // 关闭天气看板：切回默认新闻 tab
@@ -584,36 +590,176 @@ function toggleWeatherBoardMode() {
     isWeatherBoardMode.value = openingWeather;
 }
 
-/** 切换 2D/3D 视图 */
-async function toggle3D() {
-    if (isWeatherBoardMode.value) {
-        isWeatherBoardMode.value = false;
-    }
+/**
+ * 按需加载 Cesium 组件，避免 3D 资源参与首屏竞争。
+ * @returns {Promise<boolean>} Cesium 组件是否已加载完成
+ */
+async function ensureCesiumLoaded() {
+    if (isCesiumLoaded.value) return true;
+    if (isCesiumLoading.value) return false;
 
-    if (is3DMode.value) {
-        is3DMode.value = false;
-        return;
+    isCesiumLoading.value = true;
+    showLoading('正在加载 3D 引擎资源...');
+    try {
+        const module = await import('../components/Cesium/CesiumContainer.vue');
+        CesiumContainer.value = module.default;
+        isCesiumLoaded.value = true;
+        return true;
+    } catch (error) {
+        message.error('Cesium 组件加载失败', error);
+        return false;
+    } finally {
+        isCesiumLoading.value = false;
+        hideLoading();
     }
+}
 
-    if (!isCesiumLoaded.value && !isCesiumLoading.value) {
-        isCesiumLoading.value = true;
-        showLoading('正在加载 3D 引擎资源...');
-        try {
-            // const module = await import('../components/Cesium/CesiumContainer.vue');
-            const module = await import('../components/Cesium/CesiumContainer.vue');
-            CesiumContainer.value = module.default;
-            isCesiumLoaded.value = true;
-        } catch (error) {
-            message.error('Cesium 组件加载失败', error);
-            return;
-        } finally {
-            isCesiumLoading.value = false;
-            hideLoading();
+/**
+ * 将 URL 传输链路中的 z 参数格式化为统一两位小数字符串。
+ * @param {*} value - OL zoom 或 Cesium height 数值
+ * @returns {string|null} 两位小数字符串，或无效时返回 null
+ */
+function formatZParam(value) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return null;
+    return numberValue.toFixed(2);
+}
+
+/**
+ * 从当前 OL 视图构建 Cesium URL 参数，切换 3D 时保持中心与可视范围接近。
+ * @returns {Record<string,string>|null} 可直接合并到 URL 的 query patch
+ */
+function buildCesiumQueryPatchFromOl() {
+    const state = mapContainerRef.value?.getCurrentViewState?.();
+    if (!state || !Number.isFinite(state.lng) || !Number.isFinite(state.lat)) return null;
+
+    const height = olZoomToCesiumHeight({
+        view: state.view,
+        zoom: state.zoom,
+        mapSize: state.size,
+        centerLat: state.lat,
+    });
+    const poseCode = encodeCesiumPoseState({ heading: 0, pitch: -90, roll: 0 });
+    return {
+        lng: Number(state.lng).toFixed(6),
+        lat: Number(state.lat).toFixed(6),
+        z: formatZParam(height ?? 6000000),
+        cv: poseCode && poseCode !== '0' ? poseCode : undefined,
+    };
+}
+
+/**
+ * 将最近一次 Cesium 相机状态换算并同步到隐藏的 OL 视图。
+ * @param {Object} payload - Cesium view-sync payload
+ */
+function syncOlFromCesiumPayload(payload = {}) {
+    const directEquivalent = payload?.olEquivalent;
+    const camera = payload?.camera;
+    let equivalent = directEquivalent;
+
+    if (!equivalent && camera) {
+        const olView = mapContainerRef.value?.getOlView?.();
+        const zoom = cesiumHeightToOlZoom({
+            view: olView,
+            height: camera.height,
+            mapSize: mapContainerRef.value?.getMapSize?.(),
+            centerLat: camera.lat,
+        });
+        if (zoom !== null) {
+            equivalent = { lng: camera.lng, lat: camera.lat, zoom };
         }
     }
 
-    if (isCesiumLoaded.value) {
+    if (!equivalent) return;
+    latestCesiumOlEquivalent.value = equivalent;
+    mapContainerRef.value?.syncViewFromCesium?.(equivalent);
+}
+
+/**
+ * 将最近一次 Cesium 等效视图转换为 OL URL 参数，切回 2D 时一次性写入。
+ * @returns {Record<string,string>|null}
+ */
+function buildOlQueryPatchFromCesium() {
+    const equivalent = latestCesiumOlEquivalent.value;
+    if (!equivalent) return null;
+    return {
+        lng: Number(equivalent.lng).toFixed(6),
+        lat: Number(equivalent.lat).toFixed(6),
+        z: formatZParam(equivalent.zoom),
+    };
+}
+
+/**
+ * 切换地图引擎并同步 view URL 参数。
+ * @param {'ol'|'cesium'} view - 目标地图视图
+ * @param {Object} [options={}] - 切换选项
+ * @param {boolean} [options.writeUrl=true] - 是否写回 URL
+ * @returns {Promise<boolean>} 是否切换成功
+ */
+async function setMapView(view, { writeUrl = true } = {}) {
+    const normalizedView = view === MAP_VIEW_CESIUM ? MAP_VIEW_CESIUM : MAP_VIEW_OL;
+    const queryPatch = normalizedView === MAP_VIEW_CESIUM
+        ? buildCesiumQueryPatchFromOl()
+        : buildOlQueryPatchFromCesium();
+
+    // 视图切换必须先完成 URL 语义转换，再加载目标引擎：
+    // - OL -> Cesium：先把 URL z 从 OL zoom 转为 Cesium camera height。
+    // - Cesium -> OL：先把 URL z 从 Cesium camera height 转为 OL zoom。
+    // 这样 Cesium/OL 初始化时读取到的 z 已经是目标引擎对应的语义。
+    if (writeUrl) {
+        replaceMapView(normalizedView, queryPatch ? { queryPatch } : undefined);
+    }
+
+    if (normalizedView === MAP_VIEW_CESIUM) {
+        if (isWeatherBoardMode.value) {
+            isWeatherBoardMode.value = false;
+        }
+        const loaded = await ensureCesiumLoaded();
+        if (!loaded) return false;
         is3DMode.value = true;
+    } else {
+        if (latestCesiumOlEquivalent.value) {
+            mapContainerRef.value?.syncViewFromCesium?.(latestCesiumOlEquivalent.value);
+        }
+        is3DMode.value = false;
+        // 切回 OL 时卸载 CesiumContainer，确保相机 moveEnd URL 监听被清理。
+        isCesiumLoaded.value = false;
+        CesiumContainer.value = null;
+    }
+    return true;
+}
+
+/** 切换 2D/3D 视图 */
+async function toggle3D() {
+    const nextView = is3DMode.value ? MAP_VIEW_OL : MAP_VIEW_CESIUM;
+    await setMapView(nextView);
+}
+
+// 浏览器前进/后退或其他 router.replace 修改 view 时，同步 HomeView 面板状态。
+watch(
+    () => getCurrentMapView(),
+    async (nextView) => {
+        const normalizedView = nextView === MAP_VIEW_CESIUM ? MAP_VIEW_CESIUM : MAP_VIEW_OL;
+        if ((normalizedView === MAP_VIEW_CESIUM) === is3DMode.value) return;
+        await setMapView(normalizedView, { writeUrl: false });
+    },
+);
+
+/**
+ * 接收 MapContainer 的 view-sync 事件。
+ * 当 OL 地图 moveEnd 触发时收到 { view: 'ol' } 通知，
+ * 确保 HomeView 中的 is3DMode 与 URL view 参数一致。
+ * @param {{view: string}} payload
+ */
+function handleViewSync(payload) {
+    const view = String(payload?.view || '').trim();
+    if (view === MAP_VIEW_CESIUM) {
+        syncOlFromCesiumPayload(payload);
+        return;
+    }
+    if (view === MAP_VIEW_OL && is3DMode.value) {
+        // OL 面板重新激活时同步视图状态
+        is3DMode.value = false;
     }
 }
 function handleActivateMagic(effectName) {
@@ -919,6 +1065,7 @@ onMounted(async () => {
     // 如果在这里执行，会与底图加载竞争网络资源和事件循环
     // 现在改为在底图核心就绪后执行，确保底图有绝对优先级
     // visitLog 调用已移到 handleMapCoreReady() 中的 executeVisitLogAsync()
+    await setMapView(getCurrentMapView(), { writeUrl: false });
 });
 </script>
 
@@ -994,6 +1141,7 @@ onMounted(async () => {
                         <MapContainer
                             v-show="!is3DMode && !isAccountPanelFullscreen"
                             ref="mapContainerRef"
+                            :url-sync-enabled="!is3DMode"
                             @map-core-ready="handleMapCoreReady"
                             @map-core-failed="handleMapCoreFailed"
                             @location-change="handleLocationChange"
@@ -1003,6 +1151,7 @@ onMounted(async () => {
                             @graphics-overview="handleGraphicsOverview"
                             @upload-progress-change="handleUploadProgressChange"
                             @base-layers-change="handleBaseLayersChange"
+                            @view-sync="handleViewSync"
                         />
                     </template>
                     <template #fallback>
@@ -1069,15 +1218,15 @@ onMounted(async () => {
                     </div>
                 </transition>
 
-                <!-- 点击后按需加载的 Cesium 组件（外层包裹 div 解决 Vue 3 Fragment 的 v-show 穿透失效问题） -->
+                <!-- 点击后按需加载的 Cesium 组件；切回 OL 时卸载，确保相机 URL 监听同步清理。 -->
                 <div
-                    v-show="is3DMode && !isAccountPanelFullscreen"
+                    v-if="is3DMode && isCesiumLoaded && !isAccountPanelFullscreen"
                     class="cesium-wrapper"
                     style="position: absolute; width: 100%; height: 100%; inset: 0; z-index: 5"
                 >
                     <component
                         :is="CesiumContainer"
-                        v-if="isCesiumLoaded"
+                        @view-sync="handleViewSync"
                     />
                 </div>
                 <div

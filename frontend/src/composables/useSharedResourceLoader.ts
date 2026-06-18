@@ -40,7 +40,7 @@ export interface SharedResourceTreeNode {
     fileCount?: number;
 }
 
-const SHARED_RESOURCE_DIR = './ShareData';
+const SHARED_RESOURCE_DIR = `${import.meta.env.BASE_URL || '/'}ShareData`.replace(/\/+/g, '/');
 const SUPPORTED_EXTENSIONS = [
     'kml',
     'kmz',
@@ -59,6 +59,7 @@ const SUPPORTED_EXTENSIONS = [
 function normalizeResourcePath(path: string): string {
     return String(path || '')
         .replace(/\\/g, '/')
+        .replace(/^\.\.\/\.\.\/public\/ShareData\//, '')
         .replace(/^\/public\/ShareData\//, '')
         .replace(/^public\/ShareData\//, '')
         .replace(/^\/ShareData\//, '')
@@ -183,7 +184,8 @@ export function useSharedResourceLoader() {
 
         try {
             // 1. 扫描文件
-            const rawModules = import.meta.glob('/public/ShareData/**/*', {
+            // 使用相对 glob 避免 Windows 绝对盘符 + 中文文件名在 Rollup URL 解析阶段被拼成非法模块 ID。
+            const rawModules = import.meta.glob('../../public/ShareData/**/*', {
                 query: '?url',
                 import: 'default',
                 eager: true, // 建议开启 eager，确保数据立即同步可用

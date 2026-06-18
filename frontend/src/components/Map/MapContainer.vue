@@ -530,6 +530,14 @@ const userLocationSource = new VectorSource();
 const busPickSource = new VectorSource();
 const busRouteSource = new VectorSource();
 
+// 子组件入参：父组件控制当前引擎可见性，避免隐藏的 OL 面板覆盖 Cesium URL 状态。
+const props = defineProps({
+    urlSyncEnabled: {
+        type: Boolean,
+        default: true,
+    },
+});
+
 // 子组件向父组件回传事件接口定义
 const emit = defineEmits([
     'location-change',
@@ -544,6 +552,7 @@ const emit = defineEmits([
     'upload-progress-change',
     'map-core-ready',
     'map-core-failed',
+    'view-sync',
 ]);
 
 const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
@@ -849,7 +858,7 @@ async function setCustomBasemapByUrl(url) {
         }
 
         // Agent 切换自定义底图时必须落到 URL 索引 l=1，便于分享链接和状态恢复。
-        syncUrlFromMap?.();
+        syncUrlFromActiveMap();
         mapInstance.value?.updateSize?.();
 
         return {
@@ -939,6 +948,10 @@ const {
     syncUrlFromMap,
     bindMapViewSync,
     stopMapViewSync,
+    getCurrentViewState,
+    syncViewFromCesium,
+    getMapSize,
+    getOlView,
     refreshLayerInstances,
     switchLayerById,
     setGraticuleActive,
@@ -957,6 +970,33 @@ const {
         selectedLayer.value = layerId;
     },
 });
+
+/**
+ * 仅在 OL 面板处于当前视图时写回 URL，避免隐藏的 2D 地图覆盖 Cesium 相机状态。
+ */
+function syncUrlFromActiveMap() {
+    if (!props.urlSyncEnabled) return;
+    syncUrlFromMap();
+    emit('view-sync', { view: 'ol' });
+}
+
+function bindActiveMapViewSync() {
+    if (!props.urlSyncEnabled) return;
+    bindMapViewSync();
+}
+
+watch(
+    () => props.urlSyncEnabled,
+    (enabled) => {
+        if (enabled) {
+            bindMapViewSync();
+            syncUrlFromMap();
+            emit('view-sync', { view: 'ol' });
+        } else {
+            stopMapViewSync();
+        }
+    },
+);
 
 fitToLonLatExtentByMapState = (...args) => fitToLonLatExtent(...args);
 
@@ -978,7 +1018,7 @@ const { bindBasemapSelectionWatcher, resetBasemapChain, dispose: disposeSelectio
     emitBaseLayersChange: emitBaseLayersChangeBatched,
     mapInstanceRef: mapInstance,
     layerInstances,
-    syncUrlFromMap,
+    syncUrlFromMap: syncUrlFromActiveMap,
     validateBaseLayerSwitch,
     getFallbackManager,
     onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
@@ -1019,6 +1059,13 @@ if (initialLayerId) {
 function applyDeferredUrlParams() {
     if (!mapInstance?.value) {
         console.warn('[MapContainer] Cannot apply deferred params: mapInstance not ready');
+        return;
+    }
+
+    // Cesium 模式下 OL 面板被隐藏，参数恢复由 CesiumContainer.restoreCameraFromUrl 处理。
+    // 此处显式跳过避免隐式依赖 getValidCoordinateParams 返回 null。
+    if (urlParamStore.getPendingParams().view === 'cesium') {
+        urlParamStore.markParamsAsApplied();
         return;
     }
 
@@ -1082,9 +1129,9 @@ onMounted(async () => {
 
         // ========== Phase 1: 同步初始化 - 快速返回，让底图加载开始 ==========
         initMap(); // 创建地图实例，底图图层已添加
-        bindMapViewSync(); // 绑定视图同步（不阻塞）
+        bindActiveMapViewSync(); // 绑定视图同步（不阻塞）
         setGraticuleActive(showDynamicSplitLines.value); // 设置格网（不阻塞）
-        syncUrlFromMap(); // 从 URL 同步地图状态（不阻塞）
+        syncUrlFromActiveMap(); // 从 URL 同步地图状态（不阻塞）
 
         // ========== Phase 2: 等待底图渲染完成 ==========
         // 注意：此时底图瓦片请求已在后台发送，拥有高优先级（由 prioritizeTileSourceRequest 保证）
@@ -1164,7 +1211,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.5)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.6)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1760,6 +1807,10 @@ defineExpose({
     enableBasemapSwipe,
     runSpatialAnalysis,
     getMapExtent,
+    getCurrentViewState,
+    syncViewFromCesium,
+    getMapSize,
+    getOlView,
     setCustomBasemapByUrl,
 });
 </script>

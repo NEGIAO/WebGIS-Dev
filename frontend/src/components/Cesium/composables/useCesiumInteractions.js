@@ -2,7 +2,7 @@ import { ref } from 'vue';
 
 const EMPTY_COORDINATE_DISPLAY = '经度: --, 纬度: --, 海拔: --米';
 
-export function useCesiumInteractions({ getViewer, getCesium }) {
+export function useCesiumInteractions({ getViewer, getCesium, onCoordinatePick }) {
     let handler = null;
     let interactionCanvas = null;
     let canvasMouseLeaveHandler = null;
@@ -64,6 +64,13 @@ export function useCesiumInteractions({ getViewer, getCesium }) {
         const lat = Cesium.Math.toDegrees(cartographic.latitude).toFixed(6);
         const height = (Number.isFinite(cartographic.height) ? cartographic.height : 0).toFixed(2);
         coordinateDisplay.value = `经度: ${lng}, 纬度: ${lat}, 海拔: ${height}米`;
+        if (typeof onCoordinatePick === 'function') {
+            onCoordinatePick({
+                lng: Number(lng),
+                lat: Number(lat),
+                height: Number(height),
+            });
+        }
     }
 
     function pickCartesian(windowPosition, viewer, Cesium) {

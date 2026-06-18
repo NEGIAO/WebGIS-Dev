@@ -97,7 +97,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-15 更新）
+## 目录结构（2026-06-18 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -140,7 +140,7 @@ frontend/src/
 │
 ├── components/                               # 业务组件（按功能域分组）
 │   ├── Cesium/                               # 3D 地球模块
-│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + Cesium ion 3D Tiles/OSM Buildings + 统一工具面板调度）
+│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 统一工具面板调度）
 │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
 │   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/特效/风场/流体参数 + ? 提示）
 │   │   ├── Wind2D.js                         # 2D 风场渲染
@@ -148,6 +148,7 @@ frontend/src/
 │   │   │   ├── cesiumRuntime.js              # Cesium CDN 运行时加载
 │   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
 │   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排与 token 兜底重载
+│   │   │   ├── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z 坐标面板 + cv 相机视角还原）
 │   │   │   └── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
 │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
 │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
@@ -255,7 +256,8 @@ frontend/src/
 │   │   ├── GISCommander.js                   # Agent GIS 功能封装（缩放/搜索/底图切换）
 │   │   ├── index.js                          # barrel export
 │   │   └── usePositionCodeTool.js            # p 参数工具
-│   ├── useMapState.js                        # 地图状态（视图同步/经纬图层）
+│   ├── useMapState.js                        # OL 地图状态（lng/lat/z 缩放/l 图层 + view=ol）
+│   ├── useMapViewUrlState.js                 # 2D/3D 面板 URL 状态（view=ol|cesium）
 │   ├── useMapSwipe.ts                        # 卷帘核心逻辑
 │   ├── useMessage.js                         # 全局消息提示
 │   ├── useTileSourceFactory.ts               # 瓦片源工厂 barrel re-export
@@ -319,7 +321,7 @@ frontend/src/
 │   ├── useSwipeConfigStore.ts                # 卷帘配置（localStorage 持久化）
 │   ├── useThemeStore.ts                      # 主题状态（绿/蓝切换）
 │   ├── useTOCStore.ts                        # TOC 元数据状态
-│   ├── useUrlParamStore.ts                   # URL 参数管理
+│   ├── useUrlParamStore.ts                   # URL 参数管理（坐标/图层/分享/view 引擎）
 │   ├── useUserPreferencesStore.ts            # 用户偏好
 │   └── useWeatherStore.ts                    # 天气状态
 │
@@ -330,11 +332,11 @@ frontend/src/
 │   ├── tiffWorker.js                         # TIF 解码 Worker（geotiff.js 多线程解码）
 │   └── shpWorker.js                          # Shapefile 解析 Worker（shpjs 后台解析）
 │
-├── utils/                                    # 工具函数
-│   ├── abortManager.js                       # 通用请求中断管理器（AbortController 封装）
-│   ├── pathUtils.js                          # 路径工具（统一 normalizePath/getExtension/getStem）
-│   ├── textDecoder.js                        # 文本解码（多编码自动检测）
-│   ├── normalize.ts                          # 二值标记规范化（normalizeBinaryFlag）
+│   ├── utils/                                    # 工具函数
+│   │   ├── abortManager.js                       # 通用请求中断管理器（AbortController 封装）
+│   │   ├── pathUtils.js                          # 路径工具（统一 normalizePath/getExtension/getStem）
+│   │   ├── textDecoder.js                        # 文本解码（多编码自动检测）
+│   │   ├── normalize.ts                          # 二值标记规范化（normalizeBinaryFlag）
 │   ├── coordTransform.js                     # 坐标转换（GCJ-02/WGS84）
 │   ├── crsUtils.js                           # CRS 检测与注册（EPSG/WKT/proj4）
 │   ├── tifUtils.js                           # TIF 工具（Worker 调用/图层创建/样式生成）
@@ -360,9 +362,13 @@ frontend/src/
 │   ├── ui/
 │   │   ├── index.js
 │   │   └── loading.js                        # 全局 loading 控制
+│   ├── map/
+│   │   └── viewScaleConverter.js              # OL zoom ↔ Cesium camera height 换算（默认不 clamp，显式 clamp 才截断）
 │   ├── url/
 │   │   ├── index.js
-│   │   └── crypto.js                         # URL 参数加解密
+│   │   ├── crypto.js                         # URL 参数加解密（含 Cesium 姿态-only cv=p.*）
+│   │   ├── urlConstants.js                   # URL 常量（view/cv/相机姿态键）
+│   │   └── urlQueryReader.js                 # hash/query 参数统一读取与快照合并
 │   ├── echarts/
 │   │   ├── cesiumFxRuntime.js                # Cesium 图表运行时
 │   │   └── weatherRuntime.js                 # 天气图表运行时
@@ -402,6 +408,64 @@ frontend/src/
         ├── useLayerOperations.ts             # 图层操作
         └── useSidePanel.ts                   # 侧边栏逻辑
 ```
+
+## V3.3.6 (2026-06-18)
+### 🛠️ z 参数精度链路修复（2026-06-18 追加）
+
+- ✅ 确认 URL 读取链路使用 `Number()` / `parseFloat()`，未对 `z` 执行 `parseInt` 整数化。
+- ✅ 按用户要求将 URL 中 `z` 统一保留两位小数，避免参数过长；OL zoom 与 Cesium height 的内部换算继续使用原始数值。
+- ✅ `src/utils/map/viewScaleConverter.js` 默认不再 clamp，只有显式传入 `clamp: true` 时才执行范围截断，避免 2D/3D 往返被默认截断。
+- ✅ `useMapState.js`、`HomeView.vue`、`useCesiumUrlTracking.js` 集中使用 `formatZParam()`，避免 z 格式化逻辑散落。
+
+详见 [`../Docs/26-06/26-06-18/2026-06-18-z-parameter-precision-fix.md`](../Docs/26-06/26-06-18/2026-06-18-z-parameter-precision-fix.md)
+
+### 🛠️ OL / Cesium URL Code Review 修复 + 中国视角高度调整 + 双向视图同步
+- ✅ 新增 `src/utils/map/viewScaleConverter.js`，按 OL resolution、视口短边与 Cesium FOV 在 `zoom` 与 camera height 之间近似换算。
+- ✅ 新增 `src/utils/url/urlConstants.js` 与 `src/utils/url/urlQueryReader.js`，统一 URL 常量、视图规范化、hash/query 快照读取。
+- ✅ Cesium URL 写入改为 `router.replace`，与 OL URL 写入链路保持一致。
+- ✅ Cesium 新链接改为 `cv=p.<pose>` 姿态-only 编码，`lng/lat/z` 在 `view=cesium` 下承担相机经纬度/高度；旧 full-camera `cv` 继续兼容解码。
+- ✅ OL → Cesium 切换时将当前 OL center/zoom 转换为 Cesium `lng/lat/z/cv` 一次性写入 URL，避免把 OL zoom 误当相机高度。
+- ✅ Cesium → OL 通过 `view-sync` 将相机高度换算为 OL zoom 并静默同步隐藏的 2D 视图，切回 2D 后范围更接近。
+- ✅ 鼠标拾取坐标不再写入视图 URL，避免临时 UI 坐标污染分享链接。
+- ✅ OL 仅在 `view=ol` 时清理 Cesium 专属 `cv/heading/pitch/roll`，并按完整 query 快照判断是否需要写入，避免隐藏 OL 面板覆盖 3D 状态。
+- ✅ 切回 OL 时卸载 CesiumContainer 并监听 route view 变化，防止隐藏 Cesium 继续写 URL，浏览器前进/后退也能同步 2D/3D 面板。
+- ✅ Cesium 默认中国中心相机高度从 `15,000,000m` 调整为 `6,000,000m`。
+- ✅ 全量修复当前 ESLint 报错/警告，并通过生产构建。
+
+**新增文件：**
+- `src/utils/map/viewScaleConverter.js`
+- `src/utils/url/urlConstants.js`
+- `src/utils/url/urlQueryReader.js`
+
+**验证：**
+```bash
+npm run lint -- --max-warnings=0
+npm run build
+```
+
+**日志：** [`../Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md`](../Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md)
+
+## V3.3.6 (2026-06-17)
+### 🛰️ OL / Cesium URL 状态同步
+
+- ✅ 新增 `view=ol|cesium`，刷新/分享/直链可恢复 2D 或 3D 面板。
+- ✅ Cesium 新增 `useCesiumUrlTracking.js`，鼠标移动写回坐标面板 `lng/lat/z`，相机停止移动写回 `cv` 编码视角。
+- ✅ `view=cesium` 下 `z` 表示坐标面板捕捉到的高程，`cv` 用于完整还原相机位置/姿态；`view=ol` 下 `z` 仍表示 OL 缩放级别。
+- ✅ `MapContainer.vue` 新增 `urlSyncEnabled`，隐藏 2D 时停止 OL URL 写回，防止覆盖 Cesium 状态。
+- ✅ `router/index.js` 与 `useUrlParamStore.ts` 扩展 `view` 参数提取和延迟应用流程。
+
+**修改文件：**
+- `src/composables/useMapState.js`
+- `src/composables/useMapViewUrlState.js`
+- `src/components/Cesium/composables/useCesiumInteractions.js`
+- `src/components/Cesium/composables/useCesiumUrlTracking.js`
+- `src/components/Cesium/CesiumContainer.vue`
+- `src/components/Map/MapContainer.vue`
+- `src/views/HomeView.vue`
+- `src/router/index.js`
+- `src/stores/useUrlParamStore.ts`
+
+---
 
 ## V3.3.0 (2026-06-05)
 ### 🤖 Chat Function Calling GIS 架构 + 🛡️ 前端 404 兜底页面
@@ -628,7 +692,7 @@ MIT
 
 ---
 
-最后更新：2026-06-15
+最后更新：2026-06-18
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）

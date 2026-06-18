@@ -23,9 +23,51 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-15 更新）
+## 0. 项目结构（2026-06-18 更新）
 
-### V3.3.5 (2026-06-15) - 运行时地图 Token 池 + 四类 API 备用 Token
+### V3.3.6 (2026-06-18) - z 参数精度链路修复
+
+> 本次版本为前端 URL `z` 参数链路检查与 OL/Cesium 换算修复，后端 API 与后端文件结构无变更。本 README 按项目规范同步版本与结构说明。
+
+**前端同步记录（本次无后端结构变更）：**
+- 确认 `z` 读取链路使用 `Number()` / `parseFloat()`，没有 `parseInt` 整数化。
+- URL 分享链路按用户要求统一将 `z` 保留两位小数，避免参数过长。
+- `frontend/src/utils/map/viewScaleConverter.js` 默认不再 clamp，只有显式 `clamp: true` 时才截断，避免 2D/3D 换算链路被默认裁剪。
+- `frontend/src/composables/useMapState.js`、`frontend/src/views/HomeView.vue`、`frontend/src/components/Cesium/composables/useCesiumUrlTracking.js` 集中使用 `formatZParam()` 管理 z 格式化。
+
+详见 [`../Docs/26-06/26-06-18/2026-06-18-z-parameter-precision-fix.md`](../Docs/26-06/26-06-18/2026-06-18-z-parameter-precision-fix.md)
+
+### V3.3.6 (2026-06-18) - OL / Cesium 双向 URL 视图同步 + 中国视角高度
+
+> 本次版本为前端 URL 追踪 Code Review 修复和 OL/Cesium 双向视图同步增强，后端 API 与后端文件结构无变更。本 README 按项目规范同步版本与结构说明。
+
+**前端同步记录（本次无后端结构变更）：**
+- 新增 `frontend/src/utils/map/viewScaleConverter.js`，按 OL resolution、视口短边、纬度 `cos(lat)` 修正与 Cesium FOV 在 `zoom` 与 camera height 之间近似换算。
+- 新增 `frontend/src/utils/url/urlConstants.js`，统一 `view=ol|cesium`、`cv`、相机姿态键和 `normalizeMapView()`。
+- 新增 `frontend/src/utils/url/urlQueryReader.js`，统一 hash query 与 `route.query` 快照读取，hash query 优先。
+- 修复 `shouldUseDefaultCesiumHeight` 未定义导致的 Cesium 视图切换崩溃。
+- Cesium URL 写入改为 `router.replace`，与 OL URL 写入保持一致。
+- Cesium 新链接改为 `cv=p.<pose>` 姿态-only 编码；`view=cesium` 时 `lng/lat/z` 明确表示相机经纬度/高度，旧 full-camera `cv` 继续兼容解码。
+- OL → Cesium 切换时从当前 OL center/zoom 计算 Cesium height 并一次性写入 URL，避免直接复用 OL zoom。
+- Cesium → OL 通过 `view-sync` 将 camera height 换算为 OL zoom 并静默同步隐藏 2D 视图，切回 2D 时范围更接近。
+- 鼠标拾取坐标不再写入视图 URL，避免临时 UI 坐标污染分享链接。
+- OL 仅在 `view=ol` 时清理 Cesium 专属 `cv/heading/pitch/roll`，并按完整 query 快照判断是否需要写入，避免隐藏 2D 面板覆盖 3D 状态。
+- 切回 OL 时卸载 CesiumContainer 并监听 route view 变化，防止隐藏 Cesium 继续写 URL，浏览器前进/后退也能同步 2D/3D 面板。
+- Cesium 默认中国中心相机高度从 `15,000,000m` 调整为 `6,000,000m`。
+
+详见 [`../Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md`](../Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md)
+
+### V3.3.6 (2026-06-17) - OL / Cesium URL 状态同步
+
+> 本次版本为前端 OL / Cesium URL 状态同步增强，后端 API 与后端文件结构无变更。本 README 按项目规范同步版本与结构说明。
+
+**前端同步记录（本次无后端结构变更）：**
+- 前端新增 `view=ol|cesium` 引擎参数，刷新与分享链接可恢复 2D/3D 面板状态
+- Cesium 侧新增鼠标三维坐标 URL 追踪与 `cv` 相机视角编码，`lng/lat/z` 按坐标面板结果写回，`cv` 用于分享链接完整还原 3D 视角
+- OL 侧继续保留 `lng/lat/z/l` 视图同步，并在隐藏 2D 面板时避免覆盖 Cesium URL 状态
+- 本次前端同步修改 `frontend/src/composables/useMapState.js`、`frontend/src/composables/useMapViewUrlState.js`、`frontend/src/components/Cesium/composables/useCesiumInteractions.js`、`frontend/src/components/Cesium/composables/useCesiumUrlTracking.js`、`frontend/src/components/Cesium/CesiumContainer.vue`、`frontend/src/components/Map/MapContainer.vue`、`frontend/src/views/HomeView.vue`、`frontend/src/router/index.js`、`frontend/src/stores/useUrlParamStore.ts`、`frontend/src/utils/url/crypto.js`
+
+详见 [`../Docs/26-06/26-06-17/2026-06-17-ol-cesium-url-tracking.md`](../Docs/26-06/26-06-17/2026-06-17-ol-cesium-url-tracking.md)
 
 **后端变更：**
 - `api_keys_management.py` 新增 `api_key_backups` 表，支持高德、Agent、天地图、Cesium Ion 四类 API 的任意数量备用 token

@@ -5,8 +5,9 @@ export function useCesiumSceneActions({ getViewer, getCesium, message }) {
         if (!viewer || !Cesium) return;
 
         const duration = typeof param === 'number' ? param : 2;
+        // 使用与 DEFAULT_CESIUM_CAMERA 一致的高度 6,000,000m（中国居中视角）
         viewer.camera.flyTo({
-            destination: Cesium.Cartesian3.fromDegrees(104.1954, 35.8617, 15000000),
+            destination: Cesium.Cartesian3.fromDegrees(104.1954, 35.8617, 6000000),
             orientation: {
                 heading: 0.0,
                 pitch: -Cesium.Math.PI_OVER_TWO,

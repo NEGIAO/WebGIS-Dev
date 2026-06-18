@@ -165,7 +165,7 @@ export class AbortManager {
      * @param {string} [reason] - 中断原因
      */
     abortAll(reason = 'abort-all') {
-        for (const [key, controller] of this._controllers) {
+        for (const [, controller] of this._controllers) {
             if (!controller.signal.aborted) {
                 controller.abort(reason);
             }
@@ -234,7 +234,7 @@ export class AbortManager {
 export const globalAbortManager = new AbortManager({
     onAbort: (reason) => {
         if (import.meta.env.DEV) {
-            console.debug(`[AbortManager] ${reason}`);
+            console.warn(`[AbortManager] ${reason}`);
         }
     },
 });

@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { normalizeBinaryFlag } from '@/utils/normalize';
+import { normalizeMapView } from '@/utils/url/urlConstants';
 
 /**
  * @description URL 路由参数持久化 & 延迟应用仓库
@@ -20,6 +21,7 @@ import { normalizeBinaryFlag } from '@/utils/normalize';
  * @property s 分享模式标记 0=普通进入 / 1=分享链接进入
  * @property loc 定位权限标记 0=禁止定位 / 1=允许定位
  * @property p 加密点位编码（私密/定制点位解析用）
+ * @property view 地图视图引擎 ol=OpenLayers / cesium=Cesium
  */
 interface PendingParams {
     lng: number | null;
@@ -29,6 +31,7 @@ interface PendingParams {
     s: '0' | '1';
     loc: '0' | '1';
     p: string | null;
+    view: 'ol' | 'cesium';
 }
 /**
  * 路由 query 原始参数类型
@@ -41,6 +44,7 @@ interface PendingParams {
  * @property s: 分享标记 ('0' | '1')
  * @property loc: 定位授权标记 ('0' | '1')
  * @property p: 加密位置编码
+ * @property view: 地图视图引擎 ('ol' | 'cesium')
  * @property ut: 用户类型（guest|admin|registered）
  *
  * 注意：罗盘参数 (cs) 由 compassUrlState.ts 独立管理，不在此接口中定义
@@ -53,6 +57,7 @@ interface QueryParams {
     s?: string | number | null;
     loc?: string | number | null;
     p?: string | null;
+    view?: string | null;
     ut?: string;
 }
 
@@ -70,6 +75,7 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
         s: '0',
         loc: '0',
         p: null,
+        view: 'ol',
     });
 
     /**
@@ -92,10 +98,12 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
      */
     function extractAndStorePendingParams(queryParams: QueryParams = {}) {
         // 经纬度格式化校验
-        const normalizedLng = validateCoordinate(queryParams.lng);
-        const normalizedLat = validateCoordinate(queryParams.lat);
-        // 地图缩放层级校验
-        const normalizedZ = validateZoom(queryParams.z);
+        const normalizedLng = validateLongitude(queryParams.lng);
+        const normalizedLat = validateLatitude(queryParams.lat);
+        // 地图视图引擎校验
+        const normalizedView = normalizeMapView(queryParams.view);
+        // 地图缩放层级 / Cesium 相机高度校验
+        const normalizedZ = validateViewZ(queryParams.z, normalizedView);
         // 图层索引格式化校验
         const normalizedL = validateLayerIndex(queryParams.l);
         // 分享模式标识格式化
@@ -114,6 +122,7 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
             s: normalizedS,
             loc: normalizedLoc,
             p: normalizedP,
+            view: normalizedView,
         };
 
         // 每次更新参数后，重置应用标记，等待地图重新应用
@@ -136,9 +145,15 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
      * @description 筛选【合法坐标参数】，专供地图初始化定位使用
      * @returns 包含经纬度/层级/图层的有效对象 | 空（坐标非法时）
      * @rule 经纬度合法范围内才返回，自动填充缩放/图层默认值
+     *
+     * NOTE: view=cesium 时返回 null，因为 Cesium 相机初始化不经过此路径，
+     * 而是由 useCesiumUrlTracking.restoreCameraFromUrl() 独立处理 cv 编码参数。
+     * 这样设计避免 OL 坐标恢复逻辑与 Cesium 相机恢复逻辑冲突。
      */
     function getValidCoordinateParams() {
-        const { lng, lat, z, l } = pendingParams.value;
+        const { lng, lat, z, l, view } = pendingParams.value;
+        // Cesium 模式下 OL 面板被隐藏，参数恢复走 Cesium 的 restoreCameraFromUrl 独立路径
+        if (view === 'cesium') return null;
         if (lng !== null && lat !== null && Number.isFinite(lng) && Number.isFinite(lat)) {
             return {
                 lng,
@@ -174,6 +189,7 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
             s: '0',
             loc: '0',
             p: null,
+            view: 'ol',
         };
         isParamApplied.value = false;
     }
@@ -190,6 +206,7 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
             hasPositionCode: !!pendingParams.value.p,
             shareFlag: pendingParams.value.s,
             locateFlag: pendingParams.value.loc,
+            view: pendingParams.value.view,
         };
     }
 
@@ -209,15 +226,28 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
 // ====================== 工具校验函数 ======================
 
 /**
- * @description 经纬度校验格式化
- * @param value 原始url传入的经度/纬度
- * @returns 合法数字 | null（非法/超出范围）
- * @range 经度、纬度统一限制 -180 ~ 180
+ * @description 经度校验格式化
+ * @param value 原始 URL 经度
+ * @returns 合法经度 | null
+ * @range -180 ~ 180
  */
-function validateCoordinate(value: unknown): number | null {
+function validateLongitude(value: unknown): number | null {
     const num = parseFloat(value as string);
     if (!Number.isFinite(num)) return null;
     if (num < -180 || num > 180) return null;
+    return num;
+}
+
+/**
+ * @description 纬度校验格式化
+ * @param value 原始 URL 纬度
+ * @returns 合法纬度 | null
+ * @range -90 ~ 90
+ */
+function validateLatitude(value: unknown): number | null {
+    const num = parseFloat(value as string);
+    if (!Number.isFinite(num)) return null;
+    if (num < -90 || num > 90) return null;
     return num;
 }
 
@@ -228,10 +258,26 @@ function validateCoordinate(value: unknown): number | null {
  * @range 0 ~ 30 符合天地图/cesium常规层级范围
  */
 function validateZoom(value: unknown): number | null {
-    const num = parseInt(value as string, 10);
+    const num = parseFloat(value as string);
     if (!Number.isFinite(num)) return null;
     if (num < 0 || num > 30) return null;
     return num;
+}
+
+/**
+ * @description 按地图视图校验 z 参数
+ * @param value 原始 URL z 参数
+ * @param view 地图视图引擎，ol 表示缩放，cesium 表示相机高度
+ * @returns 合法数字 | null
+ */
+function validateViewZ(value: unknown, view: 'ol' | 'cesium'): number | null {
+    if (view === 'cesium') {
+        const num = parseFloat(value as string);
+        if (!Number.isFinite(num)) return null;
+        if (num < 1 || num > 50000000) return null;
+        return num;
+    }
+    return validateZoom(value);
 }
 
 /**
@@ -247,4 +293,5 @@ function validateLayerIndex(value: unknown): number | null {
     return num;
 }
 
+// normalizeMapView 已迁移至 src/utils/url/urlConstants.js（P2-9 去重复）
 // normalizeBinaryFlag 已迁移至 src/utils/normalize.ts

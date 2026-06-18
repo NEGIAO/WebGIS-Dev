@@ -104,6 +104,24 @@ router.beforeEach(async (to, from) => {
     const isHomeRoute = to.name === 'home';
     let shouldRelayLoadingToHome = false;
 
+    const urlParamStore = useUrlParamStore();
+    const routeQueryParams = {
+        lng: readRouteQueryValue(to, 'lng'),
+        lat: readRouteQueryValue(to, 'lat'),
+        z: readRouteQueryValue(to, 'z'),
+        l: readRouteQueryValue(to, 'l'),
+        s: readRouteQueryValue(to, 's'),
+        loc: readRouteQueryValue(to, 'loc'),
+        p: readRouteQueryValue(to, 'p'),
+        view: readRouteQueryValue(to, 'view'),
+    };
+
+    if (isHomeRoute) {
+        // 同一路由 query/hash 变化也需要刷新 pending params，供刷新恢复与前进/后退同步使用。
+        urlParamStore.extractAndStorePendingParams(routeQueryParams);
+        console.warn('[Router] URL params extracted and stored for deferred application');
+    }
+
     // Guard 1: Ignore pure query/hash changes (parameter updates only)
     const isRealNavigation = !from || from.path !== to.path;
     if (!isRealNavigation) {
@@ -124,23 +142,6 @@ router.beforeEach(async (to, from) => {
     }
 
     // [优先级 2] 提取 URL 参数并存储到 urlParamStore（独立于鉴权过程）
-    const urlParamStore = useUrlParamStore();
-    const routeQueryParams = {
-        lng: readRouteQueryValue(to, 'lng'),
-        lat: readRouteQueryValue(to, 'lat'),
-        z: readRouteQueryValue(to, 'z'),
-        l: readRouteQueryValue(to, 'l'),
-        s: readRouteQueryValue(to, 's'),
-        loc: readRouteQueryValue(to, 'loc'),
-        p: readRouteQueryValue(to, 'p'),
-    };
-
-    if (isHomeRoute) {
-        // 在路由阶段就提取 URL 参数，等待 MapContainer 挂载后再应用
-        urlParamStore.extractAndStorePendingParams(routeQueryParams);
-        console.warn('[Router] URL params extracted and stored for deferred application');
-    }
-
     // Guard 3: After GIS init completes, prevent re-showing loading for home route
     const appStore = useAppStore();
     if (appStore.isInitialGisLoadComplete && isHomeRoute) {

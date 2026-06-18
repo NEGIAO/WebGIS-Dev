@@ -206,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
+import { computed, watch, onMounted, onUnmounted } from 'vue';
 import type { FengShuiCompassConfig, Layer } from './types';
 
 const emit = defineEmits(['latticeClick']);

@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.5 阶段，Cesium 三维分析、运行时地图 token 管理与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.6 阶段，Cesium 三维分析、运行时地图 token 管理、OL/Cesium 双向 URL 视图同步与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -43,6 +43,7 @@
 
 **前端功能**：
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
+- 🔁 **OL/Cesium 双向 URL 视图同步**：`view=ol|cesium`、`lng/lat/z` 与 `cv=p.<pose>` 分工明确，2D/3D 切换自动换算可视范围
 - 🧭 **Cesium 三维分析增强**：统一控制面板集成场景导航、高级特效、风场、水体模拟与参数说明
 - 🔐 **运行时地图 Token 管理**：天地图 TK 与 Cesium Ion Token 由管理员后台配置，前端启动时读取一次后直连服务
 - 🌊 **掩膜分析（水体模拟）**：基于地形高程值域动态生成外包盒，支持点击点海拔初始水位、水位滑杆和水色调色板
@@ -189,7 +190,7 @@ WebGIS_Dev/
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + Cesium ion 真实 3D Tiles/OSM Buildings + 工具面板 + FPS HUD）
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 工具面板 + FPS HUD）
 │   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
 │   │   │   │   ├── CesiumToolPanel.vue   # 统一控制面板（场景/特效/风场/流体 + 参数提示）
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
@@ -197,6 +198,7 @@ WebGIS_Dev/
 │   │   │   │   │   ├── cesiumRuntime.js   # Cesium CDN 运行时加载
 │   │   │   │   │   ├── useCesiumFrameRate.js # FPS 采样与折线图数据
 │   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排（Cesium ion 3D Tiles + OSM Buildings）
+│   │   │   │   │   ├── useCesiumUrlTracking.js # Cesium URL 追踪（lng/lat/z 相机位置 + cv=p.* 姿态还原 + view-sync）
 │   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
 │   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
 │   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
@@ -263,7 +265,8 @@ WebGIS_Dev/
 │   │   │   │   ├── basemapSystem.js      # 底图系统入口
 │   │   │   │   ├── GISCommander.js       # Agent GIS 功能封装（缩放/搜索/底图切换）
 │   │   │   │   └── index.js              # barrel export
-│   │   │   ├── useMapState.js            # 地图状态（视图同步/经纬图层）
+│   │   │   ├── useMapState.js            # OL 地图状态（lng/lat/z 缩放/l 图层 + view=ol）
+│   │   │   ├── useMapViewUrlState.js     # 2D/3D 面板 URL 状态（view=ol|cesium）
 │   │   │   ├── useMapSwipe.ts            # 卷帘核心逻辑
 │   │   │   ├── useMessage.js             # 全局消息提示
 │   │   │   ├── useStyleEditor.js         # 样式编辑器 composable
@@ -319,7 +322,7 @@ WebGIS_Dev/
 │   │   │   ├── useLayerStore.ts          # 图层状态
 │   │   │   ├── useSwipeConfigStore.ts    # 卷帘配置（localStorage 持久化）
 │   │   │   ├── useThemeStore.ts          # 主题状态（绿/蓝切换）
-│   │   │   ├── useUrlParamStore.ts       # URL 参数管理
+│   │   │   ├── useUrlParamStore.ts       # URL 参数管理（坐标/图层/分享/view 引擎）
 │   │   │   └── ...
 │   │   ├── data/                         # 应用数据（纯数据模块）
 │   │   │   └── goldenSoupQuotes.js       # 励志语录数据（懒加载）
@@ -354,7 +357,12 @@ WebGIS_Dev/
 │   │   │   ├── geo/                      # CRS 相关 barrel
 │   │   │   ├── biz/                      # 业务工具 barrel
 │   │   │   ├── io/                       # GIS IO barrel
-│   │   │   ├── url/                      # URL 工具（加密）
+│   │   │   ├── map/                      # 地图视图换算工具（OL zoom ↔ Cesium height）
+│   │   │   │   └── viewScaleConverter.js # OL/Cesium z 换算（默认不 clamp，显式 clamp 才截断）
+│   │   │   ├── url/                      # URL 工具（加密/常量/查询读取）
+│   │   │   │   ├── crypto.js             # URL 参数加解密（含 Cesium cv 姿态编码）
+│   │   │   │   ├── urlConstants.js       # view/cv/相机姿态 URL 常量
+│   │   │   │   └── urlQueryReader.js     # hash/query 参数统一读取与快照合并
 │   │   │   ├── ui/                       # UI 工具（loading）
 │   │   │   ├── echarts/                  # ECharts 运行时
 │   │   │   └── layerExportService.js     # 图层导出服务
@@ -449,6 +457,11 @@ WebGIS_Dev/
 │   │   ├── 26-06-15/                     # Cesium 3D Tiles 与运行时 token 文档同步
 │   │   │   ├── 2026-06-15-google-photorealistic-3d-tiles.md
 │   │   │   └── 2026-06-15-readme-structure-sync-v335.md
+│   │   ├── 26-06-17/                     # OL/Cesium URL 状态同步
+│   │   │   └── 2026-06-17-ol-cesium-url-tracking.md
+│   │   ├── 26-06-18/                     # OL/Cesium URL Code Review 修复 + Cesium 中国视角高度 + z 参数精度链路修复
+│   │   │   ├── 2026-06-18-ol-cesium-url-review-fix.md
+│   │   │   └── 2026-06-18-z-parameter-precision-fix.md  # z 两位小数 URL 规范 + 换算默认不 clamp
 │   │   └── 2026-06-03-ring-explosion-effect.md  # 圆环粒子特效开发日志
 │   ├── 26-06-04/                         # Agent Chat 默认 AI 配置
 │   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
@@ -613,6 +626,27 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.3.6 (2026-06-18)
+#### 🛠️ OL / Cesium URL Code Review 修复 + 中国视角高度调整
+
+- 修复 `shouldUseDefaultCesiumHeight` 未定义导致的 Cesium 视图切换运行时崩溃。
+- 抽取 `urlConstants.js` 与 `urlQueryReader.js`，统一 `view/cv` 常量、hash/query 快照读取与 `normalizeMapView`。
+- Cesium URL 写入改为与 OL 一致的 `router.replace`，减少 `route.query` 与 hash query 分裂。
+- Cesium 相机 `moveEnd` 同步写回 `cv` 与相机位置 `lng/lat/z`，鼠标拾取坐标写回时清除旧 `cv` 并节流，避免明文坐标和编码相机状态语义分裂。
+- OL 仅在 `view=ol` 时清理 `cv/heading/pitch/roll`，完整比较清洗后的 query 快照，避免隐藏 2D 面板残余同步覆盖 3D 相机状态。
+- 切回 OL 时卸载 CesiumContainer 并监听路由 `view` 变化，防止隐藏 Cesium 相机监听继续写 URL，并支持浏览器前进/后退同步面板。
+- Cesium 默认中国中心高度从 `15,000,000m` 调整为 `6,000,000m`，进入 3D 时默认展示中国区域而不是全球远景。
+- 已通过 `npm run lint -- --max-warnings=0` 与 `npm run build`。
+- 详见 [`Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md`](Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md)
+
+### V3.3.6 (2026-06-17)
+#### 🛰️ OL / Cesium URL 状态同步
+
+- 新增 `view=ol|cesium` 引擎参数，刷新、分享和直链可恢复当前 2D/3D 面板。
+- Cesium 新增双通道 URL 追踪：`lng/lat/z` 表示坐标面板捕捉点，`cv` 编码完整相机视角，分享链接可优先解析 `cv` 还原 3D 视图。
+- OL 保持原有 `lng/lat/z/l` 语义，隐藏 2D 面板时停止写回，避免覆盖 Cesium 相机状态。
+- 详见 [`Docs/26-06/26-06-17/2026-06-17-ol-cesium-url-tracking.md`](Docs/26-06/26-06-17/2026-06-17-ol-cesium-url-tracking.md)
 
 ### V3.3.2 (2026-06-09)
 #### 🛡️ SQLite 损坏恢复数据丢失修复 + 北京时间日志增强 + 整点报时 + 天气图表响应式/风力仪表 UI

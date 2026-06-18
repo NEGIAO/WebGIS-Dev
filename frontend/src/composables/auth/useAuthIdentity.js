@@ -1,6 +1,11 @@
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{6,64}$/;
-const DISPLAY_NAME_CONTROL_REGEX = /[\x00-\x1f\x7f]/;
+function hasControlCharacter(value) {
+    return Array.from(String(value || '')).some((char) => {
+        const code = char.charCodeAt(0);
+        return code <= 31 || code === 127;
+    });
+}
 
 export function normalizeEmail(raw) {
     return String(raw || '').trim().toLowerCase();
@@ -30,7 +35,7 @@ export function validateDisplayName(value) {
     if (normalized.length > 40) {
         return { valid: false, message: '昵称长度不能超过 40 个字符' };
     }
-    if (DISPLAY_NAME_CONTROL_REGEX.test(normalized)) {
+    if (hasControlCharacter(normalized)) {
         return { valid: false, message: '昵称不能包含控制字符' };
     }
     return { valid: true, value: normalized, message: '' };

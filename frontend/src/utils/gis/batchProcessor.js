@@ -1,4 +1,4 @@
-import { normalizePath, getExtension, getStem, getBaseStem, makeShpGroupKey } from '../pathUtils.js';
+import { normalizePath, getExtension, getStem, makeShpGroupKey } from '../pathUtils.js';
 
 export function buildResourcePool(entries = []) {
     const pool = new Map();

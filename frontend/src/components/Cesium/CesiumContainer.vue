@@ -123,6 +123,7 @@ import { useCesiumInteractions } from './composables/useCesiumInteractions';
 import { useCesiumLayers } from './composables/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/useCesiumSceneActions';
 import { useCesiumToolModules } from './composables/useCesiumToolModules';
+import { useCesiumUrlTracking } from './composables/useCesiumUrlTracking';
 import { useCesiumWind } from './composables/useCesiumWind';
 import {
     getRuntimeMapTokensSync,
@@ -132,8 +133,10 @@ import {
 
 let Cesium = null;
 let viewer = null;
+let componentUnmounted = false;
 
 const message = useMessage();
+const emit = defineEmits(['view-sync']);
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const runtimeMapTokens = ref(getRuntimeMapTokensSync());
@@ -183,6 +186,15 @@ const {
 } = useCesiumFrameRate({ getViewer });
 
 const { installCreditHider, cleanupCreditHider } = useCesiumCreditHider({ getViewer });
+const {
+    restoreCameraFromUrl,
+    bindCameraViewSync,
+    cleanupCameraViewSync,
+} = useCesiumUrlTracking({
+    getViewer,
+    getCesium,
+    onCameraViewSync: (payload) => emit('view-sync', payload),
+});
 const sceneActions = useCesiumSceneActions({
     getViewer,
     getCesium,
@@ -212,6 +224,7 @@ const {
 });
 
 async function bootCesium() {
+    componentUnmounted = false;
     showLoading('正在初始化 3D 场景...');
     try {
         let retryCount = 0;
@@ -233,7 +246,7 @@ async function bootCesium() {
                     1,
                 );
                 Cesium = await loadCesiumRuntime({ ionToken: getCesiumIonToken() });
-                if (!Cesium || !document.getElementById('cesiumContainer')) return;
+                if (componentUnmounted || !Cesium || !document.getElementById('cesiumContainer')) return;
 
                 initViewer();
                 setupInteractions();
@@ -241,7 +254,12 @@ async function bootCesium() {
 
                 const basemapReady = addBaseImageryLayers();
                 const terrainReady = await initCustomTerrain();
+                if (componentUnmounted) {
+                    resetCesiumViewerForRetry();
+                    return;
+                }
                 cesiumReady.value = true;
+                bindCameraViewSync({ initialSync: false });
                 if (basemapReady && terrainReady) {
                     message.success('天地图基础影像与地形加载成功。');
                     return;
@@ -287,6 +305,7 @@ async function bootCesium() {
 
 function resetCesiumViewerForRetry() {
     cesiumReady.value = false;
+    cleanupCameraViewSync();
     cleanupInteractions();
     cleanupFrameRateMonitor();
     cleanupLayers();
@@ -326,7 +345,9 @@ function initViewer() {
     configureSolarLighting(viewer);
     installCreditHider();
     bindLayerPickerStateSync();
-    flyToHome(0);
+    if (!restoreCameraFromUrl({ duration: 0 })) {
+        flyToHome(0);
+    }
 }
 
 onMounted(() => {
@@ -334,7 +355,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    componentUnmounted = true;
     cesiumReady.value = false;
+    cleanupCameraViewSync();
     cleanupInteractions();
     cleanupFrameRateMonitor();
     cleanupTools();

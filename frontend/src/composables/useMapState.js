@@ -29,6 +29,7 @@ import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
 import { prioritizeTileSourceRequest } from './useTileSourceFactory';
 import { normalizeBinaryFlag } from '../utils/normalize';
+import { getCurrentQuerySnapshot as getSnapshot, readQueryValue as readQueryFromSnapshot } from '../utils/url/urlQueryReader';
 // 新增：中心点标记所需导入
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
@@ -85,25 +86,27 @@ function formatNumber(value, fractionDigits) {
 }
 
 /**
- * 从 URL hash 中解析查询参数
- * @returns {Object} 包含 lng、lat、z、l 的查询参数对象
+ * 将 URL 传输链路中的 z 参数格式化为统一两位小数字符串。
+ * @param {*} value - OL zoom 或 Cesium height 数值
+ * @returns {string|null} 两位小数字符串，或无效时返回 null
  */
-function parseHashQuery() {
-    if (typeof window === 'undefined') return {};
-    const hash = String(window.location.hash || '');
-    const queryStart = hash.indexOf('?');
-    if (queryStart < 0) return {};
+function formatZParam(value) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return null;
+    return numberValue.toFixed(2);
+}
 
-    const params = new URLSearchParams(hash.slice(queryStart + 1));
-    return {
-        lng: params.get('lng'),
-        lat: params.get('lat'),
-        z: params.get('z'),
-        l: params.get('l'),
-        s: params.get('s'),
-        loc: params.get('loc'),
-        p: params.get('p'),
-    };
+/**
+ * 判断两个 query 快照是否完全一致，用于避免因只比较 nextQuery 而跳过清理字段。
+ * @param {Record<string, string>} currentQuery - 当前 URL query 快照
+ * @param {Record<string, string>} nextQuery - 清洗后的目标 query
+ * @returns {boolean}
+ */
+function isSameQuerySnapshot(currentQuery, nextQuery) {
+    const currentKeys = Object.keys(currentQuery).filter((key) => currentQuery[key] !== undefined && currentQuery[key] !== null && currentQuery[key] !== '');
+    const nextKeys = Object.keys(nextQuery).filter((key) => nextQuery[key] !== undefined && nextQuery[key] !== null && nextQuery[key] !== '');
+    if (currentKeys.length !== nextKeys.length) return false;
+    return nextKeys.every((key) => String(currentQuery[key] ?? '') === String(nextQuery[key] ?? ''));
 }
 
 function resolvePreferredDefaultLayerIndex() {
@@ -164,6 +167,7 @@ export function useMapState(mapInstance, options = {}) {
     let graticuleLayer = null;
     let graticuleActive = false;
     let locationContextChangeHandler = null;
+    let suppressNextUrlSync = false;
 
     // ---------- 新增：中心点标记相关变量 ----------
     let centerPointLayer = null;      // 中心点矢量图层
@@ -180,17 +184,7 @@ export function useMapState(mapInstance, options = {}) {
      * @private
      */
     function readQueryValue(key) {
-        const hashQuery = parseHashQuery();
-        const hashValue = getFirstValue(hashQuery[key]);
-        if (hashValue !== undefined && hashValue !== null && hashValue !== '') {
-            return hashValue;
-        }
-
-        const routeValue = getFirstValue(route.query?.[key]);
-        if (routeValue !== undefined && routeValue !== null && routeValue !== '') {
-            return routeValue;
-        }
-        return null;
+        return readQueryFromSnapshot(key, route.query) || null;
     }
 
     /**
@@ -200,28 +194,7 @@ export function useMapState(mapInstance, options = {}) {
      * @private
      */
     function getCurrentQuerySnapshot() {
-        const snapshot = {};
-
-        const routeQuery = route?.query || {};
-        Object.keys(routeQuery).forEach((key) => {
-            const value = getFirstValue(routeQuery[key]);
-            if (value === undefined || value === null || value === '') return;
-            snapshot[key] = String(value);
-        });
-
-        if (typeof window !== 'undefined') {
-            const hash = String(window.location.hash || '');
-            const queryStart = hash.indexOf('?');
-            if (queryStart >= 0) {
-                const hashParams = new URLSearchParams(hash.slice(queryStart + 1));
-                hashParams.forEach((value, key) => {
-                    if (value === undefined || value === null || value === '') return;
-                    snapshot[key] = String(value);
-                });
-            }
-        }
-
-        return snapshot;
+        return getSnapshot(route?.query);
     }
 
     /**
@@ -328,38 +301,13 @@ export function useMapState(mapInstance, options = {}) {
         return {
             lng: formatNumber(lng, 6),
             lat: formatNumber(lat, 6),
-            z: formatNumber(zoom, 2),
+            z: formatZParam(zoom),
             l: String(normalizedLayerIndex),
             s: shareFlag,
             loc: locateFlag,
             p: compactPosCode || '0',
+            view: 'ol',
         };
-    }
-
-    /**
-     * 判断新查询参数是否与当前 URL 参数相同
-     * @param {Object} nextQuery - 新查询参数
-     * @returns {boolean} 是否相同
-     * @private
-     */
-    function isSameQuery(nextQuery) {
-        const currentLng = String(readQueryValue('lng') ?? '');
-        const currentLat = String(readQueryValue('lat') ?? '');
-        const currentZoom = String(readQueryValue('z') ?? '');
-        const currentLayer = String(readQueryValue('l') ?? readQueryValue('layer') ?? '');
-        const currentShareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
-        const currentLocateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
-        const currentPosCode = String(readQueryValue('p') ?? '0');
-
-        return (
-            currentLng === String(nextQuery.lng ?? '') &&
-            currentLat === String(nextQuery.lat ?? '') &&
-            currentZoom === String(nextQuery.z ?? '') &&
-            currentLayer === String(nextQuery.l ?? '') &&
-            currentShareFlag === String(nextQuery.s ?? '0') &&
-            currentLocateFlag === String(nextQuery.loc ?? '0') &&
-            currentPosCode === String(nextQuery.p ?? '0')
-        );
     }
 
     /**
@@ -384,6 +332,15 @@ export function useMapState(mapInstance, options = {}) {
             ...nextQuery,
         };
 
+        // 仅在当前是 OL 视图时才清除 Cesium 专属参数
+        // 避免在 Cesium 模式下 OL 残留调用抹掉相机编码状态
+        if (nextQuery.view === 'ol') {
+            delete mergedQuery.cv;
+            delete mergedQuery.heading;
+            delete mergedQuery.pitch;
+            delete mergedQuery.roll;
+        }
+
         Object.keys(mergedQuery).forEach((key) => {
             const value = mergedQuery[key];
             if (value === undefined || value === null || value === '') {
@@ -393,7 +350,8 @@ export function useMapState(mapInstance, options = {}) {
             mergedQuery[key] = String(value);
         });
 
-        if (isSameQuery(nextQuery)) return;
+        const currentSnapshot = getCurrentQuerySnapshot();
+        if (isSameQuerySnapshot(currentSnapshot, mergedQuery)) return;
 
         if (router && route) {
             void router
@@ -443,6 +401,12 @@ export function useMapState(mapInstance, options = {}) {
      * 提取地图中心和缩放级别，构建新查询参数并更新 URL
      */
     function syncUrlFromMap() {
+        if (suppressNextUrlSync) {
+            suppressNextUrlSync = false;
+            debouncedSyncUrlFromMap.cancel();
+            return;
+        }
+
         const map = mapInstance?.value;
         if (!map) return;
 
@@ -555,6 +519,67 @@ export function useMapState(mapInstance, options = {}) {
                 layerIndex: finalLayerIndex,
             }),
         );
+    }
+
+    /**
+     * 获取当前 OL 视图状态，供 2D→3D 切换时换算 Cesium 相机高度。
+     * @returns {{lng:number,lat:number,zoom:number,layerIndex:number|null,size:number[]|null,resolution:number|null,view:Object|null}|null}
+     */
+    function getCurrentViewState() {
+        const map = mapInstance?.value;
+        const view = map?.getView?.();
+        const center = view?.getCenter?.();
+        const zoom = parseNumber(view?.getZoom?.());
+        if (!map || !view || !Array.isArray(center) || center.length < 2 || zoom === null) return null;
+
+        const [lng, lat] = toLonLat(center);
+        return {
+            lng,
+            lat,
+            zoom,
+            layerIndex: parseInteger(getLayerIndex()),
+            size: map.getSize?.() || null,
+            resolution: parseNumber(view.getResolution?.()),
+            view,
+        };
+    }
+
+    /**
+     * 静默同步 Cesium 等效视图到 OL，避免隐藏 2D 面板下一次 moveend 覆盖 Cesium URL。
+     * @param {{lng:number, lat:number, zoom:number}} state - Cesium 相机换算得到的 OL 中心与 zoom
+     * @returns {boolean} 是否应用成功
+     */
+    function syncViewFromCesium({ lng, lat, zoom } = {}) {
+        const map = mapInstance?.value;
+        const view = map?.getView?.();
+        const normalizedLng = parseNumber(lng);
+        const normalizedLat = parseNumber(lat);
+        const normalizedZoom = parseNumber(zoom);
+        if (!view || normalizedLng === null || normalizedLat === null || normalizedZoom === null) {
+            return false;
+        }
+
+        suppressNextUrlSync = true;
+        debouncedSyncUrlFromMap.cancel();
+        view.setCenter?.(fromLonLat([normalizedLng, normalizedLat]));
+        view.setZoom?.(normalizedZoom);
+        return true;
+    }
+
+    /**
+     * 返回当前 OL 地图视口尺寸，供 Cesium 高度换算使用。
+     * @returns {number[]|null}
+     */
+    function getMapSize() {
+        return mapInstance?.value?.getSize?.() || null;
+    }
+
+    /**
+     * 返回当前 OL View 实例，供 Cesium 高度换算使用。
+     * @returns {Object|null}
+     */
+    function getOlView() {
+        return mapInstance?.value?.getView?.() || null;
     }
 
     /**
@@ -1086,6 +1111,10 @@ export function useMapState(mapInstance, options = {}) {
         parseUrlToState,
         flyToView,
         updateMapView,
+        getCurrentViewState,
+        syncViewFromCesium,
+        getMapSize,
+        getOlView,
         locateAddress,
         fitToLonLatExtent,
         syncUrlFromMap,
