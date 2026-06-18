@@ -506,10 +506,11 @@ export class CompassManager {
 
     /**
      * 同步地理要素坐标
-     * 将状态存储中的经纬度坐标同步到 OpenLayers 点要素
-     * 如果位置无效，则从地图中心获取坐标
+     * 将状态存储中的经纬度坐标同步到 OpenLayers 点要素。
+     * 罗盘未启用时不从地图中心生成默认位置，避免刷新后误写 cs。
      */
     private syncFeatureGeometry(): void {
+        if (!this.store.enabled || this.store.mode !== 'vector') return;
         if (!this.feature) return;
 
         if (!this.store.hasValidPosition) {
@@ -686,26 +687,35 @@ export class CompassManager {
 
     /**
      * 从 URL 参数恢复指南针状态
-     * 解析 URL 查询参数中的指南针位置和大小配置
-     * 如果参数有效，则更新状态存储并将地图中心移至该位置
+     * 解析 URL 查询参数中的指南针位置和大小配置。
+     * 只有完整合法的 cs 才启用罗盘；缺失、cs=0 或损坏参数均保持关闭。
      */
     private async restoreFromUrlState(): Promise<void> {
         const urlState = readCompassUrlState();
+        const lng = Number(urlState.lng);
+        const lat = Number(urlState.lat);
+        const radius = Number(urlState.radius);
+        const hasValidCompassUrlState =
+            Number.isFinite(lng) &&
+            lng >= -180 &&
+            lng <= 180 &&
+            Number.isFinite(lat) &&
+            lat >= -90 &&
+            lat <= 90 &&
+            Number.isFinite(radius) &&
+            radius > 0;
 
-        if (Number.isFinite(Number(urlState.lng)) && Number.isFinite(Number(urlState.lat))) {
-            const lng = Number(urlState.lng);
-            const lat = Number(urlState.lat);
-
-            this.store.setPosition(lng, lat);
-            this.store.setEnabled(true);
-
-            const center = fromLonLat([lng, lat]);
-            this.map.getView()?.setCenter(center);
+        if (!hasValidCompassUrlState) {
+            this.store.setEnabled(false);
+            return;
         }
 
-        if (Number.isFinite(Number(urlState.radius))) {
-            this.store.setPhysicalRadiusMeters(Number(urlState.radius));
-        }
+        this.store.setPosition(lng, lat);
+        this.store.setPhysicalRadiusMeters(radius);
+        this.store.setEnabled(true);
+
+        const center = fromLonLat([lng, lat]);
+        this.map.getView()?.setCenter(center);
     }
 
     /**

@@ -225,7 +225,6 @@ function openToolbox() {
 
 async function openCompassPanel() {
     activeSidePanelTab.value = 'compass';
-    compassStore.setEnabled(true);
     if (!shouldLoadSidePanel.value) {
         shouldLoadSidePanel.value = true;
     }

@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.6 阶段，Cesium 三维分析、运行时地图 token 管理、OL/Cesium 双向 URL 视图同步与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.6 阶段，Cesium 三维分析、运行时地图 token 管理、OL/Cesium 双向 URL 视图同步、罗盘默认关闭语义与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -43,7 +43,7 @@
 
 **前端功能**：
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
-- 🔁 **OL/Cesium 双向 URL 视图同步**：`view=ol|cesium`、`lng/lat/z` 与 `cv=p.<pose>` 分工明确，2D/3D 切换自动换算可视范围
+- 🔁 **OL/Cesium 双向 URL 视图同步**：`view=ol|cesium`、`lng/lat/z` 与 `cv=p.<pose>` 分工明确，2D/3D 切换自动换算可视范围，分享链接刷新不覆盖待恢复视图
 - 🧭 **Cesium 三维分析增强**：统一控制面板集成场景导航、高级特效、风场、水体模拟与参数说明
 - 🔐 **运行时地图 Token 管理**：天地图 TK 与 Cesium Ion Token 由管理员后台配置，前端启动时读取一次后直连服务
 - 🌊 **掩膜分析（水体模拟）**：基于地形高程值域动态生成外包盒，支持点击点海拔初始水位、水位滑杆和水色调色板
@@ -52,7 +52,7 @@
 - 🔎 **高德 AOI 手动注入**：支持粘贴详情 JSON / 搜索 AOI 结果，兼容 `@` 分隔的独立多区域边界
 - 🔎 **纯坐标串 AOI 注入**：支持双引号包围的坐标文本，按 `;` 分隔坐标对、按 `@` 分隔多区域，自动闭合首尾
 - 🎨 电影级视觉效果、数据可视化、首屏特效
-- 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步）
+- 风水罗盘（HUD 模式 + 传统模式）+ 行政区划选择（边界加载 + TOC 同步），默认无 `cs`/`cs=0` 时保持关闭不绘制，打开罗盘面板不会隐式启用
 - 🔍 绘制、测量、路线规划、地点搜索、**卷帘分析**
 - 🌤️ 实时天气 + 趋势预报
 - 🤖 AI 空间助手（LLM 集成）
@@ -257,6 +257,7 @@ WebGIS_Dev/
 │   │   │   │   │   ├── useRouteStepStyles.js          # 路线步骤样式缓存
 │   │   │   │   │   ├── useSpatialAnalysis.js          # 空间分析
 │   │   │   │   │   ├── useStartupTaskScheduler.js     # 启动任务调度
+│   │   │   │   │   ├── useStartupUrlRestoreGuard.js   # 启动 URL 恢复守卫，防止分享链接被初始写回覆盖
 │   │   │   │   │   ├── basemapLayerFactory.js         # 底图图层工厂
 │   │   │   │   │   └── ...
 │   │   │   │   ├── toc/                  # TOC 模块
@@ -626,6 +627,15 @@ LOG_LEVEL=INFO
 | ESLint 错误 | 0 |
 
 ## 🔄 更新日志
+
+### V3.3.6 (2026-06-18)
+#### 🧭 罗盘面板隐式启用与 cs 回写修复
+
+- 修复打开罗盘面板即触发 `compassStore.setEnabled(true)` 的问题，面板展示不再等同于启用绘制。
+- 保留 `CompassControlPanel.vue` 中的显式启用入口，以及有效 `cs` 分享链接的刷新恢复能力。
+- 避免无 `cs` / `cs=0` 场景下因地图中心自动补位而重新生成有效 `cs`。
+- 同步调整 `HomeView.vue` 与 `views/home/useSidePanel.ts`，防止后续侧栏拆分逻辑回归该问题。
+- 详见 [`Docs/26-06/26-06-18/2026-06-18-url-restore-compass-fix.md`](Docs/26-06/26-06-18/2026-06-18-url-restore-compass-fix.md)
 
 ### V3.3.6 (2026-06-18)
 #### 🛠️ OL / Cesium URL Code Review 修复 + 中国视角高度调整

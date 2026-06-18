@@ -30,7 +30,7 @@
 - 地图内核：OpenLayers 2D + Cesium 3D
 - 数据能力：GeoJSON/KML/KMZ/SHP/GeoTIFF/CSV 导入，CSV/TXT/GeoJSON/KML 导出
 - 图层系统：TOC 协议层、右键菜单、多选批处理、行政区划与用户图层统一管理
-- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD、Cesium 三维分析、水体模拟
+- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD（面板展示与启用绘制解耦）、Cesium 三维分析、水体模拟
 
 ## 快速开始
 # WebGIS 前端项目
@@ -42,7 +42,7 @@
 - 地图内核：OpenLayers 2D + Cesium 3D
 - 数据能力：GeoJSON/KML/KMZ/SHP/GeoTIFF/CSV 导入，CSV/TXT/GeoJSON/KML 导出
 - 图层系统：TOC 协议层、右键菜单、多选批处理、行政区划与用户图层统一管理
-- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD、Cesium 三维分析、水体模拟
+- 业务模块：路径规划、地点检索、属性表、天气看板、AI 聊天、罗盘 HUD（面板展示与启用绘制解耦）、Cesium 三维分析、水体模拟
 
 ## 快速开始
 
@@ -162,7 +162,7 @@ frontend/src/
 │   ├── Common/                               # 通用可复用组件
 │   │   └── ExtentPicker.vue                  # 框选范围组件（开始/重新/清除/提示）
 │   ├── Compass/
-│   │   ├── CompassControlPanel.vue           # 罗盘控制面板（HUD 尺寸控制）
+│   │   ├── CompassControlPanel.vue           # 罗盘控制面板（显式启用 + HUD 尺寸控制）
 │   │   └── PalaceExplanationPanel.vue        # 宫位解释面板
 │   ├── ControlsPanel/                        # 左侧控制栏
 │   │   ├── ControlsPanel.vue                 # 总面板入口
@@ -295,7 +295,7 @@ frontend/src/
 ├── services/
 │   ├── agent/                                # Agent 服务
 │   │   └── AgentExecutor.js                  # Agent 响应拦截与工具调用执行路由
-│   ├── CompassManager.ts                     # 罗盘管理器（半径判断/缩放分级/渐变背景）
+│   ├── CompassManager.ts                     # 罗盘管理器（仅显式启用/有效 cs 时绘制）
 │   ├── DistrictManager.ts                    # 行政区划管理器
 │   ├── auth.js                               # 鉴权工具
 │   ├── runtimeMapTokens.js                   # 运行时地图 token 池读取、缓存与备用 token 切换

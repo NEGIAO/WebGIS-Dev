@@ -155,6 +155,7 @@ import {
 } from '../../constants';
 import { createAutoTileSourceFromUrl } from '../../composables/useTileSourceFactory';
 import { createBasemapLayerFromSource } from '../../composables/map/features/basemapLayerFactory';
+import { createStartupUrlRestoreGuard } from '../../composables/map/features/useStartupUrlRestoreGuard';
 import LayerControlPanel from '../Layer/LayerControlPanel.vue';
 import MapSwipeController from './MapSwipeController.vue';
 // import MapEasterEgg from './MapEasterEgg.vue';
@@ -971,17 +972,23 @@ const {
     },
 });
 
+const startupUrlRestoreGuard = createStartupUrlRestoreGuard({
+    parseUrlToState,
+    getPendingParams: () => urlParamStore.getPendingParams(),
+    isUrlSyncEnabled: () => props.urlSyncEnabled,
+});
+
 /**
- * 仅在 OL 面板处于当前视图时写回 URL，避免隐藏的 2D 地图覆盖 Cesium 相机状态。
+ * 仅在 OL 面板处于当前视图且启动 URL 已恢复后写回 URL，避免覆盖分享链接或 Cesium 相机状态。
  */
 function syncUrlFromActiveMap() {
-    if (!props.urlSyncEnabled) return;
+    if (!startupUrlRestoreGuard.canSyncNow()) return;
     syncUrlFromMap();
     emit('view-sync', { view: 'ol' });
 }
 
 function bindActiveMapViewSync() {
-    if (!props.urlSyncEnabled) return;
+    if (!props.urlSyncEnabled || startupUrlRestoreGuard.hasPendingRestore()) return;
     bindMapViewSync();
 }
 
@@ -990,8 +997,10 @@ watch(
     (enabled) => {
         if (enabled) {
             bindMapViewSync();
-            syncUrlFromMap();
-            emit('view-sync', { view: 'ol' });
+            if (startupUrlRestoreGuard.canSyncNow()) {
+                syncUrlFromMap();
+                emit('view-sync', { view: 'ol' });
+            }
         } else {
             stopMapViewSync();
         }
@@ -1057,8 +1066,14 @@ if (initialLayerId) {
 //   3. GIS 初始化完成后调用此函数应用参数
 //   4. 标记为已应用，防止重复应用
 function applyDeferredUrlParams() {
+    const finishInitialRestore = () => {
+        startupUrlRestoreGuard.markInitialRestoreApplied();
+        bindActiveMapViewSync();
+    };
+
     if (!mapInstance?.value) {
         console.warn('[MapContainer] Cannot apply deferred params: mapInstance not ready');
+        finishInitialRestore();
         return;
     }
 
@@ -1066,6 +1081,7 @@ function applyDeferredUrlParams() {
     // 此处显式跳过避免隐式依赖 getValidCoordinateParams 返回 null。
     if (urlParamStore.getPendingParams().view === 'cesium') {
         urlParamStore.markParamsAsApplied();
+        finishInitialRestore();
         return;
     }
 
@@ -1073,6 +1089,7 @@ function applyDeferredUrlParams() {
     if (!validParams) {
         // 没有有效的地理坐标参数，直接标记已应用
         urlParamStore.markParamsAsApplied();
+        finishInitialRestore();
         return;
     }
 
@@ -1088,12 +1105,14 @@ function applyDeferredUrlParams() {
             duration: 500, // 应用参数时的动画持续时间
         });
 
-        // 标记为已应用
+        // 释放启动守卫后再绑定 moveend，避免 flyToView 动画产生的首次 moveend 覆盖分享链接。
         urlParamStore.markParamsAsApplied();
+        finishInitialRestore();
         console.warn('[MapContainer] Deferred URL params applied successfully');
     } catch (error) {
         console.error('[MapContainer] Failed to apply deferred URL params:', error);
         urlParamStore.markParamsAsApplied(); // 即使失败也标记已应用，防止重复尝试
+        finishInitialRestore();
     }
 }
 
@@ -1129,9 +1148,9 @@ onMounted(async () => {
 
         // ========== Phase 1: 同步初始化 - 快速返回，让底图加载开始 ==========
         initMap(); // 创建地图实例，底图图层已添加
-        bindActiveMapViewSync(); // 绑定视图同步（不阻塞）
+        bindActiveMapViewSync(); // 绑定视图同步（启动恢复期间会暂停 moveend 写回）
         setGraticuleActive(showDynamicSplitLines.value); // 设置格网（不阻塞）
-        syncUrlFromActiveMap(); // 从 URL 同步地图状态（不阻塞）
+        syncUrlFromActiveMap(); // 安全写回当前地图状态，避免覆盖待恢复的分享链接
 
         // ========== Phase 2: 等待底图渲染完成 ==========
         // 注意：此时底图瓦片请求已在后台发送，拥有高优先级（由 prioritizeTileSourceRequest 保证）

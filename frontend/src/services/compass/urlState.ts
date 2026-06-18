@@ -44,6 +44,9 @@ export function readCompassUrlState(): CompassUrlPayload {
 
     const { query } = readMergedQuery();
     const stateCode = String(query.get(COMPASS_PARAM_KEY) || '').trim();
+    // 空值和 cs=0 明确表示罗盘关闭，避免默认状态被误恢复。
+    if (!stateCode || stateCode === '0') return {};
+
     const decoded = decodeCompassState(stateCode);
 
     if (!decoded) return {};
@@ -82,7 +85,8 @@ export function writeCompassUrlState(payload: CompassUrlPayload): void {
 
         const nextQuery = query.toString();
         const nextHash = nextQuery ? `#${path}?${nextQuery}` : `#${path}`;
-        const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+        // 将查询参数规范化到 hash route；保留 location.search 会让已删除的 cs 复活。
+        const nextUrl = `${window.location.pathname}${nextHash}`;
         window.history.replaceState(window.history.state, '', nextUrl);
     } catch {
         // URL sync failures should not block map interaction.

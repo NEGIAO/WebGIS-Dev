@@ -53,10 +53,9 @@ export function useSidePanel({ compassStore, message }) {
         isSidePanelCollapsed.value = false;
     }
 
-    /** 打开罗盘面板 */
+    /** 打开罗盘面板：仅展示配置面板，不隐式启用绘制，避免自动写入 cs。 */
     async function openCompassPanel() {
         activeSidePanelTab.value = 'compass';
-        compassStore.setEnabled(true);
         if (!shouldLoadSidePanel.value) {
             shouldLoadSidePanel.value = true;
         }
