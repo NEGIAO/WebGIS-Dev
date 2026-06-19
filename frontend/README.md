@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.3.7
+# WebGIS 前端项目 — v3.3.8
 
 ## 📋 项目概述
 
@@ -97,7 +97,7 @@ VITE_BASE_URL=./
 VITE_BASE_URL=/WebGIS-Dev/ npm run build
 ```
 
-## 目录结构（2026-06-18 更新）
+## 目录结构（2026-06-19 更新）
 
 以下结构按当前工程实际文件更新。本次重构清理了死代码、消除了重复工具函数、重组了数据文件。
 
@@ -140,15 +140,18 @@ frontend/src/
 │
 ├── components/                               # 业务组件（按功能域分组）
 │   ├── Cesium/                               # 3D 地球模块
-│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 统一工具面板调度）
+│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 统一工具面板调度 + 拖拽数据导入）
 │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
-│   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/特效/风场/流体参数 + ? 提示）
+│   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/数据导入/特效/风场/流体参数 + ? 提示）
+│   │   ├── CesiumDataImportDialog.vue        # GLTF/GLB 模型放置坐标输入弹窗（Teleport 到 body + 实时验证）
 │   │   ├── Wind2D.js                         # 2D 风场渲染
 │   │   ├── composables/                      # Cesium 工具模块状态编排
 │   │   │   ├── cesiumRuntime.js              # Cesium CDN 运行时加载
+│   │   │   ├── useCesiumBasemapSwitcher.js   # 底图熔断/降级切换器（与 OL 共用预设）
+│   │   │   ├── useCesiumDataImport.js        # 数据导入 composable（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles + 自动定位 + BlobURL 生命周期管理）
 │   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
-│   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排与 token 兜底重载
-│   │   │   ├── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z 坐标面板 + cv 相机视角还原）
+│   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排 + 统一预设接入
+│   │   │   ├── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
 │   │   │   └── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
 │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
 │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
@@ -282,6 +285,8 @@ frontend/src/
 │   ├── basemap/                              # 底图配置模块
 │   │   ├── basemapConfig.ts                  # 图源定义 + 预设配置（1317 行）
 │   │   ├── basemapResolver.ts                # 解析逻辑
+│   │   ├── sourceDescriptors.ts              # 引擎无关的图层源描述符（OL/Cesium 共用）
+│   │   ├── cesiumProviderFactory.ts          # 描述符→Cesium ImageryProvider 工厂
 │   │   └── index.ts
 │   ├── agentToolsSchema.js                   # Agent Function Calling 工具声明 + 系统提示词
 │   ├── index.js                              # barrel export
@@ -408,6 +413,22 @@ frontend/src/
         ├── useLayerOperations.ts             # 图层操作
         └── useSidePanel.ts                   # 侧边栏逻辑
 ```
+
+## V3.3.8 (2026-06-19)
+### 🛰️ Cesium 数据导入 + 底图预设统一接入
+
+- ✅ **Cesium 数据导入**：GeoJSON / KML / KMZ / SHP / GLB / GLTF / CZML / 3D Tiles 加载到 3D 场景；支持文件选择 + 拖拽上传 + GLTF 坐标弹窗；自动定位到数据源范围；BlobURL 生命周期管理。
+- ✅ **底图预设统一接入**：`sourceDescriptors.ts` + `cesiumProviderFactory.ts` 让 OL/Cesium 共享同一套 `BASEMAP_PRESETS`；Cesium 接入 `useCesiumBasemapSwitcher` 熔断/降级；URL `l` 参数还原底图预设。
+- ✅ **字体栈变量**：`theme.css` 新增 5 个 `--font-*` 字体栈变量（基础/中文/英文/衬线/等宽）。
+- ✅ **Cesium OSM Buildings + Google Photorealistic 3D Tiles 叠加层**：熔断链路重置按钮入口。
+- ✅ **Code Review 修复**：
+  - `CesiumContainer.onDragLeave` 屏蔽子节点冒泡导致的覆盖层闪烁
+  - `useCesiumDataImport.loadGLTF` 重复导入时回收旧 BlobURL
+  - `CesiumDataImportDialog` 重入残留检查，仅在 visible=true 时重置表单
+  - `CesiumToolPanel.localDataSources` 去掉 deep watch，避免每次 push 重建数组
+  - `useCesiumDataImport.clearAllDataSources` 移除未使用变量 `knownEntityIds`
+
+详见 [`../Docs/26-06/26-06-19/2026-06-19-cesium-data-import.md`](../Docs/26-06/26-06-19/2026-06-19-cesium-data-import.md) 与 [`../Docs/26-06/26-06-19/2026-06-19-unified-basemap-ol-cesium.md`](../Docs/26-06/26-06-19/2026-06-19-unified-basemap-ol-cesium.md)
 
 ## V3.3.7 (2026-06-19)
 ### 🔍 暂存区 Code Review & Bug 修复

@@ -7,24 +7,45 @@ import {
     writeStoredString,
 } from './cesiumStorage';
 import createGeoTerrainProvider from '../terrain/GeoTerrainProvider';
+import { BASEMAP_OPTIONS, resolvePresetLayerIds } from '../../../constants/basemap/basemapResolver';
+import { DEFAULT_BASEMAP_PRESET_ID } from '../../../constants/basemap/basemapConfig';
+import { getDescriptorById } from '../../../constants/basemap/sourceDescriptors';
+import { buildCesiumImageryProvidersForPreset, abortAllDescriptorRequests } from '../../../constants/basemap/cesiumProviderFactory';
+import { useCesiumBasemapSwitcher } from './useCesiumBasemapSwitcher';
 
 const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 const ARCGIS_WORLD_TERRAIN_URL = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer';
 const CESIUM_OSM_BUILDINGS_ASSET_ID = 96188;
 const CUSTOM_XYZ_BASEMAP_ID = 'custom-xyz';
-const CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
+const CUSTOM_XYZ_BASEMAP_URL_KEY = 'webgis_custom_basemap_url';
 const TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
 const TDT_BOUNDARY_LAYER_VISIBLE_KEY = 'cesium_tdt_boundary_layer_visible';
 const TDT_TEXT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_text_label_layer_visible';
 const CESIUM_OSM_BUILDINGS_VISIBLE_KEY = 'cesium_osm_buildings_visible';
 const GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY = 'cesium_google_photorealistic_3d_tiles_visible';
 
-const projectBasemapOptions = [
-    { value: 'tianditu', label: '天地图', description: '天地图影像与注记服务' },
-    { value: 'google', label: 'Google', description: 'Google 卫星影像代理服务' },
-    { value: CUSTOM_XYZ_BASEMAP_ID, label: '自定义 XYZ', description: '用户输入的 XYZ 瓦片 URL' },
-];
+/** 将统一预设映射为 Cesium 兼容的选项列表 */
+function buildUnifiedBasemapOptions() {
+    return BASEMAP_OPTIONS.map((opt) => ({
+        ...opt,
+        description: getPresetDescription(opt.value),
+        source: 'preset',
+    }));
+}
+
+/** 获取预设的简要描述 */
+function getPresetDescription(presetId) {
+    const stack = resolvePresetLayerIds(presetId);
+    if (!stack.length) return '复合底图';
+    const names = stack.map((sid) => {
+        const desc = getDescriptorById(sid);
+        return desc ? desc.name : sid;
+    });
+    return names.slice(0, 3).join(' + ') + (names.length > 3 ? ' ...' : '');
+}
+
+const unifiedBasemapOptions = buildUnifiedBasemapOptions();
 
 const terrainOptions = [
     { value: 'tianditu', label: '天地图地形', description: '天地图高程地形服务' },
@@ -62,26 +83,31 @@ export function useCesiumLayers({
     const terrainProviderViewModelById = new Map();
     const terrainProviderIdByViewModel = new Map();
 
-    const activeBasemap = ref('tianditu');
+    const LEGACY_CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
+
+    const activeBasemap = ref(DEFAULT_BASEMAP_PRESET_ID);
     const activeTerrain = ref('tianditu');
-    const customXyzBasemapUrl = ref(readStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, ''));
+    // 读取自定义 URL：优先新 key，兼容旧 key
+    const customXyzBasemapUrl = ref(readStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, '') ||
+        readStoredString(LEGACY_CUSTOM_XYZ_BASEMAP_URL_KEY, ''));
+    // 叠加层默认全部开启：国界线 + 文字注记 + Cesium OSM Buildings + Google 倾斜摄影
     const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, true);
     const tdtBoundaryLayerVisible = ref(
-        readStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible),
+        readStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? true),
     );
     const tdtTextLabelLayerVisible = ref(
-        readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible),
+        readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? true),
     );
     const osmBuildingsVisible = ref(
-        readStoredBoolean(CESIUM_OSM_BUILDINGS_VISIBLE_KEY, false),
+        readStoredBoolean(CESIUM_OSM_BUILDINGS_VISIBLE_KEY, true),
     );
     const googlePhotorealistic3DTilesVisible = ref(
-        readStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, false),
+        readStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, true),
     );
 
     const basemapOptions = computed(() => [
-        ...projectBasemapOptions.map((option) => {
-            if (option.value !== CUSTOM_XYZ_BASEMAP_ID) return option;
+        ...unifiedBasemapOptions.map((option) => {
+            if (option.value !== 'custom') return option;
             return {
                 ...option,
                 description: customXyzBasemapUrl.value
@@ -93,6 +119,19 @@ export function useCesiumLayers({
         }),
         ...officialBasemapOptions.value,
     ]);
+
+    // ========== 熔断/降级切换器 ==========
+    const basemapSwitcher = useCesiumBasemapSwitcher({
+        getViewer,
+        getCesium,
+        activeBasemap,
+        applyBasemap,
+        resolvePresetLayerIds,
+        message,
+    });
+
+    /** 供 UI 绑定的熔断状态 */
+    const basemapCircuitOpen = computed(() => basemapSwitcher.isCircuitOpen.value);
 
     const overlayOptions = computed(() => [
         {
@@ -162,22 +201,15 @@ export function useCesiumLayers({
         imageryProviderViewModelById.clear();
         imageryProviderIdByViewModel.clear();
 
-        const projectProviderViewModels = projectBasemapOptions.map((option) => {
+        // 从统一预设构建 ProviderViewModel 列表
+        const projectProviderViewModels = unifiedBasemapOptions.map((option) => {
             const viewModel = new Cesium.ProviderViewModel({
                 name: option.label,
                 tooltip: getBasemapTooltip(option),
                 category: '项目底图',
                 iconUrl: createPickerIcon(
-                    option.value === 'google'
-                        ? '#5ea1ff'
-                        : option.value === CUSTOM_XYZ_BASEMAP_ID
-                            ? '#f59e0b'
-                            : '#37d67a',
-                    option.value === 'google'
-                        ? 'G'
-                        : option.value === CUSTOM_XYZ_BASEMAP_ID
-                            ? 'XY'
-                            : 'TD',
+                    getPresetPickerColor(option.value),
+                    getPresetPickerLabel(option.value, option.label),
                 ),
                 creationFunction: () => createImageryProvidersById(option.value),
             });
@@ -253,9 +285,43 @@ export function useCesiumLayers({
     }
 
     function createImageryProvidersById(value) {
+        // 先检查是否为统一预设 ID（如 'custom_China_Blender_preset_2'）
+        const stackIds = resolvePresetLayerIds(value);
+        if (stackIds.length > 0) {
+            return createImageryProvidersFromPreset(value);
+        }
+
+        // 兼容旧的 Cesium 专用 ID
         if (value === 'google') return createGoogleImageryProviders();
         if (value === CUSTOM_XYZ_BASEMAP_ID) return createCustomXyzImageryProviders();
+        if (value === 'tianditu') return createTiandituImageryProviders();
+
+        // 默认 fallback
         return createTiandituImageryProviders();
+    }
+
+    /** 从统一预设创建 Cesium ImageryProvider 数组 */
+    function createImageryProvidersFromPreset(presetId) {
+        const Cesium = getCesium?.();
+        if (!Cesium) return [];
+
+        const stackIds = resolvePresetLayerIds(presetId);
+        if (!stackIds.length) {
+            console.warn(`[useCesiumLayers] 预设 "${presetId}" 没有有效的图层栈`);
+            return createTiandituImageryProviders();
+        }
+
+        // 获取运行时 token
+        const tiandituTk = getTiandituToken();
+        const customUrl = customXyzBasemapUrl.value;
+
+        const ctx = {
+            tiandituTk,
+            customUrl: customUrl,
+            normBase: '',
+        };
+
+        return buildCesiumImageryProvidersForPreset(Cesium, stackIds, ctx);
     }
 
     function createTiandituImageryProviders() {
@@ -360,7 +426,11 @@ export function useCesiumLayers({
     }
 
     function addBaseImageryLayers() {
-        syncBasemapSideEffects();
+        // 同步叠加层（国界线 / 文字注记）
+        syncTdtOverlayLayers();
+        // 同步 Cesium OSM Buildings 与 Google 倾斜摄影
+        void syncOsmBuildingsLayer();
+        void syncGooglePhotorealistic3DTilesLayer();
         return true;
     }
 
@@ -644,12 +714,19 @@ export function useCesiumLayers({
         const viewer = getViewer?.();
         if (!viewer || !getCesium?.()) return false;
 
+        // 先中断所有旧请求，实现快速切换
+        abortAllDescriptorRequests();
+        clearBaseImageryLayers();
+
         const pickerViewModel = viewer.baseLayerPicker?.viewModel;
         const providerViewModel = imageryProviderViewModelById.get(value);
+
+        // 如果有对应的 ProviderViewModel，通过 baseLayerPicker 切换
         if (pickerViewModel && providerViewModel) {
-            clearBaseImageryLayers();
             if (options.forceReload && pickerViewModel.selectedImagery === providerViewModel) {
-                const fallbackViewModel = imageryProviderViewModelById.get('tianditu');
+                const fallbackViewModel = imageryProviderViewModelById.get(
+                    DEFAULT_BASEMAP_PRESET_ID
+                ) || imageryProviderViewModelById.get('tianditu');
                 if (fallbackViewModel && fallbackViewModel !== providerViewModel) {
                     pickerViewModel.selectedImagery = fallbackViewModel;
                 }
@@ -661,11 +738,13 @@ export function useCesiumLayers({
             return true;
         }
 
+        // 降级路径：直接操作 imageryLayers
         try {
-            clearBaseImageryLayers();
             const providers = createImageryProvidersById(value);
             providers.forEach((provider) => {
-                imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
+                if (provider) {
+                    imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
+                }
             });
 
             syncTdtOverlayLayers();
@@ -928,6 +1007,10 @@ export function useCesiumLayers({
         handleOverlayToggle,
         handleCustomBasemapSubmit,
         cleanupLayers,
+        // 熔断/降级切换器
+        basemapSwitcher,
+        basemapCircuitOpen,
+        resetCircuitBreaker: basemapSwitcher.resetCircuitBreaker,
     };
 }
 
@@ -983,10 +1066,32 @@ async function createCesiumOsmBuildingsTileset(Cesium, options = {}) {
 }
 
 function getBasemapTooltip(option) {
-    if (option.value !== CUSTOM_XYZ_BASEMAP_ID) {
-        return option.description || option.label;
+    if (option.value === CUSTOM_XYZ_BASEMAP_ID) {
+        return `${option.description || option.label}\n支持 https://server/{z}/{x}/{y}.png`;
     }
-    return `${option.description || option.label}\n支持 https://server/{z}/{x}/{y}.png`;
+    return option.description || option.label;
+}
+
+/** 获取预设 Picker 图标颜色（根据第一个图层源分类） */
+function getPresetPickerColor(presetId) {
+    const stackIds = resolvePresetLayerIds(presetId);
+    if (!stackIds.length) return '#37d67a';
+    const firstDesc = getDescriptorById(stackIds[0]);
+    if (!firstDesc) return '#37d67a';
+    const cat = firstDesc.category;
+    if (cat === 'imagery') return '#5ea1ff';
+    if (cat === 'vector') return '#37d67a';
+    if (cat === 'terrain') return '#d0a449';
+    if (cat === 'label') return '#a78bfa';
+    if (cat === 'theme') return '#f59e0b';
+    if (cat === 'custom') return '#f472b6';
+    return '#37d67a';
+}
+
+/** 获取预设 Picker 图标短标签 */
+function getPresetPickerLabel(presetId, label) {
+    const safeLabel = String(label || '').replace(/[<>&"']/g, '');
+    return safeLabel.slice(0, 2) || 'BM';
 }
 
 function normalizeCustomXyzUrl(rawUrl) {

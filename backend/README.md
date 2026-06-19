@@ -25,15 +25,45 @@ WebGIS 后端服务，当前包含五大核心能力：
 
 ## 0. 项目结构（2026-06-19 更新）
 
-### V3.3.7 (2026-06-19) - 暂存区 Code Review & Bug 修复
+### V3.3.8 (2026-06-19) - Cesium 数据导入 + 底图预设统一 + Code Review 修复
 
-> 本次版本为前端 Code Review 与 Bug 修复，后端 API 与后端文件结构无变更。
+> 本次版本为前端新增「Cesium 数据导入」与「底图预设统一接入」、暂存区 Code Review 与 Bug 修复，后端 API 与后端文件结构无变更。
 
 **前端同步记录（本次无后端结构变更）：**
+- 新增 `Cesium/composables/useCesiumDataImport.js`：统一管理 GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles 加载到 Cesium 场景，复用 OL 侧 `parseShpPartsToGeoJSON` + JSZip 解压；自动定位到数据源范围；GLTF 无嵌入坐标时弹窗输入。
+- 新增 `Cesium/CesiumDataImportDialog.vue`：GLTF/GLB 无嵌入坐标时的坐标输入弹窗（Teleport 到 body + 实时验证 + 输入防护）。
+- 新增 `Cesium/composables/useCesiumBasemapSwitcher.js`：底图熔断/降级切换器（与 OL 共用统一预设）。
+- 新增 `constants/basemap/sourceDescriptors.ts`：引擎无关的图层源描述符（OL/Cesium 共用）。
+- 新增 `constants/basemap/cesiumProviderFactory.ts`：描述符→Cesium ImageryProvider 工厂（含 AbortController 中断旧请求）。
+- 新增 `assets/theme.css` `--font-*` 字体栈变量（基础/中文/英文/衬线/等宽）。
+- 修改 `Cesium/CesiumToolPanel.vue`：新增「数据」tab（4 列布局）+ 文件选择 + 已加载数据源管理 + 全部清除。
+- 修改 `Cesium/CesiumContainer.vue`：接入 dataImport composable + 拖拽上传覆盖层 + Dialog + 数据导入事件处理 + onUnmounted 清理。
+- 修改 `Cesium/composables/useCesiumLayers.js`：接入统一底图预设（与 OL 共享 `BASEMAP_PRESETS`）。
+- 修改 `Cesium/composables/useCesiumUrlTracking.js`：增加 `l` 底图参数还原。
+- 修改 `constants/basemap/index.ts`：导出 sourceDescriptors 与 cesiumProviderFactory。
+- 修改 `assets/theme.css`：新增 5 个 `--font-*` 字体栈 CSS 变量。
+- 修改 `components/Layer/LayerControlPanel.vue`：新增 cesium overlay 开关 + 熔断链路重置按钮入口。
+- 修改 `views/HomeView.vue`：3D 切换流程串行化，避免相机 URL 监听竞态。
+- 修复 `buildShareMarkedUrl` 中 `loc` 提前重置导致分享链接 `p` 参数丢失的严重 Bug。
+- TopBar 主题适配、CSS 变量统一、罗盘初始化防循环、定位上下文安全检查。
+- Code Review 修复：响应式转发、SHP 数组分支要素数、KMZ BlobURL 泄漏、Dialog 重入残留、文件选择键盘可达性、删除未使用变量、`localDataSources` 去掉 deep watch 避免每次 push 重建数组、`onDragLeave` 屏蔽子节点冒泡导致的覆盖层闪烁、`loadGLTF` 重复导入时回收旧 BlobURL、`CesiumDataImportDialog` 重入残留检查、`useCesiumDataImport.clearAllDataSources` 移除未使用变量 `knownEntityIds`。
+
+详见 [`../Docs/26-06/26-06-19/2026-06-19-cesium-data-import.md`](../Docs/26-06/26-06-19/2026-06-19-cesium-data-import.md)、[`../Docs/26-06/26-06-19/2026-06-19-unified-basemap-ol-cesium.md`](../Docs/26-06/26-06-19/2026-06-19-unified-basemap-ol-cesium.md) 与 [`../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
+
+### V3.3.7 (2026-06-19) - Cesium 数据导入 + 暂存区 Code Review & Bug 修复
+
+> 本次版本为前端新增「Cesium 数据导入」功能与暂存区 Code Review 与 Bug 修复，后端 API 与后端文件结构无变更。
+
+**前端同步记录（本次无后端结构变更）：**
+- 新增 `Cesium/composables/useCesiumDataImport.js`：统一管理 GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles 加载到 Cesium 场景，复用 OL 侧 `parseShpPartsToGeoJSON` + JSZip 解压。
+- 新增 `Cesium/CesiumDataImportDialog.vue`：GLTF/GLB 无嵌入坐标时的坐标输入弹窗。
+- 修改 `Cesium/CesiumToolPanel.vue`：新增「数据」tab（4 列布局）+ 文件选择 + 已加载数据源管理 + 全部清除。
+- 修改 `Cesium/CesiumContainer.vue`：接入 dataImport composable + 拖拽上传覆盖层 + Dialog + 数据导入事件处理 + onUnmounted 清理。
+- Code Review 修复：响应式转发、SHP 数组分支要素数、KMZ BlobURL 泄漏、Dialog 重入残留、文件选择键盘可达性、删除未使用变量。
 - 修复 `buildShareMarkedUrl` 中 `loc` 提前重置导致分享链接 `p` 参数丢失的严重 Bug。
 - TopBar 主题适配、CSS 变量统一、罗盘初始化防循环、定位上下文安全检查。
 
-详见 [`../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
+详见 [`../Docs/26-06/26-06-19/2026-06-19-cesium-data-import.md`](../Docs/26-06/26-06-19/2026-06-19-cesium-data-import.md) 与 [`../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
 
 ### V3.3.6 (2026-06-18) - z 参数精度链路修复
 

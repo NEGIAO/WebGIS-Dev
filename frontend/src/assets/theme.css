@@ -70,6 +70,18 @@
     --radius-lg: 12px;
     --radius-full: 50%;
 
+    /* ===== 字体栈 ===== */
+    /* --font-base   : 全局默认无衬线，适配中英文混排 + 系统字体回退 */
+    /* --font-zh     : 中文优先栈（思源黑体 → 苹方 → 微软雅黑 → 苹方 GB） */
+    /* --font-en     : 英文优先栈（SF Pro → Segoe UI → Roboto → Helvetica） */
+    /* --font-serif  : 装饰衬线栈（Cinzel → Times New Roman → Songti），用于标题/Logo */
+    /* --font-mono   : 等宽栈（SF Mono → JetBrains Mono → Consolas → Menlo） */
+    --font-base: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
+    --font-zh: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Hiragino Sans GB', sans-serif;
+    --font-en: 'SF Pro Text', 'SF Pro Display', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-serif: 'Cinzel', 'Cormorant Garamond', 'Times New Roman', 'Songti SC', 'SimSun', serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
+
     /* ===== 阴影 ===== */
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);

@@ -14,6 +14,17 @@ import { useMessage } from '../composables/useMessage';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, useMapViewUrlState } from '../composables/useMapViewUrlState';
 import { olZoomToCesiumHeight, cesiumHeightToOlZoom } from '../utils/map/viewScaleConverter';
 import { encodeCesiumPoseState } from '../utils/url/crypto';
+import { readQueryValue as readQueryFromSnapshot } from '../utils/url/urlQueryReader';
+import { useRoute } from 'vue-router';
+import { createBasemapUrlMappingFeature } from '../composables/map/features/useBasemapUrlMapping';
+import { URL_LAYER_OPTIONS } from '../constants/basemap/basemapResolver';
+import { getLayerCategory, getLayerGroup } from '../constants/basemap/basemapResolver';
+
+const { getLayerIdByIndex } = createBasemapUrlMappingFeature({
+    urlLayerOptions: URL_LAYER_OPTIONS,
+    getLayerCategoryById: getLayerCategory,
+    getLayerGroupById: getLayerGroup,
+});
 import {
     useAttrStore,
     useWeatherStore,
@@ -96,6 +107,17 @@ const is3DMode = ref(getCurrentMapView() === MAP_VIEW_CESIUM);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
 const isWeatherBoardMode = ref(false);
+
+// 路由快照：用于在视图切换时把 URL 中的 l 参数同步到 OL/Cesium
+const route = useRoute();
+const readQueryValue = (key) => readQueryFromSnapshot(key, route.query);
+
+function parseFiniteNumber(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string' && value.trim() === '') return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+}
 const shouldLoadWeatherChartPanel = ref(false);
 const isMagicMode = ref(false);
 const magicEffectData = ref('');
@@ -681,12 +703,19 @@ function syncOlFromCesiumPayload(payload = {}) {
  */
 function buildOlQueryPatchFromCesium() {
     const equivalent = latestCesiumOlEquivalent.value;
-    if (!equivalent) return null;
-    return {
-        lng: Number(equivalent.lng).toFixed(6),
-        lat: Number(equivalent.lat).toFixed(6),
-        z: formatZParam(equivalent.zoom),
-    };
+    const patch = {};
+    if (equivalent) {
+        patch.lng = Number(equivalent.lng).toFixed(6);
+        patch.lat = Number(equivalent.lat).toFixed(6);
+        patch.z = formatZParam(equivalent.zoom);
+    }
+    // 同步底图 l：Cesium 切回 OL 时，把 URL 中当前的 l 参数原样保留到下一个 patch，
+    // OL 侧 useMapState.parseUrlToState 会读这个 l 并应用到底图。
+    const currentLayerIndex = parseFiniteNumber(readQueryValue('l'));
+    if (currentLayerIndex !== null) {
+        patch.l = String(currentLayerIndex);
+    }
+    return Object.keys(patch).length ? patch : null;
 }
 
 /**
@@ -720,6 +749,14 @@ async function setMapView(view, { writeUrl = true } = {}) {
     } else {
         if (latestCesiumOlEquivalent.value) {
             mapContainerRef.value?.syncViewFromCesium?.(latestCesiumOlEquivalent.value);
+        }
+        // Cesium → OL 切换：把当前 URL 中的 l 同步到底图，确保 2D 视图继承 Cesium 选中的底图
+        const incomingLayerIndex = parseFiniteNumber(readQueryValue('l'));
+        if (incomingLayerIndex !== null) {
+            const targetLayerId = getLayerIdByIndex(incomingLayerIndex);
+            if (targetLayerId) {
+                mapContainerRef.value?.setBaseLayerActive?.(targetLayerId);
+            }
         }
         is3DMode.value = false;
         // 切回 OL 时卸载 CesiumContainer，确保相机 moveEnd URL 监听被清理。

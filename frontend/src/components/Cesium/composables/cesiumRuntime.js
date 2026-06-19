@@ -1,3 +1,8 @@
+/**
+ * cesiumRuntime.js
+ * Cesium 运行时加载：从 jsDelivr CDN 注入 Cesium.js / widgets.css 并写入 Ion token
+ */
+
 export const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.122/Build/Cesium/';
 export const CESIUM_JS_URL = `${CESIUM_BASE_URL}Cesium.js`;
 export const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
@@ -7,12 +12,22 @@ export async function loadCesiumRuntime({ ionToken } = {}) {
         window.CESIUM_BASE_URL = CESIUM_BASE_URL;
     }
 
+    console.info('[Cesium][runtime] loading', { baseUrl: window.CESIUM_BASE_URL });
+
     await loadStyleOnce(CESIUM_CSS_URL, 'cesium-widgets-style');
+    console.info('[Cesium][runtime] widgets.css loaded');
     await loadScriptOnce(CESIUM_JS_URL, 'cesium-runtime-script');
+    console.info('[Cesium][runtime] Cesium.js loaded');
 
     const Cesium = window.Cesium;
-    if (!Cesium) throw new Error('Cesium global 未找到');
+    if (!Cesium) {
+        throw new Error('Cesium global 未找到（window.Cesium 为空）');
+    }
     applyCesiumIonToken(Cesium, ionToken);
+    console.info('[Cesium][runtime] ready', {
+        version: Cesium.VERSION || 'unknown',
+        ionTokenApplied: !!ionToken,
+    });
     return Cesium;
 }
 

@@ -31,6 +31,7 @@
         </div>
 
         <button
+            v-if="engine === 'ol'"
             ref="layerManageButtonRef"
             class="layer-manage-btn"
             title="图层管理"
@@ -49,6 +50,7 @@
         </button>
 
         <button
+            v-if="engine === 'ol'"
             class="graticule-btn"
             :class="{ active: activeGraticule }"
             title="经纬度分割线"
@@ -65,6 +67,25 @@
         >
             重置链路
         </button>
+
+        <!-- Cesium 引擎：3D overlay 开关 -->
+        <div
+            v-if="engine === 'cesium' && cesiumOverlays.length"
+            class="cesium-overlay-toggles"
+        >
+            <label
+                v-for="overlay in cesiumOverlays"
+                :key="overlay.value"
+                class="cesium-overlay-item"
+            >
+                <input
+                    type="checkbox"
+                    :checked="overlay.active"
+                    @change="emit('cesium-overlay-toggle', { overlayId: overlay.value, value: $event.target.checked })"
+                />
+                <span>{{ overlay.label }}</span>
+            </label>
+        </div>
 
         <div
             v-if="selectedLayer === 'custom'"
@@ -91,6 +112,7 @@
         </div>
 
         <Teleport
+            v-if="engine === 'ol'"
             defer
             to="#map-container"
         >
@@ -147,6 +169,7 @@
         </Teleport>
 
         <Teleport
+            v-if="engine === 'ol'"
             defer
             to="#map-container"
         >
@@ -288,6 +311,17 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    /** 地图引擎类型：'ol' 或 'cesium'，用于条件隐藏引擎特定功能 */
+    engine: {
+        type: String,
+        default: 'ol',
+        validator: (v) => v === 'ol' || v === 'cesium',
+    },
+    /** Cesium 模式下的 overlay 选项列表（国界线/注记/OSM Buildings 等） */
+    cesiumOverlays: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 /**
@@ -304,6 +338,7 @@ const emit = defineEmits([
     'search-jump',
     'reset-basemap-chain',
     'layer-context-action',
+    'cesium-overlay-toggle',
 ]);
 
 const layerManageButtonRef = ref(null);
@@ -1234,5 +1269,28 @@ onBeforeUnmount(() => {
         top: 5px;
         right: 3px;
     }
+}
+
+/* Cesium overlay 开关 */
+.cesium-overlay-toggles {
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cesium-overlay-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--bg-brand-light);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.cesium-overlay-item input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
 }
 </style>

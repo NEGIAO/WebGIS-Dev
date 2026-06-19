@@ -553,6 +553,98 @@
                         暂无可用功能模块
                     </div>
                 </section>
+
+                <!-- ==================== 数据 tab ==================== -->
+                <section
+                    v-show="activeTab === 'data'"
+                    class="panel-page"
+                >
+                    <!-- 文件选择区域 -->
+                    <!--
+                        注意：不要在外层 <div> 上挂 click 事件去转发 click() 到 input，
+                        会与 input 自身的 change 事件耦合产生「弹两次文件选择框」的副作用。
+                        这里用 <label for="..."> 原生关联即可：label 被点击 = input.click()。
+                    -->
+                    <label
+                        for="cesium-data-file-input"
+                        class="data-upload-area"
+                        :aria-label="'选择要导入的数据文件'"
+                    >
+                        <input
+                            id="cesium-data-file-input"
+                            ref="fileInputRef"
+                            class="data-file-input"
+                            type="file"
+                            multiple
+                            :accept="supportedFormats"
+                            @change="handleFileSelect"
+                        />
+                        <div class="data-upload-hint">
+                            <Upload
+                                :size="28"
+                                stroke-width="1.5"
+                            />
+                            <span>选择文件或拖拽到此处</span>
+                            <span class="data-formats-label">
+                                支持: GeoJSON, KML/KMZ, SHP, GLB/GLTF, CZML, 3D Tiles
+                            </span>
+                        </div>
+                    </label>
+
+                    <!-- 已加载数据源列表 -->
+                    <div
+                        v-if="localDataSources.length"
+                        class="data-source-list"
+                    >
+                        <div class="data-source-head">
+                            <span class="data-source-count">
+                                已加载 {{ localDataSources.length }} 个数据源
+                            </span>
+                            <button
+                                class="tool-action danger"
+                                type="button"
+                                @click="emitClearAll"
+                            >
+                                <Trash2 :size="13" stroke-width="2" />
+                                全部清除
+                            </button>
+                        </div>
+
+                        <button
+                            v-for="source in localDataSources"
+                            :key="source.id"
+                            class="data-source-row"
+                            type="button"
+                            :title="`点击移除 ${source.name} (${formatLabel(source.type)})`"
+                            :aria-label="`移除 ${source.name}`"
+                            @click="emitRemove(source.id)"
+                        >
+                            <span class="data-source-icon">
+                                <component
+                                    :is="getFormatIcon(source.type)"
+                                    :size="15"
+                                    stroke-width="2"
+                                />
+                            </span>
+                            <span class="data-source-copy">
+                                <span class="data-source-name">{{ source.name }}</span>
+                                <span class="data-source-type">{{ formatLabel(source.type) }}</span>
+                            </span>
+                            <X
+                                class="data-source-remove-icon"
+                                :size="14"
+                                stroke-width="2"
+                            />
+                        </button>
+                    </div>
+
+                    <div
+                        v-else
+                        class="empty-state"
+                    >
+                        暂无已导入的数据
+                    </div>
+                </section>
             </div>
         </section>
     </aside>
@@ -566,6 +658,8 @@ import {
     ChevronDown,
     Droplets,
     Eye,
+    FileJson,
+    Globe,
     Home,
     Layers,
     Link,
@@ -578,6 +672,7 @@ import {
     SlidersHorizontal,
     Sparkles,
     Trash2,
+    Upload,
     Wind,
     X,
 } from 'lucide-vue-next';
@@ -623,7 +718,28 @@ const props = defineProps({
         type: String,
         default: 'cesium_tool_panel_ui',
     },
+    loadedDataSources: {
+        type: Array,
+        default: () => [],
+    },
 });
+
+// 兼容两种调用方：直接传 ref / 直接传数组
+// - ref：通过 .value 读取并在 watch 中响应变化
+// - 数组：原样使用（不具备响应式，列表不会更新；调用方应改为传 ref）
+const localDataSources = ref(Array.isArray(props.loadedDataSources) ? props.loadedDataSources : []);
+
+watch(
+    () => props.loadedDataSources,
+    (next) => {
+        const arr = Array.isArray(next) ? next : [];
+        // 仅在引用变化时同步，避免无谓重渲染；不再使用 deep watch，避免每次 push 都重建数组
+        if (arr !== localDataSources.value) {
+            localDataSources.value = arr;
+        }
+    },
+    { immediate: true },
+);
 
 const emit = defineEmits([
     'update:open',
@@ -633,9 +749,12 @@ const emit = defineEmits([
     'control-change',
     'overlay-toggle',
     'custom-basemap-submit',
+    'data-import',
+    'data-remove',
+    'data-clear-all',
 ]);
 
-const UI_STATE_VERSION = 2;
+const UI_STATE_VERSION = 3;
 const storedUiState = readStoredUiState();
 const shouldRestoreExpansionState = storedUiState.uiStateVersion === UI_STATE_VERSION;
 const activeTab = ref(storedUiState.activeTab || 'scene');
@@ -647,6 +766,13 @@ const expandedModuleIds = ref(
     new Set(shouldRestoreExpansionState ? storedUiState.expandedModuleIds || [] : []),
 );
 const customBasemapDraft = ref(props.customBasemapUrl || '');
+
+/** 文件上传 input 的模板 ref */
+const fileInputRef = ref(null);
+
+/** 支持的数据格式 accept 字符串 */
+const supportedFormats =
+    '.geojson,.json,.kml,.kmz,.shp,.dbf,.shx,.prj,.cpg,.glb,.gltf,.czml,.zip';
 
 const isPanelOpen = computed(() => props.embedded || props.open);
 const sceneModule = computed(() => props.modules.find(module => module.id === 'scene') || null);
@@ -664,6 +790,7 @@ const activeOverlayCount = computed(() => {
 const panelTabs = [
     { id: 'scene', label: '场景', icon: Navigation },
     { id: 'layers', label: '图层', icon: Layers },
+    { id: 'data', label: '数据', icon: Upload },
     { id: 'modules', label: '模块', icon: SlidersHorizontal },
 ];
 
@@ -817,6 +944,63 @@ function emitOverlayToggle(overlay) {
         overlayId: overlay.value,
         value: !overlay.active,
     });
+}
+
+// ==========================================
+// 数据导入相关函数
+// ==========================================
+
+/** 各数据格式对应的图标映射 */
+function getFormatIcon(type) {
+    const icons = {
+        geojson: FileJson,
+        json: FileJson,
+        kml: Globe,
+        kmz: Globe,
+        shp: Layers,
+        gltf: Box,
+        czml: FileJson,
+        '3dtiles': Box,
+    };
+    return icons[type] || FileJson;
+}
+
+/** 格式类型 → 人类可读标签 */
+function formatLabel(type) {
+    const labels = {
+        geojson: 'GeoJSON',
+        json: 'JSON',
+        kml: 'KML',
+        kmz: 'KMZ',
+        shp: 'Shapefile',
+        gltf: 'GLTF/GLB',
+        czml: 'CZML',
+        '3dtiles': '3D Tiles',
+    };
+    return labels[type] || type.toUpperCase();
+}
+
+/** 文件选择事件处理 */
+function handleFileSelect(event) {
+    const files = event.target?.files;
+    if (!files || files.length === 0) return;
+
+    emit('data-import', { files: Array.from(files) });
+
+    // 重置 input 以支持重复选择同一文件
+    if (fileInputRef.value) {
+        fileInputRef.value.value = '';
+    }
+}
+
+/** 移除单个数据源 */
+function emitRemove(id) {
+    emit('data-remove', { id });
+}
+
+/** 清除所有数据源 */
+function emitClearAll() {
+    emit('data-clear-all');
 }
 </script>
 
@@ -979,7 +1163,7 @@ function emitOverlayToggle(overlay) {
 
 .panel-tabs {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 4px;
     padding: 8px;
     border-bottom: 1px solid rgba(155, 216, 255, 0.14);
@@ -1768,5 +1952,137 @@ function emitOverlayToggle(overlay) {
     .control-row.control-color {
         grid-template-columns: 64px minmax(0, 1fr) 34px;
     }
+}
+
+/* ==================== 数据导入 tab 样式 ==================== */
+
+.data-upload-area {
+    position: relative;
+    border: 1px dashed rgba(155, 216, 255, 0.3);
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.18s ease;
+}
+
+.data-upload-area:hover {
+    border-color: rgba(74, 222, 128, 0.48);
+}
+
+.data-file-input {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    opacity: 0;
+    cursor: pointer;
+    font-size: 0;
+}
+
+.data-upload-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 28px 16px;
+    color: rgba(220, 243, 255, 0.58);
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    pointer-events: none;
+}
+
+.data-upload-hint svg {
+    color: rgba(155, 216, 255, 0.48);
+}
+
+.data-formats-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(220, 243, 255, 0.38);
+}
+
+.data-source-list {
+    display: grid;
+    gap: 8px;
+}
+
+.data-source-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.data-source-count {
+    color: rgba(220, 243, 255, 0.58);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.data-source-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    border: 1px solid rgba(155, 216, 255, 0.16);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.055);
+    color: rgba(239, 250, 255, 0.86);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s ease;
+}
+
+.data-source-row:hover {
+    border-color: rgba(255, 143, 143, 0.42);
+    background: rgba(120, 41, 53, 0.32);
+}
+
+.data-source-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: rgba(15, 40, 54, 0.72);
+    border: 1px solid rgba(155, 216, 255, 0.2);
+    color: #b9e8ff;
+}
+
+.data-source-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.data-source-name {
+    overflow: hidden;
+    color: #f6fffb;
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.data-source-type {
+    color: rgba(220, 243, 255, 0.5);
+    font-size: 11px;
+}
+
+.data-source-remove-icon {
+    flex: 0 0 auto;
+    color: rgba(255, 143, 143, 0.48);
+    transition: color 0.18s ease;
+}
+
+.data-source-row:hover .data-source-remove-icon {
+    color: #ff8f8f;
 }
 </style>

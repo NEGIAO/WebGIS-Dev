@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.7 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.8 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入、Cesium 数据导入多格式支持（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles），正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -44,7 +44,8 @@
 **前端功能**：
 - 🗺️ OpenLayers 2D + Cesium 3D 地球
 - 🔁 **OL/Cesium 双向 URL 视图同步**：`view=ol|cesium`、`lng/lat/z` 与 `cv=p.<pose>` 分工明确，2D/3D 切换自动换算可视范围，分享链接刷新不覆盖待恢复视图
-- 🧭 **Cesium 三维分析增强**：统一控制面板集成场景导航、高级特效、风场、水体模拟与参数说明
+- 🧭 **Cesium 三维分析增强**：统一控制面板集成场景导航、**数据导入**、高级特效、风场、水体模拟与参数说明
+- 🆕 **Cesium 数据导入**：GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles 加载到 3D 场景；支持文件选择 + 拖拽上传 + GLTF 坐标弹窗
 - 🔐 **运行时地图 Token 管理**：天地图 TK 与 Cesium Ion Token 由管理员后台配置，前端启动时读取一次后直连服务
 - 🌊 **掩膜分析（水体模拟）**：基于地形高程值域动态生成外包盒，支持点击点海拔初始水位、水位滑杆和水色调色板
 - Custom terrain + WTFS labels (in-repo providers, no TDT Cesium plugins)
@@ -185,20 +186,23 @@ WebGIS_Dev/
 │   │   │   ├── map.js                    # 地图相关 API
 │   │   │   └── index.js                  # barrel export
 │   │   ├── assets/                       # 全局样式与静态数据
-│   │   │   ├── theme.css                 # 全局主题变量（绿/蓝切换）
+│   │   │   ├── theme.css                 # 全局主题变量（绿/蓝切换 + 🆕 字体栈变量）
 │   │   │   ├── toc-theme.css             # TOC 主题变量
 │   │   │   └── data/                     # 罗盘元数据等静态数据
 │   │   ├── components/                   # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 工具面板 + FPS HUD）
+│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 工具面板 + FPS HUD + 🆕 拖拽数据导入）
 │   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
-│   │   │   │   ├── CesiumToolPanel.vue   # 统一控制面板（场景/特效/风场/流体 + 参数提示）
+│   │   │   │   ├── CesiumToolPanel.vue   # 🆕 统一控制面板（场景/🆕数据/特效/风场/流体 + 参数提示 + 数据导入 tab）
+│   │   │   │   ├── CesiumDataImportDialog.vue # 🆕 GLTF/GLB 模型放置坐标输入弹窗
 │   │   │   │   ├── Wind2D.js             # 2D 风场模拟
 │   │   │   │   ├── composables/           # Cesium 工具模块配置
 │   │   │   │   │   ├── cesiumRuntime.js   # Cesium CDN 运行时加载
+│   │   │   │   │   ├── useCesiumBasemapSwitcher.js # 🆕 底图熔断/降级切换器（与 OL 共用预设）
+│   │   │   │   │   ├── useCesiumDataImport.js # 🆕 数据导入（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML → Cesium API）
 │   │   │   │   │   ├── useCesiumFrameRate.js # FPS 采样与折线图数据
-│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排（Cesium ion 3D Tiles + OSM Buildings）
-│   │   │   │   │   ├── useCesiumUrlTracking.js # Cesium URL 追踪（lng/lat/z 相机位置 + cv=p.* 姿态还原 + view-sync）
+│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排 + 统一预设接入（Cesium ion 3D Tiles + OSM Buildings）
+│   │   │   │   │   ├── useCesiumUrlTracking.js # Cesium URL 追踪（lng/lat/z 相机位置 + cv=p.* 姿态还原 + view-sync + l 底图参数还原）
 │   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
 │   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
 │   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
@@ -291,6 +295,8 @@ WebGIS_Dev/
 │   │   │   ├── basemap/                  # 底图配置模块
 │   │   │   │   ├── basemapConfig.ts      # 图源定义 + 预设配置
 │   │   │   │   ├── basemapResolver.ts    # 解析逻辑
+│   │   │   │   ├── sourceDescriptors.ts  # 🆕 引擎无关的图层源描述符（OL/Cesium 共用）
+│   │   │   │   ├── cesiumProviderFactory.ts # 🆕 描述符→Cesium ImageryProvider 工厂
 │   │   │   │   └── index.ts
 │   │   │   ├── agentToolsSchema.js       # Agent Function Calling 工具声明 + 系统提示词
 │   │   │   ├── index.js                  # barrel export
