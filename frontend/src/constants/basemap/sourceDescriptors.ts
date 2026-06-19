@@ -622,7 +622,12 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'vector',
         group: '矢量',
         serviceType: 'xyz',
-        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga',
+        // 与 basemapConfig.ts LAYER_SOURCE_DEFINITIONS 中 vector_Google_clean
+        // 保持完全一致：包含 apistyle（无标签样式）查询串。
+        // apistyle 内的 | 与 , 由 cesiumProviderFactory 的 toCesiumUrlTemplate
+        // 自动从 %7C / %2C 解码回原字符，避免 Cesium 直接输出 URL 时 Google 服务端
+        // 解析异常导致瓦片 404。
+        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
     },
     {
         id: 'vector_osm',

@@ -104,10 +104,21 @@ function toCesiumUrlTemplate(url: string): string {
     return url
         .replace(/\{z\}/gi, '{z}')
         .replace(/\{x\}/gi, '{x}')
+        // Cesium 的 UrlTemplateImageryProvider 不识别 {-y}，
+        // 必须在归一化阶段就把 OL 风格的「负 Y / TMS 反转」占位符翻译为 {reverseY}，
+        // 否则瓦片请求会被发成 y=-N&... 这种永远 404 的 URL。
+        // 顺序：先处理 {-y}，再处理普通 {y}，避免误伤。
+        .replace(/\{-\s*y\s*\}/gi, '{reverseY}')
         .replace(/\{y\}/gi, '{y}')
         .replace(/\{s\}/gi, '{s}')
         .replace(/\{subdomains?\}/gi, '{s}')
-        .replace(/\{switch:[^}]+\}/gi, '{s}');
+        .replace(/\{switch:[^}]+\}/gi, '{s}')
+        // OL 风格的 URL 里经常有未被花括号包裹的 % 转义占位符（典型例子：
+        // Google apistyle= 里的 %7C / %2C）。Cesium 会按字面输出，
+        // 必须把它们解码回原始字符，否则像 ?apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off
+        // 里的 | 在 Google 端会被识别为 OR 字符，导致瓦片样式错乱或 404。
+        .replace(/%7C/gi, '|')
+        .replace(/%2C/gi, ',');
 }
 
 /**
@@ -278,8 +289,20 @@ export function createCesiumImageryProvider(
 
             default: {
                 // xyz 或未知类型
-                if (!templateUrl || (!templateUrl.includes('{z}') && !templateUrl.includes('{x}') && !templateUrl.includes('{y}'))) {
-                    console.warn(`[CesiumProvider] 图源 "${descriptor.id}" URL 缺少 {z}/{x}/{y} 占位符: ${templateUrl}`);
+                // 兼容 {reverseY}：腾讯矢量瓦片用 {-y}，归一化后变成 {reverseY}，
+                // UrlTemplateImageryProvider 只把它当成普通占位符，因此只要包含
+                // {z} 或 {x} 或 {y}（或 {reverseY}）之一就放行。
+                if (!templateUrl) {
+                    console.warn(`[CesiumProvider] 图源 "${descriptor.id}" URL 为空: ${templateUrl}`);
+                    return null;
+                }
+                const hasAnyAxisToken =
+                    templateUrl.includes('{z}') ||
+                    templateUrl.includes('{x}') ||
+                    templateUrl.includes('{y}') ||
+                    templateUrl.includes('{reverseY}');
+                if (!hasAnyAxisToken) {
+                    console.warn(`[CesiumProvider] 图源 "${descriptor.id}" URL 缺少 {z}/{x}/{y}/{reverseY} 占位符: ${templateUrl}`);
                     return null;
                 }
 
