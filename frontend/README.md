@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — v3.3.5
+# WebGIS 前端项目 — v3.3.7
 
 ## 📋 项目概述
 
@@ -409,6 +409,17 @@ frontend/src/
         └── useSidePanel.ts                   # 侧边栏逻辑
 ```
 
+## V3.3.7 (2026-06-19)
+### 🔍 暂存区 Code Review & Bug 修复
+
+- ✅ **严重 Bug 修复**：`buildShareMarkedUrl` 中 `loc` 在 `resolvePositionCodeForShare` 前被重置为 `'0'`，导致分享链接 `p` 参数丢失。
+- ✅ TopBar 主题适配：移除硬编码颜色，图标改用 `currentColor`，浮动菜单 2x2 网格重构。
+- ✅ CSS 变量统一：`#6b8c6b` → `var(--text-muted)`、`#e8f0e8` → `var(--border-brand-light)`。
+- ✅ 罗盘初始化：`restoringFromUrl` 标志防止 watcher 回写 URL 循环。
+- ✅ 定位上下文：`hasUrlLocFlag()` 防止未授权时使用 localStorage 缓存。
+
+详见 [`../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
+
 ## V3.3.6 (2026-06-18)
 ### 🛠️ z 参数精度链路修复（2026-06-18 追加）
 
@@ -692,7 +703,7 @@ MIT
 
 ---
 
-最后更新：2026-06-18
+最后更新：2026-06-19
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
 
 ## 后续变更程序准则（贡献者约定）

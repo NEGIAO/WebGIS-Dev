@@ -23,7 +23,17 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-18 更新）
+## 0. 项目结构（2026-06-19 更新）
+
+### V3.3.7 (2026-06-19) - 暂存区 Code Review & Bug 修复
+
+> 本次版本为前端 Code Review 与 Bug 修复，后端 API 与后端文件结构无变更。
+
+**前端同步记录（本次无后端结构变更）：**
+- 修复 `buildShareMarkedUrl` 中 `loc` 提前重置导致分享链接 `p` 参数丢失的严重 Bug。
+- TopBar 主题适配、CSS 变量统一、罗盘初始化防循环、定位上下文安全检查。
+
+详见 [`../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
 
 ### V3.3.6 (2026-06-18) - z 参数精度链路修复
 

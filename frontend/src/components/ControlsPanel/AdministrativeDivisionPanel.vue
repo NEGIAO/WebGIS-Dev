@@ -196,28 +196,28 @@ watch(
 </script>
 
 <style scoped>
-/* 整个面板：改为白底大圆角卡片 */
+/* 整个面板：DrawPanel 标准风格 */
 .eco-district-panel {
     position: absolute;
     left: 80px;
-    /* 避开左侧导航栏 */
     top: 100px;
     bottom: 40px;
     width: 320px;
-    background: #ffffff;
-    border-radius: 20px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid var(--border-brand-light);
+    border: 1px solid rgba(229, 236, 230, 0.6);
     z-index: 1060;
 }
 
-/* 头部：使用 #56AB56 鲜艳绿 */
+/* 头部：DrawPanel 标准渐变顶栏 */
 .eco-header {
-    background-color: var(--brand-accent);
-    padding: 14px 16px;
+    background: var(--brand-gradient-header);
+    padding: 10px 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -232,22 +232,23 @@ watch(
 
 .eco-title {
     margin: 0;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.5px;
 }
 
 .eco-close-btn {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     border: none;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.2);
     color: white;
     cursor: pointer;
-    font-size: 18px;
-    line-height: 22px;
-    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
 }
 
 .eco-close-btn:hover {

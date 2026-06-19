@@ -250,6 +250,8 @@ export class CompassManager {
 
     private urlSyncTimer: number | null = null; // URL 同步防抖计时器
 
+    private restoringFromUrl = false; // 从 URL 恢复罗盘状态时跳过 URL 写入，避免 cs 自动追加
+
     // ==================== 渲染相关 ====================
     private readonly style: Style; // 自定义 Canvas 渲染样式
 
@@ -283,14 +285,19 @@ export class CompassManager {
      */
     async init(): Promise<void> {
         await this.store.ensureConfigLoaded();
+
+        // 从 URL 恢复时标记，防止 watcher 的 immediate 触发 scheduleUrlSync() 回写 cs
+        this.restoringFromUrl = true;
         await this.restoreFromUrlState();
+
         this.ensureVectorLayer();
         this.syncFeatureGeometry();
         this.bindMapListeners();
-        this.bindStoreWatchers();
+        this.bindStoreWatchers(); // watcher 的 { immediate: true } 在此触发，但 restoringFromUrl=true 跳过写入
+        this.restoringFromUrl = false;
+
         this.updateLayerVisibility();
         this.updatePlacementCursor();
-        this.scheduleUrlSync();
         this.requestRender();
     }
 
@@ -659,6 +666,9 @@ export class CompassManager {
      */
     private scheduleUrlSync(): void {
         if (typeof window === 'undefined') return;
+
+        // 从 URL 恢复阶段跳过写入，避免 cs 参数自动追加循环
+        if (this.restoringFromUrl) return;
 
         if (this.urlSyncTimer !== null) {
             window.clearTimeout(this.urlSyncTimer);

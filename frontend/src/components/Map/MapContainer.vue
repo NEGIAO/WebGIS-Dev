@@ -1230,7 +1230,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.6)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.7)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1270,31 +1270,40 @@ watch(
 );
 
 // ========== Update Map Container Rect ==========
+// 使用 ResizeObserver 自动检测容器尺寸变化（包括侧边面板折叠/展开引起的 flex 布局变化）
+let _resizeObserver = null;
 watch(
     () => mapContainerRef.value,
     (el) => {
+        // 清理旧的 observer
+        if (_resizeObserver) {
+            _resizeObserver.disconnect();
+            _resizeObserver = null;
+        }
         if (el) {
             mapContainerRect.value = el.getBoundingClientRect();
+            _resizeObserver = new ResizeObserver(() => {
+                // 必须用 getBoundingClientRect() 获取视口相对坐标（contentRect 的 top/left 是相对于元素自身，会导致句柄偏移）
+                mapContainerRect.value = el.getBoundingClientRect();
+                // 同步 OL 地图 canvas 尺寸，确保卷帘裁剪区域计算正确
+                mapInstance.value?.updateSize?.();
+            });
+            _resizeObserver.observe(el);
         }
     },
     { immediate: true },
 );
-
-// 监听窗口大小变化以更新容器rect
-const _handleResize = () => {
-    if (mapContainerRef.value) {
-        mapContainerRect.value = mapContainerRef.value.getBoundingClientRect();
-    }
-};
-if (typeof window !== 'undefined') {
-    window.addEventListener('resize', _handleResize);
-}
 
 // [隶属] 组件卸载-资源清理
 // [作用] 组件卸载时清理地图实例、事件监听、异步
 // 任务等，避免内存泄漏和潜在错误。
 onUnmounted(() => {
     componentUnmountedRef.value = true;
+    // 清理 ResizeObserver
+    if (_resizeObserver) {
+        _resizeObserver.disconnect();
+        _resizeObserver = null;
+    }
     stopMapViewSync();
     stopGraticule();
     disposeSwipe();
@@ -1310,10 +1319,6 @@ onUnmounted(() => {
     disposeSelectionWatcher?.();
     emitBaseLayersChangeBatched.cancel?.();
     cancelScheduledTasks?.();
-    // 清理 resize 和 viewport 事件监听器，避免内存泄漏
-    if (typeof window !== 'undefined') {
-        window.removeEventListener('resize', _handleResize);
-    }
     _cleanupMapEventHandlers?.();
     _cleanupMapEventHandlers = null;
     attrStore.setMapExtent(null);

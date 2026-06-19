@@ -136,6 +136,24 @@ function loadFromLocalStorage() {
     }
 }
 
+/**
+ * 检查当前 URL 是否有 loc=1 标记
+ * loc=1 表示当前会话已授权定位
+ * @returns {boolean}
+ */
+function hasUrlLocFlag() {
+    try {
+        const hash = String(window.location.hash || '');
+        const hashQuery = hash.includes('?') ? hash.split('?')[1] : '';
+        const searchParams = new URLSearchParams(window.location.search || '');
+        const hashParams = new URLSearchParams(hashQuery);
+        const loc = String(hashParams.get('loc') || searchParams.get('loc') || '0').trim();
+        return loc === '1';
+    } catch {
+        return false;
+    }
+}
+
 export function setGlobalUserLocationContext(context) {
     const normalized = normalizeContext(context);
     if (!normalized) return null;
@@ -160,6 +178,10 @@ export function getGlobalUserLocationContext() {
 
     const fromStorage = loadFromLocalStorage();
     if (fromStorage) {
+        // 从 localStorage 恢复时检查当前 URL 的 loc 标记
+        // loc=1 表示当前会话已授权定位；无 loc 标记则不使用缓存，避免未授权时写入非零 p
+        if (!hasUrlLocFlag()) return null;
+
         runtimeUserLocationContext = fromStorage;
         writeToWindow(fromStorage);
         return runtimeUserLocationContext;

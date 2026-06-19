@@ -27,7 +27,6 @@
                     <span class="btn-icon">
                         <list-icon
                             :size="18"
-                            color="#ffffff"
                             :stroke-width="2"
                         />
                     </span>
@@ -35,109 +34,113 @@
                 </button>
                 <div
                     v-if="showToolMenu"
-                    class="floating-menu"
+                    class="floating-menu tools-menu"
                 >
-                    <button
-                        class="menu-item"
-                        @click="handleOpenToolbox"
-                    >
-                        <layers-icon
-                            :size="16"
-                            color="#38BDF8"
-                            class="m-icon"
-                        />
-                        图层管理
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleOpenCompass"
-                    >
-                        <compass-icon
-                            :size="16"
-                            color="#FB923C"
-                            class="m-icon"
-                        />
-                        风水罗盘
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleOpenBusPlanner"
-                    >
-                        <bus-icon
-                            :size="16"
-                            color="#4ADE80"
-                            class="m-icon"
-                        />
-                        公交规划
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleOpenDrivePlanner"
-                    >
-                        <car-icon
-                            :size="16"
-                            color="#F472B6"
-                            class="m-icon"
-                        />
-                        驾车规划
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleToggleWeatherBoard"
-                    >
-                        <span class="menu-item-icon">
+                    <div class="menu-header">
+                        <span class="menu-header-title">功能菜单</span>
+                    </div>
+                    <div class="menu-body">
+                        <!-- 核心功能引入 2x2 现代网格排版 -->
+                        <div class="menu-grid-layout">
+                            <button
+                                class="menu-item"
+                                @click="handleOpenToolbox"
+                            >
+                                <layers-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                图层管理
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleOpenCompass"
+                            >
+                                <compass-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                风水罗盘
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleOpenBusPlanner"
+                            >
+                                <bus-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                公交规划
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleOpenDrivePlanner"
+                            >
+                                <car-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                驾车规划
+                            </button>
+                        </div>
+
+                        <div class="menu-divider"></div>
+
+                        <!-- 状态控制全宽项 -->
+                        <button
+                            class="menu-item status-item"
+                            @click="handleToggleWeatherBoard"
+                        >
                             <component
                                 :is="isWeatherBoardMode ? MapIcon : CloudSunIcon"
                                 :size="16"
-                                :color="isWeatherBoardMode ? '#38BDF8' : '#FACC15'"
                                 class="m-icon"
                             />
-                        </span>
-                        {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
-                    </button>
+                            {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
+                        </button>
 
-                    <button
-                        class="menu-item"
-                        @click="handleToggleLogMonitor"
-                    >
-                        <activity-icon
-                            :size="16"
-                            :color="logMonitorVisible ? '#4ADE80' : '#94A3B8'"
-                            class="m-icon"
-                        />
-                        {{ logMonitorVisible ? '关闭日志监控' : '日志监控' }}
-                    </button>
-
-                    <div class="menu-divider"></div>
-                    <div class="menu-group-title">常用地点</div>
-                    <button
-                        v-for="loc in quickLocations"
-                        :key="loc.key"
-                        class="menu-item menu-item-quick"
-                        @click="handleJump(loc)"
-                    >
-                        <span class="menu-item-icon">
-                            <map-pin-icon
-                                :size="18"
-                                color="#4ADE80"
-                                style="margin: 0 10px"
+                        <button
+                            class="menu-item status-item"
+                            @click="handleToggleLogMonitor"
+                        >
+                            <activity-icon
+                                :size="16"
+                                class="m-icon"
                             />
-                        </span>
-                        <span class="menu-item-label">{{ loc.label }}</span>
-                    </button>
-                    <div class="menu-divider"></div>
-                    <button
-                        class="menu-item"
-                        title="来点鸡汤"
-                        @click="handleSoup"
-                    >
-                        <smile-icon
-                            :size="16"
-                            color="white"
-                            class="m-icon"
-                        />
-                        鸡汤
-                    </button>
+                            {{ logMonitorVisible ? '关闭日志监控' : '日志监控' }}
+                        </button>
+
+                        <div class="menu-divider"></div>
+                        <div class="menu-group-title">常用地点</div>
+
+                        <!-- 常用地点流式标签包裹 -->
+                        <div class="quick-loc-container">
+                            <button
+                                v-for="loc in quickLocations"
+                                :key="loc.key"
+                                class="menu-item menu-item-quick"
+                                @click="handleJump(loc)"
+                            >
+                                <span class="menu-item-icon">
+                                    <map-pin-icon :size="12" />
+                                </span>
+                                <span class="menu-item-label">{{ loc.label }}</span>
+                            </button>
+                        </div>
+
+                        <div class="menu-divider"></div>
+                        <button
+                            class="menu-item soup-item"
+                            title="来点鸡汤"
+                            @click="handleSoup"
+                        >
+                            <smile-icon
+                                :size="16"
+                                class="m-icon"
+                            />
+                            鸡汤
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -149,7 +152,6 @@
                 <span class="btn-icon">
                     <share-2-icon
                         :size="18"
-                        color="white"
                         :stroke-width="1.8"
                     />
                 </span>
@@ -164,7 +166,6 @@
                 <span class="btn-icon">
                     <bot-icon
                         :size="20"
-                        color="white"
                         :stroke-width="2"
                     />
                 </span>
@@ -179,7 +180,6 @@
                 <span class="btn-icon">
                     <GlobeIcon
                         :size="18"
-                        color="white"
                         :stroke-width="2"
                     />
                 </span>
@@ -196,7 +196,6 @@
                 <span class="btn-icon">
                     <user-icon
                         :size="18"
-                        color="white"
                         :stroke-width="2"
                     />
                 </span>
@@ -215,7 +214,6 @@
                     <span class="btn-icon">
                         <sparkles-icon
                             :size="18"
-                            color="white"
                             :stroke-width="2"
                         />
                     </span>
@@ -223,86 +221,88 @@
                 </button>
                 <div
                     v-if="showMagicMenu"
-                    class="floating-menu"
+                    class="floating-menu magic-menu"
                 >
-                    <button
-                        class="menu-item"
-                        @click="handleActivateMagic('fluid')"
-                    >
-                        <wind-icon
-                            :size="16"
-                            color="#94A3B8"
-                            class="m-icon"
-                        />
-                        流体烟雾
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleActivateMagic('gravity')"
-                    >
-                        <orbit-icon
-                            :size="16"
-                            color="#818CF8"
-                            class="m-icon"
-                        />
-                        引力场
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleActivateMagic('void')"
-                    >
-                        <aperture-icon
-                            :size="16"
-                            color="#A78BFA"
-                            class="m-icon"
-                        />
-                        维度塌陷
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleActivateMagic('wave')"
-                    >
-                        <waves-icon
-                            :size="16"
-                            color="#2DD4BF"
-                            class="m-icon"
-                        />
-                        量子波
-                    </button>
-                    <button
-                        class="menu-item highlight-magic"
-                        @click="handleActivateMagic('singularity')"
-                    >
-                        <circle-dot-icon
-                            :size="16"
-                            color="#1E293B"
-                            class="m-icon"
-                        />
-                        黑洞引力
-                    </button>
-                    <button
-                        class="menu-item"
-                        @click="handleActivateMagic('ring-explosion')"
-                    >
-                        <circle-icon
-                            :size="16"
-                            color="#FF2D55"
-                            class="m-icon"
-                        />
-                        圆环爆破
-                    </button>
-                    <div class="menu-divider"></div>
-                    <button
-                        class="menu-item magic-close-btn"
-                        @click="handleActivateMagic('off')"
-                    >
-                        <circle-x-icon
-                            :size="16"
-                            color="#EF4444"
-                            class="m-icon"
-                        />
-                        关闭特效
-                    </button>
+                    <div class="menu-header">
+                        <span class="menu-header-title">屏幕特效</span>
+                    </div>
+                    <div class="menu-body">
+                        <!-- 特效采用高效的 2 列网格 -->
+                        <div class="magic-grid-layout">
+                            <button
+                                class="menu-item"
+                                @click="handleActivateMagic('fluid')"
+                            >
+                                <wind-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                流体烟雾
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleActivateMagic('gravity')"
+                            >
+                                <orbit-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                引力场
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleActivateMagic('void')"
+                            >
+                                <aperture-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                维度塌陷
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleActivateMagic('wave')"
+                            >
+                                <waves-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                量子波
+                            </button>
+                            <button
+                                class="menu-item highlight-magic"
+                                @click="handleActivateMagic('singularity')"
+                            >
+                                <circle-dot-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                黑洞引力
+                            </button>
+                            <button
+                                class="menu-item"
+                                @click="handleActivateMagic('ring-explosion')"
+                            >
+                                <circle-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                圆环爆破
+                            </button>
+                        </div>
+
+                        <div class="menu-divider"></div>
+                        <button
+                            class="menu-item magic-close-btn"
+                            @click="handleActivateMagic('off')"
+                        >
+                            <circle-x-icon
+                                :size="16"
+                                class="m-icon"
+                            />
+                            关闭特效
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -341,6 +341,7 @@ import {
 } from 'lucide-vue-next';
 import { Globe as GlobeIcon } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/useAppStore';
+import { useCompassStore } from '../../stores/useCompassStore';
 import { storeToRefs } from 'pinia';
 
 const props = defineProps({
@@ -373,6 +374,9 @@ const magicMenuHostRef = ref(null);
 // 日志监控状态
 const appStore = useAppStore();
 const { logMonitorVisible } = storeToRefs(appStore);
+
+// 罗盘状态：用于分享链接时判断是否保留 cs 参数
+const compassStore = useCompassStore();
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -547,12 +551,20 @@ function normalizePositionCode(value, fallback = '0') {
     return String(fallback ?? '0');
 }
 
+/**
+ * 解析分享链接中的定位编码
+ * 只在 URL 有 loc=1 标记（用户已授权定位）时才保留非零 p 值
+ */
 function resolvePositionCodeForShare(hashParams, searchParams) {
+    // 只在 loc=1 时才保留 p 参数，否则返回 '0'
+    const locFlag = String(hashParams.get('loc') || searchParams.get('loc') || '0').trim();
+    if (locFlag !== '1') return '0';
+
     const hashCode = normalizePositionCode(hashParams?.get('p'), '');
-    if (hashCode) return hashCode;
+    if (hashCode && hashCode !== '0') return hashCode;
 
     const searchCode = normalizePositionCode(searchParams?.get('p'), '');
-    if (searchCode) return searchCode;
+    if (searchCode && searchCode !== '0') return searchCode;
 
     return '0';
 }
@@ -596,6 +608,11 @@ function syncShareFlagInCurrentUrl() {
         );
         hashParams.delete('layer');
 
+        // 只在罗盘启用时保留 cs 参数
+        if (!compassStore.enabled) {
+            hashParams.delete('cs');
+        }
+
         const nextHashQuery = hashParams.toString();
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
         const nextHash = nextHashQuery
@@ -622,8 +639,11 @@ function buildShareMarkedUrl(rawHref) {
         hashParams.delete('from');
         hashParams.delete('shared');
         hashParams.set('s', '1');
+        // [Bug Fix] 先解析 p 再重置 loc：resolvePositionCodeForShare 依赖原始 loc 值判断是否保留 p
+        // 如果先 set('loc','0')，函数永远看到 loc=0 导致 p 被丢弃
+        const resolvedP = resolvePositionCodeForShare(hashParams, url.searchParams);
         hashParams.set('loc', '0');
-        hashParams.set('p', resolvePositionCodeForShare(hashParams, url.searchParams));
+        hashParams.set('p', resolvedP);
         hashParams.set(
             'l',
             normalizeLayerIndex(
@@ -633,10 +653,10 @@ function buildShareMarkedUrl(rawHref) {
         );
         hashParams.delete('layer');
 
-        // [Bug Fix] 保留罗盘参数 cs
-        // 问题背景：分享链接时会丢失罗盘参数，导致接收者无法看到罗盘状态
-        // 解决方案：保留原始 URL 中的 cs 参数
-        // 注意：cs 参数由 compassUrlState.ts 管理，这里只做透传
+        // 只在罗盘启用时保留 cs 参数，未开启则删除
+        if (!compassStore.enabled) {
+            hashParams.delete('cs');
+        }
 
         const nextHashQuery = hashParams.toString();
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
@@ -696,11 +716,20 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* ===================================================== */
+/* TopBar 主题适配：所有颜色从 theme.css CSS 变量派生        */
+/* 切换 [data-theme] 属性即可自动联动全部色彩                */
+/* ===================================================== */
+
+/* ---- 工具类 ---- */
 .m-icon {
     margin-right: 8px;
     vertical-align: middle;
+    /* 图标继承父元素颜色，配合 currentColor 实现主题联动 */
+    color: inherit;
 }
 
+/* ==================== 顶部导航栏 ==================== */
 .top-bar {
     width: 100%;
     height: 60px;
@@ -713,7 +742,7 @@ onBeforeUnmount(() => {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-md);
     z-index: 2000;
     position: relative;
 }
@@ -726,7 +755,7 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     text-decoration: none;
-    color: #fff;
+    color: var(--text-on-brand);
     gap: 12px;
 }
 
@@ -746,13 +775,14 @@ onBeforeUnmount(() => {
     font-size: 30px;
     font-weight: 700;
     letter-spacing: 1px;
-    background: linear-gradient(to bottom, #fff, var(--border-light));
+    background: linear-gradient(to bottom, var(--text-on-brand), var(--border-light));
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
+/* ==================== 导航按钮 ==================== */
 .controls {
     display: flex;
     align-items: center;
@@ -763,6 +793,7 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    color: inherit;
 }
 
 .btn-text {
@@ -774,71 +805,10 @@ onBeforeUnmount(() => {
     position: relative;
 }
 
-.floating-menu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 8px);
-    min-width: 168px;
-    background: var(--brand-primary-dark);
-    border-radius: 10px;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.24);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    padding: 6px;
-    z-index: 2200;
-    overflow: hidden;
-    /* 防止内容超出圆角 */
-}
-
-.menu-divider {
-    height: 1px;
-    margin: 6px 4px;
-    background: rgba(255, 255, 255, 0.2);
-}
-
-.menu-group-title {
-    padding: 4px 10px 6px;
-    color: rgba(232, 250, 236, 0.9);
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.4px;
-}
-
-.menu-item {
-    width: 100%;
-    border: none;
-    text-align: left;
-    background: transparent;
-    border-radius: 8px;
-    padding: 8px 10px;
-    color: #f3fff4;
-    cursor: pointer;
-    font-size: 13px;
-}
-
-.menu-item:hover {
-    background: rgba(255, 255, 255, 0.15);
-}
-
-.menu-item-quick {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.menu-item-icon {
-    opacity: 0.95;
-}
-
-.menu-item-label {
-    min-width: 0;
-}
-
 .nav-btn {
     background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.25);
-    color: #eee;
+    color: rgba(255, 255, 255, 0.9);
     padding: 8px 16px;
     border-radius: 20px;
     cursor: pointer;
@@ -851,27 +821,12 @@ onBeforeUnmount(() => {
 }
 
 .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    color: #fff;
-
-    background: rgba(110, 124, 117, 0.15);
+    background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    /* 内嵌关键：内阴影 + 弱化边框 */
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
     color: #eee;
-    padding: 8px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.3s ease;
-    white-space: nowrap;
 }
 
 .nav-btn:active {
@@ -879,13 +834,13 @@ onBeforeUnmount(() => {
 }
 
 .magic-btn:hover {
-    background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 105, 180, 0.2));
-    border-color: rgba(255, 215, 0, 0.4);
-    text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);
+    background: linear-gradient(135deg, rgba(var(--warning-rgb), 0.2), rgba(var(--brand-accent-rgb), 0.2));
+    border-color: rgba(var(--warning-rgb), 0.4);
+    text-shadow: 0 0 8px rgba(var(--warning-rgb), 0.6);
 }
 
 .account-btn {
-    background: rgba(186, 199, 191, 0.292);
+    background: rgba(var(--brand-accent-light-rgb), 0.2);
     border-color: rgba(var(--brand-accent-light-rgb), 0.35);
 }
 
@@ -895,23 +850,190 @@ onBeforeUnmount(() => {
     text-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.45);
 }
 
+/* ===================================================== */
+/* ===== 浮动菜单：参照 DrawPanel 风格 =================== */
+/* ===================================================== */
+
+.floating-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 12px);
+    background: rgba(255, 255, 255, 0.96);
+    border-radius: 12px;
+    border: 1px solid rgba(229, 236, 230, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    overflow: hidden;
+    z-index: 2200;
+    box-sizing: border-box;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    animation: menuSlideIn 0.2s ease-out;
+}
+
+@keyframes menuSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.floating-menu :deep(svg) {
+    stroke: currentColor !important;
+    transition: stroke 0.2s ease, transform 0.2s ease;
+    margin-right: 8px;
+}
+
+/* 菜单宽度 */
+.tools-menu { width: 280px; }
+.magic-menu { width: 260px; }
+
+/* ---- 品牌渐变顶栏（与 DrawPanel panel-header 一致） ---- */
+.menu-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--brand-gradient-header);
+    color: white;
+}
+
+.menu-header-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* ---- 菜单内容区 ---- */
+.menu-body {
+    padding: 10px;
+}
+
+/* ---- 2列网格 ---- */
+.menu-grid-layout, .magic-grid-layout {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+/* ---- 菜单单项：白卡片 + 浅绿边框（与 DrawPanel tool-btn 一致） ---- */
+.menu-item {
+    width: 100%;
+    border: 2px solid var(--border-brand-light);
+    text-align: left;
+    background: white;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--brand-accent-muted);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    transition: all 0.2s;
+}
+
+.menu-item:hover {
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
+    color: var(--text-brand-dark);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-accent) 25%, transparent);
+}
+
+.menu-item:hover :deep(svg) {
+    transform: scale(1.08);
+}
+
+/* ---- 全宽状态项 ---- */
+.status-item, .soup-item {
+    grid-column: span 2;
+    background: white;
+    border: 2px solid var(--border-brand-light);
+    color: var(--brand-accent-muted);
+}
+
+.status-item:hover, .soup-item:hover {
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
+    color: var(--text-brand-dark);
+}
+
+/* ---- 常用地点标签 ---- */
+.quick-loc-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 2px;
+}
+
+.menu-item-quick {
+    width: auto;
+    padding: 5px 10px;
+    background: white;
+    border: 2px solid var(--border-brand-light);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--brand-accent-muted);
+}
+
+.menu-item-quick :deep(svg) {
+    margin-right: 4px !important;
+}
+
+.menu-item-quick:hover {
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
+    color: var(--text-brand-dark);
+}
+
+/* ---- 分割线 & 分组标题 ---- */
+.menu-divider {
+    height: 1px;
+    margin: 8px 2px;
+    background: var(--border-brand-light);
+}
+
+.menu-group-title {
+    padding: 4px 10px 6px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+}
+
+/* ---- 特效高亮项 ---- */
 .highlight-magic {
-    color: #ff9800;
+    background: var(--bg-brand-light);
+    border-color: var(--brand-accent);
+    color: var(--brand-accent-dark);
     font-weight: bold;
 }
 
 .highlight-magic:hover {
-    background: rgba(255, 152, 0, 0.15) !important;
+    background: linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.1) 0%, var(--bg-active) 100%) !important;
+    border-color: var(--brand-accent);
+    color: var(--brand-accent-dark) !important;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-accent) 25%, transparent);
 }
 
+/* ---- 特效关闭按钮 ---- */
 .magic-close-btn {
-    color: #f80004;
+    grid-column: span 2;
+    justify-content: center;
+    color: var(--danger);
+    background: #fff0f0;
+    border: 2px solid #ffd0d0;
 }
 
 .magic-close-btn:hover {
-    background: rgba(255, 77, 79, 0.15) !important;
+    background: #ffe0e0 !important;
+    border-color: #ffb0b0;
+    color: var(--danger);
 }
 
+/* ==================== 移动端适配 ==================== */
 @media (max-width: 768px) {
     .logo-icon {
         height: 30px;

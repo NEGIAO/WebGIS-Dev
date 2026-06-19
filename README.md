@@ -31,7 +31,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.6 阶段，Cesium 三维分析、运行时地图 token 管理、OL/Cesium 双向 URL 视图同步、罗盘默认关闭语义与水体模拟能力持续增强，正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.7 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入，正逐步发展成为专业级的地理信息系统应用
 
 ### 🎯 项目定位
 
@@ -636,6 +636,18 @@ LOG_LEVEL=INFO
 - 避免无 `cs` / `cs=0` 场景下因地图中心自动补位而重新生成有效 `cs`。
 - 同步调整 `HomeView.vue` 与 `views/home/useSidePanel.ts`，防止后续侧栏拆分逻辑回归该问题。
 - 详见 [`Docs/26-06/26-06-18/2026-06-18-url-restore-compass-fix.md`](Docs/26-06/26-06-18/2026-06-18-url-restore-compass-fix.md)
+
+### V3.3.7 (2026-06-19)
+#### 🔍 暂存区 Code Review & Bug 修复
+
+- **严重 Bug 修复**：`buildShareMarkedUrl` 中 `loc` 在 `resolvePositionCodeForShare` 前被重置为 `'0'`，导致所有分享链接丢失用户位置编码 `p` 参数。修复：交换执行顺序，先解析 `p` 再重置 `loc`。
+- TopBar 主题适配：移除所有硬编码颜色（`color="#ffffff"`），图标改用 `currentColor` 继承。
+- 浮动菜单重构：2x2 网格排版、品牌渐变顶栏、白卡片风格，与 DrawPanel 统一。
+- URL 安全：分享链接仅在罗盘启用时保留 `cs` 参数，`p` 参数仅在 `loc=1` 时保留。
+- 罗盘初始化：`restoringFromUrl` 标志防止 watcher 回写 URL 循环。
+- 定位上下文：`hasUrlLocFlag()` 防止未授权时使用 localStorage 缓存。
+- CSS 变量统一：`#6b8c6b` → `var(--text-muted)`、`#e8f0e8` → `var(--border-brand-light)`、`#c8e6c9` → `var(--border-brand-light)`。
+- 详见 [`Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
 
 ### V3.3.6 (2026-06-18)
 #### 🛠️ OL / Cesium URL Code Review 修复 + 中国视角高度调整

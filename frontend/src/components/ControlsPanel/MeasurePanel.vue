@@ -152,9 +152,9 @@ function handleClear() {
 
 .tool-btn.active {
     border-color: var(--brand-accent);
-    background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, var(--bg-active) 100%);
+    background: linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.1) 0%, var(--bg-active) 100%);
     color: var(--brand-accent-dark);
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-accent) 25%, transparent);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
 }
 
 .tool-label {

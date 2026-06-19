@@ -546,7 +546,8 @@ async function executeVisitLogAsync() {
         const visitPayload = await buildVisitLogPayload();
         const visitResponse = await apiLogVisit(visitPayload);
         const encodedPos = String(visitResponse?.data?.encoded_pos || '0');
-        syncVisitPosCodeToUrl(encodedPos);
+        // 传递客户端定位授权状态：denied 时不写入 IP 编码位置
+        syncVisitPosCodeToUrl(encodedPos, visitPayload.geo_permission);
     } catch {
         // 访问记录失败不影响主页面使用
     }
@@ -1008,7 +1009,12 @@ async function buildVisitLogPayload() {
     return payload;
 }
 
-function syncVisitPosCodeToUrl(encodedPos) {
+/**
+ * 将定位编码同步到 URL 的 p 参数
+ * @param {string} encodedPos - 服务器返回的编码位置
+ * @param {string} geoPermission - 客户端定位授权状态 ('granted'|'denied'|'unknown' 等)
+ */
+function syncVisitPosCodeToUrl(encodedPos, geoPermission = 'unknown') {
     if (typeof window === 'undefined') return;
 
     const normalizedCode = String(encodedPos || '').trim() || '0';
@@ -1020,6 +1026,22 @@ function syncVisitPosCodeToUrl(encodedPos) {
         const hashPath = hashPathRaw || '/home';
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
         const params = new URLSearchParams(hashQueryRaw);
+
+        // 定位授权被拒绝时：不写入 IP 编码位置，清除已有的非零 p 和 loc
+        if (geoPermission === 'denied') {
+            const existingP = String(params.get('p') || '').trim();
+            if (existingP && existingP !== '0') {
+                params.set('p', '0');
+                params.delete('loc');
+                const nextHashQuery = params.toString();
+                const nextHash = nextHashQuery
+                    ? `#${normalizedHashPath}?${nextHashQuery}`
+                    : `#${normalizedHashPath}`;
+                const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
+                window.history.replaceState(window.history.state, '', nextUrl);
+            }
+            return;
+        }
 
         params.set('p', normalizedCode);
 
@@ -1546,36 +1568,39 @@ onMounted(async () => {
     }
 }
 
-/* 面板主体 */
+/* 面板主体：DrawPanel 标准风格 */
 .eco-query-panel {
     position: absolute;
     left: 20px;
     bottom: 20px;
     width: 300px;
-    background: #ffffff;
-    border-radius: 20px;
-    /* 大圆角，匹配导航栏风格 */
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
     overflow: hidden;
-    border: 1px solid var(--bg-brand-lighter);
+    border: 1px solid rgba(229, 236, 230, 0.6);
     z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    max-height: 400px;
 }
 
-/* 头部：对标0的绿色顶栏 */
+/* 头部：DrawPanel 标准渐变顶栏 */
 .eco-header {
-    background-color: var(--brand-primary-dark);
-    /* 匹配0截图顶栏的绿色 */
-    padding: 12px 16px;
+    background: var(--brand-gradient-header);
+    padding: 10px 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     color: white;
+    flex-shrink: 0;
 }
 
 .eco-title {
     font-weight: 600;
-    font-size: 15px;
-    letter-spacing: 1px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
 }
 
 .header-content {
@@ -1588,12 +1613,13 @@ onMounted(async () => {
     background: rgba(255, 255, 255, 0.2);
     border: none;
     color: white;
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     cursor: pointer;
-    line-height: 20px;
-    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background 0.2s;
 }
 
@@ -1601,68 +1627,73 @@ onMounted(async () => {
     background: rgba(255, 255, 255, 0.4);
 }
 
-/* 内容区 */
+/* 内容区：可滚动 */
 .eco-body {
-    padding: 16px;
+    padding: 12px;
+    overflow-y: auto;
+    flex: 1;
 }
 
-/* 统计标签：对标0的 user_1 绿色胶囊样式 */
+.eco-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.eco-body::-webkit-scrollbar-thumb {
+    background: var(--border-brand-light);
+    border-radius: 4px;
+}
+
+/* 统计标签：DrawPanel 白卡片风格 */
 .eco-stats {
     display: flex;
     gap: 8px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
 }
 
 .eco-tag {
-    background: var(--bg-brand-light);
-    color: var(--text-brand);
+    background: white;
+    color: var(--brand-accent-muted);
     padding: 4px 12px;
     border-radius: 20px;
     font-size: 11px;
-    font-weight: bold;
-    border: 1px solid var(--border-brand-light);
+    font-weight: 600;
+    border: 2px solid #e8f0e8;
 }
 
 /* 属性列表 */
 .eco-list-container {
-    max-height: 260px;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-/* 自定义滚动条 */
-.eco-list-container::-webkit-scrollbar {
-    width: 4px;
-}
-
-.eco-list-container::-webkit-scrollbar-thumb {
-    background: var(--brand-primary-light);
-    border-radius: 10px;
-}
-
-/* 属性单项 */
-.eco-item {
-    padding: 10px 0;
-    border-bottom: 1px dashed #eee;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
-.eco-item:last-child {
-    border-bottom: none;
+/* 属性单项：DrawPanel 白卡片风格 */
+.eco-item {
+    padding: 8px 10px;
+    border: 2px solid #e8f0e8;
+    border-radius: 8px;
+    background: white;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transition: border-color 0.2s;
+}
+
+.eco-item:hover {
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
 }
 
 .eco-key {
     font-size: 11px;
     color: var(--text-muted);
     text-transform: uppercase;
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .eco-val {
     font-size: 13px;
-    color: var(--text-primary);
+    color: var(--brand-accent-muted);
     font-weight: 500;
     word-break: break-all;
 }

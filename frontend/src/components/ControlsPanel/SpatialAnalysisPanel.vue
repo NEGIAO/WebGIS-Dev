@@ -7,6 +7,7 @@
             </button>
         </div>
 
+        <div class="panel-scroll-body">
         <!-- 分析工具列表 -->
         <div class="analysis-list">
             <button
@@ -345,6 +346,7 @@
             <Info :size="12" />
             <span>分析结果将作为新图层添加到地图</span>
         </div>
+        </div>
     </div>
 </template>
 
@@ -674,7 +676,8 @@ function showResult(type, msg) {
     overflow: hidden;
     animation: slideIn 0.2s ease-out;
     max-height: calc(100vh - 120px);
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 @keyframes slideIn {
@@ -688,14 +691,6 @@ function showResult(type, msg) {
     }
 }
 
-.spatial-panel::-webkit-scrollbar {
-    width: 4px;
-}
-
-.spatial-panel::-webkit-scrollbar-thumb {
-    background: #c0d8c0;
-    border-radius: 4px;
-}
 
 .panel-header {
     display: flex;
@@ -704,6 +699,22 @@ function showResult(type, msg) {
     padding: 10px 12px;
     background: var(--brand-gradient-header);
     color: white;
+    flex-shrink: 0;
+}
+
+.panel-scroll-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.panel-scroll-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.panel-scroll-body::-webkit-scrollbar-thumb {
+    background: var(--border-brand-light);
+    border-radius: 4px;
 }
 
 .panel-title {
@@ -742,9 +753,10 @@ function showResult(type, msg) {
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border: 1px solid #e8f0e8;
+    border: 2px solid #e8f0e8;
     border-radius: 8px;
     background: white;
+    color: var(--brand-accent-muted);
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
@@ -757,8 +769,9 @@ function showResult(type, msg) {
 
 .analysis-item.active {
     border-color: var(--brand-accent);
-    background: var(--bg-active);
-    box-shadow: 0 2px 8px var(--bg-active);
+    background: linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.1) 0%, var(--bg-active) 100%);
+    color: var(--brand-accent-dark);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
 }
 
 .item-icon {
@@ -781,12 +794,12 @@ function showResult(type, msg) {
 .item-label {
     font-size: 13px;
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--brand-accent-muted);
 }
 
 .item-desc {
     font-size: 11px;
-    color: #888;
+    color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -810,18 +823,18 @@ function showResult(type, msg) {
 .param-label {
     font-size: 12px;
     font-weight: 600;
-    color: #555;
+    color: var(--brand-accent-muted);
 }
 
 .param-input,
 .param-select {
     width: 100%;
     padding: 7px 10px;
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
+    border: 2px solid #e8f0e8;
+    border-radius: 8px;
     font-size: 13px;
     background: white;
-    color: var(--text-primary);
+    color: var(--brand-accent-muted);
     box-sizing: border-box;
     transition: border-color 0.2s;
 }
@@ -883,10 +896,10 @@ function showResult(type, msg) {
 .mode-btn {
     flex: 1;
     padding: 6px 8px;
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
+    border: 2px solid #e8f0e8;
+    border-radius: 8px;
     background: white;
-    color: var(--text-secondary);
+    color: var(--brand-accent-muted);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
@@ -895,13 +908,14 @@ function showResult(type, msg) {
 
 .mode-btn:hover {
     border-color: var(--brand-accent);
-    color: var(--brand-accent-muted);
+    background: var(--bg-hover);
 }
 
 .mode-btn.active {
     border-color: var(--brand-accent);
-    background: linear-gradient(135deg, rgba(13, 151, 47, 0.1) 0%, var(--bg-active) 100%);
+    background: linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.1) 0%, var(--bg-active) 100%);
     color: var(--brand-accent-dark);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
 }
 
 .run-btn {
@@ -910,7 +924,7 @@ function showResult(type, msg) {
     justify-content: center;
     gap: 6px;
     padding: 8px 16px;
-    background: linear-gradient(135deg, var(--brand-accent-dark) 0%, #0f995b 100%);
+    background: var(--brand-gradient);
     border: none;
     border-radius: 6px;
     color: white;
@@ -922,7 +936,7 @@ function showResult(type, msg) {
 
 .run-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(19, 150, 71, 0.3);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.3);
 }
 
 .run-btn:disabled {
@@ -942,12 +956,13 @@ function showResult(type, msg) {
 }
 
 .result-section.success {
-    background: #f0faf0;
+    background: var(--bg-brand-light);
     color: var(--brand-primary-dark);
 }
 
 .result-section.error {
     background: #fff0f0;
+    border: 1px solid #ffd0d0;
     color: #d44;
 }
 
@@ -957,7 +972,7 @@ function showResult(type, msg) {
     gap: 6px;
     padding: 8px 12px;
     background: #f6faf6;
-    color: #6b8c6b;
+    color: var(--text-muted);
     font-size: 11px;
     border-top: 1px solid #e8f0e8;
 }

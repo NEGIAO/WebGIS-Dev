@@ -518,7 +518,7 @@ const getBasemapLabel = (id) => {
     transform: scale(1.1);
 }
 
-/* ========== Map Swipe 对话框样式 ========== */
+/* ========== Map Swipe 对话框样式：DrawPanel 标准 ========== */
 .swipe-dialog-overlay {
     position: fixed;
     top: 0;
@@ -534,25 +534,25 @@ const getBasemapLabel = (id) => {
 }
 
 .swipe-dialog-box {
-    background: white;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
     border-radius: 12px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    min-width: 380px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(229, 236, 230, 0.6);
+    min-width: 340px;
     max-width: 90vw;
-    /* 安全兜底：防止在窄屏幕上溢出 */
     overflow: hidden;
-    animation: dialogSlideIn 0.3s ease-out;
+    animation: dialogSlideIn 0.2s ease-out;
 }
 
 @keyframes dialogSlideIn {
     from {
         opacity: 0;
-        transform: scale(0.9) translateY(-20px);
+        transform: translateY(-8px);
     }
-
     to {
         opacity: 1;
-        transform: scale(1) translateY(0);
+        transform: translateY(0);
     }
 }
 
@@ -560,43 +560,41 @@ const getBasemapLabel = (id) => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px;
-    border-bottom: 1px solid var(--border-light);
+    padding: 10px 12px;
     background: var(--brand-gradient-header);
     color: white;
 }
 
 .dialog-header h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
 }
 
 .close-btn {
-    background: none;
+    background: rgba(255, 255, 255, 0.2);
     border: none;
-    font-size: 28px;
-    cursor: pointer;
     color: white;
-    padding: 0;
-    width: 30px;
-    height: 30px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s;
+    transition: background 0.2s;
 }
 
 .close-btn:hover {
-    transform: scale(1.2);
+    background: rgba(255, 255, 255, 0.4);
 }
 
 .dialog-content {
-    padding: 24px;
+    padding: 12px;
 }
 
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .form-group:last-child {
@@ -607,20 +605,21 @@ const getBasemapLabel = (id) => {
     display: block;
     font-weight: 600;
     margin-bottom: 8px;
-    color: var(--text-primary);
-    font-size: 14px;
+    color: var(--brand-accent-muted);
+    font-size: 13px;
 }
 
 .basemap-select {
     width: 100%;
-    padding: 10px 12px;
-    border: 2px solid var(--border-light);
-    border-radius: 6px;
-    font-size: 14px;
+    padding: 8px 10px;
+    border: 2px solid #e8f0e8;
+    border-radius: 8px;
+    font-size: 13px;
     background: white;
-    color: var(--text-primary);
+    color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s;
+    font-weight: 500;
 }
 
 .basemap-select:hover {
@@ -630,76 +629,77 @@ const getBasemapLabel = (id) => {
 .basemap-select:focus {
     outline: none;
     border-color: var(--brand-accent);
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
 }
 
 .mode-selector {
     display: flex;
-    gap: 12px;
+    gap: 8px;
 }
 
 .mode-btn {
     flex: 1;
     padding: 10px 16px;
-    border: 2px solid var(--border-light);
-    border-radius: 6px;
-    background: var(--bg-primary);
-    color: var(--text-secondary);
+    border: 2px solid #e8f0e8;
+    border-radius: 8px;
+    background: white;
+    color: var(--brand-accent-muted);
     font-weight: 600;
+    font-size: 13px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s;
 }
 
 .mode-btn:hover {
     border-color: var(--brand-accent);
-    color: var(--brand-accent-dark);
+    background: var(--bg-hover);
 }
 
 .mode-btn.active {
-    background: var(--brand-gradient);
     border-color: var(--brand-accent);
-    color: var(--text-on-brand);
+    background: linear-gradient(135deg, rgba(var(--brand-accent-rgb), 0.1) 0%, var(--bg-active) 100%);
+    color: var(--brand-accent-dark);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
 }
 
 .dialog-footer {
     display: flex;
-    gap: 12px;
-    padding: 16px 24px;
-    border-top: 1px solid var(--border-light);
-    background: var(--bg-secondary);
+    gap: 8px;
+    padding: 10px 12px;
+    border-top: 1px solid #e8f0e8;
 }
 
 .cancel-btn,
 .confirm-btn {
     flex: 1;
-    padding: 12px 20px;
-    border: 2px solid var(--border-light);
+    padding: 10px 16px;
     border-radius: 6px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s;
 }
 
 .cancel-btn {
     background: white;
-    color: var(--text-secondary);
+    border: 2px solid #e8f0e8;
+    color: var(--brand-accent-muted);
 }
 
 .cancel-btn:hover {
-    border-color: var(--text-muted);
-    background: var(--bg-secondary);
+    border-color: var(--brand-accent);
+    background: var(--bg-hover);
 }
 
 .confirm-btn {
     background: var(--brand-gradient);
-    border-color: var(--brand-accent);
+    border: 2px solid var(--brand-accent);
     color: var(--text-on-brand);
 }
 
 .confirm-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 16px rgba(102, 234, 157, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
 }
 
 .confirm-btn:active {
