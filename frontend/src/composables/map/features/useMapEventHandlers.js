@@ -49,6 +49,7 @@ export function createMapEventHandlers({
     pendingBusPickRef,
     pendingReverseGeocodePickRef,
     busPickSource,
+    highlightManagedFeature,
 }) {
     function updateCurrentCoordinate(olCoordinate) {
         if (!olCoordinate || olCoordinate.length < 2) return;
@@ -166,10 +167,30 @@ export function createMapEventHandlers({
             const drawInteraction = getDrawInteraction?.();
             if (drawInteraction?.getActive?.()) return;
 
-            const feature = map.forEachFeatureAtPixel(evt.pixel, (f) => f);
-            if (feature) {
-                const { geometry: _geometry, style: _style, ...props } = feature.getProperties();
-                emit?.('feature-selected', props);
+            let clickedFeature = null;
+            let clickedLayer = null;
+            map.forEachFeatureAtPixel(evt.pixel, (f, layer) => {
+                if (!clickedFeature && f) {
+                    clickedFeature = f;
+                    clickedLayer = layer;
+                }
+                return false;
+            });
+
+            if (clickedFeature) {
+                const { geometry: _geometry, style: _style, ...props } = clickedFeature.getProperties();
+                const layerId = String(clickedLayer?.get?.('managedLayerId') || clickedLayer?.get?.('layerId') || '');
+                const featureId = String(
+                    clickedFeature.getId?.() || clickedFeature.get?.('_gid') || clickedFeature.get?.('id') || '',
+                );
+                if (layerId && featureId) {
+                    highlightManagedFeature?.({ layerId, featureId });
+                }
+                emit?.('feature-selected', {
+                    ...props,
+                    layerId,
+                    featureId,
+                });
                 return;
             }
 

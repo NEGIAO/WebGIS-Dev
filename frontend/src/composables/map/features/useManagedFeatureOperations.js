@@ -28,6 +28,7 @@ export function createManagedFeatureOperationsFeature({
     setCurrentHighlightedFeature,
     clearManagedFeatureHighlight,
     createManagedFeatureHighlightStyle,
+    highlightManagedFeature,
 }) {
     /**
      * 根据图层 ID 和要素 ID 查找托管图层中的要素实例
@@ -75,14 +76,23 @@ export function createManagedFeatureOperationsFeature({
         const geometry = feature.getGeometry?.();
         const extent = geometry?.getExtent?.();
         if (!extent || extent.some((v) => !Number.isFinite(v))) return;
+
         mapInstanceRef.value.getView().fit(extent, {
             padding: [80, 80, 80, 80],
             duration: 800,
             maxZoom: 18,
         });
-        clearManagedFeatureHighlight(getCurrentHighlightedFeature());
-        setCurrentHighlightedFeature(feature);
-        feature.setStyle(createManagedFeatureHighlightStyle(feature));
+
+        const currentHighlighted = getCurrentHighlightedFeature();
+        if (currentHighlighted !== feature) {
+            clearManagedFeatureHighlight(currentHighlighted);
+            if (typeof highlightManagedFeature === 'function') {
+                highlightManagedFeature({ layerId, featureId });
+            } else {
+                setCurrentHighlightedFeature(feature);
+                feature.setStyle(createManagedFeatureHighlightStyle(feature));
+            }
+        }
     }
 
     return {

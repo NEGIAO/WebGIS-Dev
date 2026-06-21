@@ -718,6 +718,7 @@ const { zoomToManagedFeature } = createManagedFeatureOperationsFeature({
     setCurrentHighlightedFeature,
     clearManagedFeatureHighlight,
     createManagedFeatureHighlightStyle,
+    highlightManagedFeature,
 });
 
 // 绘图与测量交互
@@ -905,6 +906,7 @@ const { bindMapEvents } = createMapEventHandlers({
     pendingBusPickRef,
     pendingReverseGeocodePickRef,
     busPickSource,
+    highlightManagedFeature,
 });
 
 // UI 事件处理器（简单转发 + 属性表同步）

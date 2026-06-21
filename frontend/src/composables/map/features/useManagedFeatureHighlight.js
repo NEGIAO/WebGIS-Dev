@@ -19,6 +19,7 @@ import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 export function createManagedFeatureHighlightFeature({ findManagedFeature = () => null }) {
     // 当前被高亮的要素引用（闭包中维护）
     let currentHighlightedFeature = null;
+    const originalStyleByFeature = new WeakMap();
 
     /**
      * 创建要素高亮样式
@@ -34,27 +35,43 @@ export function createManagedFeatureHighlightFeature({ findManagedFeature = () =
             return new Style({
                 image: new CircleStyle({
                     radius: 8,
-                    fill: new Fill({ color: 'rgba(52, 211, 153, 0.95)' }),
+                    fill: new Fill({ color: 'rgba(255, 69, 58, 0.95)' }),
                     stroke: new Stroke({ color: '#ffffff', width: 2 }),
                 }),
             });
         }
 
         return new Style({
-            fill: new Fill({ color: 'rgba(48, 157, 88, 0.18)' }),
-            stroke: new Stroke({ color: '#1f8a4c', width: 4 }),
+            fill: new Fill({ color: 'rgba(255, 69, 58, 0.18)' }),
+            stroke: new Stroke({ color: '#ff4136', width: 4 }),
         });
+    }
+
+    function saveManagedFeatureOriginalStyle(feature) {
+        if (!feature || typeof feature.getStyle !== 'function') return;
+        if (originalStyleByFeature.has(feature)) return;
+        const currentStyle = feature.getStyle();
+        originalStyleByFeature.set(feature, currentStyle === undefined ? null : currentStyle);
     }
 
     /**
      * 清除要素高亮
-     * 清除当前要素的高亮样式，恢复默认样式显示
+     * 还原之前保存的原始样式，避免 KML/自定义样式被丢失
      * @param {Feature} feature - 要清除高亮的 Feature
      */
     function clearManagedFeatureHighlight(feature) {
-        if (!feature) return;
-        if (typeof feature.setStyle === 'function') {
+        if (!feature || typeof feature.setStyle !== 'function') return;
+
+        if (originalStyleByFeature.has(feature)) {
+            const originalStyle = originalStyleByFeature.get(feature);
+            feature.setStyle(originalStyle === undefined ? null : originalStyle);
+            originalStyleByFeature.delete(feature);
+        } else {
             feature.setStyle(null);
+        }
+
+        if (feature === currentHighlightedFeature) {
+            currentHighlightedFeature = null;
         }
     }
 
@@ -66,7 +83,14 @@ export function createManagedFeatureHighlightFeature({ findManagedFeature = () =
     function highlightManagedFeature({ layerId, featureId }) {
         const feature = findManagedFeature(layerId, featureId);
         if (!feature) return;
+
+        if (feature === currentHighlightedFeature) {
+            return;
+        }
+
         clearManagedFeatureHighlight(currentHighlightedFeature);
+        saveManagedFeatureOriginalStyle(feature);
+
         currentHighlightedFeature = feature;
         feature.setStyle(createManagedFeatureHighlightStyle(feature));
     }

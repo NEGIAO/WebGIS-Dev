@@ -981,6 +981,14 @@ function handleFeatureSelected(properties) {
     if (!properties) return;
     featureQueryResult.value = properties;
     showQueryPanel.value = true;
+
+    if (
+        properties.layerId &&
+        properties.featureId &&
+        attrStore.activeLayerId === String(properties.layerId)
+    ) {
+        attrStore.setSelectedFeature(String(properties.featureId));
+    }
 }
 
 async function buildVisitLogPayload() {

@@ -1174,8 +1174,12 @@ onBeforeUnmount(() => {
 }
 
 .pro-tr.selected {
-    background: #bcebc1; /* 高亮的青荧绿：对齐系统特主题且具备穿透数据的明确标识能力*/
-    color: #0b4f17;
+    background: #ffebe9; /* 与地图高亮一致的红色主题 */
+    color: #7f1d1d;
+}
+
+.pro-tr.selected .cell {
+    border-right-color: rgba(255, 69, 58, 0.22);
 }
 
 /* Column cell generic setup. GIS Tables are typically deeply straight edge boxed per row-item separation with hard lines.*/
