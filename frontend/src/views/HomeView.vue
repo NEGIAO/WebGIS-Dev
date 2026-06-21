@@ -66,7 +66,7 @@ const SidePanelLoading = {
     render() {
         return h('div', { class: 'sidepanel-loading-state' }, [
             h('div', { class: 'sidepanel-loading-spinner' }),
-            h('span', { class: 'sidepanel-loading-text' }, '侧边面板资源加载中...'),
+            h('span', { class: 'sidepanel-loading-text' }, '侧边面板加载中...'),
         ]);
     },
 };

@@ -90,19 +90,19 @@ export function useCesiumLayers({
     // 读取自定义 URL：优先新 key，兼容旧 key
     const customXyzBasemapUrl = ref(readStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, '') ||
         readStoredString(LEGACY_CUSTOM_XYZ_BASEMAP_URL_KEY, ''));
-    // 叠加层默认全部开启：国界线 + 文字注记 + Cesium OSM Buildings + Google 倾斜摄影
-    const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, true);
+    // 叠加层默认全部关闭：国界线 + 文字注记 + Cesium OSM Buildings + Google 倾斜摄影
+    const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, false);
     const tdtBoundaryLayerVisible = ref(
-        readStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? true),
+        readStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? false),
     );
     const tdtTextLabelLayerVisible = ref(
-        readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? true),
+        readStoredBoolean(TDT_TEXT_LABEL_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? false),
     );
     const osmBuildingsVisible = ref(
-        readStoredBoolean(CESIUM_OSM_BUILDINGS_VISIBLE_KEY, true),
+        readStoredBoolean(CESIUM_OSM_BUILDINGS_VISIBLE_KEY, false),
     );
     const googlePhotorealistic3DTilesVisible = ref(
-        readStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, true),
+        readStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, false),
     );
 
     const basemapOptions = computed(() => [
