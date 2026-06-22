@@ -1,5 +1,7 @@
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import { useFeatureStyleStore } from '../../../stores/useFeatureStyleStore';
+import { getFeatureIdFromFeature } from '../../../utils/map/featureKey';
 
 // WebGL 渲染阈值：当要素数量超过此值时自动使用 WebGL 渲染
 const WEBGL_RENDER_THRESHOLD = 5000;
@@ -110,8 +112,28 @@ export function useCreateManagedVectorLayer({
             labelStyleCache: new globalThis.Map(),
         };
 
+        const id = createManagedLayerId();
+        features.forEach((feature, index) => ensureFeatureId(feature, name, index));
+
         // 4. 清除要素上的残留样式（如 KML 解析器设置的空数组/透明样式），
         //    确保图层的 buildManagedLayerStyle 样式函数生效
+        // ★ 改造（2026-06-21）：先备份原始样式到 useFeatureStyleStore，
+        //    避免后续 setStyle(null) 后 KML/自定义样式永久丢失
+        try {
+            const featureStyleStore = useFeatureStyleStore();
+            if (featureStyleStore && typeof featureStyleStore.saveOriginalStyle === 'function') {
+                features.forEach((f) => {
+                    const featureId = getFeatureIdFromFeature(f);
+                    if (featureId) {
+                        const s = f.getStyle();
+                        featureStyleStore.saveOriginalStyle(id, featureId, s ?? null);
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn('[useCreateManagedVectorLayer] saveOriginalStyle failed:', error);
+        }
+
         features.forEach((f) => {
             const s = f.getStyle();
             // 清除：undefined、null、空数组、Function（让图层样式函数接管）
@@ -145,12 +167,10 @@ export function useCreateManagedVectorLayer({
 
         // 6. 序列化要素并应用 ID
         const serializedFeatures = serializeManagedFeatures(features, name);
-        features.forEach((feature, index) => ensureFeatureId(feature, name, index));
 
         // 7. 将图层添加到地图
 
         // 8. 创建及登记层数据记录
-        const id = createManagedLayerId();
         layer.set?.('managedLayerId', id);
         layer.set?.('sourceType', sourceType);
         mapInstanceRef.value.addLayer(layer);

@@ -9,3 +9,4 @@ export * from './useCompassStore';
 export * from './useTOCStore';
 export * from './useDownloadStore';
 export * from './useThemeStore';
+export * from './useFeatureStyleStore';

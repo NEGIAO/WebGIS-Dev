@@ -1,4 +1,6 @@
 import { useMessage } from './useMessage';
+import { useFeatureStyleStore } from '../stores/useFeatureStyleStore';
+import { getFeatureIdFromFeature } from '../utils/map/featureKey';
 
 export function useUserLayerActions({
     mapInstance,
@@ -151,7 +153,25 @@ export function useUserLayerActions({
         }
 
         target.styleConfig = mergeStyleConfig(target.styleConfig, styleConfig);
+
         const features = target.layer.getSource()?.getFeatures?.() || [];
+
+        // ★ 改造（2026-06-21）：先备份原始样式到 useFeatureStyleStore，
+        //    避免 setStyle(undefined) 后 KML/自定义样式永久丢失
+        try {
+            const featureStyleStore = useFeatureStyleStore();
+            if (featureStyleStore && typeof featureStyleStore.saveOriginalStyle === 'function') {
+                features.forEach((feature) => {
+                    const featureId = getFeatureIdFromFeature(feature);
+                    if (featureId) {
+                        featureStyleStore.saveOriginalStyle(layerId, featureId, feature.getStyle?.() ?? null);
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn('[useUserLayerActions] setUserLayerStyle → saveOriginalStyle failed:', error);
+        }
+
         features.forEach((feature) => {
             feature.setStyle(undefined);
         });

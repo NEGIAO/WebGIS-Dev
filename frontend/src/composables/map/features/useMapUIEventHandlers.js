@@ -57,15 +57,20 @@ export function createMapUIEventHandlers({
 
     /**
      * 属性表：聚焦要素
+     * 支持 mode 透传：默认 'replace'；Ctrl+点击 'toggle'；Shift+点击 'range'
+     * 注：参数 zoomToManagedFeature 仍由外部传入以兼容调用方契约，
+     *     但聚焦事件默认不触发缩放（避免与属性表点击冲突）。
      */
     function handleAttributeTableFocusFeature(payload) {
         if (!payload?.layerId || !payload?.featureId) return;
-        highlightManagedFeature?.(payload);
-        zoomToManagedFeature?.(payload);
+        const mode = payload?.mode || 'replace';
+        highlightManagedFeature?.({ ...payload, mode });
+        void zoomToManagedFeature; // 保留契约引用
     }
 
     /**
      * 属性表：高亮要素（featureId 为 null 时清除高亮）
+     * 支持 mode 透传：默认 'replace'；Ctrl+鼠标悬停切换；Shift+鼠标悬停区间
      */
     function handleAttributeTableHighlightFeature(payload) {
         if (!payload?.layerId) return;
@@ -78,7 +83,8 @@ export function createMapUIEventHandlers({
             }
             return;
         }
-        highlightManagedFeature?.(payload);
+        const mode = payload?.mode || 'replace';
+        highlightManagedFeature?.({ ...payload, mode });
     }
 
     /**

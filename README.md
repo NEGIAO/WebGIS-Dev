@@ -1,4 +1,6 @@
-# NEGIAO's WebGIS - 专业级前后端分离 WebGIS 平台
+# NEGIAO's WebGIS
+
+> 专业级前后端分离 WebGIS 平台 · Vue 3 + OpenLayers + Cesium + FastAPI
 
 [![Vue](https://img.shields.io/badge/Vue-3.5+-4FC08D?logo=vuedotjs)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
@@ -25,6 +27,17 @@
 
 </div>
 
+## 📑 目录
+
+- [项目简介](#-项目简介)
+- [核心能力](#-核心能力)
+- [快速开始](#-快速开始)
+- [项目结构](#-项目结构)
+- [版本演进](#-版本演进)
+- [开发约定](#-开发约定)
+- [许可证](#-许可证)
+
+---
 ## 📖 项目简介
 <img width="1248" height="723" alt="界面预览" src="https://github.com/user-attachments/assets/90255184-7623-46f5-97f3-115e07f4f917" />
 
@@ -77,17 +90,13 @@
 
 ## 🚀 快速开始
 
-### 📋 依赖环境（必需）
-
-在开始之前，请确保已安装以下工具：
+### 环境要求
 
 - **Node.js 16+** —— 前端构建与开发服务器
 - **Docker Desktop** —— 容器化后端环境（**强制要求**）
 - **LocalDev.bat** —— Windows 快速启动脚本（推荐使用）
 
-### 🎯 推荐方式：使用 LocalDev.bat（一键启动）
-
-最简单的启动方式——**双击 LocalDev.bat 文件即可**：
+### 启动后端
 
 ```bash
 # Windows 系统
@@ -151,1515 +160,251 @@ docker-compose up
 # 一键启动前后端
 docker-compose up
 
-# 前端：http://localhost:5173
-# 后端：http://localhost:7860
+# 后端 Docker
+cd backend
+docker build -t webgis-backend .
 ```
+
+---
 
 ## 📁 项目结构
 
 ```
 WebGIS_Dev/
-├── .github/                              # CI/CD 配置
-│   └── workflows/
-├── frontend/                             # 🔹 前端（Vue 3 + Vite + OpenLayers + Cesium）
+├── .github/workflows/                 # CI/CD（前端 GitHub Pages 自动部署）
+│
+├── frontend/                         # 前端工程（Vue 3 + Vite）
 │   ├── src/
-│   │   ├── api/                          # API 客户端封装
-│   │   │   ├── backend.js                # 后端 API barrel re-export
-│   │   │   ├── backend/                  # 后端 API 按业务域拆分
-│   │   │   │   ├── client.js             # axios 实例、拦截器、错误处理
-│   │   │   │   ├── auth.js               # 鉴权接口（14 个函数，含邮箱账号/绑定/昵称）
-│   │   │   │   ├── location.js           # 地理编码/定位接口
-│   │   │   │   ├── weather.js            # 天气接口
-│   │   │   │   ├── routing.js            # 路线规划接口
-│   │   │   │   ├── agent.js              # AI Agent 接口
-│   │   │   │   ├── statistics.js         # 统计/消息/公告
-│   │   │   │   ├── admin.js              # 管理后台接口
-│   │   │   │   ├── spatial.js            # 空间分析接口
-│   │   │   │   ├── runtime.js            # 前端运行时地图 token 配置接口
-│   │   │   │   └── index.js              # barrel export
-│   │   │   ├── download.js               # 在线底图下载 API
-│   │   │   ├── geocoding.js              # 天地图/高德地理编码
-│   │   │   ├── httpStatusMap.js          # HTTP 状态码 + 高德 infocode 统一映射
-│   │   │   ├── weather.js                # 天气数据 API
-│   │   │   ├── ipLocation.js             # IP 定位 API
-│   │   │   ├── locationSearch.js         # 地点搜索 API
-│   │   │   ├── map.js                    # 地图相关 API
-│   │   │   └── index.js                  # barrel export
-│   │   ├── assets/                       # 全局样式与静态数据
-│   │   │   ├── theme.css                 # 全局主题变量（绿/蓝切换 + 🆕 字体栈变量）
-│   │   │   ├── toc-theme.css             # TOC 主题变量
-│   │   │   └── data/                     # 罗盘元数据等静态数据
-│   │   ├── components/                   # 业务组件（按功能域分组）
-│   │   │   ├── Cesium/                   # 3D 地球模块
-│   │   │   │   ├── CesiumContainer.vue   # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 工具面板 + FPS HUD + 🆕 拖拽数据导入）
-│   │   │   │   ├── CesiumAdvancedEffects.vue # 高级视觉效果（支持 headless）
-│   │   │   │   ├── CesiumToolPanel.vue   # 🆕 统一控制面板（场景/🆕数据/特效/风场/流体 + 参数提示 + 数据导入 tab）
-│   │   │   │   ├── CesiumDataImportDialog.vue # 🆕 GLTF/GLB 模型放置坐标输入弹窗
-│   │   │   │   ├── Wind2D.js             # 2D 风场模拟
-│   │   │   │   ├── composables/           # Cesium 工具模块配置
-│   │   │   │   │   ├── cesiumRuntime.js   # Cesium CDN 运行时加载
-│   │   │   │   │   ├── useCesiumBasemapSwitcher.js # 🆕 底图熔断/降级切换器（与 OL 共用预设）
-│   │   │   │   │   ├── useCesiumDataImport.js # 🆕 数据导入（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML → Cesium API）
-│   │   │   │   │   ├── useCesiumFrameRate.js # FPS 采样与折线图数据
-│   │   │   │   │   ├── useCesiumLayers.js # 底图/地形/叠加层编排 + 统一预设接入（Cesium ion 3D Tiles + OSM Buildings）
-│   │   │   │   │   ├── useCesiumUrlTracking.js # Cesium URL 追踪（lng/lat/z 相机位置 + cv=p.* 姿态还原 + view-sync + l 底图参数还原）
-│   │   │   │   │   └── useCesiumToolModules.js # 工具面板模块/参数/状态编排
-│   │   │   │   ├── FluidSimulation/      # 掩膜分析（水体流体模拟）
-│   │   │   │   │   ├── FluidSimulationPanel.vue # 高度图采样、水位滑杆、水色调色板
-│   │   │   │   │   └── fluidRuntime.js   # WebGL 流体渲染引擎与水面后处理
-│   │   │   │   └── terrain/              # 自定义地形提供者
-│   │   │   ├── Chat/                     # AI 聊天助手
-│   │   │   ├── Common/                   # 通用可复用组件
-│   │   │   │   └── ExtentPicker.vue      # 框选范围组件（开始/重新/清除/提示）
-│   │   │   ├── Compass/                  # 罗盘控制面板（HUD 尺寸控制）
-│   │   │   ├── ControlsPanel/            # 左侧控制栏（绘制/测量/空间分析/行政区）
-│   │   │   ├── Layer/                    # 图层管理（TOC/属性表/资源树）
-│   │   │   ├── Map/                      # 地图核心容器与控制器（含罗盘 HUD 浮层）
-│   │   │   ├── Routing/                  # 路线规划（公交/驾车）
-│   │   │   ├── Search/                   # 搜索与数据注入
-│   │   │   ├── Shell/                    # 应用壳层（TopBar/SidePanel/Loading/Message）
-│   │   │   │   ├── TopBar.vue            # 顶栏
-│   │   │   │   ├── SidePanel.vue         # 右侧综合侧栏
-│   │   │   │   ├── ResizeHandle.vue      # 🆕 可拖拽分割条（侧边栏宽度调整）
-│   │   │   │   ├── GlobalLoading.vue     # 全局加载遮罩
-│   │   │   │   ├── Message.vue           # 全局消息条
-│   │   │   │   ├── PersistentAnnouncementBar.vue # 顶部公告条
-│   │   │   │   └── MagicCursor.vue       # 首屏特效
-│   │   │   ├── UserCenter/               # 用户中心（登录/管理/API Key）
-│   │   │   │   ├── tabs/                 # 用户中心子面板（OverviewTab/SecurityTab/PreferencesTab）
-│   │   │   │   └── ...
-│   │   │   ├── Weather/                  # 天气面板
-│   │   │   │   ├── WeatherChartPanel.vue # 天气主面板（容器查询 + 响应式图表壳）
-│   │   │   │   ├── WeatherLiveCards.vue  # 实况天气卡片
-│   │   │   │   └── WeatherForecastTable.vue # 预报表格
-│   │   │   └── feng-shui-compass-svg/    # 罗盘 SVG HUD 组件（小尺寸渲染适配）
-│   │   │       ├── themes/               # 主题配置
-│   │   │       ├── types/                # TypeScript 类型
-│   │   │       └── Explanation/          # 宫位解释 JSON
-│   │   ├── composables/                  # 组合式函数（逻辑复用）
-│   │   │   ├── auth/                     # 认证身份校验与展示工具
-│   │   │   │   └── useAuthIdentity.js    # 邮箱/昵称/密码校验 + display_name 展示
-│   │   │   ├── Magic/                    # 首屏视觉特效
-│   │   │   │   ├── useDelaunay.js        # Delaunay 三角形特效
-│   │   │   │   ├── useFluid.js           # 流体模拟特效
-│   │   │   │   ├── useGravity.js         # 重力粒子特效
-│   │   │   │   ├── useRingExplosion.js   # 圆环粒子迸溅特效（Apple Watch 风格 + 鼠标交互）
-│   │   │   │   ├── useSingularity.js     # 奇点特效
-│   │   │   │   └── useWave.js            # 波纹特效
-│   │   │   ├── dataImport/               # 数据导入工具
-│   │   │   │   ├── rasterUtils.js        # 栅格工具（波段统计/拉伸/NoData）
-│   │   │   │   ├── vectorUtils.js        # 矢量工具（解码/类型识别）
-│   │   │   │   └── index.js
-│   │   │   ├── map/                      # 地图核心 composables
-│   │   │   │   ├── features/             # 功能模块（30+ 文件）
-│   │   │   │   │   ├── useBasemapResilience.js       # 底图容错与降级
-│   │   │   │   │   ├── useBasemapSelectionWatcher.js  # 底图选择监听
-│   │   │   │   │   ├── useBasemapStateManagement.js   # 底图状态批处理
-│   │   │   │   │   ├── useBasemapSwipe.js             # 卷帘对比
-│   │   │   │   │   ├── useDrawMeasure.js              # 绘制与测量
-│   │   │   │   │   ├── useMapEventHandlers.js         # 地图事件处理
-│   │   │   │   │   ├── useRouteStepStyles.js          # 路线步骤样式缓存
-│   │   │   │   │   ├── useSpatialAnalysis.js          # 空间分析
-│   │   │   │   │   ├── useStartupTaskScheduler.js     # 启动任务调度
-│   │   │   │   │   ├── useStartupUrlRestoreGuard.js   # 启动 URL 恢复守卫，防止分享链接被初始写回覆盖
-│   │   │   │   │   ├── basemapLayerFactory.js         # 底图图层工厂
-│   │   │   │   │   └── ...
-│   │   │   │   ├── toc/                  # TOC 模块
-│   │   │   │   │   ├── actions/          # 右键菜单动作
-│   │   │   │   │   └── menu/             # 菜单调度
-│   │   │   │   ├── basemapSystem.js      # 底图系统入口
-│   │   │   │   ├── GISCommander.js       # Agent GIS 功能封装（缩放/搜索/底图切换）
-│   │   │   │   └── index.js              # barrel export
-│   │   │   ├── useMapState.js            # OL 地图状态（lng/lat/z 缩放/l 图层 + view=ol）
-│   │   │   ├── useMapViewUrlState.js     # 2D/3D 面板 URL 状态（view=ol|cesium）
-│   │   │   ├── useMapSwipe.ts            # 卷帘核心逻辑
-│   │   │   ├── useMessage.js             # 全局消息提示
-│   │   │   ├── useStyleEditor.js         # 样式编辑器 composable
-│   │   │   ├── useTileSourceFactory.ts   # 瓦片源工厂 barrel re-export
-│   │   │   ├── tileSource/               # 瓦片源工厂拆分模块
-│   │   │   │   ├── types.ts              # 类型定义与常量
-│   │   │   │   ├── urlUtils.ts           # URL 工具函数
-│   │   │   │   ├── tileLifecycle.ts      # 请求生命周期管理 + 外部瓦片代理改写 + 消息通知
-│   │   │   │   ├── wmsSource.ts          # WMS 源创建
-│   │   │   │   ├── wmtsSource.ts         # WMTS 源创建
-│   │   │   │   ├── xyzSource.ts          # XYZ 源 + 自动检测
-│   │   │   │   └── index.ts              # barrel export
-│   │   │   ├── weather/                  # 天气相关 composables
-│   │   │   │   ├── useWeatherData.js     # 天气数据获取与查询
-│   │   │   │   └── useWeatherCharts.js   # ECharts 图表渲染 + 容器自适应布局
-│   │   │   ├── useUserLocation.js        # 用户定位
+│   │   ├── api/                      # 后端 API 客户端（axios + 拦截器）
+│   │   ├── assets/                   # 全局样式与静态数据
+│   │   ├── components/               # 业务组件（按功能域分组）
+│   │   │   ├── Cesium/               # 3D 地球模块（含 FluidSimulation）
+│   │   │   ├── Chat/                 # AI 聊天
+│   │   │   ├── Common/               # 通用组件（ExtentPicker 等）
+│   │   │   ├── Compass/              # 罗盘控制 + 宫位解释
+│   │   │   ├── ControlsPanel/        # 左侧控制栏
+│   │   │   ├── Layer/                # 图层 / TOC / 属性表
+│   │   │   ├── Map/                  # 主地图容器
+│   │   │   ├── Routing/              # 路线规划
+│   │   │   ├── Search/               # 搜索与数据注入
+│   │   │   ├── Shell/                # 顶层壳（TopBar / SidePanel / Loading）
+│   │   │   ├── UserCenter/           # 用户中心
+│   │   │   ├── Weather/              # 天气面板
+│   │   │   └── feng-shui-compass-svg/  # 罗盘 SVG 组件
+│   │   ├── composables/              # 组合式函数（业务编排层）
+│   │   │   ├── auth/                 # 鉴权身份校验
+│   │   │   ├── dataImport/           # 数据导入工具
+│   │   │   ├── Magic/                # 首屏视觉特效
+│   │   │   ├── map/                  # 地图核心 composables
+│   │   │   │   ├── features/         # 30+ 功能模块（高亮/样式/序列化/导出等）
+│   │   │   │   └── toc/              # TOC 协议层
+│   │   │   └── ...                   # 其他业务 composable
+│   │   ├── config/                   # 环境变量集中管理
+│   │   ├── constants/                # 常量配置（底图 / Agent Schema）
+│   │   ├── router/                   # Vue Router
+│   │   ├── services/                 # 服务层（外部 SDK 集成）
+│   │   ├── stores/                   # Pinia 状态管理
+│   │   │   ├── useAppStore.ts        # 全局应用状态
+│   │   │   ├── useAttrStore.ts       # 属性表状态
+│   │   │   ├── useAuthStore.ts       # 鉴权状态
+│   │   │   ├── useChatStore.ts       # Chat 工具调用状态
+│   │   │   ├── useCompassStore.ts    # 罗盘状态
+│   │   │   ├── useDownloadStore.ts   # 下载任务状态
+│   │   │   ├── useFeatureStyleStore.ts  # ★ 要素高亮样式（多选 + TOC 联动）
+│   │   │   ├── useLayerStore.ts      # 图层状态
+│   │   │   ├── useSwipeConfigStore.ts   # 卷帘配置
+│   │   │   ├── useThemeStore.ts      # 主题状态
+│   │   │   ├── useTOCStore.ts        # TOC 元数据
+│   │   │   ├── useUrlParamStore.ts   # URL 参数
+│   │   │   ├── useUserPreferencesStore.ts
+│   │   │   └── useWeatherStore.ts    # 天气状态
+│   │   ├── data/                     # 应用数据（懒加载）
+│   │   ├── workers/                  # Web Worker（TIF / SHP 后台解析）
+│   │   ├── utils/                    # 工具函数
+│   │   │   ├── map/                  # 地图工具（featureKey / viewScaleConverter）
+│   │   │   ├── gis/                  # GIS 工具（KML / SHP / TIF 解析）
+│   │   │   ├── url/                  # URL 编解码
 │   │   │   └── ...
-│   │   ├── config/                       # 🔹 环境变量集中管理
-│   │   │   └── env.ts                    # TIANDITU_TOKEN / AMAP_WEB_KEY / BACKEND_BASE_URL
-│   │   ├── constants/                    # 常量配置
-│   │   │   ├── basemap/                  # 底图配置模块
-│   │   │   │   ├── basemapConfig.ts      # 图源定义 + 预设配置
-│   │   │   │   ├── basemapResolver.ts    # 解析逻辑
-│   │   │   │   ├── sourceDescriptors.ts  # 🆕 引擎无关的图层源描述符（OL/Cesium 共用）
-│   │   │   │   ├── cesiumProviderFactory.ts # 🆕 描述符→Cesium ImageryProvider 工厂
-│   │   │   │   └── index.ts
-│   │   │   ├── agentToolsSchema.js       # Agent Function Calling 工具声明 + 系统提示词
-│   │   │   ├── index.js                  # barrel export
-│   │   │   ├── mapStyles.js              # 地图样式常量
-│   │   │   └── tileSourceAdapters.ts     # 非标准瓦片源适配器
-│   │   ├── router/                       # Vue Router 路由
-│   │   ├── services/                     # 业务服务层
-│   │   │   ├── agent/                    # Agent 服务
-│   │   │   │   └── AgentExecutor.js      # Agent 响应拦截与工具调用执行路由
-│   │   │   ├── auth.js                   # 鉴权服务（登录/注册/会话管理）
-│   │   │   ├── runtimeMapTokens.js       # 运行时地图 token 池读取、缓存与备用 token 切换
-│   │   │   ├── compass/                  # 罗盘服务模块
-│   │   │   │   ├── urlState.ts           # 罗盘 URL 状态读写
-│   │   │   │   └── index.js              # barrel export
-│   │   │   ├── CompassManager.ts         # 罗盘管理器（地图集成）
-│   │   │   ├── DistrictManager.ts        # 行政区划管理器
-│   │   │   ├── userLocationContext.js    # 用户定位上下文（全局状态）
-│   │   │   └── userPositionCache.js      # 用户位置缓存（localStorage）
-│   │   ├── stores/                       # Pinia 状态管理
-│   │   │   ├── layer/                    # 图层模块
-│   │   │   │   ├── layerHelpers.ts       # 图层工具函数
-│   │   │   │   ├── layerTreeBuilder.ts   # 图层树构建器
-│   │   │   │   └── index.ts
-│   │   │   ├── useAppStore.ts            # 全局应用状态
-│   │   │   ├── useAttrStore.ts           # 属性表状态
-│   │   │   ├── useAuthStore.ts           # 鉴权状态
-│   │   │   ├── useChatStore.ts           # Chat 工具调用状态管理
-│   │   │   ├── useCompassStore.ts        # 罗盘状态（HUD 专用配置缩放）
-│   │   │   ├── useDownloadStore.ts       # 下载任务状态
-│   │   │   ├── useLayerStore.ts          # 图层状态
-│   │   │   ├── useSwipeConfigStore.ts    # 卷帘配置（localStorage 持久化）
-│   │   │   ├── useThemeStore.ts          # 主题状态（绿/蓝切换）
-│   │   │   ├── useUrlParamStore.ts       # URL 参数管理（坐标/图层/分享/view 引擎）
-│   │   │   └── ...
-│   │   ├── data/                         # 应用数据（纯数据模块）
-│   │   │   └── goldenSoupQuotes.js       # 励志语录数据（懒加载）
-│   │   ├── workers/                      # Web Worker（后台线程处理）
-│   │   │   ├── tiffWorker.js             # TIF 解码 Worker（geotiff.js 多线程解码）
-│   │   │   └── shpWorker.js              # Shapefile 解析 Worker（shpjs 后台解析）
-│   │   ├── utils/                        # 工具函数
-│   │   │   ├── abortManager.js           # 通用请求中断管理器（AbortController 封装）
-│   │   │   ├── pathUtils.js              # 路径工具（统一 normalizePath/getExtension/getStem）
-│   │   │   ├── textDecoder.js            # 文本解码（多编码自动检测）
-│   │   │   ├── normalize.ts              # 二值标记规范化
-│   │   │   ├── coordTransform.js         # 坐标转换（GCJ-02/WGS84）
-│   │   │   ├── crsUtils.js              # CRS 检测与注册
-│   │   │   ├── tifUtils.js              # TIF 工具（Worker 调用/图层创建/样式生成）
-│   │   │   ├── vectorWorkerUtils.js     # 矢量 Worker 工具（SHP Worker/requestIdleCallback）
-│   │   │   ├── weather/                  # 天气工具函数
-│   │   │   │   └── weatherUtils.js       # 图标/风力/格式化
-│   │   │   ├── gis/                      # GIS 工具库
-│   │   │   │   ├── parsers/              # 数据解析器
-│   │   │   │   │   ├── kmlParser.ts      # KML/KMZ 解析
-│   │   │   │   │   ├── kmlStyleParser.js # KML 样式解析
-│   │   │   │   │   ├── shpParser.ts      # Shapefile 解析
-│   │   │   │   │   ├── tifLoader.ts      # GeoTIFF 加载
-│   │   │   │   │   └── ...
-│   │   │   │   ├── dataDispatcher.js     # 数据格式分发（路由）
-│   │   │   │   ├── archiveProcessor.js   # 归档解包、SHP 分组、资源 URL
-│   │   │   │   ├── shpPacketBuilder.js   # 浏览器文件 SHP 包构建
-│   │   │   │   ├── crs-engine.ts         # CRS 引擎（proj4 重投影）
-│   │   │   │   ├── crsAware.js           # CRS 感知层
-│   │   │   │   ├── mapRuntimeDeps.js     # OL 运行时依赖
-│   │   │   │   └── ...
-│   │   │   ├── geo/                      # CRS 相关 barrel
-│   │   │   ├── biz/                      # 业务工具 barrel
-│   │   │   ├── io/                       # GIS IO barrel
-│   │   │   ├── map/                      # 地图视图换算工具（OL zoom ↔ Cesium height）
-│   │   │   │   └── viewScaleConverter.js # OL/Cesium z 换算（默认不 clamp，显式 clamp 才截断）
-│   │   │   ├── url/                      # URL 工具（加密/常量/查询读取）
-│   │   │   │   ├── crypto.js             # URL 参数加解密（含 Cesium cv 姿态编码）
-│   │   │   │   ├── urlConstants.js       # view/cv/相机姿态 URL 常量
-│   │   │   │   └── urlQueryReader.js     # hash/query 参数统一读取与快照合并
-│   │   │   ├── ui/                       # UI 工具（loading）
-│   │   │   ├── echarts/                  # ECharts 运行时
-│   │   │   └── layerExportService.js     # 图层导出服务
-│   │   ├── views/                        # 页面
-│   │   │   ├── HomeView.vue              # 主页（地图 + 侧边栏）
-│   │   │   ├── RegisterView.vue          # 邮箱账号注册/登录 + 旧用户名绑定邮箱
-│   │   │   ├── NotFoundView.vue          # 404 兜底页面（自动倒计时返回首页）
-│   │   │   ├── TermsOfService.vue        # 服务条款页
-│   │   │   ├── PrivacyPolicy.vue         # 隐私政策页
-│   │   │   └── home/                     # HomeView 拆分模块
-│   │   │       ├── useDistrictLayer.ts   # 行政区划图层
-│   │   │       ├── useLayerOperations.ts # 图层操作
-│   │   │       └── useSidePanel.ts       # 侧边栏逻辑
+│   │   ├── views/                    # 页面级组件
+│   │   │   ├── HomeView.vue          # 主页面
+│   │   │   ├── RegisterView.vue      # 注册 / 登录
+│   │   │   ├── NotFoundView.vue      # 404 兜底
+│   │   │   └── home/                 # HomeView 拆分模块
 │   │   ├── App.vue
 │   │   └── main.js
-│   ├── public/                           # 静态资源
+│   ├── public/                       # 静态资源
 │   ├── package.json
 │   ├── vite.config.js
-│   ├── eslint.config.js                  # ESLint 配置（含 TypeScript 支持）
-│   └── README.md
-├── backend/                              # 🔹 后端（FastAPI + Python）
-│   ├── api/                              # 接口模块
-│   │   ├── auth/                         # 鉴权模块（模块化拆分）
-│   │   │   ├── __init__.py               # 门面 re-export
-│   │   │   ├── constants.py              # 常量、角色、邮箱/昵称/密码校验常量
-│   │   │   ├── db.py                     # 数据库连接工厂 + 损坏自动恢复 + WAL 清理
-│   │   │   ├── schema.py                 # DDL 建表与邮箱账号迁移
-│   │   │   ├── password.py               # 密码哈希/验证
-│   │   │   ├── models.py                 # Pydantic 请求模型（邮箱账号/绑定/昵称）
-│   │   │   ├── user.py                   # 用户 CRUD + 旧 username 兼容键
-│   │   │   ├── session.py                # 会话管理、邮箱与受限绑定 session
-│   │   │   ├── email_service.py          # SMTP 邮件发送服务
-│   │   │   ├── verification.py           # 验证码生成/存储/校验/频率限制
-│   │   │   ├── preferences.py            # 用户偏好
-│   │   │   ├── quota.py                  # 配额追踪
-│   │   │   ├── system_config.py          # 系统配置
-│   │   │   ├── dependencies.py           # FastAPI 依赖注入 + EMAIL_BINDING_REQUIRED 拦截
-│   │   │   └── routes.py                 # 认证路由（邮箱注册/登录/绑定/重置）
-│   │   ├── agent_chat/                   # AI 对话代理（模块化拆分）
-│   │   │   ├── __init__.py               # 门面 re-export
-│   │   │   ├── constants.py              # 常量、环境变量
-│   │   │   ├── schemas.py                # Pydantic 模型
-│   │   │   ├── utils.py                  # 纯工具函数
-│   │   │   ├── db.py                     # DB schema、config CRUD
-│   │   │   ├── quota.py                  # 配额管理
-│   │   │   ├── upstream.py               # 上游 LLM API 调用
-│   │   │   └── routes.py                 # 路由处理函数
-│   │   ├── spatial/                      # 空间分析 API（模块化拆分）
-│   │   │   ├── __init__.py               # 门面 re-export router
-│   │   │   ├── models.py                 # Pydantic 请求/响应模型
-│   │   │   ├── utils.py                  # 坐标重投影 + 几何格式转换
-│   │   │   ├── router.py                 # 路由 + 端点分发
-│   │   │   └── operations/               # 分析操作实现
-│   │   │       ├── buffer.py             # 缓冲区分析
-│   │   │       ├── overlay.py            # 叠加分析（交集/并集/差集）
-│   │   │       ├── convex_hull.py        # 凸包分析
-│   │   │       ├── voronoi.py            # 泰森多边形
-│   │   │       ├── aggregation.py        # 空间聚合
-│   │   │       ├── multi_ring_buffer.py  # 多环缓冲区
-│   │   │       ├── simplify.py           # 几何简化
-│   │   │       └── fishnet.py            # 渔网分析
-│   │   ├── api_keys_management.py        # API 主/备密钥管理 + 运行时地图 token 池下发
-│   │   ├── proxy.py                      # 瓦片代理 + 坐标纠偏
-│   │   ├── download.py                   # 底图下载任务 API
-│   │   ├── monitor.py                    # 日志监控
-│   │   ├── statistics.py                 # 访问统计
-│   │   └── ...
-│   ├── utils/                            # 通用工具模块
-│   │   ├── __init__.py                   # 包初始化
-│   │   └── time_utils.py                 # 北京时间工具 + 整点报时后台任务
-│   ├── core/                             # 核心业务逻辑
-│   │   ├── tile_engine.py                # 瓦片下载 + GeoTIFF 拼接
-│   │   └── task_scheduler.py             # 过期任务清理
-│   ├── models/                           # 数据模型
-│   │   └── download_task.py              # SQLModel 下载任务表
-│   ├── gcj_rectify/                      # GCJ-02 坐标纠偏
-│   ├── download_xyz/                     # XYZ 瓦片下载
-│   ├── app.py                            # FastAPI 入口
+│   └── README.md                     # 前端详细文档
+│
+├── backend/                          # 后端工程（FastAPI）
+│   ├── api/                          # API 路由（auth / proxy / agent / spatial 等）
+│   ├── core/                         # 核心（数据库 / 安全 / 配置）
+│   ├── models/                       # SQLAlchemy 数据模型
+│   ├── schemas/                      # Pydantic Schema
+│   ├── services/                     # 业务逻辑层
+│   ├── spatial/                      # 空间分析模块（Shapely 2.x）
+│   ├── main.py                       # FastAPI 入口
 │   ├── Dockerfile
-│   ├── docker-compose.yml
-│   ├── pyproject.toml
-│   └── README.md
-├── Docs/                                 # 开发日志
-│   ├── 26-04/                            # 2026年4月日志
-│   ├── 26-05/                            # 2026年5月日志
-│   ├── 26-06/                            # 2026年6月日志
-│   │   ├── 26-06-02/                     # 前端文件重构 + 安全加固 + 卷帘持久化修复
-│   │   ├── 26-06-03/                     # 邮箱验证码发送逻辑修复
-│   │   │   └── 2026-06-03-fix-email-send-logic.md  # 修复axios拦截/倒计时/429处理
-│   │   ├── 26-06-11/                     # 邮箱账号化与旧用户兼容迁移
-│   │   │   └── 2026-06-11-email-account-auth-migration.md  # 邮箱账号/昵称/旧用户绑定流程
-│   │   ├── 26-06-15/                     # Cesium 3D Tiles 与运行时 token 文档同步
-│   │   │   ├── 2026-06-15-google-photorealistic-3d-tiles.md
-│   │   │   └── 2026-06-15-readme-structure-sync-v335.md
-│   │   ├── 26-06-17/                     # OL/Cesium URL 状态同步
-│   │   │   └── 2026-06-17-ol-cesium-url-tracking.md
-│   │   ├── 26-06-18/                     # OL/Cesium URL Code Review 修复 + Cesium 中国视角高度 + z 参数精度链路修复
-│   │   │   ├── 2026-06-18-ol-cesium-url-review-fix.md
-│   │   │   └── 2026-06-18-z-parameter-precision-fix.md  # z 两位小数 URL 规范 + 换算默认不 clamp
-│   │   └── 2026-06-03-ring-explosion-effect.md  # 圆环粒子特效开发日志
-│   ├── 26-06-04/                         # Agent Chat 默认 AI 配置
-│   │   └── 2026-06-04-agent-chat-default-ai-config.md  # 默认 AI 专属配置功能
-│   ├── 06-06/                            # 2026年6月6日日志
-│   │   └── 2026-06-06-log-monitor-mobile-pad-fix.md  # LogMonitor 移动端/Pad 适配修复
-│   ├── 06-09/                            # 2026年6月9日日志
-│   │   ├── 2026-06-09-fix-db-recovery-data-loss.md  # SQLite 损坏恢复数据丢失修复
-│   │   └── 2026-06-09-beijing-time-and-hourly-chime.md  # 北京时间日志 + 整点报时
-│   └── TODO/                             # 待办事项
-├── docker-compose.yml                    # 顶级 Docker Compose
-├── LocalDev.bat                          # 一键启动脚本（纯 ASCII，兼容 GBK/UTF-8）
-├── Write-Color.ps1                       # 彩色输出辅助脚本（中文消息 + ANSI 颜色）
-└── README.md                             # 本文件
+│   ├── requirements.txt
+│   └── README.md                     # 后端详细文档
+│
+├── Docs/                             # 维护日志（按年月归档）
+│   ├── 26-04/
+│   ├── 26-05/
+│   ├── 26-06/
+│   │   ├── 26-06-02/
+│   │   ├── 26-06-03/
+│   │   ├── ...
+│   │   ├── 26-06-21/                 # V3.3.8 要素高亮与属性解析日志
+│   │   └── 26-06-22/                 # 暂存区 Code Review 修复日志
+│   ├── Architecture/                  # 架构设计文档
+│   ├── Example_prompt.md
+│   ├── Force_command.md
+│   └── TODO
+│
+├── .gitignore
+├── LICENSE
+└── README.md                         # 本文件
 ```
 
-## 📚 文档导航
+---
 
-- **[前端详细文档](./frontend/README.md)**：Vue 3、Vite、组件、状态管理、构建优化
-- **[后端详细文档](./backend/README.md)**：FastAPI、Pydantic、Docker、部署
-- **[部署指南](##部署指南)**：GitHub Pages、Docker、HF Spaces
+## 📜 版本演进
 
-## 🏗️ 架构设计
+### V3.3.8 (2026-06-22) — 暂存区 Code Review 修复
 
-### 整体架构图
+- 🐛 修复 `useCreateManagedVectorLayer.js` 在图层 ID 创建前备份样式导致的 `id` 时序错误。
+- 🐛 修复 `clearManagedFeatureHighlight(feature)` 旧调用链缺少 `layerId` 时无法通过 Pinia store 清理高亮的问题。
+- 🐛 修复 `forEachFeatureAtPixel` 返回值语义误用，确保点击命中统计可继续遍历。
+- 🧹 清理维护日志 trailing whitespace，保证 Git whitespace 检查通过。
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      前端 ( Vue 3 )                     │
-│                   http://localhost:5173                 │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Components (UI) → Composables (Logic) → Stores   │  │
-│  │                       ↓                           │  │
-│  │              API Service Layer                    │  │
-│  └───────────────────────────────────────────────────┘  │
-└────────────────────────┬────────────────────────────────┘
-                         │ HTTP/REST
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│                   后端 (FastAPI)                        │
-│                   http://localhost:7860                 │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Routes → Services (Business Logic) → Utils       │  │
-│  │           ↓                                       │  │
-│  │     External APIs / Databases                     │  │
-│  └───────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
-```
+详见 [`Docs/26-06/26-06-22/2026-06-22-fix-staged-feature-highlight-review.md`](Docs/26-06/26-06-22/2026-06-22-fix-staged-feature-highlight-review.md)
 
-### 前后端通信
+### V3.3.8 (2026-06-21) — 要素高亮 Pinia 化 & 连续多选样式持久化
 
-| 环境 | 前端地址 | 后端地址 | API 端点 |
-|------|---------|---------|---------|
-| **本地开发** | http://localhost:5173 | http://localhost:7860 | http://localhost:7860/api/* |
-| **生产环境** | https://negiao.github.io/WebGIS-Dev/ | https://negiao-webgis.hf.space/ | https://negiao-webgis.hf.space/api/* |
-| **GitHub Pages** | https://NEGIAO.github.io/WebGIS | Hugging Face Spaces | [查看 deploy.yml] |
+#### ✨ 要素高亮系统重构
 
-## 🌐 部署指南
+把高亮状态从 composable 闭包迁移到 Pinia store，彻底解决"连续多选样式丢失"问题。
 
-### 前端部署（GitHub Pages）
-
-前端通过 GitHub Actions 自动部署：
-
-1. **首次配置**：
-   - 在仓库 Settings → Pages 中启用 GitHub Pages
-   - 选择 Deploy from a branch，分支为 `gh-pages`
-
-2. **自动触发**：
-   - 推送到 `main` 或 `fullstack` 分支时自动触发
-   - Actions 会自动构建并部署到 GitHub Pages
-
-3. **访问**：
-   - https://NEGIAO.github.io/WebGIS （通过中间仓库 NEGIAO.github.io）
-
-### 后端部署（Hugging Face Spaces）
-
-后端通过 GitHub Actions 自动推送到 HF Spaces：
-
-1. **前置条件**：
-   - 在 Hugging Face 创建 Space：https://huggingface.co/spaces
-   - 在 GitHub Secrets 配置 `HF_TOKEN`
-
-2. **自动部署**：
-   - 推送到 `main` 或 `fullstack` 分支时自动触发
-   - Actions 使用 `git subtree` 推送 backend 目录
-   - 自动构建 Docker 镜像并启动服务
-
-3. **验证**：
-   - HF Spaces 构建日志：https://huggingface.co/spaces/NEGIAO/WebGIS
-   - API 文档说明：https://NEGIAO-WebGIS.hf.space/docs
-
-### Docker 本地部署
-
-```bash
-# 构建后端镜像
-docker build -t webgis-backend:latest -f Dockerfile .
-
-# 运行容器
-docker run -p 7860:7860 webgis-backend:latest
-
-# 或使用 docker-compose
-docker-compose up --build
-```
-
-## 🔑 环境变量配置
-
-### 前端环境变量（frontend/.env）
-
-```bash
-# 天地图 TK 与 Cesium Ion Token
-# 生产环境由管理员后台统一配置到后端数据库，支持主 token + 任意数量备用 token。
-# 前端启动时通过 /api/runtime-config/map-tokens 读取一次运行时 token 池。
-# 不要在 VITE_* 环境变量中写入天地图/Cesium 真实 token，Vite 会把它们打进前端产物。
-
-# 高德 Web 服务 Key
-# Amap key is configured in the admin API key panel.
-
-# LLM API（AI 助手）
-# 现已改为后端代理模式：前端无需配置任何 LLM Key
-# 对话统一经由后端接口 /api/agent/chat/*
-
-# 后端 API 地址
-VITE_BACKEND_URL=http://localhost:7860
-
-# 瓦片代理根地址（默认复用 VITE_BACKEND_URL；线上可设为 https://negiao-webgis.hf.space）
-VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
-VITE_TILE_PROXY_MODE=fallback
-```
-
-### 后端环境变量（backend/.env）
-
-```bash
-# 第三方 API Keys
-# Third-party API keys are configured in the admin panel/database.
-# Optional backend env fallback:
-# AMAP_WEB_SERVICE_KEY=your_amap_key
-
-# Agent 对话（后端代理）
-# AGENT_API_KEY=your_agent_key
-AGENT_BASE_URL=https://api.qnaigc.com/v1
-AGENT_MODEL=deepseek-V3-0324
-AGENT_CHAT_GUEST_DAILY_QUOTA=10
-AGENT_CHAT_REGISTERED_DAILY_QUOTA=100
-
-# 数据库（可选）
-DATABASE_URL=postgresql://user:password@localhost/webgis
-
-# 日志级别
-LOG_LEVEL=INFO
-```
-
-## 📊 项目统计
-
-| 指标 | 数值 |
+| 改动 | 文件 |
 |------|------|
-| 前端组件数 | 30+ |
-| 后端 API 端点 | 45+ |
-| 前端源码行数 | 77K+ |
-| 构建体积优化 | -35% |
-| 首屏加速 | 30-50% |
-| 支持的数据格式 | 8+ |
-| 技术栈 | 5+ |
-| ESLint 错误 | 0 |
+| 🆕 新增 Pinia store | `frontend/src/stores/useFeatureStyleStore.ts` |
+| 🆕 新增 FeatureKey 工具 | `frontend/src/utils/map/featureKey.js` |
+| ♻️ 闭包变量 → 薄壳 store | `frontend/src/composables/map/features/useManagedFeatureHighlight.js` |
+| ♻️ 支持 Ctrl/Shift 多选 | `frontend/src/composables/map/features/useMapEventHandlers.js` |
+| 🐛 TOC 移除图层联动清理 | `frontend/src/stores/useTOCStore.ts` |
+| 🐛 `syncLayers` 差量清理 | `frontend/src/stores/useLayerStore.ts` |
+| 🐛 `setStyle(null)` 前备份样式 | `useCreateManagedVectorLayer.js` + `useUserLayerActions.js` |
 
-## 🔄 更新日志
+详见 [`Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md`](Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md)
 
-### V3.3.6 (2026-06-18)
-#### 🧭 罗盘面板隐式启用与 cs 回写修复
+#### ✨ 增强要素属性 HTML 解析
 
-- 修复打开罗盘面板即触发 `compassStore.setEnabled(true)` 的问题，面板展示不再等同于启用绘制。
-- 保留 `CompassControlPanel.vue` 中的显式启用入口，以及有效 `cs` 分享链接的刷新恢复能力。
-- 避免无 `cs` / `cs=0` 场景下因地图中心自动补位而重新生成有效 `cs`。
-- 同步调整 `HomeView.vue` 与 `views/home/useSidePanel.ts`，防止后续侧栏拆分逻辑回归该问题。
-- 详见 [`Docs/26-06/26-06-18/2026-06-18-url-restore-compass-fix.md`](Docs/26-06/26-06-18/2026-06-18-url-restore-compass-fix.md)
+`useLayerMetadataNormalization.js` 重写表格解析器：
 
-### V3.3.7 (2026-06-19)
-#### 🔍 暂存区 Code Review & Bug 修复
+- ✅ `<thead>` 列索引表头映射（`name`/`value` 列自动识别）
+- ✅ `<dl>/<dt>/<dd>` 定义列表支持
+- ✅ `<Null>` 占位符归一化（OSM / Cesium / GeoServer 约定）
+- ✅ 嵌套表格命名空间（`parent.child`）
+- ✅ 同名多值合并
+- ✅ `<script>` / inline 事件 / `javascript:` URL 主动剥离
 
-- **严重 Bug 修复**：`buildShareMarkedUrl` 中 `loc` 在 `resolvePositionCodeForShare` 前被重置为 `'0'`，导致所有分享链接丢失用户位置编码 `p` 参数。修复：交换执行顺序，先解析 `p` 再重置 `loc`。
-- TopBar 主题适配：移除所有硬编码颜色（`color="#ffffff"`），图标改用 `currentColor` 继承。
-- 浮动菜单重构：2x2 网格排版、品牌渐变顶栏、白卡片风格，与 DrawPanel 统一。
-- URL 安全：分享链接仅在罗盘启用时保留 `cs` 参数，`p` 参数仅在 `loc=1` 时保留。
-- 罗盘初始化：`restoringFromUrl` 标志防止 watcher 回写 URL 循环。
-- 定位上下文：`hasUrlLocFlag()` 防止未授权时使用 localStorage 缓存。
-- CSS 变量统一：`#6b8c6b` → `var(--text-muted)`、`#e8f0e8` → `var(--border-brand-light)`、`#c8e6c9` → `var(--border-brand-light)`。
-- 详见 [`Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
+**修复用户截图**：属性表 `description` 字段从一长串乱码展开为多行字段。
 
-### V3.3.6 (2026-06-18)
-#### 🛠️ OL / Cesium URL Code Review 修复 + 中国视角高度调整
+详见 [`Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md`](Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md)
 
-- 修复 `shouldUseDefaultCesiumHeight` 未定义导致的 Cesium 视图切换运行时崩溃。
-- 抽取 `urlConstants.js` 与 `urlQueryReader.js`，统一 `view/cv` 常量、hash/query 快照读取与 `normalizeMapView`。
-- Cesium URL 写入改为与 OL 一致的 `router.replace`，减少 `route.query` 与 hash query 分裂。
-- Cesium 相机 `moveEnd` 同步写回 `cv` 与相机位置 `lng/lat/z`，鼠标拾取坐标写回时清除旧 `cv` 并节流，避免明文坐标和编码相机状态语义分裂。
-- OL 仅在 `view=ol` 时清理 `cv/heading/pitch/roll`，完整比较清洗后的 query 快照，避免隐藏 2D 面板残余同步覆盖 3D 相机状态。
-- 切回 OL 时卸载 CesiumContainer 并监听路由 `view` 变化，防止隐藏 Cesium 相机监听继续写 URL，并支持浏览器前进/后退同步面板。
-- Cesium 默认中国中心高度从 `15,000,000m` 调整为 `6,000,000m`，进入 3D 时默认展示中国区域而不是全球远景。
-- 已通过 `npm run lint -- --max-warnings=0` 与 `npm run build`。
-- 详见 [`Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md`](Docs/26-06/26-06-18/2026-06-18-ol-cesium-url-review-fix.md)
+#### 🐛 高亮 Pinia 化后置修复（2026-06-21 同日补遗）
 
-### V3.3.6 (2026-06-17)
-#### 🛰️ OL / Cesium URL 状态同步
+针对前两条改造的 Code Review 发现修复：
 
-- 新增 `view=ol|cesium` 引擎参数，刷新、分享和直链可恢复当前 2D/3D 面板。
-- Cesium 新增双通道 URL 追踪：`lng/lat/z` 表示坐标面板捕捉点，`cv` 编码完整相机视角，分享链接可优先解析 `cv` 还原 3D 视图。
-- OL 保持原有 `lng/lat/z/l` 语义，隐藏 2D 面板时停止写回，避免覆盖 Cesium 相机状态。
-- 详见 [`Docs/26-06/26-06-17/2026-06-17-ol-cesium-url-tracking.md`](Docs/26-06/26-06-17/2026-06-17-ol-cesium-url-tracking.md)
+- 🐛 **`useFeatureStyleStore.ts` TS 类型缺失**：`highlightFeature` 内 `targets` 数组元素补充 `feature: any` 字段类型；`syncLayerHighlights` 的 `callbacks` 默认值类型显式声明 `cb = callbacks || {}`，消除 `Property 'restoreStyle'/'lookupFeature'/'applyHighlight' does not exist on type '{}'` 报错
+- 🐛 **`useMapUIEventHandlers.js` 破坏性重命名回滚**：`zoomToManagedFeature` 恢复原参数名，`void zoomToManagedFeature` 保留契约引用，避免调用方传参静默失效
+- 🐛 **`useLayerMetadataNormalization.js` dl 合并顺序反**：修正 `{ ...dlParsed, ...next }` → `{ ...next, ...dlParsed }`，避免解析值被原 attributes 覆盖
+- ♻️ **`useManagedFeatureHighlight.js` 封装性回填**：删除对 store state 的直接操作（`store.highlightedFeatures.delete` 等），统一通过 `store.clearHighlight` 行动
+- ♻️ **抽离 `getFeatureIdFromFeature` 工具函数**：消除 4 处重复的 `getId() ?? get('_gid') ?? get('id')` 回退逻辑，统一到 `utils/map/featureKey.js`
 
-### V3.3.2 (2026-06-09)
-#### 🛡️ SQLite 损坏恢复数据丢失修复 + 北京时间日志增强 + 整点报时 + 天气图表响应式/风力仪表 UI
-
-**后端修复（数据安全）：**
-- ✅ 修复数据库损坏恢复后数据全丢的严重问题（备份 → 恢复 → 删除 → 重建 → 导入完整链路）
-- ✅ `.dump` 输出校验 INSERT 语句数量，不再被空 dump 误判为成功
-- ✅ 新增 `_pending_recovery_data` 全局暂存，schema 重建后自动导入恢复数据
-- ✅ dump 导入仅提取 INSERT 语句（跳过 DDL），避免 `CREATE TABLE` 冲突
-- ✅ 新增 `_cleanup_orphaned_wal_files()` 启动时清理孤立 `-wal`/`-shm` 文件
-- ✅ 修复 `_try_dump_database` 连接泄漏（异常路径未关闭连接）
-- ✅ 修复 `_db_connection` 导入连接异常路径泄漏
-- ✅ SQL 标识符引用（表名/列名加双引号，防特殊字符报错）
-
-**后端新增（北京时间日志 + 整点报时）：**
-- ✅ 新增 `utils/time_utils.py`：北京时间获取函数 + 整点报时异步任务 + `BeijingTimeFormatter`
-- ✅ 自定义 `BeijingTimeFormatter` 重写 `formatTime` 方法，使用北京时间（UTC+8）
-- ✅ 日志格式统一为：`2026-06-09 15:30:00,123 [北京时间] - logger - LEVEL - message`
-- ✅ 解决海外服务器（如 HuggingFace Space）日志时间显示为 UTC 的问题
-- ✅ `app.py` 所有路由注册日志追加 `[北京时间: YYYY-MM-DD HH:MM:SS]` 后缀
-- ✅ lifespan startup 阶段启动整点报时后台任务（精确 sleep 到下一整点）
-- ✅ 整点报时任务内置异常保护，单次异常不会终止整个任务
-- ✅ lifespan shutdown 阶段安全取消整点报时任务
-
-**前端优化（天气组件响应式）：**
-- ✅ 天气图表容器由固定高度改为容器查询 + grid 自适应尺寸
-- ✅ 使用 `ResizeObserver` + `requestAnimationFrame` 监听容器大小变化，动态触发图表 resize
-- ✅ 侧边栏折叠/面板展开时图表自动重新适配
-- ✅ 实况天气卡片使用 CSS 容器查询实现父组件尺寸自适应
-- ✅ 风力图改为上下 50% 分区：上半区仅显示轻量风力仪表，下半区独立显示预报风级柱线图
-- ✅ 预报风级纵轴改为按返回数据值域动态计算，低风级数据不再被固定 0-8 级范围压扁
-- ✅ 城市解析查询优先复用正地理编码返回的 adcode，并避免 `setAdcode` watcher 与手动加载造成重复天气请求
-
-**前端优化（罗盘 HUD）：**
-- ✅ 固定屏幕 HUD 新增小尺寸专用渲染配置，按 HUD 尺寸缩放刻度线、刻度数字、分层文字、天池半径和天心十字线
-- ✅ 高密度 24/60 分宫图层设置更小字号上限，减少小 HUD 中的文字遮挡和环层塌陷
-- ✅ HUD 默认尺寸提升到 340px，控制面板滑杆范围与 store 限制统一为 240-560px
-- ✅ 地图 HUD 浮层增加圆形背景、响应式边距、drop shadow 和 SVG overflow 保护
-
-**前端优化（瓦片 CORS）：**
-- ✅ 外部 HTTP(S) 瓦片请求直连优先，直连失败后兜底请求既有 `/proxy/{URL}` 后端代理，解决 `maps-for-free.com` 等图源缺少 CORS 响应头导致的加载失败
-- ✅ 已经是后端代理、当前站点同源、`/proxy/` 或 `/tiles/` 的地址不会二次代理
-- ✅ 新增 `VITE_TILE_PROXY_BASE_URL` 与 `VITE_TILE_PROXY_MODE`，支持按环境指定瓦片代理根地址、强制代理或关闭自动代理
-- ✅ 代理触发时通过全局 Message 组件弹出 toast 通知（fallback 模式 / always 模式），5s 防抖去重，不打断快速切换瓦片的 fetch + AbortController 逻辑
-
-**新增文件：**
-- `backend/utils/__init__.py` — 工具包初始化
-- `backend/utils/time_utils.py` — 北京时间工具 + 整点报时后台任务 + BeijingTimeFormatter
-
-**修改文件：**
-- `backend/api/auth/db.py` — 恢复机制增强 + WAL 清理 + 连接泄漏修复
-- `backend/app.py` — 北京时间日志 + 整点报时任务生命周期管理 + BeijingTimeFormatter
-- `backend/api/monitor.py` — SSE 日志流广播使用 BeijingTimeFormatter
-- `frontend/src/components/Weather/WeatherChartPanel.vue` — 图表容器查询与响应式 grid 布局
-- `frontend/src/composables/weather/useWeatherCharts.js` — ResizeObserver 调度、容器尺寸布局、风力仪表 UI 优化
-- `frontend/src/composables/weather/useWeatherData.js` — 城市解析查询去重，减少不必要逆地理编码与重复天气请求
-- `frontend/src/components/Weather/WeatherLiveCards.vue` — 容器查询响应式
-- `frontend/src/stores/useCompassStore.ts` — 罗盘 HUD 小尺寸专用渲染配置与缩放参数
-- `frontend/src/components/Map/MapContainer.vue` — 固定屏幕 HUD 浮层样式与 SVG overflow 保护
-- `frontend/src/components/Compass/CompassControlPanel.vue` — HUD 尺寸滑杆范围同步
-- `frontend/src/composables/tileSource/tileLifecycle.ts` — 外部瓦片直连失败后兜底请求既有 `/proxy/{URL}` 代理，保留 AbortController 中断能力
-- `frontend/.env.example` — 补充瓦片代理环境变量示例
-
-详见 [DB 恢复日志](./Docs/26-06/26-06-09/2026-06-09-fix-db-recovery-data-loss.md) | [北京时间日志](./Docs/26-06/26-06-09/2026-06-09-beijing-time-and-hourly-chime.md) | [日志北京时间优化](./Docs/26-06/26-06-09/2026-06-09-logging-beijing-time.md) | [天气组件响应式与风力仪表 UI](./Docs/26-06/26-06-09/2026-06-09-weather-chart-responsive.md)
+详见 [`Docs/26-06/26-06-21/2026-06-21-fix-feature-style-store-types-and-bugs.md`](Docs/26-06/26-06-21/2026-06-21-fix-feature-style-store-types-and-bugs.md)
 
 ---
 
-### V3.3.5 (2026-06-15)
-#### 🔐 运行时地图 Token 池 + 四类 API 备用 Token
+### V3.3.8 (2026-06-19) — Cesium 数据导入 + 底图预设统一
 
-**密钥策略调整：**
-- ✅ 管理员面板支持高德、Agent、天地图、Cesium Ion 四类 API 配置主 token 与任意数量备用 token
-- ✅ 后端新增 `api_key_backups` 存储结构，`/api/admin/api-keys/*/backups` 提供备用 token 追加、替换与删除接口
-- ✅ `/api/runtime-config/map-tokens` 下发天地图 TK 与 Cesium Ion Token 池，前端启动后直连第三方服务，不再把真实 token 写入 Vite 环境变量
-- ✅ 高德后端代理与平台 Agent 上游调用按主 token → 备用 token 顺序兜底，遇到 key 失效或上游限流时自动尝试下一枚
-- ✅ 2D 天地图底图瓦片连续失败时会切换备用 TK，并重建当前可见的 OpenLayers 底图 source
-- ✅ Cesium 初始化接入运行时 token 池，Ion 或天地图初始链路失败时会自动切换备用 token 重建场景
+- 🆕 Cesium 数据导入（GeoJSON / KML / KMZ / SHP / GLB / GLTF / CZML / 3D Tiles）
+- 🆕 Cesium OSM Buildings + Google Photorealistic 3D Tiles 叠加层
+- 🆕 底图预设统一接入（OL / Cesium 共用 `BASEMAP_PRESETS`）
+- 🆕 字体栈 CSS 变量（`--font-*`）
+- 🐛 `buildShareMarkedUrl` 中 `loc` 提前重置导致分享链接 `p` 参数丢失
+- 🐛 Code Review 修复（响应式转发 / KMZ BlobURL 泄漏 / Dialog 重入 / 键盘可达性等）
 
-**安全说明：**
-- 浏览器直连 token 无法做到完全隐藏，保护重点是服务商控制台的域名、Referer、配额与权限限制
-- 生产构建不要配置 `VITE_TIANDITU_TK` / `VITE_CESIUM_ION_TOKEN`，避免 token 被 Vite 内联到前端产物
-
-**修改文件：**
-- `backend/api/api_keys_management.py` — 主/备密钥存储接口、运行时地图 token 池下发
-- `backend/api/external_proxy.py` — 高德代理主/备 key 自动兜底
-- `backend/api/agent_chat/db.py`、`routes.py`、`upstream.py` — Agent 平台 key 候选池与上游兜底
-- `frontend/src/components/UserCenter/ApiKeysManagementPanel.vue` — 四类 API 备用 token 管理区
-- `frontend/src/components/Map/MapContainer.vue` — 2D 天地图 token 失败切换与底图 source 重建
-- `frontend/src/services/runtimeMapTokens.js` — 前端运行时 token 池缓存与失败切换
-- `frontend/src/components/Cesium/CesiumContainer.vue` — Cesium 初始化备用 token 重试
-
-详见 [V3.3.5 README 与结构同步日志](./Docs/26-06/26-06-15/2026-06-15-readme-structure-sync-v335.md)
+详见 [`Docs/26-06/26-06-19/`](Docs/26-06/26-06-19/)
 
 ---
 
-### V3.3.4 (2026-06-14)
-#### 🧭 Cesium 三维控制面板集成增强 + 掩膜分析（水体模拟）
+### V3.3.6 (2026-06-18) — OL / Cesium URL 双向视图同步
 
-**三维分析增强：**
-- ✅ Cesium 三维模块统一控制面板继续收敛场景导航、高级视觉特效、2D 风场和水体模拟参数
-- ✅ 图层 tab 中底图源、地形、叠加层改为可折叠卡片，升级后初始状态默认收起
-- ✅ 地形新增 ArcGIS World Elevation 3D，高程源可在控制面板地形分组中切换
-- ✅ 叠加层新增 ArcGIS Open3D Buildings 3DObject SceneServer 建筑图层开关
-- ✅ Cesium 运行时升级至 1.122，修复 ArcGIS I3S Open3D 建筑场景加载兼容问题
-- ✅ 右上角新增实时 FPS 折线图性能 HUD，坐标面板保持专注显示鼠标位置
-- ✅ 参数行新增 `?` 悬浮说明，补充阈值、混合、光强、水位、水色等控制项含义
-- ✅ 水色支持调色板动态调整，当前水体颜色可实时更新
-- ✅ 水位滑杆接入高程值域，范围来自当前捕捉区域最低点到最高点
-- ✅ 鼠标点击位置的三维坐标高程作为初始水位，点击点海拔同时参与外包盒初始高程范围计算
-- ✅ 水体外包盒高度不再固定，改为依据采样高程值域动态生成，最低点到最高点即外包盒高度
-- ✅ 流体渲染恢复顶部薄层动画效果，避免绝对水位模式下水面顶层特效消失
-- ✅ 采样失败回退分支也使用真实海拔区间，保持水位滑杆、外包盒和 shader 归一化逻辑一致
-
-**修改文件：**
-- `frontend/src/components/Cesium/CesiumToolPanel.vue` — 图层分组折叠、控制项提示气泡 UI 与响应式列宽
-- `frontend/src/components/Cesium/CesiumContainer.vue` — 右上角实时 FPS 折线图 HUD 与容器挂载
-- `frontend/src/components/Cesium/composables/cesiumRuntime.js` — Cesium CDN 运行时升级到 1.122
-- `frontend/src/components/Cesium/composables/useCesiumFrameRate.js` — FPS 采样、历史序列与 SVG 折线数据
-- `frontend/src/components/Cesium/composables/useCesiumLayers.js` — ArcGIS 世界地形与 Open3D 建筑叠加层接入
-- `frontend/src/components/Cesium/composables/useCesiumToolModules.js` — 流体模块状态、水位控制、提示说明与显示值格式化
-- `frontend/src/components/Cesium/FluidSimulation/FluidSimulationPanel.vue` — 高程值域外包盒、点击点初始水位、水位滑杆、水色同步
-- `frontend/src/components/Cesium/FluidSimulation/fluidRuntime.js` — 归一化绝对水位、顶部动画薄膜、重置模拟入口
-- `frontend/src/components/Map/MapContainer.vue` — 欢迎提示版本号更新为 V3.3.4
-
-详见 [Cesium 控制面板与水体模拟 V3.3.4 日志](./Docs/26-06/26-06-14/2026-06-14-cesium-tool-panel-fluid-simulation-v334.md)
+- 🆕 `view=ol|cesium` 引擎参数，刷新 / 分享可恢复 2D / 3D 面板
+- 🆕 `viewScaleConverter.js`（OL zoom ↔ Cesium camera height 换算）
+- 🆕 `urlConstants.js` + `urlQueryReader.js`（URL 统一管理）
+- 🐛 Cesium 默认中国中心相机高度 `15,000,000m → 6,000,000m`
 
 ---
 
-### V3.3.3 (2026-06-11)
-#### 📧 邮箱账号化 + 旧用户绑定迁移
+### V3.3.5 (2026-06-15) — 运行时 Token 池 + 备用 Token
 
-**认证体系调整：**
-- ✅ 新注册用户以邮箱作为唯一登录账号，注册必须完成邮箱验证码校验
-- ✅ `username` 保留为内部兼容键，新增 `display_name` 承载昵称展示，昵称允许重复并支持修改
-- ✅ 旧用户无邮箱时可用旧用户名和密码登录一次，进入受限绑定邮箱流程
-- ✅ 受限 session 调用受保护 API 返回 `403 EMAIL_BINDING_REQUIRED`，防止绕过前端绑定页
-- ✅ 绑定邮箱成功后注销该账号所有旧 session 并签发完整 session，后续使用邮箱登录和密码重置
-- ✅ 旧数据库无需强制重建；首次 schema 迁移前自动备份认证库，再原地新增列并回填旧 `username` 为昵称
-- ✅ 修复账号中心刷新覆盖 `display_name` 和 `avatar_index` 的问题，中文昵称与自定义头像索引可稳定持久化
-- ✅ 管理员头像索引从 `system_config` 统一回读，登录、`/me` 与用户中心刷新保持一致
-
-**修改文件：**
-- `backend/api/auth/schema.py` — 新增 `display_name` 与 `sessions.requires_email_binding` 迁移
-- `backend/api/auth/db.py` — 邮箱账号迁移前自动备份旧认证数据库
-- `backend/api/auth/models.py` — 注册、绑定邮箱、昵称修改请求模型
-- `backend/api/auth/user.py` — 邮箱账号创建、旧 username 兼容键生成、昵称更新
-- `backend/api/auth/session.py` — 会话绑定状态与邮箱用户查询
-- `backend/api/auth/routes.py` — 邮箱注册/登录/绑定/重置与响应字段统一
-- `backend/api/auth/system_config.py` — 管理员头像索引读写
-- `backend/api/auth/__init__.py` — 导出管理员头像读取辅助函数
-- `backend/api/statistics.py` — 用户中心统计接口补齐昵称/邮箱/头像字段
-- `backend/api/auth/dependencies.py` — 受限绑定 session 访问拦截
-- `frontend/src/views/RegisterView.vue` — 邮箱注册/登录、旧用户名绑定邮箱面板
-- `frontend/src/composables/auth/useAuthIdentity.js` — 邮箱、昵称、密码校验与展示名工具
-- `frontend/src/api/backend/auth.js` — 绑定邮箱和昵称修改 API
-- `frontend/src/components/UserCenter/FloatingAccountPanel.vue` — 账号中心展示昵称和邮箱，合并用户状态避免覆盖中文昵称/头像
-- `frontend/src/components/UserCenter/tabs/SecurityTab.vue` — 安全页昵称修改入口
-
-详见 [邮箱账号迁移日志](./Docs/26-06/26-06-11/2026-06-11-email-account-auth-migration.md) | [昵称头像持久化修复日志](./Docs/26-06/26-06-11/2026-06-11-fix-display-name-avatar-persistence.md)
+- 🆕 `/api/runtime-config/map-tokens` 运行时下发天地图 / Cesium 主备 token 池
+- 🆕 高德 / Agent / 天地图 / Cesium Ion 四类 API 备用 token 管理面板
+- 🆕 2D / 3D 视图初始化失败自动尝试备用 token
 
 ---
 
-### V3.3.2 (2026-06-11) 补充
-#### 🔐 游客配额权限修复 + 结构化认证错误
+### V3.3.0 (2026-06-05) — Chat Function Calling GIS + 404 兜底
 
-**问题修复：**
-- ✅ 游客身份请求 API 不再被直接 401 拒绝，改为走配额制度（100 次/天）
-- ✅ 后端 401 响应返回结构化 `{code, message}`，前端根据 code 差异化处理
-- ✅ 新增 `require_api_access_or_guest` 依赖：无 token 自动创建 guest session + 配额检查
-- ✅ Agent Chat / 天气 / 搜索 / 地理编码等端点全部支持游客配额访问
-- ✅ 前端 401 区分"会话过期"（清除+跳转）和"游客权限不足"（warning 提示）
-
-**修改文件：**
-- `backend/api/auth/dependencies.py` — 结构化 detail + 新依赖
-- `backend/api/agent_chat/routes.py` — 7 端点改用 guest 配额
-- `backend/api/external_proxy.py` — 9 端点改用 guest 配额
-- `backend/api/statistics.py` — 2 端点改用 guest 配额
-- `frontend/src/api/backend/client.js` — 401 差异化处理
-
-详见 [游客配额权限修复日志](./Docs/26-06-11/2026-06-11-游客配额权限与结构化认证错误.md)
+- 🆕 Agent Function Calling 三层降级（原生 → 文本解析 → 关键词意图）
+- 🆕 `agentToolsSchema.js` / `AgentExecutor.js` / `GISCommander.js`
+- 🆕 `stores/useChatStore.ts` Chat 工具调用状态
+- 🆕 `views/NotFoundView.vue` 404 兜底页面
 
 ---
 
-### V3.3.2 (2026-06-10) 补充
-#### 🧭 风水罗盘显示优化 + 动画 + 背景色自定义
+### V3.2.9 (2026-06-04) — WebGL 栅格渲染器
 
-**问题修复：**
-- ✅ 优化罗盘半径判断逻辑：圆心到视图边缘距离 ≤ 半径 × 1.5 时可见
-- ✅ 移除缩放级别限制：罗盘在任意缩放级别下都可显示
-- ✅ 增强 Vector 模式显示效果：2 倍半径径向渐变背景（可自定义基色），提高对比度
-- ✅ 调整 HUD 模式位置：从右下角调整为地图几何中心显示
-- ✅ HUD 切换主题时重新播放逐层绘制动画
-- ✅ 新增渐变背景颜色调色板，用户可自定义罗盘背景色
-
-**修改文件：**
-- `frontend/src/services/CompassManager.ts` — 罗盘核心管理服务
-- `frontend/src/components/Map/MapContainer.vue` — HUD 居中 + 渐变背景
-- `frontend/src/components/Compass/CompassControlPanel.vue` — 新增颜色选择器
-- `frontend/src/components/feng-shui-compass-svg/feng-shui-compass-svg.vue` — 动画默认启用
-- `frontend/src/stores/useCompassStore.ts` — 新增 bgColor 状态
-
-详见 [风水罗盘显示优化日志](./Docs/26-06-10/2026-06-10-风水罗盘显示优化.md)
+- 🆕 `dataImport/webglRasterRenderer.js` GPU 并行像素处理
+- 🚀 10000×10000 TIF 渲染 `3-5 秒 → <50ms`（60-100 倍提升）
 
 ---
 
-### V3.3.1 (2026-06-06)
-#### 📱 LogMonitor + MapSwipeController 移动端/Pad 适配修复
+### V3.1.0 — 在线底图下载
 
-**问题修复：**
-- ✅ 修复移动端无法打开日志监控面板的问题（ControlsPanel 在移动端被隐藏）
-- ✅ 在 TopBar 菜单中新增日志监控入口，移动端用户可直接访问
-- ✅ 优化 LogMonitor 在 Pad 上的面板头部布局，支持自动换行
-- ✅ 增大移动端按钮触摸区域（min-height: 36px），提升触控体验
-- ✅ 移动端面板高度调整为 35vh，避免与 SidePanel 布局冲突
-- ✅ 极窄屏幕（≤380px）隐藏按钮文字，只显示图标
-- ✅ 新增 MapSwipeController 移动端控制面板（预设按钮 + 滑块）
-- ✅ 移动端卷帘分析支持快速切换 25%、50%、75% 位置
-- ✅ 修复 iPad 横屏（1024px ~ 1366px）按钮文字换行问题，增加面板最小宽度
-
-**修改文件：**
-- `frontend/src/components/Shell/TopBar.vue`：新增日志监控菜单入口
-- `frontend/src/components/ControlsPanel/LogMonitor.vue`：响应式布局优化
-- `frontend/src/components/Map/MapSwipeController.vue`：新增移动端控制面板
-
-详见 [开发日志](./Docs/06-06/2026-06-06-log-monitor-mobile-pad-fix.md)
+- 🆕 `MapDownloader.vue` 底图源选择 + 范围选择 + 异步任务
+- 🆕 `useDownloadStore.ts` 下载任务 Pinia 状态
+- 🆕 `api/download.js` 任务提交 / 轮询 / 文件下载
 
 ---
 
-### V3.3.0 (2026-06-05)
-#### 🤖 Chat Function Calling GIS 架构 + 🛡️ 前端 404 兜底页面
+## 📐 开发约定
 
-**核心架构（Chat Function Calling GIS）：**
-- ✅ 实现三层降级的 Function Calling 架构（原生 → 文本解析 → 关键词意图检测）
-- ✅ 新增 `agentToolsSchema.js`：Agent 工具声明（zoom_to_extent/search_and_zoom/switch_basemap）
-- ✅ 新增 `AgentExecutor.js`：Agent 响应拦截与工具调用执行路由
-- ✅ 新增 `GISCommander.js`：Agent GIS 功能封装（缩放/搜索/底图切换）
-- ✅ 新增 `useChatStore.ts`：Chat 工具调用状态管理
-- ✅ 新增 `ResizeHandle.vue`：侧边栏可拖拽调整宽度
+### 强制规范（来自 CLAUDE.md）
 
-**后端增强（Function Calling 支持）：**
-- ✅ `schemas.py`：新增 tools/tool_choice 字段
-- ✅ `upstream.py`：透传 tools 给上游 LLM + 提取 tool_calls
-- ✅ `routes.py`：支持 tool_calls 返回
+1. **每次任务必须创建日志**到 `Docs/yyyy-mm/yyyy-mm-dd-topic.md`
+2. **先写文档，再实施代码改动**
+3. **三个 README 同步更新**（根目录 / `frontend/` / `backend/`）的文件结构树
+4. **不执行** `git commit` / `git push` —— 版本控制决策权归用户
+5. **新功能必须封装**为独立 `.js` / `.ts` 文件，组件内不堆叠业务逻辑
+6. **新增代码必须有注释**（功能 / 参数 / 核心逻辑）
 
-**前端增强：**
-- ✅ `ChatPanelContent.vue`：核心改造，新增工具调用流程 + 意图检测
-- ✅ `agent.js`：API 层新增 tools/tool_choice 参数透传
-- ✅ `MapContainer.vue`：新增 setCustomBasemapByUrl 方法
-- ✅ `HomeView.vue`：新增 provide/inject 底图切换能力 + ResizeHandle 集成
+### 分层边界
 
-**404 兜底页面：**
-- ✅ 新增 `NotFoundView.vue` 404 错误页面组件（赛博朋克风格）
-- ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
+| 层 | 职责 | 禁止 |
+|----|------|------|
+| `components/` | UI 渲染 + 事件 | 业务逻辑 |
+| `composables/` | 编排流程 + 地图动作 | 直接操作 store state |
+| `stores/` | 状态维护 + 派生 | 依赖 OL / Cesium 类 |
+| `utils/` | 纯函数 + 解析 | 副作用 |
+| `services/` | 外部 SDK 集成 | UI 逻辑 |
 
-**新增功能：**
-- ✅ 新增 `NotFoundView.vue` 404 错误页面组件
-- ✅ 赛博朋克 / 高科技 UI 设计
-- ✅ CRT 扫描线 + 绿色霓虹网格 + 脉动光晕
-- ✅ 磨砂玻璃卡片 + Glitch 抖动文字特效
-- ✅ SVG 环形倒计时进度条
-- ✅ 25 个浮动微尘粒子 + 二进制数据流装饰
-- ✅ 实时显示错误路径信息
-- ✅ 按钮交互：悬停发光 + 内部光晕扩散
-- ✅ 响应式布局 + 移动端适配
-- ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
+### 提交前检查
 
-**技术实现：**
-- Vue 3 Composition API (`<script setup>`)
-- SVG 动画 + CSS 动画组合
-- `computed` 计算属性控制进度条
-- `useRoute()` 获取当前路径
-- 组件卸载时自动清理定时器
-
-**修改文件：**
-- `frontend/src/views/NotFoundView.vue`：**新增** 404 页面组件
-- `frontend/src/router/index.js`：添加 catch-all 路由
-
-详见 [开发日志](./Docs/26-06-05/2026-06-05-frontend-404-fallback.md)
-
----
-
-### V3.2.9 (2026-06-04)
-#### 🚀 TIF 栅格渲染 GPU 加速 + 数据导入模块 Code Review
-
-**核心性能优化：**
-- ✅ **新增 WebGL 着色器渲染器**：非地理配准 TIF 像素处理从 CPU 迁移到 GPU
-- ✅ 10000×10000 单波段 TIF 渲染：从 3-5 秒降至 <50ms（**60-100 倍提升**）
-- ✅ 三波段 TIF 渲染：从 8-15 秒降至 <80ms（**100-180 倍提升**）
-- ✅ WebGL 不可用时自动回退到 CPU 分块处理路径
-- ✅ `main.js` 注入 `powerPreference: 'high-performance'` 强制使用独立显卡
-
-**代码质量优化：**
-- ✅ 合并重复的栅格采样器为通用工厂 `createRasterSampler`（消除 ~90 行重复）
-- ✅ 合并重复的 KML 解析函数为单一 `parseKmlTextToFeatures`（消除 ~60 行重复）
-- ✅ `getBandMinMax` 添加 20 万采样上限
-- ✅ 提取 7 个魔法数字为语义化常量，添加 15+ JSDoc 注释
-
-**前端构建优化：**
-- ✅ Gzip/Brotli 预压缩：传输体积减少 60-80%
-- ✅ `min-enhanced.js` 改为 `defer`：不再阻塞 HTML 解析
-- ✅ CDN `preconnect`：减少 Font Awesome 首次连接延迟
-- ✅ `modulePreload` 启用：关键模块提前加载
-- ✅ `vendor-toast` chunk 拆分：vendor-libs 体积降低
-
-**修改文件：**
-- `dataImport/webglRasterRenderer.js`：**新增** WebGL 栅格着色器渲染器
-- `useLayerDataImport.js`：核心重构 + WebGL 集成 + Worker Pool + URL 直传
-- `dataImport/rasterUtils.js`：采样优化
-- `main.js`：GPU 高性能选择
-- `vite.config.js`：Gzip/Brotli 压缩 + chunk 拆分 + modulePreload
-- `index.html`：defer + preconnect
-
-详见 [开发日志](./Docs/26-06-04/2026-06-04-data-import-code-review-and-tif-perf-opt.md)
-
-### V3.2.8 (2026-06-04)
-#### 🏗️ 数据与渲染分离架构 - TOC 管理与大数据量渲染兼顾
-
-**架构优化：**
-- ✅ 实现数据与渲染分离架构（DataManager + Renderer + TOC Manager）
-- ✅ DataManager 管理所有数据（GeoJSON），不依赖 OL
-- ✅ TOC 管理（导出/属性查询）基于 DataManager，不依赖渲染方式
-- ✅ 渲染层（Canvas/WebGL）只负责可视化，不管理数据
-- ✅ 支持大数据量高效渲染，同时保持 TOC 管理功能
-
-**新增功能：**
-- ✅ `useDataManager.js`：数据管理器核心实现
-- ✅ GeoJSON/CSV 导出功能（基于 DataManager）
-- ✅ 属性查询、属性表功能（基于 DataManager）
-- ✅ 图层创建自动同步 DataManager
-
-**性能提升：**
-- ✅ 大数据渲染：WebGL 渲染，性能提升 10-50 倍
-- ✅ 导出功能：不依赖 OL，响应更快
-- ✅ 属性查询：基于 DataManager，支持大数据量
-
-详见 [开发日志](./Docs/26-06-04/2026-06-04-data-render-separation-architecture.md)
-
-#### ⚡ WebGL 渲染优化 - 大数据量矢量图层性能提升
-
-**性能优化：**
-- ✅ 当矢量图层要素数量 > 5000 时，自动切换为 WebGL 渲染
-- ✅ 渔网分析 10 万网格渲染时间从 5-10 秒降至 0.2-0.5 秒
-- ✅ 性能提升 **10-50 倍**，内存占用降低 3-5 倍
-- ✅ 动态导入 WebGLVectorLayer，不影响首屏加载
-
-**TOC 管理兼容：**
-- ✅ 属性查询、导入导出、TOC 显隐控制完全兼容
-- ✅ 数据仍在 VectorSource 中，不改变数据管理逻辑
-
-**修改文件：**
-- `useCreateManagedVectorLayer.js`：添加 WebGL 渲染支持
-- `useSpatialAnalysis.js`：更新为 await 调用
-- `useDrawMeasure.js`：更新为 await 调用
-- `useLayerDataImport.js`：更新为 await 调用
-
-详见 [开发日志](./Docs/26-06-04/2026-06-04-webgl-render-optimization.md)
-
-### V3.2.7 (2026-06-04)
-#### 🤖 Agent Chat 默认 AI 专属配置模式
-
-**后端新增：**
-- ✅ `constants.py`：新增 `CONFIG_KEY_DEFAULT_AI_API_KEY` / `CONFIG_KEY_DEFAULT_AI_BASE_URL` / `CONFIG_KEY_DEFAULT_AI_MODEL` 常量
-- ✅ `db.py`：新增 `_get_default_ai_config_sync()` 和 `_set_default_ai_config_sync()` 函数
-- ✅ `routes.py`：新增 4 个端点（admin 读/写、公开读取、default-proxy 聊天）
-- ✅ `schemas.py`：新增 `DefaultAIConfigUpdateRequest` Pydantic 模型
-
-**前端新增：**
-- ✅ `agent.js`：新增 4 个 API 函数（admin 读/写、公开读取、default-proxy 聊天）
-- ✅ `ChatPanelContent.vue`：支持三种路由模式（默认 AI / 个人 Key / 后端代理）
-- ✅ `ApiKeysManagementPanel.vue`：新增默认 AI 配置管理面板（查看/编辑/保存/取消）
-
-**安全设计：**
-- 🔒 api_key 存储在后端数据库，前端不持有
-- 🔒 管理员端点需要 `require_admin` 权限
-- 🔒 公开端点只返回 base_url / model，不返回 api_key
-
-详见 [开发日志](./Docs/26-06-04/2026-06-04-agent-chat-default-ai-config.md)
-
-### V3.2.6 (2026-06-04)
-#### 🧩 可复用 ExtentPicker 框选组件 + Code Review 修复
-
-**前端新增：**
-- ✅ `Common/ExtentPicker.vue`：通用框选范围组件（开始框选/重新框选/清除选区/状态提示/坐标标签）
-- ✅ SpatialAnalysisPanel 渔网分析集成 ExtentPicker（新增清除功能 + 状态提示）
-- ✅ MapDownloader 框选 UI 统一替换为 ExtentPicker（消除重复代码）
-
-**后端修复（Code Review）：**
-- ✅ `router.py` bbox 转换复用 `_get_transformer` 缓存，避免每次请求新建 Transformer
-- ✅ `utils.py` 修复 `_reproject_features` 循环变量遮蔽
-- ✅ `MAX_GRID_CELLS` 提取为 `utils.py` 共享常量，消除 aggregation/fishnet 重复定义
-
-详见 [变更日志](./Docs/26-06/26-06-04/v3.2.6-extent-picker-component.md)
-
-### V3.2.5 (2026-06-04)
-#### 🌐 空间分析统一 EPSG:3857 平面坐标系
-
-**后端重构：**
-- ✅ `router.py` 统一收口 CRS 转换：输入 GeoJSON(4326) → pyproj 转 3857 → operation(纯 3857) → 转回 4326
-- ✅ 所有空间分析参数统一为米（buffer 半径、聚合网格大小、简化容差、渔网网格大小）
-- ✅ 删除 `meters_to_degrees_approx` 近似转换，buffer/multiRingBuffer 在 3857 下直接用米计算
-- ✅ 新增 `pyproj>=3.6.0` 依赖，`utils.py` 提供 `reproject_geoms_to_3857/4326` 重投影函数
-- ✅ 合并 fishnet 专用 `grid_size_meters` 到通用 `grid_size` 字段
-
-**前端修复：**
-- ✅ 修复 aggregation `_gridSize` 命名 bug（用户输入的网格大小被静默忽略，始终用默认值 0.01 度）
-- ✅ 删除前端 `metersToDegrees`/`getReferenceLat` 重复转换函数
-- ✅ aggregation 标签从"度"改为"米"，默认值 0.01→500
-
-详见 [变更日志](./Docs/26-06/26-06-04/v3.2.5-spatial-crs-unification.md)
-
-### V3.2.4 (2026-06-04)
-#### 📦 空间分析模块化拆分
-
-- ✅ 将单文件 `api/spatial.py`（784 行）拆分为 `api/spatial/` 模块化目录（14 个文件）
-- ✅ `utils.py` 公共工具函数、`models.py` Pydantic 模型、`router.py` 路由分发
-- ✅ `operations/` 子目录：buffer / overlay / convex_hull / voronoi / aggregation / multi_ring_buffer / simplify / fishnet
-- ✅ `__init__.py` 门面保持 `from api.spatial import router` 完全兼容
-
-详见 [变更日志](./Docs/26-06/26-06-04/v3.2.4-spatial-module-refactor.md)
-
-### V3.2.3 (2026-06-04)
-#### 🐟 渔网分析功能 + 通用框选复用
-
-**后端新增：**
-- ✅ `do_fishnet()` 渔网分析：在指定四至范围内按固定间距（米）生成规则网格
-- ✅ 支持面（Polygon）/ 线（LineString）输出，可选创建每个网格中心点
-- ✅ 使用 pyproj 在 EPSG:3857 下精确计算，MAX_GRID_CELLS = 100000 安全限制
-
-**前端新增：**
-- ✅ 空间分析面板新增"渔网分析"工具（四至输入 + 地图框选 + 当前视图三种范围获取）
-- ✅ 抽取通用 `pickBoxExtent()` 框选函数，从 MapDownloader 下载专用逻辑中解耦
-- ✅ 事件通道：ControlsPanel → HomeView → MapContainer.pickBoxExtent()
-- ✅ 图层命名：`渔网_{size}m_{面/线/点}`，自动加入 TOC 管理
-
-详见 [变更日志](./Docs/26-06/26-06-04/v3.2.3-fishnet-analysis.md)
-
-### V3.2.2 (2026-06-04)
-#### 🔧 统一 HTTP 状态码映射 + 日志监控修复 + 瓦片请求中断修复
-
-**前端新增：**
-- ✅ `httpStatusMap.js`：统一 HTTP 状态码映射模块（80+ 标准 HTTP 码 + 40+ 高德 infocode 中文描述）
-- ✅ `getHttpStatusMessage()` / `getAmapErrorMessage()` / `buildHttpErrorMessage()` / `classifyHttpStatus()` / `isRetryable()` 辅助函数
-
-**前端修复：**
-- ✅ axios 响应拦截器：错误日志附带 `[503 服务暂不可用]` 标签，`apiError` 新增 `status`/`statusText`
-- ✅ 统一 geocoding / weather / ipLocation / map / locationSearch 的高德 infocode 错误映射
-- ✅ LogMonitor `getLogClass()`：HTTP 状态码正则检测优先于 `INFO` 关键字，5xx 红色 / 4xx 黄色 / 2xx 绿色
-- ✅ `tileLifecycle.ts`：`fetch()` + `AbortController.signal` 替代 `img.src`，abort 立即释放 TCP 连接
-- ✅ 修复 `useBasemapResilience` 的 `validateBaseLayerSwitch` setTimeout 泄漏
-
-### V3.2.1 (2026-06-03)
-#### 📧 邮箱验证码系统 + 密码重置 + 认证安全增强
-
-**后端新增：**
-- ✅ `email_service.py`：SMTP 邮件发送服务（阿里云邮件推送代理转发，HTML 验证码模板，异步发送，零额外依赖）
-- ✅ `verification.py`：验证码核心逻辑（secrets 安全生成、频率限制 60秒/次、每日上限 10次、5次尝试上限、5分钟有效期）
-- ✅ `email_verification_codes` 表 + users 表 email/email_verified 字段 + 邮箱部分唯一索引
-- ✅ 新增 SendCodeRequest / VerifyCodeRequest / ResetPasswordRequest 请求模型
-- ✅ 新增 POST `/api/auth/send-code`、`/verify-code`、`/reset-password` 接口
-- ✅ 改造 POST `/api/auth/register` 支持邮箱绑定（可选）
-- ✅ 新增邮箱 CRUD 函数（_get_user_by_email_sync / _check_email_taken_sync / _update_user_password_by_email_sync 等）
-
-**前端新增：**
-- ✅ 新增 `apiAuthSendCode` / `apiAuthVerifyCode` / `apiAuthResetPassword` API 函数
-- ✅ 注册表新增邮箱输入框 + 验证码行（发送/验证/已验证徽章）
-- ✅ 登录模式新增"忘记密码？"链接 + 密码重置弹窗（两步：邮箱→验证码+新密码）
-
-**安全设计：**
-- 🔒 6位数字验证码（secrets 模块安全生成）
-- 🔒 60秒发送间隔限制 + 每日上限 10 次
-- 🔒 5分钟有效期 + 最多 5 次验证尝试
-- 🔒 邮箱部分唯一索引（防并发注册竞态）
-- 🔒 密码重置后注销该账号全部会话
-
-**Code Review 修复：**
-- schema.py 新增邮箱唯一索引（`idx_users_email_unique`），防止并发注册竞态
-- auth.js 移除密码字段 trim，保留用户输入意图
-
-详见 [前端文档](./frontend/README.md#v321-2026-06-03) | [开发日志](./Docs/26-06/2026-06-03-邮箱验证码与密码重置.md)
-
----
-
-### V3.2.0 (2026-06-03)
-#### ✨ 圆环粒子特效鼠标交互 + 🔧 GCJ-02 纠偏模块优化
-
-**前端新增 - 圆环粒子特效：**
-- 🖱️ **鼠标跟随**：圆环平滑跟随鼠标移动（缓动插值系数 0.08）
-- 🎯 **悬停增强**：鼠标进入圆环范围时亮度提升 1.4 倍，颜色粉色→蓝色平滑渐变
-- 💥 **点击迸发**：鼠标点击瞬间爆发 30 个高速粒子（2.5x 速度）
-- 🔄 **拖拽旋转**：鼠标拖拽时计算角速度，影响粒子切向速度方向
-
-**后端优化 - GCJ-02 纠偏模块：**
-- 🐛 **P0 修复**：`fetch_tile()` 移除递归调用，改为循环+重试
-- ⚡ **性能提升**：缓存命中直接返回字节，预期减少 50%+ I/O 开销
-- 🔍 **格式验证**：添加魔数快速检查，避免不必要 PIL 解码
-- 📝 **代码质量**：变量命名、文档字符串、类型注解全面改进
-- 🛡️ **健壮性**：WebP 长度验证、异常处理、变量初始化
-
-详见 [前端文档](./frontend/README.md#v320-2026-06-03) | [后端优化详情](./Docs/26-06/2026-06-03-gcj-rectify-code-review.md)
-
-### V3.1.9 (2026-06-02)
-#### 🧹 前端文件重构 + 🔒 安全加固 + 卷帘持久化修复
-
-本次版本包含前端项目全面文件重构、XSS/SSRF 安全修复、卷帘状态恢复逻辑修复。
-
----
-
-#### 🧹 前端文件重构（详见 [前端文档](./frontend/README.md#v319-2026-06-02)）
-
-- **清理死代码**：删除 vendored ol.js/ol.css (~1.5MB)、空目录、误放文件
-- **消除重复**：新建 `pathUtils.js`、`textDecoder.js` 共享模块，消除 6+ 处重复实现
-- **组件拆分**：FloatingAccountPanel (2520→1463行, -42%)、WeatherChartPanel (1883→460行, -76%)
-- **数据重组**：goldenSoupQuotes 迁移至 `data/`、重命名误导性常量文件
-- **Barrel 清理**：`geo/index.js`、`biz/index.js` 移除不相关 re-export
-
----
-
-#### 🛡️ 安全加固
-
-##### 1. 全局消息 XSS 修复
-- `Message.vue` 新增 `escapeHtml()` 函数，对所有 `v-html` 渲染的文本进行五字符转义（`&`/`<`/`>`/`"`/`'`）
-- 覆盖项目唯一的 `v-html` 攻击面
-
-##### 2. 代理 SSRF 防护
-- `proxy.py` 新增 `_is_private_host()` 校验，阻断 localhost/私网 IP/链路本地/保留地址
-- 默认开启 TLS 校验（`PROXY_VERIFY_SSL=true`），通过环境变量兼容特殊部署
-- `follow_redirects=False` 防止重定向型 SSRF 绕过
-
----
-
-#### 📊 卷帘持久化修复
-
-##### 1. 新增显式左右图层持久化
-- `useSwipeConfigStore` 新增 `leftLayerIds`/`rightLayerIds` 字段
-- `enableBasemapSwipe` 启用时同时写入显式左右列表，不再仅依赖拼接后的 `targetLayerIds`
-
-##### 2. 恢复逻辑增强
-- `restoreSwipe` 优先读取持久化的 `leftLayerIds`/`rightLayerIds`
-- 兼容旧数据：无显式左右列表时回退到 midIndex 拆分（原有行为）
-
----
-
-#### 📁 修改文件
-
-| 文件 | 变更 |
-|------|------|
-| `frontend/src/components/Shell/Message.vue` | XSS 转义修复 |
-| `backend/api/proxy.py` | SSRF 防护 + TLS 默认开启 |
-| `frontend/src/composables/map/features/useBasemapSwipe.js` | 接入 leftLayerIds/rightLayerIds |
-| `frontend/src/stores/useSwipeConfigStore.ts` | 新增左右字段 + 显式类型标注 |
-| `README.md`、`frontend/README.md`、`backend/README.md` | 文档同步 |
-
----
-
-### V3.1.8 (2026-05-31)
-#### 🔧 LocalDev.bat 智能构建检测 + 彩色输出 + 编码兼容
-
-优化本地开发启动脚本，解决跨系统编码兼容性问题，增加智能 Docker 镜像管理。
-
----
-
-#### 🌟 新增功能
-
-##### 1. 智能 Docker 镜像构建检测
-- **首次运行**（无镜像）→ 自动 `--build` 构建
-- **仅修改代码** → 跳过构建，靠 volume 映射 + uvicorn `--reload` 热重载
-- **Dockerfile 变更** → 检测到镜像与 Dockerfile 时间不一致，提示用户选择是否重建
-- 通过比较 Dockerfile 修改时间与镜像创建时间判断是否需要重建
-
-##### 2. ANSI 彩色输出
-- 步骤标题（MAGENTA）、成功（GREEN）、错误（RED）、警告（YELLOW）、信息（CYAN）、辅助（DIM）
-- 自动检测并启用 Windows Terminal VT100 支持，老终端降级为纯文本
-
-##### 3. 编码兼容架构
-- `LocalDev.bat` 保持 100% 纯 ASCII，兼容任意系统 OEM 代码页（GBK/UTF-8/其他）
-- 中文消息集中到 `Write-Color.ps1`（UTF-8 BOM），通过数字 ID 调用
-- 错误处理全部使用 `goto` 跳转，避免括号块内中文解析问题
-
----
-
-#### 📁 新增文件
-
-| 文件 | 说明 |
-|------|------|
-| `Write-Color.ps1` | 彩色输出辅助脚本，集中定义所有中文消息 + ANSI 颜色 |
-
----
-
-#### 🔧 优化项
-
-| 项目 | 优化前 | 优化后 |
-|------|--------|--------|
-| Docker 构建 | 每次 `up -d` 不感知镜像状态 | 智能三段式检测 |
-| 编码兼容 | UTF-8 中文在 GBK 系统闪退 | 纯 ASCII .bat + PS1 分离 |
-| 终端颜色 | 无 | ANSI 彩色输出 |
-| 错误处理 | 括号块内中文 echo | goto 跳转 + ASCII echo |
-
----
-
-#### 🛡️ 底图容灾模块修复
-
-##### 1. FallbackManager 单例化
-- **问题**：每次调用 `createBaseLayerFallbackManager` 创建新实例，降级计数器重置，降级链永远从头开始（`tianDiTu → tianDiTu → ...`）
-- **修复**：`getFallbackManager(layerId)` 按 layerId 缓存实例，降级链正确推进（`tianDiTu → local`）
-- 同时跳过当前失败的 layerId，避免降级到同一个图层
-
-##### 2. 瓦片验证逻辑修正
-- **问题**：`Promise.race` 中 1.5s 硬编码超时永远赢过 3s 的 `checkTimeoutMs`，参数失效
-- **修复**：移除 `Promise.race`，使用 `checkTimeoutMs` 作为唯一超时
-- 新增 `tileloadstart` 监听，要求至少 1 次 start + 1 次 end 才算成功，避免缓存假阳性
-
-##### 3. 内存泄漏修复
-- `cleanUp()` 时从 `activeMonitors` Map 中移除条目并重置 monitorKey
-- `disposeAllMonitors()` 同时清理 `fallbackManagers` Map
-- `loadingTilesCount` 改为 `Math.max(0, count - 1)` 防止负数
-
----
-
-#### 📍 用户定位模块鲁棒性增强
-
-##### 1. GPS 错误分类
-- 区分 4 种错误：权限拒绝、信号弱、超时、未知
-- 每种错误给用户有意义的中文提示，不再静默吞掉
-
-##### 2. 请求竞态防护
-- `activeLocateController` 全局单例，新定位请求自动 abort 旧的
-- 多次快速点击"定位"不会产生竞态覆盖
-
-##### 3. 并行策略优化
-- `Promise.all` → `Promise.allSettled`，GPS 和 IP 定位互不阻塞
-- IP 抛出配额用完错误时正确向上层传递
-
-##### 4. 逆地理编码超时
-- 独立 `AbortController` + 8s 超时，避免 Nominatim 等慢服务阻塞
-- `apiLocationReverse` 和 `addressToLocation` 均支持 `signal` 参数透传
-
-##### 5. 其他修复
-- `markLocationSuccessFlagInUrl`：不再无条件覆盖 `s` 参数
-- `isCoordinateInChina`：收紧边界框（lat 18→3），正确覆盖南海诸岛
-- `getCurrentLocation`：添加 `maximumAge: 60000` 允许复用缓存位置，加速定位
-- `zoomToUserCityByIp`：geocode 失败时使用 IP extent 中心作为坐标回退
-
----
-
-#### 📁 修改文件
-
-| 文件 | 变更 |
-|------|------|
-| `frontend/src/composables/map/features/useBasemapResilience.js` | FallbackManager 单例、瓦片验证修正、内存泄漏修复 |
-| `frontend/src/composables/map/features/useBasemapSelectionWatcher.js` | 适配 `getFallbackManager` API |
-| `frontend/src/components/Map/MapContainer.vue` | 适配 API 重命名 |
-| `frontend/src/composables/useUserLocation.js` | GPS 错误分类、竞态防护、超时控制、边界修复 |
-| `frontend/src/api/backend/location.js` | `apiLocationReverse` 支持 AbortSignal |
-| `frontend/src/api/geocoding.js` | `addressToLocation` 支持 AbortSignal |
-| `Docs/26-05-31/code-review-basemap-resilience-2026-05-31.md` | 底图容灾模块 Code Review 报告 |
-
----
-
-### V3.1.7 (2026-05-30)
-#### 🔧 ESLint 全项目修复 + 超大文件拆分重构
-
-本次版本对前端代码质量进行全面治理，并将 3 个超大模块拆分为更小的文件。
-
----
-
-#### 🌟 代码质量
-
-##### 1. ESLint 全项目修复（389 → 0 errors）
-- 修复全部 ESLint 错误：未使用变量、空 catch 块、console 语句、无用转义、属性排序等
-- 配置 `@typescript-eslint/no-unused-vars` 忽略 `_` 前缀变量
-- 添加 `globals.node` 支持 Node.js 脚本文件
-- 新建 `tsconfig.json`，关闭 `noImplicitAny`，修复 12 个 TypeScript 类型错误
-
-##### 2. 构建警告修复
-- `useFluid.js`：修复被 ESLint 自动修复破坏的导入语句
-- `useMapUIEventHandlers.js`：同上
-
----
-
-#### 📦 超大文件拆分
-
-| 原文件 | 原行数 | 拆分结果 | 文件数 |
-|--------|--------|---------|--------|
-| `api/backend.js` | 881 | `backend/` 子目录 | 10 |
-| `utils/gis/dataDispatcher.js` | 696 | + archiveProcessor + shpPacketBuilder | 3 |
-| `composables/useTileSourceFactory.ts` | 1099 | `tileSource/` 子目录 | 8 |
-
-**拆分原则**：原文件变为 barrel re-export，所有消费方 import 路径不变。
-
----
-
-#### 📁 文件变更
-
-| 操作 | 文件 |
-|------|------|
-| 新建 | `api/backend/{client,auth,location,weather,routing,agent,statistics,admin,spatial,index}.js` |
-| 新建 | `composables/tileSource/{types,urlUtils,tileLifecycle,wmsSource,wmtsSource,xyzSource,index}.ts` |
-| 新建 | `utils/gis/archiveProcessor.js`、`utils/gis/shpPacketBuilder.js` |
-| 新建 | `tsconfig.json` |
-| 修改 | `eslint.config.js`（添加 globals.node + no-unused-vars 配置） |
-| 修改 | 50+ 个源文件（ESLint 修复） |
-
-### V3.1.6 (2026-05-29)
-#### 🔧 超大文件拆分 + 图层拖拽性能优化
-
-本次版本对核心模块进行拆分重构，并修复图层拖拽排序卡顿问题。
-
----
-
-#### 🌟 新增功能
-
-##### 1. 模块化重构
-- **底图配置模块** `constants/basemap/`：将 1587 行的 `useBasemapManager.ts` 拆分为配置层 + 逻辑层
-- **数据导入模块** `composables/dataImport/`：提取栅格/矢量工具函数为独立模块
-- **图层 Store 模块** `stores/layer/`：将工具函数和树构建器从 `useLayerStore.ts` 分离
-- **清理冗余代码**：移除未使用的主机测速逻辑（`probeGoogleHostLatency`、`resolvePreferredGoogleHost`）
-
-#### ⚡ 性能优化
-
-##### 2. 图层拖拽排序性能优化
-- **问题**：图层树拖拽排序严重卡顿，即使只有 2 个图层
-- **原因**：TOCPanel 使用 `deep: true` watch，每次拖拽都触发递归比较和完整树重建
-- **方案**：
-  - 移除 `deep: true`，改用浅比较
-  - 添加 `layerTree` 缓存层，只在图层 ID 序列变化时才重建树
-- **效果**：拖拽响应速度提升 90%+
-
-| 优化项 | 优化前 | 优化后 |
-|--------|--------|--------|
-| `useBasemapManager.ts` | 1587 行 | ~400 行 |
-| `useLayerDataImport.js` | 1428 行 | 1235 行 |
-| `useLayerStore.ts` | 1110 行 | 344 行 |
-| 拖拽排序响应 | 卡顿 | 流畅 |
-
----
-
-### V3.1.5 (2026-05-28)
-#### 🎨 主题系统工程化 + 性能优化
-
-本次版本完成 CSS 样式体系统一化，实现全局主题切换功能，并修复多项性能问题。
-
----
-
-#### 🌟 新增功能
-
-##### 1. 全局主题系统 ✨
-- **统一 CSS 变量体系**：新建 `theme.css`，定义 40+ 全局设计令牌（品牌色/文字色/背景色/边框色/渐变/阴影）
-- **绿色系主题切换**：支持「默认绿」和「海洋蓝」两套主题，一键切换实时预览
-- **主题持久化**：通过 localStorage 保存用户偏好，刷新页面自动恢复
-- **组件全覆盖**：迁移 20+ 个 Vue 组件的硬编码色值为 CSS 变量（ControlsPanel/Shell/UserCenter/views/Routing/Chat/Weather/Map/Compass 等）
-- **TOC 主题联动**：`toc-theme.css` 主色改为引用全局变量，主题切换时 TOC 面板同步变化
-
-##### 2. 空间聚合 BBox 自动获取 ✨
-- 空间聚合分析的可视范围 BBox 支持自动获取当前地图视图范围
-- 新增「获取当前视图范围」按钮，无需手动输入经纬度
-
-#### ⚡ 性能优化
-
-| 优化项 | 预估节省 |
-|--------|----------|
-| `loadJsZip.ts` 移除静态 import，仅保留动态懒加载 | ~115KB |
-| `deferredGisAssets.js` 的 `import *` 改为动态导入 | ~80KB |
-| `lodash-es` 替换为 16 行原生 debounce 实现 | ~25KB |
-| `apiLocationTrackVisit` 超时从 8s 缩短到 3s | 首屏体验 |
-
-#### 🔧 代码质量
-
-- 修复 `useSwipeConfigStore` 的 `setSwipeConfig` 未持久化的 Bug
-- 修复 `constants/index.js` 中 `useBasemapManager` 的错误路径
-- 清理死代码：删除未使用的 `base.css` / `main.css`
-- `ControlsPanel.vue` 清理死代码 emit、修复 `message.warn` → `message.warning`
-- `backend.js` 抽取 `normalizeChatHistory` 共用函数、`syncUserRoleToUrl` 迁移至 `auth.js`
-- `spatialAnalysis` API 添加 30s 独立超时
-
-#### 📁 文件变更
-
-| 操作 | 文件 |
-|------|------|
-| 新建 | `assets/theme.css`、`stores/useThemeStore.ts` |
-| 删除 | `assets/base.css`、`assets/main.css` |
-| 修改 | 20+ 个 Vue 组件 CSS 迁移、`toc-theme.css`、`App.vue`、`stores/index.ts` 等 |
-
----
-
-### V3.1.4 (2026-05-28)
-#### 🔹 高级空间分析功能扩展
-
-本次版本新增 4 项高级空间分析能力，将空间分析工具从 5 个扩展到 9 个，覆盖公共设施服务范围划分、宏观热点统计、辐射圈分级评估和大数据传输优化等业务场景。
-
----
-
-#### 🌟 新增功能
-
-##### 1. 泰森多边形（Voronoi Diagram） ✨
-- **业务场景**：公共设施服务范围划分（消防栓、外卖站点、快递柜等最近邻势力范围）
-- **后端**：`shapely.ops.voronoi_diagram` 计算 Voronoi 图，自动裁剪到边界 envelope
-- **前端**：随机彩色半透明填充，蜂窝状视觉效果
-- **属性**：每个 Feature 附带 `site_index` 标识对应站点
-
-##### 2. 空间聚合分析（Spatial Aggregation） ✨
-- **业务场景**：大范围离散数据的宏观热点统计（交通事故、旅游签到等）
-- **后端**：支持方格网（Grid）和六边形网格（Hexbin）两种聚合模式
-- **前端**：根据 `count` 属性做分级色彩表达，比热力图更具空间统计严谨性
-- **参数**：BBox 范围 + 网格类型 + 网格大小
-
-##### 3. 多环缓冲区（Multi-ring Buffer） ✨
-- **业务场景**：污染源/地铁站辐射圈分级评估（核心影响区/边缘波及区/安全防护区）
-- **后端**：接收距离数组，使用 `difference` 擦除生成"甜甜圈"中空环状拓扑
-- **前端**：由深到浅的渐变同心圆环渲染
-- **属性**：每个环附带 `ring_index` 和 `distance_m`
-
-##### 4. 几何简化（Simplify） ✨
-- **业务场景**：大数据量网络传输优化（精细海岸线、省界等复杂几何的节点抽稀）
-- **后端**：Douglas-Peucker 算法 + `preserve_topology=True`，保证拓扑正确
-- **前端**：展示简化前后节点数对比和压缩比率
-- **属性**：每个 Feature 附带 `original_vertices` 和 `simplified_vertices`
-
----
-
-#### 📁 涉及文件变更
-
-| 文件 | 变更 |
-|------|------|
-| `backend/api/spatial.py` | 新增 4 个分析函数 + 扩展请求模型 |
-| `frontend/src/composables/map/features/useSpatialAnalysis.js` | 扩展分析类型支持 |
-| `frontend/src/components/ControlsPanel/SpatialAnalysisPanel.vue` | 新增 4 个工具卡片 UI |
-
----
-
-### V 3.1.3 (2026-05-28)
-#### 🔹 KML/KMZ 样式解析增强 + 编码多支持
-
-本次版本聚焦 **KML/KMZ 样式解析的健壮性**，增强编码检测、修复颜色渲染问题，确保来自不同工具（如 Google Earth）的 KML 文件能正确显示样式颜色。
-
----
-
-#### 🌟 核心改进（重点）
-
-##### 1. 编码多支持策略 ✨
-- **问题**：KML 文件可能采用 UTF-16LE/UTF-16BE 等多种编码，原有只支持 UTF-8，导致解码失败
-- **方案**：实施 **多编码尝试 + 最优选择策略**
-  - 候选编码：UTF-8 > UTF-16LE > UTF-16BE > GBK
-  - 选择标准：替代字符（\uFFFD）最少的编码
-- **涉及函数**：
-  - `kmlParser.ts::parseKmlBuffer()`
-  - `dataDispatcher.js::decodeBufferToText()`
-  - `useLayerDataImport.js::decodeTextContent()`
-
-##### 2. KML 颜色渲染修复 🎨
-- **问题**：颜色十进制字符串拼接导致非法 `#` 颜色值（如 `#163214245`），OpenLayers 回退为黑色
-- **修复**：改用十六进制字符串生成合法 `#RRGGBB` 格式颜色值
-- **测试**：HENU湖泊.kmz 现能正确渲染蓝色（原 KML color: fff5d6a3）
-
-##### 3. KML PolyStyle 缺省值修复 📐
-- **问题**：`<fill>` 和 `<outline>` 元素缺失时被误判为 false，导致仅描边渲染
-- **修复**：按 KML 2.2 规范，缺失时默认为 true（填充 + 描边）
-- **结果**：多边形样式渲染完整
-
----
-
-#### 📊 改进清单
-| 改进项 | 前 | 后 | 效果 |
-|-------|-----|-----|------|
-| 编码支持 | UTF-8/GBK | UTF-8/UTF-16LE/UTF-16BE/GBK | 兼容更多 KML 来源 |
-| 颜色格式 | 十进制字符串 | 十六进制 #RRGGBB | 正确渲染颜色 |
-| PolyStyle 缺省 | false | true | 符合 KML 规范 |
-| KMZ 渲染效果 | 黑色（无样式） | 正确颜色 | 一致性提升 100% |
-
----
-
-#### 📦 涉及文件
-- `frontend/src/utils/gis/parsers/kmlStyleParser.js` —— 颜色解析 & PolyStyle 修复
-- `frontend/src/utils/gis/parsers/kmlParser.ts` —— 编码多支持
-- `frontend/src/utils/gis/dataDispatcher.js` —— Buffer 解码编码多支持
-- `frontend/src/composables/useLayerDataImport.js` —— 文本解码编码多支持
-
----
-
-#### ✅ 兼容性
-- ✅ **无破坏性变更**：对外接口完全保持不变
-- ✅ **向后兼容**：现有 KML/KMZ 导入流程无需修改
-- ✅ **渐进式修复**：直接升级即可自动享受改进
-
----
-
-#### ✅ 使用者收益
-1. **样式完整**：KML/KMZ 导入时颜色、线条、填充完整应用
-2. **兼容性强**：支持多种编码的 KML 文件，不再限于 UTF-8
-3. **规范遵循**：严格按 KML 2.2 规范处理样式，避免非标准解析
-
----
-
-### V 3.1.2 (05-08) 
-- 原生下载模式: 为大文件下载引入 token-based 浏览器原生下载，避免页面内存占用。  
-- 后端 FileResponse 优化: 使用 RFC 5987 编码的 Content-Disposition 并增加缓存控制头。  
-- 前端增强: `MapDownloader.vue` 增加下载模式选择（native/progressive），Progressive 模式保留流式进度显示。  
-### V3.1.0 (2026-05-04)
-#### 🔹 在线地图下载 + GCJ-02实时纠偏 + Docker Compose容器化
-
-本次版本引入**在线地图下载系统、GCJ-02坐标纠偏、Docker Compose容器化**，进一步完善后端服务能力，实现专业级地图数据导出功能。
-
----
-
-#### 🌟 核心特性（重点）
-
-##### 1. 在线底图下载面板（MapDownloader）✨
-- **功能**：前端UI可视化选择任意在线底图、自定义分辨率、矩形框选范围
-- **输出**：异步后端任务生成标准 GeoTIFF 格式地图数据，可直接导入 ArcGIS / QGIS 等专业 GIS 应用
-- **工作流**：
-  1. 用户选择底图源（天地图/Google/自定义 URL）
-  2. 输入分辨率（支持 EPSG:4326 / EPSG:3857 两种坐标系）
-  3. 地图框选范围（拖拽矩形）或手动输入四至范围
-  4. 提交后端，后端异步下载瓦片 + Rasterio 拼接
-  5. 生成 GeoTIFF 文件，自动计算过期时间（30分钟保留期）
-  6. 前端轮询获取进度，完成后自动下载
-- **技术亮点**：
-  - 后端 httpx 异步并发下载（信号量控制 10 并发）
-  - Rasterio Window 流式写入（避免全量内存加载）
-  - SQLite 任务持久化 + APScheduler 自动清理
-
-##### 2. GCJ-02在线底图实时纠偏 ✨
-- **问题**：高德、腾讯地图使用 GCJ-02 坐标系，直接叠加会产生偏移
-- **解决**：后端新增 GCJ-02 ↔ WGS84 实时转换代理
-  ```
-  /proxy/gcj2wgs/{target_url:path}  —— GCJ-02 → WGS84
-  /proxy/wgs2gcj/{target_url:path}  —— WGS84 → GCJ-02
-  ```
-- **使用场景**：
-  - 高德底图配合 WGS84 数据层叠加
-  - 下载高德底图后，自动纠偏以 WGS84 存储
-
-##### 3. Docker Compose 容器化部署 🐳
-- **改进**：后端升级为 Docker Compose 多容器编排
-- **优势**：
-  - 依赖隔离：应用、数据库、缓存独立容器
-  - 开发一致性：本地开发环境 = 生产环境
-  - 快速启动：一命令启动完整后端栈
-- **一键启动**：`LocalDev.bat` 双击即可启动前后端
-
----
-
-#### 📦 涉及文件
-
-**前端新增**：
-- `frontend/src/components/MapDownloader.vue` —— 下载面板 UI
-- `frontend/src/stores/useDownloadStore.ts` —— Pinia 状态管理
-- `frontend/src/api/download.js` —— API 客户端
-
-**后端新增**：
-- `backend/core/tile_engine.py` —— 瓦片下载 + 拼接引擎
-- `backend/core/task_scheduler.py` —— 过期任务清理调度器
-- `backend/models/download_task.py` —— SQLModel 任务表
-- `backend/api/download.py` —— 下载任务 REST API
-
-**部署升级**：
-- `docker-compose.yml` —— Docker Compose 编排（顶级）
-- `backend/docker-compose.yml` —— 后端专用编排
-- `LocalDev.bat` —— 升级，支持 Docker Compose 启动
-
-**依赖升级**：
-- `backend/pyproject.toml` 新增：rasterio, sqlmodel, apscheduler, httpx
-
----
-
-#### ⚙️ 新增后端接口
-
-| 方法 | 端点 | 说明 |
-|------|------|------|
-| POST | `/api/download/tasks` | 创建下载任务 |
-| GET | `/api/download/tasks/{task_id}` | 查询任务状态 & 进度 |
-| GET | `/api/download/tasks/{task_id}/file` | 下载 GeoTIFF 文件 |
-| GET | `/proxy/gcj2wgs/{target_url:path}` | GCJ-02 → WGS84 纠偏 |
-| GET | `/proxy/wgs2gcj/{target_url:path}` | WGS84 → GCJ-02 纠偏 |
-| POST | `/api/agent/chat/proxy` | ✨ 用户个人 Key 代理聊天（绕过浏览器 CORS） |
-
----
-
-#### 📋 环境要求
-
-**必需依赖**：
-- Node.js 16+
-- Docker Desktop（**强制要求**）
-- Python 3.10+（仅内部使用）
-
-**启动方式**：
 ```bash
 # Windows: 双击 LocalDev.bat
 # 自动启动：

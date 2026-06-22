@@ -23,7 +23,61 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-19 更新）
+## 0. 项目结构（2026-06-22 更新）
+
+### V3.3.8 (2026-06-22) - 暂存区 Code Review 修复
+
+> 本次为前端托管图层高亮链路修复与维护日志清理，后端 API 与后端文件结构**无变更**。
+
+**前端同步记录（本次无后端结构变更）：**
+
+- 修复 `useCreateManagedVectorLayer.js` 中图层 `id` 生成晚于样式备份的问题。
+- 修复 `clearManagedFeatureHighlight(feature)` 旧调用链在缺少 `layerId` 时无法清理 Pinia 高亮状态的问题。
+- 修复 `forEachFeatureAtPixel` 命中遍历返回值，确保点击命中统计继续遍历。
+- 清理维护日志 trailing whitespace。
+
+详见 [`../Docs/26-06/26-06-22/2026-06-22-fix-staged-feature-highlight-review.md`](../Docs/26-06/26-06-22/2026-06-22-fix-staged-feature-highlight-review.md)
+
+---
+
+### V3.3.8 (2026-06-21) - 要素高亮 Pinia 化 + HTML 属性解析增强 + import 路径修复
+
+> 本次版本为前端要素高亮系统重构与属性解析增强，后端 API 与后端文件结构**无变更**。
+
+**前端同步记录（本次无后端结构变更）：**
+
+#### ✨ 要素高亮 Pinia 集中化
+
+把高亮状态从 `useManagedFeatureHighlight.js` 闭包变量迁移到新建 Pinia store `useFeatureStyleStore`：
+
+- ✅ **新增** `frontend/src/stores/useFeatureStyleStore.ts`：高亮要素集合 + 原始样式备份 Map + TOC 图层联动清理
+- ✅ **新增** `frontend/src/utils/map/featureKey.js`：FeatureKey 复合主键工具
+- ✅ **重构** `useManagedFeatureHighlight.js`：闭包变量 → store 薄壳
+- ✅ **支持连续多选**：`useMapEventHandlers.js` singleclick + Ctrl/Shift 多选模式
+- ✅ **TOC 联动**：`useTOCStore.removeLayerMeta` + `useLayerStore.syncLayers` 联动清理
+- ✅ **样式备份**：`useCreateManagedVectorLayer.js` + `useUserLayerActions.js` 在 `setStyle(null)` 前先备份
+
+#### ✨ HTML 属性解析增强
+
+`useLayerMetadataNormalization.js` 重写表格解析器：
+
+- ✅ 列索引表头映射（`name`/`value` 列自动识别）
+- ✅ `<dl>/<dt>/<dd>` 定义列表支持
+- ✅ `<Null>` 占位符归一化（OSM / Cesium / GeoServer 约定）
+- ✅ 嵌套表格命名空间（`parent.child`）
+- ✅ 同名多值合并
+- ✅ `<script>` / inline 事件 / `javascript:` URL 主动剥离
+
+#### 🐛 import 路径修复
+
+`useManagedFeatureHighlight.js` 两条 import 路径层级缺失：`../../...` → `../../../...`。
+
+详见：
+- [`../Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md`](../Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md)
+- [`../Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md`](../Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md)
+- [`../Docs/26-06/26-06-21/2026-06-21-fix-managed-feature-highlight-import.md`](../Docs/26-06/26-06-21/2026-06-21-fix-managed-feature-highlight-import.md)
+
+---
 
 ### V3.3.8 (2026-06-19) - Cesium 数据导入 + 底图预设统一 + Code Review 修复
 
@@ -375,6 +429,46 @@ backend/
 - ✅ 路由配置添加 catch-all 路由 `/:pathMatch(.*)*`
 
 详见 [前端开发日志](../Docs/26-06-05/2026-06-05-frontend-404-fallback.md)
+
+---
+
+## 0.0.1 前端要素高亮 Pinia 集中化 & 连续多选样式持久化 (2026-06-21)
+
+> 本次更新仅涉及前端，后端无变更。
+
+详见 [前端开发日志](../Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md)
+
+---
+
+## 0.0.2 前端要素属性 HTML 解析增强 (2026-06-21)
+
+> 本次更新仅涉及前端，后端无变更。
+
+详见 [前端开发日志](../Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md)
+
+---
+
+## 0.0.4 前端高亮 Pinia 化后置修复 (2026-06-21)
+
+> 本次更新仅涉及前端，后端无变更。补遗针对 0.0.1/0.0.2/0.0.3 三条日志的 Code Review 修复。
+
+| 改动 | 文件 |
+|------|------|
+| 🐛 `useFeatureStyleStore.ts` TS 类型补齐 | `targets.feature` + `syncLayerHighlights.callbacks` |
+| 🐛 `useMapUIEventHandlers.js` 恢复参数名 | `zoomToManagedFeature` 重命名回滚 |
+| 🐛 `useLayerMetadataNormalization.js` dl 合并顺序 | `{ ...next, ...dlParsed }` |
+| ♻️ 抽离 `getFeatureIdFromFeature` 工具函数 | `utils/map/featureKey.js` |
+| ♻️ `useManagedFeatureHighlight.js` 删除对 store state 的直接操作 | 委托给 `store.clearHighlight` |
+
+详见 [前端开发日志](../Docs/26-06/26-06-21/2026-06-21-fix-feature-style-store-types-and-bugs.md)
+
+---
+
+## 0.0.3 前端修复 useManagedFeatureHighlight.js import 路径 (2026-06-21)
+
+> 本次更新仅涉及前端，后端无变更。
+
+详见 [前端开发日志](../Docs/26-06/26-06-21/2026-06-21-fix-managed-feature-highlight-import.md)
 
 ---
 
@@ -974,4 +1068,3 @@ onMounted() 触发
 - 模型列表缓存不阻塞响应（使用 `asyncio.create_task()` 后台保存）
 - 前端预加载模型不阻塞页面渲染
 - 用户体验：**立即可用，无感知延迟**
-

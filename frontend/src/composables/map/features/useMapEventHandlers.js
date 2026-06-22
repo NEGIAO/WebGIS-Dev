@@ -31,6 +31,8 @@ import { toLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 import { Point, Polygon } from 'ol/geom';
 import { unByKey } from 'ol/Observable';
+import { normalizeHtmlAttributes } from './useLayerMetadataNormalization';
+import { getFeatureIdFromFeature } from '../../../utils/map/featureKey';
 // 新增：导入 Vue nextTick 解决生命周期时序问题
 import { nextTick } from 'vue';
 
@@ -80,7 +82,10 @@ export function createMapEventHandlers({
             const feature = map.forEachFeatureAtPixel(pixel, (f) => f);
             if (!feature) return;
             const { geometry: _geometry, style: _style, ...props } = feature.getProperties();
-            emit?.('feature-selected', { ...props, 操作提示: '右键选择，可在工具箱中编辑样式' });
+            emit?.('feature-selected', {
+                ...normalizeHtmlAttributes(props),
+                操作提示: '右键选择，可在工具箱中编辑样式',
+            });
         };
         const _touchmoveHandler = () => {
             updateCurrentCoordinate(map.getView().getCenter());
@@ -167,29 +172,44 @@ export function createMapEventHandlers({
             const drawInteraction = getDrawInteraction?.();
             if (drawInteraction?.getActive?.()) return;
 
+            // ★ 改造（2026-06-21）：累积所有命中 feature 而非只取第一个，
+            //    并通过 Ctrl/Shift 修饰键决定多选模式
+            const originalEvent = evt?.originalEvent || null;
+            const isCtrlPressed = !!(originalEvent && (originalEvent.ctrlKey || originalEvent.metaKey));
+            const isShiftPressed = !!originalEvent?.shiftKey;
+            const selectionMode = isCtrlPressed
+                ? 'toggle'
+                : isShiftPressed
+                    ? 'range'
+                    : 'replace';
+
+            const hits = [];
             let clickedFeature = null;
             let clickedLayer = null;
             map.forEachFeatureAtPixel(evt.pixel, (f, layer) => {
-                if (!clickedFeature && f) {
+                if (!f) return false;
+                hits.push({ feature: f, layer });
+                // 取第一个作为默认响应（避免点空：必须有一个被高亮的）
+                if (!clickedFeature) {
                     clickedFeature = f;
                     clickedLayer = layer;
                 }
-                return false;
+                return false; // false 才会继续遍历；truthy 会让 OL 提前停止
             });
 
             if (clickedFeature) {
                 const { geometry: _geometry, style: _style, ...props } = clickedFeature.getProperties();
                 const layerId = String(clickedLayer?.get?.('managedLayerId') || clickedLayer?.get?.('layerId') || '');
-                const featureId = String(
-                    clickedFeature.getId?.() || clickedFeature.get?.('_gid') || clickedFeature.get?.('id') || '',
-                );
+                const featureId = getFeatureIdFromFeature(clickedFeature);
                 if (layerId && featureId) {
-                    highlightManagedFeature?.({ layerId, featureId });
+                    highlightManagedFeature?.({ layerId, featureId, mode: selectionMode });
                 }
                 emit?.('feature-selected', {
-                    ...props,
+                    ...normalizeHtmlAttributes(props),
                     layerId,
                     featureId,
+                    mode: selectionMode,
+                    totalHits: hits.length,
                 });
                 return;
             }

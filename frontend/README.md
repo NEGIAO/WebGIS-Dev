@@ -1,5 +1,28 @@
 # WebGIS 前端项目 — v3.3.8
 
+## 📝 2026-06-22 暂存区 Code Review 修复
+
+针对 V3.3.8 要素高亮 Pinia 化暂存变更的后续审查：
+
+* 🐛 **修复托管图层 ID 时序**：`useCreateManagedVectorLayer.js` 先生成图层 ID 并确保要素 ID，再进行样式备份，避免 `id` 声明前访问导致备份失效。
+* 🐛 **补齐高亮清理旧 API 兼容**：`clearManagedFeatureHighlight(feature)` 可通过 `store.highlightedList` 反查 `layerId/featureId`，旧调用链不再静默 no-op。
+* 🐛 **修复点击命中遍历语义**：`forEachFeatureAtPixel` 回调返回 `false` 以继续累积命中要素，避免 `totalHits` 永远只统计首个命中。
+* 🧹 **清理维护日志空白字符**：保证 `git diff --check` 可通过。
+
+详见维护日志 `Docs/26-06/26-06-22/2026-06-22-fix-staged-feature-highlight-review.md`。
+
+## 📝 2026-06-21 高亮 Pinia 化后置修复
+
+针对同日 V3.3.8 Pinia 化改造的 Code Review 发现：
+
+* 🐛 **修复 `useFeatureStyleStore.ts` TS 报错**：`highlightFeature` 内 `targets` 数组元素补充 `feature: any` 字段类型；`syncLayerHighlights` 的 `callbacks` 默认值类型显式声明 `cb = callbacks || {}`，消除 7 个 TS 报错（`Property 'feature'/'restoreStyle'/'lookupFeature'/'applyHighlight' does not exist on type ...`）
+* 🐛 **回滚 `useMapUIEventHandlers.js` 破坏性重命名**：参数 `zoomToManagedFeature` 恢复原参数名，`void zoomToManagedFeature` 保留契约引用
+* 🐛 **修正 `useLayerMetadataNormalization.js` dl 合并顺序**：`{ ...dlParsed, ...next }` → `{ ...next, ...dlParsed }`，避免解析值被原 attributes 覆盖
+* ♻️ **抽离 `getFeatureIdFromFeature` 工具函数**：消除 4 处重复的 `getId() ?? get('_gid') ?? get('id')` 回退逻辑，统一到 `utils/map/featureKey.js`
+* ♻️ **`useManagedFeatureHighlight.js` 删除直接操作 store state 的代码**：统一通过 `store.clearHighlight` 行动维护封装性
+
+详见维护日志 `Docs/26-06/26-06-21/2026-06-21-fix-feature-style-store-types-and-bugs.md`。
+
 ## 📋 项目概述
 
 基于 **Vue 3 + Vite + OpenLayers + Cesium** 构建的专业级 WebGIS 前端应用。历经多次优化迭代，现已发展成为功能丰富、架构清晰的 WebGIS 平台。
@@ -322,6 +345,7 @@ frontend/src/
 │   ├── useChatStore.ts                       # Chat 工具调用状态管理
 │   ├── useCompassStore.ts                    # 罗盘状态（HUD 专用配置缩放）
 │   ├── useDownloadStore.ts                   # 下载任务状态
+│   ├── useFeatureStyleStore.ts               # 要素高亮样式 Pinia 集中管理（多选 + 样式备份 + TOC 联动）
 │   ├── useLayerStore.ts                      # 图层状态
 │   ├── useSwipeConfigStore.ts                # 卷帘配置（localStorage 持久化）
 │   ├── useThemeStore.ts                      # 主题状态（绿/蓝切换）
@@ -368,6 +392,7 @@ frontend/src/
 │   │   ├── index.js
 │   │   └── loading.js                        # 全局 loading 控制
 │   ├── map/
+│   │   ├── featureKey.js                     # FeatureKey 复合主键（`${layerId}::${featureId}`）
 │   │   └── viewScaleConverter.js              # OL zoom ↔ Cesium camera height 换算（默认不 clamp，显式 clamp 才截断）
 │   ├── url/
 │   │   ├── index.js
@@ -440,6 +465,39 @@ frontend/src/
 - ✅ 定位上下文：`hasUrlLocFlag()` 防止未授权时使用 localStorage 缓存。
 
 详见 [`../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md`](../Docs/26-06/26-06-19/2026-06-19-staged-code-review.md)
+
+## V3.3.8 (2026-06-21)
+### ✨ 要素高亮 Pinia 集中化 & 连续多选样式持久化
+
+- ✅ **新增** `src/stores/useFeatureStyleStore.ts`：高亮要素集合 + 原始样式备份 Map + TOC 图层联动清理
+- ✅ **新增** `src/utils/map/featureKey.js`：FeatureKey 复合主键工具（`${layerId}::${featureId}`）
+- ✅ **重构** `src/composables/map/features/useManagedFeatureHighlight.js`：闭包变量 → store 薄壳（保留 OL 类样式生成）
+- ✅ **改造** `src/composables/map/features/useMapEventHandlers.js` singleclick：累积命中 + Ctrl/Shift 多选模式
+- ✅ **联动修复** `src/stores/useTOCStore.ts` `removeLayerMeta` + `src/stores/useLayerStore.ts` `syncLayers`：自动清理已移除图层的高亮数据
+- ✅ **样式备份** `src/composables/map/features/useCreateManagedVectorLayer.js` + `src/composables/useUserLayerActions.js`：在 `setStyle(null)` 前先备份到 store，避免 KML/自定义样式永久丢失
+
+**修复内容**：解决"连续多选要素样式丢失"的核心痛点。
+
+详见 [`../Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md`](../Docs/26-06/26-06-21/2026-06-21-feature-style-pinia-multi-select.md)
+
+### ✨ 增强要素属性 HTML 解析逻辑
+
+- ✅ **重写** `parseHtmlTableValue` 为列索引驱动解析：识别 `<thead>` 表头 → 提取 `name`/`value` 列索引
+- ✅ **新增** `parseDefinitionListValue`：支持 `<dl>/<dt>/<dd>` 定义列表字段
+- ✅ **新增** `stripScriptsAndStyles`：主动剥离 `<script>` / `<style>` / inline 事件 / `javascript:` URL
+- ✅ **新增** `normalizeNullString`：识别 `<Null>` 占位符（OSM/Cesium/GeoServer 约定）→ null
+- ✅ **支持嵌套表格**：外层 `details` + 内层 `floor` → `details.floor` 命名空间
+- ✅ **同名多值合并**：多个 `<tr><th>image</th>...` → 数组化
+
+**用户截图修复**：属性表 `description` 字段从一长串乱码展开为多行字段（name / building / layer / levels / height / location / BldgClass）。
+
+详见 [`../Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md`](../Docs/26-06/26-06-21/2026-06-21-enhance-html-attribute-parser.md)
+
+### 🐛 修复 import 路径
+
+`useManagedFeatureHighlight.js` 两条 import 相对路径层级缺失：`../../...` → `../../../...`，解决 Vite `[plugin:vite:import-analysis] Failed to resolve import` 报错。
+
+详见 [`../Docs/26-06/26-06-21/2026-06-21-fix-managed-feature-highlight-import.md`](../Docs/26-06/26-06-21/2026-06-21-fix-managed-feature-highlight-import.md)
 
 ## V3.3.6 (2026-06-18)
 ### 🛠️ z 参数精度链路修复（2026-06-18 追加）
@@ -1706,4 +1764,3 @@ MIT
 - **配额消费**：实时跟踪用户配额使用情况
 
 更多详情见 [后端详细文档 - Agent Chat](../backend/README.md#%EF%B8%8F-v302-agent-chat-配置同步修复)
-

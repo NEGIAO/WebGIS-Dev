@@ -2,6 +2,7 @@ import { computed, ref, shallowRef } from 'vue';
 import { defineStore } from 'pinia';
 import { useTOCStore } from './useTOCStore';
 import { useSwipeConfigStore } from './useSwipeConfigStore';
+import { useFeatureStyleStore } from './useFeatureStyleStore';
 import type { LayerHandlers, LayerStoreLayer } from './layer';
 import {
     isRasterLayer,
@@ -168,6 +169,23 @@ export const useLayerStore = defineStore('layerStore', () => {
         const editable = editableLayers.value;
         if (!editable.find((item) => item.id === selectedEditLayerId.value)) {
             selectedEditLayerId.value = editable[0]?.id || 'draw';
+        }
+
+        // ★ 联动清理已移除图层的所有高亮数据
+        //    对比当前 userLayers 与 featureStyleStore 中记录的图层 ID 差量清理
+        try {
+            const featureStyleStore = useFeatureStyleStore();
+            if (featureStyleStore && typeof featureStyleStore.clearHighlightsByLayer === 'function') {
+                const nextLayerIds = new Set(normalizedLayers.map((layer) => String(layer.id)));
+                const existingLayerIds = featureStyleStore.highlightedLayerIds || [];
+                existingLayerIds.forEach((layerId) => {
+                    if (!nextLayerIds.has(String(layerId))) {
+                        featureStyleStore.clearHighlightsByLayer(String(layerId), null);
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn('[useLayerStore] syncLayers → clearHighlightsByLayer failed:', error);
         }
     }
 

@@ -1232,7 +1232,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.7)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.8)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
