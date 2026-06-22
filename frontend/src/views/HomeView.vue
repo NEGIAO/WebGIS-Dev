@@ -958,6 +958,20 @@ function handleSearchPoiSelected(poiPayload) {
         .toLowerCase();
     if (service && service !== 'amap') return;
     const poiid = String(poiPayload?.poiid || '').trim();
+    
+    // 若果是搜索结果的 POI，打开侧边面板并切换到工具箱 tab，确保 AOI 绘制对话框可见。 
+    // stopCompassTransientInteractions();
+    // if (!shouldLoadSidePanel.value) {
+    //     shouldLoadSidePanel.value = true;
+    // }
+    // activeSidePanelTab.value = 'toolbox';
+    // isSidePanelCollapsed.value = false;
+
+    // // Force ToolboxPanel back to the layer tab so the inline AOI dialog is mounted and visible.
+    // toolboxTab.value = '__layers_refresh__';
+    // nextTick(() => {
+    //     toolboxTab.value = 'layers';
+    // });
 
     latestSearchPoi.value = {
         ...poiPayload,

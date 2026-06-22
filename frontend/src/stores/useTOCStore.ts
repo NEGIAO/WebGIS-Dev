@@ -16,6 +16,7 @@ export type TOCLayerMetadata = {
     features?: any[];
     updatedAt: string;
     metadata: Record<string, any>;
+    persistedAt?: string;
 };
 
 export type DistrictTreeNode = {
@@ -136,6 +137,7 @@ export const useTOCStore = defineStore('tocStore', () => {
                   ? previous.features
                   : [],
             updatedAt: normalizeText(meta.updatedAt, new Date().toISOString()),
+            persistedAt: normalizeText(meta.persistedAt, previous?.persistedAt || new Date().toISOString()),
             metadata: {
                 ...(previous?.metadata || {}),
                 ...(meta.metadata && typeof meta.metadata === 'object' ? meta.metadata : {}),

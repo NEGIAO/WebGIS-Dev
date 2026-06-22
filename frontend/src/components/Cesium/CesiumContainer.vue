@@ -68,73 +68,6 @@
         <span class="drag-overlay-hint">GeoJSON / KML / SHP / GLB / CZML</span>
     </div>
 
-    <section
-        v-if="cesiumReady && fpsChartVisible"
-        class="fps-chart-panel"
-        aria-label="实时帧率折线图"
-    >
-        <div class="fps-chart-head">
-            <div class="fps-chart-title">
-                <span>FPS</span>
-                <strong>{{ frameRateDisplay }}</strong>
-            </div>
-            <button
-                class="fps-chart-close"
-                type="button"
-                aria-label="关闭 FPS 面板"
-                title="关闭 FPS 面板"
-                @click="closeFpsChart"
-            >
-                ×
-            </button>
-        </div>
-        <svg
-            class="fps-chart"
-            viewBox="0 0 160 48"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-        >
-            <line
-                class="fps-grid-line"
-                x1="0"
-                y1="12"
-                x2="160"
-                y2="12"
-            />
-            <line
-                class="fps-grid-line"
-                x1="0"
-                y1="24"
-                x2="160"
-                y2="24"
-            />
-            <line
-                class="fps-grid-line"
-                x1="0"
-                y1="36"
-                x2="160"
-                y2="36"
-            />
-            <polyline
-                v-if="frameRateLinePoints"
-                class="fps-line"
-                :points="frameRateLinePoints"
-            />
-        </svg>
-    </section>
-
-    <!-- 隐藏后用于重新打开 -->
-    <button
-        v-else-if="cesiumReady && !fpsChartVisible"
-        class="fps-chart-toggle"
-        type="button"
-        aria-label="显示 FPS 面板"
-        title="显示 FPS 面板"
-        @click="openFpsChart"
-    >
-        FPS
-    </button>
-
     <!-- 坐标显示面板 -->
     <div class="map-controls-group">
         <div class="mouse-position-content">{{ coordinateDisplay }}</div>
@@ -171,7 +104,6 @@ import { configureSolarLighting } from './composables/cesiumAtmosphere';
 import { loadCesiumRuntime } from './composables/cesiumRuntime';
 import { configureBeijingTimeSystem } from './composables/cesiumTimeSystem';
 import { useCesiumCreditHider } from './composables/useCesiumCreditHider';
-import { useCesiumFrameRate } from './composables/useCesiumFrameRate';
 import { useCesiumInteractions } from './composables/useCesiumInteractions';
 import { useCesiumLayers } from './composables/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/useCesiumSceneActions';
@@ -194,16 +126,6 @@ const emit = defineEmits(['view-sync']);
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const runtimeMapTokens = ref(getRuntimeMapTokensSync());
-
-const fpsChartVisible = ref(true);
-
-function closeFpsChart() {
-    fpsChartVisible.value = false;
-}
-
-function openFpsChart() {
-    fpsChartVisible.value = true;
-}
 
 const getViewer = () => viewer;
 const getCesium = () => Cesium || window.Cesium;
@@ -248,12 +170,6 @@ const { coordinateDisplay, setupInteractions, cleanupInteractions } = useCesiumI
     getViewer,
     getCesium,
 });
-const {
-    frameRateDisplay,
-    frameRateLinePoints,
-    setupFrameRateMonitor,
-    cleanupFrameRateMonitor,
-} = useCesiumFrameRate({ getViewer });
 
 const { installCreditHider, cleanupCreditHider } = useCesiumCreditHider({ getViewer });
 const {
@@ -391,7 +307,6 @@ async function bootCesium() {
                 initViewer();
                 console.warn('[Cesium][boot] viewer constructed');
                 setupInteractions();
-                setupFrameRateMonitor();
 
                 const basemapReady = addBaseImageryLayers();
                 const terrainReady = await initCustomTerrain();
@@ -459,7 +374,6 @@ function resetCesiumViewerForRetry() {
     cesiumReady.value = false;
     cleanupCameraViewSync();
     cleanupInteractions();
-    cleanupFrameRateMonitor();
     cleanupLayers();
     cleanupCreditHider();
     if (!viewer) return;
@@ -491,6 +405,7 @@ function initViewer() {
         selectedTerrainProviderViewModel: getSelectedTerrainProviderViewModel(terrainProviderViewModels),
         shouldAnimate: true,
     });
+    viewer.scene.debugShowFramesPerSecond = true;
     viewer.scene.globe.terrainExaggeration = 1;
     viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
     configureBeijingTimeSystem(viewer, Cesium);
@@ -560,7 +475,6 @@ onUnmounted(() => {
     cesiumReady.value = false;
     cleanupCameraViewSync();
     cleanupInteractions();
-    cleanupFrameRateMonitor();
     cleanupTools();
     cleanupLayers();
     cleanupCreditHider();
@@ -604,102 +518,6 @@ onUnmounted(() => {
     white-space: nowrap;
 }
 
-.fps-chart-panel {
-    position: absolute;
-    top: 90px;
-    right: 12px;
-    z-index: 1150;
-    width: 188px;
-    border: 1px solid rgba(155, 216, 255, 0.26);
-    border-radius: 8px;
-    padding: 9px 10px 10px;
-    background: rgba(8, 25, 36, 0.86);
-    color: #eefbf3;
-    box-shadow: 0 14px 34px rgba(0, 7, 14, 0.32);
-    backdrop-filter: blur(14px);
-    pointer-events: none;
-}
-
-.fps-chart-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 7px;
-}
-
-.fps-chart-head span {
-    color: rgba(220, 243, 255, 0.66);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0;
-}
-
-.fps-chart-head strong {
-    color: #a7f3d0;
-    font-size: 20px;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-}
-
-.fps-chart {
-    display: block;
-    width: 100%;
-    height: 48px;
-    overflow: visible;
-}
-
-.fps-grid-line {
-    stroke: rgba(155, 216, 255, 0.16);
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
-}
-
-.fps-line {
-    fill: none;
-    stroke: #5eead4;
-    stroke-width: 2.2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    vector-effect: non-scaling-stroke;
-    filter: drop-shadow(0 0 4px rgba(94, 234, 212, 0.45));
-}
-
-.fps-chart-close,
-.fps-chart-toggle {
-    pointer-events: auto;
-    border: none;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 0.2s ease;
-}
-
-.fps-chart-close {
-    width: 22px;
-    height: 22px;
-    line-height: 22px;
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-    font-size: 16px;
-}
-
-.fps-chart-close:hover {
-    background: rgba(255, 255, 255, 0.18);
-}
-
-.fps-chart-toggle {
-    position: absolute;
-    top: 90px;
-    right: 12px;
-    z-index: 1150;
-    padding: 6px 10px;
-    background: rgba(8, 25, 36, 0.86);
-    color: #eefbf3;
-    border: 1px solid rgba(155, 216, 255, 0.26);
-    box-shadow: 0 14px 34px rgba(0, 7, 14, 0.32);
-    backdrop-filter: blur(14px);
-}
-
 /* 平板适配 */
 @media (max-width: 1024px) {
     .map-controls-group {
@@ -717,12 +535,6 @@ onUnmounted(() => {
     .mouse-position-content {
         font-size: 12px;
         min-width: auto;
-    }
-
-    .fps-chart-panel {
-        top: 90px;
-        right: 10px;
-        width: 164px;
     }
 
 }

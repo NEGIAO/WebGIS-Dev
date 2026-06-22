@@ -21,21 +21,21 @@
     }
 
     const Command = `
-// cesium for fluid by mind3d , fluid demo from https://www.shadertoy.com/view/7tSSDD 
+// 基于 mind3d 的 Cesium 流体示例，原始灵感来自 shadertoy：https://www.shadertoy.com/view/7tSSDD
 const int textureSize = 1024;
-// Render
+// 渲染相关常量
 const vec3 backgroundColor = vec3(0.2);
-// Terrain
+// 地形相关常量
 const float transitionTime = 5.0;
 const float transitionPercent = 0.3;
 const int octaves = 7;
 const float minAnimatedFilmDepth = 0.003;
-// Water simulation
+// 水体模拟参数
 // const float attenuation = 0.995;
 // const float strenght = 0.25;
 // const float minTotalFlow = 0.0001;
-// fluidParam: x=attenuation, y=strength, z=minTotalFlow, w=initialWaterLevel(normalized absolute elevation)
-// customParam: x=threshold(fogDist), y=blend(specPower), z=lightStrength(specIntensity), w=reserved
+// fluidParam：x=衰减系数，y=扩散强度，z=最小总流量，w=初始水位（归一化后的绝对高程）
+// customParam：x=雾化距离阈值，y=高光指数，z=高光强度，w=保留参数
 uniform vec4 fluidParam;
 uniform vec4 customParam;
 
@@ -105,7 +105,7 @@ vec3 applyFog( in vec3  rgb, vec3 fogColor, in float distance)
 
     // 计算地形和更新水位的一个pass
     const BufferA = `
-// compute Terrain and update water level 1st pass
+    // 计算地形并更新水位的第一阶段
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
 uniform sampler2D heightMap;
@@ -189,7 +189,7 @@ void main( )
 
     // 更新流出量的pass
     const BufferB = `
-// Update Outflow 1st pass
+// 计算流量更新的第一阶段
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
 uniform float     iTime;
@@ -249,7 +249,7 @@ void main()
 
     // 水位计算的第二个pass
     const BufferC = `
-// water level 2nd pass
+// 水位计算的第二阶段
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
 uniform float     iTime;
@@ -291,7 +291,7 @@ void main( )
 
     // 更新流出量的 第二个pass
     const BufferD = `
-// Update Outflow 2nd pass
+// 计算流量更新的第二阶段
 uniform sampler2D iChannel0;
 uniform sampler2D iChannel1;
 uniform float     iTime;
@@ -342,7 +342,8 @@ void main( )
     out_FragColor = nOutFlow;
 }
 `;
-    // 默认体渲染，水体效果和地形部分有待完善
+    // 默认主渲染着色器：负责体渲染、地形遮罩、雾化和水体高光
+
     const renderShaderSource = `
 // Created by David Gallardo - xjorma/2021
 // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0
@@ -508,9 +509,8 @@ void main()
 }
 `;
 
-    /**
-     * @description 自定义DC
-     */
+    // 自定义绘制命令封装
+
     class CustomPrimitive {
         constructor(options) {
             this.commandType = options.commandType;
@@ -644,9 +644,8 @@ void main()
         }
     }
 
-    /**
-     * @description 渲染工具类
-     */
+    // 渲染工具类
+
     class RenderUtil {
         constructor() {
         }
@@ -762,9 +761,8 @@ void main()
         }
     }
 
-    /**
-     * @description 流体体渲染
-     */
+    // 流体体渲染
+
     class FluidRenderer {
         static DEFAULTS = {
             width: 1024,
@@ -1236,7 +1234,8 @@ void main()
             }
         }
 
-        /* 纹理拷贝方法 */
+        // 纹理拷贝方法：将高度图数据复制到目标 framebuffer
+
         _copyTexture(sourceTexture, targetFBO) {
             const context = this.viewer.scene.context;
             const passState = getScenePassState(this.viewer.scene);
@@ -1266,7 +1265,8 @@ void main()
             passState.framebuffer = originalFramebuffer;
         }
 
-        /* 获取地形深度渲染命令 */
+        // 获取地形深度渲染命令：收集当前视锥下的深度预渲染命令
+
         _getDepthRenderCommands() {
             const commands = [];
             const frustumCommandsList = getFrustumCommandsList(this.viewer.scene);
@@ -1281,7 +1281,8 @@ void main()
             return commands;
         }
 
-        /* 高度图着色器处理 */
+            // 高度图着色器处理：为地形深度预渲染注入逆 ENU 坐标转换
+
         _processHeightMapShaders() {
             const patchedCommands = [];
             // 计算逆ENU矩阵
@@ -1294,7 +1295,7 @@ void main()
             );
             const frameState = this.viewer.scene.frameState;
             const commands = this._getDepthRenderCommands();
-            
+
             commands.forEach((command) => {
                 if (!command?.shaderProgram?.fragmentShaderSource || !command.uniformMap) {
                     return;
@@ -1349,7 +1350,8 @@ void main()
             });
         }
 
-        /* 创建派生着色器程序 */
+            // 创建派生着色器程序：在原始 shader 基础上生成高度图专用版本
+
         _getDerivedShaderProgram(context, baseShaderProgram, passName) {
             let derivedProgram = context.shaderCache.getDerivedShaderProgram(
                 baseShaderProgram,
@@ -1367,7 +1369,8 @@ void main()
             return derivedProgram;
         }
 
-        /* 生成高度图专用着色器 */
+            // 生成高度图专用着色器：替换 main 并注入地形高程写回逻辑
+
         _createHeightMapShaderProgram(context, baseShaderProgram, passName) {
             // 修改片段着色器源码
             const newFS = this._modifyFragmentShader(
@@ -1385,7 +1388,8 @@ void main()
             );
         }
 
-        /* 修改片段着色器 */
+            // 修改片段着色器：保留原始渲染流程，仅追加高度图输出
+
         _modifyFragmentShader(originalFS) {
             const modifiedSources = originalFS.sources.map((source) =>
                 Cesium.ShaderSource.replaceMain(source, "czm_heightMap_main")
@@ -1406,7 +1410,8 @@ void main()
             });
         }
 
-        /* 创建流体几何体 */
+            // 创建流体几何体：使用单位盒体作为体渲染包围体
+
         _createBoxGeometry() {
             return Cesium.BoxGeometry.createGeometry(
                 Cesium.BoxGeometry.fromDimensions({
@@ -1416,14 +1421,16 @@ void main()
             );
         }
 
-        /* 获取属性位置映射 */
+            // 获取属性位置映射：根据盒体几何体生成顶点属性索引
+
         _getAttributeLocations() {
             return Cesium.GeometryPipeline.createAttributeLocations(
                 this._createBoxGeometry()
             );
         }
 
-        /* 创建渲染状态配置 */
+            // 创建渲染状态配置：关闭背面剔除并开启深度测试
+
         _createRenderState() {
             return {
                 cull: {
@@ -1442,7 +1449,8 @@ void main()
             };
         }
 
-        /* 顶点着色器生成 */
+            // 顶点着色器生成：输出相机位置、视线方向和纹理坐标
+
         _getVertexShader() {
             return new Cesium.ShaderSource({
                 sources: [
@@ -1465,13 +1473,8 @@ void main()
         }
     }
 
-    /**
-     * 生成矩阵
-     * @param {*} position
-     * @param {*} rotation
-     * @param {*} scale
-     * @returns
-     */
+    // 生成模型矩阵
+
     const generateModelMatrix = (
         position = [0, 0, 0],
         rotation = [0, 0, 0],
@@ -1691,10 +1694,8 @@ void main()
     }      
     `;
 
-    /**
-     * 基础大气雾
-     * @returns
-     */
+    // 基础大气雾
+
     function createSkyEffect() {
         return new Cesium.PostProcessStage({
             fragmentShader: atmosphereFs,

@@ -871,10 +871,13 @@ function openManualAoiDetailLink() {
 function openManualAoiDialogByPoi(payload = {}, options = {}) {
     const poiId = normalizeManualAoiPoiId(payload?.poiid, { keepRawFallback: false });
     const layerName = String(payload?.layerName || '').trim();
+    const shouldResetContent = !manualAoiDialogVisible.value || poiId !== manualAoiPoiId.value;
 
     manualAoiPoiId.value = poiId || '';
-    manualAoiJsonText.value = '';
-    manualAoiError.value = '';
+    if (shouldResetContent) {
+        manualAoiJsonText.value = '';
+        manualAoiError.value = '';
+    }
     manualAoiSourceLayerName.value = layerName;
     manualAoiDialogVisible.value = true;
 
@@ -1170,6 +1173,7 @@ watch(
     ([syncAt, nextPoiId, service, poiName]) => {
         if (!syncAt) return;
         if (service && service !== 'amap') return;
+        if (manualAoiDialogVisible.value && nextPoiId === manualAoiPoiId.value) return;
 
         openManualAoiDialogByPoi(
             {
