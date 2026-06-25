@@ -26,7 +26,15 @@
 | [![visitors](https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis)](https://github.com/NEGIAO/WebGIS-Dev) | [![Total Clones](https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic) | [![Unique Cloners](https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue)](https://github.com/NEGIAO/WebGIS-Dev/graphs/traffic) | ![Last Commit](https://img.shields.io/github/last-commit/negiao/webgis-dev) |
 
 </div>
+## 📖 项目简介
+<img width="1248" height="723" alt="界面预览" src="https://github.com/user-attachments/assets/90255184-7623-46f5-97f3-115e07f4f917" />
 
+## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
+> 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
+
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.8 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入、Cesium 数据导入多格式支持（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles），正逐步发展成为专业级的地理信息系统应用
+
+---
 ## 📑 目录
 
 - [项目简介](#-项目简介)
@@ -38,14 +46,6 @@
 - [许可证](#-许可证)
 
 ---
-## 📖 项目简介
-<img width="1248" height="723" alt="界面预览" src="https://github.com/user-attachments/assets/90255184-7623-46f5-97f3-115e07f4f917" />
-
-## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
-> 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
-
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.8 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入、Cesium 数据导入多格式支持（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles），正逐步发展成为专业级的地理信息系统应用
-
 ### 🎯 项目定位
 
 - **前端**：基于 Vue 3 + Vite + OpenLayers + Cesium，托管在 GitHub Pages  
@@ -178,7 +178,7 @@ WebGIS_Dev/
 │   │   ├── api/                      # 后端 API 客户端（axios + 拦截器）
 │   │   ├── assets/                   # 全局样式与静态数据
 │   │   ├── components/               # 业务组件（按功能域分组）
-│   │   │   ├── Cesium/               # 3D 地球模块（含 FluidSimulation）
+│   │   │   ├── Cesium/               # 3D 地球模块（含 FluidSimulation / Clouds / 高级特效）
 │   │   │   ├── Chat/                 # AI 聊天
 │   │   │   ├── Common/               # 通用组件（ExtentPicker 等）
 │   │   │   ├── Compass/              # 罗盘控制 + 宫位解释

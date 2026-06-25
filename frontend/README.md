@@ -159,30 +159,36 @@ frontend/src/
 │   └── data/                                 # 静态数据
 │       └── compass-metadata/                 # 罗盘元数据
 │           ├── compass-data.ts               # 罗盘基础数据
-│           └── twentyEightConstellations.ts   # 二十八星宿数据（4323 行）
-│
-├── components/                               # 业务组件（按功能域分组）
-│   ├── Cesium/                               # 3D 地球模块
-│   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 统一工具面板调度 + 拖拽数据导入）
-│   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，支持 headless）
-│   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/数据导入/特效/风场/流体参数 + ? 提示）
-│   │   ├── CesiumDataImportDialog.vue        # GLTF/GLB 模型放置坐标输入弹窗（Teleport 到 body + 实时验证）
-│   │   ├── Wind2D.js                         # 2D 风场渲染
-│   │   ├── composables/                      # Cesium 工具模块状态编排
-│   │   │   ├── cesiumRuntime.js              # Cesium CDN 运行时加载
-│   │   │   ├── useCesiumBasemapSwitcher.js   # 底图熔断/降级切换器（与 OL 共用预设）
-│   │   │   ├── useCesiumDataImport.js        # 数据导入 composable（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles + 自动定位 + BlobURL 生命周期管理）
-│   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
-│   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排 + 统一预设接入
-│   │   │   ├── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
-│   │   │   └── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
-│   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
-│   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
-│   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）
-│   │   └── terrain/                          # 自定义地形 Provider
-│   │       ├── GeoTerrainProvider.js
-│   │       ├── GeoWTFS.js
-│   │       └── util.js
+│   │   ├── Cesium/                               # 3D 地球模块
+│   │   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 统一工具面板调度 + 拖拽数据导入）
+│   │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气/云层，支持 headless）
+│   │   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/数据导入/特效/风场/流体参数 + ? 提示）
+│   │   │   ├── CesiumDataImportDialog.vue        # GLTF/GLB 模型放置坐标输入弹窗（Teleport 到 body + 实时验证）
+│   │   │   ├── Wind2D.js                         # 2D 风场渲染
+│   │   │   ├── Clouds/                           # 云层 / 云影 / 高级天空效果
+│   │   │   │   ├── CesiumVolumetricClouds.js     # 体积云主模块
+│   │   │   │   ├── CloudShadowPrimitive.js       # 云影几何体/Primitive
+│   │   │   │   ├── cloudDefaults.js              # 默认参数
+│   │   │   │   ├── cloudMath.js                  # 数学与采样工具
+│   │   │   │   ├── cloudShaders.js               # 云层着色器
+│   │   │   │   ├── cloudShadowResources.js       # 云影资源管理
+│   │   │   │   └── cloudShadowShaders.js         # 云影着色器
+│   │   │   ├── composables/                      # Cesium 工具模块状态编排
+│   │   │   │   ├── cesiumRuntime.js              # Cesium CDN 运行时加载
+│   │   │   │   ├── useCesiumBasemapSwitcher.js   # 底图熔断/降级切换器（与 OL 共用预设）
+│   │   │   │   ├── useCesiumClouds.js            # 云层/云影开关与参数编排
+│   │   │   │   ├── useCesiumDataImport.js        # 数据导入 composable（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles + 自动定位 + BlobURL 生命周期管理）
+│   │   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
+│   │   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排 + 统一预设接入
+│   │   │   │   ├── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
+│   │   │   │   └── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
+│   │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
+│   │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
+│   │   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）
+│   │   │   └── terrain/                          # 自定义地形 Provider
+│   │   │       ├── GeoTerrainProvider.js
+│   │   │       ├── GeoWTFS.js
+│   │   │       └── util.js
 │   ├── Chat/
 │   │   └── ChatPanelContent.vue              # AI 聊天面板
 │   ├── Common/                               # 通用可复用组件

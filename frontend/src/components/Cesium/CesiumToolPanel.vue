@@ -448,12 +448,17 @@
                                 <div
                                     v-if="module.controls?.length"
                                     class="control-list"
+                                    :class="module.controlLayout ? `control-list-${module.controlLayout}` : ''"
                                 >
                                     <label
                                         v-for="control in module.controls"
                                         :key="control.id"
                                         class="control-row"
-                                        :class="`control-${control.type}`"
+                                        :class="[
+                                            `control-${control.type}`,
+                                            module.controlLayout ? `control-row-${module.controlLayout}` : '',
+                                            control.numberInput === false ? 'without-number-input' : '',
+                                        ]"
                                     >
                                         <span class="control-label">
                                             <span class="control-label-text">{{ control.label }}</span>
@@ -480,6 +485,7 @@
                                                 @input="emitControlChange(module.id, control, $event.target.value)"
                                             />
                                             <input
+                                                v-if="control.numberInput !== false"
                                                 class="control-number"
                                                 type="number"
                                                 :min="control.min"
@@ -656,6 +662,7 @@ import {
     Box,
     Check,
     ChevronDown,
+    Cloud,
     Droplets,
     Eye,
     FileJson,
@@ -900,6 +907,7 @@ function getModuleIcon(moduleId) {
     const icons = {
         scene: Navigation,
         effects: Sparkles,
+        clouds: Cloud,
         wind: Wind,
         fluid: Droplets,
     };
@@ -1720,6 +1728,34 @@ function emitClearAll() {
     grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.control-list-clouds {
+    gap: 7px;
+}
+
+.control-row.control-row-clouds {
+    width: 100%;
+    box-sizing: border-box;
+    grid-template-columns: 48px minmax(0, 1fr) 58px;
+    gap: 8px;
+    border-color: rgba(155, 216, 255, 0.14);
+    background: rgba(7, 27, 36, 0.54);
+}
+
+.control-row-clouds.control-toggle {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 38px;
+    border-color: rgba(74, 222, 128, 0.2);
+    background: rgba(17, 86, 66, 0.2);
+}
+
+.control-row-clouds.control-select {
+    grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.control-row-clouds.without-number-input {
+    grid-template-columns: 48px minmax(0, 1fr) 58px;
+}
+
 .control-label {
     min-width: 0;
     display: inline-flex;
@@ -1779,6 +1815,15 @@ function emitClearAll() {
 
 .control-select {
     grid-column: span 2;
+}
+
+.control-row.control-select {
+    grid-column: auto;
+}
+
+.control-row-clouds .control-select {
+    grid-column: auto;
+    width: 100%;
 }
 
 .control-row.control-color {
@@ -1855,6 +1900,22 @@ function emitClearAll() {
     grid-column: 2 / 4;
     color: rgba(190, 232, 255, 0.72);
     font-size: 11px;
+}
+
+.control-row-clouds .control-value {
+    grid-column: auto;
+    justify-self: end;
+    min-width: 48px;
+    border: 1px solid rgba(155, 216, 255, 0.13);
+    border-radius: 999px;
+    padding: 3px 7px;
+    background: rgba(3, 18, 28, 0.62);
+    color: rgba(225, 244, 255, 0.82);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
 }
 
 .compact .panel-header {
@@ -1947,6 +2008,11 @@ function emitClearAll() {
 
     .control-row {
         grid-template-columns: 64px minmax(0, 1fr) 70px;
+    }
+
+    .control-row.control-row-clouds,
+    .control-row-clouds.without-number-input {
+        grid-template-columns: 44px minmax(0, 1fr) 54px;
     }
 
     .control-row.control-color {

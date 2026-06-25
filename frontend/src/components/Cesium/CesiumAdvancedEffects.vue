@@ -24,6 +24,13 @@
                 </label>
                 <label class="switch-item">
                     <input
+                        v-model="volumetricCloudsEnabled"
+                        type="checkbox"
+                    />
+                    <span>Clouds</span>
+                </label>
+                <label class="switch-item">
+                    <input
                         v-model="hbaoEnabled"
                         type="checkbox"
                     />
@@ -62,6 +69,7 @@ import {
     configureRealisticAtmosphere,
     restoreRealisticAtmosphere,
 } from './composables/cesiumAtmosphere';
+import CloudShadowPrimitive from './Clouds/CloudShadowPrimitive';
 
 const props = defineProps({
     headless: {
@@ -86,12 +94,32 @@ const message = useMessage();
 const chartRef = ref(null);
 
 const fogEnabled = ref(false);
+const volumetricCloudsEnabled = ref(false);
 const hbaoEnabled = ref(false);
 const tiltShiftEnabled = ref(false);
 const atmosphereEnabled = ref(false);
 const chartVisible = ref(false);
+const cloudControls = ref({
+    coverage: 0.52,
+    density: 0.00009,
+    shadowStrength: 0.82,
+    beerShadowStrength: 0.64,
+    multiScattering: 0.58,
+    powderStrength: 0.72,
+    hazeStrength: 0.38,
+    groundBounceStrength: 0.26,
+    bsmShadow: false,
+    shadowResolution: 256,
+    maxDistance: 360000,
+    stepCount: 48,
+});
 
 let fogStage = null;
+let volumetricCloudsStage = null;
+let cloudShadowPrimitive = null;
+let cloudShadowFailed = false;
+let cloudShadowFallbackTexture = null;
+let ownsCloudShadowFallbackTexture = false;
 let tiltShiftStage = null;
 let ambientOcclusionStage = null;
 let createdAmbientOcclusionStage = false;
@@ -107,6 +135,7 @@ let preRenderListener = null;
 let renderErrorListener = null;
 let hasRenderErrorNotified = false;
 let realisticAtmosphereSnapshot = null;
+let cloudClockEpoch = null;
 
 let frameCounter = 0;
 let fpsValue = 0;
@@ -145,11 +174,374 @@ const chartData = {
     fps: [],
 };
 
+const cloudShadowUniformScratch = {
+    texture: null,
+    matrices: null,
+    splits: null,
+    params: null,
+};
+
 const originalSceneState = {
     hdr: null,
     bloom: null,
     sky: null,
 };
+
+const VOLUMETRIC_CLOUDS_FRAGMENT_SHADER = `
+uniform sampler2D colorTexture;
+uniform sampler2D depthTexture;
+uniform sampler2D u_cloudShadowTexture;
+uniform vec3 u_cameraPositionWC;
+uniform vec3 u_cameraDirectionWC;
+uniform mat4 u_inverseViewProjection;
+uniform vec3 u_sunDirectionWC;
+uniform mat4 u_cloudShadowMatrices[4];
+uniform vec4 u_cloudShadowSplits;
+uniform vec4 u_cloudShadowParams;
+uniform float u_cloudBottomRadius;
+uniform float u_cloudTopRadius;
+uniform float u_maxDistance;
+uniform float u_coverage;
+uniform float u_density;
+uniform float u_shadowStrength;
+uniform float u_beerShadowStrength;
+uniform float u_multiScattering;
+uniform float u_powderStrength;
+uniform float u_hazeStrength;
+uniform float u_groundBounceStrength;
+uniform float u_stepCount;
+uniform float u_timeSeconds;
+
+#if __VERSION__ == 300
+in vec2 v_textureCoordinates;
+#define SAMPLE_TEX texture
+#define FRAG_COLOR out_FragColor
+#else
+varying vec2 v_textureCoordinates;
+#define SAMPLE_TEX texture2D
+#define FRAG_COLOR gl_FragColor
+#endif
+
+float saturate(float value) {
+    return clamp(value, 0.0, 1.0);
+}
+
+float hash31(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+float valueNoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n000 = hash31(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
+    float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
+
+    float x00 = mix(n000, n100, f.x);
+    float x10 = mix(n010, n110, f.x);
+    float x01 = mix(n001, n101, f.x);
+    float x11 = mix(n011, n111, f.x);
+    float y0 = mix(x00, x10, f.y);
+    float y1 = mix(x01, x11, f.y);
+    return mix(y0, y1, f.z);
+}
+
+float fbm(vec3 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 5; i++) {
+        value += valueNoise(p) * amplitude;
+        p = p * 2.03 + vec3(17.1, 31.7, 11.3);
+        amplitude *= 0.5;
+    }
+    return value;
+}
+
+vec2 raySphere(vec3 origin, vec3 direction, float radius) {
+    float b = dot(origin, direction);
+    float c = dot(origin, origin) - radius * radius;
+    float h = b * b - c;
+    if (h < 0.0) {
+        return vec2(1.0, 0.0);
+    }
+    h = sqrt(h);
+    return vec2(-b - h, -b + h);
+}
+
+float getSceneDistance(vec2 uv) {
+    float depth = czm_readDepth(depthTexture, uv);
+    if (depth <= 0.0 || depth >= 1.0) {
+        return 1.0e9;
+    }
+    vec4 eye = czm_windowToEyeCoordinates(gl_FragCoord.xy, depth);
+    return length(eye.xyz);
+}
+
+vec3 getRayDirection(vec2 uv) {
+    vec2 ndc = uv * 2.0 - 1.0;
+    vec4 farPosition = u_inverseViewProjection * vec4(ndc, 1.0, 1.0);
+    float safeW = abs(farPosition.w) < 0.00001 ? 0.00001 : farPosition.w;
+    farPosition.xyz /= safeW;
+    return normalize(farPosition.xyz - u_cameraPositionWC);
+}
+
+float sampleCloudDensity(vec3 position, float heightFraction) {
+    vec3 normal = normalize(position);
+    vec3 wind = vec3(u_timeSeconds * 0.0025, u_timeSeconds * 0.0015, 0.0);
+    vec3 weatherCoord = normal * 42.0 + wind;
+    vec3 shapeCoord = position * 0.000075 + vec3(u_timeSeconds * 0.006, 0.0, 0.0);
+
+    float weather = fbm(weatherCoord);
+    float shape = fbm(shapeCoord);
+    float detail = fbm(shapeCoord * 3.2 + 19.0);
+    float profile = smoothstep(0.02, 0.22, heightFraction) * (1.0 - smoothstep(0.72, 1.0, heightFraction));
+    float coverageCutoff = 1.0 - u_coverage;
+    float baseDensity = smoothstep(coverageCutoff, coverageCutoff + 0.28, weather * 0.72 + shape * 0.28);
+    float carved = baseDensity * smoothstep(0.10, 0.82, detail);
+
+    return carved * profile;
+}
+
+float hgPhase(float cosTheta, float g) {
+    float g2 = g * g;
+    float denom = pow(max(1.0 + g2 - 2.0 * g * cosTheta, 0.001), 1.5);
+    return (1.0 - g2) / (12.5663706144 * denom);
+}
+
+float marchSunOpticalDepth(vec3 startPosition, vec3 sunDirection) {
+    vec2 sunHit = raySphere(startPosition, sunDirection, u_cloudTopRadius);
+    float maxDistance = max(sunHit.y, 0.0);
+    float stepSize = min(maxDistance / 6.0, 2600.0);
+    float distanceAlongRay = stepSize * 0.5;
+    float opticalDepth = 0.0;
+
+    for (int i = 0; i < 6; i++) {
+        if (distanceAlongRay > maxDistance) {
+            break;
+        }
+
+        vec3 samplePosition = startPosition + sunDirection * distanceAlongRay;
+        float radius = length(samplePosition);
+        float heightFraction = saturate((radius - u_cloudBottomRadius) / (u_cloudTopRadius - u_cloudBottomRadius));
+        if (heightFraction > 0.0 && heightFraction < 1.0) {
+            opticalDepth += sampleCloudDensity(samplePosition, heightFraction) * stepSize;
+        }
+
+        distanceAlongRay += stepSize;
+    }
+
+    return opticalDepth;
+}
+
+float structuredShadowJitter(vec3 position, vec3 sunDirection) {
+    vec3 p = normalize(position) * 37.0 + sunDirection * 19.0;
+    return hash31(p + vec3(fract(u_timeSeconds * 0.031)));
+}
+
+float marchBeerShadowOpticalDepth(vec3 startPosition, vec3 sunDirection) {
+    vec2 sunHit = raySphere(startPosition, sunDirection, u_cloudTopRadius);
+    float maxDistance = max(sunHit.y, 0.0);
+    if (maxDistance <= 0.0) {
+        return 0.0;
+    }
+
+    float stepSize = min(maxDistance / 10.0, 7200.0);
+    float jitter = structuredShadowJitter(startPosition, sunDirection);
+    float distanceAlongRay = stepSize * (0.35 + jitter * 0.55);
+    float opticalDepth = 0.0;
+    float lastDensity = 0.0;
+
+    for (int i = 0; i < 10; i++) {
+        if (distanceAlongRay > maxDistance) {
+            break;
+        }
+
+        vec3 samplePosition = startPosition + sunDirection * distanceAlongRay;
+        float radius = length(samplePosition);
+        float heightFraction = saturate((radius - u_cloudBottomRadius) / (u_cloudTopRadius - u_cloudBottomRadius));
+        if (heightFraction > 0.0 && heightFraction < 1.0) {
+            lastDensity = sampleCloudDensity(samplePosition, heightFraction);
+            opticalDepth += lastDensity * stepSize;
+        }
+
+        distanceAlongRay += stepSize * 1.18;
+    }
+
+    float tailDistance = max(maxDistance - distanceAlongRay, 0.0);
+    opticalDepth += lastDensity * tailDistance * 0.28;
+    return opticalDepth;
+}
+
+float sampleBsmShadow(vec3 position, float cameraDistance, float localShadow) {
+    if (u_cloudShadowParams.x < 0.5) {
+        return 1.0;
+    }
+
+    int cascadeIndex = 0;
+    if (cameraDistance > u_cloudShadowSplits.z) {
+        cascadeIndex = 3;
+    } else if (cameraDistance > u_cloudShadowSplits.y) {
+        cascadeIndex = 2;
+    } else if (cameraDistance > u_cloudShadowSplits.x) {
+        cascadeIndex = 1;
+    }
+
+    float cascadeCount = max(u_cloudShadowParams.y, 1.0);
+    if (float(cascadeIndex) >= cascadeCount) {
+        cascadeIndex = int(cascadeCount - 1.0);
+    }
+
+    vec4 shadowClip = u_cloudShadowMatrices[cascadeIndex] * vec4(position, 1.0);
+    shadowClip.xyz /= max(abs(shadowClip.w), 0.000001);
+    vec2 localUv = shadowClip.xy * 0.5 + 0.5;
+
+    if (localUv.x <= 0.001 || localUv.x >= 0.999 || localUv.y <= 0.001 || localUv.y >= 0.999) {
+        return 1.0;
+    }
+
+    float atlasWidth = 1.0 / cascadeCount;
+    vec2 atlasUv = vec2((float(cascadeIndex) + localUv.x) * atlasWidth, localUv.y);
+    vec4 packed = SAMPLE_TEX(u_cloudShadowTexture, atlasUv);
+    float opticalDepth = packed.g * 255.0;
+    float maxDensity = packed.b;
+    float frontOcclusion = smoothstep(0.015, 0.25, maxDensity);
+    float atlasShadow = exp(-opticalDepth * u_density * u_cloudShadowParams.z);
+    float densityShadow = mix(1.0, atlasShadow, frontOcclusion);
+
+    return mix(1.0, min(localShadow, densityShadow), u_cloudShadowParams.w);
+}
+
+float approximateMultipleScattering(float opticalDepth) {
+    float attenuation = 1.0;
+    float contribution = 0.0;
+    float octaveWeight = 0.5;
+
+    for (int i = 0; i < 3; i++) {
+        attenuation *= exp(-opticalDepth * u_density * octaveWeight);
+        contribution += (1.0 - attenuation) * octaveWeight;
+        octaveWeight *= 0.5;
+    }
+
+    return saturate(contribution);
+}
+
+vec3 applyCloudHaze(vec3 color, vec3 rayDirection, vec3 sunDirection, float frontDistance, float alpha) {
+    float distanceHaze = 1.0 - exp(-max(frontDistance, 0.0) * 0.0000028);
+    float sunGlow = pow(saturate(dot(rayDirection, sunDirection) * 0.5 + 0.5), 5.0);
+    float verticalFade = saturate(dot(rayDirection, normalize(u_cameraPositionWC)) * 1.8 + 0.9);
+    vec3 skyHaze = mix(vec3(0.48, 0.62, 0.78), vec3(1.0, 0.82, 0.55), sunGlow);
+    float hazeAmount = distanceHaze * u_hazeStrength * alpha * verticalFade;
+    return mix(color, skyHaze, saturate(hazeAmount));
+}
+
+void main() {
+    vec2 uv = v_textureCoordinates;
+    vec4 sceneColor = SAMPLE_TEX(colorTexture, uv);
+    vec3 rayDirection = getRayDirection(uv);
+
+    vec2 outerHit = raySphere(u_cameraPositionWC, rayDirection, u_cloudTopRadius);
+    if (outerHit.x > outerHit.y || outerHit.y <= 0.0) {
+        FRAG_COLOR = sceneColor;
+        return;
+    }
+
+    vec2 innerHit = raySphere(u_cameraPositionWC, rayDirection, u_cloudBottomRadius);
+    float nearDistance = max(outerHit.x, 0.0);
+    float farDistance = outerHit.y;
+    if (innerHit.x <= innerHit.y && innerHit.y > 0.0) {
+        if (length(u_cameraPositionWC) < u_cloudBottomRadius) {
+            nearDistance = max(innerHit.y, nearDistance);
+        } else {
+            farDistance = min(farDistance, max(innerHit.x, 0.0));
+        }
+    }
+
+    farDistance = min(farDistance, u_maxDistance);
+    farDistance = min(farDistance, getSceneDistance(uv));
+    if (farDistance <= nearDistance) {
+        FRAG_COLOR = sceneColor;
+        return;
+    }
+
+    float span = farDistance - nearDistance;
+    int stepCount = int(clamp(floor(u_stepCount + 0.5), 16.0, 80.0));
+    float stepSize = max(span / float(stepCount), 750.0);
+    float jitter = hash31(vec3(gl_FragCoord.xy, fract(u_timeSeconds))) * stepSize;
+    float distanceAlongRay = nearDistance + jitter;
+    vec3 cloudLight = vec3(0.0);
+    float transmittance = 1.0;
+    float alpha = 0.0;
+    float weightedDepth = 0.0;
+    float depthWeight = 0.0;
+    vec3 sunDirection = normalize(u_sunDirectionWC);
+
+    for (int i = 0; i < 80; i++) {
+        if (i >= stepCount || distanceAlongRay > farDistance || transmittance < 0.03) {
+            break;
+        }
+
+        vec3 position = u_cameraPositionWC + rayDirection * distanceAlongRay;
+        float radius = length(position);
+        float heightFraction = saturate((radius - u_cloudBottomRadius) / (u_cloudTopRadius - u_cloudBottomRadius));
+        float density = sampleCloudDensity(position, heightFraction);
+
+        if (density > 0.001) {
+            float extinction = density * u_density * stepSize;
+            float opticalDepthToSun = marchSunOpticalDepth(position + sunDirection * stepSize * 0.35, sunDirection);
+            float beerOpticalDepth = marchBeerShadowOpticalDepth(position + sunDirection * stepSize * 0.75, sunDirection);
+            float localShadow = exp(-opticalDepthToSun * u_density * 1.35);
+            float beerShadow = exp(-beerOpticalDepth * u_density * 0.72);
+            float bsmShadow = sampleBsmShadow(position, distanceAlongRay, localShadow);
+            float sunTransmittance = mix(1.0, localShadow * mix(1.0, beerShadow, u_beerShadowStrength) * bsmShadow, u_shadowStrength);
+            float multipleScattering = approximateMultipleScattering(opticalDepthToSun + beerOpticalDepth * 0.45) * u_multiScattering;
+            float lightFacing = saturate(dot(normalize(position), sunDirection) * 0.45 + 0.55);
+            float cosTheta = dot(rayDirection, sunDirection);
+            float phase = hgPhase(cosTheta, 0.68) * 4.6 + hgPhase(cosTheta, -0.22) * 1.25;
+            float silverLining = pow(saturate(cosTheta * 0.5 + 0.5), 10.0);
+            float powder = 1.0 - exp(-density * 3.8);
+            vec3 sunColor = vec3(1.0, 0.88, 0.66) *
+                (phase * (sunTransmittance + multipleScattering * 0.34) + silverLining * sunTransmittance * 0.42) *
+                (0.62 + 0.68 * lightFacing) *
+                (1.0 + powder * u_powderStrength * 0.42);
+            vec3 skyColor = vec3(0.42, 0.62, 0.86) * (0.24 + 0.30 * heightFraction) * (0.78 + 0.22 * multipleScattering);
+            vec3 groundBounce = vec3(0.44, 0.38, 0.31) * (1.0 - heightFraction) * u_groundBounceStrength * 0.42 * (0.45 + 0.55 * lightFacing);
+            vec3 sampleLight = sunColor + skyColor;
+            float sampleAlpha = 1.0 - exp(-extinction);
+
+            cloudLight += transmittance * (sampleLight + groundBounce) * sampleAlpha;
+            weightedDepth += distanceAlongRay * transmittance * sampleAlpha;
+            depthWeight += transmittance * sampleAlpha;
+            transmittance *= exp(-extinction);
+            alpha = 1.0 - transmittance;
+        }
+
+        stepSize *= 1.018;
+        distanceAlongRay += stepSize;
+    }
+
+    if (alpha <= 0.001) {
+        FRAG_COLOR = sceneColor;
+        return;
+    }
+
+    float horizonFade = saturate(dot(rayDirection, normalize(u_cameraPositionWC)) * 2.5 + 0.8);
+    alpha *= horizonFade;
+    vec3 cloudColor = cloudLight / max(alpha, 0.001);
+    vec3 finalColor = mix(sceneColor.rgb, cloudColor, saturate(alpha * 0.82));
+    float frontDistance = weightedDepth / max(depthWeight, 0.001);
+    finalColor = applyCloudHaze(finalColor, rayDirection, sunDirection, frontDistance, alpha);
+    FRAG_COLOR = vec4(finalColor, sceneColor.a);
+}
+`;
 
 onMounted(() => {
     bootstrapWhenReady();
@@ -171,6 +563,15 @@ function syncExternalControls(controls) {
     if (Object.prototype.hasOwnProperty.call(controls, 'fog')) {
         fogEnabled.value = !!controls.fog;
     }
+    if (Object.prototype.hasOwnProperty.call(controls, 'volumetricClouds')) {
+        volumetricCloudsEnabled.value = !!controls.volumetricClouds;
+    }
+    if (controls.clouds && typeof controls.clouds === 'object') {
+        cloudControls.value = normalizeCloudControls(controls.clouds);
+        if (cloudControls.value.bsmShadow) {
+            cloudShadowFailed = false;
+        }
+    }
     if (Object.prototype.hasOwnProperty.call(controls, 'hbao')) {
         hbaoEnabled.value = !!controls.hbao;
     }
@@ -180,6 +581,23 @@ function syncExternalControls(controls) {
     if (Object.prototype.hasOwnProperty.call(controls, 'atmosphere')) {
         atmosphereEnabled.value = !!controls.atmosphere;
     }
+}
+
+function normalizeCloudControls(input = {}) {
+    return {
+        coverage: clampNumberValue(input.coverage, 0.52, 0.18, 0.82),
+        density: clampNumberValue(input.density, 0.00009, 0.000025, 0.00018),
+        shadowStrength: clampNumberValue(input.shadowStrength, 0.82, 0, 1),
+        beerShadowStrength: clampNumberValue(input.beerShadowStrength, 0.64, 0, 1),
+        multiScattering: clampNumberValue(input.multiScattering, 0.58, 0, 1),
+        powderStrength: clampNumberValue(input.powderStrength, 0.72, 0, 1.4),
+        hazeStrength: clampNumberValue(input.hazeStrength, 0.38, 0, 1),
+        groundBounceStrength: clampNumberValue(input.groundBounceStrength, 0.26, 0, 1),
+        bsmShadow: input.bsmShadow === true,
+        shadowResolution: Math.round(clampNumberValue(input.shadowResolution, 256, 128, 512) / 128) * 128,
+        maxDistance: clampNumberValue(input.maxDistance, 360000, 120000, 900000),
+        stepCount: Math.round(clampNumberValue(input.stepCount, 48, 24, 80)),
+    };
 }
 
 function bootstrapWhenReady() {
@@ -249,6 +667,7 @@ function initCinematicEffects(viewer, Cesium) {
     if (!stageCollection || !Cesium?.PostProcessStage) return;
 
     initHeightFogStage(viewer, Cesium);
+    initVolumetricCloudsStage(viewer, Cesium);
     initAmbientOcclusion(viewer, Cesium);
     initTiltShiftStage(viewer, Cesium);
 
@@ -281,12 +700,24 @@ function initRenderErrorGuard(viewer) {
 
 function degradeEffectsAfterRenderError() {
     fogEnabled.value = false;
+    volumetricCloudsEnabled.value = false;
     tiltShiftEnabled.value = false;
     hbaoEnabled.value = false;
     atmosphereEnabled.value = false;
 
     if (fogStage) {
         fogStage.enabled = false;
+    }
+    if (volumetricCloudsStage) {
+        volumetricCloudsStage.enabled = false;
+    }
+    if (cloudShadowPrimitive) {
+        cloudShadowPrimitive.show = false;
+        cloudShadowPrimitive.setParams?.({ enabled: false });
+    }
+    if (cloudShadowUniformScratch.params) {
+        cloudShadowUniformScratch.params.x = 0;
+        cloudShadowUniformScratch.params.w = 0;
     }
     if (tiltShiftStage) {
         tiltShiftStage.enabled = false;
@@ -348,6 +779,129 @@ function initHeightFogStage(viewer, Cesium) {
 
     viewer.scene.postProcessStages.add(fogStage);
     fogStage.enabled = fogEnabled.value;
+}
+
+function initVolumetricCloudsStage(viewer, Cesium) {
+    if (volumetricCloudsStage || !Cesium?.PostProcessStage) return;
+
+    const ellipsoidRadius = Number(Cesium?.Ellipsoid?.WGS84?.maximumRadius) || 6378137.0;
+    const cameraPosition = new Cesium.Cartesian3();
+    const cameraDirection = new Cesium.Cartesian3();
+    const sunDirection = new Cesium.Cartesian3(0.35, -0.25, 0.9);
+    const inverseViewProjection = new Cesium.Matrix4();
+    const shadowMatrices = Array.from({ length: 4 }, () => new Cesium.Matrix4());
+    const shadowSplits = new Cesium.Cartesian4(0, 0, 0, 0);
+    const shadowParams = new Cesium.Cartesian4(0, 1, 0.72, 0);
+
+    Cesium.Cartesian3.normalize(sunDirection, sunDirection);
+    cloudShadowUniformScratch.texture = getCloudShadowFallbackTexture(viewer, Cesium);
+    cloudShadowUniformScratch.matrices = shadowMatrices;
+    cloudShadowUniformScratch.splits = shadowSplits;
+    cloudShadowUniformScratch.params = shadowParams;
+
+    volumetricCloudsStage = new Cesium.PostProcessStage({
+        name: 'cesium_ecef_volumetric_clouds_stage',
+        fragmentShader: VOLUMETRIC_CLOUDS_FRAGMENT_SHADER,
+        uniforms: {
+            u_cloudShadowTexture: () => cloudShadowUniformScratch.texture,
+            u_cameraPositionWC: cameraPosition,
+            u_cameraDirectionWC: cameraDirection,
+            u_inverseViewProjection: inverseViewProjection,
+            u_sunDirectionWC: sunDirection,
+            u_cloudShadowMatrices: () => cloudShadowUniformScratch.matrices,
+            u_cloudShadowSplits: () => cloudShadowUniformScratch.splits,
+            u_cloudShadowParams: () => cloudShadowUniformScratch.params,
+            u_cloudBottomRadius: ellipsoidRadius + 1500.0,
+            u_cloudTopRadius: ellipsoidRadius + 8500.0,
+            u_maxDistance: 420000.0,
+            u_coverage: 0.52,
+            u_density: 0.000085,
+            u_shadowStrength: 0.82,
+            u_beerShadowStrength: 0.64,
+            u_multiScattering: 0.58,
+            u_powderStrength: 0.72,
+            u_hazeStrength: 0.38,
+            u_groundBounceStrength: 0.26,
+            u_stepCount: 48,
+            u_timeSeconds: 0.0,
+        },
+    });
+
+    viewer.scene.postProcessStages.add(volumetricCloudsStage);
+    volumetricCloudsStage.enabled = volumetricCloudsEnabled.value;
+}
+
+function getCloudShadowFallbackTexture(viewer, Cesium) {
+    if (cloudShadowFallbackTexture) return cloudShadowFallbackTexture;
+    const context = viewer?.scene?.context;
+    if (!context || !Cesium?.Texture) return null;
+
+    const defaultTexture = context.defaultTexture || context.defaultTexture2D;
+    if (defaultTexture) {
+        cloudShadowFallbackTexture = defaultTexture;
+        ownsCloudShadowFallbackTexture = false;
+        return cloudShadowFallbackTexture;
+    }
+
+    cloudShadowFallbackTexture = new Cesium.Texture({
+        context,
+        width: 1,
+        height: 1,
+        pixelFormat: Cesium.PixelFormat.RGBA,
+        pixelDatatype: Cesium.PixelDatatype.UNSIGNED_BYTE,
+        source: {
+            width: 1,
+            height: 1,
+            arrayBufferView: new Uint8Array([0, 0, 0, 0]),
+        },
+    });
+    ownsCloudShadowFallbackTexture = true;
+    return cloudShadowFallbackTexture;
+}
+
+function ensureCloudShadowPrimitive(viewer, Cesium) {
+    const controls = cloudControls.value;
+    const shouldEnable = volumetricCloudsEnabled.value && controls.bsmShadow && !cloudShadowFailed;
+    if (!shouldEnable) {
+        destroyCloudShadowPrimitive(viewer);
+        return;
+    }
+    if (cloudShadowPrimitive || !viewer?.scene?.primitives || !Cesium) return;
+
+    try {
+        cloudShadowPrimitive = new CloudShadowPrimitive(viewer, {
+            cesium: Cesium,
+            enabled: true,
+            shadowResolution: controls.shadowResolution,
+            maxDistance: controls.maxDistance,
+        });
+        viewer.scene.primitives.add(cloudShadowPrimitive);
+    } catch (error) {
+        cloudShadowFailed = true;
+        cloudShadowPrimitive = null;
+        console.warn('Cesium cloud BSM resources disabled:', error);
+    }
+}
+
+function destroyCloudShadowPrimitive(viewer) {
+    if (!cloudShadowPrimitive) return;
+    const Cesium = props.getCesium?.() || window.Cesium;
+    if (cloudShadowUniformScratch.params) {
+        cloudShadowUniformScratch.params.x = 0;
+        cloudShadowUniformScratch.params.w = 0;
+    }
+    cloudShadowUniformScratch.texture = getCloudShadowFallbackTexture(viewer, Cesium);
+    if (viewer?.scene?.primitives) {
+        try {
+            viewer.scene.primitives.remove(cloudShadowPrimitive);
+        } catch (error) {
+            console.warn('Cesium cloud BSM primitive remove failed:', error);
+            cloudShadowPrimitive.destroy?.();
+        }
+    } else {
+        cloudShadowPrimitive.destroy?.();
+    }
+    cloudShadowPrimitive = null;
 }
 
 function initAmbientOcclusion(viewer, Cesium) {
@@ -454,6 +1008,17 @@ function bindFrameUpdates(viewer, Cesium) {
                 0.00055 + (1.0 - fogStage.uniforms.cameraHeightFactor) * 0.00125;
         }
 
+        if (volumetricCloudsStage) {
+            volumetricCloudsStage.enabled = volumetricCloudsEnabled.value;
+            ensureCloudShadowPrimitive(viewer, Cesium);
+            if (cloudShadowPrimitive) {
+                cloudShadowPrimitive.show = volumetricCloudsEnabled.value && cloudControls.value.bsmShadow;
+            }
+            if (volumetricCloudsStage.enabled) {
+                updateVolumetricCloudUniforms(viewer, Cesium, height);
+            }
+        }
+
         if (ambientOcclusionStage) {
             ambientOcclusionStage.enabled = hbaoEnabled.value;
         }
@@ -471,6 +1036,112 @@ function bindFrameUpdates(viewer, Cesium) {
             restoreAtmosphereState(viewer);
         }
     });
+}
+
+function updateVolumetricCloudUniforms(viewer, Cesium, cameraHeight) {
+    const stage = volumetricCloudsStage;
+    const scene = viewer?.scene;
+    const camera = viewer?.camera;
+    if (!stage || !scene || !camera || !Cesium) return;
+
+    const uniforms = stage.uniforms;
+    Cesium.Cartesian3.clone(camera.positionWC, uniforms.u_cameraPositionWC);
+    Cesium.Cartesian3.clone(camera.directionWC, uniforms.u_cameraDirectionWC);
+
+    const uniformState = scene.context?.uniformState;
+    if (uniformState?.inverseViewProjection) {
+        Cesium.Matrix4.clone(uniformState.inverseViewProjection, uniforms.u_inverseViewProjection);
+    } else if (camera.inverseViewProjectionMatrix) {
+        Cesium.Matrix4.clone(camera.inverseViewProjectionMatrix, uniforms.u_inverseViewProjection);
+    }
+
+    const sunDirection = getSunDirectionWC(viewer, Cesium);
+    Cesium.Cartesian3.clone(sunDirection, uniforms.u_sunDirectionWC);
+
+    const highAltitudeFade = normalizeHeight(cameraHeight, 10000.0, 180000.0);
+    const controls = cloudControls.value;
+    const ellipsoidRadius = Number(Cesium?.Ellipsoid?.WGS84?.maximumRadius) || 6378137.0;
+    uniforms.u_coverage = controls.coverage;
+    uniforms.u_density = controls.density * (1.0 - highAltitudeFade * 0.22);
+    uniforms.u_maxDistance = controls.maxDistance;
+    uniforms.u_shadowStrength = controls.shadowStrength * (1.0 - highAltitudeFade * 0.12);
+    uniforms.u_beerShadowStrength = controls.beerShadowStrength * (1.0 - highAltitudeFade * 0.18);
+    uniforms.u_multiScattering = controls.multiScattering;
+    uniforms.u_powderStrength = controls.powderStrength;
+    uniforms.u_hazeStrength = controls.hazeStrength * (1.0 - highAltitudeFade * 0.35);
+    uniforms.u_groundBounceStrength = controls.groundBounceStrength;
+    uniforms.u_stepCount = controls.stepCount;
+    uniforms.u_timeSeconds = getClockSeconds(viewer, Cesium);
+
+    cloudShadowPrimitive?.setParams({
+        enabled: volumetricCloudsEnabled.value && controls.bsmShadow && !cloudShadowFailed,
+        coverage: uniforms.u_coverage,
+        density: uniforms.u_density,
+        bottomRadius: ellipsoidRadius + 1500.0,
+        topRadius: ellipsoidRadius + 8500.0,
+        maxDistance: uniforms.u_maxDistance,
+        shadowResolution: controls.shadowResolution,
+        timeSeconds: uniforms.u_timeSeconds,
+    });
+    syncCloudShadowUniforms(viewer, Cesium, controls);
+}
+
+function syncCloudShadowUniforms(viewer, Cesium, controls) {
+    const shadowParams = cloudShadowUniformScratch.params;
+    const shadowSplits = cloudShadowUniformScratch.splits;
+    const shadowMatrices = cloudShadowUniformScratch.matrices;
+    if (!shadowParams || !shadowSplits || !shadowMatrices) return;
+
+    const fallbackTexture = getCloudShadowFallbackTexture(viewer, Cesium);
+    const resources = cloudShadowPrimitive?.resources;
+    const shadowTexture = resources?.texture || null;
+    const enabled = !!(
+        volumetricCloudsEnabled.value &&
+        controls.bsmShadow &&
+        !cloudShadowFailed &&
+        shadowTexture &&
+        resources?.status?.ready
+    );
+
+    cloudShadowUniformScratch.texture = enabled ? shadowTexture : fallbackTexture;
+    shadowParams.x = enabled ? 1 : 0;
+    shadowParams.y = enabled ? Math.max(resources.options?.cascadeCount || 1, 1) : 1;
+    shadowParams.z = 0.72;
+    shadowParams.w = enabled ? controls.beerShadowStrength : 0;
+
+    for (let i = 0; i < 4; i += 1) {
+        Cesium.Matrix4.clone(resources?.cascadeMatrices?.[i] || Cesium.Matrix4.IDENTITY, shadowMatrices[i]);
+    }
+
+    const splits = resources?.cascadeSplits;
+    shadowSplits.x = Number(splits?.[0] || 0);
+    shadowSplits.y = Number(splits?.[1] || shadowSplits.x);
+    shadowSplits.z = Number(splits?.[2] || shadowSplits.y);
+    shadowSplits.w = Number(splits?.[3] || shadowSplits.z);
+}
+
+function getSunDirectionWC(viewer, Cesium) {
+    const uniformStateSun = viewer?.scene?.context?.uniformState?.sunDirectionWC;
+    if (uniformStateSun) return uniformStateSun;
+
+    const fallback = new Cesium.Cartesian3(0.35, -0.25, 0.9);
+    Cesium.Cartesian3.normalize(fallback, fallback);
+    return fallback;
+}
+
+function getClockSeconds(viewer, Cesium) {
+    try {
+        const currentTime = viewer?.clock?.currentTime;
+        if (currentTime && Cesium?.JulianDate?.secondsDifference && Cesium?.JulianDate?.fromIso8601) {
+            if (!cloudClockEpoch) {
+                cloudClockEpoch = Cesium.JulianDate.fromIso8601('2026-01-01T00:00:00Z');
+            }
+            return Cesium.JulianDate.secondsDifference(currentTime, cloudClockEpoch);
+        }
+    } catch {
+        // Wall-clock time is good enough for cloud drift if Cesium clock helpers are unavailable.
+    }
+    return (typeof performance !== 'undefined' ? performance.now() : Date.now()) * 0.001;
 }
 
 function applyAtmosphereEnhancement(viewer, Cesium, cameraHeight) {
@@ -743,6 +1414,24 @@ function cleanupEffects() {
     }
     fogStage = null;
 
+    if (volumetricCloudsStage && sceneStages) {
+        sceneStages.remove(volumetricCloudsStage);
+    }
+    volumetricCloudsStage = null;
+
+    if (cloudShadowPrimitive && viewer?.scene?.primitives) {
+        viewer.scene.primitives.remove(cloudShadowPrimitive);
+    } else if (cloudShadowPrimitive) {
+        cloudShadowPrimitive.destroy?.();
+    }
+    cloudShadowPrimitive = null;
+    if (ownsCloudShadowFallbackTexture && cloudShadowFallbackTexture) {
+        cloudShadowFallbackTexture.destroy?.();
+    }
+    cloudShadowFallbackTexture = null;
+    ownsCloudShadowFallbackTexture = false;
+    cloudShadowUniformScratch.texture = null;
+
     if (tiltShiftStage && sceneStages) {
         sceneStages.remove(tiltShiftStage);
     }
@@ -789,6 +1478,12 @@ function normalizeHeight(value, min, max) {
 
 function clamp01(value) {
     return Math.min(1, Math.max(0, Number(value) || 0));
+}
+
+function clampNumberValue(value, fallback, min, max) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.min(max, Math.max(min, number));
 }
 
 function pushFixedLength(arr, value, maxLen) {

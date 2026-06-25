@@ -1020,6 +1020,7 @@ void main() {
             renderState,
             framebuffer: this._framebuffers[1 - this._particleState],
             uniformMap: this._getUpdateUniformMap(),
+            pass: Cesium.Pass.OPAQUE,
         });
     }
 
