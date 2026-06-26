@@ -180,6 +180,7 @@ WebGIS_Dev/
 │   │   ├── assets/                   # 全局样式与静态数据
 │   │   ├── components/               # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/               # 3D 地球模块
+│   │   │   │   ├── PlayerController/ # 人物漫游控制器（第一/第三人称 + Rapier 物理碰撞）
 │   │   │   │   ├── FluidSimulation/  # 流体模拟
 │   │   │   │   ├── ShallowWater/     # Three.js 热带浅水（焦散/折射/吸色/体积云/闪电）
 │   │   │   │   ├── composables/      # Cesium composables（图层/底图/URL 追踪等）
@@ -263,7 +264,7 @@ WebGIS_Dev/
 │   │   ├── ...
 │   │   ├── 26-06-21/                 # V3.3.8 要素高亮与属性解析日志
 │   │   ├── 26-06-22/                 # 暂存区 Code Review 修复日志
-│   │   └── 26-06-26/                 # 大气 LUT 修复 + 模块卡片 UI 清理 + 热带浅水控件修复
+│   │   └── 26-06-26/                 # 大气 LUT 修复 + 模块卡片 UI + 热带浅水 + 人物漫游控制器
 │   ├── Architecture/                  # 架构设计文档
 │   ├── Example_prompt.md
 │   ├── Force_command.md
@@ -277,6 +278,21 @@ WebGIS_Dev/
 ---
 
 ## 📜 版本演进
+
+### V3.3.11 (2026-06-26) — 人物漫游控制器集成（第一/第三人称 + Rapier 物理）
+
+- 🆕 **人物漫游控制器** (`PlayerController/`)：集成 cesium-player-controller，支持第一/第三人称视角切换、WASD 移动、跳跃、飞行模式
+- 🆕 **Rapier 物理碰撞**：胶囊体碰撞 + 地形碰撞 + 射线避障，角色可在 3D Tiles 和地形上行走
+- 🆕 **动画状态机**：idle/walk/run/jump/fly 多动画自动切换，支持三段跳跃
+- 🆕 **弹簧相机**：第三人称弹簧阻尼跟随 + 过肩视角 + 射线防穿墙
+- 🆕 **操作提示面板** (`PlayerGuidePanel.vue`)：右上角悬浮键位说明，实时显示视角/飞行状态
+- 🆕 **控制台调试参数**：行走速度、飞行速度、重力、跳跃高度、鼠标灵敏度滑块实时调节
+- 🆕 **Cesium ESM 垫片** (`cesium-shim.js`)：桥接 CDN Cesium 与 npm ESM 导入，消除双实例冲突
+- 🔧 **Vite 配置**：添加 `cesium` alias + `optimizeDeps.exclude`，确保单一 Cesium 实例
+- 🐛 **修复人物漫游面板滑块类型**：控件 `type: 'slider'` → `type: 'range'`，与项目统一的 `lil-gui` 渲染管线对齐，修复滑块降级为文本输入框的问题
+- 🐛 **修复 ArcGIS 地形无法被漫游系统识别**：新增 `ArcGISTerrainProvider` 增强包装器（参照天地图 `GeoTerrainProvider` 补充 `availability` + `getTileDataAvailable`），使 `sampleTerrainMostDetailed` 原生支持 ArcGIS 地形 + 降级兜底到 `sampleTerrain(17)`
+
+详见 [`Docs/26-06/2026-06-26-player-controller-integration.md`](Docs/26-06/2026-06-26-player-controller-integration.md)
 
 ### V3.3.10 (2026-06-26) — 大气系统清理 + 场景美化 + 热带浅水 + Tellux 模块移植
 

@@ -39,7 +39,10 @@ export default defineConfig(({ command, mode }) => {
     // 路径别名：@ 指向 src
     resolve: {
       alias: {
-        '@': fileURLToPath(new URL('./src', import.meta.url))
+        '@': fileURLToPath(new URL('./src', import.meta.url)),
+        // Cesium ESM 垫片：将 `import { ... } from "cesium"` 映射到 window.Cesium（CDN 全局变量）
+        // 避免 npm cesium 包与 CDN cesium 产生双实例冲突
+        'cesium': fileURLToPath(new URL('./src/cesium-shim.js', import.meta.url))
       }
     },
 
@@ -53,6 +56,11 @@ export default defineConfig(({ command, mode }) => {
           rewrite: (path) => path.replace(/^\/amap-api/, '')
         }
       }
+    },
+
+    // 排除 Cesium npm 包的预构建，避免与 CDN Cesium 产生双实例
+    optimizeDeps: {
+      exclude: ['cesium']
     },
 
     // 生产环境代码压缩配置

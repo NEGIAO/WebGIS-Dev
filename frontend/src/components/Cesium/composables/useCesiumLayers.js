@@ -7,6 +7,7 @@ import {
     writeStoredString,
 } from './cesiumStorage';
 import createGeoTerrainProvider from '../terrain/GeoTerrainProvider';
+import createArcGISTerrainProvider from '../terrain/ArcGISTerrainProvider';
 import { BASEMAP_OPTIONS, resolvePresetLayerIds } from '../../../constants/basemap/basemapResolver';
 import { DEFAULT_BASEMAP_PRESET_ID } from '../../../constants/basemap/basemapConfig';
 import { getDescriptorById } from '../../../constants/basemap/sourceDescriptors';
@@ -926,7 +927,10 @@ export function useCesiumLayers({
             throw new Error('当前 Cesium 运行时不支持 ArcGIS 高程地形。');
         }
 
-        return Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(ARCGIS_WORLD_TERRAIN_URL);
+        // 使用增强包装器：补充 availability + getTileDataAvailable
+        // 使 sampleTerrainMostDetailed 能正确查询最高精度层级（与天地图/Cesium 行为一致）
+        const ArcGISTerrainProvider = createArcGISTerrainProvider(Cesium);
+        return ArcGISTerrainProvider.fromUrl(ARCGIS_WORLD_TERRAIN_URL);
     }
 
     function queueTerrainFallback(failedValue, fallbackValue) {

@@ -53,6 +53,14 @@
         @data-clear-all="handleDataClearAll"
     />
 
+    <!-- 人物漫游操作提示面板 -->
+    <PlayerGuidePanel
+        :visible="playerController.isActive.value && showPlayerGuide"
+        :is-first-person="playerController.isFirstPerson.value"
+        :is-flying="playerController.isFlying.value"
+        @close="showPlayerGuide = false"
+    />
+
     <!-- GLTF/GLB 坐标输入弹窗 -->
     <CesiumDataImportDialog
         :visible="!!pendingGltfFile"
@@ -108,7 +116,6 @@ import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import ShallowWaterOverlay from './ShallowWater/ShallowWaterOverlay.vue';
 import { configureSolarLighting } from './composables/cesiumAtmosphere';
-import { useAtmosphereAutoClose } from './composables/useAtmosphereAutoClose';
 import { loadCesiumRuntime } from './composables/cesiumRuntime';
 import { configureBeijingTimeSystem } from './composables/cesiumTimeSystem';
 import { useCesiumCreditHider } from './composables/useCesiumCreditHider';
@@ -122,6 +129,8 @@ import { useCesiumWind } from './composables/useCesiumWind';
 import { useCesiumModelManager } from './composables/useCesiumModelManager';
 import { useCesiumCameraEnhanced } from './composables/useCesiumCameraEnhanced';
 import { useCesiumHeightSampler } from './composables/useCesiumHeightSampler';
+import { usePlayerController } from './PlayerController/usePlayerController';
+import PlayerGuidePanel from './PlayerController/PlayerGuidePanel.vue';
 import {
     getRuntimeMapTokensSync,
     loadRuntimeMapTokens,
@@ -134,6 +143,9 @@ let componentUnmounted = false;
 
 const message = useMessage();
 const emit = defineEmits(['view-sync']);
+
+/** 漫游模式操作提示面板显示状态 */
+const showPlayerGuide = ref(true);
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const runtimeMapTokens = ref(getRuntimeMapTokensSync());
@@ -212,9 +224,6 @@ const wind = useCesiumWind({
     message,
 });
 
-// 近地大气自动关闭
-const atmosphereAutoClose = useAtmosphereAutoClose({ getViewer, getCesium });
-
 const dataImport = useCesiumDataImport({
     getViewer,
     getCesium,
@@ -228,6 +237,16 @@ const modelManager = useCesiumModelManager({ getViewer, getCesium, message });
 const cameraEnhanced = useCesiumCameraEnhanced({ getViewer, getCesium });
 const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
 
+// ==========================================
+// 人物漫游控制器（第一/第三人称视角）
+// ==========================================
+const playerController = usePlayerController({ getViewer, getCesium, message });
+
+// 漫游模式启动时重置提示面板显示
+watch(() => playerController.isActive.value, (active) => {
+    if (active) showPlayerGuide.value = true;
+});
+
 /** 暴露给子组件和外部调用 */
 defineExpose({
     getViewer,
@@ -235,6 +254,7 @@ defineExpose({
     modelManager,
     cameraEnhanced,
     heightSampler,
+    playerController,
 });
 
 /**
@@ -289,7 +309,6 @@ const {
     advancedEffectControls,
     fluidParams,
     baseAtmosphereParams,
-    atmosphereAutoCloseEnabled,
     shallowWaterVisible,
     shallowWaterParams,
     toolModules,
@@ -304,6 +323,7 @@ const {
     modelManager,
     cameraEnhanced,
     heightSampler,
+    playerController,
 });
 
 async function bootCesium() {
@@ -521,7 +541,6 @@ onUnmounted(() => {
     cameraEnhanced.cleanup();
     heightSampler.cleanup();
 
-    atmosphereAutoClose.cleanup();
     cleanupCreditHider();
     dataImport.clearAllDataSources();
     if (viewer) {
@@ -539,14 +558,7 @@ watch(cesiumReady, (ready) => {
     if (ready) {
         // 初始应用基础大气参数
         applyBaseAtmosphereParams(baseAtmosphereParams.value);
-        // 启动近地大气自动关闭监听
-        atmosphereAutoClose.start();
     }
-});
-
-// 同步控制中心的开关状态到自动关闭模块
-watch(atmosphereAutoCloseEnabled, (enabled) => {
-    atmosphereAutoClose.atmosphereAutoCloseEnabled.value = enabled;
 });
 
 /**
@@ -559,11 +571,8 @@ function applyBaseAtmosphereParams(params) {
     const globe = scene.globe;
 
     if (globe) {
-        // 近地自动关闭生效时，跳过 enableLighting 和 showGroundAtmosphere 赋值
-        if (!atmosphereAutoClose.atmosphereAutoClosed.value) {
-            globe.enableLighting = params.enableLighting;
-            globe.showGroundAtmosphere = params.showGroundAtmosphere;
-        }
+        globe.enableLighting = params.enableLighting;
+        globe.showGroundAtmosphere = params.showGroundAtmosphere;
         if ('dynamicAtmosphereLighting' in globe) globe.dynamicAtmosphereLighting = params.dynamicAtmosphereLighting;
         if ('dynamicAtmosphereLightingFromSun' in globe) globe.dynamicAtmosphereLightingFromSun = params.dynamicAtmosphereLightingFromSun;
         if ('atmosphereLightIntensity' in globe) globe.atmosphereLightIntensity = params.atmosphereLightIntensity;

@@ -1,4 +1,21 @@
-# WebGIS 前端项目 — v3.3.10
+# WebGIS 前端项目 — v3.3.11
+
+## 📝 2026-06-26 人物漫游控制器集成（第一/第三人称 + Rapier 物理碰撞）
+
+集成 `cesium-player-controller` 库，实现 3D 场景中的人物漫游功能：
+
+* 🆕 **PlayerController 模块** (`components/Cesium/PlayerController/`)：完整移植 12 个源文件，包含核心控制器、物理系统、相机系统、输入系统、动画系统、坐标变换工具
+* 🆕 **Rapier 物理碰撞**：`@dimforge/rapier3d-compat` 胶囊体碰撞 + 地形高度场采样 + 射线避障
+* 🆕 **第一/第三人称切换**：V 键切换视角，第三人称弹簧阻尼跟随 + 过肩视角 + 滚轮缩放
+* 🆕 **飞行模式**：F 键切换飞行，无地形时自动进入飞行模式悬浮移动
+* 🆕 **操作提示面板** (`PlayerGuidePanel.vue`)：右上角悬浮键位说明条，实时显示当前视角和飞行状态
+* 🆕 **控制台调试参数**：CesiumToolPanel 人物漫游模块新增行走速度/飞行速度/重力/跳跃高度/鼠标灵敏度滑块
+* 🆕 **Cesium ESM 垫片** (`src/cesium-shim.js`)：桥接 CDN Cesium 与 npm ESM 导入，Vite alias 映射
+* 🔧 **Vite 配置**：添加 `resolve.alias['cesium']` + `optimizeDeps.exclude['cesium']`，消除 CDN/npm 双实例冲突
+* 🔧 **地形碰撞自适应**：有地形时创建碰撞体可行走，无地形时自动飞行模式 + 最低高度保护
+* 🐛 **修复 ArcGIS 地形无法识别**：新增 `ArcGISTerrainProvider` 增强包装器（参照天地图 `GeoTerrainProvider` 补充 `availability` + `getTileDataAvailable`），使 `sampleTerrainMostDetailed` 原生支持 + 降级兜底
+
+详见维护日志 `Docs/26-06/2026-06-26-player-controller-integration.md`。
 
 ## 📝 2026-06-26 热带浅水控件显示修复
 
@@ -270,6 +287,7 @@ VITE_BASE_URL=/WebGIS-Dev/ npm run build
 frontend/src/
 ├── App.vue                                   # 根组件
 ├── main.js                                   # 应用入口（挂载 Router/Pinia）
+├── cesium-shim.js                            # Cesium ESM 垫片（CDN window.Cesium 桥接）
 │
 ├── api/                                      # API 客户端封装
 │   ├── backend.js                            # 后端 API barrel re-export
@@ -307,6 +325,25 @@ frontend/src/
 │   │   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/数据导入/特效/风场/流体参数 + ? 提示）
 │   │   │   ├── CesiumDataImportDialog.vue        # GLTF/GLB 模型放置坐标输入弹窗（Teleport 到 body + 实时验证）
 │   │   │   ├── Wind2D.js                         # 2D 风场渲染
+│   │   │   ├── PlayerController/                 # 人物漫游控制器（第一/第三人称 + Rapier 物理碰撞）
+│   │   │   │   ├── index.js                      # 模块入口（懒加载导出）
+│   │   │   │   ├── usePlayerController.js        # Vue composable（启停/状态管理/地形碰撞/最低高度保护）
+│   │   │   │   ├── playerDefaults.js             # 默认配置（模型/物理/相机/键位）
+│   │   │   │   ├── PlayerGuidePanel.vue          # 键位说明悬浮面板（右上角）
+│   │   │   │   ├── playerController.ts           # 核心控制器类（777行）
+│   │   │   │   ├── dynamicObject.ts              # 动态物体句柄
+│   │   │   │   ├── types.ts                      # 类型定义
+│   │   │   │   ├── systems/                      # 子系统
+│   │   │   │   │   ├── AnimationSystem.ts        # 动画状态机（idle/walk/run/jump/fly）
+│   │   │   │   │   ├── CameraSystem.ts           # 第一/第三人称相机（弹簧跟随+避障）
+│   │   │   │   │   ├── InputSystem.ts            # 键鼠输入管理
+│   │   │   │   │   └── PhysicsSystem.ts          # Rapier 物理碰撞（胶囊体+射线）
+│   │   │   │   └── utils/                        # 工具函数
+│   │   │   │       ├── frame.ts                  # ECEF/ENU/Rapier 坐标变换
+│   │   │   │       ├── gltfGeometry.ts           # glTF 几何解析
+│   │   │   │       ├── math.ts                   # lerp 插值
+│   │   │   │       ├── mobileControls.ts         # 移动端虚拟摇杆
+│   │   │   │       └── terrainHelper.ts          # 统一地形 provider 检测（兼容 ArcGIS/天地图/Cesium）
 │   │   │   ├── Clouds/                           # 云层 / 云影 / 高级天空效果
 │   │   │   │   ├── CesiumVolumetricClouds.js     # 体积云主模块
 │   │   │   │   ├── CloudShadowPrimitive.js       # 云影几何体/Primitive
@@ -323,9 +360,7 @@ frontend/src/
 │   │   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
 │   │   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排 + 统一预设接入
 │   │   │   │   ├── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
-│   │   │   │   ├── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
-│   │   │   │   ├── useAtmosphereAutoClose.js     # 近地大气自动关闭（相机高度 < 800m 关闭大气，控制中心可切换）
-│   │   │   │   └── useVolumetricClouds.js        # 体积云参数/控件/预设/归一化（从 useCesiumToolModules 拆分）
+│   │   │   │   └── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
 │   │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
 │   │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
 │   │   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）
@@ -341,6 +376,7 @@ frontend/src/
 │   │   │   │       └── textures.js               # 程序化纹理（法线贴图/沙地/噪声）
 │   │   │   └── terrain/                          # 自定义地形 Provider
 │   │   │       ├── GeoTerrainProvider.js
+│   │   │       ├── ArcGISTerrainProvider.js      # ArcGIS 地形增强包装器（补充 availability + getTileDataAvailable）
 │   │   │       ├── GeoWTFS.js
 │   │   │       └── util.js
 │   ├── Chat/
