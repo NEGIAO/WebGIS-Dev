@@ -179,7 +179,11 @@ WebGIS_Dev/
 │   │   ├── api/                      # 后端 API 客户端（axios + 拦截器）
 │   │   ├── assets/                   # 全局样式与静态数据
 │   │   ├── components/               # 业务组件（按功能域分组）
-│   │   │   ├── Cesium/               # 3D 地球模块（含 FluidSimulation / Clouds / 高级特效）
+│   │   │   ├── Cesium/               # 3D 地球模块
+│   │   │   │   ├── Clouds/           # 体积云系统（高聚合：shader + primitive + composables + 配置）
+│   │   │   │   ├── FluidSimulation/  # 流体模拟
+│   │   │   │   ├── composables/      # Cesium composables（图层/底图/URL 追踪等）
+│   │   │   │   └── terrain/          # 地形 provider
 │   │   │   ├── Chat/                 # AI 聊天
 │   │   │   ├── Common/               # 通用组件（ExtentPicker 等）
 │   │   │   ├── Compass/              # 罗盘控制 + 宫位解释
@@ -258,7 +262,8 @@ WebGIS_Dev/
 │   │   ├── 26-06-03/
 │   │   ├── ...
 │   │   ├── 26-06-21/                 # V3.3.8 要素高亮与属性解析日志
-│   │   └── 26-06-22/                 # 暂存区 Code Review 修复日志
+│   │   ├── 26-06-22/                 # 暂存区 Code Review 修复日志
+│   │   └── 26-06-26/                 # 大气 LUT 修复 + 模块卡片 UI 清理
 │   ├── Architecture/                  # 架构设计文档
 │   ├── Example_prompt.md
 │   ├── Force_command.md
@@ -272,6 +277,25 @@ WebGIS_Dev/
 ---
 
 ## 📜 版本演进
+
+### V3.3.9 (2026-06-26) — 大气 LUT 纹理集成修复 + TAAU 时序上采样 + BSM Shadow TAA + 模块卡片 UI 清理
+
+- 🐛 修复 `CesiumAdvancedEffects.vue` 和 `FluidSimulationPanel.vue` 文件开头的 UTF-8 BOM 头问题。
+- 🐛 修复 `atmosphereLutResources.js` 资源销毁保护，添加 try-catch 防止单个纹理销毁失败阻断后续清理。
+- 📝 为 GLSL 和 JS 中的大气散射物理常数添加详细注释（Rayleigh/Mie 散射系数、标高等）。
+- ✅ 验证阶段三（大气保真）实现完整，包括 LUT 纹理创建、大气透视合成、天空辐照度计算。
+- 🆕 新增 `useCesiumTemporalUpsampling.js` 模块，实现 TAAU 16x 上采样、方差裁剪、速度重投影、STBN 蓝噪声。
+- 🆕 新增 `shadowResolveShaders.js` 模块，实现 BSM Shadow TAA 时序抗锯齿。
+- 🔧 集成 TAAU Resolve Stage 到 Cesium PostProcessStage 渲染管线，实现完整生命周期管理。
+- 🆕 完善质量预设系统，新增 `ultra` 档位（stepCount: 128, maxDistance: 720000）。
+- 🧹 清理 CesiumToolPanel.vue 引入 lil-gui 后遗留的约 200 行废弃 CSS（`.control-row` / `.control-label` 等手写控制样式）
+- 🎨 模块卡片视觉增强：左侧渐变色条 + 图标升级 + hover 阴影 + 展开动画 + 状态圆点指示器
+- 🐛 隐藏 LilGuiControls 重复标题（lil-gui title 与 module-head 标题冲突）
+- 🐛 **Code Review 三轮修复（30 个问题）**：shadowResolveShaders GLSL 兼容性（FRAG_COLOR/SAMPLE_TEX/version guard）；质量预设统一（useCesiumToolModules 导入 QUALITY_PRESETS）；TAAU 每帧 GC 优化（scratch Cartesian2）；resolution uniform 窗口缩放同步；atmosphereLutResources 移除 viewer 引用；cleanup 补全 matrices 置 null；移除未使用的 shader uniform/config/字段；FluidSimulationPanel 死 CSS 清理
+- 🐛 **修复 Cesium → OL 图层同步**：`setBaseLayerActive` ID 类型不匹配（`layerList` 存储图层源 ID，`selectedLayer` 存储预设 ID），简化为直接设置 `selectedLayer.value`
+- 🚀 **体积云性能优化**：减少阴影计算步数（-55%）、LOD 距离优化（-65%）、远处禁用昂贵阴影（-85%）、自适应步长、更激进的早期终止、分辨率缩放模块
+
+详见 [`Docs/26-06/26-06-26/2026-06-26-atmosphere-lut-integration-fix.md`](Docs/26-06/26-06-26/2026-06-26-atmosphere-lut-integration-fix.md)、[`Docs/26-06/26-06-26/2026-06-26-module-card-ui-cleanup.md`](Docs/26-06/26-06-26/2026-06-26-module-card-ui-cleanup.md)、[`Docs/26-06/26-06-26/2026-06-26-code-review-taau-lilgui-fix.md`](Docs/26-06/26-06-26/2026-06-26-code-review-taau-lilgui-fix.md) 和 [`Docs/26-06/26-06-26/2026-06-26-cloud-performance-optimization.md`](Docs/26-06/26-06-26/2026-06-26-cloud-performance-optimization.md)
 
 ### V3.3.8 (2026-06-22) — 暂存区 Code Review 修复
 

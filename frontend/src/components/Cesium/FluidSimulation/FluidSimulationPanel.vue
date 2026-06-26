@@ -39,97 +39,12 @@
                 {{ selectedText }}
             </div>
 
-            <div class="param-list">
-                <label class="param-row">
-                    <span>阈值</span>
-                    <input
-                        v-model.number="threshold"
-                        type="range"
-                        min="0"
-                        max="500"
-                        step="0.0001"
-                    />
-                    <input
-                        v-model.number="threshold"
-                        class="number-input"
-                        type="number"
-                        min="0"
-                        max="500"
-                        step="0.0001"
-                    />
-                </label>
-
-                <label class="param-row">
-                    <span>混合</span>
-                    <input
-                        v-model.number="blend"
-                        type="range"
-                        min="0"
-                        max="50"
-                        step="0.0001"
-                    />
-                    <input
-                        v-model.number="blend"
-                        class="number-input"
-                        type="number"
-                        min="0"
-                        max="50"
-                        step="0.0001"
-                    />
-                </label>
-
-                <label class="param-row">
-                    <span>光强</span>
-                    <input
-                        v-model.number="lightStrength"
-                        type="range"
-                        min="0"
-                        max="10"
-                        step="0.0001"
-                    />
-                    <input
-                        v-model.number="lightStrength"
-                        class="number-input"
-                        type="number"
-                        min="0"
-                        max="10"
-                        step="0.0001"
-                    />
-                </label>
-                <label
-                    v-if="hasWaterLevelRange"
-                    class="param-row"
-                >
-                    <span>水位</span>
-                    <input
-                        v-model.number="waterLevel"
-                        type="range"
-                        :min="waterLevelMin"
-                        :max="waterLevelMax"
-                        :step="waterLevelStep"
-                    />
-                    <input
-                        v-model.number="waterLevel"
-                        class="number-input"
-                        type="number"
-                        :min="waterLevelMin"
-                        :max="waterLevelMax"
-                        :step="waterLevelStep"
-                    />
-                </label>
-                <label class="param-row color-row">
-                    <span>水色</span>
-                    <input
-                        v-model="waterColor"
-                        class="color-input"
-                        type="color"
-                    />
-                    <span
-                        class="color-swatch"
-                        :style="{ backgroundColor: waterColor }"
-                    ></span>
-                </label>
-            </div>
+            <LilGuiControls
+                class="param-list"
+                title="Fluid Parameters"
+                :controls="fluidGuiControls"
+                @change="handleFluidGuiChange"
+            />
         </div>
     </div>
 </template>
@@ -139,6 +54,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useMessage } from '../../../composables/useMessage';
 import { showLoading, hideLoading } from '../../../utils/ui/loading';
 import { createFluidRuntime } from './fluidRuntime';
+import LilGuiControls from '../LilGuiControls.vue';
 
 const props = defineProps({
     headless: {
@@ -212,6 +128,58 @@ const waterLevelStep = computed(() => {
     return Math.max(span / 1000, 0.01);
 });
 
+const fluidGuiControls = computed(() => [
+    {
+        id: 'threshold',
+        label: 'Threshold',
+        type: 'range',
+        min: 0,
+        max: 500,
+        step: 0.0001,
+        value: threshold.value,
+        displayValue: Number(threshold.value).toFixed(2),
+    },
+    {
+        id: 'blend',
+        label: 'Blend',
+        type: 'range',
+        min: 0,
+        max: 50,
+        step: 0.0001,
+        value: blend.value,
+        displayValue: Number(blend.value).toFixed(2),
+    },
+    {
+        id: 'lightStrength',
+        label: 'Light',
+        type: 'range',
+        min: 0,
+        max: 10,
+        step: 0.0001,
+        value: lightStrength.value,
+        displayValue: Number(lightStrength.value).toFixed(2),
+    },
+    {
+        id: 'waterLevel',
+        label: 'Water Level',
+        type: 'range',
+        min: hasWaterLevelRange.value ? waterLevelMin.value : 0,
+        max: hasWaterLevelRange.value ? waterLevelMax.value : 1,
+        step: waterLevelStep.value,
+        value: Number.isFinite(Number(waterLevel.value)) ? Number(waterLevel.value) : 0,
+        displayValue: hasWaterLevelRange.value && Number.isFinite(Number(waterLevel.value))
+            ? `${Number(waterLevel.value).toFixed(2)} m`
+            : 'Pick terrain first',
+        disabled: !hasWaterLevelRange.value,
+    },
+    {
+        id: 'waterColor',
+        label: 'Water Color',
+        type: 'color',
+        value: waterColor.value,
+    },
+]);
+
 watch([threshold, blend, lightStrength, waterColor], applyFluidParams);
 watch(waterLevel, applyWaterLevelParam);
 
@@ -262,6 +230,20 @@ function syncExternalParams(params) {
     }
     if (Number.isFinite(Number(params.waterLevel))) {
         waterLevel.value = Number(params.waterLevel);
+    }
+}
+
+function handleFluidGuiChange({ controlId, value }) {
+    if (controlId === 'threshold') {
+        threshold.value = Number(value);
+    } else if (controlId === 'blend') {
+        blend.value = Number(value);
+    } else if (controlId === 'lightStrength') {
+        lightStrength.value = Number(value);
+    } else if (controlId === 'waterLevel') {
+        waterLevel.value = Number(value);
+    } else if (controlId === 'waterColor' && isValidHexColor(value)) {
+        waterColor.value = value;
     }
 }
 
@@ -896,50 +878,6 @@ defineExpose({
     display: grid;
     gap: 12px;
     padding: 12px 14px 14px;
-}
-
-.param-row {
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) 72px;
-    align-items: center;
-    gap: 10px;
-    font-size: 12px;
-}
-
-.param-row input[type='range'] {
-    width: 100%;
-    accent-color: #4fb3ff;
-}
-
-.number-input {
-    min-width: 0;
-    height: 28px;
-    border: 1px solid rgba(148, 210, 255, 0.28);
-    border-radius: 6px;
-    background: rgba(5, 18, 29, 0.72);
-    color: #e8f6ff;
-    padding: 0 6px;
-}
-
-.color-row {
-    grid-template-columns: 42px minmax(0, 1fr) 32px;
-}
-
-.color-input {
-    width: 100%;
-    height: 28px;
-    border: 1px solid rgba(148, 210, 255, 0.28);
-    border-radius: 6px;
-    background: rgba(5, 18, 29, 0.72);
-    padding: 2px;
-    cursor: pointer;
-}
-
-.color-swatch {
-    width: 28px;
-    height: 28px;
-    border: 1px solid rgba(232, 246, 255, 0.5);
-    border-radius: 6px;
 }
 
 @media (max-width: 768px) {

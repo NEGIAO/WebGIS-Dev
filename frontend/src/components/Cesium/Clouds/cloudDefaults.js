@@ -1,15 +1,27 @@
 export const QUALITY_PRESETS = {
     low: {
+        label: '性能',
         stepCount: 32,
         maxDistance: 260000,
+        temporalUpsampling: false,
     },
     medium: {
+        label: '均衡',
         stepCount: 56,
         maxDistance: 360000,
+        temporalUpsampling: false,
     },
     high: {
+        label: '精细',
         stepCount: 88,
         maxDistance: 520000,
+        temporalUpsampling: true,
+    },
+    ultra: {
+        label: '极致',
+        stepCount: 128,
+        maxDistance: 720000,
+        temporalUpsampling: true,
     },
 };
 

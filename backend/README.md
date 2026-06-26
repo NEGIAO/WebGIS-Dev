@@ -23,7 +23,29 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-22 更新）
+## 0. 项目结构（2026-06-26 更新）
+
+### V3.3.9 (2026-06-26) - 大气 LUT 纹理集成修复 + TAAU 时序上采样 + BSM Shadow TAA + 模块卡片 UI 清理
+
+> 本次为前端 Cesium 体积云大气散射模块修复 + TAAU 时序上采样实现 + BSM Shadow TAA 实现 + CesiumToolPanel 模块卡片冗余 CSS 清理与视觉优化，后端 API 与后端文件结构**无变更**。
+
+**前端同步记录（本次无后端结构变更）：**
+
+- 修复 `CesiumAdvancedEffects.vue` 和 `FluidSimulationPanel.vue` 文件开头的 UTF-8 BOM 头问题。
+- 修复 `atmosphereLutResources.js` 资源销毁保护，添加 try-catch 防止单个纹理销毁失败阻断后续清理。
+- 为 GLSL 和 JS 中的大气散射物理常数添加详细注释。
+- 验证阶段三（大气保真）实现完整，包括 LUT 纹理创建、大气透视合成、天空辐照度计算。
+- 新增 `useCesiumTemporalUpsampling.js` 模块，实现 TAAU 16x 上采样、方差裁剪、速度重投影、STBN 蓝噪声。
+- 新增 `shadowResolveShaders.js` 模块，实现 BSM Shadow TAA 时序抗锯齿。
+- 集成 TAAU Resolve Stage 到 Cesium PostProcessStage 渲染管线，实现完整生命周期管理。
+- 完善质量预设系统，新增 `ultra` 档位（stepCount: 128, maxDistance: 720000）。
+- 修复 Cesium → OL 图层同步问题：`setBaseLayerActive` ID 类型不匹配。
+- 体积云性能优化：减少阴影计算步数、LOD 距离优化、远处禁用昂贵阴影、自适应步长、分辨率缩放模块。
+- 体积云模块重组：将 `useCesiumClouds.js`、`useCesiumTemporalUpsampling.js`、`useCesiumResolutionScaling.js` 移动到 `Clouds/composables/` 目录，实现高聚合。
+
+详见 [`../Docs/26-06/26-06-26/2026-06-26-atmosphere-lut-integration-fix.md`](../Docs/26-06/26-06-26/2026-06-26-atmosphere-lut-integration-fix.md) 和 [`../Docs/26-06/26-06-26/2026-06-26-cloud-performance-optimization.md`](../Docs/26-06/26-06-26/2026-06-26-cloud-performance-optimization.md)
+
+---
 
 ### V3.3.8 (2026-06-22) - 暂存区 Code Review 修复
 

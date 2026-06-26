@@ -447,107 +447,14 @@
 
                                 <div
                                     v-if="module.controls?.length"
-                                    class="control-list"
+                                    class="control-list control-list-gui"
                                     :class="module.controlLayout ? `control-list-${module.controlLayout}` : ''"
                                 >
-                                    <label
-                                        v-for="control in module.controls"
-                                        :key="control.id"
-                                        class="control-row"
-                                        :class="[
-                                            `control-${control.type}`,
-                                            module.controlLayout ? `control-row-${module.controlLayout}` : '',
-                                            control.numberInput === false ? 'without-number-input' : '',
-                                        ]"
-                                    >
-                                        <span class="control-label">
-                                            <span class="control-label-text">{{ control.label }}</span>
-                                            <span
-                                                v-if="control.tooltip"
-                                                class="control-help"
-                                                :aria-label="control.tooltip"
-                                                :title="control.tooltip"
-                                                @click.prevent.stop
-                                            >
-                                                ?
-                                            </span>
-                                        </span>
-
-                                        <template v-if="control.type === 'range'">
-                                            <input
-                                                class="control-range"
-                                                type="range"
-                                                :min="control.min"
-                                                :max="control.max"
-                                                :step="control.step"
-                                                :value="control.value"
-                                                :disabled="control.disabled"
-                                                @input="emitControlChange(module.id, control, $event.target.value)"
-                                            />
-                                            <input
-                                                v-if="control.numberInput !== false"
-                                                class="control-number"
-                                                type="number"
-                                                :min="control.min"
-                                                :max="control.max"
-                                                :step="control.step"
-                                                :value="control.value"
-                                                :disabled="control.disabled"
-                                                @input="emitControlChange(module.id, control, $event.target.value)"
-                                            />
-                                        </template>
-
-                                        <template v-else-if="control.type === 'color'">
-                                            <input
-                                                class="control-color"
-                                                type="color"
-                                                :value="control.value"
-                                                :disabled="control.disabled"
-                                                @input="emitControlChange(module.id, control, $event.target.value)"
-                                            />
-                                            <span
-                                                class="control-color-swatch"
-                                                :style="{ backgroundColor: control.value }"
-                                            ></span>
-                                        </template>
-
-                                        <select
-                                            v-else-if="control.type === 'select'"
-                                            class="control-select"
-                                            :value="control.value"
-                                            :disabled="control.disabled"
-                                            @change="emitControlChange(module.id, control, $event.target.value)"
-                                        >
-                                            <option
-                                                v-for="option in control.options || []"
-                                                :key="option.value"
-                                                :value="option.value"
-                                            >
-                                                {{ option.label }}
-                                            </option>
-                                        </select>
-
-                                        <button
-                                            v-else-if="control.type === 'toggle'"
-                                            class="toggle-control"
-                                            :class="{ active: !!control.value }"
-                                            type="button"
-                                            :aria-pressed="!!control.value"
-                                            :disabled="control.disabled"
-                                            @click="emitControlChange(module.id, control, !control.value)"
-                                        >
-                                            <span class="toggle-track">
-                                                <span class="toggle-thumb"></span>
-                                            </span>
-                                        </button>
-
-                                        <span
-                                            v-if="control.displayValue"
-                                            class="control-value"
-                                        >
-                                            {{ control.displayValue }}
-                                        </span>
-                                    </label>
+                                    <LilGuiControls
+                                        :title="module.title"
+                                        :controls="module.controls"
+                                        @change="emitControlChange(module.id, $event.control, $event.value)"
+                                    />
                                 </div>
                             </div>
                         </article>
@@ -683,6 +590,7 @@ import {
     Wind,
     X,
 } from 'lucide-vue-next';
+import LilGuiControls from './LilGuiControls.vue';
 
 const props = defineProps({
     open: {
@@ -1547,13 +1455,22 @@ function emitClearAll() {
 .module-item {
     overflow: hidden;
     border: 1px solid rgba(155, 216, 255, 0.16);
+    border-left: 3px solid transparent;
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.045);
+    transition: border-color 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.module-item:hover {
+    border-color: rgba(155, 216, 255, 0.32);
+    box-shadow: 0 4px 16px rgba(0, 12, 24, 0.28);
 }
 
 .module-item.expanded {
     border-color: rgba(74, 222, 128, 0.38);
+    border-left-color: #3ddc84;
     background: rgba(10, 47, 37, 0.64);
+    box-shadow: 0 6px 20px rgba(0, 12, 24, 0.32);
 }
 
 .module-head {
@@ -1577,20 +1494,25 @@ function emitClearAll() {
 }
 
 .module-head:hover {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.module-item.expanded .module-head {
+    background: rgba(255, 255, 255, 0.04);
 }
 
 .module-icon {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     flex: 0 0 auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(155, 216, 255, 0.2);
-    border-radius: 8px;
-    background: rgba(15, 40, 54, 0.72);
-    color: #b9e8ff;
+    border: 1px solid rgba(74, 222, 128, 0.24);
+    border-radius: 9px;
+    background: linear-gradient(135deg, rgba(15, 54, 42, 0.82), rgba(12, 40, 54, 0.82));
+    color: #a7f3d0;
+    box-shadow: 0 2px 8px rgba(0, 20, 14, 0.3);
 }
 
 .module-copy {
@@ -1627,10 +1549,25 @@ function emitClearAll() {
 .module-status {
     min-width: 48px;
     border-radius: 6px;
-    padding: 3px 7px;
+    padding: 3px 8px 3px 18px;
     font-size: 11px;
+    font-weight: 700;
     line-height: 1.1;
     text-align: center;
+    position: relative;
+}
+
+/* 状态圆点指示器 */
+.module-status::before {
+    content: '';
+    position: absolute;
+    left: 7px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
 }
 
 .module-status.success {
@@ -1664,6 +1601,24 @@ function emitClearAll() {
     padding: 12px;
     border-top: 1px solid rgba(155, 216, 255, 0.12);
     background: rgba(0, 7, 12, 0.22);
+    animation: module-body-in 0.2s ease;
+}
+
+@keyframes module-body-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 展开时图标高亮发光 */
+.module-item.expanded .module-icon {
+    border-color: rgba(74, 222, 128, 0.48);
+    box-shadow: 0 0 12px rgba(61, 220, 132, 0.2);
 }
 
 .tool-action {
@@ -1706,151 +1661,8 @@ function emitClearAll() {
     opacity: 0.48;
 }
 
-.control-list {
-    display: grid;
-    gap: 8px;
-}
-
-.control-row {
-    display: grid;
-    grid-template-columns: 72px minmax(0, 1fr) 76px;
-    align-items: center;
-    gap: 9px;
-    min-height: 34px;
-    border: 1px solid rgba(155, 216, 255, 0.11);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.045);
-    padding: 7px;
-    font-size: 12px;
-}
-
-.control-row.control-toggle {
-    grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.control-list-clouds {
-    gap: 7px;
-}
-
-.control-row.control-row-clouds {
-    width: 100%;
-    box-sizing: border-box;
-    grid-template-columns: 48px minmax(0, 1fr) 58px;
-    gap: 8px;
-    border-color: rgba(155, 216, 255, 0.14);
-    background: rgba(7, 27, 36, 0.54);
-}
-
-.control-row-clouds.control-toggle {
-    grid-template-columns: minmax(0, 1fr) auto;
-    min-height: 38px;
-    border-color: rgba(74, 222, 128, 0.2);
-    background: rgba(17, 86, 66, 0.2);
-}
-
-.control-row-clouds.control-select {
-    grid-template-columns: 48px minmax(0, 1fr);
-}
-
-.control-row-clouds.without-number-input {
-    grid-template-columns: 48px minmax(0, 1fr) 58px;
-}
-
-.control-label {
-    min-width: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    color: rgba(238, 251, 243, 0.82);
-    font-weight: 700;
-}
-
-.control-label-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.control-help {
-    width: 16px;
-    height: 16px;
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(155, 216, 255, 0.32);
-    border-radius: 50%;
-    background: rgba(155, 216, 255, 0.12);
-    color: rgba(225, 244, 255, 0.86);
-    cursor: help;
-    font-size: 11px;
-    line-height: 1;
-}
-
-.control-help:hover,
-.control-help:focus-visible {
-    border-color: rgba(74, 222, 128, 0.56);
-    background: rgba(74, 222, 128, 0.18);
-    color: #f6fffb;
-    outline: none;
-}
-
-.control-range {
-    width: 100%;
-    accent-color: #3ddc84;
-}
-
-.control-number,
-.control-select {
-    min-width: 0;
-    height: 28px;
-    border: 1px solid rgba(155, 216, 255, 0.2);
-    border-radius: 6px;
-    background: rgba(3, 18, 28, 0.88);
-    color: #eefbf3;
-    padding: 0 7px;
-    font-size: 12px;
-}
-
-.control-select {
-    grid-column: span 2;
-}
-
-.control-row.control-select {
-    grid-column: auto;
-}
-
-.control-row-clouds .control-select {
-    grid-column: auto;
-    width: 100%;
-}
-
-.control-row.control-color {
-    grid-template-columns: 72px minmax(0, 1fr) 34px;
-}
-
-.control-color {
-    width: 100%;
-    height: 28px;
-    min-width: 0;
-    border: 1px solid rgba(155, 216, 255, 0.2);
-    border-radius: 6px;
-    background: rgba(3, 18, 28, 0.88);
-    padding: 2px;
-    cursor: pointer;
-}
-
-.control-color:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-}
-
-.control-color-swatch {
-    width: 28px;
-    height: 28px;
-    border: 1px solid rgba(238, 251, 243, 0.46);
-    border-radius: 6px;
+.control-list-gui {
+    display: block;
 }
 
 .toggle-control {
@@ -1896,28 +1708,6 @@ function emitClearAll() {
     background: #072417;
 }
 
-.control-value {
-    grid-column: 2 / 4;
-    color: rgba(190, 232, 255, 0.72);
-    font-size: 11px;
-}
-
-.control-row-clouds .control-value {
-    grid-column: auto;
-    justify-self: end;
-    min-width: 48px;
-    border: 1px solid rgba(155, 216, 255, 0.13);
-    border-radius: 999px;
-    padding: 3px 7px;
-    background: rgba(3, 18, 28, 0.62);
-    color: rgba(225, 244, 255, 0.82);
-    font-size: 10px;
-    font-weight: 800;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
-}
-
 .compact .panel-header {
     padding: 10px 12px;
 }
@@ -1946,8 +1736,7 @@ function emitClearAll() {
 .cesium-tool-shell.is-embedded .module-desc,
 .cesium-tool-shell.is-embedded .overlay-desc,
 .cesium-tool-shell.is-embedded .custom-basemap-current,
-.cesium-tool-shell.is-embedded .overview-label,
-.cesium-tool-shell.is-embedded .control-value {
+.cesium-tool-shell.is-embedded .overview-label {
     color: var(--text-muted);
 }
 
@@ -1963,10 +1752,15 @@ function emitClearAll() {
 .cesium-tool-shell.is-embedded .option-card,
 .cesium-tool-shell.is-embedded .custom-basemap-editor,
 .cesium-tool-shell.is-embedded .overlay-row,
-.cesium-tool-shell.is-embedded .module-item,
-.cesium-tool-shell.is-embedded .control-row {
+.cesium-tool-shell.is-embedded .module-item {
     background: var(--bg-secondary);
     border-color: var(--border-light);
+}
+
+/* 嵌入模式下展开卡片保留左侧绿色边框指示 */
+.cesium-tool-shell.is-embedded .module-item.expanded {
+    border-color: var(--border-light);
+    border-left-color: #3ddc84;
 }
 
 .cesium-tool-shell.is-embedded .custom-basemap-input {
@@ -1984,7 +1778,6 @@ function emitClearAll() {
 .cesium-tool-shell.is-embedded .overlay-row,
 .cesium-tool-shell.is-embedded .overlay-title,
 .cesium-tool-shell.is-embedded .tool-action,
-.cesium-tool-shell.is-embedded .control-label,
 .cesium-tool-shell.is-embedded .section-head {
     color: var(--text-primary);
 }
@@ -2004,19 +1797,6 @@ function emitClearAll() {
 
     .overview-grid {
         grid-template-columns: 1fr;
-    }
-
-    .control-row {
-        grid-template-columns: 64px minmax(0, 1fr) 70px;
-    }
-
-    .control-row.control-row-clouds,
-    .control-row-clouds.without-number-input {
-        grid-template-columns: 44px minmax(0, 1fr) 54px;
-    }
-
-    .control-row.control-color {
-        grid-template-columns: 64px minmax(0, 1fr) 34px;
     }
 }
 

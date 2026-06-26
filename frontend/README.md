@@ -1,4 +1,90 @@
-# WebGIS 前端项目 — v3.3.8
+# WebGIS 前端项目 — v3.3.9
+
+## 📝 2026-06-26 模块卡片 UI 清理与视觉优化
+
+CesiumToolPanel.vue 引入 lil-gui 后的冗余清理 + 模块卡片视觉增强：
+
+* 🧹 **清理死代码 CSS**：移除约 200 行已废弃的手写控制样式（`.control-row` / `.control-label` / `.control-help` / `.control-range` / `.control-number` / `.control-select` / `.control-color` / `.control-value` 系列），这些样式在引入 lil-gui 替换自定义控件后已不再使用。
+* 🐛 **隐藏 lil-gui 重复标题**：LilGuiControls.vue 中 lil-gui 自带的 `.lil-title` 与 module-head 标题重复，通过 `height: 0 + overflow: hidden` 视觉隐藏（保留 DOM 以维持折叠逻辑）。
+* 🎨 **模块卡片视觉增强**：
+  - expanded 状态左侧 3px 绿色渐变色条，提升视觉层次
+  - hover 时边框变亮 + 微阴影 `box-shadow`
+  - 图标区域 32→36px，渐变背景 + 发光边框
+  - 展开动画（opacity + translateY 过渡）
+  - 状态标签加圆点指示器（`::before` 伪元素）
+
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-module-card-ui-cleanup.md`。
+
+## 📝 2026-06-26 体积云性能优化
+
+体积云开启后卡死问题的全面优化：
+
+* 🚀 **减少阴影计算步数**：`marchSunOpticalDepth` 从 6 步减到 3 步，`marchBeerShadowOpticalDepth` 从 10 步减到 4 步。
+* 🚀 **LOD 优化**：根据距离和质量等级动态调整步数，远处云层降低 60% 计算量。
+* 🚀 **远处禁用昂贵阴影**：超过阈值后跳过 Beer 阴影和 BSM 计算。
+* 🚀 **自适应步长**：空白区域跳 3 倍大步，减少无效采样。
+* 🚀 **更激进的早期终止**：云层足够厚时提前结束循环。
+* 🆕 **分辨率缩放模块**：`useCesiumResolutionScaling.js` 支持低分辨率渲染 + 动态调整。
+
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-cloud-performance-optimization.md`。
+
+## 📝 2026-06-26 修复 Cesium → OL 图层同步问题
+
+当 URL 面板是 Cesium 时，`l` 参数（图层索引）不能同步到 OpenLayers 中的问题：
+
+* 🐛 **修复 `setBaseLayerActive` ID 类型不匹配**：`layerList` 包含图层源 ID（如 `'imagery_google'`），而 `selectedLayer` 存储预设 ID（如 `'imagery_google_preset'`）。原代码检查 `layerList` 中是否存在该图层，导致始终返回 `undefined`。简化为直接设置 `selectedLayer.value`。
+
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-fix-cesium-to-ol-layer-sync.md`。
+
+## 📝 2026-06-26 Code Review 两轮修复（17 个问题）
+
+未提交代码的两轮全面审查与修复：
+
+**第一轮（4 个）**：
+* 🐛 GLSL sampler null 检查 → `uniform bool hasVelocityTexture` 标志
+* 🐛 深度纹理格式 → `DEPTH_COMPONENT16` renderbuffer 兼容 WebGL1/2
+* 🐛 TAAU resolve stage 缺失 uniforms → 补充 depthTexture/velocityTexture/hasVelocityTexture
+* 🐛 lil-gui title 隐藏 → `height: 0` 保留 DOM 折叠逻辑
+
+**第二轮（13 个）**：
+* 🔴 **TAAU resolve stage 永久禁用** → 接入质量预设（high/ultra 自动启用）
+* 🔴 **swapBuffers() 从未调用** → preRender 中 TAAU 启用时交换 ping-pong framebuffer
+* 🟡 内部 API 访问封装 → `getStageOutputTexture()`/`getSceneDepthTexture()`/`getFramebufferColorTexture()`
+* 🟡 GLSL 兼容性 → `FRAG_COLOR`/`SAMPLE_TEX` 宏 + `#if __VERSION__` 兼容块
+* 🟡 cloudShadowShaders `out_FragColor` 未声明 → 显式 `out vec4` 声明
+* 🟡 嵌入模式 expanded 卡片无视觉区分 → 添加 `.is-embedded .module-item.expanded` 规则
+* 🟡 TAAU resolve stage 资源泄漏 → 模块级变量 + cleanupEffects 移除
+* 🔵 `const scene` 变量遮蔽 / `fract()` 定义顺序 / `historyValid` 过早设置 / 无用矩阵克隆 / lil-gui min-height 防护 / 蓝噪声哈希优化
+
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-code-review-taau-lilgui-fix.md`。
+
+## 📝 2026-06-26 体积云模块重构 + 性能优化
+
+将分散的体积云相关代码整合到 `Clouds/` 目录，实现高聚合：
+
+* ♻️ **模块重组**：将 `useCesiumClouds.js`、`useCesiumTemporalUpsampling.js`、`useCesiumResolutionScaling.js` 从 `composables/` 移动到 `Clouds/composables/`。
+* 🚀 **性能优化**：减少阴影计算步数（-55%）、LOD 距离优化（-65%）、远处禁用昂贵阴影（-85%）。
+* 🆕 **分辨率缩放模块**：`useCesiumResolutionScaling.js` 支持低分辨率渲染 + 动态调整。
+
+**体积云目录结构**：
+```
+Cesium/Clouds/
+├── composables/
+│   ├── useCesiumClouds.js          # 体积云 composable
+│   ├── useCesiumTemporalUpsampling.js  # TAAU 时序上采样
+│   └── useCesiumResolutionScaling.js   # 分辨率缩放
+├── atmosphereLutResources.js       # 大气 LUT 纹理
+├── CesiumVolumetricClouds.js       # 体积云 Primitive
+├── CloudShadowPrimitive.js         # BSM 阴影 Primitive
+├── cloudDefaults.js                # 质量预设配置
+├── cloudMath.js                    # 云层数学工具
+├── cloudShaders.js                 # 云层 shader
+├── cloudShadowShaders.js           # 阴影 shader
+├── cloudShadowResources.js         # 阴影资源管理
+└── shadowResolveShaders.js         # 阴影 TAA shader
+```
+
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-cloud-performance-optimization.md`。
 
 ## 📝 2026-06-22 暂存区 Code Review 修复
 

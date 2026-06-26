@@ -1,13 +1,10 @@
 import { computed, ref, watch } from 'vue';
 import { readStoredBoolean, writeStoredBoolean } from './cesiumStorage';
+import { QUALITY_PRESETS } from '../Clouds/cloudDefaults';
 
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
 
-const CLOUD_QUALITY_PRESETS = {
-    low: { label: '性能', stepCount: 28, maxDistance: 240000 },
-    medium: { label: '均衡', stepCount: 48, maxDistance: 360000 },
-    high: { label: '精细', stepCount: 64, maxDistance: 520000 },
-};
+// 统一质量预设源，从 cloudDefaults.js 导入（含 label/stepCount/maxDistance/temporalUpsampling）
 
 export function useCesiumToolModules({
     fluidPanelRef,
@@ -37,8 +34,8 @@ export function useCesiumToolModules({
         groundBounceStrength: 0.26,
         bsmShadow: false,
         shadowResolution: 256,
-        maxDistance: CLOUD_QUALITY_PRESETS.medium.maxDistance,
-        stepCount: CLOUD_QUALITY_PRESETS.medium.stepCount,
+        maxDistance: QUALITY_PRESETS.medium.maxDistance,
+        stepCount: QUALITY_PRESETS.medium.stepCount,
     });
     advancedEffectControls.value = {
         ...advancedEffectControls.value,
@@ -116,14 +113,14 @@ export function useCesiumToolModules({
                     label: '云层',
                     type: 'toggle',
                     value: advancedEffectControls.value.volumetricClouds,
-                    tooltip: 'Cesium ECEF 球壳体积云。当前为单 pass 版本，后续可替换为 BSM 阴影与 TAA。',
+                    tooltip: 'Cesium ECEF 球壳体积云。包含向太阳二次步进、SVS Beer Shadow Map、自阴影与薄雾近似。',
                 },
                 {
                     id: 'cloudQuality',
                     label: '质量',
                     type: 'select',
                     value: cloudParams.value.quality,
-                    options: Object.entries(CLOUD_QUALITY_PRESETS).map(([value, preset]) => ({
+                    options: Object.entries(QUALITY_PRESETS).map(([value, preset]) => ({
                         value,
                         label: preset.label,
                     })),
@@ -429,7 +426,7 @@ function createCloudControls(params = {}, disabled) {
             type: 'toggle',
             value: !!params.bsmShadow,
             disabled,
-            tooltip: '实验 Beer Shadow Map 阴影 atlas。用于调试真实阴影链路，异常时会自动关闭。',
+            tooltip: 'Beer Shadow Map 阴影 atlas。用于远距离自阴影，异常时会自动降级关闭。',
         },
         {
             id: 'shadowResolution',
@@ -451,8 +448,8 @@ function createCloudControls(params = {}, disabled) {
             min: 120000,
             max: 900000,
             step: 10000,
-            value: params.maxDistance ?? CLOUD_QUALITY_PRESETS.medium.maxDistance,
-            displayValue: `${Math.round((params.maxDistance ?? CLOUD_QUALITY_PRESETS.medium.maxDistance) / 1000)} km`,
+            value: params.maxDistance ?? QUALITY_PRESETS.medium.maxDistance,
+            displayValue: `${Math.round((params.maxDistance ?? QUALITY_PRESETS.medium.maxDistance) / 1000)} km`,
             disabled,
             numberInput: false,
         },
@@ -463,8 +460,8 @@ function createCloudControls(params = {}, disabled) {
             min: 24,
             max: 80,
             step: 1,
-            value: params.stepCount ?? CLOUD_QUALITY_PRESETS.medium.stepCount,
-            displayValue: String(Math.round(params.stepCount ?? CLOUD_QUALITY_PRESETS.medium.stepCount)),
+            value: params.stepCount ?? QUALITY_PRESETS.medium.stepCount,
+            displayValue: String(Math.round(params.stepCount ?? QUALITY_PRESETS.medium.stepCount)),
             disabled,
             numberInput: false,
         },
@@ -490,10 +487,10 @@ function isCloudControlId(controlId) {
 }
 
 function normalizeCloudParams(params = {}) {
-    const quality = Object.prototype.hasOwnProperty.call(CLOUD_QUALITY_PRESETS, params.quality)
+    const quality = Object.prototype.hasOwnProperty.call(QUALITY_PRESETS, params.quality)
         ? params.quality
         : 'medium';
-    const preset = CLOUD_QUALITY_PRESETS[quality];
+    const preset = QUALITY_PRESETS[quality];
     const qualityChanged = params.quality && params.quality !== params.previousQuality;
     return {
         quality,

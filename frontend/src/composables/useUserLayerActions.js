@@ -17,7 +17,7 @@ export function useUserLayerActions({
     setDrawStyle,
     layerList,
     selectedLayer,
-    getLayerCategory,
+    getLayerCategory: _getLayerCategory,
     refreshLayersState,
     projectExtentToMapView,
     emitFeatureSelected,
@@ -201,11 +201,18 @@ export function useUserLayerActions({
         }
     }
 
+    /**
+     * 设置底图激活状态
+     * 当从 Cesium 切换到 OL 时，同步 URL 中的 l 参数到底图选择
+     * 注意：layerId 是底图预设 ID（如 'imagery_google_preset'），不是图层源 ID（如 'imagery_google'）
+     * @param {string} layerId - 底图预设 ID
+     */
     function setBaseLayerActive(layerId) {
-        const target = layerList?.value?.find((item) => item.id === layerId);
-        if (!target) return;
-        if (getLayerCategory?.(layerId) !== 'base') return;
-        if (selectedLayer) {
+        if (!layerId || !selectedLayer) return;
+
+        // 直接设置 selectedLayer，因为 selectedLayer 存储的是预设 ID
+        // 不需要检查 layerList，因为 layerList 包含的是图层源 ID，不是预设 ID
+        if (selectedLayer.value !== layerId) {
             selectedLayer.value = layerId;
         }
     }
