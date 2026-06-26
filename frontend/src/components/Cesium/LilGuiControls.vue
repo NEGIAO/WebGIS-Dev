@@ -85,6 +85,25 @@ function createGui(container, signature) {
 }
 
 function createController(control) {
+    // info 类型是分隔符/标题，不创建控制器
+    if (control.type === 'info') {
+        const div = document.createElement('div');
+        div.className = 'lil-separator';
+        div.textContent = control.label || '';
+        div.style.cssText = `
+            padding: 6px 0 4px;
+            color: rgba(155, 216, 255, 0.7);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            border-top: 1px solid rgba(155, 216, 255, 0.12);
+            margin-top: 4px;
+        `;
+        const target = gui.children[0]?.domElement || gui.domElement;
+        target.appendChild(div);
+        return null;
+    }
+
     guiTarget[control.id] = getControlValue(control);
 
     let controller = null;

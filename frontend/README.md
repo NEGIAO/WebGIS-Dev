@@ -1,5 +1,14 @@
 # WebGIS 前端项目 — v3.3.10
 
+## 📝 2026-06-26 热带浅水控件显示修复
+
+修复热带浅水控件无法正确显示在控制面板中的问题：
+
+* 🐛 **修复 `type: 'info'` 分隔符控件处理**：LilGuiControls.vue 中缺少对分隔符类型控件的特殊处理，导致分隔符被当作普通文本输入框处理。现在分隔符控件渲染为带样式的标题分隔线。
+* 🔧 **补充 `shallowWater` 模块图标映射**：CesiumToolPanel.vue 中添加 `Waves` 图标导入和 `shallowWater` 模块/操作图标映射。
+
+详见维护日志 `Docs/06-26/2026-06-26-shallow-water-controls-fix.md`。
+
 ## 📝 2026-06-26 大气系统清理 + 场景美化 + 高度阈值
 
 完全移除 `AtmosphereManager`（Tellux 移植的大气系统），新增场景美化模块和大气高度阈值：
@@ -314,7 +323,9 @@ frontend/src/
 │   │   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
 │   │   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排 + 统一预设接入
 │   │   │   │   ├── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
-│   │   │   │   └── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
+│   │   │   │   ├── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
+│   │   │   │   ├── useAtmosphereAutoClose.js     # 近地大气自动关闭（相机高度 < 800m 关闭大气，控制中心可切换）
+│   │   │   │   └── useVolumetricClouds.js        # 体积云参数/控件/预设/归一化（从 useCesiumToolModules 拆分）
 │   │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
 │   │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
 │   │   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）

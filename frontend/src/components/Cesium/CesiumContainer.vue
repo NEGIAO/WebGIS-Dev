@@ -108,6 +108,7 @@ import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import ShallowWaterOverlay from './ShallowWater/ShallowWaterOverlay.vue';
 import { configureSolarLighting } from './composables/cesiumAtmosphere';
+import { useAtmosphereAutoClose } from './composables/useAtmosphereAutoClose';
 import { loadCesiumRuntime } from './composables/cesiumRuntime';
 import { configureBeijingTimeSystem } from './composables/cesiumTimeSystem';
 import { useCesiumCreditHider } from './composables/useCesiumCreditHider';
@@ -211,6 +212,9 @@ const wind = useCesiumWind({
     message,
 });
 
+// 近地大气自动关闭
+const atmosphereAutoClose = useAtmosphereAutoClose({ getViewer, getCesium });
+
 const dataImport = useCesiumDataImport({
     getViewer,
     getCesium,
@@ -285,6 +289,7 @@ const {
     advancedEffectControls,
     fluidParams,
     baseAtmosphereParams,
+    atmosphereAutoCloseEnabled,
     shallowWaterVisible,
     shallowWaterParams,
     toolModules,
@@ -516,6 +521,7 @@ onUnmounted(() => {
     cameraEnhanced.cleanup();
     heightSampler.cleanup();
 
+    atmosphereAutoClose.cleanup();
     cleanupCreditHider();
     dataImport.clearAllDataSources();
     if (viewer) {
@@ -533,7 +539,14 @@ watch(cesiumReady, (ready) => {
     if (ready) {
         // 初始应用基础大气参数
         applyBaseAtmosphereParams(baseAtmosphereParams.value);
+        // 启动近地大气自动关闭监听
+        atmosphereAutoClose.start();
     }
+});
+
+// 同步控制中心的开关状态到自动关闭模块
+watch(atmosphereAutoCloseEnabled, (enabled) => {
+    atmosphereAutoClose.atmosphereAutoCloseEnabled.value = enabled;
 });
 
 /**
@@ -546,8 +559,11 @@ function applyBaseAtmosphereParams(params) {
     const globe = scene.globe;
 
     if (globe) {
-        globe.enableLighting = params.enableLighting;
-        globe.showGroundAtmosphere = params.showGroundAtmosphere;
+        // 近地自动关闭生效时，跳过 enableLighting 和 showGroundAtmosphere 赋值
+        if (!atmosphereAutoClose.atmosphereAutoClosed.value) {
+            globe.enableLighting = params.enableLighting;
+            globe.showGroundAtmosphere = params.showGroundAtmosphere;
+        }
         if ('dynamicAtmosphereLighting' in globe) globe.dynamicAtmosphereLighting = params.dynamicAtmosphereLighting;
         if ('dynamicAtmosphereLightingFromSun' in globe) globe.dynamicAtmosphereLightingFromSun = params.dynamicAtmosphereLightingFromSun;
         if ('atmosphereLightIntensity' in globe) globe.atmosphereLightIntensity = params.atmosphereLightIntensity;

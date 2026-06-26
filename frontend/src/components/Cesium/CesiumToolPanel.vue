@@ -587,6 +587,7 @@ import {
     Sparkles,
     Trash2,
     Upload,
+    Waves,
     Wind,
     X,
 } from 'lucide-vue-next';
@@ -818,6 +819,7 @@ function getModuleIcon(moduleId) {
         clouds: Cloud,
         wind: Wind,
         fluid: Droplets,
+        shallowWater: Waves,
     };
     return icons[moduleId] || SlidersHorizontal;
 }
@@ -836,6 +838,9 @@ function getActionIcon(moduleId, actionId) {
         fluid: {
             pick: Eye,
             clear: Trash2,
+        },
+        shallowWater: {
+            toggle: Waves,
         },
     };
     return icons[moduleId]?.[actionId] || RotateCcw;

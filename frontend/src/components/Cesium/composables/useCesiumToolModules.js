@@ -1,17 +1,8 @@
 import { computed, ref, watch } from 'vue';
 import { readStoredBoolean, writeStoredBoolean } from './cesiumStorage';
+import { QUALITY_PRESETS, createCloudControls, isCloudControlId, normalizeCloudParams } from './useVolumetricClouds';
 
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
-
-// 云层质量预设（本地定义，原 atmosphereDefaults.js 已移除）
-const QUALITY_PRESETS = {
-    low: { stepCount: 32, maxDistance: 200000, label: '低' },
-    medium: { stepCount: 48, maxDistance: 360000, label: '中' },
-    high: { stepCount: 64, maxDistance: 500000, label: '高' },
-    ultra: { stepCount: 80, maxDistance: 700000, label: '超高' },
-};
-
-// 统一质量预设源，从 cloudDefaults.js 导入（含 label/stepCount/maxDistance/temporalUpsampling）
 
 export function useCesiumToolModules({
     fluidPanelRef,
@@ -32,6 +23,9 @@ export function useCesiumToolModules({
         atmosphere: false,
         volumetricClouds: false,
     });
+
+    // 近地大气自动关闭开关（默认开启：放大到 800m 以下自动关闭大气）
+    const atmosphereAutoCloseEnabled = ref(true);
 
     // 基础大气参数（只开启晨昏半球，其余全部关闭）
     const baseAtmosphereParams = ref({
@@ -144,12 +138,12 @@ export function useCesiumToolModules({
             description: 'Cesium 原生光照 + Tellux 增强大气 + 高级后效（全部可选）',
             status: advancedEffectControls.value.atmosphere ||
                     advancedEffectControls.value.fog ||
-                    advancedEffectControls.value.hbao ||
-                    advancedEffectControls.value.volumetricClouds
+                    advancedEffectControls.value.hbao
                 ? '部分启用' : '仅晨昏半球',
             statusTone: advancedEffectControls.value.atmosphere ? 'success' : 'neutral',
             controls: [
                 // --- Cesium 原生基础 ---
+                { id: 'atmosphereAutoClose', label: '近地自动关大气+光照', type: 'toggle', value: atmosphereAutoCloseEnabled.value, tooltip: '开启后，相机高度低于 80000m（URL z 参数）时自动关闭大气和日照，近地面查看更清晰' },
                 ...createBaseAtmosphereControls(baseAtmosphereParams.value),
                 // --- 分隔：高级后效（全部默认关闭）---
                 { id: '_sep_effects', label: '── 高级后效（默认关闭）──', type: 'info' },
@@ -160,9 +154,16 @@ export function useCesiumToolModules({
                 { id: '_sep_tellux', label: '── Tellux 增强大气（默认关闭）──', type: 'info' },
                 { id: 'atmosphere', label: '大气效果', type: 'toggle', value: advancedEffectControls.value.atmosphere, tooltip: '启用 Tellux 大气渲染（日夜过渡、月光、星空）' },
                 ...createAtmosphereControls(atmosphereParams.value, !advancedEffectControls.value.atmosphere),
-                // --- 分隔：体积云 ---
-                { id: '_sep_clouds', label: '── 体积云（默认关闭）──', type: 'info' },
-                { id: 'volumetricClouds', label: '云层', type: 'toggle', value: advancedEffectControls.value.volumetricClouds, tooltip: 'Cesium ECEF 球壳体积云' },
+            ],
+        },
+        {
+            id: 'cloud',
+            title: '体积云',
+            description: 'Cesium ECEF 球壳体积云（独立控制）',
+            status: advancedEffectControls.value.volumetricClouds ? '已启用' : '未启用',
+            statusTone: advancedEffectControls.value.volumetricClouds ? 'success' : 'neutral',
+            controls: [
+                { id: 'volumetricClouds', label: '体积云', type: 'toggle', value: advancedEffectControls.value.volumetricClouds, tooltip: 'Cesium ECEF 球壳体积云' },
                 {
                     id: 'cloudQuality', label: '云质量', type: 'select',
                     value: cloudParams.value.quality,
@@ -281,29 +282,19 @@ export function useCesiumToolModules({
             return;
         }
 
-        // ========== 合并的 atmosphere 模块处理 ==========
+        // ========== atmosphere 模块处理 ==========
         if (moduleId === 'atmosphere') {
-            // 高级特效开关（fog/hbao/tiltShift/atmosphere/volumetricClouds）
+            // 近地大气自动关闭开关
+            if (controlId === 'atmosphereAutoClose') {
+                atmosphereAutoCloseEnabled.value = Boolean(value);
+                return;
+            }
+
+            // 高级特效开关（fog/hbao/tiltShift/atmosphere）
             if (controlId in advancedEffectControls.value) {
                 advancedEffectControls.value = {
                     ...advancedEffectControls.value,
                     [controlId]: Boolean(value),
-                };
-                return;
-            }
-
-            // 体积云参数
-            if (isCloudControlId(controlId)) {
-                const nextCloudPatch = controlId === 'cloudQuality'
-                    ? { quality: value, previousQuality: cloudParams.value.quality }
-                    : { [controlId]: value };
-                cloudParams.value = normalizeCloudParams({
-                    ...cloudParams.value,
-                    ...nextCloudPatch,
-                });
-                advancedEffectControls.value = {
-                    ...advancedEffectControls.value,
-                    clouds: cloudParams.value,
                 };
                 return;
             }
@@ -330,6 +321,32 @@ export function useCesiumToolModules({
                     ...atmosphereParams.value,
                     [controlId]: value,
                 };
+            }
+        }
+
+        // ========== 体积云模块处理 ==========
+        if (moduleId === 'cloud') {
+            if (controlId === 'volumetricClouds') {
+                advancedEffectControls.value = {
+                    ...advancedEffectControls.value,
+                    volumetricClouds: Boolean(value),
+                };
+                return;
+            }
+
+            if (isCloudControlId(controlId)) {
+                const nextCloudPatch = controlId === 'cloudQuality'
+                    ? { quality: value, previousQuality: cloudParams.value.quality }
+                    : { [controlId]: value };
+                cloudParams.value = normalizeCloudParams({
+                    ...cloudParams.value,
+                    ...nextCloudPatch,
+                });
+                advancedEffectControls.value = {
+                    ...advancedEffectControls.value,
+                    clouds: cloudParams.value,
+                };
+                return;
             }
         }
     }
@@ -366,6 +383,7 @@ export function useCesiumToolModules({
         cloudParams,
         baseAtmosphereParams,
         atmosphereParams,
+        atmosphereAutoCloseEnabled,
         fluidParams,
         fluidState,
         shallowWaterVisible,
@@ -425,205 +443,6 @@ function createWindControls(windParams = {}, disabled) {
             disabled,
         },
     ];
-}
-
-function createCloudControls(params = {}, disabled) {
-    return [
-        {
-            id: 'coverage',
-            label: '云量',
-            type: 'range',
-            min: 0.18,
-            max: 0.82,
-            step: 0.01,
-            value: params.coverage ?? 0.52,
-            displayValue: Number(params.coverage ?? 0.52).toFixed(2),
-            disabled,
-            tooltip: '覆盖率阈值。数值越大云越少，数值越小云越密。',
-            numberInput: false,
-        },
-        {
-            id: 'density',
-            label: '密度',
-            type: 'range',
-            min: 0.000025,
-            max: 0.00018,
-            step: 0.000005,
-            value: params.density ?? 0.00009,
-            displayValue: Number(params.density ?? 0.00009).toExponential(2),
-            disabled,
-            tooltip: '体积消光密度。数值越大云更厚、更暗，也更影响性能观感。',
-            numberInput: false,
-        },
-        {
-            id: 'shadowStrength',
-            label: '阴影',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.shadowStrength ?? 0.82,
-            displayValue: Number(params.shadowStrength ?? 0.82).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'multiScattering',
-            label: '散射',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.multiScattering ?? 0.58,
-            displayValue: Number(params.multiScattering ?? 0.58).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'beerShadowStrength',
-            label: '远影',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.beerShadowStrength ?? 0.64,
-            displayValue: Number(params.beerShadowStrength ?? 0.64).toFixed(2),
-            disabled,
-            tooltip: 'Beer Shadow Map 风格的远距离光学深度近似。数值越大，云层背光阴影越明显。',
-            numberInput: false,
-        },
-        {
-            id: 'powderStrength',
-            label: '银边',
-            type: 'range',
-            min: 0,
-            max: 1.4,
-            step: 0.02,
-            value: params.powderStrength ?? 0.72,
-            displayValue: Number(params.powderStrength ?? 0.72).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'hazeStrength',
-            label: '薄霾',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.hazeStrength ?? 0.38,
-            displayValue: Number(params.hazeStrength ?? 0.38).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'groundBounceStrength',
-            label: '反照',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.groundBounceStrength ?? 0.26,
-            displayValue: Number(params.groundBounceStrength ?? 0.26).toFixed(2),
-            disabled,
-            tooltip: '地面反弹光近似，用于提亮云底。',
-            numberInput: false,
-        },
-        {
-            id: 'bsmShadow',
-            label: 'BSM',
-            type: 'toggle',
-            value: !!params.bsmShadow,
-            disabled,
-            tooltip: 'Beer Shadow Map 阴影 atlas。用于远距离自阴影，异常时会自动降级关闭。',
-        },
-        {
-            id: 'shadowResolution',
-            label: '影图',
-            type: 'range',
-            min: 128,
-            max: 512,
-            step: 128,
-            value: params.shadowResolution ?? 256,
-            displayValue: `${Math.round(params.shadowResolution ?? 256)} px`,
-            disabled: disabled || !params.bsmShadow,
-            tooltip: 'BSM 阴影 atlas 单级联分辨率。越高越清晰，也越影响性能。',
-            numberInput: false,
-        },
-        {
-            id: 'maxDistance',
-            label: '距离',
-            type: 'range',
-            min: 120000,
-            max: 900000,
-            step: 10000,
-            value: params.maxDistance ?? QUALITY_PRESETS.medium.maxDistance,
-            displayValue: `${Math.round((params.maxDistance ?? QUALITY_PRESETS.medium.maxDistance) / 1000)} km`,
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'stepCount',
-            label: '步数',
-            type: 'range',
-            min: 24,
-            max: 80,
-            step: 1,
-            value: params.stepCount ?? QUALITY_PRESETS.medium.stepCount,
-            displayValue: String(Math.round(params.stepCount ?? QUALITY_PRESETS.medium.stepCount)),
-            disabled,
-            numberInput: false,
-        },
-    ];
-}
-
-function isCloudControlId(controlId) {
-    return [
-        'cloudQuality',
-        'coverage',
-        'density',
-        'shadowStrength',
-        'beerShadowStrength',
-        'multiScattering',
-        'powderStrength',
-        'hazeStrength',
-        'groundBounceStrength',
-        'bsmShadow',
-        'shadowResolution',
-        'maxDistance',
-        'stepCount',
-    ].includes(controlId);
-}
-
-function normalizeCloudParams(params = {}) {
-    const quality = Object.prototype.hasOwnProperty.call(QUALITY_PRESETS, params.quality)
-        ? params.quality
-        : 'medium';
-    const preset = QUALITY_PRESETS[quality];
-    const qualityChanged = params.quality && params.quality !== params.previousQuality;
-    return {
-        quality,
-        coverage: clampNumber(toFiniteNumber(params.coverage, 0.52), 0.18, 0.82),
-        density: clampNumber(toFiniteNumber(params.density, 0.00009), 0.000025, 0.00018),
-        shadowStrength: clampNumber(toFiniteNumber(params.shadowStrength, 0.82), 0, 1),
-        beerShadowStrength: clampNumber(toFiniteNumber(params.beerShadowStrength, 0.64), 0, 1),
-        multiScattering: clampNumber(toFiniteNumber(params.multiScattering, 0.58), 0, 1),
-        powderStrength: clampNumber(toFiniteNumber(params.powderStrength, 0.72), 0, 1.4),
-        hazeStrength: clampNumber(toFiniteNumber(params.hazeStrength, 0.38), 0, 1),
-        groundBounceStrength: clampNumber(toFiniteNumber(params.groundBounceStrength, 0.26), 0, 1),
-        bsmShadow: params.bsmShadow === true,
-        shadowResolution: Math.round(clampNumber(toFiniteNumber(params.shadowResolution, 256), 128, 512) / 128) * 128,
-        maxDistance: clampNumber(
-            qualityChanged ? preset.maxDistance : toFiniteNumber(params.maxDistance, preset.maxDistance),
-            120000,
-            900000,
-        ),
-        stepCount: Math.round(clampNumber(
-            qualityChanged ? preset.stepCount : toFiniteNumber(params.stepCount, preset.stepCount),
-            24,
-            80,
-        )),
-    };
 }
 
 function createFluidControls(fluidParams, fluidState = {}) {
@@ -699,11 +518,6 @@ function createFluidControls(fluidParams, fluidState = {}) {
 function toFiniteNumberOrNull(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
-}
-
-function toFiniteNumber(value, fallback) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
 }
 
 function clampNumber(value, min, max) {
