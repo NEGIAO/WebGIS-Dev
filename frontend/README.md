@@ -15,7 +15,7 @@
 * 🔧 **地形碰撞自适应**：有地形时创建碰撞体可行走，无地形时自动飞行模式 + 最低高度保护
 * 🐛 **修复 ArcGIS 地形无法识别**：新增 `ArcGISTerrainProvider` 增强包装器（参照天地图 `GeoTerrainProvider` 补充 `availability` + `getTileDataAvailable`），使 `sampleTerrainMostDetailed` 原生支持 + 降级兜底
 
-详见维护日志 `Docs/26-06/2026-06-26-player-controller-integration.md`。
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-player-controller-integration.md`。
 
 ## 📝 2026-06-26 热带浅水控件显示修复
 

@@ -11,8 +11,6 @@ const QUALITY_PRESETS = {
     ultra: { stepCount: 80, maxDistance: 700000, label: '超高' },
 };
 
-// 统一质量预设源，从 cloudDefaults.js 导入（含 label/stepCount/maxDistance/temporalUpsampling）
-
 export function useCesiumToolModules({
     fluidPanelRef,
     sceneActions = {},
@@ -105,7 +103,7 @@ export function useCesiumToolModules({
     // 人物漫游调试参数
     const playerParams = ref({
         speed: 300,
-        flySpeed: 5500,
+        flySpeed: 55000,
         gravity: -2400,
         jumpHeight: 600,
         sensitivity: 5,
@@ -246,7 +244,7 @@ export function useCesiumToolModules({
             ],
             controls: [
                 { id: 'speed', label: '行走速度', type: 'range', value: playerParams.value.speed, min: 50, max: 2000, step: 10, disabled: !_playerController?.isActive?.value },
-                { id: 'flySpeed', label: '飞行速度', type: 'range', value: playerParams.value.flySpeed, min: 200, max: 10000, step: 100, disabled: !_playerController?.isActive?.value },
+                { id: 'flySpeed', label: '飞行速度', type: 'range', value: playerParams.value.flySpeed, min: 2000, max: 1000000, step: 1000, disabled: !_playerController?.isActive?.value },
                 { id: 'gravity', label: '重力', type: 'range', value: playerParams.value.gravity, min: -6000, max: 0, step: 50, disabled: !_playerController?.isActive?.value },
                 { id: 'jumpHeight', label: '跳跃高度', type: 'range', value: playerParams.value.jumpHeight, min: 0, max: 3000, step: 50, disabled: !_playerController?.isActive?.value },
                 { id: 'sensitivity', label: '鼠标灵敏度', type: 'range', value: playerParams.value.sensitivity, min: 1, max: 20, step: 0.5, disabled: !_playerController?.isActive?.value },

@@ -12,7 +12,8 @@
  * 三种地形 provider 对比：
  * - CesiumTerrainProvider (Ion)：有 availability 属性 ✓
  * - GeoTerrainProvider (天地图自定义)：有 availability 属性 ✓
- * - ArcGISTiledElevationTerrainProvider：无 availability 属性，但不是 EllipsoidTerrainProvider
+ * - ArcGISTiledElevationTerrainProvider：无 availability，但有 requestWaterMask/requestVertexNormals
+ * - EllipsoidTerrainProvider（默认无地形）：无 availability、无 requestWaterMask
  *
  * @param provider - viewer.terrainProvider
  * @returns true 表示有可用高程数据，false 表示椭球平面（无高程）
@@ -20,12 +21,12 @@
 export function hasRealTerrain(provider: any): boolean {
     if (!provider) return false;
 
-    // EllipsoidTerrainProvider 是 Cesium 默认的"无地形"provider
-    // 它的构造函数名固定为 'EllipsoidTerrainProvider'
-    const name = provider.constructor?.name;
-    if (name === 'EllipsoidTerrainProvider') return false;
+    // 有 availability 属性 → 一定是真实地形（CesiumTerrainProvider / GeoTerrainProvider）
+    if (provider.availability) return true;
 
-    // 只要不是 EllipsoidTerrainProvider 且存在，就认为有地形
-    // 兼容 availability 属性存在/不存在的所有 provider
-    return true;
+    // 有 requestWaterMask 或 requestVertexNormals → ArcGISTiledElevationTerrainProvider
+    if (provider.requestWaterMask !== undefined || provider.requestVertexNormals !== undefined) return true;
+
+    // 其他情况视为无地形（EllipsoidTerrainProvider）
+    return false;
 }

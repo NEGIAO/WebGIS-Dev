@@ -54,6 +54,12 @@ export function usePlayerController({ getViewer, getCesium, message }) {
             message?.error?.('Cesium 未初始化');
             return;
         }
+        // 安全检查：isActive 为 true 但没有实际实例时，自动重置（防止之前失败卡住状态）
+        if (isActive.value && !playerInstance) {
+            isActive.value = false;
+            isFirstPerson.value = false;
+            isFlying.value = false;
+        }
         if (isActive.value) return;
 
         try {
@@ -74,16 +80,16 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 const provider = viewer.terrainProvider;
 
                 if (hasRealTerrain(provider)) {
-                    // 有地形 provider（Cesium/天地图/ArcGIS），尝试采样高度
+                    // 直接用 sampleTerrain 指定层级，避免 sampleTerrainMostDetailed 请求过高精度导致瓦片过载
+                    // 天地图用 level 10，ArcGIS/Cesium 用 level 12
+                    const prov = provider;
+                    const sampleLevel = prov._bottomLevel
+                        ? Math.max(0, prov._bottomLevel - 1)
+                        : Math.min(prov.maximumLevel ?? 12, 12);
                     let sampled = null;
                     try {
-                        sampled = await Cesium.sampleTerrainMostDetailed(provider, [carto]);
-                    } catch {
-                        // sampleTerrainMostDetailed 不兼容时降级
-                        try {
-                            sampled = await Cesium.sampleTerrain(provider, 17, [carto]);
-                        } catch { /* 采样彻底失败 */ }
-                    }
+                        sampled = await Cesium.sampleTerrain(provider, sampleLevel, [carto]);
+                    } catch { /* 采样失败 */ }
 
                     if (sampled && sampled[0] && Cesium.defined(sampled[0].height)) {
                         // 采样成功：地形高度 + 500m
@@ -92,7 +98,6 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                         noTerrain = false;
                     } else {
                         // 采样失败但地形存在（网络/服务异常），仍尝试创建碰撞体
-                        console.warn('[PlayerController] 地形高度采样失败，使用相机高度 + 500m');
                         spawnHeight = carto.height > 0 ? carto.height + 500 : 500;
                         noTerrain = false;
                     }
@@ -102,26 +107,26 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 initPos = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, spawnHeight);
             }
 
-            // 构建地形碰撞体：仅在有地形时创建
+            // 构建地形碰撞体：仅在有地形时创建，范围 ±0.03°（约 ±3.3km）
             let staticCollider = options.staticCollider;
+            const TERRAIN_HALF = 0.03;
+            let colliderCenter = { lon: carto.longitude, lat: carto.latitude };
             if (!staticCollider && !noTerrain) {
-                const half = 0.006;
                 staticCollider = [{
                     type: 'terrain',
                     rectangle: [
-                        carto.longitude - half,
-                        carto.latitude - half,
-                        carto.longitude + half,
-                        carto.latitude + half,
+                        carto.longitude - TERRAIN_HALF,
+                        carto.latitude - TERRAIN_HALF,
+                        carto.longitude + TERRAIN_HALF,
+                        carto.latitude + TERRAIN_HALF,
                     ],
                     resolution: 64,
                 }];
             }
 
-            // 无地形时默认开启飞行模式，角色悬浮可自由移动
-            if (noTerrain) {
-                DEFAULT_CAMERA_CONFIG.isFirstPerson = false;
-            }
+            // 合并相机配置（局部副本，避免突变共享默认对象）
+            const cameraConfig = { ...DEFAULT_CAMERA_CONFIG };
+            if (noTerrain) cameraConfig.isFirstPerson = false;
 
             // 合并模型配置
             const modelConfig = {
@@ -138,7 +143,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 initPos,
                 playerModelConfig: modelConfig,
                 staticCollider,
-                ...DEFAULT_CAMERA_CONFIG,
+                ...cameraConfig,
                 mouseSensitivity: DEFAULT_MOUSE_SENSITIVITY,
                 keyMap: DEFAULT_KEY_MAP,
                 isShowMobileControls: false,
@@ -151,8 +156,10 @@ export function usePlayerController({ getViewer, getCesium, message }) {
 
             playerInstance = player;
 
-            // 接入 Cesium 帧循环（含最低高度保护）
+            // 接入 Cesium 帧循环（含最低高度保护 + 动态地形碰撞更新）
             const MIN_HEIGHT = 5;
+            const TERRAIN_UPDATE_THRESHOLD = TERRAIN_HALF * 0.6; // 距碰撞中心 60% 时触发更新
+            let updatingTerrain = false;
             let lastTime = performance.now();
             preUpdateListener = viewer.scene.preUpdate.addEventListener(() => {
                 const now = performance.now();
@@ -170,6 +177,46 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                         posCarto.latitude,
                         floor,
                     ));
+                }
+
+                // 动态地形碰撞：玩家接近碰撞边界时重新采样地形
+                if (!noTerrain && !updatingTerrain) {
+                    const dLon = Math.abs(posCarto.longitude - colliderCenter.lon);
+                    const dLat = Math.abs(posCarto.latitude - colliderCenter.lat);
+                    if (dLon > TERRAIN_UPDATE_THRESHOLD || dLat > TERRAIN_UPDATE_THRESHOLD) {
+                        updatingTerrain = true;
+                        const newLon = posCarto.longitude;
+                        const newLat = posCarto.latitude;
+                        colliderCenter = { lon: newLon, lat: newLat };
+                        // 异步更新碰撞体，不阻塞渲染
+                        player.physics.clearStaticColliders();
+                        player.physics.addStaticColliders(viewer, {
+                            type: 'terrain',
+                            rectangle: [
+                                newLon - TERRAIN_HALF,
+                                newLat - TERRAIN_HALF,
+                                newLon + TERRAIN_HALF,
+                                newLat + TERRAIN_HALF,
+                            ],
+                            resolution: 64,
+                        }).then(async () => {
+                            // 更新地形高度基准（用于最低高度保护）
+                            try {
+                                const provider = viewer.terrainProvider;
+                                const centerCarto = new Cesium.Cartographic(newLon, newLat, 0);
+                                const level = provider._bottomLevel
+                                    ? Math.max(0, provider._bottomLevel - 1)
+                                    : Math.min(provider.maximumLevel ?? 12, 12);
+                                const sampled = await Cesium.sampleTerrain(provider, level, [centerCarto]);
+                                if (sampled && sampled[0] && Cesium.defined(sampled[0].height)) {
+                                    terrainHeight = sampled[0].height;
+                                }
+                            } catch { /* 保持旧值 */ }
+                            updatingTerrain = false;
+                        }).catch(() => {
+                            updatingTerrain = false;
+                        });
+                    }
                 }
             });
 

@@ -9,6 +9,8 @@
 3. 修复 ArcGIS 世界地形无法被人物漫游和物理碰撞系统识别的问题
 4. 修复 ArcGIS 地形下 `sampleTerrainMostDetailed` 不兼容导致采样失败的问题（降级到 `sampleTerrain` level 17）
 5. 修正初始位置高度判断逻辑：有地形 → 采样成功用地形高度+500m，采样失败用相机高度+500m；仅平面地形（EllipsoidTerrainProvider）才进入飞行模式
+6. 修复水体流体模块 ArcGIS 地形采样：`sampleTerrainPositions` 增加 try-catch 降级到 `sampleTerrain(maximumLevel)`
+7. 修复 ArcGIS 包装器 availability 只标记 level 0 导致 `sampleTerrainMostDetailed` 返回最低精度的问题：改为逐级标记所有层级（0 → maxLevel）全球可用
 
 ## 修改原因
 1. 人物漫游面板使用 `type: 'slider'`，但 `LilGuiControls`（基于 `lil-gui`）只识别 `type: 'range'`，导致滑块降级为文本输入框
@@ -40,3 +42,4 @@
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\src\components\Cesium\PlayerController\utils\terrainHelper.ts`（新增）
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\src\components\Cesium\terrain\ArcGISTerrainProvider.js`（新增）
 - `d:\Dev\GitHub\WebGIS_Dev\frontend\src\components\Cesium\composables\useCesiumLayers.js`（ArcGIS 地形改用增强包装器）
+- `d:\Dev\GitHub\WebGIS_Dev\frontend\src\components\Cesium\FluidSimulation\FluidSimulationPanel.vue`（sampleTerrainPositions 降级兜底）

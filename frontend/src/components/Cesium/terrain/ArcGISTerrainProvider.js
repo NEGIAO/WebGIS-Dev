@@ -33,18 +33,27 @@ export default function createArcGISTerrainProvider(Cesium) {
         /**
          * 初始化 TileAvailability
          * 参照 GeoTerrainProvider 的 createAvailability 模式
+         * 必须标记所有层级，否则 sampleTerrainMostDetailed 的
+         * availability.getMaximumLevelAtPosition() 只会返回 0（最低精度）
          */
         _initAvailability() {
             const ts = this._inner.tilingScheme;
             if (!ts) return;
 
-            // ArcGIS World Elevation 最高约 15-17 级，取 provider 的 maximumLevel 或默认 15
             const maxLevel = this._inner.maximumLevel ?? 15;
             this._availability = new TileAvailability(ts, maxLevel);
 
-            // 标记所有层级全局可用（ArcGIS 是全球覆盖）
-            // level 0: 1 个 tile (0,0) 到 (1,0)
-            this._availability.addAvailableTileRange(0, 0, 0, 1, 0);
+            // ArcGIS 是全球覆盖，逐级标记全部瓦片范围为可用
+            // sampleTerrainMostDetailed 依赖此查询每个位置的最高精度层级
+            for (let level = 0; level <= maxLevel; level++) {
+                const count = 1 << level; // 2^level
+                this._availability.addAvailableTileRange(
+                    level,
+                    0, 0,            // startX, startY
+                    count - 1,       // endX
+                    count - 1,       // endY
+                );
+            }
         }
 
         /** availability 属性 — sampleTerrainMostDetailed 依赖此属性查询最高精度 */
@@ -62,6 +71,16 @@ export default function createArcGISTerrainProvider(Cesium) {
         /** maximumLevel 委托 */
         get maximumLevel() {
             return this._inner.maximumLevel;
+        }
+
+        /** requestWaterMask 委托 — hasRealTerrain() 检测依赖此属性 */
+        get requestWaterMask() {
+            return this._inner.requestWaterMask;
+        }
+
+        /** requestVertexNormals 委托 — hasRealTerrain() 检测依赖此属性 */
+        get requestVertexNormals() {
+            return this._inner.requestVertexNormals;
         }
 
         /** ready 委托 */
@@ -88,7 +107,7 @@ export default function createArcGISTerrainProvider(Cesium) {
          * 判断某个瓦片是否有高程数据
          * 参照 GeoTerrainProvider 的 getTileDataAvailable 实现
          */
-        getTileDataAvailable(x, y, level) {
+        getTileDataAvailable(_x, _y, level) {
             // ArcGIS 是全球覆盖，只要不超过 maximumLevel 就有数据
             const maxLevel = this._inner.maximumLevel ?? 15;
             return level <= maxLevel;

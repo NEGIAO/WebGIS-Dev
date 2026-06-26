@@ -1,5 +1,5 @@
 import type RAPIER from "@dimforge/rapier3d-compat";
-import { Cartesian3, sampleTerrain, sampleTerrainMostDetailed, Cartographic, Math as CMath, Matrix3, Matrix4, Quaternion, Transforms, HeadingPitchRoll } from "cesium";
+import { Cartesian3, sampleTerrain, Cartographic, Math as CMath, Matrix3, Matrix4, Quaternion, Transforms, HeadingPitchRoll } from "cesium";
 import { LocalFrame } from "../utils/frame";
 import { loadGltfGeometry } from "../utils/gltfGeometry";
 import type { ColliderSource, DynamicShape } from "../types";
@@ -456,6 +456,14 @@ export class PhysicsSystem {
         }
     }
 
+    // 清除所有静态碰撞体（用于动态地形更新）
+    clearStaticColliders() {
+        for (const col of this.staticColliders) {
+            this.world?.removeCollider(col, true);
+        }
+        this.staticColliders = [];
+    }
+
     // 注册一个运动学(可移动平台)碰撞源,返回其刚体以便外部每帧驱动
     async addKinematicCollider(viewer: any, source: ColliderSource): Promise<RAPIER.RigidBody | null> {
         const r = this.rapier;
@@ -569,16 +577,16 @@ export class PhysicsSystem {
             }
         }
         // 有地形才采样;无地形保持 height=0(贴椭球面)
-        // sampleTerrainMostDetailed 需要 provider 支持 availability，ArcGIS 不支持时降级到 sampleTerrain
+        // 用 sampleTerrain 指定层级，避免 sampleTerrainMostDetailed 请求过高精度导致瓦片过载
         if (hasTerrain) {
+            // 天地图 _bottomLevel=11 时走 level 10，ArcGIS/Cesium 走 level 12
+            const sampleLevel = (provider as any)._bottomLevel
+                ? Math.max(0, (provider as any)._bottomLevel - 1)
+                : Math.min(provider.maximumLevel ?? 12, 12);
             try {
-                await sampleTerrainMostDetailed(provider, carts);
+                await sampleTerrain(provider, sampleLevel, carts);
             } catch {
-                try {
-                    await sampleTerrain(provider, 17, carts);
-                } catch {
-                    console.warn('[PhysicsSystem] 地形采样失败，使用椭球面');
-                }
+                console.warn('[PhysicsSystem] 地形采样失败，使用椭球面');
             }
         }
 

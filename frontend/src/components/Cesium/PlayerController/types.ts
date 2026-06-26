@@ -63,7 +63,7 @@ export type PlayerModelOptions = {
     gravity?: number; // 重力基准(按 scale 缩放),默认 -2400
     jumpHeight?: number; // 跳跃初速度基准(按 scale 缩放),默认 600
     speed?: number; // 行走速度基准(按 scale 缩放),默认 300
-    flySpeed?: number; // 飞行速度基准(按 scale 缩放),默认 2100
+    flySpeed?: number; // 飞行速度基准(按 scale 缩放),默认 55000
     rotateY?: number; // 人物初始朝向(弧度),默认 0
     facingOffset?: number; // 模型正面轴校正(弧度):正面 +Y 用 0,+X 用 -π/2,-Y 用 π,-X 用 π/2
     firstPersonCameraOffset?: [number, number, number]; // 第一人称相机局部偏移(基于胶囊顶部,玩家朝向系 x=右/y=前/z=上,随 yaw 转动,按 scale 缩放),默认 [0,0,0]

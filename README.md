@@ -291,8 +291,9 @@ WebGIS_Dev/
 - 🔧 **Vite 配置**：添加 `cesium` alias + `optimizeDeps.exclude`，确保单一 Cesium 实例
 - 🐛 **修复人物漫游面板滑块类型**：控件 `type: 'slider'` → `type: 'range'`，与项目统一的 `lil-gui` 渲染管线对齐，修复滑块降级为文本输入框的问题
 - 🐛 **修复 ArcGIS 地形无法被漫游系统识别**：新增 `ArcGISTerrainProvider` 增强包装器（参照天地图 `GeoTerrainProvider` 补充 `availability` + `getTileDataAvailable`），使 `sampleTerrainMostDetailed` 原生支持 ArcGIS 地形 + 降级兜底到 `sampleTerrain(17)`
+- 🐛 **修复 ArcGIS 包装器 availability 精度问题**：逐级标记所有层级（0→maxLevel）全球可用，修复 `getMaximumLevelAtPosition` 返回 0 导致采样最低精度的 bug
 
-详见 [`Docs/26-06/2026-06-26-player-controller-integration.md`](Docs/26-06/2026-06-26-player-controller-integration.md)
+详见 [`Docs/26-06/26-06-26/2026-06-26-player-controller-integration.md`](Docs/26-06/26-06-26/2026-06-26-player-controller-integration.md)
 
 ### V3.3.10 (2026-06-26) — 大气系统清理 + 场景美化 + 热带浅水 + Tellux 模块移植
 

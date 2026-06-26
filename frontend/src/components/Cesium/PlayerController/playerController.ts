@@ -33,7 +33,7 @@ export class playerController {
     gravity = -2400; // 重力加速度
     jumpHeight = 600; // 跳跃初速度
     playerSpeed = 300; // 行走速度
-    playerFlySpeed = 2100; // 飞行速度
+    playerFlySpeed = 55000; // 飞行速度
     private curPlayerSpeed = 0; // 当前实际速度
     playerAcceleration = 30; // XZ 加速响应速度
     playerDeceleration = 30; // XZ 减速响应速度

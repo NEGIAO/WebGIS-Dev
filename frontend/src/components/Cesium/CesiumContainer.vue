@@ -242,9 +242,12 @@ const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
 // ==========================================
 const playerController = usePlayerController({ getViewer, getCesium, message });
 
-// 漫游模式启动时重置提示面板显示
+// 漫游模式启动时：关闭高级控制台 + 显示键位提示面板
 watch(() => playerController.isActive.value, (active) => {
-    if (active) showPlayerGuide.value = true;
+    if (active) {
+        showPlayerGuide.value = true;
+        cesiumToolPanelOpen.value = false;
+    }
 });
 
 /** 暴露给子组件和外部调用 */

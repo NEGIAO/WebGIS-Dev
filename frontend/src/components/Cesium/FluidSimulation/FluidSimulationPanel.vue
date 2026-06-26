@@ -433,17 +433,19 @@ function createTerrainSamplePositions(Cesium, { lon, lat, centerHeight, dimensio
 }
 
 async function sampleTerrainPositions(Cesium, terrainProvider, positions) {
-    const sampleLevel = getExplicitTerrainSampleLevel(terrainProvider);
+    // 统一用 sampleTerrain 指定层级，避免 sampleTerrainMostDetailed 请求过高精度导致瓦片过载
+    // 天地图 _bottomLevel=11 走 level 10，ArcGIS/Cesium 走 level 12
+    const explicitLevel = getExplicitTerrainSampleLevel(terrainProvider);
+    const sampleLevel = Number.isInteger(explicitLevel)
+        ? explicitLevel
+        : Math.min(terrainProvider?.maximumLevel ?? 12, 12);
 
-    if (Number.isInteger(sampleLevel) && typeof Cesium.sampleTerrain === 'function') {
+    if (typeof Cesium.sampleTerrain === 'function') {
         return Cesium.sampleTerrain(terrainProvider, sampleLevel, positions);
     }
 
-    if (typeof Cesium.sampleTerrainMostDetailed === 'function') {
-        return Cesium.sampleTerrainMostDetailed(terrainProvider, positions);
-    }
-
-    return Cesium.sampleTerrain(terrainProvider, 10, positions);
+    // 兜底：sampleTerrain 不可用时才用 sampleTerrainMostDetailed
+    return Cesium.sampleTerrainMostDetailed(terrainProvider, positions);
 }
 
 function getExplicitTerrainSampleLevel(terrainProvider) {

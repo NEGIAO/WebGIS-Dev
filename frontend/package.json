@@ -21,7 +21,6 @@
         "@loaders.gl/draco": "^4.4.3",
         "@loaders.gl/gltf": "^4.4.3",
         "axios": "^1.7.9",
-        "cesium-player-controller": "^0.1.2",
         "echarts": "^6.0.0",
         "jszip": "^3.10.1",
         "lil-gui": "^0.21.0",

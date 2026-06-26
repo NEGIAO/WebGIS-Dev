@@ -337,15 +337,13 @@ export function useCesiumHeightSampler({ getViewer, getCesium }) {
                 return results
             }
 
-            // 执行批量采样
+            // 执行批量采样（用 sampleTerrain 指定层级，避免过高精度导致瓦片过载）
             try {
-                const sampled = Cesium.sampleTerrainMostDetailed(
-                    viewer.terrainProvider,
-                    toSample
-                )
-
-                // sampleTerrainMostDetailed 可能返回 Promise 或直接返回数组
-                const resolved = sampled instanceof Promise ? await sampled : sampled
+                const provider = viewer.terrainProvider
+                const sampleLevel = provider._bottomLevel
+                    ? Math.max(0, provider._bottomLevel - 1)
+                    : Math.min(provider.maximumLevel ?? 12, 12)
+                const resolved = await Cesium.sampleTerrain(provider, sampleLevel, toSample)
 
                 for (let j = 0; j < resolved.length; j++) {
                     const result = cartoToPlain(Cesium, resolved[j])
