@@ -180,8 +180,8 @@ WebGIS_Dev/
 │   │   ├── assets/                   # 全局样式与静态数据
 │   │   ├── components/               # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/               # 3D 地球模块
-│   │   │   │   ├── Clouds/           # 体积云系统（高聚合：shader + primitive + composables + 配置）
 │   │   │   │   ├── FluidSimulation/  # 流体模拟
+│   │   │   │   ├── ShallowWater/     # Three.js 热带浅水（焦散/折射/吸色/体积云/闪电）
 │   │   │   │   ├── composables/      # Cesium composables（图层/底图/URL 追踪等）
 │   │   │   │   └── terrain/          # 地形 provider
 │   │   │   ├── Chat/                 # AI 聊天
@@ -277,6 +277,23 @@ WebGIS_Dev/
 ---
 
 ## 📜 版本演进
+
+### V3.3.10 (2026-06-26) — 大气系统清理 + 场景美化 + 热带浅水 + Tellux 模块移植
+
+- 🆕 **场景美化模块** (`useCesiumBeautify.js`)：HDR + PBR_NEUTRAL 色调映射 + FXAA + 定向光 + 天空大气微调，控制面板可调
+- 🆕 **热带浅水场景** (`ShallowWater/`)：Three.js 叠加层，焦散/折射/物理吸色/体积云/闪电
+- 🆕 **模型管理器** (`useCesiumModelManager.js`)：glTF/GLB 模型加载、地理坐标定位、动画控制
+- 🆕 **增强相机** (`useCesiumCameraEnhanced.js`)：弹簧物理相机、自定义缓动、飞行队列
+- 🆕 **高度采样器** (`useCesiumHeightSampler.js`)：地形高度查询、批量异步采样、屏幕坐标拾取
+- 🆕 **大气高度阈值**：相机低于 800m 自动关闭大气增强，避免与晨昏半球冲突
+- 🔧 **移除 AtmosphereManager**：删除 `atmosphere/` 目录（14 个文件），清理 CesiumContainer.vue
+- 🔧 **移除旧体积云**：删除 `Clouds/` 目录（12 个文件），由 CesiumAdvancedEffects 内置体积云替代
+- 🔧 **晨昏半球无限高度**：`lightingFadeOutDistance` / `nightFadeOutDistance` 改为 MAX_SAFE_INTEGER
+- 🔧 **大气光照强度调优**：`atmosphereLightIntensity` 从 11.5 调整为 5.5
+- 🐛 **修复 CesiumAdvancedEffects.vue BOM 头**
+- 📝 **完整文档**：详细的移植日志和技术文档
+
+详见 [`Docs/26-06-26/2026-06-26-tellux-atmosphere-migration.md`](Docs/26-06-26/2026-06-26-tellux-atmosphere-migration.md)
 
 ### V3.3.9 (2026-06-26) — 大气 LUT 纹理集成修复 + TAAU 时序上采样 + BSM Shadow TAA + 模块卡片 UI 清理
 

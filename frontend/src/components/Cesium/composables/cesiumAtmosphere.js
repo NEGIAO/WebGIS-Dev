@@ -31,7 +31,7 @@ export function configureRealisticAtmosphere(viewer, Cesium) {
 
     setIfExists(globe, 'dynamicAtmosphereLighting', true);
     setIfExists(globe, 'dynamicAtmosphereLightingFromSun', true);
-    setIfExists(globe, 'atmosphereLightIntensity', 11.5);
+    setIfExists(globe, 'atmosphereLightIntensity', 5.5);
     setIfExists(globe, 'atmosphereHueShift', -0.015);
     setIfExists(globe, 'atmosphereSaturationShift', 0.08);
     setIfExists(globe, 'atmosphereBrightnessShift', 0.02);

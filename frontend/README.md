@@ -1,4 +1,51 @@
-# WebGIS 前端项目 — v3.3.9
+# WebGIS 前端项目 — v3.3.10
+
+## 📝 2026-06-26 大气系统清理 + 场景美化 + 高度阈值
+
+完全移除 `AtmosphereManager`（Tellux 移植的大气系统），新增场景美化模块和大气高度阈值：
+
+* 🗑️ **删除 atmosphere 目录**：移除 AtmosphereManager、DayNightTransition、MoonLightSystem 等 14 个文件
+* 🆕 **useCesiumBeautify.js**：HDR + PBR_NEUTRAL 色调映射 + FXAA + 定向光 + 天空大气微调，控制面板可调
+* 🆕 **大气高度阈值**：相机低于 800m 自动关闭大气增强，避免与晨昏半球冲突
+* 🔧 **晨昏半球无限高度**：`lightingFadeOutDistance` / `nightFadeOutDistance` 改为 MAX_SAFE_INTEGER
+* ✅ **保留基础功能**：`configureSolarLighting`、`baseAtmosphereParams`、`CesiumAdvancedEffects`
+
+详见维护日志 `Docs/26-06/26-06-26/2026-06-26-cesium-terminator-fix.md`。
+
+## 📝 2026-06-26 Tellux 大气渲染系统完整移植
+
+从 Tellux 项目完整移植大气渲染系统，替换原有的 Clouds 实现：
+
+* 🆕 **日夜过渡系统**：基于太阳高度角的平滑过渡，使用 `smoothstep` 插值算法
+* 🆕 **月光照明系统**：月光方向光 + 环境光，支持月相计算和可见性判断
+* 🆕 **月相计算器**：基于太阳-月亮相量点积计算月相因子（0=新月，1=满月）
+* 🆕 **体积云渲染器**：基于 Cesium PostProcessStage 的 raymarching 实现，支持日夜过渡
+* 🆕 **星空渲染器**：基于相机高度和夜间因子控制星空可见性
+* 🆕 **大气管理器**：协调所有子系统，提供统一 API
+* 🆕 **UI 控制面板**：Vue 组件，提供大气效果控制界面
+* 🔧 **替换原有体积云实现**：废除旧的 `Clouds/` 目录，使用新的大气系统
+
+**大气系统目录结构**：
+```
+Cesium/atmosphere/
+├── shaders/                          # GLSL shader
+│   ├── cloudVertex.glsl              # 云层 vertex shader
+│   ├── cloudFragment.glsl            # 云层 fragment shader（FBM + HG 相位函数）
+│   └── cloudShaders.js               # shader 导入文件
+├── AtmosphereManager.js              # 主管理器
+├── DayNightTransition.js             # 日夜过渡系统
+├── MoonLightSystem.js                # 月光照明系统
+├── MoonPhaseCalculator.js            # 月相计算
+├── VolumetricCloudRenderer.js        # 体积云渲染
+├── StarFieldRenderer.js              # 星空渲染
+├── AtmosphereControlPanel.vue        # UI 控制面板
+├── useCesiumAtmosphere.js            # Vue Composable
+├── atmosphereConstants.js            # 常量定义
+├── atmosphereDefaults.js             # 默认配置
+└── index.js                          # 索引文件
+```
+
+详见维护日志 `Docs/26-06-26/2026-06-26-tellux-atmosphere-migration.md`。
 
 ## 📝 2026-06-26 模块卡片 UI 清理与视觉优化
 
@@ -271,6 +318,16 @@ frontend/src/
 │   │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
 │   │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
 │   │   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）
+│   │   │   ├── ShallowWater/                     # Three.js 热带浅水场景叠加
+│   │   │   │   ├── ShallowWaterOverlay.vue       # 叠加层组件（透明背景覆盖 Cesium）
+│   │   │   │   ├── shaders/                      # GLSL 着色器
+│   │   │   │   │   ├── caustics.glsl.js          # 焦散着色器（TDM caustic）
+│   │   │   │   │   ├── waterSurface.glsl.js      # 水面着色器（折射/Beer-Lambert/菲涅尔/泡沫）
+│   │   │   │   │   └── clouds.glsl.js            # 体积云着色器（光线步进 + 闪电）
+│   │   │   │   ├── composables/                  # 组合式函数
+│   │   │   │   │   └── useShallowWater.js        # Three.js 场景生命周期管理
+│   │   │   │   └── utils/                        # 工具函数
+│   │   │   │       └── textures.js               # 程序化纹理（法线贴图/沙地/噪声）
 │   │   │   └── terrain/                          # 自定义地形 Provider
 │   │   │       ├── GeoTerrainProvider.js
 │   │   │       ├── GeoWTFS.js

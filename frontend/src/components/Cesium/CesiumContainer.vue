@@ -27,6 +27,12 @@
         @state-change="handleFluidStateChange"
     />
 
+    <ShallowWaterOverlay
+        v-if="cesiumReady"
+        :visible="shallowWaterVisible"
+        v-bind="shallowWaterParams"
+    />
+
     <CesiumToolPanel
         v-if="cesiumReady"
         v-model:open="cesiumToolPanelOpen"
@@ -100,6 +106,7 @@ import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
 import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
+import ShallowWaterOverlay from './ShallowWater/ShallowWaterOverlay.vue';
 import { configureSolarLighting } from './composables/cesiumAtmosphere';
 import { loadCesiumRuntime } from './composables/cesiumRuntime';
 import { configureBeijingTimeSystem } from './composables/cesiumTimeSystem';
@@ -111,6 +118,9 @@ import { useCesiumDataImport } from './composables/useCesiumDataImport';
 import { useCesiumToolModules } from './composables/useCesiumToolModules';
 import { useCesiumUrlTracking } from './composables/useCesiumUrlTracking';
 import { useCesiumWind } from './composables/useCesiumWind';
+import { useCesiumModelManager } from './composables/useCesiumModelManager';
+import { useCesiumCameraEnhanced } from './composables/useCesiumCameraEnhanced';
+import { useCesiumHeightSampler } from './composables/useCesiumHeightSampler';
 import {
     getRuntimeMapTokensSync,
     loadRuntimeMapTokens,
@@ -207,6 +217,22 @@ const dataImport = useCesiumDataImport({
     message,
 });
 
+// ==========================================
+// tellux 移植模块：模型管理、相机增强、高度采样
+// ==========================================
+const modelManager = useCesiumModelManager({ getViewer, getCesium, message });
+const cameraEnhanced = useCesiumCameraEnhanced({ getViewer, getCesium });
+const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
+
+/** 暴露给子组件和外部调用 */
+defineExpose({
+    getViewer,
+    getCesium,
+    modelManager,
+    cameraEnhanced,
+    heightSampler,
+});
+
 /**
  * 响应式转发：使用 computed 包装 loadedDataSources，
  * 避免在模板里写 dataImport.loadedDataSources.value（解包时不会响应化）。
@@ -258,6 +284,9 @@ const {
     toolPanelOpen: cesiumToolPanelOpen,
     advancedEffectControls,
     fluidParams,
+    baseAtmosphereParams,
+    shallowWaterVisible,
+    shallowWaterParams,
     toolModules,
     handleToolAction,
     handleToolControlChange,
@@ -267,6 +296,9 @@ const {
     fluidPanelRef,
     sceneActions,
     wind,
+    modelManager,
+    cameraEnhanced,
+    heightSampler,
 });
 
 async function bootCesium() {
@@ -410,6 +442,7 @@ function initViewer() {
     viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
     configureBeijingTimeSystem(viewer, Cesium);
     configureSolarLighting(viewer);
+
     installCreditHider();
     bindLayerPickerStateSync();
     if (!restoreCameraFromUrl({ duration: 0 })) {
@@ -477,6 +510,12 @@ onUnmounted(() => {
     cleanupInteractions();
     cleanupTools();
     cleanupLayers();
+
+    // 清理 tellux 移植模块
+    modelManager.dispose();
+    cameraEnhanced.cleanup();
+    heightSampler.cleanup();
+
     cleanupCreditHider();
     dataImport.clearAllDataSources();
     if (viewer) {
@@ -488,6 +527,60 @@ onUnmounted(() => {
         viewer = null;
     }
 });
+
+// 在 Cesium 初始化完成后调用
+watch(cesiumReady, (ready) => {
+    if (ready) {
+        // 初始应用基础大气参数
+        applyBaseAtmosphereParams(baseAtmosphereParams.value);
+    }
+});
+
+/**
+ * 应用基础大气参数到 Cesium 场景
+ * @param {Object} params - 基础大气参数
+ */
+function applyBaseAtmosphereParams(params) {
+    if (!viewer || !Cesium) return;
+    const scene = viewer.scene;
+    const globe = scene.globe;
+
+    if (globe) {
+        globe.enableLighting = params.enableLighting;
+        globe.showGroundAtmosphere = params.showGroundAtmosphere;
+        if ('dynamicAtmosphereLighting' in globe) globe.dynamicAtmosphereLighting = params.dynamicAtmosphereLighting;
+        if ('dynamicAtmosphereLightingFromSun' in globe) globe.dynamicAtmosphereLightingFromSun = params.dynamicAtmosphereLightingFromSun;
+        if ('atmosphereLightIntensity' in globe) globe.atmosphereLightIntensity = params.atmosphereLightIntensity;
+        if ('atmosphereHueShift' in globe) globe.atmosphereHueShift = params.atmosphereHueShift;
+        if ('atmosphereSaturationShift' in globe) globe.atmosphereSaturationShift = params.atmosphereSaturationShift;
+        if ('atmosphereBrightnessShift' in globe) globe.atmosphereBrightnessShift = params.atmosphereBrightnessShift;
+        if ('lightingFadeInDistance' in globe) globe.lightingFadeInDistance = params.lightingFadeInDistance;
+        if ('lightingFadeOutDistance' in globe) globe.lightingFadeOutDistance = params.lightingFadeOutDistance;
+        if ('nightFadeInDistance' in globe) globe.nightFadeInDistance = params.nightFadeInDistance;
+        if ('nightFadeOutDistance' in globe) globe.nightFadeOutDistance = params.nightFadeOutDistance;
+    }
+
+    if (scene.fog) {
+        scene.fog.enabled = params.fogEnabled;
+        if ('density' in scene.fog) scene.fog.density = params.fogDensity;
+        if ('minimumBrightness' in scene.fog) scene.fog.minimumBrightness = params.fogMinimumBrightness;
+    }
+
+    if (scene.sun) scene.sun.show = params.sunShow;
+    if (scene.moon) scene.moon.show = params.moonShow;
+    if (scene.skyBox) scene.skyBox.show = params.skyBoxShow;
+
+    scene.requestRender?.();
+}
+
+// 监听基础大气参数变化，应用到 Cesium 场景
+watch(
+    baseAtmosphereParams,
+    (params) => {
+        applyBaseAtmosphereParams(params);
+    },
+    { deep: true },
+);
 </script>
 
 <style scoped>
