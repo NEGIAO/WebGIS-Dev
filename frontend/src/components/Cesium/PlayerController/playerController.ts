@@ -16,6 +16,7 @@ import { PhysicsSystem } from "./systems/PhysicsSystem";
 import { InputSystem } from "./systems/InputSystem";
 import { CameraSystem } from "./systems/CameraSystem";
 import { AnimationSystem } from "./systems/AnimationSystem";
+import { smoothDamp } from "./utils/math";
 import type { PlayerControllerOptions, PlayerModelOptions, KeyMap } from "./types";
 
 function isMobileDevice() {
@@ -57,6 +58,11 @@ export class playerController {
     enableOverShoulderView = false; // 越肩视角开关
     private isShowMobileControls = true; // 显示移动端控件
     mobileControls: MobileControls | null = null; // 移动端控件
+
+    // ==================== 移动手感 ====================
+    private airControl = 0.3; // 空中控制系数（0=无空控，1=与地面相同）
+    private landingDamping = 0.3; // 落地竖直速度衰减系数
+    private moveSmoothTime = 0.08; // 水平速度平滑时间（秒），越小越灵敏
 
     // ==================== 运动状态 ====================
     // 速度在 ENU 局部系:E/N 为水平，U 为竖直
@@ -114,7 +120,8 @@ export class playerController {
         this.yaw = m.rotateY ?? 0;
 
         // 应用相机参数
-        this.cam.theta = this.yaw + Math.PI;
+        // theta = 有效朝向 + PI（相机在人物背后），有效朝向 = yaw + facingOffset
+        this.cam.theta = this.yaw + (this.playerModelConfig.facingOffset ?? 0) + Math.PI;
         this.cam.sensitivity = opts.mouseSensitivity ?? this.cam.sensitivity;
         this.cam.mouseMode = opts.thirdMouseMode ?? this.cam.mouseMode;
         this.cam.enableSpringCamera = opts.enableSpringCamera ?? this.cam.enableSpringCamera;
@@ -183,7 +190,7 @@ export class playerController {
 
     private modelScale = 1; // 模型归一化系数（胶囊高度 / 模型包围盒高度）
 
-    // 加载模型与动画
+    // 加载模型与动画（使用 Model.boundingSphere 避免冗余 fetch）
     private async loadPlayerModel(): Promise<Model> {
         // 先用 scale=1 加载，ready 后量包围盒算 modelScale，再设最终矩阵
         const modelMatrix = this.frame.composeModelMatrix(this.posEcef, this.yaw);
@@ -201,12 +208,20 @@ export class playerController {
         this.viewer.scene.primitives.add(this.model);
         await this.waitForModelReady(this.model); // 等待模型 ready 后再注册动画
 
-        // 计算胶囊体尺寸：modelScale = 胶囊高度 / 模型包围盒高度
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`fetch 模型失败: ${url} HTTP ${res.status}`);
-        const glbBytes = await res.arrayBuffer();
-        const size = await getGltfBboxSize(glbBytes, url);
-        if (size.y > 0) this.modelScale = this.playerCapsuleHeight / size.y;
+        // 计算胶囊体尺寸：从 Model.boundingSphere 获取包围盒高度，无需二次 fetch
+        const bs = this.model.boundingSphere;
+        if (bs && bs.radius > 0) {
+            // boundingSphere.radius 是半径，模型高度约等于 2*radius
+            const modelHeight = bs.radius * 2;
+            this.modelScale = this.playerCapsuleHeight / modelHeight;
+        } else {
+            // 兜底：如果 boundingSphere 不可用，回退到 fetch 方式
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`fetch 模型失败: ${url} HTTP ${res.status}`);
+            const glbBytes = await res.arrayBuffer();
+            const size = await getGltfBboxSize(glbBytes, url);
+            if (size.y > 0) this.modelScale = this.playerCapsuleHeight / size.y;
+        }
 
         // 挂载模型：最终缩放 = modelScale * s,并下移半个胶囊高让脚对齐胶囊底（lookAt 朝向）
         const s = this.playerModelConfig.scale;
@@ -264,7 +279,7 @@ export class playerController {
         }
 
         // 根据当前速度动态调整相机弹簧时间（速度越快，相机跟得越紧）
-        this.cam.updateSpringTimeBySpeed(this.curPlayerSpeed, this.playerSpeed);
+        this.cam.updateSpringTimeBySpeed(this.curPlayerSpeed, this.playerSpeed, delta);
 
         // 归一化方向向量（飞行按 3D 归一化以保留俯仰；地面只归一化水平）
         if (this.isFlying) {
@@ -275,29 +290,26 @@ export class playerController {
             if (hLen > 0) { dirE /= hLen; dirN /= hLen; }
         }
 
-        // 速度驱动（XZ 作为整体 2D 向量限幅）
-        const accelStep = this.playerAcceleration * this.decelBase * delta; // 加速步长
-        const decelStep = this.playerDeceleration * this.decelBase * delta; // 减速步长
+        // 速度驱动（smoothDamp 平滑加速/减速，空中控制衰减）
         const targetE = dirE * this.curPlayerSpeed; // 目标速度 E
         const targetN = dirN * this.curPlayerSpeed; // 目标速度 N
-        const diffE = targetE - this.velE; // 速度差 E
-        const diffN = targetN - this.velN; // 速度差 N
         const hasInput = dirE !== 0 || dirN !== 0;
-        const diffLen = Math.hypot(diffE, diffN);
-        if (diffLen > 0) {
-            const applied = Math.min(diffLen, hasInput ? accelStep : decelStep);
-            this.velE += (diffE / diffLen) * applied;
-            this.velN += (diffN / diffLen) * applied;
+        // 空中时降低操控响应，保留惯性感
+        const airFactor = (!this.isFlying && !this.playerIsOnGround) ? this.airControl : 1;
+        const smoothTime = hasInput ? this.moveSmoothTime / airFactor : this.moveSmoothTime * 1.5 / airFactor;
+        this.velE = smoothDamp(this.velE, targetE, smoothTime, delta);
+        this.velN = smoothDamp(this.velN, targetN, smoothTime, delta);
+
+        // 跳跃：叠加当前竖直速度（保留起跳前的运动状态）
+        if (!this.isFlying && this.pendingJump) {
+            this.velU = Math.max(this.velU, 0) + this.jumpHeight; // 叠加而非覆盖，向上速度取正
+            this.pendingJump = false;
         }
 
-        // 跳跃
-        if (!this.isFlying && this.pendingJump) { this.velU = this.jumpHeight; this.pendingJump = false; }
-
         if (this.isFlying) {
-            // 飞行：竖直直接给速度
+            // 飞行：竖直方向 smoothDamp 平滑
             const targetU = dirU * this.curPlayerSpeed;
-            const dU = targetU - this.velU;
-            this.velU += Math.sign(dU) * Math.min(Math.abs(dU), dirU !== 0 ? accelStep : decelStep);
+            this.velU = smoothDamp(this.velU, targetU, smoothTime, delta);
         } else {
             // 地面检测
             const snapH = this.capsuleInfo.height / 2; // 胶囊中心静止离地高度
@@ -317,7 +329,8 @@ export class playerController {
                     // 从空中落下：本帧速度能到落点才吸附，否则继续下落
                     const predicted = dist + this.velU * delta;
                     if (predicted <= snapH) {
-                        this.velU = (snapH - dist) / delta;
+                        // 落地缓冲：衰减竖直速度，模拟"软着陆"
+                        this.velU = (snapH - dist) / delta * this.landingDamping;
                         this.setOnGround(true);
                     } else {
                         this.velU += this.gravity * delta;
@@ -389,17 +402,23 @@ export class playerController {
         return Math.atan2(d.e, d.n); // atan2(E, N)
     }
 
+    // scratch 对象（避免每帧分配）
+    private _enuScratch = new Matrix4();
+    private _enuInvScratch = new Matrix4();
+    private _localDirScratch = new Cartesian3();
+    private _camDirResult = { e: 0, n: 0, u: 0 };
+
     // 相机朝向在本地 ENU 下的单位向量 {e,n,u}（含俯仰，供飞行沿视线方向用）
     private getCameraDirEnu(): { e: number; n: number; u: number } {
         const dir = this.viewer.camera.directionWC;
-        // 投影到本地 ENU 坐标系
-        const enuInv = Matrix4.inverse(
-            Transforms.eastNorthUpToFixedFrame(this.posEcef, undefined, new Matrix4()),
-            new Matrix4(),
-        );
-        const local = Matrix4.multiplyByPointAsVector(enuInv, dir, new Cartesian3());
+        // 投影到本地 ENU 坐标系（复用 scratch 对象）
+        Transforms.eastNorthUpToFixedFrame(this.posEcef, undefined, this._enuScratch);
+        Matrix4.inverse(this._enuScratch, this._enuInvScratch);
+        const local = Matrix4.multiplyByPointAsVector(this._enuInvScratch, dir, this._localDirScratch);
         const len = Math.hypot(local.x, local.y, local.z) || 1;
-        return { e: local.x / len, n: local.y / len, u: local.z / len };
+        const r = this._camDirResult;
+        r.e = local.x / len; r.n = local.y / len; r.u = local.z / len;
+        return r;
     }
 
     // 角度插值

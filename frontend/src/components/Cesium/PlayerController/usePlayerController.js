@@ -48,8 +48,20 @@ export function usePlayerController({ getViewer, getCesium, message }) {
      */
     const playerSpeed = ref(0);
 
+    /**
+     * 导航目标点
+     * 格式: { lng, lat, name, bearing?, distance?, _entity? }
+     * bearing = 玩家到目标的方位角（度，0=北，顺时针）
+     * distance = 玩家到目标的直线距离（米）
+     * _entity = Cesium Entity 引用（用于 Selection Indicator）
+     */
+    const navTarget = ref(null);
+
     let playerInstance = null;
     let preUpdateListener = null;
+    let _onOpenNavDialog = null; // 外部注册的打开导航对话框回调
+    let _navSelectionListener = null; // selectedEntity 变更监听器（锁定选中状态）
+    let _navPreRenderListener = null; // 导航 HUD 每帧更新监听器（preRender）
 
     /**
      * 启动漫游模式
@@ -59,6 +71,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
      * @param {Object} [options.modelConfig] - 人物模型配置覆盖
      * @param {Object} [options.staticCollider] - 静态碰撞源
      * @param {Object} [options.initPos] - 初始位置（Cartesian3），默认使用当前相机位置
+     * @param {number} [options.spawnHeight=500] - 初始离地高度（米），有地形时叠加地形高度
      */
     async function startPlayer(options = {}) {
         const viewer = getViewer();
@@ -82,14 +95,15 @@ export function usePlayerController({ getViewer, getCesium, message }) {
             const { playerController } = await import('./index.js');
 
             // 确定出生点：用户指定 > 当前相机位置
-            // 逻辑：有地形 → 地形高度 + 500m | 确认平面地形 → 固定 500m
+            // 逻辑：有地形 → 地形高度 + spawnHeight | 确认平面地形 → 固定 spawnHeight
             let initPos = options.initPos;
+            const heightOffset = options.spawnHeight || 500; // 用户可配置的离地高度，默认 500m
             let terrainHeight = 0;
             let noTerrain = true;
             const camera = viewer.camera;
             const carto = Cesium.Cartographic.fromCartesian(camera.position);
             if (!initPos) {
-                let spawnHeight = 500;
+                let spawnHeight = heightOffset;
                 const provider = viewer.terrainProvider;
 
                 if (hasRealTerrain(provider)) {
@@ -105,26 +119,28 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                     } catch { /* 采样失败 */ }
 
                     if (sampled && sampled[0] && Cesium.defined(sampled[0].height)) {
-                        // 采样成功：地形高度 + 500m
+                        // 采样成功：地形高度 + 用户设定离地高度
                         terrainHeight = sampled[0].height;
-                        spawnHeight = terrainHeight + 500;
+                        spawnHeight = terrainHeight + heightOffset;
                         noTerrain = false;
                     } else {
                         // 采样失败但地形存在（网络/服务异常），仍尝试创建碰撞体
-                        spawnHeight = carto.height > 0 ? carto.height + 500 : 500;
+                        spawnHeight = carto.height > 0 ? carto.height + heightOffset : heightOffset;
                         noTerrain = false;
                     }
                 }
-                // else: 平面地形（EllipsoidTerrainProvider），spawnHeight 保持 500m，noTerrain = true
+                // else: 平面地形（EllipsoidTerrainProvider），生成平坦椭球面碰撞体
+                // 出生高度保持 heightOffset（默认 500m），noTerrain = true
 
                 initPos = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, spawnHeight);
             }
 
-            // 构建地形碰撞体：仅在有地形时创建，范围 ±0.03°（约 ±3.3km）
+            // 构建碰撞体：有地形时采样高程网格，无地形时创建平坦椭球面（height=0）
+            const MIN_HEIGHT = 5;
             let staticCollider = options.staticCollider;
             const TERRAIN_HALF = 0.03;
             let colliderCenter = { lon: carto.longitude, lat: carto.latitude };
-            if (!staticCollider && !noTerrain) {
+            if (!staticCollider) {
                 staticCollider = [{
                     type: 'terrain',
                     rectangle: [
@@ -139,7 +155,6 @@ export function usePlayerController({ getViewer, getCesium, message }) {
 
             // 合并相机配置（局部副本，避免突变共享默认对象）
             const cameraConfig = { ...DEFAULT_CAMERA_CONFIG };
-            if (noTerrain) cameraConfig.isFirstPerson = false;
 
             // 合并模型配置
             const modelConfig = {
@@ -162,15 +177,9 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 isShowMobileControls: false,
             });
 
-            // 无地形自动进入飞行模式
-            if (noTerrain) {
-                player.isFlying = true;
-            }
-
             playerInstance = player;
 
             // 接入 Cesium 帧循环（含最低高度保护 + 动态地形碰撞更新）
-            const MIN_HEIGHT = 5;
             const TERRAIN_UPDATE_THRESHOLD = TERRAIN_HALF * 0.6; // 距碰撞中心 60% 时触发更新
             let updatingTerrain = false;
             let lastTime = performance.now();
@@ -180,7 +189,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 lastTime = now;
                 player.update(delta);
 
-                // 最低高度保护：有地形时防止穿地，无地形时保持悬浮
+                // 最低高度保护：有地形时防止穿地（terrainHeight + 1m），无地形时兜底在椭球面(0m)
                 const pos = player.getPosition();
                 const posCarto = Cesium.Cartographic.fromCartesian(pos);
                 const floor = noTerrain ? MIN_HEIGHT : terrainHeight + MIN_HEIGHT;
@@ -202,6 +211,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 // 更新实时速度（m/s）：ENU 速度分量合成
                 const vel = player.getVelocity();
                 playerSpeed.value = Math.hypot(vel.e, vel.n, vel.u);
+
 
                 // 动态地形碰撞：玩家接近碰撞边界时重新采样地形
                 if (!noTerrain && !updatingTerrain) {
@@ -302,6 +312,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
         isFlying.value = false;
         playerPosition.value = null;
         playerSpeed.value = 0;
+        // 注意：不清除 navTarget，导航目标独立于漫游状态
     }
 
     /**
@@ -328,6 +339,186 @@ export function usePlayerController({ getViewer, getCesium, message }) {
     }
 
     /**
+     * 设置导航目标
+     * 创建 Cesium Entity 并聚焦 Selection Indicator，同时记录坐标用于 HUD 方位计算
+     *
+     * @param {Object} target - 目标信息
+     * @param {number} target.lng - 经度
+     * @param {number} target.lat - 纬度
+     * @param {string} [target.name] - 目标名称
+     */
+    function setNavTarget({ lng, lat, name }) {
+        const viewer = getViewer();
+        const Cesium = getCesium();
+        if (!viewer || !Cesium) return;
+
+        // 清除旧目标
+        clearNavTarget();
+
+        const pos = Cesium.Cartesian3.fromDegrees(lng, lat);
+        // 创建 Entity 用于 Selection Indicator 显示
+        const targetEntity = viewer.entities.add({
+            position: pos,
+            point: { pixelSize: 10, color: Cesium.Color.CYAN.withAlpha(0.8) },
+            name: name || '导航目标',
+        });
+        viewer.selectedEntity = targetEntity;
+
+        // 锁定 Selection Indicator：监听选中变化，防止点击其他地方取消选中
+        _navSelectionListener = viewer.selectedEntityChanged.addEventListener((selectedEntity) => {
+            if (navTarget.value?._entity && selectedEntity !== navTarget.value._entity) {
+                // 延迟一帧恢复，避免与 Cesium 内部逻辑冲突
+                Promise.resolve().then(() => {
+                    if (navTarget.value?._entity) {
+                        viewer.selectedEntity = navTarget.value._entity;
+                    }
+                });
+            }
+        });
+
+        navTarget.value = {
+            lng,
+            lat,
+            name: name || '导航目标',
+            bearing: 0,
+            distance: 0,
+            _entity: targetEntity,
+        };
+
+        // 注册 preRender 监听器：每帧更新相对方位角 + 距离（不依赖漫游状态）
+        const targetCartesian = Cesium.Cartesian3.fromDegrees(lng, lat);
+        _navPreRenderListener = viewer.scene.preRender.addEventListener(() => {
+            if (!navTarget.value) return;
+
+            const cameraPos = viewer.camera.position;
+            const cameraCarto = Cesium.Cartographic.fromCartesian(cameraPos);
+
+            // 1. 绝对方位角：相机 → 目标（度，0=北，顺时针）
+            const absoluteBearing = computeBearing(
+                Cesium.Math.toDegrees(cameraCarto.longitude),
+                Cesium.Math.toDegrees(cameraCarto.latitude),
+                lng, lat,
+            );
+
+            // 2. 相机航向（弧度 → 度）
+            const cameraHeadingDeg = Cesium.Math.toDegrees(viewer.camera.heading);
+
+            // 3. 相对方位角 = 绝对方位角 - 相机航向（箭头指向目标在屏幕上的方向）
+            navTarget.value.bearing = (absoluteBearing - cameraHeadingDeg + 360) % 360;
+
+            // 4. 3D 欧氏距离（米）
+            navTarget.value.distance = Cesium.Cartesian3.distance(cameraPos, targetCartesian);
+
+            // 5. 锁定 Selection Indicator
+            const entity = navTarget.value._entity;
+            if (entity && viewer.selectedEntity !== entity) {
+                viewer.selectedEntity = entity;
+            }
+        });
+
+        message?.info?.(`导航目标已设置：${name || '地图选点'}`);
+    }
+
+    /**
+     * 清除导航目标
+     * 移除 Cesium Entity 并取消 Selection Indicator
+     */
+    function clearNavTarget() {
+        const viewer = getViewer();
+
+        // 移除每帧更新监听器
+        if (_navPreRenderListener) {
+            _navPreRenderListener();
+            _navPreRenderListener = null;
+        }
+
+        // 移除选中锁定监听器
+        if (_navSelectionListener) {
+            _navSelectionListener();
+            _navSelectionListener = null;
+        }
+
+        if (viewer && navTarget.value?._entity) {
+            try {
+                viewer.entities.remove(navTarget.value._entity);
+            } catch { /* entity 可能已被移除 */ }
+            viewer.selectedEntity = undefined;
+        }
+        navTarget.value = null;
+    }
+
+    /**
+     * 打开导航目标选择对话框
+     * 由控制中心调用，实际对话框由 CesiumContainer 管理
+     */
+    function openNavDialog() {
+        if (_onOpenNavDialog) {
+            _onOpenNavDialog();
+        }
+    }
+
+    /**
+     * 注册打开导航对话框的回调（由 CesiumContainer 调用）
+     * @param {Function} handler - 打开对话框的回调函数
+     */
+    function setOpenNavDialogHandler(handler) {
+        _onOpenNavDialog = handler;
+    }
+
+    /**
+     * 进入导航目标点选模式
+     * 点击 Cesium 场景设置目标：优先检测数据实体，否则取地形坐标
+     * 点选完成后自动退出模式
+     */
+    function startNavPick() {
+        const viewer = getViewer();
+        const Cesium = getCesium();
+        if (!viewer || !Cesium) return;
+
+        message?.info?.('点击地图选择导航目标');
+
+        const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handler.setInputAction((click) => {
+            // 优先检测是否点到了数据实体
+            const picked = viewer.scene.pick(click.position);
+            if (Cesium.defined(picked) && picked.id && picked.id.position) {
+                const julianDate = viewer.clock.currentTime;
+                const entityPos = picked.id.position.getValue(julianDate);
+                if (entityPos) {
+                    const carto = Cesium.Cartographic.fromCartesian(entityPos);
+                    if (carto) {
+                        viewer.selectedEntity = picked.id;
+                        navTarget.value = {
+                            lng: Cesium.Math.toDegrees(carto.longitude),
+                            lat: Cesium.Math.toDegrees(carto.latitude),
+                            name: picked.id.name || '数据要素',
+                            bearing: 0,
+                            distance: 0,
+                            _entity: picked.id,
+                        };
+                        message?.info?.(`导航目标已设置：${picked.id.name || '数据要素'}`);
+                        handler.destroy();
+                        return;
+                    }
+                }
+            }
+
+            // 未命中实体 → 取地形坐标
+            const cartesian = viewer.scene.pickPosition(click.position)
+                || viewer.scene.globe.pick(viewer.camera.getPickRay(click.position), viewer.scene);
+            if (cartesian) {
+                const carto = Cesium.Cartographic.fromCartesian(cartesian);
+                setNavTarget({
+                    lng: Cesium.Math.toDegrees(carto.longitude),
+                    lat: Cesium.Math.toDegrees(carto.latitude),
+                    name: '地图选点',
+                });
+            }
+            handler.destroy();
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    }
+
+    /**
      * 获取当前控制器实例（高级用法）
      * @returns {Object|null}
      */
@@ -341,10 +532,35 @@ export function usePlayerController({ getViewer, getCesium, message }) {
         isFlying,
         playerPosition,
         playerSpeed,
+        navTarget,
         startPlayer,
         stopPlayer,
         togglePlayer,
         changeView,
         getPlayerInstance,
+        setNavTarget,
+        clearNavTarget,
+        startNavPick,
+        openNavDialog,
+        setOpenNavDialogHandler,
     };
+}
+
+/**
+ * 初始方位角（度，0=北，顺时针）
+ * @param {number} lon1 - 起点经度
+ * @param {number} lat1 - 起点纬度
+ * @param {number} lon2 - 终点经度
+ * @param {number} lat2 - 终点纬度
+ * @returns {number} 方位角（0~360 度）
+ */
+function computeBearing(lon1, lat1, lon2, lat2) {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const toDeg = (r) => (r * 180) / Math.PI;
+    const dLon = toRad(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+    const x =
+        Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+        Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }

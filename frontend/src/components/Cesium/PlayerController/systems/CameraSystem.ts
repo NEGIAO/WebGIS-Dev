@@ -2,12 +2,12 @@ import {
     Cartesian3, Math as CMath, Matrix4, Transforms,
 } from "cesium";
 import type { playerController } from "../playerController";
-import { lerp } from "../utils/math";
+import { lerp, smoothDamp } from "../utils/math";
 
 export class CameraSystem {
     private ctrl: playerController; // 主控制器引用
 
-    collisionLerp = 0.18; // 碰撞插值速度
+    collisionLerp = 0.12; // 碰撞恢复插值速度（降低以减少微抖）
     epsilon = 35; // 安全距离偏移
     minDist = 100; // 最小相机距离
     maxDist = 440; // 最大相机距离
@@ -42,8 +42,14 @@ export class CameraSystem {
     private _centerDir = new Cartesian3(); // 准星射线方向（getCenterHit 用）
 
     private _overShoulder = false; // 越肩开关（每帧 updateThirdPerson 读取）
+    private _overShoulderOffset = 0; // 当前越肩横移比例（平滑过渡用）
     private static readonly overShoulderRatio = 0.2; // 越肩横移占相机距离的比例
+    private static readonly overShoulderSmoothTime = 0.2; // 越肩过渡时间（秒）
     private static readonly centerRayMaxDist = 1e7; // 准星射线最大检测距离（米）
+
+    // 弹簧时间平滑
+    private _targetSpringTime = 0.05; // 目标弹簧时间
+    private _springTimeSmoothTime = 0.3; // 弹簧时间过渡时间（秒）
 
     constructor(ctrl: playerController) {
         this.ctrl = ctrl;
@@ -112,18 +118,21 @@ export class CameraSystem {
     }
 
     /**
-     * 根据当前玩家速度动态调整弹簧相机时间
+     * 根据当前玩家速度动态调整弹簧相机时间（平滑过渡，无跳变）
      * 速度越快 → springCameraTime 越小 → 相机跟得更紧
      * 速度越慢 → springCameraTime 越大 → 相机跟得更平滑
      *
      * @param currentSpeed 当前实际速度（curPlayerSpeed）
      * @param baseSpeed    基准速度（playerSpeed，即无加速时的行走速度）
+     * @param delta        帧间隔（秒）
      */
-    updateSpringTimeBySpeed(currentSpeed: number, baseSpeed: number) {
+    updateSpringTimeBySpeed(currentSpeed: number, baseSpeed: number, delta: number) {
         if (this.baseSpringCameraTime <= 0) return;
         const ratio = Math.max(0.1, currentSpeed / Math.max(1, baseSpeed));
         const clamped = Math.min(3, Math.max(0.5, ratio));
-        this.springCameraTime = this.baseSpringCameraTime / clamped;
+        this._targetSpringTime = this.baseSpringCameraTime / clamped;
+        // 平滑过渡到目标值，避免冲刺/行走切换时相机突变
+        this.springCameraTime = smoothDamp(this.springCameraTime, this._targetSpringTime, this._springTimeSmoothTime, delta);
     }
 
     // 处理鼠标朝向
@@ -151,7 +160,7 @@ export class CameraSystem {
         this.updateThirdPerson(delta);
     }
 
-    // 第三人称：手动轨道 + 弹簧跟随 + 射线避障
+    // 第三人称：手动轨道 + 弹簧跟随 + 射线避障 + 越肩平滑过渡
     private updateThirdPerson(delta: number) {
         const target = this.getLookAtPoint(this._lookAtPoint);
         const smoothed = this.springTarget(target, delta);
@@ -179,10 +188,12 @@ export class CameraSystem {
         Cartesian3.normalize(direction, direction);
         const up = this.localUp(camPos, this._up);
 
-        // 越肩视角：把相机沿 right 轴横移一小段。
-        if (this._overShoulder) {
+        // 越肩视角：平滑过渡横移量（0→目标比例 或 目标比例→0）
+        const targetOffset = this._overShoulder ? CameraSystem.overShoulderRatio : 0;
+        this._overShoulderOffset = smoothDamp(this._overShoulderOffset, targetOffset, CameraSystem.overShoulderSmoothTime, delta);
+        if (Math.abs(this._overShoulderOffset) > 0.001) {
             const right = Cartesian3.normalize(Cartesian3.cross(direction, up, this._right), this._right);
-            Cartesian3.add(camPos, Cartesian3.multiplyByScalar(right, dist * CameraSystem.overShoulderRatio, right), camPos);
+            Cartesian3.add(camPos, Cartesian3.multiplyByScalar(right, dist * this._overShoulderOffset, right), camPos);
         }
 
         // 更新相机位置和朝向

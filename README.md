@@ -181,7 +181,7 @@ WebGIS_Dev/
 │   │   ├── components/               # 业务组件（按功能域分组）
 │   │   │   ├── Cesium/               # 3D 地球模块
 │   │   │   │   ├── Cloud/            # 体积云模块（Ray Marching + 散射 + 纹理）
-│   │   │   │   ├── PlayerController/ # 人物漫游控制器（第一/第三人称 + Rapier 物理碰撞）
+│   │   │   │   ├── PlayerController/ # 人物漫游控制器（第一/第三人称 + Rapier 物理 + 导航指引 + 动画混合 + 移动手感优化）
 │   │   │   │   ├── FluidSimulation/  # 流体模拟（洪水模拟 + 水位动画）
 │   │   │   │   ├── ShallowWater/     # Three.js 热带浅水（焦散/折射/吸色/体积云/闪电）
 │   │   │   │   ├── composables/      # Cesium composables（图层/底图/URL 追踪等）
@@ -280,14 +280,15 @@ WebGIS_Dev/
 
 ## 📜 版本演进
 
-### V3.3.12 (2026-06-27) — 体积云模块重构 + 洪水模拟 + 漫游坐标显示
+### V3.3.12 (2026-06-27) — 体积云模块重构 + 洪水模拟 + 漫游导航指引
 
 - 🆕 **体积云独立模块** (`Cloud/`)：从 `CesiumAdvancedEffects.vue` 提取为独立 TypeScript 模块（CloudManager / CloudPresets / CloudUniforms / cloudIntegration / useVolumetricCloud / 4 个 GLSL Shader / 纹理资源）
 - 🆕 **洪水模拟功能**：通过 `useCesiumToolModules.js` 控制中心接入「洪水模拟」按钮 + 动态速度滑块（默认值域÷10，10s 完成），`FluidSimulationPanel.vue` 提供 `requestAnimationFrame` 水位自动上涨动画
+- 🆕 **漫游导航指引** (`NavGuideHUD` + `NavTargetDialog`)：三选一对话框（搜索/数据要素/地图点选），屏幕顶部方向箭头 + 距离，Selection Indicator 持久聚焦，导航独立于漫游状态
 - 🆕 **漫游坐标显示** (`PlayerController`)：漫游模式下实时显示人物世界坐标
 - 🆕 **漫游相机速度同步** (`CameraSystem`)：相机移动速度与漫游速度参数联动
 - 🔧 **CesiumAdvancedEffects.vue**：删除体积云相关代码，改为调用 Cloud/ 模块
-- 🔧 **useCesiumToolModules.js**：体积云控件重构为独立 `cloudParams` + 洪水模拟 action/control/state
+- 🔧 **useCesiumToolModules.js**：体积云控件重构为独立 `cloudParams` + 洪水模拟/导航 action/control/state
 
 ### V3.3.11 (2026-06-26) — 人物漫游控制器集成（第一/第三人称 + Rapier 物理）
 

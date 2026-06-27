@@ -35,6 +35,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 从 `CesiumAdvancedEffects.vue` 提取体积云代码至 `Cloud/` 模块
 - 新增洪水模拟功能：`FluidSimulationPanel.vue` + `useCesiumToolModules.js` 控制中心接入
 - 漫游控制器新增坐标显示 + 相机速度动态联动
+- 新增漫游导航指引：NavGuideHUD + NavTargetDialog（三选一：搜索/数据要素/地图点选）+ Selection Indicator 持久聚焦
 
 ### V3.3.9 (2026-06-26) - 大气 LUT 纹理集成修复 + TAAU 时序上采样 + BSM Shadow TAA + 模块卡片 UI 清理
 

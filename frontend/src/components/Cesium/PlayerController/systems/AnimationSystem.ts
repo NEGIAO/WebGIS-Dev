@@ -8,6 +8,7 @@ type AnimEntry = {
     timeScale: number; // 速度
     once: boolean; // 播放一次
     runtime?: ModelAnimation; // 当前激活的运行时动画
+    blendWeight?: number; // 混合权重（0=完全淡出，1=完全淡入）
 };
 
 export class AnimationSystem {
@@ -20,6 +21,18 @@ export class AnimationSystem {
     // 手动动画时钟（秒）。每帧累加已被 timeScale 缩放的 delta，经 animationTime 回调驱动动画
     private animSeconds = 0;
     private staticPoseRuntime?: ModelAnimation; // 当前若为单关键帧静态姿势 clip，持有其 runtime，需每帧手动贴姿势
+
+    // === crossfade 混合 ===
+    private blendDuration = 0.15; // 混合时长（秒）
+    private prevEntry: AnimEntry | null = null; // 上一个动画（淡出中）
+    private blendElapsed = 0; // 当前混合已过时间
+
+    // === 跳跃超时保护 ===
+    private jumpStartTime = 0; // 跳跃动画开始时间
+    private static readonly JUMP_TIMEOUT = 2.0; // 跳跃超时（秒）
+
+    // === 输入变化检查 ===
+    private lastInputHash = ""; // 上一帧输入状态哈希
 
     constructor(ctrl: playerController) {
         this.ctrl = ctrl;
@@ -72,28 +85,44 @@ export class AnimationSystem {
         this.playByName("idle");
     }
 
-    // 按名切换动画
+    // 按名切换动画（支持 crossfade 混合过渡）
     playByName(key: string) {
         if (!this.model) return;
         const next = this.actions.get(key);
         // 如果动画不存在，或已在播放，则忽略
         if (!next || this.stateKey === key) return;
 
-        // 停掉旧状态
-        if (this.stateKey) {
+        // 记录旧动画用于 crossfade 淡出
+        if (this.stateKey && this.blendDuration > 0) {
             const prev = this.actions.get(this.stateKey);
-            if (prev?.runtime) { this.model.activeAnimations.remove(prev.runtime); prev.runtime = undefined; }
+            if (prev?.runtime) {
+                // 启动淡出：保留旧 runtime，update 中渐降权重
+                this.prevEntry = prev;
+                this.blendElapsed = 0;
+            }
+        } else {
+            // 无混合：直接停掉旧状态
+            if (this.stateKey) {
+                const prev = this.actions.get(this.stateKey);
+                if (prev?.runtime) { this.model.activeAnimations.remove(prev.runtime); prev.runtime = undefined; }
+            }
         }
 
         // 播放新动画
         const runtime = this.addRuntime(next);
         next.runtime = runtime;
+        next.blendWeight = 1; // 新动画立即全权重
 
         // 单关键帧 clip（_localStopTime===0）Cesium 不走时间驱动，由 update() 每帧重激活维持
         this.staticPoseRuntime = (runtime as any)?._localStopTime === 0 ? runtime : undefined;
 
         this.stateKey = key;
         this.ctrl.onAnimationChange?.(key);
+
+        // 记录跳跃动画开始时间（超时保护用）
+        if (["jumpStart", "jumping"].includes(key)) {
+            this.jumpStartTime = this.animSeconds;
+        }
     }
 
     // 激活一个 clip，animationTime 回调手动驱动播放时间
@@ -113,11 +142,39 @@ export class AnimationSystem {
     // 每帧更新
     update(delta: number) {
         this.animSeconds += delta;
+
+        // === crossfade 淡出处理 ===
+        if (this.prevEntry && this.model) {
+            this.blendElapsed += delta;
+            if (this.blendElapsed >= this.blendDuration) {
+                // 淡出完成，移除旧动画
+                if (this.prevEntry.runtime) {
+                    this.model.activeAnimations.remove(this.prevEntry.runtime);
+                    this.prevEntry.runtime = undefined;
+                }
+                this.prevEntry = null;
+            } else {
+                // 淡出中：渐降旧动画速度（Cesium 不原生支持权重，用 speed 模拟淡出效果）
+                const fadeRatio = 1 - (this.blendElapsed / this.blendDuration);
+                try {
+                    if (this.prevEntry.runtime) {
+                        (this.prevEntry.runtime as any).speed = this.prevEntry.timeScale * fadeRatio;
+                    }
+                } catch { /* speed 属性可能不可写 */ }
+            }
+        }
+
+        // === 跳跃超时保护 ===
+        if (this.stateKey === "jumpStart" && (this.animSeconds - this.jumpStartTime) > AnimationSystem.JUMP_TIMEOUT) {
+            console.warn("[AnimationSystem] jumpStart 超时，强制推进到 jumpLoop");
+            this.playByName("jumpLoop");
+        }
+
         // 单关键帧静态姿势：每帧重新激活 clip 强制重贴
         const sp = this.staticPoseRuntime;
         const entry = this.stateKey ? this.actions.get(this.stateKey) : undefined;
         if (sp && entry && this.model) {
-            entry.runtime = undefined; // 解绑，避免 remove 的事件误清状态机                 
+            entry.runtime = undefined; // 解绑，避免 remove 的事件误清状态机
             this.model.activeAnimations.remove(sp);
             const fresh = this.addRuntime(entry);
             entry.runtime = fresh;
@@ -209,6 +266,10 @@ export class AnimationSystem {
         this.staticPoseRuntime = undefined;
         this.currentLocomotionSet = null;
         this.model = undefined;
+        // 清理 crossfade 状态
+        this.prevEntry = null;
+        this.blendElapsed = 0;
+        this.lastInputHash = "";
     }
 
     sets = new Map<string, Map<string, AnimEntry>>(); // 动作集合组
@@ -281,12 +342,18 @@ export class AnimationSystem {
         }
     }
 
-    // 按键状态触发动画
+    // 按键状态触发动画（带输入变化检查，避免每帧重复调用）
     setAnimationByPressed() {
         if (!this.model) return;
+
+        // 输入变化快速检查：构造输入哈希，无变化则跳过
+        const { fwd, bkd, lft, rgt, shift, space } = this.ctrl.input;
+        const hash = `${fwd ? 1 : 0}${bkd ? 1 : 0}${lft ? 1 : 0}${rgt ? 1 : 0}${shift ? 1 : 0}${space ? 1 : 0}${this.ctrl.isFlying ? 1 : 0}${this.ctrl.playerIsOnGround ? 1 : 0}`;
+        if (hash === this.lastInputHash) return;
+        this.lastInputHash = hash;
+
         // 恢复相机距离
         this.ctrl.cam.maxDist = this.ctrl.cam.originMaxDist;
-        const { fwd, bkd, lft, rgt, shift, space } = this.ctrl.input;
 
         // 飞行状态下的动画逻辑
         if (this.ctrl.isFlying) {

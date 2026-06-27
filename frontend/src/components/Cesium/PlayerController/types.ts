@@ -22,6 +22,8 @@ export type TerrainCollider = {
     rectangle: [number, number, number, number];
     // 采样网格分辨率,默认 64x64
     resolution?: number;
+    // 无地形时的平坦高度（米），默认 0。设为 MIN_HEIGHT 可让角色站在该高度的平面上
+    flatHeight?: number;
 };
 
 export type ColliderSource =

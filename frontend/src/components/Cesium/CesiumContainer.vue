@@ -61,6 +61,19 @@
         @close="showPlayerGuide = false"
     />
 
+    <!-- 漫游导航 HUD（科幻风格，有目标即显示） -->
+    <NavGuideHUD
+        v-if="playerController.navTarget.value"
+        :nav-target="playerController.navTarget.value"
+    />
+
+    <!-- 导航目标选择弹窗（搜索/数据要素/地图点选） -->
+    <NavTargetPicker
+        :visible="navPickerVisible"
+        @close="navPickerVisible = false"
+        @select="handleNavTargetSelect"
+    />
+
     <!-- GLTF/GLB 坐标输入弹窗 -->
     <CesiumDataImportDialog
         :visible="!!pendingGltfFile"
@@ -132,6 +145,8 @@ import { useCesiumCameraEnhanced } from './composables/useCesiumCameraEnhanced';
 import { useCesiumHeightSampler } from './composables/useCesiumHeightSampler';
 import { usePlayerController } from './PlayerController/usePlayerController';
 import PlayerGuidePanel from './PlayerController/PlayerGuidePanel.vue';
+import NavGuideHUD from './PlayerController/NavGuideHUD.vue';
+import NavTargetPicker from './PlayerController/NavTargetPicker.vue';
 import {
     getRuntimeMapTokensSync,
     loadRuntimeMapTokens,
@@ -147,6 +162,8 @@ const emit = defineEmits(['view-sync']);
 
 /** 漫游模式操作提示面板显示状态 */
 const showPlayerGuide = ref(true);
+/** 导航目标选择弹窗可见性 */
+const navPickerVisible = ref(false);
 const cesiumReady = ref(false);
 const fluidPanelRef = ref(null);
 const runtimeMapTokens = ref(getRuntimeMapTokensSync());
@@ -242,6 +259,27 @@ const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
 // 人物漫游控制器（第一/第三人称视角）
 // ==========================================
 const playerController = usePlayerController({ getViewer, getCesium, message });
+
+// 注册导航弹窗打开回调
+playerController.setOpenNavDialogHandler(() => {
+    navPickerVisible.value = true;
+});
+
+/**
+ * 处理导航目标来源选择
+ * @param {'search' | 'data' | 'pick'} type
+ */
+function handleNavTargetSelect(type) {
+    if (type === 'pick') {
+        playerController.startNavPick();
+    } else if (type === 'search') {
+        message.info('请使用顶部搜索框搜索地点，搜索结果将自动设为导航目标');
+    } else if (type === 'data') {
+        message.info('请点击已导入的数据要素，将自动设为导航目标');
+        // 进入数据要素点选模式（复用 startNavPick，它已支持 entity 检测）
+        playerController.startNavPick();
+    }
+}
 
 /**
  * 坐标显示：漫游模式下显示人物三维坐标+实时速度，否则显示鼠标位置
@@ -607,6 +645,8 @@ watch(cesiumReady, (ready) => {
     if (ready) {
         // 初始应用基础大气参数
         applyBaseAtmosphereParams(baseAtmosphereParams.value);
+        // 初始应用 Tellux 大气渲染参数（日夜/月光/星空）
+        applyAtmosphereParams(atmosphereParams.value);
     }
 });
 
@@ -652,6 +692,52 @@ watch(
     baseAtmosphereParams,
     (params) => {
         applyBaseAtmosphereParams(params);
+    },
+    { deep: true },
+);
+
+/**
+ * 应用 Tellux 大气渲染参数到 Cesium 场景
+ * 控制日夜过渡、月光照明、星空可见性
+ */
+function applyAtmosphereParams(params) {
+    if (!viewer || !Cesium) return;
+    const scene = viewer.scene;
+    const globe = scene.globe;
+
+    // 日夜过渡：控制 globe.enableLighting
+    if (globe && 'enableLighting' in globe) {
+        globe.enableLighting = params.dayNightEnabled !== false;
+    }
+
+    // 月光：控制 scene.moon.show
+    if (scene.moon) {
+        scene.moon.show = params.moonLightEnabled !== false;
+    }
+
+    // 星空：控制 scene.skyBox.show
+    if (scene.skyBox) {
+        scene.skyBox.show = params.starsEnabled !== false;
+    }
+
+    // 月光强度：通过 SunLight 的 intensity 模拟（夜间场景光照）
+    // 注意：Cesium 没有独立的 MoonLight 类，用 DirectionalLight 模拟
+    // 这里通过 globe.atmosphereLightIntensity 间接影响夜间亮度
+    if (globe && 'atmosphereLightIntensity' in globe) {
+        // 月光强度映射到大气光强（基础值 + 月光贡献）
+        const baseIntensity = baseAtmosphereParams.value.atmosphereLightIntensity ?? 5.5;
+        const moonBoost = (params.moonLightEnabled !== false) ? (params.moonLightIntensity ?? 0.18) * 8 : 0;
+        globe.atmosphereLightIntensity = baseIntensity + moonBoost;
+    }
+
+    scene.requestRender?.();
+}
+
+// 监听 Tellux 大气渲染参数变化
+watch(
+    atmosphereParams,
+    (params) => {
+        applyAtmosphereParams(params);
     },
     { deep: true },
 );

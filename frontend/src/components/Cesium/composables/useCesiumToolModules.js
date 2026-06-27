@@ -45,14 +45,14 @@ export function useCesiumToolModules({
         skyBoxShow: true,           // 星空盒 - 开启
     });
 
-    // Tellux 大气渲染参数（默认全部关闭，需要手动启用）
+    // Tellux 大气渲染参数（默认开启，与 baseAtmosphereParams 配合）
     const atmosphereParams = ref({
-        dayNightEnabled: false,
+        dayNightEnabled: true,
         nightFactor: 0,
-        moonLightEnabled: false,
+        moonLightEnabled: true,
         moonLightIntensity: 0.18,
         ambientIntensity: 0.08,
-        starsEnabled: false,
+        starsEnabled: true,
         starsIntensity: 1.0,
     });
 
@@ -102,6 +102,7 @@ export function useCesiumToolModules({
         sensitivity: 5,
         acceleration: 30,
         deceleration: 30,
+        spawnHeight: 500,
     });
 
     const fluidState = ref({
@@ -237,6 +238,15 @@ export function useCesiumToolModules({
                     label: '切换视角',
                     disabled: !_playerController?.isActive?.value,
                 },
+                {
+                    id: 'setNavTarget',
+                    label: _playerController?.navTarget?.value ? '更改目标' : '设置导航',
+                },
+                {
+                    id: 'clearNavTarget',
+                    label: '清除导航',
+                    disabled: !_playerController?.navTarget?.value,
+                },
             ],
             controls: [
                 { id: 'speed', label: '行走速度', type: 'range', value: playerParams.value.speed, min: 50, max: 2000, step: 10, disabled: !_playerController?.isActive?.value },
@@ -246,6 +256,7 @@ export function useCesiumToolModules({
                 { id: 'sensitivity', label: '鼠标灵敏度', type: 'range', value: playerParams.value.sensitivity, min: 1, max: 20, step: 0.5, disabled: !_playerController?.isActive?.value },
                 { id: 'acceleration', label: '加速惯性', type: 'range', value: playerParams.value.acceleration, min: 1, max: 100, step: 1, disabled: !_playerController?.isActive?.value, tooltip: '值越大加速越快。WASD 按下后到达目标速度的响应快慢。' },
                 { id: 'deceleration', label: '减速惯性', type: 'range', value: playerParams.value.deceleration, min: 1, max: 100, step: 1, disabled: !_playerController?.isActive?.value, tooltip: '值越大松手后停得越快。影响滑行/惯性感。' },
+                { id: 'spawnHeight', label: '初始高度', type: 'range', value: playerParams.value.spawnHeight, min: 50, max: 5000, step: 50, disabled: false, tooltip: '漫游启动时的离地高度（米），重启后生效。' },
             ],
         },
     ]);
@@ -276,8 +287,10 @@ export function useCesiumToolModules({
                 },
             },
             player: {
-                toggle: () => _playerController?.togglePlayer?.(),
+                toggle: () => _playerController?.togglePlayer?.({ spawnHeight: playerParams.value.spawnHeight }),
                 changeView: () => _playerController?.changeView?.(),
+                setNavTarget: () => _playerController?.openNavDialog?.(),
+                clearNavTarget: () => _playerController?.clearNavTarget?.(),
             },
         };
 
@@ -319,6 +332,8 @@ export function useCesiumToolModules({
         if (moduleId === 'player' && controlId in playerParams.value) {
             const numVal = Number(value);
             playerParams.value = { ...playerParams.value, [controlId]: numVal };
+            // spawnHeight 是启动前参数，无需同步到运行时
+            if (controlId === 'spawnHeight') return;
             const p = _playerController?.getPlayerInstance?.();
             if (p) {
                 if (controlId === 'speed') p.setPlayerSpeed(numVal);

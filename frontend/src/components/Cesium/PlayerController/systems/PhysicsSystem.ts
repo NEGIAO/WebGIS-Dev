@@ -509,7 +509,7 @@ export class PhysicsSystem {
     // 把碰撞源(gltf / terrain)统一解析成 Rapier 局部空间的三角网。
     private async resolveTriMesh(viewer: any, s: ColliderSource): Promise<ResolvedTriMesh | null> {
         if (s.type === "terrain") {
-            return this.terrainToTriMesh(viewer, s.rectangle, s.resolution ?? 64);
+            return this.terrainToTriMesh(viewer, s.rectangle, s.resolution ?? 64, s.flatHeight ?? 0);
         }
         if (s.type === "gltf") {
             return this.gltfToTriMesh(s);
@@ -562,6 +562,7 @@ export class PhysicsSystem {
         viewer: any,
         rect: [number, number, number, number],
         res: number,
+        flatHeight = 0,
     ): Promise<ResolvedTriMesh> {
         const provider = viewer.terrainProvider;
         // 判断是否有地形（兼容 ArcGIS/天地图/Cesium 三种 provider）
@@ -573,10 +574,10 @@ export class PhysicsSystem {
             for (let i = 0; i < res; i++) {
                 const lon = CMath.lerp(west, east, i / (res - 1));
                 const lat = CMath.lerp(south, north, j / (res - 1));
-                carts.push(new Cartographic(lon, lat, 0));
+                carts.push(new Cartographic(lon, lat, hasTerrain ? 0 : flatHeight));
             }
         }
-        // 有地形才采样;无地形保持 height=0(贴椭球面)
+        // 有地形才采样;无地形使用 flatHeight 作为平坦地面高度
         // 用 sampleTerrain 指定层级，避免 sampleTerrainMostDetailed 请求过高精度导致瓦片过载
         if (hasTerrain) {
             // 天地图 _bottomLevel=11 时走 level 10，ArcGIS/Cesium 走 level 12

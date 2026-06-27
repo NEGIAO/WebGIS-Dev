@@ -13,6 +13,17 @@ export class LocalFrame {
     private _scratchM4 = new Matrix4();
     private _scratchC3 = new Cartesian3();
 
+    // composeModelMatrixLookAt 专用 scratch 对象（GC 优化）
+    private _fwd = new Cartesian3();
+    private _right = new Cartesian3();
+    private _up = new Cartesian3();
+    private _worldUp = new Cartesian3(0, 0, 1);
+    private _northAxis = new Cartesian3(0, 1, 0);
+    private _offset = new Cartesian3();
+    private _rotLocal = new Matrix3();
+    private _rz = new Matrix3();
+    private _rot4 = new Matrix4();
+
     constructor(anchor?: Cartesian3) {
         if (anchor) this.setAnchor(anchor);
     }
@@ -88,7 +99,7 @@ export class LocalFrame {
         return out;
     }
 
-    // 按位置 + 朝向生成模型变换矩阵
+    // 按位置 + 朝向生成模型变换矩阵（使用 scratch 对象避免 GC）
     composeModelMatrixLookAt(
         positionEcef: Cartesian3,
         fwdEN: { e: number; n: number; u?: number },
@@ -100,32 +111,32 @@ export class LocalFrame {
         // pivot 固定在胶囊中心,取该点 ENU 基（列：E, N, U）
         Transforms.eastNorthUpToFixedFrame(positionEcef, undefined, this._scratchM4);
 
-        // 用朝向向量正交化出 right/up,构造朝向旋转基
-        const fwd = new Cartesian3(fwdEN.e, fwdEN.n, fwdEN.u ?? 0);
+        // 用朝向向量正交化出 right/up,构造朝向旋转基（复用 scratch 对象）
+        const fwd = this._fwd;
+        fwd.x = fwdEN.e; fwd.y = fwdEN.n; fwd.z = fwdEN.u ?? 0;
         Cartesian3.normalize(fwd, fwd);
-        const worldUp = new Cartesian3(0, 0, 1); // ENU Up
-        let right = Cartesian3.cross(fwd, worldUp, new Cartesian3());
+        let right = Cartesian3.cross(fwd, this._worldUp, this._right);
         if (Cartesian3.magnitude(right) < 1e-6) {
             // 朝向近乎竖直时 fwd×up 退化,改用 North 轴求稳定的 right
-            right = Cartesian3.cross(fwd, new Cartesian3(0, 1, 0), new Cartesian3());
+            right = Cartesian3.cross(fwd, this._northAxis, this._right);
         }
         Cartesian3.normalize(right, right);
-        const up = Cartesian3.cross(right, fwd, new Cartesian3());
+        const up = Cartesian3.cross(right, fwd, this._up);
         Cartesian3.normalize(up, up);
-        // Matrix3 行主序参数；列 = [right, fwd, up]
-        let rotLocal = new Matrix3(
+        // Matrix3 行主序参数；列 = [right, fwd, up]（使用 fromArray 构造避免索引赋值）
+        let rotLocal = Matrix3.fromArray([
             right.x, fwd.x, up.x,
             right.y, fwd.y, up.y,
             right.z, fwd.z, up.z,
-        );
+        ], 0, this._rotLocal);
         // facingOffset：绕本体 Up（+Z 列）后乘,校正模型正面轴差异（不改变 up 方向）
         if (facingOffset !== 0) {
-            const rz = Matrix3.fromRotationZ(facingOffset, new Matrix3());
-            rotLocal = Matrix3.multiply(rotLocal, rz, new Matrix3());
+            Matrix3.fromRotationZ(facingOffset, this._rz);
+            rotLocal = Matrix3.multiply(rotLocal, this._rz, rotLocal);
         }
         // 竖直补偿沿本体 up 平移（世界米,不受 scale 影响）,折进 rot4
-        const offset = Cartesian3.multiplyByScalar(up, verticalOffset, new Cartesian3());
-        const rot4 = Matrix4.fromRotationTranslation(rotLocal, offset, new Matrix4());
+        Cartesian3.multiplyByScalar(up, verticalOffset, this._offset);
+        const rot4 = Matrix4.fromRotationTranslation(rotLocal, this._offset, this._rot4);
         Matrix4.multiply(this._scratchM4, rot4, out);
         Matrix4.multiplyByUniformScale(out, scale, out); // 只缩旋转列,不动平移
         return out;

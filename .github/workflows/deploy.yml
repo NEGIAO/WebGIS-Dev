@@ -159,25 +159,35 @@ jobs:
             HF_TOKEN: ${{ secrets.HF_TOKEN }}
           run: |
             cd dist-to-hf
-            
+
             # 1. 彻底删除瓦片文件夹（HF对大数量文件有限制）
             if [ -d "tiles" ]; then
               rm -rf tiles/
             fi
-            
+
             # 2. 初始化 Git 和 LFS
             git init
             git lfs install
-            
-            # 3. 强制追踪所有潜在的二进制文件为 LFS
-            # 这样 HF 就会通过 LFS 存储它们，而不会在 pre-receive 阶段拦截
-            git lfs track "images/*.webp"
-            git lfs track "images/*.png"
-            git lfs track "images/*.jpg"
+
+            # 3. 追踪所有二进制文件为 LFS（覆盖 dist 中所有非文本资源）
+            # 图片
+            git lfs track "*.webp"
+            git lfs track "*.png"
+            git lfs track "*.jpg"
+            git lfs track "*.jpeg"
+            # 3D 模型
+            git lfs track "*.glb"
+            git lfs track "*.gltf"
+            # 云纹理数据
+            git lfs track "*.bin"
+            # 地理数据（Vite 哈希重命名后的副本）
             git lfs track "assets/*.kmz"
             git lfs track "assets/*.kml"
+            # 共享资源（public/ShareData 直接拷贝）
+            git lfs track "ShareData/**"
+            # 图标
             git lfs track "*.ico"
-            
+
             # 必须添加 .gitattributes 否则追踪不生效
             git add .gitattributes
             
