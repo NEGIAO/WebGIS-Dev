@@ -82,9 +82,9 @@
         <span class="drag-overlay-hint">GeoJSON / KML / SHP / GLB / CZML</span>
     </div>
 
-    <!-- 坐标显示面板 -->
+    <!-- 坐标显示面板（漫游模式下显示人物三维坐标） -->
     <div class="map-controls-group">
-        <div class="mouse-position-content">{{ coordinateDisplay }}</div>
+        <div class="mouse-position-content">{{ activeCoordinateDisplay }}</div>
         <div class="divider"></div>
         <button
             class="home-btn"
@@ -124,6 +124,7 @@ import { useCesiumLayers } from './composables/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/useCesiumSceneActions';
 import { useCesiumDataImport } from './composables/useCesiumDataImport';
 import { useCesiumToolModules } from './composables/useCesiumToolModules';
+import { setupCloudIntegration } from './Cloud';
 import { useCesiumUrlTracking } from './composables/useCesiumUrlTracking';
 import { useCesiumWind } from './composables/useCesiumWind';
 import { useCesiumModelManager } from './composables/useCesiumModelManager';
@@ -242,6 +243,23 @@ const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
 // ==========================================
 const playerController = usePlayerController({ getViewer, getCesium, message });
 
+/**
+ * 坐标显示：漫游模式下显示人物三维坐标+实时速度，否则显示鼠标位置
+ * 漫游时格式: "经度: xxx, 纬度: xxx, 海拔: xxx米 | 速度: xxx m/s (漫游)"
+ */
+const activeCoordinateDisplay = computed(() => {
+    const pos = playerController.playerPosition.value;
+    if (pos) {
+        const lng = pos.lng.toFixed(6);
+        const lat = pos.lat.toFixed(6);
+        const height = pos.height.toFixed(2);
+        const speed = playerController.playerSpeed.value;
+        const speedStr = speed > 0.1 ? ` | 速度: ${speed.toFixed(1)} m/s` : '';
+        return `经度: ${lng}, 纬度: ${lat}, 海拔: ${height}米${speedStr} (漫游)`;
+    }
+    return coordinateDisplay.value;
+});
+
 // 漫游模式启动时：关闭高级控制台 + 显示键位提示面板
 watch(() => playerController.isActive.value, (active) => {
     if (active) {
@@ -312,6 +330,8 @@ const {
     advancedEffectControls,
     fluidParams,
     baseAtmosphereParams,
+    atmosphereParams,
+    cloudParams,
     shallowWaterVisible,
     shallowWaterParams,
     toolModules,
@@ -436,6 +456,11 @@ function resetCesiumViewerForRetry() {
     cleanupInteractions();
     cleanupLayers();
     cleanupCreditHider();
+    // 清理体积云（viewer 即将被销毁）
+    if (cloudCleanup) {
+        cloudCleanup();
+        cloudCleanup = null;
+    }
     if (!viewer) return;
     try {
         viewer.destroy();
@@ -444,6 +469,9 @@ function resetCesiumViewerForRetry() {
     }
     viewer = null;
 }
+
+/** 体积云集成清理函数 */
+let cloudCleanup = null;
 
 function initViewer() {
     const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
@@ -475,6 +503,18 @@ function initViewer() {
     bindLayerPickerStateSync();
     if (!restoreCameraFromUrl({ duration: 0 })) {
         flyToHome(0);
+    }
+
+    // 体积云集成（桥接 cloudParams → CloudManager → PostProcessStage）
+    try {
+        const { cleanup } = setupCloudIntegration({
+            viewer,
+            cloudParams,
+            atmosphereParams,
+        });
+        cloudCleanup = cleanup;
+    } catch (err) {
+        console.warn('[Cesium] Cloud integration skipped:', err);
     }
 }
 
@@ -543,6 +583,12 @@ onUnmounted(() => {
     modelManager.dispose();
     cameraEnhanced.cleanup();
     heightSampler.cleanup();
+
+    // 清理体积云
+    if (cloudCleanup) {
+        cloudCleanup();
+        cloudCleanup = null;
+    }
 
     cleanupCreditHider();
     dataImport.clearAllDataSources();

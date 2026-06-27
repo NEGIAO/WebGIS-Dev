@@ -19,6 +19,7 @@ export class CameraSystem {
 
     enableSpringCamera = false;
     springCameraTime = 0.05;
+    private baseSpringCameraTime = 0; // 初始弹簧相机时间（用于根据速度动态调整）
 
     // 第三人称轨道角：方位角 theta、仰角 phi
     theta = 0;
@@ -101,6 +102,28 @@ export class CameraSystem {
             (cur as any)[a] = (dest as any)[a] + (change + temp) * exp;
         }
         return cur;
+    }
+
+    /**
+     * 保存初始弹簧时间（在 init 完成后调用一次）
+     */
+    saveBaseSpringTime() {
+        this.baseSpringCameraTime = this.springCameraTime;
+    }
+
+    /**
+     * 根据当前玩家速度动态调整弹簧相机时间
+     * 速度越快 → springCameraTime 越小 → 相机跟得更紧
+     * 速度越慢 → springCameraTime 越大 → 相机跟得更平滑
+     *
+     * @param currentSpeed 当前实际速度（curPlayerSpeed）
+     * @param baseSpeed    基准速度（playerSpeed，即无加速时的行走速度）
+     */
+    updateSpringTimeBySpeed(currentSpeed: number, baseSpeed: number) {
+        if (this.baseSpringCameraTime <= 0) return;
+        const ratio = Math.max(0.1, currentSpeed / Math.max(1, baseSpeed));
+        const clamped = Math.min(3, Math.max(0.5, ratio));
+        this.springCameraTime = this.baseSpringCameraTime / clamped;
     }
 
     // 处理鼠标朝向

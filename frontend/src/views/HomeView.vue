@@ -628,7 +628,8 @@ async function ensureCesiumLoaded() {
         isCesiumLoaded.value = true;
         return true;
     } catch (error) {
-        message.error('Cesium 组件加载失败', error);
+        message.error(`Cesium 组件加载失败: ${error?.message || error}`);
+        console.error('[ensureCesiumLoaded] Cesium load error:', error);
         return false;
     } finally {
         isCesiumLoading.value = false;

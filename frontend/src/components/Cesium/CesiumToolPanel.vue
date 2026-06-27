@@ -569,7 +569,6 @@ import {
     Box,
     Check,
     ChevronDown,
-    Cloud,
     Droplets,
     Eye,
     FileJson,
@@ -816,7 +815,6 @@ function getModuleIcon(moduleId) {
     const icons = {
         scene: Navigation,
         effects: Sparkles,
-        clouds: Cloud,
         wind: Wind,
         fluid: Droplets,
         shallowWater: Waves,

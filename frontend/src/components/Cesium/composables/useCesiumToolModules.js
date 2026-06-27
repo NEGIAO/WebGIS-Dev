@@ -3,14 +3,6 @@ import { readStoredBoolean, writeStoredBoolean } from './cesiumStorage';
 
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
 
-// 云层质量预设（本地定义，原 atmosphereDefaults.js 已移除）
-const QUALITY_PRESETS = {
-    low: { stepCount: 32, maxDistance: 200000, label: '低' },
-    medium: { stepCount: 48, maxDistance: 360000, label: '中' },
-    high: { stepCount: 64, maxDistance: 500000, label: '高' },
-    ultra: { stepCount: 80, maxDistance: 700000, label: '超高' },
-};
-
 export function useCesiumToolModules({
     fluidPanelRef,
     sceneActions = {},
@@ -29,7 +21,6 @@ export function useCesiumToolModules({
         hbao: false,
         tiltShift: false,
         atmosphere: false,
-        volumetricClouds: false,
     });
 
     // 基础大气参数（只开启晨昏半球，其余全部关闭）
@@ -61,36 +52,37 @@ export function useCesiumToolModules({
         moonLightEnabled: false,
         moonLightIntensity: 0.18,
         ambientIntensity: 0.08,
+        starsEnabled: false,
+        starsIntensity: 1.0,
+    });
+
+    // 体积云独立参数（与 atmosphere 同级模块）
+    const cloudParams = ref({
         cloudsEnabled: false,
         cloudCoverage: 0.3,
         cloudSpeed: 0.001,
         cloudBottom: 1500,
         cloudTop: 2150,
         cloudQuality: 'medium',
-        starsEnabled: false,
-        starsIntensity: 1.0,
+        cloudWindDirection: 90,
+        // 散射
+        cloudScattering: 1.0,
+        cloudAbsorption: 0.0,
+        cloudAnisotropy1: 0.7,
+        cloudAnisotropy2: -0.2,
+        cloudAnisotropyMix: 0.5,
+        cloudSkyLight: 1.0,
+        cloudGroundBounce: 1.0,
+        cloudPowder: 0.8,
+        // 密度
+        cloudDensityScale: 1.0,
+        cloudShapeAmount: 1.0,
+        cloudDetailAmount: 0.5,
+        cloudTurbulence: 350,
+        // 雾效
+        cloudHazeDensity: 3e-5,
+        cloudHazeExponent: 1e-3,
     });
-
-    // 体积云参数（默认关闭）
-    const cloudParams = ref({
-        quality: 'medium',
-        coverage: 0.52,
-        density: 0.00009,
-        shadowStrength: 0.82,
-        beerShadowStrength: 0.64,
-        multiScattering: 0.58,
-        powderStrength: 0.72,
-        hazeStrength: 0.38,
-        groundBounceStrength: 0.26,
-        bsmShadow: false,
-        shadowResolution: 256,
-        maxDistance: QUALITY_PRESETS.medium.maxDistance,
-        stepCount: QUALITY_PRESETS.medium.stepCount,
-    });
-    advancedEffectControls.value = {
-        ...advancedEffectControls.value,
-        clouds: cloudParams.value,
-    };
 
     const fluidParams = ref({
         threshold: 10,
@@ -98,6 +90,7 @@ export function useCesiumToolModules({
         lightStrength: 3,
         waterColor: '#0d4fa3',
         waterLevel: null,
+        floodSpeed: 5,
     });
 
     // 人物漫游调试参数
@@ -107,6 +100,8 @@ export function useCesiumToolModules({
         gravity: -2400,
         jumpHeight: 600,
         sensitivity: 5,
+        acceleration: 30,
+        deceleration: 30,
     });
 
     const fluidState = ref({
@@ -116,6 +111,7 @@ export function useCesiumToolModules({
         waterLevel: null,
         waterLevelMin: null,
         waterLevelMax: null,
+        floodSimActive: false,
     });
 
     // ========== 热带浅水参数 ==========
@@ -152,8 +148,7 @@ export function useCesiumToolModules({
             description: 'Cesium 原生光照 + Tellux 增强大气 + 高级后效（全部可选）',
             status: advancedEffectControls.value.atmosphere ||
                     advancedEffectControls.value.fog ||
-                    advancedEffectControls.value.hbao ||
-                    advancedEffectControls.value.volumetricClouds
+                    advancedEffectControls.value.hbao
                 ? '部分启用' : '仅晨昏半球',
             statusTone: advancedEffectControls.value.atmosphere ? 'success' : 'neutral',
             controls: [
@@ -164,15 +159,15 @@ export function useCesiumToolModules({
                 { id: 'tiltShift', label: '移轴', type: 'toggle', value: advancedEffectControls.value.tiltShift, tooltip: '移轴模糊后处理' },
                 { id: 'atmosphere', label: '大气效果', type: 'toggle', value: advancedEffectControls.value.atmosphere, tooltip: '启用 Tellux 大气渲染（日夜过渡、月光、星空）' },
                 ...createAtmosphereControls(atmosphereParams.value, !advancedEffectControls.value.atmosphere),
-                { id: 'volumetricClouds', label: '云层', type: 'toggle', value: advancedEffectControls.value.volumetricClouds, tooltip: 'Cesium ECEF 球壳体积云' },
-                {
-                    id: 'cloudQuality', label: '云质量', type: 'select',
-                    value: cloudParams.value.quality,
-                    options: Object.entries(QUALITY_PRESETS).map(([value, preset]) => ({ value, label: preset.label })),
-                    disabled: !advancedEffectControls.value.volumetricClouds,
-                },
-                ...createCloudControls(cloudParams.value, !advancedEffectControls.value.volumetricClouds),
             ],
+        },
+        {
+            id: 'cloud',
+            title: '体积云',
+            description: 'PostProcessStage Ray Marching 体积云渲染',
+            status: cloudParams.value.cloudsEnabled ? cloudParams.value.cloudQuality ?? 'medium' : '未启用',
+            statusTone: cloudParams.value.cloudsEnabled ? 'success' : 'neutral',
+            controls: createCloudControls(cloudParams.value, !cloudParams.value.cloudsEnabled),
         },
         {
             id: 'tools',
@@ -207,6 +202,7 @@ export function useCesiumToolModules({
             statusTone: fluidState.value.isPicking ? 'warning' : fluidState.value.hasFluid ? 'success' : 'neutral',
             actions: [
                 { id: 'pick', label: fluidState.value.isPicking ? '等待选点' : '捕捉高度图', variant: 'primary', active: fluidState.value.isPicking },
+                { id: 'floodSim', label: fluidState.value.floodSimActive ? '停止洪水' : '洪水模拟', variant: fluidState.value.floodSimActive ? 'danger' : 'default', active: fluidState.value.floodSimActive, disabled: !hasFluidWaterLevelRange(fluidState.value) },
                 { id: 'clear', label: '清除', variant: 'danger', disabled: !fluidState.value.hasFluid && !fluidState.value.isPicking },
             ],
             controls: createFluidControls(fluidParams.value, fluidState.value),
@@ -248,6 +244,8 @@ export function useCesiumToolModules({
                 { id: 'gravity', label: '重力', type: 'range', value: playerParams.value.gravity, min: -6000, max: 0, step: 50, disabled: !_playerController?.isActive?.value },
                 { id: 'jumpHeight', label: '跳跃高度', type: 'range', value: playerParams.value.jumpHeight, min: 0, max: 3000, step: 50, disabled: !_playerController?.isActive?.value },
                 { id: 'sensitivity', label: '鼠标灵敏度', type: 'range', value: playerParams.value.sensitivity, min: 1, max: 20, step: 0.5, disabled: !_playerController?.isActive?.value },
+                { id: 'acceleration', label: '加速惯性', type: 'range', value: playerParams.value.acceleration, min: 1, max: 100, step: 1, disabled: !_playerController?.isActive?.value, tooltip: '值越大加速越快。WASD 按下后到达目标速度的响应快慢。' },
+                { id: 'deceleration', label: '减速惯性', type: 'range', value: playerParams.value.deceleration, min: 1, max: 100, step: 1, disabled: !_playerController?.isActive?.value, tooltip: '值越大松手后停得越快。影响滑行/惯性感。' },
             ],
         },
     ]);
@@ -269,6 +267,7 @@ export function useCesiumToolModules({
             },
             fluid: {
                 pick: () => fluidPanelRef?.value?.startPickHeightMap?.(),
+                floodSim: () => fluidPanelRef?.value?.toggleFloodSimulation?.(),
                 clear: () => fluidPanelRef?.value?.clearFluid?.(),
             },
             shallowWater: {
@@ -298,6 +297,10 @@ export function useCesiumToolModules({
                 ...fluidParams.value,
                 [controlId]: controlId === 'waterColor' ? value : Number(value),
             };
+            // floodSpeed 变化同步到 FluidSimulationPanel
+            if (controlId === 'floodSpeed') {
+                fluidPanelRef?.value?.setFloodSpeed?.(Number(value));
+            }
             return;
         }
 
@@ -323,33 +326,19 @@ export function useCesiumToolModules({
                 else if (controlId === 'gravity') p.setGravity(numVal);
                 else if (controlId === 'jumpHeight') p.setJumpHeight(numVal);
                 else if (controlId === 'sensitivity') p.setMouseSensitivity(numVal);
+                else if (controlId === 'acceleration') p.setAcceleration(numVal);
+                else if (controlId === 'deceleration') p.setDeceleration(numVal);
             }
             return;
         }
 
         // ========== 合并的 atmosphere 模块处理 ==========
         if (moduleId === 'atmosphere') {
-            // 高级特效开关（fog/hbao/tiltShift/atmosphere/volumetricClouds）
+            // 高级特效开关（fog/hbao/tiltShift/atmosphere）
             if (controlId in advancedEffectControls.value) {
                 advancedEffectControls.value = {
                     ...advancedEffectControls.value,
                     [controlId]: Boolean(value),
-                };
-                return;
-            }
-
-            // 体积云参数
-            if (isCloudControlId(controlId)) {
-                const nextCloudPatch = controlId === 'cloudQuality'
-                    ? { quality: value, previousQuality: cloudParams.value.quality }
-                    : { [controlId]: value };
-                cloudParams.value = normalizeCloudParams({
-                    ...cloudParams.value,
-                    ...nextCloudPatch,
-                });
-                advancedEffectControls.value = {
-                    ...advancedEffectControls.value,
-                    clouds: cloudParams.value,
                 };
                 return;
             }
@@ -378,12 +367,21 @@ export function useCesiumToolModules({
                 };
             }
         }
+
+        // ========== 体积云独立模块 ==========
+        if (moduleId === 'cloud' && controlId in cloudParams.value) {
+            cloudParams.value = {
+                ...cloudParams.value,
+                [controlId]: controlId === 'cloudQuality' ? value : Number(value),
+            };
+        }
     }
 
     function handleFluidStateChange(state) {
         const nextWaterLevel = toFiniteNumberOrNull(state?.waterLevel);
         const nextWaterLevelMin = toFiniteNumberOrNull(state?.waterLevelMin);
         const nextWaterLevelMax = toFiniteNumberOrNull(state?.waterLevelMax);
+        const nextFloodSpeed = toFiniteNumberOrNull(state?.floodSpeed);
 
         fluidState.value = {
             isPicking: !!state?.isPicking,
@@ -392,7 +390,16 @@ export function useCesiumToolModules({
             waterLevel: nextWaterLevel,
             waterLevelMin: nextWaterLevelMin,
             waterLevelMax: nextWaterLevelMax,
+            floodSimActive: !!state?.floodSimActive,
         };
+
+        // 同步洪水速度（面板自动计算的默认值 = 值域/10）
+        if (nextFloodSpeed !== null) {
+            fluidParams.value = {
+                ...fluidParams.value,
+                floodSpeed: nextFloodSpeed,
+            };
+        }
 
         if (nextWaterLevel !== null) {
             fluidParams.value = {
@@ -409,9 +416,9 @@ export function useCesiumToolModules({
     return {
         toolPanelOpen,
         advancedEffectControls,
-        cloudParams,
         baseAtmosphereParams,
         atmosphereParams,
+        cloudParams,
         fluidParams,
         fluidState,
         shallowWaterVisible,
@@ -473,203 +480,9 @@ function createWindControls(windParams = {}, disabled) {
     ];
 }
 
-function createCloudControls(params = {}, disabled) {
-    return [
-        {
-            id: 'coverage',
-            label: '云量',
-            type: 'range',
-            min: 0.18,
-            max: 0.82,
-            step: 0.01,
-            value: params.coverage ?? 0.52,
-            displayValue: Number(params.coverage ?? 0.52).toFixed(2),
-            disabled,
-            tooltip: '覆盖率阈值。数值越大云越少，数值越小云越密。',
-            numberInput: false,
-        },
-        {
-            id: 'density',
-            label: '密度',
-            type: 'range',
-            min: 0.000025,
-            max: 0.00018,
-            step: 0.000005,
-            value: params.density ?? 0.00009,
-            displayValue: Number(params.density ?? 0.00009).toExponential(2),
-            disabled,
-            tooltip: '体积消光密度。数值越大云更厚、更暗，也更影响性能观感。',
-            numberInput: false,
-        },
-        {
-            id: 'shadowStrength',
-            label: '阴影',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.shadowStrength ?? 0.82,
-            displayValue: Number(params.shadowStrength ?? 0.82).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'multiScattering',
-            label: '散射',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.multiScattering ?? 0.58,
-            displayValue: Number(params.multiScattering ?? 0.58).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'beerShadowStrength',
-            label: '远影',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.beerShadowStrength ?? 0.64,
-            displayValue: Number(params.beerShadowStrength ?? 0.64).toFixed(2),
-            disabled,
-            tooltip: 'Beer Shadow Map 风格的远距离光学深度近似。数值越大，云层背光阴影越明显。',
-            numberInput: false,
-        },
-        {
-            id: 'powderStrength',
-            label: '银边',
-            type: 'range',
-            min: 0,
-            max: 1.4,
-            step: 0.02,
-            value: params.powderStrength ?? 0.72,
-            displayValue: Number(params.powderStrength ?? 0.72).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'hazeStrength',
-            label: '薄霾',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.hazeStrength ?? 0.38,
-            displayValue: Number(params.hazeStrength ?? 0.38).toFixed(2),
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'groundBounceStrength',
-            label: '反照',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.02,
-            value: params.groundBounceStrength ?? 0.26,
-            displayValue: Number(params.groundBounceStrength ?? 0.26).toFixed(2),
-            disabled,
-            tooltip: '地面反弹光近似，用于提亮云底。',
-            numberInput: false,
-        },
-        {
-            id: 'bsmShadow',
-            label: 'BSM',
-            type: 'toggle',
-            value: !!params.bsmShadow,
-            disabled,
-            tooltip: 'Beer Shadow Map 阴影 atlas。用于远距离自阴影，异常时会自动降级关闭。',
-        },
-        {
-            id: 'shadowResolution',
-            label: '影图',
-            type: 'range',
-            min: 128,
-            max: 512,
-            step: 128,
-            value: params.shadowResolution ?? 256,
-            displayValue: `${Math.round(params.shadowResolution ?? 256)} px`,
-            disabled: disabled || !params.bsmShadow,
-            tooltip: 'BSM 阴影 atlas 单级联分辨率。越高越清晰，也越影响性能。',
-            numberInput: false,
-        },
-        {
-            id: 'maxDistance',
-            label: '距离',
-            type: 'range',
-            min: 120000,
-            max: 900000,
-            step: 10000,
-            value: params.maxDistance ?? QUALITY_PRESETS.medium.maxDistance,
-            displayValue: `${Math.round((params.maxDistance ?? QUALITY_PRESETS.medium.maxDistance) / 1000)} km`,
-            disabled,
-            numberInput: false,
-        },
-        {
-            id: 'stepCount',
-            label: '步数',
-            type: 'range',
-            min: 24,
-            max: 80,
-            step: 1,
-            value: params.stepCount ?? QUALITY_PRESETS.medium.stepCount,
-            displayValue: String(Math.round(params.stepCount ?? QUALITY_PRESETS.medium.stepCount)),
-            disabled,
-            numberInput: false,
-        },
-    ];
-}
-
-function isCloudControlId(controlId) {
-    return [
-        'cloudQuality',
-        'coverage',
-        'density',
-        'shadowStrength',
-        'beerShadowStrength',
-        'multiScattering',
-        'powderStrength',
-        'hazeStrength',
-        'groundBounceStrength',
-        'bsmShadow',
-        'shadowResolution',
-        'maxDistance',
-        'stepCount',
-    ].includes(controlId);
-}
-
-function normalizeCloudParams(params = {}) {
-    const quality = Object.prototype.hasOwnProperty.call(QUALITY_PRESETS, params.quality)
-        ? params.quality
-        : 'medium';
-    const preset = QUALITY_PRESETS[quality];
-    const qualityChanged = params.quality && params.quality !== params.previousQuality;
-    return {
-        quality,
-        coverage: clampNumber(toFiniteNumber(params.coverage, 0.52), 0.18, 0.82),
-        density: clampNumber(toFiniteNumber(params.density, 0.00009), 0.000025, 0.00018),
-        shadowStrength: clampNumber(toFiniteNumber(params.shadowStrength, 0.82), 0, 1),
-        beerShadowStrength: clampNumber(toFiniteNumber(params.beerShadowStrength, 0.64), 0, 1),
-        multiScattering: clampNumber(toFiniteNumber(params.multiScattering, 0.58), 0, 1),
-        powderStrength: clampNumber(toFiniteNumber(params.powderStrength, 0.72), 0, 1.4),
-        hazeStrength: clampNumber(toFiniteNumber(params.hazeStrength, 0.38), 0, 1),
-        groundBounceStrength: clampNumber(toFiniteNumber(params.groundBounceStrength, 0.26), 0, 1),
-        bsmShadow: params.bsmShadow === true,
-        shadowResolution: Math.round(clampNumber(toFiniteNumber(params.shadowResolution, 256), 128, 512) / 128) * 128,
-        maxDistance: clampNumber(
-            qualityChanged ? preset.maxDistance : toFiniteNumber(params.maxDistance, preset.maxDistance),
-            120000,
-            900000,
-        ),
-        stepCount: Math.round(clampNumber(
-            qualityChanged ? preset.stepCount : toFiniteNumber(params.stepCount, preset.stepCount),
-            24,
-            80,
-        )),
-    };
+function hasFluidWaterLevelRange(fluidState) {
+    return toFiniteNumberOrNull(fluidState.waterLevelMin) !== null &&
+           toFiniteNumberOrNull(fluidState.waterLevelMax) !== null;
 }
 
 function createFluidControls(fluidParams, fluidState = {}) {
@@ -733,6 +546,25 @@ function createFluidControls(fluidParams, fluidState = {}) {
             tooltip: '当前水位海拔。范围来自本次捕捉区域内的最低到最高高程，拖动后会按新水位重置并重新计算水流。',
         },
         {
+            id: 'floodSpeed',
+            label: '洪水速度',
+            type: 'range',
+            min: hasWaterLevelRange ? Math.max((maxWaterLevel - minWaterLevel) / 100, 0.01) : 0.1,
+            max: hasWaterLevelRange ? Math.max(maxWaterLevel - minWaterLevel, 1) : 50,
+            step: hasWaterLevelRange ? Math.max((maxWaterLevel - minWaterLevel) / 1000, 0.01) : 0.5,
+            value: fluidParams.floodSpeed ?? (hasWaterLevelRange ? (maxWaterLevel - minWaterLevel) / 10 : 5),
+            displayValue: (() => {
+                const rangeSpan = maxWaterLevel - minWaterLevel;
+                const speed = fluidParams.floodSpeed ?? (hasWaterLevelRange ? rangeSpan / 10 : 5);
+                const duration = hasWaterLevelRange && speed > 0 ? rangeSpan / speed : 0;
+                return hasWaterLevelRange
+                    ? `${Number(speed).toFixed(1)} m/s（${duration.toFixed(1)}s）`
+                    : '先捕捉';
+            })(),
+            disabled: !hasWaterLevelRange || !!fluidState.floodSimActive,
+            tooltip: '洪水模拟水位上涨速度。默认值域÷10（10s 完成），可自定义。范围：100s ~ 1s 完成。',
+        },
+        {
             id: 'waterColor',
             label: '水色',
             type: 'color',
@@ -745,11 +577,6 @@ function createFluidControls(fluidParams, fluidState = {}) {
 function toFiniteNumberOrNull(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
-}
-
-function toFiniteNumber(value, fallback) {
-    const number = Number(value);
-    return Number.isFinite(number) ? number : fallback;
 }
 
 function clampNumber(value, min, max) {
@@ -767,11 +594,11 @@ function formatElevation(value) {
 // 大气系统控件
 // ============================================================
 
-const ATMOSPHERE_QUALITY_PRESETS = {
-    low: { stepCount: 32, label: '低' },
-    medium: { stepCount: 64, label: '中' },
-    high: { stepCount: 96, label: '高' },
-    ultra: { stepCount: 128, label: '超高' },
+const CLOUD_QUALITY_PRESETS = {
+    low: { label: '低' },
+    medium: { label: '中' },
+    high: { label: '高' },
+    ultra: { label: '超高' },
 };
 
 function createAtmosphereControls(params = {}, disabled) {
@@ -823,21 +650,48 @@ function createAtmosphereControls(params = {}, disabled) {
             displayValue: Number(params.ambientIntensity ?? 0.08).toFixed(2),
             disabled: disabled || !params.moonLightEnabled,
         },
-        // 体积云
+        // 星空
+        {
+            id: 'starsEnabled',
+            label: '星空',
+            type: 'toggle',
+            value: params.starsEnabled !== false,
+            disabled,
+            tooltip: '基于高度的星空可见性',
+        },
+        {
+            id: 'starsIntensity',
+            label: '星空强度',
+            type: 'range',
+            min: 0,
+            max: 5,
+            step: 0.1,
+            value: params.starsIntensity ?? 1.0,
+            displayValue: Number(params.starsIntensity ?? 1.0).toFixed(1),
+            disabled: disabled || !params.starsEnabled,
+        },
+    ];
+}
+
+// ============================================================
+// 体积云独立控件（与大气模块同级）
+// ============================================================
+
+function createCloudControls(params = {}, disabled) {
+    return [
         {
             id: 'cloudsEnabled',
-            label: '体积云',
+            label: '启用体积云',
             type: 'toggle',
             value: params.cloudsEnabled === true,
-            disabled,
-            tooltip: '基于 PostProcessStage 的体积云渲染',
+            tooltip: '基于 PostProcessStage 的体积云 Ray Marching 渲染',
         },
         {
             id: 'cloudQuality',
-            label: '云质量',
+            label: '质量预设',
             type: 'select',
             value: params.cloudQuality ?? 'medium',
-            options: Object.entries(ATMOSPHERE_QUALITY_PRESETS).map(([value, preset]) => ({
+            options: Object.entries(CLOUD_QUALITY_PRESETS).map(([value, preset]) => ({
                 value,
                 label: preset.label,
             })),
@@ -845,24 +699,13 @@ function createAtmosphereControls(params = {}, disabled) {
         },
         {
             id: 'cloudCoverage',
-            label: '覆盖度',
+            label: '云覆盖率',
             type: 'range',
             min: 0,
             max: 1,
             step: 0.01,
             value: params.cloudCoverage ?? 0.3,
             displayValue: `${Math.round((params.cloudCoverage ?? 0.3) * 100)}%`,
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudSpeed',
-            label: '移动速度',
-            type: 'range',
-            min: 0,
-            max: 0.01,
-            step: 0.0001,
-            value: params.cloudSpeed ?? 0.001,
-            displayValue: Number(params.cloudSpeed ?? 0.001).toFixed(4),
             disabled: disabled || !params.cloudsEnabled,
         },
         {
@@ -887,25 +730,181 @@ function createAtmosphereControls(params = {}, disabled) {
             displayValue: `${Math.round(params.cloudTop ?? 2150)} m`,
             disabled: disabled || !params.cloudsEnabled,
         },
-        // 星空
         {
-            id: 'starsEnabled',
-            label: '星空',
-            type: 'toggle',
-            value: params.starsEnabled !== false,
-            disabled,
-            tooltip: '基于高度的星空可见性',
-        },
-        {
-            id: 'starsIntensity',
-            label: '星空强度',
+            id: 'cloudSpeed',
+            label: '移动速度',
             type: 'range',
             min: 0,
-            max: 5,
-            step: 0.1,
-            value: params.starsIntensity ?? 1.0,
-            displayValue: Number(params.starsIntensity ?? 1.0).toFixed(1),
-            disabled: disabled || !params.starsEnabled,
+            max: 0.01,
+            step: 0.0001,
+            value: params.cloudSpeed ?? 0.001,
+            displayValue: Number(params.cloudSpeed ?? 0.001).toFixed(4),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudWindDirection',
+            label: '风向',
+            type: 'range',
+            min: 0,
+            max: 360,
+            step: 1,
+            value: params.cloudWindDirection ?? 90,
+            displayValue: `${Math.round(params.cloudWindDirection ?? 90)}°`,
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudScattering',
+            label: '散射系数',
+            type: 'range',
+            min: 0,
+            max: 3,
+            step: 0.01,
+            value: params.cloudScattering ?? 1.0,
+            displayValue: Number(params.cloudScattering ?? 1.0).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudAbsorption',
+            label: '吸收系数',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: params.cloudAbsorption ?? 0.0,
+            displayValue: Number(params.cloudAbsorption ?? 0.0).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudAnisotropy1',
+            label: '前向散射',
+            type: 'range',
+            min: -1,
+            max: 1,
+            step: 0.01,
+            value: params.cloudAnisotropy1 ?? 0.7,
+            displayValue: Number(params.cloudAnisotropy1 ?? 0.7).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudAnisotropy2',
+            label: '后向散射',
+            type: 'range',
+            min: -1,
+            max: 1,
+            step: 0.01,
+            value: params.cloudAnisotropy2 ?? -0.2,
+            displayValue: Number(params.cloudAnisotropy2 ?? -0.2).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudAnisotropyMix',
+            label: '散射混合比',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: params.cloudAnisotropyMix ?? 0.5,
+            displayValue: Number(params.cloudAnisotropyMix ?? 0.5).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudSkyLight',
+            label: '天空光',
+            type: 'range',
+            min: 0,
+            max: 3,
+            step: 0.05,
+            value: params.cloudSkyLight ?? 1.0,
+            displayValue: Number(params.cloudSkyLight ?? 1.0).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudGroundBounce',
+            label: '地面反弹光',
+            type: 'range',
+            min: 0,
+            max: 2,
+            step: 0.05,
+            value: params.cloudGroundBounce ?? 1.0,
+            displayValue: Number(params.cloudGroundBounce ?? 1.0).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudPowder',
+            label: 'Powder 效应',
+            type: 'range',
+            min: 0,
+            max: 2,
+            step: 0.05,
+            value: params.cloudPowder ?? 0.8,
+            displayValue: Number(params.cloudPowder ?? 0.8).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudDensityScale',
+            label: '密度缩放',
+            type: 'range',
+            min: 0,
+            max: 3,
+            step: 0.01,
+            value: params.cloudDensityScale ?? 1.0,
+            displayValue: Number(params.cloudDensityScale ?? 1.0).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudShapeAmount',
+            label: '形状强度',
+            type: 'range',
+            min: 0,
+            max: 2,
+            step: 0.01,
+            value: params.cloudShapeAmount ?? 1.0,
+            displayValue: Number(params.cloudShapeAmount ?? 1.0).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudDetailAmount',
+            label: '细节强度',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: params.cloudDetailAmount ?? 0.5,
+            displayValue: Number(params.cloudDetailAmount ?? 0.5).toFixed(2),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudTurbulence',
+            label: '湍流位移',
+            type: 'range',
+            min: 0,
+            max: 1000,
+            step: 10,
+            value: params.cloudTurbulence ?? 350,
+            displayValue: `${Math.round(params.cloudTurbulence ?? 350)} m`,
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudHazeDensity',
+            label: '雾霾密度',
+            type: 'range',
+            min: 0,
+            max: 0.001,
+            step: 0.00001,
+            value: params.cloudHazeDensity ?? 3e-5,
+            displayValue: Number(params.cloudHazeDensity ?? 3e-5).toFixed(5),
+            disabled: disabled || !params.cloudsEnabled,
+        },
+        {
+            id: 'cloudHazeExponent',
+            label: '雾霾衰减',
+            type: 'range',
+            min: 0,
+            max: 0.01,
+            step: 0.0001,
+            value: params.cloudHazeExponent ?? 1e-3,
+            displayValue: Number(params.cloudHazeExponent ?? 1e-3).toFixed(4),
+            disabled: disabled || !params.cloudsEnabled,
         },
     ];
 }

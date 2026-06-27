@@ -25,6 +25,17 @@ WebGIS 后端服务，当前包含五大核心能力：
 
 ## 0. 项目结构（2026-06-26 更新）
 
+### V3.3.12 (2026-06-27) — 体积云模块重构 + 洪水模拟 + 漫游坐标显示
+
+> 本次为前端 Cesium 体积云模块重构（TypeScript 独立模块）+ 洪水模拟功能 + 漫游坐标/相机速度联动，后端 API 与后端文件结构**无变更**。
+
+**前端同步记录（本次无后端结构变更）：**
+
+- 新增 `Cloud/` 独立模块（CloudManager / CloudPresets / CloudUniforms / cloudIntegration / useVolumetricCloud / GLSL Shaders / 纹理资源）
+- 从 `CesiumAdvancedEffects.vue` 提取体积云代码至 `Cloud/` 模块
+- 新增洪水模拟功能：`FluidSimulationPanel.vue` + `useCesiumToolModules.js` 控制中心接入
+- 漫游控制器新增坐标显示 + 相机速度动态联动
+
 ### V3.3.9 (2026-06-26) - 大气 LUT 纹理集成修复 + TAAU 时序上采样 + BSM Shadow TAA + 模块卡片 UI 清理
 
 > 本次为前端 Cesium 体积云大气散射模块修复 + TAAU 时序上采样实现 + BSM Shadow TAA 实现 + CesiumToolPanel 模块卡片冗余 CSS 清理与视觉优化，后端 API 与后端文件结构**无变更**。

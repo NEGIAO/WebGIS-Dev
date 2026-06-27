@@ -1,4 +1,48 @@
-# WebGIS 前端项目 — v3.3.11
+# WebGIS 前端项目 — v3.3.12
+
+## 📝 2026-06-27 Cesium 体积云模块彻底删除
+
+彻底清除 Cesium ECEF 球壳体积云的所有代码和依赖，为全新模块集成做准备：
+
+* 🗑️ **删除 cloud/ 目录**（4 个文件：cloudShader / cloudPresets / cloudControls / useVolumetricCloud）
+* 🔧 **CesiumAdvancedEffects.vue**：删除体积云 import、composable 解构、GUI toggle、Stage 初始化/更新/降级/清理
+* 🔧 **useCesiumToolModules.js**：删除 cloud/ import、cloudParams、云控件定义、isCloudControlId 处理块
+* 🔧 **CesiumToolPanel.vue**：删除 Cloud 图标导入和 clouds 图标映射
+* ✅ **保留**：ShallowWater Three.js 云 Dome（独立系统）、Tellux 大气系统云控件
+
+详见维护日志 `Docs/26-06/26-06-27/2026-06-27-volumetric-cloud-complete-removal.md`。
+
+## 📝 2026-06-27 体积云代码模块化提取 → TypeScript 重构
+
+将 Cesium 主场景体积云代码从 `CesiumAdvancedEffects.vue` 和 `useCesiumToolModules.js` 提取到独立 `Cloud/` TypeScript 模块：
+
+* 🆕 **Cloud/CloudManager.ts**：体积云管理器（PostProcessStage 生命周期 + 质量切换 + 降级）
+* 🆕 **Cloud/CloudPresets.ts**：质量预设（low/medium/high/ultra）+ 默认参数
+* 🆕 **Cloud/CloudUniforms.ts**：GPU Uniform 缓冲区管理
+* 🆕 **Cloud/cloudIntegration.ts**：Cesium 场景集成
+* 🆕 **Cloud/composables/useVolumetricCloud.ts**：Vue composable（init/update/cleanup）
+* 🆕 **Cloud/shaders/**：4 个 GLSL Shader（cloudFragment / cloudVertex / noise / utils）
+* 🆕 **Cloud/textures/**：4 个纹理资源（weather / shape / shape_detail / turbulence）
+* 🔧 **CesiumAdvancedEffects.vue**：删除体积云代码，改为调用 Cloud/ 模块
+* 🔧 **useCesiumToolModules.js**：体积云控件重构为独立 `cloudParams`
+
+详见维护日志 `Docs/26-06/26-06-27/2026-06-27-volumetric-cloud-extract.md`。
+
+## 📝 2026-06-27 洪水模拟功能
+
+水体流体模块新增洪水模拟，通过控制中心统一接入：
+
+* 🆕 **洪水模拟按钮**：`useCesiumToolModules.js` 控制中心新增 `floodSim` 动作，运行时高亮为「停止洪水」
+* 🆕 **动态速度滑块**：默认速度 = 水位值域 ÷ 10（10s 完成），范围 [值域/100, 值域/1]，显示 `m/s（完成时间s）`
+* 🆕 **FluidSimulationPanel.vue**：`requestAnimationFrame` 驱动水位自动上涨，到达最大值自动停止
+* 🆕 **生命周期安全**：cleanup / onBeforeUnmount / clearFluid 均停止动画
+
+详见维护日志 `Docs/06-27/2026-06-27-flood-simulation-button.md`。
+
+## 📝 2026-06-27 漫游坐标显示 + 相机速度联动
+
+* 🆕 **漫游坐标显示**：漫游模式下实时显示人物世界坐标
+* 🆕 **相机速度联动** (`CameraSystem.ts`)：`updateSpringTimeBySpeed()` 根据玩家速度动态调整弹簧相机时间，速度越快跟得越紧
 
 ## 📝 2026-06-26 人物漫游控制器集成（第一/第三人称 + Rapier 物理碰撞）
 
@@ -321,7 +365,7 @@ frontend/src/
 │           ├── compass-data.ts               # 罗盘基础数据
 │   │   ├── Cesium/                               # 3D 地球模块
 │   │   │   ├── CesiumContainer.vue               # Cesium 容器（底图/地形切换 + 鼠标坐标 URL 追踪 + 统一工具面板调度 + 拖拽数据导入）
-│   │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气/云层，支持 headless）
+│   │   │   ├── CesiumAdvancedEffects.vue         # 高级视觉效果（高度雾/HBAO/移轴/大气，体积云已提取至 Cloud/）
 │   │   │   ├── CesiumToolPanel.vue               # 统一控制面板（场景导航/数据导入/特效/风场/流体参数 + ? 提示）
 │   │   │   ├── CesiumDataImportDialog.vue        # GLTF/GLB 模型放置坐标输入弹窗（Teleport 到 body + 实时验证）
 │   │   │   ├── Wind2D.js                         # 2D 风场渲染
@@ -335,7 +379,7 @@ frontend/src/
 │   │   │   │   ├── types.ts                      # 类型定义
 │   │   │   │   ├── systems/                      # 子系统
 │   │   │   │   │   ├── AnimationSystem.ts        # 动画状态机（idle/walk/run/jump/fly）
-│   │   │   │   │   ├── CameraSystem.ts           # 第一/第三人称相机（弹簧跟随+避障）
+│   │   │   │   │   ├── CameraSystem.ts           # 第一/第三人称相机（弹簧跟随+避障+速度联动）
 │   │   │   │   │   ├── InputSystem.ts            # 键鼠输入管理
 │   │   │   │   │   └── PhysicsSystem.ts          # Rapier 物理碰撞（胶囊体+射线）
 │   │   │   │   └── utils/                        # 工具函数
@@ -344,6 +388,24 @@ frontend/src/
 │   │   │   │       ├── math.ts                   # lerp 插值
 │   │   │   │       ├── mobileControls.ts         # 移动端虚拟摇杆
 │   │   │   │       └── terrainHelper.ts          # 统一地形 provider 检测（兼容 ArcGIS/天地图/Cesium）
+│   │   │   ├── Cloud/                            # 🆕 体积云独立模块（TypeScript）
+│   │   │   │   ├── CloudManager.ts               # 体积云管理器（Stage 生命周期 + 质量切换）
+│   │   │   │   ├── CloudPresets.ts               # 质量预设（low/medium/high/ultra）+ 默认参数
+│   │   │   │   ├── CloudUniforms.ts              # GPU Uniform 缓冲区管理
+│   │   │   │   ├── cloudIntegration.ts           # Cesium 场景集成（PostProcessStage）
+│   │   │   │   ├── index.ts                      # 模块入口（统一导出）
+│   │   │   │   ├── composables/
+│   │   │   │   │   └── useVolumetricCloud.ts     # Vue composable（init/update/cleanup）
+│   │   │   │   ├── shaders/
+│   │   │   │   │   ├── cloudFragment.glsl        # 体积云 Fragment Shader（FBM + 散射 + Beer Shadow Map）
+│   │   │   │   │   ├── cloudVertex.glsl          # 体积云 Vertex Shader
+│   │   │   │   │   ├── noise.glsl                # FBM 噪声函数
+│   │   │   │   │   └── utils.glsl                # 工具函数（相交/采样）
+│   │   │   │   └── textures/
+│   │   │   │       ├── local_weather.png         # 天气噪声纹理
+│   │   │   │       ├── shape.bin                 # 云形状数据
+│   │   │   │       ├── shape_detail.bin          # 云细节数据
+│   │   │   │       └── turbulence.png            # 湍流噪声纹理
 │   │   │   ├── Clouds/                           # 云层 / 云影 / 高级天空效果
 │   │   │   │   ├── CesiumVolumetricClouds.js     # 体积云主模块
 │   │   │   │   ├── CloudShadowPrimitive.js       # 云影几何体/Primitive
@@ -359,10 +421,10 @@ frontend/src/
 │   │   │   │   ├── useCesiumDataImport.js        # 数据导入 composable（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles + 自动定位 + BlobURL 生命周期管理）
 │   │   │   │   ├── useCesiumFrameRate.js         # FPS 采样与折线图数据
 │   │   │   │   ├── useCesiumLayers.js            # 底图/地形/叠加层编排 + 统一预设接入
-│   │   │   │   ├── useCesiumToolModules.js       # 工具面板模块、流体参数、水位值域与提示文案
+│   │   │   │   ├── useCesiumToolModules.js       # 工具面板模块编排（大气/云/流体/漫游/洪水模拟参数与控制）
 │   │   │   │   └── useCesiumUrlTracking.js       # Cesium URL 追踪（lng/lat/z/cv + l 底图参数还原）
 │   │   │   ├── FluidSimulation/                  # 掩膜分析（水体流体模拟模块）
-│   │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板
+│   │   │   │   ├── FluidSimulationPanel.vue      # 高度图捕捉、动态外包盒、水位滑杆、水色调色板、洪水模拟
 │   │   │   │   └── fluidRuntime.js               # WebGL 流体渲染引擎（GLSL 着色器 + 水面后处理）
 │   │   │   ├── ShallowWater/                     # Three.js 热带浅水场景叠加
 │   │   │   │   ├── ShallowWaterOverlay.vue       # 叠加层组件（透明背景覆盖 Cesium）

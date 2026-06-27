@@ -35,6 +35,19 @@ export function usePlayerController({ getViewer, getCesium, message }) {
     /** 当前是否处于飞行模式 */
     const isFlying = ref(false);
 
+    /**
+     * 人物三维坐标（经纬度 + 高度）
+     * 格式: { lng: number, lat: number, height: number }
+     * 漫游模式激活时实时更新，停止时重置为 null
+     */
+    const playerPosition = ref(null);
+
+    /**
+     * 人物实时速度（m/s）
+     * 漫游模式激活时每帧更新，停止时重置为 0
+     */
+    const playerSpeed = ref(0);
+
     let playerInstance = null;
     let preUpdateListener = null;
 
@@ -179,6 +192,17 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                     ));
                 }
 
+                // 更新人物三维坐标（经纬度 + 高度）
+                playerPosition.value = {
+                    lng: Cesium.Math.toDegrees(posCarto.longitude),
+                    lat: Cesium.Math.toDegrees(posCarto.latitude),
+                    height: posCarto.height,
+                };
+
+                // 更新实时速度（m/s）：ENU 速度分量合成
+                const vel = player.getVelocity();
+                playerSpeed.value = Math.hypot(vel.e, vel.n, vel.u);
+
                 // 动态地形碰撞：玩家接近碰撞边界时重新采样地形
                 if (!noTerrain && !updatingTerrain) {
                     const dLon = Math.abs(posCarto.longitude - colliderCenter.lon);
@@ -276,6 +300,8 @@ export function usePlayerController({ getViewer, getCesium, message }) {
         isActive.value = false;
         isFirstPerson.value = false;
         isFlying.value = false;
+        playerPosition.value = null;
+        playerSpeed.value = 0;
     }
 
     /**
@@ -313,6 +339,8 @@ export function usePlayerController({ getViewer, getCesium, message }) {
         isActive,
         isFirstPerson,
         isFlying,
+        playerPosition,
+        playerSpeed,
         startPlayer,
         stopPlayer,
         togglePlayer,

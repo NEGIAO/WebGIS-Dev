@@ -102,6 +102,12 @@ const hasFluid = ref(false);
 const selectedLon = ref(null);
 const selectedLat = ref(null);
 
+// 洪水模拟状态
+const floodSimActive = ref(false);
+const floodSimSpeed = ref(5); // 洪水上涨速度（m/s），默认值会在水位值域确定后自动更新
+let floodAnimFrameId = null;
+let floodLastTimestamp = null;
+
 let FluidRenderer = null;
 let createSkyEffect = null;
 let pickHandler = null;
@@ -191,9 +197,10 @@ watch(
     { deep: true, immediate: true },
 );
 
-watch([isPicking, hasFluid, selectedText, waterLevel, waterLevelMin, waterLevelMax], emitState, { immediate: true });
+watch([isPicking, hasFluid, selectedText, waterLevel, waterLevelMin, waterLevelMax, floodSimActive, floodSimSpeed], emitState, { immediate: true });
 
 onBeforeUnmount(() => {
+    stopFloodSimulation();
     cleanup(true);
 });
 
@@ -255,6 +262,8 @@ function emitState() {
         waterLevel: waterLevel.value,
         waterLevelMin: waterLevelMin.value,
         waterLevelMax: waterLevelMax.value,
+        floodSimActive: floodSimActive.value,
+        floodSpeed: floodSimSpeed.value,
     });
 }
 
@@ -322,6 +331,12 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         waterLevelMin.value = verticalRange.minHeight;
         waterLevelMax.value = verticalRange.maxHeight;
         waterLevel.value = initialWaterLevel;
+
+        // 洪水速度默认值 = 值域 / 10，即默认 10s 完成模拟
+        const rangeSpan = Math.abs(verticalRange.maxHeight - verticalRange.minHeight);
+        if (rangeSpan > 0) {
+            floodSimSpeed.value = Math.max(rangeSpan / 10, 0.1);
+        }
 
         if (!heightMapSource) {
             message.warning('范围高度预请求不可用，已回退到当前场景捕捉。', {
@@ -728,7 +743,83 @@ function restoreScene(viewer) {
     sceneSnapshot = null;
 }
 
+/**
+ * 切换洪水模拟状态
+ * 启动时水位从当前值开始上涨，到达最大值后停止
+ */
+function toggleFloodSimulation() {
+    if (floodSimActive.value) {
+        stopFloodSimulation();
+    } else {
+        startFloodSimulation();
+    }
+}
+
+/**
+ * 启动洪水模拟动画
+ * 从当前水位开始，以 floodSimSpeed 速度向最大水位上涨
+ */
+function startFloodSimulation() {
+    const range = getCurrentWaterLevelRange();
+    if (!range) return;
+
+    // 如果当前水位已在最大值附近，从最小值开始
+    const currentLevel = Number(waterLevel.value);
+    if (!Number.isFinite(currentLevel) || currentLevel >= range.maxHeight - 0.01) {
+        waterLevel.value = range.minHeight;
+    }
+
+    floodSimActive.value = true;
+    floodLastTimestamp = null;
+
+    function step(timestamp) {
+        if (!floodSimActive.value) return;
+
+        if (floodLastTimestamp === null) {
+            floodLastTimestamp = timestamp;
+        }
+
+        const deltaSeconds = Math.min((timestamp - floodLastTimestamp) / 1000, 0.1);
+        floodLastTimestamp = timestamp;
+
+        const range = getCurrentWaterLevelRange();
+        if (!range) {
+            stopFloodSimulation();
+            return;
+        }
+
+        const currentLevel = Number(waterLevel.value);
+        const nextLevel = currentLevel + floodSimSpeed.value * deltaSeconds;
+
+        if (nextLevel >= range.maxHeight) {
+            waterLevel.value = range.maxHeight;
+            stopFloodSimulation();
+            message.info('洪水模拟完成：水位已达最大值');
+            return;
+        }
+
+        waterLevel.value = nextLevel;
+        floodAnimFrameId = requestAnimationFrame(step);
+    }
+
+    floodAnimFrameId = requestAnimationFrame(step);
+    message.info('洪水模拟开始');
+}
+
+/**
+ * 停止洪水模拟动画
+ */
+function stopFloodSimulation() {
+    floodSimActive.value = false;
+    floodLastTimestamp = null;
+    if (floodAnimFrameId !== null) {
+        cancelAnimationFrame(floodAnimFrameId);
+        floodAnimFrameId = null;
+    }
+}
+
 function clearFluid() {
+    stopFloodSimulation();
     cleanup(false);
     message.success('水体流体已清除。');
 }
@@ -757,6 +848,7 @@ function cleanup(restoreSceneState) {
     const viewer = props.getViewer?.();
 
     fluidCreationId += 1;
+    stopFloodSimulation();
     stopPicking();
     destroyFluidOnly();
     selectedLon.value = null;
@@ -786,9 +878,23 @@ function closePanel() {
     emit('close');
 }
 
+/**
+ * 设置洪水上涨速度（供外部控制中心调用）
+ * @param {number} speed - 上涨速度，单位 m/s
+ */
+function setFloodSpeed(speed) {
+    const num = Number(speed);
+    if (Number.isFinite(num) && num > 0) {
+        floodSimSpeed.value = num;
+    }
+}
+
 defineExpose({
     startPickHeightMap,
     clearFluid,
+    toggleFloodSimulation,
+    stopFloodSimulation,
+    setFloodSpeed,
 });
 </script>
 

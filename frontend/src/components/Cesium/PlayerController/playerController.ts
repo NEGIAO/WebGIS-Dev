@@ -119,6 +119,7 @@ export class playerController {
         this.cam.mouseMode = opts.thirdMouseMode ?? this.cam.mouseMode;
         this.cam.enableSpringCamera = opts.enableSpringCamera ?? this.cam.enableSpringCamera;
         this.cam.springCameraTime = opts.springCameraTime ?? this.cam.springCameraTime;
+        this.cam.saveBaseSpringTime(); // 保存初始弹簧时间，供速度动态调整使用
         this.cam.zoomEnabled = opts.enableZoom ?? this.cam.zoomEnabled;
         this.cam.minDist = (opts.minCamDistance ?? this.cam.minDist) * s;
         this.cam.maxDist = (opts.maxCamDistance ?? this.cam.maxDist) * s;
@@ -261,6 +262,9 @@ export class playerController {
         } else {
             this.curPlayerSpeed = i.shift ? this.playerSpeed * 2 : this.playerSpeed;
         }
+
+        // 根据当前速度动态调整相机弹簧时间（速度越快，相机跟得越紧）
+        this.cam.updateSpringTimeBySpeed(this.curPlayerSpeed, this.playerSpeed);
 
         // 归一化方向向量（飞行按 3D 归一化以保留俯仰；地面只归一化水平）
         if (this.isFlying) {
@@ -695,6 +699,10 @@ export class playerController {
     setPlayerSpeed(sp: number) { this.playerSpeed = sp * this.playerModelConfig.scale; this.curPlayerSpeed = this.playerSpeed; }
     // 设置飞行速度
     setPlayerFlySpeed(f: number) { this.playerFlySpeed = f * this.playerModelConfig.scale; }
+    // 设置加速惯性（值越大加速越快）
+    setAcceleration(a: number) { this.playerAcceleration = a; }
+    // 设置减速惯性（值越大松手后停得越快）
+    setDeceleration(d: number) { this.playerDeceleration = d; }
     // 设置朝向开关
     setEnableToward(v: boolean) { this.enableToward = v; }
 
