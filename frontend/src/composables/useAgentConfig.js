@@ -209,6 +209,8 @@ export function useAgentConfig() {
     const agentConfigDraft = ref({ ...DEFAULT_AGENT_CONFIG });
     const loading = ref(false);
     const submitting = ref(false);
+    /** 编辑模式开关 */
+    const editingConfig = ref(false);
 
     return {
         // 状态
@@ -216,11 +218,21 @@ export function useAgentConfig() {
         agentConfigDraft,
         loading,
         submitting,
+        editingConfig,
 
         // 方法
         load: () => loadAgentConfig(agentConfig, agentConfigDraft, loading),
         save: () => saveAgentConfig(agentConfig, agentConfigDraft, loading, submitting),
         resetQuota: () => resetChatQuota(agentConfig, agentConfigDraft, loading),
         hydrate: () => hydrateAgentConfigDraft(agentConfig.value, agentConfigDraft),
+        /** 进入编辑模式，将当前配置填充到草稿 */
+        startEdit: () => {
+            hydrateAgentConfigDraft(agentConfig.value, agentConfigDraft);
+            editingConfig.value = true;
+        },
+        /** 退出编辑模式，丢弃未保存的草稿 */
+        cancelEdit: () => {
+            editingConfig.value = false;
+        },
     };
 }

@@ -41,120 +41,135 @@
             </div>
         </div>
 
-        <div
-            v-if="showUserConfig"
-            class="user-config-panel"
-        >
-            <div class="user-config-grid">
-                <label class="user-config-item user-config-item-full">
-                    <span>我的 Agent API Key</span>
-                    <input
-                        v-model="userConfigDraft.api_key"
-                        type="password"
-                        placeholder="sk-...（填写后启用个人 Key 模式，消息经后端代理转发到 LLM）"
-                    />
-                </label>
-                <label class="user-config-item">
-                    <span>Base URL</span>
-                    <input
-                        v-model="userConfigDraft.base_url"
-                        placeholder="https://api.xxx.com/v1"
-                    />
-                </label>
-                <label class="user-config-item">
-                    <span>Model</span>
-                    <div style="display: flex; gap: 6px; align-items: center">
+        <!-- 可滚动区域：配置面板 + 服务状态 -->
+        <div class="scroll-top-section">
+            <div
+                v-if="showUserConfig"
+                class="user-config-panel"
+            >
+                <div class="user-config-grid">
+                    <label class="user-config-item user-config-item-full">
+                        <span>我的 Agent API Key</span>
                         <input
-                            v-model="userConfigDraft.model"
-                            list="model-suggestions"
-                            class="model-input"
-                            placeholder="输入或选择模型名称"
+                            v-model="userConfigDraft.api_key"
+                            type="password"
+                            placeholder="sk-...（填写后启用个人 Key 模式，消息经后端代理转发到 LLM）"
                         />
-                        <datalist id="model-suggestions">
-                            <option
-                                v-for="m in allModels"
-                                :key="m.id"
-                                :value="m.id"
-                            >{{ m.name || m.id }}</option>
-                        </datalist>
-                        <button
-                            class="refresh-models-btn"
-                            :disabled="isLoadingModels"
-                            title="刷新模型列表"
-                            @click="reloadAgentConfig(true)"
-                        >
-                            {{ isLoadingModels ? '⏳' : '🔄' }}
-                        </button>
-                    </div>
-                    <small class="hint">{{ modelLoadHint }}</small>
-                </label>
-                <label class="user-config-item">
-                    <span>Timeout (秒)</span>
-                    <input
-                        v-model.number="userConfigDraft.timeout_seconds"
-                        type="number"
-                        min="5"
-                        max="180"
-                    />
-                </label>
-                <label class="user-config-item">
-                    <span>Max Tokens</span>
-                    <input
-                        v-model.number="userConfigDraft.max_tokens"
-                        type="number"
-                        min="1"
-                        max="128000"
-                    />
-                </label>
-                <label class="user-config-item">
-                    <span>Temperature</span>
-                    <input
-                        v-model.number="userConfigDraft.temperature"
-                        type="number"
-                        min="0"
-                        max="2"
-                        step="0.1"
-                    />
-                </label>
-                <label class="user-config-item user-config-item-full">
-                    <span>System Prompt</span>
-                    <textarea
-                        v-model="userConfigDraft.system_prompt"
-                        rows="3"
-                        placeholder="仅覆盖你自己的系统提示词（可选）"
-                    ></textarea>
-                </label>
+                    </label>
+                    <label class="user-config-item">
+                        <span>Base URL</span>
+                        <input
+                            v-model="userConfigDraft.base_url"
+                            placeholder="https://api.xxx.com/v1"
+                        />
+                    </label>
+                    <label class="user-config-item">
+                        <span>Model</span>
+                        <div class="model-input-row">
+                            <input
+                                ref="modelInputRef"
+                                v-model="userConfigDraft.model"
+                                class="model-input"
+                                placeholder="输入或选择模型名称"
+                                autocomplete="off"
+                                @focus="showModelDropdown = true"
+                                @blur="onModelInputBlur"
+                            />
+                            <button
+                                class="model-dropdown-btn"
+                                title="展开模型列表"
+                                @click.stop="toggleModelDropdown"
+                            >▾</button>
+                            <div
+                                v-if="showModelDropdown && filteredModels.length"
+                                class="model-dropdown"
+                                @mousedown.prevent
+                            >
+                                <div
+                                    v-for="m in filteredModels"
+                                    :key="m.id"
+                                    class="model-dropdown-item"
+                                    @mousedown.prevent="pickModel(m.id)"
+                                >{{ m.name || m.id }}{{ m._isFallback ? '（当前）' : '' }}</div>
+                            </div>
+                            <button
+                                class="refresh-models-btn"
+                                :disabled="isLoadingModels"
+                                title="刷新模型列表"
+                                @click="reloadAgentConfig(true)"
+                            >
+                                {{ isLoadingModels ? '⏳' : '🔄' }}
+                            </button>
+                        </div>
+                        <small class="hint">{{ modelLoadHint }}</small>
+                    </label>
+                    <label class="user-config-item">
+                        <span>Timeout (秒)</span>
+                        <input
+                            v-model.number="userConfigDraft.timeout_seconds"
+                            type="number"
+                            min="5"
+                            max="180"
+                        />
+                    </label>
+                    <label class="user-config-item">
+                        <span>Max Tokens</span>
+                        <input
+                            v-model.number="userConfigDraft.max_tokens"
+                            type="number"
+                            min="1"
+                            max="128000"
+                        />
+                    </label>
+                    <label class="user-config-item">
+                        <span>Temperature</span>
+                        <input
+                            v-model.number="userConfigDraft.temperature"
+                            type="number"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                        />
+                    </label>
+                    <label class="user-config-item user-config-item-full">
+                        <span>System Prompt</span>
+                        <textarea
+                            v-model="userConfigDraft.system_prompt"
+                            rows="3"
+                            placeholder="仅覆盖你自己的系统提示词（可选）"
+                        ></textarea>
+                    </label>
+                </div>
+
+                <div class="user-config-actions">
+                    <button
+                        :disabled="userConfigSaving"
+                        @click="saveUserConfig"
+                    >
+                        {{ userConfigSaving ? '保存中...' : '保存我的配置' }}
+                    </button>
+                    <button
+                        :disabled="userConfigSaving"
+                        class="secondary"
+                        @click="clearPersonalKey"
+                    >
+                        清除我的 Key
+                    </button>
+                    <button
+                        :disabled="userConfigSaving"
+                        class="secondary"
+                        @click="resetProviderOverrides"
+                    >
+                        恢复平台默认参数
+                    </button>
+                </div>
+
+                <small class="hint">
+                    💡 个人 Key 模式下消息经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。API Key 仅保存在当前页面会话中。
+                </small>
             </div>
 
-            <div class="user-config-actions">
-                <button
-                    :disabled="userConfigSaving"
-                    @click="saveUserConfig"
-                >
-                    {{ userConfigSaving ? '保存中...' : '保存我的配置' }}
-                </button>
-                <button
-                    :disabled="userConfigSaving"
-                    class="secondary"
-                    @click="clearPersonalKey"
-                >
-                    清除我的 Key
-                </button>
-                <button
-                    :disabled="userConfigSaving"
-                    class="secondary"
-                    @click="resetProviderOverrides"
-                >
-                    恢复平台默认参数
-                </button>
-            </div>
-
-            <small class="hint">
-                💡 个人 Key 模式下消息经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。API Key 仅保存在当前页面会话中。
-            </small>
-        </div>
-
-        <div class="service-status">
+            <div class="service-status">
             <div class="status-line">
                 <span class="status-label">路由模式:</span>
                 <button
@@ -203,6 +218,7 @@
             </div>
             <small class="hint">{{ statusHint }}</small>
         </div>
+        </div>
 
         <div
             ref="chatBody"
@@ -236,13 +252,15 @@
                 </template>
                 <!-- 普通 Assistant 消息 -->
                 <template v-else-if="msg.role === 'assistant'">
-                    <div class="message-content">{{ getAnswerContent(msg.content) }}</div>
+                    <!-- eslint-disable-next-line vue/no-v-html -->
+                    <div class="message-content markdown-body" v-html="renderAnswerHtml(msg.content)"></div>
                     <details
                         v-if="hasThinkContent(msg.content)"
                         class="think-panel"
                     >
-                        <summary>展开思考过程</summary>
-                        <pre class="think-content">{{ getThinkContent(msg.content) }}</pre>
+                        <summary>🧠 思考过程</summary>
+                        <!-- eslint-disable-next-line vue/no-v-html -->
+                        <div class="think-content markdown-body" v-html="renderThinkHtml(msg.content)"></div>
                     </details>
                 </template>
                 <div
@@ -279,6 +297,17 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, nextTick, inject, watch } from 'vue';
+
+// highlight.js 核心 + 常用语言包（按需添加更多）
+import 'highlight.js/styles/github-dark-dimmed.css';
+import { useMarkdownRenderer } from '../../composables/useMarkdownRenderer';
+
+const {
+    renderAnswerHtml,
+    renderThinkHtml,
+    hasThinkContent,
+    ensureMarkdownLibs,
+} = useMarkdownRenderer();
 import {
     apiAgentChatCompletions,
     apiAgentChatProxy,
@@ -307,21 +336,11 @@ const emit = defineEmits(['close-chat']);
 const message = useMessage();
 const chatStore = useChatStore();
 
-// ============================================================
-//  GIS Commander & Agent Executor（工具调用基础设施）
-// ============================================================
-
-/** 通过 inject 获取地图实例和底图切换能力（由 HomeView provide） */
 const olMapRef = inject('olMap', ref(null));
 const setCustomBasemapByUrl = inject('setCustomBasemapByUrl', null);
 
-/** GISCommander 实例 */
 const gisCommander = ref(null);
-
-/** AgentExecutor 实例 */
 const agentExecutor = ref(null);
-
-/** 工具调用状态消息（嵌入到消息流中） */
 const toolCallStatusMessages = ref(new Map());
 
 const inputMessage = ref('');
@@ -352,21 +371,54 @@ const quota = ref({
     quota_subject: '',
 });
 
-// 模型列表相关
 const isLoadingModels = ref(false);
 const modelLoadHint = ref('');
 const configuredModels = ref([]);
 const upstreamModels = ref([]);
 
-/** 合并所有可用模型列表，供 datalist 使用 */
-const allModels = computed(() => {
-    return [...configuredModels.value, ...upstreamModels.value];
+/**
+ * Model 下拉选项列表
+ * 若当前 draft.model 不在已获取的模型列表中，追加一条"当前"兜底选项
+ */
+const selectModels = computed(() => {
+    const list = [...configuredModels.value, ...upstreamModels.value];
+    const current = String(userConfigDraft.value.model || '').trim();
+    if (current && !list.some((m) => m.id === current)) {
+        list.unshift({ id: current, name: current, _isFallback: true });
+    }
+    return list;
 });
 
-/**
- * 直连模式配置（用户个人 Key 或管理员默认 AI 配置）
- * 用户个人 Key 仅保存在内存，不持久化；管理员默认配置从后端加载。
- */
+/** Model 输入框下拉组合框状态 */
+const modelInputRef = ref(null);
+const showModelDropdown = ref(false);
+
+/** 根据输入文本过滤下拉列表（忽略大小写，匹配 id 或 name） */
+const filteredModels = computed(() => {
+    const q = String(userConfigDraft.value.model || '').trim().toLowerCase();
+    if (!q) return selectModels.value;
+    return selectModels.value.filter(
+        (m) => m.id.toLowerCase().includes(q) || String(m.name || '').toLowerCase().includes(q),
+    );
+});
+
+/** 从下拉列表选中某个模型 */
+function pickModel(id) {
+    userConfigDraft.value.model = id;
+    showModelDropdown.value = false;
+}
+
+/** 切换下拉显示 */
+function toggleModelDropdown() {
+    showModelDropdown.value = !showModelDropdown.value;
+    if (showModelDropdown.value) modelInputRef.value?.focus();
+}
+
+/** 输入框失焦时延迟关闭下拉（给 @mousedown.prevent 留时间） */
+function onModelInputBlur() {
+    setTimeout(() => { showModelDropdown.value = false; }, 150);
+}
+
 const directConfig = ref({
     api_key: '',
     base_url: '',
@@ -379,28 +431,15 @@ const directConfig = ref({
     extra_body: { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 16384 },
 });
 
-/** 当前是否使用管理员配置的默认 AI 模式（api_key 存储在后端数据库，前端不持有） */
 const isDefaultAIMode = ref(false);
-
-/** 管理员默认 AI 配置是否已就绪（base_url + model + api_key 均已配置），内部使用 */
 const _defaultAIReady = ref(false);
 
-/**
- * 是否处于直连模式（包含默认 AI 模式和个人 Key 模式）
- * - 默认 AI 模式：管理员配置了专属 key/base_url/model，前端通过后端代理转发
- * - 个人 Key 模式：用户填写了自己的 API Key
- */
 const isDirectMode = computed(() => {
     return isDefaultAIMode.value || !!(directConfig.value.api_key && directConfig.value.base_url);
 });
 
-/**
- * 切换路由模式
- * 在直连模式和代理模式之间切换，自动同步配置到配置面板
- */
 const toggleRoutingMode = async () => {
     if (isDirectMode.value) {
-        // 当前是直连 → 切换到代理：清空直连配置和默认 AI 模式
         isDefaultAIMode.value = false;
         directConfig.value = {
             api_key: '',
@@ -413,7 +452,6 @@ const toggleRoutingMode = async () => {
         };
         message.success('已切换为后端代理模式');
     } else {
-        // 当前是代理 → 切换到默认 AI 模式（从后端加载管理员配置）
         await _loadDefaultAIConfig();
         if (isDefaultAIMode.value) {
             message.success('已切换为默认 AI 模式（使用管理员配置的专属 Key，经后端代理转发）');
@@ -421,16 +459,11 @@ const toggleRoutingMode = async () => {
             message.warning('管理员尚未配置默认 AI 专属参数，请在个人配置中填写 API Key');
         }
     }
-    // 同步到配置面板
     syncDraftFromDirectConfig();
     updateWelcomeMessageIfNeeded();
-    // 重新加载 Agent 配置以同步模型名称（切换模式后 URL 和 Model 完全不同）
     await reloadAgentConfig(false);
 };
 
-/**
- * 将直连配置同步到配置面板（供用户查看和编辑）
- */
 const syncDraftFromDirectConfig = () => {
     if (isDirectMode.value) {
         userConfigDraft.value = {
@@ -510,7 +543,6 @@ const quotaText = computed(() => {
 });
 
 const quotaExhausted = computed(() => {
-    // 直连模式下不受后端配额限制
     if (isDirectMode.value) return false;
     return Number.isFinite(quota.value.remaining) && Number(quota.value.remaining) <= 0;
 });
@@ -533,7 +565,6 @@ const inputPlaceholder = computed(() => {
 
 const sendDisabled = computed(() => {
     if (isLoading.value || !inputMessage.value.trim()) return true;
-    // 直连模式下只要 inputMessage 有内容就可发送
     if (isDirectMode.value) return false;
     return !serviceReady.value || quotaExhausted.value;
 });
@@ -560,13 +591,6 @@ const updateWelcomeMessageIfNeeded = () => {
     }
 };
 
-/**
- * 构建带位置上下文的系统提示词
- *
- * @param {string} basePrompt - 基础系统提示词
- * @param {string} locationContext - 用户位置上下文信息
- * @returns {string} 合并后的完整系统提示词
- */
 const _buildSystemPrompt = (basePrompt, locationContext) => {
     let prompt = basePrompt || 'You are a helpful AI assistant. Reply in concise Chinese unless the user asks for another language.';
     const locationText = String(locationContext || '').trim();
@@ -576,11 +600,6 @@ const _buildSystemPrompt = (basePrompt, locationContext) => {
     return prompt;
 };
 
-/**
- * 从后端加载管理员配置的默认 AI 专属配置（base_url / model）。
- * api_key 存储在后端数据库中，前端仅获取 base_url 和 model 用于展示。
- * 聊天时通过 /chat/default-proxy 端点由后端读取 api_key 转发。
- */
 const _loadDefaultAIConfig = async () => {
     try {
         const result = await apiGetDefaultAIConfig();
@@ -589,7 +608,7 @@ const _loadDefaultAIConfig = async () => {
             isDefaultAIMode.value = true;
             _defaultAIReady.value = true;
             directConfig.value = {
-                api_key: '', // 不持有 key，由后端读取
+                api_key: '',
                 base_url: String(data.base_url || ''),
                 model: String(data.model || ''),
                 system_prompt: '',
@@ -613,16 +632,13 @@ const _loadDefaultAIConfig = async () => {
 const reloadAgentConfig = async (showToast = false) => {
     try {
         if (isDefaultAIMode.value) {
-            // 默认 AI 模式：管理员已配置，无需获取模型列表，直接标记就绪
             serviceReady.value = true;
             modelName.value = directConfig.value.model || modelName.value || '未配置';
             statusHint.value = `默认 AI 模式：使用管理员配置的 ${modelName.value}（经后端代理转发，Key 安全存储在后端）。`;
         } else if (isDirectMode.value) {
-            // 个人 Key 模式：从后端代理获取可用模型列表并随机选择一个
             serviceReady.value = true;
             statusHint.value = '个人 Key 模式：使用个人 API Key 经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。';
 
-            // 经后端代理获取当前端点的可用模型列表
             try {
                 const dc = directConfig.value;
                 const modelsResult = await apiAgentListModels({
@@ -633,7 +649,6 @@ const reloadAgentConfig = async (showToast = false) => {
                 const models = Array.isArray(modelsData?.models) ? modelsData.models : [];
 
                 if (models.length > 0) {
-                    // 从可用聊天模型中随机选择一个
                     const chatModels = models.filter((m) => m?.chat_compatible !== false);
                     const pool = chatModels.length > 0 ? chatModels : models;
                     const randomModel = pool[Math.floor(Math.random() * pool.length)];
@@ -646,7 +661,6 @@ const reloadAgentConfig = async (showToast = false) => {
                     }
                     statusHint.value = `个人 Key 模式：已随机选择模型 ${modelName.value}（共 ${pool.length} 个可用），经后端代理转发。`;
                 } else {
-                    // 获取模型列表失败，使用配置中的默认模型
                     modelName.value = dc.model || '未配置';
                     statusHint.value = '个人 Key 模式：未获取到可用模型列表，使用配置中的默认模型。';
                 }
@@ -655,16 +669,14 @@ const reloadAgentConfig = async (showToast = false) => {
                 statusHint.value = `个人 Key 模式：模型列表获取失败（${modelError.message}），使用默认模型。`;
             }
 
-            // 仍然尝试获取后端配额信息（供参考）
             try {
                 const result = await apiAgentGetChatConfig();
                 const data = result?.data || result || {};
                 quota.value = normalizeQuota(data?.quota || {});
             } catch {
-                // 直连模式下后端错误可忽略
+                // ignore
             }
         } else {
-            // 代理模式：从后端获取完整配置
             const result = await apiAgentGetChatConfig();
             const data = result?.data || result || {};
 
@@ -704,7 +716,6 @@ const loadUserConfig = async (showToast = false) => {
         const personal = data?.personal || {};
         const effective = data?.effective || {};
 
-        // 如果当前是直连模式，优先显示直连配置
         if (isDirectMode.value) {
             syncDraftFromDirectConfig();
         } else {
@@ -739,12 +750,6 @@ const toggleUserConfig = async () => {
     }
 };
 
-/**
- * 加载可用模型列表
- *
- * 直连模式：直接从用户配置的 LLM 端点获取模型列表
- * 代理模式：通过后端代理获取模型列表（支持 override 参数动态跟随面板设置）
- */
 const loadAvailableModels = async () => {
     isLoadingModels.value = true;
     modelLoadHint.value = '正在加载模型列表...';
@@ -753,7 +758,6 @@ const loadAvailableModels = async () => {
         let models = [];
 
         if (isDirectMode.value) {
-            // 直连模式：经后端代理获取模型列表（避免浏览器 CORS 限制）
             const dc = directConfig.value;
             const overrideOptions = {
                 override_base_url: dc.base_url,
@@ -768,7 +772,6 @@ const loadAvailableModels = async () => {
                 modelLoadHint.value = `✅ 已加载 ${models.length} 个模型（个人 Key 模式）`;
             }
         } else {
-            // 代理模式：通过后端获取
             const overrideOptions = {};
             const draftBaseUrl = String(userConfigDraft.value.base_url || '').trim();
             const draftApiKey = String(userConfigDraft.value.api_key || '').trim();
@@ -795,7 +798,6 @@ const loadAvailableModels = async () => {
         configuredModels.value = models.filter((m) => m?.source !== 'upstream');
         upstreamModels.value = models.filter((m) => m?.source === 'upstream');
 
-        // 零配置即刻响应：如果用户未选择模型，自动从可用列表中选择
         if (!String(userConfigDraft.value.model || '').trim()) {
             const currentModel = isDirectMode.value
                 ? ''
@@ -810,7 +812,6 @@ const loadAvailableModels = async () => {
                 if (chatModels.length > 0) {
                     const randomModel = chatModels[Math.floor(Math.random() * chatModels.length)];
                     userConfigDraft.value.model = String(randomModel?.id || '');
-                    // 异步保存为用户偏好
                     if (userConfigDraft.value.model && !isDirectMode.value) {
                         apiAgentSaveModelPreference(userConfigDraft.value.model).catch(() => {});
                     }
@@ -837,20 +838,12 @@ const loadAvailableModels = async () => {
     }
 };
 
-/**
- * 保存用户配置
- *
- * - 如果用户填写了 API Key + Base URL → 启用前端直连模式（Key 仅存内存，不发后端）
- * - 非敏感字段（base_url、model 等）始终同步保存到后端以保持跨设备一致性
- * - 如果用户未填写 API Key → 切换为后端代理模式
- */
 const saveUserConfig = async () => {
     userConfigSaving.value = true;
     try {
         const personalApiKey = String(userConfigDraft.value.api_key || '').trim();
         const personalBaseUrl = String(userConfigDraft.value.base_url || '').trim();
 
-        // 非敏感字段始终保存到后端（保持跨设备一致性）
         const backendPayload = {
             base_url: personalBaseUrl,
             model: String(userConfigDraft.value.model || '').trim(),
@@ -862,16 +855,13 @@ const saveUserConfig = async () => {
             extra_body: userConfigDraft.value.extra_body,
         };
 
-        // API Key 不发送到后端
         if (personalApiKey) {
-            // 用户提供个人 Key → 退出默认 AI 模式，启用个人 Key 模式
             isDefaultAIMode.value = false;
             directConfig.value = {
                 api_key: personalApiKey,
                 ...backendPayload,
             };
         } else {
-            // 代理模式：清空直连配置
             directConfig.value = {
                 api_key: '',
                 base_url: '',
@@ -883,25 +873,21 @@ const saveUserConfig = async () => {
             };
         }
 
-        // 尝试保存到后端（非敏感字段），失败不影响直连模式
         try {
             await apiAgentUpdateUserConfig(backendPayload);
         } catch (backendError) {
             console.warn('[ChatPanel] 后端配置保存失败（直连模式不受影响）:', backendError.message);
         }
 
-        // 保存模型偏好
         if (backendPayload.model) {
             try {
                 await apiAgentSaveModelPreference(backendPayload.model);
             } catch {
-                // 不中断主流程
+                // ignore
             }
         }
 
-        // 清空 draft 中的 API Key（安全考虑）
         userConfigDraft.value.api_key = '';
-
         await reloadAgentConfig(false);
 
         if (personalApiKey) {
@@ -919,7 +905,6 @@ const saveUserConfig = async () => {
 const clearPersonalKey = async () => {
     userConfigSaving.value = true;
     try {
-        // 清空前端直连配置和默认 AI 模式
         isDefaultAIMode.value = false;
         directConfig.value = {
             api_key: '',
@@ -932,11 +917,10 @@ const clearPersonalKey = async () => {
         };
         userConfigDraft.value.api_key = '';
 
-        // 同时清除后端存储的 Key
         try {
             await apiAgentUpdateUserConfig({ clear_personal_key: true, api_key: '' });
         } catch {
-            // 后端清除失败不影响本地清除
+            // ignore
         }
 
         await reloadAgentConfig(false);
@@ -951,7 +935,6 @@ const clearPersonalKey = async () => {
 const resetProviderOverrides = async () => {
     userConfigSaving.value = true;
     try {
-        // 清空前端直连配置
         directConfig.value = {
             api_key: '',
             base_url: '',
@@ -962,11 +945,10 @@ const resetProviderOverrides = async () => {
             temperature: 1,
         };
 
-        // 重置后端配置
         try {
             await apiAgentUpdateUserConfig({ reset_provider_overrides: true });
         } catch {
-            // 后端重置失败不影响本地重置
+            // ignore
         }
 
         await loadUserConfig(false);
@@ -1029,43 +1011,6 @@ const buildEconomyContext = () => {
         .map((m) => ({ role: m.role, content: compactText(m.content) }));
 };
 
-const parseThinkAndAnswer = (rawContent) => {
-    const text = String(rawContent || '');
-    const startTag = '<think>';
-    const endTag = '</think>';
-    const start = text.indexOf(startTag);
-
-    if (start === -1) {
-        return {
-            answer: text,
-            think: '',
-        };
-    }
-
-    const end = text.indexOf(endTag, start + startTag.length);
-
-    if (end === -1) {
-        return {
-            answer: text.slice(0, start).trim(),
-            think: text.slice(start + startTag.length).trim(),
-        };
-    }
-
-    return {
-        answer: `${text.slice(0, start)}${text.slice(end + endTag.length)}`.trim(),
-        think: text.slice(start + startTag.length, end).trim(),
-    };
-};
-
-const getAnswerContent = (rawContent) => {
-    const answer = parseThinkAndAnswer(rawContent).answer;
-    return answer || '（正在组织回答...）';
-};
-
-const getThinkContent = (rawContent) => parseThinkAndAnswer(rawContent).think;
-
-const hasThinkContent = (rawContent) => !!getThinkContent(rawContent);
-
 const getUserTurnsCount = () => messages.value.filter((m) => m.role === 'user').length;
 
 const pruneHistoryIfNeeded = () => {
@@ -1116,41 +1061,16 @@ const clearHistory = () => {
     message.success('聊天历史已清除');
 };
 
-/**
- * 将工具说明注入到消息历史中（降级方案）
- *
- * 当后端 API 不支持 system_prompt 参数时，将工具说明作为第一条用户消息
- * 注入到历史记录中，确保 LLM 能感知到可用工具。
- *
- * @private
- * @param {Array} history - 原始对话历史
- * @param {string} toolPrompt - 工具说明提示词
- * @returns {Array} 注入工具说明后的历史
- */
 const _injectToolPromptIntoHistory = (history, toolPrompt) => {
     if (!toolPrompt) return history;
-    // 后端 _sanitize_history 会过滤 system 角色（避免与后端 system prompt 重复），
-    // 因此工具说明以 user 角色注入，确保能通过后端校验并送达 LLM
     return [{ role: 'user', content: `[系统指令] 以下是你可以使用的工具说明，请严格按照此格式调用工具：\n\n${toolPrompt}` }, ...history];
 };
 
-/**
- * GIS 意图关键词检测（降级方案）
- *
- * 当 LLM 未输出 tool_call JSON 块时，通过关键词匹配检测用户的 GIS 操作意图。
- * 这是工具调用的最后防线，确保即使后端/LLM 不支持 Function Calling，地图也能响应。
- *
- * @private
- * @param {string} userMsg - 用户消息
- * @returns {{name: string, arguments: Object}|null} 检测到的工具调用，无则返回 null
- */
 const _detectGISIntent = (userMsg) => {
     const rawMsg = String(userMsg || '').trim();
     const msg = rawMsg.toLowerCase();
     if (!rawMsg) return null;
 
-    // 模式 1：搜索/定位意图
-    // 匹配：定位到XXX、搜索XXX、找到XXX、去到XXX、飞到XXX、显示XXX位置、XXX在哪里
     const searchPatterns = [
         /(?:定位到?|搜索|查找?|去到?|飞到?|缩放到|前往|移动到?|显示)\s*[「"']?(.+?)[」"']?\s*(?:的位置|地方|在哪里|的范围)?$/,
         /^(.+?)(?:在哪里|在哪儿|怎么去|的坐标|的位置)$/,
@@ -1161,7 +1081,6 @@ const _detectGISIntent = (userMsg) => {
         const match = msg.match(pattern);
         if (match && match[1] && match[1].length >= 2) {
             const query = match[1].trim();
-            // 排除常见非地名词汇
             const excludeWords = ['一下', '一下下', '这个', '那个', '什么', '怎么', '为什么', '地图', '底图'];
             if (!excludeWords.includes(query)) {
                 return { name: 'search_and_zoom', arguments: { query, zoom: 16 } };
@@ -1169,14 +1088,11 @@ const _detectGISIntent = (userMsg) => {
         }
     }
 
-    // 模式 2：底图切换意图
-    // 匹配：切换到XXX底图、换成XXX地图、使用XXX图源
     const basemapPatterns = [
         /(?:切换到?|换成?|使用|启用|换上|加载)\s*[「"']?(.+?)[」"']?\s*(?:底图|地图|图源|卫星)?$/,
         /(?:底图|地图|图源)\s*(?:切换到?|换成?|使用)\s*[「"']?(.+?)[」"']?$/,
     ];
 
-    // Chat 底图切换只允许走 HTTPS XYZ URL -> custom 底图（l=1）。
     const basemapUrlMapping = {
         '高德卫星': {
             url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
@@ -1256,13 +1172,11 @@ const _detectGISIntent = (userMsg) => {
         }
     };
 
-    // 模式 2a：用户直接提供了 URL
     const urlMatch = rawMsg.match(/https?:\/\/[^\s]+/i);
     if (urlMatch) {
         const url = urlMatch[0];
-        // 检查是否是 XYZ URL（包含 {x} {y} {z} 或类似模式）
         if (url.includes('{x}') || url.includes('{y}') || url.includes('{z}') || url.includes('{0-7}')) {
-            const normalizedUrl = url.replace(/\{0-7\}/, '01'); // 天地图服务器编号降级
+            const normalizedUrl = url.replace(/\{0-7\}/, '01');
             return {
                 name: 'switch_basemap',
                 arguments: { url: normalizedUrl, name: '自定义图源' },
@@ -1289,16 +1203,7 @@ const _detectGISIntent = (userMsg) => {
     return null;
 };
 
-/**
- * 执行工具调用并更新 UI 状态
- *
- * @private
- * @param {Array} toolCalls - 工具调用列表
- * @param {number} assistantMsgIndex - 占位 assistant 消息的索引
- * @returns {Promise<{toolResults: Array, toolResultSummary: string}>}
- */
 const _executeToolsAndUpdateUI = async (toolCalls, assistantMsgIndex) => {
-    // 插入工具执行状态消息
     const statusMsgIndex =
         messages.value.push({
             role: 'assistant',
@@ -1312,11 +1217,8 @@ const _executeToolsAndUpdateUI = async (toolCalls, assistantMsgIndex) => {
         }) - 1;
 
     scrollToBottom();
-
-    // 执行工具调用
     const toolResults = await agentExecutor.value.executeToolCalls(toolCalls);
 
-    // 更新工具状态消息
     messages.value[statusMsgIndex].toolCalls = toolCalls.map((tc, idx) => {
         const result = toolResults[idx];
         return {
@@ -1327,41 +1229,26 @@ const _executeToolsAndUpdateUI = async (toolCalls, assistantMsgIndex) => {
         };
     });
 
-    // 清理空的占位 assistant 消息
     if (!messages.value[assistantMsgIndex].content) {
         messages.value.splice(assistantMsgIndex, 1);
     }
 
     scrollToBottom();
-
     const toolResultSummary = AgentExecutor.buildResultSummary(toolResults);
     return { toolResults, toolResultSummary };
 };
 
-/**
- * 调用 LLM API（统一入口，支持三种模式）
- *
- * @private
- * @param {Object} params
- * @param {string} params.message - 用户消息
- * @param {Array} params.history - 对话历史
- * @param {string} params.locationContext - 位置上下文
- * @param {string} [params.systemPrompt] - 系统提示词（含工具说明）
- * @returns {Promise<{reply: string, usedModel: string, toolCalls?: Array, quota?: Object}>}
- */
 const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemPrompt }) => {
     let reply = '';
     let usedModel = '';
     let toolCalls = null;
     let quotaData = null;
 
-    // 将工具说明注入历史（确保 LLM 感知工具，即使后端不支持 system_prompt）
     const enhancedHistory = systemPrompt
         ? _injectToolPromptIntoHistory(history, systemPrompt)
         : history;
 
     if (isDefaultAIMode.value) {
-        // ============= 管理员默认 AI 模式 =============
         const dc = directConfig.value;
         const result = await apiAgentChatDefaultProxy({
             message: userMsg,
@@ -1378,9 +1265,7 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
         usedModel = String(data?.model || dc.model || '');
         toolCalls = AgentExecutor.extractToolCalls(data);
     } else if (isDirectMode.value) {
-        // ==================== 个人 Key 模式 ====================
         const dc = directConfig.value;
-        // 合并工具说明与用户自定义 system prompt
         const mergedSystemPrompt = systemPrompt
             ? (dc.system_prompt ? `${systemPrompt}\n\n---\n\n${dc.system_prompt}` : systemPrompt)
             : dc.system_prompt || undefined;
@@ -1406,7 +1291,6 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
         usedModel = String(data?.model || dc.model || '');
         toolCalls = AgentExecutor.extractToolCalls(data);
     } else {
-        // ==================== 后端代理模式 ====================
         const chatPayload = {
             message: userMsg,
             history: enhancedHistory,
@@ -1449,16 +1333,6 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
     return { reply, usedModel, toolCalls, quota: quotaData };
 };
 
-/**
- * 发送消息（支持工具调用 + 降级意图检测）
- *
- * 三级工具调用策略：
- * 1. 原生 Function Calling：后端返回 tool_calls 字段
- * 2. 降级文本解析：LLM 在回复中输出 ```tool_call JSON 块
- * 3. 关键词意图检测：从用户消息中直接识别 GIS 操作意图（最终防线）
- *
- * 工具执行后，将结果回传 LLM 获取自然语言回复。
- */
 const sendMessage = async () => {
     if (sendDisabled.value) return;
 
@@ -1476,10 +1350,8 @@ const sendMessage = async () => {
     const assistantMsgIndex = messages.value.push({ role: 'assistant', content: '' }) - 1;
 
     try {
-        // 构建含工具说明的系统提示词
         const systemPrompt = buildSystemPromptWithTools();
 
-        // ===== 第一轮：调用 LLM =====
         const { reply, usedModel, toolCalls: llmToolCalls, quota: quotaData } = await _callLLMAPI({
             message: userMsg,
             history: requestHistory,
@@ -1490,12 +1362,9 @@ const sendMessage = async () => {
         if (quotaData) quota.value = normalizeQuota(quotaData);
         if (usedModel) modelName.value = usedModel;
 
-        // ===== 工具调用检测（三级策略） =====
         let finalToolCalls = llmToolCalls;
         let isIntentFallback = false;
 
-        // 策略 1+2：LLM 返回了 tool_calls（原生或文本解析）
-        // 策略 3：LLM 未返回 tool_calls，尝试关键词意图检测
         if ((!finalToolCalls || finalToolCalls.length === 0) && agentExecutor.value) {
             const intentToolCall = _detectGISIntent(userMsg);
             if (intentToolCall) {
@@ -1504,21 +1373,15 @@ const sendMessage = async () => {
             }
         }
 
-        // ===== 执行工具调用 =====
         if (finalToolCalls && finalToolCalls.length > 0 && agentExecutor.value) {
-            // 从回复文本中移除 tool_call JSON 块（降级模式清理）
             const cleanReply = AgentExecutor.stripToolCallBlocks(reply);
 
-            // 仅当工具调用来自 LLM 自身时才显示其文字回复
-            // Strategy 3（意图检测）时 LLM 未真正调用工具，其文字可能是误导性的
             if (!isIntentFallback && cleanReply && cleanReply.length > 5) {
                 messages.value[assistantMsgIndex].content = cleanReply;
             }
 
-            // 执行工具并更新 UI
             const { toolResultSummary } = await _executeToolsAndUpdateUI(finalToolCalls, assistantMsgIndex);
 
-            // ===== 第二轮：将工具结果回传 LLM 获取自然语言回复 =====
             const toolRoundHistory = [
                 ...requestHistory,
                 { role: 'user', content: userMsg },
@@ -1549,15 +1412,12 @@ const sendMessage = async () => {
                 if (finalReply) {
                     messages.value.push({ role: 'assistant', content: finalReply });
                 } else {
-                    // LLM 未返回回复，用工具结果摘要作为兜底
                     messages.value.push({ role: 'assistant', content: `✅ 操作完成：\n${toolResultSummary}` });
                 }
             } catch {
-                // 第二轮失败时，用工具结果作为回复
                 messages.value.push({ role: 'assistant', content: `✅ 操作完成：\n${toolResultSummary}` });
             }
         } else {
-            // 无工具调用：直接显示 LLM 回复
             messages.value[assistantMsgIndex].content = reply || '（未返回有效内容）';
         }
 
@@ -1582,21 +1442,15 @@ onBeforeUnmount(() => {
         clearTimeout(clearConfirmTimer);
         clearConfirmTimer = null;
     }
-    // 清理 GISCommander 资源
     gisCommander.value?.dispose?.();
 });
 
-/**
- * 初始化 GIS Commander 和 Agent Executor
- * 在地图实例就绪后创建，提供工具调用能力
- */
 const initGISCommander = () => {
     if (!olMapRef?.value) return;
 
     try {
         gisCommander.value = createGISCommander({
             mapInstanceRef: olMapRef,
-            // 注入自定义 XYZ 底图切换方法（复用 custom 图层机制）
             onCustomXYZSwitch: setCustomBasemapByUrl,
         });
 
@@ -1634,10 +1488,6 @@ const initGISCommander = () => {
     }
 };
 
-/**
- * 获取工具的中文显示名称
- * @private
- */
 const _getToolDisplayName = (name, args = {}) => {
     const displayNames = {
         zoom_to_extent: '缩放到指定范围',
@@ -1654,18 +1504,19 @@ onMounted(async () => {
         runtimeTiandituTk.value = nextTiandituTk;
     }
 
-    // 启动时先尝试加载管理员配置的默认 AI 配置
     await _loadDefaultAIConfig();
-    // 自动预加载模型列表
     loadAvailableModels();
     await reloadAgentConfig(false);
 
-    // 初始化 GIS Commander（如果地图已就绪）
+    try {
+        await ensureMarkdownLibs();
+    } catch (_e) {
+        // ignore
+    }
+
     initGISCommander();
 });
 
-// 监听地图实例变化，延迟初始化 GIS Commander
-// 地图可能在 Chat 组件挂载后才完成初始化
 watch(
     () => olMapRef?.value,
     (newMap) => {
@@ -1684,29 +1535,41 @@ watch(
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f9fbf9;
 }
 
 .chat-header {
     background: white;
     color: var(--text-primary);
-    padding: 10px 15px;
+    padding: 12px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid #eef2ef;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .service-status {
-    border-bottom: 1px solid #e9ecef;
-    background: #fdfefe;
-    padding: 10px 14px;
+    border-bottom: 1px solid #eef2ef;
+    background: #ffffff;
+    padding: 10px 16px;
+    flex: 0 0 auto;
+}
+
+/* 配置面板 + 服务状态的可滚动包裹层，
+   避免配置面板展开时 service-status 被 overflow:hidden 裁切 */
+.scroll-top-section {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .user-config-panel {
-    border-bottom: 1px solid #e9ecef;
-    background: #fcfffd;
-    padding: 10px 14px 12px;
+    border-bottom: 1px solid #eef2ef;
+    background: #fbfdfb;
+    padding: 12px 16px;
 }
 
 .user-config-grid {
@@ -1729,7 +1592,8 @@ watch(
 
 .user-config-item input,
 .user-config-item textarea,
-.user-config-item select {
+.user-config-item select,
+.user-config-item .model-input {
     width: 100%;
     border: 1px solid #d7e5dc;
     border-radius: 6px;
@@ -1756,6 +1620,64 @@ watch(
     outline: none;
     border-color: var(--brand-primary);
     box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.1);
+}
+
+/* Model 输入框 + 下拉按钮组合行 */
+.model-input-row {
+    position: relative;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* 下拉切换按钮（▾） */
+.model-dropdown-btn {
+    padding: 6px 8px;
+    border: 1px solid #d7e5dc;
+    border-radius: 6px;
+    background-color: white;
+    cursor: pointer;
+    font-size: 12px;
+    color: #4a6b57;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.model-dropdown-btn:hover {
+    border-color: var(--brand-primary);
+    background-color: #f0f7f2;
+}
+
+/* 下拉列表面板 */
+.model-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 40px;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid #d7e5dc;
+    border-radius: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* 下拉列表项 */
+.model-dropdown-item {
+    padding: 7px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.15s;
+}
+
+.model-dropdown-item:hover {
+    background: #f0f7f2;
+    color: var(--brand-primary-dark);
 }
 
 .refresh-models-btn {
@@ -1940,15 +1862,28 @@ watch(
     color: var(--text-primary);
 }
 
+/* ========== 优化滚动条与背景 ========== */
 .chat-body {
     flex: 1;
-    padding: 15px;
+    padding: 20px 16px;
     overflow-y: auto;
-    background: #f8f9fa;
+    background: #f4f7f5;
+    scroll-behavior: smooth;
+}
+
+.chat-body::-webkit-scrollbar {
+    width: 6px;
+}
+.chat-body::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+.chat-body::-webkit-scrollbar-track {
+    background-color: transparent;
 }
 
 .message {
-    margin-bottom: 15px;
+    margin-bottom: 16px;
     display: flex;
     flex-direction: column;
 }
@@ -1966,12 +1901,13 @@ watch(
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 8px 12px;
+    padding: 10px 14px;
     border-radius: 10px;
     background: #f0f7ff;
     border: 1px solid #d0e3f7;
     font-size: 0.88em;
-    max-width: 90%;
+    max-width: 85%;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.02);
 }
 
 .tool-status-item {
@@ -1987,68 +1923,360 @@ watch(
 }
 
 .tool-status-label {
-    color: #333;
+    color: #1e3a5f;
     font-weight: 500;
 }
 
 .tool-status-message {
-    color: #666;
+    color: #5c6b73;
     font-size: 0.9em;
     word-break: break-all;
 }
 
+/* ========== 普通气泡样式基础 ========== */
 .message-content {
-    max-width: 90%;
-    padding: 10px 14px;
-    border-radius: 12px;
+    max-width: 85%;
+    padding: 12px 16px;
+    border-radius: 16px;
     font-size: 0.95em;
-    line-height: 1.5;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    line-height: 1.6;
+    box-shadow: 0 2px 8px rgba(34, 50, 38, 0.04);
     word-wrap: break-word;
-    white-space: pre-wrap;
 }
 
 .message.user .message-content {
     background: var(--brand-primary);
     color: white;
-    border-bottom-right-radius: 2px;
+    border-bottom-right-radius: 4px;
+    white-space: pre-wrap; /* 用户原生输入保持换行 */
 }
 
+/* ========== AI Assistant 深度优化（Markdown渲染容器） ========== */
 .message.assistant .message-content {
-    background: white;
-    color: var(--text-primary);
-    border-bottom-left-radius: 2px;
-    border: 1px solid var(--border-light);
+    background: #ffffff;
+    color: #2c3e50;
+    border-bottom-left-radius: 4px;
+    border: 1px solid rgba(215, 229, 220, 0.5);
+    width: 100%; /* 防止表格等块级元素撑宽失败 */
+    box-sizing: border-box;
+}
+
+/* 当作为 Markdown 渲染容器时，覆盖 white-space 以免与 HTML 结构冲突 */
+.markdown-body {
+    white-space: normal !important;
 }
 
 .think-panel {
-    max-width: 90%;
-    margin-top: 6px;
-    border: 1px dashed #c7d7cc;
+    max-width: 85%;
+    margin-top: 8px;
+    border: 1px dashed #cbdad0;
     border-radius: 10px;
-    padding: 6px 10px;
-    background: #f7fbf8;
-    color: #4f5b53;
-    font-size: 0.85em;
+    padding: 8px 14px;
+    background: #f8faf9;
+    color: #617468;
+    font-size: 0.88em;
 }
 
 .think-panel summary {
     cursor: pointer;
     user-select: none;
     font-weight: 600;
+    color: #4a5d51;
+    padding: 2px 0;
+    transition: color 0.2s;
+}
+.think-panel summary:hover {
+    color: var(--brand-primary);
+}
+.think-panel[open] summary {
+    margin-bottom: 6px;
 }
 
 .think-content {
-    margin: 8px 0 2px;
-    white-space: pre-wrap;
-    word-break: break-word;
-    line-height: 1.45;
-    font-family: inherit;
+    margin: 0;
+    padding: 10px 14px;
+    background: #f8faf9;
+    border-radius: 8px;
+    border: 1px solid #e8efea;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.6;
+    font-size: 0.9em;
+    color: #4a5d51;
 }
 
+/* Think 内部的 markdown 也应继承排版 */
+.think-content p { margin: 0 0 8px 0; }
+.think-content p:last-child { margin-bottom: 0; }
+.think-content code:not(pre code) {
+    background: #e8efea;
+    color: #5a6e62;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.88em;
+}
+.think-content pre {
+    background: #2d3740;
+    color: #e6edf3;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    margin: 6px 0;
+}
+
+/* ============================================================
+    Markdown 元素精细排版美化 (Beautiful Text Rendering)
+============================================================ */
+
+/* 标题样式 */
+.markdown-body :where(h1, h2, h3, h4, h5, h6) {
+    margin-top: 14px;
+    margin-bottom: 8px;
+    color: #1a2a20;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.markdown-body h1 { font-size: 1.4em; border-bottom: 1px solid #eef2ef; padding-bottom: 4px; }
+.markdown-body h2 { font-size: 1.25em; border-bottom: 1px solid #eef2ef; padding-bottom: 3px; }
+.markdown-body h3 { font-size: 1.15em; }
+.markdown-body h4 { font-size: 1em; }
+
+/* 段落间距 */
+.markdown-body p {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+}
+.markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+/* 超链接 */
+.markdown-body a {
+    color: var(--brand-primary);
+    text-decoration: none;
+    font-weight: 500;
+    border-bottom: 1px dashed var(--brand-primary);
+    transition: color 0.2s;
+}
+.markdown-body a:hover {
+    color: var(--brand-primary-dark);
+}
+
+/* 列表排版 */
+.markdown-body ul,
+.markdown-body ol {
+    margin: 0 0 10px 0;
+    padding-left: 1.5em;
+}
+.markdown-body li {
+    margin-bottom: 4px;
+}
+.markdown-body li:last-child {
+    margin-bottom: 0;
+}
+
+/* 行内代码 */
+.markdown-body code:not(pre code) {
+    background: #f0f4f1;
+    color: #c0392b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+/* 全局代码块 - 暗色主题匹配 highlight.js github-dark-dimmed */
+.markdown-body pre {
+    background: #22272e;
+    color: #adbac7;
+    padding: 14px 14px 14px 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.88em;
+    line-height: 1.6;
+    margin: 12px 0;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.25);
+    position: relative;
+    border: 1px solid #373e47;
+}
+.markdown-body pre code.hljs {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+}
+
+/* 语言标签徽章 - 左上角 */
+.markdown-body pre .code-lang-badge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: #373e47;
+    color: #768390;
+    padding: 2px 10px;
+    font-size: 0.72em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    border-radius: 8px 0 6px 0;
+    border-bottom: 1px solid #444c56;
+    border-right: 1px solid #444c56;
+    user-select: none;
+    line-height: 1.6;
+}
+
+/* 当有语言标签时，代码内容需要顶部留白 */
+.markdown-body pre[data-lang] {
+    padding-top: 30px;
+}
+
+/* 代码复制按钮 */
+.markdown-body pre .code-copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #768390;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.76em;
+    cursor: pointer;
+    transition: all 0.2s;
+    opacity: 0; /* 默认隐藏，鼠标滑过显示 */
+    z-index: 1;
+}
+
+.markdown-body pre:hover .code-copy-btn {
+    opacity: 1;
+}
+
+.markdown-body pre .code-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #cdd9e5;
+}
+
+.markdown-body pre .code-copy-btn.copied {
+    background: #347d39;
+    border-color: #347d39;
+    color: #cdd9e5;
+    opacity: 1;
+}
+
+/* highlight.js github-dark-dimmed 主题 token 颜色覆盖（scoped 内需穿透） */
+.markdown-body pre .hljs-comment,
+.markdown-body pre .hljs-quote { color: #768390; font-style: italic; }
+.markdown-body pre .hljs-keyword,
+.markdown-body pre .hljs-selector-tag { color: #f47067; }
+.markdown-body pre .hljs-string,
+.markdown-body pre .hljs-addition { color: #6cb6ff; }
+.markdown-body pre .hljs-number,
+.markdown-body pre .hljs-literal { color: #6cb6ff; }
+.markdown-body pre .hljs-built_in,
+.markdown-body pre .hljs-type { color: #f69d50; }
+.markdown-body pre .hljs-function,
+.markdown-body pre .hljs-title { color: #dcbdfb; }
+.markdown-body pre .hljs-attr,
+.markdown-body pre .hljs-attribute { color: #6cb6ff; }
+.markdown-body pre .hljs-variable,
+.markdown-body pre .hljs-template-variable { color: #f69d50; }
+.markdown-body pre .hljs-regexp,
+.markdown-body pre .hljs-link { color: #96d0ff; }
+.markdown-body pre .hljs-symbol,
+.markdown-body pre .hljs-bullet { color: #f69d50; }
+.markdown-body pre .hljs-meta { color: #6cb6ff; }
+.markdown-body pre .hljs-deletion { color: #f47067; }
+.markdown-body pre .hljs-selector-class { color: #6cb6ff; }
+.markdown-body pre .hljs-selector-id { color: #dcbdfb; }
+.markdown-body pre .hljs-tag { color: #8ddb8c; }
+.markdown-body pre .hljs-name { color: #8ddb8c; }
+.markdown-body pre .hljs-params { color: #adbac7; }
+
+/* GFM 任务列表 checkbox 样式 */
+.markdown-body ul.contains-task-list {
+    list-style: none;
+    padding-left: 0.5em;
+}
+.markdown-body li.task-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.markdown-body li.task-list-item input[type="checkbox"] {
+    margin-top: 5px;
+    accent-color: var(--brand-primary, #2d5016);
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+/* 水平分割线 */
+.markdown-body hr {
+    border: none;
+    height: 1px;
+    background: linear-gradient(to right, transparent, #d7e5dc, transparent);
+    margin: 16px 0;
+}
+
+/* 引用块 (Blockquote) */
+.markdown-body blockquote {
+    border-left: 4px solid var(--brand-primary);
+    margin: 12px 0;
+    padding: 8px 14px;
+    background: #f4f9f5;
+    color: #4f6f5c;
+    border-radius: 0 6px 6px 0;
+}
+.markdown-body blockquote p {
+    color: #4f6f5c;
+    margin: 0;
+}
+
+/* 现代精致表格 (Modern Elegant Table) */
+.markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 0.92em;
+    overflow-x: auto;
+    display: block; /* 移动端/窄屏自适应 */
+}
+
+.markdown-body th,
+.markdown-body td {
+    border: 1px solid #e1e8e3;
+    padding: 8px 12px;
+    text-align: left;
+    line-height: 1.4;
+}
+
+.markdown-body thead th {
+    background-color: #f5f8f6;
+    color: #1a2a20;
+    font-weight: 600;
+}
+
+.markdown-body tbody tr:nth-child(even) {
+    background-color: #fbfdfb;
+}
+
+.markdown-body tbody tr:hover {
+    background-color: #f2f7f3;
+}
+
+.markdown-body img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 8px 0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+/* ========== 页脚区域 ========== */
 .chat-footer {
-    padding: 10px;
-    border-top: 1px solid #eee;
+    padding: 12px 16px;
+    border-top: 1px solid #eef2ef;
     background: white;
     display: flex;
     gap: 8px;
@@ -2057,38 +2285,42 @@ watch(
 
 textarea {
     flex: 1;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
+    padding: 10px 12px;
+    border: 1px solid #d7e5dc;
+    border-radius: 8px;
     resize: none;
     outline: none;
     font-family: inherit;
-    transition: border-color 0.2s;
+    font-size: 0.95em;
+    transition: all 0.2s;
     min-height: 40px;
+    box-sizing: border-box;
 }
 
 textarea:focus {
     border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.08);
 }
 
 .chat-footer button {
-    padding: 0 16px;
-    height: 40px;
+    padding: 0 18px;
+    height: 38px;
     background: var(--brand-primary);
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     font-weight: 600;
+    font-size: 0.92em;
     transition: background 0.2s;
 }
 
 .chat-footer button:hover {
-    background: var(--brand-primary);
+    background: var(--brand-primary-dark, #1b3522);
 }
 
 .chat-footer button:disabled {
-    background: #ccc;
+    background: #cbdad0;
     cursor: not-allowed;
 }
 

@@ -105,6 +105,20 @@ export default defineConfig(({ command, mode }) => {
             if (isNodeModulePackage(id, 'proj4')) return 'vendor-proj4';
             // HTTP 客户端
             if (isNodeModulePackage(id, 'axios')) return 'vendor-axios';
+            // Three.js（仅 ShallowWater 使用，~700KB）
+            if (isNodeModulePackage(id, 'three')) return 'vendor-three';
+            // Rapier 物理引擎（仅 PlayerController 使用，~300KB）
+            if (isNodeModulePackage(id, '@dimforge/rapier3d-compat')) return 'vendor-rapier';
+            // highlight.js 代码高亮（仅 AI 聊天使用，~350KB）
+            if (isNodeModulePackage(id, 'highlight.js')) return 'vendor-hljs';
+            // Markdown 渲染（仅 AI 聊天使用）
+            if (isNodeModulePackage(id, 'marked') || isNodeModulePackage(id, 'dompurify')) return 'vendor-marked';
+            // 图标库（tree-shake 后仅保留使用到的图标）
+            if (isNodeModulePackage(id, 'lucide-vue-next')) return 'vendor-lucide';
+            // 压缩/解码（仅瓦片模块使用）
+            if (isNodeModulePackage(id, 'pako') || isNodeModulePackage(id, 'protobufjs') || isNodeModulePackage(id, 'zstd-codec')) return 'vendor-codec';
+            // lil-gui 控件（仅 Cesium 面板使用）
+            if (isNodeModulePackage(id, 'lil-gui')) return 'vendor-lilgui';
             // Vue 核心框架
             if (
               isNodeModulePackage(id, 'vue') ||

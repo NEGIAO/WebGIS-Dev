@@ -145,9 +145,10 @@
 import { useMessage } from '../../composables/useMessage';
 import { ref } from 'vue';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
-import DrawPanel from './DrawPanel.vue';
-import MeasurePanel from './MeasurePanel.vue';
-import SpatialAnalysisPanel from './SpatialAnalysisPanel.vue';
+import { defineAsyncComponent } from 'vue';
+const DrawPanel = defineAsyncComponent(() => import('./DrawPanel.vue'));
+const MeasurePanel = defineAsyncComponent(() => import('./MeasurePanel.vue'));
+const SpatialAnalysisPanel = defineAsyncComponent(() => import('./SpatialAnalysisPanel.vue'));
 import {
     Activity,
     Newspaper,

@@ -811,10 +811,13 @@ const {
     agentConfig,
     agentConfigDraft,
     loading: agentConfigLoading,
+    editingConfig: editingAgentConfig,
     save: saveAgentConfig,
     resetQuota: resetChatQuota,
     load: loadAgentConfig,
     hydrate: hydrateAgentConfigDraft,
+    startEdit: startEditAgentConfig,
+    cancelEdit: cancelEditAgentConfig,
 } = useAgentConfig();
 
 // 兼容旧代码的额度引用
@@ -930,8 +933,12 @@ async function loadAgentConfigWrapper() {
 }
 
 async function saveAgentConfigWrapper() {
-    // 使用共享 composable 的 save 方法
-    await saveAgentConfig();
+    // 保存成功后退出编辑模式，并同步额度显示
+    const ok = await saveAgentConfig();
+    if (ok) {
+        cancelEditAgentConfig();
+        hydrateWithQuotaSync();
+    }
 }
 
 async function resetChatQuotaWrapper() {

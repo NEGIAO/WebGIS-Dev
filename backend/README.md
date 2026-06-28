@@ -441,12 +441,9 @@ backend/
 │   ├── __init__.py                                # 包初始化
 │   └── time_utils.py                              # 北京时间工具 + 整点报时后台任务
 │
-├── core/                                          # 核心业务逻辑
-│   ├── tile_engine.py                             # 瓦片下载 + GeoTIFF 拼接
-│   └── task_scheduler.py                          # 过期任务清理调度器
-│
-├── models/                                        # 数据模型
-│   └── download_task.py                           # SQLModel 下载任务表
+├── services/                                      # 共享业务服务
+│   ├── __init__.py
+│   └── ip_geo.py                                  # IP 地理定位统一服务
 │
 ├── download_xyz/                                  # 在线底图下载模块
 │   ├── download.py                                # 下载逻辑
@@ -461,6 +458,9 @@ backend/
 │   ├── transform.py                               # 坐标转换
 │   ├── url_template.py                            # URL 模板
 │   └── utils.py                                   # 工具函数
+│
+├── data/                                          # 运行时数据目录
+│   └── webgis_auth.db                             # SQLite 数据库（+ WAL/SHM）
 │
 ├── app.py                                         # FastAPI 主入口
 ├── Dockerfile                                     # Docker 构建文件

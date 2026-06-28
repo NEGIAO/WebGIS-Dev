@@ -1,5 +1,24 @@
 # WebGIS 前端项目 — v3.3.13
 
+## 📝 2026-06-28 Agent 对话 Markdown 渲染优化（语法高亮 + GFM + composable 化）
+
+从 ChatPanelContent.vue 提取并重构 Markdown 渲染逻辑为独立 composable，集成 highlight.js 语法高亮和 GFM 扩展。
+
+**核心特性：**
+- 🆕 **代码语法高亮**：引入 highlight.js（core + 18 语言），代码块支持语言着色（github-dark-dimmed 主题）
+- 🆕 **代码块语言标签**：左上角显示语言名徽章（如 `python`、`bash`），便于快速识别
+- 🆕 **GFM 任务列表**：`- [x]` / `- [ ]` 渲染为带 checkbox 的交互式任务列表
+- 🆕 **思考面板增强**：`<think>` 块改为 markdown 渲染（支持嵌套代码块/列表），可滚动最大高度 400px
+- ♻️ **composable 化**：渲染逻辑提取至 `useMarkdownRenderer.js`，ChatPanelContent.vue 精简 ~80 行
+- ♻️ **去除 DOM 操作**：移除 `enhanceRenderedMarkdown()` 的 imperative 注入，改为 marked renderer 声明式输出
+- 🔧 **highlight.js 按需加载**：core + 18 语言注册（非全量 import），vendor-libs chunk 节省 877 kB
+
+**涉及文件：**
+- `frontend/src/composables/useMarkdownRenderer.js` - 新增 Markdown 渲染 composable
+- `frontend/src/components/Chat/ChatPanelContent.vue` - 移除旧渲染逻辑，接入 composable
+
+详见维护日志 `Docs/06-28/2026-06-28-agent-markdown-render-optimize.md`。
+
 ## 📝 2026-06-28 LLM 参数动态配置管理（管理员后台）
 
 管理员控制台新增 LLM 参数配置面板 (`AdminControlPanel.vue`)，支持动态修改后端运行时读取的 Agent 对话参数，修改后**无需重启服务即时生效**。
@@ -410,6 +429,7 @@ frontend/src/
 │   └── weather.js                                  # 天气 API
 │
 ├── assets/                                         # 全局样式与静态数据
+│   ├── logo.svg                                    # 项目 Logo
 │   ├── theme.css                                   # 全局主题变量
 │   ├── toc-theme.css                               # TOC 主题变量
 │   └── data/compass-metadata/                      # 罗盘元数据
@@ -510,6 +530,12 @@ frontend/src/
 │   │   └── SpatialAnalysisPanel.vue                # 空间分析面板
 │   ├── feng-shui-compass-svg/                      # 罗盘 SVG HUD
 │   │   ├── feng-shui-compass-svg.vue               # 罗盘主组件
+│   │   ├── Explanation/                            # 宫位解释 JSON 数据
+│   │   │   ├── circle_explanation.json
+│   │   │   ├── compass_explanation.json
+│   │   │   ├── dark_explanation.json
+│   │   │   ├── polygon_explanation.json
+│   │   │   └── simple_explanation.json
 │   │   ├── themes/                                 # 5 种主题配置
 │   │   │   ├── index.ts
 │   │   │   ├── theme-compass.ts
@@ -643,6 +669,8 @@ frontend/src/
 │   ├── weather/
 │   │   ├── useWeatherData.js                       # 天气数据获取
 │   │   └── useWeatherCharts.js                     # ECharts 图表渲染
+│   ├── useAgentConfig.js                           # Agent 配置共享 composable
+│   ├── useMarkdownRenderer.js                      # Agent 对话 Markdown 渲染（marked + hljs + GFM）
 │   ├── useErrorHandler.ts                          # 错误处理
 │   ├── useGisLoader.ts                             # GIS 加载器
 │   ├── useKmzLoader.js                             # KMZ 加载器

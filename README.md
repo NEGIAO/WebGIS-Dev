@@ -205,7 +205,11 @@ WebGIS_Dev/
 │   │   │   ├── map/                  # 地图核心 composables
 │   │   │   │   ├── features/         # 30+ 功能模块（高亮/样式/序列化/导出等）
 │   │   │   │   └── toc/              # TOC 协议层
-│   │   │   └── ...                   # 其他业务 composable
+│   │   │   ├── tileSource/           # 瓦片源工厂
+│   │   │   ├── weather/              # 天气 composables
+│   │   │   ├── useAgentConfig.js     # Agent 配置共享
+│   │   │   ├── useMarkdownRenderer.js # Agent Markdown 渲染（marked + hljs）
+│   │   │   └── ...                   # 其他业务 composable（20+ 文件）
 │   │   ├── config/                   # 环境变量集中管理
 │   │   ├── constants/                # 常量配置（底图 / Agent Schema）
 │   │   ├── router/                   # Vue Router
@@ -244,32 +248,42 @@ WebGIS_Dev/
 │   ├── vite.config.js
 │   └── README.md                     # 前端详细文档
 │
-├── backend/                          # 后端工程（FastAPI）
-│   ├── api/                          # API 路由（auth / proxy / agent / spatial 等）
-│   ├── core/                         # 核心（数据库 / 安全 / 配置）
-│   ├── models/                       # SQLAlchemy 数据模型
-│   ├── schemas/                      # Pydantic Schema
-│   ├── services/                     # 业务逻辑层
-│   ├── spatial/                      # 空间分析模块（Shapely 2.x）
-│   ├── main.py                       # FastAPI 入口
+├── backend/                          # 后端工程（FastAPI + Docker）
+│   ├── api/                          # API 路由模块
+│   │   ├── auth/                     # 鉴权子系统（14 个模块：邮箱/会话/配额/系统配置）
+│   │   ├── agent_chat/               # LLM Agent 对话代理（动态配置/配额/上游调用）
+│   │   ├── spatial/                  # 空间分析 API（Shapely 2.x，operations/ 8 个算子）
+│   │   ├── api_keys_management.py    # 主/备密钥管理 + 运行时 token 池下发
+│   │   ├── proxy.py                  # 通用代理 + GCJ-02 纠偏
+│   │   └── ...                       # admin / location / monitor / statistics
+│   ├── download_xyz/                 # 在线底图下载引擎（瓦片/任务/调度）
+│   ├── gcj_rectify/                  # GCJ-02 坐标纠偏模块
+│   ├── services/                     # 共享业务服务（ip_geo 等）
+│   ├── utils/                        # 通用工具（北京时间/整点报时）
+│   ├── data/                         # 运行时数据（SQLite 数据库）
+│   ├── app.py                        # FastAPI 主入口
 │   ├── Dockerfile
-│   ├── requirements.txt
+│   ├── docker-compose.yml
+│   ├── pyproject.toml
 │   └── README.md                     # 后端详细文档
 │
 ├── Docs/                             # 维护日志（按年月归档）
-│   ├── 26-04/
-│   ├── 26-05/
-│   ├── 26-06/
-│   │   ├── 26-06-02/
-│   │   ├── 26-06-03/
-│   │   ├── ...
-│   │   ├── 26-06-21/                 # V3.3.8 要素高亮与属性解析日志
-│   │   ├── 26-06-22/                 # 暂存区 Code Review 修复日志
-│   │   └── 26-06-26/                 # 大气 LUT 修复 + 模块卡片 UI + 热带浅水 + 人物漫游控制器
+│   ├── 26-04/                        # 2026-04 日志（6 个子目录）
+│   ├── 26-05/                        # 2026-05 日志（11 个子目录）
+│   ├── 26-06/                        # 2026-06 日志
+│   │   ├── 26-06-02/ ~ 26-06-06/     # 6 月上旬日志
+│   │   ├── 26-06-09/ ~ 26-06-11/     # 日志
+│   │   ├── 26-06-14/ ~ 26-06-15/     # 日志
+│   │   ├── 26-06-17/ ~ 26-06-22/     # 日志
+│   │   ├── 26-06-24/                 # 体积云设计文档
+│   │   ├── 26-06-26/                 # 大气 LUT + 模块卡片 + 浅水 + 漫游控制器
+│   │   ├── 26-06-27/                 # 体积云重构 + 洪水模拟 + 漫游优化
+│   │   └── 26-06-28/                 # LLM 动态配置管理
+│   ├── 06-28/                        # useAgentConfig 编辑模式修复 + Chat 面板修复
 │   ├── Architecture/                  # 架构设计文档
 │   ├── Example_prompt.md
 │   ├── Force_command.md
-│   └── TODO
+│   └── TODO/
 │
 ├── .gitignore
 ├── LICENSE

@@ -55,8 +55,9 @@ import MapContainer from '../components/Map/MapContainer.vue';
 import MagicCursor from '../components/Shell/MagicCursor.vue';
 import FloatingAccountPanel from '../components/UserCenter/FloatingAccountPanel.vue';
 import PersistentAnnouncementBar from '../components/Shell/PersistentAnnouncementBar.vue';
-import LogMonitor from '../components/ControlsPanel/LogMonitor.vue';
 import ResizeHandle from '../components/Shell/ResizeHandle.vue';
+// LogMonitor 按需懒加载（仅开发者打开时才加载）
+const LogMonitor = defineAsyncComponent(() => import('../components/ControlsPanel/LogMonitor.vue'));
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
