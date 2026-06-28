@@ -159,7 +159,7 @@ export async function apiAdminGetAgentConfig() {
 export async function apiAdminUpdateAgentConfig(payload = {}) {
     const safePayload = {};
 
-    if (payload.base_url) safePayload.base_url = String(payload.base_url).trim();
+    if ('base_url' in payload) safePayload.base_url = String(payload.base_url || '').trim();
     if ('model' in payload) safePayload.model = String(payload.model || '').trim();
     if (Array.isArray(payload.available_models)) {
         safePayload.available_models = payload.available_models
@@ -167,13 +167,19 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
             .filter(Boolean)
             .slice(0, 200);
     }
-    if (payload.system_prompt) safePayload.system_prompt = String(payload.system_prompt).trim();
+    if ('system_prompt' in payload) safePayload.system_prompt = String(payload.system_prompt || '').trim();
     if (typeof payload.timeout_seconds !== 'undefined')
         safePayload.timeout_seconds = Number(payload.timeout_seconds);
     if (typeof payload.max_tokens !== 'undefined')
         safePayload.max_tokens = Number(payload.max_tokens);
     if (typeof payload.temperature !== 'undefined')
         safePayload.temperature = Number(payload.temperature);
+    if (typeof payload.top_p !== 'undefined' && payload.top_p !== null)
+        safePayload.top_p = Number(payload.top_p);
+    if (typeof payload.stream !== 'undefined' && payload.stream !== null)
+        safePayload.stream = Boolean(payload.stream);
+    if (typeof payload.extra_body !== 'undefined' && payload.extra_body !== null)
+        safePayload.extra_body = payload.extra_body;
     if (typeof payload.guest_daily_quota !== 'undefined' && payload.guest_daily_quota !== null) {
         safePayload.guest_daily_quota = Number(payload.guest_daily_quota);
     }

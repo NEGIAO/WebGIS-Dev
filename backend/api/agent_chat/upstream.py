@@ -219,6 +219,8 @@ async def _call_upstream_chat(
     timeout_seconds: int,
     max_tokens: int,
     temperature: float,
+    top_p: Optional[float] = None,
+    extra_body: Optional[Dict[str, Any]] = None,
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Optional[str] = None,
 ) -> Dict[str, Any]:
@@ -231,6 +233,24 @@ async def _call_upstream_chat(
         "max_tokens": int(max_tokens),
         "temperature": float(temperature),
     }
+    if top_p is not None:
+        payload["top_p"] = float(top_p)
+    # Carefully merge extra_body to avoid overwriting critical fields.
+    if extra_body is not None and isinstance(extra_body, dict):
+        # Forbidden keys that must not be overridden by extra_body
+        forbidden = {"model", "messages", "max_tokens", "temperature", "api_key", "tools", "tool_choice"}
+
+        # Merge allowed keys. For dict values, do a shallow merge into existing dicts.
+        for k, v in extra_body.items():
+            if not k or k in forbidden:
+                # skip forbidden or empty keys
+                continue
+            if isinstance(payload.get(k), dict) and isinstance(v, dict):
+                merged = dict(payload.get(k))
+                merged.update(v)
+                payload[k] = merged
+                continue
+            payload[k] = v
 
     # Function Calling 支持：透传 tools 声明给上游 LLM
     if tools and isinstance(tools, list) and len(tools) > 0:
@@ -347,6 +367,8 @@ async def _call_upstream_chat_with_key_candidates(
     timeout_seconds: int,
     max_tokens: int,
     temperature: float,
+    top_p: Optional[float] = None,
+    extra_body: Optional[Dict[str, Any]] = None,
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Optional[str] = None,
 ) -> Dict[str, Any]:

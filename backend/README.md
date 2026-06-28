@@ -23,7 +23,25 @@ WebGIS 后端服务，当前包含五大核心能力：
 - 🆕 GCJ-02 实时纠偏：GET /proxy/gcj2wgs/* 和 /proxy/wgs2gcj/*
 - 🆕 空间分析 API：POST /api/v1/spatial/analysis（缓冲区/叠加/凸包/泰森多边形/空间聚合/多环缓冲区/几何简化/渔网分析），统一 EPSG:3857 平面坐标系，基于 Shapely 2.x + pyproj
 
-## 0. 项目结构（2026-06-26 更新）
+## 0. 项目结构（2026-06-28 更新）
+
+### V3.3.13 (2026-06-28) — LLM 参数动态配置管理（管理员后台）
+
+> 本次版本新增后端 Agent Chat 动态配置管理，前端管理员控制台可实时修改所有 LLM 参数，后端运行时动态读取数据库 `system_config` 表，修改后无需重启服务即时生效。
+
+**后端新增/变更：**
+- 🆕 `system_config` 表新增 Agent Chat 配置键：`agent_base_url`、`agent_model`、`agent_available_models`、`agent_system_prompt`、`agent_timeout_seconds`、`agent_max_tokens`、`agent_temperature`、`agent_top_p`、`agent_extra_body`、`agent_chat_guest_daily_quota`、`agent_chat_registered_daily_quota`
+- 🆕 `_get_agent_provider_config_sync()` 运行时动态读取数据库配置
+- 🆕 `_set_agent_provider_config_sync()` 管理员更新配置持久化
+- 🆕 Admin API 端点：`GET /api/admin/agent/config`、`POST /api/admin/agent/config`
+- 🔧 **默认参数已标准化**：`DEFAULT_AGENT_TEMPERATURE=1.0`、`DEFAULT_AGENT_TOP_P=0.95`、`DEFAULT_AGENT_MAX_TOKENS=32768`、`DEFAULT_AGENT_EXTRA_BODY={"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}`
+
+**前端同步记录（本次涉及后端 API）：**
+- `frontend/src/components/UserCenter/AdminControlPanel.vue` - 新增 LLM 配置面板
+- `frontend/src/components/UserCenter/ApiKeysManagementPanel.vue` - 默认参数对齐后端
+- `frontend/src/components/Chat/ChatPanelContent.vue` - 运行时使用动态配置
+
+详见维护日志 `Docs/26-06/26-06-28/2026-06-28-llm-dynamic-config.md`。
 
 ### V3.3.12 (2026-06-27) — 体积云模块重构 + 洪水模拟 + 漫游坐标显示
 

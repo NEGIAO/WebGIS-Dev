@@ -339,8 +339,10 @@ const userConfigDraft = ref({
     model: '',
     system_prompt: '',
     timeout_seconds: 45,
-    max_tokens: 8192,
-    temperature: 0.2,
+    max_tokens: 32768,
+    temperature: 1,
+    top_p: 0.95,
+    extra_body: { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 16384 },
 });
 const quota = ref({
     limit: null,
@@ -371,8 +373,10 @@ const directConfig = ref({
     model: '',
     system_prompt: '',
     timeout_seconds: 45,
-    max_tokens: 8192,
-    temperature: 0.2,
+    max_tokens: 32768,
+    temperature: 1,
+    top_p: 0.95,
+    extra_body: { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 16384 },
 });
 
 /** 当前是否使用管理员配置的默认 AI 模式（api_key 存储在后端数据库，前端不持有） */
@@ -404,8 +408,8 @@ const toggleRoutingMode = async () => {
             model: '',
             system_prompt: '',
             timeout_seconds: 45,
-            max_tokens: 8192,
-            temperature: 0.2,
+            max_tokens: 32768,
+            temperature: 1,
         };
         message.success('已切换为后端代理模式');
     } else {
@@ -437,6 +441,8 @@ const syncDraftFromDirectConfig = () => {
             timeout_seconds: directConfig.value.timeout_seconds,
             max_tokens: directConfig.value.max_tokens,
             temperature: directConfig.value.temperature,
+            top_p: directConfig.value.top_p,
+            extra_body: directConfig.value.extra_body,
         };
     }
 };
@@ -588,8 +594,8 @@ const _loadDefaultAIConfig = async () => {
                 model: String(data.model || ''),
                 system_prompt: '',
                 timeout_seconds: 45,
-                max_tokens: 8192,
-                temperature: 0.2,
+                max_tokens: 32768,
+                temperature: 1,
             };
             modelName.value = data.model;
             serviceReady.value = true;
@@ -708,8 +714,10 @@ const loadUserConfig = async (showToast = false) => {
                 model: String(personal?.model || effective?.model || ''),
                 system_prompt: String(personal?.system_prompt || ''),
                 timeout_seconds: Number(personal?.timeout_seconds ?? effective?.timeout_seconds ?? 45),
-                max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 8192),
-                temperature: Number(personal?.temperature ?? effective?.temperature ?? 0.2),
+                max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 32768),
+                temperature: Number(personal?.temperature ?? effective?.temperature ?? 1),
+                top_p: Number(personal?.top_p ?? effective?.top_p ?? 0.95),
+                extra_body: personal?.extra_body ?? effective?.extra_body ?? { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 16384 },
             };
         }
 
@@ -848,8 +856,10 @@ const saveUserConfig = async () => {
             model: String(userConfigDraft.value.model || '').trim(),
             system_prompt: String(userConfigDraft.value.system_prompt || '').trim(),
             timeout_seconds: Number(userConfigDraft.value.timeout_seconds || 45),
-            max_tokens: Number(userConfigDraft.value.max_tokens || 8192),
-            temperature: Number(userConfigDraft.value.temperature ?? 0.2),
+            max_tokens: Number(userConfigDraft.value.max_tokens || 32768),
+            temperature: Number(userConfigDraft.value.temperature ?? 1),
+            top_p: Number(userConfigDraft.value.top_p ?? 0.95),
+            extra_body: userConfigDraft.value.extra_body,
         };
 
         // API Key 不发送到后端
@@ -868,8 +878,8 @@ const saveUserConfig = async () => {
                 model: '',
                 system_prompt: '',
                 timeout_seconds: 45,
-                max_tokens: 8192,
-                temperature: 0.2,
+                max_tokens: 32768,
+                temperature: 1,
             };
         }
 
@@ -917,8 +927,8 @@ const clearPersonalKey = async () => {
             model: '',
             system_prompt: '',
             timeout_seconds: 45,
-            max_tokens: 8192,
-            temperature: 0.2,
+            max_tokens: 32768,
+            temperature: 1,
         };
         userConfigDraft.value.api_key = '';
 
@@ -948,8 +958,8 @@ const resetProviderOverrides = async () => {
             model: '',
             system_prompt: '',
             timeout_seconds: 45,
-            max_tokens: 8192,
-            temperature: 0.2,
+            max_tokens: 32768,
+            temperature: 1,
         };
 
         // 重置后端配置
@@ -1358,6 +1368,8 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
             history: enhancedHistory,
             location_context: locationContext,
             override_model: dc.model || undefined,
+            override_top_p: dc.top_p,
+            override_extra_body: dc.extra_body,
             tools: AGENT_TOOLS,
             tool_choice: 'auto',
         });
@@ -1384,6 +1396,8 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
             timeout_seconds: dc.timeout_seconds,
             max_tokens: dc.max_tokens,
             temperature: dc.temperature,
+            top_p: dc.top_p,
+            extra_body: dc.extra_body,
             tools: AGENT_TOOLS,
             tool_choice: 'auto',
         });
@@ -1407,6 +1421,8 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
         const draftTimeout = userConfigDraft.value.timeout_seconds;
         const draftMaxTokens = userConfigDraft.value.max_tokens;
         const draftTemperature = userConfigDraft.value.temperature;
+        const draftTopP = userConfigDraft.value.top_p;
+        const draftExtraBody = userConfigDraft.value.extra_body;
 
         if (draftBaseUrl) chatPayload.override_base_url = draftBaseUrl;
         if (draftApiKey) chatPayload.override_api_key = draftApiKey;
@@ -1417,6 +1433,10 @@ const _callLLMAPI = async ({ message: userMsg, history, locationContext, systemP
             chatPayload.override_max_tokens = draftMaxTokens;
         if (typeof draftTemperature === 'number')
             chatPayload.override_temperature = draftTemperature;
+        if (typeof draftTopP === 'number')
+            chatPayload.override_top_p = draftTopP;
+        if (draftExtraBody !== undefined && draftExtraBody !== null)
+            chatPayload.override_extra_body = draftExtraBody;
 
         const result = await apiAgentChatCompletions(chatPayload);
         const data = result?.data || result || {};

@@ -124,7 +124,7 @@ REM --- Smart image build detection ---
 echo.
 
 set DOCKER_ACTION=up
-set IMAGE_NAME=backend-api
+set IMAGE_NAME=negiao/webgis_dev:latest
 
 for /f "tokens=*" %%i in ('docker compose config --images 2^>nul') do (
     set IMAGE_NAME=%%i

@@ -24,6 +24,8 @@ from .constants import (
     CONFIG_KEY_DEFAULT_AI_API_KEY,
     CONFIG_KEY_DEFAULT_AI_BASE_URL,
     CONFIG_KEY_DEFAULT_AI_MODEL,
+    CONFIG_KEY_TOP_P,
+    CONFIG_KEY_EXTRA_BODY,
     CONFIG_KEY_MAX_TOKENS,
     CONFIG_KEY_MODEL,
     CONFIG_KEY_SYSTEM_PROMPT,
@@ -35,6 +37,8 @@ from .constants import (
     DEFAULT_AGENT_SYSTEM_PROMPT,
     DEFAULT_AGENT_TEMPERATURE,
     DEFAULT_AGENT_TIMEOUT_SECONDS,
+    DEFAULT_AGENT_TOP_P,
+    DEFAULT_AGENT_EXTRA_BODY,
     USER_CONFIG_TABLE,
     logger,
 )
@@ -48,6 +52,20 @@ from .utils import (
     _safe_parse_float,
     _safe_parse_int,
 )
+
+def _safe_parse_extra_body(raw: Any, fallback: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        return fallback
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+    return fallback
 
 
 def _db_connection() -> sqlite3.Connection:
@@ -123,6 +141,8 @@ def _ensure_agent_chat_tables_sync() -> None:
                     timeout_seconds INTEGER,
                     max_tokens INTEGER,
                     temperature REAL,
+                    top_p REAL,
+                    extra_body TEXT,
                     updated_at TEXT NOT NULL,
                     updated_by TEXT
                 )
@@ -144,6 +164,8 @@ def _ensure_agent_chat_tables_sync() -> None:
                 ("timeout_seconds", "INTEGER"),
                 ("max_tokens", "INTEGER"),
                 ("temperature", "REAL"),
+                ("top_p", "REAL"),
+                ("extra_body", "TEXT"),
                 ("updated_by", "TEXT")
             ]
             for col_name, col_type in cols_to_add:
@@ -178,6 +200,8 @@ def _read_agent_user_config_row_sync(username: str) -> Optional[Dict[str, Any]]:
                     timeout_seconds INTEGER,
                     max_tokens INTEGER,
                     temperature REAL,
+                    top_p REAL,
+                    extra_body TEXT,
                     updated_at TEXT NOT NULL,
                     updated_by TEXT
                 )
@@ -186,7 +210,7 @@ def _read_agent_user_config_row_sync(username: str) -> Optional[Dict[str, Any]]:
             row = conn.execute(
                 """
                 SELECT username, api_key, base_url, model, system_prompt,
-                       timeout_seconds, max_tokens, temperature, updated_at, updated_by
+                       timeout_seconds, max_tokens, temperature, top_p, extra_body, updated_at, updated_by
                 FROM agent_user_config
                 WHERE username = ?
                 """,
@@ -230,9 +254,19 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
     if "timeout_seconds" in updates:
         merged["timeout_seconds"] = _safe_parse_int(updates.get("timeout_seconds"), DEFAULT_AGENT_TIMEOUT_SECONDS, 5, 180)
     if "max_tokens" in updates:
-        merged["max_tokens"] = _safe_parse_int(updates.get("max_tokens"), DEFAULT_AGENT_MAX_TOKENS, 1, 8192)
+        merged["max_tokens"] = _safe_parse_int(updates.get("max_tokens"), DEFAULT_AGENT_MAX_TOKENS, 1, 32768)
     if "temperature" in updates:
         merged["temperature"] = _safe_parse_float(updates.get("temperature"), DEFAULT_AGENT_TEMPERATURE, 0.0, 2.0)
+    if "top_p" in updates:
+        merged["top_p"] = _safe_parse_float(updates.get("top_p"), DEFAULT_AGENT_TOP_P, 0.0, 1.0)
+    if "extra_body" in updates:
+        raw_extra_body = updates.get("extra_body")
+        if raw_extra_body is None:
+            merged["extra_body"] = merged.get("extra_body")
+        elif isinstance(raw_extra_body, dict):
+            merged["extra_body"] = json.dumps(raw_extra_body, ensure_ascii=False)
+        else:
+            merged["extra_body"] = str(raw_extra_body)
 
     if bool(updates.get("clear_personal_key")):
         merged["api_key"] = None
@@ -244,6 +278,8 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
         merged["timeout_seconds"] = None
         merged["max_tokens"] = None
         merged["temperature"] = None
+        merged["top_p"] = None
+        merged["extra_body"] = None
 
     merged["updated_at"] = _iso_now()
     merged["updated_by"] = str(updated_by or "self")[:64]
@@ -270,8 +306,8 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
                 """
                 INSERT INTO agent_user_config (
                     username, api_key, base_url, model, system_prompt,
-                    timeout_seconds, max_tokens, temperature, updated_at, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    timeout_seconds, max_tokens, temperature, top_p, extra_body, updated_at, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(username)
                 DO UPDATE SET
                     api_key = excluded.api_key,
@@ -281,6 +317,8 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
                     timeout_seconds = excluded.timeout_seconds,
                     max_tokens = excluded.max_tokens,
                     temperature = excluded.temperature,
+                    top_p = excluded.top_p,
+                    extra_body = excluded.extra_body,
                     updated_at = excluded.updated_at,
                     updated_by = excluded.updated_by
                 """,
@@ -293,6 +331,8 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
                     merged.get("timeout_seconds"),
                     merged.get("max_tokens"),
                     merged.get("temperature"),
+                    merged.get("top_p"),
+                    merged.get("extra_body"),
                     merged.get("updated_at"),
                     merged.get("updated_by"),
                 ),
@@ -314,6 +354,8 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
             "timeout_seconds": row.get("timeout_seconds"),
             "max_tokens": row.get("max_tokens"),
             "temperature": row.get("temperature"),
+            "top_p": row.get("top_p"),
+            "extra_body": _safe_parse_extra_body(row.get("extra_body")),
         },
         "updated_at": str(row.get("updated_at") or ""),
         "updated_by": str(row.get("updated_by") or ""),
@@ -356,6 +398,8 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
             CONFIG_KEY_TIMEOUT_SECONDS,
             CONFIG_KEY_MAX_TOKENS,
             CONFIG_KEY_TEMPERATURE,
+            CONFIG_KEY_TOP_P,
+            CONFIG_KEY_EXTRA_BODY,
         ]
     )
 
@@ -376,7 +420,7 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
         config_values.get(CONFIG_KEY_MAX_TOKENS),
         DEFAULT_AGENT_MAX_TOKENS,
         1,
-        8192,
+        32768,
     )
     temperature = _safe_parse_float(
         config_values.get(CONFIG_KEY_TEMPERATURE),
@@ -384,6 +428,19 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
         0.0,
         2.0,
     )
+    top_p = _safe_parse_float(
+        config_values.get(CONFIG_KEY_TOP_P),
+        DEFAULT_AGENT_TOP_P,
+        0.0,
+        1.0,
+    )
+    extra_body = None
+    raw_extra_body = config_values.get(CONFIG_KEY_EXTRA_BODY)
+    if raw_extra_body is not None and raw_extra_body != "":
+        try:
+            extra_body = json.loads(raw_extra_body)
+        except Exception:
+            extra_body = raw_extra_body
 
     return {
         "base_url": base_url,
@@ -393,6 +450,8 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
         "timeout_seconds": timeout_seconds,
         "max_tokens": max_tokens,
         "temperature": temperature,
+        "top_p": top_p,
+        "extra_body": extra_body,
     }
 
 
@@ -480,7 +539,7 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
         rows_to_upsert.append(
             (
                 CONFIG_KEY_MAX_TOKENS,
-                str(_safe_parse_int(updates["max_tokens"], DEFAULT_AGENT_MAX_TOKENS, 1, 8192)),
+                str(_safe_parse_int(updates["max_tokens"], DEFAULT_AGENT_MAX_TOKENS, 1, 32768)),
                 now_iso,
             )
         )
@@ -489,6 +548,23 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
             (
                 CONFIG_KEY_TEMPERATURE,
                 str(_safe_parse_float(updates["temperature"], DEFAULT_AGENT_TEMPERATURE, 0.0, 2.0)),
+                now_iso,
+            )
+        )
+    if "top_p" in updates:
+        rows_to_upsert.append(
+            (
+                CONFIG_KEY_TOP_P,
+                str(_safe_parse_float(updates["top_p"], DEFAULT_AGENT_TOP_P, 0.0, 1.0)),
+                now_iso,
+            )
+        )
+    if "extra_body" in updates:
+        extra_body_val = updates.get("extra_body")
+        rows_to_upsert.append(
+            (
+                CONFIG_KEY_EXTRA_BODY,
+                json.dumps(extra_body_val, ensure_ascii=False) if extra_body_val is not None else "",
                 now_iso,
             )
         )
@@ -660,8 +736,10 @@ def _resolve_effective_agent_runtime_sync(username: str) -> Dict[str, Any]:
         "available_models": available_models,
         "system_prompt": _normalize_system_prompt(str(user_cfg.get("system_prompt") or provider.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT)),
         "timeout_seconds": _safe_parse_int(user_cfg.get("timeout_seconds"), int(provider.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS), 5, 180),
-        "max_tokens": _safe_parse_int(user_cfg.get("max_tokens"), int(provider.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS), 1, 8192),
+        "max_tokens": _safe_parse_int(user_cfg.get("max_tokens"), int(provider.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS), 1, DEFAULT_AGENT_MAX_TOKENS),
         "temperature": _safe_parse_float(user_cfg.get("temperature"), float(provider.get("temperature") or DEFAULT_AGENT_TEMPERATURE), 0.0, 2.0),
+        "top_p": _safe_parse_float(user_cfg.get("top_p"), float(provider.get("top_p") or DEFAULT_AGENT_TOP_P), 0.0, 1.0),
+        "extra_body": _safe_parse_extra_body(user_cfg.get("extra_body"), provider.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY),
         "api_key": personal_key if use_personal_key else str(key_info.get("key_value") or "").strip(),
         "api_key_candidates": [personal_key] if use_personal_key else list(key_info.get("key_values") or []),
         "api_key_source": "user-personal" if use_personal_key else str(key_info.get("source") or "missing"),

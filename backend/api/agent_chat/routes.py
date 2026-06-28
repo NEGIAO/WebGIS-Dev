@@ -1,5 +1,5 @@
 """
-Agent Chat 路由处理函数。
+Agent Chat route handlers.
 """
 
 import asyncio
@@ -19,6 +19,8 @@ from .constants import (
     DEFAULT_AGENT_SYSTEM_PROMPT,
     DEFAULT_AGENT_TEMPERATURE,
     DEFAULT_AGENT_TIMEOUT_SECONDS,
+    DEFAULT_AGENT_TOP_P,
+    DEFAULT_AGENT_EXTRA_BODY,
     logger,
 )
 from .db import (
@@ -35,6 +37,7 @@ from .db import (
     _upsert_agent_user_config_sync,
     _db_connection,
     _ensure_agent_chat_tables_sync,
+    _safe_parse_extra_body,
 )
 from .quota import (
     _check_agent_chat_quota_sync,
@@ -65,6 +68,7 @@ from .utils import (
     _normalize_available_models,
     _normalize_base_url,
     _normalize_model,
+    _safe_parse_float,
 )
 
 router = APIRouter(prefix="/api/agent", tags=["agent-chat"])
@@ -102,6 +106,8 @@ async def get_agent_chat_config(
                 "timeout_seconds": int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
                 "max_tokens": int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS),
                 "temperature": float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE),
+                "top_p": float(runtime.get("top_p") or DEFAULT_AGENT_TOP_P),
+                "extra_body": runtime.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY,
             },
         },
     }
@@ -144,6 +150,8 @@ async def agent_chat_completions(
     override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS)
     override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS)
     override_temp = float(payload.override_temperature) if payload.override_temperature is not None else float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE)
+    override_top_p = float(payload.override_top_p) if payload.override_top_p is not None else float(runtime.get("top_p") or DEFAULT_AGENT_TOP_P)
+    override_extra_body = payload.override_extra_body if payload.override_extra_body is not None else runtime.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY
 
     if not api_key:
         raise HTTPException(
@@ -201,6 +209,8 @@ async def agent_chat_completions(
             timeout_seconds=override_timeout,
             max_tokens=override_max_tokens,
             temperature=override_temp,
+            top_p=override_top_p,
+            extra_body=override_extra_body,
             tools=payload.tools,
             tool_choice=payload.tool_choice,
         )
@@ -417,6 +427,8 @@ async def agent_chat_default_proxy(
     override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else DEFAULT_AGENT_TIMEOUT_SECONDS
     override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else DEFAULT_AGENT_MAX_TOKENS
     override_temp = float(payload.override_temperature) if payload.override_temperature is not None else DEFAULT_AGENT_TEMPERATURE
+    override_top_p = float(payload.override_top_p) if payload.override_top_p is not None else float(DEFAULT_AGENT_TOP_P)
+    override_extra_body = payload.override_extra_body if payload.override_extra_body is not None else DEFAULT_AGENT_EXTRA_BODY
 
     history_items = _sanitize_history(payload.history)
 
@@ -460,6 +472,8 @@ async def agent_chat_default_proxy(
             timeout_seconds=override_timeout,
             max_tokens=override_max_tokens,
             temperature=override_temp,
+            top_p=override_top_p,
+            extra_body=override_extra_body,
             tools=payload.tools,
             tool_choice=payload.tool_choice,
         )
@@ -532,6 +546,8 @@ async def get_agent_user_config(
                 "timeout_seconds": (user_cfg or {}).get("timeout_seconds"),
                 "max_tokens": (user_cfg or {}).get("max_tokens"),
                 "temperature": (user_cfg or {}).get("temperature"),
+                "top_p": _safe_parse_float((user_cfg or {}).get("top_p"), DEFAULT_AGENT_TOP_P, 0.0, 1.0),
+                "extra_body": _safe_parse_extra_body((user_cfg or {}).get("extra_body")),
             },
             "default_provider": provider,
         },
@@ -833,6 +849,8 @@ async def agent_chat_proxy(
             timeout_seconds=int(payload.timeout_seconds),
             max_tokens=int(payload.max_tokens),
             temperature=float(payload.temperature),
+            top_p=float(payload.top_p),
+            extra_body=payload.extra_body,
             tools=payload.tools,
             tool_choice=payload.tool_choice,
         )

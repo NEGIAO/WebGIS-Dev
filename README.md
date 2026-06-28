@@ -280,6 +280,14 @@ WebGIS_Dev/
 
 ## 📜 版本演进
 
+### V3.3.13 (2026-06-28) — LLM 参数动态配置管理（管理员后台）
+
+- 🆕 **管理员控制台新增 LLM 参数配置面板** (`AdminControlPanel.vue`)：支持动态修改后端运行时读取的 Agent 对话参数，修改后**无需重启服务即时生效**
+- 🆕 **可配置参数**：Base URL、Model、Available Models 列表、Timeout、Max Tokens、Temperature (1.0)、Top P (0.95)、Extra Body (JSON)、System Prompt、Stream、Guest/Registered 每日额度
+- 🆕 **后端动态读取机制**：所有参数存储在数据库 `system_config` 表，后端运行时通过 `_get_agent_provider_config_sync()` 实时读取，前端 AI 助手、Agent 对话、模型列表等功能统一使用这些配置
+- 🔧 **默认参数已标准化**：Temperature=1、Top P=0.95、Max Tokens=32768、Extra Body 包含 `chat_template_kwargs.enable_thinking=true` 和 `reasoning_budget=16384`
+- 🔧 **前后端链路一致性**：`ApiKeysManagementPanel.vue`、`ChatPanelContent.vue` 均从后端动态获取配置，彻底消除硬编码
+
 ### V3.3.12 (2026-06-27) — 体积云模块重构 + 洪水模拟 + 漫游导航指引
 
 - 🆕 **体积云独立模块** (`Cloud/`)：从 `CesiumAdvancedEffects.vue` 提取为独立 TypeScript 模块（CloudManager / CloudPresets / CloudUniforms / cloudIntegration / useVolumetricCloud / 4 个 GLSL Shader / 纹理资源）

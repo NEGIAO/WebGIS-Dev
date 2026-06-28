@@ -1,5 +1,6 @@
 services:
   api:
+    image: negiao/webgis_dev:latest
     build: .
     ports:
       - "7860:7860"

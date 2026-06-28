@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useAgentConfig } from '../../composables/useAgentConfig';
 import {
     apiAdminDeleteRows,
     apiAdminGetTableRows,
@@ -38,6 +39,17 @@ const loadingTables = ref(false);
 const loadingRows = ref(false);
 const submittingConfig = ref(false);
 const submittingTable = ref(false);
+
+// LLM 参数配置 - 使用共享 composable
+const {
+    agentConfig: _agentConfig,
+    agentConfigDraft,
+    loading: loadingAgentConfig,
+    submitting: submittingAgentConfig,
+    load: loadAgentConfig,
+    save: saveAgentConfig,
+    resetQuota: resetChatQuota,
+} = useAgentConfig();
 
 const selectedTableMeta = computed(() => {
     return tables.value.find((item) => item.name === selectedTable.value) || null;
@@ -280,6 +292,7 @@ onMounted(async () => {
     await loadOverview();
     await loadTables();
     await loadRows();
+    await loadAgentConfig();
 });
 </script>
 
@@ -353,6 +366,178 @@ onMounted(async () => {
             >
                 发布公告
             </button>
+        </div>
+
+        <!-- LLM 参数动态配置 -->
+        <div class="admin-card">
+            <h5 class="admin-subtitle">🤖 LLM 对话参数配置（后端动态读取，实时生效）</h5>
+            <p class="config-description">以下参数存储在数据库 system_config 表中，后端运行时动态读取，修改后无需重启服务即可生效。前端 AI 助手、Agent 对话、模型列表等功能均使用这些配置。</p>
+
+            <div v-if="loadingAgentConfig" class="loading-state">
+                <span class="spinner"></span> 正在加载 Agent 配置...
+            </div>
+
+            <div v-else class="agent-config-form">
+                <div class="config-row">
+                    <label class="config-field">
+                        <span>Base URL</span>
+                        <input
+                            v-model="agentConfigDraft.base_url"
+                            class="config-input"
+                            type="text"
+                            placeholder="https://api.example.com/v1"
+                        />
+                    </label>
+                    <label class="config-field">
+                        <span>Model</span>
+                        <input
+                            v-model="agentConfigDraft.model"
+                            class="config-input"
+                            type="text"
+                            placeholder="留空则按 available_models 随机调度"
+                        />
+                    </label>
+                </div>
+
+                <label class="config-field config-field-full">
+                    <span>Available Models（逗号或换行分隔）</span>
+                    <textarea
+                        v-model="agentConfigDraft.available_models_text"
+                        class="config-textarea"
+                        rows="3"
+                        placeholder="qwen-plus\ndeepseek-chat\ngpt-4o-mini"
+                    ></textarea>
+                </label>
+
+                <div class="config-row">
+                    <label class="config-field">
+                        <span>Timeout (seconds)</span>
+                        <input
+                            v-model.number="agentConfigDraft.timeout_seconds"
+                            class="config-input"
+                            type="number"
+                            min="5"
+                            max="180"
+                        />
+                    </label>
+                    <label class="config-field">
+                        <span>Max Tokens</span>
+                        <input
+                            v-model.number="agentConfigDraft.max_tokens"
+                            class="config-input"
+                            type="number"
+                            min="1"
+                            max="32768"
+                        />
+                    </label>
+                </div>
+
+                <div class="config-row">
+                    <label class="config-field">
+                        <span>Temperature</span>
+                        <input
+                            v-model.number="agentConfigDraft.temperature"
+                            class="config-input"
+                            type="number"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                        />
+                    </label>
+                    <label class="config-field">
+                        <span>Top P</span>
+                        <input
+                            v-model.number="agentConfigDraft.top_p"
+                            class="config-input"
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                        />
+                    </label>
+                </div>
+
+                <label class="config-field config-field-full">
+                    <span>Extra Body (JSON)</span>
+                    <textarea
+                        v-model="agentConfigDraft.extra_body"
+                        class="config-textarea"
+                        rows="3"
+                        placeholder='{"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}'
+                    ></textarea>
+                </label>
+
+                <label class="config-field config-field-full">
+                    <span>System Prompt</span>
+                    <textarea
+                        v-model="agentConfigDraft.system_prompt"
+                        class="config-textarea"
+                        rows="4"
+                        placeholder="用于后端统一注入的系统提示词"
+                    ></textarea>
+                </label>
+
+                <div class="config-row">
+                    <label class="config-field">
+                        <span>Stream</span>
+                        <input
+                            v-model="agentConfigDraft.stream"
+                            class="config-checkbox"
+                            type="checkbox"
+                        />
+                    </label>
+                </div>
+
+                <div class="config-row">
+                    <label class="config-field">
+                        <span>Guest 每日额度</span>
+                        <input
+                            v-model.number="agentConfigDraft.guest_daily_quota"
+                            class="config-input"
+                            type="number"
+                            min="1"
+                            max="100000"
+                        />
+                    </label>
+                    <label class="config-field">
+                        <span>Registered 每日额度</span>
+                        <input
+                            v-model.number="agentConfigDraft.registered_daily_quota"
+                            class="config-input"
+                            type="number"
+                            min="1"
+                            max="100000"
+                        />
+                    </label>
+                </div>
+
+                <div class="button-group">
+                    <button
+                        class="btn btn-save"
+                        type="button"
+                        :disabled="submittingAgentConfig"
+                        @click="saveAgentConfig"
+                    >
+                        {{ submittingAgentConfig ? '保存中...' : '保存 LLM 参数' }}
+                    </button>
+                    <button
+                        class="btn btn-edit"
+                        type="button"
+                        :disabled="submittingAgentConfig"
+                        @click="resetChatQuota"
+                    >
+                        恢复默认对话额度
+                    </button>
+                    <button
+                        class="btn btn-cancel"
+                        type="button"
+                        :disabled="submittingAgentConfig"
+                        @click="loadAgentConfig"
+                    >
+                        重新加载
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="admin-card">
@@ -680,5 +865,157 @@ onMounted(async () => {
     color: var(--acc-text-soft, #5d7f6a);
     text-align: center;
     background: rgba(255, 255, 255, 0.4);
+}
+
+/* LLM 参数配置样式 */
+.config-description {
+    margin: 0 0 12px 0;
+    font-size: 12px;
+    color: var(--acc-text-soft, #5d7f6a);
+    line-height: 1.5;
+}
+
+.agent-config-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.config-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+    gap: 10px;
+}
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--acc-text-main, #2c5f3e);
+    min-width: 0;
+}
+
+.config-field-full {
+    grid-column: 1 / -1;
+}
+
+.config-field span {
+    font-weight: 500;
+    color: var(--acc-text-strong, #214a31);
+}
+
+.config-input,
+.config-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
+    border-radius: 8px;
+    background: #ffffff;
+    color: #333333;
+    padding: 8px 10px;
+    font-size: 13px;
+    transition: border-color 0.2s;
+    font-family: Consolas, Monaco, 'Courier New', monospace;
+}
+
+.config-input:focus,
+.config-textarea:focus {
+    outline: none;
+    border-color: var(--brand-primary-light);
+    box-shadow: 0 0 0 3px rgba(89, 182, 106, 0.15);
+}
+
+.config-textarea {
+    min-height: 70px;
+    resize: vertical;
+}
+
+.config-checkbox {
+    width: auto;
+    margin-top: 4px;
+    transform: scale(1.1);
+    accent-color: var(--brand-primary);
+}
+
+.loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: var(--acc-text-soft, #5d7f6a);
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-top: 2px solid var(--brand-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-height: 36px;
+}
+
+.btn-save {
+    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
+    color: #ffffff;
+    border: 1px solid rgba(63, 148, 75, 0.55);
+    box-shadow: 0 4px 10px rgba(58, 129, 76, 0.15);
+}
+
+.btn-save:hover:not(:disabled) {
+    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(58, 129, 76, 0.25);
+}
+
+.btn-edit {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary);
+    border: 1px solid var(--brand-primary);
+}
+
+.btn-edit:hover:not(:disabled) {
+    background: var(--brand-primary);
+    color: white;
+}
+
+.btn-cancel {
+    background: var(--border-light);
+    color: var(--text-primary);
+}
+
+.btn-cancel:hover:not(:disabled) {
+    background: #bdbdbd;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
 }
 </style>

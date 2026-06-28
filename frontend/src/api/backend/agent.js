@@ -54,6 +54,10 @@ export async function apiAgentChatDefaultProxy(payload = {}) {
         body.override_max_tokens = Number(payload.override_max_tokens);
     if (typeof payload.override_temperature !== 'undefined' && payload.override_temperature !== null)
         body.override_temperature = Number(payload.override_temperature);
+    if (typeof payload.override_top_p !== 'undefined' && payload.override_top_p !== null)
+        body.override_top_p = Number(payload.override_top_p);
+    if (typeof payload.override_extra_body !== 'undefined' && payload.override_extra_body !== null)
+        body.override_extra_body = payload.override_extra_body;
 
     // Function Calling 支持：透传工具声明给后端
     if (Array.isArray(payload.tools) && payload.tools.length > 0) {
@@ -106,6 +110,10 @@ export async function apiAgentUpdateUserConfig(payload = {}) {
         safePayload.max_tokens = Number(payload.max_tokens);
     if (typeof payload.temperature !== 'undefined')
         safePayload.temperature = Number(payload.temperature);
+    if (typeof payload.top_p !== 'undefined')
+        safePayload.top_p = Number(payload.top_p);
+    if (typeof payload.extra_body !== 'undefined')
+        safePayload.extra_body = payload.extra_body;
     if (typeof payload.clear_personal_key !== 'undefined')
         safePayload.clear_personal_key = !!payload.clear_personal_key;
     if (typeof payload.reset_provider_overrides !== 'undefined')
@@ -148,6 +156,12 @@ export async function apiAgentChatCompletions(payload = {}) {
     }
     if (typeof payload.override_temperature !== 'undefined' && payload.override_temperature !== null) {
         body.override_temperature = Number(payload.override_temperature);
+    }
+    if (typeof payload.override_top_p !== 'undefined' && payload.override_top_p !== null) {
+        body.override_top_p = Number(payload.override_top_p);
+    }
+    if (typeof payload.override_extra_body !== 'undefined' && payload.override_extra_body !== null) {
+        body.override_extra_body = payload.override_extra_body;
     }
 
     // Function Calling 支持：透传工具声明给后端
@@ -209,6 +223,10 @@ export async function apiAgentChatProxy(payload = {}) {
         body.max_tokens = Number(payload.max_tokens);
     if (typeof payload.temperature !== 'undefined' && payload.temperature !== null)
         body.temperature = Number(payload.temperature);
+    if (typeof payload.top_p !== 'undefined' && payload.top_p !== null)
+        body.top_p = Number(payload.top_p);
+    if (typeof payload.extra_body !== 'undefined' && payload.extra_body !== null)
+        body.extra_body = payload.extra_body;
 
     // Function Calling 支持：透传工具声明给后端
     if (Array.isArray(payload.tools) && payload.tools.length > 0) {

@@ -451,8 +451,7 @@ function retryTiandituLayersWithNextToken({ layerId, reason, releaseMonitor } = 
     affectedLayerIds.forEach(attachRuntimeTokenMonitor);
 
     message?.warning?.(
-        `天地图 token 已切换到备用项，正在重试 ${affectedLayerIds.join(' + ')}${
-            reason ? `：${reason}` : ''
+        `天地图 token 已切换到备用项，正在重试 ${affectedLayerIds.join(' + ')}${reason ? `：${reason}` : ''
         }`,
     );
     return true;
@@ -1232,7 +1231,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.10)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.13)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1871,9 +1870,9 @@ defineExpose({
     /* 渐变背景由 --compass-bg 变量驱动，fallback 为黑色 */
     background:
         radial-gradient(circle at 50% 50%,
-            var(--compass-bg-g1, rgba(0,0,0,0.45)),
-            var(--compass-bg-g2, rgba(0,0,0,0.25)) 30%,
-            var(--compass-bg-g3, rgba(0,0,0,0.10)) 60%,
+            var(--compass-bg-g1, rgba(0, 0, 0, 0.45)),
+            var(--compass-bg-g2, rgba(0, 0, 0, 0.25)) 30%,
+            var(--compass-bg-g3, rgba(0, 0, 0, 0.10)) 60%,
             transparent 100%);
     filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.26));
     overflow: visible;

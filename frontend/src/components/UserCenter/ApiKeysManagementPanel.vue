@@ -400,7 +400,7 @@
                 <div class="section-actions">
                     <button
                         class="btn btn-edit"
-                        @click="loadAgentConfig"
+                        @click="loadAgentConfigWrapper"
                     >
                         刷新
                     </button>
@@ -467,7 +467,7 @@
                             v-model.number="agentConfigDraft.max_tokens"
                             type="number"
                             min="1"
-                            max="8192"
+                            max="32768"
                             class="key-input"
                         />
                     </label>
@@ -480,6 +480,35 @@
                             max="2"
                             step="0.1"
                             class="key-input"
+                        />
+                    </label>
+                    <label class="config-item">
+                        <span>Top P</span>
+                        <input
+                            v-model.number="agentConfigDraft.top_p"
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.01"
+                            class="key-input"
+                        />
+                    </label>
+                    <label class="config-item config-item-full">
+                        <span>Extra Body (JSON)</span>
+                        <textarea
+                            v-model="agentConfigDraft.extra_body"
+                            rows="3"
+                            class="key-input"
+                            placeholder='{"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}'
+                        ></textarea>
+                    </label>
+                    <label class="config-item">
+                        <span>Stream</span>
+                        <input
+                            v-model="agentConfigDraft.stream"
+                            type="checkbox"
+                            class="key-input"
+                            style="width: auto; margin-top: 8px;"
                         />
                     </label>
                     <label class="config-item">
@@ -516,13 +545,13 @@
                 <div class="button-group">
                     <button
                         class="btn btn-save"
-                        @click="saveAgentConfig"
+                        @click="saveAgentConfigWrapper"
                     >
                         保存参数
                     </button>
                     <button
                         class="btn btn-edit"
-                        @click="resetChatQuota"
+                        @click="resetChatQuotaWrapper"
                     >
                         恢复默认额度
                     </button>
@@ -565,6 +594,18 @@
                     <div class="config-item">
                         <span>Temperature</span>
                         <strong>{{ agentConfig.temperature ?? '-' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Top P</span>
+                        <strong>{{ agentConfig.top_p ?? '-' }}</strong>
+                    </div>
+                    <div class="config-item config-item-full">
+                        <span>Extra Body</span>
+                        <strong>{{ agentConfig.extra_body ? JSON.stringify(agentConfig.extra_body) : '未配置' }}</strong>
+                    </div>
+                    <div class="config-item">
+                        <span>Stream</span>
+                        <strong>{{ agentConfig.stream ? '开启' : '关闭' }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Guest 每日额度</span>
@@ -721,14 +762,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useAgentConfig } from '../../composables/useAgentConfig';
 import {
-    apiAdminGetAgentConfig,
     apiAdminGetApiKeysStatus,
     apiAdminAppendApiKeyBackup,
     apiAdminDeleteApiKeyBackup,
     apiAdminDeleteApiKey,
     apiAdminSetApiKey,
-    apiAdminUpdateAgentConfig,
     apiAdminGetDefaultAIConfig,
     apiAdminUpdateDefaultAIConfig,
 } from '../../api/backend';
@@ -766,27 +806,38 @@ const backupEditValues = ref({
     cesium_ion_token: '',
 });
 
-const agentConfigLoading = ref(false);
-const editingAgentConfig = ref(false);
-const agentConfig = ref({
-    base_url: '',
-    model: '',
-    available_models: [],
-    timeout_seconds: 45,
-    max_tokens: 512,
-    temperature: 0.2,
-    system_prompt: '',
-});
-const agentConfigDraft = ref({
-    ...agentConfig.value,
-    available_models_text: '',
-    guest_daily_quota: 10,
-    registered_daily_quota: 100,
-});
+// Agent 配置 - 使用共享 composable
+const {
+    agentConfig,
+    agentConfigDraft,
+    loading: agentConfigLoading,
+    save: saveAgentConfig,
+    resetQuota: resetChatQuota,
+    load: loadAgentConfig,
+    hydrate: hydrateAgentConfigDraft,
+} = useAgentConfig();
+
+// 兼容旧代码的额度引用
 const agentQuota = ref({
     guest: 10,
     registered: 100,
 });
+
+// 同步 agentQuota 与 composable 内部状态
+const hydrateWithQuotaSync = () => {
+    hydrateAgentConfigDraft();
+    const chatQuota = agentConfig.value?.chat_quota || {};
+    agentQuota.value = {
+        guest: Number(chatQuota.guest || 10),
+        registered: Number(chatQuota.registered || 100),
+    };
+};
+
+// 重写 load 方法以同步 quota
+const loadAgentConfigWithQuota = async () => {
+    await loadAgentConfig();
+    hydrateWithQuotaSync();
+};
 
 // 默认 AI 专属配置状态
 const defaultAILoading = ref(false);
@@ -873,148 +924,19 @@ function cancelEdit() {
     };
 }
 
-function hydrateAgentConfigDraft() {
-    agentConfigDraft.value = {
-        base_url: String(agentConfig.value.base_url || ''),
-        model: String(agentConfig.value.model || ''),
-        available_models_text: Array.isArray(agentConfig.value.available_models)
-            ? agentConfig.value.available_models.join('\n')
-            : '',
-        timeout_seconds: Number(agentConfig.value.timeout_seconds || 45),
-        max_tokens: Number(agentConfig.value.max_tokens || 512),
-        temperature: Number(agentConfig.value.temperature ?? 0.2),
-        guest_daily_quota: Number(agentQuota.value.guest || 10),
-        registered_daily_quota: Number(agentQuota.value.registered || 100),
-        system_prompt: String(agentConfig.value.system_prompt || ''),
-    };
+async function loadAgentConfigWrapper() {
+    // 使用共享 composable 的 load 方法，但需要同步 agentConfig 和 agentQuota
+    await loadAgentConfigWithQuota();
 }
 
-function parseAvailableModelsText(rawText) {
-    return String(rawText || '')
-        .split(/[,\n]/g)
-        .map((item) => String(item || '').trim())
-        .filter(Boolean)
-        .filter((item, index, array) => array.indexOf(item) === index)
-        .slice(0, 200);
+async function saveAgentConfigWrapper() {
+    // 使用共享 composable 的 save 方法
+    await saveAgentConfig();
 }
 
-function startEditAgentConfig() {
-    editingAgentConfig.value = true;
-    hydrateAgentConfigDraft();
-}
-
-function cancelEditAgentConfig() {
-    editingAgentConfig.value = false;
-    hydrateAgentConfigDraft();
-}
-
-async function loadAgentConfig() {
-    agentConfigLoading.value = true;
-    try {
-        const result = await apiAdminGetAgentConfig();
-        const data = result?.data || result || {};
-        const provider = data?.provider || {};
-        agentConfig.value = {
-            base_url: String(provider.base_url || ''),
-            model: String(provider.model || ''),
-            available_models: Array.isArray(provider.available_models)
-                ? provider.available_models
-                : [],
-            timeout_seconds: Number(provider.timeout_seconds || 45),
-            max_tokens: Number(provider.max_tokens || 512),
-            temperature: Number(provider.temperature ?? 0.2),
-            system_prompt: String(provider.system_prompt || ''),
-        };
-
-        const quota = data?.chat_quota || {};
-        agentQuota.value = {
-            guest: Number(quota.guest || 10),
-            registered: Number(quota.registered || 100),
-        };
-
-        hydrateAgentConfigDraft();
-    } catch (error) {
-        message.error(`加载 Agent 配置失败: ${error.message}`);
-    } finally {
-        agentConfigLoading.value = false;
-    }
-}
-
-async function saveAgentConfig() {
-    const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text);
-    const guestDailyQuota = Number(agentConfigDraft.value.guest_daily_quota || 0);
-    const registeredDailyQuota = Number(agentConfigDraft.value.registered_daily_quota || 0);
-
-    const payload = {
-        base_url: String(agentConfigDraft.value.base_url || '').trim(),
-        model: String(agentConfigDraft.value.model || '').trim(),
-        available_models: availableModels,
-        timeout_seconds: Number(agentConfigDraft.value.timeout_seconds || 45),
-        max_tokens: Number(agentConfigDraft.value.max_tokens || 512),
-        temperature: Number(agentConfigDraft.value.temperature ?? 0.2),
-        guest_daily_quota: guestDailyQuota,
-        registered_daily_quota: registeredDailyQuota,
-        system_prompt: String(agentConfigDraft.value.system_prompt || '').trim(),
-    };
-
-    if (!payload.base_url || !payload.system_prompt) {
-        message.error('Base URL、System Prompt 不能为空');
-        return;
-    }
-
-    if (!payload.model && payload.available_models.length === 0) {
-        message.error('请至少配置一个固定 Model 或 available_models 列表');
-        return;
-    }
-
-    if (!Number.isFinite(guestDailyQuota) || guestDailyQuota < 1) {
-        message.error('Guest 每日额度必须是大于 0 的整数');
-        return;
-    }
-
-    if (!Number.isFinite(registeredDailyQuota) || registeredDailyQuota < 1) {
-        message.error('Registered 每日额度必须是大于 0 的整数');
-        return;
-    }
-
-    try {
-        const result = await apiAdminUpdateAgentConfig(payload);
-        const data = result?.data || result || {};
-        const provider = data?.provider || {};
-        agentConfig.value = {
-            base_url: String(provider.base_url || payload.base_url),
-            model: String(provider.model || payload.model),
-            available_models: Array.isArray(provider.available_models)
-                ? provider.available_models
-                : payload.available_models,
-            timeout_seconds: Number(provider.timeout_seconds || payload.timeout_seconds),
-            max_tokens: Number(provider.max_tokens || payload.max_tokens),
-            temperature: Number(provider.temperature ?? payload.temperature),
-            system_prompt: String(provider.system_prompt || payload.system_prompt),
-        };
-
-        const quota = data?.chat_quota || {};
-        agentQuota.value = {
-            guest: Number(quota.guest || payload.guest_daily_quota || 10),
-            registered: Number(quota.registered || payload.registered_daily_quota || 100),
-        };
-
-        hydrateAgentConfigDraft();
-        editingAgentConfig.value = false;
-        message.success('Agent 参数已保存');
-    } catch (error) {
-        message.error(`保存 Agent 配置失败: ${error.message}`);
-    }
-}
-
-async function resetChatQuota() {
-    try {
-        await apiAdminUpdateAgentConfig({ reset_chat_quota: true });
-        await loadAgentConfig();
-        message.success('已恢复默认对话额度');
-    } catch (error) {
-        message.error(`恢复默认额度失败: ${error.message}`);
-    }
+async function resetChatQuotaWrapper() {
+    // 使用共享 composable 的 resetQuota 方法
+    await resetChatQuota();
 }
 
 async function saveKey(keyName) {

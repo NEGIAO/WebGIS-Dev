@@ -1,4 +1,24 @@
-# WebGIS 前端项目 — v3.3.12
+# WebGIS 前端项目 — v3.3.13
+
+## 📝 2026-06-28 LLM 参数动态配置管理（管理员后台）
+
+管理员控制台新增 LLM 参数配置面板 (`AdminControlPanel.vue`)，支持动态修改后端运行时读取的 Agent 对话参数，修改后**无需重启服务即时生效**。
+
+**核心特性：**
+- 🆕 **可配置参数**：Base URL、Model、Available Models 列表、Timeout、Max Tokens、Temperature (1.0)、Top P (0.95)、Extra Body (JSON)、System Prompt、Stream、Guest/Registered 每日额度
+- 🆕 **后端动态读取机制**：所有参数存储在数据库 `system_config` 表，后端运行时实时读取，前端 AI 助手、Agent 对话、模型列表等功能统一使用这些配置
+- 🔧 **默认参数已标准化**：Temperature=1、Top P=0.95、Max Tokens=32768、Extra Body 包含 `chat_template_kwargs.enable_thinking=true` 和 `reasoning_budget=16384`
+- 🔧 **前后端链路一致性**：`ApiKeysManagementPanel.vue`、`ChatPanelContent.vue` 均从后端动态获取配置，彻底消除硬编码
+
+**涉及文件：**
+- `frontend/src/components/UserCenter/AdminControlPanel.vue` - 新增 LLM 配置面板
+- `frontend/src/components/UserCenter/ApiKeysManagementPanel.vue` - 默认参数对齐
+- `frontend/src/components/Chat/ChatPanelContent.vue` - 运行时使用动态配置
+- `backend/api/agent_chat/constants.py` - 后端默认常量
+- `backend/api/agent_chat/db.py` - 数据库读写逻辑
+- `backend/api/agent_chat/routes.py` - Admin API 端点
+
+详见维护日志 `Docs/26-06/26-06-28/2026-06-28-llm-dynamic-config.md`。
 
 ## 📝 2026-06-27 PlayerController 全面优化（动画混合 + 移动手感 + 相机平滑 + GC 优化）
 

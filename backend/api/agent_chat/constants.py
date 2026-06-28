@@ -46,8 +46,13 @@ DEFAULT_AGENT_SYSTEM_PROMPT = str(
     )
 ).strip()
 DEFAULT_AGENT_TIMEOUT_SECONDS = _safe_env_int("AGENT_TIMEOUT_SECONDS", 45, 5, 180)
-DEFAULT_AGENT_MAX_TOKENS = _safe_env_int("AGENT_MAX_TOKENS", 512, 1, 8192)
-DEFAULT_AGENT_TEMPERATURE = _safe_env_float("AGENT_TEMPERATURE", 0.2, 0.0, 2.0)
+DEFAULT_AGENT_MAX_TOKENS = _safe_env_int("AGENT_MAX_TOKENS", 32768, 1, 32768)
+DEFAULT_AGENT_TEMPERATURE = _safe_env_float("AGENT_TEMPERATURE", 1.0, 0.0, 2.0)
+DEFAULT_AGENT_TOP_P = _safe_env_float("AGENT_TOP_P", 0.95, 0.0, 1.0)
+DEFAULT_AGENT_EXTRA_BODY = {
+    "chat_template_kwargs": {"enable_thinking": True},
+    "reasoning_budget": 16384,
+}
 
 CONFIG_KEY_BASE_URL = "agent_base_url"
 CONFIG_KEY_MODEL = "agent_model"
@@ -56,6 +61,8 @@ CONFIG_KEY_SYSTEM_PROMPT = "agent_system_prompt"
 CONFIG_KEY_TIMEOUT_SECONDS = "agent_timeout_seconds"
 CONFIG_KEY_MAX_TOKENS = "agent_max_tokens"
 CONFIG_KEY_TEMPERATURE = "agent_temperature"
+CONFIG_KEY_TOP_P = "agent_top_p"
+CONFIG_KEY_EXTRA_BODY = "agent_extra_body"
 CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA = "agent_chat_guest_daily_quota"
 CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA = "agent_chat_registered_daily_quota"
 
