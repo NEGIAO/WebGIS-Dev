@@ -4,14 +4,17 @@ import { useMessage } from '../../composables/useMessage';
 import { useAgentConfig } from '../../composables/useAgentConfig';
 import {
     apiAdminDeleteRows,
+    apiAdminGetDefaultBasemapIndex,
     apiAdminGetTableRows,
     apiAdminInsertRow,
     apiAdminListTables,
     apiAdminOverview,
     apiAdminPublishAnnouncement,
     apiAdminUpdateContact,
+    apiAdminUpdateDefaultBasemapIndex,
     apiAdminUpdateRows,
 } from '../../api/backend';
+import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '../../constants/basemap/basemapResolver';
 
 const message = useMessage();
 
@@ -50,6 +53,42 @@ const {
     save: saveAgentConfig,
     resetQuota: resetChatQuota,
 } = useAgentConfig();
+
+// 默认底图配置
+const defaultBasemapIndex = ref(DEFAULT_BASEMAP_LAYER_INDEX);
+const loadingBasemap = ref(false);
+const submittingBasemap = ref(false);
+
+const basemapOptions = BASEMAP_OPTIONS.map((opt, i) => ({ index: i, label: opt.label }));
+
+async function loadDefaultBasemapIndex() {
+    loadingBasemap.value = true;
+    try {
+        const result = await apiAdminGetDefaultBasemapIndex();
+        const idx = result?.data?.index;
+        defaultBasemapIndex.value = idx != null ? idx : DEFAULT_BASEMAP_LAYER_INDEX;
+    } catch {
+        defaultBasemapIndex.value = DEFAULT_BASEMAP_LAYER_INDEX;
+    } finally {
+        loadingBasemap.value = false;
+    }
+}
+
+async function saveDefaultBasemapIndex() {
+    submittingBasemap.value = true;
+    try {
+        await apiAdminUpdateDefaultBasemapIndex(defaultBasemapIndex.value);
+        message.success('默认底图已更新，刷新页面后生效');
+    } catch (err) {
+        message.error(`保存失败: ${err?.response?.data?.detail || err?.message || '未知错误'}`);
+    } finally {
+        submittingBasemap.value = false;
+    }
+}
+
+function resetDefaultBasemapIndex() {
+    defaultBasemapIndex.value = DEFAULT_BASEMAP_LAYER_INDEX;
+}
 
 const selectedTableMeta = computed(() => {
     return tables.value.find((item) => item.name === selectedTable.value) || null;
@@ -293,6 +332,7 @@ onMounted(async () => {
     await loadTables();
     await loadRows();
     await loadAgentConfig();
+    await loadDefaultBasemapIndex();
 });
 </script>
 
@@ -366,6 +406,51 @@ onMounted(async () => {
             >
                 发布公告
             </button>
+        </div>
+
+        <!-- 地图默认配置 -->
+        <div class="admin-card">
+            <h5 class="admin-subtitle">🗺️ 地图默认配置</h5>
+            <p class="config-description">设置系统默认加载的底图预设，修改后新用户打开页面将自动使用该底图。URL 中带 l= 参数时仍优先使用 URL 指定的底图。</p>
+
+            <div v-if="loadingBasemap" class="loading-state">
+                <span class="spinner"></span> 正在加载底图配置...
+            </div>
+
+            <div v-else class="agent-config-form">
+                <div class="config-row">
+                    <div class="config-field config-field-full">
+                        <label class="config-label">默认底图预设</label>
+                        <select v-model.number="defaultBasemapIndex" class="config-input">
+                            <option
+                                v-for="opt in basemapOptions"
+                                :key="opt.index"
+                                :value="opt.index"
+                            >
+                                {{ opt.label }} (索引 {{ opt.index }})
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button
+                        class="btn-save"
+                        type="button"
+                        :disabled="submittingBasemap"
+                        @click="saveDefaultBasemapIndex"
+                    >
+                        {{ submittingBasemap ? '保存中...' : '💾 保存' }}
+                    </button>
+                    <button
+                        class="btn-edit"
+                        type="button"
+                        :disabled="submittingBasemap"
+                        @click="resetDefaultBasemapIndex"
+                    >
+                        🔄 重置为默认
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- LLM 参数动态配置 -->

@@ -89,7 +89,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
         if (isActive.value) return;
 
         try {
-            message?.info?.('正在加载漫游控制器...');
+            message?.info?.('正在加载漫游控制器（物理引擎 ~2MB，首次加载较慢）...', { duration: 8000 });
 
             // 从本地模块导入（懒加载 rapier WASM + 控制器 + loaders.gl）
             const { playerController } = await import('./index.js');

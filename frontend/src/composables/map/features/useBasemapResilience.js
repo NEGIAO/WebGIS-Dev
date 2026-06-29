@@ -196,7 +196,7 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
             if (isSwitched) return;
             isSwitched = true;
 
-            message?.warning?.(`[底图降级] ${layerId} - ${reason}`);
+            message?.warning?.(`[底图降级] ${layerId} - ${reason}`, { duration: 1000 });
 
             const runtimeTokenHandled = onRuntimeTokenFailure?.({
                 layerId,
@@ -209,7 +209,7 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
             }
 
             if (fallbackManager.isNotifyOnly()) {
-                message?.warning?.(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`);
+                message?.warning?.(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`, { duration: 1000 });
                 message?.info?.('若页面长时间无底图，请尝试切换底图或刷新页面以重新加载。');
                 if (triggerCallback) triggerCallback();
                 cleanUp();

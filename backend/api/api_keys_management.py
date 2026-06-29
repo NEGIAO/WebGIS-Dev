@@ -686,6 +686,22 @@ async def get_runtime_map_tokens(
     }
 
 
+@runtime_config_router.get("/defaults")
+async def get_runtime_defaults(
+    _session: Dict[str, Any] = Depends(require_api_access_or_guest),
+) -> Dict[str, Any]:
+    """返回管理员配置的全局默认值（当前仅 default_basemap_index）。"""
+    from api.auth.system_config import _get_default_basemap_index_sync
+
+    index = await asyncio.to_thread(_get_default_basemap_index_sync)
+    return {
+        "status": "success",
+        "data": {
+            "default_basemap_index": index,
+        },
+    }
+
+
 async def get_api_key(key_name: str) -> Optional[str]:
     """获取 API 密钥（供外部模块使用）"""
     return await asyncio.to_thread(_get_api_key_sync, key_name)
