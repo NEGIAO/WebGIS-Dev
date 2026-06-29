@@ -6,7 +6,7 @@
                 :key="item.id"
                 class="sidebar-item"
                 :class="{
-                    active: activeId === item.id || (item.id === 'log' && logMonitorVisible),
+                    active: activeId === item.id || (item.id === 'log' && logMonitorVisible) || (item.id === 'mark' && isMarkModeActive),
                 }"
                 @click="handleSelect(item.id)"
             >
@@ -145,7 +145,7 @@
 import { useMessage } from '../../composables/useMessage';
 import { ref } from 'vue';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
-import { defineAsyncComponent } from 'vue';
+import { defineAsyncComponent, inject, computed } from 'vue';
 const DrawPanel = defineAsyncComponent(() => import('./DrawPanel.vue'));
 const MeasurePanel = defineAsyncComponent(() => import('./MeasurePanel.vue'));
 const SpatialAnalysisPanel = defineAsyncComponent(() => import('./SpatialAnalysisPanel.vue'));
@@ -170,6 +170,9 @@ const message = useMessage();
 const layerStore = useLayerStore();
 const appStore = useAppStore();
 const { logMonitorVisible } = storeToRefs(appStore);
+
+// 从 HomeView inject 标注模式状态（反映 MapContainer 的 isReverseGeocodePickMode）
+const isMarkModeActive = inject('isMarkModeActive', computed(() => false));
 
 // ========== Props ==========
 defineProps({
@@ -283,9 +286,17 @@ const handleSelect = (id) => {
             break;
 
         case 'toggleMark':
-            emit('open-tab', 'toolbox');
             emit('map-interaction', 'ReverseGeocodePick');
-            message.info('请在地图单击进行标注与逆地理编码');
+            if (!isMarkModeActive.value) {
+                // 进入标注模式
+                emit('open-tab', 'toolbox');
+                activeId.value = 'mark';
+            } else {
+                // 退出标注模式
+                if (activeId.value === 'mark') {
+                    activeId.value = 'layers';
+                }
+            }
             break;
 
         case 'toggleAnalyze':

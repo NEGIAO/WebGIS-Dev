@@ -135,6 +135,147 @@ export function inferFallbackNoDataValue(data, explicitNoDataValue) {
 }
 
 /**
+ * 智能检测单波段栅格数据的有效范围和 nodata 值
+ *
+ * 核心算法：
+ * 1. 采样并排除非有限值，计算基础统计量
+ * 2. 哨兵值检测：常见 nodata 候选值（0/-9999/-32768/32767/65535）若远离主数据分布则标记
+ * 3. GAP 离群检测：排序后寻找最大间隔，若远超中位间隔则小端为离群值
+ * 4. 返回 nodata 值和有效数据的 min/max
+ *
+ * @param {Array|TypedArray} data - 单波段像素数据
+ * @param {Object} [options] - 可选参数
+ * @param {number|null} [options.nodataValue] - 显式 nodata 值（GDAL 标记）
+ * @returns {{ nodataValue: number|null, min: number, max: number }}
+ */
+export function detectDataRange(data, options = {}) {
+    if (!data?.length) return { nodataValue: null, min: 0, max: 1 };
+
+    const MAX_SAMPLES = 200000;
+    const step = Math.max(1, Math.floor(data.length / MAX_SAMPLES));
+    const SENTINEL_CANDIDATES = [0, -9999, -32768, 32767, 65535];
+
+    // ── 阶段 1：采样 + 基础统计 ──
+    const finite = [];
+    const explicitNodata = Number.isFinite(options.nodataValue) ? options.nodataValue : null;
+
+    for (let i = 0; i < data.length; i += step) {
+        const v = data[i];
+        if (Number.isFinite(v)) finite.push(v);
+    }
+    if (!finite.length) return { nodataValue: explicitNodata, min: 0, max: 1 };
+
+    finite.sort((a, b) => a - b);
+    const total = finite.length;
+    const dataMin = finite[0];
+    const dataMax = finite[total - 1];
+
+    // 全部值相同 → 无离群可言
+    if (dataMin === dataMax) {
+        return { nodataValue: explicitNodata, min: dataMin, max: dataMax };
+    }
+
+    let sum = 0;
+    for (let i = 0; i < total; i++) sum += finite[i];
+    const mean = sum / total;
+    let varianceSum = 0;
+    for (let i = 0; i < total; i++) varianceSum += (finite[i] - mean) ** 2;
+    const stdDev = Math.sqrt(varianceSum / total);
+
+    // ── 阶段 2：哨兵 nodata 检测 ──
+    // 规则：候选值在数据中出现且远离主分布（距均值 > 3σ）
+    let sentinelNodata = null;
+    if (explicitNodata === null) {
+        const sentinelCounts = new Map(SENTINEL_CANDIDATES.map((v) => [v, 0]));
+        for (let i = 0; i < total; i++) {
+            if (sentinelCounts.has(finite[i])) {
+                sentinelCounts.set(finite[i], sentinelCounts.get(finite[i]) + 1);
+            }
+        }
+
+        for (const [value, count] of sentinelCounts) {
+            if (count === 0) continue;
+            // 占比 ≥ 5% → 极可能是合法数据（如大面积 0 值），跳过
+            if (count / total >= 0.05) continue;
+            // 占比 < 1% → 太稀疏，不像 nodata 标记
+            if (count / total < 0.01) continue;
+            // 距均值 > 3σ → 明显偏离主分布，视为 nodata
+            if (stdDev > 0 && Math.abs(value - mean) > 3 * stdDev) {
+                sentinelNodata = value;
+                break;
+            }
+        }
+    }
+
+    const nodataValue = explicitNodata ?? sentinelNodata;
+
+    // ── 阶段 3：排除 nodata 后重新计算 ──
+    const validValues = [];
+    for (let i = 0; i < total; i++) {
+        const v = finite[i];
+        if (nodataValue !== null && Math.abs(v - nodataValue) <= Math.max(1e-9, Math.abs(nodataValue) * 1e-9)) {
+            continue;
+        }
+        validValues.push(v);
+    }
+    if (!validValues.length) {
+        return { nodataValue, min: 0, max: 1 };
+    }
+
+    const vTotal = validValues.length;
+    const vMin = validValues[0];
+    const vMax = validValues[vTotal - 1];
+    if (vMin === vMax) return { nodataValue, min: vMin, max: vMin + 1 };
+
+    // ── 阶段 4：GAP 离群检测（仅在哨兵检测未找到 nodata 时） ──
+    // 有效数据应连续分布；nodata 值会产生大间隔
+    let validMin = vMin;
+    let validMax = vMax;
+
+    if (nodataValue === null && vTotal >= 10) {
+        // 计算相邻值间隔（仅正值，即排序后严格递增处）
+        const gapEntries = [];
+        for (let i = 1; i < vTotal; i++) {
+            const gap = validValues[i] - validValues[i - 1];
+            if (gap > 0) gapEntries.push({ gap, splitIdx: i });
+        }
+
+        if (gapEntries.length >= 3) {
+            gapEntries.sort((a, b) => a.gap - b.gap);
+            const medianGap = gapEntries[Math.floor(gapEntries.length / 2)].gap;
+            const maxGap = gapEntries[gapEntries.length - 1].gap;
+
+            // 最大间隔 > 中位间隔 10 倍 → 存在明显离群
+            if (medianGap > 0 && maxGap / medianGap > 10) {
+                // 收集所有与最大间隔相等的候选位置，选取少数端占比最小的
+                let bestCandidate = null;
+                let bestMinorityRatio = Infinity;
+                for (const entry of gapEntries) {
+                    if (entry.gap < maxGap) break; // 已排序，后续更小
+                    const lowerCount = entry.splitIdx;
+                    const upperCount = vTotal - entry.splitIdx;
+                    const minorityRatio = Math.min(lowerCount, upperCount) / vTotal;
+                    if (minorityRatio < bestMinorityRatio) {
+                        bestMinorityRatio = minorityRatio;
+                        bestCandidate = entry.splitIdx;
+                    }
+                }
+
+                if (bestCandidate !== null && bestMinorityRatio < 0.20) {
+                    if (bestCandidate < vTotal - bestCandidate) {
+                        validMin = validValues[bestCandidate]; // 跳过小端离群
+                    } else {
+                        validMax = validValues[bestCandidate - 1]; // 跳过大端离群
+                    }
+                }
+            }
+        }
+    }
+
+    return { nodataValue, min: validMin, max: validMax };
+}
+
+/**
  * 判断是否为栅格上传图层
  * @param {Object} item - 图层对象
  * @returns {boolean}

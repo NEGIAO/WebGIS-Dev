@@ -9,6 +9,7 @@ export {
     isNoDataValue,
     computePercentileStretch,
     inferFallbackNoDataValue,
+    detectDataRange,
     isRasterUploadLayer,
     isTiffType,
 } from './rasterUtils';

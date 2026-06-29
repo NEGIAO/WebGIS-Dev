@@ -1156,7 +1156,10 @@ watch(
 watch(
     () => props.overview,
     (overview) => {
-        layerStore.syncLayers(props.userLayers || [], overview || {});
+        // 使用 store 中的 userLayers 而非 props.userLayers，避免时序问题：
+        // 图层移除时 user-layers-change 和 graphics-overview 先后触发，
+        // 若 props.userLayers 尚未更新，会用旧列表重新同步导致已删除图层"恢复"
+        layerStore.syncLayers(layerStore.userLayers || [], overview || {});
     },
     { immediate: true },
 );

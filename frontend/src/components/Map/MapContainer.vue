@@ -8,6 +8,7 @@
                 compassStore.enabled &&
                 compassStore.mode === 'vector' &&
                 compassStore.placementMode,
+            'reverse-geocode-pick-mode': isReverseGeocodePickMode,
         }"
     >
         <div
@@ -566,6 +567,7 @@ const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
 // 此处保留注释以说明这些函数的来源
 
 const isAttributeQueryEnabled = ref(true);
+const isReverseGeocodePickMode = ref(false);
 const userDataLayers = [];
 let drawLayerInstance = null;
 const tooltipRef = {
@@ -1231,7 +1233,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.13)', { duration: 3000 });
+        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.14)', { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1579,6 +1581,11 @@ async function startReverseGeocodePickAndDraw() {
         throw new Error('逆地理编码选点失败，请重试');
     }
 
+    // 长时间等待用户点击后，地图可能已卸载
+    if (!mapInstance.value) {
+        throw new Error('地图已卸载');
+    }
+
     let reverseResult = null;
     try {
         const reverseResponse = await apiReverseGeocodeWithFallback(picked.lng, picked.lat, {
@@ -1687,6 +1694,11 @@ function activateInteraction(type) {
     clearDrawMeasureInteractions();
     if (!mapInstance.value) return;
 
+    // 切换到非选点交互时，退出选点模式
+    if (type !== 'ReverseGeocodePick') {
+        isReverseGeocodePickMode.value = false;
+    }
+
     if (type !== 'ReverseGeocodePick' && pendingReverseGeocodePickRef.value?.reject) {
         pendingReverseGeocodePickRef.value.reject(new Error('逆地理编码选点已取消'));
         pendingReverseGeocodePickRef.value = null;
@@ -1703,15 +1715,36 @@ function activateInteraction(type) {
     }
 
     if (type === 'ReverseGeocodePick') {
-        message.info('请在地图上单击一个点，系统将自动逆地理编码并绘制。', {
-            closable: true,
-            duration: 4500,
-        });
-        startReverseGeocodePickAndDraw().catch((error) => {
-            const detail = error instanceof Error ? error.message : '未知错误';
-            if (/(取消|cancel)/i.test(detail)) return;
-            message.warning(`逆地理编码选点未完成：${detail}`);
-        });
+        // Toggle：已在选点模式 → 取消当前选点并退出
+        if (isReverseGeocodePickMode.value) {
+            isReverseGeocodePickMode.value = false;
+            if (pendingReverseGeocodePickRef.value?.reject) {
+                pendingReverseGeocodePickRef.value.reject(new Error('逆地理编码选点已取消'));
+                pendingReverseGeocodePickRef.value = null;
+            }
+            message.info('已退出标注模式');
+            return;
+        }
+
+        isReverseGeocodePickMode.value = true;
+        try {
+            message.info('请在地图上单击一个点，系统将自动逆地理编码并绘制。', {
+                closable: true,
+                duration: 4500,
+            });
+            startReverseGeocodePickAndDraw()
+                .catch((error) => {
+                    const detail = error instanceof Error ? error.message : '未知错误';
+                    // 静默忽略：用户主动取消、地图已卸载、地图未初始化
+                    if (/(取消|cancel|地图已卸载|地图尚未初始化)/i.test(detail)) return;
+                    message.warning(`逆地理编码选点未完成：${detail}`);
+                })
+                .finally(() => {
+                    isReverseGeocodePickMode.value = false;
+                });
+        } catch {
+            isReverseGeocodePickMode.value = false;
+        }
         return;
     }
 
@@ -1791,6 +1824,7 @@ function getMapExtent() {
 
 defineExpose({
     mapInstance,
+    isReverseGeocodePickMode,
     updateViewByParams,
     locateAddress,
     addUserDataLayer,
@@ -1888,6 +1922,11 @@ defineExpose({
 
 .map-container.compass-placement-mode :deep(#map),
 .map-container.compass-placement-mode #map {
+    cursor: crosshair;
+}
+
+.map-container.reverse-geocode-pick-mode :deep(#map),
+.map-container.reverse-geocode-pick-mode #map {
     cursor: crosshair;
 }
 

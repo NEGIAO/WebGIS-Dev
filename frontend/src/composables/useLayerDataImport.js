@@ -28,8 +28,7 @@ import {
     getBandMinMax,
     stretchToByte,
     isNoDataValue,
-    computePercentileStretch,
-    inferFallbackNoDataValue,
+    detectDataRange,
     isRasterUploadLayer,
     isTiffType,
     decodeTextContent,
@@ -582,12 +581,14 @@ export function useLayerDataImport({
         const bandStats = bands.slice(0, 3).map(getBandMinMax);
         const alphaStats = bands.length >= 4 ? getBandMinMax(bands[3]) : null;
         const isSingleBand = bands.length === 1;
-        const singleBandStretch =
-            stretchRange && Number.isFinite(stretchRange.min) && Number.isFinite(stretchRange.max)
-                ? stretchRange
-                : isSingleBand
-                  ? computePercentileStretch(bands[0], nodataValue)
-                  : null;
+        let singleBandStretch = null;
+        if (stretchRange && Number.isFinite(stretchRange.min) && Number.isFinite(stretchRange.max)) {
+            singleBandStretch = stretchRange;
+        } else if (isSingleBand) {
+            const r = detectDataRange(bands[0], { nodataValue });
+            nodataValue = r.nodataValue;
+            singleBandStretch = { min: r.min, max: r.max };
+        }
         const stretchMin = Number.isFinite(singleBandStretch?.min) ? singleBandStretch.min : null;
         const stretchMax = Number.isFinite(singleBandStretch?.max) ? singleBandStretch.max : null;
 
@@ -806,13 +807,14 @@ export function useLayerDataImport({
             const nd = firstImage?.getGDALNoData?.();
             nodataValue = Number.isFinite(nd) ? nd : null;
 
-            // 单波段：仅读取第一个波段的采样数据计算拉伸参数
+            // 单波段：智能检测 nodata 并计算全有效范围的渲染拉伸参数
             if (sampleBandCount === 1) {
                 const readOpts = { samples: [0], interleave: true };
                 if (pool) readOpts.pool = pool;
                 const singleBandData = await firstImage.readRasters(readOpts);
-                nodataValue = inferFallbackNoDataValue(singleBandData, nodataValue);
-                singleBandStretch = computePercentileStretch(singleBandData, nodataValue, 2, 98);
+                const dataRange = detectDataRange(singleBandData, { nodataValue });
+                nodataValue = dataRange.nodataValue;
+                singleBandStretch = { min: dataRange.min, max: dataRange.max };
             }
         } catch (_e) {
             sampleBandCount = 0;

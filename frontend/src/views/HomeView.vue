@@ -185,6 +185,10 @@ const setCustomBasemapByUrl = (url) => {
     return handler(url);
 };
 provide('setCustomBasemapByUrl', setCustomBasemapByUrl);
+
+// 标注模式状态：供 ControlsPanel 读取 MapContainer 的选点模式
+const isMarkModeActive = computed(() => !!mapContainerRef.value?.isReverseGeocodePickMode?.value);
+provide('isMarkModeActive', isMarkModeActive);
 const mapCoreLoadingSettled = ref(false);
 let sidePanelWarmupTimer = null;
 let sidePanelWarmupIdleId = null;
@@ -863,6 +867,8 @@ function handleViewLayer(layerId) {
 function handleRemoveLayer(layerId) {
     if (handleDistrictLayerRemove(layerId)) return;
     mapContainerRef.value?.removeUserLayer(layerId);
+    // 直接更新 Pinia store，不依赖 async 事件链
+    layerStore.removeLayerById(layerId);
 }
 
 function handleReorderUserLayers(payload) {
@@ -935,6 +941,8 @@ function handleExportLayerData(payload) {
 
 function handleUserLayersChange(layers) {
     userLayers.value = layers || [];
+    // 直接更新 Pinia store，不依赖下游 TOCPanel watcher 的 prop 链
+    layerStore.syncLayers(userLayers.value, toolboxOverview.value);
     attrStore.syncLayers(userLayers.value);
 }
 
@@ -1339,6 +1347,7 @@ onMounted(async () => {
                     :selected-image="selectedImage"
                     :is-collapsed="isSidePanelCollapsed"
                     :active-tab="activeSidePanelTab"
+                    :toolbox-tab="toolboxTab"
                     :active-feature="activeFeature"
                     :user-layers="userLayers"
                     :base-layers="baseLayers"

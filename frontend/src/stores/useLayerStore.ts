@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef } from 'vue';
+import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { useTOCStore } from './useTOCStore';
 import { useSwipeConfigStore } from './useSwipeConfigStore';
@@ -19,10 +19,6 @@ export const useLayerStore = defineStore('layerStore', () => {
     const userLayers = ref<LayerStoreLayer[]>([]);
     const overview = ref<any>({ drawCount: 0, uploadCount: 0, layers: [] });
     const selectedDrawTool = ref('AttributeQuery');
-
-    // 缓存上一次的图层 ID 序列，避免不必要的 layerTree 重建
-    let lastLayerIdSequence = '';
-    const cachedLayerTree = shallowRef<any[]>([]);
     const selectedEditLayerId = ref('draw');
     const attributeTableLayerId = ref('');
     const attributeTableVisible = ref(false);
@@ -102,29 +98,14 @@ export const useLayerStore = defineStore('layerStore', () => {
     ]);
 
     const layerTree = computed(() => {
-        // 生成当前图层 ID 序列，用于判断是否需要重建树
-        const currentIdSequence = [
-            ...drawLayers.value.map(l => l.id),
-            ...routeLayers.value.map(l => l.id),
-            ...searchLayers.value.map(l => l.id),
-            ...uploadLayers.value.map(l => l.id),
-            ...districtLayers.value.map(l => l.id),
-        ].join(',');
-
-        // 只在图层顺序或数量变化时才重建树
-        if (currentIdSequence !== lastLayerIdSequence) {
-            lastLayerIdSequence = currentIdSequence;
-            cachedLayerTree.value = buildLayerTree({
-                drawLayers: drawLayers.value,
-                routeLayers: routeLayers.value,
-                searchLayers: searchLayers.value,
-                uploadLayers: uploadLayers.value,
-                districtLayers: districtLayers.value,
-                expandedState: layerTreeExpandedState.value,
-            });
-        }
-
-        return cachedLayerTree.value;
+        return buildLayerTree({
+            drawLayers: drawLayers.value,
+            routeLayers: routeLayers.value,
+            searchLayers: searchLayers.value,
+            uploadLayers: uploadLayers.value,
+            districtLayers: districtLayers.value,
+            expandedState: layerTreeExpandedState.value,
+        });
     });
 
     function syncLayers(nextLayers: any[] = [], nextOverview: any = {}): void {
@@ -215,6 +196,22 @@ export const useLayerStore = defineStore('layerStore', () => {
 
         const updated = [...userLayers.value];
         updated[idx] = layer;
+        userLayers.value = updated;
+    }
+
+    /**
+     * 按 ID 直接移除图层
+     * 绕过事件链，确保 store 立即更新、layerTree 立即重建
+     */
+    function removeLayerById(layerId: string): void {
+        const id = String(layerId || '').trim();
+        if (!id) return;
+
+        const idx = userLayers.value.findIndex((l: any) => String(l.id).trim() === id);
+        if (idx < 0) return;
+
+        const updated = [...userLayers.value];
+        updated.splice(idx, 1);
         userLayers.value = updated;
     }
 
@@ -356,6 +353,7 @@ export const useLayerStore = defineStore('layerStore', () => {
         bindHandlers,
         setStyleTarget,
         renameLayer,
+        removeLayerById,
         setDrawTool,
         showAttributeTable,
         closeAttributeTable,

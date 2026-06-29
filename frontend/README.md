@@ -1,4 +1,15 @@
-# WebGIS 前端项目 — v3.3.13
+# WebGIS 前端项目 — v3.3.14
+
+### V3.3.14 (2026-06-29) — Bug 修复 + TIF 渲染优化
+
+- 🐛 **修复"下载底图"按钮跳转**：HomeView `<SidePanel>` 缺少 `:toolbox-tab` 属性绑定
+- 🐛 **修复标注功能**：重复 Toast、catch 正则遗漏、await 后地图校验、选点 crosshair 光标
+- 🐛 **修复 TOC 缓存系统（统一修复）**：`layerTree` 缓存键仅含 ID，导致重命名/可见性/透明度 UI 不同步 → 移除缓存层，computed 直接从 store 构建树
+- 🐛 **修复图层移除后 TOC 不更新**：新增 `removeLayerById` 直接更新 store，绕过 async 事件链
+- 🐛 **修复 barrel export 缺失**：`detectDataRange` 未在 `dataImport/index.js` 中导出
+- 🚀 **单波段 TIF 渲染范围优化**：`detectDataRange()` 智能 nodata 检测（哨兵 3σ + GAP 离群），渲染范围 = 全有效数据 min/max
+
+详见 [`Docs/06-29/`](../Docs/06-29/) 目录
 
 ## 📝 2026-06-28 Agent 对话 Markdown 渲染优化（语法高亮 + GFM + composable 化）
 
