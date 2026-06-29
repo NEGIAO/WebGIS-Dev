@@ -13,6 +13,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from api.auth import get_auth_db_connection, require_admin
+from api.auth.system_config import (
+    _get_default_basemap_index_sync,
+    _set_default_basemap_index_sync,
+)
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -36,6 +40,11 @@ class PublishAnnouncementRequest(BaseModel):
 
 class UpdateContactRequest(BaseModel):
     contact: str = Field(..., min_length=1, max_length=500)
+
+
+class UpdateDefaultBasemapIndexRequest(BaseModel):
+    """管理员设置全局默认底图索引"""
+    index: int = Field(..., ge=0, le=99)
 
 
 def _db_connection() -> sqlite3.Connection:
@@ -395,4 +404,28 @@ async def update_admin_contact(
     return {
         "status": "success",
         "message": "管理员联系方式已更新",
+    }
+
+
+# ========== 默认底图索引配置 ==========
+
+@router.get("/config/default-basemap-index")
+async def get_default_basemap_index(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取管理员配置的全局默认底图索引"""
+    index = await asyncio.to_thread(_get_default_basemap_index_sync)
+    return {"status": "success", "data": {"index": index}}
+
+
+@router.post("/config/default-basemap-index")
+async def update_default_basemap_index(
+    payload: UpdateDefaultBasemapIndexRequest,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """设置全局默认底图索引（对应 BASEMAP_PRESETS 数组下标）"""
+    await asyncio.to_thread(_set_default_basemap_index_sync, payload.index)
+    return {
+        "status": "success",
+        "message": f"默认底图索引已更新为 {payload.index}",
     }

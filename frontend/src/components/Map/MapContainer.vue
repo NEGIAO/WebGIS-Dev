@@ -185,6 +185,7 @@ import {
     markRuntimeMapTokenFailed,
 } from '../../services/runtimeMapTokens';
 import { apiReverseGeocodeWithFallback } from '../../api';
+import { apiGetRuntimeDefaults } from '../../api/backend';
 
 // --- 工具函数 ---
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../../utils/coordTransform';
@@ -1175,7 +1176,24 @@ onMounted(async () => {
     routeBuilderApiPromise = null;
 
     try {
-        await hydrateRuntimeMapTokens();
+        // 并行加载运行时 token 和管理员默认底图配置
+        const [, defaultsRes] = await Promise.all([
+            hydrateRuntimeMapTokens(),
+            apiGetRuntimeDefaults().catch(() => null),
+        ]);
+
+        // ★ 读取管理员配置的全局默认底图索引
+        // 仅在 URL 未显式指定 l= 参数时生效
+        // 注意：parseUrlToState() 会用硬编码默认值填充 layerIndex，所以不能用它判断
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasExplicitLayerParam = urlParams.has('l') || urlParams.has('layer');
+        if (!hasExplicitLayerParam) {
+            const serverIndex = defaultsRes?.data?.default_basemap_index;
+            if (serverIndex != null) {
+                const serverLayerId = getLayerIdByIndex(serverIndex);
+                if (serverLayerId) selectedLayer.value = serverLayerId;
+            }
+        }
 
         // ========== Phase 1: 同步初始化 - 快速返回，让底图加载开始 ==========
         initMap(); // 创建地图实例，底图图层已添加

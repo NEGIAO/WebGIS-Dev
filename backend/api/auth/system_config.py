@@ -10,6 +10,8 @@ __all__ = [
     "_set_system_config_value_sync",
     "_set_admin_avatar_index_sync",
     "_get_admin_avatar_index_sync",
+    "_get_default_basemap_index_sync",
+    "_set_default_basemap_index_sync",
 ]
 
 
@@ -51,3 +53,19 @@ def _set_admin_avatar_index_sync(new_avatar_index: int) -> int:
 def _get_admin_avatar_index_sync() -> int:
     """读取管理员头像索引，缺省保持原有 admin 头像 1。"""
     return _normalize_avatar_index(_get_system_config_value_sync("admin_avatar_index", "1"))
+
+
+def _get_default_basemap_index_sync() -> int | None:
+    """从 system_config 读取默认底图索引，无记录返回 None"""
+    raw = _get_system_config_value_sync("default_basemap_index", "")
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+def _set_default_basemap_index_sync(index: int) -> None:
+    """将默认底图索引写入 system_config 表"""
+    _set_system_config_value_sync("default_basemap_index", str(index))

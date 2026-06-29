@@ -195,3 +195,15 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
 
     return backendAPI.post('/api/admin/agent/config', safePayload);
 }
+
+// ==================== 默认底图配置 ====================
+
+/** 获取管理员配置的全局默认底图索引 */
+export async function apiAdminGetDefaultBasemapIndex() {
+    return backendAPI.get('/api/admin/config/default-basemap-index');
+}
+
+/** 设置全局默认底图索引（对应 BASEMAP_PRESETS 数组下标） */
+export async function apiAdminUpdateDefaultBasemapIndex(index) {
+    return backendAPI.post('/api/admin/config/default-basemap-index', { index: Number(index) });
+}

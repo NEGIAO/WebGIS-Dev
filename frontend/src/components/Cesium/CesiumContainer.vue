@@ -119,7 +119,8 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { BACKEND_BASE_URL } from '../../api/backend';
+import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '../../api/backend';
+import { URL_LAYER_OPTIONS } from '../../constants/basemap/basemapResolver';
 import { useMessage } from '../../composables/useMessage';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
 import { Upload } from 'lucide-vue-next';
@@ -448,7 +449,16 @@ async function bootCesium() {
                 }
                 cesiumReady.value = true;
                 bindCameraViewSync({ initialSync: false, getActivePresetId: () => activeBasemap.value });
-                // 从 URL 恢复底图预设
+                // ★ 读取管理员配置的全局默认底图索引（URL l= 参数随后会覆盖）
+                try {
+                    const defaultsRes = await apiGetRuntimeDefaults();
+                    const serverIndex = defaultsRes?.data?.default_basemap_index;
+                    if (serverIndex != null) {
+                        const serverLayerId = URL_LAYER_OPTIONS[serverIndex] || null;
+                        if (serverLayerId) activeBasemap.value = serverLayerId;
+                    }
+                } catch { /* 静默失败，用硬编码兜底 */ }
+                // 从 URL 恢复底图预设（URL l= 参数优先覆盖管理员默认）
                 restoreBasemapFromUrl();
                 if (basemapReady && terrainReady) {
                     message.success('天地图基础影像与地形加载成功。');
