@@ -33,8 +33,6 @@ import { Point, Polygon } from 'ol/geom';
 import { unByKey } from 'ol/Observable';
 import { normalizeHtmlAttributes } from './useLayerMetadataNormalization';
 import { getFeatureIdFromFeature } from '../../../utils/map/featureKey';
-// 新增：导入 Vue nextTick 解决生命周期时序问题
-import { nextTick } from 'vue';
 
 export function createMapEventHandlers({
     mapInstanceRef,
@@ -234,12 +232,10 @@ export function createMapEventHandlers({
             updateCurrentCoordinate(map.getView().getCenter());
         }));
 
-        // ✅ 修复 宽高0 警告（nextTick 等待 DOM 渲染完成）
-        olKeys.push(map.on('moveend', async () => {
+        // moveend 更新坐标和属性表范围（updateSize 由 ResizeObserver 处理）
+        olKeys.push(map.on('moveend', () => {
             updateCurrentCoordinate(map.getView().getCenter());
             syncAttributeTableMapExtent?.();
-            await nextTick();
-            map.updateSize();
         }));
 
         // ========== 移动端触摸事件 ==========

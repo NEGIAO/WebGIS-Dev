@@ -355,10 +355,12 @@ async function onDrop(event) {
     if (!files || files.length === 0) return;
 
     for (const file of files) {
+        if (componentUnmounted) break;
         try {
             await dataImport.loadDataFile(file);
-        } catch {
+        } catch (err) {
             // loadDataFile 内部已通过 message.error 提示
+            console.warn('[Cesium] file import error:', err);
         }
     }
 }
@@ -387,7 +389,18 @@ const {
     playerController,
 });
 
+/** 启动中标志，防止并发 bootCesium 调用 */
+let bootInProgress = false;
+
+/** token 重试硬上限，防止动态 maxRetryCount 无限增长 */
+const MAX_TOKEN_RETRY = 5;
+
 async function bootCesium() {
+    if (bootInProgress) {
+        console.warn('[Cesium][boot] skipped — already in progress');
+        return;
+    }
+    bootInProgress = true;
     componentUnmounted = false;
     showLoading('正在初始化 3D 场景...');
     console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
@@ -400,7 +413,7 @@ async function bootCesium() {
                     silent: false,
                     force: retryCount > 0,
                 });
-                maxRetryCount = Math.max(
+                maxRetryCount = Math.min(MAX_TOKEN_RETRY, Math.max(
                     maxRetryCount,
                     Array.isArray(runtimeMapTokens.value.tiandituTokens)
                         ? runtimeMapTokens.value.tiandituTokens.length
@@ -409,7 +422,7 @@ async function bootCesium() {
                         ? runtimeMapTokens.value.cesiumIonTokens.length
                         : 1,
                     1,
-                );
+                ));
                 console.warn('[Cesium][boot] runtime tokens loaded', {
                     td: !!runtimeMapTokens.value.tiandituTk,
                     ion: !!runtimeMapTokens.value.cesiumIonToken,
@@ -477,28 +490,41 @@ async function bootCesium() {
         }
         console.error('[Cesium][boot] exhausted token pool');
         message.error('备用 token 已全部尝试，Cesium 初始化仍失败。', { closable: true });
-        // 风场在初始化完毕后即可准备加载（但需要手动点击按钮或自动加载）
-        // 这里不自动加载，避免占满视野，等待用户点击“加载模拟风场”
     } catch (error) {
         console.error('[Cesium][boot] FATAL:', error);
         message.error('Cesium 运行时加载失败', error);
         message.error('Cesium 初始化失败，请检查网络环境。', { closable: true });
     } finally {
+        bootInProgress = false;
         hideLoading();
     }
 }
 
+/**
+ * 重置 Cesium viewer 以便 token 重试
+ * 清理所有 composable 状态和 viewer 资源，为下一次 initViewer 做准备
+ */
 function resetCesiumViewerForRetry() {
     cesiumReady.value = false;
     cleanupCameraViewSync();
     cleanupInteractions();
+    cleanupTools();
     cleanupLayers();
     cleanupCreditHider();
+    // 清理人物漫游控制器
+    try { playerController.stopPlayer(); } catch { /* ignore */ }
+    try { playerController.clearNavTarget?.(); } catch { /* ignore */ }
     // 清理体积云（viewer 即将被销毁）
     if (cloudCleanup) {
         cloudCleanup();
         cloudCleanup = null;
     }
+    // 清理 tellux 移植模块
+    try { modelManager.dispose(); } catch { /* ignore */ }
+    try { cameraEnhanced.cleanup(); } catch { /* ignore */ }
+    try { heightSampler.cleanup(); } catch { /* ignore */ }
+    // 清理已加载数据源（释放 Blob URL 等）
+    dataImport.clearAllDataSources();
     if (!viewer) return;
     try {
         viewer.destroy();
@@ -511,6 +537,11 @@ function resetCesiumViewerForRetry() {
 /** 体积云集成清理函数 */
 let cloudCleanup = null;
 
+/**
+ * 初始化 Cesium Viewer 实例
+ * 构造 viewer → 配置时间系统 → 太阳光照 → 信用隐藏 → 底图同步 → 相机恢复 → 体积云集成
+ * 设置模块级 viewer 变量，供所有 composable 通过 getViewer() 访问
+ */
 function initViewer() {
     const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
     const imageryProviderViewModels = createImageryProviderViewModels();
@@ -544,20 +575,22 @@ function initViewer() {
     }
 
     // 体积云集成（桥接 cloudParams → CloudManager → PostProcessStage）
+    // setupCloudIntegration 直接返回 cleanup 函数，非 { cleanup } 结构
     try {
-        const { cleanup } = setupCloudIntegration({
+        cloudCleanup = setupCloudIntegration({
             viewer,
             cloudParams,
             atmosphereParams,
         });
-        cloudCleanup = cleanup;
     } catch (err) {
         console.warn('[Cesium] Cloud integration skipped:', err);
     }
 }
 
 onMounted(() => {
-    bootCesium();
+    bootCesium().catch((err) => {
+        console.error('[Cesium][boot] unhandled rejection:', err);
+    });
 });
 
 // ==========================================
@@ -571,6 +604,7 @@ onMounted(() => {
  */
 async function handleDataImport({ files }) {
     for (const file of files) {
+        if (componentUnmounted) break;
         try {
             await dataImport.loadDataFile(file);
         } catch {
@@ -597,6 +631,7 @@ function handleDataClearAll() {
  * @param {{ lng: number, lat: number, height: number }} coords
  */
 async function handleGltfCoordConfirm(coords) {
+    if (componentUnmounted) return;
     try {
         await dataImport.loadGltfWithUserCoords(coords);
     } catch {
@@ -612,6 +647,12 @@ function handleGltfCoordCancel() {
 onUnmounted(() => {
     componentUnmounted = true;
     cesiumReady.value = false;
+
+    // 清理人物漫游控制器（移除 scene.preRender / selectedEntityChanged 监听）
+    try { playerController.stopPlayer(); } catch { /* ignore */ }
+    try { playerController.clearNavTarget?.(); } catch { /* ignore */ }
+    try { playerController.setOpenNavDialogHandler?.(null); } catch { /* ignore */ }
+
     cleanupCameraViewSync();
     cleanupInteractions();
     cleanupTools();
@@ -698,36 +739,24 @@ watch(
 
 /**
  * 应用 Tellux 大气渲染参数到 Cesium 场景
- * 控制日夜过渡、月光照明、星空可见性
+ * 控制月光强度贡献（日夜/月光/星空的 enableLighting、moon.show、skyBox.show
+ * 由 applyBaseAtmosphereParams 统一管理，此处不再重复写入，避免双写冲突）
  */
 function applyAtmosphereParams(params) {
     if (!viewer || !Cesium) return;
     const scene = viewer.scene;
     const globe = scene.globe;
 
-    // 日夜过渡：控制 globe.enableLighting
-    if (globe && 'enableLighting' in globe) {
-        globe.enableLighting = params.dayNightEnabled !== false;
-    }
-
-    // 月光：控制 scene.moon.show
-    if (scene.moon) {
-        scene.moon.show = params.moonLightEnabled !== false;
-    }
-
-    // 星空：控制 scene.skyBox.show
-    if (scene.skyBox) {
-        scene.skyBox.show = params.starsEnabled !== false;
-    }
-
-    // 月光强度：通过 SunLight 的 intensity 模拟（夜间场景光照）
-    // 注意：Cesium 没有独立的 MoonLight 类，用 DirectionalLight 模拟
-    // 这里通过 globe.atmosphereLightIntensity 间接影响夜间亮度
+    // 月光强度贡献：叠加到 atmosphereLightIntensity 基础值之上
     if (globe && 'atmosphereLightIntensity' in globe) {
-        // 月光强度映射到大气光强（基础值 + 月光贡献）
         const baseIntensity = baseAtmosphereParams.value.atmosphereLightIntensity ?? 5.5;
-        const moonBoost = (params.moonLightEnabled !== false) ? (params.moonLightIntensity ?? 0.18) * 8 : 0;
-        globe.atmosphereLightIntensity = baseIntensity + moonBoost;
+        // 月光增益系数：slider 0~1 → 实际贡献 0~MOON_BOOST_MAX
+        const MOON_BOOST_MAX = 4.0;
+        const moonBoost = (params.moonLightEnabled !== false)
+            ? (params.moonLightIntensity ?? 0.18) * MOON_BOOST_MAX
+            : 0;
+        // 钳位防止过曝：总强度上限 12.0
+        globe.atmosphereLightIntensity = Math.min(baseIntensity + moonBoost, 12.0);
     }
 
     scene.requestRender?.();

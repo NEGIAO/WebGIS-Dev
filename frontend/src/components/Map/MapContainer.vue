@@ -28,10 +28,6 @@
             @close="handleSwipeClose"
         />
 
-        <!-- <MapEasterEgg :map-instance="mapInstance" :bounds="DIHUAN_BOUNDS" :images="IMAGES"
-            @open-large-image="handleEasterEggImageOpen"
-            @location-change="handleEasterEggLocationChange" /> -->
-
         <LayerControlPanel
             :map-instance="mapInstance"
             :layer-list="layerList"
@@ -98,13 +94,25 @@
    便于进行项目的维护和升级
    避免臃肿和职责混乱 
 */
-import { computed, ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { storeToRefs } from 'pinia';
+
+// --- OpenLayers 核心 ---
+import Map from 'ol/Map';
+import View from 'ol/View';
+import { fromLonLat, toLonLat } from 'ol/proj';
+import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
+import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
+import TileLayer from 'ol/layer/Tile';
+import VectorLayer from 'ol/layer/Vector';
+import XYZ from 'ol/source/XYZ';
+import VectorSource from 'ol/source/Vector';
+
+// --- Composables ---
 import { useManagedLayerRegistry } from '../../composables/useManagedLayerRegistry';
 import { useUserLocation } from '../../composables/useUserLocation';
 import { useMessage } from '../../composables/useMessage';
 import { useMapState } from '../../composables/useMapState';
-// OpenLayers 依赖直接导入（原 loadMapRuntimeDeps 仅是静态导入的 Promise 缓存包装）
-// 直接导入可避免 top-level await，使 defineExpose 能正常工作
 import {
     createBasemapLayerBootstrap,
     createBasemapResilience,
@@ -139,7 +147,12 @@ import {
 import {
     abortTileSourceRequests,
     prioritizeTileSourceRequest,
+    createAutoTileSourceFromUrl,
 } from '../../composables/useTileSourceFactory';
+import { createBasemapLayerFromSource } from '../../composables/map/features/basemapLayerFactory';
+import { createStartupUrlRestoreGuard } from '../../composables/map/features/useStartupUrlRestoreGuard';
+
+// --- 常量 / 配置 ---
 import {
     DEFAULT_BASEMAP_PRESET_ID,
     URL_LAYER_OPTIONS,
@@ -154,17 +167,8 @@ import {
     AMAP_EXTRACT_AOI_STYLE,
     createMapStylesObject,
 } from '../../constants';
-import { createAutoTileSourceFromUrl } from '../../composables/useTileSourceFactory';
-import { createBasemapLayerFromSource } from '../../composables/map/features/basemapLayerFactory';
-import { createStartupUrlRestoreGuard } from '../../composables/map/features/useStartupUrlRestoreGuard';
-import LayerControlPanel from '../Layer/LayerControlPanel.vue';
-import MapSwipeController from './MapSwipeController.vue';
-// import MapEasterEgg from './MapEasterEgg.vue';
-import MapControlsBar from './MapControlsBar.vue';
-import AttributeTable from '../Layer/AttributeTable.vue';
-import FengShuiCompassSvg from '../feng-shui-compass-svg/feng-shui-compass-svg.vue';
-import PalaceExplanationPanel from '../Compass/PalaceExplanationPanel.vue';
-import { apiReverseGeocodeWithFallback } from '../../api';
+
+// --- Stores / Services / API ---
 import {
     useAttrStore,
     useUrlParamStore,
@@ -178,6 +182,19 @@ import {
     loadRuntimeMapTokens,
     markRuntimeMapTokenFailed,
 } from '../../services/runtimeMapTokens';
+import { apiReverseGeocodeWithFallback } from '../../api';
+
+// --- 工具函数 ---
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../../utils/geo';
+import { createLayerExporter, isVectorManagedLayer } from '../../utils/layerExportService';
+
+// --- 子组件 ---
+import LayerControlPanel from '../Layer/LayerControlPanel.vue';
+import MapSwipeController from './MapSwipeController.vue';
+import MapControlsBar from './MapControlsBar.vue';
+import AttributeTable from '../Layer/AttributeTable.vue';
+import FengShuiCompassSvg from '../feng-shui-compass-svg/feng-shui-compass-svg.vue';
+import PalaceExplanationPanel from '../Compass/PalaceExplanationPanel.vue';
 
 const message = useMessage();
 const attrStore = useAttrStore();
@@ -204,7 +221,8 @@ function compassBgVars(hex) {
 }
 const layerStore = useLayerStore();
 
-const selectedPalace = computed(() => compassStore.selectedPalace);
+// 从 compassStore 解构响应式 ref（替代 computed 包装）
+const { selectedPalace } = storeToRefs(compassStore);
 
 // 关闭宫位解释面板
 const handleCloseExplanation = () => {
@@ -216,35 +234,24 @@ const handleCloseExplanation = () => {
 // URL_LAYER_OPTIONS：用于 URL 参数中的图层索引映射（与 BASEMAP_OPTIONS 对应）
 // createLayerConfigs：工厂函数，根据参数生成全部底图源配置
 
-// OpenLayers 运行时依赖（直接从模块导入，避免 top-level await）
-import Map from 'ol/Map';
-import View from 'ol/View';
-import { fromLonLat, toLonLat } from 'ol/proj';
-import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
-import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
-import TileLayer from 'ol/layer/Tile';
-import VectorLayer from 'ol/layer/Vector';
-import XYZ from 'ol/source/XYZ';
-import VectorSource from 'ol/source/Vector';
-
-import { gcj02ToWgs84, wgs84ToGcj02 } from '../../utils/geo';
-import { createLayerExporter, isVectorManagedLayer } from '../../utils/layerExportService';
-
 // --- 配置常量 ---
 const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
-const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; //初始位置
+const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; // 初始视图位置
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
+const APP_DISPLAY_VERSION = 'V3.3.14'; // 应用显示版本号（与 package.json 独立维护）
+
+// 图层 z-index 分层方案（值越大越在上层）
+const Z_INDEX = {
+    DRAW: 999,        // 绘图图层
+    USER_LOCATION: 1000, // 用户定位图层
+    BUS_ROUTE: 1080,  // 公交/驾车路线图层
+    BUS_PICK: 1085,   // 公交选点图层
+    SEARCH: 1100,     // 搜索结果图层
+};
 
 let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
 const tiandituTk = ref(TIANDITU_TK);
-
-//彩蛋：判断鼠标是否进入地环院，弹出地环院的图片信息
-// const DIHUAN_BOUNDS = { minLon: 114.3020, maxLon: 114.3030, minLat: 34.8149, maxLat: 34.8154 };
-// const IMAGES = [
-//     '地理与环境学院标志牌.webp', '地理与环境学院入口.webp', '地学楼.webp',
-//     '教育部重点实验室.webp', '四楼逃生图.webp', '学院楼单侧.webp'
-// ].map(img => `${NORM_BASE}images/${img}`);
 
 // --- Refs ---
 const mapContainerRef = ref(null);
@@ -264,13 +271,19 @@ const currentCoordinate = ref(null);
 const isDomestic = ref(true); // 是否为国内用户（基于 IP 判断）
 let fitToLonLatExtentByMapState = () => false;
 
+/**
+ * 将任意值归一化为二进制标志字符串 '0' 或 '1'
+ * @param {*} value - 待归一化的值（支持 '1'/'true'/'0'/'false'/其他）
+ * @param {string} fallback - 无法识别时的默认值，默认 '0'
+ * @returns {'0' | '1'}
+ */
 function normalizeBinaryFlag(value, fallback = '0') {
     const compact = String(value ?? '')
         .trim()
         .toLowerCase();
     if (compact === '1' || compact === 'true') return '1';
     if (compact === '0' || compact === 'false') return '0';
-    return fallback === '1' ? '1' : '0';
+    return fallback; // 直接返回 fallback，不再硬编码 '0'
 }
 
 function parseSharedEntryFlagFromUrl() {
@@ -316,7 +329,7 @@ async function resolveSharedAddressByLonLat(lng, lat) {
 
     try {
         const geocodeResponse = await apiReverseGeocodeWithFallback(lon, latitude, {
-            tiandituTk: TIANDITU_TK,
+            tiandituTk: tiandituTk.value, // 读取响应式 ref，确保 token 轮换后使用最新值
             tiandituTimeout: 3500,
             silent: true,
         });
@@ -343,7 +356,8 @@ const layerList = ref(
         opacity: 1, // 初始透明度为 100%
     })),
 );
-const layerInstances = {}; // 存储所有底图层实例 (TileLayer/VectorTileLayer)
+const layerInstances = {}; // ⚠️ 非响应式共享可变状态：存储所有底图层实例 (TileLayer/VectorTileLayer)
+                           // 被 30+ composable 直接读写，通过 emit 手动同步外部状态，刻意不使用 reactive 以避免深层响应式追踪的性能开销
 
 function applyRuntimeMapTokens(tokens = {}) {
     const nextTiandituTk = String(tokens.tiandituTk || '').trim();
@@ -523,6 +537,7 @@ const {
 let busRouteLayerRef = null;
 const busRouteManagedLayerIdRef = ref(null);
 let rightDragZoomController = null;
+const rightDragZoomControllerRef = shallowRef(null);
 let compassManagerRef = null;
 
 // 图层引用
@@ -568,7 +583,8 @@ const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
 
 const isAttributeQueryEnabled = ref(true);
 const isReverseGeocodePickMode = ref(false);
-const userDataLayers = [];
+const userDataLayers = []; // ⚠️ 非响应式共享可变状态：用户上传/绘制的图层记录数组
+                           // 被多个 composable 直接修改（push/splice/filter），通过 emitUserLayersChange() 手动同步
 let drawLayerInstance = null;
 const tooltipRef = {
     helpTooltipEl: null,
@@ -900,7 +916,7 @@ const { bindMapEvents } = createMapEventHandlers({
     getDrawInteraction,
     getSketchFeature,
     queryRasterValueAtCoordinateRef,
-    rightDragZoomControllerRef: { value: rightDragZoomController },
+    rightDragZoomControllerRef,
     isAttributeQueryEnabledRef: isAttributeQueryEnabled,
     tooltipRef,
     syncAttributeTableMapExtent,
@@ -1097,8 +1113,6 @@ function applyDeferredUrlParams() {
     }
 
     try {
-        console.warn('[MapContainer] Applying deferred URL params:', validParams);
-
         // 应用坐标、缩放、图层索引
         flyToView({
             lng: validParams.lng,
@@ -1111,7 +1125,6 @@ function applyDeferredUrlParams() {
         // 释放启动守卫后再绑定 moveend，避免 flyToView 动画产生的首次 moveend 覆盖分享链接。
         urlParamStore.markParamsAsApplied();
         finishInitialRestore();
-        console.warn('[MapContainer] Deferred URL params applied successfully');
     } catch (error) {
         console.error('[MapContainer] Failed to apply deferred URL params:', error);
         urlParamStore.markParamsAsApplied(); // 即使失败也标记已应用，防止重复尝试
@@ -1146,6 +1159,19 @@ function getInitialViewState() {
 //   6. runDeferredStartupTasks() - 所有非关键任务（Google 测速、定位等）在最后执行
 onMounted(async () => {
     componentUnmountedRef.value = false;
+
+    // 重置模块级变量，防止组件重新挂载时残留旧引用（如路由切换场景）
+    searchSource = null;
+    searchLayer = null;
+    busRouteLayerRef = null;
+    drawLayerInstance = null;
+    rightDragZoomController = null;
+    rightDragZoomControllerRef.value = null;
+    compassManagerRef = null;
+    _cleanupMapEventHandlers = null;
+    removeManagedLayerById = () => undefined;
+    routeBuilderApiPromise = null;
+
     try {
         await hydrateRuntimeMapTokens();
 
@@ -1233,7 +1259,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success('欢迎使用NEGIAO的WebGIS!(V3.3.14)', { duration: 3000 });
+        message.success(`欢迎使用NEGIAO的WebGIS!(${APP_DISPLAY_VERSION})`, { duration: 3000 });
     }
 
     // ========== 用户定位 ==========
@@ -1317,6 +1343,7 @@ onUnmounted(() => {
     rightDragZoomController?.dispose?.();
     clearRouteStepStyleCache?.();
     rightDragZoomController = null;
+    rightDragZoomControllerRef.value = null;
     // 清理 composable 暴露的资源句柄
     disposeAllMonitors?.();
     disposeSelectionWatcher?.();
@@ -1411,23 +1438,23 @@ function initMap() {
     drawLayerInstance = new VectorLayer({
         source: drawSource,
         style: createStyleFromConfig(drawStyleConfig.value),
-        zIndex: 999,
+        zIndex: Z_INDEX.DRAW,
     });
     const userLayer = new VectorLayer({
         source: userLocationSource,
-        zIndex: 1000,
+        zIndex: Z_INDEX.USER_LOCATION,
         style: (feature) =>
             feature.get('type') === 'accuracy' ? styles.userAccuracy : styles.userPoint,
     });
     const busPickLayer = new VectorLayer({
         source: busPickSource,
-        zIndex: 1085,
+        zIndex: Z_INDEX.BUS_PICK,
         style: (feature) =>
             feature.get('busPickType') === 'end' ? styles.busEnd : styles.busStart,
     });
     const busRouteLayer = new VectorLayer({
         source: busRouteSource,
-        zIndex: 1080,
+        zIndex: Z_INDEX.BUS_ROUTE,
         style: (feature) => {
             if (feature.get('routeMode') === 'drive') {
                 const stepIndex = Number(feature.get('stepIndex'));
@@ -1462,34 +1489,15 @@ function initMap() {
     searchSource = new VectorSource();
     searchLayer = new VectorLayer({
         source: searchSource,
-        zIndex: 1100,
+        zIndex: Z_INDEX.SEARCH,
         style: createStyleFromConfig(SEARCH_RESULT_STYLE),
     });
 
     // 1.3 控件
-    // 从 LAYER_CONFIGS 中获取 Google 配置，使鹰眼视图与坐标系保持一致
     const controls = defaultControls({ zoom: false }).extend([
-        // new ScaleLine({
-        //     units: 'metric',
-        //     bar: true,
-        //     minWidth: 100 ,
-        //     // className: 'ol-scaleline'//绑定类名，控制css
-        // }),
-
-        // 鹰眼视图控件 - 使用 默认底图动态引用，保持 URL 一致
-        //bug：待修复,临时使用
+        // 鹰眼视图控件 - 使用天地图卫星影像作为底图（Google 不稳定已弃用）
         new OverviewMap({
             className: 'ol-overviewmap ol-custom-overviewmap',
-            //原始逻辑，直接使用Google，但是不稳定，容易崩
-            //切换为稳定的天地图
-            // layers: [
-            //     new TileLayer({
-            //         source: googleConfig ? googleConfig.createSource() : new XYZ({
-            //             url: buildGoogleTileUrl('/maps/vt?lyrs=s&x={x}&y={y}&z={z}'),
-            //             maxZoom: 20
-            //         })
-            // })
-            // ],
             layers: [
                 new TileLayer({
                     source: prioritizeTileSourceRequest(
@@ -1506,7 +1514,10 @@ function initMap() {
         }),
     ]);
 
-    // 1.4 实例化地图
+    // 1.4 实例化地图（先清理旧实例防止泄漏）
+    if (mapInstance.value) {
+        try { mapInstance.value.setTarget(null); } catch { /* ignore */ }
+    }
     const initialViewState = getInitialViewState();
     mapInstance.value = new Map({
         target: mapRef.value,
@@ -1526,12 +1537,11 @@ function initMap() {
         }),
         controls,
     });
-    // 创建比例尺
+    // 创建比例尺控件（通过 addControl 添加，避免与 defaultControls 冲突）
     const scaleline = new ScaleLine({
         units: 'metric',
         bar: true,
         minWidth: 100,
-        // className: 'my-custom-scale'
     });
     mapInstance.value.addControl(scaleline);
 
@@ -1553,6 +1563,7 @@ function initMap() {
     // 1.5 初始化右拖缩放控制器
     rightDragZoomController?.dispose?.();
     rightDragZoomController = createRightDragZoomController(mapInstance.value);
+    rightDragZoomControllerRef.value = rightDragZoomController;
 
     // 1.6 事件监听（返回清理函数用于卸载时移除 viewport 监听器）
     _cleanupMapEventHandlers = bindMapEvents();
@@ -1589,7 +1600,7 @@ async function startReverseGeocodePickAndDraw() {
     let reverseResult = null;
     try {
         const reverseResponse = await apiReverseGeocodeWithFallback(picked.lng, picked.lat, {
-            tiandituTk: TIANDITU_TK,
+            tiandituTk: tiandituTk.value, // 读取响应式 ref，确保 token 轮换后使用最新值
             silent: true,
         });
         reverseResult = reverseResponse?.data || null;
@@ -1953,8 +1964,6 @@ defineExpose({
     border: 1px solid white;
 }
 
-/* 比例尺 */
-
 /* 鹰眼视图样式 */
 :deep(.ol-custom-overviewmap) {
     position: absolute;
@@ -2011,10 +2020,5 @@ defineExpose({
         left: 5px;
         top: 5px;
     }
-
-    /* :deep(ol-scale-line) {
-        left: 5px;
-        bottom: 5px;
-    } */
 }
 </style>

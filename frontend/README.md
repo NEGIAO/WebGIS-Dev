@@ -1,6 +1,6 @@
 # WebGIS 前端项目 — v3.3.14
 
-### V3.3.14 (2026-06-29) — Bug 修复 + TIF 渲染优化
+### V3.3.14 (2026-06-29) — Bug 修复 + TIF 渲染优化 + CesiumContainer Code Review
 
 - 🐛 **修复"下载底图"按钮跳转**：HomeView `<SidePanel>` 缺少 `:toolbox-tab` 属性绑定
 - 🐛 **修复标注功能**：重复 Toast、catch 正则遗漏、await 后地图校验、选点 crosshair 光标
@@ -8,6 +8,7 @@
 - 🐛 **修复图层移除后 TOC 不更新**：新增 `removeLayerById` 直接更新 store，绕过 async 事件链
 - 🐛 **修复 barrel export 缺失**：`detectDataRange` 未在 `dataImport/index.js` 中导出
 - 🚀 **单波段 TIF 渲染范围优化**：`detectDataRange()` 智能 nodata 检测（哨兵 3σ + GAP 离群），渲染范围 = 全有效数据 min/max
+- 🔍 **CesiumContainer.vue Code Review 修复（7 项）**：体积云清理解构错误 `cloudCleanup=undefined`、大气系统 `enableLighting` 双写冲突、重试路径缺少 `cleanupTools`/`dataImport` 清理、异步循环 `componentUnmounted` 守卫、`bootCesium` 并发保护 + `MAX_TOKEN_RETRY=5` 硬顶、FPS 面板移至 `import.meta.env.DEV`、`setOpenNavDialogHandler` 回调清理
 
 详见 [`Docs/06-29/`](../Docs/06-29/) 目录
 

@@ -107,6 +107,7 @@ const selectedImage = ref('');
 const is3DMode = ref(getCurrentMapView() === MAP_VIEW_CESIUM);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
+let _cesiumLoadPromise = null;
 const isWeatherBoardMode = ref(false);
 
 // 路由快照：用于在视图切换时把 URL 中的 l 参数同步到 OL/Cesium
@@ -339,9 +340,15 @@ function handleControlsOpenTab(tab) {
     isSidePanelCollapsed.value = false;
 }
 
+/**
+ * 打开工具箱并切换到指定子标签。
+ * 若目标子标签已激活，先重置为 'layers' 再下一帧切回，触发 SidePanel 内部 watch 重新响应。
+ * @param {string} tab - 工具箱子标签名
+ */
 function handleControlsOpenToolboxTab(tab) {
     const next = String(tab || '').trim();
     if (!next) return;
+    // 已激活相同标签时：先 reset 再 nextTick 恢复，强制触发子组件 watch 刷新
     if (toolboxTab.value === next) {
         toolboxTab.value = 'layers';
         nextTick(() => {
@@ -409,33 +416,26 @@ async function handleControlsDistrictSelect(payload) {
 
 /**
  * 处理卷帘分析（双底图对比）事件
+ * @param {Object} payload - 卷帘配置
+ * @param {string} payload.leftBasemap - 左侧底图 ID
+ * @param {string} payload.rightBasemap - 右侧底图 ID
+ * @param {string} [payload.mode='horizontal'] - 卷帘方向
  */
 async function handleEnableBasemapSwipe(payload) {
     const { leftBasemap, rightBasemap, mode } = payload || {};
 
-    console.warn('[handleEnableBasemapSwipe] Received payload:', {
-        leftBasemap,
-        rightBasemap,
-        mode,
-    });
-
     if (!mapContainerRef.value) {
-        console.error('[handleEnableBasemapSwipe] MapContainer ref not available');
         message.error('地图容器未准备好');
         return;
     }
 
     try {
-        console.warn('[handleEnableBasemapSwipe] Calling mapContainerRef.enableBasemapSwipe');
-        // 调用MapContainer的swipe相关方法
-        const result = await mapContainerRef.value?.enableBasemapSwipe?.({
+        await mapContainerRef.value?.enableBasemapSwipe?.({
             leftBasemapId: leftBasemap,
             rightBasemapId: rightBasemap,
             mode: mode || 'horizontal',
         });
-        console.warn('[handleEnableBasemapSwipe] Result:', result);
     } catch (error) {
-        console.error('[handleEnableBasemapSwipe] Error:', error);
         const detail = String(error?.message || '').trim();
         message.error(detail || '卷帘分析启用失败，请检查底图配置');
     }
@@ -530,14 +530,17 @@ function settleMapCoreLoading(payload = {}) {
     }
 }
 
-/** 主地图关键内容就绪后，消除加载状态并在空闲时预加载侧边面板资源。 */
+/**
+ * 主地图核心就绪后的回调：预热侧边面板并调度异步访问记录。
+ * Phase 1：在浏览器空闲时预加载 SidePanel 资源，提升后续展开速度。
+ * Phase 2：延后执行访问记录（visitLog），避免与底图加载竞争网络资源。
+ */
 function handleMapCoreReady() {
     settleMapCoreLoading();
 
     // ========== Phase 1: 处理侧边面板预热 ==========
-    if (sidePanelWarmupScheduled.value || shouldLoadSidePanel.value) {
-        // 侧边面板已在加载或已加载，先执行 visitLog
-    } else {
+    // 仅在尚未调度且未加载时，安排空闲预热
+    if (!sidePanelWarmupScheduled.value && !shouldLoadSidePanel.value) {
         sidePanelWarmupScheduled.value = true;
 
         const preloadSidePanel = () => {
@@ -623,23 +626,28 @@ function toggleWeatherBoardMode() {
  */
 async function ensureCesiumLoaded() {
     if (isCesiumLoaded.value) return true;
-    if (isCesiumLoading.value) return false;
+    // 并发调用复用同一个 Promise，避免第二次调用直接返回 false
+    if (_cesiumLoadPromise) return _cesiumLoadPromise;
 
     isCesiumLoading.value = true;
     showLoading('正在加载 3D 引擎资源...');
-    try {
-        const module = await import('../components/Cesium/CesiumContainer.vue');
-        CesiumContainer.value = module.default;
-        isCesiumLoaded.value = true;
-        return true;
-    } catch (error) {
-        message.error(`Cesium 组件加载失败: ${error?.message || error}`);
-        console.error('[ensureCesiumLoaded] Cesium load error:', error);
-        return false;
-    } finally {
-        isCesiumLoading.value = false;
-        hideLoading();
-    }
+    _cesiumLoadPromise = (async () => {
+        try {
+            const module = await import('../components/Cesium/CesiumContainer.vue');
+            CesiumContainer.value = module.default;
+            isCesiumLoaded.value = true;
+            return true;
+        } catch (error) {
+            message.error(`Cesium 组件加载失败: ${error?.message || error}`);
+            console.error('[ensureCesiumLoaded] Cesium load error:', error);
+            return false;
+        } finally {
+            isCesiumLoading.value = false;
+            hideLoading();
+            _cesiumLoadPromise = null;
+        }
+    })();
+    return _cesiumLoadPromise;
 }
 
 /**
@@ -746,11 +754,14 @@ async function setMapView(view, { writeUrl = true } = {}) {
     }
 
     if (normalizedView === MAP_VIEW_CESIUM) {
-        if (isWeatherBoardMode.value) {
-            isWeatherBoardMode.value = false;
-        }
+        // 切换到 3D 时自动关闭天气看板（天气看板仅支持 2D OL 视图）
+        isWeatherBoardMode.value = false;
         const loaded = await ensureCesiumLoaded();
-        if (!loaded) return false;
+        if (!loaded) {
+            // Cesium 加载失败，回滚 URL 为 OL 视图
+            if (writeUrl) replaceMapView(MAP_VIEW_OL);
+            return false;
+        }
         is3DMode.value = true;
     } else {
         if (latestCesiumOlEquivalent.value) {
@@ -1065,7 +1076,9 @@ async function buildVisitLogPayload() {
 }
 
 /**
- * 将定位编码同步到 URL 的 p 参数
+ * 将定位编码同步到 URL 的 p 参数。
+ * 直接使用 window.history.replaceState 而非 Vue Router，因为 p/loc 参数是 Hash 路由之外的附加查询参数，
+ * 不参与 Vue Router 路由匹配，使用 replaceState 可避免触发不必要的路由守卫和组件重渲染。
  * @param {string} encodedPos - 服务器返回的编码位置
  * @param {string} geoPermission - 客户端定位授权状态 ('granted'|'denied'|'unknown' 等)
  */
@@ -1116,9 +1129,9 @@ function syncVisitPosCodeToUrl(encodedPos, geoPermission = 'unknown') {
     }
 }
 
+/** 组件卸载：仅清理定时器资源，不强制 settleMapCoreLoading。
+ *  若地图从未就绪（用户提前离开），不应标记为初始化完成。 */
 onUnmounted(() => {
-    settleMapCoreLoading();
-
     if (typeof window === 'undefined') return;
 
     if (sidePanelWarmupIdleId !== null && typeof window.cancelIdleCallback === 'function') {
@@ -1501,11 +1514,6 @@ onMounted(async () => {
     letter-spacing: 0.3px;
 }
 
-.weather-board-surface {
-    width: 100%;
-    height: 100%;
-}
-
 /* 用户中心面板 (由 HomeView 配置覆盖位置) */
 :deep(.home-account-panel) {
     position: absolute !important;
@@ -1582,46 +1590,6 @@ onMounted(async () => {
     color: #fff;
     font-size: 16px;
     font-weight: 600;
-}
-
-.weather-loading-state {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-    gap: 10px;
-    background: rgba(var(--brand-primary-rgb), 0.15);
-    background: color-mix(in srgb, var(--brand-primary) 15%, transparent);
-    color: var(--text-brand);
-    z-index: 22;
-}
-
-.weather-loading-spinner {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    border: 3px solid rgba(var(--brand-primary-dark-rgb), 0.22);
-    border: 3px solid color-mix(in srgb, var(--brand-primary-dark) 22%, transparent);
-    border-top-color: var(--brand-primary-dark);
-    animation: weather-spin 0.9s linear infinite;
-}
-
-.weather-loading-text {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-brand);
-}
-
-@keyframes weather-spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
 }
 
 /* 面板主体：DrawPanel 标准风格 */
@@ -1908,13 +1876,6 @@ onMounted(async () => {
     font-size: 12px;
     color: #096dd9;
     font-weight: 600;
-}
-
-.extra-info {
-    padding: 10px;
-    background: #eee;
-    border-radius: 4px;
-    margin-top: 10px;
 }
 
 @keyframes sidepanel-spin {

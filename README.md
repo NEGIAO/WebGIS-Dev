@@ -295,12 +295,13 @@ WebGIS_Dev/
 
 ## 📜 版本演进
 
-### V3.3.14 (2026-06-29) — 下载底图跳转修复 + 标注功能修复 + TOC 缓存系统修复 + TIF 渲染优化
+### V3.3.14 (2026-06-29) — 下载底图跳转修复 + 标注功能修复 + TOC 缓存系统修复 + TIF 渲染优化 + CesiumContainer 全面 Code Review
 
 - 🐛 **修复"下载底图"按钮无法跳转到工具箱下载Tab**：HomeView.vue 中 `<SidePanel>` 组件遗漏 `:toolbox-tab="toolboxTab"` 属性绑定
 - 🐛 **修复标注功能 4 个问题**：重复 Toast 消息、catch 正则遗漏"地图已卸载"、await 后地图存活校验缺失、选点模式无 crosshair 光标指示
 - 🐛 **修复 TOC 缓存系统（统一修复 3 个 Bug）**：`layerTree` 缓存键仅含图层 ID，导致重命名、可见性勾选、透明度滑杆的 UI 变更均不生效
 - 🚀 **单波段 TIF 渲染范围优化**：从 2%-98% 百分位截断改为智能 nodata 检测 + 全有效范围渲染。新增 `detectDataRange()` 函数（哨兵值 3σ 检测 + GAP 离群检测），有效数据不再被截断
+- 🔍 **CesiumContainer.vue 全面 Code Review（6 维度审查）**：修复 3 个严重 Bug（体积云清理解构错误、大气系统双写冲突、重试路径资源泄漏）+ 4 个中等问题（异步循环守卫、bootCesium 并发保护、重试上限硬顶、FPS 调试面板移至 DEV）+ 代码规范改进（JSDoc、死代码清理、回调清理）
 
 详见 [`Docs/06-29/`](Docs/06-29/) 目录
 
