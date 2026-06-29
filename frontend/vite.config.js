@@ -81,7 +81,23 @@ export default defineConfig(({ command, mode }) => {
       sourcemap: !isProductionLikeBuild,
       minify: 'esbuild',
       chunkSizeWarningLimit: 300,
-      modulePreload: true,
+
+      // 模块预加载：只预加载首屏关键 chunk，避免浏览器提前下载懒加载模块
+      // 过滤掉 geotiff/lerc/jszip/proj4/codec 等非首屏 chunk（节省 ~594 KB 首屏传输）
+      modulePreload: {
+        polyfill: true,
+        resolveDependencies: (filename, deps) => {
+          const SKIP_PRELOAD_CHUNKS = [
+            'vendor-geotiff', 'vendor-lerc', 'vendor-jszip', 'vendor-shpjs',
+            'vendor-proj4', 'vendor-codec', 'vendor-echarts-all',
+            'vendor-three', 'vendor-rapier', 'vendor-hljs',
+            'vendor-marked', 'vendor-lilgui', 'vendor-loaders',
+          ];
+          return deps.filter(
+            (dep) => !SKIP_PRELOAD_CHUNKS.some((name) => dep.includes(name)),
+          );
+        },
+      },
 
       // Rollup 分包策略：按功能拆分，避免单个 chunk 过大
       rollupOptions: {
@@ -90,12 +106,14 @@ export default defineConfig(({ command, mode }) => {
             if (id.includes('vite/preload-helper')) return 'vendor-runtime';
             if (!id.includes('node_modules')) return undefined;
 
-            // 地图引擎（最大 chunk，~524KB）
-            if (isNodeModulePackage(id, 'ol')) return 'vendor-ol-all';
+            // 地图引擎（排除 GeoTIFF 相关模块，它们随 geotiff chunk 懒加载）
+            if (isNodeModulePackage(id, 'ol') && !id.includes('ol/source/GeoTIFF') && !id.includes('ol/source/DataTile')) return 'vendor-ol-all';
             // 图表库（~543KB）
             if (isNodeModulePackage(id, 'echarts') || isNodeModulePackage(id, 'zrender')) return 'vendor-echarts-all';
             // GeoTIFF 解析（~316KB）
             if (isNodeModulePackage(id, 'geotiff')) return 'vendor-geotiff';
+            // OL 的 GeoTIFF/DataTile source 随 geotiff 一起懒加载（避免拉入首屏）
+            if (id.includes('ol/source/GeoTIFF') || id.includes('ol/source/DataTile')) return 'vendor-geotiff';
             // LERC 栅格解码
             if (isNodeModulePackage(id, 'lerc')) return 'vendor-lerc';
             // 压缩库
@@ -119,6 +137,8 @@ export default defineConfig(({ command, mode }) => {
             if (isNodeModulePackage(id, 'pako') || isNodeModulePackage(id, 'protobufjs') || isNodeModulePackage(id, 'zstd-codec')) return 'vendor-codec';
             // lil-gui 控件（仅 Cesium 面板使用）
             if (isNodeModulePackage(id, 'lil-gui')) return 'vendor-lilgui';
+            // 3D 模型加载器（仅 Cesium PlayerController 使用，~340KB）
+            if (id.includes('@loaders.gl')) return 'vendor-loaders';
             // Vue 核心框架
             if (
               isNodeModulePackage(id, 'vue') ||

@@ -11,7 +11,7 @@ import { isEmpty as isExtentEmpty } from 'ol/extent';
 import { toLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 
-import { gcj02ToWgs84 as convertGCJ02ToWGS84 } from '@/utils/geo';
+import { gcj02ToWgs84 as convertGCJ02ToWGS84 } from '@/utils/coordTransform';
 import type { useTOCStore } from '@/stores/useTOCStore';
 
 type TOCStore = ReturnType<typeof useTOCStore>;

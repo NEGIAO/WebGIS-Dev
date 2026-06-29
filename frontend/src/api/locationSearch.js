@@ -1,6 +1,6 @@
 import backendAPI from './backend';
 import { useMessage } from '../composables/useMessage';
-import { gcj02ToWgs84 } from '../utils/geo';
+import { gcj02ToWgs84 } from '../utils/coordTransform';
 import { getAmapErrorMessage, getHttpStatusMessage } from './httpStatusMap';
 
 const AMAP_SUCCESS_STATUS = '1';

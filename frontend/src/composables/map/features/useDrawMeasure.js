@@ -6,7 +6,8 @@
  * - createDrawMeasureFeature()
  */
 
-import { Draw, Snap } from 'ol/interaction';
+import Draw from 'ol/interaction/Draw';
+import Snap from 'ol/interaction/Snap';
 import Overlay from 'ol/Overlay';
 import { Polygon } from 'ol/geom';
 import { getArea, getLength } from 'ol/sphere';

@@ -101,7 +101,9 @@ import { storeToRefs } from 'pinia';
 import Map from 'ol/Map';
 import View from 'ol/View';
 import { fromLonLat, toLonLat } from 'ol/proj';
-import { defaults as defaultControls, ScaleLine, OverviewMap } from 'ol/control';
+import { defaults as defaultControls } from 'ol/control';
+import ScaleLine from 'ol/control/ScaleLine';
+import OverviewMap from 'ol/control/OverviewMap';
 import { createEmpty, extend as extendExtent, isEmpty as isExtentEmpty } from 'ol/extent';
 import TileLayer from 'ol/layer/Tile';
 import VectorLayer from 'ol/layer/Vector';
@@ -185,7 +187,7 @@ import {
 import { apiReverseGeocodeWithFallback } from '../../api';
 
 // --- 工具函数 ---
-import { gcj02ToWgs84, wgs84ToGcj02 } from '../../utils/geo';
+import { gcj02ToWgs84, wgs84ToGcj02 } from '../../utils/coordTransform';
 import { createLayerExporter, isVectorManagedLayer } from '../../utils/layerExportService';
 
 // --- 子组件 ---
