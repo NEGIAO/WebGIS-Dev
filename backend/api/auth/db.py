@@ -126,6 +126,111 @@ def backup_auth_db_for_migration(reason: str) -> Optional[Path]:
     return None
 
 # ─── 数据库损坏恢复 ───
+def _try_wal_recovery(db_path: Path) -> tuple[bool, dict]:
+    """
+    尝试通过 WAL 文件自动回放恢复数据。
+
+    策略：
+      1. 创建临时空主库（同目录，避免跨设备 move）
+      2. 将原 WAL/SHM **复制**为与临时库同名的文件
+         （SQLite 查找 WAL 的规则固定为 "{db_path}-wal"，必须路径匹配）
+      3. 连接临时库 → SQLite 自动发现同名 WAL → 回放 → 读取数据
+      4. 数据以 dict 返回给调用方（_attempt_db_recovery 步骤3会删掉 db_path，
+         所以这里不做 shutil.move，避免写回后被立即删除）
+
+    返回: (是否成功, 恢复的数据字典)
+    """
+    wal_path = Path(str(db_path) + "-wal")
+    shm_path = Path(str(db_path) + "-shm")
+
+    if not wal_path.exists():
+        logger.info("无 WAL 文件，跳过 WAL 恢复")
+        return False, {}
+
+    logger.info("尝试 WAL 自动回放恢复: 复制 WAL/SHM 到临时路径，让 SQLite 自动回放...")
+
+    import tempfile
+    new_db_path: Optional[Path] = None
+    wal_temp: Optional[Path] = None
+    shm_temp: Optional[Path] = None
+
+    try:
+        # 创建临时主库（同目录，名称随机）
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False, dir=db_path.parent) as tmp:
+            new_db_path = Path(tmp.name)
+
+        # ── 关键修复 ──────────────────────────────────────────────────────────
+        # SQLite 寻找 WAL 时使用固定规则："{主库路径}-wal"
+        # 必须将原 WAL/SHM 复制到与临时库同名的位置，才能触发回放。
+        # 直接保留原 WAL 不动、连接另一个路径的临时库，SQLite 找不到 WAL。
+        # ─────────────────────────────────────────────────────────────────────
+        wal_temp = Path(str(new_db_path) + "-wal")
+        shutil.copy2(str(wal_path), str(wal_temp))
+
+        if shm_path.exists():
+            shm_temp = Path(str(new_db_path) + "-shm")
+            shutil.copy2(str(shm_path), str(shm_temp))
+            logger.info("已复制 WAL+SHM 到临时路径: %s", str(wal_temp))
+        else:
+            logger.info("已复制 WAL 到临时路径: %s", str(wal_temp))
+
+        # 连接临时库，SQLite 发现同名 WAL 并自动回放
+        conn = sqlite3.connect(str(new_db_path), timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("SELECT 1;")  # 触发 WAL checkpoint/回放
+
+        tables = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+
+        recovered_data = {}
+        total_rows = 0
+
+        for table_row in tables:
+            table_name = table_row[0]
+            try:
+                columns = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
+                if not columns:
+                    continue
+                rows = conn.execute(f'SELECT * FROM "{table_name}"').fetchall()
+                if rows:
+                    recovered_data[table_name] = {
+                        'columns': [col[1] for col in columns],
+                        'rows': rows
+                    }
+                    total_rows += len(rows)
+                    logger.info("WAL 恢复表 %s: %d 行", table_name, len(rows))
+            except Exception as e:
+                logger.warning("WAL 恢复表 %s 失败: %s", table_name, str(e))
+
+        conn.close()
+
+        if total_rows > 0:
+            logger.info("WAL 自动回放恢复成功: 共 %d 个表, %d 行数据", len(recovered_data), total_rows)
+            # 不在此处 shutil.move：_attempt_db_recovery 步骤3 会删除 db_path，
+            # move 回去只会被立即删除。数据已在 recovered_data dict 中，
+            # 由 _import_recovered_data 在 schema 重建后写入新库。
+            return True, recovered_data
+        else:
+            logger.warning("WAL 回放后无数据（WAL 可能为空或仅含非数据事务）")
+            return False, {}
+
+    except sqlite3.DatabaseError as e:
+        logger.warning("WAL 自动回放失败 (DatabaseError): %s", str(e))
+    except Exception as e:
+        logger.warning("WAL 自动回放异常: %s", str(e))
+    finally:
+        # 清理所有临时文件（主库 + 临时 WAL/SHM）
+        for tmp_path in (new_db_path, wal_temp, shm_temp):
+            if tmp_path is not None and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+
+    return False, {}
+
+
 def _try_dump_database(db_path: Path) -> dict:
     """
     尝试从损坏的数据库中导出数据。
@@ -166,7 +271,7 @@ def _try_dump_database(db_path: Path) -> dict:
             logger.warning("sqlite3 .dump 无输出: %s", (result.stderr or '')[:200])
 
     except FileNotFoundError:
-        logger.warning("sqlite3 命令行工具不可可用，将使用 Python sqlite3 模块")
+        logger.warning("sqlite3 命令行工具不可用，将使用 Python sqlite3 模块")
     except subprocess.TimeoutExpired:
         logger.warning("sqlite3 .dump 命令超时 (30s)")
     except Exception as e:
@@ -184,11 +289,11 @@ def _try_dump_database(db_path: Path) -> dict:
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
 
-        for table_row in tables:
+        # 如果 .dump 已经成功，跳过逐表恢复（避免重复）
+        if dump_insert_count > 0:
+            logger.info("sqlite3 .dump 已成功，跳过 Python 逐表恢复")
+        for table_row in (tables if dump_insert_count == 0 else []):
             table_name = table_row[0]
-            # 如果 .dump 已经成功，跳过逐表恢复（避免重复）
-            if dump_insert_count > 0:
-                break
             try:
                 # 获取表结构（quote 表名防止特殊字符）
                 columns = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
@@ -345,9 +450,10 @@ def _attempt_db_recovery(db_path: Path) -> bool:
     数据库损坏恢复：备份损坏文件 → 尝试恢复数据 → 删除损坏文件 → 重置初始化标志。
     使用 threading.Lock 保证同一进程内只执行一次恢复。
 
-    恢复策略：
-    1. 优先使用 sqlite3 .dump 命令导出完整 SQL（最完整的恢复方式）
-    2. 如果失败，使用 Python sqlite3 模块逐表尝试 SELECT（部分恢复）
+    恢复策略（按优先级）：
+    1. WAL 自动回放恢复（保留 WAL/SHM，新建主库让 SQLite 回放） —— 最完整，保留最近事务
+    2. 优先使用 sqlite3 .dump 命令导出完整 SQL（最完整的恢复方式）
+    3. 如果失败，使用 Python sqlite3 模块逐表尝试 SELECT（部分恢复）
 
     返回: True 表示恢复成功（有数据被恢复），False 表示恢复失败或无数据
     """
@@ -364,19 +470,35 @@ def _attempt_db_recovery(db_path: Path) -> bool:
             f"{db_path.suffix}.corrupted.{timestamp}"
         )
 
-        # 步骤1：备份损坏的数据库主文件（WAL 模式下备份不包含 WAL 数据，仅供事后分析）
+        # 步骤1：备份完整的数据库三件套（主库 + WAL + SHM），保留原文件用于恢复尝试
         try:
-            if db_path.exists():
-                shutil.copy2(str(db_path), str(backup_path))
-                logger.warning("已备份损坏的数据库文件: %s → %s", str(db_path), str(backup_path))
+            for suffix in ("", "-wal", "-shm"):
+                src = Path(str(db_path) + suffix)
+                if src.exists():
+                    dst = Path(str(backup_path) + suffix)
+                    shutil.copy2(str(src), str(dst))
+                    logger.warning("已备份损坏的数据库文件: %s → %s", str(src), str(dst))
         except Exception as backup_err:
             logger.error("备份损坏数据库失败: %s", str(backup_err))
 
-        # 步骤2：尝试从损坏的数据库中恢复数据
-        logger.info("开始尝试恢复损坏的数据库数据...")
-        recovered_data = _try_dump_database(db_path)
+        # 步骤2：按优先级尝试恢复数据
+        recovered_data = {}
+        has_recovered_data = False
 
-        has_recovered_data = bool(recovered_data)
+        # 策略1：WAL 自动回放恢复（最高优先级，保留最近提交的事务）
+        logger.info("开始尝试 WAL 自动回放恢复...")
+        wal_success, wal_data = _try_wal_recovery(db_path)
+        if wal_success and wal_data:
+            recovered_data = wal_data
+            has_recovered_data = True
+            logger.info("WAL 恢复成功，跳过后续恢复策略")
+
+        # 策略2：sqlite3 .dump / 逐表恢复（仅在 WAL 恢复失败时尝试）
+        if not has_recovered_data:
+            logger.info("WAL 恢复失败或无数据，尝试 sqlite3 dump/逐表恢复...")
+            recovered_data = _try_dump_database(db_path)
+            has_recovered_data = bool(recovered_data)
+
         if has_recovered_data:
             if '_dump_sql' in recovered_data:
                 logger.info("成功导出数据库 dump，共 %d 条 INSERT 语句", recovered_data.get('_dump_insert_count', 0))
@@ -391,7 +513,7 @@ def _attempt_db_recovery(db_path: Path) -> bool:
         else:
             logger.warning("无法从损坏的数据库中恢复任何数据")
 
-        # 步骤3：删除损坏的主文件、WAL 和 SHM
+        # 步骤3：删除损坏的主文件、WAL 和 SHM（恢复尝试完成后）
         for suffix in ("", "-wal", "-shm"):
             target = Path(str(db_path) + suffix)
             try:
