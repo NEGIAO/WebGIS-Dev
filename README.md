@@ -183,6 +183,7 @@ WebGIS_Dev/
 │   │   │   │   ├── Cloud/            # 体积云模块（Ray Marching + 散射 + 纹理）
 │   │   │   │   ├── PlayerController/ # 人物漫游控制器（第一/第三人称 + Rapier 物理 + 导航指引 + 动画混合 + 移动手感优化）
 │   │   │   │   ├── FluidSimulation/  # 流体模拟（洪水模拟 + 水位动画）
+│   │   │   │   ├── Wind/             # GPU 风场粒子可视化（cesium-wind-layer + ComputeCommand + GLSL 300 es）
 │   │   │   │   ├── ShallowWater/     # Three.js 热带浅水（焦散/折射/吸色/体积云/闪电）
 │   │   │   │   ├── composables/      # Cesium composables（图层/底图/URL 追踪等）
 │   │   │   │   └── terrain/          # 地形 provider
@@ -278,7 +279,8 @@ WebGIS_Dev/
 │   │   ├── 26-06-24/                 # 体积云设计文档
 │   │   ├── 26-06-26/                 # 大气 LUT + 模块卡片 + 浅水 + 漫游控制器
 │   │   ├── 26-06-27/                 # 体积云重构 + 洪水模拟 + 漫游优化
-│   │   └── 26-06-28/                 # LLM 动态配置管理
+│   │   ├── 26-06-28/                 # LLM 动态配置管理
+│   │   └── 26-06-30/                 # SQLite 损坏恢复命令记录
 │   ├── 06-28/                        # useAgentConfig 编辑模式修复 + Chat 面板修复
 │   ├── 06-29/                        # 下载底图跳转 + 标注链路 + TOC 缓存 + TIF 渲染优化
 │   ├── Architecture/                  # 架构设计文档
@@ -747,6 +749,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-15
-**当前版本**：V3.3.5 (运行时地图 Token 池 + 四类 API 备用 Token)
+**最后更新**：2026-06-30
+**当前版本**：V3.3.15 (SQLite 损坏恢复命令记录 + WAL 自动回放优先策略)
 **项目状态**：开发中 - 持续迭代优化
