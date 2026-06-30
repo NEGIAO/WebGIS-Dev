@@ -538,25 +538,25 @@ def _attempt_db_recovery(db_path: Path) -> bool:
 
 def _db_file_is_corrupted(db_path: Path) -> bool:
     """通过 PRAGMA quick_check 快速检测数据库文件是否损坏。"""
-    """【临时修改】强制返回 False，关闭一切全自动恢复和删除逻辑"""
-    logger.warning("【临时提示】已强行关闭数据库自动损坏检测")
-    return False
-    # try:
-    #     if not db_path.exists():
-    #         return False
-    #     conn = sqlite3.connect(str(db_path), timeout=5)
-    #     try:
-    #         result = conn.execute("PRAGMA quick_check(1)").fetchone()
-    #         is_bad = result is None or str(result[0]).lower() != "ok"
-    #         if is_bad:
-    #             logger.warning("quick_check 检测到数据库异常: %s", result)
-    #         return is_bad
-    #     finally:
-    #         conn.close()
-    # except sqlite3.DatabaseError:
-    #     return True
-    # except Exception:
-    #     return False
+    # """【人工临时修改】强制返回 False，关闭一切全自动恢复和删除逻辑"""
+    # logger.warning("【临时提示】已强行关闭数据库自动损坏检测")
+    # return False
+    try:
+        if not db_path.exists():
+            return False
+        conn = sqlite3.connect(str(db_path), timeout=5)
+        try:
+            result = conn.execute("PRAGMA quick_check(1)").fetchone()
+            is_bad = result is None or str(result[0]).lower() != "ok"
+            if is_bad:
+                logger.warning("quick_check 检测到数据库异常: %s", result)
+            return is_bad
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return True
+    except Exception:
+        return False
 
 
 # ─── 连接工厂 ───
