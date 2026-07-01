@@ -43,6 +43,9 @@ function parsePayloadToObject(payload) {
     throw createParserError('AMAP_AOI_INVALID_JSON', '输入内容不是有效的 JSON 对象');
 }
 
+// 提取 AOI 边界坐标串。
+// 兼容三类来源：详情接口 mining_shape.shape、POI biz_ext.aoi，
+// 以及 v5/aoi/polyline 接口的 aois[0].polyline（用户手动粘贴的 AOI 边界数据）。
 function extractAoiShape(data = {}) {
     return String(
         data?.data?.spec?.mining_shape?.shape ||
@@ -50,12 +53,18 @@ function extractAoiShape(data = {}) {
             data?.pois?.[0]?.spec?.mining_shape?.shape ||
             data?.pois?.[0]?.biz_ext?.aoi ||
             data?.pois?.[0]?.aoi ||
+            data?.aois?.[0]?.polyline ||
+            data?.aois?.[0]?.shape ||
             '',
     ).trim();
 }
 
+// 提取承载属性的基础节点。
+// 追加 aois[0] 分支：AOI 边界接口的 type/typecode/pname/cityname/adname/address 等
+// 属性均挂在 aois[0] 下，需一并纳入以便属性表展示。
 function extractBaseNode(data = {}) {
-    const base = data?.data?.base || data?.base || data?.pois?.[0] || {};
+    const base =
+        data?.data?.base || data?.base || data?.pois?.[0] || data?.aois?.[0] || {};
     return base && typeof base === 'object' ? base : {};
 }
 
@@ -65,6 +74,7 @@ function extractPoiId(data = {}) {
             data?.base?.poiid ||
             data?.pois?.[0]?.id ||
             data?.pois?.[0]?.poiid ||
+            data?.aois?.[0]?.id ||
             data?.id ||
             '',
     ).trim();
@@ -72,14 +82,25 @@ function extractPoiId(data = {}) {
 
 function extractPoiName(data = {}, base = {}) {
     return String(
-        base?.name || data?.data?.base?.name || data?.base?.name || data?.pois?.[0]?.name || '',
+        base?.name ||
+            data?.data?.base?.name ||
+            data?.base?.name ||
+            data?.pois?.[0]?.name ||
+            data?.aois?.[0]?.name ||
+            '',
     ).trim();
 }
+
+// 需要从属性表中剔除的几何/像素字段：
+// polyline/shape 是原始边界坐标串（已单独解析为几何），pixelx/pixely 为像素坐标，
+// 直接展示会污染属性表且无实际意义。
+const EXCLUDED_PROPERTY_KEYS = /^(polyline|shape|pixel[xy])$/i;
 
 function normalizeBaseProperties(base = {}) {
     const result = {};
     Object.entries(base || {}).forEach(([key, value]) => {
         if (!key) return;
+        if (EXCLUDED_PROPERTY_KEYS.test(String(key))) return;
 
         if (value === null || value === undefined) return;
 

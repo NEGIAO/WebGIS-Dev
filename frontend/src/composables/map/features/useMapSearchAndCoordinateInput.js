@@ -6,8 +6,8 @@
  * - handleSearchJump(payload)
  * - drawPointByCoordinatesInput(payload)
  */
-// 1. 导入万能解析器
-import { universalAmapParser } from '@/utils/gis/parsers/universalAmapParser';
+// 1. 导入完整解析器，提取所有属性
+import { parseAmapAoiPayload } from '@/utils/gis/parsers/amapAoiParser';
 import { fromLonLat } from 'ol/proj';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
@@ -454,9 +454,9 @@ export function createMapSearchAndCoordinateInputFeature({
                 return;
             }
 
-            // --- 核心改动点：调用万能解析器 ---
-            const detail = universalAmapParser(jsonText);
-            // --------------------------------
+            // --- 核心改动点：使用完整解析器，提取所有属性 ---
+            const detail = parseAmapAoiPayload(jsonText);
+            // ------------------------------------------------
 
             const poiid = String(payload?.poiid || detail?.poiid || '').trim();
             const layerName = detail.name
@@ -473,11 +473,15 @@ export function createMapSearchAndCoordinateInputFeature({
                 return;
             }
 
+            // 提取所有基础属性用于属性表显示
+            const baseProperties = detail.base || {};
+
             const aoiFeature = new Feature({
                 geometry: new Polygon(mapRings),
                 名称: layerName,
                 POI_ID: poiid,
                 来源: detail.source,
+                ...baseProperties,
             });
 
             // 调用已有的图层创建函数
@@ -487,7 +491,7 @@ export function createMapSearchAndCoordinateInputFeature({
                 fitView: true,
             });
 
-            message.success?.('解析成功！');
+            message.success?.('解析成功！属性已同步至属性表');
         } catch (error) {
             console.error('AOI提取失败:', error);
             message.error?.(error.message || '解析失败');
