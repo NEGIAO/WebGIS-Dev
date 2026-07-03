@@ -1095,26 +1095,13 @@ function syncVisitPosCodeToUrl(encodedPos, geoPermission = 'unknown') {
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
         const params = new URLSearchParams(hashQueryRaw);
 
-        // 定位授权被拒绝时：不写入 IP 编码位置，清除已有的非零 p 和 loc
-        if (geoPermission === 'denied') {
-            const existingP = String(params.get('p') || '').trim();
-            if (existingP && existingP !== '0') {
-                params.set('p', '0');
-                params.delete('loc');
-                const nextHashQuery = params.toString();
-                const nextHash = nextHashQuery
-                    ? `#${normalizedHashPath}?${nextHashQuery}`
-                    : `#${normalizedHashPath}`;
-                const nextUrl = `${window.location.pathname}${window.location.search}${nextHash}`;
-                window.history.replaceState(window.history.state, '', nextUrl);
-            }
-            return;
-        }
-
-        params.set('p', normalizedCode);
-
-        if (normalizedCode !== '0' && String(params.get('loc') || '').trim() === '') {
-            params.set('loc', '1');
+        // 授权并取得有效编码坐标时写入 loc=gps 与 p 编码；否则统一清除为 0，避免 IP/未授权坐标泄漏到 URL
+        if (geoPermission === 'granted' && normalizedCode !== '0') {
+            params.set('p', normalizedCode);
+            params.set('loc', 'gps');
+        } else {
+            params.set('p', '0');
+            params.set('loc', '0');
         }
 
         const nextHashQuery = params.toString();

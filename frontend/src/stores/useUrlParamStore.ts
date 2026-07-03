@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
-import { normalizeBinaryFlag } from '@/utils/normalize';
+import { normalizeBinaryFlag, normalizeLocationFlag } from '@/utils/normalize';
 import { normalizeMapView } from '@/utils/url/urlConstants';
 
 /**
@@ -19,7 +19,7 @@ import { normalizeMapView } from '@/utils/url/urlConstants';
  * @property z 地图缩放层级
  * @property l 图层切换索引
  * @property s 分享模式标记 0=普通进入 / 1=分享链接进入
- * @property loc 定位权限标记 0=禁止定位 / 1=允许定位
+ * @property loc 定位来源标记 'gps' / 'ip' / '0'
  * @property p 加密点位编码（私密/定制点位解析用）
  * @property view 地图视图引擎 ol=OpenLayers / cesium=Cesium
  */
@@ -29,7 +29,7 @@ interface PendingParams {
     z: number | null;
     l: number | null;
     s: '0' | '1';
-    loc: '0' | '1';
+    loc: 'gps' | 'ip' | '0';
     p: string | null;
     view: 'ol' | 'cesium';
 }
@@ -42,7 +42,7 @@ interface PendingParams {
  * @property z: 缩放级别
  * @property l: 图层索引
  * @property s: 分享标记 ('0' | '1')
- * @property loc: 定位授权标记 ('0' | '1')
+ * @property loc: 定位来源标记 ('gps' | 'ip' | '0') — '1' 视为 'gps' 兼容旧链接
  * @property p: 加密位置编码
  * @property view: 地图视图引擎 ('ol' | 'cesium')
  * @property ut: 用户类型（guest|admin|registered）
@@ -108,10 +108,9 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
         const normalizedL = validateLayerIndex(queryParams.l);
         // 分享模式标识格式化
         const normalizedS = normalizeBinaryFlag(queryParams.s, '0');
-        // 定位权限标识格式化
-        const normalizedLoc = normalizeBinaryFlag(queryParams.loc, '0');
-        // 加密点位编码清洗
-        const normalizedP = String(queryParams.p || '').trim() || null;
+        // 定位来源标识格式化（复用 normalize.ts，避免重复实现）
+        const normalizedLoc = normalizeLocationFlag(queryParams.loc);
+        const normalizedP = normalizePositionCode(queryParams.p);
 
         // 覆盖更新规范化后的参数集合
         pendingParams.value = {
@@ -293,5 +292,10 @@ function validateLayerIndex(value: unknown): number | null {
     return num;
 }
 
+function normalizePositionCode(value: unknown): string | null {
+    const text = String(value ?? '').trim();
+    return text || null;
+}
+
 // normalizeMapView 已迁移至 src/utils/url/urlConstants.js（P2-9 去重复）
-// normalizeBinaryFlag 已迁移至 src/utils/normalize.ts
+// normalizeBinaryFlag / normalizeLocationFlag 已迁移至 src/utils/normalize.ts

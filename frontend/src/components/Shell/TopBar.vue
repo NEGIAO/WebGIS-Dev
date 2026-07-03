@@ -313,7 +313,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '../../constants';
-import { normalizeBinaryFlag } from '../../utils/normalize';
+import { normalizeLocationFlag } from '../../utils/normalize';
 // import { hideLoading, showLoading } from '@/utils';
 import {
     List as ListIcon,
@@ -556,9 +556,8 @@ function normalizePositionCode(value, fallback = '0') {
  * 只在 URL 有 loc=1 标记（用户已授权定位）时才保留非零 p 值
  */
 function resolvePositionCodeForShare(hashParams, searchParams) {
-    // 只在 loc=1 时才保留 p 参数，否则返回 '0'
-    const locFlag = String(hashParams.get('loc') || searchParams.get('loc') || '0').trim();
-    if (locFlag !== '1') return '0';
+    const locSource = normalizeLocationFlag(hashParams.get('loc') || searchParams.get('loc') || '0', '0');
+    if (locSource !== 'gps' && locSource !== 'ip') return '0';
 
     const hashCode = normalizePositionCode(hashParams?.get('p'), '');
     if (hashCode && hashCode !== '0') return hashCode;
@@ -597,7 +596,8 @@ function syncShareFlagInCurrentUrl() {
         hashParams.delete('from');
         hashParams.delete('shared');
         hashParams.set('s', '1');
-        hashParams.set('loc', normalizeBinaryFlag(hashParams.get('loc'), '0'));
+        const locSource = normalizeLocationFlag(hashParams.get('loc') || searchParams.get('loc') || '0', '0');
+        hashParams.set('loc', locSource);
         hashParams.set('p', resolvePositionCodeForShare(hashParams, searchParams));
         hashParams.set(
             'l',
@@ -642,7 +642,8 @@ function buildShareMarkedUrl(rawHref) {
         // [Bug Fix] 先解析 p 再重置 loc：resolvePositionCodeForShare 依赖原始 loc 值判断是否保留 p
         // 如果先 set('loc','0')，函数永远看到 loc=0 导致 p 被丢弃
         const resolvedP = resolvePositionCodeForShare(hashParams, url.searchParams);
-        hashParams.set('loc', '0');
+        const locSource = normalizeLocationFlag(hashParams.get('loc') || url.searchParams.get('loc') || '0', '0');
+        hashParams.set('loc', locSource);
         hashParams.set('p', resolvedP);
         hashParams.set(
             'l',

@@ -1,4 +1,28 @@
-# WebGIS 前端项目 — v3.3.14
+# WebGIS 前端项目 — v3.3.16
+
+### V3.3.16 (2026-07-02) — GPS 定位授权逻辑修复
+
+- 🐛 **修复定位授权逻辑**：仅当用户明确授权 GPS 定位（`source === 'gps'`）时，才在 URL 中设置 `loc=1` 并将坐标编码写入 `p` 参数
+- 🐛 **IP 定位不再写入 `loc=1` 和 `p` 参数**：IP 定位仅保留全局定位上下文供内部使用，URL 参数保持 `loc=0`、`p=0`
+- 🔧 **`useUserLocation.js::markLocationSuccessFlagInUrl()`**：新增 `source` 参数，仅 GPS 定位时写入 `loc=1`
+- 🔧 **`useMapState.js::resolveLocationState()`**：重构为解析定位授权状态，新增 `hasGpsAuthorization` 和 `urlHasLocFlag` 字段
+- 🔧 **`useMapState.js::resolvePositionCode()`**：仅 `hasGpsAuthorization` 为 true 时编码 GPS 坐标到 `p` 参数
+- 🔧 **`useMapState.js::parseUrlToState()`**：仅 URL 中 `loc=1` 时解码 `p` 参数
+- 🔧 **`useMapState.js::buildQuery()`**：基于 `shouldSetLoc` 同步设置 `loc` 和 `p` 参数
+
+详见 [`Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md`](../Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md)
+
+### V3.3.15 (2026-06-30) — SQLite 损坏恢复命令记录 + 维护日志同步
+
+### V3.3.15 (2026-06-29) — GPU 风场粒子可视化集成（cesium-wind-layer）
+
+- 🆕 **GPU 风场粒子可视化**：集成 `cesium-wind-layer` 开源库，实现 WebGL 2 ComputeCommand + GLSL 300 es 着色器驱动的高性能风场粒子动画
+- 🆕 **wind-core 模块**：从 `cesium-wind-layer` 提取 10 个核心 TS 源文件到 `Wind/wind-core/`，含 GPU 计算管线（3 ComputeCommand）+ 渲染管线（DrawCommand）+ Runge-Kutta 二阶积分 + 双线性插值风速查询
+- 🆕 **useWindLayer Composable**：封装 WindLayer 完整生命周期（初始化/数据加载/参数更新/显隐/销毁），支持 bbox→bounds 自动适配、Array→Float32Array 转换
+- 🆕 **windLayerController lil-gui 模块**：风场参数 GUI 控制面板（粒子密度/高度/速度/丢弃率/线条宽度长度/颜色方案/显示范围/翻转Y轴）
+- 🆕 **windSampleData 示例数据**：印尼区域风场 + 洋流数据（wind.json / ocean.json），支持缓存和自定义数据源注册
+- 🔧 **Cesium Shim 扩展**：新增 28 个 Cesium API 导出（Viewer/Cartesian2/Texture/Framebuffer/ComputeCommand 等），确保 wind-core 与 CDN Cesium 共享同一实例
+- 🔧 **模块注册**：`useCesiumToolModules.js` 导入并导出 `windLayerModule`
 
 ### V3.3.14 (2026-06-29) — Bug 修复 + TIF 渲染优化 + CesiumContainer Code Review
 
@@ -456,6 +480,27 @@ frontend/src/
 │   │   ├── CesiumDataImportDialog.vue              # GLTF/GLB 模型放置坐标输入弹窗
 │   │   ├── LilGuiControls.vue                      # lil-gui 动态控件渲染器
 │   │   ├── Wind2D.js                               # 2D 风场渲染
+│   │   │
+│   │   ├── Wind/                                   # GPU 风场粒子可视化模块
+│   │   │   ├── wind-core/                          # 核心源码（cesium-wind-layer 移植）
+│   │   │   │   ├── index.ts                        # WindLayer 主类（公共 API）
+│   │   │   │   ├── types.ts                        # 类型定义（WindData/WindLayerOptions）
+│   │   │   │   ├── utils.ts                        # deepMerge 工具
+│   │   │   │   ├── windParticleSystem.ts           # 粒子系统编排器
+│   │   │   │   ├── windParticlesComputing.ts       # GPU 计算管线（3 ComputeCommand）
+│   │   │   │   ├── windParticlesRendering.ts       # GPU 渲染管线（DrawCommand）
+│   │   │   │   ├── customPrimitive.ts              # Cesium Primitive 桥接
+│   │   │   │   ├── shaderManager.ts                # ShaderSource 工厂
+│   │   │   │   ├── cesium-extensions.d.ts          # Cesium 内部类型补充
+│   │   │   │   └── shaders/                        # GLSL 300 es 着色器
+│   │   │   │       ├── calculateSpeed.ts           # 速度计算（Runge-Kutta）
+│   │   │   │       ├── updatePosition.ts           # 位置更新
+│   │   │   │       ├── postProcessingPosition.ts   # 粒子丢弃/重生
+│   │   │   │       └── segmentDraw.ts              # 线段渲染
+│   │   │   ├── useWindLayer.js                     # Vue Composable（生命周期管理）
+│   │   │   ├── windLayerController.js              # lil-gui 模块（参数控制面板）
+│   │   │   ├── windSampleData.js                   # 示例数据加载器
+│   │   │   └── cesium-wind-layer/                  # 原始 clone 仓库（参考）
 │   │   │
 │   │   ├── Cloud/                                  # 体积云模块（TypeScript）
 │   │   │   ├── index.ts                            # 模块入口

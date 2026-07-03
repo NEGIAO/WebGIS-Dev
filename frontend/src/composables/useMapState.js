@@ -28,7 +28,7 @@ import {
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
 import { prioritizeTileSourceRequest } from './useTileSourceFactory';
-import { normalizeBinaryFlag } from '../utils/normalize';
+import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '../utils/normalize';
 import { getCurrentQuerySnapshot as getSnapshot, readQueryValue as readQueryFromSnapshot } from '../utils/url/urlQueryReader';
 // 新增：中心点标记所需导入
 import Feature from 'ol/Feature';
@@ -198,81 +198,87 @@ export function useMapState(mapInstance, options = {}) {
     }
 
     /**
-     * 解析定位状态（loc 标记或全局定位上下文）
+     * 解析定位授权状态
+     * 核心原则：只有用户明确授权 GPS 定位（source === 'gps'）时，才允许写入 loc=gps 和 p=编码坐标
+     * URL 中的 loc 只是同步标记，不是授权来源；真正的授权来源是 globalLocationContext.source === 'gps'
+     * IP 定位（source === 'ip'）虽然有全局上下文，但不写入 loc 和 p 参数，避免粗略坐标泄漏到 URL
      * @returns {{
-     *   hasLocationCondition: boolean,
-     *   hasGlobalLocation: boolean,
+     *   hasGpsAuthorization: boolean,     // 是否有 GPS 授权（仅 source==='gps' 才为 true，不含 ip）
+     *   hasGlobalLocation: boolean,       // 是否有全局定位上下文（GPS/IP等）
      *   globalLng: number|null,
-     *   globalLat: number|null
+     *   globalLat: number|null,
+     *   globalSource: 'gps'|'ip'|'unknown'|null, // 定位来源
+     *   urlHasLocFlag: boolean            // URL 中是否有 loc=gps/loc=ip 标记
      * }}
      * @private
      */
     function resolveLocationState() {
-        const locateFlagReady = normalizeBinaryFlag(readQueryValue('loc'), '0') === '1';
         const globalLocationContext = getGlobalUserLocationContext();
         const globalLng = parseNumber(globalLocationContext?.lon);
         const globalLat = parseNumber(globalLocationContext?.lat);
+        const globalSource = normalizeText(globalLocationContext?.source) || 'unknown';
         const hasGlobalLocation = globalLng !== null && globalLat !== null;
+        // 仅 GPS 授权写入 p 编码与 loc=gps；IP 定位不写入 URL，避免坐标泄漏
+        const hasGpsAuthorization = hasGlobalLocation && globalSource === 'gps';
+
+        const urlLocSource = normalizeLocationFlag(readQueryValue('loc'), '0');
+        const urlHasLocFlag = urlLocSource === 'gps' || urlLocSource === 'ip';
 
         return {
-            hasLocationCondition: locateFlagReady || hasGlobalLocation,
+            hasGpsAuthorization,
             hasGlobalLocation,
             globalLng,
             globalLat,
+            globalSource,
+            urlHasLocFlag,
         };
     }
 
     /**
-     * 生成 p 参数（定位满足时写短码，不满足写 0）
-     * @param {number|null} fallbackLng
-     * @param {number|null} fallbackLat
-     * @returns {string}
+     * 生成 p 参数与 loc 来源标记
+     * 核心原则：仅当用户明确授权 GPS 定位（hasGpsAuthorization）时，才写入 p 编码坐标与 loc=gps
+     * IP 定位不写入 p 与 loc，避免粗略坐标泄漏到 URL（IP 坐标仅供内部上下文使用）
+     * @returns {{code: string, locSource: 'gps'|'0'}} code=p 编码('0' 表示无坐标)，locSource=loc 标记
      * @private
      */
-    function resolvePositionCode(fallbackLng = null, fallbackLat = null) {
-        const { hasLocationCondition, hasGlobalLocation, globalLng, globalLat } =
-            resolveLocationState();
+    function resolvePositionCode() {
+        const { hasGpsAuthorization, globalLng, globalLat } = resolveLocationState();
+        if (!hasGpsAuthorization) return { code: '0', locSource: '0' };
+        if (globalLng === null || globalLat === null) return { code: '0', locSource: '0' };
 
-        if (!hasLocationCondition) return '0';
+        const encoded = encodePos(globalLng, globalLat);
+        const code = encoded && encoded !== '0' ? encoded : '0';
+        const locSource = code !== '0' ? 'gps' : '0';
 
-        const sourceLng = hasGlobalLocation ? globalLng : parseNumber(fallbackLng);
-        const sourceLat = hasGlobalLocation ? globalLat : parseNumber(fallbackLat);
-        if (sourceLng === null || sourceLat === null) return '0';
-
-        const encoded = encodePos(sourceLng, sourceLat);
-        return encoded && encoded !== '0' ? encoded : '0';
+        return { code, locSource };
     }
 
     /**
      * 解析 URL 为地图状态对象
+     * 仅当 URL 中有 loc=gps 或 loc=ip 时才解码 p 参数
      * @returns {Object} 包含 lng、lat、zoom、layerIndex 的状态对象
      */
     function parseUrlToState() {
         let lng = parseNumber(readQueryValue('lng'));
         let lat = parseNumber(readQueryValue('lat'));
         const zoom = parseNumber(readQueryValue('z'));
-        // 默认底图索引统一由 DEFAULT_BASEMAP_LAYER_INDEX 控制。
         const layerIndex =
             parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ??
             resolvePreferredDefaultLayerIndex();
 
-        //修复URL错误
         const compactPosCode = String(readQueryValue('p') ?? '').trim();
+        const { urlHasLocFlag } = resolveLocationState();
 
-        if ((lng === null || lat === null) && compactPosCode && compactPosCode !== '0') {
-            const { hasLocationCondition } = resolveLocationState();
+        if ((lng === null || lat === null) && compactPosCode && compactPosCode !== '0' && urlHasLocFlag) {
+            const decodedPos = decodePos(compactPosCode);
 
-            if (hasLocationCondition) {
-                const decodedPos = decodePos(compactPosCode);
-
-                if (
-                    decodedPos &&
-                    Number.isFinite(decodedPos.lng) &&
-                    Number.isFinite(decodedPos.lat)
-                ) {
-                    lng = decodedPos.lng;
-                    lat = decodedPos.lat;
-                }
+            if (
+                decodedPos &&
+                Number.isFinite(decodedPos.lng) &&
+                Number.isFinite(decodedPos.lat)
+            ) {
+                lng = decodedPos.lng;
+                lat = decodedPos.lat;
             }
         }
 
@@ -292,11 +298,10 @@ export function useMapState(mapInstance, options = {}) {
      */
     function buildQuery({ lng, lat, zoom, layerIndex }) {
         const shareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
-        const locateFlag = normalizeBinaryFlag(readQueryValue('loc'), '0');
         const normalizedLayerIndex = Number.isInteger(layerIndex)
             ? layerIndex
             : DEFAULT_BASEMAP_LAYER_INDEX;
-        const compactPosCode = resolvePositionCode(lng, lat);
+        const { code: compactPosCode, locSource } = resolvePositionCode();
 
         return {
             lng: formatNumber(lng, 6),
@@ -304,8 +309,8 @@ export function useMapState(mapInstance, options = {}) {
             z: formatZParam(zoom),
             l: String(normalizedLayerIndex),
             s: shareFlag,
-            loc: locateFlag,
-            p: compactPosCode || '0',
+            loc: locSource,
+            p: compactPosCode,
             view: 'ol',
         };
     }

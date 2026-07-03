@@ -297,6 +297,18 @@ WebGIS_Dev/
 
 ## 📜 版本演进
 
+### V3.3.15 (2026-07-02) — GPS 定位授权逻辑修复
+
+- 🐛 **修复定位授权逻辑**：仅当用户明确授权 GPS 定位（`source === 'gps'`）时，才在 URL 中设置 `loc=1` 并将坐标编码写入 `p` 参数
+- 🐛 **IP 定位不再写入 `loc=1` 和 `p` 参数**：IP 定位仅保留全局定位上下文供内部使用，URL 参数保持 `loc=0`、`p=0`
+- 🔧 **`useUserLocation.js::markLocationSuccessFlagInUrl()`**：新增 `source` 参数，仅 GPS 定位时写入 `loc=1`
+- 🔧 **`useMapState.js::resolveLocationState()`**：重构为解析定位授权状态，新增 `hasGpsAuthorization` 和 `urlHasLocFlag` 字段
+- 🔧 **`useMapState.js::resolvePositionCode()`**：仅 `hasGpsAuthorization` 为 true 时编码 GPS 坐标到 `p` 参数
+- 🔧 **`useMapState.js::parseUrlToState()`**：仅 URL 中 `loc=1` 时解码 `p` 参数
+- 🔧 **`useMapState.js::buildQuery()`**：基于 `shouldSetLoc` 同步设置 `loc` 和 `p` 参数
+
+详见 [`Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md`](Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md)
+
 ### V3.3.14 (2026-06-29) — 下载底图跳转修复 + 标注功能修复 + TOC 缓存系统修复 + TIF 渲染优化 + CesiumContainer 全面 Code Review
 
 - 🐛 **修复"下载底图"按钮无法跳转到工具箱下载Tab**：HomeView.vue 中 `<SidePanel>` 组件遗漏 `:toolbox-tab="toolboxTab"` 属性绑定

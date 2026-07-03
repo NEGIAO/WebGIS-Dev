@@ -45,6 +45,17 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 ## 0. 项目结构（2026-06-30 更新）
 
+### V3.3.16 (2026-07-02) — GPS 定位授权逻辑修复（前端同步）
+
+> 本次为前端 GPS 定位授权逻辑修复，后端 API 与后端文件结构**无变更**。
+
+**前端同步记录：**
+- 仅当用户明确授权 GPS 定位（`source === 'gps'`）时，才在 URL 中设置 `loc=1` 并将坐标编码写入 `p` 参数
+- IP 定位不再写入 `loc=1` 和 `p` 参数，仅保留全局定位上下文供内部使用
+- 修复文件：`useUserLocation.js`、`useMapState.js`
+
+详见维护日志 `../Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md`。
+
 ### V3.3.15 (2026-06-30) — SQLite 损坏恢复命令记录 + WAL 自动回放优先策略
 
 > 本次更新为后端数据库恢复机制文档化与代码层面 WAL 自动回放优先策略落地，核心修复文件 `backend/api/auth/db.py`。

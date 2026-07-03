@@ -6,7 +6,7 @@ import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationRevers
 import { useMessage } from '@/composables/useMessage';
 import { saveUserPositionToCache } from '../services/userPositionCache';
 import { setGlobalUserLocationContext } from '../services/userLocationContext';
-import { normalizeBinaryFlag } from '../utils/normalize';
+import { normalizeBinaryFlag, normalizeLocationFlag } from '../utils/normalize';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
 
 // [Fix] 单个定位流程的 AbortController，用于取消上一次请求
@@ -120,7 +120,15 @@ export function useUserLocation({
         };
     }
 
-    function markLocationSuccessFlagInUrl() {
+    /**
+     * 仅当用户授权定位（GPS 或 IP）成功时，才在 URL 中写入 loc 来源标记
+     * - GPS 授权：写入 loc=gps，且后续 IP 回退不可降级覆盖（GPS 优先级最高）
+     * - IP 定位：写入 loc=ip，但不写入 p 编码坐标（p 仅由 GPS 授权写入）
+     * @param {string} source - 定位来源 'gps' | 'ip' | 'unknown'（unknown 直接返回不写入）
+     */
+    function markLocationSuccessFlagInUrl(source = 'unknown') {
+        if (source !== 'gps' && source !== 'ip') return;
+
         if (typeof window === 'undefined') return;
 
         try {
@@ -130,14 +138,16 @@ export function useUserLocation({
             const hashPath = hashPathRaw || '/home';
             const params = new URLSearchParams(hashQueryRaw);
 
-            // [Fix] 保留 s 参数原值，不再无条件覆盖为 '0'
             if (normalizeBinaryFlag(params.get('s'), '0') !== '1') {
                 params.set('s', '0');
             }
 
-            if (normalizeBinaryFlag(params.get('loc'), '0') === '1') return;
+            const currentLoc = normalizeLocationFlag(params.get('loc') || '0', '0');
+            if (currentLoc === source) return;
+            // GPS 优先级最高：已标记为 gps 时，后续 IP 回退不得降级覆盖
+            if (currentLoc === 'gps' && source !== 'gps') return;
 
-            params.set('loc', '1');
+            params.set('loc', source);
             const nextHashQuery = params.toString();
             const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
             const nextHash = nextHashQuery
@@ -292,8 +302,11 @@ export function useUserLocation({
                     encodedLocation,
                 });
 
-                if (globalLocationContext) {
-                    markLocationSuccessFlagInUrl();
+                if (
+                    globalLocationContext &&
+                    (globalLocationContext.source === 'gps' || globalLocationContext.source === 'ip')
+                ) {
+                    markLocationSuccessFlagInUrl(globalLocationContext.source);
                 }
 
                 const cityLabel =
@@ -607,8 +620,8 @@ export function useUserLocation({
                 encodedLocation,
             });
 
-            if (globalLocationContext) {
-                markLocationSuccessFlagInUrl();
+            if (globalLocationContext && (selected.source === 'gps' || selected.source === 'ip')) {
+                markLocationSuccessFlagInUrl(selected.source);
             }
 
             if (!silent) {

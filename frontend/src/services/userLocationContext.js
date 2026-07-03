@@ -147,8 +147,8 @@ function hasUrlLocFlag() {
         const hashQuery = hash.includes('?') ? hash.split('?')[1] : '';
         const searchParams = new URLSearchParams(window.location.search || '');
         const hashParams = new URLSearchParams(hashQuery);
-        const loc = String(hashParams.get('loc') || searchParams.get('loc') || '0').trim();
-        return loc === '1';
+        const loc = String(hashParams.get('loc') || searchParams.get('loc') || '0').trim().toLowerCase();
+        return loc === 'gps' || loc === 'ip';
     } catch {
         return false;
     }
