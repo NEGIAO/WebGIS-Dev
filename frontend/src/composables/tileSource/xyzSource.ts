@@ -85,20 +85,26 @@ export function detectNonStandardXYZ(
 
 export function createXYZSourceFromUrl(
     rawUrl: string,
-    options: { adapters?: Record<string, NonStandardXYZAdapter> } = {},
+    options: { adapters?: Record<string, NonStandardXYZAdapter>; tilePixelRatio?: number } = {},
 ): XYZ {
     const url = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
     const adapters = options.adapters || DEFAULT_NON_STANDARD_XYZ_ADAPTERS;
+    const xyzOptions: ConstructorParameters<typeof XYZ>[0] = {};
+
+    // HD/@2x 瓦片实际 512×512 叠在 256 网格上，需告知 OL 渲染器按 256 网格缩放还原
+    if (typeof options.tilePixelRatio === 'number' && options.tilePixelRatio > 0) {
+        xyzOptions.tilePixelRatio = options.tilePixelRatio;
+    }
 
     const nonStandard = detectNonStandardXYZ(url, adapters);
     if (nonStandard) {
         return new XYZ({
             tileUrlFunction: nonStandard.urlFunction,
-            tilePixelRatio: 1,
+            tilePixelRatio: xyzOptions.tilePixelRatio ?? 1,
         });
     }
 
-    return new XYZ({ url });
+    return new XYZ({ url, ...xyzOptions });
 }
 
 export function createVectorTileSourceFromUrl(rawUrl: string): VectorTileSource {

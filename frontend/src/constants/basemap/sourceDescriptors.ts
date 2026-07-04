@@ -24,6 +24,9 @@ export type TileSourceDescriptor = {
     url: string;
     /** 最大缩放级别 */
     maxZoom?: number;
+    /** 瓦片像素比：HD/@2x 瓦片实际为 512×512 叠在 256 网格上时设为 2，
+     *  告知 OL/Cesium 渲染器按 256 网格缩放还原，避免拉伸糊化。默认 1（256×256）。 */
+    tilePixelRatio?: number;
     /** 子域名列表，用于负载均衡 */
     subdomains?: string[];
     /** 非标准适配器 ID（如 maps-for-free） */
@@ -193,6 +196,24 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         group: '影像',
         serviceType: 'xyz',
         url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}',
+    },
+    {
+        id: 'imagery_maptiler_satellite',
+        name: 'MapTiler影像',
+        category: 'imagery',
+        group: '影像',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+    },
+    {
+        id: 'imagery_maptiler_satellite_hd',
+        name: 'MapTiler影像HD',
+        category: 'imagery',
+        group: '影像',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}@2x.jpg?key=osLOujcXk1GJrGk5oaDz',
+        // @2x 瓦片实际 512×512 叠在 256 网格，需告知渲染器按 256 网格缩放还原
+        tilePixelRatio: 2,
     },
 
     // 4、专题图层 - WMS/WMTS
@@ -436,7 +457,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'theme',
         group: '专题',
         serviceType: 'xyz',
-        url: 'https://tiles.windy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}/?lang=en',
+        url: 'https://tiles.windy.com/v1/maptiles/outdoor/{z}/{x}/{y}/?lang=en',
     },
     {
         id: 'theme_windy2',
@@ -444,7 +465,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'theme',
         group: '专题',
         serviceType: 'xyz',
-        url: 'https://tiles.windy.com/v1/maptiles/winter/256/{z}/{x}/{y}/?lang=en',
+        url: 'https://tiles.windy.com/v1/maptiles/winter/{z}/{x}/{y}/?lang=en',
     },
     {
         id: 'theme_windy_outer',
@@ -461,6 +482,22 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         group: '专题',
         serviceType: 'xyz',
         url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png',
+    },
+    {
+        id: 'theme_maptiler_winter',
+        name: 'MapTiler冬季',
+        category: 'theme',
+        group: '专题',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+    },
+    {
+        id: 'theme_maptiler_ocean',
+        name: 'MapTiler海洋',
+        category: 'theme',
+        group: 'Ocean',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
     },
 
     // 7、MFF 专题层（非标准 XYZ 适配器）
@@ -572,6 +609,22 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         url: 'https://maps-for-free.com/layer/relief/z{z}/row{y}/{z}_{x}-{y}.jpg',
         nonStandardAdapter: 'maps-for-free-relief',
     },
+    {
+        id: 'terrain_maptiler_landscape',
+        name: 'MapTiler地貌',
+        category: 'terrain',
+        group: '专题',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/landscape-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+    },
+    {
+        id: 'terrain_maptiler_topo',
+        name: 'MapTiler地形图',
+        category: 'terrain',
+        group: '专题',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/topo-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+    },
 
     // 8、矢量图层
     {
@@ -607,6 +660,14 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         group: '矢量',
         serviceType: 'xyz',
         url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    },
+    {
+        id: 'vector_maptiler_streets',
+        name: 'MapTiler街道',
+        category: 'vector',
+        group: '矢量',
+        serviceType: 'xyz',
+        url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
     },
     {
         id: 'vector_tengxun',

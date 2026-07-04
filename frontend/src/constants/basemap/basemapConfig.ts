@@ -324,6 +324,34 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 new XYZ({ url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}' }),
             ),
     },
+    {
+        id: 'imagery_maptiler_satellite',
+        name: 'MapTiler影像',
+        category: 'imagery',
+        group: '影像',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
+            ),
+    },
+    {
+        id: 'imagery_maptiler_satellite_hd',
+        name: 'MapTiler影像HD',
+        category: 'imagery',
+        group: '影像',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}@2x.jpg?key=osLOujcXk1GJrGk5oaDz',
+                    // HD 瓦片实际尺寸 512×512，叠在 256 瓦片网格上（@2x）。
+                    // 显式声明 tilePixelRatio:2，让 OL 按 256 网格缩放还原，
+                    // 避免被默认按 256 像素拉伸导致糊化与地理套合错位。
+                    tilePixelRatio: 2,
+                }),
+            ),
+    },
 
     // 4、专题图层 - WMS/WMTS
     {
@@ -684,7 +712,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.windy.com/v1/maptiles/outdoor/256/{z}/{x}/{y}/?lang=en',
+                    url: 'https://tiles.windy.com/v1/maptiles/outdoor/{z}/{x}/{y}/?lang=en',
                 }),
             ),
     },
@@ -696,7 +724,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.windy.com/v1/maptiles/winter/256/{z}/{x}/{y}/?lang=en',
+                    url: 'https://tiles.windy.com/v1/maptiles/winter/{z}/{x}/{y}/?lang=en',
                 }),
             ),
     },
@@ -720,6 +748,30 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png' }),
+            ),
+    },
+    {
+        id: 'theme_maptiler_winter',
+        name: 'MapTiler冬季',
+        category: 'theme',
+        group: '专题',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
+            ),
+    },
+    {
+        id: 'theme_maptiler_ocean',
+        name: 'MapTiler海洋',
+        category: 'theme',
+        group: 'Ocean',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
             ),
     },
 
@@ -856,6 +908,30 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 { adapters: NON_STANDARD_XYZ_ADAPTERS },
             ),
     },
+    {
+        id: 'terrain_maptiler_landscape',
+        name: 'MapTiler地貌',
+        category: 'terrain',
+        group: '专题',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/landscape-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
+            ),
+    },
+    {
+        id: 'terrain_maptiler_topo',
+        name: 'MapTiler地形图',
+        category: 'terrain',
+        group: '专题',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/topo-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
+            ),
+    },
 
     // 8、矢量图层
     {
@@ -906,6 +982,18 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             prioritizeTileSourceRequest(
                 new XYZ({
                     url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        id: 'vector_maptiler_streets',
+        name: 'MapTiler街道',
+        category: 'vector',
+        group: '矢量',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
                 }),
             ),
     },
@@ -1207,6 +1295,15 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
     { id: 'vector_alidade_preset', label: '清爽风格', stack: ['vector_alidade'] },
+
+    // MapTiler 系列
+    { id: 'imagery_maptiler_satellite_preset', label: 'MapTiler影像', stack: ['imagery_maptiler_satellite', 'label_tianditu'] },
+    { id: 'imagery_maptiler_satellite_hd_preset', label: 'MapTiler影像HD', stack: ['imagery_maptiler_satellite_hd', 'label_tianditu'] },
+    { id: 'vector_maptiler_streets_preset', label: 'MapTiler街道', stack: ['vector_maptiler_streets'] },
+    { id: 'terrain_maptiler_landscape_preset', label: 'MapTiler地貌', stack: ['terrain_maptiler_landscape'] },
+    { id: 'terrain_maptiler_topo_preset', label: 'MapTiler地形图', stack: ['terrain_maptiler_topo'] },
+    { id: 'theme_maptiler_winter_preset', label: 'MapTiler冬季', stack: ['terrain_maptiler_topo', 'theme_maptiler_winter'] },
+    { id: 'theme_maptiler_ocean_preset', label: 'MapTiler海洋', stack: ['theme_maptiler_ocean'] },
 
     // ArcGIS (ESRI) 系列
     {

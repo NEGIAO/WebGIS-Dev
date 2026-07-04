@@ -122,6 +122,7 @@ import {
     createBasemapStateManagementFeature,
     createBasemapSwipe,
     createBasemapUrlMappingFeature,
+    tileHDRendering,
     createCoordinateSystemConversionFeature,
     useCreateManagedVectorLayer,
     createDeferredUserLayerApis,
@@ -792,7 +793,7 @@ const { drawRouteOnMap, drawDriveRouteOnMap } = createRouteRenderingFeature({
 });
 
 // 底图状态管理
-const { emitBaseLayersChangeBatched } =
+const { emitBaseLayersChangeBatched, refreshAllBasemapSourcesForHD } =
     createBasemapStateManagementFeature({
         layerList,
         selectedLayer,
@@ -1314,6 +1315,19 @@ watch(
         if (mapInstance.value) {
             mapInstance.value.render();
         }
+    },
+    { immediate: false },
+);
+
+// ========== 高清渲染开关联动 ==========
+// 开关翻转后，已建 raster 底图 source 需重建以套用/解除 zDirection 设置。
+// layerInstances 在地图初始化后才有内容，immediate:false 避免空重建。
+watch(
+    tileHDRendering,
+    () => {
+        if (!mapInstance.value) return;
+        refreshAllBasemapSourcesForHD();
+        mapInstance.value.render();
     },
     { immediate: false },
 );

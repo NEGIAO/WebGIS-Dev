@@ -8,7 +8,8 @@
  * 中文注释遵循原有约定，保持代码可读性。
  */
 
-import { prioritizeTileSourceRequest } from '../../useTileSourceFactory';
+import { prioritizeTileSourceRequest, abortTileSourceRequests } from '../../useTileSourceFactory';
+import { buildRasterBasemapSource, isVectorTileSource } from './basemapLayerFactory';
 
 /**
  * 创建底图状态管理特性工厂函数
@@ -110,9 +111,39 @@ export function createBasemapStateManagementFeature({
         });
     }
 
+    /**
+     * 高清渲染开关翻转后，重建所有 raster 底图 source。
+     *
+     * 机制：buildRasterBasemapSource 在构造期读取 tileHDRendering 决定是否设置 zDirection=-1；
+     * 已建图层的 source 不会自动跟随开关变化，故翻转后需遍历 layerInstances 重建 source。
+     * 旧 source 先 abort 释放 fetch 连接，再 setSource 新 source，避免泄漏/挂起请求。
+     * VectorTile 图层不受高清开关影响（矢量瓦片本身可缩放，无模糊问题），跳过。
+     */
+    function refreshAllBasemapSourcesForHD() {
+        Object.keys(layerInstances).forEach((id) => {
+            const layer = layerInstances[id];
+            if (!layer || typeof layer.getSource !== 'function') return;
+            const cfg = LAYER_CONFIGS.find((item) => item.id === id);
+            if (!cfg || typeof cfg.createSource !== 'function') return;
+
+            // 仅 raster 底图需要重建（VectorTile 跳过）
+            const prevSource = layer.getSource();
+            if (prevSource && isVectorTileSource(prevSource)) return;
+
+            // 先 abort 旧 source 的所有 fetch，释放 TCP 连接，再挂新 source
+            if (prevSource) abortTileSourceRequests(prevSource);
+            // 走与构造期同一套 zDirection 设置逻辑
+            const newSource = buildRasterBasemapSource(cfg.createSource());
+            if (newSource) {
+                layer.setSource(newSource);
+            }
+        });
+    }
+
     return {
         emitBaseLayersChange,
         emitBaseLayersChangeBatched,
         refreshGoogleLayerSources,
+        refreshAllBasemapSourcesForHD,
     };
 }

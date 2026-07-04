@@ -4,3 +4,4 @@ export { createBasemapSelectionWatcher } from './features/useBasemapSelectionWat
 export { createBasemapStateManagementFeature } from './features/useBasemapStateManagement';
 export { createBasemapSwipe } from './features/useBasemapSwipe';
 export { createBasemapUrlMappingFeature } from './features/useBasemapUrlMapping';
+export { tileHDRendering, toggleTileHDRendering } from './features/useTileHDRendering';

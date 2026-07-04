@@ -7,7 +7,20 @@
             @select-result="handleSearchJump"
         />
 
-        <div class="layer-label">选择底图</div>
+        <div class="layer-label-row">
+            <div class="layer-label">底图</div>
+            <div
+                class="hd-toggle"
+                :class="{ 'hd-on': tileHDRendering }"
+                title="高清渲染：开启后请求上一瓦片层级并缩小渲染，牺牲性能与流量换取清晰度。"
+                @click.stop="onToggleHD"
+            >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                    <path d="M3 17l4-4 3 3 5-6 6 7H3z" />
+                    <path d="M9.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                </svg>
+            </div>
+        </div>
         <div
             ref="customSelectRef"
             class="custom-select-container"
@@ -256,6 +269,7 @@ import { toLonLat } from 'ol/proj';
 import { apiSearchLocations } from '../../api';
 import { BASEMAP_OPTIONS } from '../../constants';
 import { detectCustomTileServiceKind } from '../../composables/useTileSourceFactory';
+import { tileHDRendering, toggleTileHDRendering } from '../../composables/map/basemapSystem';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
@@ -388,8 +402,13 @@ const customSelectRef = ref(null);
 
 const currentLayerLabel = computed(() => {
     const found = BASEMAP_OPTIONS.find(opt => opt.value === props.selectedLayer);
-    return found ? found.label : '选择底图';
+    return found ? found.label : '底图';
 });
+
+// 高清渲染开关切换（hover tips 由 title 属性提供，无需确认弹窗）
+function onToggleHD() {
+    toggleTileHDRendering();
+}
 
 function toggleSelectDropdown(_event) {
     isSelectDropdownOpen.value = !isSelectDropdownOpen.value;
@@ -950,6 +969,38 @@ onBeforeUnmount(() => {
     display: inline-block;
     margin: 0;
     vertical-align: middle;
+}
+
+.layer-label-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    vertical-align: middle;
+}
+
+.hd-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    color: var(--bg-brand-light);
+    opacity: 0.45;
+    cursor: pointer;
+    transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+    flex-shrink: 0;
+}
+
+.hd-toggle:hover {
+    opacity: 0.85;
+    background-color: rgba(148, 163, 184, 0.15);
+}
+
+.hd-toggle.hd-on {
+    opacity: 1;
+    color: #38bdf8;
+    background-color: rgba(56, 189, 248, 0.15);
 }
 
 .custom-url-wrapper {

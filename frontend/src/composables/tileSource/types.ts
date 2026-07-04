@@ -59,6 +59,9 @@ export type ConfiguredTileServiceDefinition = {
 
 export type TileSourceFactoryOptions = {
     adapters?: Record<string, NonStandardXYZAdapter>;
+    /** 瓦片像素比：HD/@2x 瓦片实际为 512×512 叠在 256 网格上时传 2，
+     *  让 OL 按 256 网格缩放还原，避免拉伸糊化。默认不传（沿用 OL 默认 1）。 */
+    tilePixelRatio?: number;
 };
 
 export type AutoDetectOptions = {

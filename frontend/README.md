@@ -671,6 +671,7 @@ frontend/src/
 │   │   │   ├── useBasemapStateManagement.js        # 底图状态批处理
 │   │   │   ├── useBasemapSwipe.js                  # 卷帘对比
 │   │   │   ├── useBasemapUrlMapping.js             # 底图 URL 映射
+│   │   │   ├── useTileHDRendering.js               # 高清渲染开关（zDirection=-1，localStorage 持久化）
 │   │   │   ├── useCoordinateSystemConversion.js    # 坐标系转换
 │   │   │   ├── useCreateManagedVectorLayer.js      # 托管矢量图层创建
 │   │   │   ├── useDataManager.js                   # 数据管理
