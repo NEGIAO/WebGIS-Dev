@@ -33,7 +33,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.8 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入、Cesium 数据导入多格式支持（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles），正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.15 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入、Cesium 数据导入多格式支持（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles），正逐步发展成为专业级的地理信息系统应用
 
 ---
 ## 📑 目录
@@ -761,6 +761,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-06-30
-**当前版本**：V3.3.15 (SQLite 损坏恢复命令记录 + WAL 自动回放优先策略)
+**最后更新**：2026-07-04
+**当前版本**：V3.3.15
 **项目状态**：开发中 - 持续迭代优化
