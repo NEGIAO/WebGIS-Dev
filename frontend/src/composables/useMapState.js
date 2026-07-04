@@ -27,7 +27,7 @@ import {
 } from '../services/userLocationContext';
 import { decodePos, encodePos } from '../utils/biz';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '../constants';
-import { prioritizeTileSourceRequest } from './useTileSourceFactory';
+import { buildRasterBasemapSource } from './map/features/basemapLayerFactory';
 import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '../utils/normalize';
 import { getCurrentQuerySnapshot as getSnapshot, readQueryValue as readQueryFromSnapshot } from '../utils/url/urlQueryReader';
 // 新增：中心点标记所需导入
@@ -716,7 +716,11 @@ export function useMapState(mapInstance, options = {}) {
         if (!layer || layer.getSource?.()) return;
         const cfg = findLayerConfigById(layerId, configs);
         if (!cfg || typeof cfg.createSource !== 'function') return;
-        layer.setSource(prioritizeTileSourceRequest(cfg.createSource()));
+        // cfg.createSource() 已内含 prioritizeTileSourceRequest，再走 buildRasterBasemapSource 套 zDirection
+        const newSource = buildRasterBasemapSource(cfg.createSource());
+        if (newSource) {
+            layer.setSource(newSource);
+        }
     }
 
     /**

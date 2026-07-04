@@ -8,7 +8,7 @@
  * 中文注释遵循原有约定，保持代码可读性。
  */
 
-import { prioritizeTileSourceRequest, abortTileSourceRequests } from '../../useTileSourceFactory';
+import { abortTileSourceRequests } from '../../useTileSourceFactory';
 import { buildRasterBasemapSource, isVectorTileSource } from './basemapLayerFactory';
 
 /**
@@ -107,14 +107,18 @@ export function createBasemapStateManagementFeature({
             const cfg = LAYER_CONFIGS.find((item) => item.id === id);
             const layer = layerInstances[id];
             if (!cfg || !layer) return;
-            layer.setSource(prioritizeTileSourceRequest(cfg.createSource()));
+            // cfg.createSource() 已内含 prioritizeTileSourceRequest，再走 buildRasterBasemapSource 套 zDirection
+            const newSource = buildRasterBasemapSource(cfg.createSource());
+            if (newSource) {
+                layer.setSource(newSource);
+            }
         });
     }
 
     /**
      * 高清渲染开关翻转后，重建所有 raster 底图 source。
      *
-     * 机制：buildRasterBasemapSource 在构造期读取 tileHDRendering 决定是否设置 zDirection=-1；
+     * 机制：buildRasterBasemapSource 在构造期读取 tileHDRendering 决定是否设置 zDirection（自定义函数，非整数 zoom 一律取上层）；
      * 已建图层的 source 不会自动跟随开关变化，故翻转后需遍历 layerInstances 重建 source。
      * 旧 source 先 abort 释放 fetch 连接，再 setSource 新 source，避免泄漏/挂起请求。
      * VectorTile 图层不受高清开关影响（矢量瓦片本身可缩放，无模糊问题），跳过。

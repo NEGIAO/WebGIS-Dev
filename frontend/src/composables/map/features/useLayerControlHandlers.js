@@ -6,7 +6,7 @@
  * 2. 优化并发槽位释放，解决国外底图加载导致的“卡死”问题
  */
 import { abortTileSourceRequests } from '../../useTileSourceFactory'; // 确保路径指向你存放工厂函数的地方
-import { createBasemapLayerFromSource, isVectorTileLayer } from './basemapLayerFactory';
+import { createBasemapLayerFromSource, isVectorTileLayer, buildRasterBasemapSource } from './basemapLayerFactory';
 
 export function createLayerControlHandlers({
     selectedLayerRef,
@@ -139,7 +139,7 @@ export function createLayerControlHandlers({
                 }
             } else {
                 if (customLayer && !isVectorTileLayer(customLayer) && customLayer.setSource) {
-                    customLayer.setSource(detected.source);
+                    customLayer.setSource(buildRasterBasemapSource(detected.source));
                 } else {
                     const nextLayer = createBasemapLayerFromSource(detected.source, layerState);
                     replaceLayerInstance('custom', nextLayer);

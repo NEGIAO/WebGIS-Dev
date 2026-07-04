@@ -80,13 +80,31 @@ export function createVectorTileBasemapLayer(source, options = {}) {
 }
 
 /**
+ * 自定义 NearestDirectionFunction：非整数 zoom 一律取更高层级瓦片。
+ *
+ * OL 的 linearFindNearest 在 target 落在两个 resolution 之间时调用此函数：
+ *   - high = 较粗一级的 resolution（低 zoom，如 z=14 的 resolution）
+ *   - low  = 较细一级的 resolution（高 zoom，如 z=15 的 resolution）
+ *   返回 > 0 → 取 high（coarser）；返回 <= 0 → 取 low（finer / 更高 zoom）
+ *
+ * 策略：只要 target 不精确命中整数级，始终返回 -1（取 finer），
+ * 实现"任何非整数 zoom 一律向上取整为高清瓦片"。
+ *
+ * @type {import('ol/array.js').NearestDirectionFunction}
+ */
+function alwaysPickFinerZoom(target, high, low) {
+    if (high === target || low === target) return 1;   // 精确命中整数级，用该级
+    return -1;                                          // 介于两级之间，取更高层级
+}
+
+/**
  * 根据 tileHDRendering 开关，在 source 上设置 OL 内置的 zDirection 属性。
  *
  * OL 渲染器在 TileLayer.js 主渲染路径中读取 `tileSource.zDirection`，
- * 传给 `tileGrid.getZForResolution(resolution, direction)`：
- *   - 0（默认）：最近邻，fractional zoom 时取距离最近的整数层级
- *   - -1：始终偏向上层（更细分辨率 / 更高 zoom），缩小渲染换取清晰度
- *   - 1：始终偏向下层（更粗分辨率 / 更低 zoom）
+ * 传给 `tileGrid.getZForResolution(resolution, direction)`。
+ * 使用自定义 NearestDirectionFunction 而非固定 -1，
+ * 因为 zDirection=-1 仅在 fractional zoom < ~0.415 时偏向上层，
+ * z=14.5+ 时与默认行为无差异。自定义函数确保任何非整数 zoom 一律取上层。
  *
  * 构造期与切换期共用此函数，确保开关 flip 后重建的 source 与初始构造走同一套逻辑。
  *
@@ -96,8 +114,8 @@ export function createVectorTileBasemapLayer(source, options = {}) {
 export function buildRasterBasemapSource(rawSource) {
     if (!rawSource) return null;
     if (tileHDRendering.value) {
-        // zDirection=-1：fractional zoom 时 OL 自动取上一层瓦片（z+1），瓦片数 ×4，清晰度提升
-        rawSource.zDirection = -1;
+        // 非整数 zoom 一律取上一层瓦片（z+1），瓦片数 ×4，清晰度提升
+        rawSource.zDirection = alwaysPickFinerZoom;
     }
     return rawSource;
 }
