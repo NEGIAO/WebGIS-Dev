@@ -434,19 +434,6 @@ function saveModel(model) {
     try { localStorage.setItem(MODEL_STORAGE_KEY, model || ''); } catch { /* noop */ }
 }
 
-/** localStorage 键名：用户选择的模型名称 */
-const MODEL_STORAGE_KEY = 'chat:selectedModel';
-
-/** 读取持久化的模型名 */
-function readSavedModel() {
-    try { return localStorage.getItem(MODEL_STORAGE_KEY) || ''; } catch { return ''; }
-}
-
-/** 持久化模型名 */
-function saveModel(model) {
-    try { localStorage.setItem(MODEL_STORAGE_KEY, model || ''); } catch { /* noop */ }
-}
-
 const directConfig = ref({
     api_key: '',
     base_url: '',
@@ -470,13 +457,10 @@ const toggleRoutingMode = async () => {
     if (isDirectMode.value) {
         // 保留模型引用，让 reloadAgentConfig 后续根据 localStorage 恢复
         const preservedModel = directConfig.value.model;
-        // 保留模型引用，让 reloadAgentConfig 后续根据 localStorage 恢复
-        const preservedModel = directConfig.value.model;
         isDefaultAIMode.value = false;
         directConfig.value = {
             api_key: '',
             base_url: '',
-            model: preservedModel,
             model: preservedModel,
             system_prompt: '',
             timeout_seconds: 45,
@@ -692,11 +676,6 @@ const reloadAgentConfig = async (showToast = false) => {
                         ? savedModel
                         : '';
                     const selectedModel = preferredModel || String(pool[0]?.id || dc.model || '');
-                    const savedModel = readSavedModel();
-                    const preferredModel = savedModel && pool.some((m) => m.id === savedModel)
-                        ? savedModel
-                        : '';
-                    const selectedModel = preferredModel || String(pool[0]?.id || dc.model || '');
                     if (selectedModel) {
                         directConfig.value.model = selectedModel;
                         modelName.value = selectedModel;
@@ -861,23 +840,6 @@ const loadAvailableModels = async () => {
 
             if (currentModel) {
                 userConfigDraft.value.model = currentModel;
-            } else {
-                // 优先用 localStorage 中保存的用户偏好模型
-                const saved = readSavedModel();
-                if (saved && models.some((m) => m.id === saved)) {
-                    userConfigDraft.value.model = saved;
-                } else if (models.length > 0) {
-                    const chatModels = models.filter((m) => m?.chat_compatible !== false);
-                    if (chatModels.length > 0) {
-                        const firstModel = chatModels[0];
-                        userConfigDraft.value.model = String(firstModel?.id || '');
-                        if (userConfigDraft.value.model && !isDirectMode.value) {
-                            apiAgentSaveModelPreference(userConfigDraft.value.model).catch(() => {});
-                        }
-                    }
-                }
-                if (userConfigDraft.value.model) {
-                    saveModel(userConfigDraft.value.model);
             } else {
                 // 优先用 localStorage 中保存的用户偏好模型
                 const saved = readSavedModel();
