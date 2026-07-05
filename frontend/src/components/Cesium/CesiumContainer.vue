@@ -449,17 +449,23 @@ async function bootCesium() {
                 }
                 cesiumReady.value = true;
                 bindCameraViewSync({ initialSync: false, getActivePresetId: () => activeBasemap.value });
-                // ★ 读取管理员配置的全局默认底图索引（URL l= 参数随后会覆盖）
-                try {
-                    const defaultsRes = await apiGetRuntimeDefaults();
-                    const serverIndex = defaultsRes?.data?.default_basemap_index;
-                    if (serverIndex != null) {
-                        const serverLayerId = URL_LAYER_OPTIONS[serverIndex] || null;
-                        if (serverLayerId) activeBasemap.value = serverLayerId;
-                    }
-                } catch { /* 静默失败，用硬编码兜底 */ }
-                // 从 URL 恢复底图预设（URL l= 参数优先覆盖管理员默认）
-                restoreBasemapFromUrl();
+                // 1) 先从 URL 恢复底图预设：URL l= 参数优先级最高，确保分享链接可重现同一底图
+                const restoredFromUrl = restoreBasemapFromUrl();
+                // 2) 仅在 URL 无 l 时才应用服务器管理员默认底图，避免 activeBasemap 反复赋值造成的冗余 URL 写入与底图闪烁
+                if (!restoredFromUrl) {
+                    try {
+                        const defaultsRes = await apiGetRuntimeDefaults();
+                        const serverIndex = defaultsRes?.data?.default_basemap_index;
+                        if (serverIndex != null) {
+                            const serverLayerId = URL_LAYER_OPTIONS[serverIndex] || null;
+                            if (serverLayerId && activeBasemap.value !== serverLayerId) {
+                                activeBasemap.value = serverLayerId;
+                            }
+                        }
+                    } catch { /* 静默失败，用硬编码兜底 */ }
+                }
+                // 3) 无条件写回 l：activeBasemap 默认值与初始底图相同时 watch 不触发，强制初始写入避免 URL l 缺失
+                syncBasemapToUrl(activeBasemap.value);
                 if (basemapReady && terrainReady) {
                     message.success('天地图基础影像与地形加载成功。');
                     return;

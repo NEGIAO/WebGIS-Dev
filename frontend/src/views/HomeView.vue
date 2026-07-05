@@ -20,7 +20,7 @@ import { createBasemapUrlMappingFeature } from '../composables/map/features/useB
 import { URL_LAYER_OPTIONS } from '../constants/basemap/basemapResolver';
 import { getLayerCategory, getLayerGroup } from '../constants/basemap/basemapResolver';
 
-const { getLayerIdByIndex } = createBasemapUrlMappingFeature({
+const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
     urlLayerOptions: URL_LAYER_OPTIONS,
     getLayerCategoryById: getLayerCategory,
     getLayerGroupById: getLayerGroup,
@@ -61,6 +61,8 @@ const LogMonitor = defineAsyncComponent(() => import('../components/ControlsPane
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
+// CesiumContainer 实例引用：用于在引擎切换时读取 activeBasemap 等状态
+const cesiumContainerRef = ref(null);
 
 const SidePanelLoading = {
     name: 'SidePanelLoading',
@@ -663,6 +665,7 @@ function formatZParam(value) {
 
 /**
  * 从当前 OL 视图构建 Cesium URL 参数，切换 3D 时保持中心与可视范围接近。
+ * 同时写入 l（底图预设索引），确保 Cesium 启动时能从 URL 恢复同一底图。
  * @returns {Record<string,string>|null} 可直接合并到 URL 的 query patch
  */
 function buildCesiumQueryPatchFromOl() {
@@ -676,12 +679,17 @@ function buildCesiumQueryPatchFromOl() {
         centerLat: state.lat,
     });
     const poseCode = encodeCesiumPoseState({ heading: 0, pitch: -90, roll: 0 });
-    return {
+    const patch = {
         lng: Number(state.lng).toFixed(6),
         lat: Number(state.lat).toFixed(6),
         z: formatZParam(height ?? 6000000),
         cv: poseCode && poseCode !== '0' ? poseCode : undefined,
     };
+    // 显式写入 l：OL 当前 selectedLayer 对应的预设索引，避免 Cesium 拿不到 l 而落到默认底图
+    if (Number.isFinite(state.layerIndex)) {
+        patch.l = String(state.layerIndex);
+    }
+    return patch;
 }
 
 /**
@@ -712,6 +720,17 @@ function syncOlFromCesiumPayload(payload = {}) {
 }
 
 /**
+ * 从 Cesium 当前 activeBasemap 计算底图预设索引。
+ * @returns {number|null}
+ */
+function getCesiumActiveLayerIndex() {
+    const presetId = cesiumContainerRef.value?.activeBasemap;
+    if (!presetId) return null;
+    const idx = getLayerIndexById(presetId);
+    return Number.isInteger(idx) ? idx : null;
+}
+
+/**
  * 将最近一次 Cesium 等效视图转换为 OL URL 参数，切回 2D 时一次性写入。
  * @returns {Record<string,string>|null}
  */
@@ -723,11 +742,17 @@ function buildOlQueryPatchFromCesium() {
         patch.lat = Number(equivalent.lat).toFixed(6);
         patch.z = formatZParam(equivalent.zoom);
     }
-    // 同步底图 l：Cesium 切回 OL 时，把 URL 中当前的 l 参数原样保留到下一个 patch，
-    // OL 侧 useMapState.parseUrlToState 会读这个 l 并应用到底图。
-    const currentLayerIndex = parseFiniteNumber(readQueryValue('l'));
-    if (currentLayerIndex !== null) {
-        patch.l = String(currentLayerIndex);
+    // 同步底图 l：从 Cesium 当前 activeBasemap 重新计算索引，
+    // 而非透传 URL 旧值——避免 Cesium 熔断降级后 activeBasemap 已变但 URL l 尚未写回的场景。
+    const cesiumLayerIndex = getCesiumActiveLayerIndex();
+    if (cesiumLayerIndex !== null) {
+        patch.l = String(cesiumLayerIndex);
+    } else {
+        // Cesium 容器已卸载或无 activeBasemap：兜底保留 URL 现有 l
+        const currentLayerIndex = parseFiniteNumber(readQueryValue('l'));
+        if (currentLayerIndex !== null) {
+            patch.l = String(currentLayerIndex);
+        }
     }
     return Object.keys(patch).length ? patch : null;
 }
@@ -772,13 +797,16 @@ async function setMapView(view, { writeUrl = true } = {}) {
         if (incomingLayerIndex !== null) {
             const targetLayerId = getLayerIdByIndex(incomingLayerIndex);
             if (targetLayerId) {
-                mapContainerRef.value?.setBaseLayerActive?.(targetLayerId);
+                // await 异步切换：setBaseLayerActive 内部 lazy-load useUserLayerActions，
+                // 不 await 会导致 selectedLayer 已变但 switchLayerById 尚未执行的竞态。
+                await mapContainerRef.value?.setBaseLayerActive?.(targetLayerId);
             }
         }
         is3DMode.value = false;
         // 切回 OL 时卸载 CesiumContainer，确保相机 moveEnd URL 监听被清理。
         isCesiumLoaded.value = false;
         CesiumContainer.value = null;
+        cesiumContainerRef.value = null;
     }
     return true;
 }
@@ -1302,6 +1330,7 @@ onMounted(async () => {
                 >
                     <component
                         :is="CesiumContainer"
+                        ref="cesiumContainerRef"
                         @view-sync="handleViewSync"
                     />
                 </div>

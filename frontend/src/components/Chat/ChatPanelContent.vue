@@ -651,15 +651,14 @@ const reloadAgentConfig = async (showToast = false) => {
                 if (models.length > 0) {
                     const chatModels = models.filter((m) => m?.chat_compatible !== false);
                     const pool = chatModels.length > 0 ? chatModels : models;
-                    const randomModel = pool[Math.floor(Math.random() * pool.length)];
-                    const selectedModel = String(randomModel?.id || dc.model || '');
+                    const selectedModel = String(pool[0]?.id || dc.model || '');
                     if (selectedModel) {
                         directConfig.value.model = selectedModel;
                         modelName.value = selectedModel;
                     } else {
                         modelName.value = dc.model || '未配置';
                     }
-                    statusHint.value = `个人 Key 模式：已随机选择模型 ${modelName.value}（共 ${pool.length} 个可用），经后端代理转发。`;
+                    statusHint.value = `个人 Key 模式：已选择模型 ${modelName.value}（共 ${pool.length} 个可用），经后端代理转发。`;
                 } else {
                     modelName.value = dc.model || '未配置';
                     statusHint.value = '个人 Key 模式：未获取到可用模型列表，使用配置中的默认模型。';
@@ -810,8 +809,8 @@ const loadAvailableModels = async () => {
             } else if (models.length > 0) {
                 const chatModels = models.filter((m) => m?.chat_compatible !== false);
                 if (chatModels.length > 0) {
-                    const randomModel = chatModels[Math.floor(Math.random() * chatModels.length)];
-                    userConfigDraft.value.model = String(randomModel?.id || '');
+                    const firstModel = chatModels[0];
+                    userConfigDraft.value.model = String(firstModel?.id || '');
                     if (userConfigDraft.value.model && !isDirectMode.value) {
                         apiAgentSaveModelPreference(userConfigDraft.value.model).catch(() => {});
                     }
