@@ -22,6 +22,7 @@ from api.auth import (
     _get_session_sync,
 )
 from services import ip_geo_service
+from gcj_rectify.transform import wgs2gcj
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +126,7 @@ async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient
     调用高德反向地理编码 API
 
     Args:
-        lng, lat: 坐标
+        lng, lat: WGS-84 坐标（函数内部自动转换为 GCJ-02）
         client: 共享 httpx 客户端
 
     Returns:
@@ -135,10 +136,13 @@ async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient
         logger.warning("AMAP_KEY 未配置")
         return None
 
+    # 高德 API 要求 GCJ-02 坐标，将输入的 WGS-84 转换为 GCJ-02
+    gcj_lng, gcj_lat = wgs2gcj(lng, lat)
+
     try:
         response = await client.get(
             "https://restapi.amap.com/v3/geocode/regeo",
-            params={"location": f"{lng},{lat}", "key": AMAP_KEY, "extensions": "all"},
+            params={"location": f"{gcj_lng},{gcj_lat}", "key": AMAP_KEY, "extensions": "all"},
         )
         data = response.json()
 

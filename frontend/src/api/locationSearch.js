@@ -1,3 +1,15 @@
+/**
+ * 地名/POI 搜索模块（高德 + 天地图 + Nominatim）
+ *
+ * ===== 坐标系统契约 =====
+ * 本模块遵循统一约定：
+ *   - 高德 POI 搜索返回的 GCJ-02 坐标自动转换为 WGS-84 输出
+ *   - 天地图、Nominatim 直接返回 WGS-84，无需转换
+ *   - 搜索关键词（文本）不涉及坐标系
+ *   - 上层调用方始终拿到 WGS-84 坐标
+ * =========================
+ */
+
 import backendAPI from './backend';
 import { useMessage } from '../composables/useMessage';
 import { gcj02ToWgs84 } from '../utils/coordTransform';

@@ -7,7 +7,7 @@ import { useMessage } from '@/composables/useMessage';
 import { saveUserPositionToCache } from '../services/userPositionCache';
 import { setGlobalUserLocationContext } from '../services/userLocationContext';
 import { normalizeBinaryFlag, normalizeLocationFlag } from '../utils/normalize';
-import { gcj02ToWgs84, wgs84ToGcj02 } from '../utils/coordTransform';
+import { gcj02ToWgs84 } from '../utils/coordTransform';
 
 // [Fix] 单个定位流程的 AbortController，用于取消上一次请求
 let activeLocateController = null;
@@ -254,9 +254,8 @@ export function useUserLocation({
                     });
                     geocode = geocodeResponse?.data || null;
                     if (geocode) {
-                        // 高德逆地理编码要求 GCJ-02 坐标，geocode 坐标已为 WGS-84，需转换
-                        const [gcjLng, gcjLat] = wgs84ToGcj02(geocode.lng, geocode.lat);
-                        const reverseResponse = await apiLocationReverse(gcjLng, gcjLat, {
+                        // apiLocationReverse 统一接受 WGS-84 坐标（后端内部转换为 GCJ-02）
+                        const reverseResponse = await apiLocationReverse(geocode.lng, geocode.lat, {
                             preferService: 'auto',
                             silent: true,
                         });
@@ -568,9 +567,8 @@ export function useUserLocation({
                 const reverseController = new AbortController();
                 const reverseTimeout = setTimeout(() => reverseController.abort(), 8000);
 
-                // 高德逆地理编码要求 GCJ-02 坐标，selected 坐标已统一为 WGS-84，需转换
-                const [gcjLng, gcjLat] = wgs84ToGcj02(selected.lon, selected.lat);
-                const reverseResponse = await apiLocationReverse(gcjLng, gcjLat, {
+                // apiLocationReverse 统一接受 WGS-84 坐标（后端内部转换为 GCJ-02）
+                const reverseResponse = await apiLocationReverse(selected.lon, selected.lat, {
                     preferService: 'auto',
                     silent: true,
                     signal: reverseController.signal,

@@ -1,35 +1,71 @@
 /**
  * 地理编码、位置搜索、IP 定位接口
+ *
+ * ===== 坐标系统契约 =====
+ * 本模块所有公开函数遵循统一约定：
+ *   - 输入：WGS-84 坐标（OpenLayers toLonLat 产出的标准）
+ *   - 输出：WGS-84 坐标
+ *   - 内部：调用高德 API 前自动 wgs84ToGcj02，收到结果后自动 gcj02ToWgs84
+ *   - 上层调用方（组件/Composable/Store）无需感知 GCJ-02 的存在
+ *
+ * 后端代理 (external_proxy.py) 纯透传，不转换；
+ * 后端服务端点 (location.py) 也在调用高德前做防御性转换。
+ * =========================
  */
 
 import backendAPI from './client';
 import { useMessage } from '../../composables/useMessage';
+import { wgs84ToGcj02, gcj02ToWgs84 } from '../../utils/coordTransform';
 
 /**
- * 地理编码 - 地址→坐标
+ * 地理编码 - 地址→坐标（WGS-84）
+ *
+ * 高德 API 返回 GCJ-02 坐标，本函数自动转换为 WGS-84。
+ *
  * @param {string} address - 地址
  * @param {string} city - 城市（可选）
- * @returns {Promise<{lng, lat, address, adcode}>}
+ * @returns {Promise<{geocodes: Array<{location: string, lng: number, lat: number}>, ...}>} WGS-84 坐标
  */
 export async function apiGeocode(address, city = '') {
-    return backendAPI.get('/api/proxy/amap/geocode/geo', {
+    const data = await backendAPI.get('/api/proxy/amap/geocode/geo', {
         params: {
             address: String(address || '').trim(),
             city: String(city || '').trim(),
         },
     });
+
+    // 高德返回 GCJ-02 坐标，转换为 WGS-84
+    const geocodes = Array.isArray(data?.geocodes) ? data.geocodes : [];
+    for (const geo of geocodes) {
+        if (geo.location && typeof geo.location === 'string') {
+            const parts = geo.location.split(',');
+            const gcjLng = Number.parseFloat(parts[0]);
+            const gcjLat = Number.parseFloat(parts[1]);
+            if (Number.isFinite(gcjLng) && Number.isFinite(gcjLat)) {
+                const [wgsLng, wgsLat] = gcj02ToWgs84(gcjLng, gcjLat);
+                geo.location = `${wgsLng},${wgsLat}`;
+            }
+        }
+    }
+
+    return data;
 }
 
 /**
  * 反向地理编码 - 坐标→地址
- * @param {number} lng - 经度
- * @param {number} lat - 纬度
+ *
+ * 接受 WGS-84 坐标，内部自动转换为 GCJ-02 后调用高德 API。
+ *
+ * @param {number} lng - WGS-84 经度
+ * @param {number} lat - WGS-84 纬度
  * @returns {Promise<{address, province, city, district, adcode}>}
  */
 export async function apiReverseGeocode(lng, lat) {
+    // 高德 API 要求 GCJ-02 坐标，将 WGS-84 转换为 GCJ-02
+    const [gcjLng, gcjLat] = wgs84ToGcj02(Number(lng), Number(lat));
     return backendAPI.get('/api/proxy/amap/geocode/regeo', {
         params: {
-            location: `${Number(lng)},${Number(lat)}`,
+            location: `${gcjLng},${gcjLat}`,
             extensions: 'base',
             radius: 1000,
             batch: false,
@@ -119,6 +155,10 @@ export async function apiLocationIpLocate(ip = '', options = {}) {
 /**
  * 反向地理编码（后端代理）
  * - 通过后端统一调度多个服务（高德、天地图、Nominatim 等）
+ * - 接受 WGS-84 坐标，后端内部自动转换为 GCJ-02 调用高德
+ *
+ * @param {number} lng - WGS-84 经度
+ * @param {number} lat - WGS-84 纬度
  */
 export async function apiLocationReverse(lng, lat, options = {}) {
     const config = {};

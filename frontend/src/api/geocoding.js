@@ -1,3 +1,17 @@
+/**
+ * 地理编码与逆地理编码模块
+ *
+ * ===== 坐标系统契约 =====
+ * 本模块所有公开函数遵循统一约定：
+ *   - 输入：WGS-84 坐标（OpenLayers toLonLat 产出的标准）
+ *   - 输出：WGS-84 坐标
+ *   - 内部：调用高德 API 前自动 wgs84ToGcj02，收到结果后自动 gcj02ToWgs84
+ *   - 上层调用方（组件/Composable/Store）无需感知 GCJ-02 的存在
+ *
+ * 天地图（reverseGeocodeTianditu）天然接受 WGS-84，无需转换。
+ * =========================
+ */
+
 import axios from 'axios';
 import backendAPI, { handleApiError } from './backend';
 import { useMessage } from '@/composables/useMessage';

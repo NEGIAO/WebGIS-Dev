@@ -520,6 +520,33 @@ WebGIS_Dev/
 | `utils/` | 纯函数 + 解析 | 副作用 |
 | `services/` | 外部 SDK 集成 | UI 逻辑 |
 
+### 坐标系统约定
+
+本项目涉及国内地图服务（高德/天地图）与全球标准（OpenLayers/Cesium/Nominatim），遵循以下统一规则：
+
+```
+前端 UI/组件/Composable —— 始终使用 WGS-84
+         ↓
+  前端 API 包装层 (frontend/src/api/)
+    ├─ geocoding.js              —— WGS-84 in, WGS-84 out（内部 wgs84ToGcj02 → AMap → gcj02ToWgs84）
+    ├─ backend/location.js       —— WGS-84 in, WGS-84 out（同上）
+    ├─ locationSearch.js         —— 高德 POI 搜索结果的 GCJ-02 坐标自动转 WGS-84
+    └─ map.js / amapAoiParser / universalAmapParser —— AOI/详情 GCJ-02 自动转 WGS-84
+         ↓
+  后端代理 (external_proxy.py) —— 透传，不转换
+         ↓
+  后端服务端点 (location.py)    —— 调用高德前做 wgs2gcj 转换
+         ↓
+  高德 API                    —— 始终接收/返回 GCJ-02
+```
+
+**核心原则**：
+1. 前端所有组件、Composable、Store 统一使用 **WGS-84**（OpenLayers `toLonLat`/`fromLonLat` 产出/消费的就是 WGS-84）
+2. WGS-84 ↔ GCJ-02 转换仅发生在 **调用高德 API 的前一刻**（前端 API 包装层或后端服务端点），对上层代码完全透明
+3. 天地图接受 WGS-84、Nominatim 使用 WGS-84，无需转换
+4. 用户手动输入坐标时可通过 `crsType` 参数指定输入坐标系（wgs84/gcj02），系统自动转换后以 WGS-84 进入内部管线
+5. 瓦片图层通过后端 `/proxy/gcj2wgs/` 纠偏代理将高德 GCJ-02 瓦片实时转为 WGS-84 瓦片
+
 ### 提交前检查
 
 ```bash

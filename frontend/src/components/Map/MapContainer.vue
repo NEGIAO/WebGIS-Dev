@@ -1675,10 +1675,12 @@ async function startReverseGeocodePickAndDraw() {
             .join('、')
         : '';
 
+    // 高德 API 需要 GCJ-02 坐标，将地图拾取的 WGS-84 转为 GCJ-02 再存储
+    const [gcjLng, gcjLat] = wgs84ToGcj02(picked.lng, picked.lat);
     drawPointByCoordinatesInput({
-        lng: picked.lng,
-        lat: picked.lat,
-        crsType: 'wgs84',
+        lng: gcjLng,
+        lat: gcjLat,
+        crsType: 'gcj02',
         displayName: layerName,
         label: layerName,
         layerName,
