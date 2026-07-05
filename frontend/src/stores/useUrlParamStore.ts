@@ -2,6 +2,7 @@ import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { normalizeBinaryFlag, normalizeLocationFlag } from '@/utils/normalize';
 import { normalizeMapView } from '@/utils/url/urlConstants';
+import { URL_LAYER_OPTIONS } from '@/constants/basemap/basemapResolver';
 
 /**
  * @description URL 路由参数持久化 & 延迟应用仓库
@@ -283,12 +284,13 @@ function validateViewZ(value: unknown, view: 'ol' | 'cesium'): number | null {
  * @description 图层索引校验
  * @param value 原始url图层编号
  * @returns 合法索引数字 | null
- * @range 0 ~ 100 预留多图层扩展
+ * @range 0 ~ URL_LAYER_OPTIONS.length-1，随预设数组动态变化，避免越界写入与未来扩展时校验过宽
  */
 function validateLayerIndex(value: unknown): number | null {
     const num = parseInt(value as string, 10);
     if (!Number.isFinite(num)) return null;
-    if (num < 0 || num > 100) return null;
+    const maxIndex = Math.max(0, URL_LAYER_OPTIONS.length - 1);
+    if (num < 0 || num > maxIndex) return null;
     return num;
 }
 

@@ -1397,7 +1397,7 @@ let routeBuilderApiPromise = null;
 const {
     ensureLayerDataImportApi,
     ensureUserLayerActionsApi,
-    setBaseLayerActive,
+    setBaseLayerActive: setBaseLayerActiveDeferred,
     setLayerVisibility,
     zoomToUserLayer,
     viewUserLayer,
@@ -1460,6 +1460,29 @@ const {
 // 更新栅格值查询函数 ref（解决初始化顺序问题）
 removeManagedLayerById = removeUserLayer;
 queryRasterValueAtCoordinateRef.value = queryRasterValueAtCoordinate;
+
+/**
+ * 设置底图激活状态并立即触发实际图层切换。
+ *
+ * 包装 useUserLayerActions.setBaseLayerActive：先通过懒加载 API 设置 selectedLayer（预设 ID），
+ * 再直接调用 switchLayerById 让 OL 立即切换瓦片图层，绕过 useBasemapSelectionWatcher 的
+ * 300ms 防抖与熔断校验链路，确保 Cesium→OL 引擎切换时底图立即同步。
+ * @param {string} layerId - 底图预设 ID（如 'imagery_google_preset'）
+ * @returns {Promise<void>}
+ */
+async function setBaseLayerActive(layerId) {
+    if (!layerId) return;
+    await setBaseLayerActiveDeferred(layerId);
+    if (selectedLayer.value !== layerId) {
+        selectedLayer.value = layerId;
+    }
+    switchLayerById?.(layerId, {
+        onUpdated: () => {
+            emitBaseLayersChangeBatched?.();
+            mapInstance.value?.updateSize?.();
+        },
+    });
+}
 
 // --- 1. 地图核心逻辑 ---
 // [隶属] 图层切换-地图初始化
