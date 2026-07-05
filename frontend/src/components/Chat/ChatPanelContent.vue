@@ -405,6 +405,7 @@ const filteredModels = computed(() => {
 /** 从下拉列表选中某个模型 */
 function pickModel(id) {
     userConfigDraft.value.model = id;
+    saveModel(id);
     showModelDropdown.value = false;
 }
 
@@ -417,6 +418,19 @@ function toggleModelDropdown() {
 /** 输入框失焦时延迟关闭下拉（给 @mousedown.prevent 留时间） */
 function onModelInputBlur() {
     setTimeout(() => { showModelDropdown.value = false; }, 150);
+}
+
+/** localStorage 键名：用户选择的模型名称 */
+const MODEL_STORAGE_KEY = 'chat:selectedModel';
+
+/** 读取持久化的模型名 */
+function readSavedModel() {
+    try { return localStorage.getItem(MODEL_STORAGE_KEY) || ''; } catch { return ''; }
+}
+
+/** 持久化模型名 */
+function saveModel(model) {
+    try { localStorage.setItem(MODEL_STORAGE_KEY, model || ''); } catch { /* noop */ }
 }
 
 const directConfig = ref({
@@ -440,11 +454,13 @@ const isDirectMode = computed(() => {
 
 const toggleRoutingMode = async () => {
     if (isDirectMode.value) {
+        // 保留模型引用，让 reloadAgentConfig 后续根据 localStorage 恢复
+        const preservedModel = directConfig.value.model;
         isDefaultAIMode.value = false;
         directConfig.value = {
             api_key: '',
             base_url: '',
-            model: '',
+            model: preservedModel,
             system_prompt: '',
             timeout_seconds: 45,
             max_tokens: 32768,
@@ -462,6 +478,9 @@ const toggleRoutingMode = async () => {
     syncDraftFromDirectConfig();
     updateWelcomeMessageIfNeeded();
     await reloadAgentConfig(false);
+    // 模式切换后刷新 userConfigDraft 和模型列表，避免残留旧模式的配置
+    await loadUserConfig(false);
+    await loadAvailableModels();
 };
 
 const syncDraftFromDirectConfig = () => {
@@ -651,7 +670,11 @@ const reloadAgentConfig = async (showToast = false) => {
                 if (models.length > 0) {
                     const chatModels = models.filter((m) => m?.chat_compatible !== false);
                     const pool = chatModels.length > 0 ? chatModels : models;
-                    const selectedModel = String(pool[0]?.id || dc.model || '');
+                    const savedModel = readSavedModel();
+                    const preferredModel = savedModel && pool.some((m) => m.id === savedModel)
+                        ? savedModel
+                        : '';
+                    const selectedModel = preferredModel || String(pool[0]?.id || dc.model || '');
                     if (selectedModel) {
                         directConfig.value.model = selectedModel;
                         modelName.value = selectedModel;
@@ -682,6 +705,16 @@ const reloadAgentConfig = async (showToast = false) => {
             serviceReady.value = !!data?.service_ready;
             modelName.value = String(data?.model || '');
             quota.value = normalizeQuota(data?.quota || {});
+
+            // 如果管理员在后端配置了模型，优先使用数据库的配置；
+            // 仅当后端没有配置模型时，才回退到用户 localStorage 中保存的偏好
+            if (!modelName.value) {
+                const savedModel = readSavedModel();
+                if (savedModel) {
+                    modelName.value = savedModel;
+                    userConfigDraft.value.model = savedModel;
+                }
+            }
 
             if (serviceReady.value) {
                 statusHint.value = quotaExhausted.value
@@ -806,14 +839,23 @@ const loadAvailableModels = async () => {
 
             if (currentModel) {
                 userConfigDraft.value.model = currentModel;
-            } else if (models.length > 0) {
-                const chatModels = models.filter((m) => m?.chat_compatible !== false);
-                if (chatModels.length > 0) {
-                    const firstModel = chatModels[0];
-                    userConfigDraft.value.model = String(firstModel?.id || '');
-                    if (userConfigDraft.value.model && !isDirectMode.value) {
-                        apiAgentSaveModelPreference(userConfigDraft.value.model).catch(() => {});
+            } else {
+                // 优先用 localStorage 中保存的用户偏好模型
+                const saved = readSavedModel();
+                if (saved && models.some((m) => m.id === saved)) {
+                    userConfigDraft.value.model = saved;
+                } else if (models.length > 0) {
+                    const chatModels = models.filter((m) => m?.chat_compatible !== false);
+                    if (chatModels.length > 0) {
+                        const firstModel = chatModels[0];
+                        userConfigDraft.value.model = String(firstModel?.id || '');
+                        if (userConfigDraft.value.model && !isDirectMode.value) {
+                            apiAgentSaveModelPreference(userConfigDraft.value.model).catch(() => {});
+                        }
                     }
+                }
+                if (userConfigDraft.value.model) {
+                    saveModel(userConfigDraft.value.model);
                 }
             }
         }
@@ -888,6 +930,8 @@ const saveUserConfig = async () => {
 
         userConfigDraft.value.api_key = '';
         await reloadAgentConfig(false);
+        // 保存配置后刷新模型列表，使下拉框与当前模式一致
+        await loadAvailableModels();
 
         if (personalApiKey) {
             message.success('已启用前端直连模式（API Key 仅保存在当前会话，刷新后需重新输入）');
@@ -923,6 +967,7 @@ const clearPersonalKey = async () => {
         }
 
         await reloadAgentConfig(false);
+        await loadAvailableModels();
         message.success('已清除个人 API Key，切换为后端代理模式');
     } catch (error) {
         message.error(`清除失败：${error.message}`);
@@ -952,6 +997,7 @@ const resetProviderOverrides = async () => {
 
         await loadUserConfig(false);
         await reloadAgentConfig(false);
+        await loadAvailableModels();
         message.success('已恢复平台默认参数');
     } catch (error) {
         message.error(`恢复失败：${error.message}`);
@@ -1504,8 +1550,8 @@ onMounted(async () => {
     }
 
     await _loadDefaultAIConfig();
-    loadAvailableModels();
     await reloadAgentConfig(false);
+    await loadAvailableModels();
 
     try {
         await ensureMarkdownLibs();
