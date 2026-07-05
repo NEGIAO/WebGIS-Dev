@@ -11,6 +11,48 @@ const FALLBACK_SOUP = Object.freeze({
     en: 'Do not wrestle with the world today; make peace with yourself first.',
 });
 
+// ===== 方案 A：防抖合并 =====
+const DEDUP_WINDOW_MS = 1000;
+/** key="type|text" → { msgId, count, timer } */
+const dedupCache = new Map();
+
+function getDedupKey(type, text) {
+    return `${type}|${String(text || '')}`;
+}
+
+/** 在所有消息中查找（先 visible 再 queue） */
+function findMessageById(id) {
+    let idx = state.messages.findIndex((m) => m.id === id);
+    if (idx >= 0) return { msg: state.messages[idx], location: 'messages', idx };
+    idx = state.queue.findIndex((m) => m.id === id);
+    if (idx >= 0) return { msg: state.queue[idx], location: 'queue', idx };
+    return null;
+}
+
+// ===== 方案 C：智能 draining =====
+const QUEUE_DRAIN_THRESHOLD = 3;
+const FAST_DURATION_MS = 800;
+// 额外触发条件：短时间内大量消息涌入
+const RATE_WINDOW_MS = 2000;
+const RATE_THRESHOLD = 5;
+const messageTimestamps = [];
+
+function isHighRate() {
+    const now = Date.now();
+    // 只保留窗口内的记录
+    while (messageTimestamps.length > 0 && messageTimestamps[0] < now - RATE_WINDOW_MS) {
+        messageTimestamps.shift();
+    }
+    return messageTimestamps.length >= RATE_THRESHOLD;
+}
+function markMessageTimestamp() {
+    messageTimestamps.push(Date.now());
+}
+
+function shouldUseFastDuration() {
+    return isHighRate() || state.queue.length >= QUEUE_DRAIN_THRESHOLD;
+}
+
 const state = reactive({
     messages: [],
     queue: [],
@@ -76,20 +118,71 @@ function formatSoupQuote(quote) {
 function flushQueue() {
     while (state.messages.length < MAX_VISIBLE && state.queue.length > 0) {
         const next = state.queue.shift();
+        // 方案 C：队列积压或短时大量涌入 → 加速清空
+        if (shouldUseFastDuration()) {
+            next.duration = Math.min(
+                Number.isFinite(next.duration) ? next.duration : DEFAULT_DURATION_MS,
+                FAST_DURATION_MS,
+            );
+        }
         state.messages.push(next);
     }
 }
 
+/** 清理 dedupCache 中指定 msgId 的条目 */
+function cleanDedupCache(id) {
+    for (const [key, entry] of dedupCache.entries()) {
+        if (entry.msgId === id) {
+            clearTimeout(entry.timer);
+            dedupCache.delete(key);
+            return;
+        }
+    }
+}
+
 function createMessage(type, text, options = {}) {
+    const normalizedText = String(text || '');
+    const dedupKey = getDedupKey(type, normalizedText);
+
+    // 标记消息速率（在防抖合并之前，因为被合并的消息也应计入速率）
+    markMessageTimestamp();
+
+    // 方案 A：防抖合并 — 1 秒内同 type+text 的消息合并计数
+    const existing = dedupCache.get(dedupKey);
+    if (existing) {
+        // 延长合并窗口
+        clearTimeout(existing.timer);
+        existing.timer = setTimeout(() => {
+            dedupCache.delete(dedupKey);
+        }, DEDUP_WINDOW_MS);
+
+        // 找到并更新已存在的消息
+        const found = findMessageById(existing.msgId);
+        if (found) {
+            existing.count++;
+            found.msg._dedupCount = existing.count;
+            found.msg.text = `${normalizedText}（共${existing.count}条）`;
+            // 刷新 duration：使 auto-close timer 按新的 duration 走
+            found.msg.duration = getDefaultDuration(type, options.duration);
+        }
+
+        return existing.msgId;
+    }
+
     const payload = {
         id: nextId(),
         type,
-        text: String(text || ''),
+        text: normalizedText,
         duration: getDefaultDuration(type, options.duration),
         closable: options.closable ?? true,
         showTitle: options.showTitle ?? true,
         onClose: options.onClose,
     };
+
+    // 方案 C：短时大量涌入或队列积压 → 快速闪过
+    if (shouldUseFastDuration()) {
+        payload.duration = Math.min(payload.duration, FAST_DURATION_MS);
+    }
 
     if (state.messages.length >= MAX_VISIBLE) {
         state.queue.push(payload);
@@ -97,23 +190,45 @@ function createMessage(type, text, options = {}) {
         state.messages.push(payload);
     }
 
+    // 注册防抖缓存
+    dedupCache.set(dedupKey, {
+        msgId: payload.id,
+        count: 1,
+        timer: setTimeout(() => {
+            dedupCache.delete(dedupKey);
+        }, DEDUP_WINDOW_MS),
+    });
+
     return payload.id;
 }
 
 function remove(id) {
-    const idx = state.messages.findIndex((m) => m.id === id);
-    if (idx < 0) return;
+    const found = findMessageById(id);
+    if (!found) return;
 
-    const msg = state.messages[idx];
+    const msg = found.msg;
     if (typeof msg.onClose === 'function') {
         msg.onClose();
     }
 
-    state.messages.splice(idx, 1);
-    flushQueue();
+    // 从 dedupCache 清理
+    cleanDedupCache(id);
+
+    if (found.location === 'messages') {
+        state.messages.splice(found.idx, 1);
+        flushQueue();
+    } else {
+        state.queue.splice(found.idx, 1);
+    }
 }
 
 function clearAll() {
+    // 清理所有 dedup 定时器
+    for (const entry of dedupCache.values()) {
+        clearTimeout(entry.timer);
+    }
+    dedupCache.clear();
+
     state.messages = [];
     state.queue = [];
 }

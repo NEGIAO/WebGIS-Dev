@@ -836,9 +836,21 @@ const hydrateWithQuotaSync = () => {
     };
 };
 
-// 重写 load 方法以同步 quota
+/**
+ * 将 agentConfig.provider 子字段展开到顶层，供 config-view 模板直接访问
+ * 因为 useAgentConfig composable 存储的是原始 API 响应，provider 字段嵌套在子对象中
+ */
+function flattenProviderToTop() {
+    const provider = agentConfig.value?.provider || {};
+    if (provider.base_url || provider.model || Object.keys(provider).length > 0) {
+        agentConfig.value = { ...agentConfig.value, ...provider };
+    }
+}
+
+// 重写 load 方法以同步 quota，并将 provider 子字段展开到顶层供模板读取
 const loadAgentConfigWithQuota = async () => {
     await loadAgentConfig();
+    flattenProviderToTop();
     hydrateWithQuotaSync();
 };
 
@@ -936,6 +948,8 @@ async function saveAgentConfigWrapper() {
     // 保存成功后退出编辑模式，并同步额度显示
     const ok = await saveAgentConfig();
     if (ok) {
+        // saveAgentConfig 将 raw API 响应写回 agentConfig.value，需要重新扁平化
+        flattenProviderToTop();
         cancelEditAgentConfig();
         hydrateWithQuotaSync();
     }
@@ -944,6 +958,7 @@ async function saveAgentConfigWrapper() {
 async function resetChatQuotaWrapper() {
     // 使用共享 composable 的 resetQuota 方法
     await resetChatQuota();
+    flattenProviderToTop();
 }
 
 async function saveKey(keyName) {
@@ -1113,7 +1128,7 @@ async function saveDefaultAIConfig() {
 
 onMounted(async () => {
     await loadKeysStatus();
-    await loadAgentConfig();
+    await loadAgentConfigWithQuota();
     await loadDefaultAIConfig();
 });
 </script>
