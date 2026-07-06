@@ -500,6 +500,11 @@ async function startTransitPlan() {
     };
 
     try {
+        const tk = String(props.token || '').trim();
+        if (!tk) {
+            throw new Error('天地图 Token 未配置。请在「设置」→「API 密钥管理」中添加 tianditu_tk，或确认后端服务已启动。');
+        }
+
         const postObj = {
             startposition: `${startPoint.value.lng},${startPoint.value.lat}`,
             endposition: `${endPoint.value.lng},${endPoint.value.lat}`,
@@ -507,7 +512,7 @@ async function startTransitPlan() {
         };
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
-        const requestUrl = `https://api.tianditu.gov.cn/transit?tk=${encodeURIComponent(props.token)}&type=busplan&postStr=${encodedPostStr}`;
+        const requestUrl = `https://api.tianditu.gov.cn/transit?tk=${encodeURIComponent(tk)}&type=busplan&postStr=${encodedPostStr}`;
         debugInfo.value.requestUrl = requestUrl;
 
         const res = await fetch(requestUrl, { method: 'GET' });
@@ -548,11 +553,13 @@ async function startTransitPlan() {
         }
     } catch (err: any) {
         const rawMessage = err?.message || '';
-        const likelyNetworkBlocked =
-            err instanceof TypeError || /failed\s+to\s+fetch/i.test(String(rawMessage));
-        const hint = likelyNetworkBlocked
+        const isNetworkError = /failed\s+to\s+fetch/i.test(String(rawMessage));
+        const hint = isNetworkError
             ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
             : '';
+        if (!isNetworkError) {
+            console.error('[公交规划] 错误详情:', err);
+        }
         errorMsg.value = hint || rawMessage || '公交规划失败';
         routes.value = [];
         selectedRouteIndex.value = -1;

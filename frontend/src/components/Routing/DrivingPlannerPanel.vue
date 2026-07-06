@@ -164,7 +164,14 @@ interface ParsedRouteResult {
     steps: Array<{ text: string; linePoint: string }>;
 }
 
-const YOUR_TIANDITU_TK = 'YOUR_TIANDITU_TK';
+/** 天地图 Token 未配置或为空 */
+class TokenMissingError extends Error {
+    constructor() {
+        super('TokenMissing');
+        this.name = 'TokenMissingError';
+    }
+}
+
 
 const props = defineProps<{
     token?: string;
@@ -346,7 +353,10 @@ async function startDriveSearch(): Promise<void> {
     debug.message = '';
 
     try {
-        const token = String(props.token || YOUR_TIANDITU_TK).trim();
+        const token = String(props.token || '').trim();
+        if (!token) {
+            throw new TokenMissingError();
+        }
         const postObj = {
             orig: `${oLng},${oLat}`,
             dest: `${dLng},${dLat}`,
@@ -400,13 +410,7 @@ async function startDriveSearch(): Promise<void> {
             destPoint.lat = xmlDest.lat.toFixed(6);
         }
 
-        if (parsed.routeLatLon && props.drawDriveRouteOnMap) {
-            await props.drawDriveRouteOnMap({
-                routeLatLonStr: parsed.routeLatLon,
-                stepLinePoints: steps.map((step) => step.linePoint),
-            });
-        }
-
+        // 先更新调试信息，确保即使地图渲染失败也能看到解析结果
         debug.rawDistance = String(parsed.distanceKm || 0);
         debug.rawDuration = String(parsed.durationSec || 0);
         debug.stepCount = steps.length;
@@ -415,13 +419,34 @@ async function startDriveSearch(): Promise<void> {
         if (!steps.length) {
             debug.message = '未解析到 steps，可检查 routes/item/strguide 是否存在';
         }
+
+        // 地图渲染（可能抛出错误，但不影响已解析的数据）
+        if (parsed.routeLatLon && props.drawDriveRouteOnMap) {
+            await props.drawDriveRouteOnMap({
+                routeLatLonStr: parsed.routeLatLon,
+                stepLinePoints: steps.map((step) => step.linePoint),
+            });
+        }
     } catch (e) {
         const rawMessage = e instanceof Error ? e.message : String(e || '');
-        const likelyNetworkBlocked =
-            e instanceof TypeError || /failed\s+to\s+fetch/i.test(rawMessage);
-        const message = likelyNetworkBlocked
-            ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
-            : rawMessage || '导航失败';
+        let message: string;
+
+        if (e instanceof TokenMissingError) {
+            message =
+                '天地图 Token 未配置。请在「设置」→「API 密钥管理」中添加 tianditu_tk，' +
+                '或确认后端服务已启动。';
+        } else if (/failed\s+to\s+fetch/i.test(rawMessage)) {
+            // 真正的网络错误（fetch 本身失败，CORS/混合内容等）
+            message =
+                '网络请求被浏览器拦截或跨域失败。请确认：' +
+                '1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；' +
+                '3) 浏览器控制台无 Mixed Content/CORS 报错。';
+        } else {
+            // 其他错误（XML 解析、坐标处理、地图渲染等）
+            console.error('[驾车规划] 错误详情:', e);
+            message = rawMessage || '导航失败';
+        }
+
         error.value = message;
         debug.status = 'error';
         debug.message = message;
