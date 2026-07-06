@@ -19,6 +19,7 @@
             :end-point="destPoint"
             :start-address="origAddress"
             :end-address="destAddress"
+            :tianditu-tk="token"
             theme="drive"
             start-label="设置起点"
             end-label="设置终点"
@@ -28,6 +29,8 @@
             end-title="终点坐标"
             @pick-start="pickPointOnMap('start')"
             @pick-end="pickPointOnMap('end')"
+            @select-start-result="onSelectStartResult"
+            @select-end-result="onSelectEndResult"
         />
 
         <div class="plan-row">
@@ -266,6 +269,20 @@ async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
     } finally {
         pickMode.value = '';
     }
+}
+
+function onSelectStartResult(result: { lng: number; lat: number; address: string }) {
+    origPoint.lng = result.lng.toFixed(6);
+    origPoint.lat = result.lat.toFixed(6);
+    origAddress.value = result.address || '';
+    error.value = '';
+}
+
+function onSelectEndResult(result: { lng: number; lat: number; address: string }) {
+    destPoint.lng = result.lng.toFixed(6);
+    destPoint.lat = result.lat.toFixed(6);
+    destAddress.value = result.address || '';
+    error.value = '';
 }
 
 function isValidLngLat(lng: number, lat: number): boolean {

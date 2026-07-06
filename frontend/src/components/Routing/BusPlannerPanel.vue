@@ -19,11 +19,14 @@
             :end-point="endPoint"
             :start-address="startAddress"
             :end-address="endAddress"
+            :tianditu-tk="token"
             theme="bus"
             start-label="设置起点"
             end-label="设置终点"
             @pick-start="enablePick('start')"
             @pick-end="enablePick('end')"
+            @select-start-result="onSelectStartResult"
+            @select-end-result="onSelectEndResult"
         />
 
         <div class="plan-row">
@@ -432,6 +435,18 @@ async function enablePick(type: 'start' | 'end') {
     } finally {
         pickMode.value = '';
     }
+}
+
+function onSelectStartResult(result: { lng: number; lat: number; address: string }) {
+    startPoint.value = { lng: result.lng, lat: result.lat };
+    startAddress.value = result.address || '';
+    errorMsg.value = '';
+}
+
+function onSelectEndResult(result: { lng: number; lat: number; address: string }) {
+    endPoint.value = { lng: result.lng, lat: result.lat };
+    endAddress.value = result.address || '';
+    errorMsg.value = '';
 }
 
 async function handleSelectRoute(route: RouteCandidate, idx: number) {
