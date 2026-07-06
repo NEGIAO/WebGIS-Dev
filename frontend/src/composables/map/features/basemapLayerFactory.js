@@ -113,8 +113,10 @@ function alwaysPickFinerZoom(target, high, low) {
  */
 export function buildRasterBasemapSource(rawSource) {
     if (!rawSource) return null;
-    if (tileHDRendering.value) {
+    if (tileHDRendering.value && !rawSource.skipHighResTile) {
         // 非整数 zoom 一律取上一层瓦片（z+1），瓦片数 ×4，清晰度提升
+        // 注：注记图层 (category='label') 通过 createSource 设置 skipHighResTile=true
+        //     跳过此优化，保持向下取整，避免注记文字在高清瓦片中显示过小。
         rawSource.zDirection = alwaysPickFinerZoom;
     }
     return rawSource;

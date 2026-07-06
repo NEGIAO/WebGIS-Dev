@@ -116,6 +116,15 @@ export const buildTiandituUrl = (pathAndQuery: string, tiandituTk: string): stri
     return `https://${TILE_HOSTS.tianditu}${pathAndQuery}${separator}tk=${tiandituTk}`;
 };
 
+/**
+ * 为 source 标记 skipHighResTile 标志，用于注记图层跳过 zDirection 高清瓦片优化
+ * （避免注记文字在非整数 zoom 时因取上层瓦片而显示过小）
+ */
+function withSkipHighResTile<T extends XYZ>(src: T): T & { skipHighResTile: true } {
+    Object.assign(src, { skipHighResTile: true });
+    return src as T & { skipHighResTile: true };
+}
+
 // ========== 配置1：图层源定义 ==========
 export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     // 1、注记图层
@@ -125,13 +134,15 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         createSource: ({ tiandituTk }) =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: buildTiandituUrl(
-                        '/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                        tiandituTk,
-                    ),
-                }),
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildTiandituUrl(
+                            '/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                            tiandituTk,
+                        ),
+                    }),
+                ),
             ),
     },
     {
@@ -140,13 +151,15 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         createSource: ({ tiandituTk }) =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: buildTiandituUrl(
-                        '/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                        tiandituTk,
-                    ),
-                }),
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildTiandituUrl(
+                            '/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                            tiandituTk,
+                        ),
+                    }),
+                ),
             ),
     },
     {
@@ -155,10 +168,12 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
-                }),
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                    }),
+                ),
             ),
     },
     {
@@ -167,10 +182,12 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         group: '注记',
         category: 'label',
         createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-                }),
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                    }),
+                ),
             ),
     },
 
