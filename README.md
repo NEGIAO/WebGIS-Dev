@@ -33,7 +33,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.15 阶段，UI 组件库 DrawPanel 风格统一、URL 参数安全校验、卷帘分析 ResizeObserver 修复、罗盘初始化防循环写入、Cesium 数据导入多格式支持（GeoJSON/KML/KMZ/SHP/GLB/GLTF/CZML/3D Tiles），正逐步发展成为专业级的地理信息系统应用
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.16 阶段，驾车/公交规划集成天地图搜索、注记图层 HD 兼容修复、错误处理优化，正逐步发展成为专业级的地理信息系统应用
 
 ---
 ## 📑 目录
@@ -183,7 +183,7 @@ WebGIS_Dev/
 │   │   │   │   ├── Cloud/            # 体积云模块（Ray Marching + 散射 + 纹理）
 │   │   │   │   ├── PlayerController/ # 人物漫游控制器（第一/第三人称 + Rapier 物理 + 导航指引 + 动画混合 + 移动手感优化）
 │   │   │   │   ├── FluidSimulation/  # 流体模拟（洪水模拟 + 水位动画）
-│   │   │   │   ├── Wind/             # GPU 风场粒子可视化（cesium-wind-layer + ComputeCommand + GLSL 300 es）
+│   │   │   │   ├── Wind/             # （原 GPU 风场模块，已清空）
 │   │   │   │   ├── ShallowWater/     # Three.js 热带浅水（焦散/折射/吸色/体积云/闪电）
 │   │   │   │   ├── composables/      # Cesium composables（图层/底图/URL 追踪等）
 │   │   │   │   └── terrain/          # 地形 provider
@@ -281,6 +281,8 @@ WebGIS_Dev/
 │   │   ├── 26-06-27/                 # 体积云重构 + 洪水模拟 + 漫游优化
 │   │   ├── 26-06-28/                 # LLM 动态配置管理
 │   │   └── 26-06-30/                 # SQLite 损坏恢复命令记录
+│   ├── 26-07/                        # 2026-07 日志
+│   │   ├── 26-07-01/ ~ 26-07-06/     # 7 月上旬日志
 │   ├── 06-28/                        # useAgentConfig 编辑模式修复 + Chat 面板修复
 │   ├── 06-29/                        # 下载底图跳转 + 标注链路 + TOC 缓存 + TIF 渲染优化
 │   ├── Architecture/                  # 架构设计文档
@@ -296,6 +298,18 @@ WebGIS_Dev/
 ---
 
 ## 📜 版本演进
+
+### V3.3.16 (2026-07-06) — 路径规划搜索集成 + 注记图层 HD 兼容 + 错误处理优化
+
+- 🆕 **驾车/公交规划集成天地图搜索**：`MapPointPickerCard.vue` 新增起点/终点关键词搜索输入框 + 下拉结果列表，AbortController 防竞态保护，支持键盘导航（方向键/Enter）和鼠标选择
+- 🆕 **注记图层 HD 兼容**：新增 `withSkipHighResTile` 辅助函数，4 个 `category='label'` 图层（天地图 cia/cva、GeoVIS cia、高德注记）跳过 `zDirection` 高清瓦片优化，避免注记文字在非整数 zoom 时显示过小
+- 🆕 **TokenMissingError 语义化错误**：驾车规划新增 `TokenMissingError` 自定义错误类，Token 缺失时显示明确配置提示
+- 🔧 **错误判断修复**：移除 `e instanceof TypeError` 网络错误判断（误捕渲染链路 TypeError），改用 `/failed\s+to\s+fetch/i` 精准识别
+- 🔧 **调试/渲染顺序调整**：驾车规划先更新调试信息再执行地图渲染，确保渲染失败后调试数据不丢失
+- 🔧 **公交规划 Token 前置校验**：构建请求 URL 前检查 Token 是否为空，空则抛语义化错误
+- 🐛 **Edit 工具重复内容修复**：清理 `MapPointPickerCard.vue` 中因连续 Edit 替换导致的重复 import/props/emits/代码块
+
+详见 [`Docs/26-07/26-07-06/2026-07-06-路径规划搜索集成与bug修复.md`](Docs/26-07/26-07-06/2026-07-06-路径规划搜索集成与bug修复.md)
 
 ### V3.3.15 (2026-07-02) — GPS 定位授权逻辑修复
 
@@ -788,6 +802,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-07-04
-**当前版本**：V3.3.15
+**最后更新**：2026-07-06
+**当前版本**：V3.3.16
 **项目状态**：开发中 - 持续迭代优化

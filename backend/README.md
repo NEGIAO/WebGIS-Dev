@@ -43,7 +43,20 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 ---
 
-## 0. 项目结构（2026-07-04 更新）
+## 0. 项目结构（2026-07-06 更新）
+
+### V3.3.16 (2026-07-06) — 路径规划搜索集成 + 注记图层 HD 兼容 + 错误处理优化
+
+> 本次为前端的驾车/公交规划面板集成天地图搜索、注记图层 HD 兼容修复及错误处理优化，后端 API 与后端文件结构**无变更**。
+
+**前端同步记录（本次无后端结构变更）：**
+- `MapPointPickerCard.vue` 新增起点/终点关键词搜索输入框 + 下拉结果列表，AbortController 防竞态保护
+- `basemapConfig.ts` 新增 `withSkipHighResTile` 辅助函数，4 个注记图层跳过 HD 瓦片优化
+- `basemapLayerFactory.js` `buildRasterBasemapSource` 新增 `skipHighResTile` 标志检查
+- `DrivingPlannerPanel.vue` 接入搜索选点 + TokenMissingError + 错误判断修复
+- `BusPlannerPanel.vue` 接入搜索选点 + Token 前置校验
+
+详见维护日志 `../Docs/26-07/26-07-06/2026-07-06-路径规划搜索集成与bug修复.md`。
 
 ### V3.3 (2026-07-04) — 前端 README 文档重构 + 版本号统一为大版本 V3.3
 

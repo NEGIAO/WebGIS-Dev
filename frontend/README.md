@@ -138,19 +138,7 @@ frontend/src/
 │   │   ├── LilGuiControls.vue                      # lil-gui 动态控件渲染器
 │   │   ├── Wind2D.js                               # 2D 风场渲染
 │   │   │
-│   │   ├── Wind/                                   # GPU 风场粒子可视化模块
-│   │   │   ├── wind-core/                          # 核心源码（cesium-wind-layer 移植）
-│   │   │   │   ├── index.ts                        # WindLayer 主类
-│   │   │   │   ├── types.ts                        # 类型定义
-│   │   │   │   ├── windParticleSystem.ts           # 粒子系统编排器
-│   │   │   │   ├── windParticlesComputing.ts       # GPU 计算管线（3 ComputeCommand）
-│   │   │   │   ├── windParticlesRendering.ts       # GPU 渲染管线（DrawCommand）
-│   │   │   │   ├── customPrimitive.ts              # Cesium Primitive 桥接
-│   │   │   │   ├── shaderManager.ts                # ShaderSource 工厂
-│   │   │   │   └── shaders/                        # GLSL 300 es 着色器
-│   │   │   ├── useWindLayer.js                     # Vue Composable（生命周期管理）
-│   │   │   ├── windLayerController.js              # lil-gui 模块（参数控制面板）
-│   │   │   └── windSampleData.js                   # 示例数据加载器
+│   │   ├── Wind/                                   # （原 GPU 风场模块，已清空）
 │   │   │
 │   │   ├── Cloud/                                  # 体积云模块（TypeScript）
 │   │   │   ├── index.ts                            # 模块入口
@@ -158,13 +146,17 @@ frontend/src/
 │   │   │   ├── CloudPresets.ts                     # 质量预设（low/medium/high/ultra）
 │   │   │   ├── CloudUniforms.ts                    # GPU Uniform 缓冲区管理
 │   │   │   ├── cloudIntegration.ts                 # Cesium 场景集成（PostProcessStage）
-│   │   │   └── composables/useVolumetricCloud.ts   # Vue composable
+│   │   │   ├── composables/useVolumetricCloud.ts   # Vue composable
+│   │   │   ├── shaders/                            # GLSL 着色器（cloud/noise/utils）
+│   │   │   └── textures/                           # 纹理资源（weather/shape/turbulence）
 │   │   │
 │   │   ├── PlayerController/                       # 人物漫游控制器
 │   │   │   ├── index.js                            # 模块入口（懒加载导出）
 │   │   │   ├── usePlayerController.js              # Vue composable（启停/状态/地形碰撞）
-│   │   │   ├── playerDefaults.ts                   # 默认配置
 │   │   │   ├── playerController.ts                 # 核心控制器类
+│   │   │   ├── playerDefaults.ts                   # 默认配置
+│   │   │   ├── dynamicObject.ts                    # 动态物体
+│   │   │   ├── types.ts                            # 类型定义
 │   │   │   ├── PlayerGuidePanel.vue                # 键位说明面板
 │   │   │   ├── NavGuideHUD.vue                     # 漫游导航 HUD（方向箭头+距离）
 │   │   │   ├── NavTargetPicker.vue                 # 导航目标选择器
@@ -175,7 +167,9 @@ frontend/src/
 │   │   │   │   └── PhysicsSystem.ts                # Rapier 物理碰撞
 │   │   │   └── utils/                              # 工具函数
 │   │   │       ├── frame.ts                        # ECEF/ENU/Rapier 坐标变换
+│   │   │       ├── gltfGeometry.ts                 # glTF 几何提取
 │   │   │       ├── math.ts                         # lerp + smoothDamp 平滑阻尼
+│   │   │       ├── mobileControls.ts               # 移动端触控
 │   │   │       └── terrainHelper.ts                # 地形 provider 检测
 │   │   │
 │   │   ├── FluidSimulation/                        # 流体模拟（洪水 + 水位动画）
@@ -190,9 +184,13 @@ frontend/src/
 │   │   │
 │   │   ├── composables/                            # Cesium composables
 │   │   │   ├── cesiumRuntime.js                    # Cesium CDN 运行时加载
+│   │   │   ├── cesiumAtmosphere.js                 # 大气渲染
+│   │   │   ├── cesiumStorage.js                    # Cesium 状态持久化
+│   │   │   ├── cesiumTimeSystem.js                 # 时间系统
 │   │   │   ├── useCesiumBasemapSwitcher.js         # 底图熔断/降级切换
 │   │   │   ├── useCesiumBeautify.js                # 场景美化（HDR/FXAA/定向光）
 │   │   │   ├── useCesiumCameraEnhanced.js          # 相机增强
+│   │   │   ├── useCesiumCreditHider.js             # 版权信息隐藏
 │   │   │   ├── useCesiumDataImport.js              # 数据导入
 │   │   │   ├── useCesiumFrameRate.js               # FPS 采样
 │   │   │   ├── useCesiumHeightSampler.js           # 高度采样
@@ -201,7 +199,8 @@ frontend/src/
 │   │   │   ├── useCesiumModelManager.js            # 3D 模型管理
 │   │   │   ├── useCesiumSceneActions.js            # 场景动作
 │   │   │   ├── useCesiumToolModules.js             # 工具面板模块编排
-│   │   │   └── useCesiumUrlTracking.js             # URL 追踪
+│   │   │   ├── useCesiumUrlTracking.js             # URL 追踪
+│   │   │   └── useCesiumWind.js                    # 风场集成
 │   │   │
 │   │   └── terrain/                                # 自定义地形 Provider
 │   │       ├── GeoTerrainProvider.js               # 天地图地形
@@ -217,14 +216,15 @@ frontend/src/
 │   ├── ControlsPanel/
 │   │   ├── ControlsPanel.vue                       # 总面板入口
 │   │   ├── AdministrativeDivisionPanel.vue         # 行政区面板
+│   │   ├── AdministrativeDivisionTreeNode.vue      # 行政区树节点
 │   │   ├── DrawPanel.vue                           # 绘制面板
 │   │   ├── LogMonitor.vue                          # 日志监控
 │   │   ├── MeasurePanel.vue                        # 测量面板
 │   │   └── SpatialAnalysisPanel.vue                # 空间分析面板
 │   ├── feng-shui-compass-svg/                      # 罗盘 SVG HUD
 │   │   ├── feng-shui-compass-svg.vue               # 罗盘主组件
-│   │   ├── Explanation/                            # 宫位解释 JSON 数据
-│   │   ├── themes/                                 # 5 种主题配置
+│   │   ├── Explanation/                            # 宫位解释 JSON 数据（5 种解释）
+│   │   ├── themes/                                 # 5 种主题配置 + 预览图
 │   │   └── types/                                  # TypeScript 类型定义
 │   ├── Layer/
 │   │   ├── TOCPanel.vue                            # TOC 主面板
@@ -243,7 +243,7 @@ frontend/src/
 │   ├── Routing/
 │   │   ├── BusPlannerPanel.vue                     # 公交规划
 │   │   ├── DrivingPlannerPanel.vue                 # 驾车规划
-│   │   └── MapPointPickerCard.vue                  # 地图点选卡片
+│   │   └── MapPointPickerCard.vue                  # 地图点选卡片（含搜索选点）
 │   ├── Search/
 │   │   ├── LocationSearch.vue                      # 地点搜索
 │   │   └── AmapAoiInjectDialog.vue                 # 高德 AOI 注入弹窗
@@ -321,7 +321,12 @@ frontend/src/
 │   │   │   └── index.js
 │   │   ├── toc/                                    # TOC 模块
 │   │   │   ├── actions/                            # 右键菜单动作
+│   │   │   │   ├── contextActionManager.js
+│   │   │   │   ├── exportService.js
+│   │   │   │   └── selectionManager.js
 │   │   │   ├── menu/                               # 菜单调度
+│   │   │   │   ├── commandDispatcher.js
+│   │   │   │   └── contextMenu.js
 │   │   │   ├── factory.js
 │   │   │   ├── protocol.js
 │   │   │   └── index.js
@@ -352,6 +357,7 @@ frontend/src/
 │   ├── useManagedLayerRegistry.js                  # 托管图层注册
 │   ├── useMapState.js                              # OL 地图状态
 │   ├── useMapSwipe.ts                              # 卷帘核心逻辑
+│   ├── useMapSwipeTest.ts                          # 卷帘测试
 │   ├── useMapViewUrlState.js                       # 2D/3D URL 状态
 │   ├── useMessage.js                               # 全局消息提示
 │   ├── useMessageIslandMotion.js                   # 消息动画
@@ -360,8 +366,6 @@ frontend/src/
 │   ├── useTileSourceFactory.ts                     # 瓦片源工厂 barrel
 │   ├── useUserLayerActions.js                      # 用户图层动作
 │   └── useUserLocation.js                          # 用户定位
-│
-├── config/env.ts                                   # 环境变量集中管理
 │
 ├── constants/                                      # 常量配置
 │   ├── basemap/
@@ -415,7 +419,10 @@ frontend/src/
 ├── data/goldenSoupQuotes.js                        # 励志语录数据（懒加载）
 │
 ├── utils/                                          # 工具函数
+│   ├── index.js
 │   ├── abortManager.js                             # 请求中断管理器
+│   ├── amapRectangle.js                            # 高德矩形范围解析
+│   ├── biz/index.js                                # 业务工具 barrel
 │   ├── coordTransform.js                           # 坐标转换（GCJ-02/WGS84）
 │   ├── coordinateFormatter.js                      # 坐标格式化
 │   ├── coordinateInputHandler.js                   # 坐标输入处理
@@ -433,9 +440,6 @@ frontend/src/
 │   ├── tifUtils.js                                 # TIF 工具
 │   ├── transitRouteBuilder.js                      # 路线渲染数据构建
 │   ├── vectorWorkerUtils.js                        # 矢量 Worker 工具
-│   ├── index.js
-│   ├── amapRectangle.js                            # 高德矩形范围解析
-│   ├── biz/index.js                                # 业务工具 barrel
 │   ├── echarts/
 │   │   ├── cesiumFxRuntime.js                      # Cesium 图表运行时
 │   │   └── weatherRuntime.js                       # 天气图表运行时
@@ -496,7 +500,19 @@ frontend/src/
 
 ## 📜 版本记录
 
-### V3.3.16 (2026-07-02) — GPS 定位授权逻辑修复
+### V3.3.16 (2026-07-06) — 路径规划搜索集成 + 注记图层 HD 兼容 + 错误处理优化
+
+- 🆕 **驾车/公交规划集成天地图搜索**：`MapPointPickerCard.vue` 新增起点/终点关键词搜索输入框 + 下拉结果列表，AbortController 防竞态保护，支持键盘导航和鼠标选择
+- 🆕 **注记图层 HD 兼容**：新增 `withSkipHighResTile` 辅助函数，4 个 `category='label'` 图层跳过 `zDirection` 高清瓦片优化
+- 🆕 **TokenMissingError 语义化错误**：驾车规划 `TokenMissingError` 自定义错误类，Token 缺失时显示明确配置提示
+- 🔧 **错误判断修复**：移除 `e instanceof TypeError`，改用 `/failed\s+to\s+fetch/i` 精准识别网络错误
+- 🔧 **调试/渲染顺序调整**：驾车规划先更新调试信息再执行地图渲染
+- 🔧 **公交规划 Token 前置校验**：构建请求 URL 前检查 Token 是否为空
+- 🐛 **Edit 工具重复内容修复**：清理 `MapPointPickerCard.vue` 重复 import/props/emits/代码块
+
+详见 [`Docs/26-07/26-07-06/2026-07-06-路径规划搜索集成与bug修复.md`](../Docs/26-07/26-07-06/2026-07-06-路径规划搜索集成与bug修复.md)
+
+### V3.3.15 (2026-07-02) — GPS 定位授权逻辑修复
 
 - 🐛 **修复定位授权逻辑**：仅当用户明确授权 GPS 定位（`source === 'gps'`）时，才在 URL 中设置 `loc=1` 并将坐标编码写入 `p` 参数
 - 🐛 **IP 定位不再写入 `loc=1` 和 `p` 参数**：IP 定位仅保留全局定位上下文供内部使用
@@ -505,7 +521,7 @@ frontend/src/
 
 详见 [`Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md`](../Docs/26-07/26-07-02/2026-07-02-gps-location-auth-fix.md)
 
-### V3.3.15 (2026-06-29) — GPU 风场粒子可视化集成（cesium-wind-layer）
+### V3.3.14 (2026-06-29) — GPU 风场粒子可视化集成（cesium-wind-layer）
 
 - 🆕 **GPU 风场粒子可视化**：集成 `cesium-wind-layer`，WebGL 2 ComputeCommand + GLSL 300 es 着色器驱动的高性能风场粒子动画
 - 🆕 **wind-core 模块**：10 个核心 TS 源文件，含 GPU 计算管线（3 ComputeCommand）+ 渲染管线（DrawCommand）+ Runge-Kutta 二阶积分
@@ -760,6 +776,6 @@ MIT
 
 ---
 
-最后更新：2026-07-04
+最后更新：2026-07-06
 当前版本：V3.3
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
