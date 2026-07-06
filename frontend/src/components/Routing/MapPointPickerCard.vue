@@ -58,7 +58,6 @@
                                 class="search-item-name"
                                 :title="item.display_name"
                             >{{ item.display_name }}</span>
-                            <span class="search-item-coord">{{ item.lon?.toFixed(4) }}, {{ item.lat?.toFixed(4) }}</span>
                         </li>
                         <li
                             v-if="!startResults.length && startKeyword.trim()"
@@ -124,7 +123,6 @@
                                 class="search-item-name"
                                 :title="item.display_name"
                             >{{ item.display_name }}</span>
-                            <span class="search-item-coord">{{ item.lon?.toFixed(4) }}, {{ item.lat?.toFixed(4) }}</span>
                         </li>
                         <li
                             v-if="!endResults.length && endKeyword.trim()"
@@ -558,110 +556,6 @@ function onEndKeyEnter() {
     white-space: nowrap;
     flex: 1;
     min-width: 0;
-}
-
-.search-item-coord {
-    color: #6b7280;
-    font-size: 11px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.search-item-empty {
-    color: #9ca3af;
-    justify-content: center;
-}
-
-.search-wrap {
-    position: relative;
-    margin-top: 6px;
-}
-
-.search-input {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid var(--pp-soft-border);
-    border-radius: 7px;
-    padding: 6px 8px;
-    font-size: 12px;
-    background: #fff;
-    color: #1f2937;
-    outline: none;
-    transition: border-color 0.2s;
-}
-
-.search-input:focus {
-    border-color: var(--pp-accent);
-}
-
-.search-input::placeholder {
-    color: #9ca3af;
-}
-
-.search-spinner {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--pp-soft-border);
-    border-top-color: var(--pp-accent);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-    to { transform: translateY(-50%) rotate(360deg); }
-}
-
-.search-dropdown {
-    position: absolute;
-    top: calc(100% + 2px);
-    left: 0;
-    right: 0;
-    z-index: 100;
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid var(--pp-soft-border);
-    border-radius: 7px;
-    background: #fff;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-    list-style: none;
-    margin: 0;
-    padding: 4px 0;
-}
-
-.search-item {
-    padding: 7px 10px;
-    font-size: 12px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    gap: 6px;
-    transition: background 0.15s;
-}
-
-.search-item:hover,
-.search-item.highlighted {
-    background: var(--pp-soft-bg);
-}
-
-.search-item-name {
-    color: #1f2937;
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
-    min-width: 0;
-}
-
-.search-item-coord {
-    color: #6b7280;
-    font-size: 11px;
-    white-space: nowrap;
-    flex-shrink: 0;
 }
 
 .search-item-empty {
