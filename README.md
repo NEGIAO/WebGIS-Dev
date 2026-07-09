@@ -30,7 +30,7 @@
 ## 📖 项目简介
 <img width="1248" height="723" alt="界面预览" src="https://github.com/user-attachments/assets/90255184-7623-46f5-97f3-115e07f4f917" />
 
-## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
+## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
 **NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.16 阶段，驾车/公交规划集成天地图搜索、注记图层 HD 兼容修复、错误处理优化，正逐步发展成为专业级的地理信息系统应用
