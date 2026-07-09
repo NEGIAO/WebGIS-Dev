@@ -3,7 +3,6 @@ Agent Chat 纯工具函数（无数据库、无 HTTP 访问）。
 """
 
 import json
-import random
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -78,8 +77,12 @@ def _pick_runtime_model(
     user_override_model: str,
     preference_model: str,
     provider_model: str,
-    available_models: List[str],
 ) -> Tuple[str, str, bool]:
+    """选取运行时模型，优先级：用户覆盖 > 用户偏好 > 管理员配置 > 环境默认值。
+
+    不参与随机选取 —— 随机选取模型功能已废除。
+    available_models 仅用于前端展示，不参与运行时模型选取。
+    """
     user_override = _normalize_model(user_override_model)
     if user_override:
         return user_override, "user-config", True
@@ -87,10 +90,6 @@ def _pick_runtime_model(
     preferred = _normalize_model(preference_model)
     if preferred:
         return preferred, "user-preference", True
-
-    pool = _normalize_available_models(available_models)
-    if pool:
-        return random.choice(pool), "provider-random", False
 
     provider_default = _normalize_model(provider_model)
     if provider_default:

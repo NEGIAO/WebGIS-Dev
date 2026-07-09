@@ -25,7 +25,6 @@ GUEST_USERNAME = "user"
 GUEST_PASSWORD = "123"
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD_ENV_NAME = "SUPER_USER"
-DEFAULT_ADMIN_PASSWORD_LOCAL = "123456"
 MAX_AVATAR_INDEX = 11
 
 # ─── 偏好默认值 ───
@@ -320,9 +319,36 @@ def _is_guest_allow_request(request: Request) -> bool:
     return normalized == "1"
 
 
+# ─── 管理员密码常量 ───
+DEV_DEFAULT_ADMIN_PASSWORD = "123456"  # 仅在 APP_ENV=development 且未设置 SUPER_USER 时生效
+
+
 def _get_admin_password() -> str:
+    """获取管理员密码。
+
+    优先级：
+    1. SUPER_USER 环境变量 → 直接使用
+    2. APP_ENV=development → fallback 到 DEV_DEFAULT_ADMIN_PASSWORD（仅本地开发）
+    3. 其他情况 → 返回空字符串，管理员登录被禁用
+    """
     configured = str(os.getenv(ADMIN_PASSWORD_ENV_NAME, "")).strip()
-    return configured or DEFAULT_ADMIN_PASSWORD_LOCAL
+    if configured:
+        return configured
+
+    app_env = str(os.getenv("APP_ENV", "")).strip().lower()
+    if app_env == "development":
+        logger.warning(
+            "SUPER_USER 未配置，当前 APP_ENV=development，使用开发默认密码。"
+            "请勿在生产环境使用此配置。"
+        )
+        return DEV_DEFAULT_ADMIN_PASSWORD
+
+    logger.error(
+        "SUPER_USER 环境变量未配置，管理员登录已禁用。"
+        "请在 docker-compose.yml 或 .env 中设置 SUPER_USER。"
+        "本地开发可设置 APP_ENV=development 启用默认密码。"
+    )
+    return ""
 
 
 # ─── 邮箱验证码常量 ───

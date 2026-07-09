@@ -725,7 +725,6 @@ def _resolve_effective_agent_runtime_sync(username: str) -> Dict[str, Any]:
         user_override_model=str(user_cfg.get("model") or ""),
         preference_model=preferred_model,
         provider_model=str(provider.get("model") or ""),
-        available_models=available_models,
     )
 
     effective = {

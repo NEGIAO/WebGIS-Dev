@@ -534,13 +534,34 @@ export function useCesiumDataImport({ getViewer, getCesium, message }) {
         const viewer = getViewer();
         if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
 
-        const blobUrl = createBlobUrl(file);
+        // 优先利用 file.path（Chrome/Electron 支持）构造可直接解析相对路径的 URL
+        // 3D Tiles tileset.json 内部的 content.url 是相对于 tileset.json 的路径，
+        // 用 blob URL 会导致 Cesium 无法解析这些相对引用（详见函数底部注释）。
+        const filePath = file.path || '';
+        const hasLocalPath = /^[a-zA-Z]:\\/.test(filePath) || filePath.startsWith('/');
+        let tilesetUrl = '';
+
+        if (hasLocalPath) {
+            // 构造 file:// URL，保留相对路径解析能力
+            // 注意：file:// 在标准浏览器中受 CORS 限制，
+            // 仅在 Electron（webSecurity:false）或
+            // Chrome --allow-file-access-from-files 下可用
+            const normalizedPath = filePath.replace(/\\/g, '/');
+            tilesetUrl = normalizedPath.startsWith('/')
+                ? `file://${normalizedPath}`
+                : `file:///${normalizedPath}`;
+        } else {
+            // 无本地路径 → 回退 blob URL（tile 内容文件无法加载）
+            tilesetUrl = createBlobUrl(file);
+        }
+
         try {
-            const tileset = await Cesium.Cesium3DTileset.fromUrl(blobUrl);
+            const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
 
             const id = `tileset_${++idCounter}`;
             viewer.scene.primitives.add(tileset);
 
+            const blobUrl = tilesetUrl.startsWith('file:') ? undefined : tilesetUrl;
             const record = { id, name: file.name, type: '3dtiles', entity: tileset, blobUrl };
             loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -549,7 +570,274 @@ export function useCesiumDataImport({ getViewer, getCesium, message }) {
             message.success(`3D Tiles "${file.name}" 加载成功`);
             return record;
         } catch (error) {
-            revokeBlobUrl(blobUrl);
+            if (tilesetUrl.startsWith('blob:')) revokeBlobUrl(tilesetUrl);
+            throw error;
+        }
+    }
+
+    // ============================================================
+    // 3D Tiles 从 ZIP / 目录导入
+    // ============================================================
+
+    /**
+     * 在 tileset 目录上下文中解析相对路径
+     * 将 tileset 根目录下的相对引用（如 tiles/0.b3dm）规范化为统一键值，
+     * 用于在 blobUrlMap 中查找对应文件的 blob URL。
+     */
+    function resolveTilesetPath(baseDir, relativeUrl) {
+        const path = String(relativeUrl || '').replace(/\\/g, '/');
+        // 已是绝对 URL → 不处理
+        if (/^(blob|file|https?):/i.test(path)) return path;
+        // 绝对路径（以 / 开头）→ 从 ZIP/目录根匹配，等同于 HTTP origin root
+        if (path.startsWith('/')) return path.slice(1);
+        // 相对于 baseDir 解析
+        const combined = baseDir + path;
+        const parts = combined.split('/');
+        const result = [];
+        for (const part of parts) {
+            if (part === '.' || part === '') continue;
+            if (part === '..') { result.pop(); continue; }
+            result.push(part);
+        }
+        return result.join('/');
+    }
+
+    /**
+     * 递归遍历 tileset JSON 树节点，将所有 content.url / content.uri
+     * 以及 extensions 中可能含有的 url 替换为 blob URL。
+     */
+    function rewriteTilesetContentUrls(node, baseDir, blobUrlMap) {
+        if (!node || typeof node !== 'object') return;
+
+        /**
+         * 将 content 中的相对 url/uri 改写为 blob URL（内部辅助）
+         * @param {Object} contentItem - content 节点
+         */
+        function rewriteItem(contentItem) {
+            if (!contentItem || typeof contentItem !== 'object') return;
+            for (const key of ['url', 'uri']) {
+                const val = contentItem[key];
+                if (typeof val !== 'string') continue;
+                if (/^(blob|file|https?|data):/i.test(val)) continue;
+                const resolved = resolveTilesetPath(baseDir, val);
+                if (blobUrlMap[resolved]) {
+                    contentItem[key] = blobUrlMap[resolved];
+                } else {
+                    console.warn(
+                        '[3DTiles][rewrite] 未解析到对应的文件:',
+                        val,
+                        '→ 已解析为:', resolved,
+                        '(可用路径:', Object.keys(blobUrlMap).slice(0, 8), '...)',
+                    );
+                }
+            }
+        }
+
+        const content = node.content;
+        if (content) {
+            if (Array.isArray(content)) {
+                // 3D Tiles 1.1 / 3DTILES_multiple_contents：content 是数组
+                for (const contentItem of content) {
+                    rewriteItem(contentItem);
+                }
+            } else {
+                // 3D Tiles 1.0：content 是单个对象
+                rewriteItem(content);
+            }
+        }
+
+        // 递归 children
+        if (Array.isArray(node.children)) {
+            for (const child of node.children) {
+                rewriteTilesetContentUrls(child, baseDir, blobUrlMap);
+            }
+        }
+
+        // extensions 中也可能含有 url（如 3DTILES_metadata / 外部参考）
+        if (node.extensions && typeof node.extensions === 'object') {
+            for (const extVal of Object.values(node.extensions)) {
+                if (extVal && typeof extVal === 'object') {
+                    rewriteItem(extVal);
+                }
+            }
+        }
+    }
+
+    /**
+     * 从 文件路径→blob 映射中加载 3D Tiles
+     *
+     * 核心思路：
+     * 1. 将映射中所有文件创建为 blob URL
+     * 2. 找到所有 tileset.json（或类 tileset 的 JSON），将其内部的
+     *    content.url 从相对路径改写为对应文件的 blob URL
+     * 3. 将改写后的 JSON 重新序列化为 blob URL
+     * 4. 传给 Cesium.Cesium3DTileset.fromUrl() 加载
+     *
+     * 这样 Cesium 在加载 tile 内容文件时，fetch 的是完整的 blob URL，
+     * 不涉及文件系统路径解析，本地开发和线上部署均可正常工作。
+     *
+     * @param {Object<string, Blob>} fileMap - { 相对路径: Blob }
+     * @param {string} sourceName - 显示名称
+     * @returns {Promise<Object>} record
+     */
+    async function loadTilesetFromFileMap(fileMap, sourceName) {
+        const Cesium = getCesium();
+        const viewer = getViewer();
+        if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+
+        // Step 1: 将所有文件创建为 blob URL
+        const blobUrlMap = {};
+        const allBlobUrls = [];
+        for (const [relPath, blob] of Object.entries(fileMap)) {
+            const normalized = relPath.replace(/\\/g, '/');
+            const url = URL.createObjectURL(blob);
+            blobUrlMap[normalized] = url;
+            allBlobUrls.push(url);
+        }
+
+        const allPaths = Object.keys(blobUrlMap);
+        console.warn('[3DTiles][import] 文件总数:', allPaths.length, '路径示例:', allPaths.slice(0, 5));
+
+        // Step 2: 找出所有 tileset.json 或类 tileset 的 JSON 文件
+        const tilesetPaths = allPaths.filter((p) => {
+            if (p.endsWith('tileset.json')) return true;
+            // 也可能是任意命名的 tileset JSON（如 buildings_subtileset.json）
+            if (!p.endsWith('.json')) return false;
+            // 通过检查根 root 字段快速判断 — 后面实际处理时二次验证
+            const blob = fileMap[p];
+            if (!blob) return false;
+            return true; // 所有 JSON 文件都尝试处理
+        });
+
+        console.warn('[3DTiles][import] 找到候选 tileset:', tilesetPaths);
+
+        // Step 3: 逐个处理 tileset JSON，改写 content URL
+        for (const tsPath of tilesetPaths) {
+            // 获取原始 blob 内容
+            const rawKey = Object.keys(fileMap).find(
+                (k) => k.replace(/\\/g, '/') === tsPath,
+            ) || tsPath;
+            const blob = fileMap[rawKey];
+            let text;
+            try {
+                text = await blob.text();
+            } catch {
+                continue;
+            }
+
+            let json;
+            try {
+                json = JSON.parse(text);
+            } catch {
+                continue;
+            }
+
+            // 二次验证：必须有 root 字段才视为 tileset
+            if (!json.root) continue;
+
+            const tsDir = tsPath.substring(0, tsPath.lastIndexOf('/') + 1);
+            rewriteTilesetContentUrls(json.root, tsDir, blobUrlMap);
+
+            // 创建改写后的 tileset JSON blob URL
+            const newBlob = new Blob([JSON.stringify(json)], { type: 'application/json' });
+            const newUrl = URL.createObjectURL(newBlob);
+            blobUrlMap[tsPath] = newUrl;
+            allBlobUrls.push(newUrl);
+            console.warn('[3DTiles][import] 已处理:', tsPath, '→ blob URL 已更新');
+        }
+
+        // Step 4: 找根 tileset.json（优先选择顶层目录的）
+        const rootTsPath =
+            tilesetPaths.find((p) => p === 'tileset.json' || p.endsWith('/tileset.json'))
+            || tilesetPaths[0];
+
+        if (!rootTsPath) throw new Error('未找到 tileset.json，请确认 ZIP 或目录包含有效的 3D Tiles 数据集');
+
+        const tilesetUrl = blobUrlMap[rootTsPath];
+        console.warn('[3DTiles][import] 根 tileset 路径:', rootTsPath, '→ 最终 URL:', tilesetUrl);
+
+        // Step 5: 加载 tileset
+        const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
+        console.warn('[3DTiles][import] Cesium3DTileset.fromUrl 完成，boundingSphere:', tileset.boundingSphere);
+
+        const id = `tileset_${++idCounter}`;
+        viewer.scene.primitives.add(tileset);
+
+        const record = {
+            id,
+            name: sourceName,
+            type: '3dtiles',
+            entity: tileset,
+            blobUrls: allBlobUrls,
+        };
+        loadedDataSources.value = [...loadedDataSources.value, record];
+
+        flyToEntity(viewer, Cesium, tileset, '3dtiles');
+        message.success(`3D Tiles "${sourceName}" 加载成功 (${allPaths.length} 个文件)`);
+        return record;
+    }
+
+    /**
+     * 从 ZIP 文件中加载 3D Tiles
+     * 使用 JSZip 解压后交给 loadTilesetFromFileMap 处理。
+     *
+     * @param {File} zipFile - .zip 文件
+     * @returns {Promise<Object>}
+     */
+    async function loadTilesetFromZip(zipFile) {
+        const { default: JSZip } = await import('jszip');
+        const zip = await JSZip.loadAsync(zipFile);
+
+        const fileMap = {};
+        const entries = [];
+        zip.forEach((relPath, entry) => {
+            if (!entry.dir) entries.push(relPath);
+        });
+
+        for (const relPath of entries) {
+            const blob = await zip.file(relPath).async('blob');
+            fileMap[relPath] = blob;
+        }
+
+        return await loadTilesetFromFileMap(fileMap, zipFile.name || '3D Tiles');
+    }
+
+    /**
+     * 递归读取目录句柄下的所有文件，构建相对路径→File 映射
+     */
+    async function readDirRecursive(dirHandle, currentPath, fileMap) {
+        for await (const [name, handle] of dirHandle.entries()) {
+            const relPath = currentPath ? `${currentPath}/${name}` : name;
+            if (handle.kind === 'file') {
+                const file = await handle.getFile();
+                fileMap[relPath] = file;
+            } else if (handle.kind === 'directory') {
+                await readDirRecursive(handle, relPath, fileMap);
+            }
+        }
+    }
+
+    /**
+     * 打开系统目录选择器，选取 3D Tiles 文件夹后加载
+     *
+     * 使用 File System Access API（showDirectoryPicker），
+     * 仅在安全上下文（HTTPS / localhost）下可用。
+     *
+     * @returns {Promise<Object|null>}
+     */
+    async function importTilesetFromDirectory() {
+        try {
+            // 浏览器文件系统访问 API
+            const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+            const fileMap = {};
+            await readDirRecursive(dirHandle, '', fileMap);
+            return await loadTilesetFromFileMap(fileMap, dirHandle.name);
+        } catch (error) {
+            if (error.name === 'AbortError' || error.name === 'SecurityError') {
+                // 用户取消或无权限
+                return null;
+            }
+            message.error(`导入 3D Tiles 目录失败: ${error.message || error}`);
             throw error;
         }
     }
@@ -759,6 +1047,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message }) {
                     return await loadGLTF(file);
                 case 'czml':
                     return await loadCZML(file);
+                case 'zip':
+                    return await loadTilesetFromZip(file);
                 default:
                     message.error(`不支持的文件格式: .${ext}。支持的格式: GeoJSON, KML/KMZ, SHP, GLB/GLTF, CZML, 3D Tiles`);
                     throw new Error(`不支持的格式: .${ext}`);
@@ -795,6 +1085,11 @@ export function useCesiumDataImport({ getViewer, getCesium, message }) {
         if (record.blobUrl) {
             revokeBlobUrl(record.blobUrl);
         }
+        if (record.blobUrls && Array.isArray(record.blobUrls)) {
+            for (const url of record.blobUrls) {
+                revokeBlobUrl(url);
+            }
+        }
 
         loadedDataSources.value = loadedDataSources.value.filter((ds) => ds.id !== id);
         message.info(`已移除 "${record.name}"`);
@@ -826,6 +1121,11 @@ export function useCesiumDataImport({ getViewer, getCesium, message }) {
 
             if (record.blobUrl) {
                 revokeBlobUrl(record.blobUrl);
+            }
+            if (record.blobUrls && Array.isArray(record.blobUrls)) {
+                for (const url of record.blobUrls) {
+                    revokeBlobUrl(url);
+                }
             }
         }
 
@@ -876,6 +1176,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message }) {
 
     return {
         loadDataFile,
+        importTilesetFromDirectory,
         loadedDataSources,
         removeDataSource,
         clearAllDataSources,

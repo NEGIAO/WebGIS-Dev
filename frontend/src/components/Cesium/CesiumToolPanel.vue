@@ -504,6 +504,28 @@
                         </div>
                     </label>
 
+                    <!-- 3D Tiles 专用导入按钮 -->
+                    <div class="tileset-actions">
+                        <button
+                            class="tool-action primary"
+                            type="button"
+                            title="从 ZIP 压缩包导入 3D Tiles 数据集"
+                            @click="emit('import-tileset-zip')"
+                        >
+                            <FileArchive :size="14" stroke-width="2" />
+                            ZIP导入
+                        </button>
+                        <button
+                            class="tool-action primary"
+                            type="button"
+                            title="从文件夹导入 3D Tiles 数据集（需浏览器支持）"
+                            @click="emit('import-tileset-folder')"
+                        >
+                            <FolderOpen :size="14" stroke-width="2" />
+                            文件夹导入
+                        </button>
+                    </div>
+
                     <!-- 已加载数据源列表 -->
                     <div
                         v-if="localDataSources.length"
@@ -571,7 +593,9 @@ import {
     ChevronDown,
     Droplets,
     Eye,
+    FileArchive,
     FileJson,
+    FolderOpen,
     Globe,
     Home,
     Layers,
@@ -667,6 +691,8 @@ const emit = defineEmits([
     'data-import',
     'data-remove',
     'data-clear-all',
+    'import-tileset-zip',
+    'import-tileset-folder',
 ]);
 
 const UI_STATE_VERSION = 3;
@@ -1622,6 +1648,13 @@ function emitClearAll() {
 .module-item.expanded .module-icon {
     border-color: rgba(74, 222, 128, 0.48);
     box-shadow: 0 0 12px rgba(61, 220, 132, 0.2);
+}
+
+.tileset-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
 }
 
 .tool-action {

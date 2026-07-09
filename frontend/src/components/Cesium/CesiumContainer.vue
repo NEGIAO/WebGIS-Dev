@@ -51,6 +51,8 @@
         @data-import="handleDataImport"
         @data-remove="handleDataRemove"
         @data-clear-all="handleDataClearAll"
+        @import-tileset-zip="handleImportTilesetZip"
+        @import-tileset-folder="handleImportTilesetFolder"
     />
 
     <!-- 人物漫游操作提示面板 -->
@@ -640,6 +642,38 @@ function handleDataRemove({ id }) {
 /** 清除所有已加载数据源 */
 function handleDataClearAll() {
     dataImport.clearAllDataSources();
+}
+
+/**
+ * 打开文件选择器选择 3D Tiles ZIP 包
+ * 选中后通过 loadDataFile 自动路由到 loadTilesetFromZip
+ */
+function handleImportTilesetZip() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = async (e) => {
+        const file = e.target?.files?.[0];
+        if (!file) return;
+        try {
+            await dataImport.loadDataFile(file);
+        } catch {
+            // 内部已提示
+        }
+    };
+    input.click();
+}
+
+/**
+ * 打开系统目录选择器，选取 3D Tiles 文件夹
+ * 使用 File System Access API（showDirectoryPicker）
+ */
+async function handleImportTilesetFolder() {
+    try {
+        await dataImport.importTilesetFromDirectory();
+    } catch {
+        // 内部已提示
+    }
 }
 
 /**
