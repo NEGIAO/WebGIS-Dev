@@ -43,7 +43,22 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 ---
 
-## 0. 项目结构（2026-07-06 更新）
+## 0. 项目结构（2026-07-09 更新）
+
+### V3.3.17 (2026-07-09) — 后端模型选取去随机化 + 管理员密码安全加固
+
+> 本次为后端 Agent Chat 模型选取逻辑修复 + 管理员密码安全加固，前端同步新增 3D Tiles ZIP/文件夹导入功能。
+
+**后端新增/变更：**
+- 🔒 **管理员密码安全加固**：`api/auth/constants.py` 移除硬编码 `DEFAULT_ADMIN_PASSWORD_LOCAL="123456"`，`_get_admin_password()` 仅在 `APP_ENV=development` 时使用开发默认密码，生产环境 SUPER_USER 未设置则返回空字符串（HTTP 503 禁用登录）
+- 🐛 **模型选取去除随机化**：`api/agent_chat/utils.py` 移除 `import random` 和 `_pick_runtime_model` 中的 `random.choice(pool)` 逻辑；`api/agent_chat/db.py` 调用处移除 `available_models` 实参；新的选取优先级：用户覆盖 > 用户偏好 > 管理员 `system_config.agent_model` > 环境默认值
+- 🗑️ **清理**：`model_source="provider-random"` 不再出现
+
+**前端同步记录：**
+- `CesiumToolPanel.vue` 新增 ZIP导入/文件夹导入 按钮，`useCesiumDataImport.js` 实现 ZIP 解压→blob URL 映射→tileset.json content URL 重写→Cesium3DTileset 加载
+- `ChatPanelContent.vue` 通过 `apiAgentGetChatConfig()` 自动读取管理员配置的模型（后端修复后自动生效）
+
+详见维护日志 `../Docs/26-07/26-07-09/2026-07-09-后端代理模式模型随机选取修复.md`。
 
 ### V3.3.16 (2026-07-06) — 路径规划搜索集成 + 注记图层 HD 兼容 + 错误处理优化
 

@@ -500,6 +500,12 @@ frontend/src/
 
 ## 📜 版本记录
 
+### V3.3.17 (2026-07-09) — 3D Tiles ZIP/文件夹导入 + 后端模型选取去随机化
+
+- 🆕 **3D Tiles ZIP/文件夹导入**：`CesiumToolPanel.vue` 新增 ZIP导入/文件夹导入 按钮，`useCesiumDataImport.js` 实现 ZIP 解压（JSZip）→ blob URL 映射 → tileset.json content URL 重写 → Cesium3DTileset.fromUrl() 加载，兼容 3D Tiles 1.0/1.1 content 格式
+- 🆕 **3D Tiles 本地文件 file:// URL 优先**：`loadTileset` 优先使用 `file.path` 构造 file:// URL 保留相对路径解析能力（Electron），无路径时回退到 blob URL
+- 🐛 **后端模型选取去除随机化**：后端 `_pick_runtime_model` 移除随机选取逻辑，前端 `ChatPanelContent.vue` 通过 `apiAgentGetChatConfig()` 自动读取管理员配置的模型，`loadAvailableModels` 不再覆盖管理员选择
+
 ### V3.3.16 (2026-07-06) — 路径规划搜索集成 + 注记图层 HD 兼容 + 错误处理优化
 
 - 🆕 **驾车/公交规划集成天地图搜索**：`MapPointPickerCard.vue` 新增起点/终点关键词搜索输入框 + 下拉结果列表，AbortController 防竞态保护，支持键盘导航和鼠标选择
@@ -776,6 +782,6 @@ MIT
 
 ---
 
-最后更新：2026-07-06
+最后更新：2026-07-09
 当前版本：V3.3
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
