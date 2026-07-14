@@ -1,6 +1,6 @@
 # NEGIAO's WebGIS
 
-> 专业级前后端分离 WebGIS 平台 · Vue 3 + OpenLayers + Cesium +  FastAPI
+> 专业级前后端分离 WebGIS 平台 · Vue 3 + OpenLayers + Cesium + FastAPI
 
 [![Vue](https://img.shields.io/badge/Vue-3.5+-4FC08D?logo=vuedotjs)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
