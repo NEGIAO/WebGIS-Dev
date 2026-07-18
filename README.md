@@ -1,4 +1,4 @@
-# NEGIAO's WebGIS 
+# NEGIAO's WebGIS
 
 > 专业级前后端分离 WebGIS 平台 · Vue 3 + OpenLayers + Cesium + FastAPI
 
