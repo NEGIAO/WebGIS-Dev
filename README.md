@@ -284,6 +284,7 @@ WebGIS_Dev/
 │   ├── 26-07/                        # 2026-07 日志
 │   │   ├── 26-07-01/ ~ 26-07-06/     # 7 月上旬日志
 │   │   ├── 26-07-09/                 # 后端模型选取去随机化 + 管理员密码加固 + 3D Tiles 导入
+│   │   ├── 26-07-19/                 # 分享链接隐私过滤修复
 │   ├── 06-28/                        # useAgentConfig 编辑模式修复 + Chat 面板修复
 │   ├── 06-29/                        # 下载底图跳转 + 标注链路 + TOC 缓存 + TIF 渲染优化
 │   ├── Architecture/                  # 架构设计文档
@@ -300,13 +301,14 @@ WebGIS_Dev/
 
 ## 📜 版本演进
 
-### V3.3.17 (2026-07-09) — 3D Tiles ZIP/文件夹导入 + 管理员密码安全加固 + 后端模型选取去随机化
+### V3.3.17 (2026-07-19) — 分享链接隐私过滤 + 3D Tiles ZIP/文件夹导入 + 管理员密码安全加固 + 后端模型选取去随机化
 
 - 🆕 **3D Tiles ZIP/文件夹导入**：`CesiumToolPanel.vue` 新增 ZIP导入/文件夹导入 按钮，`useCesiumDataImport.js` 实现 ZIP 解压（JSZip）→ blob URL 映射 → tileset.json content URL 重写→ Cesium3DTileset 加载，兼容 3D Tiles 1.0/1.1 content 格式
 - 🆕 **3D Tiles 本地文件 file:// URL 优先**：`loadTileset` 优先使用 `file.path` 构造 file:// URL 保留相对路径解析能力（Electron），无路径时回退到 blob URL
 - 🔒 **管理员密码安全加固**：移除硬编码 `DEFAULT_ADMIN_PASSWORD_LOCAL="123456"`，`_get_admin_password()` 仅在 `APP_ENV=development` 时使用开发默认密码，生产环境 SUPER_USER 未设置则禁用管理员登录（HTTP 503）
 - 🐛 **后端模型选取去除随机化**：`_pick_runtime_model` 移除 `random.choice(pool)` 逻辑，管理员在数据库 `system_config.agent_model` 中配置的模型不再被随机选取覆盖，新的优先级为：用户覆盖 > 用户偏好 > 管理员配置 > 环境默认值
 - 🗑️ **清理废弃代码**：移除 `import random`（已无其他用途），`model_source="provider-random"` 字符串不再出现
+- 🔒 **分享链接隐私过滤**：点击「分享」生成的链接不再包含 `ut`（用户身份）、`loc`（定位授权来源）、`p`（GPS 编码位置）三个用户私有参数；`cs`（罗盘）仅在启用时保留；`cv`（Cesium 相机姿态）等视图还原参数全部保留
 
 详见 [`Docs/26-07/26-07-09/2026-07-09-后端代理模式模型随机选取修复.md`](Docs/26-07/26-07-09/2026-07-09-后端代理模式模型随机选取修复.md)
 
@@ -813,6 +815,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-07-09
+**最后更新**：2026-07-19
 **当前版本**：V3.3.17
 **项目状态**：开发中 - 持续迭代优化

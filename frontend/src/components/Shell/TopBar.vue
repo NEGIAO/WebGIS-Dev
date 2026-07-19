@@ -313,7 +313,6 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '../../constants';
-import { normalizeLocationFlag } from '../../utils/normalize';
 // import { hideLoading, showLoading } from '@/utils';
 import {
     List as ListIcon,
@@ -341,7 +340,6 @@ import {
 } from 'lucide-vue-next';
 import { Globe as GlobeIcon } from 'lucide-vue-next';
 import { useAppStore } from '../../stores/useAppStore';
-import { useCompassStore } from '../../stores/useCompassStore';
 import { storeToRefs } from 'pinia';
 
 const props = defineProps({
@@ -374,9 +372,6 @@ const magicMenuHostRef = ref(null);
 // 日志监控状态
 const appStore = useAppStore();
 const { logMonitorVisible } = storeToRefs(appStore);
-
-// 罗盘状态：用于分享链接时判断是否保留 cs 参数
-const compassStore = useCompassStore();
 
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
@@ -545,40 +540,14 @@ function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_LAYER_INDEX) {
     return String(DEFAULT_BASEMAP_LAYER_INDEX);
 }
 
-function normalizePositionCode(value, fallback = '0') {
-    const text = String(value ?? '').trim();
-    if (text) return text;
-    return String(fallback ?? '0');
-}
-
 /**
- * 解析分享链接中的定位编码
- * 只在 URL 有 loc=1 标记（用户已授权定位）时才保留非零 p 值
+ * 分享链接黑名单：这 3 个参数为用户私有信息，分享时一律清空。
+ * ut  = 用户身份（guest/admin/registered）
+ * loc = 定位授权来源（gps/ip）
+ * p   = 编码后的 GPS 精准位置
+ * 其余参数（lng、lat、z、l、view、cv、cs 等）全部保留，用于还原分享者的视图与位置状态。
  */
-function resolvePositionCodeForShare(hashParams, searchParams) {
-    const locSource = normalizeLocationFlag(hashParams.get('loc') || searchParams.get('loc') || '0', '0');
-    if (locSource !== 'gps' && locSource !== 'ip') return '0';
-
-    const hashCode = normalizePositionCode(hashParams?.get('p'), '');
-    if (hashCode && hashCode !== '0') return hashCode;
-
-    const searchCode = normalizePositionCode(searchParams?.get('p'), '');
-    if (searchCode && searchCode !== '0') return searchCode;
-
-    return '0';
-}
-
-function extractPositionCodeFromText(rawHref) {
-    const text = String(rawHref || '');
-    const match = text.match(/[?#&]p=([^&#]*)/i);
-    if (!match) return '0';
-
-    try {
-        return normalizePositionCode(decodeURIComponent(match[1] || ''), '0');
-    } catch {
-        return normalizePositionCode(match[1] || '', '0');
-    }
-}
+const SHARE_EXCLUDED_PARAMS = ['ut', 'loc', 'p'];
 
 function syncShareFlagInCurrentUrl() {
     if (typeof window === 'undefined') return;
@@ -589,16 +558,12 @@ function syncShareFlagInCurrentUrl() {
         const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
         const hashPath = hashPathRaw || '/home';
         const hashParams = new URLSearchParams(hashQueryRaw);
-        const searchParams = new URLSearchParams(
-            String(window.location.search || '').replace(/^\?/, ''),
-        );
 
-        hashParams.delete('from');
-        hashParams.delete('shared');
-        hashParams.set('s', '1');
-        const locSource = normalizeLocationFlag(hashParams.get('loc') || searchParams.get('loc') || '0', '0');
-        hashParams.set('loc', locSource);
-        hashParams.set('p', resolvePositionCodeForShare(hashParams, searchParams));
+        // 删除用户私有参数
+        for (const key of SHARE_EXCLUDED_PARAMS) {
+            hashParams.delete(key);
+        }
+        // layer 是 l 的历史别名，统一归一化为 l
         hashParams.set(
             'l',
             normalizeLayerIndex(
@@ -607,11 +572,8 @@ function syncShareFlagInCurrentUrl() {
             ),
         );
         hashParams.delete('layer');
-
-        // 只在罗盘启用时保留 cs 参数
-        if (!compassStore.enabled) {
-            hashParams.delete('cs');
-        }
+        // 分享入口标记
+        hashParams.set('s', '1');
 
         const nextHashQuery = hashParams.toString();
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
@@ -626,6 +588,9 @@ function syncShareFlagInCurrentUrl() {
     }
 }
 
+/**
+ * 构建分享链接：清空 ut、loc、p 三个用户私有参数，其余参数全部保留以还原视图状态。
+ */
 function buildShareMarkedUrl(rawHref) {
     try {
         const url = new URL(rawHref, window.location.origin);
@@ -635,16 +600,11 @@ function buildShareMarkedUrl(rawHref) {
         const hashPath = hashPathRaw || '/home';
         const hashParams = new URLSearchParams(hashQueryRaw);
 
-        // 标记该链接来自”分享”入口，供启动流程识别。
-        hashParams.delete('from');
-        hashParams.delete('shared');
-        hashParams.set('s', '1');
-        // [Bug Fix] 先解析 p 再重置 loc：resolvePositionCodeForShare 依赖原始 loc 值判断是否保留 p
-        // 如果先 set('loc','0')，函数永远看到 loc=0 导致 p 被丢弃
-        const resolvedP = resolvePositionCodeForShare(hashParams, url.searchParams);
-        const locSource = normalizeLocationFlag(hashParams.get('loc') || url.searchParams.get('loc') || '0', '0');
-        hashParams.set('loc', locSource);
-        hashParams.set('p', resolvedP);
+        // 删除用户私有参数
+        for (const key of SHARE_EXCLUDED_PARAMS) {
+            hashParams.delete(key);
+        }
+        // layer 是 l 的历史别名，统一归一化为 l
         hashParams.set(
             'l',
             normalizeLayerIndex(
@@ -653,22 +613,19 @@ function buildShareMarkedUrl(rawHref) {
             ),
         );
         hashParams.delete('layer');
-
-        // 只在罗盘启用时保留 cs 参数，未开启则删除
-        if (!compassStore.enabled) {
-            hashParams.delete('cs');
-        }
+        // 分享入口标记
+        hashParams.set('s', '1');
 
         const nextHashQuery = hashParams.toString();
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
         url.hash = nextHashQuery ? `${normalizedHashPath}?${nextHashQuery}` : normalizedHashPath;
         return url.toString();
     } catch {
+        // 降级：无法解析 URL 时，直接在原始链接上追加最小标记
         const text = String(rawHref || '');
-        const pCode = extractPositionCodeFromText(text);
         return text.includes('?')
-            ? `${text}&s=1&loc=0&p=${encodeURIComponent(pCode)}&l=${DEFAULT_BASEMAP_LAYER_INDEX}`
-            : `${text}?s=1&loc=0&p=${encodeURIComponent(pCode)}&l=${DEFAULT_BASEMAP_LAYER_INDEX}`;
+            ? `${text}&s=1&l=${DEFAULT_BASEMAP_LAYER_INDEX}`
+            : `${text}?s=1&l=${DEFAULT_BASEMAP_LAYER_INDEX}`;
     }
 }
 

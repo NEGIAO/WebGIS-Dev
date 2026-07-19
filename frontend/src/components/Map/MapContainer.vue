@@ -243,7 +243,7 @@ const BASE_URL = import.meta.env.BASE_URL || '/';
 const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; // 初始视图位置
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
-const APP_DISPLAY_VERSION = 'V3.3.16'; // 应用显示版本号（与 package.json 独立维护）
+const APP_DISPLAY_VERSION = 'V3.3.17'; // 应用显示版本号（与 package.json 独立维护）
 
 // 图层 z-index 分层方案（值越大越在上层）
 const Z_INDEX = {
