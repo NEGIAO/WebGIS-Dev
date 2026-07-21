@@ -5,7 +5,7 @@
 [![Vue](https://img.shields.io/badge/Vue-3.5+-4FC08D?logo=vuedotjs)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![OpenLayers](https://img.shields.io/badge/OpenLayers-10.5-FFD700?logo=openlayers)](https://openlayers.org/)
-[![Cesium](https://img.shields.io/badge/Cesium-1.122+-64B5F6?logo=cesium)](https://cesium.com/)
+[![Cesium](https://img.shields.io/badge/Cesium-1.132+-64B5F6?logo=cesium)](https://cesium.com/)
 [![Deployment](https://img.shields.io/badge/Frontend-GitHub%20Pages-black?logo=github)](https://pages.github.com/)
 [![Docker](https://img.shields.io/badge/Docker-24.x-2496ED?logo=docker)](https://www.docker.com/)
 [![Deployment](https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface)](https://huggingface.co/)
@@ -33,7 +33,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.18 阶段，新增 Agent 系统提示词平台简介集成（AI 助手可准确回答平台功能特色）、八大功能架构文档（`Docs/Architecture/`，含 2D/3D 双引擎、底图源、数据导入、空间分析、路径规划、三维特效、实用工具、账号体系）、3D Tiles ZIP/文件夹导入、管理员密码安全加固、后端模型选取去随机化
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.19 阶段，新增 Cesium 体积云·大气一体化模块（cesium-clouds-atmosphere 移植，Bruneton 大气 + 体积云 raymarch + BSM 云影/丁达尔 + 可选 LensFlare Bloom）
 
 > 📚 **文档已模块化**：本 README 作为项目门户页，仅保留核心概览与导航。完整的项目结构、开发约定、开发指南、技术栈与常见问题、更新日志等已拆分至 [`Docs/Guide/`](Docs/Guide/)，点击下方「文档导航」一键跳转。
 
@@ -220,6 +220,18 @@ docker build -t webgis-backend .
 
 > 完整版本历史见 [`Docs/Guide/CHANGELOG.md`](Docs/Guide/CHANGELOG.md)，以下仅展示最近三个版本摘要。
 
+### V3.3.19 (2026-07-21) — Cesium 体积云·大气一体化模块（cesium-clouds-atmosphere 移植）
+
+- 🆕 **体积云 + Bruneton 大气集成**：`Cloud/` 模块从空目录恢复实现，源码以 `Cloud/lib/**` 内联（21 文件 / ~173KB JS + ~60KB GLSL bundle）。覆盖体积云 raymarch（多层 + 形状/细节 3D 噪声 + weather 图 + 湍流）、Bruneton 预计算大气（天空 + 太阳圆盘）、空中透视、Beer Shadow Map（云地投影 + 丁达尔光柱）、可选镜头光晕 Bloom、原生 WebGL PBO TAA
+- 🆕 **Vue 桥接**：`Cloud/setupCloudIntegration.js` 懒加载管线（`cloudsEnabled=true` 才加载资源），启用时关闭 Cesium `skyAtmosphere`/`skyBox` 由 Bruneton 接管，关闭 / 卸载时销毁管线并恢复天空快照；`Cloud/cloudParamsApply.js` 桥接工具面板参数到 `pipeline.params` 与 BSM 缩放（同步大气 + Aerial 两侧）
+- 🆕 **静态资源**：`public/cloud-atmosphere/` 拷贝云 3D 纹理 ~3.8MB（复用 `public/textures/cloud/` 同源 + 补 `stbn.bin`）、Bruneton 大气 LUT ~24MB、蓝噪声、shader GLSL；路径通过 `import.meta.env.BASE_URL + 'cloud-atmosphere/'` 解析，兼容 GitHub Pages 子路径部署
+- ⬆️ **Cesium CDN 升级 1.122 → 1.132**：`Cesium.Texture3D` 自 1.130 才引入，1.122 下体积云管线初始化抛 `TypeError: Cesium.Texture3D is not a constructor`；统一升到库官方验证的 1.132 以解锁大气 LUT 与 stbn 的 3D 纹理路径
+- 🔧 **ESM 适配**：库源码使用裸 `Cesium.xxx`，ESM 打包后会未定义。通过 `Cloud/lib/getCesium.js` + 各模块顶部 `const Cesium = getCesium()` 绑定本地常量；移除对 `dat.gui` 的硬依赖（默认 `enableGui=false`，调试面板由工具面板取代）
+- 🔧 **工具面板体积云卡片重写**：移除旧 `cloudCoverage` / `cloudQuality` / Frostbite 字段，改为三层云覆盖 + 层高/层厚、太阳/云曝光、BSM 阴影/丁达尔、LensFlare Bloom/鬼影/Halo 等共 ~28 个控件；状态文本改为「云+BSM/仅体积云/未启用」
+- 📚 **文件结构同步**：`Docs/Guide/frontend-structure.md` 中 `Cloud/` 树从原 TypeScript 描述更新为新 lib 内联架构
+
+详见 [`Docs/LLM_record/26-07/26-07-21/2026-07-21-cesium-clouds-atmosphere-integration.md`](Docs/LLM_record/26-07/26-07-21/2026-07-21-cesium-clouds-atmosphere-integration.md)
+
 ### V3.3.18 (2026-07-21) — Agent 系统提示词平台简介集成 + 八大功能架构文档
 
 - 🆕 **平台简介注入系统提示词**：`agentToolsSchema.js` 的 `buildSystemPromptWithTools()` 在工具说明前新增「平台简介」章节（2D/3D 双引擎、20+ 底图源、多格式数据导入、空间分析、路径规划、三维特效、实用工具、账号体系），用户询问"平台有什么功能/特色"时 AI 助手可准确作答
@@ -275,5 +287,5 @@ MIT License - 可自由使用、修改、分发
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
 **最后更新**：2026-07-21
-**当前版本**：V3.3.18
+**当前版本**：V3.3.19
 **项目状态**：开发中 - 持续迭代优化

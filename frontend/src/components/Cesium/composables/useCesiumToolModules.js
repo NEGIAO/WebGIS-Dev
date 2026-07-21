@@ -1,5 +1,10 @@
 import { computed, ref, watch } from 'vue';
 import { readStoredBoolean, writeStoredBoolean } from './cesiumStorage';
+import {
+    applyCloudQualityPreset,
+    DEFAULT_CLOUD_QUALITY,
+    getCloudQualityOptions,
+} from '../Cloud/cloudQualityPresets.js';
 
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
 
@@ -56,33 +61,16 @@ export function useCesiumToolModules({
         starsIntensity: 1.0,
     });
 
-    // 体积云独立参数（与 atmosphere 同级模块）
-    const cloudParams = ref({
-        cloudsEnabled: false,
-        cloudCoverage: 0.3,
-        cloudSpeed: 0.001,
-        cloudBottom: 1500,
-        cloudTop: 2150,
-        cloudQuality: 'medium',
-        cloudWindDirection: 90,
-        // 散射
-        cloudScattering: 1.0,
-        cloudAbsorption: 0.0,
-        cloudAnisotropy1: 0.7,
-        cloudAnisotropy2: -0.2,
-        cloudAnisotropyMix: 0.5,
-        cloudSkyLight: 1.0,
-        cloudGroundBounce: 1.0,
-        cloudPowder: 0.8,
-        // 密度
-        cloudDensityScale: 1.0,
-        cloudShapeAmount: 1.0,
-        cloudDetailAmount: 0.5,
-        cloudTurbulence: 350,
-        // 雾效
-        cloudHazeDensity: 3e-5,
-        cloudHazeExponent: 1e-3,
-    });
+    // 体积云独立参数（cesium-clouds-atmosphere 管线；默认关闭懒加载；开启时默认「流畅」档）
+    const cloudParams = ref(
+        applyCloudQualityPreset(
+            {
+                cloudsEnabled: false,
+                quality: DEFAULT_CLOUD_QUALITY,
+            },
+            DEFAULT_CLOUD_QUALITY,
+        ),
+    );
 
     const fluidParams = ref({
         threshold: 10,
@@ -164,9 +152,11 @@ export function useCesiumToolModules({
         },
         {
             id: 'cloud',
-            title: '体积云',
-            description: 'PostProcessStage Ray Marching 体积云渲染',
-            status: cloudParams.value.cloudsEnabled ? cloudParams.value.cloudQuality ?? 'medium' : '未启用',
+            title: '体积云·大气',
+            description: 'Bruneton 大气 + 体积云 raymarch + BSM 云影/丁达尔（cesium-clouds-atmosphere）',
+            status: cloudParams.value.cloudsEnabled
+                ? qualityStatusLabel(cloudParams.value.quality)
+                : '未启用',
             statusTone: cloudParams.value.cloudsEnabled ? 'success' : 'neutral',
             controls: createCloudControls(cloudParams.value, !cloudParams.value.cloudsEnabled),
         },
@@ -383,12 +373,30 @@ export function useCesiumToolModules({
             }
         }
 
-        // ========== 体积云独立模块 ==========
-        if (moduleId === 'cloud' && controlId in cloudParams.value) {
-            cloudParams.value = {
-                ...cloudParams.value,
-                [controlId]: controlId === 'cloudQuality' ? value : Number(value),
-            };
+        // ========== 体积云独立模块（布尔开关 / 数值滑杆 / 性能预设） ==========
+        if (moduleId === 'cloud') {
+            // 性能预设：一键覆盖参数组合（保留 cloudsEnabled）
+            if (controlId === 'quality') {
+                cloudParams.value = applyCloudQualityPreset(cloudParams.value, value);
+                return;
+            }
+            if (controlId in cloudParams.value) {
+                const booleanKeys = new Set([
+                    'cloudsEnabled',
+                    'lensFlareEnabled',
+                    'useShadowBuffer',
+                    'shadowLengthEnabled',
+                    'hazeEnabled',
+                    'temporalEnabled',
+                    'atmosphereExposureFollowTimeline',
+                    'atmosphereStageEnabled',
+                    'aerialStageEnabled',
+                ]);
+                cloudParams.value = {
+                    ...cloudParams.value,
+                    [controlId]: booleanKeys.has(controlId) ? Boolean(value) : Number(value),
+                };
+            }
         }
     }
 
@@ -609,13 +617,6 @@ function formatElevation(value) {
 // 大气系统控件
 // ============================================================
 
-const CLOUD_QUALITY_PRESETS = {
-    low: { label: '低' },
-    medium: { label: '中' },
-    high: { label: '高' },
-    ultra: { label: '超高' },
-};
-
 function createAtmosphereControls(params = {}, disabled) {
     return [
         {
@@ -689,244 +690,400 @@ function createAtmosphereControls(params = {}, disabled) {
 }
 
 // ============================================================
-// 体积云独立控件（与大气模块同级）
+// 体积云独立控件（cesium-clouds-atmosphere 参数子集）
 // ============================================================
 
+/**
+ * 构建体积云工具面板控件。
+ * @param {Record<string, unknown>} params
+ * @param {boolean} disabled - 总开关关闭时子项禁用
+ * @returns {Array<object>}
+ */
 function createCloudControls(params = {}, disabled) {
+    const off = disabled || !params.cloudsEnabled;
     return [
         {
             id: 'cloudsEnabled',
-            label: '启用体积云',
+            label: '启用体积云·大气',
             type: 'toggle',
             value: params.cloudsEnabled === true,
-            tooltip: '基于 PostProcessStage 的体积云 Ray Marching 渲染',
+            tooltip: '懒加载 Bruneton 大气 + 体积云 raymarch；默认「流畅」档，首次开启会加载约 29MB 纹理/LUT',
         },
         {
-            id: 'cloudQuality',
-            label: '质量预设',
+            id: 'quality',
+            label: '性能预设',
             type: 'select',
-            value: params.cloudQuality ?? 'medium',
-            options: Object.entries(CLOUD_QUALITY_PRESETS).map(([value, preset]) => ({
-                value,
-                label: preset.label,
-            })),
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.quality ?? DEFAULT_CLOUD_QUALITY,
+            options: getCloudQualityOptions(),
+            disabled: off,
+            tooltip: '流畅=仅云；均衡=云+轻 BSM/光晕；极致=全效果高采样',
         },
         {
-            id: 'cloudCoverage',
-            label: '云覆盖率',
+            id: 'layer0Coverage',
+            label: '低云覆盖',
             type: 'range',
             min: 0,
             max: 1,
             step: 0.01,
-            value: params.cloudCoverage ?? 0.3,
-            displayValue: `${Math.round((params.cloudCoverage ?? 0.3) * 100)}%`,
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.layer0Coverage ?? 0.3,
+            displayValue: `${Math.round((params.layer0Coverage ?? 0.3) * 100)}%`,
+            disabled: off,
         },
         {
-            id: 'cloudBottom',
-            label: '云底高度',
+            id: 'layer0Altitude',
+            label: '低云底高',
             type: 'range',
-            min: 500,
+            min: 0,
+            max: 8000,
+            step: 50,
+            value: params.layer0Altitude ?? 1800,
+            displayValue: `${Math.round(params.layer0Altitude ?? 1800)} m`,
+            disabled: off,
+        },
+        {
+            id: 'layer0Height',
+            label: '低云厚度',
+            type: 'range',
+            min: 50,
             max: 5000,
             step: 50,
-            value: params.cloudBottom ?? 1500,
-            displayValue: `${Math.round(params.cloudBottom ?? 1500)} m`,
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.layer0Height ?? 650,
+            displayValue: `${Math.round(params.layer0Height ?? 650)} m`,
+            disabled: off,
         },
         {
-            id: 'cloudTop',
-            label: '云顶高度',
+            id: 'layer1Coverage',
+            label: '中云覆盖',
             type: 'range',
-            min: 1000,
-            max: 10000,
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: params.layer1Coverage ?? 0.3,
+            displayValue: `${Math.round((params.layer1Coverage ?? 0.3) * 100)}%`,
+            disabled: off,
+        },
+        {
+            id: 'layer1Altitude',
+            label: '中云底高',
+            type: 'range',
+            min: 0,
+            max: 12000,
+            step: 50,
+            value: params.layer1Altitude ?? 2400,
+            displayValue: `${Math.round(params.layer1Altitude ?? 2400)} m`,
+            disabled: off,
+        },
+        {
+            id: 'layer1Height',
+            label: '中云厚度',
+            type: 'range',
+            min: 50,
+            max: 6000,
+            step: 50,
+            value: params.layer1Height ?? 1200,
+            displayValue: `${Math.round(params.layer1Height ?? 1200)} m`,
+            disabled: off,
+        },
+        {
+            id: 'layer2Coverage',
+            label: '高云覆盖',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: params.layer2Coverage ?? 0.3,
+            displayValue: `${Math.round((params.layer2Coverage ?? 0.3) * 100)}%`,
+            disabled: off,
+        },
+        {
+            id: 'layer2Altitude',
+            label: '高云底高',
+            type: 'range',
+            min: 2000,
+            max: 16000,
             step: 100,
-            value: params.cloudTop ?? 2150,
-            displayValue: `${Math.round(params.cloudTop ?? 2150)} m`,
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.layer2Altitude ?? 7500,
+            displayValue: `${Math.round(params.layer2Altitude ?? 7500)} m`,
+            disabled: off,
         },
         {
-            id: 'cloudSpeed',
-            label: '移动速度',
+            id: 'layer2Height',
+            label: '高云厚度',
             type: 'range',
-            min: 0,
-            max: 0.01,
-            step: 0.0001,
-            value: params.cloudSpeed ?? 0.001,
-            displayValue: Number(params.cloudSpeed ?? 0.001).toFixed(4),
-            disabled: disabled || !params.cloudsEnabled,
+            min: 50,
+            max: 4000,
+            step: 50,
+            value: params.layer2Height ?? 500,
+            displayValue: `${Math.round(params.layer2Height ?? 500)} m`,
+            disabled: off,
         },
         {
-            id: 'cloudWindDirection',
-            label: '风向',
+            id: 'sunIntensity',
+            label: '太阳强度',
             type: 'range',
             min: 0,
-            max: 360,
+            max: 150,
             step: 1,
-            value: params.cloudWindDirection ?? 90,
-            displayValue: `${Math.round(params.cloudWindDirection ?? 90)}°`,
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.sunIntensity ?? 20,
+            displayValue: Number(params.sunIntensity ?? 20).toFixed(0),
+            disabled: off,
         },
         {
-            id: 'cloudScattering',
-            label: '散射系数',
+            id: 'cloudExposure',
+            label: '云曝光',
+            type: 'range',
+            min: 0.1,
+            max: 8,
+            step: 0.1,
+            value: params.cloudExposure ?? 3.0,
+            displayValue: Number(params.cloudExposure ?? 3.0).toFixed(1),
+            disabled: off,
+            tooltip: '只影响云颜色，不影响底图',
+        },
+        {
+            id: 'skyToSunRatio',
+            label: '天空/太阳比',
+            type: 'range',
+            min: 0.05,
+            max: 0.6,
+            step: 0.01,
+            value: params.skyToSunRatio ?? 0.28,
+            displayValue: Number(params.skyToSunRatio ?? 0.28).toFixed(2),
+            disabled: off,
+        },
+        {
+            id: 'aerialPerspectiveScale',
+            label: '大气透视',
             type: 'range',
             min: 0,
             max: 3,
-            step: 0.01,
-            value: params.cloudScattering ?? 1.0,
-            displayValue: Number(params.cloudScattering ?? 1.0).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
+            step: 0.1,
+            value: params.aerialPerspectiveScale ?? 0.0,
+            displayValue: Number(params.aerialPerspectiveScale ?? 0.0).toFixed(1),
+            disabled: off,
+            tooltip: 'Aerial 阶段近距离散射；过高会让底图过曝涂白',
         },
         {
-            id: 'cloudAbsorption',
-            label: '吸收系数',
+            id: 'atmosphereExposureDay',
+            label: '大气曝光(白天)',
             type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: params.cloudAbsorption ?? 0.0,
-            displayValue: Number(params.cloudAbsorption ?? 0.0).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudAnisotropy1',
-            label: '前向散射',
-            type: 'range',
-            min: -1,
-            max: 1,
-            step: 0.01,
-            value: params.cloudAnisotropy1 ?? 0.7,
-            displayValue: Number(params.cloudAnisotropy1 ?? 0.7).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudAnisotropy2',
-            label: '后向散射',
-            type: 'range',
-            min: -1,
-            max: 1,
-            step: 0.01,
-            value: params.cloudAnisotropy2 ?? -0.2,
-            displayValue: Number(params.cloudAnisotropy2 ?? -0.2).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudAnisotropyMix',
-            label: '散射混合比',
-            type: 'range',
-            min: 0,
-            max: 1,
-            step: 0.01,
-            value: params.cloudAnisotropyMix ?? 0.5,
-            displayValue: Number(params.cloudAnisotropyMix ?? 0.5).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudSkyLight',
-            label: '天空光',
-            type: 'range',
-            min: 0,
+            min: 0.1,
             max: 3,
             step: 0.05,
-            value: params.cloudSkyLight ?? 1.0,
-            displayValue: Number(params.cloudSkyLight ?? 1.0).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.atmosphereExposureDay ?? 1.0,
+            displayValue: Number(params.atmosphereExposureDay ?? 1.0).toFixed(2),
+            disabled: off,
+            tooltip: '乘到所有像素（含底图）；>1 会让底图偏白',
         },
         {
-            id: 'cloudGroundBounce',
-            label: '地面反弹光',
+            id: 'atmosphereExposureNight',
+            label: '大气曝光(夜晚)',
             type: 'range',
-            min: 0,
-            max: 2,
+            min: 0.0,
+            max: 1.5,
             step: 0.05,
-            value: params.cloudGroundBounce ?? 1.0,
-            displayValue: Number(params.cloudGroundBounce ?? 1.0).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.atmosphereExposureNight ?? 0.1,
+            displayValue: Number(params.atmosphereExposureNight ?? 0.1).toFixed(2),
+            disabled: off,
         },
         {
-            id: 'cloudPowder',
-            label: 'Powder 效应',
+            id: 'atmosphereExposureManual',
+            label: '大气曝光(手动)',
             type: 'range',
-            min: 0,
-            max: 2,
+            min: 0.1,
+            max: 5,
             step: 0.05,
-            value: params.cloudPowder ?? 0.8,
-            displayValue: Number(params.cloudPowder ?? 0.8).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.atmosphereExposureManual ?? 1.0,
+            displayValue: Number(params.atmosphereExposureManual ?? 1.0).toFixed(2),
+            disabled: off || params.atmosphereExposureFollowTimeline !== false,
+            tooltip: '关闭「曝光随时间轴」后生效',
         },
         {
-            id: 'cloudDensityScale',
-            label: '密度缩放',
-            type: 'range',
-            min: 0,
-            max: 3,
-            step: 0.01,
-            value: params.cloudDensityScale ?? 1.0,
-            displayValue: Number(params.cloudDensityScale ?? 1.0).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
+            id: 'atmosphereExposureFollowTimeline',
+            label: '曝光随时间轴',
+            type: 'toggle',
+            value: params.atmosphereExposureFollowTimeline !== false,
+            disabled: off,
         },
         {
-            id: 'cloudShapeAmount',
-            label: '形状强度',
-            type: 'range',
-            min: 0,
-            max: 2,
-            step: 0.01,
-            value: params.cloudShapeAmount ?? 1.0,
-            displayValue: Number(params.cloudShapeAmount ?? 1.0).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
+            id: 'atmosphereStageEnabled',
+            label: 'Bruneton 天空',
+            type: 'toggle',
+            value: params.atmosphereStageEnabled !== false,
+            disabled: off,
+            tooltip: '关闭后只保留体积云 stage，天空回退为透传场景色',
         },
         {
-            id: 'cloudDetailAmount',
-            label: '细节强度',
+            id: 'aerialStageEnabled',
+            label: '空中透视 stage',
+            type: 'toggle',
+            value: params.aerialStageEnabled !== false,
+            disabled: off,
+            tooltip: '链末端 ACES/几何透视；流畅档默认关闭以省 GPU',
+        },
+        {
+            id: 'windSpeed',
+            label: '风速',
             type: 'range',
             min: 0,
             max: 1,
-            step: 0.01,
-            value: params.cloudDetailAmount ?? 0.5,
-            displayValue: Number(params.cloudDetailAmount ?? 0.5).toFixed(2),
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudTurbulence',
-            label: '湍流位移',
-            type: 'range',
-            min: 0,
-            max: 1000,
-            step: 10,
-            value: params.cloudTurbulence ?? 350,
-            displayValue: `${Math.round(params.cloudTurbulence ?? 350)} m`,
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudHazeDensity',
-            label: '雾霾密度',
-            type: 'range',
-            min: 0,
-            max: 0.001,
-            step: 0.00001,
-            value: params.cloudHazeDensity ?? 3e-5,
-            displayValue: Number(params.cloudHazeDensity ?? 3e-5).toFixed(5),
-            disabled: disabled || !params.cloudsEnabled,
-        },
-        {
-            id: 'cloudHazeExponent',
-            label: '雾霾衰减',
-            type: 'range',
-            min: 0,
-            max: 0.01,
             step: 0.0001,
-            value: params.cloudHazeExponent ?? 1e-3,
-            displayValue: Number(params.cloudHazeExponent ?? 1e-3).toFixed(4),
-            disabled: disabled || !params.cloudsEnabled,
+            value: params.windSpeed ?? 0,
+            displayValue: Number(params.windSpeed ?? 0).toFixed(4),
+            disabled: off,
+        },
+        {
+            id: 'evolutionSpeed',
+            label: '云演化速度',
+            type: 'range',
+            min: 0,
+            max: 0.02,
+            step: 0.0005,
+            value: params.evolutionSpeed ?? 0.005,
+            displayValue: Number(params.evolutionSpeed ?? 0.005).toFixed(4),
+            disabled: off,
+        },
+        {
+            id: 'maxSteps',
+            label: '主采样步数',
+            type: 'range',
+            min: 64,
+            max: 1000,
+            step: 1,
+            value: params.maxSteps ?? 500,
+            displayValue: String(Math.round(params.maxSteps ?? 500)),
+            disabled: off,
+            tooltip: '越大越清晰但越耗 GPU（流畅约 140 / 均衡约 280 / 极致 500）',
+        },
+        {
+            id: 'multiScatteringOctaves',
+            label: '多散射阶数',
+            type: 'range',
+            min: 1,
+            max: 12,
+            step: 1,
+            value: params.multiScatteringOctaves ?? 8,
+            displayValue: String(Math.round(params.multiScatteringOctaves ?? 8)),
+            disabled: off,
+        },
+        {
+            id: 'useShadowBuffer',
+            label: 'BSM 云阴影',
+            type: 'toggle',
+            value: params.useShadowBuffer !== false,
+            disabled: off,
+            tooltip: 'Beer Shadow Map：云对地面投影（流畅档关闭）',
+        },
+        {
+            id: 'shadowLengthEnabled',
+            label: '丁达尔光柱',
+            type: 'toggle',
+            value: params.shadowLengthEnabled !== false,
+            disabled: off,
+            tooltip: '阴影长度采样（流畅档关闭）',
+        },
+        {
+            id: 'bsmGroundScale',
+            label: '地面阴影强度',
+            type: 'range',
+            min: 0.1,
+            max: 10,
+            step: 0.1,
+            value: params.bsmGroundScale ?? 0.3,
+            displayValue: Number(params.bsmGroundScale ?? 0.3).toFixed(1),
+            disabled: off || params.useShadowBuffer === false,
+        },
+        {
+            id: 'bsmTyndallScale',
+            label: '光柱强度',
+            type: 'range',
+            min: 0.1,
+            max: 10,
+            step: 0.1,
+            value: params.bsmTyndallScale ?? 1.0,
+            displayValue: Number(params.bsmTyndallScale ?? 1.0).toFixed(1),
+            disabled: off || params.shadowLengthEnabled === false,
+        },
+        {
+            id: 'shadowFar',
+            label: '阴影覆盖距离',
+            type: 'range',
+            min: 10000,
+            max: 200000,
+            step: 1000,
+            value: params.shadowFar ?? 40000,
+            displayValue: `${Math.round((params.shadowFar ?? 40000) / 1000)} km`,
+            disabled: off || params.useShadowBuffer === false,
+        },
+        {
+            id: 'hazeEnabled',
+            label: '雾霾',
+            type: 'toggle',
+            value: params.hazeEnabled === true,
+            disabled: off,
+        },
+        {
+            id: 'temporalEnabled',
+            label: 'TAA 时序滤波',
+            type: 'toggle',
+            value: params.temporalEnabled === true,
+            disabled: off,
+            tooltip: '原生 WebGL PBO 时序抗锯齿，可能与部分 GPU 驱动不兼容',
+        },
+        {
+            id: 'lensFlareEnabled',
+            label: '镜头光晕',
+            type: 'toggle',
+            value: params.lensFlareEnabled !== false,
+            disabled: off,
+            tooltip: '流畅档默认关闭',
+        },
+        {
+            id: 'bloomIntensity',
+            label: '光晕 Bloom',
+            type: 'range',
+            min: 0,
+            max: 3,
+            step: 0.05,
+            value: params.bloomIntensity ?? 0.6,
+            displayValue: Number(params.bloomIntensity ?? 0.6).toFixed(2),
+            disabled: off || params.lensFlareEnabled === false,
+        },
+        {
+            id: 'ghostIntensity',
+            label: '鬼影强度',
+            type: 'range',
+            min: 0,
+            max: 3,
+            step: 0.05,
+            value: params.ghostIntensity ?? 1.1,
+            displayValue: Number(params.ghostIntensity ?? 1.1).toFixed(2),
+            disabled: off || params.lensFlareEnabled === false,
+        },
+        {
+            id: 'haloIntensity',
+            label: 'Halo 强度',
+            type: 'range',
+            min: 0,
+            max: 2,
+            step: 0.05,
+            value: params.haloIntensity ?? 0.2,
+            displayValue: Number(params.haloIntensity ?? 0.2).toFixed(2),
+            disabled: off || params.lensFlareEnabled === false,
         },
     ];
 }
 
-// ============================================================
-// 基础大气控件（Cesium 原生大气/光照/雾效）
-// ============================================================
+/**
+ * 模块卡片状态文案：流畅 / 均衡 / 极致。
+ * @param {string | undefined} quality
+ * @returns {string}
+ */
+function qualityStatusLabel(quality) {
+    if (quality === 'balanced') return '均衡';
+    if (quality === 'ultra') return '极致';
+    return '流畅';
+}
 
 function createBaseAtmosphereControls(params = {}) {
     return [

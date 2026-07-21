@@ -6,6 +6,17 @@
 
 ## 版本记录
 
+### V3.3.19 (2026-07-21) — Cesium 体积云·大气一体化模块（cesium-clouds-atmosphere 移植）
+
+- 🆕 **体积云 + Bruneton 大气集成**：将 `cesium-clouds-atmosphere`（three-geospatial Cesium 移植版）作为正式三维特效模块接入。覆盖体积云 raymarch（多层 + 形状/细节 3D 噪声 + weather 图 + 湍流）、Bruneton 预计算大气（天空 + 太阳圆盘）、空中透视、Beer Shadow Map（云地投影 + 丁达尔光柱）、可选镜头光晕 Bloom、原生 WebGL PBO TAA
+- 🆕 **`Cloud/` 模块重写**：原空目录恢复实现，源码以 `Cloud/lib/**` 内联（21 文件，~173KB JS + ~60KB GLSL bundle），新增 Vue 桥接 `setupCloudIntegration` / `cloudParamsApply` / `assetConfig` / `getCesium`，移除对 `dat.gui` 的硬依赖（默认 `enableGui=false`，调试面板由工具面板取代）
+- 🆕 **静态资源**：拷贝云 3D 纹理 ~3.8MB（复用 `public/textures/cloud/` 同源 + 补 `stbn.bin`）、Bruneton 大气 LUT ~24MB、蓝噪声、shader GLSL 到 `public/cloud-atmosphere/`，路径通过 `import.meta.env.BASE_URL + 'cloud-atmosphere/'` 解析，兼容 GitHub Pages 子路径部署
+- 🆕 **懒加载生命周期**：`cloudsEnabled=false` 时不加载任何资源、Cesium 原生大气保持开启；`true` 时关闭 `skyAtmosphere`/`skyBox` 由 Bruneton 接管，再次关闭 / 组件卸载销毁管线并恢复天空快照
+- 🔧 **工具面板体积云卡片重写**：移除 `cloudCoverage` / `cloudQuality` / Frostbite 旧字段，改为三层云覆盖 + 层高/层厚、太阳/云曝光、BSM 阴影/丁达尔、LensFlare Bloom/鬼影/Halo 等共 ~28 个控件；状态文本改为「云+BSM/仅体积云/未启用」
+- 🔧 **ESM 适配**：库源码使用裸 `Cesium.xxx`，ESM 打包后会未定义。通过 `Cloud/lib/getCesium.js` + 各模块顶部 `const Cesium = getCesium()` 绑定本地常量，避免对 `window.Cesium` 的隐式依赖
+- ⬆️ **Cesium CDN 升级 1.122 → 1.132**：`Cesium.Texture3D` 自 1.130 才引入，1.122 下体积云管线初始化抛 `TypeError: Cesium.Texture3D is not a constructor`；统一升到库官方验证的 1.132 以解锁大气 LUT 与 stbn 的 3D 纹理路径
+- 📚 **文件结构同步**：`Docs/Guide/frontend-structure.md` 中 `Cloud/` 树从原 TypeScript 描述更新为新 lib 内联架构
+
 ### V3.3.18 (2026-07-21) — Agent 系统提示词平台简介集成 + 八大功能架构文档
 
 - 🆕 **平台简介注入系统提示词**：`agentToolsSchema.js` 的 `buildSystemPromptWithTools()` 在工具说明前新增「平台简介」章节（2D/3D 双引擎、20+ 底图源、多格式数据导入、空间分析、路径规划、三维特效、实用工具、账号体系），用户询问"平台有什么功能/特色"时 AI 助手可准确作答
