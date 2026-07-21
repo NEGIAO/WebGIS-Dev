@@ -592,13 +592,17 @@ function initViewer() {
         flyToHome(0);
     }
 
-    // 体积云集成（桥接 cloudParams → CloudManager → PostProcessStage）
-    // setupCloudIntegration 直接返回 cleanup 函数，非 { cleanup } 结构
+    // 体积云集成（cesium-clouds-atmosphere 懒加载管线）
+    // setupCloudIntegration 在内部按 cloudParams.cloudsEnabled 决定是否加载资源；
+    // 直接返回 cleanup 函数（非 { cleanup } 结构）
     try {
         cloudCleanup = setupCloudIntegration({
             viewer,
             cloudParams,
             atmosphereParams,
+            // Bruneton 大气接管天空时，与 Tellux 大气/Cesium 原生大气叠加会让底图过曝涂白。
+            // 启用体积云时临时关闭 Tellux 大气，关闭时恢复。
+            advancedEffectControls,
         });
     } catch (err) {
         console.warn('[Cesium] Cloud integration skipped:', err);

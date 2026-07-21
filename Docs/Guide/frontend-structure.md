@@ -53,17 +53,38 @@ frontend/src/
 │   │   ├── LilGuiControls.vue                      # lil-gui 动态控件渲染器
 │   │   ├── Wind2D.js                               # 2D 风场渲染
 │   │   │
-│   │   ├── Wind/                                   # （原 GPU 风场模块，已清空）
-│   │   │
-│   │   ├── Cloud/                                  # 体积云模块（TypeScript）
-│   │   │   ├── index.ts                            # 模块入口
-│   │   │   ├── CloudManager.ts                     # 体积云管理器（Stage 生命周期 + 质量切换）
-│   │   │   ├── CloudPresets.ts                     # 质量预设（low/medium/high/ultra）
-│   │   │   ├── CloudUniforms.ts                    # GPU Uniform 缓冲区管理
-│   │   │   ├── cloudIntegration.ts                 # Cesium 场景集成（PostProcessStage）
-│   │   │   ├── composables/useVolumetricCloud.ts   # Vue composable
-│   │   │   ├── shaders/                            # GLSL 着色器（cloud/noise/utils）
-│   │   │   └── textures/                           # 纹理资源（weather/shape/turbulence）
+│   │   ├── Cloud/                                  # 体积云·大气（移植 cesium-clouds-atmosphere）
+│   │   │   ├── index.js                            # 模块统一出口
+│   │   │   ├── setupCloudIntegration.js            # Vue 桥接：懒加载/销毁/天空快照
+│   │   │   ├── cloudParamsApply.js                 # 面板参数 → pipeline.params 映射
+│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（流畅/均衡/极致）
+│   │   │   ├── assetConfig.js                      # public/cloud-atmosphere 路径 + 默认参数
+│   │   │   └── lib/                                # 库核心源码（内联，非 npm）
+│   │   │       ├── createCloudAtmosphere.js        # 一行创建入口
+│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排
+│   │   │       ├── CloudShadowFrag.glsl.js         # BSM 着色器内联
+│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联
+│   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve
+│   │   │       ├── loadBinThreeGeospatial.js       # three Data3DTexture 解析 .bin
+│   │   │       ├── shaderLoader.js                 # 着色器加载器（bundle 优先 + fetch 回退）
+│   │   │       ├── shaders/bundledShaders.js       # 自动生成的 GLSL 内联 bundle
+│   │   │       ├── getCesium.js                    # 全局 Cesium 引用桥接
+│   │   │       ├── assetPaths.js                   # 静态资源 URL 常量
+│   │   │       ├── index.js                        # lib barrel export
+│   │   │       └── AtmosphereFromThreeGeospatial/  # Bruneton 大气管线模块
+│   │   │           ├── AtmosphereParameters.js     # 大气物理参数
+│   │   │           ├── AtmospherePostProcess.js    # 天空大气后处理
+│   │   │           ├── AerialPerspectiveEffect.js  # 空中透视（几何像素散射 + tonemap）
+│   │   │           ├── AtmosphereForClouds.js      # 云专用大气接口
+│   │   │           ├── LensFlareBloomStage.js      # 镜头光晕 + Bloom
+│   │   │           ├── PrecomputedTexturesLoader.js# Bruneton LUT 加载器
+│   │   │           └── Shaders/                    # 大气 + 空中透视 GLSL 源码
+│   │   │               ├── aerialPerspectiveEffect.frag
+│   │   │               ├── sky.glsl
+│   │   │               └── bruneton/
+│   │   │                   ├── definitions.glsl
+│   │   │                   ├── common.glsl
+│   │   │                   └── runtime.glsl
 │   │   │
 │   │   ├── PlayerController/                       # 人物漫游控制器
 │   │   │   ├── index.js                            # 模块入口（懒加载导出）
@@ -200,6 +221,7 @@ frontend/src/
 │   │   └── index.js
 │   ├── map/                                        # 地图核心 composables
 │   │   ├── features/                               # 功能模块（30+ 文件）
+│   │   │   ├── README.md
 │   │   │   ├── basemapLayerFactory.js              # 底图图层工厂
 │   │   │   ├── useBasemapLayerBootstrap.js         # 底图初始化
 │   │   │   ├── useBasemapResilience.js             # 底图容错与降级
@@ -363,6 +385,7 @@ frontend/src/
 │   │   ├── parsers/
 │   │   │   ├── kmlParser.ts                        # KML/KMZ 解析
 │   │   │   ├── kmlStyleParser.js                   # KML 样式解析
+│   │   │   ├── kmlStyleParser.doc.md               # KML 样式文档
 │   │   │   ├── shpParser.ts                        # Shapefile 解析
 │   │   │   ├── tifLoader.ts                        # GeoTIFF 加载
 │   │   │   ├── dbfParser.ts                        # DBF 解析
