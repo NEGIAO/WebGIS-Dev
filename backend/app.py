@@ -24,7 +24,7 @@ from api.proxy import router as proxy_router, build_http_client
 from api.external_proxy import router as external_proxy_router
 from api.statistics import router as statistics_router
 from api.location import router as location_router
-from api.auth import init_auth_storage, router as auth_router
+from api.auth import init_auth_storage, router as auth_router, check_smtp_configured
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router, runtime_config_router
@@ -58,6 +58,21 @@ class ApiResponse(BaseModel):
 # ==================== 生命周期管理 ====================
 
 
+def _mask_smtp_user() -> str:
+    """脱敏 SMTP_USER 用于日志显示，只保留 @ 前首尾各 1 字符。"""
+    from api.auth.email_service import SMTP_USER
+    if not SMTP_USER:
+        return "(空)"
+    if "@" in SMTP_USER:
+        local, domain = SMTP_USER.split("@", 1)
+        if len(local) <= 2:
+            masked = local[0] + "*" * max(len(local) - 1, 1)
+        else:
+            masked = local[0] + "*" * (len(local) - 2) + local[-1]
+        return f"{masked}@{domain}"
+    return SMTP_USER[0] + "**" + SMTP_USER[-1] if len(SMTP_USER) > 4 else "***"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -75,6 +90,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("认证存储初始化失败: %s", str(e), exc_info=True)
         app.state.startup_error = f"数据库初始化失败: {str(e)}"
+
+    # SMTP 邮件服务配置检查
+    if check_smtp_configured():
+        logger.info("邮件服务已配置（SMTP: %s）", _mask_smtp_user())
+    else:
+        logger.warning(
+            "邮件服务未配置：SMTP_USER/SMTP_PASSWORD 环境变量未设置，验证码功能不可用。"
+            " 如需启用，请在环境变量中配置 SMTP_USER 和 SMTP_PASSWORD。"
+        )
 
     try:
         init_download_task_db()

@@ -86,7 +86,8 @@ from .session import (
 # ─── 配额 ───
 from .quota import _consume_api_quota_sync, get_user_quota_snapshot_sync
 
-# ─── FastAPI 依赖 ───
+# ─── 邮件服务 ───
+from .email_service import check_smtp_configured
 from .dependencies import require_admin, require_api_access, require_api_access_or_guest, require_login
 
 # ─── 路由 ───
