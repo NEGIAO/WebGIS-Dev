@@ -2,10 +2,12 @@ import httpx
 import ipaddress
 import logging
 import os
-from typing import Any, Dict, Tuple
+import time
+from collections import defaultdict
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from gcj_rectify.rectify import get_gcj2wgs_tile, get_wgs2gcj_tile
@@ -31,6 +33,20 @@ def _parse_env_flag(name: str, default: bool) -> bool:
 
 PROXY_ALLOW_PRIVATE_HOSTS = _parse_env_flag("PROXY_ALLOW_PRIVATE_HOSTS", False)
 PROXY_VERIFY_SSL = _parse_env_flag("PROXY_VERIFY_SSL", True)
+
+# 简单滑动窗口限流（每 IP 每分钟最多 N 次代理请求）
+PROXY_RATE_LIMIT = int(os.getenv("PROXY_RATE_LIMIT", "60"))
+_rate_limit_store: Dict[str, List[float]] = defaultdict(list)
+
+
+def _rate_limit_check(request: Request) -> None:
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    window_start = now - 60.0
+    _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if t > window_start]
+    if len(_rate_limit_store[ip]) >= PROXY_RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many requests")
+    _rate_limit_store[ip].append(now)
 
 def build_http_client():
     """
@@ -163,7 +179,7 @@ def _resolve_gcj_http_client(request: Request) -> Tuple[httpx.AsyncClient, bool]
 #海图专用代理（因为 ships66 的瓦片服务对请求头要求较高，且不允许跨域访问，所以单独写一个专用接口来代理这些瓦片请求，避免污染通用代理的逻辑和性能）
 #eg:本地前端请求：http://localhost:8000/tiles/ships66/{z}/{x}/{y}.png
 @router.get("/tiles/ships66/{z}/{x}/{y}.png")
-async def ships66_tile(z: int, x: int, y: int, request: Request):
+async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depends(_rate_limit_check)):
     upstream_url = f"http://g3.ships66.com/maps/one/{z}/{x}/{y}.png"
 
     # 瓦片请求尽量干净，不转发浏览器的 Origin/Referer
@@ -231,7 +247,7 @@ async def ships66_tile(z: int, x: int, y: int, request: Request):
 
 
 @router.get("/proxy/gcj2wgs/{target_url:path}")
-async def gcj2wgs_proxy(target_url: str, request: Request):
+async def gcj2wgs_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
     """GCJ02 -> WGS84 tile rectification for arbitrary XYZ tile URLs."""
     upstream_url = _build_proxy_target_url(target_url, request.url.query)
     try:
@@ -262,7 +278,7 @@ async def gcj2wgs_proxy(target_url: str, request: Request):
 
 
 @router.get("/proxy/wgs2gcj/{target_url:path}")
-async def wgs2gcj_proxy(target_url: str, request: Request):
+async def wgs2gcj_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
     """WGS84 -> GCJ02 tile rectification for arbitrary XYZ tile URLs."""
     upstream_url = _build_proxy_target_url(target_url, request.url.query)
     try:
@@ -292,7 +308,7 @@ async def wgs2gcj_proxy(target_url: str, request: Request):
     return Response(content=tile_bytes, media_type="image/png")
 
 @router.get("/proxy/{target_url:path}")
-async def universal_stream_proxy(target_url: str, request: Request):
+async def universal_stream_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
     """
     通用流式代理：将 /proxy/{target_url:path} 代理到任意上游 HTTP(S) 资源。
 
