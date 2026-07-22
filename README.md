@@ -33,7 +33,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.20 阶段，体积云·大气模块缺陷修复（bottomRadius 统一 / BSM 纹理注入 / Aerial 双 gamma / shadowFar 对齐）+ 面板参数补全 + 邮件服务加固
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.20 阶段，体积云·大气模块缺陷修复（bottomRadius 统一 / BSM 纹理注入 / Aerial 双 gamma / 高度渐变淡出 / 云底颜色）+ 面板参数补全 + 邮件服务加固
 
 > 📚 **文档已模块化**：本 README 作为项目门户页，仅保留核心概览与导航。完整的项目结构、开发约定、开发指南、技术栈与常见问题、更新日志等已拆分至 [`Docs/Guide/`](Docs/Guide/)，点击下方「文档导航」一键跳转。
 
@@ -234,6 +234,8 @@ docker build -t webgis-backend .
 - 🔒 **SMTP 安全加固**：`SMTP_PORT` 环境变量非数字时不再导致模块级崩溃（安全 int 转换 + 默认值 80）；`check_smtp_configured()` 扩展为 USER/PASSWORD/HOST/PORT 四要素校验
 - 📧 **邮件发信重试**：`_send_email_sync` 增加 3 次指数退避重试（1s→2s），每次失败打 WARNING 日志
 - 📧 **启动 SMTP 配置检查**：`app.py` lifespan 启动时检查 SMTP 配置并打日志（脱敏显示 SMTP_USER）
+- 🐛 **体积云高度渐变淡出**：修复相机升过云顶后云层突然消失——raymarch 起点改为云层入口距离，新增 `altitudeFadeRange` 参数线性淡出
+- 🐛 **云底颜色修复**：云底不再纯黑，提升底部天空光比例 + 环境光地板，云底呈自然浅灰色
 
 详见 [`Docs/LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md`](Docs/LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md)
 

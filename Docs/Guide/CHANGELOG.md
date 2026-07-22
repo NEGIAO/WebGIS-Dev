@@ -20,6 +20,8 @@
 - 🔒 **SMTP 安全加固**：`SMTP_PORT` 环境变量非数字时不再导致模块级崩溃（安全 int 转换 + 默认值 80）；`check_smtp_configured()` 扩展为 USER/PASSWORD/HOST/PORT 四要素校验
 - 📧 **邮件发信重试**：`_send_email_sync` 增加 3 次指数退避重试（1s→2s），每次失败打 WARNING 日志
 - 📧 **启动 SMTP 配置检查**：`app.py` lifespan 启动时检查 SMTP 配置并打日志（脱敏显示 SMTP_USER）
+- 🐛 **体积云高度渐变淡出**：修复相机升过云顶后云层突然消失——`getRayNearFar` case3 的 near 改为射线进入云顶球面的实际距离（`first.z`），不再从相机近裁面出发耗尽步数；新增 `altitudeFadeRange` 参数（面板「高度淡出范围」），云顶以上线性淡出（流畅 6km / 均衡 8km / 极致 10km）
+- 🐛 **云底颜色修复**：云底不再纯黑——`skyGradient` 底部最低值从 0.5 提升到 0.7，新增环境光地板（`skyColor * 0.2`）模拟地面反射与深层多次散射，云底呈自然浅灰色
 
 详见 [`../LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md`](../LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md)
 
