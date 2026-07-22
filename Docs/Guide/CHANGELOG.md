@@ -6,6 +6,23 @@
 
 ## 版本记录
 
+### V3.3.20 (2026-07-22) — 体积云迁移缺陷修复 + 面板参数补全 + 邮件服务加固
+
+- 🐛 **bottomRadius 统一**：`pipeline.params.bottomRadius` 改为从 `atmosphereParams.bottomRadius` 派生，消除云层基准球与相机偏移基准球 ~830m 错位，修复云漂浮高度错误与移动抖动
+- 🐛 **BSM 纹理注入修复**：`_bsmResolveGetTexture` 不再返回自定义 `bind()` 裸句柄（Cesium PostProcessStage 不识别），改为返回 `_syncBSM` blit 写入的共享 `Cesium.Texture`，云影/丁达尔稳定生效
+- 🐛 **Aerial 双 gamma 修复**：地面像素不再走 `tonemapDisplay`（ACES+gamma），消除底图过曝白雾；新增 `u_aerialPerspectiveScale` uniform 独立控制空中透视对地面的散射强度
+- 🆕 **groundAerialScale 分离**：空中透视 stage 对地面的发白程度独立于 Cloud Stage 云体透视（`aerialPerspectiveScale`），面板新增「地面发白」滑杆
+- ⬆️ **shadowFar 提升**：40km → 120km，对齐云可见距离量级，消除 cascade 边界硬切与移动时阴影弹出
+- ⬆️ **默认性能档改为均衡**：`DEFAULT_CLOUD_QUALITY` 从 `smooth` 改为 `balanced`（云+轻 BSM/光晕），流畅档 maxSteps 140→220、windSpeed/evolutionSpeed 微调
+- 🆕 **面板新增控件**：`groundAerialScale`、`magentaFixStrength`（去品红）、`scatterG1/G2`（HG 散射权重）、`distFadeStart/End`（距离衰减）、`maxRayDistance`（最大采样距离）、`shadowSplitLambda`（级联分配）、`shadowFadeScale`（衰减范围）；全部控件补全 tooltip 描述
+- 🔧 **shader 来源统一**：`bundledShaders.js` 为唯一真源，`public/` 与 `lib/Shaders/` 标注为镜像；`aerialPerspectiveEffect.frag` 行尾统一 LF
+- 🆕 **体积云加载提示**：开启体积云时弹出 toast 提示「需加载约 4 个 8MB 纹理文件，请稍候」，加载完成后自动切换为成功提示
+- 🔒 **SMTP 安全加固**：`SMTP_PORT` 环境变量非数字时不再导致模块级崩溃（安全 int 转换 + 默认值 80）；`check_smtp_configured()` 扩展为 USER/PASSWORD/HOST/PORT 四要素校验
+- 📧 **邮件发信重试**：`_send_email_sync` 增加 3 次指数退避重试（1s→2s），每次失败打 WARNING 日志
+- 📧 **启动 SMTP 配置检查**：`app.py` lifespan 启动时检查 SMTP 配置并打日志（脱敏显示 SMTP_USER）
+
+详见 [`../LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md`](../LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md)
+
 ### V3.3.19 (2026-07-21) — Cesium 体积云·大气一体化模块（cesium-clouds-atmosphere 移植）
 
 - 🆕 **体积云 + Bruneton 大气集成**：将 `cesium-clouds-atmosphere`（three-geospatial Cesium 移植版）作为正式三维特效模块接入。覆盖体积云 raymarch（多层 + 形状/细节 3D 噪声 + weather 图 + 湍流）、Bruneton 预计算大气（天空 + 太阳圆盘）、空中透视、Beer Shadow Map（云地投影 + 丁达尔光柱）、可选镜头光晕 Bloom、原生 WebGL PBO TAA

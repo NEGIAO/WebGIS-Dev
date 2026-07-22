@@ -53,20 +53,22 @@ export function applyCloudPanelParams(pipeline, panelParams) {
     'distFadeStart',
     'distFadeEnd',
     'maxSteps',
+    'maxRayDistance',
     'shadowFar',
     'shadowSplitLambda',
     'shadowFadeScale',
+    'groundAerialScale',
+    'altitudeFadeRange',
   ];
   for (const key of scalarKeys) {
     const v = num(panelParams[key]);
     if (v != null) p[key] = v;
   }
 
-  // Aerial stage 空中透视强度（独立于 pipeline.params.aerialPerspectiveScale，后者供 CloudStage 使用）
-  const aerialScale = num(panelParams.aerialPerspectiveScale);
-  if (aerialScale != null) {
-    p.aerialPerspectiveScale = aerialScale;
-    if (pipeline.aerial) pipeline.aerial._aerialPerspectiveScale = aerialScale;
+  // Aerial stage 地面发白强度（独立于 pipeline.params.aerialPerspectiveScale，后者供 CloudStage 云透视使用）
+  const groundAerialVal = num(panelParams.groundAerialScale);
+  if (groundAerialVal != null && pipeline.aerial) {
+    pipeline.aerial._aerialPerspectiveScale = groundAerialVal;
   }
 
   // 布尔开关

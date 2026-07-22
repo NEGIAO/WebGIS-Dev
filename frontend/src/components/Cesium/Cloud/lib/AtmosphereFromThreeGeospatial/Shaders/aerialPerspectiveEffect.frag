@@ -29,6 +29,8 @@ uniform float u_bsmGroundOpticalDepthScale;
 uniform vec2 u_cloudShadowTexelSize;
 // 远距几何误差修正量 [0,1]：越大越把 BSM 采样点拉向椭球/bottom 球，抑制地形 LOD 抖动
 uniform float u_geometricErrorCorrectionAmount;
+// 空中透视强度 [0,1]：0=透传原色（无透视），1=全强度大气散射
+uniform float u_aerialPerspectiveScale;
 
 const float METER_TO_LENGTH_UNIT = 0.001; // m -> km
 
@@ -330,8 +332,10 @@ void main() {
       transmittanceW
     );
     float sunTW = getGroundSunTransmittance(scenePosKmApprox / METER_TO_LENGTH_UNIT);
-    vec3 finalColorW = originalColor.rgb * transmittanceW * sunTW + inscatterW;
-    out_FragColor = tonemapDisplay(finalColorW, originalColor.a);
+    // 地面像素输入为 sRGB（AtmospherePostProcess 对 applyGroundAtmosphere=0 的地面仅乘曝光），
+    // 不能再走 tonemapDisplay（ACES+gamma），否则双重 gamma 产生白雾。直接输出大气合成结果。
+    vec3 finalColorW = originalColor.rgb * transmittanceW * sunTW + inscatterW * u_aerialPerspectiveScale;
+    out_FragColor = vec4(finalColorW, originalColor.a);
     return;
   }
   eyePos /= eyePos.w;
@@ -390,8 +394,9 @@ void main() {
     rawForBSM = rawWorldPosMeters;
   }
   float sunT = getGroundSunTransmittance(rawForBSM);
-  vec3 finalColor = originalColor.rgb * transmittance * sunT + inscatter;
+  // 地面像素：sRGB 输入不走 tonemapDisplay，避免双重 gamma 白雾
+  vec3 finalColor = originalColor.rgb * transmittance * sunT + inscatter * u_aerialPerspectiveScale;
 
-  out_FragColor = tonemapDisplay(finalColor, originalColor.a);
+  out_FragColor = vec4(finalColor, originalColor.a);
 }
 

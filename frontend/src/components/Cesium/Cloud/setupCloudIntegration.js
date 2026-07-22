@@ -190,6 +190,9 @@ export function setupCloudIntegration({
             msg.remove(loadingMsgId);
             loadingMsgId = null;
             msg.success('体积云已就绪');
+            msg.info('提示：请将视角缩放至 1500m ~ 8000m 高度范围，以获得最佳体积云观赏效果', {
+              duration: 6000,
+            });
           }
           applyCloudPanelParams(pipeline, params);
           applyLensFlareParams(lensFlare, params);

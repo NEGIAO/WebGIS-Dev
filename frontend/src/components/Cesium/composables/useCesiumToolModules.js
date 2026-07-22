@@ -239,11 +239,11 @@ export function useCesiumToolModules({
                 },
             ],
             controls: [
-                { id: 'speed', label: '行走速度', type: 'range', value: playerParams.value.speed, min: 50, max: 2000, step: 10, disabled: !_playerController?.isActive?.value },
-                { id: 'flySpeed', label: '飞行速度', type: 'range', value: playerParams.value.flySpeed, min: 2000, max: 1000000, step: 1000, disabled: !_playerController?.isActive?.value },
-                { id: 'gravity', label: '重力', type: 'range', value: playerParams.value.gravity, min: -6000, max: 0, step: 50, disabled: !_playerController?.isActive?.value },
-                { id: 'jumpHeight', label: '跳跃高度', type: 'range', value: playerParams.value.jumpHeight, min: 0, max: 3000, step: 50, disabled: !_playerController?.isActive?.value },
-                { id: 'sensitivity', label: '鼠标灵敏度', type: 'range', value: playerParams.value.sensitivity, min: 1, max: 20, step: 0.5, disabled: !_playerController?.isActive?.value },
+                { id: 'speed', label: '行走速度', type: 'range', value: playerParams.value.speed, min: 50, max: 2000, step: 10, disabled: !_playerController?.isActive?.value, tooltip: '地面行走速度（米/秒）' },
+                { id: 'flySpeed', label: '飞行速度', type: 'range', value: playerParams.value.flySpeed, min: 2000, max: 1000000, step: 1000, disabled: !_playerController?.isActive?.value, tooltip: '飞行模式速度（米/秒）' },
+                { id: 'gravity', label: '重力', type: 'range', value: playerParams.value.gravity, min: -6000, max: 0, step: 50, disabled: !_playerController?.isActive?.value, tooltip: '重力加速度（负值），绝对值越大下落越快' },
+                { id: 'jumpHeight', label: '跳跃高度', type: 'range', value: playerParams.value.jumpHeight, min: 0, max: 3000, step: 50, disabled: !_playerController?.isActive?.value, tooltip: '跳跃初始高度（米）' },
+                { id: 'sensitivity', label: '鼠标灵敏度', type: 'range', value: playerParams.value.sensitivity, min: 1, max: 20, step: 0.5, disabled: !_playerController?.isActive?.value, tooltip: '鼠标视角转动灵敏度' },
                 { id: 'acceleration', label: '加速惯性', type: 'range', value: playerParams.value.acceleration, min: 1, max: 100, step: 1, disabled: !_playerController?.isActive?.value, tooltip: '值越大加速越快。WASD 按下后到达目标速度的响应快慢。' },
                 { id: 'deceleration', label: '减速惯性', type: 'range', value: playerParams.value.deceleration, min: 1, max: 100, step: 1, disabled: !_playerController?.isActive?.value, tooltip: '值越大松手后停得越快。影响滑行/惯性感。' },
                 { id: 'spawnHeight', label: '初始高度', type: 'range', value: playerParams.value.spawnHeight, min: 50, max: 5000, step: 50, disabled: false, tooltip: '漫游启动时的离地高度（米），重启后生效。' },
@@ -466,6 +466,7 @@ function createWindControls(windParams = {}, disabled) {
             value: windParams.speedFactor ?? 1,
             displayValue: Number(windParams.speedFactor ?? 1).toFixed(1),
             disabled,
+            tooltip: '风场粒子速度倍率',
         },
         {
             id: 'arrowLength',
@@ -477,6 +478,7 @@ function createWindControls(windParams = {}, disabled) {
             value: windParams.arrowLength ?? 15000,
             displayValue: `${Math.round((windParams.arrowLength ?? 15000) / 1000)} km`,
             disabled,
+            tooltip: '风场箭头/流线长度',
         },
         {
             id: 'trailLength',
@@ -488,6 +490,7 @@ function createWindControls(windParams = {}, disabled) {
             value: windParams.trailLength ?? 20000,
             displayValue: `${Math.round((windParams.trailLength ?? 20000) / 1000)} km`,
             disabled,
+            tooltip: '风场粒子尾迹长度',
         },
         {
             id: 'alphaFactor',
@@ -499,6 +502,7 @@ function createWindControls(windParams = {}, disabled) {
             value: windParams.alphaFactor ?? 1,
             displayValue: Number(windParams.alphaFactor ?? 1).toFixed(2),
             disabled,
+            tooltip: '风场粒子透明度',
         },
     ];
 }
@@ -654,6 +658,7 @@ function createAtmosphereControls(params = {}, disabled) {
             value: params.moonLightIntensity ?? 0.18,
             displayValue: Number(params.moonLightIntensity ?? 0.18).toFixed(2),
             disabled: disabled || !params.moonLightEnabled,
+            tooltip: '月光对场景的照明强度（0=无月光 1=最亮）',
         },
         {
             id: 'ambientIntensity',
@@ -665,6 +670,7 @@ function createAtmosphereControls(params = {}, disabled) {
             value: params.ambientIntensity ?? 0.08,
             displayValue: Number(params.ambientIntensity ?? 0.08).toFixed(2),
             disabled: disabled || !params.moonLightEnabled,
+            tooltip: '夜间环境光底亮度，防止场景完全黑暗',
         },
         // 星空
         {
@@ -685,6 +691,7 @@ function createAtmosphereControls(params = {}, disabled) {
             value: params.starsIntensity ?? 1.0,
             displayValue: Number(params.starsIntensity ?? 1.0).toFixed(1),
             disabled: disabled || !params.starsEnabled,
+            tooltip: '星空渲染亮度倍率',
         },
     ];
 }
@@ -728,6 +735,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer0Coverage ?? 0.3,
             displayValue: `${Math.round((params.layer0Coverage ?? 0.3) * 100)}%`,
             disabled: off,
+            tooltip: '低云层天气图覆盖率（0=无云 1=全覆盖）',
         },
         {
             id: 'layer0Altitude',
@@ -739,6 +747,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer0Altitude ?? 1800,
             displayValue: `${Math.round(params.layer0Altitude ?? 1800)} m`,
             disabled: off,
+            tooltip: '低云层底部海拔高度',
         },
         {
             id: 'layer0Height',
@@ -750,6 +759,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer0Height ?? 650,
             displayValue: `${Math.round(params.layer0Height ?? 650)} m`,
             disabled: off,
+            tooltip: '低云层垂直厚度',
         },
         {
             id: 'layer1Coverage',
@@ -761,6 +771,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer1Coverage ?? 0.3,
             displayValue: `${Math.round((params.layer1Coverage ?? 0.3) * 100)}%`,
             disabled: off,
+            tooltip: '中云层天气图覆盖率（0=无云 1=全覆盖）',
         },
         {
             id: 'layer1Altitude',
@@ -772,6 +783,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer1Altitude ?? 2400,
             displayValue: `${Math.round(params.layer1Altitude ?? 2400)} m`,
             disabled: off,
+            tooltip: '中云层底部海拔高度',
         },
         {
             id: 'layer1Height',
@@ -783,6 +795,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer1Height ?? 1200,
             displayValue: `${Math.round(params.layer1Height ?? 1200)} m`,
             disabled: off,
+            tooltip: '中云层垂直厚度',
         },
         {
             id: 'layer2Coverage',
@@ -794,6 +807,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer2Coverage ?? 0.3,
             displayValue: `${Math.round((params.layer2Coverage ?? 0.3) * 100)}%`,
             disabled: off,
+            tooltip: '高云层天气图覆盖率（0=无云 1=全覆盖）',
         },
         {
             id: 'layer2Altitude',
@@ -805,6 +819,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer2Altitude ?? 7500,
             displayValue: `${Math.round(params.layer2Altitude ?? 7500)} m`,
             disabled: off,
+            tooltip: '高云层底部海拔高度',
         },
         {
             id: 'layer2Height',
@@ -816,6 +831,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.layer2Height ?? 500,
             displayValue: `${Math.round(params.layer2Height ?? 500)} m`,
             disabled: off,
+            tooltip: '高云层垂直厚度',
         },
         {
             id: 'sunIntensity',
@@ -827,6 +843,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.sunIntensity ?? 20,
             displayValue: Number(params.sunIntensity ?? 20).toFixed(0),
             disabled: off,
+            tooltip: '太阳对云的光照强度，影响云的亮度和对比度',
         },
         {
             id: 'cloudExposure',
@@ -850,6 +867,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.skyToSunRatio ?? 0.28,
             displayValue: Number(params.skyToSunRatio ?? 0.28).toFixed(2),
             disabled: off,
+            tooltip: '天空散射光与太阳直射光的比例，影响云的冷暖色调',
         },
         {
             id: 'aerialPerspectiveScale',
@@ -861,7 +879,55 @@ function createCloudControls(params = {}, disabled) {
             value: params.aerialPerspectiveScale ?? 0.0,
             displayValue: Number(params.aerialPerspectiveScale ?? 0.0).toFixed(1),
             disabled: off,
-            tooltip: 'Aerial 阶段近距离散射；过高会让底图过曝涂白',
+            tooltip: 'Cloud Stage 云体透视；控制远处云融入天空色的程度',
+        },
+        {
+            id: 'groundAerialScale',
+            label: '地面发白',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.05,
+            value: params.groundAerialScale ?? 1.0,
+            displayValue: Number(params.groundAerialScale ?? 1.0).toFixed(2),
+            disabled: off || params.aerialStageEnabled === false,
+            tooltip: '控制空中透视 stage 对地面的发白程度（0=原色 1=全散射），需开启「空中透视 stage」',
+        },
+        {
+            id: 'magentaFixStrength',
+            label: '去品红强度',
+            type: 'range',
+            min: 0,
+            max: 5,
+            step: 0.1,
+            value: params.magentaFixStrength ?? 2.0,
+            displayValue: Number(params.magentaFixStrength ?? 2.0).toFixed(1),
+            disabled: off,
+            tooltip: '校正体积云 raymarch 的偏品红 tint，0=不校正',
+        },
+        {
+            id: 'scatterG1',
+            label: '前向散射 G1',
+            type: 'range',
+            min: -1,
+            max: 1,
+            step: 0.01,
+            value: params.scatterG1 ?? 0.7,
+            displayValue: Number(params.scatterG1 ?? 0.7).toFixed(2),
+            disabled: off,
+            tooltip: 'Henyey-Greenstein 前向散射权重（正=前向亮）',
+        },
+        {
+            id: 'scatterG2',
+            label: '后向散射 G2',
+            type: 'range',
+            min: -1,
+            max: 1,
+            step: 0.01,
+            value: params.scatterG2 ?? -0.2,
+            displayValue: Number(params.scatterG2 ?? -0.2).toFixed(2),
+            disabled: off,
+            tooltip: 'Henyey-Greenstein 后向散射权重（负=逆光暗）',
         },
         {
             id: 'atmosphereExposureDay',
@@ -885,6 +951,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.atmosphereExposureNight ?? 0.1,
             displayValue: Number(params.atmosphereExposureNight ?? 0.1).toFixed(2),
             disabled: off,
+            tooltip: '夜间大气曝光倍率，控制夜景亮度',
         },
         {
             id: 'atmosphereExposureManual',
@@ -904,6 +971,7 @@ function createCloudControls(params = {}, disabled) {
             type: 'toggle',
             value: params.atmosphereExposureFollowTimeline !== false,
             disabled: off,
+            tooltip: '曝光随 Cesium 时间轴自动切换日夜（关闭后用手动值）',
         },
         {
             id: 'atmosphereStageEnabled',
@@ -931,6 +999,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.windSpeed ?? 0,
             displayValue: Number(params.windSpeed ?? 0).toFixed(4),
             disabled: off,
+            tooltip: '云水平漂移速度（纹理坐标偏移），0=静止',
         },
         {
             id: 'evolutionSpeed',
@@ -942,6 +1011,55 @@ function createCloudControls(params = {}, disabled) {
             value: params.evolutionSpeed ?? 0.005,
             displayValue: Number(params.evolutionSpeed ?? 0.005).toFixed(4),
             disabled: off,
+            tooltip: '云形态演化速度（噪声时间轴推进），0=冻结',
+        },
+        {
+            id: 'distFadeStart',
+            label: '距离衰减起始',
+            type: 'range',
+            min: 1000,
+            max: 50000,
+            step: 500,
+            value: params.distFadeStart ?? 11000,
+            displayValue: `${Math.round((params.distFadeStart ?? 11000) / 1000)} km`,
+            disabled: off,
+            tooltip: '云入口距离超过此值开始线性衰减 alpha（流畅 10km / 均衡 10km / 极致 11km）',
+        },
+        {
+            id: 'distFadeEnd',
+            label: '距离衰减结束',
+            type: 'range',
+            min: 5000,
+            max: 200000,
+            step: 1000,
+            value: params.distFadeEnd ?? 51000,
+            displayValue: `${Math.round((params.distFadeEnd ?? 51000) / 1000)} km`,
+            disabled: off,
+            tooltip: '云入口距离达到此值 alpha 完全归零',
+        },
+        {
+            id: 'maxRayDistance',
+            label: '最大采样距离',
+            type: 'range',
+            min: 10000,
+            max: 300000,
+            step: 5000,
+            value: params.maxRayDistance ?? 200000,
+            displayValue: `${Math.round((params.maxRayDistance ?? 200000) / 1000)} km`,
+            disabled: off,
+            tooltip: 'raymarch 最大射线距离；应 > distFadeEnd（流畅 50km / 均衡/极致 200km）',
+        },
+        {
+            id: 'altitudeFadeRange',
+            label: '高度淡出范围',
+            type: 'range',
+            min: 1000,
+            max: 30000,
+            step: 500,
+            value: params.altitudeFadeRange ?? 8000,
+            displayValue: `${Math.round((params.altitudeFadeRange ?? 8000) / 1000)} km`,
+            disabled: off,
+            tooltip: '相机升过云顶后在此范围内线性淡出（防止突然消失）；0=不平滑',
         },
         {
             id: 'maxSteps',
@@ -953,7 +1071,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.maxSteps ?? 500,
             displayValue: String(Math.round(params.maxSteps ?? 500)),
             disabled: off,
-            tooltip: '越大越清晰但越耗 GPU（流畅约 140 / 均衡约 280 / 极致 500）',
+            tooltip: '越大越清晰但越耗 GPU（流畅约 220 / 均衡约 280 / 极致 500）',
         },
         {
             id: 'multiScatteringOctaves',
@@ -965,6 +1083,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.multiScatteringOctaves ?? 8,
             displayValue: String(Math.round(params.multiScatteringOctaves ?? 8)),
             disabled: off,
+            tooltip: '多次散射迭代次数，越多云越通透但越耗 GPU',
         },
         {
             id: 'useShadowBuffer',
@@ -989,9 +1108,10 @@ function createCloudControls(params = {}, disabled) {
             min: 0.1,
             max: 10,
             step: 0.1,
-            value: params.bsmGroundScale ?? 0.3,
-            displayValue: Number(params.bsmGroundScale ?? 0.3).toFixed(1),
+            value: params.bsmGroundScale ?? 0.1,
+            displayValue: Number(params.bsmGroundScale ?? 0.1).toFixed(1),
             disabled: off || params.useShadowBuffer === false,
+            tooltip: 'BSM 云影在地面的光学深度缩放，值越大阴影越深',
         },
         {
             id: 'bsmTyndallScale',
@@ -1003,6 +1123,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.bsmTyndallScale ?? 1.0,
             displayValue: Number(params.bsmTyndallScale ?? 1.0).toFixed(1),
             disabled: off || params.shadowLengthEnabled === false,
+            tooltip: '丁达尔光柱的光学深度缩放，值越大光柱越明显',
         },
         {
             id: 'shadowFar',
@@ -1011,9 +1132,34 @@ function createCloudControls(params = {}, disabled) {
             min: 10000,
             max: 200000,
             step: 1000,
-            value: params.shadowFar ?? 40000,
-            displayValue: `${Math.round((params.shadowFar ?? 40000) / 1000)} km`,
+            value: params.shadowFar ?? 120000,
+            displayValue: `${Math.round((params.shadowFar ?? 120000) / 1000)} km`,
             disabled: off || params.useShadowBuffer === false,
+            tooltip: 'BSM 级联阴影覆盖的最远距离，应 ≤ maxRayDistance；过大影响帧率',
+        },
+        {
+            id: 'shadowSplitLambda',
+            label: '阴影级联分配',
+            type: 'range',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            value: params.shadowSplitLambda ?? 1.0,
+            displayValue: Number(params.shadowSplitLambda ?? 1.0).toFixed(2),
+            disabled: off || params.useShadowBuffer === false,
+            tooltip: 'BSM cascade 近处分配权重（0=均匀 1=偏近处）',
+        },
+        {
+            id: 'shadowFadeScale',
+            label: '阴影衰减范围',
+            type: 'range',
+            min: 1,
+            max: 20,
+            step: 0.5,
+            value: params.shadowFadeScale ?? 5.0,
+            displayValue: Number(params.shadowFadeScale ?? 5.0).toFixed(1),
+            disabled: off || params.useShadowBuffer === false,
+            tooltip: '扩大 BSM ortho 覆盖半径，防止级联矩形外硬切',
         },
         {
             id: 'hazeEnabled',
@@ -1021,6 +1167,7 @@ function createCloudControls(params = {}, disabled) {
             type: 'toggle',
             value: params.hazeEnabled === true,
             disabled: off,
+            tooltip: '启用大气雾霾层（低空薄雾效果）',
         },
         {
             id: 'temporalEnabled',
@@ -1048,6 +1195,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.bloomIntensity ?? 0.6,
             displayValue: Number(params.bloomIntensity ?? 0.6).toFixed(2),
             disabled: off || params.lensFlareEnabled === false,
+            tooltip: '镜头光晕 Bloom 扩散强度',
         },
         {
             id: 'ghostIntensity',
@@ -1059,6 +1207,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.ghostIntensity ?? 1.1,
             displayValue: Number(params.ghostIntensity ?? 1.1).toFixed(2),
             disabled: off || params.lensFlareEnabled === false,
+            tooltip: '镜头光晕鬼影（多个光圈）强度',
         },
         {
             id: 'haloIntensity',
@@ -1070,6 +1219,7 @@ function createCloudControls(params = {}, disabled) {
             value: params.haloIntensity ?? 0.2,
             displayValue: Number(params.haloIntensity ?? 0.2).toFixed(2),
             disabled: off || params.lensFlareEnabled === false,
+            tooltip: '镜头光晕 Halo 光环强度',
         },
     ];
 }
@@ -1106,6 +1256,7 @@ function createBaseAtmosphereControls(params = {}) {
             label: '动态光照',
             type: 'toggle',
             value: params.dynamicAtmosphereLighting !== false,
+            tooltip: '根据太阳位置动态调整大气光照颜色与强度',
         },
         {
             id: 'atmosphereLightIntensity',
@@ -1116,12 +1267,14 @@ function createBaseAtmosphereControls(params = {}) {
             step: 0.5,
             value: params.atmosphereLightIntensity ?? 5.5,
             displayValue: Number(params.atmosphereLightIntensity ?? 5.5).toFixed(1),
+            tooltip: '大气光晕整体亮度倍率，过高会让天空过曝',
         },
         {
             id: 'fogEnabled',
             label: '雾效',
             type: 'toggle',
             value: params.fogEnabled !== false,
+            tooltip: 'Cesium 原生距离雾（非高度雾），基于相机到地表距离',
         },
         {
             id: 'fogDensity',
@@ -1133,24 +1286,28 @@ function createBaseAtmosphereControls(params = {}) {
             value: params.fogDensity ?? 0.00012,
             displayValue: Number(params.fogDensity ?? 0.00012).toFixed(5),
             disabled: !params.fogEnabled,
+            tooltip: '雾浓度系数，值越大雾越浓、可视距离越短',
         },
         {
             id: 'sunShow',
             label: '太阳',
             type: 'toggle',
             value: params.sunShow !== false,
+            tooltip: '显示太阳圆盘（晨昏线必需，关闭后无日照效果）',
         },
         {
             id: 'moonShow',
             label: '月亮',
             type: 'toggle',
             value: params.moonShow !== false,
+            tooltip: '显示月亮圆盘',
         },
         {
             id: 'skyBoxShow',
             label: '星空盒',
             type: 'toggle',
             value: params.skyBoxShow !== false,
+            tooltip: '显示星空天空盒（关闭后背景为纯黑）',
         },
     ];
 }
@@ -1171,6 +1328,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.elevation ?? 30,
             displayValue: Number(params.elevation ?? 30).toFixed(1),
             disabled,
+            tooltip: '太阳高度角（度），影响光照方向和阴影长度',
         },
         {
             id: 'azimuth',
@@ -1182,6 +1340,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.azimuth ?? 150,
             displayValue: Number(params.azimuth ?? 150).toFixed(1),
             disabled,
+            tooltip: '太阳方位角（度），-180~180，影响光照方向',
         },
         {
             id: 'clarity',
@@ -1205,6 +1364,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.causticStrength ?? 0.9,
             displayValue: Number(params.causticStrength ?? 0.9).toFixed(2),
             disabled,
+            tooltip: '水底焦散光斑强度（光线折射聚焦）',
         },
         {
             id: 'waveHeight',
@@ -1216,6 +1376,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.waveHeight ?? 0.5,
             displayValue: Number(params.waveHeight ?? 0.5).toFixed(2),
             disabled,
+            tooltip: '水面波浪振幅，影响法线扰动和反射扭曲',
         },
         {
             id: 'foamWidth',
@@ -1227,6 +1388,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.foamWidth ?? 2.4,
             displayValue: Number(params.foamWidth ?? 2.4).toFixed(1),
             disabled,
+            tooltip: '浪花泡沫带宽度（海岸线附近）',
         },
         {
             id: 'reflection',
@@ -1238,6 +1400,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.reflection ?? 0.38,
             displayValue: Number(params.reflection ?? 0.38).toFixed(2),
             disabled,
+            tooltip: '水面菲涅尔反射强度（0=纯折射 1=纯反射）',
         },
         {
             id: 'waterColor',
@@ -1245,6 +1408,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             type: 'color',
             value: params.waterColor ?? '#2bb3c4',
             disabled,
+            tooltip: '远处深水颜色（近处由清澈度控制）',
         },
         {
             id: 'cloudCoverage',
@@ -1256,6 +1420,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.cloudCoverage ?? 0.58,
             displayValue: Number(params.cloudCoverage ?? 0.58).toFixed(2),
             disabled,
+            tooltip: '天空云量（0=晴天 1=全阴），影响光照和天空颜色',
         },
         {
             id: 'lightningEnabled',
@@ -1263,6 +1428,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             type: 'toggle',
             value: params.lightningEnabled !== false,
             disabled,
+            tooltip: '启用随机闪电效果',
         },
         {
             id: 'lightningInterval',
@@ -1274,6 +1440,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.lightningInterval ?? 2.0,
             displayValue: Number(params.lightningInterval ?? 2.0).toFixed(1),
             disabled: disabled || params.lightningEnabled === false,
+            tooltip: '闪电触发平均间隔（秒）',
         },
     ];
 }

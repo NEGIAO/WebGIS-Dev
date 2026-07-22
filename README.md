@@ -33,7 +33,7 @@
 ## [LLM 项目详细分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 > 不知如何下手？向大语言模型了解本项目的具体内容：(https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.19 阶段，新增 Cesium 体积云·大气一体化模块（cesium-clouds-atmosphere 移植，Bruneton 大气 + 体积云 raymarch + BSM 云影/丁达尔 + 可选 LensFlare Bloom）
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的**前后端分离** WebGIS 平台，历经多次优化迭代，现已进入 V3.3.20 阶段，体积云·大气模块缺陷修复（bottomRadius 统一 / BSM 纹理注入 / Aerial 双 gamma / shadowFar 对齐）+ 面板参数补全 + 邮件服务加固
 
 > 📚 **文档已模块化**：本 README 作为项目门户页，仅保留核心概览与导航。完整的项目结构、开发约定、开发指南、技术栈与常见问题、更新日志等已拆分至 [`Docs/Guide/`](Docs/Guide/)，点击下方「文档导航」一键跳转。
 
@@ -220,6 +220,23 @@ docker build -t webgis-backend .
 
 > 完整版本历史见 [`Docs/Guide/CHANGELOG.md`](Docs/Guide/CHANGELOG.md)，以下仅展示最近三个版本摘要。
 
+### V3.3.20 (2026-07-22) — 体积云迁移缺陷修复 + 面板参数补全 + 邮件服务加固
+
+- 🐛 **bottomRadius 统一**：`pipeline.params.bottomRadius` 改为从 `atmosphereParams.bottomRadius` 派生，消除云层基准球与相机偏移基准球 ~830m 错位，修复云漂浮高度错误与移动抖动
+- 🐛 **BSM 纹理注入修复**：`_bsmResolveGetTexture` 不再返回自定义 `bind()` 裸句柄（Cesium PostProcessStage 不识别），改为返回 `_syncBSM` blit 写入的共享 `Cesium.Texture`，云影/丁达尔稳定生效
+- 🐛 **Aerial 双 gamma 修复**：地面像素不再走 `tonemapDisplay`（ACES+gamma），消除底图过曝白雾；新增 `u_aerialPerspectiveScale` uniform 独立控制空中透视对地面的散射强度
+- 🆕 **groundAerialScale 分离**：空中透视 stage 对地面的发白程度独立于 Cloud Stage 云体透视（`aerialPerspectiveScale`），面板新增「地面发白」滑杆
+- ⬆️ **shadowFar 提升**：40km → 120km，对齐云可见距离量级，消除 cascade 边界硬切与移动时阴影弹出
+- ⬆️ **默认性能档改为均衡**：`DEFAULT_CLOUD_QUALITY` 从 `smooth` 改为 `balanced`（云+轻 BSM/光晕），流畅档 maxSteps 140→220、windSpeed/evolutionSpeed 微调
+- 🆕 **面板新增控件**：`groundAerialScale`、`magentaFixStrength`（去品红）、`scatterG1/G2`（HG 散射权重）、`distFadeStart/End`（距离衰减）、`maxRayDistance`（最大采样距离）、`shadowSplitLambda`（级联分配）、`shadowFadeScale`（衰减范围）；全部控件补全 tooltip 描述
+- 🔧 **shader 来源统一**：`bundledShaders.js` 为唯一真源，`public/` 与 `lib/Shaders/` 标注为镜像；`aerialPerspectiveEffect.frag` 行尾统一 LF
+- 🆕 **体积云加载提示**：开启体积云时弹出 toast 提示「需加载约 4 个 8MB 纹理文件，请稍候」，加载完成后自动切换为成功提示
+- 🔒 **SMTP 安全加固**：`SMTP_PORT` 环境变量非数字时不再导致模块级崩溃（安全 int 转换 + 默认值 80）；`check_smtp_configured()` 扩展为 USER/PASSWORD/HOST/PORT 四要素校验
+- 📧 **邮件发信重试**：`_send_email_sync` 增加 3 次指数退避重试（1s→2s），每次失败打 WARNING 日志
+- 📧 **启动 SMTP 配置检查**：`app.py` lifespan 启动时检查 SMTP 配置并打日志（脱敏显示 SMTP_USER）
+
+详见 [`Docs/LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md`](Docs/LLM_record/26-07/26-07-22/2026-07-22-cloud-migration-defect-fix.md)
+
 ### V3.3.19 (2026-07-21) — Cesium 体积云·大气一体化模块（cesium-clouds-atmosphere 移植）
 
 - 🆕 **体积云 + Bruneton 大气集成**：`Cloud/` 模块从空目录恢复实现，源码以 `Cloud/lib/**` 内联（21 文件 / ~173KB JS + ~60KB GLSL bundle）。覆盖体积云 raymarch（多层 + 形状/细节 3D 噪声 + weather 图 + 湍流）、Bruneton 预计算大气（天空 + 太阳圆盘）、空中透视、Beer Shadow Map（云地投影 + 丁达尔光柱）、可选镜头光晕 Bloom、原生 WebGL PBO TAA
@@ -241,18 +258,7 @@ docker build -t webgis-backend .
 
 详见 [`Docs/LLM_record/26-07/26-07-21/2026-07-21-Agent系统提示词平台简介集成.md`](Docs/LLM_record/26-07/26-07-21/2026-07-21-Agent系统提示词平台简介集成.md)
 
-### V3.3.17 (2026-07-19) — 分享链接隐私过滤 + 3D Tiles ZIP/文件夹导入 + 管理员密码安全加固 + 后端模型选取去随机化
-
-- 🆕 **3D Tiles ZIP/文件夹导入**：`CesiumToolPanel.vue` 新增 ZIP导入/文件夹导入 按钮，`useCesiumDataImport.js` 实现 ZIP 解压（JSZip）→ blob URL 映射 → tileset.json content URL 重写→ Cesium3DTileset 加载，兼容 3D Tiles 1.0/1.1 content 格式
-- 🆕 **3D Tiles 本地文件 file:// URL 优先**：`loadTileset` 优先使用 `file.path` 构造 file:// URL 保留相对路径解析能力（Electron），无路径时回退到 blob URL
-- 🔒 **管理员密码安全加固**：移除硬编码 `DEFAULT_ADMIN_PASSWORD_LOCAL="123456"`，`_get_admin_password()` 仅在 `APP_ENV=development` 时使用开发默认密码，生产环境 SUPER_USER 未设置则禁用管理员登录（HTTP 503）
-- 🐛 **后端模型选取去除随机化**：`_pick_runtime_model` 移除 `random.choice(pool)` 逻辑，管理员在数据库 `system_config.agent_model` 中配置的模型不再被随机选取覆盖，新的优先级为：用户覆盖 > 用户偏好 > 管理员配置 > 环境默认值
-- 🗑️ **清理废弃代码**：移除 `import random`（已无其他用途），`model_source="provider-random"` 字符串不再出现
-- 🔒 **分享链接隐私过滤**：点击「分享」生成的链接不再包含 `ut`（用户身份）、`loc`（定位授权来源）、`p`（GPS 编码位置）三个用户私有参数；`cs`（罗盘）仅在启用时保留；`cv`（Cesium 相机姿态）等视图还原参数全部保留
-
-详见 [`Docs/LLM_record/26-07/26-07-09/2026-07-09-后端代理模式模型随机选取修复.md`](Docs/LLM_record/26-07/26-07-09/2026-07-09-后端代理模式模型随机选取修复.md)
-
-> 📜 更早版本（V3.3.15 及以前，含 V3.0.7 性能优化、V3.0.0 前后端分离等）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+> 📜 更早版本（V3.3.17 及以前，含 V3.0.7 性能优化、V3.0.0 前后端分离等）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -274,6 +280,6 @@ MIT License - 可自由使用、修改、分发
 - 前端部署：https://NEGIAO.github.io/WebGIS
 - 后端部署：https://NEGIAO-WebGIS.hf.space
 
-**最后更新**：2026-07-21
-**当前版本**：V3.3.19
+**最后更新**：2026-07-22
+**当前版本**：V3.3.20
 **项目状态**：开发中 - 持续迭代优化

@@ -120,6 +120,10 @@ uniform float u_minTransmittance;
 // 消除天际线附近云"堆在一起"的视觉拥挤
 uniform float u_distFadeStart;
 uniform float u_distFadeEnd;
+// 相机高度渐变淡出：从 u_altitudeFadeStart 开始线性衰减，到 u_altitudeFadeEnd 完全消失
+// 避免相机升过云顶后云层突然消失
+uniform float u_altitudeFadeStart;
+uniform float u_altitudeFadeEnd;
 uniform float u_minSecondaryStepSize;
 uniform float u_secondaryStepScale;
 uniform int u_multiScatteringOctaves;
@@ -349,7 +353,7 @@ void getIntersections(vec3 camPos, vec3 rd, out bool ground, out vec4 first, out
 }
 
 vec2 getRayNearFar(bool ground, vec4 first, vec4 second) {
-  vec2 nearFar;
+  vec2 nearFar = vec2(-1.0);
   if (u_cameraHeight < u_minHeight) {
      if (ground) {
         nearFar = vec2(-1.0);
@@ -373,11 +377,13 @@ vec2 getRayNearFar(bool ground, vec4 first, vec4 second) {
           nearFar = vec2(u_cameraNear, farExit);
       }
   } else {
-      float farExit = max(max(first.y, second.y), max(first.z, second.z));
-      if (farExit > 0.0) {
-          farExit = min(farExit, u_maxRayDistance);
-          farExit = max(farExit, u_cameraNear + u_minStepSize * 0.5);
-          nearFar = vec2(u_cameraNear, farExit);
+      // 相机在云层上方：near 取射线进入云顶球面的距离（first.z），
+      // 避免从相机近裁面出发耗尽步数穿越空旷空间导致云层突然消失
+      float nearEntry = max(first.z, u_cameraNear);
+      float farExit = max(max(first.y, second.y), second.z);
+      if (farExit > nearEntry) {
+          farExit = min(farExit, nearEntry + u_maxRayDistance);
+          nearFar = vec2(nearEntry, farExit);
       }
   }
   return nearFar;
@@ -592,14 +598,14 @@ vec4 marchClouds(vec3 rayOrigin, vec3 rd, vec2 rayNearFar, float cosTheta, float
       #ifdef USE_ATMOSPHERE_IRRADIANCE
       vec3 skyIrradiance;
       vec3 sunIrradiance = GetSunAndSkyScalarIrradiance(position * METER_TO_LENGTH_UNIT, sunDirection, skyIrradiance);
-      float skyGradient = dot(weather.heightFraction * 0.5 + 0.5, media.weight);
+      float skyGradient = dot(weather.heightFraction * 0.3 + 0.7, media.weight);
       vec3 sunColor = sunIrradiance * u_sunIntensity;
       vec3 skyColor = skyIrradiance * u_sunIntensity * u_skyToSunRatio;
       #else
       float heightAlpha = clamp((height - u_minHeight) / max(u_maxHeight - u_minHeight, 1.0), 0.0, 1.0);
-      vec3 sunColor = mix(sunColorBase * 0.85, sunColorBase, heightAlpha);
-      vec3 skyColor = mix(skyColorBase * 0.6, skyColorBase, heightAlpha);
-      float skyGradient = dot(weather.heightFraction * 0.5 + 0.5, media.weight);
+      vec3 sunColor = mix(sunColorBase * 0.95, sunColorBase, heightAlpha);
+      vec3 skyColor = mix(skyColorBase * 0.85, skyColorBase, heightAlpha);
+      float skyGradient = dot(weather.heightFraction * 0.3 + 0.7, media.weight);
       #endif
       float sunRayDist;
       float opticalDepth = marchOpticalDepthToSun(position, sunDirection, mipLevel, jitter, sunRayDist);
@@ -610,6 +616,8 @@ vec4 marchClouds(vec3 rayOrigin, vec3 rd, vec2 rayNearFar, float cosTheta, float
       }
       vec3 radiance = sunColor * approximateMultipleScattering(opticalDepth, cosTheta);
       radiance += skyColor * RECIPROCAL_PI4 * skyGradient * u_skyLightScale;
+      // 环境光地板：模拟地面反射 + 深层多次散射，防止云底纯黑（现实中云底为浅灰）
+      radiance += skyColor * RECIPROCAL_PI4 * 0.2 * u_skyLightScale;
       radiance *= media.scattering * (1.0 - u_powderScale * exp(-media.extinction * u_powderExponent));
       float transmittance = exp(-media.extinction * stepSize);
       vec3 scatInt = (radiance - radiance * transmittance) / max(media.extinction, 1e-7);
@@ -682,6 +690,11 @@ void main() {
   float entryFade = 1.0 - smoothstep(u_distFadeStart, u_distFadeEnd, rayNearFar.x);
   cloudColor.a *= entryFade;
   cloudColor.rgb *= entryFade;
+
+  // 相机高度渐变淡出：升过云顶后线性衰减，避免硬切消失
+  float altitudeFade = 1.0 - smoothstep(u_altitudeFadeStart, u_altitudeFadeEnd, u_cameraHeight);
+  cloudColor.a *= altitudeFade;
+  cloudColor.rgb *= altitudeFade;
 
   float shadowLen = 0.0;
   bool hitClouds = frontDepth > 0.0 && cloudColor.a > max(u_edgeAlphaCutoff, 0.02);
@@ -797,9 +810,15 @@ export class ThreeGeospatialPipeline {
     this.atmosphereAssetsBase = options.atmosphereAssetsBase ?? DEFAULT_ATMOSPHERE_ASSETS_BASE;
     this.atmosphereShaderBase = options.atmosphereShaderBase ?? DEFAULT_ATMOSPHERE_SHADER_BASE;
 
+    // bottomRadius 统一从 atmosphereParams 派生（V3.3.20 修复）：
+    // 此前 params.bottomRadius=6371860 与 AtmosphereParameters.bottomRadius=6371030 双值并存，
+    // 导致云层基准球(u_bottomRadius)与相机偏移基准球(u_altitudeCorrection)错位 ~830m，
+    // 云漂浮高度错误、BSM 求交错位、移动抖动。现在统一以 atmosphereParams 为唯一真源。
+    const bottomRadiusMeters = Number(this.atmosphereParams?.bottomRadius) || 6371030;
+
     this.params = {
       cloudsVisible: true,
-      bottomRadius: 6371860,
+      bottomRadius: bottomRadiusMeters,
       layers: [
         { channel: 'r', altitude: 1800, height: 650, densityScale: 0.2, shapeAmount: 1.0, shapeDetailAmount: 1.0, weatherExponent: 1.0, shapeAlteringBias: 0.35, coverageFilterWidth: 0.6, coverage: 0.3, densityProfile: { expTerm: 0, exponent: 0, linearTerm: 0.75, constantTerm: 0.25 } },
         { channel: 'g', altitude: 2400, height: 1200, densityScale: 0.2, shapeAmount: 1.0, shapeDetailAmount: 1.0, weatherExponent: 1.0, shapeAlteringBias: 0.35, coverageFilterWidth: 0.6, coverage: 0.3, densityProfile: { expTerm: 0, exponent: 0, linearTerm: 0.75, constantTerm: 0.25 } },
@@ -810,6 +829,8 @@ export class ThreeGeospatialPipeline {
       perspectiveStepScale: 1.005, minDensity: 1e-5, minExtinction: 1e-5, minTransmittance: 0.01,
       // 远处云距离衰减（米）：天际线附近射线斜穿云层累积过密，从 distFadeStart 起线性衰减到 distFadeEnd 完全消失
       distFadeStart: 11000.0, distFadeEnd: 51000.0,
+      // 相机高度淡出（米）：相机升过云顶后，在 altitudeFadeRange 范围内线性淡出至消失
+      altitudeFadeRange: 8000.0,
       minSecondaryStepSize: 100.0, secondaryStepScale: 2.0, multiScatteringOctaves: 8, lowLayerDensityBoost: 1.0,
       shadowLengthEnabled: true, useShadowBuffer: true, hazeEnabled: false,
       maxShadowLengthIterationCount: 500, minShadowLengthStepSize: 50.0, maxShadowLengthRayDistance: 200000.0,
@@ -826,7 +847,9 @@ export class ThreeGeospatialPipeline {
       blueNoiseScale: 1.0, jitterStrength: 1.0,
       // BSM cascade 几何：shadowFar 控制覆盖最远距离，splitLambda 控制近处分配，fadeScale 扩大 ortho radius 防切割
       // fadeScale 提高以扩大 ortho 覆盖，避免 cascade 矩形外硬切；不再依赖 UV edgeFade
-      shadowFar: 40000, shadowSplitLambda: 1.0, shadowFadeScale: 5.0,
+      // shadowFar 对齐云可见距离量级（云 maxRayDistance=200000），否则超过 shadowFar 的云看得见但不产生 BSM、
+      // cascade 边界硬切导致移动时阴影弹出。可经面板下调以换取帧率。
+      shadowFar: 120000, shadowSplitLambda: 1.0, shadowFadeScale: 5.0,
     };
 
     this.atmosphere = null;
@@ -837,6 +860,8 @@ export class ThreeGeospatialPipeline {
 
     // BSM state
     this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null };
+    /** V3.3.20：每帧 _syncBSM blit 写入的共享 Cesium.Texture，供主云 stage u_shadowBuffer 采样 */
+    this._bsmSharedTexture = null;
     // TAA state
     this._taa = { texA: null, texB: null, current: 0, pbo: null, pboReady: false, w: 0, h: 0, frameCount: 0, prevVP: null, curVP: null };
     // Wind offsets
@@ -1039,6 +1064,8 @@ uniform sampler2D irradiance_texture;
       u_maxRayDistance: () => p().maxRayDistance,
       u_distFadeStart: () => Number(p().distFadeStart) || 30000.0,
       u_distFadeEnd: () => Number(p().distFadeEnd) || 150000.0,
+      u_altitudeFadeStart: () => self._getMaxHeight(),
+      u_altitudeFadeEnd: () => self._getMaxHeight() + (Number(p().altitudeFadeRange) || 8000.0),
       u_cameraNear: () => Number(self.viewer.camera.frustum?.near) || 0,
       u_shadowTopHeight: () => self._getMaxHeight(),
       u_shadowLengthEnabled: () => p().shadowLengthEnabled ? 1 : 0,
@@ -1050,9 +1077,15 @@ uniform sampler2D irradiance_texture;
       u_hazeScatteringCoefficient: () => p().hazeScatteringCoefficient,
       u_hazeAbsorptionCoefficient: () => p().hazeAbsorptionCoefficient,
       u_shadowBuffer: () => {
-        if (p().useShadowBuffer && self._bsm.resolve) { 
-          const t = self._bsmResolveGetTexture(); // 直接调用对象的原生方法
-          if (t) return t; 
+        if (p().useShadowBuffer && self._bsm.pass) {
+          // V3.3.20 修复：不再返回自定义 bind() 对象——Cesium PostProcessStage uniform 采样走内部逻辑，
+          // 不会调用自定义 bind，导致 BSM 纹理绑不上/采样残留。改为返回 _syncBSM 已 blit 写入的共享
+          // Cesium.Texture（getCloudShadowTargetTexture），与 atmosphere/aerial 两侧 setCloudShadow 同源。
+          const shared = self._bsmSharedTexture;
+          if (shared) return shared;
+          // 退化路径：无共享目标时回退到 pass 的原生 Cesium.Texture（CloudShadowPass 已用 Cesium.Texture 包 RT）
+          const passTex = self._bsm.pass.getTexture?.();
+          if (passTex) return passTex;
         }
         return tex()?.weather;
       },
@@ -1112,21 +1145,15 @@ uniform sampler2D irradiance_texture;
 
   // ── BSM helpers ─────────────────────────────────────────────────────────
 
+  /**
+   * 返回 resolve pass 当前输出纹理（裸 WebGLTexture 句柄）。
+   * V3.3.20：不再用作 u_shadowBuffer 返回值（自定义 bind 不被 Cesium 识别）。
+   * 仅保留供 _syncBSM 内部 blit 读取 resolve 输出。
+   */
   _bsmResolveGetTexture() {
     const r = this._bsm.resolve;
     const tex = r ? r._historyTex : (this._bsm.pass ? this._bsm.pass._colorTexture : null);
-    if (!tex) return null;
-    const gl = this.viewer.scene.context._gl;
-    return { 
-      _texture: tex, 
-      _textureTarget: gl.TEXTURE_2D, 
-      _target: gl.TEXTURE_2D,
-      // 【关键注入】Cesium 必须调用此方法才能把纹理挂载到 GPU
-      bind: function(textureUnit) {
-          gl.activeTexture(gl.TEXTURE0 + textureUnit);
-          gl.bindTexture(gl.TEXTURE_2D, this._texture);
-      }
-    };
+    return tex ? { _texture: tex } : null;
   }
 
   _taaGetHistoryTexture() {
@@ -1213,6 +1240,9 @@ uniform sampler2D irradiance_texture;
     let textureToPass = tex;
 
     if (targetTex && tex._texture) { this._blitBSM(tex, targetTex, scaleToPass); textureToPass = targetTex; }
+    // V3.3.20：blit 写入的共享 Cesium.Texture 同时供主云 stage 的 u_shadowBuffer 采样，
+    // 避免返回自定义 bind() 对象（见 _buildCloudUniforms.u_shadowBuffer）。
+    this._bsmSharedTexture = targetTex || null;
 
     const intervals = sp.getShadowIntervals();
     const mats = sp.getShadowMatrices();

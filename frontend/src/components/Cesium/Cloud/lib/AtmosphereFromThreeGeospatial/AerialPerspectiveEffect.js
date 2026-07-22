@@ -81,6 +81,9 @@ export class AerialPerspectiveEffect {
     this._bsmTyndallOpticalDepthScale = 1.0;
     this._bsmGroundOpticalDepthScale = 1.0;
 
+    /** 空中透视强度 [0,1]，由云面板 aerialPerspectiveScale 滑杆控制 */
+    this._aerialPerspectiveScale = 0.0;
+
     /** 是否在控制台打印相机椭球高（WGS84，米）；仅在相机相对上一帧有变动时打印 */
     this._logCameraAltitude = options.logCameraAltitude ?? false;
     this._logCameraPositionEpsilonMeters =
@@ -355,6 +358,10 @@ uniform sampler2D irradiance_texture;
         self._bsmTyndallOpticalDepthScale ?? 1.0;
       uniforms.u_bsmGroundOpticalDepthScale = () =>
         self._bsmGroundOpticalDepthScale ?? 1.0;
+
+      // 空中透视强度：由云面板 aerialPerspectiveScale 滑杆通过 cloudParamsApply 注入
+      uniforms.u_aerialPerspectiveScale = () =>
+        self._aerialPerspectiveScale ?? 0.0;
 
       this.stage = new Cesium.PostProcessStage({
         name: "AerialPerspectiveEffect",
