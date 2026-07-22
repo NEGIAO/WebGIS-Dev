@@ -20,6 +20,7 @@ import { applyCloudPanelParams, applyLensFlareParams } from './cloudParamsApply.
  * @param {import('vue').Ref<Record<string, unknown>>} [opts.atmosphereParams] - 保留参数兼容旧调用，当前不直接使用
  * @param {import('vue').Ref<Record<string, boolean>>} [opts.advancedEffectControls] - Tellux 大气开关（启用体积云时临时关闭，避免底图过曝涂白）
  * @param {boolean} [opts.enableGui=false]
+ * @param {object} [opts.message] - Naive UI useMessage() 实例，用于显示加载/成功/失败提示
  * @returns {() => void} cleanup
  */
 export function setupCloudIntegration({
@@ -28,6 +29,7 @@ export function setupCloudIntegration({
   atmosphereParams: _atmosphereParams,
   advancedEffectControls,
   enableGui = false,
+  message: msg,
 } = {}) {
   if (!viewer) {
     console.warn('[Cloud] setupCloudIntegration: viewer 为空');
@@ -41,6 +43,8 @@ export function setupCloudIntegration({
   /** @type {Promise<void> | null} */
   let initPromise = null;
   let disposed = false;
+  /** @type {string|null} */
+  let loadingMsgId = null;
 
   /** 启用管线前的 Cesium 原生天空快照 */
   const skySnapshot = captureSkyState(viewer);
@@ -134,6 +138,12 @@ export function setupCloudIntegration({
    * 销毁管线并恢复原生天空。
    */
   function teardownPipeline() {
+    // 清理加载提示
+    if (msg && loadingMsgId) {
+      msg.remove(loadingMsgId);
+      loadingMsgId = null;
+    }
+
     try {
       lensFlare?.destroy?.();
     } catch (e) {
@@ -165,12 +175,33 @@ export function setupCloudIntegration({
     async (params) => {
       if (disposed || !params) return;
       if (params.cloudsEnabled) {
+        // 首次开启时提示用户等待大文件加载
+        if (msg && !pipeline && !loadingMsgId) {
+          loadingMsgId = msg.info(
+            '体积云资源加载中（需加载约 4 个 8MB 纹理文件），请稍候...',
+            { closable: false, duration: 0 },
+          );
+        }
         try {
           await ensurePipeline();
           if (disposed) return;
+          // 加载完成，关闭等待提示
+          if (msg && loadingMsgId) {
+            msg.remove(loadingMsgId);
+            loadingMsgId = null;
+            msg.success('体积云已就绪');
+          }
           applyCloudPanelParams(pipeline, params);
           applyLensFlareParams(lensFlare, params);
         } catch {
+          // 出错了也要关闭等待提示，并向用户反馈
+          if (msg && loadingMsgId) {
+            msg.remove(loadingMsgId);
+            loadingMsgId = null;
+          }
+          if (msg) {
+            msg.error('体积云加载失败，请稍后重试');
+          }
           // ensurePipeline 已打日志
         }
       } else if (pipeline) {

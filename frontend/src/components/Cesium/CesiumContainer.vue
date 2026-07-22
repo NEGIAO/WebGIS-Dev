@@ -603,6 +603,7 @@ function initViewer() {
             // Bruneton 大气接管天空时，与 Tellux 大气/Cesium 原生大气叠加会让底图过曝涂白。
             // 启用体积云时临时关闭 Tellux 大气，关闭时恢复。
             advancedEffectControls,
+            message,
         });
     } catch (err) {
         console.warn('[Cesium] Cloud integration skipped:', err);
