@@ -23,10 +23,9 @@ import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
  * @param {Object} ctx.message
  * @param {import('vue').Ref} ctx.loadedDataSources
  * @param {{ current: number }} ctx.nextId
- * @param {Object} [ctx.heightSampler] - 地形高度采样器
  * @returns {Promise<Object>} record 或 { needsCoordInput: true, file, blobUrl }
  */
-export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -43,8 +42,32 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
     let coords;
     if (embeddedCoords) {
         coords = embeddedCoords;
+        // 嵌入坐标存在时，检查地形高度并补偿
+        const CesiumNs = getCesium();
+        if (CesiumNs && viewer.terrainProvider &&
+            viewer.terrainProvider.constructor !== CesiumNs.EllipsoidTerrainProvider) {
+            try {
+                const pos = CesiumNs.Cartographic.fromDegrees(coords.lng, coords.lat);
+                const results = await CesiumNs.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
+                if (results && results.length > 0 && results[0].height !== undefined) {
+                    const terrainH = results[0].height;
+                    const diff = terrainH - coords.height;
+                    if (diff > 0) {
+                        coords = { ...coords, height: terrainH + 10 };
+                        console.warn('[贴地-GLTF] 地形=', terrainH.toFixed(1), 'm, 模型原高=', embeddedCoords.height.toFixed(1), 'm, 抬升至=', coords.height.toFixed(1), 'm');
+                    }
+                } else {
+                    // 采样无结果，关地形兜底
+                    console.warn('[贴地-GLTF] 采样无结果，关闭地形');
+                    viewer.terrainProvider = new CesiumNs.EllipsoidTerrainProvider();
+                }
+            } catch (e) {
+                console.warn('[贴地-GLTF] 采样失败:', e.message || e, '，关闭地形');
+                viewer.terrainProvider = new CesiumNs.EllipsoidTerrainProvider();
+            }
+        }
     } else {
-        coords = await getAutoPlaceCoords(viewer, Cesium, heightSampler);
+        coords = await getAutoPlaceCoords(viewer, Cesium);
         if (!coords) {
             return { needsCoordInput: true, file, blobUrl };
         }
@@ -228,10 +251,9 @@ export function parseGlbJsonChunk(buffer) {
  *
  * @param {Cesium.Viewer} viewer
  * @param {Cesium} Cesium
- * @param {Object} [heightSampler] - 地形高度采样器
  * @returns {Promise<{lng: number, lat: number, height: number}|null>}
  */
-export async function getAutoPlaceCoords(viewer, Cesium, heightSampler) {
+export async function getAutoPlaceCoords(viewer, Cesium) {
     try {
         const center = new Cesium.Cartesian2(
             viewer.canvas.clientWidth / 2,
@@ -256,17 +278,12 @@ export async function getAutoPlaceCoords(viewer, Cesium, heightSampler) {
 
         let height = 0;
         try {
-            if (heightSampler?.sampleHeight) {
-                const result = heightSampler.sampleHeight({ lng, lat });
-                if (result?.height !== undefined) {
-                    height = result.height;
-                }
-            } else {
-                const samplePos = Cesium.Cartographic.fromDegrees(lng, lat);
-                const sampled = Cesium.sampleTerrain(viewer.terrainProvider, 0, [samplePos]);
-                const resolved = sampled instanceof Promise ? await sampled : sampled;
-                if (resolved?.[0]?.height !== undefined) {
-                    height = resolved[0].height;
+            if (viewer.terrainProvider &&
+                viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider) {
+                const pos = Cesium.Cartographic.fromDegrees(lng, lat);
+                const results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
+                if (results && results.length > 0 && results[0].height !== undefined) {
+                    height = results[0].height;
                 }
             }
         } catch { /* 采样失败，使用默认高度 0 */ }
