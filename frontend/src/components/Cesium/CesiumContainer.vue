@@ -51,6 +51,9 @@
         @data-import="handleDataImport"
         @data-remove="handleDataRemove"
         @data-clear-all="handleDataClearAll"
+        @data-flyto="handleDataFlyTo"
+        @data-reposition="handleDataReposition"
+        @data-stretch-height="handleDataStretchHeight"
         @import-tileset-zip="handleImportTilesetZip"
         @import-tileset-folder="handleImportTilesetFolder"
     />
@@ -76,10 +79,12 @@
         @select="handleNavTargetSelect"
     />
 
-    <!-- GLTF/GLB 坐标输入弹窗 -->
+    <!-- GLTF/GLB 坐标输入/调整弹窗 -->
     <CesiumDataImportDialog
-        :visible="!!pendingGltfFile"
-        :file-name="pendingGltfFile?.name || ''"
+        :visible="!!pendingGltfFile || !!repositionTarget"
+        :file-name="repositionTarget?.name || pendingGltfFile?.name || ''"
+        :initial-coords="repositionTarget?.position || null"
+        :mode="repositionTarget ? 'reposition' : 'import'"
         @confirm="handleGltfCoordConfirm"
         @cancel="handleGltfCoordCancel"
     />
@@ -131,21 +136,21 @@ import CesiumToolPanel from './CesiumToolPanel.vue';
 import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import ShallowWaterOverlay from './ShallowWater/ShallowWaterOverlay.vue';
-import { configureSolarLighting } from './composables/cesiumAtmosphere';
-import { loadCesiumRuntime } from './composables/cesiumRuntime';
-import { configureBeijingTimeSystem } from './composables/cesiumTimeSystem';
-import { useCesiumCreditHider } from './composables/useCesiumCreditHider';
-import { useCesiumInteractions } from './composables/useCesiumInteractions';
-import { useCesiumLayers } from './composables/useCesiumLayers';
-import { useCesiumSceneActions } from './composables/useCesiumSceneActions';
-import { useCesiumDataImport } from './composables/useCesiumDataImport';
-import { useCesiumToolModules } from './composables/useCesiumToolModules';
+import { configureSolarLighting } from './composables/scene/cesiumAtmosphere';
+import { loadCesiumRuntime } from './composables/core/cesiumRuntime';
+import { configureBeijingTimeSystem } from './composables/core/cesiumTimeSystem';
+import { useCesiumCreditHider } from './composables/scene/useCesiumCreditHider';
+import { useCesiumInteractions } from './composables/interaction/useCesiumInteractions';
+import { useCesiumLayers } from './composables/layers/useCesiumLayers';
+import { useCesiumSceneActions } from './composables/camera/useCesiumSceneActions';
+import { useCesiumDataImport } from './composables/dataImport/useCesiumDataImport';
+import { useCesiumToolModules } from './composables/toolModules/useCesiumToolModules';
 import { setupCloudIntegration } from './Cloud';
-import { useCesiumUrlTracking } from './composables/useCesiumUrlTracking';
-import { useCesiumWind } from './composables/useCesiumWind';
-import { useCesiumModelManager } from './composables/useCesiumModelManager';
-import { useCesiumCameraEnhanced } from './composables/useCesiumCameraEnhanced';
-import { useCesiumHeightSampler } from './composables/useCesiumHeightSampler';
+import { useCesiumUrlTracking } from './composables/layers/useCesiumUrlTracking';
+import { useCesiumWind } from './composables/terrain/useCesiumWind';
+import { useCesiumModelManager } from './composables/models/useCesiumModelManager';
+import { useCesiumCameraEnhanced } from './composables/camera/useCesiumCameraEnhanced';
+import { useCesiumHeightSampler } from './composables/terrain/useCesiumHeightSampler';
 import { usePlayerController } from './PlayerController/usePlayerController';
 import PlayerGuidePanel from './PlayerController/PlayerGuidePanel.vue';
 import NavGuideHUD from './PlayerController/NavGuideHUD.vue';
@@ -245,18 +250,19 @@ const wind = useCesiumWind({
     message,
 });
 
-const dataImport = useCesiumDataImport({
-    getViewer,
-    getCesium,
-    message,
-});
-
 // ==========================================
 // tellux 移植模块：模型管理、相机增强、高度采样
 // ==========================================
 const modelManager = useCesiumModelManager({ getViewer, getCesium, message });
 const cameraEnhanced = useCesiumCameraEnhanced({ getViewer, getCesium });
 const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
+
+const dataImport = useCesiumDataImport({
+    getViewer,
+    getCesium,
+    message,
+    heightSampler,
+});
 
 // ==========================================
 // 人物漫游控制器（第一/第三人称视角）
@@ -325,6 +331,7 @@ defineExpose({
  */
 const loadedDataSourcesForPanel = computed(() => dataImport.loadedDataSources.value);
 const pendingGltfFile = computed(() => dataImport.pendingGltfFile.value);
+const repositionTarget = computed(() => dataImport.repositionTarget?.value);
 
 /** 拖拽悬浮状态（用于显示拖拽提示覆盖层） */
 const isDragOver = ref(false);
@@ -357,14 +364,10 @@ async function onDrop(event) {
     const files = event.dataTransfer?.files;
     if (!files || files.length === 0) return;
 
-    for (const file of files) {
-        if (componentUnmounted) break;
-        try {
-            await dataImport.loadDataFile(file);
-        } catch (err) {
-            // loadDataFile 内部已通过 message.error 提示
-            console.warn('[Cesium] file import error:', err);
-        }
+    try {
+        await dataImport.loadDataFiles(Array.from(files));
+    } catch (err) {
+        console.warn('[Cesium] file import error:', err);
     }
 }
 
@@ -622,17 +625,15 @@ onMounted(() => {
 
 /**
  * 处理文件导入事件（由 CesiumToolPanel data tab 触发）
- * 支持多文件选择，逐个加载
+ * 多文件选择时自动分组（SHP 配套文件 .dbf/.shx/.prj 合并加载）
  * @param {{ files: File[] }} payload
  */
 async function handleDataImport({ files }) {
-    for (const file of files) {
-        if (componentUnmounted) break;
-        try {
-            await dataImport.loadDataFile(file);
-        } catch {
-            // loadDataFile 内部已通过 message.error 提示用户
-        }
+    if (componentUnmounted) return;
+    try {
+        await dataImport.loadDataFiles(Array.from(files));
+    } catch {
+        // loadDataFiles 内部已通过 message.error 提示
     }
 }
 
@@ -644,9 +645,35 @@ function handleDataRemove({ id }) {
     dataImport.removeDataSource(id);
 }
 
+/**
+ * 定位/缩放到指定数据源
+ * @param {{ id: string }} payload
+ */
+function handleDataFlyTo({ id }) {
+    dataImport.flyToDataSource(id);
+}
+
 /** 清除所有已加载数据源 */
 function handleDataClearAll() {
     dataImport.clearAllDataSources();
+}
+
+/**
+ * 调整 GLTF 模型位置
+ * @param {{ id: string }} payload
+ */
+function handleDataReposition({ id }) {
+    dataImport.startGltfReposition(id);
+}
+
+/** 拉伸 GeoTIFF 单波段到高程 */
+async function handleDataStretchHeight({ id }) {
+    if (componentUnmounted) return;
+    try {
+        await dataImport.stretchRasterToHeight(id);
+    } catch {
+        // stretchRasterToHeight 内部已通过 message 提示
+    }
 }
 
 /**
@@ -683,20 +710,29 @@ async function handleImportTilesetFolder() {
 
 /**
  * GLTF 坐标弹窗确认回调
+ * 同时处理：首次导入坐标确认（pendingGltfFile）和已加载模型位置调整（repositionTarget）
  * @param {{ lng: number, lat: number, height: number }} coords
  */
 async function handleGltfCoordConfirm(coords) {
     if (componentUnmounted) return;
     try {
-        await dataImport.loadGltfWithUserCoords(coords);
+        if (repositionTarget.value) {
+            await dataImport.confirmGltfReposition(coords);
+        } else {
+            await dataImport.loadGltfWithUserCoords(coords);
+        }
     } catch {
-        // loadGltfWithUserCoords 内部已通过 message.error 提示用户
+        // 内部已通过 message.error 提示用户
     }
 }
 
 /** GLTF 坐标弹窗取消回调 */
 function handleGltfCoordCancel() {
-    dataImport.cancelPendingGltf();
+    if (repositionTarget.value) {
+        dataImport.cancelGltfReposition();
+    } else {
+        dataImport.cancelPendingGltf();
+    }
 }
 
 onUnmounted(() => {

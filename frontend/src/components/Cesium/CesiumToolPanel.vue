@@ -499,7 +499,7 @@
                             />
                             <span>选择文件或拖拽到此处</span>
                             <span class="data-formats-label">
-                                支持: GeoJSON, KML/KMZ, SHP, GLB/GLTF, CZML, 3D Tiles
+                                支持: GeoJSON, KML/KMZ, TIF, SHP, GLB/GLTF, CZML, 3D Tiles
                             </span>
                         </div>
                     </label>
@@ -545,14 +545,10 @@
                             </button>
                         </div>
 
-                        <button
+                        <div
                             v-for="source in localDataSources"
                             :key="source.id"
                             class="data-source-row"
-                            type="button"
-                            :title="`点击移除 ${source.name} (${formatLabel(source.type)})`"
-                            :aria-label="`移除 ${source.name}`"
-                            @click="emitRemove(source.id)"
                         >
                             <span class="data-source-icon">
                                 <component
@@ -565,12 +561,47 @@
                                 <span class="data-source-name">{{ source.name }}</span>
                                 <span class="data-source-type">{{ formatLabel(source.type) }}</span>
                             </span>
-                            <X
-                                class="data-source-remove-icon"
-                                :size="14"
-                                stroke-width="2"
-                            />
-                        </button>
+                            <span class="data-source-actions">
+                                <button
+                                    class="data-source-action-btn flyto"
+                                    type="button"
+                                    title="定位到此数据源"
+                                    :aria-label="`定位到 ${source.name}`"
+                                    @click.stop="emitFlyTo(source.id)"
+                                >
+                                    <Crosshair :size="14" stroke-width="2" />
+                                </button>
+                                <button
+                                    v-if="source.type === 'gltf'"
+                                    class="data-source-action-btn reposition"
+                                    type="button"
+                                    title="调整模型位置"
+                                    :aria-label="`调整 ${source.name} 的位置`"
+                                    @click.stop="emitReposition(source.id)"
+                                >
+                                    <MapPin :size="14" stroke-width="2" />
+                                </button>
+                                <button
+                                    v-if="source.type === 'tif'"
+                                    class="data-source-action-btn stretch-height"
+                                    type="button"
+                                    title="拉伸到高程"
+                                    :aria-label="`将 ${source.name} 拉伸到高程`"
+                                    @click.stop="emitStretchHeight(source.id)"
+                                >
+                                    <Mountain :size="14" stroke-width="2" />
+                                </button>
+                                <button
+                                    class="data-source-action-btn remove"
+                                    type="button"
+                                    title="移除此数据源"
+                                    :aria-label="`移除 ${source.name}`"
+                                    @click.stop="emitRemove(source.id)"
+                                >
+                                    <X :size="14" stroke-width="2" />
+                                </button>
+                            </span>
+                        </div>
                     </div>
 
                     <div
@@ -591,6 +622,7 @@ import {
     Box,
     Check,
     ChevronDown,
+    Crosshair,
     Droplets,
     Eye,
     FileArchive,
@@ -598,8 +630,10 @@ import {
     FolderOpen,
     Globe,
     Home,
+    Image,
     Layers,
     Link,
+    MapPin,
     Mountain,
     Navigation,
     Play,
@@ -691,6 +725,9 @@ const emit = defineEmits([
     'data-import',
     'data-remove',
     'data-clear-all',
+    'data-flyto',
+    'data-reposition',
+    'data-stretch-height',
     'import-tileset-zip',
     'import-tileset-folder',
 ]);
@@ -906,6 +943,7 @@ function getFormatIcon(type) {
         gltf: Box,
         czml: FileJson,
         '3dtiles': Box,
+        tif: Image,
     };
     return icons[type] || FileJson;
 }
@@ -921,6 +959,7 @@ function formatLabel(type) {
         gltf: 'GLTF/GLB',
         czml: 'CZML',
         '3dtiles': '3D Tiles',
+        tif: 'GeoTIFF',
     };
     return labels[type] || type.toUpperCase();
 }
@@ -941,6 +980,21 @@ function handleFileSelect(event) {
 /** 移除单个数据源 */
 function emitRemove(id) {
     emit('data-remove', { id });
+}
+
+/** 定位/缩放到指定数据源 */
+function emitFlyTo(id) {
+    emit('data-flyto', { id });
+}
+
+/** 调整 GLTF 模型位置 */
+function emitReposition(id) {
+    emit('data-reposition', { id });
+}
+
+/** 拉伸 GeoTIFF 单波段到高程 */
+function emitStretchHeight(id) {
+    emit('data-stretch-height', { id });
 }
 
 /** 清除所有数据源 */
@@ -1914,14 +1968,12 @@ function emitClearAll() {
     padding: 8px 10px;
     background: rgba(255, 255, 255, 0.055);
     color: rgba(239, 250, 255, 0.86);
-    cursor: pointer;
-    text-align: left;
     transition: all 0.18s ease;
 }
 
 .data-source-row:hover {
-    border-color: rgba(255, 143, 143, 0.42);
-    background: rgba(120, 41, 53, 0.32);
+    border-color: rgba(155, 216, 255, 0.35);
+    background: rgba(60, 100, 140, 0.22);
 }
 
 .data-source-icon {
@@ -1958,13 +2010,60 @@ function emitClearAll() {
     font-size: 11px;
 }
 
-.data-source-remove-icon {
+.data-source-actions {
     flex: 0 0 auto;
-    color: rgba(255, 143, 143, 0.48);
-    transition: color 0.18s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.data-source-row:hover .data-source-remove-icon {
+.data-source-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.data-source-action-btn.flyto {
+    color: rgba(100, 200, 255, 0.45);
+}
+
+.data-source-action-btn.flyto:hover {
+    color: #64c8ff;
+    background: rgba(100, 200, 255, 0.15);
+}
+
+.data-source-action-btn.reposition {
+    color: rgba(250, 204, 21, 0.5);
+}
+
+.data-source-action-btn.reposition:hover {
+    color: #facc15;
+    background: rgba(250, 204, 21, 0.15);
+}
+
+.data-source-action-btn.stretch-height {
+    color: rgba(74, 222, 128, 0.5);
+}
+
+.data-source-action-btn.stretch-height:hover {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+}
+
+.data-source-action-btn.remove {
+    color: rgba(255, 143, 143, 0.4);
+}
+
+.data-source-action-btn.remove:hover {
     color: #ff8f8f;
+    background: rgba(255, 100, 100, 0.15);
 }
 </style>

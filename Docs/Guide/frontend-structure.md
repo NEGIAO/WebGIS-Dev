@@ -118,25 +118,56 @@ frontend/src/
 │   │   │   ├── composables/useShallowWater.js      # Three.js 生命周期
 │   │   │   └── utils/textures.js                   # 程序化纹理
 │   │   │
-│   │   ├── composables/                            # Cesium composables
-│   │   │   ├── cesiumRuntime.js                    # Cesium CDN 运行时加载
-│   │   │   ├── cesiumAtmosphere.js                 # 大气渲染
-│   │   │   ├── cesiumStorage.js                    # Cesium 状态持久化
-│   │   │   ├── cesiumTimeSystem.js                 # 时间系统
-│   │   │   ├── useCesiumBasemapSwitcher.js         # 底图熔断/降级切换
-│   │   │   ├── useCesiumBeautify.js                # 场景美化（HDR/FXAA/定向光）
-│   │   │   ├── useCesiumCameraEnhanced.js          # 相机增强
-│   │   │   ├── useCesiumCreditHider.js             # 版权信息隐藏
-│   │   │   ├── useCesiumDataImport.js              # 数据导入
-│   │   │   ├── useCesiumFrameRate.js               # FPS 采样
-│   │   │   ├── useCesiumHeightSampler.js           # 高度采样
-│   │   │   ├── useCesiumInteractions.js            # 交互管理
-│   │   │   ├── useCesiumLayers.js                  # 底图/地形/叠加层编排
-│   │   │   ├── useCesiumModelManager.js            # 3D 模型管理
-│   │   │   ├── useCesiumSceneActions.js            # 场景动作
-│   │   │   ├── useCesiumToolModules.js             # 工具面板模块编排
-│   │   │   ├── useCesiumUrlTracking.js             # URL 追踪
-│   │   │   └── useCesiumWind.js                    # 风场集成
+│   │   ├── composables/                            # Cesium composables（按功能模块分层）
+│   │   │   ├── index.js                            # 统一导出入口
+│   │   │   ├── core/                               # 核心层（运行时、时间、状态持久化）
+│   │   │   │   ├── cesiumRuntime.js                # Cesium CDN 运行时加载
+│   │   │   │   ├── cesiumStorage.js                # Cesium 状态持久化
+│   │   │   │   └── cesiumTimeSystem.js             # 时间系统
+│   │   │   ├── scene/                              # 场景层（大气、美化、版权隐藏）
+│   │   │   │   ├── cesiumAtmosphere.js             # 大气渲染
+│   │   │   │   ├── useCesiumBeautify.js            # 场景美化（HDR/FXAA/定向光）
+│   │   │   │   └── useCesiumCreditHider.js         # 版权信息隐藏
+│   │   │   ├── camera/                             # 相机层（增强、场景动作）
+│   │   │   │   ├── useCesiumCameraEnhanced.js      # 相机增强
+│   │   │   │   └── useCesiumSceneActions.js        # 场景动作
+│   │   │   ├── layers/                             # 图层层（底图、叠加层、URL追踪）
+│   │   │   │   ├── useCesiumLayers.js              # 底图/地形/叠加层编排
+│   │   │   │   ├── useCesiumBasemapSwitcher.js     # 底图熔断/降级切换
+│   │   │   │   ├── useCesiumUrlTracking.js         # URL 追踪
+│   │   │   │   └── layerUtils.js                   # 图层工具函数/常量
+│   │   │   ├── interaction/                        # 交互层（鼠标交互、FPS采样）
+│   │   │   │   ├── useCesiumInteractions.js        # 交互管理
+│   │   │   │   └── useCesiumFrameRate.js           # FPS 采样
+│   │   │   ├── terrain/                            # 地形/风场/高度采样层
+│   │   │   │   ├── useCesiumWind.js                # 风场集成
+│   │   │   │   └── useCesiumHeightSampler.js       # 高度采样
+│   │   │   ├── models/                             # 模型管理层
+│   │   │   │   └── useCesiumModelManager.js        # 3D 模型管理
+│   │   │   ├── dataImport/                         # 数据导入模块（含工具函数）
+│   │   │   │   ├── useCesiumDataImport.js          # 数据导入主逻辑
+│   │   │   │   ├── importUtils.js                  # 导入工具函数
+│   │   │   │   ├── geoTiffUtils.js                 # GeoTIFF 工具函数
+│   │   │   │   └── loaders/                        # 数据加载器（按格式拆分）
+│   │   │   │       ├── utils.js                    # 加载器共享工具函数
+│   │   │   │       ├── czmlLoader.js               # CZML 时序数据加载器
+│   │   │   │       ├── geojsonLoader.js            # GeoJSON 流式加载器
+│   │   │   │       ├── geotiffLoader.js            # GeoTIFF 影像加载器
+│   │   │   │       ├── gltfLoader.js               # GLTF/GLB 三维模型加载器
+│   │   │   │       ├── kmlLoader.js                # KML/KMZ 格式加载器
+│   │   │   │       ├── shpLoader.js                # Shapefile 格式加载器
+│   │   │   │       └── tilesetLoader.js            # 3D Tiles 数据集加载器
+│   │   │   └── toolModules/                        # 工具面板模块（v3.0.2 扁平化重构）
+│   │   │       ├── useCesiumToolModules.js         # 工具面板模块编排（核心）
+│   │   │       ├── controlsUtils.js                # 控件工具函数（toFiniteNumberOrNull）
+│   │   │       ├── sceneModule.js                  # 场景导航模块（相机飞行+演示数据）
+│   │   │       ├── atmosphereModule.js             # 大气模块（晨昏/雾/HBAO/移轴+Tellux）
+│   │   │       ├── cloudModule.js                  # 体积云模块（性能预设+参数控件）
+│   │   │       ├── windModule.js                   # 风场模块（2D风场加载+清空）
+│   │   │       ├── fluidModule.js                  # 流体模块（洪水模拟+水位动画）
+│   │   │       ├── shallowWaterModule.js           # 热带浅水模块（三渲二水体+闪电）
+│   │   │       ├── playerModule.js                 # 人物漫游模块（WASD移动+碰撞检测）
+│   │   │       └── toolsModule.js                  # 空间工具模块（模型管理+增强相机）
 │   │   │
 │   │   └── terrain/                                # 自定义地形 Provider
 │   │       ├── GeoTerrainProvider.js               # 天地图地形

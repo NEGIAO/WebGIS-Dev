@@ -17,11 +17,11 @@
                             :size="18"
                             stroke-width="2"
                         />
-                        <span class="dialog-title">输入模型放置坐标</span>
+                        <span class="dialog-title">{{ mode === 'reposition' ? '调整模型放置位置' : '输入模型放置坐标' }}</span>
                     </div>
                     <p class="dialog-file-name">{{ fileName }}</p>
                     <p class="dialog-hint">
-                        该模型未包含嵌入的地理坐标，请输入要放置的位置。
+                        {{ mode === 'reposition' ? '修改坐标以调整已加载模型的位置。' : '该模型未包含嵌入的地理坐标，请输入要放置的位置。' }}
                     </p>
                 </header>
 
@@ -102,7 +102,7 @@
                                 :size="14"
                                 stroke-width="2"
                             />
-                            确认放置
+                            {{ mode === 'reposition' ? '确认调整' : '确认放置' }}
                         </button>
                     </div>
                 </form>
@@ -123,6 +123,14 @@ const props = defineProps({
     fileName: {
         type: String,
         default: '',
+    },
+    initialCoords: {
+        type: Object,
+        default: null,
+    },
+    mode: {
+        type: String,
+        default: 'import', // 'import' | 'reposition'
     },
 });
 
@@ -188,11 +196,10 @@ function handleConfirm() {
     emit('confirm', { lng, lat, height });
 }
 
-// 弹窗打开/关闭时统一重置表单 + 必要时聚焦到经度输入框
+// 弹窗打开/关闭时：打开时根据模式填充或清空表单
 watch(
     () => props.visible,
     (isVisible) => {
-        // 仅在状态变化为打开时重置，避免重复创建文件时把进行中的输入擦除
         if (!isVisible) {
             lngError.value = '';
             latError.value = '';
@@ -200,20 +207,27 @@ watch(
             return;
         }
 
-        // 打开时统一清空，避免残留上次的输入或报错
-        lngStr.value = '';
-        latStr.value = '';
-        heightStr.value = '0';
+        // 重置报错
         lngError.value = '';
         latError.value = '';
         heightError.value = '';
 
-        if (isVisible) {
-            // 等待 Teleport 把 dialog 挂载到 body 后再聚焦
-            setTimeout(() => {
-                lngInputRef.value?.focus();
-            }, 60);
+        if (props.initialCoords && props.mode === 'reposition') {
+            // 调整位置：使用当前坐标预填充
+            lngStr.value = String(props.initialCoords.lng ?? '');
+            latStr.value = String(props.initialCoords.lat ?? '');
+            heightStr.value = String(props.initialCoords.height ?? '0');
+        } else {
+            // 首次导入：清空
+            lngStr.value = '';
+            latStr.value = '';
+            heightStr.value = '0';
         }
+
+        // 等待 Teleport 把 dialog 挂载到 body 后再聚焦
+        setTimeout(() => {
+            lngInputRef.value?.focus();
+        }, 60);
     },
 );
 </script>

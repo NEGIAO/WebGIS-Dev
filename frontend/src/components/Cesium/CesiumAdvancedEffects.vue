@@ -38,7 +38,7 @@ import {
     captureRealisticAtmosphereState,
     configureRealisticAtmosphere,
     restoreRealisticAtmosphere,
-} from './composables/cesiumAtmosphere';
+} from './composables/scene/cesiumAtmosphere';
 import LilGuiControls from './LilGuiControls.vue';
 
 const props = defineProps({

@@ -988,7 +988,7 @@ void main() {
 
   vec3 color = speedToColor(speedT);
   float alpha = clamp((1.0 - v_age) * alphaFactor, 0.0, 1.0);
-  out_FragColor = vec4(color, alpha);
+  czm_out_FragColor = vec4(color, alpha);
 }`;
 
         this._drawProgram = Cesium.ShaderProgram.fromCache({

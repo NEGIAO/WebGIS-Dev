@@ -46,18 +46,27 @@
 
 ## 📑 目录
 
-- [项目简介](#-项目简介)
-- [快速开始](#-快速开始)
-- [项目结构](#-项目结构)
-- [文档导航](#-文档导航)
-- [版本演进](#-版本演进)
-- [许可证](#-许可证)
+- [🌟 核心功能预览](#-核心功能预览)
+- [📑 目录](#-目录)
+- [🎯 项目简介](#-项目简介)
+  - [核心能力](#核心能力)
+- [🚀 快速开始](#-快速开始)
+  - [环境要求](#环境要求)
+  - [一键启动（推荐）](#一键启动推荐)
+  - [手动启动（高级用户）](#手动启动高级用户)
+- [📁 项目结构](#-项目结构)
+- [🧭 文档导航](#-文档导航)
+  - [开发文档](#开发文档)
+  - [架构文档](#架构文档)
+- [📜 版本演进](#-版本演进)
+- [📄 许可证](#-许可证)
+- [👤 作者与托管](#-作者与托管)
 
 ---
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.3.20），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.3.21），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -196,9 +205,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.3.21** | 2026-07-23 | Cesium Composables 架构重构（按功能域分层：core/scene/camera/layers/interaction/terrain/models/dataImport/toolModules），toolModules 控件拆分，importUtils 与 layerUtils 工具函数提取 |
 | **V3.3.20** | 2026-07-22 | 体积云迁移缺陷修复（bottomRadius / BSM 纹理 / Aerial 双 gamma / 高度淡出 / 云底颜色）+ 面板参数补全 + 邮件服务加固 |
 | **V3.3.19** | 2026-07-21 | Cesium 体积云·大气一体化模块移植（raymarch + Bruneton + BSM + TAA），Cesium CDN 升级 1.132 |
-| **V3.3.18** | 2026-07-21 | Agent 系统提示词平台简介集成 + 八大功能架构文档 |
 
 更早版本（V3.3.17 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -222,6 +231,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.3.20 · 开发中 · 最后更新 2026-07-22</sub>
+<sub>V3.3.21 · 开发中 · 最后更新 2026-07-23</sub>
 
 </div>

@@ -1,59 +1,42 @@
 import { computed, ref, watch } from 'vue';
-import { applyCesiumIonToken } from './cesiumRuntime';
+import { applyCesiumIonToken } from '../core/cesiumRuntime';
 import {
     readStoredBoolean,
     readStoredString,
     writeStoredBoolean,
     writeStoredString,
-} from './cesiumStorage';
-import createGeoTerrainProvider from '../terrain/GeoTerrainProvider';
-import createArcGISTerrainProvider from '../terrain/ArcGISTerrainProvider';
-import { BASEMAP_OPTIONS, resolvePresetLayerIds } from '../../../constants/basemap/basemapResolver';
-import { DEFAULT_BASEMAP_PRESET_ID } from '../../../constants/basemap/basemapConfig';
-import { getDescriptorById } from '../../../constants/basemap/sourceDescriptors';
-import { buildCesiumImageryProvidersForPreset, abortAllDescriptorRequests } from '../../../constants/basemap/cesiumProviderFactory';
+} from '../core/cesiumStorage';
+import createGeoTerrainProvider from '../../terrain/GeoTerrainProvider';
+import createArcGISTerrainProvider from '../../terrain/ArcGISTerrainProvider';
+import { resolvePresetLayerIds } from '../../../../constants/basemap/basemapResolver';
+import { DEFAULT_BASEMAP_PRESET_ID } from '../../../../constants/basemap/basemapConfig';
+import { buildCesiumImageryProvidersForPreset, abortAllDescriptorRequests } from '../../../../constants/basemap/cesiumProviderFactory';
 import { useCesiumBasemapSwitcher } from './useCesiumBasemapSwitcher';
-
-const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
-const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
-const ARCGIS_WORLD_TERRAIN_URL = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer';
-const CESIUM_OSM_BUILDINGS_ASSET_ID = 96188;
-const CUSTOM_XYZ_BASEMAP_ID = 'custom-xyz';
-const CUSTOM_XYZ_BASEMAP_URL_KEY = 'webgis_custom_basemap_url';
-const TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
-const TDT_BOUNDARY_LAYER_VISIBLE_KEY = 'cesium_tdt_boundary_layer_visible';
-const TDT_TEXT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_text_label_layer_visible';
-const CESIUM_OSM_BUILDINGS_VISIBLE_KEY = 'cesium_osm_buildings_visible';
-const GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY = 'cesium_google_photorealistic_3d_tiles_visible';
-
-/** 将统一预设映射为 Cesium 兼容的选项列表 */
-function buildUnifiedBasemapOptions() {
-    return BASEMAP_OPTIONS.map((opt) => ({
-        ...opt,
-        description: getPresetDescription(opt.value),
-        source: 'preset',
-    }));
-}
-
-/** 获取预设的简要描述 */
-function getPresetDescription(presetId) {
-    const stack = resolvePresetLayerIds(presetId);
-    if (!stack.length) return '复合底图';
-    const names = stack.map((sid) => {
-        const desc = getDescriptorById(sid);
-        return desc ? desc.name : sid;
-    });
-    return names.slice(0, 3).join(' + ') + (names.length > 3 ? ' ...' : '');
-}
-
-const unifiedBasemapOptions = buildUnifiedBasemapOptions();
-
-const terrainOptions = [
-    { value: 'tianditu', label: '天地图地形', description: '天地图高程地形服务' },
-    { value: 'cesiumWorld', label: 'Cesium世界地形', description: 'Cesium ion 全球地形服务' },
-    { value: 'arcgisWorld', label: 'ArcGIS世界地形', description: 'ArcGIS World Elevation 3D 高程服务' },
-    { value: 'ellipsoid', label: '平面地形', description: '无高程的椭球地形' },
-];
+import {
+    TDT_SUBDOMAINS,
+    TDT_SERVICE_ROOT,
+    ARCGIS_WORLD_TERRAIN_URL,
+    CUSTOM_XYZ_BASEMAP_ID,
+    CUSTOM_XYZ_BASEMAP_URL_KEY,
+    TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY,
+    TDT_BOUNDARY_LAYER_VISIBLE_KEY,
+    TDT_TEXT_LABEL_LAYER_VISIBLE_KEY,
+    CESIUM_OSM_BUILDINGS_VISIBLE_KEY,
+    GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY,
+    unifiedBasemapOptions,
+    terrainOptions,
+    getTerrainIconColor,
+    getTerrainIconText,
+    readRuntimeValue,
+    destroyPrimitive,
+    createCesiumOsmBuildingsTileset,
+    getBasemapTooltip,
+    getPresetPickerColor,
+    getPresetPickerLabel,
+    normalizeCustomXyzUrl,
+    createOfficialBasemapId,
+    createPickerIcon,
+} from './layerUtils';
 
 export function useCesiumLayers({
     getViewer,
@@ -1014,186 +997,6 @@ export function useCesiumLayers({
         // 熔断/降级切换器
         basemapSwitcher,
         basemapCircuitOpen,
-        resetCircuitBreaker: basemapSwitcher.resetCircuitBreaker,
+    resetCircuitBreaker: basemapSwitcher.resetCircuitBreaker,
     };
-}
-
-function getTerrainIconColor(value) {
-    if (value === 'ellipsoid') return '#a3a3a3';
-    if (value === 'arcgisWorld') return '#5ea1ff';
-    return '#d0a449';
-}
-
-function getTerrainIconText(value) {
-    if (value === 'cesiumWorld') return 'CW';
-    if (value === 'arcgisWorld') return 'AG';
-    if (value === 'ellipsoid') return 'EL';
-    return 'TE';
-}
-
-function readRuntimeValue(source) {
-    if (typeof source === 'function') {
-        return String(source() || '').trim();
-    }
-
-    if (source && typeof source === 'object' && 'value' in source) {
-        return String(source.value || '').trim();
-    }
-
-    return String(source || '').trim();
-}
-
-function destroyPrimitive(primitive) {
-    if (!primitive || primitive.isDestroyed?.()) return;
-    try {
-        primitive.destroy?.();
-    } catch (error) {
-        console.warn('Primitive destroy warning:', error);
-    }
-}
-
-async function createCesiumOsmBuildingsTileset(Cesium, options = {}) {
-    if (typeof Cesium?.Cesium3DTileset?.fromIonAssetId === 'function') {
-        const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(
-            CESIUM_OSM_BUILDINGS_ASSET_ID,
-            options,
-        );
-        if (!tileset.style && typeof Cesium.Cesium3DTileStyle === 'function') {
-            tileset.style = new Cesium.Cesium3DTileStyle({
-                color: "Boolean(${feature['cesium#color']}) ? color(${feature['cesium#color']}) : color('white')",
-            });
-        }
-        return tileset;
-    }
-
-    return Cesium.createOsmBuildingsAsync(options);
-}
-
-function getBasemapTooltip(option) {
-    if (option.value === CUSTOM_XYZ_BASEMAP_ID) {
-        return `${option.description || option.label}\n支持 https://server/{z}/{x}/{y}.png`;
-    }
-    return option.description || option.label;
-}
-
-/** 获取预设 Picker 图标颜色（根据第一个图层源分类） */
-function getPresetPickerColor(presetId) {
-    const stackIds = resolvePresetLayerIds(presetId);
-    if (!stackIds.length) return '#37d67a';
-    const firstDesc = getDescriptorById(stackIds[0]);
-    if (!firstDesc) return '#37d67a';
-    const cat = firstDesc.category;
-    if (cat === 'imagery') return '#5ea1ff';
-    if (cat === 'vector') return '#37d67a';
-    if (cat === 'terrain') return '#d0a449';
-    if (cat === 'label') return '#a78bfa';
-    if (cat === 'theme') return '#f59e0b';
-    if (cat === 'custom') return '#f472b6';
-    return '#37d67a';
-}
-
-/** 获取预设 Picker 图标短标签 */
-function getPresetPickerLabel(presetId, label) {
-    const safeLabel = String(label || '').replace(/[<>&"']/g, '');
-    return safeLabel.slice(0, 2) || 'BM';
-}
-
-function normalizeCustomXyzUrl(rawUrl) {
-    const source = String(rawUrl || '').trim();
-    if (!source) {
-        return {
-            valid: false,
-            message: '自定义 XYZ URL 为空',
-            url: '',
-            subdomains: [],
-        };
-    }
-
-    let url = source
-        .replace(/\{z\}/gi, '{z}')
-        .replace(/\{x\}/gi, '{x}')
-        .replace(/\{y\}/gi, '{y}')
-        .replace(/\{subdomains?\}/gi, '{s}')
-        .replace(/\{switch:[^}]+\}/gi, '{s}')
-        .replace(/\{s\}/gi, '{s}');
-
-    const subdomainRange = url.match(/\{([a-z0-9])-([a-z0-9])\}/i);
-    let subdomains = [];
-
-    if (subdomainRange) {
-        subdomains = expandSubdomainRange(subdomainRange[1], subdomainRange[2]);
-        url = url.replace(subdomainRange[0], '{s}');
-    } else if (/\{s\}/i.test(url)) {
-        subdomains = ['a', 'b', 'c'];
-    }
-
-    if (!/\{z\}/.test(url) || !/\{x\}/.test(url) || !/\{y\}/.test(url)) {
-        return {
-            valid: false,
-            message: 'URL 需要包含 {z}、{x}、{y} 占位符',
-            url,
-            subdomains,
-        };
-    }
-
-    if (!isValidCustomTileUrl(url)) {
-        return {
-            valid: false,
-            message: 'URL 格式不合法',
-            url,
-            subdomains,
-        };
-    }
-
-    return {
-        valid: true,
-        message: '',
-        url,
-        subdomains,
-    };
-}
-
-function expandSubdomainRange(start, end) {
-    const startCode = String(start || '').charCodeAt(0);
-    const endCode = String(end || '').charCodeAt(0);
-    if (!Number.isFinite(startCode) || !Number.isFinite(endCode)) return [];
-
-    const step = startCode <= endCode ? 1 : -1;
-    const values = [];
-    for (let code = startCode; step > 0 ? code <= endCode : code >= endCode; code += step) {
-        values.push(String.fromCharCode(code));
-    }
-    return values;
-}
-
-function isValidCustomTileUrl(url) {
-    if (/^(https?:)?\/\//i.test(url) || url.startsWith('/')) return true;
-
-    try {
-        const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
-        const parsed = new URL(url, baseUrl);
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-        return false;
-    }
-}
-
-function createOfficialBasemapId(label, index) {
-    const slug = label
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-    return `official_${index}_${slug || 'basemap'}`;
-}
-
-function createPickerIcon(color, shortLabel) {
-    const safeLabel = String(shortLabel || '').replace(/[<>&"']/g, '').slice(0, 2);
-    const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-            <rect width="64" height="64" rx="10" fill="#0f2432"/>
-            <circle cx="32" cy="30" r="18" fill="${color}" opacity="0.9"/>
-            <text x="32" y="53" text-anchor="middle" fill="#ffffff" font-size="10" font-family="Arial">${safeLabel}</text>
-        </svg>
-    `;
-    return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }

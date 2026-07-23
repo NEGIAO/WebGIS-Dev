@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import Wind2D from '../Wind2D';
+import Wind2D from '../../Wind2D';
 
 export function useCesiumWind({ getViewer, getCesium, message }) {
     const wind2D = ref(null);
@@ -8,6 +8,13 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
         arrowLength: 15000,
         trailLength: 20000,
         alphaFactor: 1.0,
+        // UI 状态（与模块控件同步）
+        windEnabled: false,
+        particleCount: 10000,
+        maxAge: 3.0,
+        colorScale: 1.5,
+        frameRate: 30,
+        wind2DEnabled: false,
     });
 
     function clearWind2D() {
@@ -21,6 +28,7 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
         }
         wind2D.value.destroy();
         wind2D.value = null;
+        windParams.value = { ...windParams.value, windEnabled: false };
     }
 
     function loadSimulatedWind() {
@@ -33,21 +41,30 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
 
         clearWind2D();
 
-        const data = generateSimulatedWindData(Cesium);
-        wind2D.value = new Wind2D(viewer, {
-            maxWindSpeed: 20,
-            cesium: Cesium,
-            speedFactor: windParams.value.speedFactor,
-            arrowLength: windParams.value.arrowLength,
-            trailLength: windParams.value.trailLength,
-            alphaFactor: windParams.value.alphaFactor,
-        });
+        try {
+            const data = generateSimulatedWindData(Cesium);
+            wind2D.value = new Wind2D(viewer, {
+                maxWindSpeed: 20,
+                cesium: Cesium,
+                speedFactor: windParams.value.speedFactor,
+                arrowLength: windParams.value.arrowLength,
+                trailLength: windParams.value.trailLength,
+                alphaFactor: windParams.value.alphaFactor,
+                decaySpeed: 1.0 / Math.max(1, windParams.value.maxAge * 60),
+            });
 
-        wind2D.value.loadData(data);
-        viewer.scene.primitives.add(wind2D.value);
-        wind2D.value.flyTo();
+            wind2D.value.loadData(data);
+            wind2D.value.setParticleCount(windParams.value.particleCount);
+            viewer.scene.primitives.add(wind2D.value);
+            wind2D.value.flyTo();
 
-        message.success('风场加载成功，可通过下方滑块调节样式');
+            windParams.value = { ...windParams.value, windEnabled: true };
+            message.success('风场加载成功，可通过下方滑块调节样式');
+        } catch (e) {
+            console.error('[Wind] 风场加载失败:', e);
+            message.error(`风场加载失败: ${e.message || '未知错误'}。请检查浏览器是否支持 WebGL2。`);
+            clearWind2D();
+        }
     }
 
     function applyWindParams() {
@@ -56,6 +73,7 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
         wind2D.value.arrowLength = windParams.value.arrowLength;
         wind2D.value.trailLength = windParams.value.trailLength;
         wind2D.value.alphaFactor = windParams.value.alphaFactor;
+        wind2D.value.decaySpeed = 1.0 / Math.max(1, windParams.value.maxAge * 60);
     }
 
     function setWindParam(controlId, value) {
@@ -64,6 +82,10 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
             ...windParams.value,
             [controlId]: Number(value),
         };
+        // 部分参数需要额外操作
+        if (controlId === 'particleCount' && wind2D.value) {
+            wind2D.value.setParticleCount(Number(value));
+        }
         applyWindParams();
         return true;
     }
