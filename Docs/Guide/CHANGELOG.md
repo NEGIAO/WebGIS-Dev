@@ -6,6 +6,28 @@
 
 ## 版本记录
 
+### V3.3.22 (2026-07-23) — 3D Tiles 贴地修复 + ArcGIS 地形性能极致优化
+
+- 🐛 **3D Tiles 贴地高度修复**：模型贴地用 `center.height - radius`（模型底部高度）替代 `center.height`（球心高度），解决模型半埋地下的问题
+- 🆕 **ENU 参考系高程范围采样**：在 tileset 外包矩形的 ENU 空间（`eastNorthUpToFixedFrame`）生成均匀网格，`sampleTerrain` 批量采样高程值域，参考洪水模拟 FluidSimulation 采样逻辑
+- 🆕 **手动贴地滑杆**：根据高程采样 min/max 生成滑杆范围，用户可手动微调贴地高度，`CesiumToolPanel.vue` 新增 `data-set-height` 事件 + 滑杆控件
+- 🐛 **加载时序修复**：高程范围在设置 modelMatrix 之前采样，初始高度取高程中值（`(min+max)/2`），消除"先加载后采样"导致的视觉跳跃
+- 🚀 **ArcGIS 地形性能极致优化（三轮迭代）**：
+  - `_hasAvailability=false` 禁用内部 Tilemap 二次请求（-50% 网络请求量）
+  - 动态 SSE：相机移动时 `maximumScreenSpaceError=12`（阻止 LERC 解码爆发），静止恢复 `=4`
+  - 层级硬顶 11（有效 0-11 级 vs 原生 0-15 级，请求量减少 ~87%）
+  - 无 Promise 壳开销：`requestTileGeometry` 直接返回内部结果，可用性标记 fire-and-forget
+  - `tileCacheSize=500` 提升瓦片缓存命中率
+- 🔧 **非 ArcGIS 地形回退默认值**：SSE=2、tileCacheSize=100，不影响其他地形性能
+
+详见 [`../LLM_record/26-07/26-07-23/2026-07-23-terrain-clamping-arcgis-optimization.md`](../LLM_record/26-07/26-07-23/2026-07-23-terrain-clamping-arcgis-optimization.md)
+
+### V3.3.21 (2026-07-23) — Cesium Composables 架构重构（按功能域分层）
+
+- ♻️ **Cesium composables 架构重构**：将 `useCesium.js` 拆分为按功能域分层的 composables 体系——`core/`（viewer 生命周期）、`scene/`（场景参数）、`camera/`（相机控制）、`layers/`（图层管理）、`interaction/`（交互事件）、`terrain/`（地形切换）、`models/`（模型管理）、`dataImport/`（数据导入）、`toolModules/`（工具模块）
+- 🆕 **toolModules 控件拆分**：将原先堆积在 `useCesiumToolModules.js` 中的工具模块拆分为独立 composables
+- 🆕 **工具函数提取**：`importUtils.js`（导入工具函数）、`layerUtils.js`（图层工具函数），减少 composables 内部重复逻辑
+
 ### V3.3.20 (2026-07-22) — 体积云迁移缺陷修复 + 面板参数补全 + 邮件服务加固
 
 - 🐛 **bottomRadius 统一**：`pipeline.params.bottomRadius` 改为从 `atmosphereParams.bottomRadius` 派生，消除云层基准球与相机偏移基准球 ~830m 错位，修复云漂浮高度错误与移动抖动

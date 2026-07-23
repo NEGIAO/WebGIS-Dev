@@ -828,10 +828,42 @@ export function useCesiumLayers({
         }
     }
 
+    /** @type {Array<() => void>} 地形相关相机事件清理回调 */
+    let terrainCameraCleanups = [];
+
     function applyTerrainSceneFlags(value) {
         const viewer = getViewer?.();
         if (!viewer?.scene?.globe) return;
-        viewer.scene.globe.depthTestAgainstTerrain = value !== 'ellipsoid';
+        const globe = viewer.scene.globe;
+
+        // 清理上一次地形的相机事件监听
+        for (const cleanup of terrainCameraCleanups) cleanup();
+        terrainCameraCleanups = [];
+
+        globe.depthTestAgainstTerrain = value !== 'ellipsoid';
+
+        if (value === 'arcgisWorld') {
+            // ArcGIS 地形性能调优：
+            // 静态：SSE=6（默认 2 对 129×129 LERC 太激进），缓存 1000 瓦片
+            globe.maximumScreenSpaceError = 6;
+            globe.tileCacheSize = 1000;
+
+            // 动态 SSE：相机移动时极度保守（阻止瓦片细分风暴），
+            // 停下后恢复细节。避免移动时 LERC 解码突发导致帧率暴跌。
+            const camera = viewer.scene.camera;
+            const onMoveStart = () => { globe.maximumScreenSpaceError = 12; };
+            const onMoveEnd = () => { globe.maximumScreenSpaceError = 4; };
+            camera.moveStart.addEventListener(onMoveStart);
+            camera.moveEnd.addEventListener(onMoveEnd);
+            terrainCameraCleanups.push(() => {
+                camera.moveStart.removeEventListener(onMoveStart);
+                camera.moveEnd.removeEventListener(onMoveEnd);
+            });
+        } else {
+            // 天地图 / Cesium World / 椭球：恢复默认
+            globe.maximumScreenSpaceError = 2;
+            globe.tileCacheSize = 100;
+        }
     }
 
     function createTerrainProviderById(value) {

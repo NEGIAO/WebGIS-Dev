@@ -205,11 +205,11 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.3.22** | 2026-07-23 | 3D Tiles 贴地修复（模型底部高度 `center.height - radius`）+ ENU 参考系高程范围采样 + 手动贴地滑杆 + ArcGIS 地形性能极致优化（`_hasAvailability=false` / 动态 SSE / 层级硬顶 11） |
 | **V3.3.21** | 2026-07-23 | Cesium Composables 架构重构（按功能域分层：core/scene/camera/layers/interaction/terrain/models/dataImport/toolModules），toolModules 控件拆分，importUtils 与 layerUtils 工具函数提取 |
 | **V3.3.20** | 2026-07-22 | 体积云迁移缺陷修复（bottomRadius / BSM 纹理 / Aerial 双 gamma / 高度淡出 / 云底颜色）+ 面板参数补全 + 邮件服务加固 |
-| **V3.3.19** | 2026-07-21 | Cesium 体积云·大气一体化模块移植（raymarch + Bruneton + BSM + TAA），Cesium CDN 升级 1.132 |
 
-更早版本（V3.3.17 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.3.19 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -231,6 +231,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.3.21 · 开发中 · 最后更新 2026-07-23</sub>
+<sub>V3.3.22 · 开发中 · 最后更新 2026-07-23</sub>
 
 </div>

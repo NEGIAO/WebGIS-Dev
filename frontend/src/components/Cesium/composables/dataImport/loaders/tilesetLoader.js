@@ -196,8 +196,11 @@ async function adjustTilesetToTerrain(tileset, viewer, Cesium) {
 /**
  * 采样瓦片集外包矩形内的地形高程范围
  *
- * 从 boundingSphere 反算 lat/lng 矩形 → 5×5 网格采样 → 返回 min/max。
- * 用于用户手动贴地滑杆的上下阈值。
+ * 参考 FluidSimulation 的 ENU 网格采样策略：
+ * 1. 以 tileset 中心建立 ENU (East-North-Up) 参考系
+ * 2. 在 ENU 水平面上生成均匀网格
+ * 3. 每个点转换到世界坐标 → Cartographic → Cesium.sampleTerrain 批量查询
+ * 4. 返回 min/max/centerHeight（用于滑杆阈值）
  *
  * @param {Cesium.Cesium3DTileset} tileset
  * @param {Cesium.Viewer} viewer
@@ -215,49 +218,71 @@ async function sampleTerrainElevationRange(tileset, viewer, Cesium) {
         const carto = Cesium.Cartographic.fromCartesian(center);
         const cLng = Cesium.Math.toDegrees(carto.longitude);
         const cLat = Cesium.Math.toDegrees(carto.latitude);
+        const cH = carto.height;
 
-        // 包围球半径 → lat/lng 跨度（近似）
-        const earthR = 6378137;
-        const halfDegLat = (radius / earthR) * (180 / Math.PI);
-        const halfDegLng = halfDegLat / Math.cos(carto.latitude);
+        // ENU 参考系下的水平跨度：用包围球直径覆盖瓦片集的地面投影
+        const spanX = radius * 2;
+        const spanY = radius * 2;
 
-        const west = cLng - halfDegLng;
-        const east = cLng + halfDegLng;
-        const south = cLat - halfDegLat;
-        const north = cLat + halfDegLat;
+        // 网格分辨率：参考 FluidSimulation 的 ~60m 间距，最小 16×16，最大 100×100
+        const TARGET_SPACING = 60;
+        const MIN_SIZE = 16;
+        const MAX_SIZE = 100;
+        let size = Math.ceil(Math.max(spanX, spanY) / TARGET_SPACING) + 1;
+        size = Math.max(MIN_SIZE, Math.min(MAX_SIZE, size));
 
-        // 5×5 采样点
-        const GRID = 5;
+        // 在 ENU 参考系下建立均匀网格
+        const centerENU = Cesium.Cartesian3.fromDegrees(cLng, cLat, cH);
+        const enuMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(centerENU);
         const positions = [];
-        for (let row = 0; row < GRID; row++) {
-            const lat = south + (north - south) * row / (GRID - 1);
-            for (let col = 0; col < GRID; col++) {
-                const lng = west + (east - west) * col / (GRID - 1);
-                positions.push(Cesium.Cartographic.fromDegrees(lng, lat));
+        const denom = Math.max(1, size - 1);
+
+        for (let row = 0; row < size; row++) {
+            const v = row / denom;
+            const north = (0.5 - v) * spanY;
+            for (let col = 0; col < size; col++) {
+                const u = col / denom;
+                const east = (u - 0.5) * spanX;
+                const local = new Cesium.Cartesian3(east, north, 0);
+                const world = Cesium.Matrix4.multiplyByPoint(enuMatrix, local, new Cesium.Cartesian3());
+                positions.push(Cesium.Cartographic.fromCartesian(world));
             }
         }
 
-        const results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions);
+        // 批量采样地形：优先用固定层级（速度快），回退到 mostDetailed
+        let results;
+        if (typeof Cesium.sampleTerrain === 'function') {
+            const level = Math.min(viewer.terrainProvider?.maximumLevel ?? 12, 12);
+            results = await Cesium.sampleTerrain(viewer.terrainProvider, level, positions);
+        } else {
+            results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions);
+        }
 
+        // 提取高程范围
         let min = Infinity;
         let max = -Infinity;
+        let centerHeight = null;
+
         for (const r of results) {
-            if (r && typeof r.height === 'number') {
-                if (r.height < min) min = r.height;
-                if (r.height > max) max = r.height;
-            }
+            const h = Number(r?.height);
+            if (!Number.isFinite(h)) continue;
+            if (h < min) min = h;
+            if (h > max) max = h;
         }
 
         if (!isFinite(min) || !isFinite(max)) return null;
 
-        // 中心点地形高度（用于滑杆默认值）
-        const centerPos = Cesium.Cartographic.fromDegrees(cLng, cLat);
-        const centerResults = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [centerPos]);
-        const centerHeight = (centerResults && centerResults.length > 0 && centerResults[0].height !== undefined)
-            ? centerResults[0].height
-            : (min + max) / 2;
+        // 中心点高度：取网格正中间那个采样点
+        const centerIdx = Math.floor(size / 2) * size + Math.floor(size / 2);
+        if (centerIdx < results.length && Number.isFinite(Number(results[centerIdx]?.height))) {
+            centerHeight = results[centerIdx].height;
+        } else {
+            centerHeight = (min + max) / 2;
+        }
 
-        console.warn('[贴地] 高程范围采样: min=', min.toFixed(1), 'm, max=', max.toFixed(1), 'm, 中心=', centerHeight.toFixed(1), 'm, 跨度=', (max - min).toFixed(1), 'm');
+        console.warn('[贴地] ENU网格采样: size=', size, '×', size,
+            ', span=', spanX.toFixed(0), 'm×', spanY.toFixed(0), 'm',
+            ', range=[', min.toFixed(1), ', ', max.toFixed(1), ']m, center=', centerHeight.toFixed(1), 'm');
 
         return { min, max, centerHeight };
     } catch (e) {
@@ -355,22 +380,34 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
     const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
     console.warn('[3DTiles][import] Cesium3DTileset.fromUrl 完成，boundingSphere:', tileset.boundingSphere);
 
-    // Step 5.5: 地形自适应——如果 tileset 低于地形表面，自动抬升
-    const clamped = await adjustTilesetToTerrain(tileset, viewer, Cesium);
-    if (!clamped) {
-        disableTerrain(viewer, Cesium);
-    }
-
-    // Step 5.6: 采样瓦片集外包矩形内的高程范围（用于手动贴地滑杆）
+    // Step 5.5: 先采样外包矩形内的高程范围（必须在放置模型之前完成）
     const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
 
     // 记录贴地所需的几何参数
     const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+    const bottomH = centerCarto.height - tileset.boundingSphere.radius;
     const tilesetGeo = {
         lng: Cesium.Math.toDegrees(centerCarto.longitude),
         lat: Cesium.Math.toDegrees(centerCarto.latitude),
-        bottomH: centerCarto.height - tileset.boundingSphere.radius,
+        bottomH,
     };
+
+    // Step 5.6: 设置初始高度 = 高程值域中值，让模型底部贴在中值高度
+    if (terrainElevation) {
+        const median = (terrainElevation.min + terrainElevation.max) / 2;
+        const offset = median - bottomH;
+        const origin = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, 0);
+        const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
+        const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
+        tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+        console.warn('[贴地] 初始贴地: 高程中值=', median.toFixed(1), 'm, 底部高=', bottomH.toFixed(1), 'm, 偏移=', offset.toFixed(1), 'm');
+    } else {
+        // 无地形数据时回退：自动贴地到中心点地形
+        const clamped = await adjustTilesetToTerrain(tileset, viewer, Cesium);
+        if (!clamped) {
+            disableTerrain(viewer, Cesium);
+        }
+    }
 
     const id = `tileset_${++nextId.current}`;
     viewer.scene.primitives.add(tileset);
@@ -411,20 +448,31 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
 
         const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
 
-        // 地形自适应：如果 tileset 低于地形表面，自动抬升
-        const clamped = await adjustTilesetToTerrain(tileset, viewer, Cesium);
-        if (!clamped) {
-            disableTerrain(viewer, Cesium);
-        }
-
-        // 采样高程范围（用于手动贴地滑杆）
+        // 先采样外包矩形内的高程范围（必须在放置模型之前完成）
         const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
         const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+        const bottomH = centerCarto.height - tileset.boundingSphere.radius;
         const tilesetGeo = {
             lng: Cesium.Math.toDegrees(centerCarto.longitude),
             lat: Cesium.Math.toDegrees(centerCarto.latitude),
-            bottomH: centerCarto.height - tileset.boundingSphere.radius,
+            bottomH,
         };
+
+        // 设置初始高度 = 高程值域中值
+        if (terrainElevation) {
+            const median = (terrainElevation.min + terrainElevation.max) / 2;
+            const offset = median - bottomH;
+            const origin = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, 0);
+            const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
+            const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
+            tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+            console.warn('[贴地] 初始贴地: 高程中值=', median.toFixed(1), 'm, 底部高=', bottomH.toFixed(1), 'm, 偏移=', offset.toFixed(1), 'm');
+        } else {
+            const clamped = await adjustTilesetToTerrain(tileset, viewer, Cesium);
+            if (!clamped) {
+                disableTerrain(viewer, Cesium);
+            }
+        }
 
         const id = `tileset_${++nextId.current}`;
         viewer.scene.primitives.add(tileset);
