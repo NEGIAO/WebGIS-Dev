@@ -50,6 +50,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         message,
         loadedDataSources,
         nextId,
+        heightSampler,
     });
 
     // ============================================================

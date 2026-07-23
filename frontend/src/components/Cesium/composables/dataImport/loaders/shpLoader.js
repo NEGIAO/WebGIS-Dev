@@ -48,6 +48,7 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
     };
 
     const dataSource = await Cesium.GeoJsonDataSource.load(payload, {
+        clampToGround: true,
         stroke: Cesium.Color.fromCssColorString('#ffcc00'),
         fill: Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.25),
         markerColor: Cesium.Color.fromCssColorString('#ffcc00'),

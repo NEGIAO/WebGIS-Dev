@@ -3,6 +3,7 @@
  * GLTF/GLB 三维模型加载器
  *
  * 功能：加载 GLTF/GLB 到 Cesium，提取嵌入坐标，自动放置无坐标模型。
+ * 地形自适应：加载后自动采样地形高度，低于地表时抬升；采样失败则关地形兜底。
  */
 
 import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
@@ -15,18 +16,8 @@ import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
  * 2. 尝试从模型中提取嵌入坐标（CESIUM_RTC 扩展或 asset.extras）
  * 3. 如无嵌入坐标 → 尝试自动放置到相机视野中心 + 地形采样
  * 4. 自动放置失败 → 返回 { needsCoordInput: true }，由调用方弹窗收集坐标
- *
- * @param {Object} ctx
- * @param {File} ctx.file
- * @param {Function} ctx.getCesium
- * @param {Function} ctx.getViewer
- * @param {Object} ctx.message
- * @param {import('vue').Ref} ctx.loadedDataSources
- * @param {{ current: number }} ctx.nextId
- * @param {Object} [ctx.heightSampler] - 地形高度采样器
- * @returns {Promise<Object>} record 或 { needsCoordInput: true, file, blobUrl }
  */
-export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -43,8 +34,31 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
     let coords;
     if (embeddedCoords) {
         coords = embeddedCoords;
+        // 嵌入坐标存在时，检查地形高度并补偿
+        const CesiumNs = getCesium();
+        if (CesiumNs && viewer.terrainProvider &&
+            viewer.terrainProvider.constructor !== CesiumNs.EllipsoidTerrainProvider) {
+            try {
+                const pos = CesiumNs.Cartographic.fromDegrees(coords.lng, coords.lat);
+                const results = await CesiumNs.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
+                if (results && results.length > 0 && results[0].height !== undefined) {
+                    const terrainH = results[0].height;
+                    const diff = terrainH - coords.height;
+                    if (diff > 0) {
+                        coords = { ...coords, height: terrainH + 10 };
+                        console.warn('[贴地-GLTF] 地形=', terrainH.toFixed(1), 'm, 模型原高=', embeddedCoords.height.toFixed(1), 'm, 抬升至=', coords.height.toFixed(1), 'm');
+                    }
+                } else {
+                    console.warn('[贴地-GLTF] 采样无结果，关闭地形');
+                    viewer.terrainProvider = new CesiumNs.EllipsoidTerrainProvider();
+                }
+            } catch (e) {
+                console.warn('[贴地-GLTF] 采样失败:', e.message || e, '，关闭地形');
+                viewer.terrainProvider = new CesiumNs.EllipsoidTerrainProvider();
+            }
+        }
     } else {
-        coords = await getAutoPlaceCoords(viewer, Cesium, heightSampler);
+        coords = await getAutoPlaceCoords(viewer, Cesium);
         if (!coords) {
             return { needsCoordInput: true, file, blobUrl };
         }
@@ -82,12 +96,6 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
 
 /**
  * 根据坐标创建 modelMatrix 并加载 GLTF 模型
- * @param {Cesium} Cesium
- * @param {Cesium.Viewer} viewer
- * @param {string} blobUrl - 模型的 Blob URL
- * @param {string} name - 文件名
- * @param {{ lng: number, lat: number, height: number }} coords - 坐标
- * @returns {Promise<Cesium.Model>}
  */
 export async function loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords) {
     const { lng, lat, height } = coords;
@@ -120,10 +128,6 @@ export async function loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords) 
  * 1. CESIUM_RTC 扩展
  * 2. asset.extras 自定义坐标
  * 3. 首个 node 的 matrix 平移分量（地固坐标）
- *
- * @param {File} file - GLTF/GLB 文件
- * @param {Function} getCesium
- * @returns {Promise<{lng: number, lat: number, height: number}|null>}
  */
 export async function extractGlbEmbeddedCoords(file, getCesium) {
     const ext = getExtension(file.name);
@@ -199,9 +203,6 @@ export async function extractGlbEmbeddedCoords(file, getCesium) {
 /**
  * 解析 GLB 二进制文件的 JSON chunk
  * GLB 格式：12 字节头 | JSON chunk（长度 + 类型 + 数据）| 可选 BIN chunk
- *
- * @param {ArrayBuffer} buffer - GLB 文件二进制数据
- * @returns {Object|null} 解析后的 JSON 对象
  */
 export function parseGlbJsonChunk(buffer) {
     if (buffer.byteLength < 20) return null;
@@ -225,13 +226,8 @@ export function parseGlbJsonChunk(buffer) {
 /**
  * 自动获取相机视野中心的地面位置（含地形高度）
  * 用于 GLTF 无嵌入坐标时的自动放置
- *
- * @param {Cesium.Viewer} viewer
- * @param {Cesium} Cesium
- * @param {Object} [heightSampler] - 地形高度采样器
- * @returns {Promise<{lng: number, lat: number, height: number}|null>}
  */
-export async function getAutoPlaceCoords(viewer, Cesium, heightSampler) {
+export async function getAutoPlaceCoords(viewer, Cesium) {
     try {
         const center = new Cesium.Cartesian2(
             viewer.canvas.clientWidth / 2,
@@ -256,17 +252,12 @@ export async function getAutoPlaceCoords(viewer, Cesium, heightSampler) {
 
         let height = 0;
         try {
-            if (heightSampler?.sampleHeight) {
-                const result = heightSampler.sampleHeight({ lng, lat });
-                if (result?.height !== undefined) {
-                    height = result.height;
-                }
-            } else {
-                const samplePos = Cesium.Cartographic.fromDegrees(lng, lat);
-                const sampled = Cesium.sampleTerrain(viewer.terrainProvider, 0, [samplePos]);
-                const resolved = sampled instanceof Promise ? await sampled : sampled;
-                if (resolved?.[0]?.height !== undefined) {
-                    height = resolved[0].height;
+            if (viewer.terrainProvider &&
+                viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider) {
+                const pos = Cesium.Cartographic.fromDegrees(lng, lat);
+                const results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
+                if (results && results.length > 0 && results[0].height !== undefined) {
+                    height = results[0].height;
                 }
             }
         } catch { /* 采样失败，使用默认高度 0 */ }

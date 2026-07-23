@@ -6,6 +6,74 @@
  */
 
 /**
+ * 统一的地形高度采样 —— 异步版
+ *
+ * 检测是否开启了真实地形（非 EllipsoidTerrainProvider），
+ * 使用 Cesium.sampleTerrainMostDetailed 主动触发瓦片加载并等待高精度高度。
+ *
+ * @param {Object} ctx
+ * @param {number} ctx.lng - 经度（度）
+ * @param {number} ctx.lat - 纬度（度）
+ * @param {Cesium.Viewer} ctx.viewer
+ * @param {Cesium} ctx.Cesium
+ * @param {number} [ctx.timeout=8000] - 超时毫秒，超时后返回 null
+ * @returns {Promise<number|null>} 地形高度（米），无地形数据时返回 null
+ */
+export async function sampleTerrainHeight({ lng, lat, viewer, Cesium, timeout = 8000 }) {
+    if (!viewer?.terrainProvider) return null;
+    if (viewer.terrainProvider.constructor === Cesium.EllipsoidTerrainProvider) return null;
+
+    const carto = Cesium.Cartographic.fromDegrees(lng, lat);
+
+    try {
+        const results = await Promise.race([
+            Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]),
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('TIMEOUT')), timeout)
+            ),
+        ]);
+        if (results && results.length > 0 && results[0].height !== undefined) {
+            return results[0].height;
+        }
+    } catch (e) {
+        if (e.message !== 'TIMEOUT') {
+            console.warn('[Terrain] 高度采样失败:', e.message || e);
+        }
+    }
+    return null;
+}
+
+/**
+ * 将数据抬升到地形表面上方（统一入口）
+ *
+ * 采样目标位置的地形高度，如果数据当前高度低于地形，返回需要抬升的偏移量（米）。
+ * 返回 null 表示无需调整或无法采样。
+ *
+ * @param {Object} ctx
+ * @param {number} ctx.lng
+ * @param {number} ctx.lat
+ * @param {number} ctx.currentHeight - 数据当前海拔（米）
+ * @param {Cesium.Viewer} ctx.viewer
+ * @param {Cesium} ctx.Cesium
+ * @param {number} [ctx.margin=10] - 抬升余量
+ * @returns {Promise<number|null>} 需要抬升的米数，null 表示无需调整
+ */
+export async function calcTerrainOffset({ lng, lat, currentHeight, viewer, Cesium, margin = 10 }) {
+    const terrainH = await sampleTerrainHeight({ lng, lat, viewer, Cesium });
+    if (terrainH === null || terrainH === undefined) return null;
+
+    const diff = terrainH - currentHeight;
+    if (diff <= 0) return null; // 已经在或高于地形
+
+    const offset = diff + margin;
+    console.warn(
+        `[Terrain] 贴地调整: 地形 ${terrainH.toFixed(1)}m, ` +
+        `数据 ${currentHeight.toFixed(1)}m, 抬升 ${offset.toFixed(1)}m`
+    );
+    return offset;
+}
+
+/**
  * 获取文件扩展名（小写）
  * @param {string} filename - 文件名
  * @returns {string} 小写扩展名（不含点）
