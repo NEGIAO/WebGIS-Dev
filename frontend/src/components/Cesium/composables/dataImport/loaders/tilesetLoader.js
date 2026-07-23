@@ -7,18 +7,13 @@
  * Cesium3DTileset.fromUrl() 加载。
  *
  * 地形自适应：加载后自动采样地形高度，如果 tileset 低于地形表面则抬升到地表上方。
- *
- * 地形自适应：加载后自动采样地形高度，如果 tileset 低于地形表面则抬升到地表上方。
  */
 
-import { flyToEntity, calcTerrainOffset } from './utils.js';
+import { flyToEntity } from './utils.js';
 
 /** @type {string} tileset.json 文件名标识 */
 export const TILESET_JSON_INDICATOR = 'tileset.json';
 
-// ============================================================
-// 内部工具函数
-// ============================================================
 // ============================================================
 // 内部工具函数
 // ============================================================
@@ -378,108 +373,11 @@ export async function loadTilesetFromZip({ zipFile, getCesium, getViewer, messag
     });
 }
 
-/**
- * 使用传统 <input webkitdirectory> 方式选取文件夹（降级方案）
- * 适用于不支持 File System Access API 的浏览器
- */
-function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId }) {
-    return new Promise((resolve, reject) => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.webkitdirectory = true;
-        input.directory = true;
-        input.multiple = true;
-        input.style.display = 'none';
-        document.body.appendChild(input);
-
-        /** 清理 DOM 中的 input 元素 */
-        function cleanup() {
-            if (input.parentNode) {
-                document.body.removeChild(input);
-            }
-        }
-
-        input.onchange = async () => {
-            const files = Array.from(input.files || []);
-            cleanup();
-
-            if (files.length === 0) {
-                resolve(null);
-                return;
-            }
-
-            // 从文件列表中提取目录名（取第一个文件的相对路径前缀）
-            const firstPath = files[0].webkitRelativePath || files[0].name;
-            const dirName = firstPath.split('/')[0] || '3D Tiles';
-
-            // 构建 fileMap：去掉目录前缀，保留内部相对路径
-            const fileMap = {};
-            for (const file of files) {
-                const relPath = file.webkitRelativePath || file.name;
-                // 去掉顶层目录名前缀
-                const innerPath = relPath.includes('/')
-                    ? relPath.substring(relPath.indexOf('/') + 1)
-                    : relPath;
-                fileMap[innerPath] = file;
-            }
-
-            try {
-                const result = await loadTilesetFromFileMap({
-                    fileMap,
-                    sourceName: dirName,
-                    getCesium, getViewer, message, loadedDataSources, nextId,
-                });
-                resolve(result);
-            } catch (error) {
-                message.error(`导入 3D Tiles 目录失败: ${error.message || error}`);
-                reject(error);
-            }
-        };
-
-        // 用户取消选择：通过 window focus 事件检测
-        const onFocus = () => {
-            window.removeEventListener('focus', onFocus);
-            setTimeout(() => {
-                if (!input.files || input.files.length === 0) {
-                    cleanup();
-                    resolve(null);
-                }
-            }, 300);
-        };
-        window.addEventListener('focus', onFocus);
-
-        input.click();
-    });
-}
+// ============================================================
+// 内部：目录选择器
+// ============================================================
 
 /**
- * 使用 File System Access API 选取目录（原生方案）
- */
-async function importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId }) {
-    const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-    const fileMap = {};
-    await readDirRecursive(dirHandle, '', fileMap);
-    return await loadTilesetFromFileMap({
-        fileMap,
-        sourceName: dirHandle.name,
-        getCesium, getViewer, message, loadedDataSources, nextId,
-    });
-}
-
-/**
- * 打开系统目录选择器，选取 3D Tiles 文件夹后加载
- * 优先使用 File System Access API，不支持时降级为传统 webkitdirectory 方式
- *
- * @returns {Promise<Object|null>}
- */
-export async function importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId }) {
-    try {
-        // 检测是否支持 File System Access API
-        if (typeof window.showDirectoryPicker === 'function') {
-            return await importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId });
-        }
-        // 降级方案：使用传统 webkitdirectory 方式
-        return await importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId });
  * 使用传统 <input webkitdirectory> 方式选取文件夹（降级方案）
  * 适用于不支持 File System Access API 的浏览器
  */
