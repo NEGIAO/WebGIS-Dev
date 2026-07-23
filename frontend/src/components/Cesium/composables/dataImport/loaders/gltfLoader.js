@@ -5,7 +5,7 @@
  * 功能：加载 GLTF/GLB 到 Cesium，提取嵌入坐标，自动放置无坐标模型。
  */
 
-import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
+import { getExtension, createBlobUrl, revokeBlobUrl, calcTerrainOffset, sampleTerrainHeight } from './utils.js';
 
 /**
  * 加载 GLTF/GLB 三维模型到 Cesium
@@ -25,6 +25,7 @@ import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
  * @param {{ current: number }} ctx.nextId
  * @returns {Promise<Object>} record 或 { needsCoordInput: true, file, blobUrl }
  */
+export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
 export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
     const viewer = getViewer();
@@ -67,6 +68,7 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
             }
         }
     } else {
+        coords = await getAutoPlaceCoords(viewer, Cesium);
         coords = await getAutoPlaceCoords(viewer, Cesium);
         if (!coords) {
             return { needsCoordInput: true, file, blobUrl };
@@ -253,6 +255,7 @@ export function parseGlbJsonChunk(buffer) {
  * @param {Cesium} Cesium
  * @returns {Promise<{lng: number, lat: number, height: number}|null>}
  */
+export async function getAutoPlaceCoords(viewer, Cesium) {
 export async function getAutoPlaceCoords(viewer, Cesium) {
     try {
         const center = new Cesium.Cartesian2(
