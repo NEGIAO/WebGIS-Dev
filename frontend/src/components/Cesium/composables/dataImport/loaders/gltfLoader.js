@@ -43,6 +43,38 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
     let coords;
     if (embeddedCoords) {
         coords = embeddedCoords;
+        // 嵌入坐标存在时，检查地形高度并补偿（类似 3D Tiles 的地形自适应）
+        try {
+            const CesiumNs = getCesium();
+            if (CesiumNs && viewer.terrainProvider &&
+                viewer.terrainProvider.constructor !== CesiumNs.EllipsoidTerrainProvider) {
+                let terrainHeight;
+                if (heightSampler?.sampleHeight) {
+                    const result = heightSampler.sampleHeight({
+                        lng: coords.lng, lat: coords.lat,
+                    });
+                    if (result?.height !== undefined) terrainHeight = result.height;
+                }
+                if (terrainHeight === undefined) {
+                    const samplePos = CesiumNs.Cartographic.fromDegrees(coords.lng, coords.lat);
+                    const sampled = await CesiumNs.sampleTerrain(viewer.terrainProvider, 0, [samplePos]);
+                    if (sampled?.[0]?.height !== undefined) terrainHeight = sampled[0].height;
+                }
+                if (terrainHeight !== undefined) {
+                    const diff = terrainHeight - coords.height;
+                    if (diff > 0) {
+                        const oldH = coords.height;
+                        coords = { ...coords, height: terrainHeight + 10 }; // +10m 缓冲
+                        console.warn(
+                            `[GLTF] 地形自适应: 地形 ${terrainHeight.toFixed(1)}m, ` +
+                            `模型原高度 ${oldH.toFixed(1)}m, 抬升至 ${coords.height.toFixed(1)}m`
+                        );
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[GLTF] 地形高度采样失败，使用嵌入坐标原值:', e);
+        }
     } else {
         coords = await getAutoPlaceCoords(viewer, Cesium, heightSampler);
         if (!coords) {

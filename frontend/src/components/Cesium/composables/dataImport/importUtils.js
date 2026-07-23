@@ -75,7 +75,7 @@ export async function ensureGisParsers() {
 
     const [shpMod, dbfMod] = await Promise.all([
         import('shpjs'),
-        import('../../../../composables/dataImport/dbfParser.js'),
+        import('../../../../utils/gis/parsers/dbfParser.ts'),
     ]);
 
     const shpModule = shpMod.default || shpMod;
