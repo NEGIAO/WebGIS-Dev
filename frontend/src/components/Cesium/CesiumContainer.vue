@@ -54,6 +54,7 @@
         @data-flyto="handleDataFlyTo"
         @data-reposition="handleDataReposition"
         @data-stretch-height="handleDataStretchHeight"
+        @data-set-height="handleDataSetHeight"
         @import-tileset-zip="handleImportTilesetZip"
         @import-tileset-folder="handleImportTilesetFolder"
     />
@@ -674,6 +675,12 @@ async function handleDataStretchHeight({ id }) {
     } catch {
         // stretchRasterToHeight 内部已通过 message 提示
     }
+}
+
+/** 手动设置 3D Tiles 贴地高度（滑杆） */
+function handleDataSetHeight({ id, height }) {
+    if (componentUnmounted) return;
+    dataImport.setTilesetHeight(id, height);
 }
 
 /**

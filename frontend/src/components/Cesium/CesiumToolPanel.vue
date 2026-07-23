@@ -601,6 +601,23 @@
                                     <X :size="14" stroke-width="2" />
                                 </button>
                             </span>
+                            <!-- 3D Tiles 高程贴地滑杆 -->
+                            <div
+                                v-if="source.type === '3dtiles' && source.terrainElevation"
+                                class="tileset-height-slider"
+                            >
+                                <span class="slider-label" title="贴地高程 (m)">↕</span>
+                                <input
+                                    type="range"
+                                    class="slider-input"
+                                    :min="Math.floor(source.terrainElevation.min)"
+                                    :max="Math.ceil(source.terrainElevation.max)"
+                                    :step="1"
+                                    :value="getTileHeight(source)"
+                                    @input="emitSetHeight(source.id, $event.target.value)"
+                                />
+                                <span class="slider-value">{{ Math.round(getTileHeight(source)) }}m</span>
+                            </div>
                         </div>
                     </div>
 
@@ -728,6 +745,7 @@ const emit = defineEmits([
     'data-flyto',
     'data-reposition',
     'data-stretch-height',
+    'data-set-height',
     'import-tileset-zip',
     'import-tileset-folder',
 ]);
@@ -1000,6 +1018,26 @@ function emitStretchHeight(id) {
 /** 清除所有数据源 */
 function emitClearAll() {
     emit('data-clear-all');
+}
+
+/** 手动设置 3D Tiles 贴地高度 */
+const tileHeightMap = ref({});
+
+/** 获取 tileset 当前滑杆高度（初始化用 terrainElevation.centerHeight） */
+function getTileHeight(source) {
+    if (tileHeightMap.value[source.id] !== undefined) {
+        return tileHeightMap.value[source.id];
+    }
+    if (source.terrainElevation?.centerHeight !== undefined) {
+        return source.terrainElevation.centerHeight;
+    }
+    return 0;
+}
+
+function emitSetHeight(sourceId, height) {
+    const num = Number(height);
+    tileHeightMap.value = { ...tileHeightMap.value, [sourceId]: num };
+    emit('data-set-height', { id: sourceId, height: num });
 }
 </script>
 
@@ -2065,5 +2103,66 @@ function emitClearAll() {
 .data-source-action-btn.remove:hover {
     color: #ff8f8f;
     background: rgba(255, 100, 100, 0.15);
+}
+
+/* 3D Tiles 贴地高程滑杆 */
+.tileset-height-slider {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 4px 0;
+    margin-top: 2px;
+}
+
+.tileset-height-slider .slider-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.35);
+    flex-shrink: 0;
+    width: 14px;
+}
+
+.tileset-height-slider .slider-input {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+.tileset-height-slider .slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #64c8ff;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.tileset-height-slider .slider-input::-webkit-slider-thumb:hover {
+    background: #90d8ff;
+}
+
+.tileset-height-slider .slider-input::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #64c8ff;
+    border: none;
+    cursor: pointer;
+}
+
+.tileset-height-slider .slider-value {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    flex-shrink: 0;
+    min-width: 36px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 </style>

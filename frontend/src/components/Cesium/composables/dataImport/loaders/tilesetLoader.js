@@ -139,13 +139,17 @@ async function adjustTilesetToTerrain(tileset, viewer, Cesium) {
         return true;
     }
 
-    // 2. 获取瓦片集中心位置
+    // 2. 获取瓦片集包围球：用球心高度 - 半径 = 模型底部高度
     const center = tileset.boundingSphere.center;
+    const radius = tileset.boundingSphere.radius;
     const carto = Cesium.Cartographic.fromCartesian(center);
     const lng = Cesium.Math.toDegrees(carto.longitude);
     const lat = Cesium.Math.toDegrees(carto.latitude);
-    const tilesetH = carto.height;
-    console.warn('[贴地] 瓦片集中心:', lng.toFixed(6), lat.toFixed(6), '高度=', tilesetH.toFixed(1), 'm');
+    const centerH = carto.height;
+    // 底部 ≈ 球心高度 - 球半径（在局部 up 方向上的分量近似等于球半径）
+    const bottomH = centerH - radius;
+    console.warn('[贴地] 瓦片集中心:', lng.toFixed(6), lat.toFixed(6),
+        '中心高=', centerH.toFixed(1), 'm, 半径=', radius.toFixed(1), 'm, 底部高=', bottomH.toFixed(1), 'm');
 
     // 3. 采样地形高度
     let terrainH;
@@ -167,12 +171,12 @@ async function adjustTilesetToTerrain(tileset, viewer, Cesium) {
         return false;
     }
 
-    // 4. 计算偏移
-    const diff = terrainH - tilesetH;
-    console.warn('[贴地] 地形高度=', terrainH.toFixed(1), 'm, 瓦片集高度=', tilesetH.toFixed(1), 'm, 差值=', diff.toFixed(1), 'm');
+    // 4. 计算偏移：让瓦片集底部贴到地形表面 + 10m 余量
+    const diff = terrainH - bottomH;
+    console.warn('[贴地] 地形高度=', terrainH.toFixed(1), 'm, 瓦片集底部=', bottomH.toFixed(1), 'm, 需抬升=', diff.toFixed(1), 'm');
 
     if (diff <= 0) {
-        console.warn('[贴地] 瓦片集已在地表或之上，无需调整');
+        console.warn('[贴地] 瓦片集底部已在地表或之上，无需调整');
         return true;
     }
 
@@ -187,6 +191,79 @@ async function adjustTilesetToTerrain(tileset, viewer, Cesium) {
     tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
     console.warn('[贴地] modelMatrix 已设置 ✓');
     return true;
+}
+
+/**
+ * 采样瓦片集外包矩形内的地形高程范围
+ *
+ * 从 boundingSphere 反算 lat/lng 矩形 → 5×5 网格采样 → 返回 min/max。
+ * 用于用户手动贴地滑杆的上下阈值。
+ *
+ * @param {Cesium.Cesium3DTileset} tileset
+ * @param {Cesium.Viewer} viewer
+ * @param {Cesium} Cesium
+ * @returns {Promise<{min:number, max:number, centerHeight:number}|null>}
+ */
+async function sampleTerrainElevationRange(tileset, viewer, Cesium) {
+    if (!viewer.terrainProvider || viewer.terrainProvider.constructor === Cesium.EllipsoidTerrainProvider) {
+        return null;
+    }
+
+    try {
+        const center = tileset.boundingSphere.center;
+        const radius = tileset.boundingSphere.radius;
+        const carto = Cesium.Cartographic.fromCartesian(center);
+        const cLng = Cesium.Math.toDegrees(carto.longitude);
+        const cLat = Cesium.Math.toDegrees(carto.latitude);
+
+        // 包围球半径 → lat/lng 跨度（近似）
+        const earthR = 6378137;
+        const halfDegLat = (radius / earthR) * (180 / Math.PI);
+        const halfDegLng = halfDegLat / Math.cos(carto.latitude);
+
+        const west = cLng - halfDegLng;
+        const east = cLng + halfDegLng;
+        const south = cLat - halfDegLat;
+        const north = cLat + halfDegLat;
+
+        // 5×5 采样点
+        const GRID = 5;
+        const positions = [];
+        for (let row = 0; row < GRID; row++) {
+            const lat = south + (north - south) * row / (GRID - 1);
+            for (let col = 0; col < GRID; col++) {
+                const lng = west + (east - west) * col / (GRID - 1);
+                positions.push(Cesium.Cartographic.fromDegrees(lng, lat));
+            }
+        }
+
+        const results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, positions);
+
+        let min = Infinity;
+        let max = -Infinity;
+        for (const r of results) {
+            if (r && typeof r.height === 'number') {
+                if (r.height < min) min = r.height;
+                if (r.height > max) max = r.height;
+            }
+        }
+
+        if (!isFinite(min) || !isFinite(max)) return null;
+
+        // 中心点地形高度（用于滑杆默认值）
+        const centerPos = Cesium.Cartographic.fromDegrees(cLng, cLat);
+        const centerResults = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [centerPos]);
+        const centerHeight = (centerResults && centerResults.length > 0 && centerResults[0].height !== undefined)
+            ? centerResults[0].height
+            : (min + max) / 2;
+
+        console.warn('[贴地] 高程范围采样: min=', min.toFixed(1), 'm, max=', max.toFixed(1), 'm, 中心=', centerHeight.toFixed(1), 'm, 跨度=', (max - min).toFixed(1), 'm');
+
+        return { min, max, centerHeight };
+    } catch (e) {
+        console.warn('[贴地] 高程范围采样失败:', e.message || e);
+        return null;
+    }
 }
 
 // ============================================================
@@ -284,6 +361,17 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
         disableTerrain(viewer, Cesium);
     }
 
+    // Step 5.6: 采样瓦片集外包矩形内的高程范围（用于手动贴地滑杆）
+    const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
+
+    // 记录贴地所需的几何参数
+    const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+    const tilesetGeo = {
+        lng: Cesium.Math.toDegrees(centerCarto.longitude),
+        lat: Cesium.Math.toDegrees(centerCarto.latitude),
+        bottomH: centerCarto.height - tileset.boundingSphere.radius,
+    };
+
     const id = `tileset_${++nextId.current}`;
     viewer.scene.primitives.add(tileset);
 
@@ -293,6 +381,8 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
         type: '3dtiles',
         entity: tileset,
         blobUrls: allBlobUrls,
+        terrainElevation,
+        tilesetGeo,
     };
     loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -327,10 +417,19 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
             disableTerrain(viewer, Cesium);
         }
 
+        // 采样高程范围（用于手动贴地滑杆）
+        const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
+        const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+        const tilesetGeo = {
+            lng: Cesium.Math.toDegrees(centerCarto.longitude),
+            lat: Cesium.Math.toDegrees(centerCarto.latitude),
+            bottomH: centerCarto.height - tileset.boundingSphere.radius,
+        };
+
         const id = `tileset_${++nextId.current}`;
         viewer.scene.primitives.add(tileset);
 
-        const record = { id, name: file.name, type: '3dtiles', entity: tileset };
+        const record = { id, name: file.name, type: '3dtiles', entity: tileset, terrainElevation, tilesetGeo };
         loadedDataSources.value = [...loadedDataSources.value, record];
 
         flyToEntity(viewer, Cesium, tileset, '3dtiles');

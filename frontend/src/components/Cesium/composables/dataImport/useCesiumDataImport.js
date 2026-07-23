@@ -527,6 +527,45 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         message.info(`已定位到 "${record.name}"`);
     }
 
+    /**
+     * 手动设置 3D Tiles 的贴地高度（垂直平移滑杆）
+     * 将 tileset 底部放置到指定海拔高度
+     * @param {string} id - 数据源 ID
+     * @param {number} targetBaseHeight - 目标底部海拔（米）
+     */
+    function setTilesetHeight(id, targetBaseHeight) {
+        const Cesium = getCesium();
+        const viewer = getViewer();
+        if (!Cesium || !viewer) return;
+
+        const record = loadedDataSources.value.find((ds) => ds.id === id);
+        if (!record || record.type !== '3dtiles') {
+            console.warn('[贴地] setTilesetHeight: 未找到 tileset 记录, id=', id);
+            return;
+        }
+
+        const { tilesetGeo } = record;
+        if (!tilesetGeo) {
+            console.warn('[贴地] setTilesetHeight: 记录缺少 tilesetGeo');
+            return;
+        }
+
+        const { lng, lat, bottomH } = tilesetGeo;
+        const offset = targetBaseHeight - bottomH;
+
+        const origin = Cesium.Cartesian3.fromRadians(
+            Cesium.Math.toRadians(lng), Cesium.Math.toRadians(lat), 0);
+        const target = Cesium.Cartesian3.fromRadians(
+            Cesium.Math.toRadians(lng), Cesium.Math.toRadians(lat), offset);
+        const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
+
+        const tileset = toRaw(record.entity);
+        tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+
+        console.warn('[贴地] 手动贴地: 底部高度=', targetBaseHeight.toFixed(1),
+            'm, ECEF偏移量级=', Cesium.Cartesian3.magnitude(translation).toFixed(1), 'm');
+    }
+
     // ============================================================
     // 导出
     // ============================================================
@@ -547,5 +586,6 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         confirmGltfReposition,
         cancelGltfReposition,
         stretchRasterToHeight,
+        setTilesetHeight,
     };
 }
