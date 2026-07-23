@@ -5,6 +5,8 @@
  * 支持：本地 file:// 路径、ZIP 压缩包、浏览器目录选择器（File System Access API）。
  * 核心思路：将所有文件映射为 blob URL → 改写 tileset.json 内部 content.url →
  * Cesium3DTileset.fromUrl() 加载。
+ *
+ * 地形自适应：加载后自动采样地形高度，如果 tileset 低于地形表面则抬升到地表上方。
  */
 
 import { flyToEntity, calcTerrainOffset } from './utils.js';
@@ -12,7 +14,9 @@ import { flyToEntity, calcTerrainOffset } from './utils.js';
 /** @type {string} tileset.json 文件名标识 */
 export const TILESET_JSON_INDICATOR = 'tileset.json';
 
-// ---- 内部工具函数 ----
+// ============================================================
+// 内部工具函数
+// ============================================================
 
 /**
  * 在 tileset 目录上下文中解析相对路径
@@ -103,6 +107,10 @@ async function readDirRecursive(dirHandle, currentPath, fileMap) {
     }
 }
 
+// ============================================================
+// 地形自适应
+// ============================================================
+
 /**
  * 自动将 tileset 抬升到地形表面上方
  *
@@ -128,7 +136,9 @@ async function adjustTilesetToTerrain(tileset, viewer, Cesium) {
     tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
 }
 
-// ---- 导出加载函数 ----
+// ============================================================
+// 导出加载函数
+// ============================================================
 
 /**
  * 从 文件路径→blob 映射中加载 3D Tiles
@@ -238,16 +248,8 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
 /**
  * 加载 tileset.json 文件
  * 优先使用 file:// 路径（Electron/桌面环境），浏览器环境回退到目录选择器。
- *
- * @param {Object} ctx
- * @param {File} ctx.file
- * @param {Function} ctx.getCesium
- * @param {Function} ctx.getViewer
- * @param {Object} ctx.message
- * @param {import('vue').Ref} ctx.loadedDataSources
- * @param {{ current: number }} ctx.nextId
  */
-export async function loadTilesetJSON({ file, getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+export async function loadTilesetJSON({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -280,7 +282,7 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
     // 浏览器环境：引导用户选择完整目录
     message.warning('3D Tiles 是目录格式，需要选择包含所有文件的文件夹，即将打开目录选择器…');
 
-    const result = await importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId, heightSampler });
+    const result = await importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId });
     if (!result) {
         throw new Error('用户取消了目录选择，3D Tiles 导入中止');
     }
@@ -289,16 +291,8 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
 
 /**
  * 从 ZIP 文件中加载 3D Tiles
- *
- * @param {Object} ctx
- * @param {File} ctx.zipFile
- * @param {Function} ctx.getCesium
- * @param {Function} ctx.getViewer
- * @param {Object} ctx.message
- * @param {import('vue').Ref} ctx.loadedDataSources
- * @param {{ current: number }} ctx.nextId
  */
-export async function loadTilesetFromZip({ zipFile, getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+export async function loadTilesetFromZip({ zipFile, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const { default: JSZip } = await import('jszip');
     const zip = await JSZip.loadAsync(zipFile);
 
@@ -316,18 +310,15 @@ export async function loadTilesetFromZip({ zipFile, getCesium, getViewer, messag
     return await loadTilesetFromFileMap({
         fileMap,
         sourceName: zipFile.name || '3D Tiles',
-        getCesium, getViewer, message, loadedDataSources, nextId, heightSampler,
+        getCesium, getViewer, message, loadedDataSources, nextId,
     });
 }
 
 /**
  * 使用传统 <input webkitdirectory> 方式选取文件夹（降级方案）
  * 适用于不支持 File System Access API 的浏览器
- *
- * @param {Object} ctx
- * @returns {Promise<Object|null>}
  */
-function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId }) {
     return new Promise((resolve, reject) => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -372,7 +363,7 @@ function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loa
                 const result = await loadTilesetFromFileMap({
                     fileMap,
                     sourceName: dirName,
-                    getCesium, getViewer, message, loadedDataSources, nextId, heightSampler,
+                    getCesium, getViewer, message, loadedDataSources, nextId,
                 });
                 resolve(result);
             } catch (error) {
@@ -399,18 +390,15 @@ function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loa
 
 /**
  * 使用 File System Access API 选取目录（原生方案）
- *
- * @param {Object} ctx
- * @returns {Promise<Object|null>}
  */
-async function importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+async function importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId }) {
     const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     const fileMap = {};
     await readDirRecursive(dirHandle, '', fileMap);
     return await loadTilesetFromFileMap({
         fileMap,
         sourceName: dirHandle.name,
-        getCesium, getViewer, message, loadedDataSources, nextId, heightSampler,
+        getCesium, getViewer, message, loadedDataSources, nextId,
     });
 }
 
@@ -418,22 +406,16 @@ async function importTilesetFromDirectoryNative({ getCesium, getViewer, message,
  * 打开系统目录选择器，选取 3D Tiles 文件夹后加载
  * 优先使用 File System Access API，不支持时降级为传统 webkitdirectory 方式
  *
- * @param {Object} ctx
- * @param {Function} ctx.getCesium
- * @param {Function} ctx.getViewer
- * @param {Object} ctx.message
- * @param {import('vue').Ref} ctx.loadedDataSources
- * @param {{ current: number }} ctx.nextId
  * @returns {Promise<Object|null>}
  */
-export async function importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+export async function importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId }) {
     try {
         // 检测是否支持 File System Access API
         if (typeof window.showDirectoryPicker === 'function') {
-            return await importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId, heightSampler });
+            return await importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId });
         }
         // 降级方案：使用传统 webkitdirectory 方式
-        return await importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId, heightSampler });
+        return await importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId });
     } catch (error) {
         if (error.name === 'AbortError' || error.name === 'SecurityError') {
             return null;
