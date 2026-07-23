@@ -31,6 +31,7 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
     }
 
     const dataSource = await Cesium.GeoJsonDataSource.load(geojsonData, {
+        clampToGround: true,
         stroke: Cesium.Color.fromCssColorString('#3ddc84'),
         fill: Cesium.Color.fromCssColorString('#3ddc84').withAlpha(0.3),
         markerColor: Cesium.Color.fromCssColorString('#3ddc84'),

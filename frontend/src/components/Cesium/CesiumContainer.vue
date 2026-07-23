@@ -679,12 +679,24 @@ async function handleDataStretchHeight({ id }) {
 /**
  * 打开文件选择器选择 3D Tiles ZIP 包
  * 选中后通过 loadDataFile 自动路由到 loadTilesetFromZip
+ * 注意：input 必须挂载到 DOM 中才能可靠触发 click 事件
  */
 function handleImportTilesetZip() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.zip';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+
+    /** 清理 DOM 中的 input 元素 */
+    function cleanup() {
+        if (input.parentNode) {
+            document.body.removeChild(input);
+        }
+    }
+
     input.onchange = async (e) => {
+        cleanup();
         const file = e.target?.files?.[0];
         if (!file) return;
         try {
@@ -693,6 +705,18 @@ function handleImportTilesetZip() {
             // 内部已提示
         }
     };
+
+    // 用户取消选择：通过 window focus 事件检测
+    const onFocus = () => {
+        window.removeEventListener('focus', onFocus);
+        setTimeout(() => {
+            if (!input.files || input.files.length === 0) {
+                cleanup();
+            }
+        }, 300);
+    };
+    window.addEventListener('focus', onFocus);
+
     input.click();
 }
 

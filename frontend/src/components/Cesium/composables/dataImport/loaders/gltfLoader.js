@@ -5,7 +5,7 @@
  * 功能：加载 GLTF/GLB 到 Cesium，提取嵌入坐标，自动放置无坐标模型。
  */
 
-import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
+import { getExtension, createBlobUrl, revokeBlobUrl, calcTerrainOffset, sampleTerrainHeight } from './utils.js';
 
 /**
  * 加载 GLTF/GLB 三维模型到 Cesium
@@ -23,10 +23,9 @@ import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
  * @param {Object} ctx.message
  * @param {import('vue').Ref} ctx.loadedDataSources
  * @param {{ current: number }} ctx.nextId
- * @param {Object} [ctx.heightSampler] - 地形高度采样器
  * @returns {Promise<Object>} record 或 { needsCoordInput: true, file, blobUrl }
  */
-export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId, heightSampler }) {
+export async function loadGLTF({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -43,8 +42,20 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
     let coords;
     if (embeddedCoords) {
         coords = embeddedCoords;
+        // 嵌入坐标存在时，检查地形高度并补偿
+        const CesiumNs = getCesium();
+        if (CesiumNs) {
+            const offset = await calcTerrainOffset({
+                lng: coords.lng, lat: coords.lat,
+                currentHeight: coords.height,
+                viewer, Cesium: CesiumNs,
+            });
+            if (offset !== null) {
+                coords = { ...coords, height: coords.height + offset };
+            }
+        }
     } else {
-        coords = await getAutoPlaceCoords(viewer, Cesium, heightSampler);
+        coords = await getAutoPlaceCoords(viewer, Cesium);
         if (!coords) {
             return { needsCoordInput: true, file, blobUrl };
         }
@@ -228,10 +239,9 @@ export function parseGlbJsonChunk(buffer) {
  *
  * @param {Cesium.Viewer} viewer
  * @param {Cesium} Cesium
- * @param {Object} [heightSampler] - 地形高度采样器
  * @returns {Promise<{lng: number, lat: number, height: number}|null>}
  */
-export async function getAutoPlaceCoords(viewer, Cesium, heightSampler) {
+export async function getAutoPlaceCoords(viewer, Cesium) {
     try {
         const center = new Cesium.Cartesian2(
             viewer.canvas.clientWidth / 2,
@@ -256,19 +266,8 @@ export async function getAutoPlaceCoords(viewer, Cesium, heightSampler) {
 
         let height = 0;
         try {
-            if (heightSampler?.sampleHeight) {
-                const result = heightSampler.sampleHeight({ lng, lat });
-                if (result?.height !== undefined) {
-                    height = result.height;
-                }
-            } else {
-                const samplePos = Cesium.Cartographic.fromDegrees(lng, lat);
-                const sampled = Cesium.sampleTerrain(viewer.terrainProvider, 0, [samplePos]);
-                const resolved = sampled instanceof Promise ? await sampled : sampled;
-                if (resolved?.[0]?.height !== undefined) {
-                    height = resolved[0].height;
-                }
-            }
+            const sampled = await sampleTerrainHeight({ lng, lat, viewer, Cesium });
+            if (sampled !== null) height = sampled;
         } catch { /* 采样失败，使用默认高度 0 */ }
 
         return { lng, lat, height: Math.max(0, height) };
