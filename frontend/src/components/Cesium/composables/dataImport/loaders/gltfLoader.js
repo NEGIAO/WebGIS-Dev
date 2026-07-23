@@ -6,7 +6,7 @@
  * 地形自适应：加载后自动采样地形高度，低于地表时抬升；采样失败则关地形兜底。
  */
 
-import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
+import { getExtension, createBlobUrl, revokeBlobUrl, calcTerrainOffset, sampleTerrainHeight } from './utils.js';
 
 /**
  * 加载 GLTF/GLB 三维模型到 Cesium
@@ -252,6 +252,12 @@ export async function getAutoPlaceCoords(viewer, Cesium) {
 
         let height = 0;
         try {
+            if (viewer.terrainProvider &&
+                viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider) {
+                const pos = Cesium.Cartographic.fromDegrees(lng, lat);
+                const results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
+                if (results && results.length > 0 && results[0].height !== undefined) {
+                    height = results[0].height;
             if (viewer.terrainProvider &&
                 viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider) {
                 const pos = Cesium.Cartographic.fromDegrees(lng, lat);
