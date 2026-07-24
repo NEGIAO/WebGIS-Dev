@@ -6,6 +6,13 @@
 
 ## 版本记录
 
+### V3.4.1 (2026-07-24) — 版本号自动同步：Vite define 从 README.md 注入
+
+- 🔧 **版本号单一事实来源**：根目录 `README.md` 成为版本号的唯一权威来源，`MapContainer.vue` 的 `APP_DISPLAY_VERSION` 不再硬编码
+- ⚙️ **Vite define 注入**：`vite.config.js` 构建时自动读取 `README.md`，用正则 `当前版本[^\d]*(\d+\.\d+\.\d+)` 提取版本号，注入为全局常量 `__APP_VERSION__`
+- 🎯 **ESLint 兼容**：`eslint.config.js` 添加 `__APP_VERSION__: readonly` 全局声明，避免 no-undef 误报
+- 📝 **LLM 工作流简化**：Agent 只需在 `README.md` 中更新版本号，Vue 侧构建时自动同步，无需额外操作
+
 ### V3.3.23 (2026-07-24) — 体积云性能优化（默认流畅档 60FPS 路径）
 
 - 🚀 **默认档改为流畅（smooth）**：`DEFAULT_CLOUD_QUALITY` 由 `balanced` 改回 `smooth`，开启体积云即走性能优先路径（关 BSM/丁达尔/Aerial/光晕，低采样）

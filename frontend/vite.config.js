@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
@@ -20,8 +21,26 @@ export default defineConfig(({ command, mode }) => {
   // 项目基础路径（支持环境变量自定义）
   const baseUrl = process.env.VITE_BASE_URL || './';
 
+  // 从 README.md 提取版本号（构建时自动同步，LLM 更新 README 后无需手动维护 Vue 侧版本）
+  const readmePath = fileURLToPath(new URL('../README.md', import.meta.url));
+  let appDisplayVersion = 'V0.0.0';
+  try {
+    const readmeContent = fs.readFileSync(readmePath, 'utf-8');
+    const match = readmeContent.match(/当前版本[^\d]*(\d+\.\d+\.\d+)/);
+    if (match) {
+      appDisplayVersion = `V${match[1]}`;
+    }
+  } catch (e) {
+    console.warn(`[vite] 无法读取 README.md 提取版本：${e.message}`);
+  }
+
   return {
     base: baseUrl,
+
+    // 构建时注入全局常量 __APP_VERSION__（值从 README.md 自动提取）
+    define: {
+      __APP_VERSION__: JSON.stringify(appDisplayVersion),
+    },
 
     // 插件配置
     plugins: [

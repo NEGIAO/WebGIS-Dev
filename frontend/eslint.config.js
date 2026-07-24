@@ -35,6 +35,9 @@ export default [
         languageOptions: {
             ecmaVersion: 'latest',
             sourceType: 'module',
+            globals: {
+                __APP_VERSION__: 'readonly', // Vite define 注入，构建时从 README.md 自动提取
+            },
         },
         rules: {
             'no-console': ['warn', { allow: ['warn', 'error'] }],
