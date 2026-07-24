@@ -55,16 +55,16 @@ frontend/src/
 │   │   │
 │   │   ├── Cloud/                                  # 体积云·大气（移植 cesium-clouds-atmosphere）
 │   │   │   ├── index.js                            # 模块统一出口
-│   │   │   ├── setupCloudIntegration.js            # Vue 桥接：懒加载/销毁/天空快照
-│   │   │   ├── cloudParamsApply.js                 # 面板参数 → pipeline.params 映射
-│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（流畅/均衡/极致）
+│   │   │   ├── setupCloudIntegration.js            # Vue 桥接：懒加载/销毁/天空快照 + LensFlare 懒创建 + watch 帧级(RAF)合并
+│   │   │   ├── cloudParamsApply.js                 # 面板参数 → pipeline.params 映射（含性能标量键）
+│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（默认流畅 60FPS 路径/均衡/极致）
 │   │   │   ├── assetConfig.js                      # public/cloud-atmosphere 路径 + 默认参数
 │   │   │   └── lib/                                # 库核心源码（内联，非 npm）
 │   │   │       ├── createCloudAtmosphere.js        # 一行创建入口
-│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排
+│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（scratch 对象池复用 + shader 质量旋钮 + BSM 尺寸/启停统一）
 │   │   │       ├── CloudShadowFrag.glsl.js         # BSM 着色器内联
-│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联
-│   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve
+│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（uniform location 缓存 + bsmUpdateInterval 低频渲染）
+│   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve（持久 VBO/location 复用 + interval gating）
 │   │   │       ├── loadBinThreeGeospatial.js       # three Data3DTexture 解析 .bin
 │   │   │       ├── shaderLoader.js                 # 着色器加载器（bundle 优先 + fetch 回退）
 │   │   │       ├── shaders/bundledShaders.js       # 自动生成的 GLSL 内联 bundle

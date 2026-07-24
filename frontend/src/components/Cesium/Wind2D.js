@@ -961,7 +961,6 @@ uniform float alphaFactor;
 uniform float colorSpeedMin;
 uniform float colorSpeedMax;
 
-
 vec3 speedToColor(float t) {
   if (t < 0.25) {
     return mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), t / 0.25);
@@ -988,7 +987,7 @@ void main() {
 
   vec3 color = speedToColor(speedT);
   float alpha = clamp((1.0 - v_age) * alphaFactor, 0.0, 1.0);
-  czm_out_FragColor = vec4(color, alpha);
+  out_FragColor = vec4(color, alpha);
 }`;
 
         this._drawProgram = Cesium.ShaderProgram.fromCache({

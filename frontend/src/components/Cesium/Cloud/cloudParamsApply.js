@@ -59,6 +59,15 @@ export function applyCloudPanelParams(pipeline, panelParams) {
     'shadowFadeScale',
     'groundAerialScale',
     'altitudeFadeRange',
+    // 性能旋钮：直接决定主 raymarch 采样量、太阳方向采样、BSM 分辨率与低频更新节奏。
+    'minStepSize',
+    'maxStepSize',
+    'perspectiveStepScale',
+    'maxStepsToSun',
+    'maxShadowLengthIterationCount',
+    'shadowMapSize',
+    'bsmUpdateInterval',
+    'shadowPcfTaps',
   ];
   for (const key of scalarKeys) {
     const v = num(panelParams[key]);
@@ -76,6 +85,7 @@ export function applyCloudPanelParams(pipeline, panelParams) {
   if (typeof panelParams.shadowLengthEnabled === 'boolean') p.shadowLengthEnabled = panelParams.shadowLengthEnabled;
   if (typeof panelParams.hazeEnabled === 'boolean') p.hazeEnabled = panelParams.hazeEnabled;
   if (typeof panelParams.temporalEnabled === 'boolean') p.temporalEnabled = panelParams.temporalEnabled;
+  if (typeof panelParams.shadowResolveEnabled === 'boolean') p.shadowResolveEnabled = panelParams.shadowResolveEnabled;
 
   // BSM OD 缩放（同步大气 + Aerial 两侧）
   const groundScale = num(panelParams.bsmGroundScale);

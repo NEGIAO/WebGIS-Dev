@@ -85,6 +85,7 @@ uniform vec2 u_shadowIntervals[4];
 uniform mat4 u_shadowMatrices[4];
 uniform float u_shadowFar;
 uniform float u_maxShadowFilterRadius;
+uniform int u_shadowPcfTaps;
 uniform int u_useShadowBuffer;
 uniform float u_skyLightScale;
 uniform float u_weatherRepeat;
@@ -267,7 +268,8 @@ MediaSample sampleMedia(WeatherSample weather, vec3 position, vec2 uv, float mip
   vec3 sp = (position + evolution + turb) * u_shapeRepeat + u_shapeOffset;
   float shapeTex = texture(u_shapeTexture, fract(sp)).r;
   density = remapClamped(density, vec4(1.0 - shapeTex) * u_shapeAmounts, vec4(1.0));
-  if (mipLevel * 0.5 + (jitter - 0.5) * 0.5 < 0.5) {
+  // detailAmounts 全 0（smooth 档）时整体跳过 3D detail 纹理采样，节省最重的体积纹理带宽
+  if (any(greaterThan(u_shapeDetailAmounts, vec4(0.0))) && (mipLevel * 0.5 + (jitter - 0.5) * 0.5 < 0.5)) {
     vec3 dp = (position + turb) * u_shapeDetailRepeat + u_shapeDetailOffset;
     float detail = texture(u_shapeDetailTexture, dp).r;
     vec4 modifier = mix(vec4(pow(detail, 6.0)), vec4(1.0 - detail),
@@ -479,8 +481,12 @@ float sampleShadowOpticalDepthPCF(vec3 worldPos, float distToTop, float distOff,
   if (radius < 0.1) return readShadowOpticalDepth(uv, ci, distToTop, distOff);
   float sum = 0.0;
   float phi = interleavedGradientNoise(gl_FragCoord.xy) * 3.14159265 * 2.0;
-  for (int i = 0; i < 16; ++i) sum += readShadowOpticalDepth(uv + vogelDisk(i, 16, phi) * radius * u_shadowTexelSize, ci, distToTop, distOff);
-  return sum / 16.0;
+  int taps = clamp(u_shadowPcfTaps, 1, 16);
+  for (int i = 0; i < 16; ++i) {
+    if (i >= taps) break;
+    sum += readShadowOpticalDepth(uv + vogelDisk(i, 16, phi) * radius * u_shadowTexelSize, ci, distToTop, distOff);
+  }
+  return sum / float(taps);
 }
 
 float sampleShadowOpticalDepth(vec3 rayPos, float distOff, float radius, float jitter) {
@@ -850,7 +856,13 @@ export class ThreeGeospatialPipeline {
       // shadowFar 对齐云可见距离量级（云 maxRayDistance=200000），否则超过 shadowFar 的云看得见但不产生 BSM、
       // cascade 边界硬切导致移动时阴影弹出。可经面板下调以换取帧率。
       shadowFar: 120000, shadowSplitLambda: 1.0, shadowFadeScale: 5.0,
+      // 性能控制：默认值偏向极致；面板预设会在 init 前覆盖为 smooth/balanced/ultra。
+      shadowMapSize: 1024, bsmUpdateInterval: 1, shadowResolveEnabled: true, shadowPcfTaps: 16,
     };
+
+    if (options.initialCloudParams) {
+      this._applyInitialCloudParams(options.initialCloudParams);
+    }
 
     this.atmosphere = null;
     this.aerial = null;
@@ -859,7 +871,9 @@ export class ThreeGeospatialPipeline {
     this._ready = null;
 
     // BSM state
-    this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null };
+    this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null, blitLoc: null };
+    this._bsmBlitSize = Number(this.params.shadowMapSize) || BSM_BLIT_SIZE;
+    this._bsmShadowDisabled = false;
     /** V3.3.20：每帧 _syncBSM blit 写入的共享 Cesium.Texture，供主云 stage u_shadowBuffer 采样 */
     this._bsmSharedTexture = null;
     // TAA state
@@ -869,10 +883,98 @@ export class ThreeGeospatialPipeline {
     this._shapeOffsetX = 0; this._shapeOffsetY = 0; this._shapeOffsetZ = 0;
     this._shapeDetailOffsetX = 0; this._shapeDetailOffsetY = 0; this._shapeDetailOffsetZ = 0;
     this._lastFrameTime = undefined;
+    this._lastOffsetFrame = -1;
     this._listeners = [];
+
+    // 每帧 uniform 回调复用的 scratch 对象池：每个 uniform 独立实例，避免同帧互相覆盖与 GC 抖动
+    this._scratch = {
+      // _getAltitudeCorrectionOffset 内部中间量
+      altCorrCarto: new Cesium.Cartographic(),
+      altCorrSurface: new Cesium.Cartesian3(),
+      altCorrNormal: new Cesium.Cartesian3(),
+      altCorrCenter: new Cesium.Cartesian3(),
+      // _getIntervalHeights 内部中间量与结果
+      intervalEntries: Array.from({ length: 8 }, () => ({ v: 0, flag: 0 })),
+      intervalRanges: Array.from({ length: 3 }, () => ({ min: 0, max: 0 })),
+      intervalResult: { min: new Cesium.Cartesian3(), max: new Cesium.Cartesian3() },
+      // uniform 回调各自的返回容器
+      altitudeCorrection: new Cesium.Cartesian3(),
+      cameraHeightCorr: new Cesium.Cartesian3(),
+      cameraHeightPos: new Cesium.Cartesian3(),
+      minLayerHeights: new Cesium.Cartesian4(),
+      maxLayerHeights: new Cesium.Cartesian4(),
+      densityScales: new Cesium.Cartesian4(),
+      shapeAmounts: new Cesium.Cartesian4(),
+      shapeDetailAmounts: new Cesium.Cartesian4(),
+      weatherExponents: new Cesium.Cartesian4(),
+      shapeAlteringBiases: new Cesium.Cartesian4(),
+      coverageFilterWidths: new Cesium.Cartesian4(),
+      coverages: new Cesium.Cartesian4(),
+      densityProfileExpTerms: new Cesium.Cartesian4(),
+      densityProfileExponents: new Cesium.Cartesian4(),
+      densityProfileLinearTerms: new Cesium.Cartesian4(),
+      densityProfileConstantTerms: new Cesium.Cartesian4(),
+      shadowTexelSize: new Cesium.Cartesian2(),
+      shadowIntervals: Array.from({ length: 4 }, () => new Cesium.Cartesian2()),
+      shadowMatrices: Array.from({ length: 4 }, () => new Cesium.Matrix4()),
+      localWeatherOffset: new Cesium.Cartesian2(),
+      shapeOffset: new Cesium.Cartesian3(),
+      shapeDetailOffset: new Cesium.Cartesian3(),
+      resolution: new Cesium.Cartesian2(),
+      // _syncBSM 每帧传给 CloudShadowPass.updateDynamicParams / setCloudShadow 的复用容器
+      bsmDynamicParams: {
+        coverages: [0, 0, 0, 0], densityScales: [0, 0, 0, 0], shapeAmounts: [0, 0, 0, 0],
+        shapeDetailAmounts: [0, 0, 0, 0], weatherExponents: [0, 0, 0, 0],
+        shapeAlteringBiases: [0, 0, 0, 0], coverageFilterWidths: [0, 0, 0, 0],
+        localWeatherOffset: [0, 0], shapeOffset: [0, 0, 0], shapeDetailOffset: [0, 0, 0],
+        windSpeed: 0, evolutionSpeed: 0,
+      },
+      bsmShadowOpts: null, // 惰性构建：首次 _syncBSM 时按 setCloudShadow 期望字段填充
+      bsmShadowIntervals: Array.from({ length: 4 }, () => new Cesium.Cartesian2()),
+      bsmShadowMatrices: Array.from({ length: 4 }, () => new Cesium.Matrix4()),
+    };
   }
 
   // ── Texture loading ────────────────────────────────────────────────────
+
+  /**
+   * 初始化前应用面板性能参数，确保 BSM 尺寸/开关在 GPU 资源创建前生效。
+   * @param {Record<string, unknown>} params
+   */
+  _applyInitialCloudParams(params) {
+    if (!params || typeof params !== "object") return;
+    const p = this.params;
+    if (typeof params.cloudsEnabled === "boolean") p.cloudsVisible = params.cloudsEnabled;
+    const scalarKeys = [
+      "sunIntensity", "cloudExposure", "skyToSunRatio", "aerialPerspectiveScale", "magentaFixStrength",
+      "scatterG1", "scatterG2", "multiScatteringOctaves", "windSpeed", "evolutionSpeed",
+      "distFadeStart", "distFadeEnd", "maxSteps", "maxStepsToSun", "minStepSize", "maxStepSize",
+      "perspectiveStepScale", "maxRayDistance", "shadowFar", "shadowSplitLambda", "shadowFadeScale",
+      "altitudeFadeRange", "maxShadowLengthIterationCount", "shadowMapSize", "bsmUpdateInterval", "shadowPcfTaps"
+    ];
+    for (const key of scalarKeys) {
+      const v = Number(params[key]);
+      if (Number.isFinite(v)) p[key] = v;
+    }
+    // 低成本档关闭 3D detail 噪声采样：保持云形大轮廓，减少每步 texture3D 访问。
+    const smoothMode = params.quality === "smooth";
+    for (let i = 0; i < 3; i++) {
+      const layer = p.layers[i];
+      if (!layer) continue;
+      const altitude = Number(params[`layer${i}Altitude`]);
+      const height = Number(params[`layer${i}Height`]);
+      const coverage = Number(params[`layer${i}Coverage`]);
+      if (Number.isFinite(altitude)) layer.altitude = altitude;
+      if (Number.isFinite(height)) layer.height = height;
+      if (Number.isFinite(coverage)) layer.coverage = coverage;
+      if (smoothMode) layer.shapeDetailAmount = 0.0;
+    }
+    if (typeof params.useShadowBuffer === "boolean") p.useShadowBuffer = params.useShadowBuffer;
+    if (typeof params.shadowLengthEnabled === "boolean") p.shadowLengthEnabled = params.shadowLengthEnabled;
+    if (typeof params.hazeEnabled === "boolean") p.hazeEnabled = params.hazeEnabled;
+    if (typeof params.temporalEnabled === "boolean") p.temporalEnabled = params.temporalEnabled;
+    if (typeof params.shadowResolveEnabled === "boolean") p.shadowResolveEnabled = params.shadowResolveEnabled;
+  }
 
   async _load3DTexture(url, size) {
     const data3D = await loadBinThreeGeospatial(url, size);
@@ -960,6 +1062,9 @@ uniform sampler2D irradiance_texture;
   // ── Wind animation ─────────────────────────────────────────────────────
 
   _advanceOffsets() {
+    const frame = this._frameCount || 0;
+    if (this._lastOffsetFrame === frame) return;
+    this._lastOffsetFrame = frame;
     const now = performance.now() / 1000;
     if (this._lastFrameTime !== undefined) {
       const dt = now - this._lastFrameTime;
@@ -971,52 +1076,66 @@ uniform sampler2D irradiance_texture;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
+  // 以下 helper 均支持可选 result/内部 scratch：uniform 回调每帧执行，避免反复 new Cartesian* 触发 GC。
 
-  _getDensityProfileVec4(key) {
+  _getDensityProfileVec4(key, result) {
     const ls = this.params.layers, def = k => k === "linearTerm" ? 0.75 : k === "constantTerm" ? 0.25 : 0;
-    return new Cesium.Cartesian4(...[0,1,2,3].map(i => {
-      const val = ls[i]?.densityProfile?.[key];
-      return val !== undefined ? Number(val) : def(key);
-    }));
+    const out = result || new Cesium.Cartesian4();
+    const val = i => { const v = ls[i]?.densityProfile?.[key]; return v !== undefined ? Number(v) : def(key); };
+    out.x = val(0); out.y = val(1); out.z = val(2); out.w = val(3);
+    return out;
   }
 
   _getIntervalHeights() {
-    const ls = this.params.layers, entries = [];
-    for (let i = 0; i < 4; i++) { const a = Number(ls[i]?.altitude) || 0, h = Number(ls[i]?.height) || 0; entries.push({ v: a, flag: 0 }, { v: a + h, flag: 1 }); }
-    entries.sort((a, b) => a.v !== b.v ? a.v - b.v : a.flag - b.flag);
-    const intervals = [{ min: 0, max: 0 }, { min: 0, max: 0 }, { min: 0, max: 0 }];
-    let idx = 0, balance = 0;
-    for (let i = 0; i < entries.length; i++) { if (balance === 0 && i > 0) { intervals[idx] = { min: entries[i - 1].v, max: entries[i].v }; idx++; } balance += entries[i].flag === 0 ? 1 : -1; }
-    return { min: new Cesium.Cartesian3(intervals[0].min, intervals[1].min, intervals[2].min), max: new Cesium.Cartesian3(intervals[0].max, intervals[1].max, intervals[2].max) };
-  }
-
-  _getLayerVec4(key, fallback = 0) {
     const ls = this.params.layers;
-    return new Cesium.Cartesian4(...[0,1,2,3].map(i => {
-      const val = ls[i]?.[key];
-      return val !== undefined ? Number(val) : fallback;
-    }));
+    const entries = this._scratch.intervalEntries;
+    for (let i = 0; i < 4; i++) {
+      const a = Number(ls[i]?.altitude) || 0, h = Number(ls[i]?.height) || 0;
+      const e0 = entries[i * 2], e1 = entries[i * 2 + 1];
+      e0.v = a; e0.flag = 0;
+      e1.v = a + h; e1.flag = 1;
+    }
+    entries.sort((a, b) => a.v !== b.v ? a.v - b.v : a.flag - b.flag);
+    const iv = this._scratch.intervalRanges;
+    for (let i = 0; i < 3; i++) { iv[i].min = 0; iv[i].max = 0; }
+    let idx = 0, balance = 0;
+    for (let i = 0; i < entries.length; i++) { if (balance === 0 && i > 0 && idx < 3) { iv[idx].min = entries[i - 1].v; iv[idx].max = entries[i].v; idx++; } balance += entries[i].flag === 0 ? 1 : -1; }
+    const out = this._scratch.intervalResult;
+    out.min.x = iv[0].min; out.min.y = iv[1].min; out.min.z = iv[2].min;
+    out.max.x = iv[0].max; out.max.y = iv[1].max; out.max.z = iv[2].max;
+    return out;
   }
 
-  _getAltitudeCorrectionOffset(bottomRadius) {
+  _getLayerVec4(key, fallback = 0, result) {
+    const ls = this.params.layers;
+    const out = result || new Cesium.Cartesian4();
+    const val = i => { const v = ls[i]?.[key]; return v !== undefined ? Number(v) : fallback; };
+    out.x = val(0); out.y = val(1); out.z = val(2); out.w = val(3);
+    return out;
+  }
+
+  _getAltitudeCorrectionOffset(bottomRadius, result) {
+    const out = result || new Cesium.Cartesian3();
     const ellipsoid = this.viewer?.scene?.globe?.ellipsoid;
     const cameraPos = this.viewer?.camera?.positionWC;
-    if (!ellipsoid || !cameraPos) return Cesium.Cartesian3.ZERO.clone();
-    const carto = Cesium.Cartographic.fromCartesian(cameraPos, ellipsoid);
-    if (!carto) return Cesium.Cartesian3.ZERO.clone();
+    if (!ellipsoid || !cameraPos) return Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO, out);
+    const s = this._scratch;
+    const carto = Cesium.Cartographic.fromCartesian(cameraPos, ellipsoid, s.altCorrCarto);
+    if (!carto) return Cesium.Cartesian3.clone(Cesium.Cartesian3.ZERO, out);
     const surface = Cesium.Cartesian3.fromRadians(
       carto.longitude,
       carto.latitude,
       0.0,
-      ellipsoid
+      ellipsoid,
+      s.altCorrSurface
     );
-    const normal = ellipsoid.geodeticSurfaceNormal(surface, new Cesium.Cartesian3());
+    const normal = ellipsoid.geodeticSurfaceNormal(surface, s.altCorrNormal);
     const center = Cesium.Cartesian3.subtract(
       surface,
-      Cesium.Cartesian3.multiplyByScalar(normal, Number(bottomRadius) || 0, new Cesium.Cartesian3()),
-      new Cesium.Cartesian3()
+      Cesium.Cartesian3.multiplyByScalar(normal, Number(bottomRadius) || 0, s.altCorrNormal),
+      s.altCorrCenter
     );
-    return Cesium.Cartesian3.negate(center, new Cesium.Cartesian3());
+    return Cesium.Cartesian3.negate(center, out);
   }
 
   _getMinHeight() { const ls = this.params.layers; let m = Infinity; for (let i = 0; i < 4; i++) { if ((Number(ls[i]?.height) || 0) > 0) m = Math.min(m, Number(ls[i]?.altitude) || 0); } return Number.isFinite(m) ? m : 0; }
@@ -1040,25 +1159,26 @@ uniform sampler2D irradiance_texture;
       u_cameraPosition: () => self.viewer.camera.positionWC,
       u_altitudeCorrection: () => {
         const br = Number(atm.bottomRadius()) || Number(p().bottomRadius) || 0;
-        return self._getAltitudeCorrectionOffset(br);
+        return self._getAltitudeCorrectionOffset(br, self._scratch.altitudeCorrection);
       },
       u_cameraHeight: () => {
-        const corr = u.u_altitudeCorrection();
-        const pos = Cesium.Cartesian3.add(self.viewer.camera.positionWC, corr, new Cesium.Cartesian3());
+        const s = self._scratch;
         const br = Number(atm.bottomRadius()) || Number(p().bottomRadius) || 0;
+        const corr = self._getAltitudeCorrectionOffset(br, s.cameraHeightCorr);
+        const pos = Cesium.Cartesian3.add(self.viewer.camera.positionWC, corr, s.cameraHeightPos);
         return Math.max(0, Cesium.Cartesian3.magnitude(pos) - br);
       },
       u_bottomRadius: () => Number(p().bottomRadius),
       u_minHeight: () => self._getMinHeight(),
       u_maxHeight: () => self._getMaxHeight(),
-      u_minLayerHeights: () => self._getLayerVec4("altitude", 0),
-      u_maxLayerHeights: () => { const ls = p().layers; return new Cesium.Cartesian4(...[0,1,2,3].map(i => (Number(ls[i]?.altitude)||0)+(Number(ls[i]?.height)||0))); },
-      u_densityScales: () => self._getLayerVec4("densityScale", 0),
-      u_shapeAmounts: () => self._getLayerVec4("shapeAmount", 0),
-      u_shapeDetailAmounts: () => self._getLayerVec4("shapeDetailAmount", 0),
-      u_weatherExponents: () => self._getLayerVec4("weatherExponent", 1),
-      u_shapeAlteringBiases: () => self._getLayerVec4("shapeAlteringBias", 0.35),
-      u_coverageFilterWidths: () => self._getLayerVec4("coverageFilterWidth", 0.6),
+      u_minLayerHeights: () => self._getLayerVec4("altitude", 0, self._scratch.minLayerHeights),
+      u_maxLayerHeights: () => { const ls = p().layers, out = self._scratch.maxLayerHeights; out.x = (Number(ls[0]?.altitude)||0)+(Number(ls[0]?.height)||0); out.y = (Number(ls[1]?.altitude)||0)+(Number(ls[1]?.height)||0); out.z = (Number(ls[2]?.altitude)||0)+(Number(ls[2]?.height)||0); out.w = (Number(ls[3]?.altitude)||0)+(Number(ls[3]?.height)||0); return out; },
+      u_densityScales: () => self._getLayerVec4("densityScale", 0, self._scratch.densityScales),
+      u_shapeAmounts: () => self._getLayerVec4("shapeAmount", 0, self._scratch.shapeAmounts),
+      u_shapeDetailAmounts: () => self._getLayerVec4("shapeDetailAmount", 0, self._scratch.shapeDetailAmounts),
+      u_weatherExponents: () => self._getLayerVec4("weatherExponent", 1, self._scratch.weatherExponents),
+      u_shapeAlteringBiases: () => self._getLayerVec4("shapeAlteringBias", 0.35, self._scratch.shapeAlteringBiases),
+      u_coverageFilterWidths: () => self._getLayerVec4("coverageFilterWidth", 0.6, self._scratch.coverageFilterWidths),
       u_maxSteps: () => p().maxSteps, u_maxStepsToSun: () => p().maxStepsToSun,
       u_minStepSize: () => p().minStepSize, u_maxStepSize: () => p().maxStepSize,
       u_maxRayDistance: () => p().maxRayDistance,
@@ -1089,25 +1209,40 @@ uniform sampler2D irradiance_texture;
         }
         return tex()?.weather;
       },
-      u_shadowTexelSize: () => { const tile = self._bsm.pass ? Math.floor(SHADOW_MAP_SIZE / 2) : 512; return new Cesium.Cartesian2(1 / tile, 1 / tile); },
-      u_shadowIntervals: () => { if (p().useShadowBuffer && self._bsm.pass) { 
-        const iv = self._bsm.pass.getShadowIntervals(); // 使用 Getter
-        return iv.map(a => new Cesium.Cartesian2(a[0], a[1])); 
-      } 
-      return Array(4).fill(null).map(() => new Cesium.Cartesian2(0, 0)); },
-      u_shadowMatrices: () => { if (p().useShadowBuffer && self._bsm.pass) return self._bsm.pass._shadowMatrices.map(m => Cesium.Matrix4.fromArray(m)); return Array(4).fill(null).map(() => Cesium.Matrix4.IDENTITY.clone()); },
+      u_shadowTexelSize: () => { const tile = self._bsm.pass ? self._bsm.pass.getTileSize?.() || Math.floor((Number(p().shadowMapSize) || SHADOW_MAP_SIZE) / 2) : 512; const out = self._scratch.shadowTexelSize; out.x = 1 / tile; out.y = 1 / tile; return out; },
+      u_shadowIntervals: () => {
+        const out = self._scratch.shadowIntervals;
+        if (p().useShadowBuffer && self._bsm.pass) {
+          const iv = self._bsm.pass.getShadowIntervals();
+          for (let i = 0; i < 4; i++) { out[i].x = iv[i][0]; out[i].y = iv[i][1]; }
+        } else {
+          for (let i = 0; i < 4; i++) { out[i].x = 0; out[i].y = 0; }
+        }
+        return out;
+      },
+      u_shadowMatrices: () => {
+        const out = self._scratch.shadowMatrices;
+        if (p().useShadowBuffer && self._bsm.pass) {
+          const mats = self._bsm.pass._shadowMatrices;
+          for (let i = 0; i < 4; i++) Cesium.Matrix4.fromArray(mats[i], 0, out[i]);
+        } else {
+          for (let i = 0; i < 4; i++) Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY, out[i]);
+        }
+        return out;
+      },
       u_shadowFar: () => self._bsm.pass ? self._bsm.pass._shadowFar : p().maxShadowLengthRayDistance,
       u_maxShadowFilterRadius: () => 2.0,
+      u_shadowPcfTaps: () => Math.min(16, Math.max(1, Number(p().shadowPcfTaps) || 16)),
       u_useShadowBuffer: () => p().useShadowBuffer ? 1 : 0,
       u_skyLightScale: () => p().skyLightScale,
       u_weatherRepeat: () => p().weatherRepeat,
-      u_localWeatherOffset: () => { self._advanceOffsets(); return new Cesium.Cartesian2(self._weatherOffsetX, self._weatherOffsetY); },
+      u_localWeatherOffset: () => { self._advanceOffsets(); const out = self._scratch.localWeatherOffset; out.x = self._weatherOffsetX; out.y = self._weatherOffsetY; return out; },
       u_shapeRepeat: () => (Number(p().shapeRepeat) || 3) / 1e4,
-      u_shapeOffset: () => { self._advanceOffsets(); return new Cesium.Cartesian3(self._shapeOffsetX, self._shapeOffsetY, self._shapeOffsetZ); },
+      u_shapeOffset: () => { self._advanceOffsets(); const out = self._scratch.shapeOffset; out.x = self._shapeOffsetX; out.y = self._shapeOffsetY; out.z = self._shapeOffsetZ; return out; },
       u_shapeDetailRepeat: () => p().shapeDetailRepeat,
-      u_shapeDetailOffset: () => { self._advanceOffsets(); return new Cesium.Cartesian3(self._shapeDetailOffsetX, self._shapeDetailOffsetY, self._shapeDetailOffsetZ); },
+      u_shapeDetailOffset: () => { self._advanceOffsets(); const out = self._scratch.shapeDetailOffset; out.x = self._shapeDetailOffsetX; out.y = self._shapeDetailOffsetY; out.z = self._shapeDetailOffsetZ; return out; },
       u_turbulenceRepeat: () => p().turbulenceRepeat, u_turbulenceDisplacement: () => p().turbulenceDisplacement,
-      u_coverages: () => self._getLayerVec4("coverage", 0.3),
+      u_coverages: () => self._getLayerVec4("coverage", 0.3, self._scratch.coverages),
       u_coverageHaze: () => { const ls = p().layers; return Math.max(Number(ls[0]?.coverage) ?? 0.3, Number(ls[1]?.coverage) ?? 0.3, Number(ls[2]?.coverage) ?? 0.3); },
       u_scatteringCoefficient: () => p().scatteringCoefficient, u_absorptionCoefficient: () => p().absorptionCoefficient,
       u_scatterG1: () => p().scatterG1, u_scatterG2: () => p().scatterG2, u_scatterMix: () => p().scatterMix,
@@ -1116,7 +1251,7 @@ uniform sampler2D irradiance_texture;
       u_aerialPerspectiveScale: () => p().aerialPerspectiveScale, u_cloudExposure: () => p().cloudExposure,
       u_magentaFixStrength: () => p().magentaFixStrength ?? 0.8,
       u_edgeAlphaCutoff: () => p().edgeAlphaCutoff ?? 0.03,
-      u_resolution: () => { const ctx = self.viewer.scene.context; return new Cesium.Cartesian2(ctx.drawingBufferWidth || 1, ctx.drawingBufferHeight || 1); },
+      u_resolution: () => { const ctx = self.viewer.scene.context; const out = self._scratch.resolution; out.x = ctx.drawingBufferWidth || 1; out.y = ctx.drawingBufferHeight || 1; return out; },
       u_mipLevelScale: () => Number(p().mipLevelScale) || 1.0,
       u_perspectiveStepScale: () => p().perspectiveStepScale ?? 1.01,
       u_minDensity: () => p().minDensity ?? 1e-5, u_minExtinction: () => p().minExtinction ?? 1e-5,
@@ -1124,10 +1259,10 @@ uniform sampler2D irradiance_texture;
       u_minSecondaryStepSize: () => p().minSecondaryStepSize ?? 100, u_secondaryStepScale: () => p().secondaryStepScale ?? 2,
       u_multiScatteringOctaves: () => Math.min(12, Math.max(1, p().multiScatteringOctaves ?? 8)),
       u_lowLayerDensityBoost: () => p().lowLayerDensityBoost ?? 1.0,
-      u_densityProfileExpTerms: () => self._getDensityProfileVec4("expTerm"),
-      u_densityProfileExponents: () => self._getDensityProfileVec4("exponent"),
-      u_densityProfileLinearTerms: () => self._getDensityProfileVec4("linearTerm"),
-      u_densityProfileConstantTerms: () => self._getDensityProfileVec4("constantTerm"),
+      u_densityProfileExpTerms: () => self._getDensityProfileVec4("expTerm", self._scratch.densityProfileExpTerms),
+      u_densityProfileExponents: () => self._getDensityProfileVec4("exponent", self._scratch.densityProfileExponents),
+      u_densityProfileLinearTerms: () => self._getDensityProfileVec4("linearTerm", self._scratch.densityProfileLinearTerms),
+      u_densityProfileConstantTerms: () => self._getDensityProfileVec4("constantTerm", self._scratch.densityProfileConstantTerms),
       u_minIntervalHeights: () => self._getIntervalHeights().min,
       u_maxIntervalHeights: () => self._getIntervalHeights().max,
       u_historyTexture: () => { const t = self._taaGetHistoryTexture(); return t || tex()?.blueNoise; },
@@ -1175,6 +1310,11 @@ uniform sampler2D irradiance_texture;
         `#version 300 es\nin vec2 a_pos;\nout vec2 v_uv;\nvoid main(){v_uv=a_pos*0.5+0.5;gl_Position=vec4(a_pos,0,1);}`,
         `#version 300 es\nprecision highp float;\nuniform sampler2D u_src;\nuniform float u_scale;\nin vec2 v_uv;\nout vec4 o;\nvoid main(){vec4 raw=texture(u_src,v_uv);\n  // 编码：rgba *= scale。HALF_FLOAT(scale=1)等价透传；RGBA8(scale=0.02)压到0..1，消费端 /scale 还原。\n  o=vec4(raw.rgb*u_scale, raw.a*u_scale);}`,
         "BSMBlit");
+      this._bsm.blitLoc = {
+        src: gl.getUniformLocation(this._bsm.blitProg, "u_src"),
+        scale: gl.getUniformLocation(this._bsm.blitProg, "u_scale"),
+        pos: gl.getAttribLocation(this._bsm.blitProg, "a_pos"),
+      };
       const vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
@@ -1184,13 +1324,13 @@ uniform sampler2D irradiance_texture;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this._bsm.blitFbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, targetCesiumTex._texture, 0);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) { gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo); gl.viewport(...prevVp); return; }
-    gl.viewport(0, 0, BSM_BLIT_SIZE, BSM_BLIT_SIZE);
+    gl.viewport(0, 0, this._bsmBlitSize, this._bsmBlitSize);
     gl.useProgram(this._bsm.blitProg);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, sourceTex._texture);
-    gl.uniform1i(gl.getUniformLocation(this._bsm.blitProg, "u_src"), 0);
-    gl.uniform1f(gl.getUniformLocation(this._bsm.blitProg, "u_scale"), scale);
+    if (this._bsm.blitLoc?.src) gl.uniform1i(this._bsm.blitLoc.src, 0);
+    if (this._bsm.blitLoc?.scale) gl.uniform1f(this._bsm.blitLoc.scale, scale);
     gl.bindBuffer(gl.ARRAY_BUFFER, this._bsm.blitVbo);
-    const aloc = gl.getAttribLocation(this._bsm.blitProg, "a_pos");
+    const aloc = this._bsm.blitLoc?.pos ?? gl.getAttribLocation(this._bsm.blitProg, "a_pos");
     if (aloc >= 0) { gl.enableVertexAttribArray(aloc); gl.vertexAttribPointer(aloc, 2, gl.FLOAT, false, 0, 0); }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     if (aloc >= 0) gl.disableVertexAttribArray(aloc);
@@ -1202,32 +1342,40 @@ uniform sampler2D irradiance_texture;
   _syncBSM() {
     const sp = this._bsm.pass;
     if (!sp || !this.params.useShadowBuffer) {
-      this.atmosphere?.setCloudShadow?.({ enabled: false });
-      this.aerial?.setCloudShadow?.({ enabled: false });
+      if (!this._bsmShadowDisabled) {
+        this.atmosphere?.setCloudShadow?.({ enabled: false });
+        this.aerial?.setCloudShadow?.({ enabled: false });
+        this._bsmShadowDisabled = true;
+      }
       return;
     }
-    sp.updateDynamicParams({
-      localWeatherOffset: [this._weatherOffsetX || 0, this._weatherOffsetY || 0],
-      shapeOffset: [this._shapeOffsetX || 0, this._shapeOffsetY || 0, this._shapeOffsetZ || 0],
-      shapeDetailOffset: [this._shapeDetailOffsetX || 0, this._shapeDetailOffsetY || 0, this._shapeDetailOffsetZ || 0],
-      bottomRadius: this.params.bottomRadius,
-      // 每帧同步 shadow cascade far，限制到云层相关距离（避免 Cesium frustum.far~8e8 导致矩阵 NaN）
-      shadowFar: Number(this.params.shadowFar) || Number(this.params.maxShadowLengthRayDistance) || 200000.0,
-      maxShadowLengthRayDistance: Number(this.params.maxShadowLengthRayDistance) || 200000.0,
-      shadowSplitLambda: Number(this.params.shadowSplitLambda) || 0.5,
-      shadowFadeScale: Number(this.params.shadowFadeScale) || 1.0,
-      // 同步 layer 参数（coverage/densityScale 等），否则 GUI 调 coverage 只影响主云，BSM 阴影不变
-      // 用普通数组（非 Cartesian4），因为 BSM 的 set4f 走原生 gl.uniform4fv 只接受数组/Float32Array
-      coverages: [0,1,2,3].map(i => { const v = this.params.layers[i]?.coverage; return v !== undefined ? Number(v) : 0.3; }),
-      densityScales: [0,1,2,3].map(i => { const v = this.params.layers[i]?.densityScale; return v !== undefined ? Number(v) : 0; }),
-      shapeAmounts: [0,1,2,3].map(i => { const v = this.params.layers[i]?.shapeAmount; return v !== undefined ? Number(v) : 0; }),
-      shapeDetailAmounts: [0,1,2,3].map(i => { const v = this.params.layers[i]?.shapeDetailAmount; return v !== undefined ? Number(v) : 0; }),
-      weatherExponents: [0,1,2,3].map(i => { const v = this.params.layers[i]?.weatherExponent; return v !== undefined ? Number(v) : 1; }),
-      shapeAlteringBiases: [0,1,2,3].map(i => { const v = this.params.layers[i]?.shapeAlteringBias; return v !== undefined ? Number(v) : 0.35; }),
-      coverageFilterWidths: [0,1,2,3].map(i => { const v = this.params.layers[i]?.coverageFilterWidth; return v !== undefined ? Number(v) : 0.6; }),
-      scatteringCoefficient: Number(this.params.scatteringCoefficient) ?? 0.9,
-      absorptionCoefficient: Number(this.params.absorptionCoefficient) ?? 1.0,
-    });
+    this._bsmShadowDisabled = false;
+    // 复用 scratch 容器原地更新：CloudShadowPass.updateDynamicParams 内部 Object.assign 拷贝值，
+    // BSM set4f 走原生 gl.uniform4fv 只接受数组/Float32Array，所以这里保持普通数组
+    const dyn = this._scratch.bsmDynamicParams;
+    const layers = this.params.layers;
+    const layerVal = (i, key, fallback) => { const v = layers[i]?.[key]; return v !== undefined ? Number(v) : fallback; };
+    for (let i = 0; i < 4; i++) {
+      dyn.coverages[i] = layerVal(i, "coverage", 0.3);
+      dyn.densityScales[i] = layerVal(i, "densityScale", 0);
+      dyn.shapeAmounts[i] = layerVal(i, "shapeAmount", 0);
+      dyn.shapeDetailAmounts[i] = layerVal(i, "shapeDetailAmount", 0);
+      dyn.weatherExponents[i] = layerVal(i, "weatherExponent", 1);
+      dyn.shapeAlteringBiases[i] = layerVal(i, "shapeAlteringBias", 0.35);
+      dyn.coverageFilterWidths[i] = layerVal(i, "coverageFilterWidth", 0.6);
+    }
+    dyn.localWeatherOffset[0] = this._weatherOffsetX || 0; dyn.localWeatherOffset[1] = this._weatherOffsetY || 0;
+    dyn.shapeOffset[0] = this._shapeOffsetX || 0; dyn.shapeOffset[1] = this._shapeOffsetY || 0; dyn.shapeOffset[2] = this._shapeOffsetZ || 0;
+    dyn.shapeDetailOffset[0] = this._shapeDetailOffsetX || 0; dyn.shapeDetailOffset[1] = this._shapeDetailOffsetY || 0; dyn.shapeDetailOffset[2] = this._shapeDetailOffsetZ || 0;
+    dyn.bottomRadius = this.params.bottomRadius;
+    // 每帧同步 shadow cascade far，限制到云层相关距离（避免 Cesium frustum.far~8e8 导致矩阵 NaN）
+    dyn.shadowFar = Number(this.params.shadowFar) || Number(this.params.maxShadowLengthRayDistance) || 200000.0;
+    dyn.maxShadowLengthRayDistance = Number(this.params.maxShadowLengthRayDistance) || 200000.0;
+    dyn.shadowSplitLambda = Number(this.params.shadowSplitLambda) || 0.5;
+    dyn.shadowFadeScale = Number(this.params.shadowFadeScale) || 1.0;
+    dyn.scatteringCoefficient = Number(this.params.scatteringCoefficient) ?? 0.9;
+    dyn.absorptionCoefficient = Number(this.params.absorptionCoefficient) ?? 1.0;
+    sp.updateDynamicParams(dyn);
 
     let tex = this._bsm.resolve ? this._bsmResolveGetTexture() : null;
     if (!tex) tex = sp.getTexture();
@@ -1250,17 +1398,31 @@ uniform sampler2D irradiance_texture;
     // 远距几何误差修正：相机越高/越远，越把 BSM 采样点拉向稳定球面（对齐 three-geospatial correctGeometricError）
     const camH = this.viewer.camera.positionCartographic?.height ?? 0;
     const geoAmt = Math.min(1, Math.max(0, (camH - 2000) / 25000));
-    const opts = {
-      enabled: true, texture: textureToPass, scale: scaleToPass,
-      decode: { x: 1, y: 1, z: 1, w: 1 },
-      near: sp.getShadowNear?.() ?? (Number(this.viewer.camera.frustum?.near) || 0.1),
-      far: sp.getShadowFar(),
-      topHeight: this._getMaxHeight(), bottomRadius: Number(this.params.bottomRadius) || 6371000,
-      intervals: intervals.map(a => new Cesium.Cartesian2(a[0], a[1])),
-      matrices: mats.map(m => Cesium.Matrix4.fromArray(m)),
-      texelSize: { x: 1 / tile, y: 1 / tile },
-      geometricErrorCorrectionAmount: geoAmt,
-    };
+    // setCloudShadow 对 intervals/matrices 存引用（见 AtmospherePostProcess/AerialPerspectiveEffect），
+    // 因此复用同一 opts 与数组、原地更新内容是安全的，避免每帧 new Cartesian2/Matrix4
+    const s = this._scratch;
+    for (let i = 0; i < 4; i++) {
+      s.bsmShadowIntervals[i].x = intervals[i][0]; s.bsmShadowIntervals[i].y = intervals[i][1];
+      Cesium.Matrix4.fromArray(mats[i], 0, s.bsmShadowMatrices[i]);
+    }
+    if (!s.bsmShadowOpts) {
+      s.bsmShadowOpts = {
+        enabled: true, texture: null, scale: 1,
+        decode: { x: 1, y: 1, z: 1, w: 1 },
+        near: 0.1, far: 200000, topHeight: 5000, bottomRadius: 6371000,
+        intervals: s.bsmShadowIntervals, matrices: s.bsmShadowMatrices,
+        texelSize: { x: 1 / 512, y: 1 / 512 },
+        geometricErrorCorrectionAmount: 0,
+      };
+    }
+    const opts = s.bsmShadowOpts;
+    opts.enabled = true; opts.texture = textureToPass; opts.scale = scaleToPass;
+    opts.near = sp.getShadowNear?.() ?? (Number(this.viewer.camera.frustum?.near) || 0.1);
+    opts.far = sp.getShadowFar();
+    opts.topHeight = this._getMaxHeight();
+    opts.bottomRadius = Number(this.params.bottomRadius) || 6371000;
+    opts.texelSize.x = 1 / tile; opts.texelSize.y = 1 / tile;
+    opts.geometricErrorCorrectionAmount = geoAmt;
     this.atmosphere?.setCloudShadow?.(opts);
     this.aerial?.setCloudShadow?.(opts);
   }
@@ -1485,10 +1647,22 @@ uniform sampler2D irradiance_texture;
       const { CloudShadowPass } = await import("./CloudShadowPass.js");
       const { ShadowResolvePass } = await import("./ShadowResolvePass.js");
       if (this.params.useShadowBuffer && this.textures) {
-        this._bsm.pass = new CloudShadowPass(viewer, { textures: this.textures, params: this._getShadowPassParams() });
+        const shadowMapSize = Math.max(256, Number(this.params.shadowMapSize) || SHADOW_MAP_SIZE);
+        const bsmUpdateInterval = Math.max(1, Number(this.params.bsmUpdateInterval) || 1);
+        this._bsmBlitSize = shadowMapSize;
+        this._bsm.pass = new CloudShadowPass(viewer, {
+          size: shadowMapSize,
+          updateInterval: bsmUpdateInterval,
+          textures: this.textures,
+          params: this._getShadowPassParams(),
+        });
         this._bsm.pass.init();
-        // 静止 temporalAlpha 对齐 three-geospatial≈0.01；运动时 ShadowResolvePass 内会抬高 alpha
-        this._bsm.resolve = new ShadowResolvePass(viewer, { size: SHADOW_MAP_SIZE, temporalAlpha: 0.01 });
+        // 静止 temporalAlpha 对齐 three-geospatial≈0.01；低频 resolve 与 BSM 同步，避免无新阴影帧时重复 1024 pass。
+        this._bsm.resolve = new ShadowResolvePass(viewer, {
+          size: shadowMapSize,
+          temporalAlpha: 0.01,
+          updateInterval: this.params.shadowResolveEnabled === false ? Number.MAX_SAFE_INTEGER : bsmUpdateInterval,
+        });
         this._bsm.resolve.setInputTextures(this._bsm.pass.getTexture(), this._bsm.pass.getDepthVelocityTexture());
         this._bsm.resolve.init();
       }
@@ -1572,7 +1746,8 @@ uniform sampler2D irradiance_texture;
       if (this._taa.texB) gl.deleteTexture(this._taa.texB);
       if (this._taa.pbo) gl.deleteBuffer(this._taa.pbo);
     }
-    this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null };
+    this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null, blitLoc: null };
+    this._bsmSharedTexture = null;
     this._taa = { texA: null, texB: null, current: 0, pbo: null, pboReady: false, w: 0, h: 0, frameCount: 0, prevVP: null, curVP: null };
     if (this.textures) { for (const k in this.textures) { try { this.textures[k]?.destroy?.(); } catch { /* ignore */ } } this.textures = null; }
     if (this._gui) { this._gui.destroy(); this._gui = null; }

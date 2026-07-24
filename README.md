@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.3.21），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.3.23），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -206,11 +206,11 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.3.23** | 2026-07-24 | 体积云性能优化：默认改流畅档（60FPS 路径）+ 三档重调 + CloudShadowPass/ShadowResolvePass location 缓存与低频渲染 + shader detail 跳过 + `_scratch` 对象池削减每帧 GC + LensFlare 懒创建 + watch 帧级合并 |
 | **V3.3.22** | 2026-07-23 | 3D Tiles 贴地修复（模型底部高度 `center.height - radius`）+ ENU 参考系高程范围采样 + 手动贴地滑杆 + ArcGIS 地形性能极致优化（`_hasAvailability=false` / 动态 SSE / 层级硬顶 11） |
 | **V3.3.21** | 2026-07-23 | Cesium Composables 架构重构（按功能域分层：core/scene/camera/layers/interaction/terrain/models/dataImport/toolModules），toolModules 控件拆分，importUtils 与 layerUtils 工具函数提取 |
-| **V3.3.20** | 2026-07-22 | 体积云迁移缺陷修复（bottomRadius / BSM 纹理 / Aerial 双 gamma / 高度淡出 / 云底颜色）+ 面板参数补全 + 邮件服务加固 |
 
-更早版本（V3.3.19 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.3.20 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -232,6 +232,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.3.22 · 开发中 · 最后更新 2026-07-23</sub>
+<sub>V3.3.23 · 开发中 · 最后更新 2026-07-24</sub>
 
 </div>

@@ -18,6 +18,10 @@ export class CloudShadowPass {
         this.size = options.size ?? SHADOW_MAP_SIZE;
         this.textures = options.textures || {};
         this.params = options.params || {};
+        this.updateInterval = Math.max(1, Number(options.updateInterval ?? this.params.bsmUpdateInterval) || 1);
+        this.enabled = options.enabled !== false;
+        this._renderFrame = 0;
+        this._hasRendered = false;
         this._gl = null;
         this._fbo = null;
         this._colorTexture = null;
@@ -644,9 +648,22 @@ void main() {
         gl.deleteShader(vs);
         gl.deleteShader(fs);
         this._program = prog;
+        // 一次性枚举全部 active uniform 并缓存 location，替代 render() 每帧几十次 getUniformLocation
+        const locations = Object.create(null);
+        const uniformCount = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+        for (let i = 0; i < uniformCount; i++) {
+            const info = gl.getActiveUniform(prog, i);
+            if (info) locations[info.name] = gl.getUniformLocation(prog, info.name);
+        }
+        this._locations = locations;
+        this._positionLoc = gl.getAttribLocation(prog, "a_position");
     }
 
-    render() {
+    render(force = false) {
+        if (!this.enabled && !force) return;
+        const interval = Math.max(1, Number(this.updateInterval || this.params.bsmUpdateInterval) || 1);
+        if (!force && this._hasRendered && interval > 1 && (this._renderFrame++ % interval) !== 0) return;
+        this._hasRendered = true;
         const scene = this.viewer.scene;
         const context = scene.context;
         const gl = context._gl;
@@ -673,18 +690,21 @@ void main() {
 
         gl.useProgram(this._program);
 
+        // uniform location 全部走 createProgram() 时缓存的 _locations，避免每帧 driver 查找
+        const locs = this._locations || Object.create(null);
+
         // 射线方向：从太阳指向地心（与 three-geospatial shadow 一致）
-        const sunDirLoc = gl.getUniformLocation(this._program, "u_sunDirection");
+        const sunDirLoc = locs.u_sunDirection;
         if (sunDirLoc) gl.uniform3f(sunDirLoc, -this._sunDirection[0], -this._sunDirection[1], -this._sunDirection[2]);
 
         const R = Number(this.params.bottomRadius) || 6371000;
         const time = (performance.now() / 1000.0) - (this.params.startTime || 0);
 
-        const set1f = (name, v) => { const loc = gl.getUniformLocation(this._program, name); if (loc !== null) gl.uniform1f(loc, v); };
-        const set2f = (name, a, b) => { const loc = gl.getUniformLocation(this._program, name); if (loc !== null) gl.uniform2f(loc, a, b); };
-        const set3f = (name, arr) => { const loc = gl.getUniformLocation(this._program, name); if (loc !== null) gl.uniform3fv(loc, arr); };
-        const set4f = (name, arr) => { const loc = gl.getUniformLocation(this._program, name); if (loc !== null) gl.uniform4fv(loc, arr); };
-        const set1i = (name, v) => { const loc = gl.getUniformLocation(this._program, name); if (loc !== null) gl.uniform1i(loc, v); };
+        const set1f = (name, v) => { const loc = locs[name]; if (loc != null) gl.uniform1f(loc, v); };
+        const set2f = (name, a, b) => { const loc = locs[name]; if (loc != null) gl.uniform2f(loc, a, b); };
+        const set3f = (name, arr) => { const loc = locs[name]; if (loc != null) gl.uniform3fv(loc, arr); };
+        const set4f = (name, arr) => { const loc = locs[name]; if (loc != null) gl.uniform4fv(loc, arr); };
+        const set1i = (name, v) => { const loc = locs[name]; if (loc != null) gl.uniform1i(loc, v); };
 
         // 每个 cascade 以 tileSize 分辨率渲染（viewport 决定 gl_FragCoord）
         set2f("u_resolution", this._tileSize, this._tileSize);
@@ -730,8 +750,8 @@ void main() {
 
         let texUnit = 0;
         const bindTex = (name, tex, target) => {
-            const loc = gl.getUniformLocation(this._program, name);
-            if (loc === null) return;
+            const loc = locs[name];
+            if (loc == null) return;
             gl.uniform1i(loc, texUnit);
             if (tex && (tex._texture !== undefined || (target === gl.TEXTURE_3D && tex))) {
                 gl.activeTexture(gl.TEXTURE0 + texUnit);
@@ -746,10 +766,10 @@ void main() {
         bindTex("u_shapeTexture", this.textures.shape, gl.TEXTURE_3D);
         bindTex("u_shapeDetailTexture", this.textures.shapeDetail, gl.TEXTURE_3D);
 
-        const locInv = gl.getUniformLocation(this._program, "u_inverseSunViewProj");
-        const locReproj = gl.getUniformLocation(this._program, "u_reprojectionMatrix");
-        const locAtlasOffset = gl.getUniformLocation(this._program, "u_atlasOffset");
-        const posLoc = gl.getAttribLocation(this._program, "a_position");
+        const locInv = locs.u_inverseSunViewProj;
+        const locReproj = locs.u_reprojectionMatrix;
+        const locAtlasOffset = locs.u_atlasOffset;
+        const posLoc = this._positionLoc != null ? this._positionLoc : gl.getAttribLocation(this._program, "a_position");
         if (posLoc >= 0 && this._vbo) {
             gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
             gl.enableVertexAttribArray(posLoc);
@@ -857,6 +877,8 @@ void main() {
             if (this._vbo) gl.deleteBuffer(this._vbo);
         }
         this._program = null;
+        this._locations = null;
+        this._positionLoc = null;
         this._colorTexture = null;
         this._depthVelocityTexture = null;
         this._fbo = null;

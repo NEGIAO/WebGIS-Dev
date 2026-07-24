@@ -13,11 +13,16 @@ export class ShadowResolvePass {
         // 对齐 three-geospatial ShadowResolveMaterial 默认≈0.01；运动时 render() 内会抬高
         this.temporalAlpha = options.temporalAlpha ?? 0.01;
         this.varianceGamma = options.varianceGamma ?? 1.0;
+        this.updateInterval = Math.max(1, Number(options.updateInterval) || 1);
+        this.enabled = options.enabled !== false;
+        this._renderFrame = 0;
         this._gl = null;
         this._program = null;
         this._fbo = null;
         this._outTex = null;
         this._historyTex = null;
+        this._vbo = null;
+        this._locations = null;
         this._useFloatRT = true;
         this._preRenderListener = null;
         this.inputTexture = null;
@@ -215,9 +220,21 @@ void main() {
         gl.deleteShader(vs);
         gl.deleteShader(fs);
         this._program = prog;
+        this._locations = {
+            texelSize: gl.getUniformLocation(prog, "u_texelSize"),
+            varianceGamma: gl.getUniformLocation(prog, "u_varianceGamma"),
+            temporalAlpha: gl.getUniformLocation(prog, "u_temporalAlpha"),
+            inputBuffer: gl.getUniformLocation(prog, "u_inputBuffer"),
+            depthVelocityBuffer: gl.getUniformLocation(prog, "u_depthVelocityBuffer"),
+            historyBuffer: gl.getUniformLocation(prog, "u_historyBuffer"),
+            position: gl.getAttribLocation(prog, "a_position")
+        };
     }
 
-    render() {
+    render(force = false) {
+        if (!this.enabled && !force) return;
+        const interval = Math.max(1, Number(this.updateInterval) || 1);
+        if (!force && interval > 1 && (this._renderFrame++ % interval) !== 0) return;
         const gl = this._gl;
         if (!gl || !this._fbo || !this._program || !this._outTex || !this._historyTex) return;
         if (!this.inputTexture || !this.depthVelocityTexture) return;
@@ -256,36 +273,31 @@ void main() {
         gl.viewport(0, 0, this.size, this.size);
         gl.useProgram(this._program);
 
-        const texelSizeLoc = gl.getUniformLocation(this._program, "u_texelSize");
-        if (texelSizeLoc) gl.uniform2f(texelSizeLoc, 1.0 / this.size, 1.0 / this.size);
-        const vgLoc = gl.getUniformLocation(this._program, "u_varianceGamma");
-        if (vgLoc) gl.uniform1f(vgLoc, this.varianceGamma);
-        const taLoc = gl.getUniformLocation(this._program, "u_temporalAlpha");
-        if (taLoc) gl.uniform1f(taLoc, this._motionAlpha);
+        const loc = this._locations || {};
+        if (loc.texelSize) gl.uniform2f(loc.texelSize, 1.0 / this.size, 1.0 / this.size);
+        if (loc.varianceGamma) gl.uniform1f(loc.varianceGamma, this.varianceGamma);
+        if (loc.temporalAlpha) gl.uniform1f(loc.temporalAlpha, this._motionAlpha);
 
         let unit = 0;
-        const bind = (name, texObj) => {
-            const loc = gl.getUniformLocation(this._program, name);
-            if (loc === null) return;
-            gl.uniform1i(loc, unit);
+        const bind = (locRef, texObj) => {
+            if (locRef === null || locRef === undefined) return;
+            gl.uniform1i(locRef, unit);
             gl.activeTexture(gl.TEXTURE0 + unit);
             gl.bindTexture(gl.TEXTURE_2D, texObj._texture ?? texObj);
             unit++;
         };
-        bind("u_inputBuffer", this.inputTexture);
-        bind("u_depthVelocityBuffer", this.depthVelocityTexture);
-        bind("u_historyBuffer", { _texture: this._historyTex });
+        bind(loc.inputBuffer, this.inputTexture);
+        bind(loc.depthVelocityBuffer, this.depthVelocityTexture);
+        bind(loc.historyBuffer, { _texture: this._historyTex });
 
-        const posLoc = gl.getAttribLocation(this._program, "a_position");
-        if (posLoc >= 0) {
-            const buf = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        const posLoc = loc.position ?? -1;
+        if (posLoc >= 0 && this._vbo) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
             gl.enableVertexAttribArray(posLoc);
             gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
             gl.disableVertexAttribArray(posLoc);
-            gl.deleteBuffer(buf);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
@@ -306,6 +318,11 @@ void main() {
         this._gl = gl;
         this.createRT();
         this.createProgram();
+        // fullscreen 三角形 VBO 只创建一次，避免 resolve pass 每帧触发 GL buffer 分配/删除。
+        this._vbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
         this._preRenderListener = scene.preRender.addEventListener(() => this.render());
     }
 
@@ -320,10 +337,13 @@ void main() {
             if (this._outTex) gl.deleteTexture(this._outTex);
             if (this._historyTex) gl.deleteTexture(this._historyTex);
             if (this._fbo) gl.deleteFramebuffer(this._fbo);
+            if (this._vbo) gl.deleteBuffer(this._vbo);
         }
         this._program = null;
         this._outTex = null;
         this._historyTex = null;
+        this._vbo = null;
+        this._locations = null;
         this._fbo = null;
         this._gl = null;
     }

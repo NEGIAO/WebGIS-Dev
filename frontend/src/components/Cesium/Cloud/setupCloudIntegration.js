@@ -45,6 +45,10 @@ export function setupCloudIntegration({
   let disposed = false;
   /** @type {string|null} */
   let loadingMsgId = null;
+  /** deep watch 帧级合并：同一帧内多次滑杆/对象变化只在下一 rAF 应用一次，降低主线程抖动 */
+  let applyRafId = 0;
+  /** @type {Record<string, unknown> | null} */
+  let pendingApplyParams = null;
 
   /** 启用管线前的 Cesium 原生天空快照 */
   const skySnapshot = captureSkyState(viewer);
@@ -71,9 +75,6 @@ export function setupCloudIntegration({
         }
 
         const { createCloudAtmosphere } = await import('./lib/createCloudAtmosphere.js');
-        const { LensFlareBloomStage } = await import(
-          './lib/AtmosphereFromThreeGeospatial/LensFlareBloomStage.js'
-        );
 
         if (disposed) return;
 
@@ -89,8 +90,10 @@ export function setupCloudIntegration({
         }
 
         const assetPaths = resolveWebgisCloudAssetPaths(import.meta.env.BASE_URL);
+        const initialCloudParams = cloudParams?.value ?? {};
         const instance = await createCloudAtmosphere(viewer, {
           enableGui,
+          initialCloudParams,
           ...assetPaths,
         });
 
@@ -105,19 +108,7 @@ export function setupCloudIntegration({
 
         pipeline = instance;
         applyCloudPanelParams(pipeline, cloudParams?.value ?? {});
-
-        // 镜头光晕（独立 stage，接在现有后处理之后）
-        const lf = new LensFlareBloomStage(viewer, {
-          bloomIntensity: Number(cloudParams?.value?.bloomIntensity) || 0.6,
-          ghostIntensity: Number(cloudParams?.value?.ghostIntensity) || 1.1,
-          haloIntensity: Number(cloudParams?.value?.haloIntensity) || 0.2,
-        });
-        lf.init();
-        if (cloudParams?.value?.lensFlareEnabled === false && lf.stage) {
-          lf.stage.enabled = false;
-        }
-        lensFlare = lf;
-        applyLensFlareParams(lensFlare, cloudParams?.value ?? {});
+        await syncLensFlare(cloudParams?.value ?? {});
 
         console.warn('[Cloud] cesium-clouds-atmosphere 管线就绪');
       } catch (err) {
@@ -135,9 +126,59 @@ export function setupCloudIntegration({
   }
 
   /**
+   * 按需创建/同步镜头光晕。默认流畅档不开启，避免无用全屏后处理 stage 常驻。
+   * @param {Record<string, unknown>} params
+   * @returns {Promise<void>}
+   */
+  async function syncLensFlare(params) {
+    if (disposed || !params) return;
+    if (params.lensFlareEnabled !== true) {
+      applyLensFlareParams(lensFlare, params);
+      return;
+    }
+    if (!lensFlare) {
+      const { LensFlareBloomStage } = await import(
+        './lib/AtmosphereFromThreeGeospatial/LensFlareBloomStage.js'
+      );
+      if (disposed) return;
+      lensFlare = new LensFlareBloomStage(viewer, {
+        bloomIntensity: Number(params.bloomIntensity) || 0.6,
+        ghostIntensity: Number(params.ghostIntensity) || 1.1,
+        haloIntensity: Number(params.haloIntensity) || 0.2,
+      });
+      lensFlare.init();
+    }
+    applyLensFlareParams(lensFlare, params);
+  }
+
+  /**
+   * 将面板参数应用推迟到下一动画帧，合并同一帧内的多次 deep watch 触发。
+   * @param {Record<string, unknown>} params
+   */
+  function scheduleApply(params) {
+    pendingApplyParams = params;
+    if (applyRafId) return;
+    applyRafId = requestAnimationFrame(() => {
+      applyRafId = 0;
+      const p = pendingApplyParams;
+      pendingApplyParams = null;
+      if (disposed || !pipeline || !p) return;
+      applyCloudPanelParams(pipeline, p);
+      // syncLensFlare 可能异步懒加载 stage，失败不应中断参数应用
+      void syncLensFlare(p);
+    });
+  }
+
+  /**
    * 销毁管线并恢复原生天空。
    */
   function teardownPipeline() {
+    // 取消尚未执行的帧级参数合并，避免 teardown 后回调命中已销毁管线
+    if (applyRafId) {
+      cancelAnimationFrame(applyRafId);
+      applyRafId = 0;
+    }
+    pendingApplyParams = null;
     // 清理加载提示
     if (msg && loadingMsgId) {
       msg.remove(loadingMsgId);
@@ -194,8 +235,8 @@ export function setupCloudIntegration({
               duration: 6000,
             });
           }
-          applyCloudPanelParams(pipeline, params);
-          applyLensFlareParams(lensFlare, params);
+          // 参数应用走帧级合并：滑杆连续拖动/对象整体替换时，同一帧多次 watch 只应用一次
+          scheduleApply(params);
         } catch {
           // 出错了也要关闭等待提示，并向用户反馈
           if (msg && loadingMsgId) {

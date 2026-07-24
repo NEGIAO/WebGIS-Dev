@@ -6,6 +6,19 @@
 
 ## 版本记录
 
+### V3.3.23 (2026-07-24) — 体积云性能优化（默认流畅档 60FPS 路径）
+
+- 🚀 **默认档改为流畅（smooth）**：`DEFAULT_CLOUD_QUALITY` 由 `balanced` 改回 `smooth`，开启体积云即走性能优先路径（关 BSM/丁达尔/Aerial/光晕，低采样）
+- 🎚️ **三档重调**：smooth `maxSteps=108`/无 BSM、balanced `maxSteps=156`/BSM 512·每 3 帧、ultra `maxSteps=340`/BSM 1024·每帧（由 500 下调避免极端卡顿），极致档保留全效果但不承诺 60FPS
+- ⚡ **CloudShadowPass location 缓存 + 低频渲染**：`createProgram()` 后一次性缓存全部 uniform/attribute location，删除 render() 每帧数十次 `gl.getUniformLocation`；`render(force)` 按 `bsmUpdateInterval` 帧间隔早退，BSM 从每帧全量降为低频更新
+- ⚡ **ShadowResolvePass 复用 VBO/location**：`init()` 一次性建 fullscreen VBO，去掉每帧 `createBuffer/deleteBuffer` 与 uniform 查找
+- ⚡ **主 shader detail 跳过**：`shapeDetailAmounts` 全 0（流畅档）时 GLSL 整体跳过最重的 3D detail 纹理采样；`u_shadowPcfTaps` 按档位 1/4/8 taps
+- 🧹 **每帧对象分配削减**：`_buildCloudUniforms` / `_syncBSM` 引入 `_scratch` 对象池，vec2/3/4 与 Matrix4 全部原地复用（`setCloudShadow` 存引用，复用安全），消除每帧数十个 `new Cartesian*` 的 GC 抖动
+- 🎯 **LensFlare 懒创建**：默认档不再常驻镜头光晕全屏后处理 stage，仅面板打开时懒加载
+- 🎯 **Vue 参数桥接帧级合并**：deep watch 稳态参数应用改为 `requestAnimationFrame` 合并，滑杆连续拖动同一帧只应用一次；teardown/cleanup 取消挂起回调
+
+详见 [`../LLM_record/26-07-24/2026-07-24-cloud-performance-optimization.md`](../LLM_record/26-07-24/2026-07-24-cloud-performance-optimization.md)
+
 ### V3.3.22 (2026-07-23) — 3D Tiles 贴地修复 + ArcGIS 地形性能极致优化
 
 - 🐛 **3D Tiles 贴地高度修复**：模型贴地用 `center.height - radius`（模型底部高度）替代 `center.height`（球心高度），解决模型半埋地下的问题
