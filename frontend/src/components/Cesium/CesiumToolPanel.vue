@@ -1385,7 +1385,7 @@ function emitSetHeight(sourceId, height) {
 .section-body {
     display: grid;
     gap: 8px;
-    padding: 0 10px 10px;
+    padding: 8px 10px 10px;
     border-top: 1px solid rgba(155, 216, 255, 0.12);
     background: rgba(0, 7, 12, 0.14);
 }
