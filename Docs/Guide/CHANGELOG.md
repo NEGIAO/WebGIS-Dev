@@ -8,12 +8,12 @@
 
 ### V3.4.2 (2026-07-25) — 体积云 BSM 地面阴影底层修复 + Cesium 导航控件集成 + 镇远市 3D Tiles 城市模型 + Demo 演示页面库
 
-- 🆕 **Cesium 导航控件集成**：`cesium-navigation-es6` 插件接入（罗盘 + 缩放控件 + 比例尺），动态 import 确保 Cesium CDN 就绪，Reset 按钮飞至中国区域
+- 🆕 **Cesium 导航控件集成**：`cesium-navigation-es6` 插件接入（罗盘 + 缩放控件 + 比例尺），动态 import 确保 Cesium CDN 就绪，Reset 按钮飞至中国区域。同日迁入源码：`src/components/Cesium/cesium-navigation/`，模块级惰性 getter 防竞态
 - 🆕 **镇远市 3D Tiles 城市模型**：`frontend/public/tileset/city/` 约 200+ b3dm/json 镇远市腾讯地图3dtiles数据
 - 🆕 **Demo 演示页面库**：`Docs/Demo/` 新增 15 个独立演示页面（2D 风场、3D 热力图、大气渲染、北斗定位、OD 飞线、动态标签、海量点加载、地图主题、建筑阴影、近地面盒体、自定义虚线箭头、高德纠偏、通视分析、高度限制分析、聚合点）
 - 🆕 **全球风场数据**：`frontend/public/json/wind_globe.json` 全球风场可视化数据
 - 🔧 **CI/CD 优化**：`deploy.yml` 删除 tileset 碎片清理步骤、新增 3D 瓦片格式（b3dm/i3dm/pnts/cmpt）Git LFS 追踪、构建流程加速
-- 🔧 **Cesium 导航控件主题**：`cesium-navigation-theme.css` 自定义皮肤样式
+- 🔧 **Cesium 模块源码内嵌**：cesium-navigation-es6 + cesium-wind-layer 从 npm 依赖迁移为 `src/components/Cesium/` 下内嵌模块，WIn2d 封装层归入 cesium-wind-layer，导航控件高对比度主题 CSS 合并进主样式文件，移除 patch-package 黑盒依赖
 - 🆕 **2D 风场模块**：`Wind2D.js` 二维风场可视化独立模块
 
 

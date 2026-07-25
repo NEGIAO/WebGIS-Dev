@@ -4,11 +4,52 @@
  * cesium-player-controller / cesium-navigation-es6 等 npm 包通过标准 ESM 导入 Cesium，
  * 而本项目通过 CDN 加载。Vite alias 将 "cesium" 模块解析到此文件，桥接两种加载方式。
  *
- * ⚠️ 惰性求值设计：
- * 顶层不检查 window.Cesium 是否存在，避免静态 import 在 Cesium CDN 加载前就抛出错误。
- * 所有导出成员均为 Proxy 包装器，首次实际访问时才从 window.Cesium 解析真实值。
+ * ⚠️ 加载时序保证：
+ * 本模块在顶层立即注入 Cesium CDN <script>，并暴露 cesiumReady Promise。
+ * cesiumRuntime.js 的 loadCesiumRuntime() 内部 `await cesiumReady` 确保 CDN 就位后再继续。
+ * cesium-navigation / cesium-wind-layer 源码已内嵌到 components/Cesium/ 目录下，
+ * 模块级 new CesiumClass() 已改为惰性 getter，无模块级 Cesium 访问。
+ * 因此本方案可消除 dev/build 下的竞态问题。
  */
 import knockout from 'knockout';
+
+// ==========================================
+// Cesium CDN 自动加载：模块顶层立即注入 <script>
+// ==========================================
+const CESIUM_CDN_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/Cesium.js';
+
+let _cesiumReadyResolve;
+let _cesiumReadyReject;
+const cesiumReady = new Promise((resolve, reject) => {
+    _cesiumReadyResolve = resolve;
+    _cesiumReadyReject = reject;
+});
+
+(function injectCesiumCDN() {
+    // 防止 cesiumRuntime.js 或其他地方已注入同 ID 脚本
+    if (document.getElementById('cesium-shim-autoload')) return;
+
+    // 必须在 Cesium.js 加载前设置，否则 Cesium 内部的 Worker 等资源路径会解析错误
+    if (!window.CESIUM_BASE_URL) {
+        window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/';
+    }
+
+    const script = document.createElement('script');
+    script.id = 'cesium-shim-autoload';
+    script.src = CESIUM_CDN_URL;
+    script.onload = () => {
+        console.info('[cesium-shim] Cesium CDN loaded, window.Cesium ready');
+        _cesiumReadyResolve();
+    };
+    script.onerror = () => {
+        const err = new Error('[cesium-shim] Cesium CDN 加载失败');
+        console.error(err);
+        _cesiumReadyReject(err);
+    };
+    document.head.appendChild(script);
+})();
+
+export { cesiumReady };
 
 // cesium-navigation-es6 依赖 Knockout.track()（旧版 Cesium 内置的 knockout-es5 扩展）。
 // 独立 knockout 包不含此方法，需手动补丁。
@@ -60,14 +101,18 @@ if (!knockout.bindingHandlers.cesiumSvgPath) {
 }
 
 /**
- * 获取 window.Cesium（惰性求值，首次访问时才检查）
- * 避免模块顶层立即 throw 导致静态 import 在 Cesium CDN 加载前就失败
+ * 获取 window.Cesium（惰性求值，首次访问时才检查）。
+ * 模块顶层启动 CDN 注入后，调用方应 `await cesiumReady` 确保 Cesium 就位。
  * @returns {object} Cesium 全局对象
  */
 function getCesium() {
     const C = window.Cesium;
     if (!C) {
-        throw new Error('[cesium-shim] window.Cesium 未找到，请确保 Cesium CDN 已加载');
+        throw new Error(
+            '[cesium-shim] window.Cesium 未找到。' +
+            '请在调用处先 `await cesiumReady`（从 cesium-shim 导入），' +
+            '确保 Cesium CDN 已加载完毕再使用。'
+        );
     }
     return C;
 }

@@ -117,7 +117,7 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
 /**
  * 将 wind_globe.json（GFS 格式）转为 WindLayer 所需的 WindData
  * @param {Array} raw - JSON array，[0]=U 分量，[1]=V 分量
- * @returns {import('cesium-wind-layer').WindData}
+ * @returns {import('./index.mjs').WindData}
  */
 function normalizeWindData(raw) {
     return {

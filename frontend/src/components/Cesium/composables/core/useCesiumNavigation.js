@@ -1,10 +1,7 @@
 /**
  * useCesiumNavigation.js
- * 集成 cesium-navigation-es6 插件（罗盘 + 缩放控件 + 比例尺）。
- *
- * 由于项目通过 CDN 加载 Cesium（window.Cesium），而插件内部 `import from 'cesium'`
- * 经 Vite alias 解析到 cesium-shim.js，shim 要求 window.Cesium 已就绪。
- * 因此本 composable 使用动态 import()，确保仅在 viewer 创建后（Cesium CDN 已加载）才加载插件。
+ * 集成 cesium-navigation 插件（罗盘 + 缩放控件 + 比例尺）。
+ * 源码内嵌于 ../cesium-navigation/，可直接修改。
  */
 
 /**
@@ -14,7 +11,7 @@
  * @returns {{ initNavigation: () => Promise<void>, cleanupNavigation: () => void }}
  */
 export function useCesiumNavigation({ getViewer, getCesium }) {
-    /** @type {InstanceType<typeof import('cesium-navigation-es6').default> | null} */
+    /** @type {InstanceType<typeof import('../../cesium-navigation/CesiumNavigation.js').default> | null} */
     let navigationInstance = null;
 
     /**
@@ -29,8 +26,7 @@ export function useCesiumNavigation({ getViewer, getCesium }) {
         }
 
         try {
-            // 动态导入：避免 shim 在 Cesium CDN 加载前求值
-            const { default: CesiumNavigation } = await import('cesium-navigation-es6');
+            const { default: CesiumNavigation } = await import('../../cesium-navigation/CesiumNavigation.js');
             const Cesium = getCesium?.();
 
             navigationInstance = new CesiumNavigation(viewer, {

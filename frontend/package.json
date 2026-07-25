@@ -13,8 +13,7 @@
         "preview": "vite preview",
         "lint": "eslint src/ --fix",
         "format": "prettier --write src/",
-        "docs:index": "node scripts/generate-boundary-index.mjs",
-        "postinstall": "patch-package"
+        "docs:index": "node scripts/generate-boundary-index.mjs"
     },
     "dependencies": {
         "@dimforge/rapier3d-compat": "^0.14.0",
@@ -22,14 +21,11 @@
         "@loaders.gl/draco": "^4.4.3",
         "@loaders.gl/gltf": "^4.4.3",
         "axios": "^1.7.9",
-        "cesium-navigation-es6": "^3.0.9",
-        "cesium-wind-layer": "^0.10.1",
         "dompurify": "^3.4.11",
         "echarts": "^6.0.0",
         "highlight.js": "^11.11.1",
         "jszip": "^3.10.1",
         "knockout": "^3.5.3",
-        "knockout-es5": "^0.4.5",
         "lil-gui": "^0.21.0",
         "lucide-vue-next": "^1.0.0",
         "marked": "^18.0.5",
@@ -54,7 +50,6 @@
         "eslint": "^9.0.0",
         "eslint-config-prettier": "^10.0.0",
         "eslint-plugin-vue": "^9.0.0",
-        "patch-package": "^8.0.1",
         "rollup-plugin-visualizer": "^5.14.0",
         "sass-embedded": "^1.99.0",
         "typescript-eslint": "^8.60.0",

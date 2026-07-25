@@ -9,7 +9,7 @@ import { createSceneModule } from './sceneModule';
 import { createAtmosphereModule } from './atmosphereModule';
 import { createCloudModule } from './cloudModule';
 import { createToolsModule } from './toolsModule';
-import { createWindModule } from '../../Win2d/windModule';
+import { createWindModule } from '../../cesium-wind-layer/windModule';
 import { createFluidModule } from './fluidModule';
 import { createShallowWaterModule } from './shallowWaterModule';
 import { createPlayerModule } from './playerModule';

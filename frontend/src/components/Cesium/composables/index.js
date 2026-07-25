@@ -20,7 +20,7 @@
  */
 
 // === core ===
-export { loadCesiumRuntime, applyCesiumIonToken, CESIUM_BASE_URL, CESIUM_JS_URL, CESIUM_CSS_URL } from './core/cesiumRuntime.js';
+export { loadCesiumRuntime, applyCesiumIonToken, CESIUM_BASE_URL, CESIUM_CSS_URL } from './core/cesiumRuntime.js';
 export { readStoredString, writeStoredString, readStoredBoolean, writeStoredBoolean } from './core/cesiumStorage.js';
 export { configureBeijingTimeSystem } from './core/cesiumTimeSystem.js';
 
@@ -56,7 +56,7 @@ export { useCesiumFrameRate } from './interaction/useCesiumFrameRate.js';
 
 // === terrain ===
 export { useCesiumHeightSampler } from './terrain/useCesiumHeightSampler.js';
-export { useCesiumWind } from '../Win2d/useCesiumWind.js';
+export { useCesiumWind } from '../cesium-wind-layer/useCesiumWind.js';
 
 // === models ===
 export { useCesiumModelManager, ModelState } from './models/useCesiumModelManager.js';

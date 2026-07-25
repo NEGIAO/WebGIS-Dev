@@ -123,10 +123,8 @@ import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import ShallowWaterOverlay from './ShallowWater/ShallowWaterOverlay.vue';
 
-// cesium-navigation-es6 导航控件样式
-import 'cesium-navigation-es6/dist/styles/cesium-navigation.css';
-// 导航控件高对比度主题覆盖
-import './composables/core/cesium-navigation-theme.css';
+// cesium-navigation 导航控件样式（含高对比度深色主题）
+import './cesium-navigation/styles/cesium-navigation.css';
 
 import { configureSolarLighting } from './composables/scene/cesiumAtmosphere';
 import { loadCesiumRuntime } from './composables/core/cesiumRuntime';
@@ -140,7 +138,7 @@ import { useCesiumDataImport } from './composables/dataImport/useCesiumDataImpor
 import { useCesiumToolModules } from './composables/toolModules/useCesiumToolModules';
 import { setupCloudIntegration } from './Cloud';
 import { useCesiumUrlTracking } from './composables/layers/useCesiumUrlTracking';
-import { useCesiumWind } from './Win2d/useCesiumWind';
+import { useCesiumWind } from './cesium-wind-layer/useCesiumWind';
 import { useCesiumModelManager } from './composables/models/useCesiumModelManager';
 import { useCesiumCameraEnhanced } from './composables/camera/useCesiumCameraEnhanced';
 import { useCesiumHeightSampler } from './composables/terrain/useCesiumHeightSampler';

@@ -2,10 +2,10 @@
  * Wind2D.js
  * 2D 风场粒子可视化 — 基于 cesium-wind-layer 的 WindLayer
  *
- * 替换了旧的自研 WebGL2 管线，使用 cesium-wind-layer 库实现 GPU 粒子风场。
+ * 内嵌于 cesium-wind-layer/ 模块，可直接修改。
  * 数据格式：wind_globe.json（GFS 全球风场 U/V 分量）
  */
-import { WindLayer } from 'cesium-wind-layer';
+import { WindLayer } from './index.mjs';
 
 /** 粒子颜色带：从慢到快 */
 const WIND_COLORS = ['#00ffff', '#00ff00', '#ffff00', '#ff8000', '#ff0000'];

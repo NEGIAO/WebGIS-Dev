@@ -51,7 +51,26 @@ frontend/src/
 │   │   ├── CesiumToolPanel.vue                     # 统一控制面板（场景/数据/特效/风场/流体/漫游）
 │   │   ├── CesiumDataImportDialog.vue              # GLTF/GLB 模型放置坐标输入弹窗
 │   │   ├── LilGuiControls.vue                      # lil-gui 动态控件渲染器
-│   │   ├── Wind2D.js                               # 2D 风场渲染
+│   │   │
+│   │   ├── cesium-navigation/                       # 导航控件（罗盘/缩放/比例尺，原 npm 包内嵌）
+│   │   │   ├── CesiumNavigation.js                  # 模块入口
+│   │   │   ├── core/Utils.js                        # 相机焦点计算（惰性 getter 防竞态）
+│   │   │   ├── core/createFragmentFromTemplate.js    # 模板片段创建
+│   │   │   ├── core/loadView.js                     # 视图加载器
+│   │   │   ├── viewModels/NavigationViewModel.js    # 导航视图模型
+│   │   │   ├── viewModels/NavigationControl.js      # 导航控件
+│   │   │   ├── viewModels/ZoomNavigationControl.js  # 缩放控件（惰性 getter 防竞态）
+│   │   │   ├── viewModels/ResetViewNavigationControl.js # 重置视图控件
+│   │   │   ├── viewModels/DistanceLegendViewModel.js# 比例尺视图模型（惰性 getter 防竞态）
+│   │   │   ├── viewModels/UserInterfaceControl.js   # UI 控件基类
+│   │   │   ├── svgPaths/                            # SVG 图标路径
+│   │   │   └── styles/cesium-navigation.css         # 样式（含高对比度深色主题）
+│   │   │
+│   │   ├── cesium-wind-layer/                       # GPU 风场粒子（原 npm 包内嵌 + Win2d 归入）
+│   │   │   ├── index.mjs                            # WindLayer 核心（ComputeCommand 管线）
+│   │   │   ├── Wind2D.js                            # 2D 风场封装层
+│   │   │   ├── useCesiumWind.js                     # Vue composable
+│   │   │   └── windModule.js                        # 面板控件定义
 │   │   │
 │   │   ├── Cloud/                                  # 体积云·大气（移植 cesium-clouds-atmosphere）
 │   │   │   ├── index.js                            # 模块统一出口
@@ -121,9 +140,10 @@ frontend/src/
 │   │   ├── composables/                            # Cesium composables（按功能模块分层）
 │   │   │   ├── index.js                            # 统一导出入口
 │   │   │   ├── core/                               # 核心层（运行时、时间、状态持久化）
-│   │   │   │   ├── cesiumRuntime.js                # Cesium CDN 运行时加载
+│   │   │   │   ├── cesiumRuntime.js                # Cesium 运行时加载（await cesiumReady）
 │   │   │   │   ├── cesiumStorage.js                # Cesium 状态持久化
-│   │   │   │   └── cesiumTimeSystem.js             # 时间系统
+│   │   │   │   ├── cesiumTimeSystem.js             # 时间系统
+│   │   │   │   └── useCesiumNavigation.js          # 导航控件集成（罗盘/缩放）
 │   │   │   ├── scene/                              # 场景层（大气、美化、版权隐藏）
 │   │   │   │   ├── cesiumAtmosphere.js             # 大气渲染
 │   │   │   │   ├── useCesiumBeautify.js            # 场景美化（HDR/FXAA/定向光）
@@ -139,8 +159,7 @@ frontend/src/
 │   │   │   ├── interaction/                        # 交互层（鼠标交互、FPS采样）
 │   │   │   │   ├── useCesiumInteractions.js        # 交互管理
 │   │   │   │   └── useCesiumFrameRate.js           # FPS 采样
-│   │   │   ├── terrain/                            # 地形/风场/高度采样层
-│   │   │   │   ├── useCesiumWind.js                # 风场集成
+│   │   │   ├── terrain/                            # 地形/高度采样层
 │   │   │   │   └── useCesiumHeightSampler.js       # 高度采样
 │   │   │   ├── models/                             # 模型管理层
 │   │   │   │   └── useCesiumModelManager.js        # 3D 模型管理
@@ -163,7 +182,6 @@ frontend/src/
 │   │   │       ├── sceneModule.js                  # 场景导航模块（相机飞行+演示数据）
 │   │   │       ├── atmosphereModule.js             # 大气模块（晨昏/雾/HBAO/移轴+Tellux）
 │   │   │       ├── cloudModule.js                  # 体积云模块（性能预设+参数控件）
-│   │   │       ├── windModule.js                   # 风场模块（2D风场加载+清空）
 │   │   │       ├── fluidModule.js                  # 流体模块（洪水模拟+水位动画）
 │   │   │       ├── shallowWaterModule.js           # 热带浅水模块（三渲二水体+闪电）
 │   │   │       ├── playerModule.js                 # 人物漫游模块（WASD移动+碰撞检测）
