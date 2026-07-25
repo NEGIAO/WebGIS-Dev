@@ -9,7 +9,7 @@ import { createSceneModule } from './sceneModule';
 import { createAtmosphereModule } from './atmosphereModule';
 import { createCloudModule } from './cloudModule';
 import { createToolsModule } from './toolsModule';
-import { createWindModule } from './windModule';
+import { createWindModule } from '../../Win2d/windModule';
 import { createFluidModule } from './fluidModule';
 import { createShallowWaterModule } from './shallowWaterModule';
 import { createPlayerModule } from './playerModule';
@@ -133,7 +133,7 @@ export function useCesiumToolModules({
         createAtmosphereModule(advancedEffectControls, baseAtmosphereParams, atmosphereParams),
         createCloudModule(cloudParams),
         createToolsModule(_modelManager, _cameraEnhanced),
-        createWindModule(wind),
+        createWindModule(wind.windParams),
         createFluidModule(fluidParams, fluidState),
         createShallowWaterModule(shallowWaterVisible, shallowWaterParams),
         createPlayerModule(playerParams, _playerController),
@@ -187,20 +187,9 @@ export function useCesiumToolModules({
                 }
                 return;
             }
-            // 参数名映射表
-            const paramMap = {
-                windSpeed: 'speedFactor',
-                lineWidth: 'arrowLength',
-                colorScale: 'colorScale',
-                opacity: 'alphaFactor',
-                particleCount: 'particleCount',
-                maxAge: 'maxAge',
-                frameRate: 'frameRate',
-                wind2DEnabled: 'wind2DEnabled',
-            };
-            const engineId = paramMap[controlId];
-            if (engineId && engineId in (wind.windParams?.value || {})) {
-                wind.setWindParam?.(engineId, value);
+            // 参数直接映射 — 控件 ID 与 windParams 字段名一致
+            if (controlId in (wind.windParams?.value || {})) {
+                wind.setWindParam?.(controlId, value);
             }
             return;
         }

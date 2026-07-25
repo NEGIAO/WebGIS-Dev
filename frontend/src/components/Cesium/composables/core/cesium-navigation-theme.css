@@ -1,0 +1,88 @@
+/* =========================================================
+   Cesium Navigation - 色彩重构样式 (保持原尺寸与布局不变)
+   ========================================================= */
+
+/* 1. 罗盘主体：加深背景并赋予科技感微光 */
+.compass {
+  background: rgba(15, 23, 42, 0.75) !important;
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.compass:hover {
+  background: rgba(15, 23, 42, 0.9) !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 229, 255, 0.3) !important;
+}
+
+/* 2. 罗盘外环文字/刻度颜色 */
+.compass-outer-ring {
+  color: rgba(240, 246, 252, 0.85) !important;
+}
+
+.compass:hover .compass-outer-ring {
+  color: #ffffff !important;
+}
+
+/* 3. 旋转标记 (Orbit Cursor) */
+.compass-rotation-marker {
+  color: #00e5ff !important;
+  filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.8));
+}
+
+/* 4. 陀螺仪 / 俯仰中心 (Gyro) */
+.compass-gyro-background {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: 50%;
+}
+
+.compass-gyro {
+  color: rgba(203, 213, 225, 0.7) !important;
+  transition: color 0.2s ease;
+}
+
+.compass-gyro:hover {
+  color: #00e5ff !important;
+}
+
+.compass-gyro-active {
+  color: #00f0ff !important;
+  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.9));
+}
+
+/* 5. 缩放与重置按钮控制栏背景 */
+.navigation-controls {
+  background: rgba(15, 23, 42, 0.75) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px;
+}
+
+/* 6. 单个按钮色彩与悬浮态 */
+.navigation-control,
+.navigation-control-last {
+  color: rgba(226, 232, 240, 0.8) !important;
+  background: transparent !important;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.navigation-control:hover,
+.navigation-control-last:hover {
+  color: #ffffff !important;
+  background: rgba(0, 229, 255, 0.2) !important;
+}
+
+.navigation-control:active,
+.navigation-control-last:active {
+  background: rgba(0, 229, 255, 0.35) !important;
+}
+
+/* 7. 激活态图标高亮 */
+.navigation-control-icon-active {
+  color: #00f0ff !important;
+  filter: drop-shadow(0 0 4px rgba(0, 240, 255, 0.8));
+}
+
+/* 8. 确保 SVG 主体拾取当前的颜色 */
+.cesium-nav-svg path {
+  fill: currentColor !important;
+}

@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.3
+# WebGIS 前端项目 — V3.4.2
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -163,6 +163,6 @@ MIT
 
 ---
 
-最后更新：2026-07-24
-当前版本：V3.3.23
+最后更新：2026-07-25
+当前版本：V3.4.2
 说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。

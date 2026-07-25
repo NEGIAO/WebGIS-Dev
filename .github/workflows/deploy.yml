@@ -141,8 +141,8 @@ jobs:
           fi
 
 # ==========================================
-  # 第四步：同步到 Hugging Face Static Space
-  # (仅前端构建产物 dist)，HF对大数量文件有限制，无法推送成功啊
+# 第四步：同步到 Hugging Face Static Space
+# (仅前端构建产物 dist)
 # ==========================================
   deploy-frontend-to-hf:
       needs: build
@@ -160,10 +160,13 @@ jobs:
           run: |
             cd dist-to-hf
 
-            # 1. 彻底删除瓦片文件夹（HF对大数量文件有限制）
-            if [ -d "tiles" ]; then
-              rm -rf tiles/
-            fi
+            # 1. 彻底删除所有大数量碎文件目录（瓦片和 3D Tiles）
+            echo "Removing heavy tiles and 3dtiles..."
+            rm -rf tiles/
+            rm -rf tileset/
+            rm -rf public/tileset/
+            # 递归删除可能被 Vite 打包到 assets 或根目录下的 3dtiles 碎片
+            find . -type d -name "*tileset*" -exec rm -rf {} + 2>/dev/null || true
 
             # 2. 初始化 Git 和 LFS
             git init
@@ -175,15 +178,20 @@ jobs:
             git lfs track "*.png"
             git lfs track "*.jpg"
             git lfs track "*.jpeg"
-            # 3D 模型
+            # 3D 模型与瓦片 (追加了 b3dm / i3dm / pnts / cmpt / geom)
             git lfs track "*.glb"
             git lfs track "*.gltf"
+            git lfs track "*.b3dm"
+            git lfs track "*.i3dm"
+            git lfs track "*.pnts"
+            git lfs track "*.cmpt"
             # 云纹理数据
             git lfs track "*.bin"
             # 地理数据（Vite 哈希重命名后的副本）
             git lfs track "assets/*.kmz"
             git lfs track "assets/*.kml"
-            # 共享资源（public/ShareData 直接拷贝）
+            git lfs track "*.geojson"
+            # 共享资源
             git lfs track "ShareData/**"
             # 图标
             git lfs track "*.ico"
@@ -205,7 +213,7 @@ jobs:
 
             # 5. 提交并推送
             git add .
-            git commit -m "Updatate WebGIS frontend dist to Hugging Face: ${GITHUB_SHA::7}"
+            git commit -m "Update WebGIS frontend dist to Hugging Face: ${GITHUB_SHA::7}"
             
             echo "Pushing to Hugging Face..."
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main

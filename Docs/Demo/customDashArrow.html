@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PolylineDashArrow 材质测试</title>
+<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Cesium.js"></script>
+<link
+href="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Widgets/widgets.css"
+rel="stylesheet"
+/>
+<style>
+      html, body, #app, #cesiumContainer {
+        width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+      }
+      #gui-panel {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 999;
+        max-height: 90vh;
+        overflow-y: auto;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      #gui-panel input,
+      #gui-panel select,
+      #gui-panel button {
+        box-sizing: content-box;
+        font-family: inherit;
+      }
+      #gui-panel .lil-gui {
+        position: static;
+      }
+</style>
+</head>
+<body>
+<divid="app"><divid="cesiumContainer"></div></div>
+<divid="gui-panel"></div>
+
+<script>
+      class PolylineDashArrowMaterialProperty {
+        constructor(options) {
+options = Cesium.defaultValue(options, Cesium.defaultValue.EMPTY_OBJECT);
+          const defaultColor = Cesium.Color.WHITE;
+          const defaultGapColor = Cesium.Color.TRANSPARENT;
+          const defaultDashLength = 16.0;
+          const defaultDashPattern = 255.0;
+
+          this._definitionChanged = new Cesium.Event();
+          this._color = undefined;
+          this._colorSubscription = undefined;
+          this._gapColor = undefined;
+          this._gapColorSubscription = undefined;
+          this._dashLength = undefined;
+          this._dashLengthSubscription = undefined;
+          this._dashPattern = undefined;
+          this._dashPatternSubscription = undefined;
+
+          this.color = Cesium.defaultValue(options.color, defaultColor);
+          this.gapColor = Cesium.defaultValue(options.gapColor, defaultGapColor);
+          this.dashLength = Cesium.defaultValue(options.dashLength, defaultDashLength);
+          this.dashPattern = Cesium.defaultValue(options.dashPattern, defaultDashPattern);
+        }
+      }
+
+      Object.defineProperties(PolylineDashArrowMaterialProperty.prototype, {
+        isConstant: {
+          get: function () {
+            return (
+              Cesium.Property.isConstant(this._color) &&
+              Cesium.Property.isConstant(this._gapColor) &&
+              Cesium.Property.isConstant(this._dashLength) &&
+              Cesium.Property.isConstant(this._dashPattern)
+            );
+          },
+        },
+        definitionChanged: {
+          get: function () { return this._definitionChanged; },
+        },
+        color: Cesium.createPropertyDescriptor("color"),
+        gapColor: Cesium.createPropertyDescriptor("gapColor"),
+        dashLength: Cesium.createPropertyDescriptor("dashLength"),
+        dashPattern: Cesium.createPropertyDescriptor("dashPattern"),
+      });
+
+      PolylineDashArrowMaterialProperty.prototype.getType = function (_time) {
+        return "PolylineDashArrow";
+      };
+
+      const timeScratch = new Cesium.JulianDate();
+
+      PolylineDashArrowMaterialProperty.prototype.getValue = function (time, result) {
+        if (!Cesium.defined(time)) { time = Cesium.JulianDate.now(timeScratch); }
+        if (!Cesium.defined(result)) { result = {}; }
+
+        result.color = Cesium.Property.getValueOrClonedDefault(this._color, time, Cesium.Color.WHITE, result.color);
+        result.gapColor = Cesium.Property.getValueOrClonedDefault(this._gapColor, time, Cesium.Color.TRANSPARENT, result.gapColor);
+        result.dashLength = Cesium.Property.getValueOrDefault(this._dashLength, time, 16.0, result.dashLength);
+        result.dashPattern = Cesium.Property.getValueOrDefault(this._dashPattern, time, 255.0, result.dashPattern);
+        return result;
+      };
+
+      PolylineDashArrowMaterialProperty.prototype.equals = function (other) {
+        return (
+this === other ||
+          (other instanceof PolylineDashArrowMaterialProperty &&
+            Cesium.Property.equals(this._color, other._color) &&
+            Cesium.Property.equals(this._gapColor, other._gapColor) &&
+            Cesium.Property.equals(this._dashLength, other._dashLength) &&
+            Cesium.Property.equals(this._dashPattern, other._dashPattern))
+        );
+      };
+
+      (function () {
+        Cesium.Material.PolylineDashArrowType = "PolylineDashArrow";
+        const shaderSource = `
+uniform vec4 color;
+uniform vec4 gapColor;
+uniform float dashLength;
+uniform float dashPattern;
+in float v_polylineAngle;
+
+const float maskLength = 16.0;
+
+mat2 rotate(float rad) {
+    float c = cos(rad);
+    float s = sin(rad);
+    return mat2(c, s, -s, c);
+}
+
+float getPointOnLine(vec2 p0, vec2 p1, float x) {
+    float slope = (p0.y - p1.y) / (p0.x - p1.x);
+    return slope * (x - p0.x) + p0.y;
+}
+
+czm_material czm_getMaterial(czm_materialInput materialInput) {
+    czm_material material = czm_getDefaultMaterial(materialInput);
+    vec2 st = materialInput.st;
+
+#if (__VERSION__ == 300 || defined(GL_OES_standard_derivatives))
+    float base = 1.0 - abs(fwidth(st.s)) * 10.0 * czm_pixelRatio;
+#else
+    float base = 0.975;
+#endif
+
+    vec2 center = vec2(1.0, 0.5);
+    float ptOnUpperLine = getPointOnLine(vec2(base, 1.0), center, st.s);
+    float ptOnLowerLine = getPointOnLine(vec2(base, 0.0), center, st.s);
+    float halfWidth = 0.15;
+
+    float s = step(0.5 - halfWidth, st.t);
+    s *= 1.0 - step(0.5 + halfWidth, st.t);
+    s *= 1.0 - step(base, st.s);
+
+    float t = step(base, st.s);
+    t *= 1.0 - step(ptOnUpperLine, st.t);
+    t *= step(ptOnLowerLine, st.t);
+
+    vec2 pos = rotate(v_polylineAngle) * gl_FragCoord.xy;
+    float dashPosition = fract(pos.x / (dashLength * czm_pixelRatio));
+    float maskIndex = floor(dashPosition * maskLength);
+    float maskTest = floor(dashPattern / pow(2.0, maskIndex));
+    bool inDash = (mod(maskTest, 2.0) >= 1.0);
+
+    vec4 lineColor = inDash ? color : gapColor;
+    vec4 arrowColor = color;
+
+    if (s >0.0 && !inDash && gapColor.a < 0.005) { discard; }
+
+    vec4 outsideColor = vec4(0.0);
+    vec4 currentColor = mix(outsideColor, lineColor, s);
+currentColor = mix(currentColor, arrowColor, t);
+
+    float dist;
+    if (st.s < base) {
+        float d1 = abs(st.t - (0.5 - halfWidth));
+        float d2 = abs(st.t - (0.5 + halfWidth));
+dist = min(d1, d2);
+    } else {
+        float d1 = czm_infinity;
+        if (st.t < 0.5 - halfWidth && st.t >0.5 + halfWidth) { d1 = abs(st.s - base); }
+        float d2 = abs(st.t - ptOnUpperLine);
+        float d3 = abs(st.t - ptOnLowerLine);
+dist = min(min(d1, d2), d3);
+    }
+
+    vec4 outColor = czm_antialias(outsideColor, color, currentColor, dist);
+outColor = czm_gammaCorrect(outColor);
+
+    material.diffuse = outColor.rgb;
+    material.alpha = outColor.a;
+    return material;
+}`;
+
+        Cesium.Material._materialCache.addMaterial(Cesium.Material.PolylineDashArrowType, {
+          fabric: {
+            type: Cesium.Material.PolylineDashArrowType,
+            uniforms: {
+              color: new Cesium.Color(1.0, 1.0, 1.0, 1.0),
+              gapColor: new Cesium.Color(0.0, 0.0, 0.0, 0.0),
+              dashLength: 16.0,
+              dashPattern: 255.0,
+            },
+            source: shaderSource,
+          },
+          translucent: function (material) {
+            const u = material.uniforms;
+            return u.color.alpha < 1.0 || u.gapColor.alpha < 1.0 || u.gapColor.alpha >0.0;
+          },
+        });
+      })();
+
+      window.PolylineDashArrowMaterialProperty = PolylineDashArrowMaterialProperty;
+</script>
+
+<script type="module">
+      window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/";
+      const { createApp } = Vue;
+      import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+      const DASH_PRESETS = {
+"实线 (0xFFFF)": { v: 65535, bin: "11111111 11111111" },
+"长划 (0xFF00)": { v: 65280, bin: "11111111 00000000" },
+"短划 (0xF0F0)": { v: 61680, bin: "11110000 11110000" },
+"点划 (0xCCCC)": { v: 52428, bin: "11001100 11001100" },
+"交替 (0xAAAA)": { v: 43690, bin: "10101010 10101010" },
+"稀疏 (0x8888)": { v: 34952, bin: "10001000 10001000" },
+"短线 (0xC0C0)": { v: 49344, bin: "11000000 11000000" },
+"单点 (0x8080)": { v: 32896, bin: "10000000 10000000" },
+      };
+
+      createApp({
+        data() {
+          return {
+            params: {
+              color: [0, 0.59, 1],
+              gapColor: [0, 0, 0],
+              dashLength: 16,
+              dashPattern: 255,
+              lineWidth: 3,
+              selectedLine: "全部",
+              dashHex: "0x00FF",
+              dashBin: "00000000 11111111",
+            },
+            lineNames: ["全部", "东-西 (水平)", "东北-西南 (斜向)", "弧线路径", "折线路径"],
+          };
+        },
+        mounted() {
+          this.initMap();
+          this.createTestLines();
+          this.addGUI();
+        },
+        methods: {
+          initMap() {
+            const viewer = new Cesium.Viewer("cesiumContainer", {
+              animation: false, timeline: false, geocoder: false,
+              homeButton: false, sceneModePicker: false, navigationHelpButton: false,
+              infoBox: false, selectionIndicator: false, baseLayerPicker: false,
+              fullscreenButton: false, shouldAnimate: false, imageryProvider: false,
+            });
+
+            viewer.imageryLayers.addImageryProvider(
+              new Cesium.UrlTemplateImageryProvider({
+                url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+              }),
+            );
+
+            viewer.camera.setView({
+              destination: Cesium.Cartesian3.fromDegrees(116.4, 39.9, 80000),
+              orientation: { heading: 0, pitch: Cesium.Math.toRadians(-60), roll: 0 },
+            });
+
+            viewer._cesiumWidget._creditContainer.style.display = "none";
+            this.viewer = viewer;
+          },
+
+          createTestLines() {
+            const viewer = this.viewer;
+            const lines = [];
+
+            lines.push(viewer.entities.add({
+              name: "东-西 (水平)",
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray([115.5, 40.0, 117.5, 40.0]),
+                material: new window.PolylineDashArrowMaterialProperty({
+                  color: new Cesium.Color(0, 150 / 255, 1, 1),
+                  dashPattern: 255,
+                }),
+                width: 3,
+              },
+            }));
+
+            lines.push(viewer.entities.add({
+              name: "东北-西南 (斜向)",
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray([117.2, 40.3, 115.6, 39.5]),
+                material: new window.PolylineDashArrowMaterialProperty({
+                  color: new Cesium.Color(1, 180 / 255, 0, 1),
+                  dashPattern: 255,
+                }),
+                width: 3,
+              },
+            }));
+
+            lines.push(viewer.entities.add({
+              name: "弧线路径",
+              polyline: {
+                positions: this.createArcPoints(116.4, 40.2, 0.4, 60),
+                material: new window.PolylineDashArrowMaterialProperty({
+                  color: new Cesium.Color(0, 1, 180 / 255, 1),
+                  dashPattern: 61680,
+                }),
+                width: 3,
+              },
+            }));
+
+            lines.push(viewer.entities.add({
+              name: "折线路径",
+              polyline: {
+                positions: Cesium.Cartesian3.fromDegreesArray([
+115.6, 39.5, 116.2, 40.1, 116.8, 39.6, 117.4, 40.3,
+                ]),
+                material: new window.PolylineDashArrowMaterialProperty({
+                  color: new Cesium.Color(1, 80 / 255, 80 / 255, 1),
+                  dashPattern: 52428,
+                }),
+                width: 3,
+              },
+            }));
+
+            this.testLines = lines;
+          },
+
+          createArcPoints(lon, lat, radiusDeg, numPoints) {
+            const pts = [];
+            for (let i = 0; i <= numPoints; i++) {
+              const angle = (i / numPoints) * Math.PI;
+              const x = lon - Math.cos(angle) * radiusDeg;
+              const y = lat + Math.sin(angle) * radiusDeg * 0.6;
+              pts.push(x); pts.push(y);
+            }
+            return Cesium.Cartesian3.fromDegreesArray(pts);
+          },
+
+          fmtPattern(v) {
+            return {
+              hex: "0x" + v.toString(16).toUpperCase().padStart(4, "0"),
+              bin: v.toString(2).padStart(16, "0").replace(/(.{8})/, "$1 "),
+            };
+          },
+
+          applyToAll(fn) {
+            this.testLines.forEach(fn);
+            this.viewer.scene.requestRender();
+          },
+
+          addGUI() {
+            const gui = new GUI({
+              title: "PolylineDashArrow",
+              container: document.getElementById("gui-panel"),
+            });
+            const p = this.params;
+
+            const colorFolder = gui.addFolder("颜色");
+            colorFolder.addColor(p, "color").name("线条颜色").onChange((v) => {
+              const c = new Cesium.Color(v[0], v[1], v[2], 1);
+              this.applyToAll((line) => { line.polyline.material.color = c.clone(); });
+            });
+
+            colorFolder.addColor(p, "gapColor").name("间隔颜色").onChange((v) => {
+              const c = new Cesium.Color(v[0], v[1], v[2], 0.3);
+              this.applyToAll((line) => { line.polyline.material.gapColor = c.clone(); });
+            });
+
+            const dashFolder = gui.addFolder("虚线参数");
+            dashFolder.add(p, "dashLength", 2, 100, 1).name("Dash 长度").onChange((v) => {
+              this.applyToAll((line) => { line.polyline.material.dashLength = v; });
+            });
+
+            const presetNames = Object.keys(DASH_PRESETS);
+            const patternCtrl = dashFolder.add(p, "dashPattern").name("Dash 模式值").onChange((v) => {
+              const fmt = this.fmtPattern(v);
+              p.dashHex = fmt.hex;
+              p.dashBin = fmt.bin;
+              hexCtrl.updateDisplay();
+              binCtrl.updateDisplay();
+              this.applyToAll((line) => { line.polyline.material.dashPattern = v; });
+            });
+
+            dashFolder.add({ preset: presetNames[0] }, "preset", presetNames).name("Dash 预设").onChange((name) => {
+              const preset = DASH_PRESETS[name];
+              p.dashPattern = preset.v;
+              const fmt = this.fmtPattern(preset.v);
+              p.dashHex = fmt.hex;
+              p.dashBin = fmt.bin;
+              patternCtrl.updateDisplay();
+              hexCtrl.updateDisplay();
+              binCtrl.updateDisplay();
+              this.applyToAll((line) => { line.polyline.material.dashPattern = preset.v; });
+            });
+
+            const hexCtrl = dashFolder.add(p, "dashHex").name("Hex").disable();
+            const binCtrl = dashFolder.add(p, "dashBin").name("Bin (16bit)").disable();
+
+            const widthFolder = gui.addFolder("线宽");
+            widthFolder.add(p, "lineWidth", 1, 10, 1).name("宽度 (px)").onChange((v) => {
+              this.applyToAll((line) => { line.polyline.width = v; });
+            });
+
+            const selFolder = gui.addFolder("选中线条操作");
+            selFolder.add(p, "selectedLine", this.lineNames).name("选中线条").onChange((v) => {
+              this.testLines.forEach((line, i) => {
+                const isSelected = this.lineNames.indexOf(v) === i + 1 || v === "全部";
+                line.polyline.width = isSelected ? p.lineWidth + 1 : p.lineWidth;
+              });
+            });
+
+            gui.add({ reset: () => {
+              p.color = [0, 0.59, 1];
+              p.gapColor = [0, 0, 0];
+              p.dashLength = 16;
+              p.dashPattern = 255;
+              p.lineWidth = 3;
+              p.selectedLine = "全部";
+              const fmt = this.fmtPattern(255);
+              p.dashHex = fmt.hex;
+              p.dashBin = fmt.bin;
+              patternCtrl.updateDisplay();
+              hexCtrl.updateDisplay();
+              binCtrl.updateDisplay();
+
+              const colors = [
+                [0, 150 / 255, 1], [1, 180 / 255, 0],
+                [0, 1, 180 / 255], [1, 80 / 255, 80 / 255],
+              ];
+              this.testLines.forEach((line, i) => {
+                line.polyline.material.color = new Cesium.Color(colors[i][0], colors[i][1], colors[i][2], 1);
+                line.polyline.material.gapColor = Cesium.Color.TRANSPARENT;
+                line.polyline.material.dashLength = 16;
+                line.polyline.material.dashPattern = 255;
+                line.polyline.width = 3;
+              });
+              this.viewer.scene.requestRender();
+            }}, "reset").name("重置全部");
+
+            const initFmt = this.fmtPattern(p.dashPattern);
+            p.dashHex = initFmt.hex;
+            p.dashBin = initFmt.bin;
+            patternCtrl.updateDisplay();
+            hexCtrl.updateDisplay();
+            binCtrl.updateDisplay();
+
+            this.gui = gui;
+          },
+        },
+      }).mount("#app");
+</script>
+</body>
+</html>

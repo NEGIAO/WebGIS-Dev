@@ -79,7 +79,7 @@ export default defineConfig(({ command, mode }) => {
 
     // 排除 Cesium npm 包的预构建，避免与 CDN Cesium 产生双实例
     optimizeDeps: {
-      exclude: ['cesium']
+      exclude: ['cesium', 'cesium-navigation-es6', 'cesium-wind-layer']
     },
 
     // 生产环境代码压缩配置
@@ -171,6 +171,10 @@ export default defineConfig(({ command, mode }) => {
             if (isNodeModulePackage(id, 'vue-toastification') || isNodeModulePackage(id, 'vue3-toastify')) {
               return 'vendor-toast';
             }
+            // cesium-navigation-es6（罗盘/缩放控件，仅 Cesium 场景使用，必须独立 chunk 避免顶层 new EllipsoidGeodesic() 在 vendor-libs 求值时触发 cesium-shim 报错）
+            if (isNodeModulePackage(id, 'cesium-navigation-es6')) return 'vendor-navigation';
+            // cesium-wind-layer（GPU 风场粒子，仅 Cesium 场景使用，与 navigation 同理需独立 chunk）
+            if (isNodeModulePackage(id, 'cesium-wind-layer')) return 'vendor-wind';
             // 剩余 node_modules（小库合集）
             return 'vendor-libs';
           }

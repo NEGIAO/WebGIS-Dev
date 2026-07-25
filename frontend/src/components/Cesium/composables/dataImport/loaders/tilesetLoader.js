@@ -521,6 +521,180 @@ export async function loadTilesetFromZip({ zipFile, getCesium, getViewer, messag
 }
 
 // ============================================================
+// 材质切换（5 种模式）
+// ============================================================
+
+/** 5 种材质模式的显示名称映射 */
+export const MATERIAL_MODES = {
+    pureWhite: '纯白膜',
+    baimo: '白膜贴图',
+    heightStyle: '高度分层',
+    gradient: '高度渐变',
+    none: '原始材质',
+};
+
+/**
+ * 对 tileset 应用指定材质模式
+ * @param {Cesium.Cesium3DTileset} tileset
+ * @param {string} mode - MATERIAL_MODES 的 key
+ * @param {Cesium} Cesium
+ */
+export function applyTilesetMaterial(tileset, mode, Cesium) {
+    // 清空之前的状态
+    tileset.customShader = null;
+    tileset.style = undefined;
+
+    if (mode === 'heightStyle') {
+        tileset.style = buildHeightStyle(Cesium);
+    } else if (mode !== 'none') {
+        tileset.customShader = buildCustomShader(mode, Cesium);
+    }
+    // 'none': 保持无 shader + 无 style
+}
+
+/** 高度分层样式 */
+function buildHeightStyle(Cesium) {
+    return new Cesium.Cesium3DTileStyle({
+        color: {
+            conditions: [
+                ["${height} === null", "color('rgb(44, 49, 88)')"],
+                ["${height} === undefined", "color('rgb(44, 49, 88)')"],
+                ["isNaN(Number(${height}))", "color('rgb(44, 49, 88)')"],
+                ["Number(${height}) >= 130", "color('rgb(195, 21, 21)')"],
+                ["Number(${height}) >= 60", "color('rgb(195, 83, 0)')"],
+                ["Number(${height}) >= 30", "color('rgb(73, 52, 140)')"],
+                ["true", "color('rgb(44, 49, 88)')"],
+            ],
+        },
+    });
+}
+
+/** 构建 CustomShader（纯白膜 / 白膜贴图 / 高度渐变） */
+function buildCustomShader(mode, Cesium) {
+    if (mode === 'pureWhite') {
+        return new Cesium.CustomShader({
+            lightingModel: Cesium.LightingModel.UNLIT,
+            fragmentShaderText: `
+                void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+                    material.diffuse = vec3(0.95, 0.95, 0.95);
+                    material.alpha = 1.0;
+                }`,
+        });
+    }
+
+    if (mode === 'baimo') {
+        return new Cesium.CustomShader({
+            lightingModel: Cesium.LightingModel.UNLIT,
+            varyings: { v_normalMC: Cesium.VaryingType.VEC3 },
+            uniforms: {
+                u_texture: {
+                    value: new Cesium.TextureUniform({
+                        url: './textures/building7.png',
+                    }),
+                    type: Cesium.UniformType.SAMPLER_2D,
+                },
+            },
+            vertexShaderText: `
+                void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {
+                    v_normalMC = vsInput.attributes.normalMC;
+                }`,
+            fragmentShaderText: `
+                void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+                    vec3 positionMC = fsInput.attributes.positionMC;
+                    if (dot(vec3(0.0, 0.0, 1.0), v_normalMC) > 0.95) {
+                        material.diffuse = vec3(0.079, 0.107, 0.111);
+                    } else {
+                        float width = 100.0, height = 100.0;
+                        float dotXAxis = dot(vec3(0.0, 1.0, 0.0), v_normalMC);
+                        float textureX = (dotXAxis > 0.52 || dotXAxis < -0.52)
+                            ? mod(positionMC.x, width) / width
+                            : mod(positionMC.y, width) / width;
+                        float textureY = mod(positionMC.z, height) / height;
+                        material.diffuse = texture(u_texture, vec2(textureX, textureY)).rgb;
+                    }
+                }`,
+        });
+    }
+
+    if (mode === 'gradient') {
+        return new Cesium.CustomShader({
+            vertexShaderText: `
+                void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {}`,
+            fragmentShaderText: `
+                void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
+                    float bottomHeight = 560.0, topHeight = 750.0;
+                    float heightRatio = clamp(
+                        (fsInput.attributes.positionMC.z - bottomHeight) / (topHeight - bottomHeight),
+                        0.0, 1.0);
+                    material.diffuse = mix(vec3(0.0, 0.8, 0.0), vec3(0.8, 0.0, 0.0), heightRatio);
+                }`,
+        });
+    }
+
+    return null;
+}
+
+// ============================================================
+// 加载内置样例 3D Tiles
+// ============================================================
+
+/**
+ * 加载内置的样例城市 3D Tiles（public/tileset/city/tileset.json）
+ * 默认应用白膜贴图材质
+ */
+export async function loadSampleTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+
+    const tileset = await Cesium.Cesium3DTileset.fromUrl(
+        './tileset/city/tileset.json',
+        { maximumScreenSpaceError: 10, maximumMemoryUsage: 5120 },
+    );
+
+    viewer.scene.primitives.add(tileset);
+
+    // 默认白膜贴图材质
+    applyTilesetMaterial(tileset, 'baimo', Cesium);
+
+    // 采样外包矩形高程范围
+    const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
+    const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
+    const bottomH = centerCarto.height - tileset.boundingSphere.radius;
+    const tilesetGeo = {
+        lng: Cesium.Math.toDegrees(centerCarto.longitude),
+        lat: Cesium.Math.toDegrees(centerCarto.latitude),
+        bottomH,
+    };
+
+    // 贴地
+    if (terrainElevation) {
+        const median = (terrainElevation.min + terrainElevation.max) / 2;
+        const offset = median - bottomH;
+        const origin = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, 0);
+        const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
+        const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
+        tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+    }
+
+    const id = `tileset_${++nextId.current}`;
+    const record = {
+        id,
+        name: '样例城市',
+        type: '3dtiles',
+        entity: tileset,
+        terrainElevation,
+        tilesetGeo,
+        materialMode: 'baimo',
+    };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    await viewer.zoomTo(tileset);
+    message.success('样例 3D Tiles 加载成功');
+    return record;
+}
+
+// ============================================================
 // 内部：目录选择器
 // ============================================================
 

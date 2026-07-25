@@ -56,7 +56,7 @@ export { useCesiumFrameRate } from './interaction/useCesiumFrameRate.js';
 
 // === terrain ===
 export { useCesiumHeightSampler } from './terrain/useCesiumHeightSampler.js';
-export { useCesiumWind } from './terrain/useCesiumWind.js';
+export { useCesiumWind } from '../Win2d/useCesiumWind.js';
 
 // === models ===
 export { useCesiumModelManager, ModelState } from './models/useCesiumModelManager.js';

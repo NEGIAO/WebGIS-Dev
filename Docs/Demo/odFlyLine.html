@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>ODLine - 公交线路飞线</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+
+			.lil-gui {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				z-index: 999;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+		</div>
+
+		<script type="module">
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/";
+
+			const { createApp } = Vue;
+			import * as Cesium from "https://cdn.jsdelivr.net/npm/cesium@1.140.0/+esm";
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+			/* ================================================================
+			 * 注册自定义 ODLine 材质
+			 * 实现沿折线方向流动的虚线动画效果
+			 * ================================================================ */
+			const ODLineSource = /* glsl */ `
+        czm_material czm_getMaterial(czm_materialInput materialInput) {
+          czm_material material = czm_getDefaultMaterial(materialInput);
+          vec2 st = materialInput.st;
+
+          // st.s 沿折线方向 0→1，repeat 控制分段数量
+          // czm_frameNumber 驱动动画，speed 控制流速
+          float dash = fract(st.s * repeat - czm_frameNumber * speed * 0.005);
+
+          // 50% 实线 + 50% 留空，平滑过渡抗锯齿
+          float dashMask = smoothstep(0.03, 0.08, dash) * (1.0 - smoothstep(0.47, 0.53, dash));
+
+          material.diffuse = mix(bgColor.rgb, color.rgb, dashMask);
+          material.alpha = mix(bgColor.a * 0.3, color.a, dashMask);
+          return material;
+        }
+      `;
+
+			Cesium.Material._materialCache.addMaterial("ODLine", {
+				fabric: {
+					type: "ODLine",
+					uniforms: {
+						color: Cesium.Color.fromCssColorString("rgba(255,200,0,1)"),
+						bgColor: Cesium.Color.fromCssColorString("rgba(255,200,0,0.15)"),
+						speed: 2.0,
+						repeat: 20.0,
+					},
+					source: ODLineSource,
+				},
+				translucent: true,
+			});
+
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						imageryLayer: null,
+						myLilGui: null,
+						odeLineGroup: null, // PrimitiveCollection 存放所有 ODLine
+						allPolylines: [], // 每条线的配置引用（用于批量更新）
+						/* ---- lil-gui 面板参数 ---- */
+						params: {
+							color: [1.0, 0.78, 0.0], // RGB: 亮黄
+							bgColor: [1.0, 0.78, 0.0], // RGB: 淡黄底色
+							bgAlpha: 0.15,
+							speed: 2.0,
+							repeat: 20.0,
+							lineWidth: 2.5,
+							maxLines: 0, // 0 = 全部加载
+							resetCamera: () => this.resetCamera(),
+							reloadLines: () => this.rebuildLines(),
+						},
+					};
+				},
+				async mounted() {
+					const viewer = this.initMap();
+					this.addlilgui();
+					await this.loadBusLines(viewer);
+				},
+				methods: {
+					/* ------------------------------------------------------------
+					 * 初始化 Cesium Viewer
+					 * ------------------------------------------------------------ */
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+
+						window.viewer = viewer;
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.enableLighting = false;
+						viewer.scene.fog.enabled = true;
+						viewer.scene.fog.density = 0.00008;
+						viewer.scene.skyAtmosphere.show = true;
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+
+						// 影像底图
+						const imageryLayer = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								maximumLevel: 18,
+							}),
+						);
+
+						this.viewer = viewer;
+						this.imageryLayer = imageryLayer;
+						this.resetCamera();
+						return viewer;
+					},
+
+					/* ------------------------------------------------------------
+					 * lil-gui 控制面板
+					 * ------------------------------------------------------------ */
+					addlilgui() {
+						const gui = new GUI({ title: "ODLine 控制" });
+						this.myLilGui = gui;
+
+						const applyUniforms = () => {
+							if (!this.allPolylines.length) return;
+							const color = new Cesium.Color(
+								this.params.color[0],
+								this.params.color[1],
+								this.params.color[2],
+								1.0,
+							);
+							const bgColor = new Cesium.Color(
+								this.params.bgColor[0],
+								this.params.bgColor[1],
+								this.params.bgColor[2],
+								this.params.bgAlpha,
+							);
+							this.allPolylines.forEach((p) => {
+								if (p.appearance && p.appearance.material) {
+									p.appearance.material.uniforms.color = color;
+									p.appearance.material.uniforms.bgColor = bgColor;
+									p.appearance.material.uniforms.speed = this.params.speed;
+									p.appearance.material.uniforms.repeat = this.params.repeat;
+								}
+							});
+						};
+
+						// 颜色
+						gui
+							.addColor(this.params, "color")
+							.name("飞线颜色")
+							.onChange(applyUniforms);
+						gui
+							.addColor(this.params, "bgColor")
+							.name("底色")
+							.onChange(applyUniforms);
+						gui
+							.add(this.params, "bgAlpha", 0, 1, 0.01)
+							.name("底色透明度")
+							.onChange(applyUniforms);
+
+						// 动画（实时更新，不需要重建）
+						gui
+							.add(this.params, "speed", 0.1, 10, 0.1)
+							.name("流速")
+							.onChange(applyUniforms);
+						gui
+							.add(this.params, "repeat", 1, 80, 1)
+							.name("分段数")
+							.onChange(applyUniforms);
+
+						// 样式（需要重建 primitive）
+						gui
+							.add(this.params, "lineWidth", 0.5, 10, 0.5)
+							.name("线宽")
+							.onChange(() => this.rebuildLines());
+
+						// 加载数量（0 = 全部）
+						gui
+							.add(this.params, "maxLines", 0, 200, 10)
+							.name("加载条数(0=全部)")
+							.onChange(() => this.rebuildLines());
+
+						// 按钮
+						gui.add(this.params, "reloadLines").name("重新加载");
+						gui.add(this.params, "resetCamera").name("重置视角");
+					},
+
+					/* ------------------------------------------------------------
+					 * 加载公交线路数据 & 创建 ODLine 图元
+					 * ------------------------------------------------------------ */
+					async loadBusLines(_viewer) {
+						try {
+							const res = await fetch(
+								"https://data.mars3d.cn/file/apidemo/bjgj.json",
+							);
+							const json = await res.json();
+							this._rawBusData = json;
+							this._createPrimitives(json);
+							this.flyToBeijing();
+						} catch (e) {
+							console.error("公交数据加载失败:", e);
+						}
+					},
+
+					_createPrimitives(rawData) {
+						const viewer = this.viewer;
+
+						// 移除旧图层
+						if (this.odeLineGroup) {
+							viewer.scene.primitives.remove(this.odeLineGroup);
+						}
+
+						const group = new Cesium.PrimitiveCollection();
+						this.odeLineGroup = group;
+						this.allPolylines = [];
+
+						const max = this.params.maxLines || rawData.length;
+						const lines = rawData.slice(0, Math.min(max, rawData.length));
+
+						const lineEntries = [];
+						lines.forEach((busLine, idx) => {
+							const cartPositions = this._decodeBusLine(busLine);
+							if (cartPositions.length < 2) return;
+							lineEntries.push({ positions: cartPositions, idx });
+						});
+
+						// 构建 Primitive
+						const guiColor = new Cesium.Color(
+							this.params.color[0],
+							this.params.color[1],
+							this.params.color[2],
+							1.0,
+						);
+						const guiBgColor = new Cesium.Color(
+							this.params.bgColor[0],
+							this.params.bgColor[1],
+							this.params.bgColor[2],
+							this.params.bgAlpha,
+						);
+
+						lineEntries.forEach((entry) => {
+							const instance = new Cesium.GeometryInstance({
+								geometry: new Cesium.PolylineGeometry({
+									positions: entry.positions,
+									width: this.params.lineWidth,
+									vertexFormat: Cesium.PolylineMaterialAppearance.VERTEX_FORMAT,
+								}),
+							});
+
+							// 每条线在基准流速/分段数上加随机偏移，保留视觉多样性
+							const material = Cesium.Material.fromType("ODLine", {
+								color: guiColor,
+								bgColor: guiBgColor,
+								speed: this.params.speed + Math.random() * 2,
+								repeat: this.params.repeat + (Math.random() - 0.5) * 10,
+							});
+
+							const appearance = new Cesium.PolylineMaterialAppearance({
+								material,
+								translucent: true,
+							});
+
+							const primitive = new Cesium.Primitive({
+								geometryInstances: instance,
+								appearance,
+							});
+
+							group.add(primitive);
+							this.allPolylines.push(primitive);
+						});
+
+						viewer.scene.primitives.add(group);
+					},
+
+					/* 重新构建所有线（线宽/数量变化时调用） */
+					rebuildLines() {
+						if (this._rawBusData) {
+							this._createPrimitives(this._rawBusData);
+						}
+					},
+
+					/* 解码 delta-encoded 公交坐标 */
+					_decodeBusLine(busLine) {
+						let prevPt;
+						const cartPositions = [];
+						for (let i = 0; i < busLine.length; i += 2) {
+							let pt = [busLine[i], busLine[i + 1]];
+							if (i > 0) {
+								pt = [prevPt[0] + pt[0], prevPt[1] + pt[1]];
+							}
+							prevPt = pt;
+							const lon = pt[0] / 1e4;
+							const lat = pt[1] / 1e4;
+							cartPositions.push(
+								Cesium.Cartesian3.fromDegrees(lon, lat, 100.0),
+							);
+						}
+						return cartPositions;
+					},
+
+					/* 飞至北京视角 */
+					flyToBeijing() {
+						this.viewer.camera.flyTo({
+							destination: Cesium.Cartesian3.fromDegrees(
+								116.394,
+								39.364,
+								55751,
+							),
+							orientation: {
+								heading: Cesium.Math.toRadians(0),
+								pitch: Cesium.Math.toRadians(-56),
+								roll: Cesium.Math.toRadians(0),
+							},
+							duration: 2,
+						});
+					},
+
+					/* 重置为全局视角 */
+					resetCamera() {
+						if (!this.viewer) return;
+						this.viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(
+								120.592886,
+								32.470705,
+								20000000,
+							),
+							orientation: {
+								heading: Cesium.Math.toRadians(0.0),
+								pitch: Cesium.Math.toRadians(-90.0),
+								roll: Cesium.Math.toRadians(0),
+							},
+						});
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

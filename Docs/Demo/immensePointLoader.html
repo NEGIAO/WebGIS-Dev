@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Cesium 点聚合示例</title>
+
+		<!-- 引入 Vue 3 与 Cesium -->
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+
+		<!-- 引入 lil-gui CSS -->
+		<link
+			href="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.css"
+			rel="stylesheet"
+		/>
+
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+
+			/* 彻底解决 lil-gui 控件与文字重叠问题 */
+			.lil-gui {
+				position: fixed !important;
+				top: 12px !important;
+				right: 12px !important;
+				left: auto !important;
+				z-index: 99999 !important;
+				font-family:
+					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+				font-size: 12px !important;
+				background-color: rgba(26, 26, 26, 0.9) !important;
+				border-radius: 8px !important;
+				box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6) !important;
+				border: 1px solid #333 !important;
+			}
+
+			/* 强行约束内部布局为弹性盒 */
+			.lil-gui .controller {
+				display: flex !important;
+				align-items: center !important;
+				justify-content: space-between !important;
+				padding: 4px 8px !important;
+				box-sizing: border-box !important;
+			}
+
+			.lil-gui .name {
+				width: 40% !important;
+				min-width: 80px !important;
+				overflow: hidden !important;
+				text-overflow: ellipsis !important;
+				white-space: nowrap !important;
+			}
+
+			.lil-gui .widget {
+				width: 60% !important;
+				display: flex !important;
+				align-items: center !important;
+			}
+
+			.lil-gui input[type="range"] {
+				width: 100% !important;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+		</div>
+
+		<script>
+			class PointCluster {
+				constructor(opt) {
+					this.options = {
+						dataOrUrl: "",
+						pixelRange: 20,
+						minimumClusterSize: 2,
+						enabled: true,
+						colorArr: [
+							{ num: 1, size: 32, color: "#1c86d1cc" },
+							{ num: 50, size: 36, color: "#67c23acc" },
+							{ num: 100, size: 40, color: "#f56c6ccc" },
+							{ num: 500, size: 46, color: "#e6a23ccc" },
+						],
+					};
+					this.options = Object.assign(this.options, opt);
+					this.viewer = opt.viewer;
+					this.dataSources = null;
+					this.clusterIconCache = {};
+					this._removeListener = null;
+
+					if (this.options.dataOrUrl) {
+						this.loadJson(this.options.dataOrUrl);
+					}
+				}
+
+				loadJson(dataOrUrl) {
+					Cesium.GeoJsonDataSource.load(dataOrUrl)
+						.then((ds) => {
+							this.showCluster(ds);
+						})
+						.catch((err) => {
+							console.error("加载 GeoJSON 失败:", err);
+						});
+				}
+
+				showCluster(geoJsonDataSource) {
+					if (this.dataSources) {
+						this.remove();
+					}
+
+					this.dataSources = geoJsonDataSource;
+					this.viewer.dataSources.add(this.dataSources);
+
+					const clustering = this.dataSources.clustering;
+					clustering.enabled = this.options.enabled;
+					clustering.pixelRange = this.options.pixelRange;
+					clustering.minimumClusterSize = this.options.minimumClusterSize;
+
+					this._applyCustomStyle();
+				}
+
+				_applyCustomStyle() {
+					if (!this.dataSources) return;
+					const clustering = this.dataSources.clustering;
+
+					if (this._removeListener) {
+						this._removeListener();
+						this._removeListener = null;
+					}
+
+					this._removeListener = clustering.clusterEvent.addEventListener(
+						(clusteredEntities, cluster) => {
+							if (cluster.label) cluster.label.show = false;
+							if (cluster.billboard) {
+								cluster.billboard.show = true;
+								cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.CENTER;
+								cluster.billboard.horizontalOrigin =
+									Cesium.HorizontalOrigin.CENTER;
+
+								const count = clusteredEntities.length;
+								let activeConfig = this.options.colorArr[0];
+
+								for (let i = this.options.colorArr.length - 1; i >= 0; i--) {
+									if (count >= this.options.colorArr[i].num) {
+										activeConfig = this.options.colorArr[i];
+										break;
+									}
+								}
+
+								cluster.billboard.image = this._drawImage(
+									count,
+									activeConfig.size,
+									activeConfig.color,
+								);
+							}
+						},
+					);
+
+					const currentRange = clustering.pixelRange;
+					clustering.pixelRange = 0;
+					clustering.pixelRange = currentRange;
+				}
+
+				_drawImage(text, size, color) {
+					const key = `${text}_${size}_${color}`;
+					if (this.clusterIconCache[key]) {
+						return this.clusterIconCache[key];
+					}
+
+					const scale = window.devicePixelRatio || 1;
+					const canvas = document.createElement("canvas");
+					canvas.width = size * scale;
+					canvas.height = size * scale;
+
+					const ctx = canvas.getContext("2d");
+					ctx.scale(scale, scale);
+
+					ctx.beginPath();
+					ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2, true);
+					ctx.fillStyle = color;
+					ctx.fill();
+					ctx.lineWidth = 2;
+					ctx.strokeStyle = "#ffffff";
+					ctx.stroke();
+
+					ctx.font = `bold ${Math.floor(size * 0.4)}px sans-serif`;
+					ctx.fillStyle = "#ffffff";
+					ctx.textAlign = "center";
+					ctx.textBaseline = "middle";
+					ctx.fillText(text, size / 2, size / 2);
+
+					const dataUrl = canvas.toDataURL("image/png");
+					this.clusterIconCache[key] = dataUrl;
+					return dataUrl;
+				}
+
+				reload(dataOrUrl) {
+					this.options.dataOrUrl = dataOrUrl;
+					this.loadJson(dataOrUrl);
+				}
+
+				setEnabled(enabled) {
+					this.options.enabled = enabled;
+					if (this.dataSources) this.dataSources.clustering.enabled = enabled;
+				}
+
+				setPixelRange(v) {
+					this.options.pixelRange = v;
+					if (this.dataSources) this.dataSources.clustering.pixelRange = v;
+				}
+
+				setMinimumClusterSize(v) {
+					this.options.minimumClusterSize = v;
+					if (this.dataSources)
+						this.dataSources.clustering.minimumClusterSize = v;
+				}
+
+				remove() {
+					if (this._removeListener) {
+						this._removeListener();
+						this._removeListener = null;
+					}
+					if (this.dataSources) {
+						this.viewer.dataSources.remove(this.dataSources);
+						this.dataSources = null;
+					}
+					this.clusterIconCache = {};
+				}
+			}
+			window.PointCluster = PointCluster;
+		</script>
+
+		<script type="module">
+			const { createApp } = Vue;
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+			createApp({
+				data() {
+					return { viewer: null, clusterInstance: null };
+				},
+				async mounted() {
+					const viewer = this.initMap();
+					this.addlilgui();
+					this.addPointCluster(viewer);
+				},
+				beforeUnmount() {
+					if (this.clusterInstance) {
+						this.clusterInstance.remove();
+					}
+					if (this.myLilGui) {
+						this.myLilGui.destroy();
+						this.myLilGui = null;
+					}
+				},
+				methods: {
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+						window.viewer = viewer;
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.enableLighting = false;
+						if (viewer._cesiumWidget._creditContainer) {
+							viewer._cesiumWidget._creditContainer.style.display = "none";
+						}
+
+						viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								maximumLevel: 18,
+							}),
+						);
+
+						this.viewer = viewer;
+						this.resetCamera();
+						return viewer;
+					},
+
+					resetCamera() {
+						if (!this.viewer) return;
+						this.viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(105, 33, 4500000),
+							orientation: {
+								heading: 0,
+								pitch: Cesium.Math.toRadians(-90),
+								roll: 0,
+							},
+						});
+					},
+
+					addlilgui() {
+						if (this.myLilGui) {
+							this.myLilGui.destroy();
+						}
+
+						const myLilGui = new GUI({ title: "点聚合控制台" });
+						// 确保独立 DOM 挂载
+						document.body.appendChild(myLilGui.domElement);
+						this.myLilGui = myLilGui;
+
+						const params = {
+							pixelRange: 30,
+							minimumClusterSize: 2,
+							enabled: true,
+							resetCamera: () => this.resetCamera(),
+							randomizePoints: () => this.randomizePoints(),
+						};
+
+						const f = myLilGui.addFolder("聚合设置");
+						f.add(params, "enabled")
+							.name("启用聚合")
+							.onChange((v) => {
+								if (this.clusterInstance) this.clusterInstance.setEnabled(v);
+							});
+						f.add(params, "pixelRange", 10, 150, 1)
+							.name("像素距离")
+							.onChange((v) => {
+								if (this.clusterInstance) this.clusterInstance.setPixelRange(v);
+							});
+						f.add(params, "minimumClusterSize", 2, 50, 1)
+							.name("最小聚合数")
+							.onChange((v) => {
+								if (this.clusterInstance)
+									this.clusterInstance.setMinimumClusterSize(v);
+							});
+
+						myLilGui.add(params, "resetCamera").name("重置视角");
+						myLilGui.add(params, "randomizePoints").name("重新生成 1万个点");
+						this._params = params;
+					},
+
+					addPointCluster(viewer) {
+						const geojson = this.randomPointsWithinBbox(90, 120, 20, 45, 10000);
+						this.clusterInstance = new window.PointCluster({
+							viewer,
+							dataOrUrl: geojson,
+							pixelRange: this._params.pixelRange,
+							minimumClusterSize: this._params.minimumClusterSize,
+							enabled: this._params.enabled,
+						});
+					},
+
+					randomizePoints() {
+						const geojson = this.randomPointsWithinBbox(90, 120, 20, 45, 10000);
+						if (this.clusterInstance) {
+							this.clusterInstance.reload(geojson);
+						}
+					},
+
+					randomPointsWithinBbox(xmin, xmax, ymin, ymax, num) {
+						const features = [];
+						for (let i = 0; i < num; i++) {
+							features.push({
+								type: "Feature",
+								properties: { id: i + 1 },
+								geometry: {
+									type: "Point",
+									coordinates: [
+										Math.random() * (xmax - xmin) + xmin,
+										Math.random() * (ymax - ymin) + ymin,
+									],
+								},
+							});
+						}
+						return { type: "FeatureCollection", features };
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

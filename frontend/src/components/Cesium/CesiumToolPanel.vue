@@ -524,6 +524,15 @@
                             <FolderOpen :size="14" stroke-width="2" />
                             文件夹导入
                         </button>
+                        <button
+                            class="tool-action primary"
+                            type="button"
+                            title="加载内置样例城市 3D Tiles"
+                            @click="emit('import-tileset-sample')"
+                        >
+                            <Box :size="14" stroke-width="2" />
+                            样例数据
+                        </button>
                     </div>
 
                     <!-- 已加载数据源列表 -->
@@ -617,6 +626,24 @@
                                     @input="emitSetHeight(source.id, $event.target.value)"
                                 />
                                 <span class="slider-value">{{ Math.round(getTileHeight(source)) }}m</span>
+                            </div>
+                            <!-- 3D Tiles 材质选择器 -->
+                            <div
+                                v-if="source.type === '3dtiles'"
+                                class="tileset-material-selector"
+                            >
+                                <span class="slider-label" title="渲染材质">材质</span>
+                                <select
+                                    class="material-select"
+                                    :value="source.materialMode || 'baimo'"
+                                    @change="emitSetMaterial(source.id, $event.target.value)"
+                                >
+                                    <option value="pureWhite">纯白膜</option>
+                                    <option value="baimo">白膜贴图</option>
+                                    <option value="heightStyle">高度分层</option>
+                                    <option value="gradient">高度渐变</option>
+                                    <option value="none">原始材质</option>
+                                </select>
                             </div>
                         </div>
                     </div>
@@ -748,6 +775,8 @@ const emit = defineEmits([
     'data-set-height',
     'import-tileset-zip',
     'import-tileset-folder',
+    'import-tileset-sample',
+    'data-set-material',
 ]);
 
 const UI_STATE_VERSION = 3;
@@ -1038,6 +1067,11 @@ function emitSetHeight(sourceId, height) {
     const num = Number(height);
     tileHeightMap.value = { ...tileHeightMap.value, [sourceId]: num };
     emit('data-set-height', { id: sourceId, height: num });
+}
+
+/** 切换 3D Tiles 材质模式 */
+function emitSetMaterial(sourceId, mode) {
+    emit('data-set-material', { id: sourceId, mode });
 }
 </script>
 
@@ -2164,5 +2198,36 @@ function emitSetHeight(sourceId, height) {
     min-width: 36px;
     text-align: right;
     font-variant-numeric: tabular-nums;
+}
+
+/* 3D Tiles 材质选择器 */
+.tileset-material-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px 4px 0;
+    margin-top: 2px;
+}
+
+.tileset-material-selector .material-select {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.08);
+    color: #eefbf3;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.tileset-material-selector .material-select:hover {
+    border-color: rgba(100, 200, 255, 0.5);
+}
+
+.tileset-material-selector .material-select option {
+    background: #1a1a2e;
+    color: #eefbf3;
 }
 </style>

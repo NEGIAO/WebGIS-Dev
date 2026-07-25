@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>3D Tiles 通视分析</title>
+		
+		<!-- 基础依赖库 -->
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.0.0/turf.min.js"></script>
+
+		<!-- Cesium 样式 -->
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+
+		<!-- lil-gui 官方样式 + UMD 脚本 -->
+		<link
+			href="https://cdn.jsdelivr.net/npm/lil-gui@0.19.0/dist/lil-gui.min.css"
+			rel="stylesheet"
+		/>
+		<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.0/dist/lil-gui.umd.min.js"></script>
+
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+
+			/* 关键修复 1：修正 lil-gui 的层级与折叠面板排版，彻底解决堆叠错乱问题 */
+			.lil-gui.root {
+				position: absolute !important;
+				top: 15px !important;
+				left: 15px !important;
+				z-index: 9999 !important;
+				max-height: 90vh;
+				overflow-y: auto;
+				--background-color: rgba(20, 20, 20, 0.88);
+				--text-color: #ddd;
+				--title-background-color: #2c2c2c;
+				--widget-color: #3c3c3c;
+				--hover-color: #5c5c5c;
+				--focus-color: #7c7c7c;
+				--number-color: #00e5ff;
+				--string-color: #8bc34a;
+			}
+			/* 防止子 Folder 排版错乱 */
+			.lil-gui .folder .children {
+				display: block !important;
+				position: static !important;
+			}
+			.lil-gui.closed .children {
+				display: none !important;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+		</div>
+
+		<script>
+			const { createApp } = Vue;
+
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						imageryLayer: null,
+						tileset: null,
+						// 观察点坐标
+						longitude: 114.3,
+						latitude: 30.6,
+						height: 30,
+						distance: 300,
+						step: 5,
+						startAngle: -60,
+						endAngle: 60,
+						showSector: true,
+						width: 3,
+						visibleColor: "#00ff00",
+						invisibleColor: "#ff0000",
+						allEntity: [],
+						centerEntity: null,
+						sectorEntity: null,
+						sector: null,
+						handler: null,
+						myLilGui: null,
+						guiControllers: {}, // 存 GUI 实例以便更新面板显示
+						isPicking: false,   // 是否处于选点状态
+					};
+				},
+				async mounted() {
+					this.initMap();
+					await this.add3DTileset();
+					this.addlilgui();
+					this.addViewshed();
+				},
+				beforeUnmount() {
+					if (this.handler) {
+						this.handler.destroy();
+						this.handler = null;
+					}
+					if (this.myLilGui) {
+						this.myLilGui.destroy();
+						this.myLilGui = null;
+					}
+				},
+				methods: {
+					initMap() {
+						let viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+						window.viewer = viewer;
+						this.viewer = viewer;
+
+						// 开启深度测试（选点和通视必备）
+						viewer.scene.globe.depthTestAgainstTerrain = true;
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+
+						// 底图
+						this.imageryLayer = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								maximumLevel: 18,
+							}),
+						);
+
+						// 初始化屏幕事件监听器（专门用于选点）
+						this.handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
+					},
+
+					async add3DTileset() {
+						try {
+							this.tileset = await Cesium.Cesium3DTileset.fromUrl(
+								"./data/tileset/city/tileset.json",
+								{
+									maximumScreenSpaceError: 16,
+									maximumMemoryUsage: 2048,
+								},
+							);
+							this.viewer.scene.primitives.add(this.tileset);
+
+							// 根据包围球计算 Tileset 中心点
+							const boundingSphere = this.tileset.boundingSphere;
+							const centerCartographic = Cesium.Cartographic.fromCartesian(boundingSphere.center);
+
+							this.longitude = parseFloat(Cesium.Math.toDegrees(centerCartographic.longitude).toFixed(6));
+							this.latitude = parseFloat(Cesium.Math.toDegrees(centerCartographic.latitude).toFixed(6));
+							this.height = parseFloat((centerCartographic.height + 15).toFixed(2));
+							this.distance = Math.round(boundingSphere.radius * 1.2) || 300;
+
+							// 视角飞向 Tileset
+							this.flyTo3DTiles();
+						} catch (error) {
+							console.error("加载 3D Tiles 失败:", error);
+						}
+					},
+
+					flyTo3DTiles() {
+						if (!this.tileset) return;
+						const boundingSphere = this.tileset.boundingSphere;
+						const offset = new Cesium.HeadingPitchRange(
+							0,
+							Cesium.Math.toRadians(-35),
+							boundingSphere.radius * 2.2,
+						);
+						this.viewer.camera.flyToBoundingSphere(boundingSphere, {
+							duration: 1.5,
+							offset: offset,
+						});
+					},
+
+					// 关键修复 2：彻底重构选点逻辑，确保能够精准拾取 3D Tiles 表面或椭球体/地形
+					enableLocate() {
+						if (this.isPicking) return;
+						this.isPicking = true;
+
+						// 改变鼠标样式提示用户正在选点
+						this.viewer.canvas.style.cursor = "crosshair";
+
+						// 绑定左键点击事件
+						this.handler.setInputAction((click) => {
+							let cartesian = null;
+
+							// 1. 优先尝试 pickPosition (能精准拾取 3D Tiles 模型表面)
+							if (this.viewer.scene.pickPositionSupported) {
+								cartesian = this.viewer.scene.pickPosition(click.position);
+							}
+
+							// 2. 如果没点到模型，保底使用摄像机射线拾取地形/地面
+							if (!Cesium.defined(cartesian)) {
+								const ray = this.viewer.camera.getPickRay(click.position);
+								cartesian = this.viewer.scene.globe.pick(ray, this.viewer.scene);
+							}
+
+							if (Cesium.defined(cartesian)) {
+								const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+								
+								// 更新响应式数据
+								this.longitude = parseFloat(Cesium.Math.toDegrees(cartographic.longitude).toFixed(6));
+								this.latitude = parseFloat(Cesium.Math.toDegrees(cartographic.latitude).toFixed(6));
+								// 点击的位置稍微抬高 1.5 米，防止观察点嵌入模型内部
+								this.height = parseFloat((cartographic.height + 1.5).toFixed(2));
+
+								// 强制刷新 GUI 界面的输入框显示
+								if (this.guiControllers.longitude) this.guiControllers.longitude.updateDisplay();
+								if (this.guiControllers.latitude) this.guiControllers.latitude.updateDisplay();
+								if (this.guiControllers.height) this.guiControllers.height.updateDisplay();
+
+								// 重新计算通视分析
+								this.updateAnalysis();
+							}
+
+							// 选完一点后自动结束选点模式
+							this.disableLocate();
+						}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+					},
+
+					disableLocate() {
+						this.isPicking = false;
+						this.handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+						this.viewer.canvas.style.cursor = "default";
+					},
+
+					addViewshed() {
+						this.clearEntity();
+
+						// 绘制中心观察点
+						if (!this.centerEntity) {
+							this.centerEntity = this.viewer.entities.add({
+								name: "观察点",
+								position: new Cesium.CallbackProperty(() => {
+									return Cesium.Cartesian3.fromDegrees(
+										this.longitude,
+										this.latitude,
+										this.height,
+									);
+								}, false),
+								point: {
+									pixelSize: 10,
+									color: Cesium.Color.YELLOW,
+									outlineColor: Cesium.Color.BLACK,
+									outlineWidth: 2,
+									disableDepthTestDistance: Number.POSITIVE_INFINITY, // 保证穿透不被遮挡
+								},
+							});
+							this.allEntity.push(this.centerEntity);
+						}
+
+						// 绘制扇形区域
+						if (!this.sectorEntity) {
+							this.sector = this.getSector();
+							this.sectorEntity = this.viewer.entities.add({
+								polygon: {
+									hierarchy: new Cesium.CallbackProperty(() => {
+										return new Cesium.PolygonHierarchy(
+											Cesium.Cartesian3.fromDegreesArray(
+												this.sector.geometry.coordinates[0].flat(),
+											),
+										);
+									}, false),
+									height: this.height - 0.5,
+									material: Cesium.Color.CYAN.withAlpha(0.2),
+									show: this.showSector,
+								},
+							});
+							this.allEntity.push(this.sectorEntity);
+						}
+
+						// 视线射线计算
+						for (
+							let angle = this.startAngle;
+							angle <= this.endAngle;
+							angle += this.step
+						) {
+							const dest = this.calculateDestination(
+								this.latitude,
+								this.longitude,
+								angle,
+								this.distance,
+							);
+							const startPoint = Cesium.Cartesian3.fromDegrees(
+								this.longitude,
+								this.latitude,
+								this.height,
+							);
+							const endPoint = Cesium.Cartesian3.fromDegrees(
+								dest.longitude,
+								dest.latitude,
+								this.height,
+							);
+							this.analysisVisible([startPoint, endPoint]);
+						}
+					},
+
+					calculateDestination(lat, lon, bearing, distance) {
+						const R = 6371000;
+						const radLat = (lat * Math.PI) / 180;
+						const radLon = (lon * Math.PI) / 180;
+						const radBearing = (bearing * Math.PI) / 180;
+						const dr = distance / R;
+
+						const newLat = Math.asin(
+							Math.sin(radLat) * Math.cos(dr) +
+								Math.cos(radLat) * Math.sin(dr) * Math.cos(radBearing),
+						);
+						const newLon =
+							radLon +
+							Math.atan2(
+								Math.sin(radBearing) * Math.sin(dr) * Math.cos(radLat),
+								Math.cos(dr) - Math.sin(radLat) * Math.sin(newLat),
+							);
+
+						return {
+							latitude: (newLat * 180) / Math.PI,
+							longitude: (newLon * 180) / Math.PI,
+						};
+					},
+
+					analysisVisible(positions) {
+						const direction = Cesium.Cartesian3.normalize(
+							Cesium.Cartesian3.subtract(
+								positions[1],
+								positions[0],
+								new Cesium.Cartesian3(),
+							),
+							new Cesium.Cartesian3(),
+						);
+						const ray = new Cesium.Ray(positions[0], direction);
+
+						// pickFromRay 排除已经生成的辅助 Entity
+						const result = this.viewer.scene.pickFromRay(ray, this.allEntity);
+
+						const visColor = Cesium.Color.fromCssColorString(this.visibleColor);
+						const invisColor = Cesium.Color.fromCssColorString(this.invisibleColor);
+
+						if (Cesium.defined(result) && Cesium.defined(result.position)) {
+							const hitDistance = Cesium.Cartesian3.distance(
+								result.position,
+								positions[0],
+							);
+
+							if (hitDistance >= this.distance) {
+								this.drawLine(positions[0], positions[1], visColor);
+							} else {
+								this.drawLine(positions[0], result.position, visColor);
+								this.drawLine(result.position, positions[1], invisColor);
+							}
+						} else {
+							this.drawLine(positions[0], positions[1], visColor);
+						}
+					},
+
+					drawLine(p1, p2, color) {
+						let line = this.viewer.entities.add({
+							polyline: {
+								positions: [p1, p2],
+								width: this.width,
+								material: color,
+								depthFailMaterial: color,
+							},
+						});
+						this.allEntity.push(line);
+					},
+
+					getSector() {
+						const center = turf.point([this.longitude, this.latitude]);
+						const radius = this.distance / 1000;
+						return turf.sector(
+							center,
+							radius,
+							this.startAngle,
+							this.endAngle,
+						);
+					},
+
+					clearEntity() {
+						this.allEntity = this.allEntity.filter((entity) => {
+							if (
+								entity !== this.centerEntity &&
+								entity !== this.sectorEntity
+							) {
+								this.viewer.entities.remove(entity);
+								return false;
+							}
+							return true;
+						});
+					},
+
+					addlilgui() {
+						const gui = new lil.GUI({ title: "通视分析控制台" });
+						this.myLilGui = gui;
+
+						const params = {
+							distance: this.distance,
+							step: this.step,
+							startAngle: this.startAngle,
+							endAngle: this.endAngle,
+							showSector: this.showSector,
+							width: this.width,
+							visibleColor: this.visibleColor,
+							invisibleColor: this.invisibleColor,
+							flyTo3DTiles: () => this.flyTo3DTiles(),
+							locate: () => this.enableLocate(),
+						};
+
+						// 1. 分析参数
+						gui.add(params, "distance", 10, 5000, 10).name("分析距离(m)").onChange((v) => { this.distance = v; this.updateAnalysis(); });
+						gui.add(params, "step", 1, 30, 1).name("采样间隔(°)").onChange((v) => { this.step = v; this.updateAnalysis(); });
+						gui.add(params, "startAngle", -180, 180, 1).name("起始视角(°)").onChange((v) => { this.startAngle = v; this.updateAnalysis(); });
+						gui.add(params, "endAngle", -180, 180, 1).name("结束视角(°)").onChange((v) => { this.endAngle = v; this.updateAnalysis(); });
+
+						// 2. 位置调整 Folder
+						const posFolder = gui.addFolder("位置调整");
+						this.guiControllers.longitude = posFolder.add(this, "longitude").name("经度").onChange(() => this.updateAnalysis());
+						this.guiControllers.latitude = posFolder.add(this, "latitude").name("纬度").onChange(() => this.updateAnalysis());
+						this.guiControllers.height = posFolder.add(this, "height").name("视点高度(m)").onChange(() => this.updateAnalysis());
+
+						posFolder.add(params, "locate").name("📍 点击开启地图选点");
+						posFolder.add(params, "flyTo3DTiles").name("✈️ 视角飞向模型");
+
+						// 3. 样式配置 Folder
+						const styleFolder = gui.addFolder("样式配置");
+						styleFolder.add(params, "showSector").name("显示扇形区域").onChange((v) => {
+							this.showSector = v;
+							if (this.sectorEntity) this.sectorEntity.show = v;
+						});
+						styleFolder.add(params, "width", 1, 10, 1).name("射线宽度").onChange((v) => { this.width = v; this.updateAnalysis(); });
+						styleFolder.addColor(params, "visibleColor").name("通视颜色").onChange((v) => { this.visibleColor = v; this.updateAnalysis(); });
+						styleFolder.addColor(params, "invisibleColor").name("遮挡颜色").onChange((v) => { this.invisibleColor = v; this.updateAnalysis(); });
+					},
+
+					updateAnalysis() {
+						this.sector = this.getSector();
+						this.addViewshed();
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>
