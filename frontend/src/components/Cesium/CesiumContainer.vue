@@ -292,14 +292,16 @@ let cleanupAttitudeListener = null;
 
 /**
  * 坐标显示：漫游模式下显示人物三维坐标+实时速度，否则显示鼠标位置
- * 末尾附加相机姿态信息
+ * 移动端固定拆为「位置 / 姿态 / 相机海拔」三行，避免窄屏自动折叠成两行。
  */
 const activeCoordinateDisplay = computed(() => {
     const att = cameraAttitude.value;
-    const attStr = `方位: ${att.heading.toFixed(1)}° 俯仰: ${att.pitch.toFixed(1)}° 翻滚: ${att.roll.toFixed(1)}° | 相机海拔: ${att.height.toFixed(1)}米`;
+    const attitudeLine = `方位: ${att.heading.toFixed(1)}° 俯仰: ${att.pitch.toFixed(1)}° 翻滚: ${att.roll.toFixed(1)}°`;
+    const cameraHeightLine = `相机海拔: ${att.height.toFixed(1)}米`;
+    const attStr = `${attitudeLine} | ${cameraHeightLine}`;
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
     const pos = playerController.playerPosition.value;
-    let result;
     if (pos) {
         const lng = pos.lng.toFixed(6);
         const lat = pos.lat.toFixed(6);
@@ -308,22 +310,20 @@ const activeCoordinateDisplay = computed(() => {
         const speedStr = speed > 0.1 ? ` | 速度: ${speed.toFixed(1)} m/s` : '';
         const coordLine = `经度: ${lng}, 纬度: ${lat}`;
         const altLine = `海拔: ${height}米${speedStr}`;
-        result = `${coordLine}, ${altLine} | ${attStr} (漫游)`;
-    } else {
-        const coord = coordinateDisplay.value;
-        if (coord.includes('--')) {
-            result = attStr;
-        } else {
-            result = `${coord} | ${attStr}`;
+        if (isMobile) {
+            return `${coordLine}, ${altLine}\n${attitudeLine}\n${cameraHeightLine} (漫游)`;
         }
+        return `${coordLine}, ${altLine} | ${attStr} (漫游)`;
     }
 
-    // 移动端窄屏 (<480px)：以 | 为分割，每段占一行
-    const w = typeof window !== 'undefined' ? window.innerWidth : 9999;
-    if (w < 480) {
-        result = result.split(' | ').join('\n');
+    const coord = coordinateDisplay.value;
+    if (isMobile) {
+        return `${coord}\n${attitudeLine}\n${cameraHeightLine}`;
     }
-    return result;
+    if (coord.includes('--')) {
+        return attStr;
+    }
+    return `${coord} | ${attStr}`;
 });
 
 // 漫游模式启动时：关闭高级控制台 + 显示键位提示面板
@@ -980,12 +980,22 @@ watch(
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
     font-weight: 600;
+    line-height: 1.45;
     text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
     pointer-events: none;
     user-select: none;
     white-space: pre-line;
     text-align: right;
     max-width: calc(100vw - 48px);
+}
+
+@media (max-width: 767px) {
+    .coordinate-display {
+        bottom: 18px;
+        right: 12px;
+        max-width: calc(100vw - 24px);
+        line-height: 1.6;
+    }
 }
 
 :global(.cesium-viewer-toolbar),

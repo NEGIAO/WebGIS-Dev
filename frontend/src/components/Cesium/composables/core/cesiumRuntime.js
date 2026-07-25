@@ -1,57 +1,72 @@
 /**
- * cesiumRuntime.js
- * Cesium 运行时加载：cesium-shim.js 已在模块顶层启动 CDN 注入，
- * 本模块负责等待 CDN 就位 + 加载 widgets.css + 写入 Ion token。
+ * cesiumRuntime.js — Cesium 运行时加载
+ *
+ * cesium-shim.js 在模块顶层启动 CDN 注入，本模块负责：
+ * 1. 等待 cesiumReady（CDN 就位）
+ * 2. 加载 widgets.css
+ * 3. 写入 Ion token
+ *
+ * 仅 CesiumContainer 懒加载链路会触发本模块，非 Cesium 页面不受影响。
  */
 
-import { cesiumReady } from 'cesium';
+import { cesiumReady, CESIUM_BASE_URL } from 'cesium';
 
-export const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/';
+export { CESIUM_BASE_URL };
 export const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
 
+/**
+ * 等待 Cesium CDN 就位，加载样式并写入 Ion token。
+ * @param {{ ionToken?: string }} [options]
+ * @returns {Promise<object>} window.Cesium
+ */
 export async function loadCesiumRuntime({ ionToken } = {}) {
-    // cesium-shim.js 模块顶层已注入 Cesium CDN，此处等待它就位
     if (!window.Cesium) {
-        console.info('[Cesium][runtime] waiting for cesium-shim CDN injection...');
+        console.info('[Cesium][runtime] 等待 cesium-shim CDN 注入...');
         await cesiumReady;
     }
 
-    // 确保 widgets.css 已加载（cesium-shim 不负责 CSS）
     await loadStyleOnce(CESIUM_CSS_URL, 'cesium-widgets-style');
 
     const Cesium = window.Cesium;
     if (!Cesium) {
-        throw new Error('[Cesium][runtime] window.Cesium 仍为空，cesiumReady 可能未正确 resolve');
+        throw new Error('[Cesium][runtime] cesiumReady 已 resolve 但 window.Cesium 仍为空');
     }
 
     applyCesiumIonToken(Cesium, ionToken);
-    console.info('[Cesium][runtime] ready', {
+    console.info('[Cesium][runtime] 就绪', {
         version: Cesium.VERSION || 'unknown',
         ionTokenApplied: !!ionToken,
     });
     return Cesium;
 }
 
+/**
+ * 写入 Cesium Ion 访问令牌。
+ * @param {object} Cesium
+ * @param {string} [ionToken]
+ */
 export function applyCesiumIonToken(Cesium, ionToken) {
     if (ionToken && Cesium?.Ion) {
         Cesium.Ion.defaultAccessToken = ionToken;
     }
 }
 
+// ==========================================
+// 内部工具
+// ==========================================
+
 function loadStyleOnce(url, id) {
     return new Promise((resolve, reject) => {
-        const existing = document.getElementById(id);
-        if (existing) {
+        if (document.getElementById(id)) {
             resolve();
             return;
         }
-
         const link = document.createElement('link');
         link.id = id;
         link.rel = 'stylesheet';
         link.href = url;
         link.onload = () => resolve();
-        link.onerror = () => reject(new Error(`样式加载失败: ${url}`));
+        link.onerror = () => reject(new Error(`[Cesium][runtime] 样式加载失败: ${url}`));
         document.head.appendChild(link);
     });
 }

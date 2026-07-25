@@ -1,22 +1,34 @@
 /**
- * cesium-shim.js
- * Cesium ESM 垫片：将 `import { ... } from "cesium"` 映射到 window.Cesium（CDN 全局变量）。
- * cesium-player-controller / cesium-navigation-es6 等 npm 包通过标准 ESM 导入 Cesium，
- * 而本项目通过 CDN 加载。Vite alias 将 "cesium" 模块解析到此文件，桥接两种加载方式。
+ * cesium-shim.js — Cesium ESM 垫片
  *
- * ⚠️ 加载时序保证：
- * 本模块在顶层立即注入 Cesium CDN <script>，并暴露 cesiumReady Promise。
- * cesiumRuntime.js 的 loadCesiumRuntime() 内部 `await cesiumReady` 确保 CDN 就位后再继续。
- * cesium-navigation / cesium-wind-layer 源码已内嵌到 components/Cesium/ 目录下，
- * 模块级 new CesiumClass() 已改为惰性 getter，无模块级 Cesium 访问。
- * 因此本方案可消除 dev/build 下的竞态问题。
+ * 将各模块的 `import { ... } from "cesium"` 桥接到 CDN 全局 window.Cesium。
+ * Vite alias 将 "cesium" 解析至此文件，所有导出均为惰性 Proxy。
+ *
+ * ## 加载时序
+ * 模块顶层立即注入 <script>（Cesium CDN），暴露 cesiumReady Promise。
+ * cesiumRuntime.js 的 loadCesiumRuntime() 内部 `await cesiumReady` 保证
+ * Cesium 就位后才继续。cesium-navigation / cesium-wind-layer 源码已内嵌
+ * 到 components/Cesium/ 下，模块级构造器已改为惰性 getter。
+ *
+ * ## 设计要点
+ * - CDN 注入在模块求值时同步触发（createElement + appendChild），
+ *   但下载是异步的；cesiumReady 作为栅栏保证业务代码不抢先。
+ * - 不阻塞非 Cesium 页面：只有 CesiumContainer 懒加载链路上的模块
+ *   才会触发本文件的 import，首页完全不加载 Cesium。
+ * - knockout 补丁（track / cesiumSvgPath）在此文件中完成，
+ *   cesium-navigation 控件依赖这些扩展。
  */
 import knockout from 'knockout';
 
 // ==========================================
-// Cesium CDN 自动加载：模块顶层立即注入 <script>
+// 公共常量
 // ==========================================
-const CESIUM_CDN_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/Cesium.js';
+export const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/';
+
+// ==========================================
+// Cesium CDN 自动加载
+// ==========================================
+const CESIUM_CDN_URL = `${CESIUM_BASE_URL}Cesium.js`;
 
 let _cesiumReadyResolve;
 let _cesiumReadyReject;
@@ -26,19 +38,18 @@ const cesiumReady = new Promise((resolve, reject) => {
 });
 
 (function injectCesiumCDN() {
-    // 防止 cesiumRuntime.js 或其他地方已注入同 ID 脚本
     if (document.getElementById('cesium-shim-autoload')) return;
 
-    // 必须在 Cesium.js 加载前设置，否则 Cesium 内部的 Worker 等资源路径会解析错误
+    // Cesium 依赖此全局变量解析 Worker / 静态资源路径，必须在脚本加载前设置
     if (!window.CESIUM_BASE_URL) {
-        window.CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/';
+        window.CESIUM_BASE_URL = CESIUM_BASE_URL;
     }
 
     const script = document.createElement('script');
     script.id = 'cesium-shim-autoload';
     script.src = CESIUM_CDN_URL;
     script.onload = () => {
-        console.info('[cesium-shim] Cesium CDN loaded, window.Cesium ready');
+        console.info('[cesium-shim] Cesium CDN 加载完成');
         _cesiumReadyResolve();
     };
     script.onerror = () => {
@@ -51,8 +62,13 @@ const cesiumReady = new Promise((resolve, reject) => {
 
 export { cesiumReady };
 
-// cesium-navigation-es6 依赖 Knockout.track()（旧版 Cesium 内置的 knockout-es5 扩展）。
-// 独立 knockout 包不含此方法，需手动补丁。
+// ==========================================
+// Knockout 补丁（cesium-navigation 控件依赖）
+// ==========================================
+// cesium-navigation 内部使用 Knockout 绑定视图模型。
+// Cesium ≥1.104 移除了内置 knockout 导出，因此独立 npm 包需要以下补丁。
+
+// knockout.track() — 旧版 Cesium 内置的 knockout-es5 扩展，独立包不含此方法
 if (!knockout.track) {
     knockout.track = function (obj, propertyNames) {
         if (!propertyNames) return;
@@ -68,8 +84,7 @@ if (!knockout.track) {
     };
 }
 
-// 旧版 Cesium 注册的 cesiumSvgPath knockout binding handler（用于渲染罗盘/缩放 SVG 图标）。
-// Cesium ≥1.104 移除内置 knockout 后此 handler 不再存在，需手动补注册。
+// cesiumSvgPath binding handler — 渲染罗盘/缩放按钮的 SVG 图标
 if (!knockout.bindingHandlers.cesiumSvgPath) {
     knockout.bindingHandlers.cesiumSvgPath = {
         update(element, valueAccessor) {
@@ -80,8 +95,6 @@ if (!knockout.bindingHandlers.cesiumSvgPath) {
 
             const svgNS = 'http://www.w3.org/2000/svg';
             const svg = document.createElementNS(svgNS, 'svg');
-            
-            // 💡 增加标识 class，便于 CSS 高优先级覆盖
             svg.setAttribute('class', 'cesium-nav-svg');
             svg.style.width = '100%';
             svg.style.height = '100%';
@@ -100,38 +113,36 @@ if (!knockout.bindingHandlers.cesiumSvgPath) {
     };
 }
 
+// ==========================================
+// 惰性代理工厂
+// ==========================================
+
 /**
- * 获取 window.Cesium（惰性求值，首次访问时才检查）。
- * 模块顶层启动 CDN 注入后，调用方应 `await cesiumReady` 确保 Cesium 就位。
- * @returns {object} Cesium 全局对象
+ * 获取 window.Cesium。如果 CDN 尚未加载，给出指向 cesiumReady 的报错。
+ * @returns {object}
  */
 function getCesium() {
     const C = window.Cesium;
     if (!C) {
         throw new Error(
-            '[cesium-shim] window.Cesium 未找到。' +
-            '请在调用处先 `await cesiumReady`（从 cesium-shim 导入），' +
-            '确保 Cesium CDN 已加载完毕再使用。'
+            '[cesium-shim] window.Cesium 未就绪。' +
+            '请确保调用方已 `await import("cesium").cesiumReady` 或通过 cesiumRuntime 等待 CDN 加载完毕。'
         );
     }
     return C;
 }
 
 /**
- * 创建可调用 + 可构造的惰性代理。
- * 解决 import { Cartesian3 } from "cesium" 后执行 new Cartesian3() / Cartesian3.fromDegrees() 等模式。
- * 
- * Proxy 拦截策略：
- *  - construct：  new CesiumProxy() → 转发到 new window.Cesium[name]()
- *  - apply：      CesiumProxy() → 转发到 window.Cesium[name]()
- *  - get：        CesiumProxy.staticMethod → 返回 window.Cesium[name].staticMethod
+ * 创建一个可调用、可构造的惰性 Proxy。
+ * - new Proxy() → new window.Cesium[name](...)
+ * - Proxy()     → window.Cesium[name](...)
+ * - Proxy.prop  → window.Cesium[name].prop
  *
- * @param {string} name - Cesium 全局对象上的属性名
- * @returns {Proxy} 可调用、可构造的惰性包装器
+ * @param {string} name - Cesium 全局对象上的键名
+ * @returns {Proxy}
  */
 function createLazyExport(name) {
     return new Proxy(function () {}, {
-        /** 支持 new 调用（如 new Cartesian3(x, y, z)） */
         construct(_target, args) {
             const C = getCesium();
             const Real = C[name];
@@ -140,7 +151,6 @@ function createLazyExport(name) {
             }
             return new Real(...args);
         },
-        /** 支持普通函数调用（如 sampleTerrain(...)） */
         apply(_target, _thisArg, args) {
             const C = getCesium();
             const fn = C[name];
@@ -149,28 +159,25 @@ function createLazyExport(name) {
             }
             return fn(...args);
         },
-        /** 支持静态属性访问（如 Matrix4.IDENTITY, Cartesian3.fromDegrees） */
         get(_target, prop) {
+            // Symbol（如 Symbol.toPrimitive）直接返回 undefined，避免干扰引擎内部操作
+            if (typeof prop === 'symbol') return undefined;
+
             const C = getCesium();
             const val = C[name];
             if (val === undefined) {
                 console.warn(`[cesium-shim] window.Cesium.${name} 不存在，可能版本不兼容`);
                 return undefined;
             }
-            // 对 Symbol 属性（如 Symbol.toPrimitive）直接返回 undefined 避免报错
-            if (typeof prop === 'symbol') return undefined;
             const member = val[prop];
-            // 如果是函数，绑定 this 上下文确保正确调用
-            if (typeof member === 'function') {
-                return member.bind(val);
-            }
-            return member;
+            // 方法是函数时绑定 this 确保正确上下文
+            return typeof member === 'function' ? member.bind(val) : member;
         },
     });
 }
 
 // ==========================================
-// 命名导出：cesium-player-controller（惰性代理）
+// 命名导出 — PlayerController 依赖
 // ==========================================
 export const Cartesian3 = createLazyExport('Cartesian3');
 export const Cartographic = createLazyExport('Cartographic');
@@ -199,7 +206,7 @@ export const sampleTerrainMostDetailed = createLazyExport('sampleTerrainMostDeta
 export const sampleTerrain = createLazyExport('sampleTerrain');
 
 // ==========================================
-// 命名导出：cesium-navigation-es6（惰性代理）
+// 命名导出 — cesium-navigation 依赖
 // ==========================================
 export const defined = createLazyExport('defined');
 export const DeveloperError = createLazyExport('DeveloperError');
@@ -217,11 +224,11 @@ export const Ray = createLazyExport('Ray');
 export const IntersectionTests = createLazyExport('IntersectionTests');
 export const ReferenceFrame = createLazyExport('ReferenceFrame');
 
-// Cesium ≥1.104 移除了内置 knockout 导出，从 npm 包独立提供
+// Cesium ≥1.104 移除了内置 knockout，本文件从 npm 独立提供并补丁
 export { knockout };
 
 // ==========================================
-// 命名导出：cesium-wind-layer（惰性代理）
+// 命名导出 — cesium-wind-layer 依赖
 // ==========================================
 export const PixelDatatype = createLazyExport('PixelDatatype');
 export const PixelFormat = createLazyExport('PixelFormat');

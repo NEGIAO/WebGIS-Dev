@@ -48,7 +48,7 @@ export function useCesiumWind({ getViewer, getCesium, message }) {
         clearWind2D();
 
         try {
-            const response = await fetch('/json/wind_globe.json');
+            const response = await fetch('./json/wind_globe.json');
             if (!response.ok) {
                 throw new Error(`风场数据加载失败：${response.status}`);
             }

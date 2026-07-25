@@ -667,7 +667,7 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         bottomH,
     };
 
-    // 贴地
+    // 贴地：有高程数据→中值贴地；无数据→自动采样贴地兜底；都失败→关地形
     if (terrainElevation) {
         const median = (terrainElevation.min + terrainElevation.max) / 2;
         const offset = median - bottomH;
@@ -675,6 +675,11 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
         const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
         tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+    } else {
+        const clamped = await adjustTilesetToTerrain(tileset, viewer, Cesium);
+        if (!clamped) {
+            disableTerrain(viewer, Cesium);
+        }
     }
 
     const id = `tileset_${++nextId.current}`;
