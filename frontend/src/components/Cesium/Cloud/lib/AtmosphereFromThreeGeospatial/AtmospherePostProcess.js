@@ -139,7 +139,7 @@ float readBSMOpticalDepth(vec3 posMeters) {
     if (uv.x < 0.01 || uv.x > 0.99 || uv.y < 0.01 || uv.y > 0.99) continue;
     vec2 atlasUv = getCloudShadowAtlasOffset(ci) + uv * 0.5;
     vec4 shadow = (texture(u_cloudShadowBuffer, atlasUv) / scale) * u_cloudShadowDecode;
-    return shadow.b * max(u_bsmTyndallOpticalDepthScale, 0.0);
+    return (shadow.b + shadow.a) * max(u_bsmTyndallOpticalDepthScale, 0.0);
   }
   return 0.0;
 }
@@ -201,7 +201,7 @@ float readShadowOpticalDepthGround(vec2 uv, int ci, float distToTop) {
   float scale = max(u_cloudShadowScale, 1e-6);
   vec2 atlasUv = getCloudShadowAtlasOffset(ci) + uv * 0.5;
   vec4 shadow = (texture(u_cloudShadowBuffer, atlasUv) / scale) * u_cloudShadowDecode;
-  float od = min(shadow.b, shadow.g * max(0.0, distToTop - shadow.r));
+  float od = min(shadow.b + shadow.a, shadow.g * max(0.0, distToTop - shadow.r));
   return od * max(u_bsmGroundOpticalDepthScale, 0.0);
 }
 
@@ -227,8 +227,7 @@ vec3 correctBsmPosition(vec3 posMeters, float amount) {
 
 vec3 stabilizeBsmSamplePosition(vec3 posMeters, float viewDistMeters) {
   float geoAmt = max(u_geometricErrorCorrectionAmount, 0.0);
-  float distAmt = smoothstep(8000.0, 50000.0, viewDistMeters);
-  float amount = saturateAP(max(geoAmt, distAmt));
+  float amount = saturateAP(geoAmt);
   vec3 corrected = correctBsmPosition(posMeters, amount);
   if (amount < 0.01) return corrected;
   vec3 n = normalize(corrected);

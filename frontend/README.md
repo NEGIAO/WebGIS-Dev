@@ -165,4 +165,4 @@ MIT
 
 最后更新：2026-07-25
 当前版本：V3.4.2
-说明：`GlobalLoading.vue` 已在 `App.vue` 全局挂载，业务组件仅需调用 `showLoading(text)` 与 `hideLoading()` 即可。
+说明：体积云 BSM 地面阴影已支持运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass，并统一 Cloud/Aerial/Atmosphere 三条 BSM 解码链路，地面云影会随云形自然动态更新。

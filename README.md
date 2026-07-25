@@ -206,7 +206,7 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.4.2** | 2026-07-25 | BSM 地面阴影底层修复（resolve 冻结/UV 越界/cascade 选级错配）+ Cesium 导航控件集成（罗盘/缩放/比例尺）+ 镇远市 3D Tiles 城市模型 + 15 个 Demo 演示页面 + CI/CD 部署优化（3D 瓦片格式 LFS 追踪）+ Cesium 依赖模块源码内嵌（cesium-navigation/cesium-wind-layer 迁入，移除 patch-package/两个 npm 包） |
+| **V3.4.2** | 2026-07-25 | BSM 地面阴影底层修复（运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass、统一 Cloud/Aerial/Atmosphere 三条 BSM 解码、修复 tail 光学厚度与距离贴球导致的不自然地面云影）+ Cesium 导航控件集成（罗盘/缩放/比例尺）+ 镇远市 3D Tiles 城市模型 + 15 个 Demo 演示页面 + CI/CD 部署优化（3D 瓦片格式 LFS 追踪）+ Cesium 依赖模块源码内嵌（cesium-navigation/cesium-wind-layer 迁入，移除 patch-package/两个 npm 包） |
 | **V3.4.1** | 2026-07-24 | 版本号自动同步：Vite define 从 README.md 提取版本注入 MapContainer.vue，LLM 改 README 后无需手动维护 Vue 侧版本 |
 | **V3.3.23** | 2026-07-24 | 体积云性能优化：默认改流畅档（60FPS 路径）+ 三档重调 + CloudShadowPass/ShadowResolvePass location 缓存与低频渲染 + shader detail 跳过 + `_scratch` 对象池削减每帧 GC + LensFlare 懒创建 + watch 帧级合并 |
 

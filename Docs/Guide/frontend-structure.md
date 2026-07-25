@@ -80,9 +80,9 @@ frontend/src/
 │   │   │   ├── assetConfig.js                      # public/cloud-atmosphere 路径 + 默认参数
 │   │   │   └── lib/                                # 库核心源码（内联，非 npm）
 │   │   │       ├── createCloudAtmosphere.js        # 一行创建入口
-│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（scratch 对象池复用 + shader 质量旋钮 + BSM 尺寸/启停统一）
+│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（BSM 运行时启停/重建 + 统一解码 + 动态 offset 同步）
 │   │   │       ├── CloudShadowFrag.glsl.js         # BSM 着色器内联
-│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（uniform location 缓存 + bsmUpdateInterval 低频渲染）
+│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（uniform location 缓存 + 动态高度同步 + bsmUpdateInterval 低频渲染）
 │   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve（持久 VBO/location 复用 + interval gating）
 │   │   │       ├── loadBinThreeGeospatial.js       # three Data3DTexture 解析 .bin
 │   │   │       ├── shaderLoader.js                 # 着色器加载器（bundle 优先 + fetch 回退）
@@ -93,7 +93,7 @@ frontend/src/
 │   │   │       └── AtmosphereFromThreeGeospatial/  # Bruneton 大气管线模块
 │   │   │           ├── AtmosphereParameters.js     # 大气物理参数
 │   │   │           ├── AtmospherePostProcess.js    # 天空大气后处理
-│   │   │           ├── AerialPerspectiveEffect.js  # 空中透视（几何像素散射 + tonemap）
+│   │   │           ├── AerialPerspectiveEffect.js  # 空中透视（几何像素散射 + 自然地面云影 + tonemap）
 │   │   │           ├── AtmosphereForClouds.js      # 云专用大气接口
 │   │   │           ├── LensFlareBloomStage.js      # 镜头光晕 + Bloom
 │   │   │           ├── PrecomputedTexturesLoader.js# Bruneton LUT 加载器

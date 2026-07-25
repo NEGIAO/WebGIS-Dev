@@ -147,7 +147,8 @@ float readShadowOpticalDepth(vec2 uv, int ci, float distToTop) {
   float scale = max(u_cloudShadowScale, 1e-6);
   vec2 atlasUv = getCloudShadowAtlasOffset(ci) + uv * 0.5;
   vec4 shadow = (texture(u_cloudShadowBuffer, atlasUv) / scale) * u_cloudShadowDecode;
-  float od = min(shadow.b, shadow.g * max(0.0, distToTop - shadow.r));
+  // BSM atlas 语义：b=maxOpticalDepth，a=tail；地面也必须消费 tail，否则阴影边缘会被硬截断。
+  float od = min(shadow.b + shadow.a, shadow.g * max(0.0, distToTop - shadow.r));
   return od * max(u_bsmGroundOpticalDepthScale, 0.0);
 }
 
@@ -176,9 +177,8 @@ vec3 correctBsmPosition(vec3 posMeters, float amount) {
 // 远距额外径向稳定：保留水平位置方向，高度向粗略地表混合，进一步抑制 DEM LOD 高度跳变
 vec3 stabilizeBsmSamplePosition(vec3 posMeters, float viewDistMeters) {
   float geoAmt = max(u_geometricErrorCorrectionAmount, 0.0);
-  // 距离驱动：约 8km 起开始拉向稳定面，50km 附近接近满修正
-  float distAmt = smoothstep(8000.0, 50000.0, viewDistMeters);
-  float amount = saturateAP(max(geoAmt, distAmt));
+  // 只使用显式几何误差修正；不再按距离强制贴合 bottom 球，避免远处地面云影被压平成“贴球滑动”的假阴影。
+  float amount = saturateAP(geoAmt);
   vec3 corrected = correctBsmPosition(posMeters, amount);
   if (amount < 0.01) return corrected;
   // 径向高度：用当前高度与 bottom 的差做轻度保留，避免近处地形阴影完全贴球

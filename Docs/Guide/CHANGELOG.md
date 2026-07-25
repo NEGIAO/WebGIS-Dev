@@ -8,7 +8,11 @@
 
 ### V3.4.2 (2026-07-25) — 体积云 BSM 地面阴影底层修复 + Cesium 导航控件集成 + 镇远市 3D Tiles 城市模型 + Demo 演示页面库
 
-- 🆕 **Cesium 导航控件集成**：`cesium-navigation-es6` 插件接入（罗盘 + 缩放控件 + 比例尺），动态 import 确保 Cesium CDN 就绪，Reset 按钮飞至中国区域。同日迁入源码：`src/components/Cesium/cesium-navigation/`，模块级惰性 getter 防竞态
+- 🐛 **BSM 地面阴影自然度底层修复**：统一 Cloud/Aerial/Atmosphere 三条 BSM 采样链路的 atlas 解码；地面云影补用 `shadow.a` tail 光学厚度，修复边缘硬截断；移除距离驱动贴合 bottom 球的采样稳定逻辑，避免远处阴影被压平成不自然“贴球滑动”效果
+- 🐛 **BSM 地面阴影运行时修复**：`ThreeGeospatialPipeline` 新增 BSM 资源签名与 `_ensureBSMPasses/_destroyBSMPasses` 生命周期管理，三档预设切换或从流畅档手动开启 `useShadowBuffer` 时自动创建/重建 `CloudShadowPass` + `ShadowResolvePass`，不再只依赖 init 时开关
+- 🐛 **地面云影动态同步**：`_syncBSM()` 显式推进 wind/evolution offsets 并同步 `shadowTopHeight/shadowBottomHeight` 到 `CloudShadowPass`，地面 BSM atlas 随云形动态更新
+- 🐛 **BSM atlas 尺寸残留修复**：`_blitBSM()` 按目标 Cesium.Texture 实际 width/height 设置 viewport，并在 blit 前清空整张共享 atlas，避免 512 → 1024 模式切换时旧阴影残留
+- 🎚️ **三档预设云影可见性优化**：保留 smooth 默认关闭 BSM 的性能语义，同时提高 smooth/balanced 手动开启后的 `bsmGroundScale` 基础值
 - 🆕 **镇远市 3D Tiles 城市模型**：`frontend/public/tileset/city/` 约 200+ b3dm/json 镇远市腾讯地图3dtiles数据
 - 🆕 **Demo 演示页面库**：`Docs/Demo/` 新增 15 个独立演示页面（2D 风场、3D 热力图、大气渲染、北斗定位、OD 飞线、动态标签、海量点加载、地图主题、建筑阴影、近地面盒体、自定义虚线箭头、高德纠偏、通视分析、高度限制分析、聚合点）
 - 🆕 **全球风场数据**：`frontend/public/json/wind_globe.json` 全球风场可视化数据

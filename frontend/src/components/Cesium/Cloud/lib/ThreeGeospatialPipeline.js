@@ -20,6 +20,8 @@ import { AtmospherePostProcess } from "./AtmosphereFromThreeGeospatial/Atmospher
 import { AerialPerspectiveEffect } from "./AtmosphereFromThreeGeospatial/AerialPerspectiveEffect.js";
 import { loadBinThreeGeospatial, bindData3DTextureToCesiumContext } from "./loadBinThreeGeospatial.js";
 import { loadShaderSource } from "./shaderLoader.js";
+import { CloudShadowPass } from "./CloudShadowPass.js";
+import { ShadowResolvePass } from "./ShadowResolvePass.js";
 import {
   DEFAULT_CLOUDS_ASSETS_BASE,
   DEFAULT_BRUNETON_SHADER_BASE,
@@ -80,6 +82,8 @@ uniform float u_hazeExponent;
 uniform float u_hazeScatteringCoefficient;
 uniform float u_hazeAbsorptionCoefficient;
 uniform sampler2D u_shadowBuffer;
+uniform float u_shadowScale;
+uniform vec4 u_shadowDecode;
 uniform vec2 u_shadowTexelSize;
 uniform vec2 u_shadowIntervals[4];
 uniform mat4 u_shadowMatrices[4];
@@ -458,7 +462,7 @@ vec2 getShadowAtlasOffset(int ci) { return vec2(mod(float(ci), 2.0) * 0.5, (ci <
 float readShadowOpticalDepth(vec2 uv, int ci, float distToTop, float distOff) {
   if (u_useShadowBuffer == 0) return 0.0;
   vec2 atlasUv = getShadowAtlasOffset(ci) + uv * 0.5;
-  vec4 shadow = texture(u_shadowBuffer, atlasUv);
+  vec4 shadow = (texture(u_shadowBuffer, atlasUv) / max(u_shadowScale, 1e-6)) * u_shadowDecode;
   float distToFront = max(0.0, distToTop - distOff - shadow.r);
   return min(shadow.b + shadow.a, shadow.g * distToFront);
 }
@@ -873,9 +877,13 @@ export class ThreeGeospatialPipeline {
     // BSM state
     this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null, blitLoc: null };
     this._bsmBlitSize = Number(this.params.shadowMapSize) || BSM_BLIT_SIZE;
+    /** 当前 BSM GPU 资源签名；质量预设/阴影尺寸变化时用于触发重建。 */
+    this._bsmResourceSignature = null;
     this._bsmShadowDisabled = false;
     /** V3.3.20：每帧 _syncBSM blit 写入的共享 Cesium.Texture，供主云 stage u_shadowBuffer 采样 */
     this._bsmSharedTexture = null;
+    /** BSM atlas 编码缩放；主云、天空与 Aerial 必须一致解码，避免云体/地面阴影强度错配。 */
+    this._bsmShadowScale = 1.0;
     // TAA state
     this._taa = { texA: null, texB: null, current: 0, pbo: null, pboReady: false, w: 0, h: 0, frameCount: 0, prevVP: null, curVP: null };
     // Wind offsets
@@ -915,6 +923,7 @@ export class ThreeGeospatialPipeline {
       densityProfileLinearTerms: new Cesium.Cartesian4(),
       densityProfileConstantTerms: new Cesium.Cartesian4(),
       shadowTexelSize: new Cesium.Cartesian2(),
+      shadowDecode: new Cesium.Cartesian4(1.0, 1.0, 1.0, 1.0),
       shadowIntervals: Array.from({ length: 4 }, () => new Cesium.Cartesian2()),
       shadowMatrices: Array.from({ length: 4 }, () => new Cesium.Matrix4()),
       localWeatherOffset: new Cesium.Cartesian2(),
@@ -1209,6 +1218,8 @@ uniform sampler2D irradiance_texture;
         }
         return tex()?.weather;
       },
+      u_shadowScale: () => self._bsmShadowScale ?? 1.0,
+      u_shadowDecode: () => self._scratch.shadowDecode,
       u_shadowTexelSize: () => { const tile = self._bsm.pass ? self._bsm.pass.getTileSize?.() || Math.floor((Number(p().shadowMapSize) || SHADOW_MAP_SIZE) / 2) : 512; const out = self._scratch.shadowTexelSize; out.x = 1 / tile; out.y = 1 / tile; return out; },
       u_shadowIntervals: () => {
         const out = self._scratch.shadowIntervals;
@@ -1281,6 +1292,83 @@ uniform sampler2D irradiance_texture;
   // ── BSM helpers ─────────────────────────────────────────────────────────
 
   /**
+   * 计算当前 BSM GPU 资源签名；尺寸/更新节奏变化需要重建 RT/FBO 与 resolve pass。
+   * @returns {{ size: number, updateInterval: number, resolveEnabled: boolean }}
+   */
+  _getBSMResourceSignature() {
+    return {
+      size: Math.max(256, Number(this.params.shadowMapSize) || SHADOW_MAP_SIZE),
+      updateInterval: Math.max(1, Number(this.params.bsmUpdateInterval) || 1),
+      resolveEnabled: this.params.shadowResolveEnabled !== false,
+    };
+  }
+
+  /**
+   * 判断两个 BSM 资源签名是否一致。
+   * @param {{ size: number, updateInterval: number, resolveEnabled: boolean } | null} a
+   * @param {{ size: number, updateInterval: number, resolveEnabled: boolean } | null} b
+   * @returns {boolean}
+   */
+  _sameBSMResourceSignature(a, b) {
+    return !!a && !!b && a.size === b.size && a.updateInterval === b.updateInterval && a.resolveEnabled === b.resolveEnabled;
+  }
+
+  /**
+   * 创建或复用 BSM pass；用于初始化和运行时从“流畅/关闭”切换到开启云影。
+   */
+  _ensureBSMPasses() {
+    if (!this.params.useShadowBuffer || !this.textures) return;
+    const signature = this._getBSMResourceSignature();
+    if (this._bsm.pass && this._sameBSMResourceSignature(this._bsmResourceSignature, signature)) {
+      this._bsm.pass.updateInterval = signature.updateInterval;
+      if (this._bsm.resolve) {
+        this._bsm.resolve.updateInterval = signature.resolveEnabled ? signature.updateInterval : Number.MAX_SAFE_INTEGER;
+        this._bsm.resolve.enabled = signature.resolveEnabled;
+      }
+      return;
+    }
+
+    this._destroyBSMPasses({ disableShadow: false });
+    this._bsmBlitSize = signature.size;
+    this._bsm.pass = new CloudShadowPass(this.viewer, {
+      size: signature.size,
+      updateInterval: signature.updateInterval,
+      textures: this.textures,
+      params: this._getShadowPassParams(),
+    });
+    this._bsm.pass.init();
+    this._bsm.resolve = new ShadowResolvePass(this.viewer, {
+      size: signature.size,
+      temporalAlpha: 0.01,
+      updateInterval: signature.resolveEnabled ? signature.updateInterval : Number.MAX_SAFE_INTEGER,
+      enabled: signature.resolveEnabled,
+    });
+    this._bsm.resolve.setInputTextures(this._bsm.pass.getTexture(), this._bsm.pass.getDepthVelocityTexture());
+    this._bsm.resolve.init();
+    this._bsmResourceSignature = signature;
+  }
+
+  /**
+   * 销毁 BSM pass，并按需关闭大气/Aerial 侧的地面云影采样。
+   * @param {{ disableShadow?: boolean }} [options]
+   */
+  _destroyBSMPasses(options = {}) {
+    const disableShadow = options.disableShadow !== false;
+    try { this._bsm.pass?.destroy(); } catch { /* ignore */ }
+    try { this._bsm.resolve?.destroy(); } catch { /* ignore */ }
+    this._bsm.pass = null;
+    this._bsm.resolve = null;
+    this._bsmSharedTexture = null;
+    this._bsmShadowScale = 1.0;
+    this._bsmResourceSignature = null;
+    if (disableShadow) {
+      this.atmosphere?.setCloudShadow?.({ enabled: false });
+      this.aerial?.setCloudShadow?.({ enabled: false });
+      this._bsmShadowDisabled = true;
+    }
+  }
+
+  /**
    * 返回 resolve pass 当前输出纹理（裸 WebGLTexture 句柄）。
    * V3.3.20：不再用作 u_shadowBuffer 返回值（自定义 bind 不被 Cesium 识别）。
    * 仅保留供 _syncBSM 内部 blit 读取 resolve 输出。
@@ -1321,10 +1409,15 @@ uniform sampler2D irradiance_texture;
       this._bsm.blitVbo = vbo;
     }
     const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING), prevVp = gl.getParameter(gl.VIEWPORT);
+    const targetWidth = Number(targetCesiumTex.width ?? targetCesiumTex._width) || this._bsmBlitSize;
+    const targetHeight = Number(targetCesiumTex.height ?? targetCesiumTex._height) || this._bsmBlitSize;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this._bsm.blitFbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, targetCesiumTex._texture, 0);
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) { gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo); gl.viewport(...prevVp); return; }
-    gl.viewport(0, 0, this._bsmBlitSize, this._bsmBlitSize);
+    gl.viewport(0, 0, targetWidth, targetHeight);
+    // 清空整张目标 atlas，避免 512 BSM 写入 1024 共享纹理时旧像素残留。
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this._bsm.blitProg);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, sourceTex._texture);
     if (this._bsm.blitLoc?.src) gl.uniform1i(this._bsm.blitLoc.src, 0);
@@ -1340,8 +1433,19 @@ uniform sampler2D irradiance_texture;
   // ── BSM sync to Atmosphere + Aerial ────────────────────────────────────
 
   _syncBSM() {
+    if (!this.params.useShadowBuffer) {
+      if (this._bsm.pass || this._bsm.resolve) {
+        this._destroyBSMPasses({ disableShadow: true });
+      } else if (!this._bsmShadowDisabled) {
+        this.atmosphere?.setCloudShadow?.({ enabled: false });
+        this.aerial?.setCloudShadow?.({ enabled: false });
+        this._bsmShadowDisabled = true;
+      }
+      return;
+    }
+    this._ensureBSMPasses();
     const sp = this._bsm.pass;
-    if (!sp || !this.params.useShadowBuffer) {
+    if (!sp) {
       if (!this._bsmShadowDisabled) {
         this.atmosphere?.setCloudShadow?.({ enabled: false });
         this.aerial?.setCloudShadow?.({ enabled: false });
@@ -1349,6 +1453,13 @@ uniform sampler2D irradiance_texture;
       }
       return;
     }
+    const signature = this._getBSMResourceSignature();
+    sp.updateInterval = signature.updateInterval;
+    if (this._bsm.resolve) {
+      this._bsm.resolve.updateInterval = signature.resolveEnabled ? signature.updateInterval : Number.MAX_SAFE_INTEGER;
+      this._bsm.resolve.enabled = signature.resolveEnabled;
+    }
+    this._advanceOffsets();
     this._bsmShadowDisabled = false;
     // 复用 scratch 容器原地更新：CloudShadowPass.updateDynamicParams 内部 Object.assign 拷贝值，
     // BSM set4f 走原生 gl.uniform4fv 只接受数组/Float32Array，所以这里保持普通数组
@@ -1368,6 +1479,8 @@ uniform sampler2D irradiance_texture;
     dyn.shapeOffset[0] = this._shapeOffsetX || 0; dyn.shapeOffset[1] = this._shapeOffsetY || 0; dyn.shapeOffset[2] = this._shapeOffsetZ || 0;
     dyn.shapeDetailOffset[0] = this._shapeDetailOffsetX || 0; dyn.shapeDetailOffset[1] = this._shapeDetailOffsetY || 0; dyn.shapeDetailOffset[2] = this._shapeDetailOffsetZ || 0;
     dyn.bottomRadius = this.params.bottomRadius;
+    dyn.shadowBottomHeight = this._getMinHeight();
+    dyn.shadowTopHeight = this._getMaxHeight();
     // 每帧同步 shadow cascade far，限制到云层相关距离（避免 Cesium frustum.far~8e8 导致矩阵 NaN）
     dyn.shadowFar = Number(this.params.shadowFar) || Number(this.params.maxShadowLengthRayDistance) || 200000.0;
     dyn.maxShadowLengthRayDistance = Number(this.params.maxShadowLengthRayDistance) || 200000.0;
@@ -1391,6 +1504,7 @@ uniform sampler2D irradiance_texture;
     // V3.3.20：blit 写入的共享 Cesium.Texture 同时供主云 stage 的 u_shadowBuffer 采样，
     // 避免返回自定义 bind() 对象（见 _buildCloudUniforms.u_shadowBuffer）。
     this._bsmSharedTexture = targetTex || null;
+    this._bsmShadowScale = targetTex ? scaleToPass : 1.0;
 
     const intervals = sp.getShadowIntervals();
     const mats = sp.getShadowMatrices();
@@ -1643,29 +1757,8 @@ uniform sampler2D irradiance_texture;
       await this._loadTextures();
       const fragmentShader = await this._buildCloudFragmentShader();
 
-      // 4. BSM passes (import dynamically to avoid circular deps)
-      const { CloudShadowPass } = await import("./CloudShadowPass.js");
-      const { ShadowResolvePass } = await import("./ShadowResolvePass.js");
-      if (this.params.useShadowBuffer && this.textures) {
-        const shadowMapSize = Math.max(256, Number(this.params.shadowMapSize) || SHADOW_MAP_SIZE);
-        const bsmUpdateInterval = Math.max(1, Number(this.params.bsmUpdateInterval) || 1);
-        this._bsmBlitSize = shadowMapSize;
-        this._bsm.pass = new CloudShadowPass(viewer, {
-          size: shadowMapSize,
-          updateInterval: bsmUpdateInterval,
-          textures: this.textures,
-          params: this._getShadowPassParams(),
-        });
-        this._bsm.pass.init();
-        // 静止 temporalAlpha 对齐 three-geospatial≈0.01；低频 resolve 与 BSM 同步，避免无新阴影帧时重复 1024 pass。
-        this._bsm.resolve = new ShadowResolvePass(viewer, {
-          size: shadowMapSize,
-          temporalAlpha: 0.01,
-          updateInterval: this.params.shadowResolveEnabled === false ? Number.MAX_SAFE_INTEGER : bsmUpdateInterval,
-        });
-        this._bsm.resolve.setInputTextures(this._bsm.pass.getTexture(), this._bsm.pass.getDepthVelocityTexture());
-        this._bsm.resolve.init();
-      }
+      // 4. BSM passes：运行时也会通过 _syncBSM/_ensureBSMPasses 按开关动态创建或重建。
+      this._ensureBSMPasses();
 
       // 5. Cloud PostProcessStage
       const uniforms = this._buildCloudUniforms();
@@ -1735,8 +1828,7 @@ uniform sampler2D irradiance_texture;
     this.cloudStage = null;
     try { this.aerial?.destroy(); } catch { /* ignore */ } this.aerial = null;
     try { this.atmosphere?.destroy(); } catch { /* ignore */ } this.atmosphere = null;
-    try { this._bsm.pass?.destroy(); } catch { /* ignore */ } this._bsm.pass = null;
-    try { this._bsm.resolve?.destroy(); } catch { /* ignore */ } this._bsm.resolve = null;
+    try { this._destroyBSMPasses({ disableShadow: false }); } catch { /* ignore */ }
     const gl = this.viewer?.scene?.context?._gl;
     if (gl) {
       if (this._bsm.blitFbo) gl.deleteFramebuffer(this._bsm.blitFbo);
@@ -1747,6 +1839,7 @@ uniform sampler2D irradiance_texture;
       if (this._taa.pbo) gl.deleteBuffer(this._taa.pbo);
     }
     this._bsm = { pass: null, resolve: null, blitFbo: null, blitProg: null, blitVbo: null, blitLoc: null };
+    this._bsmResourceSignature = null;
     this._bsmSharedTexture = null;
     this._taa = { texA: null, texB: null, current: 0, pbo: null, pboReady: false, w: 0, h: 0, frameCount: 0, prevVP: null, curVP: null };
     if (this.textures) { for (const k in this.textures) { try { this.textures[k]?.destroy?.(); } catch { /* ignore */ } } this.textures = null; }

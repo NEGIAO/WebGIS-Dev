@@ -63,7 +63,8 @@ export const CLOUD_QUALITY_PRESETS = {
       shadowLengthEnabled: false,
       hazeEnabled: false,
       temporalEnabled: false,
-      bsmGroundScale: 0.1,
+      // 流畅档默认关闭 BSM；用户手动开启时给足基础 OD，确保低频 512 阴影仍可见。
+      bsmGroundScale: 0.18,
       bsmTyndallScale: 1.0,
       shadowFar: 25000,
       shadowSplitLambda: 0.8,
@@ -129,7 +130,7 @@ export const CLOUD_QUALITY_PRESETS = {
       shadowLengthEnabled: false,
       hazeEnabled: false,
       temporalEnabled: false,
-      bsmGroundScale: 0.08,
+      bsmGroundScale: 0.12,
       bsmTyndallScale: 0.6,
       shadowFar: 30000,
       shadowSplitLambda: 0.9,

@@ -149,7 +149,7 @@ MediaSample sampleMedia(WeatherSample weather, vec3 position, vec2 uv, float mip
     vec3 shapePosition = (position + evolution + turbulence) * u_shapeRepeat + u_shapeOffset;
     float shapeTex = texture(u_shapeTexture, fract(shapePosition)).r;
     density = remapClamped(density, vec4(1.0 - shapeTex) * u_shapeAmounts, vec4(1.0));
-    if (mipLevel * 0.5 + (jitter - 0.5) * 0.5 < 0.5) {
+    if (any(greaterThan(u_shapeDetailAmounts, vec4(0.0))) && (mipLevel * 0.5 + (jitter - 0.5) * 0.5 < 0.5)) {
         vec3 detailPosition = (position + turbulence) * u_shapeDetailRepeat + u_shapeDetailOffset;
         float detail = texture(u_shapeDetailTexture, detailPosition).r;
         vec4 modifier = mix(vec4(pow(detail, 6.0)), vec4(1.0 - detail), remapClamped(weather.heightFraction, vec4(0.2), vec4(0.4), vec4(0.0), vec4(1.0)));

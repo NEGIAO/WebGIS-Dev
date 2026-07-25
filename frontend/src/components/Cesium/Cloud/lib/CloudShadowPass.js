@@ -51,6 +51,8 @@ export class CloudShadowPass {
         if (dynamicParams.shapeOffset) this.params.shapeOffset = dynamicParams.shapeOffset;
         if (dynamicParams.shapeDetailOffset) this.params.shapeDetailOffset = dynamicParams.shapeDetailOffset;
         if (dynamicParams.bottomRadius !== undefined) this.params.bottomRadius = dynamicParams.bottomRadius;
+        if (dynamicParams.shadowBottomHeight !== undefined) this.params.shadowBottomHeight = dynamicParams.shadowBottomHeight;
+        if (dynamicParams.shadowTopHeight !== undefined) this.params.shadowTopHeight = dynamicParams.shadowTopHeight;
         if (dynamicParams.debugShadow !== undefined) this.params.debugShadow = dynamicParams.debugShadow;
         // shadow cascade far 必须每帧同步，否则会用 init 时的旧值（Cesium frustum.far~8e8 → 矩阵 NaN）
         if (dynamicParams.shadowFar !== undefined) this.params.shadowFar = dynamicParams.shadowFar;
