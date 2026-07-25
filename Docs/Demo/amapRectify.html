@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>高德卫星地图 - 左右分屏对比</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Cesium.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/gcoord@1.0.7/dist/gcoord.global.min.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+			}
+			#toggle-panel {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+				z-index: 999;
+				background: rgba(0, 0, 0, 0.7);
+				color: #fff;
+				padding: 8px 12px;
+				border-radius: 4px;
+				font-family:
+					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+				font-size: 14px;
+				user-select: none;
+			}
+			#toggle-panel select {
+				margin-left: 6px;
+				padding: 2px 6px;
+				font-size: 14px;
+				border-radius: 3px;
+				border: 1px solid #555;
+				background: #333;
+				color: #fff;
+				cursor: pointer;
+			}
+			#slider {
+				position: absolute;
+				left: 50%;
+				top: 0;
+				background-color: #d3d3d3;
+				width: 2px;
+				height: 100%;
+				z-index: 99;
+				cursor: ew-resize;
+			}
+			.split-label {
+				position: absolute;
+				top: 10px;
+				background: rgba(0, 0, 0, 0.7);
+				color: #fff;
+				padding: 4px 12px;
+				border-radius: 4px;
+				font-family:
+					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+				font-size: 13px;
+				z-index: 99;
+				user-select: none;
+				pointer-events: none;
+			}
+			.split-label.left {
+				left: 10px;
+			}
+			.split-label.right {
+				right: 10px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer">
+				<div id="slider"></div>
+			</div>
+			<div class="split-label left">ArcGIS</div>
+			<div class="split-label right">高德卫星</div>
+		</div>
+		<div id="toggle-panel">
+			右侧高德地图
+			<select id="amap-mode">
+				<option value="corrected">纠偏</option>
+				<option value="uncorrected">未纠偏</option>
+			</select>
+		</div>
+
+		<script>
+			class AmapMercatorTilingScheme extends Cesium.WebMercatorTilingScheme {
+				constructor(options) {
+					super(options);
+					const projection = new Cesium.WebMercatorProjection();
+					this._projection.project = function (cartographic, result) {
+						result = gcoord.transform(
+							[
+								Cesium.Math.toDegrees(cartographic.longitude),
+								Cesium.Math.toDegrees(cartographic.latitude),
+							],
+							gcoord.WGS84,
+							gcoord.GCJ02,
+						);
+						result = projection.project(
+							new Cesium.Cartographic(
+								Cesium.Math.toRadians(result[0]),
+								Cesium.Math.toRadians(result[1]),
+							),
+						);
+						return new Cesium.Cartesian2(result.x, result.y);
+					};
+					this._projection.unproject = function (cartesian, result) {
+						const cartographic = projection.unproject(cartesian);
+						result = gcoord.transform(
+							[
+								Cesium.Math.toDegrees(cartographic.longitude),
+								Cesium.Math.toDegrees(cartographic.latitude),
+							],
+							gcoord.GCJ02,
+							gcoord.WGS84,
+						);
+						return new Cesium.Cartographic(
+							Cesium.Math.toRadians(result[0]),
+							Cesium.Math.toRadians(result[1]),
+						);
+					};
+				}
+			}
+
+			class AmapImageryProvider extends Cesium.UrlTemplateImageryProvider {
+				constructor(options = {}) {
+					if (!options.subdomains || !options.subdomains.length) {
+						options["subdomains"] = ["1", "2", "3", "4"];
+					}
+					options["tilingScheme"] = new AmapMercatorTilingScheme();
+					super(options);
+				}
+			}
+			window.AmapImageryProvider = AmapImageryProvider;
+
+			const gcoordWGS84toGCJ02 = function (longitude, latitude) {
+				return gcoord.transform(
+					[longitude, latitude],
+					gcoord.WGS84,
+					gcoord.GCJ02,
+				);
+			};
+			window.gcoordWGS84toGCJ02 = gcoordWGS84toGCJ02;
+		</script>
+
+		<script type="module">
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/";
+			const { createApp } = Vue;
+
+			const AMAP_URL =
+				"https://webst0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=6&x={x}&y={y}&z={z}";
+
+			createApp({
+				data() {
+					return { amapLayerCorrected: null, amapLayerUncorrected: null };
+				},
+				mounted() {
+					this.initMap();
+					document
+						.getElementById("amap-mode")
+						.addEventListener("change", (e) => this.onAmapModeChange(e));
+				},
+				methods: {
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							animation: false,
+							timeline: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							navigationHelpButton: false,
+							infoBox: false,
+							selectionIndicator: false,
+							baseLayerPicker: false,
+							fullscreenButton: false,
+							shouldAnimate: false,
+							imageryProvider: false,
+						});
+
+						viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+							}),
+						);
+
+						this.amapLayerCorrected = viewer.imageryLayers.addImageryProvider(
+							new window.AmapImageryProvider({ url: AMAP_URL }),
+						);
+						this.amapLayerCorrected.splitDirection =
+							Cesium.SplitDirection.RIGHT;
+
+						this.amapLayerUncorrected = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: AMAP_URL,
+								subdomains: ["1", "2", "3", "4"],
+							}),
+						);
+						this.amapLayerUncorrected.splitDirection =
+							Cesium.SplitDirection.RIGHT;
+						this.amapLayerUncorrected.show = false;
+
+						const slider = document.getElementById("slider");
+						viewer.scene.splitPosition =
+							slider.offsetLeft / slider.parentElement.offsetWidth;
+
+						const handler = new Cesium.ScreenSpaceEventHandler(slider);
+						let moveActive = false;
+
+						handler.setInputAction(() => {
+							moveActive = true;
+						}, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+						handler.setInputAction((movement) => {
+							if (!moveActive) return;
+							const relativeOffset = movement.endPosition.x;
+							const splitPosition =
+								(slider.offsetLeft + relativeOffset) /
+								slider.parentElement.offsetWidth;
+							slider.style.left = `${100.0 * splitPosition}%`;
+							viewer.scene.splitPosition = splitPosition;
+						}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+						handler.setInputAction(() => {
+							moveActive = false;
+						}, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+						viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(116.4, 29.9, 16000000),
+							orientation: {
+								heading: 0,
+								pitch: Cesium.Math.toRadians(-90),
+								roll: 0,
+							},
+						});
+
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+						this.viewer = viewer;
+					},
+
+					onAmapModeChange(e) {
+						const mode = e.target.value;
+						if (mode === "corrected") {
+							this.amapLayerCorrected.show = true;
+							this.amapLayerUncorrected.show = false;
+						} else {
+							this.amapLayerCorrected.show = false;
+							this.amapLayerUncorrected.show = true;
+						}
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

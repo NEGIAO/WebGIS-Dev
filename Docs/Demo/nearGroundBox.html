@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Cesium 近地天空盒</title>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Cesium.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style>
+			html,
+			body,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+				font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+			}
+
+			.control-panel {
+				position: absolute;
+				top: 12px;
+				left: 12px;
+				z-index: 10;
+				width: 280px;
+				padding: 14px 16px;
+				color: #e8eef8;
+				background: rgba(13, 19, 33, 0.82);
+				border: 1px solid rgba(255, 255, 255, 0.12);
+				border-radius: 8px;
+				box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+				backdrop-filter: blur(10px);
+				box-sizing: border-box;
+			}
+
+			.control-title {
+				margin: 0 0 10px;
+				font-size: 15px;
+				font-weight: 700;
+			}
+
+			.control-desc {
+				margin: 0 0 12px;
+				color: #b8c5d8;
+				font-size: 12px;
+				line-height: 1.7;
+			}
+
+			.status-row {
+				display: flex;
+				justify-content: space-between;
+				gap: 12px;
+				padding: 8px 0;
+				border-top: 1px solid rgba(255, 255, 255, 0.08);
+				font-size: 12px;
+			}
+
+			.status-label {
+				color: #93a4ba;
+			}
+
+			.status-value {
+				color: #ffffff;
+				font-family: Consolas, "Fira Code", monospace;
+			}
+
+			.button-row {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				gap: 8px;
+				margin-top: 12px;
+			}
+
+			button {
+				height: 32px;
+				color: #f8fbff;
+				background: rgba(45, 99, 201, 0.86);
+				border: 1px solid rgba(255, 255, 255, 0.16);
+				border-radius: 6px;
+				cursor: pointer;
+				font-size: 12px;
+			}
+
+			button:hover {
+				background: rgba(58, 119, 232, 0.95);
+			}
+		</style>
+	</head>
+	<body>
+		<div id="cesiumContainer"></div>
+		<div class="control-panel">
+			<div class="control-title">近地天空盒 SkyBoxOnGround</div>
+			<p class="control-desc">
+				相机高度低于阈值时切换为自定义近地天空盒，高于阈值时恢复 Cesium
+				默认天空和大气。
+			</p>
+			<div class="status-row">
+				<span class="status-label">当前相机高度</span>
+				<span id="cameraHeight" class="status-value">-- m</span>
+			</div>
+			<div class="status-row">
+				<span class="status-label">天空盒状态</span>
+				<span id="skyboxStatus" class="status-value">--</span>
+			</div>
+			<div class="status-row">
+				<span class="status-label">切换阈值</span>
+				<span id="heightLimit" class="status-value">120000 m</span>
+			</div>
+			<div class="button-row">
+				<button id="nearBtn" type="button">低空视角</button>
+				<button id="highBtn" type="button">高空视角</button>
+			</div>
+		</div>
+
+		<script>
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/";
+
+			// 以下代码复制自 SkyBoxOnGround.js，并改为 HTML 单文件可直接使用的全局 Cesium 写法。
+
+			const BoxGeometry = Cesium.BoxGeometry;
+			const Cartesian3 = Cesium.Cartesian3;
+			const defaultValue = Cesium.defaultValue;
+			const defined = Cesium.defined;
+			const destroyObject = Cesium.destroyObject;
+			const DeveloperError = Cesium.DeveloperError;
+			const GeometryPipeline = Cesium.GeometryPipeline;
+			const Matrix3 = Cesium.Matrix3;
+			const Matrix4 = Cesium.Matrix4;
+			const Transforms = Cesium.Transforms;
+			const VertexFormat = Cesium.VertexFormat;
+			const BufferUsage = Cesium.BufferUsage;
+			const CubeMap = Cesium.CubeMap;
+			const DrawCommand = Cesium.DrawCommand;
+			const loadCubeMap = Cesium.loadCubeMap;
+			const RenderState = Cesium.RenderState;
+			const VertexArray = Cesium.VertexArray;
+			const BlendingState = Cesium.BlendingState;
+			const SceneMode = Cesium.SceneMode;
+			const ShaderProgram = Cesium.ShaderProgram;
+			const ShaderSource = Cesium.ShaderSource;
+			const skyboxMatrix3 = new Matrix3();
+
+			/**
+			 * @class DEUGlobe.Scene.SkyBoxOnGround
+			 * @category 场景
+			 * @classdesc 近景天空盒
+			 * @param {Object} options - 参数。
+			 * @param {Object} options.sources - 近地天空盒来源。
+			 */
+			class SkyBoxOnGround {
+				constructor(options) {
+					/**
+					 * 为了兼容高版本的 Cesium，因为新版 Cesium 中 getRotation 被移除。
+					 */
+					if (!Cesium.defined(Cesium.Matrix4.getRotation)) {
+						Cesium.Matrix4.getRotation = Cesium.Matrix4.getMatrix3;
+					}
+					this.sources = options.sources;
+					this._sources = undefined;
+					this.show = defaultValue(options.show, true);
+
+					this._command = new DrawCommand({
+						modelMatrix: Matrix4.clone(Matrix4.IDENTITY),
+						owner: this,
+					});
+					this._cubeMap = undefined;
+
+					this._attributeLocations = undefined;
+					this._useHdr = undefined;
+				}
+
+				update(frameState, useHdr) {
+					const that = this;
+
+					// 片元着色器，直接从源码复制。
+					const SkyBoxFS = `#version 300 es
+
+            precision highp float;
+
+            uniform samplerCube u_cubeMap;
+            in vec3 v_texCoord;
+            out vec4 fragColor;
+
+            void main() {
+                vec4 color = texture(u_cubeMap, normalize(v_texCoord));
+                fragColor = vec4(czm_gammaCorrect(color).rgb, czm_morphTime);
+            }`;
+
+					// 顶点着色器有修改，主要是乘了一个旋转矩阵。
+					const SkyBoxVS = `#version 300 es
+
+              precision highp float;
+
+              in vec3 position;
+              out vec3 v_texCoord;
+
+              uniform mat3 u_rotateMatrix;
+
+              void main() {
+                  vec3 p = czm_viewRotation * u_rotateMatrix * (czm_temeToPseudoFixed * (czm_entireFrustum.y * position));
+                  gl_Position = czm_projection * vec4(p, 1.0);
+                  v_texCoord = position;
+              }
+              `;
+
+					if (!this.show) {
+						return undefined;
+					}
+
+					if (
+						frameState.mode !== SceneMode.SCENE3D &&
+						frameState.mode !== SceneMode.MORPHING
+					) {
+						return undefined;
+					}
+
+					if (!frameState.passes.render) {
+						return undefined;
+					}
+
+					const context = frameState.context;
+
+					if (this._sources !== this.sources) {
+						this._sources = this.sources;
+						const sources = this.sources;
+
+						if (
+							!defined(sources.positiveX) ||
+							!defined(sources.negativeX) ||
+							!defined(sources.positiveY) ||
+							!defined(sources.negativeY) ||
+							!defined(sources.positiveZ) ||
+							!defined(sources.negativeZ)
+						) {
+							throw new DeveloperError(
+								"this.sources is required and must have positiveX, negativeX, positiveY, negativeY, positiveZ, and negativeZ properties.",
+							);
+						}
+
+						if (
+							typeof sources.positiveX !== typeof sources.negativeX ||
+							typeof sources.positiveX !== typeof sources.positiveY ||
+							typeof sources.positiveX !== typeof sources.negativeY ||
+							typeof sources.positiveX !== typeof sources.positiveZ ||
+							typeof sources.positiveX !== typeof sources.negativeZ
+						) {
+							throw new DeveloperError(
+								"this.sources properties must all be the same type.",
+							);
+						}
+
+						if (typeof sources.positiveX === "string") {
+							// Given urls for cube-map images. Load them.
+							loadCubeMap(context, this._sources).then(function (cubeMap) {
+								that._cubeMap = that._cubeMap && that._cubeMap.destroy();
+								that._cubeMap = cubeMap;
+							});
+						} else {
+							this._cubeMap = this._cubeMap && this._cubeMap.destroy();
+							this._cubeMap = new CubeMap({
+								context: context,
+								source: sources,
+							});
+						}
+					}
+
+					const command = this._command;
+
+					command.modelMatrix = Transforms.eastNorthUpToFixedFrame(
+						frameState.camera._positionWC,
+					);
+					if (!defined(command.vertexArray)) {
+						command.uniformMap = {
+							u_cubeMap: function () {
+								return that._cubeMap;
+							},
+							u_rotateMatrix: function () {
+								return Matrix4.getRotation(command.modelMatrix, skyboxMatrix3);
+							},
+						};
+
+						const geometry = BoxGeometry.createGeometry(
+							BoxGeometry.fromDimensions({
+								dimensions: new Cartesian3(2.0, 2.0, 2.0),
+								vertexFormat: VertexFormat.POSITION_ONLY,
+							}),
+						);
+						const attributeLocations = (this._attributeLocations =
+							GeometryPipeline.createAttributeLocations(geometry));
+
+						command.vertexArray = VertexArray.fromGeometry({
+							context: context,
+							geometry: geometry,
+							attributeLocations: attributeLocations,
+							bufferUsage: BufferUsage.STATIC_DRAW || BufferUsage._DRAW,
+						});
+
+						command.renderState = RenderState.fromCache({
+							blending: BlendingState.ALPHA_BLEND,
+						});
+					}
+
+					if (!defined(command.shaderProgram) || this._useHdr !== useHdr) {
+						const fs = new ShaderSource({
+							defines: [useHdr ? "HDR" : ""],
+							sources: [SkyBoxFS],
+						});
+						command.shaderProgram = ShaderProgram.fromCache({
+							context: context,
+							vertexShaderSource: SkyBoxVS,
+							fragmentShaderSource: fs,
+							attributeLocations: this._attributeLocations,
+						});
+						this._useHdr = useHdr;
+					}
+
+					if (!defined(this._cubeMap)) {
+						return undefined;
+					}
+
+					return command;
+				}
+
+				isDestroyed() {
+					return false;
+				}
+
+				destroy() {
+					const command = this._command;
+					command.vertexArray =
+						command.vertexArray && command.vertexArray.destroy();
+					command.shaderProgram =
+						command.shaderProgram && command.shaderProgram.destroy();
+					this._cubeMap = this._cubeMap && this._cubeMap.destroy();
+					return destroyObject(this);
+				}
+			}
+
+			/**
+			 * @class DEUGlobe.Scene.SkyBox
+			 * @category 场景
+			 * @classdesc 天空盒
+			 * @param {Object} viewer - Cesium.Viewer。
+			 */
+			class SkyBox {
+				constructor(viewer) {
+					this.viewer = viewer;
+					this.sources = {};
+				}
+
+				/**
+				 * @class DEUGlobe.Scene.SkyBox.customSkyBox
+				 * @classdesc 天空盒
+				 * @param {Object} sources - 天空盒来源（必选）。
+				 */
+				customSkyBox(sources) {
+					this.viewer.scene.skyBox = new Cesium.SkyBox({
+						sources: sources,
+					});
+				}
+
+				/**
+				 * @class DEUGlobe.Scene.SkyBox.SkyBoxOnGround
+				 * @classdesc 近地天空盒
+				 * @param {Object} options - 参数。
+				 * @param {Object} sources - 天空盒来源（必选）。
+				 * @param {boolean} options.height - 离地高度（只有在近地天空盒有效，默认值：225705）。
+				 */
+				SkyBoxOnGround(options) {
+					const _this = this;
+					const height = !options.height ? "5705" : options.height;
+					const defaultSkyBox = _this.viewer.scene.skyBox;
+					const currentSkyBox = new SkyBoxOnGround({
+						sources: options.sources,
+					});
+
+					// 注册一个在事件引发时执行的回调函数。
+					_this.viewer.scene.postRender.addEventListener(() => {
+						const e = _this.viewer.camera.position;
+						// 判断当前视高。
+						if (Cesium.Cartographic.fromCartesian(e).height < height) {
+							// 显示自定义的天空盒。
+							_this.viewer.scene.skyBox = currentSkyBox;
+							_this.viewer.scene.skyAtmosphere.show = false;
+						} else {
+							// 默认天空盒。
+							_this.viewer.scene.skyBox = defaultSkyBox;
+							_this.viewer.scene.skyAtmosphere.show = true;
+						}
+					});
+				}
+			}
+
+			window.SkyBoxOnGround = SkyBoxOnGround;
+			window.SkyBox = SkyBox;
+		</script>
+
+		<script>
+			function createSkyBoxSources() {
+				return {
+					positiveX: "./skyboxImage/px.png",
+					negativeX: "./skyboxImage/nx.png",
+					positiveY: "./skyboxImage/pz.png",
+					negativeY: "./skyboxImage/nz.png",
+					positiveZ: "./skyboxImage/py.png",
+					negativeZ: "./skyboxImage/ny.png",
+				};
+			}
+
+			const heightLimit = 120000;
+			document.getElementById("heightLimit").textContent = `${heightLimit} m`;
+
+			const viewer = new Cesium.Viewer("cesiumContainer", {
+				baseLayer: false,
+				animation: false,
+				timeline: false,
+				fullscreenButton: false,
+				infoBox: false,
+				geocoder: false,
+				homeButton: false,
+				sceneModePicker: false,
+				baseLayerPicker: false,
+				navigationHelpButton: false,
+				selectionIndicator: false,
+				shouldAnimate: true,
+			});
+
+			viewer.imageryLayers.addImageryProvider(
+				new Cesium.UrlTemplateImageryProvider({
+					url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+					maximumLevel: 18,
+				}),
+			);
+
+			viewer.scene.globe.enableLighting = false;
+			viewer.scene.fog.enabled = true;
+			viewer.scene.fog.density = 0.00018;
+			viewer.scene.skyAtmosphere.show = true;
+			viewer.scene.debugShowFramesPerSecond = true;
+			viewer._cesiumWidget._creditContainer.style.display = "none";
+
+			const skyBox = new Cesium.SkyBox(viewer);
+			skyBox.SkyBoxOnGround({
+				height: heightLimit,
+				sources: createSkyBoxSources(),
+			});
+
+			const cameraHeightEl = document.getElementById("cameraHeight");
+			const skyboxStatusEl = document.getElementById("skyboxStatus");
+
+			viewer.scene.postRender.addEventListener(() => {
+				const height = Cesium.Cartographic.fromCartesian(
+					viewer.camera.position,
+				).height;
+				cameraHeightEl.textContent = `${height.toFixed(0)} m`;
+				skyboxStatusEl.textContent =
+					height < heightLimit ? "近地天空盒" : "默认天空盒";
+			});
+
+			function flyToNear() {
+				viewer.camera.flyTo({
+					destination: Cesium.Cartesian3.fromDegrees(116.3913, 39.9075, 5200),
+					orientation: {
+						heading: Cesium.Math.toRadians(18),
+						pitch: Cesium.Math.toRadians(-12),
+						roll: 0,
+					},
+					duration: 1.4,
+				});
+			}
+
+			function flyToHigh() {
+				viewer.camera.flyTo({
+					destination: Cesium.Cartesian3.fromDegrees(116.3913, 39.9075, 280000),
+					orientation: {
+						heading: Cesium.Math.toRadians(0),
+						pitch: Cesium.Math.toRadians(-80),
+						roll: 0,
+					},
+					duration: 1.4,
+				});
+			}
+
+			document.getElementById("nearBtn").addEventListener("click", flyToNear);
+			document.getElementById("highBtn").addEventListener("click", flyToHigh);
+
+			flyToNear();
+			window.viewer = viewer;
+		</script>
+	</body>
+</html>

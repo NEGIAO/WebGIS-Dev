@@ -103,25 +103,8 @@
         <span class="drag-overlay-hint">GeoJSON / KML / SHP / GLB / CZML</span>
     </div>
 
-    <!-- 坐标显示面板（漫游模式下显示人物三维坐标） -->
-    <div class="map-controls-group">
-        <div class="mouse-position-content">{{ activeCoordinateDisplay }}</div>
-        <div class="divider"></div>
-        <button
-            class="home-btn"
-            title="回到初始位置"
-            @click="flyToHome"
-        >
-            <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="currentColor"
-            >
-                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
-            </svg>
-        </button>
-    </div>
+    <!-- 坐标显示面板（固定右下角，只显示文字） -->
+    <div class="coordinate-display">{{ activeCoordinateDisplay }}</div>
 
 </template>
 
@@ -137,10 +120,17 @@ import CesiumToolPanel from './CesiumToolPanel.vue';
 import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from './FluidSimulation/FluidSimulationPanel.vue';
 import ShallowWaterOverlay from './ShallowWater/ShallowWaterOverlay.vue';
+
+// cesium-navigation-es6 导航控件样式
+import 'cesium-navigation-es6/dist/styles/cesium-navigation.css';
+// 导航控件高对比度主题覆盖
+import './composables/core/cesium-navigation-theme.css';
+
 import { configureSolarLighting } from './composables/scene/cesiumAtmosphere';
 import { loadCesiumRuntime } from './composables/core/cesiumRuntime';
 import { configureBeijingTimeSystem } from './composables/core/cesiumTimeSystem';
 import { useCesiumCreditHider } from './composables/scene/useCesiumCreditHider';
+import { useCesiumNavigation } from './composables/core/useCesiumNavigation';
 import { useCesiumInteractions } from './composables/interaction/useCesiumInteractions';
 import { useCesiumLayers } from './composables/layers/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/camera/useCesiumSceneActions';
@@ -222,6 +212,7 @@ const { coordinateDisplay, setupInteractions, cleanupInteractions } = useCesiumI
 });
 
 const { installCreditHider, cleanupCreditHider } = useCesiumCreditHider({ getViewer });
+const { initNavigation, cleanupNavigation } = useCesiumNavigation({ getViewer, getCesium });
 const {
     restoreCameraFromUrl,
     restoreBasemapFromUrl,
@@ -292,10 +283,19 @@ function handleNavTargetSelect(type) {
 }
 
 /**
+ * 相机姿态（方位角/俯仰角/翻滚角），由 scene.postRender 每帧更新
+ */
+const cameraAttitude = ref({ heading: 0, pitch: 0, roll: 0, height: 0 });
+let cleanupAttitudeListener = null;
+
+/**
  * 坐标显示：漫游模式下显示人物三维坐标+实时速度，否则显示鼠标位置
- * 漫游时格式: "经度: xxx, 纬度: xxx, 海拔: xxx米 | 速度: xxx m/s (漫游)"
+ * 末尾附加相机姿态信息
  */
 const activeCoordinateDisplay = computed(() => {
+    const att = cameraAttitude.value;
+    const attStr = `方位: ${att.heading.toFixed(1)}° 俯仰: ${att.pitch.toFixed(1)}° 翻滚: ${att.roll.toFixed(1)}° | 相机海拔: ${att.height.toFixed(1)}米`;
+
     const pos = playerController.playerPosition.value;
     if (pos) {
         const lng = pos.lng.toFixed(6);
@@ -303,9 +303,12 @@ const activeCoordinateDisplay = computed(() => {
         const height = pos.height.toFixed(2);
         const speed = playerController.playerSpeed.value;
         const speedStr = speed > 0.1 ? ` | 速度: ${speed.toFixed(1)} m/s` : '';
-        return `经度: ${lng}, 纬度: ${lat}, 海拔: ${height}米${speedStr} (漫游)`;
+        return `经度: ${lng}, 纬度: ${lat}, 海拔: ${height}米${speedStr} | ${attStr} (漫游)`;
     }
-    return coordinateDisplay.value;
+    const coord = coordinateDisplay.value;
+    // 鼠标不在视图内时，coordinateDisplay 为 --，此时只显示相机姿态
+    if (coord.includes('--')) return attStr;
+    return `${coord} | ${attStr}`;
 });
 
 // 漫游模式启动时：关闭高级控制台 + 显示键位提示面板
@@ -533,6 +536,7 @@ function resetCesiumViewerForRetry() {
     cleanupTools();
     cleanupLayers();
     cleanupCreditHider();
+    cleanupNavigation();
     // 清理人物漫游控制器
     try { playerController.stopPlayer(); } catch { /* ignore */ }
     try { playerController.clearNavTarget?.(); } catch { /* ignore */ }
@@ -612,6 +616,21 @@ function initViewer() {
     } catch (err) {
         console.warn('[Cesium] Cloud integration skipped:', err);
     }
+
+    // 相机姿态/高度每帧更新
+    cleanupAttitudeListener = viewer.scene.postRender.addEventListener(() => {
+        const cam = viewer.camera;
+        const carto = cam.positionCartographic;
+        cameraAttitude.value = {
+            heading: Cesium.Math.toDegrees(cam.heading),
+            pitch: Cesium.Math.toDegrees(cam.pitch),
+            roll: Cesium.Math.toDegrees(cam.roll),
+            height: carto.height,
+        };
+    });
+
+    // 导航控件（罗盘 / 缩放 / 比例尺）— 动态加载，不阻塞主流程
+    initNavigation();
 }
 
 onMounted(() => {
@@ -791,7 +810,14 @@ onUnmounted(() => {
         cloudCleanup = null;
     }
 
+    // 清理相机姿态更新
+    if (cleanupAttitudeListener) {
+        cleanupAttitudeListener();
+        cleanupAttitudeListener = null;
+    }
+
     cleanupCreditHider();
+    cleanupNavigation();
     dataImport.clearAllDataSources();
     if (viewer) {
         try {
@@ -904,79 +930,19 @@ watch(
     z-index: 1;
 }
 
-.map-controls-group {
+.coordinate-display {
     position: absolute;
     bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: linear-gradient(to right, rgba(10, 121, 51, 0.9), rgba(8, 96, 41, 0.9));
-    color: white;
-    padding: 5px 10px;
-    border-radius: 6px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    right: 24px;
     z-index: 1000;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    color: #00f0ff;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
+    pointer-events: none;
+    user-select: none;
     white-space: nowrap;
-}
-
-/* 平板适配 */
-@media (max-width: 1024px) {
-    .map-controls-group {
-        width: 85%;
-    }
-}
-
-@media (max-width: 768px) {
-    .map-controls-group {
-        width: 90%;
-        justify-content: center;
-        bottom: 58px;
-    }
-
-    .mouse-position-content {
-        font-size: 12px;
-        min-width: auto;
-    }
-
-}
-
-.mouse-position-content {
-    font-size: 14px;
-    font-weight: bold;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.mouse-position-content {
-    min-width: 120px;
-}
-
-.divider {
-    width: 1px;
-    height: 20px;
-    background-color: rgba(255, 255, 255, 0.4);
-}
-
-.home-btn {
-    background: transparent;
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-}
-
-.home-btn:hover {
-    background-color: rgba(255, 255, 255, 0.2);
 }
 
 :global(.cesium-viewer-toolbar),

@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>北斗网格生成</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+			.lil-gui {
+				top: 10px;
+				left: 10px;
+				z-index: 999;
+			}
+			.status-panel {
+				position: absolute;
+				left: 10px;
+				bottom: 10px;
+				z-index: 998;
+				min-width: 280px;
+				padding: 10px 12px;
+				border-radius: 6px;
+				color: #e8f1ff;
+				background: rgba(12, 18, 28, 0.78);
+				font-size: 13px;
+				line-height: 1.7;
+				pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+			<div class="status-panel">{{ statusText }}</div>
+		</div>
+
+		<script>
+			/* global Cesium */
+			// ========== BeidouGrid 北斗网格类 ==========
+			class BeidouGrid {
+				constructor(viewer, options) {
+					this._viewer = viewer;
+					this._options = options || {};
+					this._level = this._options.level || 3;
+					this._showCode = this._options.showCode || false;
+					this._showOutline = this._options.showOutline || false;
+					this._showFaces = this._options.showFaces || false;
+
+					this.GRID_LEVELS = {
+						LEVEL_1: { lon: 6, lat: 4 },
+						LEVEL_2: { lon: 30 / 60, lat: 30 / 60 },
+						LEVEL_3: { lon: 15 / 60, lat: 10 / 60 },
+						LEVEL_4: { lon: 1 / 60, lat: 1 / 60 },
+						LEVEL_5: { lon: 4 / 3600, lat: 4 / 3600 },
+						LEVEL_6: { lon: 2 / 3600, lat: 2 / 3600 },
+						LEVEL_7: { lon: 1 / (3600 * 4), lat: 1 / (3600 * 4) },
+						LEVEL_8: { lon: 1 / (3600 * 32), lat: 1 / (3600 * 32) },
+						LEVEL_9: { lon: 1 / (3600 * 256), lat: 1 / (3600 * 256) },
+						LEVEL_10: { lon: 1 / (3600 * 2048), lat: 1 / (3600 * 2048) },
+					};
+
+					const GL = this.GRID_LEVELS;
+					this.GRID_ENCODING = {
+						LEVEL_1: {
+							format: (lon, lat) => {
+								const hemisphere = lat >= 0 ? "N" : "S";
+								const lngNormalized = lon + 180;
+								const lngGridNumber = Math.floor(lngNormalized / 6) + 1;
+								const lngGrid = lngGridNumber.toString().padStart(2, "0");
+								const latAbs = Math.abs(lat);
+								const latGridNumber = Math.floor(latAbs / 4);
+								if (latGridNumber >= 22) return hemisphere + lngGrid + "V";
+								const latGridChar = String.fromCharCode(65 + latGridNumber);
+								return `${hemisphere}${lngGrid}${latGridChar}`;
+							},
+						},
+						LEVEL_2: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_1.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_1.lat);
+								const lonCode = "0123456789AB";
+								const latCode = "01234567";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_2.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_2.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+						LEVEL_3: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_2.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_2.lat);
+								const codeIndex = {
+									"00": "0",
+									10: "1",
+									"01": "2",
+									11: "3",
+									"02": "4",
+									12: "5",
+								};
+								const lonIndex = Math.floor(dLon / GL.LEVEL_3.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_3.lat);
+								return `${codeIndex[`${lonIndex}${latIndex}`]}`;
+							},
+						},
+						LEVEL_4: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_3.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_3.lat);
+								const lonCode = "0123456789ABCDE";
+								const latCode = "0123456789";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_4.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_4.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+						LEVEL_5: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_4.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_4.lat);
+								const lonCode = "0123456789ABCDE";
+								const latCode = "0123456789ABCDE";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_5.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_5.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+						LEVEL_6: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_5.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_5.lat);
+								const codeIndex = { "00": "0", 10: "1", "01": "2", 11: "3" };
+								const lonIndex = Math.floor(dLon / GL.LEVEL_6.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_6.lat);
+								return `${codeIndex[`${lonIndex}${latIndex}`]}`;
+							},
+						},
+						LEVEL_7: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_6.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_6.lat);
+								const lonCode = "01234567";
+								const latCode = "01234567";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_7.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_7.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+						LEVEL_8: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_7.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_7.lat);
+								const lonCode = "01234567";
+								const latCode = "01234567";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_8.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_8.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+						LEVEL_9: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_8.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_8.lat);
+								const lonCode = "01234567";
+								const latCode = "01234567";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_9.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_9.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+						LEVEL_10: {
+							format: (lon, lat) => {
+								const dLon = Math.abs(lon % GL.LEVEL_9.lon);
+								const dLat = Math.abs(lat % GL.LEVEL_9.lat);
+								const lonCode = "01234567";
+								const latCode = "01234567";
+								const lonIndex = Math.floor(dLon / GL.LEVEL_10.lon);
+								const latIndex = Math.floor(dLat / GL.LEVEL_10.lat);
+								return `${lonCode.charAt(lonIndex)}${latCode.charAt(latIndex)}`;
+							},
+						},
+					};
+
+					this.currentGrids = {};
+					this.labelCollection = this._viewer.scene.primitives.add(
+						new Cesium.LabelCollection(),
+					);
+				}
+
+				get showCode() {
+					return this._showCode;
+				}
+				set showCode(value) {
+					this._showCode = value;
+				}
+				get showOutline() {
+					return this._showOutline;
+				}
+				set showOutline(value) {
+					this._showOutline = value;
+				}
+				get showFaces() {
+					return this._showFaces;
+				}
+				set showFaces(value) {
+					this._showFaces = value;
+				}
+
+				getTrueRectangle(gridLevel, rectangle) {
+					const { north, south, east, west } = rectangle;
+					const { lon: lonInterval, lat: latInterval } = gridLevel;
+					const westGridIndex = Math.floor(west / lonInterval);
+					const eastGridIndex = Math.ceil(east / lonInterval);
+					const southGridIndex = Math.floor(south / latInterval);
+					const northGridIndex = Math.ceil(north / latInterval);
+					const actualWest =
+						westGridIndex * lonInterval < -180
+							? -180
+							: westGridIndex * lonInterval;
+					const actualEast =
+						eastGridIndex * lonInterval > 180
+							? 180
+							: eastGridIndex * lonInterval;
+					const actualSouth =
+						southGridIndex * latInterval < -90
+							? -90
+							: southGridIndex * latInterval;
+					const actualNorth =
+						northGridIndex * latInterval > 90
+							? 90
+							: northGridIndex * latInterval;
+					return {
+						west: actualWest,
+						south: actualSouth,
+						east: actualEast,
+						north: actualNorth,
+						westGridIndex,
+						eastGridIndex,
+						southGridIndex,
+						northGridIndex,
+					};
+				}
+
+				createGridLines(level, rectangle, heightCount) {
+					const gridLevel = this.GRID_LEVELS[`LEVEL_${level}`];
+					if (!gridLevel) {
+						console.error("Invalid grid level");
+						return;
+					}
+					const height = gridLevel.lat * 110574;
+					const {
+						westGridIndex,
+						eastGridIndex,
+						southGridIndex,
+						northGridIndex,
+						west,
+						south,
+						east,
+						north,
+					} = this.getTrueRectangle(gridLevel, rectangle);
+
+					const lonCells = eastGridIndex - westGridIndex;
+					const latCells = northGridIndex - southGridIndex;
+
+					const gridLines = [];
+					this.currentGrids = {};
+
+					if (this._showOutline) {
+						for (let i = 0; i <= lonCells; i++) {
+							for (let h = 0; h <= heightCount; h++) {
+								gridLines.push([
+									west + i * gridLevel.lon,
+									south,
+									h * height,
+									west + i * gridLevel.lon,
+									north,
+									h * height,
+								]);
+							}
+						}
+						for (let j = 0; j <= latCells; j++) {
+							for (let h = 0; h <= heightCount; h++) {
+								gridLines.push([
+									west,
+									south + j * gridLevel.lat,
+									h * height,
+									east,
+									south + j * gridLevel.lat,
+									h * height,
+								]);
+							}
+						}
+					}
+
+					const gridPolygons = [];
+					for (let i = 0; i <= lonCells; i++) {
+						for (let j = 0; j <= latCells; j++) {
+							if (this._showOutline) {
+								gridLines.push([
+									west + i * gridLevel.lon,
+									south + j * gridLevel.lat,
+									0,
+									west + i * gridLevel.lon,
+									south + j * gridLevel.lat,
+									height * heightCount,
+								]);
+							}
+							for (let k = 0; k < heightCount; k++) {
+								if (i === lonCells || j === latCells) continue;
+								if (this._showCode) {
+									const centerLon = west + (i + 0.5) * gridLevel.lon;
+									const centerLat = south + (j + 0.5) * gridLevel.lat;
+									const gridCode = this.getFullGridCode(
+										centerLon,
+										centerLat,
+										level,
+									);
+									this.currentGrids[gridCode] = {
+										west: west + i * gridLevel.lon,
+										south: south + j * gridLevel.lat,
+										east: west + (i + 1) * gridLevel.lon,
+										north: south + (j + 1) * gridLevel.lat,
+										height: k * height,
+									};
+									this.addGridCode(
+										centerLon,
+										centerLat,
+										k * height + height / 2,
+										gridCode,
+									);
+								}
+								gridPolygons.push([
+									west + i * gridLevel.lon,
+									south + j * gridLevel.lat,
+									k * height,
+									west + (i + 1) * gridLevel.lon,
+									south + j * gridLevel.lat,
+									k * height,
+									west + (i + 1) * gridLevel.lon,
+									south + (j + 1) * gridLevel.lat,
+									k * height,
+									west + i * gridLevel.lon,
+									south + (j + 1) * gridLevel.lat,
+									k * height,
+								]);
+							}
+						}
+					}
+
+					return {
+						gridLines,
+						gridPolygons,
+						gridCount: lonCells * latCells * heightCount,
+						extrudedHeight: height,
+					};
+				}
+
+				createPolylinePrimitive(level, rectangle, heightCount = 1) {
+					const { gridLines, gridPolygons, gridCount, extrudedHeight } =
+						this.createGridLines(level, rectangle, heightCount);
+
+					const instances = [];
+					gridLines.forEach((line) => {
+						const positions = Cesium.Cartesian3.fromDegreesArrayHeights(line);
+						instances.push(
+							new Cesium.GeometryInstance({
+								geometry: new Cesium.PolylineGeometry({
+									positions,
+									width: 1.0,
+									arcType: Cesium.ArcType.RHUMB,
+									granularity: Cesium.Math.toRadians(
+										this.GRID_LEVELS["LEVEL_" + level].lon,
+									),
+								}),
+							}),
+						);
+					});
+
+					const gridPrimitive = new Cesium.Primitive({
+						geometryInstances: instances,
+						appearance: new Cesium.PolylineMaterialAppearance({
+							material: Cesium.Material.fromType("Color", {
+								color: Cesium.Color.WHITE.withAlpha(0.3),
+							}),
+							translucent: true,
+						}),
+					});
+
+					let polygonPrimitive = null;
+					if (this._showFaces && gridPolygons.length > 0) {
+						const polygonInstances = [];
+						gridPolygons.forEach((polygon) => {
+							const positions =
+								Cesium.Cartesian3.fromDegreesArrayHeights(polygon);
+							polygonInstances.push(
+								new Cesium.GeometryInstance({
+									geometry: new Cesium.PolygonGeometry({
+										polygonHierarchy: new Cesium.PolygonHierarchy(positions),
+										arcType: Cesium.ArcType.RHUMB,
+										height: polygon[2],
+										extrudedHeight: polygon[2] + extrudedHeight,
+									}),
+								}),
+							);
+						});
+
+						polygonPrimitive = new Cesium.Primitive({
+							geometryInstances: polygonInstances,
+							appearance: new Cesium.MaterialAppearance({
+								material: Cesium.Material.fromType("Color", {
+									color: Cesium.Color.GREEN.withAlpha(0.2),
+								}),
+								translucent: true,
+							}),
+						});
+					}
+
+					return { gridPrimitive, gridCount, polygonPrimitive };
+				}
+
+				getFullGridCode(lon, lat, level) {
+					let code = "";
+					for (let i = 1; i <= level; i++) {
+						code += this.GRID_ENCODING[`LEVEL_${i}`].format(lon, lat);
+					}
+					return code;
+				}
+
+				addGridCode(lon, lat, height, text) {
+					this.labelCollection.add({
+						position: Cesium.Cartesian3.fromDegrees(lon, lat, height),
+						text: text,
+						font: "20px sans-serif",
+						fillColor: Cesium.Color.WHITE,
+						pixelOffset: new Cesium.Cartesian2(-text.length * 5, 0),
+					});
+				}
+
+				clear() {
+					this.labelCollection.removeAll();
+				}
+			}
+			window.BeidouGrid = BeidouGrid;
+		</script>
+
+		<script type="module">
+			/* global Cesium, Vue, BeidouGrid */
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+			const { createApp } = Vue;
+
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						imageryLayer: null,
+						beidouGrid: null,
+						gridPrimitive: [],
+						drawHandler: null,
+						firstCartesian: null,
+						previewEntity: null,
+						statusText:
+							"就绪。可手动输入坐标或在地图上绘制矩形区域来生成北斗网格。",
+						west: 114,
+						east: 114.5,
+						south: 30.3,
+						north: 31,
+						level: 4,
+						heightCount: 1,
+						gridCount: 0,
+						showCode: false,
+						showOutline: true,
+						showFaces: false,
+					};
+				},
+				async mounted() {
+					this.initMap();
+					this.beidouGrid = new BeidouGrid(this.viewer, {
+						showCode: this.showCode,
+						showOutline: this.showOutline,
+						showFaces: this.showFaces,
+					});
+					this.addlilgui();
+				},
+				beforeUnmount() {
+					this.cancelDraw();
+					if (this.myLilGui) {
+						this.myLilGui.destroy();
+						this.myLilGui = null;
+					}
+				},
+				methods: {
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+
+						window.viewer = viewer;
+						this.viewer = viewer;
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.enableLighting = false;
+						viewer.scene.globe.showGroundAtmosphere = false;
+						viewer.scene.fog.enabled = false;
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+						viewer.scene.postProcessStages.fxaa.enabled = true;
+
+						const imageryLayer = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								minimumLevel: 1,
+								maximumLevel: 18,
+							}),
+						);
+
+						this.imageryLayer = imageryLayer;
+						this.resetCamera();
+					},
+
+					resetCamera() {
+						if (!this.viewer) return;
+						this.viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(
+								110.59,
+								32.47,
+								20000000,
+							),
+							orientation: {
+								heading: Cesium.Math.toRadians(0.0),
+								pitch: Cesium.Math.toRadians(-90.0),
+								roll: Cesium.Math.toRadians(0),
+							},
+						});
+					},
+
+					addlilgui() {
+						const myLilGui = new GUI({ title: "北斗网格" });
+						this.myLilGui = myLilGui;
+
+						// eslint-disable-next-line prefer-const
+						let westCtrl, eastCtrl, southCtrl, northCtrl, levelCtrl; // 控制器会在闭包回调中延迟赋值并复用。
+
+						const params = {
+							west: this.west,
+							east: this.east,
+							south: this.south,
+							north: this.north,
+							level: this.level,
+							heightCount: this.heightCount,
+							gridCount: this.gridCount,
+							showCode: this.showCode,
+							showOutline: this.showOutline,
+							showFaces: this.showFaces,
+
+							drawRange: () => this.startRectangleDraw(),
+							chinaExtent: () => {
+								this.west = 70.0;
+								this.south = 12.0;
+								this.east = 134.0;
+								this.north = 53.0;
+								this.level = 1;
+								westCtrl.setValue(this.west.toFixed(4));
+								eastCtrl.setValue(this.east.toFixed(4));
+								southCtrl.setValue(this.south.toFixed(4));
+								northCtrl.setValue(this.north.toFixed(4));
+								levelCtrl.setValue(this.level);
+								this.reDraw();
+								this.resetCamera();
+							},
+							reDraw: () => this.reDraw(),
+							clear: () => this.clearPrimitiveGrid(),
+						};
+
+						myLilGui.add(params, "drawRange").name("绘制区域");
+						myLilGui.add(params, "chinaExtent").name("全国范围");
+
+						westCtrl = myLilGui
+							.add(params, "west", 0, 180, 1)
+							.name("西")
+							.onChange(() => {
+								this.west = params.west;
+							});
+						eastCtrl = myLilGui
+							.add(params, "east", 0, 180, 1)
+							.name("东")
+							.onChange(() => {
+								this.east = params.east;
+							});
+						southCtrl = myLilGui
+							.add(params, "south", -90, 90, 1)
+							.name("南")
+							.onChange(() => {
+								this.south = params.south;
+							});
+						northCtrl = myLilGui
+							.add(params, "north", -90, 90, 1)
+							.name("北")
+							.onChange(() => {
+								this.north = params.north;
+							});
+
+						levelCtrl = myLilGui
+							.add(params, "level", {
+								1: 1,
+								2: 2,
+								3: 3,
+								4: 4,
+								5: 5,
+								6: 6,
+								7: 7,
+								8: 8,
+								9: 9,
+								10: 10,
+							})
+							.name("网格层级")
+							.onChange(() => {
+								this.level = params.level;
+							});
+
+						myLilGui
+							.add(params, "heightCount", {
+								1: 1,
+								2: 2,
+								3: 3,
+								4: 4,
+								5: 5,
+								6: 6,
+								7: 7,
+								8: 8,
+								9: 9,
+								10: 10,
+							})
+							.name("网格层数")
+							.onChange(() => {
+								this.heightCount = params.heightCount;
+							});
+
+						myLilGui
+							.add(params, "showOutline")
+							.name("显示边框")
+							.onChange(() => {
+								this.showOutline = params.showOutline;
+								this.beidouGrid.showOutline = this.showOutline;
+								this.reDraw();
+							});
+						myLilGui
+							.add(params, "showFaces")
+							.name("显示面")
+							.onChange(() => {
+								this.showFaces = params.showFaces;
+								this.beidouGrid.showFaces = this.showFaces;
+								this.reDraw();
+							});
+						myLilGui
+							.add(params, "showCode")
+							.name("显示编码")
+							.onChange(() => {
+								this.showCode = params.showCode;
+								this.beidouGrid.showCode = this.showCode;
+								this.reDraw();
+							});
+
+						const layerFolder = myLilGui.addFolder("图层控制");
+						layerFolder.add(this.imageryLayer, "show").name("影像图层");
+						layerFolder
+							.add(this.imageryLayer, "alpha", 0, 1, 0.01)
+							.name("影像透明度");
+
+						myLilGui.add(params, "reDraw").name("绘制网格");
+						myLilGui.add(params, "clear").name("清除网格");
+							this._gridCountCtrl = myLilGui
+								.add(params, "gridCount")
+								.name("网格数量")
+								.disable();
+					},
+
+					reDraw() {
+						this.clearPrimitiveGrid();
+						this.beidouGrid.showCode = this.showCode;
+						this.beidouGrid.showOutline = this.showOutline;
+						this.beidouGrid.showFaces = this.showFaces;
+
+						const { gridPrimitive, gridCount, polygonPrimitive } =
+							this.beidouGrid.createPolylinePrimitive(
+								this.level,
+								{
+									west: this.west,
+									south: this.south,
+									east: this.east,
+									north: this.north,
+								},
+								this.heightCount,
+							);
+
+						this.gridPrimitive = polygonPrimitive
+							? [gridPrimitive, polygonPrimitive]
+							: [gridPrimitive];
+						this.viewer.scene.primitives.add(gridPrimitive);
+						if (polygonPrimitive) {
+							this.viewer.scene.primitives.add(polygonPrimitive);
+						}
+
+						if (this._gridCountCtrl) {
+							this._gridCountCtrl.setValue(gridCount);
+						}
+						this.gridCount = gridCount;
+						this.statusText = `网格生成完成：共 ${gridCount} 个网格`;
+					},
+
+					clearPrimitiveGrid() {
+						if (this.gridPrimitive && this.gridPrimitive.length > 0) {
+							this.gridPrimitive.forEach((primitive) => {
+								if (primitive) this.viewer.scene.primitives.remove(primitive);
+							});
+						}
+						this.beidouGrid.clear();
+						this.gridPrimitive = [];
+					},
+
+					// ---- 矩形绘制 ----
+					startRectangleDraw() {
+						this.cancelDraw();
+						this.removePreview();
+						this.firstCartesian = null;
+						this.statusText = "请左键点击第一个角点。";
+
+						const handler = new Cesium.ScreenSpaceEventHandler(
+							this.viewer.scene.canvas,
+						);
+						this.drawHandler = handler;
+
+						handler.setInputAction((click) => {
+							const cartesian = this.pickGlobe(click.position);
+							if (!cartesian) return;
+
+							if (!this.firstCartesian) {
+								this.firstCartesian = cartesian;
+								this.statusText = "请移动鼠标并点击第二个对角点。";
+
+								handler.setInputAction((movement) => {
+									const end = this.pickGlobe(movement.endPosition);
+									if (!end) return;
+									this.updatePreview(
+										this.rectangleFromTwoCartesians(this.firstCartesian, end),
+									);
+								}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+							} else {
+								const rect = this.rectangleFromTwoCartesians(
+									this.firstCartesian,
+									cartesian,
+								);
+								this.cancelDraw();
+								this.removePreview();
+
+								this.west = Cesium.Math.toDegrees(rect.west);
+								this.south = Cesium.Math.toDegrees(rect.south);
+								this.east = Cesium.Math.toDegrees(rect.east);
+								this.north = Cesium.Math.toDegrees(rect.north);
+
+								this.statusText =
+									`范围已确定：西${this.west.toFixed(2)}° 东${this.east.toFixed(2)}° ` +
+									`南${this.south.toFixed(2)}° 北${this.north.toFixed(2)}°`;
+								this.reDraw();
+							}
+						}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+					},
+
+					cancelDraw() {
+						if (this.drawHandler) {
+							this.drawHandler.destroy();
+							this.drawHandler = null;
+						}
+						this.firstCartesian = null;
+					},
+
+					pickGlobe(position) {
+						const ray = this.viewer.camera.getPickRay(position);
+						return ray
+							? this.viewer.scene.globe.pick(ray, this.viewer.scene)
+							: null;
+					},
+
+					rectangleFromTwoCartesians(start, end) {
+						const c1 = Cesium.Cartographic.fromCartesian(start);
+						const c2 = Cesium.Cartographic.fromCartesian(end);
+						return new Cesium.Rectangle(
+							Math.min(c1.longitude, c2.longitude),
+							Math.min(c1.latitude, c2.latitude),
+							Math.max(c1.longitude, c2.longitude),
+							Math.max(c1.latitude, c2.latitude),
+						);
+					},
+
+					updatePreview(rectangle) {
+						if (!this.previewEntity) {
+							this.previewEntity = this.viewer.entities.add({
+								rectangle: {
+									coordinates: new Cesium.CallbackProperty(() => {
+										return this._currentPreview || rectangle;
+									}, false),
+									material: Cesium.Color.CYAN.withAlpha(0.18),
+									outline: true,
+									outlineColor: Cesium.Color.CYAN,
+								},
+							});
+						}
+						this._currentPreview = Cesium.Rectangle.clone(rectangle);
+						this.previewEntity.show = true;
+					},
+
+					removePreview() {
+						if (this.previewEntity) {
+							this.viewer.entities.remove(this.previewEntity);
+							this.previewEntity = null;
+						}
+						this._currentPreview = null;
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

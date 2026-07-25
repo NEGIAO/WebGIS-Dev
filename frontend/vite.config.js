@@ -79,7 +79,7 @@ export default defineConfig(({ command, mode }) => {
 
     // 排除 Cesium npm 包的预构建，避免与 CDN Cesium 产生双实例
     optimizeDeps: {
-      exclude: ['cesium']
+      exclude: ['cesium', 'cesium-navigation-es6']
     },
 
     // 生产环境代码压缩配置

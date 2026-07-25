@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Cesium - ESRI World Imagery</title>
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Widgets/widgets.css"
+		/>
+		<link
+			rel="stylesheet"
+			href="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.css"
+		/>
+		<style>
+			html,
+			body,
+			#cesiumContainer {
+				margin: 0;
+				padding: 0;
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				font-family:
+					-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+			}
+			.cesium-widget-credits {
+				display: none !important;
+			} /* lil-gui defaults to top:0;right:0 — move to left side */
+			.lil-gui.root {
+				top: 10px;
+				left: 10px;
+				right: auto;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="cesiumContainer"></div>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/Cesium.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.js"></script>
+		<script>
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.119.0/Build/Cesium/";
+			const atmosphereParams = {
+				lightIntensity: 20.0,
+				hue: 0.0,
+				saturation: 1.0,
+				brightness: 0.0,
+				rayleighScatteringRed: 5.5,
+				rayleighScatteringGreen: 5.5,
+				rayleighScatteringBlue: 5.5,
+				mieScattering: 0.0,
+				mieScatteringHeight: 0.0,
+				mieScatteringAnisotropy: 0.0,
+			};
+			const defaults = { ...atmosphereParams };
+			let viewer = null;
+			let styleGui = null;
+			function applyAtmosphereStyle() {
+				if (!viewer) return;
+				const globe = viewer.scene.globe;
+				globe.showGroundAtmosphere = true;
+				globe.atmosphereLightIntensity = atmosphereParams.lightIntensity;
+				globe.atmosphereHueShift = atmosphereParams.hue;
+				globe.atmosphereSaturationShift = atmosphereParams.saturation;
+				globe.atmosphereBrightnessShift = atmosphereParams.brightness;
+				globe.atmosphereRayleighCoefficient = new Cesium.Cartesian3(
+					atmosphereParams.rayleighScatteringRed * 1e-6,
+					atmosphereParams.rayleighScatteringGreen * 1e-6,
+					atmosphereParams.rayleighScatteringBlue * 1e-6,
+				);
+				const mie = atmosphereParams.mieScattering * 1e-6;
+				globe.atmosphereMieCoefficient = new Cesium.Cartesian3(mie, mie, mie);
+				globe.atmosphereMieScaleHeight = atmosphereParams.mieScatteringHeight;
+				globe.atmosphereMieAnisotropy =
+					atmosphereParams.mieScatteringAnisotropy;
+				viewer.scene.requestRender();
+			}
+			function resetAtmosphere() {
+				Object.assign(atmosphereParams, defaults);
+				applyAtmosphereStyle();
+				styleGui.controllersRecursive().forEach(function (c) {
+					c.updateDisplay();
+				});
+			}
+			function addStyleGui() {
+				styleGui = new lil.GUI({ title: "大气参数" });
+				styleGui
+					.add(atmosphereParams, "lightIntensity", 0.1, 100.0, 0.1)
+					.name("光照强度")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "hue", 0.0, 10.0, 0.1)
+					.name("色相")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "saturation", 0.0, 10.0, 0.1)
+					.name("饱和度")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "brightness", 0.0, 5.0, 0.1)
+					.name("亮度")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "rayleighScatteringRed", 0.1, 100.0, 0.1)
+					.name("瑞利散射系数(红)")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "rayleighScatteringGreen", 0.1, 100.0, 0.1)
+					.name("瑞利散射系数(绿)")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "rayleighScatteringBlue", 0.1, 100.0, 0.1)
+					.name("瑞利散射系数(蓝)")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "mieScattering", 0.0, 100.0, 0.1)
+					.name("米散射系数")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "mieScatteringHeight", 0.0, 100.0, 0.1)
+					.name("米氏散射高度")
+					.onChange(applyAtmosphereStyle);
+				styleGui
+					.add(atmosphereParams, "mieScatteringAnisotropy", 0.0, 100.0, 0.1)
+					.name("米氏散射各向异性")
+					.onChange(applyAtmosphereStyle);
+				styleGui.add({ reset: resetAtmosphere }, "reset").name("重置");
+			}
+			document.addEventListener("DOMContentLoaded", function () {
+				viewer = new Cesium.Viewer("cesiumContainer", {
+					animation: false,
+					timeline: false,
+					geocoder: false,
+					homeButton: false,
+					sceneModePicker: false,
+					navigationHelpButton: false,
+					infoBox: false,
+					selectionIndicator: false,
+					baseLayerPicker: false,
+					fullscreenButton: false,
+					scene3DOnly: false,
+					shouldAnimate: false,
+				});
+				viewer.imageryLayers.removeAll(false);
+				var esriProvider = new Cesium.UrlTemplateImageryProvider({
+					url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+				});
+				viewer.imageryLayers.addImageryProvider(esriProvider, 0);
+				addStyleGui();
+				applyAtmosphereStyle();
+				viewer.camera.flyTo({
+					destination: Cesium.Cartesian3.fromDegrees(104.0, 35.0, 8000000),
+					duration: 0,
+				});
+			});
+		</script>
+	</body>
+</html>

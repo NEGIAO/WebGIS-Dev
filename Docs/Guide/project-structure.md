@@ -23,10 +23,11 @@ WebGIS_Dev/
 ├── backend/                           # 后端工程（FastAPI + Docker，部署于 HF Spaces）
 │   └── api/                           # 详细文件树见 backend-structure.md
 │
-├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档）
+├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档 + Demo 演示）
 │   ├── LLM_record/                    # 维护日志（按日期归档）
 │   ├── Architecture/                  # 架构设计文档（八大功能架构说明 + 洪水模拟）
 │   ├── Guide/                         # 指南文档（本目录）
+│   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Example_prompt.md
 │   ├── Force_command.md
 │   └── TODO/
@@ -51,6 +52,22 @@ Docs/
 │   └── 26-07/                         # 2026-07 日志（26-07-21 Agent 系统提示词平台简介集成等）
 │
 ├── Architecture/                      # 架构设计文档（八大功能架构说明 + 洪水模拟）
+│
+├── Demo/                              # 前端静态 Demo 演示页面
+│   ├── 2dWindField.html               # 2D 风场可视化演示
+│   ├── 3dHeatMap.html                 # 3D 热力图演示
+│   ├── aggragatePoint.html            # 聚合点图层演示
+│   ├── amapRectify.html               # 高德底图纠偏演示
+│   ├── atmosphere.html                # 大气渲染效果演示
+│   ├── beidou.html                    # 北斗相关定位/可视化演示
+│   ├── buildingShade.html             # 建筑阴影分析演示
+│   ├── customDashArrow.html           # 自定义虚线箭头样式演示
+│   ├── dynamicLable.html              # 动态标签渲染演示
+│   ├── immensePointLoader.html        # 海量点加载演示
+│   ├── mapTheme.html                  # 地图主题切换演示
+│   ├── nearGroundBox.html             # 近地面盒体效果演示
+│   ├── odFlyLine.html                 # OD 飞线效果演示
+│   └── visibilityAnalysis.html        # 通视/可视域分析演示
 │
 ├── Guide/                             # 指南文档（由根 README 拆分，原子化维护）
 │   ├── project-structure.md           # 本文件：根级目录总览 + Docs 树

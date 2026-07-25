@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>文字贴墙+贴地 — Canvas Wall</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style type="text/css">
+html, body, #app, #cesiumContainer {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.lil-gui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 999;
+}
+
+#navigationDiv {
+  position: absolute;
+  top: 50px;
+  right: 0;
+}
+
+#infoPanel {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 13px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 6px 12px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+			<div id="navigationDiv"></div>
+			<div id="infoPanel">贴墙+贴地 · Canvas Wall</div>
+		</div>
+
+		<script type="module">
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/";
+
+			const { createApp } = Vue;
+			import * as Cesium from "https://cdn.jsdelivr.net/npm/cesium@1.140.0/+esm";
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+			// =========================================================================
+			// drawCanvasImage — 将文字绘制到 canvas（async: 确保背景图先加载）
+			// =========================================================================
+			async function drawCanvasImage(text, options = {}) {
+				const fontSize = options.fontSize || 100;
+				const fontColor = options.fontColor || "rgba(255,255,255,1)";
+				const body = document.body;
+				const width = options.width || body.clientWidth;
+				const height = options.height || body.clientHeight;
+
+				const canvas = document.createElement("canvas");
+				canvas.width = width;
+				canvas.height = height;
+				const ctx = canvas.getContext("2d");
+
+				if (options.fillColor) {
+					ctx.fillStyle = options.fillColor;
+					ctx.fillRect(0, 0, width, height);
+				}
+
+				if (options.backgroundImage) {
+					const img = await loadImage(options.backgroundImage);
+					ctx.drawImage(img, 0, 0, width, height);
+				}
+
+				drawTextOnCanvas(ctx, text, {
+					width,
+					height,
+					fontSize,
+					fontColor,
+					align: options.align,
+				});
+				return canvas;
+			}
+
+			function loadImage(src) {
+				return new Promise((resolve, reject) => {
+					const img = new Image();
+					img.onload = () => resolve(img);
+					img.onerror = reject;
+					img.src = src;
+				});
+			}
+
+			function drawTextOnCanvas(
+				ctx,
+				text,
+				{ width, height, fontSize, fontColor, align },
+			) {
+				const textAry = text.split(";");
+				const marginTop = height / 4;
+				const marginLeft = width / 10;
+				const lineHeight = fontSize * 1.5;
+
+				const title = textAry.shift();
+				ctx.fillStyle = "rgba(255,255,255,1)";
+				ctx.font = `${fontSize * 1.5}px Arial`;
+				const titleX = width - ctx.measureText(title).width - marginLeft;
+				ctx.fillText(title, titleX, marginTop - fontSize * 0.565);
+
+				ctx.font = `600 ${fontSize}px PingFang SC-Regular, Microsoft YaHei, sans-serif`;
+				ctx.fillStyle = fontColor;
+				textAry.forEach((line, idx) => {
+					const x = calcTextX(ctx, line, width, marginLeft, align);
+					ctx.fillText(line, x, marginTop + lineHeight * (idx + 0.5));
+				});
+			}
+
+			function calcTextX(ctx, text, width, marginLeft, align) {
+				if (align === "center")
+					return (width - ctx.measureText(text).width) / 2;
+				if (align === "right")
+					return width - ctx.measureText(text).width - marginLeft;
+				return marginLeft;
+			}
+
+			// =========================================================================
+			// createPlaqueBackground — 生成牌匾式背景图（纯 canvas）
+			// =========================================================================
+			function createPlaqueBackground() {
+				const canvas = document.createElement("canvas");
+				canvas.width = 1920;
+				canvas.height = 1080;
+				const ctx = canvas.getContext("2d");
+
+				const grd = ctx.createLinearGradient(0, 0, 1920, 1080);
+				grd.addColorStop(0, "rgba(10, 20, 60, 0.85)");
+				grd.addColorStop(0.5, "rgba(15, 30, 80, 0.9)");
+				grd.addColorStop(1, "rgba(5, 15, 50, 0.85)");
+				ctx.fillStyle = grd;
+				ctx.fillRect(0, 0, 1920, 1080);
+
+				ctx.strokeStyle = "rgba(102, 217, 255, 0.5)";
+				ctx.lineWidth = 4;
+				ctx.strokeRect(80, 80, 1760, 920);
+
+				ctx.strokeStyle = "rgba(102, 217, 255, 0.25)";
+				ctx.lineWidth = 1;
+				ctx.strokeRect(100, 100, 1720, 880);
+
+				ctx.strokeStyle = "rgba(102, 217, 255, 0.6)";
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.moveTo(80, 180);
+				ctx.lineTo(80, 80);
+				ctx.lineTo(180, 80);
+				ctx.stroke();
+
+				ctx.beginPath();
+				ctx.moveTo(1840, 1000);
+				ctx.lineTo(1840, 920);
+				ctx.lineTo(1740, 920);
+				ctx.stroke();
+
+				return canvas.toDataURL();
+			}
+
+			// =========================================================================
+			// getDestination — 计算中垂线上的目标点
+			// =========================================================================
+			function getDestination(point1, point2, distance, bearing, options) {
+				const _options = { units: "meters", ...options };
+				const bearing0 = turf.bearing(point1, point2);
+				const center = turf.midpoint(point1, point2);
+				const _bearing = bearing || 90;
+				const destination = turf.destination(
+					center,
+					distance,
+					bearing0 + _bearing,
+					_options,
+				);
+				return destination.geometry.coordinates;
+			}
+
+			// =========================================================================
+			// drawTimestamp — 在 canvas 右下角绘制实时时间
+			// =========================================================================
+			function drawTimestamp(ctx, width, height) {
+				const now = new Date();
+				const timeStr = now.toLocaleString("zh-CN", {
+					year: "numeric",
+					month: "2-digit",
+					day: "2-digit",
+					hour: "2-digit",
+					minute: "2-digit",
+					second: "2-digit",
+					hour12: false,
+				});
+				ctx.save();
+				ctx.font = "32px PingFang SC-Regular, Microsoft YaHei, monospace";
+				ctx.fillStyle = "rgba(102, 217, 255, 0.85)";
+				ctx.textAlign = "right";
+				ctx.textBaseline = "bottom";
+				ctx.fillText(timeStr, width - 60, height - 40);
+				ctx.restore();
+			}
+
+			// =========================================================================
+			// CreateLabelInPolygon — 文字贴墙+贴地
+			// =========================================================================
+			class CreateLabelInPolygon {
+				constructor(viewer, params = {}) {
+					this.viewer = viewer;
+					this.p = params;
+					this.entity = null;
+					this._groundEntity = null;
+					this._baseCanvas = null;
+				}
+
+				async add() {
+					this._baseCanvas = await drawCanvasImage(this.p.text, {
+						fontSize: this.p.fontSize || 100,
+						fontColor: this.p.fontColor || "rgba(255,255,255,1)",
+						fillColor: this.p.fillColor,
+						width: this.p.width,
+						height: this.p.height,
+						align: this.p.align,
+						backgroundImage: this.p.backgroundImage,
+					});
+
+					const w = this._baseCanvas.width;
+					const h = this._baseCanvas.height;
+
+					// 共享材质：贴墙（Wall）和贴地（Rectangle）使用同一个 CallbackProperty
+					const sharedMaterial = new Cesium.ImageMaterialProperty({
+						image: new Cesium.CallbackProperty(() => {
+							const canvas = document.createElement("canvas");
+							canvas.width = w;
+							canvas.height = h;
+							const ctx = canvas.getContext("2d");
+							ctx.drawImage(this._baseCanvas, 0, 0);
+							drawTimestamp(ctx, w, h);
+							return canvas;
+						}, true),
+						color: Cesium.Color.fromCssColorString("rgba(255,255,255,0.9999)"),
+					});
+
+					// ① 贴墙：Wall 实体
+					this.entity = this.viewer.entities.add({
+						wall: {
+							positions: Cesium.Cartesian3.fromDegreesArray(this.p.coordinates),
+							maximumHeights: [this.p.maxHeight || 50, this.p.maxHeight || 50],
+							minimumHeights: [this.p.minHeight || 25, this.p.minHeight || 25],
+							material: sharedMaterial,
+						},
+					});
+
+					// 文字贴地：以 coordinates 中最大纬度作为北边界，向南延伸
+					const [lon1, lat1, lon2, lat2] = this.p.coordinates;
+					const lonSpanM =
+						Math.abs(lon2 - lon1) *
+						111320 *
+						Math.cos(Cesium.Math.toRadians(Math.min(lat1, lat2)));
+					const latSpanM = lonSpanM * (h / w);
+					const latSpanDeg = latSpanM / 111320;
+					const north = Math.max(lat1, lat2);
+					const south = north - latSpanDeg * 2;
+
+					this._groundEntity = this.viewer.entities.add({
+						rectangle: {
+							coordinates: Cesium.Rectangle.fromDegrees(
+								Math.min(lon1, lon2),
+								south,
+								Math.max(lon1, lon2),
+								north,
+							),
+							material: sharedMaterial,
+						},
+					});
+
+					return this;
+				}
+
+				remove() {
+					this.entity && this.viewer.entities.remove(this.entity);
+					this._groundEntity && this.viewer.entities.remove(this._groundEntity);
+				}
+
+				locate(cameraInfo) {
+					if (!this.viewer) return;
+					if (cameraInfo?.position) {
+						this.viewer.camera.flyTo({
+							destination: cameraInfo.position,
+							orientation: {
+								heading: Cesium.Math.toRadians(cameraInfo.heading ?? 0),
+								pitch: Cesium.Math.toRadians(cameraInfo.pitch ?? -10),
+								roll: cameraInfo.roll ?? 0,
+							},
+							duration: 1,
+						});
+					} else {
+						this.entity && this.viewer.zoomTo(this.entity);
+					}
+				}
+			}
+
+			async function addLabelInPolygon(viewer, params) {
+				const instance = new CreateLabelInPolygon(viewer, params);
+				return instance.add();
+			}
+
+			// =========================================================================
+			// createViewer — 初始化 Cesium Viewer
+			// =========================================================================
+			function createViewer(id, options = {}) {
+				const center = options.center || {};
+				const hpr = options.hpr || {};
+				const mapOpt = {
+					animation: false,
+					timeline: false,
+					shouldAnimate: true,
+					fullscreenButton: false,
+					infoBox: true,
+					geocoder: false,
+					homeButton: false,
+					sceneModePicker: false,
+					baseLayerPicker: false,
+					navigationHelpButton: false,
+					selectionIndicator: false,
+				};
+
+				if (options.imageUrl) {
+					mapOpt.baseLayer = new Cesium.ImageryLayer(
+						new Cesium.UrlTemplateImageryProvider({
+							url: options.imageUrl,
+							minimumLevel: 0,
+							maximumLevel: 18,
+						}),
+					);
+				}
+				if (options.tarrainUrl) {
+					mapOpt.terrain = new Cesium.Terrain(
+						Cesium.CesiumTerrainProvider.fromUrl(options.tarrainUrl),
+					);
+				}
+
+				const viewer = new Cesium.Viewer(id, mapOpt);
+				viewer.cesiumWidget.creditContainer.style.display = "none";
+				if (options.depthTest)
+					viewer.scene.globe.depthTestAgainstTerrain = true;
+
+				viewer.camera.setView({
+					destination: Cesium.Cartesian3.fromDegrees(
+						center.lng || 120,
+						center.lat || 33,
+						center.alt || 20000000,
+					),
+					orientation: {
+						heading: Cesium.Math.toRadians(hpr.h || 0),
+						pitch: Cesium.Math.toRadians(hpr.p || -90),
+						roll: Cesium.Math.toRadians(hpr.r || 0),
+					},
+				});
+				return viewer;
+			}
+
+			// =========================================================================
+			// Vue App
+			// =========================================================================
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						labelPolygon: null,
+					};
+				},
+				async mounted() {
+					const viewer = this.initViewer();
+					this.addlilgui();
+
+					const plaqueBg = createPlaqueBackground();
+					await this.addTextWall(viewer, plaqueBg);
+				},
+				methods: {
+					initViewer() {
+						const viewer = createViewer("cesiumContainer", {
+							imageUrl:
+								"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+							depthTest: true,
+							infoBox: true,
+							center: { lng: 120.1, lat: 33, alt: 20000 },
+						});
+
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.enableLighting = true;
+
+						if (Cesium.FeatureDetection.supportsImageRenderingPixelated()) {
+							viewer.resolutionScale = window.devicePixelRatio;
+						}
+						viewer.scene.postProcessStages.fxaa.enabled = true;
+
+						this.viewer = viewer;
+						window.viewer = viewer;
+						return viewer;
+					},
+
+					addlilgui() {
+						const gui = new GUI();
+
+						const params = {
+							resetCamera: () => {
+								if (this.labelPolygon) {
+									this.labelPolygon.locate(this._cameraInfo);
+								}
+							},
+							resetTopView: () => {
+								if (this.viewer) {
+									this.viewer.camera.setView({
+										destination: Cesium.Cartesian3.fromDegrees(
+											120.1,
+											33,
+											20000000,
+										),
+										orientation: {
+											heading: Cesium.Math.toRadians(0),
+											pitch: Cesium.Math.toRadians(-90),
+											roll: Cesium.Math.toRadians(0),
+										},
+									});
+								}
+							},
+						};
+
+						gui.add(params, "resetCamera").name("飞到文字墙");
+						gui.add(params, "resetTopView").name("重置顶视角");
+					},
+
+					async addTextWall(viewer, plaqueBg) {
+						const side = 20000;
+						const p1 = [120, 33];
+						const p2 = [120.2, 33];
+
+						const labelPolygon = await addLabelInPolygon(viewer, {
+							coordinates: [...p1, ...p2],
+							backgroundImage: plaqueBg,
+							fontSize: 50,
+							text: "出师表;先帝创业未半而中道崩殂。;今天下三分益州疲弊,此诚危急存亡之秋也。;然侍卫之臣不懈于内,忠志之士忘身于外者,盖追先帝之殊遇，;欲报之于陛下也。诚宜开张圣听，以光先帝遗德，;恢弘志士之气，不宜妄自菲薄，引喻失义，以塞忠谏之路也。",
+							fontColor: "rgba(102, 217, 255, 1)",
+							minHeight: 0.1,
+							maxHeight: 0.1 + (side * 1080) / 1920,
+							align: "left",
+						});
+						this.labelPolygon = labelPolygon;
+
+						const dest = getDestination(p1, p2, 40000, 100);
+						const bearing = turf.bearing(dest, [
+							(p1[0] + p2[0]) / 2,
+							(p1[1] + p2[1]) / 2,
+						]);
+						const cameraInfo = {
+							position: Cesium.Cartesian3.fromDegrees(dest[0], dest[1], 10000),
+							heading: bearing,
+						};
+						this._cameraInfo = cameraInfo;
+						labelPolygon.locate(cameraInfo);
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

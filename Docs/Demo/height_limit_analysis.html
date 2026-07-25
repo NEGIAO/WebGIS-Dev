@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>3D Tiles 限高分析</title>
+    <!-- 基础依赖库 -->
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+    
+    <!-- Cesium 样式 -->
+    <link href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+    
+    <!-- lil-gui 样式与 UMD 脚本 (解决 ES 模块引入缺少 CSS 导致 addFolder 控件堆叠的 BUG) -->
+    <link href="https://cdn.jsdelivr.net/npm/lil-gui@0.19.0/dist/lil-gui.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.0/dist/lil-gui.umd.min.js"></script>
+
+    <style>
+        html, body, #app, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+
+        /* 矫正 lil-gui 层级与排版，防止 addFolder 展开时控件重叠 */
+        .lil-gui.root {
+            position: absolute !important;
+            top: 15px !important;
+            left: 15px !important;
+            z-index: 9999 !important;
+            max-height: 90vh;
+            overflow-y: auto;
+            --background-color: rgba(20, 20, 20, 0.88);
+            --text-color: #ddd;
+            --title-background-color: #2c2c2c;
+            --widget-color: #3c3c3c;
+            --hover-color: #5c5c5c;
+            --focus-color: #7c7c7c;
+            --number-color: #00e5ff;
+            --string-color: #8bc34a;
+        }
+        .lil-gui .folder .children {
+            display: block !important;
+            position: static !important;
+        }
+        .lil-gui.closed .children {
+            display: none !important;
+        }
+
+        .status-panel {
+            position: absolute;
+            left: 15px;
+            bottom: 20px;
+            z-index: 998;
+            min-width: 300px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            color: #e8f1ff;
+            background: rgba(12, 18, 28, 0.85);
+            font-size: 13px;
+            line-height: 1.7;
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="cesiumContainer"></div>
+        <div class="status-panel">{{ statusText }}</div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    viewer: null,
+                    imageryLayer: null,
+                    tileset: null,
+                    tilesetUrl: "data/tileset/city/tileset.json",
+                    
+                    // 中心点与偏移量
+                    centerLon: 0,
+                    centerLat: 0,
+                    offsetX: 0, // 经度偏移
+                    offsetY: 0, // 纬度偏移
+                    
+                    // 限高分析参数
+                    height: 50,
+                    basePoints: [], // 相对中心的基准经纬度数组
+                    points: [],     // 实际渲染使用的绝对经纬度数组 [lon, lat, lon, lat...]
+                    
+                    // 可视化样式控制
+                    classification: null,
+                    polygonEntity: null,
+                    showClassification: true,
+                    showPolygon: true,
+                    classificationColor: "#ff0000",
+                    classificationOpacity: 0.7,
+                    statusText: "正在初始化地图...",
+                    
+                    // 交互与 GUI 句柄
+                    handler: null,
+                    myLilGui: null,
+                    isDrawing: false,
+                    drawPoints: [],
+                    tempEntities: [],
+                    guiControllers: {},
+                };
+            },
+            async mounted() {
+                this.initMap();
+                await this.load3DTiles();
+                this.initGui();
+            },
+            beforeUnmount() {
+                if (this.handler) {
+                    this.handler.destroy();
+                    this.handler = null;
+                }
+                if (this.myLilGui) {
+                    this.myLilGui.destroy();
+                    this.myLilGui = null;
+                }
+            },
+            methods: {
+                // ===================== 地图初始化 =====================
+                initMap() {
+                    let viewer = new Cesium.Viewer("cesiumContainer", {
+                        baseLayer: false,
+                        animation: false,
+                        timeline: false,
+                        fullscreenButton: false,
+                        infoBox: false,
+                        geocoder: false,
+                        homeButton: false,
+                        sceneModePicker: false,
+                        baseLayerPicker: false,
+                        navigationHelpButton: false,
+                        selectionIndicator: false,
+                        shouldAnimate: true,
+                    });
+                    window.viewer = viewer;
+                    this.viewer = viewer;
+
+                    viewer.scene.globe.depthTestAgainstTerrain = true;
+                    viewer._cesiumWidget._creditContainer.style.display = "none";
+
+                    // ArcGIS 底图
+                    this.imageryLayer = viewer.imageryLayers.addImageryProvider(
+                        new Cesium.UrlTemplateImageryProvider({
+                            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                            minimumLevel: 1,
+                            maximumLevel: 18,
+                        }),
+                    );
+
+                    this.handler = new Cesium.ScreenSpaceEventHandler(this.viewer.scene.canvas);
+                },
+
+                // ===================== 3D Tiles 加载与位置匹配 =====================
+                async load3DTiles() {
+                    try {
+                        this.tileset = await Cesium.Cesium3DTileset.fromUrl(
+                            this.tilesetUrl,
+                            {
+                                maximumScreenSpaceError: 16,
+                                maximumMemoryUsage: 2048,
+                            },
+                        );
+                        this.viewer.scene.primitives.add(this.tileset);
+
+                        // 1. 获取包围球及其中心坐标
+                        const boundingSphere = this.tileset.boundingSphere;
+                        const centerCartographic = Cesium.Cartographic.fromCartesian(boundingSphere.center);
+
+                        this.centerLon = Cesium.Math.toDegrees(centerCartographic.longitude);
+                        this.centerLat = Cesium.Math.toDegrees(centerCartographic.latitude);
+                        
+                        // 计算模型底部高程与初始限高线 (设在模型高度的中间)
+                        const modelGroundHeight = centerCartographic.height - boundingSphere.radius * 0.3;
+                        this.height = Math.round(modelGroundHeight + boundingSphere.radius * 0.4);
+
+                        // 2. 根据模型的半径生成一个包裹模型的初始分析矩形范围
+                        const deltaLon = (boundingSphere.radius * 0.6) / (111000 * Math.cos(Cesium.Math.toRadians(this.centerLat)));
+                        const deltaLat = (boundingSphere.radius * 0.6) / 111000;
+
+                        this.basePoints = [
+                            -deltaLon, -deltaLat,
+                             deltaLon, -deltaLat,
+                             deltaLon,  deltaLat,
+                            -deltaLon,  deltaLat
+                        ];
+
+                        this.updateActualPoints();
+                        this.resetCamera();
+                        
+                        this.statusText = "3D Tiles 加载成功！限高分析框已定位到模型中央。";
+                    } catch (err) {
+                        console.error("3D Tiles 加载失败:", err);
+                        this.statusText = "3D Tiles 加载失败，请检查文件路径是否存在！";
+                    }
+                },
+
+                resetCamera() {
+                    if (!this.tileset) return;
+                    const boundingSphere = this.tileset.boundingSphere;
+                    const offset = new Cesium.HeadingPitchRange(
+                        0,
+                        Cesium.Math.toRadians(-45.0),
+                        boundingSphere.radius * 2.5
+                    );
+                    this.viewer.camera.flyToBoundingSphere(boundingSphere, {
+                        duration: 1.5,
+                        offset: offset
+                    });
+                },
+
+                // 更新计算绝对坐标
+                updateActualPoints() {
+                    const pts = [];
+                    for (let i = 0; i < this.basePoints.length; i += 2) {
+                        pts.push(this.centerLon + this.offsetX + this.basePoints[i]);
+                        pts.push(this.centerLat + this.offsetY + this.basePoints[i + 1]);
+                    }
+                    this.points = pts;
+
+                    // 重新渲染限高体与边界
+                    this.updateClassificationPrimitive();
+                    this.updatePolygon();
+                },
+
+                // ===================== 限高分析核心 =====================
+                updateClassificationPrimitive() {
+                    if (!this.viewer) return;
+                    if (this.classification) {
+                        this.viewer.scene.primitives.remove(this.classification);
+                        this.classification = null;
+                    }
+                    if (!this.showClassification || !this.points || this.points.length < 6) return;
+
+                    const polygonInstance = new Cesium.GeometryInstance({
+                        geometry: new Cesium.PolygonGeometry({
+                            polygonHierarchy: new Cesium.PolygonHierarchy(
+                                Cesium.Cartesian3.fromDegreesArray(this.points),
+                            ),
+                            height: this.height,
+                        }),
+                        attributes: {
+                            color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+                                Cesium.Color.fromCssColorString(this.classificationColor)
+                                    .withAlpha(this.classificationOpacity),
+                            ),
+                        },
+                    });
+
+                    // ClassificationPrimitive：对超过限高高度的 3D Tiles 建筑表面进行红染着色
+                    this.classification = new Cesium.ClassificationPrimitive({
+                        geometryInstances: polygonInstance,
+                        appearance: new Cesium.PerInstanceColorAppearance({
+                            translucent: true,
+                            closed: true,
+                        }),
+                        classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
+                    });
+                    this.viewer.scene.primitives.add(this.classification);
+                    this.statusText = `分析中：限高 ${this.height}m，覆盖区域包含 ${this.points.length / 2} 个顶点`;
+                },
+
+                // ===================== 限高截面边界可视化 =====================
+                updatePolygon() {
+                    if (!this.viewer) return;
+                    if (this.polygonEntity) {
+                        this.viewer.entities.remove(this.polygonEntity);
+                        this.polygonEntity = null;
+                    }
+                    if (!this.showPolygon || !this.points || this.points.length < 6) return;
+
+                    this.polygonEntity = this.viewer.entities.add({
+                        name: "限高截面框",
+                        polygon: {
+                            hierarchy: new Cesium.CallbackProperty(() => {
+                                return new Cesium.PolygonHierarchy(
+                                    Cesium.Cartesian3.fromDegreesArray(this.points),
+                                );
+                            }, false),
+                            height: new Cesium.CallbackProperty(() => this.height, false),
+                            material: Cesium.Color.YELLOW.withAlpha(0.15),
+                            outline: true,
+                            outlineColor: Cesium.Color.YELLOW,
+                            outlineWidth: 2,
+                        },
+                    });
+                },
+
+                // ===================== 交互：绘制自定义分析区域 =====================
+                startDrawPolygon() {
+                    if (this.isDrawing) return;
+                    this.isDrawing = true;
+                    this.drawPoints = [];
+                    this.clearTempEntities();
+                    
+                    this.statusText = "✍️ 左键点击地图添加顶点，右键点击结束绘制。";
+                    this.viewer.canvas.style.cursor = "crosshair";
+
+                    // 1. 左键加点
+                    this.handler.setInputAction((click) => {
+                        let cartesian = this.viewer.scene.pickPosition(click.position);
+                        if (!Cesium.defined(cartesian)) {
+                            const ray = this.viewer.camera.getPickRay(click.position);
+                            cartesian = this.viewer.scene.globe.pick(ray, this.viewer.scene);
+                        }
+
+                        if (Cesium.defined(cartesian)) {
+                            const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+                            const lon = Cesium.Math.toDegrees(cartographic.longitude);
+                            const lat = Cesium.Math.toDegrees(cartographic.latitude);
+
+                            this.drawPoints.push([lon, lat]);
+
+                            // 绘制辅助点
+                            const ptEntity = this.viewer.entities.add({
+                                position: cartesian,
+                                point: { pixelSize: 8, color: Cesium.Color.CYAN, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+                            });
+                            this.tempEntities.push(ptEntity);
+                        }
+                    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+                    // 2. 右键结束绘制
+                    this.handler.setInputAction(() => {
+                        if (this.drawPoints.length >= 3) {
+                            // 归一化重置基准点
+                            this.offsetX = 0;
+                            this.offsetY = 0;
+                            if (this.guiControllers.offsetX) this.guiControllers.offsetX.updateDisplay();
+                            if (this.guiControllers.offsetY) this.guiControllers.offsetY.updateDisplay();
+
+                            this.basePoints = [];
+                            this.drawPoints.forEach(pt => {
+                                this.basePoints.push(pt[0] - this.centerLon);
+                                this.basePoints.push(pt[1] - this.centerLat);
+                            });
+
+                            this.updateActualPoints();
+                            this.statusText = "绘制完成！已根据新区域更新限高分析。";
+                        } else {
+                            this.statusText = "绘制取消：多边形至少需要 3 个顶点。";
+                        }
+                        this.stopDrawPolygon();
+                    }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+                },
+
+                stopDrawPolygon() {
+                    this.isDrawing = false;
+                    this.handler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_CLICK);
+                    this.handler.removeInputAction(Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+                    this.viewer.canvas.style.cursor = "default";
+                    this.clearTempEntities();
+                },
+
+                clearTempEntities() {
+                    this.tempEntities.forEach(e => this.viewer.entities.remove(e));
+                    this.tempEntities = [];
+                },
+
+                // ===================== lil-gui 控制面板 =====================
+                initGui() {
+                    let myLilGui = new lil.GUI({ title: "限高分析控制台" });
+                    this.myLilGui = myLilGui;
+
+                    const params = {
+                        height: this.height,
+                        showClassification: this.showClassification,
+                        showPolygon: this.showPolygon,
+                        classificationColor: this.classificationColor,
+                        classificationOpacity: this.classificationOpacity,
+                        resetCamera: () => this.resetCamera(),
+                        startDraw: () => this.startDrawPolygon(),
+                        offsetX: this.offsetX,
+                        offsetY: this.offsetY,
+                    };
+
+                    // 1. 限高高度
+                    myLilGui.add(params, "height", -50, 500, 1)
+                        .name("限高高度 (m)")
+                        .onChange((val) => {
+                            this.height = val;
+                            this.updateClassificationPrimitive();
+                            this.updatePolygon();
+                        });
+
+                    // 2. 位置与范围平移 Folder
+                    const posFolder = myLilGui.addFolder("分析范围与移动");
+                    this.guiControllers.offsetX = posFolder.add(params, "offsetX", -0.02, 0.02, 0.0001)
+                        .name("经度平移")
+                        .onChange((val) => {
+                            this.offsetX = val;
+                            this.updateActualPoints();
+                        });
+                    this.guiControllers.offsetY = posFolder.add(params, "offsetY", -0.02, 0.02, 0.0001)
+                        .name("纬度平移")
+                        .onChange((val) => {
+                            this.offsetY = val;
+                            this.updateActualPoints();
+                        });
+                    posFolder.add(params, "startDraw").name("✍️ 手绘自定义分析区域");
+
+                    // 3. 可视化控制 Folder
+                    const visualFolder = myLilGui.addFolder("样式与显隐");
+                    visualFolder.add(params, "showClassification")
+                        .name("显示压平限高")
+                        .onChange((val) => {
+                            this.showClassification = val;
+                            this.updateClassificationPrimitive();
+                        });
+                    visualFolder.add(params, "showPolygon")
+                        .name("显示截面边界")
+                        .onChange((val) => {
+                            this.showPolygon = val;
+                            this.updatePolygon();
+                        });
+                    visualFolder.addColor(params, "classificationColor")
+                        .name("超高颜色")
+                        .onChange((val) => {
+                            this.classificationColor = val;
+                            this.updateClassificationPrimitive();
+                        });
+                    visualFolder.add(params, "classificationOpacity", 0, 1, 0.05)
+                        .name("透明度")
+                        .onChange((val) => {
+                            this.classificationOpacity = val;
+                            this.updateClassificationPrimitive();
+                        });
+
+                    // 4. 视角操作
+                    myLilGui.add(params, "resetCamera").name("✈️ 视角复位到模型");
+                },
+            },
+        }).mount("#app");
+    </script>
+</body>
+</html>

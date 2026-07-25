@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Cesium Map Theme System</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Cesium.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+			}
+			.lil-gui {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				z-index: 999;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app"><div id="cesiumContainer"></div></div>
+		<script type="module">
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.133.0/Build/Cesium/";
+			const { createApp } = Vue;
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+			createApp({
+				data() {
+					return {};
+				},
+				mounted() {
+					this.initMap();
+					this.addlilgui();
+				},
+				methods: {
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							imageryProvider: false,
+						});
+						window.viewer = viewer;
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(
+								110.592886,
+								32.470705,
+								14000000,
+							),
+							orientation: {
+								heading: Cesium.Math.toRadians(0.0),
+								pitch: Cesium.Math.toRadians(-90.0),
+								roll: Cesium.Math.toRadians(0),
+							},
+						});
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+						const imageryLayer = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=2&style=8&x={x}&y={y}&z={z}",
+								maximumLevel: 18,
+							}),
+						);
+						viewer.imageryLayers.add(imageryLayer);
+						this.viewer = viewer;
+						this.imageryLayer = imageryLayer;
+						viewer.scene.postProcessStages.fxaa.enabled = false;
+						viewer.scene.globe.depthTestAgainstTerrain = true;
+						this.createColorFilterStage();
+						this.switchTheme({ filterRGB: [0.2, 0.2, 0.2] });
+						return viewer;
+					},
+					createColorFilterStage() {
+						const fragmentShader = ` uniform sampler2D colorTexture; uniform sampler2D depthTexture; uniform vec3 filterColor; uniform bool enabled; in vec2 v_textureCoordinates; void main() { vec4 color = texture(colorTexture, v_textureCoordinates); float depth = texture(depthTexture, v_textureCoordinates).r; if (enabled && depth < 0.999) { vec3 inverted = vec3(1.0) - color.rgb; vec3 filtered = inverted * filterColor; out_FragColor = vec4(filtered, color.a); } else { out_FragColor = color; } } `;
+						this.colorFilterStage = new Cesium.PostProcessStage({
+							fragmentShader: fragmentShader,
+							uniforms: {
+								filterColor: new Cesium.Cartesian3(1.0, 1.0, 1.0),
+								enabled: false,
+							},
+						});
+						this.viewer.scene.postProcessStages.add(this.colorFilterStage);
+					},
+					switchTheme(theme) {
+						const baseLayer = this.imageryLayer;
+						const colorFilterStage = this.colorFilterStage;
+						if (theme.isOriginal) {
+							if (colorFilterStage) {
+								colorFilterStage.uniforms.enabled = false;
+							}
+							if (baseLayer) {
+								baseLayer.brightness = 1;
+								baseLayer.contrast = 1;
+								baseLayer.gamma = 1;
+								baseLayer.hue = 0;
+								baseLayer.saturation = 1;
+							}
+						} else {
+							if (colorFilterStage) {
+								colorFilterStage.uniforms.enabled = true;
+								colorFilterStage.uniforms.filterColor = new Cesium.Cartesian3(
+									theme.filterRGB[0],
+									theme.filterRGB[1],
+									theme.filterRGB[2],
+								);
+							}
+							if (baseLayer) {
+								baseLayer.brightness = theme.brightness ?? 0.6;
+								baseLayer.contrast = theme.contrast ?? 1.8;
+								baseLayer.gamma = theme.gamma ?? 0.3;
+								baseLayer.hue = 0;
+								baseLayer.saturation = 0;
+							}
+						}
+						this.viewer.scene.requestRender();
+					},
+					addlilgui() {
+						const myLilGui = new GUI();
+						this.myLilGui = myLilGui;
+						const params = {
+							colorArray: [255, 0, 0],
+							brightness: 1.0,
+							contrast: 1.0,
+							saturation: 1.0,
+							hue: 0.0,
+							gamma: 1.0,
+							reset: () => this.switchTheme({ isOriginal: true }),
+						};
+						myLilGui
+							.addColor(params, "colorArray")
+							.name("颜色")
+							.onChange((value) => this.switchTheme({ filterRGB: value }));
+						myLilGui
+							.add(params, "brightness", 0.1, 10.0, 0.1)
+							.name("亮度")
+							.onChange(() => {
+								this.imageryLayer.brightness = params.brightness;
+							});
+						myLilGui
+							.add(params, "contrast", 0.1, 10.0, 0.1)
+							.name("对比度")
+							.onChange(() => {
+								this.imageryLayer.contrast = params.contrast;
+							});
+						myLilGui
+							.add(params, "saturation", 0.1, 10.0, 0.1)
+							.name("饱和度")
+							.onChange(() => {
+								this.imageryLayer.saturation = params.saturation;
+							});
+						myLilGui
+							.add(params, "hue", -5.0, 5.0, 0.1)
+							.name("色调")
+							.onChange(() => {
+								this.imageryLayer.hue = params.hue;
+							});
+						myLilGui
+							.add(params, "gamma", 0.1, 10.0, 0.1)
+							.name("伽马")
+							.onChange(() => {
+								this.imageryLayer.gamma = params.gamma;
+							});
+						myLilGui.add(params, "reset").name("重置");
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

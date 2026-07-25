@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Cesium GPU 风场粒子 - cesium-wind-layer</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+			.lil-gui {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				z-index: 999;
+			}
+			.loading-tip {
+				position: absolute;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				color: #fff;
+				font-size: 18px;
+				z-index: 1000;
+				background: rgba(0, 0, 0, 0.6);
+				padding: 12px 20px;
+				border-radius: 6px;
+				display: none;
+			}
+			.loading-tip.show {
+				display: block;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+			<div id="loadingTip" class="loading-tip">正在加载 GPU 风场…</div>
+		</div>
+
+		<script type="module">
+			window.CESIUM_BASE_URL =
+				"https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/";
+			const { createApp } = Vue;
+			import * as Cesium from "https://cdn.jsdelivr.net/npm/cesium@1.140.0/+esm";
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+			import * as CesiumWindLayer from "https://cdn.jsdelivr.net/npm/cesium-wind-layer@0.10.1/+esm";
+
+			const WindLayer = CesiumWindLayer.WindLayer;
+
+			// 粒子颜色带：从慢到快
+			const WIND_COLORS = [
+				"#00ffff", // 青
+				"#00ff00", // 绿
+				"#ffff00", // 黄
+				"#ff8000", // 橙
+				"#ff0000", // 红
+			];
+
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						windLayer: null,
+						myLilGui: null,
+					};
+				},
+				async mounted() {
+					this.viewer = this.initMap();
+					this.addlilgui();
+					await this.addWindLayer();
+				},
+				methods: {
+					// ---------- 地图初始化 ----------
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.enableLighting = false;
+						viewer.scene.fog.enabled = true;
+						viewer.scene.fog.density = 0.00008;
+						viewer.scene.skyAtmosphere.show = true;
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+
+						viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								maximumLevel: 18,
+							}),
+						);
+
+						this.resetCamera(viewer);
+						return viewer;
+					},
+
+					resetCamera(viewer) {
+						(viewer || this.viewer).camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(
+								120.592886,
+								32.470705,
+								20000000,
+							),
+							orientation: {
+								heading: Cesium.Math.toRadians(0.0),
+								pitch: Cesium.Math.toRadians(-90.0),
+								roll: Cesium.Math.toRadians(0),
+							},
+						});
+					},
+
+					// ---------- lil-gui 面板 ----------
+					addlilgui() {
+						const gui = new GUI();
+						this.myLilGui = gui;
+						gui
+							.add({ resetCamera: () => this.resetCamera() }, "resetCamera")
+							.name("重置视角");
+					},
+
+					// ---------- 风场图层 ----------
+					showLoading(show) {
+						document
+							.getElementById("loadingTip")
+							.classList.toggle("show", show);
+					},
+
+					// 把文章里的 wind_globe.json 转成 WindLayer 需要的 WindData
+					normalizeWindData(raw) {
+						return {
+							u: {
+								array: raw[0].data,
+								min: raw[0].header.min,
+								max: raw[0].header.max,
+							},
+							v: {
+								array: raw[1].data,
+								min: raw[1].header.min,
+								max: raw[1].header.max,
+							},
+							bounds: {
+								west: raw[0].header.extent[0],
+								south: raw[0].header.extent[1],
+								east: raw[0].header.extent[2],
+								north: raw[0].header.extent[3],
+							},
+							width: raw[0].header.nx,
+							height: raw[0].header.ny,
+						};
+					},
+
+					async addWindLayer() {
+						try {
+							if (!WindLayer) {
+								throw new Error(
+									"未找到 cesium-wind-layer 导出，请检查 CDN 是否加载成功",
+								);
+							}
+
+							this.showLoading(true);
+
+							const response = await fetch("./data/json/wind_globe.json");
+							if (!response.ok) {
+								throw new Error(`风场数据加载失败：${response.status}`);
+							}
+							const raw = await response.json();
+							const windData = this.normalizeWindData(raw);
+
+							// 当前 GUI 便捷值
+							const state = {
+								particlesTextureSize: 600,
+								particleHeight: 1000,
+								lineWidthVal: 10,
+								lineLengthVal: 800,
+								speedFactor: 1.0,
+								dropRate: 0.003,
+								dropRateBump: 0.001,
+								dynamic: true,
+							};
+
+							// 真正传给 WindLayer 的选项
+							const windOptions = {
+								colors: WIND_COLORS,
+								particlesTextureSize: state.particlesTextureSize,
+								particleHeight: state.particleHeight,
+								lineWidth: { min: 1, max: state.lineWidthVal },
+								lineLength: { min: 20, max: state.lineLengthVal },
+								speedFactor: state.speedFactor,
+								dropRate: state.dropRate,
+								dropRateBump: state.dropRateBump,
+								flipY: true,
+								domain: undefined,
+								displayRange: undefined,
+								dynamic: state.dynamic,
+								useViewerBounds: true,
+							};
+
+							const windLayer = new WindLayer(
+								this.viewer,
+								windData,
+								windOptions,
+							);
+							this.windLayer = windLayer;
+
+							// ---------- GUI 绑定（带映射）----------
+							const gui = this.myLilGui;
+
+							gui
+								.add(state, "particlesTextureSize", 100, 5000, 100)
+								.name("粒子纹理尺寸")
+								.onFinishChange((v) =>
+									windLayer.updateOptions({ particlesTextureSize: v }),
+								);
+
+							gui
+								.add(state, "particleHeight", 0, 10000, 100)
+								.name("粒子高度")
+								.onFinishChange((v) =>
+									windLayer.updateOptions({ particleHeight: v }),
+								);
+
+							gui
+								.add(state, "lineWidthVal", 1, 30, 1)
+								.name("线宽")
+								.onChange((v) =>
+									windLayer.updateOptions({ lineWidth: { min: 1, max: v } }),
+								);
+
+							gui
+								.add(state, "lineLengthVal", 20, 3000, 10)
+								.name("拖尾长度")
+								.onChange((v) =>
+									windLayer.updateOptions({ lineLength: { min: 20, max: v } }),
+								);
+
+							gui
+								.add(state, "speedFactor", 0.1, 5, 0.1)
+								.name("速度倍率")
+								.onChange((v) => windLayer.updateOptions({ speedFactor: v }));
+
+							gui
+								.add(state, "dropRate", 0, 0.02, 0.001)
+								.name("丢弃率")
+								.onChange((v) => windLayer.updateOptions({ dropRate: v }));
+
+							gui
+								.add(state, "dynamic")
+								.name("动画")
+								.onChange((v) => windLayer.updateOptions({ dynamic: v }));
+
+							this.showLoading(false);
+						} catch (err) {
+							this.showLoading(false);
+							console.error(err);
+							alert(err.message);
+						}
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

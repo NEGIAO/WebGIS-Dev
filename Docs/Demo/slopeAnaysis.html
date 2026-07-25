@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>坡向分析</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<style type="text/css">
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+
+			.lil-gui {
+				top: 10px;
+				left: 10px;
+				z-index: 999;
+			}
+
+			.status-panel {
+				position: absolute;
+				left: 10px;
+				bottom: 10px;
+				z-index: 998;
+				min-width: 300px;
+				padding: 10px 12px;
+				border-radius: 6px;
+				color: #e8f1ff;
+				background: rgba(12, 18, 28, 0.78);
+				font-size: 13px;
+				line-height: 1.7;
+				pointer-events: none;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+			<div class="status-panel">{{ statusText }}</div>
+		</div>
+
+		<script type="module">
+			const { createApp } = Vue;
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						imageryLayer: null,
+						terrainProvider: null,
+						myLilGui: null,
+						drawHandler: null,
+						firstCartesian: null,
+						currentRectangle: null,
+						previewEntity: null,
+						resultLayer: null,
+						arrowEntities: [],
+						statusText: '点击"绘制范围"，左键选择矩形两个对角点。',
+						params: {
+							gridCols: 100,
+							gridRows: 100,
+							terrainLevel: 12,
+							minSlopeForAspect: 1,
+							alpha: 0.78,
+							colorRamp: "八方向",
+							showPreview: true,
+							showArrows: true,
+							arrowStep: 10,
+							arrowWidth: 4,
+							arrowColor: "#ffffff",
+							autoAnalyze: true,
+							drawRange: () => this.startRectangleDraw(),
+							analyze: () => this.analyzeCurrentRectangle(),
+							clear: () => this.clearAll(),
+							resetCamera: () => this.resetCamera(),
+						},
+					};
+				},
+				async mounted() {
+					this.initMap();
+					await this.initTerrain();
+					this.addlilgui();
+				},
+				beforeUnmount() {
+					this.cancelDraw();
+					if (this.myLilGui) this.myLilGui.destroy();
+				},
+				methods: {
+					initMap() {
+						const viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+						window.viewer = viewer;
+						this.viewer = viewer;
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.depthTestAgainstTerrain = true;
+						viewer.scene.globe.enableLighting = false;
+						viewer.scene.fog.enabled = true;
+						viewer.scene.fog.density = 0.00008;
+						viewer.scene.skyAtmosphere.show = true;
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+						this.imageryLayer = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								maximumLevel: 18,
+							}),
+						);
+						this.resetCamera();
+					},
+
+					async initTerrain() {
+						try {
+							// 设置 Cesium Ion token（建议放 main.js 里全局设一次，这里为了完整也写上）
+							Cesium.Ion.defaultAccessToken =
+								"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI4YTgwOWNiNS1hOWJmLTQyM2YtOGEzNC0xZGFkYTAxNDM1MDMiLCJpZCI6MjA0NzA1LCJpYXQiOjE3MjA3Nzc5ODN9.v6ovIolLo6WQgDGikXvW9W5_C_ZkpE6B9xG-RdkC2u0";
+
+							// 切到 Cesium World Terrain（assetId = 1）
+							this.terrainProvider =
+								await Cesium.CesiumTerrainProvider.fromIonAssetId(1, {
+									requestVertexNormals: true, // 坡度/坡向分析必备
+									requestWaterMask: false,
+								});
+
+							this.viewer.terrainProvider = this.terrainProvider;
+							this.statusText =
+								"Cesium 官方地形加载完成，可绘制范围进行坡向分析。";
+						} catch (error) {
+							console.error(error);
+							this.statusText = "地形加载失败";
+						}
+					},
+
+					addlilgui() {
+						const gui = new GUI();
+						this.myLilGui = gui;
+						gui.add(this.params, "drawRange").name("绘制范围");
+						gui.add(this.params, "analyze").name("开始分析");
+						gui.add(this.params, "clear").name("清除结果");
+						gui.add(this.params, "resetCamera").name("重置视角");
+
+						const analysisFolder = gui.addFolder("分析参数");
+						analysisFolder
+							.add(this.params, "gridCols", 40, 1000, 1)
+							.name("横向网格数")
+							.onFinishChange(() => this.reanalyzeIfReady());
+						analysisFolder
+							.add(this.params, "gridRows", 40, 1000, 1)
+							.name("纵向网格数")
+							.onFinishChange(() => this.reanalyzeIfReady());
+						analysisFolder
+							.add(this.params, "terrainLevel", 8, 15, 1)
+							.name("采样层级")
+							.onFinishChange(() => this.reanalyzeIfReady());
+						analysisFolder
+							.add(this.params, "minSlopeForAspect", 0, 10, 0.5)
+							.name("最小坡度(度)")
+							.onFinishChange(() => this.reanalyzeIfReady());
+						analysisFolder
+							.add(this.params, "autoAnalyze")
+							.name("绘制后自动分析");
+
+						const styleFolder = gui.addFolder("显示样式");
+						styleFolder
+							.add(this.params, "alpha", 0.1, 1, 0.01)
+							.name("结果透明度")
+							.onChange(() => this.updateResultAlpha());
+						styleFolder
+							.add(this.params, "colorRamp", [
+								"八方向",
+								"冷暖方位",
+								"彩虹方位",
+								"灰度方位",
+							])
+							.name("内置色带")
+							.onChange(() => this.reanalyzeIfReady());
+						styleFolder
+							.add(this.params, "showPreview")
+							.name("显示预览框")
+							.onChange(() => {
+								if (this.previewEntity)
+									this.previewEntity.show = this.params.showPreview;
+							});
+
+						const arrowFolder = gui.addFolder("箭头配置");
+						arrowFolder
+							.add(this.params, "showArrows")
+							.name("显示坡向箭头")
+							.onChange(() => this.reanalyzeIfReady());
+						arrowFolder
+							.add(this.params, "arrowStep", 4, 30, 1)
+							.name("箭头间隔")
+							.onFinishChange(() => this.reanalyzeIfReady());
+						arrowFolder
+							.add(this.params, "arrowWidth", 1, 10, 1)
+							.name("箭头线宽")
+							.onChange(() => this.updateArrowStyle());
+						arrowFolder
+							.addColor(this.params, "arrowColor")
+							.name("箭头颜色")
+							.onChange(() => this.updateArrowStyle());
+
+						const layerFolder = gui.addFolder("图层控制");
+						layerFolder.add(this.imageryLayer, "show").name("影像显示");
+						layerFolder
+							.add(this.imageryLayer, "alpha", 0, 1, 0.01)
+							.name("影像透明度");
+					},
+
+					startRectangleDraw() {
+						if (!this.terrainProvider) {
+							this.statusText = "地形未加载完成，暂不能分析。";
+							return;
+						}
+						this.cancelDraw();
+						this.clearAll();
+						this.firstCartesian = null;
+						this.statusText = "请左键点击第一个角点。";
+						const handler = new Cesium.ScreenSpaceEventHandler(
+							this.viewer.scene.canvas,
+						);
+						this.drawHandler = handler;
+						handler.setInputAction((click) => {
+							const cartesian = this.pickGlobe(click.position);
+							if (!cartesian) return;
+							if (!this.firstCartesian) {
+								this.firstCartesian = cartesian;
+								this.statusText = "请移动鼠标并点击第二个对角点。";
+								handler.setInputAction((movement) => {
+									const end = this.pickGlobe(movement.endPosition);
+									if (!end) return;
+									this.updatePreview(
+										this.rectangleFromTwoCartesians(this.firstCartesian, end),
+									);
+								}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+							} else {
+								this.currentRectangle = Cesium.Rectangle.clone(
+									this.rectangleFromTwoCartesians(
+										this.firstCartesian,
+										cartesian,
+									),
+								);
+								this.cancelDraw();
+								this.removePreview();
+								this.updatePreview(this.currentRectangle);
+								this.statusText = "范围绘制完成。";
+								if (this.params.autoAnalyze) this.analyzeCurrentRectangle();
+							}
+						}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+					},
+
+					cancelDraw() {
+						if (this.drawHandler) {
+							this.drawHandler.destroy();
+							this.drawHandler = null;
+						}
+						this.firstCartesian = null;
+					},
+
+					pickGlobe(position) {
+						const ray = this.viewer.camera.getPickRay(position);
+						return ray
+							? this.viewer.scene.globe.pick(ray, this.viewer.scene)
+							: null;
+					},
+
+					rectangleFromTwoCartesians(start, end) {
+						const c1 = Cesium.Cartographic.fromCartesian(start);
+						const c2 = Cesium.Cartographic.fromCartesian(end);
+						return new Cesium.Rectangle(
+							Math.min(c1.longitude, c2.longitude),
+							Math.min(c1.latitude, c2.latitude),
+							Math.max(c1.longitude, c2.longitude),
+							Math.max(c1.latitude, c2.latitude),
+						);
+					},
+
+					updatePreview(rectangle) {
+						if (!this.params.showPreview) return;
+						if (!this.previewEntity) {
+							this.previewEntity = this.viewer.entities.add({
+								rectangle: {
+									coordinates: new Cesium.CallbackProperty(() => {
+										return this.currentPreviewRectangle || rectangle;
+									}, false),
+									material: Cesium.Color.CYAN.withAlpha(0.18),
+									outline: true,
+									outlineColor: Cesium.Color.CYAN,
+									heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+									classificationType: Cesium.ClassificationType.TERRAIN,
+								},
+							});
+						}
+						this.currentPreviewRectangle = Cesium.Rectangle.clone(rectangle);
+						this.previewEntity.show = true;
+					},
+
+					removePreview() {
+						if (this.previewEntity)
+							this.viewer.entities.remove(this.previewEntity);
+						this.previewEntity = null;
+						this.currentPreviewRectangle = null;
+					},
+
+					clearAll() {
+						this.cancelDraw();
+						this.removePreview();
+						this.removeResult();
+						this.currentRectangle = null;
+						this.statusText = "已清除，点击绘制范围重新开始。";
+					},
+
+					removeResult() {
+						if (this.resultLayer)
+							this.viewer.imageryLayers.remove(this.resultLayer, true);
+						this.resultLayer = null;
+						this.arrowEntities.forEach((entity) =>
+							this.viewer.entities.remove(entity),
+						);
+						this.arrowEntities = [];
+					},
+
+					async reanalyzeIfReady() {
+						if (
+							this.currentRectangle &&
+							(this.resultLayer || this.arrowEntities.length)
+						)
+							await this.analyzeCurrentRectangle();
+					},
+
+					async analyzeCurrentRectangle() {
+						if (!this.currentRectangle) {
+							this.statusText = "请先绘制分析范围。";
+							return;
+						}
+						this.statusText = "正在采样地形并计算坡向...";
+						try {
+							const result = await this.createAspectCanvas(
+								this.currentRectangle,
+							);
+							this.renderAspectResult(this.currentRectangle, result.canvas);
+							if (this.params.showArrows) this.renderArrows(result.arrows);
+							this.statusText = `分析完成：有效点 ${result.validAspectCount}，平均坡向 ${result.avgAspect.toFixed(1)}°。`;
+						} catch (error) {
+							console.error(error);
+							this.statusText = error.message || "坡向分析失败。";
+						}
+					},
+
+					async createAspectCanvas(rectangle) {
+						const cols = Math.max(
+							3,
+							Math.min(1000, Math.round(this.params.gridCols)),
+						);
+						const rows = Math.max(
+							3,
+							Math.min(1000, Math.round(this.params.gridRows)),
+						);
+						const west = rectangle.west;
+						const south = rectangle.south;
+						const east = rectangle.east;
+						const north = rectangle.north;
+						const lonSpan = east - west;
+						const latSpan = north - south;
+						if (lonSpan <= 0 || latSpan <= 0)
+							throw new Error("分析范围无效。请重新绘制矩形范围。");
+
+						const positions = [];
+						for (let j = 0; j < rows; j++) {
+							const lat = south + (latSpan * j) / (rows - 1);
+							for (let i = 0; i < cols; i++) {
+								const lon = west + (lonSpan * i) / (cols - 1);
+								positions.push(new Cesium.Cartographic(lon, lat, 0));
+							}
+						}
+
+						const sampled = await Cesium.sampleTerrain(
+							this.viewer.terrainProvider,
+							this.params.terrainLevel,
+							positions,
+						);
+						const heights = new Float64Array(cols * rows);
+						const valid = new Uint8Array(cols * rows);
+						for (let k = 0; k < sampled.length; k++) {
+							const height = sampled[k].height;
+							if (height === undefined || Number.isNaN(height)) continue;
+							heights[k] = height;
+							valid[k] = 1;
+						}
+
+						const canvas = document.createElement("canvas");
+						canvas.width = cols;
+						canvas.height = rows;
+						const context = canvas.getContext("2d");
+						const imageData = context.createImageData(cols, rows);
+						const data = imageData.data;
+						const earthRadius = 6378137;
+						const dLon = lonSpan / (cols - 1);
+						const dLat = latSpan / (rows - 1);
+						const aspects = [];
+						const arrows = [];
+
+						const getHeight = (i, j) => {
+							if (i < 0 || i >= cols || j < 0 || j >= rows) return undefined;
+							const idx = j * cols + i;
+							return valid[idx] ? heights[idx] : undefined;
+						};
+
+						for (let j = 0; j < rows; j++) {
+							const lat = south + (latSpan * j) / (rows - 1);
+							const eastMeterPerRad = earthRadius * Math.cos(lat);
+							for (let i = 0; i < cols; i++) {
+								const canvasRow = rows - 1 - j;
+								const p = (canvasRow * cols + i) * 4;
+								const dhdEast = this.getGradient(
+									i,
+									j,
+									cols,
+									getHeight,
+									true,
+									eastMeterPerRad * dLon,
+								);
+								const dhdNorth = this.getGradient(
+									i,
+									j,
+									rows,
+									getHeight,
+									false,
+									earthRadius * dLat,
+								);
+								if (dhdEast === undefined || dhdNorth === undefined) {
+									data[p + 3] = 0;
+									continue;
+								}
+
+								const slopeDeg =
+									Math.atan(
+										Math.sqrt(dhdEast * dhdEast + dhdNorth * dhdNorth),
+									) * Cesium.Math.DEGREES_PER_RADIAN;
+								if (slopeDeg < this.params.minSlopeForAspect) {
+									data[p + 3] = 0;
+									continue;
+								}
+
+								const aspectDeg = this.getAspectAzimuthDeg(-dhdEast, -dhdNorth);
+								aspects.push(aspectDeg);
+								const color = this.getAspectColor(aspectDeg);
+								data[p] = color[0];
+								data[p + 1] = color[1];
+								data[p + 2] = color[2];
+								data[p + 3] = Math.round(255 * this.params.alpha);
+
+								if (
+									this.params.showArrows &&
+									i % this.params.arrowStep === 0 &&
+									j % this.params.arrowStep === 0
+								) {
+									const lon = Cesium.Math.toDegrees(
+										west + (lonSpan * i) / (cols - 1),
+									);
+									const latPoint = Cesium.Math.toDegrees(
+										south + (latSpan * j) / (rows - 1),
+									);
+									const lonLen = Cesium.Math.toDegrees((lonSpan / cols) * 4);
+									const latLen = Cesium.Math.toDegrees((latSpan / rows) * 4);
+									arrows.push(
+										this.getArrow(lon, latPoint, lonLen, latLen, aspectDeg),
+									);
+								}
+							}
+						}
+
+						context.putImageData(imageData, 0, 0);
+						const avgAspect = aspects.length
+							? aspects.reduce((sum, item) => sum + item, 0) / aspects.length
+							: 0;
+						return {
+							canvas,
+							arrows,
+							validAspectCount: aspects.length,
+							avgAspect,
+						};
+					},
+
+					getGradient(i, j, limit, getHeight, isEast, cellSize) {
+						const prev = isEast ? getHeight(i - 1, j) : getHeight(i, j - 1);
+						const next = isEast ? getHeight(i + 1, j) : getHeight(i, j + 1);
+						const center = getHeight(i, j);
+						const index = isEast ? i : j;
+						if (center === undefined) return undefined;
+						if (index > 0 && index < limit - 1)
+							return prev !== undefined && next !== undefined
+								? (next - prev) / (2 * cellSize)
+								: undefined;
+						if (index === 0)
+							return next !== undefined
+								? (next - center) / cellSize
+								: undefined;
+						return prev !== undefined ? (center - prev) / cellSize : undefined;
+					},
+
+					getAspectAzimuthDeg(east, north) {
+						const angle = Cesium.Math.toDegrees(Math.atan2(east, north));
+						return (angle + 360) % 360;
+					},
+
+					getAspectColor(aspect) {
+						const ramps = {
+							八方向: [
+								"#e41a1c",
+								"#ff7f00",
+								"#ffff33",
+								"#4daf4a",
+								"#377eb8",
+								"#984ea3",
+								"#f781bf",
+								"#a65628",
+							],
+							冷暖方位: [
+								"#2166ac",
+								"#4393c3",
+								"#92c5de",
+								"#f7f7f7",
+								"#f4a582",
+								"#d6604d",
+								"#b2182b",
+								"#67001f",
+							],
+							彩虹方位: [
+								"#d7191c",
+								"#fdae61",
+								"#ffffbf",
+								"#a6d96a",
+								"#1a9641",
+								"#2b83ba",
+								"#5e4fa2",
+								"#9e0142",
+							],
+							灰度方位: [
+								"#252525",
+								"#525252",
+								"#737373",
+								"#969696",
+								"#bdbdbd",
+								"#d9d9d9",
+								"#f0f0f0",
+								"#ffffff",
+							],
+						};
+						const ramp = ramps[this.params.colorRamp] || ramps["八方向"];
+						const value = (aspect / 360) * ramp.length;
+						const i = Math.floor(value) % ramp.length;
+						const next = (i + 1) % ramp.length;
+						return this.lerpColor(
+							this.hexToRgb(ramp[i]),
+							this.hexToRgb(ramp[next]),
+							value - Math.floor(value),
+						);
+					},
+
+					getArrow(lon, lat, lonLen, latLen, aspectDeg) {
+						const rad = Cesium.Math.toRadians(aspectDeg);
+						const dx = Math.sin(rad) * lonLen;
+						const dy = Math.cos(rad) * latLen;
+						return {
+							startLon: lon - dx * 0.5,
+							startLat: lat - dy * 0.5,
+							endLon: lon + dx * 0.5,
+							endLat: lat + dy * 0.5,
+						};
+					},
+
+					renderAspectResult(rectangle, canvas) {
+						this.removeResult();
+						const provider = new Cesium.SingleTileImageryProvider({
+							url: canvas.toDataURL("image/png"),
+							rectangle,
+						});
+						this.resultLayer =
+							this.viewer.imageryLayers.addImageryProvider(provider);
+						this.resultLayer.alpha = this.params.alpha;
+						this.viewer.imageryLayers.raiseToTop(this.resultLayer);
+					},
+
+					renderArrows(arrows) {
+						const material = new Cesium.PolylineArrowMaterialProperty(
+							Cesium.Color.fromCssColorString(this.params.arrowColor),
+						);
+						for (const arrow of arrows) {
+							this.arrowEntities.push(
+								this.viewer.entities.add({
+									polyline: {
+										positions: Cesium.Cartesian3.fromDegreesArray([
+											arrow.startLon,
+											arrow.startLat,
+											arrow.endLon,
+											arrow.endLat,
+										]),
+										clampToGround: true,
+										width: this.params.arrowWidth,
+										material,
+										depthFailMaterial: material,
+										zIndex: 10,
+									},
+								}),
+							);
+						}
+					},
+
+					updateArrowStyle() {
+						const material = new Cesium.PolylineArrowMaterialProperty(
+							Cesium.Color.fromCssColorString(this.params.arrowColor),
+						);
+						this.arrowEntities.forEach((entity) => {
+							entity.polyline.width = this.params.arrowWidth;
+							entity.polyline.material = material;
+						});
+					},
+
+					updateResultAlpha() {
+						if (this.resultLayer) this.resultLayer.alpha = this.params.alpha;
+					},
+
+					hexToRgb(hex) {
+						const value = hex.replace("#", "");
+						const number = parseInt(value, 16);
+						return [(number >> 16) & 255, (number >> 8) & 255, number & 255];
+					},
+
+					lerpColor(a, b, t) {
+						return [
+							Math.round(a[0] + (b[0] - a[0]) * t),
+							Math.round(a[1] + (b[1] - a[1]) * t),
+							Math.round(a[2] + (b[2] - a[2]) * t),
+						];
+					},
+
+					resetCamera() {
+						if (!this.viewer) return;
+						this.viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(118.78, 31.95, 18000),
+							orientation: {
+								heading: Cesium.Math.toRadians(0),
+								pitch: Cesium.Math.toRadians(-45),
+								roll: Cesium.Math.toRadians(0),
+							},
+						});
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>
