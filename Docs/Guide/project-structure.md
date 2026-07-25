@@ -24,9 +24,11 @@ WebGIS_Dev/
 │   └── api/                           # 详细文件树见 backend-structure.md
 │
 ├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档 + Demo 演示）
+├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档 + Demo 演示）
 │   ├── LLM_record/                    # 维护日志（按日期归档）
 │   ├── Architecture/                  # 架构设计文档（八大功能架构说明 + 洪水模拟）
 │   ├── Guide/                         # 指南文档（本目录）
+│   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Example_prompt.md
 │   ├── Force_command.md
