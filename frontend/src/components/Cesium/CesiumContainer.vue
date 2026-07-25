@@ -57,6 +57,8 @@
         @data-set-height="handleDataSetHeight"
         @import-tileset-zip="handleImportTilesetZip"
         @import-tileset-folder="handleImportTilesetFolder"
+        @import-tileset-sample="handleImportTilesetSample"
+        @data-set-material="handleDataSetMaterial"
     />
 
     <!-- 人物漫游操作提示面板 -->
@@ -700,6 +702,31 @@ async function handleDataStretchHeight({ id }) {
 function handleDataSetHeight({ id, height }) {
     if (componentUnmounted) return;
     dataImport.setTilesetHeight(id, height);
+}
+
+/**
+ * 加载内置样例城市 3D Tiles
+ */
+async function handleImportTilesetSample() {
+    if (componentUnmounted) return;
+    try {
+        await dataImport.loadSampleTileset();
+    } catch {
+        // 内部已提示
+    }
+}
+
+/**
+ * 切换 3D Tiles 材质模式
+ */
+function handleDataSetMaterial({ id, mode }) {
+    if (componentUnmounted) return;
+    const CesiumRuntime = getCesium();
+    if (!CesiumRuntime) return;
+    const record = dataImport.loadedDataSources.value.find(ds => ds.id === id);
+    if (!record || record.type !== '3dtiles') return;
+    dataImport.applyTilesetMaterial(record.entity, mode, CesiumRuntime);
+    record.materialMode = mode;
 }
 
 /**

@@ -171,6 +171,8 @@ export default defineConfig(({ command, mode }) => {
             if (isNodeModulePackage(id, 'vue-toastification') || isNodeModulePackage(id, 'vue3-toastify')) {
               return 'vendor-toast';
             }
+            // cesium-navigation-es6（罗盘/缩放控件，仅 Cesium 场景使用，必须独立 chunk 避免顶层 new EllipsoidGeodesic() 在 vendor-libs 求值时触发 cesium-shim 报错）
+            if (isNodeModulePackage(id, 'cesium-navigation-es6')) return 'vendor-navigation';
             // 剩余 node_modules（小库合集）
             return 'vendor-libs';
           }

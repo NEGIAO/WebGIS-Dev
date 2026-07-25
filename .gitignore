@@ -8,6 +8,8 @@ dist-ssr
 .npm-cache/
 .eslintcache
 .cache/
+Docs/Demo/data
+Docs/Demo/textures
 
 # ========== 后端依赖与缓存 ==========
 backend/__pycache__/

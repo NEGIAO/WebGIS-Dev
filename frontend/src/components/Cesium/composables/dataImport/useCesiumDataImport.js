@@ -14,7 +14,7 @@ import { loadSHP } from './loaders/shpLoader.js';
 import { loadGLTF, loadGltfWithCoords } from './loaders/gltfLoader.js';
 import { loadCZML } from './loaders/czmlLoader.js';
 import { loadGeoTIFF } from './loaders/geotiffLoader.js';
-import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR } from './loaders/tilesetLoader.js';
+import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset } from './loaders/tilesetLoader.js';
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
@@ -28,7 +28,8 @@ const MAX_MESH_SIZE = 200;
  * @returns {{ loadDataFile, loadDataFiles, loadedDataSources, removeDataSource, clearAllDataSources,
  *    flyToDataSource, pendingGltfFile, repositionTarget, loadGltfWithUserCoords,
  *    cancelPendingGltf, startGltfReposition, confirmGltfReposition, cancelGltfReposition,
- *    stretchRasterToHeight, importTilesetFromDirectory }}
+ *    stretchRasterToHeight, importTilesetFromDirectory, setTilesetHeight,
+ *    MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset }}
  */
 export function useCesiumDataImport({ getViewer, getCesium, message, heightSampler }) {
     /** @type {import('vue').Ref<Array>} */
@@ -587,5 +588,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         cancelGltfReposition,
         stretchRasterToHeight,
         setTilesetHeight,
+        MATERIAL_MODES,
+        applyTilesetMaterial,
+        loadSampleTileset: () => loadSampleTileset(loaderCtx()),
     };
 }
