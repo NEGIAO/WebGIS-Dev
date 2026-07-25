@@ -1,8 +1,8 @@
-diff --git a/dist/core/Utils.js b/dist/core/Utils.js
-index bc8ac90..27666b3 100644
---- a/dist/core/Utils.js
-+++ b/dist/core/Utils.js
-@@ -3,8 +3,16 @@ import { defined, Ray, Cartesian3, Cartographic, ReferenceFrame, SceneMode } fro
+diff --git a/node_modules/cesium-navigation-es6/dist/core/Utils.js b/node_modules/cesium-navigation-es6/dist/core/Utils.js
+index 9c8dba7..e11c7a2 100644
+--- a/node_modules/cesium-navigation-es6/dist/core/Utils.js
++++ b/node_modules/cesium-navigation-es6/dist/core/Utils.js
+@@ -3,8 +3,18 @@ import { defined, Ray, Cartesian3, Cartographic, ReferenceFrame, SceneMode } fro
  
  var Utils = {}
  
@@ -15,19 +15,22 @@ index bc8ac90..27666b3 100644
 +        if (!unprojectedScratch) unprojectedScratch = new Cartographic()
 +        return unprojectedScratch
 +    }
-+    if (!rayScratch) rayScratch = new Ray()
-+    return rayScratch
++    if (name === 'ray') {
++        if (!rayScratch) rayScratch = new Ray()
++        return rayScratch
++    }
 +}
  
  /**
   * gets the focus point of the camera
-@@ -31,9 +39,10 @@ Utils.getCameraFocus = function (terria, inWorldCoordinates, result) {
+@@ -31,9 +41,11 @@ Utils.getCameraFocus = function (terria, inWorldCoordinates, result) {
    if (defined(terria.trackedEntity)) {
      result = terria.trackedEntity.position.getValue(terria.clock.currentTime, result)
    } else {
 -    rayScratch.origin = camera.positionWC
 -    rayScratch.direction = camera.directionWC
 -    result = scene.globe.pick(rayScratch, scene, result)
++    // 💡 改动点 1：通过 getScratch('ray') 获取实例后再赋值，避免 null 报错
 +    var rs = getScratch('ray')
 +    rs.origin = camera.positionWC
 +    rs.direction = camera.directionWC
@@ -35,25 +38,25 @@ index bc8ac90..27666b3 100644
    }
  
    if (!defined(result)) {
-@@ -44,7 +53,7 @@ Utils.getCameraFocus = function (terria, inWorldCoordinates, result) {
+@@ -44,7 +56,8 @@ Utils.getCameraFocus = function (terria, inWorldCoordinates, result) {
      result = camera.worldToCameraCoordinatesPoint(result, result)
  
      if (inWorldCoordinates) {
 -      result = scene.globe.ellipsoid.cartographicToCartesian(scene.mapProjection.unproject(result, unprojectedScratch), result)
++      // 💡 改动点 2：将 unprojectedScratch 替换为 getScratch('unprojected')
 +      result = scene.globe.ellipsoid.cartographicToCartesian(scene.mapProjection.unproject(result, getScratch('unprojected')), result)
      }
    } else {
      if (!inWorldCoordinates) {
-diff --git a/dist/viewModels/DistanceLegendViewModel.js b/dist/viewModels/DistanceLegendViewModel.js
-index fb9f79b..8c67079 100644
---- a/dist/viewModels/DistanceLegendViewModel.js
-+++ b/dist/viewModels/DistanceLegendViewModel.js
-@@ -81,7 +81,12 @@ DistanceLegendViewModel.create = function (options) {
+diff --git a/node_modules/cesium-navigation-es6/dist/viewModels/DistanceLegendViewModel.js b/node_modules/cesium-navigation-es6/dist/viewModels/DistanceLegendViewModel.js
+index 4f3c620..7cf49d0 100644
+--- a/node_modules/cesium-navigation-es6/dist/viewModels/DistanceLegendViewModel.js
++++ b/node_modules/cesium-navigation-es6/dist/viewModels/DistanceLegendViewModel.js
+@@ -81,7 +81,11 @@ DistanceLegendViewModel.create = function (options) {
    return result
  }
  
 -var geodesic = new EllipsoidGeodesic()
-+// 惰性初始化，避免模块求值时立即触发 cesium-shim 代理的 construct 陷阱（此时 window.Cesium 可能未就绪）
 +var geodesic = null
 +function getGeodesic() {
 +    if (!geodesic) geodesic = new EllipsoidGeodesic()
@@ -62,160 +65,22 @@ index fb9f79b..8c67079 100644
  
  var distances = [
    1, 2, 3, 5,
-@@ -126,8 +131,9 @@ function updateDistanceLegendCesium(viewModel, scene) {
+@@ -126,8 +130,9 @@ function updateDistanceLegendCesium(viewModel, scene) {
    var leftCartographic = globe.ellipsoid.cartesianToCartographic(leftPosition)
    var rightCartographic = globe.ellipsoid.cartesianToCartographic(rightPosition)
  
 -  geodesic.setEndPoints(leftCartographic, rightCartographic)
 -  var pixelDistance = geodesic.surfaceDistance
-+  var g = getGeodesic()
-+  g.setEndPoints(leftCartographic, rightCartographic)
-+  var pixelDistance = g.surfaceDistance
++var g = getGeodesic()
++g.setEndPoints(leftCartographic, rightCartographic)
++var pixelDistance = g.surfaceDistance
  
    // Find the first distance that makes the scale bar less than 100 pixels.
    var maxBarWidth = 100
-diff --git a/dist/viewModels/NavigationViewModel.js b/dist/viewModels/NavigationViewModel.js
-index 648f654..153d6e9 100644
---- a/dist/viewModels/NavigationViewModel.js
-+++ b/dist/viewModels/NavigationViewModel.js
-@@ -197,7 +197,26 @@ NavigationViewModel.prototype.isLastControl = function (control) {
-   return (control === this.controls[this.controls.length - 1])
- }
- 
--var vectorScratch = new Cartesian2()
-+var vectorScratch = null
-+var oldTransformScratch = null
-+var newTransformScratch = null
-+var centerScratch = null
-+function getNavScratch(name) {
-+    if (name === 'vector') {
-+        if (!vectorScratch) vectorScratch = new Cartesian2()
-+        return vectorScratch
-+    }
-+    if (name === 'oldTransform') {
-+        if (!oldTransformScratch) oldTransformScratch = new Matrix4()
-+        return oldTransformScratch
-+    }
-+    if (name === 'newTransform') {
-+        if (!newTransformScratch) newTransformScratch = new Matrix4()
-+        return newTransformScratch
-+    }
-+    if (!centerScratch) centerScratch = new Cartesian3()
-+    return centerScratch
-+}
- 
- const getClientXY = (e) => {
-   let temp;
-@@ -225,7 +244,7 @@ NavigationViewModel.prototype.handleMouseDown = function (viewModel, e) {
-   var maxDistance = compassRectangle.width / 2.0
-   var center = new Cartesian2((compassRectangle.right - compassRectangle.left) / 2.0, (compassRectangle.bottom - compassRectangle.top) / 2.0)
-   var clickLocation = new Cartesian2(clientX - compassRectangle.left, clientY - compassRectangle.top)
--  var vector = Cartesian2.subtract(clickLocation, center, vectorScratch)
-+  var vector = Cartesian2.subtract(clickLocation, center, getNavScratch('vector'))
-   var distanceFromCenter = Cartesian2.magnitude(vector)
- 
-   var distanceFraction = distanceFromCenter / maxDistance
-@@ -244,9 +263,6 @@ NavigationViewModel.prototype.handleMouseDown = function (viewModel, e) {
-   }
- }
- 
--var oldTransformScratch = new Matrix4()
--var newTransformScratch = new Matrix4()
--var centerScratch = new Cartesian3()
- 
- NavigationViewModel.prototype.handleDoubleClick = function (viewModel, e) {
-   var scene = viewModel.terria.scene
-@@ -275,7 +291,7 @@ NavigationViewModel.prototype.handleDoubleClick = function (viewModel, e) {
-     }
-   }
- 
--  var center = Utils.getCameraFocus(viewModel.terria, true, centerScratch)
-+  var center = Utils.getCameraFocus(viewModel.terria, true, getNavScratch('center'))
- 
-   if (!defined(center)) {
-     // Globe is barely visible, so reset to home view.
-@@ -400,13 +416,13 @@ function orbit(viewModel, compassElement, cursorVector) {
-     viewModel.orbitFrame = undefined
-     viewModel.orbitIsLook = false
-   } else {
--    var center = Utils.getCameraFocus(viewModel.terria, true, centerScratch)
-+    var center = Utils.getCameraFocus(viewModel.terria, true, getNavScratch('center'))
- 
-     if (!defined(center)) {
--      viewModel.orbitFrame = Transforms.eastNorthUpToFixedFrame(camera.positionWC, scene.globe.ellipsoid, newTransformScratch)
-+      viewModel.orbitFrame = Transforms.eastNorthUpToFixedFrame(camera.positionWC, scene.globe.ellipsoid, getNavScratch('newTransform'))
-       viewModel.orbitIsLook = true
-     } else {
--      viewModel.orbitFrame = Transforms.eastNorthUpToFixedFrame(center, scene.globe.ellipsoid, newTransformScratch)
-+      viewModel.orbitFrame = Transforms.eastNorthUpToFixedFrame(center, scene.globe.ellipsoid, getNavScratch('newTransform'))
-       viewModel.orbitIsLook = false
-     }
-   }
-@@ -428,7 +444,7 @@ function orbit(viewModel, compassElement, cursorVector) {
-     }
- 
-     if (defined(viewModel.orbitFrame)) {
--      oldTransform = Matrix4.clone(camera.transform, oldTransformScratch)
-+      oldTransform = Matrix4.clone(camera.transform, getNavScratch('oldTransform'))
- 
-       camera.lookAtTransform(viewModel.orbitFrame)
-     }
-@@ -473,7 +489,7 @@ function orbit(viewModel, compassElement, cursorVector) {
-     var compassRectangle = compassElement.getBoundingClientRect()
-     var center = new Cartesian2((compassRectangle.right - compassRectangle.left) / 2.0, (compassRectangle.bottom - compassRectangle.top) / 2.0)
-     var clickLocation = new Cartesian2(clientX - compassRectangle.left, clientY - compassRectangle.top)
--    var vector = Cartesian2.subtract(clickLocation, center, vectorScratch)
-+    var vector = Cartesian2.subtract(clickLocation, center, getNavScratch('vector'))
-     updateAngleAndOpacity(vector, compassRectangle.width)
-   }
- 
-@@ -527,20 +543,20 @@ function rotate(viewModel, compassElement, cursorVector) {
-     viewModel.rotateFrame = undefined
-     viewModel.rotateIsLook = false
-   } else {
--    var viewCenter = Utils.getCameraFocus(viewModel.terria, true, centerScratch)
-+    var viewCenter = Utils.getCameraFocus(viewModel.terria, true, getNavScratch('center'))
- 
-     if (!defined(viewCenter) || (scene.mode === SceneMode.COLUMBUS_VIEW && !sscc.enableLook && !sscc.enableTranslate)) {
--      viewModel.rotateFrame = Transforms.eastNorthUpToFixedFrame(camera.positionWC, scene.globe.ellipsoid, newTransformScratch)
-+      viewModel.rotateFrame = Transforms.eastNorthUpToFixedFrame(camera.positionWC, scene.globe.ellipsoid, getNavScratch('newTransform'))
-       viewModel.rotateIsLook = true
-     } else {
--      viewModel.rotateFrame = Transforms.eastNorthUpToFixedFrame(viewCenter, scene.globe.ellipsoid, newTransformScratch)
-+      viewModel.rotateFrame = Transforms.eastNorthUpToFixedFrame(viewCenter, scene.globe.ellipsoid, getNavScratch('newTransform'))
-       viewModel.rotateIsLook = false
-     }
-   }
- 
-   var oldTransform
-   if (defined(viewModel.rotateFrame)) {
--    oldTransform = Matrix4.clone(camera.transform, oldTransformScratch)
-+    oldTransform = Matrix4.clone(camera.transform, getNavScratch('oldTransform'))
-     camera.lookAtTransform(viewModel.rotateFrame)
-   }
- 
-@@ -555,7 +571,7 @@ function rotate(viewModel, compassElement, cursorVector) {
-     var compassRectangle = compassElement.getBoundingClientRect()
-     var center = new Cartesian2((compassRectangle.right - compassRectangle.left) / 2.0, (compassRectangle.bottom - compassRectangle.top) / 2.0)
-     var clickLocation = new Cartesian2(clientX - compassRectangle.left, clientY - compassRectangle.top)
--    var vector = Cartesian2.subtract(clickLocation, center, vectorScratch)
-+    var vector = Cartesian2.subtract(clickLocation, center, getNavScratch('vector'))
-     var angle = Math.atan2(-vector.y, vector.x)
- 
-     var angleDifference = angle - viewModel.rotateInitialCursorAngle
-@@ -565,7 +581,7 @@ function rotate(viewModel, compassElement, cursorVector) {
- 
-     var oldTransform
-     if (defined(viewModel.rotateFrame)) {
--      oldTransform = Matrix4.clone(camera.transform, oldTransformScratch)
-+      oldTransform = Matrix4.clone(camera.transform, getNavScratch('oldTransform'))
-       camera.lookAtTransform(viewModel.rotateFrame)
-     }
- 
-diff --git a/dist/viewModels/ZoomNavigationControl.js b/dist/viewModels/ZoomNavigationControl.js
-index f0d25c8..6b5bf87 100644
---- a/dist/viewModels/ZoomNavigationControl.js
-+++ b/dist/viewModels/ZoomNavigationControl.js
+diff --git a/node_modules/cesium-navigation-es6/dist/viewModels/ZoomNavigationControl.js b/node_modules/cesium-navigation-es6/dist/viewModels/ZoomNavigationControl.js
+index e776c81..a076d7b 100644
+--- a/node_modules/cesium-navigation-es6/dist/viewModels/ZoomNavigationControl.js
++++ b/node_modules/cesium-navigation-es6/dist/viewModels/ZoomNavigationControl.js
 @@ -72,7 +72,11 @@ ZoomNavigationControl.prototype.activate = function () {
    this.zoom(this.relativeAmount)
  }
