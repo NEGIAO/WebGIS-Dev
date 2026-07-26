@@ -559,7 +559,7 @@ onUnmounted(() => {
     position: absolute;
     right: 8px;
     bottom: 8px;
-    z-index: 1000;
+    z-index: var(--z-panel);
     display: flex;
     align-items: center;
     gap: 10px;
@@ -682,10 +682,10 @@ onUnmounted(() => {
     bottom: 100%;
     left: 0;
     margin-bottom: 8px;
-    z-index: 2000;
+    z-index: var(--z-modal);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
     border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: 12px;
+    border-radius: var(--panel-radius);
     box-shadow:
         0 16px 48px rgba(0, 0, 0, 0.15),
         0 4px 12px rgba(0, 0, 0, 0.1);

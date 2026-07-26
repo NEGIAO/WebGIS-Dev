@@ -4,4 +4,6 @@ export { createBasemapSelectionWatcher } from './features/useBasemapSelectionWat
 export { createBasemapStateManagementFeature } from './features/useBasemapStateManagement';
 export { createBasemapSwipe } from './features/useBasemapSwipe';
 export { createBasemapUrlMappingFeature } from './features/useBasemapUrlMapping';
+export { createRuntimeMapTokenPool } from './features/useRuntimeMapTokenPool';
+export { createSharedEntryResolver } from './features/useSharedEntryResolver';
 export { tileHDRendering, toggleTileHDRendering } from './features/useTileHDRendering';

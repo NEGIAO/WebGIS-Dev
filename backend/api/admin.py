@@ -17,6 +17,7 @@ from api.auth.system_config import (
     _get_default_basemap_index_sync,
     _set_default_basemap_index_sync,
 )
+from config import get_settings
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -256,6 +257,26 @@ def _update_admin_contact_sync(contact: str) -> None:
         conn.commit()
 
 
+def _get_l3_env_status() -> Dict[str, bool]:
+    """
+    L3 环境密钥「是否已配置」布尔（供 Admin 面板只读展示）。
+
+    安全约束：仅输出布尔，绝不回显明文；绝密只能在 HF Secrets / 本地
+    未提交 .env 修改，Admin 面板与 DB 不存储 L3 真值。
+    """
+    s = get_settings()
+    return {
+        "super_user": bool(s.super_user),
+        "oauth_state_secret": bool(s.oauth_state_secret),
+        "google_oauth": bool(s.google_oauth_client_id and s.google_oauth_client_secret),
+        "github_oauth": bool(s.github_oauth_client_id and s.github_oauth_client_secret),
+        "smtp": bool(s.smtp_user and s.smtp_password),
+        "agent_api_key_env": bool(s.agent_api_key),
+        "amap_web_service_key": bool(s.amap_web_service_key),
+        "supabase": bool(s.supabase_url and s.supabase_key),
+    }
+
+
 def _get_admin_overview_sync() -> Dict[str, Any]:
     with _db_connection() as conn:
         table_count = conn.execute(
@@ -275,6 +296,7 @@ def _get_admin_overview_sync() -> Dict[str, Any]:
         "total_sessions": int((dict(total_sessions).get("cnt") if total_sessions else 0) or 0),
         "total_messages": int((dict(total_messages).get("cnt") if total_messages else 0) or 0),
         "active_announcement": int((dict(active_announcement).get("cnt") if active_announcement else 0) or 0),
+        "l3_env_status": _get_l3_env_status(),
         "snapshot_at": _iso_now(),
     }
 

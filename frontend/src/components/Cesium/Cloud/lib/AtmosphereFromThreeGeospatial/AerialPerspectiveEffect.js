@@ -73,6 +73,8 @@ export class AerialPerspectiveEffect {
     this._cloudShadowDummyArray = null;
     this._cloudShadowTexelSize = null;
     this._geometricErrorCorrectionAmount = 0.0;
+    /** 地面云影 PCF tap 数（1~16），由管线按质量预设注入；性能与柔和度折中 */
+    this._cloudShadowPcfTaps = 16;
 
     this._cloudShadowLengthEnabled = false;
     this._cloudShadowLengthTexture = null;
@@ -347,6 +349,8 @@ uniform sampler2D irradiance_texture;
         self._cloudShadowTexelSize ?? new Cesium.Cartesian2(1 / 512, 1 / 512);
       uniforms.u_geometricErrorCorrectionAmount = () =>
         self._geometricErrorCorrectionAmount ?? 0.0;
+      uniforms.u_cloudShadowPcfTaps = () =>
+        Math.max(1, Math.min(16, Math.round(self._cloudShadowPcfTaps ?? 16)));
 
       // shadowLength MRT 纹理（可选）
       uniforms.u_cloudShadowLengthEnabled = () =>
@@ -463,6 +467,9 @@ uniform sampler2D irradiance_texture;
     }
     if (options.geometricErrorCorrectionAmount !== undefined) {
       this._geometricErrorCorrectionAmount = options.geometricErrorCorrectionAmount;
+    }
+    if (options.pcfTaps !== undefined) {
+      this._cloudShadowPcfTaps = options.pcfTaps;
     }
   }
 

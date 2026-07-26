@@ -50,7 +50,7 @@ defineEmits(['close']);
     position: fixed;
     bottom: 32px;
     right: 12px;
-    z-index: 9998;
+    z-index: calc(var(--z-toast) - 1);
     display: flex;
     flex-direction: column;
     align-items: flex-end;

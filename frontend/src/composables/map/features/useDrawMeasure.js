@@ -12,6 +12,7 @@ import Overlay from 'ol/Overlay';
 import { Polygon } from 'ol/geom';
 import { getArea, getLength } from 'ol/sphere';
 import { unByKey } from 'ol/Observable';
+import { formatAreaMeasure, formatDistanceMeasure } from '../../../utils/units';
 import {
     applyDrawingFeatureStyle,
     createDrawingStyleFromParams,
@@ -64,23 +65,21 @@ export function createDrawMeasureFeature({
     const drawListenerKeys = []; // [C7] 存储 drawstart/drawend 监听器 key
 
     /**
-     * 格式化线长度显示文本
+     * 格式化线长度显示文本（跟随用户偏好单位制：公制 m/km，英制 ft/mi）
      * @param {LineString} line - OL LineString对象
      * @returns {string} 格式化后的长度文本
      */
     function formatLength(line) {
-        const len = getLength(line);
-        return len > 100 ? `${(len / 1000).toFixed(2)} km` : `${len.toFixed(2)} m`;
+        return formatDistanceMeasure(getLength(line));
     }
 
     /**
-     * 格式化面面积显示文本
+     * 格式化面面积显示文本（跟随用户偏好单位制：公制 m²/km²，英制 ft²/acre）
      * @param {Polygon} poly - OL Polygon对象
      * @returns {string} 格式化后的面积文本
      */
     function formatArea(poly) {
-        const area = getArea(poly);
-        return area > 10000 ? `${(area / 1000000).toFixed(2)} km²` : `${area.toFixed(2)} m²`;
+        return formatAreaMeasure(getArea(poly));
     }
 
     /**

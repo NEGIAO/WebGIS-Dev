@@ -68,7 +68,11 @@
                     <div class="toolbar-group">
                         <label
                             class="pro-toggle"
-                            title="通过当前的地图视图对数据行进行限制"
+                            :class="{ unavailable: viewFilterUnavailable }"
+                            :title="viewFilterUnavailable
+                                ? '当前地图视图范围不可用（3D 模式或视图未就绪），筛选暂不生效'
+                                : '通过当前的地图视图对数据行进行限制'
+                            "
                         >
                             <input
                                 v-model="filterByCurrentView"
@@ -104,6 +108,52 @@
                                 />
                             </svg>
                             {{ showFieldPanel ? '收起字段视图' : '设置可用字段' }}
+                        </button>
+                        <span class="divider"></span>
+                        <div class="pro-search-wrap">
+                            <svg
+                                class="pro-search-icon"
+                                viewBox="0 0 16 16"
+                            >
+                                <path
+                                    d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"
+                                    fill="currentColor"
+                                />
+                            </svg>
+                            <input
+                                v-model="searchInput"
+                                type="text"
+                                class="pro-input pro-search-input"
+                                placeholder="搜索全部字段..."
+                            />
+                            <button
+                                v-show="searchInput"
+                                class="pro-search-clear"
+                                type="button"
+                                title="清除搜索"
+                                @click="clearSearch"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <span class="divider"></span>
+                        <button
+                            class="pro-toolbar-btn"
+                            type="button"
+                            :disabled="!totalRows"
+                            title="导出当前视图（筛选 + 排序，可见列）为 CSV"
+                            @click.stop="exportCsv"
+                        >
+                            <svg
+                                class="pro-icon-field"
+                                viewBox="0 0 16 16"
+                            >
+                                <path
+                                    d="M7 1v7.586L4.707 6.293 3.293 7.707 8 12.414l4.707-4.707-1.414-1.414L9 8.586V1H7zM2 13v2h12v-2H2z"
+                                    fill="currentColor"
+                                />
+                            </svg>
+                            导出CSV
                         </button>
                     </div>
 
@@ -213,26 +263,47 @@
                         ref="scrollRef"
                         class="pro-scroll-area"
                         @scroll="handleScroll"
+                        @mouseleave="clearPreview"
                     >
-                        <div class="pro-grid-layout">
+                        <div
+                            class="pro-grid-layout"
+                            :style="{ width: `${gridTotalWidth}px` }"
+                        >
                             <!-- 严格边界型表头 -->
                             <div
                                 class="pro-th-group"
                                 :style="{ gridTemplateColumns }"
                             >
-                                <div class="cell header id-col">OID/标识</div>
+                                <div
+                                    class="cell header id-col"
+                                    :class="{ sortable: !!sortKey }"
+                                    :title="sortKey ? '点击恢复默认顺序' : 'OID/标识'"
+                                    @click="sortKey && clearSort()"
+                                >
+                                    OID/标识
+                                </div>
                                 <div
                                     v-for="field in visibleFields"
                                     :key="`head_${field.key}`"
-                                    class="cell header resizable"
+                                    class="cell header resizable sortable"
+                                    :title="`点击按「${field.alias || field.key}」排序`"
+                                    @click="handleSortClick(field.key)"
                                 >
-                                    <div
-                                        class="header-text"
-                                        :title="field.alias || field.key"
-                                    >
+                                    <div class="header-text">
                                         {{ field.alias || field.key }}
                                     </div>
-                                    <span class="header-sort-grip"></span>
+                                    <span
+                                        v-if="sortKey === field.key"
+                                        class="header-sort-caret"
+                                        >{{ sortDirection === 'asc' ? '▲' : '▼' }}</span
+                                    >
+                                    <span
+                                        class="col-resize-grip"
+                                        title="拖拽调整列宽"
+                                        @click.stop
+                                        @dblclick.stop
+                                        @pointerdown.stop.prevent="startColResize(field, $event)"
+                                    ></span>
                                 </div>
                             </div>
 
@@ -241,18 +312,22 @@
                                 class="virtual-holder"
                                 :style="{ height: `${totalHeight}px` }"
                             >
+                                <!-- key 使用稳定行 id（不含 index），滚动位移时 Vue 可复用节点避免整片重挂载 -->
                                 <div
                                     v-for="item in virtualRows"
-                                    :key="`row_${item.row.featureId}_${item.index}`"
+                                    :key="`row_${item.row.id}`"
                                     class="pro-tr"
-                                    :class="{ selected: item.row.featureId === selectedFeatureId }"
+                                    :class="{
+                                        selected: item.row.featureId === selectedFeatureId,
+                                        'row-even': item.index % 2 === 1,
+                                    }"
                                     :style="{
                                         transform: `translateY(${item.top}px)`,
                                         gridTemplateColumns,
                                     }"
                                     @mouseenter="previewFeature(item.row)"
-                                    @mouseleave="clearPreview"
-                                    @click="focusFeature(item.row)"
+                                    @click="focusFeature(item.row, $event)"
+                                    @dblclick="zoomToFeatureRow(item.row)"
                                 >
                                     <div class="cell id-col">{{ item.index + 1 }}</div>
 
@@ -277,8 +352,13 @@
 
                 <!-- 底部辅助说明列条（模拟ArcgisPro信息横条） -->
                 <footer class="pro-footer-bar">
-                    展示数量 {{ visibleFields.length }}列 · 余可用字段数量
-                    {{ allFields.length - visibleFields.length }}个
+                    展示 {{ totalRows }} / {{ totalSourceRows }} 行 ·
+                    {{ visibleFields.length }}列可见（余 {{ allFields.length - visibleFields.length }}个字段）
+                    <span
+                        v-if="viewFilterUnavailable"
+                        class="filter-warn"
+                        >视图范围不可用，范围筛选未生效</span
+                    >
                     <span style="flex: 1"></span>
                     <span
                         v-show="selectedFeatureId !== ''"
@@ -320,6 +400,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAttrStore, type AttrRow } from '../../stores';
+import { buildAttributeCsv, buildCsvFilename, downloadCsv } from '../../utils/attributeTableCsv';
 
 type ResizeDirection = 'top' | 'right' | 'bottom' | 'left' | 'bottom-right';
 
@@ -358,16 +439,91 @@ const filterByCurrentView = computed({
     get: () => store.filterByCurrentView,
     set: (val: boolean) => store.setFilterByCurrentView(!!val),
 });
+// 搜索输入 200ms 防抖：大数据集下避免每击键全量过滤
+const searchInput = ref(store.searchQuery);
+let searchDebounceTimer: number | null = null;
 
-const rows = computed(() => store.filteredRows);
-const totalRows = computed(() => rows.value.length);
-
-const gridTemplateColumns = computed(() => {
-    // 稍微放低单元宽容以装载更多业务级信息内容
-    const dynamicCols = visibleFields.value.map(() => 'minmax(140px, 1fr)');
-    // 经典桌面GIS的序列号列表首字段占据大约 76像素宽度
-    return ['68px', ...dynamicCols].join(' ');
+watch(searchInput, (val) => {
+    if (searchDebounceTimer !== null) window.clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = window.setTimeout(() => {
+        searchDebounceTimer = null;
+        store.setSearchQuery(String(val || ''));
+    }, 200);
 });
+
+// store 侧被外部改动时回写输入框，保持双向一致
+watch(
+    () => store.searchQuery,
+    (val) => {
+        if (val !== searchInput.value) searchInput.value = val;
+    },
+);
+
+/** 清除搜索：输入框与 store 同时立即清空（不等防抖） */
+function clearSearch() {
+    if (searchDebounceTimer !== null) {
+        window.clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
+    searchInput.value = '';
+    store.setSearchQuery('');
+}
+const sortKey = computed(() => store.sortKey);
+const sortDirection = computed(() => store.sortDirection);
+/** 视图筛选已勾选但地图范围不可用（3D 模式或视图未就绪）→ 筛选实际未生效 */
+const viewFilterUnavailable = computed(
+    () => store.filterByCurrentView && !store.currentMapExtent,
+);
+
+// 改用 displayRows：在 filteredRows（视图范围 + 搜索）之上叠加表头排序
+const rows = computed(() => store.displayRows);
+const totalRows = computed(() => rows.value.length);
+const totalSourceRows = computed(() => store.activeRows.length);
+
+/** 表头点击排序：同列切换升/降序，换列重置为升序 */
+function handleSortClick(fieldKey: string) {
+    store.toggleSort(fieldKey);
+}
+
+/** 恢复默认行序 */
+function clearSort() {
+    store.clearSort();
+}
+
+/** 导出当前视图（已筛选 + 已排序的行 × 可见列别名）为 CSV 文件 */
+function exportCsv() {
+    if (!totalRows.value) return;
+    const csvText = buildAttributeCsv(rows.value, visibleFields.value);
+    downloadCsv(buildCsvFilename(layerName.value), csvText);
+}
+
+// ─── 确定性像素列宽 ───
+// 表头与每一行是独立的 grid 容器，弹性轨道（fr/minmax）会在各自容器内解算，
+// 容器宽度稍有差异（行的长内容、表头长别名）列就会错位。
+// 全列使用确定像素宽后，两边轨道逐像素一致，对齐与容器宽度彻底解耦。
+const ID_COL_WIDTH = 68;
+const DEFAULT_COL_WIDTH = 170;
+const DEFAULT_COL_WIDTH_BY_TYPE: Record<string, number> = {
+    number: 120,
+    date: 132,
+    boolean: 100,
+};
+
+function resolveFieldWidth(field: { width?: number; type?: string }): number {
+    if (Number.isFinite(field.width)) return Number(field.width);
+    return DEFAULT_COL_WIDTH_BY_TYPE[String(field.type || '')] ?? DEFAULT_COL_WIDTH;
+}
+
+const columnWidths = computed(() => visibleFields.value.map(resolveFieldWidth));
+
+const gridTemplateColumns = computed(() =>
+    [`${ID_COL_WIDTH}px`, ...columnWidths.value.map((width) => `${width}px`)].join(' '),
+);
+
+/** 表格内容总宽：驱动横向滚动条与两个 grid 容器的一致宽度 */
+const gridTotalWidth = computed(
+    () => ID_COL_WIDTH + columnWidths.value.reduce((sum, width) => sum + width, 0),
+);
 
 const panelStyle = computed(() => ({
     left: `${store.panelRect.x}px`,
@@ -625,25 +781,89 @@ function updateFieldVisibility(fieldKey: string, event: Event) {
     store.setFieldVisibility(fieldKey, target.checked);
 }
 
+// ─── hover 高亮：rAF 合并 + 同值去重（消除行间快速划过的事件风暴与闪烁）───
+let hoverFrameId: number | null = null;
+let pendingHoverFeatureId: string | null = null;
+let hasPendingHover = false;
+let lastSentHoverFeatureId: string | null = null;
+
+function flushHoverHighlight() {
+    hoverFrameId = null;
+    if (!hasPendingHover) return;
+    hasPendingHover = false;
+    const layerId = store.activeLayerId;
+    if (!layerId) return;
+    if (pendingHoverFeatureId === lastSentHoverFeatureId) return;
+    lastSentHoverFeatureId = pendingHoverFeatureId;
+    emit('highlight-feature', { layerId, featureId: pendingHoverFeatureId });
+}
+
+function scheduleHoverHighlight(featureId: string | null) {
+    pendingHoverFeatureId = featureId;
+    hasPendingHover = true;
+    if (hoverFrameId === null) {
+        hoverFrameId = window.requestAnimationFrame(flushHoverHighlight);
+    }
+}
+
 function previewFeature(row: AttrRow) {
-    const layerId = store.activeLayerId;
-    if (!layerId) return;
-    emit('highlight-feature', { layerId, featureId: row.featureId });
+    scheduleHoverHighlight(row.featureId);
 }
 
+/** 仅在鼠标离开整个表格滚动区时清除（行间移动由下一行的 replace 覆盖，不再闪烁） */
 function clearPreview() {
-    const layerId = store.activeLayerId;
-    if (!layerId) return;
-    emit('highlight-feature', { layerId, featureId: null });
+    scheduleHoverHighlight(null);
 }
 
-function focusFeature(row: AttrRow) {
+/** Ctrl/⌘=toggle 多选、Shift=range 区间，默认 replace——透传给下游高亮引擎既有契约 */
+function resolveClickMode(event?: MouseEvent): 'replace' | 'toggle' | 'range' {
+    if (event?.ctrlKey || event?.metaKey) return 'toggle';
+    if (event?.shiftKey) return 'range';
+    return 'replace';
+}
+
+function focusFeature(row: AttrRow, event?: MouseEvent) {
     const layerId = store.activeLayerId;
     if (!layerId) return;
+    const mode = resolveClickMode(event);
     store.setSelectedFeature(row.featureId);
-    const payload = { layerId, featureId: row.featureId };
+    // 点击已确定高亮目标，同步 hover 去重基准避免后续重复发送
+    lastSentHoverFeatureId = row.featureId;
+    const payload = { layerId, featureId: row.featureId, mode };
     emit('highlight-feature', payload);
     emit('focus-feature', payload);
+}
+
+/** 双击行：缩放到要素范围（下游 zoomToManagedFeature 契约） */
+function zoomToFeatureRow(row: AttrRow) {
+    const layerId = store.activeLayerId;
+    if (!layerId) return;
+    emit('focus-feature', { layerId, featureId: row.featureId, mode: 'replace', zoom: true });
+}
+
+// ─── 列宽拖拽 ───
+const colResize = ref<{ fieldKey: string; startX: number; startWidth: number } | null>(null);
+
+function onColResizeMove(event: PointerEvent) {
+    const state = colResize.value;
+    if (!state) return;
+    store.setFieldWidth(state.fieldKey, state.startWidth + (event.clientX - state.startX));
+}
+
+function stopColResize() {
+    colResize.value = null;
+    document.body.style.cursor = 'auto';
+    window.removeEventListener('pointermove', onColResizeMove);
+    window.removeEventListener('pointerup', stopColResize);
+}
+
+function startColResize(field: { key: string; width?: number; type?: string }, event: PointerEvent) {
+    // 列宽完全由状态决定（用户宽度或类型默认宽），无需测量 DOM
+    const startWidth = resolveFieldWidth(field);
+    colResize.value = { fieldKey: field.key, startX: event.clientX, startWidth };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('pointermove', onColResizeMove, { passive: true });
+    window.addEventListener('pointerup', stopColResize, { passive: true, once: true });
 }
 
 function handleWindowResize() {
@@ -665,15 +885,39 @@ watch(
     { immediate: true },
 );
 
+function scrollBackToTop() {
+    scrollTop.value = 0;
+    if (scrollRef.value) {
+        scrollRef.value.scrollTop = 0;
+    }
+}
+
+// 仅在「切换图层」时回到顶部；数据增量刷新保持当前滚动位置（修复看表中途莫名回顶）
 watch(
-    () => rows.value,
+    () => store.activeLayerId,
     () => {
-        scrollTop.value = 0;
-        if (scrollRef.value) {
-            scrollRef.value.scrollTop = 0;
-        }
+        scrollBackToTop();
+        // 图层上下文变化，hover 去重基准失效，重置以保证新图层首次悬停必发送
+        lastSentHoverFeatureId = null;
     },
 );
+
+// 排序 / 搜索 / 视图筛选条件变化等价于重新查询，回顶符合使用直觉
+watch(
+    () => [store.sortKey, store.sortDirection, store.searchQuery, store.filterByCurrentView],
+    () => scrollBackToTop(),
+);
+
+// 行数变化（数据被删/被筛掉）时钳制滚动位置，避免悬停在空白虚拟区域
+watch(totalRows, () => {
+    const maxTop = Math.max(0, totalHeight.value - viewportHeight.value);
+    if (scrollTop.value > maxTop) {
+        scrollTop.value = maxTop;
+        if (scrollRef.value) {
+            scrollRef.value.scrollTop = maxTop;
+        }
+    }
+});
 
 watch(
     () => isVisible.value,
@@ -704,6 +948,15 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('resize', handleWindowResize);
     stopInteraction();
+    stopColResize();
+    if (hoverFrameId !== null) {
+        window.cancelAnimationFrame(hoverFrameId);
+        hoverFrameId = null;
+    }
+    if (searchDebounceTimer !== null) {
+        window.clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = null;
+    }
 });
 </script>
 
@@ -735,7 +988,7 @@ onBeforeUnmount(() => {
 
 .pro-float-window {
     position: absolute;
-    z-index: 1400;
+    z-index: calc(var(--z-popover) + 200);
     display: flex;
     flex-direction: column;
     min-width: 520px;
@@ -923,10 +1176,14 @@ onBeforeUnmount(() => {
     height: 14px;
     fill: currentColor;
 }
-.pro-toolbar-btn:hover {
+.pro-toolbar-btn:hover:not(:disabled) {
     background: var(--bg-brand-light);
     border-color: var(--border-brand-light);
     color: var(--text-brand);
+}
+.pro-toolbar-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 .pro-toolbar-btn.active {
     background: var(--bg-brand-light);
@@ -1137,11 +1394,11 @@ onBeforeUnmount(() => {
 }
 
 .pro-grid-layout {
-    min-width: max-content;
+    /* 宽度由内联样式按列宽总和精确设定；不小于可视区以保证表头背景铺满 */
+    min-width: 100%;
 }
 .virtual-holder {
     position: relative;
-    min-width: max-content;
 }
 
 .pro-th-group {
@@ -1149,7 +1406,6 @@ onBeforeUnmount(() => {
     position: sticky;
     top: 0;
     z-index: 3;
-    min-width: max-content;
     border-bottom: 1px solid #a3aca4; /* 顶部分裂横栏通常比下层分隔要沉粗显见!这是很细节特征!*/
     background: #ebefec; /* Esri 标准默认灰色调数据背景或微极色配出冷清肃冷的感觉而非强干扰颜色.*/
 }
@@ -1160,12 +1416,13 @@ onBeforeUnmount(() => {
     right: 0;
     /* 行距调整在行主板里执行。当前行是30所以定义固实值 */
     height: 30px;
-    min-width: max-content;
     border-bottom: 1px solid #e1e3e0;
     background: #ffffff;
     transition: none; /* Native UI不带拖拉效果的瞬间改变才是常态.*/
 }
-.pro-tr:nth-child(even) {
+/* 斑马纹按数据行号驱动（row-even 类）：虚拟滚动下 nth-child 只数可视切片，
+   滚动时同一行的奇偶会漂移导致条纹"游动"，故不使用 nth-child */
+.pro-tr.row-even {
     background: #fafbfa; /* GIS经典的交错条背景带极细差距用于校眼 */
 }
 .pro-tr:hover {
@@ -1223,12 +1480,91 @@ onBeforeUnmount(() => {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.header-sort-grip {
-    position: absolute;
-    right: 4px;
-    display: none;
+/* 表头排序：可点击 + 当前排序列 caret 指示 */
+.cell.header.sortable {
+    cursor: pointer;
+    user-select: none;
 }
-/* Reserved spot to simulate Arc "A-Z sorting caret visual triggers if future wanted" */
+.cell.header.sortable:hover {
+    background: #e2e8e3;
+}
+.header-sort-caret {
+    margin-left: 4px;
+    font-size: 9px;
+    color: #2f7a3d;
+    flex-shrink: 0;
+}
+
+/* 列宽拖拽热区（覆盖表头右缘，悬停显示指示线） */
+.col-resize-grip {
+    position: absolute;
+    right: -4px;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 2;
+}
+.col-resize-grip:hover,
+.col-resize-grip:active {
+    background: linear-gradient(
+        to right,
+        transparent 3px,
+        var(--brand-accent) 3px,
+        var(--brand-accent) 5px,
+        transparent 5px
+    );
+}
+
+/* 工具栏搜索框（接通 store.searchQuery 全字段检索） */
+.pro-search-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+.pro-search-icon {
+    position: absolute;
+    left: 6px;
+    width: 12px;
+    height: 12px;
+    color: #7a857c;
+    pointer-events: none;
+}
+.pro-search-input {
+    width: 180px;
+    height: 24px;
+    padding: 0 22px 0 24px;
+    border-radius: 2px;
+}
+.pro-search-clear {
+    position: absolute;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #7a857c;
+    font-size: 14px;
+    line-height: 1;
+}
+.pro-search-clear:hover {
+    color: var(--danger);
+}
+
+/* 视图筛选不可用状态（3D / 视图未就绪） */
+.pro-toggle.unavailable .pro-toggle-box {
+    border-style: dashed;
+    opacity: 0.75;
+}
+.filter-warn {
+    background: #fdecdb;
+    border: 1px solid #e2b07e;
+    border-radius: 10px;
+    padding: 0 8px;
+    color: #8a4b12;
+    margin-left: 8px;
+}
 
 /* IDs Fix Column Special Standard Native Behavior (always gray or differently filled visually left bounder box!)  */
 .id-col {

@@ -16,19 +16,20 @@ IP 地理定位统一服务
 
 import asyncio
 import logging
-import os
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import httpx
 
+from config import get_settings
+
 logger = logging.getLogger(__name__)
 
 # ==================== 配置 ====================
 
 # 高德 IP 定位
-AMAP_KEY = os.getenv("AMAP_WEB_SERVICE_KEY", "")
+AMAP_KEY = get_settings().amap_web_service_key
 AMAP_IP_ENDPOINT = "https://restapi.amap.com/v3/ip"
 
 # ip-api.com（免费，无速率限制，支持 HTTPS）

@@ -1,3 +1,10 @@
+/**
+ * 高德天气「业务封装」（前端直连高德，含 infocode 解析/风力归一化/消息提示）。
+ * ⚠️ 与 `api/backend/weather.js`（后端天气代理接口）同名不同义：
+ *   - 本文件：第三方高德天气的前端业务层
+ *   - backend/weather.js：走后端 FastAPI 的天气代理
+ * 消费方经 api/index.js barrel 导入，请勿混用两者。
+ */
 import { useMessage } from '@/composables/useMessage';
 import backendAPI, { handleApiError } from './backend';
 import { getAmapErrorMessage } from './httpStatusMap';

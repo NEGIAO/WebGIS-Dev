@@ -539,7 +539,9 @@ import {
     pruneSelectedLayerIds,
     handleLayerTreeContextAction,
 } from '../../composables/map/toc';
+import { handleCesiumLayerTreeAction } from '../../composables/map/toc/actions/cesiumTocActions';
 import { useLayerStore, useAttrStore } from '../../stores';
+import { useCesiumLayersStore } from '../../stores/layer/cesiumLayers';
 import { useStyleEditor } from '../../composables/useStyleEditor';
 import {
     COORDINATE_FORMATS,
@@ -575,6 +577,7 @@ const emit = defineEmits([
     'zoom-layer',
     'view-layer',
     'remove-layer',
+    'edit-layer',
     'reorder-user-layers',
     'solo-layer',
     'set-base-layer',
@@ -600,6 +603,8 @@ const gisLoader = useGisLoader();
 const sharedLoader = useSharedResourceLoader();
 const layerStore = useLayerStore();
 const attrStore = useAttrStore();
+// Cesium 三维数据店：TOC「三维数据」分组的动作直调目标
+const cesiumLayersStore = useCesiumLayersStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
 const isUploadDragging = ref(false);
@@ -1298,6 +1303,9 @@ function onDrop(targetLayerId) {
 function handleLayerTreeAction(evt) {
     const type = evt?.type;
     if (!type) return;
+
+    // Cesium 三维数据节点（id 前缀 cesium:）：直调元数据店，2D 链零参与
+    if (handleCesiumLayerTreeAction(evt, cesiumLayersStore)) return;
 
     const contextHandled = handleLayerTreeContextAction({
         evt,

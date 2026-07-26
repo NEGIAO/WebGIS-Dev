@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.5），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.38），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -99,12 +99,28 @@
 | Docker Desktop | 容器化后端环境（**强制要求**） |
 | LocalDev.bat | Windows 一键启动脚本（推荐） |
 
+### 配置（三层，先看这一处）
+
+| 层 | 放哪里 | 做什么 |
+|----|--------|--------|
+| **L1** | 根目录 [`.env.example`](.env.example) → 复制为 `.env` | 不涉密常量、URL、前端 `VITE_*` |
+| **L2** | 管理员面板 + 数据库 | 地图 token、Agent 参数、底图、公告（常变） |
+| **L3** | Hugging Face **Secrets** | 绝密：`SUPER_USER`、OAuth secret、SMTP 密码、API Key |
+
+说明与检查清单：[Docs/Guide/configuration.md](Docs/Guide/configuration.md) · 执行计划：[configuration-architecture-plan.md](Docs/Guide/configuration-architecture-plan.md)
+
+```bash
+# 仓库根目录
+cp .env.example .env
+# 按注释填 [L1]；生产把 [L3] 配到 HF Secrets；启动后 admin 配 [L2]
+```
+
 ### 一键启动（推荐）
 
 ```bash
 # Windows：双击 LocalDev.bat，脚本自动完成：
 # 1. 检测环境依赖（Node.js / Docker / docker compose）
-# 2. 自动配置前端 .env.local
+# 2. 确保根目录 .env 存在（前后端唯一 env：Vite 与后端都从根读取）
 # 3. 智能检测 Docker 镜像状态（首次构建 / 代码热重载 / Dockerfile 变更提示）
 # 4. 启动前端开发服务器 → http://localhost:5173
 # 5. 自动打开浏览器
@@ -177,10 +193,14 @@ docker build -t webgis-backend .
 | 文档 | 内容 |
 |------|------|
 | [项目结构详解](Docs/Guide/project-structure.md) | 完整目录树与各模块职责说明 |
+| [交接文档 handover](Docs/Guide/handover.md) | 接手必读：文档地图、三大架构速览、代码坐标、门禁流程与坑清单 |
 | [开发约定](Docs/Guide/dev-conventions.md) | 强制规范、分层边界、坐标系统约定、提交前检查 |
 | [开发指南与贡献指南](Docs/Guide/dev-guide.md) | 新增页面/API 标准流程、前后端通信、代码风格 |
 | [技术栈与常见问题](Docs/Guide/faq.md) | 前后端技术栈、参考资源、FAQ、TODO |
 | [更新日志 CHANGELOG](Docs/Guide/CHANGELOG.md) | 完整版本演进历史 |
+| [配置指南 configuration](Docs/Guide/configuration.md) | 三层配置（根 .env / Admin+DB / HF Secrets） |
+| [配置架构执行计划](Docs/Guide/configuration-architecture-plan.md) | 分阶段收拢配置的落地路线 |
+| [OAuth 部署配置指南](Docs/Guide/oauth-deployment.md) | Google/GitHub 登录：控制台申请、HF Secrets 配置、验收与排错全流程 |
 
 ### 架构文档
 
@@ -197,6 +217,8 @@ docker build -t webgis-backend .
 | 实用工具 | [`utility-tools.md`](Docs/Architecture/utility-tools.md) | 测量、坐标拾取、罗盘、分享、GeoTIFF 下载 |
 | 账号体系 | [`account-system-ai-quota.md`](Docs/Architecture/account-system-ai-quota.md) | 邮箱登录、三级身份、双 AI 配额 |
 | 洪水淹没模拟 | [`cesium-fluid-flood-simulation.md`](Docs/Architecture/cesium-fluid-flood-simulation.md) | GPU 流体管线详解（三维特效配套） |
+| 三层配置架构 | [`configuration-three-tier.md`](Docs/Architecture/configuration-three-tier.md) | L1/L2/L3 全景：来源→统一入口→业务/前端消费与门禁 |
+| Cesium 统一图层管理 | [`cesium-unified-layer-management.md`](Docs/Architecture/cesium-unified-layer-management.md) | 设计评审稿：3D 数据接入统一 TOC 的两步走方案 |
 
 ---
 
@@ -206,9 +228,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.4.5** | 2026-07-26 | 高级 2D 绘制与几何编辑集成：DrawPanel 升级为分组富绘制面板（矩形/椭圆/圆/箭头/风向/军标 + 选择编辑 + 要素级样式），新增 drawingToolRegistry / drawingGeometryUtils / useDrawingFeatureStyle / useAdvancedDrawing / useGeometryEdit；绘制结果统一 `sourceType: draw` 进入 TOC/LayerControl 托管图层管理 |
-| **V3.4.4** | 2026-07-26 | Google/GitHub OAuth 一键注册登录：新增后端 OAuth 授权/回调、`oauth_accounts` 绑定表、账号中心第三方绑定/解绑、注册页一键登录按钮与回调页，邮箱注册用户可绑定对应 Google/GitHub 账号；体积云阴影稳定性修复：BSM 矩阵每帧同步、运动中强制刷新 raymarch、CloudShadowPass 颜色图集 read/write 双缓冲、ShadowResolvePass 大运动 history reset、地面采样只使用可靠 depth→ECEF 锚点并降低 cascade 边界抖动，修复旋转黑闪、升降抖动和屏幕粘滞阴影 |
-| **V3.4.2** | 2026-07-25 | BSM 地面阴影底层修复（运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass、统一 Cloud/Aerial/Atmosphere 三条 BSM 解码、相机接近/高于云顶时地面云影随体积云高度淡出）+ Cesium 导航控件集成（罗盘/缩放/比例尺）+ 镇远市 3D Tiles 城市模型 + 15 个 Demo 演示页面 + CI/CD 部署优化（3D 瓦片格式 LFS 追踪）+ Cesium 依赖模块源码内嵌（cesium-navigation/cesium-wind-layer 迁入，移除 patch-package/两个 npm 包） |
+| **V3.4.38** | 2026-07-26 | 天地图地形解码下放 Worker（默认地形 inflate+编码主线程卡顿修复，通用 decodeWorkerPool 与 ArcGIS LERC 共用）；ArcGIS 层级硬顶 12、SSE 3/6 二次下探；风场库监听移除失效泄漏与 percentageChanged 全局副作用修复，未引用 CJS 产物清理；Force_command 版本说明纠偏 |
+| **V3.4.37** | 2026-07-26 | 新增交接文档 `Docs/Guide/handover.md`：定位「导航 + 独家知识」不重复既有文档——三十秒项目认知/十分钟跑起来、按问题类型的文档地图、三大核心架构速览（三层配置数据流/统一图层管理原则/3D 功能模块范式）、高频修改场景→代码坐标表、门禁与提交五步流程、8 条「别处没写的坑」（响应式禁 Cesium 对象、env 双端共读、版本撞车惯例等）、已知边界与候选增强；README 开发文档表与结构树同步登记 |
+| **V3.4.36** | 2026-07-26 | 面板设计令牌推广（UI 治理·续）：SpatialAnalysisPanel / AdministrativeDivisionPanel / ControlsPanel（含卷帘对话框）/ MapControlsBar 四个地图浮层面板接入 `--panel-bg/--panel-radius/--panel-shadow` 令牌与品牌描边（同值替换零视觉差），绿色家族硬编码沿用 DrawPanel 试点映射归一到语义变量（共 30 处替换）；至此 ControlsPanel 面板族群全部完成令牌化，蓝色主题下浮层面板全面联动 |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -233,6 +255,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.4.5 · 开发中 · 最后更新 2026-07-26</sub>
+<sub>V3.4.38 · 开发中 · 最后更新 2026-07-26</sub>
 
 </div>

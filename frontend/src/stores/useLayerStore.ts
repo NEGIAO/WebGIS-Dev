@@ -3,6 +3,8 @@ import { defineStore } from 'pinia';
 import { useTOCStore } from './useTOCStore';
 import { useSwipeConfigStore } from './useSwipeConfigStore';
 import { useFeatureStyleStore } from './useFeatureStyleStore';
+import { useCesiumLayersStore } from './layer/cesiumLayers';
+import { buildCesiumDataGroup } from './layer/cesiumLayerNodeBuilder';
 import type { LayerHandlers, LayerStoreLayer } from './layer';
 import {
     isRasterLayer,
@@ -16,6 +18,8 @@ import {
 
 export const useLayerStore = defineStore('layerStore', () => {
     const tocStore = useTOCStore();
+    // Cesium 三维数据元数据店（统一图层管理：树顶拼「三维数据」分组）
+    const cesiumLayersStore = useCesiumLayersStore();
     const userLayers = ref<LayerStoreLayer[]>([]);
     const overview = ref<any>({ drawCount: 0, uploadCount: 0, layers: [] });
     const selectedDrawTool = ref('AttributeQuery');
@@ -98,14 +102,22 @@ export const useLayerStore = defineStore('layerStore', () => {
     ]);
 
     const layerTree = computed(() => {
-        return buildLayerTree({
-            drawLayers: drawLayers.value,
-            routeLayers: routeLayers.value,
-            searchLayers: searchLayers.value,
-            uploadLayers: uploadLayers.value,
-            districtLayers: districtLayers.value,
-            expandedState: layerTreeExpandedState.value,
-        });
+        // 「三维数据」分组置顶：容器卸载即清档 → records 为空时分组自动消失（2D 模式天然隐藏）
+        const cesiumGroup = buildCesiumDataGroup(
+            cesiumLayersStore.records,
+            layerTreeExpandedState.value,
+        );
+        return [
+            ...cesiumGroup,
+            ...buildLayerTree({
+                drawLayers: drawLayers.value,
+                routeLayers: routeLayers.value,
+                searchLayers: searchLayers.value,
+                uploadLayers: uploadLayers.value,
+                districtLayers: districtLayers.value,
+                expandedState: layerTreeExpandedState.value,
+            }),
+        ];
     });
 
     function syncLayers(nextLayers: any[] = [], nextOverview: any = {}): void {

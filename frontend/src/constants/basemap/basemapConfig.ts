@@ -19,6 +19,8 @@ import {
     createXYZSourceFromUrl,
     prioritizeTileSourceRequest,
 } from '../../composables/useTileSourceFactory';
+// 后端/瓦片代理基址统一由 publicRuntime 派生（VITE_TILE_PROXY_BASE_URL / VITE_BACKEND_URL），禁止硬编码域名
+import { backendTilesUrl, gcj2wgsProxyUrl, tileProxyUrl } from '../../config/publicRuntime';
 
 // ========== 类型定义 ==========
 export type LayerCategory = 'label' | 'imagery' | 'terrain' | 'vector' | 'theme' | 'custom';
@@ -185,7 +187,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             withSkipHighResTile(
                 prioritizeTileSourceRequest(
                     new XYZ({
-                        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                        url: gcj2wgsProxyUrl('http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
                     }),
                 ),
             ),
@@ -265,7 +267,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+                    url: gcj2wgsProxyUrl('http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'),
                 }),
             ),
     },
@@ -998,7 +1000,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                    url: gcj2wgsProxyUrl('http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
                 }),
             ),
     },
@@ -1034,7 +1036,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off'),
                 }),
             ),
     },
@@ -1195,7 +1197,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://negiao-webgis.hf.space/proxy/mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+                    url: tileProxyUrl('mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
                 }),
             ),
     },
@@ -1207,7 +1209,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://negiao-webgis.hf.space/tiles/ships66/{z}/{x}/{y}.png',
+                    url: backendTilesUrl('ships66/{z}/{x}/{y}.png'),
                 }),
             ),
     },

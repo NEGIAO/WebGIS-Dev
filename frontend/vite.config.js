@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import { visualizer } from 'rollup-plugin-visualizer';
@@ -18,8 +18,15 @@ export default defineConfig(({ command, mode }) => {
   const isAnalyze = mode === 'analyze';
   const isProductionLikeBuild = isBuild && mode !== 'development';
 
-  // 项目基础路径（支持环境变量自定义）
-  const baseUrl = process.env.VITE_BASE_URL || './';
+  // 【三层配置架构】env 统一收敛到仓库根目录：
+  // Vite 从根目录读取 .env / .env.production 等（只暴露 VITE_* 前缀给前端，
+  // 根 .env 中的后端/绝密变量不会进入构建产物）。
+  // 本地开发改根 .env；生产公开值提交在根 .env.production。
+  const envDir = fileURLToPath(new URL('..', import.meta.url));
+  const rootEnv = loadEnv(mode, envDir, 'VITE_');
+
+  // 项目基础路径（根 env 优先，其次进程环境变量，最后默认相对路径）
+  const baseUrl = rootEnv.VITE_BASE_URL || process.env.VITE_BASE_URL || './';
 
   // 从 README.md 提取版本号（构建时自动同步，LLM 更新 README 后无需手动维护 Vue 侧版本）
   const readmePath = fileURLToPath(new URL('../README.md', import.meta.url));
@@ -36,6 +43,9 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     base: baseUrl,
+
+    // env 文件目录 = 仓库根（.env / .env.production 单一来源）
+    envDir,
 
     // 构建时注入全局常量 __APP_VERSION__（值从 README.md 自动提取）
     define: {

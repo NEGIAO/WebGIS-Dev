@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from io import BytesIO
 from math import atan, cos, log, pi, sinh, tan
-import os
 from pathlib import Path
 from typing import Tuple
 
 from PIL import Image
+
+from config import get_str
 
 from .transform import gcj2wgs, wgs2gcj
 
@@ -15,7 +16,7 @@ TILE_SIZE = 256
 
 def get_cache_dir() -> Path:
     """Resolve the cache directory for rectified tiles."""
-    env_cache = os.getenv("GCJRE_CACHE")
+    env_cache = get_str("GCJRE_CACHE", "")
     if env_cache:
         cache_dir = Path(env_cache)
         cache_dir.mkdir(parents=True, exist_ok=True)

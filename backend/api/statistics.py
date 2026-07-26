@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-import os
 import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -32,25 +31,15 @@ from api.auth import (
 )
 from services import ip_geo_service
 
+from config import get_settings
+
 logger = logging.getLogger(__name__)
 
-SUPABASE_URL = str(
-    os.getenv("SUPABASE_URL")
-    or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    or ""
-).strip()
-SUPABASE_KEY = str(
-    os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    or os.getenv("SUPABASE_SERVICE_KEY")
-    or os.getenv("SUPABASE_KEY")
-    or os.getenv("SUPABASE_ANON_KEY")
-    or ""
-).strip()
-SUPABASE_VISITS_TABLE = str(
-    os.getenv("SUPABASE_VISITS_TABLE")
-    or os.getenv("SUPABASE_TABLE_NAME")
-    or "visit_tracking_events"
-).strip()
+# Supabase 接入统一 loader：URL/Key 为 L3（HF Secrets），表名为 L1；
+# 兼容别名（NEXT_PUBLIC_/SERVICE_ROLE_ 等）已在 config.load 内解析。
+SUPABASE_URL = get_settings().supabase_url
+SUPABASE_KEY = get_settings().supabase_key
+SUPABASE_VISITS_TABLE = get_settings().supabase_visits_table
 
 SHANGHAI_TZ = pytz.timezone("Asia/Shanghai")
 HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)

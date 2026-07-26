@@ -219,7 +219,7 @@ onBeforeUnmount(() => {
     border: 1px solid #ddd;
     padding: 6px;
     width: 310px;
-    z-index: 1000;
+    z-index: var(--z-panel);
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.85);
-    z-index: 2000;
+    z-index: var(--z-modal);
     display: flex;
     justify-content: center;
     align-items: center;

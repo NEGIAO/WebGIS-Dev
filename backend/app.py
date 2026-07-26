@@ -13,6 +13,8 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
+from config import build_public_config, get_settings, masked_summary
+
 from utils.time_utils import get_beijing_now_str, hourly_chime_task, BeijingTimeFormatter
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -42,7 +44,8 @@ _beijing_formatter = BeijingTimeFormatter(
 )
 _handler = logging.StreamHandler()
 _handler.setFormatter(_beijing_formatter)
-logging.basicConfig(level=logging.INFO, handlers=[_handler])
+_log_level = getattr(logging, get_settings().log_level.upper(), logging.INFO)
+logging.basicConfig(level=_log_level, handlers=[_handler])
 logger = logging.getLogger(__name__)
 
 # ==================== 统一响应模型 ====================
@@ -60,17 +63,17 @@ class ApiResponse(BaseModel):
 
 def _mask_smtp_user() -> str:
     """脱敏 SMTP_USER 用于日志显示，只保留 @ 前首尾各 1 字符。"""
-    from api.auth.email_service import SMTP_USER
-    if not SMTP_USER:
+    smtp_user = get_settings().smtp_user
+    if not smtp_user:
         return "(空)"
-    if "@" in SMTP_USER:
-        local, domain = SMTP_USER.split("@", 1)
+    if "@" in smtp_user:
+        local, domain = smtp_user.split("@", 1)
         if len(local) <= 2:
             masked = local[0] + "*" * max(len(local) - 1, 1)
         else:
             masked = local[0] + "*" * (len(local) - 2) + local[-1]
         return f"{masked}@{domain}"
-    return SMTP_USER[0] + "**" + SMTP_USER[-1] if len(SMTP_USER) > 4 else "***"
+    return smtp_user[0] + "**" + smtp_user[-1] if len(smtp_user) > 4 else "***"
 
 
 @asynccontextmanager
@@ -81,6 +84,9 @@ async def lifespan(app: FastAPI):
     """
     # ---- Startup ----
     logger.info("WebGIS Backend 启动... [北京时间: %s]", get_beijing_now_str())
+    # 统一配置脱敏摘要（三层模型：L1 env / L2 Admin+DB / L3 HF Secrets）
+    for line in masked_summary():
+        logger.info("[配置] %s", line)
     app.state.startup_error = None
     app.state.log_stream_mode = init_monitor_log_streaming()
 
@@ -330,6 +336,13 @@ logger.info("已注册空间分析路由 [北京时间: %s]", _beijing_time)
 async def health_check():
     """功能：健康检查接口，用于探活与部署监控。"""
     return {"status": "healthy", "message": "WebGIS Backend is Running!"}
+
+
+# --- 功能：公开运行时配置 ---
+@app.get("/api/config/public")
+async def get_public_config():
+    """功能：下发前端可安全消费的公开配置（非密值 + 功能可用性布尔，无任何 secret 明文）。"""
+    return {"code": 200, "message": "success", "data": build_public_config()}
 
 # --- 信息接口 ---
 # 返回后端服务的概览信息和核心端点目录，方便前端调试和开发者了解 API 结构。

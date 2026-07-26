@@ -49,6 +49,13 @@ const currentPassword = ref('');
 const nextPassword = ref('');
 const confirmPassword = ref('');
 
+/** 三个密码框的明文显隐状态 */
+const showPwd = ref({ current: false, next: false, confirm: false });
+
+function togglePwd(key) {
+    showPwd.value[key] = !showPwd.value[key];
+}
+
 function resetForm() {
     displayName.value = '';
     currentPassword.value = '';
@@ -166,28 +173,52 @@ defineExpose({ resetForm });
                 <i class="fas fa-lock input-icon"></i>
                 <input
                     v-model="currentPassword"
-                    type="password"
+                    :type="showPwd.current ? 'text' : 'password'"
                     autocomplete="current-password"
                     placeholder="当前密码"
                 />
+                <button
+                    type="button"
+                    class="pwd-toggle"
+                    :title="showPwd.current ? '隐藏密码' : '显示密码'"
+                    @click="togglePwd('current')"
+                >
+                    <i :class="showPwd.current ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                </button>
             </div>
             <div class="modern-input-group">
                 <i class="fas fa-key input-icon"></i>
                 <input
                     v-model="nextPassword"
-                    type="password"
+                    :type="showPwd.next ? 'text' : 'password'"
                     autocomplete="new-password"
                     placeholder="新密码 (至少6位)"
                 />
+                <button
+                    type="button"
+                    class="pwd-toggle"
+                    :title="showPwd.next ? '隐藏密码' : '显示密码'"
+                    @click="togglePwd('next')"
+                >
+                    <i :class="showPwd.next ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                </button>
             </div>
             <div class="modern-input-group">
                 <i class="fas fa-check-double input-icon"></i>
                 <input
                     v-model="confirmPassword"
-                    type="password"
+                    :type="showPwd.confirm ? 'text' : 'password'"
                     autocomplete="new-password"
                     placeholder="确认新密码"
                 />
+                <button
+                    type="button"
+                    class="pwd-toggle"
+                    :title="showPwd.confirm ? '隐藏密码' : '显示密码'"
+                    @click="togglePwd('confirm')"
+                >
+                    <i :class="showPwd.confirm ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                </button>
             </div>
 
             <button
@@ -207,62 +238,88 @@ defineExpose({ resetForm });
 </template>
 
 <style scoped>
-/* View: Security */
+/* 安全页（浅色单套设计，与账号中心壳统一视觉语言） */
+.security-view {
+    display: flex;
+    flex-direction: column;
+}
+
 .password-form-container {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
 }
 
+/* 分区标题：品牌左条 */
 .section-title {
-    margin: 0 0 8px 0;
-    font-size: 16px;
+    margin: 6px 0 2px;
+    font-size: 13px;
     font-weight: 700;
-    color: #a0ddb6;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-left: 3px solid var(--brand-accent-light);
-    padding-left: 10px;
+    color: var(--text-primary);
+    border-left: 3px solid var(--brand-primary);
+    padding-left: 9px;
+    letter-spacing: 0.3px;
+}
+
+.section-title:first-child {
+    margin-top: 0;
 }
 
 .oauth-bind-desc {
-    margin: -4px 0 4px;
-    color: #8ab99c;
-    font-size: 13px;
-    line-height: 1.5;
+    margin: -2px 0 2px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.55;
 }
 
 .oauth-bind-list {
     display: grid;
-    gap: 10px;
+    gap: 8px;
 }
 
 .oauth-bind-btn {
     width: 100%;
-    min-height: 46px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    background: rgba(8, 20, 14, 0.65);
-    color: #ffffff;
+    min-height: 44px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--text-primary);
     cursor: pointer;
     display: grid;
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
+    padding: 9px 12px;
     text-align: left;
-    transition: all 0.2s ease;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 3px rgba(34, 50, 38, 0.04);
+}
+
+.oauth-bind-btn i {
+    font-size: 15px;
+}
+
+.oauth-bind-btn.google i {
+    color: #4285f4;
+}
+
+.oauth-bind-btn.github i {
+    color: #24292f;
 }
 
 .oauth-bind-btn:hover:not(:disabled) {
-    border-color: var(--brand-accent-light);
-    background: rgba(12, 28, 18, 0.9);
+    border-color: rgba(var(--brand-primary-rgb), 0.5);
+    background: rgba(var(--brand-primary-rgb), 0.04);
+    transform: translateY(-1px);
 }
 
 .oauth-bind-btn small {
     grid-column: 2;
-    color: #8ab99c;
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 400;
 }
 
 .oauth-bind-btn:disabled {
@@ -270,6 +327,7 @@ defineExpose({ resetForm });
     cursor: not-allowed;
 }
 
+/* 输入组 */
 .modern-input-group {
     position: relative;
     display: flex;
@@ -278,140 +336,118 @@ defineExpose({ resetForm });
 
 .input-icon {
     position: absolute;
-    left: 16px;
-    color: #6a9c7e;
-    font-size: 16px;
+    left: 13px;
+    color: var(--text-muted);
+    font-size: 13px;
+    pointer-events: none;
+    transition: color 0.15s;
+}
+
+.modern-input-group:focus-within .input-icon {
+    color: var(--brand-primary);
 }
 
 .modern-input-group input {
     width: 100%;
-    height: 48px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    padding: 0 16px 0 44px;
-    font-size: 14px;
-    color: #ffffff;
-    transition: all 0.3s ease;
-    background: rgba(8, 20, 14, 0.6);
+    height: 42px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 0 38px 0 38px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: #fbfdfb;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    box-sizing: border-box;
 }
 
 .modern-input-group input::placeholder {
-    color: #4b6a57;
+    color: var(--text-muted);
 }
 
 .modern-input-group input:focus {
     outline: none;
-    border-color: var(--brand-accent-light);
-    box-shadow:
-        0 0 10px rgba(var(--brand-accent-light-rgb), 0.3),
-        inset 0 0 6px rgba(var(--brand-accent-light-rgb), 0.15);
-    background: rgba(12, 28, 18, 0.9);
+    border-color: var(--brand-primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.1);
 }
 
+/* 密码显隐切换 */
+.pwd-toggle {
+    position: absolute;
+    right: 6px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    border-radius: 7px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all 0.15s;
+}
+
+.pwd-toggle:hover {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
+}
+
+/* 角色提示卡（游客/管理员） */
 .guest-warning {
-    background: rgba(60, 20, 20, 0.7);
-    border: 1px solid rgba(239, 68, 68, 0.5);
-    color: #fca5a5;
-    padding: 20px;
-    border-radius: 10px;
+    background: rgba(var(--warning-rgb), 0.07);
+    border: 1px solid rgba(var(--warning-rgb), 0.35);
+    color: #8a6100;
+    padding: 18px 16px;
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 16px;
-    box-shadow: inset 0 0 12px rgba(239, 68, 68, 0.1);
+    gap: 10px;
 }
 
 .guest-warning i {
-    font-size: 28px;
-    color: var(--danger);
-    text-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+    font-size: 24px;
+    color: var(--warning);
 }
 
 .guest-warning p {
     margin: 0;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.6;
 }
 
-/* Shared button styles needed by this tab */
+/* 主按钮 */
 .btn-primary {
-    background: linear-gradient(135deg, rgba(var(--brand-accent-light-rgb), 0.85) 0%, var(--brand-primary-dark) 100%);
-    color: white;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.6);
-    height: 48px;
-    border-radius: 8px;
-    font-size: 15px;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    color: #fff;
+    border: none;
+    height: 40px;
+    border-radius: 10px;
+    font-size: 13.5px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
-    transition: all 0.3s ease;
-    margin-top: 8px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    gap: 8px;
+    box-shadow: 0 3px 10px rgba(var(--brand-primary-rgb), 0.28);
+    transition: all 0.18s ease;
 }
 
 .btn-primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(var(--brand-accent-light-rgb), 0.35);
-    border-color: var(--brand-accent-light);
-    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-primary) 100%);
+    filter: brightness(1.06);
+    transform: translateY(-1px);
 }
 
 .btn-primary:disabled {
-    opacity: 0.5;
+    opacity: 0.55;
     cursor: not-allowed;
-    filter: grayscale(0.5);
 }
 
 .w-100 {
     width: 100%;
-}
-
-/* Light Mint Theme Override */
-.section-title {
-    color: var(--acc-text-strong, #214a31);
-}
-
-.input-icon {
-    color: #6e9c80;
-}
-
-.modern-input-group input {
-    color: var(--acc-text-strong, #214a31);
-    background: rgba(255, 255, 255, 0.92);
-    border-color: rgba(var(--brand-primary-rgb), 0.3);
-}
-
-.modern-input-group input::placeholder {
-    color: #88a797;
-}
-
-.modern-input-group input:focus {
-    border-color: rgba(var(--brand-primary-rgb), 0.52);
-    box-shadow: 0 0 0 3px rgba(var(--brand-accent-light-rgb), 0.18);
-    background: #ffffff;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    border-color: rgba(63, 148, 75, 0.55);
-    color: #f8fff9;
-    box-shadow: 0 6px 16px rgba(58, 129, 76, 0.24);
-    text-shadow: none;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
-    box-shadow: 0 8px 18px rgba(58, 129, 76, 0.3);
-}
-
-.guest-warning {
-    background: rgba(255, 244, 244, 0.86);
-    border-color: rgba(239, 68, 68, 0.3);
-    color: #9b3f3f;
 }
 </style>

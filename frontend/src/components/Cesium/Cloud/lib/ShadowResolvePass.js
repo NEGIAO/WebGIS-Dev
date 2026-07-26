@@ -197,6 +197,11 @@ void main() {
     out_color = current;
     return;
   }
+  // V3.4.12：history 采样必须限制在本 fragment 所属 cascade tile 内（2×2 atlas），
+  // 否则速度重投影会把相邻 cascade（矩阵语义不同）的 history 混进来。
+  vec2 tileOrigin = floor(v_uv * 2.0) * 0.5;
+  vec2 tileHalfTexel = u_texelSize * 0.5;
+  prevUv = clamp(prevUv, tileOrigin + tileHalfTexel, tileOrigin + 0.5 - tileHalfTexel);
   vec4 history = texture(u_historyBuffer, prevUv);
   vec4 clipped = varianceClipping(u_inputBuffer, v_uv, current, history, u_varianceGamma);
   out_color = mix(clipped, current, u_temporalAlpha);
@@ -265,22 +270,28 @@ void main() {
             const pos = cam.positionWC; const dir = cam.directionWC;
             if (this._prevCamPos) {
                 const dp = Cesium.Cartesian3.distance(pos, this._prevCamPos);
-                const dd = Math.abs(Cesium.Cartesian3.dot(dir, this._prevCamDir) - 1.0);
-                // 位置每米 + 方向每弧度(1-cos) 综合归一化。云阴影掠射时 BSM 内特征滑动放大，
-                // 故对微小运动也敏感：1m/帧 或 0.1°/帧 即触发。
-                motion = Math.min(1.0, dp * 2e-3 + dd * 100.0);
+                const dot = Math.min(1.0, Math.max(-1.0, Cesium.Cartesian3.dot(dir, this._prevCamDir)));
+                // V3.4.7：与 CloudShadowPass 一致改用角度度量 sqrt(2(1-dot))（≈弧度）。
+                // 旧的 (1-dot) 对小角度二次方弱化，慢旋转时 alpha 过低，
+                // 过期 history（对应旧 cascade 盒）在 atlas 空间被大权重复用 → 拖影/粘屏。
+                const ang = Math.sqrt(Math.max(0.0, 2.0 * (1.0 - dot)));
+                motion = Math.min(1.0, dp * 2e-3 + ang * 8.0);
                 motion = Math.max(motion, this._externalMotion || 0.0);
             }
             this._prevCamPos = Cesium.Cartesian3.clone(pos, this._prevCamPos);
             this._prevCamDir = Cesium.Cartesian3.clone(dir, this._prevCamDir);
         }
         const stillAlpha = this.temporalAlpha;
-        // smoothstep：motion 0→0.01 从 stillAlpha 升到 1.0。移动期几乎纯当前帧。
-        const t = Math.min(1.0, Math.max(0.0, motion / 0.01));
-        const resetHistory = this._forceResetHistory || !this._hasValidHistory || motion > 0.02;
+        // V3.4.12：texel snap 与监听顺序修复后，cascade 窗口平移可被逐 texel velocity 精确重投影，
+        // 运动期不再需要断开 history（此前 0.005 阈值使垂直移动几乎每帧硬重置，
+        // BSM snap 跳变重噪失去时域平滑 → 表现为升降抖动）。
+        // reset 仅保留给真正的不连续（预设切换/大幅跳变）；运动期 alpha 上限 0.5。
+        const t = Math.min(1.0, Math.max(0.0, motion / 0.02));
+        const resetHistory = this._forceResetHistory || !this._hasValidHistory || motion > 0.05;
+        const MOTION_ALPHA_MAX = 0.5;
         this._motionAlpha = resetHistory
             ? 1.0
-            : stillAlpha + (1.0 - stillAlpha) * (t * t * (3.0 - 2.0 * t));
+            : stillAlpha + (MOTION_ALPHA_MAX - stillAlpha) * (t * t * (3.0 - 2.0 * t));
 
         const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
         const prevViewport = gl.getParameter(gl.VIEWPORT);

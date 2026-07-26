@@ -167,6 +167,25 @@ const quotaText = computed(() => {
     return `已调用 ${used}/${limit} 次`;
 });
 
+/** 速览条用的精简配额文案 */
+const quotaShortText = computed(() => {
+    const limit = quotaInfo.value?.limit;
+    if (limit == null) return '配额不限';
+    const remaining = Number(quotaInfo.value?.remaining ?? 0);
+    return `配额余 ${remaining}`;
+});
+
+/** 头部手动刷新：统计 + 实时 + 留言一次拉齐 */
+async function handleManualRefresh() {
+    if (isLoadingCenter.value) return;
+    await Promise.allSettled([
+        loadCenterData({ silent: false }),
+        refreshRealtimeData({ silent: true }),
+        refreshMessages(),
+    ]);
+    message.success('账号中心数据已刷新');
+}
+
 const sessionDurationText = computed(() => {
     const sec = Number(selfStats.value?.current_session_seconds || 0);
     return formatDuration(sec);
@@ -499,8 +518,14 @@ function handleDocumentClick(event) {
 }
 
 function handleDocumentKeydown(event) {
-    if (event.key === 'Escape' && isFullscreen.value) {
+    if (event.key !== 'Escape') return;
+    // Esc 分级退出：先退全屏，再关面板
+    if (isFullscreen.value) {
         setFullscreen(false);
+        return;
+    }
+    if (isOpen.value) {
+        closePanel();
     }
 }
 
@@ -726,14 +751,41 @@ onBeforeUnmount(() => {
                             </span>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        class="btn-fullscreen"
-                        :title="isFullscreen ? '退出全屏' : '全屏展开'"
-                        @click="toggleFullscreen"
-                    >
-                        <i :class="isFullscreen ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
-                    </button>
+                    <div class="header-btns">
+                        <button
+                            type="button"
+                            class="btn-fullscreen"
+                            title="刷新数据"
+                            :disabled="isLoadingCenter"
+                            @click="handleManualRefresh"
+                        >
+                            <i
+                                class="fas fa-rotate"
+                                :class="{ 'fa-spin': isLoadingCenter }"
+                            ></i>
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-fullscreen"
+                            :title="isFullscreen ? '退出全屏' : '全屏展开'"
+                            @click="toggleFullscreen"
+                        >
+                            <i :class="isFullscreen ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 速览条：不滚动即可看到最常查的信息 -->
+                <div class="quick-strip">
+                    <span class="quick-item">
+                        <i class="fas fa-bolt"></i>{{ quotaShortText }}
+                    </span>
+                    <span class="quick-item">
+                        <i class="fas fa-stopwatch"></i>在线 {{ sessionDurationText }}
+                    </span>
+                    <span class="quick-item">
+                        <i class="fas fa-users"></i>{{ realtimeStats.online_users || 0 }} 人在线
+                    </span>
                 </div>
 
                 <!-- Navigation Tabs -->
@@ -877,88 +929,63 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* 
-  High-End Atmospheric Floating Account Center
-  Emerald Gradient & Premium Glassmorphism Design
+/*
+  账号中心（浅色单套设计，与注册页/对话面板同一视觉语言）
+  结构：FAB 胶囊按钮 → 弹出面板（品牌渐变头部横幅 + 分页导航 + 自适应内容区 + 页脚）
 */
 
-/* .floating-account-manager {
-  position: fixed;
-  top: 200px;
-  left: 250px;
-  z-index: 1500;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  align-items: flex-start;
-  gap: 16px;
-} */
+/* 供子面板（Admin/API 管理等）引用的语义变量 */
+.floating-account-manager {
+    --acc-mint-50: var(--bg-brand-light);
+    --acc-mint-100: var(--bg-brand-light);
+    --acc-mint-200: var(--bg-brand-lighter);
+    --acc-mint-300: var(--bg-brand-lighter);
+    --acc-mint-500: var(--brand-primary-light);
+    --acc-mint-600: var(--brand-primary);
+    --acc-mint-700: var(--brand-primary-dark);
+    --acc-text-strong: var(--text-brand-dark);
+    --acc-text-main: var(--text-brand);
+    --acc-text-soft: var(--text-secondary);
+}
 
 .floating-account-manager.is-fullscreen {
-    z-index: 3000;
+    z-index: var(--z-modal-high);
 }
 
 .floating-account-manager.is-fullscreen .account-fab {
     display: none;
 }
 
-/* Float FAB */
+/* ========== FAB 胶囊按钮 ========== */
 .account-fab {
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.4);
-    border-radius: 40px;
-    background: rgba(10, 24, 15, 0.85);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    color: #fff;
-
-    /* 👇 抛弃固定高度，用自适应单位 */
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
+    border-radius: 999px;
+    background: var(--panel-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-brand-dark);
     height: auto;
-    min-height: 44px; /* 移动端最小可点击高度 */
-    max-height: 56px; /* 大屏不超出原来的设计 */
-
-    /* 👇 内边距也自适应 */
-    padding: 6px 20px 6px 8px;
+    min-height: 44px;
+    padding: 5px 16px 5px 6px;
     display: inline-flex;
     align-items: center;
-    gap: 8px; /* 图标和文字的间距 */
-
+    gap: 8px;
     cursor: pointer;
-    box-shadow:
-        0 10px 40px rgba(0, 0, 0, 0.5),
-        0 0 16px rgba(var(--brand-accent-light-rgb), 0.25);
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    box-shadow: 0 6px 20px rgba(var(--brand-primary-rgb), 0.18);
+    transition: all 0.25s ease;
     position: relative;
-    overflow: hidden;
-}
-
-.account-fab::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(var(--brand-accent-light-rgb), 0.3), transparent);
-    transition: left 0.6s ease;
 }
 
 .account-fab:hover {
-    transform: translateY(-3px);
-    background: rgba(10, 24, 15, 0.95);
-    box-shadow:
-        0 14px 44px rgba(0, 0, 0, 0.6),
-        0 0 20px rgba(var(--brand-accent-light-rgb), 0.5);
-    border-color: rgba(var(--brand-accent-light-rgb), 0.9);
-}
-
-.account-fab:hover::before {
-    left: 150%;
+    transform: translateY(-2px);
+    border-color: rgba(var(--brand-primary-rgb), 0.55);
+    box-shadow: 0 10px 26px rgba(var(--brand-primary-rgb), 0.26);
 }
 
 .fab-content {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
 }
 
 .account-avatar-wrapper {
@@ -966,18 +993,15 @@ onBeforeUnmount(() => {
 }
 
 .account-avatar {
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-primary-dark) 100%);
-    color: #fff;
-    box-shadow: inset 0 -3px 6px rgba(0, 0, 0, 0.4);
-    border: 2px solid rgba(var(--brand-accent-light-rgb), 0.7);
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    border: 2px solid rgba(var(--brand-primary-rgb), 0.35);
+    overflow: hidden;
 }
 
 .account-avatar img {
@@ -991,28 +1015,25 @@ onBeforeUnmount(() => {
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 12px;
-    height: 12px;
-    background: var(--brand-accent-light);
-    border: 2px solid #0a180f;
+    width: 10px;
+    height: 10px;
+    background: var(--brand-primary);
+    border: 2px solid #fff;
     border-radius: 50%;
-    box-shadow: 0 0 8px var(--brand-accent-light);
 }
 
 .account-fab-text {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
-    letter-spacing: 0.5px;
     white-space: nowrap;
-    color: #ffffff;
-    text-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.5);
+    color: var(--text-brand-dark);
 }
 
 .fold-icon {
-    font-size: 14px;
-    color: var(--brand-accent-light);
-    opacity: 0.8;
-    transition: transform 0.4s ease;
+    font-size: 12px;
+    color: var(--brand-primary-dark);
+    opacity: 0.75;
+    transition: transform 0.3s ease;
     margin-left: 2px;
 }
 
@@ -1020,505 +1041,402 @@ onBeforeUnmount(() => {
     transform: rotate(180deg);
 }
 
-/* Glass Panel */
+/* ========== 弹出面板 ========== */
 .account-panel {
-    width: 380px;
-    border-radius: 12px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    background: linear-gradient(to bottom, rgba(12, 28, 18, 0.9), rgba(6, 18, 10, 0.96));
+    width: min(430px, 96vw);
+    border-radius: 16px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    background: #fff;
     box-shadow:
-        0 30px 60px rgba(0, 0, 0, 0.7),
-        inset 0 0 24px rgba(var(--brand-accent-light-rgb), 0.15);
-    backdrop-filter: blur(24px) saturate(140%);
-    -webkit-backdrop-filter: blur(24px);
+        0 1px 2px rgba(20, 45, 25, 0.05),
+        0 24px 56px -12px rgba(20, 45, 25, 0.28);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     transform-origin: bottom left;
-    clip-path: polygon(
-        20px 0,
-        100% 0,
-        100% calc(100% - 20px),
-        calc(100% - 20px) 100%,
-        0 100%,
-        0 20px
-    );
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: all 0.3s ease;
 }
 
-.account-panel.is-fullscreen {
-    border-radius: 0;
-    border: none;
-    clip-path: none;
+/* ── 头部：品牌渐变横幅 ── */
+.panel-header {
+    position: relative;
+    padding: 18px 20px;
+    background: linear-gradient(140deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    overflow: hidden;
+}
+
+/* 经纬网格纹理（与注册页同 DNA） */
+.panel-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 24px 24px;
+    -webkit-mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
+    pointer-events: none;
+}
+
+.panel-header > * {
+    position: relative;
     z-index: 1;
-    transform-origin: center;
-    /* background defaults to panel gradient */
-}
-
-.account-panel.is-fullscreen .panel-header {
-    padding: 16px 20px;
-}
-
-.account-panel.is-fullscreen .panel-nav {
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.account-panel.is-fullscreen .nav-tab {
-    flex: 0 1 calc(25% - 6px);
-    padding: 10px 12px;
-}
-
-.account-panel.is-fullscreen .panel-body {
-    height: auto;
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-}
-
-.account-panel.is-fullscreen .panel-footer {
-    position: sticky;
-    bottom: 0;
-    padding: 12px 20px;
 }
 
 .blur-bg {
     background: transparent;
 }
 
-/* Header */
-.panel-header {
-    padding: 24px;
-    border-bottom: 1px solid rgba(var(--brand-accent-light-rgb), 0.2);
-    position: relative;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-}
-
-.panel-header::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(var(--brand-accent-light-rgb), 0.5), transparent);
-}
-
 .profile-main {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 14px;
     flex: 1;
+    min-width: 0;
 }
 
 .profile-avatar.large {
-    width: 64px;
-    height: 64px;
-    font-size: 26px;
-    /* background: linear-gradient(135deg, #5bcf89 0%, #3dce7e 100%); */
-    /* background:transparent; */
-    background: rgba(var(--brand-accent-light-rgb), 0.05);
-    border-radius: 10px;
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 2px solid rgba(255, 255, 255, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
-    /* color: #fff; */
-    font-weight: bold;
-    /* border: 1px solid rgba(var(--brand-accent-light-rgb), 0.6); */
-    box-shadow: 0 4px 18px rgba(var(--brand-accent-light-rgb), 0.35);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    flex-shrink: 0;
+    overflow: hidden;
 }
 
 .profile-avatar.large img {
     width: 100%;
     height: 100%;
-    border-radius: 10px;
+    border-radius: 12px;
     object-fit: cover;
 }
 
 .profile-info {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
+    min-width: 0;
 }
 
 .profile-name {
     margin: 0;
-    font-size: 20px;
-    font-weight: 800;
-    color: #ffffff;
-    line-height: 1.2;
-    text-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.4);
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.25;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .profile-email {
-    max-width: 220px;
-    overflow-wrap: anywhere;
-    font-size: 12px;
-    color: #7da48b;
+    max-width: 230px;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.82);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .profile-role {
-    font-size: 14px;
-    color: #a0ddb6;
-    font-weight: 500;
-    display: flex;
+    align-self: flex-start;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    padding: 1px 9px;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
 }
 
 .profile-role i {
-    color: var(--brand-accent-light);
+    font-size: 10px;
+    color: #fff;
+    opacity: 0.9;
 }
 
+.header-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* 渐变横幅上的操作钮：实底白 + 品牌色图标，保证对比度 */
 .btn-fullscreen {
-    background: rgba(var(--brand-accent-light-rgb), 0.15);
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.4);
-    color: var(--brand-accent-light);
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    color: var(--brand-primary-dark);
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 16px;
+    transition: all 0.2s ease;
+    font-size: 13px;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
-.btn-fullscreen:hover {
-    background: rgba(var(--brand-accent-light-rgb), 0.25);
-    border-color: rgba(var(--brand-accent-light-rgb), 0.6);
-    box-shadow: 0 0 12px rgba(var(--brand-accent-light-rgb), 0.3);
+.btn-fullscreen:hover:not(:disabled) {
+    background: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.btn-fullscreen:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ── 速览条 ── */
+.quick-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: linear-gradient(180deg, rgba(var(--brand-primary-rgb), 0.07), rgba(var(--brand-primary-rgb), 0.03));
+    border-bottom: 1px solid var(--border-light);
+}
+
+.quick-item {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-brand-dark);
+    background: #fff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quick-item i {
+    color: var(--brand-primary);
+    font-size: 10px;
+    flex-shrink: 0;
 }
 
 .btn-fullscreen:active {
     transform: scale(0.95);
 }
 
-/* Nav Tabs */
+/* ── 导航分页 ── */
 .panel-nav {
     display: flex;
-    padding: 0 12px;
-    border-bottom: 1px solid rgba(var(--brand-accent-light-rgb), 0.15);
-    background: rgba(8, 20, 14, 0.6);
+    padding: 0 10px;
+    border-bottom: 1px solid var(--border-light);
+    background: #fff;
 }
 
 .nav-tab {
     flex: 1;
     background: transparent;
     border: none;
-    padding: 16px 0;
-    font-size: 14px;
+    padding: 12px 0 11px;
+    font-size: 13px;
     font-weight: 600;
-    color: #6a9c7e;
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: color 0.2s ease, background 0.2s ease;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
+}
+
+.nav-tab i {
+    font-size: 12px;
 }
 
 .nav-tab:hover {
-    color: #a0ddb6;
-    background: rgba(var(--brand-accent-light-rgb), 0.05);
+    color: var(--brand-primary-dark);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 .nav-tab.active {
-    color: #ffffff;
-    text-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.6);
+    color: var(--brand-primary-dark);
 }
 
 .nav-tab.active i {
-    color: var(--brand-accent-light);
+    color: var(--brand-primary);
 }
 
 .nav-tab.active::after {
     content: '';
     position: absolute;
     bottom: 0;
-    left: 15%;
-    width: 70%;
+    left: 22%;
+    width: 56%;
     height: 3px;
     border-radius: 3px 3px 0 0;
-    background: var(--brand-accent-light);
-    box-shadow: 0 -2px 10px var(--brand-accent-light);
+    background: var(--brand-primary);
 }
 
-/* Content Area */
+/* ── 内容区：自适应视口高度（原固定 210px 的实用性修复） ── */
 .panel-body {
-    height: 280px;
+    min-height: 280px;
+    max-height: min(58vh, 540px);
     overflow-y: auto;
-    padding: 24px;
+    padding: 16px 18px;
+    background: var(--bg-secondary);
     position: relative;
 }
 
 .styled-scrollbar::-webkit-scrollbar {
-    width: 5px;
+    width: 6px;
 }
 .styled-scrollbar::-webkit-scrollbar-track {
     background: transparent;
 }
 .styled-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(var(--brand-accent-light-rgb), 0.4);
+    background-color: rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 5px;
 }
 .styled-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(var(--brand-accent-light-rgb), 0.7);
+    background-color: rgba(var(--brand-primary-rgb), 0.55);
 }
 
-/* Admin & API Management views */
-.admin-view {
-    display: flex;
-    flex-direction: column;
-}
-
+.admin-view,
 .api-mgmt-view {
     display: flex;
     flex-direction: column;
 }
 
-/* Footer Action */
+/* ── 页脚 ── */
 .panel-footer {
-    padding: 16px 24px;
-    border-top: 1px solid rgba(var(--brand-accent-light-rgb), 0.2);
-    position: relative;
-}
-
-.panel-footer::before {
-    content: '';
-    position: absolute;
-    top: -1px;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(var(--brand-accent-light-rgb), 0.5), transparent);
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-light);
+    background: #fff;
 }
 
 .btn-logout {
     width: 100%;
-    height: 48px;
-    border-radius: 8px;
-    border: 1px solid rgba(239, 68, 68, 0.5);
-    background: rgba(239, 68, 68, 0.15);
-    color: #fca5a5;
-    font-size: 15px;
+    height: 42px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--danger-rgb), 0.35);
+    background: rgba(var(--danger-rgb), 0.05);
+    color: var(--danger);
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    transition: all 0.3s ease;
+    gap: 8px;
+    transition: all 0.2s ease;
 }
 
 .btn-logout:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.25);
+    background: rgba(var(--danger-rgb), 0.12);
     border-color: var(--danger);
-    color: #fef2f2;
-    box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
     transform: translateY(-1px);
 }
 
-/* Transitions */
+.btn-logout:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ========== 全屏模式 ========== */
+.account-panel.is-fullscreen {
+    border-radius: 0;
+    border: none;
+    z-index: 1;
+    transform-origin: center;
+}
+
+.account-panel.is-fullscreen .panel-header {
+    padding: 16px 22px;
+}
+
+.account-panel.is-fullscreen .panel-nav {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 14px;
+}
+
+.account-panel.is-fullscreen .nav-tab {
+    flex: 0 1 calc(25% - 6px);
+    padding: 11px 12px;
+}
+
+.account-panel.is-fullscreen .panel-body {
+    min-height: 0;
+    max-height: none;
+    height: auto;
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px;
+}
+
+.account-panel.is-fullscreen .panel-footer {
+    position: sticky;
+    bottom: 0;
+    padding: 12px 22px;
+}
+
+/* ========== 过渡动画 ========== */
 .account-panel-transition-enter-active,
 .account-panel-transition-leave-active {
-    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .account-panel-transition-enter-from,
 .account-panel-transition-leave-to {
     opacity: 0;
-    transform: translateY(20px) scale(0.96);
-    filter: blur(8px);
+    transform: translateY(14px) scale(0.97);
 }
 
 .fade-slide-enter-active,
 .fade-slide-leave-active {
-    transition:
-        opacity 0.3s ease,
-        transform 0.3s ease;
+    transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .fade-slide-enter-from {
     opacity: 0;
-    transform: translateX(-15px);
+    transform: translateX(-12px);
 }
 
 .fade-slide-leave-to {
     opacity: 0;
-    transform: translateX(15px);
+    transform: translateX(12px);
 }
 
-/* Light Mint Theme Override (aligned with TopBar) */
-.floating-account-manager {
-    --acc-mint-50: var(--bg-brand-light);
-    --acc-mint-100: var(--bg-brand-light);
-    --acc-mint-200: var(--bg-brand-lighter);
-    --acc-mint-300: var(--bg-brand-lighter);
-    --acc-mint-500: var(--brand-primary-light);
-    --acc-mint-600: var(--brand-primary);
-    --acc-mint-700: var(--brand-primary-dark);
-    --acc-text-strong: #214a31;
-    --acc-text-main: #2c5f3e;
-    --acc-text-soft: #5d7f6a;
-}
-
-.account-fab {
-    border-color: rgba(var(--brand-primary-rgb), 0.35);
-    background: linear-gradient(
-        135deg,
-        rgba(245, 255, 248, 0.96) 0%,
-        rgba(231, 248, 238, 0.96) 100%
-    );
-    box-shadow:
-        0 12px 28px rgba(54, 124, 76, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    color: var(--acc-text-strong);
-}
-
-.account-fab:hover {
-    background: linear-gradient(
-        135deg,
-        rgba(250, 255, 252, 0.98) 0%,
-        rgba(238, 251, 244, 0.98) 100%
-    );
-    border-color: rgba(var(--brand-primary-rgb), 0.55);
-    box-shadow:
-        0 14px 34px rgba(54, 124, 76, 0.26),
-        inset 0 1px 0 rgba(255, 255, 255, 0.92);
-}
-
-.account-fab::before {
-    background: linear-gradient(90deg, transparent, rgba(var(--brand-primary-rgb), 0.22), transparent);
-}
-
-.account-fab-text {
-    color: var(--acc-text-main);
-    text-shadow: none;
-}
-
-.fold-icon {
-    color: var(--acc-mint-700);
-}
-
-.status-dot {
-    border-color: var(--acc-mint-50);
-    box-shadow: 0 0 0 2px rgba(var(--brand-accent-light-rgb), 0.3);
-}
-
-.account-panel {
-    width: min(420px, 96vw);
-    /* 安全兜底：防止在窄屏设备上溢出 */
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.28);
-    border-radius: 14px;
-    background: linear-gradient(
-        180deg,
-        rgba(246, 255, 250, 0.96) 0%,
-        rgba(232, 248, 238, 0.97) 100%
-    );
-    box-shadow:
-        0 24px 48px rgba(49, 111, 69, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    clip-path: polygon(
-        18px 0,
-        100% 0,
-        100% calc(100% - 18px),
-        calc(100% - 18px) 100%,
-        0 100%,
-        0 18px
-    );
-}
-
-.panel-header,
-.panel-nav,
-.panel-footer {
-    background: transparent;
-}
-
-.panel-header {
-    border-bottom-color: rgba(var(--brand-primary-rgb), 0.2);
-}
-
-.panel-header::after,
-.panel-footer::before {
-    background: linear-gradient(90deg, transparent, rgba(var(--brand-primary-rgb), 0.35), transparent);
-}
-
-.profile-name {
-    color: var(--acc-text-strong);
-    text-shadow: none;
-}
-
-.profile-role {
-    color: var(--acc-text-main);
-}
-
-.profile-role i,
-.nav-tab.active i {
-    color: var(--acc-mint-700);
-}
-
-.panel-nav {
-    border-bottom-color: rgba(var(--brand-primary-rgb), 0.2);
-    background: rgba(255, 255, 255, 0.42);
-}
-
-.nav-tab {
-    color: var(--acc-text-soft);
-}
-
-.nav-tab:hover {
-    color: var(--acc-text-main);
-    background: rgba(var(--brand-accent-light-rgb), 0.12);
-}
-
-.nav-tab.active {
-    color: var(--acc-text-strong);
-    text-shadow: none;
-}
-
-.nav-tab.active::after {
-    background: linear-gradient(90deg, var(--acc-mint-500), var(--acc-mint-700));
-    box-shadow: 0 -1px 6px rgba(var(--brand-primary-rgb), 0.45);
-}
-
-.panel-body {
-    height: 210px;
-}
-
-.styled-scrollbar::-webkit-scrollbar-thumb {
-    background-color: rgba(var(--brand-primary-rgb), 0.42);
-}
-
-.btn-logout {
-    background: rgba(255, 236, 236, 0.86);
-    border-color: rgba(230, 93, 93, 0.36);
-    color: #a34040;
-}
-
-.btn-logout:hover:not(:disabled) {
-    background: rgba(255, 226, 226, 0.96);
-    border-color: rgba(218, 76, 76, 0.58);
-    color: #8f2f2f;
-    box-shadow: 0 8px 18px rgba(207, 94, 94, 0.2);
-}
-
-/* Responsive Adjustments */
+/* ========== 移动端适配 ========== */
 @media (max-width: 768px) {
-    .floating-account-manager {
-        top: 500px;
-        left: 100px;
-    }
     .account-panel {
-        width: min(96vw, 420px);
+        width: min(96vw, 430px);
     }
 
-    /* Fullscreen mode on mobile */
+    .panel-body {
+        max-height: min(52vh, 480px);
+    }
+
     .account-panel.is-fullscreen {
         border-radius: 0;
         border: none;
@@ -1529,13 +1447,12 @@ onBeforeUnmount(() => {
     }
 
     .account-panel.is-fullscreen .profile-avatar.large {
-        width: 48px;
-        height: 48px;
-        font-size: 20px;
+        width: 46px;
+        height: 46px;
     }
 
     .account-panel.is-fullscreen .profile-name {
-        font-size: 16px;
+        font-size: 15px;
     }
 
     .account-panel.is-fullscreen .panel-nav {
@@ -1554,9 +1471,9 @@ onBeforeUnmount(() => {
     }
 
     .btn-fullscreen {
-        width: 36px;
-        height: 36px;
-        font-size: 14px;
+        width: 32px;
+        height: 32px;
+        font-size: 12px;
     }
 }
 
@@ -1564,6 +1481,7 @@ onBeforeUnmount(() => {
     .account-panel.is-fullscreen .panel-header {
         flex-direction: column;
         gap: 8px;
+        align-items: flex-start;
     }
 
     .account-panel.is-fullscreen .profile-main {

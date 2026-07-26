@@ -24,7 +24,20 @@ const overview = ref({
     total_sessions: 0,
     total_messages: 0,
     active_announcement: 0,
+    l3_env_status: {},
 });
+
+// L3（HF Secrets）环境密钥状态标签映射：仅展示「是否已配置」布尔，不回显明文
+const L3_STATUS_LABELS = [
+    { key: 'super_user', label: 'SUPER_USER 管理员密码' },
+    { key: 'oauth_state_secret', label: 'OAUTH_STATE_SECRET' },
+    { key: 'google_oauth', label: 'Google OAuth' },
+    { key: 'github_oauth', label: 'GitHub OAuth' },
+    { key: 'smtp', label: 'SMTP 邮件账号/密码' },
+    { key: 'agent_api_key_env', label: 'AGENT_API_KEY（环境）' },
+    { key: 'amap_web_service_key', label: '高德 Web 服务 Key（环境）' },
+    { key: 'supabase', label: 'Supabase URL/Key' },
+];
 
 const tables = ref([]);
 const selectedTable = ref('');
@@ -371,6 +384,28 @@ onMounted(async () => {
             </div>
         </div>
 
+        <!-- L3 环境密钥状态（只读） -->
+        <div class="admin-card">
+            <h5 class="admin-subtitle">🔐 环境密钥状态（L3 · HF Secrets · 只读）</h5>
+            <p class="config-description">
+                绝密项只能在 Hugging Face Space Secrets（或本地未提交 .env）中修改，此处仅显示是否已配置，不回显明文。
+                地图 Token、Agent 参数等常变项（L2）请在下方及「API 密钥管理」面板配置；全部键名登记见仓库根目录
+                <code>.env.example</code> 与 Docs/Guide/configuration.md。
+            </p>
+            <div class="env-status-grid">
+                <div
+                    v-for="item in L3_STATUS_LABELS"
+                    :key="item.key"
+                    class="env-status-item"
+                >
+                    <span class="env-status-label">{{ item.label }}</span>
+                    <span :class="['env-status-badge', overview.l3_env_status?.[item.key] ? 'set' : 'unset']">
+                        {{ overview.l3_env_status?.[item.key] ? '已配置' : '未配置' }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
         <div class="admin-card">
             <h5 class="admin-subtitle">系统配置</h5>
 
@@ -456,7 +491,7 @@ onMounted(async () => {
         <!-- LLM 参数动态配置 -->
         <div class="admin-card">
             <h5 class="admin-subtitle">🤖 LLM 对话参数配置（后端动态读取，实时生效）</h5>
-            <p class="config-description">以下参数存储在数据库 system_config 表中，后端运行时动态读取，修改后无需重启服务即可生效。前端 AI 助手、Agent 对话、模型列表等功能均使用这些配置。</p>
+            <p class="config-description">以下参数存储在数据库 system_config 表中（L2，优先于根 .env 的 L1 默认），后端运行时动态读取，修改后无需重启服务即可生效。前端 AI 助手、Agent 对话、模型列表等功能均使用这些配置；键名登记见根 .env.example [L2] 段。</p>
 
             <div v-if="loadingAgentConfig" class="loading-state">
                 <span class="spinner"></span> 正在加载 Agent 配置...
@@ -793,6 +828,52 @@ onMounted(async () => {
     color: var(--acc-text-strong, #214a31);
 }
 
+/* L3 环境密钥状态（只读徽章） */
+.env-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+}
+
+.env-status-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.env-status-label {
+    font-size: 12px;
+    color: var(--acc-text-soft, #5d7f6a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.env-status-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.env-status-badge.set {
+    color: #1a7a3a;
+    background: rgba(47, 154, 87, 0.14);
+    border: 1px solid rgba(47, 154, 87, 0.35);
+}
+
+.env-status-badge.unset {
+    color: #a15c07;
+    background: rgba(230, 162, 60, 0.14);
+    border: 1px solid rgba(230, 162, 60, 0.4);
+}
+
 .admin-field-label {
     display: block;
     margin: 10px 0 6px;
@@ -809,7 +890,7 @@ onMounted(async () => {
     border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 8px;
     background: #ffffff;
-    color: #333333;
+    color: var(--text-primary);
     padding: 10px;
     font-size: 13px;
     transition: border-color 0.2s;
@@ -997,7 +1078,7 @@ onMounted(async () => {
     border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 8px;
     background: #ffffff;
-    color: #333333;
+    color: var(--text-primary);
     padding: 8px 10px;
     font-size: 13px;
     transition: border-color 0.2s;

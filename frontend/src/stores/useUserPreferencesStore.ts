@@ -81,6 +81,16 @@ export function readCachedPreferredAgentModel(): string {
     return normalizeAgentModel(storage.getItem(USER_PREFERENCE_AGENT_MODEL_KEY));
 }
 
+/**
+ * 同步读取用户偏好的默认底图 preset id（runtime 缓存）
+ * 供 2D MapContainer / 3D CesiumContainer 初始化时零依赖读取，未设置返回空串
+ */
+export function readCachedPreferredBasemap(): string {
+    const storage = getStorage();
+    if (!storage) return '';
+    return normalizeBasemap(storage.getItem(USER_PREFERENCE_BASEMAP_KEY));
+}
+
 export const useUserPreferencesStore = defineStore('userPreferencesStore', () => {
     const preferences = ref<UserPreferences>({ ...DEFAULT_PREFERENCES });
     const loading = ref(false);

@@ -117,6 +117,11 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
         return events;
     }
 
+    if (commandKey === TOC_MENU_COMMANDS.EDIT) {
+        events.push({ type: 'edit-layer', payload: { layerId: nodeId } });
+        return events;
+    }
+
     if (commandKey === TOC_MENU_COMMANDS.STYLE) {
         events.push({
             type: 'set-style-target',

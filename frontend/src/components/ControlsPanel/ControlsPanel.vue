@@ -144,10 +144,9 @@
 </template>
 
 <script setup>
+import { computed, defineAsyncComponent, inject, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
-import { ref } from 'vue';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
-import { defineAsyncComponent, inject, computed } from 'vue';
 const DrawPanel = defineAsyncComponent(() => import('./DrawPanel.vue'));
 const MeasurePanel = defineAsyncComponent(() => import('./MeasurePanel.vue'));
 const SpatialAnalysisPanel = defineAsyncComponent(() => import('./SpatialAnalysisPanel.vue'));
@@ -336,7 +335,8 @@ const handleSelect = (id) => {
             break;
 
         default:
-            message.warning('未识别的 Action:', currentItem.action);
+            // 注意：useMessage 的第二参是 options 对象，不能把 action 当参数传（会被吞掉）
+            message.warning(`未识别的 Action: ${currentItem.action}`);
             break;
     }
 };
@@ -388,11 +388,11 @@ const handleDrawEditAction = (action) => {
 };
 
 /**
- * 清除所有绘制图形
+ * 清除全部绘制图形（仅绘制图层；其他图层由图层目录统一管理）
  */
 const handleClearDraw = () => {
     emit('map-interaction', 'Clear');
-    message.success('已清除所有绘制图形');
+    message.success('已清除全部绘制图形');
 };
 
 /**
@@ -514,8 +514,8 @@ const getBasemapLabel = (id) => {
     backdrop-filter: blur(10px);
     border: 1px solid rgba(229, 236, 230, 0.5);
     border-radius: 0 16px 16px 0;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
+    box-shadow: var(--panel-shadow);
+    z-index: var(--z-panel);
 }
 
 /* Chrome/Safari 隐藏滚动条 */
@@ -535,7 +535,7 @@ const getBasemapLabel = (id) => {
     /* 使用 min-height 确保高度 */
     cursor: pointer;
     transition: all 0.3s ease;
-    border-radius: 12px;
+    border-radius: var(--panel-radius);
     color: var(--brand-accent-muted);
 }
 
@@ -578,16 +578,16 @@ const getBasemapLabel = (id) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
+    z-index: var(--z-toast);
     backdrop-filter: blur(4px);
 }
 
 .swipe-dialog-box {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--panel-bg);
     backdrop-filter: blur(12px);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(229, 236, 230, 0.6);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
     min-width: 340px;
     max-width: 90vw;
     overflow: hidden;
@@ -661,7 +661,7 @@ const getBasemapLabel = (id) => {
 .basemap-select {
     width: 100%;
     padding: 8px 10px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     font-size: 13px;
     background: white;
@@ -689,7 +689,7 @@ const getBasemapLabel = (id) => {
 .mode-btn {
     flex: 1;
     padding: 10px 16px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     background: white;
     color: var(--brand-accent-muted);
@@ -715,7 +715,7 @@ const getBasemapLabel = (id) => {
     display: flex;
     gap: 8px;
     padding: 10px 12px;
-    border-top: 1px solid #e8f0e8;
+    border-top: 1px solid var(--bg-brand-light);
 }
 
 .cancel-btn,
@@ -731,7 +731,7 @@ const getBasemapLabel = (id) => {
 
 .cancel-btn {
     background: white;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     color: var(--brand-accent-muted);
 }
 

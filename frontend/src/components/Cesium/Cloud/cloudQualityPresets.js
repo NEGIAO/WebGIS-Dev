@@ -55,6 +55,8 @@ export const CLOUD_QUALITY_PRESETS = {
       minStepSize: 110,
       maxStepSize: 1400,
       perspectiveStepScale: 1.03,
+      // 云主 raymarch 半分辨率（像素成本 ÷4），全分辨率合成回主画面；开启体积云时生效
+      cloudResolutionScale: 0.5,
       shadowMapSize: 512,
       // BSM 更新节奏：仅节流昂贵 raymarch；CSM 矩阵每帧仍会更新，运动时会强制刷新。
       bsmUpdateInterval: 4,
@@ -123,6 +125,8 @@ export const CLOUD_QUALITY_PRESETS = {
       minStepSize: 80,
       maxStepSize: 1200,
       perspectiveStepScale: 1.018,
+      // 云主 raymarch 3/4 分辨率（像素成本 ÷1.78）
+      cloudResolutionScale: 0.75,
       shadowMapSize: 512,
       // BSM 更新节奏：仅节流昂贵 raymarch；CSM 矩阵每帧仍会更新，运动时会强制刷新。
       bsmUpdateInterval: 3,
@@ -187,6 +191,8 @@ export const CLOUD_QUALITY_PRESETS = {
       minStepSize: 45,
       maxStepSize: 1100,
       perspectiveStepScale: 1.008,
+      // 极致档保持全分辨率 raymarch（画质优先，走原单 stage 路径零回归）
+      cloudResolutionScale: 1.0,
       shadowMapSize: 1024,
       bsmUpdateInterval: 1,
       shadowResolveEnabled: true,

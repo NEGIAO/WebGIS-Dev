@@ -21,21 +21,25 @@ WebGIS_Dev/
 │   └── src/                           # 详细文件树见 frontend-structure.md
 │
 ├── backend/                           # 后端工程（FastAPI + Docker，部署于 HF Spaces）
-│   └── api/                           # 详细文件树见 backend-structure.md
+│   ├── api/                           # API 路由模块，详细文件树见 backend-structure.md
+│   └── config/                        # 三层配置统一 loader（L1 env / L2 Admin+DB / L3 Secrets）
 │
 ├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档 + Demo 演示）
-├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档 + Demo 演示）
 │   ├── LLM_record/                    # 维护日志（按日期归档）
-│   ├── Architecture/                  # 架构设计文档（八大功能架构说明 + 洪水模拟）
+│   ├── Architecture/                  # 架构设计文档（八大功能 + 洪水模拟 + 三层配置架构）
 │   ├── Guide/                         # 指南文档（本目录）
-│   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Example_prompt.md
 │   ├── Force_command.md
 │   └── TODO/
 │
 ├── LocalDev.bat                       # Windows 一键启动脚本
+├── CheckConfigRegistry.py             # 配置登记门禁扫描（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
+├── CheckStructureTree.py              # 结构树漂移门禁（frontend-structure.md ⇄ frontend/src 双向 diff）
+├── UpdateReadmeTree.py                # README 文件树同步脚本
 ├── docker-compose.yml                 # 前后端容器编排
+├── .env.example                       # 配置全集清单（L1/L2/L3 权威入口）
+├── .env.production                    # 前端生产构建公开 VITE_*（Vite envDir=根；clone 必改 VITE_BACKEND_URL）
 ├── .gitignore
 ├── LICENSE
 └── README.md                          # 项目门户页
@@ -51,9 +55,9 @@ Docs/
 │   ├── 26-04/                         # 2026-04 日志
 │   ├── 26-05/                         # 2026-05 日志
 │   ├── 26-06/                         # 2026-06 日志（含 06-28 / 06-29 等不规则命名子目录）
-│   └── 26-07/                         # 2026-07 日志（含 26-07-25 BSM 动态修复、26-07-26 阴影稳定性、OAuth 登录绑定、高级 2D 绘制编辑集成）
+│   └── 26-07/                         # 2026-07 日志（含 26-07-25 BSM 动态修复、26-07-26 阴影稳定性、OAuth 登录绑定、高级 2D 绘制编辑集成、三层配置落地与 OAuth 回调推导验证）
 │
-├── Architecture/                      # 架构设计文档（八大功能架构说明 + 洪水模拟）
+├── Architecture/                      # 架构设计文档（八大功能 + 洪水模拟 + 三层配置架构 configuration-three-tier.md）
 │
 ├── Demo/                              # 前端静态 Demo 演示页面（15 个独立页面）
 │   ├── 2dWindField.html               # 2D 风场可视化演示
@@ -74,9 +78,13 @@ Docs/
 │
 ├── Guide/                             # 指南文档（由根 README 拆分，原子化维护）
 │   ├── project-structure.md           # 本文件：根级目录总览 + Docs 树
+│   ├── handover.md                    # 交接文档（文档地图 + 架构速览 + 代码坐标 + 坑清单）
 │   ├── frontend-structure.md          # 前端完整文件树（唯一权威）
 │   ├── backend-structure.md           # 后端完整文件树（唯一权威）
 │   ├── CHANGELOG.md                   # 更新日志（版本记录唯一权威）
+│   ├── configuration.md               # 三层配置指南（根 .env / Admin / HF Secrets）
+│   ├── configuration-architecture-plan.md  # 配置架构分阶段执行计划
+│   ├── oauth-deployment.md            # Google/GitHub OAuth 部署配置指南（控制台申请 + HF Secrets + 排错）
 │   ├── dev-conventions.md             # 开发约定与提交规范
 │   ├── dev-guide.md                   # 开发指南
 │   └── faq.md                         # 技术栈与 FAQ

@@ -1,17 +1,20 @@
 """
 认证模块常量、角色定义、正则验证、纯工具函数。
 
-本模块为叶子依赖，不依赖数据库或 FastAPI。
+本模块为叶子依赖，不依赖数据库或 FastAPI 业务层；
+配置统一经 backend/config 读取（L1 env / L3 Secrets），不直接 os.getenv。
 """
 
 import hashlib
 import logging
-import os
 import re
 import secrets
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request, status
+
+from config import get_settings
+from config import is_development_env as _config_is_development_env
 
 logger = logging.getLogger(__name__)
 
@@ -42,59 +45,41 @@ SUPPORTED_UNIT_SYSTEMS = {
 }
 
 # ─── 会话/安全配置 ───
-# 非密钥项固定在代码中，避免 Hugging Face 堆积无关环境变量。
-SESSION_EXPIRE_HOURS = 72
-PASSWORD_HASH_ITERATIONS = 120000
+# 默认值登记于根 .env.example / config.catalog，可经 L1 env 调整。
+SESSION_EXPIRE_HOURS = get_settings().session_expire_hours
+PASSWORD_HASH_ITERATIONS = get_settings().password_hash_iterations
 
 # ─── OAuth 非密钥常量 ───
-# 真正需要放 HF Secrets 的只有：
-# - GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
-# - GITHUB_OAUTH_CLIENT_ID / GITHUB_OAUTH_CLIENT_SECRET
-# - OAUTH_STATE_SECRET
-# - SUPER_USER
-OAUTH_STATE_TTL_SECONDS = 600
-OAUTH_TICKET_TTL_SECONDS = 120
+# L3（HF Secrets）：GOOGLE/GITHUB CLIENT_ID+SECRET、OAUTH_STATE_SECRET、SUPER_USER
+OAUTH_STATE_TTL_SECONDS = get_settings().oauth_state_ttl_seconds
+OAUTH_TICKET_TTL_SECONDS = get_settings().oauth_ticket_ttl_seconds
 OAUTH_PASSWORD_MARKER_PREFIX = "oauth-disabled"
 SUPPORTED_OAUTH_PROVIDERS = frozenset({"google", "github"})
-
-# 生产默认域名：后端 HF Space + 前端 GitHub Pages
-OAUTH_BACKEND_BASE_URL_PROD = "https://negiao-webgis.hf.space"
-OAUTH_BACKEND_BASE_URL_DEV = "http://localhost:7860"
-OAUTH_FRONTEND_SUCCESS_URL_PROD = "https://negiao.github.io/WebGIS-Dev/#/oauth/callback"
-OAUTH_FRONTEND_FAILURE_URL_PROD = "https://negiao.github.io/WebGIS-Dev/#/register"
-OAUTH_FRONTEND_SUCCESS_URL_DEV = "http://localhost:5173/#/oauth/callback"
-OAUTH_FRONTEND_FAILURE_URL_DEV = "http://localhost:5173/#/register"
 
 
 def is_development_env() -> bool:
     """判断是否本地开发环境。"""
-    app_env = str(os.getenv("APP_ENV") or "").strip().lower()
-    return app_env in {"development", "dev", "local"}
+    return _config_is_development_env()
 
 
 def get_oauth_backend_base_url() -> str:
-    """返回 OAuth 后端基址：开发用 localhost，生产用 HF Space 域名。"""
-    if is_development_env():
-        return OAUTH_BACKEND_BASE_URL_DEV
-    return OAUTH_BACKEND_BASE_URL_PROD
+    """返回 OAuth 后端基址（BACKEND_PUBLIC_URL，按 APP_ENV 提供默认）。"""
+    return get_settings().backend_public_url
 
 
 def get_oauth_redirect_uri(provider: str) -> str:
     """
-    返回 provider 的固定回调 URI。
+    返回 provider 的回调 URI（由 BACKEND_PUBLIC_URL 推导，可被
+    GOOGLE/GITHUB_OAUTH_REDIRECT_URI 覆盖）。
 
     注意：该值必须与 Google/GitHub 控制台 Authorized redirect URI 完全一致。
     """
-    normalized = str(provider or "").strip().lower()
-    base = get_oauth_backend_base_url().rstrip("/")
-    return f"{base}/api/auth/oauth/{normalized}/callback"
+    return get_settings().get_oauth_redirect_uri(provider)
 
 
 def get_oauth_frontend_redirect_url(success: bool) -> str:
-    """返回 OAuth 完成后前端跳转地址。"""
-    if is_development_env():
-        return OAUTH_FRONTEND_SUCCESS_URL_DEV if success else OAUTH_FRONTEND_FAILURE_URL_DEV
-    return OAUTH_FRONTEND_SUCCESS_URL_PROD if success else OAUTH_FRONTEND_FAILURE_URL_PROD
+    """返回 OAuth 完成后前端跳转地址（由 FRONTEND_PUBLIC_URL 推导，可覆盖）。"""
+    return get_settings().get_oauth_frontend_redirect_url(success)
 
 
 # ─── 配额常量 ───
@@ -372,35 +357,18 @@ def _is_guest_allow_request(request: Request) -> bool:
 
 
 # ─── 管理员密码常量 ───
-DEV_DEFAULT_ADMIN_PASSWORD = "123456"  # 仅在 APP_ENV=development 且未设置 SUPER_USER 时生效
+DEV_DEFAULT_ADMIN_PASSWORD = "123456"  # 仅开发环境且未设置 SUPER_USER 时生效
 
 
 def _get_admin_password() -> str:
-    """获取管理员密码。
+    """获取管理员密码（统一 loader）。
 
     优先级：
-    1. SUPER_USER 环境变量 → 直接使用
-    2. APP_ENV=development → fallback 到 DEV_DEFAULT_ADMIN_PASSWORD（仅本地开发）
-    3. 其他情况 → 返回空字符串，管理员登录被禁用
+    1. L3 SUPER_USER（HF Secrets / 本地未提交 .env） → 直接使用
+    2. 开发环境（APP_ENV=development 等） → DEV_DEFAULT_ADMIN_PASSWORD
+    3. 其他情况 → 返回空字符串，管理员登录被禁用（日志已说明缺哪项）
     """
-    configured = str(os.getenv(ADMIN_PASSWORD_ENV_NAME, "")).strip()
-    if configured:
-        return configured
-
-    app_env = str(os.getenv("APP_ENV", "")).strip().lower()
-    if app_env == "development":
-        logger.warning(
-            "SUPER_USER 未配置，当前 APP_ENV=development，使用开发默认密码。"
-            "请勿在生产环境使用此配置。"
-        )
-        return DEV_DEFAULT_ADMIN_PASSWORD
-
-    logger.error(
-        "SUPER_USER 环境变量未配置，管理员登录已禁用。"
-        "请在 docker-compose.yml 或 .env 中设置 SUPER_USER。"
-        "本地开发可设置 APP_ENV=development 启用默认密码。"
-    )
-    return ""
+    return get_settings().get_admin_password()
 
 
 # ─── 邮箱验证码常量 ───

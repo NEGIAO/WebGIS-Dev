@@ -93,6 +93,7 @@ uniform float u_cloudShadowBottomRadius;
 uniform float u_cloudShadowAltitudeFadeStart;
 uniform float u_cloudShadowAltitudeFadeEnd;
 uniform vec2 u_cloudShadowTexelSize;
+uniform int u_cloudShadowPcfTaps;
 uniform float u_geometricErrorCorrectionAmount;
 // three-geospatial 对齐：直接消费 shadowLengthBuffer（长度单位与大气 length unit 一致，当前为 km）
 uniform sampler2D u_shadowLengthBuffer;
@@ -178,7 +179,8 @@ int getFadedCascadeIndex(mat4 viewMat, vec3 worldPos, vec2 intervals[4], float n
       }
     }
   }
-  return alpha > 0.35 ? nextIndex : prevIndex;
+  // V3.4.12：与 aerial 一致，硬阈值改为逐像素 IGN 抖动阈值，消除随相机扫动的 cascade 硬边界线。
+  return alpha > jitter ? nextIndex : prevIndex;
 }
 
 vec2 getShadowUvGround(vec3 worldPos, int ci) {
@@ -201,6 +203,9 @@ vec2 vogelDiskAP(int index, int count, float phi) {
 
 float readShadowOpticalDepthGround(vec2 uv, int ci, float distToTop) {
   float scale = max(u_cloudShadowScale, 1e-6);
+  // V3.4.7：tile UV 半 texel gutter clamp，防 PCF 越界读到相邻 cascade tile。
+  vec2 gutterG = max(u_cloudShadowTexelSize, vec2(1e-4)) * 0.5;
+  uv = clamp(uv, gutterG, 1.0 - gutterG);
   vec2 atlasUv = getCloudShadowAtlasOffset(ci) + uv * 0.5;
   vec4 shadow = (texture(u_cloudShadowBuffer, atlasUv) / scale) * u_cloudShadowDecode;
   float od = min(shadow.b + shadow.a, shadow.g * max(0.0, distToTop - shadow.r));
@@ -211,13 +216,15 @@ float sampleShadowOpticalDepthPCFGround(vec3 worldPos, float distToTop, float ra
   vec2 uv = getShadowUvGround(worldPos, ci);
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
   vec2 texel = max(u_cloudShadowTexelSize, vec2(1e-4));
-  if (radius < 0.1) return readShadowOpticalDepthGround(uv, ci, distToTop);
+  int taps = clamp(u_cloudShadowPcfTaps, 1, 16);
+  if (radius < 0.1 || taps <= 1) return readShadowOpticalDepthGround(uv, ci, distToTop);
   float sum = 0.0;
   float phi = interleavedGradientNoiseAP(gl_FragCoord.xy) * 6.28318530718;
   for (int i = 0; i < 16; ++i) {
+    if (i >= taps) break;
     sum += readShadowOpticalDepthGround(uv + vogelDiskAP(i, 16, phi) * radius * texel, ci, distToTop);
   }
-  return sum / 16.0;
+  return sum / float(taps);
 }
 
 vec3 correctBsmPosition(vec3 posMeters, float amount) {
@@ -281,7 +288,8 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   int ci = getFadedCascadeIndex(czm_view, samplePos, u_cloudShadowIntervals, near, far, jitter);
   if (ci < 0) return 1.0;
 
-  float pcfRadius = mix(1.5, 3.0, saturateAP(viewDist / max(far, 1.0)));
+  // V3.4.12：PCF 半径固定，避免随视距连续变化导致升降时模糊宽度“呼吸”。
+  float pcfRadius = 2.0;
   float opticalDepth = sampleShadowOpticalDepthPCFGround(samplePos, distToShadowTop, pcfRadius, ci);
   float shade = exp(-opticalDepth);
   return mix(1.0, shade, fade);
@@ -589,6 +597,8 @@ export class AtmospherePostProcess {
     this._cloudShadowTexScale = 1.0;
     this._cloudShadowTexelSize = null;
     this._geometricErrorCorrectionAmount = 0.0;
+    /** 地面云影 PCF tap 数（1~16），由管线按质量预设注入 */
+    this._cloudShadowPcfTaps = 16;
     this._gui = null;
     /** @type {boolean} 是否创建 dat.gui（WebGIS 默认 false） */
     this.enableGui = options.enableGui === true;
@@ -815,6 +825,8 @@ export class AtmospherePostProcess {
       ];
       uniforms.u_cloudShadowTexelSize = () =>
         self._cloudShadowTexelSize ?? new Cesium.Cartesian2(1 / 512, 1 / 512);
+      uniforms.u_cloudShadowPcfTaps = () =>
+        Math.max(1, Math.min(16, Math.round(self._cloudShadowPcfTaps ?? 16)));
       uniforms.u_geometricErrorCorrectionAmount = () =>
         self._geometricErrorCorrectionAmount ?? 0.0;
       uniforms.u_shadowLengthEnabled = () => (self._shadowLengthEnabled ? 1 : 0);
@@ -908,6 +920,9 @@ export class AtmospherePostProcess {
     }
     if (options.geometricErrorCorrectionAmount !== undefined) {
       this._geometricErrorCorrectionAmount = options.geometricErrorCorrectionAmount;
+    }
+    if (options.pcfTaps !== undefined) {
+      this._cloudShadowPcfTaps = options.pcfTaps;
     }
   }
 

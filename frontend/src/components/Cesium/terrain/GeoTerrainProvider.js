@@ -1,4 +1,22 @@
 import { inflate } from 'pako/lib/inflate.js';
+import { DecodeWorkerPool } from './decodeWorkerPool.js';
+
+/**
+ * 模块级共享解码 Worker 池（V3.4.x：inflate + 逐像素编码原在主线程，
+ * 瓦片风暴期堆积卡顿，与 ArcGIS LERC 同类问题，同思路下放 Worker）。
+ * @type {DecodeWorkerPool | null}
+ */
+let sharedGeoDecodePool = null;
+function getSharedGeoDecodePool() {
+    if (!sharedGeoDecodePool) {
+        sharedGeoDecodePool = new DecodeWorkerPool(
+            () => new Worker(new URL('./geoTerrainDecode.worker.js', import.meta.url), { type: 'module' }),
+            2,
+            'GeoTerrain',
+        );
+    }
+    return sharedGeoDecodePool;
+}
 
 export default function createGeoTerrainProvider(Cesium) {
     if (!Cesium) {
@@ -40,9 +58,22 @@ export default function createGeoTerrainProvider(Cesium) {
         return availability;
     }
 
-    function createHeightmapTerrainData(provider, buffer, level, x, y) {
+    /**
+     * 由已完成"高程→RGBA 编码"的像素构造地形数据。
+     * @param {object} provider
+     * @param {Uint8Array|null} pixels - 编码后的 RGBA 像素（null 表示源数据非法）
+     * @param {number} level
+     * @param {number} x
+     * @param {number} y
+     * @returns {object} HeightmapTerrainData
+     */
+    function createHeightmapTerrainData(provider, pixels, level, x, y) {
+        // 原实现把 null 直接传给 HeightmapTerrainData 会在内部崩溃；显式抛出交给瓦片失败处理
+        if (!pixels) {
+            throw new Error('Invalid terrain payload.');
+        }
         const terrainData = new HeightmapTerrainData({
-            buffer: provider._transformBuffer(buffer),
+            buffer: pixels,
             width: provider._width,
             height: provider._height,
             childTileMask: provider._getChildTileMask(x, y, level),
@@ -124,6 +155,25 @@ export default function createGeoTerrainProvider(Cesium) {
                 return undefined;
             }
 
+            // V3.4.x：inflate + 逐像素编码下放 Worker（Transferable 零拷贝），
+            // 主线程仅构造 HeightmapTerrainData；Worker 不可用回退原主线程路径。
+            const pool = getSharedGeoDecodePool();
+            if (pool.available()) {
+                return tileResource
+                    .then((buffer) =>
+                        pool.submit(
+                            {
+                                buffer,
+                                dataType: this._dataType,
+                                width: this._width,
+                                height: this._height,
+                            },
+                            [buffer],
+                        ),
+                    )
+                    .then(({ pixels }) => createHeightmapTerrainData(this, pixels, level, x, y));
+            }
+
             return tileResource
                 .then((buffer) => {
                     if (buffer.byteLength < 1000) {
@@ -131,7 +181,9 @@ export default function createGeoTerrainProvider(Cesium) {
                     }
                     return inflate(buffer);
                 })
-                .then((uint8Array) => createHeightmapTerrainData(this, uint8Array, level, x, y));
+                .then((uint8Array) =>
+                    createHeightmapTerrainData(this, this._transformBuffer(uint8Array), level, x, y),
+                );
         }
 
         getTileDataAvailable(x, y, level) {

@@ -20,6 +20,13 @@ export class CloudShadowPass {
         this.params = options.params || {};
         this.updateInterval = Math.max(1, Number(options.updateInterval ?? this.params.bsmUpdateInterval) || 1);
         this.enabled = options.enabled !== false;
+        /**
+         * 是否自注册 preRender listener 驱动渲染。
+         * V3.4.7：管线场景传 false，由 _syncBSM 显式调用 render()，
+         * 保证“矩阵→raymarch→publish→resolve→blit→setCloudShadow”同帧顺序确定；
+         * 运行时重建 pass 时自注册 listener 会排到 _syncBSM 之后，造成固定 1 帧滞后。
+         */
+        this.autoRender = options.autoRender !== false;
         this._renderFrame = 0;
         this._hasRendered = false;
         this._gl = null;
@@ -54,6 +61,18 @@ export class CloudShadowPass {
         this._publishedShadowFar = 0.0;
         this._hasPublishedShadowState = false;
         this._inverseShadowMatrices = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array(16));
+        // 逐 cascade 世界锚定噪声偏移：snap 后中心的 texel 计数 mod 256。
+        // BSM 噪声相位若绑定 gl_FragCoord（atlas 像素），snap 跳变时会相对世界滑动
+        // 1 texel → 整场重噪 → 升降抖动；加上该偏移后噪声随纹理网格贴住世界。
+        this._jitterOffsets = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array(2));
+        // V3.4.x 性能：BSM 内容签名门控。
+        // snap+世界锚定噪声修复后，atlas 内容 = f(snap 窗口, 太阳方向, 天气偏移, 参数)，
+        // 与相机连续位移解耦；签名/参数未变且演化刷新未到期时跳过整张 raymarch。
+        this._cascadeSignature = "";
+        this._renderedSignature = null;
+        this._paramsRev = 1;
+        this._renderedParamsRev = -1;
+        this._framesSinceRender = Number.MAX_SAFE_INTEGER;
         this._prevShadowMatrices = Array.from({ length: SHADOW_CASCADE_COUNT }, () => {
             const m = new Float32Array(16);
             m[0] = m[5] = m[10] = m[15] = 1.0;
@@ -64,28 +83,60 @@ export class CloudShadowPass {
     }
 
     updateDynamicParams(dynamicParams) {
-        if (dynamicParams.localWeatherOffset) this.params.localWeatherOffset = dynamicParams.localWeatherOffset;
-        if (dynamicParams.shapeOffset) this.params.shapeOffset = dynamicParams.shapeOffset;
-        if (dynamicParams.shapeDetailOffset) this.params.shapeDetailOffset = dynamicParams.shapeDetailOffset;
-        if (dynamicParams.bottomRadius !== undefined) this.params.bottomRadius = dynamicParams.bottomRadius;
-        if (dynamicParams.shadowBottomHeight !== undefined) this.params.shadowBottomHeight = dynamicParams.shadowBottomHeight;
-        if (dynamicParams.shadowTopHeight !== undefined) this.params.shadowTopHeight = dynamicParams.shadowTopHeight;
-        if (dynamicParams.debugShadow !== undefined) this.params.debugShadow = dynamicParams.debugShadow;
+        // V3.4.x 性能：值级变更检测。任何"会改变 BSM 内容"的参数变化都 bump _paramsRev，
+        // 供 render() 签名门控判断；持续推进的风/演化偏移除外（其新鲜度由演化刷新节奏兜底），
+        // 否则 windSpeed>0 时每帧都会判定"参数已变"，门控失效。
+        const p = this.params;
+        let changed = false;
+        const setNum = (key, v) => {
+            if (v === undefined) return;
+            if (p[key] !== v) { p[key] = v; changed = true; }
+        };
+        // 数组必须拷贝为 pass 自有副本再比较：调用方传入的是每帧原地复用的 scratch 数组，
+        // 若直接共享引用，后续比较永远相等，变更检测失效。
+        const setArr = (key, v) => {
+            if (v === undefined || v === null) return;
+            const cur = p[key];
+            if (!Array.isArray(cur) || cur === v || cur.length !== v.length) {
+                p[key] = Array.prototype.slice.call(v);
+                changed = true;
+                return;
+            }
+            for (let i = 0; i < v.length; i++) {
+                if (cur[i] !== v[i]) {
+                    for (let j = 0; j < v.length; j++) cur[j] = v[j];
+                    changed = true;
+                    return;
+                }
+            }
+        };
+        // 演化偏移：直接同步，不参与变更检测（见上）
+        if (dynamicParams.localWeatherOffset) p.localWeatherOffset = dynamicParams.localWeatherOffset;
+        if (dynamicParams.shapeOffset) p.shapeOffset = dynamicParams.shapeOffset;
+        if (dynamicParams.shapeDetailOffset) p.shapeDetailOffset = dynamicParams.shapeDetailOffset;
+        if (dynamicParams.windSpeed !== undefined) p.windSpeed = dynamicParams.windSpeed;
+        if (dynamicParams.evolutionSpeed !== undefined) p.evolutionSpeed = dynamicParams.evolutionSpeed;
+
+        setNum("bottomRadius", dynamicParams.bottomRadius);
+        setNum("shadowBottomHeight", dynamicParams.shadowBottomHeight);
+        setNum("shadowTopHeight", dynamicParams.shadowTopHeight);
+        setNum("debugShadow", dynamicParams.debugShadow);
         // shadow cascade far 必须每帧同步，否则会用 init 时的旧值（Cesium frustum.far~8e8 → 矩阵 NaN）
-        if (dynamicParams.shadowFar !== undefined) this.params.shadowFar = dynamicParams.shadowFar;
-        if (dynamicParams.maxShadowLengthRayDistance !== undefined) this.params.maxShadowLengthRayDistance = dynamicParams.maxShadowLengthRayDistance;
-        if (dynamicParams.shadowSplitLambda !== undefined) this.params.shadowSplitLambda = dynamicParams.shadowSplitLambda;
-        if (dynamicParams.shadowFadeScale !== undefined) this.params.shadowFadeScale = dynamicParams.shadowFadeScale;
+        setNum("shadowFar", dynamicParams.shadowFar);
+        setNum("maxShadowLengthRayDistance", dynamicParams.maxShadowLengthRayDistance);
+        setNum("shadowSplitLambda", dynamicParams.shadowSplitLambda);
+        setNum("shadowFadeScale", dynamicParams.shadowFadeScale);
         // layer 参数每帧同步，否则 GUI 调 coverage/density 等只影响主云，BSM 阴影不变
-        if (dynamicParams.coverages !== undefined) this.params.coverages = dynamicParams.coverages;
-        if (dynamicParams.densityScales !== undefined) this.params.densityScales = dynamicParams.densityScales;
-        if (dynamicParams.shapeAmounts !== undefined) this.params.shapeAmounts = dynamicParams.shapeAmounts;
-        if (dynamicParams.shapeDetailAmounts !== undefined) this.params.shapeDetailAmounts = dynamicParams.shapeDetailAmounts;
-        if (dynamicParams.weatherExponents !== undefined) this.params.weatherExponents = dynamicParams.weatherExponents;
-        if (dynamicParams.shapeAlteringBiases !== undefined) this.params.shapeAlteringBiases = dynamicParams.shapeAlteringBiases;
-        if (dynamicParams.coverageFilterWidths !== undefined) this.params.coverageFilterWidths = dynamicParams.coverageFilterWidths;
-        if (dynamicParams.scatteringCoefficient !== undefined) this.params.scatteringCoefficient = dynamicParams.scatteringCoefficient;
-        if (dynamicParams.absorptionCoefficient !== undefined) this.params.absorptionCoefficient = dynamicParams.absorptionCoefficient;
+        setArr("coverages", dynamicParams.coverages);
+        setArr("densityScales", dynamicParams.densityScales);
+        setArr("shapeAmounts", dynamicParams.shapeAmounts);
+        setArr("shapeDetailAmounts", dynamicParams.shapeDetailAmounts);
+        setArr("weatherExponents", dynamicParams.weatherExponents);
+        setArr("shapeAlteringBiases", dynamicParams.shapeAlteringBiases);
+        setArr("coverageFilterWidths", dynamicParams.coverageFilterWidths);
+        setNum("scatteringCoefficient", dynamicParams.scatteringCoefficient);
+        setNum("absorptionCoefficient", dynamicParams.absorptionCoefficient);
+        if (changed) this._paramsRev++;
     }
 
     /**
@@ -312,8 +363,13 @@ export class CloudShadowPass {
             // ignore
         }
         
-        // 构造光源朝向矩阵（lookAt(0, -sunDir, up)）
-        const lightOrientation = this._lookAt([0, 0, 0], [-toSun.x, -toSun.y, -toSun.z], [0, 0, 1]);
+        // 构造光源朝向矩阵（lookAt(0, -sunDir, up)）。
+        // up 与太阳方向近平行时 lookAt 退化（x=up×z 长度为 0），换用 Y 轴兜底；
+        // 该 up 必须与下方逐 cascade 的 _lookAt(positionWS, centerWS, up) 保持一致，
+        // 否则 texel snap 的 x/y 轴与最终阴影图 x/y 轴不重合。
+        const upAxis = Math.abs(toSun.z) > 0.99 ? [0, 1, 0] : [0, 0, 1];
+        this._shadowUpAxis = upAxis;
+        const lightOrientation = this._lookAt([0, 0, 0], [-toSun.x, -toSun.y, -toSun.z], upAxis);
         const invLightOrientation = new Float32Array(16);
         this._invert(invLightOrientation, lightOrientation);
 
@@ -322,8 +378,12 @@ export class CloudShadowPass {
         const camWorld = new Float32Array(16);
         Cesium.Matrix4.toArray(camInvView, camWorld);
 
+        // V3.4.7 核心修复：相机视空间 → 光空间 = (世界→光) × (相机→世界)。
+        // 旧代码误用 invLightOrientation（光→世界）做首乘，bbox/texel snap 全部落在
+        // “转置光框架”里 —— snap 的量化轴与阴影图 x/y 轴不重合，量化完全失效，
+        // cascade 原点随相机亚 texel 滑动 → BSM 重栅格化漂移 → 阴影抖动/粘屏。
         const cameraToLight = new Float32Array(16);
-        this._multiply(cameraToLight, invLightOrientation, camWorld);
+        this._multiply(cameraToLight, lightOrientation, camWorld);
 
         // 全 frustum（view space）近远平面 4 个角
         const fov = Number(frustum?.fovy) || (Math.PI / 3);
@@ -355,6 +415,10 @@ export class CloudShadowPass {
         const R = Number(this.params.bottomRadius) || 6371000;
         const cloudTopR = R + (Number(this.params.cloudBottomHeight) || 3000) + (Number(this.params.cloudTopHeight) || 1500);
         const distance = cloudTopR * 3.0;
+        // 内容签名：snap 整数 + 量化半径（覆盖 fov/aspect/near/far 变化）+ 量化太阳方向（2e-4 rad）
+        const sigParts = [
+            Math.round(toSun.x * 5000), Math.round(toSun.y * 5000), Math.round(toSun.z * 5000)
+        ];
 
         for (let ci = 0; ci < SHADOW_CASCADE_COUNT; ci++) {
             const tNear = (splits[ci - 1] ?? 0);
@@ -396,21 +460,32 @@ export class CloudShadowPass {
                 1.0
             ];
 
-            // texel snap
+            // texel snap：在光空间 x/y 上按整 texel 量化中心。
+            // 正交半径只依赖视锥参数（帧间常量），中心量化后 texel↔世界映射帧间分段恒定，
+            // BSM 栅格与静态 blue-noise jitter 因此获得世界稳定性（贴地不抖的关键）。
             const texelW = (right - left) / mapSize.width;
             const texelH = (top - bottom) / mapSize.height;
-            centerLS[0] = Math.round(centerLS[0] / texelW) * texelW;
-            centerLS[1] = Math.round(centerLS[1] / texelH) * texelH;
+            const snapX = Math.round(centerLS[0] / texelW);
+            const snapY = Math.round(centerLS[1] / texelH);
+            centerLS[0] = snapX * texelW;
+            centerLS[1] = snapY * texelH;
+            // 世界锚定噪声偏移：fragCoord + center/texel = (x_light + radius)/texel，
+            // 与窗口位置无关（整数域，mod 256 保 f32 精确 + 蓝噪声纹理周期对齐）。
+            this._jitterOffsets[ci][0] = ((snapX % 256) + 256) % 256;
+            this._jitterOffsets[ci][1] = ((snapY % 256) + 256) % 256;
+            sigParts.push(snapX, snapY, Math.round(radius));
 
-            // center 回到 world：centerWS = lightOrientation * centerLS
-            const centerWS4 = this._mulMat4Vec4(lightOrientation, centerLS);
+            // center 回到 world：光空间 → 世界 = invLightOrientation（V3.4.7 修复，
+            // 旧代码误乘 lightOrientation=世界→光，与上面的错误首乘“互相抵消”，
+            // 中心点虽连续但 snap 轴向错误）。
+            const centerWS4 = this._mulMat4Vec4(invLightOrientation, centerLS);
             const centerWS = [centerWS4[0], centerWS4[1], centerWS4[2]];
             const positionWS = [
                 centerWS[0] + toSun.x * distance,
                 centerWS[1] + toSun.y * distance,
                 centerWS[2] + toSun.z * distance
             ];
-            const view = this._lookAt(positionWS, centerWS, [0, 0, 1]);
+            const view = this._lookAt(positionWS, centerWS, upAxis);
 
             const shadowMatrix = this._shadowMatrices[ci];
             const invShadowMatrix = this._inverseShadowMatrices[ci];
@@ -419,6 +494,7 @@ export class CloudShadowPass {
             this._multiply(shadowMatrix, proj, view);
             this._invert(invShadowMatrix, shadowMatrix);
         }
+        this._cascadeSignature = sigParts.join(",");
     }
 
     /**
@@ -642,10 +718,13 @@ export class CloudShadowPass {
         let motion = 1.0;
         if (this._prevCamPos && this._prevCamDir) {
             const dp = Cesium.Cartesian3.distance(cam.positionWC, this._prevCamPos);
-            const dot = Cesium.Cartesian3.dot(cam.directionWC, this._prevCamDir);
-            const dd = Math.abs(Math.min(1.0, Math.max(-1.0, dot)) - 1.0);
-            // BSM 是相机视锥相关 CSM：很小的旋转也会让 atlas/matrix 错配，因此阈值比普通 TAA 更敏感。
-            motion = Math.min(1.0, dp * 2e-3 + dd * 160.0);
+            const dot = Math.min(1.0, Math.max(-1.0, Cesium.Cartesian3.dot(cam.directionWC, this._prevCamDir)));
+            // V3.4.7：旋转度量改用角度（弧度）近似 sqrt(2(1-dot))。
+            // 旧的 (1-dot) 在小角度下是 θ²/2 量级（二次方弱化），慢速旋转（~12°/s）
+            // 也无法越过强制刷新阈值 → interval>1 预设下 cascade 冻结、新视野无阴影、
+            // 更新帧阴影整块弹入（旋转黑闪）。角度度量对旋转是线性响应。
+            const ang = Math.sqrt(Math.max(0.0, 2.0 * (1.0 - dot)));
+            motion = Math.min(1.0, dp * 2e-3 + ang * 8.0);
         }
         this._prevCamPos = Cesium.Cartesian3.clone(cam.positionWC, this._prevCamPos);
         this._prevCamDir = Cesium.Cartesian3.clone(cam.directionWC, this._prevCamDir);
@@ -741,13 +820,24 @@ void main() {
         if (!gl || !this._fbo || !this._program || !this._fboComplete) return;
 
         this._gl = gl;
-        // CSM 矩阵必须每帧跟随相机发布；只节流昂贵的 BSM raymarch，避免矩阵/atlas 错配造成屏幕粘滞。
         this.updateShadowCascades();
-        const motion = this._measureCameraMotion();
-        const movingForce = motion > 0.003;
+        // motion 仍每帧测量：供 resolve 侧 alpha/reset 决策使用
+        this._measureCameraMotion();
+        // V3.4.x 性能：内容签名门控取代"运动即每帧重绘"。
+        // snap+世界锚定噪声修复后，BSM 内容与相机连续位移解耦：
+        // 仅在 snap/太阳/半径签名变化、参数变化、或演化刷新到期时重绘；
+        // 相机平滑移动的未跳变帧与静止帧全部跳过整张 atlas raymarch。
         const interval = Math.max(1, Number(this.updateInterval || this.params.bsmUpdateInterval) || 1);
-        const shouldSkip = !force && this._hasRendered && !movingForce && interval > 1 && (this._renderFrame++ % interval) !== 0;
-        if (shouldSkip) return;
+        const evolutionActive =
+            Math.abs(Number(this.params.windSpeed) || 0) > 1e-9 ||
+            Math.abs(Number(this.params.evolutionSpeed) || 0) > 1e-9;
+        const refreshFrames = evolutionActive ? Math.max(interval, 8) : Number.MAX_SAFE_INTEGER;
+        if (this._framesSinceRender < Number.MAX_SAFE_INTEGER) this._framesSinceRender++;
+        const signatureChanged = this._cascadeSignature !== this._renderedSignature;
+        const paramsChanged = this._paramsRev !== this._renderedParamsRev;
+        const shouldRender = force || !this._hasRendered || signatureChanged || paramsChanged
+            || this._framesSinceRender >= refreshFrames;
+        if (!shouldRender) return;
         this._hasRendered = true;
         this._updatedThisFrame = true;
         this._lastRenderedFrame++;
@@ -851,6 +941,7 @@ void main() {
         const locInv = locs.u_inverseSunViewProj;
         const locReproj = locs.u_reprojectionMatrix;
         const locAtlasOffset = locs.u_atlasOffset;
+        const locJitterOffset = locs.u_jitterOffset;
         const posLoc = this._positionLoc != null ? this._positionLoc : gl.getAttribLocation(this._program, "a_position");
         if (posLoc >= 0 && this._vbo) {
             gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
@@ -870,6 +961,7 @@ void main() {
             if (locInv) gl.uniformMatrix4fv(locInv, false, this._inverseShadowMatrices[ci]);
             if (locReproj) gl.uniformMatrix4fv(locReproj, false, this._prevShadowMatrices[ci]);
             if (locAtlasOffset) gl.uniform2f(locAtlasOffset, t.x / this.size, t.y / this.size);
+            if (locJitterOffset) gl.uniform2f(locJitterOffset, this._jitterOffsets[ci][0], this._jitterOffsets[ci][1]);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
 
@@ -891,6 +983,10 @@ void main() {
 
         this._swapColorTextures();
         this._publishShadowState();
+        // 门控账本：记录本次渲染对应的内容签名/参数版本，重置演化刷新计时
+        this._renderedSignature = this._cascadeSignature;
+        this._renderedParamsRev = this._paramsRev;
+        this._framesSinceRender = 0;
     }
 
     /**
@@ -948,7 +1044,9 @@ void main() {
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
         this._vbo = vbo;
-        this._preRenderListener = scene.preRender.addEventListener(() => this.render());
+        if (this.autoRender) {
+            this._preRenderListener = scene.preRender.addEventListener(() => this.render());
+        }
     }
 
     destroy() {

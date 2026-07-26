@@ -14,7 +14,7 @@ frontend/src/
 ├── cesium-shim.js                                  # Cesium ESM 垫片（CDN window.Cesium 桥接）
 │
 ├── api/                                            # API 客户端封装
-│   ├── backend.js                                  # 后端 API barrel re-export
+│   ├── backend.js                                  # ⚠️ DEPRECATED 转发壳（删除后 api/backend 自动解析目录 index，待 git rm）
 │   ├── backend/                                    # 后端 API 按业务域拆分
 │   │   ├── client.js                               # axios 实例、拦截器、错误处理
 │   │   ├── auth.js                                 # 鉴权接口
@@ -34,7 +34,7 @@ frontend/src/
 │   ├── ipLocation.js                               # IP 定位 API
 │   ├── locationSearch.js                           # 地点搜索 API
 │   ├── map.js                                      # 地图业务 API
-│   └── weather.js                                  # 天气 API
+│   └── weather.js                                  # 高德天气业务封装（前端直连；与 backend/weather.js 后端代理同名不同义）
 │
 ├── assets/                                         # 全局样式与静态数据
 │   ├── logo.svg                                    # 项目 Logo
@@ -52,6 +52,13 @@ frontend/src/
 │   │   ├── CesiumDataImportDialog.vue              # GLTF/GLB 模型放置坐标输入弹窗
 │   │   ├── LilGuiControls.vue                      # lil-gui 动态控件渲染器
 │   │   │
+│   │   ├── Analysis/                                # 三维分析模块（通视 + 限高，独立文件夹 + 统一 GUI 接口）
+│   │   │   ├── index.js                             # 模块出口：createAnalysisRuntime 懒实例化/控件分发/销毁
+│   │   │   ├── analysisModule.js                    # 声明式 GUI 控件定义（vis*/limit* 前缀 + 按钮动作）
+│   │   │   ├── analysisMath.js                      # 共享纯函数：拾取兜底/大圆推算/扇形顶点（零 turf 依赖）
+│   │   │   ├── visibilityAnalysis.js                # 通视分析器（pickFromRay 逐角度射线，可见/遮挡分色）
+│   │   │   └── heightLimitAnalysis.js               # 限高分析器（ClassificationPrimitive 超限染色 + 截面框 + 自动框选/手绘）
+│   │   │
 │   │   ├── cesium-navigation/                       # 导航控件（罗盘/缩放/比例尺，原 npm 包内嵌）
 │   │   │   ├── CesiumNavigation.js                  # 模块入口
 │   │   │   ├── core/Utils.js                        # 相机焦点计算（惰性 getter 防竞态）
@@ -66,9 +73,10 @@ frontend/src/
 │   │   │   ├── svgPaths/                            # SVG 图标路径
 │   │   │   └── styles/cesium-navigation.css         # 样式（含高对比度深色主题）
 │   │   │
-│   │   ├── cesium-wind-layer/                       # GPU 风场粒子（原 npm 包内嵌 + Win2d 归入）
-│   │   │   ├── index.mjs                            # WindLayer 核心（ComputeCommand 管线）
-│   │   │   ├── Wind2D.js                            # 2D 风场封装层
+│   │   ├── cesium-wind-layer/                       # GPU 风场粒子（原 npm 包内嵌，纯 ESM：已清理未引用 CJS 产物）
+│   │   │   ├── index.mjs                            # WindLayer 核心（ComputeCommand 管线；监听引用缓存 + percentageChanged 快照恢复）
+│   │   │   ├── index.d.ts                           # WindLayer 类型声明
+│   │   │   ├── Wind2D.js                            # 2D 风场封装层（粒子数 clamp）
 │   │   │   ├── useCesiumWind.js                     # Vue composable
 │   │   │   └── windModule.js                        # 面板控件定义
 │   │   │
@@ -129,7 +137,7 @@ frontend/src/
 │   │   │
 │   │   ├── FluidSimulation/                        # 流体模拟（洪水 + 水位动画）
 │   │   │   ├── FluidSimulationPanel.vue            # 流体控制面板
-│   │   │   └── fluidruntime.js                     # WebGL 流体渲染引擎
+│   │   │   └── fluidRuntime.js                     # WebGL 流体渲染引擎
 │   │   │
 │   │   ├── ShallowWater/                           # Three.js 热带浅水场景叠加
 │   │   │   ├── ShallowWaterOverlay.vue             # 叠加层组件
@@ -165,8 +173,11 @@ frontend/src/
 │   │   │   │   └── useCesiumModelManager.js        # 3D 模型管理
 │   │   │   ├── dataImport/                         # 数据导入模块（含工具函数）
 │   │   │   │   ├── useCesiumDataImport.js          # 数据导入主逻辑
+│   │   │   │   ├── dataSourceDisplay.js            # 显隐/透明度类型适配器（统一图层管理·句柄侧）
+│   │   │   │   ├── useCesiumDataOpsHandlers.js     # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   ├── importUtils.js                  # 导入工具函数
 │   │   │   │   ├── geoTiffUtils.js                 # GeoTIFF 工具函数
+│   │   │   │   ├── dataSourceDisplay.js            # 数据源显示辅助
 │   │   │   │   └── loaders/                        # 数据加载器（按格式拆分）
 │   │   │   │       ├── utils.js                    # 加载器共享工具函数
 │   │   │   │       ├── czmlLoader.js               # CZML 时序数据加载器
@@ -188,12 +199,20 @@ frontend/src/
 │   │   │       └── toolsModule.js                  # 空间工具模块（模型管理+增强相机）
 │   │   │
 │   │   └── terrain/                                # 自定义地形 Provider
-│   │       ├── GeoTerrainProvider.js               # 天地图地形
-│   │       ├── ArcGISTerrainProvider.js            # ArcGIS 地形
+│   │       ├── GeoTerrainProvider.js               # 天地图地形（inflate+编码下放 Worker，失败回退主线程）
+│   │       ├── ArcGISTerrainProvider.js            # ArcGIS 地形（LERC Worker 解码 + availability 增强，硬顶 L12）
+│   │       ├── decodeWorkerPool.js                 # 通用解码 Worker 池（LERC/天地图共用：Transferable + 失效回退）
+│   │       ├── lercDecode.worker.js                # LERC 瓦片解码 Worker（主线程卡顿修复）
+│   │       ├── geoTerrainDecode.worker.js          # 天地图瓦片解码 Worker（pako inflate + 高程编码）
 │   │       ├── GeoWTFS.js                          # WMTS 地形
 │   │       └── util.js                             # 工具函数
 │   │
-│   ├── Chat/ChatPanelContent.vue                   # AI 聊天面板
+│   ├── Chat/
+│   │   ├── ChatPanelContent.vue                    # AI 聊天面板（编排容器：发送/工具两轮/停止/重新生成）
+│   │   ├── ChatConfigPanel.vue                     # 个人 Agent 配置面板（Key/模型下拉/参数）
+│   │   ├── ChatServiceStatus.vue                   # 路由模式/服务状态/额度展示条
+│   │   ├── ChatMessageList.vue                     # 消息列表（复制/重新生成/时间戳/回到底部/建议词）
+│   │   └── ChatInputBar.vue                        # 输入栏（自适应高度/Enter 发送/停止生成）
 │   ├── Common/ExtentPicker.vue                     # 框选范围组件
 │   ├── Compass/
 │   │   ├── CompassControlPanel.vue                 # 罗盘控制面板
@@ -276,6 +295,9 @@ frontend/src/
 │   │   │   ├── useBasemapResilience.js             # 底图容错与降级
 │   │   │   ├── useBasemapSelectionWatcher.js       # 底图选择监听
 │   │   │   ├── useBasemapStateManagement.js        # 底图状态批处理
+│   │   │   ├── useRuntimeMapTokenPool.js           # 运行时天地图 token 池（应用/水合/失效切换重试，自 MapContainer 抽离）
+│   │   │   ├── useSharedEntryResolver.js           # 分享链接入口解析 + 启动问候逆地理（自 MapContainer 抽离）
+│   │   │   ├── useStartupViewResolver.js           # 启动视图解析：URL 初始视图 + 延迟参数应用（二轮抽离）
 │   │   │   ├── useBasemapSwipe.js                  # 卷帘对比
 │   │   │   ├── useBasemapUrlMapping.js             # 底图 URL 映射
 │   │   │   ├── useTileHDRendering.js               # 高清渲染开关
@@ -289,7 +311,7 @@ frontend/src/
 │   │   │   ├── drawingGeometryUtils.js             # 矩形/椭圆/箭头几何纯函数
 │   │   │   ├── useDrawingFeatureStyle.js           # 绘制要素级样式与选中高亮
 │   │   │   ├── useAdvancedDrawing.js               # 高级 Draw 交互（矩形/椭圆/圆/箭头）
-│   │   │   ├── useGeometryEdit.js                  # Select/Modify/删除选中编辑会话
+│   │   │   ├── useGeometryEdit.js                  # Select/Modify 几何编辑会话（全矢量图层，支持定向编辑与 Delete 删除）
 │   │   │   ├── useLayerContextMenuActions.js       # 图层右键菜单
 │   │   │   ├── useLayerControlHandlers.js          # 图层控制处理
 │   │   │   ├── useLayerMetadataNormalization.js    # 图层元数据规范化
@@ -313,6 +335,8 @@ frontend/src/
 │   │   ├── toc/                                    # TOC 模块
 │   │   │   ├── actions/                            # 右键菜单动作
 │   │   │   │   ├── contextActionManager.js
+│   │   │   │   ├── cesiumTocActions.js             # TOC 动作 Cesium 分流器（cesium: 前缀直调元数据店）
+│   │   │   │   ├── cesiumTocActions.js             # Cesium 图层目录动作
 │   │   │   │   ├── exportService.js
 │   │   │   │   └── selectionManager.js
 │   │   │   ├── menu/                               # 菜单调度
@@ -336,6 +360,10 @@ frontend/src/
 │   │   ├── wmtsSource.ts                           # WMTS 源创建
 │   │   ├── xyzSource.ts                            # XYZ 源 + 自动检测
 │   │   └── index.ts
+│   ├── chat/
+│   │   ├── useChatAgentConfig.js                   # Agent 对话配置/路由模式/模型列表/额度 + LLM 三通道调用
+│   │   ├── useChatSession.js                       # 会话消息状态 + localStorage 持久化 + 上下文精简
+│   │   └── chatIntentFallback.js                   # GIS 意图识别兜底（定位/切底图正则 + 图源映射，纯函数）
 │   ├── weather/
 │   │   ├── useWeatherData.js                       # 天气数据获取
 │   │   └── useWeatherCharts.js                     # ECharts 图表渲染
@@ -358,11 +386,14 @@ frontend/src/
 │   ├── useUserLayerActions.js                      # 用户图层动作
 │   └── useUserLocation.js                          # 用户定位
 │
+├── config/                                         # 前端公开运行时配置
+│   └── publicRuntime.ts                            # 后端/瓦片代理基址单点派生（VITE_* → URL 拼接 helper，禁止硬编码域名）
+│
 ├── constants/                                      # 常量配置
 │   ├── basemap/
-│   │   ├── basemapConfig.ts                        # 图源定义 + 预设配置
+│   │   ├── basemapConfig.ts                        # 图源定义 + 预设配置（基址经 publicRuntime 派生）
 │   │   ├── basemapResolver.ts                      # 解析逻辑
-│   │   ├── sourceDescriptors.ts                    # 引擎无关图层源描述符
+│   │   ├── sourceDescriptors.ts                    # 引擎无关图层源描述符（基址经 publicRuntime 派生）
 │   │   ├── cesiumProviderFactory.ts                # Cesium ImageryProvider 工厂
 │   │   └── index.ts
 │   ├── agentToolsSchema.js                         # Agent Function Calling 工具声明
@@ -388,8 +419,12 @@ frontend/src/
 │
 ├── stores/                                         # Pinia 状态管理
 │   ├── layer/
+│   │   ├── cesiumLayers.ts                         # Cesium 三维数据元数据店（元数据入店、句柄留场 + adapter）
+│   │   ├── cesiumLayerNodeBuilder.ts               # Cesium 记录 → TOC「三维数据」分组节点映射
 │   │   ├── layerHelpers.ts                         # 图层工具函数
 │   │   ├── layerTreeBuilder.ts                     # 图层树构建器
+│   │   ├── cesiumLayerNodeBuilder.ts               # Cesium 图层树节点构建
+│   │   ├── cesiumLayers.ts                         # Cesium 图层状态 store
 │   │   └── index.ts
 │   ├── index.ts
 │   ├── useAppStore.ts                              # 全局应用状态
@@ -413,7 +448,10 @@ frontend/src/
 │   ├── index.js
 │   ├── abortManager.js                             # 请求中断管理器
 │   ├── amapRectangle.js                            # 高德矩形范围解析
+│   ├── attributeTableCsv.ts                        # 属性表 CSV 导出（RFC4180 转义 + BOM + 下载）
+│   ├── units.js                                    # 单位换算工具
 │   ├── biz/index.js                                # 业务工具 barrel
+│   ├── units.js                                    # 单位制工具（用户偏好 unit_system 消费：距离/面积公英制格式化）
 │   ├── coordTransform.js                           # 坐标转换（GCJ-02/WGS84）
 │   ├── coordinateFormatter.js                      # 坐标格式化
 │   ├── coordinateInputHandler.js                   # 坐标输入处理

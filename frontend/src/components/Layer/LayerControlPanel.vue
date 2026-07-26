@@ -903,7 +903,7 @@ onBeforeUnmount(() => {
     border: 1px solid var(--border-brand-light);
     border-radius: 6px;
     box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
-    z-index: 2200;
+    z-index: var(--z-modal-high);
     overflow-y: auto;
     animation: fadeIn 0.15s ease-out;
 }
@@ -1109,7 +1109,7 @@ onBeforeUnmount(() => {
     padding: 0;
     max-height: 300px;
     overflow-y: auto;
-    z-index: 2000;
+    z-index: var(--z-modal);
 }
 
 .layer-manager-panel::-webkit-scrollbar {

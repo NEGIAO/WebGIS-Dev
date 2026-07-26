@@ -1,4 +1,9 @@
 /**
+ * ⚠️ DEPRECATED 转发壳：请勿在新代码中 import 本文件。
+ * 直接 `import ... from './backend'`（目录 index）语义相同——本文件删除后
+ * 既有的 `api/backend` 无后缀导入会自动解析到 backend/index.js，零改动兼容。
+ * 待执行清理（用户 git 操作）：git rm frontend/src/api/backend.js
+ *
  * 后端 API 客户端 — barrel re-export
  *
  * 原 881 行已按业务域拆分到 backend/ 子目录：

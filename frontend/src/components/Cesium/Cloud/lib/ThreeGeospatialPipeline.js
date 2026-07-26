@@ -88,6 +88,9 @@ uniform vec2 u_shadowTexelSize;
 uniform vec2 u_shadowIntervals[4];
 uniform mat4 u_shadowMatrices[4];
 uniform float u_shadowFar;
+// V3.4.7：cascade 选择用 BSM published near（与 intervals/matrices 同一快照），
+// 不再用当前相机 near，避免跳帧期间选择域与矩阵域不一致。
+uniform float u_shadowNear;
 uniform float u_maxShadowFilterRadius;
 uniform int u_shadowPcfTaps;
 uniform int u_useShadowBuffer;
@@ -461,6 +464,9 @@ vec2 getShadowAtlasOffset(int ci) { return vec2(mod(float(ci), 2.0) * 0.5, (ci <
 
 float readShadowOpticalDepth(vec2 uv, int ci, float distToTop, float distOff) {
   if (u_useShadowBuffer == 0) return 0.0;
+  // V3.4.7：tile UV 半 texel gutter clamp。2×2 atlas + LINEAR 过滤下，
+  // PCF 偏移越过 tile 边界会读到相邻 cascade（矩阵语义不同）→ 边缘黑条。
+  uv = clamp(uv, u_shadowTexelSize * 0.5, 1.0 - u_shadowTexelSize * 0.5);
   vec2 atlasUv = getShadowAtlasOffset(ci) + uv * 0.5;
   vec4 shadow = (texture(u_shadowBuffer, atlasUv) / max(u_shadowScale, 1e-6)) * u_shadowDecode;
   float distToFront = max(0.0, distToTop - distOff - shadow.r);
@@ -496,7 +502,8 @@ float sampleShadowOpticalDepthPCF(vec3 worldPos, float distToTop, float distOff,
 float sampleShadowOpticalDepth(vec3 rayPos, float distOff, float radius, float jitter) {
   float distToTop = getDistanceToShadowTop(rayPos);
   if (distToTop <= 0.0) return 0.0;
-  int ci = getFadedCascadeIndex(czm_view, rayPos, u_shadowIntervals, u_cameraNear, u_shadowFar, jitter);
+  // V3.4.7：near 改用 u_shadowNear（published 快照），与 intervals/matrices 同源。
+  int ci = getFadedCascadeIndex(czm_view, rayPos, u_shadowIntervals, u_shadowNear, u_shadowFar, jitter);
   return ci >= 0 ? sampleShadowOpticalDepthPCF(rayPos, distToTop, distOff, radius, ci) : 0.0;
 }
 
@@ -683,7 +690,15 @@ void main() {
     if (u_shadowLengthEnabled == 1 && shadowNF.y > 0.0) shadowNF.y = min(shadowNF.y, rayDistToScene);
     if (u_hazeEnabled == 1 && hazeNF.y > 0.0) hazeNF.y = min(hazeNF.y, rayDistToScene);
   }
-  if (rayNearFar.x >= tMax) { out_FragColor = sceneColor; return; }
+  if (rayNearFar.x >= tMax) {
+#ifdef SPLIT_CLOUD_OUTPUT
+    // 拆分模式：无云像素输出全透明，由全分辨率合成 stage 保留场景原色
+    out_FragColor = vec4(0.0);
+#else
+    out_FragColor = sceneColor;
+#endif
+    return;
+  }
 
   float frontDepth;
   float cosTheta = dot(rd, sunDirection);
@@ -739,6 +754,16 @@ void main() {
   vec3 cloudActual = cloudColor.rgb / edgeSafeAlpha;
   cloudActual = ACESFilmic(cloudActual * u_cloudExposure);
   cloudActual = pow(cloudActual, vec3(1.0 / 2.2));
+
+#ifdef SPLIT_CLOUD_OUTPUT
+  // 性能拆分模式：本 stage 以 textureScale 低分辨率运行，只输出预乘云色 (cloud*a, a)，
+  // 场景混合交给全分辨率合成 stage（scene*(1-a)+cloud），底图/模型保持全分辨率清晰。
+  float cloudWSplit = smoothstep(0.02, 0.3, cloudColor.a);
+  vec3 premulCloud = cloudActual * cloudColor.a;
+  premulCloud = mix(premulCloud, reduceMagenta(premulCloud, u_magentaFixStrength), cloudWSplit);
+  out_FragColor = vec4(premulCloud, cloudColor.a);
+  return;
+#endif
 
   vec4 composited = vec4(
     sceneColor.rgb * (1.0 - cloudColor.a) + cloudActual * cloudColor.a,
@@ -860,6 +885,9 @@ export class ThreeGeospatialPipeline {
       shadowFar: 120000, shadowSplitLambda: 1.0, shadowFadeScale: 5.0,
       // 性能控制：默认值偏向极致；面板预设会在 init 前覆盖为 smooth/balanced/ultra。
       shadowMapSize: 1024, bsmUpdateInterval: 1, shadowResolveEnabled: true, shadowPcfTaps: 16,
+      // 云主 raymarch 分辨率缩放（0.25~1）：<1 时拆分为低分辨率 raymarch + 全分辨率合成，
+      // raymarch 像素成本按 scale² 下降；在 init 时生效（预设注入），运行时改动需重开体积云。
+      cloudResolutionScale: 1.0,
     };
 
     if (options.initialCloudParams) {
@@ -882,6 +910,8 @@ export class ThreeGeospatialPipeline {
     this._bsmSharedTexture = null;
     /** BSM atlas 编码缩放；主云、天空与 Aerial 必须一致解码，避免云体/地面阴影强度错配。 */
     this._bsmShadowScale = 1.0;
+    /** 共享纹理是否已至少 blit 一次（blit 门控用；BSM 未更新的帧跳过 blit） */
+    this._bsmBlitDone = false;
     // TAA state
     this._taa = { texA: null, texB: null, current: 0, pbo: null, pboReady: false, w: 0, h: 0, frameCount: 0, prevVP: null, curVP: null };
     // Wind offsets
@@ -957,7 +987,8 @@ export class ThreeGeospatialPipeline {
       "scatterG1", "scatterG2", "multiScatteringOctaves", "windSpeed", "evolutionSpeed",
       "distFadeStart", "distFadeEnd", "maxSteps", "maxStepsToSun", "minStepSize", "maxStepSize",
       "perspectiveStepScale", "maxRayDistance", "shadowFar", "shadowSplitLambda", "shadowFadeScale",
-      "altitudeFadeRange", "maxShadowLengthIterationCount", "shadowMapSize", "bsmUpdateInterval", "shadowPcfTaps"
+      "altitudeFadeRange", "maxShadowLengthIterationCount", "shadowMapSize", "bsmUpdateInterval", "shadowPcfTaps",
+      "cloudResolutionScale"
     ];
     for (const key of scalarKeys) {
       const v = Number(params[key]);
@@ -1043,7 +1074,12 @@ export class ThreeGeospatialPipeline {
     return loadShaderSource(name, { shaderBaseUrl: this.brunetonShaderBase });
   }
 
-  async _buildCloudFragmentShader() {
+  /**
+   * 组装云主 pass 片元着色器。
+   * @param {boolean} [splitMode=false] - true 时定义 SPLIT_CLOUD_OUTPUT：
+   *   低分辨率 raymarch stage 只输出预乘云色，由全分辨率合成 stage 混合场景。
+   */
+  async _buildCloudFragmentShader(splitMode = false) {
     const provider = this.atmosphere.getAtmosphereForClouds();
     const [definitions, common, runtime] = await Promise.all([
       this._loadShader("definitions.glsl"),
@@ -1052,7 +1088,8 @@ export class ThreeGeospatialPipeline {
     ]);
     const defines = "precision highp float;\nprecision highp sampler2D;\nprecision highp sampler3D;\n"
       + provider.constants.getShaderDefines()
-      + "\n#define METER_TO_LENGTH_UNIT 0.001\n#define USE_ATMOSPHERE_IRRADIANCE\n";
+      + "\n#define METER_TO_LENGTH_UNIT 0.001\n#define USE_ATMOSPHERE_IRRADIANCE\n"
+      + (splitMode ? "#define SPLIT_CLOUD_OUTPUT\n" : "");
     const globalU = `
 uniform vec3 sunDirection;
 uniform AtmosphereParameters ATMOSPHERE;
@@ -1232,14 +1269,18 @@ uniform sampler2D irradiance_texture;
       u_shadowMatrices: () => {
         const out = self._scratch.shadowMatrices;
         if (p().useShadowBuffer && self._bsm.pass) {
-          const mats = self._bsm.pass._shadowMatrices;
+          // V3.4.7：必须读 published 矩阵（与 atlas 内容配对的快照）。
+          // 旧代码读 RAW _shadowMatrices（updateShadowCascades 每帧覆盖），
+          // interval>1 跳帧期间与旧 atlas 失配 → 云体 BSM 采样/丁达尔错位闪烁。
+          const mats = self._bsm.pass.getShadowMatrices();
           for (let i = 0; i < 4; i++) Cesium.Matrix4.fromArray(mats[i], 0, out[i]);
         } else {
           for (let i = 0; i < 4; i++) Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY, out[i]);
         }
         return out;
       },
-      u_shadowFar: () => self._bsm.pass ? self._bsm.pass._shadowFar : p().maxShadowLengthRayDistance,
+      u_shadowFar: () => self._bsm.pass ? self._bsm.pass.getShadowFar() : p().maxShadowLengthRayDistance,
+      u_shadowNear: () => self._bsm.pass ? self._bsm.pass.getShadowNear() : (Number(self.viewer.camera.frustum?.near) || 0.1),
       u_maxShadowFilterRadius: () => 2.0,
       u_shadowPcfTaps: () => Math.min(16, Math.max(1, Number(p().shadowPcfTaps) || 16)),
       u_useShadowBuffer: () => p().useShadowBuffer ? 1 : 0,
@@ -1277,7 +1318,8 @@ uniform sampler2D irradiance_texture;
       u_historyTexture: () => { const t = self._taaGetHistoryTexture(); return t || tex()?.blueNoise; },
       u_prevViewProjection: () => self._taa.prevVP || Cesium.Matrix4.IDENTITY,
       u_temporalAlpha: () => p().temporalAlpha ?? 0.1,
-      u_temporalEnabled: () => (p().temporalEnabled && self._taa.frameCount > 2 && self._taa.prevVP) ? 1 : 0,
+      // 拆分模式下 in-shader TAA 不适用（输出为预乘云色，无场景合成），强制关闭
+      u_temporalEnabled: () => (p().temporalEnabled && !self._cloudSplitMode && self._taa.frameCount > 2 && self._taa.prevVP) ? 1 : 0,
       u_frame: () => self._frameCount || 0,
     };
 
@@ -1333,6 +1375,9 @@ uniform sampler2D irradiance_texture;
       updateInterval: signature.updateInterval,
       textures: this.textures,
       params: this._getShadowPassParams(),
+      // V3.4.7：由 _syncBSM 显式驱动 render()，不自注册 preRender listener。
+      // 运行时重建 pass 时监听器会排到 _syncBSM 之后，导致消费端固定读到上一帧状态。
+      autoRender: false,
     });
     this._bsm.pass.init();
     this._bsm.resolve = new ShadowResolvePass(this.viewer, {
@@ -1358,6 +1403,7 @@ uniform sampler2D irradiance_texture;
     this._bsm.resolve = null;
     this._bsmSharedTexture = null;
     this._bsmShadowScale = 1.0;
+    this._bsmBlitDone = false;
     this._bsmResourceSignature = null;
     if (disableShadow) {
       this.atmosphere?.setCloudShadow?.({ enabled: false });
@@ -1486,20 +1532,29 @@ uniform sampler2D irradiance_texture;
     dyn.shadowFadeScale = Number(this.params.shadowFadeScale) || 1.0;
     dyn.scatteringCoefficient = Number(this.params.scatteringCoefficient) ?? 0.9;
     dyn.absorptionCoefficient = Number(this.params.absorptionCoefficient) ?? 1.0;
+    // 演化活跃度同步：供 BSM 签名门控决定"无演化时不做周期刷新"
+    dyn.windSpeed = Number(this.params.windSpeed) || 0;
+    dyn.evolutionSpeed = Number(this.params.evolutionSpeed) || 0;
     sp.updateDynamicParams(dyn);
+    // V3.4.7：显式驱动 BSM 渲染（autoRender:false），保证与后续 resolve/blit/setCloudShadow
+    // 严格同帧同序；内部仍按 updateInterval + 运动检测节流。
+    sp.render();
+    const passUpdated = sp.wasUpdatedThisFrame?.() === true;
+    let resolveRan = false;
     if (this._bsm.resolve) {
-      const passUpdated = sp.wasUpdatedThisFrame?.() === true;
       const passMotion = sp.getLastMotion?.() || 0.0;
       this._bsm.resolve.setInputTextures(sp.getTexture(), sp.getDepthVelocityTexture());
       this._bsm.resolve.setFrameState?.({
-        // BSM atlas/matrix 在快速运动时变化很大，resolve history 必须断开，避免把旧 cascade 投到新地面。
-        forceReset: passUpdated && passMotion > 0.02,
+        // V3.4.12：锚定修复后重投影可信，reset 仅保留给大幅不连续（0.005→0.05）；
+        // 垂直移动的中低速运动交给 resolve 的 velocity 重投影 + 受限 alpha 平滑。
+        forceReset: passUpdated && passMotion > 0.05,
         motion: passMotion,
       });
       if (passUpdated) {
         // Resolve 必须在 CloudShadowPass 当帧写完 color/depthVelocity 后立即执行；
         // 不再依赖 ShadowResolvePass 自己的 preRender listener，避免 history 与 atlas 配对错帧。
         this._bsm.resolve.render(true);
+        resolveRan = true;
       }
     }
 
@@ -1513,7 +1568,15 @@ uniform sampler2D irradiance_texture;
     const scaleToPass = clamp01 ? 200.0 : 1.0;
     let textureToPass = tex;
 
-    if (targetTex && tex._texture) { this._blitBSM(tex, targetTex, scaleToPass); textureToPass = targetTex; }
+    if (targetTex && tex._texture) {
+      // 性能：blit 门控——仅 BSM/resolve 本帧有新内容时才 clear+blit 1024² 共享纹理；
+      // 跳过帧消费端继续采样上一次 blit 结果（内容未变）。
+      if (passUpdated || resolveRan || !this._bsmBlitDone) {
+        this._blitBSM(tex, targetTex, scaleToPass);
+        this._bsmBlitDone = true;
+      }
+      textureToPass = targetTex;
+    }
     // V3.3.20：blit 写入的共享 Cesium.Texture 同时供主云 stage 的 u_shadowBuffer 采样，
     // 避免返回自定义 bind() 对象（见 _buildCloudUniforms.u_shadowBuffer）。
     this._bsmSharedTexture = targetTex || null;
@@ -1542,10 +1605,13 @@ uniform sampler2D irradiance_texture;
         intervals: s.bsmShadowIntervals, matrices: s.bsmShadowMatrices,
         texelSize: { x: 1 / 512, y: 1 / 512 },
         geometricErrorCorrectionAmount: 0,
+        pcfTaps: 16,
       };
     }
     const opts = s.bsmShadowOpts;
     opts.enabled = true; opts.texture = textureToPass; opts.scale = scaleToPass;
+    // 性能：地面 PCF tap 数接入预设（smooth 1 / balanced 4 / ultra 8），不再硬编码 16
+    opts.pcfTaps = Math.min(16, Math.max(1, Number(this.params.shadowPcfTaps) || 16));
     opts.near = sp.getShadowNear?.() ?? (Number(this.viewer.camera.frustum?.near) || 0.1);
     opts.far = sp.getShadowFar();
     opts.topHeight = this._getMaxHeight();
@@ -1747,6 +1813,51 @@ uniform sampler2D irradiance_texture;
     };
   }
 
+  // ── Cloud stage factory ────────────────────────────────────────────────
+
+  /**
+   * 创建云 stage。
+   * - 全分辨率（scale≈1）：单一 PostProcessStage（原路径，零回归）。
+   * - 拆分模式（scale<1）：Composite[低分辨率 raymarch(textureScale) → 全分辨率合成]，
+   *   inputPreviousStageTexture:false 使两个子 stage 的 colorTexture 均为场景输入，
+   *   合成 stage 通过 stage 名引用 raymarch 输出，scene*(1-a)+cloud 混合。
+   * @param {string} fragmentShader - 云 raymarch 片元（拆分模式含 SPLIT_CLOUD_OUTPUT）
+   * @param {Record<string, unknown>} uniforms - 云 raymarch uniforms
+   * @returns {object} PostProcessStage 或 PostProcessStageComposite（都带 enabled/name）
+   */
+  _createCloudStage(fragmentShader, uniforms) {
+    if (!this._cloudSplitMode) {
+      return new Cesium.PostProcessStage({
+        name: "GeospatialVolumetricClouds", fragmentShader, uniforms,
+      });
+    }
+    const rayStage = new Cesium.PostProcessStage({
+      name: "GeospatialVolumetricCloudsRay",
+      fragmentShader,
+      uniforms,
+      textureScale: this._cloudResolutionScale,
+    });
+    const composeFragment = `
+uniform sampler2D colorTexture;
+uniform sampler2D u_cloudTexture;
+in vec2 v_textureCoordinates;
+void main() {
+  vec4 scene = texture(colorTexture, v_textureCoordinates);
+  vec4 cloud = texture(u_cloudTexture, v_textureCoordinates);
+  out_FragColor = vec4(scene.rgb * (1.0 - cloud.a) + cloud.rgb, scene.a);
+}`;
+    const composeStage = new Cesium.PostProcessStage({
+      name: "GeospatialVolumetricCloudsCompose",
+      fragmentShader: composeFragment,
+      uniforms: { u_cloudTexture: rayStage.name },
+    });
+    return new Cesium.PostProcessStageComposite({
+      name: "GeospatialVolumetricClouds",
+      stages: [rayStage, composeStage],
+      inputPreviousStageTexture: false,
+    });
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────
 
   async init() {
@@ -1772,16 +1883,19 @@ uniform sampler2D irradiance_texture;
 
       // 3. Load cloud textures + build shader
       await this._loadTextures();
-      const fragmentShader = await this._buildCloudFragmentShader();
+      // 性能：cloudResolutionScale<1 时启用拆分模式（低分辨率 raymarch + 全分辨率合成）。
+      // 在 init 固化（textureScale 为构造期参数）；预设经 initialCloudParams 注入。
+      const resolutionScale = Math.min(1, Math.max(0.25, Number(this.params.cloudResolutionScale) || 1));
+      this._cloudResolutionScale = resolutionScale;
+      this._cloudSplitMode = resolutionScale < 0.999;
+      const fragmentShader = await this._buildCloudFragmentShader(this._cloudSplitMode);
 
       // 4. BSM passes：运行时也会通过 _syncBSM/_ensureBSMPasses 按开关动态创建或重建。
       this._ensureBSMPasses();
 
-      // 5. Cloud PostProcessStage
+      // 5. Cloud PostProcessStage（拆分模式为 PostProcessStageComposite，外部接口不变）
       const uniforms = this._buildCloudUniforms();
-      this.cloudStage = new Cesium.PostProcessStage({
-        name: "GeospatialVolumetricClouds", fragmentShader, uniforms,
-      });
+      this.cloudStage = this._createCloudStage(fragmentShader, uniforms);
       this.cloudStage.enabled = this.params.cloudsVisible;
 
       // 6. Aerial init
@@ -1802,7 +1916,8 @@ uniform sampler2D irradiance_texture;
       // 9. postRender: TAA capture + frame count
       this._listeners.push(viewer.scene.postRender.addEventListener(() => {
         this._taaUpdateVP();
-        if (this.params.temporalEnabled) this._taaCapture();
+        // 拆分模式下 in-shader TAA 关闭，跳过整屏 readPixels 回读，避免无谓带宽
+        if (this.params.temporalEnabled && !this._cloudSplitMode) this._taaCapture();
         this._frameCount++;
       }));
       this._listeners.push(viewer.camera.changed.addEventListener(() => {

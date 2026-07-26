@@ -29,6 +29,8 @@ uniform float u_cloudShadowAltitudeFadeEnd;
 uniform float u_bsmGroundOpticalDepthScale;
 // cascade UV 空间 texel 尺寸（单 cascade tile，非整个 atlas）
 uniform vec2 u_cloudShadowTexelSize;
+// 地面云影 PCF tap 数（1~16），按质量预设注入；性能优化：不再硬编码 16
+uniform int u_cloudShadowPcfTaps;
 // 远距几何误差修正量 [0,1]：越大越把 BSM 采样点拉向椭球/bottom 球，抑制地形 LOD 抖动
 uniform float u_geometricErrorCorrectionAmount;
 // 空中透视强度 [0,1]：0=透传原色（无透视），1=全强度大气散射
@@ -124,7 +126,9 @@ int getFadedCascadeIndex(mat4 viewMat, vec3 worldPos, vec2 intervals[4], float n
       }
     }
   }
-  return alpha > 0.35 ? nextIndex : prevIndex;
+  // V3.4.12：硬阈值 0.35 会形成随相机深度扫动的 cascade 硬边界线（升降时肉眼可见）。
+  // 改为逐像素 IGN 抖动阈值：边界带内两级 cascade 空间蓝噪声式混合，PCF 自然平滑。
+  return alpha > jitter ? nextIndex : prevIndex;
 }
 
 vec2 getShadowUv(vec3 worldPos, int ci) {
@@ -147,6 +151,10 @@ vec2 vogelDisk(int index, int count, float phi) {
 
 float readShadowOpticalDepth(vec2 uv, int ci, float distToTop) {
   float scale = max(u_cloudShadowScale, 1e-6);
+  // V3.4.7：tile UV 半 texel gutter clamp。2×2 atlas + LINEAR 过滤下，
+  // PCF vogel 偏移越过 tile 边界会读到相邻 cascade（矩阵语义不同）→ 边缘黑条/异常斑块。
+  vec2 gutter = max(u_cloudShadowTexelSize, vec2(1e-4)) * 0.5;
+  uv = clamp(uv, gutter, 1.0 - gutter);
   vec2 atlasUv = getCloudShadowAtlasOffset(ci) + uv * 0.5;
   vec4 shadow = (texture(u_cloudShadowBuffer, atlasUv) / scale) * u_cloudShadowDecode;
   // BSM atlas 语义：b=maxOpticalDepth，a=tail；地面也必须消费 tail，否则阴影边缘会被硬截断。
@@ -159,13 +167,15 @@ float sampleShadowOpticalDepthPCF(vec3 worldPos, float distToTop, float radius, 
   // 与 three-geospatial 一致：UV 出 [0,1] 才无阴影（硬切），不再做 edgeFade 矩形软边
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
   vec2 texel = max(u_cloudShadowTexelSize, vec2(1e-4));
-  if (radius < 0.1) return readShadowOpticalDepth(uv, ci, distToTop);
+  int taps = clamp(u_cloudShadowPcfTaps, 1, 16);
+  if (radius < 0.1 || taps <= 1) return readShadowOpticalDepth(uv, ci, distToTop);
   float sum = 0.0;
   float phi = interleavedGradientNoise(gl_FragCoord.xy) * 6.28318530718;
   for (int i = 0; i < 16; ++i) {
+    if (i >= taps) break;
     sum += readShadowOpticalDepth(uv + vogelDisk(i, 16, phi) * radius * texel, ci, distToTop);
   }
-  return sum / 16.0;
+  return sum / float(taps);
 }
 
 // three-geospatial correctGeometricError：远距把位置混向 bottom 球表面，减轻 tile/地形几何误差对阴影 UV 的影响
@@ -246,8 +256,9 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   );
   if (ci < 0) return 1.0;
 
-  // PCF 半径（cascade UV texel 单位）；远处略加大，减轻锯齿
-  float pcfRadius = mix(1.5, 3.0, saturateAP(viewDist / max(far, 1.0)));
+  // V3.4.12：PCF 半径固定（texel 单位，随 cascade 分辨率自适应）。
+  // 旧 mix(1.5,3.0,viewDist/far) 随视距连续变化，相机升降时模糊宽度“呼吸”→ 抖动感。
+  float pcfRadius = 2.0;
   float opticalDepth = sampleShadowOpticalDepthPCF(samplePos, distToShadowTop, pcfRadius, ci);
   float shade = exp(-opticalDepth);
   return mix(1.0, shade, fade);

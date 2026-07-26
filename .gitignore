@@ -78,9 +78,14 @@ webgis_auth.db
 *.sw?
 
 # ========== 本地环境 ==========
+# 根目录与各端私密 env（.env.example 可提交；真实 .env 禁止提交）
 .env
 .env.local
 .env.*.local
+frontend/.env.local
+frontend/.env.*.local
+backend/.env
+backend/.env.local
 .venv/
 venv/
 env/

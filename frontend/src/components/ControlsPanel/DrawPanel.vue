@@ -231,9 +231,13 @@
                     <Undo2 :size="14" />
                     <span>撤销最近</span>
                 </button>
-                <button class="action-btn clear-btn" @click="handleClear">
+                <button
+                    class="action-btn clear-btn"
+                    title="仅清除绘制图层；上传/搜索等其他图层请在图层目录中统一管理"
+                    @click="handleClear"
+                >
                     <Eraser :size="14" />
-                    <span>清除所有</span>
+                    <span>清除绘制</span>
                 </button>
             </div>
         </div>
@@ -330,7 +334,7 @@ const toolGroups = [
             {
                 type: 'SelectEdit',
                 label: '选择编辑',
-                hint: '选择绘制图层要素后可拖动顶点修改',
+                hint: '点击任意矢量图层要素（绘制/上传/搜索/区划）拖动顶点修改，Delete 删除选中',
                 icon: ICON_MAP.SelectEdit,
             },
         ],
@@ -402,11 +406,11 @@ function handleClear() {
 .draw-panel {
     width: 248px;
     max-height: min(78vh, 720px);
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--panel-bg);
     backdrop-filter: blur(12px);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(229, 236, 230, 0.6);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -470,7 +474,7 @@ function handleClear() {
 .section-title {
     font-size: 11px;
     font-weight: 600;
-    color: #6b8c6b;
+    color: var(--text-brand);
     margin-bottom: 8px;
 }
 
@@ -490,7 +494,7 @@ function handleClear() {
     align-items: center;
     gap: 4px;
     padding: 8px 4px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     background: white;
     color: var(--brand-accent-muted);
@@ -525,7 +529,7 @@ function handleClear() {
 
 .style-row label {
     font-size: 11px;
-    color: #5f7a5f;
+    color: var(--text-brand);
     min-width: 56px;
 }
 
@@ -540,7 +544,7 @@ function handleClear() {
 .color-input {
     width: 28px;
     height: 22px;
-    border: 1px solid #d7e4d7;
+    border: 1px solid var(--border-brand-light);
     border-radius: 4px;
     padding: 0;
     background: transparent;
@@ -550,7 +554,7 @@ function handleClear() {
 .color-value,
 .range-value {
     font-size: 11px;
-    color: #6b8c6b;
+    color: var(--text-brand);
     min-width: 42px;
     text-align: right;
 }
@@ -587,9 +591,9 @@ function handleClear() {
 }
 
 .dash-toggle-btn {
-    border: 1px solid #d7e4d7;
+    border: 1px solid var(--border-brand-light);
     background: #fff;
-    color: #6b8c6b;
+    color: var(--text-brand);
     border-radius: 6px;
     font-size: 11px;
     padding: 4px 8px;
@@ -624,14 +628,14 @@ function handleClear() {
 }
 
 .secondary-btn {
-    background: #f4faf4;
-    border: 1px solid #d7e8d7;
-    color: #3f6b3f;
+    background: rgba(var(--brand-primary-rgb), 0.05);
+    border: 1px solid var(--border-brand-light);
+    color: var(--text-brand);
 }
 
 .secondary-btn:hover:not(:disabled) {
-    background: #eaf6ea;
-    border-color: #c5dec5;
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    border-color: var(--border-brand-light);
 }
 
 .secondary-btn:disabled {
@@ -640,14 +644,14 @@ function handleClear() {
 }
 
 .clear-btn {
-    background: #fff0f0;
-    border: 1px solid #ffd0d0;
-    color: #d44;
+    background: rgba(var(--danger-rgb), 0.06);
+    border: 1px solid var(--danger-light);
+    color: var(--danger);
 }
 
 .clear-btn:hover {
-    background: #ffe0e0;
-    border-color: #ffb0b0;
+    background: rgba(var(--danger-rgb), 0.12);
+    border-color: rgba(var(--danger-rgb), 0.35);
 }
 
 .panel-hint {
@@ -655,10 +659,18 @@ function handleClear() {
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    background: #f6faf6;
-    color: #6b8c6b;
+    background: rgba(var(--brand-primary-rgb), 0.04);
+    color: var(--text-brand);
     font-size: 11px;
-    border-top: 1px solid #e8f0e8;
+    border-top: 1px solid var(--bg-brand-light);
     flex-shrink: 0;
+}
+
+/* 移动端适配：面板宽度自适应小屏视口 */
+@media (max-width: 768px) {
+    .draw-panel {
+        width: min(248px, calc(100vw - 24px));
+        max-height: min(70vh, 560px);
+    }
 }
 </style>

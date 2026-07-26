@@ -8,13 +8,14 @@
 """
 
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+
+from config import get_settings
 
 from api.auth import (
     get_auth_db_connection,
@@ -48,7 +49,7 @@ async def require_api_access_optional(request: Request) -> Optional[Dict[str, An
 
 # ==================== 配置 ====================
 
-AMAP_KEY = os.getenv("AMAP_WEB_SERVICE_KEY", "")
+AMAP_KEY = get_settings().amap_web_service_key
 NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org"
 
 # ==================== 请求/响应模型 ====================

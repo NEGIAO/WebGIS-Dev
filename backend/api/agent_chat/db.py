@@ -4,13 +4,13 @@ Agent Chat 数据库 schema、config CRUD、API key 解析、运行时解析。
 
 import json
 import logging
-import os
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 
 from api.auth import get_auth_db_connection
+from config import get_settings
 
 from .constants import (
     AGENT_API_KEY_LEGACY,
@@ -669,7 +669,7 @@ def _resolve_agent_api_key_sync() -> Dict[str, Any]:
             "source": "db-legacy",
         }
 
-    env_key = str(os.getenv("AGENT_API_KEY", "") or "").strip() or str(os.getenv("AGENT_TOKEN", "") or "").strip()
+    env_key = get_settings().agent_api_key
     if env_key:
         return {
             "key_name": "env",

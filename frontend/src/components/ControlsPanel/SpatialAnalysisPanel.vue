@@ -668,11 +668,11 @@ function showResult(type, msg) {
 <style scoped>
 .spatial-panel {
     width: 220px;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--panel-bg);
     backdrop-filter: blur(12px);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(229, 236, 230, 0.6);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
     overflow: hidden;
     animation: slideIn 0.2s ease-out;
     max-height: calc(100vh - 120px);
@@ -753,7 +753,7 @@ function showResult(type, msg) {
     align-items: center;
     gap: 10px;
     padding: 8px 10px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     background: white;
     color: var(--brand-accent-muted);
@@ -808,7 +808,7 @@ function showResult(type, msg) {
 /* 参数区域 */
 .params-section {
     padding: 10px 12px;
-    border-top: 1px solid #e8f0e8;
+    border-top: 1px solid var(--bg-brand-light);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -830,7 +830,7 @@ function showResult(type, msg) {
 .param-select {
     width: 100%;
     padding: 7px 10px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     font-size: 13px;
     background: white;
@@ -896,7 +896,7 @@ function showResult(type, msg) {
 .mode-btn {
     flex: 1;
     padding: 6px 8px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     background: white;
     color: var(--brand-accent-muted);
@@ -952,7 +952,7 @@ function showResult(type, msg) {
     padding: 8px 12px;
     font-size: 12px;
     font-weight: 500;
-    border-top: 1px solid #e8f0e8;
+    border-top: 1px solid var(--bg-brand-light);
 }
 
 .result-section.success {
@@ -961,9 +961,9 @@ function showResult(type, msg) {
 }
 
 .result-section.error {
-    background: #fff0f0;
-    border: 1px solid #ffd0d0;
-    color: #d44;
+    background: rgba(var(--danger-rgb), 0.06);
+    border: 1px solid var(--danger-light);
+    color: var(--danger);
 }
 
 .panel-hint {
@@ -971,10 +971,10 @@ function showResult(type, msg) {
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    background: #f6faf6;
+    background: rgba(var(--brand-primary-rgb), 0.04);
     color: var(--text-muted);
     font-size: 11px;
-    border-top: 1px solid #e8f0e8;
+    border-top: 1px solid var(--bg-brand-light);
 }
 
 .bbox-actions {

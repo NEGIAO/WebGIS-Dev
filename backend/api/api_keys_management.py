@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from api.auth import get_auth_db_connection, require_admin, require_api_access_or_guest
+from config import get_str
 
 logger = logging.getLogger(__name__)
 
@@ -375,7 +376,7 @@ def _normalize_origin(value: str) -> str:
 
 
 def _allowed_runtime_config_origins() -> set[str]:
-    raw = str(os.getenv(RUNTIME_CONFIG_ALLOWED_ORIGINS_ENV, "") or "")
+    raw = get_str(RUNTIME_CONFIG_ALLOWED_ORIGINS_ENV, "")
     return {
         normalized
         for normalized in (_normalize_origin(item) for item in raw.split(","))

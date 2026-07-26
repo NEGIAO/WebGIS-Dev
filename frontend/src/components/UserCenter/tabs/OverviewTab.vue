@@ -1,14 +1,16 @@
 <!--
   OverviewTab.vue
-  Purpose: Displays the user overview tab of the floating account panel.
-  Shows personal statistics (registration date, login count, API calls, etc.),
-  site-wide realtime stats, admin contact info, and a user message board.
-  Parent passes data via props; user interactions bubble up via emits.
+  账号中心「总览」页（重设计版）：
+  - 顶部三张大数字统计卡（登录/访问/API 调用）
+  - API 配额可视化进度条（用量>80% 转警示色）
+  - 紧凑个人信息行 + 全站实时统计双列
+  - 留言板（发布 + 列表卡片）
+  数据由父组件经 props 注入，交互经 emits 上抛。
 -->
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
-defineProps({
+const props = defineProps({
     /** Personal statistics object (registered_at, login_count, etc.) */
     selfStats: {
         type: Object,
@@ -57,6 +59,88 @@ const emit = defineEmits([
 ]);
 
 const newMessageText = ref('');
+const contactCopied = ref(false);
+let contactCopiedTimer = null;
+
+/** 留言最大长度 */
+const MESSAGE_MAX_LEN = 200;
+
+/** 数字千分位格式化 */
+function formatNumber(value) {
+    const num = Number(value || 0);
+    return Number.isFinite(num) ? num.toLocaleString('zh-CN') : '0';
+}
+
+/** 注册陪伴天数（注册时间无效时返回 null） */
+const daysSinceRegister = computed(() => {
+    const raw = String(props.selfStats?.registered_at || '').trim();
+    if (!raw) return null;
+    const registered = new Date(raw);
+    if (Number.isNaN(registered.getTime())) return null;
+    return Math.max(1, Math.ceil((Date.now() - registered.getTime()) / 86400000));
+});
+
+/** 相对时间：刚刚/x 分钟前/x 小时前/昨天/日期 */
+function formatRelativeTime(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '-';
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+
+    const diff = Date.now() - parsed.getTime();
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
+    if (diff < 86400000 && new Date().toDateString() === parsed.toDateString()) {
+        return `${Math.floor(diff / 3600000)} 小时前`;
+    }
+    const yesterday = new Date(Date.now() - 86400000);
+    if (parsed.toDateString() === yesterday.toDateString()) return '昨天';
+    return parsed.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+}
+
+/** 留言作者彩色首字头像：按用户名哈希取色 */
+const AUTHOR_COLORS = ['#4caf50', '#2980b9', '#9b59b6', '#e67e22', '#1abc9c', '#e74c3c'];
+function authorColor(name) {
+    const text = String(name || '匿');
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+        hash = (hash * 31 + text.charCodeAt(i)) % 997;
+    }
+    return AUTHOR_COLORS[hash % AUTHOR_COLORS.length];
+}
+
+function authorInitial(name) {
+    const text = String(name || '').trim();
+    return text ? text.slice(0, 1).toUpperCase() : '匿';
+}
+
+/** 一键复制管理员联系方式 */
+async function copyAdminContact() {
+    const text = String(props.adminContact || '').trim();
+    if (!text) return;
+    try {
+        await navigator.clipboard.writeText(text);
+        contactCopied.value = true;
+        if (contactCopiedTimer) clearTimeout(contactCopiedTimer);
+        contactCopiedTimer = setTimeout(() => {
+            contactCopied.value = false;
+            contactCopiedTimer = null;
+        }, 1500);
+    } catch {
+        /* clipboard 不可用时静默忽略 */
+    }
+}
+
+/** 配额使用百分比（不限额时返回 null） */
+const quotaPercent = computed(() => {
+    const limit = Number(props.quotaInfo?.limit);
+    if (!Number.isFinite(limit) || limit <= 0) return null;
+    const used = Math.max(0, Number(props.quotaInfo?.used || 0));
+    return Math.min(100, Math.round((used / limit) * 100));
+});
+
+/** 配额是否接近耗尽（>80% 转警示色） */
+const quotaWarning = computed(() => quotaPercent.value !== null && quotaPercent.value >= 80);
 
 function formatDateTime(value) {
     const raw = String(value || '').trim();
@@ -73,7 +157,6 @@ function formatDateTime(value) {
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
-        second: '2-digit',
         hour12: false,
     });
 }
@@ -88,7 +171,52 @@ function handleSubmit() {
 
 <template>
     <div class="view-content overview-view">
-        <div class="info-card">
+        <!-- 个人统计卡 -->
+        <div class="stats-grid">
+            <div class="stat-box">
+                <i class="fas fa-sign-in-alt stat-icon"></i>
+                <span class="stat-num">{{ formatNumber(selfStats.login_count) }}</span>
+                <span class="stat-name">登录次数</span>
+            </div>
+            <div class="stat-box">
+                <i class="fas fa-chart-line stat-icon"></i>
+                <span class="stat-num">{{ formatNumber(selfStats.total_visit_count) }}</span>
+                <span class="stat-name">访问次数</span>
+            </div>
+            <div class="stat-box">
+                <i class="fas fa-bolt stat-icon"></i>
+                <span class="stat-num">{{ formatNumber(selfStats.total_api_calls) }}</span>
+                <span class="stat-name">API 调用</span>
+            </div>
+        </div>
+
+        <!-- API 配额进度 -->
+        <div class="ov-card quota-card">
+            <div class="quota-head">
+                <span class="ov-card-title"><i class="fas fa-gauge-high"></i> 今日 AI 配额</span>
+                <span
+                    class="quota-value"
+                    :class="{ warning: quotaWarning }"
+                >{{ quotaText }}</span>
+            </div>
+            <div class="quota-track">
+                <div
+                    class="quota-fill"
+                    :class="{ warning: quotaWarning, unlimited: quotaPercent === null }"
+                    :style="{ width: quotaPercent === null ? '100%' : quotaPercent + '%' }"
+                ></div>
+            </div>
+        </div>
+
+        <!-- 个人信息 -->
+        <div class="ov-card">
+            <div class="ov-card-title title-with-badge">
+                <span><i class="fas fa-user-clock"></i> 我的账号</span>
+                <span
+                    v-if="daysSinceRegister"
+                    class="days-badge"
+                >已陪伴 {{ daysSinceRegister }} 天</span>
+            </div>
             <div class="info-row">
                 <span class="info-label">注册时间</span>
                 <span class="info-value">{{ formatDateTime(selfStats.registered_at) }}</span>
@@ -98,76 +226,79 @@ function handleSubmit() {
                 <span class="info-value">{{ formatDateTime(selfStats.last_login_at) }}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">本次在线时长</span>
+                <span class="info-label">本次在线</span>
                 <span class="info-value">{{ sessionDurationText }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">当前 API 配额</span>
-                <span class="info-value">{{ quotaText }}</span>
             </div>
             <div class="info-row">
                 <span class="info-label">当前状态</span>
                 <span class="info-value text-success">
-                    <i class="fas fa-circle active-dot"></i> 在线
+                    <span class="online-dot"></span> 在线
                 </span>
             </div>
         </div>
 
-        <div class="stats-grid">
-            <div class="stat-box">
-                <i class="fas fa-sign-in-alt stat-icon"></i>
-                <span class="stat-num">{{ selfStats.login_count || 0 }}</span>
-                <span class="stat-name">登录次数</span>
+        <!-- 全站实时 -->
+        <div class="ov-card">
+            <div class="ov-card-title"><i class="fas fa-globe"></i> 全站实时</div>
+            <div class="realtime-grid">
+                <div class="realtime-item">
+                    <span class="realtime-num">{{ formatNumber(realtimeStats.online_users) }}</span>
+                    <span class="realtime-name">在线用户</span>
+                </div>
+                <div class="realtime-item">
+                    <span class="realtime-num">{{ formatNumber(realtimeStats.total_registered_users) }}</span>
+                    <span class="realtime-name">注册用户</span>
+                </div>
+                <div class="realtime-item">
+                    <span class="realtime-num">{{ formatNumber(realtimeStats.total_visit_count) }}</span>
+                    <span class="realtime-name">总浏览量</span>
+                </div>
+                <div class="realtime-item">
+                    <span class="realtime-num">{{ formatNumber(realtimeStats.total_api_calls) }}</span>
+                    <span class="realtime-name">总 API 调用</span>
+                </div>
             </div>
-            <div class="stat-box">
-                <i class="fas fa-chart-line stat-icon"></i>
-                <span class="stat-num">{{ selfStats.total_visit_count || 0 }}</span>
-                <span class="stat-name">访问次数</span>
-            </div>
-            <div class="stat-box">
-                <i class="fas fa-bolt stat-icon"></i>
-                <span class="stat-num">{{ selfStats.total_api_calls || 0 }}</span>
-                <span class="stat-name">API 调用</span>
+            <div class="info-row contact-row">
+                <span class="info-label">管理员联系</span>
+                <button
+                    v-if="adminContact"
+                    type="button"
+                    class="contact-copy-btn"
+                    :title="contactCopied ? '已复制' : '点击复制'"
+                    @click="copyAdminContact"
+                >
+                    <span class="break-text">{{ adminContact }}</span>
+                    <i
+                        class="fas"
+                        :class="contactCopied ? 'fa-check' : 'fa-copy'"
+                    ></i>
+                </button>
+                <span
+                    v-else
+                    class="info-value"
+                >未配置</span>
             </div>
         </div>
 
-        <div class="info-card account-extra-card">
-            <div class="info-row">
-                <span class="info-label">全站在线用户</span>
-                <span class="info-value">{{ realtimeStats.online_users || 0 }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">全站总浏览量</span>
-                <span class="info-value">{{ realtimeStats.total_visit_count || 0 }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">全站总 API 调用</span>
-                <span class="info-value">{{ realtimeStats.total_api_calls || 0 }}</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">注册用户总数</span>
-                <span class="info-value">{{ realtimeStats.total_registered_users || 0 }}</span>
-            </div>
-        </div>
-
-        <div class="info-card account-extra-card">
-            <div class="info-row">
-                <span class="info-label">管理员联系方式</span>
-                <span class="info-value break-text">{{ adminContact || '未配置' }}</span>
-            </div>
-        </div>
-
-        <div class="info-card account-extra-card">
-            <div class="compose-title">用户留言</div>
+        <!-- 留言板 -->
+        <div class="ov-card">
+            <div class="ov-card-title"><i class="fas fa-comments"></i> 用户留言</div>
             <textarea
                 v-model="newMessageText"
                 class="user-message-input"
-                placeholder="请输入你的建议或反馈，发布后所有用户都能看到"
+                :maxlength="MESSAGE_MAX_LEN"
+                placeholder="输入你的建议或反馈，发布后所有用户可见"
             ></textarea>
+            <div class="compose-meta">
+                <span
+                    class="char-count"
+                    :class="{ nearly: newMessageText.length >= MESSAGE_MAX_LEN - 20 }"
+                >{{ newMessageText.length }}/{{ MESSAGE_MAX_LEN }}</span>
+            </div>
             <button
                 class="btn-primary w-100"
                 type="button"
-                :disabled="isPostingMessage"
+                :disabled="isPostingMessage || !newMessageText.trim()"
                 @click="handleSubmit"
             >
                 <i
@@ -179,7 +310,7 @@ function handleSubmit() {
 
             <div class="message-list">
                 <div v-if="recentMessages.length === 0" class="message-empty">
-                    暂无留言
+                    暂无留言，来发第一条吧
                 </div>
                 <div
                     v-for="item in recentMessages"
@@ -187,8 +318,15 @@ function handleSubmit() {
                     class="message-item"
                 >
                     <div class="message-item-meta">
+                        <span
+                            class="author-avatar"
+                            :style="{ background: authorColor(item.username) }"
+                        >{{ authorInitial(item.username) }}</span>
                         <span class="message-author">{{ item.username || '匿名' }}</span>
-                        <span class="message-time">{{ formatDateTime(item.created_at) }}</span>
+                        <span
+                            class="message-time"
+                            :title="formatDateTime(item.created_at)"
+                        >{{ formatRelativeTime(item.created_at) }}</span>
                     </div>
                     <div class="message-item-content">{{ item.content }}</div>
                 </div>
@@ -198,295 +336,410 @@ function handleSubmit() {
 </template>
 
 <style scoped>
-/* View: Overview */
-.info-card {
-    background: rgba(16, 32, 22, 0.6);
-    border-radius: 10px;
-    padding: 16px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.2);
-    margin-bottom: 20px;
+.overview-view {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+    gap: 10px;
 }
 
+/* ========== 统计卡 ========== */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.stat-box {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 12px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(34, 50, 38, 0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.14);
+}
+
+.stat-icon {
+    font-size: 15px;
+    color: var(--brand-primary);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-num {
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.stat-name {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* ========== 通用卡片 ========== */
+.ov-card {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(34, 50, 38, 0.04);
+}
+
+.ov-card-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ov-card-title i {
+    color: var(--brand-primary);
+    font-size: 12px;
+}
+
+/* ========== 配额进度 ========== */
+.quota-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.quota-head .ov-card-title {
+    margin-bottom: 0;
+}
+
+.quota-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand-primary-dark);
+    font-variant-numeric: tabular-nums;
+}
+
+.quota-value.warning {
+    color: var(--warning);
+}
+
+.quota-track {
+    margin-top: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    overflow: hidden;
+}
+
+.quota-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brand-primary-light), var(--brand-primary));
+    transition: width 0.4s ease;
+}
+
+.quota-fill.warning {
+    background: linear-gradient(90deg, var(--warning), #e08600);
+}
+
+.quota-fill.unlimited {
+    background: linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.25), rgba(var(--brand-primary-rgb), 0.45));
+}
+
+/* ========== 信息行 ========== */
 .info-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 14px;
+    gap: 10px;
+    font-size: 12.5px;
+    padding: 5px 0;
+}
+
+.info-row + .info-row {
+    border-top: 1px dashed rgba(0, 0, 0, 0.05);
 }
 
 .info-label {
-    color: #8fbc9f;
+    color: var(--text-secondary);
+    flex-shrink: 0;
 }
 
 .info-value {
     font-weight: 600;
-    color: #ffffff;
+    color: var(--text-primary);
+    text-align: right;
 }
 
 .text-success {
-    color: var(--brand-accent-light);
-    text-shadow: 0 0 6px rgba(var(--brand-accent-light-rgb), 0.5);
-}
-
-.active-dot {
-    font-size: 10px;
-    margin-right: 6px;
-    vertical-align: middle;
-    box-shadow: 0 0 8px var(--brand-accent-light);
-    border-radius: 50%;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-}
-
-.stat-box {
-    background: rgba(16, 32, 22, 0.6);
-    border-radius: 10px;
-    padding: 16px 10px;
-    display: flex;
-    flex-direction: column;
+    color: var(--brand-primary-dark);
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.2);
-    transition:
-        transform 0.3s ease,
-        border-color 0.3s ease,
-        background 0.3s ease;
-    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.3);
+    gap: 5px;
 }
 
-.stat-box:hover {
-    transform: translateY(-3px);
-    border-color: var(--brand-accent-light);
-    background: rgba(22, 44, 30, 0.8);
-    box-shadow:
-        inset 0 0 12px rgba(0, 0, 0, 0.3),
-        0 6px 16px rgba(var(--brand-accent-light-rgb), 0.15);
-}
-
-.stat-icon {
-    font-size: 20px;
-    color: var(--brand-accent-light);
-    filter: drop-shadow(0 0 6px rgba(var(--brand-accent-light-rgb), 0.5));
-}
-
-.stat-num {
-    font-size: 18px;
-    font-weight: 700;
-    color: #ffffff;
-    text-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
-}
-
-.stat-name {
-    font-size: 12px;
-    color: #8fbc9f;
-}
-
-.account-extra-card {
-    margin-top: 12px;
+.online-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.18);
 }
 
 .break-text {
-    max-width: 200px;
-    text-align: right;
+    max-width: 220px;
     word-break: break-word;
 }
 
-.compose-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #b9f7d8;
-    margin-bottom: 4px;
+/* ========== 全站实时 ========== */
+.realtime-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
 }
 
+.realtime-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 2px;
+    border-radius: 9px;
+    background: var(--bg-secondary);
+}
+
+.realtime-num {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-brand-dark);
+    font-variant-numeric: tabular-nums;
+}
+
+.realtime-name {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.contact-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(0, 0, 0, 0.06);
+}
+
+/* 卡片标题右侧徽章 */
+.title-with-badge {
+    justify-content: space-between;
+    display: flex;
+    align-items: center;
+}
+
+.days-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--brand-primary-dark);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.25);
+    border-radius: 999px;
+    padding: 1px 8px;
+    white-space: nowrap;
+}
+
+/* 管理员联系一键复制 */
+.contact-copy-btn {
+    border: none;
+    background: none;
+    padding: 2px 4px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: right;
+}
+
+.contact-copy-btn:hover {
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    color: var(--brand-primary-dark);
+}
+
+.contact-copy-btn i {
+    font-size: 11px;
+    color: var(--brand-primary);
+    flex-shrink: 0;
+}
+
+/* ========== 留言板 ========== */
 .user-message-input {
     width: 100%;
-    min-height: 86px;
+    min-height: 70px;
     box-sizing: border-box;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    font-family: inherit;
     resize: vertical;
-    color: #fff;
-    background: rgba(8, 20, 14, 0.6);
-    transition: all 0.3s ease;
+    color: var(--text-primary);
+    background: #fbfdfb;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.user-message-input::placeholder {
+    color: var(--text-muted);
 }
 
 .user-message-input:focus {
     outline: none;
-    border-color: var(--brand-accent-light);
-    box-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb), 0.3);
-    background: rgba(12, 28, 18, 0.9);
+    border-color: var(--brand-primary);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.1);
 }
 
-.message-list {
-    max-height: 200px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 8px;
-}
-
-.message-empty {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
-    text-align: center;
-    border: 1px dashed rgba(var(--brand-accent-light-rgb), 0.3);
-    border-radius: 8px;
-    padding: 12px;
-}
-
-.message-item {
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.25);
-    border-radius: 8px;
-    background: rgba(4, 12, 8, 0.4);
-    padding: 10px 12px;
-    transition: border-color 0.2s ease;
-}
-
-.message-item:hover {
-    border-color: rgba(var(--brand-accent-light-rgb), 0.4);
-}
-
-.message-item-meta {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.message-author {
-    color: #8df3b9;
-    font-weight: 700;
-}
-
-.message-item-content {
-    margin-top: 6px;
-    font-size: 13px;
-    line-height: 1.5;
-    color: #f2fff8;
-    word-break: break-word;
-}
-
-/* Shared button styles needed by this tab */
 .btn-primary {
-    background: linear-gradient(135deg, rgba(var(--brand-accent-light-rgb), 0.85) 0%, var(--brand-primary-dark) 100%);
-    color: white;
-    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.6);
-    height: 48px;
-    border-radius: 8px;
-    font-size: 15px;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    color: #fff;
+    border: none;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
-    transition: all 0.3s ease;
+    gap: 8px;
+    box-shadow: 0 3px 10px rgba(var(--brand-primary-rgb), 0.28);
+    transition: all 0.18s ease;
     margin-top: 8px;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .btn-primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(var(--brand-accent-light-rgb), 0.35);
-    border-color: var(--brand-accent-light);
-    background: linear-gradient(135deg, var(--brand-accent-light) 0%, var(--brand-primary) 100%);
+    filter: brightness(1.06);
+    transform: translateY(-1px);
 }
 
 .btn-primary:disabled {
-    opacity: 0.5;
+    opacity: 0.55;
     cursor: not-allowed;
-    filter: grayscale(0.5);
 }
 
 .w-100 {
     width: 100%;
 }
 
-/* Light Mint Theme Override */
-.info-card,
-.stat-box,
-.message-item {
-    background: rgba(255, 255, 255, 0.72);
-    border-color: rgba(var(--brand-primary-rgb), 0.2);
-    box-shadow: 0 4px 12px rgba(76, 130, 88, 0.08);
+.message-list {
+    max-height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
 }
 
-.stat-box:hover,
-.message-item:hover {
-    background: rgba(252, 255, 253, 0.95);
-    border-color: rgba(var(--brand-primary-rgb), 0.35);
-}
-
-.info-label,
-.stat-name,
-.message-item-meta,
 .message-empty {
-    color: var(--acc-text-soft, #5d7f6a);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+    border: 1px dashed var(--border-light);
+    border-radius: 10px;
+    padding: 12px;
 }
 
-.info-value,
-.stat-num,
-.message-item-content,
-.message-author,
-.compose-title {
-    color: var(--acc-text-strong, #214a31);
-    text-shadow: none;
+.message-item {
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+    padding: 8px 11px;
+    transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.text-success {
-    color: var(--acc-mint-700, var(--brand-primary-dark));
-    text-shadow: none;
-}
-
-.active-dot {
-    color: var(--acc-mint-600, var(--brand-primary));
-    box-shadow: none;
-}
-
-.stat-icon {
-    color: var(--acc-mint-700, var(--brand-primary-dark));
-}
-
-.user-message-input {
-    color: var(--acc-text-strong, #214a31);
-    background: rgba(255, 255, 255, 0.92);
+.message-item:hover {
     border-color: rgba(var(--brand-primary-rgb), 0.3);
+    background: #fff;
 }
 
-.user-message-input::placeholder {
-    color: #88a797;
+/* 字数计数 */
+.compose-meta {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 3px;
 }
 
-.user-message-input:focus {
-    border-color: rgba(var(--brand-primary-rgb), 0.52);
-    box-shadow: 0 0 0 3px rgba(var(--brand-accent-light-rgb), 0.18);
-    background: #ffffff;
+.char-count {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
-.btn-primary {
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    border-color: rgba(63, 148, 75, 0.55);
-    color: #f8fff9;
-    box-shadow: 0 6px 16px rgba(58, 129, 76, 0.24);
-    text-shadow: none;
+.char-count.nearly {
+    color: var(--warning);
+    font-weight: 600;
 }
 
-.btn-primary:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
-    box-shadow: 0 8px 18px rgba(58, 129, 76, 0.3);
+.message-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* 留言作者彩色首字头像 */
+.author-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.message-item-meta .message-time {
+    margin-left: auto;
+}
+
+.message-author {
+    color: var(--brand-primary-dark);
+    font-weight: 600;
+}
+
+.message-time {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.message-item-content {
+    margin-top: 4px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--text-primary);
+    word-break: break-word;
 }
 </style>

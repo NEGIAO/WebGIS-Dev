@@ -219,6 +219,7 @@ const menuCapabilities = computed(() => {
     return {
         canView: !!actions.viewEvent,
         canSolo: !!actions.soloEvent,
+        canEdit: !!actions.edit,
         canOpenAttributeTable: !!actions.attribute,
         canStyle: !!actions.style,
         canOpenAoiPanel: !!actions.openAoiPanel,
@@ -617,7 +618,7 @@ defineExpose({ closeContextMenu });
 
 .toc-context-menu {
     position: fixed;
-    z-index: 1200;
+    z-index: var(--z-popover);
     min-width: 180px;
     border: 1px solid var(--toc-menu-border);
     border-radius: var(--toc-radius-lg);

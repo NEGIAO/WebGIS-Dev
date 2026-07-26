@@ -4,13 +4,13 @@
 
 import json
 import logging
-import os
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from fastapi import HTTPException, Request, status
 
 from api.api_management import record_api_call
+from config import get_settings
 
 from .constants import DEFAULT_AGENT_SYSTEM_PROMPT, logger
 from .schemas import AgentChatHistoryItem
@@ -59,7 +59,7 @@ async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
     if not ip or ip == "127.0.0.1" or ip == "::1":
         return None
 
-    amap_key = str(os.getenv("AMAP_WEB_SERVICE_KEY", "")).strip()
+    amap_key = get_settings().amap_web_service_key
     if not amap_key:
         return None
 

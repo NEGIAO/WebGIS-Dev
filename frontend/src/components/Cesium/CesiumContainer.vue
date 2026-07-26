@@ -135,7 +135,11 @@ import { useCesiumInteractions } from './composables/interaction/useCesiumIntera
 import { useCesiumLayers } from './composables/layers/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/camera/useCesiumSceneActions';
 import { useCesiumDataImport } from './composables/dataImport/useCesiumDataImport';
+import { createCesiumDataOpsHandlers } from './composables/dataImport/useCesiumDataOpsHandlers';
 import { useCesiumToolModules } from './composables/toolModules/useCesiumToolModules';
+import { useCesiumLayersStore } from '../../stores/layer/cesiumLayers';
+import { readCachedPreferredBasemap } from '../../stores/useUserPreferencesStore';
+import { setRecordVisible, setRecordOpacity } from './composables/dataImport/dataSourceDisplay';
 import { setupCloudIntegration } from './Cloud';
 import { useCesiumUrlTracking } from './composables/layers/useCesiumUrlTracking';
 import { useCesiumWind } from './cesium-wind-layer/useCesiumWind';
@@ -256,6 +260,53 @@ const dataImport = useCesiumDataImport({
     getCesium,
     message,
     heightSampler,
+});
+
+// ==========================================
+// 统一图层管理：元数据店同步 + 场景操作 adapter
+// 「元数据入店、句柄留场」：store 只存元数据，句柄操作经此处注册的回调触达
+// ==========================================
+const cesiumLayersStore = useCesiumLayersStore();
+
+/** 按 id 查 loadedDataSources 句柄记录 */
+function findImportRecord(id) {
+    return (dataImport.loadedDataSources.value || []).find((item) => item.id === id) || null;
+}
+
+// 导入列表 → 元数据店差量同步（新增建档/删除销档，保留用户改过的 visible/opacity）
+watch(
+    () => dataImport.loadedDataSources.value,
+    (list) => {
+        cesiumLayersStore.syncFromImport(
+            (list || []).map((item) => ({ id: item.id, name: item.name, type: item.type })),
+        );
+    },
+    { immediate: true, deep: false },
+);
+
+// 注册场景操作 adapter（store action → 句柄）
+cesiumLayersStore.registerAdapter({
+    setVisible(id, visible) {
+        const record = findImportRecord(id);
+        if (!record) return;
+        setRecordVisible(getCesium(), record, visible);
+        getViewer()?.scene?.requestRender?.();
+    },
+    setOpacity(id, opacity) {
+        const record = findImportRecord(id);
+        if (!record) return;
+        // 矢量类经 rAF 合并异步应用，onApplied 补一次渲染保证按需渲染模式即时生效
+        setRecordOpacity(getCesium(), record, opacity, () => {
+            getViewer()?.scene?.requestRender?.();
+        });
+        getViewer()?.scene?.requestRender?.();
+    },
+    flyTo(id) {
+        dataImport.flyToDataSource(id);
+    },
+    remove(id) {
+        dataImport.removeDataSource(id);
+    },
 });
 
 // ==========================================
@@ -412,6 +463,9 @@ const {
     cameraEnhanced,
     heightSampler,
     playerController,
+    // 三维分析（通视/限高）运行时依赖：viewer 与 Cesium 命名空间注入
+    getViewer,
+    getCesium,
 });
 
 /** 启动中标志，防止并发 bootCesium 调用 */
@@ -475,18 +529,28 @@ async function bootCesium() {
                 bindCameraViewSync({ initialSync: false, getActivePresetId: () => activeBasemap.value });
                 // 1) 先从 URL 恢复底图预设：URL l= 参数优先级最高，确保分享链接可重现同一底图
                 const restoredFromUrl = restoreBasemapFromUrl();
-                // 2) 仅在 URL 无 l 时才应用服务器管理员默认底图，避免 activeBasemap 反复赋值造成的冗余 URL 写入与底图闪烁
+                // 2) 仅在 URL 无 l 时才应用默认底图，优先级：用户偏好 > 管理员全局默认
+                //    （避免 activeBasemap 反复赋值造成的冗余 URL 写入与底图闪烁）
                 if (!restoredFromUrl) {
-                    try {
-                        const defaultsRes = await apiGetRuntimeDefaults();
-                        const serverIndex = defaultsRes?.data?.default_basemap_index;
-                        if (serverIndex != null) {
-                            const serverLayerId = URL_LAYER_OPTIONS[serverIndex] || null;
-                            if (serverLayerId && activeBasemap.value !== serverLayerId) {
-                                activeBasemap.value = serverLayerId;
-                            }
+                    // 2a) 用户偏好（账号中心-偏好设置；preset id 与 2D 共用同一体系）
+                    const preferredBasemapId = readCachedPreferredBasemap();
+                    if (preferredBasemapId && URL_LAYER_OPTIONS.includes(preferredBasemapId)) {
+                        if (activeBasemap.value !== preferredBasemapId) {
+                            activeBasemap.value = preferredBasemapId;
                         }
-                    } catch { /* 静默失败，用硬编码兜底 */ }
+                    } else {
+                        // 2b) 管理员配置的全局默认底图索引
+                        try {
+                            const defaultsRes = await apiGetRuntimeDefaults();
+                            const serverIndex = defaultsRes?.data?.default_basemap_index;
+                            if (serverIndex != null) {
+                                const serverLayerId = URL_LAYER_OPTIONS[serverIndex] || null;
+                                if (serverLayerId && activeBasemap.value !== serverLayerId) {
+                                    activeBasemap.value = serverLayerId;
+                                }
+                            }
+                        } catch { /* 静默失败，用硬编码兜底 */ }
+                    }
                 }
                 // 3) 无条件写回 l：activeBasemap 默认值与初始底图相同时 watch 不触发，强制初始写入避免 URL l 缺失
                 syncBasemapToUrl(activeBasemap.value);
@@ -664,171 +728,35 @@ onMounted(() => {
  * 多文件选择时自动分组（SHP 配套文件 .dbf/.shx/.prj 合并加载）
  * @param {{ files: File[] }} payload
  */
-async function handleDataImport({ files }) {
-    if (componentUnmounted) return;
-    try {
-        await dataImport.loadDataFiles(Array.from(files));
-    } catch {
-        // loadDataFiles 内部已通过 message.error 提示
-    }
-}
-
-/**
- * 移除单个已加载数据源
- * @param {{ id: string }} payload
- */
-function handleDataRemove({ id }) {
-    dataImport.removeDataSource(id);
-}
-
-/**
- * 定位/缩放到指定数据源
- * @param {{ id: string }} payload
- */
-function handleDataFlyTo({ id }) {
-    dataImport.flyToDataSource(id);
-}
-
-/** 清除所有已加载数据源 */
-function handleDataClearAll() {
-    dataImport.clearAllDataSources();
-}
-
-/**
- * 调整 GLTF 模型位置
- * @param {{ id: string }} payload
- */
-function handleDataReposition({ id }) {
-    dataImport.startGltfReposition(id);
-}
-
-/** 拉伸 GeoTIFF 单波段到高程 */
-async function handleDataStretchHeight({ id }) {
-    if (componentUnmounted) return;
-    try {
-        await dataImport.stretchRasterToHeight(id);
-    } catch {
-        // stretchRasterToHeight 内部已通过 message 提示
-    }
-}
-
-/** 手动设置 3D Tiles 贴地高度（滑杆） */
-function handleDataSetHeight({ id, height }) {
-    if (componentUnmounted) return;
-    dataImport.setTilesetHeight(id, height);
-}
-
-/**
- * 加载内置样例城市 3D Tiles
- */
-async function handleImportTilesetSample() {
-    if (componentUnmounted) return;
-    try {
-        await dataImport.loadSampleTileset();
-    } catch {
-        // 内部已提示
-    }
-}
-
-/**
- * 切换 3D Tiles 材质模式
- */
-function handleDataSetMaterial({ id, mode }) {
-    if (componentUnmounted) return;
-    const CesiumRuntime = getCesium();
-    if (!CesiumRuntime) return;
-    const record = dataImport.loadedDataSources.value.find(ds => ds.id === id);
-    if (!record || record.type !== '3dtiles') return;
-    dataImport.applyTilesetMaterial(record.entity, mode, CesiumRuntime);
-    record.materialMode = mode;
-}
-
-/**
- * 打开文件选择器选择 3D Tiles ZIP 包
- * 选中后通过 loadDataFile 自动路由到 loadTilesetFromZip
- * 注意：input 必须挂载到 DOM 中才能可靠触发 click 事件
- */
-function handleImportTilesetZip() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.zip';
-    input.style.display = 'none';
-    document.body.appendChild(input);
-
-    /** 清理 DOM 中的 input 元素 */
-    function cleanup() {
-        if (input.parentNode) {
-            document.body.removeChild(input);
-        }
-    }
-
-    input.onchange = async (e) => {
-        cleanup();
-        const file = e.target?.files?.[0];
-        if (!file) return;
-        try {
-            await dataImport.loadDataFile(file);
-        } catch {
-            // 内部已提示
-        }
-    };
-
-    // 用户取消选择：通过 window focus 事件检测
-    const onFocus = () => {
-        window.removeEventListener('focus', onFocus);
-        setTimeout(() => {
-            if (!input.files || input.files.length === 0) {
-                cleanup();
-            }
-        }, 300);
-    };
-    window.addEventListener('focus', onFocus);
-
-    input.click();
-}
-
-/**
- * 打开系统目录选择器，选取 3D Tiles 文件夹
- * 使用 File System Access API（showDirectoryPicker）
- */
-async function handleImportTilesetFolder() {
-    try {
-        await dataImport.importTilesetFromDirectory();
-    } catch {
-        // 内部已提示
-    }
-}
-
-/**
- * GLTF 坐标弹窗确认回调
- * 同时处理：首次导入坐标确认（pendingGltfFile）和已加载模型位置调整（repositionTarget）
- * @param {{ lng: number, lat: number, height: number }} coords
- */
-async function handleGltfCoordConfirm(coords) {
-    if (componentUnmounted) return;
-    try {
-        if (repositionTarget.value) {
-            await dataImport.confirmGltfReposition(coords);
-        } else {
-            await dataImport.loadGltfWithUserCoords(coords);
-        }
-    } catch {
-        // 内部已通过 message.error 提示用户
-    }
-}
-
-/** GLTF 坐标弹窗取消回调 */
-function handleGltfCoordCancel() {
-    if (repositionTarget.value) {
-        dataImport.cancelGltfReposition();
-    } else {
-        dataImport.cancelPendingGltf();
-    }
-}
+// ========== 数据导入/操作事件处理（via composable：useCesiumDataOpsHandlers） ==========
+// 面板/拖拽/GLTF 弹窗事件 → useCesiumDataImport 的转发层，容器只做一次装配。
+const {
+    handleDataImport,
+    handleDataRemove,
+    handleDataFlyTo,
+    handleDataClearAll,
+    handleDataReposition,
+    handleDataStretchHeight,
+    handleDataSetHeight,
+    handleImportTilesetSample,
+    handleDataSetMaterial,
+    handleImportTilesetZip,
+    handleImportTilesetFolder,
+    handleGltfCoordConfirm,
+    handleGltfCoordCancel,
+} = createCesiumDataOpsHandlers({
+    dataImport,
+    repositionTargetRef: repositionTarget,
+    getCesium,
+    isComponentUnmounted: () => componentUnmounted,
+});
 
 onUnmounted(() => {
     componentUnmounted = true;
     cesiumReady.value = false;
+
+    // 统一图层管理：注销 adapter 并清档（TOC「三维数据」分组随之消失）
+    try { cesiumLayersStore.unregisterAdapter(); } catch { /* ignore */ }
 
     // 清理人物漫游控制器（移除 scene.preRender / selectedEntityChanged 监听）
     try { playerController.stopPlayer(); } catch { /* ignore */ }
@@ -975,7 +903,7 @@ watch(
     position: absolute;
     bottom: 30px;
     right: 24px;
-    z-index: 1000;
+    z-index: var(--z-panel);
     color: #00f0ff;
     font-family: 'Consolas', 'Courier New', monospace;
     font-size: 13px;
@@ -1002,7 +930,7 @@ watch(
 :global(.cesium-baseLayerPicker-dropDown),
 :global(.cesium-geocoder-searchButton),
 :global(.cesium-geocoder-searchButton:hover) {
-    z-index: 1400;
+    z-index: calc(var(--z-popover) + 200);
 }
 
 :global(.cesium-viewer-toolbar) {
@@ -1024,7 +952,7 @@ watch(
 .drag-overlay {
     position: absolute;
     inset: 0;
-    z-index: 2000;
+    z-index: var(--z-modal);
     display: flex;
     flex-direction: column;
     align-items: center;

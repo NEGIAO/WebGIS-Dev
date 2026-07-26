@@ -13,6 +13,12 @@ import { createWindModule } from '../../cesium-wind-layer/windModule';
 import { createFluidModule } from './fluidModule';
 import { createShallowWaterModule } from './shallowWaterModule';
 import { createPlayerModule } from './playerModule';
+import {
+    createAnalysisModule,
+    createAnalysisRuntime,
+    DEFAULT_ANALYSIS_PARAMS,
+    DEFAULT_ANALYSIS_STATE,
+} from '../../Analysis';
 
 const CESIUM_TOOL_PANEL_OPEN_KEY = 'cesium_tool_panel_open';
 
@@ -24,6 +30,8 @@ export function useCesiumToolModules({
     cameraEnhanced: _cameraEnhanced = null,
     heightSampler: _heightSampler = null,
     playerController: _playerController = null,
+    getViewer = () => null,
+    getCesium = () => null,
     panelStorageKey = CESIUM_TOOL_PANEL_OPEN_KEY,
 } = {}) {
     const toolPanelOpen = ref(readStoredBoolean(panelStorageKey, true));
@@ -127,6 +135,24 @@ export function useCesiumToolModules({
         lightningInterval: 2.0,
     });
 
+    // ========== 三维分析（通视/限高）参数与运行时（Analysis 文件夹模块，懒创建） ==========
+    const analysisParams = ref({ ...DEFAULT_ANALYSIS_PARAMS });
+    const analysisState = ref({ ...DEFAULT_ANALYSIS_STATE });
+
+    let analysisRuntime = null;
+    function ensureAnalysisRuntime() {
+        if (!analysisRuntime) {
+            analysisRuntime = createAnalysisRuntime({
+                getViewer,
+                getCesium,
+                onStateChange: (patch) => {
+                    analysisState.value = { ...analysisState.value, ...patch };
+                },
+            });
+        }
+        return analysisRuntime;
+    }
+
     // ========== 工具模块定义（使用模块化工厂函数，聚合同类功能） ==========
     const toolModules = computed(() => [
         createSceneModule(),
@@ -137,6 +163,7 @@ export function useCesiumToolModules({
         createFluidModule(fluidParams, fluidState),
         createShallowWaterModule(shallowWaterVisible, shallowWaterParams),
         createPlayerModule(playerParams, _playerController),
+        createAnalysisModule(analysisParams, analysisState),
     ]);
 
     watch(toolPanelOpen, (value) => {
@@ -176,6 +203,15 @@ export function useCesiumToolModules({
     }
 
     function handleToolControlChange({ moduleId, controlId, value }) {
+        // 三维分析控件（参数写回 + 统一分发给 Analysis 运行时；按钮 value 为函数，仅按 id 触发动作）
+        if (moduleId === 'analysis') {
+            if (controlId in analysisParams.value && typeof value !== 'function') {
+                analysisParams.value = { ...analysisParams.value, [controlId]: value };
+            }
+            ensureAnalysisRuntime().handleControlChange(controlId, value, analysisParams.value);
+            return;
+        }
+
         // 风场控件（面板参数名 → 引擎参数名映射）
         if (moduleId === 'wind') {
             // windEnabled 开关→启动/关闭
@@ -334,10 +370,15 @@ export function useCesiumToolModules({
 
     function cleanupTools() {
         wind.clearWind2D?.();
+        // 销毁三维分析运行时（实体/事件 handler 全量释放）
+        analysisRuntime?.destroy();
+        analysisRuntime = null;
     }
 
     return {
         toolPanelOpen,
+        analysisParams,
+        analysisState,
         advancedEffectControls,
         baseAtmosphereParams,
         atmosphereParams,

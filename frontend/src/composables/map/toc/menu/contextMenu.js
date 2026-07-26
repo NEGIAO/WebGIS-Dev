@@ -107,6 +107,8 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         if (primary.length) groups.push(primary);
 
         const edit = [];
+        if (capabilities.canEdit)
+            edit.push({ key: TOC_MENU_COMMANDS.EDIT, label: '编辑要素' });
         edit.push({ key: TOC_MENU_COMMANDS.RENAME, label: '重命名' });
         if (capabilities.canOpenAttributeTable)
             edit.push({ key: TOC_MENU_COMMANDS.ATTRIBUTE, label: '打开属性表' });

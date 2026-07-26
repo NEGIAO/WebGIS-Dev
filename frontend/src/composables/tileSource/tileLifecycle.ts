@@ -15,15 +15,7 @@
 
 import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
 import { useMessage } from '../useMessage';
-
-// ==================== 环境变量 ====================
-
-const TILE_PROXY_BASE_URL = String(
-    import.meta.env.VITE_TILE_PROXY_BASE_URL ||
-        import.meta.env.VITE_BACKEND_URL ||
-        'https://negiao-webgis.hf.space',
-).replace(/\/$/, '');
-const TILE_PROXY_MODE = String(import.meta.env.VITE_TILE_PROXY_MODE || 'fallback').toLowerCase();
+import { TILE_PROXY_BASE_URL, TILE_PROXY_MODE } from '../../config/publicRuntime';
 
 // ==================== 代理通知（去重防抖） ====================
 

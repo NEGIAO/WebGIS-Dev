@@ -81,7 +81,7 @@ function formatDistance(dist) {
     top: 55px; /* 略微往上提，给三维视野留出空间 */
     left: 50%;
     transform: translateX(-50%);
-    z-index: 9997;
+    z-index: calc(var(--z-toast) - 2);
     pointer-events: none;
     
     display: flex;

@@ -1,6 +1,5 @@
 import ipaddress
 import logging
-import os
 import time
 from collections import defaultdict
 from typing import Dict, List, Tuple
@@ -14,6 +13,8 @@ from gcj_rectify.rectify import get_gcj2wgs_tile, get_wgs2gcj_tile
 from gcj_rectify.url_template import parse_tile_url
 from gcj_rectify.utils import get_cache_dir
 
+from config import get_bool, get_int
+
 # 初始化路由对象
 router = APIRouter()
 
@@ -21,16 +22,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# 解析布尔环境变量，支持常见开关值。
-def _parse_env_flag(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-
-
-PROXY_ALLOW_PRIVATE_HOSTS = _parse_env_flag("PROXY_ALLOW_PRIVATE_HOSTS", False)
-PROXY_VERIFY_SSL = _parse_env_flag("PROXY_VERIFY_SSL", True)
+PROXY_ALLOW_PRIVATE_HOSTS = get_bool("PROXY_ALLOW_PRIVATE_HOSTS", False)
+PROXY_VERIFY_SSL = get_bool("PROXY_VERIFY_SSL", True)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -45,7 +38,7 @@ def _get_client_ip(request: Request) -> str:
 
 
 # 简单滑动窗口限流（每 IP 每分钟最多 N 次代理请求）
-PROXY_RATE_LIMIT = int(os.getenv("PROXY_RATE_LIMIT", "0"))
+PROXY_RATE_LIMIT = get_int("PROXY_RATE_LIMIT", 0)
 _rate_limit_store: Dict[str, List[float]] = defaultdict(list)
 _last_clean_time = time.time()
 

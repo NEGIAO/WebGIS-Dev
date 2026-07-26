@@ -519,12 +519,30 @@
                         <!-- 独立卡片化列表 -->
                         <div class="data-source-list">
                             <div
-                                v-for="source in localDataSources"
+                                v-for="source in displaySources"
                                 :key="source.id"
                                 class="data-source-card"
+                                :class="{ 'is-hidden': !isSourceVisible(source) }"
                             >
-                                <!-- 卡片头部：图标 + 标题/标签 + 操作按钮 -->
+                                <!-- 卡片头部：显隐 + 图标 + 标题/标签 + 操作按钮 -->
                                 <div class="card-header">
+                                    <button
+                                        class="action-icon-btn visibility"
+                                        type="button"
+                                        :title="isSourceVisible(source) ? '隐藏' : '显示'"
+                                        @click.stop="toggleSourceVisible(source)"
+                                    >
+                                        <Eye
+                                            v-if="isSourceVisible(source)"
+                                            :size="14"
+                                            stroke-width="2"
+                                        />
+                                        <EyeOff
+                                            v-else
+                                            :size="14"
+                                            stroke-width="2"
+                                        />
+                                    </button>
                                     <div class="card-type-icon">
                                         <component
                                             :is="getFormatIcon(source.type)"
@@ -534,9 +552,25 @@
                                     </div>
                                     <div
                                         class="card-info"
-                                        :title="source.name"
+                                        :title="source.meta?.name || source.name"
                                     >
-                                        <span class="card-title">{{ source.name }}</span>
+                                        <input
+                                            v-if="renamingSourceId === source.id"
+                                            v-model="renameDraft"
+                                            class="card-rename-input"
+                                            type="text"
+                                            maxlength="60"
+                                            @keyup.enter="commitRenameSource"
+                                            @keyup.esc="cancelRenameSource"
+                                            @blur="commitRenameSource"
+                                            @click.stop
+                                        />
+                                        <span
+                                            v-else
+                                            class="card-title"
+                                            title="双击重命名"
+                                            @dblclick.stop="startRenameSource(source)"
+                                        >{{ source.meta?.name || source.name }}</span>
                                         <span class="card-tag">{{ formatLabel(source.type) }}</span>
                                     </div>
                                     <div class="card-actions">
@@ -586,6 +620,33 @@
                                                 stroke-width="2"
                                             />
                                         </button>
+                                    </div>
+                                </div>
+
+                                <!-- 透明度（tif / gltf / 3dtiles，统一图层管理元数据驱动） -->
+                                <div
+                                    v-if="source.meta?.supportsOpacity"
+                                    class="card-extended-controls"
+                                >
+                                    <div class="control-row">
+                                        <span
+                                            class="control-label"
+                                            title="图层透明度"
+                                        >透明</span>
+                                        <div class="slider-wrapper">
+                                            <input
+                                                type="range"
+                                                class="tileset-slider"
+                                                min="0"
+                                                max="1"
+                                                step="0.05"
+                                                :value="source.meta?.opacity ?? 1"
+                                                @input="onSourceOpacityInput(source, $event.target.value)"
+                                            />
+                                        </div>
+                                        <span class="control-value">
+                                            {{ Math.round((source.meta?.opacity ?? 1) * 100) }}%
+                                        </span>
                                     </div>
                                 </div>
 
@@ -777,6 +838,7 @@ import {
     Check,
     ChevronDown,
     Crosshair,
+    EyeOff,
     Droplets,
     Eye,
     FileArchive,
@@ -803,6 +865,7 @@ import {
     X,
 } from 'lucide-vue-next';
 import LilGuiControls from './LilGuiControls.vue';
+import { useCesiumLayersStore } from '../../stores/layer/cesiumLayers';
 
 const props = defineProps({
     open: { type: Boolean, default: true },
@@ -819,6 +882,51 @@ const props = defineProps({
 });
 
 const localDataSources = ref(Array.isArray(props.loadedDataSources) ? props.loadedDataSources : []);
+
+// ==========================================
+// 统一图层管理：元数据店（可见性/透明度/重命名，与 TOC「三维数据」分组同源）
+// ==========================================
+const cesiumLayersStore = useCesiumLayersStore();
+
+/** 卡片渲染源：句柄记录（特化字段）+ 元数据（visible/opacity/显示名）合并视图 */
+const displaySources = computed(() => localDataSources.value.map((source) => ({
+    ...source,
+    meta: cesiumLayersStore.getRecord(source.id) || null,
+})));
+
+/** 当前处于重命名编辑态的数据源 id 与草稿 */
+const renamingSourceId = ref('');
+const renameDraft = ref('');
+
+function isSourceVisible(source) {
+    return source?.meta ? source.meta.visible !== false : true;
+}
+
+function toggleSourceVisible(source) {
+    cesiumLayersStore.setVisible(source.id, !isSourceVisible(source));
+}
+
+function onSourceOpacityInput(source, rawValue) {
+    cesiumLayersStore.setOpacity(source.id, Number(rawValue));
+}
+
+function startRenameSource(source) {
+    renamingSourceId.value = source.id;
+    renameDraft.value = String(source.meta?.name || source.name || '');
+}
+
+function commitRenameSource() {
+    if (renamingSourceId.value) {
+        cesiumLayersStore.rename(renamingSourceId.value, renameDraft.value);
+    }
+    renamingSourceId.value = '';
+    renameDraft.value = '';
+}
+
+function cancelRenameSource() {
+    renamingSourceId.value = '';
+    renameDraft.value = '';
+}
 
 watch(
     () => props.loadedDataSources,
@@ -1116,7 +1224,7 @@ function emitSetMaterial(sourceId, mode) {
     position: absolute;
     top: 12px;
     left: 12px;
-    z-index: 1200;
+    z-index: var(--z-popover);
     max-width: min(390px, calc(100% - 24px));
     color: #eefbf3;
     pointer-events: none;
@@ -1836,6 +1944,33 @@ function emitSetMaterial(sourceId, mode) {
     gap: 6px;
 }
 
+/* 统一图层管理：隐藏态卡片降透明呈现（不移除，保留操作入口） */
+.data-source-card.is-hidden {
+    opacity: 0.55;
+}
+
+.data-source-card.is-hidden .card-title {
+    color: var(--acc-text-soft, #5d7f6a);
+}
+
+/* 显隐按钮沿用 action-icon-btn 家族，强调色区分 */
+.action-icon-btn.visibility {
+    color: var(--brand-primary, #2f9a57);
+}
+
+/* 双击重命名的行内输入框 */
+.card-rename-input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid rgba(var(--brand-primary-rgb, 47, 154, 87), 0.5);
+    border-radius: 6px;
+    background: #ffffff;
+    color: #333;
+    font-size: 12px;
+    padding: 2px 6px;
+    outline: none;
+}
+
 .data-source-section {
     display: grid;
     gap: 8px;
@@ -2087,7 +2222,7 @@ function emitSetMaterial(sourceId, mode) {
     position: absolute;
     top: 12px;
     left: 12px;
-    z-index: 1200;
+    z-index: var(--z-popover);
     max-width: min(390px, calc(100% - 24px));
     color: #eefbf3;
     pointer-events: none;

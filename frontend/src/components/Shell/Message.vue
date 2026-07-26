@@ -10,11 +10,14 @@
             name="toast"
             tag="div"
             class="toast-list"
+            @mouseenter="pauseAllTimers"
+            @mouseleave="resumeAllTimers"
         >
             <div
-                v-for="item in messages"
+                v-for="(item, index) in messages"
                 :key="item.id"
                 class="toast-item"
+                :style="{ '--i': index }"
                 :class="[
                     `toast-${resolveVisualType(item.type)}`,
                     { 'toast-soup': item.type === 'soup' },
@@ -23,11 +26,15 @@
                         'toast-item-collapsing': isCollapsing(item.id),
                     },
                 ]"
-                @mouseenter="pauseTimer(item.id)"
-                @mouseleave="resumeTimer(item)"
                 @click="handleItemClick(item)"
             >
-                <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
+                <div class="toast-icon-wrap">
+                    <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
+                    <span
+                        v-if="(item._dedupCount || 0) > 1"
+                        class="toast-count"
+                    >×{{ item._dedupCount > 99 ? '99+' : item._dedupCount }}</span>
+                </div>
                 <div class="toast-content">
                     <div
                         v-if="shouldShowTitle(item)"
@@ -49,6 +56,23 @@
                 >
                     ×
                 </button>
+                <div
+                    v-if="(item._lifeMs || 0) > 0"
+                    class="toast-progress"
+                >
+                    <i
+                        :key="`bar_${item.id}_${item._dedupCount || 0}`"
+                        class="toast-progress-bar"
+                        :style="{ animationDuration: `${item._lifeMs}ms` }"
+                    ></i>
+                </div>
+            </div>
+            <div
+                v-if="queued.length > 0"
+                key="__queue_hint__"
+                class="toast-queue-hint"
+            >
+                还有 {{ queued.length }} 条提示…
             </div>
         </TransitionGroup>
     </div>
@@ -60,6 +84,11 @@ import { useMessageIslandMotion } from '../../composables/useMessageIslandMotion
 
 const props = defineProps({
     messages: {
+        type: Array,
+        default: () => [],
+    },
+    // 等待队列（MAX_VISIBLE 之外的积压消息）。传数组引用以保持响应式，仅读取 length。
+    queued: {
         type: Array,
         default: () => [],
     },
@@ -79,14 +108,15 @@ const emit = defineEmits(['close']);
 const messagesRef = toRef(props, 'messages');
 const durationRef = toRef(props, 'duration');
 
-// 将自动关闭、hover 暂停恢复、点击收缩消失统一封装，避免组件中重复计时器逻辑。
+// 将自动关闭、悬停暂停恢复、点击收缩消失统一封装，避免组件中重复计时器逻辑。
+// V3.4.x：暂停语义提升到整岛（指针进入岛内暂停全部计时），阅读时邻条不再消失。
 const {
     clickCollapseMs,
     handleCloseButtonClick,
     handleItemClick,
     isCollapsing,
-    pauseTimer,
-    resumeTimer,
+    pauseAllTimers,
+    resumeAllTimers,
 } = useMessageIslandMotion({
     messagesRef,
     durationRef,
@@ -152,7 +182,7 @@ function formatTextWithFonts(text) {
 <style scoped>
 .message-host {
     position: fixed;
-    z-index: 9999;
+    z-index: var(--z-toast);
     pointer-events: none;
     width: min(500px, calc(100vw - 24px));
     --island-spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -169,6 +199,15 @@ function formatTextWithFonts(text) {
     align-items: center;
 }
 
+/* 组件默认 position 的兜底样式（此前缺失：fixed 无偏移时位置未定义） */
+.message-host-top-right {
+    top: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
 .toast-list {
     display: flex;
     flex-direction: column;
@@ -176,8 +215,9 @@ function formatTextWithFonts(text) {
     border-radius: 36px;
     overflow: hidden;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+    /* 28→20px：首屏 burst 多条同时进出时模糊面积大，减负后观感几乎无差 */
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: #000000;
     max-width: 100%;
@@ -186,10 +226,11 @@ function formatTextWithFonts(text) {
 
 .toast-item {
     pointer-events: auto;
+    position: relative;
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 14px 20px;
+    padding: 14px 20px 16px;
     color: #ffffff;
     cursor: default;
     user-select: none;
@@ -219,8 +260,12 @@ function formatTextWithFonts(text) {
 }
 
 /* Icons styling */
-.toast-icon {
+.toast-icon-wrap {
+    position: relative;
     flex-shrink: 0;
+}
+
+.toast-icon {
     width: 22px;
     height: 22px;
     border-radius: 50%;
@@ -229,6 +274,26 @@ function formatTextWithFonts(text) {
     justify-content: center;
     font-size: 13px;
     font-weight: bold;
+}
+
+/* 防抖合并计数徽标：替代旧的"（共N条）"文本改写 */
+.toast-count {
+    position: absolute;
+    top: -7px;
+    right: -10px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #000000;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+    box-sizing: border-box;
+    border: 2px solid #000000;
+    font-family: 'SF Pro Text', 'Segoe UI', Arial, sans-serif;
 }
 
 .toast-success .toast-icon {
@@ -257,10 +322,11 @@ function formatTextWithFonts(text) {
 }
 
 .toast-title {
-    font-family: 'Cinzel', 'Times New Roman', serif;
+    /* 标题为中文（成功/错误/警告/提示），补中文字体栈避免 Cinzel 拉丁衬线下的不可控回退 */
+    font-family: 'Cinzel', 'Microsoft YaHei', 'Noto Sans CJK SC', 'PingFang SC', 'Times New Roman', serif;
     font-size: 14px;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: 0.02em;
     margin-bottom: 2px;
 }
 
@@ -309,6 +375,56 @@ function formatTextWithFonts(text) {
     color: #ffffff;
 }
 
+/* 自动关闭进度条：时长 = 实际调度寿命(_lifeMs，含错峰偏移)，与计时器严格同相位；
+   整岛悬停时随计时器一起冻结（play-state 联动 .toast-list:hover） */
+.toast-progress {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    bottom: 6px;
+    height: 2px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.toast-progress-bar {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    transform-origin: left center;
+    background: rgba(255, 255, 255, 0.35);
+    animation: toast-life linear forwards;
+}
+
+.toast-success .toast-progress-bar { background: var(--success); opacity: 0.55; }
+.toast-error .toast-progress-bar { background: var(--danger); opacity: 0.65; }
+.toast-warning .toast-progress-bar { background: var(--warning); opacity: 0.6; }
+.toast-info .toast-progress-bar { background: var(--info); opacity: 0.55; }
+
+.toast-list:hover .toast-progress-bar {
+    animation-play-state: paused;
+}
+
+@keyframes toast-life {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
+
+/* 队列积压徽标：MAX_VISIBLE 之外的等待消息数，让首屏 burst 的"后续还有"可预期 */
+.toast-queue-hint {
+    pointer-events: none;
+    padding: 6px 20px 8px;
+    text-align: center;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.45);
+    font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', 'PingFang SC', sans-serif;
+    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.03);
+}
+
 /* =========================================
    Vue Transition Group Classes
 ========================================= */
@@ -322,6 +438,21 @@ function formatTextWithFonts(text) {
         max-height 0.5s var(--island-spring-bouncy),
         padding 0.5s var(--island-spring-bouncy),
         filter 0.4s ease-out;
+}
+
+/* 进场级联：同帧 burst 多条时按列表序错峰 45ms，避免齐刷刷弹出（leave/move 不延迟） */
+.toast-enter-active {
+    transition-delay: calc(var(--i, 0) * 45ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast-enter-active {
+        transition-delay: 0ms;
+    }
+
+    .toast-progress {
+        display: none;
+    }
 }
 
 /* Success Priority: Fast, Bouncy, Playful */
@@ -346,24 +477,24 @@ function formatTextWithFonts(text) {
         padding 0.6s var(--island-spring-stable);
 }
 
-/* Start State */
+/* Start State（blur 8→4px：首屏多条同时 enter 时模糊过渡叠加是掉帧大户） */
 .toast-enter-from {
     opacity: 0;
     transform: translateY(-8px) scale(0.95);
     max-height: 0;
     padding-top: 0;
     padding-bottom: 0;
-    filter: blur(8px);
+    filter: blur(4px);
 }
 
-/* End State */
+/* End State（blur 10→6px，理由同上） */
 .toast-leave-to {
     opacity: 0;
     transform: scale(0.9) translateY(-10px);
     max-height: 0;
     padding-top: 0;
     padding-bottom: 0;
-    filter: blur(10px);
+    filter: blur(6px);
 }
 
 /* Morphing Container Layout Triggers */

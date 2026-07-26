@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.4.5
+# WebGIS 前端项目 — V3.4.38
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -165,5 +165,5 @@ MIT
 ---
 
 最后更新：2026-07-26
-当前版本：V3.4.5
-说明：高级 2D 绘制与几何编辑集成。DrawPanel 升级为分组富绘制面板；新增 drawingToolRegistry / drawingGeometryUtils / useDrawingFeatureStyle / useAdvancedDrawing / useGeometryEdit；绘制结果统一 `sourceType: draw` 进入 TOC/LayerControl 托管图层管理。
+当前版本：V3.4.38
+说明：天地图地形解码下放 Worker（通用 decodeWorkerPool 与 ArcGIS 共用）、ArcGIS L12/SSE3 二次下探、风场监听泄漏与 percentageChanged 副作用修复、CJS 产物清理。

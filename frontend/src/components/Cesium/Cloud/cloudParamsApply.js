@@ -68,6 +68,8 @@ export function applyCloudPanelParams(pipeline, panelParams) {
     'shadowMapSize',
     'bsmUpdateInterval',
     'shadowPcfTaps',
+    // 云主 raymarch 分辨率缩放：写入 params 供下次开启体积云时生效（textureScale 为 stage 构造期参数）
+    'cloudResolutionScale',
   ];
   for (const key of scalarKeys) {
     const v = num(panelParams[key]);

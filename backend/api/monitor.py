@@ -21,6 +21,8 @@ from fastapi.responses import StreamingResponse
 
 from utils.time_utils import BeijingTimeFormatter
 
+from config import get_bool, get_str
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
@@ -43,7 +45,8 @@ SUBSCRIBER_QUEUE_MAX = 800
 
 
 def _LOG_token() -> str:
-    return os.getenv("LOG", "").strip()
+    """监控日志流访问令牌（L3，HF Secrets：LOG）。"""
+    return get_str("LOG", "")
 
 
 def _sse_escape_data(line: str) -> str:
@@ -52,9 +55,9 @@ def _sse_escape_data(line: str) -> str:
 
 def _running_on_huggingface_space() -> bool:
     """Spaces 运行时通常会注入与 Space 相关的环境变量（具体以平台为准）。"""
-    if os.getenv("SPACE_REPO_NAME") or os.getenv("SPACE_AUTHOR_NAME"):
+    if get_str("SPACE_REPO_NAME", "") or get_str("SPACE_AUTHOR_NAME", ""):
         return True
-    if os.getenv("WEBGIS_ASSUME_HF_SPACE", "").strip().lower() in ("1", "true", "yes"):
+    if get_bool("WEBGIS_ASSUME_HF_SPACE", False):
         return True
     return False
 
@@ -73,7 +76,7 @@ def _running_in_container() -> bool:
     except Exception:
         pass
     # Allow manual override via env var
-    if os.getenv("WEBGIS_ASSUME_IN_CONTAINER", "").strip().lower() in ("1", "true", "yes"):
+    if get_bool("WEBGIS_ASSUME_IN_CONTAINER", False):
         return True
     return False
 
@@ -83,7 +86,7 @@ def effective_log_stream_mode() -> Literal["local", "hf"]:
     - WEBGIS_LOG_STREAM_MODE=local|hf|auto（默认 auto）
     - auto：在检测到 Hugging Face Space 环境时用 hf，否则 local
     """
-    raw = os.getenv("WEBGIS_LOG_STREAM_MODE", "auto").strip().lower()
+    raw = get_str("WEBGIS_LOG_STREAM_MODE", "auto").lower()
     if raw == "local":
         return "local"
     if raw == "hf":

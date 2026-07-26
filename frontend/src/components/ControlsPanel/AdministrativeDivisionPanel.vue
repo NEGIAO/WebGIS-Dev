@@ -203,14 +203,14 @@ watch(
     top: 100px;
     bottom: 40px;
     width: 320px;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    background: var(--panel-bg);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
     backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid rgba(229, 236, 230, 0.6);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
     z-index: 1060;
 }
 
@@ -271,7 +271,7 @@ watch(
     height: 38px;
     background: var(--bg-brand-light);
     border: 1px solid var(--border-brand-light);
-    border-radius: 12px;
+    border-radius: var(--panel-radius);
     padding: 0 35px 0 12px;
     color: var(--text-brand-dark);
     font-size: 13px;

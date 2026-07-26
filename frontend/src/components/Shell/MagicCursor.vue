@@ -159,7 +159,7 @@ onUnmounted(() => {
     width: 100vw;
     height: 100vh;
     pointer-events: none;
-    z-index: 9998;
+    z-index: calc(var(--z-toast) - 1);
     opacity: 0;
     transition: opacity 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     background: transparent;

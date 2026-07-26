@@ -17,6 +17,7 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     BATCH_EXPORT_KML: 'batch-export-kml',
     VIEW: 'view',
     SOLO: 'solo',
+    EDIT: 'edit',
     ATTRIBUTE: 'attribute',
     STYLE: 'style',
     OPEN_AOI_PANEL: 'open-aoi-panel',

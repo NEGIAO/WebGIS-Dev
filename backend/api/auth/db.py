@@ -12,13 +12,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from config import get_settings, get_str
+
 logger = logging.getLogger(__name__)
 
 
 # ─── 数据库路径 ───
 def _default_auth_db_path() -> Path:
     """默认路径策略：HF 使用 /data；本地开发优先项目 data 目录。"""
-    space_id = str(os.getenv("SPACE_ID") or os.getenv("HF_SPACE_ID") or "").strip()
+    space_id = get_str("SPACE_ID", "") or get_str("HF_SPACE_ID", "")
     if space_id:
         logger.info("检测到 HuggingFace Space 环境 (SPACE_ID=%s)，使用 /data/webgis_auth.db", space_id)
         return Path("/data/webgis_auth.db")
@@ -35,7 +37,7 @@ def _default_auth_db_path() -> Path:
 
 
 def _resolve_auth_db_path() -> Path:
-    configured = str(os.getenv("AUTH_DB_PATH", "")).strip()
+    configured = get_settings().auth_db_path
     preferred = Path(configured) if configured else _default_auth_db_path()
 
     try:

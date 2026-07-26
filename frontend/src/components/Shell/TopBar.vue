@@ -701,7 +701,7 @@ onBeforeUnmount(() => {
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: var(--shadow-md);
-    z-index: 2000;
+    z-index: var(--z-modal);
     position: relative;
 }
 
@@ -822,7 +822,7 @@ onBeforeUnmount(() => {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     overflow: hidden;
-    z-index: 2200;
+    z-index: var(--z-modal-high);
     box-sizing: border-box;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
     animation: menuSlideIn 0.2s ease-out;

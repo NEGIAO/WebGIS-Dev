@@ -6,6 +6,7 @@ const LAYER_ID_FORWARD_EVENT_TYPES = new Set([
     'view-layer',
     'remove-layer',
     'solo-layer',
+    'edit-layer',
 ]);
 
 function canLayerExportFormat(layerActions, format) {

@@ -3,6 +3,10 @@
         <div class="keys-header">
             <h2>🔑 API 密钥管理</h2>
             <p class="subtitle">管理第三方 API 密钥，确保系统正常运行</p>
+            <p class="subtitle layer-note">
+                本页密钥池存于数据库 api_keys 表（L2 运营层，优先于环境变量）；绝密（OAuth secret、SMTP 密码、SUPER_USER 等
+                L3）只在 HF Secrets 配置，不进本面板。键名登记见根 .env.example [L2] 段 / Docs/Guide/configuration.md。
+            </p>
         </div>
 
         <!-- 密钥列表 -->
@@ -1164,6 +1168,14 @@ onMounted(async () => {
     color: #4b8b60;
     margin: 0;
     font-size: 14px;
+}
+
+/* 三层配置（L2/L3）说明文案 */
+.subtitle.layer-note {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #7a9c86;
+    line-height: 1.5;
 }
 
 .loading-state {

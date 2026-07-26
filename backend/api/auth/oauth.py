@@ -10,14 +10,15 @@ import hashlib
 import hmac
 import json
 import logging
-import os
 import secrets
 import threading
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, status
+
+from config import get_settings
 
 from .constants import (
     ADMIN_USERNAME,
@@ -30,9 +31,6 @@ from .constants import (
     ROLE_GUEST,
     ROLE_REGISTERED,
     SUPPORTED_OAUTH_PROVIDERS as AUTH_SUPPORTED_OAUTH_PROVIDERS,
-    get_oauth_frontend_redirect_url,
-    get_oauth_redirect_uri,
-    is_development_env,
     _normalize_display_name,
     normalize_role,
 )
@@ -62,16 +60,13 @@ def _urlsafe_b64decode(raw: str) -> bytes:
 
 
 def _get_state_secret() -> str:
-    """读取 OAuth state 签名密钥；生产环境必须显式配置。"""
-    secret = str(os.getenv("OAUTH_STATE_SECRET") or "").strip()
+    """读取 OAuth state 签名密钥；生产环境必须显式配置（L3 HF Secrets）。"""
+    secret = get_settings().get_oauth_state_secret()
     if secret:
         return secret
-    if is_development_env():
-        # 仅本地开发兜底，生产环境缺失 secret 必须失败。
-        return "webgis-oauth-dev-state-secret"
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="OAuth state secret 未配置，请设置 OAUTH_STATE_SECRET",
+        detail="OAuth state secret 未配置，请在 HF Secrets 设置 OAUTH_STATE_SECRET",
     )
 
 
@@ -85,11 +80,6 @@ def _sign_payload(payload_text: str) -> str:
     return _urlsafe_b64encode(digest)
 
 
-def _provider_env(provider: str, key: str) -> str:
-    """读取 provider 专属环境变量。"""
-    return str(os.getenv(f"{provider.upper()}_OAUTH_{key}") or "").strip()
-
-
 def _ensure_supported_provider(provider: str) -> str:
     """校验并规范化 provider 名称。"""
     normalized = str(provider or "").strip().lower()
@@ -99,11 +89,16 @@ def _ensure_supported_provider(provider: str) -> str:
 
 
 def _oauth_config(provider: str) -> Dict[str, str]:
-    """返回 OAuth provider 配置，缺失必要配置时抛出可读错误。"""
+    """返回 OAuth provider 配置，缺失必要 L3 配置时抛出可读错误。
+
+    redirect_uri 由 BACKEND_PUBLIC_URL 推导（可被 *_OAUTH_REDIRECT_URI 覆盖），
+    不再要求单独配置。
+    """
     provider = _ensure_supported_provider(provider)
-    client_id = _provider_env(provider, "CLIENT_ID")
-    client_secret = _provider_env(provider, "CLIENT_SECRET")
-    redirect_uri = _provider_env(provider, "REDIRECT_URI")
+    settings = get_settings()
+    client_id = settings.get_oauth_client_id(provider)
+    client_secret = settings.get_oauth_client_secret(provider)
+    redirect_uri = settings.get_oauth_redirect_uri(provider)
 
     if provider == "google":
         auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -117,14 +112,13 @@ def _oauth_config(provider: str) -> Dict[str, str]:
         scope = "read:user user:email"
 
     missing = [name for name, value in {
-        "CLIENT_ID": client_id,
-        "CLIENT_SECRET": client_secret,
-        "REDIRECT_URI": redirect_uri,
+        f"{provider.upper()}_OAUTH_CLIENT_ID": client_id,
+        f"{provider.upper()}_OAUTH_CLIENT_SECRET": client_secret,
     }.items() if not value]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"{provider} OAuth 未配置：缺少 {', '.join(missing)}",
+            detail=f"{provider} OAuth 未配置：HF Secrets 缺少 {', '.join(missing)}",
         )
 
     return {
@@ -551,13 +545,8 @@ def unlink_oauth_account_sync(username: str, provider: str) -> None:
 
 
 def build_frontend_redirect(success: bool, params: Dict[str, Any]) -> str:
-    """构建固定前端 OAuth 回调跳转 URL，兼容 hash router。"""
-    default_success = "http://localhost:5173/#/oauth/callback"
-    default_failure = "http://localhost:5173/#/register"
-    base_url = str(
-        os.getenv("FRONTEND_OAUTH_SUCCESS_URL" if success else "FRONTEND_OAUTH_FAILURE_URL")
-        or (default_success if success else default_failure)
-    ).strip()
+    """构建前端 OAuth 回调跳转 URL（FRONTEND_PUBLIC_URL 推导），兼容 hash router。"""
+    base_url = get_settings().get_oauth_frontend_redirect_url(success).strip()
     safe_params = {key: value for key, value in params.items() if value is not None and str(value) != ""}
     query = urlencode(safe_params)
     if not query:

@@ -122,7 +122,7 @@ export const DRAWING_TOOLS = Object.freeze([
         type: 'SelectEdit',
         label: '选择编辑',
         group: 'edit',
-        hint: '点击绘制图层要素后可拖动顶点修改',
+        hint: '点击任意矢量图层要素（绘制/上传/搜索/区划）拖动顶点修改，Delete 删除选中',
         olDrawType: null,
         geomType: null,
         edit: true,

@@ -987,52 +987,38 @@ var WindParticlesRendering = class {
     });
   }
   createSegmentsGeometry() {
+    // 性能（本地修改）：原实现用 JS 数组 push 构建（600² 粒子时 ~940 万次 push，
+    // 创建/改粒子数时主线程卡顿数百 ms），改为预分配 TypedArray 直写。
     const repeatVertex = 4, texureSize = this.options.particlesTextureSize;
-    let st = [];
+    const particlesCount = texureSize * texureSize;
+    const st = new Float32Array(particlesCount * repeatVertex * 2);
+    let stOffset = 0;
     for (let s = 0; s < texureSize; s++) {
+      const sNorm = s / texureSize;
       for (let t = 0; t < texureSize; t++) {
+        const tNorm = t / texureSize;
         for (let i = 0; i < repeatVertex; i++) {
-          st.push(s / texureSize);
-          st.push(t / texureSize);
+          st[stOffset++] = sNorm;
+          st[stOffset++] = tNorm;
         }
       }
     }
-    st = new Float32Array(st);
-    const particlesCount = this.options.particlesTextureSize ** 2;
-    let normal = [];
+    // (point to use, offset sign, not used component) — 每粒子 4 顶点固定模式
+    const normalPattern = [-1, -1, 0, -1, 1, 0, 1, -1, 0, 1, 1, 0];
+    const normal = new Float32Array(particlesCount * normalPattern.length);
     for (let i = 0; i < particlesCount; i++) {
-      normal.push(
-        // (point to use, offset sign, not used component)
-        -1,
-        -1,
-        0,
-        -1,
-        1,
-        0,
-        1,
-        -1,
-        0,
-        1,
-        1,
-        0
-      );
+      normal.set(normalPattern, i * normalPattern.length);
     }
-    normal = new Float32Array(normal);
-    let vertexIndexes = [];
-    for (let i = 0, vertex = 0; i < particlesCount; i++) {
-      vertexIndexes.push(
-        // 第一个三角形用的顶点
-        vertex + 0,
-        vertex + 1,
-        vertex + 2,
-        // 第二个三角形用的顶点
-        vertex + 2,
-        vertex + 1,
-        vertex + 3
-      );
-      vertex += repeatVertex;
+    const vertexIndexes = new Uint32Array(particlesCount * 6);
+    for (let i = 0, vertex = 0, idx = 0; i < particlesCount; i++, vertex += repeatVertex) {
+      // 两个三角形
+      vertexIndexes[idx++] = vertex + 0;
+      vertexIndexes[idx++] = vertex + 1;
+      vertexIndexes[idx++] = vertex + 2;
+      vertexIndexes[idx++] = vertex + 2;
+      vertexIndexes[idx++] = vertex + 1;
+      vertexIndexes[idx++] = vertex + 3;
     }
-    vertexIndexes = new Uint32Array(vertexIndexes);
     const geometry = new Geometry2({
       attributes: new GeometryAttributes({
         st: new GeometryAttribute({
@@ -1293,15 +1279,30 @@ var _WindLayer = class _WindLayer {
     }
   }
   setupEventListeners() {
+    // 本地修改（缺陷修复）：
+    // 1) 原实现 add/remove 各自 .bind(this) 生成不同函数，removeEventListener 永远
+    //    匹配不上 → 风场销毁后 camera.changed/morphComplete/resize 监听残留（泄漏）。
+    //    改为缓存同一 bound 引用。
+    // 2) percentageChanged 是 viewer 级全局设置（影响整个应用 camera.changed 触发频率），
+    //    快照原值并在销毁时恢复，消除全局副作用。
+    this._boundUpdateViewerParameters = this._boundUpdateViewerParameters
+      || this.updateViewerParameters.bind(this);
+    this._prevPercentageChanged = this.viewer.camera.percentageChanged;
     this.viewer.camera.percentageChanged = 0.01;
-    this.viewer.camera.changed.addEventListener(this.updateViewerParameters.bind(this));
-    this.scene.morphComplete.addEventListener(this.updateViewerParameters.bind(this));
-    window.addEventListener("resize", this.updateViewerParameters.bind(this));
+    this.viewer.camera.changed.addEventListener(this._boundUpdateViewerParameters);
+    this.scene.morphComplete.addEventListener(this._boundUpdateViewerParameters);
+    window.addEventListener("resize", this._boundUpdateViewerParameters);
   }
   removeEventListeners() {
-    this.viewer.camera.changed.removeEventListener(this.updateViewerParameters.bind(this));
-    this.scene.morphComplete.removeEventListener(this.updateViewerParameters.bind(this));
-    window.removeEventListener("resize", this.updateViewerParameters.bind(this));
+    if (this._boundUpdateViewerParameters) {
+      this.viewer.camera.changed.removeEventListener(this._boundUpdateViewerParameters);
+      this.scene.morphComplete.removeEventListener(this._boundUpdateViewerParameters);
+      window.removeEventListener("resize", this._boundUpdateViewerParameters);
+    }
+    if (typeof this._prevPercentageChanged === "number") {
+      this.viewer.camera.percentageChanged = this._prevPercentageChanged;
+      this._prevPercentageChanged = undefined;
+    }
   }
   processWindData(windData) {
     if (windData.speed?.min === void 0 || windData.speed?.max === void 0 || windData.speed.array === void 0) {

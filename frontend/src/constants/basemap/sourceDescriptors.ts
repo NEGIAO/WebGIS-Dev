@@ -5,6 +5,8 @@
  */
 
 import type { LayerCategory, LayerGroup } from './basemapConfig';
+// 后端/瓦片代理基址统一由 publicRuntime 派生（VITE_TILE_PROXY_BASE_URL / VITE_BACKEND_URL），禁止硬编码域名
+import { backendTilesUrl, gcj2wgsProxyUrl, tileProxyUrl } from '../../config/publicRuntime';
 
 // ========== 类型定义 ==========
 
@@ -91,7 +93,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'label',
         group: '注记',
         serviceType: 'xyz',
-        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        url: gcj2wgsProxyUrl('http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
     },
 
     // 2、地形图层
@@ -145,7 +147,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'imagery',
         group: '影像',
         serviceType: 'xyz',
-        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+        url: gcj2wgsProxyUrl('http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'),
     },
     {
         id: 'imagery_google',
@@ -659,7 +661,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'vector',
         group: '矢量',
         serviceType: 'xyz',
-        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        url: gcj2wgsProxyUrl('http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
     },
     {
         id: 'vector_maptiler_streets',
@@ -688,7 +690,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         // apistyle 内的 | 与 , 由 cesiumProviderFactory 的 toCesiumUrlTemplate
         // 自动从 %7C / %2C 解码回原字符，避免 Cesium 直接输出 URL 时 Google 服务端
         // 解析异常导致瓦片 404。
-        url: 'https://negiao-webgis.hf.space/proxy/gcj2wgs/https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off'),
     },
     {
         id: 'vector_osm',
@@ -816,7 +818,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'custom',
         group: '自定义',
         serviceType: 'xyz',
-        url: 'https://negiao-webgis.hf.space/proxy/mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        url: tileProxyUrl('mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
     },
     {
         id: 'ships66',
@@ -824,7 +826,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'custom',
         group: '自定义',
         serviceType: 'xyz',
-        url: 'https://negiao-webgis.hf.space/tiles/ships66/{z}/{x}/{y}.png',
+        url: backendTilesUrl('ships66/{z}/{x}/{y}.png'),
     },
     {
         id: 'custom_mapbox_labeled',

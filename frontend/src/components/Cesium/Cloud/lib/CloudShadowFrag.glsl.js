@@ -23,6 +23,9 @@ uniform vec2 u_resolution;
 uniform vec2 u_atlasOffset;
 uniform float u_atlasScale;
 uniform vec2 u_atlasResolution;
+// V3.4.12：世界锚定噪声偏移（snap 后 cascade 中心的 texel 计数 mod 256）。
+// 使噪声相位随纹理网格贴住世界，snap 跳变时 BSM 内容不再整场重噪。
+uniform vec2 u_jitterOffset;
 uniform float u_bottomRadius;
 uniform float u_shadowTopHeight;
 uniform float u_shadowBottomHeight;
@@ -72,7 +75,7 @@ layout(location = 1) out vec4 out_depthVelocity;
 const float PI = 3.14159265359;
 const float EVOLUTION_SCALE = 2e4;
 
-float getBlueNoise() { return texture(u_blueNoise, gl_FragCoord.xy / 256.0).r; }
+float getBlueNoise() { return texture(u_blueNoise, (gl_FragCoord.xy + u_jitterOffset) / 256.0).r; }
 
 float saturate(float x) { return clamp(x, 0.0, 1.0); }
 vec4 saturate(vec4 x) { return clamp(x, 0.0, 1.0); }

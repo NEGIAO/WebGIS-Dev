@@ -820,7 +820,12 @@ function stopFloodSimulation() {
 
 function clearFluid() {
     stopFloodSimulation();
-    cleanup(false);
+    // V3.4.x 修复：必须传 true 触发 restoreScene。
+    // prepareScene 在开始选点时就翻转了 8 个全场景开关（HDR/阴影/全球光照/地气/
+    // 天空大气/雾/MSAA/对数深度）并挂上全屏大气后处理；此前 cleanup(false) 只删
+    // 水体与后处理层、跳过场景快照还原，且 headless 集成下 closePanel（唯一还原
+    // 入口）永远不会触发 → “清除”后整屏效果层残留。
+    cleanup(true);
     message.success('水体流体已清除。');
 }
 

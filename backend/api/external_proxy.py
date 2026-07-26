@@ -7,7 +7,6 @@
 3) 保持与前端既有数据结构兼容，尽量减少改动面。
 """
 
-import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
@@ -15,6 +14,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from api.auth import require_api_access_or_guest, get_auth_db_connection
+from config import get_str
 from services import ip_geo_service
 
 AMAP_REST_ROOT = "https://restapi.amap.com"
@@ -104,7 +104,7 @@ def _resolve_amap_key_candidates() -> list[str]:
             candidates.append(db_key)
 
     for env_name in ("AMAP_WEB_SERVICE_KEY", "AMAP_KEY", "GAODE_KEY"):
-        value = str(os.getenv(env_name, "") or "").strip()
+        value = get_str(env_name, "")
         if value:
             candidates.append(value)
 

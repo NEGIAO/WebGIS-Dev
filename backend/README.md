@@ -59,7 +59,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 后端完整文件树（`backend/` 全部文件及注释）统一维护于 [`Docs/Guide/backend-structure.md`](../Docs/Guide/backend-structure.md)，本 README 不再重复维护，避免多处同步。
 
-> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-26 本次为前端高级 2D 绘制与几何编辑集成（V3.4.5），后端文件树无结构变更。
+> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-26 V3.4.6：新增 `backend/config/` 三层配置统一 loader（catalog/load/runtime/public），OAuth 回调与前端回跳 URL 改由 BACKEND/FRONTEND_PUBLIC_URL 自动推导，文件树已同步。
 
 ## 1. 认证系统
 
@@ -76,11 +76,12 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 - 角色：registered
 - 说明：新账号必须完成邮箱验证码校验；昵称仅用于展示，可重复、可修改
 
-3. 超级管理员
-- 账号与密码由数据库 users 表维护
-- 推荐用户名：super_admin
-- 角色：super_admin
-- 说明：管理员密码不在后端代码和前端提示中出现
+3. 管理员
+- 用户名：**`admin`**（固定，不是 super_admin）
+- 密码：L3 环境变量 `SUPER_USER`（HF Secrets / 本地未提交 `.env`）
+- 本地开发：`APP_ENV=development` 且未设 `SUPER_USER` 时为 `123456`
+- 角色：admin
+- 说明：密码只经统一配置 loader（`backend/config`）读取，不进数据库、不进前端；`admin`/`user` 禁止绑定 OAuth
 
 ### 1.2 持久化存储（HF Space /data）
 
@@ -92,27 +93,25 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 当 /data 不可写时，服务会自动回退到本地目录：
 - ./data/webgis_auth.db
 
-### 1.2.1 管理员账号 SQL 初始化
+### 1.2.1 管理员账号配置（无需 SQL）
 
-管理员账号建议通过 SQL 直接写入 users 表，并设置 role='super_admin'。
-
-```sql
-INSERT INTO users (username, password_hash, role, created_at)
-VALUES ('super_admin', '<pbkdf2_salt_hex$pbkdf2_digest_hex>', 'super_admin', datetime('now'));
-```
+管理员不走数据库初始化：账号固定为 `admin`，密码来自 L3 环境变量 `SUPER_USER`
+（生产配在 HF Space Secrets；本地开发 `APP_ENV=development` 时缺省 `123456`）。
+角色由代码按用户名归一化（`normalize_role`），数据库中的管理员角色字段不被信任。
+分层与登记见根 [`.env.example`](../.env.example) 与 [`Docs/Guide/configuration.md`](../Docs/Guide/configuration.md)。
 
 ### 1.3 认证相关接口
 
 1) 注册普通用户
 ```bash
-curl -X POST "http://localhost:8000/api/auth/register" \
+curl -X POST "http://localhost:7860/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{"email":"demo@example.com","email_code":"123456","display_name":"Demo","password":"abc12345"}'
 ```
 
 2) 邮箱账号登录
 ```bash
-curl -X POST "http://localhost:8000/api/auth/login" \
+curl -X POST "http://localhost:7860/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"email":"demo@example.com","password":"abc12345"}'
 ```
@@ -120,12 +119,12 @@ curl -X POST "http://localhost:8000/api/auth/login" \
 3) 旧用户名登录并绑定邮箱
 ```bash
 # 仅适用于无已验证邮箱的旧用户；返回 requires_email_binding=true 的受限 session
-curl -X POST "http://localhost:8000/api/auth/login" \
+curl -X POST "http://localhost:7860/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"old_username","password":"<old_password>"}'
 
 # 使用受限 session 绑定邮箱，成功后返回新 token
-curl -X POST "http://localhost:8000/api/auth/bind-email" \
+curl -X POST "http://localhost:7860/api/auth/bind-email" \
   -H "Authorization: Bearer <restricted_token>" \
   -H "Content-Type: application/json" \
   -d '{"email":"old-user@example.com","code":"123456","current_password":"<old_password>"}'
@@ -133,16 +132,16 @@ curl -X POST "http://localhost:8000/api/auth/bind-email" \
 
 4) 游客登录
 ```bash
-curl -X POST "http://localhost:8000/api/auth/login" \
+curl -X POST "http://localhost:7860/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"user","password":"123"}'
 ```
 
-5) 超级管理员登录
+5) 管理员登录
 ```bash
-curl -X POST "http://localhost:8000/api/auth/login" \
+curl -X POST "http://localhost:7860/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"super_admin","password":"<admin_password_from_db>"}'
+  -d '{"username":"admin","password":"<SUPER_USER 或本地开发 123456>"}'
 ```
 
 6) Google/GitHub OAuth 登录与账号绑定
@@ -162,19 +161,19 @@ curl "http://localhost:7860/api/auth/oauth/accounts" \
 
 7) 查询当前登录用户
 ```bash
-curl "http://localhost:8000/api/auth/me" \
+curl "http://localhost:7860/api/auth/me" \
   -H "Authorization: Bearer <token>"
 ```
 
 8) 退出登录
 ```bash
-curl -X POST "http://localhost:8000/api/auth/logout" \
+curl -X POST "http://localhost:7860/api/auth/logout" \
   -H "Authorization: Bearer <token>"
 ```
 
 9) 修改当前账号密码
 ```bash
-curl -X POST "http://localhost:8000/api/auth/change-password" \
+curl -X POST "http://localhost:7860/api/auth/change-password" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"current_password":"<old_password>","new_password":"<new_password>"}'
@@ -182,7 +181,7 @@ curl -X POST "http://localhost:8000/api/auth/change-password" \
 
 10) 修改昵称
 ```bash
-curl -X POST "http://localhost:8000/api/auth/change-display-name" \
+curl -X POST "http://localhost:7860/api/auth/change-display-name" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"display_name":"新的昵称"}'
@@ -202,15 +201,15 @@ curl -X POST "http://localhost:8000/api/auth/change-display-name" \
 示例：
 ```bash
 # 默认卫星图层
-curl "http://localhost:8000/api/tile/16/53576/25999"
+curl "http://localhost:7860/api/tile/16/53576/25999"
 
 # 指定混合图层
-curl "http://localhost:8000/api/tile/16/53576/25999?lyrs=y"
+curl "http://localhost:7860/api/tile/16/53576/25999?lyrs=y"
 ```
 
 前端模板 URL：
 ```text
-http://localhost:8000/api/tile/{z}/{x}/{y}?lyrs=s
+http://localhost:7860/api/tile/{z}/{x}/{y}?lyrs=s
 ```
 
 ### 2.1.1 GCJ/WGS 纠偏瓦片代理
@@ -222,10 +221,10 @@ http://localhost:8000/api/tile/{z}/{x}/{y}?lyrs=s
 示例：
 ```bash
 # GCJ02 -> WGS84
-curl "http://localhost:8000/proxy/gcj2wgs/mt1.google.com/vt?x=53576&y=25999&z=16&lyrs=s"
+curl "http://localhost:7860/proxy/gcj2wgs/mt1.google.com/vt?x=53576&y=25999&z=16&lyrs=s"
 
 # WGS84 -> GCJ02
-curl "http://localhost:8000/proxy/wgs2gcj/mt1.google.com/vt?x=53576&y=25999&z=16&lyrs=s"
+curl "http://localhost:7860/proxy/wgs2gcj/mt1.google.com/vt?x=53576&y=25999&z=16&lyrs=s"
 ```
 
 ### 2.2 访客统计 API
@@ -236,7 +235,7 @@ curl "http://localhost:8000/proxy/wgs2gcj/mt1.google.com/vt?x=53576&y=25999&z=16
 
 示例：
 ```bash
-curl -X POST "http://localhost:8000/api/log-visit" \
+curl -X POST "http://localhost:7860/api/log-visit" \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{}'
@@ -244,7 +243,7 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 
 可选模拟代理 IP：
 ```bash
-curl -X POST "http://localhost:8000/api/log-visit" \
+curl -X POST "http://localhost:7860/api/log-visit" \
   -H "Authorization: Bearer <token>" \
   -H "X-Forwarded-For: 8.8.8.8" \
   -H "User-Agent: Mozilla/5.0" \
@@ -293,6 +292,16 @@ curl -X POST "http://localhost:8000/api/log-visit" \
 - AUTH_SESSION_EXPIRE_HOURS=72
 - AUTH_PASSWORD_HASH_ITERATIONS=120000
 
+Google/GitHub OAuth 一键登录（回调地址自动推导，无需单独配置 REDIRECT_URI）：
+- GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
+- GITHUB_OAUTH_CLIENT_ID / GITHUB_OAUTH_CLIENT_SECRET
+- OAUTH_STATE_SECRET（生产必填；APP_ENV=development 有内置兜底）
+- BACKEND_PUBLIC_URL / FRONTEND_PUBLIC_URL（推导 OAuth 回调 `{base}/api/auth/oauth/{provider}/callback` 与前端回跳；可用 GOOGLE/GITHUB_OAUTH_REDIRECT_URI、FRONTEND_OAUTH_SUCCESS/FAILURE_URL 显式覆盖）
+- 第三方控制台 Authorized redirect URI 必须与推导/覆盖结果完全一致
+
+> 配置全集与三层安全模型（L1/L2/L3）权威清单见根目录 `.env.example`；统一读取入口为 `backend/config` 包。
+> HF 生产环境 OAuth 完整配置操作手册（控制台逐步申请、Secrets 配置、验收自检、排错速查）见 [`Docs/Guide/oauth-deployment.md`](../Docs/Guide/oauth-deployment.md)。
+
 Agent 对话可选配置：
 - AGENT_API_KEY=your_agent_key (optional env fallback; prefer admin panel/database)
 - AGENT_BASE_URL=https://api.qnaigc.com/v1
@@ -331,7 +340,7 @@ AUTH_DB_PATH=/data/webgis_auth.db
 
 ```bash
 # 1. 创建下载任务
-curl -X POST http://localhost:8000/api/download/tasks \
+curl -X POST http://localhost:7860/api/download/tasks \
   -H "Content-Type: application/json" \
   -d '{
     "tile_url_template": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -355,10 +364,10 @@ curl -X POST http://localhost:8000/api/download/tasks \
 }
 
 # 2. 轮询任务状态
-curl http://localhost:8000/api/download/tasks/abc123
+curl http://localhost:7860/api/download/tasks/abc123
 
 # 3. 下载 GeoTIFF
-curl -O http://localhost:8000/api/download/tasks/abc123/file
+curl -O http://localhost:7860/api/download/tasks/abc123/file
 ```
 
 #### 核心实现细节
@@ -424,8 +433,8 @@ uv run uvicorn app:app --reload --port 8000
 ```
 
 文档地址：
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+- Swagger UI: http://localhost:7860/docs
+- ReDoc: http://localhost:7860/redoc
 
 ## 8. Docker Compose 一键启动（推荐）
 
@@ -446,8 +455,8 @@ docker-compose down
 
 服务地址：
 - 前端：http://localhost:5173
-- 后端 API：http://localhost:8000
-- 后端文档：http://localhost:8000/docs
+- 后端 API：http://localhost:7860
+- 后端文档：http://localhost:7860/docs
 
 ---
 

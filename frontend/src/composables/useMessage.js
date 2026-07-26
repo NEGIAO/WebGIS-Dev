@@ -32,6 +32,29 @@ function findMessageById(id) {
 // ===== 方案 C：智能 draining =====
 const QUEUE_DRAIN_THRESHOLD = 3;
 const FAST_DURATION_MS = 800;
+/** 快排豁免：error/warning 属重要消息，高压期也至少保留该时长，避免被 800ms 闪过 */
+const FAST_MIN_IMPORTANT_MS = 2500;
+/** 队列硬上限：批量导入等极端 burst 场景防无限积压 */
+const MAX_QUEUE = 8;
+
+function isImportantType(type) {
+    return type === 'error' || type === 'warning';
+}
+
+/**
+ * 高压期压缩消息停留时长（error/warning 豁免至 FAST_MIN_IMPORTANT_MS）。
+ * @param {{ type: string, duration: number }} payload
+ */
+function applyFastDuration(payload) {
+    if (!shouldUseFastDuration()) return;
+    const cap = isImportantType(payload.type)
+        ? Math.max(FAST_DURATION_MS, FAST_MIN_IMPORTANT_MS)
+        : FAST_DURATION_MS;
+    payload.duration = Math.min(
+        Number.isFinite(payload.duration) ? payload.duration : DEFAULT_DURATION_MS,
+        cap,
+    );
+}
 // 额外触发条件：短时间内大量消息涌入
 const RATE_WINDOW_MS = 2000;
 const RATE_THRESHOLD = 5;
@@ -118,14 +141,28 @@ function formatSoupQuote(quote) {
 function flushQueue() {
     while (state.messages.length < MAX_VISIBLE && state.queue.length > 0) {
         const next = state.queue.shift();
-        // 方案 C：队列积压或短时大量涌入 → 加速清空
-        if (shouldUseFastDuration()) {
-            next.duration = Math.min(
-                Number.isFinite(next.duration) ? next.duration : DEFAULT_DURATION_MS,
-                FAST_DURATION_MS,
-            );
-        }
+        // 方案 C：队列积压或短时大量涌入 → 加速清空（error/warning 豁免至 2.5s）
+        applyFastDuration(next);
         state.messages.push(next);
+    }
+}
+
+/**
+ * 入队并执行硬上限淘汰：超过 MAX_QUEUE 时优先淘汰最旧的低优先级
+ * （非 error/warning）消息；被淘汰消息触发 onClose 并清理 dedup 缓存。
+ * @param {object} payload
+ */
+function enqueueWithCap(payload) {
+    state.queue.push(payload);
+    if (state.queue.length <= MAX_QUEUE) return;
+
+    let dropIdx = state.queue.findIndex((m) => !isImportantType(m.type));
+    if (dropIdx < 0) dropIdx = 0;
+    const [dropped] = state.queue.splice(dropIdx, 1);
+    if (!dropped) return;
+    cleanDedupCache(dropped.id);
+    if (typeof dropped.onClose === 'function') {
+        try { dropped.onClose(); } catch { /* ignore */ }
     }
 }
 
@@ -156,13 +193,14 @@ function createMessage(type, text, options = {}) {
             dedupCache.delete(dedupKey);
         }, DEDUP_WINDOW_MS);
 
-        // 找到并更新已存在的消息
+        // 找到并更新已存在的消息。
+        // V3.4.x：不再改写 text 追加"（共N条）"（文本回流且污染原文），
+        // 改由组件按 _dedupCount 渲染图标角标 ×N；motion 侧检测 _dedupCount 变化重启计时。
         const found = findMessageById(existing.msgId);
         if (found) {
             existing.count++;
             found.msg._dedupCount = existing.count;
-            found.msg.text = `${normalizedText}（共${existing.count}条）`;
-            // 刷新 duration：使 auto-close timer 按新的 duration 走
+            // 刷新 duration：motion 侧 watcher 检测 _dedupCount 变化后按新 duration 重启
             found.msg.duration = getDefaultDuration(type, options.duration);
         }
 
@@ -179,13 +217,11 @@ function createMessage(type, text, options = {}) {
         onClose: options.onClose,
     };
 
-    // 方案 C：短时大量涌入或队列积压 → 快速闪过
-    if (shouldUseFastDuration()) {
-        payload.duration = Math.min(payload.duration, FAST_DURATION_MS);
-    }
+    // 方案 C：短时大量涌入或队列积压 → 快速闪过（error/warning 豁免至 2.5s）
+    applyFastDuration(payload);
 
     if (state.messages.length >= MAX_VISIBLE) {
-        state.queue.push(payload);
+        enqueueWithCap(payload);
     } else {
         state.messages.push(payload);
     }
@@ -234,29 +270,24 @@ function clearAll() {
 }
 
 function ensureMessageHost(position = 'top-right') {
+    // queued 传数组引用（非快照长度）：组件内读 queued.length 保持响应式，
+    // 用于岛底"还有 N 条提示…"徽标，让 MAX_VISIBLE 之外的积压对用户可见。
+    const hostProps = () => ({
+        messages: state.messages,
+        queued: state.queue,
+        position,
+        onClose: remove,
+    });
+
     if (hostMounted && hostEl) {
-        render(
-            h(Message, {
-                messages: state.messages,
-                position,
-                onClose: remove,
-            }),
-            hostEl,
-        );
+        render(h(Message, hostProps()), hostEl);
         return;
     }
 
     hostEl = document.createElement('div');
     hostEl.id = 'global-message-host';
     document.body.appendChild(hostEl);
-    render(
-        h(Message, {
-            messages: state.messages,
-            position,
-            onClose: remove,
-        }),
-        hostEl,
-    );
+    render(h(Message, hostProps()), hostEl);
     hostMounted = true;
 }
 

@@ -521,7 +521,7 @@ function onEndKeyEnter() {
     top: calc(100% + 2px);
     left: 0;
     right: 0;
-    z-index: 100;
+    z-index: var(--z-float);
     max-height: 200px;
     overflow-y: auto;
     border: 1px solid var(--pp-soft-border);

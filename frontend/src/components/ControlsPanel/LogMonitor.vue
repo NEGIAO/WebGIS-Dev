@@ -102,9 +102,10 @@
             ref="scrollContainer"
             class="log-viewport"
         >
+            <!-- key 用稳定自增 id：头部裁剪后 index 整体前移，index key 会导致全列表重 patch -->
             <div
                 v-for="(log, index) in logEntries"
-                :key="index"
+                :key="log.id"
                 class="log-line"
                 title="双击复制此行内容"
                 @dblclick="copySingleLine(log.message)"
@@ -141,10 +142,15 @@ const scrollContainer = ref(null);
 const isCopiedAll = ref(false);
 const currentType = ref('run');
 let eventSource = null;
+/** 断线自动重连定时器（仅 streamDesired=true 时调度） */
+let reconnectTimer = null;
+const RECONNECT_DELAY_MS = 3000;
 
 // 缓冲区优化逻辑
 let logBuffer = [];
 let renderPending = false;
+/** 稳定自增 id：v-for key 用，避免头部裁剪后 index key 全列表重 patch */
+let logSeq = 0;
 
 const logsStreamUrl = computed(() => {
     const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
@@ -209,11 +215,15 @@ function pushLine(message) {
         second: '2-digit',
     });
 
-    logBuffer.push({
-        message: String(message ?? ''),
+    const text = String(message ?? '');
+    // Object.freeze：Vue 对冻结对象跳过深响应式转换，2500 行日志渲染读取零 proxy 开销
+    // （数组 push 仍触发列表更新；日志条目本身不可变，冻结安全）
+    logBuffer.push(Object.freeze({
+        id: ++logSeq,
+        message: text,
         time: timeString,
-        className: getLogClass(String(message ?? '')),
-    });
+        className: getLogClass(text),
+    }));
 
     if (!renderPending) {
         renderPending = true;
@@ -221,8 +231,10 @@ function pushLine(message) {
             logEntries.value.push(...logBuffer);
             logBuffer = [];
 
-            if (logEntries.value.length > props.maxLines) {
-                logEntries.value.splice(0, logEntries.value.length - props.maxLines);
+            // 超限 10% 才批量裁剪：避免高频日志时每帧一次 O(n) 头部搬移
+            const overflow = logEntries.value.length - props.maxLines;
+            if (overflow > props.maxLines * 0.1) {
+                logEntries.value.splice(0, overflow);
             }
 
             // 只有在用户没有锁定滚动时，才执行强制滚动
@@ -267,10 +279,11 @@ async function copySingleLine(text) {
     }
 }
 
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 const displaySourceLabel = computed(() => {
     try {
         const u = new URL(logsStreamUrl.value);
-        return u.hostname === 'localhost' ? 'LOCAL' : 'REMOTE';
+        return LOCAL_HOSTNAMES.has(u.hostname) ? 'LOCAL' : 'REMOTE';
     } catch {
         return 'UNKNOWN';
     }
@@ -281,8 +294,15 @@ const toggleConnection = () => {
     else openConnection();
 };
 
-function closeConnection() {
-    streamDesired.value = false;
+function clearReconnectTimer() {
+    if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+}
+
+/** 仅断开传输，不改变用户意图（streamDesired），供出错重连复用 */
+function teardownEventSource() {
     if (eventSource) {
         eventSource.close();
         eventSource = null;
@@ -290,12 +310,30 @@ function closeConnection() {
     isConnected.value = false;
 }
 
+function closeConnection() {
+    streamDesired.value = false;
+    clearReconnectTimer();
+    teardownEventSource();
+}
+
 function openConnection() {
     streamDesired.value = true;
+    clearReconnectTimer();
+    teardownEventSource();
     eventSource = new EventSource(logsStreamUrl.value);
     eventSource.onopen = () => (isConnected.value = true);
     eventSource.onmessage = (e) => pushLine(e.data);
-    eventSource.onerror = () => closeConnection();
+    // 断线不改用户意图：瞬时网络抖动/后端重启时 3s 退避自动重连，
+    // 状态点转 pending；只有手动"停止"才真正关闭（旧逻辑一错即停，需手动重开）。
+    eventSource.onerror = () => {
+        teardownEventSource();
+        if (!streamDesired.value) return;
+        clearReconnectTimer();
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            if (streamDesired.value) openConnection();
+        }, RECONNECT_DELAY_MS);
+    };
 }
 
 onUnmounted(() => {
@@ -412,7 +450,7 @@ onUnmounted(() => {
     border: 1px solid #3f3f46;
     border-radius: 6px;
     padding: 8px 12px;
-    z-index: 100;
+    z-index: var(--z-float);
     white-space: nowrap;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
@@ -484,7 +522,7 @@ onUnmounted(() => {
 
 .action-btn.danger {
     background: #7f1d1d;
-    color: #fecaca;
+    color: var(--danger-light);
 }
 
 .log-viewport {

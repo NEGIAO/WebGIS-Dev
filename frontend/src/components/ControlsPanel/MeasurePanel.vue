@@ -72,11 +72,11 @@ function handleClear() {
 <style scoped>
 .measure-panel {
     width: 200px;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--panel-bg);
     backdrop-filter: blur(12px);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    border: 1px solid rgba(229, 236, 230, 0.6);
+    border-radius: var(--panel-radius);
+    box-shadow: var(--panel-shadow);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
     overflow: hidden;
     animation: slideIn 0.2s ease-out;
 }
@@ -137,7 +137,7 @@ function handleClear() {
     align-items: center;
     gap: 4px;
     padding: 10px 6px;
-    border: 2px solid #e8f0e8;
+    border: 2px solid var(--bg-brand-light);
     border-radius: 8px;
     background: white;
     color: var(--brand-accent-muted);
@@ -181,14 +181,14 @@ function handleClear() {
 }
 
 .clear-btn {
-    background: #fff0f0;
-    border: 1px solid #ffd0d0;
-    color: #d44;
+    background: rgba(var(--danger-rgb), 0.06);
+    border: 1px solid var(--danger-light);
+    color: var(--danger);
 }
 
 .clear-btn:hover {
-    background: #ffe0e0;
-    border-color: #ffb0b0;
+    background: rgba(var(--danger-rgb), 0.12);
+    border-color: rgba(var(--danger-rgb), 0.35);
 }
 
 .panel-hint {
@@ -196,9 +196,16 @@ function handleClear() {
     align-items: center;
     gap: 6px;
     padding: 8px 12px;
-    background: #f6faf6;
-    color: #6b8c6b;
+    background: rgba(var(--brand-primary-rgb), 0.04);
+    color: var(--text-brand);
     font-size: 11px;
-    border-top: 1px solid #e8f0e8;
+    border-top: 1px solid var(--bg-brand-light);
+}
+
+/* 移动端适配：面板宽度自适应小屏视口 */
+@media (max-width: 768px) {
+    .measure-panel {
+        width: min(200px, calc(100vw - 24px));
+    }
 }
 </style>

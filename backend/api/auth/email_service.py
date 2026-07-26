@@ -6,28 +6,25 @@
 """
 
 import logging
-import os
 import smtplib
 import time
 import asyncio
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
-from dotenv import load_dotenv
 
-load_dotenv(override=False)
+from config import get_settings
 
 logger = logging.getLogger(__name__)
 
 # SMTP 配置（阿里云邮件推送，端口 80 明文）
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtpdm.aliyun.com")
-try:
-    SMTP_PORT = int(os.environ.get("SMTP_PORT", "80"))
-except (TypeError, ValueError):
-    SMTP_PORT = 80
-    logger.warning("SMTP_PORT 环境变量值无效，已使用默认值 80")
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+# 主机/端口为 L1（根 .env），账号/密码为 L3（HF Secrets），统一经 config 读取。
+
+
+def _smtp_config() -> tuple[str, int, str, str]:
+    """返回 (host, port, user, password)；每次调用取最新 settings。"""
+    s = get_settings()
+    return s.smtp_host, s.smtp_port, s.smtp_user, s.smtp_password
 
 # 验证码用途中文映射
 _PURPOSE_LABELS = {
@@ -103,13 +100,14 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
     端口 80 明文连接（HF 环境不封锁 80 端口）。
     自动重试：失败后最多重试 2 次（共 3 次），间隔 1s → 2s 指数退避。
     """
-    if not SMTP_USER or not SMTP_PASSWORD:
-        logger.error("SMTP 配置不完整：SMTP_USER 或 SMTP_PASSWORD 未设置")
+    smtp_host, smtp_port, smtp_user, smtp_password = _smtp_config()
+    if not smtp_user or not smtp_password:
+        logger.error("SMTP 配置不完整：SMTP_USER 或 SMTP_PASSWORD 未设置（L3 HF Secrets）")
         return False
 
     # 构建邮件
     msg = MIMEMultipart("alternative")
-    msg["From"] = formataddr(("WebGIS", SMTP_USER))
+    msg["From"] = formataddr(("WebGIS", smtp_user))
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.attach(MIMEText(html_body, "html", "utf-8"))
@@ -123,12 +121,12 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
         try:
             logger.info(
                 "SMTP 发送尝试 %d/%d: %s:%s -> %s",
-                attempt, max_attempts, SMTP_HOST, SMTP_PORT, to_email,
+                attempt, max_attempts, smtp_host, smtp_port, to_email,
             )
-            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=10)
             server.ehlo()
-            server.login(SMTP_USER, SMTP_PASSWORD)
-            server.sendmail(SMTP_USER, [to_email], msg.as_string())
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, [to_email], msg.as_string())
             logger.info("验证码邮件已发送至 %s", to_email)
             return True
         except Exception as e:
@@ -174,10 +172,11 @@ async def send_verification_email(
 
 def check_smtp_configured() -> bool:
     """检查邮件服务配置是否完整（USER、PASSWORD、HOST、PORT 四要素）。"""
-    if not SMTP_USER or not SMTP_PASSWORD:
+    smtp_host, smtp_port, smtp_user, smtp_password = _smtp_config()
+    if not smtp_user or not smtp_password:
         return False
-    if not SMTP_HOST:
+    if not smtp_host:
         return False
-    if not isinstance(SMTP_PORT, int) or SMTP_PORT <= 0 or SMTP_PORT > 65535:
+    if not isinstance(smtp_port, int) or smtp_port <= 0 or smtp_port > 65535:
         return False
     return True

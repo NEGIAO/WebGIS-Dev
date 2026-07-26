@@ -1,4 +1,5 @@
 import backendAPI from './backend';
+import { DOWNLOAD_REQUEST_TIMEOUT_MS } from '../config/publicRuntime';
 
 /**
  * 创建新的底图下载任务
@@ -20,10 +21,9 @@ export async function apiDownloadTaskStatus(taskId) {
 }
 
 /**
- * 下载请求超时时间：30 分钟 (2000000ms)
- * 远长于全局 8s 超时设置，因为大型 GeoTIFF 文件流传输耗时较久
+ * 下载请求超时时间：统一由 src/config/publicRuntime 派生（VITE_DOWNLOAD_REQUEST_TIMEOUT）
  */
-const DOWNLOAD_REQUEST_TIMEOUT = Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT || 2000000);
+const DOWNLOAD_REQUEST_TIMEOUT = DOWNLOAD_REQUEST_TIMEOUT_MS;
 
 /**
  * 下载生成的 GeoTIFF 文件（使用 token，用于原生浏览器下载）

@@ -374,7 +374,7 @@ onUnmounted(() => {
 }
 
 .hint-muted {
-    color: var(--text-muted, #999);
+    color: var(--text-muted, var(--text-muted));
 }
 
 .hint-picking {

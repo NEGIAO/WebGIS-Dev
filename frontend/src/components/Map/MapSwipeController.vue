@@ -661,7 +661,7 @@ onUnmounted(() => {
     left: 20px;
     display: flex;
     gap: 8px;
-    z-index: 2001;
+    z-index: calc(var(--z-modal) + 1);
     pointer-events: auto;
 }
 
@@ -714,7 +714,7 @@ onUnmounted(() => {
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     pointer-events: none;
-    z-index: 2001;
+    z-index: calc(var(--z-modal) + 1);
 }
 
 /* ========== 快速控制面板 ========== */
@@ -723,7 +723,7 @@ onUnmounted(() => {
     bottom: 70px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 2001;
+    z-index: calc(var(--z-modal) + 1);
     pointer-events: auto;
     background: rgba(var(--brand-accent-light-rgb), 0.9);
     backdrop-filter: blur(12px);

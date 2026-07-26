@@ -223,16 +223,11 @@ export function applyDrawingFeatureStyle(feature) {
 }
 
 /**
- * 创建选中高亮样式（叠加在原始样式后）
- * @param {Feature} feature
+ * 构建选中高亮叠加样式（光晕 + 虚线描边），供绘制/通用两种高亮复用
+ * @param {Object} params - 归一化后的样式参数（取线宽/半径作为高亮基准）
  * @returns {Style[]}
  */
-export function createSelectionHighlightStyle(feature) {
-    const params = normalizeDrawingStyleParams(feature?.get?.('styleParams') || {});
-    const drawType = feature?.get?.('drawType');
-    const baseStyle = createDrawingStyleFromParams(drawType, params, feature);
-    const baseStyles = Array.isArray(baseStyle) ? baseStyle : baseStyle ? [baseStyle] : [];
-
+function buildSelectionOverlayStyles(params) {
     const outerGlow = new Style({
         stroke: new Stroke({
             color: 'rgba(26, 188, 156, 0.55)',
@@ -263,7 +258,30 @@ export function createSelectionHighlightStyle(feature) {
         }),
     });
 
-    return [...baseStyles, outerGlow, innerDash];
+    return [outerGlow, innerDash];
+}
+
+/**
+ * 创建选中高亮样式（绘制要素：基础样式 + 高亮叠加）
+ * @param {Feature} feature
+ * @returns {Style[]}
+ */
+export function createSelectionHighlightStyle(feature) {
+    const params = normalizeDrawingStyleParams(feature?.get?.('styleParams') || {});
+    const drawType = feature?.get?.('drawType');
+    const baseStyle = createDrawingStyleFromParams(drawType, params, feature);
+    const baseStyles = Array.isArray(baseStyle) ? baseStyle : baseStyle ? [baseStyle] : [];
+    return [...baseStyles, ...buildSelectionOverlayStyles(params)];
+}
+
+/**
+ * 创建通用选中高亮样式（非绘制来源要素：上传/搜索/行政区划）
+ * 仅返回光晕 + 虚线描边叠加，不重建基础样式，避免覆盖原图层样式语义
+ * @param {Object} [params] - 可选样式参数（用于线宽/点半径基准）
+ * @returns {Style[]}
+ */
+export function createGenericSelectionHighlightStyle(params = {}) {
+    return buildSelectionOverlayStyles(normalizeDrawingStyleParams(params));
 }
 
 /**

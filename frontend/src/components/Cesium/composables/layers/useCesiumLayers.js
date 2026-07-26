@@ -843,16 +843,16 @@ export function useCesiumLayers({
         globe.depthTestAgainstTerrain = value !== 'ellipsoid';
 
         if (value === 'arcgisWorld') {
-            // ArcGIS 地形性能调优：
-            // 静态：SSE=6（默认 2 对 129×129 LERC 太激进），缓存 1000 瓦片
-            globe.maximumScreenSpaceError = 6;
+            // ArcGIS 地形性能调优（LERC 解码已下放 Worker，主线程不再被解码占用；
+            // 二次下探：SSE 4/8 → 3/6，层级硬顶同步放宽至 12——地形更细，
+            // 移动期仍保留抑制细分风暴的保守性）
+            globe.maximumScreenSpaceError = 3;
             globe.tileCacheSize = 1000;
 
-            // 动态 SSE：相机移动时极度保守（阻止瓦片细分风暴），
-            // 停下后恢复细节。避免移动时 LERC 解码突发导致帧率暴跌。
+            // 动态 SSE：相机移动时适度保守，停下后恢复细节
             const camera = viewer.scene.camera;
-            const onMoveStart = () => { globe.maximumScreenSpaceError = 12; };
-            const onMoveEnd = () => { globe.maximumScreenSpaceError = 4; };
+            const onMoveStart = () => { globe.maximumScreenSpaceError = 6; };
+            const onMoveEnd = () => { globe.maximumScreenSpaceError = 3; };
             camera.moveStart.addEventListener(onMoveStart);
             camera.moveEnd.addEventListener(onMoveEnd);
             terrainCameraCleanups.push(() => {

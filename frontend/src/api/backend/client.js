@@ -14,13 +14,12 @@ import {
 } from '../../services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
 import { useMessage } from '../../composables/useMessage';
+import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL } from '../../config/publicRuntime';
 
 const { error: showError } = useMessage();
 
-/** 与 Vite 环境变量一致的后端根地址（无尾部斜杠），供 axios 与 SSE 等共用 */
-export const BACKEND_BASE_URL = String(
-    import.meta.env.VITE_BACKEND_URL || 'http://localhost:7860',
-).replace(/\/$/, '');
+/** 后端根地址（无尾部斜杠），统一来自 src/config/publicRuntime，供 axios 与 SSE 等共用 */
+export const BACKEND_BASE_URL = PUBLIC_BACKEND_BASE_URL;
 
 const backendURL = BACKEND_BASE_URL;
 

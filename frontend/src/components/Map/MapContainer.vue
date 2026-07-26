@@ -151,6 +151,9 @@ import {
     normalizeDrawingStyleParams,
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature,
+    createRuntimeMapTokenPool,
+    createSharedEntryResolver,
+    createStartupViewResolver,
 } from '../../composables/map';
 import {
     abortTileSourceRequests,
@@ -183,6 +186,7 @@ import {
     useCompassStore,
     useTOCStore,
     useLayerStore,
+    readCachedPreferredBasemap,
 } from '../../stores';
 import { CompassManager } from '../../services/CompassManager';
 import {
@@ -286,69 +290,10 @@ let fitToLonLatExtentByMapState = () => false;
  * @param {string} fallback - 无法识别时的默认值，默认 '0'
  * @returns {'0' | '1'}
  */
-function normalizeBinaryFlag(value, fallback = '0') {
-    const compact = String(value ?? '')
-        .trim()
-        .toLowerCase();
-    if (compact === '1' || compact === 'true') return '1';
-    if (compact === '0' || compact === 'false') return '0';
-    return fallback; // 直接返回 fallback，不再硬编码 '0'
-}
-
-function parseSharedEntryFlagFromUrl() {
-    if (typeof window === 'undefined') return false;
-
-    const hash = String(window.location.hash || '');
-    const queryStart = hash.indexOf('?');
-    const hashParams =
-        queryStart >= 0 ? new URLSearchParams(hash.slice(queryStart + 1)) : new URLSearchParams();
-
-    const searchParams = new URLSearchParams(
-        String(window.location.search || '').replace(/^\?/, ''),
-    );
-    const shareFlagRaw = hashParams.get('s') ?? searchParams.get('s');
-    if (shareFlagRaw !== null && String(shareFlagRaw).trim() !== '') {
-        return normalizeBinaryFlag(shareFlagRaw, '0') === '1';
-    }
-
-    // 兼容旧版分享链接。
-    const legacyMarker = String(
-        hashParams.get('from') ||
-        hashParams.get('shared') ||
-        searchParams.get('from') ||
-        searchParams.get('shared') ||
-        '',
-    )
-        .trim()
-        .toLowerCase();
-
-    return (
-        legacyMarker === 'share' ||
-        legacyMarker === 'shared' ||
-        legacyMarker === '1' ||
-        legacyMarker === 'true'
-    );
-}
-
-// 启动问候地址解析：高德优先，天地图兜底。
-async function resolveSharedAddressByLonLat(lng, lat) {
-    const lon = Number(lng);
-    const latitude = Number(lat);
-    if (!Number.isFinite(lon) || !Number.isFinite(latitude)) return '';
-
-    try {
-        const geocodeResponse = await apiReverseGeocodeWithFallback(lon, latitude, {
-            tiandituTk: tiandituTk.value, // 读取响应式 ref，确保 token 轮换后使用最新值
-            tiandituTimeout: 3500,
-            silent: true,
-        });
-        const geocodeResult = geocodeResponse?.data || null;
-        return String(geocodeResult?.formattedAddress || '').trim();
-    } catch {
-        // 逆地理编码失败不阻断启动流程，回退到通用欢迎语。
-        return '';
-    }
-}
+// ========== 分享入口解析（via composable：useSharedEntryResolver） ==========
+const { parseSharedEntryFlagFromUrl, resolveSharedAddressByLonLat } = createSharedEntryResolver({
+    tiandituTkRef: tiandituTk,
+});
 
 let searchSource, searchLayer;
 
@@ -368,118 +313,33 @@ const layerList = ref(
 const layerInstances = {}; // ⚠️ 非响应式共享可变状态：存储所有底图层实例 (TileLayer/VectorTileLayer)
                            // 被 30+ composable 直接读写，通过 emit 手动同步外部状态，刻意不使用 reactive 以避免深层响应式追踪的性能开销
 
-function applyRuntimeMapTokens(tokens = {}) {
-    const nextTiandituTk = String(tokens.tiandituTk || '').trim();
-    if (!nextTiandituTk || nextTiandituTk === TIANDITU_TK) return;
-
-    const previousLayerState = new globalThis.Map(
-        (Array.isArray(layerList.value) ? layerList.value : []).map((item) => [
-            item.id,
-            {
-                visible: !!item.visible,
-                opacity: typeof item.opacity === 'number' ? item.opacity : 1,
-            },
-        ]),
-    );
-
-    TIANDITU_TK = nextTiandituTk;
-    tiandituTk.value = nextTiandituTk;
-
-    const nextLayerConfigs = createLayerConfigs(NORM_BASE, TIANDITU_TK, customMapUrl.value);
-    LAYER_CONFIGS.splice(0, LAYER_CONFIGS.length, ...nextLayerConfigs);
-    layerList.value = LAYER_CONFIGS.map((cfg) => ({
-        id: cfg.id,
-        name: cfg.name,
-        visible: previousLayerState.has(cfg.id)
-            ? previousLayerState.get(cfg.id).visible
-            : cfg.visible,
-        opacity: previousLayerState.get(cfg.id)?.opacity ?? 1,
-    }));
-}
-
-async function hydrateRuntimeMapTokens() {
-    const tokens = await loadRuntimeMapTokens({ silent: false });
-    applyRuntimeMapTokens(tokens);
-}
-
-function isTiandituLayerId(layerId) {
-    return String(layerId || '')
-        .trim()
-        .toLowerCase()
-        .includes('tianditu');
-}
-
-function resolveRuntimeTiandituLayerIds(layerId) {
-    const selectedStack = resolvePresetLayerIds(selectedLayer.value);
-    const failedLayerId = String(layerId || '').trim();
-    const failedStack = resolvePresetLayerIds(failedLayerId);
-    const sourceIds =
-        selectedStack.includes(failedLayerId) || !failedStack.length
-            ? selectedStack
-            : failedStack;
-    const candidates = sourceIds.length ? sourceIds : [failedLayerId];
-    const result = [];
-    const seen = new Set();
-
-    candidates.forEach((id) => {
-        const normalized = String(id || '').trim();
-        if (!normalized || seen.has(normalized) || !isTiandituLayerId(normalized)) return;
-        seen.add(normalized);
-        result.push(normalized);
-    });
-
-    return result;
-}
-
-function resetLayerSourceForRuntimeToken(layerId) {
-    const layer = layerInstances[layerId];
-    if (!layer || typeof layer.setSource !== 'function') return;
-
-    const source = layer.getSource?.();
-    if (source) {
-        abortTileSourceRequests(source);
-    }
-
-    layer.set?.(`_isTimeoutMonitored_${layerId}`, false);
-    layer.setSource(null);
-}
-
-function attachRuntimeTokenMonitor(layerId) {
-    const layer = layerInstances[layerId];
-    const item = Array.isArray(layerList.value)
-        ? layerList.value.find((entry) => entry.id === layerId)
-        : null;
-    if (!layer || !item?.visible) return;
-
-    layer.set?.(`_isTimeoutMonitored_${layerId}`, false);
-    monitorLayerTimeout?.(layer, layerId, selectedLayer.value === DEFAULT_BASEMAP_PRESET_ID);
-}
-
-function retryTiandituLayersWithNextToken({ layerId, reason, releaseMonitor } = {}) {
-    const affectedLayerIds = resolveRuntimeTiandituLayerIds(layerId);
-    if (!affectedLayerIds.length) return false;
-
-    const tokenSwitch = markRuntimeMapTokenFailed('tianditu_tk');
-    if (!tokenSwitch.switched) return false;
-
-    releaseMonitor?.();
-    applyRuntimeMapTokens(tokenSwitch.tokens);
-    affectedLayerIds.forEach(resetLayerSourceForRuntimeToken);
-
-    switchLayerById?.(selectedLayer.value, {
-        onUpdated: () => {
-            emitBaseLayersChangeBatched?.();
-            mapInstance.value?.updateSize?.();
-        },
-    });
-    affectedLayerIds.forEach(attachRuntimeTokenMonitor);
-
-    message?.warning?.(
-        `天地图 token 已切换到备用项，正在重试 ${affectedLayerIds.join(' + ')}${reason ? `：${reason}` : ''
-        }`,
-    );
-    return true;
-}
+// ========== 运行时地图 Token 池（via composable：useRuntimeMapTokenPool） ==========
+// monitorLayerTimeout / switchLayerById / emitBaseLayersChangeBatched 声明晚于此处，
+// 以 getter 延迟解析（与原实现的运行时晚绑定语义一致）。
+const { hydrateRuntimeMapTokens, retryTiandituLayersWithNextToken } = createRuntimeMapTokenPool({
+    getTiandituTk: () => TIANDITU_TK,
+    setTiandituTk: (value) => {
+        TIANDITU_TK = value;
+    },
+    tiandituTkRef: tiandituTk,
+    layerListRef: layerList,
+    customMapUrlRef: customMapUrl,
+    selectedLayerRef: selectedLayer,
+    mapInstanceRef: mapInstance,
+    LAYER_CONFIGS,
+    layerInstances,
+    NORM_BASE,
+    DEFAULT_BASEMAP_PRESET_ID,
+    createLayerConfigs,
+    resolvePresetLayerIds,
+    loadRuntimeMapTokens,
+    markRuntimeMapTokenFailed,
+    abortTileSourceRequests,
+    getMonitorLayerTimeout: () => monitorLayerTimeout,
+    getSwitchLayerById: () => switchLayerById,
+    getEmitBaseLayersChangeBatched: () => emitBaseLayersChangeBatched,
+    message,
+});
 
 // ========== Map Swipe Setup (via composable) ==========
 const {
@@ -836,6 +696,20 @@ function clearAllDrawingInteractions() {
     clearGeometryEditInteractions();
 }
 
+/**
+ * TOC 图层目录「编辑要素」入口：对指定托管图层启动几何编辑会话
+ * @param {string} [layerId] - 托管图层 ID；为空则等价于绘制面板的全图层选择编辑
+ * @returns {boolean} 是否成功进入编辑模式
+ */
+function activateGeometryEditForLayer(layerId = '') {
+    clearAllDrawingInteractions();
+    const activated = activateGeometryEdit({ layerId: String(layerId || '').trim() });
+    if (activated) {
+        message.info('已进入要素编辑模式：点击要素拖动顶点，Delete 删除选中，Esc 退出');
+    }
+    return activated;
+}
+
 // 路线绘制交互
 const { drawRouteOnMap, drawDriveRouteOnMap } = createRouteRenderingFeature({
     mapInstanceRef: mapInstance,
@@ -1016,6 +890,15 @@ const {
 
 syncAttributeTableMapExtentImpl = syncAttributeTableMapExtentFromUI;
 
+// 勾选属性表「视图筛选范围」时立即同步一次当前地图范围，
+// 不再依赖下一次 moveend 才生效（否则勾选后首屏筛选结果为"未过滤"假象）。
+watch(
+    () => attrStore.filterByCurrentView,
+    (enabled) => {
+        if (enabled) syncAttributeTableMapExtent();
+    },
+);
+
 // --- 样式定义 ---
 const styles = createMapStylesObject();
 
@@ -1146,67 +1029,16 @@ if (initialLayerId) {
 //   2. MapContainer 挂载并初始化 GIS 引擎
 //   3. GIS 初始化完成后调用此函数应用参数
 //   4. 标记为已应用，防止重复应用
-function applyDeferredUrlParams() {
-    const finishInitialRestore = () => {
-        startupUrlRestoreGuard.markInitialRestoreApplied();
-        bindActiveMapViewSync();
-    };
-
-    if (!mapInstance?.value) {
-        console.warn('[MapContainer] Cannot apply deferred params: mapInstance not ready');
-        finishInitialRestore();
-        return;
-    }
-
-    // Cesium 模式下 OL 面板被隐藏，参数恢复由 CesiumContainer.restoreCameraFromUrl 处理。
-    // 此处显式跳过避免隐式依赖 getValidCoordinateParams 返回 null。
-    if (urlParamStore.getPendingParams().view === 'cesium') {
-        urlParamStore.markParamsAsApplied();
-        finishInitialRestore();
-        return;
-    }
-
-    const validParams = urlParamStore.getValidCoordinateParams();
-    if (!validParams) {
-        // 没有有效的地理坐标参数，直接标记已应用
-        urlParamStore.markParamsAsApplied();
-        finishInitialRestore();
-        return;
-    }
-
-    try {
-        // 应用坐标、缩放、图层索引
-        flyToView({
-            lng: validParams.lng,
-            lat: validParams.lat,
-            z: validParams.z,
-            l: validParams.l,
-            duration: 500, // 应用参数时的动画持续时间
-        });
-
-        // 释放启动守卫后再绑定 moveend，避免 flyToView 动画产生的首次 moveend 覆盖分享链接。
-        urlParamStore.markParamsAsApplied();
-        finishInitialRestore();
-    } catch (error) {
-        console.error('[MapContainer] Failed to apply deferred URL params:', error);
-        urlParamStore.markParamsAsApplied(); // 即使失败也标记已应用，防止重复尝试
-        finishInitialRestore();
-    }
-}
-
-// [隶属] 地图初始化-视图状态
-// [作用] 根据 URL 参数或默认值设置初始视图状态，支持直接
-// 定位到分享链接中的地点。
-function getInitialViewState() {
-    const routeState = parseUrlToState();
-    if (Number.isFinite(routeState?.lng) && Number.isFinite(routeState?.lat)) {
-        return {
-            center: [routeState.lng, routeState.lat],
-            zoom: Number.isFinite(routeState.zoom) ? routeState.zoom : INITIAL_VIEW.zoom,
-        };
-    }
-    return INITIAL_VIEW;
-}
+// ========== 启动视图解析（via composable：useStartupViewResolver，容器瘦身二轮） ==========
+const { applyDeferredUrlParams, getInitialViewState } = createStartupViewResolver({
+    mapInstanceRef: mapInstance,
+    urlParamStore,
+    startupUrlRestoreGuard,
+    bindActiveMapViewSync,
+    flyToView: (...args) => flyToView(...args),
+    parseUrlToState,
+    INITIAL_VIEW,
+});
 
 // --- 组件挂载后 ---
 // [隶属] 地图初始化-启动流程
@@ -1241,16 +1073,26 @@ onMounted(async () => {
             apiGetRuntimeDefaults().catch(() => null),
         ]);
 
-        // ★ 读取管理员配置的全局默认底图索引
-        // 仅在 URL 未显式指定 l= 参数时生效
+        // ★ 默认底图优先级（仅在 URL 未显式指定 l= 参数时生效）：
+        //   用户偏好 default_basemap > 管理员全局默认 default_basemap_index
         // 注意：parseUrlToState() 会用硬编码默认值填充 layerIndex，所以不能用它判断
         const urlParams = new URLSearchParams(window.location.search);
         const hasExplicitLayerParam = urlParams.has('l') || urlParams.has('layer');
         if (!hasExplicitLayerParam) {
-            const serverIndex = defaultsRes?.data?.default_basemap_index;
-            if (serverIndex != null) {
-                const serverLayerId = getLayerIdByIndex(serverIndex);
-                if (serverLayerId) selectedLayer.value = serverLayerId;
+            // 1) 用户偏好（useUserPreferencesStore bootstrap 时写入的 runtime 缓存）
+            const preferredBasemapId = readCachedPreferredBasemap();
+            const preferredValid =
+                preferredBasemapId && getLayerIndexById(preferredBasemapId) != null;
+
+            if (preferredValid) {
+                selectedLayer.value = preferredBasemapId;
+            } else {
+                // 2) 管理员配置的全局默认底图索引
+                const serverIndex = defaultsRes?.data?.default_basemap_index;
+                if (serverIndex != null) {
+                    const serverLayerId = getLayerIdByIndex(serverIndex);
+                    if (serverLayerId) selectedLayer.value = serverLayerId;
+                }
             }
         }
 
@@ -1938,7 +1780,7 @@ function activateInteraction(type) {
         return;
     }
 
-    // 选择编辑：Select + Modify（仅 sourceType=draw）
+    // 选择编辑：Select + Modify（全部矢量托管图层，路线/栅格/WebGL 除外）
     if (isSelectEditTool(type)) {
         activateGeometryEdit();
         return;
@@ -2026,6 +1868,7 @@ defineExpose({
     updateDrawingStyleParams,
     deleteSelectedDrawingFeature,
     updateSelectedDrawingStyle,
+    activateGeometryEditForLayer,
     setUserLayerStyle,
     applyStyleTemplate,
     setUserLayerVisibility,

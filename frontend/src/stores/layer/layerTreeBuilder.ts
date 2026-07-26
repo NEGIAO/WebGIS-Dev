@@ -385,6 +385,8 @@ export function toLayerNode(layer: LayerStoreLayer, level: number, group: string
         droppable: group === 'upload',
         actions: {
             attribute: capabilities.attribute !== false && hasAttributeFeatures(layer),
+            // 编辑要素：矢量图层统一开放（绘制/上传/搜索/区划），路线与栅格图层除外
+            edit: capabilities.edit !== false && group !== 'route' && !isRasterLayer(layer),
             style: capabilities.style !== false && group !== 'route' && !isRasterLayer(layer),
             label:
                 capabilities.label !== false &&
@@ -425,6 +427,7 @@ export function toLayerNode(layer: LayerStoreLayer, level: number, group: string
     if (group === 'route') {
         baseNode.actions.style = false;
         baseNode.actions.label = false;
+        baseNode.actions.edit = false;
     }
     return baseNode;
 }

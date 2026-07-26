@@ -1,6 +1,8 @@
 /**
  * 几何编辑会话功能库
- * 负责 Select + Modify + 删除选中 + Escape，仅编辑 sourceType=draw 的托管图层。
+ * 负责 Select + Modify + 删除选中 + Escape/Delete 快捷键。
+ * 编辑范围：全部矢量托管图层（绘制/上传/搜索/行政区划均可编辑），
+ * 仅排除路线图层（由规划器生成，手动改几何会破坏路线步骤联动）与栅格/WebGL 图层。
  */
 
 import Select from 'ol/interaction/Select';
@@ -9,6 +11,7 @@ import { unByKey } from 'ol/Observable';
 import {
     applyDrawingFeatureStyle,
     createSelectionHighlightStyle,
+    createGenericSelectionHighlightStyle,
     isDrawingStyledFeature,
     setDrawingFeatureMetadata,
 } from './useDrawingFeatureStyle';
@@ -36,14 +39,30 @@ export function createGeometryEditFeature({
     let keydownHandler = null;
 
     /**
-     * 判断图层是否可编辑
+     * 解析托管图层记录持有的 OL Layer
+     * 兼容两种字段：常规托管图层的 layer 与行政区划托管记录的 _layer
+     * @param {Object} layerItem
+     * @returns {import('ol/layer/Layer').default|null}
+     */
+    function getOlLayerFromItem(layerItem) {
+        return layerItem?.layer || layerItem?._layer || null;
+    }
+
+    /**
+     * 判断图层是否可编辑：任意矢量托管图层（不再局限 sourceType=draw）
+     * 排除项：路线图层（规划器生成）、非矢量源（栅格/瓦片）、WebGL 大数据图层
      * @param {Object} layerItem
      * @returns {boolean}
      */
     function isEditableLayer(layerItem) {
-        if (!layerItem || layerItem.sourceType !== 'draw') return false;
-        const layer = layerItem.layer;
-        if (!layer || typeof layer.getSource !== 'function') return false;
+        const layer = getOlLayerFromItem(layerItem);
+        if (!layer) return false;
+        // 路线图层由路径规划器生成，几何与途径步骤强绑定，不开放手动编辑
+        if (layerItem.sourceType === 'route') return false;
+        if (typeof layer.getSource !== 'function') return false;
+        // 仅矢量源可编辑（栅格/瓦片源没有 getFeatures）
+        const source = layer.getSource?.();
+        if (!source || typeof source.getFeatures !== 'function') return false;
         // 排除 WebGL 大数据图层
         if (layer.get?.('_useWebGL') || layer.get?.('properties')?._useWebGL) return false;
         if (layer.getProperties?.()?._useWebGL) return false;
@@ -61,7 +80,7 @@ export function createGeometryEditFeature({
         if (managedId) {
             return userDataLayers.find((item) => item.id === managedId) || null;
         }
-        return userDataLayers.find((item) => item.layer === layer) || null;
+        return userDataLayers.find((item) => getOlLayerFromItem(item) === layer) || null;
     }
 
     /**
@@ -69,8 +88,9 @@ export function createGeometryEditFeature({
      * @param {Object} layerItem
      */
     function syncEditedLayerFeatures(layerItem) {
-        if (!layerItem?.layer) return;
-        const source = layerItem.layer.getSource?.();
+        const layer = getOlLayerFromItem(layerItem);
+        if (!layer) return;
+        const source = layer.getSource?.();
         const features = source?.getFeatures?.() || [];
         layerItem.features = serializeManagedFeatures(features, layerItem.name);
         layerItem.featureCount = features.length;
@@ -91,6 +111,8 @@ export function createGeometryEditFeature({
 
     /**
      * 应用选中高亮
+     * 绘制要素：基础样式 + 高亮叠加；非绘制来源要素（上传/搜索/区划）：仅通用高亮描边，
+     * 不重建基础样式，避免覆盖其图层级样式语义。
      * @param {Feature} feature
      */
     function applySelectionHighlight(feature) {
@@ -98,19 +120,7 @@ export function createGeometryEditFeature({
         if (isDrawingStyledFeature(feature)) {
             feature.setStyle(createSelectionHighlightStyle(feature));
         } else {
-            // 无 drawType 的旧绘制要素：使用浅青描边提示
-            feature.setStyle(
-                createSelectionHighlightStyle({
-                    get: (key) => {
-                        if (key === 'drawType') return 'Polygon';
-                        if (key === 'styleParams') {
-                            return normalizeDrawingStyleParams({});
-                        }
-                        return undefined;
-                    },
-                    getGeometry: () => feature.getGeometry?.(),
-                }),
-            );
+            feature.setStyle(createGenericSelectionHighlightStyle());
         }
     }
 
@@ -148,31 +158,48 @@ export function createGeometryEditFeature({
     }
 
     /**
-     * Escape 处理
+     * 键盘快捷键：Escape 取消选择/退出编辑，Delete/Backspace 删除选中要素
+     * 输入框聚焦时不响应，避免误删
      * @param {KeyboardEvent} event
      */
     function handleGeometryEditKeydown(event) {
-        if (event.key !== 'Escape') return;
-        if (selectedFeature) {
-            clearSelectionState();
+        const target = event.target;
+        const tagName = String(target?.tagName || '').toUpperCase();
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || target?.isContentEditable) return;
+
+        if (event.key === 'Escape') {
+            if (selectedFeature) {
+                clearSelectionState();
+                return;
+            }
+            clearGeometryEditInteractions();
             return;
         }
-        clearGeometryEditInteractions();
+
+        if ((event.key === 'Delete' || event.key === 'Backspace') && selectedFeature) {
+            event.preventDefault();
+            Promise.resolve(deleteSelectedDrawingFeature()).catch(() => {});
+        }
     }
 
     /**
      * 激活选择编辑模式
+     * @param {Object} [options]
+     * @param {string} [options.layerId] - 仅编辑指定托管图层（TOC「编辑要素」定向入口）；为空则编辑全部可编辑图层
      * @returns {boolean}
      */
-    function activateGeometryEdit() {
+    function activateGeometryEdit(options = {}) {
         clearGeometryEditInteractions();
         const map = mapInstanceRef.value;
         if (!map) return false;
 
+        const targetLayerId = String(options?.layerId || '').trim();
+
         selectInteraction = new Select({
             layers: (layer) => {
                 const item = findLayerItemByOlLayer(layer);
-                return isEditableLayer(item);
+                if (!isEditableLayer(item)) return false;
+                return !targetLayerId || String(item.id) === targetLayerId;
             },
             hitTolerance: 6,
         });
@@ -194,7 +221,7 @@ export function createGeometryEditFeature({
                         selectedLayerItem =
                             userDataLayers.find((item) => {
                                 if (!isEditableLayer(item)) return false;
-                                const source = item.layer?.getSource?.();
+                                const source = getOlLayerFromItem(item)?.getSource?.();
                                 return source?.getFeatures?.()?.includes?.(selectedFeature);
                             }) || null;
                     }
@@ -244,19 +271,21 @@ export function createGeometryEditFeature({
     }
 
     /**
-     * 删除当前选中要素
+     * 删除当前选中要素（适用于全部可编辑图层）
+     * 绘制图层清空后自动移除托管图层；上传/搜索/区划图层清空后保留空图层记录，
+     * 是否移除交由 TOC 图层目录统一管理，避免绕过图层管理入口
      * @returns {Promise<boolean>}
      */
     async function deleteSelectedDrawingFeature() {
         if (!selectedFeature || !selectedLayerItem) return false;
 
-        const source = selectedLayerItem.layer?.getSource?.();
+        const source = getOlLayerFromItem(selectedLayerItem)?.getSource?.();
         if (!source) return false;
 
         source.removeFeature(selectedFeature);
         const remaining = source.getFeatures?.() || [];
 
-        if (!remaining.length) {
+        if (!remaining.length && selectedLayerItem.sourceType === 'draw') {
             const layerId = selectedLayerItem.id;
             clearSelectionState();
             if (typeof removeManagedLayerById === 'function') {
@@ -276,12 +305,19 @@ export function createGeometryEditFeature({
 
     /**
      * 更新选中要素样式
+     * 非绘制来源要素首次调整样式时，按几何类型推导 drawType 并转为要素级样式托管
      * @param {Object} stylePatch
      * @returns {boolean}
      */
     function updateSelectedDrawingStyle(stylePatch = {}) {
         if (!selectedFeature) return false;
-        const drawType = selectedFeature.get?.('drawType') || 'Polygon';
+        const geometryType = String(selectedFeature.getGeometry?.()?.getType?.() || '');
+        const fallbackDrawType = geometryType.includes('Point')
+            ? 'Point'
+            : geometryType.includes('LineString')
+              ? 'LineString'
+              : 'Polygon';
+        const drawType = selectedFeature.get?.('drawType') || fallbackDrawType;
         const nextParams = normalizeDrawingStyleParams({
             ...(selectedFeature.get?.('styleParams') || {}),
             ...(stylePatch || {}),

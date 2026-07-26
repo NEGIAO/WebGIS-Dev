@@ -65,7 +65,11 @@ export function createMapUIEventHandlers({
         if (!payload?.layerId || !payload?.featureId) return;
         const mode = payload?.mode || 'replace';
         highlightManagedFeature?.({ ...payload, mode });
-        void zoomToManagedFeature; // 保留契约引用
+        // 属性表双击行请求缩放（payload.zoom=true）时才触发视图 fit，
+        // 单击聚焦保持不缩放，避免与表格浏览操作冲突。
+        if (payload?.zoom) {
+            zoomToManagedFeature?.({ layerId: payload.layerId, featureId: payload.featureId });
+        }
     }
 
     /**

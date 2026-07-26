@@ -84,6 +84,7 @@
                     @zoom-layer="$emit('zoom-layer', $event)"
                     @view-layer="$emit('view-layer', $event)"
                     @remove-layer="$emit('remove-layer', $event)"
+                    @edit-layer="$emit('edit-layer', $event)"
                     @reorder-user-layers="$emit('reorder-user-layers', $event)"
                     @solo-layer="$emit('solo-layer', $event)"
                     @apply-style-template="$emit('apply-style-template', $event)"
@@ -430,6 +431,7 @@ defineEmits([
     'zoom-layer',
     'view-layer',
     'remove-layer',
+    'edit-layer',
     'reorder-user-layers',
     'solo-layer',
     'apply-style-template',
@@ -534,7 +536,7 @@ onUnmounted(() => {
     cursor: pointer;
     border-radius: 12px 0 0 12px;
     transition: all 0.2s ease;
-    z-index: 9999;
+    z-index: var(--z-toast);
 
     /* 👇 向左偏移 15px 核心代码 */
     position: absolute;

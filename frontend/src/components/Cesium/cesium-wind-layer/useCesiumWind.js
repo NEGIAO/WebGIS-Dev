@@ -10,11 +10,13 @@
 import { ref } from 'vue';
 import Wind2D from './Wind2D';
 
-export function useCesiumWind({ getViewer, getCesium, message }) {
+export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
     const wind2D = ref(null);
     const windParams = ref({
         windEnabled: false,
-        particlesTextureSize: 600,
+        // 性能:粒子数 = size²。600²=36 万粒子(库默认 100²=1 万)是帧率杀手;
+        // 256²≈6.5 万在全球风场下视觉密度仍充足,段绘制顶点数降为 1/5.5。
+        particlesTextureSize: 256,
         particleHeight: 1000,
         lineWidthVal: 10,
         lineLengthVal: 800,

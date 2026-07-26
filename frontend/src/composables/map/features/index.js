@@ -1,9 +1,13 @@
 export { createBasemapLayerBootstrap } from './useBasemapLayerBootstrap';
 export { createBasemapResilience } from './useBasemapResilience';
+export { createRuntimeMapTokenPool } from './useRuntimeMapTokenPool';
+export { createSharedEntryResolver } from './useSharedEntryResolver';
+export { createStartupViewResolver } from './useStartupViewResolver';
 export { createBasemapSelectionWatcher } from './useBasemapSelectionWatcher';
 export { createBasemapStateManagementFeature } from './useBasemapStateManagement';
 export { createBasemapSwipe } from './useBasemapSwipe';
 export { createBasemapUrlMappingFeature } from './useBasemapUrlMapping';
+export { tileHDRendering, toggleTileHDRendering } from './useTileHDRendering';
 export { createCoordinateSystemConversionFeature } from './useCoordinateSystemConversion';
 export { useCreateManagedVectorLayer } from './useCreateManagedVectorLayer';
 export { createDeferredUserLayerApis } from './useDeferredUserLayerApis';

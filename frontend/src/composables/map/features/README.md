@@ -3,6 +3,28 @@
 该目录遵循“一个功能一个库”的约束，所有模块只承担单一地图能力。
 `MapContainer.vue` 仅负责编排与事件桥接，不在组件中实现复杂业务细节。
 
+## ✅ 注册规则（已简化为单层）
+
+自两层转发链改造后（map/index.js 直接 `export * from './features'`），
+**新增 feature 模块只需登记本目录 `features/index.js` 一处**即可从
+`composables/map` 可达。领域 barrel（basemapSystem.js 等）保留给直接导入方，
+新增条目可选登记（语义分组用途）。以下为历史背景，供理解转发链演进：
+
+## ⚠️ 历史：双层注册时代（已废止）
+
+barrel 转发链是 `composables/map/index.js → 领域 barrel（basemapSystem.js / layerManager.js /
+interactionHandlers.js / toc 等）→ 具体模块`。**本目录的 `features/index.js` 不在该链上**，
+只服务于直接 `from '../composables/map/features'` 的导入方。
+
+因此新增 feature 模块必须同时登记两处：
+
+1. `features/index.js`（本目录 barrel）；
+2. 对应的领域 barrel（如底图/token 相关 → `../basemapSystem.js`）。
+
+只登记第 1 处时，`import { xxx } from '../../composables/map'` 会得到 undefined
+且 ESLint 不报错（跨模块命名导出不校验），属于运行时才暴露的坑——已在
+V3.4.29 容器瘦身中实际踩过，特此成文。
+
 ## 当前模块
 
 - `index.js`

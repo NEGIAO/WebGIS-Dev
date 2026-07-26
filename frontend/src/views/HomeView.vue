@@ -932,6 +932,15 @@ function handleRemoveLayer(layerId) {
     layerStore.removeLayerById(layerId);
 }
 
+/**
+ * TOC「编辑要素」统一入口：对指定图层启动几何编辑会话
+ * 编辑能力覆盖全部矢量图层（绘制/上传/搜索/区划），与绘制面板 SelectEdit 共用同一编辑引擎
+ * @param {string} layerId
+ */
+function handleEditLayer(layerId) {
+    mapContainerRef.value?.activateGeometryEditForLayer?.(layerId);
+}
+
 function handleReorderUserLayers(payload) {
     mapContainerRef.value?.reorderUserLayers(payload);
 }
@@ -1429,6 +1438,7 @@ onMounted(async () => {
                     @zoom-layer="handleZoomLayer"
                     @view-layer="handleViewLayer"
                     @remove-layer="handleRemoveLayer"
+                    @edit-layer="handleEditLayer"
                     @reorder-user-layers="handleReorderUserLayers"
                     @solo-layer="handleSoloLayer"
                     @apply-style-template="handleApplyStyleTemplate"
@@ -1561,7 +1571,7 @@ onMounted(async () => {
     left: 215px !important;
     /* 位于鹰眼(左侧, 宽200px)的右侧 */
     bottom: auto !important;
-    z-index: 2200 !important;
+    z-index: var(--z-modal-high) !important;
     /* 高于地图和其他组件 */
     flex-direction: column !important;
     /* 调整流向为向下展开 */
@@ -1644,7 +1654,7 @@ onMounted(async () => {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
     overflow: hidden;
     border: 1px solid rgba(229, 236, 230, 0.6);
-    z-index: 2000;
+    z-index: var(--z-modal);
     display: flex;
     flex-direction: column;
     max-height: 400px;

@@ -1,0 +1,172 @@
+/**
+ * dataSourceDisplay.js
+ * 导入数据的显隐 / 透明度类型适配器（统一图层管理·句柄侧实现）。
+ *
+ * 输入为 loadedDataSources 中的记录（含 entity 句柄），按类型分派：
+ * - 显隐：各类句柄统一走 .show；TIF 需同步 heightMesh 伴生 primitive
+ * - 透明度：tif → ImageryLayer.alpha；gltf → Model.color alpha；
+ *   3dtiles → Cesium3DTileStyle 白色乘 alpha（与「材质模式」互写 style，
+ *   语义为「最后操作生效」，alpha=1 时清空 style 还原）；
+ *   矢量类（geojson/kml/czml/shp）→ per-entity 材质 alpha 缩放：
+ *   首次调节时以 WeakMap 快照原始颜色（新 alpha = 原始 alpha × 系数，可反复调节
+ *   不衰减），时间动态颜色属性（isConstant=false）跳过以保留动态性，
+ *   大数据源经 rAF 合并（滑杆高频拖动一帧只重算一次）。
+ */
+
+import { toRaw } from 'vue';
+
+/** 矢量数据源原始颜色快照：WeakMap<DataSource, Map<entityId, snapshot>>（随句柄 GC） */
+const vectorColorSnapshots = new WeakMap();
+
+/** rAF 合并挂起表：WeakMap<DataSource, { alpha, scheduled }> */
+const vectorOpacityPending = new WeakMap();
+
+/**
+ * 设置记录显隐
+ * @param {object} Cesium - Cesium 命名空间（未用到保留签名一致性）
+ * @param {object} record - loadedDataSources 记录 { type, entity, heightMesh? }
+ * @param {boolean} visible - 目标可见性
+ */
+export function setRecordVisible(Cesium, record, visible) {
+    const entity = toRaw(record?.entity);
+    if (!entity) return;
+    const next = !!visible;
+
+    // DataSource / Cesium3DTileset / Model / ImageryLayer 均支持 .show
+    entity.show = next;
+
+    // TIF 伴生的高程拉伸网格需同步
+    const heightMesh = toRaw(record?.heightMesh);
+    if (heightMesh) heightMesh.show = next;
+}
+
+/**
+ * 设置记录透明度（仅 tif / gltf / 3dtiles）
+ * @param {object} Cesium - Cesium 命名空间
+ * @param {object} record - loadedDataSources 记录
+ * @param {number} opacity - 0~1
+ * @param {Function} [onApplied] - 矢量类 rAF 合并应用后的回调（用于补 requestRender）
+ */
+export function setRecordOpacity(Cesium, record, opacity, onApplied) {
+    const entity = toRaw(record?.entity);
+    if (!Cesium || !entity) return;
+    const alpha = Math.min(1, Math.max(0, Number(opacity) || 0));
+
+    switch (record.type) {
+        case 'tif':
+            // ImageryLayer 原生 alpha
+            entity.alpha = alpha;
+            break;
+        case 'gltf':
+            // Model 颜色乘白：仅调透明不改色相
+            entity.color = Cesium.Color.WHITE.withAlpha(alpha);
+            break;
+        case '3dtiles':
+            // 与材质模式互写 style：alpha=1 清空还原，交回材质模式控制
+            entity.style = alpha >= 1
+                ? undefined
+                : new Cesium.Cesium3DTileStyle({
+                    color: `color('#ffffff', ${alpha.toFixed(3)})`,
+                });
+            break;
+        default:
+            // 矢量类（geojson/kml/czml/shp）：per-entity 材质 alpha 缩放
+            scheduleVectorOpacity(Cesium, entity, alpha, onApplied);
+            break;
+    }
+}
+
+/** rAF 合并：滑杆高频拖动时同一 DataSource 一帧只重算一次 */
+function scheduleVectorOpacity(Cesium, dataSource, alpha, onApplied) {
+    let pending = vectorOpacityPending.get(dataSource);
+    if (!pending) {
+        pending = { alpha, scheduled: false, onApplied: null };
+        vectorOpacityPending.set(dataSource, pending);
+    }
+    pending.alpha = alpha;
+    pending.onApplied = typeof onApplied === 'function' ? onApplied : null;
+    if (pending.scheduled) return;
+    pending.scheduled = true;
+
+    requestAnimationFrame(() => {
+        pending.scheduled = false;
+        applyVectorDataSourceOpacity(Cesium, dataSource, pending.alpha);
+        pending.onApplied?.();
+    });
+}
+
+/** 需要参与透明度缩放的 (图元, 颜色属性) 清单 */
+const VECTOR_COLOR_TARGETS = [
+    ['point', 'color'],
+    ['point', 'outlineColor'],
+    ['billboard', 'color'],
+    ['label', 'fillColor'],
+    ['label', 'outlineColor'],
+    ['label', 'backgroundColor'],
+    ['polyline', 'materialColor'],   // 特殊：material 为 ColorMaterialProperty 时取其 color
+    ['polygon', 'materialColor'],
+    ['polygon', 'outlineColor'],
+];
+
+/**
+ * 对 DataSource 全部实体应用透明度（基于原始颜色快照，可反复调节不衰减）
+ * @param {object} Cesium - Cesium 命名空间
+ * @param {object} dataSource - Cesium.DataSource
+ * @param {number} alpha - 0~1 系数
+ */
+function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
+    const entities = dataSource?.entities?.values;
+    if (!Cesium || !Array.isArray(entities)) return;
+
+    let snapshots = vectorColorSnapshots.get(dataSource);
+    if (!snapshots) {
+        snapshots = new Map();
+        vectorColorSnapshots.set(dataSource, snapshots);
+    }
+    const now = Cesium.JulianDate.now();
+
+    for (const entity of entities) {
+        let snapshot = snapshots.get(entity.id);
+        if (!snapshot) {
+            snapshot = {};
+            snapshots.set(entity.id, snapshot);
+        }
+        for (const [graphicsKey, propKey] of VECTOR_COLOR_TARGETS) {
+            const graphics = entity[graphicsKey];
+            if (!graphics) continue;
+            applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha, now);
+        }
+    }
+}
+
+/**
+ * 缩放单个颜色属性：快照原始色 → 写入 原始alpha×系数 的新常量色。
+ * 时间动态属性（isConstant=false）跳过，保留 CZML 等动画语义。
+ */
+function applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha, now) {
+    const isMaterial = propKey === 'materialColor';
+    const property = isMaterial ? graphics.material : graphics[propKey];
+    if (!property) return;
+
+    // 仅处理常量颜色：ColorMaterialProperty.color / 普通颜色 Property
+    const colorProperty = isMaterial ? property.color : property;
+    if (!colorProperty || typeof colorProperty.getValue !== 'function') return;
+    if (isMaterial && !(property instanceof Cesium.ColorMaterialProperty)) return;
+    if (colorProperty.isConstant === false) return;
+
+    const cacheKey = `${graphicsKey}.${propKey}`;
+    if (!(cacheKey in snapshot)) {
+        const original = colorProperty.getValue(now);
+        if (!original) return;
+        snapshot[cacheKey] = Cesium.Color.clone(original, new Cesium.Color());
+    }
+
+    const base = snapshot[cacheKey];
+    if (!base) return;
+    const next = base.withAlpha(base.alpha * alpha);
+    if (isMaterial) {
+        property.color = next;
+    } else {
+        graphics[propKey] = next;
+    }
+}

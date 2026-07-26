@@ -9,6 +9,8 @@ export type AttrFieldConfigItem = {
     alias: string;
     visible: boolean;
     type: AttrFieldType;
+    /** 用户拖拽设定的列宽（px）；未设定时由表格用弹性宽度渲染 */
+    width?: number;
 };
 
 export type AttrRow = {
@@ -139,6 +141,77 @@ function intersectsExtent(
     return !(a[0] > b[2] || a[2] < b[0] || a[1] > b[3] || a[3] < b[1]);
 }
 
+// ─── 范围坐标系归一（EPSG:3857 → EPSG:4326，纯数学无 OL 依赖）───
+const WEB_MERCATOR_LIMIT = 20037508.342789244;
+
+/**
+ * 判断范围数值是否更像 Web Mercator 米制坐标。
+ * EPSG:4326 合法值域不超过 ±180/±90，任一分量绝对值超过 360 视为 3857。
+ * （±0.36~360 米的赤道原点微小范围存在理论歧义，实际业务数据不会落入。）
+ */
+function looksLikeWebMercatorExtent(extent: [number, number, number, number]): boolean {
+    return extent.some((value) => Math.abs(value) > 360);
+}
+
+/** Web Mercator X（米） → 经度（度）。 */
+function mercatorToLon(x: number): number {
+    return (x / WEB_MERCATOR_LIMIT) * 180;
+}
+
+/** Web Mercator Y（米） → 纬度（度）。 */
+function mercatorToLat(y: number): number {
+    return (Math.atan(Math.exp((y / WEB_MERCATOR_LIMIT) * Math.PI)) * 360) / Math.PI - 90;
+}
+
+/**
+ * 将任意来源的范围归一到 EPSG:4326 后返回。
+ *
+ * 背景：行数据来自 OL 要素时 extent 为 3857 米制，来自 GeoJSON 记录时为 4326
+ * 经纬度；地图视图范围则始终是 3857。混用坐标系做相交判断会让「视图筛选范围」
+ * 结果完全错乱，因此行侧与地图侧统一归一到 4326 再比较。
+ */
+function normalizeExtentTo4326(
+    extent: [number, number, number, number] | null,
+): [number, number, number, number] | null {
+    if (!extent || !extent.every(Number.isFinite)) return null;
+    if (!looksLikeWebMercatorExtent(extent)) return extent;
+    return [
+        mercatorToLon(extent[0]),
+        mercatorToLat(extent[1]),
+        mercatorToLon(extent[2]),
+        mercatorToLat(extent[3]),
+    ];
+}
+
+/** FNV-1a 32 位哈希（可传入种子实现流式累计）。 */
+function fnv1aHash(text: string, seed = 0x811c9dc5): number {
+    let hash = seed >>> 0;
+    for (let index = 0; index < text.length; index += 1) {
+        hash ^= text.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash >>> 0;
+}
+
+/**
+ * 计算数据集内容签名：图层元信息 + 行数 + 逐行 featureId/searchText 哈希。
+ * 签名一致 → 数据未实质变化 → 跳过替换，保持 rows 引用稳定，
+ * 使属性表的虚拟滚动、选中态不因无关的图层事件被重置。
+ */
+function computeDatasetSignature(dataset: AttrLayerDataset): string {
+    let hash = 0x811c9dc5;
+    dataset.rows.forEach((row) => {
+        hash = fnv1aHash(`${row.featureId}|${row.searchText}`, hash);
+    });
+    return [
+        dataset.layerName,
+        dataset.sourceType,
+        dataset.geometryType,
+        dataset.rows.length,
+        hash.toString(16),
+    ].join('|');
+}
+
 function buildFieldConfig(
     rows: AttrRow[],
     previousMap: Record<string, AttrFieldConfigItem> = {},
@@ -165,6 +238,8 @@ function buildFieldConfig(
             type: (oldConfig?.type ||
                 Object.entries(typeCounts).sort((left, right) => right[1] - left[1])[0]?.[0] ||
                 'string') as AttrFieldType,
+            // 数据集重建时保留用户拖拽过的列宽
+            ...(Number.isFinite(oldConfig?.width) ? { width: oldConfig?.width } : {}),
         };
     });
 
@@ -208,7 +283,10 @@ function buildLayerDataset(
                 rawAttributes,
                 statistics,
                 geometry: record?.geometry || null,
-                extent: record?.extent || computeGeometryExtent(record?.geometry),
+                // 统一归一到 4326，与地图视图范围（同样归一）可靠相交比较
+                extent: normalizeExtentTo4326(
+                    record?.extent || computeGeometryExtent(record?.geometry),
+                ),
                 searchText: String(
                     record?.searchText ||
                         stringifySearchText([
@@ -343,23 +421,61 @@ export const useAttrStore = defineStore('attrStore', () => {
         });
     });
 
+    /** 各图层数据集的内容签名缓存（非响应式，仅用于增量同步比较）。 */
+    const datasetSignatures: Record<string, string> = {};
+    /** 各图层上游内容修订号缓存（来自 useManagedLayerRegistry 的 revision 契约）。 */
+    const layerRevisions: Record<string, number> = {};
+
     function upsertDatasetSnapshot(layer: any): void {
         const layerId = String(layer?.id || '').trim();
         if (!layerId) return;
 
         const previous = datasets.value[layerId] || null;
+
+        // 快路径：上游修订号契约——revision 未变则内容必未变，
+        // 直接跳过整个快照构建（normalize + 行映射 + searchText 序列化）。
+        const revisionRaw = (layer as { revision?: unknown })?.revision;
+        const revisionNumber = Number(revisionRaw);
+        const revision = Number.isFinite(revisionNumber) ? revisionNumber : null;
+        if (previous && revision !== null && layerRevisions[layerId] === revision) {
+            return;
+        }
+
+        // 慢路径（revision 变化或上游未提供 revision）：全量构建 + 内容签名兜底。
+        // buildLayerDataset 内部已按字段 key 合并 previous.fieldConfig（保留别名/可见性/列宽）
         const snapshot = buildLayerDataset(layer, previous);
-        datasets.value[layerId] = {
-            ...snapshot,
-            fieldConfig: buildFieldConfig(
-                snapshot.rows,
-                (previous?.fieldConfig || {}) as Record<string, AttrFieldConfigItem>,
-            ),
-        };
+        const nextSignature = computeDatasetSignature(snapshot);
+        if (revision !== null) {
+            layerRevisions[layerId] = revision;
+        }
+
+        // 签名一致说明数据未实质变化，保留旧 dataset 引用，
+        // 避免 rows 引用更替引发属性表全量重渲染与滚动/选中丢失。
+        if (previous && datasetSignatures[layerId] === nextSignature) {
+            return;
+        }
+
+        datasetSignatures[layerId] = nextSignature;
+        datasets.value[layerId] = snapshot;
     }
 
     function syncLayers(layers: any[] = []): void {
+        const incomingIds = new Set(
+            (layers || [])
+                .map((layer) => String(layer?.id || '').trim())
+                .filter((id) => id.length > 0),
+        );
+
         (layers || []).forEach((layer) => upsertDatasetSnapshot(layer));
+
+        // 清理已删除图层的数据集、签名与修订号，避免属性表继续展示"幽灵图层"
+        Object.keys(datasets.value).forEach((layerId) => {
+            if (!incomingIds.has(layerId)) {
+                delete datasets.value[layerId];
+                delete datasetSignatures[layerId];
+                delete layerRevisions[layerId];
+            }
+        });
 
         if (activeLayerId.value && !datasets.value[activeLayerId.value]) {
             activeLayerId.value = '';
@@ -406,6 +522,10 @@ export const useAttrStore = defineStore('attrStore', () => {
         const normalizedLayerId = String(layerId || '').trim();
         if (!normalizedLayerId) return;
         ensureDataset(normalizedLayerId);
+        // 切换到不同图层时清除选中，避免旧图层的 featureId 残留误高亮新图层同名要素
+        if (activeLayerId.value !== normalizedLayerId) {
+            selectedFeatureId.value = '';
+        }
         activeLayerId.value = normalizedLayerId;
     }
 
@@ -467,7 +587,13 @@ export const useAttrStore = defineStore('attrStore', () => {
             currentMapExtent.value = null;
             return;
         }
-        currentMapExtent.value = [normalized[0], normalized[1], normalized[2], normalized[3]];
+        // 地图视图范围（OL 侧为 3857）与行范围统一归一到 4326 再参与相交比较
+        currentMapExtent.value = normalizeExtentTo4326([
+            normalized[0],
+            normalized[1],
+            normalized[2],
+            normalized[3],
+        ]);
     }
 
     function setFieldAlias(fieldKey: string, alias: string): void {
@@ -487,6 +613,18 @@ export const useAttrStore = defineStore('attrStore', () => {
         dataset.fieldConfig[fieldKey] = {
             ...dataset.fieldConfig[fieldKey],
             visible: !!visibleFlag,
+        };
+    }
+
+    /** 设置列宽（表头拖拽），钳制在 80–600px；随字段配置在数据集生命周期内保留 */
+    function setFieldWidth(fieldKey: string, width: number): void {
+        const dataset = activeDataset.value;
+        if (!dataset) return;
+        if (!dataset.fieldConfig[fieldKey]) return;
+        const clamped = Math.max(80, Math.min(600, Math.round(Number(width) || 0)));
+        dataset.fieldConfig[fieldKey] = {
+            ...dataset.fieldConfig[fieldKey],
+            width: clamped,
         };
     }
 
@@ -538,6 +676,7 @@ export const useAttrStore = defineStore('attrStore', () => {
         setMapExtent,
         setFieldAlias,
         setFieldVisibility,
+        setFieldWidth,
         setPanelRect,
         resetPanelRectInitialized,
     };
