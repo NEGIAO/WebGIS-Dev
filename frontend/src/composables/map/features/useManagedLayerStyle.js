@@ -1,5 +1,9 @@
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from 'ol/style';
 import { isLabelValid } from '../../../utils/labelValidator';
+import {
+    applyDrawingFeatureStyle,
+    isDrawingStyledFeature,
+} from './useDrawingFeatureStyle';
 
 const DEFAULT_STYLE_TEMPLATE = {
     fillColor: '#5fbf7a',
@@ -136,28 +140,48 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         return getLayerLabelText(layerItem);
     };
 
+    /**
+     * 解析 feature 样式：优先 feature 自带 style，其次高级绘制 styleParams，最后返回 null 交给图层默认样式。
+     * @param {Feature} feature
+     * @returns {Style|Style[]|null}
+     */
+    const resolveFeatureStyle = (feature) => {
+        const existingStyle = feature?.getStyle?.();
+        if (
+            existingStyle &&
+            !(existingStyle instanceof Function) &&
+            !(Array.isArray(existingStyle) && existingStyle.length === 0)
+        ) {
+            return existingStyle;
+        }
+
+        // 高级绘制要素：根据 drawType/styleParams 重建样式（避免序列化/刷新后丢失）
+        if (isDrawingStyledFeature(feature)) {
+            const rebuilt = applyDrawingFeatureStyle(feature);
+            if (rebuilt) return rebuilt;
+        }
+
+        return null;
+    };
+
     const buildManagedLayerStyle = (layerItem) => {
         const baseStyleConfig = layerItem?.styleConfig || defaultStyleTemplate;
         if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
-            return (feature) => {
-                const existingStyle = feature.getStyle();
-                if (existingStyle && !(existingStyle instanceof Function) && !(Array.isArray(existingStyle) && existingStyle.length === 0)) {
-                    return existingStyle;
-                }
-                return createStyleFromConfig(baseStyleConfig, { labelText: '' });
-            };
+            return (feature) => resolveFeatureStyle(feature) || createStyleFromConfig(baseStyleConfig, { labelText: '' });
         }
 
         layerItem.labelStyleCache = layerItem.labelStyleCache || new globalThis.Map();
         return (feature) => {
             const rawLabel = getFeatureLabelText(feature, layerItem);
             const labelText = String(rawLabel || '').trim();
+            const existingStyle = resolveFeatureStyle(feature);
 
-            const existingStyle = feature.getStyle();
-            if (existingStyle && !(existingStyle instanceof Function) && !(Array.isArray(existingStyle) && existingStyle.length === 0)) {
+            if (existingStyle) {
                 if (!labelText) return existingStyle;
                 const labelOnly = createStyleFromConfig(baseStyleConfig, { labelText });
-                return [existingStyle, labelOnly];
+                return Array.isArray(existingStyle)
+                    ? [...existingStyle, labelOnly]
+                    : [existingStyle, labelOnly];
             }
 
             const cacheKey = labelText || '__empty__';

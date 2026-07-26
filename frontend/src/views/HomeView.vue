@@ -368,6 +368,28 @@ function handleControlsMapInteraction(type) {
     mapContainerRef.value?.activateInteraction?.(nextType);
 }
 
+/**
+ * 绘制面板样式变更：优先更新选中要素，否则影响后续绘制
+ * @param {Object} stylePayload
+ */
+function handleControlsDrawStyleChange(stylePayload) {
+    mapContainerRef.value?.updateDrawingStyleParams?.(stylePayload);
+}
+
+/**
+ * 绘制面板编辑动作
+ * @param {string} action
+ */
+function handleControlsDrawEditAction(action) {
+    if (action === 'delete-selected') {
+        mapContainerRef.value?.deleteSelectedDrawingFeature?.();
+        return;
+    }
+    if (action === 'undo-last') {
+        mapContainerRef.value?.activateInteraction?.('UndoLastDrawing');
+    }
+}
+
 function handleControlsShowAnalysis() {
     message.info('分析功能入口已接入，后续可扩展缓冲区/最短路径专属面板。');
 }
@@ -1211,6 +1233,8 @@ onMounted(async () => {
                     @open-tab="handleControlsOpenTab"
                     @open-toolbox-tab="handleControlsOpenToolboxTab"
                     @map-interaction="handleControlsMapInteraction"
+                    @draw-style-change="handleControlsDrawStyleChange"
+                    @draw-edit-action="handleControlsDrawEditAction"
                     @show-analysis="handleControlsShowAnalysis"
                     @district-select="handleControlsDistrictSelect"
                     @enable-basemap-swipe="handleEnableBasemapSwipe"

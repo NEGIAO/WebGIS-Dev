@@ -42,8 +42,60 @@ SUPPORTED_UNIT_SYSTEMS = {
 }
 
 # ─── 会话/安全配置 ───
-SESSION_EXPIRE_HOURS = int(os.getenv("AUTH_SESSION_EXPIRE_HOURS", "72"))
-PASSWORD_HASH_ITERATIONS = int(os.getenv("AUTH_PASSWORD_HASH_ITERATIONS", "120000"))
+# 非密钥项固定在代码中，避免 Hugging Face 堆积无关环境变量。
+SESSION_EXPIRE_HOURS = 72
+PASSWORD_HASH_ITERATIONS = 120000
+
+# ─── OAuth 非密钥常量 ───
+# 真正需要放 HF Secrets 的只有：
+# - GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET
+# - GITHUB_OAUTH_CLIENT_ID / GITHUB_OAUTH_CLIENT_SECRET
+# - OAUTH_STATE_SECRET
+# - SUPER_USER
+OAUTH_STATE_TTL_SECONDS = 600
+OAUTH_TICKET_TTL_SECONDS = 120
+OAUTH_PASSWORD_MARKER_PREFIX = "oauth-disabled"
+SUPPORTED_OAUTH_PROVIDERS = frozenset({"google", "github"})
+
+# 生产默认域名：后端 HF Space + 前端 GitHub Pages
+OAUTH_BACKEND_BASE_URL_PROD = "https://negiao-webgis.hf.space"
+OAUTH_BACKEND_BASE_URL_DEV = "http://localhost:7860"
+OAUTH_FRONTEND_SUCCESS_URL_PROD = "https://negiao.github.io/WebGIS-Dev/#/oauth/callback"
+OAUTH_FRONTEND_FAILURE_URL_PROD = "https://negiao.github.io/WebGIS-Dev/#/register"
+OAUTH_FRONTEND_SUCCESS_URL_DEV = "http://localhost:5173/#/oauth/callback"
+OAUTH_FRONTEND_FAILURE_URL_DEV = "http://localhost:5173/#/register"
+
+
+def is_development_env() -> bool:
+    """判断是否本地开发环境。"""
+    app_env = str(os.getenv("APP_ENV") or "").strip().lower()
+    return app_env in {"development", "dev", "local"}
+
+
+def get_oauth_backend_base_url() -> str:
+    """返回 OAuth 后端基址：开发用 localhost，生产用 HF Space 域名。"""
+    if is_development_env():
+        return OAUTH_BACKEND_BASE_URL_DEV
+    return OAUTH_BACKEND_BASE_URL_PROD
+
+
+def get_oauth_redirect_uri(provider: str) -> str:
+    """
+    返回 provider 的固定回调 URI。
+
+    注意：该值必须与 Google/GitHub 控制台 Authorized redirect URI 完全一致。
+    """
+    normalized = str(provider or "").strip().lower()
+    base = get_oauth_backend_base_url().rstrip("/")
+    return f"{base}/api/auth/oauth/{normalized}/callback"
+
+
+def get_oauth_frontend_redirect_url(success: bool) -> str:
+    """返回 OAuth 完成后前端跳转地址。"""
+    if is_development_env():
+        return OAUTH_FRONTEND_SUCCESS_URL_DEV if success else OAUTH_FRONTEND_FAILURE_URL_DEV
+    return OAUTH_FRONTEND_SUCCESS_URL_PROD if success else OAUTH_FRONTEND_FAILURE_URL_PROD
+
 
 # ─── 配额常量 ───
 GUEST_DAILY_API_QUOTA = 100

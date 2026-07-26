@@ -1246,6 +1246,20 @@ watch(resetEmail, () => {
 });
 
 onMounted(async () => {
+    const oauthStatus = String(route.query?.status || '').trim().toLowerCase();
+    const oauthMessage = String(route.query?.message || '').trim();
+    if (oauthStatus === 'error' && oauthMessage) {
+        setFormState('error', oauthMessage);
+        message.error(oauthMessage);
+
+        // 显示后清掉 OAuth 错误 query，避免刷新页面重复弹同一条错误。
+        const nextQuery = { ...route.query };
+        delete nextQuery.status;
+        delete nextQuery.message;
+        delete nextQuery.provider;
+        await router.replace({ name: 'register', query: nextQuery });
+    }
+
     const token = getAuthToken();
     if (token) {
         const storedUser = getAuthUser();

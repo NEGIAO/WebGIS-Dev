@@ -31,6 +31,8 @@
         <DrawPanel
             v-if="drawPanelVisible"
             @draw-type="handleDrawType"
+            @edit-action="handleDrawEditAction"
+            @style-change="handleDrawStyleChange"
             @clear="handleClearDraw"
             @close="drawPanelVisible = false"
         />
@@ -198,6 +200,8 @@ const emit = defineEmits([
     'open-tab',
     'open-toolbox-tab',
     'map-interaction',
+    'draw-style-change',
+    'draw-edit-action',
     'district-select',
     'enable-basemap-swipe',
     'spatial-analysis',
@@ -343,11 +347,44 @@ const handleDistrictSelect = (payload) => {
 
 /**
  * 处理绘制类型选择
- * @param {string} type - 绘制类型：Point/LineString/Polygon
+ * @param {string} type - 绘制/编辑类型
  */
 const handleDrawType = (type) => {
     emit('map-interaction', type);
-    message.info(`已激活绘制工具：${type === 'Point' ? '点' : type === 'LineString' ? '线' : '面'}`);
+    const labelMap = {
+        Point: '点',
+        LineString: '线',
+        Polygon: '面',
+        Rectangle: '矩形',
+        Ellipse: '椭圆',
+        CircleOutline: '圆',
+        Arrow: '箭头',
+        WindArrow: '风向箭头',
+        BattleArrow: '军标箭头',
+        SelectEdit: '选择编辑',
+    };
+    message.info(`已激活绘制工具：${labelMap[type] || type}`);
+};
+
+/**
+ * 处理绘制样式变更
+ * @param {Object} stylePayload
+ */
+const handleDrawStyleChange = (stylePayload) => {
+    emit('draw-style-change', stylePayload);
+};
+
+/**
+ * 处理绘制编辑动作
+ * @param {string} action
+ */
+const handleDrawEditAction = (action) => {
+    emit('draw-edit-action', action);
+    if (action === 'delete-selected') {
+        message.info('已请求删除选中要素');
+    } else if (action === 'undo-last') {
+        message.info('已请求撤销最近绘制图层');
+    }
 };
 
 /**

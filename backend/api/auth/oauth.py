@@ -22,10 +22,17 @@ from fastapi import HTTPException, Request, status
 from .constants import (
     ADMIN_USERNAME,
     GUEST_USERNAME,
+    OAUTH_PASSWORD_MARKER_PREFIX,
+    OAUTH_STATE_TTL_SECONDS,
+    OAUTH_TICKET_TTL_SECONDS,
     RESERVED_USERNAMES,
     ROLE_ADMIN,
     ROLE_GUEST,
     ROLE_REGISTERED,
+    SUPPORTED_OAUTH_PROVIDERS as AUTH_SUPPORTED_OAUTH_PROVIDERS,
+    get_oauth_frontend_redirect_url,
+    get_oauth_redirect_uri,
+    is_development_env,
     _normalize_display_name,
     normalize_role,
 )
@@ -35,10 +42,7 @@ from .user import _generate_account_username_sync, _get_user_by_id_sync
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_OAUTH_PROVIDERS = {"google", "github"}
-OAUTH_STATE_TTL_SECONDS = max(60, int(os.getenv("OAUTH_STATE_TTL_SECONDS", "600")))
-OAUTH_TICKET_TTL_SECONDS = max(30, int(os.getenv("OAUTH_TICKET_TTL_SECONDS", "120")))
-OAUTH_PASSWORD_MARKER_PREFIX = "oauth-disabled"
+SUPPORTED_OAUTH_PROVIDERS = set(AUTH_SUPPORTED_OAUTH_PROVIDERS)
 _ticket_lock = threading.Lock()
 _oauth_tickets: Dict[str, Dict[str, Any]] = {}
 
@@ -59,11 +63,10 @@ def _urlsafe_b64decode(raw: str) -> bytes:
 
 def _get_state_secret() -> str:
     """读取 OAuth state 签名密钥；生产环境必须显式配置。"""
-    secret = str(os.getenv("OAUTH_STATE_SECRET") or os.getenv("SUPER_USER") or "").strip()
+    secret = str(os.getenv("OAUTH_STATE_SECRET") or "").strip()
     if secret:
         return secret
-    app_env = str(os.getenv("APP_ENV") or "").strip().lower()
-    if app_env in {"development", "dev", "local"}:
+    if is_development_env():
         # 仅本地开发兜底，生产环境缺失 secret 必须失败。
         return "webgis-oauth-dev-state-secret"
     raise HTTPException(

@@ -144,6 +144,11 @@ import {
     createRouteStepInteraction,
     createRouteStepStyles,
     createSpatialAnalysisFeature,
+    createAdvancedDrawingFeature,
+    createGeometryEditFeature,
+    isAdvancedDrawingType,
+    isSelectEditTool,
+    normalizeDrawingStyleParams,
     createStartupTaskSchedulerFeature,
     createUserLayerApiFacadeFeature,
 } from '../../composables/map';
@@ -745,6 +750,8 @@ const { zoomToManagedFeature } = createManagedFeatureOperationsFeature({
 // 绘图与测量交互
 const drawGraphicSeedRef = { value: 1 };
 let removeManagedLayerById = () => undefined;
+// 高级绘制样式参数（DrawPanel 可实时更新）
+const drawingStyleParams = ref(normalizeDrawingStyleParams({}));
 
 // 空间分析交互
 const { runSpatialAnalysis } = createSpatialAnalysisFeature({
@@ -773,10 +780,61 @@ const {
     emitUserLayersChange,
     removeManagedLayerById: (...args) => removeManagedLayerById(...args),
     drawStyleConfig,
+    drawingStyleParamsRef: drawingStyleParams,
     drawGraphicSeedRef,
     userDataLayers,
     tooltipRef,
 });
+
+// 高级绘制：矩形/椭圆/圆/箭头等
+const {
+    activateAdvancedDrawing,
+    clearAdvancedDrawingInteractions,
+    undoLastDrawingLayer,
+} = createAdvancedDrawingFeature({
+    mapInstanceRef: mapInstance,
+    drawSource,
+    createManagedVectorLayer,
+    emitGraphicsOverview,
+    emitUserLayersChange,
+    drawStyleConfig,
+    drawingStyleParamsRef: drawingStyleParams,
+    drawGraphicSeedRef,
+    userDataLayers,
+});
+
+// 几何编辑：Select + Modify + 删除选中
+const {
+    activateGeometryEdit,
+    clearGeometryEditInteractions,
+    deleteSelectedDrawingFeature,
+    updateSelectedDrawingStyle,
+    getSelectedEditFeature,
+} = createGeometryEditFeature({
+    mapInstanceRef: mapInstance,
+    userDataLayers,
+    serializeManagedFeatures,
+    emitUserLayersChange,
+    emitGraphicsOverview,
+    removeManagedLayerById: (...args) => removeManagedLayerById(...args),
+    onSelectionChange: (payload) => {
+        if (!payload) return;
+        emit('feature-selected', {
+            编辑模式: '几何编辑',
+            绘制类型: payload.drawType || '未知',
+            图层名称: payload.layerItem?.name || '未知',
+        });
+    },
+});
+
+/**
+ * 统一清理绘制/测量/高级绘制/几何编辑交互
+ */
+function clearAllDrawingInteractions() {
+    clearDrawMeasureInteractions();
+    clearAdvancedDrawingInteractions();
+    clearGeometryEditInteractions();
+}
 
 // 路线绘制交互
 const { drawRouteOnMap, drawDriveRouteOnMap } = createRouteRenderingFeature({
@@ -1714,18 +1772,51 @@ async function startReverseGeocodePickAndDraw() {
 // [交互] 影响绘图工具与图层管理面板样式显示。
 function setDrawStyle(styleCfg) {
     drawStyleConfig.value = mergeStyleConfig(drawStyleConfig.value, styleCfg);
+    // 同步到高级绘制参数，保证 DrawPanel 样式区可影响后续绘制
+    drawingStyleParams.value = normalizeDrawingStyleParams({
+        ...drawingStyleParams.value,
+        ...(styleCfg || {}),
+        radius: styleCfg?.pointRadius ?? styleCfg?.radius ?? drawingStyleParams.value.radius,
+        fillOpacity:
+            styleCfg?.fillOpacity ??
+            (Number.isFinite(styleCfg?.fillOpacityPct)
+                ? styleCfg.fillOpacityPct / 100
+                : drawingStyleParams.value.fillOpacity),
+    });
     if (drawLayerInstance) {
         drawLayerInstance.setStyle(createStyleFromConfig(drawStyleConfig.value));
     }
     userDataLayers
         .filter((item) => item.sourceType === 'draw')
         .forEach((item) => {
+            // 若图层内存在要素级 styleParams，则保留 feature 自身样式，只更新图层默认配置
             item.styleConfig = mergeStyleConfig(item.styleConfig, styleCfg);
-            // 样式配置变化时清空标签缓存
             item.labelStyleCache = new globalThis.Map();
             applyManagedLayerStyle(item);
         });
     emitUserLayersChange();
+}
+
+/**
+ * 更新绘制样式参数（优先作用于选中要素，否则影响后续绘制）
+ * @param {Object} stylePatch
+ */
+function updateDrawingStyleParams(stylePatch = {}) {
+    drawingStyleParams.value = normalizeDrawingStyleParams({
+        ...drawingStyleParams.value,
+        ...(stylePatch || {}),
+    });
+    // 同步基础 drawStyleConfig，兼容旧 TOC 样式入口
+    drawStyleConfig.value = mergeStyleConfig(drawStyleConfig.value, {
+        fillColor: drawingStyleParams.value.fillColor,
+        strokeColor: drawingStyleParams.value.strokeColor,
+        fillOpacity: drawingStyleParams.value.fillOpacity,
+        strokeWidth: drawingStyleParams.value.strokeWidth,
+        pointRadius: drawingStyleParams.value.radius,
+    });
+    if (getSelectedEditFeature()) {
+        updateSelectedDrawingStyle(stylePatch);
+    }
 }
 
 // [隶属] 底部控制-图形视野
@@ -1761,7 +1852,7 @@ function zoomToGraphics() {
 // [作用] 根据工具类型激活绘图、测量、清理、属性查询等交互。
 // [交互] 对外 emit(feature-selected/graphics-overview) 并被父组件工具箱调用。
 function activateInteraction(type) {
-    clearDrawMeasureInteractions();
+    clearAllDrawingInteractions();
     if (!mapInstance.value) return;
 
     // 切换到非选点交互时，退出选点模式
@@ -1838,7 +1929,28 @@ function activateInteraction(type) {
         return;
     }
 
-    // 其他类型则激活绘图/测量（Point/LineString/Polygon/MeasureDistance/MeasureArea）
+    if (type === 'UndoLastDrawing') {
+        Promise.resolve(undoLastDrawingLayer((...args) => removeManagedLayerById(...args))).catch(
+            (error) => {
+                console.warn('[MapContainer] undoLastDrawingLayer failed:', error);
+            },
+        );
+        return;
+    }
+
+    // 选择编辑：Select + Modify（仅 sourceType=draw）
+    if (isSelectEditTool(type)) {
+        activateGeometryEdit();
+        return;
+    }
+
+    // 高级绘制：矩形/椭圆/圆/箭头等
+    if (isAdvancedDrawingType(type)) {
+        activateAdvancedDrawing(type);
+        return;
+    }
+
+    // 其他类型则激活基础绘图/测量（Point/LineString/Polygon/MeasureDistance/MeasureArea）
     activateDrawMeasure(type, (props) => emit('feature-selected', props));
 }
 
@@ -1861,7 +1973,7 @@ const {
 // [作用] 清理当前激活的绘图/捕捉交互和提示覆盖物。
 // [交互] 被 activateInteraction 与外部调用复用。
 function clearInteractions() {
-    clearDrawMeasureInteractions();
+    clearAllDrawingInteractions();
 }
 
 // 初始化图层导出服务并包装为适配本组件的调用方式
@@ -1911,6 +2023,9 @@ defineExpose({
     previewDriveRouteStep,
     clearDriveRouteStepPreview,
     setDrawStyle,
+    updateDrawingStyleParams,
+    deleteSelectedDrawingFeature,
+    updateSelectedDrawingStyle,
     setUserLayerStyle,
     applyStyleTemplate,
     setUserLayerVisibility,

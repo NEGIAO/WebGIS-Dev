@@ -6,6 +6,15 @@
 
 ## 版本记录
 
+### V3.4.5 (2026-07-26) — 高级 2D 绘制与几何编辑集成
+
+- 🎨 **DrawPanel 富绘制升级**：保留 WebGIS 品牌配色，新增基础/形状/箭头/编辑分组，支持矩形、椭圆、圆轮廓、箭头、风向箭头、军标箭头与选择编辑。
+- 🧩 **模块化 feature 库**：新增 `drawingToolRegistry`、`drawingGeometryUtils`、`useDrawingFeatureStyle`、`useAdvancedDrawing`、`useGeometryEdit`，避免把业务逻辑堆进 `MapContainer.vue`。
+- 🗺️ **托管图层统一管理**：高级/基础绘制结果均以 `sourceType: draw` 写入 managed layer，进入 TOC/LayerControl 统一显示、隐藏、定位、删除与导出。
+- ✏️ **几何编辑会话**：Select + Modify 顶点编辑、删除选中、Escape 退出、撤销最近绘制图层；仅允许编辑 draw 托管图层，避免误改上传/分析数据。
+- 🎯 **要素级样式**：边线/填充/虚线/半径/箭头参数/军标渐变，绘制前影响后续绘制，选中后可即时更新当前要素。
+- 📝 文档同步：版本升至 V3.4.5，补充维护日志与前后端/结构说明。
+
 ### V3.4.4 (2026-07-26) — Google/GitHub OAuth 一键注册登录与体积云阴影稳定性修复
 
 - 🆕 **OAuth 一键注册登录**：新增 Google/GitHub 授权起点与回调，首次授权可自动创建本地 registered 用户，后续直接复用 WebGIS session token 登录。

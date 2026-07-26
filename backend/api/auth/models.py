@@ -55,7 +55,7 @@ class SendCodeRequest(BaseModel):
     """发送邮箱验证码请求"""
     email: str = Field(..., min_length=5, max_length=120)
     purpose: str = Field(..., min_length=1, max_length=32)
-    username: Optional[str] = Field(default=None, max_length=24)
+    username: Optional[str] = Field(default=None, max_length=40)
 
 
 class VerifyCodeRequest(BaseModel):

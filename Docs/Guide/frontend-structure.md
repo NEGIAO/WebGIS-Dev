@@ -202,7 +202,7 @@ frontend/src/
 │   │   ├── ControlsPanel.vue                       # 总面板入口
 │   │   ├── AdministrativeDivisionPanel.vue         # 行政区面板
 │   │   ├── AdministrativeDivisionTreeNode.vue      # 行政区树节点
-│   │   ├── DrawPanel.vue                           # 绘制面板
+│   │   ├── DrawPanel.vue                           # 富绘制面板（基础/形状/箭头/编辑 + 要素样式）
 │   │   ├── LogMonitor.vue                          # 日志监控
 │   │   ├── MeasurePanel.vue                        # 测量面板
 │   │   └── SpatialAnalysisPanel.vue                # 空间分析面板
@@ -284,7 +284,12 @@ frontend/src/
 │   │   │   ├── useDataManager.js                   # 数据管理
 │   │   │   ├── useDeferredUserLayerApis.js         # 延迟用户图层 API
 │   │   │   ├── useDistrictManager.js               # 行政区划管理
-│   │   │   ├── useDrawMeasure.js                   # 绘制与测量
+│   │   │   ├── useDrawMeasure.js                   # 基础绘制与测量
+│   │   │   ├── drawingToolRegistry.js              # 高级绘制工具注册表与默认样式
+│   │   │   ├── drawingGeometryUtils.js             # 矩形/椭圆/箭头几何纯函数
+│   │   │   ├── useDrawingFeatureStyle.js           # 绘制要素级样式与选中高亮
+│   │   │   ├── useAdvancedDrawing.js               # 高级 Draw 交互（矩形/椭圆/圆/箭头）
+│   │   │   ├── useGeometryEdit.js                  # Select/Modify/删除选中编辑会话
 │   │   │   ├── useLayerContextMenuActions.js       # 图层右键菜单
 │   │   │   ├── useLayerControlHandlers.js          # 图层控制处理
 │   │   │   ├── useLayerMetadataNormalization.js    # 图层元数据规范化

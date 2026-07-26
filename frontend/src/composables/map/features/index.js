@@ -9,6 +9,40 @@ export { useCreateManagedVectorLayer } from './useCreateManagedVectorLayer';
 export { createDeferredUserLayerApis } from './useDeferredUserLayerApis';
 export { createDistrictManagerFeature } from './useDistrictManager';
 export { createDrawMeasureFeature } from './useDrawMeasure';
+export { createAdvancedDrawingFeature } from './useAdvancedDrawing';
+export { createGeometryEditFeature } from './useGeometryEdit';
+export {
+    DRAWING_TOOLS,
+    DRAWING_PRESET_COLORS,
+    DEFAULT_DRAWING_STYLE_PARAMS,
+    getDrawingTool,
+    getDrawingHint,
+    getDrawingTypeLabel,
+    getDrawingToolsByGroup,
+    isAdvancedDrawingType,
+    isBasicDrawingType,
+    isSelectEditTool,
+    isArrowTool,
+    isBattleArrowTool,
+    hasFill,
+    hasRadius,
+    hasStrokeDash,
+    normalizeDrawingStyleParams,
+    toManagedStyleConfig,
+} from './drawingToolRegistry';
+export {
+    getRectangleGeometryFunction,
+    getEllipseGeometryFunction,
+    buildTaperedArrowPolygon,
+    buildSmallArrowHeadPolygon,
+    catmullRomSmooth,
+} from './drawingGeometryUtils';
+export {
+    applyDrawingFeatureStyle,
+    createDrawingStyleFromParams,
+    createSelectionHighlightStyle,
+    isDrawingStyledFeature,
+} from './useDrawingFeatureStyle';
 export { useLayerContextMenuActions } from './useLayerContextMenuActions';
 export { createLayerControlHandlers } from './useLayerControlHandlers';
 export { createLayerMetadataNormalizationFeature } from './useLayerMetadataNormalization';

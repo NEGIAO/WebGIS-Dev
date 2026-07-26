@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.4.4
+# WebGIS 前端项目 — V3.4.5
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -24,7 +24,7 @@
 - 📊 **数据管理**：多格式导入（GeoJSON/KML/SHP/GeoTIFF/CSV/GLB/GLTF/CZML/3D Tiles），批量导出
 - 🔎 **高德 AOI 注入**：支持详情 JSON 与搜索 AOI，`@` 分隔的独立区域自动拆分为多个环
 - 🎨 **可视化**：热力图、等高线、3D 要素、电影级效果（HDR/FXAA/HBAO/体积云/大气散射）
-- 🔍 **交互**：绘制、测量、路线规划、地点搜索、卷帘分析
+- 🔍 **交互**：富绘制（点/线/面/矩形/椭圆/圆/箭头/风向/军标 + 选择编辑）、测量、路线规划、地点搜索、卷帘分析
 - 🌤️ **天气**：实时天气 + 趋势预报（ECharts 容器查询自适应）
 - 🤖 **AI 助手**：LLM 集成地理问答，支持 Function Calling（三层降级）
 - 🧭 **风水罗盘**：HUD 模式 + 传统模式，5 种主题，宫位解释系统
@@ -165,5 +165,5 @@ MIT
 ---
 
 最后更新：2026-07-26
-当前版本：V3.4.4
-说明：体积云 BSM 阴影稳定性修复完成。CloudShadowPass 改为矩阵每帧同步 + 颜色图集双缓冲 + 运动强制刷新；ShadowResolvePass 大运动时 hard-reset history；地面 BSM 仅使用可靠 depth→ECEF 锚点，并降低 cascade 边界抖动。
+当前版本：V3.4.5
+说明：高级 2D 绘制与几何编辑集成。DrawPanel 升级为分组富绘制面板；新增 drawingToolRegistry / drawingGeometryUtils / useDrawingFeatureStyle / useAdvancedDrawing / useGeometryEdit；绘制结果统一 `sourceType: draw` 进入 TOC/LayerControl 托管图层管理。

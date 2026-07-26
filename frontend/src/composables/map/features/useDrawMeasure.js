@@ -12,6 +12,15 @@ import Overlay from 'ol/Overlay';
 import { Polygon } from 'ol/geom';
 import { getArea, getLength } from 'ol/sphere';
 import { unByKey } from 'ol/Observable';
+import {
+    applyDrawingFeatureStyle,
+    createDrawingStyleFromParams,
+    setDrawingFeatureMetadata,
+} from './useDrawingFeatureStyle';
+import {
+    normalizeDrawingStyleParams,
+    toManagedStyleConfig,
+} from './drawingToolRegistry';
 
 /**
  * 工厂函数 - 返回绘图与测量相关的导出函数
@@ -38,6 +47,7 @@ export function createDrawMeasureFeature({
     emitUserLayersChange = () => {},
     removeManagedLayerById = null,
     drawStyleConfig = { value: {} },
+    drawingStyleParamsRef = { value: {} },
     drawGraphicSeedRef = { value: 1 },
     userDataLayers = [],
     tooltipRef = { helpTooltipEl: null, helpTooltipOverlay: null },
@@ -158,10 +168,22 @@ export function createDrawMeasureFeature({
         const drawType =
             type === 'MeasureDistance' ? 'LineString' : type === 'MeasureArea' ? 'Polygon' : type;
 
+        const currentDrawingStyleParams = () =>
+            normalizeDrawingStyleParams({
+                ...(drawStyleConfig?.value || {}),
+                ...(drawingStyleParamsRef?.value || {}),
+                radius:
+                    drawingStyleParamsRef?.value?.radius ??
+                    drawStyleConfig?.value?.pointRadius ??
+                    drawStyleConfig?.value?.radius,
+            });
+
         drawInteraction = new Draw({
             source: drawSource,
             type: drawType,
-            style: createStyleFromConfig(drawStyleConfig.value),
+            style: isMeasure
+                ? createStyleFromConfig(drawStyleConfig.value)
+                : (feature) => createDrawingStyleFromParams(drawType, currentDrawingStyleParams(), feature),
         });
 
         map.addInteraction(drawInteraction);
@@ -207,14 +229,25 @@ export function createDrawMeasureFeature({
                 const feature = evt.feature;
                 const geom = feature.getGeometry();
                 const geomType = geom?.getType?.() || drawType;
-                drawSource.removeFeature(feature);
+                // OL Draw 会在 drawend 后再把 feature 插入 source：延迟移除，避免临时绘制层与托管图层重复显示
+                window.setTimeout(() => drawSource.removeFeature(feature), 0);
+
+                // 为基础绘制补充 drawType/styleParams，便于后续选择编辑与样式恢复
+                const styleParams = currentDrawingStyleParams();
+                setDrawingFeatureMetadata(feature, drawType, styleParams);
+                applyDrawingFeatureStyle(feature);
 
                 await createManagedVectorLayer({
                     name: `绘制_${geomType}_${drawGraphicSeedRef.value++}`,
                     type: geomType,
                     sourceType: 'draw',
                     features: [feature],
-                    styleConfig: drawStyleConfig.value,
+                    styleConfig: toManagedStyleConfig(styleParams),
+                    metadata: {
+                        drawType,
+                        editorType: 'basic-2d',
+                        styleParams,
+                    },
                     fitView: false,
                 });
                 emitGraphicsOverview();

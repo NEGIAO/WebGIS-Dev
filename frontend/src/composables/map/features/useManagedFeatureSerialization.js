@@ -46,12 +46,27 @@ function serializeManagedFeature(feature, layerName, index) {
     delete properties.geometry;
     delete properties.style;
 
-    const serializedGeometry = geometry
-        ? {
-              type: geometry.getType?.() || 'Geometry',
-              coordinates: geometry.getCoordinates?.(),
-          }
-        : null;
+    // 保留高级绘制元数据（drawType/styleParams），供 TOC/导出/编辑恢复
+    if (typeof feature?.get === 'function') {
+        const drawType = feature.get('drawType');
+        const styleParams = feature.get('styleParams');
+        if (drawType) properties.drawType = drawType;
+        if (styleParams) properties.styleParams = styleParams;
+    }
+
+    let serializedGeometry = null;
+    if (geometry) {
+        const geomType = geometry.getType?.() || 'Geometry';
+        serializedGeometry = {
+            type: geomType,
+            coordinates: geometry.getCoordinates?.(),
+        };
+        // OpenLayers Circle 不是标准 GeoJSON：额外保存 center/radius 以便恢复
+        if (geomType === 'Circle' && typeof geometry.getRadius === 'function') {
+            serializedGeometry.radius = geometry.getRadius();
+            serializedGeometry.center = geometry.getCenter?.() || geometry.getCoordinates?.();
+        }
+    }
 
     properties._gid = featureId;
 
