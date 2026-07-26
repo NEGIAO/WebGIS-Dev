@@ -24,6 +24,8 @@ uniform float u_cloudShadowNear;
 uniform float u_cloudShadowFar;
 uniform float u_cloudShadowTopHeight;
 uniform float u_cloudShadowBottomRadius;
+uniform float u_cloudShadowAltitudeFadeStart;
+uniform float u_cloudShadowAltitudeFadeEnd;
 uniform float u_bsmGroundOpticalDepthScale;
 // cascade UV 空间 texel 尺寸（单 cascade tile，非整个 atlas）
 uniform vec2 u_cloudShadowTexelSize;
@@ -122,7 +124,7 @@ int getFadedCascadeIndex(mat4 viewMat, vec3 worldPos, vec2 intervals[4], float n
       }
     }
   }
-  return jitter <= alpha ? nextIndex : prevIndex;
+  return alpha > 0.35 ? nextIndex : prevIndex;
 }
 
 vec2 getShadowUv(vec3 worldPos, int ci) {
@@ -188,16 +190,26 @@ vec3 stabilizeBsmSamplePosition(vec3 posMeters, float viewDistMeters) {
   return n * (u_cloudShadowBottomRadius + stableH);
 }
 
+float getCloudShadowCameraAltitudeFade(vec3 cameraMeters) {
+  float cameraHeight = length(cameraMeters) - u_cloudShadowBottomRadius;
+  float fadeStart = max(u_cloudShadowAltitudeFadeStart, 0.0);
+  float fadeEnd = max(u_cloudShadowAltitudeFadeEnd, fadeStart + 1.0);
+  return 1.0 - smoothstep(fadeStart, fadeEnd, cameraHeight);
+}
+
 // rawWorldPosMeters：ECEF 米；u_cloudShadowBottomRadius / TopHeight 与管线 setCloudShadow 一致（米）
 float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   if (u_cloudShadowEnabled == 0) return 1.0;
 
   // 采样前稳定 BSM 世界点（空中透视仍用原始 depth 点，见 main）
   vec3 camMeters = (u_cameraPosition + u_altitudeCorrection) / METER_TO_LENGTH_UNIT;
-  float viewDist = length(rawWorldPosMeters - camMeters);
+  float altitudeFade = getCloudShadowCameraAltitudeFade(camMeters);
+  if (altitudeFade <= 0.0) return 1.0;
+  float viewDist = length(rawWorldPosMeters - u_cameraPosition / METER_TO_LENGTH_UNIT);
   vec3 samplePos = stabilizeBsmSamplePosition(rawWorldPosMeters, viewDist);
 
-  vec3 groundNormal = normalize(samplePos);
+  vec3 shellSamplePos = samplePos + u_altitudeCorrection / METER_TO_LENGTH_UNIT;
+  vec3 groundNormal = normalize(shellSamplePos);
   float sunSinElev = dot(u_sunDirection, groundNormal);
 
   // 1) 昼夜线遮挡：太阳低于该地面点本地地平线时，地面点已入夜，无云阴影。
@@ -206,8 +218,8 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
 
   float topShellR = u_cloudShadowBottomRadius + u_cloudShadowTopHeight;
   vec3 rd = u_sunDirection;
-  float bS = dot(rd, samplePos);
-  float cTop = dot(samplePos, samplePos) - topShellR * topShellR;
+  float bS = dot(rd, shellSamplePos);
+  float cTop = dot(shellSamplePos, shellSamplePos) - topShellR * topShellR;
   float discTop = bS * bS - cTop;
   if (discTop <= 0.0) return 1.0;
   float distToShadowTop = -bS + sqrt(discTop);
@@ -218,7 +230,7 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   float rayLenFade = 1.0 - smoothstep(u_cloudShadowTopHeight * 6.0,
                                        u_cloudShadowTopHeight * 20.0,
                                        distToShadowTop);
-  float fade = horizonFade * lowSunFade * rayLenFade;
+  float fade = horizonFade * lowSunFade * rayLenFade * altitudeFade;
   if (fade <= 0.0) return 1.0;
 
   float jitter = interleavedGradientNoise(gl_FragCoord.xy);
@@ -331,10 +343,8 @@ void main() {
       u_sunDirection,
       transmittanceW
     );
-    float sunTW = getGroundSunTransmittance(scenePosKmApprox / METER_TO_LENGTH_UNIT);
-    // 地面像素输入为 sRGB（AtmospherePostProcess 对 applyGroundAtmosphere=0 的地面仅乘曝光），
-    // 不能再走 tonemapDisplay（ACES+gamma），否则双重 gamma 产生白雾。直接输出大气合成结果。
-    vec3 finalColorW = originalColor.rgb * transmittanceW * sunTW + inscatterW * u_aerialPerspectiveScale;
+    // w 异常时的 bottom-sphere 交点只是透视兜底，不作为 BSM 地面阴影锚点，避免假贴地阴影粘屏。
+    vec3 finalColorW = originalColor.rgb * transmittanceW + inscatterW * u_aerialPerspectiveScale;
     out_FragColor = vec4(finalColorW, originalColor.a);
     return;
   }
@@ -347,7 +357,8 @@ void main() {
   vec3 scenePosKm;
   vec3 rawWorldPosMeters = vec3(0.0);
   if (eyePos.z >= 0.0 && hasSceneDepth) {
-    // z>=0 但深度非空：远距/对数深度常见数值问题，眼→世界不可靠，用射线与 bottom 球前向交点作地表锚点
+    // z>=0 但深度非空：远距/对数深度常见数值问题，眼→世界不可靠。
+    // 这里仅做空中透视近似，不再把 bottom-sphere 交点喂给 BSM，避免假贴地阴影。
     float bz = dot(cameraPosition, rayDirection);
     float cz = dot(cameraPosition, cameraPosition) - bottomR * bottomR;
     float discz = bz * bz - cz;
@@ -387,13 +398,10 @@ void main() {
     transmittance
   );
 
-  vec3 rawForBSM;
-  if (eyePos.z >= 0.0 && hasSceneDepth) {
-    rawForBSM = scenePosKm / METER_TO_LENGTH_UNIT;
-  } else {
-    rawForBSM = rawWorldPosMeters;
-  }
-  float sunT = getGroundSunTransmittance(rawForBSM);
+  // 仅在可靠 depth→ECEF 路径上启用地面 BSM；假球壳点不参与，防止屏幕粘滞阴影。
+  float sunT = (rawWorldPosMeters.x != 0.0 || rawWorldPosMeters.y != 0.0 || rawWorldPosMeters.z != 0.0)
+    ? getGroundSunTransmittance(rawWorldPosMeters)
+    : 1.0;
   // 地面像素：sRGB 输入不走 tonemapDisplay，避免双重 gamma 白雾
   vec3 finalColor = originalColor.rgb * transmittance * sunT + inscatter * u_aerialPerspectiveScale;
 

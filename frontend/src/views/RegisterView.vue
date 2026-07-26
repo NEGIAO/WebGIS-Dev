@@ -3,11 +3,15 @@
         <div class="container fade-in">
             <div class="form-header">
                 <h1 class="form-title">NEGIAO's WebGIS</h1>
-                <h1 class="form-title">用户登录/注册</h1>
-                <p class="form-subtitle">登录以访问系统主页与受保护 API</p>
+                <p class="app-purpose-title">地理空间数据可视化与在线 WebGIS 平台</p>
+                <p class="form-subtitle">
+                    NEGIAO's WebGIS 用于浏览、导入、分析和保存个人地图项目；Google 登录仅用于账户认证与保存你的地图配置。
+                </p>
 
                 <div class="quick-hints">
-                    <div class="hint-item">游客登陆API受限</div>
+                    <div class="hint-item">WebGIS 地图可视化</div>
+                    <div class="hint-item">个人地图项目保存</div>
+                    <div class="hint-item">游客登陆 API 受限</div>
                 </div>
             </div>
 
@@ -33,6 +37,31 @@
                     >
                         注册
                     </button>
+                </div>
+
+                <div
+                    v-if="!requiresEmailBinding"
+                    class="oauth-section"
+                >
+                    <button
+                        type="button"
+                        class="oauth-btn google"
+                        @click="handleOAuthLogin('google')"
+                    >
+                        <i class="fab fa-google"></i>
+                        使用 Google 继续
+                    </button>
+                    <button
+                        type="button"
+                        class="oauth-btn github"
+                        @click="handleOAuthLogin('github')"
+                    >
+                        <i class="fab fa-github"></i>
+                        使用 GitHub 继续
+                    </button>
+                    <div class="oauth-divider">
+                        <span>或使用邮箱账号</span>
+                    </div>
                 </div>
 
                 <form
@@ -531,6 +560,7 @@ import {
     apiAuthResetPassword,
     apiAuthBindEmail,
     apiLocationTrackVisit,
+    redirectToOAuthProvider,
 } from '../api/backend';
 import {
     consumePersistedPositionCode,
@@ -641,6 +671,15 @@ function switchMode(nextMode) {
         emailVerified.value = false;
         selectedAvatarIndex.value = 0;
     }
+}
+
+/**
+ * 跳转 Google/GitHub OAuth 登录入口。
+ * @param {'google'|'github'} provider
+ */
+function handleOAuthLogin(provider) {
+    setFormState('', '');
+    redirectToOAuthProvider(provider);
 }
 
 function _fillGuestAccount() {
@@ -1341,11 +1380,21 @@ onUnmounted(() => {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-.form-subtitle {
+.app-purpose-title {
+    margin: 8px 0 0;
     font-size: 15px;
-    opacity: 0.9;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    opacity: 0.98;
+}
+
+.form-subtitle {
+    font-size: 14px;
+    opacity: 0.92;
     font-weight: 300;
-    margin-top: 5px;
+    margin: 10px auto 0;
+    max-width: 34em;
+    line-height: 1.55;
 }
 
 .quick-hints {
@@ -1393,6 +1442,59 @@ onUnmounted(() => {
 .mode-btn.active {
     background: var(--brand-primary);
     color: #fff;
+}
+
+.oauth-section {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 22px;
+}
+
+.oauth-btn {
+    width: 100%;
+    border: 1px solid var(--border-brand-light);
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #ffffff;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.oauth-btn.google {
+    border-color: rgba(66, 133, 244, 0.35);
+}
+
+.oauth-btn.github {
+    border-color: rgba(36, 41, 47, 0.35);
+}
+
+.oauth-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.oauth-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-light);
 }
 
 .form-group {

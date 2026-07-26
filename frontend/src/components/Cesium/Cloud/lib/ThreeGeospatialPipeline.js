@@ -453,7 +453,7 @@ int getFadedCascadeIndex(mat4 viewMat, vec3 worldPos, vec2 intervals[4], float n
       if (depth >= interval.x) { prevIndex = nextIndex; nextIndex = i; alpha = saturate((depth - interval.x) / max(margin, 1e-6)); }
     }
   }
-  return jitter <= alpha ? nextIndex : prevIndex;
+  return alpha > 0.35 ? nextIndex : prevIndex;
 }
 
 vec2 getShadowUv(vec3 pos, int ci) { vec4 clip = u_shadowMatrices[ci] * vec4(pos, 1.0); clip /= clip.w; return clip.xy * 0.5 + 0.5; }
@@ -619,11 +619,9 @@ vec4 marchClouds(vec3 rayOrigin, vec3 rd, vec2 rayNearFar, float cosTheta, float
       #endif
       float sunRayDist;
       float opticalDepth = marchOpticalDepthToSun(position, sunDirection, mipLevel, jitter, sunRayDist);
-      if (length(position) - refRadius < u_shadowTopHeight && u_useShadowBuffer == 1) {
-        vec3 sn = normalize(position);
-        float r = u_maxShadowFilterRadius * remapClamped(dot(sunDirection, sn), 0.1, 0.0);
-        opticalDepth += sampleShadowOpticalDepth(position, sunRayDist, r, jitter);
-      }
+      // BSM 只用于地面云影与丁达尔/空气透视辅助，不再叠加到体积云体本身。
+      // 直接把地面 shadow atlas 采样到云体会在镜头移动时看起来像“阴影贴图贴到了云上”。
+      // 云体自阴影仍由 marchOpticalDepthToSun(position, sunDirection, ...) 沿太阳方向实时积分负责。
       vec3 radiance = sunColor * approximateMultipleScattering(opticalDepth, cosTheta);
       radiance += skyColor * RECIPROCAL_PI4 * skyGradient * u_skyLightScale;
       // 环境光地板：模拟地面反射 + 深层多次散射，防止云底纯黑（现实中云底为浅灰）
@@ -1489,6 +1487,21 @@ uniform sampler2D irradiance_texture;
     dyn.scatteringCoefficient = Number(this.params.scatteringCoefficient) ?? 0.9;
     dyn.absorptionCoefficient = Number(this.params.absorptionCoefficient) ?? 1.0;
     sp.updateDynamicParams(dyn);
+    if (this._bsm.resolve) {
+      const passUpdated = sp.wasUpdatedThisFrame?.() === true;
+      const passMotion = sp.getLastMotion?.() || 0.0;
+      this._bsm.resolve.setInputTextures(sp.getTexture(), sp.getDepthVelocityTexture());
+      this._bsm.resolve.setFrameState?.({
+        // BSM atlas/matrix 在快速运动时变化很大，resolve history 必须断开，避免把旧 cascade 投到新地面。
+        forceReset: passUpdated && passMotion > 0.02,
+        motion: passMotion,
+      });
+      if (passUpdated) {
+        // Resolve 必须在 CloudShadowPass 当帧写完 color/depthVelocity 后立即执行；
+        // 不再依赖 ShadowResolvePass 自己的 preRender listener，避免 history 与 atlas 配对错帧。
+        this._bsm.resolve.render(true);
+      }
+    }
 
     let tex = this._bsm.resolve ? this._bsmResolveGetTexture() : null;
     if (!tex) tex = sp.getTexture();
@@ -1509,9 +1522,10 @@ uniform sampler2D irradiance_texture;
     const intervals = sp.getShadowIntervals();
     const mats = sp.getShadowMatrices();
     const tile = sp.getTileSize?.() || Math.floor(SHADOW_MAP_SIZE / 2);
-    // 远距几何误差修正：相机越高/越远，越把 BSM 采样点拉向稳定球面（对齐 three-geospatial correctGeometricError）
-    const camH = this.viewer.camera.positionCartographic?.height ?? 0;
-    const geoAmt = Math.min(1, Math.max(0, (camH - 2000) / 25000));
+    // BSM 地面采样位置必须与相机海拔解耦：之前按 camH 动态增加几何误差修正，
+    // 会在镜头升降时连续把采样点拉向 bottom 球面，导致地面云影 UV 帧间滑动/抖动。
+    // 如需远距地形修正，应使用显式、稳定的参数，而不是每帧相机高度驱动。
+    const geoAmt = 0.0;
     // setCloudShadow 对 intervals/matrices 存引用（见 AtmospherePostProcess/AerialPerspectiveEffect），
     // 因此复用同一 opts 与数组、原地更新内容是安全的，避免每帧 new Cartesian2/Matrix4
     const s = this._scratch;
@@ -1524,6 +1538,7 @@ uniform sampler2D irradiance_texture;
         enabled: true, texture: null, scale: 1,
         decode: { x: 1, y: 1, z: 1, w: 1 },
         near: 0.1, far: 200000, topHeight: 5000, bottomRadius: 6371000,
+        altitudeFadeStart: 5000, altitudeFadeEnd: 13000,
         intervals: s.bsmShadowIntervals, matrices: s.bsmShadowMatrices,
         texelSize: { x: 1 / 512, y: 1 / 512 },
         geometricErrorCorrectionAmount: 0,
@@ -1534,6 +1549,8 @@ uniform sampler2D irradiance_texture;
     opts.near = sp.getShadowNear?.() ?? (Number(this.viewer.camera.frustum?.near) || 0.1);
     opts.far = sp.getShadowFar();
     opts.topHeight = this._getMaxHeight();
+    opts.altitudeFadeStart = this._getMaxHeight();
+    opts.altitudeFadeEnd = this._getMaxHeight() + (Number(this.params.altitudeFadeRange) || 8000.0);
     opts.bottomRadius = Number(this.params.bottomRadius) || 6371000;
     opts.texelSize.x = 1 / tile; opts.texelSize.y = 1 / tile;
     opts.geometricErrorCorrectionAmount = geoAmt;

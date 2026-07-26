@@ -56,6 +56,7 @@ export const CLOUD_QUALITY_PRESETS = {
       maxStepSize: 1400,
       perspectiveStepScale: 1.03,
       shadowMapSize: 512,
+      // BSM 更新节奏：仅节流昂贵 raymarch；CSM 矩阵每帧仍会更新，运动时会强制刷新。
       bsmUpdateInterval: 4,
       shadowResolveEnabled: false,
       shadowPcfTaps: 1,
@@ -123,6 +124,7 @@ export const CLOUD_QUALITY_PRESETS = {
       maxStepSize: 1200,
       perspectiveStepScale: 1.018,
       shadowMapSize: 512,
+      // BSM 更新节奏：仅节流昂贵 raymarch；CSM 矩阵每帧仍会更新，运动时会强制刷新。
       bsmUpdateInterval: 3,
       shadowResolveEnabled: true,
       shadowPcfTaps: 4,

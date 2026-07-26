@@ -165,4 +165,4 @@ MIT
 
 最后更新：2026-07-25
 当前版本：V3.4.2
-说明：体积云 BSM 地面阴影已支持运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass，并统一 Cloud/Aerial/Atmosphere 三条 BSM 解码链路，地面云影会随云形自然动态更新。
+说明：体积云 BSM 地面阴影已支持运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass，并统一 Cloud/Aerial/Atmosphere 三条 BSM 解码链路；相机接近或高于云顶时，地面云影会随体积云高度淡出。

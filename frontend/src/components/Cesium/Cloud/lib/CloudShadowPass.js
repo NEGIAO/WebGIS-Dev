@@ -25,7 +25,19 @@ export class CloudShadowPass {
         this._gl = null;
         this._fbo = null;
         this._colorTexture = null;
+        this._colorTextureWrite = null;
         this._depthVelocityTexture = null;
+        this._cesiumColorTextureRead = null;
+        this._cesiumColorTextureWrite = null;
+        this._cesiumDepthTexture = null;
+        this._colorTextureHandle = null;
+        this._depthVelocityTextureHandle = null;
+        this._hasValidColorTexture = false;
+        this._lastRenderedFrame = -1;
+        this._updatedThisFrame = false;
+        this._prevCamPos = null;
+        this._prevCamDir = null;
+        this._lastMotion = 1.0;
         this._program = null;
         this._vao = null;
         this._colorTextureTarget = null;
@@ -36,6 +48,11 @@ export class CloudShadowPass {
         this._shadowFar = 0.0;
         this._shadowIntervals = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array([0, 0]));
         this._shadowMatrices = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array(16));
+        this._publishedShadowIntervals = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array([0, 0]));
+        this._publishedShadowMatrices = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array(16));
+        this._publishedShadowNear = 0.1;
+        this._publishedShadowFar = 0.0;
+        this._hasPublishedShadowState = false;
         this._inverseShadowMatrices = Array.from({ length: SHADOW_CASCADE_COUNT }, () => new Float32Array(16));
         this._prevShadowMatrices = Array.from({ length: SHADOW_CASCADE_COUNT }, () => {
             const m = new Float32Array(16);
@@ -151,47 +168,53 @@ export class CloudShadowPass {
         const gl = context._gl;
         if (!gl) return;
 
-        // 清理旧资源
-        if (this._cesiumColorTexture) this._cesiumColorTexture.destroy();
+        // 清理旧资源。BSM 颜色使用 read/write 双缓冲：写入纹理允许 clear，消费者只读取上一张完整纹理。
+        if (this._cesiumColorTextureRead) this._cesiumColorTextureRead.destroy();
+        if (this._cesiumColorTextureWrite) this._cesiumColorTextureWrite.destroy();
         if (this._cesiumDepthTexture) this._cesiumDepthTexture.destroy();
         if (this._fbo) { gl.deleteFramebuffer(this._fbo); this._fbo = null; }
 
-        // 核心修正：利用 Cesium 原生的 Texture 类，它会自动处理 Float/Half_Float 扩展与上下文绑定
-        const options = {
+        const makeOptions = (pixelDatatype) => ({
             context: context,
             width: this.size,
             height: this.size,
             pixelFormat: Cesium.PixelFormat.RGBA,
-            pixelDatatype: Cesium.PixelDatatype.HALF_FLOAT, // 强制半浮点，保存巨大的光学深度
+            pixelDatatype,
             sampler: new Cesium.Sampler({
                 minificationFilter: Cesium.TextureMinificationFilter.LINEAR,
                 magnificationFilter: Cesium.TextureMagnificationFilter.LINEAR,
                 wrapS: Cesium.TextureWrap.CLAMP_TO_EDGE,
                 wrapT: Cesium.TextureWrap.CLAMP_TO_EDGE
             })
-        };
+        });
 
         try {
-            this._cesiumColorTexture = new Cesium.Texture(options);
+            const options = makeOptions(Cesium.PixelDatatype.HALF_FLOAT);
+            this._cesiumColorTextureRead = new Cesium.Texture(options);
+            this._cesiumColorTextureWrite = new Cesium.Texture(options);
             this._cesiumDepthTexture = new Cesium.Texture(options);
             this._useFloatRT = true;
         } catch (e) {
             console.warn("CloudShadowPass: HALF_FLOAT 不支持，降级为 UNSIGNED_BYTE");
-            options.pixelDatatype = Cesium.PixelDatatype.UNSIGNED_BYTE;
-            this._cesiumColorTexture = new Cesium.Texture(options);
+            const options = makeOptions(Cesium.PixelDatatype.UNSIGNED_BYTE);
+            this._cesiumColorTextureRead = new Cesium.Texture(options);
+            this._cesiumColorTextureWrite = new Cesium.Texture(options);
             this._cesiumDepthTexture = new Cesium.Texture(options);
             this._useFloatRT = false;
         }
 
-        // 提取底层 WebGLTexture 供原生 FBO 绑定
-        this._colorTexture = this._cesiumColorTexture._texture;
-        this._depthVelocityTexture = this._cesiumDepthTexture._texture;
-        this._colorTextureTarget = this._cesiumColorTexture._target;
+        this._colorTexture = this._cesiumColorTextureRead;
+        this._colorTextureWrite = this._cesiumColorTextureWrite;
+        this._depthVelocityTexture = this._cesiumDepthTexture;
+        this._colorTextureHandle = this._cesiumColorTextureWrite._texture;
+        this._depthVelocityTextureHandle = this._cesiumDepthTexture._texture;
+        this._colorTextureTarget = this._cesiumColorTextureWrite._target;
+        this._hasValidColorTexture = false;
 
         const fbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._colorTexture, 0);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this._depthVelocityTexture, 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._colorTextureHandle, 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this._depthVelocityTextureHandle, 0);
         gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
         
         this._fboComplete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
@@ -391,6 +414,8 @@ export class CloudShadowPass {
 
             const shadowMatrix = this._shadowMatrices[ci];
             const invShadowMatrix = this._inverseShadowMatrices[ci];
+            // 生成端：inverse 用 ECEF 世界矩阵，shader 内部再加 altitudeCorrection。
+            // 消费端：shadowMatrices 同样保持 ECEF，避免与 depth 重建的 raw ECEF 采样空间不一致。
             this._multiply(shadowMatrix, proj, view);
             this._invert(invShadowMatrix, shadowMatrix);
         }
@@ -597,6 +622,52 @@ export class CloudShadowPass {
         out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
     }
 
+    _publishShadowState() {
+        for (let ci = 0; ci < SHADOW_CASCADE_COUNT; ci++) {
+            this._publishedShadowIntervals[ci].set(this._shadowIntervals[ci]);
+            this._publishedShadowMatrices[ci].set(this._shadowMatrices[ci]);
+        }
+        this._publishedShadowNear = this._shadowNear;
+        this._publishedShadowFar = this._shadowFar;
+        this._hasPublishedShadowState = true;
+    }
+
+    /**
+     * 估算相机帧间运动量。
+     * @returns {number} 0 表示近似静止，1 表示需要强制刷新 BSM 的明显运动。
+     */
+    _measureCameraMotion() {
+        const cam = this.viewer?.scene?.camera;
+        if (!cam?.positionWC || !cam?.directionWC) return 1.0;
+        let motion = 1.0;
+        if (this._prevCamPos && this._prevCamDir) {
+            const dp = Cesium.Cartesian3.distance(cam.positionWC, this._prevCamPos);
+            const dot = Cesium.Cartesian3.dot(cam.directionWC, this._prevCamDir);
+            const dd = Math.abs(Math.min(1.0, Math.max(-1.0, dot)) - 1.0);
+            // BSM 是相机视锥相关 CSM：很小的旋转也会让 atlas/matrix 错配，因此阈值比普通 TAA 更敏感。
+            motion = Math.min(1.0, dp * 2e-3 + dd * 160.0);
+        }
+        this._prevCamPos = Cesium.Cartesian3.clone(cam.positionWC, this._prevCamPos);
+        this._prevCamDir = Cesium.Cartesian3.clone(cam.directionWC, this._prevCamDir);
+        this._lastMotion = motion;
+        return motion;
+    }
+
+    /**
+     * 交换 BSM color read/write 纹理。
+     * 写入侧允许 clear；交换后消费者只会读取完整写完的 read 纹理，避免黑闪。
+     */
+    _swapColorTextures() {
+        const read = this._cesiumColorTextureRead;
+        this._cesiumColorTextureRead = this._cesiumColorTextureWrite;
+        this._cesiumColorTextureWrite = read;
+        this._colorTexture = this._cesiumColorTextureRead;
+        this._colorTextureWrite = this._cesiumColorTextureWrite;
+        this._colorTextureHandle = this._cesiumColorTextureWrite?._texture || null;
+        this._colorTextureTarget = this._cesiumColorTextureWrite?._target || this._colorTextureTarget;
+        this._hasValidColorTexture = true;
+    }
+
     getVertexShader() {
         return `#version 300 es
 in vec2 a_position;
@@ -662,17 +733,24 @@ void main() {
     }
 
     render(force = false) {
+        this._updatedThisFrame = false;
         if (!this.enabled && !force) return;
-        const interval = Math.max(1, Number(this.updateInterval || this.params.bsmUpdateInterval) || 1);
-        if (!force && this._hasRendered && interval > 1 && (this._renderFrame++ % interval) !== 0) return;
-        this._hasRendered = true;
         const scene = this.viewer.scene;
         const context = scene.context;
         const gl = context._gl;
         if (!gl || !this._fbo || !this._program || !this._fboComplete) return;
 
         this._gl = gl;
+        // CSM 矩阵必须每帧跟随相机发布；只节流昂贵的 BSM raymarch，避免矩阵/atlas 错配造成屏幕粘滞。
         this.updateShadowCascades();
+        const motion = this._measureCameraMotion();
+        const movingForce = motion > 0.003;
+        const interval = Math.max(1, Number(this.updateInterval || this.params.bsmUpdateInterval) || 1);
+        const shouldSkip = !force && this._hasRendered && !movingForce && interval > 1 && (this._renderFrame++ % interval) !== 0;
+        if (shouldSkip) return;
+        this._hasRendered = true;
+        this._updatedThisFrame = true;
+        this._lastRenderedFrame++;
 
         const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
         const prevViewport = gl.getParameter(gl.VIEWPORT);
@@ -685,6 +763,8 @@ void main() {
         gl.disable(gl.CULL_FACE);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, this._fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this._colorTextureHandle, 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this._depthVelocityTextureHandle, 0);
         if (gl.getParameter(gl.FRAMEBUFFER_BINDING) !== this._fbo) return;
         gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
         gl.clearColor(0.0, 0.0, 0.0, 0.0);
@@ -808,39 +888,45 @@ void main() {
         if (prevBlend) gl.enable(gl.BLEND);
         if (prevDepthTest) gl.enable(gl.DEPTH_TEST);
         if (prevCullFace) gl.enable(gl.CULL_FACE);
+
+        this._swapColorTextures();
+        this._publishShadowState();
     }
 
     /**
      * 返回供主 Pass 使用的纹理。Cesium 绑定用 _texture + _textureTarget。
      */
     getTexture() {
-        // if (!this._gl || !this._colorTexture) return null;
-        // const target = this._colorTextureTarget;
-        // // Cesium UniformSampler 使用 _target（与 Cesium.Texture 的 getter 一致），仅 _textureTarget 会导致绑定失败
-        // return { _texture: this._colorTexture, _textureTarget: target, _target: target };
-        return this._cesiumColorTexture;
+        // 首帧还没有完整 BSM 时不发布 color atlas，避免下游读取 clear/空纹理造成大面积黑闪。
+        return this._hasValidColorTexture ? this._cesiumColorTextureRead : null;
     }
 
     getDepthVelocityTexture() {
-        // if (!this._gl || !this._depthVelocityTexture) return null;
-        // return { _texture: this._depthVelocityTexture, _textureTarget: this._gl.TEXTURE_2D, _target: this._gl.TEXTURE_2D };
-        return this._cesiumDepthTexture;
+        return this._hasValidColorTexture ? this._cesiumDepthTexture : null;
+    }
+
+    wasUpdatedThisFrame() {
+        return this._updatedThisFrame === true;
+    }
+
+    getLastMotion() {
+        return this._lastMotion || 0.0;
     }
 
     getShadowMatrices() {
-        return this._shadowMatrices;
+        return this._hasPublishedShadowState ? this._publishedShadowMatrices : this._shadowMatrices;
     }
 
     getShadowIntervals() {
-        return this._shadowIntervals;
+        return this._hasPublishedShadowState ? this._publishedShadowIntervals : this._shadowIntervals;
     }
 
     getShadowFar() {
-        return this._shadowFar;
+        return this._hasPublishedShadowState ? this._publishedShadowFar : this._shadowFar;
     }
 
     getShadowNear() {
-        return this._shadowNear;
+        return this._hasPublishedShadowState ? this._publishedShadowNear : this._shadowNear;
     }
 
     getTileSize() {
@@ -873,8 +959,9 @@ void main() {
         const gl = this._gl;
         if (gl) {
             if (this._program) gl.deleteProgram(this._program);
-            if (this._colorTexture) gl.deleteTexture(this._colorTexture);
-            if (this._depthVelocityTexture) gl.deleteTexture(this._depthVelocityTexture);
+            try { this._cesiumColorTextureRead?.destroy?.(); } catch { /* ignore */ }
+            try { this._cesiumColorTextureWrite?.destroy?.(); } catch { /* ignore */ }
+            try { this._cesiumDepthTexture?.destroy?.(); } catch { /* ignore */ }
             if (this._fbo) gl.deleteFramebuffer(this._fbo);
             if (this._vbo) gl.deleteBuffer(this._vbo);
         }
@@ -882,7 +969,16 @@ void main() {
         this._locations = null;
         this._positionLoc = null;
         this._colorTexture = null;
+        this._colorTextureWrite = null;
         this._depthVelocityTexture = null;
+        this._cesiumColorTextureRead = null;
+        this._cesiumColorTextureWrite = null;
+        this._cesiumDepthTexture = null;
+        this._colorTextureHandle = null;
+        this._depthVelocityTextureHandle = null;
+        this._hasValidColorTexture = false;
+        this._prevCamPos = null;
+        this._prevCamDir = null;
         this._fbo = null;
         this._vbo = null;
         this._gl = null;

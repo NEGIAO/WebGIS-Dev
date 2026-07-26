@@ -62,6 +62,8 @@ export class AerialPerspectiveEffect {
     this._cloudShadowNear = 0.1;
     this._cloudShadowFar = 200000.0;
     this._cloudShadowTopHeight = 5000.0;
+    this._cloudShadowAltitudeFadeStart = 5000.0;
+    this._cloudShadowAltitudeFadeEnd = 13000.0;
     this._cloudShadowBottomRadius = this.atmosphereParams.bottomRadius;
     this._cloudShadowIntervals = null;
     this._cloudShadowMatrices = null;
@@ -319,6 +321,10 @@ uniform sampler2D irradiance_texture;
       uniforms.u_cloudShadowFar = () => self._cloudShadowFar ?? 200000.0;
       uniforms.u_cloudShadowTopHeight = () =>
         self._cloudShadowTopHeight ?? 5000.0;
+      uniforms.u_cloudShadowAltitudeFadeStart = () =>
+        self._cloudShadowAltitudeFadeStart ?? self._cloudShadowTopHeight ?? 5000.0;
+      uniforms.u_cloudShadowAltitudeFadeEnd = () =>
+        self._cloudShadowAltitudeFadeEnd ?? ((self._cloudShadowTopHeight ?? 5000.0) + 8000.0);
       uniforms.u_cloudShadowBottomRadius = () =>
         self._cloudShadowBottomRadius ?? self.atmosphereParams.bottomRadius;
       uniforms.u_cloudShadowIntervals = () =>
@@ -444,6 +450,8 @@ uniform sampler2D irradiance_texture;
     this._cloudShadowNear = options.near ?? this._cloudShadowNear ?? 0.1;
     this._cloudShadowFar = options.far ?? 200000.0;
     this._cloudShadowTopHeight = options.topHeight ?? 5000.0;
+    this._cloudShadowAltitudeFadeStart = options.altitudeFadeStart ?? this._cloudShadowTopHeight;
+    this._cloudShadowAltitudeFadeEnd = options.altitudeFadeEnd ?? (this._cloudShadowTopHeight + 8000.0);
     this._cloudShadowBottomRadius = options.bottomRadius ?? this.atmosphereParams.bottomRadius;
     this._cloudShadowIntervals = options.intervals ?? null;
     this._cloudShadowMatrices = options.matrices ?? null;

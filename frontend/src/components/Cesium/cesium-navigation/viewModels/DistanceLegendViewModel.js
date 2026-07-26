@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { defined, DeveloperError, EllipsoidGeodesic, Cartesian2, getTimestamp, EventHelper, knockout } from 'cesium'
 import loadView from '../core/loadView'
 var Knockout = knockout
@@ -33,14 +32,12 @@ var DistanceLegendViewModel = function (options) {
   //            }
   //        }, this);
 
-  var that = this
-
-  function addUpdateSubscription() {
-    if (defined(that.terria)) {
-      var scene = that.terria.scene
-      that._removeSubscription = scene.postRender.addEventListener(function () {
+  const addUpdateSubscription = () => {
+    if (defined(this.terria)) {
+      var scene = this.terria.scene
+      this._removeSubscription = scene.postRender.addEventListener(() => {
         updateDistanceLegendCesium(this, scene)
-      }, that)
+      })
     }
   }
 

@@ -90,6 +90,8 @@ uniform float u_cloudShadowNear;
 uniform float u_cloudShadowFar;
 uniform float u_cloudShadowTopHeight;
 uniform float u_cloudShadowBottomRadius;
+uniform float u_cloudShadowAltitudeFadeStart;
+uniform float u_cloudShadowAltitudeFadeEnd;
 uniform vec2 u_cloudShadowTexelSize;
 uniform float u_geometricErrorCorrectionAmount;
 // three-geospatial 对齐：直接消费 shadowLengthBuffer（长度单位与大气 length unit 一致，当前为 km）
@@ -176,7 +178,7 @@ int getFadedCascadeIndex(mat4 viewMat, vec3 worldPos, vec2 intervals[4], float n
       }
     }
   }
-  return jitter <= alpha ? nextIndex : prevIndex;
+  return alpha > 0.35 ? nextIndex : prevIndex;
 }
 
 vec2 getShadowUvGround(vec3 worldPos, int ci) {
@@ -236,21 +238,31 @@ vec3 stabilizeBsmSamplePosition(vec3 posMeters, float viewDistMeters) {
   return n * (u_cloudShadowBottomRadius + stableH);
 }
 
+float getCloudShadowCameraAltitudeFade(vec3 cameraMeters) {
+  float cameraHeight = length(cameraMeters) - u_cloudShadowBottomRadius;
+  float fadeStart = max(u_cloudShadowAltitudeFadeStart, 0.0);
+  float fadeEnd = max(u_cloudShadowAltitudeFadeEnd, fadeStart + 1.0);
+  return 1.0 - smoothstep(fadeStart, fadeEnd, cameraHeight);
+}
+
 float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   if (u_cloudShadowEnabled == 0) return 1.0;
   vec3 camMeters = (u_cameraPosition + u_altitudeCorrection) / METER_TO_LENGTH_UNIT;
-  float viewDist = length(rawWorldPosMeters - camMeters);
+  float altitudeFade = getCloudShadowCameraAltitudeFade(camMeters);
+  if (altitudeFade <= 0.0) return 1.0;
+  float viewDist = length(rawWorldPosMeters - u_cameraPosition / METER_TO_LENGTH_UNIT);
   vec3 samplePos = stabilizeBsmSamplePosition(rawWorldPosMeters, viewDist);
 
-  vec3 groundNormal = normalize(samplePos);
+  vec3 shellSamplePos = samplePos + u_altitudeCorrection / METER_TO_LENGTH_UNIT;
+  vec3 groundNormal = normalize(shellSamplePos);
   float sunSinElev = dot(u_sunDirection, groundNormal);
   float horizonFade = smoothstep(-0.02, 0.02, sunSinElev);
   if (horizonFade <= 0.0) return 1.0;
 
   float topShellR = u_cloudShadowBottomRadius + u_cloudShadowTopHeight;
   vec3 rd = u_sunDirection;
-  float bS = dot(rd, samplePos);
-  float cS = dot(samplePos, samplePos) - topShellR * topShellR;
+  float bS = dot(rd, shellSamplePos);
+  float cS = dot(shellSamplePos, shellSamplePos) - topShellR * topShellR;
   float discS = bS * bS - cS;
   if (discS <= 0.0) return 1.0;
   float distToShadowTop = -bS + sqrt(discS);
@@ -260,7 +272,7 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   float rayLenFade = 1.0 - smoothstep(u_cloudShadowTopHeight * 6.0,
                                        u_cloudShadowTopHeight * 20.0,
                                        distToShadowTop);
-  float fade = horizonFade * lowSunFade * rayLenFade;
+  float fade = horizonFade * lowSunFade * rayLenFade * altitudeFade;
   if (fade <= 0.0) return 1.0;
 
   float jitter = interleavedGradientNoiseAP(gl_FragCoord.xy);
@@ -421,6 +433,8 @@ void main() {
   }
 
   // 地面分支仍依赖 depth 重建；若几何上已判地面但深度未重建出 hit，用 bottom 球前向交点兜底（同 aerial）
+  // 注意：该兜底只用于空中透视几何点，不直接用于 BSM 地面阴影，避免球壳假贴地。
+  bool bsmSampleValid = hasScene;
   if (!isSky && !hasScene && hitBottom) {
     float bG = dot(cameraPosition, rayDirection);
     float cG = dot(cameraPosition, cameraPosition) - bottomRadius * bottomRadius;
@@ -433,6 +447,7 @@ void main() {
       }
       if (tHitG > 1e-6) {
         hasScene = true;
+        bsmSampleValid = false;
         vec3 sceneKmG = cameraPosition + rayDirection * tHitG;
         rawWorldPosMeters = sceneKmG / METER_TO_LENGTH_UNIT;
         sceneDist = tHitG;
@@ -500,7 +515,7 @@ void main() {
       u_sunDirection,
       transmittance
     );
-    float sunTransmittance = getGroundSunTransmittance(rawWorldPosMeters);
+    float sunTransmittance = bsmSampleValid ? getGroundSunTransmittance(rawWorldPosMeters) : 1.0;
     finalColor = originalColor.rgb * transmittance * sunTransmittance + inscatter;
   }
 
@@ -566,6 +581,8 @@ export class AtmospherePostProcess {
     this._cloudShadowNear = 0.1;
     this._cloudShadowFar = 200000.0;
     this._cloudShadowTopHeight = 5000.0;
+    this._cloudShadowAltitudeFadeStart = 5000.0;
+    this._cloudShadowAltitudeFadeEnd = 13000.0;
     this._cloudShadowBottomRadius = this.atmosphereParams.bottomRadius;
     this._cloudShadowIntervals = null;
     this._cloudShadowMatrices = null;
@@ -782,6 +799,10 @@ export class AtmospherePostProcess {
       uniforms.u_cloudShadowNear = () => self._cloudShadowNear ?? 0.1;
       uniforms.u_cloudShadowFar = () => self._cloudShadowFar ?? 200000.0;
       uniforms.u_cloudShadowTopHeight = () => self._cloudShadowTopHeight ?? 5000.0;
+      uniforms.u_cloudShadowAltitudeFadeStart = () =>
+        self._cloudShadowAltitudeFadeStart ?? self._cloudShadowTopHeight ?? 5000.0;
+      uniforms.u_cloudShadowAltitudeFadeEnd = () =>
+        self._cloudShadowAltitudeFadeEnd ?? ((self._cloudShadowTopHeight ?? 5000.0) + 8000.0);
       uniforms.u_cloudShadowBottomRadius = () =>
         self._cloudShadowBottomRadius ?? self.atmosphereParams.bottomRadius;
       uniforms.u_cloudShadowIntervals = () => self._cloudShadowIntervals ?? [
@@ -873,6 +894,8 @@ export class AtmospherePostProcess {
     this._cloudShadowNear = options.near ?? this._cloudShadowNear ?? 0.1;
     this._cloudShadowFar = options.far ?? 200000.0;
     this._cloudShadowTopHeight = options.topHeight ?? 5000.0;
+    this._cloudShadowAltitudeFadeStart = options.altitudeFadeStart ?? this._cloudShadowTopHeight;
+    this._cloudShadowAltitudeFadeEnd = options.altitudeFadeEnd ?? (this._cloudShadowTopHeight + 8000.0);
     this._cloudShadowBottomRadius = options.bottomRadius ?? this.atmosphereParams.bottomRadius;
     this._cloudShadowIntervals = options.intervals ?? null;
     this._cloudShadowMatrices = options.matrices ?? null;

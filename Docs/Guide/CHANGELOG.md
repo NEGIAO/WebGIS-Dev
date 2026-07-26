@@ -8,6 +8,7 @@
 
 ### V3.4.2 (2026-07-25) — 体积云 BSM 地面阴影底层修复 + Cesium 导航控件集成 + 镇远市 3D Tiles 城市模型 + Demo 演示页面库
 
+- 🐛 **BSM 地面阴影高度淡出**：Aerial/Atmosphere 地面云影新增 `u_cloudShadowAltitudeFadeStart/End`，由 `ThreeGeospatialPipeline` 同步为云顶高度到 `altitudeFadeRange`，相机接近或高于体积云时地面云影与云体同步渐隐，避免俯视云顶时云影遮盖云层上表面
 - 🐛 **BSM 地面阴影自然度底层修复**：统一 Cloud/Aerial/Atmosphere 三条 BSM 采样链路的 atlas 解码；地面云影补用 `shadow.a` tail 光学厚度，修复边缘硬截断；移除距离驱动贴合 bottom 球的采样稳定逻辑，避免远处阴影被压平成不自然“贴球滑动”效果
 - 🐛 **BSM 地面阴影运行时修复**：`ThreeGeospatialPipeline` 新增 BSM 资源签名与 `_ensureBSMPasses/_destroyBSMPasses` 生命周期管理，三档预设切换或从流畅档手动开启 `useShadowBuffer` 时自动创建/重建 `CloudShadowPass` + `ShadowResolvePass`，不再只依赖 init 时开关
 - 🐛 **地面云影动态同步**：`_syncBSM()` 显式推进 wind/evolution offsets 并同步 `shadowTopHeight/shadowBottomHeight` 到 `CloudShadowPass`，地面 BSM atlas 随云形动态更新

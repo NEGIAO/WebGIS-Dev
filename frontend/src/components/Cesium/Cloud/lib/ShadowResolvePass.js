@@ -33,6 +33,9 @@ export class ShadowResolvePass {
         this._prevCamPos = null;
         this._prevCamDir = null;
         this._motionAlpha = this.temporalAlpha;
+        this._forceResetHistory = false;
+        this._externalMotion = 0.0;
+        this._hasValidHistory = false;
     }
 
     setInputTextures(inputTexture, depthVelocityTexture) {
@@ -40,9 +43,18 @@ export class ShadowResolvePass {
         this.depthVelocityTexture = depthVelocityTexture;
     }
 
+    /**
+     * 通知 resolve 本帧是否应重置历史。
+     * @param {{ forceReset?: boolean, motion?: number }} state
+     */
+    setFrameState(state = {}) {
+        this._forceResetHistory = state.forceReset === true;
+        this._externalMotion = Math.max(0.0, Number(state.motion) || 0.0);
+    }
+
     getTexture() {
         // 每帧 render() 末尾做了 swap：刚写入的是 _historyTex。Cesium 仅支持 sampler2D，故返回 2D 纹理。
-        if (!this._gl || !this._outTex || !this._historyTex) return null;
+        if (!this._hasValidHistory || !this._gl || !this._outTex || !this._historyTex) return null;
         return { _texture: this._historyTex, _textureTarget: this._gl.TEXTURE_2D, _target: this._gl.TEXTURE_2D };
     }
 
@@ -113,6 +125,7 @@ uniform sampler2D u_historyBuffer;
 uniform vec2 u_texelSize;
 uniform float u_varianceGamma;
 uniform float u_temporalAlpha;
+uniform int u_resetHistory;
 
 in vec2 v_uv;
 out vec4 out_color;
@@ -173,6 +186,10 @@ vec4 getClosestFragment() {
 
 void main() {
   vec4 current = texture(u_inputBuffer, v_uv);
+  if (u_resetHistory == 1) {
+    out_color = current;
+    return;
+  }
   vec4 depthVelocity = getClosestFragment();
   vec2 velocityUv = depthVelocity.gb * u_texelSize;
   vec2 prevUv = v_uv - velocityUv;
@@ -224,6 +241,7 @@ void main() {
             texelSize: gl.getUniformLocation(prog, "u_texelSize"),
             varianceGamma: gl.getUniformLocation(prog, "u_varianceGamma"),
             temporalAlpha: gl.getUniformLocation(prog, "u_temporalAlpha"),
+            resetHistory: gl.getUniformLocation(prog, "u_resetHistory"),
             inputBuffer: gl.getUniformLocation(prog, "u_inputBuffer"),
             depthVelocityBuffer: gl.getUniformLocation(prog, "u_depthVelocityBuffer"),
             historyBuffer: gl.getUniformLocation(prog, "u_historyBuffer"),
@@ -251,6 +269,7 @@ void main() {
                 // 位置每米 + 方向每弧度(1-cos) 综合归一化。云阴影掠射时 BSM 内特征滑动放大，
                 // 故对微小运动也敏感：1m/帧 或 0.1°/帧 即触发。
                 motion = Math.min(1.0, dp * 2e-3 + dd * 100.0);
+                motion = Math.max(motion, this._externalMotion || 0.0);
             }
             this._prevCamPos = Cesium.Cartesian3.clone(pos, this._prevCamPos);
             this._prevCamDir = Cesium.Cartesian3.clone(dir, this._prevCamDir);
@@ -258,7 +277,10 @@ void main() {
         const stillAlpha = this.temporalAlpha;
         // smoothstep：motion 0→0.01 从 stillAlpha 升到 1.0。移动期几乎纯当前帧。
         const t = Math.min(1.0, Math.max(0.0, motion / 0.01));
-        this._motionAlpha = stillAlpha + (1.0 - stillAlpha) * (t * t * (3.0 - 2.0 * t));
+        const resetHistory = this._forceResetHistory || !this._hasValidHistory || motion > 0.02;
+        this._motionAlpha = resetHistory
+            ? 1.0
+            : stillAlpha + (1.0 - stillAlpha) * (t * t * (3.0 - 2.0 * t));
 
         const prevFbo = gl.getParameter(gl.FRAMEBUFFER_BINDING);
         const prevViewport = gl.getParameter(gl.VIEWPORT);
@@ -277,6 +299,7 @@ void main() {
         if (loc.texelSize) gl.uniform2f(loc.texelSize, 1.0 / this.size, 1.0 / this.size);
         if (loc.varianceGamma) gl.uniform1f(loc.varianceGamma, this.varianceGamma);
         if (loc.temporalAlpha) gl.uniform1f(loc.temporalAlpha, this._motionAlpha);
+        if (loc.resetHistory) gl.uniform1i(loc.resetHistory, resetHistory ? 1 : 0);
 
         let unit = 0;
         const bind = (locRef, texObj) => {
@@ -309,6 +332,9 @@ void main() {
         const tmp = this._historyTex;
         this._historyTex = this._outTex;
         this._outTex = tmp;
+        this._hasValidHistory = true;
+        this._forceResetHistory = false;
+        this._externalMotion = 0.0;
     }
 
     init() {
@@ -323,7 +349,8 @@ void main() {
         gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
         gl.bindBuffer(gl.ARRAY_BUFFER, null);
-        this._preRenderListener = scene.preRender.addEventListener(() => this.render());
+        // Resolve 依赖 CloudShadowPass 当帧写完的 color/depthVelocity 配对纹理，不能独立 preRender。
+        // 由 ThreeGeospatialPipeline._syncBSM 在 pass 完成后显式调用 render(true)，保证 atlas/matrix/history 同步。
     }
 
     destroy() {

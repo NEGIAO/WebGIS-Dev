@@ -596,7 +596,7 @@
                                 >
                                     <!-- 高程滑杆 -->
                                     <div
-                                        v-if="source.terrainElevation"
+                                        v-if="getTilesetHeightRange(source)"
                                         class="control-row"
                                     >
                                         <span
@@ -607,8 +607,8 @@
                                             <input
                                                 type="range"
                                                 class="tileset-slider"
-                                                :min="Math.floor(source.terrainElevation.min)"
-                                                :max="Math.ceil(source.terrainElevation.max)"
+                                                :min="getTilesetHeightRange(source).min"
+                                                :max="getTilesetHeightRange(source).max"
                                                 :step="1"
                                                 :value="getTileHeight(source)"
                                                 @input="emitSetHeight(source.id, $event.target.value)"
@@ -1067,7 +1067,27 @@ function emitClearAll() { emit('data-clear-all'); }
 
 const tileHeightMap = ref({});
 
+function getTilesetHeightRange(source) {
+    if (source.terrainElevation) {
+        return {
+            min: Math.floor(source.terrainElevation.min),
+            max: Math.ceil(source.terrainElevation.max),
+        };
+    }
+
+    const baseHeight = Number(source.currentBaseHeight ?? source.tilesetGeo?.initialBaseHeight ?? source.tilesetGeo?.bottomH ?? 0);
+    if (!Number.isFinite(baseHeight)) return null;
+
+    return {
+        min: Math.floor(baseHeight - 500),
+        max: Math.ceil(baseHeight + 500),
+    };
+}
+
 function getTileHeight(source) {
+    if (source.currentBaseHeight !== undefined) {
+        return source.currentBaseHeight;
+    }
     if (tileHeightMap.value[source.id] !== undefined) {
         return tileHeightMap.value[source.id];
     }

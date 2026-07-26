@@ -386,15 +386,19 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
     // 记录贴地所需的几何参数
     const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
     const bottomH = centerCarto.height - tileset.boundingSphere.radius;
+    const initialBaseHeight = terrainElevation
+        ? (terrainElevation.min + terrainElevation.max) / 2
+        : bottomH;
     const tilesetGeo = {
         lng: Cesium.Math.toDegrees(centerCarto.longitude),
         lat: Cesium.Math.toDegrees(centerCarto.latitude),
         bottomH,
+        initialBaseHeight,
     };
 
     // Step 5.6: 设置初始高度 = 高程值域中值，让模型底部贴在中值高度
     if (terrainElevation) {
-        const median = (terrainElevation.min + terrainElevation.max) / 2;
+        const median = initialBaseHeight;
         const offset = median - bottomH;
         const origin = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, 0);
         const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
@@ -420,6 +424,7 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
         blobUrls: allBlobUrls,
         terrainElevation,
         tilesetGeo,
+        currentBaseHeight: initialBaseHeight,
     };
     loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -452,15 +457,19 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
         const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
         const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
         const bottomH = centerCarto.height - tileset.boundingSphere.radius;
+        const initialBaseHeight = terrainElevation
+            ? (terrainElevation.min + terrainElevation.max) / 2
+            : bottomH;
         const tilesetGeo = {
             lng: Cesium.Math.toDegrees(centerCarto.longitude),
             lat: Cesium.Math.toDegrees(centerCarto.latitude),
             bottomH,
+            initialBaseHeight,
         };
 
         // 设置初始高度 = 高程值域中值
         if (terrainElevation) {
-            const median = (terrainElevation.min + terrainElevation.max) / 2;
+            const median = initialBaseHeight;
             const offset = median - bottomH;
             const origin = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, 0);
             const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
@@ -477,7 +486,15 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
         const id = `tileset_${++nextId.current}`;
         viewer.scene.primitives.add(tileset);
 
-        const record = { id, name: file.name, type: '3dtiles', entity: tileset, terrainElevation, tilesetGeo };
+        const record = {
+            id,
+            name: file.name,
+            type: '3dtiles',
+            entity: tileset,
+            terrainElevation,
+            tilesetGeo,
+            currentBaseHeight: initialBaseHeight,
+        };
         loadedDataSources.value = [...loadedDataSources.value, record];
 
         flyToEntity(viewer, Cesium, tileset, '3dtiles');
@@ -661,15 +678,19 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
     const terrainElevation = await sampleTerrainElevationRange(tileset, viewer, Cesium);
     const centerCarto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
     const bottomH = centerCarto.height - tileset.boundingSphere.radius;
+    const initialBaseHeight = terrainElevation
+        ? (terrainElevation.min + terrainElevation.max) / 2
+        : bottomH;
     const tilesetGeo = {
         lng: Cesium.Math.toDegrees(centerCarto.longitude),
         lat: Cesium.Math.toDegrees(centerCarto.latitude),
         bottomH,
+        initialBaseHeight,
     };
 
     // 贴地：有高程数据→中值贴地；无数据→自动采样贴地兜底；都失败→关地形
     if (terrainElevation) {
-        const median = (terrainElevation.min + terrainElevation.max) / 2;
+        const median = initialBaseHeight;
         const offset = median - bottomH;
         const origin = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, 0);
         const target = Cesium.Cartesian3.fromRadians(centerCarto.longitude, centerCarto.latitude, offset);
@@ -690,6 +711,7 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         entity: tileset,
         terrainElevation,
         tilesetGeo,
+        currentBaseHeight: initialBaseHeight,
         materialMode: 'baimo',
     };
     loadedDataSources.value = [...loadedDataSources.value, record];

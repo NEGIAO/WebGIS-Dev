@@ -551,8 +551,14 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             return;
         }
 
+        const targetHeight = Number(targetBaseHeight);
+        if (!Number.isFinite(targetHeight)) {
+            console.warn('[贴地] setTilesetHeight: 高度值无效, height=', targetBaseHeight);
+            return;
+        }
+
         const { lng, lat, bottomH } = tilesetGeo;
-        const offset = targetBaseHeight - bottomH;
+        const offset = targetHeight - bottomH;
 
         const origin = Cesium.Cartesian3.fromRadians(
             Cesium.Math.toRadians(lng), Cesium.Math.toRadians(lat), 0);
@@ -562,8 +568,10 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
         const tileset = toRaw(record.entity);
         tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+        record.currentBaseHeight = targetHeight;
+        loadedDataSources.value = [...loadedDataSources.value];
 
-        console.warn('[贴地] 手动贴地: 底部高度=', targetBaseHeight.toFixed(1),
+        console.warn('[贴地] 手动贴地: 底部高度=', targetHeight.toFixed(1),
             'm, ECEF偏移量级=', Cesium.Cartesian3.magnitude(translation).toFixed(1), 'm');
     }
 
