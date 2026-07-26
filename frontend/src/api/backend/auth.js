@@ -3,7 +3,7 @@
  * 包含：登录、注册、验证码、密码重置、用户偏好等
  */
 
-import backendAPI from './client';
+import backendAPI, { BACKEND_BASE_URL } from './client';
 
 export async function apiAuthCheckUsername(username) {
     return backendAPI.get('/api/auth/check-username', {
@@ -111,6 +111,7 @@ export async function apiAuthSendCode(email, purpose, username) {
  * @param {string} purpose - 用途标识
  * @returns {Promise<{status: string, message: string}>}
  */
+
 export async function apiAuthVerifyCode(email, code, purpose) {
     return backendAPI.post('/api/auth/verify-code', {
         email: String(email || '').trim(),
@@ -118,6 +119,51 @@ export async function apiAuthVerifyCode(email, code, purpose) {
         purpose: String(purpose || '').trim(),
     });
 }
+
+/**
+ * 跳转到 Google/GitHub OAuth 登录入口。
+ * @param {'google'|'github'} provider - 第三方登录提供商
+ */
+export function redirectToOAuthProvider(provider) {
+    const safeProvider = provider === 'github' ? 'github' : 'google';
+    window.location.href = `${BACKEND_BASE_URL}/api/auth/oauth/${safeProvider}/start`;
+}
+
+/**
+ * 跳转到当前已登录用户的 Google/GitHub OAuth 绑定入口。
+ * 绑定接口由 axios token 负责提供 Authorization，最终仍通过浏览器跳转完成授权。
+ * @param {'google'|'github'} provider - 第三方登录提供商
+ */
+export async function redirectToOAuthBindProvider(provider) {
+    const safeProvider = provider === 'github' ? 'github' : 'google';
+    const result = await backendAPI.get(`/api/auth/oauth/${safeProvider}/bind/start`);
+    const authUrl = String(result?.auth_url || '').trim();
+    if (!authUrl) throw new Error('第三方绑定入口生成失败');
+    window.location.href = authUrl;
+}
+
+export async function apiAuthExchangeOAuthLoginTicket(ticket) {
+    return backendAPI.post('/api/auth/oauth/login/exchange', {
+        ticket: String(ticket || '').trim(),
+    });
+}
+
+export async function apiAuthCompleteOAuthBind(provider, ticket) {
+    const safeProvider = provider === 'github' ? 'github' : 'google';
+    return backendAPI.post(`/api/auth/oauth/${safeProvider}/bind/complete`, {
+        ticket: String(ticket || '').trim(),
+    });
+}
+
+export async function apiAuthListOAuthAccounts() {
+    return backendAPI.get('/api/auth/oauth/accounts');
+}
+
+export async function apiAuthUnlinkOAuthAccount(provider) {
+    const safeProvider = provider === 'github' ? 'github' : 'google';
+    return backendAPI.delete(`/api/auth/oauth/${safeProvider}/bind`);
+}
+
 
 /**
  * 通过邮箱验证码重置密码（无需登录）。

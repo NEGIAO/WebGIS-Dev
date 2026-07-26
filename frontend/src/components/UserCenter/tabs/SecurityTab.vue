@@ -10,7 +10,7 @@
 import { ref } from 'vue';
 import { getUserDisplayName, validateDisplayName } from '../../../composables/auth/useAuthIdentity';
 
-defineProps({
+const props = defineProps({
     /** Current user object (used to check role) */
     user: {
         type: Object,
@@ -21,6 +21,16 @@ defineProps({
         type: Boolean,
         default: false,
     },
+    /** Bound Google/GitHub OAuth accounts for the current registered user */
+    oauthAccounts: {
+        type: Array,
+        default: () => [],
+    },
+    /** Whether OAuth binding state is loading */
+    oauthLoading: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const emit = defineEmits([
@@ -28,6 +38,10 @@ const emit = defineEmits([
     'change-display-name',
     /** Request parent to change password. Payload: { oldPassword, newPassword } */
     'change-password',
+    /** Request parent to start Google/GitHub OAuth binding. Payload: provider */
+    'bind-oauth',
+    /** Request parent to unlink Google/GitHub OAuth binding. Payload: provider */
+    'unlink-oauth',
 ]);
 
 const displayName = ref('');
@@ -75,6 +89,15 @@ function handlePasswordSubmit() {
     emit('change-password', { oldPassword: oldPass, newPassword: newPass });
 }
 
+function getBoundAccount(provider) {
+    return props.oauthAccounts.find((account) => String(account?.provider || '') === provider) || null;
+}
+
+function handleOAuthAction(provider) {
+    const account = getBoundAccount(provider);
+    emit(account ? 'unlink-oauth' : 'bind-oauth', provider);
+}
+
 /** Exposed method: allows parent to reset the form (e.g. on panel close) */
 defineExpose({ resetForm });
 </script>
@@ -115,6 +138,28 @@ defineExpose({ resetForm });
                 ></i>
                 {{ isSubmitting ? '正在提交...' : '保存昵称' }}
             </button>
+
+            <h4 class="section-title">第三方账号绑定</h4>
+            <p class="oauth-bind-desc">已注册邮箱用户可绑定 Google 或 GitHub，后续可一键登录同一个 WebGIS 账号。</p>
+            <div class="oauth-bind-list">
+                <button
+                    v-for="provider in ['google', 'github']"
+                    :key="provider"
+                    type="button"
+                    class="oauth-bind-btn"
+                    :class="provider"
+                    :disabled="isSubmitting || oauthLoading"
+                    @click="handleOAuthAction(provider)"
+                >
+                    <i :class="provider === 'google' ? 'fab fa-google' : 'fab fa-github'"></i>
+                    <span>
+                        {{ getBoundAccount(provider) ? `解绑 ${provider}` : `绑定 ${provider}` }}
+                    </span>
+                    <small v-if="getBoundAccount(provider)">
+                        {{ getBoundAccount(provider)?.email || getBoundAccount(provider)?.display_name || '已绑定' }}
+                    </small>
+                </button>
+            </div>
 
             <h4 class="section-title">修改密码</h4>
             <div class="modern-input-group">
@@ -178,6 +223,51 @@ defineExpose({ resetForm });
     letter-spacing: 1px;
     border-left: 3px solid var(--brand-accent-light);
     padding-left: 10px;
+}
+
+.oauth-bind-desc {
+    margin: -4px 0 4px;
+    color: #8ab99c;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.oauth-bind-list {
+    display: grid;
+    gap: 10px;
+}
+
+.oauth-bind-btn {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
+    border-radius: 8px;
+    background: rgba(8, 20, 14, 0.65);
+    color: #ffffff;
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+.oauth-bind-btn:hover:not(:disabled) {
+    border-color: var(--brand-accent-light);
+    background: rgba(12, 28, 18, 0.9);
+}
+
+.oauth-bind-btn small {
+    grid-column: 2;
+    color: #8ab99c;
+    font-size: 12px;
+}
+
+.oauth-bind-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .modern-input-group {

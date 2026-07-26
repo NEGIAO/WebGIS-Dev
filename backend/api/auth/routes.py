@@ -7,6 +7,7 @@ import hmac
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 
 from .constants import (
     ADMIN_USERNAME,
@@ -43,6 +44,19 @@ from .models import (
     UpdatePreferencesRequest,
     VerifyCodeRequest,
 )
+from pydantic import BaseModel, Field
+from .oauth import (
+    bind_oauth_account_to_username_sync,
+    build_authorization_url,
+    build_frontend_redirect,
+    consume_oauth_ticket,
+    create_oauth_ticket,
+    fetch_oauth_profile,
+    list_user_oauth_accounts_sync,
+    parse_oauth_state,
+    resolve_oauth_login_user_sync,
+    unlink_oauth_account_sync,
+)
 from .preferences import _get_user_preferences_sync, _upsert_user_preferences_sync
 from .quota import get_user_quota_snapshot_sync
 from .session import (
@@ -77,6 +91,23 @@ from .constants import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+class OAuthTicketRequest(BaseModel):
+    """OAuth 一次性 ticket 兑换请求。"""
+    ticket: str = Field(..., min_length=16, max_length=256)
+
+
+def _oauth_public_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """提取 ticket 中允许短期保存的最小 OAuth profile。"""
+    return {
+        "provider": str(profile.get("provider") or ""),
+        "provider_user_id": str(profile.get("provider_user_id") or ""),
+        "email": str(profile.get("email") or ""),
+        "email_verified": bool(profile.get("email_verified")),
+        "display_name": str(profile.get("display_name") or ""),
+        "avatar_url": str(profile.get("avatar_url") or ""),
+    }
 
 
 def _is_verified_email_user(user: Dict[str, Any]) -> bool:
@@ -178,6 +209,157 @@ async def _build_login_response(
         "preferences": preferences,
         "quota": quota,
     }
+
+
+@router.get("/oauth/accounts")
+async def list_oauth_accounts(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+    """
+    功能：列出当前注册用户已绑定的第三方账号。
+
+    返回：
+    - accounts: Google/GitHub 绑定列表，不包含任何 access token。
+    """
+    _reject_binding_required(session)
+    accounts = await asyncio.to_thread(
+        list_user_oauth_accounts_sync,
+        str(session.get("username") or ""),
+    )
+    return {"status": "success", "accounts": accounts}
+
+
+@router.get("/oauth/{provider}/start")
+async def start_oauth_login(provider: str) -> RedirectResponse:
+    """功能：发起 Google/GitHub OAuth 登录或自动注册流程。"""
+    auth_url = build_authorization_url(provider, mode="login")
+    return RedirectResponse(auth_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/oauth/{provider}/bind/start")
+async def start_oauth_bind(
+    provider: str,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """功能：为已登录邮箱注册用户生成 Google/GitHub 账号绑定授权 URL。"""
+    _reject_binding_required(session)
+    auth_url = build_authorization_url(
+        provider,
+        mode="bind",
+        username=str(session.get("username") or ""),
+    )
+    return {"status": "success", "auth_url": auth_url}
+
+
+@router.get("/oauth/{provider}/callback")
+async def handle_oauth_callback(provider: str, request: Request, code: str = "", state: str = "") -> RedirectResponse:
+    """
+    功能：处理 Google/GitHub OAuth 回调。
+
+    登录模式：自动创建/绑定本地用户并签发 WebGIS session。
+    绑定模式：将第三方账号绑定到 state 中记录的当前本地用户。
+    """
+    try:
+        state_payload = parse_oauth_state(state, provider)
+        profile = await fetch_oauth_profile(provider, code)
+        mode = str(state_payload.get("mode") or "login").strip().lower()
+
+        if mode == "bind":
+            ticket = create_oauth_ticket("bind", provider, {"profile": _oauth_public_profile(profile)})
+            redirect_url = build_frontend_redirect(
+                True,
+                {
+                    "status": "bind_pending",
+                    "provider": provider,
+                    "ticket": ticket,
+                    "message": f"{provider} 授权成功，请返回账号中心完成绑定",
+                },
+            )
+            return RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+
+        user = await asyncio.to_thread(resolve_oauth_login_user_sync, profile)
+        ticket = create_oauth_ticket("login", provider, {"user_id": int(user.get("id") or 0)})
+        redirect_url = build_frontend_redirect(
+            True,
+            {
+                "status": "success",
+                "provider": provider,
+                "ticket": ticket,
+            },
+        )
+        return RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+    except HTTPException as exc:
+        redirect_url = build_frontend_redirect(
+            False,
+            {
+                "status": "error",
+                "provider": provider,
+                "message": str(exc.detail or "第三方登录失败"),
+            },
+        )
+        return RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+    except Exception:
+        redirect_url = build_frontend_redirect(
+            False,
+            {"status": "error", "provider": provider, "message": "第三方登录处理失败"},
+        )
+        return RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.post("/oauth/login/exchange")
+async def exchange_oauth_login_ticket(payload: OAuthTicketRequest, request: Request) -> Dict[str, Any]:
+    """功能：用一次性 OAuth 登录 ticket 换取正式 WebGIS session。"""
+    ticket_payload = None
+    provider = ""
+    last_error = None
+    for candidate in ("google", "github"):
+        try:
+            ticket_payload = consume_oauth_ticket("login", candidate, payload.ticket)
+            provider = candidate
+            break
+        except HTTPException as exc:
+            last_error = exc
+            continue
+    if ticket_payload is None:
+        raise last_error or HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth 登录 ticket 无效或已过期")
+
+    user = await asyncio.to_thread(_get_user_by_id_sync, int(ticket_payload.get("user_id") or 0))
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OAuth 登录用户不存在")
+    return await _build_login_response(
+        request=request,
+        username=str(user.get("username") or ""),
+        role=ROLE_REGISTERED,
+        avatar_index=_normalize_avatar_index(user.get("avatar_index")),
+        user=user,
+        requires_email_binding=False,
+        message=f"{provider or '第三方'} 登录成功",
+    )
+
+
+@router.post("/oauth/{provider}/bind/complete")
+async def complete_oauth_bind(
+    provider: str,
+    payload: OAuthTicketRequest,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """功能：当前登录用户使用一次性 ticket 完成 Google/GitHub 绑定。"""
+    _reject_binding_required(session)
+    ticket_payload = consume_oauth_ticket("bind", provider, payload.ticket)
+    profile = dict(ticket_payload.get("profile") or {})
+    await asyncio.to_thread(
+        bind_oauth_account_to_username_sync,
+        str(session.get("username") or ""),
+        profile,
+    )
+    accounts = await asyncio.to_thread(list_user_oauth_accounts_sync, str(session.get("username") or ""))
+    return {"status": "success", "message": "第三方账号绑定成功", "accounts": accounts}
+
+
+@router.delete("/oauth/{provider}/bind")
+async def unlink_oauth_account(provider: str, session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+    """功能：解绑当前用户的 Google/GitHub 第三方账号。"""
+    _reject_binding_required(session)
+    await asyncio.to_thread(unlink_oauth_account_sync, str(session.get("username") or ""), provider)
+    return {"status": "success", "message": "第三方账号已解绑"}
 
 
 @router.post("/send-code")

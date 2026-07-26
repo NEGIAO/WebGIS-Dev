@@ -27,6 +27,12 @@ const router = createRouter({
             meta: { requiresAuth: false },
         },
         {
+            path: '/oauth/callback',
+            name: 'oauth-callback',
+            component: () => import('../views/OAuthCallbackView.vue'),
+            meta: { requiresAuth: false, skipAuthCheck: true },
+        },
+        {
             path: '/home',
             name: 'home',
             component: HomeView,
@@ -100,7 +106,7 @@ function cacheRoutePositionCode(route) {
 router.beforeEach(async (to, from) => {
     const requiresAuth = !!to.meta?.requiresAuth;
     const shareModeEnabled = readShareFlagFromRoute(to);
-    const shouldCheckAuth = requiresAuth || to.name === 'register';
+    const shouldCheckAuth = (requiresAuth || to.name === 'register') && !to.meta?.skipAuthCheck;
     const isHomeRoute = to.name === 'home';
     let shouldRelayLoadingToHome = false;
 

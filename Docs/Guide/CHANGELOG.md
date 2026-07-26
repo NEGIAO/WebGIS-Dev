@@ -6,6 +6,19 @@
 
 ## 版本记录
 
+### V3.4.4 (2026-07-26) — Google/GitHub OAuth 一键注册登录与体积云阴影稳定性修复
+
+- 🆕 **OAuth 一键注册登录**：新增 Google/GitHub 授权起点与回调，首次授权可自动创建本地 registered 用户，后续直接复用 WebGIS session token 登录。
+- 🆕 **邮箱用户第三方绑定**：账号中心安全页支持已注册邮箱用户绑定/解绑 Google 或 GitHub 账号，同一 WebGIS 用户可复用第三方账号一键登录。
+- 🗄️ **第三方身份表**：新增 `oauth_accounts` 表，使用 `(provider, provider_user_id)` 唯一绑定本地 `users.id`，不保存 provider access token。
+- 🔐 **安全控制**：OAuth state 使用 HMAC 签名与短 TTL；GitHub 使用 primary verified email；仅 verified email 可自动绑定/注册，避免未验证邮箱导致账号接管。
+
+- 🐛 **旋转黑闪修复**：`CloudShadowPass` 改为颜色图集 read/write 双缓冲，消费者只读取完整写完的 last-good atlas，避免 clear 中的空纹理被地面采样解码成大面积黑色阴影。
+- 🐛 **矩阵/图集错配修复**：CSM `updateShadowCascades()` 每帧执行，仅昂贵 BSM raymarch 受 `bsmUpdateInterval` 节流；相机运动时强制刷新 raymarch，消除屏幕粘滞阴影。
+- 🐛 **时域 history 污染修复**：`ShadowResolvePass` 增加 `setFrameState` / `u_resetHistory`，大运动或无效 history 时 hard-reset，避免旧 cascade 重投影造成黑块/拖影。
+- 🐛 **贴地稳定性修复**：地面 BSM 仅在可靠 `depth → ECEF` 路径启用；bottom-sphere 兜底不再喂给云影采样；cascade 边界选择降低抖动，修复垂直升降时阴影不贴地的问题。
+- 📝 文档同步：版本升至 V3.4.4，补充维护日志与前后端/结构说明。
+
 ### V3.4.2 (2026-07-25) — 体积云 BSM 地面阴影底层修复 + Cesium 导航控件集成 + 镇远市 3D Tiles 城市模型 + Demo 演示页面库
 
 - 🐛 **BSM 地面阴影高度淡出**：Aerial/Atmosphere 地面云影新增 `u_cloudShadowAltitudeFadeStart/End`，由 `ThreeGeospatialPipeline` 同步为云顶高度到 `altitudeFadeRange`，相机接近或高于体积云时地面云影与云体同步渐隐，避免俯视云顶时云影遮盖云层上表面

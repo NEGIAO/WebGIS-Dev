@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.2），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.4），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -84,7 +84,7 @@
 | ✨ 三维特效 | 体积云 ray marching、Bruneton 大气、BSM 云影、风场粒子、洪水淹没模拟 |
 | 🛣️ 路径规划 | 天地图驾车/公交双管线、搜索选点与路线渲染 |
 | 🤖 AI 空间助手 | LLM 集成，三种接入模式（默认 / 个人 Key / 后端代理） |
-| 🔐 账号体系 | 邮箱注册登录、三级身份、会话鉴权、双 AI 配额管理 |
+| 🔐 账号体系 | 邮箱注册登录、Google/GitHub 一键注册登录与绑定、三级身份、会话鉴权、双 AI 配额管理 |
 | 🧰 实用工具 | 测量、坐标拾取、风水罗盘、卷帘分析、天气、主题切换、图层管理 |
 
 ---
@@ -206,9 +206,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.4.4** | 2026-07-26 | Google/GitHub OAuth 一键注册登录：新增后端 OAuth 授权/回调、`oauth_accounts` 绑定表、账号中心第三方绑定/解绑、注册页一键登录按钮与回调页，邮箱注册用户可绑定对应 Google/GitHub 账号；体积云阴影稳定性修复：BSM 矩阵每帧同步、运动中强制刷新 raymarch、CloudShadowPass 颜色图集 read/write 双缓冲、ShadowResolvePass 大运动 history reset、地面采样只使用可靠 depth→ECEF 锚点并降低 cascade 边界抖动，修复旋转黑闪、升降抖动和屏幕粘滞阴影 |
 | **V3.4.2** | 2026-07-25 | BSM 地面阴影底层修复（运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass、统一 Cloud/Aerial/Atmosphere 三条 BSM 解码、相机接近/高于云顶时地面云影随体积云高度淡出）+ Cesium 导航控件集成（罗盘/缩放/比例尺）+ 镇远市 3D Tiles 城市模型 + 15 个 Demo 演示页面 + CI/CD 部署优化（3D 瓦片格式 LFS 追踪）+ Cesium 依赖模块源码内嵌（cesium-navigation/cesium-wind-layer 迁入，移除 patch-package/两个 npm 包） |
 | **V3.4.1** | 2026-07-24 | 版本号自动同步：Vite define 从 README.md 提取版本注入 MapContainer.vue，LLM 改 README 后无需手动维护 Vue 侧版本 |
-| **V3.3.23** | 2026-07-24 | 体积云性能优化：默认改流畅档（60FPS 路径）+ 三档重调 + CloudShadowPass/ShadowResolvePass location 缓存与低频渲染 + shader detail 跳过 + `_scratch` 对象池削减每帧 GC + LensFlare 懒创建 + watch 帧级合并 |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -233,6 +233,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.4.2 · 开发中 · 最后更新 2026-07-25</sub>
+<sub>V3.4.4 · 开发中 · 最后更新 2026-07-26</sub>
 
 </div>

@@ -139,6 +139,27 @@ def init_auth_tables_sync(conn) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
     conn.execute("UPDATE users SET display_name = username WHERE display_name IS NULL OR display_name = ''")
 
+    # 表：oauth_accounts
+    # 记录 Google/GitHub 第三方身份与本地 users 的绑定关系；不存储 provider access token。
+    _safe_execute(conn, """
+        CREATE TABLE IF NOT EXISTS oauth_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            provider TEXT NOT NULL,
+            provider_user_id TEXT NOT NULL,
+            email TEXT,
+            email_verified INTEGER NOT NULL DEFAULT 0,
+            display_name TEXT,
+            avatar_url TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(provider, provider_user_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id ON oauth_accounts(user_id)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_oauth_accounts_email ON oauth_accounts(email)")
+
     # 表：sessions
     sessions_table_exists = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"

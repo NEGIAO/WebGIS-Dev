@@ -16,7 +16,7 @@ WebGIS 后端服务，当前包含五大核心能力：
 - Google 瓦片代理：GET /api/tile/{z}/{x}/{y}
 - 通用流式代理：GET /proxy/{target_url:path}（Provider Agnostic）
 - 访客地理统计：POST /api/log-visit
-- 真实用户登录系统：/api/auth/*（邮箱账号、旧用户绑定迁移、三类身份）
+- 真实用户登录系统：/api/auth/*（邮箱账号、Google/GitHub OAuth 一键注册登录、第三方账号绑定/解绑、旧用户绑定迁移、三类身份）
 - Agent 对话后端代理：/api/agent/chat/*（按身份配额）
 - 运行时地图 Token 配置：GET /api/runtime-config/map-tokens 下发天地图/Cesium 主备 token 池，前端直连第三方服务
 - 🆕 在线底图下载：POST /api/download/tasks（异步任务 + GeoTIFF 输出）
@@ -59,7 +59,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 后端完整文件树（`backend/` 全部文件及注释）统一维护于 [`Docs/Guide/backend-structure.md`](../Docs/Guide/backend-structure.md)，本 README 不再重复维护，避免多处同步。
 
-> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-25 本次为前端体积云 BSM 地面阴影修复，后端文件树无结构变更。
+> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-26 本次为前端体积云 BSM 阴影稳定性修复，后端文件树无结构变更。
 
 ## 1. 认证系统
 
@@ -145,19 +145,34 @@ curl -X POST "http://localhost:8000/api/auth/login" \
   -d '{"username":"super_admin","password":"<admin_password_from_db>"}'
 ```
 
-6) 查询当前登录用户
+6) Google/GitHub OAuth 登录与账号绑定
+```bash
+# 浏览器打开：一键登录/自动注册
+http://localhost:7860/api/auth/oauth/google/start
+http://localhost:7860/api/auth/oauth/github/start
+
+# 已登录邮箱用户：获取第三方绑定授权 URL
+curl "http://localhost:7860/api/auth/oauth/google/bind/start" \
+  -H "Authorization: Bearer <token>"
+
+# 查询已绑定第三方账号
+curl "http://localhost:7860/api/auth/oauth/accounts" \
+  -H "Authorization: Bearer <token>"
+```
+
+7) 查询当前登录用户
 ```bash
 curl "http://localhost:8000/api/auth/me" \
   -H "Authorization: Bearer <token>"
 ```
 
-7) 退出登录
+8) 退出登录
 ```bash
 curl -X POST "http://localhost:8000/api/auth/logout" \
   -H "Authorization: Bearer <token>"
 ```
 
-8) 修改当前账号密码
+9) 修改当前账号密码
 ```bash
 curl -X POST "http://localhost:8000/api/auth/change-password" \
   -H "Authorization: Bearer <token>" \
@@ -165,7 +180,7 @@ curl -X POST "http://localhost:8000/api/auth/change-password" \
   -d '{"current_password":"<old_password>","new_password":"<new_password>"}'
 ```
 
-9) 修改昵称
+10) 修改昵称
 ```bash
 curl -X POST "http://localhost:8000/api/auth/change-display-name" \
   -H "Authorization: Bearer <token>" \

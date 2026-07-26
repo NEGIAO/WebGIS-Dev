@@ -36,7 +36,8 @@ backend/
 │   │   ├── quota.py                               # 配额追踪
 │   │   ├── system_config.py                       # 系统配置
 │   │   ├── dependencies.py                        # FastAPI 依赖注入 + EMAIL_BINDING_REQUIRED 拦截
-│   │   └── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置）
+│   │   ├── oauth.py                               # Google/GitHub OAuth 登录、自动注册与账号绑定服务
+│   │   └── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置/OAuth）
 │   ├── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）
 │   │   ├── __init__.py                            # 门面 re-export router
 │   │   ├── models.py                              # Pydantic 请求/响应模型

@@ -76,14 +76,14 @@ frontend/src/
 │   │   │   ├── index.js                            # 模块统一出口
 │   │   │   ├── setupCloudIntegration.js            # Vue 桥接：懒加载/销毁/天空快照 + LensFlare 懒创建 + watch 帧级(RAF)合并
 │   │   │   ├── cloudParamsApply.js                 # 面板参数 → pipeline.params 映射（含性能标量键）
-│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（默认流畅 60FPS 路径/均衡/极致）
+│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（BSM 仅节流 raymarch；运动中强制刷新）
 │   │   │   ├── assetConfig.js                      # public/cloud-atmosphere 路径 + 默认参数
 │   │   │   └── lib/                                # 库核心源码（内联，非 npm）
 │   │   │       ├── createCloudAtmosphere.js        # 一行创建入口
-│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（BSM 运行时启停/重建 + 统一解码 + 高度淡出同步）
+│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（BSM 运行时启停/重建 + latest-good 纹理同步）
 │   │   │       ├── CloudShadowFrag.glsl.js         # BSM 着色器内联
-│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（uniform location 缓存 + 动态高度同步 + bsmUpdateInterval 低频渲染）
-│   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve（持久 VBO/location 复用 + interval gating）
+│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（矩阵每帧同步 + 颜色图集双缓冲 + 运动强制刷新）
+│   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve（大运动 history reset + 持久 VBO/location 复用）
 │   │   │       ├── loadBinThreeGeospatial.js       # three Data3DTexture 解析 .bin
 │   │   │       ├── shaderLoader.js                 # 着色器加载器（bundle 优先 + fetch 回退）
 │   │   │       ├── shaders/bundledShaders.js       # 自动生成的 GLSL 内联 bundle
@@ -93,7 +93,7 @@ frontend/src/
 │   │   │       └── AtmosphereFromThreeGeospatial/  # Bruneton 大气管线模块
 │   │   │           ├── AtmosphereParameters.js     # 大气物理参数
 │   │   │           ├── AtmospherePostProcess.js    # 天空大气后处理
-│   │   │           ├── AerialPerspectiveEffect.js  # 空中透视（几何像素散射 + 地面云影高度淡出 + tonemap）
+│   │   │           ├── AerialPerspectiveEffect.js  # 空中透视（几何像素散射 + 可靠 depth→ECEF 地面云影）
 │   │   │           ├── AtmosphereForClouds.js      # 云专用大气接口
 │   │   │           ├── LensFlareBloomStage.js      # 镜头光晕 + Bloom
 │   │   │           ├── PrecomputedTexturesLoader.js# Bruneton LUT 加载器
@@ -245,13 +245,13 @@ frontend/src/
 │   │   ├── WeatherLiveCards.vue                    # 实况天气卡片
 │   │   └── WeatherForecastTable.vue                # 预报表格
 │   └── UserCenter/
-│       ├── FloatingAccountPanel.vue                # 用户中心浮层壳
+│       ├── FloatingAccountPanel.vue                # 用户中心浮层壳（含第三方账号绑定入口）
 │       ├── AdminControlPanel.vue                   # 管理员控制台
 │       ├── ApiKeysManagementPanel.vue              # API 密钥管理
 │       ├── ApiManagementPanel.vue                  # API 使用管理
 │       └── tabs/
 │           ├── OverviewTab.vue                     # 总览标签
-│           ├── SecurityTab.vue                     # 安全标签
+│           ├── SecurityTab.vue                     # 安全标签（密码修改 + Google/GitHub 绑定）
 │           └── PreferencesTab.vue                  # 偏好标签
 │
 ├── composables/                                    # 组合式函数
@@ -468,7 +468,8 @@ frontend/src/
 │
 ├── views/
 │   ├── HomeView.vue                                # 主页面
-│   ├── RegisterView.vue                            # 注册/登录
+│   ├── RegisterView.vue                            # 注册/登录（邮箱 + Google/GitHub OAuth）
+│   ├── OAuthCallbackView.vue                       # Google/GitHub OAuth 回调会话落地
 │   ├── NotFoundView.vue                            # 404 页面
 │   ├── TermsOfService.vue                          # 服务条款
 │   ├── PrivacyPolicy.vue                           # 隐私政策

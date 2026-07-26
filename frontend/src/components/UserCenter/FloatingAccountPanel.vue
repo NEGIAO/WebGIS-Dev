@@ -8,6 +8,9 @@ import {
     apiAuthChangeDisplayName,
     apiAuthLogout,
     apiAuthMe,
+    apiAuthListOAuthAccounts,
+    apiAuthUnlinkOAuthAccount,
+    redirectToOAuthBindProvider,
     apiAgentListModels,
     apiCreateUserMessage,
     apiListUserMessages,
@@ -50,6 +53,8 @@ const isSubmitting = ref(false);
 const isLoadingCenter = ref(false);
 const isPostingMessage = ref(false);
 const user = ref(getAuthUser());
+const oauthAccounts = ref([]);
+const oauthLoading = ref(false);
 
 const centerData = ref({
     quota: {
@@ -355,6 +360,47 @@ watch(
     { immediate: true },
 );
 
+async function loadOAuthAccounts({ silent = true } = {}) {
+    oauthLoading.value = true;
+    try {
+        const result = await apiAuthListOAuthAccounts();
+        oauthAccounts.value = Array.isArray(result?.accounts) ? result.accounts : [];
+    } catch (error) {
+        oauthAccounts.value = [];
+        if (!silent) {
+            message.warning(String(error?.message || '第三方账号绑定状态加载失败'));
+        }
+    } finally {
+        oauthLoading.value = false;
+    }
+}
+
+/**
+ * 跳转到第三方账号绑定授权入口。
+ * @param {'google'|'github'} provider - 第三方提供商
+ */
+async function handleBindOAuth(provider) {
+    try {
+        await redirectToOAuthBindProvider(provider);
+    } catch (error) {
+        message.error(String(error?.message || '第三方账号绑定入口生成失败'));
+    }
+}
+
+async function handleUnlinkOAuth(provider) {
+    if (isSubmitting.value) return;
+    isSubmitting.value = true;
+    try {
+        await apiAuthUnlinkOAuthAccount(provider);
+        message.success('第三方账号已解绑');
+        await loadOAuthAccounts({ silent: false });
+    } catch (error) {
+        message.error(String(error?.message || '第三方账号解绑失败'));
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+
 function selectMenu(menu) {
     if (menu === 'admin' && !isAdmin.value) return;
 
@@ -362,6 +408,9 @@ function selectMenu(menu) {
     if (menu === 'preferences') {
         void loadUserPreferences({ silent: true });
         void loadPreferenceModelOptions({ silent: true });
+    }
+    if (menu === 'security') {
+        void loadOAuthAccounts({ silent: true });
     }
     if (menu !== 'security') {
         resetPasswordForm();
@@ -762,8 +811,12 @@ onBeforeUnmount(() => {
                             ref="securityTabRef"
                             :user="user"
                             :is-submitting="isSubmitting"
+                            :oauth-accounts="oauthAccounts"
+                            :oauth-loading="oauthLoading"
                             @change-display-name="handleChangeDisplayName"
                             @change-password="handleChangePassword"
+                            @bind-oauth="handleBindOAuth"
+                            @unlink-oauth="handleUnlinkOAuth"
                         />
 
                         <!-- View 3: Admin -->

@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.4.2
+# WebGIS 前端项目 — V3.4.4
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -18,6 +18,7 @@
 - 🏙️ **Google 真实 3D 模型**：Cesium 叠加层支持 Google Photorealistic 3D Tiles 倾斜摄影
 - 🎮 **人物漫游控制器**：第一/第三人称 + Rapier 物理碰撞 + 导航指引 + 动画混合
 - 🔐 **运行时 Token 池**：天地图 TK 与 Cesium Ion Token 由管理员后台配置，支持主/备 token 自动兜底
+- 🔐 **账号体系**：邮箱注册登录、Google/GitHub OAuth 一键登录、账号中心第三方绑定/解绑、游客降级与受保护 API 会话鉴权
 - 🌊 **掩膜分析（水体模拟）**：按捕捉区域高程值域生成外包盒，支持水位滑杆和水色调色板
 - 🌪️ **GPU 风场粒子**：cesium-wind-layer 集成，WebGL 2 ComputeCommand + GLSL 300 es
 - 📊 **数据管理**：多格式导入（GeoJSON/KML/SHP/GeoTIFF/CSV/GLB/GLTF/CZML/3D Tiles），批量导出
@@ -163,6 +164,6 @@ MIT
 
 ---
 
-最后更新：2026-07-25
-当前版本：V3.4.2
-说明：体积云 BSM 地面阴影已支持运行时开启/关闭与三档预设切换自动创建/重建 ShadowPass，并统一 Cloud/Aerial/Atmosphere 三条 BSM 解码链路；相机接近或高于云顶时，地面云影会随体积云高度淡出。
+最后更新：2026-07-26
+当前版本：V3.4.4
+说明：体积云 BSM 阴影稳定性修复完成。CloudShadowPass 改为矩阵每帧同步 + 颜色图集双缓冲 + 运动强制刷新；ShadowResolvePass 大运动时 hard-reset history；地面 BSM 仅使用可靠 depth→ECEF 锚点，并降低 cascade 边界抖动。
