@@ -107,13 +107,15 @@ def rate_limit_check(email: str) -> Dict[str, Any]:
         )
         conn.commit()
 
-        # 检查 30 秒内是否有未过期、未使用的验证码
+        # 检查 30 秒内是否有发送记录（不限 used / 是否过期）：
+        # 已验证成功或已被暴力破解作废的码同样占用节流窗口，
+        # 否则「先把码烧成 used=1，再立即重发」可绕过 30 秒节流对目标邮箱刷验证码。
         count_recent = conn.execute(
             """
             SELECT COUNT(*) as cnt FROM email_verification_codes
-            WHERE email = ? AND created_at > ? AND used = 0 AND expires_at > ?
+            WHERE email = ? AND created_at > ?
             """,
-            (normalized_email, cutoff_60s, now_iso),
+            (normalized_email, cutoff_60s),
         ).fetchone()
 
         if count_recent and dict(count_recent).get("cnt", 0) > 0:
@@ -229,9 +231,12 @@ def verify_code(email: str, code: str, purpose: str) -> Dict[str, Any]:
 
         # 检查尝试次数
         if attempt_count >= VERIFICATION_MAX_ATTEMPTS:
-            # 标记为已使用（作废）
+            # 【安全】尝试次数耗尽时删除该记录使其彻底作废，禁止置 used=1。
+            # 原因：used=1 是「验证成功」的唯一凭据——is_email_verified_for_purpose
+            # 据此在注册/绑定流程放行免二次校验；若暴力破解耗尽也置 used=1，
+            # 攻击者只需对他人邮箱连发 6 次错误码把码「烧成」used=1，即可免验证码注册占用该邮箱。
             conn.execute(
-                "UPDATE email_verification_codes SET used = 1 WHERE id = ?",
+                "DELETE FROM email_verification_codes WHERE id = ?",
                 (record_id,),
             )
             conn.commit()
@@ -248,8 +253,10 @@ def verify_code(email: str, code: str, purpose: str) -> Dict[str, Any]:
         )
         conn.commit()
 
-        # 比对验证码
-        if not secrets.compare_digest(stored_code, code.strip()):
+        # 比对验证码：编码为 bytes 再比较。secrets.compare_digest 收到含非 ASCII 的
+        # str（如全角数字"１２３４５６"，可通过 6 位长度校验）会抛 TypeError → 500；
+        # bytes 比较等长时间且不受字符集影响，非法输入统一按「验证码错误」处理。
+        if not secrets.compare_digest(stored_code.encode("utf-8"), code.strip().encode("utf-8")):
             remaining = VERIFICATION_MAX_ATTEMPTS - attempt_count - 1
             return {
                 "valid": False,

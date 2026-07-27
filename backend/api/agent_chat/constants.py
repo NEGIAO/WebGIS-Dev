@@ -8,7 +8,7 @@ L1 默认经统一 loader（config）读取，可被根 .env 调整；
 import logging
 from typing import Any, List
 
-from config import get_float, get_int, get_settings, get_str
+from config import get_bool, get_float, get_int, get_settings, get_str
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,16 @@ DEFAULT_AGENT_EXTRA_BODY = {
     "chat_template_kwargs": {"enable_thinking": True},
     "reasoning_budget": 16384,
 }
+
+# 调用方 override_base_url 安全护栏（详见 Docs/TODO/agent-override-key-leak-plan.md）：
+# 白名单留空 = 不限制服务商域名（保留「个人 Key 接任意 OpenAI 兼容服务商」能力），
+# 但成对 Key 校验与私网/回环拒绝恒生效，二者不受本开关影响。
+AGENT_ALLOWED_BASE_URL_HOSTS: List[str] = [
+    piece.strip().lower().rstrip(".")
+    for piece in str(get_str("AGENT_ALLOWED_BASE_URL_HOSTS", "") or "").replace(";", ",").split(",")
+    if piece.strip()
+]
+AGENT_ALLOW_INSECURE_BASE_URL = get_bool("AGENT_ALLOW_INSECURE_BASE_URL")
 
 CONFIG_KEY_BASE_URL = "agent_base_url"
 CONFIG_KEY_MODEL = "agent_model"

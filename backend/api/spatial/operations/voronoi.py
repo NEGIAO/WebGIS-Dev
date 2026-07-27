@@ -27,14 +27,12 @@ def do_voronoi(geoms_a: list) -> dict:
 
     multi_point = MultiPoint(points)
 
-    # 计算边界 envelope，留出余量防止边缘多边形无限延伸
-    envelope = multi_point.convex_hull
-
-    # 检测退化输入（共线或重合点导致 convex_hull 不是 Polygon）
-    if envelope.geom_type in ("Point", "LineString"):
-        raise ValueError("输入点集退化（共线或重合），无法计算泰森多边形")
-    minx, miny, maxx, maxy = envelope.bounds
-    # 退化情况（所有点共线/重合）：用 1km 作为默认 padding（3857 下单位为米）
+    # 直接用点集外包围盒（bounds）计算 envelope，留出余量防止边缘多边形无限延伸。
+    # 【修复】此前用 convex_hull 且在其为 Point/LineString 时直接报错——但恰好 2 个点的
+    # convex_hull 必为 LineString、任意共线点集亦然，导致「至少 2 个点」的契约下 2 点/共线输入
+    # 100% 失败。改用 bounds（对两点、共线等退化情形同样有效），零展布维度回退 1km padding
+    # （EPSG:3857 下单位为米），voronoi_diagram 以带面积的 box envelope 即可正常切分。
+    minx, miny, maxx, maxy = multi_point.bounds
     dx = (maxx - minx) * 0.5 if maxx > minx else 1000.0
     dy = (maxy - miny) * 0.5 if maxy > miny else 1000.0
     bounding_poly = box(minx - dx, miny - dy, maxx + dx, maxy + dy)

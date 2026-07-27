@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { createLayerMetadataNormalizationFeature } from '../composables/map/features';
+// 直连具体模块而非 features barrel:barrel 全量 re-export 约 40 个 feature(多数 import ol),
+// 会把 OpenLayers 连带打进登录页入口 chunk(V3.4.54 加载性能优化)
+import { createLayerMetadataNormalizationFeature } from '../composables/map/features/useLayerMetadataNormalization';
 
 type AttrFieldType = 'string' | 'number' | 'date' | 'boolean';
 
@@ -48,23 +50,14 @@ type PanelRect = {
     initialized: boolean;
 };
 
-const { flattenAttributes: _flattenAttributes, inferValueType, normalizeLayerAttributeSnapshot } =
-    createLayerMetadataNormalizationFeature();
-
-function toFeatureId(feature: any, index: number): string {
-    const candidates = [
-        feature?.id,
-        feature?._gid,
-        feature?.properties?._gid,
-        feature?.properties?.id,
-        feature?.properties?.OBJECTID,
-        feature?.properties?.FID,
-        feature?.properties?.objectid,
-        feature?.properties?.fid,
-    ];
-    const matched = candidates.find((item) => String(item || '').trim().length > 0);
-    return String(matched || `feature_${index + 1}`);
-}
+const {
+    flattenAttributes: _flattenAttributes,
+    inferValueType,
+    normalizeLayerAttributeSnapshot,
+    // B1：稳定 ID 单点实现收敛到归一化模块（含 OL 访问器候选 + 生成后写回要素本体），
+    // 不再维护本地 toFeatureId 索引兜底副本——索引 ID 行序一变即错位，且 map 侧无法反解
+    ensureStableFeatureId,
+} = createLayerMetadataNormalizationFeature();
 
 function stringifySearchText(parts: unknown[]): string {
     return parts
@@ -267,8 +260,10 @@ function buildLayerDataset(
                     : {};
 
             return {
-                id: String(record?.id || record?.featureId || toFeatureId(record, index)),
-                featureId: String(record?.featureId || record?.id || toFeatureId(record, index)),
+                id: String(record?.id || record?.featureId || ensureStableFeatureId(record, index)),
+                featureId: String(
+                    record?.featureId || record?.id || ensureStableFeatureId(record, index),
+                ),
                 layerId: String(record?.layerId || snapshot.layerId || layer?.id || ''),
                 layerName: String(
                     record?.layerName || snapshot.layerName || layer?.name || '未命名图层',
@@ -440,6 +435,8 @@ export const useAttrStore = defineStore('attrStore', () => {
         if (previous && revision !== null && layerRevisions[layerId] === revision) {
             return;
         }
+        // 在写回缓存前先记录"revision 是否实际变化"，供下方签名守卫分流
+        const revisionChanged = revision !== null && layerRevisions[layerId] !== revision;
 
         // 慢路径（revision 变化或上游未提供 revision）：全量构建 + 内容签名兜底。
         // buildLayerDataset 内部已按字段 key 合并 previous.fieldConfig（保留别名/可见性/列宽）
@@ -449,9 +446,10 @@ export const useAttrStore = defineStore('attrStore', () => {
             layerRevisions[layerId] = revision;
         }
 
-        // 签名一致说明数据未实质变化，保留旧 dataset 引用，
-        // 避免 rows 引用更替引发属性表全量重渲染与滚动/选中丢失。
-        if (previous && datasetSignatures[layerId] === nextSignature) {
+        // 签名守卫仅服务于"无 revision 契约"的来源：签名不含几何，
+        // 仅编辑形状（属性/行数不变）时签名相同但 extent 已变——revision 已变化时
+        // 必须以上游契约为准强制替换，否则视图筛选会使用过期范围（B2 修复）。
+        if (!revisionChanged && previous && datasetSignatures[layerId] === nextSignature) {
             return;
         }
 
@@ -587,7 +585,8 @@ export const useAttrStore = defineStore('attrStore', () => {
             currentMapExtent.value = null;
             return;
         }
-        // 地图视图范围（OL 侧为 3857）与行范围统一归一到 4326 再参与相交比较
+        // 地图视图范围与行范围统一归一到 4326 再参与相交比较：
+        // 2D（OL）传 3857 米制经归一转换；3D（Cesium 视域）直传 4326 度值原样放行
         currentMapExtent.value = normalizeExtentTo4326([
             normalized[0],
             normalized[1],

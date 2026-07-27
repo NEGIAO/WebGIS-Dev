@@ -37,6 +37,7 @@ frontend/src/
 │   └── weather.js                                  # 高德天气业务封装（前端直连；与 backend/weather.js 后端代理同名不同义）
 │
 ├── assets/                                         # 全局样式与静态数据
+│   ├── cesium-tool-theme.css                       # Cesium 工具面板主题变量（--ctp-* 独立暗色域）
 │   ├── logo.svg                                    # 项目 Logo
 │   ├── theme.css                                   # 全局主题变量
 │   ├── toc-theme.css                               # TOC 主题变量
@@ -156,7 +157,8 @@ frontend/src/
 │   │   │   │   ├── cesiumAtmosphere.js             # 大气渲染
 │   │   │   │   ├── useCesiumBeautify.js            # 场景美化（HDR/FXAA/定向光）
 │   │   │   │   └── useCesiumCreditHider.js         # 版权信息隐藏
-│   │   │   ├── camera/                             # 相机层（增强、场景动作）
+│   │   │   ├── camera/                             # 相机层（增强、场景动作、视域同步）
+│   │   │   │   ├── useCesiumAttrViewExtentSync.js  # 相机视域→属性表视图筛选范围（B4）
 │   │   │   │   ├── useCesiumCameraEnhanced.js      # 相机增强
 │   │   │   │   └── useCesiumSceneActions.js        # 场景动作
 │   │   │   ├── layers/                             # 图层层（底图、叠加层、URL追踪）
@@ -164,9 +166,10 @@ frontend/src/
 │   │   │   │   ├── useCesiumBasemapSwitcher.js     # 底图熔断/降级切换
 │   │   │   │   ├── useCesiumUrlTracking.js         # URL 追踪
 │   │   │   │   └── layerUtils.js                   # 图层工具函数/常量
-│   │   │   ├── interaction/                        # 交互层（鼠标交互、FPS采样）
+│   │   │   ├── interaction/                        # 交互层（鼠标交互、FPS采样、渲染模式）
 │   │   │   │   ├── useCesiumInteractions.js        # 交互管理
-│   │   │   │   └── useCesiumFrameRate.js           # FPS 采样
+│   │   │   │   ├── useCesiumFrameRate.js           # FPS 采样
+│   │   │   │   └── useCesiumRenderMode.js          # 按需渲染计数器管理器（requestRenderMode，总开关一行可回退）
 │   │   │   ├── terrain/                            # 地形/高度采样层
 │   │   │   │   └── useCesiumHeightSampler.js       # 高度采样
 │   │   │   ├── models/                             # 模型管理层
@@ -177,7 +180,6 @@ frontend/src/
 │   │   │   │   ├── useCesiumDataOpsHandlers.js     # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   ├── importUtils.js                  # 导入工具函数
 │   │   │   │   ├── geoTiffUtils.js                 # GeoTIFF 工具函数
-│   │   │   │   ├── dataSourceDisplay.js            # 数据源显示辅助
 │   │   │   │   └── loaders/                        # 数据加载器（按格式拆分）
 │   │   │   │       ├── utils.js                    # 加载器共享工具函数
 │   │   │   │       ├── czmlLoader.js               # CZML 时序数据加载器
@@ -336,7 +338,6 @@ frontend/src/
 │   │   │   ├── actions/                            # 右键菜单动作
 │   │   │   │   ├── contextActionManager.js
 │   │   │   │   ├── cesiumTocActions.js             # TOC 动作 Cesium 分流器（cesium: 前缀直调元数据店）
-│   │   │   │   ├── cesiumTocActions.js             # Cesium 图层目录动作
 │   │   │   │   ├── exportService.js
 │   │   │   │   └── selectionManager.js
 │   │   │   ├── menu/                               # 菜单调度
@@ -391,8 +392,9 @@ frontend/src/
 │
 ├── constants/                                      # 常量配置
 │   ├── basemap/
-│   │   ├── basemapConfig.ts                        # 图源定义 + 预设配置（基址经 publicRuntime 派生）
-│   │   ├── basemapResolver.ts                      # 解析逻辑
+│   │   ├── basemapConfig.ts                        # 图源定义（基址经 publicRuntime 派生；预设已抽离 basemapPresets）
+│   │   ├── basemapPresets.ts                       # 底图预设纯数据（id/label/stack + URL_LAYER_OPTIONS，零 ol 依赖，供登录页入口链安全消费）
+│   │   ├── basemapResolver.ts                      # 解析逻辑（URL_LAYER_OPTIONS 自 presets re-export）
 │   │   ├── sourceDescriptors.ts                    # 引擎无关图层源描述符（基址经 publicRuntime 派生）
 │   │   ├── cesiumProviderFactory.ts                # Cesium ImageryProvider 工厂
 │   │   └── index.ts
@@ -423,8 +425,6 @@ frontend/src/
 │   │   ├── cesiumLayerNodeBuilder.ts               # Cesium 记录 → TOC「三维数据」分组节点映射
 │   │   ├── layerHelpers.ts                         # 图层工具函数
 │   │   ├── layerTreeBuilder.ts                     # 图层树构建器
-│   │   ├── cesiumLayerNodeBuilder.ts               # Cesium 图层树节点构建
-│   │   ├── cesiumLayers.ts                         # Cesium 图层状态 store
 │   │   └── index.ts
 │   ├── index.ts
 │   ├── useAppStore.ts                              # 全局应用状态
@@ -449,9 +449,8 @@ frontend/src/
 │   ├── abortManager.js                             # 请求中断管理器
 │   ├── amapRectangle.js                            # 高德矩形范围解析
 │   ├── attributeTableCsv.ts                        # 属性表 CSV 导出（RFC4180 转义 + BOM + 下载）
-│   ├── units.js                                    # 单位换算工具
+│   ├── units.js                                    # 单位制工具（距离/面积公英制格式化）
 │   ├── biz/index.js                                # 业务工具 barrel
-│   ├── units.js                                    # 单位制工具（用户偏好 unit_system 消费：距离/面积公英制格式化）
 │   ├── coordTransform.js                           # 坐标转换（GCJ-02/WGS84）
 │   ├── coordinateFormatter.js                      # 坐标格式化
 │   ├── coordinateInputHandler.js                   # 坐标输入处理

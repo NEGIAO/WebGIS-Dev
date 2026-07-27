@@ -2,19 +2,14 @@
     <div class="register-container">
         <div class="container fade-in">
             <div class="form-header">
-                <div class="brand-badge">
-                    <i class="fas fa-earth-asia"></i>
-                </div>
-                <h1 class="form-title">NEGIAO's WebGIS</h1>
-                <p class="app-purpose-title">地理空间数据可视化与在线 WebGIS 平台</p>
-                <p class="form-subtitle">
-                    NEGIAO's WebGIS 用于浏览、导入、分析和保存个人地图项目；Google 登录仅用于账户认证与保存你的地图配置。
-                </p>
-
-                <div class="quick-hints">
-                    <div class="hint-item"><i class="fas fa-map-location-dot"></i>WebGIS 地图可视化</div>
-                    <div class="hint-item"><i class="fas fa-floppy-disk"></i>个人地图项目保存</div>
-                    <div class="hint-item"><i class="fas fa-user-clock"></i>游客登陆 API 受限</div>
+                <div class="brand-row">
+                    <div class="brand-badge">
+                        <i class="fas fa-earth-asia"></i>
+                    </div>
+                    <div class="brand-text">
+                        <h1 class="form-title">NEGIAO's WebGIS</h1>
+                        <p class="app-purpose-title">地理空间数据可视化与在线 WebGIS 平台</p>
+                    </div>
                 </div>
             </div>
 
@@ -1373,13 +1368,12 @@ onUnmounted(() => {
     flex-direction: column;
 }
 
-/* ─── 头部 ─── */
+/* ─── 头部（紧凑单行） ─── */
 .form-header {
     position: relative;
     background: linear-gradient(140deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
     color: #fff;
-    padding: 22px 24px 18px;
-    text-align: center;
+    padding: 14px 20px;
     overflow: hidden;
     /* 关键：注册模式表单变高时，禁止 flex 压缩头部卡片（否则头部被表单区遮挡/裁切） */
     flex-shrink: 0;
@@ -1403,69 +1397,51 @@ onUnmounted(() => {
     position: relative;
 }
 
+.brand-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .brand-badge {
-    width: 46px;
-    height: 46px;
-    margin: 0 auto 10px;
-    border-radius: 14px;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 12px;
     background: rgba(255, 255, 255, 0.16);
     border: 1px solid rgba(255, 255, 255, 0.3);
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
+    font-size: 19px;
+}
+
+.brand-text {
+    min-width: 0;
+    text-align: left;
 }
 
 .form-title {
     font-weight: 700;
-    font-size: 24px;
+    font-size: 19px;
     margin: 0;
     letter-spacing: 0.4px;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .app-purpose-title {
-    margin: 4px 0 0;
-    font-size: 13.5px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    opacity: 0.95;
-}
-
-.form-subtitle {
-    font-size: 12px;
-    opacity: 0.82;
-    font-weight: 400;
-    margin: 8px auto 0;
-    max-width: 34em;
-    line-height: 1.55;
-}
-
-.quick-hints {
-    margin-top: 12px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 6px;
-}
-
-.hint-item {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 11px;
-    background-color: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 999px;
+    margin: 2px 0 0;
     font-size: 12px;
     font-weight: 500;
+    letter-spacing: 0.2px;
+    opacity: 0.88;
     white-space: nowrap;
-}
-
-.hint-item i {
-    font-size: 11px;
-    opacity: 0.9;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ─── 表单主体 ─── */
@@ -2138,24 +2114,18 @@ input:disabled {
     }
 
     .form-header {
-        padding: 18px 16px 16px;
-        padding-top: max(18px, env(safe-area-inset-top));
+        padding: 12px 16px;
+        padding-top: max(12px, env(safe-area-inset-top));
     }
 
     .brand-badge {
-        width: 40px;
-        height: 40px;
-        font-size: 19px;
-        margin-bottom: 8px;
-        border-radius: 12px;
+        width: 36px;
+        height: 36px;
+        font-size: 17px;
     }
 
     .form-title {
-        font-size: 21px;
-    }
-
-    .form-subtitle {
-        font-size: 11.5px;
+        font-size: 17px;
     }
 
     .form-footer {

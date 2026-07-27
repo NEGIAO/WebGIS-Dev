@@ -66,8 +66,12 @@ async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
     try:
         timeout = httpx.Timeout(connect=2.0, read=5.0, write=2.0, pool=1.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            url = f"https://restapi.amap.com/v3/ip?ip={ip}&key={amap_key}"
-            response = await client.get(url)
+            # 用 params 而非 f-string 拼 URL：ip 源自客户端可控的 X-Forwarded-For，
+            # 直接拼接时形如 "1.1.1.1#" 会截断 key、"1.1.1.1&k=v" 会注入额外查询参数。
+            response = await client.get(
+                "https://restapi.amap.com/v3/ip",
+                params={"ip": ip, "key": amap_key},
+            )
             data = response.json()
 
             if data.get("status") == "1":
@@ -237,8 +241,10 @@ async def _call_upstream_chat(
         payload["top_p"] = float(top_p)
     # Carefully merge extra_body to avoid overwriting critical fields.
     if extra_body is not None and isinstance(extra_body, dict):
-        # Forbidden keys that must not be overridden by extra_body
-        forbidden = {"model", "messages", "max_tokens", "temperature", "api_key", "tools", "tool_choice"}
+        # Forbidden keys that must not be overridden by extra_body.
+        # 必含 "stream"/"stream_options"：本函数走非流式（stream=False）并以 response.json() 解析，
+        # 若允许 extra_body 覆盖 stream=True，上游会返回 text/event-stream 致解析失败（502，但计费已发生）。
+        forbidden = {"model", "messages", "max_tokens", "temperature", "api_key", "tools", "tool_choice", "stream", "stream_options"}
 
         # Merge allowed keys. For dict values, do a shallow merge into existing dicts.
         for k, v in extra_body.items():
@@ -392,6 +398,8 @@ async def _call_upstream_chat_with_key_candidates(
                 timeout_seconds=timeout_seconds,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                top_p=top_p,
+                extra_body=extra_body,
                 tools=tools,
                 tool_choice=tool_choice,
             )

@@ -69,6 +69,7 @@ from .utils import (
     _normalize_base_url,
     _normalize_model,
     _safe_parse_float,
+    _validate_override_base_url,
 )
 
 router = APIRouter(prefix="/api/agent", tags=["agent-chat"])
@@ -105,8 +106,10 @@ async def get_agent_chat_config(
                 "base_url": str(runtime.get("base_url") or ""),
                 "timeout_seconds": int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS),
                 "max_tokens": int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS),
-                "temperature": float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE),
-                "top_p": float(runtime.get("top_p") or DEFAULT_AGENT_TOP_P),
+                # 用 is None 判定而非 `or`：temperature/top_p 合法取值可为 0.0，
+                # `0.0 or DEFAULT` 会把用户显式设置的 0（确定性输出）静默改回默认值。
+                "temperature": float(runtime.get("temperature")) if runtime.get("temperature") is not None else DEFAULT_AGENT_TEMPERATURE,
+                "top_p": float(runtime.get("top_p")) if runtime.get("top_p") is not None else DEFAULT_AGENT_TOP_P,
                 "extra_body": runtime.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY,
             },
         },
@@ -146,11 +149,19 @@ async def agent_chat_completions(
         else list(runtime.get("api_key_candidates") or [api_key])
     )
     runtime_model = override_model if override_model else str(runtime.get("model") or "").strip()
-    base_url = _normalize_base_url(override_base_url) if override_base_url else str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+    # 自定义上游必须自带 Key（否则平台/个人 Key 会被发往调用方指定的地址），并过协议/私网/白名单护栏。
+    base_url = (
+        _validate_override_base_url(override_base_url, has_override_key=bool(override_api_key))
+        if override_base_url
+        else str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+    )
     override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS)
     override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS)
-    override_temp = float(payload.override_temperature) if payload.override_temperature is not None else float(runtime.get("temperature") or DEFAULT_AGENT_TEMPERATURE)
-    override_top_p = float(payload.override_top_p) if payload.override_top_p is not None else float(runtime.get("top_p") or DEFAULT_AGENT_TOP_P)
+    # 回退分支同样用 is None 判定：runtime 中存储的 0.0 不应被 `or` 折叠回默认值。
+    _rt_temp = runtime.get("temperature")
+    _rt_top_p = runtime.get("top_p")
+    override_temp = float(payload.override_temperature) if payload.override_temperature is not None else (float(_rt_temp) if _rt_temp is not None else DEFAULT_AGENT_TEMPERATURE)
+    override_top_p = float(payload.override_top_p) if payload.override_top_p is not None else (float(_rt_top_p) if _rt_top_p is not None else DEFAULT_AGENT_TOP_P)
     override_extra_body = payload.override_extra_body if payload.override_extra_body is not None else runtime.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY
 
     if not api_key:
@@ -569,6 +580,17 @@ async def update_agent_user_config(
             detail="No user agent config fields provided.",
         )
 
+    # 持久化 base_url 是 override_base_url 之外的第二道入口：写进本表后 runtime 会直接采用，
+    # 而个人 Key 为空时挂的是平台 Key —— 与请求体 override 同一泄漏语义，故用同一护栏校验。
+    # has_override_key 取「本次提交的 api_key」或「库中已存的个人 Key」。
+    pending_base_url = str(updates.get("base_url") or "").strip()
+    if pending_base_url:
+        pending_api_key = str(updates.get("api_key") or "").strip()
+        if not pending_api_key:
+            existing_row = await asyncio.to_thread(_read_agent_user_config_row_sync, username) or {}
+            pending_api_key = str(existing_row.get("api_key") or "").strip()
+        _validate_override_base_url(pending_base_url, has_override_key=bool(pending_api_key))
+
     saved = await asyncio.to_thread(_upsert_agent_user_config_sync, username, updates, username)
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
 
@@ -609,7 +631,11 @@ async def get_available_models(
     override_api_key_clean = str(override_api_key or "").strip()
 
     if override_base_url_clean:
-        base_url = _normalize_base_url(override_base_url_clean)
+        # 同 /chat/completions：query 形式同样会把平台 Key 发往调用方地址，护栏口径必须一致。
+        base_url = _validate_override_base_url(
+            override_base_url_clean,
+            has_override_key=bool(override_api_key_clean),
+        )
     else:
         base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
 
@@ -646,7 +672,10 @@ async def get_available_models(
         compatible_upstream_models = [
             item for item in upstream_models if bool(item.get("chat_compatible", True))
         ]
-        asyncio.create_task(_cache_models_async(compatible_upstream_models))
+        # 仅缓存平台自身上游的返回：override 走的是调用方自选服务商，其模型列表写进全局
+        # system_config 会污染其他用户的 fallback 列表与 /chat/config 展示。
+        if not (override_base_url_clean or override_api_key_clean):
+            asyncio.create_task(_cache_models_async(compatible_upstream_models))
     elif upstream_error:
         fallback_reason = f"上游服务暂时不可用（{upstream_error}），使用缓存模型列表"
         cached_model_list = _normalize_available_models(

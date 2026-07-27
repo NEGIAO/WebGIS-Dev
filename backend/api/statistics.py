@@ -5,7 +5,7 @@
 import asyncio
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from api.auth import (
+    ONLINE_WINDOW_MINUTES,
     ROLE_ADMIN,
     _extract_client_ip,
     _get_admin_avatar_index_sync,
@@ -454,83 +455,57 @@ def _upsert_guest_identity_record_sync(record: Dict[str, Any]) -> None:
     user_agent = str(record.get("user_agent") or "")
 
     with _db_connection() as conn:
-        existing = conn.execute(
-            "SELECT guest_uid, id FROM guest_identity_records WHERE guest_uid = ?",
-            (guest_uid,),
-        ).fetchone()
-
-        if existing is None:
-            # 使用子查询原子获取下一个 id，避免并发竞态
-            conn.execute(
-                """
-                INSERT INTO guest_identity_records (
-                    guest_uid,
-                    username,
-                    role,
-                    guest_device_id,
-                    ip,
-                    coord_source,
-                    geo_permission,
-                    encoded_pos,
-                    last_latitude,
-                    last_longitude,
-                    user_agent,
-                    visit_count,
-                    first_seen_at,
-                    last_seen_at
-                ) VALUES (?, 'user_' || (SELECT COALESCE(MAX(id), 0) + 1 FROM guest_identity_records), ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-                """,
-                (
-                    guest_uid,
-                    role,
-                    guest_device_id,
-                    ip,
-                    coord_source,
-                    geo_permission,
-                    encoded_pos,
-                    latitude,
-                    longitude,
-                    user_agent,
-                    now_iso,
-                    now_iso,
-                ),
-            )
-        else:
-            # 获取现有的用户名和 id
-            existing_dict = dict(existing)
-            existing_id = existing_dict.get("id")
-            existing_username = existing_dict.get("username") or username
-            
-            conn.execute(
-                """
-                UPDATE guest_identity_records
-                SET role = ?,
-                    guest_device_id = ?,
-                    ip = ?,
-                    coord_source = ?,
-                    geo_permission = ?,
-                    encoded_pos = ?,
-                    last_latitude = ?,
-                    last_longitude = ?,
-                    user_agent = ?,
-                    visit_count = visit_count + 1,
-                    last_seen_at = ?
-                WHERE guest_uid = ?
-                """,
-                (
-                    role,
-                    guest_device_id,
-                    ip,
-                    coord_source,
-                    geo_permission,
-                    encoded_pos,
-                    latitude,
-                    longitude,
-                    user_agent,
-                    now_iso,
-                    guest_uid,
-                ),
-            )
+        # 【修复】改为单条 UPSERT（guest_uid 有 UNIQUE 约束）。
+        # 原「先 SELECT 判断存在再分支 INSERT/UPDATE」在并发下有竞态：同一新游客
+        # 双标签页同时首次访问 → 两个线程都判定 existing is None → 后一条 INSERT 触发
+        # UNIQUE 冲突 IntegrityError → 500「记录访问失败」且该次访问丢失。
+        # ON CONFLICT DO UPDATE 由 SQLite 原子处理插入/更新二选一，无需先读。
+        conn.execute(
+            """
+            INSERT INTO guest_identity_records (
+                guest_uid,
+                username,
+                role,
+                guest_device_id,
+                ip,
+                coord_source,
+                geo_permission,
+                encoded_pos,
+                last_latitude,
+                last_longitude,
+                user_agent,
+                visit_count,
+                first_seen_at,
+                last_seen_at
+            ) VALUES (?, 'user_' || (SELECT COALESCE(MAX(id), 0) + 1 FROM guest_identity_records), ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(guest_uid) DO UPDATE SET
+                role = excluded.role,
+                guest_device_id = excluded.guest_device_id,
+                ip = excluded.ip,
+                coord_source = excluded.coord_source,
+                geo_permission = excluded.geo_permission,
+                encoded_pos = excluded.encoded_pos,
+                last_latitude = excluded.last_latitude,
+                last_longitude = excluded.last_longitude,
+                user_agent = excluded.user_agent,
+                visit_count = visit_count + 1,
+                last_seen_at = excluded.last_seen_at
+            """,
+            (
+                guest_uid,
+                role,
+                guest_device_id,
+                ip,
+                coord_source,
+                geo_permission,
+                encoded_pos,
+                latitude,
+                longitude,
+                user_agent,
+                now_iso,
+                now_iso,
+            ),
+        )
 
         conn.commit()
 
@@ -871,17 +846,21 @@ def _get_self_stats_sync(username: str, token: str) -> Dict[str, Any]:
 
 
 def _get_realtime_global_stats_sync() -> Dict[str, Any]:
-    now_iso = _iso(_utc_now())
+    now = _utc_now()
+    now_iso = _iso(now)
+    # 在线 = 未过期 且 最近 ONLINE_WINDOW_MINUTES 内有鉴权请求（V3.4.60）。
+    # 原判定仅看 expires_at（TTL 72h），导致 3 天内登录未退出者恒被计为在线。
+    online_cutoff_iso = _iso(now - timedelta(minutes=ONLINE_WINDOW_MINUTES))
 
     with _db_connection() as conn:
         online_users = conn.execute(
-            "SELECT COUNT(DISTINCT username) AS cnt FROM sessions WHERE expires_at > ?",
-            (now_iso,),
+            "SELECT COUNT(DISTINCT username) AS cnt FROM sessions WHERE expires_at > ? AND last_seen_at > ?",
+            (now_iso, online_cutoff_iso),
         ).fetchone()
 
         online_sessions = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM sessions WHERE expires_at > ?",
-            (now_iso,),
+            "SELECT COUNT(*) AS cnt FROM sessions WHERE expires_at > ? AND last_seen_at > ?",
+            (now_iso, online_cutoff_iso),
         ).fetchone()
 
         total_registered_users = conn.execute(
@@ -902,18 +881,21 @@ def _get_realtime_global_stats_sync() -> Dict[str, Any]:
 
         role_rows = conn.execute(
             """
-            SELECT role, COUNT(*) AS cnt
+            SELECT username, role, COUNT(*) AS cnt
             FROM sessions
-            WHERE expires_at > ?
-            GROUP BY role
+            WHERE expires_at > ? AND last_seen_at > ?
+            GROUP BY username, role
             """,
-            (now_iso,),
+            (now_iso, online_cutoff_iso),
         ).fetchall()
 
     role_online: Dict[str, int] = {}
     for row in role_rows:
         row_data = dict(row)
-        normalized = normalize_role(row_data.get("role"), None)
+        # 必须带 username 归一：normalize_role 仅凭用户名判定 admin（不信任 DB role 字段）。
+        # 原按 role 聚合并传 None，令在线管理员会话永远落不进 admin 档、被并入 registered，
+        # 用户中心「在线管理员」恒为 0。改为按 (username, role) 聚合后逐组归一再累加。
+        normalized = normalize_role(row_data.get("role"), row_data.get("username"))
         role_online[normalized] = int(role_online.get(normalized, 0) + int(row_data.get("cnt") or 0))
 
     return {

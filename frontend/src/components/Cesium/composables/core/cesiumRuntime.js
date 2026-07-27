@@ -9,9 +9,10 @@
  * 仅 CesiumContainer 懒加载链路会触发本模块，非 Cesium 页面不受影响。
  */
 
-import { cesiumReady, CESIUM_BASE_URL } from 'cesium';
+import { cesiumReady, CESIUM_BASE_URL, getActiveCesiumBaseUrl } from 'cesium';
 
 export { CESIUM_BASE_URL };
+/** 主源静态值(兼容保留);多源回退后实际样式地址在 loadCesiumRuntime 内按生效源计算 */
 export const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
 
 /**
@@ -25,7 +26,8 @@ export async function loadCesiumRuntime({ ionToken } = {}) {
         await cesiumReady;
     }
 
-    await loadStyleOnce(CESIUM_CSS_URL, 'cesium-widgets-style');
+    // widgets.css 必须与实际加载成功的 CDN 同源(多源回退后可能不是主源)
+    await loadStyleOnce(`${getActiveCesiumBaseUrl()}Widgets/widgets.css`, 'cesium-widgets-style');
 
     const Cesium = window.Cesium;
     if (!Cesium) {

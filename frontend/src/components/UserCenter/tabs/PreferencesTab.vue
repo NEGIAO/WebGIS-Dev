@@ -6,9 +6,9 @@
   Parent passes draft state and options; save actions bubble up via emits.
 -->
 <script setup>
-// PreferencesTab — no extra imports needed
+import { computed } from 'vue';
 
-defineProps({
+const props = defineProps({
     /** Draft preferences object { default_basemap, language, unit_system, preferred_agent_model } */
     preferenceDraft: {
         type: Object,
@@ -44,10 +44,19 @@ defineProps({
         type: Boolean,
         default: false,
     },
-    /** Current user object (used to compare avatar_index) */
+    /** Current user object (third-party avatar_url detection) */
     user: {
         type: Object,
         default: null,
+    },
+    /**
+     * 当前生效头像索引（父组件归一化后下传，V3.4.62 A2）。
+     * 原比较基准 user.avatar_index || 0 与实际显示基准（admin 默认 1）不一致，
+     * 导致 admin 默认头像误显「保存头像」；改为与显示同源的归一化值。
+     */
+    currentAvatarIndex: {
+        type: Number,
+        default: 0,
     },
     /** Current theme name */
     currentTheme: {
@@ -68,6 +77,11 @@ const emit = defineEmits([
     /** Request parent to set theme. Payload: theme name string */
     'set-theme',
 ]);
+
+/** 当前是否正在使用第三方（Google/GitHub）头像 */
+const hasThirdPartyAvatar = computed(() => {
+    return /^https?:\/\//i.test(String(props.user?.avatar_url || '').trim());
+});
 
 /** Helper to get avatar SVG path */
 function getAvatarSrc(avatarIndex) {
@@ -225,7 +239,7 @@ function handleSetTheme(theme) {
             <div class="pref-item avatar-selector-item">
                 <div class="pref-info">
                     <span class="pref-title"><i class="fas fa-image"></i> 个人头像</span>
-                    <span class="pref-desc">选择你喜欢的头像样式</span>
+                    <span class="pref-desc">{{ hasThirdPartyAvatar ? '当前使用第三方账号头像，选择预设头像可替换' : '选择你喜欢的头像样式' }}</span>
                 </div>
             </div>
 
@@ -241,7 +255,7 @@ function handleSetTheme(theme) {
                 </div>
             </div>
             <button
-                v-if="selectedAvatarIndex !== (user?.avatar_index || 0)"
+                v-if="hasThirdPartyAvatar || selectedAvatarIndex !== currentAvatarIndex"
                 class="avatar-save-btn"
                 :disabled="avatarSaving"
                 @click="handleSaveAvatar"
@@ -271,7 +285,7 @@ function handleSetTheme(theme) {
 
 /* 偏好项卡片行 */
 .pref-item {
-    background: #fff;
+    background: var(--bg-primary);
     border: 1px solid rgba(0, 0, 0, 0.05);
     border-radius: 12px;
     padding: 11px 13px;
@@ -328,7 +342,7 @@ function handleSetTheme(theme) {
     height: 34px;
     border: 1px solid var(--border-light);
     border-radius: 9px;
-    background: #fbfdfb;
+    background: var(--bg-secondary);
     color: var(--text-primary);
     font-size: 12.5px;
     padding: 0 8px;
@@ -354,7 +368,7 @@ function handleSetTheme(theme) {
     gap: 7px;
     border: 1px solid var(--border-light);
     border-radius: 10px;
-    background: #fbfdfb;
+    background: var(--bg-secondary);
     padding: 6px 10px;
     cursor: pointer;
     transition: all 0.15s ease;

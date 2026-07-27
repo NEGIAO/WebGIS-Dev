@@ -130,7 +130,7 @@
                     </div>
                     <div class="route-meta">
                         <span>时长：{{ route.time }} 分钟</span>
-                        <span>里程：{{ route.distanceKm }} km</span>
+                        <span>里程：{{ route.distanceText }}</span>
                     </div>
                 </button>
             </aside>
@@ -159,7 +159,7 @@
                 >
                     <div class="step-head">
                         <span class="step-tag">步骤 {{ stepIndex + 1 }}</span>
-                        <span class="step-distance">{{ step.distanceKm }} km</span>
+                        <span class="step-distance">{{ step.distanceText }}</span>
                     </div>
                     <div class="step-line">{{ step.segmentName }}</div>
                     <div class="step-stations">{{ step.startName }} -> {{ step.endName }}</div>
@@ -188,6 +188,7 @@ import MapPointPickerCard from './MapPointPickerCard.vue';
 import { useMessage } from '../../composables/useMessage';
 import { locationToAddress } from '../../api';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
+import { formatDistanceMeasure } from '../../utils/units';
 
 const message = useMessage();
 
@@ -235,14 +236,16 @@ interface StepInfo {
     startName: string;
     endName: string;
     time: number;
-    distanceKm: string;
+    /** 带单位的距离展示文本（跟随用户偏好单位制） */
+    distanceText: string;
 }
 
 interface RouteCandidate {
     id: string;
     lineName: string;
     time: number;
-    distanceKm: string;
+    /** 带单位的距离展示文本（跟随用户偏好单位制） */
+    distanceText: string;
     segments: TransitSegment[];
     steps: StepInfo[];
 }
@@ -367,7 +370,7 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
                 startName,
                 endName,
                 time: Math.round(metrics.time),
-                distanceKm: (metrics.distance / 1000).toFixed(2),
+                distanceText: formatDistanceMeasure(metrics.distance),
             };
         });
 
@@ -375,7 +378,7 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
             id: `${idx}_${lineName}`,
             lineName,
             time: Math.round(total.time),
-            distanceKm: (total.distance / 1000).toFixed(2),
+            distanceText: formatDistanceMeasure(total.distance),
             segments: segmentList,
             steps,
         };

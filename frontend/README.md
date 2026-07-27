@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.4.38
+# WebGIS 前端项目 — V3.4.64
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -133,7 +133,7 @@ VITE_BASE_URL=/WebGIS-Dev/ npm run build
 
 - 统一从聚合入口导入（如 `@/api`、`@/stores`、`@/composables/map`）
 - 新增功能优先在 `composables/map/features` 扩展，避免堆叠到组件内
-- 新增或重命名文件后，请同步更新本 README 的目录结构章节
+- 新增或重命名文件后，请同步更新 `Docs/Guide/frontend-structure.md`（前端唯一文件树记录）
 
 ### 新增文件必须补齐出口
 
@@ -164,6 +164,6 @@ MIT
 
 ---
 
-最后更新：2026-07-26
-当前版本：V3.4.38
-说明：天地图地形解码下放 Worker（通用 decodeWorkerPool 与 ArcGIS 共用）、ArcGIS L12/SSE3 二次下探、风场监听泄漏与 percentageChanged 副作用修复、CJS 产物清理。
+最后更新：2026-07-27
+当前版本：V3.4.64
+说明：requestRenderMode 按需渲染正式生效，后端 SSRF/Agent 上游安全护栏收敛，并修复登录页加载链路与用户中心体验。

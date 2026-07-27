@@ -7,6 +7,8 @@ from typing import List, Optional
 import httpx
 from PIL import Image
 
+from config import get_int
+
 from .fetch import fetch_tile
 from .url_template import TileUrlTemplate, build_tile_url
 from .utils import (
@@ -21,8 +23,33 @@ from .utils import (
 
 logger = logging.getLogger(__name__)
 
-# 并发数：不限制，依赖 fetch.py 的重试机制处理限流错误
-MAX_CONCURRENCY = 100  # 实际上不限制并发
+# 并发数：原为 100（注释自述"实际不限制"）；P1-4 S2 收紧至 16，
+# 防单个纠偏请求打爆上游与本机 fd（重试机制仍由 fetch.py 处理限流错误）
+MAX_CONCURRENCY = get_int("GCJRE_MAX_CONCURRENCY", 16)
+
+# --- SSRF/资源耗尽护栏（P1-4 S2；方案 Docs/TODO/proxy-ssrf-hardening-plan.md）---
+# 单瓦片字节上限：上游返回超大图时直接判废，避免进入解码
+_TILE_MAX_BYTES = max(0, get_int("GCJRE_TILE_MAX_MB", 8)) * 1024 * 1024
+# 解码像素上限：Pillow 默认 MAX_IMAGE_PIXELS 仅告警不拦截 → 显式收紧为硬上限，防解压炸弹
+_MAX_IMAGE_PIXELS = get_int("GCJRE_MAX_IMAGE_PIXELS", 4096 * 4096)
+# 单请求合成网格瓦片数上限：合成图为 (nx*256)×(ny*256)，无上限时内存随请求参数放大
+_MAX_TILES_PER_REQUEST = get_int("GCJRE_MAX_TILES_PER_REQUEST", 64)
+
+if _MAX_IMAGE_PIXELS > 0:
+    # Pillow 的全局阈值：超过即抛 DecompressionBombError（而非仅 warning）
+    Image.MAX_IMAGE_PIXELS = _MAX_IMAGE_PIXELS
+
+
+def _reject_oversized_tile_bytes(data: bytes, url: str) -> None:
+    """瓦片字节数超上限时抛 ValueError（由路由层转 400/502）。
+
+    参数：data —— 上游返回字节；url —— 仅用于日志定位。无返回。
+    """
+    if _TILE_MAX_BYTES > 0 and data is not None and len(data) > _TILE_MAX_BYTES:
+        logger.warning("纠偏瓦片超字节上限已拒绝：%s（%d > %d）", url, len(data), _TILE_MAX_BYTES)
+        raise ValueError(
+            f"上游瓦片过大：{len(data)} 字节 > 上限 {_TILE_MAX_BYTES} 字节"
+        )
 
 
 def _tile_cache_path(
@@ -108,6 +135,8 @@ async def _get_tile_cached(
     # 缓存未命中：从上游获取
     url = build_tile_url(template, x, y, z)
     tile_bytes = await fetch_tile(url, client=client)
+    # P1-4 S2：先判字节上限，再进入解码/落盘（拒绝路径不写缓存）
+    _reject_oversized_tile_bytes(tile_bytes, url)
 
     # 验证是有效图像后保存
     try:
@@ -185,6 +214,13 @@ async def _fetch_tile_grid(
     x_count = x_max - x_min + 1
     y_count = y_max - y_min + 1
     total_tiles = x_count * y_count
+
+    # P1-4 S2：网格瓦片数上限——合成图为 (x_count*256)×(y_count*256)，
+    # 无上限时内存占用随请求间接放大（正常纠偏为 2×2~3×3，默认 64 留足余量）
+    if _MAX_TILES_PER_REQUEST > 0 and total_tiles > _MAX_TILES_PER_REQUEST:
+        raise ValueError(
+            f"纠偏网格过大：{x_count}x{y_count}={total_tiles} 片 > 上限 {_MAX_TILES_PER_REQUEST} 片"
+        )
 
     if total_tiles > 9:
         logger.info("Fetching %d tiles for %s z=%d (grid: %dx%d)", total_tiles, category, z, x_count, y_count)

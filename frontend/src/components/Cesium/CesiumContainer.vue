@@ -132,6 +132,7 @@ import { configureBeijingTimeSystem } from './composables/core/cesiumTimeSystem'
 import { useCesiumCreditHider } from './composables/scene/useCesiumCreditHider';
 import { useCesiumNavigation } from './composables/core/useCesiumNavigation';
 import { useCesiumInteractions } from './composables/interaction/useCesiumInteractions';
+import { initRequestRenderMode } from './composables/interaction/useCesiumRenderMode';
 import { useCesiumLayers } from './composables/layers/useCesiumLayers';
 import { useCesiumSceneActions } from './composables/camera/useCesiumSceneActions';
 import { useCesiumDataImport } from './composables/dataImport/useCesiumDataImport';
@@ -145,6 +146,7 @@ import { useCesiumUrlTracking } from './composables/layers/useCesiumUrlTracking'
 import { useCesiumWind } from './cesium-wind-layer/useCesiumWind';
 import { useCesiumModelManager } from './composables/models/useCesiumModelManager';
 import { useCesiumCameraEnhanced } from './composables/camera/useCesiumCameraEnhanced';
+import { createCesiumAttrViewExtentSync } from './composables/camera/useCesiumAttrViewExtentSync';
 import { useCesiumHeightSampler } from './composables/terrain/useCesiumHeightSampler';
 import { usePlayerController } from './PlayerController/usePlayerController';
 import PlayerGuidePanel from './PlayerController/PlayerGuidePanel.vue';
@@ -254,6 +256,9 @@ const wind = useCesiumWind({
 const modelManager = useCesiumModelManager({ getViewer, getCesium, message });
 const cameraEnhanced = useCesiumCameraEnhanced({ getViewer, getCesium });
 const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
+
+// B4：相机视域 → 属性表「视图筛选范围」同步（moveEnd 喂 attrStore，3D 模式视图筛选生效）
+const attrViewExtentSync = createCesiumAttrViewExtentSync({ getViewer, getCesium });
 
 const dataImport = useCesiumDataImport({
     getViewer,
@@ -527,6 +532,8 @@ async function bootCesium() {
                 }
                 cesiumReady.value = true;
                 bindCameraViewSync({ initialSync: false, getActivePresetId: () => activeBasemap.value });
+                // B4：viewer 就绪后开始喂属性表视图筛选范围（start 内含首帧同步）
+                attrViewExtentSync.start();
                 // 1) 先从 URL 恢复底图预设：URL l= 参数优先级最高，确保分享链接可重现同一底图
                 const restoredFromUrl = restoreBasemapFromUrl();
                 // 2) 仅在 URL 无 l 时才应用默认底图，优先级：用户偏好 > 管理员全局默认
@@ -611,6 +618,7 @@ async function bootCesium() {
  */
 function resetCesiumViewerForRetry() {
     cesiumReady.value = false;
+    attrViewExtentSync.stop();
     cleanupCameraViewSync();
     cleanupInteractions();
     cleanupTools();
@@ -668,11 +676,16 @@ function initViewer() {
         selectedTerrainProviderViewModel: getSelectedTerrainProviderViewModel(terrainProviderViewModels),
         shouldAnimate: true,
     });
+    // FPS 面板保留常开：按需渲染（requestRenderMode）下低 FPS = 空闲降载省电（预期行为，非卡顿），
+    // 交互瞬间回升——恰是验证按需渲染生效的直接仪表；如嫌干扰可改 false，不影响功能
     viewer.scene.debugShowFramesPerSecond = true;
     viewer.scene.globe.terrainExaggeration = 1;
     viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
     configureBeijingTimeSystem(viewer, Cesium);
     configureSolarLighting(viewer);
+    // 按需渲染管理器：逐帧特效经 acquire/release 计数接管，计数归零进入按需渲染
+    // （总开关在 useCesiumRenderMode.js，改 false 可一行回退恒连续渲染）
+    initRequestRenderMode(viewer);
 
     installCreditHider();
     bindLayerPickerStateSync();
@@ -763,6 +776,8 @@ onUnmounted(() => {
     try { playerController.clearNavTarget?.(); } catch { /* ignore */ }
     try { playerController.setOpenNavDialogHandler?.(null); } catch { /* ignore */ }
 
+    // B4：解除相机监听并清空属性表范围（回退「范围不可用」，2D 挂载后由 OL 侧重新喂入）
+    attrViewExtentSync.stop();
     cleanupCameraViewSync();
     cleanupInteractions();
     cleanupTools();
@@ -943,6 +958,40 @@ watch(
     max-height: calc(100vh - 82px);
     overflow-y: auto;
 }
+
+/* FPS 面板（debugShowFramesPerSecond）：Cesium 默认 top:50 双行盒子会压住
+   罗盘（top:100, right:0）。压成单行紧凑胶囊后放回罗盘正上方、贴右缘——
+   上不碰工具栏行（约 y≤52），下不碰罗盘（y≥100）；z 用 --z-panel 且
+   pointer-events:none，任何侧栏/下拉都盖在它上面，永不遮挡交互 */
+:global(.cesium-performanceDisplay-defaultContainer) {
+    top: 68px !important;
+    right: 10px !important;
+    text-align: right;
+    pointer-events: none;
+    z-index: var(--z-panel);
+}
+
+:global(.cesium-performanceDisplay) {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 3px 9px !important;
+    background: rgba(15, 23, 42, 0.75) !important;
+    border: 1px solid rgba(0, 229, 255, 0.22) !important;
+    border-radius: 999px !important;
+    font: 600 11px 'Consolas', 'Courier New', monospace !important;
+    line-height: 1.5;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+:global(.cesium-performanceDisplay-fps) {
+    color: #4ade80 !important;
+}
+
+:global(.cesium-performanceDisplay-ms) {
+    color: #67e8f9 !important;
+}
+
 
 :global(.cesium-geocoder .search-results) {
     z-index: 1401;

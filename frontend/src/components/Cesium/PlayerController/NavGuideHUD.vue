@@ -44,6 +44,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { formatDistanceMeasure } from '../../../utils/units';
 
 const props = defineProps({
     navTarget: {
@@ -64,11 +65,9 @@ const arrowAngle = computed(() => {
     return props.navTarget?.bearing ?? 0;
 });
 
-/** 格式化距离显示 */
+/** 格式化距离显示（跟随用户偏好单位制：公制 m/km、英制 ft/mi） */
 function formatDistance(dist) {
-    if (dist == null) return '0.0 m';
-    if (dist < 1000) return `${Math.round(dist)} m`;
-    return `${(dist / 1000).toFixed(2)} km`;
+    return formatDistanceMeasure(dist == null ? 0 : dist);
 }
 </script>
 

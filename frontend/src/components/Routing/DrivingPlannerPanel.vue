@@ -111,7 +111,7 @@
                 <div class="summary-grid">
                     <div class="summary-card">
                         <div class="summary-label">总距离</div>
-                        <div class="summary-value">{{ routeResult.distanceKm }} km</div>
+                        <div class="summary-value">{{ routeResult.distanceText }}</div>
                     </div>
                     <div class="summary-card">
                         <div class="summary-label">总耗时</div>
@@ -159,9 +159,11 @@ import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../../utils/driveXmlParser';
 import { locationToAddress } from '../../api';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
+import { formatDistanceMeasure } from '../../utils/units';
 
 interface ParsedRouteResult {
-    distanceKm: string;
+    /** 带单位的距离展示文本（跟随用户偏好单位制） */
+    distanceText: string;
     durationText: string;
     routelatlon: string;
     steps: Array<{ text: string; linePoint: string }>;
@@ -402,7 +404,7 @@ async function startDriveSearch(): Promise<void> {
             .filter((step) => step.text);
 
         routeResult.value = {
-            distanceKm: Number.isFinite(parsed.distanceKm) ? parsed.distanceKm.toFixed(2) : '0.00',
+            distanceText: formatDistanceMeasure(Number.isFinite(parsed.distanceKm) ? parsed.distanceKm * 1000 : 0),
             durationText: parsed.durationText || formatDuration(parsed.durationSec),
             routelatlon: parsed.routeLatLon,
             steps,

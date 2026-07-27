@@ -6,10 +6,11 @@ import { getExtension as _getExtension } from '../utils/pathUtils.js';
  * 共享资源加载器 - 用于从 public/ShareData 目录加载预配置的地理数据资源
  *
  * Features:
- * - 自动扫描共享资源目录
+ * - 通过构建期生成的 manifest.json 发现资源(scripts/generate-sharedata-manifest.mjs
+ *   在 vite 配置求值时自动刷新;旧 import.meta.glob 方案会把 ShareData 全目录
+ *   再拷进 dist/assets 造成约 7.5MB 死重,V3.4.54 移除)
  * - 支持 KML, KMZ, GeoJSON, JSON, SHP, TIF/TIFF 格式
  * - 将文件内容转换为 Blob，复用上传逻辑
- * - 可扩展的资源发现机制
  *
  * 使用方式：
  * const sharedLoader = useSharedResourceLoader();
@@ -172,9 +173,10 @@ export function useSharedResourceLoader() {
     const getExtension = _getExtension;
 
     /**
-     * 扫描共享资源目录（支持两种实现方式）
-     * 方案1: 使用 import.meta.glob（编译时扩展，最可靠）
-     * 方案2: 使用 fetch API 动态获取（需要后端支持）
+     * 扫描共享资源目录:读取构建期生成的 public/ShareData/manifest.json
+     *
+     * 清单由 scripts/generate-sharedata-manifest.mjs 在 dev/build 启动时自动刷新,
+     * 运行时按需 fetch——资源文件本体只保留 public 一份,不再进 bundle。
      *
      * @returns 发现的资源列表
      */
@@ -183,78 +185,25 @@ export function useSharedResourceLoader() {
         scanError.value = null;
 
         try {
-            // 1. 扫描文件
-            // 使用相对 glob 避免 Windows 绝对盘符 + 中文文件名在 Rollup URL 解析阶段被拼成非法模块 ID。
-            const rawModules = import.meta.glob('../../public/ShareData/**/*', {
-                query: '?url',
-                import: 'default',
-                eager: true, // 建议开启 eager，确保数据立即同步可用
-            });
-
-            // 2. 核心修复：把路径变成“相对路径”
-            const globModules = Object.fromEntries(
-                Object.entries(rawModules).map(([path, value]) => [
-                    path.replace(/^\/public\//, ''),
-                    value,
-                ]),
-            );
-            // 解决路径问题
-
-            const discoveredMap = new Map<string, SharedResource>();
-
-            for (const [path] of Object.entries(globModules)) {
-                try {
-                    const relativePath = normalizeResourcePath(path);
-                    if (!relativePath) continue;
-
-                    const filename = relativePath.split('/').pop() || '';
-                    const ext = getExtension(filename);
-
-                    if (!isSupportedExtension(ext)) {
-                        continue;
-                    }
-
-                    discoveredMap.set(relativePath, {
-                        name: filename,
-                        path: relativePath,
-                        type: ext,
-                    });
-                } catch (error) {
-                    console.warn(`Failed to process shared resource: ${path}`, error);
-                }
+            const discovered = await scanViaManifest();
+            if (!discovered.length) {
+                console.warn('[SharedResource] manifest 为空或缺失,共享资源列表不可用');
             }
-
-            const discovered = Array.from(discoveredMap.values());
-            resources.value = discovered.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-            lastScanTime.value = Date.now();
-
-            return resources.value;
+            return discovered;
         } catch (error) {
-            console.warn(
-                'Failed to scan shared resources with glob, falling back to dynamic fetch',
-                error,
-            );
-
-            try {
-                // 降级方案: 尝试通过 API 或直接 fetch .json manifest
-                return await fallbackScanViaApi();
-            } catch (apiError) {
-                scanError.value = `无法扫描共享资源: ${String(apiError)}`;
-                message.warning(scanError.value);
-                return [];
-            }
+            scanError.value = `无法扫描共享资源: ${String(error)}`;
+            message.warning(scanError.value);
+            return [];
         } finally {
             isScanning.value = false;
         }
     }
 
     /**
-     * 降级方案: 从 API 或 manifest 文件获取资源列表
-     * 这需要后端支持或一个静态 .json 配置文件
+     * 从 manifest.json 获取资源列表(主路径;清单由构建脚本自动生成)
      */
-    async function fallbackScanViaApi(): Promise<SharedResource[]> {
+    async function scanViaManifest(): Promise<SharedResource[]> {
         try {
-            // 尝试获取一个静态的 manifest 文件（可选实现）
             const response = await fetch(`${SHARED_RESOURCE_DIR}/manifest.json`);
             if (response.ok) {
                 const manifest = await response.json();
@@ -280,11 +229,10 @@ export function useSharedResourceLoader() {
                 return discovered;
             }
         } catch {
-            // manifest.json 不存在或有问题，继续
+            // manifest.json 不存在或解析失败,走下方空列表返回
         }
 
-        // 最后的降级方案: 返回空列表并提示用户
-        console.warn('Could not scan shared resources via glob or API');
+        console.warn('Could not scan shared resources via manifest.json');
         return [];
     }
 

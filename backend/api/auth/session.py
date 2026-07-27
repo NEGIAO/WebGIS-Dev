@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from .constants import (
     SESSION_EXPIRE_HOURS,
+    SESSION_TOUCH_THROTTLE_SECONDS,
     _normalize_avatar_index,
     _normalize_guest_device_id,
     normalize_role,
@@ -70,9 +71,10 @@ def _create_session_sync(
                 user_agent,
                 requires_email_binding,
                 created_at,
-                expires_at
+                expires_at,
+                last_seen_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 token,
@@ -85,6 +87,7 @@ def _create_session_sync(
                 1 if requires_email_binding else 0,
                 _iso(now),
                 _iso(expires_at),
+                _iso(now),  # 登录即在线（V3.4.60 在线判定心跳基点）
             ),
         )
         conn.commit()
@@ -106,7 +109,7 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
         row = conn.execute(
             """
             SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent,
-                   requires_email_binding, created_at, expires_at
+                   requires_email_binding, created_at, expires_at, last_seen_at
             FROM sessions
             WHERE token = ?
             """,
@@ -130,6 +133,21 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
             conn.commit()
             return None
 
+        # 心跳触活（V3.4.60）：节流刷新 last_seen_at，统计侧据此按活跃窗口判在线。
+        # 空串经 _safe_parse_iso 得 None → 立即写；写失败不阻断会话验证主流程。
+        last_seen = _safe_parse_iso(str(data.get("last_seen_at") or ""))
+        if last_seen is None or (now - last_seen).total_seconds() >= SESSION_TOUCH_THROTTLE_SECONDS:
+            try:
+                now_iso = _iso(now)
+                conn.execute(
+                    "UPDATE sessions SET last_seen_at = ? WHERE token = ?",
+                    (now_iso, token),
+                )
+                conn.commit()
+                data["last_seen_at"] = now_iso
+            except Exception:
+                pass  # 心跳属尽力而为，不因统计辅助字段影响鉴权
+
         old_role = str(data.get("role") or "")
         resolved_role = normalize_role(old_role, str(data.get("username") or ""))
         data["role"] = resolved_role
@@ -143,7 +161,7 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
         if resolved_role not in {"guest", "admin"}:
             user_row = conn.execute(
                 """
-                SELECT id, username, display_name, email, email_verified, avatar_index, created_at
+                SELECT id, username, display_name, email, email_verified, avatar_index, avatar_url, created_at
                 FROM users
                 WHERE username = ?
                 """,
@@ -169,6 +187,7 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
                         "email": email,
                         "email_verified": bool(email_verified),
                         "avatar_index": _normalize_avatar_index(user_data.get("avatar_index")),
+                        "avatar_url": str(user_data.get("avatar_url") or "").strip(),
                         "user_created_at": str(user_data.get("created_at") or ""),
                         "requires_email_binding": requires_binding,
                     }
@@ -239,8 +258,10 @@ def _update_user_avatar_index_sync(username: str, avatar_index: int) -> bool:
     normalized_avatar_index = _normalize_avatar_index(avatar_index)
 
     with _db_connection() as conn:
+        # 用户主动改选预设头像：avatar_url 置为 ''（区别于 NULL=从未设置），
+        # 后续 OAuth 登录不再用第三方头像覆盖用户的选择。
         cursor = conn.execute(
-            "UPDATE users SET avatar_index = ? WHERE username = ?",
+            "UPDATE users SET avatar_index = ?, avatar_url = '' WHERE username = ?",
             (normalized_avatar_index, username),
         )
         conn.commit()
@@ -261,7 +282,7 @@ def _get_user_by_email_sync(email: str) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
-            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            SELECT id, username, display_name, password_hash, role, avatar_index, avatar_url, email, email_verified, created_at
             FROM users
             WHERE email = ?
             """,

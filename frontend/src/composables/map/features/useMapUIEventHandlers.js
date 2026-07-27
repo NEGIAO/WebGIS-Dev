@@ -14,6 +14,7 @@ export function createMapUIEventHandlers({
     attrStoreRef,
     emit,
     highlightManagedFeature,
+    batchHighlightManagedFeatures,
     clearManagedFeatureHighlight,
     getCurrentHighlightedFeature,
     setCurrentHighlightedFeature,
@@ -44,7 +45,10 @@ export function createMapUIEventHandlers({
      */
     function syncAttributeTableMapExtent() {
         const map = mapInstanceRef?.value;
-        const attrStore = attrStoreRef?.value;
+        // 兼容 ref 包装与 Pinia store 直传两种注入形态：此前仅解 .value，
+        // MapContainer 直传 store 实例时恒为 undefined → extent 同步静默失效，
+        // 2D「视图筛选范围」勾选与 moveend 两条同步路径实际全部空转。
+        const attrStore = attrStoreRef?.value ?? attrStoreRef;
 
         if (!map || !attrStore) return;
 
@@ -58,13 +62,23 @@ export function createMapUIEventHandlers({
     /**
      * 属性表：聚焦要素
      * 支持 mode 透传：默认 'replace'；Ctrl+点击 'toggle'；Shift+点击 'range'
+     * B3：range 时 payload.featureIds 携带表格展示顺序的连续区间 ID 列表 →
+     *     批量追加高亮（append 与 featureStyleStore range「保留旧高亮，只追加区间」契约一致）
      * 注：参数 zoomToManagedFeature 仍由外部传入以兼容调用方契约，
      *     但聚焦事件默认不触发缩放（避免与属性表点击冲突）。
      */
     function handleAttributeTableFocusFeature(payload) {
         if (!payload?.layerId || !payload?.featureId) return;
         const mode = payload?.mode || 'replace';
-        highlightManagedFeature?.({ ...payload, mode });
+        if (mode === 'range' && Array.isArray(payload?.featureIds) && payload.featureIds.length) {
+            batchHighlightManagedFeatures?.({
+                layerId: payload.layerId,
+                featureIds: payload.featureIds,
+                mode: 'append',
+            });
+        } else {
+            highlightManagedFeature?.({ ...payload, mode });
+        }
         // 属性表双击行请求缩放（payload.zoom=true）时才触发视图 fit，
         // 单击聚焦保持不缩放，避免与表格浏览操作冲突。
         if (payload?.zoom) {

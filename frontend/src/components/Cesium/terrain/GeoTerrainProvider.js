@@ -29,15 +29,9 @@ export default function createGeoTerrainProvider(Cesium) {
         Ellipsoid,
         Resource,
         HeightmapTerrainData,
-        Rectangle,
         TileAvailability,
         CustomHeightmapTerrainProvider,
     } = Cesium;
-
-    function tileIntersects(tilingScheme, rectangle, x, y, level, scratchRect) {
-        const tileRectangle = tilingScheme.tileXYToRectangle(x, y, level);
-        return defined(Rectangle.intersection(tileRectangle, rectangle, scratchRect));
-    }
 
     function createAvailability(provider) {
         const overallAvailability = [[[0, 0, 1, 0]]];
@@ -76,7 +70,7 @@ export default function createGeoTerrainProvider(Cesium) {
             buffer: pixels,
             width: provider._width,
             height: provider._height,
-            childTileMask: provider._getChildTileMask(x, y, level),
+            childTileMask: provider._computeChildTileMask(level),
             structure: provider._terrainDataStructure,
         });
         terrainData._skirtHeight = 6000;
@@ -105,7 +99,8 @@ export default function createGeoTerrainProvider(Cesium) {
             this._subdomains = options.subdomains;
             this._token = options.token;
 
-            this._rectangles = [];
+            // 层级范围：<topLevel 返回平高程占位；>=bottomLevel 拒绝（评估记录见
+            // 2026-07-26-round1 日志：放宽 bottomLevel 需真机携 token 验证服务响应，暂维持）
             this._topLevel = 5;
             this._bottomLevel = 11;
             this._terrainDataStructure = {
@@ -133,7 +128,7 @@ export default function createGeoTerrainProvider(Cesium) {
                         buffer: this._getVHeightBuffer(),
                         width: this._width,
                         height: this._height,
-                        childTileMask: this._getChildTileMask(x, y, level),
+                        childTileMask: this._computeChildTileMask(level),
                         structure: this._terrainDataStructure,
                     }),
                 );
@@ -260,64 +255,16 @@ export default function createGeoTerrainProvider(Cesium) {
             return buffer;
         }
 
-        _getChildTileMask(x, y, level) {
-            const scratchRect = new Rectangle();
-            const tilingScheme = this._tilingScheme;
-            const rectangles = this._rectangles;
-            const tileRect = tilingScheme.tileXYToRectangle(x, y, level);
-            let mask = 0;
-
-            for (let i = 0; i < rectangles.length && mask !== 15; i++) {
-                const rectInfo = rectangles[i];
-                if (rectInfo.maxLevel <= level) {
-                    continue;
-                }
-                const rect = rectInfo.rectangle;
-                const intersection = Rectangle.intersection(rect, tileRect, scratchRect);
-                if (defined(intersection)) {
-                    if (tileIntersects(tilingScheme, rect, 2 * x, 2 * y, level + 1, scratchRect)) {
-                        mask |= 4;
-                    }
-                    if (
-                        tileIntersects(
-                            tilingScheme,
-                            rect,
-                            2 * x + 1,
-                            2 * y,
-                            level + 1,
-                            scratchRect,
-                        )
-                    ) {
-                        mask |= 8;
-                    }
-                    if (
-                        tileIntersects(
-                            tilingScheme,
-                            rect,
-                            2 * x,
-                            2 * y + 1,
-                            level + 1,
-                            scratchRect,
-                        )
-                    ) {
-                        mask |= 1;
-                    }
-                    if (
-                        tileIntersects(
-                            tilingScheme,
-                            rect,
-                            2 * x + 1,
-                            2 * y + 1,
-                            level + 1,
-                            scratchRect,
-                        )
-                    ) {
-                        mask |= 2;
-                    }
-                }
-            }
-
-            return mask;
+        /**
+         * 子瓦片可用性掩码（V3.4.x 语义修正）。
+         * 旧实现依赖恒为空的 _rectangles → mask 恒 0("子瓦片全无数据")，与
+         * getTileDataAvailable(恒 true) 矛盾，此前依赖 Cesium availability 优先才未出错。
+         * 现明确：下一层级仍在支持范围内 → 四个子瓦片均可用(15)，否则 0。
+         * @param {number} level - 当前瓦片层级
+         * @returns {number} childTileMask
+         */
+        _computeChildTileMask(level) {
+            return level + 1 < this._bottomLevel ? 15 : 0;
         }
     }
 

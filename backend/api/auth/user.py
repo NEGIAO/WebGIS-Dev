@@ -19,7 +19,7 @@ def _get_user_sync(username: str) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
-            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            SELECT id, username, display_name, password_hash, role, avatar_index, avatar_url, email, email_verified, created_at
             FROM users
             WHERE username = ?
             """,
@@ -32,7 +32,7 @@ def _get_user_by_id_sync(user_id: int) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
-            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            SELECT id, username, display_name, password_hash, role, avatar_index, avatar_url, email, email_verified, created_at
             FROM users
             WHERE id = ?
             """,

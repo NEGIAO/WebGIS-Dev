@@ -1573,8 +1573,13 @@ onMounted(async () => {
     bottom: auto !important;
     z-index: var(--z-modal-high) !important;
     /* 高于地图和其他组件 */
+    display: flex !important;
+    /* 激活下行 flex-direction，并让内部 .account-panel 参与弹性收缩（V3.4.53） */
     flex-direction: column !important;
     /* 调整流向为向下展开 */
+    max-height: calc(100% - 10px) !important;
+    /* 以 .map-wrapper 为基准封顶（top:5px + 底部留 5px），替代组件内的 vh 计算：
+       面板总高不再超出 overflow:hidden 的容器，小窗口下页脚退出按钮始终可见（V3.4.53） */
 }
 
 /* 设置向下展开的动画源点及过渡方向 */
@@ -1592,6 +1597,8 @@ onMounted(async () => {
     inset: 0 !important;
     width: 100% !important;
     height: 100% !important;
+    max-height: none !important;
+    /* 豁免非全屏态的 calc(100% - 10px) 上界，否则全屏会矮 10px（V3.4.53） */
     z-index: 5000 !important;
     /* 在 map-wrapper 内封顶 */
     gap: 0 !important;
@@ -1614,6 +1621,8 @@ onMounted(async () => {
         right: 8px !important;
         width: auto !important;
         max-width: none !important;
+        max-height: calc(100% - 16px) !important;
+        /* 移动端 top:8px，上下各留 8px 对称（V3.4.53） */
         /* Mobile follows the map area width and sits just under the top bar */
     }
 

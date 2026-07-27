@@ -120,6 +120,60 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "注册用户日对话额度默认",
     },
+    "AGENT_ALLOWED_BASE_URL_HOSTS": {
+        "layer": "L1",
+        "default": "",
+        "secret": False,
+        "description": "调用方 override_base_url 的 host 白名单（逗号分隔；留空=不启用白名单，仅走成对 Key 校验与私网护栏）",
+    },
+    "AGENT_ALLOW_INSECURE_BASE_URL": {
+        "layer": "L1",
+        "default": False,
+        "secret": False,
+        "description": "是否允许 override_base_url 使用 http:// 明文（仅本地回环地址；生产恒 false）",
+    },
+    "PROXY_ALLOWED_HOSTS": {
+        "layer": "L1",
+        "default": "",
+        "secret": False,
+        "description": "瓦片/通用代理 host 白名单（逗号分隔，支持 *.example.com；留空=不启用，仅走私网+DNS 护栏）",
+    },
+    "PROXY_DNS_GUARD": {
+        "layer": "L1",
+        "default": True,
+        "secret": False,
+        "description": "代理目标 host 是否做 DNS 解析后私网复判（堵域名指向内网的 SSRF；解析失败则拒绝）",
+    },
+    "PROXY_MAX_RESPONSE_MB": {
+        "layer": "L1",
+        "default": 32,
+        "secret": False,
+        "description": "通用代理响应体上限（MB，≤0=不限制）：Content-Length 超限 413，流式累计超限断流",
+    },
+    "GCJRE_TILE_MAX_MB": {
+        "layer": "L1",
+        "default": 8,
+        "secret": False,
+        "description": "纠偏代理单瓦片字节上限（MB，≤0=不限制），防超大图撑爆解码",
+    },
+    "GCJRE_MAX_IMAGE_PIXELS": {
+        "layer": "L1",
+        "default": 16777216,
+        "secret": False,
+        "description": "纠偏解码单图像素上限（默认 4096×4096），防 Pillow 解压炸弹",
+    },
+    "GCJRE_MAX_CONCURRENCY": {
+        "layer": "L1",
+        "default": 16,
+        "secret": False,
+        "description": "纠偏瓦片抓取并发上限（原硬编码 100，收紧防打爆上游与本机 fd）",
+    },
+    "GCJRE_MAX_TILES_PER_REQUEST": {
+        "layer": "L1",
+        "default": 64,
+        "secret": False,
+        "description": "纠偏单请求合成瓦片数上限（默认 64=8×8），超限 400",
+    },
     "PROXY_RATE_LIMIT": {
         "layer": "L1",
         "default": 0,
@@ -168,6 +222,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "default": "",
         "secret": False,
         "description": "runtime-config CORS 白名单",
+    },
+    "CORS_ALLOWED_ORIGINS": {
+        "layer": "L1",
+        "default": "",
+        "secret": False,
+        "description": "全局 CORS 来源白名单（逗号分隔；空 = 允许所有来源，兼容旧行为）",
     },
     "SUPABASE_VISITS_TABLE": {
         "layer": "L1",

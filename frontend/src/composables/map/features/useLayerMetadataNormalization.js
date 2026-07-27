@@ -5,8 +5,37 @@
  * 输出统一的属性结构，供图层注册、属性表和联动高亮共用。
  */
 
-import { getCenter as getExtentCenter } from 'ol/extent';
-import { toLonLat } from 'ol/proj';
+// ========== 本地投影/范围纯函数(V3.4.54 去 ol 化) ==========
+// 本模块被 useAttrStore(登录页入口链)同步消费,原先仅为下面两个小工具引入
+// 整个 ol 包,导致 vendor-ol-all(gzip 178KB)被打进首屏。以下为与 ol 实现
+// 逐位等价的本地替代(已用 ol 原函数抽样比对验证),本文件不得再 import ol。
+
+/** EPSG:3857 常量:地球半径与半周长(与 ol/proj/epsg3857 一致) */
+const EPSG3857_RADIUS = 6378137;
+const EPSG3857_HALF_SIZE = Math.PI * EPSG3857_RADIUS;
+
+/**
+ * 计算 extent 中心点(等价 ol/extent 的 getCenter)
+ * @param {number[]} extent - [minX, minY, maxX, maxY]
+ * @returns {number[]} [centerX, centerY]
+ */
+function getExtentCenter(extent) {
+    return [(extent[0] + extent[2]) / 2, (extent[1] + extent[3]) / 2];
+}
+
+/**
+ * Web Mercator(EPSG:3857)坐标转经纬度(等价 ol/proj 的 toLonLat,默认源投影 3857)
+ * 核心逻辑:x 线性映射经度;y 经 Gudermannian 反变换得纬度;经度归一化到 [-180,180]
+ * @param {number[]} coordinate - [x, y](米)
+ * @returns {number[]} [lon, lat](度)
+ */
+function toLonLat(coordinate) {
+    const lon = (180 * coordinate[0]) / EPSG3857_HALF_SIZE;
+    const lat = (360 * Math.atan(Math.exp(coordinate[1] / EPSG3857_RADIUS))) / Math.PI - 90;
+    // 与 ol toLonLat 一致:经度绕回 [-180, 180]
+    const wrappedLon = lon < -180 || lon > 180 ? ((((lon + 180) % 360) + 360) % 360) - 180 : lon;
+    return [wrappedLon, lat];
+}
 
 function isPlainObject(value) {
     return !!value && Object.prototype.toString.call(value) === '[object Object]';
@@ -482,20 +511,93 @@ function normalizeLayerMetadata(metadata, features = []) {
     return nextMetadata;
 }
 
-function extractFeatureId(feature, index = 0) {
-    const candidates = [
-        feature?.id,
-        feature?._gid,
-        feature?.properties?._gid,
-        feature?.properties?.id,
-        feature?.properties?.OBJECTID,
-        feature?.properties?.FID,
-        feature?.properties?.objectid,
-        feature?.properties?.fid,
-    ];
+/** B1：模块级自增种子，配合时间戳+随机段保证生成 ID 图层内外均唯一。 */
+let generatedFeatureIdSeed = 0;
 
-    const matched = candidates.find((item) => String(item || '').trim().length > 0);
-    return String(matched || `feature_${index + 1}`);
+/**
+ * 读取要素上已有的稳定 ID（不生成、不写回）。
+ *
+ * 候选顺序：先 OL Feature 访问器（getId → get('_gid') → get('id')，与
+ * utils/map/featureKey.getFeatureIdFromFeature 的 map 侧解析顺序保持一致），
+ * 再回退 GeoJSON-like 平面属性（id/_gid/properties.*）。
+ *
+ * 修复背景（B1）：旧 extractFeatureId 只查平面属性，裸 OL Feature 的
+ * getId()/get('_gid') 读不到 → 有稳定 ID 的要素也会跌入 feature_${index}
+ * 索引兜底，行序一变选中/高亮即错位，且 map 侧 findManagedFeature 无法
+ * 反解索引 ID（高亮/缩放静默失效）。
+ *
+ * 注意：判空用 ?? 而非 ||，数值 0 是合法 ID（OBJECTID=0），与 map 侧语义对齐。
+ *
+ * @param {any} feature OL Feature 或 GeoJSON-like 对象
+ * @returns {string} 已有 ID；不存在返回空串
+ */
+function readExistingFeatureId(feature) {
+    if (!feature || typeof feature !== 'object') return '';
+    const candidates = [
+        typeof feature.getId === 'function' ? feature.getId() : null,
+        typeof feature.get === 'function' ? feature.get('_gid') : null,
+        typeof feature.get === 'function' ? feature.get('id') : null,
+        feature.id,
+        feature._gid,
+        feature.properties?._gid,
+        feature.properties?.id,
+        feature.properties?.OBJECTID,
+        feature.properties?.FID,
+        feature.properties?.objectid,
+        feature.properties?.fid,
+    ];
+    const matched = candidates.find((item) => String(item ?? '').trim().length > 0);
+    return matched === undefined ? '' : String(matched).trim();
+}
+
+/**
+ * 确保要素拥有稳定 ID：已有则直接返回；没有则生成一次并**写回要素本体**。
+ *
+ * 写回是 B1 修复的核心——ID 落在要素对象上后：
+ * 1. 后续任意顺序的快照重建都解析出同一 ID（行序无关，选中/高亮不再错位）；
+ * 2. map 侧 findManagedFeature（getFeatureById / get('_gid') 扫描）可解析同一
+ *    ID，属性表 → 地图的高亮、缩放链路对原本无 ID 的数据也变为可达。
+ *
+ * 写回策略：OL Feature 走 setId + set('_gid', id, true)（第三参 silent，避免
+ * 归一化过程触发要素 change 事件）；普通对象直写 _gid（并镜像到
+ * properties._gid，使 ID 经属性展开类的浅重建后仍存活）。与导入侧
+ * useManagedFeatureSerialization.ensureFeatureId 的 setId+_gid 约定同构，
+ * 但本函数补齐了普通对象的持久化（导入侧只写 OL 实例）。
+ *
+ * @param {any} feature OL Feature 或 GeoJSON-like 对象
+ * @param {number} index 要素索引（仅写回失败时用于退化兜底）
+ * @returns {string} 稳定 ID；极端不可写（冻结对象）时退回 feature_${index+1}
+ */
+function ensureStableFeatureId(feature, index = 0) {
+    const existing = readExistingFeatureId(feature);
+    if (existing) return existing;
+    if (!feature || typeof feature !== 'object') return `feature_${index + 1}`;
+
+    generatedFeatureIdSeed += 1;
+    const generated = `gid_${Date.now().toString(36)}_${generatedFeatureIdSeed}_${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+    let persisted = false;
+    try {
+        if (typeof feature.set === 'function') {
+            // OL Feature：silent 写 _gid + setId（供 getFeatureById O(1) 命中）
+            feature.set('_gid', generated, true);
+            if (typeof feature.setId === 'function') feature.setId(generated);
+            persisted = true;
+        } else {
+            feature._gid = generated;
+            if (isPlainObject(feature.properties)) {
+                feature.properties._gid = generated;
+            }
+            persisted = true;
+        }
+    } catch {
+        // 冻结/密封对象等极端情况：放弃写回，退回索引兜底（行为不劣于修复前）
+        persisted = false;
+    }
+
+    return persisted ? generated : `feature_${index + 1}`;
 }
 
 function extractRawAttributes(feature) {
@@ -617,8 +719,8 @@ function normalizeFeatureRecord(feature, context = {}) {
     const geometry = feature?.getGeometry?.() || feature?.geometry || null;
 
     return {
-        id: String(context.id || extractFeatureId(feature, context.index || 0)),
-        featureId: String(context.id || extractFeatureId(feature, context.index || 0)),
+        id: String(context.id || ensureStableFeatureId(feature, context.index || 0)),
+        featureId: String(context.id || ensureStableFeatureId(feature, context.index || 0)),
         layerId: String(context.layerId || ''),
         layerName: String(context.layerName || ''),
         sourceType: String(context.sourceType || 'upload'),
@@ -651,7 +753,7 @@ function normalizeLayerAttributeSnapshot(layer = {}, previousSnapshot = null) {
     const records = features.length
         ? features.map((feature, index) =>
               normalizeFeatureRecord(feature, {
-                  id: extractFeatureId(feature, index),
+                  id: ensureStableFeatureId(feature, index),
                   index,
                   layerId,
                   layerName,
@@ -757,6 +859,8 @@ export function createLayerMetadataNormalizationFeature() {
     return {
         flattenAttributes,
         inferValueType,
+        readExistingFeatureId,
+        ensureStableFeatureId,
         normalizeFeatureRecord,
         normalizeLayerAttributeSnapshot,
         getFeatureRepresentativeLonLat,

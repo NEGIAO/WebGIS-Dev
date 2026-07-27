@@ -31,7 +31,7 @@ WebGIS_Dev/
 │   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Example_prompt.md
 │   ├── Force_command.md
-│   └── TODO/
+│   └── TODO/                          # 待办（含 bugfix-optimization-plan.md 修复优化规划）
 │
 ├── LocalDev.bat                       # Windows 一键启动脚本
 ├── CheckConfigRegistry.py             # 配置登记门禁扫描（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
@@ -55,11 +55,11 @@ Docs/
 │   ├── 26-04/                         # 2026-04 日志
 │   ├── 26-05/                         # 2026-05 日志
 │   ├── 26-06/                         # 2026-06 日志（含 06-28 / 06-29 等不规则命名子目录）
-│   └── 26-07/                         # 2026-07 日志（含 26-07-25 BSM 动态修复、26-07-26 阴影稳定性、OAuth 登录绑定、高级 2D 绘制编辑集成、三层配置落地与 OAuth 回调推导验证）
+│   └── 26-07/                         # 2026-07 日志（按 YYYY-MM-DD 子目录归档，含 07-26 多轮优化与 07-27 安全/渲染/账号修复）
 │
 ├── Architecture/                      # 架构设计文档（八大功能 + 洪水模拟 + 三层配置架构 configuration-three-tier.md）
 │
-├── Demo/                              # 前端静态 Demo 演示页面（15 个独立页面）
+├── Demo/                              # 前端静态 Demo 演示页面（16 个独立页面）
 │   ├── 2dWindField.html               # 2D 风场可视化演示
 │   ├── 3dHeatMap.html                 # 3D 热力图演示
 │   ├── amapRectify.html               # 高德底图纠偏演示
@@ -74,7 +74,8 @@ Docs/
 │   ├── nearGroundBox.html             # 近地面盒体效果演示
 │   ├── odFlyLine.html                 # OD 飞线效果演示
 │   ├── slopeAnaysis.html              # 坡度/坡向分析演示
-│   └── visibilityAnalysis.html        # 通视/可视域分析演示
+│   ├── visibilityAnalysis.html        # 通视/可视域分析演示
+│   └── volume_analysis.html           # 体积/方量分析演示
 │
 ├── Guide/                             # 指南文档（由根 README 拆分，原子化维护）
 │   ├── project-structure.md           # 本文件：根级目录总览 + Docs 树
@@ -89,7 +90,16 @@ Docs/
 │   ├── dev-guide.md                   # 开发指南
 │   └── faq.md                         # 技术栈与 FAQ
 │
-├── Example_prompt.md                  # Agent 提示词示例
-├── Force_command.md                   # Agent 强制命令
+├── Example_prompt.md                  # 任务启动提示词模板（Bug/功能/重构/审计四类）
+├── Force_command.md                   # Agent 强制执行规范（权威：分级/边界/DoD/交接块）
 └── TODO/                              # 待办事项
+    ├── bugfix-optimization-plan.md    # 修 Bug 与优化规划（P0–P3 分级 + Sprint 排期，滚动维护）
+    ├── account-panel-ui-optimization.md # 账号面板 UI 优化计划
+    ├── agent-override-key-leak-plan.md # L3 方案：Agent override_base_url 平台 Key 外泄修复（已批准并实施）
+    ├── loading-performance-optimization-plan.md # 登录页/首屏加载性能优化计划
+    ├── next-session-prompt-rendering.md # 渲染/性能工作流接续提示词
+    ├── next-sprint-bugfix-and-optimization.md # 历史归档：已并入 bugfix 主规划的旧下一轮计划
+    ├── proxy-ssrf-hardening-plan.md    # 代理/下载 SSRF 与资源上限加固计划
+    ├── requestrendermode-plan.md       # requestRenderMode 按需渲染方案与验收清单
+    └── OverPassApiIntegration/         # OverPass API 集成调研
 ```

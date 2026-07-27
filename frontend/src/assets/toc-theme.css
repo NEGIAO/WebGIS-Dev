@@ -2,6 +2,9 @@
  * TOC 主题变量
  * 统一管理图层目录相关组件的颜色、间距、圆角等设计令牌
  * 修改此文件即可全局更新 TOC 面板样式
+ *
+ * 合流约定（V3.4.46）：绿色系取值一律派生自 --brand-* 令牌（蓝主题自动联动）；
+ * 蓝主题覆盖块仅保留渐变等无法 rgba 派生的项；危险色/中性灰为主题无关值。
  */
 
 :root {
@@ -10,11 +13,11 @@
     --toc-primary-light: var(--brand-primary);
     --toc-primary-lighter: var(--brand-primary-light);
     --toc-primary-dark: var(--brand-accent-dark);
-    --toc-primary-bg: rgba(31, 123, 73, 0.06);
-    --toc-primary-bg-hover: rgba(31, 123, 73, 0.12);
+    --toc-primary-bg: rgba(var(--brand-primary-dark-rgb), 0.06);
+    --toc-primary-bg-hover: rgba(var(--brand-primary-dark-rgb), 0.12);
 
     /* ===== 文本颜色 ===== */
-    --toc-text-primary: #2c4638;
+    --toc-text-primary: var(--text-brand-dark);
     --toc-text-secondary: #5f7e6d;
     --toc-text-dark: #2f4a3b;
     --toc-text-light: #8faa9b;
@@ -30,9 +33,9 @@
     --toc-bg-overlay: rgba(0, 0, 0, 0.4);
 
     /* ===== 边框颜色 ===== */
-    --toc-border-light: rgba(153, 195, 170, 0.35);
-    --toc-border-medium: #d6e5dc;
-    --toc-border-active: #a8d4c0;
+    --toc-border-light: rgba(var(--brand-primary-rgb), 0.22);
+    --toc-border-medium: rgba(var(--brand-primary-rgb), 0.18);
+    --toc-border-active: var(--brand-primary-lighter);
     --toc-border-selected: rgba(50, 120, 190, 0.35);
 
     /* ===== 危险色 ===== */
@@ -49,10 +52,10 @@
     --toc-bg-active-hover: linear-gradient(135deg, rgba(190, 225, 215, 0.7) 0%, rgba(180, 220, 210, 0.7) 100%);
 
     /* ===== 徽章 ===== */
-    --toc-badge-border: #d4e6db;
-    --toc-badge-border-hover: #b8d9c8;
-    --toc-badge-bg-hover: #e8f4ed;
-    --toc-badge-bg-active: #ddf0e8;
+    --toc-badge-border: rgba(var(--brand-primary-rgb), 0.25);
+    --toc-badge-border-hover: rgba(var(--brand-primary-rgb), 0.4);
+    --toc-badge-bg-hover: rgba(var(--brand-primary-rgb), 0.08);
+    --toc-badge-bg-active: rgba(var(--brand-primary-rgb), 0.12);
 
     /* ===== 树连接线 ===== */
     --toc-tree-line: #171c19;
@@ -69,8 +72,8 @@
     --toc-bg-dialog: #ffffff;
 
     /* ===== 卡片标题 ===== */
-    --toc-card-title: #1f4d36;
-    --toc-card-title-dark: #2e4b3a;
+    --toc-card-title: var(--text-brand-dark);
+    --toc-card-title-dark: var(--text-brand-dark);
 
     /* ===== 工具按钮 ===== */
     --toc-btn-primary: var(--brand-primary-light);
@@ -95,29 +98,29 @@
     --toc-hint-text: #88a088;
 
     /* ===== 选项卡 ===== */
-    --toc-tab-border: rgba(130, 176, 146, 0.18);
+    --toc-tab-border: rgba(var(--brand-primary-rgb), 0.18);
     --toc-tab-bg: rgba(255, 255, 255, 0.42);
     --toc-tab-text: #4e6656;
     --toc-tab-active-bg: var(--brand-gradient);
-    --toc-tab-active-border: rgba(33, 128, 72, 0.84);
+    --toc-tab-active-border: rgba(var(--brand-primary-dark-rgb), 0.84);
 
     /* ===== 上传区域 ===== */
-    --toc-upload-border: #b7dcc7;
-    --toc-upload-bg: #f9fdfb;
-    --toc-upload-drag-border: #3f9f67;
-    --toc-upload-drag-bg: #eaf7f0;
-    --toc-upload-icon: #2f8e58;
-    --toc-upload-progress-border: #d8e9df;
-    --toc-upload-progress-bg: #f8fcfa;
-    --toc-upload-done-border: #b8dec7;
-    --toc-upload-done-bg: #f0fbf4;
+    --toc-upload-border: rgba(var(--brand-primary-rgb), 0.35);
+    --toc-upload-bg: rgba(var(--brand-primary-rgb), 0.03);
+    --toc-upload-drag-border: var(--brand-primary);
+    --toc-upload-drag-bg: rgba(var(--brand-primary-rgb), 0.1);
+    --toc-upload-icon: var(--brand-primary-dark);
+    --toc-upload-progress-border: rgba(var(--brand-primary-rgb), 0.2);
+    --toc-upload-progress-bg: rgba(var(--brand-primary-rgb), 0.03);
+    --toc-upload-done-border: rgba(var(--brand-primary-rgb), 0.4);
+    --toc-upload-done-bg: rgba(var(--brand-primary-rgb), 0.07);
     --toc-upload-error-border: #e8bbbb;
     --toc-upload-error-bg: #fff4f4;
 
     /* ===== 工具面板 ===== */
     --toc-toolbox-bg: linear-gradient(180deg, #fdfefd 0%, #f3f8f5 100%);
     --toc-toolbox-text: #2f3a45;
-    --toc-header-border: #dde9e2;
+    --toc-header-border: rgba(var(--brand-primary-rgb), 0.16);
     --toc-title: var(--brand-primary-dark);
     --toc-subtitle: #72897a;
 

@@ -59,7 +59,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 后端完整文件树（`backend/` 全部文件及注释）统一维护于 [`Docs/Guide/backend-structure.md`](../Docs/Guide/backend-structure.md)，本 README 不再重复维护，避免多处同步。
 
-> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-26 V3.4.6：新增 `backend/config/` 三层配置统一 loader（catalog/load/runtime/public），OAuth 回调与前端回跳 URL 改由 BACKEND/FRONTEND_PUBLIC_URL 自动推导，文件树已同步。
+> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-27 V3.4.64：新增 `backend/utils/net_guard.py` 出站网络护栏，统一 Agent override、通用代理、GCJ 纠偏与底图下载的私网/回环/IP 字面量判定，并补齐代理响应体/瓦片资源上限。
 
 ## 1. 认证系统
 

@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.auth import require_api_access
+from utils.net_guard import is_disallowed_host
 
 from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles, clip_geotiff_to_bbox
 from .download_task import DownloadTask, create_task, get_task, update_task
@@ -391,6 +392,30 @@ def _validate_tile_template(template: str) -> None:
         raise HTTPException(
             status_code=400,
             detail=f"tile_url_template must include {', '.join(required_tokens)}, but missing: {', '.join(missing_tokens)}",
+        )
+
+    # P1-4 SSRF S1：补协议与内网目标校验——此前只校验占位符，已登录用户可让服务器
+    # 抓取任意内网 URL 并把响应写进 GeoTIFF 回传（信息回传型 SSRF）。
+    # host 判定走 utils/net_guard 单点（与 /proxy/** 及 agent override 同一实现）。
+    probe_url = template.replace("{z}", "0").replace("{x}", "0").replace("{y}", "0")
+    probe_url = probe_url.replace("{s}", "a").replace("{-y}", "0")
+    # 无协议前缀（`tile.example.com/...`）与协议相对（`//host/...`）按 https 兜底解析，
+    # 与 api/proxy._build_proxy_target_url 同语义——保持既有宽松输入不被本次校验打断
+    if "//" not in probe_url.split("?", 1)[0]:
+        probe_url = f"https://{probe_url.lstrip('/')}"
+    elif probe_url.startswith("//"):
+        probe_url = f"https:{probe_url}"
+    parsed_template = urlparse(probe_url)
+    if (parsed_template.scheme or "").lower() not in {"http", "https"}:
+        raise HTTPException(
+            status_code=400,
+            detail="tile_url_template must use http:// or https:// (other schemes are not allowed)",
+        )
+    if is_disallowed_host(parsed_template.hostname or ""):
+        logger.warning("底图下载模板指向内网/本机，已拒绝：%s", template[:80])
+        raise HTTPException(
+            status_code=400,
+            detail="tile_url_template 指向内网或本机地址，已拒绝。",
         )
 
     if "{-y}" in template:

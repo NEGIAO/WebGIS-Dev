@@ -1,19 +1,25 @@
-import ipaddress
 import logging
 import time
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import AsyncIterator, Dict, List, Tuple
 from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from PIL import Image
 
 from gcj_rectify.rectify import get_gcj2wgs_tile, get_wgs2gcj_tile
 from gcj_rectify.url_template import parse_tile_url
 from gcj_rectify.utils import get_cache_dir
 
-from config import get_bool, get_int
+from config import get_bool, get_int, get_str
+from utils.net_guard import (
+    host_matches_allowlist,
+    is_disallowed_host,
+    parse_host_allowlist,
+    resolve_host_has_private_ip,
+)
 
 # 初始化路由对象
 router = APIRouter()
@@ -24,6 +30,11 @@ logger = logging.getLogger(__name__)
 
 PROXY_ALLOW_PRIVATE_HOSTS = get_bool("PROXY_ALLOW_PRIVATE_HOSTS", False)
 PROXY_VERIFY_SSL = get_bool("PROXY_VERIFY_SSL", True)
+# SSRF 护栏（P1-4 S1/S2）：白名单留空=不启用；DNS 复判默认开；响应体上限默认 32MB
+PROXY_ALLOWED_HOSTS = parse_host_allowlist(get_str("PROXY_ALLOWED_HOSTS", ""))
+PROXY_DNS_GUARD = get_bool("PROXY_DNS_GUARD", True)
+PROXY_MAX_RESPONSE_MB = get_int("PROXY_MAX_RESPONSE_MB", 32)
+PROXY_MAX_RESPONSE_BYTES = PROXY_MAX_RESPONSE_MB * 1024 * 1024 if PROXY_MAX_RESPONSE_MB > 0 else 0
 
 
 def _get_client_ip(request: Request) -> str:
@@ -118,33 +129,44 @@ PROXY_DEFAULT_REQUEST_HEADERS = {
 
 
 def _is_private_host(hostname: str) -> bool:
-    if not hostname:
-        return True
-    lower = hostname.lower()
-    if lower == "localhost" or lower.endswith(".local"):
-        return True
-    try:
-        ip = ipaddress.ip_address(lower)
-    except ValueError:
-        return False
-    return (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_reserved
-        or ip.is_multicast
-        or ip.is_unspecified
-    )
+    """host 字面量是否指向内网/本机（判定实现见 utils/net_guard，三处出站面共用）。
+
+    修复背景（P1-4 SSRF S1）：旧实现只用 `ipaddress.ip_address` 认点分十进制，
+    解析失败即放行 → `2130706433` / `0x7f000001` / `127.1` / `0177.0.0.1` 等
+    等价于 127.0.0.1 的写法全部绕过私网过滤。现按 inet_aton 语义归一后判定。
+    """
+    return is_disallowed_host(hostname)
 
 
 def _validate_proxy_target_url(upstream_url: str) -> None:
+    """校验代理目标 URL：协议 → host 字面量私网 → 白名单 → DNS 解析后私网复判。
+
+    参数：upstream_url —— 已拼装的上游 URL。无返回；拒绝即抛 HTTPException。
+    核心逻辑：`PROXY_ALLOW_PRIVATE_HOSTS=true` 时整体放行内网（本地调试用）；
+    白名单 `PROXY_ALLOWED_HOSTS` 留空=不启用（默认，保「自定义 XYZ 接入」不破）；
+    `PROXY_DNS_GUARD=true` 时解析 host 复判，堵「域名 A 记录指向内网」的绕过，
+    解析失败 fail-closed 拒绝（宁可瓦片失败也不代访未知目标）。
+    """
     parsed = urlparse(upstream_url)
     if parsed.scheme not in {"http", "https"}:
         raise HTTPException(status_code=400, detail="Only http/https targets are allowed")
     if not parsed.hostname:
         raise HTTPException(status_code=400, detail="Target host is missing")
-    if not PROXY_ALLOW_PRIVATE_HOSTS and _is_private_host(parsed.hostname):
+
+    if PROXY_ALLOW_PRIVATE_HOSTS:
+        return
+
+    if _is_private_host(parsed.hostname):
         raise HTTPException(status_code=403, detail="Target host is not allowed")
+
+    if not host_matches_allowlist(parsed.hostname, PROXY_ALLOWED_HOSTS):
+        raise HTTPException(status_code=403, detail="Target host is not in the proxy allowlist")
+
+    if PROXY_DNS_GUARD:
+        unsafe, reason = resolve_host_has_private_ip(parsed.hostname)
+        if unsafe:
+            logger.warning("代理目标 host 解析后被拒：%s（%s）", parsed.hostname, reason)
+            raise HTTPException(status_code=403, detail="Target host resolves to a disallowed address")
 
 
 def _build_proxy_target_url(target_url: str, query: str) -> str:
@@ -164,6 +186,55 @@ def _build_proxy_target_url(target_url: str, query: str) -> str:
 
     _validate_proxy_target_url(upstream_url)
     return upstream_url
+
+
+def _reject_if_content_length_exceeds(upstream_response: httpx.Response) -> None:
+    """上游声明的 Content-Length 超上限时直接拒绝（不必先传完再判）。
+
+    参数：upstream_response —— 已发出的流式响应。无返回；超限抛 413。
+    核心逻辑：仅在 PROXY_MAX_RESPONSE_BYTES>0 时生效；头缺失或非法则跳过，
+    交由 `_limited_stream` 在传输过程中按累计字节兜底。
+    """
+    if PROXY_MAX_RESPONSE_BYTES <= 0:
+        return
+    raw_length = upstream_response.headers.get("content-length")
+    if not raw_length:
+        return
+    try:
+        declared = int(raw_length)
+    except (TypeError, ValueError):
+        return
+    if declared > PROXY_MAX_RESPONSE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Upstream response too large: {declared} bytes > {PROXY_MAX_RESPONSE_BYTES} limit",
+        )
+
+
+async def _limited_stream(upstream_response: httpx.Response, upstream_url: str) -> AsyncIterator[bytes]:
+    """按字节上限转发上游流，超限即断流（防无 Content-Length 的超大响应打满带宽）。
+
+    参数：upstream_response —— 流式响应；upstream_url —— 仅用于日志。
+    产出：原始字节块。核心逻辑：累计计数超 PROXY_MAX_RESPONSE_BYTES 时记 warning 并停止迭代
+    （已发出的响应头无法再改状态码，只能截断——客户端会收到不完整响应，符合"宁断不放大"取舍）。
+    """
+    if PROXY_MAX_RESPONSE_BYTES <= 0:
+        async for chunk in upstream_response.aiter_raw():
+            yield chunk
+        return
+
+    transferred = 0
+    async for chunk in upstream_response.aiter_raw():
+        transferred += len(chunk)
+        if transferred > PROXY_MAX_RESPONSE_BYTES:
+            logger.warning(
+                "代理响应超上限已截断：%s（%d > %d）",
+                upstream_url,
+                transferred,
+                PROXY_MAX_RESPONSE_BYTES,
+            )
+            return
+        yield chunk
 
 
 def _build_proxy_request_headers(request: Request) -> Dict[str, str]:
@@ -273,6 +344,11 @@ async def gcj2wgs_proxy(target_url: str, request: Request, _: None = Depends(_ra
         )
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=504, detail="纠偏请求超时") from exc
+    except ValueError as exc:
+        # 资源护栏拒绝（瓦片字节/网格数超上限，P1-4 S2）属请求问题 → 400 而非 502
+        raise HTTPException(status_code=400, detail=f"纠偏请求被拒绝: {exc}") from exc
+    except Image.DecompressionBombError as exc:
+        raise HTTPException(status_code=400, detail="上游瓦片像素超上限，已拒绝解码") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"纠偏失败: {exc}") from exc
     finally:
@@ -299,6 +375,11 @@ async def wgs2gcj_proxy(target_url: str, request: Request, _: None = Depends(_ra
         )
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=504, detail="纠偏请求超时") from exc
+    except ValueError as exc:
+        # 同 gcj2wgs：资源护栏拒绝归 400（P1-4 S2）
+        raise HTTPException(status_code=400, detail=f"纠偏请求被拒绝: {exc}") from exc
+    except Image.DecompressionBombError as exc:
+        raise HTTPException(status_code=400, detail="上游瓦片像素超上限，已拒绝解码") from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"纠偏失败: {exc}") from exc
     finally:
@@ -373,8 +454,17 @@ async def universal_stream_proxy(target_url: str, request: Request, _: None = De
     if fallback_client is not None:
         background_tasks.add_task(fallback_client.aclose)
 
+    # 响应体上限（P1-4 S2）：先按 Content-Length 预检，再由 _limited_stream 兜住无长度声明的流
+    try:
+        _reject_if_content_length_exceeds(upstream_response)
+    except HTTPException:
+        await upstream_response.aclose()
+        if fallback_client is not None:
+            await fallback_client.aclose()
+        raise
+
     return StreamingResponse(
-        upstream_response.aiter_raw(),
+        _limited_stream(upstream_response, upstream_url),
         status_code=upstream_response.status_code,
         headers=response_headers,
         background=background_tasks,

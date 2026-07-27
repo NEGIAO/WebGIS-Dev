@@ -965,6 +965,13 @@ export class ThreeGeospatialPipeline {
         shapeAlteringBiases: [0, 0, 0, 0], coverageFilterWidths: [0, 0, 0, 0],
         localWeatherOffset: [0, 0], shapeOffset: [0, 0, 0], shapeDetailOffset: [0, 0, 0],
         windSpeed: 0, evolutionSpeed: 0,
+        // V3.4.x：层高/间隙/密度剖面运行时同步（此前 pass 创建后固化，
+        // 面板改层高会造成云体与云影层高错位）
+        minLayerHeights: [0, 0, 0, 0], maxLayerHeights: [0, 0, 0, 0],
+        minIntervalHeights: [0, 0, 0], maxIntervalHeights: [0, 0, 0],
+        densityProfileLinear: [0.75, 0.75, 0.75, 0.75],
+        densityProfileConstant: [0.25, 0.25, 0.25, 0.25],
+        densityProfileExpTerms: [0, 0, 0, 0], densityProfileExponents: [0, 0, 0, 0],
       },
       bsmShadowOpts: null, // 惰性构建：首次 _syncBSM 时按 setCloudShadow 期望字段填充
       bsmShadowIntervals: Array.from({ length: 4 }, () => new Cesium.Cartesian2()),
@@ -1519,6 +1526,21 @@ uniform sampler2D irradiance_texture;
       dyn.shapeAlteringBiases[i] = layerVal(i, "shapeAlteringBias", 0.35);
       dyn.coverageFilterWidths[i] = layerVal(i, "coverageFilterWidth", 0.6);
     }
+    // V3.4.x：层高/间隙/密度剖面每帧装配（updateDynamicParams 值级检测，变更才触发 BSM 重绘）
+    const iv = this._getIntervalHeights();
+    for (let i = 0; i < 4; i++) {
+      const alt = layerVal(i, "altitude", 0);
+      const hgt = layerVal(i, "height", 0);
+      dyn.minLayerHeights[i] = alt;
+      dyn.maxLayerHeights[i] = alt + hgt;
+      const profile = layers[i]?.densityProfile;
+      dyn.densityProfileLinear[i] = Number(profile?.linearTerm ?? 0.75);
+      dyn.densityProfileConstant[i] = Number(profile?.constantTerm ?? 0.25);
+      dyn.densityProfileExpTerms[i] = Number(profile?.expTerm ?? 0);
+      dyn.densityProfileExponents[i] = Number(profile?.exponent ?? 0);
+    }
+    dyn.minIntervalHeights[0] = iv.min.x; dyn.minIntervalHeights[1] = iv.min.y; dyn.minIntervalHeights[2] = iv.min.z;
+    dyn.maxIntervalHeights[0] = iv.max.x; dyn.maxIntervalHeights[1] = iv.max.y; dyn.maxIntervalHeights[2] = iv.max.z;
     dyn.localWeatherOffset[0] = this._weatherOffsetX || 0; dyn.localWeatherOffset[1] = this._weatherOffsetY || 0;
     dyn.shapeOffset[0] = this._shapeOffsetX || 0; dyn.shapeOffset[1] = this._shapeOffsetY || 0; dyn.shapeOffset[2] = this._shapeOffsetZ || 0;
     dyn.shapeDetailOffset[0] = this._shapeDetailOffsetX || 0; dyn.shapeDetailOffset[1] = this._shapeDetailOffsetY || 0; dyn.shapeDetailOffset[2] = this._shapeDetailOffsetZ || 0;
@@ -1858,6 +1880,50 @@ void main() {
     });
   }
 
+  /**
+   * 运行时切换云主 raymarch 分辨率（切质量预设免重开体积云）。
+   * 依赖 init 缓存的双 shader 变体与 uniforms（同步重建，无异步竞态）。
+   * 重建后 cloudStage 会排到后处理链尾；若链上存在 lensFlare 等后续 stage，
+   * 由集成层消费 consumeCloudStageRebuilt() 后协作重建以恢复顺序。
+   * @param {number} scale - 目标分辨率缩放（0.25~1，≥0.999 走全分辨率单 stage 路径）
+   * @returns {boolean} 是否发生了重建
+   */
+  setCloudResolutionScale(scale) {
+    const next = Math.min(1, Math.max(0.25, Number(scale) || 1));
+    this.params.cloudResolutionScale = next;
+    // init 未完成（shader 缓存不存在）：仅记录 params，init 会按此值构建
+    if (!this._cloudShaderSplit || !this._cloudShaderLegacy || !this.cloudStage) return false;
+    if (Math.abs(next - (this._cloudResolutionScale ?? 1)) < 1e-3) return false;
+
+    const stages = this.viewer?.scene?.postProcessStages;
+    if (!stages) return false;
+
+    const wasEnabled = this.cloudStage.enabled;
+    try { stages.remove(this.cloudStage); } catch { /* ignore */ }
+
+    this._cloudResolutionScale = next;
+    this._cloudSplitMode = next < 0.999;
+    this.cloudStage = this._createCloudStage(
+      this._cloudSplitMode ? this._cloudShaderSplit : this._cloudShaderLegacy,
+      this._cloudUniforms,
+    );
+    this.cloudStage.enabled = wasEnabled;
+    stages.add(this.cloudStage);
+    this._cloudStageRebuiltFlag = true;
+    this.viewer.scene.requestRender?.();
+    return true;
+  }
+
+  /**
+   * 一次性消费"云 stage 已重建"标志（供集成层决定是否重建 lensFlare 以恢复链序）。
+   * @returns {boolean}
+   */
+  consumeCloudStageRebuilt() {
+    const flag = this._cloudStageRebuiltFlag === true;
+    this._cloudStageRebuiltFlag = false;
+    return flag;
+  }
+
   // ── Init ───────────────────────────────────────────────────────────────
 
   async init() {
@@ -1881,21 +1947,30 @@ void main() {
         assetsBaseUrl: this.atmosphereAssetsBase, shaderBaseUrl: this.atmosphereShaderBase,
       });
 
-      // 3. Load cloud textures + build shader
+      // 3. Load cloud textures + build shaders
       await this._loadTextures();
       // 性能：cloudResolutionScale<1 时启用拆分模式（低分辨率 raymarch + 全分辨率合成）。
-      // 在 init 固化（textureScale 为构造期参数）；预设经 initialCloudParams 注入。
+      // V3.4.x：两个 shader 变体在 init 一次性预构建并缓存，
+      // 使 setCloudResolutionScale 可同步重建 stage（切档免重开体积云）。
       const resolutionScale = Math.min(1, Math.max(0.25, Number(this.params.cloudResolutionScale) || 1));
       this._cloudResolutionScale = resolutionScale;
       this._cloudSplitMode = resolutionScale < 0.999;
-      const fragmentShader = await this._buildCloudFragmentShader(this._cloudSplitMode);
+      const [shaderSplit, shaderLegacy] = await Promise.all([
+        this._buildCloudFragmentShader(true),
+        this._buildCloudFragmentShader(false),
+      ]);
+      this._cloudShaderSplit = shaderSplit;
+      this._cloudShaderLegacy = shaderLegacy;
 
       // 4. BSM passes：运行时也会通过 _syncBSM/_ensureBSMPasses 按开关动态创建或重建。
       this._ensureBSMPasses();
 
       // 5. Cloud PostProcessStage（拆分模式为 PostProcessStageComposite，外部接口不变）
-      const uniforms = this._buildCloudUniforms();
-      this.cloudStage = this._createCloudStage(fragmentShader, uniforms);
+      this._cloudUniforms = this._buildCloudUniforms();
+      this.cloudStage = this._createCloudStage(
+        this._cloudSplitMode ? this._cloudShaderSplit : this._cloudShaderLegacy,
+        this._cloudUniforms,
+      );
       this.cloudStage.enabled = this.params.cloudsVisible;
 
       // 6. Aerial init

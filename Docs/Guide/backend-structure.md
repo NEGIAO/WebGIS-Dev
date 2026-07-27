@@ -70,6 +70,7 @@ backend/
 │
 ├── utils/                                         # 通用工具模块
 │   ├── __init__.py                                # 包初始化
+│   ├── net_guard.py                               # 出站 SSRF 护栏单点（IP 字面量归一/私网判定/DNS 复判/host 白名单），proxy+agent+download_xyz 三面共用
 │   └── time_utils.py                              # 北京时间工具 + 整点报时后台任务
 │
 ├── services/                                      # 共享业务服务

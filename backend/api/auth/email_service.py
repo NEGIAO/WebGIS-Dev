@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 def _smtp_config() -> tuple[str, int, str, str]:
-    """返回 (host, port, user, password)；每次调用取最新 settings。"""
+    """返回 (host, port, user, password)；读取 get_settings() 快照（进程内 lru_cache，配置变更需重启生效）。"""
     s = get_settings()
     return s.smtp_host, s.smtp_port, s.smtp_user, s.smtp_password
 

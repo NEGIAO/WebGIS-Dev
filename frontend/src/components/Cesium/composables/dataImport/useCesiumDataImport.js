@@ -14,7 +14,7 @@ import { loadSHP } from './loaders/shpLoader.js';
 import { loadGLTF, loadGltfWithCoords } from './loaders/gltfLoader.js';
 import { loadCZML } from './loaders/czmlLoader.js';
 import { loadGeoTIFF } from './loaders/geotiffLoader.js';
-import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset } from './loaders/tilesetLoader.js';
+import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
@@ -25,7 +25,7 @@ const MAX_MESH_SIZE = 200;
  * @param {Function} options.getCesium - 获取 Cesium 命名空间的闭包
  * @param {Object}  options.message - useMessage() 返回的消息实例
  * @param {Object}  [options.heightSampler] - useCesiumHeightSampler 返回的采样器
- * @returns {{ loadDataFile, loadDataFiles, loadedDataSources, removeDataSource, clearAllDataSources,
+ * @returns {{ getViewer, loadDataFile, loadDataFiles, loadedDataSources, removeDataSource, clearAllDataSources,
  *    flyToDataSource, pendingGltfFile, repositionTarget, loadGltfWithUserCoords,
  *    cancelPendingGltf, startGltfReposition, confirmGltfReposition, cancelGltfReposition,
  *    stretchRasterToHeight, importTilesetFromDirectory, setTilesetHeight,
@@ -45,14 +45,60 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
     // 构建各 loader 共享的上下文
     // ============================================================
 
-    const loaderCtx = () => ({
-        getCesium,
-        getViewer,
-        message,
-        loadedDataSources,
-        nextId,
-        heightSampler,
-    });
+    const loaderCtx = () => {
+        ensureTerrainRefitWatcher();
+        return {
+            getCesium,
+            getViewer,
+            message,
+            loadedDataSources,
+            nextId,
+            heightSampler,
+        };
+    };
+
+    // ============================================================
+    // 地形切换 → 自动重贴地
+    // 贴地不是导入时刻的一次性动作：用户先导入数据再开启/切换地形是常规操作，
+    // 监听 terrainProviderChanged，对所有 3D Tiles 用导入时留存的基底采样重新配准。
+    // ============================================================
+
+    let terrainWatcherInstalled = false;
+    let refitEpoch = 0;
+
+    /** 幂等挂载 terrainProviderChanged 监听；viewer 未就绪时静默，等下次加载再试 */
+    function ensureTerrainRefitWatcher() {
+        if (terrainWatcherInstalled) return;
+        const viewer = getViewer();
+        const changed = viewer?.scene?.terrainProviderChanged;
+        if (!changed?.addEventListener) return;
+
+        changed.addEventListener(async () => {
+            const epoch = ++refitEpoch;
+            const Cesium = getCesium();
+            const v = getViewer();
+            if (!Cesium || !v) return;
+
+            const tilesets = loadedDataSources.value.filter((r) => r.type === '3dtiles');
+            if (!tilesets.length) return;
+
+            let refitted = 0;
+            for (const record of tilesets) {
+                const ok = await refitTilesetToTerrain({
+                    record, tileset: toRaw(record.entity), viewer: v, Cesium,
+                });
+                // 期间用户又切了一次地形：本轮作废，让最新一轮接管
+                if (epoch !== refitEpoch) return;
+                if (ok) refitted++;
+            }
+            if (refitted) {
+                loadedDataSources.value = [...loadedDataSources.value];
+                message?.info?.(`地形已切换，${refitted} 个 3D Tiles 已重新贴地`);
+            }
+        });
+        terrainWatcherInstalled = true;
+        console.warn('[贴地] 已挂载地形切换自动重贴地监听');
+    }
 
     // ============================================================
     // GLTF UI 状态管理（坐标弹窗 + 位置调整）
@@ -580,6 +626,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
     // ============================================================
 
     return {
+        /** 透出 Viewer 访问器：供操作处理器（如材质模式切换）补 requestRender 用 */
+        getViewer,
         loadDataFile,
         loadDataFiles,
         importTilesetFromDirectory: () => importTilesetFromDirectory(loaderCtx()),

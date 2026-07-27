@@ -1,6 +1,7 @@
 import { h, reactive, render, readonly } from 'vue';
 import Message from '../components/Shell/Message.vue';
-import { GOLDEN_SOUP_QUOTES } from '../data/goldenSoupQuotes';
+// 金句库(约 60KB 源码 / gzip 16KB)改为懒加载:不进入口 chunk,页面 load 后空闲期预取;
+// 数据未就绪时 pickSoupQuote 用 FALLBACK_SOUP 兜底(V3.4.54 加载性能优化)
 
 const MAX_VISIBLE = 3;
 //默认持续时间，单位毫秒
@@ -10,6 +11,44 @@ const FALLBACK_SOUP = Object.freeze({
     cn: '今天先不和世界较劲，先和自己和解。',
     en: 'Do not wrestle with the world today; make peace with yourself first.',
 });
+
+// ===== 金句库懒加载状态 =====
+/** 就绪前为空数组,pickSoupQuote 走 FALLBACK_SOUP */
+let goldenSoupQuotes = [];
+let soupQuotesLoadPromise = null;
+
+/**
+ * 确保金句库已加载(幂等,单飞)。
+ * 首次调用触发动态 import;完成后重置轮询池以纳入全量金句。
+ * @returns {Promise<void>}
+ */
+function ensureSoupQuotesLoaded() {
+    if (!soupQuotesLoadPromise) {
+        soupQuotesLoadPromise = import('../data/goldenSoupQuotes')
+            .then((mod) => {
+                goldenSoupQuotes = Array.isArray(mod.GOLDEN_SOUP_QUOTES)
+                    ? mod.GOLDEN_SOUP_QUOTES
+                    : [];
+                soupPool = []; // 数据到位后下次取句时重建轮询池
+            })
+            .catch((error) => {
+                console.warn('[useMessage] 金句库加载失败,继续使用兜底文案:', error);
+            });
+    }
+    return soupQuotesLoadPromise;
+}
+
+// 页面 load 后空闲期预取(2.5s 延迟,避开首屏与 GIS 预热的带宽窗口)
+if (typeof window !== 'undefined') {
+    const prefetchSoupQuotes = () => {
+        window.setTimeout(ensureSoupQuotesLoaded, 2500);
+    };
+    if (document.readyState === 'complete') {
+        prefetchSoupQuotes();
+    } else {
+        window.addEventListener('load', prefetchSoupQuotes, { once: true });
+    }
+}
 
 // ===== 方案 A：防抖合并 =====
 const DEDUP_WINDOW_MS = 1000;
@@ -99,7 +138,7 @@ function getDefaultDuration(type, inputDuration) {
 }
 
 function refillSoupPool() {
-    const total = GOLDEN_SOUP_QUOTES.length;
+    const total = goldenSoupQuotes.length;
     soupPool = Array.from({ length: total }, (_, index) => index);
 
     for (let i = soupPool.length - 1; i > 0; i--) {
@@ -118,14 +157,16 @@ function refillSoupPool() {
 }
 
 function pickSoupQuote() {
-    if (GOLDEN_SOUP_QUOTES.length === 0) return FALLBACK_SOUP;
+    // 触发懒加载(幂等);未就绪的当次先用兜底文案
+    ensureSoupQuotesLoaded();
+    if (goldenSoupQuotes.length === 0) return FALLBACK_SOUP;
     if (soupPool.length === 0) refillSoupPool();
 
     const index = soupPool.pop();
     if (!Number.isInteger(index)) return FALLBACK_SOUP;
 
     lastSoupIndex = index;
-    return GOLDEN_SOUP_QUOTES[index] || FALLBACK_SOUP;
+    return goldenSoupQuotes[index] || FALLBACK_SOUP;
 }
 
 function formatSoupQuote(quote) {

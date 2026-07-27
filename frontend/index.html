@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="">
+<html lang="zh-CN">
     <!--    
         NEGIAO's WebGIS
         联系作者：1482918576
@@ -12,10 +12,11 @@
         <!-- <meta name="referrer" content="no-referrer"> -->
         <link
             rel="icon"
-            href="images/icon.webp"
+            href="./images/icon.webp"
             type="image/x-icon"
         />
-        <!-- 自定义网页的logo -->
+        <!-- 自定义网页的logo
+             顶栏高清 logo 由 TopBar.vue 独立引用 images/icon.webp,互不影响 -->
 
         <meta
             name="viewport"
@@ -23,11 +24,21 @@
         />
         <!-- 多设备自适应 -->
 
-        <!-- Font Awesome (使用 BootCDN 加速国内访问) -->
+        <!-- Font Awesome (BootCDN 加速国内访问)
+             media="print" + onload 交换:CSS 异步加载不阻塞首屏渲染(图标可能晚到约百毫秒);
+             noscript 兜底保证无 JS 环境仍能加载图标样式 -->
         <link
             rel="stylesheet"
             href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+            media="print"
+            onload="this.media='all'; this.onload=null;"
         />
+        <noscript>
+            <link
+                rel="stylesheet"
+                href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+            />
+        </noscript>
 
         <!-- 关键资源预加载：减少首屏渲染等待 -->
         <link rel="preconnect" href="https://cdn.bootcdn.net" crossorigin />
@@ -43,7 +54,7 @@
         ></script>
         <!-- 导入js文件 -->
 
-        <script defer src="./min-enhanced.js"></script>
+        <script defer src="/min-enhanced.js"></script>
         <!--
         导入增强功能的js文件（51.la立即执行，其他延迟3秒 ）
         defer：不阻塞 HTML 解析，DOMContentLoaded 前按顺序执行

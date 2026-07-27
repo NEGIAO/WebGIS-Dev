@@ -62,6 +62,7 @@ themeStore.init();
 <style>
 @import './assets/theme.css';
 @import './assets/toc-theme.css';
+@import './assets/cesium-tool-theme.css';
 
 /* Global Styles */
 html,

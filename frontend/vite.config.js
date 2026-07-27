@@ -4,6 +4,7 @@ import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import { visualizer } from 'rollup-plugin-visualizer';
+import { generateShareDataManifest } from './scripts/generate-sharedata-manifest.mjs';
 
 /**
  * 判断模块是否来自指定 node_modules 包
@@ -24,6 +25,10 @@ export default defineConfig(({ command, mode }) => {
   // 本地开发改根 .env；生产公开值提交在根 .env.production。
   const envDir = fileURLToPath(new URL('..', import.meta.url));
   const rootEnv = loadEnv(mode, envDir, 'VITE_');
+
+  // 刷新 public/ShareData/manifest.json(共享资源清单;dev 与所有 build 脚本统一生效)
+  // 替代旧 import.meta.glob 方案,详见 scripts/generate-sharedata-manifest.mjs 头注释
+  generateShareDataManifest();
 
   // 项目基础路径（根 env 优先，其次进程环境变量，最后默认相对路径）
   const baseUrl = rootEnv.VITE_BASE_URL || process.env.VITE_BASE_URL || './';
@@ -121,6 +126,7 @@ export default defineConfig(({ command, mode }) => {
             'vendor-proj4', 'vendor-codec', 'vendor-echarts-all',
             'vendor-three', 'vendor-rapier', 'vendor-hljs',
             'vendor-marked', 'vendor-lilgui', 'vendor-loaders',
+            'vendor-cesium-deps',
           ];
           return deps.filter(
             (dep) => !SKIP_PRELOAD_CHUNKS.some((name) => dep.includes(name)),
@@ -143,6 +149,8 @@ export default defineConfig(({ command, mode }) => {
             if (isNodeModulePackage(id, 'geotiff')) return 'vendor-geotiff';
             // OL 的 GeoTIFF/DataTile source 随 geotiff 一起懒加载（避免拉入首屏）
             if (id.includes('ol/source/GeoTIFF') || id.includes('ol/source/DataTile')) return 'vendor-geotiff';
+            // zstd 解码器(geotiff 传递依赖;此前漏配落入 vendor-libs 兜底桶被入口预加载,gzip 63KB)
+            if (isNodeModulePackage(id, 'zstddec')) return 'vendor-geotiff';
             // LERC 栅格解码
             if (isNodeModulePackage(id, 'lerc')) return 'vendor-lerc';
             // 压缩库
@@ -168,6 +176,15 @@ export default defineConfig(({ command, mode }) => {
             if (isNodeModulePackage(id, 'lil-gui')) return 'vendor-lilgui';
             // 3D 模型加载器（仅 Cesium PlayerController 使用，~340KB）
             if (id.includes('@loaders.gl')) return 'vendor-loaders';
+            // Cesium 生态依赖(knockout 供 cesium-shim/navigation;math.gl/probe.gl 供 loaders.gl)
+            // 独立成懒加载 chunk,避免混入 vendor-libs 兜底桶被入口预加载(gzip 约 45KB)
+            if (
+              isNodeModulePackage(id, 'knockout') ||
+              id.includes('@math.gl') ||
+              id.includes('@probe.gl')
+            ) {
+              return 'vendor-cesium-deps';
+            }
             // Vue 核心框架
             if (
               isNodeModulePackage(id, 'vue') ||

@@ -1,7 +1,7 @@
 /**
  * 底图配置文件
  * 集中管理图层源定义和底图预设配置
- * 新增图源时只需编辑此文件的 LAYER_SOURCE_DEFINITIONS 和 BASEMAP_PRESETS
+ * 新增图源:编辑此文件的 LAYER_SOURCE_DEFINITIONS;新增预设:编辑 basemapPresets.ts 的 BASEMAP_PRESETS(V3.4.54 抽离,纯数据零 ol 依赖)
  */
 
 import { ref } from 'vue';
@@ -21,6 +21,12 @@ import {
 } from '../../composables/useTileSourceFactory';
 // 后端/瓦片代理基址统一由 publicRuntime 派生（VITE_TILE_PROXY_BASE_URL / VITE_BACKEND_URL），禁止硬编码域名
 import { backendTilesUrl, gcj2wgsProxyUrl, tileProxyUrl } from '../../config/publicRuntime';
+
+// ========== 预设目录(已抽离至 basemapPresets.ts,原位 re-export 保持兼容) ==========
+// 抽离原因见 basemapPresets.ts 头注释(切断登录页入口 → ol 的打包链)。
+export { BASEMAP_PRESETS, DEFAULT_BASEMAP_PRESET_ID } from './basemapPresets';
+export type { BasemapPresetDefinition } from './basemapPresets';
+
 
 // ========== 类型定义 ==========
 export type LayerCategory = 'label' | 'imagery' | 'terrain' | 'vector' | 'theme' | 'custom';
@@ -65,11 +71,6 @@ export type LayerSourceDefinition = {
     createSource: (ctx: LayerFactoryContext) => TileSourceInstance;
 };
 
-export type BasemapPresetDefinition = {
-    id: string;
-    label: string;
-    stack: string[];
-};
 
 export type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
     category?: LayerCategory;
@@ -84,8 +85,6 @@ export const TILE_HOSTS = {
 
 export const GOOGLE_MANUAL_HOST = 'gac-geo.googlecnapps.club';
 
-/** 默认底图预设 ID */
-export const DEFAULT_BASEMAP_PRESET_ID = 'custom_China_Blender_preset_2';
 
 /** Google 主机选择状态（全局单例） */
 export const activeGoogleTileHost = ref(GOOGLE_MANUAL_HOST);
@@ -1249,185 +1248,4 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
-];
-
-// ========== 配置2：底图预设 ==========
-export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
-    { id: 'local_tiles_preset', label: '本地瓦片', stack: ['local_tiles'] },
-    { id: 'custom', label: '自定义URL', stack: ['custom'] },
-
-    // 天地图系列
-    {
-        id: 'imagery_tianditu_preset',
-        label: '天地图影像',
-        stack: ['imagery_tianditu', 'label_tianditu'],
-    },
-    {
-        id: 'vector_tianditu_preset',
-        label: '天地图矢量',
-        stack: ['vector_tianditu', 'label_tianditu_vector'],
-    },
-
-    // 图新系列
-    { id: 'imagery_tuxin_preset', label: '图新影像', stack: ['imagery_tuxin', 'label_tuxin'] },
-    { id: 'vector_tuxin_preset', label: '图新矢量', stack: ['vector_tuxin', 'label_tuxin'] },
-
-    // 互联网商业地图
-    { id: 'imagery_gac_preset', label: 'Google(gac)', stack: ['imagery_gac', 'label_tianditu'] },
-    {
-        id: 'imagery_google_preset',
-        label: 'Google原版',
-        stack: ['imagery_google', 'terrain_google', 'label_tianditu'],
-    },
-    { id: 'imagery_amap_preset', label: '高德影像', stack: ['imagery_amap'] },
-    { id: 'imagery_yandex_preset', label: 'Yandex卫星', stack: ['imagery_yandex'] },
-    {
-        id: 'google_Backend_Proxy_preset',
-        label: '后端代理谷歌',
-        stack: ['google_Backend_Proxy', 'label_tianditu'],
-    },
-    { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
-    { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
-    { id: 'imagery_mapbox_preset', label: 'Mapbox影像', stack: ['imagery_mapbox', 'label_tuxin'] },
-    {
-        id: 'imagery_google_standard_preset',
-        label: 'Google标准',
-        stack: ['imagery_google_standard'],
-    },
-    { id: 'vector_Google_clean_preset', label: 'Google简洁', stack: ['vector_Google_clean'] },
-    { id: 'vector_amap_preset', label: '高德地图', stack: ['vector_amap'] },
-    { id: 'vector_tengxun_preset', label: '腾讯地图', stack: ['vector_tengxun'] },
-    { id: 'vector_osm_preset', label: 'OSM标准', stack: ['vector_osm'] },
-    { id: 'custom_mapbox_labeled_preset', label: 'Mapbox自定义', stack: ['custom_mapbox_labeled'] },
-    {
-        id: 'custom_mapbox_unlabeled_preset',
-        label: 'Mapbox(无注记)',
-        stack: ['custom_mapbox_unlabeled', 'label_tuxin'],
-    },
-    {
-        id: 'custom_China_Blender_preset',
-        label: 'China Blender1',
-        stack: ['custom_China_Blender', 'terrain_google'],
-    },
-    { id: 'custom_China_Blender_preset_2', label: 'China Blender2', stack: ['custom_China_Blender'] },
-    { id: 'vector_carton_light_preset', label: 'Carto浅色', stack: ['vector_carton_light'] },
-    { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
-    { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
-    { id: 'vector_alidade_preset', label: '清爽风格', stack: ['vector_alidade'] },
-
-    // MapTiler 系列
-    { id: 'imagery_maptiler_satellite_preset', label: 'MapTiler影像', stack: ['imagery_maptiler_satellite', 'label_tianditu'] },
-    { id: 'imagery_maptiler_satellite_hd_preset', label: 'MapTiler影像HD', stack: ['imagery_maptiler_satellite_hd', 'label_tianditu'] },
-    { id: 'vector_maptiler_streets_preset', label: 'MapTiler街道', stack: ['vector_maptiler_streets'] },
-    { id: 'terrain_maptiler_landscape_preset', label: 'MapTiler地貌', stack: ['terrain_maptiler_landscape'] },
-    { id: 'terrain_maptiler_topo_preset', label: 'MapTiler地形图', stack: ['terrain_maptiler_topo'] },
-    { id: 'theme_maptiler_winter_preset', label: 'MapTiler冬季', stack: ['terrain_maptiler_topo', 'theme_maptiler_winter'] },
-    { id: 'theme_maptiler_ocean_preset', label: 'MapTiler海洋', stack: ['theme_maptiler_ocean'] },
-
-    // ArcGIS (ESRI) 系列
-    {
-        id: 'arcgis_imagery_preset',
-        label: 'ESRI影像',
-        stack: ['theme_arcgis_imagery_root', 'label_tianditu'],
-    },
-    {
-        id: 'arcgis_canvas_dark_preset',
-        label: 'ESRI深灰',
-        stack: ['theme_arcgis_canvas_dark_base', 'theme_arcgis_canvas_dark_ref'],
-    },
-    {
-        id: 'arcgis_canvas_light_preset',
-        label: 'ESRI浅灰',
-        stack: ['theme_arcgis_canvas_light_base', 'theme_arcgis_canvas_light_ref'],
-    },
-    { id: 'arcgis_street_preset', label: 'ESRI街道', stack: ['theme_arcgis_street_root'] },
-    { id: 'arcgis_topo_preset', label: 'ESRI世界地形', stack: ['theme_arcgis_topo_root'] },
-    { id: 'arcgis_natgeo_preset', label: '国家地理', stack: ['theme_arcgis_natgeo_world'] },
-    { id: 'arcgis_physical_preset', label: '自然地理', stack: ['theme_arcgis_physical_root'] },
-
-    // 地形与专题系列
-    {
-        id: 'arcgis_elev_hillshade_preset',
-        label: '山体阴影',
-        stack: ['terrain_arcgis_elev_hillshade', 'label_tianditu'],
-    },
-    {
-        id: 'arcgis_elev_hillshade_dark_preset',
-        label: '深色阴影',
-        stack: ['terrain_arcgis_elev_hillshade_dark', 'label_tianditu'],
-    },
-    { id: 'terrain_google_preset', label: 'Google山体', stack: ['terrain_google'] },
-    { id: 'terrain_opentopomap_preset', label: '开放地形', stack: ['terrain_opentopomap'] },
-    { id: 'terrain_esa_preset', label: '欧空局地形', stack: ['terrain_esa'] },
-
-    // 农田专题
-    {
-        id: 'hn_basic_farmland_preset',
-        label: '河南基本农田',
-        stack: ['imagery_tianditu', 'theme_hn_basic_farmland_wmts', 'label_tianditu'],
-    },
-    {
-        id: 'hn_farmland_preset',
-        label: '河南耕地',
-        stack: ['imagery_tianditu', 'theme_hn_farmland_wmts', 'label_tianditu'],
-    },
-    {
-        id: 'gd_basic_farmland_preset',
-        label: '广东基本农田',
-        stack: ['imagery_tianditu', 'theme_gd_basic_farmland_wms', 'label_tianditu'],
-    },
-
-    // Windy 气象系列
-    { id: 'ship66_preset', label: '船舶网', stack: ['ships66'] },
-    { id: 'windy_preset', label: 'Windy户外', stack: ['theme_windy'] },
-    { id: 'windy2_preset', label: 'Windy冬季', stack: ['theme_windy2'] },
-    { id: 'windy_outer_preset', label: 'Windy轮廓', stack: ['theme_windy_outer'] },
-    { id: 'windy_greenland_preset', label: 'Windy灰色', stack: ['theme_windy_greenland'] },
-
-    // 极地与海洋系列
-    {
-        id: 'arcgis_ocean_preset',
-        label: 'ESRI海洋',
-        stack: ['theme_arcgis_ocean_base', 'theme_arcgis_ocean_ref'],
-    },
-    {
-        id: 'arcgis_terrain_base_preset',
-        label: '地形底色',
-        stack: ['theme_arcgis_terrain_base', 'label_tianditu'],
-    },
-    { id: 'arcgis_polar_ant_preset', label: '南极影像', stack: ['imagery_arcgis_polar_ant_img'] },
-    { id: 'arcgis_polar_arc_preset', label: '北极影像', stack: ['imagery_arcgis_polar_arc_img'] },
-    {
-        id: 'arcgis_polar_arc_base_preset',
-        label: '北极地图',
-        stack: ['theme_arcgis_polar_arc_base', 'label_arcgis_polar_arc_ref'],
-    },
-
-    // Maps For Free (MFF) 浮雕系列
-    { id: 'mff_relief_preset', label: '地形浮雕', stack: ['terrain_relief', 'label_tianditu'] },
-    {
-        id: 'mff_water_preset',
-        label: 'MFF水体',
-        stack: ['terrain_relief', 'theme_mff_water', 'label_tianditu'],
-    },
-    {
-        id: 'mff_admin_preset',
-        label: 'MFF边界',
-        stack: ['terrain_relief', 'theme_mff_admin', 'label_tianditu'],
-    },
-    {
-        id: 'mff_streets_preset',
-        label: 'MFF街道',
-        stack: ['terrain_relief', 'theme_mff_streets', 'label_tianditu'],
-    },
-    {
-        id: 'mff_forest_preset',
-        label: 'MFF森林',
-        stack: ['terrain_relief', 'theme_mff_forest', 'label_tianditu'],
-    },
-
-    // 其他与自定义
-    { id: 'vector_geoq_gray_preset', label: 'GeoQ灰', stack: ['vector_geoq_gray'] },
-    { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
-    { id: 'vector_henu_border_preset', label: '矢量边界', stack: ['vector_henu_border_pbf'] },
 ];

@@ -49,6 +49,14 @@ SUPPORTED_UNIT_SYSTEMS = {
 SESSION_EXPIRE_HOURS = get_settings().session_expire_hours
 PASSWORD_HASH_ITERATIONS = get_settings().password_hash_iterations
 
+# ─── 在线判定（V3.4.60，普通常量非配置 key）───
+# 心跳链路：鉴权单点 _get_session_sync 节流刷新 sessions.last_seen_at，
+# 统计侧以「未过期 且 last_seen_at 落在窗口内」判在线。
+# 约束：ONLINE_WINDOW_MINUTES(300s) ≫ 节流(60s) + 前端最长轮询间隔(30s)，
+# 活跃用户 last_seen_at 滞后上界 60s，不会因节流被误判离线。
+SESSION_TOUCH_THROTTLE_SECONDS = 60  # 距上次触活不足 60s 不写库（防写放大）
+ONLINE_WINDOW_MINUTES = 5            # 最近 5 分钟内有鉴权请求 = 在线
+
 # ─── OAuth 非密钥常量 ───
 # L3（HF Secrets）：GOOGLE/GITHUB CLIENT_ID+SECRET、OAUTH_STATE_SECRET、SUPER_USER
 OAUTH_STATE_TTL_SECONDS = get_settings().oauth_state_ttl_seconds

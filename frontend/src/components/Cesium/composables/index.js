@@ -53,6 +53,10 @@ export {
 // === interaction ===
 export { useCesiumInteractions } from './interaction/useCesiumInteractions.js';
 export { useCesiumFrameRate } from './interaction/useCesiumFrameRate.js';
+export {
+    ENABLE_REQUEST_RENDER_MODE, initRequestRenderMode,
+    acquireContinuous, releaseContinuous, getContinuousRenderSnapshot,
+} from './interaction/useCesiumRenderMode.js';
 
 // === terrain ===
 export { useCesiumHeightSampler } from './terrain/useCesiumHeightSampler.js';

@@ -376,8 +376,8 @@ const { logMonitorVisible } = storeToRefs(appStore);
 const baseUrl = import.meta.env.BASE_URL || '/';
 const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
 
-// 复用 index.html 中已加载的 favicon，避免重复请求同一资源
-const faviconUrl = document.querySelector('link[rel="icon"]')?.href || `${normalizedBase}images/icon.webp`;
+// 本组件在 HomeView 懒加载链路中,79.5KB 的 webp 不影响登录页首屏)
+const faviconUrl = `${normalizedBase}images/icon.webp`;
 
 const message = useMessage();
 

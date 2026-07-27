@@ -194,14 +194,27 @@ def get_float(
     return value
 
 
-def get_bool(name: str, default: bool = False) -> bool:
-    """读取布尔配置，支持 1/true/yes/on 与 0/false/no/off。"""
+def get_bool(name: str, default: Optional[bool] = None) -> bool:
+    """读取布尔配置，支持 1/true/yes/on 与 0/false/no/off；default 省略时回退 catalog 登记默认。
+
+    此前签名为 `default: bool = False`，无法区分「调用方显式传 False」与「未传」，
+    因而永远不查 catalog 登记的默认值——例如 PROXY_VERIFY_SSL 在 catalog 登记 default=True，
+    但环境变量未设时 get_bool 会返回 False（静默 fail-open 关闭 TLS 校验）。
+    与 get_int/get_float 对齐：未显式传 default 时回退 catalog 默认。
+    """
     raw = get_str(name, "").lower()
     if raw in _TRUTHY:
         return True
     if raw in _FALSY:
         return False
-    return default
+    if default is not None:
+        return default
+    catalog_default = _catalog_default(name)
+    if isinstance(catalog_default, bool):
+        return catalog_default
+    if isinstance(catalog_default, str):
+        return catalog_default.strip().lower() in _TRUTHY
+    return bool(catalog_default) if catalog_default is not None else False
 
 
 def is_development_env() -> bool:

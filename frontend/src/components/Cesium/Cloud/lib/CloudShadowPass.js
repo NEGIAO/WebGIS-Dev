@@ -136,6 +136,16 @@ export class CloudShadowPass {
         setArr("coverageFilterWidths", dynamicParams.coverageFilterWidths);
         setNum("scatteringCoefficient", dynamicParams.scatteringCoefficient);
         setNum("absorptionCoefficient", dynamicParams.absorptionCoefficient);
+        // V3.4.x：层高/间隙/密度剖面运行时同步（此前 pass 创建后固化，
+        // 面板改层高会造成云体与云影层高错位）
+        setArr("minLayerHeights", dynamicParams.minLayerHeights);
+        setArr("maxLayerHeights", dynamicParams.maxLayerHeights);
+        setArr("minIntervalHeights", dynamicParams.minIntervalHeights);
+        setArr("maxIntervalHeights", dynamicParams.maxIntervalHeights);
+        setArr("densityProfileLinear", dynamicParams.densityProfileLinear);
+        setArr("densityProfileConstant", dynamicParams.densityProfileConstant);
+        setArr("densityProfileExpTerms", dynamicParams.densityProfileExpTerms);
+        setArr("densityProfileExponents", dynamicParams.densityProfileExponents);
         if (changed) this._paramsRev++;
     }
 

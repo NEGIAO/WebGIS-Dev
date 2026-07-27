@@ -51,6 +51,11 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    /** 首次统计加载中（骨架屏；30s 轮询刷新不触发） */
+    initialLoading: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const emit = defineEmits([
@@ -114,20 +119,38 @@ function authorInitial(name) {
     return text ? text.slice(0, 1).toUpperCase() : '匿';
 }
 
-/** 一键复制管理员联系方式 */
+/** 复制成功后的按钮态切换（1.5s 还原） */
+function markContactCopied() {
+    contactCopied.value = true;
+    if (contactCopiedTimer) clearTimeout(contactCopiedTimer);
+    contactCopiedTimer = setTimeout(() => {
+        contactCopied.value = false;
+        contactCopiedTimer = null;
+    }, 1500);
+}
+
+/** 一键复制管理员联系方式（clipboard API 不可用时降级 execCommand） */
 async function copyAdminContact() {
     const text = String(props.adminContact || '').trim();
     if (!text) return;
     try {
         await navigator.clipboard.writeText(text);
-        contactCopied.value = true;
-        if (contactCopiedTimer) clearTimeout(contactCopiedTimer);
-        contactCopiedTimer = setTimeout(() => {
-            contactCopied.value = false;
-            contactCopiedTimer = null;
-        }, 1500);
+        markContactCopied();
     } catch {
-        /* clipboard 不可用时静默忽略 */
+        // 非安全上下文（http 局域网访问）等场景 clipboard API 不可用，降级隐藏 textarea + execCommand
+        try {
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+            document.body.appendChild(helper);
+            helper.select();
+            document.execCommand('copy');
+            document.body.removeChild(helper);
+            markContactCopied();
+        } catch {
+            /* 双通道均不可用则静默（联系方式仍可手动选中复制） */
+        }
     }
 }
 
@@ -164,15 +187,44 @@ function formatDateTime(value) {
 function handleSubmit() {
     const content = String(newMessageText.value || '').trim();
     if (!content) return;
-    emit('submit-message', content);
-    newMessageText.value = '';
+    // 第二参为成功回调：父组件 API 成功后才清空输入框，发布失败时保留草稿（V3.4.62 A1）
+    emit('submit-message', content, () => {
+        newMessageText.value = '';
+    });
 }
 </script>
 
 <template>
     <div class="view-content overview-view">
+        <!-- 首载骨架屏（仅首次打开时显示，轮询刷新不闪烁） -->
+        <template v-if="initialLoading">
+            <div class="stats-grid">
+                <div
+                    v-for="i in 3"
+                    :key="`sk-stat-${i}`"
+                    class="stat-box"
+                >
+                    <span class="skeleton sk-icon"></span>
+                    <span class="skeleton sk-num"></span>
+                    <span class="skeleton sk-name"></span>
+                </div>
+            </div>
+            <div class="ov-card">
+                <span class="skeleton sk-line w-40"></span>
+                <span class="skeleton sk-bar"></span>
+            </div>
+            <div class="ov-card">
+                <span
+                    v-for="i in 4"
+                    :key="`sk-row-${i}`"
+                    class="skeleton sk-line"
+                    :class="i % 2 ? 'w-90' : 'w-70'"
+                ></span>
+            </div>
+        </template>
+
         <!-- 个人统计卡 -->
-        <div class="stats-grid">
+        <div v-if="!initialLoading" class="stats-grid">
             <div class="stat-box">
                 <i class="fas fa-sign-in-alt stat-icon"></i>
                 <span class="stat-num">{{ formatNumber(selfStats.login_count) }}</span>
@@ -191,7 +243,7 @@ function handleSubmit() {
         </div>
 
         <!-- API 配额进度 -->
-        <div class="ov-card quota-card">
+        <div v-if="!initialLoading" class="ov-card quota-card">
             <div class="quota-head">
                 <span class="ov-card-title"><i class="fas fa-gauge-high"></i> 今日 AI 配额</span>
                 <span
@@ -209,7 +261,7 @@ function handleSubmit() {
         </div>
 
         <!-- 个人信息 -->
-        <div class="ov-card">
+        <div v-if="!initialLoading" class="ov-card">
             <div class="ov-card-title title-with-badge">
                 <span><i class="fas fa-user-clock"></i> 我的账号</span>
                 <span
@@ -238,7 +290,7 @@ function handleSubmit() {
         </div>
 
         <!-- 全站实时 -->
-        <div class="ov-card">
+        <div v-if="!initialLoading" class="ov-card">
             <div class="ov-card-title"><i class="fas fa-globe"></i> 全站实时</div>
             <div class="realtime-grid">
                 <div class="realtime-item">
@@ -281,7 +333,7 @@ function handleSubmit() {
         </div>
 
         <!-- 留言板 -->
-        <div class="ov-card">
+        <div v-if="!initialLoading" class="ov-card">
             <div class="ov-card-title"><i class="fas fa-comments"></i> 用户留言</div>
             <textarea
                 v-model="newMessageText"
@@ -342,6 +394,29 @@ function handleSubmit() {
     gap: 10px;
 }
 
+/* ========== 首载骨架屏 ========== */
+.skeleton {
+    display: block;
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.05) 25%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.05) 75%);
+    background-size: 200% 100%;
+    animation: skeletonShimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes skeletonShimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+}
+
+.sk-icon { width: 30px; height: 30px; border-radius: 9px; }
+.sk-num { width: 44px; height: 18px; margin-top: 4px; }
+.sk-name { width: 52px; height: 10px; margin-top: 4px; }
+.sk-bar { width: 100%; height: 8px; border-radius: 999px; margin-top: 10px; }
+.sk-line { height: 12px; margin: 8px 0; }
+.sk-line.w-40 { width: 40%; }
+.sk-line.w-70 { width: 70%; }
+.sk-line.w-90 { width: 90%; }
+
 /* ========== 统计卡 ========== */
 .stats-grid {
     display: grid;
@@ -350,7 +425,7 @@ function handleSubmit() {
 }
 
 .stat-box {
-    background: #fff;
+    background: var(--bg-primary);
     border: 1px solid rgba(0, 0, 0, 0.05);
     border-radius: 12px;
     padding: 12px 8px;
@@ -394,7 +469,7 @@ function handleSubmit() {
 
 /* ========== 通用卡片 ========== */
 .ov-card {
-    background: #fff;
+    background: var(--bg-primary);
     border: 1px solid rgba(0, 0, 0, 0.05);
     border-radius: 12px;
     padding: 12px 14px;
@@ -602,7 +677,7 @@ function handleSubmit() {
     font-family: inherit;
     resize: vertical;
     color: var(--text-primary);
-    background: #fbfdfb;
+    background: var(--bg-secondary);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
@@ -613,7 +688,7 @@ function handleSubmit() {
 .user-message-input:focus {
     outline: none;
     border-color: var(--brand-primary);
-    background: #fff;
+    background: var(--bg-primary);
     box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.1);
 }
 
@@ -677,7 +752,7 @@ function handleSubmit() {
 
 .message-item:hover {
     border-color: rgba(var(--brand-primary-rgb), 0.3);
-    background: #fff;
+    background: var(--bg-primary);
 }
 
 /* 字数计数 */

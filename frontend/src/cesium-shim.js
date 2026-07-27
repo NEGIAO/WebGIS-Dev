@@ -21,15 +21,41 @@
 import knockout from 'knockout';
 
 // ==========================================
-// 公共常量
+// 公共常量与 CDN 候选链
 // ==========================================
-export const CESIUM_BASE_URL = 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/';
+/**
+ * CDN 候选源(按序尝试,前一个失败/超时自动切下一个;V3.4.54 加载性能优化)。
+ * 单一 jsDelivr 在国内时常不可达且此前无回退——失败即 Cesium 永不加载。
+ * 顺序:jsDelivr(全球稳定,保持现行为)→ BootCDN(国内友好,cdnjs 镜像布局,
+ * 该源 1.132.0 版本可用性 ⚠️ 未验证——404 时自动跳下一候选,无副作用)→ unpkg(已验证可达)。
+ * 注意:Workers/Assets/Widgets 子资源均从 window.CESIUM_BASE_URL 解析,
+ * 每次尝试前必须先把该全局指到当前候选,保证与主脚本同源。
+ */
+const CESIUM_CDN_CANDIDATES = [
+    { name: 'jsDelivr', base: 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/' },
+    { name: 'BootCDN', base: 'https://cdn.bootcdn.net/ajax/libs/cesium/1.132.0/' },
+    { name: 'unpkg', base: 'https://unpkg.com/cesium@1.132.0/Build/Cesium/' },
+];
+
+/** 单个候选源的加载超时(ms):超时视为失败切换下一源(挂起连接不会触发 onerror) */
+const CDN_ATTEMPT_TIMEOUT_MS = 10000;
+
+/** 兼容旧 API:主源静态基址(运行时实际生效源请用 getActiveCesiumBaseUrl) */
+export const CESIUM_BASE_URL = CESIUM_CDN_CANDIDATES[0].base;
+
+let activeCesiumBaseUrl = CESIUM_BASE_URL;
+
+/**
+ * 获取实际加载成功的 CDN 基址(widgets.css 等子资源必须与主脚本同源)
+ * @returns {string}
+ */
+export function getActiveCesiumBaseUrl() {
+    return activeCesiumBaseUrl;
+}
 
 // ==========================================
-// Cesium CDN 自动加载
+// Cesium CDN 自动加载(多源回退)
 // ==========================================
-const CESIUM_CDN_URL = `${CESIUM_BASE_URL}Cesium.js`;
-
 let _cesiumReadyResolve;
 let _cesiumReadyReject;
 const cesiumReady = new Promise((resolve, reject) => {
@@ -40,24 +66,56 @@ const cesiumReady = new Promise((resolve, reject) => {
 (function injectCesiumCDN() {
     if (document.getElementById('cesium-shim-autoload')) return;
 
-    // Cesium 依赖此全局变量解析 Worker / 静态资源路径，必须在脚本加载前设置
-    if (!window.CESIUM_BASE_URL) {
-        window.CESIUM_BASE_URL = CESIUM_BASE_URL;
+    /**
+     * 依次尝试候选源:成功 → resolve cesiumReady;失败/超时 → 清理后试下一个;
+     * 全部失败 → reject(与旧单源失败行为一致,由调用方兜底)。
+     * @param {number} index - 当前候选下标
+     */
+    function attemptLoad(index) {
+        if (index >= CESIUM_CDN_CANDIDATES.length) {
+            const err = new Error('[cesium-shim] 所有 Cesium CDN 候选源均加载失败');
+            console.error(err);
+            _cesiumReadyReject(err);
+            return;
+        }
+
+        const candidate = CESIUM_CDN_CANDIDATES[index];
+        // Cesium 依赖此全局解析 Worker / 静态资源路径,必须在脚本加载前指向当前候选
+        activeCesiumBaseUrl = candidate.base;
+        window.CESIUM_BASE_URL = candidate.base;
+
+        const script = document.createElement('script');
+        script.id = 'cesium-shim-autoload';
+        script.src = `${candidate.base}Cesium.js`;
+
+        let settled = false;
+        const timer = window.setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            console.warn(`[cesium-shim] ${candidate.name} 加载超时(${CDN_ATTEMPT_TIMEOUT_MS}ms),切换下一候选源`);
+            script.remove();
+            attemptLoad(index + 1);
+        }, CDN_ATTEMPT_TIMEOUT_MS);
+
+        script.onload = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            console.info(`[cesium-shim] Cesium CDN 加载完成(来源:${candidate.name})`);
+            _cesiumReadyResolve();
+        };
+        script.onerror = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            console.warn(`[cesium-shim] ${candidate.name} 加载失败,切换下一候选源`);
+            script.remove();
+            attemptLoad(index + 1);
+        };
+        document.head.appendChild(script);
     }
 
-    const script = document.createElement('script');
-    script.id = 'cesium-shim-autoload';
-    script.src = CESIUM_CDN_URL;
-    script.onload = () => {
-        console.info('[cesium-shim] Cesium CDN 加载完成');
-        _cesiumReadyResolve();
-    };
-    script.onerror = () => {
-        const err = new Error('[cesium-shim] Cesium CDN 加载失败');
-        console.error(err);
-        _cesiumReadyReject(err);
-    };
-    document.head.appendChild(script);
+    attemptLoad(0);
 })();
 
 export { cesiumReady };

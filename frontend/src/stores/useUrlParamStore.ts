@@ -2,7 +2,8 @@ import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import { normalizeBinaryFlag, normalizeLocationFlag } from '@/utils/normalize';
 import { normalizeMapView } from '@/utils/url/urlConstants';
-import { URL_LAYER_OPTIONS } from '@/constants/basemap/basemapResolver';
+// 从纯数据层导入(basemapPresets 零 ol 依赖),避免登录页入口连带打包 OpenLayers
+import { URL_LAYER_OPTIONS } from '@/constants/basemap/basemapPresets';
 
 /**
  * @description URL 路由参数持久化 & 延迟应用仓库

@@ -142,6 +142,10 @@ def _public_user_payload(
         resolved_avatar_index = _get_admin_avatar_index_sync()
     elif user:
         resolved_avatar_index = user.get("avatar_index")
+    # 第三方头像 URL：仅注册用户可能有值；空串表示回退到 avatar_index 预设头像。
+    resolved_avatar_url = ""
+    if resolved_role == ROLE_REGISTERED:
+        resolved_avatar_url = str((user.get("avatar_url") if user else session.get("avatar_url")) or "").strip()
     display_name = str(user.get("display_name") or session.get("display_name") or username or "").strip()
     email = str(user.get("email") or session.get("email") or "").strip()
     email_verified = bool(int(user.get("email_verified") or 0)) if user else bool(session.get("email_verified"))
@@ -156,6 +160,7 @@ def _public_user_payload(
         "role": resolved_role,
         "guest_uid": str(session.get("guest_uid") or ""),
         "avatar_index": _normalize_avatar_index(resolved_avatar_index),
+        "avatar_url": resolved_avatar_url,
         "created_at": session.get("created_at") or user.get("created_at"),
         "session_created_at": session.get("created_at"),
         "expires_at": session.get("expires_at"),
@@ -661,7 +666,9 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
 
     normalized_credential = credential.lower()
 
-    if normalized_credential == GUEST_USERNAME and hmac.compare_digest(password, GUEST_PASSWORD):
+    if normalized_credential == GUEST_USERNAME and hmac.compare_digest(
+        password.encode("utf-8"), GUEST_PASSWORD.encode("utf-8")
+    ):
         request_ip = _extract_client_ip(request)
         request_user_agent = str(request.headers.get("User-Agent", "unknown"))
         guest_device_id = _normalize_guest_device_id(payload.guest_device_id)
@@ -686,7 +693,9 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
                 detail="管理员密码未配置，请联系运维设置 SUPER_USER 环境变量",
             )
 
-        if not hmac.compare_digest(password, super_user_secret):
+        # 编码为 bytes 再比较：password 含非 ASCII 字符时 hmac.compare_digest(str, str)
+        # 会抛 TypeError → 500（且能借此区分保留账号），bytes 比较等长时间且不受字符集影响。
+        if not hmac.compare_digest(password.encode("utf-8"), super_user_secret.encode("utf-8")):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="账号或密码错误",

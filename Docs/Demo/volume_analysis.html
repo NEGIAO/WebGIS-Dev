@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>方量分析</title>
+		<script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+		<link
+			href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+		<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+		<style>
+			html,
+			body,
+			#app,
+			#cesiumContainer {
+				width: 100%;
+				height: 100%;
+				margin: 0;
+				padding: 0;
+				overflow: hidden;
+				background: #000;
+			}
+			.lil-gui {
+				top: 10px;
+				left: 10px;
+				z-index: 999;
+			}
+			.cesium-tooltip {
+				position: absolute;
+				z-index: 1000;
+				padding: 6px 12px;
+				background: rgba(0, 0, 0, 0.75);
+				color: #fff;
+				border-radius: 4px;
+				font-size: 14px;
+				pointer-events: none;
+				display: none;
+				white-space: nowrap;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="app">
+			<div id="cesiumContainer"></div>
+			<div class="cesium-tooltip" id="measureTooltip">单击开始绘制</div>
+		</div>
+		<script type="module">
+			const { createApp } = Vue;
+			import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+			createApp({
+				data() {
+					return {
+						viewer: null,
+						imageryLayer: null,
+						/* 测量状态 */
+						measuring: false,
+						handler: null,
+						positions: [],
+						cartesian2Array: [],
+						/* 可视化实体 */
+						drawPolygonEntity: null,
+						volumePolygonEntity: null,
+						wallEntity: null,
+						labelEntity: null,
+						floatingPointEntities: [],
+						/* 计算数据 */
+						terrainData: [],
+						cellsize: 0,
+						polygonArea: 0,
+						centroid: null,
+						cutVolume: 0,
+						fillVolume: 0,
+						/* 参数 */
+						planeHeight: 0,
+						wallMinHeight: 0,
+						wallMaxHeight: 0,
+						terrainLevel: 13,
+						/* 提示元素 */
+						tooltip: null,
+					};
+				},
+				async mounted() {
+					this.tooltip = document.getElementById("measureTooltip");
+					this.initMap();
+					this.initTerrain();
+					this.addlilgui();
+				},
+				beforeUnmount() {
+					if (this.handler) {
+						this.handler.destroy();
+						this.handler = null;
+					}
+					if (this.myLilGui) {
+						this.myLilGui.destroy();
+						this.myLilGui = null;
+					}
+				},
+				methods: {
+					/* ========== 地图初始化 ========== */
+					initMap() {
+						let viewer = new Cesium.Viewer("cesiumContainer", {
+							baseLayer: false,
+							animation: false,
+							timeline: false,
+							fullscreenButton: false,
+							infoBox: false,
+							geocoder: false,
+							homeButton: false,
+							sceneModePicker: false,
+							baseLayerPicker: false,
+							navigationHelpButton: false,
+							selectionIndicator: false,
+							shouldAnimate: true,
+						});
+						window.viewer = viewer;
+						viewer.scene.debugShowFramesPerSecond = true;
+						viewer.scene.globe.enableLighting = false;
+						viewer.scene.fog.enabled = true;
+						viewer.scene.fog.density = 0.00008;
+						viewer.scene.skyAtmosphere.show = true;
+						viewer._cesiumWidget._creditContainer.style.display = "none";
+						/* 地形 —— 方量分析必须开启深度检测 */
+						viewer.scene.globe.depthTestAgainstTerrain = true;
+						let imageryLayer = viewer.imageryLayers.addImageryProvider(
+							new Cesium.UrlTemplateImageryProvider({
+								url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+								maximumLevel: 18,
+							}),
+						);
+						this.viewer = viewer;
+						this.imageryLayer = imageryLayer;
+						this.resetCamera();
+						return viewer;
+					},
+					async initTerrain() {
+						try {
+							// 本地 DEM 瓦片服务
+							this.terrainProvider = await Cesium.CesiumTerrainProvider.fromUrl(
+								"http://127.0.0.1:8888/3dtiles/jiangsu/dem/",
+							);
+							this.viewer.terrainProvider = this.terrainProvider;
+						} catch (error) {
+							console.error(error);
+							// 兜底：Cesium Ion 全球地形（需要 Token）
+							// this.viewer.terrainProvider = Cesium.createWorldTerrain();
+						}
+					},
+					resetCamera() {
+						if (!this.viewer) return;
+						this.viewer.camera.setView({
+							destination: Cesium.Cartesian3.fromDegrees(118.78, 31.95, 18000),
+							orientation: {
+								heading: Cesium.Math.toRadians(0),
+								pitch: Cesium.Math.toRadians(-45),
+								roll: Cesium.Math.toRadians(0),
+							},
+						});
+					},
+					/* ========== lil-gui 面板 ========== */
+					addlilgui() {
+						let myLilGui = new GUI();
+						this.myLilGui = myLilGui;
+						/* ---- 测量操作 ---- */
+						let measureFolder = myLilGui.addFolder("测量操作");
+						measureFolder
+							.add({ start: () => this.startMeasure() }, "start")
+							.name("开始绘制");
+						measureFolder
+							.add({ clear: () => this.clearMeasure() }, "clear")
+							.name("清除");
+						measureFolder
+							.add({ resetCamera: () => this.resetCamera() }, "resetCamera")
+							.name("重置视角");
+						/* ---- 参数调节 ---- */
+						let paramFolder = myLilGui.addFolder("参数调节");
+						this._ctrlPlaneHeight = paramFolder
+							.add(this, "planeHeight")
+							.name("基准面高");
+						this._ctrlWallMin = paramFolder
+							.add(this, "wallMinHeight")
+							.name("围墙底高");
+						this._ctrlWallMax = paramFolder
+							.add(this, "wallMaxHeight")
+							.name("围墙顶高(展示效果)");
+						this._ctrlTerrainLevel = paramFolder
+							.add(this, "terrainLevel", 7, 15, 1)
+							.name("地形精度");
+						/* ---- 调整应用 ---- */
+						let adjustFolder = myLilGui.addFolder("调整应用");
+						adjustFolder
+							.add({ apply: () => this.applyAdjust() }, "apply")
+							.name("应用调整");
+						/* ---- 结果显示 ---- */
+						let resultFolder = myLilGui.addFolder("计算结果");
+						let cutDisplay = { cutVolume: "—" };
+						let fillDisplay = { fillVolume: "—" };
+						let areaDisplay = { area: "—" };
+						this._ctrlCutVol = resultFolder
+							.add(cutDisplay, "cutVolume")
+							.name("挖方量")
+							.disable();
+						this._ctrlFillVol = resultFolder
+							.add(fillDisplay, "fillVolume")
+							.name("填方量")
+							.disable();
+						this._ctrlArea = resultFolder
+							.add(areaDisplay, "area")
+							.name("横切面积")
+							.disable();
+						this.cutDisplay = cutDisplay;
+						this.fillDisplay = fillDisplay;
+						this.areaDisplay = areaDisplay;
+						/* ---- 图层控制 ---- */
+						let layerFolder = myLilGui.addFolder("图层控制");
+						layerFolder.add(this.imageryLayer, "show").name("影像图层");
+						layerFolder
+							.add(this.imageryLayer, "alpha", 0, 1, 0.01)
+							.name("影像透明度");
+					},
+					/* ========== 开始绘制多边形 ========== */
+					startMeasure() {
+						if (this.measuring) return;
+						/* 先清除上一次的结果 */
+						this.clearMeasure();
+						this.measuring = true;
+						this.positions = [];
+						this.cartesian2Array = [];
+						/* 提示 */
+						this.tooltip.style.display = "block";
+						this.tooltip.innerText = "单击开始绘制";
+						this.tooltip.style.left = "-1000px";
+						this.tooltip.style.top = "-1000px";
+						this.viewer.scene.canvas.style.cursor = "crosshair";
+						this.handler = new Cesium.ScreenSpaceEventHandler(
+							this.viewer.scene.canvas,
+						);
+						/* 鼠标移动 —— 预览多边形 & 跟随提示 */
+						this.handler.setInputAction((movement) => {
+							const ray = this.viewer.camera.getPickRay(movement.endPosition);
+							const cartesian = this.viewer.scene.globe.pick(
+								ray,
+								this.viewer.scene,
+							);
+							if (!Cesium.defined(cartesian)) return;
+							/* 更新 tooltip 位置 */
+							this.tooltip.style.left = movement.endPosition.x + 20 + "px";
+							this.tooltip.style.top = movement.endPosition.y - 10 + "px";
+							/* 预览多边形（>= 2 个点时） */
+							if (this.positions.length >= 2) {
+								if (!Cesium.defined(this.drawPolygonEntity)) {
+									this._previewPositions = [];
+									this.drawPolygonEntity = this.viewer.entities.add({
+										polygon: {
+											hierarchy: new Cesium.CallbackProperty(() => {
+												return new Cesium.PolygonHierarchy(
+													this._previewPositions,
+												);
+											}, false),
+											perPositionHeight: true,
+											material: Cesium.Color.CHARTREUSE.withAlpha(0.5),
+										},
+									});
+								}
+								this._previewPositions.length = 0;
+								this._previewPositions.push(
+									...this.positions,
+									cartesian.clone(),
+								);
+							}
+						}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+						/* 左键单击 —— 添加顶点 */
+						this.handler.setInputAction((movement) => {
+							const ray = this.viewer.camera.getPickRay(movement.position);
+							const cartesian = this.viewer.scene.globe.pick(
+								ray,
+								this.viewer.scene,
+							);
+							if (!Cesium.defined(cartesian)) return;
+							if (this.positions.length === 0) {
+								this.positions.push(cartesian.clone());
+							}
+							this.positions.push(cartesian);
+							this.tooltip.innerText = `已添加 ${this.positions.length} 个点，右键结束`;
+						}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+						/* 右键 —— 结束绘制，计算方量 */
+						this.handler.setInputAction(() => {
+							this.finishMeasure();
+						}, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+					},
+					/* ========== 完成绘制，开始计算 ========== */
+					async finishMeasure() {
+						this.measuring = false;
+						/* 清理交互 */
+						this.handler.destroy();
+						this.handler = null;
+						this.viewer.scene.canvas.style.cursor = "";
+						this.tooltip.style.display = "none";
+						/* 移除预览多边形 */
+						if (Cesium.defined(this.drawPolygonEntity)) {
+							this.viewer.entities.remove(this.drawPolygonEntity);
+							this.drawPolygonEntity = null;
+						}
+						if (this.positions.length < 3) {
+							alert("至少需要 3 个点才能构成多边形");
+							return;
+						}
+						/* 转换为经纬度数组 */
+						const ellipsoid = this.viewer.scene.globe.ellipsoid;
+						this.cartesian2Array = this.positions.map((pos) => {
+							const cartographic = ellipsoid.cartesianToCartographic(pos);
+							return [
+								Cesium.Math.toDegrees(cartographic.longitude),
+								Cesium.Math.toDegrees(cartographic.latitude),
+							];
+						});
+						/* 闭合多边形 */
+						this.cartesian2Array.push([...this.cartesian2Array[0]]);
+						/* ---- turf 空间计算 ---- */
+						const polygon = turf.polygon([this.cartesian2Array]);
+						this.polygonArea = turf.area(polygon);
+						this.cellsize = Math.sqrt(this.polygonArea / 10000);
+						this.centroid = turf.centroid(polygon);
+						const enveloped = turf.envelope(polygon);
+						const bbox = turf.bbox(enveloped);
+						const grid = turf.pointGrid(bbox, this.cellsize, {
+							units: "meters",
+						});
+						const ptsWithin = turf.pointsWithinPolygon(grid, polygon);
+						const lonlats = ptsWithin.features.map((f) => ({
+							lon: f.geometry.coordinates[0],
+							lat: f.geometry.coordinates[1],
+						}));
+						if (lonlats.length === 0) {
+							alert("多边形区域内没有采样点，请扩大绘制范围");
+							return;
+						}
+						/* ---- 采样地形高度 ---- */
+						const cartographics = lonlats.map((ll) =>
+							Cesium.Cartographic.fromDegrees(ll.lon, ll.lat),
+						);
+						try {
+							const samples = await Cesium.sampleTerrain(
+								this.viewer.terrainProvider,
+								this.terrainLevel,
+								cartographics,
+							);
+							this.terrainData = samples;
+							this.calculateVolume(samples);
+						} catch (e) {
+							console.error("地形采样失败:", e);
+							alert("地形数据采样失败，请检查网络或地形服务");
+						}
+					},
+					/* ========== 体积计算 ========== */
+					calculateVolume(samples) {
+						const ellipsoid = this.viewer.scene.globe.ellipsoid;
+						const vertexHeights = this.positions.map((pos) => {
+							const cartographic = ellipsoid.cartesianToCartographic(pos);
+							return this.viewer.scene.globe.getHeight(cartographic) || 0;
+						});
+						const sorted = [...vertexHeights].sort((a, b) => a - b);
+						this.wallMinHeight = sorted[0];
+						this.planeHeight = sorted[0];
+						this.wallMaxHeight = sorted[sorted.length - 1];
+						let totalVolume = 0;
+						let cutVol = 0;
+						for (let i = 0; i < samples.length; i++) {
+							const h = samples[i].height;
+							const diff = h - this.wallMinHeight;
+							totalVolume += diff * this.cellsize * this.cellsize;
+							if (h > this.planeHeight) {
+								cutVol +=
+									(h - this.planeHeight) * this.cellsize * this.cellsize;
+							}
+						}
+						const planeBulk =
+							this.polygonArea * (this.planeHeight - this.wallMinHeight);
+						const fillVol =
+							this.planeHeight >= this.wallMinHeight
+								? planeBulk - (totalVolume - cutVol)
+								: 0;
+						this.cutVolume = cutVol > 0 ? cutVol : 0;
+						this.fillVolume = fillVol > 0 ? fillVol : 0;
+						this.updateResultDisplay();
+						this.refreshControllers();
+						this.updateVisualization();
+					},
+					/* ========== 可视化更新 ========== */
+					updateVisualization() {
+						this.clearVisualEntities();
+						/* 顶点海拔标签 */
+						const ellipsoid = this.viewer.scene.globe.ellipsoid;
+						this.positions.forEach((pos) => {
+							const cartographic = ellipsoid.cartesianToCartographic(pos);
+							const h = this.viewer.scene.globe.getHeight(cartographic) || 0;
+							const entity = this.viewer.entities.add({
+								position: pos,
+								label: {
+									text: "海拔:" + h.toFixed(2) + "米",
+									font: "16px sans-serif",
+									fillColor: Cesium.Color.GOLD,
+									style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+									outlineWidth: 2,
+									verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+									heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+									pixelOffset: new Cesium.Cartesian2(0.0, -20),
+								},
+							});
+							this.floatingPointEntities.push(entity);
+						});
+						const heightsArr = [];
+						const minHeights = [];
+						const maxHeights = [];
+						this.cartesian2Array.forEach((coord) => {
+							heightsArr.push(coord[0], coord[1], 0);
+							minHeights.push(this.wallMinHeight);
+							maxHeights.push(this.wallMaxHeight);
+						});
+						/* 围墙 */
+						this.wallEntity = this.viewer.entities.add({
+							wall: {
+								positions:
+									Cesium.Cartesian3.fromDegreesArrayHeights(heightsArr),
+								minimumHeights: minHeights,
+								maximumHeights: maxHeights,
+								outline: true,
+								outlineColor: Cesium.Color.WHITE.withAlpha(0.7),
+								material: Cesium.Color.CYAN.withAlpha(0.7),
+							},
+						});
+						/* 基准面多边形 */
+						this.volumePolygonEntity = this.viewer.entities.add({
+							polygon: {
+								show: true,
+								hierarchy: new Cesium.PolygonHierarchy(
+									Cesium.Cartesian3.fromDegreesArrayHeights(heightsArr),
+								),
+								height: this.planeHeight,
+								material: Cesium.Color.CHARTREUSE.withAlpha(0.5),
+							},
+						});
+						/* 体积标签（质心位置） */
+						if (this.centroid) {
+							const labelText = this.buildLabelText();
+							this.labelEntity = this.viewer.entities.add({
+								position: Cesium.Cartesian3.fromDegrees(
+									this.centroid.geometry.coordinates[0],
+									this.centroid.geometry.coordinates[1],
+									this.wallMaxHeight,
+								),
+								label: {
+									text: labelText,
+									font: "18px sans-serif",
+									showBackground: true,
+									fillColor: Cesium.Color.WHITE,
+									style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+									horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+									pixelOffset: new Cesium.Cartesian2(0.0, -80),
+								},
+							});
+						}
+					},
+					/* ========== 应用参数调整 ========== */
+					applyAdjust() {
+						if (!Cesium.defined(this.volumePolygonEntity)) return;
+						if (this.wallMinHeight > this.planeHeight) {
+							this.wallMinHeight = this.planeHeight;
+						}
+						if (this.wallMaxHeight < this.planeHeight) {
+							this.wallMaxHeight = this.planeHeight;
+						}
+						this.volumePolygonEntity.polygon.height = this.planeHeight;
+						if (Cesium.defined(this.wallEntity)) {
+							const count =
+								this.wallEntity.wall.minimumHeights.getValue().length;
+							const newMinHeights = new Array(count).fill(this.wallMinHeight);
+							const newMaxHeights = new Array(count).fill(this.wallMaxHeight);
+							this.wallEntity.wall.minimumHeights = newMinHeights;
+							this.wallEntity.wall.maximumHeights = newMaxHeights;
+						}
+						this.recalculateVolume();
+					},
+					/* ========== 重新计算挖/填方量 ========== */
+					recalculateVolume() {
+						if (this.terrainData.length === 0) return;
+						const planeBulk =
+							this.polygonArea * (this.planeHeight - this.wallMinHeight);
+						let totalVolume = 0;
+						let cutVol = 0;
+						for (let i = 0; i < this.terrainData.length; i++) {
+							const h = this.terrainData[i].height;
+							totalVolume +=
+								(h - this.wallMinHeight) * this.cellsize * this.cellsize;
+							if (h > this.planeHeight) {
+								cutVol +=
+									(h - this.planeHeight) * this.cellsize * this.cellsize;
+							}
+						}
+						const fillVol =
+							this.planeHeight >= this.wallMinHeight
+								? planeBulk - (totalVolume - cutVol)
+								: 0;
+						this.cutVolume = cutVol > 0 ? cutVol : 0;
+						this.fillVolume = fillVol > 0 ? fillVol : 0;
+						this.updateResultDisplay();
+						this.refreshControllers();
+						if (Cesium.defined(this.labelEntity)) {
+							this.labelEntity.label.text = this.buildLabelText();
+						}
+					},
+					/* ========== 刷新 lil-gui 控制器显示 ========== */
+					refreshControllers() {
+						const ctrls = [
+							this._ctrlPlaneHeight,
+							this._ctrlWallMin,
+							this._ctrlWallMax,
+							this._ctrlTerrainLevel,
+							this._ctrlCutVol,
+							this._ctrlFillVol,
+							this._ctrlArea,
+						];
+						ctrls.forEach((c) => {
+							if (c && typeof c.updateDisplay === "function") {
+								c.updateDisplay();
+							}
+						});
+					},
+					/* ========== 结果面板文字 ========== */
+					buildLabelText() {
+						const formatVol = (v) => {
+							if (v / 10000 > 0.01) {
+								return (v / 10000).toFixed(2) + "万立方米";
+							}
+							return v.toFixed(2) + "立方米";
+						};
+						const formatArea = (a) => {
+							if (a / 10000 > 0.01) {
+								return (a / 10000).toFixed(2) + "万平方米";
+							}
+							return a.toFixed(2) + "平方米";
+						};
+						let lines = [];
+						if (this.cutVolume > 0) {
+							lines.push("挖方体积：" + formatVol(this.cutVolume));
+						}
+						if (this.fillVolume > 0) {
+							lines.push("填方体积：" + formatVol(this.fillVolume));
+						}
+						lines.push("横切面积：" + formatArea(this.polygonArea));
+						return lines.join("\n");
+					},
+					updateResultDisplay() {
+						const formatVol = (v) => {
+							if (v / 10000 > 0.01) {
+								return (v / 10000).toFixed(2) + "万立方米";
+							}
+							return v.toFixed(2) + "立方米";
+						};
+						const formatArea = (a) => {
+							if (a / 10000 > 0.01) {
+								return (a / 10000).toFixed(2) + "万平方米";
+							}
+							return a.toFixed(2) + "平方米";
+						};
+						this.cutDisplay.cutVolume = formatVol(this.cutVolume);
+						this.fillDisplay.fillVolume = formatVol(this.fillVolume);
+						this.areaDisplay.area = formatArea(this.polygonArea);
+					},
+					/* ========== 清除可视化实体 ========== */
+					clearVisualEntities() {
+						this.floatingPointEntities.forEach((e) =>
+							this.viewer.entities.remove(e),
+						);
+						this.floatingPointEntities = [];
+						if (Cesium.defined(this.wallEntity)) {
+							this.viewer.entities.remove(this.wallEntity);
+							this.wallEntity = null;
+						}
+						if (Cesium.defined(this.volumePolygonEntity)) {
+							this.viewer.entities.remove(this.volumePolygonEntity);
+							this.volumePolygonEntity = null;
+						}
+						if (Cesium.defined(this.labelEntity)) {
+							this.viewer.entities.remove(this.labelEntity);
+							this.labelEntity = null;
+						}
+					},
+					/* ========== 全部清除 ========== */
+					clearMeasure() {
+						this.measuring = false;
+						if (this.handler) {
+							this.handler.destroy();
+							this.handler = null;
+						}
+						this.viewer.scene.canvas.style.cursor = "";
+						this.tooltip.style.display = "none";
+						if (Cesium.defined(this.drawPolygonEntity)) {
+							this.viewer.entities.remove(this.drawPolygonEntity);
+							this.drawPolygonEntity = null;
+						}
+						this.clearVisualEntities();
+						this.positions = [];
+						this.cartesian2Array = [];
+						this.terrainData = [];
+						this.cellsize = 0;
+						this.polygonArea = 0;
+						this.centroid = null;
+						this.cutVolume = 0;
+						this.fillVolume = 0;
+						this.planeHeight = 0;
+						this.wallMinHeight = 0;
+						this.wallMaxHeight = 0;
+						this.cutDisplay.cutVolume = "—";
+						this.fillDisplay.fillVolume = "—";
+						this.areaDisplay.area = "—";
+						this.refreshControllers();
+					},
+				},
+			}).mount("#app");
+		</script>
+	</body>
+</html>

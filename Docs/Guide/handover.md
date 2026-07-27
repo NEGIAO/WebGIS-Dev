@@ -2,7 +2,7 @@
 
 > 目的：让接手者（人或 AI 会话）**半天内具备独立开发能力**。
 > 本文只写导航、代码坐标与"别处没写的坑"；细节一律链接既有文档，不重复维护。
-> 基线版本：V3.4.36（2026-07-26）· 返回 [根 README](../../README.md)
+> 基线版本：V3.4.46（2026-07-26，§7 并入并行会话交接契约）· 返回 [根 README](../../README.md)
 
 ---
 
@@ -106,8 +106,19 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
 - **`.env.production`（仓库根，提交 git）**：clone 用户必改 `VITE_BACKEND_URL`，否则构建产物打到原作者 HF。
 - **tileset 透明度与材质模式互写 style**：语义为"最后操作生效"，透明度拉回 100% 会清 style 还原。
 - **JSDoc 注释里别写 `*/`**（如 `vis*/limit*`）——会提前终止块注释，ESLint 报 Invalid character。
-- **多会话并行开发时版本号常撞车**：以 CHANGELOG 先占者为准，后完成的任务顺延一号并在日志备注。
+- **多会话并行开发时版本号常撞车**：以 CHANGELOG 先占者为准，后完成的任务顺延一号并在日志备注；
+  写记录前先 `grep 当前版本 README.md` 复核（README 可能在你读写之间被并行会话推进）。
 - **挂载盘上 git/npm 命令很慢**：沙盒/CI 中避免 `git status` 全量扫描，ESLint 分批跑。
+- **Cowork 挂载盘禁止 rm/mv，`.git` 目录只读**：删除/改名类操作走「新建文件 + 标注 DEPRECATED + 给用户 git 命令」
+  模式，由用户本机执行；超时被杀的 git 命令可能残留 `.git/index.lock`，需用户手动删。
+  沙盒跑 ESLint 用 `node node_modules/eslint/bin/eslint.js`（`.bin` 垫片不可用）。
+- **barrel 链已两层化**：新增 feature 模块**只登记 `composables/map/features/index.js` 一处**（规范见
+  `features/README.md`）；ESM `export *` 重名会**静默丢弃**——改 barrel 前先做导出名核验
+  （V3.4.31 日志 `2026-07-26-frontend-architecture-quickwins.md` 有现成 node 校验脚本）。
+- **属性表 revision 契约不变式**：图层内容级变更必须**整体重赋值** `item.features` 数组（触发注册表
+  revision 递增 → attrStore 快路径），就地改属性会静默失效（注册表注释有说明）。
+- **容器瘦身 factory 抽离模式**（V3.4.29 日志）：依赖注入；晚声明依赖用 getter 延迟解析；工厂参数在
+  调用点求值——**逐一核对 TDZ**（函数声明提升可依赖，const 不行）。
 - **admin/user 是保留账号**：禁绑 OAuth；管理员角色按用户名归一化，DB 角色字段不被信任。
 
 ## 8. 已知边界与待办

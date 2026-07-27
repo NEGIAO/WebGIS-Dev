@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.38），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.64），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -228,9 +228,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.4.38** | 2026-07-26 | 天地图地形解码下放 Worker（默认地形 inflate+编码主线程卡顿修复，通用 decodeWorkerPool 与 ArcGIS LERC 共用）；ArcGIS 层级硬顶 12、SSE 3/6 二次下探；风场库监听移除失效泄漏与 percentageChanged 全局副作用修复，未引用 CJS 产物清理；Force_command 版本说明纠偏 |
-| **V3.4.37** | 2026-07-26 | 新增交接文档 `Docs/Guide/handover.md`：定位「导航 + 独家知识」不重复既有文档——三十秒项目认知/十分钟跑起来、按问题类型的文档地图、三大核心架构速览（三层配置数据流/统一图层管理原则/3D 功能模块范式）、高频修改场景→代码坐标表、门禁与提交五步流程、8 条「别处没写的坑」（响应式禁 Cesium 对象、env 双端共读、版本撞车惯例等）、已知边界与候选增强；README 开发文档表与结构树同步登记 |
-| **V3.4.36** | 2026-07-26 | 面板设计令牌推广（UI 治理·续）：SpatialAnalysisPanel / AdministrativeDivisionPanel / ControlsPanel（含卷帘对话框）/ MapControlsBar 四个地图浮层面板接入 `--panel-bg/--panel-radius/--panel-shadow` 令牌与品牌描边（同值替换零视觉差），绿色家族硬编码沿用 DrawPanel 试点映射归一到语义变量（共 30 处替换）；至此 ControlsPanel 面板族群全部完成令牌化，蓝色主题下浮层面板全面联动 |
+| **V3.4.64** | 2026-07-27 | requestRenderMode P2+P3 收官（用户授权全量执行）：总开关 `ENABLE_REQUEST_RENDER_MODE` 置 **true**，按需渲染自本版起真实生效——「3D 静止+四特效全关」渲染降至 ~0.2Hz、GPU 满载→近零，特效开启期自动回连续渲染。全库高危写点静态普查：唯一缺口 3D Tiles 材质模式切换（直写 tileset.style）补 requestRender，其余直改点均已带显式触发或走 Entity API 自动通道；P3 定夺 `maximumRenderTimeChange=5s` 维持、FPS 面板保留（空闲低读数=省电特性，兼作生效仪表）。出现「画面不刷新」回归时总开关改回 false 一行回退。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-requestrendermode-p2-enable.md) |
+| **V3.4.63** | 2026-07-27 | Agent `override_base_url` 平台 Key 外泄修复（规划 P1-4 [P0 安全]，L3 已批）：任意游客/用户发一个带 `override_base_url` 不带 `override_api_key` 的请求，后端即把平台 Key 以 `Authorization: Bearer` 发往对方地址；无 override key 时 candidates 含全部备用 Key 且 401 触发轮换 → 单次请求可收割整个 Key 池（`/models` 为 GET 且不耗配额）。新增 `_validate_override_base_url` 单点护栏：成对校验 fail-closed + 仅 https + 私网/回环拒绝（`_coerce_ip_literal` 按 inet_aton 归一，堵死 `2130706433`/`0x7f000001`/`127.1`/`0177.0.0.1` 绕过）+ 可选 host 白名单（默认关，保留个人 Key 接任意服务商能力）；前端草稿改成对透传；新增两个默认即安全的 L1 key。附带 07-26 五会话连环撞号对账补录（V3.4.52/55–58 + V3.4.48 空号注记）。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-agent-override-base-url-key-leak-fix.md) |
+| **V3.4.62** | 2026-07-27 | 3D 属性表视图筛选接通核验收账（规划 P0-4 B4，零代码改动）：前序会话实现完整但收尾中断，五侧静态核验全绿——`useCesiumAttrViewExtentSync`（moveEnd+首帧推送、视域不可解/跨反经线诚实 null 降级）→ CesiumContainer 生命周期双路 stop → AttributeTable 动态「范围不可用」态 → 归一层 4326 直传 → 2D 回喂三路径；并行撞车旧副本 `useCesiumAttrExtentSync` 已确认零引用且当前文件系统不存在，仅保留新名实现。**B 簇（B1–B6）代码侧全清**，V3.5.0 建议实机三清单验证后打线。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-b4-cesium-view-extent-sync-closeout.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -255,6 +255,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.4.38 · 开发中 · 最后更新 2026-07-26</sub>
+<sub>V3.4.64 · 开发中 · 最后更新 2026-07-27</sub>
 
 </div>

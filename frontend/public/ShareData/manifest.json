@@ -1,0 +1,39 @@
+{
+    "resources": [
+        {
+            "path": "2026大疆限飞区.kml",
+            "name": "2026大疆限飞区.kml",
+            "size": 4029984
+        },
+        {
+            "path": "中国山脉分布图.kmz",
+            "name": "中国山脉分布图.kmz",
+            "size": 13577
+        },
+        {
+            "path": "全国禁飞区.kml",
+            "name": "全国禁飞区.kml",
+            "size": 1106925
+        },
+        {
+            "path": "全国限行区域.kml",
+            "name": "全国限行区域.kml",
+            "size": 2417586
+        },
+        {
+            "path": "河南大学金明校区/HENU建筑.kmz",
+            "name": "HENU建筑.kmz",
+            "size": 20712
+        },
+        {
+            "path": "河南大学金明校区/HENU湖泊.kmz",
+            "name": "HENU湖泊.kmz",
+            "size": 6820
+        },
+        {
+            "path": "河南大学金明校区/HENU道路.kmz",
+            "name": "HENU道路.kmz",
+            "size": 12727
+        }
+    ]
+}

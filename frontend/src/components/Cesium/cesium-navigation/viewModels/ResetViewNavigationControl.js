@@ -121,8 +121,10 @@ ResetViewNavigationControl.prototype.resetView = function () {
             complete: this.resetSuccess,
           });
         } catch (e) {
-          console.log(
-            "Cesium-navigation/ResetViewNavigationControl:   options.defaultResetView Cesium rectangle is  invalid!"
+          // 错误分支应走 warn 级别（P1-3 日志卫生：catch 内禁用 console.log）
+          console.warn(
+            "Cesium-navigation/ResetViewNavigationControl: options.defaultResetView Cesium rectangle is invalid!",
+            e
           );
         }
       }

@@ -354,8 +354,14 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     const overrideOptions = {};
                     const draftBaseUrl = String(config.userConfigDraft.base_url || '').trim();
                     const draftApiKey = String(config.userConfigDraft.api_key || '').trim();
-                    if (draftBaseUrl) overrideOptions.override_base_url = draftBaseUrl;
-                    if (draftApiKey) overrideOptions.override_api_key = draftApiKey;
+                    // base_url 与 api_key 必须成对透传：只传 base_url 会让后端把平台 Key 发往该地址，
+                    // 后端已 fail-closed 返回 400（见 utils._validate_override_base_url），此处同口径避免无谓报错。
+                    if (draftBaseUrl && draftApiKey) {
+                        overrideOptions.override_base_url = draftBaseUrl;
+                        overrideOptions.override_api_key = draftApiKey;
+                    } else if (draftApiKey) {
+                        overrideOptions.override_api_key = draftApiKey;
+                    }
 
                     const response = await apiAgentListModels(overrideOptions);
                     const data = response?.data || response || {};
@@ -604,8 +610,13 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 const draftApiKey = String(d.api_key || '').trim();
                 const draftModel = String(d.model || '').trim();
 
-                if (draftBaseUrl) chatPayload.override_base_url = draftBaseUrl;
-                if (draftApiKey) chatPayload.override_api_key = draftApiKey;
+                // 同 loadAvailableModels：base_url 与 api_key 成对才透传（防平台 Key 被发往草稿地址）
+                if (draftBaseUrl && draftApiKey) {
+                    chatPayload.override_base_url = draftBaseUrl;
+                    chatPayload.override_api_key = draftApiKey;
+                } else if (draftApiKey) {
+                    chatPayload.override_api_key = draftApiKey;
+                }
                 if (draftModel) chatPayload.override_model = draftModel;
                 if (typeof d.timeout_seconds === 'number' && d.timeout_seconds > 0)
                     chatPayload.override_timeout_seconds = d.timeout_seconds;

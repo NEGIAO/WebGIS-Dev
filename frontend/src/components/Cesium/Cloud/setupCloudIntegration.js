@@ -12,6 +12,10 @@
 import { watch } from 'vue';
 import { resolveWebgisCloudAssetPaths } from './assetConfig.js';
 import { applyCloudPanelParams, applyLensFlareParams } from './cloudParamsApply.js';
+import { acquireContinuous, releaseContinuous } from '../composables/interaction/useCesiumRenderMode.js';
+
+/** 按需渲染计数器 tag：体积云管线存活期间需要连续渲染（preRender BSM / 时域降噪） */
+const RENDER_MODE_TAG = 'volumetric-cloud';
 
 /**
  * @param {object} opts
@@ -107,6 +111,8 @@ export function setupCloudIntegration({
         }
 
         pipeline = instance;
+        // 管线就绪 → 声明连续渲染（与 teardownPipeline 的 release 成对）
+        acquireContinuous(viewer, RENDER_MODE_TAG);
         applyCloudPanelParams(pipeline, cloudParams?.value ?? {});
         await syncLensFlare(cloudParams?.value ?? {});
 
@@ -116,6 +122,8 @@ export function setupCloudIntegration({
         restoreSkyState(viewer, skySnapshot);
         pipeline = null;
         lensFlare = null;
+        // 若 acquire 已发生（参数应用/光晕加载阶段失败），归还计数；未发生时为安全 no-op
+        releaseContinuous(viewer, RENDER_MODE_TAG);
         throw err;
       } finally {
         initPromise = null;
@@ -164,6 +172,17 @@ export function setupCloudIntegration({
       pendingApplyParams = null;
       if (disposed || !pipeline || !p) return;
       applyCloudPanelParams(pipeline, p);
+      // V3.4.x：云 stage 因分辨率切档被重建时会排到链尾（lensFlare 之后）。
+      // 消费重建标志并销毁 lensFlare，让下方 syncLensFlare 按需重建、
+      // 恢复 [atmosphere, aerial, cloud, lensFlare] 链序。
+      if (pipeline.consumeCloudStageRebuilt?.() && lensFlare) {
+        try {
+          lensFlare.destroy();
+        } catch (e) {
+          console.warn('[Cloud] lensFlare 重建前销毁失败：', e);
+        }
+        lensFlare = null;
+      }
       // syncLensFlare 可能异步懒加载 stage，失败不应中断参数应用
       void syncLensFlare(p);
     });
@@ -198,6 +217,9 @@ export function setupCloudIntegration({
       console.warn('[Cloud] pipeline destroy:', e);
     }
     pipeline = null;
+
+    // 归还连续渲染计数；重复 teardown（watch 关闭 + cleanup）时第二次为安全 no-op
+    releaseContinuous(viewer, RENDER_MODE_TAG);
 
     restoreSkyState(viewer, skySnapshot);
 

@@ -55,6 +55,10 @@ import { useMessage } from '../../../composables/useMessage';
 import { showLoading, hideLoading } from '../../../utils/ui/loading';
 import { createFluidRuntime } from './fluidRuntime';
 import LilGuiControls from '../LilGuiControls.vue';
+import { acquireContinuous, releaseContinuous } from '../composables/interaction/useCesiumRenderMode';
+
+/** 按需渲染计数器 tag：流体模拟 postRender 时间步逐帧执行，水体存活期间需要连续渲染 */
+const RENDER_MODE_TAG = 'fluid-sim';
 
 const props = defineProps({
     headless: {
@@ -273,7 +277,8 @@ function startPickHeightMap() {
 
     const { viewer, Cesium } = runtime;
     stopPicking();
-    prepareScene(viewer, Cesium);
+    // V3.4.x：prepareScene 不再在"开始选点"时执行（此前点按钮瞬间整屏变色）。
+    // 场景开关与天空后处理延后到水体确定创建时（createFluidAtScreenPosition 内）。
 
     isPicking.value = true;
     pickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
@@ -328,6 +333,10 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
 
         if (creationId !== fluidCreationId) return;
 
+        // V3.4.x：水体创建已确定,此时才翻转场景开关并挂天空后处理
+        // （选点/取消阶段画面保持原样;FluidRenderer 构造前场景状态已就绪）
+        prepareScene(viewer, Cesium);
+
         waterLevelMin.value = verticalRange.minHeight;
         waterLevelMax.value = verticalRange.maxHeight;
         waterLevel.value = initialWaterLevel;
@@ -364,6 +373,9 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
                 normalizeWaterLevel(initialWaterLevel, verticalRange),
             ),
         });
+
+        // 水体渲染器就绪 → 声明连续渲染（与 destroyFluidOnly 的 release 成对）
+        acquireContinuous(viewer, RENDER_MODE_TAG);
 
         selectedLon.value = lon;
         selectedLat.value = lat;
@@ -847,6 +859,9 @@ function destroyFluidOnly() {
     }
     fluidRenderer = null;
     hasFluid.value = false;
+    // 归还连续渲染计数（本函数入口已保证此前存在水体实例，与 acquire 恰好配对；
+    // 重建水体路径 createFluidAtScreenPosition 会先经此处归还旧实例计数）
+    releaseContinuous(props.getViewer?.(), RENDER_MODE_TAG);
 }
 
 function cleanup(restoreSceneState) {

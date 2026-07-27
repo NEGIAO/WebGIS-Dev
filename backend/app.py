@@ -13,7 +13,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any, Dict
 
-from config import build_public_config, get_settings, masked_summary
+from config import build_public_config, get_settings, get_str, masked_summary
 
 from utils.time_utils import get_beijing_now_str, hourly_chime_task, BeijingTimeFormatter
 
@@ -168,28 +168,20 @@ app = FastAPI(
 
 # ==================== CORS 中间件配置 ====================
 
+# CORS 来源白名单经统一 loader 读取（L1 key: CORS_ALLOWED_ORIGINS，逗号分隔）；
+# 留空 = ["*"] 兼容旧行为；生产 HF Variables 建议配置 Pages 域名 + localhost（P1-1）。
+_cors_raw = get_str("CORS_ALLOWED_ORIGINS", "")
+_cors_origins = [item.strip().rstrip("/") for item in _cors_raw.split(",") if item.strip()] or ["*"]
+if _cors_origins != ["*"]:
+    logger.info("CORS 白名单已启用（%d 个来源）：%s", len(_cors_origins), ", ".join(_cors_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # 允许所有来源
-    allow_credentials=False,    
+    allow_origins=_cors_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=[
-#         "http://localhost:5173",
-#         "http://127.0.0.1:5173",
-#         "http://localhost:4173",
-#         "https://negiao.github.io",
-#         "https://ripzhoudi.github.io",
-#         "https://negiao-webgis.hf.space"  # 服务器自身域名（如需在线调试 Swagger UI 时也是此 Origin）
-#     ],
-#     allow_origin_regex="https?://.*",  # 允许所有 HTTP/HTTPS 源，适配不固定的前端
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
 
 # ==================== 启动状态检查中间件 ====================
 

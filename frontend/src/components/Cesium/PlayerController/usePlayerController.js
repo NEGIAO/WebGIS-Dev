@@ -24,6 +24,10 @@ import {
     DEFAULT_MOUSE_SENSITIVITY,
 } from './playerDefaults';
 import { hasRealTerrain } from './utils/terrainHelper';
+import { acquireContinuous, releaseContinuous } from '../composables/interaction/useCesiumRenderMode';
+
+/** 按需渲染计数器 tag：漫游期间物理步进/人物动画逐帧推进，需要连续渲染 */
+const RENDER_MODE_TAG = 'player-roam';
 
 export function usePlayerController({ getViewer, getCesium, message }) {
     /** 漫游模式是否激活 */
@@ -178,6 +182,9 @@ export function usePlayerController({ getViewer, getCesium, message }) {
             });
 
             playerInstance = player;
+            // 控制器就绪 → 声明连续渲染（与 stopPlayer 的 release 成对；
+            // 后续步骤失败走 catch → stopPlayer 归还，不会泄漏计数）
+            acquireContinuous(viewer, RENDER_MODE_TAG);
 
             // 接入 Cesium 帧循环（含最低高度保护 + 动态地形碰撞更新）
             const TERRAIN_UPDATE_THRESHOLD = TERRAIN_HALF * 0.6; // 距碰撞中心 60% 时触发更新
@@ -294,6 +301,8 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 console.warn('[PlayerController] 销毁警告:', error);
             }
             playerInstance = null;
+            // 归还连续渲染计数（仅实例确实存在过才归还，与 acquire 配对）
+            releaseContinuous(getViewer(), RENDER_MODE_TAG);
         }
 
         // 恢复 Cesium 默认交互

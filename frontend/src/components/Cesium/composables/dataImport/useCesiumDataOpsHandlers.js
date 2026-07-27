@@ -10,6 +10,8 @@
  * - getCesium：Cesium 运行时获取函数
  * - isComponentUnmounted：宿主组件卸载标记 getter（卸载后拒绝异步操作）
  */
+import { setTilesetMaterialMode } from './dataSourceDisplay.js';
+
 export function createCesiumDataOpsHandlers({
     dataImport,
     repositionTargetRef,
@@ -84,7 +86,7 @@ export function createCesiumDataOpsHandlers({
     }
 
     /**
-     * 切换 3D Tiles 材质模式
+     * 切换 3D Tiles 材质模式（P1-2：经合成器保留当前透明度，材质与透明度互不覆盖）
      */
     function handleDataSetMaterial({ id, mode }) {
         if (isComponentUnmounted()) return;
@@ -92,8 +94,10 @@ export function createCesiumDataOpsHandlers({
         if (!CesiumRuntime) return;
         const record = dataImport.loadedDataSources.value.find(ds => ds.id === id);
         if (!record || record.type !== '3dtiles') return;
-        dataImport.applyTilesetMaterial(record.entity, mode, CesiumRuntime);
+        setTilesetMaterialMode(CesiumRuntime, record, mode);
         record.materialMode = mode;
+        // tileset.style 直改不经 Cesium 自动触发通道，按需渲染模式下补一帧（连续模式无害）
+        dataImport.getViewer?.()?.scene?.requestRender?.();
     }
 
     /**

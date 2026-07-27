@@ -137,6 +137,9 @@ def init_auth_tables_sync(conn) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN email TEXT")
     if "email_verified" not in user_columns:
         conn.execute("ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+    # 新增：第三方头像 URL（NULL=从未设置，可在 OAuth 首次登录时采用；''=用户已主动改选预设头像，不再覆盖）
+    if "avatar_url" not in user_columns:
+        _safe_execute(conn, "ALTER TABLE users ADD COLUMN avatar_url TEXT")
     conn.execute("UPDATE users SET display_name = username WHERE display_name IS NULL OR display_name = ''")
 
     # 表：oauth_accounts
@@ -159,6 +162,20 @@ def init_auth_tables_sync(conn) -> None:
     """)
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_oauth_accounts_user_id ON oauth_accounts(user_id)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_oauth_accounts_email ON oauth_accounts(email)")
+
+    # 表：oauth_tickets
+    # OAuth 回调 → 前端换取 session 的一次性短期 ticket（TTL 秒级）。
+    # 落库替代进程内存字典：多 worker / 容器重启场景下仍可原子消费（P0-3）。
+    _safe_execute(conn, """
+        CREATE TABLE IF NOT EXISTS oauth_tickets (
+            ticket TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+        )
+    """)
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_oauth_tickets_expires ON oauth_tickets(expires_at)")
 
     # 表：sessions
     sessions_table_exists = conn.execute(
@@ -189,6 +206,12 @@ def init_auth_tables_sync(conn) -> None:
         _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN guest_device_id TEXT")
     if "requires_email_binding" not in session_columns:
         conn.execute("ALTER TABLE sessions ADD COLUMN requires_email_binding INTEGER NOT NULL DEFAULT 0")
+    if "last_seen_at" not in session_columns:
+        # V3.4.60 在线判定：会话活跃时间戳（鉴权单点节流刷新，统计侧按窗口判在线）
+        _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''")
+        # 存量回填 created_at：僵尸会话 created_at 久远 → 判离线；活跃旧会话首次请求即被心跳刷新
+        _safe_execute(conn, "UPDATE sessions SET last_seen_at = created_at WHERE last_seen_at = ''")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_guest_uid ON sessions(guest_uid)")

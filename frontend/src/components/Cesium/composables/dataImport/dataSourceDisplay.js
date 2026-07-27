@@ -14,9 +14,39 @@
  */
 
 import { toRaw } from 'vue';
+import { applyTilesetMaterial } from './loaders/tilesetLoader.js';
 
 /** 矢量数据源原始颜色快照：WeakMap<DataSource, Map<entityId, snapshot>>（随句柄 GC） */
 const vectorColorSnapshots = new WeakMap();
+
+/**
+ * tileset 外观二元状态：WeakMap<Cesium3DTileset, { mode, alpha }>
+ * P1-2 单点合成——材质模式与透明度任一变化都以完整二元组重建外观，互不覆盖。
+ */
+const tilesetAppearanceState = new WeakMap();
+
+function getTilesetState(tileset) {
+    let state = tilesetAppearanceState.get(tileset);
+    if (!state) {
+        state = { mode: 'none', alpha: 1 };
+        tilesetAppearanceState.set(tileset, state);
+    }
+    return state;
+}
+
+/**
+ * 设置 tileset 材质模式（保留当前透明度合成应用）
+ * @param {object} Cesium - Cesium 命名空间
+ * @param {object} record - loadedDataSources 记录（type='3dtiles'）
+ * @param {string} mode - MATERIAL_MODES 的 key
+ */
+export function setTilesetMaterialMode(Cesium, record, mode) {
+    const entity = toRaw(record?.entity);
+    if (!Cesium || !entity) return;
+    const state = getTilesetState(entity);
+    state.mode = String(mode || 'none');
+    applyTilesetMaterial(entity, state.mode, Cesium, state.alpha);
+}
 
 /** rAF 合并挂起表：WeakMap<DataSource, { alpha, scheduled }> */
 const vectorOpacityPending = new WeakMap();
@@ -61,14 +91,13 @@ export function setRecordOpacity(Cesium, record, opacity, onApplied) {
             // Model 颜色乘白：仅调透明不改色相
             entity.color = Cesium.Color.WHITE.withAlpha(alpha);
             break;
-        case '3dtiles':
-            // 与材质模式互写 style：alpha=1 清空还原，交回材质模式控制
-            entity.style = alpha >= 1
-                ? undefined
-                : new Cesium.Cesium3DTileStyle({
-                    color: `color('#ffffff', ${alpha.toFixed(3)})`,
-                });
+        case '3dtiles': {
+            // P1-2 单点合成：透明度变化时保留当前材质模式一并重建外观
+            const state = getTilesetState(entity);
+            state.alpha = alpha;
+            applyTilesetMaterial(entity, state.mode, Cesium, state.alpha);
             break;
+        }
         default:
             // 矢量类（geojson/kml/czml/shp）：per-entity 材质 alpha 缩放
             scheduleVectorOpacity(Cesium, entity, alpha, onApplied);
@@ -103,7 +132,8 @@ const VECTOR_COLOR_TARGETS = [
     ['label', 'fillColor'],
     ['label', 'outlineColor'],
     ['label', 'backgroundColor'],
-    ['polyline', 'materialColor'],   // 特殊：material 为 ColorMaterialProperty 时取其 color
+    ['polyline', 'materialColor'],          // material 为 Color/PolylineOutline 材质时取其 color
+    ['polyline', 'materialOutlineColor'],   // PolylineOutlineMaterialProperty 的描边色（P2-2）
     ['polygon', 'materialColor'],
     ['polygon', 'outlineColor'],
 ];
@@ -142,16 +172,28 @@ function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
 /**
  * 缩放单个颜色属性：快照原始色 → 写入 原始alpha×系数 的新常量色。
  * 时间动态属性（isConstant=false）跳过，保留 CZML 等动画语义。
+ * 材质支持：ColorMaterialProperty（color）与 PolylineOutlineMaterialProperty（color + outlineColor，P2-2）。
  */
 function applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha, now) {
-    const isMaterial = propKey === 'materialColor';
+    const isMaterial = propKey === 'materialColor' || propKey === 'materialOutlineColor';
     const property = isMaterial ? graphics.material : graphics[propKey];
     if (!property) return;
 
-    // 仅处理常量颜色：ColorMaterialProperty.color / 普通颜色 Property
-    const colorProperty = isMaterial ? property.color : property;
+    // 材质类型白名单：纯色 / 描边线；贴图与特效材质不触碰
+    if (isMaterial) {
+        const isColorMaterial = property instanceof Cesium.ColorMaterialProperty;
+        const isOutlineMaterial = Cesium.PolylineOutlineMaterialProperty
+            && property instanceof Cesium.PolylineOutlineMaterialProperty;
+        if (!isColorMaterial && !isOutlineMaterial) return;
+        // outlineColor 仅描边线材质具备
+        if (propKey === 'materialOutlineColor' && !isOutlineMaterial) return;
+    }
+
+    // 仅处理常量颜色：材质子属性 / 普通颜色 Property
+    const colorProperty = isMaterial
+        ? (propKey === 'materialOutlineColor' ? property.outlineColor : property.color)
+        : property;
     if (!colorProperty || typeof colorProperty.getValue !== 'function') return;
-    if (isMaterial && !(property instanceof Cesium.ColorMaterialProperty)) return;
     if (colorProperty.isConstant === false) return;
 
     const cacheKey = `${graphicsKey}.${propKey}`;
@@ -165,7 +207,11 @@ function applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha
     if (!base) return;
     const next = base.withAlpha(base.alpha * alpha);
     if (isMaterial) {
-        property.color = next;
+        if (propKey === 'materialOutlineColor') {
+            property.outlineColor = next;
+        } else {
+            property.color = next;
+        }
     } else {
         graphics[propKey] = next;
     }

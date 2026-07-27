@@ -792,17 +792,17 @@ var WindParticlesComputing = class {
         uniformMap: {
           U: () => this.windTextures.U,
           V: () => this.windTextures.V,
-          uRange: () => new Cartesian2(this.windData.u.min, this.windData.u.max),
-          vRange: () => new Cartesian2(this.windData.v.min, this.windData.v.max),
-          speedRange: () => new Cartesian2(this.windData.speed.min, this.windData.speed.max),
+          uRange: () => Cartesian2.fromElements(this.windData.u.min, this.windData.u.max, this._scratchURange ??= new Cartesian2()),
+          vRange: () => Cartesian2.fromElements(this.windData.v.min, this.windData.v.max, this._scratchVRange ??= new Cartesian2()),
+          speedRange: () => Cartesian2.fromElements(this.windData.speed.min, this.windData.speed.max, this._scratchSpeedRange ??= new Cartesian2()),
           currentParticlesPosition: () => this.particlesTextures.currentParticlesPosition,
           speedScaleFactor: () => {
             return (this.viewerParameters.pixelSize + 50) * this.options.speedFactor;
           },
           frameRateAdjustment: () => this.frameRateAdjustment,
-          dimension: () => new Cartesian2(this.windData.width, this.windData.height),
-          minimum: () => new Cartesian2(this.windData.bounds.west, this.windData.bounds.south),
-          maximum: () => new Cartesian2(this.windData.bounds.east, this.windData.bounds.north)
+          dimension: () => Cartesian2.fromElements(this.windData.width, this.windData.height, this._scratchDimension ??= new Cartesian2()),
+          minimum: () => Cartesian2.fromElements(this.windData.bounds.west, this.windData.bounds.south, this._scratchMinimum ??= new Cartesian2()),
+          maximum: () => Cartesian2.fromElements(this.windData.bounds.east, this.windData.bounds.north, this._scratchMaximum ??= new Cartesian2())
         },
         fragmentShaderSource: ShaderManager.getCalculateSpeedShader(),
         outputTexture: this.particlesTextures.particlesSpeed,
@@ -1062,26 +1062,30 @@ var WindParticlesRendering = class {
         frameRateAdjustment: () => this.computing.frameRateAdjustment,
         colorTable: () => this.colorTable,
         domain: () => {
-          const domain = new Cartesian22(this.options.domain?.min ?? this.computing.windData.speed.min, this.options.domain?.max ?? this.computing.windData.speed.max);
-          return domain;
+          // 本地修改（GC 优化）：scratch 复用，避免每帧分配
+          this._scratchDomain ??= new Cartesian22();
+          return Cartesian22.fromElements(this.options.domain?.min ?? this.computing.windData.speed.min, this.options.domain?.max ?? this.computing.windData.speed.max, this._scratchDomain);
         },
         displayRange: () => {
-          const displayRange = new Cartesian22(
+          this._scratchDisplayRange ??= new Cartesian22();
+          return Cartesian22.fromElements(
             this.options.displayRange?.min ?? this.computing.windData.speed.min,
-            this.options.displayRange?.max ?? this.computing.windData.speed.max
+            this.options.displayRange?.max ?? this.computing.windData.speed.max,
+            this._scratchDisplayRange
           );
-          return displayRange;
         },
         particleHeight: () => this.options.particleHeight || 0,
         aspect: () => this.context.drawingBufferWidth / this.context.drawingBufferHeight,
         pixelSize: () => this.viewerParameters.pixelSize,
         lineWidth: () => {
           const width = this.options.lineWidth || DefaultOptions.lineWidth;
-          return new Cartesian22(width.min, width.max);
+          this._scratchLineWidth ??= new Cartesian22();
+          return Cartesian22.fromElements(width.min, width.max, this._scratchLineWidth);
         },
         lineLength: () => {
           const length = this.options.lineLength || DefaultOptions.lineLength;
-          return new Cartesian22(length.min, length.max);
+          this._scratchLineLength ??= new Cartesian22();
+          return Cartesian22.fromElements(length.min, length.max, this._scratchLineLength);
         },
         is3D: () => this.viewerParameters.sceneMode === SceneMode.SCENE3D,
         segmentsDepthTexture: () => this.textures.segmentsDepth

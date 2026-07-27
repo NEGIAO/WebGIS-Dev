@@ -11,7 +11,6 @@ import hmac
 import json
 import logging
 import secrets
-import threading
 from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
@@ -41,8 +40,6 @@ from .user import _generate_account_username_sync, _get_user_by_id_sync
 logger = logging.getLogger(__name__)
 
 SUPPORTED_OAUTH_PROVIDERS = set(AUTH_SUPPORTED_OAUTH_PROVIDERS)
-_ticket_lock = threading.Lock()
-_oauth_tickets: Dict[str, Dict[str, Any]] = {}
 
 
 OAuthProfile = Dict[str, Any]
@@ -344,44 +341,80 @@ def _assert_oauth_bindable_user(user: Dict[str, Any]) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="该账号不支持绑定第三方账号")
 
 
-def _cleanup_expired_tickets_locked(now_ts: int) -> None:
-    """清理内存中的过期 OAuth ticket。调用方需持有 _ticket_lock。"""
-    expired = [ticket for ticket, data in _oauth_tickets.items() if int(data.get("exp") or 0) <= now_ts]
-    for ticket in expired:
-        _oauth_tickets.pop(ticket, None)
-
-
 def create_oauth_ticket(kind: str, provider: str, payload: Dict[str, Any]) -> str:
-    """创建短期一次性 OAuth ticket，明文只通过前端 URL 传递一次。"""
+    """
+    创建短期一次性 OAuth ticket（落库 oauth_tickets 表，明文只经前端 URL 传递一次）。
+
+    落库替代进程内存字典：多 uvicorn worker / 容器滚动重启场景下，
+    回调进程与换取进程不同也能正确消费（P0-3 多 worker 安全）。
+    创建时顺带清理过期行（TTL 秒级，行数极小，DELETE 开销可忽略）。
+    """
     normalized_kind = "bind" if str(kind or "").strip().lower() == "bind" else "login"
     normalized_provider = _ensure_supported_provider(provider)
     now_ts = int(_utc_now().timestamp())
     ticket = secrets.token_urlsafe(32)
-    with _ticket_lock:
-        _cleanup_expired_tickets_locked(now_ts)
-        _oauth_tickets[ticket] = {
-            "kind": normalized_kind,
-            "provider": normalized_provider,
-            "payload": payload,
-            "exp": now_ts + OAUTH_TICKET_TTL_SECONDS,
-        }
+    payload_text = json.dumps(dict(payload or {}), ensure_ascii=False, separators=(",", ":"))
+
+    with _db_connection() as conn:
+        conn.execute("DELETE FROM oauth_tickets WHERE expires_at <= ?", (now_ts,))
+        conn.execute(
+            """
+            INSERT INTO oauth_tickets (ticket, kind, provider, payload, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (ticket, normalized_kind, normalized_provider, payload_text, now_ts + OAUTH_TICKET_TTL_SECONDS),
+        )
+        conn.commit()
     return ticket
 
 
 def consume_oauth_ticket(kind: str, provider: str, ticket: str) -> Dict[str, Any]:
-    """原子消费一次性 OAuth ticket，重复使用或过期均失败。"""
+    """
+    原子消费一次性 OAuth ticket：先校验 kind/provider/过期，匹配后再以带条件的
+    DELETE 的 rowcount 作为唯一性判定（两个并发/跨 worker 请求同票，只有先删成功者拿到 payload）。
+
+    【修复】此前实现「先无条件 DELETE 再判 provider」：登录换票 exchange_oauth_login_ticket
+    会依次以 ("google","github") 试探同一 ticket，第一次探测（google）即把 GitHub 的票删除
+    并抛「类型不匹配」，第二次（github）已查无此票 → GitHub 登录 100% 失败。
+    改为「provider 不匹配则不删」，让正确 provider 的那次探测得以成功消费。
+    """
     normalized_kind = "bind" if str(kind or "").strip().lower() == "bind" else "login"
     normalized_provider = _ensure_supported_provider(provider)
     now_ts = int(_utc_now().timestamp())
-    with _ticket_lock:
-        _cleanup_expired_tickets_locked(now_ts)
-        data = _oauth_tickets.get(str(ticket or "").strip())
-        if not data:
+    normalized_ticket = str(ticket or "").strip()
+    if not normalized_ticket:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth ticket 无效或已过期")
+
+    with _db_connection() as conn:
+        row = conn.execute(
+            "SELECT kind, provider, payload, expires_at FROM oauth_tickets WHERE ticket = ?",
+            (normalized_ticket,),
+        ).fetchone()
+        if not row:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth ticket 无效或已过期")
+
+        data = dict(row)
+        # 先判 kind/provider/过期——不匹配时【不删除】，以便调用方对其它 provider 继续试探。
         if data.get("kind") != normalized_kind or data.get("provider") != normalized_provider:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth ticket 类型不匹配")
-        _oauth_tickets.pop(str(ticket or "").strip(), None)
-    return dict(data.get("payload") or {})
+        if int(data.get("expires_at") or 0) <= now_ts:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth ticket 无效或已过期")
+
+        # 匹配成功：带 kind+provider 条件删除，rowcount 决定唯一占有权（并发/跨 worker 只有一方拿到）。
+        cursor = conn.execute(
+            "DELETE FROM oauth_tickets WHERE ticket = ? AND kind = ? AND provider = ?",
+            (normalized_ticket, normalized_kind, normalized_provider),
+        )
+        conn.commit()
+
+    if int(cursor.rowcount or 0) <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth ticket 无效或已过期")
+
+    try:
+        payload = json.loads(str(data.get("payload") or "{}"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OAuth ticket 数据损坏")
+    return payload if isinstance(payload, dict) else {}
 
 
 def _get_user_by_username_sync(username: str) -> Optional[Dict[str, Any]]:
@@ -389,7 +422,7 @@ def _get_user_by_username_sync(username: str) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
-            SELECT id, username, display_name, password_hash, role, avatar_index, email, email_verified, created_at
+            SELECT id, username, display_name, password_hash, role, avatar_index, avatar_url, email, email_verified, created_at
             FROM users
             WHERE username = ?
             """,
@@ -411,14 +444,15 @@ def _create_oauth_user_sync(profile: OAuthProfile) -> Dict[str, Any]:
         username = _generate_account_username_sync(conn, email, display_name)
         cursor = conn.execute(
             """
-            INSERT INTO users (username, display_name, password_hash, role, avatar_index, email, email_verified, created_at)
-            VALUES (?, ?, ?, 'registered', ?, ?, ?, ?)
+            INSERT INTO users (username, display_name, password_hash, role, avatar_index, avatar_url, email, email_verified, created_at)
+            VALUES (?, ?, ?, 'registered', ?, ?, ?, ?, ?)
             """,
             (
                 username,
                 display_name,
                 password_marker,
                 0,
+                str(profile.get("avatar_url") or "").strip() or None,
                 email,
                 1 if profile.get("email_verified") else 0,
                 now_iso,
@@ -455,6 +489,24 @@ def _insert_oauth_account_with_conn(conn, user_id: int, profile: OAuthProfile, n
     )
 
 
+def _adopt_oauth_avatar_if_unset_sync(user_id: int, profile: OAuthProfile) -> None:
+    """
+    首次采用第三方头像：仅当 users.avatar_url 仍为 NULL（从未设置）时写入。
+
+    用户在账号中心改选预设头像后 avatar_url 会被置为 ''（显式放弃），
+    此后 OAuth 登录不再覆盖用户选择。
+    """
+    avatar_url = str(profile.get("avatar_url") or "").strip()
+    if not avatar_url or int(user_id or 0) <= 0:
+        return
+    with _db_connection() as conn:
+        conn.execute(
+            "UPDATE users SET avatar_url = ? WHERE id = ? AND avatar_url IS NULL",
+            (avatar_url, int(user_id)),
+        )
+        conn.commit()
+
+
 def _link_oauth_to_user_sync(user: Dict[str, Any], profile: OAuthProfile) -> Dict[str, Any]:
     """将 provider 身份绑定到指定本地用户，并返回最新用户记录。"""
     now_iso = _iso(_utc_now())
@@ -465,6 +517,7 @@ def _link_oauth_to_user_sync(user: Dict[str, Any], profile: OAuthProfile) -> Dic
     with _db_connection() as conn:
         _insert_oauth_account_with_conn(conn, user_id, profile, now_iso)
         conn.commit()
+    _adopt_oauth_avatar_if_unset_sync(user_id, profile)
     refreshed = _get_user_by_id_sync(user_id)
     if not refreshed:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="OAuth 绑定后读取用户失败")
@@ -481,7 +534,10 @@ def resolve_oauth_login_user_sync(profile: OAuthProfile) -> Dict[str, Any]:
     provider_user_id = str(profile.get("provider_user_id") or "").strip()
     account = _get_oauth_account_sync(provider, provider_user_id)
     if account:
-        user = _get_user_by_id_sync(int(account.get("user_id") or 0))
+        account_user_id = int(account.get("user_id") or 0)
+        # 存量绑定用户（本功能上线前注册）：avatar_url 仍为 NULL 时一次性采用第三方头像。
+        _adopt_oauth_avatar_if_unset_sync(account_user_id, profile)
+        user = _get_user_by_id_sync(account_user_id)
         if user:
             return user
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="第三方账号绑定的本地用户不存在")

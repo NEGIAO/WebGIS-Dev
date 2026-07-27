@@ -584,6 +584,7 @@ const {
     createManagedFeatureHighlightStyle,
     clearManagedFeatureHighlight,
     highlightManagedFeature,
+    batchHighlightManagedFeatures,
     getCurrentHighlightedFeature,
     setCurrentHighlightedFeature,
 } = createManagedFeatureHighlightFeature({
@@ -592,7 +593,21 @@ const {
         const layerRecord = userDataLayers.find((item) => item.id === layerId);
         if (!layerRecord || !layerRecord.layer || !layerRecord.layer.getSource) return null;
         const source = layerRecord.layer.getSource();
-        return source.getFeatureById(featureId);
+        const normalizedId = String(featureId || '');
+        // getFeatureById 未命中时退化全量扫描（getId/_gid），与缩放链路
+        // useManagedFeatureOperations.findManagedFeature 的解析策略保持同构：
+        // 属性 ID（OBJECTID 等）未经 setId 写入 OL id 的存量要素，高亮/多选
+        // 链路此前会静默丢失目标（B1/B3 联测缺口）
+        return (
+            source.getFeatureById(normalizedId) ||
+            source
+                .getFeatures?.()
+                ?.find(
+                    (feature) =>
+                        String(feature?.getId?.() ?? feature?.get?.('_gid') ?? '') === normalizedId,
+                ) ||
+            null
+        );
     },
 });
 
@@ -876,6 +891,7 @@ const {
     attrStoreRef: attrStore,
     emit,
     highlightManagedFeature,
+    batchHighlightManagedFeatures,
     clearManagedFeatureHighlight,
     getCurrentHighlightedFeature,
     setCurrentHighlightedFeature,

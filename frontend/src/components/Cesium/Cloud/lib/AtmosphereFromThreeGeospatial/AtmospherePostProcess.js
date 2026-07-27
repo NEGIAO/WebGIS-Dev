@@ -299,7 +299,9 @@ float marchShadowLengthAtm(vec3 cameraKm, vec3 rd, float tNear, float tFar) {
   if (u_cloudShadowEnabled == 0) return 0.0;
   float maxDist = tFar - tNear;
   if (maxDist <= 0.0) return 0.0;
-  const int STEPS = 64;
+  // V3.4.x：64→24。BSM OD 为低频信号，24 步视觉无差；该路径在修复 LUT 伪值后
+  // 成为 BSM 开启时的实际执行分支，需控制每像素成本。
+  const int STEPS = 24;
   float stepSize = maxDist / float(STEPS);
   float shadowLen = 0.0;
   float attenuation = 1.0;
@@ -488,14 +490,16 @@ void main() {
   float startT = (isSky && camR > topRadius + 1e-3) ? tEnterTop : 0.0;
   float shadowRayEnd = isSky ? min(tMax, startT + marchMax) : min(sceneDist, marchMax);
   float shadowRayBegin = max(startT, shadowRayEnd - marchMax);
-  // 优先 shadowLengthBuffer；未提供纹理时回退为沿视线 BSM 步进（与 three-geospatial 丁达尔一致）
-  float shadowLength;
-  if (u_shadowLengthEnabled != 0) {
-    shadowLength = readShadowLengthBuffer(v_textureCoordinates) * max(u_tyndallScale, 0.0);
-  } else if (u_cloudShadowEnabled != 0) {
-    shadowLength = marchShadowLengthAtm(cameraPosition, rayDirection, shadowRayBegin, shadowRayEnd);
-  } else {
-    shadowLength = 0.0;
+  // 优先 shadowLengthBuffer；未提供纹理时回退为沿视线 BSM 步进（与 three-geospatial 丁达尔一致）。
+  // V3.4.x：仅在结果会被消费的像素计算（isSky 或 applyGroundAtmosphere）；
+  // 本管线 applyGround=0 → 地面像素跳过（其 shadowLength 之前算完即丢）。
+  float shadowLength = 0.0;
+  if (isSky || u_applyGroundAtmosphere != 0) {
+    if (u_shadowLengthEnabled != 0) {
+      shadowLength = readShadowLengthBuffer(v_textureCoordinates) * max(u_tyndallScale, 0.0);
+    } else if (u_cloudShadowEnabled != 0) {
+      shadowLength = marchShadowLengthAtm(cameraPosition, rayDirection, shadowRayBegin, shadowRayEnd);
+    }
   }
 
   vec3 transmittance;
@@ -829,7 +833,11 @@ export class AtmospherePostProcess {
         Math.max(1, Math.min(16, Math.round(self._cloudShadowPcfTaps ?? 16)));
       uniforms.u_geometricErrorCorrectionAmount = () =>
         self._geometricErrorCorrectionAmount ?? 0.0;
-      uniforms.u_shadowLengthEnabled = () => (self._shadowLengthEnabled ? 1 : 0);
+      // V3.4.x 修复：必须"开关开启且纹理确实存在"才启用。此前默认 enabled=true 而管线
+      // 从未注入纹理，u_shadowLengthBuffer 兜底到 transmittance LUT → 天空辐射每帧被喂入
+      // "把透射率查找表当阴影长度"的伪值（0~2.5km 随屏幕 UV 变化）。
+      uniforms.u_shadowLengthEnabled = () =>
+        (self._shadowLengthEnabled && self._shadowLengthTexture ? 1 : 0);
       uniforms.u_shadowLengthScale = () => (self._shadowLengthScale ?? 1.0);
       uniforms.u_shadowLengthBuffer = () => self._shadowLengthTexture ?? self.textures.transmittanceTexture;
       uniforms.u_applyGroundAtmosphere = () => (self._applyGroundAtmosphere ? 1 : 0);

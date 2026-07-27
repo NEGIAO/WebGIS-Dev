@@ -82,13 +82,29 @@ export function readCachedPreferredAgentModel(): string {
 }
 
 /**
+ * 不可作为默认底图偏好的特殊 preset：
+ * custom 需配套自定义 URL（偏好中无 URL 上下文），local_tiles_preset 依赖本地瓦片环境
+ */
+const PREFERENCE_EXCLUDED_BASEMAPS = new Set(['custom', 'local_tiles_preset']);
+
+/**
+ * 判断 preset id 是否可作为默认底图偏好
+ */
+export function isBasemapPreferenceSelectable(presetId: unknown): boolean {
+    const id = String(presetId ?? '').trim();
+    return !!id && !PREFERENCE_EXCLUDED_BASEMAPS.has(id);
+}
+
+/**
  * 同步读取用户偏好的默认底图 preset id（runtime 缓存）
- * 供 2D MapContainer / 3D CesiumContainer 初始化时零依赖读取，未设置返回空串
+ * 供 2D MapContainer / 3D CesiumContainer 初始化时零依赖读取；
+ * 未设置或为特殊 preset（custom/local_tiles_preset，无法脱离上下文还原）时返回空串
  */
 export function readCachedPreferredBasemap(): string {
     const storage = getStorage();
     if (!storage) return '';
-    return normalizeBasemap(storage.getItem(USER_PREFERENCE_BASEMAP_KEY));
+    const value = normalizeBasemap(storage.getItem(USER_PREFERENCE_BASEMAP_KEY));
+    return isBasemapPreferenceSelectable(value) ? value : '';
 }
 
 export const useUserPreferencesStore = defineStore('userPreferencesStore', () => {

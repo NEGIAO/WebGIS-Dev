@@ -18,6 +18,8 @@ export type LayerHandlers = {
 
 export type StandardLayerCapabilities = {
     attribute?: boolean;
+    /** 几何编辑能力（V3.4.9 编辑泛化引入，V3.4.40 补类型声明） */
+    edit?: boolean;
     style?: boolean;
     label?: boolean;
     copyCoordinates?: boolean;

@@ -68,12 +68,17 @@ export function applyCloudPanelParams(pipeline, panelParams) {
     'shadowMapSize',
     'bsmUpdateInterval',
     'shadowPcfTaps',
-    // 云主 raymarch 分辨率缩放：写入 params 供下次开启体积云时生效（textureScale 为 stage 构造期参数）
-    'cloudResolutionScale',
   ];
   for (const key of scalarKeys) {
     const v = num(panelParams[key]);
     if (v != null) p[key] = v;
+  }
+
+  // 云主 raymarch 分辨率缩放：V3.4.x 起走管线方法运行时重建 stage（切档免重开体积云）；
+  // 方法内部同步 params，init 前调用则仅记录待 init 使用。
+  const resolutionScale = num(panelParams.cloudResolutionScale);
+  if (resolutionScale != null && typeof pipeline.setCloudResolutionScale === 'function') {
+    pipeline.setCloudResolutionScale(resolutionScale);
   }
 
   // Aerial stage 地面发白强度（独立于 pipeline.params.aerialPerspectiveScale，后者供 CloudStage 云透视使用）

@@ -70,7 +70,7 @@
                             class="pro-toggle"
                             :class="{ unavailable: viewFilterUnavailable }"
                             :title="viewFilterUnavailable
-                                ? '当前地图视图范围不可用（3D 模式或视图未就绪），筛选暂不生效'
+                                ? '当前地图视图范围不可用（视图未就绪或相机未对准地表），筛选暂不生效'
                                 : '通过当前的地图视图对数据行进行限制'
                             "
                         >
@@ -470,7 +470,7 @@ function clearSearch() {
 }
 const sortKey = computed(() => store.sortKey);
 const sortDirection = computed(() => store.sortDirection);
-/** 视图筛选已勾选但地图范围不可用（3D 模式或视图未就绪）→ 筛选实际未生效 */
+/** 视图筛选已勾选但地图范围不可用（视图未就绪或 3D 相机未对准地表）→ 筛选实际未生效 */
 const viewFilterUnavailable = computed(
     () => store.filterByCurrentView && !store.currentMapExtent,
 );
@@ -806,12 +806,26 @@ function scheduleHoverHighlight(featureId: string | null) {
     }
 }
 
+/** B3：Ctrl/Shift 多选进行中标志——期间暂停 hover 预览防集合被 replace 覆盖；普通单击退出 */
+let multiSelectActive = false;
+
+// 图层切换 / 面板重开时重置多选态（store 侧选中锚点已被清空，续用旧状态会误判进入时机）
+watch(
+    () => [store.activeLayerId, store.visible],
+    () => {
+        multiSelectActive = false;
+    },
+);
+
 function previewFeature(row: AttrRow) {
+    // B3：多选进行中暂停 hover 预览——预览走 replace 语义，会清空 Ctrl/Shift 累积的高亮集合
+    if (multiSelectActive) return;
     scheduleHoverHighlight(row.featureId);
 }
 
 /** 仅在鼠标离开整个表格滚动区时清除（行间移动由下一行的 replace 覆盖，不再闪烁） */
 function clearPreview() {
+    if (multiSelectActive) return;
     scheduleHoverHighlight(null);
 }
 
@@ -822,16 +836,73 @@ function resolveClickMode(event?: MouseEvent): 'replace' | 'toggle' | 'range' {
     return 'replace';
 }
 
+/**
+ * B3：按当前表格展示顺序（排序/搜索/视图筛选后的 displayRows）解析 Shift 区间。
+ * 返回锚点→目标的连续 featureId 列表（含两端）；锚点或目标不在当前展示集时返回空数组，
+ * 由调用方降级 replace 单选。
+ */
+function resolveRangeFeatureIds(anchorId: string, targetId: string): string[] {
+    if (!anchorId || !targetId) return [];
+    const list = rows.value;
+    const anchorIndex = list.findIndex((item) => item.featureId === anchorId);
+    const targetIndex = list.findIndex((item) => item.featureId === targetId);
+    if (anchorIndex < 0 || targetIndex < 0) return [];
+    const from = Math.min(anchorIndex, targetIndex);
+    const to = Math.max(anchorIndex, targetIndex);
+    return list.slice(from, to + 1).map((item) => item.featureId);
+}
+
 function focusFeature(row: AttrRow, event?: MouseEvent) {
     const layerId = store.activeLayerId;
     if (!layerId) return;
     const mode = resolveClickMode(event);
+    // B3：锚点 = 上一次点击选中的行，须在 setSelectedFeature 覆盖前捕获
+    const anchorId = String(store.selectedFeatureId || '');
     store.setSelectedFeature(row.featureId);
     // 点击已确定高亮目标，同步 hover 去重基准避免后续重复发送
     lastSentHoverFeatureId = row.featureId;
-    const payload = { layerId, featureId: row.featureId, mode };
-    emit('highlight-feature', payload);
-    emit('focus-feature', payload);
+
+    // 普通单击：退出多选，replace 单选。高亮只经 focus-feature 触发一次——
+    // 修复前同一次点击还并发 highlight-feature，下游对同一目标高亮两次（toggle 直接抵消）
+    if (mode === 'replace') {
+        multiSelectActive = false;
+        emit('focus-feature', { layerId, featureId: row.featureId, mode: 'replace' });
+        return;
+    }
+
+    const entering = !multiSelectActive;
+    multiSelectActive = true;
+
+    if (mode === 'toggle') {
+        // 首次进入多选先把集合规整为 {锚点行}：此刻下游集合可能是 hover 预览残留，
+        // 不规整则 toggle 结果不可预期（预览恰为目标行时表现为"点了没反应"）
+        if (entering) {
+            if (!anchorId) {
+                emit('focus-feature', { layerId, featureId: row.featureId, mode: 'replace' });
+                return;
+            }
+            emit('focus-feature', { layerId, featureId: anchorId, mode: 'replace' });
+        }
+        emit('focus-feature', { layerId, featureId: row.featureId, mode: 'toggle' });
+        return;
+    }
+
+    // range：按表格当前展示顺序取锚点→目标连续区间，featureIds 交下游批量追加
+    const rangeFeatureIds = resolveRangeFeatureIds(anchorId, row.featureId);
+    if (!rangeFeatureIds.length) {
+        multiSelectActive = false;
+        emit('focus-feature', { layerId, featureId: row.featureId, mode: 'replace' });
+        return;
+    }
+    if (entering) {
+        emit('focus-feature', { layerId, featureId: rangeFeatureIds[0], mode: 'replace' });
+    }
+    emit('focus-feature', {
+        layerId,
+        featureId: row.featureId,
+        mode: 'range',
+        featureIds: rangeFeatureIds,
+    });
 }
 
 /** 双击行：缩放到要素范围（下游 zoomToManagedFeature 契约） */
@@ -871,11 +942,27 @@ function handleWindowResize() {
     refreshViewportHeight();
 }
 
+/** 各图层统计字段记忆：切走再切回时恢复上次选择（B6） */
+const statsFieldMemory = new Map<string, string>();
+
+watch(statsField, (key) => {
+    if (store.activeLayerId && key) {
+        statsFieldMemory.set(store.activeLayerId, key);
+    }
+});
+
 watch(
-    () => numericFields.value,
-    (fields) => {
+    () => [store.activeLayerId, numericFields.value] as const,
+    () => {
+        const fields = numericFields.value;
         if (!fields.length) {
             statsField.value = '';
+            return;
+        }
+        // 优先恢复该图层上次记忆的统计字段（仍存在数值列中才生效）
+        const remembered = statsFieldMemory.get(store.activeLayerId);
+        if (remembered && fields.some((item) => item.key === remembered)) {
+            if (statsField.value !== remembered) statsField.value = remembered;
             return;
         }
         if (!fields.find((item) => item.key === statsField.value)) {
@@ -1552,7 +1639,7 @@ onBeforeUnmount(() => {
     color: var(--danger);
 }
 
-/* 视图筛选不可用状态（3D / 视图未就绪） */
+/* 视图筛选不可用状态（视图未就绪 / 相机未对地） */
 .pro-toggle.unavailable .pro-toggle-box {
     border-style: dashed;
     opacity: 0.75;

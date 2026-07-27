@@ -9,6 +9,10 @@
  */
 import { ref } from 'vue';
 import Wind2D from './Wind2D';
+import { acquireContinuous, releaseContinuous } from '../composables/interaction/useCesiumRenderMode';
+
+/** 按需渲染计数器 tag：风场粒子 compute pass 逐帧执行，存活期间需要连续渲染 */
+const RENDER_MODE_TAG = 'wind-field';
 
 export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
     const wind2D = ref(null);
@@ -36,6 +40,8 @@ export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
             console.warn('Wind2D destroy warning:', e);
         }
         wind2D.value = null;
+        // 归还连续渲染计数（本函数入口已保证此前存在风场实例，与 acquire 恰好配对）
+        releaseContinuous(getViewer?.(), RENDER_MODE_TAG);
         windParams.value = { ...windParams.value, windEnabled: false };
     }
 
@@ -70,6 +76,8 @@ export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
             });
 
             wind2D.value = wind;
+            // 风场实例就绪 → 声明连续渲染（与 clearWind2D 的 release 成对；后续失败走 clearWind2D 归还）
+            acquireContinuous(viewer, RENDER_MODE_TAG);
             wind.flyTo(3);
 
             windParams.value = { ...windParams.value, windEnabled: true };

@@ -116,6 +116,10 @@ async def spatial_analysis(request: SpatialAnalysisRequest):
                 status_code=400,
                 detail=f"不支持的分析类型: {operation}，支持: buffer/intersection/union/difference/convexHull/voronoi/aggregation/multiRingBuffer/simplify/fishnet",
             )
+    except HTTPException:
+        # 已是明确的 HTTP 错误（如上面「不支持的分析类型」的 400）——原样抛出，
+        # 否则会被下面的 `except Exception` 兜底重写成 500 并打一条误导性的 ERROR 堆栈。
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

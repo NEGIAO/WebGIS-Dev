@@ -43,8 +43,8 @@ export const DEFAULT_BASEMAP_LAYER_INDEX = resolveDefaultBasemapLayerIndex();
 
 const DEFAULT_VISIBLE_LAYER_ID_SET = resolveDefaultVisibleLayerIdSet();
 
-/** URL 图层选项列表：用于 URL 参数中的图层索引映射 */
-export const URL_LAYER_OPTIONS = BASEMAP_PRESETS.map((preset) => preset.id);
+/** URL 图层选项列表：定义已抽离至 basemapPresets.ts(纯数据层),此处 re-export 保持旧 import 路径兼容 */
+export { URL_LAYER_OPTIONS } from './basemapPresets';
 
 /** 预设底图选项列表（用于 UI 下拉菜单） */
 export const BASEMAP_OPTIONS = BASEMAP_PRESETS.map((preset) => ({

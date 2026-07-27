@@ -166,6 +166,16 @@ function syncExternalControls(controls) {
     if (Object.prototype.hasOwnProperty.call(controls, 'atmosphere')) {
         atmosphereEnabled.value = !!controls.atmosphere;
     }
+    requestSceneRender();
+}
+
+/**
+ * 请求一帧渲染：特效 stage 的 enabled/uniform 在 preRender 里同步，
+ * 按需渲染（requestRenderMode）下开关切换后需显式触发一帧才能生效；
+ * 连续渲染模式下本调用为无害 no-op。
+ */
+function requestSceneRender() {
+    props.getViewer?.()?.scene?.requestRender?.();
 }
 
 function handleEffectGuiChange({ controlId, value }) {
@@ -179,6 +189,7 @@ function handleEffectGuiChange({ controlId, value }) {
     const target = controlMap[controlId];
     if (target) {
         target.value = enabled;
+        requestSceneRender();
     }
 }
 

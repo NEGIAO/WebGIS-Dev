@@ -727,8 +727,13 @@ def _resolve_effective_agent_runtime_sync(username: str) -> Dict[str, Any]:
         provider_model=str(provider.get("model") or ""),
     )
 
+    # 个人 base_url 仅在同时配了个人 Key 时生效：否则出站请求会把**平台 Key** 发往该地址
+    # （与请求体 override_base_url 同一泄漏语义）。写入侧已在 POST /user-config 用同一护栏拦截，
+    # 此处兜住护栏上线前已存库的历史行——无个人 Key 时静默回退平台上游。
+    personal_base_url = str(user_cfg.get("base_url") or "").strip() if use_personal_key else ""
+
     effective = {
-        "base_url": _normalize_base_url(str(user_cfg.get("base_url") or provider.get("base_url") or DEFAULT_AGENT_BASE_URL)),
+        "base_url": _normalize_base_url(str(personal_base_url or provider.get("base_url") or DEFAULT_AGENT_BASE_URL)),
         "model": runtime_model,
         "model_source": runtime_model_source,
         "model_locked": bool(runtime_model_locked),

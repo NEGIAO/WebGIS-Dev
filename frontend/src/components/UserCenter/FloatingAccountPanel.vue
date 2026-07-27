@@ -19,7 +19,7 @@ import {
 } from '../../api/backend';
 import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '../../services/auth';
 import { BASEMAP_OPTIONS } from '../../constants';
-import { useUserPreferencesStore, useThemeStore } from '../../stores';
+import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '../../stores';
 import { getUserDisplayName } from '../../composables/auth/useAuthIdentity';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
@@ -51,10 +51,17 @@ const isFullscreen = ref(false);
 const activeMenu = ref('overview'); // 'overview', 'security', 'admin', 'api-management', 'preferences'
 const isSubmitting = ref(false);
 const isLoadingCenter = ref(false);
+const hasLoadedCenterOnce = ref(false); // 首次统计加载完成标记（骨架屏只在首载显示，30s 轮询不触发）
 const isPostingMessage = ref(false);
 const user = ref(getAuthUser());
 const oauthAccounts = ref([]);
 const oauthLoading = ref(false);
+
+// 切页缓存标记（V3.4.62 A10）：面板单次打开期间各数据源只拉一次，
+// 关闭面板时失效，下次打开首个进入重新拉取；变更操作自带刷新不受影响
+const prefsLoadedOnce = ref(false);
+const modelsLoadedOnce = ref(false);
+const oauthLoadedOnce = ref(false);
 
 const centerData = ref({
     quota: {
@@ -127,9 +134,34 @@ const userAvatarIndex = computed(() => {
     return 0;
 });
 
-const userAvatarSrc = computed(() => {
+const presetAvatarSrc = computed(() => {
     return resolvePublicAssetPath(`avatars/avatar-${userAvatarIndex.value}.svg`);
 });
+
+// 第三方（Google/GitHub）头像加载失败标记：失败后回退预设头像
+const oauthAvatarFailed = ref(false);
+
+const oauthAvatarUrl = computed(() => {
+    const url = String(user.value?.avatar_url || '').trim();
+    return /^https?:\/\//i.test(url) ? url : '';
+});
+
+const userAvatarSrc = computed(() => {
+    if (oauthAvatarUrl.value && !oauthAvatarFailed.value) {
+        return oauthAvatarUrl.value;
+    }
+    return presetAvatarSrc.value;
+});
+
+watch(oauthAvatarUrl, () => {
+    oauthAvatarFailed.value = false;
+});
+
+function handleAvatarImgError() {
+    if (oauthAvatarUrl.value && !oauthAvatarFailed.value) {
+        oauthAvatarFailed.value = true;
+    }
+}
 
 const roleText = computed(() => {
     const role = String(user.value?.role || '').trim();
@@ -146,7 +178,9 @@ const panelLabel = computed(() => {
 const displayNameText = computed(() => getUserDisplayName(user.value));
 
 const basemapPreferenceOptions = computed(() => {
-    return Array.isArray(BASEMAP_OPTIONS) ? BASEMAP_OPTIONS : [];
+    // 过滤无法作为偏好还原的特殊 preset（custom 需配套 URL、local_tiles_preset 依赖本地环境）
+    const options = Array.isArray(BASEMAP_OPTIONS) ? BASEMAP_OPTIONS : [];
+    return options.filter((option) => isBasemapPreferenceSelectable(option?.value));
 });
 
 const selfStats = computed(() => centerData.value?.self_stats || {});
@@ -273,6 +307,7 @@ async function loadCenterData({ silent = false } = {}) {
             ...centerData.value,
             ...(result || {}),
         };
+        hasLoadedCenterOnce.value = true;
     } catch (error) {
         if (!silent) {
             message.warning(String(error?.message || '用户中心数据加载失败'));
@@ -314,13 +349,19 @@ async function refreshMessages() {
     }
 }
 
+/** 面板关闭后的统一收尾：回总览、清密码表单、失效切页缓存 */
+function afterPanelClose() {
+    activeMenu.value = 'overview';
+    resetPasswordForm();
+    prefsLoadedOnce.value = false;
+    modelsLoadedOnce.value = false;
+    oauthLoadedOnce.value = false;
+}
+
 function closePanel() {
     setOpen(false);
     setFullscreen(false);
-    setTimeout(() => {
-        activeMenu.value = 'overview';
-        resetPasswordForm();
-    }, 200);
+    setTimeout(afterPanelClose, 200);
 }
 
 function setOpen(nextValue) {
@@ -351,10 +392,7 @@ function togglePanel() {
 
     if (!nextOpen) {
         setFullscreen(false);
-        setTimeout(() => {
-            activeMenu.value = 'overview';
-            resetPasswordForm();
-        }, 200);
+        setTimeout(afterPanelClose, 200);
     }
 }
 
@@ -369,10 +407,7 @@ watch(
                 loadCenterData({ silent: true });
             } else {
                 setFullscreen(false);
-                setTimeout(() => {
-                    activeMenu.value = 'overview';
-                    resetPasswordForm();
-                }, 200);
+                setTimeout(afterPanelClose, 200);
             }
         }
     },
@@ -424,11 +459,20 @@ function selectMenu(menu) {
     if (menu === 'admin' && !isAdmin.value) return;
 
     activeMenu.value = menu;
+    // 切页缓存（V3.4.62 A10）：本次打开期间首次进入才拉取；
+    // 绑定/解绑等变更操作自身会刷新对应数据，不受缓存影响
     if (menu === 'preferences') {
-        void loadUserPreferences({ silent: true });
-        void loadPreferenceModelOptions({ silent: true });
+        if (!prefsLoadedOnce.value) {
+            prefsLoadedOnce.value = true;
+            void loadUserPreferences({ silent: true });
+        }
+        if (!modelsLoadedOnce.value) {
+            modelsLoadedOnce.value = true;
+            void loadPreferenceModelOptions({ silent: true });
+        }
     }
-    if (menu === 'security') {
+    if (menu === 'security' && !oauthLoadedOnce.value) {
+        oauthLoadedOnce.value = true;
         void loadOAuthAccounts({ silent: true });
     }
     if (menu !== 'security') {
@@ -633,7 +677,7 @@ async function handleSaveAvatar() {
     }
 }
 
-async function handleSubmitUserMessage(content) {
+async function handleSubmitUserMessage(content, onSuccess) {
     if (isPostingMessage.value) return;
 
     if (!content) {
@@ -644,6 +688,8 @@ async function handleSubmitUserMessage(content) {
     isPostingMessage.value = true;
     try {
         await apiCreateUserMessage(content);
+        // 成功才回调清空输入框：发布失败时保留用户草稿（V3.4.62 A1）
+        onSuccess?.();
         message.success('留言已发布');
         await refreshMessages();
         await refreshRealtimeData({ silent: true });
@@ -658,6 +704,9 @@ let centerTimer = null;
 
 onMounted(() => {
     syncCurrentUser();
+    // 挂载预热偏好/模型（面板未开也先备好），并标记缓存已热
+    prefsLoadedOnce.value = true;
+    modelsLoadedOnce.value = true;
     void loadUserPreferences({ silent: true });
     void loadPreferenceModelOptions({ silent: true });
     // 初始化头像选择为当前用户的头像
@@ -709,6 +758,8 @@ onBeforeUnmount(() => {
                             :src="userAvatarSrc"
                             :alt="`${displayNameText || '用户'}头像`"
                             loading="lazy"
+                            referrerpolicy="no-referrer"
+                            @error="handleAvatarImgError"
                         />
                     </span>
                     <span class="status-dot"></span>
@@ -726,16 +777,21 @@ onBeforeUnmount(() => {
                 v-if="isOpen"
                 class="account-panel"
                 :class="{ 'is-fullscreen': isFullscreen }"
+                role="dialog"
+                aria-modal="false"
+                :aria-label="panelLabel"
                 @pointerdown.stop
             >
                 <!-- Header Profile Summary -->
-                <div class="panel-header blur-bg">
+                <div class="panel-header">
                     <div class="profile-main">
-                        <div class="profile-avatar large blur-bg">
+                        <div class="profile-avatar large">
                             <img
                                 :src="userAvatarSrc"
                                 :alt="`${displayNameText || '用户'}头像`"
                                 loading="lazy"
+                                referrerpolicy="no-referrer"
+                                @error="handleAvatarImgError"
                             />
                         </div>
                         <div class="profile-info">
@@ -788,20 +844,24 @@ onBeforeUnmount(() => {
                     </span>
                 </div>
 
-                <!-- Navigation Tabs -->
-                <div class="panel-nav">
+                <!-- Navigation Tabs（role/aria 补齐，V3.4.62 A9） -->
+                <div class="panel-nav" role="tablist" aria-label="账号中心页签">
                     <button
                         type="button"
+                        role="tab"
                         class="nav-tab"
                         :class="{ active: activeMenu === 'overview' }"
+                        :aria-selected="activeMenu === 'overview'"
                         @click="selectMenu('overview')"
                     >
                         <i class="fas fa-home"></i> 总览
                     </button>
                     <button
                         type="button"
+                        role="tab"
                         class="nav-tab"
                         :class="{ active: activeMenu === 'security' }"
+                        :aria-selected="activeMenu === 'security'"
                         @click="selectMenu('security')"
                     >
                         <i class="fas fa-shield-alt"></i> 安全
@@ -809,8 +869,10 @@ onBeforeUnmount(() => {
                     <button
                         v-if="isAdmin"
                         type="button"
+                        role="tab"
                         class="nav-tab"
                         :class="{ active: activeMenu === 'admin' }"
+                        :aria-selected="activeMenu === 'admin'"
                         @click="selectMenu('admin')"
                     >
                         <i class="fas fa-database"></i> 管理
@@ -818,19 +880,24 @@ onBeforeUnmount(() => {
                     <button
                         v-if="isAdmin"
                         type="button"
+                        role="tab"
                         class="nav-tab"
                         :class="{ active: activeMenu === 'api-management' }"
+                        :aria-selected="activeMenu === 'api-management'"
                         @click="selectMenu('api-management')"
                     >
                         <i class="fas fa-sliders-h"></i> API
                     </button>
                     <button
                         type="button"
+                        role="tab"
                         class="nav-tab"
                         :class="{ active: activeMenu === 'preferences' }"
+                        :aria-selected="activeMenu === 'preferences'"
                         @click="selectMenu('preferences')"
                     >
-                        <i class="fas fa-sliders-h"></i> 偏好
+                        <!-- 原 fa-sliders-h 与 API 页签重复（V3.4.62 A4）：偏好含主题/头像，palette 更贴切 -->
+                        <i class="fas fa-palette"></i> 偏好
                     </button>
                 </div>
 
@@ -852,6 +919,7 @@ onBeforeUnmount(() => {
                             :recent-messages="recentMessages"
                             :quota-text="quotaText"
                             :session-duration-text="sessionDurationText"
+                            :initial-loading="isLoadingCenter && !hasLoadedCenterOnce"
                             :is-posting-message="isPostingMessage"
                             @submit-message="handleSubmitUserMessage"
                         />
@@ -899,6 +967,7 @@ onBeforeUnmount(() => {
                             :basemap-preference-options="basemapPreferenceOptions"
                             :selected-avatar-index="selectedAvatarIndex"
                             :avatar-saving="avatarSaving"
+                            :current-avatar-index="userAvatarIndex"
                             :user="user"
                             :current-theme="themeStore.theme"
                             @update:preference-draft="({ key, value }) => { preferenceDraft[key] = value }"
@@ -911,7 +980,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <!-- Footer Actions -->
-                <div class="panel-footer blur-bg">
+                <div class="panel-footer">
                     <button
                         class="btn-logout"
                         type="button"
@@ -949,7 +1018,8 @@ onBeforeUnmount(() => {
 }
 
 .floating-account-manager.is-fullscreen {
-    z-index: var(--z-modal-high);
+    /* 整屏覆盖档：需压过 LayerControlPanel/TopBar 弹层等 --z-modal-high 同层浮层 */
+    z-index: var(--z-overlay-top);
 }
 
 .floating-account-manager.is-fullscreen .account-fab {
@@ -1044,6 +1114,11 @@ onBeforeUnmount(() => {
 /* ========== 弹出面板 ========== */
 .account-panel {
     width: min(430px, 96vw);
+    /* 高度弹性链（V3.4.53）：上界继承父级（宿主给面板容器封顶，如 HomeView 的
+       max-height: calc(100% - 10px)），min-height:0 允许在 flex 容器中收缩；
+       唯一伸缩区为 .panel-body，其余区块 flex-shrink:0 保证页脚永远可见 */
+    max-height: 100%;
+    min-height: 0;
     border-radius: 16px;
     border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
     background: #fff;
@@ -1067,6 +1142,7 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 14px;
     overflow: hidden;
+    flex-shrink: 0; /* 面板收缩时头部不被压扁，伸缩全部交给 .panel-body */
 }
 
 /* 经纬网格纹理（与注册页同 DNA） */
@@ -1088,9 +1164,9 @@ onBeforeUnmount(() => {
     z-index: 1;
 }
 
-.blur-bg {
-    background: transparent;
-}
+/* （V3.4.54 移除 .blur-bg）旧玻璃拟态遗留类 background:transparent 在源序上
+   晚于 .panel-header，同特异性覆盖掉品牌渐变横幅——头部白字（昵称/邮箱/角色徽章）
+   压在白面板上不可见。模板 3 处引用一并摘除：页脚/头像各自背景规则本就胜出，零影响 */
 
 .profile-main {
     display: flex;
@@ -1206,6 +1282,47 @@ onBeforeUnmount(() => {
     cursor: not-allowed;
 }
 
+.btn-fullscreen:active {
+    transform: scale(0.95);
+}
+
+/* ── 头部瘦身（V3.4.53，仅非全屏态；全屏态维持原观感） ──
+   背景：非全屏头部原 92px 高但仅承载三行文字，竖排双按钮 74px 是第二支撑柱；
+   横排 + 缩小头像/内边距后约 60px，同时缓解面板总高溢出 */
+.account-panel:not(.is-fullscreen) .panel-header {
+    padding: 12px 16px;
+    gap: 12px;
+}
+
+.account-panel:not(.is-fullscreen) .profile-avatar.large {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+}
+
+.account-panel:not(.is-fullscreen) .profile-avatar.large img {
+    border-radius: 10px; /* 外框 12px − 2px 边框 */
+}
+
+.account-panel:not(.is-fullscreen) .profile-name {
+    font-size: 15.5px;
+}
+
+.account-panel:not(.is-fullscreen) .header-btns {
+    flex-direction: row; /* 竖排 → 横排，消除 74px 高度支撑柱 */
+}
+
+.account-panel:not(.is-fullscreen) .btn-fullscreen {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.account-panel:not(.is-fullscreen) .quick-strip {
+    padding: 6px 12px;
+}
+
 /* ── 速览条 ── */
 .quick-strip {
     display: flex;
@@ -1214,6 +1331,7 @@ onBeforeUnmount(() => {
     padding: 8px 14px;
     background: linear-gradient(180deg, rgba(var(--brand-primary-rgb), 0.07), rgba(var(--brand-primary-rgb), 0.03));
     border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
 }
 
 .quick-item {
@@ -1240,16 +1358,13 @@ onBeforeUnmount(() => {
     flex-shrink: 0;
 }
 
-.btn-fullscreen:active {
-    transform: scale(0.95);
-}
-
 /* ── 导航分页 ── */
 .panel-nav {
     display: flex;
     padding: 0 10px;
     border-bottom: 1px solid var(--border-light);
     background: #fff;
+    flex-shrink: 0;
 }
 
 .nav-tab {
@@ -1297,10 +1412,15 @@ onBeforeUnmount(() => {
     background: var(--brand-primary);
 }
 
-/* ── 内容区：自适应视口高度（原固定 210px 的实用性修复） ── */
+/* ── 内容区：面板内唯一弹性伸缩区（V3.4.53） ──
+   原 max-height: min(58vh, 540px) 以视口 vh 为基准，但面板实际被 overflow:hidden 的
+   .map-wrapper 约束（恒小于 100vh），小窗口下页脚「退出系统」会被裁掉不可点；
+   改为 flex:1 + min-height:0，高度上界由宿主容器（HomeView :deep 的 max-height）封顶，
+   内容超长时在本区内部滚动。与全屏态既有写法同一模式 */
 .panel-body {
-    min-height: 280px;
-    max-height: min(58vh, 540px);
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
     overflow-y: auto;
     padding: 16px 18px;
     background: var(--bg-secondary);
@@ -1332,6 +1452,7 @@ onBeforeUnmount(() => {
     padding: 12px 18px;
     border-top: 1px solid var(--border-light);
     background: #fff;
+    flex-shrink: 0; /* 退出按钮永远可见：收缩压力全部由 .panel-body 承担 */
 }
 
 .btn-logout {
@@ -1433,9 +1554,8 @@ onBeforeUnmount(() => {
         width: min(96vw, 430px);
     }
 
-    .panel-body {
-        max-height: min(52vh, 480px);
-    }
+    /* 原 .panel-body { max-height: min(52vh, 480px) } 已随弹性链移除（V3.4.53）：
+       高度上界统一由宿主容器封顶，vh 基准在窄高窗口同样会溢出 */
 
     .account-panel.is-fullscreen {
         border-radius: 0;

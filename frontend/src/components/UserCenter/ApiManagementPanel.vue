@@ -1,18 +1,16 @@
 <template>
     <div class="api-management-container">
-        <div class="management-header">
-            <h1>🔐 API 管理后台</h1>
-            <p class="subtitle">查看和管理用户 API 调用统计与配额</p>
-        </div>
-
-        <!-- 标签页导航 -->
-        <div class="tabs-nav">
+        <!-- 标签页导航（原 display:none 的 management-header 死标记已删，V3.4.62 D10） -->
+        <div class="tabs-nav" role="tablist" aria-label="API 管理页签">
             <button
                 v-for="tab in tabs"
                 :key="tab.id"
+                type="button"
+                role="tab"
                 class="tab-btn"
                 :class="{ active: activeTab === tab.id }"
-                @click="activeTab = tab.id"
+                :aria-selected="activeTab === tab.id"
+                @click="selectTab(tab.id)"
             >
                 {{ tab.label }}
             </button>
@@ -54,25 +52,26 @@
                     <table class="data-table">
                     <thead>
                         <tr>
-                            <th>用户名</th>
-                            <th>角色</th>
-                            <th>调用次数</th>
-                            <th>活跃天数</th>
-                            <th>平均响应时间</th>
-                            <th>最后调用</th>
+                            <th scope="col">用户名</th>
+                            <th scope="col">角色</th>
+                            <th scope="col">调用次数</th>
+                            <th scope="col">活跃天数</th>
+                            <th scope="col">平均响应时间</th>
+                            <th scope="col">最后调用</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr
                             v-for="(stat, idx) in userStats"
-                            :key="idx"
+                            :key="stat.username || idx"
                             class="data-row"
                         >
                             <td class="username">{{ stat.username }}</td>
                             <td>
+                                <!-- String 包裹（V3.4.62 D2）：role 为 null 时 toLowerCase 会抛错并白屏整页 -->
                                 <span
                                     class="role-badge"
-                                    :class="stat.role.toLowerCase()"
+                                    :class="String(stat.role || '').toLowerCase()"
                                 >
                                     {{ stat.role }}
                                 </span>
@@ -127,19 +126,19 @@
                     <table class="data-table">
                     <thead>
                         <tr>
-                            <th>API 端点</th>
-                            <th>调用次数</th>
-                            <th>成功</th>
-                            <th>错误</th>
-                            <th>成功率</th>
-                            <th>平均响应时间</th>
-                            <th>最大/最小响应时间</th>
+                            <th scope="col">API 端点</th>
+                            <th scope="col">调用次数</th>
+                            <th scope="col">成功</th>
+                            <th scope="col">错误</th>
+                            <th scope="col">成功率</th>
+                            <th scope="col">平均响应时间</th>
+                            <th scope="col">最大/最小响应时间</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr
                             v-for="(stat, idx) in endpointStats"
-                            :key="idx"
+                            :key="stat.api_endpoint || idx"
                             class="data-row"
                         >
                             <td class="endpoint-name">{{ formatEndpoint(stat.api_endpoint) }}</td>

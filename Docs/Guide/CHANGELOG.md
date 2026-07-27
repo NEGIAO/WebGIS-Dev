@@ -6,6 +6,222 @@
 
 ## 版本记录
 
+### V3.4.64 (2026-07-27) — requestRenderMode P2+P3 收官：按需渲染正式生效（总开关置 true）
+
+L3 延续（同方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestrendermode-plan.md)；用户明示「不用请求批准，直接全部执行」授权 P2/P3）。**按需渲染自本版起真实生效**：「3D 静止 + 四特效全关」渲染频率降至 ~0.2Hz（5s 时钟兜底重渲）、GPU 满载→近零；体积云/风场/流体/漫游任一开启即自动回连续渲染，关闭后回降载。
+
+- ⚡ `useCesiumRenderMode.js` 总开关 `ENABLE_REQUEST_RENDER_MODE` false→**true**（回退方式不变：改回 false 一行恢复恒连续渲染）。
+- 🔍 **全库高危写点静态普查**（沙盒无 GPU，以逐类读码核对替代实机冒烟）：大气/光照/美化/数据源显隐透明度/OSM 与谷歌 3D Tiles 开关/地形切换/太阳光照/高级特效/分析工具等 11 类直改点——除一处外均已带显式 `requestRender`（前几轮铺垫，全库约 50 处/15 文件）或走 Entity API 自动触发通道；**唯一缺口**：3D Tiles 材质模式切换直写 `tileset.style`（`useCesiumDataOpsHandlers`）→ 补 requestRender，配套 `useCesiumDataImport` 透出既有 `getViewer` 访问器。
+- 🎛️ P3 定夺：`maximumRenderTimeChange` 维持 5s（命名常量即调参入口；时间轴拖动/高倍速播放因模拟时间越阈值自然回逐帧，跟手性无损）；`debugShowFramesPerSecond` **保留常开**并加语义注释——按需模式下空闲低 FPS = 省电特性非卡顿，交互回升，兼作生效验证仪表。
+- ⚠️ 实机验收移交用户（冒烟清单见日志）：重点盯「操作后画面不刷新、动一下相机才变」，发现即补一处 requestRender 或总开关回退。详见 `Docs/LLM_record/26-07/2026-07-27/2026-07-27-requestrendermode-p2-enable.md`
+
+### V3.4.63 (2026-07-27) — Agent `override_base_url` 平台 Key 外泄修复（规划 P1-4 [P0 安全]，L3）+ 07-26 版本账目对账
+
+> L3 任务，方案文档 [`Docs/TODO/agent-override-key-leak-plan.md`](../TODO/agent-override-key-leak-plan.md)，用户批准口径「a+c，白名单默认关」。
+
+- 🔐 **[P0] 平台 Key 外泄面切断**：任意**游客或登录用户**发一个带 `override_base_url` 但不带 `override_api_key` 的请求，后端即把平台 Key 以 `Authorization: Bearer` 发往调用方指定地址（`/chat/completions` 与 `/models` 两处 key/base_url 回退各自独立、无耦合校验）；更严重的是无 override key 时 candidates = 平台主 Key + **全部备用 Key**，上游返 401 触发 `_is_agent_key_retryable_error` 逐个换 Key 重发 → 攻击者恒返 401 即可**单次请求收割整个 Key 池**；`/models` 还是 GET query 形式且不耗配额，利用成本极低。新增 `utils._validate_override_base_url` 单点护栏：**成对校验**（无 key 即 400 fail-closed）+ 协议仅 https + 私网/回环/链路本地/保留段拒绝 + 可选 host 白名单，两端点接入。
+- 🕳️ **IP 字面量绕过一并堵死**：新增 `_coerce_ip_literal` 按 C 库 `inet_aton` 语义归一——`2130706433` / `0x7f000001` / `127.1` / `0177.0.0.1` 全部还原为 `127.0.0.1`（P1-4 点名的绕过手法），另拒 `.local`/`.internal`/`.home.arpa`/`.localhost` 后缀与 `[::1]`。
+- 🚪 **收尾审计发现的第二道门（方案文档未列，一并修复）**：`base_url` 还有「写库再读回」这条持久化入口——
+  `POST /user-config` 的 `base_url` 原仅限长度且与 `api_key` **互相独立**，可只存 base_url 不存 Key，
+  之后 runtime 以用户行优先返回该地址而 Key 落到平台 Key 全池 → **与 override 等价的泄漏，且一次写入长期生效**。
+  修复：写入侧用**同一护栏函数**校验（key 取本次提交或库中已存）；读回侧 `_resolve_effective_agent_runtime_sync`
+  改为个人 base_url **仅在配了个人 Key 时生效**（兜住护栏上线前的存量历史行，无 Key 时回退平台上游）。
+- 🧹 **`/models` 全局缓存污染**：原无条件把上游返回写入全局 `system_config.agent_available_models`，
+  调用方用自选服务商查询即可污染**其他用户**的 fallback 列表与 `/chat/config` 展示；改为仅在未使用 override 时缓存。
+- 🖥️ **前端成对透传**（`useChatAgentConfig.js` 两处）：草稿模式原为两条独立 `if`，用户只填 Base URL 不填 Key 即命中泄漏路径；改为二者齐备才透传。
+- ⚙️ **新增 L1 key（默认即安全）**：`AGENT_ALLOWED_BASE_URL_HOSTS`（留空=不限制服务商域名，保留「个人 Key 接任意 OpenAI 兼容服务商」能力）、`AGENT_ALLOW_INSECURE_BASE_URL`（默认 false，仅本地回环 http 调试用）；catalog + 根 `.env.example` 已登记。
+- 📌 **规划口径纠偏**（逐行核实）：`/chat/default-proxy` **不成立**（只接受 `override_model`，key/base_url 恒读 DB）；规划漏列的 `/chat/proxy` 无 Key 泄漏（调用方必须自带 key）→ 归 P1-4 SSRF 项。已核实排除：httpx 锁定 0.28.1，跨源重定向会剥离 Authorization → 「白名单 host 302 偷 Key」不成立。
+- 🧾 **07-26 版本账目对账**（附带 L1 文档修补）：五会话并行连环撞号致 CHANGELOG 空洞，按 §5 以完成时序统一重排补录（53′→**V3.4.55**、54′→**V3.4.56**、55′→**V3.4.57**、56′→**V3.4.58**），补 V3.4.52 漏写条目，为 **V3.4.48 登记空号说明**（无日志认领，永久空置）；四份日志头同步注记。规划文档三条顺带发现销项（含 P0-2 经全量 `tsc` 复核确认业务代码零错误）。
+- ✅ **验证**：护栏定向单测 **23/23**（成对校验 / 协议 / 私网 11 例含各类绕过写法 / 白名单开关 / 回环 http / 空值透传）、四文件 `py_compile`、双门禁全绿（catalog 58 key、结构树 390/390）、ESLint 与全量 `tsc` 零问题。**⏭️ 待用户实机回归**：默认模式对话、个人 Key 模式模型列表与对话、只填 Base URL 应 400、本地 ollama 需置 `AGENT_ALLOW_INSECURE_BASE_URL=true`。详见[日志](../LLM_record/26-07/2026-07-27/2026-07-27-agent-override-base-url-key-leak-fix.md)
+
+### V3.4.62 (2026-07-27) — 3D 属性表视图筛选接通核验收账（规划 P0-4 B4，B 簇全清）
+
+- ✅ **B4 核验闭环（零代码改动，收账）**：前序会话已完成实现但收尾中断（与 B1/B3 同模式），本版补齐账目。五侧静态核验全绿——`useCesiumAttrViewExtentSync.js`（`camera.moveEnd` + start 首帧推送，`computeViewRectangle` scratch 复用 → 4326 度值直写 attrStore；望天/跨反经线诚实写 null 降级）→ `CesiumContainer` 生命周期（ready 后 start，retry-reset 与 unmount 双路 stop）→ `AttributeTable` 动态 `viewFilterUnavailable` 态（替代原「3D 不可用」硬提示，复选框不再按引擎门控）→ `setMapExtent` 归一层 4326 直传 → 2D 回喂三路径（init 尾/勾选 watch/moveend）。与 V3.4.61 requestRenderMode 交叉核验：moveEnd 系相机事件不受按需渲染影响。
+- 🗑️ **并行撞车副本复核**：`useCesiumAttrExtentSync.js`（两会话各自实现 B4 的重复产物）全 src 引用扫描 = 0；当前文件系统已不存在该旧副本，结构树仅保留实际接线的 `useCesiumAttrViewExtentSync.js`。
+- 🏁 **P0-4 B 簇（B1–B6）代码侧全清**。V3.5.0 里程碑建议在 B1/B3/B4 三份实机清单（4+7+6 步）验证通过后打线。实机 6 步清单见日志。详见 `Docs/LLM_record/26-07/2026-07-27/2026-07-27-b4-cesium-view-extent-sync-closeout.md`
+
+### V3.4.61 (2026-07-27) — requestRenderMode 按需渲染 P1：计数器管理器 + 四特效接入（总开关默认关）
+
+L3 任务（方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestrendermode-plan.md) 用户批准 P1；渲染/性能流水路线图 2.2）。应用此前恒连续渲染，静止无特效时 GPU 满负荷；本版铺好按需渲染接线，**总开关默认 false、零行为变化**，P2 置 true 后「3D 静止+四特效全关」GPU 满载→近零。
+
+- ⚡ 新增 `frontend/src/components/Cesium/composables/interaction/useCesiumRenderMode.js`：连续渲染引用计数管理器——`acquireContinuous(viewer, tag)`/`releaseContinuous(viewer, tag)` 计数 >0 保持连续渲染，归零切 `requestRenderMode=true` + `maximumRenderTimeChange=5`（秒，时钟推进超阈值自动重渲：太阳光照 ~0.2Hz 低频刷新、时间轴拖动/播放跟手）+ 切换补渲一帧；保险四件套：总开关 `ENABLE_REQUEST_RENDER_MODE` 默认 false（一行回退）、异常 fail-open 回退连续、release 容忍未配对（失败清理路径安全）、WeakMap 按 viewer 隔离（token 重试重建无残留）。
+- 🔗 四逐帧特效生命周期成对接入：体积云 `setupCloudIntegration`（管线就绪 acquire / teardown 与 init 失败 catch 双路 release）、风场 `useCesiumWind`（实例就绪 / clearWind2D）、流体 `FluidSimulationPanel`（FluidRenderer 构造后 / `destroyFluidOnly`——挂点自方案的 cleanup(true) 微调，因重建水体路径不经 cleanup 会泄漏计数）、人物漫游 `usePlayerController`（init 成功 / stopPlayer 实例分支）。
+- 🔍 方案开放问题定性：`CesiumAdvancedEffects` 三 stage（高度雾/HBAO/移轴）相机驱动无时间动画→**不接计数**，仅在开关切换处补 `requestSceneRender()`（按需模式下开关立即生效，连续模式无害）；`useCesiumFrameRate` 被动采样不阻断（FPS 语义变化留 P3）；热带浅水为独立 Three.js canvas 不消费 Cesium 帧，无需接入。
+- ✅ 验证：ESLint 8 触改文件 0 error/0 warning；tsc 无新增报错；6 处新 import 路径脚本解析全过；门禁双绿（结构树 390 项）。⚠️ 沙盒 vite build 因 Windows node_modules 缺 Linux rollup 二进制不可执行（环境限制），构建冒烟与全部 GPU 行为验证待用户实机。详见 `Docs/LLM_record/26-07/2026-07-27/2026-07-27-requestrendermode-p1.md`
+
+### V3.4.60 (2026-07-27) — 在线人数真实化：会话活跃心跳（未过期 ≠ 在线）
+
+- 🐛 用户反馈账号面板「X 人在线」如随机数。排查确认**非随机非 mock**，系统计语义缺陷：「在线」= `sessions` 未过期会话计数，而 TTL=72h → 3 天内登录未退出者恒被计在线。纯后端修复（前端零改动、零新端点）：`sessions` 表迁移新增 `last_seen_at` 活跃时间戳（存量回填 created_at + `idx_sessions_last_seen` 索引）；鉴权单点 `_get_session_sync` 节流触活（60s 内不重复写，防写放大）；`/statistics/realtime` 三条在线查询（`online_users`/`online_sessions`/`online_by_role`）改判「未过期 **且** 5 分钟内有鉴权请求」。心跳载体为现有轮询：公告栏 20s / 账号面板 30s（均 require_login），App 开着即在线、关闭 ≤5 分钟内消失。窗口(300s)≫节流(60s)+轮询(30s)，活跃用户无误判离线风险。沙盒临时 DB 实测 7 项断言全过（初始化/节流/触活/窗口判定/空串兜底/迁移幂等/旧库回填），门禁双绿。详见 `Docs/LLM_record/26-07/2026-07-27/2026-07-27-online-users-presence-fix.md`
+
+### V3.4.59 (2026-07-27) — 属性表 Shift range 多选链路核验收账 + 高亮查找器扫描兜底（规划 P0-4 B3）
+
+- ✅ **B3 核验闭环**：Shift range 端到端五环静态核验全绿——表侧锚点捕获与 `resolveRangeFeatureIds`（按排序/搜索/筛选后的 displayRows 展示顺序取区间，锚点失效降级 replace）→ MapContainer `@focus-feature` 接线 → `useMapUIEventHandlers` range+featureIds 批量分支 → `batchHighlightManagedFeatures` append → `featureStyleStore` range「保留旧高亮仅追加」契约；`resolveRangeTargets` 回调经全库扫描确认闲置属设计（表侧已自行解析区间）非断链。连续 Shift 为续接并集语义（含在待实机验证清单，见日志 7 步）。
+- 🐛 **高亮链路查找器补扫描兜底**（核验中发现的真实缺口，本次唯一代码改动）：`MapContainer.vue` 内联 `findManagedFeature` 仅 `getFeatureById`，属性 ID（OBJECTID/FID）未写入 OL id 的存量要素高亮/多选**静默丢目标**（缩放链路早有扫描兜底不受影响）；补 `getId()/get('_gid')` 全量扫描退化路径（`??` 判空保数值 0，与 B1 语义对齐），命中路径零行为变化。**P0-4 B 簇仅剩 B4**，B4 完成且 B1/B3 实机验证通过后打 V3.5.0。详见 `Docs/LLM_record/26-07/2026-07-27/2026-07-27-b3-shift-range-verify-and-highlight-lookup-fix.md`
+
+### V3.4.58 (2026-07-26) — CesiumToolPanel 组件域令牌收敛（观感零变化）
+
+> 📌 2026-07-27 对账补录：本条及以下 V3.4.55–57 三条系 07-26 五会话并行连环撞号导致的 CHANGELOG 空洞，按 Force_command §5「后完成者顺延」以完成时序统一重排补录（53′→55、54′→56、55′→57、56′→58），各原始日志头已同步注记。
+
+- 🎨 新增 `frontend/src/assets/cesium-tool-theme.css`（`--ctp-` 前缀：29 个 `-rgb` 基色 + 19 个实色令牌；文件头声明独立暗色身份不随绿/蓝主题联动）；`CesiumToolPanel.vue` style 块 **218 处色值字面量脚本化收编**（162 处 rgba 保 α 捕获回填 + 56 处 hex，5 处防御性 var 兜底豁免；规划原口径 56 处经实测纠偏为 232 处并获用户确认全量收编）；`App.vue` 一行 `@import`；`frontend-structure.md` 登记。**等值还原证明**：全部 var 反代回字面量后与改前文件逐字节一致 → 观感零变化。为 P3-1 拆分子组件预铺域令牌。详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-cesium-tool-panel-token-merge.md`
+- 📌 原记 V3.4.56（自注「以 README 实际为准」），对账正式取号 V3.4.58。
+
+### V3.4.57 (2026-07-26) — 账号面板头部白字不可见修复（blur-bg 源序覆盖，死类清除）
+
+- 🐛 用户实机回归首报（P0-1 欠账第一个兑现）：V3.4.28 遗留玻璃拟态死类 `.blur-bg { background: transparent }` 源序晚于 `.panel-header` 品牌渐变、同特异性后到者胜 → **头部渐变横幅自 V3.4.28 起即被清空**，昵称/邮箱/角色三行白字落白底不可读。选死类清除：模板 3 处 class 摘除 + 规则删除原位留注释防复发；页脚/头像经源序与特异性核验零变化，全屏态渐变同步恢复。详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-account-panel-header-blurbg-fix.md`
+- 📌 原记 V3.4.55，对账顺延。
+
+### V3.4.56 (2026-07-26) — 属性表稳定要素 ID：兜底 ID 写回要素本体（规划 P0-4 B1）
+
+- 🐛 无稳定 id 图层（无 OBJECTID/FID、导入未 setId）排序/筛选/刷新后行序变化 → 选中/高亮**错位到别的要素**，且行序兜底 ID map 侧无法反解、属性表→地图定位链路整体不可达。`useLayerMetadataNormalization.js` 新增 `readExistingFeatureId`（候选链 getId→`_gid`→id→properties 系，`??` 判空保 `OBJECTID=0`）与 `ensureStableFeatureId`（缺失则生成 `gid_` 唯一 ID 并**写回要素本体**：OL Feature `set('_gid',id,true)`+`setId`、普通对象直写 `_gid` 并镜像 properties；不可写场景退回原兜底不劣化）；`useAttrStore.ts` 删本地 toFeatureId 索引副本改走归一化单点导出。**P0-4 B 簇仅剩 B3/B4**。详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-b1-stable-feature-id-writeback.md`
+- 📌 原记 V3.4.54（与加载性能会话撞号），对账顺延。
+
+### V3.4.55 (2026-07-26) — 账号中心浮层高度溢出修复 + 头部瘦身
+
+- 🐛 非全屏账号面板 `.panel-body` 以视口 vh 定高（`min(58vh,540px)`）而实际约束在 `.map-wrapper` 内 + `min-height:280px` 硬地板 → 小窗口下总高溢出、页脚「退出系统」被 `overflow:hidden` 裁掉（功能缺陷）。高度基准换父容器：宿主 `:deep` 封顶 `calc(100% - 10px)`（全屏段 `max-height:none` 豁免、移动端对称 16px）、`.panel-body` 去 vh/去硬地板改唯一 `flex:1` 伸缩区、头/速览/导航/页脚四区块 `flex-shrink:0` 锁定；头部瘦身 92→60px（头像 56→44、`header-btns` 竖排→横排消 74px 支撑柱），全屏态零触碰。纯 `<style>` 改动。详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-account-panel-height-fix.md`
+- 📌 原记 V3.4.53（与后端安全批次撞号），对账顺延。
+
+### V3.4.54 (2026-07-26) — 前端加载性能优化：登录页首屏 −79% + 部署死重清理 + Cesium 多源回退
+
+L3 任务（方案文档 [`Docs/TODO/loading-performance-optimization-plan.md`](../TODO/loading-performance-optimization-plan.md)，用户批准批次 1+2 + 录屏关闭项）。真实构建实测：首屏（登录页）gzip JS **404KB → 86.5KB（−79%）**，阻塞 CSS 只剩 index.css 一项。
+
+- 🚀 **切断 OpenLayers 混入登录页入口的两条打包链**：链 B——新建 `constants/basemap/basemapPresets.ts`（预设 id/label/stack + `URL_LAYER_OPTIONS` 纯数据抽离，零 ol 依赖），`useUrlParamStore` 改从纯数据层导入，`basemapConfig/basemapResolver` 原位 re-export 保持全部旧 import 路径兼容；链 A——`useAttrStore` 绕开 `composables/map/features` barrel（约 40 个 feature 全量 re-export）直连 `useLayerMetadataNormalization`，该模块内 `ol/extent getCenter`、`ol/proj toLonLat` 以本地纯函数替代（与 ol 原函数抽样比对**逐位等价**，偏差 0），符合「stores 禁止依赖 OL」分层边界。构建后 `dist/index.html` 不再 modulepreload `vendor-ol-all`（gzip 178KB）与 `vendor-libs`，ol CSS 退出阻塞列表。
+- 📦 **vendor-libs 兜底桶拆分**（290KB→47KB）：`zstddec`（geotiff 传递依赖，manualChunks 漏配，gzip 63KB）归入 `vendor-geotiff`；`knockout`/`@math.gl`/`@probe.gl` 独立为懒加载 `vendor-cesium-deps`（gzip 32KB）并加入 SKIP_PRELOAD。
+- 💤 **金句库懒加载**：`useMessage` 的 60KB 金句数据改动态 import（页面 load 后 2.5s 空闲预取 + 取句时兜底文案），退出入口 chunk。
+- 🎨 **Font Awesome 非阻塞**：`media="print"` + onload 交换 + noscript 兜底，仍走 BootCDN；favicon 由 79.5KB webp 换 4.3KB favicon.ico（顶栏高清 logo 改为 TopBar 独立引用，互不影响）；`<html lang="zh-CN">` 补齐。
+- 🧹 **ShareData 死重清理（dist −7.5MB）**：移除 `useSharedResourceLoader` 的 `import.meta.glob`（会把 ShareData 全目录再拷进 dist/assets 且哈希副本零引用），新建 `frontend/scripts/generate-sharedata-manifest.mjs` 于 vite 配置求值时自动生成 `public/ShareData/manifest.json`（dev/build/build:* 全覆盖，产物确定性无 git 噪声），loader 原 manifest 降级路径转正。
+- 🛰️ **Cesium CDN 三源回退**（治国内加载）：cesium-shim 单一 jsDelivr（国内时常不可达，失败即 Cesium 永不加载）改为 jsDelivr → BootCDN（⚠️ 该源 1.132.0 可用性未验证，404 自动跳过）→ unpkg（已验证）逐源尝试，10s 超时切换，`window.CESIUM_BASE_URL` 随生效源同步保证 Workers/Assets/widgets.css 同源（`cesiumRuntime` 样式加载改用 `getActiveCesiumBaseUrl()`）。
+- 📉 **51.la `screenRecord: true → false`**（用户批准）：录屏采集持续吃运行时性能。
+- 📐 基线勘误：此前「dist ≈121MB」为目录清单 2000 条截断假象，真实 dist ≈388MB（tiles 307MB 为主，按需加载不影响首屏）。
+- ⏭️ 待用户实机验证：登录页打开与登录跳转、2D/3D 地图、共享资源面板加载 KML/KMZ、断源模拟 Cesium 回退。`tsc --noEmit` 零新增报错、ESLint 零新增问题、双门禁通过（云端沙盒执行）。
+- ⏭️ 版本号顺延说明：实施期间并行会话占用 V3.4.53（后端安全批次），按规范「撞车后完成者顺延」取 V3.4.54。
+
+
+### V3.4.53 (2026-07-26) — 后端 code review 安全与正确性 Bug 批次（14 项，L2）
+
+> 用户要求「后端代码 code review 一下，修复优化」，口径经确认为「明确 bug + 低风险优化」（中大型重构仅登记 TODO）。逐条读实际代码核实触发链后修复，无 schema 变更 / 无新增删除文件 / 无新增配置 key / 无依赖增删 → 两门禁与结构树不受影响。第一轮 S1–S11，第二轮（承「继续检查并优化」指令）追加 S12–S14。
+
+- 🔐 **鉴权（P0×2）**：
+  - **验证码耗尽即删（S1）**：`verify_code` 尝试次数耗尽由置 `used=1` 改为 `DELETE`——`is_email_verified_for_purpose` 把任意 `used=1` 视为「已验证成功」，攻击者对他人未注册邮箱连发 6 次错误码即可把码「烧成」`used=1`，再免验证码 `/register` 占用该邮箱（并因 OAuth 按已验证邮箱自动关联而放大为登录劫持）。改后 `used=1` 重新成为验证成功的唯一凭据。
+  - **OAuth ticket 先校验后条件删（S2）**：`consume_oauth_ticket` 原「先无条件 DELETE 再判 provider」，登录换票按 (`google`,`github`) 试探同一 ticket → google 探测即删票并抛「类型不匹配」，github 探测已查无此票，**GitHub 登录 100% 失败**。改为先校验 kind/provider/过期、匹配后再带 `AND kind=? AND provider=?` 条件删除（保留 rowcount 唯一占有语义），不匹配不删。
+- 🛡️ **系统监控（P0）**：`/monitor/logs/stream` 原无任何鉴权，匿名即可实时抓取全进程 logging（含 INFO 打印的邮箱等 PII、异常堆栈），线上还以 L3 `LOG` token 代理 Space 日志；CORS 又为 `*`。加 `Depends(require_admin)`（S3）。**前端管理员日志面板须在 EventSource URL 带 `?token=<会话令牌>`**（`_extract_token` 支持 query token）。
+- 🐛 **崩溃与 fail-open**：
+  - 非 ASCII 密码/验证码使 `hmac`/`secrets.compare_digest(str,str)` 抛 TypeError→500（并能借状态码区分保留账号）；改 bytes 比较（S4，login 2 处 + verify 1 处）。
+  - `get_bool(default=False)` 无法区分「显式传 False」与「未传」，从不回退 catalog 默认 → 如 `PROXY_VERIFY_SSL` 未设环境变量时静默关闭 TLS 校验；改 `Optional[bool]=None` 并回退 catalog（S5，与 get_int/get_float 对齐）。
+- 🤖 **AI 对话**：`_call_upstream_chat_with_key_candidates` 未透传 `top_p`/`extra_body`（thinking 配置从未到达上游）（S6）；`extra_body` 禁用键补 `stream`/`stream_options`（防覆盖 `stream=False` 致 `response.json()` 解析 502 但已计费）（S12）；`temperature/top_p=0` 被 `x or DEFAULT` 折叠回默认（确定性输出失效）（S7，4 处）；高德 IP 定位 URL 由 f-string 改 `params=`（`ip` 源自可控 XFF，`#`/`&` 会截断 key 或注入参数）（S13）。
+- 🗺️ **空间分析**：不支持的 operation 主动抛的 `HTTPException(400)` 被同 `try` 的 `except Exception` 兜底重写为 500 + 误导堆栈，插 `except HTTPException: raise`（S8）；泰森多边形用 `convex_hull` 判退化——恰好 2 点/共线其凸包必为 LineString→命中退化分支必报错，违背「至少 2 点」契约，改用 `bounds` 构造带 padding 的 `box` envelope（S9）。
+- 📊 **访问统计**：游客身份记录 `guest_uid UNIQUE` 用「先 SELECT 判存在再分支 INSERT」，并发首访双方均判不存在 → 后一 INSERT 触发 IntegrityError→500 且访问丢失，改单条 `ON CONFLICT(guest_uid) DO UPDATE` 原子 UPSERT（S10）；`online_by_role` 按 role 聚合并传 `normalize_role(role, None)`——admin 仅由用户名判定，故在线管理员恒被并入 registered、「在线管理员」计数恒 0，改 `GROUP BY username, role` 后带 username 归一（S14）。
+- 🔁 **验证码节流（S11）**：30 秒发送节流仅统计 `used=0 且未过期` 的码，码被验证/烧毁置 `used=1` 后不再计入 → 「烧码后立即重发」可绕过节流刷邮件；改为统计 30 秒内任意发送记录。
+- ✅ **验证**：10 改动文件 `py_compile` + 全 backend `compileall` 通过；`CheckConfigRegistry.py` 7/7 全绿；scratch 单测验证 UPSERT 语义（visit_count 累加 / first_seen 保留 / 无 IntegrityError）与 bytes 比较不再抛 TypeError。**待用户本机实机回归**（沙盒无 vite/uvicorn/shapely）：见日志 §7 逐条清单，尤其 S3 前端 token 联动、S2 GitHub 登录、S9 泰森 2 点/共线。
+- 📌 **未纳入本批、已登记 `Docs/TODO/bugfix-optimization-plan.md`**（需设计决策 / 行为变更 / 实机验证）：代理 SSRF 加固（`/proxy/**`、`gcj2wgs`、`download_xyz` 无 host 白名单 + 私网 IP 过滤可被非点分十进制绕过 + 无响应体大小上限 + 无界磁盘缓存）、agent `override_base_url` 致平台 Key 外泄、Agent 配额 check-then-consume 竞态与可伪造 quota_subject、SQLite 每请求新建连接 + 重复 DDL、损坏恢复锁外竞态、SMTP 明文、`require_login` 的 `?s=1` 旁路、游客 uid 随机化配额旁路。**建议下一会话最高优先级：代理 SSRF 与 agent override 凭据外泄**。
+- 📝 详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-backend-security-bugfix-batch.md`。
+
+### V3.4.52 (2026-07-26) — 规划 P2 双项收官 + 会话交接
+
+> 📌 2026-07-27 对账补录：README 版本表已有本行而 CHANGELOG 漏写（原会话未收尾完整），据其日志补齐。
+
+- 🎨 **P2-2 矢量透明度扩 `PolylineOutlineMaterialProperty`**：描边线材质 color+outlineColor 双通道原色快照缩放，材质白名单与写回分流泛化；贴图/特效材质维持防守跳过。
+- ✅ **P2-1 罗盘元数据定性关闭（问题不成立）**：静态 import 链核验 `compass-data.ts` 与 `twentyEightConstellations.ts`（合计 ~4400 行）全 src 零引用——死文件不进任何 bundle，原「疑似进主包」假设不成立；物理清理归 P3-3 本机执行清单（挂载盘禁 rm）。
+- 📋 新增跨会话启动提示词 `Docs/TODO/next-session-prompt.md`（后随 V3.4.46 规划合流删除）。详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-p2-batch-and-session-handoff.md`
+
+### V3.4.51 (2026-07-26) — 文档治理收口：任务启动模板重写 + 游离段落清理
+
+- 📝 **`Docs/Example_prompt.md` 重写（43 → 约 140 行）**：定位为「用户怎么下达」，与 `Force_command.md`「Agent 怎么执行」形成闭环，不重复规范内容只做引用。含**通用开场白**（"完整阅读 Force_command.md + 先声明任务等级"，因未设自动加载入口，此句是规范生效的唯一开关）、**四类模板**（A Bug 修复 / B 功能开发含"不做什么"防范围膨胀 / C 重构 L3 显式"先出方案再动代码"+"只搬不改"+分批可回滚 / D 审计 L0 只读并按 P0–P3 汇入规划文档）、**8 项收尾验收表**（对照 DoD 与交接块）。模板类型与 L0–L3 分级一一对应，选模板即等于定级。
+- 🧹 **清理三处过期指向**：原文第 3 行引用 **`/Docs/Force_prompt.md`（该文件不存在）**，与 V3.4.44 发现的 `CLAUDE.md` 幽灵引用同源；约束 3「强制更新三个 README 文件树」已随 V3.4.44 废除（三 README `grep -c "├──"` 均为 0）；约束 4 日志路径 `yy-mm-dd/` 缺一级。正文空标题为 2026-04-19 配额任务的一次性填空残留，无复用价值。
+- 📐 **`Guide/dev-conventions.md`**：删除尾部 15 行游离段落（「✅ 使用者收益」「🔄 兼容性说明」——版本发布说明粘贴残留，按 SSOT 属 CHANGELOG 内容），替换为「相关文档」导航表（Force_command / Example_prompt / handover / dev-guide）。该删除于 V3.4.44 时按新规范硬边界「禁止删除范围外内容」列为遗留项，本次经用户确认后执行，为规范实际生效的一次记录。
+- 🗂️ **`Guide/project-structure.md`** 两行注释纠偏：`Example_prompt.md` →「任务启动提示词模板（Bug/功能/重构/审计四类）」、`Force_command.md` →「Agent 强制执行规范（权威：分级/边界/DoD/交接块）」。
+- ⏭️ 版本号顺延说明：本次任务期间并行会话连续占用 V3.4.45–V3.4.50，按规范「撞车后完成者顺延」取 V3.4.51。
+- 📝 详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-prompt-template-and-doc-cleanup.md`。
+
+### V3.4.50 (2026-07-26) — TOC 主题变量与品牌令牌合流（规划 P2-3）
+
+- 🎨 **24 项绿色系独立值合流**：`toc-theme.css` 中蓝主题无覆盖的绿色取值全部改为 `--brand-*` 派生——上传区 11 项（边框/拖拽/图标/进度/完成态）、边框族（light/medium/active/header/tab）、徽章四件套、卡片标题、页签激活描边、主色底 rgba；绿主题近似原值，蓝主题自动联动（此前切蓝这批全部残绿）。
+- 🔒 **兼容保障**：既有 `[data-theme="blue"]` 手工覆盖块保留（优先级不受影响）；`--toc-text-primary` 与 `--text-brand-dark` 为同值直接引用化；危险色/中性灰主题无关值不动；剩余 3 个低饱和灰绿文本刻意保留（蓝主题下不刺眼）。
+- 📐 **规划修正**：P2-1「Routing 面板令牌接入」经扫描证实为误判范围撤销（三面板系 SidePanel 页签内容卡而非浮层家族，无 0.95 框架签名与绿色家族残留，蓝色系为功能语义色）。
+- ✅ 验证：CSS 括号配平、剩余绿色 hex 扫描（5 个均为合理保留项）、引用的 brand 变量存在性核对。
+- 📝 详见 `Docs/LLM_record/26-07-26/2026-07-26-toc-theme-token-merge.md`。
+
+### V3.4.49 (2026-07-26) — 云分辨率运行时切换 + 流体场景准备时机 + 风场 uniform GC
+
+- ⚡ **云分辨率切档免重开体积云**：init 预构建 split/legacy 双 shader 缓存，新增 `pipeline.setCloudResolutionScale()` 同步重建 cloud stage（remove→create→add）；重建标志经 `consumeCloudStageRebuilt()` 由集成层消费，销毁并按需重建 lensFlare 恢复 [atmosphere, aerial, cloud, flare] 链序；`cloudParamsApply` 的 cloudResolutionScale 改走该方法。切档即时生效，省一次云资源重载。
+- 🎨 **流体 prepareScene 时机后移**：由"开始选点"（点按钮瞬间整屏变色）移至水体确定创建时（高度采样完成、FluidRenderer 构造前）；选点/取消阶段画面保持原样，清除/关闭还原路径不变。
+- 🧹 **风场 uniform GC**：vendored index.mjs 计算/渲染 10 处 uniform 回调 `new Cartesian2` 改 scratch 复用，消除每帧小对象分配。
+- 📝 日志：`Docs/LLM_record/26-07/2026-07-26/2026-07-26-round2-runtime-scale-fluid-timing.md`。
+
+### V3.4.48 — 空号（无对应改动）
+
+> 📌 2026-07-27 对账注记：全仓库无任何日志认领 V3.4.48——系 07-26 多会话并行期 V3.4.49 会话误判该号已被占用而跳号取 49 所致。本号**永久空置**，无对应代码或文档变更，特此登记防后续追查。
+
+### V3.4.47 (2026-07-26) — 修复规划 P1 收官：CORS 收敛 + tileset 外观合成
+
+- 🛡️ **P1-1 CORS 白名单收敛**：`app.py` 全局 CORS 由硬编码 `allow_origins=["*"]`（含一段废弃注释代码）收敛为经统一 loader 读取的 L1 key `CORS_ALLOWED_ORIGINS`——逗号分隔、strip + 去尾斜杠规整，留空回退 `["*"]` 保持本地零配置兼容；启用白名单时启动日志打印来源数量与清单；catalog 与根 `.env.example` 登记（生产建议：Pages 域名 + localhost 系）。
+- 🎨 **P1-2 tileset「材质 × 透明度」单点合成**：`dataSourceDisplay.js` 新增 `tilesetAppearanceState`（WeakMap<tileset, {mode, alpha}> 二元状态）与 `setTilesetMaterialMode()`；`tilesetLoader.applyTilesetMaterial` 增 `alpha` 参数——heightStyle 各分层色经 `color('rgb(...)', a)` 融入透明度、pureWhite/baimo/gradient 三个 CustomShader 注入 `material.alpha = a` 并在 a<1 时显式 `CustomShaderTranslucencyMode.TRANSLUCENT`（否则不透明通道下 alpha 无效）、none+半透明走白色 style；透明度滑杆与材质切换任一变化均以完整二元组重建外观，**互不覆盖**（替代一期"最后操作生效"妥协）；`useCesiumDataOpsHandlers.handleDataSetMaterial` 收编走合成器。
+- ✅ **验证**：py_compile（app/catalog）、配置门禁七项全绿、CORS 解析 3 场景断言、改动前端 3 文件 ESLint 零告警；规划文档 P1-1/P1-2 勾选——至此 P0-2/P0-3/P1-1/P1-2/P1-3 全部完成，仅剩 P0-1 实机回归（用户侧）与 P2/P3。
+- 📝 详见 `Docs/LLM_record/26-07-26/2026-07-26-p1-cors-style-batch.md`。
+
+### V3.4.46 (2026-07-26) — 并行会话规划/交接文档合流（消除双套并存）
+
+- 📋 **TODO 规划合一**：原并行会话 `Docs/TODO/next-sprint-bugfix-and-optimization.md` 全量并入 `Docs/TODO/bugfix-optimization-plan.md`（Force_command §2.5 指定正典）——属性表 B1–B6 落为 P0-4 簇（B2/B5/B6 标注 ✅V3.4.40，B1/B3/B4 待办）、容器二轮路线图（V3.4.29 日志）并入 P3-1、T2 分域/门禁 CI 落为 P3-3/P3-4、属性表性能项（searchText 惰性化/列宽持久化/列虚拟化）落为 P2-4；执行顺序更新并标注已完成项；确立「B 簇全清打 V3.5.0 里程碑」与「冒烟回归自动升最高优先级」口径。
+- 📘 **交接文档合一**：`Docs/Guide/handover.md`（SSOT 接手导航）§7 并入并行线 6 条独有契约——Cowork 挂载盘禁 rm/mv 与 index.lock 处置、沙盒 ESLint 跑法（node 直呼 bin）、barrel 两层化单点登记与 `export *` 重名静默丢弃、属性表 revision 整体重赋值不变式、容器 factory 抽离 TDZ 核对模式、版本撞号 grep 复核；基线版本行更新。
+- 🗑️ **冗余清理**：`2026-07-26-session-handover.md` 文头加「已合并」横幅转历史快照（保留防断链）；`next-sprint-bugfix-and-optimization.md` 与 `next-session-prompt.md` 删除（用户执行 git rm）。
+- 📝 详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-merge-parallel-planning-docs.md`。
+
+### V3.4.45 (2026-07-26) — 单位制覆盖面扩展（规划 P1-2）
+
+- 📏 **路线规划接入偏好单位制**：公交面板（候选线路里程 + 分段步行/公交距离）与驾车面板（总里程）改经 `formatDistanceMeasure`；`distanceKm: string` 字段更名 `distanceText`（带单位展示文本，TS 接口注释同步），模板硬编码 " km" 后缀清除；驾车 debug 原始值保留。
+- 🚶 **3D 漫游导航 HUD 接入**：`NavGuideHUD.formatDistance` 改经统一工具，英制偏好下漫游目标距离显示 ft/mi。
+- ✅ 验证：3 组件 compiler-sfc + ESLint 零告警；`distanceKm` 展示层零残留（仅存驾车解析器源数据字段，语义为 km 数值输入）。
+- 📝 规划文档 P1-2 已标注部分完成（余下：空间分析参数提示/坐标面板为输入型单位，需换算逻辑另行处理）。详见 `Docs/LLM_record/26-07-26/2026-07-26-unit-system-coverage-expansion.md`。
+
+### V3.4.44 (2026-07-26) — Agent 强制规范重写（Force_command.md v2：边界 / 流程 / DoD / 交接四段式）
+
+- 📜 **`Docs/Force_command.md` 重写（59 → 210 行，十节结构）**：0 冲突裁决优先级（用户指令 > 本文件 > Guide 文档 > 代码惯例，发现矛盾必须停止上报）· 1 **任务分级 L0–L3**（咨询 / 微改 ≤20 行 / 常规 / 架构级须先批准方案）· 2 **8 条硬边界禁止清单** · 3 四阶段 SOP（分析 → 文档先行 → 实施 → 收尾）· 4 **SSOT 单一事实来源表**（9 类信息 → 唯一权威文件）· 5 版本号规则 · 6 日志唯一路径与 11 项必含章节 · 7 **DoD 完成清单**（10 项，含门禁必过）· 8 **会话交接块**固定格式 · 9–10 违规处置与规范自维护。
+- 🔧 **修正四处与仓库脱节的过期条款**：① 原第 5 条"必须同步三个 README 的文件结构树"——实际三个 README `grep -c "├──"` 均为 0，权威树在 `Guide/project-structure.md` / `frontend-structure.md` / `backend-structure.md`，且原条款第 21 行又写"唯一文件树记录是 project-structure.md"，同一条内部自相矛盾；② 日志路径 `LLM_record/yy-mm-dd/` 缺一级，实际为两级且已漂移出 `26-05/26-05-01/`、`26-06/06-27/`（缺年）、`26-07-26/`（平铺 44 文件）三种写法；③ 仓库已有门禁脚本 `CheckStructureTree.py` / `CheckConfigRegistry.py`（`LocalDev.bat` 已接入）而规范全文未提，Agent 无从知晓；④ "同日大版本只更新一次"与同日 V3.4.38→43 连续递增的现状矛盾。
+- 🛡️ **针对 LLM 失效模式设防**：禁止臆造 API / 字段 / 配置 key / 路径（未确认标 `⚠️ 未验证`）、禁止未实机运行即写"已测试通过"（日志测试方案强制拆「Agent 已执行」与「待用户验证」两栏）、禁止静默跳过做不到的事、禁止越权扩大范围（顺带发现记入 TODO 而非顺手改）。
+- 🔁 **新增会话交接块**（版本 / 等级 / 改动清单 / 日志路径 / 门禁结果 / 待用户操作 / 遗留风险 / 下一步入手点），使下一会话可零成本接续——此前规范以"顺利交接"为目标却未规定交接产物。
+- 📐 **`Docs/Guide/dev-conventions.md` 同步**：「强制规范」小节标题由「来自 CLAUDE.md」（该文件在仓库中不存在，长期错误指向）改为「摘要」并声明权威版本与冲突时的取舍，6 条扩为 11 条逐条对齐；「提交前检查」小节补入两个门禁脚本命令与"非零退出必须修到通过"要求（原小节仅有 `docker-compose up`）。
+- 🗂️ **历史日志目录不迁移**：旧写法保持原样（CHANGELOG 已有大量指向链接，迁移将造成批量死链），以"新建一律合规"而非"存量重整"收敛漂移。
+- ⏭️ 版本号顺延说明：本次任务进行期间另一会话已占用 V3.4.42 / V3.4.43，按规范"撞车后完成者顺延"取 V3.4.44。
+- 📝 详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-force-command-rewrite.md`（新格式首例）。
+
+### V3.4.43 (2026-07-26) — 修复规划 Sprint 首批落地（P0-2 / P0-3 / P1-3）
+
+- 🔧 **P0-2 类型断裂修复**：`stores/layer/layerHelpers.ts` 的 `StandardLayerCapabilities` 补 `edit?: boolean` 声明（V3.4.9 编辑泛化引入 `capabilities.edit` 消费但未声明，为全库唯一 tsc 业务错误）；`tsc --noEmit` 过滤 cesium 环境噪音后业务代码归零。
+- 🗄️ **P0-3 OAuth ticket 落库（多 worker 安全）**：`api/auth/schema.py` 新增 `oauth_tickets` 表（ticket PK / kind / provider / payload JSON / expires_at + 过期索引）；`oauth.py` 的 `create_oauth_ticket` 落库并顺带清理过期行，`consume_oauth_ticket` 以 DELETE rowcount 判定唯一占有（并发/跨 worker 同票仅一方成功），过期与类型不匹配均 400 且票已销毁防重试爆破；移除进程内存 dict 与 threading 锁。内存 SQLite 语义单测 5 场景（正常消费/重复消费/类型不匹配/过期/创建时清理）全过。
+- 🧹 **P1-3 日志卫生**：前端业务代码 `console.log` 归零——vendored `cesium-navigation/ResetViewNavigationControl` catch 分支 log→warn 并携带错误对象；`useMapSwipeTest.ts`（8 处）定性为自带 `eslint-disable no-console` 声明的开发测试工具（无生产引用），保留不改。
+- ✅ **验证**：py_compile（oauth/schema）+ ESLint 改动文件零告警 + 配置门禁七项全绿 + 规划文档三项勾选（含版本与日志链接）。
+- 📝 详见 `Docs/LLM_record/26-07-26/2026-07-26-p0-fixes-batch.md`。
+
+### V3.4.42 (2026-07-26) — 天空 Tyndall 伪值输入修复 + GeoTerrain 语义 + BSM 层参数运行时同步
+
+- 🐛 **天空 shadowLength 伪值(移植遗留正确性 bug)**:AtmospherePostProcess 默认 `_shadowLengthEnabled=true` 而管线从未注入纹理,uniform 兜底到 transmittance LUT → 天空辐射每帧被喂入"把透射率查找表当阴影长度"的伪值(0~2.5km 随屏幕 UV 变化)。修复:启用门控改为"开关且纹理存在";修复后 BSM 开启落入 march 兜底 → 仅消费像素(isSky/applyGround)执行、步数 64→24,天空丁达尔由垃圾输入变为正确 BSM 暗带。
+- 🐛 **GeoTerrainProvider childTileMask 语义修正**:`_rectangles` 恒空 → mask 恒 0 与 getTileDataAvailable 恒 true 矛盾,靠 Cesium availability 优先才未出错;改为 `level+1 < bottomLevel ? 15 : 0` 明确语义并删除死代码。
+- 🐛 **BSM 层高/密度剖面运行时同步**:面板改层高后云影层高不再错位(此前 pass 创建后固化);经 updateDynamicParams 值级检测接入签名门控,不变零开销。
+- 📝 1.4 天地图 bottomLevel 放宽评估:留待真机验证,记录于日志。日志按 Force_command v2 新路径:`Docs/LLM_record/26-07/2026-07-26/2026-07-26-round1-tyndall-terrain-bsm.md`。
+
+### V3.4.41 (2026-07-26) — P0 静态打靶：两项预判 bug 证实与修复
+
+- 🐛 **偏好默认底图特殊 preset 过滤**：`custom`（需配套 URL）与 `local_tiles_preset`（依赖本地环境）不可作为偏好——store 新增 `isBasemapPreferenceSelectable` + `readCachedPreferredBasemap` 读取时过滤（已存脏值刷新即免疫，2D/3D 消费方零改动自动生效），偏好下拉同步过滤防再存；过滤断言 4/4 通过。
+- 🐛 **账号中心全屏层级还原**：z-index 令牌化时 3000→2200 丢失整屏覆盖语义，扫描证实与三处浮层同层（其一 !important）；theme.css 新增 `--z-overlay-top: 2400` 档，全屏账号中心改用。
+- ✅ 验证：compiler-sfc/TS transpile/ESLint 零告警；规划文档 P0 表已标注两项结论，其余三项待实机（Chrome 扩展连接后执行）。
+- 📝 详见 `Docs/LLM_record/26-07-26/2026-07-26-p0-static-bugfixes.md`。
+
+### V3.4.40 (2026-07-26) — Phase 1 速胜三项（B2 extent 滞后 / B5 注释纠偏 / B6 统计字段记忆）
+
+- 🐛 **B2 · 几何编辑后视图筛选用过期范围**：features 重赋值 → revision 递增 → 慢路径重建，但内容签名不含几何 → 签名相同 → 新快照被守卫拒绝替换 → extent 残留。修复：`upsertDatasetSnapshot` 写回缓存前判定 `revisionChanged`，revision 已变化时以上游契约为准强制替换，签名兜底仅服务于无 revision 来源。
+- 🆕 **B6 · 属性表统计字段按图层记忆**：组件内 `statsFieldMemory` Map，切回图层恢复上次选择（字段仍存在时），否则回退首个数值列。
+- 📝 **B5 · email_service 注释纠偏**：`_smtp_config` 文档字符串改为 lru_cache 快照语义（配置变更需重启生效）。
+- ✅ ESLint（useAttrStore.ts / AttributeTable.vue）零告警、py_compile 通过；详见 `Docs/LLM_record/26-07-26/2026-07-26-phase1-quickfix-b2-b5-b6.md`。
+
+### V3.4.39 (2026-07-26) — 修 Bug 与优化规划落档（P0–P3 分级 + Sprint 排期）
+
+- 📋 **新增 `Docs/TODO/bugfix-optimization-plan.md`（滚动维护）**：基于全库证据盘点——TODO/FIXME 扫描（5 处，均为 cesium-navigation 上游遗留）、`tsc --noEmit` 全量（1 个真实业务错误）、近日维护日志风险归集、大文件统计（5 个 2000+ 行）、后端安全面走查（CORS/`allow_origins=["*"]`、OAuth 内存 ticket）。
+- 🔴 **P0（1 天内）**：实机回归欠账六项合并清单（当日大改验证闭环 → git 提交）；`layerTreeBuilder.ts:389` `capabilities.edit` 类型断裂修复；OAuth 内存 ticket 多 worker 隐患（方案：落 SQLite 短表 TTL 120s）。
+- 🟠 **P1（本周）**：CORS 全开收敛为 L1 白名单 key `CORS_ALLOWED_ORIGINS`（走统一 loader + 门禁登记）；tileset 透明度×材质模式 style 单点合成收编；前端 9 处 `console.log` 清零。
+- 🟡 **P2（下周）**：罗盘 4323 行元数据 JSON 化懒加载（先 analyze 定位 chunk）；矢量透明度扩 `PolylineOutlineMaterialProperty`；高德低级 API → v5 高级版（faq 遗留 TODO 收编）。
+- 🔵 **P3（穿插）**：五大巨型文件渐进拆分表（CesiumToolPanel 2686 / TOCPanel 2499 / RegisterView 2198 / MapContainer 2041 / HomeView 2011，原则：只搬不改、每次一个一份日志）；cesium-navigation 上游 tracking TODO 挂起观察。
+- 🗓️ 附三个 Sprint 执行顺序与逐项工作量/验收标准；每完成一项在计划文中勾选并链接日志。
+- 📝 详见 `Docs/LLM_record/26-07-26/2026-07-26-bugfix-optimization-plan.md`。
+
 ### V3.4.38 (2026-07-26) — 天地图地形解码下放 Worker + ArcGIS 二次调优 + 风场收尾
 
 - ⚡ **天地图地形（默认地形）解码下放 Worker**：`GeoTerrainProvider` 的 pako inflate + 64×64 逐像素高程编码原在主线程（每瓦 0.6~2.5ms，瓦片风暴期堆积卡顿，与 ArcGIS LERC 同类问题）；抽通用 `decodeWorkerPool.js`（round-robin/Transferable/失效拒绝挂起并永久回退），新增 `geoTerrainDecode.worker.js`，ArcGIS 的 LERC 池迁移至共享实现（行为不变）；`_transformBuffer` 长度异常改显式 reject（原 null 直传 HeightmapTerrainData 会构造异常）。

@@ -7,7 +7,7 @@
   requests bubble up via the 'change-password' emit.
 -->
 <script setup>
-import { ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { getUserDisplayName, validateDisplayName } from '../../../composables/auth/useAuthIdentity';
 
 const props = defineProps({
@@ -44,7 +44,21 @@ const emit = defineEmits([
     'unlink-oauth',
 ]);
 
-const displayName = ref('');
+/** OAuth 提供商品牌名（按钮文案用，避免小写 google/github） */
+const PROVIDER_LABELS = Object.freeze({ google: 'Google', github: 'GitHub' });
+
+// 昵称框预填当前昵称（V3.4.62 A7）；仅在「用户未改动」时跟随外部 user 变化，
+// 防止 30s 轮询 mergeUserPatch 触发的 user 更新覆盖正在输入的内容
+const displayName = ref(getUserDisplayName(props.user) || '');
+watch(
+    () => getUserDisplayName(props.user),
+    (next, prev) => {
+        if (!displayName.value || displayName.value === prev) {
+            displayName.value = next || '';
+        }
+    },
+);
+
 const currentPassword = ref('');
 const nextPassword = ref('');
 const confirmPassword = ref('');
@@ -56,11 +70,33 @@ function togglePwd(key) {
     showPwd.value[key] = !showPwd.value[key];
 }
 
+/**
+ * 新密码强度评估（V3.4.62 A5）：
+ * 长度（≥6 / ≥10）+ 字符类别数（小写/大写/数字/符号）计分，映射三档。
+ * 返回 0=未输入，1=弱，2=中，3=强。
+ */
+const pwdStrength = computed(() => {
+    const value = String(nextPassword.value || '');
+    if (!value) return 0;
+    let score = 0;
+    if (value.length >= 6) score += 1;
+    if (value.length >= 10) score += 1;
+    const classCount = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((re) => re.test(value)).length;
+    if (classCount >= 2) score += 1;
+    if (classCount >= 3) score += 1;
+    if (score >= 4) return 3;
+    if (score >= 2) return 2;
+    return 1;
+});
+
+const pwdStrengthText = computed(() => ['', '弱', '中', '强'][pwdStrength.value] || '');
+
 function resetForm() {
-    displayName.value = '';
+    displayName.value = getUserDisplayName(props.user) || '';
     currentPassword.value = '';
     nextPassword.value = '';
     confirmPassword.value = '';
+    clearPendingUnlink();
 }
 
 function handleDisplayNameSubmit() {
@@ -100,10 +136,37 @@ function getBoundAccount(provider) {
     return props.oauthAccounts.find((account) => String(account?.provider || '') === provider) || null;
 }
 
+// 解绑二段式确认（V3.4.62 A3）：首点进入待确认态（按钮变红提示），
+// 3s 内再点才真正解绑，超时自动还原——防误触且不打断式
+const pendingUnlink = ref('');
+let pendingUnlinkTimer = null;
+
+function clearPendingUnlink() {
+    pendingUnlink.value = '';
+    if (pendingUnlinkTimer) {
+        clearTimeout(pendingUnlinkTimer);
+        pendingUnlinkTimer = null;
+    }
+}
+
 function handleOAuthAction(provider) {
     const account = getBoundAccount(provider);
-    emit(account ? 'unlink-oauth' : 'bind-oauth', provider);
+    if (!account) {
+        clearPendingUnlink();
+        emit('bind-oauth', provider);
+        return;
+    }
+    if (pendingUnlink.value !== provider) {
+        clearPendingUnlink();
+        pendingUnlink.value = provider;
+        pendingUnlinkTimer = setTimeout(clearPendingUnlink, 3000);
+        return;
+    }
+    clearPendingUnlink();
+    emit('unlink-oauth', provider);
 }
+
+onBeforeUnmount(clearPendingUnlink);
 
 /** Exposed method: allows parent to reset the form (e.g. on panel close) */
 defineExpose({ resetForm });
@@ -124,27 +187,30 @@ defineExpose({ resetForm });
         </div>
         <div v-else class="password-form-container">
             <h4 class="section-title">账号昵称</h4>
-            <div class="modern-input-group">
-                <i class="fas fa-user input-icon"></i>
-                <input
-                    v-model="displayName"
-                    type="text"
-                    maxlength="40"
-                    :placeholder="getUserDisplayName(user)"
-                />
-            </div>
-            <button
-                class="btn-primary w-100"
-                type="button"
-                :disabled="isSubmitting"
-                @click="handleDisplayNameSubmit"
-            >
-                <i
-                    class="fas"
-                    :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-id-card'"
-                ></i>
-                {{ isSubmitting ? '正在提交...' : '保存昵称' }}
-            </button>
+            <!-- form 包裹：回车即提交（V3.4.62 A5） -->
+            <form class="stack-form" @submit.prevent="handleDisplayNameSubmit">
+                <div class="modern-input-group">
+                    <i class="fas fa-user input-icon"></i>
+                    <input
+                        v-model="displayName"
+                        type="text"
+                        maxlength="40"
+                        placeholder="输入新昵称"
+                        aria-label="账号昵称"
+                    />
+                </div>
+                <button
+                    class="btn-primary w-100"
+                    type="submit"
+                    :disabled="isSubmitting"
+                >
+                    <i
+                        class="fas"
+                        :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-id-card'"
+                    ></i>
+                    {{ isSubmitting ? '正在提交...' : '保存昵称' }}
+                </button>
+            </form>
 
             <h4 class="section-title">第三方账号绑定</h4>
             <p class="oauth-bind-desc">已注册邮箱用户可绑定 Google 或 GitHub，后续可一键登录同一个 WebGIS 账号。</p>
@@ -154,85 +220,117 @@ defineExpose({ resetForm });
                     :key="provider"
                     type="button"
                     class="oauth-bind-btn"
-                    :class="provider"
+                    :class="[provider, { 'confirm-unlink': pendingUnlink === provider }]"
                     :disabled="isSubmitting || oauthLoading"
+                    :aria-label="getBoundAccount(provider)
+                        ? `解绑 ${PROVIDER_LABELS[provider]}`
+                        : `绑定 ${PROVIDER_LABELS[provider]}`"
                     @click="handleOAuthAction(provider)"
                 >
                     <i :class="provider === 'google' ? 'fab fa-google' : 'fab fa-github'"></i>
-                    <span>
-                        {{ getBoundAccount(provider) ? `解绑 ${provider}` : `绑定 ${provider}` }}
+                    <span v-if="pendingUnlink === provider">
+                        再点一次确认解绑 {{ PROVIDER_LABELS[provider] }}
                     </span>
-                    <small v-if="getBoundAccount(provider)">
+                    <span v-else>
+                        {{ getBoundAccount(provider)
+                            ? `解绑 ${PROVIDER_LABELS[provider]}`
+                            : `绑定 ${PROVIDER_LABELS[provider]}` }}
+                    </span>
+                    <small v-if="getBoundAccount(provider) && pendingUnlink !== provider">
                         {{ getBoundAccount(provider)?.email || getBoundAccount(provider)?.display_name || '已绑定' }}
                     </small>
                 </button>
             </div>
 
             <h4 class="section-title">修改密码</h4>
-            <div class="modern-input-group">
-                <i class="fas fa-lock input-icon"></i>
+            <!-- form 包裹：回车提交 + 隐藏用户名字段供密码管理器关联账号（V3.4.62 A5） -->
+            <form class="stack-form" @submit.prevent="handlePasswordSubmit">
                 <input
-                    v-model="currentPassword"
-                    :type="showPwd.current ? 'text' : 'password'"
-                    autocomplete="current-password"
-                    placeholder="当前密码"
+                    class="visually-hidden-input"
+                    type="text"
+                    name="username"
+                    autocomplete="username"
+                    :value="user?.username || ''"
+                    readonly
+                    tabindex="-1"
+                    aria-hidden="true"
                 />
-                <button
-                    type="button"
-                    class="pwd-toggle"
-                    :title="showPwd.current ? '隐藏密码' : '显示密码'"
-                    @click="togglePwd('current')"
+                <div class="modern-input-group">
+                    <i class="fas fa-lock input-icon"></i>
+                    <input
+                        v-model="currentPassword"
+                        :type="showPwd.current ? 'text' : 'password'"
+                        autocomplete="current-password"
+                        placeholder="当前密码"
+                    />
+                    <button
+                        type="button"
+                        class="pwd-toggle"
+                        :title="showPwd.current ? '隐藏密码' : '显示密码'"
+                        @click="togglePwd('current')"
+                    >
+                        <i :class="showPwd.current ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                    </button>
+                </div>
+                <div class="modern-input-group">
+                    <i class="fas fa-key input-icon"></i>
+                    <input
+                        v-model="nextPassword"
+                        :type="showPwd.next ? 'text' : 'password'"
+                        autocomplete="new-password"
+                        placeholder="新密码 (至少6位)"
+                    />
+                    <button
+                        type="button"
+                        class="pwd-toggle"
+                        :title="showPwd.next ? '隐藏密码' : '显示密码'"
+                        @click="togglePwd('next')"
+                    >
+                        <i :class="showPwd.next ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                    </button>
+                </div>
+                <!-- 新密码强度提示（仅输入后显示） -->
+                <div
+                    v-if="pwdStrength > 0"
+                    class="pwd-strength"
+                    :class="`level-${pwdStrength}`"
+                    aria-live="polite"
                 >
-                    <i :class="showPwd.current ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-            </div>
-            <div class="modern-input-group">
-                <i class="fas fa-key input-icon"></i>
-                <input
-                    v-model="nextPassword"
-                    :type="showPwd.next ? 'text' : 'password'"
-                    autocomplete="new-password"
-                    placeholder="新密码 (至少6位)"
-                />
-                <button
-                    type="button"
-                    class="pwd-toggle"
-                    :title="showPwd.next ? '隐藏密码' : '显示密码'"
-                    @click="togglePwd('next')"
-                >
-                    <i :class="showPwd.next ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-            </div>
-            <div class="modern-input-group">
-                <i class="fas fa-check-double input-icon"></i>
-                <input
-                    v-model="confirmPassword"
-                    :type="showPwd.confirm ? 'text' : 'password'"
-                    autocomplete="new-password"
-                    placeholder="确认新密码"
-                />
-                <button
-                    type="button"
-                    class="pwd-toggle"
-                    :title="showPwd.confirm ? '隐藏密码' : '显示密码'"
-                    @click="togglePwd('confirm')"
-                >
-                    <i :class="showPwd.confirm ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                </button>
-            </div>
+                    <span class="strength-bars">
+                        <span v-for="n in 3" :key="n" class="bar" :class="{ on: pwdStrength >= n }"></span>
+                    </span>
+                    <span class="strength-text">强度：{{ pwdStrengthText }}</span>
+                </div>
+                <div class="modern-input-group">
+                    <i class="fas fa-check-double input-icon"></i>
+                    <input
+                        v-model="confirmPassword"
+                        :type="showPwd.confirm ? 'text' : 'password'"
+                        autocomplete="new-password"
+                        placeholder="确认新密码"
+                    />
+                    <button
+                        type="button"
+                        class="pwd-toggle"
+                        :title="showPwd.confirm ? '隐藏密码' : '显示密码'"
+                        @click="togglePwd('confirm')"
+                    >
+                        <i :class="showPwd.confirm ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                    </button>
+                </div>
 
-            <button
-                class="btn-primary w-100"
-                type="button"
-                :disabled="isSubmitting"
-                @click="handlePasswordSubmit"
-            >
-                <i
-                    class="fas"
-                    :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'"
-                ></i>
-                {{ isSubmitting ? '正在提交...' : '保存新密码' }}
-            </button>
+                <button
+                    class="btn-primary w-100"
+                    type="submit"
+                    :disabled="isSubmitting"
+                >
+                    <i
+                        class="fas"
+                        :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'"
+                    ></i>
+                    {{ isSubmitting ? '正在提交...' : '保存新密码' }}
+                </button>
+            </form>
         </div>
     </div>
 </template>
@@ -249,6 +347,60 @@ defineExpose({ resetForm });
     flex-direction: column;
     gap: 12px;
 }
+
+/* form 化后的纵向栈（与容器同 gap，视觉零变化） */
+.stack-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* 密码管理器关联用的隐藏用户名字段：视觉与交互双隐藏，但保留在可访问性树外 */
+.visually-hidden-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    border: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+/* 新密码强度条：三段指示 + 文案 */
+.pwd-strength {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: -6px 2px 0;
+}
+
+.strength-bars {
+    display: flex;
+    gap: 4px;
+}
+
+.strength-bars .bar {
+    width: 26px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--border-light);
+    transition: background 0.2s ease;
+}
+
+.pwd-strength.level-1 .bar.on { background: var(--danger); }
+.pwd-strength.level-2 .bar.on { background: var(--warning); }
+.pwd-strength.level-3 .bar.on { background: var(--brand-primary); }
+
+.strength-text {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.pwd-strength.level-1 .strength-text { color: var(--danger); }
+.pwd-strength.level-2 .strength-text { color: var(--warning); }
+.pwd-strength.level-3 .strength-text { color: var(--brand-primary-dark); }
 
 /* 分区标题：品牌左条 */
 .section-title {
@@ -282,7 +434,7 @@ defineExpose({ resetForm });
     min-height: 44px;
     border: 1px solid var(--border-light);
     border-radius: 10px;
-    background: #fff;
+    background: var(--bg-primary);
     color: var(--text-primary);
     cursor: pointer;
     display: grid;
@@ -327,6 +479,22 @@ defineExpose({ resetForm });
     cursor: not-allowed;
 }
 
+/* 解绑二段确认态：转危险色提示，3s 未确认自动还原 */
+.oauth-bind-btn.confirm-unlink {
+    border-color: rgba(var(--danger-rgb), 0.55);
+    background: rgba(var(--danger-rgb), 0.06);
+    color: var(--danger);
+}
+
+.oauth-bind-btn.confirm-unlink i {
+    color: var(--danger);
+}
+
+.oauth-bind-btn.confirm-unlink:hover:not(:disabled) {
+    border-color: var(--danger);
+    background: rgba(var(--danger-rgb), 0.1);
+}
+
 /* 输入组 */
 .modern-input-group {
     position: relative;
@@ -355,7 +523,7 @@ defineExpose({ resetForm });
     padding: 0 38px 0 38px;
     font-size: 13px;
     color: var(--text-primary);
-    background: #fbfdfb;
+    background: var(--bg-secondary);
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     box-sizing: border-box;
 }
@@ -367,7 +535,7 @@ defineExpose({ resetForm });
 .modern-input-group input:focus {
     outline: none;
     border-color: var(--brand-primary);
-    background: #fff;
+    background: var(--bg-primary);
     box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.1);
 }
 
