@@ -4,15 +4,21 @@
         <div class="tabs-nav" role="tablist" aria-label="API 管理页签">
             <button
                 v-for="tab in tabs"
+                :id="`api-tab-${tab.id}`"
                 :key="tab.id"
                 type="button"
                 role="tab"
                 class="tab-btn"
                 :class="{ active: activeTab === tab.id }"
                 :aria-selected="activeTab === tab.id"
+                :aria-controls="`api-panel-${tab.id}`"
                 @click="selectTab(tab.id)"
             >
-                {{ tab.label }}
+                <span class="tab-btn__icon" aria-hidden="true">{{ tab.icon }}</span>
+                <span class="tab-btn__body">
+                    <span class="tab-btn__label">{{ tab.label }}</span>
+                    <span class="tab-btn__desc">{{ tab.desc }}</span>
+                </span>
             </button>
         </div>
 
@@ -21,7 +27,10 @@
             <!-- 1. 用户 API 使用统计 -->
             <div
                 v-show="activeTab === 'by-user'"
+                id="api-panel-by-user"
                 class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="api-tab-by-user"
             >
                 <div class="panel-header">
                     <h2>用户 API 调用统计</h2>
@@ -95,7 +104,10 @@
             <!-- 2. API 端点使用统计 -->
             <div
                 v-show="activeTab === 'by-endpoint'"
+                id="api-panel-by-endpoint"
                 class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="api-tab-by-endpoint"
             >
                 <div class="panel-header">
                     <h2>API 端点调用统计</h2>
@@ -168,7 +180,10 @@
             <!-- 3. API 调用日志 -->
             <div
                 v-show="activeTab === 'logs'"
+                id="api-panel-logs"
                 class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="api-tab-logs"
             >
                 <div class="panel-header">
                     <h2>API 调用日志</h2>
@@ -235,7 +250,7 @@
                             <td>
                                 <span
                                     class="role-badge"
-                                    :class="log.role.toLowerCase()"
+                                    :class="String(log.role || '').toLowerCase()"
                                 >
                                     {{ log.role }}
                                 </span>
@@ -263,9 +278,7 @@
                     <button
                         class="btn-paging"
                         :disabled="logsFilter.offset === 0"
-                        @click="
-                            logsFilter.offset = Math.max(0, logsFilter.offset - logsFilter.limit)
-                        "
+                        @click="prevLogsPage"
                     >
                         ← 上一页
                     </button>
@@ -276,7 +289,7 @@
                     <button
                         class="btn-paging"
                         :disabled="apiLogs.length < logsFilter.limit"
-                        @click="logsFilter.offset += logsFilter.limit"
+                        @click="nextLogsPage"
                     >
                         下一页 →
                     </button>
@@ -293,7 +306,10 @@
             <!-- 4. 配额配置 -->
             <div
                 v-show="activeTab === 'quota'"
+                id="api-panel-quota"
                 class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="api-tab-quota"
             >
                 <div class="panel-header">
                     <h2>API 配额配置</h2>
@@ -348,7 +364,10 @@
             <!-- 5. API 密钥管理 -->
             <div
                 v-show="activeTab === 'api-keys'"
+                id="api-panel-api-keys"
                 class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="api-tab-api-keys"
             >
                 <ApiKeysManagementPanel />
             </div>
@@ -371,12 +390,18 @@ const message = useMessage();
 
 const activeTab = ref('by-user');
 const tabs = [
-    { id: 'by-user', label: '📊 用户统计' },
-    { id: 'by-endpoint', label: '🔗 端点统计' },
-    { id: 'logs', label: '📝 调用日志' },
-    { id: 'quota', label: '⚙️ 配额配置' },
-    { id: 'api-keys', label: '🔑 密钥管理' },
+    { id: 'by-user', icon: '📊', label: '用户统计', desc: '用户维度用量' },
+    { id: 'by-endpoint', icon: '🔗', label: '端点统计', desc: '接口热度与耗时' },
+    { id: 'logs', icon: '📝', label: '调用日志', desc: '请求明细追踪' },
+    { id: 'quota', icon: '⚙️', label: '配额配置', desc: '角色访问限制' },
+    { id: 'api-keys', icon: '🔑', label: '密钥管理', desc: '第三方密钥池' },
 ];
+
+// 修复：模板 @click="selectTab(tab.id)" 此前未定义该函数，点击 tab 完全无响应
+function selectTab(tabId) {
+    if (!tabs.some((tab) => tab.id === tabId)) return;
+    activeTab.value = tabId;
+}
 
 // 用户统计
 const userStats = ref([]);
@@ -489,6 +514,18 @@ async function loadLogs() {
     }
 }
 
+async function prevLogsPage() {
+    if (loadingLogs.value || logsFilter.value.offset === 0) return;
+    logsFilter.value.offset = Math.max(0, logsFilter.value.offset - logsFilter.value.limit);
+    await loadLogs();
+}
+
+async function nextLogsPage() {
+    if (loadingLogs.value || apiLogs.value.length < logsFilter.value.limit) return;
+    logsFilter.value.offset += logsFilter.value.limit;
+    await loadLogs();
+}
+
 async function loadQuotaConfig() {
     loadingQuota.value = true;
     try {
@@ -525,38 +562,145 @@ onMounted(async () => {
 
 /* Tabs Navigation */
 .tabs-nav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 20px;
-    border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.2);
-    padding-bottom: 10px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(148px, 1fr));
+    gap: 10px;
+    margin-bottom: 22px;
+    padding: 10px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
+    border-radius: 20px;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.48)),
+        radial-gradient(circle at 10% 0%, rgba(var(--brand-primary-rgb), 0.12), transparent 34%);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.72),
+        0 14px 34px rgba(49, 111, 69, 0.08);
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--brand-primary-rgb), 0.26) transparent;
+}
+
+.tabs-nav::-webkit-scrollbar {
+    height: 6px;
+}
+
+.tabs-nav::-webkit-scrollbar-thumb {
+    background: rgba(var(--brand-primary-rgb), 0.25);
+    border-radius: 999px;
 }
 
 .tab-btn {
-    flex: 0 0 auto;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.4);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    min-height: 64px;
+    padding: 11px 12px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.1);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.54);
     color: var(--acc-text-soft, #5d7f6a);
     cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: all 0.3s ease;
-    border: 1px solid transparent;
+    text-align: left;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.66);
+    transition:
+        color 0.22s ease,
+        background 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease,
+        transform 0.22s ease;
+}
+
+.tab-btn::after {
+    content: '';
+    position: absolute;
+    inset: auto 14px 8px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brand-primary-light), var(--brand-primary));
+    opacity: 0;
+    transform: scaleX(0.45);
+    transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
 .tab-btn:hover {
     color: var(--acc-text-main, #2c5f3e);
-    background: rgba(var(--brand-accent-light-rgb), 0.15);
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(var(--brand-primary-rgb), 0.22);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(49, 111, 69, 0.1);
 }
 
 .tab-btn.active {
-    color: white;
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    box-shadow: 0 4px 10px rgba(58, 129, 76, 0.2);
+    color: var(--acc-text-strong, #214a31);
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 250, 244, 0.92)),
+        radial-gradient(circle at 20% 0%, rgba(var(--brand-primary-rgb), 0.18), transparent 48%);
+    border-color: rgba(var(--brand-primary-rgb), 0.32);
+    box-shadow:
+        0 12px 28px rgba(58, 129, 76, 0.16),
+        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+    transform: translateY(-1px);
+}
+
+.tab-btn.active::after {
+    opacity: 1;
+    transform: scaleX(1);
+}
+
+.tab-btn:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 3px;
+}
+
+.tab-btn__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 34px;
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: rgba(var(--brand-primary-rgb), 0.09);
+    font-size: 17px;
+    box-shadow: inset 0 0 0 1px rgba(var(--brand-primary-rgb), 0.08);
+}
+
+.tab-btn.active .tab-btn__icon {
+    background: linear-gradient(135deg, var(--brand-primary-light), var(--brand-primary));
+    box-shadow: 0 8px 18px rgba(58, 129, 76, 0.22);
+}
+
+.tab-btn__body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.tab-btn__label {
+    overflow: hidden;
+    color: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tab-btn__desc {
+    overflow: hidden;
+    color: var(--acc-text-soft, #5d7f6a);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tab-btn.active .tab-btn__desc {
+    color: var(--acc-text-main, #2c5f3e);
 }
 
 /* Tab Content */
@@ -940,17 +1084,40 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
     .tabs-nav {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        padding-bottom: 12px;
+        grid-template-columns: repeat(5, minmax(132px, 1fr));
+        gap: 8px;
         margin-bottom: 14px;
+        padding: 8px;
+        border-radius: 16px;
         -webkit-overflow-scrolling: touch;
     }
 
     .tab-btn {
-        min-height: 36px;
-        padding: 8px 12px;
+        min-height: 54px;
+        gap: 8px;
+        padding: 9px 10px;
+        border-radius: 14px;
+    }
+
+    .tab-btn::after {
+        inset: auto 12px 6px;
+        height: 2px;
+    }
+
+    .tab-btn__icon {
+        flex-basis: 30px;
+        width: 30px;
+        height: 30px;
+        border-radius: 10px;
+        font-size: 15px;
+    }
+
+    .tab-btn__label {
         font-size: 12px;
+    }
+
+    .tab-btn__desc {
+        font-size: 10px;
     }
 
     .tab-panel {
@@ -1017,6 +1184,29 @@ onMounted(async () => {
 
     .quota-card {
         padding: 14px;
+    }
+}
+
+@media (max-width: 560px) {
+    .tabs-nav {
+        grid-template-columns: repeat(5, minmax(112px, 1fr));
+        padding: 7px;
+    }
+
+    .tab-btn {
+        min-height: 46px;
+        padding: 8px;
+    }
+
+    .tab-btn__icon {
+        flex-basis: 28px;
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .tab-btn__desc {
+        display: none;
     }
 }
 

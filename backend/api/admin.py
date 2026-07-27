@@ -261,8 +261,8 @@ def _get_l3_env_status() -> Dict[str, bool]:
     """
     L3 环境密钥「是否已配置」布尔（供 Admin 面板只读展示）。
 
-    安全约束：仅输出布尔，绝不回显明文；绝密只能在 HF Secrets / 本地
-    未提交 .env 修改，Admin 面板与 DB 不存储 L3 真值。
+    安全约束：仅输出布尔，绝不回显明文；L3 只保留平台侧绝密。
+    Agent/LLM 主密钥与高德 Web 服务 Key 属 L2 管理员配置，走 API 密钥管理面板。
     """
     s = get_settings()
     return {
@@ -271,8 +271,6 @@ def _get_l3_env_status() -> Dict[str, bool]:
         "google_oauth": bool(s.google_oauth_client_id and s.google_oauth_client_secret),
         "github_oauth": bool(s.github_oauth_client_id and s.github_oauth_client_secret),
         "smtp": bool(s.smtp_user and s.smtp_password),
-        "agent_api_key_env": bool(s.agent_api_key),
-        "amap_web_service_key": bool(s.amap_web_service_key),
         "supabase": bool(s.supabase_url and s.supabase_key),
     }
 

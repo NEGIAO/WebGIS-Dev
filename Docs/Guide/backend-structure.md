@@ -53,7 +53,7 @@ backend/
 │   │       ├── multi_ring_buffer.py               # 多环缓冲区
 │   │       ├── simplify.py                        # 几何简化
 │   │       └── fishnet.py                         # 渔网分析
-│   ├── api_keys_management.py                     # API 主/备密钥管理 + 运行时地图 token 池下发
+│   ├── api_keys_management.py                     # API 主/备密钥管理 + L2 Agent/高德 Key 池 + 运行时地图 token 池下发
 │   ├── api_management.py                          # API 使用管理接口
 │   ├── external_proxy.py                          # 外部代理接口
 │   ├── location.py                                # 定位相关接口
@@ -64,7 +64,7 @@ backend/
 ├── config/                                        # 三层配置统一入口（L1 env / L2 Admin+DB / L3 Secrets）
 │   ├── __init__.py                                # 门面 re-export（get_settings/get_str 等）+ 启动时加载根/backend .env
 │   ├── catalog.py                                 # 配置全集登记表（key/层级/默认值/是否绝密）
-│   ├── load.py                                    # L1/L3 加载 + BackendSettings 快照（OAuth 回调/回跳 URL 由 PUBLIC_URL 推导）
+│   ├── load.py                                    # L1/L3 加载 + BackendSettings 快照（AGENT/AMAP env 仅旧部署兜底）
 │   ├── public.py                                  # 前端可见公开配置构建
 │   └── runtime.py                                 # L2 运行时覆盖（Admin 面板 + system_config，绝密项禁止 DB 覆盖）
 │

@@ -22,14 +22,13 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from config import get_settings
+from config import get_str
 
 logger = logging.getLogger(__name__)
 
 # ==================== 配置 ====================
 
-# 高德 IP 定位
-AMAP_KEY = get_settings().amap_web_service_key
+# 高德 IP 定位（优先由 L2 api_keys.amap_key 动态读取，env 仅旧部署兜底）
 AMAP_IP_ENDPOINT = "https://restapi.amap.com/v3/ip"
 
 # ip-api.com（免费，无速率限制，支持 HTTPS）
@@ -143,6 +142,23 @@ class _TTLCache:
 _cache = _TTLCache()
 
 
+def _resolve_amap_key() -> str:
+    """读取 L2 高德 key；旧部署若仍写 env，则作为兜底兼容。"""
+    try:
+        from api.api_keys_management import _get_api_key_candidates_sync
+
+        candidates = _get_api_key_candidates_sync("amap_key")
+        if candidates:
+            return str(candidates[0] or "").strip()
+    except Exception:
+        pass
+    return (
+        get_str("AMAP_WEB_SERVICE_KEY", "")
+        or get_str("AMAP_KEY", "")
+        or get_str("GAODE_KEY", "")
+    )
+
+
 # ==================== 服务实现 ====================
 
 class IpGeoService:
@@ -198,8 +214,9 @@ class IpGeoService:
         result = None
 
         # 优先级 1: 高德（精度高，有 key 时使用）
-        if prefer_amap and AMAP_KEY:
-            result = await self._locate_amap(ip)
+        amap_key = _resolve_amap_key()
+        if prefer_amap and amap_key:
+            result = await self._locate_amap(ip, amap_key)
             if result:
                 _cache.set(ip, result)
                 return result
@@ -219,7 +236,7 @@ class IpGeoService:
         logger.warning("所有 IP 定位服务都失败: ip=%s", ip)
         return None
 
-    async def _locate_amap(self, ip: str) -> Optional[IpGeoResult]:
+    async def _locate_amap(self, ip: str, amap_key: str) -> Optional[IpGeoResult]:
         """
         高德 IP 定位
 
@@ -230,7 +247,7 @@ class IpGeoService:
             client = await self._get_client()
             resp = await client.get(
                 AMAP_IP_ENDPOINT,
-                params={"ip": ip, "key": AMAP_KEY},
+                params={"ip": ip, "key": amap_key},
             )
 
             if resp.status_code != 200:

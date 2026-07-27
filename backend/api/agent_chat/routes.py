@@ -620,6 +620,7 @@ async def get_available_models(
     session: Dict[str, Any] = Depends(require_api_access_or_guest),
     override_base_url: Optional[str] = None,
     override_api_key: Optional[str] = None,
+    use_default_ai: bool = False,
 ) -> Dict[str, Any]:
     """请求上游模型端点并返回"当前账号真实可用"的模型列表。"""
     username = str(session.get("username") or "")
@@ -630,23 +631,37 @@ async def get_available_models(
     override_base_url_clean = str(override_base_url or "").strip()
     override_api_key_clean = str(override_api_key or "").strip()
 
-    if override_base_url_clean:
-        # 同 /chat/completions：query 形式同样会把平台 Key 发往调用方地址，护栏口径必须一致。
-        base_url = _validate_override_base_url(
-            override_base_url_clean,
-            has_override_key=bool(override_api_key_clean),
-        )
+    if use_default_ai:
+        default_config = await asyncio.to_thread(_get_default_ai_config_sync)
+        if not default_config.get("is_configured"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="默认 AI 专属配置未完成，请联系管理员配置 api_key / base_url / model。",
+            )
+        base_url = str(default_config.get("base_url") or "").strip()
+        api_key = str(default_config.get("api_key") or "").strip()
+        api_key_candidates = [api_key] if api_key else []
+        current_model = str(default_config.get("model") or "").strip()
+        override_base_url_clean = ""
+        override_api_key_clean = ""
     else:
-        base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+        if override_base_url_clean:
+            # 同 /chat/completions：query 形式同样会把平台 Key 发往调用方地址，护栏口径必须一致。
+            base_url = _validate_override_base_url(
+                override_base_url_clean,
+                has_override_key=bool(override_api_key_clean),
+            )
+        else:
+            base_url = str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
 
-    if override_api_key_clean:
-        api_key = override_api_key_clean
-        api_key_candidates = [override_api_key_clean]
-    else:
-        api_key = str(runtime.get("api_key") or "").strip()
-        api_key_candidates = list(runtime.get("api_key_candidates") or [api_key])
+        if override_api_key_clean:
+            api_key = override_api_key_clean
+            api_key_candidates = [override_api_key_clean]
+        else:
+            api_key = str(runtime.get("api_key") or "").strip()
+            api_key_candidates = list(runtime.get("api_key_candidates") or [api_key])
 
-    current_model = str(runtime.get("model") or "").strip()
+        current_model = str(runtime.get("model") or "").strip()
 
     if not api_key:
         raise HTTPException(

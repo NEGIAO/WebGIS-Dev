@@ -21,7 +21,7 @@ frontend/src/
 │   │   ├── location.js                             # 地理编码/定位接口
 │   │   ├── weather.js                              # 天气接口
 │   │   ├── routing.js                              # 路线规划接口
-│   │   ├── agent.js                                # AI Agent 接口
+│   │   ├── agent.js                                # AI Agent 接口（三通道：后端代理/默认 AI/个人 Key，override 成对透传）
 │   │   ├── statistics.js                           # 统计/消息/公告
 │   │   ├── admin.js                                # 管理后台接口
 │   │   ├── spatial.js                              # 空间分析接口
@@ -362,7 +362,7 @@ frontend/src/
 │   │   ├── xyzSource.ts                            # XYZ 源 + 自动检测
 │   │   └── index.ts
 │   ├── chat/
-│   │   ├── useChatAgentConfig.js                   # Agent 对话配置/路由模式/模型列表/额度 + LLM 三通道调用
+│   │   ├── useChatAgentConfig.js                   # Agent 对话配置/路由模式/模型列表/额度 + LLM 三通道调用（后端代理不携带孤立 base_url）
 │   │   ├── useChatSession.js                       # 会话消息状态 + localStorage 持久化 + 上下文精简
 │   │   └── chatIntentFallback.js                   # GIS 意图识别兜底（定位/切底图正则 + 图源映射，纯函数）
 │   ├── weather/

@@ -111,11 +111,8 @@ GITHUB_OAUTH_CLIENT_SECRET
 # 邮箱验证码（注册/重置/绑定）—— 账号 SMTP_USER 属 L1（Variables 或代码默认），凭证必进 Secrets
 SMTP_PASSWORD
 
-# AI 对话主密钥（也可改用 Admin 面板 L2 key 池）
-AGENT_API_KEY
-
-# 高德搜索 / IP 定位（也可改用 Admin 面板 amap_key 池）
-AMAP_WEB_SERVICE_KEY
+# AI 对话主密钥：不进 HF Secrets；登录 admin 后在 L2 API 密钥管理 → Agent 配置 agent_api_key
+# 高德搜索 / IP 定位：不进 HF Secrets；登录 admin 后在 L2 API 密钥管理 → 高德 配置 amap_key
 
 # 访客统计
 SUPABASE_URL
@@ -154,8 +151,8 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 |-------|----------------|-----------------|----------|
 | 天地图 TK（主备池） | API 密钥管理 → 天地图 | `api_keys.tianditu_tk`（备用在 `api_key_backups`） | `GET /api/runtime-config/map-tokens` 下发前端 |
 | Cesium Ion Token（主备池） | API 密钥管理 → Cesium | `api_keys.cesium_ion_token` | 同上 |
-| 高德 Web 服务 Key（池） | API 密钥管理 → 高德 | `api_keys.amap_key` | external_proxy 候选链：DB 池 → env `AMAP_WEB_SERVICE_KEY`（L3） |
-| Agent 主密钥（池） | API 密钥管理 → Agent | `api_keys.agent_api_key`（旧 `agent_token` 兼容） | agent_chat 解析链：DB 池 → env `AGENT_API_KEY`（L3） |
+| 高德 Web 服务 Key（池） | API 密钥管理 → 高德 | `api_keys.amap_key` | external_proxy / IP 定位候选链：DB 池 → 旧 env 兼容兜底（不再新增 HF Secrets） |
+| Agent 主密钥（池） | API 密钥管理 → Agent | `api_keys.agent_api_key`（旧 `agent_token` 兼容） | agent_chat 解析链：DB 池 → 旧 env 兼容兜底（不再新增 HF Secrets） |
 | 默认 AI 直连配置 | API 密钥管理 → 默认 AI | `system_config.default_ai_api_key / _base_url / _model` | `/api/agent/default-ai-config`（api_key 不下发普通用户） |
 | Agent 对话参数（base_url/model/可用模型/提示词/超时/max_tokens/温度/top_p/extra_body） | 管理员控制台 → LLM 对话参数配置 | `system_config.agent_*` | `/api/admin/agent/config`，运行时动态读取 |
 | AI 对话配额（游客/注册） | 管理员控制台 → LLM 对话参数配置 | `system_config.agent_chat_*_daily_quota` | 同上；L1 env 仅作缺省 |
@@ -166,7 +163,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 
 **「仅 env」例外（有意不迁面板）**：`RUNTIME_CONFIG_ALLOWED_ORIGINS`、`PROXY_*`、`WEBGIS_LOG_STREAM_MODE` 等运维开关属 L1；`LOG` 监控令牌属 L3。
 
-**L3 状态可见性**：管理员控制台顶部「环境密钥状态」卡片显示 SUPER_USER / OAUTH_STATE_SECRET / Google/GitHub OAuth / SMTP / AGENT_API_KEY(环境) / 高德(环境) / Supabase 的已配置布尔（来自 `GET /api/admin/overview` 的 `l3_env_status`，不回显明文）。
+**L3 状态可见性**：管理员控制台顶部「环境密钥状态」卡片仅显示 SUPER_USER / OAUTH_STATE_SECRET / Google/GitHub OAuth / SMTP / Supabase 的已配置布尔（来自 `GET /api/admin/overview` 的 `l3_env_status`，不回显明文）。Agent/LLM 主密钥与高德 Web 服务 Key 是 L2 项，请在「API 密钥管理」面板查看和维护。
 
 ---
 
@@ -179,9 +176,9 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 | 邮箱注册/重置 | L1 `SMTP_HOST/PORT/USER` + L3 `SMTP_PASSWORD`（账号/凭证分开存取） |
 | Google 登录 | L3 Google Client ID/Secret + `OAUTH_STATE_SECRET`；控制台 redirect |
 | GitHub 登录 | L3 GitHub Client ID/Secret + `OAUTH_STATE_SECRET`；控制台 callback |
-| AI 对话 | L3 `AGENT_API_KEY`；模型/额度 L2 或 L1 默认 |
+| AI 对话 | L2 `api_keys.agent_api_key` + L2 `system_config.agent_*`（base_url/model/额度/提示词等）；旧 env 仅兼容存量 |
 | 天地图/Cesium | L2 Admin token 池（不要 VITE 写死 token） |
-| 高德搜索/IP | L3 `AMAP_WEB_SERVICE_KEY`（或未来 L2） |
+| 高德搜索/IP | L2 `api_keys.amap_key`；旧 env 仅兼容存量 |
 | 访客统计 Supabase | L3 `SUPABASE_URL` + Key |
 
 ---
@@ -198,7 +195,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 
 | 项 | 层 |
 |----|-----|
-| `AGENT_API_KEY` | L3 |
+| `agent_api_key`（旧 env `AGENT_API_KEY` 仅兼容兜底） | L2 Admin：API 密钥管理 → Agent |
 | base_url / model / temperature / quota | L1 默认 + **L2 Admin 覆盖** |
 
 ## 后端地址

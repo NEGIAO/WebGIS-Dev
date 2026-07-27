@@ -179,6 +179,9 @@ export async function apiAgentChatCompletions(payload = {}) {
 
 export async function apiAgentListModels(options = {}) {
     const params = {};
+    if (options.use_default_ai) {
+        params.use_default_ai = true;
+    }
     if (options.override_base_url) {
         params.override_base_url = String(options.override_base_url).trim();
     }

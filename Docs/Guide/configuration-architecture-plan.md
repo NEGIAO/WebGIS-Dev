@@ -147,8 +147,8 @@ OAuth **回调完整 URL** 优先由 `BACKEND_PUBLIC_URL` / `FRONTEND_PUBLIC_URL
 | Cesium Ion Token 主备 | 三维 token 池 | 同上 |
 | `agent_*` / 默认 AI 配置 | 模型、base_url、额度、温度等 | AdminControlPanel + system_config |
 | `default_basemap_index` | 默认底图 | Admin 已有 |
-| `admin_contact` / 公告 | 运营文案 | Admin 已有 |
-| 高德 Key（若改为面板管理） | 搜索/定位 | 现状多在 env；可迁 L2 或保留 L3 |
+| Agent 主密钥（`agent_api_key` / 旧 `agent_token`） | LLM 主密钥 | 已迁 L2；旧 env `AGENT_API_KEY`/`AGENT_TOKEN` 仅兼容存量兜底 |
+| 高德 Web 服务 Key（`amap_key`） | 搜索/定位 | 已迁 L2；旧 env `AMAP_WEB_SERVICE_KEY`/`AMAP_KEY`/`GAODE_KEY` 仅兼容存量兜底 |
 
 `.env.example` 对 L2 只写：
 
@@ -168,8 +168,6 @@ OAuth **回调完整 URL** 优先由 `BACKEND_PUBLIC_URL` / `FRONTEND_PUBLIC_URL
 | `GITHUB_OAUTH_CLIENT_SECRET` | GitHub 绝密 |
 | `SMTP_USER` / `SMTP_PASSWORD` | 邮件账号与凭证（密码必须 L3；账号建议 L3） |
 | `SUPABASE_URL` / `SUPABASE_KEY` 等 | 统计/外部库密钥 |
-| `AGENT_API_KEY` 或 `AGENT_TOKEN` | LLM 主密钥 |
-| `AMAP_WEB_SERVICE_KEY` | 高德 Web 服务密钥（若不上 L2） |
 
 平台注入、一般不手写：`SPACE_ID` / `HF_SPACE_ID` 等。
 
@@ -276,8 +274,7 @@ backend/config/
 
 - 文档列出「所有 L2 项 ↔ Admin 菜单位置 ↔ DB 表/key」  
 - 缺口补齐（若有 key 只在 env、应迁面板则迁）  
-- 明确：**绝密不进面板**  
-  - 可显示「是否已配置 AGENT_API_KEY（来自环境）」布尔，不回显明文  
+- 明确：**绝密不进面板**；Agent/高德这类第三方业务 Key 走 L2 密钥池，HF Secrets 仅保留平台侧绝密
 - `AdminControlPanel` / API keys 文案与根 `.env.example` L2 段交叉链接
 
 **已有可保留**

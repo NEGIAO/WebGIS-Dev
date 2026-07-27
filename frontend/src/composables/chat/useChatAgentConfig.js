@@ -39,7 +39,7 @@ function defaultDraft() {
         max_tokens: 32768,
         temperature: 1,
         top_p: 0.95,
-        extra_body: { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 16384 },
+        extra_body: {},
     };
 }
 
@@ -339,7 +339,14 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             try {
                 let models = [];
 
-                if (config.isDirectMode) {
+                if (config.isDefaultAIMode) {
+                    const response = await apiAgentListModels({ use_default_ai: true });
+                    const data = response?.data || response || {};
+                    models = Array.isArray(data?.models) ? data.models : [];
+                    config.modelLoadHint = models.length
+                        ? `✅ 已加载 ${models.length} 个模型（默认 AI 模式）`
+                        : '未从默认 AI 上游返回可用模型，请检查管理员配置的 Base URL / API Key。';
+                } else if (config.isDirectMode) {
                     const dc = config.directConfig;
                     const response = await apiAgentListModels({
                         override_base_url: dc.base_url,
@@ -438,8 +445,8 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             config.userConfigSaving = true;
             try {
                 const personalApiKey = String(config.userConfigDraft.api_key || '').trim();
+                const draftBaseUrl = String(config.userConfigDraft.base_url || '').trim();
                 const backendPayload = {
-                    base_url: String(config.userConfigDraft.base_url || '').trim(),
                     model: String(config.userConfigDraft.model || '').trim(),
                     system_prompt: String(config.userConfigDraft.system_prompt || '').trim(),
                     timeout_seconds: Number(config.userConfigDraft.timeout_seconds || 45),
@@ -450,6 +457,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 };
 
                 if (personalApiKey) {
+                    backendPayload.base_url = draftBaseUrl;
                     config.isDefaultAIMode = false;
                     config.directConfig = { api_key: personalApiKey, ...backendPayload };
                 } else {

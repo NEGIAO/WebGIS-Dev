@@ -34,8 +34,6 @@ const L3_STATUS_LABELS = [
     { key: 'google_oauth', label: 'Google OAuth' },
     { key: 'github_oauth', label: 'GitHub OAuth' },
     { key: 'smtp', label: 'SMTP 邮件账号/密码' },
-    { key: 'agent_api_key_env', label: 'AGENT_API_KEY（环境）' },
-    { key: 'amap_web_service_key', label: '高德 Web 服务 Key（环境）' },
     { key: 'supabase', label: 'Supabase URL/Key' },
 ];
 
@@ -388,8 +386,8 @@ onMounted(async () => {
         <div class="admin-card">
             <h5 class="admin-subtitle">🔐 环境密钥状态（L3 · HF Secrets · 只读）</h5>
             <p class="config-description">
-                绝密项只能在 Hugging Face Space Secrets（或本地未提交 .env）中修改，此处仅显示是否已配置，不回显明文。
-                地图 Token、Agent 参数等常变项（L2）请在下方及「API 密钥管理」面板配置；全部键名登记见仓库根目录
+                L3 仅保留平台侧绝密项，只显示是否已配置，不回显明文。
+                LLM 主密钥 / base_url / model / 高德 Web 服务 Key 等 L2 项请在下方及「API 密钥管理」面板配置；全部键名登记见仓库根目录
                 <code>.env.example</code> 与 Docs/Guide/configuration.md。
             </p>
             <div class="env-status-grid">
@@ -583,7 +581,7 @@ onMounted(async () => {
                         v-model="agentConfigDraft.extra_body"
                         class="config-textarea"
                         rows="3"
-                        placeholder='{"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}'
+                        placeholder='{}'
                     ></textarea>
                 </label>
 

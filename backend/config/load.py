@@ -393,8 +393,6 @@ def masked_summary() -> list[str]:
             ("GOOGLE_OAUTH", s.google_oauth_client_id and s.google_oauth_client_secret),
             ("GITHUB_OAUTH", s.github_oauth_client_id and s.github_oauth_client_secret),
             ("SMTP_PASSWORD", s.smtp_password),
-            ("AGENT_API_KEY", s.agent_api_key),
-            ("AMAP_WEB_SERVICE_KEY", s.amap_web_service_key),
             ("SUPABASE", s.supabase_url and s.supabase_key),
         )
     )

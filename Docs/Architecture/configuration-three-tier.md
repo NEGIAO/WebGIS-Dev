@@ -79,8 +79,8 @@ flowchart TB
 | 层 | 位置 | 放什么 | 谁改 | 生效方式 |
 |----|------|--------|------|----------|
 | **L1** | 根 `.env`（模板 `.env.example`） | URL、端口、TTL、Agent 非密默认、`VITE_*` | 部署者 | 重启 / 重新构建 |
-| **L2** | `system_config` / `api_keys`(+备份池) / `announcements`（SQLite） | 地图 token、Agent 模型/配额/提示词、默认底图、公告、联系方式 | 运营（admin 面板） | 即时（后端动态读取） |
-| **L3** | HF Space Secrets（本地 = 未提交 `.env`） | `SUPER_USER`、OAuth Client Secret、`SMTP_PASSWORD`（账号在 L1，分开存取）、`AGENT_API_KEY`、`AMAP_WEB_SERVICE_KEY`、Supabase、`LOG` | 部署者（仅平台侧） | 重启容器 |
+| **L2** | `system_config` / `api_keys`(+备份池) / `announcements`（SQLite） | 地图 token、高德 Web 服务 Key、Agent 主密钥、Agent 模型/配额/提示词、默认底图、公告、联系方式 | 运营（admin 面板） | 即时（后端动态读取） |
+| **L3** | HF Space Secrets（本地 = 未提交 `.env`） | `SUPER_USER`、OAuth Client Secret、`SMTP_PASSWORD`（账号在 L1，分开存取）、Supabase、`LOG` | 部署者（仅平台侧） | 重启容器 |
 
 硬性边界：L3 真值不进 git、不进 DB、不进前端；`VITE_*` 永远不承载 secret；
 根 `.env.example` 是 L1+L2+L3 全部 key 的唯一登记目录（L2/L3 只登记不写真值）。
@@ -111,7 +111,7 @@ L1/L3 加载顺序（`load.py`）：**系统环境变量 ▸ 根 `.env` ▸ `bac
 
 **管理员密码**：账号固定 `admin`；密码链 = `SUPER_USER`（L3） ▸ 开发环境兜底 `123456` ▸ 生产缺失则禁用并日志说明。角色按用户名归一化，不信任 DB 角色字段。
 
-**Agent 密钥解析**：`api_keys.agent_api_key`（L2 池，含备份与旧名 `agent_token` 兼容） ▸ env `AGENT_API_KEY`/`AGENT_TOKEN`（L3）。模型/配额/提示词等参数以 `system_config`（L2）覆盖 L1 默认，免重启。
+**Agent 密钥解析**：`api_keys.agent_api_key`（L2 池，含备份与旧名 `agent_token` 兼容） ▸ env `AGENT_API_KEY`/`AGENT_TOKEN`（仅旧部署兜底，不再新增 HF Secrets）。模型/配额/提示词等参数以 `system_config`（L2）覆盖 L1 默认，免重启。
 
 **SMTP（账号/凭证分开存取的范例）**：主机/端口/发件账号为 L1，凭证 `SMTP_PASSWORD` 单独为 L3；
 `email_service` 调用时读取 settings，Secrets 更新重启即生效。

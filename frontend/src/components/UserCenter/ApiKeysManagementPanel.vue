@@ -1213,13 +1213,21 @@ onMounted(async () => {
 
 .key-card {
     background: rgba(255, 255, 255, 0.9);
-    border-radius: 8px;
+    border-radius: 12px;
     overflow: hidden;
     border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     box-shadow: 0 4px 12px rgba(33, 74, 49, 0.05);
     display: flex;
     flex-direction: column;
     min-width: 0;
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.key-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(33, 74, 49, 0.12);
 }
 
 .key-header {
@@ -1242,11 +1250,23 @@ onMounted(async () => {
 
 .status-badge {
     flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     padding: 4px 12px;
     border-radius: 12px;
     font-weight: 500;
     white-space: nowrap;
+}
+
+.status-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: 0 0 auto;
 }
 
 .status-badge.set {
@@ -1256,7 +1276,7 @@ onMounted(async () => {
 }
 
 .status-badge.unset {
-    background: rgba(244, 67, 54, 0.8);
+    background: rgba(244, 67, 54, 0.85);
     color: white;
 }
 
@@ -1526,13 +1546,21 @@ textarea.key-input {
 
 .backup-card {
     border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 12px;
     background: rgba(var(--brand-primary-rgb), 0.03);
     display: flex;
     flex-direction: column;
     gap: 10px;
     min-width: 0;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.backup-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(33, 74, 49, 0.08);
 }
 
 .backup-card-head,
