@@ -30,8 +30,14 @@ router = APIRouter(
     tags=["系统监控"],
 )
 
-DEFAULT_HF_RUN_LOGS_URL = "https://huggingface.co/api/spaces/NEGIAO/WebGIS/logs/run"
-DEFAULT_HF_BUILD_LOGS_URL = "https://huggingface.co/api/spaces/NEGIAO/WebGIS/logs/build"
+def _hf_run_logs_url() -> str:
+    """读取 HF 运行日志端点（L1，可随 Space 路径调整）。"""
+    return get_str("HF_RUN_LOGS_URL")
+
+
+def _hf_build_logs_url() -> str:
+    """读取 HF 构建日志端点（L1，可随 Space 路径调整）。"""
+    return get_str("HF_BUILD_LOGS_URL")
 
 # ---------- 本地日志广播（多订阅者）----------
 
@@ -284,7 +290,7 @@ async def stream_logs(
         raise HTTPException(status_code=503, detail="未配置 LOG Token")
 
     # 根据前端选择动态切换 HF Endpoint[cite: 4]
-    target_url = DEFAULT_HF_BUILD_LOGS_URL if type == "build" else DEFAULT_HF_RUN_LOGS_URL
+    target_url = _hf_build_logs_url() if type == "build" else _hf_run_logs_url()
     
     headers = {
         "Authorization": f"Bearer {token}",

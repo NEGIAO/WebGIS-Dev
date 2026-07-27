@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiAuthGetPreferences, apiAuthUpdatePreferences } from '../api/backend';
 import { getAuthToken } from '../services/auth';
+import { normalizeLocaleLanguage, setLocaleLanguage } from '../composables/useLocale';
 
 const USER_PREFERENCES_STORAGE_KEY = 'webgis_user_preferences_cache';
 export const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';
@@ -29,12 +30,7 @@ function getStorage(): Storage | null {
 }
 
 function normalizeLanguage(value: unknown): string {
-    const compact = String(value ?? '')
-        .trim()
-        .toLowerCase()
-        .replace('_', '-');
-    if (compact === 'en-us') return 'en-US';
-    return 'zh-CN';
+    return normalizeLocaleLanguage(value);
 }
 
 function normalizeUnitSystem(value: unknown): 'metric' | 'imperial' {
@@ -126,9 +122,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
 
     function applyRuntimePreferences(): void {
         savePreferenceRuntimeCache(preferences.value);
-        if (typeof document !== 'undefined') {
-            document.documentElement.lang = preferences.value.language || 'zh-CN';
-        }
+        setLocaleLanguage(preferences.value.language || 'zh-CN');
     }
 
     function loadFromStorage(): void {

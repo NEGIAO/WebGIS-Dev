@@ -1435,7 +1435,8 @@ var _WindLayer = class _WindLayer {
       const visibleRatio = Math.min(visibleRatioLon, visibleRatioLat);
       const pixelSize = 1e3 * visibleRatio;
       if (pixelSize > 0) {
-        this.viewerParameters.pixelSize = Math.max(0, Math.min(1e3, pixelSize));
+        // 修复：设定 pixelSize 下限 5，防止放大视角后粒子拖尾过短导致"小块渲染"
+        this.viewerParameters.pixelSize = Math.max(5, Math.min(1e3, pixelSize));
       }
     }
     this.viewerParameters.sceneMode = this.scene.mode;

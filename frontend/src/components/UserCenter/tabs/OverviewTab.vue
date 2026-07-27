@@ -10,6 +10,8 @@
 <script setup>
 import { computed, ref } from 'vue';
 
+import { useLocale } from '../../../composables/useLocale';
+
 const props = defineProps({
     /** Personal statistics object (registered_at, login_count, etc.) */
     selfStats: {
@@ -66,6 +68,9 @@ const emit = defineEmits([
 const newMessageText = ref('');
 const contactCopied = ref(false);
 let contactCopiedTimer = null;
+const { language, t } = useLocale();
+
+const intlLocale = computed(() => (language.value === 'en-US' ? 'en-US' : 'zh-CN'));
 
 /** 留言最大长度 */
 const MESSAGE_MAX_LEN = 200;
@@ -73,7 +78,7 @@ const MESSAGE_MAX_LEN = 200;
 /** 数字千分位格式化 */
 function formatNumber(value) {
     const num = Number(value || 0);
-    return Number.isFinite(num) ? num.toLocaleString('zh-CN') : '0';
+    return Number.isFinite(num) ? num.toLocaleString(intlLocale.value) : '0';
 }
 
 /** 注册陪伴天数（注册时间无效时返回 null） */
@@ -93,20 +98,20 @@ function formatRelativeTime(value) {
     if (Number.isNaN(parsed.getTime())) return raw;
 
     const diff = Date.now() - parsed.getTime();
-    if (diff < 60000) return '刚刚';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
+    if (diff < 60000) return t('overview.justNow');
+    if (diff < 3600000) return t('overview.minutesAgo', { count: Math.floor(diff / 60000) });
     if (diff < 86400000 && new Date().toDateString() === parsed.toDateString()) {
-        return `${Math.floor(diff / 3600000)} 小时前`;
+        return t('overview.hoursAgo', { count: Math.floor(diff / 3600000) });
     }
     const yesterday = new Date(Date.now() - 86400000);
-    if (parsed.toDateString() === yesterday.toDateString()) return '昨天';
-    return parsed.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+    if (parsed.toDateString() === yesterday.toDateString()) return t('overview.yesterday');
+    return parsed.toLocaleDateString(intlLocale.value, { month: '2-digit', day: '2-digit' });
 }
 
 /** 留言作者彩色首字头像：按用户名哈希取色 */
 const AUTHOR_COLORS = ['#4caf50', '#2980b9', '#9b59b6', '#e67e22', '#1abc9c', '#e74c3c'];
 function authorColor(name) {
-    const text = String(name || '匿');
+    const text = String(name || t('overview.anonymousInitial'));
     let hash = 0;
     for (let i = 0; i < text.length; i++) {
         hash = (hash * 31 + text.charCodeAt(i)) % 997;
@@ -116,7 +121,7 @@ function authorColor(name) {
 
 function authorInitial(name) {
     const text = String(name || '').trim();
-    return text ? text.slice(0, 1).toUpperCase() : '匿';
+    return text ? text.slice(0, 1).toUpperCase() : t('overview.anonymousInitial');
 }
 
 /** 复制成功后的按钮态切换（1.5s 还原） */
@@ -174,7 +179,7 @@ function formatDateTime(value) {
         return raw;
     }
 
-    return parsed.toLocaleString('zh-CN', {
+    return parsed.toLocaleString(intlLocale.value, {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -228,24 +233,24 @@ function handleSubmit() {
             <div class="stat-box">
                 <i class="fas fa-sign-in-alt stat-icon"></i>
                 <span class="stat-num">{{ formatNumber(selfStats.login_count) }}</span>
-                <span class="stat-name">登录次数</span>
+                <span class="stat-name">{{ t('overview.loginCount') }}</span>
             </div>
             <div class="stat-box">
                 <i class="fas fa-chart-line stat-icon"></i>
                 <span class="stat-num">{{ formatNumber(selfStats.total_visit_count) }}</span>
-                <span class="stat-name">访问次数</span>
+                <span class="stat-name">{{ t('overview.visitCount') }}</span>
             </div>
             <div class="stat-box">
                 <i class="fas fa-bolt stat-icon"></i>
                 <span class="stat-num">{{ formatNumber(selfStats.total_api_calls) }}</span>
-                <span class="stat-name">API 调用</span>
+                <span class="stat-name">{{ t('overview.apiCalls') }}</span>
             </div>
         </div>
 
         <!-- API 配额进度 -->
         <div v-if="!initialLoading" class="ov-card quota-card">
             <div class="quota-head">
-                <span class="ov-card-title"><i class="fas fa-gauge-high"></i> 今日 AI 配额</span>
+                <span class="ov-card-title"><i class="fas fa-gauge-high"></i> {{ t('overview.quotaToday') }}</span>
                 <span
                     class="quota-value"
                     :class="{ warning: quotaWarning }"
@@ -263,60 +268,60 @@ function handleSubmit() {
         <!-- 个人信息 -->
         <div v-if="!initialLoading" class="ov-card">
             <div class="ov-card-title title-with-badge">
-                <span><i class="fas fa-user-clock"></i> 我的账号</span>
+                <span><i class="fas fa-user-clock"></i> {{ t('overview.myAccount') }}</span>
                 <span
                     v-if="daysSinceRegister"
                     class="days-badge"
-                >已陪伴 {{ daysSinceRegister }} 天</span>
+                >{{ t('overview.accompaniedDays', { days: daysSinceRegister }) }}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">注册时间</span>
+                <span class="info-label">{{ t('overview.registeredAt') }}</span>
                 <span class="info-value">{{ formatDateTime(selfStats.registered_at) }}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">上次登录</span>
+                <span class="info-label">{{ t('overview.lastLogin') }}</span>
                 <span class="info-value">{{ formatDateTime(selfStats.last_login_at) }}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">本次在线</span>
+                <span class="info-label">{{ t('overview.currentSession') }}</span>
                 <span class="info-value">{{ sessionDurationText }}</span>
             </div>
             <div class="info-row">
-                <span class="info-label">当前状态</span>
+                <span class="info-label">{{ t('overview.currentStatus') }}</span>
                 <span class="info-value text-success">
-                    <span class="online-dot"></span> 在线
+                    <span class="online-dot"></span> {{ t('overview.online') }}
                 </span>
             </div>
         </div>
 
         <!-- 全站实时 -->
         <div v-if="!initialLoading" class="ov-card">
-            <div class="ov-card-title"><i class="fas fa-globe"></i> 全站实时</div>
+            <div class="ov-card-title"><i class="fas fa-globe"></i> {{ t('overview.realtime') }}</div>
             <div class="realtime-grid">
                 <div class="realtime-item">
                     <span class="realtime-num">{{ formatNumber(realtimeStats.online_users) }}</span>
-                    <span class="realtime-name">在线用户</span>
+                    <span class="realtime-name">{{ t('overview.onlineUsers') }}</span>
                 </div>
                 <div class="realtime-item">
                     <span class="realtime-num">{{ formatNumber(realtimeStats.total_registered_users) }}</span>
-                    <span class="realtime-name">注册用户</span>
+                    <span class="realtime-name">{{ t('overview.registeredUsers') }}</span>
                 </div>
                 <div class="realtime-item">
                     <span class="realtime-num">{{ formatNumber(realtimeStats.total_visit_count) }}</span>
-                    <span class="realtime-name">总浏览量</span>
+                    <span class="realtime-name">{{ t('overview.totalVisits') }}</span>
                 </div>
                 <div class="realtime-item">
                     <span class="realtime-num">{{ formatNumber(realtimeStats.total_api_calls) }}</span>
-                    <span class="realtime-name">总 API 调用</span>
+                    <span class="realtime-name">{{ t('overview.totalApiCalls') }}</span>
                 </div>
             </div>
             <div class="info-row contact-row">
-                <span class="info-label">管理员联系</span>
+                <span class="info-label">{{ t('overview.adminContact') }}</span>
                 <button
                     v-if="adminContact"
                     type="button"
                     class="contact-copy-btn"
-                    :title="contactCopied ? '已复制' : '点击复制'"
+                    :title="contactCopied ? t('overview.copied') : t('overview.clickToCopy')"
                     @click="copyAdminContact"
                 >
                     <span class="break-text">{{ adminContact }}</span>
@@ -328,18 +333,18 @@ function handleSubmit() {
                 <span
                     v-else
                     class="info-value"
-                >未配置</span>
+                >{{ t('overview.notConfigured') }}</span>
             </div>
         </div>
 
         <!-- 留言板 -->
         <div v-if="!initialLoading" class="ov-card">
-            <div class="ov-card-title"><i class="fas fa-comments"></i> 用户留言</div>
+            <div class="ov-card-title"><i class="fas fa-comments"></i> {{ t('overview.messages') }}</div>
             <textarea
                 v-model="newMessageText"
                 class="user-message-input"
                 :maxlength="MESSAGE_MAX_LEN"
-                placeholder="输入你的建议或反馈，发布后所有用户可见"
+                :placeholder="t('overview.messagePlaceholder')"
             ></textarea>
             <div class="compose-meta">
                 <span
@@ -357,12 +362,12 @@ function handleSubmit() {
                     class="fas"
                     :class="isPostingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
                 ></i>
-                {{ isPostingMessage ? '发布中...' : '发布留言' }}
+                {{ isPostingMessage ? t('overview.posting') : t('overview.postMessage') }}
             </button>
 
             <div class="message-list">
                 <div v-if="recentMessages.length === 0" class="message-empty">
-                    暂无留言，来发第一条吧
+                    {{ t('overview.emptyMessages') }}
                 </div>
                 <div
                     v-for="item in recentMessages"
@@ -374,7 +379,7 @@ function handleSubmit() {
                             class="author-avatar"
                             :style="{ background: authorColor(item.username) }"
                         >{{ authorInitial(item.username) }}</span>
-                        <span class="message-author">{{ item.username || '匿名' }}</span>
+                        <span class="message-author">{{ item.username || t('overview.anonymous') }}</span>
                         <span
                             class="message-time"
                             :title="formatDateTime(item.created_at)"

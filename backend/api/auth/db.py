@@ -591,8 +591,9 @@ def _ensure_schema() -> None:
     finally:
         conn.close()
 
-    global _auth_storage_ready
-    _auth_storage_ready = True
+    # 注意：不在此处设置 _auth_storage_ready = True。
+    # 由 _db_connection() 在数据恢复导入完成后统一设置，避免并发线程在数据
+    # 恢复前拿到空库连接。
     logger.info("数据库 schema 重建完成: %s", str(AUTH_DB_PATH))
 
 
@@ -670,6 +671,10 @@ def _db_connection() -> sqlite3.Connection:
 
         # 清除暂存数据
         _pending_recovery_data = None
+
+    # 所有初始化步骤完成（schema 重建 + 数据恢复导入），标记为就绪
+    _auth_storage_ready = True
+    logger.info("数据库初始化与恢复流程完成，服务就绪: %s", str(AUTH_DB_PATH))
 
     # 重试连接
     try:

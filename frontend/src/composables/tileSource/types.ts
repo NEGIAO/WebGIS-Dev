@@ -8,6 +8,7 @@ import type XYZ from 'ol/source/XYZ';
 import type TileWMS from 'ol/source/TileWMS';
 import type WMTS from 'ol/source/WMTS';
 import type VectorTileSource from 'ol/source/VectorTile';
+import { TILE_CAPABILITIES_TIMEOUT_MS as PUBLIC_TILE_CAPABILITIES_TIMEOUT_MS, TILE_REQUEST_TIMEOUT_MS as PUBLIC_TILE_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 
 export type TileYNormalizeMode = 'auto' | 'direct' | 'invert-tms' | 'ol-negative';
 export type CustomTileSourceKind =
@@ -70,6 +71,6 @@ export type AutoDetectOptions = {
 
 export const DEFAULT_WMS_VERSION = '1.1.1';
 export const DEFAULT_WMTS_VERSION = '1.0.0';
-export const CAPABILITIES_FETCH_TIMEOUT_MS = 10000;
-export const TILE_REQUEST_TIMEOUT_MS = 15000;
+export const CAPABILITIES_FETCH_TIMEOUT_MS = PUBLIC_TILE_CAPABILITIES_TIMEOUT_MS;
+export const TILE_REQUEST_TIMEOUT_MS = PUBLIC_TILE_REQUEST_TIMEOUT_MS;
 export const TILE_STATE_ERROR = 3;

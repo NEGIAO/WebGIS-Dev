@@ -19,6 +19,7 @@
  *   cesium-navigation 控件依赖这些扩展。
  */
 import knockout from 'knockout';
+import { CESIUM_CDN_ATTEMPT_TIMEOUT_MS, CESIUM_CDN_BASE_URLS } from './config/publicRuntime';
 
 // ==========================================
 // 公共常量与 CDN 候选链
@@ -31,14 +32,13 @@ import knockout from 'knockout';
  * 注意:Workers/Assets/Widgets 子资源均从 window.CESIUM_BASE_URL 解析,
  * 每次尝试前必须先把该全局指到当前候选,保证与主脚本同源。
  */
-const CESIUM_CDN_CANDIDATES = [
-    { name: 'jsDelivr', base: 'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/' },
-    { name: 'BootCDN', base: 'https://cdn.bootcdn.net/ajax/libs/cesium/1.132.0/' },
-    { name: 'unpkg', base: 'https://unpkg.com/cesium@1.132.0/Build/Cesium/' },
-];
+const CESIUM_CDN_CANDIDATES = CESIUM_CDN_BASE_URLS.map((base, index) => ({
+    name: index === 0 ? 'primary' : `fallback-${index}`,
+    base,
+}));
 
 /** 单个候选源的加载超时(ms):超时视为失败切换下一源(挂起连接不会触发 onerror) */
-const CDN_ATTEMPT_TIMEOUT_MS = 10000;
+const CDN_ATTEMPT_TIMEOUT_MS = CESIUM_CDN_ATTEMPT_TIMEOUT_MS;
 
 /** 兼容旧 API:主源静态基址(运行时实际生效源请用 getActiveCesiumBaseUrl) */
 export const CESIUM_BASE_URL = CESIUM_CDN_CANDIDATES[0].base;

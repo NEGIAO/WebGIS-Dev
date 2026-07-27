@@ -6,6 +6,25 @@
 
 ## 版本记录
 
+### V3.4.67 (2026-07-27) — 体积云时间轴同步与大气透视修复
+
+- ☁️ **Cesium 时间倍率同步**：体积云风场漂移与云形态演化从 `performance.now()` 墙钟增量改为 `viewer.clock.currentTime` 仿真时间差；调整 Cesium 时间倍率即同步改变云演化速度，拖动时间轴会让云纹理跳到对应时间状态。
+- 🌥️ **云影同源时间**：BSM `CloudShadowPass` 不再独立计算墙钟 `u_time`，改由主云管线传入同一 `clockElapsedSeconds`，云体与云影演化保持一致。
+- 🌌 **大气透视恢复且保留地面阴影**：后处理链保持 Atmosphere → Aerial → Cloud，Aerial 继续负责几何像素与地面云影，Cloud 最后叠加云体；流畅档重新启用基础 Aerial，三档 `aerialPerspectiveScale` 改为非零默认，避免大气效果只显示一点点。
+- ✅ **验证**：4 个触改 JS 文件 `node --check` 通过；定向 ESLint 通过。详见[日志](../LLM_record/26-07/2026-07-27/2026-07-27-cloud-time-atmosphere-sync.md)
+
+### V3.4.66 (2026-07-27) — L1 tracked `.env` 与硬编码服务端点收敛
+
+- ⚙️ **配置三层模型落地纠偏**：根目录 `.env` 改为 tracked L1 非涉密默认配置，`.env.example` 回归全集 registry；`.gitignore` 仅忽略 `.env.local`、`backend/.env` 等私密覆盖入口。文档同步删除“复制 `.env.example` 到忽略 `.env`”旧流程，明确 L1/L2/L3 边界。
+- 🛰️ **监控日志链路拆分**：`LOG` 继续作为 L3 监控令牌，新增 L1 `HF_RUN_LOGS_URL` / `HF_BUILD_LOGS_URL`，Space owner/name/path 不再写死在 `backend/api/monitor.py`。
+- 🔧 **后端部署相关常量收敛**：下载输出目录与任务库、ships66 海图模板、Amap/Nominatim/EPSG/IP 定位/OAuth provider 端点、代理连接池/超时/User-Agent 等统一登记到 `backend/config/catalog.py` + 根 env，并用 `get_str/get_int` 读取；`AGENT_BASE_URL` fallback 去重，仅保留 catalog/env 默认。
+- 🌐 **前端公开 L1 派生**：`publicRuntime.ts` 集中导出后端请求超时、Agent/空间分析超时、瓦片超时、Cesium CDN 候选链、天地图/行政区公开端点与浏览器侧 public token 占位，业务代码不散落 `import.meta.env`。
+- ✅ **已验证**：`CheckConfigRegistry.py` 7 项全绿（catalog 107 key、前端 VITE 使用 10 个）；编辑后端文件 `py_compile` 通过。详见[日志](../LLM_record/26-07/2026-07-27/2026-07-27-l1-env-config-hardcode-cleanup.md)
+
+### V3.4.65 (2026-07-27) — 体积云颗粒感画质旋钮
+
+- ☁️ 体积云流畅/均衡档颗粒感优化：提高低/中档 `cloudResolutionScale` 与主采样步数，降低最小采样步长和远距步长增幅；工具面板新增「云渲染分辨率 / 最小采样步长 / 远距步长增幅」三个画质旋钮，可在不切极致档的情况下现场微调颗粒感。详见 `Docs/LLM_record/26-07/2026-07-27/2026-07-27-cloud-quality-grain-ui-tuning.md`
+
 ### V3.4.64 (2026-07-27) — requestRenderMode P2+P3 收官：按需渲染正式生效（总开关置 true）
 
 L3 延续（同方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestrendermode-plan.md)；用户明示「不用请求批准，直接全部执行」授权 P2/P3）。**按需渲染自本版起真实生效**：「3D 静止 + 四特效全关」渲染频率降至 ~0.2Hz（5s 时钟兜底重渲）、GPU 满载→近零；体积云/风场/流体/漫游任一开启即自动回连续渲染，关闭后回降载。

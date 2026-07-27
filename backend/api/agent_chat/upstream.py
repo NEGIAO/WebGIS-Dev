@@ -10,7 +10,7 @@ import httpx
 from fastapi import HTTPException, Request, status
 
 from api.api_management import record_api_call
-from config import get_str
+from config import get_int, get_str
 
 from .constants import DEFAULT_AGENT_SYSTEM_PROMPT, logger
 from .schemas import AgentChatHistoryItem
@@ -115,12 +115,17 @@ async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
         return None
 
     try:
-        timeout = httpx.Timeout(connect=2.0, read=5.0, write=2.0, pool=1.0)
+        timeout = httpx.Timeout(
+            connect=float(get_int("IP_GEO_TIMEOUT_CONNECT_SECONDS", 3, minimum=1, maximum=120)),
+            read=float(get_int("IP_GEO_TIMEOUT_READ_SECONDS", 5, minimum=1, maximum=300)),
+            write=float(get_int("IP_GEO_TIMEOUT_WRITE_SECONDS", 5, minimum=1, maximum=300)),
+            pool=float(get_int("IP_GEO_TIMEOUT_POOL_SECONDS", 3, minimum=1, maximum=120)),
+        )
         async with httpx.AsyncClient(timeout=timeout) as client:
             # 用 params 而非 f-string 拼 URL：ip 源自客户端可控的 X-Forwarded-For，
             # 直接拼接时形如 "1.1.1.1#" 会截断 key、"1.1.1.1&k=v" 会注入额外查询参数。
             response = await client.get(
-                "https://restapi.amap.com/v3/ip",
+                get_str("IP_GEO_AMAP_ENDPOINT"),
                 params={"ip": ip, "key": amap_key},
             )
             data = response.json()

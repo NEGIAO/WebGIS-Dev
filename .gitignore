@@ -78,8 +78,7 @@ webgis_auth.db
 *.sw?
 
 # ========== 本地环境 ==========
-# 根目录与各端私密 env（.env.example 可提交；真实 .env 禁止提交）
-.env
+# 根目录 .env 是已提交的 L1 非涉密默认配置；本地私密覆盖仍保持忽略
 .env.local
 .env.*.local
 frontend/.env.local

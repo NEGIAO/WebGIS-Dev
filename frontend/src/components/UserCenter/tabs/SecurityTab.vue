@@ -9,6 +9,7 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { getUserDisplayName, validateDisplayName } from '../../../composables/auth/useAuthIdentity';
+import { useLocale } from '../../../composables/useLocale';
 
 const props = defineProps({
     /** Current user object (used to check role) */
@@ -43,6 +44,8 @@ const emit = defineEmits([
     /** Request parent to unlink Google/GitHub OAuth binding. Payload: provider */
     'unlink-oauth',
 ]);
+
+const { t } = useLocale();
 
 /** OAuth 提供商品牌名（按钮文案用，避免小写 google/github） */
 const PROVIDER_LABELS = Object.freeze({ google: 'Google', github: 'GitHub' });
@@ -89,7 +92,15 @@ const pwdStrength = computed(() => {
     return 1;
 });
 
-const pwdStrengthText = computed(() => ['', '弱', '中', '强'][pwdStrength.value] || '');
+const pwdStrengthText = computed(() => {
+    const levels = [
+        '',
+        t('security.strengthLevels.weak'),
+        t('security.strengthLevels.medium'),
+        t('security.strengthLevels.strong'),
+    ];
+    return levels[pwdStrength.value] || '';
+});
 
 function resetForm() {
     displayName.value = getUserDisplayName(props.user) || '';
@@ -115,17 +126,17 @@ function handlePasswordSubmit() {
     const confirmPass = String(confirmPassword.value || '').trim();
 
     if (!oldPass || !newPass || !confirmPass) {
-        emit('change-password', { error: '请完整填写密码信息' });
+        emit('change-password', { error: t('security.errors.required') });
         return;
     }
 
     if (newPass !== confirmPass) {
-        emit('change-password', { error: '两次输入的新密码不一致' });
+        emit('change-password', { error: t('security.errors.mismatch') });
         return;
     }
 
     if (newPass.length < 6) {
-        emit('change-password', { error: '新密码长度至少为 6 位' });
+        emit('change-password', { error: t('security.errors.minLength') });
         return;
     }
 
@@ -176,17 +187,14 @@ defineExpose({ resetForm });
     <div class="view-content security-view">
         <div v-if="user?.role === 'guest'" class="guest-warning">
             <i class="fas fa-exclamation-triangle"></i>
-            <p>游客账号不支持修改密码，请注册正式账号享受完整功能。</p>
+            <p>{{ t('security.guestWarning') }}</p>
         </div>
         <div v-else-if="user?.role === 'admin'" class="guest-warning">
             <i class="fas fa-user-shield"></i>
-            <p>
-                管理员密码优先由 SUPER_USER 控制（本地未配置时默认
-                123456），不支持在线修改。
-            </p>
+            <p>{{ t('security.adminWarning') }}</p>
         </div>
         <div v-else class="password-form-container">
-            <h4 class="section-title">账号昵称</h4>
+            <h4 class="section-title">{{ t('security.displayNameTitle') }}</h4>
             <!-- form 包裹：回车即提交（V3.4.62 A5） -->
             <form class="stack-form" @submit.prevent="handleDisplayNameSubmit">
                 <div class="modern-input-group">
@@ -195,8 +203,8 @@ defineExpose({ resetForm });
                         v-model="displayName"
                         type="text"
                         maxlength="40"
-                        placeholder="输入新昵称"
-                        aria-label="账号昵称"
+                        :placeholder="t('security.displayNamePlaceholder')"
+                        :aria-label="t('security.displayNameTitle')"
                     />
                 </div>
                 <button
@@ -208,12 +216,12 @@ defineExpose({ resetForm });
                         class="fas"
                         :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-id-card'"
                     ></i>
-                    {{ isSubmitting ? '正在提交...' : '保存昵称' }}
+                    {{ isSubmitting ? t('security.submitting') : t('security.saveDisplayName') }}
                 </button>
             </form>
 
-            <h4 class="section-title">第三方账号绑定</h4>
-            <p class="oauth-bind-desc">已注册邮箱用户可绑定 Google 或 GitHub，后续可一键登录同一个 WebGIS 账号。</p>
+            <h4 class="section-title">{{ t('security.oauthTitle') }}</h4>
+            <p class="oauth-bind-desc">{{ t('security.oauthDesc') }}</p>
             <div class="oauth-bind-list">
                 <button
                     v-for="provider in ['google', 'github']"
@@ -223,26 +231,26 @@ defineExpose({ resetForm });
                     :class="[provider, { 'confirm-unlink': pendingUnlink === provider }]"
                     :disabled="isSubmitting || oauthLoading"
                     :aria-label="getBoundAccount(provider)
-                        ? `解绑 ${PROVIDER_LABELS[provider]}`
-                        : `绑定 ${PROVIDER_LABELS[provider]}`"
+                        ? t('security.unlinkProvider', { provider: PROVIDER_LABELS[provider] })
+                        : t('security.bindProvider', { provider: PROVIDER_LABELS[provider] })"
                     @click="handleOAuthAction(provider)"
                 >
                     <i :class="provider === 'google' ? 'fab fa-google' : 'fab fa-github'"></i>
                     <span v-if="pendingUnlink === provider">
-                        再点一次确认解绑 {{ PROVIDER_LABELS[provider] }}
+                        {{ t('security.confirmUnlink', { provider: PROVIDER_LABELS[provider] }) }}
                     </span>
                     <span v-else>
                         {{ getBoundAccount(provider)
-                            ? `解绑 ${PROVIDER_LABELS[provider]}`
-                            : `绑定 ${PROVIDER_LABELS[provider]}` }}
+                            ? t('security.unlinkProvider', { provider: PROVIDER_LABELS[provider] })
+                            : t('security.bindProvider', { provider: PROVIDER_LABELS[provider] }) }}
                     </span>
                     <small v-if="getBoundAccount(provider) && pendingUnlink !== provider">
-                        {{ getBoundAccount(provider)?.email || getBoundAccount(provider)?.display_name || '已绑定' }}
+                        {{ getBoundAccount(provider)?.email || getBoundAccount(provider)?.display_name || t('security.bound') }}
                     </small>
                 </button>
             </div>
 
-            <h4 class="section-title">修改密码</h4>
+            <h4 class="section-title">{{ t('security.passwordTitle') }}</h4>
             <!-- form 包裹：回车提交 + 隐藏用户名字段供密码管理器关联账号（V3.4.62 A5） -->
             <form class="stack-form" @submit.prevent="handlePasswordSubmit">
                 <input
@@ -261,12 +269,12 @@ defineExpose({ resetForm });
                         v-model="currentPassword"
                         :type="showPwd.current ? 'text' : 'password'"
                         autocomplete="current-password"
-                        placeholder="当前密码"
+                        :placeholder="t('security.currentPassword')"
                     />
                     <button
                         type="button"
                         class="pwd-toggle"
-                        :title="showPwd.current ? '隐藏密码' : '显示密码'"
+                        :title="showPwd.current ? t('security.hidePassword') : t('security.showPassword')"
                         @click="togglePwd('current')"
                     >
                         <i :class="showPwd.current ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
@@ -278,12 +286,12 @@ defineExpose({ resetForm });
                         v-model="nextPassword"
                         :type="showPwd.next ? 'text' : 'password'"
                         autocomplete="new-password"
-                        placeholder="新密码 (至少6位)"
+                        :placeholder="t('security.newPassword')"
                     />
                     <button
                         type="button"
                         class="pwd-toggle"
-                        :title="showPwd.next ? '隐藏密码' : '显示密码'"
+                        :title="showPwd.next ? t('security.hidePassword') : t('security.showPassword')"
                         @click="togglePwd('next')"
                     >
                         <i :class="showPwd.next ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
@@ -299,7 +307,7 @@ defineExpose({ resetForm });
                     <span class="strength-bars">
                         <span v-for="n in 3" :key="n" class="bar" :class="{ on: pwdStrength >= n }"></span>
                     </span>
-                    <span class="strength-text">强度：{{ pwdStrengthText }}</span>
+                    <span class="strength-text">{{ t('security.strength', { level: pwdStrengthText }) }}</span>
                 </div>
                 <div class="modern-input-group">
                     <i class="fas fa-check-double input-icon"></i>
@@ -307,12 +315,12 @@ defineExpose({ resetForm });
                         v-model="confirmPassword"
                         :type="showPwd.confirm ? 'text' : 'password'"
                         autocomplete="new-password"
-                        placeholder="确认新密码"
+                        :placeholder="t('security.confirmPassword')"
                     />
                     <button
                         type="button"
                         class="pwd-toggle"
-                        :title="showPwd.confirm ? '隐藏密码' : '显示密码'"
+                        :title="showPwd.confirm ? t('security.hidePassword') : t('security.showPassword')"
                         @click="togglePwd('confirm')"
                     >
                         <i :class="showPwd.confirm ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
@@ -328,7 +336,7 @@ defineExpose({ resetForm });
                         class="fas"
                         :class="isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'"
                     ></i>
-                    {{ isSubmitting ? '正在提交...' : '保存新密码' }}
+                    {{ isSubmitting ? t('security.submitting') : t('security.savePassword') }}
                 </button>
             </form>
         </div>

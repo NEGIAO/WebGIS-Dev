@@ -49,7 +49,7 @@ export default class Wind2D {
             domain: undefined,
             displayRange: undefined,
             dynamic: true,
-            useViewerBounds: true,
+            useViewerBounds: false,
         };
 
         const mergedOptions = { ...defaultOptions, ...options };

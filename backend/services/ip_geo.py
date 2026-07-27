@@ -22,31 +22,36 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-from config import get_str
+from config import get_int, get_str
 
 logger = logging.getLogger(__name__)
 
 # ==================== 配置 ====================
 
 # 高德 IP 定位（优先由 L2 api_keys.amap_key 动态读取，env 仅旧部署兜底）
-AMAP_IP_ENDPOINT = "https://restapi.amap.com/v3/ip"
+AMAP_IP_ENDPOINT = get_str("IP_GEO_AMAP_ENDPOINT")
 
 # ip-api.com（免费，无速率限制，支持 HTTPS）
-IP_API_ENDPOINT = "https://ip-api.com/json"
+IP_API_ENDPOINT = get_str("IP_GEO_IP_API_ENDPOINT")
 
 # ipapi.co（免费，有速率限制 30次/分钟）
-IPAPI_ENDPOINT = "https://ipapi.co"
+IPAPI_ENDPOINT = get_str("IP_GEO_IPAPI_ENDPOINT")
 
 # HTTP 客户端配置
-HTTP_TIMEOUT = httpx.Timeout(connect=3.0, read=5.0, write=5.0, pool=3.0)
+HTTP_TIMEOUT = httpx.Timeout(
+    connect=float(get_int("IP_GEO_TIMEOUT_CONNECT_SECONDS", 3, minimum=1, maximum=120)),
+    read=float(get_int("IP_GEO_TIMEOUT_READ_SECONDS", 5, minimum=1, maximum=300)),
+    write=float(get_int("IP_GEO_TIMEOUT_WRITE_SECONDS", 5, minimum=1, maximum=300)),
+    pool=float(get_int("IP_GEO_TIMEOUT_POOL_SECONDS", 3, minimum=1, maximum=120)),
+)
 HTTP_HEADERS = {
-    "User-Agent": "WebGIS-Backend/2.0",
+    "User-Agent": get_str("IP_GEO_USER_AGENT"),
     "Accept": "application/json",
 }
 
 # 缓存配置
-CACHE_TTL = 3600  # 1 小时
-CACHE_MAX_SIZE = 2000  # 最大缓存条目数
+CACHE_TTL = get_int("IP_GEO_CACHE_TTL_SECONDS", 3600, minimum=60, maximum=24 * 3600)
+CACHE_MAX_SIZE = get_int("IP_GEO_CACHE_MAX_SIZE", 2000, minimum=1, maximum=100000)
 
 
 # ==================== 数据模型 ====================

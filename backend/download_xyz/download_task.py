@@ -7,7 +7,7 @@ from sqlmodel import Field, SQLModel, Session, create_engine, select
 
 from config import get_str
 
-DEFAULT_DB_PATH = "/tmp/webgis_download_tasks.db"
+_db_path = get_str("DOWNLOAD_TASK_DB_PATH")
 
 
 def _utc_now() -> datetime:
@@ -24,7 +24,6 @@ class DownloadTask(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_utc_now)
 
 
-_db_path = get_str("DOWNLOAD_TASK_DB_PATH", "") or DEFAULT_DB_PATH
 _engine = create_engine(
     f"sqlite:///{_db_path}",
     echo=False,

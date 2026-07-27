@@ -3,7 +3,7 @@
  *
  * 三层配置模型的 L1 前端段（见根目录 .env.example）：
  * env 已统一收敛到仓库根目录（vite.config.js envDir=仓库根）——
- * - 本地开发：根目录 .env（git 忽略）
+ * - 本地开发：根目录 .env（已提交的 L1 非涉密默认配置）
  * - 生产构建：根目录 .env.production（clone 用户改成自己的后端域名）
  *
  * 规则：业务代码不得再硬编码后端域名（原作者 HF Space 域名等），
@@ -13,11 +13,24 @@
  * - VITE_BACKEND_URL           后端 API 基址（缺省 http://localhost:7860）
  * - VITE_TILE_PROXY_BASE_URL   瓦片代理基址（缺省同 VITE_BACKEND_URL）
  * - VITE_TILE_PROXY_MODE       fallback | always | off（缺省 fallback）
+ * - VITE_*_TIMEOUT_MS          公开请求超时与 CDN 加载超时
+ * - VITE_*_BASE_URL(S)         公开第三方服务端点 / CDN 候选链
  */
 
 /** 去除尾部斜杠，保证拼接时不出现双斜杠 */
 function stripTrailingSlash(value: string): string {
     return String(value || '').replace(/\/+$/, '');
+}
+
+function positiveNumberEnv(name: string, fallback: number): number {
+    const value = Number(import.meta.env[name]);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function csvEnv(name: string, fallback: string[]): string[] {
+    const raw = String(import.meta.env[name] || '').trim();
+    const values = raw ? raw.split(',').map((item) => item.trim()).filter(Boolean) : [];
+    return values.length ? values : fallback;
 }
 
 /** 后端 API 基址（axios client、鉴权、runtime-config 等均以此为准） */
@@ -36,10 +49,38 @@ export const TILE_PROXY_MODE: string = String(
 ).toLowerCase();
 
 /** 大文件下载请求超时（ms）：远长于全局 8s，GeoTIFF 流式传输耗时久（缺省 2000000ms ≈ 33 分钟） */
-export const DOWNLOAD_REQUEST_TIMEOUT_MS: number =
-    Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT) > 0
-        ? Number(import.meta.env.VITE_DOWNLOAD_REQUEST_TIMEOUT)
-        : 2000000;
+export const DOWNLOAD_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_DOWNLOAD_REQUEST_TIMEOUT', 2000000);
+
+/** 普通后端 API 请求超时（ms） */
+export const BACKEND_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_BACKEND_REQUEST_TIMEOUT_MS', 20000);
+
+/** Agent 对话请求超时（ms） */
+export const AGENT_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_AGENT_REQUEST_TIMEOUT_MS', 60000);
+
+/** 空间分析请求超时（ms） */
+export const SPATIAL_ANALYSIS_TIMEOUT_MS: number = positiveNumberEnv('VITE_SPATIAL_ANALYSIS_TIMEOUT_MS', 30000);
+
+/** 瓦片能力探测与请求超时（ms） */
+export const TILE_CAPABILITIES_TIMEOUT_MS: number = positiveNumberEnv('VITE_TILE_CAPABILITIES_TIMEOUT_MS', 10000);
+export const TILE_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_TILE_REQUEST_TIMEOUT_MS', 15000);
+
+/** Cesium CDN 候选链与单源加载超时 */
+export const CESIUM_CDN_BASE_URLS: string[] = csvEnv('VITE_CESIUM_CDN_BASE_URLS', [
+    'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/',
+    'https://cdn.bootcdn.net/ajax/libs/cesium/1.132.0/',
+    'https://unpkg.com/cesium@1.132.0/Build/Cesium/',
+]);
+export const CESIUM_CDN_ATTEMPT_TIMEOUT_MS: number = positiveNumberEnv('VITE_CESIUM_CDN_ATTEMPT_TIMEOUT_MS', 10000);
+
+/** 公开第三方服务默认端点 */
+export const TIANDITU_API_BASE_URL: string = stripTrailingSlash(String(import.meta.env.VITE_TIANDITU_API_BASE_URL || 'https://api.tianditu.gov.cn'));
+export const TIANDITU_SEARCH_DEFAULT_BOUND: string = String(import.meta.env.VITE_TIANDITU_SEARCH_DEFAULT_BOUND || '73.5,18.2,135.0,53.5');
+export const DISTRICT_BOUNDARY_BASE_URL: string = stripTrailingSlash(String(import.meta.env.VITE_DISTRICT_BOUNDARY_BASE_URL || 'https://geo.datav.aliyun.com/areas_v3/bound'));
+
+/** 公开浏览器侧地图服务 token：为空时调用方应禁用/降级对应 provider */
+export const MAPBOX_ACCESS_TOKEN: string = String(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '').trim();
+export const MAPTILER_KEY: string = String(import.meta.env.VITE_MAPTILER_KEY || '').trim();
+export const GEOVISEARTH_TOKEN: string = String(import.meta.env.VITE_GEOVISEARTH_TOKEN || '').trim();
 
 /**
  * 拼接后端 API URL

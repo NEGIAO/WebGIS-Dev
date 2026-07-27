@@ -3,6 +3,7 @@
  */
 
 import backendAPI from './client';
+import { AGENT_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 
 /**
  * 管理员：获取默认 AI 专属配置（含 api_key 完整值）
@@ -68,7 +69,7 @@ export async function apiAgentChatDefaultProxy(payload = {}) {
     }
 
     return backendAPI.post('/api/agent/chat/default-proxy', body, {
-        timeout: 60000,
+        timeout: AGENT_REQUEST_TIMEOUT_MS,
     });
 }
 
@@ -173,7 +174,7 @@ export async function apiAgentChatCompletions(payload = {}) {
     }
 
     return backendAPI.post('/api/agent/chat/completions', body, {
-        timeout: 60000, // LLM 推理可能需要较长时间
+        timeout: AGENT_REQUEST_TIMEOUT_MS, // LLM 推理可能需要较长时间
     });
 }
 
@@ -240,6 +241,6 @@ export async function apiAgentChatProxy(payload = {}) {
     }
 
     return backendAPI.post('/api/agent/chat/proxy', body, {
-        timeout: 60000, // LLM 推理可能需要较长时间
+        timeout: AGENT_REQUEST_TIMEOUT_MS, // LLM 推理可能需要较长时间
     });
 }

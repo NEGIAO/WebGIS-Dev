@@ -59,7 +59,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 后端完整文件树（`backend/` 全部文件及注释）统一维护于 [`Docs/Guide/backend-structure.md`](../Docs/Guide/backend-structure.md)，本 README 不再重复维护，避免多处同步。
 
-> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-27 V3.4.64：新增 `backend/utils/net_guard.py` 出站网络护栏，统一 Agent override、通用代理、GCJ 纠偏与底图下载的私网/回环/IP 字面量判定，并补齐代理响应体/瓦片资源上限。
+> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-27 V3.4.67：后端无代码改动，本次为前端体积云 Cesium 时间轴同步与大气透视链路修复。
 
 ## 1. 认证系统
 
@@ -78,7 +78,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 3. 管理员
 - 用户名：**`admin`**（固定，不是 super_admin）
-- 密码：L3 环境变量 `SUPER_USER`（HF Secrets / 本地未提交 `.env`）
+- 密码：L3 环境变量 `SUPER_USER`（HF Secrets / 系统环境变量 / 本地忽略的 `backend/.env`）
 - 本地开发：`APP_ENV=development` 且未设 `SUPER_USER` 时为 `123456`
 - 角色：admin
 - 说明：密码只经统一配置 loader（`backend/config`）读取，不进数据库、不进前端；`admin`/`user` 禁止绑定 OAuth

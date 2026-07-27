@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.auth import require_api_access
+from config import get_int, get_str
 from utils.net_guard import is_disallowed_host
 
 from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles, clip_geotiff_to_bbox
@@ -25,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/download", tags=["Download"])
 
-DEFAULT_OUTPUT_DIR = "/tmp"
-DEFAULT_TASK_TTL_MINUTES = 30
-DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = 60
+DEFAULT_OUTPUT_DIR = get_str("DOWNLOAD_OUTPUT_DIR")
+DEFAULT_TASK_TTL_MINUTES = get_int("DOWNLOAD_TASK_TTL_MINUTES", 30, minimum=1, maximum=24 * 60)
+DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = get_int("DOWNLOAD_TOKEN_LIFETIME_MINUTES", 60, minimum=1, maximum=24 * 60)
 
 # 下载令牌缓存：{token: (task_id, expires_at)}
 _download_tokens: Dict[str, tuple[str, datetime]] = {}

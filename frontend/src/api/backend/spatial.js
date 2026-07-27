@@ -3,6 +3,7 @@
  */
 
 import backendAPI from './client';
+import { SPATIAL_ANALYSIS_TIMEOUT_MS } from '../../config/publicRuntime';
 
 /**
  * 调用后端空间分析 API
@@ -15,6 +16,6 @@ import backendAPI from './client';
  */
 export async function apiSpatialAnalysis(payload) {
     return backendAPI.post('/api/v1/spatial/analysis', payload, {
-        timeout: 30000, // 空间分析为重计算操作，给予 30 秒超时
+        timeout: SPATIAL_ANALYSIS_TIMEOUT_MS, // 空间分析为重计算操作，给予独立超时
     });
 }

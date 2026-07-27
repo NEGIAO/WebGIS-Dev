@@ -21,6 +21,7 @@ import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRo
 import { BASEMAP_OPTIONS } from '../../constants';
 import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '../../stores';
 import { getUserDisplayName } from '../../composables/auth/useAuthIdentity';
+import { setLocaleLanguage, useLocale } from '../../composables/useLocale';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
@@ -32,6 +33,7 @@ const router = useRouter();
 const message = useMessage();
 const userPreferencesStore = useUserPreferencesStore();
 const themeStore = useThemeStore();
+const { t } = useLocale();
 const props = defineProps({
     open: {
         type: Boolean,
@@ -86,7 +88,7 @@ const centerData = ref({
         total_api_calls: 0,
         total_registered_users: 0,
     },
-    admin_contact: '管理员联系方式：admin@negiao.local',
+    admin_contact: 'admin@negiao.local',
     messages: [],
 });
 
@@ -105,13 +107,6 @@ const preferenceDraft = ref({
 });
 const preferenceSaving = ref(false);
 const preferenceModelOptions = ref([]);
-
-const roleTextMap = Object.freeze({
-    admin: '管理员',
-    super_admin: '管理员',
-    registered: '注册用户',
-    guest: '游客',
-});
 
 const isAdmin = computed(() => String(user.value?.role || '') === 'admin');
 
@@ -165,14 +160,17 @@ function handleAvatarImgError() {
 
 const roleText = computed(() => {
     const role = String(user.value?.role || '').trim();
-    return roleTextMap[role] || '未知角色';
+    const knownRole = ['admin', 'super_admin', 'registered', 'guest'].includes(role)
+        ? role
+        : 'unknown';
+    return t(`account.roles.${knownRole}`);
 });
 
 const hasControlledOpen = computed(() => props.open !== undefined);
 
 const panelLabel = computed(() => {
     const displayName = getUserDisplayName(user.value);
-    return displayName ? `账号：${displayName}` : '账号中心';
+    return displayName ? t('account.accountOf', { name: displayName }) : t('account.title');
 });
 
 const displayNameText = computed(() => getUserDisplayName(user.value));
@@ -196,17 +194,17 @@ const quotaText = computed(() => {
     const used = Number(quotaInfo.value?.used || 0);
     const limit = quotaInfo.value?.limit;
     if (limit == null) {
-        return `已调用 ${used} 次 / 不限额`;
+        return t('account.quotaUnlimited', { used });
     }
-    return `已调用 ${used}/${limit} 次`;
+    return t('account.quotaLimited', { used, limit });
 });
 
 /** 速览条用的精简配额文案 */
 const quotaShortText = computed(() => {
     const limit = quotaInfo.value?.limit;
-    if (limit == null) return '配额不限';
+    if (limit == null) return t('account.quotaShortUnlimited');
     const remaining = Number(quotaInfo.value?.remaining ?? 0);
-    return `配额余 ${remaining}`;
+    return t('account.quotaShortRemaining', { remaining });
 });
 
 /** 头部手动刷新：统计 + 实时 + 留言一次拉齐 */
@@ -217,7 +215,7 @@ async function handleManualRefresh() {
         refreshRealtimeData({ silent: true }),
         refreshMessages(),
     ]);
-    message.success('账号中心数据已刷新');
+    message.success(t('account.messages.refreshed'));
 }
 
 const sessionDurationText = computed(() => {
@@ -233,15 +231,15 @@ function formatDuration(totalSeconds) {
     const second = sec % 60;
 
     if (day > 0) {
-        return `${day}天 ${hour}小时 ${minute}分钟`;
+        return t('account.duration.day', { day, hour, minute });
     }
     if (hour > 0) {
-        return `${hour}小时 ${minute}分钟 ${second}秒`;
+        return t('account.duration.hour', { hour, minute, second });
     }
     if (minute > 0) {
-        return `${minute}分钟 ${second}秒`;
+        return t('account.duration.minute', { minute, second });
     }
-    return `${second}秒`;
+    return t('account.duration.second', { second });
 }
 
 function mergeUserPatch(nextUser = {}) {
@@ -310,7 +308,7 @@ async function loadCenterData({ silent = false } = {}) {
         hasLoadedCenterOnce.value = true;
     } catch (error) {
         if (!silent) {
-            message.warning(String(error?.message || '用户中心数据加载失败'));
+            message.warning(String(error?.message || t('account.messages.centerLoadFailed')));
         }
     } finally {
         isLoadingCenter.value = false;
@@ -331,7 +329,7 @@ async function refreshRealtimeData({ silent = true } = {}) {
         }
     } catch (error) {
         if (!silent) {
-            message.warning(String(error?.message || '实时统计刷新失败'));
+            message.warning(String(error?.message || t('account.messages.realtimeLoadFailed')));
         }
     }
 }
@@ -422,7 +420,7 @@ async function loadOAuthAccounts({ silent = true } = {}) {
     } catch (error) {
         oauthAccounts.value = [];
         if (!silent) {
-            message.warning(String(error?.message || '第三方账号绑定状态加载失败'));
+            message.warning(String(error?.message || t('account.messages.oauthLoadFailed')));
         }
     } finally {
         oauthLoading.value = false;
@@ -437,7 +435,7 @@ async function handleBindOAuth(provider) {
     try {
         await redirectToOAuthBindProvider(provider);
     } catch (error) {
-        message.error(String(error?.message || '第三方账号绑定入口生成失败'));
+        message.error(String(error?.message || t('account.messages.oauthEntryFailed')));
     }
 }
 
@@ -446,10 +444,10 @@ async function handleUnlinkOAuth(provider) {
     isSubmitting.value = true;
     try {
         await apiAuthUnlinkOAuthAccount(provider);
-        message.success('第三方账号已解绑');
+        message.success(t('account.messages.oauthUnlinked'));
         await loadOAuthAccounts({ silent: false });
     } catch (error) {
-        message.error(String(error?.message || '第三方账号解绑失败'));
+        message.error(String(error?.message || t('account.messages.oauthUnlinkFailed')));
     } finally {
         isSubmitting.value = false;
     }
@@ -503,13 +501,20 @@ function syncPreferenceDraftFromStore() {
     preferenceDraft.value = normalizePreferences(userPreferencesStore.preferences);
 }
 
+watch(
+    () => preferenceDraft.value.language,
+    (language) => {
+        setLocaleLanguage(language);
+    },
+);
+
 async function loadUserPreferences({ silent = true } = {}) {
     try {
         await userPreferencesStore.loadPreferences({ force: true, silent });
         syncPreferenceDraftFromStore();
     } catch (error) {
         if (!silent) {
-            message.error(String(error?.message || '偏好设置加载失败'));
+            message.error(String(error?.message || t('account.messages.prefsLoadFailed')));
         }
     }
 }
@@ -527,7 +532,7 @@ async function loadPreferenceModelOptions({ silent = true } = {}) {
     } catch (error) {
         preferenceModelOptions.value = [];
         if (!silent) {
-            message.warning(String(error?.message || '模型列表加载失败'));
+            message.warning(String(error?.message || t('account.messages.modelsLoadFailed')));
         }
     }
 }
@@ -541,9 +546,9 @@ async function handleSavePreferences() {
             normalizePreferences(preferenceDraft.value),
         );
         preferenceDraft.value = normalizePreferences(saved);
-        message.success('偏好设置已保存');
+        message.success(t('account.messages.prefsSaved'));
     } catch (error) {
-        message.error(String(error?.message || '偏好设置保存失败'));
+        message.error(String(error?.message || t('account.messages.prefsSaveFailed')));
     } finally {
         preferenceSaving.value = false;
     }
@@ -594,7 +599,7 @@ async function handleLogout() {
         isSubmitting.value = false;
     }
 
-    await forceBackToLogin('已退出登录');
+    await forceBackToLogin(t('account.messages.loggedOut'));
 }
 
 async function handleChangePassword(payload) {
@@ -608,7 +613,7 @@ async function handleChangePassword(payload) {
 
     const { oldPassword, newPassword } = payload || {};
     if (!oldPassword || !newPassword) {
-        message.error('请完整填写密码信息');
+        message.error(t('account.messages.passwordRequired'));
         return;
     }
 
@@ -617,10 +622,10 @@ async function handleChangePassword(payload) {
     try {
         await apiAuthChangePassword(oldPassword, newPassword);
         resetPasswordForm();
-        await forceBackToLogin('密码已修改，请重新登录');
+        await forceBackToLogin(t('account.messages.passwordChanged'));
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        message.error(detail || '密码修改失败，请稍后重试');
+        message.error(detail || t('account.messages.passwordChangeFailed'));
     } finally {
         isSubmitting.value = false;
     }
@@ -636,7 +641,7 @@ async function handleChangeDisplayName(payload) {
 
     const displayName = String(payload?.displayName || '').trim();
     if (!displayName) {
-        message.error('请填写昵称');
+        message.error(t('account.messages.displayNameRequired'));
         return;
     }
 
@@ -646,10 +651,10 @@ async function handleChangeDisplayName(payload) {
         if (result?.user) {
             mergeUserPatch(result.user);
         }
-        message.success('昵称已更新');
+        message.success(t('account.messages.displayNameUpdated'));
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        message.error(detail || '昵称更新失败，请稍后重试');
+        message.error(detail || t('account.messages.displayNameUpdateFailed'));
     } finally {
         isSubmitting.value = false;
     }
@@ -662,16 +667,16 @@ async function handleSaveAvatar() {
     try {
         const result = await apiAuthChangeAvatar(selectedAvatarIndex.value);
         if (result?.status === 'success') {
-            message.success('头像已更新');
+            message.success(t('account.messages.avatarUpdated'));
             mergeUserPatch(result?.user || {
                 avatar_index: Number(result?.avatar_index ?? selectedAvatarIndex.value),
             });
         } else {
-            message.error('头像更新失败，请稍后重试');
+            message.error(t('account.messages.avatarUpdateFailed'));
         }
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        message.error(detail || '头像更新失败，请稍后重试');
+        message.error(detail || t('account.messages.avatarUpdateFailed'));
     } finally {
         avatarSaving.value = false;
     }
@@ -681,7 +686,7 @@ async function handleSubmitUserMessage(content, onSuccess) {
     if (isPostingMessage.value) return;
 
     if (!content) {
-        message.warning('留言内容不能为空');
+        message.warning(t('account.messages.messageRequired'));
         return;
     }
 
@@ -690,11 +695,11 @@ async function handleSubmitUserMessage(content, onSuccess) {
         await apiCreateUserMessage(content);
         // 成功才回调清空输入框：发布失败时保留用户草稿（V3.4.62 A1）
         onSuccess?.();
-        message.success('留言已发布');
+        message.success(t('account.messages.messagePosted'));
         await refreshMessages();
         await refreshRealtimeData({ silent: true });
     } catch (error) {
-        message.error(String(error?.message || '留言发布失败'));
+        message.error(String(error?.message || t('account.messages.messagePostFailed')));
     } finally {
         isPostingMessage.value = false;
     }
@@ -756,7 +761,7 @@ onBeforeUnmount(() => {
                     <span class="account-avatar">
                         <img
                             :src="userAvatarSrc"
-                            :alt="`${displayNameText || '用户'}头像`"
+                            :alt="displayNameText || t('common.user')"
                             loading="lazy"
                             referrerpolicy="no-referrer"
                             @error="handleAvatarImgError"
@@ -764,7 +769,7 @@ onBeforeUnmount(() => {
                     </span>
                     <span class="status-dot"></span>
                 </div>
-                <span class="account-fab-text">{{ displayNameText || '用户' }}</span>
+                <span class="account-fab-text">{{ displayNameText || t('common.user') }}</span>
                 <i
                     class="fas fa-chevron-up fold-icon"
                     :class="{ rotated: !isOpen }"
@@ -788,7 +793,7 @@ onBeforeUnmount(() => {
                         <div class="profile-avatar large">
                             <img
                                 :src="userAvatarSrc"
-                                :alt="`${displayNameText || '用户'}头像`"
+                                :alt="displayNameText || t('common.user')"
                                 loading="lazy"
                                 referrerpolicy="no-referrer"
                                 @error="handleAvatarImgError"
@@ -811,7 +816,7 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             class="btn-fullscreen"
-                            title="刷新数据"
+                            :title="t('common.refresh')"
                             :disabled="isLoadingCenter"
                             @click="handleManualRefresh"
                         >
@@ -823,7 +828,7 @@ onBeforeUnmount(() => {
                         <button
                             type="button"
                             class="btn-fullscreen"
-                            :title="isFullscreen ? '退出全屏' : '全屏展开'"
+                            :title="isFullscreen ? t('common.exitFullscreen') : t('common.fullscreen')"
                             @click="toggleFullscreen"
                         >
                             <i :class="isFullscreen ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
@@ -837,15 +842,15 @@ onBeforeUnmount(() => {
                         <i class="fas fa-bolt"></i>{{ quotaShortText }}
                     </span>
                     <span class="quick-item">
-                        <i class="fas fa-stopwatch"></i>在线 {{ sessionDurationText }}
+                        <i class="fas fa-stopwatch"></i>{{ t('account.onlineFor', { duration: sessionDurationText }) }}
                     </span>
                     <span class="quick-item">
-                        <i class="fas fa-users"></i>{{ realtimeStats.online_users || 0 }} 人在线
+                        <i class="fas fa-users"></i>{{ t('account.usersOnline', { count: realtimeStats.online_users || 0 }) }}
                     </span>
                 </div>
 
                 <!-- Navigation Tabs（role/aria 补齐，V3.4.62 A9） -->
-                <div class="panel-nav" role="tablist" aria-label="账号中心页签">
+                <div class="panel-nav" role="tablist" :aria-label="t('account.title')">
                     <button
                         type="button"
                         role="tab"
@@ -854,7 +859,7 @@ onBeforeUnmount(() => {
                         :aria-selected="activeMenu === 'overview'"
                         @click="selectMenu('overview')"
                     >
-                        <i class="fas fa-home"></i> 总览
+                        <i class="fas fa-home"></i> {{ t('account.tabs.overview') }}
                     </button>
                     <button
                         type="button"
@@ -864,7 +869,7 @@ onBeforeUnmount(() => {
                         :aria-selected="activeMenu === 'security'"
                         @click="selectMenu('security')"
                     >
-                        <i class="fas fa-shield-alt"></i> 安全
+                        <i class="fas fa-shield-alt"></i> {{ t('account.tabs.security') }}
                     </button>
                     <button
                         v-if="isAdmin"
@@ -875,7 +880,7 @@ onBeforeUnmount(() => {
                         :aria-selected="activeMenu === 'admin'"
                         @click="selectMenu('admin')"
                     >
-                        <i class="fas fa-database"></i> 管理
+                        <i class="fas fa-database"></i> {{ t('account.tabs.admin') }}
                     </button>
                     <button
                         v-if="isAdmin"
@@ -886,7 +891,7 @@ onBeforeUnmount(() => {
                         :aria-selected="activeMenu === 'api-management'"
                         @click="selectMenu('api-management')"
                     >
-                        <i class="fas fa-sliders-h"></i> API
+                        <i class="fas fa-sliders-h"></i> {{ t('account.tabs.api') }}
                     </button>
                     <button
                         type="button"
@@ -897,7 +902,7 @@ onBeforeUnmount(() => {
                         @click="selectMenu('preferences')"
                     >
                         <!-- 原 fa-sliders-h 与 API 页签重复（V3.4.62 A4）：偏好含主题/头像，palette 更贴切 -->
-                        <i class="fas fa-palette"></i> 偏好
+                        <i class="fas fa-palette"></i> {{ t('account.tabs.preferences') }}
                     </button>
                 </div>
 
@@ -962,6 +967,8 @@ onBeforeUnmount(() => {
                             v-else-if="activeMenu === 'preferences'"
                             key="preferences"
                             :preference-draft="preferenceDraft"
+                            :saved-preferences="userPreferencesStore.preferences"
+                            :preference-loading="userPreferencesStore.loading"
                             :preference-saving="preferenceSaving"
                             :preference-model-options="preferenceModelOptions"
                             :basemap-preference-options="basemapPreferenceOptions"
@@ -972,6 +979,7 @@ onBeforeUnmount(() => {
                             :current-theme="themeStore.theme"
                             @update:preference-draft="({ key, value }) => { preferenceDraft[key] = value }"
                             @save-preferences="handleSavePreferences"
+                            @reset-preferences="syncPreferenceDraftFromStore"
                             @update:selected-avatar-index="(idx) => { selectedAvatarIndex = idx }"
                             @save-avatar="handleSaveAvatar"
                             @set-theme="(t) => themeStore.setTheme(t)"
@@ -985,11 +993,11 @@ onBeforeUnmount(() => {
                         class="btn-logout"
                         type="button"
                         :disabled="isSubmitting"
-                        title="安全退出"
+                        :title="t('common.safeLogout')"
                         @click="handleLogout"
                     >
                         <i class="fas fa-sign-out-alt"></i>
-                        退出系统
+                        {{ t('common.logout') }}
                     </button>
                 </div>
             </div>

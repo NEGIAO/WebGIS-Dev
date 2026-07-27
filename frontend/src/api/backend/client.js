@@ -14,7 +14,7 @@ import {
 } from '../../services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
 import { useMessage } from '../../composables/useMessage';
-import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL } from '../../config/publicRuntime';
+import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL, BACKEND_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 
 const { error: showError } = useMessage();
 
@@ -33,7 +33,7 @@ if (import.meta.env.DEV) {
  */
 const backendAPI = axios.create({
     baseURL: backendURL,
-    timeout: 20000,
+    timeout: BACKEND_REQUEST_TIMEOUT_MS,
     headers: {
         'Content-Type': 'application/json',
     },

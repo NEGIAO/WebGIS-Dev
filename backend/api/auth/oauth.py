@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import HTTPException, status
 
-from config import get_settings
+from config import get_int, get_settings, get_str
 
 from .constants import (
     ADMIN_USERNAME,
@@ -98,14 +98,14 @@ def _oauth_config(provider: str) -> Dict[str, str]:
     redirect_uri = settings.get_oauth_redirect_uri(provider)
 
     if provider == "google":
-        auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
-        token_url = "https://oauth2.googleapis.com/token"
-        profile_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+        auth_url = get_str("GOOGLE_OAUTH_AUTH_URL")
+        token_url = get_str("GOOGLE_OAUTH_TOKEN_URL")
+        profile_url = get_str("GOOGLE_OAUTH_PROFILE_URL")
         scope = "openid email profile"
     else:
-        auth_url = "https://github.com/login/oauth/authorize"
-        token_url = "https://github.com/login/oauth/access_token"
-        profile_url = "https://api.github.com/user"
+        auth_url = get_str("GITHUB_OAUTH_AUTH_URL")
+        token_url = get_str("GITHUB_OAUTH_TOKEN_URL")
+        profile_url = get_str("GITHUB_OAUTH_PROFILE_URL")
         scope = "read:user user:email"
 
     missing = [name for name, value in {
@@ -128,6 +128,11 @@ def _oauth_config(provider: str) -> Dict[str, str]:
         "profile_url": profile_url,
         "scope": scope,
     }
+
+
+def _oauth_http_timeout() -> float:
+    """OAuth provider HTTP 超时（L1，可供企业网关/代理环境覆盖）。"""
+    return float(get_int("OAUTH_HTTP_TIMEOUT_SECONDS", 15, minimum=5, maximum=120))
 
 
 def create_oauth_state(provider: str, mode: str = "login", username: str = "") -> str:
@@ -201,7 +206,7 @@ def build_authorization_url(provider: str, *, mode: str = "login", username: str
 async def _exchange_code_for_token(provider: str, code: str) -> str:
     """使用授权码向 provider 换取一次性 access token。"""
     config = _oauth_config(provider)
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
         response = await client.post(
             config["token_url"],
             data={
@@ -226,9 +231,10 @@ async def _exchange_code_for_token(provider: str, code: str) -> str:
 
 async def _fetch_google_profile(access_token: str) -> OAuthProfile:
     """拉取并规范化 Google 用户资料。"""
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    config = _oauth_config("google")
+    async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
         response = await client.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
+            config["profile_url"],
             headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
         )
     if response.status_code >= 400:
@@ -254,9 +260,10 @@ async def _fetch_github_profile(access_token: str) -> OAuthProfile:
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        profile_response = await client.get("https://api.github.com/user", headers=headers)
-        emails_response = await client.get("https://api.github.com/user/emails", headers=headers)
+    config = _oauth_config("github")
+    async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
+        profile_response = await client.get(config["profile_url"], headers=headers)
+        emails_response = await client.get(get_str("GITHUB_OAUTH_EMAILS_URL"), headers=headers)
 
     if profile_response.status_code >= 400:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="GitHub 用户资料获取失败")

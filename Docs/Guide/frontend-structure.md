@@ -85,13 +85,13 @@ frontend/src/
 │   │   │   ├── index.js                            # 模块统一出口
 │   │   │   ├── setupCloudIntegration.js            # Vue 桥接：懒加载/销毁/天空快照 + LensFlare 懒创建 + watch 帧级(RAF)合并
 │   │   │   ├── cloudParamsApply.js                 # 面板参数 → pipeline.params 映射（含性能标量键）
-│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（BSM 仅节流 raymarch；运动中强制刷新）
+│   │   │   ├── cloudQualityPresets.js              # 三档性能预设（画质采样 + 大气透视默认值）
 │   │   │   ├── assetConfig.js                      # public/cloud-atmosphere 路径 + 默认参数
 │   │   │   └── lib/                                # 库核心源码（内联，非 npm）
 │   │   │       ├── createCloudAtmosphere.js        # 一行创建入口
-│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（BSM 运行时启停/重建 + latest-good 纹理同步）
+│   │   │       ├── ThreeGeospatialPipeline.js      # 云+大气+BSM+TAA 主编排（Cesium clock 驱动演化 + Aerial 地面云影保序）
 │   │   │       ├── CloudShadowFrag.glsl.js         # BSM 着色器内联
-│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（矩阵每帧同步 + 颜色图集双缓冲 + 运动强制刷新）
+│   │   │       ├── CloudShadowPass.js              # Beer Shadow Map 级联（Cesium clock 同步时间 + 矩阵每帧同步 + 颜色图集双缓冲）
 │   │   │       ├── ShadowResolvePass.js            # BSM 时域 resolve（大运动 history reset + 持久 VBO/location 复用）
 │   │   │       ├── loadBinThreeGeospatial.js       # three Data3DTexture 解析 .bin
 │   │   │       ├── shaderLoader.js                 # 着色器加载器（bundle 优先 + fetch 回退）

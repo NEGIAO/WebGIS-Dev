@@ -38,7 +38,8 @@ WebGIS_Dev/
 ├── CheckStructureTree.py              # 结构树漂移门禁（frontend-structure.md ⇄ frontend/src 双向 diff）
 ├── UpdateReadmeTree.py                # README 文件树同步脚本
 ├── docker-compose.yml                 # 前后端容器编排
-├── .env.example                       # 配置全集清单（L1/L2/L3 权威入口）
+├── .env                               # L1 非涉密默认配置（tracked，前后端共用，clone 后可改 URL/端点/超时）
+├── .env.example                       # 配置全集 registry（L1/L2/L3 权威入口，不再作为复制模板）
 ├── .env.production                    # 前端生产构建公开 VITE_*（Vite envDir=根；clone 必改 VITE_BACKEND_URL）
 ├── .gitignore
 ├── LICENSE
@@ -55,7 +56,7 @@ Docs/
 │   ├── 26-04/                         # 2026-04 日志
 │   ├── 26-05/                         # 2026-05 日志
 │   ├── 26-06/                         # 2026-06 日志（含 06-28 / 06-29 等不规则命名子目录）
-│   └── 26-07/                         # 2026-07 日志（按 YYYY-MM-DD 子目录归档，含 07-26 多轮优化与 07-27 安全/渲染/账号修复）
+│   └── 26-07/                         # 2026-07 日志（按 YYYY-MM-DD 子目录归档，含 07-27 配置收敛、体积云画质/时间轴与大气修复）
 │
 ├── Architecture/                      # 架构设计文档（八大功能 + 洪水模拟 + 三层配置架构 configuration-three-tier.md）
 │

@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.64），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.67），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -103,16 +103,15 @@
 
 | 层 | 放哪里 | 做什么 |
 |----|--------|--------|
-| **L1** | 根目录 [`.env.example`](.env.example) → 复制为 `.env` | 不涉密常量、URL、前端 `VITE_*` |
-| **L2** | 管理员面板 + 数据库 | 地图 token、Agent 参数、底图、公告（常变） |
-| **L3** | Hugging Face **Secrets** | 绝密：`SUPER_USER`、OAuth secret、SMTP 密码、API Key |
+| **L1** | 根目录 tracked [`.env`](.env)（非涉密默认）+ [`.env.example`](.env.example)（全集目录） | 不涉密常量、URL、前端 `VITE_*`、公开服务端点/超时 |
+| **L2** | 管理员面板 + 数据库 | 地图 token、Agent/LLM Key 与参数、底图、公告（常变、动态生效） |
+| **L3** | Hugging Face **Secrets** | 绝密：`SUPER_USER`、OAuth secret、SMTP 密码、Supabase Key、监控令牌 |
 
 说明与检查清单：[Docs/Guide/configuration.md](Docs/Guide/configuration.md) · 执行计划：[configuration-architecture-plan.md](Docs/Guide/configuration-architecture-plan.md)
 
 ```bash
-# 仓库根目录
-cp .env.example .env
-# 按注释填 [L1]；生产把 [L3] 配到 HF Secrets；启动后 admin 配 [L2]
+# 仓库根目录：.env 已随仓库提交，作为 L1 非涉密默认配置
+# 只改 URL/端点/超时等 L1；L2 启动后 admin 配，L3 生产放 HF Secrets
 ```
 
 ### 一键启动（推荐）
@@ -120,7 +119,7 @@ cp .env.example .env
 ```bash
 # Windows：双击 LocalDev.bat，脚本自动完成：
 # 1. 检测环境依赖（Node.js / Docker / docker compose）
-# 2. 确保根目录 .env 存在（前后端唯一 env：Vite 与后端都从根读取）
+# 2. 使用根目录 tracked .env 作为前后端唯一 L1 默认配置（Vite 与后端都从根读取）
 # 3. 智能检测 Docker 镜像状态（首次构建 / 代码热重载 / Dockerfile 变更提示）
 # 4. 启动前端开发服务器 → http://localhost:5173
 # 5. 自动打开浏览器
@@ -228,9 +227,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.4.64** | 2026-07-27 | requestRenderMode P2+P3 收官（用户授权全量执行）：总开关 `ENABLE_REQUEST_RENDER_MODE` 置 **true**，按需渲染自本版起真实生效——「3D 静止+四特效全关」渲染降至 ~0.2Hz、GPU 满载→近零，特效开启期自动回连续渲染。全库高危写点静态普查：唯一缺口 3D Tiles 材质模式切换（直写 tileset.style）补 requestRender，其余直改点均已带显式触发或走 Entity API 自动通道；P3 定夺 `maximumRenderTimeChange=5s` 维持、FPS 面板保留（空闲低读数=省电特性，兼作生效仪表）。出现「画面不刷新」回归时总开关改回 false 一行回退。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-requestrendermode-p2-enable.md) |
-| **V3.4.63** | 2026-07-27 | Agent `override_base_url` 平台 Key 外泄修复（规划 P1-4 [P0 安全]，L3 已批）：任意游客/用户发一个带 `override_base_url` 不带 `override_api_key` 的请求，后端即把平台 Key 以 `Authorization: Bearer` 发往对方地址；无 override key 时 candidates 含全部备用 Key 且 401 触发轮换 → 单次请求可收割整个 Key 池（`/models` 为 GET 且不耗配额）。新增 `_validate_override_base_url` 单点护栏：成对校验 fail-closed + 仅 https + 私网/回环拒绝（`_coerce_ip_literal` 按 inet_aton 归一，堵死 `2130706433`/`0x7f000001`/`127.1`/`0177.0.0.1` 绕过）+ 可选 host 白名单（默认关，保留个人 Key 接任意服务商能力）；前端草稿改成对透传；新增两个默认即安全的 L1 key。附带 07-26 五会话连环撞号对账补录（V3.4.52/55–58 + V3.4.48 空号注记）。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-agent-override-base-url-key-leak-fix.md) |
-| **V3.4.62** | 2026-07-27 | 3D 属性表视图筛选接通核验收账（规划 P0-4 B4，零代码改动）：前序会话实现完整但收尾中断，五侧静态核验全绿——`useCesiumAttrViewExtentSync`（moveEnd+首帧推送、视域不可解/跨反经线诚实 null 降级）→ CesiumContainer 生命周期双路 stop → AttributeTable 动态「范围不可用」态 → 归一层 4326 直传 → 2D 回喂三路径；并行撞车旧副本 `useCesiumAttrExtentSync` 已确认零引用且当前文件系统不存在，仅保留新名实现。**B 簇（B1–B6）代码侧全清**，V3.5.0 建议实机三清单验证后打线。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-b4-cesium-view-extent-sync-closeout.md) |
+| **V3.4.67** | 2026-07-27 | 体积云时间轴同步与大气透视修复：云体风速/演化偏移改用 Cesium `viewer.clock.currentTime` 仿真时间，时间倍率调整即等价于云演化速度同步变更，拖动时间轴会驱动云纹理与 BSM 云影跳到对应时间；后处理链保持 Atmosphere → Aerial → Cloud，恢复 Aerial 几何像素地面云影，再让体积云叠加到天空与地面大气之上，并恢复流畅档基础 Aerial 与三档非零大气透视。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-cloud-time-atmosphere-sync.md) |
+| **V3.4.66** | 2026-07-27 | L1 配置与硬编码常量收敛：根目录 `.env` 改为 tracked 非涉密默认配置，`.env.example` 回归全集 registry，`.gitignore` 仅忽略本地私密覆盖；新增 `HF_RUN_LOGS_URL/HF_BUILD_LOGS_URL` 解决 `LOG` 只配 token 但 Space 日志端点写死的问题，并将下载输出目录、ships66、Amap/Nominatim/EPSG/IP 定位/OAuth provider 端点、代理连接池与前端请求超时/CDN 候选链收敛到 L1；保持 Agent/高德/地图 token 为 L2，`SUPER_USER`/OAuth secret/SMTP/Supabase/LOG token 为 L3。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-l1-env-config-hardcode-cleanup.md) |
+| **V3.4.65** | 2026-07-27 | 体积云流畅/均衡档颗粒感优化：提高低/中档 `cloudResolutionScale` 与主采样步数，降低最小采样步长和远距步长增幅；工具面板新增「云渲染分辨率 / 最小采样步长 / 远距步长增幅」三个画质旋钮，可在不切极致档的情况下现场微调颗粒感。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-cloud-quality-grain-ui-tuning.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -255,6 +254,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.4.64 · 开发中 · 最后更新 2026-07-27</sub>
+<sub>V3.4.67 · 开发中 · 最后更新 2026-07-27</sub>
 
 </div>

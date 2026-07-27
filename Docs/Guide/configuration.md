@@ -10,12 +10,13 @@
 
 | 层 | 位置 | 放什么 | 安全等级 |
 |----|------|--------|----------|
-| **L1** | 根目录 `.env`（由 `.env.example` 复制） | 不涉密/低密常量、公开 URL、前端 `VITE_*` | 最低 |
-| **L2** | 管理员面板 + 数据库 | 常变运营项：地图 token、Agent 参数、底图、公告 | 较高 |
-| **L3** | Hugging Face Space **Secrets**（本地可进未提交 `.env`） | 绝密：管理员密码、OAuth secret、SMTP 密码、API Key | 最高 |
+| **L1** | 根目录 tracked `.env`（已提交非涉密默认）+ `.env.example`（全集目录） | 不涉密/低密常量、公开 URL、前端 `VITE_*`、公开服务端点/超时 | 最低 |
+| **L2** | 管理员面板 + 数据库 | 常变运营项：地图 token、Agent/LLM Key 与参数、底图、公告 | 较高 |
+| **L3** | Hugging Face Space **Secrets** / 系统环境变量 | 绝密：管理员密码、OAuth secret、SMTP 密码、Supabase Key、监控日志令牌 | 最高 |
 
-**根目录 `.env.example` = L1+L2+L3 的全集目录**（所有 key 都出现并带注释）。  
-**已提交文件不得包含 L3 真值。**
+**根目录 `.env` = 已提交 L1 非涉密默认配置**（clone 后即可启动并按部署环境改 URL/端点）。  
+**根目录 `.env.example` = L1+L2+L3 的全集 key 目录 / registry**（所有 key 都出现并带注释）。  
+**已提交文件不得包含 L2/L3 真值。**
 
 ### 前端不能读绝密
 
@@ -33,14 +34,14 @@
 
 ## 5 分钟上手
 
-### 1. 复制清单
+### 1. 确认 L1 默认配置
 
 ```bash
-# 在仓库根目录 WebGIS-Dev/
-cp .env.example .env
+# 在仓库根目录 WebGIS-Dev/：.env 已随仓库提交，无需复制模板
+# 只修改不涉密 L1 值；L2/L3 真值不要写入 tracked .env
 ```
 
-Windows 也可手动复制 `.env.example` → `.env`。
+如需本地私密覆盖，优先使用系统环境变量 / HF Secrets；后端兼容入口 `backend/.env` 仍被 `.gitignore` 忽略。
 
 ### 2. 本地最低配置（L1）
 
@@ -122,7 +123,7 @@ SUPABASE_KEY
 LOG
 ```
 
-Variables（非密，可选）：`APP_ENV=production`、`BACKEND_PUBLIC_URL`、`FRONTEND_PUBLIC_URL`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`。
+Variables（非密，可选）：`APP_ENV=production`、`BACKEND_PUBLIC_URL`、`FRONTEND_PUBLIC_URL`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`HF_RUN_LOGS_URL`、`HF_BUILD_LOGS_URL`。
 配好后看启动日志「[配置] [L3] ...」行或 admin 控制台「环境密钥状态」卡片自检。
 
 1. Space **Secrets** 只添加根 `.env.example` 中 **[L3]** 段（上表）。  
@@ -161,7 +162,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 | 顶部公告 | 管理员控制台 → 系统配置 | `announcements` 表 | 公开接口下发 |
 | 管理员头像 | 账号中心 → 头像（admin 登录） | `system_config.admin_avatar_index` | 登录/资料接口 |
 
-**「仅 env」例外（有意不迁面板）**：`RUNTIME_CONFIG_ALLOWED_ORIGINS`、`PROXY_*`、`WEBGIS_LOG_STREAM_MODE` 等运维开关属 L1；`LOG` 监控令牌属 L3。
+**「仅 env」例外（有意不迁面板）**：`RUNTIME_CONFIG_ALLOWED_ORIGINS`、`PROXY_*`、`DOWNLOAD_*`、`HF_RUN_LOGS_URL`、`HF_BUILD_LOGS_URL`、`WEBGIS_LOG_STREAM_MODE` 等运维开关属 L1；`LOG` 监控令牌属 L3。
 
 **L3 状态可见性**：管理员控制台顶部「环境密钥状态」卡片仅显示 SUPER_USER / OAUTH_STATE_SECRET / Google/GitHub OAuth / SMTP / Supabase 的已配置布尔（来自 `GET /api/admin/overview` 的 `l3_env_status`，不回显明文）。Agent/LLM 主密钥与高德 Web 服务 Key 是 L2 项，请在「API 密钥管理」面板查看和维护。
 
@@ -172,6 +173,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 | 功能 | 最少配置 |
 |------|----------|
 | 打开地图（游客） | L1 前端 `VITE_*` + 后端可访问；地图 token 建议 L2 |
+| 日志监控 | L1 `HF_RUN_LOGS_URL/HF_BUILD_LOGS_URL` + L3 `LOG`（本地 local 模式不需要 LOG） |
 | admin 后台 | L3 `SUPER_USER` 或本地 dev 默认密码 |
 | 邮箱注册/重置 | L1 `SMTP_HOST/PORT/USER` + L3 `SMTP_PASSWORD`（账号/凭证分开存取） |
 | Google 登录 | L3 Google Client ID/Secret + `OAUTH_STATE_SECRET`；控制台 redirect |
@@ -210,8 +212,9 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 
 | 文件 | 角色 |
 |------|------|
-| [`.env.example`](../../.env.example) | 全集清单（唯一权威 key 目录） |
-| `.env` | 本地实值（git 忽略；前后端共用：后端 loader 与 Vite envDir 都读它） |
+| [`.env.example`](../../.env.example) | 全集 key 目录 / registry（L1/L2/L3 均登记，非复制模板） |
+| [`.env`](../../.env) | tracked L1 非涉密默认配置（前后端共用：后端 loader 与 Vite envDir 都读它） |
+| `backend/.env` | ignored 后端本地兼容覆盖入口；不要提交 |
 | `.env.production` | 生产构建公开 VITE_*（提交 git，clone 必改 VITE_BACKEND_URL） |
 | `frontend/.env.example` / `.env.production` | 指路存根（Vite 不再读取 frontend 目录 env） |
 | `backend/.env.example` | 后端摘要，指向根清单 |

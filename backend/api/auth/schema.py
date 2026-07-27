@@ -17,7 +17,8 @@ def _rebuild_guest_identity_records_table(conn) -> None:
     重建 guest_identity_records 表以添加 id PRIMARY KEY 列。
     SQLite 不支持 ALTER TABLE ADD COLUMN ... PRIMARY KEY，必须通过重建表实现。
 
-    使用显式事务控制：成功则 COMMIT，失败则 ROLLBACK 保证原表安全。
+    使用 SAVEPOINT 隔离事务：失败时只回滚本次重建操作，不影响外层调用方
+    （如 init_auth_tables_sync）已执行的其他 DDL。
     """
     # 1. 检查旧表是否存在
     old_table = conn.execute(
@@ -26,7 +27,11 @@ def _rebuild_guest_identity_records_table(conn) -> None:
     if old_table is None:
         return
 
+    savepoint_name = "sp_rebuild_guest_identity"
     try:
+        # 使用 SAVEPOINT 隔离本次重建：失败只回滚到此处，不影响外层事务
+        conn.execute(f"SAVEPOINT {savepoint_name}")
+
         # 2. 清理可能的残留临时表，然后创建新表（带 id 列）
         conn.execute("DROP TABLE IF EXISTS guest_identity_records_new")
         conn.execute("""
@@ -73,16 +78,21 @@ def _rebuild_guest_identity_records_table(conn) -> None:
         # 4. 替换旧表
         conn.execute("DROP TABLE guest_identity_records")
         conn.execute("ALTER TABLE guest_identity_records_new RENAME TO guest_identity_records")
-        conn.commit()
+
+        # 5. 释放 SAVEPOINT（成功：所有变更保留在外层事务中，由外层统一 commit）
+        conn.execute(f"RELEASE {savepoint_name}")
         logger.info("guest_identity_records 表重建迁移完成")
     except Exception as e:
-        logger.error("guest_identity_records 表重建失败，已回滚: %s", str(e))
-        # 回滚所有变更，恢复原表
-        conn.rollback()
-        # 清理可能残留的临时表（在新事务中）
+        logger.error("guest_identity_records 表重建失败，回滚本次重建: %s", str(e))
+        # 回滚到 SAVEPOINT：仅撤销本次重建操作，不影响外层已执行的其他 DDL
+        try:
+            conn.execute(f"ROLLBACK TO {savepoint_name}")
+            conn.execute(f"RELEASE {savepoint_name}")
+        except Exception:
+            pass
+        # 清理可能残留的临时表
         try:
             conn.execute("DROP TABLE IF EXISTS guest_identity_records_new")
-            conn.commit()
         except Exception:
             pass
         raise
@@ -353,10 +363,18 @@ def init_auth_tables_sync(conn) -> None:
     if "id" not in guest_identity_columns:
         logger.info("guest_identity_records 缺少 id 列，执行表重建迁移...")
         backup_auth_db_for_migration("guest_identity_records rebuild")
-        _rebuild_guest_identity_records_table(conn)
-        # 重建后重新读取列信息
-        guest_identity_column_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()
-        guest_identity_columns = {str(dict(row).get("name") or "") for row in guest_identity_column_rows}
+        try:
+            _rebuild_guest_identity_records_table(conn)
+            # 重建后重新读取列信息
+            guest_identity_column_rows = conn.execute("PRAGMA table_info(guest_identity_records)").fetchall()
+            guest_identity_columns = {str(dict(row).get("name") or "") for row in guest_identity_column_rows}
+        except Exception as rebuild_err:
+            # 重建失败不应阻止服务启动：旧表结构仍可用（SAVEPOINT 已回滚重建操作），
+            # 缺少 id 列不影响核心功能。记录错误后继续初始化其他表。
+            logger.error(
+                "guest_identity_records 表重建失败，服务将继续使用旧表结构（缺少 id 列）: %s",
+                str(rebuild_err)
+            )
     if "username" not in guest_identity_columns:
         _safe_execute(conn, "ALTER TABLE guest_identity_records ADD COLUMN username TEXT NOT NULL DEFAULT 'user'")
     if "role" not in guest_identity_columns:

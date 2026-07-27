@@ -18,7 +18,7 @@ AGENT_API_KEY_LEGACY = "agent_token"
 AGENT_CHAT_GUEST_DAILY_QUOTA = get_int("AGENT_CHAT_GUEST_DAILY_QUOTA", 10, minimum=1, maximum=1000)
 AGENT_CHAT_REGISTERED_DAILY_QUOTA = get_int("AGENT_CHAT_REGISTERED_DAILY_QUOTA", 100, minimum=1, maximum=10000)
 
-DEFAULT_AGENT_BASE_URL = get_settings().agent_base_url or "https://api.qnaigc.com/v1"
+DEFAULT_AGENT_BASE_URL = get_settings().agent_base_url
 DEFAULT_AGENT_MODEL = get_settings().agent_model
 DEFAULT_AGENT_SYSTEM_PROMPT = get_str(
     "AGENT_SYSTEM_PROMPT",

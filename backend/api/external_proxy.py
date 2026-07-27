@@ -14,13 +14,13 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from api.auth import require_api_access_or_guest, get_auth_db_connection
-from config import get_str
+from config import get_int, get_str
 from services import ip_geo_service
 
-AMAP_REST_ROOT = "https://restapi.amap.com"
-AMAP_WEB_DETAIL_ROOT = "https://www.amap.com/detail/get/detail"
-NOMINATIM_SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search"
-EPSG_PROJ4_ENDPOINT = "https://epsg.io/{code}.proj4"
+AMAP_REST_ROOT = get_str("AMAP_REST_ROOT")
+AMAP_WEB_DETAIL_ROOT = get_str("AMAP_WEB_DETAIL_ENDPOINT")
+NOMINATIM_SEARCH_ENDPOINT = get_str("NOMINATIM_SEARCH_ENDPOINT")
+EPSG_PROJ4_ENDPOINT = get_str("EPSG_PROJ4_ENDPOINT")
 AMAP_SUCCESS_STATUS = "1"
 AMAP_SUCCESS_INFOCODE = "10000"
 AMAP_KEY_RETRY_INFOCODES = {
@@ -32,16 +32,25 @@ AMAP_KEY_RETRY_INFOCODES = {
     "10044",
 }
 
-HTTP_CLIENT_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
-HTTP_CLIENT_LIMITS = httpx.Limits(max_connections=120, max_keepalive_connections=60)
+HTTP_CLIENT_TIMEOUT = httpx.Timeout(
+    connect=float(get_int("EXTERNAL_PROXY_CONNECT_TIMEOUT_SECONDS", 3, minimum=1, maximum=120)),
+    read=float(get_int("EXTERNAL_PROXY_READ_TIMEOUT_SECONDS", 8, minimum=1, maximum=300)),
+    write=float(get_int("EXTERNAL_PROXY_WRITE_TIMEOUT_SECONDS", 8, minimum=1, maximum=300)),
+    pool=float(get_int("EXTERNAL_PROXY_POOL_TIMEOUT_SECONDS", 3, minimum=1, maximum=120)),
+)
+HTTP_CLIENT_LIMITS = httpx.Limits(
+    max_connections=get_int("EXTERNAL_PROXY_MAX_CONNECTIONS", 120, minimum=1, maximum=10000),
+    max_keepalive_connections=get_int("EXTERNAL_PROXY_MAX_KEEPALIVE_CONNECTIONS", 60, minimum=0, maximum=10000),
+)
+EXTERNAL_PROXY_USER_AGENT = get_str("EXTERNAL_PROXY_USER_AGENT")
 
 DEFAULT_HEADERS = {
-    "User-Agent": "WebGIS-Backend/1.0",
+    "User-Agent": EXTERNAL_PROXY_USER_AGENT,
     "Accept": "application/json,text/plain,*/*",
 }
 
 NOMINATIM_HEADERS = {
-    "User-Agent": "WebGIS-Backend/1.0",
+    "User-Agent": EXTERNAL_PROXY_USER_AGENT,
     "Accept": "application/json",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.6",
 }
@@ -52,7 +61,7 @@ AMAP_WEB_DETAIL_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Referer": "https://www.amap.com/",
+    "Referer": get_str("AMAP_WEB_REFERER"),
     "Accept": "application/json,text/plain,*/*",
 }
 

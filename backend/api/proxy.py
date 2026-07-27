@@ -35,6 +35,11 @@ PROXY_ALLOWED_HOSTS = parse_host_allowlist(get_str("PROXY_ALLOWED_HOSTS", ""))
 PROXY_DNS_GUARD = get_bool("PROXY_DNS_GUARD", True)
 PROXY_MAX_RESPONSE_MB = get_int("PROXY_MAX_RESPONSE_MB", 32)
 PROXY_MAX_RESPONSE_BYTES = PROXY_MAX_RESPONSE_MB * 1024 * 1024 if PROXY_MAX_RESPONSE_MB > 0 else 0
+PROXY_HTTP_TIMEOUT_SECONDS = get_int("PROXY_HTTP_TIMEOUT_SECONDS", 20, minimum=1, maximum=300)
+PROXY_HTTP_CONNECT_TIMEOUT_SECONDS = get_int("PROXY_HTTP_CONNECT_TIMEOUT_SECONDS", 5, minimum=1, maximum=120)
+PROXY_MAX_CONNECTIONS = get_int("PROXY_MAX_CONNECTIONS", 100, minimum=1, maximum=10000)
+PROXY_MAX_KEEPALIVE_CONNECTIONS = get_int("PROXY_MAX_KEEPALIVE_CONNECTIONS", 20, minimum=0, maximum=10000)
+PROXY_USER_AGENT = get_str("PROXY_USER_AGENT")
 
 
 def _get_client_ip(request: Request) -> str:
@@ -84,9 +89,12 @@ def _rate_limit_check(request: Request) -> None:
 def build_http_client() -> httpx.AsyncClient:
     """创建并配置全局异步 HTTP 客户端"""
     return httpx.AsyncClient(
-        timeout=httpx.Timeout(20.0, connect=5.0),
+        timeout=httpx.Timeout(float(PROXY_HTTP_TIMEOUT_SECONDS), connect=float(PROXY_HTTP_CONNECT_TIMEOUT_SECONDS)),
         follow_redirects=False,
-        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        limits=httpx.Limits(
+            max_connections=PROXY_MAX_CONNECTIONS,
+            max_keepalive_connections=PROXY_MAX_KEEPALIVE_CONNECTIONS,
+        ),
         verify=PROXY_VERIFY_SSL,
     )
 
@@ -117,11 +125,7 @@ PROXY_PASSTHROUGH_HEADERS = {
 }
 
 PROXY_DEFAULT_REQUEST_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": PROXY_USER_AGENT,
     "Accept": "image/png,image/*,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     "Accept-Encoding": "gzip, deflate, br",
@@ -265,7 +269,7 @@ def _resolve_gcj_http_client(request: Request) -> Tuple[httpx.AsyncClient, bool]
 # ==================== 专用海图代理 ====================
 @router.get("/tiles/ships66/{z}/{x}/{y}.png")
 async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depends(_rate_limit_check)):
-    upstream_url = f"http://g3.ships66.com/maps/one/{z}/{x}/{y}.png"
+    upstream_url = get_str("SHIPS66_TILE_URL_TEMPLATE").format(z=z, x=x, y=y)
     headers = {
         "User-Agent": PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"],
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",

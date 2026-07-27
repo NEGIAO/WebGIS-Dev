@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.4.64
+# WebGIS 前端项目 — V3.4.67
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -63,14 +63,15 @@ npm run build:analyze
 
 ## 🔧 环境变量
 
-复制 `.env.example` 为 `.env.local` 后配置：
+根目录 [`.env`](../.env) 已作为 L1 非涉密默认配置提交；前端 `VITE_*` 统一在仓库根配置，Vite 通过 `envDir=..` 读取：
 
 ```env
-VITE_BACKEND_URL=http://localhost:8000
-VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
+VITE_BACKEND_URL=http://localhost:7860
+VITE_TILE_PROXY_BASE_URL=http://localhost:7860
 VITE_TILE_PROXY_MODE=fallback
-# Amap key is configured in the admin API key panel.
 VITE_BASE_URL=./
+VITE_BACKEND_REQUEST_TIMEOUT_MS=20000
+VITE_AGENT_REQUEST_TIMEOUT_MS=60000
 ```
 
 > ⚠️ 天地图 TK 与 Cesium Ion Token 由管理员在用户中心统一配置，后端写入数据库；前端启动时通过 `/api/runtime-config/map-tokens` 读取一次主/备 token 池后直连第三方服务。不要在 `VITE_TIANDITU_TK` / `VITE_CESIUM_ION_TOKEN` 中写入真实值，Vite 会把它们打进前端产物。
@@ -165,5 +166,5 @@ MIT
 ---
 
 最后更新：2026-07-27
-当前版本：V3.4.64
-说明：requestRenderMode 按需渲染正式生效，后端 SSRF/Agent 上游安全护栏收敛，并修复登录页加载链路与用户中心体验。
+当前版本：V3.4.67
+说明：体积云演化改为跟随 Cesium 时间轴与时间倍率，云影同步使用仿真时间；后处理链保持地面云影可见的 Aerial → Cloud 顺序。

@@ -49,7 +49,8 @@ async def require_api_access_optional(request: Request) -> Optional[Dict[str, An
 
 # ==================== 配置 ====================
 
-NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org"
+NOMINATIM_ENDPOINT = get_str("NOMINATIM_BASE_URL")
+AMAP_REVERSE_GEOCODE_ENDPOINT = f"{get_str('AMAP_REST_ROOT')}/v3/geocode/regeo"
 
 # ==================== 请求/响应模型 ====================
 
@@ -159,7 +160,7 @@ async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient
 
     try:
         response = await client.get(
-            "https://restapi.amap.com/v3/geocode/regeo",
+            AMAP_REVERSE_GEOCODE_ENDPOINT,
             params={"location": f"{gcj_lng},{gcj_lat}", "key": amap_key, "extensions": "all"},
         )
         data = response.json()

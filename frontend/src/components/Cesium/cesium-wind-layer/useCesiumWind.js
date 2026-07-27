@@ -72,7 +72,7 @@ export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
                 dropRate: windParams.value.dropRate,
                 dropRateBump: windParams.value.dropRateBump,
                 dynamic: windParams.value.dynamic,
-                useViewerBounds: true,
+                useViewerBounds: false,
             });
 
             wind2D.value = wind;

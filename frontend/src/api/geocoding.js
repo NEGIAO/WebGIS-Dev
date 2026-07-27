@@ -18,6 +18,7 @@ import { useMessage } from '@/composables/useMessage';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@/utils/coordTransform.js';
 import { getAmapErrorMessage } from './httpStatusMap';
 import { getRuntimeMapTokensSync } from '@/services/runtimeMapTokens';
+import { TIANDITU_API_BASE_URL } from '@/config/publicRuntime';
 
 const AMAP_SUCCESS_STATUS = '1';
 const AMAP_SUCCESS_INFOCODE = '10000';
@@ -25,7 +26,7 @@ const AMAP_SUCCESS_INFOCODE = '10000';
 const tiandituClient = axios.create({
     // 按天地图接口文档使用 geocoder 端点。
     // 若页面为 https 且遇到混合内容限制，可改为 https://api.tianditu.gov.cn
-    baseURL: 'https://api.tianditu.gov.cn',
+    baseURL: TIANDITU_API_BASE_URL,
     timeout: 8000,
 });
 
