@@ -457,6 +457,9 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 };
 
                 if (personalApiKey) {
+                    // 个人 Key 必须同步提交给后端；否则后端校验 base_url 时会认为“只有 URL 没有 Key”，
+                    // 从而触发 override_base_url/override_api_key 成对校验失败。
+                    backendPayload.api_key = personalApiKey;
                     backendPayload.base_url = draftBaseUrl;
                     config.isDefaultAIMode = false;
                     config.directConfig = { api_key: personalApiKey, ...backendPayload };

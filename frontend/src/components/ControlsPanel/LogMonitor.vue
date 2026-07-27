@@ -154,7 +154,8 @@ let logSeq = 0;
 
 const logsStreamUrl = computed(() => {
     const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
-    return `${base}/monitor/logs/stream?type=${currentType.value}`;
+    const params = new URLSearchParams({ type: currentType.value });
+    return `${base}/monitor/logs/stream?${params.toString()}`;
 });
 
 // 匹配 HTTP 响应状态码，仅识别 uvicorn/httpx 等标准 HTTP 日志格式：
@@ -320,12 +321,14 @@ function openConnection() {
     streamDesired.value = true;
     clearReconnectTimer();
     teardownEventSource();
+
     eventSource = new EventSource(logsStreamUrl.value);
     eventSource.onopen = () => (isConnected.value = true);
     eventSource.onmessage = (e) => pushLine(e.data);
-    // 断线不改用户意图：瞬时网络抖动/后端重启时 3s 退避自动重连，
-    // 状态点转 pending；只有手动"停止"才真正关闭（旧逻辑一错即停，需手动重开）。
     eventSource.onerror = () => {
+        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+            pushLine('[ERROR] SSE 连接已关闭（网络异常或后端不可用），将自动重连。');
+        }
         teardownEventSource();
         if (!streamDesired.value) return;
         clearReconnectTimer();

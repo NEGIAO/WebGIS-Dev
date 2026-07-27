@@ -352,9 +352,24 @@ async def _call_upstream_chat(
             await client.aclose()
 
     if response.status_code == 401 or response.status_code == 403:
+        detail = "Agent service key is invalid or expired. Please contact admin."
+        try:
+            err_payload = response.json()
+            err_message = str(
+                err_payload.get("error", {}).get("message")
+                if isinstance(err_payload.get("error"), dict)
+                else err_payload.get("message")
+                or err_payload.get("detail")
+                or ""
+            ).strip()
+            if err_message:
+                detail = f"Agent upstream auth error: {err_message}"
+        except Exception:
+            pass
+
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Agent service key is invalid or expired. Please contact admin.",
+            detail=detail,
         )
 
     if response.status_code == 429:

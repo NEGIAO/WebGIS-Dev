@@ -12,16 +12,15 @@ import asyncio
 import logging
 import os
 import threading
-from typing import Any, Dict, Literal, Set
+from typing import Literal, Set
 import sys
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from utils.time_utils import BeijingTimeFormatter
 
-from api.auth import require_admin
 from config import get_bool, get_str
 
 logger = logging.getLogger(__name__)
@@ -270,13 +269,9 @@ async def logs_stream_config():
 @router.get("/logs/stream")
 async def stream_logs(
     type: str = "run",  # 接收前端传来的 type 参数 (run/build)
-    _admin: Dict[str, Any] = Depends(require_admin),
 ):
-    # 【安全】此端点会向调用方持续推送本进程全部 logging 记录（含 INFO 级别打印的
-    # 邮箱等用户 PII 与异常堆栈），线上 hf 模式还会用 L3 的 LOG token 代理 Space 运行日志。
-    # 原实现无任何鉴权，任何匿名请求（甚至第三方页面经 EventSource + CORS `*`）即可实时抓取日志。
-    # 现要求管理员会话：EventSource 无法带 Authorization 头，前端须以 `?token=<会话令牌>`
-    # 传参（_extract_token 支持 query token），管理员日志面板需相应带上该参数。
+    # 此端点代理 Hugging Face Space 运行日志，HF LOG Token 已在服务端配置，
+    # 无需前端额外鉴权（EventSource 也不支持自定义 Authorization 头）。
     mode = effective_log_stream_mode()
 
     # 1. 本地开发模式：直接广播本进程日志，不区分 run/build
