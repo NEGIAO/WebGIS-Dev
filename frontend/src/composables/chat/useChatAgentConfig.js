@@ -39,7 +39,7 @@ function defaultDraft() {
         max_tokens: 32768,
         temperature: 1,
         top_p: 0.95,
-        extra_body: { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: 16384 },
+        extra_body: {},
     };
 }
 

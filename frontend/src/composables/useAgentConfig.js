@@ -16,12 +16,9 @@ import {
 
 /**
  * 获取默认 extra_body 的深拷贝（避免多组件共享同一引用）
- * @returns {{ chat_template_kwargs: { enable_thinking: boolean }, reasoning_budget: number }}
+ * @returns {Record<string, never>}
  */
-const getDefaultExtraBody = () => ({
-    chat_template_kwargs: { enable_thinking: true },
-    reasoning_budget: 16384,
-});
+const getDefaultExtraBody = () => ({});
 
 // 默认配置常量（与后端 constants.py 保持一致）
 // extra_body 存为 JSON 字符串（V3.4.62 B1）：草稿链路（hydrate/textarea/buildSavePayload）

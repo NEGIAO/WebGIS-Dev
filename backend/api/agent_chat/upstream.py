@@ -10,10 +10,44 @@ import httpx
 from fastapi import HTTPException, Request, status
 
 from api.api_management import record_api_call
-from config import get_settings
+from config import get_str
 
 from .constants import DEFAULT_AGENT_SYSTEM_PROMPT, logger
 from .schemas import AgentChatHistoryItem
+
+
+# OpenAI-compatible /chat/completions providers differ on reasoning/thinking fields.
+# These keys are easy to leave in stale admin/user extra_body configs and some
+# upstreams reject the whole request with "Unsupported parameter(s)".
+UNSUPPORTED_EXTRA_BODY_KEYS = {
+    "reasoning_budge",  # common typo seen in upstream validation errors
+    "reasoning_budget",
+    "budget_tokens",
+    "thinking",
+    "output_config",
+    "chat_template_kwargs",
+}
+
+
+def _sanitize_extra_body(extra_body: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Drop provider-specific or unsupported extra_body keys before upstream merge."""
+    if not isinstance(extra_body, dict):
+        return {}
+
+    sanitized: Dict[str, Any] = {}
+    dropped_keys: List[str] = []
+    for raw_key, value in extra_body.items():
+        key = str(raw_key or "").strip()
+        if not key or key in UNSUPPORTED_EXTRA_BODY_KEYS:
+            if key:
+                dropped_keys.append(key)
+            continue
+        sanitized[key] = value
+
+    if dropped_keys:
+        logger.info("Dropped unsupported agent extra_body keys: %s", ", ".join(sorted(set(dropped_keys))))
+
+    return sanitized
 
 
 def _sanitize_history(history: List[AgentChatHistoryItem]) -> List[Dict[str, Any]]:
@@ -54,12 +88,29 @@ def _extract_client_ip(request: Request) -> str:
     return str(request.client.host or "127.0.0.1")
 
 
+def _resolve_amap_key() -> str:
+    """读取 L2 高德 key；旧部署若仍写 env，则作为兜底兼容。"""
+    try:
+        from api.api_keys_management import _get_api_key_candidates_sync
+
+        candidates = _get_api_key_candidates_sync("amap_key")
+        if candidates:
+            return str(candidates[0] or "").strip()
+    except Exception:
+        pass
+    return (
+        get_str("AMAP_WEB_SERVICE_KEY", "")
+        or get_str("AMAP_KEY", "")
+        or get_str("GAODE_KEY", "")
+    )
+
+
 async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
     """尝试通过 IP 获取用户地理位置信息。"""
     if not ip or ip == "127.0.0.1" or ip == "::1":
         return None
 
-    amap_key = get_settings().amap_web_service_key
+    amap_key = _resolve_amap_key()
     if not amap_key:
         return None
 
@@ -240,14 +291,15 @@ async def _call_upstream_chat(
     if top_p is not None:
         payload["top_p"] = float(top_p)
     # Carefully merge extra_body to avoid overwriting critical fields.
-    if extra_body is not None and isinstance(extra_body, dict):
+    sanitized_extra_body = _sanitize_extra_body(extra_body)
+    if sanitized_extra_body:
         # Forbidden keys that must not be overridden by extra_body.
         # 必含 "stream"/"stream_options"：本函数走非流式（stream=False）并以 response.json() 解析，
         # 若允许 extra_body 覆盖 stream=True，上游会返回 text/event-stream 致解析失败（502，但计费已发生）。
         forbidden = {"model", "messages", "max_tokens", "temperature", "api_key", "tools", "tool_choice", "stream", "stream_options"}
 
         # Merge allowed keys. For dict values, do a shallow merge into existing dicts.
-        for k, v in extra_body.items():
+        for k, v in sanitized_extra_body.items():
             if not k or k in forbidden:
                 # skip forbidden or empty keys
                 continue

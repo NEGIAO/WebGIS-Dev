@@ -15,7 +15,7 @@ import httpx
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from config import get_settings
+from config import get_str
 
 from api.auth import (
     get_auth_db_connection,
@@ -49,7 +49,6 @@ async def require_api_access_optional(request: Request) -> Optional[Dict[str, An
 
 # ==================== 配置 ====================
 
-AMAP_KEY = get_settings().amap_web_service_key
 NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org"
 
 # ==================== 请求/响应模型 ====================
@@ -109,6 +108,23 @@ class TrackVisitResponse(BaseModel):
     tracked: bool
 
 
+def _resolve_amap_key() -> str:
+    """读取 L2 高德 key；旧部署若仍写 env，则作为兜底兼容。"""
+    try:
+        from api.api_keys_management import _get_api_key_candidates_sync
+
+        candidates = _get_api_key_candidates_sync("amap_key")
+        if candidates:
+            return str(candidates[0] or "").strip()
+    except Exception:
+        pass
+    return (
+        get_str("AMAP_WEB_SERVICE_KEY", "")
+        or get_str("AMAP_KEY", "")
+        or get_str("GAODE_KEY", "")
+    )
+
+
 # ==================== 辅助函数 ====================
 
 
@@ -133,8 +149,9 @@ async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient
     Returns:
         成功时返回 {formattedAddress, province, city, district, adcode}，失败时返回 None
     """
-    if not AMAP_KEY:
-        logger.warning("AMAP_KEY 未配置")
+    amap_key = _resolve_amap_key()
+    if not amap_key:
+        logger.warning("高德 Web 服务 Key 未配置（L2 api_keys.amap_key）")
         return None
 
     # 高德 API 要求 GCJ-02 坐标，将输入的 WGS-84 转换为 GCJ-02
@@ -143,7 +160,7 @@ async def amap_reverse_geocode(lng: float, lat: float, client: httpx.AsyncClient
     try:
         response = await client.get(
             "https://restapi.amap.com/v3/geocode/regeo",
-            params={"location": f"{gcj_lng},{gcj_lat}", "key": AMAP_KEY, "extensions": "all"},
+            params={"location": f"{gcj_lng},{gcj_lat}", "key": amap_key, "extensions": "all"},
         )
         data = response.json()
 

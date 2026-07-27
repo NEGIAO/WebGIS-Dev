@@ -28,10 +28,7 @@ DEFAULT_AGENT_TIMEOUT_SECONDS = get_int("AGENT_TIMEOUT_SECONDS", 45, minimum=5, 
 DEFAULT_AGENT_MAX_TOKENS = get_int("AGENT_MAX_TOKENS", 32768, minimum=1, maximum=32768)
 DEFAULT_AGENT_TEMPERATURE = get_float("AGENT_TEMPERATURE", 1.0, minimum=0.0, maximum=2.0)
 DEFAULT_AGENT_TOP_P = get_float("AGENT_TOP_P", 0.95, minimum=0.0, maximum=1.0)
-DEFAULT_AGENT_EXTRA_BODY = {
-    "chat_template_kwargs": {"enable_thinking": True},
-    "reasoning_budget": 16384,
-}
+DEFAULT_AGENT_EXTRA_BODY = {}
 
 # 调用方 override_base_url 安全护栏（详见 Docs/TODO/agent-override-key-leak-plan.md）：
 # 白名单留空 = 不限制服务商域名（保留「个人 Key 接任意 OpenAI 兼容服务商」能力），

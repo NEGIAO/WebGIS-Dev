@@ -378,6 +378,11 @@ const tabs = [
     { id: 'api-keys', label: '🔑 密钥管理' },
 ];
 
+// 修复：模板 @click="selectTab(tab.id)" 此前未定义该函数，点击 tab 完全无响应
+function selectTab(tabId) {
+    activeTab.value = tabId;
+}
+
 // 用户统计
 const userStats = ref([]);
 const loadingUserStats = ref(false);
@@ -526,37 +531,55 @@ onMounted(async () => {
 /* Tabs Navigation */
 .tabs-nav {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 20px;
-    border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.2);
-    padding-bottom: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    margin-bottom: 22px;
+    padding: 6px;
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
+    border-radius: 14px;
+    scrollbar-width: thin;
+}
+
+.tabs-nav::-webkit-scrollbar {
+    height: 6px;
+}
+
+.tabs-nav::-webkit-scrollbar-thumb {
+    background: rgba(var(--brand-primary-rgb), 0.25);
+    border-radius: 3px;
 }
 
 .tab-btn {
     flex: 0 0 auto;
-    padding: 8px 16px;
-    border: none;
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.4);
+    padding: 9px 18px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: transparent;
     color: var(--acc-text-soft, #5d7f6a);
     cursor: pointer;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
-    transition: all 0.3s ease;
-    border: 1px solid transparent;
+    transition: all 0.25s ease;
 }
 
 .tab-btn:hover {
     color: var(--acc-text-main, #2c5f3e);
-    background: rgba(var(--brand-accent-light-rgb), 0.15);
+    background: rgba(255, 255, 255, 0.7);
 }
 
 .tab-btn.active {
     color: white;
     background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    box-shadow: 0 4px 10px rgba(58, 129, 76, 0.2);
+    box-shadow: 0 4px 12px rgba(58, 129, 76, 0.28);
+    transform: translateY(-1px);
+}
+
+.tab-btn:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
 }
 
 /* Tab Content */
@@ -940,9 +963,6 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
     .tabs-nav {
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        padding-bottom: 12px;
         margin-bottom: 14px;
         -webkit-overflow-scrolling: touch;
     }
