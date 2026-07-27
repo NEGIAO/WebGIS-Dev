@@ -240,6 +240,11 @@ async def _fetch_google_profile(access_token: str) -> OAuthProfile:
     if response.status_code >= 400:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google 用户资料获取失败")
     data = response.json()
+    return _normalize_google_profile(data)
+
+
+def _normalize_google_profile(data: Dict[str, Any]) -> OAuthProfile:
+    """将 Google userinfo 响应规范化为 OAuthProfile。"""
     provider_user_id = str(data.get("sub") or "").strip()
     if not provider_user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google 用户资料缺少 sub")
@@ -251,6 +256,43 @@ async def _fetch_google_profile(access_token: str) -> OAuthProfile:
         "display_name": _normalize_display_name(data.get("name") or data.get("email") or "Google User"),
         "avatar_url": str(data.get("picture") or "").strip(),
     }
+
+
+async def verify_google_id_token(id_token: str) -> OAuthProfile:
+    """
+    验证 Google One Tap / Sign In With Google 返回的 ID Token（JWT）。
+
+    使用 Google oauth2/v3/tokeninfo 端点验证 token 的有效性，
+    校验 audience 与配置的 GOOGLE_OAUTH_CLIENT_ID 一致，
+    返回规范化的 OAuthProfile。
+    """
+    if not id_token or not str(id_token).strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="缺少 Google ID Token")
+
+    config = _oauth_config("google")
+    client_id = config["client_id"]
+
+    verify_url = get_str("GOOGLE_OAUTH_TOKENINFO_URL", "https://oauth2.googleapis.com/tokeninfo")
+    async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
+        response = await client.get(f"{verify_url}?id_token={id_token}")
+    if response.status_code >= 400:
+        logger.warning("Google ID token verification failed: status=%s", response.status_code)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google ID Token 验证失败")
+
+    data = response.json()
+
+    # 校验 audience 必须匹配当前 client_id
+    aud = str(data.get("aud") or "").strip()
+    if aud != client_id:
+        logger.warning("Google ID token audience mismatch: expected=%s got=%s", client_id, aud)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google ID Token audience 不匹配")
+
+    # 校验 token 未过期
+    exp = int(data.get("exp") or 0)
+    if exp > 0 and int(_utc_now().timestamp()) > exp:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google ID Token 已过期")
+
+    return _normalize_google_profile(data)
 
 
 async def _fetch_github_profile(access_token: str) -> OAuthProfile:

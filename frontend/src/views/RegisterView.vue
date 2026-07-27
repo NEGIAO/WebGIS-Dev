@@ -551,6 +551,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
 import {
+    apiAuthGoogleOneTap,
     apiAuthLogin,
     apiAuthRegister,
     apiAuthSendCode,
@@ -1243,6 +1244,84 @@ watch(resetEmail, () => {
     }
 });
 
+/**
+ * 处理 Google One Tap 返回的 ID Token 凭证，发送到后端验证并完成登录/注册。
+ * @param {object} response - Google One Tap callback 的 credential response 对象
+ */
+async function handleGoogleOneTap(response) {
+    const credential = String(response?.credential || '').trim();
+    if (!credential) {
+        console.warn('[Google One Tap] 未收到有效凭证');
+        return;
+    }
+
+    isSubmitting.value = true;
+    setFormState('', '');
+
+    try {
+        const result = await apiAuthGoogleOneTap(credential);
+        const token = String(result?.token || '').trim();
+        const user = result?.user || null;
+
+        if (!token || !user) {
+            throw new Error('Google 登录响应异常，请稍后重试');
+        }
+
+        setAuthSession({ token, user });
+        syncUserRoleToUrl(user);
+        message.success(`Google 登录成功，欢迎！`);
+        await router.replace(resolveRedirectTarget());
+        consumePersistedPositionCode();
+    } catch (error) {
+        const detail = String(
+            error?.originalError?.response?.data?.detail ||
+            error?.message ||
+            'Google 登录失败，请稍后重试',
+        );
+        setFormState('error', detail);
+        message.error(detail);
+    } finally {
+        isSubmitting.value = false;
+    }
+}
+
+/**
+ * 初始化 Google One Tap / Sign In With Google。
+ * 仅在用户未登录时调用，展示 Google 一键登录提示。
+ */
+function initGoogleOneTap() {
+    if (typeof window === 'undefined' || !window.google?.accounts?.id) {
+        console.warn('[Google One Tap] Google Identity Services 脚本未加载');
+        return;
+    }
+
+    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '';
+    if (!clientId) {
+        console.warn('[Google One Tap] 未配置 VITE_GOOGLE_OAUTH_CLIENT_ID，跳过初始化');
+        return;
+    }
+
+    window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleOneTap,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        context: 'signin',
+        itp_support: true,
+    });
+
+    // 在页面右上角展示 One Tap 提示
+    window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            console.warn(
+                '[Google One Tap] 提示未展示:',
+                notification.getNotDisplayedReason?.() || notification.getSkippedReason?.(),
+            );
+        }
+        // 用户关闭/取消 One Tap 提示属于正常行为，无需额外处理
+    });
+}
+
 onMounted(async () => {
     const oauthStatus = String(route.query?.status || '').trim().toLowerCase();
     const oauthMessage = String(route.query?.message || '').trim();
@@ -1271,6 +1350,9 @@ onMounted(async () => {
         consumePersistedPositionCode();
         return;
     }
+
+    // 初始化 Google One Tap（仅在未登录时展示）
+    initGoogleOneTap();
 
     // 自动发送定位追踪请求（无需等待，异步处理）
     // 用户进入登陆页面时自动记录访问信息到数据库

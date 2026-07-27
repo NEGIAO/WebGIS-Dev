@@ -179,3 +179,15 @@ export async function apiAuthResetPassword(email, code, newPassword) {
         new_password: String(newPassword || ''),
     });
 }
+
+/**
+ * Google One Tap / Sign In With Google 登录。
+ * 将 Google 返回的 credential（JWT ID Token）发送到后端验证并换取 WebGIS session。
+ * @param {string} credential - Google One Tap 返回的 credential（JWT）
+ * @returns {Promise<{status: string, token: string, user: object, quota: object}>}
+ */
+export async function apiAuthGoogleOneTap(credential) {
+    return backendAPI.post('/api/auth/oauth/google/onetap', {
+        credential: String(credential || '').trim(),
+    });
+}

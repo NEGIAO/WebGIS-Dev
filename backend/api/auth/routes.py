@@ -56,6 +56,7 @@ from .oauth import (
     parse_oauth_state,
     resolve_oauth_login_user_sync,
     unlink_oauth_account_sync,
+    verify_google_id_token,
 )
 from .preferences import _get_user_preferences_sync, _upsert_user_preferences_sync
 from .quota import get_user_quota_snapshot_sync
@@ -96,6 +97,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class OAuthTicketRequest(BaseModel):
     """OAuth 一次性 ticket 兑换请求。"""
     ticket: str = Field(..., min_length=16, max_length=256)
+
+
+class GoogleOneTapRequest(BaseModel):
+    """Google One Tap / Sign In With Google 的 ID Token 请求。"""
+    credential: str = Field(..., min_length=1, description="Google One Tap 返回的 ID Token (JWT)")
 
 
 def _oauth_public_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -307,6 +313,44 @@ async def handle_oauth_callback(provider: str, request: Request, code: str = "",
             {"status": "error", "provider": provider, "message": "第三方登录处理失败"},
         )
         return RedirectResponse(redirect_url, status_code=status.HTTP_302_FOUND)
+
+
+@router.get("/oauth/google/client-id")
+async def get_google_client_id() -> Dict[str, Any]:
+    """返回 Google OAuth Client ID（公开信息，供前端 Google One Tap / Sign In With Google 使用）。"""
+    from .oauth import _oauth_config
+    try:
+        config = _oauth_config("google")
+        return {"status": "success", "client_id": config["client_id"]}
+    except HTTPException as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+@router.post("/oauth/google/onetap")
+async def google_one_tap_login(payload: GoogleOneTapRequest, request: Request) -> Dict[str, Any]:
+    """
+    功能：Google One Tap / Sign In With Google 登录。
+
+    接收前端 Google One Tap 弹出窗口返回的 credential（JWT ID Token），
+    后端验证 token 有效性后，走与标准 OAuth 相同的 resolve_oauth_login_user_sync 逻辑：
+    已有绑定 → 直接登录；同邮箱 → 自动绑定；新用户 → 自动注册。
+
+    返回：
+    - token: WebGIS session 令牌
+    - user: 用户信息
+    - quota: 配额快照
+    """
+    profile = await verify_google_id_token(payload.credential)
+    user = await asyncio.to_thread(resolve_oauth_login_user_sync, profile)
+    return await _build_login_response(
+        request=request,
+        username=str(user.get("username") or ""),
+        role=ROLE_REGISTERED,
+        avatar_index=_normalize_avatar_index(user.get("avatar_index")),
+        user=user,
+        requires_email_binding=False,
+        message="Google 登录成功",
+    )
 
 
 @router.post("/oauth/login/exchange")
