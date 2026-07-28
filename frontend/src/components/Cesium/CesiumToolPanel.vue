@@ -10,14 +10,14 @@
             v-if="!embedded && !isPanelOpen"
             class="tool-launcher"
             type="button"
-            title="打开 3D 高级控制台"
+            :title="t('cesium.openConsole')"
             @click="setPanelOpen(true)"
         >
             <SlidersHorizontal
                 :size="18"
                 stroke-width="2"
             />
-            <span>高级控制台</span>
+            <span>{{ t('cesium.advancedConsole') }}</span>
             <span
                 v-if="activeModuleCount"
                 class="launcher-count"
@@ -30,7 +30,7 @@
             v-show="embedded || isPanelOpen"
             class="cesium-tool-panel"
             :class="{ compact: compactMode }"
-            aria-label="Cesium 高级控制台"
+            :aria-label="t('cesium.title')"
         >
             <header class="panel-header">
                 <div class="panel-title-block">
@@ -41,7 +41,7 @@
                         />
                     </span>
                     <span class="panel-copy">
-                        <span class="panel-title">3D 高级控制台</span>
+                        <span class="panel-title">{{ t('cesium.title') }}</span>
                         <span class="panel-subtitle">
                             {{ activeBasemapLabel }} / {{ activeTerrainLabel }}
                         </span>
@@ -52,7 +52,7 @@
                     <button
                         class="icon-btn"
                         type="button"
-                        :title="compactMode ? '切换为舒展布局' : '切换为紧凑布局'"
+                        :title="compactMode ? t('cesium.expandMode') : t('cesium.compactMode')"
                         @click="compactMode = !compactMode"
                     >
                         <Settings
@@ -64,7 +64,7 @@
                         v-if="!embedded"
                         class="icon-btn"
                         type="button"
-                        title="隐藏面板"
+                        :title="t('cesium.hide')"
                         @click="setPanelOpen(false)"
                     >
                         <X
@@ -77,7 +77,7 @@
 
             <nav
                 class="panel-tabs"
-                aria-label="3D 工具分类"
+                :aria-label="t('cesium.tabsAria')"
             >
                 <button
                     v-for="tab in panelTabs"
@@ -105,15 +105,15 @@
                 >
                     <div class="overview-grid">
                         <div class="overview-tile">
-                            <span class="overview-label">地图源</span>
+                            <span class="overview-label">{{ t('cesium.mapSource') }}</span>
                             <strong>{{ activeBasemapLabel }}</strong>
                         </div>
                         <div class="overview-tile">
-                            <span class="overview-label">地形</span>
+                            <span class="overview-label">{{ t('cesium.terrain') }}</span>
                             <strong>{{ activeTerrainLabel }}</strong>
                         </div>
                         <div class="overview-tile">
-                            <span class="overview-label">模块</span>
+                            <span class="overview-label">{{ t('cesium.modules') }}</span>
                             <strong>{{ activeModuleCount }}/{{ featureModules.length }}</strong>
                         </div>
                     </div>
@@ -142,7 +142,7 @@
                     <div
                         v-else
                         class="empty-state"
-                    >暂无场景快捷操作</div>
+                    >{{ t('cesium.noSceneActions') }}</div>
                 </section>
 
                 <!-- 2. 图层 Tab (保持原样) -->
@@ -168,7 +168,7 @@
                                     :size="16"
                                     stroke-width="2"
                                 />
-                                <span>底图源</span>
+                                <span>{{ t('cesium.basemapSource') }}</span>
                             </span>
                             <span class="section-meta">
                                 <span>{{ activeBasemapLabel }}</span>
@@ -228,13 +228,13 @@
                                         class="custom-basemap-submit"
                                         type="submit"
                                         :disabled="!customBasemapDraft.trim()"
-                                        title="加载自定义 XYZ"
+                                        :title="t('cesium.loadCustomXYZTitle')"
                                     >
                                         <Send
                                             :size="14"
                                             stroke-width="2"
                                         />
-                                        <span>加载</span>
+                                        <span>{{ t('cesium.loadCustomXYZ') }}</span>
                                     </button>
                                 </div>
                                 <div
@@ -264,7 +264,7 @@
                                     :size="16"
                                     stroke-width="2"
                                 />
-                                <span>地形</span>
+                                <span>{{ t('cesium.terrainLayer') }}</span>
                             </span>
                             <span class="section-meta">
                                 <span>{{ activeTerrainLabel }}</span>
@@ -319,10 +319,10 @@
                                     :size="16"
                                     stroke-width="2"
                                 />
-                                <span>叠加图层</span>
+                                <span>{{ t('cesium.overlayLayers') }}</span>
                             </span>
                             <span class="section-meta">
-                                <span>{{ activeOverlayCount }}/{{ overlayOptions.length }} 已启用</span>
+                                <span>{{ t('cesium.activeOverlayCount', { active: activeOverlayCount, total: overlayOptions.length }) }}</span>
                                 <ChevronDown
                                     class="section-chevron"
                                     :size="15"
@@ -367,7 +367,7 @@
                                                 v-if="overlay.hasLocation"
                                                 class="overlay-action-btn flyto"
                                                 type="button"
-                                                title="定位至图层"
+                                                :title="t('cesium.locateToOverlay')"
                                                 @click.stop="emitOverlayFlyTo(overlay)"
                                             >
                                                 <LocateFixed
@@ -398,7 +398,7 @@
                                         class="overlay-card-controls"
                                     >
                                         <div class="overlay-control-row">
-                                            <span class="control-label">不透明度</span>
+                                            <span class="control-label">{{ t('cesium.opacity') }}</span>
                                             <div class="slider-wrapper">
                                                 <input
                                                     type="range"
@@ -430,7 +430,7 @@
                     <label
                         for="cesium-data-file-input"
                         class="data-upload-area"
-                        aria-label="选择要导入的数据文件"
+                        :aria-label="t('cesium.importData')"
                     >
                         <input
                             id="cesium-data-file-input"
@@ -446,9 +446,9 @@
                                 :size="24"
                                 stroke-width="1.8"
                             />
-                            <div class="upload-title">点击或将文件拖拽至此处</div>
+                            <div class="upload-title">{{ t('cesium.uploadTitle') }}</div>
                             <span class="data-formats-label">
-                                支持 GeoJSON, KML, TIF, SHP, GLB, CZML, 3D Tiles
+                                {{ t('cesium.supportedFormats') }}
                             </span>
                         </div>
                     </label>
@@ -458,38 +458,38 @@
                         <button
                             class="tool-action mini"
                             type="button"
-                            title="从 ZIP 压缩包导入 3D Tiles"
+                            :title="t('cesium.zipImportTitle')"
                             @click="emit('import-tileset-zip')"
                         >
                             <FileArchive
                                 :size="13"
                                 stroke-width="2"
                             />
-                            <span>ZIP 导入</span>
+                            <span>{{ t('cesium.zipImport') }}</span>
                         </button>
                         <button
                             class="tool-action mini"
                             type="button"
-                            title="从文件夹导入 3D Tiles"
+                            :title="t('cesium.folderImportTitle')"
                             @click="emit('import-tileset-folder')"
                         >
                             <FolderOpen
                                 :size="13"
                                 stroke-width="2"
                             />
-                            <span>文件夹</span>
+                            <span>{{ t('cesium.folder') }}</span>
                         </button>
                         <button
                             class="tool-action mini"
                             type="button"
-                            title="加载内置样例城市"
+                            :title="t('cesium.sampleDataTitle')"
                             @click="emit('import-tileset-sample')"
                         >
                             <Box
                                 :size="13"
                                 stroke-width="2"
                             />
-                            <span>样例数据</span>
+                            <span>{{ t('cesium.sampleData') }}</span>
                         </button>
                     </div>
 
@@ -500,19 +500,19 @@
                     >
                         <div class="data-source-head">
                             <span class="data-source-count">
-                                已加载数据源 ({{ localDataSources.length }})
+                                {{ t('cesium.loadedDataSources', { count: localDataSources.length }) }}
                             </span>
                             <button
                                 class="clear-all-btn"
                                 type="button"
-                                title="清空所有已导入的数据"
+                                :title="t('cesium.clearAllTitle')"
                                 @click="emitClearAll"
                             >
                                 <Trash2
                                     :size="12"
                                     stroke-width="2"
                                 />
-                                <span>全部清除</span>
+                                <span>{{ t('cesium.clearAll') }}</span>
                             </button>
                         </div>
 
@@ -529,7 +529,7 @@
                                     <button
                                         class="action-icon-btn visibility"
                                         type="button"
-                                        :title="isSourceVisible(source) ? '隐藏' : '显示'"
+                                        :title="isSourceVisible(source) ? t('cesium.hideLayer') : t('cesium.show')"
                                         @click.stop="toggleSourceVisible(source)"
                                     >
                                         <Eye
@@ -568,7 +568,7 @@
                                         <span
                                             v-else
                                             class="card-title"
-                                            title="双击重命名"
+                                            :title="t('cesium.rename')"
                                             @dblclick.stop="startRenameSource(source)"
                                         >{{ source.meta?.name || source.name }}</span>
                                         <span class="card-tag">{{ formatLabel(source.type) }}</span>
@@ -577,7 +577,7 @@
                                         <button
                                             class="action-icon-btn flyto"
                                             type="button"
-                                            title="视角定位"
+                                            :title="t('cesium.locate')"
                                             @click.stop="emitFlyTo(source.id)"
                                         >
                                             <Crosshair
@@ -589,7 +589,7 @@
                                             v-if="source.type === 'gltf'"
                                             class="action-icon-btn reposition"
                                             type="button"
-                                            title="调整模型位置"
+                                            :title="t('cesium.adjustPosition')"
                                             @click.stop="emitReposition(source.id)"
                                         >
                                             <MapPin
@@ -601,7 +601,7 @@
                                             v-if="source.type === 'tif'"
                                             class="action-icon-btn stretch-height"
                                             type="button"
-                                            title="拉伸到高程"
+                                            :title="t('cesium.extrudeToElevation')"
                                             @click.stop="emitStretchHeight(source.id)"
                                         >
                                             <Mountain
@@ -612,7 +612,7 @@
                                         <button
                                             class="action-icon-btn remove"
                                             type="button"
-                                            title="移除数据源"
+                                            :title="t('cesium.remove')"
                                             @click.stop="emitRemove(source.id)"
                                         >
                                             <X
@@ -631,8 +631,8 @@
                                     <div class="control-row">
                                         <span
                                             class="control-label"
-                                            title="图层透明度"
-                                        >透明</span>
+                                            :title="t('cesium.layerOpacity')"
+                                        >{{ t('cesium.transparency') }}</span>
                                         <div class="slider-wrapper">
                                             <input
                                                 type="range"
@@ -662,8 +662,8 @@
                                     >
                                         <span
                                             class="control-label"
-                                            title="贴地高程调整"
-                                        >高程</span>
+                                            :title="t('cesium.heightAdjust')"
+                                        >{{ t('cesium.elevation') }}</span>
                                         <div class="slider-wrapper">
                                             <input
                                                 type="range"
@@ -682,17 +682,17 @@
 
                                     <!-- 材质选择器 -->
                                     <div class="control-row">
-                                        <span class="control-label">材质</span>
+                                        <span class="control-label">{{ t('cesium.material') }}</span>
                                         <select
                                             class="material-select"
                                             :value="source.materialMode || 'baimo'"
                                             @change="emitSetMaterial(source.id, $event.target.value)"
                                         >
-                                            <option value="pureWhite">纯白膜</option>
-                                            <option value="baimo">白膜贴图</option>
-                                            <option value="heightStyle">高度分层</option>
-                                            <option value="gradient">高度渐变</option>
-                                            <option value="none">原始材质</option>
+                                            <option value="pureWhite">{{ t('cesium.materials.pureWhite') }}</option>
+                                            <option value="baimo">{{ t('cesium.materials.baimo') }}</option>
+                                            <option value="heightStyle">{{ t('cesium.materials.heightStyle') }}</option>
+                                            <option value="gradient">{{ t('cesium.materials.gradient') }}</option>
+                                            <option value="none">{{ t('cesium.materials.none') }}</option>
                                         </select>
                                     </div>
                                 </div>
@@ -704,7 +704,7 @@
                         v-else
                         class="empty-state"
                     >
-                        暂无已导入的数据
+                        {{ t('cesium.noImportedData') }}
                     </div>
                 </section>
 
@@ -723,7 +723,7 @@
                             class="module-card"
                             :class="{
                                 expanded: isModuleExpanded(module.id),
-                                active: module.status === '运行中' || module.statusTone === 'success'
+                                active: module.statusTone === 'success' || module.statusTone === 'success'
                             }"
                         >
                             <!-- 模块头部（可点击展开/收起） -->
@@ -823,7 +823,7 @@
                         v-else
                         class="empty-state"
                     >
-                        <span>暂无可用功能模块</span>
+                        <span>{{ t('cesium.noModules') }}</span>
                     </div>
                 </section>
             </div>
@@ -865,7 +865,10 @@ import {
     X,
 } from 'lucide-vue-next';
 import LilGuiControls from './LilGuiControls.vue';
+import { useLocale } from '@/composables/useLocale';
 import { useCesiumLayersStore } from '../../stores/layer/cesiumLayers';
+
+const { t } = useLocale();
 
 const props = defineProps({
     open: { type: Boolean, default: true },
@@ -988,19 +991,19 @@ const activeModuleCount = computed(() => {
 });
 const activeOverlayCount = computed(() => props.overlayOptions.filter(o => !!o.active).length);
 
-const panelTabs = [
-    { id: 'scene', label: '场景', icon: Navigation },
-    { id: 'layers', label: '图层', icon: Layers },
-    { id: 'data', label: '数据', icon: Upload },
-    { id: 'modules', label: '模块', icon: SlidersHorizontal },
-];
+const panelTabs = computed(() => [
+    { id: 'scene', label: t('cesium.scene'), icon: Navigation },
+    { id: 'layers', label: t('cesium.layers'), icon: Layers },
+    { id: 'data', label: t('cesium.data'), icon: Upload },
+    { id: 'modules', label: t('cesium.modules'), icon: SlidersHorizontal },
+]);
 
 const activeBasemapLabel = computed(() => {
-    return props.basemapOptions.find(o => o.value === props.activeBasemap)?.label || '未选择';
+    return props.basemapOptions.find(o => o.value === props.activeBasemap)?.label || t('cesium.notSelected');
 });
 
 const activeTerrainLabel = computed(() => {
-    return props.terrainOptions.find(o => o.value === props.activeTerrain)?.label || '未选择';
+    return props.terrainOptions.find(o => o.value === props.activeTerrain)?.label || t('cesium.notSelected');
 });
 
 watch(

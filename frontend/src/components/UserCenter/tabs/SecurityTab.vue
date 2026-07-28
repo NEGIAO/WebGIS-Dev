@@ -113,7 +113,7 @@ function resetForm() {
 function handleDisplayNameSubmit() {
     const validation = validateDisplayName(displayName.value);
     if (!validation.valid) {
-        emit('change-display-name', { error: validation.message });
+        emit('change-display-name', { error: t(validation.code) });
         return;
     }
 

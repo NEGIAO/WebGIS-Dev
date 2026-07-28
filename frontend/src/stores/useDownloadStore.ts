@@ -70,6 +70,7 @@ function clampBboxByCrs(bbox: BBoxInput, crs: string): BBoxInput {
     });
 }
 
+/** Store 侧统一抛 i18n path（mapDownload.*），UI 再 t()；避免 EN 界面露中文硬编码。 */
 function buildTaskPayload(
     tileUrlTemplate: string,
     bbox: BBoxInput,
@@ -80,25 +81,25 @@ function buildTaskPayload(
     // Validate inputs and build the backend payload.
     const template = String(tileUrlTemplate || '').trim();
     if (!template) {
-        throw new Error('请输入瓦片 URL 模板');
+        throw new Error('mapDownload.errTemplateRequired');
     }
 
     // 验证瓦片模板包含必要的占位符
     if (!template.includes('{z}') || !template.includes('{x}') || !template.includes('{y}')) {
-        throw new Error('瓦片 URL 模板必须包含 {z}、{x}、{y} 占位符');
+        throw new Error('mapDownload.errTemplatePlaceholders');
     }
 
     const normalizedResolution = Number(resolutionM);
     if (!Number.isFinite(normalizedResolution) || normalizedResolution <= 0) {
-        throw new Error('分辨率必须是大于 0 的数字');
+        throw new Error('mapDownload.errResolutionPositive');
     }
 
     // 限制分辨率范围（0.5m 到 1000m）
     if (normalizedResolution < 0.5) {
-        throw new Error('分辨率过高，最小值为 0.5 米');
+        throw new Error('mapDownload.errResolutionTooHigh');
     }
     if (normalizedResolution > 1000) {
-        throw new Error('分辨率过低，最大值为 1000 米');
+        throw new Error('mapDownload.errResolutionTooLow');
     }
 
     const parsedBBox: BBoxInput = {
@@ -114,7 +115,7 @@ function buildTaskPayload(
         !Number.isFinite(parsedBBox.maxLon) ||
         !Number.isFinite(parsedBBox.maxLat)
     ) {
-        throw new Error('BBox 必须填写完整的数字坐标');
+        throw new Error('mapDownload.errBboxNumbers');
     }
 
     const normalizedBBox = clampBboxByCrs(parsedBBox, bboxCrs);
@@ -124,7 +125,7 @@ function buildTaskPayload(
         normalizedBBox.minLon === normalizedBBox.maxLon ||
         normalizedBBox.minLat === normalizedBBox.maxLat
     ) {
-        throw new Error('选择框面积不能为 0，请选择有效的地理范围');
+        throw new Error('mapDownload.errBboxZeroArea');
     }
 
     return {
@@ -263,23 +264,24 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
             // 验证响应有效性
             if (!response || typeof response !== 'object') {
-                throw new Error('后端返回无效的响应格式');
+                throw new Error('mapDownload.errInvalidResponse');
             }
 
             applyTaskResponse(response);
             status.value = (response?.status as DownloadStatus) || 'pending';
             progress.value = Number(response?.progress ?? 0);
-            message.value = String(response?.message || '任务已提交').trim();
+            // 后端 message 可能是中文运营文案；无则用 i18n key，UI 侧 resolve 展示
+            message.value = String(response?.message || 'mapDownload.msgTaskSubmitted').trim();
 
             // 验证任务ID是否有效
             if (!taskId.value) {
-                throw new Error('后端未返回有效的任务ID');
+                throw new Error('mapDownload.errNoTaskId');
             }
 
             startPolling();
             return true;
         } catch (error) {
-            const detail = error instanceof Error ? error.message : '创建任务失败';
+            const detail = error instanceof Error ? error.message : 'mapDownload.errCreateTask';
             lastError.value = detail;
             status.value = 'failed';
             console.error('[DownloadStore] submitTask failed:', detail, error);
@@ -297,7 +299,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
             // 验证响应有效性
             if (!response || typeof response !== 'object') {
-                throw new Error('后端返回无效的轮询响应');
+                throw new Error('mapDownload.errInvalidPollResponse');
             }
 
             applyTaskResponse(response);
@@ -308,7 +310,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 stopPolling();
             }
         } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : '轮询失败';
+            const errorMsg = error instanceof Error ? error.message : 'mapDownload.errPollFailed';
             lastError.value = errorMsg;
             console.error('[DownloadStore] pollOnce failed:', errorMsg, error);
         } finally {
@@ -328,7 +330,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     async function downloadResult(): Promise<void> {
         if (!taskId.value || downloadTriggered) return;
         if (isExpired.value) {
-            lastError.value = '任务已过期，无法下载';
+            lastError.value = 'mapDownload.expiredCannotDownload';
             status.value = 'failed';
             return;
         }
@@ -353,18 +355,18 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
             // 验证 Blob 有效性
             if (!blob || blob.size === 0) {
-                throw new Error('下载的文件为空');
+                throw new Error('mapDownload.errEmptyDownload');
             }
 
             const filename = `basemap_${taskId.value}.tif`;
             triggerBrowserDownload(blob, filename);
             downloadedAt.value = Date.now();
-            message.value = '文件已下载';
+            message.value = 'mapDownload.msgFileDownloaded';
             status.value = 'success';
             progress.value = 100;
         } catch (error) {
             downloadTriggered = false;
-            const errorMsg = error instanceof Error ? error.message : '下载文件失败';
+            const errorMsg = error instanceof Error ? error.message : 'mapDownload.errDownloadFailed';
             lastError.value = errorMsg;
             status.value = 'failed';
             console.error('[DownloadStore] downloadResult failed:', errorMsg, error);
@@ -374,7 +376,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     async function fetchTaskById(inputId: string, autoPoll: boolean = true): Promise<boolean> {
         const safeId = String(inputId || '').trim();
         if (!safeId) {
-            lastError.value = '请输入任务 ID';
+            lastError.value = 'mapDownload.errTaskIdRequired';
             return false;
         }
 
@@ -383,7 +385,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
             // 验证响应有效性
             if (!response || typeof response !== 'object') {
-                throw new Error('后端返回无效的响应');
+                throw new Error('mapDownload.errInvalidStatusResponse');
             }
 
             applyTaskResponse(response);
@@ -394,7 +396,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             }
             return true;
         } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : '任务查询失败';
+            const errorMsg = error instanceof Error ? error.message : 'mapDownload.errLookupFailed';
             lastError.value = errorMsg;
             console.error('[DownloadStore] fetchTaskById failed:', errorMsg, error);
             return false;

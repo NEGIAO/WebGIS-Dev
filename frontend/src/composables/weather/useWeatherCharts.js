@@ -8,6 +8,7 @@
  */
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import { useMessage } from '../useMessage';
+import { translate as t } from '../useLocale';
 import {
     clampValue,
     formatDateLabel,
@@ -73,7 +74,7 @@ export function useWeatherCharts(weatherData) {
             .then((runtimeModule) => {
                 const runtime = runtimeModule?.getWeatherEchartsRuntime?.();
                 if (!runtime) {
-                    throw new Error('天气图表运行时加载失败');
+                    throw new Error(t('weather.chartRuntimeFailed'));
                 }
 
                 echartsModule = runtime;
@@ -97,8 +98,8 @@ export function useWeatherCharts(weatherData) {
         try {
             return await loadEchartsRuntime();
         } catch (error) {
-            message.error('ECharts 模块加载失败', error);
-            throw error instanceof Error ? error : new Error('ECharts 模块加载失败');
+            message.error(t('weather.echartsLoadFailed'), error);
+            throw error instanceof Error ? error : new Error(t('weather.echartsLoadFailed'));
         }
     }
 
@@ -127,8 +128,9 @@ export function useWeatherCharts(weatherData) {
 
     /** 显示图表 loading 遮罩 */
     function showChartsLoading() {
-        trendChart?.showLoading?.('default', { text: '天气数据加载中...' });
-        windChart?.showLoading?.('default', { text: '天气数据加载中...' });
+        const loadingText = t('weather.chartsLoading');
+        trendChart?.showLoading?.('default', { text: loadingText });
+        windChart?.showLoading?.('default', { text: loadingText });
     }
 
     /** 隐藏图表 loading 遮罩 */
@@ -277,7 +279,7 @@ export function useWeatherCharts(weatherData) {
                 },
             },
             legend: {
-                data: ['白天气温', '晚间气温'],
+                data: [t('weather.dayTemp'), t('weather.nightTemp')],
                 top: metrics.legendTop,
                 left: 'center',
                 icon: 'roundRect',
@@ -316,7 +318,7 @@ export function useWeatherCharts(weatherData) {
             },
             series: [
                 {
-                    name: '白天气温',
+                    name: t('weather.dayTemp'),
                     type: 'line',
                     smooth: true,
                     showSymbol: metrics.showSymbols,
@@ -344,13 +346,13 @@ export function useWeatherCharts(weatherData) {
                         },
                         itemStyle: { color: '#2f9b58' },
                         data: [
-                            { type: 'max', name: '最高' },
-                            { type: 'min', name: '最低' },
+                            { type: 'max', name: t('weather.maxMark') },
+                            { type: 'min', name: t('weather.minMark') },
                         ],
                     },
                 },
                 {
-                    name: '晚间气温',
+                    name: t('weather.nightTemp'),
                     type: 'line',
                     smooth: true,
                     showSymbol: metrics.showSymbols,
@@ -378,8 +380,8 @@ export function useWeatherCharts(weatherData) {
                         },
                         itemStyle: { color: '#1f73d6' },
                         data: [
-                            { type: 'max', name: '最高' },
-                            { type: 'min', name: '最低' },
+                            { type: 'max', name: t('weather.maxMark') },
+                            { type: 'min', name: t('weather.minMark') },
                         ],
                     },
                 },
@@ -539,7 +541,7 @@ export function useWeatherCharts(weatherData) {
             animationDurationUpdate: 300,
             legend: {
                 show: metrics.showLegend,
-                data: ['白天风力', '夜间风力', '平均风力'],
+                data: [t('weather.dayWindPower'), t('weather.nightWindPower'), t('weather.avgWindPower')],
                 top: metrics.legendTopPx,
                 left: 'center',
                 icon: 'roundRect',
@@ -568,7 +570,7 @@ export function useWeatherCharts(weatherData) {
             },
             yAxis: {
                 type: 'value',
-                name: '级',
+                name: t('weather.windLevelUnit'),
                 min: axisMin,
                 max: axisMax,
                 interval: axisInterval,
@@ -597,15 +599,17 @@ export function useWeatherCharts(weatherData) {
                     const cast = castsList[dataIndex] || {};
                     const lines = list.map((item) => {
                         const value = Number(item?.data);
-                        const text = Number.isFinite(value) ? `${value}级` : '--';
+                        const text = Number.isFinite(value)
+                            ? t('weather.windLevelValue', { n: value })
+                            : '--';
                         return `${item.marker}${item.seriesName}: ${text}`;
                     });
 
                     return [
                         String(list[0]?.axisValue || '--'),
                         ...lines,
-                        `白天风向: ${String(cast?.dayWind || '--')}`,
-                        `夜间风向: ${String(cast?.nightWind || '--')}`,
+                        t('weather.dayWindDir', { dir: String(cast?.dayWind || '--') }),
+                        t('weather.nightWindDir', { dir: String(cast?.nightWind || '--') }),
                     ].join('<br/>');
                 },
             },
@@ -616,7 +620,7 @@ export function useWeatherCharts(weatherData) {
                     endAngle: -35,
                     tooltip: {
                         trigger: 'item',
-                        formatter: `当前实况风力：${currentWind} 级`,
+                        formatter: t('weather.liveWindTooltip', { n: currentWind }),
                     },
                     center: ['50%', metrics.gaugeCenterYPercent],
                     radius: metrics.gaugeRadiusPercent,
@@ -684,12 +688,12 @@ export function useWeatherCharts(weatherData) {
                         color: '#1f5a37',
                         lineHeight: metrics.gaugeDetailFontSize + 2,
                         offsetCenter: [0, '18%'],
-                        formatter: '{value} 级',
+                        formatter: t('weather.windLevelFmt'),
                     },
-                    data: [{ value: currentWind, name: '当前实况' }],
+                    data: [{ value: currentWind, name: t('weather.liveWindGauge') }],
                 },
                 {
-                    name: '白天风力',
+                    name: t('weather.dayWindPower'),
                     type: 'bar',
                     barMaxWidth: metrics.barMaxWidth,
                     barGap: '20%',
@@ -704,7 +708,7 @@ export function useWeatherCharts(weatherData) {
                     },
                 },
                 {
-                    name: '夜间风力',
+                    name: t('weather.nightWindPower'),
                     type: 'bar',
                     barMaxWidth: metrics.barMaxWidth,
                     barGap: '20%',
@@ -719,7 +723,7 @@ export function useWeatherCharts(weatherData) {
                     },
                 },
                 {
-                    name: '平均风力',
+                    name: t('weather.avgWindPower'),
                     type: 'line',
                     smooth: true,
                     showSymbol: metrics.showLineSymbol,

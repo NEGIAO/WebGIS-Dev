@@ -30,9 +30,9 @@
         <div class="glitch" data-text="404">404</div>
       </div>
 
-      <h1 class="error-title">目标星轨丢失</h1>
+      <h1 class="error-title">{{ t('notFound.title') }}</h1>
       <p class="error-message">
-        抱歉，您请求的宇宙坐标未注册，或已被虫洞吞噬。
+        {{ t('notFound.message') }}
       </p>
 
       <!-- 环形倒计时进度 -->
@@ -82,12 +82,12 @@
       </div>
       <div class="auto-redirect-tip">
         <span class="tip-icon">◈</span>
-        系统将在倒计时结束后重构星际链接
+        {{ t('notFound.redirectTip') }}
       </div>
 
       <!-- 绿色高科技操控按钮 -->
       <button class="back-button" @click="goHome">
-        <span class="btn-text">立即折跃回首页</span>
+        <span class="btn-text">{{ t('notFound.goHome') }}</span>
         <span class="btn-glow"></span>
       </button>
 
@@ -120,7 +120,9 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useLocale } from '../composables/useLocale';
 
+const { t } = useLocale();
 const router = useRouter();
 const route = useRoute();
 const countdown = ref(5);

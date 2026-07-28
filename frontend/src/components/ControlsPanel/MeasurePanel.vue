@@ -1,8 +1,8 @@
 <template>
     <div class="measure-panel">
         <div class="panel-header">
-            <span class="panel-title">测量工具</span>
-            <button class="close-btn" @click="$emit('close')">
+            <span class="panel-title">{{ t('measure.title') }}</span>
+            <button class="close-btn" :title="t('common.close')" @click="$emit('close')">
                 <X :size="14" />
             </button>
         </div>
@@ -23,7 +23,7 @@
         <div class="panel-actions">
             <button class="action-btn clear-btn" @click="handleClear">
                 <Trash2 :size="14" />
-                <span>清除测量结果</span>
+                <span>{{ t('measure.clear') }}</span>
             </button>
         </div>
 
@@ -37,24 +37,26 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { X, Info, Trash2, Ruler, SquareDashedBottom } from 'lucide-vue-next';
+import { useLocale } from '../../composables/useLocale';
 
+const { t } = useLocale();
 const emit = defineEmits(['measure-type', 'clear', 'close']);
 
 const activeType = ref('');
 
-const measureTools = [
-    { type: 'MeasureDistance', label: '测距', icon: Ruler },
-    { type: 'MeasureArea', label: '测面', icon: SquareDashedBottom },
-];
+const measureTools = computed(() => [
+    { type: 'MeasureDistance', label: t('measure.tools.MeasureDistance'), icon: Ruler },
+    { type: 'MeasureArea', label: t('measure.tools.MeasureArea'), icon: SquareDashedBottom },
+]);
 
 const hint = computed(() => {
     switch (activeType.value) {
         case 'MeasureDistance':
-            return '单击地图绘制测线，双击结束';
+            return t('measure.hints.MeasureDistance');
         case 'MeasureArea':
-            return '单击地图绘制区域，双击结束';
+            return t('measure.hints.MeasureArea');
         default:
-            return '选择测量模式后在地图上操作';
+            return t('measure.hints.default');
     }
 });
 

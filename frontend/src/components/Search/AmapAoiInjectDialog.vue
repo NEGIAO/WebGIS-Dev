@@ -7,10 +7,10 @@
             class="aoi-dialog-card"
             role="dialog"
             aria-modal="false"
-            aria-label="高德 AOI 数据注入"
+            :aria-label="t('layer.aoiInjectTitle')"
         >
             <div class="aoi-dialog-head">
-                <div class="aoi-dialog-title">高德 AOI 数据注入</div>
+                <div class="aoi-dialog-title">{{ t('layer.aoiInjectTitle') }}</div>
                 <button
                     class="aoi-dialog-close"
                     type="button"
@@ -21,8 +21,8 @@
             </div>
 
             <div class="aoi-dialog-tip">
-                推荐使用【方式1】获取，无需KEY、不限次数；<br />
-                【方式2】可直接获取AOI边界，但有每日额度限制。
+                {{ t('layer.aoiRecommend') }}<br />
+                {{ t('layer.aoiMethod2Note') }}
             </div>
 
             <div class="aoi-dialog-row">
@@ -31,7 +31,7 @@
                     :value="poiId"
                     class="aoi-dialog-input"
                     type="text"
-                    placeholder="请输入或粘贴 POI ID"
+                    :placeholder="t('layer.poiIdPlaceholder')"
                     @input="emit('update:poiId', $event.target.value)"
                 />
             </div>
@@ -45,7 +45,7 @@
                     type="button"
                     @click="openOfficialDetail"
                 >
-                    方式1：打开高德详情（无Key）
+                    {{ t('layer.aoiMethod1') }}
                 </button>
                 <a
                     class="aoi-dialog-link"
@@ -66,7 +66,7 @@
                     type="button"
                     @click="getAoiBoundarySafe"
                 >
-                    方式2：获取AOI边界（限额度）
+                    {{ t('layer.aoiMethod2') }}
                 </button>
                 <a
                     class="aoi-dialog-link"
@@ -81,11 +81,11 @@
             <div class="aoi-dialog-row">
                 <div class="aoi-dialog-row-head">
                     <div class="aoi-dialog-label-group">
-                        <label class="aoi-dialog-label">详情 JSON / AOI 坐标</label>
+                        <label class="aoi-dialog-label">{{ t('layer.aoiLabel') }}</label>
                         <span
                             class="aoi-dialog-help"
-                                title="支持 3 种输入：1) 高德详情 JSON（含 aois.polyline / mining_shape.shape）；2) 双引号包围的纯坐标串；3) 坐标对用 ; 分隔、独立区域用 @ 分隔。解析条件：每个区域至少 4 个点，系统会自动闭合首尾。"
-                                aria-label="支持的 AOI 输入格式说明"
+                            :title="t('layer.aoiHint')"
+                            :aria-label="t('layer.aoiHintAria')"
                         >
                             ?
                         </span>
@@ -95,13 +95,13 @@
                         type="button"
                         @click="handlePasteJson"
                     >
-                        粘贴 JSON
+                        {{ t('layer.pasteJson') }}
                     </button>
                 </div>
                 <textarea
                     :value="jsonText"
                     class="aoi-dialog-textarea"
-                    placeholder="请粘贴 JSON 数据"
+                    :placeholder="t('layer.aoiTextareaPlaceholder')"
                     @input="emit('update:jsonText', $event.target.value)"
                 ></textarea>
             </div>
@@ -110,7 +110,7 @@
                 v-if="sourceLayerName"
                 class="aoi-dialog-source"
             >
-                来源图层：{{ sourceLayerName }}
+                {{ t('layer.sourceLayer', { name: sourceLayerName }) }}
             </div>
             <div
                 v-if="errorMessage"
@@ -125,14 +125,14 @@
                     type="button"
                     @click="emit('submit')"
                 >
-                    解析绘制
+                    {{ t('layer.parseAndDraw') }}
                 </button>
                 <button
                     class="aoi-dialog-btn aoi-dialog-btn-ghost"
                     type="button"
                     @click="emit('close')"
                 >
-                    取消
+                    {{ t('common.cancel') }}
                 </button>
             </div>
         </div>
@@ -142,8 +142,10 @@
 <script setup>
 import { computed } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 
 const message = useMessage();
+const { t } = useLocale();
 
 const props = defineProps({
     visible: { type: Boolean, default: false },
@@ -167,7 +169,7 @@ const officialDetailUrl = computed(() => {
 });
 async function openOfficialDetail() {
     if (!props.poiId) {
-        message.warning('请输入 POI ID');
+        message.warning(t('layer.pleaseInputPoiId'));
         return;
     }
 
@@ -180,7 +182,7 @@ async function openOfficialDetail() {
             referrerPolicy: 'no-referrer', // 隐藏来源，尝试规避部分校验
         });
 
-        if (!response.ok) throw new Error('网络响应异常');
+        if (!response.ok) throw new Error('network');
 
         const res = await response.json();
 
@@ -189,16 +191,16 @@ async function openOfficialDetail() {
         if (res.status === '1' || (res.data && res.data.status === '1')) {
             const jsonStr = JSON.stringify(res, null, 2);
             emit('update:jsonText', jsonStr);
-            message.success('成功从官方接口解析 AOI 详情');
+            message.success(t('layer.aoiParseSuccess'));
         } else {
             // 3. 业务逻辑失败（比如接口改版、频繁访问被封、参数失效）
-            throw new Error(res.info || '接口返回异常');
+            throw new Error(res.info || 'api');
         }
     } catch (e) {
         console.warn('后台解析官方接口失败:', e);
 
         // 4. 容错处理：提醒用户并执行原始的跳转逻辑
-        message.info('后台解析受阻，正在为你打开官方详情页进行手动获取...');
+        message.info(t('layer.aoiParseFailed'));
 
         // 延迟一小会儿跳转，让用户看清提示
         setTimeout(() => {
@@ -220,7 +222,7 @@ const aoiRequestUrl = computed(() => {
 });
 async function getAoiBoundarySafe() {
     if (!props.poiId) {
-        message.warning('请输入 POI ID');
+        message.warning(t('layer.pleaseInputPoiId'));
         return;
     }
 
@@ -235,7 +237,7 @@ async function getAoiBoundarySafe() {
         });
 
         // 2. 检查网络状态
-        if (!response.ok) throw new Error('网络请求失败');
+        if (!response.ok) throw new Error('network');
 
         // 3. 解析返回的 JSON 数据
         const realData = await response.json();
@@ -244,16 +246,16 @@ async function getAoiBoundarySafe() {
         if (realData.status === '1' && realData.aois && realData.aois.length > 0) {
             const jsonStr = JSON.stringify(realData, null, 2);
             emit('update:jsonText', jsonStr);
-            message.success('AOI数据抓取成功');
+            message.success(t('layer.aoiFetchSuccess'));
         } else {
             // 如果 API 返回错误（比如 key 无效或 ID 找不到）
-            message.error(`抓取失败: ${realData.info || '未知错误'}`);
+            message.error(t('layer.aoiFetchFailed', { info: realData.info || t('layer.aoiUnknownError') }));
             // 失败时也可以把原始错误数据传出去方便调试
             emit('update:jsonText', JSON.stringify(realData, null, 2));
         }
     } catch (e) {
         console.error('请求AOI接口出错', e);
-        message.error('请求失败，请检查网络或 API Key');
+        message.error(t('layer.aoiRequestFailed'));
     }
 }
 
@@ -270,7 +272,7 @@ async function handlePasteJson() {
     } catch { /* ignored */ }
 
     if (typeof window.prompt === 'function') {
-        const fallbackText = window.prompt('请粘贴 JSON：', props.jsonText || '');
+        const fallbackText = window.prompt(t('layer.aoiPastePrompt'), props.jsonText || '');
         if (fallbackText !== null) {
             emit('update:jsonText', fallbackText);
         }

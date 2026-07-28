@@ -30,9 +30,9 @@ const THEME_OPTIONS = Object.freeze([
     },
 ]);
 
+// language 走 setLanguagePreference 即时 SSOT，不参与「未保存」dirty / 批量保存
 const PREFERENCE_FIELDS = Object.freeze([
     'default_basemap',
-    'language',
     'unit_system',
     'preferred_agent_model',
 ]);
@@ -105,7 +105,7 @@ const emit = defineEmits([
     'set-theme',
 ]);
 
-const { t, setLanguage } = useLocale();
+const { t } = useLocale();
 
 const draftPreferences = computed(() => normalizePreferences(props.preferenceDraft));
 const savedPreferenceState = computed(() => normalizePreferences(props.savedPreferences));
@@ -213,6 +213,8 @@ function normalizeUnitSystem(value) {
 }
 
 function isDirty(key) {
+    // language 不在 PREFERENCE_FIELDS：即时全局开关，永不标 dirty
+    if (key === 'language') return false;
     return Boolean(dirtyFields.value[key]);
 }
 
@@ -223,9 +225,7 @@ function getAvatarSrc(avatarIndex) {
 }
 
 function updateDraftField(key, value) {
-    if (key === 'language') {
-        setLanguage(value);
-    }
+    // language 由父级 FloatingAccountPanel 走 setLanguagePreference（全局 SSOT + 远端同步）
     emit('update:preference-draft', { key, value });
 }
 

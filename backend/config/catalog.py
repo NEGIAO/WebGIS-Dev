@@ -488,6 +488,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "Google OAuth 用户资料端点",
     },
+    "GOOGLE_OAUTH_TOKENINFO_URL": {
+        "layer": "L1",
+        "default": "https://oauth2.googleapis.com/tokeninfo",
+        "secret": False,
+        "description": "Google One Tap / ID Token 校验端点",
+    },
     "GITHUB_OAUTH_AUTH_URL": {
         "layer": "L1",
         "default": "https://github.com/login/oauth/authorize",

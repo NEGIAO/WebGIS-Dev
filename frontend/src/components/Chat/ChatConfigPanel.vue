@@ -7,11 +7,11 @@
                     :size="14"
                     class="cfg-card-icon"
                 />
-                <span class="cfg-card-title">接入凭据</span>
+                <span class="cfg-card-title">{{ t('chat.configTitle') }}</span>
                 <span
                     v-if="config.isDirectMode"
                     class="cfg-badge"
-                >个人 Key 已启用</span>
+                >{{ t('chat.personalKeyEnabled') }}</span>
             </div>
 
             <label class="cfg-field">
@@ -21,12 +21,12 @@
                         v-model="config.userConfigDraft.api_key"
                         :type="showKey ? 'text' : 'password'"
                         class="cfg-input"
-                        placeholder="sk-...（填写后启用个人 Key 模式）"
+                        :placeholder="t('chat.apiKeyPlaceholder')"
                         autocomplete="off"
                     />
                     <button
                         class="cfg-input-btn"
-                        :title="showKey ? '隐藏' : '显示'"
+                        :title="showKey ? t('chat.hide') : t('chat.show')"
                         @click="showKey = !showKey"
                     >
                         <EyeOff
@@ -39,7 +39,7 @@
                         />
                     </button>
                 </div>
-                <span class="cfg-hint">仅保存在当前页面会话中，消息经后端代理转发（规避 CORS）</span>
+                <span class="cfg-hint">{{ t('chat.apiKeyHint') }}</span>
             </label>
 
             <label class="cfg-field">
@@ -65,11 +65,11 @@
                     :size="14"
                     class="cfg-card-icon"
                 />
-                <span class="cfg-card-title">模型</span>
+                <span class="cfg-card-title">{{ t('chat.model') }}</span>
                 <button
                     class="cfg-head-btn"
                     :disabled="config.isLoadingModels"
-                    title="刷新模型列表"
+                    :title="t('chat.refreshModels')"
                     @click="config.reloadAgentConfig(true)"
                 >
                     <RefreshCw
@@ -85,14 +85,14 @@
                         ref="modelInputRef"
                         v-model="config.userConfigDraft.model"
                         class="cfg-input"
-                        placeholder="输入或选择模型名称"
+                        :placeholder="t('chat.modelPlaceholder')"
                         autocomplete="off"
                         @focus="showModelDropdown = true"
                         @blur="onModelInputBlur"
                     />
                     <button
                         class="cfg-input-btn"
-                        title="展开模型列表"
+                        :title="t('chat.expandModels')"
                         @click.stop="toggleModelDropdown"
                     >
                         <ChevronDown
@@ -116,15 +116,15 @@
                             <span
                                 v-if="m._isFallback"
                                 class="model-tag"
-                            >当前</span>
+                            >{{ t('chat.currentTag') }}</span>
                             <span
                                 v-else-if="m.source === 'upstream'"
                                 class="model-tag upstream"
-                            >上游</span>
+                            >{{ t('chat.upstreamTag') }}</span>
                         </div>
                     </div>
                 </div>
-                <span class="cfg-hint">{{ config.modelLoadHint || '未加载模型列表' }}</span>
+                <span class="cfg-hint">{{ config.modelLoadHint || t('chat.modelLoadHint') }}</span>
             </div>
         </section>
 
@@ -135,7 +135,7 @@
                     :size="14"
                     class="cfg-card-icon"
                 />
-                <span class="cfg-card-title">生成参数</span>
+                <span class="cfg-card-title">{{ t('chat.generateParams') }}</span>
             </div>
 
             <div class="cfg-field">
@@ -152,9 +152,9 @@
                     class="cfg-slider"
                 />
                 <div class="cfg-slider-marks">
-                    <span>精确</span>
-                    <span>平衡</span>
-                    <span>发散</span>
+                    <span>{{ t('chat.precise') }}</span>
+                    <span>{{ t('chat.balanced') }}</span>
+                    <span>{{ t('chat.creative') }}</span>
                 </div>
             </div>
 
@@ -170,7 +170,7 @@
                     />
                 </label>
                 <label class="cfg-field">
-                    <span class="cfg-label">超时（秒）</span>
+                    <span class="cfg-label">{{ t('chat.timeout') }}</span>
                     <input
                         v-model.number="config.userConfigDraft.timeout_seconds"
                         type="number"
@@ -189,14 +189,14 @@
                     :size="14"
                     class="cfg-card-icon"
                 />
-                <span class="cfg-card-title">系统提示词</span>
-                <span class="cfg-card-caption">可选，仅覆盖你自己的会话</span>
+                <span class="cfg-card-title">{{ t('chat.systemPrompt') }}</span>
+                <span class="cfg-card-caption">{{ t('chat.systemPromptCaption') }}</span>
             </div>
             <textarea
                 v-model="config.userConfigDraft.system_prompt"
                 rows="3"
                 class="cfg-textarea"
-                placeholder="例如：你是 WebGIS 平台的空间分析专家，回答保持简洁……"
+                :placeholder="t('chat.systemPromptPlaceholder')"
             ></textarea>
         </section>
 
@@ -208,25 +208,25 @@
                 @click="config.saveUserConfig()"
             >
                 <Save :size="14" />
-                {{ config.userConfigSaving ? '保存中...' : '保存配置' }}
+                {{ config.userConfigSaving ? t('chat.saving') : t('chat.saveConfig') }}
             </button>
             <button
                 class="cfg-text-btn"
                 :disabled="config.userConfigSaving"
-                title="清除个人 API Key，回到后端代理模式"
+                :title="t('chat.clearKeyTitle')"
                 @click="config.clearPersonalKey()"
             >
                 <Trash2 :size="13" />
-                清除 Key
+                {{ t('chat.clearKey') }}
             </button>
             <button
                 class="cfg-text-btn"
                 :disabled="config.userConfigSaving"
-                title="恢复平台默认参数"
+                :title="t('chat.resetDefaultTitle')"
                 @click="config.resetProviderOverrides()"
             >
                 <RotateCcw :size="13" />
-                恢复默认
+                {{ t('chat.resetDefault') }}
             </button>
         </div>
     </div>
@@ -256,9 +256,11 @@ import {
     SlidersHorizontal,
     Trash2,
 } from 'lucide-vue-next';
+import { useLocale } from '../../composables/useLocale';
 
 /** 容器 ChatPanelContent provide 的 Agent 配置对象 */
 const config = inject('chatAgentConfig', reactive({}));
+const { t } = useLocale();
 
 const modelInputRef = ref(null);
 const showModelDropdown = ref(false);

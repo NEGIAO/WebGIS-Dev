@@ -6,6 +6,131 @@
 
 ## 版本记录
 
+### V3.4.89 (2026-07-28) — Cesium/流体 toast + 下载 store lastError i18n
+
+- 🌐 **cesium.toast / fluidToast**：导航选点、底图地形、token 重试/耗尽、流体创建/洪水/清除 zh/en。
+- 📥 **mapDownload 校验键**：`useDownloadStore` 抛 `mapDownload.err*` / `msg*`；`MapDownloader` `resolveStoreText` 展示。
+- 📜 **Force**：L1 非密 `.env` 可改须 catalog/example 同步；L3 绝密仍禁。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3489-cesium-fluid-download-i18n.md)
+
+### V3.4.88 (2026-07-28) — useAgentConfig + ApiKeysManagementPanel i18n
+
+- 🌐 **admin agent 校验/toast**：Extra Body / 必填 / 超时 / tokens / model 列表 / 额度 / 保存与重置 zh/en。
+- 🔑 **apiKeys 扩展**：Cesium、备用池、Agent 参数区、默认 AI、安全提示与 CRUD toast。
+- 🧰 **接线**：`useAgentConfig` `translate`；`ApiKeysManagementPanel` 全量 `t()`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3488-agent-apikeys-i18n.md)
+
+### V3.4.87 (2026-07-28) — AttributeTable / MapControlsBar / AOI 弹窗可见 UI i18n
+
+- 🌐 **attrTable / mapControls 键**：属性表标题/工具栏/字段面板/空态/页脚；坐标条编辑/复制/格式/复位 zh/en 对齐。
+- 🧰 **AttributeTable + MapControlsBar**：`useLocale`；可见 UI 与 toast 全量 `t()`。
+- 🗺️ **AmapAoiInjectDialog**：模板与抓取/粘贴 toast 接入 `layer.aoi*`（含 fetch/paste 扩展键）。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3487-attrtable-mapcontrols-aoi-i18n.md)
+
+### V3.4.86 (2026-07-28) — CesiumToolPanel + 模块配置全量中英文 i18n
+
+- 🌐 **cesium 键扩展**：壳层 UI / status / materials / 九大 module.* zh/en 叶 349 对齐。
+- 🧰 **CesiumToolPanel**：`useLocale`；Tab/底图数据/材质/空态全量 `t('cesium.*')`。
+- 🧩 **toolModules 工厂**：scene/atmosphere/cloud/tools/wind/fluid/shallowWater/player/analysis 的 title·label·tooltip·status 走 `translate`；`useCesiumToolModules` 订阅 `language` 重建。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3486-cesium-toolpanel-i18n.md)
+
+### V3.4.85 (2026-07-28) — Admin 控制台 + Chat 导出空态 i18n
+
+- 🌐 **admin 缺键**：`unknownError` / JSON 解析 / 无定位键删除 / 空表 / 插入示例 / basemap 选项等 zh/en 对齐。
+- 🧰 **AdminControlPanel**：`useLocale`；模板与 CRUD toast 全量 `t('admin.*')`。
+- 💬 **Chat 导出**：空对话 `chat.exportEmpty`；下载名 `chat.exportFilename`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3485-admin-chat-i18n.md)
+
+### V3.4.84 (2026-07-28) — ExtentPicker / 404 / HomeView 可见 UI i18n
+
+- 🌐 **Vue UI 优先**：`ExtentPicker` 框选按钮与提示、`NotFoundView` 文案、`HomeView` 属性面板与地图/分析 toast 接入 `extent.*` / `notFound.*` / `home.*`。
+- 📦 **full pack 对齐**：zh/en 叶节点一致；法律长文（服务条款/隐私）本刀不纳入。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3484-extent-notfound-home-i18n.md)
+
+### V3.4.83 (2026-07-28) — 坐标输入 / p 参数校验错误 i18n
+
+- 🌐 **layer 校验键**：经纬度空值/数字/范围/标准化、p 必填 zh/en 对齐；解码失败复用 `pDecodeFailed`。
+- 🔧 **工具层 t()**：`coordinateInputHandler` / `usePositionCodeTool` 错误文案 `translate`；TOC 透传无需再改。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3483-coord-p-validation-i18n.md)
+
+### V3.4.82 (2026-07-28) — TOCPanel 坐标 / 地理编码 / 共享资源 toast i18n
+
+- 🌐 **layer toast 键**：坐标复制、弹窗拦截、AOI 粘贴、p 解码、地理编码、超大文件、共享资源扫描/加载 zh/en 对齐。
+- 🧰 **TOCPanel 脚本**：上述路径 `message.*` / 表单错误一律 `t('layer.*')`；feature properties 中文键保持数据 SSOT。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3482-tocpanel-toast-i18n.md)
+
+### V3.4.81 (2026-07-28) — Weather 看板消息 / 图表 / API 中英文 i18n
+
+- 🌐 **weather 键扩展**：雨情卡片、查询失败、ECharts 系列/风力单位、`weekdays` zh/en 对齐。
+- 🔌 **api + composable**：`getWeather` toast、`useWeatherData` 校验/雨情、`useWeatherCharts` 图例与 tooltip 全量 `t()`。
+- 📅 **formatWeekLabel**：优先 `weather.weekdays.*`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3481-weather-board-i18n.md)
+
+### V3.4.80 (2026-07-28) — Bus / Driving 规划面板全量中英文 i18n
+
+- 🌐 **routing 键扩展**：候选提示 / 无分段 / Token·网络错误 / `busNoPlan`·`busPlanFailed`·`transitMode` 等 zh/en 对齐。
+- 🚌 **BusPlannerPanel**：模板与错误全量 `t()`；步行/公交 mode 修正；空方案与 catch 语义键分离。
+- 🚗 **DrivingPlannerPanel**：策略/时长/调试/失败兜底全量 `t()`；Loading 沿用 `loading.drivingRoute`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3480-routing-panel-i18n.md)
+
+### V3.4.79 (2026-07-28) — showLoading 全链路中英文 i18n
+
+- 🌐 **core `loading.*`**：鉴权 / 地图引擎 / Cesium / GIS 导入 / 流体高度 / 公交驾车规划文案进 core，路由守卫首屏可用。
+- 🔗 **调用点统一 t()**：`router`、`HomeView`、`CesiumContainer`、`FluidSimulationPanel`、`Driving/BusPlannerPanel`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3479-showloading-i18n.md)
+
+### V3.4.78 (2026-07-28) — 语言 dirty 清除 + Message / GlobalLoading 首屏 i18n
+
+- 🧹 **language 退出 dirty**：偏好「界面语言」即时 SSOT，不参与未保存标记与批量保存；描述文案改为无需点保存。
+- 🌐 **Message.vue**：toast 标题 / 关闭 aria / 队列提示接入 `message.*`（core 首屏）。
+- ⏳ **GlobalLoading.vue**：默认主/副文案 `common.loadingPleaseWait` / `loadingHard`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3478-language-dirty-message-loading-i18n.md)
+
+### V3.4.77 (2026-07-28) — SidePanel / HomeView 侧栏中英文 i18n
+
+- 🌐 **侧栏占位与折叠**：`HomeView` 占位 `common.expand`；`SidePanel` 折叠 title 读 `shell.expandPanel` / `collapsePanel`。
+- 📰 **新闻区全量 i18n**：平台 chip、`newsSubtitle` / loading / empty / footer；`platforms` 补 GitHub/HN/V2EX/StackOverflow。
+- 🏷️ **activeFeature / 加载态**：默认新闻/天气/地图视图与懒加载失败 toast 走 `shell.*`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3477-sidepanel-homeview-i18n.md)
+
+### V3.4.76 (2026-07-28) — 全局语言开关 SSOT（注册页 ↔ 偏好页）
+
+- 🌐 **本机语言 SSOT**：`webgis_pref_language` 优先于完整偏好缓存与远端默认 `zh-CN`；`loadPreferences` 合并时保留本机，并在登录后静默回写远端。
+- 🔗 **统一入口**：`setLanguagePreference` 供注册页与账号中心偏好共用；`setLocaleLanguage` 同步完整缓存中的 `language`。
+- 🩹 **修复**：注册页切英文后进首页被 bootstrap/远端默认冲回中文。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3476-global-language-ssot.md)
+
+### V3.4.75 (2026-07-28) — Draw / Measure / Spatial 子面板中英文 i18n
+
+- 🌐 **三子面板全量 i18n**：`DrawPanel` / `MeasurePanel` / `SpatialAnalysisPanel` 标题、工具、参数、操作与结果 toast 接入 `draw.*` / `measure.*` / `spatial.*`。
+- 📦 **spatial 键补齐**：`modes`（交集/并集/差集）与各算子 `*Submitted`、`fishnetWithCenter`、`squareLabel` / `hexLabel`。
+- 🧹 **hints 归位**：`draw.hints` 误放的测距/测面提示迁至 `measure.hints` 唯一来源。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3475-draw-measure-spatial-i18n.md)
+
+### V3.4.74 (2026-07-28) — i18n 二轮 CR 残留修复
+
+- 🔗 **force/inflight join**：`loadLocaleMessages(force)` 同语言先 await 进行中的加载，再真正重载，避免双 task 竞态。
+- 🔤 **空串合法文案**：`getMessage` 改 `!== undefined`，`''` 不再被当缺失回退。
+- 🌐 **昵称校验 i18n**：`validateDisplayName` 返回 `auth.displayName*` code；RegisterView / SecurityTab `t(code)`；`getUserDisplayName` 空兜底。
+- ⚡ **首屏成功 toast**：core 同步 `guestLoginSuccess` / `loginSuccessWithRole` / `googleLoginSuccess`。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3474-i18n-cr-residual-fixes.md)
+
+### V3.4.73 (2026-07-28) — TopBar / Sidebar 中英文 i18n
+
+- 🌐 **TopBar 全量 i18n**：菜单、分享、AI、2D/3D、用户中心、屏幕特效、常用地点、分享 toast 接入 `topbar.*`。
+- 🧭 **ControlsPanel sidebar**：侧栏标签改 `computed` 读 `controls.*`；卷帘对话框与绘制/测量/日志 toast 全量 `t()`。
+- 📦 语言包 zh/en 同步增补 `topbar` 与 `controls` 对话框/消息键。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3473-topbar-sidebar-i18n.md)
+
+### V3.4.72 (2026-07-28) — i18n Code Review 全量修复
+
+- 🩹 **首屏防 key 泄漏**：`core.js` 同步纳入登录必需 `auth.*` + `preferences.language`；`main.js` 尽早 `loadLocaleMessages()`；`bootstrap` 在 preferences 网络请求前触发加载。
+- 🔗 **fallback 读写统一**：失败时 merge 进**当前语言槽**；`getMessage` 链为 当前 → `en-US` → `zh-CN` → path。
+- 🧬 **深拷贝 + per-lang 加载**：`cloneLocaleNode` 防污染 core；`loadedLocales`/`inflightLoads` 按语言去重；`setLocaleLanguage` 自动加载，调用方无需 force。
+- ♿ **RegisterView a11y i18n**：`modeSwitchAria` / `avatarGroupAria` / `avatarOption`。
+- ✅ zh/en 叶节点 801/801 对齐（剔除死键后）。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3472-i18n-review-fixes.md)
+
+### V3.4.71 (2026-07-28) — 注册页语言切换 + OAuth 配置登记收口
+
+- 🌐 **注册页中英文切换**：`RegisterView` 头部新增 `lang-toggle`（中文 / EN），行为与偏好页 Interface Language 等价（`setLanguage` 自动加载完整语言包）。
+- 💾 **语言持久化统一**：`setLocaleLanguage` 同步写入 `webgis_pref_language`，登录前后刷新保持一致。
+- ⚙️ **OAuth 配置登记收口**：catalog / `.env.example` 登记 `GOOGLE_OAUTH_TOKENINFO_URL`；`VITE_GOOGLE_OAUTH_CLIENT_ID` 经 `publicRuntime` 导出，RegisterView 不再散落 `import.meta.env`。
+- ✅ **门禁**：`CheckConfigRegistry.py` 7 项全绿；zh-CN/en-US 叶节点 key 对齐。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3471-register-lang-oauth-config.md)
+
+### V3.4.70 (2026-07-28) — i18n 国际化重构：语言包物理拆分 + 懒加载 + Bug 修复
+
+- 🌐 **语言包物理拆分**：`useLocale.js` 从 365 行精简；新增 `frontend/src/locales/core.js`（同步核心 common 键）+ `zh-CN.js` / `en-US.js`（懒加载完整语言包）。主 bundle 语言包体积减少约 82%。
+- ⚡ **懒加载架构**：`loadLocaleMessages(force)` 动态 `import()` 完整语言包，`deepMerge` 触发响应式更新。
+- 🔧 **ref 访问同步修正**：`messages` 改为 `ref()` 时，`getMessage` 同步改为 `messages.value[lang]`（属本次重构配套修正，非线上既有故障）。
+- 🔒 **竞态条件防护**：新增 `loadingLang` 标记，异步加载期间语言切换时丢弃过期结果。
+- 🏗️ **开闭原则**：硬编码 `if/else import()` 提取为 `LOCALE_LOADERS` map，新增语言仅需添加一条记录。
+- 🌍 **回退语言中性化**：fallback 目标改为 `en-US`（V3.4.72 再统一读写链）。
+- 📝 **RegisterView 全量 i18n 化**：硬编码中文文案替换为 `t('auth.*')`；修复 `emailVerifiedSuccess` 的 `✅` 前缀。
+- ✅ **验证**：触改 JS `node --check` 通过。详见[日志](../LLM_record/26-07/2026-07-28/2026-07-28-v3470-i18n-refactor.md)
+
 ### V3.4.69 (2026-07-28) — Agent 地图命令总线安全重构
 
 - 🗺️ **MapCommandBus 固定白名单命令集**：新增 `frontend/src/services/agent/MapCommandBus.js`（工厂函数 `createMapCommandBus`），Agent 地图操作收窄为 5 个白名单命令：`setMapView` / `setViewCenter` / `setCameraOrientation` / `zoomToExtent` / `switchBasemap`。无 `set_url`、`navigate` 或任意命令入口，URL 更新仍由现有 OL/Cesium 同步链自动完成。

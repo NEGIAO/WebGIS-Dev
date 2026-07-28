@@ -53,6 +53,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useMessage } from '../../../composables/useMessage';
 import { showLoading, hideLoading } from '../../../utils/ui/loading';
+import { translate as t } from '../../../composables/useLocale';
 import { createFluidRuntime } from './fluidRuntime';
 import LilGuiControls from '../LilGuiControls.vue';
 import { acquireContinuous, releaseContinuous } from '../composables/interaction/useCesiumRenderMode';
@@ -213,7 +214,7 @@ function getViewerAndCesium() {
     const Cesium = props.getCesium?.() || window.Cesium;
 
     if (!viewer || !Cesium) {
-        message.warning('Cesium 场景尚未就绪。');
+        message.warning(t('cesium.fluidToast.sceneNotReady'));
         return null;
     }
 
@@ -290,7 +291,7 @@ function startPickHeightMap() {
 async function createFluidAtScreenPosition(viewer, Cesium, position) {
     const cartesian = pickCartesian(viewer, position);
     if (!cartesian) {
-        message.warning('未选中可用地形位置。');
+        message.warning(t('cesium.fluidToast.noTerrainPick'));
         return;
     }
 
@@ -308,7 +309,7 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         0,
     );
 
-    showLoading('正在请求模拟范围高度数据...');
+    showLoading(t('loading.fluidHeights'));
     try {
         destroyFluidOnly();
 
@@ -348,7 +349,7 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         }
 
         if (!heightMapSource) {
-            message.warning('范围高度预请求不可用，已回退到当前场景捕捉。', {
+            message.warning(t('cesium.fluidToast.heightMapFallback'), {
                 duration: 4200,
             });
         }
@@ -381,10 +382,10 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
         selectedLat.value = lat;
         hasFluid.value = true;
         viewer.scene.requestRender?.();
-        message.success('水体流体已创建。');
+        message.success(t('cesium.fluidToast.created'));
     } catch (error) {
-        message.error('水体流体创建失败', error);
-        message.warning('当前显卡或 Cesium 版本可能不支持该流体渲染管线。', { closable: true });
+        message.error(t('cesium.fluidToast.createFailed'), error);
+        message.warning(t('cesium.fluidToast.pipelineUnsupported'), { closable: true });
     } finally {
         hideLoading();
     }
@@ -806,7 +807,7 @@ function startFloodSimulation() {
         if (nextLevel >= range.maxHeight) {
             waterLevel.value = range.maxHeight;
             stopFloodSimulation();
-            message.info('洪水模拟完成：水位已达最大值');
+            message.info(t('cesium.fluidToast.floodDone'));
             return;
         }
 
@@ -815,7 +816,7 @@ function startFloodSimulation() {
     }
 
     floodAnimFrameId = requestAnimationFrame(step);
-    message.info('洪水模拟开始');
+    message.info(t('cesium.fluidToast.floodStart'));
 }
 
 /**
@@ -838,7 +839,7 @@ function clearFluid() {
     // 水体与后处理层、跳过场景快照还原，且 headless 集成下 closePanel（唯一还原
     // 入口）永远不会触发 → “清除”后整屏效果层残留。
     cleanup(true);
-    message.success('水体流体已清除。');
+    message.success(t('cesium.fluidToast.cleared'));
 }
 
 function stopPicking() {

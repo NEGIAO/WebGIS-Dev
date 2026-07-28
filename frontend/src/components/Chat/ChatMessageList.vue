@@ -68,7 +68,7 @@
                     </div>
                     <div class="msg-col">
                         <div class="sender-row">
-                            <span class="sender-name">AI 助手</span>
+                            <span class="sender-name">{{ t('chat.aiAssistant') }}</span>
                             <span
                                 v-if="msg.time"
                                 class="sender-time"
@@ -85,7 +85,7 @@
                                     :size="13"
                                     class="think-icon"
                                 />
-                                <span>思考过程</span>
+                                <span>{{ t('chat.thinking') }}</span>
                                 <ChevronDown
                                     :size="13"
                                     class="think-chevron"
@@ -106,7 +106,7 @@
                         <div class="action-row">
                             <button
                                 class="action-btn"
-                                :title="copiedIndex === index ? '已复制' : '复制回复'"
+                                :title="copiedIndex === index ? t('chat.copied') : t('chat.copyReply')"
                                 @click="copyMessage(msg, index)"
                             >
                                 <Check
@@ -122,7 +122,7 @@
                             <button
                                 v-if="canRegenerate(index)"
                                 class="action-btn"
-                                title="重新生成"
+                                :title="t('chat.regenerate')"
                                 @click="emit('regenerate')"
                             >
                                 <RefreshCw :size="14" />
@@ -141,7 +141,7 @@
                         <div class="action-row user-actions">
                             <button
                                 class="action-btn"
-                                :title="copiedIndex === index ? '已复制' : '复制'"
+                                :title="copiedIndex === index ? t('chat.copied') : t('chat.copyMessage')"
                                 @click="copyMessage(msg, index)"
                             >
                                 <Check
@@ -189,11 +189,11 @@
                 <div class="hero-avatar">
                     <Bot :size="26" />
                 </div>
-                <div class="hero-title">AI 空间助手</div>
+                <div class="hero-title">{{ t('chat.aiHeroTitle') }}</div>
                 <div class="hero-subtitle">{{ heroSubtitle }}</div>
                 <div class="hero-hint">
                     <Sparkles :size="12" />
-                    试试这些指令
+                    {{ t('chat.tryTheseCommands') }}
                 </div>
                 <div class="hero-chips">
                     <button
@@ -213,7 +213,7 @@
             <button
                 v-if="showScrollFab"
                 class="scroll-fab"
-                title="回到底部"
+                :title="t('chat.backToBottom')"
                 @click="scrollToBottom(true)"
             >
                 <ChevronDown :size="16" />
@@ -254,6 +254,7 @@ import {
 } from 'lucide-vue-next';
 import 'highlight.js/styles/github-dark-dimmed.css';
 import { useMarkdownRenderer } from '../../composables/useMarkdownRenderer';
+import { useLocale } from '../../composables/useLocale';
 
 const props = defineProps({
     /** 会话消息列表（含时间戳/工具状态卡） */
@@ -264,6 +265,7 @@ const props = defineProps({
 
 const emit = defineEmits(['suggest', 'regenerate']);
 
+const { t } = useLocale();
 const { renderAnswerHtml, renderThinkHtml, hasThinkContent, ready } = useMarkdownRenderer();
 
 const chatBody = ref(null);
@@ -272,13 +274,13 @@ const copiedIndex = ref(-1);
 const unseenCount = ref(0);
 let copiedTimer = null;
 
-/** 空状态 GIS 快捷建议词 */
-const suggestions = [
-    '定位到郑州大学',
-    '切换到谷歌卫星底图',
-    '搜索北京故宫',
-    '把底图换成 Carto 暗色风格',
-];
+/** 空状态 GIS 快捷建议词（随语言切换） */
+const suggestions = computed(() => [
+    t('chat.suggestions.locate'),
+    t('chat.suggestions.switchBase'),
+    t('chat.suggestions.search'),
+    t('chat.suggestions.changeStyle'),
+]);
 
 /** Hero 首屏：仅剩欢迎语且未在生成（隐藏欢迎气泡，展示大头像 + 建议词） */
 const heroMode = computed(() => props.messages.length <= 1 && !props.isLoading);
@@ -286,7 +288,7 @@ const heroMode = computed(() => props.messages.length <= 1 && !props.isLoading);
 /** Hero 副标题：取欢迎语正文 */
 const heroSubtitle = computed(() => {
     const text = String(props.messages[0]?.content || '').trim();
-    return text || '你可以让我定位地点、切换底图、检索兴趣点，或直接提问。';
+    return text || t('chat.heroSubtitle');
 });
 
 /**
@@ -377,9 +379,9 @@ function dayLabel(ts) {
     if (Number.isNaN(d.getTime())) return '';
     const today = new Date();
     const yesterday = new Date(today.getTime() - 86400000);
-    if (d.toDateString() === today.toDateString()) return '今天';
-    if (d.toDateString() === yesterday.toDateString()) return '昨天';
-    return `${d.getMonth() + 1}月${d.getDate()}日`;
+    if (d.toDateString() === today.toDateString()) return t('chat.today');
+    if (d.toDateString() === yesterday.toDateString()) return t('chat.yesterday');
+    return t('chat.monthDay', { m: d.getMonth() + 1, d: d.getDate() });
 }
 
 /** 最后一条 assistant 消息（非欢迎语）可重新生成 */

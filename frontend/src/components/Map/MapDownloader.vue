@@ -5,8 +5,8 @@
     >
         <header class="downloader-header">
             <div>
-                <div class="header-title">在线底图导出</div>
-                <div class="header-subtitle">BBox 输入支持 EPSG:4326 / 3857，导出为 GeoTIFF</div>
+                <div class="header-title">{{ t('mapDownload.title') }}</div>
+                <div class="header-subtitle">{{ t('mapDownload.subtitle') }}</div>
             </div>
             <div class="header-actions">
                 <span
@@ -26,7 +26,7 @@
 
         <section class="downloader-body">
             <div class="form-row">
-                <label>底图源</label>
+                <label>{{ t('mapDownload.basemapSource') }}</label>
                 <select
                     v-model="selectedPreset"
                     class="form-select"
@@ -49,7 +49,7 @@
             </div>
 
             <div class="form-row">
-                <label>Tile URL 模板</label>
+                <label>{{ t('mapDownload.tileUrlTemplate') }}</label>
                 <input
                     v-model="store.tileUrlTemplate"
                     class="form-input"
@@ -61,7 +61,7 @@
 
             <div class="form-row form-grid">
                 <div class="form-field">
-                    <label>BBox CRS</label>
+                    <label>{{ t('mapDownload.bboxCrs') }}</label>
                     <select
                         v-model="store.bboxCrs"
                         class="form-select"
@@ -71,7 +71,7 @@
                     </select>
                 </div>
                 <div class="form-field">
-                    <label>分辨率 (m)</label>
+                    <label>{{ t('mapDownload.resolutionM') }}</label>
                     <input
                         v-model.number="store.resolutionM"
                         class="form-input"
@@ -82,9 +82,9 @@
                 </div>
             </div>
 
-            <!-- 下载模式选择（新增） -->
+            <!-- 下载模式选择 -->
             <div class="form-row">
-                <label>下载模式</label>
+                <label>{{ t('mapDownload.downloadMode') }}</label>
                 <div class="download-mode-selector">
                     <label class="mode-option">
                         <input
@@ -93,8 +93,8 @@
                             value="native"
                         />
                         <span class="mode-label">
-                            浏览器托管（推荐）
-                            <span class="mode-hint">不占用网页内存，大文件更稳定</span>
+                            {{ t('mapDownload.modeNative') }}
+                            <span class="mode-hint">{{ t('mapDownload.modeNativeHint') }}</span>
                         </span>
                     </label>
                     <label class="mode-option">
@@ -104,8 +104,8 @@
                             value="progressive"
                         />
                         <span class="mode-label">
-                            前端可视化（测试）
-                            <span class="mode-hint">显示实时下载进度</span>
+                            {{ t('mapDownload.modeProgressive') }}
+                            <span class="mode-hint">{{ t('mapDownload.modeProgressiveHint') }}</span>
                         </span>
                     </label>
                 </div>
@@ -156,8 +156,8 @@
                     type="checkbox"
                 />
                 <span class="clip-label">
-                    裁剪到精确范围
-                    <span class="mode-hint">下载后按框选范围裁剪，去除瓦片对齐的多余区域</span>
+                    {{ t('mapDownload.clipToExtent') }}
+                    <span class="mode-hint">{{ t('mapDownload.clipToExtentHint') }}</span>
                 </span>
             </label>
 
@@ -176,7 +176,7 @@
                     :disabled="store.isSubmitting"
                     @click="handleSubmit"
                 >
-                    {{ store.isSubmitting ? '提交中...' : '开始下载' }}
+                    {{ store.isSubmitting ? t('mapDownload.submitting') : t('mapDownload.startDownload') }}
                 </button>
                 <button
                     class="ghost-btn"
@@ -184,21 +184,21 @@
                     :disabled="!store.isPolling"
                     @click="store.stopPolling"
                 >
-                    停止轮询
+                    {{ t('mapDownload.stopPolling') }}
                 </button>
                 <button
                     class="ghost-btn"
                     type="button"
                     @click="handleReset"
                 >
-                    重置
+                    {{ t('mapDownload.reset') }}
                 </button>
             </div>
 
             <!-- 后端生成进度 -->
             <div class="progress-card">
                 <div class="progress-head">
-                    <span>后端生成进度</span>
+                    <span>{{ t('mapDownload.backendProgress') }}</span>
                     <span class="progress-value">{{ progressLabel }}</span>
                 </div>
                 <div class="progress-track">
@@ -208,13 +208,13 @@
                     ></div>
                 </div>
                 <div class="progress-meta">
-                    <span v-if="store.taskId">任务 ID: {{ store.taskId }}</span>
-                    <span v-if="store.message">{{ store.message }}</span>
+                    <span v-if="store.taskId">{{ t('mapDownload.taskId', { id: store.taskId }) }}</span>
+                    <span v-if="displayStoreMessage">{{ displayStoreMessage }}</span>
                     <span v-if="expiresHint">{{ expiresHint }}</span>
                     <span
-                        v-if="store.lastError"
+                        v-if="displayLastError"
                         class="error-text"
-                        >{{ store.lastError }}</span
+                        >{{ displayLastError }}</span
                     >
                 </div>
             </div>
@@ -224,7 +224,7 @@
                 class="progress-card transfer-card"
             >
                 <div class="progress-head">
-                    <span>本地传输进度 (剩余时间: {{ countdownText }})</span>
+                    <span>{{ t('mapDownload.transferProgress', { time: countdownText }) }}</span>
                     <span class="progress-value">{{ transferState.progress }}%</span>
                 </div>
                 <div class="progress-track transfer-track">
@@ -235,11 +235,19 @@
                 </div>
                 <div class="progress-meta transfer-meta">
                     <span v-if="transferState.total > 0">
-                        已传输: {{ formatBytes(transferState.downloaded) }} /
-                        {{ formatBytes(transferState.total) }}
+                        {{
+                            t('mapDownload.transferred', {
+                                downloaded: formatBytes(transferState.downloaded),
+                                total: formatBytes(transferState.total),
+                            })
+                        }}
                     </span>
                     <span v-else-if="transferState.active">
-                        已传输: {{ formatBytes(transferState.downloaded) }} (计算总大小中...)
+                        {{
+                            t('mapDownload.transferredComputing', {
+                                downloaded: formatBytes(transferState.downloaded),
+                            })
+                        }}
                     </span>
                     <span
                         v-if="transferState.error"
@@ -254,7 +262,7 @@
                             type="button"
                             @click="cancelTransfer"
                         >
-                            取消下载
+                            {{ t('mapDownload.cancelDownload') }}
                         </button>
                         <button
                             v-if="!transferState.active && (store.status === 'success' || transferState.error)"
@@ -262,27 +270,27 @@
                             type="button"
                             @click="handleRedownload"
                         >
-                            重新下载到本地
+                            {{ t('mapDownload.redownload') }}
                         </button>
                     </div>
                 </div>
             </div>
 
             <div class="task-query">
-                <label>任务 ID 查询</label>
+                <label>{{ t('mapDownload.taskLookup') }}</label>
                 <div class="task-query-row">
                     <input
                         v-model.trim="lookupTaskId"
                         class="form-input"
                         type="text"
-                        placeholder="输入任务 ID"
+                        :placeholder="t('mapDownload.taskIdPlaceholder')"
                     />
                     <button
                         class="ghost-btn"
                         type="button"
                         @click="handleLookup"
                     >
-                        查询
+                        {{ t('mapDownload.query') }}
                     </button>
                 </div>
             </div>
@@ -294,6 +302,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiDownloadTaskFile, apiDownloadTaskFileUrl } from '../../api/download';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { useDownloadStore } from '../../stores/useDownloadStore';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '../../constants';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
@@ -305,6 +314,7 @@ defineProps({
 
 const emit = defineEmits(['close']);
 const message = useMessage();
+const { t } = useLocale();
 const store = useDownloadStore();
 
 /**
@@ -347,10 +357,10 @@ const timeLeft = ref(INITIAL_SECONDS);
 const timer = ref(null);
 
 const countdownText = computed(() => {
-    if (timeLeft.value <= 0) return '已超时';
+    if (timeLeft.value <= 0) return t('mapDownload.timedOut');
     const minutes = Math.floor(timeLeft.value / 60);
     const seconds = timeLeft.value % 60;
-    return `${minutes}分 ${String(seconds).padStart(2, '0')}秒`;
+    return t('mapDownload.countdown', { m: minutes, s: String(seconds).padStart(2, '0') });
 });
 
 function startCountdown() {
@@ -463,7 +473,7 @@ async function downloadFileToLocal() {
 
         const blob = response?.data;
         if (!(blob instanceof Blob) || blob.size <= 0) {
-            throw new Error('下载文件为空或响应无效');
+            throw new Error(t('mapDownload.emptyFile'));
         }
 
         const contentLength = Number(response?.headers?.['content-length'] || 0);
@@ -500,15 +510,17 @@ async function downloadFileToLocal() {
         transferState.value.active = false;
         transferState.value.error = '';
         lastTransferredTaskId.value = store.taskId;
-        message.success('文件成功下载到本地！');
+        message.success(t('mapDownload.downloadSuccess'));
         stopCountdown(); // 传输成功后停止
     } catch (err) {
         const canceledByUser = err?.code === 'ERR_CANCELED';
         if (canceledByUser) {
-            transferState.value.error = '下载已手动取消';
+            transferState.value.error = t('mapDownload.canceledByUser');
         } else {
-            transferState.value.error = `传输失败: ${err.message}`;
-            message.error('文件传输到本地失败');
+            transferState.value.error = t('mapDownload.transferFailedDetail', {
+                msg: err?.message || '',
+            });
+            message.error(t('mapDownload.transferToLocalFailed'));
         }
         transferState.value.active = false;
         transferState.value.progress = 0;
@@ -524,19 +536,19 @@ async function downloadFileToLocal() {
  */
 function triggerNativeDownload() {
     if (!store.taskId || !store.downloadToken) {
-        message.error('任务 ID 或下载令牌缺失，无法下载');
+        message.error(t('mapDownload.missingToken'));
         return;
     }
 
     if (store.isExpired) {
-        message.error('任务已过期，无法下载');
+        message.error(t('mapDownload.expiredCannotDownload'));
         return;
     }
 
     try {
         // 构建带 token 的下载 URL
         const downloadUrl = apiDownloadTaskFileUrl(store.taskId, store.downloadToken);
-        
+
         // 通过创建临时链接并触发点击来启动浏览器原生下载
         const link = document.createElement('a');
         link.href = downloadUrl;
@@ -544,16 +556,16 @@ function triggerNativeDownload() {
         document.body.appendChild(link);
         link.click();
         link.remove();
-        
+
         // 记录下载时间
         store.downloadedAt = Date.now();
-        message.success('下载已启动，文件将在浏览器中下载');
-        
+        message.success(t('mapDownload.nativeStarted'));
+
         // 停止倒计时（已完成）
         stopCountdown();
     } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : '无法启动下载';
-        message.error(`浏览器原生下载失败: ${errorMsg}`);
+        const errorMsg = error instanceof Error ? error.message : t('mapDownload.cannotStartDownload');
+        message.error(t('mapDownload.nativeFailed', { msg: errorMsg }));
         console.error('[MapDownloader] triggerNativeDownload failed:', error);
     }
 }
@@ -642,8 +654,8 @@ const isCustomPreset = computed(
 );
 const activePresetHint = computed(() => {
     if (!activePreset.value) return '';
-    if (activePreset.value.isCustom) return '可手动输入自定义 URL 模板';
-    if (!activePreset.value.template) return '该底图暂不支持导出';
+    if (activePreset.value.isCustom) return t('mapDownload.customUrlHint');
+    if (!activePreset.value.template) return t('mapDownload.basemapNotExportable');
     return '';
 });
 
@@ -667,17 +679,17 @@ watch(selectedPreset, (presetId) => {
 });
 
 const statusText = computed(() => {
-    if (transferState.value.active) return '传输中';
-    if (transferState.value.error) return '传输失败';
+    if (transferState.value.active) return t('mapDownload.transferring');
+    if (transferState.value.error) return t('mapDownload.transferFailed');
 
     const statusMap = {
-        idle: '待命',
-        pending: '已提交',
-        downloading: '下载中',
-        stitching: '拼接中',
-        success: '已完成',
-        expired: '已过期',
-        failed: '失败',
+        idle: t('mapDownload.statusIdle'),
+        pending: t('mapDownload.statusPending'),
+        downloading: t('mapDownload.statusDownloading'),
+        stitching: t('mapDownload.statusStitching'),
+        success: t('mapDownload.statusSuccess'),
+        expired: t('mapDownload.statusExpired'),
+        failed: t('mapDownload.statusFailed'),
     };
     return statusMap[store.status] || store.status;
 });
@@ -689,12 +701,23 @@ const statusClass = computed(() => {
 });
 const progressWidth = computed(() => `${Math.min(100, Math.max(0, store.progress))}%`);
 const progressLabel = computed(() => `${Math.round(store.progress)}%`);
+
+/** store 存 mapDownload.* key；后端原文非 key 时原样展示 */
+function resolveStoreText(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    if (s.startsWith('mapDownload.')) return t(s);
+    return s;
+}
+const displayLastError = computed(() => resolveStoreText(store.lastError));
+const displayStoreMessage = computed(() => resolveStoreText(store.message));
+
 const expiresHint = computed(() => {
     if (!store.expiresAt && !store.expiresInSeconds) return '';
-    if (store.isExpired) return '任务已过期（30分钟保留期）';
+    if (store.isExpired) return t('mapDownload.taskExpired');
     if (store.expiresInSeconds > 0) {
         const minutes = Math.max(1, Math.ceil(store.expiresInSeconds / 60));
-        return `任务将在 ${minutes} 分钟后过期`;
+        return t('mapDownload.taskExpiresIn', { minutes });
     }
     return '';
 });
@@ -709,11 +732,14 @@ async function handleSubmit() {
 
     const ok = await store.submitTask();
     if (ok) {
-        const clipHint = store.clipToExtent ? '（将裁剪到精确范围）' : '（按瓦片网格对齐）';
-        message.success(`下载任务已提交${clipHint}`);
+        message.success(
+            store.clipToExtent
+                ? t('mapDownload.taskSubmittedClip')
+                : t('mapDownload.taskSubmittedGrid'),
+        );
         // 倒计时将在实际下载开始时根据模式启动
     } else if (store.lastError) {
-        message.error(store.lastError);
+        message.error(resolveStoreText(store.lastError));
     }
 }
 
@@ -744,9 +770,9 @@ function handleRedownload() {
 async function handleLookup() {
     const ok = await store.fetchTaskById(lookupTaskId.value, true);
     if (ok) {
-        message.success('任务状态已更新');
+        message.success(t('mapDownload.taskStatusUpdated'));
     } else if (store.lastError) {
-        message.error(store.lastError);
+        message.error(resolveStoreText(store.lastError));
     }
 }
 

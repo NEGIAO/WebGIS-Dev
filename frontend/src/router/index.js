@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import RegisterView from '../views/RegisterView.vue';
 import { useAuthStore, useAppStore, useUrlParamStore } from '../stores';
 import { hideLoading, showLoading } from '../utils/ui/loading';
+import { translate as t } from '../composables/useLocale';
 import {
     persistPositionCode,
     persistPositionCodeFromUrl,
@@ -161,7 +162,7 @@ router.beforeEach(async (to, from) => {
 
     const authStore = useAuthStore();
     authStore.beginAuthCheck();
-    showLoading('正在验证登录状态...');
+    showLoading(t('loading.authCheck'));
     try {
         const isLoggedIn = await authStore.ensureValidSession();
         const bindingRequired =
@@ -186,13 +187,13 @@ router.beforeEach(async (to, from) => {
         }
 
         if (to.name === 'register' && isLoggedIn && !bindingRequired && !shareModeEnabled) {
-            showLoading('Loading Map Engine & Assets...');
+            showLoading(t('loading.mapEngine'));
             shouldRelayLoadingToHome = true;
             return { name: 'home' };
         }
 
         if (isHomeRoute) {
-            showLoading('Loading Map Engine & Assets...');
+            showLoading(t('loading.mapEngine'));
             shouldRelayLoadingToHome = true;
         }
 

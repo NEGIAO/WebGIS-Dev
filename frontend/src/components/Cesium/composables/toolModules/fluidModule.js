@@ -6,6 +6,7 @@
  */
 
 import { toFiniteNumberOrNull, clampNumber, formatElevation } from './controlsUtils';
+import { translate as t } from '@/composables/useLocale';
 
 /**
  * 判断当前流体状态是否具有有效的水位范围
@@ -27,19 +28,19 @@ export function createFluidModule(fluidParams, fluidState) {
     const state = fluidState.value;
     const params = fluidParams.value;
 
-    const status = state.isPicking ? '等待选点' : state.hasFluid ? '已创建' : '未创建';
+    const status = state.isPicking ? t('cesium.status.waitingPick') : state.hasFluid ? t('cesium.status.created') : t('cesium.status.notCreated');
     const statusTone = state.isPicking ? 'warning' : state.hasFluid ? 'success' : 'neutral';
 
     return {
         id: 'fluid',
-        title: '水体流体',
-        description: '点击地形捕捉高度图并生成水体',
+        title: t('cesium.module.fluid.title'),
+        description: t('cesium.module.fluid.description'),
         status,
         statusTone,
         actions: [
-            { id: 'pick', label: state.isPicking ? '等待选点' : '捕捉高度图', variant: 'primary', active: state.isPicking },
-            { id: 'floodSim', label: state.floodSimActive ? '停止洪水' : '洪水模拟', variant: state.floodSimActive ? 'danger' : 'default', active: state.floodSimActive, disabled: !hasFluidWaterLevelRange(state) },
-            { id: 'clear', label: '清除', variant: 'danger', disabled: !state.hasFluid && !state.isPicking },
+            { id: 'pick', label: state.isPicking ? t('cesium.status.waitingPick') : t('cesium.status.pickHeightMap'), variant: 'primary', active: state.isPicking },
+            { id: 'floodSim', label: state.floodSimActive ? t('cesium.status.stopFlood') : t('cesium.status.floodSim'), variant: state.floodSimActive ? 'danger' : 'default', active: state.floodSimActive, disabled: !hasFluidWaterLevelRange(state) },
+            { id: 'clear', label: t('cesium.status.clear'), variant: 'danger', disabled: !state.hasFluid && !state.isPicking },
         ],
         controls: createFluidControls(params, state),
     };
@@ -68,52 +69,52 @@ function createFluidControls(fluidParams, fluidState = {}) {
     return [
         {
             id: 'threshold',
-            label: '阈值',
+            label: t('cesium.module.fluid.threshold'),
             type: 'range',
             min: 0,
             max: 500,
             step: 0.0001,
             value: fluidParams.threshold,
             displayValue: Number(fluidParams.threshold).toFixed(2),
-            tooltip: '起流阈值。值越大，越小的水流越容易被过滤掉，水体越不容易产生细碎流动；同时会影响水体雾化距离。',
+            tooltip: t('cesium.module.fluid.thresholdTip'),
         },
         {
             id: 'blend',
-            label: '混合',
+            label: t('cesium.module.fluid.blend'),
             type: 'range',
             min: 0,
             max: 50,
             step: 0.0001,
             value: fluidParams.blend,
             displayValue: Number(fluidParams.blend).toFixed(2),
-            tooltip: '流动混合/扩散强度。值越大，相邻区域之间的水量交换越强，水流传播更快；同时会影响水面高光的锐度。',
+            tooltip: t('cesium.module.fluid.blendTip'),
         },
         {
             id: 'lightStrength',
-            label: '光强',
+            label: t('cesium.module.fluid.lightStrength'),
             type: 'range',
             min: 0,
             max: 10,
             step: 0.0001,
             value: fluidParams.lightStrength,
             displayValue: Number(fluidParams.lightStrength).toFixed(2),
-            tooltip: '光照与衰减强度。值越大，水面高光越明显，模拟中的流量衰减越慢，水流会持续得更久。',
+            tooltip: t('cesium.module.fluid.lightStrengthTip'),
         },
         {
             id: 'waterLevel',
-            label: '水位',
+            label: t('cesium.module.fluid.waterLevel'),
             type: 'range',
             min: minWaterLevel,
             max: maxWaterLevel,
             step: waterLevelStep,
             value: waterLevel,
-            displayValue: hasWaterLevelRange ? `${formatElevation(waterLevel)} m` : '先捕捉',
+            displayValue: hasWaterLevelRange ? `${formatElevation(waterLevel)} m` : t('cesium.status.captureFirst'),
             disabled: !hasWaterLevelRange,
-            tooltip: '当前水位海拔。范围来自本次捕捉区域内的最低到最高高程，拖动后会按新水位重置并重新计算水流。',
+            tooltip: t('cesium.module.fluid.waterLevelTip'),
         },
         {
             id: 'floodSpeed',
-            label: '洪水速度',
+            label: t('cesium.module.fluid.floodSpeed'),
             type: 'range',
             min: hasWaterLevelRange ? Math.max((maxWaterLevel - minWaterLevel) / 100, 0.01) : 0.1,
             max: hasWaterLevelRange ? Math.max(maxWaterLevel - minWaterLevel, 1) : 50,
@@ -124,18 +125,18 @@ function createFluidControls(fluidParams, fluidState = {}) {
                 const speed = fluidParams.floodSpeed ?? (hasWaterLevelRange ? rangeSpan / 10 : 5);
                 const duration = hasWaterLevelRange && speed > 0 ? rangeSpan / speed : 0;
                 return hasWaterLevelRange
-                    ? `${Number(speed).toFixed(1)} m/s（${duration.toFixed(1)}s）`
-                    : '先捕捉';
+                    ? t('cesium.status.floodSpeedDisplay', { speed: Number(speed).toFixed(1), duration: duration.toFixed(1) })
+                    : t('cesium.status.captureFirst');
             })(),
             disabled: !hasWaterLevelRange || !!fluidState.floodSimActive,
-            tooltip: '洪水模拟水位上涨速度。默认值域÷10（10s 完成），可自定义。范围：100s ~ 1s 完成。',
+            tooltip: t('cesium.module.fluid.floodSpeedTip'),
         },
         {
             id: 'waterColor',
-            label: '水色',
+            label: t('cesium.module.fluid.waterColor'),
             type: 'color',
             value: fluidParams.waterColor,
-            tooltip: '水体渲染颜色。改变后会实时更新当前水体颜色。',
+            tooltip: t('cesium.module.fluid.waterColorTip'),
         },
     ];
 }

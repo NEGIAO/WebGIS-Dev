@@ -10,7 +10,7 @@
                 :class="{ active: pickMode === 'start' }"
                 @click="$emit('pick-start')"
             >
-                {{ pickMode === 'start' ? startPickingText : startLabel }}
+                {{ pickMode === 'start' ? resolvedStartPickingText : resolvedStartLabel }}
             </button>
             <button
                 type="button"
@@ -18,13 +18,13 @@
                 :class="{ active: pickMode === 'end' }"
                 @click="$emit('pick-end')"
             >
-                {{ pickMode === 'end' ? endPickingText : endLabel }}
+                {{ pickMode === 'end' ? resolvedEndPickingText : resolvedEndLabel }}
             </button>
         </div>
 
         <div class="point-coords-grid">
             <div class="coord-card">
-                <div class="coord-title">{{ startTitle }}</div>
+                <div class="coord-title">{{ resolvedStartTitle }}</div>
 
                 <!-- 起点关键词搜索 -->
                 <div class="search-wrap">
@@ -32,7 +32,7 @@
                         v-model="startKeyword"
                         type="text"
                         class="search-input"
-                        :placeholder="searchPlaceholder"
+                        :placeholder="resolvedSearchPlaceholder"
                         @input="onStartSearchInput"
                         @blur="onStartSearchBlur"
                         @keydown.down.prevent="onStartKeyDown($event)"
@@ -63,7 +63,7 @@
                             v-if="!startResults.length && startKeyword.trim()"
                             class="search-item search-item-empty"
                         >
-                            暂无结果
+                            {{ t('routing.noResults') }}
                         </li>
                     </ul>
                 </div>
@@ -84,12 +84,12 @@
                     v-else-if="!hasStart"
                     class="coord-empty"
                 >
-                    未设置
+                    {{ t('routing.notSet') }}
                 </div>
             </div>
 
             <div class="coord-card">
-                <div class="coord-title">{{ endTitle }}</div>
+                <div class="coord-title">{{ resolvedEndTitle }}</div>
 
                 <!-- 终点关键词搜索 -->
                 <div class="search-wrap">
@@ -97,7 +97,7 @@
                         v-model="endKeyword"
                         type="text"
                         class="search-input"
-                        :placeholder="searchPlaceholder"
+                        :placeholder="resolvedSearchPlaceholder"
                         @input="onEndSearchInput"
                         @blur="onEndSearchBlur"
                         @keydown.down.prevent="onEndKeyDown($event)"
@@ -128,7 +128,7 @@
                             v-if="!endResults.length && endKeyword.trim()"
                             class="search-item search-item-empty"
                         >
-                            暂无结果
+                            {{ t('routing.noResults') }}
                         </li>
                     </ul>
                 </div>
@@ -149,7 +149,7 @@
                     v-else-if="!hasEnd"
                     class="coord-empty"
                 >
-                    未设置
+                    {{ t('routing.notSet') }}
                 </div>
             </div>
         </div>
@@ -159,6 +159,9 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { fetchLocationResultsByService } from '../../api/locationSearch';
+import { useLocale } from '../../composables/useLocale';
+
+const { t } = useLocale();
 
 const props = defineProps({
     pickMode: {
@@ -183,27 +186,27 @@ const props = defineProps({
     },
     startLabel: {
         type: String,
-        default: '设置起点（地图选择）',
+        default: '',
     },
     endLabel: {
         type: String,
-        default: '设置终点（地图选择）',
+        default: '',
     },
     startPickingText: {
         type: String,
-        default: '请在地图单击起点...',
+        default: '',
     },
     endPickingText: {
         type: String,
-        default: '请在地图单击终点...',
+        default: '',
     },
     startTitle: {
         type: String,
-        default: '起点坐标',
+        default: '',
     },
     endTitle: {
         type: String,
-        default: '终点坐标',
+        default: '',
     },
     theme: {
         type: String,
@@ -215,7 +218,7 @@ const props = defineProps({
     },
     searchPlaceholder: {
         type: String,
-        default: '搜索地点名称...',
+        default: '',
     },
 });
 
@@ -230,6 +233,16 @@ const hasEnd = computed(() => isPointValid(props.endPoint));
 const hasStartAddress = computed(() => Boolean(String(props.startAddress || '').trim()));
 const hasEndAddress = computed(() => Boolean(String(props.endAddress || '').trim()));
 const themeClass = computed(() => (props.theme === 'drive' ? 'theme-drive' : 'theme-bus'));
+
+const resolvedStartLabel = computed(() => props.startLabel || t('routing.setStart'));
+const resolvedEndLabel = computed(() => props.endLabel || t('routing.setEnd'));
+const resolvedStartPickingText = computed(() => props.startPickingText || t('routing.startHint'));
+const resolvedEndPickingText = computed(() => props.endPickingText || t('routing.endHint'));
+const resolvedStartTitle = computed(() => props.startTitle || t('routing.startPoint'));
+const resolvedEndTitle = computed(() => props.endTitle || t('routing.endPoint'));
+const resolvedSearchPlaceholder = computed(
+    () => props.searchPlaceholder || t('routing.searchPlaceholder'),
+);
 
 // ---- 起点搜索 ----
 const startKeyword = ref('');

@@ -1,5 +1,6 @@
 import { apiReverseGeocodeWithFallback } from '../../api';
 import { decodePos } from '../../utils/biz';
+import { translate as t } from '../useLocale.js';
 
 function buildReverseGeocodeProperties(reverseResult) {
     const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
@@ -31,6 +32,7 @@ function buildReverseGeocodeProperties(reverseResult) {
  * - 负责 p 参数校验与解码
  * - 负责逆地理编码补全属性
  * - 返回可直接用于 draw-point-by-coordinates 的 payload
+ * 用户可见错误文案走 translate（layer.*）。
  */
 export function usePositionCodeTool({
     tiandituTk = '',
@@ -43,7 +45,7 @@ export function usePositionCodeTool({
         if (!normalizedCode || normalizedCode === '0') {
             return {
                 ok: false,
-                error: '请输入有效的 p 参数（不能为 0）',
+                error: t('layer.pCodeRequired'),
             };
         }
 
@@ -51,7 +53,7 @@ export function usePositionCodeTool({
         if (!decoded || !Number.isFinite(decoded.lng) || !Number.isFinite(decoded.lat)) {
             return {
                 ok: false,
-                error: 'p 参数解码失败，请检查编码内容',
+                error: t('layer.pDecodeFailed'),
             };
         }
 

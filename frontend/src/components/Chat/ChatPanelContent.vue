@@ -7,41 +7,41 @@
                     color="Green"
                     :stroke-width="2"
                 />
-                AI 助手
+                {{ t('chat.title') }}
             </span>
             <div class="header-controls">
                 <button
                     class="icon-btn"
                     :class="{ active: showUserConfig }"
-                    title="我的 Agent 配置"
+                    :title="t('chat.myAgentConfig')"
                     @click="toggleUserConfig"
                 >
                     <Settings :size="16" />
                 </button>
                 <button
                     class="icon-btn"
-                    title="刷新状态"
+                    :title="t('chat.refreshStatus')"
                     @click="config.reloadAgentConfig(true)"
                 >
                     <RefreshCw :size="16" />
                 </button>
                 <button
                     class="icon-btn"
-                    title="导出对话为 Markdown"
+                    :title="t('chat.exportMarkdown')"
                     @click="exportConversation"
                 >
                     <Download :size="16" />
                 </button>
                 <button
                     class="icon-btn"
-                    title="清除历史（双击确认）"
+                    :title="t('chat.clearHistory')"
                     @click="clearHistory"
                 >
                     <Trash2 :size="16" />
                 </button>
                 <button
                     class="icon-btn"
-                    title="退出AI"
+                    :title="t('chat.exitAI')"
                     @click="emit('close-chat')"
                 >
                     <X :size="16" />
@@ -97,6 +97,7 @@ import ChatMessageList from './ChatMessageList.vue';
 import ChatInputBar from './ChatInputBar.vue';
 
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { useMarkdownRenderer } from '../../composables/useMarkdownRenderer';
 import { createChatAgentConfig } from '../../composables/chat/useChatAgentConfig';
 import { useAgentMapContext } from '../../composables/chat/useAgentMapContext';
@@ -111,6 +112,7 @@ import { useChatStore } from '../../stores/useChatStore';
 
 const emit = defineEmits(['close-chat']);
 const message = useMessage();
+const { t } = useLocale();
 const chatStore = useChatStore();
 const { ensureMarkdownLibs } = useMarkdownRenderer();
 
@@ -137,20 +139,20 @@ function buildWelcome() {
     if (config.isDefaultAIMode) {
         return {
             role: 'assistant',
-            content: `您好！当前为默认 AI 模式，使用管理员配置的 ${config.modelName || config.directConfig.model}，消息经后端代理转发。`,
+            content: t('chat.welcomeDefault', {
+                model: config.modelName || config.directConfig.model,
+            }),
         };
     }
     if (config.isDirectMode) {
         return {
             role: 'assistant',
-            content: `您好！当前为个人 Key 模式，消息将经后端代理转发到 ${config.directConfig.base_url}。`,
+            content: t('chat.welcomeDirect', { url: config.directConfig.base_url }),
         };
     }
     return {
         role: 'assistant',
-        content: config.serviceReady
-            ? '您好！我是由后端代理的 AI 助手，您可以直接开始提问。'
-            : '您好！AI 服务暂未就绪。请在 ⚙️ 配置中填写个人 API Key 启用直连模式，或联系管理员配置后端。',
+        content: config.serviceReady ? t('chat.welcomeReady') : t('chat.welcomeNotReady'),
     };
 }
 
@@ -164,11 +166,11 @@ const showUserConfig = ref(false);
 const messageListRef = ref(null);
 
 const inputPlaceholder = computed(() => {
-    if (config.isDefaultAIMode) return '请输入您的问题（默认 AI 模式，经后端代理）...';
-    if (config.isDirectMode) return '请输入您的问题（个人 Key 模式，经后端代理）...';
-    if (!config.serviceReady) return '服务未就绪，请在 ⚙️ 配置中填写 API Key 或联系管理员';
-    if (config.quotaExhausted) return '今日额度已达上限，请明日再试';
-    return '请输入您的问题（Enter 发送，Shift+Enter 换行）...';
+    if (config.isDefaultAIMode) return t('chat.placeholderDefault');
+    if (config.isDirectMode) return t('chat.placeholderDirect');
+    if (!config.serviceReady) return t('chat.placeholderNotReady');
+    if (config.quotaExhausted) return t('chat.placeholderQuotaExhausted');
+    return t('chat.placeholderGeneral');
 });
 
 const sendDisabled = computed(() => {
@@ -215,15 +217,17 @@ async function buildFirstMessageLocationContext() {
         Number.isFinite(globalLocation.lat)
     ) {
         const encoded = globalLocation.encodedLocation || {};
-        const source = String(globalLocation.source || '未知').trim();
-        const province = String(encoded.province || '未知').trim();
-        const city = String(encoded.city || '未知').trim();
-        const district = String(encoded.district || '未知').trim();
-        const adcode = String(encoded.adcode || '未知').trim();
+        const unknown = t('chat.unknown');
+        const source = String(globalLocation.source || unknown).trim();
+        const province = String(encoded.province || unknown).trim();
+        const city = String(encoded.city || unknown).trim();
+        const district = String(encoded.district || unknown).trim();
+        const adcode = String(encoded.adcode || unknown).trim();
         const address = String(encoded.formattedAddress || '').trim();
 
         firstMessageLocationInjected.value = true;
-        return `用户位置上下文（首条消息附带）：来源=${source}，经度=${globalLocation.lon.toFixed(6)}，纬度=${globalLocation.lat.toFixed(6)}，省=${province}，市=${city}，区县=${district}，编码=${adcode}，地址=${address || '待完善'}。`;
+        // 位置上下文作为协议文本注入 LLM，主体结构保持不变
+        return `用户位置上下文（首条消息附带）：来源=${source}，经度=${globalLocation.lon.toFixed(6)}，纬度=${globalLocation.lat.toFixed(6)}，省=${province}，市=${city}，区县=${district}，编码=${adcode}，地址=${address || t('chat.addressPending')}。`;
     }
 
     const baseLocation = readUserPositionFromCache();
@@ -298,9 +302,9 @@ function stopGeneration() {
     const list = session.messages.value;
     const last = list[list.length - 1];
     if (last?.role === 'assistant' && !last.isToolStatus && !String(last.content || '').trim()) {
-        last.content = '⏹️ 已停止生成';
+        last.content = t('chat.stopped');
     }
-    message.info('已停止生成');
+    message.info(t('chat.stopGenerate'));
 }
 
 // ── 工具执行编排 ──
@@ -372,7 +376,7 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
     if (!config.isDirectMode && (!config.serviceReady || config.quotaExhausted)) return;
 
     if (session.pruneHistoryIfNeeded(buildWelcome)) {
-        config.statusHint = '🧹 已自动精简历史，仅保留最近一轮对话以节省上下文开销';
+        config.statusHint = t('chat.historyTrimmed');
     }
 
     let requestHistory = session.buildEconomyContext();
@@ -435,16 +439,19 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
             );
             if (seq !== requestSeq) return;
 
+            const toolExecuted = t('chat.toolExecuted');
+            const toolResult = t('chat.toolResult');
             const toolRoundHistory = [
                 ...requestHistory,
                 { role: 'user', content: userMsg },
                 {
                     role: 'assistant',
-                    content: cleanReply ? `${cleanReply}\n\n[工具调用已执行]` : '[工具调用已执行]',
+                    content: cleanReply ? `${cleanReply}\n\n${toolExecuted}` : toolExecuted,
                 },
                 {
                     role: 'user',
-                    content: `[工具执行结果]\n${toolResultSummary}\n\n请根据工具执行结果给用户一个简洁友好的回复。如果工具执行成功，告诉用户已完成什么操作；如果失败，告诉用户失败原因和建议。`,
+                    // 后续指令为 LLM 协议提示，不作为 UI 文案
+                    content: `${toolResult}\n${toolResultSummary}\n\n请根据工具执行结果给用户一个简洁友好的回复。如果工具执行成功，告诉用户已完成什么操作；如果失败，告诉用户失败原因和建议。`,
                 },
             ];
 
@@ -466,26 +473,26 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
                     const finalIdx = session.pushAssistant('');
                     await typewriterReveal(finalIdx, secondRound.reply, seq);
                 } else {
-                    session.pushAssistant(`✅ 操作完成：\n${toolResultSummary}`);
+                    session.pushAssistant(`✅ ${t('chat.opDone')}：\n${toolResultSummary}`);
                 }
             } catch {
-                session.pushAssistant(`✅ 操作完成：\n${toolResultSummary}`);
+                session.pushAssistant(`✅ ${t('chat.opDone')}：\n${toolResultSummary}`);
             }
         } else {
             // 打字机逐字呈现（非流式后端下的网页版观感）
-            await typewriterReveal(assistantMsgIndex, reply || '（未返回有效内容）', seq);
+            await typewriterReveal(assistantMsgIndex, reply || t('chat.emptyReply'), seq);
         }
 
         if (!config.isDirectMode && config.quotaExhausted) {
-            config.statusHint = '今日对话额度已用完，请明日再试或切换更高权限账号。';
+            config.statusHint = t('chat.quotaExhaustedHint');
         }
     } catch (error) {
         if (seq !== requestSeq) return;
-        list[assistantMsgIndex].content = `请求失败：${error.message}`;
+        list[assistantMsgIndex].content = t('chat.requestFailed', { error: error.message });
         list[assistantMsgIndex].isError = true;
 
         if (error?.isQuotaExceeded) {
-            config.statusHint = '今日额度已达上限，请明日再试。';
+            config.statusHint = t('chat.quotaLimitHint');
             await config.reloadAgentConfig(false);
         }
     } finally {
@@ -514,7 +521,7 @@ function handleRegenerate() {
     if (isLoading.value) return;
     const lastUser = session.prepareRegenerate();
     if (!lastUser) {
-        message.warning('没有可重新生成的对话');
+        message.warning(t('chat.noRegenerate'));
         return;
     }
     dispatchSend(lastUser, { skipUserPush: true });
@@ -527,7 +534,7 @@ let clearConfirmTimer = null;
 function clearHistory() {
     if (!clearConfirmArmed.value) {
         clearConfirmArmed.value = true;
-        message.warning('再次点击清除按钮可删除聊天历史', { duration: 3000 });
+        message.warning(t('chat.clearConfirmHint'), { duration: 3000 });
         if (clearConfirmTimer) clearTimeout(clearConfirmTimer);
         clearConfirmTimer = setTimeout(() => {
             clearConfirmArmed.value = false;
@@ -546,24 +553,24 @@ function clearHistory() {
     isLoading.value = false;
     session.clearAll(buildWelcome);
     resetMapContextSession();
-    message.success('聊天历史已清除');
+    message.success(t('chat.historyCleared'));
 }
 
 // ── 导出对话为 Markdown ──
 function exportConversation() {
     const md = session.exportAsMarkdown();
     if (!md || session.messages.value.length <= 1) {
-        message.warning('暂无可导出的对话内容');
+        message.warning(t('chat.exportEmpty'));
         return;
     }
     const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `WebGIS-AI对话-${new Date().toISOString().slice(0, 10)}.md`;
+    a.download = t('chat.exportFilename', { date: new Date().toISOString().slice(0, 10) });
     a.click();
     URL.revokeObjectURL(url);
-    message.success('对话已导出为 Markdown');
+    message.success(t('chat.exported'));
 }
 
 // ── 配置面板开关 ──

@@ -1,50 +1,50 @@
 <template>
     <div class="service-status">
         <div class="status-line">
-            <span class="status-label">路由模式:</span>
+            <span class="status-label">{{ t('chat.routingMode') }}</span>
             <button
                 :class="['mode-toggle-btn', config.isDefaultAIMode ? 'mode-default-ai' : config.isDirectMode ? 'mode-direct' : 'mode-proxy']"
-                title="点击切换路由模式"
+                :title="t('chat.clickToSwitchMode')"
                 @click="config.toggleRoutingMode()"
             >
-                {{ config.isDefaultAIMode ? '🤖 默认 AI 模式' : config.isDirectMode ? '🔑 个人 Key 模式' : '🛡️ 后端代理' }}
-                <span class="mode-toggle-hint">（点击切换）</span>
+                {{ config.isDefaultAIMode ? t('chat.defaultAIMode') : config.isDirectMode ? t('chat.personalKeyMode') : t('chat.backendProxy') }}
+                <span class="mode-toggle-hint">{{ t('chat.clickToSwitch') }}</span>
             </button>
         </div>
         <div class="status-line">
-            <span class="status-label">服务状态:</span>
+            <span class="status-label">{{ t('chat.serviceStatus') }}</span>
             <span :class="['status-value', config.serviceReady ? 'status-ready' : 'status-unready']">
-                {{ config.serviceReady ? (config.isDefaultAIMode ? '默认 AI 已就绪（管理员配置）' : config.isDirectMode ? '个人 API 已配置（经后端代理）' : '已连接后端 Agent') : '未就绪（请配置 API Key 或联系管理员）' }}
+                {{ config.serviceReady ? (config.isDefaultAIMode ? t('chat.defaultAIReady') : config.isDirectMode ? t('chat.personalAPIReady') : t('chat.serviceReady')) : t('chat.serviceNotReady') }}
             </span>
         </div>
         <div class="status-line">
-            <span class="status-label">当前模型:</span>
-            <span class="status-value">{{ config.modelName || '未配置' }}
-                <span v-if="config.isDefaultAIMode" class="model-source-tag default-ai">管理员配置</span>
-                <span v-else-if="config.directConfig.model && config.isDirectMode" class="model-source-tag">个人Key</span>
-                <span v-else-if="config.modelName" class="model-source-tag proxy">代理</span>
+            <span class="status-label">{{ t('chat.currentModel') }}</span>
+            <span class="status-value">{{ config.modelName || t('chat.notConfigured') }}
+                <span v-if="config.isDefaultAIMode" class="model-source-tag default-ai">{{ t('chat.adminConfigured') }}</span>
+                <span v-else-if="config.directConfig.model && config.isDirectMode" class="model-source-tag">{{ t('chat.personalKey') }}</span>
+                <span v-else-if="config.modelName" class="model-source-tag proxy">{{ t('chat.proxy') }}</span>
             </span>
         </div>
         <div
             v-if="!config.isDirectMode"
             class="status-line"
         >
-            <span class="status-label">今日对话额度:</span>
+            <span class="status-label">{{ t('chat.todayQuota') }}</span>
             <span class="status-value">{{ config.quotaText }}</span>
         </div>
         <div
             v-if="config.isDefaultAIMode"
             class="status-line"
         >
-            <span class="status-label">额度:</span>
-            <span class="status-value status-default-ai">管理员配额（经后端代理）</span>
+            <span class="status-label">{{ t('chat.quota') }}</span>
+            <span class="status-value status-default-ai">{{ t('chat.adminQuota') }}</span>
         </div>
         <div
             v-else-if="config.isDirectMode"
             class="status-line"
         >
-            <span class="status-label">额度:</span>
-            <span class="status-value status-direct">无限制（使用个人 Key）</span>
+            <span class="status-label">{{ t('chat.quota') }}</span>
+            <span class="status-value status-direct">{{ t('chat.unlimitedQuota') }}</span>
         </div>
         <small class="hint">{{ config.statusHint }}</small>
     </div>
@@ -55,10 +55,14 @@
  * ChatServiceStatus - 路由模式/服务状态/额度展示条（从 ChatPanelContent 拆出）
  * 纯展示 + 模式切换入口，状态全部来自 useChatAgentConfig 的 reactive 对象。
  */
+import { useLocale } from '../../composables/useLocale';
+
 defineProps({
     /** createChatAgentConfig 返回的 reactive 配置对象 */
     config: { type: Object, required: true },
 });
+
+const { t } = useLocale();
 </script>
 
 <style scoped>

@@ -8,7 +8,7 @@
             <div
                 class="coordinate-display"
                 :class="{ editing: isCoordinateEditing, invalid: isInputInvalid }"
-                title="单击输入经纬度并回车跳转"
+                :title="t('mapControls.editCoordTip')"
                 @mouseenter="isCoordinateHover = true"
                 @mouseleave="isCoordinateHover = false"
                 @click="startCoordinateInput"
@@ -20,7 +20,7 @@
                             v-if="isCoordinateHover && canCopyCoordinate"
                             class="copy-coordinate-btn"
                             type="button"
-                            title="复制坐标"
+                            :title="t('mapControls.copyCoord')"
                             @click.stop="copyCurrentCoordinate"
                         >
                             <svg
@@ -50,7 +50,7 @@
                         <button
                             class="format-config-btn"
                             type="button"
-                            title="坐标格式设置"
+                            :title="t('mapControls.formatSettings')"
                             @click.stop="toggleFormatMenu"
                         >
                             <svg
@@ -75,7 +75,7 @@
                     v-model="coordinateInputValue"
                     class="coordinate-input"
                     type="text"
-                    placeholder="114.302E, 34.814N 或 114°18'08.64&quot;E, 34°48'52.56&quot;N"
+                    :placeholder="t('mapControls.inputPlaceholder')"
                     @click.stop
                     @input="isInputInvalid = false"
                     @keydown.enter.prevent="submitCoordinateInput"
@@ -91,7 +91,7 @@
             >
                 <div class="format-menu-content">
                     <div class="menu-section">
-                        <div class="menu-label">显示格式</div>
+                        <div class="menu-label">{{ t('mapControls.displayFormat') }}</div>
                         <div class="format-options">
                             <button
                                 v-for="fmt in Object.values(COORDINATE_FORMATS)"
@@ -109,7 +109,7 @@
                     <div class="menu-divider"></div>
 
                     <div class="menu-section">
-                        <div class="menu-label">小数位数</div>
+                        <div class="menu-label">{{ t('mapControls.decimalPlaces') }}</div>
                         <div class="decimal-options">
                             <button
                                 v-for="(config, places) in DECIMAL_PLACES"
@@ -128,7 +128,7 @@
 
         <div
             class="zoom-level-display"
-            title="当前缩放级别"
+            :title="t('mapControls.zoomLevel')"
         >
             {{ currentZoom }}
         </div>
@@ -136,7 +136,7 @@
         <button
             class="home-btn"
             :class="{ rippling: homeButtonRippling }"
-            title="单击复位 / 双击定位"
+            :title="t('mapControls.homeTip')"
             type="button"
             @click="handleHomeInteract"
         >
@@ -181,7 +181,9 @@ import {
     normalizeCoordinate,
 } from '../../utils/biz';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 const message = useMessage();
+const { t } = useLocale();
 
 // ========== 常量定义 ==========
 /** 坐标占位符，用于显示无效坐标时的默认文本 */
@@ -337,7 +339,7 @@ const copyCurrentCoordinate = async () => {
         // 只有在支持 navigator.clipboard 且处于安全上下文(HTTPS/Localhost)时才可用
         if (navigator.clipboard && window.isSecureContext) {
             await navigator.clipboard.writeText(textToCopy);
-            message.success('坐标已复制到剪贴板');
+            message.success(t('mapControls.coordCopied'));
         } else {
             // 如果不支持 API，手动抛错进入 catch 执行回退逻辑
             throw new Error('Clipboard API unavailable');
@@ -360,7 +362,7 @@ const copyCurrentCoordinate = async () => {
         try {
             document.execCommand('copy');
         } catch (err) {
-            message.error('无法执行复制命令:', err);
+            message.error(t('mapControls.copyFailed'));
         }
 
         document.body.removeChild(fallbackInput);

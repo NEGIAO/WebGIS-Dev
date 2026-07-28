@@ -5,6 +5,8 @@
  * 模块元数据 + 控件定义合并为一个文件
  */
 
+import { translate as t } from '@/composables/useLocale';
+
 /**
  * 创建大气光照模块
  * @param {import('vue').Ref} advancedEffectControls - 高级特效开关 ref（fog/hbao/tiltShift/atmosphere）
@@ -18,23 +20,23 @@ export function createAtmosphereModule(advancedEffectControls, baseAtmospherePar
     const atmos = atmosphereParams.value;
 
     const status = adv.atmosphere || adv.fog || adv.hbao
-        ? '部分启用'
-        : '仅晨昏半球';
+        ? t('cesium.status.partial')
+        : t('cesium.status.terminatorOnly');
     const statusTone = adv.atmosphere ? 'success' : 'neutral';
 
     return {
         id: 'atmosphere',
-        title: '大气·光照·天空',
-        description: 'Cesium 原生光照 + Tellux 增强大气 + 高级后效（全部可选）',
+        title: t('cesium.module.atmosphere.title'),
+        description: t('cesium.module.atmosphere.description'),
         status,
         statusTone,
         controls: [
             // --- Cesium 原生基础 ---
             ...createBaseAtmosphereControls(base),
-            { id: 'fog', label: '高度雾', type: 'toggle', value: adv.fog, tooltip: '基于高度的指数雾效' },
-            { id: 'hbao', label: '微阴影', type: 'toggle', value: adv.hbao, tooltip: '环境光遮蔽（HBAO）' },
-            { id: 'tiltShift', label: '移轴', type: 'toggle', value: adv.tiltShift, tooltip: '移轴模糊后处理' },
-            { id: 'atmosphere', label: '大气效果', type: 'toggle', value: adv.atmosphere, tooltip: '启用 Tellux 大气渲染（日夜过渡、月光、星空）' },
+            { id: 'fog', label: t('cesium.module.atmosphere.fog'), type: 'toggle', value: adv.fog, tooltip: t('cesium.module.atmosphere.fogTip') },
+            { id: 'hbao', label: t('cesium.module.atmosphere.hbao'), type: 'toggle', value: adv.hbao, tooltip: t('cesium.module.atmosphere.hbaoTip') },
+            { id: 'tiltShift', label: t('cesium.module.atmosphere.tiltShift'), type: 'toggle', value: adv.tiltShift, tooltip: t('cesium.module.atmosphere.tiltShiftTip') },
+            { id: 'atmosphere', label: t('cesium.module.atmosphere.atmosphere'), type: 'toggle', value: adv.atmosphere, tooltip: t('cesium.module.atmosphere.atmosphereTip') },
             ...createAtmosphereControls(atmos, !adv.atmosphere),
         ],
     };
@@ -50,30 +52,30 @@ function createAtmosphereControls(params = {}, disabled) {
     return [
         {
             id: 'atmosphereEnabled',
-            label: '大气效果',
+            label: t('cesium.module.atmosphere.atmosphereEnabled'),
             type: 'toggle',
             value: !disabled,
-            tooltip: '启用 Tellux 大气渲染系统（日夜过渡、月光、体积云、星空）',
+            tooltip: t('cesium.module.atmosphere.atmosphereEnabledTip'),
         },
         {
             id: 'dayNightEnabled',
-            label: '日夜过渡',
+            label: t('cesium.module.atmosphere.dayNightEnabled'),
             type: 'toggle',
             value: params.dayNightEnabled !== false,
             disabled,
-            tooltip: '基于太阳高度角的平滑日夜过渡效果',
+            tooltip: t('cesium.module.atmosphere.dayNightEnabledTip'),
         },
         {
             id: 'moonLightEnabled',
-            label: '月光',
+            label: t('cesium.module.atmosphere.moonLightEnabled'),
             type: 'toggle',
             value: params.moonLightEnabled !== false,
             disabled,
-            tooltip: '夜间月光照明效果',
+            tooltip: t('cesium.module.atmosphere.moonLightEnabledTip'),
         },
         {
             id: 'moonLightIntensity',
-            label: '月光强度',
+            label: t('cesium.module.atmosphere.moonLightIntensity'),
             type: 'range',
             min: 0,
             max: 1,
@@ -81,11 +83,11 @@ function createAtmosphereControls(params = {}, disabled) {
             value: params.moonLightIntensity ?? 0.18,
             displayValue: Number(params.moonLightIntensity ?? 0.18).toFixed(2),
             disabled: disabled || !params.moonLightEnabled,
-            tooltip: '月光对场景的照明强度（0=无月光 1=最亮）',
+            tooltip: t('cesium.module.atmosphere.moonLightIntensityTip'),
         },
         {
             id: 'ambientIntensity',
-            label: '环境光',
+            label: t('cesium.module.atmosphere.ambientIntensity'),
             type: 'range',
             min: 0,
             max: 1,
@@ -93,19 +95,19 @@ function createAtmosphereControls(params = {}, disabled) {
             value: params.ambientIntensity ?? 0.08,
             displayValue: Number(params.ambientIntensity ?? 0.08).toFixed(2),
             disabled: disabled || !params.moonLightEnabled,
-            tooltip: '夜间环境光底亮度，防止场景完全黑暗',
+            tooltip: t('cesium.module.atmosphere.ambientIntensityTip'),
         },
         {
             id: 'starsEnabled',
-            label: '星空',
+            label: t('cesium.module.atmosphere.starsEnabled'),
             type: 'toggle',
             value: params.starsEnabled !== false,
             disabled,
-            tooltip: '基于高度的星空可见性',
+            tooltip: t('cesium.module.atmosphere.starsEnabledTip'),
         },
         {
             id: 'starsIntensity',
-            label: '星空强度',
+            label: t('cesium.module.atmosphere.starsIntensity'),
             type: 'range',
             min: 0,
             max: 5,
@@ -113,7 +115,7 @@ function createAtmosphereControls(params = {}, disabled) {
             value: params.starsIntensity ?? 1.0,
             displayValue: Number(params.starsIntensity ?? 1.0).toFixed(1),
             disabled: disabled || !params.starsEnabled,
-            tooltip: '星空渲染亮度倍率',
+            tooltip: t('cesium.module.atmosphere.starsIntensityTip'),
         },
     ];
 }
@@ -127,46 +129,46 @@ function createBaseAtmosphereControls(params = {}) {
     return [
         {
             id: 'enableLighting',
-            label: '日照',
+            label: t('cesium.module.atmosphere.enableLighting'),
             type: 'toggle',
             value: params.enableLighting !== false,
-            tooltip: 'Cesium globe.enableLighting：启用日照贴图',
+            tooltip: t('cesium.module.atmosphere.enableLightingTip'),
         },
         {
             id: 'showGroundAtmosphere',
-            label: '地面大气',
+            label: t('cesium.module.atmosphere.showGroundAtmosphere'),
             type: 'toggle',
             value: params.showGroundAtmosphere !== false,
-            tooltip: 'globe.showGroundAtmosphere：地面大气光晕',
+            tooltip: t('cesium.module.atmosphere.showGroundAtmosphereTip'),
         },
         {
             id: 'dynamicAtmosphereLighting',
-            label: '动态光照',
+            label: t('cesium.module.atmosphere.dynamicAtmosphereLighting'),
             type: 'toggle',
             value: params.dynamicAtmosphereLighting !== false,
-            tooltip: '根据太阳位置动态调整大气光照颜色与强度',
+            tooltip: t('cesium.module.atmosphere.dynamicAtmosphereLightingTip'),
         },
         {
             id: 'atmosphereLightIntensity',
-            label: '大气光强',
+            label: t('cesium.module.atmosphere.atmosphereLightIntensity'),
             type: 'range',
             min: 0,
             max: 25,
             step: 0.5,
             value: params.atmosphereLightIntensity ?? 5.5,
             displayValue: Number(params.atmosphereLightIntensity ?? 5.5).toFixed(1),
-            tooltip: '大气光晕整体亮度倍率，过高会让天空过曝',
+            tooltip: t('cesium.module.atmosphere.atmosphereLightIntensityTip'),
         },
         {
             id: 'fogEnabled',
-            label: '雾效',
+            label: t('cesium.module.atmosphere.fogEnabled'),
             type: 'toggle',
             value: params.fogEnabled !== false,
-            tooltip: 'Cesium 原生距离雾（非高度雾），基于相机到地表距离',
+            tooltip: t('cesium.module.atmosphere.fogEnabledTip'),
         },
         {
             id: 'fogDensity',
-            label: '雾密度',
+            label: t('cesium.module.atmosphere.fogDensity'),
             type: 'range',
             min: 0.00001,
             max: 0.001,
@@ -174,28 +176,28 @@ function createBaseAtmosphereControls(params = {}) {
             value: params.fogDensity ?? 0.00012,
             displayValue: Number(params.fogDensity ?? 0.00012).toFixed(5),
             disabled: !params.fogEnabled,
-            tooltip: '雾浓度系数，值越大雾越浓、可视距离越短',
+            tooltip: t('cesium.module.atmosphere.fogDensityTip'),
         },
         {
             id: 'sunShow',
-            label: '太阳',
+            label: t('cesium.module.atmosphere.sunShow'),
             type: 'toggle',
             value: params.sunShow !== false,
-            tooltip: '显示太阳圆盘（晨昏线必需，关闭后无日照效果）',
+            tooltip: t('cesium.module.atmosphere.sunShowTip'),
         },
         {
             id: 'moonShow',
-            label: '月亮',
+            label: t('cesium.module.atmosphere.moonShow'),
             type: 'toggle',
             value: params.moonShow !== false,
-            tooltip: '显示月亮圆盘',
+            tooltip: t('cesium.module.atmosphere.moonShowTip'),
         },
         {
             id: 'skyBoxShow',
-            label: '星空盒',
+            label: t('cesium.module.atmosphere.skyBoxShow'),
             type: 'toggle',
             value: params.skyBoxShow !== false,
-            tooltip: '显示星空天空盒（关闭后背景为纯黑）',
+            tooltip: t('cesium.module.atmosphere.skyBoxShowTip'),
         },
     ];
 }

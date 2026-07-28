@@ -1,6 +1,8 @@
 /**
  * Coordinate input processing helpers used by TOC draw panel.
+ * Validation messages go through translate (layer.*) for UI language.
  */
+import { translate as t } from '../composables/useLocale.js';
 
 function toNumberLike(value) {
     if (typeof value === 'number') return value;
@@ -17,28 +19,28 @@ export function validateCoordinateInput(rawLng, rawLat) {
     if (!String(rawLng ?? '').trim() || !String(rawLat ?? '').trim()) {
         return {
             valid: false,
-            error: '请输入完整的经纬度（经度、纬度均不能为空）',
+            error: t('layer.coordEmptyRequired'),
         };
     }
 
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
         return {
             valid: false,
-            error: '经纬度必须是有效数字',
+            error: t('layer.coordMustBeNumber'),
         };
     }
 
     if (lng < -180 || lng > 180) {
         return {
             valid: false,
-            error: '经度超出范围（-180 ~ 180）',
+            error: t('layer.coordLngOutOfRange'),
         };
     }
 
     if (lat < -90 || lat > 90) {
         return {
             valid: false,
-            error: '纬度超出范围（-90 ~ 90）',
+            error: t('layer.coordLatOutOfRange'),
         };
     }
 
@@ -79,7 +81,7 @@ export function processCoordinateInput(rawLng, rawLat, crsType = 'wgs84') {
     if (!Number.isFinite(normalized.lng) || !Number.isFinite(normalized.lat)) {
         return {
             valid: false,
-            message: '坐标标准化失败，请重新输入',
+            message: t('layer.coordNormalizeFailed'),
             lng: null,
             lat: null,
             crsType: String(crsType || 'wgs84').toLowerCase(),

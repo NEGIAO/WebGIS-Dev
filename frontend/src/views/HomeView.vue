@@ -37,7 +37,9 @@ import {
 } from '../stores';
 import { showLoading, hideLoading } from '../utils/ui/loading';
 import { apiLogVisit } from '../api/backend';
+import { useLocale } from '../composables/useLocale';
 const message = useMessage();
+const { t } = useLocale();
 const { getCurrentMapView, replaceMapView } = useMapViewUrlState();
 const { logMonitorVisible } = storeToRefs(useAppStore());
 const attrStore = useAttrStore();
@@ -68,11 +70,13 @@ const cesiumContainerRef = ref(null);
 
 const SidePanelLoading = {
     name: 'SidePanelLoading',
-    render() {
-        return h('div', { class: 'sidepanel-loading-state' }, [
-            h('div', { class: 'sidepanel-loading-spinner' }),
-            h('span', { class: 'sidepanel-loading-text' }, '侧边面板加载中...'),
-        ]);
+    setup() {
+        const { t: tLoad } = useLocale();
+        return () =>
+            h('div', { class: 'sidepanel-loading-state' }, [
+                h('div', { class: 'sidepanel-loading-spinner' }),
+                h('span', { class: 'sidepanel-loading-text' }, tLoad('shell.loadingPanel')),
+            ]);
     },
 };
 
@@ -91,7 +95,7 @@ const SidePanel = defineAsyncComponent({
             retry();
             return;
         }
-        message.error('侧边面板加载失败，请刷新页面后重试。');
+        message.error(t('shell.loadPanelFailed'));
         fail(error);
     },
 });
@@ -140,7 +144,7 @@ const baseLayers = ref([]);
 const uploadProgress = ref({ phase: 'idle' });
 const latestSearchPoi = ref({});
 const latestCesiumOlEquivalent = ref(null);
-const activeFeature = ref({ key: 'info', label: '新闻' });
+const activeFeature = ref({ key: 'info', label: '' });
 const isAccountPanelOpen = ref(false);
 const isAccountPanelFullscreen = ref(false);
 
@@ -265,7 +269,7 @@ const setCustomBasemapByUrl = (url) => {
     if (typeof handler !== 'function') {
         return {
             success: false,
-            message: '地图容器未就绪，暂时无法切换自定义 XYZ 底图',
+            message: t('home.basemapNotReady'),
         };
     }
     return handler(url);
@@ -404,7 +408,7 @@ function clearDriveRouteStepPreview() {
 }
 
 function handleActivateFeature(feature) {
-    activeFeature.value = feature || { key: 'info', label: '新闻' };
+    activeFeature.value = feature || { key: 'info', label: t('shell.news') };
 }
 
 function handleSwitchSidePanelTab(tab) {
@@ -474,7 +478,7 @@ function handleControlsDrawEditAction(action) {
 }
 
 function handleControlsShowAnalysis() {
-    message.info('分析功能入口已接入，后续可扩展缓冲区/最短路径专属面板。');
+    message.info(t('home.analysisEntryReady'));
 }
 
 /**
@@ -485,7 +489,7 @@ function handleControlsShowAnalysis() {
 function handleSpatialAnalysis(payload) {
     const analysisType = String(payload?.type || '').trim();
     if (!analysisType) {
-        message.warning('未指定分析类型');
+        message.warning(t('home.analysisTypeMissing'));
         return;
     }
 
@@ -498,7 +502,7 @@ async function handleControlsDistrictSelect(payload) {
     const districtName = String(payload?.label || '').trim() || adcode;
 
     if (!/^\d{6}$/.test(adcode)) {
-        message.warning('行政区 adcode 无效，请重新选择。');
+        message.warning(t('home.districtAdcodeInvalid'));
         return;
     }
 
@@ -510,14 +514,14 @@ async function handleControlsDistrictSelect(payload) {
         });
 
         if (!result) {
-            message.warning('地图尚未准备完成，请稍后再试。');
+            message.warning(t('home.mapNotReady'));
             return;
         }
 
-        message.success(`已加载行政区边界：${districtName}`);
+        message.success(t('home.districtLoaded', { name: districtName }));
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        message.error(detail || '行政区边界加载失败');
+        message.error(detail || t('home.districtLoadFailed'));
     }
 }
 
@@ -532,7 +536,7 @@ async function handleEnableBasemapSwipe(payload) {
     const { leftBasemap, rightBasemap, mode } = payload || {};
 
     if (!mapContainerRef.value) {
-        message.error('地图容器未准备好');
+        message.error(t('home.mapContainerNotReady'));
         return;
     }
 
@@ -544,7 +548,7 @@ async function handleEnableBasemapSwipe(payload) {
         });
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        message.error(detail || '卷帘分析启用失败，请检查底图配置');
+        message.error(detail || t('home.swipeEnableFailed'));
     }
 }
 
@@ -589,7 +593,7 @@ function handleDistrictLayerRemove(layerId) {
     if (!meta) return false;
 
     mapContainerRef.value?.removeDistrictLayer?.(meta.adcode);
-    message.success(`已移除行政区划图层：${meta.name}`);
+    message.success(t('home.districtRemoved', { name: meta.name }));
     return true;
 }
 
@@ -633,7 +637,7 @@ function settleMapCoreLoading(payload = {}) {
 
     if (payload?.isError) {
         const detail = String(payload?.message || '').trim();
-        message.error(detail || '地图资源加载失败，请刷新页面后重试。');
+        message.error(detail || t('home.mapResourceLoadFailed'));
     }
 }
 
@@ -693,14 +697,14 @@ async function executeVisitLogAsync() {
 function handleMapCoreFailed(payload = {}) {
     settleMapCoreLoading({
         isError: true,
-        message: String(payload?.message || '').trim() || '地图初始化失败，请检查网络后重试。',
+        message: String(payload?.message || '').trim() || t('home.mapInitFailed'),
     });
 }
 
 /** 关闭 AI 聊天，切换回新闻模式 */
 function handleCloseChat() {
     activeSidePanelTab.value = 'info';
-    activeFeature.value = { key: 'info', label: '新闻' };
+    activeFeature.value = { key: 'info', label: t('shell.news') };
 }
 
 function toggleWeatherBoardMode() {
@@ -718,11 +722,11 @@ function toggleWeatherBoardMode() {
         isSidePanelCollapsed.value = false;
         is3DMode.value = false;
         replaceMapView(MAP_VIEW_OL);
-        activeFeature.value = { key: 'weather-board', label: '天气看板' };
+        activeFeature.value = { key: 'weather-board', label: t('shell.weather') };
     } else {
         // 关闭天气看板：切回默认新闻 tab
         activeSidePanelTab.value = 'info';
-        activeFeature.value = { key: 'map', label: '地图视图' };
+        activeFeature.value = { key: 'map', label: t('shell.mapView') };
     }
     isWeatherBoardMode.value = openingWeather;
 }
@@ -737,7 +741,7 @@ async function ensureCesiumLoaded() {
     if (_cesiumLoadPromise) return _cesiumLoadPromise;
 
     isCesiumLoading.value = true;
-    showLoading('正在加载 3D 引擎资源...');
+    showLoading(t('loading.cesiumAssets'));
     _cesiumLoadPromise = (async () => {
         try {
             const module = await import('../components/Cesium/CesiumContainer.vue');
@@ -745,7 +749,7 @@ async function ensureCesiumLoaded() {
             isCesiumLoaded.value = true;
             return true;
         } catch (error) {
-            message.error(`Cesium 组件加载失败: ${error?.message || error}`);
+            message.error(t('loading.cesiumLoadFailed', { error: error?.message || error }));
             console.error('[ensureCesiumLoaded] Cesium load error:', error);
             return false;
         } finally {
@@ -1002,7 +1006,7 @@ function handleActivateMagic(effectName) {
 
 /** 处理文件上传 */
 async function handleUploadData(data) {
-    showLoading('正在导入 GIS 数据资源...');
+    showLoading(t('loading.gisImport'));
     try {
         await Promise.resolve(mapContainerRef.value?.addUserDataLayer(data));
     } finally {
@@ -1114,8 +1118,8 @@ function handleDrawAmapAoiFromJson(payload) {
     try {
         mapContainerRef.value?.drawAmapAoiByDetailJsonInput?.(payload);
     } catch (error) {
-        const detail = error instanceof Error ? error.message : 'AOI 解析失败';
-        message.warning(`AOI 解析失败：${detail}`);
+        const detail = error instanceof Error ? error.message : t('home.aoiParseFailed');
+        message.warning(t('home.aoiParseFailedDetail', { detail }));
     }
 }
 
@@ -1420,7 +1424,7 @@ onMounted(async () => {
                             v-show="!is3DMode && !isAccountPanelFullscreen"
                             class="map-runtime-loading"
                         >
-                            地图核心资源加载中...
+                            {{ t('home.mapCoreLoading') }}
                         </div>
                     </template>
                 </Suspense>
@@ -1438,7 +1442,7 @@ onMounted(async () => {
                         <div class="eco-header">
                             <div class="header-content">
                                 <i class="icon-leaf">🍃</i>
-                                <span class="eco-title">属性信息</span>
+                                <span class="eco-title">{{ t('home.attrInfo') }}</span>
                             </div>
                             <button
                                 class="eco-close"
@@ -1451,8 +1455,8 @@ onMounted(async () => {
                         <div class="eco-body">
                             <!-- 统计小标签：模仿用户面板的浅绿色调 -->
                             <div class="eco-stats">
-                                <span class="eco-tag">绘制: {{ toolboxOverview.drawCount }}</span>
-                                <span class="eco-tag">上传: {{ toolboxOverview.uploadCount }}</span>
+                                <span class="eco-tag">{{ t('home.drawTag', { n: toolboxOverview.drawCount }) }}</span>
+                                <span class="eco-tag">{{ t('home.uploadTag', { n: toolboxOverview.uploadCount }) }}</span>
                             </div>
 
                             <div class="eco-list-container">
@@ -1472,7 +1476,7 @@ onMounted(async () => {
                                     v-if="Object.keys(featureQueryResult || {}).length === 0"
                                     class="eco-empty"
                                 >
-                                    未发现属性数据
+                                    {{ t('home.noAttrData') }}
                                 </div>
                             </div>
                         </div>
@@ -1495,7 +1499,7 @@ onMounted(async () => {
                     v-if="isCesiumLoading && !isAccountPanelFullscreen"
                     class="cesium-loading"
                 >
-                    正在加载 3D 引擎...
+                    {{ t('loading.cesiumOverlay') }}
                 </div>
             </div>
 
@@ -1600,7 +1604,7 @@ onMounted(async () => {
                                 d="M15 19l-7-7 7-7"
                             />
                         </svg>
-                        <span class="placeholder-text">展开</span>
+                        <span class="placeholder-text">{{ t('common.expand') }}</span>
                     </div>
                 </div>
             </div>

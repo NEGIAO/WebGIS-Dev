@@ -21,7 +21,7 @@ import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRo
 import { BASEMAP_OPTIONS } from '../../constants';
 import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '../../stores';
 import { getUserDisplayName } from '../../composables/auth/useAuthIdentity';
-import { setLocaleLanguage, useLocale } from '../../composables/useLocale';
+import { useLocale } from '../../composables/useLocale';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
@@ -504,7 +504,8 @@ function syncPreferenceDraftFromStore() {
 watch(
     () => preferenceDraft.value.language,
     (language) => {
-        setLocaleLanguage(language);
+        // 与注册页同一全局开关：本机 SSOT + 已登录时写远端
+        void userPreferencesStore.setLanguagePreference(language);
     },
 );
 

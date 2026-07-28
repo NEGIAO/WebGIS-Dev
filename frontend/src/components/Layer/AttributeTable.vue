@@ -21,7 +21,7 @@
                             d="M1 2v12h14V2H1zm1 1h12v2H2V3zm0 3h4v2H2V6zm5 0h7v2H7V6zm-5 3h4v2H2V9zm5 0h7v2H7V9zm-5 3h4v2H2v-2zm5 0h7v2H7v-2z"
                         />
                     </svg>
-                    <span class="pro-title">属性表：{{ layerName }} ({{ totalRows }}条)</span>
+                    <span class="pro-title">{{ t('attrTable.title', { name: layerName, count: totalRows }) }}</span>
                 </div>
 
                 <!-- 右上角标准窗口控件 -->
@@ -29,7 +29,7 @@
                     <button
                         class="win-btn win-min"
                         type="button"
-                        title="折叠 / 展开"
+                        :title="t('attrTable.minimize')"
                         @click.stop="toggleMinimized"
                     >
                         <svg viewBox="0 0 10 10">
@@ -45,7 +45,7 @@
                     <button
                         class="win-btn win-close"
                         type="button"
-                        title="关闭"
+                        :title="t('attrTable.close')"
                         @click.stop="closeTable"
                     >
                         <svg viewBox="0 0 10 10">
@@ -70,8 +70,8 @@
                             class="pro-toggle"
                             :class="{ unavailable: viewFilterUnavailable }"
                             :title="viewFilterUnavailable
-                                ? '当前地图视图范围不可用（视图未就绪或相机未对准地表），筛选暂不生效'
-                                : '通过当前的地图视图对数据行进行限制'
+                                ? t('attrTable.viewFilterUnavailableTip')
+                                : t('attrTable.viewFilterTip')
                             "
                         >
                             <input
@@ -90,7 +90,7 @@
                                     />
                                 </svg>
                             </span>
-                            视图筛选范围
+                            {{ t('attrTable.viewFilter') }}
                         </label>
                         <span class="divider"></span>
                         <button
@@ -107,7 +107,7 @@
                                     fill="currentColor"
                                 />
                             </svg>
-                            {{ showFieldPanel ? '收起字段视图' : '设置可用字段' }}
+                            {{ showFieldPanel ? t('attrTable.hideFields') : t('attrTable.showFields') }}
                         </button>
                         <span class="divider"></span>
                         <div class="pro-search-wrap">
@@ -124,13 +124,13 @@
                                 v-model="searchInput"
                                 type="text"
                                 class="pro-input pro-search-input"
-                                placeholder="搜索全部字段..."
+                                :placeholder="t('attrTable.searchPlaceholder')"
                             />
                             <button
                                 v-show="searchInput"
                                 class="pro-search-clear"
                                 type="button"
-                                title="清除搜索"
+                                :title="t('attrTable.clearSearch')"
                                 @click="clearSearch"
                             >
                                 ×
@@ -141,7 +141,7 @@
                             class="pro-toolbar-btn"
                             type="button"
                             :disabled="!totalRows"
-                            title="导出当前视图（筛选 + 排序，可见列）为 CSV"
+                            :title="t('attrTable.exportCsvTip')"
                             @click.stop="exportCsv"
                         >
                             <svg
@@ -153,7 +153,7 @@
                                     fill="currentColor"
                                 />
                             </svg>
-                            导出CSV
+                            {{ t('attrTable.exportCsv') }}
                         </button>
                     </div>
 
@@ -162,7 +162,7 @@
                         class="toolbar-group layout-end"
                     >
                         <div class="pro-stats-panel">
-                            <span class="label">分析汇总：</span>
+                            <span class="label">{{ t('attrTable.statsLabel') }}</span>
                             <select
                                 v-model="statsField"
                                 class="pro-select"
@@ -178,12 +178,12 @@
                             <div class="pro-tags-wrap">
                                 <span
                                     class="pro-stat-chip"
-                                    title="求和 (SUM)"
+                                    :title="t('attrTable.sumTip')"
                                     ><strong>∑</strong>{{ statSummary.sum }}</span
                                 >
                                 <span
                                     class="pro-stat-chip"
-                                    title="平均值 (AVG)"
+                                    :title="t('attrTable.avgTip')"
                                     ><strong>μ</strong>{{ statSummary.avg }}</span
                                 >
                             </div>
@@ -197,14 +197,14 @@
                     class="pro-field-panel-view"
                 >
                     <div class="panel-desc">
-                        可自由勾选与变更要素属性列别名，应用至下部属性表格展现。
+                        {{ t('attrTable.fieldPanelDesc') }}
                     </div>
                     <div class="pro-field-grid">
                         <div class="field-header">
                             <span class="ch-wrap">✓</span>
-                            <span>列原始名</span>
-                            <span>列表头别名配置</span>
-                            <span>数据结构类型</span>
+                            <span>{{ t('attrTable.colOriginal') }}</span>
+                            <span>{{ t('attrTable.colAlias') }}</span>
+                            <span>{{ t('attrTable.colType') }}</span>
                         </div>
                         <div class="field-items">
                             <div
@@ -252,7 +252,7 @@
                             />
                         </svg>
                     </div>
-                    空白要素，该条件暂无可展示项。
+                    {{ t('attrTable.empty') }}
                 </div>
 
                 <div
@@ -277,16 +277,16 @@
                                 <div
                                     class="cell header id-col"
                                     :class="{ sortable: !!sortKey }"
-                                    :title="sortKey ? '点击恢复默认顺序' : 'OID/标识'"
+                                    :title="sortKey ? t('attrTable.clearSortTip') : t('attrTable.oid')"
                                     @click="sortKey && clearSort()"
                                 >
-                                    OID/标识
+                                    {{ t('attrTable.oid') }}
                                 </div>
                                 <div
                                     v-for="field in visibleFields"
                                     :key="`head_${field.key}`"
                                     class="cell header resizable sortable"
-                                    :title="`点击按「${field.alias || field.key}」排序`"
+                                    :title="t('attrTable.sortByTip', { alias: field.alias || field.key })"
                                     @click="handleSortClick(field.key)"
                                 >
                                     <div class="header-text">
@@ -299,7 +299,7 @@
                                     >
                                     <span
                                         class="col-resize-grip"
-                                        title="拖拽调整列宽"
+                                        :title="t('attrTable.resizeColTip')"
                                         @click.stop
                                         @dblclick.stop
                                         @pointerdown.stop.prevent="startColResize(field, $event)"
@@ -352,18 +352,22 @@
 
                 <!-- 底部辅助说明列条（模拟ArcgisPro信息横条） -->
                 <footer class="pro-footer-bar">
-                    展示 {{ totalRows }} / {{ totalSourceRows }} 行 ·
-                    {{ visibleFields.length }}列可见（余 {{ allFields.length - visibleFields.length }}个字段）
+                    {{ t('attrTable.footerRows', {
+                        shown: totalRows,
+                        total: totalSourceRows,
+                        visible: visibleFields.length,
+                        hidden: allFields.length - visibleFields.length,
+                    }) }}
                     <span
                         v-if="viewFilterUnavailable"
                         class="filter-warn"
-                        >视图范围不可用，范围筛选未生效</span
+                        >{{ t('attrTable.filterWarn') }}</span
                     >
                     <span style="flex: 1"></span>
                     <span
                         v-show="selectedFeatureId !== ''"
                         class="sel-count"
-                        >要素当前具备高亮活跃目标</span
+                        >{{ t('attrTable.selectionActive') }}</span
                     >
                 </footer>
             </div>
@@ -401,11 +405,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAttrStore, type AttrRow } from '../../stores';
 import { buildAttributeCsv, buildCsvFilename, downloadCsv } from '../../utils/attributeTableCsv';
+import { useLocale } from '../../composables/useLocale';
 
 type ResizeDirection = 'top' | 'right' | 'bottom' | 'left' | 'bottom-right';
 
 const emit = defineEmits(['focus-feature', 'highlight-feature']);
 const store = useAttrStore();
+const { t } = useLocale();
 
 const panelRef = ref<HTMLElement | null>(null);
 const scrollRef = ref<HTMLElement | null>(null);
@@ -430,7 +436,7 @@ const interaction = ref<{
 
 const isVisible = computed(() => store.visible && !!store.activeDataset);
 const isMinimized = computed(() => store.minimized);
-const layerName = computed(() => store.activeDataset?.layerName || '新建工作流图层');
+const layerName = computed(() => store.activeDataset?.layerName || t('attrTable.defaultLayerName'));
 const allFields = computed(() => store.activeFields);
 const visibleFields = computed(() => store.visibleFields);
 const numericFields = computed(() => store.numericFields);

@@ -116,6 +116,7 @@ import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '../../api/backend';
 import { URL_LAYER_OPTIONS } from '../../constants/basemap/basemapResolver';
 import { useMessage } from '../../composables/useMessage';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
+import { translate as t } from '../../composables/useLocale';
 import { Upload } from 'lucide-vue-next';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
@@ -332,9 +333,9 @@ function handleNavTargetSelect(type) {
     if (type === 'pick') {
         playerController.startNavPick();
     } else if (type === 'search') {
-        message.info('请使用顶部搜索框搜索地点，搜索结果将自动设为导航目标');
+        message.info(t('cesium.toast.navUseSearch'));
     } else if (type === 'data') {
-        message.info('请点击已导入的数据要素，将自动设为导航目标');
+        message.info(t('cesium.toast.navClickFeature'));
         // 进入数据要素点选模式（复用 startNavPick，它已支持 entity 检测）
         playerController.startNavPick();
     }
@@ -605,7 +606,7 @@ async function bootCesium() {
     }
     bootInProgress = true;
     componentUnmounted = false;
-    showLoading('正在初始化 3D 场景...');
+    showLoading(t('loading.cesiumScene'));
     console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
     try {
         let retryCount = 0;
@@ -681,7 +682,7 @@ async function bootCesium() {
                 // 3) 无条件写回 l：activeBasemap 默认值与初始底图相同时 watch 不触发，强制初始写入避免 URL l 缺失
                 syncBasemapToUrl(activeBasemap.value);
                 if (basemapReady && terrainReady) {
-                    message.success('天地图基础影像与地形加载成功。');
+                    message.success(t('cesium.toast.basemapTerrainOk'));
                     return;
                 }
 
@@ -693,7 +694,7 @@ async function bootCesium() {
                     : { switched: false };
                 const switched = switchedTianditu.switched || switchedCesium.switched;
                 if (!switched) {
-                    message.error('默认地图源或地形加载失败，请检查 token 或网络。', { closable: true });
+                    message.error(t('cesium.toast.basemapTerrainFail'), { closable: true });
                     return;
                 }
 
@@ -707,7 +708,7 @@ async function bootCesium() {
                     tdSwitched: !!switchedTianditu.switched,
                     ionSwitched: !!switchedCesium.switched,
                 });
-                message.warning('主 token 初始化失败，正在尝试备用 token。', { closable: true });
+                message.warning(t('cesium.toast.primaryTokenFailRetry'), { closable: true });
             } catch (error) {
                 console.error('[Cesium][boot] stage error:', error);
                 const switchedCesium = markRuntimeMapTokenFailed('cesium_ion_token');
@@ -715,15 +716,15 @@ async function bootCesium() {
                 runtimeMapTokens.value = switchedCesium.tokens;
                 resetCesiumViewerForRetry();
                 retryCount += 1;
-                message.warning('Cesium ion token 失败，正在尝试备用 token。', { closable: true });
+                message.warning(t('cesium.toast.ionTokenFailRetry'), { closable: true });
             }
         }
         console.error('[Cesium][boot] exhausted token pool');
-        message.error('备用 token 已全部尝试，Cesium 初始化仍失败。', { closable: true });
+        message.error(t('cesium.toast.tokenPoolExhausted'), { closable: true });
     } catch (error) {
         console.error('[Cesium][boot] FATAL:', error);
-        message.error('Cesium 运行时加载失败', error);
-        message.error('Cesium 初始化失败，请检查网络环境。', { closable: true });
+        message.error(t('cesium.toast.runtimeLoadFailed'), error);
+        message.error(t('cesium.toast.initFailed'), { closable: true });
     } finally {
         bootInProgress = false;
         hideLoading();

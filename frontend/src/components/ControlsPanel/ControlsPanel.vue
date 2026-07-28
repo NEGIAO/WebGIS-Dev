@@ -61,7 +61,7 @@
         >
             <div class="swipe-dialog-box">
                 <div class="dialog-header">
-                    <h3>卷帘分析 - 选择对比底图</h3>
+                    <h3>{{ t('controls.swipeDialogTitle') }}</h3>
                     <button
                         class="close-btn"
                         @click="cancelSwipeDialog"
@@ -72,7 +72,7 @@
 
                 <div class="dialog-content">
                     <div class="form-group">
-                        <label>左侧底图：</label>
+                        <label>{{ t('controls.leftBasemap') }}</label>
                         <select
                             v-model="leftBasemap"
                             class="basemap-select"
@@ -88,7 +88,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label>右侧底图：</label>
+                        <label>{{ t('controls.rightBasemap') }}</label>
                         <select
                             v-model="rightBasemap"
                             class="basemap-select"
@@ -104,21 +104,21 @@
                     </div>
 
                     <div class="form-group">
-                        <label>滑动模式：</label>
+                        <label>{{ t('controls.swipeMode') }}</label>
                         <div class="mode-selector">
                             <button
                                 class="mode-btn"
                                 :class="{ active: swipeMode === 'horizontal' }"
                                 @click="swipeMode = 'horizontal'"
                             >
-                                ↔ 水平
+                                ↔ {{ t('controls.horizontal') }}
                             </button>
                             <button
                                 class="mode-btn"
                                 :class="{ active: swipeMode === 'vertical' }"
                                 @click="swipeMode = 'vertical'"
                             >
-                                ↕ 竖直
+                                ↕ {{ t('controls.vertical') }}
                             </button>
                         </div>
                     </div>
@@ -129,13 +129,13 @@
                         class="cancel-btn"
                         @click="cancelSwipeDialog"
                     >
-                        取消
+                        {{ t('common.cancel') }}
                     </button>
                     <button
                         class="confirm-btn"
                         @click="confirmSwipeConfig"
                     >
-                        启用对比
+                        {{ t('controls.enableCompare') }}
                     </button>
                 </div>
             </div>
@@ -146,6 +146,7 @@
 <script setup>
 import { computed, defineAsyncComponent, inject, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
 const DrawPanel = defineAsyncComponent(() => import('./DrawPanel.vue'));
 const MeasurePanel = defineAsyncComponent(() => import('./MeasurePanel.vue'));
@@ -167,6 +168,7 @@ import { useAppStore } from '../../stores/useAppStore';
 import { storeToRefs } from 'pinia';
 import { BASEMAP_OPTIONS } from '../../constants';
 
+const { t } = useLocale();
 const message = useMessage();
 const layerStore = useLayerStore();
 const appStore = useAppStore();
@@ -212,18 +214,19 @@ const drawPanelVisible = ref(false);
 const measurePanelVisible = ref(false);
 const spatialPanelVisible = ref(false);
 
-const menuItems = [
-    { id: 'layers', label: '图层', icon: Layers, action: 'toggleLayers' },
-    { id: 'news', label: '新闻', icon: Newspaper, action: 'toggleNews' },
-    { id: 'draw', label: '绘制', icon: Pencil, action: 'toggleDraw' },
-    { id: 'measure', label: '测量', icon: Ruler, action: 'toggleMeasure' },
-    { id: 'mark', label: '标注', icon: MapPin, action: 'toggleMark' },
-    { id: 'more', label: '卷帘分析', icon: Columns2, action: 'toggleMore' },
-    { id: 'adcode', label: '行政区划', icon: LayoutGrid, action: 'toggleAdcode' },
-    { id: 'download', label: '下载底图', icon: Download, action: 'toggleDownload' },
-    { id: 'analyze', label: '空间分析', icon: Boxes, action: 'toggleAnalyze' },
-    { id: 'log', label: '日志监控', icon: Activity, action: 'toggleLog' },
-];
+/** 侧栏菜单项：label 随语言切换 */
+const menuItems = computed(() => [
+    { id: 'layers', label: t('controls.layers'), icon: Layers, action: 'toggleLayers' },
+    { id: 'news', label: t('controls.news'), icon: Newspaper, action: 'toggleNews' },
+    { id: 'draw', label: t('controls.draw'), icon: Pencil, action: 'toggleDraw' },
+    { id: 'measure', label: t('controls.measure'), icon: Ruler, action: 'toggleMeasure' },
+    { id: 'mark', label: t('controls.mark'), icon: MapPin, action: 'toggleMark' },
+    { id: 'more', label: t('controls.more'), icon: Columns2, action: 'toggleMore' },
+    { id: 'adcode', label: t('controls.adcode'), icon: LayoutGrid, action: 'toggleAdcode' },
+    { id: 'download', label: t('controls.download'), icon: Download, action: 'toggleDownload' },
+    { id: 'analyze', label: t('controls.analyze'), icon: Boxes, action: 'toggleAnalyze' },
+    { id: 'log', label: t('controls.log'), icon: Activity, action: 'toggleLog' },
+]);
 
 /** 关闭与当前激活项不相关的子面板 */
 function closeIrrelevantPanels(activePanelId) {
@@ -241,7 +244,7 @@ function closeIrrelevantPanels(activePanelId) {
 }
 
 const handleSelect = (id) => {
-    const currentItem = menuItems.find((item) => item.id === id);
+    const currentItem = menuItems.value.find((item) => item.id === id);
     if (!currentItem) return;
 
     if (currentItem.action === 'toggleLog') {
@@ -251,7 +254,11 @@ const handleSelect = (id) => {
         } else if (activeId.value === 'log') {
             activeId.value = 'layers';
         }
-        message.info(appStore.logMonitorVisible ? '日志监控面板已打开' : '日志监控面板已关闭');
+        message.info(
+            appStore.logMonitorVisible
+                ? t('controls.logMonitorOpened')
+                : t('controls.logMonitorClosed'),
+        );
         return;
     }
 
@@ -265,7 +272,7 @@ const handleSelect = (id) => {
     switch (currentItem.action) {
         case 'toggleNews':
             emit('open-tab', 'info');
-            message.info('已切换到新闻面板');
+            message.info(t('controls.newsPanelSwitched'));
             break;
 
         case 'toggleLayers':
@@ -312,7 +319,11 @@ const handleSelect = (id) => {
 
         case 'toggleAdcode':
             districtPanelVisible.value = !districtPanelVisible.value;
-            message.info(districtPanelVisible.value ? '行政区划面板已打开' : '行政区划面板已关闭');
+            message.info(
+                districtPanelVisible.value
+                    ? t('controls.districtPanelOpened')
+                    : t('controls.districtPanelClosed'),
+            );
             break;
 
         case 'toggleMore':
@@ -321,7 +332,7 @@ const handleSelect = (id) => {
                 // 已启用，关闭
                 layerStore.disableSwipe();
                 activeId.value = 'layers';
-                message.success('卷帘分析已关闭');
+                message.success(t('controls.swipeClosed'));
             } else {
                 // 未启用，打开对话框让用户选择左右底图
                 showSwipeDialog.value = true;
@@ -331,12 +342,12 @@ const handleSelect = (id) => {
         case 'toggleDownload':
             emit('open-tab', 'toolbox');
             emit('open-toolbox-tab', 'download');
-            message.info('已打开底图下载面板');
+            message.info(t('controls.downloadPanelOpened'));
             break;
 
         default:
             // 注意：useMessage 的第二参是 options 对象，不能把 action 当参数传（会被吞掉）
-            message.warning(`未识别的 Action: ${currentItem.action}`);
+            message.warning(t('controls.unknownAction', { action: currentItem.action }));
             break;
     }
 };
@@ -352,18 +363,18 @@ const handleDistrictSelect = (payload) => {
 const handleDrawType = (type) => {
     emit('map-interaction', type);
     const labelMap = {
-        Point: '点',
-        LineString: '线',
-        Polygon: '面',
-        Rectangle: '矩形',
-        Ellipse: '椭圆',
-        CircleOutline: '圆',
-        Arrow: '箭头',
-        WindArrow: '风向箭头',
-        BattleArrow: '军标箭头',
-        SelectEdit: '选择编辑',
+        Point: t('draw.tools.Point'),
+        LineString: t('draw.tools.LineString'),
+        Polygon: t('draw.tools.Polygon'),
+        Rectangle: t('draw.tools.Rectangle'),
+        Ellipse: t('draw.tools.Ellipse'),
+        CircleOutline: t('draw.tools.CircleOutline'),
+        Arrow: t('draw.tools.Arrow'),
+        WindArrow: t('controls.windArrow'),
+        BattleArrow: t('controls.battleArrow'),
+        SelectEdit: t('draw.tools.SelectEdit'),
     };
-    message.info(`已激活绘制工具：${labelMap[type] || type}`);
+    message.info(t('controls.drawToolActivated', { type: labelMap[type] || type }));
 };
 
 /**
@@ -381,9 +392,9 @@ const handleDrawStyleChange = (stylePayload) => {
 const handleDrawEditAction = (action) => {
     emit('draw-edit-action', action);
     if (action === 'delete-selected') {
-        message.info('已请求删除选中要素');
+        message.info(t('controls.deleteSelectedRequested'));
     } else if (action === 'undo-last') {
-        message.info('已请求撤销最近绘制图层');
+        message.info(t('controls.undoLastRequested'));
     }
 };
 
@@ -392,7 +403,7 @@ const handleDrawEditAction = (action) => {
  */
 const handleClearDraw = () => {
     emit('map-interaction', 'Clear');
-    message.success('已清除全部绘制图形');
+    message.success(t('controls.clearDrawSuccess'));
 };
 
 /**
@@ -401,7 +412,11 @@ const handleClearDraw = () => {
  */
 const handleMeasureType = (type) => {
     emit('map-interaction', type);
-    message.info(type === 'MeasureDistance' ? '已激活测距工具' : '已激活测面工具');
+    message.info(
+        type === 'MeasureDistance'
+            ? t('controls.measureDistanceActivated')
+            : t('controls.measureAreaActivated'),
+    );
 };
 
 /**
@@ -409,7 +424,7 @@ const handleMeasureType = (type) => {
  */
 const handleClearMeasure = () => {
     emit('map-interaction', 'Clear');
-    message.success('已清除所有测量结果');
+    message.success(t('controls.clearMeasureSuccess'));
 };
 
 /**
@@ -426,12 +441,12 @@ const handleSpatialAnalysis = (payload) => {
  */
 const confirmSwipeConfig = () => {
     if (!leftBasemap.value || !rightBasemap.value) {
-        message.warning('请选择左右两个不同的底图');
+        message.warning(t('controls.swipeSelectDifferent'));
         return;
     }
 
     if (leftBasemap.value === rightBasemap.value) {
-        message.warning('左右底图不能相同');
+        message.warning(t('controls.swipeSameBasemap'));
         return;
     }
 
@@ -444,7 +459,10 @@ const confirmSwipeConfig = () => {
 
     showSwipeDialog.value = false;
     message.success(
-        `正在加载卷帘对比：${getBasemapLabel(leftBasemap.value)} ↔ ${getBasemapLabel(rightBasemap.value)}`,
+        t('controls.swipeLoading', {
+            left: getBasemapLabel(leftBasemap.value),
+            right: getBasemapLabel(rightBasemap.value),
+        }),
     );
 };
 

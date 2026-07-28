@@ -82,6 +82,11 @@ export const MAPBOX_ACCESS_TOKEN: string = String(import.meta.env.VITE_MAPBOX_AC
 export const MAPTILER_KEY: string = String(import.meta.env.VITE_MAPTILER_KEY || '').trim();
 export const GEOVISEARTH_TOKEN: string = String(import.meta.env.VITE_GEOVISEARTH_TOKEN || '').trim();
 
+/** Google OAuth Client ID（公开，供 One Tap / GIS 初始化；空则跳过） */
+export const GOOGLE_OAUTH_CLIENT_ID: string = String(
+    import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '',
+).trim();
+
 /**
  * 拼接后端 API URL
  * @param path 以 / 开头的路径，如 /api/config/public

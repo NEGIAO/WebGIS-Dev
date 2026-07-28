@@ -7,6 +7,8 @@
  *   speedFactor, particleHeight, particlesTextureSize, lineWidth, lineLength, dropRate, dynamic
  */
 
+import { translate as t } from '@/composables/useLocale';
+
 /**
  * 创建风场模块
  * @param {import('vue').Ref} windParams - 风场参数 ref
@@ -14,13 +16,13 @@
  */
 export function createWindModule(windParams) {
     const params = windParams?.value ?? {};
-    const status = params.windEnabled ? '已启用' : '未启用';
+    const status = params.windEnabled ? t('cesium.status.enabled') : t('cesium.status.disabled');
     const statusTone = params.windEnabled ? 'success' : 'neutral';
 
     return {
         id: 'wind',
-        title: '风场可视化',
-        description: '基于 GFS 全球风场数据的 GPU 粒子风场可视化（cesium-wind-layer）',
+        title: t('cesium.module.wind.title'),
+        description: t('cesium.module.wind.description'),
         status,
         statusTone,
         controls: createWindControls(params, !params.windEnabled),
@@ -38,14 +40,14 @@ function createWindControls(params = {}, disabled) {
     return [
         {
             id: 'windEnabled',
-            label: '启用风场',
+            label: t('cesium.module.wind.windEnabled'),
             type: 'toggle',
             value: params.windEnabled === true,
-            tooltip: '基于 GFS 全球风场数据的 GPU 粒子可视化（cesium-wind-layer）',
+            tooltip: t('cesium.module.wind.windEnabledTip'),
         },
         {
             id: 'speedFactor',
-            label: '速度倍率',
+            label: t('cesium.module.wind.speedFactor'),
             type: 'range',
             min: 0.1,
             max: 5,
@@ -53,11 +55,11 @@ function createWindControls(params = {}, disabled) {
             value: params.speedFactor ?? 1.0,
             displayValue: Number(params.speedFactor ?? 1.0).toFixed(1),
             disabled: off,
-            tooltip: '粒子运动速度倍率，值越大粒子移动越快',
+            tooltip: t('cesium.module.wind.speedFactorTip'),
         },
         {
             id: 'particleHeight',
-            label: '粒子高度',
+            label: t('cesium.module.wind.particleHeight'),
             type: 'range',
             min: 0,
             max: 10000,
@@ -65,11 +67,11 @@ function createWindControls(params = {}, disabled) {
             value: params.particleHeight ?? 1000,
             displayValue: String(Math.round(params.particleHeight ?? 1000)) + 'm',
             disabled: off,
-            tooltip: '风场粒子悬浮高度（米）',
+            tooltip: t('cesium.module.wind.particleHeightTip'),
         },
         {
             id: 'particlesTextureSize',
-            label: '粒子纹理尺寸',
+            label: t('cesium.module.wind.particlesTextureSize'),
             type: 'range',
             min: 100,
             max: 5000,
@@ -77,11 +79,11 @@ function createWindControls(params = {}, disabled) {
             value: params.particlesTextureSize ?? 600,
             displayValue: String(Math.round(params.particlesTextureSize ?? 600)),
             disabled: off,
-            tooltip: '粒子纹理尺寸（像素），越大密度越高但越耗 GPU',
+            tooltip: t('cesium.module.wind.particlesTextureSizeTip'),
         },
         {
             id: 'lineWidthVal',
-            label: '线宽',
+            label: t('cesium.module.wind.lineWidthVal'),
             type: 'range',
             min: 1,
             max: 30,
@@ -89,11 +91,11 @@ function createWindControls(params = {}, disabled) {
             value: params.lineWidthVal ?? 10,
             displayValue: String(Math.round(params.lineWidthVal ?? 10)),
             disabled: off,
-            tooltip: '风场轨迹线最大宽度（像素）',
+            tooltip: t('cesium.module.wind.lineWidthValTip'),
         },
         {
             id: 'lineLengthVal',
-            label: '拖尾长度',
+            label: t('cesium.module.wind.lineLengthVal'),
             type: 'range',
             min: 20,
             max: 3000,
@@ -101,11 +103,11 @@ function createWindControls(params = {}, disabled) {
             value: params.lineLengthVal ?? 800,
             displayValue: String(Math.round(params.lineLengthVal ?? 800)),
             disabled: off,
-            tooltip: '粒子拖尾最大长度（像素），越大轨迹越长',
+            tooltip: t('cesium.module.wind.lineLengthValTip'),
         },
         {
             id: 'dropRate',
-            label: '丢弃率',
+            label: t('cesium.module.wind.dropRate'),
             type: 'range',
             min: 0,
             max: 0.02,
@@ -113,15 +115,15 @@ function createWindControls(params = {}, disabled) {
             value: params.dropRate ?? 0.003,
             displayValue: Number(params.dropRate ?? 0.003).toFixed(3),
             disabled: off,
-            tooltip: '粒子重置概率，越高粒子更新越快',
+            tooltip: t('cesium.module.wind.dropRateTip'),
         },
         {
             id: 'dynamic',
-            label: '动画',
+            label: t('cesium.module.wind.dynamic'),
             type: 'toggle',
             value: params.dynamic === true,
             disabled: off,
-            tooltip: '启用/暂停粒子动画',
+            tooltip: t('cesium.module.wind.dynamicTip'),
         },
     ];
 }

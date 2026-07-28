@@ -2,14 +2,14 @@
     <div class="compass-panel">
         <div class="panel-header">
             <div>
-                <div class="panel-title">风水罗盘</div>
-                <div class="panel-subtitle">Native Vector + HUD 双模式</div>
+                <div class="panel-title">{{ t('compass.title') }}</div>
+                <div class="panel-subtitle">{{ t('compass.subtitle') }}</div>
             </div>
             <button
                 class="ghost-btn"
                 @click="$emit('close')"
             >
-                返回
+                {{ t('compass.back') }}
             </button>
         </div>
 
@@ -20,7 +20,7 @@
                     :checked="compassStore.enabled"
                     @change="handleEnabledChange"
                 />
-                <span>启用罗盘</span>
+                <span>{{ t('compass.enable') }}</span>
             </label>
             <label class="switch-item">
                 <input
@@ -29,7 +29,7 @@
                     :disabled="!compassStore.enabled || compassStore.mode !== 'vector'"
                     @change="handlePlacementModeChange"
                 />
-                <span>地图点选定位</span>
+                <span>{{ t('compass.placement') }}</span>
             </label>
             <label class="switch-item">
                 <input
@@ -38,25 +38,25 @@
                     :disabled="!compassStore.enabled"
                     @change="handleSensorToggle"
                 />
-                <span>硬件朝向同步</span>
+                <span>{{ t('compass.sensorSync') }}</span>
             </label>
         </div>
 
         <div class="card-row">
             <div class="field full-width">
-                <label>显示模式</label>
+                <label>{{ t('compass.displayMode') }}</label>
                 <select
                     :value="compassStore.mode"
                     :disabled="!compassStore.enabled"
                     @change="handleModeChange"
                 >
-                    <option value="vector">Mode 1: 地理实体（Vector）</option>
-                    <option value="hud">Mode 2: 设备 HUD（固定屏幕）</option>
+                    <option value="vector">{{ t('compass.modeVector') }}</option>
+                    <option value="hud">{{ t('compass.modeHud') }}</option>
                 </select>
             </div>
 
             <div class="field full-width">
-                <label>主题（cid）</label>
+                <label>{{ t('compass.theme') }}</label>
                 <select
                     :value="compassStore.cid"
                     :disabled="compassStore.isConfigLoading"
@@ -84,7 +84,7 @@
                         margin-bottom: 8px;
                     "
                 >
-                    <label>地理半径 (米)</label>
+                    <label>{{ t('compass.radius') }}</label>
                     <input
                         type="number"
                         class="compact-number-input"
@@ -122,7 +122,7 @@
             </div>
 
             <div class="field full-width">
-                <label>透明度：{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</label>
+                <label>{{ t('compass.opacity') }}：{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</label>
                 <input
                     type="range"
                     min="0.1"
@@ -140,7 +140,7 @@
                 v-if="compassStore.mode === 'hud'"
                 class="field full-width"
             >
-                <label>HUD 尺寸：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
+                <label>{{ t('compass.hudSize') }}：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
                 <input
                     type="range"
                     min="240"
@@ -154,7 +154,7 @@
             </div>
 
             <div class="field full-width">
-                <label>渐变背景基色</label>
+                <label>{{ t('compass.gradientBase') }}</label>
                 <div class="color-picker-row">
                     <input
                         type="color"
@@ -170,7 +170,7 @@
 
         <div class="card-row">
             <div class="field">
-                <label>经度</label>
+                <label>{{ t('compass.longitude') }}</label>
                 <input
                     v-model="lngInput"
                     type="number"
@@ -179,7 +179,7 @@
                 />
             </div>
             <div class="field">
-                <label>纬度</label>
+                <label>{{ t('compass.latitude') }}</label>
                 <input
                     v-model="latInput"
                     type="number"
@@ -195,7 +195,7 @@
                         :disabled="!compassStore.enabled"
                         @click="applyLonLat"
                     >
-                        应用坐标
+                        {{ t('compass.applyCoord') }}
                     </button>
                     <button
                         class="action-btn action-muted"
@@ -219,7 +219,7 @@
                 v-if="compassStore.isConfigLoading"
                 class="status-chip"
             >
-                配置加载中...
+                {{ t('compass.loading') }}
             </div>
             <div
                 v-if="compassStore.configError"
@@ -240,6 +240,7 @@
 // 前端解析的时候要得到经纬度和半径即可实现跳转和还原，样式用默认的即可；
 import { computed, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { useCompassStore } from '../../stores';
 
 const props = defineProps({
@@ -251,6 +252,7 @@ const props = defineProps({
 
 defineEmits(['close']);
 
+const { t } = useLocale();
 const message = useMessage();
 const compassStore = useCompassStore();
 
@@ -267,10 +269,10 @@ watch(
 );
 
 const sensorStatusText = computed(() => {
-    if (compassStore.sensorPermission === 'granted') return '传感器权限：已授权';
-    if (compassStore.sensorPermission === 'denied') return '传感器权限：已拒绝';
-    if (compassStore.sensorPermission === 'unsupported') return '传感器权限：设备不支持';
-    return '传感器权限：未知';
+    if (compassStore.sensorPermission === 'granted') return t('compass.sensorGranted');
+    if (compassStore.sensorPermission === 'denied') return t('compass.sensorDenied');
+    if (compassStore.sensorPermission === 'unsupported') return t('compass.sensorUnsupported');
+    return t('compass.sensorUnknown');
 });
 
 function handleEnabledChange(event) {
@@ -308,7 +310,7 @@ async function handleSensorToggle(event) {
     const granted = await compassStore.requestOrientationPermission();
     if (!granted) {
         compassStore.setSensorEnabled(false);
-        message.warning('未授予设备朝向权限');
+        message.warning(t('compass.noHeadingPermission'));
         return;
     }
 
@@ -327,7 +329,7 @@ function applyLonLat() {
         lat < -90 ||
         lat > 90
     ) {
-        message.warning('请输入有效经纬度');
+        message.warning(t('compass.invalidLonLat'));
         return;
     }
 
@@ -343,14 +345,14 @@ async function useGps() {
         const lng = Number(gps?.lng);
         const lat = Number(gps?.lat);
         if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-            message.warning('未获取到可用 GPS 坐标');
+            message.warning(t('compass.noGps'));
             return;
         }
 
         compassStore.setPosition(lng, lat);
         compassStore.setEnabled(true);
     } catch (error) {
-        message.warning(`GPS 获取失败：${String(error?.message || error || 'unknown')}`);
+        message.warning(t('compass.gpsFailed', { error: String(error?.message || error || 'unknown') }));
     }
 }
 </script>

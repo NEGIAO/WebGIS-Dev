@@ -7,6 +7,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../useMessage';
+import { translate as t } from '../useLocale';
 import { apiAddressGeocode, apiReverseGeocodeWithFallback, apiWeather } from '../../api';
 import { globalAbortManager } from '@/utils/abortManager';
 import {
@@ -103,12 +104,14 @@ export function useWeatherData(chartCallbacks = {}) {
                 weatherStore.currentCity ||
                 '',
         ).trim();
-        return `${province}${city}`.trim() || '未知城市';
+        return `${province}${city}`.trim() || t('weather.unknownCity');
     });
 
     /** 实况天气文本 */
     const liveWeatherText = computed(
-        () => String(liveWeather.value?.weather || '天气未知').trim() || '天气未知',
+        () =>
+            String(liveWeather.value?.weather || t('weather.weatherUnknown')).trim() ||
+            t('weather.weatherUnknown'),
     );
 
     /** 实况温度文本 */
@@ -161,7 +164,7 @@ export function useWeatherData(chartCallbacks = {}) {
             if (hasRainSignal(cast?.dayWeather)) {
                 hits.push({
                     date,
-                    period: '白天',
+                    period: t('weather.day'),
                     weather: String(cast?.dayWeather || '--'),
                     icon: resolveWeatherIcon(cast?.dayWeather),
                 });
@@ -170,7 +173,7 @@ export function useWeatherData(chartCallbacks = {}) {
             if (hasRainSignal(cast?.nightWeather)) {
                 hits.push({
                     date,
-                    period: '夜间',
+                    period: t('weather.night'),
                     weather: String(cast?.nightWeather || '--'),
                     icon: resolveWeatherIcon(cast?.nightWeather),
                 });
@@ -189,9 +192,9 @@ export function useWeatherData(chartCallbacks = {}) {
                 hasRain: false,
                 level: 'unknown',
                 icon: '🌫️',
-                badge: '待判定',
-                title: '暂未获取到可判定的天气文本',
-                subtitle: '请刷新或切换 adcode 后重试',
+                badge: t('weather.rainPending'),
+                title: t('weather.rainNoText'),
+                subtitle: t('weather.rainRetry'),
                 hits,
             };
         }
@@ -201,13 +204,16 @@ export function useWeatherData(chartCallbacks = {}) {
                 hasRain: true,
                 level: 'rain',
                 icon: '🌧️',
-                badge: '降雨信号',
+                badge: t('weather.rainSignal'),
                 title: liveHasRain
-                    ? `当前实况：${resolveWeatherIcon(liveText)} ${liveText}`
-                    : '未来 4 日预报存在降雨时段',
+                    ? t('weather.liveCurrent', {
+                          icon: resolveWeatherIcon(liveText),
+                          text: liveText,
+                      })
+                    : t('weather.rainForecastTitle'),
                 subtitle: hits.length
-                    ? `未来 4 日识别到 ${hits.length} 个可能降雨时段`
-                    : '当前天气文本中包含降雨关键词',
+                    ? t('weather.rainHitsSubtitle', { count: hits.length })
+                    : t('weather.rainLiveSubtitle'),
                 hits,
             };
         }
@@ -216,9 +222,9 @@ export function useWeatherData(chartCallbacks = {}) {
             hasRain: false,
             level: 'clear',
             icon: '☀️',
-            badge: '无雨信号',
-            title: '当前与未来 4 日未识别到降雨关键词',
-            subtitle: '如需更精细的降雨概率，建议接入分钟级降水或雷达数据',
+            badge: t('weather.noRainSignal'),
+            title: t('weather.noRainTitle'),
+            subtitle: t('weather.noRainSubtitle'),
             hits,
         };
     });
@@ -259,7 +265,7 @@ export function useWeatherData(chartCallbacks = {}) {
         const force = !!options.force;
 
         if (!/^\d{6}$/.test(normalizedAdcode)) {
-            message.warning('请输入有效的 6 位 adcode');
+            message.warning(t('weather.invalidAdcode'));
             return;
         }
 
@@ -394,7 +400,7 @@ export function useWeatherData(chartCallbacks = {}) {
     async function applyAdcodeQuery() {
         const nextAdcode = String(adcodeInput.value || '').trim();
         if (!/^\d{6}$/.test(nextAdcode)) {
-            message.warning('请输入有效的 6 位 adcode');
+            message.warning(t('weather.invalidAdcode'));
             return;
         }
 
@@ -409,7 +415,7 @@ export function useWeatherData(chartCallbacks = {}) {
     async function resolveCityAndQuery() {
         const cityText = String(cityInput.value || '').trim();
         if (!cityText) {
-            message.warning('请输入城市或区县名称');
+            message.warning(t('weather.cityRequired'));
             return;
         }
 
@@ -434,7 +440,7 @@ export function useWeatherData(chartCallbacks = {}) {
             }
 
             if (!/^\d{6}$/.test(nextAdcode)) {
-                message.warning('未解析到有效 adcode，请尝试更详细的地名');
+                message.warning(t('weather.adcodeResolveFailed'));
                 return;
             }
 

@@ -11,27 +11,27 @@
             <div class="live-main-card">
                 <div class="live-main-icon">{{ weatherIcon }}</div>
                 <div class="live-main-content">
-                    <div class="live-city">{{ liveCityLabel }}</div>
-                    <div class="live-weather-text">{{ liveWeatherText }}</div>
+                    <div class="live-city">{{ liveCityLabelResolved }}</div>
+                    <div class="live-weather-text">{{ liveWeatherTextResolved }}</div>
                     <div class="live-report-time">{{ liveReportTimeText }}</div>
                 </div>
                 <div class="live-temp">{{ liveTemperatureText }}</div>
             </div>
 
             <div class="live-mini-card">
-                <span class="mini-label">湿度</span>
+                <span class="mini-label">{{ t('weather.humidity') }}</span>
                 <span class="mini-value">{{ liveHumidityText }}</span>
             </div>
             <div class="live-mini-card">
-                <span class="mini-label">风向</span>
+                <span class="mini-label">{{ t('weather.windDir') }}</span>
                 <span class="mini-value">{{ liveWindDirectionText }}</span>
             </div>
             <div class="live-mini-card">
-                <span class="mini-label">风力</span>
+                <span class="mini-label">{{ t('weather.windPower') }}</span>
                 <span class="mini-value">{{ liveWindPowerText }}</span>
             </div>
             <div class="live-mini-card">
-                <span class="mini-label">当前 adcode</span>
+                <span class="mini-label">{{ t('weather.currentAdcode') }}</span>
                 <span class="mini-value">{{ currentAdcode }}</span>
             </div>
         </div>
@@ -39,25 +39,25 @@
         <!-- 降雨聚焦面板 -->
         <div
             class="rain-focus-panel"
-            :class="{ 'has-rain': rainFocus.hasRain, unknown: rainFocus.level === 'unknown' }"
+            :class="{ 'has-rain': rainFocusResolved.hasRain, unknown: rainFocusResolved.level === 'unknown' }"
         >
             <div class="rain-focus-left">
-                <div class="rain-focus-icon">{{ rainFocus.icon }}</div>
+                <div class="rain-focus-icon">{{ rainFocusResolved.icon }}</div>
                 <div class="rain-focus-text">
-                    <div class="rain-focus-title">{{ rainFocus.title }}</div>
-                    <div class="rain-focus-subtitle">{{ rainFocus.subtitle }}</div>
+                    <div class="rain-focus-title">{{ rainFocusResolved.title }}</div>
+                    <div class="rain-focus-subtitle">{{ rainFocusResolved.subtitle }}</div>
                 </div>
             </div>
             <div class="rain-focus-right">
-                <span class="rain-badge">{{ rainFocus.badge }}</span>
+                <span class="rain-badge">{{ rainFocusResolved.badge }}</span>
                 <div class="rain-hit-list">
                     <span
-                        v-if="!rainFocus.hits.length"
+                        v-if="!rainFocusResolved.hits.length"
                         class="rain-hit empty"
-                        >未来 4 天白天/夜间均未识别到"雨"关键词</span
+                        >{{ t('weather.rainNoKeyword') }}</span
                     >
                     <span
-                        v-for="(hit, idx) in rainFocus.hits"
+                        v-for="(hit, idx) in rainFocusResolved.hits"
                         :key="`${hit.date}_${hit.period}_${idx}`"
                         class="rain-hit"
                     >
@@ -74,13 +74,18 @@
  * 实况天气卡片与降雨聚焦面板
  * 所有数据由父组件通过 props 传入
  */
-defineProps({
+import { computed } from 'vue';
+import { useLocale } from '../../composables/useLocale';
+
+const { t } = useLocale();
+
+const props = defineProps({
     /** 天气 Emoji 图标 */
     weatherIcon: { type: String, default: '🌤️' },
     /** 城市显示标签 */
-    liveCityLabel: { type: String, default: '未知城市' },
+    liveCityLabel: { type: String, default: '' },
     /** 天气描述文本 */
-    liveWeatherText: { type: String, default: '天气未知' },
+    liveWeatherText: { type: String, default: '' },
     /** 温度文本 */
     liveTemperatureText: { type: String, default: '--°C' },
     /** 湿度文本 */
@@ -96,17 +101,38 @@ defineProps({
     /** 降雨聚焦面板数据对象 */
     rainFocus: {
         type: Object,
-        default: () => ({
-            hasRain: false,
-            level: 'unknown',
-            icon: '🌫️',
-            badge: '待判定',
-            title: '暂未获取到可判定的天气文本',
-            subtitle: '请刷新或切换 adcode 后重试',
-            hits: [],
-        }),
+        default: null,
     },
 });
+
+const rainFocusDefaults = computed(() => ({
+    hasRain: false,
+    level: 'unknown',
+    icon: '🌫️',
+    badge: t('weather.rainPending'),
+    title: t('weather.rainNoText'),
+    subtitle: t('weather.rainRetry'),
+    hits: [],
+}));
+
+const rainFocusResolved = computed(() => {
+    if (props.rainFocus && typeof props.rainFocus === 'object') {
+        return {
+            ...rainFocusDefaults.value,
+            ...props.rainFocus,
+            hits: Array.isArray(props.rainFocus.hits) ? props.rainFocus.hits : [],
+        };
+    }
+    return rainFocusDefaults.value;
+});
+
+// Expose i18n defaults for city/weather labels when parent passes empty strings
+const liveCityLabelResolved = computed(
+    () => props.liveCityLabel || t('weather.unknownCity'),
+);
+const liveWeatherTextResolved = computed(
+    () => props.liveWeatherText || t('weather.weatherUnknown'),
+);
 </script>
 
 <style scoped>

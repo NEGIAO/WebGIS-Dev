@@ -3,6 +3,7 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import { useMessage } from './composables/useMessage';
+import { loadLocaleMessages } from './composables/useLocale';
 import { useUserPreferencesStore } from './stores';
 
 const app = createApp(App);
@@ -10,6 +11,9 @@ const pinia = createPinia();
 
 app.use(pinia);
 app.use(router);
+
+// 尽早拉完整语言包，避免登录页等首屏在 preferences 网络返回前泄漏 auth.* key
+void loadLocaleMessages();
 
 const userPreferencesStore = useUserPreferencesStore(pinia);
 void userPreferencesStore.bootstrap();

@@ -2,14 +2,14 @@
     <div class="bus-planner-panel">
         <div class="panel-head">
             <div>
-                <div class="title">公交规划</div>
+                <div class="title">{{ t('routing.busTitle') }}</div>
                 <div class="title-sub">Transit Route Planner</div>
             </div>
             <button
                 class="ghost-btn"
                 @click="$emit('close')"
             >
-                关闭
+                {{ t('routing.close') }}
             </button>
         </div>
 
@@ -21,8 +21,13 @@
             :end-address="endAddress"
             :tianditu-tk="token"
             theme="bus"
-            start-label="设置起点"
-            end-label="设置终点"
+            :start-label="t('routing.setStartShort')"
+            :end-label="t('routing.setEndShort')"
+            :start-picking-text="t('routing.startHint')"
+            :end-picking-text="t('routing.endHint')"
+            :start-title="t('routing.startPoint')"
+            :end-title="t('routing.endPoint')"
+            :search-placeholder="t('routing.searchPlaceholder')"
             @pick-start="enablePick('start')"
             @pick-end="enablePick('end')"
             @select-start-result="onSelectStartResult"
@@ -33,24 +38,24 @@
             <label
                 class="plan-label"
                 for="lineTypeSelect"
-                >公交策略</label
+                >{{ t('routing.busStrategy') }}</label
             >
             <select
                 id="lineTypeSelect"
                 v-model="lineType"
                 class="plan-select"
             >
-                <option value="1">1 - 较快捷</option>
-                <option value="2">2 - 少换乘</option>
-                <option value="3">3 - 少步行</option>
-                <option value="4">4 - 不乘地铁</option>
+                <option value="1">{{ t('routing.strategy.fast') }}</option>
+                <option value="2">{{ t('routing.strategy.lessTransfer') }}</option>
+                <option value="3">{{ t('routing.strategy.lessWalk') }}</option>
+                <option value="4">{{ t('routing.strategy.noMetro') }}</option>
             </select>
             <button
                 class="plan-btn"
                 :disabled="planning"
                 @click="startTransitPlan"
             >
-                {{ planning ? '规划中...' : '开始公交规划' }}
+                {{ planning ? t('routing.planning') : t('routing.startBusPlan') }}
             </button>
         </div>
 
@@ -64,42 +69,42 @@
             v-else-if="pickMode === 'start'"
             class="status-line"
         >
-            请在主地图上单击一个位置设置起点
+            {{ t('routing.pickStartOnMap') }}
         </div>
         <div
             v-else-if="pickMode === 'end'"
             class="status-line"
         >
-            请在主地图上单击一个位置设置终点
+            {{ t('routing.pickEndOnMap') }}
         </div>
 
         <details class="debug-box">
-            <summary>调试信息</summary>
+            <summary>{{ t('routing.debugInfo') }}</summary>
             <div class="debug-row">
-                <span>请求状态：</span><span>{{ debugInfo.status }}</span>
+                <span>{{ t('routing.requestStatus') }}</span><span>{{ debugInfo.status }}</span>
             </div>
             <div class="debug-row">
-                <span>resultCode：</span><span>{{ debugInfo.resultCode || '-' }}</span>
+                <span>{{ t('routing.resultCode') }}</span><span>{{ debugInfo.resultCode || '-' }}</span>
             </div>
             <div class="debug-row">
-                <span>分组数量：</span><span>{{ debugInfo.groupCount }}</span>
+                <span>{{ t('routing.groupCount') }}</span><span>{{ debugInfo.groupCount }}</span>
             </div>
             <div class="debug-row">
-                <span>线路数量：</span><span>{{ debugInfo.lineCount }}</span>
+                <span>{{ t('routing.lineCount') }}</span><span>{{ debugInfo.lineCount }}</span>
             </div>
             <div class="debug-row">
-                <span>请求URL：</span
-                ><span class="debug-text">{{ debugInfo.requestUrl || '未发起请求' }}</span>
+                <span>{{ t('routing.requestUrl') }}</span
+                ><span class="debug-text">{{ debugInfo.requestUrl || t('routing.noRequestYet') }}</span>
             </div>
             <div class="debug-row">
-                <span>响应结构：</span
+                <span>{{ t('routing.responseShape') }}</span
                 ><span class="debug-text">{{ debugInfo.responseShape || '-' }}</span>
             </div>
             <div class="debug-row">
-                <span>候选数量：</span><span>{{ debugInfo.candidateCount }}</span>
+                <span>{{ t('routing.candidateCount') }}</span><span>{{ debugInfo.candidateCount }}</span>
             </div>
             <div class="debug-row">
-                <span>提示：</span><span class="debug-text">{{ debugInfo.message || '-' }}</span>
+                <span>{{ t('routing.hint') }}</span><span class="debug-text">{{ debugInfo.message || '-' }}</span>
             </div>
         </details>
 
@@ -107,13 +112,13 @@
             <aside
                 class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"
             >
-                <div class="route-title">候选路线</div>
+                <div class="route-title">{{ t('routing.candidateRoutes') }}</div>
 
                 <div
                     v-if="routes.length === 0"
                     class="text-xs text-emerald-700/60 leading-5"
                 >
-                    先在主地图设置起终点并点击开始公交规划
+                    {{ t('routing.busEmpty') }}
                 </div>
 
                 <button
@@ -126,11 +131,11 @@
                 >
                     <div class="route-head">
                         <div class="route-name">{{ route.lineName }}</div>
-                        <span class="route-tag">方案 {{ idx + 1 }}</span>
+                        <span class="route-tag">{{ t('routing.planIndex', { n: idx + 1 }) }}</span>
                     </div>
                     <div class="route-meta">
-                        <span>时长：{{ route.time }} 分钟</span>
-                        <span>里程：{{ route.distanceText }}</span>
+                        <span>{{ t('routing.durationLabel', { text: t('routing.durationMinutes', { n: route.time }) }) }}</span>
+                        <span>{{ t('routing.mileage', { text: route.distanceText }) }}</span>
                     </div>
                 </button>
             </aside>
@@ -138,13 +143,13 @@
             <aside
                 class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"
             >
-                <div class="route-title">导航步骤</div>
+                <div class="route-title">{{ t('routing.navSteps') }}</div>
 
                 <div
                     v-if="!selectedRoute"
                     class="text-xs text-emerald-700/60 leading-5"
                 >
-                    选择一个候选方案后，可查看每个分段的起点、终点和路段名称
+                    {{ t('routing.busSelectPlanHint') }}
                 </div>
 
                 <button
@@ -158,14 +163,14 @@
                     @click="handleSelectStep(stepIndex)"
                 >
                     <div class="step-head">
-                        <span class="step-tag">步骤 {{ stepIndex + 1 }}</span>
+                        <span class="step-tag">{{ t('routing.stepIndex', { n: stepIndex + 1 }) }}</span>
                         <span class="step-distance">{{ step.distanceText }}</span>
                     </div>
                     <div class="step-line">{{ step.segmentName }}</div>
                     <div class="step-stations">{{ step.startName }} -> {{ step.endName }}</div>
                     <div class="step-meta">
                         <span>{{ step.modeText }}</span>
-                        <span>{{ step.time }} 分钟</span>
+                        <span>{{ t('routing.durationMinutes', { n: step.time }) }}</span>
                     </div>
                 </button>
 
@@ -175,7 +180,7 @@
                     "
                     class="text-xs text-emerald-700/60 leading-5"
                 >
-                    当前方案未返回可展示的分段步骤
+                    {{ t('routing.busNoSegmentSteps') }}
                 </div>
             </aside>
         </div>
@@ -186,11 +191,13 @@
 import { computed, ref } from 'vue';
 import MapPointPickerCard from './MapPointPickerCard.vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { locationToAddress } from '../../api';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
 import { formatDistanceMeasure } from '../../utils/units';
 
 const message = useMessage();
+const { t } = useLocale();
 
 interface TransitStation {
     name: string;
@@ -308,18 +315,18 @@ function resolveStationName(
     const normalized = String(name || '').trim();
     if (normalized) return normalized;
 
-    if (type === 'start' && index === 0) return '起点';
-    if (type === 'end' && index === total - 1) return '终点';
-    return '途经点';
+    if (type === 'start' && index === 0) return t('routing.start');
+    if (type === 'end' && index === total - 1) return t('routing.end');
+    return t('routing.via');
 }
 
 function getSegmentDisplayName(segment: TransitSegment, stepIndex: number): string {
     const _firstLine = Array.isArray(segment?.segmentLine) ? segment.segmentLine[0] : undefined;
     const lineName = String(_firstLine?.lineName || '').trim();
     if (Number(segment?.segmentType ?? 0) === 1) {
-        return lineName || '步行';
+        return lineName || t('routing.walk');
     }
-    return lineName || `公交段 ${stepIndex + 1}`;
+    return lineName || t('routing.busSegment', { n: stepIndex + 1 });
 }
 
 function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
@@ -341,11 +348,8 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
         const lineName =
             String(item?.lineName || '')
                 .replace(/\s*\|\s*$/, '')
-                .trim() || `方案 ${idx + 1}`;
+                .trim() || t('routing.planIndex', { n: idx + 1 });
         const steps: StepInfo[] = segmentList.map((segment, segmentIndex) => {
-            const _firstLine = Array.isArray(segment?.segmentLine)
-                ? segment.segmentLine[0]
-                : undefined;
             const metrics = parseSegmentMetrics(segment);
             const segmentType = Number(segment?.segmentType ?? 0);
             const startName = resolveStationName(
@@ -365,7 +369,7 @@ function normalizeTransitResults(raw: TransitLine[]): RouteCandidate[] {
             return {
                 index: segmentIndex,
                 segmentType,
-                modeText: segmentType === 1 ? '步行' : '公交',
+                modeText: segmentType === 1 ? t('routing.walk') : t('routing.transitMode'),
                 segmentName,
                 startName,
                 endName,
@@ -402,7 +406,7 @@ function extractLinesFromTransitResponse(data: TransitResponse) {
 
 async function enablePick(type: 'start' | 'end') {
     if (!props.startBusPointPick) {
-        errorMsg.value = '主地图未就绪，无法选点';
+        errorMsg.value = t('routing.mapNotReady');
         return;
     }
 
@@ -434,7 +438,7 @@ async function enablePick(type: 'start' | 'end') {
             }
         }
     } catch (err: any) {
-        errorMsg.value = err?.message || '地图选点失败';
+        errorMsg.value = err?.message || t('routing.mapPickFailed');
     } finally {
         pickMode.value = '';
     }
@@ -461,7 +465,7 @@ async function handleSelectRoute(route: RouteCandidate, idx: number) {
     try {
         await props.drawRouteOnMap(route);
     } catch (err: any) {
-        errorMsg.value = err?.message || '路线绘制失败';
+        errorMsg.value = err?.message || t('routing.drawRouteFailed');
     }
 }
 
@@ -475,7 +479,7 @@ async function handleSelectStep(stepIndex: number) {
         if (!props.zoomToBusRouteStep) return;
         await props.zoomToBusRouteStep(stepIndex);
     } catch (err: any) {
-        errorMsg.value = err?.message || `无法定位步骤 ${stepIndex + 1}`;
+        errorMsg.value = err?.message || t('routing.stepLocateFailed');
     }
 }
 
@@ -499,12 +503,12 @@ async function clearStepPreview() {
 
 async function startTransitPlan() {
     if (!startPoint.value || !endPoint.value) {
-        errorMsg.value = '请先设置起点和终点';
+        errorMsg.value = t('routing.needStartEnd');
         return;
     }
 
     planning.value = true;
-    showLoading('正在规划公交路线...');
+    showLoading(t('loading.busRoute'));
     errorMsg.value = '';
     debugInfo.value = {
         status: 'requesting',
@@ -520,7 +524,7 @@ async function startTransitPlan() {
     try {
         const tk = String(props.token || '').trim();
         if (!tk) {
-            throw new Error('天地图 Token 未配置。请在「设置」→「API 密钥管理」中添加 tianditu_tk，或确认后端服务已启动。');
+            throw new Error(t('routing.tokenMissing'));
         }
 
         const postObj = {
@@ -536,7 +540,7 @@ async function startTransitPlan() {
         const res = await fetch(requestUrl, { method: 'GET' });
         debugInfo.value.status = `http ${res.status}`;
         if (!res.ok) {
-            throw new Error(`公交规划请求失败: ${res.status}`);
+            throw new Error(t('routing.busRequestFailed', { status: res.status }));
         }
 
         const data = (await res.json()) as TransitResponse;
@@ -563,7 +567,7 @@ async function startTransitPlan() {
         }
 
         if (!normalized.length) {
-            errorMsg.value = '未查询到可用公交方案';
+            errorMsg.value = t('routing.busNoPlan');
             debugInfo.value.status = 'empty';
             if (Number(data?.resultCode) !== 0) {
                 debugInfo.value.message = `resultCode=${data?.resultCode}`;
@@ -572,19 +576,18 @@ async function startTransitPlan() {
     } catch (err: any) {
         const rawMessage = err?.message || '';
         const isNetworkError = /failed\s+to\s+fetch/i.test(String(rawMessage));
-        const hint = isNetworkError
-            ? '网络请求被浏览器拦截或跨域失败。请确认：1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；3) 浏览器控制台无 Mixed Content/CORS 报错。'
-            : '';
+        const hint = isNetworkError ? t('routing.networkBlocked') : '';
         if (!isNetworkError) {
-            console.error('[公交规划] 错误详情:', err);
+            console.error('[BusPlanner] error:', err);
         }
-        errorMsg.value = hint || rawMessage || '公交规划失败';
+        const failText = hint || rawMessage || t('routing.busPlanFailed');
+        errorMsg.value = failText;
         routes.value = [];
         selectedRouteIndex.value = -1;
         selectedStepIndex.value = -1;
         debugInfo.value.status = 'error';
-        debugInfo.value.message = hint || rawMessage || '公交规划失败';
-        message.error('[BusPlanner Debug] 规划失败:', err);
+        debugInfo.value.message = failText;
+        message.error(failText);
     } finally {
         planning.value = false;
         hideLoading();

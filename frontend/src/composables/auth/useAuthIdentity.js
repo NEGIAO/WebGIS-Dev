@@ -27,20 +27,30 @@ export function isValidPassword(value) {
     return PASSWORD_REGEX.test(String(value || ''));
 }
 
+/**
+ * 校验展示昵称。返回 i18n 键 path（code），由调用方 t(code) 渲染，避免硬编码文案。
+ * @param {unknown} value
+ * @returns {{ valid: true, value: string, code?: undefined } | { valid: false, code: string, value?: undefined }}
+ */
 export function validateDisplayName(value) {
     const normalized = normalizeDisplayName(value);
     if (!normalized) {
-        return { valid: false, message: '请填写昵称' };
+        return { valid: false, code: 'auth.displayNameRequired' };
     }
     if (normalized.length > 40) {
-        return { valid: false, message: '昵称长度不能超过 40 个字符' };
+        return { valid: false, code: 'auth.displayNameTooLong' };
     }
     if (hasControlCharacter(normalized)) {
-        return { valid: false, message: '昵称不能包含控制字符' };
+        return { valid: false, code: 'auth.displayNameControlChars' };
     }
-    return { valid: true, value: normalized, message: '' };
+    return { valid: true, value: normalized };
 }
 
+/**
+ * 取用户展示名；无则返回空串，由 UI 侧 t('common.user') 兜底。
+ * @param {object|null|undefined} user
+ * @returns {string}
+ */
 export function getUserDisplayName(user) {
-    return String(user?.display_name || user?.username || user?.email || '用户').trim();
+    return String(user?.display_name || user?.username || user?.email || '').trim();
 }

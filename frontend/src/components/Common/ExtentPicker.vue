@@ -29,7 +29,7 @@
                 @click="startPick"
             >
                 <Crosshair :size="12" />
-                {{ picking ? '框选中...' : hasExtent ? '重新框选' : '开始框选' }}
+                {{ picking ? t('extent.picking') : hasExtent ? t('extent.pickAgain') : t('extent.pickStart') }}
             </button>
             <button
                 class="extent-btn view-btn"
@@ -38,7 +38,7 @@
                 @click="getMapViewExtent"
             >
                 <Eye :size="12" />
-                当前视图
+                {{ t('extent.currentView') }}
             </button>
             <button
                 v-if="hasExtent"
@@ -48,18 +48,18 @@
                 @click="clearExtent"
             >
                 <Eraser :size="12" />
-                清除
+                {{ t('extent.clear') }}
             </button>
         </div>
         <div class="extent-hint">
             <template v-if="picking">
-                <span class="hint-picking">🔲 在地图上拖拽矩形框选范围</span>
+                <span class="hint-picking">{{ t('extent.hintPicking') }}</span>
             </template>
             <template v-else-if="hasExtent">
                 <span class="hint-success">✓ {{ extentLabel }}</span>
             </template>
             <template v-else>
-                <span class="hint-muted">拖拽框选或点击"当前视图"获取范围</span>
+                <span class="hint-muted">{{ t('extent.hintIdle') }}</span>
             </template>
         </div>
     </div>
@@ -75,6 +75,9 @@ import Feature from 'ol/Feature';
 import { Style, Stroke, Fill } from 'ol/style';
 import { Crosshair, Eraser, Eye } from 'lucide-vue-next';
 import { formatCoordinateValue } from '../../utils/coordinateFormatter';
+import { useLocale } from '../../composables/useLocale';
+
+const { t } = useLocale();
 
 const props = defineProps({
     /** 框选完成后是否保留蓝色覆盖层（默认 true，所有场景都显示） */

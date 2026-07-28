@@ -1,9 +1,10 @@
 /**
  * weatherUtils.js
  * 天气面板纯工具函数集合
- * - 无副作用、无 Vue 依赖、无 API 调用
- * - 所有函数均为纯函数，可独立单测
+ * - 无 Vue 组件副作用、无 API 调用
+ * - 展示文案可走 translate（星期标签）
  */
+import { translate as t } from '../../composables/useLocale.js';
 
 /* ------------------------------------------------------------------ */
 /*  常量映射表                                                          */
@@ -35,7 +36,7 @@ export const WEATHER_ICON_MAP = {
 };
 
 /**
- * 星期数字 → 中文标签映射
+ * 星期数字 → 中文标签映射（静态兜底；展示优先走 formatWeekLabel → weather.weekdays.*）
  * @type {Record<string, string>}
  */
 export const WEEK_LABEL_MAP = {
@@ -103,14 +104,19 @@ export function normalizeWindPower(value) {
 }
 
 /**
- * 格式化星期标签（数字/文本 → 中文星期）
+ * 格式化星期标签（数字/文本 → 本地化星期）
+ * 优先 `weather.weekdays.{n}`；缺失时回退 WEEK_LABEL_MAP。
  *
  * @param {string|number|null|undefined} weekValue 星期值（1-7 或文本）
- * @returns {string} 中文星期标签，无效值返回 '--'
+ * @returns {string} 星期标签，无效值返回 '--'
  */
 export function formatWeekLabel(weekValue) {
     const text = String(weekValue || '').trim();
     if (!text) return '--';
+    if (/^[1-7]$/.test(text)) {
+        const localized = t(`weather.weekdays.${text}`);
+        if (localized && localized !== `weather.weekdays.${text}`) return localized;
+    }
     return WEEK_LABEL_MAP[text] || text;
 }
 

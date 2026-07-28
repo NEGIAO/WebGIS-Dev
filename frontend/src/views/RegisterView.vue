@@ -8,7 +8,24 @@
                     </div>
                     <div class="brand-text">
                         <h1 class="form-title">NEGIAO's WebGIS</h1>
-                        <p class="app-purpose-title">地理空间数据可视化与在线 WebGIS 平台</p>
+                        <p class="app-purpose-title">{{ t('auth.appPurpose') }}</p>
+                    </div>
+                    <div
+                        class="lang-toggle"
+                        role="group"
+                        :aria-label="t('preferences.language')"
+                    >
+                        <button
+                            v-for="option in LANGUAGE_OPTIONS"
+                            :key="option.value"
+                            type="button"
+                            class="lang-btn"
+                            :class="{ active: language === option.value }"
+                            :aria-pressed="language === option.value"
+                            @click="switchLanguage(option.value)"
+                        >
+                            {{ option.label }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -17,7 +34,7 @@
                 <div
                     class="mode-switch"
                     role="tablist"
-                    aria-label="登录或注册"
+                    :aria-label="t('auth.modeSwitchAria')"
                 >
                     <button
                         type="button"
@@ -25,7 +42,7 @@
                         :class="{ active: mode === 'login' }"
                         @click="switchMode('login')"
                     >
-                        登录
+                        {{ t('auth.login') }}
                     </button>
                     <button
                         type="button"
@@ -33,7 +50,7 @@
                         :class="{ active: mode === 'register' }"
                         @click="switchMode('register')"
                     >
-                        注册
+                        {{ t('auth.register') }}
                     </button>
                 </div>
 
@@ -47,7 +64,7 @@
                         @click="handleOAuthLogin('google')"
                     >
                         <i class="fab fa-google"></i>
-                        使用 Google 继续
+                        {{ t('auth.loginWithGoogle') }}
                     </button>
                     <button
                         type="button"
@@ -55,10 +72,10 @@
                         @click="handleOAuthLogin('github')"
                     >
                         <i class="fab fa-github"></i>
-                        使用 GitHub 继续
+                        {{ t('auth.loginWithGithub') }}
                     </button>
                     <div class="oauth-divider">
-                        <span>或使用邮箱账号</span>
+                        <span>{{ t('auth.orUseEmail') }}</span>
                     </div>
                 </div>
 
@@ -67,7 +84,7 @@
                     @submit.prevent="handleSubmit"
                 >
                     <div class="form-group">
-                        <label for="username">{{ mode === 'login' ? '邮箱账号' : '昵称' }}</label>
+                        <label for="username">{{ mode === 'login' ? t('auth.usernameLogin') : t('auth.username') }}</label>
                         <div class="input-group">
                             <i
                                 class="icon fas"
@@ -78,8 +95,8 @@
                                 v-model="username"
                                 type="text"
                                 :placeholder="mode === 'login'
-                                        ? '请输入邮箱（旧用户可暂用原用户名）'
-                                        : '请输入昵称，1-40个字符'
+                                        ? t('auth.usernamePlaceholderLogin')
+                                        : t('auth.usernamePlaceholderRegister')
                                     "
                                 :required="mode === 'register'"
                             />
@@ -89,26 +106,26 @@
                             class="hint"
                         >
                             <i class="fas fa-info-circle"></i>
-                            新账号使用邮箱登录；旧账号会引导绑定邮箱
+                            {{ t('auth.newAccountNote') }}
                         </div>
                         <div
                             v-else
                             class="hint"
                         >
                             <i class="fas fa-user-plus"></i>
-                            昵称用于展示，可重复，后续可在账号中心修改
+                            {{ t('auth.nicknameNote') }}
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="password">密码</label>
+                        <label for="password">{{ t('auth.password') }}</label>
                         <div class="input-group">
                             <i class="icon fas fa-lock"></i>
                             <input
                                 id="password"
                                 v-model="password"
                                 type="password"
-                                :placeholder="mode === 'login' ? '请输入密码' : '6-64位，至少包含字母和数字'
+                                :placeholder="mode === 'login' ? t('auth.passwordPlaceholderLogin') : t('auth.passwordPlaceholderRegister')
                                     "
                                 required
                             />
@@ -118,14 +135,14 @@
                             class="hint"
                         >
                             <i class="fas fa-shield-alt"></i>
-                            游客默认一键登陆，无需密码，注册用户请使用注册时设置的密码登录
+                            {{ t('auth.guestNote') }}
                         </div>
                         <div
                             v-else
                             class="hint"
                         >
                             <i class="fas fa-shield-alt"></i>
-                            注册密码必须包含字母和数字
+                            {{ t('auth.passwordRuleNote') }}
                         </div>
                     </div>
 
@@ -133,14 +150,14 @@
                         v-if="mode === 'register'"
                         class="form-group"
                     >
-                        <label for="confirmPassword">确认密码</label>
+                        <label for="confirmPassword">{{ t('auth.confirmPassword') }}</label>
                         <div class="input-group">
                             <i class="icon fas fa-check-circle"></i>
                             <input
                                 id="confirmPassword"
                                 v-model="confirmPassword"
                                 type="password"
-                                placeholder="再次输入密码"
+                                :placeholder="t('auth.confirmPasswordPlaceholder')"
                                 required
                             />
                         </div>
@@ -151,14 +168,14 @@
                         v-if="mode === 'register'"
                         class="form-group"
                     >
-                        <label for="email">邮箱账号</label>
+                        <label for="email">{{ t('auth.email') }}</label>
                         <div class="input-group">
                             <i class="icon fas fa-envelope"></i>
                             <input
                                 id="email"
                                 v-model="email"
                                 type="email"
-                                placeholder="请输入邮箱地址"
+                                :placeholder="t('auth.emailPlaceholder')"
                                 required
                             />
                         </div>
@@ -182,7 +199,7 @@
                         v-if="mode === 'register'"
                         class="form-group"
                     >
-                        <label for="emailCode">邮箱验证码</label>
+                        <label for="emailCode">{{ t('auth.emailCode') }}</label>
                         <div class="email-code-row">
                             <div class="input-group email-code-input">
                                 <i class="icon fas fa-shield-alt"></i>
@@ -193,7 +210,7 @@
                                     inputmode="numeric"
                                     pattern="[0-9]*"
                                     maxlength="6"
-                                    placeholder="6位验证码"
+                                    :placeholder="t('auth.emailCodePlaceholder')"
                                     :disabled="emailVerified"
                                 />
                             </div>
@@ -208,7 +225,7 @@
                                     class="fas"
                                     :class="isSendingCode ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
                                 ></i>
-                                {{ codeCountdown > 0 ? `${codeCountdown}s` : '发送验证码' }}
+                                {{ codeCountdown > 0 ? t('auth.codeCountdown', { count: codeCountdown }) : t('auth.sendCode') }}
                             </button>
                             <button
                                 v-if="!emailVerified && emailCode.length === 6"
@@ -221,13 +238,13 @@
                                     class="fas"
                                     :class="isVerifyingCode ? 'fa-spinner fa-spin' : 'fa-check'"
                                 ></i>
-                                验证
+                                {{ t('auth.verify') }}
                             </button>
                             <span
                                 v-if="emailVerified"
                                 class="verified-badge"
                             >
-                                <i class="fas fa-check-circle"></i> 已验证
+                                <i class="fas fa-check-circle"></i> {{ t('auth.verified') }}
                             </span>
                         </div>
                     </div>
@@ -236,11 +253,11 @@
                         v-if="mode === 'register'"
                         class="form-group"
                     >
-                        <label>选择头像</label>
+                        <label>{{ t('auth.selectAvatar') }}</label>
                         <div
                             class="avatar-grid"
                             role="radiogroup"
-                            aria-label="注册头像选择"
+                            :aria-label="t('auth.avatarGroupAria')"
                         >
                             <button
                                 v-for="avatar in avatarOptions"
@@ -272,7 +289,7 @@
                             @click="quickGuestLogin"
                         >
                             <i class="fas fa-person-hiking"></i>
-                            游客一键登陆
+                            {{ t('auth.guestLogin') }}
                         </button>
                         <button
                             type="button"
@@ -281,7 +298,7 @@
                             @click="handleSubmit"
                         >
                             <i class="fas fa-sign-in-alt"></i>
-                            {{ isSubmitting ? '处理中...' : '确认登陆' }}
+                            {{ isSubmitting ? t('auth.submitting') : t('auth.confirmLogin') }}
                         </button>
                     </div>
 
@@ -296,7 +313,7 @@
                             @click.prevent="openResetPanel"
                         >
                             <i class="fas fa-key"></i>
-                            忘记密码？
+                            {{ t('auth.forgotPassword') }}
                         </a>
                     </div>
 
@@ -313,23 +330,23 @@
                         class="btn"
                         :disabled="isSubmitting"
                     >
-                        {{ isSubmitting ? '处理中...' : '创建账号' }}
+                        {{ isSubmitting ? t('auth.submitting') : t('auth.createAccount') }}
                     </button>
 
                     <div class="login-link">
                         <template v-if="mode === 'login'">
-                            还没有账号？
+                            {{ t('auth.noAccount') }}
                             <a
                                 href="#"
                                 @click.prevent="switchMode('register')"
-                            >立即注册</a>
+                            >{{ t('auth.registerNow') }}</a>
                         </template>
                         <template v-else>
-                            已有账号？
+                            {{ t('auth.hasAccount') }}
                             <a
                                 href="#"
                                 @click.prevent="switchMode('login')"
-                            >返回登录</a>
+                            >{{ t('auth.backToLogin') }}</a>
                         </template>
                     </div>
                 </form>
@@ -342,27 +359,27 @@
                     <div class="bind-alert">
                         <i class="fas fa-envelope-circle-check"></i>
                         <div>
-                            <strong>需要绑定邮箱</strong>
-                            <p>你的旧账号已通过密码校验。绑定邮箱后，后续将使用邮箱进行登录、密码重置和身份验证。</p>
+                            <strong>{{ t('auth.bindEmailTitle') }}</strong>
+                            <p>{{ t('auth.bindEmailDesc') }}</p>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="bindEmail">绑定邮箱</label>
+                        <label for="bindEmail">{{ t('auth.bindEmail') }}</label>
                         <div class="input-group">
                             <i class="icon fas fa-envelope"></i>
                             <input
                                 id="bindEmail"
                                 v-model="bindEmail"
                                 type="email"
-                                placeholder="请输入邮箱地址"
+                                :placeholder="t('auth.emailPlaceholder')"
                                 required
                             />
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="bindCode">邮箱验证码</label>
+                        <label for="bindCode">{{ t('auth.emailCode') }}</label>
                         <div class="email-code-row">
                             <div class="input-group email-code-input">
                                 <i class="icon fas fa-shield-alt"></i>
@@ -373,7 +390,7 @@
                                     inputmode="numeric"
                                     pattern="[0-9]*"
                                     maxlength="6"
-                                    placeholder="6位验证码"
+                                    :placeholder="t('auth.emailCodePlaceholder')"
                                 />
                             </div>
                             <button
@@ -386,20 +403,20 @@
                                     class="fas"
                                     :class="isBindingCodeSending ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
                                 ></i>
-                                {{ bindCodeCountdown > 0 ? `${bindCodeCountdown}s` : '发送验证码' }}
+                                {{ bindCodeCountdown > 0 ? t('auth.codeCountdown', { count: bindCodeCountdown }) : t('auth.sendCode') }}
                             </button>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label for="bindPassword">当前密码</label>
+                        <label for="bindPassword">{{ t('auth.currentPassword') }}</label>
                         <div class="input-group">
                             <i class="icon fas fa-lock"></i>
                             <input
                                 id="bindPassword"
                                 v-model="bindCurrentPassword"
                                 type="password"
-                                placeholder="请输入当前账号密码"
+                                :placeholder="t('auth.currentPasswordPlaceholder')"
                                 required
                             />
                         </div>
@@ -417,14 +434,14 @@
                         class="btn"
                         :disabled="isSubmitting"
                     >
-                        {{ isSubmitting ? '绑定中...' : '绑定邮箱并进入系统' }}
+                        {{ isSubmitting ? t('auth.binding') : t('auth.bindEmailAndEnter') }}
                     </button>
 
                     <div class="login-link">
                         <a
                             href="#"
                             @click.prevent="cancelBinding"
-                        >返回登录</a>
+                        >{{ t('auth.backToLogin') }}</a>
                     </div>
                 </form>
             </div>
@@ -436,7 +453,7 @@
             >
                 <div class="reset-panel">
                     <div class="reset-header">
-                        <h3><i class="fas fa-unlock-alt"></i> 密码重置</h3>
+                        <h3><i class="fas fa-unlock-alt"></i> {{ t('auth.resetPasswordTitle') }}</h3>
                         <button
                             type="button"
                             class="reset-close"
@@ -451,13 +468,13 @@
                         v-if="resetStep === 1"
                         class="reset-body"
                     >
-                        <p class="reset-desc">请输入您注册时绑定的邮箱，我们将发送验证码</p>
+                        <p class="reset-desc">{{ t('auth.resetStep1Desc') }}</p>
                         <div class="input-group">
                             <i class="icon fas fa-envelope"></i>
                             <input
                                 v-model="resetEmail"
                                 type="email"
-                                placeholder="请输入绑定的邮箱地址"
+                                :placeholder="t('auth.resetEmailPlaceholder')"
                             />
                         </div>
                         <button
@@ -470,7 +487,7 @@
                                 class="fas"
                                 :class="isResetSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
                             ></i>
-                            {{ isResetSubmitting ? '发送中...' : '发送验证码' }}
+                            {{ isResetSubmitting ? t('auth.sendingCode') : t('auth.sendCode') }}
                         </button>
                     </div>
 
@@ -480,7 +497,7 @@
                         class="reset-body"
                     >
                         <p class="reset-desc">
-                            验证码已发送至 <strong>{{ resetEmail }}</strong>
+                            {{ t('auth.resetCodeSentTo') }} <strong>{{ resetEmail }}</strong>
                         </p>
                         <div class="input-group">
                             <i class="icon fas fa-shield-alt"></i>
@@ -490,7 +507,7 @@
                                 inputmode="numeric"
                                 pattern="[0-9]*"
                                 maxlength="6"
-                                placeholder="6位验证码"
+                                :placeholder="t('auth.emailCodePlaceholder')"
                             />
                         </div>
                         <div class="input-group">
@@ -498,7 +515,7 @@
                             <input
                                 v-model="resetNewPassword"
                                 type="password"
-                                placeholder="新密码（6-64位，含字母和数字）"
+                                :placeholder="t('auth.resetNewPasswordPlaceholder')"
                             />
                         </div>
                         <div class="input-group">
@@ -506,7 +523,7 @@
                             <input
                                 v-model="resetConfirmPassword"
                                 type="password"
-                                placeholder="再次输入新密码"
+                                :placeholder="t('auth.resetConfirmPasswordPlaceholder')"
                             />
                         </div>
                         <button
@@ -519,7 +536,7 @@
                                 class="fas"
                                 :class="isResetSubmitting ? 'fa-spinner fa-spin' : 'fa-check'"
                             ></i>
-                            {{ isResetSubmitting ? '提交中...' : '重置密码' }}
+                            {{ isResetSubmitting ? t('auth.submitting') : t('auth.resetPasswordAction') }}
                         </button>
                         <button
                             v-if="resetCodeSent && resetCodeCountdown <= 0"
@@ -527,20 +544,20 @@
                             class="resend-btn"
                             @click="handleResetSendCode"
                         >
-                            重新发送验证码
+                            {{ t('auth.resendCode') }}
                         </button>
                         <span
                             v-if="resetCodeCountdown > 0"
                             class="countdown-text"
                         >
-                            {{ resetCodeCountdown }}s 后可重新发送
+                            {{ t('auth.resetCountdownWait', { count: resetCodeCountdown }) }}
                         </span>
                     </div>
                 </div>
             </div>
 
             <div class="form-footer">
-                登录即表示您同意我们的 <router-link to="/terms">服务条款</router-link> 和 <router-link to="/privacy">隐私政策</router-link>
+                {{ t('auth.agreeToTerms') }} <router-link to="/terms">{{ t('auth.termsOfService') }}</router-link> {{ t('auth.and') }} <router-link to="/privacy">{{ t('auth.privacyPolicy') }}</router-link>
             </div>
         </div>
     </div>
@@ -550,6 +567,9 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '../composables/useMessage';
+import { useLocale } from '../composables/useLocale';
+import { useUserPreferencesStore } from '../stores';
+import { GOOGLE_OAUTH_CLIENT_ID } from '../config/publicRuntime';
 import {
     apiAuthGoogleOneTap,
     apiAuthLogin,
@@ -585,6 +605,20 @@ import {
 const router = useRouter();
 const route = useRoute();
 const message = useMessage();
+const { t, language } = useLocale();
+const userPreferencesStore = useUserPreferencesStore();
+
+// 语言切换器标签用固定文案（各自母语书写），不依赖懒加载 i18n chunk
+const LANGUAGE_OPTIONS = Object.freeze([
+    { value: 'zh-CN', label: '中文' },
+    { value: 'en-US', label: 'EN' },
+]);
+
+/** 与账号中心偏好同一全局开关：本机 SSOT + 登录后回写远端 */
+function switchLanguage(nextLanguage) {
+    if (!nextLanguage || nextLanguage === language.value) return;
+    void userPreferencesStore.setLanguagePreference(nextLanguage);
+}
 
 const mode = ref('login');
 const username = ref('');
@@ -631,7 +665,7 @@ let resetCountdownTimer = null;
 const avatarOptions = computed(() => {
     return Array.from({ length: 12 }, (_, index) => ({
         index,
-        label: `头像 ${index + 1}`,
+        label: t('auth.avatarOption', { index: index + 1 }),
         src: resolvePublicAssetPath(`avatars/avatar-${index}.svg`),
     }));
 });
@@ -685,7 +719,7 @@ function _fillGuestAccount() {
     mode.value = 'login';
     username.value = 'user';
     password.value = '123';
-    setFormState('success', '已填入游客账号，请点击“登录系统”');
+    setFormState('success', t('auth.guestCredentialsFilled'));
 }
 async function quickGuestLogin() {
     isSubmitting.value = true;
@@ -703,19 +737,19 @@ async function quickGuestLogin() {
         const user = result?.user || null;
 
         if (!token || !user) {
-            throw new Error('游客登录响应异常，请稍后重试');
+            throw new Error(t('auth.guestLoginResponseError'));
         }
 
         setAuthSession({ token, user });
         syncUserRoleToUrl(user);
-        message.success(`游客登陆成功，欢迎使用！`);
+        message.success(t('auth.guestLoginSuccess'));
         await router.replace(resolveRedirectTarget());
         consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
             error?.message ||
-            '游客登陆失败，请稍后重试',
+            t('auth.guestLoginFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -728,7 +762,7 @@ async function handleLogin() {
     const normalizedPassword = String(password.value || '').trim();
 
     if (!normalizedPassword) {
-        setFormState('error', '请输入密码');
+        setFormState('error', t('auth.pleaseEnterPassword'));
         return;
     }
 
@@ -749,7 +783,7 @@ async function handleLogin() {
         const user = result?.user || null;
 
         if (!token || !user) {
-            throw new Error('登录响应异常，请稍后重试');
+            throw new Error(t('auth.loginResponseError'));
         }
 
         setAuthSession({ token, user });
@@ -757,19 +791,19 @@ async function handleLogin() {
         if (user?.requires_email_binding) {
             requiresEmailBinding.value = true;
             bindCurrentPassword.value = normalizedPassword;
-            setFormState('success', '旧账号验证成功，请绑定邮箱完成迁移');
-            message.warning('请先绑定邮箱后继续使用完整功能');
+            setFormState('success', t('auth.legacyVerifiedBindEmail'));
+            message.warning(t('auth.pleaseBindEmailFirst'));
             return;
         }
 
-        message.success(`登录成功，当前角色：${String(user.role || 'unknown')}`);
+        message.success(t('auth.loginSuccessWithRole', { role: String(user.role || 'unknown') }));
         await router.replace(resolveRedirectTarget());
         consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
             error?.message ||
-            '登录失败，请稍后重试',
+            t('auth.loginFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -785,27 +819,27 @@ async function handleRegister() {
     const normalizedEmail = normalizeEmail(email.value);
 
     if (!displayValidation.valid) {
-        setFormState('error', displayValidation.message);
+        setFormState('error', t(displayValidation.code));
         return;
     }
 
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
 
     if (!emailVerified.value) {
-        setFormState('error', '请先完成邮箱验证码验证');
+        setFormState('error', t('auth.pleaseVerifyEmailFirst'));
         return;
     }
 
     if (!isValidPassword(normalizedPassword)) {
-        setFormState('error', '密码需包含字母和数字，长度 6-64 位');
+        setFormState('error', t('auth.passwordRuleError'));
         return;
     }
 
     if (normalizedConfirmPassword !== normalizedPassword) {
-        setFormState('error', '两次输入的密码不一致');
+        setFormState('error', t('auth.passwordMismatch'));
         return;
     }
 
@@ -820,7 +854,7 @@ async function handleRegister() {
             display_name: displayValidation.value,
             avatar_index: selectedAvatarIndex.value,
         });
-        message.success('注册成功，请使用邮箱登录');
+        message.success(t('auth.registerSuccess'));
         username.value = '';
         password.value = '';
         confirmPassword.value = '';
@@ -829,12 +863,12 @@ async function handleRegister() {
         emailVerified.value = false;
         selectedAvatarIndex.value = 0;
         switchMode('login');
-        setFormState('success', '注册完成，请输入邮箱和密码登录');
+        setFormState('success', t('auth.registerComplete'));
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
             error?.message ||
-            '注册失败，请稍后重试',
+            t('auth.registerFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -900,28 +934,28 @@ function startBindCountdown() {
 async function handleSendCode() {
     const normalizedEmail = normalizeEmail(email.value);
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
     if (codeCountdown.value > 0) return;
 
     isSendingCode.value = true;
     emailCheckStatus.value = 'loading';
-    emailCheckMessage.value = '正在发送验证码...';
+    emailCheckMessage.value = t('auth.sendingCode');
     setFormState('', '');
 
     try {
         await apiAuthSendCode(normalizedEmail, 'register', normalizeDisplayName(username.value));
         emailCheckStatus.value = 'success';
-        emailCheckMessage.value = '验证码已发送，请查收邮箱';
-        message.success('验证码已发送至您的邮箱');
+        emailCheckMessage.value = t('auth.codeSentCheckInbox');
+        message.success(t('auth.codeSentToYourEmail'));
         startSendCountdown();
     } catch (error) {
         const isTimeout = error?.code === 'ECONNABORTED'
             || /timeout/i.test(String(error?.message || ''));
         const detail = String(
             error?.originalError?.response?.data?.detail ||
-            error?.message || '验证码发送失败，请稍后重试',
+            error?.message || t('auth.codeSendFailed'),
         );
 
         const isRateLimited = error?.isQuotaExceeded
@@ -931,11 +965,11 @@ async function handleSendCode() {
             // 超时或频率限制：后端可能已收到请求或需要等待，启动倒计时防止重复发送
             if (isRateLimited) {
                 emailCheckStatus.value = 'loading';
-                emailCheckMessage.value = detail || '发送过于频繁，请稍后再试';
-                message.warning(detail || '发送过于频繁，请稍后再试');
+                emailCheckMessage.value = detail || t('auth.tooFrequent');
+                message.warning(detail || t('auth.tooFrequent'));
             } else {
                 emailCheckStatus.value = 'loading';
-                emailCheckMessage.value = '请求超时，邮件可能正在发送中，请稍后查收邮箱';
+                emailCheckMessage.value = t('auth.timeoutMayBeSending');
             }
             startSendCountdown();
         } else {
@@ -956,11 +990,11 @@ async function handleVerifyCode() {
     const normalizedEmail = normalizeEmail(email.value);
     const code = String(emailCode.value || '').trim();
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
     if (!code || code.length !== 6) {
-        setFormState('error', '请输入 6 位验证码');
+        setFormState('error', t('auth.enter6DigitCode'));
         return;
     }
 
@@ -971,12 +1005,12 @@ async function handleVerifyCode() {
         await apiAuthVerifyCode(normalizedEmail, code, 'register');
         emailVerified.value = true;
         emailCheckStatus.value = 'success';
-        emailCheckMessage.value = '✅ 邮箱验证成功';
-        message.success('邮箱验证成功');
+        emailCheckMessage.value = '✅ ' + t('auth.emailVerifiedSuccess');
+        message.success(t('auth.emailVerifiedSuccess'));
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
-            error?.message || '验证码校验失败',
+            error?.message || t('auth.codeVerifyFailed'),
         );
         emailCheckStatus.value = 'error';
         emailCheckMessage.value = detail;
@@ -989,7 +1023,7 @@ async function handleVerifyCode() {
 async function handleBindSendCode() {
     const normalizedEmail = normalizeEmail(bindEmail.value);
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
     if (bindCodeCountdown.value > 0) return;
@@ -999,12 +1033,12 @@ async function handleBindSendCode() {
 
     try {
         await apiAuthSendCode(normalizedEmail, 'bind_email', getUserDisplayName(getStoredBindingUser()));
-        message.success('验证码已发送至您的邮箱');
+        message.success(t('auth.codeSentToYourEmail'));
         startBindCountdown();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
-            error?.message || '验证码发送失败，请稍后重试',
+            error?.message || t('auth.codeSendFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -1023,15 +1057,15 @@ async function handleBindEmailSubmit() {
     const currentPass = String(bindCurrentPassword.value || '').trim();
 
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
     if (!code || code.length !== 6) {
-        setFormState('error', '请输入 6 位验证码');
+        setFormState('error', t('auth.enter6DigitCode'));
         return;
     }
     if (!currentPass) {
-        setFormState('error', '请输入当前账号密码');
+        setFormState('error', t('auth.pleaseEnterCurrentPassword'));
         return;
     }
 
@@ -1043,19 +1077,19 @@ async function handleBindEmailSubmit() {
         const token = String(result?.token || '').trim();
         const user = result?.user || null;
         if (!token || !user) {
-            throw new Error('邮箱绑定响应异常，请稍后重试');
+            throw new Error(t('auth.emailBindResponseError'));
         }
 
         setAuthSession({ token, user });
         syncUserRoleToUrl(user);
         requiresEmailBinding.value = false;
-        message.success('邮箱绑定成功');
+        message.success(t('auth.emailBindSuccess'));
         await router.replace(resolveRedirectTarget());
         consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
-            error?.message || '邮箱绑定失败',
+            error?.message || t('auth.emailBindFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -1118,7 +1152,7 @@ function closeResetPanel() {
 async function handleResetSendCode() {
     const normalizedEmail = normalizeEmail(resetEmail.value);
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
     if (resetCodeCountdown.value > 0) return;
@@ -1128,7 +1162,7 @@ async function handleResetSendCode() {
 
     try {
         await apiAuthSendCode(normalizedEmail, 'reset_password');
-        message.success('验证码已发送至您的邮箱');
+        message.success(t('auth.codeSentToYourEmail'));
         resetStep.value = 2;
         resetCodeSent.value = true;
         startResetCountdown();
@@ -1137,7 +1171,7 @@ async function handleResetSendCode() {
             || /timeout/i.test(String(error?.message || ''));
         const detail = String(
             error?.originalError?.response?.data?.detail ||
-            error?.message || '验证码发送失败',
+            error?.message || t('auth.codeSendFailed'),
         );
 
         const isRateLimited = error?.isQuotaExceeded
@@ -1146,9 +1180,9 @@ async function handleResetSendCode() {
         if (isTimeout || isRateLimited) {
             // 超时或频率限制：后端可能已收到请求或需要等待，启动倒计时防止重复发送
             if (isRateLimited) {
-                message.warning(detail || '发送过于频繁，请稍后再试');
+                message.warning(detail || t('auth.tooFrequent'));
             } else {
-                message.warning('请求超时，邮件可能正在发送中，请稍后查收邮箱');
+                message.warning(t('auth.timeoutMayBeSending'));
             }
             resetStep.value = 2;
             resetCodeSent.value = true;
@@ -1172,19 +1206,19 @@ async function handleResetSubmit() {
     const confirmPass = String(resetConfirmPassword.value || '').trim();
 
     if (!isValidEmail(normalizedEmail)) {
-        setFormState('error', '请输入有效的邮箱地址');
+        setFormState('error', t('auth.invalidEmail'));
         return;
     }
     if (!code || code.length !== 6) {
-        setFormState('error', '请输入 6 位验证码');
+        setFormState('error', t('auth.enter6DigitCode'));
         return;
     }
     if (!isValidPassword(newPass)) {
-        setFormState('error', '新密码需包含字母和数字，长度 6-64 位');
+        setFormState('error', t('auth.newPasswordRuleError'));
         return;
     }
     if (newPass !== confirmPass) {
-        setFormState('error', '两次输入的密码不一致');
+        setFormState('error', t('auth.passwordMismatch'));
         return;
     }
 
@@ -1193,13 +1227,13 @@ async function handleResetSubmit() {
 
     try {
         await apiAuthResetPassword(normalizedEmail, code, newPass);
-        message.success('密码已重置，请使用新密码登录');
-        setFormState('success', '密码重置成功，请使用新密码登录');
+        message.success(t('auth.passwordResetSuccess'));
+        setFormState('success', t('auth.passwordResetSuccess'));
         closeResetPanel();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
-            error?.message || '密码重置失败',
+            error?.message || t('auth.passwordResetFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -1264,19 +1298,19 @@ async function handleGoogleOneTap(response) {
         const user = result?.user || null;
 
         if (!token || !user) {
-            throw new Error('Google 登录响应异常，请稍后重试');
+            throw new Error(t('auth.googleLoginResponseError'));
         }
 
         setAuthSession({ token, user });
         syncUserRoleToUrl(user);
-        message.success(`Google 登录成功，欢迎！`);
+        message.success(t('auth.googleLoginSuccess'));
         await router.replace(resolveRedirectTarget());
         consumePersistedPositionCode();
     } catch (error) {
         const detail = String(
             error?.originalError?.response?.data?.detail ||
             error?.message ||
-            'Google 登录失败，请稍后重试',
+            t('auth.googleLoginFailed'),
         );
         setFormState('error', detail);
         message.error(detail);
@@ -1295,7 +1329,7 @@ function initGoogleOneTap() {
         return;
     }
 
-    const clientId = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '';
+    const clientId = GOOGLE_OAUTH_CLIENT_ID;
     if (!clientId) {
         console.warn('[Google One Tap] 未配置 VITE_GOOGLE_OAUTH_CLIENT_ID，跳过初始化');
         return;
@@ -1342,7 +1376,7 @@ onMounted(async () => {
         const storedUser = getAuthUser();
         if (storedUser?.requires_email_binding) {
             requiresEmailBinding.value = true;
-            setFormState('success', '请先绑定邮箱以完成旧账号迁移');
+            setFormState('success', t('auth.pleaseBindEmailToMigrate'));
             return;
         }
 
@@ -1350,6 +1384,8 @@ onMounted(async () => {
         consumePersistedPositionCode();
         return;
     }
+
+    // 完整语言包由 main.js / setLanguage 预热；此处无需重复 load
 
     // 初始化 Google One Tap（仅在未登录时展示）
     initGoogleOneTap();
@@ -1483,6 +1519,48 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 12px;
+}
+
+.lang-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    flex-shrink: 0;
+}
+
+.lang-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 6px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.lang-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.lang-btn.active {
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--brand-primary-dark, #1f5d3a);
+}
+
+.lang-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.95);
+    outline-offset: 1px;
 }
 
 .brand-badge {
@@ -2198,6 +2276,20 @@ input:disabled {
     .form-header {
         padding: 12px 16px;
         padding-top: max(12px, env(safe-area-inset-top));
+    }
+
+    .brand-row {
+        gap: 8px;
+    }
+
+    .lang-toggle {
+        gap: 1px;
+        padding: 1px;
+    }
+
+    .lang-btn {
+        font-size: 10px;
+        padding: 5px 7px;
     }
 
     .brand-badge {

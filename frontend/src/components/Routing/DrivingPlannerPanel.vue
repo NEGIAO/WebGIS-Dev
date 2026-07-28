@@ -2,14 +2,14 @@
     <div class="drive-planner-panel">
         <div class="panel-head">
             <div>
-                <div class="title">驾车规划</div>
+                <div class="title">{{ t('routing.driveTitle') }}</div>
                 <div class="title-sub">Driving & Walking Routing</div>
             </div>
             <button
                 class="ghost-btn"
                 @click="$emit('close')"
             >
-                关闭
+                {{ t('routing.close') }}
             </button>
         </div>
 
@@ -21,12 +21,13 @@
             :end-address="destAddress"
             :tianditu-tk="token"
             theme="drive"
-            start-label="设置起点"
-            end-label="设置终点"
-            start-picking-text="请在地图单击起点..."
-            end-picking-text="请在地图单击终点..."
-            start-title="起点坐标"
-            end-title="终点坐标"
+            :start-label="t('routing.setStartShort')"
+            :end-label="t('routing.setEndShort')"
+            :start-picking-text="t('routing.startHint')"
+            :end-picking-text="t('routing.endHint')"
+            :start-title="t('routing.startPoint')"
+            :end-title="t('routing.endPoint')"
+            :search-placeholder="t('routing.searchPlaceholder')"
             @pick-start="pickPointOnMap('start')"
             @pick-end="pickPointOnMap('end')"
             @select-start-result="onSelectStartResult"
@@ -37,24 +38,24 @@
             <label
                 class="plan-label"
                 for="driveStyleSelect"
-                >路线策略</label
+                >{{ t('routing.driveStrategy') }}</label
             >
             <select
                 id="driveStyleSelect"
                 v-model="routeStyle"
                 class="plan-select"
             >
-                <option value="0">0 - 最快路线</option>
-                <option value="1">1 - 最短路线</option>
-                <option value="2">2 - 避开高速</option>
-                <option value="3">3 - 步行</option>
+                <option value="0">{{ t('routing.strategy.fastest') }}</option>
+                <option value="1">{{ t('routing.strategy.shortest') }}</option>
+                <option value="2">{{ t('routing.strategy.avoidHighway') }}</option>
+                <option value="3">{{ t('routing.strategy.walkMode') }}</option>
             </select>
             <button
                 class="plan-btn"
                 :disabled="isLoading"
                 @click="startDriveSearch"
             >
-                {{ isLoading ? '导航中...' : '开始导航' }}
+                {{ isLoading ? t('routing.navigating') : t('routing.startNav') }}
             </button>
         </div>
 
@@ -68,22 +69,22 @@
             v-else-if="pickMode === 'start'"
             class="status-line"
         >
-            请在主地图上单击一个位置设置起点
+            {{ t('routing.pickStartOnMap') }}
         </div>
         <div
             v-else-if="pickMode === 'end'"
             class="status-line"
         >
-            请在主地图上单击一个位置设置终点
+            {{ t('routing.pickEndOnMap') }}
         </div>
 
         <details class="debug-box">
-            <summary>调试信息</summary>
+            <summary>{{ t('routing.debugInfo') }}</summary>
             <div class="debug-row">
-                <span>请求状态：</span><span>{{ debug.status }}</span>
+                <span>{{ t('routing.requestStatus') }}</span><span>{{ debug.status }}</span>
             </div>
             <div class="debug-row">
-                <span>请求URL：</span><span class="debug-text">{{ debug.requestUrl || '-' }}</span>
+                <span>{{ t('routing.requestUrl') }}</span><span class="debug-text">{{ debug.requestUrl || '-' }}</span>
             </div>
             <div class="debug-row">
                 <span>distance：</span><span>{{ debug.rawDistance || '-' }}</span>
@@ -92,10 +93,10 @@
                 <span>duration：</span><span>{{ debug.rawDuration || '-' }}</span>
             </div>
             <div class="debug-row">
-                <span>steps数量：</span><span>{{ debug.stepCount }}</span>
+                <span>{{ t('routing.stepCount') }}</span><span>{{ debug.stepCount }}</span>
             </div>
             <div class="debug-row">
-                <span>提示：</span><span class="debug-text">{{ debug.message || '-' }}</span>
+                <span>{{ t('routing.hint') }}</span><span class="debug-text">{{ debug.message || '-' }}</span>
             </div>
         </details>
 
@@ -106,22 +107,22 @@
             <aside
                 class="w-full rounded-[10px] border border-black/10 bg-white p-2 overflow-y-auto"
             >
-                <div class="route-title">导航结果</div>
+                <div class="route-title">{{ t('routing.navResult') }}</div>
 
                 <div class="summary-grid">
                     <div class="summary-card">
-                        <div class="summary-label">总距离</div>
+                        <div class="summary-label">{{ t('routing.totalDistance') }}</div>
                         <div class="summary-value">{{ routeResult.distanceText }}</div>
                     </div>
                     <div class="summary-card">
-                        <div class="summary-label">总耗时</div>
+                        <div class="summary-label">{{ t('routing.totalDuration') }}</div>
                         <div class="summary-value">{{ routeResult.durationText }}</div>
                     </div>
                 </div>
 
                 <!-- <div class="route-line-raw">routelatlon: {{ routeResult.routelatlon || '无' }}</div> -->
 
-                <div class="route-title route-title-steps">导航步骤</div>
+                <div class="route-title route-title-steps">{{ t('routing.navSteps') }}</div>
                 <div
                     v-for="(step, index) in routeResult.steps"
                     :key="`${index}_${step.text.slice(0, 20)}`"
@@ -146,7 +147,7 @@
                     v-if="routeResult.steps.length === 0"
                     class="route-empty"
                 >
-                    暂无路线引导信息
+                    {{ t('routing.driveEmpty') }}
                 </div>
             </aside>
         </div>
@@ -159,7 +160,10 @@ import MapPointPickerCard from './MapPointPickerCard.vue';
 import { parseDriveRouteXml } from '../../utils/driveXmlParser';
 import { locationToAddress } from '../../api';
 import { showLoading, hideLoading } from '../../utils/ui/loading';
+import { useLocale } from '../../composables/useLocale';
 import { formatDistanceMeasure } from '../../utils/units';
+
+const { t } = useLocale();
 
 interface ParsedRouteResult {
     /** 带单位的距离展示文本（跟随用户偏好单位制） */
@@ -229,7 +233,7 @@ function parseCoord(value: string): number {
 
 async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
     if (!props.startMapPointPick) {
-        error.value = '主地图未就绪，无法选点';
+        error.value = t('routing.mapNotReady');
         return;
     }
 
@@ -240,7 +244,7 @@ async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
         const lng = Number(point?.lng);
         const lat = Number(point?.lat);
         if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
-            throw new Error('地图返回的坐标无效');
+            throw new Error(t('routing.invalidMapCoord'));
         }
 
         if (type === 'start') {
@@ -267,7 +271,7 @@ async function pickPointOnMap(type: 'start' | 'end'): Promise<void> {
             }
         }
     } catch (e) {
-        error.value = e instanceof Error ? e.message : '地图选点失败';
+        error.value = e instanceof Error ? e.message : t('routing.mapPickFailed');
     } finally {
         pickMode.value = '';
     }
@@ -299,13 +303,13 @@ function isValidLngLat(lng: number, lat: number): boolean {
 }
 
 function formatDuration(seconds: number): string {
-    if (!Number.isFinite(seconds) || seconds <= 0) return '0分钟';
+    if (!Number.isFinite(seconds) || seconds <= 0) return t('routing.duration.zeroMin');
     const totalMinutes = Math.round(seconds / 60);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    if (hours <= 0) return `${minutes}分钟`;
-    if (minutes <= 0) return `${hours}小时`;
-    return `${hours}小时${minutes}分钟`;
+    if (hours <= 0) return t('routing.duration.minutes', { n: minutes });
+    if (minutes <= 0) return t('routing.duration.hours', { n: hours });
+    return t('routing.duration.hoursMinutes', { h: hours, m: minutes });
 }
 
 async function handleSelectDriveStep(stepIndex: number): Promise<void> {
@@ -325,7 +329,7 @@ async function handleSelectDriveStep(stepIndex: number): Promise<void> {
         if (!props.zoomToDriveRouteStep) return;
         await props.zoomToDriveRouteStep(stepIndex);
     } catch (e) {
-        error.value = e instanceof Error ? e.message : '步骤定位失败';
+        error.value = e instanceof Error ? e.message : t('routing.stepLocateFailed');
     }
 }
 
@@ -358,12 +362,12 @@ async function startDriveSearch(): Promise<void> {
     const dLat = parseCoord(destPoint.lat);
 
     if (!isValidLngLat(oLng, oLat) || !isValidLngLat(dLng, dLat)) {
-        error.value = '请完整输入合法的起点和终点经纬度';
+        error.value = t('routing.needValidCoords');
         return;
     }
 
     isLoading.value = true;
-    showLoading('正在规划驾车路线...');
+    showLoading(t('loading.drivingRoute'));
     debug.status = 'requesting';
     debug.requestUrl = '';
     debug.rawDistance = '';
@@ -390,7 +394,7 @@ async function startDriveSearch(): Promise<void> {
         debug.status = `http ${response.status}`;
 
         if (!response.ok) {
-            throw new Error(`请求失败(${response.status})`);
+            throw new Error(t('routing.requestFailedStatus', { status: response.status }));
         }
 
         // 天地图 drive API 返回 XML，交给独立解析器处理。
@@ -436,7 +440,7 @@ async function startDriveSearch(): Promise<void> {
         debug.status = 'success';
 
         if (!steps.length) {
-            debug.message = '未解析到 steps，可检查 routes/item/strguide 是否存在';
+            debug.message = t('routing.noStepsParsed');
         }
 
         // 地图渲染（可能抛出错误，但不影响已解析的数据）
@@ -451,19 +455,12 @@ async function startDriveSearch(): Promise<void> {
         let message: string;
 
         if (e instanceof TokenMissingError) {
-            message =
-                '天地图 Token 未配置。请在「设置」→「API 密钥管理」中添加 tianditu_tk，' +
-                '或确认后端服务已启动。';
+            message = t('routing.tokenMissing');
         } else if (/failed\s+to\s+fetch/i.test(rawMessage)) {
-            // 真正的网络错误（fetch 本身失败，CORS/混合内容等）
-            message =
-                '网络请求被浏览器拦截或跨域失败。请确认：' +
-                '1) 部署站点使用 https；2) 天地图 token 已绑定当前域名；' +
-                '3) 浏览器控制台无 Mixed Content/CORS 报错。';
+            message = t('routing.networkBlocked');
         } else {
-            // 其他错误（XML 解析、坐标处理、地图渲染等）
-            console.error('[驾车规划] 错误详情:', e);
-            message = rawMessage || '导航失败';
+            console.error('[DrivePlanner] error:', e);
+            message = rawMessage || t('routing.navFailed');
         }
 
         error.value = message;

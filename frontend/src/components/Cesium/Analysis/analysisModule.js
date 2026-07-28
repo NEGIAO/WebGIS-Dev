@@ -5,6 +5,8 @@
  * type:'button' 的控件 value 为稳定空函数，真实动作在 useCesiumToolModules 按 id 分发。
  */
 
+import { translate as t } from '@/composables/useLocale';
+
 /** 按钮控件占位函数（稳定引用，避免 lil-gui 频繁 updateDisplay） */
 export const ANALYSIS_NOOP = () => {};
 
@@ -50,14 +52,14 @@ export function createAnalysisModule(analysisParams, analysisState) {
 
     const anyEnabled = params.visEnabled || params.limitEnabled;
     const status = anyEnabled
-        ? [params.visEnabled ? '通视' : null, params.limitEnabled ? '限高' : null].filter(Boolean).join('+')
-        : '未启用';
+        ? [params.visEnabled ? t('cesium.status.vis') : null, params.limitEnabled ? t('cesium.status.limit') : null].filter(Boolean).join('+')
+        : t('cesium.status.disabled');
 
     return {
         id: 'analysis',
-        title: '三维分析·通视/限高',
+        title: t('cesium.module.analysis.title'),
         description: state.statusText
-            || '射线通视（可见/遮挡分色）与 3D Tiles 限高染色分析，建议配合城市模型使用',
+            || t('cesium.module.analysis.description'),
         status,
         statusTone: anyEnabled ? 'success' : 'neutral',
         controls: [...createVisibilityControls(params, state), ...createHeightLimitControls(params, state)],
@@ -70,30 +72,30 @@ function createVisibilityControls(params, state) {
     return [
         {
             id: 'visEnabled',
-            label: '启用通视分析',
+            label: t('cesium.module.analysis.visEnabled'),
             type: 'toggle',
             value: params.visEnabled === true,
-            tooltip: '以观察点为圆心逐角度发射视线，绿色可见 / 红色遮挡',
+            tooltip: t('cesium.module.analysis.visEnabledTip'),
         },
         {
             id: 'visPick',
-            label: state.isPicking ? '⏳ 点击地图中…' : '📍 地图选点（观察点）',
+            label: state.isPicking ? t('cesium.status.pickingMap') : t('cesium.status.pickObserver'),
             type: 'button',
             value: ANALYSIS_NOOP,
             disabled: off,
-            tooltip: '左键点击地图设置观察点（自动抬高 1.5m），选完立即分析',
+            tooltip: t('cesium.module.analysis.visPickTip'),
         },
-        { id: 'visDistance', label: '分析半径(m)', type: 'range', value: params.visDistance, min: 50, max: 5000, step: 10, disabled: off },
-        { id: 'visStep', label: '采样间隔(°)', type: 'range', value: params.visStep, min: 1, max: 30, step: 1, disabled: off },
-        { id: 'visStartAngle', label: '起始方位(°)', type: 'range', value: params.visStartAngle, min: -180, max: 180, step: 1, disabled: off },
-        { id: 'visEndAngle', label: '结束方位(°)', type: 'range', value: params.visEndAngle, min: -180, max: 180, step: 1, disabled: off },
-        { id: 'visShowSector', label: '显示覆盖扇形', type: 'toggle', value: params.visShowSector, disabled: off },
-        { id: 'visLineWidth', label: '射线宽度', type: 'range', value: params.visLineWidth, min: 1, max: 10, step: 1, disabled: off },
-        { id: 'visVisibleColor', label: '可见颜色', type: 'color', value: params.visVisibleColor, disabled: off },
-        { id: 'visInvisibleColor', label: '遮挡颜色', type: 'color', value: params.visInvisibleColor, disabled: off },
+        { id: 'visDistance', label: t('cesium.module.analysis.visDistance'), type: 'range', value: params.visDistance, min: 50, max: 5000, step: 10, disabled: off },
+        { id: 'visStep', label: t('cesium.module.analysis.visStep'), type: 'range', value: params.visStep, min: 1, max: 30, step: 1, disabled: off },
+        { id: 'visStartAngle', label: t('cesium.module.analysis.visStartAngle'), type: 'range', value: params.visStartAngle, min: -180, max: 180, step: 1, disabled: off },
+        { id: 'visEndAngle', label: t('cesium.module.analysis.visEndAngle'), type: 'range', value: params.visEndAngle, min: -180, max: 180, step: 1, disabled: off },
+        { id: 'visShowSector', label: t('cesium.module.analysis.visShowSector'), type: 'toggle', value: params.visShowSector, disabled: off },
+        { id: 'visLineWidth', label: t('cesium.module.analysis.visLineWidth'), type: 'range', value: params.visLineWidth, min: 1, max: 10, step: 1, disabled: off },
+        { id: 'visVisibleColor', label: t('cesium.module.analysis.visVisibleColor'), type: 'color', value: params.visVisibleColor, disabled: off },
+        { id: 'visInvisibleColor', label: t('cesium.module.analysis.visInvisibleColor'), type: 'color', value: params.visInvisibleColor, disabled: off },
         {
             id: 'visClear',
-            label: '🧹 清除通视结果',
+            label: t('cesium.status.clearVis'),
             type: 'button',
             value: ANALYSIS_NOOP,
             disabled: off || !state.hasResult,
@@ -107,34 +109,34 @@ function createHeightLimitControls(params, state) {
     return [
         {
             id: 'limitEnabled',
-            label: '启用限高分析',
+            label: t('cesium.module.analysis.limitEnabled'),
             type: 'toggle',
             value: params.limitEnabled === true,
-            tooltip: '对分析区域内超过限高的 3D Tiles 建筑表面染色（ClassificationPrimitive）',
+            tooltip: t('cesium.module.analysis.limitEnabledTip'),
         },
         {
             id: 'limitFit',
-            label: '📦 按 3D Tiles 自动框选',
+            label: t('cesium.status.autoFit'),
             type: 'button',
             value: ANALYSIS_NOOP,
             disabled: off,
-            tooltip: '按场景中城市模型包围球生成矩形区域并推荐限高、飞行定位',
+            tooltip: t('cesium.module.analysis.limitFitTip'),
         },
         {
             id: 'limitDraw',
-            label: state.isDrawing ? '⏳ 绘制中（右键结束）' : '✍️ 手绘分析区域',
+            label: state.isDrawing ? t('cesium.status.drawing') : t('cesium.status.drawRegion'),
             type: 'button',
             value: ANALYSIS_NOOP,
             disabled: off,
-            tooltip: '左键添加顶点、右键结束，至少 3 个顶点',
+            tooltip: t('cesium.module.analysis.limitDrawTip'),
         },
-        { id: 'limitHeight', label: '限高(m)', type: 'range', value: params.limitHeight, min: 0, max: 1000, step: 1, disabled: off },
-        { id: 'limitOpacity', label: '染色不透明度', type: 'range', value: params.limitOpacity, min: 0.1, max: 1, step: 0.05, disabled: off },
-        { id: 'limitColor', label: '超限颜色', type: 'color', value: params.limitColor, disabled: off },
-        { id: 'limitShowPlane', label: '显示限高截面框', type: 'toggle', value: params.limitShowPlane, disabled: off },
+        { id: 'limitHeight', label: t('cesium.module.analysis.limitHeight'), type: 'range', value: params.limitHeight, min: 0, max: 1000, step: 1, disabled: off },
+        { id: 'limitOpacity', label: t('cesium.module.analysis.limitOpacity'), type: 'range', value: params.limitOpacity, min: 0.1, max: 1, step: 0.05, disabled: off },
+        { id: 'limitColor', label: t('cesium.module.analysis.limitColor'), type: 'color', value: params.limitColor, disabled: off },
+        { id: 'limitShowPlane', label: t('cesium.module.analysis.limitShowPlane'), type: 'toggle', value: params.limitShowPlane, disabled: off },
         {
             id: 'limitClear',
-            label: '🧹 清除限高结果',
+            label: t('cesium.status.clearLimit'),
             type: 'button',
             value: ANALYSIS_NOOP,
             disabled: off || !state.hasRegion,

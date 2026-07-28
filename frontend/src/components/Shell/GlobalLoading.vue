@@ -57,21 +57,23 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '../../stores';
+import { useLocale } from '../../composables/useLocale';
 
 const appStore = useAppStore();
 const { loading, loadingText } = storeToRefs(appStore);
+const { t } = useLocale();
 
 const dotFrame = ref(0);
 let dotTimer = null;
 
 const resolvedLoadingText = computed(() => {
     const text = String(loadingText.value || '').trim();
-    return text || '正在加载，请稍候...';
+    return text || t('common.loadingPleaseWait');
 });
 
 const loadingHint = computed(() => {
-    const dots = '.'.repeat(dotFrame.value % 4);
-    return `正在努力加载中ing${dots}`;
+    // 点号由模板 dots span 动画追加；此处只返回基底文案
+    return t('common.loadingHard');
 });
 
 function startHintAnimation() {

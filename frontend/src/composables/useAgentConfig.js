@@ -9,6 +9,7 @@
 
 import { ref } from 'vue';
 import { useMessage } from '../composables/useMessage';
+import { translate as t } from './useLocale.js';
 import {
     apiAdminGetAgentConfig,
     apiAdminUpdateAgentConfig,
@@ -92,7 +93,7 @@ export function buildSavePayload(agentConfigDraft) {
     try {
         extraBodyParsed = JSON.parse(agentConfigDraft.value.extra_body || '{}');
     } catch (_e) {
-        return { error: 'Extra Body 必须是合法的 JSON' };
+        return { error: t('admin.extraBodyInvalidJson') };
     }
 
     const timeoutSeconds = Number(agentConfigDraft.value.timeout_seconds);
@@ -115,27 +116,27 @@ export function buildSavePayload(agentConfigDraft) {
 
     // 验证必填字段（显式校验替代 || 静默兜底：清空输入直接报错而非悄悄回默认，V3.4.62 B4）
     if (!payload.base_url || !payload.system_prompt) {
-        return { error: 'Base URL、System Prompt 不能为空' };
+        return { error: t('admin.baseUrlSystemPromptRequired') };
     }
 
     if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 1) {
-        return { error: '超时时间必须是大于 0 的数字' };
+        return { error: t('admin.timeoutMustBePositive') };
     }
 
     if (!Number.isFinite(maxTokens) || maxTokens < 1) {
-        return { error: 'Max Tokens 必须是大于 0 的数字' };
+        return { error: t('admin.maxTokensMustBePositive') };
     }
 
     if (!payload.model && payload.available_models.length === 0) {
-        return { error: '请至少配置一个固定 Model 或 available_models 列表' };
+        return { error: t('admin.modelOrListRequired') };
     }
 
     if (!Number.isFinite(guestDailyQuota) || guestDailyQuota < 1) {
-        return { error: 'Guest 每日额度必须是大于 0 的整数' };
+        return { error: t('admin.guestQuotaMustBePositive') };
     }
 
     if (!Number.isFinite(registeredDailyQuota) || registeredDailyQuota < 1) {
-        return { error: 'Registered 每日额度必须是大于 0 的整数' };
+        return { error: t('admin.registeredQuotaMustBePositive') };
     }
 
     return { payload };
@@ -156,7 +157,7 @@ export async function loadAgentConfig(agentConfig, agentConfigDraft, loadingRef)
         agentConfig.value = data;
         hydrateAgentConfigDraft(data, agentConfigDraft);
     } catch (error) {
-        message.error(`加载 Agent 配置失败: ${error.message}`);
+        message.error(t('admin.loadAgentFailed', { error: error.message }));
     } finally {
         loadingRef.value = false;
     }
@@ -188,10 +189,10 @@ export async function saveAgentConfig(agentConfig, agentConfigDraft, loadingRef,
         // 使用服务端返回的完整配置，而不是本地 payload
         agentConfig.value = data;
         hydrateAgentConfigDraft(data, agentConfigDraft);
-        message.success('Agent LLM 参数已保存，后端运行时动态读取，即时生效');
+        message.success(t('admin.saveAgentSuccess'));
         return true;
     } catch (error) {
-        message.error(`保存 Agent 配置失败: ${error.message}`);
+        message.error(t('admin.saveAgentFailed', { error: error.message }));
         return false;
     } finally {
         submittingRef.value = false;
@@ -209,16 +210,16 @@ export async function resetChatQuota(agentConfig, agentConfigDraft, loadingRef, 
     const message = useMessage();
     // 确认 + 再入守卫（V3.4.62 B2）：跨用户破坏操作值得强打断式确认
     if (submittingRef?.value) return;
-    if (typeof window !== 'undefined' && !window.confirm('确认恢复默认对话额度？该操作将重置所有用户的额度配置。')) {
+    if (typeof window !== 'undefined' && !window.confirm(t('admin.resetQuotaConfirm'))) {
         return;
     }
     if (submittingRef) submittingRef.value = true;
     try {
         await apiAdminUpdateAgentConfig({ reset_chat_quota: true });
         await loadAgentConfig(agentConfig, agentConfigDraft, loadingRef);
-        message.success('已恢复默认对话额度');
+        message.success(t('admin.resetQuotaSuccess'));
     } catch (error) {
-        message.error(`恢复默认额度失败: ${error.message}`);
+        message.error(t('admin.resetQuotaFailed', { error: error.message }));
     } finally {
         if (submittingRef) submittingRef.value = false;
     }

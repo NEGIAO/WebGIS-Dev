@@ -19,13 +19,13 @@
                     <div class="header-top">
                         <button
                             class="btn-close"
-                            title="关闭"
+                            :title="t('compass.close')"
                             @click="handleClose"
                         >
                             ✕
                         </button>
                         <h2 class="palace-name">{{ palaceName }}</h2>
-                        <div class="layer-badge">第 {{ selectedPalace.layerIndex + 1 }} 层</div>
+                        <div class="layer-badge">{{ t('compass.layerBadge', { index: selectedPalace.layerIndex + 1 }) }}</div>
                     </div>
                     <div class="header-divider"></div>
                 </div>
@@ -123,7 +123,7 @@
                     <div class="footer-divider"></div>
                     <div class="feng-shui-tips">
                         <span class="tip-icon">✦</span>
-                        <span class="tip-text">点击宫位查看详细的风水解释和运势指导</span>
+                        <span class="tip-text">{{ t('compass.tip') }}</span>
                     </div>
                 </div>
             </div>
@@ -136,6 +136,7 @@ import { computed } from 'vue';
 import type { SelectedPalace } from '../../stores/useCompassStore';
 import { getThemeExplanationByConfig } from '../../utils/themeExplanationMapper';
 import { ExplanationLookup, type ExplanationResult } from '../../utils/explanationLookup';
+import { useLocale } from '../../composables/useLocale';
 
 // Props
 interface Props {
@@ -150,6 +151,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     close: [];
 }>();
+
+const { t } = useLocale();
 
 // 获取当前主题的解释数据
 const currentThemeConfig = computed(() => {
@@ -264,18 +267,20 @@ function generateDefaultExplanation(
 ): ExplanationResult | null {
     if (!palaceName) return null;
 
-    const themeDesc: Record<string, string> = {
-        polygon: '多边形罗盘',
-        compass: '地理专业版',
-        circle: '圆规尺版',
-        dark: '暗黑科技版',
-        simple: '简洁版',
-    };
+    const themeKey = ['polygon', 'compass', 'circle', 'dark', 'simple'].includes(theme)
+        ? theme
+        : null;
+    const themeDesc = themeKey
+        ? t(`compass.themes.${themeKey}`)
+        : t('compass.unknownTheme');
+    const themeForMeaning = themeKey
+        ? t(`compass.themes.${themeKey}`)
+        : t('compass.currentTheme');
 
     return {
-        category: `${themeDesc[theme] || '未知'}-第${layerIndex + 1}层`,
+        category: t('compass.defaultCategory', { theme: themeDesc, layer: layerIndex + 1 }),
         title: palaceName,
-        meaning: `${palaceName}是风水罗盘的重要宫位。在${themeDesc[theme] || '当前'}中代表特定的方位和能量属性。`,
+        meaning: t('compass.defaultMeaning', { palace: palaceName, theme: themeForMeaning }),
     };
 }
 

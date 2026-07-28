@@ -3,8 +3,8 @@
         <!-- 工具栏 -->
         <div class="weather-toolbar">
             <div class="weather-toolbar-left">
-                <h2 class="weather-title">WebGIS 动态天气看板</h2>
-                <p class="weather-subtitle">高德天气数据实时联动 · 默认 adcode: 410202</p>
+                <h2 class="weather-title">{{ t('weather.title') }}</h2>
+                <p class="weather-subtitle">{{ t('weather.subtitle') }}</p>
             </div>
             <div class="weather-toolbar-right">
                 <button
@@ -12,7 +12,7 @@
                     :disabled="isBusy"
                     @click="refreshWeather"
                 >
-                    {{ isBusy ? '刷新中...' : '刷新天气' }}
+                    {{ isBusy ? t('weather.refreshing') : t('weather.refresh') }}
                 </button>
             </div>
         </div>
@@ -20,14 +20,14 @@
         <!-- 查询行 -->
         <div class="weather-query-row">
             <div class="query-block">
-                <label>按 adcode 查询</label>
+                <label>{{ t('weather.queryAdcode') }}</label>
                 <div class="query-input-row">
                     <input
                         v-model.trim="adcodeInput"
                         class="query-input"
                         type="text"
                         maxlength="6"
-                        placeholder="输入6位 adcode"
+                        :placeholder="t('weather.adcodePlaceholder')"
                         @keyup.enter="applyAdcodeQuery"
                     />
                     <button
@@ -35,19 +35,19 @@
                         :disabled="isBusy"
                         @click="applyAdcodeQuery"
                     >
-                        查询
+                        {{ t('weather.query') }}
                     </button>
                 </div>
             </div>
 
             <div class="query-block">
-                <label>按城市名称解析</label>
+                <label>{{ t('weather.queryCity') }}</label>
                 <div class="query-input-row">
                     <input
                         v-model.trim="cityInput"
                         class="query-input"
                         type="text"
-                        placeholder="输入城市/区县名称"
+                        :placeholder="t('weather.cityPlaceholder')"
                         @keyup.enter="resolveCityAndQuery"
                     />
                     <button
@@ -55,7 +55,7 @@
                         :disabled="isBusy"
                         @click="resolveCityAndQuery"
                     >
-                        解析
+                        {{ t('weather.resolve') }}
                     </button>
                 </div>
             </div>
@@ -78,7 +78,7 @@
         <!-- 图表区 -->
         <div class="charts-layout">
             <div class="chart-panel trend-panel">
-                <div class="chart-title">未来 4 天气温趋势</div>
+                <div class="chart-title">{{ t('weather.tempTrend') }}</div>
                 <div
                     ref="trendChartRef"
                     class="chart-canvas"
@@ -86,7 +86,7 @@
             </div>
 
             <div class="chart-panel side-panel">
-                <div class="chart-title">风力仪表 + 预报风级</div>
+                <div class="chart-title">{{ t('weather.windGauge') }}</div>
                 <div
                     ref="windChartRef"
                     class="chart-canvas"
@@ -126,9 +126,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useWeatherStore } from '../../stores';
 import { useWeatherCharts } from '../../composables/weather/useWeatherCharts';
 import { useWeatherData } from '../../composables/weather/useWeatherData';
+import { useLocale } from '../../composables/useLocale';
 import WeatherLiveCards from './WeatherLiveCards.vue';
 import WeatherForecastTable from './WeatherForecastTable.vue';
 
+const { t } = useLocale();
 const weatherStore = useWeatherStore();
 
 /* ------------------------------------------------------------ */

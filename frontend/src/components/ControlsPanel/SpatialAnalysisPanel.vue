@@ -1,8 +1,8 @@
 <template>
     <div class="spatial-panel">
         <div class="panel-header">
-            <span class="panel-title">空间分析</span>
-            <button class="close-btn" @click="$emit('close')">
+            <span class="panel-title">{{ t('spatial.title') }}</span>
+            <button class="close-btn" :title="t('common.close')" @click="$emit('close')">
                 <X :size="14" />
             </button>
         </div>
@@ -30,20 +30,20 @@
         <!-- 缓冲区分析参数 -->
         <div v-if="activeTool === 'buffer'" class="params-section">
             <div class="param-group">
-                <label class="param-label">缓冲半径（米）</label>
+                <label class="param-label">{{ t('spatial.bufferRadius') }}</label>
                 <input
                     v-model.number="bufferRadius"
                     type="number"
                     class="param-input"
                     min="1"
                     max="100000"
-                    placeholder="输入缓冲半径"
+                    :placeholder="t('spatial.bufferRadiusPlaceholder')"
                 />
             </div>
             <div class="param-group">
-                <label class="param-label">目标图层</label>
+                <label class="param-label">{{ t('spatial.targetLayer') }}</label>
                 <select v-model="targetLayerId" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -55,14 +55,14 @@
             </div>
             <button class="run-btn" :disabled="!canRun" @click="runBuffer">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 叠加分析参数 -->
         <div v-if="activeTool === 'overlay'" class="params-section">
             <div class="param-group">
-                <label class="param-label">叠加方式</label>
+                <label class="param-label">{{ t('spatial.overlayMethod') }}</label>
                 <div class="overlay-mode-grid">
                     <button
                         v-for="mode in overlayModes"
@@ -76,9 +76,9 @@
                 </div>
             </div>
             <div class="param-group">
-                <label class="param-label">图层 A</label>
+                <label class="param-label">{{ t('spatial.layerA') }}</label>
                 <select v-model="layerA" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -89,9 +89,9 @@
                 </select>
             </div>
             <div class="param-group">
-                <label class="param-label">图层 B</label>
+                <label class="param-label">{{ t('spatial.layerB') }}</label>
                 <select v-model="layerB" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -103,16 +103,16 @@
             </div>
             <button class="run-btn" :disabled="!canRunOverlay" @click="runOverlay">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 凸包分析参数 -->
         <div v-if="activeTool === 'convexHull'" class="params-section">
             <div class="param-group">
-                <label class="param-label">目标图层</label>
+                <label class="param-label">{{ t('spatial.convexHullTarget') }}</label>
                 <select v-model="targetLayerId" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -124,16 +124,16 @@
             </div>
             <button class="run-btn" :disabled="!targetLayerId" @click="runConvexHull">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 泰森多边形分析参数 -->
         <div v-if="activeTool === 'voronoi'" class="params-section">
             <div class="param-group">
-                <label class="param-label">目标图层（点要素）</label>
+                <label class="param-label">{{ t('spatial.voronoiTarget') }}</label>
                 <select v-model="targetLayerId" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -145,16 +145,16 @@
             </div>
             <button class="run-btn" :disabled="!targetLayerId" @click="runVoronoi">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 空间聚合分析参数 -->
         <div v-if="activeTool === 'aggregation'" class="params-section">
             <div class="param-group">
-                <label class="param-label">目标图层（点要素）</label>
+                <label class="param-label">{{ t('spatial.aggregateTarget') }}</label>
                 <select v-model="targetLayerId" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -165,26 +165,26 @@
                 </select>
             </div>
             <div class="param-group">
-                <label class="param-label">网格类型</label>
+                <label class="param-label">{{ t('spatial.gridType') }}</label>
                 <div class="overlay-mode-grid">
                     <button
                         class="mode-btn"
                         :class="{ active: gridType === 'grid' }"
                         @click="gridType = 'grid'"
                     >
-                        方格网
+                        {{ t('spatial.squareGrid') }}
                     </button>
                     <button
                         class="mode-btn"
                         :class="{ active: gridType === 'hexbin' }"
                         @click="gridType = 'hexbin'"
                     >
-                        六边形
+                        {{ t('spatial.hexGrid') }}
                     </button>
                 </div>
             </div>
             <div class="param-group">
-                <label class="param-label">网格大小（米）</label>
+                <label class="param-label">{{ t('spatial.gridSize') }}</label>
                 <input
                     v-model.number="gridSize"
                     type="number"
@@ -192,16 +192,16 @@
                     min="1"
                     max="1000000"
                     step="100"
-                    placeholder="默认 500"
+                    :placeholder="t('spatial.gridSizePlaceholder')"
                 />
             </div>
             <div class="param-group">
-                <label class="param-label">可视范围 BBox</label>
+                <label class="param-label">{{ t('spatial.bboxRange') }}</label>
                 <div class="bbox-inputs">
-                    <input v-model.number="bboxMinLon" type="number" class="param-input bbox-input" placeholder="最小经度" step="0.1" />
-                    <input v-model.number="bboxMinLat" type="number" class="param-input bbox-input" placeholder="最小纬度" step="0.1" />
-                    <input v-model.number="bboxMaxLon" type="number" class="param-input bbox-input" placeholder="最大经度" step="0.1" />
-                    <input v-model.number="bboxMaxLat" type="number" class="param-input bbox-input" placeholder="最大纬度" step="0.1" />
+                    <input v-model.number="bboxMinLon" type="number" class="param-input bbox-input" :placeholder="t('spatial.minLon')" step="0.1" />
+                    <input v-model.number="bboxMinLat" type="number" class="param-input bbox-input" :placeholder="t('spatial.minLat')" step="0.1" />
+                    <input v-model.number="bboxMaxLon" type="number" class="param-input bbox-input" :placeholder="t('spatial.maxLon')" step="0.1" />
+                    <input v-model.number="bboxMaxLat" type="number" class="param-input bbox-input" :placeholder="t('spatial.maxLat')" step="0.1" />
                 </div>
                 <ExtentPicker
                     @extent-change="fillAggregationBbox"
@@ -210,16 +210,16 @@
             </div>
             <button class="run-btn" :disabled="!canRunAggregation" @click="runAggregation">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 多环缓冲区分析参数 -->
         <div v-if="activeTool === 'multiRingBuffer'" class="params-section">
             <div class="param-group">
-                <label class="param-label">目标图层</label>
+                <label class="param-label">{{ t('spatial.multiRingTarget') }}</label>
                 <select v-model="targetLayerId" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -230,27 +230,27 @@
                 </select>
             </div>
             <div class="param-group">
-                <label class="param-label">缓冲距离（米，逗号分隔）</label>
+                <label class="param-label">{{ t('spatial.multiRingDistance') }}</label>
                 <input
                     v-model="distancesInput"
                     type="text"
                     class="param-input"
-                    placeholder="例如：100, 300, 500"
+                    :placeholder="t('spatial.multiRingPlaceholder')"
                 />
-                <span class="param-hint">由内到外依次递增，如 100, 300, 500</span>
+                <span class="param-hint">{{ t('spatial.multiRingHint') }}</span>
             </div>
             <button class="run-btn" :disabled="!canRunMultiRing" @click="runMultiRingBuffer">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 几何简化分析参数 -->
         <div v-if="activeTool === 'simplify'" class="params-section">
             <div class="param-group">
-                <label class="param-label">目标图层</label>
+                <label class="param-label">{{ t('spatial.simplifyTarget') }}</label>
                 <select v-model="targetLayerId" class="param-select">
-                    <option value="">-- 选择图层 --</option>
+                    <option value="">{{ t('spatial.selectLayer') }}</option>
                     <option
                         v-for="layer in availableLayers"
                         :key="layer.id"
@@ -261,7 +261,7 @@
                 </select>
             </div>
             <div class="param-group">
-                <label class="param-label">简化容差（米）</label>
+                <label class="param-label">{{ t('spatial.simplifyTolerance') }}</label>
                 <input
                     v-model.number="simplifyTolerance"
                     type="number"
@@ -269,25 +269,25 @@
                     min="0.1"
                     max="100000"
                     step="1"
-                    placeholder="例如：100"
+                    :placeholder="t('spatial.simplifyPlaceholder')"
                 />
-                <span class="param-hint">值越大简化程度越高，推荐 10 ~ 1000 米</span>
+                <span class="param-hint">{{ t('spatial.simplifyHint') }}</span>
             </div>
             <button class="run-btn" :disabled="!canRunSimplify" @click="runSimplify">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
         <!-- 渔网分析参数 -->
         <div v-if="activeTool === 'fishnet'" class="params-section">
             <div class="param-group">
-                <label class="param-label">四至范围</label>
+                <label class="param-label">{{ t('spatial.fishnetRange') }}</label>
                 <div class="bbox-inputs">
-                    <input v-model.number="fishnetMinLon" type="number" class="param-input bbox-input" placeholder="最小经度" step="0.1" />
-                    <input v-model.number="fishnetMinLat" type="number" class="param-input bbox-input" placeholder="最小纬度" step="0.1" />
-                    <input v-model.number="fishnetMaxLon" type="number" class="param-input bbox-input" placeholder="最大经度" step="0.1" />
-                    <input v-model.number="fishnetMaxLat" type="number" class="param-input bbox-input" placeholder="最大纬度" step="0.1" />
+                    <input v-model.number="fishnetMinLon" type="number" class="param-input bbox-input" :placeholder="t('spatial.minLon')" step="0.1" />
+                    <input v-model.number="fishnetMinLat" type="number" class="param-input bbox-input" :placeholder="t('spatial.minLat')" step="0.1" />
+                    <input v-model.number="fishnetMaxLon" type="number" class="param-input bbox-input" :placeholder="t('spatial.maxLon')" step="0.1" />
+                    <input v-model.number="fishnetMaxLat" type="number" class="param-input bbox-input" :placeholder="t('spatial.maxLat')" step="0.1" />
                 </div>
                 <ExtentPicker
                     @extent-change="fillFishnetBbox"
@@ -295,44 +295,44 @@
                 />
             </div>
             <div class="param-group">
-                <label class="param-label">网格大小（米）<span class="required">*</span></label>
+                <label class="param-label">{{ t('spatial.fishnetGridSize') }}<span class="required">*</span></label>
                 <input
                     v-model.number="fishnetGridSize"
                     type="number"
                     class="param-input"
                     min="1"
                     max="1000000"
-                    placeholder="例如：500"
+                    :placeholder="t('spatial.fishnetGridSizePlaceholder')"
                 />
             </div>
             <div class="param-group">
-                <label class="param-label">几何类型</label>
+                <label class="param-label">{{ t('spatial.fishnetGeomType') }}</label>
                 <div class="overlay-mode-grid">
                     <button
                         class="mode-btn"
                         :class="{ active: fishnetGeometryType === 'polygon' }"
                         @click="fishnetGeometryType = 'polygon'"
                     >
-                        面
+                        {{ t('spatial.fishnetPolygon') }}
                     </button>
                     <button
                         class="mode-btn"
                         :class="{ active: fishnetGeometryType === 'line' }"
                         @click="fishnetGeometryType = 'line'"
                     >
-                        线
+                        {{ t('spatial.fishnetLine') }}
                     </button>
                 </div>
             </div>
             <div class="param-group">
                 <label class="param-label checkbox-label">
                     <input v-model="fishnetCreatePoints" type="checkbox" class="param-checkbox" />
-                    创建渔网中心点
+                    {{ t('spatial.fishnetCreateCenter') }}
                 </label>
             </div>
             <button class="run-btn" :disabled="!canRunFishnet" @click="runFishnet">
                 <Play :size="14" />
-                执行分析
+                {{ t('spatial.executeAnalysis') }}
             </button>
         </div>
 
@@ -344,7 +344,7 @@
 
         <div class="panel-hint">
             <Info :size="12" />
-            <span>分析结果将作为新图层添加到地图</span>
+            <span>{{ t('spatial.resultHint') }}</span>
         </div>
         </div>
     </div>
@@ -369,7 +369,9 @@ import {
 } from 'lucide-vue-next';
 import ExtentPicker from '../Common/ExtentPicker.vue';
 import { formatCoordinateValue } from '../../utils/coordinateFormatter';
+import { useLocale } from '../../composables/useLocale';
 
+const { t } = useLocale();
 const emit = defineEmits(['analysis', 'close']);
 
 defineProps({
@@ -379,72 +381,72 @@ defineProps({
     },
 });
 
-// 分析工具配置
-const analysisTools = [
+/** 分析工具列表：label/description 随语言切换 */
+const analysisTools = computed(() => [
     {
         id: 'buffer',
-        label: '缓冲区分析',
-        description: '对要素生成指定半径的缓冲区',
+        label: t('spatial.tools.buffer'),
+        description: t('spatial.tools.bufferDesc'),
         icon: CircleDot,
         color: '#1890ff',
     },
     {
         id: 'overlay',
-        label: '叠加分析',
-        description: '交集、并集、差集运算',
+        label: t('spatial.tools.overlay'),
+        description: t('spatial.tools.overlayDesc'),
         icon: Combine,
         color: '#52c41a',
     },
     {
         id: 'convexHull',
-        label: '凸包分析',
-        description: '计算要素集的最小凸多边形',
+        label: t('spatial.tools.convexHull'),
+        description: t('spatial.tools.convexHullDesc'),
         icon: BoxSelect,
         color: '#fa8c16',
     },
     {
         id: 'voronoi',
-        label: '泰森多边形',
-        description: '计算点集的最近邻服务范围',
+        label: t('spatial.tools.voronoi'),
+        description: t('spatial.tools.voronoiDesc'),
         icon: Network,
         color: '#722ed1',
     },
     {
         id: 'aggregation',
-        label: '空间聚合',
-        description: '网格化统计离散点密度',
+        label: t('spatial.tools.aggregate'),
+        description: t('spatial.tools.aggregateDesc'),
         icon: LayoutGrid,
         color: '#13c2c2',
     },
     {
         id: 'multiRingBuffer',
-        label: '多环缓冲区',
-        description: '生成多级同心环辐射圈',
+        label: t('spatial.tools.multiRing'),
+        description: t('spatial.tools.multiRingDesc'),
         icon: Target,
         color: '#eb2f96',
     },
     {
         id: 'simplify',
-        label: '几何简化',
-        description: '抽稀复杂几何降低节点数',
+        label: t('spatial.tools.simplify'),
+        description: t('spatial.tools.simplifyDesc'),
         icon: Shrink,
         color: '#faad14',
     },
     {
         id: 'fishnet',
-        label: '渔网分析',
-        description: '在指定范围内生成规则网格',
+        label: t('spatial.tools.fishnet'),
+        description: t('spatial.tools.fishnetDesc'),
         icon: Grid3x3,
         color: '#8b5cf6',
     },
-];
+]);
 
-// 叠加模式
-const overlayModes = [
-    { id: 'intersection', label: '交集' },
-    { id: 'union', label: '并集' },
-    { id: 'difference', label: '差集' },
-];
+/** 叠加模式 */
+const overlayModes = computed(() => [
+    { id: 'intersection', label: t('spatial.modes.intersection') },
+    { id: 'union', label: t('spatial.modes.union') },
+    { id: 'difference', label: t('spatial.modes.difference') },
+]);
 
 // 状态
 const activeTool = ref('');
@@ -521,13 +523,13 @@ function runBuffer() {
         targetLayerId: targetLayerId.value,
         radius: bufferRadius.value,
     });
-    showResult('success', `缓冲区分析已提交（半径 ${bufferRadius.value}m）`);
+    showResult('success', t('spatial.bufferSubmitted', { radius: bufferRadius.value }));
 }
 
 function runOverlay() {
     if (!canRunOverlay.value) return;
     if (layerA.value === layerB.value) {
-        showResult('error', '图层 A 和图层 B 不能相同');
+        showResult('error', t('spatial.overlaySameLayer'));
         return;
     }
     emit('analysis', {
@@ -536,8 +538,9 @@ function runOverlay() {
         layerA: layerA.value,
         layerB: layerB.value,
     });
-    const modeLabel = overlayModes.find((m) => m.id === overlayMode.value)?.label || overlayMode.value;
-    showResult('success', `${modeLabel}分析已提交`);
+    const modeLabel =
+        overlayModes.value.find((m) => m.id === overlayMode.value)?.label || overlayMode.value;
+    showResult('success', t('spatial.overlaySubmitted', { mode: modeLabel }));
 }
 
 function runConvexHull() {
@@ -546,7 +549,7 @@ function runConvexHull() {
         type: 'convexHull',
         targetLayerId: targetLayerId.value,
     });
-    showResult('success', '凸包分析已提交');
+    showResult('success', t('spatial.convexHullSubmitted'));
 }
 
 function runVoronoi() {
@@ -555,7 +558,7 @@ function runVoronoi() {
         type: 'voronoi',
         targetLayerId: targetLayerId.value,
     });
-    showResult('success', '泰森多边形分析已提交');
+    showResult('success', t('spatial.voronoiSubmitted'));
 }
 
 function runAggregation() {
@@ -567,8 +570,9 @@ function runAggregation() {
         gridType: gridType.value,
         gridSize: gridSize.value,
     });
-    const gridLabel = gridType.value === 'hexbin' ? '六边形' : '方格';
-    showResult('success', `${gridLabel}聚合分析已提交`);
+    const gridLabel =
+        gridType.value === 'hexbin' ? t('spatial.hexLabel') : t('spatial.squareLabel');
+    showResult('success', t('spatial.aggregateSubmitted', { grid: gridLabel }));
 }
 
 function runMultiRingBuffer() {
@@ -583,7 +587,7 @@ function runMultiRingBuffer() {
         targetLayerId: targetLayerId.value,
         distances,
     });
-    showResult('success', `多环缓冲区分析已提交（${distances.length} 环）`);
+    showResult('success', t('spatial.multiRingSubmitted', { count: distances.length }));
 }
 
 function runSimplify() {
@@ -593,7 +597,7 @@ function runSimplify() {
         targetLayerId: targetLayerId.value,
         tolerance: simplifyTolerance.value,
     });
-    showResult('success', `几何简化分析已提交（容差 ${simplifyTolerance.value}m）`);
+    showResult('success', t('spatial.simplifySubmitted', { tolerance: simplifyTolerance.value }));
 }
 
 /**
@@ -651,9 +655,19 @@ function runFishnet() {
         geometryType: fishnetGeometryType.value,
         createCenterPoints: fishnetCreatePoints.value,
     });
-    const typeLabel = fishnetGeometryType.value === 'polygon' ? '面' : '线';
-    const pointLabel = fishnetCreatePoints.value ? '含中心点' : '';
-    showResult('success', `渔网分析已提交（${fishnetGridSize.value}m ${typeLabel} ${pointLabel}）`);
+    const typeLabel =
+        fishnetGeometryType.value === 'polygon'
+            ? t('spatial.fishnetPolygon')
+            : t('spatial.fishnetLine');
+    const pointLabel = fishnetCreatePoints.value ? t('spatial.fishnetWithCenter') : '';
+    showResult(
+        'success',
+        t('spatial.fishnetSubmitted', {
+            size: fishnetGridSize.value,
+            geom: typeLabel,
+            point: pointLabel,
+        }),
+    );
 }
 
 function showResult(type, msg) {

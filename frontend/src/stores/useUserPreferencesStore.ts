@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiAuthGetPreferences, apiAuthUpdatePreferences } from '../api/backend';
 import { getAuthToken } from '../services/auth';
-import { normalizeLocaleLanguage, setLocaleLanguage } from '../composables/useLocale';
+import { normalizeLocaleLanguage, setLocaleLanguage, loadLocaleMessages } from '../composables/useLocale';
 
 const USER_PREFERENCES_STORAGE_KEY = 'webgis_user_preferences_cache';
 export const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';
@@ -71,6 +71,18 @@ function savePreferenceRuntimeCache(preferences: UserPreferences): void {
     storage.setItem(USER_PREFERENCE_AGENT_MODEL_KEY, preferences.preferred_agent_model);
 }
 
+/**
+ * 读取本机 UI 语言（SSOT：webgis_pref_language）。
+ * 注册页与偏好页切换都写此 key；完整 preferences 缓存可能仍是默认 zh-CN。
+ */
+export function readCachedPreferredLanguage(): string {
+    const storage = getStorage();
+    if (!storage) return '';
+    const raw = storage.getItem(USER_PREFERENCE_LANGUAGE_KEY);
+    if (raw == null || String(raw).trim() === '') return '';
+    return normalizeLanguage(raw);
+}
+
 export function readCachedPreferredAgentModel(): string {
     const storage = getStorage();
     if (!storage) return '';
@@ -125,23 +137,34 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
         setLocaleLanguage(preferences.value.language || 'zh-CN');
     }
 
+    /**
+     * 合并本机语言 SSOT 进 preferences 对象。
+     * 注册页只写 LANGUAGE_KEY 时，完整缓存仍可能是默认 zh-CN，必须以 key 为准。
+     */
+    function mergeLocalLanguage(base: UserPreferences): UserPreferences {
+        const localLang = readCachedPreferredLanguage();
+        if (!localLang) return base;
+        if (localLang === base.language) return base;
+        return { ...base, language: localLang };
+    }
+
     function loadFromStorage(): void {
         const storage = getStorage();
         if (!storage) return;
 
         const raw = storage.getItem(USER_PREFERENCES_STORAGE_KEY);
         if (!raw) {
-            preferences.value = { ...DEFAULT_PREFERENCES };
+            preferences.value = mergeLocalLanguage({ ...DEFAULT_PREFERENCES });
             applyRuntimePreferences();
             return;
         }
 
         try {
-            preferences.value = normalizePreferences(JSON.parse(raw));
+            preferences.value = mergeLocalLanguage(normalizePreferences(JSON.parse(raw)));
             applyRuntimePreferences();
         } catch {
             storage.removeItem(USER_PREFERENCES_STORAGE_KEY);
-            preferences.value = { ...DEFAULT_PREFERENCES };
+            preferences.value = mergeLocalLanguage({ ...DEFAULT_PREFERENCES });
             applyRuntimePreferences();
         }
     }
@@ -156,6 +179,9 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
         }
 
         loadFromStorage();
+        // 拉远端前快照本机语言，避免远端默认 zh-CN 冲掉注册页/本机切换
+        const localLanguageBeforeRemote =
+            readCachedPreferredLanguage() || preferences.value.language;
 
         const token = getAuthToken();
         if (!token) {
@@ -171,10 +197,22 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
                     ? (result as any).data
                     : result;
             const remote = normalizePreferences(payload?.preferences || payload || {});
-            preferences.value = remote;
+            // 本机 UI 语言与远端不一致时：保留本机（注册页/偏好即时切换的 SSOT），其它字段用远端
+            const merged: UserPreferences = {
+                ...remote,
+                language: localLanguageBeforeRemote || remote.language,
+            };
+            preferences.value = merged;
             persistToStorage();
             applyRuntimePreferences();
             initialized.value = true;
+
+            // 登录后把本机语言回写服务端，使账号中心偏好与注册页切换全局一致
+            if (merged.language && merged.language !== remote.language) {
+                void apiAuthUpdatePreferences({ language: merged.language }).catch(() => {
+                    /* 静默：UI 已用本机语言；下次 Save 仍可再同步 */
+                });
+            }
             return preferences.value;
         } catch (error) {
             if (!silent) {
@@ -226,9 +264,35 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
         }
     }
 
+    /**
+     * 全局语言开关（注册页 / 偏好页共用）。
+     * 立即更新 runtime + 完整缓存；已登录时异步写远端，保证两端一致。
+     */
+    async function setLanguagePreference(value: unknown): Promise<'zh-CN' | 'en-US'> {
+        const next = normalizeLanguage(value) as 'zh-CN' | 'en-US';
+        const changed = next !== preferences.value.language;
+        if (changed) {
+            preferences.value = { ...preferences.value, language: next };
+            persistToStorage();
+        }
+        // 即使 store 已一致，也确保 runtime/localStorage SSOT 与 UI 对齐（注册页切换）
+        setLocaleLanguage(next);
+
+        if (changed && getAuthToken()) {
+            try {
+                await savePreferences({ language: next });
+            } catch {
+                /* 本机已生效；远端失败不阻断 UI */
+            }
+        }
+        return next;
+    }
+
     async function bootstrap(): Promise<void> {
         loadFromStorage();
         applyRuntimePreferences();
+        // 与 preferences 网络请求并行；main.js 已预热，此处按当前语言再确保一次
+        void loadLocaleMessages();
         await loadPreferences({ force: true, silent: true });
     }
 
@@ -241,6 +305,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
         loadFromStorage,
         loadPreferences,
         savePreferences,
+        setLanguagePreference,
         bootstrap,
         applyRuntimePreferences,
     };

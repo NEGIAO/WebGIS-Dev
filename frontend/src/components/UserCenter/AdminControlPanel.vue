@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { useAgentConfig } from '../../composables/useAgentConfig';
 import {
     apiAdminDeleteRows,
@@ -17,6 +18,7 @@ import {
 import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '../../constants/basemap/basemapResolver';
 
 const message = useMessage();
+const { t } = useLocale();
 
 const overview = ref({
     table_count: 0,
@@ -27,15 +29,19 @@ const overview = ref({
     l3_env_status: {},
 });
 
-// L3（HF Secrets）环境密钥状态标签映射：仅展示「是否已配置」布尔，不回显明文
+// L3（HF Secrets）环境密钥状态：仅展示是否已配置，不回显明文
 const L3_STATUS_LABELS = [
-    { key: 'super_user', label: 'SUPER_USER 管理员密码' },
+    { key: 'super_user', labelKey: 'admin.envKeys.super_user' },
     { key: 'oauth_state_secret', label: 'OAUTH_STATE_SECRET' },
     { key: 'google_oauth', label: 'Google OAuth' },
     { key: 'github_oauth', label: 'GitHub OAuth' },
-    { key: 'smtp', label: 'SMTP 邮件账号/密码' },
+    { key: 'smtp', labelKey: 'admin.envKeys.smtp' },
     { key: 'supabase', label: 'Supabase URL/Key' },
 ];
+
+function l3StatusLabel(item) {
+    return item.labelKey ? t(item.labelKey) : item.label;
+}
 
 const tables = ref([]);
 const selectedTable = ref('');
@@ -54,7 +60,6 @@ const loadingRows = ref(false);
 const submittingConfig = ref(false);
 const submittingTable = ref(false);
 
-// LLM 参数配置 - 使用共享 composable
 const {
     agentConfig: _agentConfig,
     agentConfigDraft,
@@ -65,7 +70,6 @@ const {
     resetQuota: resetChatQuota,
 } = useAgentConfig();
 
-// 默认底图配置
 const defaultBasemapIndex = ref(DEFAULT_BASEMAP_LAYER_INDEX);
 const loadingBasemap = ref(false);
 const submittingBasemap = ref(false);
@@ -89,9 +93,10 @@ async function saveDefaultBasemapIndex() {
     submittingBasemap.value = true;
     try {
         await apiAdminUpdateDefaultBasemapIndex(defaultBasemapIndex.value);
-        message.success('默认底图已更新，刷新页面后生效');
+        message.success(t('admin.basemapSaveSuccess'));
     } catch (err) {
-        message.error(`保存失败: ${err?.response?.data?.detail || err?.message || '未知错误'}`);
+        const detail = err?.response?.data?.detail || err?.message || t('admin.unknownError');
+        message.error(t('admin.basemapSaveFailed', { error: detail }));
     } finally {
         submittingBasemap.value = false;
     }
@@ -105,18 +110,19 @@ const selectedTableMeta = computed(() => {
     return tables.value.find((item) => item.name === selectedTable.value) || null;
 });
 
-const rowCountText = computed(() => `共加载 ${tableRows.value.length} 行`);
+const rowCountText = computed(() => t('admin.rowCountText', { count: tableRows.value.length }));
 
-function parseJsonObject(text, hint = 'JSON 格式错误') {
+function parseJsonObject(text, hint) {
+    const fallbackHint = hint || t('admin.jsonFormatError');
     try {
         const parsed = JSON.parse(String(text || '{}'));
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            throw new Error('JSON 必须是对象');
+            throw new Error(t('admin.jsonMustBeObject'));
         }
         return parsed;
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        throw new Error(`${hint}${detail ? `：${detail}` : ''}`);
+        throw new Error(`${fallbackHint}${detail ? `：${detail}` : ''}`);
     }
 }
 
@@ -151,7 +157,7 @@ async function loadOverview() {
             ...(result?.data || {}),
         };
     } catch (error) {
-        message.error(String(error?.message || '管理员概览加载失败'));
+        message.error(String(error?.message || t('admin.overviewLoadFailed')));
     } finally {
         loadingOverview.value = false;
     }
@@ -172,7 +178,7 @@ async function loadTables() {
             selectedTable.value = String(list[0]?.name || '');
         }
     } catch (error) {
-        message.error(String(error?.message || '数据库表列表加载失败'));
+        message.error(String(error?.message || t('admin.tableListLoadFailed')));
     } finally {
         loadingTables.value = false;
     }
@@ -191,7 +197,7 @@ async function loadRows() {
         tableRows.value = Array.isArray(result?.data) ? result.data : [];
     } catch (error) {
         tableRows.value = [];
-        message.error(String(error?.message || '表数据加载失败'));
+        message.error(String(error?.message || t('admin.tableDataLoadFailed')));
     } finally {
         loadingRows.value = false;
     }
@@ -202,26 +208,26 @@ async function handleInsertRow() {
 
     const tableName = String(selectedTable.value || '').trim();
     if (!tableName) {
-        message.warning('请先选择数据表');
+        message.warning(t('admin.selectTableFirst'));
         return;
     }
 
     let rowPayload = null;
     try {
-        rowPayload = parseJsonObject(insertJsonText.value, '新增数据解析失败');
+        rowPayload = parseJsonObject(insertJsonText.value, t('admin.addParseFailed'));
     } catch (error) {
-        message.error(String(error?.message || '新增数据解析失败'));
+        message.error(String(error?.message || t('admin.addParseFailed')));
         return;
     }
 
     submittingTable.value = true;
     try {
         await apiAdminInsertRow(tableName, rowPayload);
-        message.success('新增成功');
+        message.success(t('admin.addSuccess'));
         await loadRows();
         await loadOverview();
     } catch (error) {
-        message.error(String(error?.message || '新增失败'));
+        message.error(String(error?.message || t('admin.addFailed')));
     } finally {
         submittingTable.value = false;
     }
@@ -234,31 +240,31 @@ async function handleEditRow(row) {
     const where = resolveWhere(row);
 
     if (!tableName || !where) {
-        message.warning('当前行缺少可定位键，无法编辑');
+        message.warning(t('admin.noLocateKey'));
         return;
     }
 
     const editable = toEditablePayload(row);
     const defaultText = JSON.stringify(editable, null, 2);
-    const nextText = window.prompt('请输入更新后的 JSON 对象（整行替换）', defaultText);
+    const nextText = window.prompt(t('admin.editJsonPrompt'), defaultText);
 
     if (nextText === null) return;
 
     let nextValues = null;
     try {
-        nextValues = parseJsonObject(nextText, '编辑数据解析失败');
+        nextValues = parseJsonObject(nextText, t('admin.editParseFailed'));
     } catch (error) {
-        message.error(String(error?.message || '编辑数据解析失败'));
+        message.error(String(error?.message || t('admin.editParseFailed')));
         return;
     }
 
     submittingTable.value = true;
     try {
         await apiAdminUpdateRows(tableName, where, nextValues);
-        message.success('更新成功');
+        message.success(t('admin.updateSuccess'));
         await loadRows();
     } catch (error) {
-        message.error(String(error?.message || '更新失败'));
+        message.error(String(error?.message || t('admin.updateFailed')));
     } finally {
         submittingTable.value = false;
     }
@@ -271,21 +277,21 @@ async function handleDeleteRow(row) {
     const where = resolveWhere(row);
 
     if (!tableName || !where) {
-        message.warning('当前行缺少可定位键，无法删除');
+        message.warning(t('admin.noLocateKeyDelete'));
         return;
     }
 
-    const ok = window.confirm('确认删除该行数据？此操作不可撤销。');
+    const ok = window.confirm(t('admin.deleteConfirm'));
     if (!ok) return;
 
     submittingTable.value = true;
     try {
         await apiAdminDeleteRows(tableName, where);
-        message.success('删除成功');
+        message.success(t('admin.deleteSuccess'));
         await loadRows();
         await loadOverview();
     } catch (error) {
-        message.error(String(error?.message || '删除失败'));
+        message.error(String(error?.message || t('admin.deleteFailed')));
     } finally {
         submittingTable.value = false;
     }
@@ -296,18 +302,18 @@ async function handlePublishAnnouncement() {
 
     const content = String(announcementText.value || '').trim();
     if (!content) {
-        message.warning('请输入公告内容');
+        message.warning(t('admin.announcementEmpty'));
         return;
     }
 
     submittingConfig.value = true;
     try {
         await apiAdminPublishAnnouncement(content);
-        message.success('公告发布成功');
+        message.success(t('admin.announcementSuccess'));
         announcementText.value = '';
         await loadOverview();
     } catch (error) {
-        message.error(String(error?.message || '公告发布失败'));
+        message.error(String(error?.message || t('admin.announcementFailed')));
     } finally {
         submittingConfig.value = false;
     }
@@ -318,16 +324,16 @@ async function handleSaveContact() {
 
     const contact = String(adminContactText.value || '').trim();
     if (!contact) {
-        message.warning('管理员联系方式不能为空');
+        message.warning(t('admin.contactEmpty'));
         return;
     }
 
     submittingConfig.value = true;
     try {
         await apiAdminUpdateContact(contact);
-        message.success('管理员联系方式已更新');
+        message.success(t('admin.contactUpdateSuccess'));
     } catch (error) {
-        message.error(String(error?.message || '联系方式更新失败'));
+        message.error(String(error?.message || t('admin.contactUpdateFailed')));
     } finally {
         submittingConfig.value = false;
     }
@@ -351,44 +357,44 @@ onMounted(async () => {
     <div class="admin-console">
         <div class="admin-card">
             <div class="admin-title-row">
-                <h4 class="admin-title">管理员控制台</h4>
+                <h4 class="admin-title">{{ t('admin.title') }}</h4>
                 <button
                     class="admin-mini-btn"
                     type="button"
                     :disabled="loadingOverview"
                     @click="loadOverview"
                 >
-                    刷新概览
+                    {{ t('admin.refreshOverview') }}
                 </button>
             </div>
 
             <div class="overview-grid">
                 <div class="overview-item">
-                    <span class="overview-label">数据表</span>
+                    <span class="overview-label">{{ t('admin.dataTable') }}</span>
                     <strong class="overview-value">{{ overview.table_count }}</strong>
                 </div>
                 <div class="overview-item">
-                    <span class="overview-label">用户</span>
+                    <span class="overview-label">{{ t('admin.users') }}</span>
                     <strong class="overview-value">{{ overview.total_users }}</strong>
                 </div>
                 <div class="overview-item">
-                    <span class="overview-label">在线会话</span>
+                    <span class="overview-label">{{ t('admin.onlineSessions') }}</span>
                     <strong class="overview-value">{{ overview.total_sessions }}</strong>
                 </div>
                 <div class="overview-item">
-                    <span class="overview-label">留言</span>
+                    <span class="overview-label">{{ t('admin.messages') }}</span>
                     <strong class="overview-value">{{ overview.total_messages }}</strong>
                 </div>
             </div>
         </div>
 
-        <!-- L3 环境密钥状态（只读） -->
         <div class="admin-card">
-            <h5 class="admin-subtitle">🔐 环境密钥状态（L3 · HF Secrets · 只读）</h5>
+            <h5 class="admin-subtitle">{{ t('admin.envStatusTitle') }}</h5>
             <p class="config-description">
-                L3 仅保留平台侧绝密项，只显示是否已配置，不回显明文。
-                LLM 主密钥 / base_url / model / 高德 Web 服务 Key 等 L2 项请在下方及「API 密钥管理」面板配置；全部键名登记见仓库根目录
-                <code>.env.example</code> 与 Docs/Guide/configuration.md。
+                {{ t('admin.envStatusDesc') }}
+                {{ t('admin.envStatusNote') }}
+                <code>.env.example</code>
+                {{ t('admin.envStatusDocsHint') }}
             </p>
             <div class="env-status-grid">
                 <div
@@ -396,23 +402,27 @@ onMounted(async () => {
                     :key="item.key"
                     class="env-status-item"
                 >
-                    <span class="env-status-label">{{ item.label }}</span>
+                    <span class="env-status-label">{{ l3StatusLabel(item) }}</span>
                     <span :class="['env-status-badge', overview.l3_env_status?.[item.key] ? 'set' : 'unset']">
-                        {{ overview.l3_env_status?.[item.key] ? '已配置' : '未配置' }}
+                        {{
+                            overview.l3_env_status?.[item.key]
+                                ? t('admin.configured')
+                                : t('admin.notConfigured')
+                        }}
                     </span>
                 </div>
             </div>
         </div>
 
         <div class="admin-card">
-            <h5 class="admin-subtitle">系统配置</h5>
+            <h5 class="admin-subtitle">{{ t('admin.systemConfig') }}</h5>
 
-            <label class="admin-field-label">管理员联系方式</label>
+            <label class="admin-field-label">{{ t('admin.adminContact') }}</label>
             <input
                 v-model="adminContactText"
                 class="admin-input"
                 type="text"
-                placeholder="例如：邮箱 / 微信 / QQ"
+                :placeholder="t('admin.adminContactPlaceholder')"
             />
 
             <button
@@ -421,14 +431,14 @@ onMounted(async () => {
                 :disabled="submittingConfig"
                 @click="handleSaveContact"
             >
-                保存联系方式
+                {{ t('admin.saveContact') }}
             </button>
 
-            <label class="admin-field-label">常驻顶部公告</label>
+            <label class="admin-field-label">{{ t('admin.topAnnouncement') }}</label>
             <textarea
                 v-model="announcementText"
                 class="admin-textarea"
-                placeholder="发布后会同步给所有用户，用户点击后才会消失"
+                :placeholder="t('admin.announcementPlaceholder')"
             ></textarea>
 
             <button
@@ -437,30 +447,29 @@ onMounted(async () => {
                 :disabled="submittingConfig"
                 @click="handlePublishAnnouncement"
             >
-                发布公告
+                {{ t('admin.publishAnnouncement') }}
             </button>
         </div>
 
-        <!-- 地图默认配置 -->
         <div class="admin-card">
-            <h5 class="admin-subtitle">🗺️ 地图默认配置</h5>
-            <p class="config-description">设置系统默认加载的底图预设，修改后新用户打开页面将自动使用该底图。URL 中带 l= 参数时仍优先使用 URL 指定的底图。</p>
+            <h5 class="admin-subtitle">{{ t('admin.mapDefaultConfig') }}</h5>
+            <p class="config-description">{{ t('admin.mapDefaultDesc') }}</p>
 
             <div v-if="loadingBasemap" class="loading-state">
-                <span class="spinner"></span> 正在加载底图配置...
+                <span class="spinner"></span> {{ t('admin.loadingBasemap') }}
             </div>
 
             <div v-else class="agent-config-form">
                 <div class="config-row">
                     <div class="config-field config-field-full">
-                        <label class="config-label">默认底图预设</label>
+                        <label class="config-label">{{ t('admin.defaultBasemapPreset') }}</label>
                         <select v-model.number="defaultBasemapIndex" class="config-input">
                             <option
                                 v-for="opt in basemapOptions"
                                 :key="opt.index"
                                 :value="opt.index"
                             >
-                                {{ opt.label }} (索引 {{ opt.index }})
+                                {{ t('admin.basemapOptionLabel', { label: opt.label, index: opt.index }) }}
                             </option>
                         </select>
                     </div>
@@ -472,7 +481,7 @@ onMounted(async () => {
                         :disabled="submittingBasemap"
                         @click="saveDefaultBasemapIndex"
                     >
-                        {{ submittingBasemap ? '保存中...' : '💾 保存' }}
+                        {{ submittingBasemap ? t('common.saving') : t('admin.save') }}
                     </button>
                     <button
                         class="btn-edit"
@@ -480,19 +489,18 @@ onMounted(async () => {
                         :disabled="submittingBasemap"
                         @click="resetDefaultBasemapIndex"
                     >
-                        🔄 重置为默认
+                        {{ t('admin.resetDefault') }}
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- LLM 参数动态配置 -->
         <div class="admin-card">
-            <h5 class="admin-subtitle">🤖 LLM 对话参数配置（后端动态读取，实时生效）</h5>
-            <p class="config-description">以下参数存储在数据库 system_config 表中（L2，优先于根 .env 的 L1 默认），后端运行时动态读取，修改后无需重启服务即可生效。前端 AI 助手、Agent 对话、模型列表等功能均使用这些配置；键名登记见根 .env.example [L2] 段。</p>
+            <h5 class="admin-subtitle">{{ t('admin.llmConfigTitle') }}</h5>
+            <p class="config-description">{{ t('admin.llmConfigDesc') }}</p>
 
             <div v-if="loadingAgentConfig" class="loading-state">
-                <span class="spinner"></span> 正在加载 Agent 配置...
+                <span class="spinner"></span> {{ t('admin.loadingAgentConfig') }}
             </div>
 
             <div v-else class="agent-config-form">
@@ -512,13 +520,13 @@ onMounted(async () => {
                             v-model="agentConfigDraft.model"
                             class="config-input"
                             type="text"
-                            placeholder="留空则按 available_models 随机调度"
+                            :placeholder="t('admin.modelRandomPlaceholder')"
                         />
                     </label>
                 </div>
 
                 <label class="config-field config-field-full">
-                    <span>Available Models（逗号或换行分隔）</span>
+                    <span>{{ t('admin.availableModels') }}</span>
                     <textarea
                         v-model="agentConfigDraft.available_models_text"
                         class="config-textarea"
@@ -581,7 +589,7 @@ onMounted(async () => {
                         v-model="agentConfigDraft.extra_body"
                         class="config-textarea"
                         rows="3"
-                        placeholder='{}'
+                        placeholder="{}"
                     ></textarea>
                 </label>
 
@@ -591,7 +599,7 @@ onMounted(async () => {
                         v-model="agentConfigDraft.system_prompt"
                         class="config-textarea"
                         rows="4"
-                        placeholder="用于后端统一注入的系统提示词"
+                        :placeholder="t('admin.systemPromptPlaceholder')"
                     ></textarea>
                 </label>
 
@@ -608,7 +616,7 @@ onMounted(async () => {
 
                 <div class="config-row">
                     <label class="config-field">
-                        <span>Guest 每日额度</span>
+                        <span>{{ t('admin.guestQuota') }}</span>
                         <input
                             v-model.number="agentConfigDraft.guest_daily_quota"
                             class="config-input"
@@ -618,7 +626,7 @@ onMounted(async () => {
                         />
                     </label>
                     <label class="config-field">
-                        <span>Registered 每日额度</span>
+                        <span>{{ t('admin.registeredQuota') }}</span>
                         <input
                             v-model.number="agentConfigDraft.registered_daily_quota"
                             class="config-input"
@@ -636,7 +644,11 @@ onMounted(async () => {
                         :disabled="submittingAgentConfig"
                         @click="saveAgentConfig"
                     >
-                        {{ submittingAgentConfig ? '保存中...' : '保存 LLM 参数' }}
+                        {{
+                            submittingAgentConfig
+                                ? t('common.saving')
+                                : t('admin.saveLLMParams')
+                        }}
                     </button>
                     <button
                         class="btn btn-edit"
@@ -644,7 +656,7 @@ onMounted(async () => {
                         :disabled="submittingAgentConfig"
                         @click="resetChatQuota"
                     >
-                        恢复默认对话额度
+                        {{ t('admin.resetQuota') }}
                     </button>
                     <button
                         class="btn btn-cancel"
@@ -652,7 +664,7 @@ onMounted(async () => {
                         :disabled="submittingAgentConfig"
                         @click="loadAgentConfig"
                     >
-                        重新加载
+                        {{ t('admin.reload') }}
                     </button>
                 </div>
             </div>
@@ -660,14 +672,14 @@ onMounted(async () => {
 
         <div class="admin-card">
             <div class="admin-title-row">
-                <h5 class="admin-subtitle">数据库管理</h5>
+                <h5 class="admin-subtitle">{{ t('admin.dbManagement') }}</h5>
                 <button
                     class="admin-mini-btn"
                     type="button"
                     :disabled="loadingTables"
                     @click="loadTables"
                 >
-                    刷新表
+                    {{ t('admin.refreshTables') }}
                 </button>
             </div>
 
@@ -680,7 +692,7 @@ onMounted(async () => {
                         value=""
                         disabled
                     >
-                        请选择数据表
+                        {{ t('admin.selectTable') }}
                     </option>
                     <option
                         v-for="item in tables"
@@ -696,15 +708,15 @@ onMounted(async () => {
                     :disabled="loadingRows"
                     @click="loadRows"
                 >
-                    刷新行
+                    {{ t('admin.refreshRows') }}
                 </button>
             </div>
 
             <div class="admin-meta-row">
                 <span>{{ rowCountText }}</span>
-                <span v-if="selectedTableMeta"
-                    >字段数：{{ selectedTableMeta.columns?.length || 0 }}</span
-                >
+                <span v-if="selectedTableMeta">
+                    {{ t('admin.columnCount', { count: selectedTableMeta.columns?.length || 0 }) }}
+                </span>
             </div>
 
             <div
@@ -724,7 +736,7 @@ onMounted(async () => {
                             :disabled="submittingTable"
                             @click="handleEditRow(row)"
                         >
-                            编辑
+                            {{ t('admin.edit') }}
                         </button>
                         <button
                             class="admin-mini-btn danger"
@@ -732,7 +744,7 @@ onMounted(async () => {
                             :disabled="submittingTable"
                             @click="handleDeleteRow(row)"
                         >
-                            删除
+                            {{ t('admin.delete') }}
                         </button>
                     </div>
                 </div>
@@ -741,14 +753,14 @@ onMounted(async () => {
                 v-else
                 class="rows-empty"
             >
-                当前表暂无可展示数据
+                {{ t('admin.rowsEmpty') }}
             </div>
 
-            <label class="admin-field-label">新增一行（JSON 对象）</label>
+            <label class="admin-field-label">{{ t('admin.addRowTitle') }}</label>
             <textarea
                 v-model="insertJsonText"
                 class="admin-textarea"
-                placeholder='例如：{"username":"demo","content":"hello"}'
+                :placeholder="t('admin.insertJsonExample')"
             ></textarea>
 
             <button
@@ -757,7 +769,7 @@ onMounted(async () => {
                 :disabled="submittingTable"
                 @click="handleInsertRow"
             >
-                新增到当前表
+                {{ t('admin.insertToTable') }}
             </button>
         </div>
     </div>
@@ -789,47 +801,51 @@ onMounted(async () => {
 .admin-title {
     margin: 0;
     font-size: 15px;
-    color: var(--acc-text-strong, #214a31);
-    font-weight: 600;
+    font-weight: 700;
+    color: var(--text-primary);
 }
 
 .admin-subtitle {
-    margin: 0 0 10px;
+    margin: 0 0 8px;
     font-size: 13px;
-    color: var(--acc-text-main, #2c5f3e);
+    font-weight: 700;
+    color: var(--text-primary);
 }
 
 .overview-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    gap: 8px;
 }
 
 .overview-item {
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
-    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
     padding: 8px 10px;
-    background: rgba(255, 255, 255, 0.8);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    background: var(--bg-primary);
 }
 
 .overview-label {
-    font-size: 12px;
-    color: var(--acc-text-soft, #5d7f6a);
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
 }
 
 .overview-value {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--acc-text-strong, #214a31);
+    font-size: 16px;
+    color: var(--text-primary);
 }
 
-/* L3 环境密钥状态（只读徽章） */
+.config-description {
+    margin: 0 0 10px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
 .env-status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
 }
 
@@ -838,348 +854,197 @@ onMounted(async () => {
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 8px;
-    padding: 7px 10px;
-    background: rgba(255, 255, 255, 0.8);
+    padding: 8px 10px;
+    background: var(--bg-primary);
 }
 
 .env-status-label {
-    font-size: 12px;
-    color: var(--acc-text-soft, #5d7f6a);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 11px;
+    color: var(--text-secondary);
 }
 
 .env-status-badge {
-    flex-shrink: 0;
-    font-size: 11px;
-    font-weight: 600;
-    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
     padding: 2px 8px;
+    border-radius: 999px;
 }
 
 .env-status-badge.set {
-    color: #1a7a3a;
-    background: rgba(47, 154, 87, 0.14);
-    border: 1px solid rgba(47, 154, 87, 0.35);
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--text-brand-dark);
 }
 
 .env-status-badge.unset {
-    color: #a15c07;
-    background: rgba(230, 162, 60, 0.14);
-    border: 1px solid rgba(230, 162, 60, 0.4);
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-muted);
 }
 
 .admin-field-label {
     display: block;
     margin: 10px 0 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--acc-text-strong, #214a31);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .admin-input,
+.admin-textarea,
 .admin-select,
-.admin-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
-    border-radius: 8px;
-    background: #ffffff;
-    color: var(--text-primary);
-    padding: 10px;
-    font-size: 13px;
-    transition: border-color 0.2s;
-}
-
-.admin-input:focus,
-.admin-select:focus,
-.admin-textarea:focus {
-    outline: none;
-    border-color: var(--brand-primary-light);
-    box-shadow: 0 0 0 3px rgba(89, 182, 106, 0.15);
-}
-
-.admin-textarea {
-    min-height: 88px;
-    resize: vertical;
-    font-family: Consolas, Monaco, 'Courier New', monospace;
-}
-
-.admin-action-btn,
-.admin-mini-btn {
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    color: #ffffff;
-    border: 1px solid rgba(63, 148, 75, 0.55);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    font-weight: 500;
-}
-
-.admin-action-btn {
-    margin-top: 8px;
-    padding: 10px 14px;
-    font-size: 13px;
-    width: 100%;
-    box-shadow: 0 4px 10px rgba(58, 129, 76, 0.15);
-}
-
-.admin-mini-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-}
-
-.admin-mini-btn:hover:not(:disabled),
-.admin-action-btn:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgba(58, 129, 76, 0.25);
-}
-
-.admin-mini-btn:disabled,
-.admin-action-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-    background: #a9d9b4;
-    border-color: transparent;
-}
-
-.admin-mini-btn.danger {
-    background: linear-gradient(135deg, #f87171 0%, var(--danger) 100%);
-    border-color: rgba(220, 38, 38, 0.5);
-}
-
-.admin-mini-btn.danger:hover:not(:disabled) {
-    background: linear-gradient(135deg, #fca5a5 0%, #f87171 100%);
-    box-shadow: 0 4px 10px rgba(220, 38, 38, 0.2);
-}
-
-.admin-select-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-    align-items: center;
-}
-
-.admin-meta-row {
-    margin-top: 8px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--acc-text-soft, #5d7f6a);
-}
-
-.rows-wrap {
-    margin-top: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-height: 300px;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-.rows-wrap::-webkit-scrollbar {
-    width: 6px;
-}
-
-.rows-wrap::-webkit-scrollbar-thumb {
-    background: rgba(var(--brand-primary-rgb), 0.3);
-    border-radius: 4px;
-}
-
-.row-item {
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.8);
-    padding: 10px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
-}
-
-.row-json {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.5;
-    color: #1d4027;
-    white-space: pre-wrap;
-    word-break: break-word;
-    background: rgba(243, 255, 247, 0.8);
-    padding: 8px;
-    border-radius: 6px;
-    border: 1px dashed rgba(var(--brand-primary-rgb), 0.2);
-}
-
-.row-actions {
-    margin-top: 8px;
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-}
-
-.rows-empty {
-    margin-top: 10px;
-    border: 1px dashed rgba(var(--brand-primary-rgb), 0.4);
-    border-radius: 10px;
-    padding: 16px;
-    font-size: 13px;
-    color: var(--acc-text-soft, #5d7f6a);
-    text-align: center;
-    background: rgba(255, 255, 255, 0.4);
-}
-
-/* LLM 参数配置样式 */
-.config-description {
-    margin: 0 0 12px 0;
-    font-size: 12px;
-    color: var(--acc-text-soft, #5d7f6a);
-    line-height: 1.5;
-}
-
-.agent-config-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.config-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
-    gap: 10px;
-}
-
-.config-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--acc-text-main, #2c5f3e);
-    min-width: 0;
-}
-
-.config-field-full {
-    grid-column: 1 / -1;
-}
-
-.config-field span {
-    font-weight: 500;
-    color: var(--acc-text-strong, #214a31);
-}
-
 .config-input,
 .config-textarea {
     width: 100%;
-    box-sizing: border-box;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
+    border: 1px solid var(--border-light);
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--bg-secondary);
     color: var(--text-primary);
+    font-size: 12px;
     padding: 8px 10px;
-    font-size: 13px;
-    transition: border-color 0.2s;
-    font-family: Consolas, Monaco, 'Courier New', monospace;
+    box-sizing: border-box;
 }
 
-.config-input:focus,
-.config-textarea:focus {
-    outline: none;
-    border-color: var(--brand-primary-light);
-    box-shadow: 0 0 0 3px rgba(89, 182, 106, 0.15);
-}
-
+.admin-textarea,
 .config-textarea {
-    min-height: 70px;
+    min-height: 72px;
     resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.config-checkbox {
-    width: auto;
-    margin-top: 4px;
-    transform: scale(1.1);
-    accent-color: var(--brand-primary);
+.admin-action-btn,
+.admin-mini-btn,
+.btn-save,
+.btn-edit,
+.btn-cancel,
+.btn {
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.25);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-brand-dark);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 8px 12px;
+}
+
+.admin-action-btn,
+.btn-save {
+    margin-top: 8px;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    color: #fff;
+    border: none;
+}
+
+.admin-mini-btn.danger {
+    color: var(--danger);
+    border-color: rgba(var(--danger-rgb), 0.35);
+}
+
+.admin-action-btn:disabled,
+.admin-mini-btn:disabled,
+.btn-save:disabled,
+.btn-edit:disabled,
+.btn-cancel:disabled,
+.btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .loading-state {
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 20px;
-    color: var(--acc-text-soft, #5d7f6a);
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
 }
 
 .spinner {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border: 2px solid rgba(var(--brand-primary-rgb), 0.2);
-    border-top: 2px solid var(--brand-primary);
+    border-top-color: var(--brand-primary);
     border-radius: 50%;
-    animation: spin 1s linear infinite;
-    margin-right: 8px;
+    animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
-.button-group {
+.agent-config-form,
+.config-row,
+.button-group,
+.admin-select-row,
+.admin-meta-row,
+.row-actions {
     display: flex;
-    flex-wrap: wrap;
     gap: 8px;
-    margin-top: 8px;
+    flex-wrap: wrap;
 }
 
-.btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
+.config-field {
+    flex: 1 1 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    min-height: 36px;
+    color: var(--text-secondary);
 }
 
-.btn-save {
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-primary) 100%);
-    color: #ffffff;
-    border: 1px solid rgba(63, 148, 75, 0.55);
-    box-shadow: 0 4px 10px rgba(58, 129, 76, 0.15);
+.config-field-full {
+    flex: 1 1 100%;
 }
 
-.btn-save:hover:not(:disabled) {
-    background: linear-gradient(135deg, var(--brand-primary-lighter) 0%, var(--brand-accent) 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgba(58, 129, 76, 0.25);
+.config-checkbox {
+    width: auto;
 }
 
-.btn-edit {
-    background: rgba(var(--brand-primary-rgb), 0.1);
-    color: var(--brand-primary);
-    border: 1px solid var(--brand-primary);
+.admin-select-row {
+    align-items: center;
 }
 
-.btn-edit:hover:not(:disabled) {
-    background: var(--brand-primary);
-    color: white;
+.admin-select {
+    flex: 1;
 }
 
-.btn-cancel {
-    background: var(--border-light);
-    color: var(--text-primary);
+.admin-meta-row {
+    margin: 8px 0;
+    font-size: 11px;
+    color: var(--text-muted);
 }
 
-.btn-cancel:hover:not(:disabled) {
-    background: #bdbdbd;
+.rows-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow: auto;
 }
 
-.btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
+.row-item {
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 8px;
+    padding: 8px;
+    background: var(--bg-primary);
+}
+
+.row-json {
+    margin: 0 0 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.rows-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    border: 1px dashed rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
 }
 </style>

@@ -6,7 +6,7 @@
         <!-- 折叠开关 -->
         <div
             class="toggle-handle"
-            :title="isCollapsed ? '展开面板' : '收起面板'"
+            :title="isCollapsed ? t('shell.expandPanel') : t('shell.collapsePanel')"
             @click="$emit('toggle-panel')"
         >
             <!-- 只用一个向左的箭头，通过动态 class 控制旋转 -->
@@ -50,7 +50,7 @@
                 v-if="activeFeature?.label && activeTab !== 'info'"
                 class="active-feature-banner"
             >
-                当前激活功能：{{ activeFeature.label }}
+                {{ t('shell.activeFeature', { label: activeFeature.label }) }}
             </div>
 
             <!-- 模式 1: AI 聊天 -->
@@ -161,7 +161,7 @@
             >
                 <div class="news-header-bar">
                     <span class="news-logo">Hot News</span>
-                    <span class="news-subtitle">{{ currentPlatformLabel }} 实时热点</span>
+                    <span class="news-subtitle">{{ t('shell.newsSubtitle', { platform: currentPlatformLabel }) }}</span>
                 </div>
 
                 <!-- 平台标签 -->
@@ -183,7 +183,7 @@
                     class="news-loading"
                 >
                     <div class="loading-dot-pulse"></div>
-                    <span>获取热点中...</span>
+                    <span>{{ t('shell.loadingNews') }}</span>
                 </div>
 
                 <!-- 新闻列表 -->
@@ -228,7 +228,7 @@
                         v-if="!newsItems.length && !newsLoading"
                         class="news-empty"
                     >
-                        暂无热点数据
+                        {{ t('shell.noNews') }}
                     </div>
                 </div>
 
@@ -255,7 +255,7 @@
                         :class="{ live: !newsLoading }"
                     >
                         <span class="status-dot"></span>
-                        {{ newsLoading ? '加载中' : `更新于 ${lastNewsUpdate}` }}
+                        {{ newsLoading ? t('shell.newsLoading') : t('shell.newsUpdated', { time: lastNewsUpdate }) }}
                     </span>
                 </div>
             </div>
@@ -281,32 +281,22 @@ import DrivingPlannerPanel from '../Routing/DrivingPlannerPanel.vue';
 import CompassControlPanel from '../Compass/CompassControlPanel.vue';
 import WeatherChartPanel from '../Weather/WeatherChartPanel.vue';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
+import { useLocale } from '../../composables/useLocale';
 
-// ========== 1. 热点新闻平台配置 ==========
-const NEWS_PLATFORMS = [
-    { key: 'weibo', label: '微博' },
-    { key: 'zhihu', label: '知乎' },
-    { key: 'baidu', label: '百度' },
-    { key: 'bilibili', label: 'B站' },
-    { key: '36kr', label: '36氪' },
-    { key: 'github', label: 'GitHub' },
-    { key: 'juejin', label: '掘金' },
-    { key: 'hackernews', label: 'HN' },
-    { key: 'douyin', label: '抖音' },
-    { key: 'v2ex', label: 'V2EX' },
-    { key: 'tieba', label: '贴吧' },
-    { key: 'jinritoutiao', label: '头条' },
-    { key: 'shaoshupai', label: '少数派' },
-    { key: '52pojie', label: '吾爱破解' },
-    { key: 'douban', label: '豆瓣' },
-    { key: 'hupu', label: '虎扑' },
-    { key: 'tenxunwang', label: '腾讯网' },
-    { key: 'stackoverflow', label: 'StackOverflow' },
-    { key: 'sina_finance', label: '新浪财经' },
-    { key: 'eastmoney', label: '东方财富' },
-    { key: 'xueqiu', label: '雪球' },
-    { key: 'cls', label: '财联社' },
+const { t } = useLocale();
+
+// ========== 1. 热点新闻平台配置（label 随语言切换）==========
+const NEWS_PLATFORM_KEYS = [
+    'weibo', 'zhihu', 'baidu', 'bilibili', '36kr', 'github', 'juejin', 'hackernews',
+    'douyin', 'v2ex', 'tieba', 'jinritoutiao', 'shaoshupai', '52pojie', 'douban',
+    'hupu', 'tenxunwang', 'stackoverflow', 'sina_finance', 'eastmoney', 'xueqiu', 'cls',
 ];
+const newsPlatforms = computed(() =>
+    NEWS_PLATFORM_KEYS.map((key) => ({
+        key,
+        label: t(`shell.platforms.${key}`),
+    })),
+);
 
 const NEWS_API_BASE = 'https://orz.ai/api/v1/dailynews';
 const NEWS_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
@@ -351,7 +341,7 @@ const props = defineProps({
     },
     activeFeature: {
         type: Object,
-        default: () => ({ key: 'info', label: '新闻' }),
+        default: () => ({ key: 'info', label: '' }),
     },
     getUserLocation: {
         type: Function,
@@ -456,10 +446,8 @@ const newsLoading = ref(false);
 const lastNewsUpdate = ref('');
 let newsTimer = null;
 
-const newsPlatforms = computed(() => NEWS_PLATFORMS);
-
 const currentPlatformLabel = computed(() => {
-    const p = NEWS_PLATFORMS.find((p) => p.key === currentPlatform.value);
+    const p = newsPlatforms.value.find((item) => item.key === currentPlatform.value);
     return p?.label || currentPlatform.value;
 });
 

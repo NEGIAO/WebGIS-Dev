@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import { useLocale } from '@/composables/useLocale';
 import { readStoredBoolean, writeStoredBoolean } from '../core/cesiumStorage';
 import {
     applyCloudQualityPreset,
@@ -34,6 +35,7 @@ export function useCesiumToolModules({
     getCesium = () => null,
     panelStorageKey = CESIUM_TOOL_PANEL_OPEN_KEY,
 } = {}) {
+    const { language } = useLocale();
     const toolPanelOpen = ref(readStoredBoolean(panelStorageKey, true));
 
     // ========== 高级特效开关（全部默认关闭） ==========
@@ -154,17 +156,21 @@ export function useCesiumToolModules({
     }
 
     // ========== 工具模块定义（使用模块化工厂函数，聚合同类功能） ==========
-    const toolModules = computed(() => [
-        createSceneModule(),
-        createAtmosphereModule(advancedEffectControls, baseAtmosphereParams, atmosphereParams),
-        createCloudModule(cloudParams),
-        createToolsModule(_modelManager, _cameraEnhanced),
-        createWindModule(wind.windParams),
-        createFluidModule(fluidParams, fluidState),
-        createShallowWaterModule(shallowWaterVisible, shallowWaterParams),
-        createPlayerModule(playerParams, _playerController),
-        createAnalysisModule(analysisParams, analysisState),
-    ]);
+    // language 依赖：语言切换时重建模块 title/label/tooltip
+    const toolModules = computed(() => {
+        void language.value;
+        return [
+            createSceneModule(),
+            createAtmosphereModule(advancedEffectControls, baseAtmosphereParams, atmosphereParams),
+            createCloudModule(cloudParams),
+            createToolsModule(_modelManager, _cameraEnhanced),
+            createWindModule(wind.windParams),
+            createFluidModule(fluidParams, fluidState),
+            createShallowWaterModule(shallowWaterVisible, shallowWaterParams),
+            createPlayerModule(playerParams, _playerController),
+            createAnalysisModule(analysisParams, analysisState),
+        ];
+    });
 
     watch(toolPanelOpen, (value) => {
         writeStoredBoolean(panelStorageKey, value);

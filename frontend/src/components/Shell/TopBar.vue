@@ -10,7 +10,7 @@
                     alt="Icon"
                     class="logo-icon"
                 />
-                <span class="title-text">The Science of Where！</span>
+                <span class="title-text">{{ t('topbar.slogan') }}</span>
             </a>
         </div>
 
@@ -21,7 +21,7 @@
             >
                 <button
                     class="nav-btn"
-                    title="菜单项"
+                    :title="t('topbar.menuTitle')"
                     @click="toggleToolMenu"
                 >
                     <span class="btn-icon">
@@ -30,14 +30,14 @@
                             :stroke-width="2"
                         />
                     </span>
-                    <span class="btn-text">菜单</span>
+                    <span class="btn-text">{{ t('topbar.menu') }}</span>
                 </button>
                 <div
                     v-if="showToolMenu"
                     class="floating-menu tools-menu"
                 >
                     <div class="menu-header">
-                        <span class="menu-header-title">功能菜单</span>
+                        <span class="menu-header-title">{{ t('topbar.featureMenu') }}</span>
                     </div>
                     <div class="menu-body">
                         <!-- 核心功能引入 2x2 现代网格排版 -->
@@ -50,7 +50,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                图层管理
+                                {{ t('topbar.layerManage') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -60,7 +60,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                风水罗盘
+                                {{ t('topbar.compass') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -70,7 +70,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                公交规划
+                                {{ t('topbar.busPlanner') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -80,7 +80,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                驾车规划
+                                {{ t('topbar.drivePlanner') }}
                             </button>
                         </div>
 
@@ -96,7 +96,7 @@
                                 :size="16"
                                 class="m-icon"
                             />
-                            {{ isWeatherBoardMode ? '返回地图视图' : '天气看板' }}
+                            {{ isWeatherBoardMode ? t('topbar.backToMap') : t('topbar.weatherBoard') }}
                         </button>
 
                         <button
@@ -107,11 +107,11 @@
                                 :size="16"
                                 class="m-icon"
                             />
-                            {{ logMonitorVisible ? '关闭日志监控' : '日志监控' }}
+                            {{ logMonitorVisible ? t('topbar.closeLogMonitor') : t('topbar.logMonitor') }}
                         </button>
 
                         <div class="menu-divider"></div>
-                        <div class="menu-group-title">常用地点</div>
+                        <div class="menu-group-title">{{ t('topbar.quickLocations') }}</div>
 
                         <!-- 常用地点流式标签包裹 -->
                         <div class="quick-loc-container">
@@ -131,14 +131,14 @@
                         <div class="menu-divider"></div>
                         <button
                             class="menu-item soup-item"
-                            title="来点鸡汤"
+                            :title="t('topbar.soupTitle')"
                             @click="handleSoup"
                         >
                             <smile-icon
                                 :size="16"
                                 class="m-icon"
                             />
-                            鸡汤
+                            {{ t('topbar.soup') }}
                         </button>
                     </div>
                 </div>
@@ -146,7 +146,7 @@
 
             <button
                 class="nav-btn"
-                title="分享当前视角"
+                :title="t('topbar.shareTitle')"
                 @click="handleShareView"
             >
                 <span class="btn-icon">
@@ -155,12 +155,12 @@
                         :stroke-width="1.8"
                     />
                 </span>
-                <span class="btn-text">分享</span>
+                <span class="btn-text">{{ t('topbar.share') }}</span>
             </button>
 
             <button
                 class="nav-btn"
-                title="AI 助手"
+                :title="t('topbar.aiAssistant')"
                 @click="handleOpenChat"
             >
                 <span class="btn-icon">
@@ -169,12 +169,12 @@
                         :stroke-width="2"
                     />
                 </span>
-                <span class="btn-text">AI 助手</span>
+                <span class="btn-text">{{ t('topbar.aiAssistant') }}</span>
             </button>
 
             <button
                 class="nav-btn"
-                title="切换2D/3D视图"
+                :title="t('topbar.toggleViewTitle')"
                 @click="handleToggle3D"
             >
                 <span class="btn-icon">
@@ -184,13 +184,13 @@
                     />
                 </span>
                 <span class="btn-text">
-                    {{ is3DMode ? '2D视图' : '3D视图' }}
+                    {{ is3DMode ? t('topbar.view2d') : t('topbar.view3d') }}
                 </span>
             </button>
 
             <button
                 class="nav-btn"
-                title="用户中心"
+                :title="t('topbar.userCenterTitle')"
                 @click="handleToggleAccountCenter"
             >
                 <span class="btn-icon">
@@ -199,7 +199,7 @@
                         :stroke-width="2"
                     />
                 </span>
-                <span class="btn-text">用户中心</span>
+                <span class="btn-text">{{ t('topbar.userCenter') }}</span>
             </button>
 
             <div
@@ -208,7 +208,7 @@
             >
                 <button
                     class="nav-btn magic-btn"
-                    title="魔法特效选项"
+                    :title="t('topbar.magicEffectsTitle')"
                     @click="toggleMagicMenu"
                 >
                     <span class="btn-icon">
@@ -217,14 +217,14 @@
                             :stroke-width="2"
                         />
                     </span>
-                    <span class="btn-text">屏幕特效</span>
+                    <span class="btn-text">{{ t('topbar.magicEffects') }}</span>
                 </button>
                 <div
                     v-if="showMagicMenu"
                     class="floating-menu magic-menu"
                 >
                     <div class="menu-header">
-                        <span class="menu-header-title">屏幕特效</span>
+                        <span class="menu-header-title">{{ t('topbar.magicEffects') }}</span>
                     </div>
                     <div class="menu-body">
                         <!-- 特效采用高效的 2 列网格 -->
@@ -237,7 +237,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                流体烟雾
+                                {{ t('topbar.fluid') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -247,7 +247,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                引力场
+                                {{ t('topbar.gravity') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -257,7 +257,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                维度塌陷
+                                {{ t('topbar.void') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -267,7 +267,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                量子波
+                                {{ t('topbar.wave') }}
                             </button>
                             <button
                                 class="menu-item highlight-magic"
@@ -277,7 +277,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                黑洞引力
+                                {{ t('topbar.singularity') }}
                             </button>
                             <button
                                 class="menu-item"
@@ -287,7 +287,7 @@
                                     :size="16"
                                     class="m-icon"
                                 />
-                                圆环爆破
+                                {{ t('topbar.ringExplosion') }}
                             </button>
                         </div>
 
@@ -300,7 +300,7 @@
                                 :size="16"
                                 class="m-icon"
                             />
-                            关闭特效
+                            {{ t('topbar.closeEffects') }}
                         </button>
                     </div>
                 </div>
@@ -310,8 +310,9 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '../../constants';
 // import { hideLoading, showLoading } from '@/utils';
 import {
@@ -364,6 +365,7 @@ const emit = defineEmits([
     'toggle-account-center',
 ]);
 
+const { t } = useLocale();
 const showToolMenu = ref(false);
 const showMagicMenu = ref(false);
 const menuHostRef = ref(null);
@@ -381,36 +383,43 @@ const faviconUrl = `${normalizedBase}images/icon.webp`;
 
 const message = useMessage();
 
-//地点迁移
-const quickLocations = [
-    { key: 'dengzhou', label: '邓州', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
-    { key: 'hedu', label: '河大', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 0 },
-    { key: 'home', label: 'Home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
-    { key: '51Area', label: '51区', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 6 },
-    { key: 'China', label: '美丽中国', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 21 },
-];
+/** 常用地点坐标常量；label 经 i18n 计算，随语言切换更新 */
+const QUICK_LOCATION_COORDS = Object.freeze([
+    { key: 'dengzhou', labelKey: 'topbar.locations.dengzhou', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
+    { key: 'hedu', labelKey: 'topbar.locations.hedu', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 0 },
+    { key: 'home', labelKey: 'topbar.locations.home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
+    { key: '51Area', labelKey: 'topbar.locations.area51', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 6 },
+    { key: 'China', labelKey: 'topbar.locations.china', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 21 },
+]);
+
+const quickLocations = computed(() =>
+    QUICK_LOCATION_COORDS.map((loc) => ({
+        ...loc,
+        label: t(loc.labelKey),
+    })),
+);
 
 function handleOpenToolbox() {
     showToolMenu.value = false;
-    emit('activate-feature', { key: 'toolbox', label: '工具箱' });
+    emit('activate-feature', { key: 'toolbox', label: t('topbar.layerManage') });
     emit('open-toolbox');
 }
 
 function handleOpenCompass() {
     showToolMenu.value = false;
-    emit('activate-feature', { key: 'compass', label: '风水罗盘' });
+    emit('activate-feature', { key: 'compass', label: t('topbar.compass') });
     emit('open-compass');
 }
 
 function handleOpenBusPlanner() {
     showToolMenu.value = false;
-    emit('activate-feature', { key: 'bus', label: '公交规划' });
+    emit('activate-feature', { key: 'bus', label: t('topbar.busPlanner') });
     emit('open-bus');
 }
 
 function handleOpenDrivePlanner() {
     showToolMenu.value = false;
-    emit('activate-feature', { key: 'drive', label: '驾车规划' });
+    emit('activate-feature', { key: 'drive', label: t('topbar.drivePlanner') });
     emit('open-drive');
 }
 
@@ -418,13 +427,13 @@ function handleToggleWeatherBoard() {
     showToolMenu.value = false;
     emit('activate-feature', {
         key: props.isWeatherBoardMode ? 'map' : 'weather-board',
-        label: props.isWeatherBoardMode ? '地图视图' : '天气看板',
+        label: props.isWeatherBoardMode ? t('topbar.mapView') : t('topbar.weatherBoard'),
     });
     emit('toggle-weather-board');
 }
 
 function handleOpenChat() {
-    emit('activate-feature', { key: 'chat', label: 'AI助手' });
+    emit('activate-feature', { key: 'chat', label: t('topbar.aiAssistant') });
     emit('open-chat');
 }
 
@@ -432,7 +441,10 @@ const is3DMode = ref(false);
 
 function handleToggle3D() {
     is3DMode.value = !is3DMode.value;
-    emit('activate-feature', { key: '3d', label: is3DMode.value ? '3D视图' : '2D视图' });
+    emit('activate-feature', {
+        key: '3d',
+        label: is3DMode.value ? t('topbar.view3d') : t('topbar.view2d'),
+    });
     emit('toggle-3d');
 }
 
@@ -447,7 +459,7 @@ function toggleMagicMenu() {
 
 function handleActivateMagic(effectName) {
     showMagicMenu.value = false;
-    emit('activate-feature', { key: 'magic', label: '特效' });
+    emit('activate-feature', { key: 'magic', label: t('topbar.effectLabel') });
     emit('activate-magic', effectName);
 }
 
@@ -481,7 +493,11 @@ function handleSoup() {
 function handleToggleLogMonitor() {
     showToolMenu.value = false;
     appStore.toggleLogMonitor();
-    message.info(logMonitorVisible.value ? '日志监控面板已打开' : '日志监控面板已关闭');
+    message.info(
+        logMonitorVisible.value
+            ? t('controls.logMonitorOpened')
+            : t('controls.logMonitorClosed'),
+    );
 }
 
 function handleDocumentClick(event) {
@@ -635,12 +651,12 @@ async function handleShareView() {
     try {
         if (canUseNativeShare()) {
             await navigator.share({
-                title: 'NEGIAO WebGIS 视角',
-                text: '分享当前地图视角链接',
+                title: t('topbar.shareNativeTitle'),
+                text: t('topbar.shareNativeText'),
                 url,
             });
             syncShareFlagInCurrentUrl();
-            message.success('已唤起系统分享面板');
+            message.success(t('topbar.sharePanelOpened'));
             return;
         }
     } catch (error) {
@@ -657,10 +673,10 @@ async function handleShareView() {
             fallbackCopyViaExecCommand(url);
         }
         syncShareFlagInCurrentUrl();
-        message.success('✅ 视角链接已复制，快去分享吧！');
+        message.success(t('topbar.shareCopied'));
     } catch (error) {
-        message.error('分享链接复制失败', error);
-        message.error('复制失败，请手动从地址栏复制链接');
+        message.error(t('topbar.shareCopyFailed'), error);
+        message.error(t('topbar.shareManualCopy'));
     }
 }
 

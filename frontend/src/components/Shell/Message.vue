@@ -51,7 +51,7 @@
                     v-if="item.closable !== false"
                     type="button"
                     class="toast-close"
-                    aria-label="关闭"
+                    :aria-label="t('common.close')"
                     @click.stop="handleCloseButtonClick(item.id)"
                 >
                     ×
@@ -72,7 +72,7 @@
                 key="__queue_hint__"
                 class="toast-queue-hint"
             >
-                还有 {{ queued.length }} 条提示…
+                {{ t('message.queueMore', { count: queued.length }) }}
             </div>
         </TransitionGroup>
     </div>
@@ -81,6 +81,7 @@
 <script setup>
 import { toRef } from 'vue';
 import { useMessageIslandMotion } from '../../composables/useMessageIslandMotion';
+import { useLocale } from '../../composables/useLocale';
 
 const props = defineProps({
     messages: {
@@ -104,6 +105,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+const { t } = useLocale();
 
 const messagesRef = toRef(props, 'messages');
 const durationRef = toRef(props, 'duration');
@@ -147,11 +149,11 @@ function getTypeIcon(type) {
 }
 
 function getTypeTitle(type) {
-    if (type === 'success') return '成功';
-    if (type === 'error') return '错误';
-    if (type === 'warning') return '警告';
-    if (type === 'soup') return '鸡汤';
-    return '提示';
+    if (type === 'success') return t('message.types.success');
+    if (type === 'error') return t('message.types.error');
+    if (type === 'warning') return t('message.types.warning');
+    if (type === 'soup') return t('message.types.soup');
+    return t('message.types.info');
 }
 
 // HTML 转义，避免 v-html 注入风险。

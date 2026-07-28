@@ -47,7 +47,7 @@ frontend/src/
 │
 ├── components/                                     # 业务组件
 │   ├── Cesium/                                     # ===== 3D 地球模块 =====
-│   │   ├── CesiumContainer.vue                     # Cesium 容器（底图/地形 + URL 追踪 + 工具面板 + 拖拽导入）
+│   │   ├── CesiumContainer.vue                     # Cesium 容器（底图/地形 + URL 追踪 + 工具面板 + 拖拽导入；场景 Loading i18n）
 │   │   ├── CesiumAdvancedEffects.vue               # 高级视觉效果（高度雾/HBAO/移轴/大气）
 │   │   ├── CesiumToolPanel.vue                     # 统一控制面板（场景/数据/特效/风场/流体/漫游）
 │   │   ├── CesiumDataImportDialog.vue              # GLTF/GLB 模型放置坐标输入弹窗
@@ -137,7 +137,7 @@ frontend/src/
 │   │   │       └── terrainHelper.ts                # 地形 provider 检测
 │   │   │
 │   │   ├── FluidSimulation/                        # 流体模拟（洪水 + 水位动画）
-│   │   │   ├── FluidSimulationPanel.vue            # 流体控制面板
+│   │   │   ├── FluidSimulationPanel.vue            # 流体控制面板（高度请求 Loading i18n）
 │   │   │   └── fluidRuntime.js                     # WebGL 流体渲染引擎
 │   │   │
 │   │   ├── ShallowWater/                           # Three.js 热带浅水场景叠加
@@ -215,56 +215,56 @@ frontend/src/
 │   │   ├── ChatServiceStatus.vue                   # 路由模式/服务状态/额度展示条
 │   │   ├── ChatMessageList.vue                     # 消息列表（复制/重新生成/时间戳/回到底部/建议词）
 │   │   └── ChatInputBar.vue                        # 输入栏（自适应高度/Enter 发送/停止生成）
-│   ├── Common/ExtentPicker.vue                     # 框选范围组件
+│   ├── Common/ExtentPicker.vue                     # 框选范围组件（extent.* i18n）
 │   ├── Compass/
 │   │   ├── CompassControlPanel.vue                 # 罗盘控制面板
 │   │   └── PalaceExplanationPanel.vue              # 宫位解释面板
 │   ├── ControlsPanel/
-│   │   ├── ControlsPanel.vue                       # 总面板入口
+│   │   ├── ControlsPanel.vue                       # 总面板入口（sidebar 标签 + 卷帘对话框 i18n）
 │   │   ├── AdministrativeDivisionPanel.vue         # 行政区面板
 │   │   ├── AdministrativeDivisionTreeNode.vue      # 行政区树节点
-│   │   ├── DrawPanel.vue                           # 富绘制面板（基础/形状/箭头/编辑 + 要素样式）
+│   │   ├── DrawPanel.vue                           # 富绘制面板（工具分组/样式/操作 i18n）
 │   │   ├── LogMonitor.vue                          # 日志监控
-│   │   ├── MeasurePanel.vue                        # 测量面板
-│   │   └── SpatialAnalysisPanel.vue                # 空间分析面板
+│   │   ├── MeasurePanel.vue                        # 测量面板（工具/hint i18n）
+│   │   └── SpatialAnalysisPanel.vue                # 空间分析面板（8 算子参数/结果 i18n）
 │   ├── feng-shui-compass-svg/                      # 罗盘 SVG HUD
 │   │   ├── feng-shui-compass-svg.vue               # 罗盘主组件
 │   │   ├── Explanation/                            # 宫位解释 JSON 数据（5 种解释）
 │   │   ├── themes/                                 # 5 种主题配置 + 预览图
 │   │   └── types/                                  # TypeScript 类型定义
 │   ├── Layer/
-│   │   ├── TOCPanel.vue                            # TOC 主面板
+│   │   ├── TOCPanel.vue                            # TOC 主面板（toast/表单错误 layer.* i18n）
 │   │   ├── LayerPanel.vue                          # TOC 树容器
 │   │   ├── TOCTreeItem.vue                         # 递归树节点
 │   │   ├── LayerControlPanel.vue                   # 底图控制面板
 │   │   ├── LayerPropertiesDialog.vue               # 图层属性弹窗
-│   │   ├── AttributeTable.vue                      # 属性表
+│   │   ├── AttributeTable.vue                      # 属性表（标题/工具栏/字段面板/空态/页脚 attrTable.* i18n）
 │   │   └── SharedResourceTreeItem.vue              # 共享资源树节点
 │   ├── Map/
 │   │   ├── MapContainer.vue                        # 地图容器（能力暴露 + 罗盘 HUD）
-│   │   ├── MapControlsBar.vue                      # 底部坐标/缩放工具栏
+│   │   ├── MapControlsBar.vue                      # 底部坐标/缩放工具栏（坐标编辑/复制/格式/复位 mapControls.* i18n）
 │   │   ├── MapSwipeController.vue                  # 卷帘对比滑块
 │   │   ├── MapDownloader.vue                       # 底图下载面板
 │   │   └── MapEasterEgg.vue                        # 彩蛋组件
 │   ├── Routing/
-│   │   ├── BusPlannerPanel.vue                     # 公交规划
-│   │   ├── DrivingPlannerPanel.vue                 # 驾车规划
-│   │   └── MapPointPickerCard.vue                  # 地图点选卡片（含搜索选点）
+│   │   ├── BusPlannerPanel.vue                     # 公交规划（UI/错误/Loading 全量 routing.* + loading.busRoute）
+│   │   ├── DrivingPlannerPanel.vue                 # 驾车规划（UI/时长/错误/Loading 全量 routing.* + loading.drivingRoute）
+│   │   └── MapPointPickerCard.vue                  # 地图点选卡片（默认标签/提示 routing.*）
 │   ├── Search/
 │   │   ├── LocationSearch.vue                      # 地点搜索
-│   │   └── AmapAoiInjectDialog.vue                 # 高德 AOI 注入弹窗
+│   │   └── AmapAoiInjectDialog.vue                 # 高德 AOI 注入弹窗（模板/toast layer.aoi* i18n）
 │   ├── Shell/
-│   │   ├── TopBar.vue                              # 顶栏
-│   │   ├── SidePanel.vue                           # 右侧综合侧栏
+│   │   ├── TopBar.vue                              # 顶栏（菜单/分享/特效/常用地点 i18n）
+│   │   ├── SidePanel.vue                           # 右侧综合侧栏（折叠/新闻/activeFeature i18n）
 │   │   ├── ResizeHandle.vue                        # 可拖拽分割条
-│   │   ├── GlobalLoading.vue                       # 全局加载遮罩
-│   │   ├── Message.vue                             # 全局消息条
+│   │   ├── GlobalLoading.vue                       # 全局加载遮罩（默认文案 common.loading* i18n）
+│   │   ├── Message.vue                             # 全局消息条（toast 标题/队列 message.* core i18n）
 │   │   ├── PersistentAnnouncementBar.vue           # 顶部公告条
 │   │   └── MagicCursor.vue                         # 首屏特效
 │   ├── Weather/
-│   │   ├── WeatherChartPanel.vue                   # 天气可视化主面板
-│   │   ├── WeatherLiveCards.vue                    # 实况天气卡片
-│   │   └── WeatherForecastTable.vue                # 预报表格
+│   │   ├── WeatherChartPanel.vue                   # 天气可视化主面板（UI weather.*）
+│   │   ├── WeatherLiveCards.vue                    # 实况天气卡片（雨情/标签 i18n）
+│   │   └── WeatherForecastTable.vue                # 预报表格（表头/空态/weekdays）
 │   └── UserCenter/
 │       ├── FloatingAccountPanel.vue                # 用户中心浮层壳（含第三方账号绑定入口）
 │       ├── AdminControlPanel.vue                   # 管理员控制台
@@ -273,10 +273,10 @@ frontend/src/
 │       └── tabs/
 │           ├── OverviewTab.vue                     # 总览标签
 │           ├── SecurityTab.vue                     # 安全标签（密码修改 + Google/GitHub 绑定）
-│           └── PreferencesTab.vue                  # 偏好标签
+│           └── PreferencesTab.vue                  # 偏好标签（language 即时 SSOT，不参与 dirty）
 │
 ├── composables/                                    # 组合式函数
-│   ├── auth/useAuthIdentity.js                     # 认证身份校验
+│   ├── auth/useAuthIdentity.js                     # 认证身份校验（validateDisplayName 返回 i18n code）
 │   ├── Magic/                                      # 首屏视觉特效
 │   │   ├── useDelaunay.js
 │   │   ├── useFluid.js
@@ -367,15 +367,15 @@ frontend/src/
 │   │   ├── useAgentMapContext.js                   # 发送时捕获活跃地图上下文（runtime 快照 + URL 安全回退）
 │   │   └── chatIntentFallback.js                   # GIS 意图识别兜底（定位/切底图正则 + 图源映射，纯函数）
 │   ├── weather/
-│   │   ├── useWeatherData.js                       # 天气数据获取
-│   │   └── useWeatherCharts.js                     # ECharts 图表渲染
+│   │   ├── useWeatherData.js                       # 天气数据获取（校验/雨情 toast i18n）
+│   │   └── useWeatherCharts.js                     # ECharts 图表渲染（图例/tooltip i18n）
 │   ├── useAgentConfig.js                           # Agent 配置共享 composable
 │   ├── useMarkdownRenderer.js                      # Agent 对话 Markdown 渲染（marked + hljs + GFM）
 │   ├── useErrorHandler.ts                          # 错误处理
 │   ├── useGisLoader.ts                             # GIS 加载器
 │   ├── useKmzLoader.js                             # KMZ 加载器
 │   ├── useLayerDataImport.js                       # 图层数据导入
-│   ├── useLocale.js                                # 多语言 i18n 组合式函数（zh-CN/en 消息表 + localStorage 持久化）
+│   ├── useLocale.js                                # 多语言 i18n（深拷贝 core + per-lang 懒加载 + force/inflight join + 空串合法 + 同步完整偏好缓存 language）
 │   ├── useManagedLayerRegistry.js                  # 托管图层注册
 │   ├── useMapState.js                              # OL 地图状态
 │   ├── useMapSwipe.ts                              # 卷帘核心逻辑
@@ -446,7 +446,7 @@ frontend/src/
 │   ├── useThemeStore.ts                            # 主题状态
 │   ├── useTOCStore.ts                              # TOC 元数据状态
 │   ├── useUrlParamStore.ts                         # URL 参数管理
-│   ├── useUserPreferencesStore.ts                  # 用户偏好
+│   ├── useUserPreferencesStore.ts                  # 用户偏好（语言 SSOT：setLanguagePreference + 本机 key 优先远端）
 │   └── useWeatherStore.ts                          # 天气状态
 │
 ├── data/goldenSoupQuotes.js                        # 励志语录数据（懒加载）
@@ -507,7 +507,7 @@ frontend/src/
 │   │   └── viewScaleConverter.js                   # OL zoom ↔ Cesium height 换算
 │   ├── ui/
 │   │   ├── index.js
-│   │   └── loading.js                              # 全局 loading 控制
+│   │   └── loading.js                              # 全局 loading 控制（文案由调用方 t('loading.*')）
 │   ├── url/
 │   │   ├── index.js
 │   │   ├── crypto.js                               # URL 参数加解密
@@ -515,11 +515,16 @@ frontend/src/
 │   │   └── urlQueryReader.js                       # hash/query 参数统一读取
 │   └── weather/weatherUtils.js                     # 天气工具函数
 │
+├── locales/                                        # 国际化语言包（i18n）
+│   ├── core.js                                     # 同步核心语言包（common + 登录 auth 首屏键 + preferences.language）
+│   ├── zh-CN.js                                    # 中文完整语言包（懒加载 chunk）
+│   └── en-US.js                                    # 英文完整语言包（懒加载 chunk）
+│
 ├── views/
-│   ├── HomeView.vue                                # 主页面
-│   ├── RegisterView.vue                            # 注册/登录（邮箱 + Google/GitHub OAuth）
+│   ├── HomeView.vue                                # 主页面（属性面板/地图 loading/分析 toast home.* i18n）
+│   ├── RegisterView.vue                            # 注册/登录（邮箱 + Google/GitHub OAuth，全量 i18n + 语言切换）
 │   ├── OAuthCallbackView.vue                       # Google/GitHub OAuth 回调会话落地
-│   ├── NotFoundView.vue                            # 404 页面
+│   ├── NotFoundView.vue                            # 404 页面（notFound.* i18n）
 │   ├── TermsOfService.vue                          # 服务条款
 │   ├── PrivacyPolicy.vue                           # 隐私政策
 │   └── home/

@@ -1,10 +1,10 @@
 <template>
     <div class="draw-panel">
         <div class="panel-header">
-            <span class="panel-title">绘制工具</span>
+            <span class="panel-title">{{ t('draw.title') }}</span>
             <button
                 class="close-btn"
-                title="关闭"
+                :title="t('common.close')"
                 @click="$emit('close')"
             >
                 <X :size="14" />
@@ -34,10 +34,10 @@
             </section>
 
             <section class="style-section">
-                <div class="section-title">样式设置</div>
+                <div class="section-title">{{ t('draw.styleSettings') }}</div>
 
                 <div class="style-row">
-                    <label>边线颜色</label>
+                    <label>{{ t('draw.strokeColor') }}</label>
                     <div class="style-control">
                         <input
                             v-model="styleForm.strokeColor"
@@ -62,7 +62,7 @@
                 </div>
 
                 <div class="style-row">
-                    <label>边线宽度</label>
+                    <label>{{ t('draw.strokeWidth') }}</label>
                     <div class="style-control">
                         <input
                             v-model.number="styleForm.strokeWidth"
@@ -78,7 +78,7 @@
                 </div>
 
                 <div class="style-row">
-                    <label>边线透明</label>
+                    <label>{{ t('draw.strokeOpacity') }}</label>
                     <div class="style-control">
                         <input
                             v-model.number="styleForm.strokeOpacity"
@@ -94,28 +94,28 @@
                 </div>
 
                 <div v-if="showStrokeDash" class="style-row">
-                    <label>边线类型</label>
+                    <label>{{ t('draw.strokeType') }}</label>
                     <div class="dash-toggle-group">
                         <button
                             class="dash-toggle-btn"
                             :class="{ active: styleForm.strokeDashType === 'solid' }"
                             @click="styleForm.strokeDashType = 'solid'; emitStyleChange()"
                         >
-                            实线
+                            {{ t('draw.solidLine') }}
                         </button>
                         <button
                             class="dash-toggle-btn"
                             :class="{ active: styleForm.strokeDashType === 'dashed' }"
                             @click="styleForm.strokeDashType = 'dashed'; emitStyleChange()"
                         >
-                            虚线
+                            {{ t('draw.dashedLine') }}
                         </button>
                     </div>
                 </div>
 
                 <template v-if="showFill">
                     <div class="style-row">
-                        <label>填充颜色</label>
+                        <label>{{ t('draw.fillColor') }}</label>
                         <div class="style-control">
                             <input
                                 v-model="styleForm.fillColor"
@@ -127,7 +127,7 @@
                         </div>
                     </div>
                     <div class="style-row">
-                        <label>填充透明</label>
+                        <label>{{ t('draw.fillOpacity') }}</label>
                         <div class="style-control">
                             <input
                                 v-model.number="styleForm.fillOpacity"
@@ -161,7 +161,7 @@
 
                 <template v-if="showArrow">
                     <div class="style-row">
-                        <label>箭头比例</label>
+                        <label>{{ t('draw.arrowRatio') }}</label>
                         <div class="style-control">
                             <input
                                 v-model.number="styleForm.arrowScale"
@@ -176,7 +176,7 @@
                         </div>
                     </div>
                     <div class="style-row">
-                        <label>箭头头宽</label>
+                        <label>{{ t('draw.arrowHeadWidth') }}</label>
                         <div class="style-control">
                             <input
                                 v-model.number="styleForm.arrowHeadWidth"
@@ -194,7 +194,7 @@
 
                 <template v-if="showBattleGradient">
                     <div class="style-row">
-                        <label>渐变起点</label>
+                        <label>{{ t('draw.gradientStart') }}</label>
                         <div class="style-control">
                             <input
                                 v-model="styleForm.gradientStartColor"
@@ -205,7 +205,7 @@
                         </div>
                     </div>
                     <div class="style-row">
-                        <label>渐变终点</label>
+                        <label>{{ t('draw.gradientEnd') }}</label>
                         <div class="style-control">
                             <input
                                 v-model="styleForm.gradientEndColor"
@@ -225,19 +225,19 @@
                     @click="handleDeleteSelected"
                 >
                     <Trash2 :size="14" />
-                    <span>删除选中</span>
+                    <span>{{ t('draw.deleteSelected') }}</span>
                 </button>
                 <button class="action-btn secondary-btn" @click="handleUndoLast">
                     <Undo2 :size="14" />
-                    <span>撤销最近</span>
+                    <span>{{ t('draw.undoLast') }}</span>
                 </button>
                 <button
                     class="action-btn clear-btn"
-                    title="仅清除绘制图层；上传/搜索等其他图层请在图层目录中统一管理"
+                    :title="t('draw.clearAllTitle')"
                     @click="handleClear"
                 >
                     <Eraser :size="14" />
-                    <span>清除绘制</span>
+                    <span>{{ t('draw.clearAll') }}</span>
                 </button>
             </div>
         </div>
@@ -271,7 +271,6 @@ import {
 import {
     DRAWING_PRESET_COLORS,
     DEFAULT_DRAWING_STYLE_PARAMS,
-    getDrawingHint,
     hasFill,
     hasRadius,
     hasStrokeDash,
@@ -279,7 +278,9 @@ import {
     isBattleArrowTool,
     normalizeDrawingStyleParams,
 } from '../../composables/map/features/drawingToolRegistry';
+import { useLocale } from '../../composables/useLocale';
 
+const { t } = useLocale();
 const emit = defineEmits(['draw-type', 'edit-action', 'style-change', 'clear', 'close']);
 
 const activeType = ref('');
@@ -299,47 +300,48 @@ const ICON_MAP = {
     SelectEdit: MousePointer2,
 };
 
-const toolGroups = [
+/** 工具分组与标签/提示随语言切换 */
+const toolGroups = computed(() => [
     {
         id: 'basic',
-        label: '基础',
+        label: t('draw.groups.basic'),
         tools: [
-            { type: 'Point', label: '点', hint: '单击地图放置点标记', icon: ICON_MAP.Point },
-            { type: 'LineString', label: '线', hint: '单击绘制折线，双击结束', icon: ICON_MAP.LineString },
-            { type: 'Polygon', label: '面', hint: '单击绘制多边形，双击结束', icon: ICON_MAP.Polygon },
+            { type: 'Point', label: t('draw.tools.Point'), hint: t('draw.hints.Point'), icon: ICON_MAP.Point },
+            { type: 'LineString', label: t('draw.tools.LineString'), hint: t('draw.hints.LineString'), icon: ICON_MAP.LineString },
+            { type: 'Polygon', label: t('draw.tools.Polygon'), hint: t('draw.hints.Polygon'), icon: ICON_MAP.Polygon },
         ],
     },
     {
         id: 'shape',
-        label: '形状',
+        label: t('draw.groups.shapes'),
         tools: [
-            { type: 'Rectangle', label: '矩形', hint: '拖拽绘制矩形', icon: ICON_MAP.Rectangle },
-            { type: 'Ellipse', label: '椭圆', hint: '拖拽绘制椭圆', icon: ICON_MAP.Ellipse },
-            { type: 'CircleOutline', label: '圆', hint: '拖拽绘制圆轮廓', icon: ICON_MAP.CircleOutline },
+            { type: 'Rectangle', label: t('draw.tools.Rectangle'), hint: t('draw.hints.Rectangle'), icon: ICON_MAP.Rectangle },
+            { type: 'Ellipse', label: t('draw.tools.Ellipse'), hint: t('draw.hints.Ellipse'), icon: ICON_MAP.Ellipse },
+            { type: 'CircleOutline', label: t('draw.tools.CircleOutline'), hint: t('draw.hints.CircleOutline'), icon: ICON_MAP.CircleOutline },
         ],
     },
     {
         id: 'arrow',
-        label: '箭头',
+        label: t('draw.groups.arrows'),
         tools: [
-            { type: 'Arrow', label: '箭头', hint: '绘制折线末端箭头', icon: ICON_MAP.Arrow },
-            { type: 'WindArrow', label: '风向', hint: '绘制平滑风向箭头', icon: ICON_MAP.WindArrow },
-            { type: 'BattleArrow', label: '军标', hint: '绘制军标攻击箭头', icon: ICON_MAP.BattleArrow },
+            { type: 'Arrow', label: t('draw.tools.Arrow'), hint: t('draw.hints.Arrow'), icon: ICON_MAP.Arrow },
+            { type: 'WindArrow', label: t('draw.tools.WindArrow'), hint: t('draw.hints.WindArrow'), icon: ICON_MAP.WindArrow },
+            { type: 'BattleArrow', label: t('draw.tools.BattleArrow'), hint: t('draw.hints.BattleArrow'), icon: ICON_MAP.BattleArrow },
         ],
     },
     {
         id: 'edit',
-        label: '编辑',
+        label: t('draw.groups.edit'),
         tools: [
             {
                 type: 'SelectEdit',
-                label: '选择编辑',
-                hint: '点击任意矢量图层要素（绘制/上传/搜索/区划）拖动顶点修改，Delete 删除选中',
+                label: t('draw.tools.SelectEdit'),
+                hint: t('draw.hints.SelectEdit'),
                 icon: ICON_MAP.SelectEdit,
             },
         ],
     },
-];
+]);
 
 const currentStyleType = computed(() => activeType.value || 'Polygon');
 const showFill = computed(() => hasFill(currentStyleType.value));
@@ -348,9 +350,15 @@ const showStrokeDash = computed(() => hasStrokeDash(currentStyleType.value));
 const showArrow = computed(() => isArrowTool(currentStyleType.value));
 const showBattleGradient = computed(() => isBattleArrowTool(currentStyleType.value));
 const radiusLabel = computed(() =>
-    currentStyleType.value === 'CircleOutline' ? '圆半径' : '点大小',
+    currentStyleType.value === 'CircleOutline' ? t('draw.circleRadius') : t('draw.pointSize'),
 );
-const hint = computed(() => getDrawingHint(activeType.value));
+const hint = computed(() => {
+    const type = activeType.value;
+    if (type && t(`draw.hints.${type}`) !== `draw.hints.${type}`) {
+        return t(`draw.hints.${type}`);
+    }
+    return t('draw.hints.default');
+});
 
 /**
  * 选择绘制/编辑工具

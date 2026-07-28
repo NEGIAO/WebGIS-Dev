@@ -8,7 +8,7 @@
     <div class="details-layout">
         <!-- 接口元信息面板 -->
         <div class="detail-panel">
-            <div class="detail-title">接口返回元信息</div>
+            <div class="detail-title">{{ t('weather.metaTitle') }}</div>
             <div class="meta-grid two-columns">
                 <div class="meta-item">
                     <span class="meta-key">base.status</span>
@@ -47,7 +47,7 @@
 
         <!-- 实况天气全字段面板 -->
         <div class="detail-panel">
-            <div class="detail-title">实况天气 lives 全字段</div>
+            <div class="detail-title">{{ t('weather.liveFieldsTitle') }}</div>
             <div class="meta-grid">
                 <div class="meta-item">
                     <span class="meta-key">province</span>
@@ -93,7 +93,7 @@
 
         <!-- 预报天气表格 -->
         <div class="detail-panel forecast-panel">
-            <div class="detail-title">预报天气 forecasts.casts 全字段（4 日）</div>
+            <div class="detail-title">{{ t('weather.forecastTitle') }}</div>
             <div class="meta-grid forecast-meta-grid">
                 <div class="meta-item">
                     <span class="meta-key">forecasts.province</span>
@@ -116,16 +116,16 @@
                 <table class="forecast-table">
                     <thead>
                         <tr>
-                            <th>date</th>
-                            <th>week</th>
-                            <th>dayweather</th>
-                            <th>nightweather</th>
-                            <th>daytemp</th>
-                            <th>nighttemp</th>
-                            <th>daywind</th>
-                            <th>nightwind</th>
-                            <th>daypower</th>
-                            <th>nightpower</th>
+                            <th>{{ t('weather.date') }}</th>
+                            <th>{{ t('weather.week') }}</th>
+                            <th>{{ t('weather.dayWeather') }}</th>
+                            <th>{{ t('weather.nightWeather') }}</th>
+                            <th>{{ t('weather.tempRange') }} ({{ t('weather.day') }})</th>
+                            <th>{{ t('weather.tempRange') }} ({{ t('weather.night') }})</th>
+                            <th>{{ t('weather.wind') }} ({{ t('weather.day') }})</th>
+                            <th>{{ t('weather.wind') }} ({{ t('weather.night') }})</th>
+                            <th>{{ t('weather.windPower') }} ({{ t('weather.day') }})</th>
+                            <th>{{ t('weather.windPower') }} ({{ t('weather.night') }})</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -155,7 +155,7 @@
                                 colspan="10"
                                 class="forecast-empty"
                             >
-                                暂无预报数据
+                                {{ t('weather.noForecast') }}
                             </td>
                         </tr>
                     </tbody>
@@ -165,7 +165,7 @@
 
         <!-- 原始 JSON 折叠区 -->
         <details class="raw-details">
-            <summary>查看原始返回 JSON（base / all）</summary>
+            <summary>{{ t('weather.rawJson') }}</summary>
             <div class="raw-block">
                 <h4>base raw</h4>
                 <pre>{{ baseRawJson }}</pre>
@@ -184,6 +184,9 @@
  * 所有数据由父组件通过 props 传入
  */
 import { resolveWeatherIcon, formatWeekLabel } from '../../utils/weather/weatherUtils';
+import { useLocale } from '../../composables/useLocale';
+
+const { t } = useLocale();
 
 defineProps({
     /** 实况天气数据对象 */

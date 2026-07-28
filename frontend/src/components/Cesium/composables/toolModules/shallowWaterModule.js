@@ -5,6 +5,8 @@
  * 模块元数据 + 控件定义合并为一个文件
  */
 
+import { translate as t } from '@/composables/useLocale';
+
 /**
  * 创建热带浅水模块
  * @param {import('vue').Ref} shallowWaterVisible - 是否可见 ref
@@ -17,12 +19,12 @@ export function createShallowWaterModule(shallowWaterVisible, shallowWaterParams
 
     return {
         id: 'shallowWater',
-        title: '热带浅水',
-        description: 'Three.js 热带浅水场景（焦散/折射/物理吸色/体积云/闪电）',
-        status: visible ? '已启用' : '未启用',
+        title: t('cesium.module.shallowWater.title'),
+        description: t('cesium.module.shallowWater.description'),
+        status: visible ? t('cesium.status.enabled') : t('cesium.status.disabled'),
         statusTone: visible ? 'success' : 'neutral',
         actions: [
-            { id: 'toggle', label: visible ? '关闭' : '启用', variant: visible ? 'danger' : 'primary' },
+            { id: 'toggle', label: visible ? t('cesium.module.shallowWater.toggleOff') : t('cesium.module.shallowWater.toggleOn'), variant: visible ? 'danger' : 'primary' },
         ],
         controls: createShallowWaterControls(params, !visible),
     };
@@ -38,7 +40,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
     return [
         {
             id: 'elevation',
-            label: '高度角',
+            label: t('cesium.module.shallowWater.elevation'),
             type: 'range',
             min: 2,
             max: 80,
@@ -46,11 +48,11 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.elevation ?? 30,
             displayValue: Number(params.elevation ?? 30).toFixed(1),
             disabled,
-            tooltip: '太阳高度角（度），影响光照方向和阴影长度',
+            tooltip: t('cesium.module.shallowWater.elevationTip'),
         },
         {
             id: 'azimuth',
-            label: '方位角',
+            label: t('cesium.module.shallowWater.azimuth'),
             type: 'range',
             min: -180,
             max: 180,
@@ -58,23 +60,23 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.azimuth ?? 150,
             displayValue: Number(params.azimuth ?? 150).toFixed(1),
             disabled,
-            tooltip: '太阳方位角（度），-180~180，影响光照方向',
+            tooltip: t('cesium.module.shallowWater.azimuthTip'),
         },
         {
             id: 'clarity',
-            label: '清澈度',
+            label: t('cesium.module.shallowWater.clarity'),
             type: 'range',
             min: 0.03,
             max: 0.4,
             step: 0.005,
             value: params.clarity ?? 0.085,
             displayValue: Number(params.clarity ?? 0.085).toFixed(3),
-            tooltip: '越小越清澈(Beer-Lambert 密度)',
+            tooltip: t('cesium.module.shallowWater.clarityTip'),
             disabled,
         },
         {
             id: 'causticStrength',
-            label: '焦散强度',
+            label: t('cesium.module.shallowWater.causticStrength'),
             type: 'range',
             min: 0,
             max: 2,
@@ -82,11 +84,11 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.causticStrength ?? 0.9,
             displayValue: Number(params.causticStrength ?? 0.9).toFixed(2),
             disabled,
-            tooltip: '水底焦散光斑强度（光线折射聚焦）',
+            tooltip: t('cesium.module.shallowWater.causticStrengthTip'),
         },
         {
             id: 'waveHeight',
-            label: '浪高',
+            label: t('cesium.module.shallowWater.waveHeight'),
             type: 'range',
             min: 0,
             max: 1.5,
@@ -94,11 +96,11 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.waveHeight ?? 0.5,
             displayValue: Number(params.waveHeight ?? 0.5).toFixed(2),
             disabled,
-            tooltip: '水面波浪振幅，影响法线扰动和反射扭曲',
+            tooltip: t('cesium.module.shallowWater.waveHeightTip'),
         },
         {
             id: 'foamWidth',
-            label: '泡沫宽度',
+            label: t('cesium.module.shallowWater.foamWidth'),
             type: 'range',
             min: 0,
             max: 8,
@@ -106,11 +108,11 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.foamWidth ?? 2.4,
             displayValue: Number(params.foamWidth ?? 2.4).toFixed(1),
             disabled,
-            tooltip: '浪花泡沫带宽度（海岸线附近）',
+            tooltip: t('cesium.module.shallowWater.foamWidthTip'),
         },
         {
             id: 'reflection',
-            label: '反射强度',
+            label: t('cesium.module.shallowWater.reflection'),
             type: 'range',
             min: 0,
             max: 1,
@@ -118,19 +120,19 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.reflection ?? 0.38,
             displayValue: Number(params.reflection ?? 0.38).toFixed(2),
             disabled,
-            tooltip: '水面菲涅尔反射强度（0=纯折射 1=纯反射）',
+            tooltip: t('cesium.module.shallowWater.reflectionTip'),
         },
         {
             id: 'waterColor',
-            label: '远处浅水色',
+            label: t('cesium.module.shallowWater.waterColor'),
             type: 'color',
             value: params.waterColor ?? '#2bb3c4',
             disabled,
-            tooltip: '远处深水颜色（近处由清澈度控制）',
+            tooltip: t('cesium.module.shallowWater.waterColorTip'),
         },
         {
             id: 'cloudCoverage',
-            label: '云量',
+            label: t('cesium.module.shallowWater.cloudCoverage'),
             type: 'range',
             min: 0,
             max: 1,
@@ -138,19 +140,19 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.cloudCoverage ?? 0.58,
             displayValue: Number(params.cloudCoverage ?? 0.58).toFixed(2),
             disabled,
-            tooltip: '天空云量（0=晴天 1=全阴），影响光照和天空颜色',
+            tooltip: t('cesium.module.shallowWater.cloudCoverageTip'),
         },
         {
             id: 'lightningEnabled',
-            label: '闪电开关',
+            label: t('cesium.module.shallowWater.lightningEnabled'),
             type: 'toggle',
             value: params.lightningEnabled !== false,
             disabled,
-            tooltip: '启用随机闪电效果',
+            tooltip: t('cesium.module.shallowWater.lightningEnabledTip'),
         },
         {
             id: 'lightningInterval',
-            label: '闪电间隔(秒)',
+            label: t('cesium.module.shallowWater.lightningInterval'),
             type: 'range',
             min: 0.4,
             max: 8,
@@ -158,7 +160,7 @@ function createShallowWaterControls(params = {}, disabled = false) {
             value: params.lightningInterval ?? 2.0,
             displayValue: Number(params.lightningInterval ?? 2.0).toFixed(1),
             disabled: disabled || params.lightningEnabled === false,
-            tooltip: '闪电触发平均间隔（秒）',
+            tooltip: t('cesium.module.shallowWater.lightningIntervalTip'),
         },
     ];
 }

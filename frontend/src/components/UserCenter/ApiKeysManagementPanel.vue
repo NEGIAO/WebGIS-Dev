@@ -1,397 +1,240 @@
 <template>
     <div class="api-keys-container">
         <div class="keys-header">
-            <h2>🔑 API 密钥管理</h2>
-            <p class="subtitle">管理第三方 API 密钥，确保系统正常运行</p>
-            <p class="subtitle layer-note">
-                本页密钥池存于数据库 api_keys 表（L2 运营层，优先于环境变量）；绝密（OAuth secret、SMTP 密码、SUPER_USER 等
-                L3）只在 HF Secrets 配置，不进本面板。键名登记见根 .env.example [L2] 段 / Docs/Guide/configuration.md。
-            </p>
+            <h2>{{ t('apiKeys.title') }}</h2>
+            <p class="subtitle">{{ t('apiKeys.subtitle') }}</p>
+            <p class="subtitle layer-note">{{ t('apiKeys.keyNote') }}</p>
         </div>
 
-        <!-- 密钥列表 -->
         <div class="keys-section">
-            <div
-                v-if="loading"
-                class="loading-state"
-            >
-                <span class="spinner"></span> 加载中...
+            <div v-if="loading" class="loading-state">
+                <span class="spinner"></span> {{ t('apiKeys.loading') }}
             </div>
 
-            <div
-                v-else
-                class="keys-grid"
-            >
-                <!-- 高德地图 API Key -->
+            <div v-else class="keys-grid">
                 <div class="key-card">
                     <div class="key-header">
-                        <h3>🗺️ 高德地图 API Key</h3>
-                        <span
-                            :class="['status-badge', keysStatus.amap_key?.is_set ? 'set' : 'unset']"
-                        >
-                            {{ keysStatus.amap_key?.is_set ? '已配置' : '未配置' }}
+                        <h3>{{ t('apiKeys.amapKey') }}</h3>
+                        <span :class="['status-badge', keysStatus.amap_key?.is_set ? 'set' : 'unset']">
+                            {{ keysStatus.amap_key?.is_set ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div
-                            v-if="editingKey === 'amap_key'"
-                            class="edit-form"
-                        >
+                        <div v-if="editingKey === 'amap_key'" class="edit-form">
                             <textarea
                                 v-model="editValues.amap_key"
-                                placeholder="粘贴您的高德地图 Web 服务 API Key"
+                                :placeholder="t('apiKeys.amapKeyPlaceholder')"
                                 rows="3"
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button
-                                    class="btn btn-save"
-                                    @click="saveKey('amap_key')"
-                                >
-                                    保存
-                                </button>
-                                <button
-                                    class="btn btn-cancel"
-                                    @click="cancelEdit"
-                                >
-                                    取消
-                                </button>
+                                <button class="btn btn-save" @click="saveKey('amap_key')">{{ t('apiKeys.save') }}</button>
+                                <button class="btn btn-cancel" @click="cancelEdit">{{ t('apiKeys.cancel') }}</button>
                             </div>
                         </div>
-                        <div
-                            v-else
-                            class="key-display"
-                        >
+                        <div v-else class="key-display">
                             <p class="key-value">
-                                {{ keysStatus.amap_key?.is_set ? '●●●●●●●●●●(已设置)' : '未配置' }}
+                                {{ keysStatus.amap_key?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
                             </p>
                             <div class="key-actions">
-                                <button
-                                    class="btn btn-edit"
-                                    @click="startEdit('amap_key')"
-                                >
-                                    编辑
-                                </button>
+                                <button class="btn btn-edit" @click="startEdit('amap_key')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.amap_key?.is_set"
                                     class="btn btn-delete"
                                     @click="deleteKey('amap_key')"
                                 >
-                                    删除
+                                    {{ t('apiKeys.delete') }}
                                 </button>
                             </div>
                             <p class="key-hint">
-                                如需获取密钥，访问
+                                {{ t('apiKeys.getAmapKey') }}
                                 <a
                                     href="https://lbs.amap.com/api/webservice/guide/create-project/api-key"
                                     target="_blank"
                                 >
-                                    高德地图开放平台
+                                    {{ t('apiKeys.amapPlatform') }}
                                 </a>
                             </p>
                         </div>
                     </div>
                     <div class="key-footer">
-                        最后更新: {{ formatTime(keysStatus.amap_key?.updated_at) }}
+                        {{ t('apiKeys.lastUpdated', { time: formatTime(keysStatus.amap_key?.updated_at) }) }}
                     </div>
                 </div>
 
-                <!-- Agent 对话 API Key -->
                 <div class="key-card">
                     <div class="key-header">
-                        <h3>🤖 Agent 对话 API Key</h3>
-                        <span
-                            :class="[
-                                'status-badge',
-                                keysStatus.agent_api_key?.is_set ? 'set' : 'unset',
-                            ]"
-                        >
-                            {{ keysStatus.agent_api_key?.is_set ? '已配置' : '未配置' }}
+                        <h3>{{ t('apiKeys.agentKey') }}</h3>
+                        <span :class="['status-badge', keysStatus.agent_api_key?.is_set ? 'set' : 'unset']">
+                            {{ keysStatus.agent_api_key?.is_set ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div
-                            v-if="editingKey === 'agent_api_key'"
-                            class="edit-form"
-                        >
+                        <div v-if="editingKey === 'agent_api_key'" class="edit-form">
                             <textarea
                                 v-model="editValues.agent_api_key"
-                                placeholder="粘贴您的 Agent 对话 API Key"
+                                :placeholder="t('apiKeys.agentKeyPlaceholder')"
                                 rows="3"
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button
-                                    class="btn btn-save"
-                                    @click="saveKey('agent_api_key')"
-                                >
-                                    保存
-                                </button>
-                                <button
-                                    class="btn btn-cancel"
-                                    @click="cancelEdit"
-                                >
-                                    取消
-                                </button>
+                                <button class="btn btn-save" @click="saveKey('agent_api_key')">{{ t('apiKeys.save') }}</button>
+                                <button class="btn btn-cancel" @click="cancelEdit">{{ t('apiKeys.cancel') }}</button>
                             </div>
                         </div>
-                        <div
-                            v-else
-                            class="key-display"
-                        >
+                        <div v-else class="key-display">
                             <p class="key-value">
-                                {{
-                                    keysStatus.agent_api_key?.is_set
-                                        ? '●●●●●●●●●●(已设置)'
-                                        : '未配置'
-                                }}
+                                {{ keysStatus.agent_api_key?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
                             </p>
                             <div class="key-actions">
-                                <button
-                                    class="btn btn-edit"
-                                    @click="startEdit('agent_api_key')"
-                                >
-                                    编辑
-                                </button>
+                                <button class="btn btn-edit" @click="startEdit('agent_api_key')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.agent_api_key?.is_set"
                                     class="btn btn-delete"
                                     @click="deleteKey('agent_api_key')"
                                 >
-                                    删除
+                                    {{ t('apiKeys.delete') }}
                                 </button>
                             </div>
-                            <p class="key-hint">后端代理对话使用，仅管理员可配置</p>
+                            <p class="key-hint">{{ t('apiKeys.agentKeyHint') }}</p>
                         </div>
                     </div>
                     <div class="key-footer">
-                        最后更新: {{ formatTime(keysStatus.agent_api_key?.updated_at) }}
+                        {{ t('apiKeys.lastUpdated', { time: formatTime(keysStatus.agent_api_key?.updated_at) }) }}
                     </div>
                 </div>
 
-                <!-- 天地图 API Key (可选) -->
                 <div class="key-card">
                     <div class="key-header">
-                        <h3>🌍 天地图 TK</h3>
-                        <span
-                            :class="[
-                                'status-badge',
-                                keysStatus.tianditu_tk?.is_set ? 'set' : 'unset',
-                            ]"
-                        >
-                            {{ keysStatus.tianditu_tk?.is_set ? '已配置' : '未配置' }}
+                        <h3>{{ t('apiKeys.tiandituKey') }}</h3>
+                        <span :class="['status-badge', keysStatus.tianditu_tk?.is_set ? 'set' : 'unset']">
+                            {{ keysStatus.tianditu_tk?.is_set ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div
-                            v-if="editingKey === 'tianditu_tk'"
-                            class="edit-form"
-                        >
+                        <div v-if="editingKey === 'tianditu_tk'" class="edit-form">
                             <textarea
                                 v-model="editValues.tianditu_tk"
-                                placeholder="粘贴您的天地图 API Key"
+                                :placeholder="t('apiKeys.tiandituKeyPlaceholder')"
                                 rows="3"
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button
-                                    class="btn btn-save"
-                                    @click="saveKey('tianditu_tk')"
-                                >
-                                    保存
-                                </button>
-                                <button
-                                    class="btn btn-cancel"
-                                    @click="cancelEdit"
-                                >
-                                    取消
-                                </button>
+                                <button class="btn btn-save" @click="saveKey('tianditu_tk')">{{ t('apiKeys.save') }}</button>
+                                <button class="btn btn-cancel" @click="cancelEdit">{{ t('apiKeys.cancel') }}</button>
                             </div>
                         </div>
-                        <div
-                            v-else
-                            class="key-display"
-                        >
+                        <div v-else class="key-display">
                             <p class="key-value">
-                                {{
-                                    keysStatus.tianditu_tk?.is_set ? '●●●●●●●●●●(已设置)' : '未配置'
-                                }}
+                                {{ keysStatus.tianditu_tk?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
                             </p>
                             <div class="key-actions">
-                                <button
-                                    class="btn btn-edit"
-                                    @click="startEdit('tianditu_tk')"
-                                >
-                                    编辑
-                                </button>
+                                <button class="btn btn-edit" @click="startEdit('tianditu_tk')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.tianditu_tk?.is_set"
                                     class="btn btn-delete"
                                     @click="deleteKey('tianditu_tk')"
                                 >
-                                    删除
+                                    {{ t('apiKeys.delete') }}
                                 </button>
                             </div>
-                            <p class="key-hint">天地图底图 API 密钥（可选）</p>
+                            <p class="key-hint">{{ t('apiKeys.tiandituKeyHint') }}</p>
                         </div>
                     </div>
                     <div class="key-footer">
-                        最后更新: {{ formatTime(keysStatus.tianditu_tk?.updated_at) }}
+                        {{ t('apiKeys.lastUpdated', { time: formatTime(keysStatus.tianditu_tk?.updated_at) }) }}
                     </div>
                 </div>
 
-                <!-- Cesium Ion Token -->
                 <div class="key-card">
                     <div class="key-header">
-                        <h3>🧊 Cesium Ion Token</h3>
-                        <span
-                            :class="[
-                                'status-badge',
-                                keysStatus.cesium_ion_token?.is_set ? 'set' : 'unset',
-                            ]"
-                        >
-                            {{ keysStatus.cesium_ion_token?.is_set ? '已配置' : '未配置' }}
+                        <h3>{{ t('apiKeys.cesiumKey') }}</h3>
+                        <span :class="['status-badge', keysStatus.cesium_ion_token?.is_set ? 'set' : 'unset']">
+                            {{ keysStatus.cesium_ion_token?.is_set ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
                         </span>
                     </div>
                     <div class="key-body">
-                        <div
-                            v-if="editingKey === 'cesium_ion_token'"
-                            class="edit-form"
-                        >
+                        <div v-if="editingKey === 'cesium_ion_token'" class="edit-form">
                             <textarea
                                 v-model="editValues.cesium_ion_token"
-                                placeholder="粘贴您的 Cesium Ion Access Token"
+                                :placeholder="t('apiKeys.cesiumKeyPlaceholder')"
                                 rows="3"
                                 class="key-input"
                             ></textarea>
                             <div class="button-group">
-                                <button
-                                    class="btn btn-save"
-                                    @click="saveKey('cesium_ion_token')"
-                                >
-                                    保存
-                                </button>
-                                <button
-                                    class="btn btn-cancel"
-                                    @click="cancelEdit"
-                                >
-                                    取消
-                                </button>
+                                <button class="btn btn-save" @click="saveKey('cesium_ion_token')">{{ t('apiKeys.save') }}</button>
+                                <button class="btn btn-cancel" @click="cancelEdit">{{ t('apiKeys.cancel') }}</button>
                             </div>
                         </div>
-                        <div
-                            v-else
-                            class="key-display"
-                        >
+                        <div v-else class="key-display">
                             <p class="key-value">
-                                {{
-                                    keysStatus.cesium_ion_token?.is_set
-                                        ? '●●●●●●●●●●(已设置)'
-                                        : '未配置'
-                                }}
+                                {{ keysStatus.cesium_ion_token?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
                             </p>
                             <div class="key-actions">
-                                <button
-                                    class="btn btn-edit"
-                                    @click="startEdit('cesium_ion_token')"
-                                >
-                                    编辑
-                                </button>
+                                <button class="btn btn-edit" @click="startEdit('cesium_ion_token')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.cesium_ion_token?.is_set"
                                     class="btn btn-delete"
                                     @click="deleteKey('cesium_ion_token')"
                                 >
-                                    删除
+                                    {{ t('apiKeys.delete') }}
                                 </button>
                             </div>
-                            <p class="key-hint">
-                                Cesium ion 资源直连使用，请在 Cesium ion 后台限制可用域名。
-                            </p>
+                            <p class="key-hint">{{ t('apiKeys.cesiumKeyHint') }}</p>
                         </div>
                     </div>
                     <div class="key-footer">
-                        最后更新: {{ formatTime(keysStatus.cesium_ion_token?.updated_at) }}
+                        {{ t('apiKeys.lastUpdated', { time: formatTime(keysStatus.cesium_ion_token?.updated_at) }) }}
                     </div>
                 </div>
             </div>
 
-            <div
-                v-if="!loading"
-                class="backup-token-section"
-            >
+            <div v-if="!loading" class="backup-token-section">
                 <div class="section-header-row">
-                    <h3>🔁 备用 Token 池</h3>
-                    <p class="config-note">
-                        系统会按主 token → 备用 token 顺序尝试，直连类 token 请同步在服务商后台限制域名。
-                    </p>
+                    <h3>{{ t('apiKeys.backupPoolTitle') }}</h3>
+                    <p class="config-note">{{ t('apiKeys.backupPoolNote') }}</p>
                 </div>
                 <div class="backup-grid">
-                    <div
-                        v-for="item in managedApiKeys"
-                        :key="item.key"
-                        class="backup-card"
-                    >
+                    <div v-for="item in managedApiKeys" :key="item.key" class="backup-card">
                         <div class="backup-card-head">
                             <strong>{{ item.label }}</strong>
-                            <span>{{ getBackupCount(item.key) }} 个备用</span>
+                            <span>{{ t('apiKeys.backupCount', { count: getBackupCount(item.key) }) }}</span>
                         </div>
-                        <div
-                            v-if="getBackups(item.key).length"
-                            class="backup-list"
-                        >
+                        <div v-if="getBackups(item.key).length" class="backup-list">
                             <div
                                 v-for="backup in getBackups(item.key)"
                                 :key="backup.id"
                                 class="backup-row"
                             >
-                                <span>备用 {{ Number(backup.priority || 0) + 1 }} · 已设置</span>
+                                <span>{{ t('apiKeys.backupItemSet', { n: Number(backup.priority || 0) + 1 }) }}</span>
                                 <button
                                     class="btn btn-delete btn-compact"
                                     @click="deleteBackupKey(item.key, backup.id)"
                                 >
-                                    删除
+                                    {{ t('apiKeys.delete') }}
                                 </button>
                             </div>
                         </div>
-                        <p
-                            v-else
-                            class="backup-empty"
-                        >
-                            暂无备用 token
-                        </p>
+                        <p v-else class="backup-empty">{{ t('apiKeys.backupEmpty') }}</p>
 
-                        <div
-                            v-if="editingBackupKey === item.key"
-                            class="backup-edit"
-                        >
+                        <div v-if="editingBackupKey === item.key" class="backup-edit">
                             <textarea
                                 v-model="backupEditValues[item.key]"
                                 class="key-input"
                                 rows="2"
-                                :placeholder="`粘贴 ${item.label} 的备用 token`"
+                                :placeholder="t('apiKeys.backupPlaceholder', { label: item.label })"
                             ></textarea>
                             <div class="button-group">
-                                <button
-                                    class="btn btn-save"
-                                    @click="saveBackupKey(item.key)"
-                                >
-                                    保存备用
+                                <button class="btn btn-save" @click="saveBackupKey(item.key)">
+                                    {{ t('apiKeys.saveBackup') }}
                                 </button>
-                                <button
-                                    class="btn btn-cancel"
-                                    @click="cancelBackupEdit"
-                                >
-                                    取消
+                                <button class="btn btn-cancel" @click="cancelBackupEdit">
+                                    {{ t('apiKeys.cancel') }}
                                 </button>
                             </div>
                         </div>
-                        <button
-                            v-else
-                            class="btn btn-edit"
-                            @click="startBackupEdit(item.key)"
-                        >
-                            新增备用 token
+                        <button v-else class="btn btn-edit" @click="startBackupEdit(item.key)">
+                            {{ t('apiKeys.addBackup') }}
                         </button>
                     </div>
                 </div>
@@ -400,35 +243,24 @@
 
         <div class="agent-config-section">
             <div class="section-header-row">
-                <h3>⚙️ Agent 对话参数</h3>
+                <h3>{{ t('apiKeys.agentParamsTitle') }}</h3>
                 <div class="section-actions">
-                    <button
-                        class="btn btn-edit"
-                        @click="loadAgentConfigWrapper"
-                    >
-                        刷新
-                    </button>
+                    <button class="btn btn-edit" @click="loadAgentConfigWrapper">{{ t('apiKeys.refresh') }}</button>
                     <button
                         v-if="!editingAgentConfig"
                         class="btn btn-edit"
                         @click="startEditAgentConfig"
                     >
-                        编辑参数
+                        {{ t('apiKeys.editParams') }}
                     </button>
                 </div>
             </div>
 
-            <div
-                v-if="agentConfigLoading"
-                class="loading-state"
-            >
-                <span class="spinner"></span> 加载配置中...
+            <div v-if="agentConfigLoading" class="loading-state">
+                <span class="spinner"></span> {{ t('apiKeys.loadingConfig') }}
             </div>
 
-            <div
-                v-else-if="editingAgentConfig"
-                class="edit-form"
-            >
+            <div v-else-if="editingAgentConfig" class="edit-form">
                 <div class="config-grid">
                     <label class="config-item">
                         <span>Base URL</span>
@@ -443,11 +275,11 @@
                         <input
                             v-model="agentConfigDraft.model"
                             class="key-input"
-                            placeholder="留空时按 available_models 随机调度"
+                            :placeholder="t('admin.modelRandomPlaceholder')"
                         />
                     </label>
                     <label class="config-item config-item-full">
-                        <span>Available Models（逗号或换行分隔）</span>
+                        <span>{{ t('apiKeys.availableModelsLabel') }}</span>
                         <textarea
                             v-model="agentConfigDraft.available_models_text"
                             rows="3"
@@ -516,7 +348,7 @@
                         />
                     </label>
                     <label class="config-item">
-                        <span>Guest 每日额度</span>
+                        <span>{{ t('admin.guestQuota') }}</span>
                         <input
                             v-model.number="agentConfigDraft.guest_daily_quota"
                             type="number"
@@ -526,7 +358,7 @@
                         />
                     </label>
                     <label class="config-item">
-                        <span>Registered 每日额度</span>
+                        <span>{{ t('admin.registeredQuota') }}</span>
                         <input
                             v-model.number="agentConfigDraft.registered_daily_quota"
                             type="number"
@@ -541,55 +373,41 @@
                             v-model="agentConfigDraft.system_prompt"
                             rows="4"
                             class="key-input"
-                            placeholder="用于后端统一注入的系统提示词"
+                            :placeholder="t('admin.systemPromptPlaceholder')"
                         ></textarea>
                     </label>
                 </div>
 
                 <div class="button-group">
-                    <button
-                        class="btn btn-save"
-                        @click="saveAgentConfigWrapper"
-                    >
-                        保存参数
-                    </button>
-                    <button
-                        class="btn btn-edit"
-                        @click="resetChatQuotaWrapper"
-                    >
-                        恢复默认额度
-                    </button>
-                    <button
-                        class="btn btn-cancel"
-                        @click="cancelEditAgentConfig"
-                    >
-                        取消
-                    </button>
+                    <button class="btn btn-save" @click="saveAgentConfigWrapper">{{ t('apiKeys.saveParams') }}</button>
+                    <button class="btn btn-edit" @click="resetChatQuotaWrapper">{{ t('apiKeys.resetQuota') }}</button>
+                    <button class="btn btn-cancel" @click="cancelEditAgentConfig">{{ t('apiKeys.cancel') }}</button>
                 </div>
             </div>
 
-            <div
-                v-else
-                class="config-view"
-            >
+            <div v-else class="config-view">
                 <div class="config-grid">
                     <div class="config-item">
                         <span>Base URL</span>
-                        <strong>{{ agentConfig.base_url || '未配置' }}</strong>
+                        <strong>{{ agentConfig.base_url || t('apiKeys.notConfigured') }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Model</span>
-                        <strong>{{ agentConfig.model || '未配置' }}</strong>
+                        <strong>{{ agentConfig.model || t('apiKeys.notConfigured') }}</strong>
                     </div>
                     <div class="config-item config-item-full">
                         <span>Available Models</span>
                         <strong>{{
-                            (agentConfig.available_models || []).join(', ') || '未配置'
+                            (agentConfig.available_models || []).join(', ') || t('apiKeys.notConfigured')
                         }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Timeout</span>
-                        <strong>{{ agentConfig.timeout_seconds || '-' }} 秒</strong>
+                        <strong>{{
+                            agentConfig.timeout_seconds
+                                ? t('admin.secondsUnit', { n: agentConfig.timeout_seconds })
+                                : '-'
+                        }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Max Tokens</span>
@@ -605,75 +423,66 @@
                     </div>
                     <div class="config-item config-item-full">
                         <span>Extra Body</span>
-                        <strong>{{ agentConfig.extra_body ? JSON.stringify(agentConfig.extra_body) : '未配置' }}</strong>
+                        <strong>{{
+                            agentConfig.extra_body
+                                ? JSON.stringify(agentConfig.extra_body)
+                                : t('apiKeys.notConfigured')
+                        }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Stream</span>
-                        <strong>{{ agentConfig.stream ? '开启' : '关闭' }}</strong>
+                        <strong>{{ agentConfig.stream ? t('admin.streamOn') : t('admin.streamOff') }}</strong>
                     </div>
                     <div class="config-item">
-                        <span>Guest 每日额度</span>
+                        <span>{{ t('admin.guestQuota') }}</span>
                         <strong>{{ agentQuota.guest }}</strong>
                     </div>
                     <div class="config-item">
-                        <span>Registered 每日额度</span>
+                        <span>{{ t('admin.registeredQuota') }}</span>
                         <strong>{{ agentQuota.registered }}</strong>
                     </div>
                     <div class="config-item config-item-full">
                         <span>System Prompt</span>
-                        <strong>{{ agentConfig.system_prompt || '未配置' }}</strong>
+                        <strong>{{ agentConfig.system_prompt || t('apiKeys.notConfigured') }}</strong>
                     </div>
                 </div>
 
                 <p class="config-note">
-                    对话额度：游客 {{ agentQuota.guest }} 次/日，注册用户
-                    {{ agentQuota.registered }} 次/日，管理员不限。
+                    {{
+                        t('admin.chatQuotaNote', {
+                            guest: agentQuota.guest,
+                            registered: agentQuota.registered,
+                        })
+                    }}
                 </p>
             </div>
         </div>
 
-        <!-- 默认 AI 专属配置 -->
         <div class="agent-config-section">
             <div class="section-header-row">
-                <h3>🤖 默认 AI 专属配置</h3>
-                <span
-                    :class="['status-badge', defaultAIConfig.is_configured ? 'set' : 'unset']"
-                >
-                    {{ defaultAIConfig.is_configured ? '已配置' : '未配置' }}
+                <h3>{{ t('apiKeys.defaultAITitle') }}</h3>
+                <span :class="['status-badge', defaultAIConfig.is_configured ? 'set' : 'unset']">
+                    {{ defaultAIConfig.is_configured ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
                 </span>
                 <div class="section-actions">
-                    <button
-                        class="btn btn-edit"
-                        @click="loadDefaultAIConfig"
-                    >
-                        刷新
-                    </button>
+                    <button class="btn btn-edit" @click="loadDefaultAIConfig">{{ t('apiKeys.refresh') }}</button>
                     <button
                         v-if="!editingDefaultAI"
                         class="btn btn-edit"
                         @click="startEditDefaultAI"
                     >
-                        编辑配置
+                        {{ t('apiKeys.editConfig') }}
                     </button>
                 </div>
             </div>
 
-            <p class="config-note" style="margin-bottom: 12px">
-                配置前端用户默认使用的 AI 模型专属参数。用户打开 AI 助手时将自动使用此配置，无需手动输入 API Key。
-                api_key 安全存储在后端数据库中，前端不会暴露。
-            </p>
+            <p class="config-note" style="margin-bottom: 12px">{{ t('apiKeys.defaultAIDesc') }}</p>
 
-            <div
-                v-if="defaultAILoading"
-                class="loading-state"
-            >
-                <span class="spinner"></span> 加载配置中...
+            <div v-if="defaultAILoading" class="loading-state">
+                <span class="spinner"></span> {{ t('apiKeys.loadingConfig') }}
             </div>
 
-            <div
-                v-else-if="editingDefaultAI"
-                class="edit-form"
-            >
+            <div v-else-if="editingDefaultAI" class="edit-form">
                 <div class="config-grid">
                     <label class="config-item config-item-full">
                         <span>API Key</span>
@@ -681,7 +490,7 @@
                             v-model="defaultAIDraft.api_key"
                             type="password"
                             class="key-input"
-                            placeholder="sk-... 或 tp-...（专属 LLM 服务密钥）"
+                            :placeholder="t('apiKeys.defaultAIKeyPlaceholder')"
                         />
                     </label>
                     <label class="config-item">
@@ -703,60 +512,50 @@
                 </div>
 
                 <div class="button-group">
-                    <button
-                        class="btn btn-save"
-                        @click="saveDefaultAIConfig"
-                    >
-                        保存配置
-                    </button>
-                    <button
-                        class="btn btn-cancel"
-                        @click="cancelEditDefaultAI"
-                    >
-                        取消
-                    </button>
+                    <button class="btn btn-save" @click="saveDefaultAIConfig">{{ t('apiKeys.saveConfig') }}</button>
+                    <button class="btn btn-cancel" @click="cancelEditDefaultAI">{{ t('apiKeys.cancel') }}</button>
                 </div>
             </div>
 
-            <div
-                v-else
-                class="config-view"
-            >
+            <div v-else class="config-view">
                 <div class="config-grid">
                     <div class="config-item config-item-full">
                         <span>API Key</span>
-                        <strong>{{ defaultAIConfig.api_key ? '●●●●●●●●●●（已设置）' : '未配置' }}</strong>
+                        <strong>{{
+                            defaultAIConfig.api_key ? t('apiKeys.masked') : t('apiKeys.notConfigured')
+                        }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Base URL</span>
-                        <strong>{{ defaultAIConfig.base_url || '未配置' }}</strong>
+                        <strong>{{ defaultAIConfig.base_url || t('apiKeys.notConfigured') }}</strong>
                     </div>
                     <div class="config-item">
                         <span>Model</span>
-                        <strong>{{ defaultAIConfig.model || '未配置' }}</strong>
+                        <strong>{{ defaultAIConfig.model || t('apiKeys.notConfigured') }}</strong>
                     </div>
                 </div>
 
                 <p class="config-note">
-                    {{ defaultAIConfig.is_configured
-                        ? '✅ 前端用户打开 AI 助手时将自动使用此配置（默认 AI 模式），api_key 不会暴露到前端。'
-                        : '⚠️ 尚未配置。前端用户需手动填写个人 API Key 或使用后端代理模式。' }}
+                    {{
+                        defaultAIConfig.is_configured
+                            ? t('apiKeys.defaultAIReady')
+                            : t('apiKeys.defaultAIMissing')
+                    }}
                 </p>
             </div>
         </div>
 
-        <!-- 提示信息 -->
         <div class="warning-box">
             <span class="warning-icon">⚠️</span>
             <div class="warning-content">
-                <p><strong>安全提示：</strong></p>
+                <p><strong>{{ t('apiKeys.securityTitle') }}</strong></p>
                 <ul>
-                    <li>LLM、高德等后端代理密钥仅存储在后端数据库中，不会暴露到前端运行时</li>
-                    <li>天地图 TK 与 Cesium Ion Token 属于浏览器直连密钥，会通过运行时配置下发给前端</li>
-                    <li>请在天地图、Cesium ion 控制台绑定生产域名或 Referer，限制 token 的可用范围</li>
-                    <li>仅管理员可以修改和查看密钥</li>
-                    <li>不要在前端代码中硬编码 API 密钥</li>
-                    <li>定期检查密钥使用情况和安全性</li>
+                    <li>{{ t('apiKeys.security1') }}</li>
+                    <li>{{ t('apiKeys.security2') }}</li>
+                    <li>{{ t('apiKeys.security3') }}</li>
+                    <li>{{ t('apiKeys.security4') }}</li>
+                    <li>{{ t('apiKeys.security5') }}</li>
+                    <li>{{ t('apiKeys.security6') }}</li>
                 </ul>
             </div>
         </div>
@@ -764,8 +563,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { useAgentConfig } from '../../composables/useAgentConfig';
 import {
     apiAdminGetApiKeysStatus,
@@ -779,13 +579,15 @@ import {
 import { clearRuntimeMapTokensCache } from '../../services/runtimeMapTokens';
 
 const message = useMessage();
+const { t, language } = useLocale();
 const frontendRuntimeKeyNames = new Set(['tianditu_tk', 'cesium_ion_token']);
-const managedApiKeys = [
-    { key: 'amap_key', label: '高德地图 API Key' },
-    { key: 'agent_api_key', label: 'Agent 对话 API Key' },
-    { key: 'tianditu_tk', label: '天地图 TK' },
-    { key: 'cesium_ion_token', label: 'Cesium Ion Token' },
-];
+
+const managedApiKeys = computed(() => [
+    { key: 'amap_key', label: t('apiKeys.amapKey') },
+    { key: 'agent_api_key', label: t('apiKeys.agentKey') },
+    { key: 'tianditu_tk', label: t('apiKeys.tiandituKey') },
+    { key: 'cesium_ion_token', label: t('apiKeys.cesiumKey') },
+]);
 
 const loading = ref(false);
 const keysStatus = ref({
@@ -810,7 +612,6 @@ const backupEditValues = ref({
     cesium_ion_token: '',
 });
 
-// Agent 配置 - 使用共享 composable
 const {
     agentConfig,
     agentConfigDraft,
@@ -824,13 +625,11 @@ const {
     cancelEdit: cancelEditAgentConfig,
 } = useAgentConfig();
 
-// 兼容旧代码的额度引用
 const agentQuota = ref({
     guest: 10,
     registered: 100,
 });
 
-// 同步 agentQuota 与 composable 内部状态
 const hydrateWithQuotaSync = () => {
     hydrateAgentConfigDraft();
     const chatQuota = agentConfig.value?.chat_quota || {};
@@ -840,10 +639,6 @@ const hydrateWithQuotaSync = () => {
     };
 };
 
-/**
- * 将 agentConfig.provider 子字段展开到顶层，供 config-view 模板直接访问
- * 因为 useAgentConfig composable 存储的是原始 API 响应，provider 字段嵌套在子对象中
- */
 function flattenProviderToTop() {
     const provider = agentConfig.value?.provider || {};
     if (provider.base_url || provider.model || Object.keys(provider).length > 0) {
@@ -851,14 +646,12 @@ function flattenProviderToTop() {
     }
 }
 
-// 重写 load 方法以同步 quota，并将 provider 子字段展开到顶层供模板读取
 const loadAgentConfigWithQuota = async () => {
     await loadAgentConfig();
     flattenProviderToTop();
     hydrateWithQuotaSync();
 };
 
-// 默认 AI 专属配置状态
 const defaultAILoading = ref(false);
 const editingDefaultAI = ref(false);
 const defaultAIConfig = ref({
@@ -874,10 +667,10 @@ const defaultAIDraft = ref({
 });
 
 function formatTime(isoString) {
-    if (!isoString) return '从未设置';
+    if (!isoString) return t('apiKeys.neverSet');
     try {
         const date = new Date(isoString);
-        return date.toLocaleString('zh-CN', {
+        return date.toLocaleString(language.value || undefined, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -922,7 +715,7 @@ async function loadKeysStatus() {
             cesium_ion_token: normalizeKeyStatus(data.cesium_ion_token),
         };
     } catch (error) {
-        message.error(`加载密钥状态失败: ${error.message}`);
+        message.error(t('apiKeys.loadStatusFailed', { error: error.message }));
     } finally {
         loading.value = false;
     }
@@ -944,15 +737,12 @@ function cancelEdit() {
 }
 
 async function loadAgentConfigWrapper() {
-    // 使用共享 composable 的 load 方法，但需要同步 agentConfig 和 agentQuota
     await loadAgentConfigWithQuota();
 }
 
 async function saveAgentConfigWrapper() {
-    // 保存成功后退出编辑模式，并同步额度显示
     const ok = await saveAgentConfig();
     if (ok) {
-        // saveAgentConfig 将 raw API 响应写回 agentConfig.value，需要重新扁平化
         flattenProviderToTop();
         cancelEditAgentConfig();
         hydrateWithQuotaSync();
@@ -960,7 +750,6 @@ async function saveAgentConfigWrapper() {
 }
 
 async function resetChatQuotaWrapper() {
-    // 使用共享 composable 的 resetQuota 方法
     await resetChatQuota();
     flattenProviderToTop();
 }
@@ -969,7 +758,7 @@ async function saveKey(keyName) {
     const keyValue = editValues.value[keyName]?.trim();
 
     if (!keyValue) {
-        message.error('密钥值不能为空');
+        message.error(t('apiKeys.keyValueRequired'));
         return;
     }
 
@@ -978,11 +767,11 @@ async function saveKey(keyName) {
         if (frontendRuntimeKeyNames.has(keyName)) {
             clearRuntimeMapTokensCache();
         }
-        message.success(`密钥 ${keyName} 已保存`);
+        message.success(t('apiKeys.keySaved', { name: keyName }));
         cancelEdit();
         await loadKeysStatus();
     } catch (error) {
-        message.error(`保存密钥失败: ${error.message}`);
+        message.error(t('apiKeys.keySaveFailed', { error: error.message }));
     }
 }
 
@@ -1005,7 +794,7 @@ async function saveBackupKey(keyName) {
     const keyValue = String(backupEditValues.value[keyName] || '').trim();
 
     if (!keyValue) {
-        message.error('备用 token 不能为空');
+        message.error(t('apiKeys.backupValueRequired'));
         return;
     }
 
@@ -1014,16 +803,16 @@ async function saveBackupKey(keyName) {
         if (frontendRuntimeKeyNames.has(keyName)) {
             clearRuntimeMapTokensCache();
         }
-        message.success(`已为 ${keyName} 新增备用 token`);
+        message.success(t('apiKeys.backupAdded', { name: keyName }));
         cancelBackupEdit();
         await loadKeysStatus();
     } catch (error) {
-        message.error(`新增备用 token 失败: ${error.message}`);
+        message.error(t('apiKeys.backupAddFailed', { error: error.message }));
     }
 }
 
 async function deleteBackupKey(keyName, backupId) {
-    if (!confirm(`确定要删除 ${keyName} 的这个备用 token 吗？此操作无法撤销！`)) {
+    if (!confirm(t('apiKeys.backupDeleteConfirm', { name: keyName }))) {
         return;
     }
 
@@ -1032,15 +821,15 @@ async function deleteBackupKey(keyName, backupId) {
         if (frontendRuntimeKeyNames.has(keyName)) {
             clearRuntimeMapTokensCache();
         }
-        message.success(`已删除 ${keyName} 的备用 token`);
+        message.success(t('apiKeys.backupDeleted', { name: keyName }));
         await loadKeysStatus();
     } catch (error) {
-        message.error(`删除备用 token 失败: ${error.message}`);
+        message.error(t('apiKeys.backupDeleteFailed', { error: error.message }));
     }
 }
 
 async function deleteKey(keyName) {
-    if (!confirm(`确定要删除 ${keyName} 吗？此操作无法撤销！`)) {
+    if (!confirm(t('apiKeys.keyDeleteConfirm', { name: keyName }))) {
         return;
     }
 
@@ -1049,16 +838,13 @@ async function deleteKey(keyName) {
         if (frontendRuntimeKeyNames.has(keyName)) {
             clearRuntimeMapTokensCache();
         }
-        message.success(`密钥 ${keyName} 已删除`);
+        message.success(t('apiKeys.keyDeleted', { name: keyName }));
         await loadKeysStatus();
     } catch (error) {
-        message.error(`删除密钥失败: ${error.message}`);
+        message.error(t('apiKeys.keyDeleteFailed', { error: error.message }));
     }
 }
 
-/**
- * 加载管理员配置的默认 AI 专属配置
- */
 async function loadDefaultAIConfig() {
     defaultAILoading.value = true;
     try {
@@ -1076,7 +862,7 @@ async function loadDefaultAIConfig() {
             model: String(data.model || ''),
         };
     } catch (error) {
-        message.error(`加载默认 AI 配置失败: ${error.message}`);
+        message.error(t('apiKeys.loadDefaultAIFailed', { error: error.message }));
     } finally {
         defaultAILoading.value = false;
     }
@@ -1106,7 +892,7 @@ async function saveDefaultAIConfig() {
     const model = String(defaultAIDraft.value.model || '').trim();
 
     if (!apiKey || !baseUrl || !model) {
-        message.error('API Key、Base URL、Model 均不能为空');
+        message.error(t('apiKeys.defaultAIFieldsRequired'));
         return;
     }
 
@@ -1124,9 +910,9 @@ async function saveDefaultAIConfig() {
             is_configured: !!data.is_configured,
         };
         editingDefaultAI.value = false;
-        message.success('默认 AI 专属配置已保存，前端用户将自动使用该配置');
+        message.success(t('apiKeys.defaultAISaved'));
     } catch (error) {
-        message.error(`保存默认 AI 配置失败: ${error.message}`);
+        message.error(t('apiKeys.defaultAISaveFailed', { error: error.message }));
     }
 }
 

@@ -12,7 +12,7 @@
             <button
                 v-if="isLoading"
                 class="round-btn stop-btn"
-                title="停止生成"
+                :title="t('chat.stop')"
                 @click="emit('stop')"
             >
                 <Square
@@ -24,13 +24,13 @@
                 v-else
                 class="round-btn send-btn"
                 :disabled="sendDisabled"
-                title="发送（Enter）"
+                :title="t('chat.send')"
                 @click="submit"
             >
                 <SendHorizontal :size="15" />
             </button>
         </div>
-        <div class="footer-hint">Enter 发送 · Shift+Enter 换行</div>
+        <div class="footer-hint">{{ t('chat.enterSend') }}</div>
     </div>
 </template>
 
@@ -46,12 +46,15 @@
  */
 import { computed, nextTick, ref } from 'vue';
 import { SendHorizontal, Square } from 'lucide-vue-next';
+import { useLocale } from '../../composables/useLocale';
+
+const { t } = useLocale();
 
 const props = defineProps({
     /** v-model 输入文本 */
     modelValue: { type: String, default: '' },
-    /** 占位提示（跟随服务状态） */
-    placeholder: { type: String, default: '请输入您的问题...' },
+    /** 占位提示（跟随服务状态；父组件通常会覆盖） */
+    placeholder: { type: String, default: '' },
     /** 是否禁止发送（服务未就绪/额度用尽） */
     disabled: { type: Boolean, default: false },
     /** 是否正在生成（切换停止按钮） */

@@ -6,6 +6,7 @@
  * 消费方经 api/index.js barrel 导入，请勿混用两者。
  */
 import { useMessage } from '@/composables/useMessage';
+import { translate as t } from '@/composables/useLocale';
 import backendAPI, { handleApiError } from './backend';
 import { getAmapErrorMessage } from './httpStatusMap';
 
@@ -84,7 +85,7 @@ export async function getWeather(adcode, type = 'base', options = {}) {
     const normalizedType = type === 'all' ? 'all' : 'base';
 
     if (!/^\d{6}$/.test(normalizedAdcode)) {
-        const error = new Error('天气查询失败：adcode 必须是 6 位数字');
+        const error = new Error(t('weather.queryFailedAdcode'));
         message.warning(error.message, { closable: true, duration: 4500 });
         throw error;
     }
@@ -105,9 +106,11 @@ export async function getWeather(adcode, type = 'base', options = {}) {
             status === AMAP_SUCCESS_STATUS && (!infocode || infocode === AMAP_SUCCESS_INFOCODE);
 
         if (!isSuccess) {
-            const reason = getAmapErrorMessage(infocode).includes('未知')
-                ? data?.info || data?.message || '高德天气接口返回失败'
-                : getAmapErrorMessage(infocode);
+            const mapped = getAmapErrorMessage(infocode);
+            const reason =
+                !mapped || mapped.includes('未知') || /unknown/i.test(mapped)
+                    ? data?.info || data?.message || t('weather.amapFailed')
+                    : mapped;
             throw new Error(`${reason} (status=${status}, infocode=${infocode || 'unknown'})`);
         }
 
@@ -139,12 +142,15 @@ export async function getWeather(adcode, type = 'base', options = {}) {
         if (error?.name === 'AbortError') throw error;
         if (error?.isQuotaExceeded) {
             // 配额用完：使用友好提示
-            handleApiError(error, message, '天气查询：API 调用额度已用完');
+            handleApiError(error, message, t('weather.quotaExceeded'));
         } else {
-            const detail = error instanceof Error ? error.message : '网络异常';
+            const detail = error instanceof Error ? error.message : t('weather.networkError');
             const statusTag = error?.status ? ` [${error.status}]` : '';
-            message.error(`天气查询失败：${detail}${statusTag}`, { closable: true, duration: 6000 });
+            message.error(t('weather.queryFailed', { detail: `${detail}${statusTag}` }), {
+                closable: true,
+                duration: 6000,
+            });
         }
-        throw error instanceof Error ? error : new Error('天气查询失败');
+        throw error instanceof Error ? error : new Error(t('weather.queryFailedShort'));
     }
 }

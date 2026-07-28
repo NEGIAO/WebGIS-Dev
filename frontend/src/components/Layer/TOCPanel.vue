@@ -21,13 +21,13 @@
 
         <div class="header">
             <div>
-                <div class="title">工具箱</div>
+                <div class="title">{{ t('layer.toolbox') }}</div>
             </div>
             <button
                 class="ghost-btn"
                 @click="emit('close')"
             >
-                关闭
+                {{ t('layer.close') }}
             </button>
         </div>
 
@@ -37,28 +37,28 @@
                 :class="{ active: activeTab === 'layers' }"
                 @click="activeTab = 'layers'"
             >
-                图层
+                {{ t('layer.tabLayers') }}
             </button>
             <button
                 class="tab"
                 :class="{ active: activeTab === 'draw' }"
                 @click="activeTab = 'draw'"
             >
-                绘制
+                {{ t('layer.tabDraw') }}
             </button>
             <button
                 class="tab"
                 :class="{ active: activeTab === 'style' }"
                 @click="activeTab = 'style'"
             >
-                样式
+                {{ t('layer.tabStyle') }}
             </button>
             <button
                 class="tab"
                 :class="{ active: activeTab === 'download' }"
                 @click="activeTab = 'download'"
             >
-                下载
+                {{ t('layer.tabDownload') }}
             </button>
         </div>
 
@@ -124,27 +124,27 @@
                                     ></path>
                                 </svg>
                             </span>
-                            上传图层
+                            {{ t('layer.uploadLayer') }}
                         </div>
                         <div class="upload-btns">
                             <button
                                 class="small-btn"
                                 @click="triggerFileUpload"
                             >
-                                上传文件
+                                {{ t('layer.uploadFile') }}
                             </button>
                             <button
                                 class="small-btn ghost"
                                 @click="triggerFolderUpload"
                             >
-                                上传文件夹
+                                {{ t('layer.uploadFolder') }}
                             </button>
                         </div>
                     </div>
-                    <div class="upload-tip">支持单文件、多文件、文件夹上传，也可拖拽到此区域</div>
+                    <div class="upload-tip">{{ t('layer.uploadTip') }}</div>
                     <div class="upload-crs-tip">
-                        <span>❗ 文件大小不超过 {{ MAX_FILE_SIZE_MB }} MB❗</span>
-                        <span>🔔数据格式：GeoJSON、KML、KMZ、TIF、SHP</span>
+                        <span>{{ t('layer.fileSizeLimit', { size: MAX_FILE_SIZE_MB }) }}</span>
+                        <span>{{ t('layer.dataFormats') }}</span>
                     </div>
                     <div
                         v-if="shouldShowUploadProgress"
@@ -152,11 +152,12 @@
                         :class="`phase-${uploadProgressView.phase}`"
                     >
                         <div class="upload-progress-head">
-                            <span
-                                >导入状态：{{ uploadProgressView.current }}/{{
-                                    uploadProgressView.total || 1
-                                }}</span
-                            >
+                            <span>{{
+                                t('layer.importStatus', {
+                                    current: uploadProgressView.current,
+                                    total: uploadProgressView.total || 1,
+                                })
+                            }}</span>
                             <span>{{ uploadProgressLabel }}</span>
                         </div>
                         <div class="upload-progress-bar">
@@ -166,14 +167,14 @@
                             ></div>
                         </div>
                         <div class="upload-progress-meta">
-                            <span>成功 {{ uploadProgressView.success }}</span>
-                            <span>失败 {{ uploadProgressView.failed }}</span>
-                            <span v-if="uploadProgressView.warnings"
-                                >警告 {{ uploadProgressView.warnings }}</span
-                            >
-                            <span v-if="uploadProgressView.errors"
-                                >错误 {{ uploadProgressView.errors }}</span
-                            >
+                            <span>{{ t('layer.success', { count: uploadProgressView.success }) }}</span>
+                            <span>{{ t('layer.failed', { count: uploadProgressView.failed }) }}</span>
+                            <span v-if="uploadProgressView.warnings">{{
+                                t('layer.warnings', { count: uploadProgressView.warnings })
+                            }}</span>
+                            <span v-if="uploadProgressView.errors">{{
+                                t('layer.errors', { count: uploadProgressView.errors })
+                            }}</span>
                         </div>
                         <div
                             v-if="uploadProgressView.message"
@@ -232,7 +233,7 @@
                                 ></line>
                             </svg>
                         </span>
-                        共享资源
+                        {{ t('layer.sharedResources') }}
                     </div>
                     <div class="shared-resource-menu">
                         <button
@@ -240,8 +241,8 @@
                             :class="{ loading: sharedLoader.isScanning.value }"
                             @click="scanSharedResources"
                         >
-                            <span v-if="!sharedLoader.isScanning.value">📁 加载资源</span>
-                            <span v-else>⏳ 扫描中...</span>
+                            <span v-if="!sharedLoader.isScanning.value">📁 {{ t('layer.loadResources') }}</span>
+                            <span v-else>⏳ {{ t('layer.scanning') }}</span>
                         </button>
                         <div
                             v-if="sharedLoader.hasResources.value"
@@ -259,7 +260,7 @@
                             v-else-if="!sharedLoader.isScanning.value && lastScanAttempted"
                             class="resource-empty"
                         >
-                            暂无可用资源
+                            {{ t('layer.noResources') }}
                         </div>
                     </div>
                 </div>
@@ -274,7 +275,7 @@
             <div class="eco-section">
                 <div class="section-header">
                     <span class="section-dot"></span>
-                    <span class="section-title">基础绘图</span>
+                    <span class="section-title">{{ t('layer.basicDraw') }}</span>
                 </div>
                 <div class="eco-draw-grid">
                     <button
@@ -292,13 +293,13 @@
                         class="eco-btn-op primary"
                         @click="emit('interaction', 'ZoomToGraphics')"
                     >
-                        全幅显示
+                        {{ t('layer.zoomAll') }}
                     </button>
                     <button
                         class="eco-btn-op warning"
                         @click="emit('interaction', 'Clear')"
                     >
-                        清空画布
+                        {{ t('layer.clearCanvas') }}
                     </button>
                 </div>
             </div>
@@ -307,7 +308,7 @@
             <div class="eco-section alt-bg">
                 <div class="section-header">
                     <span class="section-dot"></span>
-                    <span class="section-title">坐标定位</span>
+                    <span class="section-title">{{ t('layer.coordLocate') }}</span>
                 </div>
 
                 <!-- 经纬度输入 -->
@@ -316,12 +317,12 @@
                         <input
                             v-model.trim="coordInputLon"
                             class="eco-input"
-                            placeholder="经度"
+                            :placeholder="t('layer.lonPlaceholder')"
                         />
                         <input
                             v-model.trim="coordInputLat"
                             class="eco-input"
-                            placeholder="纬度"
+                            :placeholder="t('layer.latPlaceholder')"
                         />
                     </div>
                     <div class="input-row compact">
@@ -336,7 +337,7 @@
                             class="eco-btn-sm"
                             @click="drawPointByCoordinates"
                         >
-                            绘制
+                            {{ t('layer.draw') }}
                         </button>
                     </div>
                 </div>
@@ -349,14 +350,14 @@
                         <input
                             v-model.trim="coordInputP"
                             class="eco-input"
-                            placeholder="请输入 P 参数"
+                            :placeholder="t('layer.pParamPlaceholder')"
                         />
                         <button
                             class="eco-btn-sm"
                             :disabled="isDecodePBusy"
                             @click="drawPointByPositionCode"
                         >
-                            {{ isDecodePBusy ? '...' : '解析' }}
+                            {{ isDecodePBusy ? '...' : t('layer.parse') }}
                         </button>
                     </div>
                 </div>
@@ -372,26 +373,26 @@
             <div class="eco-section">
                 <div class="section-header">
                     <span class="section-dot"></span>
-                    <span class="section-title">地理编码</span>
+                    <span class="section-title">{{ t('layer.geocode') }}</span>
                 </div>
                 <div class="eco-input-group">
                     <input
                         v-model.trim="geocodeAddressInput"
                         class="eco-input full"
-                        placeholder="输入地址..."
+                        :placeholder="t('layer.addressPlaceholder')"
                     />
                     <div class="input-row compact mt-8">
                         <input
                             v-model.trim="geocodeCityInput"
                             class="eco-input"
-                            placeholder="限定城市(可选)"
+                            :placeholder="t('layer.cityOptionalPlaceholder')"
                         />
                         <button
                             class="eco-btn-sm"
                             :disabled="isGeocodeBusy"
                             @click="drawPointByGeocodeAddress"
                         >
-                            编码
+                            {{ t('layer.encode') }}
                         </button>
                     </div>
                 </div>
@@ -400,15 +401,22 @@
                     class="eco-btn-reverse mt-12"
                     @click="startReverseGeocodePick"
                 >
-                    <span class="icon">📍</span> 地图点选逆编码
+                    <span class="icon">📍</span> {{ t('layer.reverseGeocode') }}
                 </button>
             </div>
 
             <!-- 4. 底部操作提示 (改用气泡感设计) -->
             <div class="eco-hint-box">
-                <div class="hint-item"><span>左键</span> 选中要素</div>
-                <div class="hint-item"><span>右键</span> 独立显示</div>
-                <div class="hint-item"><span>地图右键</span> 属性查询</div>
+                <div class="hint-item">
+                    <span>{{ t('layer.hintLeftClickKey') }}</span> {{ t('layer.hintLeftClick') }}
+                </div>
+                <div class="hint-item">
+                    <span>{{ t('layer.hintRightClickKey') }}</span> {{ t('layer.hintRightClick') }}
+                </div>
+                <div class="hint-item">
+                    <span>{{ t('layer.hintMapRightClickKey') }}</span>
+                    {{ t('layer.hintMapRightClick') }}
+                </div>
             </div>
         </div>
 
@@ -427,27 +435,27 @@
             class="panel-scroll style-scroll"
         >
             <div class="style-panel">
-                <div class="card-title">样式模板</div>
+                <div class="card-title">{{ t('layer.styleTemplates') }}</div>
                 <div class="template-chip-row">
                     <button
-                        v-for="t in styleTemplates"
-                        :key="t.id"
+                        v-for="tpl in styleTemplates"
+                        :key="tpl.id"
                         class="template-chip"
-                        @click="applyTemplate(t.id)"
+                        @click="applyTemplate(tpl.id)"
                     >
                         <span
                             class="chip-dot"
-                            :style="{ backgroundColor: t.color }"
+                            :style="{ backgroundColor: tpl.color }"
                         ></span>
-                        <span>{{ t.name }}</span>
+                        <span>{{ tpl.name }}</span>
                     </button>
                 </div>
 
                 <div class="style-divider"></div>
 
-                <div class="card-title">样式编辑</div>
+                <div class="card-title">{{ t('layer.styleEdit') }}</div>
                 <div class="field">
-                    <label>编辑目标</label>
+                    <label>{{ t('layer.editTarget') }}</label>
                     <div class="select-wrap">
                         <select
                             v-model="selectedEditLayerId"
@@ -465,7 +473,7 @@
                 </div>
                 <div class="field-grid">
                     <div class="field">
-                        <label>填充色</label>
+                        <label>{{ t('layer.fillColor') }}</label>
                         <input
                             v-model="styleForm.fillColor"
                             type="color"
@@ -473,7 +481,7 @@
                         />
                     </div>
                     <div class="field">
-                        <label>边框色</label>
+                        <label>{{ t('layer.strokeColor') }}</label>
                         <input
                             v-model="styleForm.strokeColor"
                             type="color"
@@ -484,7 +492,7 @@
                 <div class="field-grid">
                     <div class="field">
                         <div class="slider-head">
-                            <label>填充透明度</label>
+                            <label>{{ t('layer.fillOpacity') }}</label>
                             <span>{{ styleForm.fillOpacityPct }}%</span>
                         </div>
                         <input
@@ -497,7 +505,7 @@
                     </div>
                     <div class="field">
                         <div class="slider-head">
-                            <label>边框宽度</label>
+                            <label>{{ t('layer.strokeWidth') }}</label>
                             <span>{{ styleForm.strokeWidth }}</span>
                         </div>
                         <input
@@ -514,7 +522,7 @@
                     class="small-btn style-apply-btn"
                     @click="applyStyle"
                 >
-                    应用样式
+                    {{ t('layer.applyStyle') }}
                 </button>
             </div>
         </div>
@@ -530,6 +538,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '../../composables/useMessage';
+import { useLocale } from '../../composables/useLocale';
 import { useGisLoader } from '../../composables/useGisLoader';
 import { useSharedResourceLoader } from '../../composables/useSharedResourceLoader';
 import { usePositionCodeTool } from '../../composables/map';
@@ -599,6 +608,7 @@ const emit = defineEmits([
 const fileInputRef = ref(null);
 const folderInputRef = ref(null);
 const message = useMessage();
+const { t } = useLocale();
 const gisLoader = useGisLoader();
 const sharedLoader = useSharedResourceLoader();
 const layerStore = useLayerStore();
@@ -688,14 +698,14 @@ function getCurrentFormatConfig() {
 
 const styleTemplates = styleEditor.styleTemplates;
 
-const drawTools = [
-    { value: 'AttributeQuery', label: '属性查询' },
-    { value: 'Point', label: '点' },
-    { value: 'LineString', label: '线' },
-    { value: 'Polygon', label: '面' },
-    { value: 'MeasureDistance', label: '测距' },
-    { value: 'MeasureArea', label: '测面' },
-];
+const drawTools = computed(() => [
+    { value: 'AttributeQuery', label: t('layer.attributeQuery') },
+    { value: 'Point', label: t('layer.drawPoint') },
+    { value: 'LineString', label: t('layer.drawLine') },
+    { value: 'Polygon', label: t('layer.drawPolygon') },
+    { value: 'MeasureDistance', label: t('layer.measureDistance') },
+    { value: 'MeasureArea', label: t('layer.measureArea') },
+]);
 
 const styleForm = styleEditor.styleForm;
 const selectedDrawTool = computed(() => layerStore.selectedDrawTool);
@@ -741,19 +751,19 @@ const uploadProgressPercent = computed(() => {
 
 const uploadProgressLabel = computed(() => {
     const phase = uploadProgressView.value.phase;
-    if (phase === 'validating') return '文件校验中';
-    if (phase === 'dispatching') return '容器解析中';
-    if (phase === 'importing') return '数据导入中';
-    if (phase === 'done') return '导入已完成';
-    if (phase === 'error') return '导入失败';
-    return '等待导入';
+    if (phase === 'validating') return t('layer.importValidating');
+    if (phase === 'dispatching') return t('layer.importDispatching');
+    if (phase === 'importing') return t('layer.importImporting');
+    if (phase === 'done') return t('layer.importDone');
+    if (phase === 'error') return t('layer.importError');
+    return t('layer.importWaiting');
 });
 
 // 复制图层经纬度信息到剪贴板
 // 应当识别当前用户选择的格式，进行转化后复制
 async function copyLayerCoordinates(layer) {
     if (!(Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude))) {
-        message.warning('当前图层未提供可复制的经纬度信息');
+        message.warning(t('layer.noCopyableCoords'));
         return;
     }
 
@@ -763,7 +773,7 @@ async function copyLayerCoordinates(layer) {
     const text = formatCoordinate(lon, lat, formatId, decimalPlaces);
 
     if (!text) {
-        message.warning('坐标格式化失败，无法复制');
+        message.warning(t('layer.coordFormatFailed'));
         return;
     }
 
@@ -781,9 +791,9 @@ async function copyLayerCoordinates(layer) {
             document.execCommand('copy');
             document.body.removeChild(textarea);
         }
-        message.success(`已复制坐标：${text}`);
+        message.success(t('layer.coordsCopied', { text }));
     } catch {
-        message.error('复制失败，请稍后重试');
+        message.error(t('layer.copyPoiIdFailed'));
     }
 }
 
@@ -868,7 +878,7 @@ function openManualAoiDetailLink() {
     if (typeof window !== 'undefined') {
         const popup = window.open(detailUrl, '_blank', 'noopener,noreferrer');
         if (!popup) {
-            message.warning('浏览器拦截了新窗口，请允许弹窗后重试');
+            message.warning(t('layer.popupBlocked'));
         }
     }
 }
@@ -887,7 +897,7 @@ function openManualAoiDialogByPoi(payload = {}, options = {}) {
     manualAoiDialogVisible.value = true;
 
     if (!poiId && options?.showMissingIdHint) {
-        message.info('该 POI 未返回 ID，请在弹窗中手动填写后继续');
+        message.info(t('layer.poiMissingIdHint'));
     }
 
     if (options?.autoOpenDetail) {
@@ -902,7 +912,7 @@ function drawAmapAoiFromManualJson() {
     manualAoiError.value = '';
     const jsonText = String(manualAoiJsonText.value || '').trim();
     if (!jsonText) {
-        manualAoiError.value = '请先粘贴高德详情 JSON';
+        manualAoiError.value = t('layer.pasteAmapJsonFirst');
         message.warning(manualAoiError.value);
         return;
     }
@@ -978,7 +988,7 @@ async function drawPointByPositionCode() {
         const decodeResult = await decodePositionCodeToPointPayload(code);
         if (!decodeResult?.ok) {
             coordInputPError.value = String(
-                decodeResult?.error || 'p 参数解码失败，请检查编码内容',
+                decodeResult?.error || t('layer.pDecodeFailed'),
             );
             message.warning(coordInputPError.value);
             return;
@@ -988,7 +998,7 @@ async function drawPointByPositionCode() {
             ...decodeResult.payload,
         });
 
-        message.success(`已按 p 参数绘制点位：${decodeResult.layerName}`);
+        message.success(t('layer.pPointDrawn', { name: decodeResult.layerName }));
         clearPositionCodeInput();
     } finally {
         isDecodePBusy.value = false;
@@ -1001,7 +1011,7 @@ async function drawPointByGeocodeAddress() {
     const inputAddress = String(geocodeAddressInput.value || '').trim();
     const inputCity = String(geocodeCityInput.value || '').trim();
     if (!inputAddress) {
-        geocodeToolError.value = '请输入待编码的地址信息';
+        geocodeToolError.value = t('layer.geocodeAddressRequired');
         message.warning(geocodeToolError.value);
         return;
     }
@@ -1015,7 +1025,7 @@ async function drawPointByGeocodeAddress() {
             !Number.isFinite(geocodeResult.lng) ||
             !Number.isFinite(geocodeResult.lat)
         ) {
-            throw new Error('地理编码未返回有效坐标');
+            throw new Error(t('layer.geocodeNoCoords'));
         }
         let reverseResult = null;
         try {
@@ -1050,11 +1060,11 @@ async function drawPointByGeocodeAddress() {
             },
         });
 
-        message.success(`地理编码成功：${inputAddress}`);
+        message.success(t('layer.geocodeSuccess', { address: inputAddress }));
     } catch (error) {
-        const detail = error instanceof Error ? error.message : '地理编码失败';
+        const detail = error instanceof Error ? error.message : t('layer.geocodeFailed');
         geocodeToolError.value = detail;
-        message.error(`地理编码失败：${detail}`);
+        message.error(t('layer.geocodeFailedDetail', { detail }));
     } finally {
         isGeocodeBusy.value = false;
     }
@@ -1218,7 +1228,7 @@ function triggerFolderUpload() {
 
 function openAttributeTable(layerId) {
     const targetLayer = (props.userLayers || []).find((item) => item.id === layerId);
-    attrStore.openTable(layerId, targetLayer?.name || '未命名图层');
+    attrStore.openTable(layerId, targetLayer?.name || t('layer.unnamedLayer'));
     activeTab.value = 'layers';
 }
 
@@ -1230,7 +1240,11 @@ function handleFileUpload(event) {
     const oversized = files.filter((file) => file.size / MB > MAX_FILE_SIZE_MB);
     if (oversized.length) {
         message.error(
-            `选中 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB 限制：${oversized.map((f) => f.name).join(', ')}`,
+            t('layer.fileOversizeSelected', {
+                count: oversized.length,
+                size: MAX_FILE_SIZE_MB,
+                names: oversized.map((f) => f.name).join(', '),
+            }),
         );
         event.target.value = '';
         return;
@@ -1248,7 +1262,10 @@ function handleDirectoryUpload(event) {
     const oversized = files.filter((file) => file.size / MB > MAX_FILE_SIZE_MB);
     if (oversized.length) {
         message.warning(
-            `文件夹中有 ${oversized.length} 个文件超过 ${MAX_FILE_SIZE_MB} MB，将在导入阶段按规则处理。`,
+            t('layer.fileOversizeFolder', {
+                count: oversized.length,
+                size: MAX_FILE_SIZE_MB,
+            }),
             { duration: 5200 },
         );
     }
@@ -1370,7 +1387,7 @@ function applyTemplate(templateId) {
     if (!targetId) return; // 如果没有选中任何图层，直接返回
 
     // 2. 更新本地 styleForm (让界面底部的颜色选择器实时同步变色)
-    const targetTemplate = styleTemplates.find((t) => t.id === templateId);
+    const targetTemplate = styleTemplates.find((tpl) => tpl.id === templateId);
     if (targetTemplate) {
         styleForm.value.fillColor = targetTemplate.color;
         // 建议：描边色通常可以设为和填充色一致，或者加深一点
@@ -1409,12 +1426,14 @@ async function scanSharedResources() {
         await sharedLoader.scanResources();
         lastScanAttempted.value = true;
         if (sharedLoader.hasResources.value) {
-            message.success(`发现 ${sharedLoader.resources.value.length} 个共享文件`);
+            message.success(
+                t('layer.sharedFound', { count: sharedLoader.resources.value.length }),
+            );
         } else {
-            message.info('未发现共享资源，请在 public/ShareDate 目录中添加数据文件');
+            message.info(t('layer.sharedEmpty'));
         }
     } catch (error) {
-        message.error(`扫描共享资源失败: ${String(error)}`);
+        message.error(t('layer.sharedScanFailed', { error: String(error) }));
         console.error('Error scanning shared resources:', error);
     }
 }
@@ -1427,7 +1446,7 @@ async function scanSharedResources() {
  */
 async function loadSharedResource(resource) {
     if (!resource || !resource.path) {
-        message.warning('资源信息不完整');
+        message.warning(t('layer.sharedIncomplete'));
         return;
     }
 
@@ -1436,18 +1455,18 @@ async function loadSharedResource(resource) {
         const files = await sharedLoader.loadResourceAsFiles(resource.path);
 
         if (!files || files.length === 0) {
-            message.warning('无法加载该资源');
+            message.warning(t('layer.sharedLoadFailed'));
             return;
         }
 
         // 显示加载中的提示
-        message.info(`正在加载共享资源: ${resource.name}`, { duration: 2000 });
+        message.info(t('layer.sharedLoading', { name: resource.name }), { duration: 2000 });
 
         // 复用上传逻辑来处理资源导入
         // 这样可以保证共享资源与手动上传的资源拥有完全相同的处理流程
         emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
     } catch (error) {
-        message.error(`加载共享资源失败: ${String(error)}`);
+        message.error(t('layer.sharedLoadError', { error: String(error) }));
         console.error('Error loading shared resource:', error);
     }
 }
