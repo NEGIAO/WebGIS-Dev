@@ -79,6 +79,11 @@ interface WindLayerOptions {
      * When set to false, particles will remain static.
      */
     dynamic: boolean;
+    /**
+     * Transition duration for zoom-dependent particle width and trail length scaling.
+     * Set to 0 to disable smoothing. Default is 260 milliseconds.
+     */
+    zoomScaleTransitionMs?: number;
 }
 interface WindDataDemention {
     array: Float32Array;
@@ -154,6 +159,9 @@ declare class WindLayer {
     options: WindLayerOptions;
     private particleSystem;
     private viewerParameters;
+    private _targetPixelSize;
+    private _pixelSizeInitialized;
+    private _lastScaleTransitionTime;
     private _isDestroyed;
     private primitives;
     private eventListeners;
@@ -175,6 +183,7 @@ declare class WindLayer {
      * @param {boolean} [options.flipY=false] - Whether to flip the Y-axis of the wind data.
      * @param {boolean} [options.useViewerBounds=false] - Whether to use the viewer bounds to generate particles.
      * @param {boolean} [options.dynamic=true] - Whether to enable dynamic particle animation.
+     * @param {number} [options.zoomScaleTransitionMs=260] - Duration for smoothing zoom-dependent trail scaling. Set to 0 to disable smoothing.
      */
     constructor(viewer: Viewer, windData: WindData, options?: Partial<WindLayerOptions>);
     private setupEventListeners;
@@ -187,6 +196,8 @@ declare class WindLayer {
      * @returns {Object} - An object containing the u, v, and speed values at the specified coordinates.
      */
     getDataAtLonLat(lon: number, lat: number): WindDataAtLonLat | null;
+    private setPixelSizeTarget;
+    private updatePixelSizeTransition;
     private updateViewerParameters;
     /**
      * Update the wind data of the wind layer.

@@ -1223,7 +1223,8 @@ var DefaultOptions = {
   useViewerBounds: false,
   domain: void 0,
   displayRange: void 0,
-  dynamic: true
+  dynamic: true,
+  zoomScaleTransitionMs: 260
 };
 var _WindLayer = class _WindLayer {
   /**
@@ -1244,6 +1245,7 @@ var _WindLayer = class _WindLayer {
    * @param {boolean} [options.flipY=false] - Whether to flip the Y-axis of the wind data.
    * @param {boolean} [options.useViewerBounds=false] - Whether to use the viewer bounds to generate particles.
    * @param {boolean} [options.dynamic=true] - Whether to enable dynamic particle animation.
+   * @param {number} [options.zoomScaleTransitionMs=260] - Duration for smoothing zoom-dependent trail scaling. Set to 0 to disable smoothing.
    */
   constructor(viewer, windData, options) {
     __publicField(this, "_show", true);
@@ -1254,6 +1256,9 @@ var _WindLayer = class _WindLayer {
     __publicField(this, "options");
     __publicField(this, "particleSystem");
     __publicField(this, "viewerParameters");
+    __publicField(this, "_targetPixelSize", 1e3);
+    __publicField(this, "_pixelSizeInitialized", false);
+    __publicField(this, "_lastScaleTransitionTime");
     __publicField(this, "_isDestroyed", false);
     __publicField(this, "primitives", []);
     __publicField(this, "eventListeners", /* @__PURE__ */ new Map());
@@ -1291,10 +1296,16 @@ var _WindLayer = class _WindLayer {
     //    快照原值并在销毁时恢复，消除全局副作用。
     this._boundUpdateViewerParameters = this._boundUpdateViewerParameters
       || this.updateViewerParameters.bind(this);
+    this._boundUpdatePixelSizeTransition = this._boundUpdatePixelSizeTransition
+      || this.updatePixelSizeTransition.bind(this);
     this._prevPercentageChanged = this.viewer.camera.percentageChanged;
-    this.viewer.camera.percentageChanged = 0.01;
+    const previousThreshold = Number(this._prevPercentageChanged);
+    this.viewer.camera.percentageChanged = Number.isFinite(previousThreshold)
+      ? Math.min(previousThreshold, 3e-3)
+      : 3e-3;
     this.viewer.camera.changed.addEventListener(this._boundUpdateViewerParameters);
     this.scene.morphComplete.addEventListener(this._boundUpdateViewerParameters);
+    this.scene.preRender.addEventListener(this._boundUpdatePixelSizeTransition);
     window.addEventListener("resize", this._boundUpdateViewerParameters);
   }
   removeEventListeners() {
@@ -1302,6 +1313,9 @@ var _WindLayer = class _WindLayer {
       this.viewer.camera.changed.removeEventListener(this._boundUpdateViewerParameters);
       this.scene.morphComplete.removeEventListener(this._boundUpdateViewerParameters);
       window.removeEventListener("resize", this._boundUpdateViewerParameters);
+    }
+    if (this._boundUpdatePixelSizeTransition) {
+      this.scene.preRender.removeEventListener(this._boundUpdatePixelSizeTransition);
     }
     if (typeof this._prevPercentageChanged === "number") {
       this.viewer.camera.percentageChanged = this._prevPercentageChanged;
@@ -1380,6 +1394,53 @@ var _WindLayer = class _WindLayer {
       }
     };
   }
+  setPixelSizeTarget(pixelSize) {
+    const numericPixelSize = Number(pixelSize);
+    const target = Number.isFinite(numericPixelSize)
+      ? Math.max(5, Math.min(1e3, numericPixelSize))
+      : 1e3;
+    // Keep the camera-derived scale as a target; the render loop advances the visible scale smoothly.
+    this._targetPixelSize = target;
+    if (!this._pixelSizeInitialized) {
+      this.viewerParameters.pixelSize = target;
+      this._pixelSizeInitialized = true;
+      this._lastScaleTransitionTime = void 0;
+    }
+  }
+  updatePixelSizeTransition() {
+    if (this._isDestroyed || !this._pixelSizeInitialized) return;
+    const target = this._targetPixelSize;
+    const currentPixelSize = Number(this.viewerParameters.pixelSize);
+    const current = Number.isFinite(currentPixelSize)
+      ? Math.max(1e-6, currentPixelSize)
+      : target;
+    if (Math.abs(target - current) <= Math.max(1e-3, target * 1e-3)) {
+      this.viewerParameters.pixelSize = target;
+      this._lastScaleTransitionTime = void 0;
+      return;
+    }
+    const now = performance.now();
+    if (this._lastScaleTransitionTime === void 0) {
+      this._lastScaleTransitionTime = now;
+      this.scene.requestRender?.();
+      return;
+    }
+    const deltaSeconds = Math.min(0.1, Math.max(0, (now - this._lastScaleTransitionTime) / 1e3));
+    this._lastScaleTransitionTime = now;
+    const configuredTransitionMs = Number(this.options.zoomScaleTransitionMs);
+    const transitionMs = Number.isFinite(configuredTransitionMs)
+      ? Math.max(0, configuredTransitionMs)
+      : DefaultOptions.zoomScaleTransitionMs;
+    if (transitionMs === 0 || deltaSeconds === 0) {
+      this.viewerParameters.pixelSize = target;
+    } else {
+      const transitionSeconds = transitionMs / 1e3;
+      const alpha = 1 - Math.exp(-4.6 * deltaSeconds / transitionSeconds);
+      // Interpolate in logarithmic space so zoom-in and zoom-out feel symmetric across the 5..1000 range.
+      this.viewerParameters.pixelSize = current * Math.pow(target / current, alpha);
+    }
+    this.scene.requestRender?.();
+  }
   updateViewerParameters() {
     const scene = this.viewer.scene;
     const canvas = scene.canvas;
@@ -1436,11 +1497,14 @@ var _WindLayer = class _WindLayer {
       const pixelSize = 1e3 * visibleRatio;
       if (pixelSize > 0) {
         // 修复：设定 pixelSize 下限 5，防止放大视角后粒子拖尾过短导致"小块渲染"
-        this.viewerParameters.pixelSize = Math.max(5, Math.min(1e3, pixelSize));
+        this.setPixelSizeTarget(pixelSize);
       }
+    } else {
+      this.setPixelSizeTarget(1e3);
     }
     this.viewerParameters.sceneMode = this.scene.mode;
     this.particleSystem?.applyViewerParameters(this.viewerParameters);
+    this.scene.requestRender?.();
   }
   /**
    * Update the wind data of the wind layer.

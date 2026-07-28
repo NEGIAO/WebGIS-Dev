@@ -50,6 +50,7 @@ export default class Wind2D {
             displayRange: undefined,
             dynamic: true,
             useViewerBounds: false,
+            zoomScaleTransitionMs: 260,
         };
 
         const mergedOptions = { ...defaultOptions, ...options };

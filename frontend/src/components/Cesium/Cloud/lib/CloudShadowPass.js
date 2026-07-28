@@ -116,6 +116,7 @@ export class CloudShadowPass {
         if (dynamicParams.shapeDetailOffset) p.shapeDetailOffset = dynamicParams.shapeDetailOffset;
         if (dynamicParams.windSpeed !== undefined) p.windSpeed = dynamicParams.windSpeed;
         if (dynamicParams.evolutionSpeed !== undefined) p.evolutionSpeed = dynamicParams.evolutionSpeed;
+        if (dynamicParams.clockElapsedSeconds !== undefined) p.clockElapsedSeconds = dynamicParams.clockElapsedSeconds;
 
         setNum("bottomRadius", dynamicParams.bottomRadius);
         setNum("shadowBottomHeight", dynamicParams.shadowBottomHeight);
@@ -880,7 +881,7 @@ void main() {
         if (sunDirLoc) gl.uniform3f(sunDirLoc, -this._sunDirection[0], -this._sunDirection[1], -this._sunDirection[2]);
 
         const R = Number(this.params.bottomRadius) || 6371000;
-        const time = (performance.now() / 1000.0) - (this.params.startTime || 0);
+        const time = Number(this.params.clockElapsedSeconds) || 0;
 
         const set1f = (name, v) => { const loc = locs[name]; if (loc != null) gl.uniform1f(loc, v); };
         const set2f = (name, a, b) => { const loc = locs[name]; if (loc != null) gl.uniform2f(loc, a, b); };

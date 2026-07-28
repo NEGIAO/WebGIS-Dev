@@ -172,9 +172,8 @@ export function setupCloudIntegration({
       pendingApplyParams = null;
       if (disposed || !pipeline || !p) return;
       applyCloudPanelParams(pipeline, p);
-      // V3.4.x：云 stage 因分辨率切档被重建时会排到链尾（lensFlare 之后）。
-      // 消费重建标志并销毁 lensFlare，让下方 syncLensFlare 按需重建、
-      // 恢复 [atmosphere, aerial, cloud, lensFlare] 链序。
+      // A resolution switch rebuilds only Cloud and appends it after the stable Aerial stage.
+      // Rebuild lens flare when present so the final order stays Atmosphere -> Aerial -> Cloud -> LensFlare.
       if (pipeline.consumeCloudStageRebuilt?.() && lensFlare) {
         try {
           lensFlare.destroy();

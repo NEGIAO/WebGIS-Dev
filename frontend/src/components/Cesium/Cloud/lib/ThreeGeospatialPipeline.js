@@ -1,10 +1,10 @@
 /**
  * ThreeGeospatialPipeline - 精炼版体积云 + Bruneton 大气 + 空中透视一体化管线。
  *
- * 渲染顺序（与 three-geospatial 对齐）：
- *  1. PostProcessStage: 体积云 raymarch（含 BSM 采样、shadowLength、haze）
- *  2. PostProcessStage: AtmospherePostProcess 天空
- *  3. PostProcessStage: AerialPerspectiveEffect 几何透视 + tonemap
+ * 渲染顺序（WebGIS 后处理链）：
+ *  1. PostProcessStage: AtmospherePostProcess 天空
+ *  2. PostProcessStage: AerialPerspectiveEffect 几何透视 + 地面云影
+ *  3. PostProcessStage: 体积云 raymarch（含 BSM 采样、shadowLength、haze）
  *
  * BSM（Beer Shadow Map）和 TAA 通过原生 WebGL 在 preRender/postRender 执行。
  * BSM 数据通过 setCloudShadow 同步到大气和 Aerial 两侧，实现丁达尔与地面云影。
@@ -920,6 +920,9 @@ export class ThreeGeospatialPipeline {
     this._shapeDetailOffsetX = 0; this._shapeDetailOffsetY = 0; this._shapeDetailOffsetZ = 0;
     this._lastFrameTime = undefined;
     this._lastOffsetFrame = -1;
+    this._clockStartTime = undefined;
+    this._clockElapsedSeconds = 0;
+    this._lastClockElapsedSeconds = undefined;
     this._listeners = [];
 
     // 每帧 uniform 回调复用的 scratch 对象池：每个 uniform 独立实例，避免同帧互相覆盖与 GC 抖动
@@ -964,7 +967,7 @@ export class ThreeGeospatialPipeline {
         shapeDetailAmounts: [0, 0, 0, 0], weatherExponents: [0, 0, 0, 0],
         shapeAlteringBiases: [0, 0, 0, 0], coverageFilterWidths: [0, 0, 0, 0],
         localWeatherOffset: [0, 0], shapeOffset: [0, 0, 0], shapeDetailOffset: [0, 0, 0],
-        windSpeed: 0, evolutionSpeed: 0,
+        windSpeed: 0, evolutionSpeed: 0, clockElapsedSeconds: 0,
         // V3.4.x：层高/间隙/密度剖面运行时同步（此前 pass 创建后固化，
         // 面板改层高会造成云体与云影层高错位）
         minLayerHeights: [0, 0, 0, 0], maxLayerHeights: [0, 0, 0, 0],
@@ -1112,18 +1115,38 @@ uniform sampler2D irradiance_texture;
 
   // ── Wind animation ─────────────────────────────────────────────────────
 
+  /**
+   * 获取 Cesium 仿真时钟经过秒数；用于让云演化跟随时间轴播放、倍速与拖拽。
+   * @returns {number}
+   */
+  _getClockElapsedSeconds() {
+    const clock = this.viewer?.clock;
+    const currentTime = clock?.currentTime;
+    if (!currentTime || typeof Cesium.JulianDate?.secondsDifference !== "function") {
+      return performance.now() / 1000;
+    }
+    if (!this._clockStartTime) {
+      this._clockStartTime = Cesium.JulianDate.clone(currentTime);
+    }
+    return Cesium.JulianDate.secondsDifference(currentTime, this._clockStartTime);
+  }
+
+  /**
+   * 推进云纹理偏移。以 Cesium clock 为唯一时间源，支持时间轴拖拽和 multiplier 加速。
+   * @returns {number} 当前仿真经过秒数
+   */
   _advanceOffsets() {
     const frame = this._frameCount || 0;
-    if (this._lastOffsetFrame === frame) return;
+    const elapsed = this._getClockElapsedSeconds();
+    if (this._lastOffsetFrame === frame) return elapsed;
     this._lastOffsetFrame = frame;
-    const now = performance.now() / 1000;
-    if (this._lastFrameTime !== undefined) {
-      const dt = now - this._lastFrameTime;
-      this._weatherOffsetX += (this.params.windSpeed || 0) * dt;
-      this._shapeOffsetX += (this.params.evolutionSpeed || 0) * dt;
-      this._shapeDetailOffsetX += (this.params.evolutionSpeed || 0) * 2 * dt;
-    }
-    this._lastFrameTime = now;
+
+    this._weatherOffsetX = (this.params.windSpeed || 0) * elapsed;
+    this._shapeOffsetX = (this.params.evolutionSpeed || 0) * elapsed;
+    this._shapeDetailOffsetX = (this.params.evolutionSpeed || 0) * 2 * elapsed;
+    this._clockElapsedSeconds = elapsed;
+    this._lastClockElapsedSeconds = elapsed;
+    return elapsed;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -1557,6 +1580,7 @@ uniform sampler2D irradiance_texture;
     // 演化活跃度同步：供 BSM 签名门控决定"无演化时不做周期刷新"
     dyn.windSpeed = Number(this.params.windSpeed) || 0;
     dyn.evolutionSpeed = Number(this.params.evolutionSpeed) || 0;
+    dyn.clockElapsedSeconds = this._clockElapsedSeconds || 0;
     sp.updateDynamicParams(dyn);
     // V3.4.7：显式驱动 BSM 渲染（autoRender:false），保证与后续 resolve/blit/setCloudShadow
     // 严格同帧同序；内部仍按 updateInterval + 运动检测节流。
@@ -1821,7 +1845,7 @@ uniform sampler2D irradiance_texture;
       coverage: Math.max(...coverages), densityScale: Math.max(...densityScales),
       scatteringCoefficient: Number(this.params.scatteringCoefficient) ?? 0.9,
       absorptionCoefficient: Number(this.params.absorptionCoefficient) ?? 1.0,
-      startTime: performance.now() / 1000, evolutionSpeed: Number(this.params.evolutionSpeed) || 0.005,
+      startTime: 0, evolutionSpeed: Number(this.params.evolutionSpeed) || 0.005,
       maxSteps: this.params.maxSteps, minStepSize: this.params.minStepSize,
       minDensity: this.params.minDensity ?? 1e-5, minExtinction: this.params.minExtinction ?? 1e-5,
       minTransmittance: this.params.minTransmittance ?? 0.01, opticalDepthTailScale: 1.0,
@@ -1908,6 +1932,9 @@ void main() {
       this._cloudUniforms,
     );
     this.cloudStage.enabled = wasEnabled;
+    // Keep the long-lived Aerial stage in place and append only the rebuilt Cloud stage.
+    // PostProcessStageCollection.remove() destroys the removed stage; using it for reordering
+    // permanently kills the Aerial ground-shadow consumer on the first resolution/preset switch.
     stages.add(this.cloudStage);
     this._cloudStageRebuiltFlag = true;
     this.viewer.scene.requestRender?.();
@@ -1976,17 +2003,23 @@ void main() {
       // 6. Aerial init
       await this.aerial.init();
 
-      // 7. Register stages in correct order
+      // 7. Register stages in stable order: Atmosphere -> Aerial -> Cloud.
       const stages = viewer.scene.postProcessStages;
-      // 1. 先渲染大气天空打底
-      if (this.atmosphere.stage) stages.add(this.atmosphere.stage); 
-      // 2. 加上空中透视和 Tonemap
+      if (this.atmosphere.stage) stages.add(this.atmosphere.stage);
+      // Aerial owns the ground BSM shadow and must remain a long-lived stage.
       if (this.aerial.stage) stages.add(this.aerial.stage);
-      // 3. 最后在天空之上画体积云
-      stages.add(this.cloudStage); 
+      // In split mode the composite receives the outer previous texture (the Aerial output)
+      // as its scene input, so the final cloud composition preserves the ground shadow.
+      stages.add(this.cloudStage);
 
       // 8. preRender: BSM sync
-      this._listeners.push(viewer.scene.preRender.addEventListener(() => this._syncBSM()));
+      this._listeners.push(viewer.scene.preRender.addEventListener(() => {
+        const elapsed = this._getClockElapsedSeconds();
+        if (this._lastClockElapsedSeconds !== undefined && Math.abs(elapsed - this._lastClockElapsedSeconds) > 1e-6) {
+          viewer.scene.requestRender?.();
+        }
+        this._syncBSM();
+      }));
 
       // 9. postRender: TAA capture + frame count
       this._listeners.push(viewer.scene.postRender.addEventListener(() => {
