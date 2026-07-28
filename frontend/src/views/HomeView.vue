@@ -19,6 +19,8 @@ import { useRoute } from 'vue-router';
 import { createBasemapUrlMappingFeature } from '../composables/map/features/useBasemapUrlMapping';
 import { URL_LAYER_OPTIONS } from '../constants/basemap/basemapResolver';
 import { getLayerCategory, getLayerGroup } from '../constants/basemap/basemapResolver';
+import { createMapCommandBus } from '../services/agent/MapCommandBus';
+import { createCesiumMapCommandAdapter, createOlMapCommandAdapter } from '../services/agent/mapCommandAdapters';
 
 const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
     urlLayerOptions: URL_LAYER_OPTIONS,
@@ -175,6 +177,87 @@ const mapContainerRef = ref(null);
 // 从 MapContainer 暴露的 mapInstance 提供给全页面子组件（如 ExtentPicker）
 const olMap = computed(() => mapContainerRef.value?.mapInstance ?? null);
 provide('olMap', olMap);
+
+/**
+ * Wait until the OL view has no active animation/interaction for a short stable window.
+ * @param {import('ol/Map').default|null} map
+ * @param {{timeoutMs?: number, stableMs?: number}} options
+ * @returns {Promise<{status: 'idle'|'timeout'|'destroyed'}>}
+ */
+function waitForOlMapIdle(map, { timeoutMs = 2500, stableMs = 120 } = {}) {
+    return new Promise((resolve) => {
+        const startedAt = Date.now();
+        let stableSince = null;
+
+        const check = () => {
+            const view = map?.getView?.();
+            if (!view || !map.getTargetElement?.()) {
+                resolve({ status: 'destroyed' });
+                return;
+            }
+
+            const now = Date.now();
+            const moving = !!(view.getAnimating?.() || view.getInteracting?.());
+            if (moving) {
+                stableSince = null;
+            } else if (stableSince === null) {
+                stableSince = now;
+            } else if (now - stableSince >= stableMs) {
+                resolve({ status: 'idle' });
+                return;
+            }
+
+            if (now - startedAt >= timeoutMs) {
+                resolve({ status: 'timeout' });
+                return;
+            }
+            setTimeout(check, 32);
+        };
+
+        check();
+    });
+}
+
+// Capture the active map runtime for each Agent request instead of waiting for URL synchronization.
+function captureOlRuntimeState() {
+    const state = mapContainerRef.value?.getCurrentViewState?.();
+    if (!state) return { view: MAP_VIEW_OL };
+    const size = Array.isArray(state.size) ? state.size : [];
+    const layerIndex = Number.isInteger(state.layerIndex) ? state.layerIndex : null;
+    const basemapId = layerIndex === null ? null : getLayerIdByIndex(layerIndex);
+
+    return {
+        view: MAP_VIEW_OL,
+        center: { lng: state.lng, lat: state.lat },
+        ol: {
+            zoom: state.zoom,
+            resolution: state.resolution,
+            viewportWidth: size[0],
+            viewportHeight: size[1],
+        },
+        basemap: {
+            index: layerIndex,
+            id: basemapId,
+        },
+    };
+}
+
+const agentMapRuntimeBridge = {
+    capture() {
+        if (is3DMode.value) {
+            return cesiumContainerRef.value?.getCurrentViewState?.() || { view: MAP_VIEW_CESIUM };
+        }
+        return captureOlRuntimeState();
+    },
+    waitForIdle(options = {}) {
+        if (is3DMode.value) {
+            return cesiumContainerRef.value?.waitForViewIdle?.(options)
+                || Promise.resolve({ status: 'destroyed' });
+        }
+        return waitForOlMapIdle(mapContainerRef.value?.mapInstance || null, options);
+    },
+};
+provide('agentMapRuntimeBridge', agentMapRuntimeBridge);
 
 // 向子组件提供自定义 XYZ 底图切换能力（供 Chat GISCommander 调用）
 const setCustomBasemapByUrl = (url) => {
@@ -833,7 +916,48 @@ async function setMapView(view, { writeUrl = true } = {}) {
     return true;
 }
 
-/** 切换 2D/3D 视图 */
+/**
+ * Wait for the target engine instance after a dynamic 2D/3D component switch.
+ */
+async function waitForAgentMapViewReady(view, { timeoutMs = 10000 } = {}) {
+    const startedAt = Date.now();
+    await nextTick();
+    while (Date.now() - startedAt < timeoutMs) {
+        if (view === MAP_VIEW_CESIUM) {
+            const viewer = cesiumContainerRef.value?.getViewer?.();
+            if (viewer && !viewer.isDestroyed?.() && viewer.camera) return true;
+        } else {
+            const map = mapContainerRef.value?.mapInstance;
+            if (map?.getView?.() && map.getTargetElement?.()) return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return false;
+}
+
+const agentOlMapCommandAdapter = createOlMapCommandAdapter({
+    getMap: () => mapContainerRef.value?.mapInstance || null,
+    getRuntimeState: captureOlRuntimeState,
+    setBasemap: (presetId) => mapContainerRef.value?.setBaseLayerActive?.(presetId),
+});
+const agentCesiumMapCommandAdapter = createCesiumMapCommandAdapter({
+    getViewer: () => cesiumContainerRef.value?.getViewer?.() || null,
+    getCesium: () => cesiumContainerRef.value?.getCesium?.() || null,
+    getRuntimeState: () => cesiumContainerRef.value?.getCurrentViewState?.() || { view: MAP_VIEW_CESIUM },
+    setBasemap: (presetId) => cesiumContainerRef.value?.setBasemapById?.(presetId),
+});
+const agentMapCommandBus = createMapCommandBus({
+    getActiveView: () => is3DMode.value ? MAP_VIEW_CESIUM : MAP_VIEW_OL,
+    switchView: (view) => setMapView(view),
+    waitForViewReady: waitForAgentMapViewReady,
+    adapters: {
+        [MAP_VIEW_OL]: agentOlMapCommandAdapter,
+        [MAP_VIEW_CESIUM]: agentCesiumMapCommandAdapter,
+    },
+});
+provide('agentMapCommandBus', agentMapCommandBus);
+
+/** Toggle between 2D and 3D. */
 async function toggle3D() {
     const nextView = is3DMode.value ? MAP_VIEW_OL : MAP_VIEW_CESIUM;
     await setMapView(nextView);

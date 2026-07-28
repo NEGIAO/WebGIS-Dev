@@ -546,10 +546,10 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
 
         /**
          * 调用 LLM API（按当前路由模式选择通道）
-         * @param {{ message: string, history: Array, locationContext: string, systemPrompt: string, tools: Array }} payload
+         * @param {{ message: string, history: Array, locationContext: string, mapContext?: Object, systemPrompt: string, tools: Array }} payload
          * @returns {Promise<{ reply: string, usedModel: string, rawData: Object, quota: Object|null }>}
          */
-        async callLLM({ message: userMsg, history, locationContext, systemPrompt, tools }) {
+        async callLLM({ message: userMsg, history, locationContext, mapContext, systemPrompt, tools }) {
             let reply = '';
             let usedModel = '';
             let rawData = {};
@@ -571,6 +571,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     message: userMsg,
                     history: enhancedHistory,
                     location_context: locationContext,
+                    map_context: mapContext,
                     override_model: dc.model || undefined,
                     override_top_p: dc.top_p,
                     override_extra_body: dc.extra_body,
@@ -592,6 +593,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     message: userMsg,
                     history: enhancedHistory,
                     location_context: locationContext,
+                    map_context: mapContext,
                     api_key: dc.api_key,
                     base_url: dc.base_url,
                     model: dc.model,
@@ -612,6 +614,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     message: userMsg,
                     history: enhancedHistory,
                     location_context: locationContext,
+                    map_context: mapContext,
                     tools,
                     tool_choice: 'auto',
                 };

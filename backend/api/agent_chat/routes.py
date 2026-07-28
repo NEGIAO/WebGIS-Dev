@@ -55,10 +55,10 @@ from .upstream import (
     _call_upstream_chat,
     _call_upstream_chat_with_key_candidates,
     _call_upstream_models_with_key_candidates,
+    _build_agent_system_prompt,
     _extract_assistant_reply,
     _extract_client_ip,
     _extract_reply_and_tools,
-    _join_system_prompt,
     _record_agent_call_safe,
     _sanitize_history,
     _try_get_location_from_ip_async,
@@ -186,9 +186,10 @@ async def agent_chat_completions(
         if ip_location:
             location_context = ip_location
 
-    system_prompt = _join_system_prompt(
+    system_prompt = _build_agent_system_prompt(
         str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
         location_context,
+        payload.map_context,
     )
 
     request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
@@ -203,6 +204,9 @@ async def agent_chat_completions(
             "api_key_source": runtime.get("api_key_source"),
             "model_source": runtime.get("model_source"),
             "has_location_context": bool(location_context),
+            "has_map_context": payload.map_context is not None,
+            "map_schema_version": getattr(payload.map_context, "schema_version", None),
+            "map_view": getattr(payload.map_context, "view", None),
             "has_overrides": bool(override_api_key or override_base_url or override_model),
         },
         ensure_ascii=False,
@@ -450,9 +454,10 @@ async def agent_chat_default_proxy(
         if ip_location:
             location_context = ip_location
 
-    system_prompt = _join_system_prompt(
+    system_prompt = _build_agent_system_prompt(
         DEFAULT_AGENT_SYSTEM_PROMPT,
         location_context,
+        payload.map_context,
     )
 
     request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
@@ -466,6 +471,9 @@ async def agent_chat_default_proxy(
             "base_url": base_url,
             "history_len": len(history_items),
             "has_location_context": bool(location_context),
+            "has_map_context": payload.map_context is not None,
+            "map_schema_version": getattr(payload.map_context, "schema_version", None),
+            "map_view": getattr(payload.map_context, "view", None),
             "has_model_override": bool(override_model),
         },
         ensure_ascii=False,
@@ -864,7 +872,7 @@ async def agent_chat_proxy(
     if not user_system_prompt:
         user_system_prompt = "You are a helpful AI assistant. Reply in concise Chinese unless the user asks for another language."
 
-    system_prompt = _join_system_prompt(user_system_prompt, location_context)
+    system_prompt = _build_agent_system_prompt(user_system_prompt, location_context, payload.map_context)
 
     request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
     request_messages.extend(history_items)
@@ -877,6 +885,9 @@ async def agent_chat_proxy(
             "base_url": base_url,
             "history_len": len(history_items),
             "has_location_context": bool(location_context),
+            "has_map_context": payload.map_context is not None,
+            "map_schema_version": getattr(payload.map_context, "schema_version", None),
+            "map_view": getattr(payload.map_context, "view", None),
         },
         ensure_ascii=False,
     )

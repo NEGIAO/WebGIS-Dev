@@ -24,6 +24,9 @@ import { parseToolCallsFromText, formatToolResultForLLM } from '@/constants/agen
  * value: GISCommander 实例上的方法名
  */
 const TOOL_REGISTRY = {
+    set_map_view: 'setMapView',
+    set_view_center: 'setViewCenter',
+    set_camera_orientation: 'setCameraOrientation',
     zoom_to_extent: 'zoomToExtent',
     search_and_zoom: 'searchAndZoom',
     switch_basemap: 'switchBasemap',
@@ -97,7 +100,7 @@ export class AgentExecutor {
 
     /**
      * 批量执行 tool_calls 数组
-     * 多个工具调用并发执行（Promise.allSettled）
+     * 多个工具按顺序串行执行，避免地图动画竞争（如 set_map_view -> set_view_center）
      *
      * @param {Array<{id?: string, name: string, arguments: Object}>} toolCalls - 工具调用列表
      * @returns {Promise<Array<{toolCallId: string, name: string, result: Object}>>}
@@ -107,20 +110,24 @@ export class AgentExecutor {
             return [];
         }
 
-        // 并发执行所有工具调用，保留原始 toolCall 信息用于错误回退
-        const results = await Promise.allSettled(
-            toolCalls.map((tc) => this.executeToolCall(tc)),
-        );
-
-        return results.map((r, idx) => {
-            if (r.status === 'fulfilled') return r.value;
-            const originalTc = toolCalls[idx] || {};
-            return {
-                toolCallId: originalTc.id || `tool_error_${Date.now()}`,
-                name: originalTc.name || 'unknown',
-                result: { success: false, message: `执行失败：${r.reason?.message || '未知错误'}` },
-            };
-        });
+        // Map mutations are intentionally serialized. This preserves call order for
+        // sequences such as set_map_view -> set_view_center and avoids animation races.
+        const results = [];
+        for (const toolCall of toolCalls) {
+            try {
+                results.push(await this.executeToolCall(toolCall));
+            } catch (error) {
+                results.push({
+                    toolCallId: toolCall?.id || `tool_error_${Date.now()}`,
+                    name: toolCall?.name || 'unknown',
+                    result: {
+                        success: false,
+                        message: `Tool execution failed: ${error?.message || 'unknown error'}`,
+                    },
+                });
+            }
+        }
+        return results;
     }
 
     /**

@@ -36,7 +36,7 @@ export async function apiGetDefaultAIConfig() {
 
 /**
  * 使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）
- * @param {Object} payload - { message, history, location_context?, override_model?, tools?, tool_choice? }
+ * @param {Object} payload - { message, history, location_context?, map_context?, override_model?, tools?, tool_choice? }
  * @param {Array} [payload.tools] - Function Calling 工具声明（OpenAI 格式），后端支持时透传给 LLM
  * @param {string} [payload.tool_choice] - 工具选择策略，如 'auto'、'none'、'required'
  * @returns {Promise}
@@ -47,6 +47,11 @@ export async function apiAgentChatDefaultProxy(payload = {}) {
         history: normalizeChatHistory(payload.history),
         location_context: String(payload.location_context || '').trim(),
     };
+
+    if (payload.map_context && typeof payload.map_context === 'object') {
+        const mapContext = sanitizeMapContext(payload.map_context);
+        if (mapContext) body.map_context = mapContext;
+    }
 
     if (payload.override_model) body.override_model = String(payload.override_model).trim();
     if (typeof payload.override_timeout_seconds !== 'undefined' && payload.override_timeout_seconds !== null)
@@ -88,6 +93,21 @@ function normalizeChatHistory(rawHistory) {
         }))
         .filter((item) => (item.role === 'user' || item.role === 'assistant') && item.content)
         .slice(-20);
+}
+
+/**
+ * Limit the serialized AgentMapContextV1 payload and reject non-JSON values.
+ * @param {Object} rawContext - normalized AgentMapContextV1 snapshot
+ * @returns {Object|null} 安全 JSON 对象
+ */
+function sanitizeMapContext(rawContext) {
+    try {
+        const normalized = JSON.parse(JSON.stringify(rawContext || {}));
+        const jsonText = JSON.stringify(normalized);
+        return jsonText.length <= 4096 ? normalized : null;
+    } catch {
+        return null;
+    }
 }
 
 export async function apiAgentGetChatConfig() {
@@ -138,6 +158,11 @@ export async function apiAgentChatCompletions(payload = {}) {
         history,
         location_context: String(payload.location_context || '').trim(),
     };
+
+    if (payload.map_context && typeof payload.map_context === 'object') {
+        const mapContext = sanitizeMapContext(payload.map_context);
+        if (mapContext) body.map_context = mapContext;
+    }
 
     // 传递用户配置面板中尚未保存的参数覆盖
     if (payload.override_base_url) {
@@ -219,6 +244,11 @@ export async function apiAgentChatProxy(payload = {}) {
         base_url: String(payload.base_url || '').trim(),
         model: String(payload.model || '').trim(),
     };
+
+    if (payload.map_context && typeof payload.map_context === 'object') {
+        const mapContext = sanitizeMapContext(payload.map_context);
+        if (mapContext) body.map_context = mapContext;
+    }
 
     if (payload.system_prompt) body.system_prompt = String(payload.system_prompt).trim();
     if (typeof payload.timeout_seconds !== 'undefined' && payload.timeout_seconds !== null)

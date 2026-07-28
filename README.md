@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.67），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.69），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -227,9 +227,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.4.69** | 2026-07-28 | Agent 地图命令总线安全重构：引入 MapCommandBus 固定白名单命令集（setMapView/setViewCenter/setCameraOrientation/zoomToExtent/switchBasemap），移除 URL 直贴与任意 XYZ 注入风险；新增 AgentMapContextV1 协议（runtime 快照 + URL 安全回退 + changesSinceLastTurn 变更追踪）；后端 Pydantic Schema 严格校验（extra="forbid"）；前端 GISCommander 改为纯 facade 仅委托 commandBus；系统提示词注入防护（read-only 标注 + 工具白名单约束）。详见[日志](Docs/LLM_record/26-07/2026-07-28/2026-07-28-v3469-agent-map-command-bus.md) |
+| **V3.4.68** | 2026-07-28 | Google/GitHub OAuth 登录重新接入（授权码 + OneTap 双通道，state 落库多 worker 安全，未配置密钥自动隐藏按钮）+ 体积云流畅/均衡档颗粒感优化（上调 `cloudResolutionScale`/`maxSteps`/`minStepSize`，恢复大气透视）+ 新增「云渲染分辨率 / 最小采样步长 / 远距步长增幅」三个画质微调旋钮 + 风场粒子缩放平滑。详见[日志](Docs/LLM_record/26-07/2026-07-28/2026-07-28-v3468-oauth-cloud-optimization.md) |
 | **V3.4.67** | 2026-07-27 | 体积云时间轴同步与大气透视修复：云体风速/演化偏移改用 Cesium `viewer.clock.currentTime` 仿真时间，时间倍率调整即等价于云演化速度同步变更，拖动时间轴会驱动云纹理与 BSM 云影跳到对应时间；后处理链保持 Atmosphere → Aerial → Cloud，恢复 Aerial 几何像素地面云影，再让体积云叠加到天空与地面大气之上，并恢复流畅档基础 Aerial 与三档非零大气透视。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-cloud-time-atmosphere-sync.md) |
-| **V3.4.66** | 2026-07-27 | L1 配置与硬编码常量收敛：根目录 `.env` 改为 tracked 非涉密默认配置，`.env.example` 回归全集 registry，`.gitignore` 仅忽略本地私密覆盖；新增 `HF_RUN_LOGS_URL/HF_BUILD_LOGS_URL` 解决 `LOG` 只配 token 但 Space 日志端点写死的问题，并将下载输出目录、ships66、Amap/Nominatim/EPSG/IP 定位/OAuth provider 端点、代理连接池与前端请求超时/CDN 候选链收敛到 L1；保持 Agent/高德/地图 token 为 L2，`SUPER_USER`/OAuth secret/SMTP/Supabase/LOG token 为 L3。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-l1-env-config-hardcode-cleanup.md) |
-| **V3.4.65** | 2026-07-27 | 体积云流畅/均衡档颗粒感优化：提高低/中档 `cloudResolutionScale` 与主采样步数，降低最小采样步长和远距步长增幅；工具面板新增「云渲染分辨率 / 最小采样步长 / 远距步长增幅」三个画质旋钮，可在不切极致档的情况下现场微调颗粒感。详见[日志](Docs/LLM_record/26-07/2026-07-27/2026-07-27-cloud-quality-grain-ui-tuning.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -254,6 +254,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.4.67 · 开发中 · 最后更新 2026-07-27</sub>
+<sub>V3.4.69 · 开发中 · 最后更新 2026-07-28</sub>
 
 </div>

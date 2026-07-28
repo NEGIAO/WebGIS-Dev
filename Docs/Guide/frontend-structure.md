@@ -17,7 +17,7 @@ frontend/src/
 │   ├── backend.js                                  # ⚠️ DEPRECATED 转发壳（删除后 api/backend 自动解析目录 index，待 git rm）
 │   ├── backend/                                    # 后端 API 按业务域拆分
 │   │   ├── client.js                               # axios 实例、拦截器、错误处理
-│   │   ├── auth.js                                 # 鉴权接口
+│   │   ├── auth.js                                 # 鉴权接口（邮箱注册/登录 + Google/GitHub OAuth 授权起点与回调）
 │   │   ├── location.js                             # 地理编码/定位接口
 │   │   ├── weather.js                              # 天气接口
 │   │   ├── routing.js                              # 路线规划接口
@@ -364,6 +364,7 @@ frontend/src/
 │   ├── chat/
 │   │   ├── useChatAgentConfig.js                   # Agent 对话配置/路由模式/模型列表/额度 + LLM 三通道调用（后端代理不携带孤立 base_url）
 │   │   ├── useChatSession.js                       # 会话消息状态 + localStorage 持久化 + 上下文精简
+│   │   ├── useAgentMapContext.js                   # 发送时捕获活跃地图上下文（runtime 快照 + URL 安全回退）
 │   │   └── chatIntentFallback.js                   # GIS 意图识别兜底（定位/切底图正则 + 图源映射，纯函数）
 │   ├── weather/
 │   │   ├── useWeatherData.js                       # 天气数据获取
@@ -374,6 +375,7 @@ frontend/src/
 │   ├── useGisLoader.ts                             # GIS 加载器
 │   ├── useKmzLoader.js                             # KMZ 加载器
 │   ├── useLayerDataImport.js                       # 图层数据导入
+│   ├── useLocale.js                                # 多语言 i18n 组合式函数（zh-CN/en 消息表 + localStorage 持久化）
 │   ├── useManagedLayerRegistry.js                  # 托管图层注册
 │   ├── useMapState.js                              # OL 地图状态
 │   ├── useMapSwipe.ts                              # 卷帘核心逻辑
@@ -409,6 +411,11 @@ frontend/src/
 │
 ├── services/
 │   ├── agent/AgentExecutor.js                      # Agent 响应拦截与工具调用
+│   ├── agent/
+│   │   ├── agentMapPresets.js                     # Agent 安全底图白名单（排除 custom/local，Agent 仅提交 presetId）
+│   │   ├── MapCommandBus.js                       # Agent 地图命令路由器（setMapView/zoomToExtent/switchBasemap 等白名单命令）
+│   │   ├── mapCommandAdapters.js                  # 坐标/bbox 校验 + OL↔Cesium 视图参数适配
+│   │   └── mapContextSnapshot.js                  # 发送时地图状态快照协议（runtime 主源 + URL 安全回退）
 │   ├── compass/
 │   │   ├── index.js
 │   │   └── urlState.ts                             # 罗盘 URL 状态编解码

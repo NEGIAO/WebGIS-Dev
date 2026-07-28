@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '../../api/backend';
 import { URL_LAYER_OPTIONS } from '../../constants/basemap/basemapResolver';
 import { useMessage } from '../../composables/useMessage';
@@ -390,10 +390,129 @@ watch(() => playerController.isActive.value, (active) => {
     }
 });
 
-/** 暴露给子组件和外部调用 */
+/**
+ * Capture the Cesium camera and basemap directly from the runtime.
+ * This intentionally does not wait for camera.moveEnd or URL synchronization.
+ * @returns {Record<string, unknown>|null}
+ */
+function getCurrentViewState() {
+    const runtimeViewer = getViewer();
+    const runtimeCesium = getCesium();
+    const camera = runtimeViewer?.camera;
+    const position = camera?.positionCartographic;
+    if (!runtimeViewer || !runtimeCesium || !camera || !position) return null;
+
+    const basemapId = String(activeBasemap.value || '').trim() || null;
+    const layerIndex = basemapId ? URL_LAYER_OPTIONS.indexOf(basemapId) : -1;
+    const basemapLabel = basemapId
+        ? basemapOptions.value.find((option) => option.value === basemapId)?.label || basemapId
+        : null;
+
+    return {
+        view: 'cesium',
+        center: {
+            lng: runtimeCesium.Math.toDegrees(position.longitude),
+            lat: runtimeCesium.Math.toDegrees(position.latitude),
+        },
+        cesium: {
+            cameraHeight: position.height,
+            heading: runtimeCesium.Math.toDegrees(camera.heading),
+            pitch: runtimeCesium.Math.toDegrees(camera.pitch),
+            roll: runtimeCesium.Math.toDegrees(camera.roll),
+        },
+        basemap: {
+            index: layerIndex >= 0 ? layerIndex : null,
+            id: basemapId,
+            label: basemapLabel,
+        },
+    };
+}
+
+/**
+ * Wait until consecutive Cesium camera samples remain stable.
+ * This covers camera.flyTo, wheel inertia, cancellation and viewer destruction.
+ * @param {{timeoutMs?: number, stableMs?: number}} options
+ * @returns {Promise<{status: 'idle'|'timeout'|'destroyed'}>}
+ */
+function waitForViewIdle({ timeoutMs = 2500, stableMs = 120 } = {}) {
+    return new Promise((resolve) => {
+        const startedAt = Date.now();
+        let previousSignature = null;
+        let stableSince = null;
+
+        const check = () => {
+            const runtimeViewer = getViewer();
+            if (!runtimeViewer || runtimeViewer.isDestroyed?.()) {
+                resolve({ status: 'destroyed' });
+                return;
+            }
+
+            const state = getCurrentViewState();
+            if (!state?.center || !state.cesium) {
+                resolve({ status: 'destroyed' });
+                return;
+            }
+
+            const signature = [
+                state.center.lng,
+                state.center.lat,
+                state.cesium.cameraHeight,
+                state.cesium.heading,
+                state.cesium.pitch,
+                state.cesium.roll,
+            ];
+            const stable = previousSignature
+                && signature.every((value, index) => {
+                    const tolerance = index === 2 ? 0.05 : index < 2 ? 0.0000001 : 0.005;
+                    return Math.abs(value - previousSignature[index]) <= tolerance;
+                });
+
+            const now = Date.now();
+            if (stable) {
+                stableSince ??= now;
+                if (now - stableSince >= stableMs) {
+                    resolve({ status: 'idle' });
+                    return;
+                }
+            } else {
+                stableSince = null;
+            }
+            previousSignature = signature;
+
+            if (now - startedAt >= timeoutMs) {
+                resolve({ status: 'timeout' });
+                return;
+            }
+            setTimeout(check, 32);
+        };
+
+        check();
+    });
+}
+
+async function setBasemapById(presetId) {
+    const normalizedPresetId = String(presetId || '').trim();
+    const exists = basemapOptions.value.some((option) => option.value === normalizedPresetId);
+    if (!exists || !getViewer() || !getCesium()) return false;
+
+    if (activeBasemap.value === normalizedPresetId) {
+        const applied = layers.applyBasemap(normalizedPresetId);
+        if (applied) syncBasemapToUrl(normalizedPresetId);
+        return !!applied;
+    }
+
+    activeBasemap.value = normalizedPresetId;
+    await nextTick();
+    return activeBasemap.value === normalizedPresetId;
+}
+
 defineExpose({
     getViewer,
     getCesium,
+    getCurrentViewState,
+    waitForViewIdle,
+    setBasemapById,
+    activeBasemap,
     modelManager,
     cameraEnhanced,
     heightSampler,

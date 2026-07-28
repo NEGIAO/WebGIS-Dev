@@ -2,9 +2,10 @@
 Agent Chat Pydantic 请求/响应模型。
 """
 
-from typing import Any, Dict, List, Optional, Union
+from datetime import datetime
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class AgentChatHistoryItem(BaseModel):
@@ -14,10 +15,116 @@ class AgentChatHistoryItem(BaseModel):
     tool_call_id: Optional[str] = Field(default=None, max_length=128)
 
 
+class _StrictMapContextModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+class AgentMapCenter(_StrictMapContextModel):
+    lng: float = Field(..., ge=-180, le=180)
+    lat: float = Field(..., ge=-90, le=90)
+
+
+class AgentMapOlContext(_StrictMapContextModel):
+    zoom: float = Field(..., ge=0, le=30)
+    resolution: Optional[float] = Field(default=None, gt=0, le=1_000_000)
+    viewport_width: Optional[int] = Field(default=None, alias="viewportWidth", ge=1, le=100_000)
+    viewport_height: Optional[int] = Field(default=None, alias="viewportHeight", ge=1, le=100_000)
+
+
+class AgentMapCesiumContext(_StrictMapContextModel):
+    camera_height: float = Field(..., alias="cameraHeight", ge=0, le=100_000_000)
+    heading: Optional[float] = Field(default=None, ge=-360, le=360)
+    pitch: Optional[float] = Field(default=None, ge=-90, le=90)
+    roll: Optional[float] = Field(default=None, ge=-360, le=360)
+
+
+class AgentMapBasemapContext(_StrictMapContextModel):
+    index: Optional[int] = Field(default=None, ge=0, le=10_000)
+    id: Optional[str] = Field(default=None, max_length=120)
+    label: Optional[str] = Field(default=None, max_length=120)
+
+
+class AgentMapUrlState(_StrictMapContextModel):
+    view: Literal["ol", "cesium"]
+    lng: Optional[float] = Field(default=None, ge=-180, le=180)
+    lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    z: Optional[float] = Field(default=None, ge=0, le=100_000_000)
+    l: Optional[int] = Field(default=None, ge=0, le=10_000)
+
+
+AgentMapChangeString = Annotated[str, Field(max_length=160)]
+AgentMapChangeInt = Annotated[int, Field(ge=-100_000_000, le=100_000_000)]
+AgentMapChangeFloat = Annotated[
+    float,
+    Field(ge=-100_000_000, le=100_000_000, allow_inf_nan=False),
+]
+AgentMapChangeValue = Union[
+    None,
+    bool,
+    AgentMapChangeInt,
+    AgentMapChangeFloat,
+    AgentMapChangeString,
+    AgentMapCenter,
+]
+AgentMapRecentAction = Annotated[str, Field(min_length=1, max_length=200)]
+MAX_MAP_CONTEXT_SERIALIZED_BYTES = 12 * 1024
+
+
+class AgentMapContextChange(_StrictMapContextModel):
+    field: str = Field(..., min_length=1, max_length=64)
+    from_: AgentMapChangeValue = Field(default=None, alias="from")
+    to: AgentMapChangeValue = None
+
+
+class AgentMapContextV1(_StrictMapContextModel):
+    schema_version: Literal[1] = Field(alias="schemaVersion")
+    context_id: str = Field(alias="contextId", min_length=1, max_length=64)
+    captured_at: datetime = Field(alias="capturedAt")
+    source: Literal["runtime+url", "runtime", "url"]
+    view: Literal["ol", "cesium"]
+    center: Optional[AgentMapCenter] = None
+    ol: Optional[AgentMapOlContext] = None
+    cesium: Optional[AgentMapCesiumContext] = None
+    basemap: AgentMapBasemapContext
+    url_state: AgentMapUrlState = Field(alias="urlState")
+    changes_since_last_turn: Optional[List[AgentMapContextChange]] = Field(
+        default=None, alias="changesSinceLastTurn",
+        description="Field-level changes since the previous turn (for LLM state awareness)",
+        max_length=10,
+    )
+    recent_actions: Optional[List[AgentMapRecentAction]] = Field(
+        default=None, alias="recentActions",
+        description="Short summaries of recent user-initiated map actions (journal)",
+        max_length=5,
+    )
+
+    @model_validator(mode="after")
+    def validate_view_semantics(self):
+        if self.url_state.view != self.view:
+            raise ValueError("urlState.view must match view")
+        if self.view == "ol" and self.cesium is not None:
+            raise ValueError("cesium state is not allowed when view=ol")
+        if self.view == "cesium" and self.ol is not None:
+            raise ValueError("ol state is not allowed when view=cesium")
+        if self.view == "ol" and self.url_state.z is not None and self.url_state.z > 30:
+            raise ValueError("urlState.z must be an OpenLayers zoom when view=ol")
+        return self
+
+    @model_validator(mode="after")
+    def validate_serialized_size(self):
+        serialized = self.model_dump_json(by_alias=True, exclude_none=True).encode("utf-8")
+        if len(serialized) > MAX_MAP_CONTEXT_SERIALIZED_BYTES:
+            raise ValueError(
+                f"map_context exceeds {MAX_MAP_CONTEXT_SERIALIZED_BYTES} serialized bytes"
+            )
+        return self
+
+
 class AgentChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=20)
     location_context: Optional[str] = Field(default=None, max_length=1000)
+    map_context: Optional[AgentMapContextV1] = Field(default=None, description="Validated AgentMapContextV1 snapshot")
     override_base_url: Optional[str] = Field(default=None, max_length=240)
     override_api_key: Optional[str] = Field(default=None, max_length=5000)
     override_model: Optional[str] = Field(default=None, max_length=160)
@@ -36,6 +143,7 @@ class AgentChatProxyRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=20)
     location_context: Optional[str] = Field(default=None, max_length=1000)
+    map_context: Optional[AgentMapContextV1] = Field(default=None, description="Validated AgentMapContextV1 snapshot")
     api_key: str = Field(..., min_length=1, max_length=5000)
     base_url: str = Field(..., min_length=1, max_length=240)
     model: str = Field(..., min_length=1, max_length=160)

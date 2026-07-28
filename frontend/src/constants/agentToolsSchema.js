@@ -1,27 +1,75 @@
 /**
- * Agent Function Calling 工具声明配置
- *
- * 遵循 OpenAI Function Calling 规范，定义 Agent 可调用的 GIS 工具。
- * 前端通过系统提示词注入实现降级调用，后端就绪后可直接透传 tools 参数。
- *
- * @module agentToolsSchema
+ * Agent Function Calling tool declarations.
+ * Map mutations are restricted to the fixed MapCommandBus command set.
  */
 
-// ============================================================
-//  工具声明（OpenAI Function Calling 格式）
-// ============================================================
+import { AGENT_BASEMAP_PRESET_IDS, AGENT_BASEMAP_PRESETS } from '@/services/agent/agentMapPresets.js';
 
-/**
- * Agent 可用工具列表（OpenAI 格式）
- * 每个工具包含 type、function.name、function.description、function.parameters
- */
+const DURATION_PROPERTY = {
+    type: 'number',
+    minimum: 0,
+    maximum: 10000,
+    default: 700,
+    description: '动画时长（毫秒），默认 700。',
+};
+
 export const AGENT_TOOLS = [
     {
         type: 'function',
         function: {
+            name: 'set_map_view',
+            description: '在 OpenLayers 2D（ol）和 Cesium 3D（cesium）之间切换。视图尺度语义由现有同步链自动转换，禁止直接修改 URL。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    view: { type: 'string', enum: ['ol', 'cesium'], description: '目标地图引擎。' },
+                },
+                required: ['view'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'set_view_center',
+            description: '移动当前地图中心。2D 使用 zoom；3D 优先使用 height（米），若只给 zoom 会转换为近似相机高度。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    lng: { type: 'number', minimum: -180, maximum: 180, description: 'WGS84 经度。' },
+                    lat: { type: 'number', minimum: -90, maximum: 90, description: 'WGS84 纬度。' },
+                    zoom: { type: 'number', minimum: 0, maximum: 22, description: 'OpenLayers 缩放级别；Cesium 中会换算为相机高度。' },
+                    height: { type: 'number', minimum: 1, maximum: 50000000, description: 'Cesium 相机高度（米）；OpenLayers 不接受仅提供 height。' },
+                    duration: DURATION_PROPERTY,
+                },
+                required: ['lng', 'lat'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'set_camera_orientation',
+            description: '调整 Cesium 相机姿态。仅适用于 3D；在 2D 中会返回结构化不支持错误。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    heading: { type: 'number', description: '航向角（度）。' },
+                    pitch: { type: 'number', minimum: -90, maximum: 90, description: '俯仰角（度）。' },
+                    roll: { type: 'number', description: '翻滚角（度）。' },
+                    duration: DURATION_PROPERTY,
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
             name: 'zoom_to_extent',
-            description:
-                '将地图缩放到指定的地理边界框范围。当用户要求查看某个区域、城市、国家的范围时使用。需要提供 [最小经度, 最小纬度, 最大经度, 最大纬度] 格式的边界框。',
+            description: '将当前 2D 或 3D 地图缩放到 WGS84 边界框。2D 使用 padding/maxZoom；3D 使用矩形相机飞行。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -30,21 +78,14 @@ export const AGENT_TOOLS = [
                         items: { type: 'number' },
                         minItems: 4,
                         maxItems: 4,
-                        description:
-                            '地理边界框 [最小经度, 最小纬度, 最大经度, 最大纬度]，WGS84 坐标系。例如北京市约 [116.0, 39.6, 116.8, 40.3]',
+                        description: '[最小经度, 最小纬度, 最大经度, 最大纬度]。',
                     },
-                    padding: {
-                        type: 'number',
-                        description: '视图边距（像素），默认 80',
-                        default: 80,
-                    },
-                    maxZoom: {
-                        type: 'number',
-                        description: '最大缩放级别（1-22），默认 11',
-                        default: 11,
-                    },
+                    padding: { type: 'number', minimum: 0, description: '2D 视图边距（像素），默认 80。', default: 80 },
+                    maxZoom: { type: 'number', minimum: 0, maximum: 22, description: '2D 最大缩放级别，默认 11。', default: 11 },
+                    duration: DURATION_PROPERTY,
                 },
                 required: ['bbox'],
+                additionalProperties: false,
             },
         },
     },
@@ -52,27 +93,16 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'search_and_zoom',
-            description:
-                '根据地名或地址关键词搜索位置，并将地图缩放定位到该位置。支持中文地名、地址、POI 名称搜索，如"北京大学"、"天安门"、"西湖"等。搜索结果会自动缩放地图到目标位置。',
+            description: '搜索地名、地址或 POI，并在当前 2D/3D 引擎中定位。地理编码只执行一次。',
             parameters: {
                 type: 'object',
                 properties: {
-                    query: {
-                        type: 'string',
-                        description: '搜索关键词，如地名、地址、POI 名称',
-                    },
-                    city: {
-                        type: 'string',
-                        description: '限定搜索的城市名称，如"北京"、"杭州"，可提高搜索精度',
-                        default: '',
-                    },
-                    zoom: {
-                        type: 'number',
-                        description: '目标缩放级别（1-22），默认 16。城市级别约 12，街区级别约 16，建筑级别约 19',
-                        default: 16,
-                    },
+                    query: { type: 'string', minLength: 1, description: '地名、地址或 POI。' },
+                    city: { type: 'string', description: '可选城市限定。', default: '' },
+                    zoom: { type: 'number', minimum: 0, maximum: 22, description: '目标缩放级别；3D 会转换为相机高度。', default: 16 },
                 },
                 required: ['query'],
+                additionalProperties: false,
             },
         },
     },
@@ -80,192 +110,92 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'switch_basemap',
-            description: `【切换底图必调此工具】所有底图切换请求一律只能传入 HTTPS XYZ 瓦片 URL。禁止使用 presetId、禁止查询底图列表、禁止走预设底图。前端收到 url 后会统一切换到 custom 自定义底图，并同步地址栏图层索引 l=1。
-当用于没有特定要求，切换底图选择天地图或者中国渲染；
-
-常用 XYZ 瓦片 URL：
-| 图源 | URL |
-|------|-----|
-| 中国渲染 | https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png |
-| 高德卫星 | https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z} |
-| 高德路网 | https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z} |
-| 高德标注 | https://wprd01.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7 |
-| 腾讯路网 | https://rt0.map.gtimg.com/tile?z={z}&x={x}&y={y}&type=vector&styleid=0 |
-| OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png |
-| OSM 法国 | https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png |
-| OpenTopoMap | https://a.tile.opentopomap.org/{z}/{x}/{y}.png |
-| Google 路网 | https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z} |
-| Google 卫星 | https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z} |
-| Google 混合 | https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z} |
-| Google 地形 | https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z} |
-| Esri 卫星 | https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x} |
-| Esri 路网 | https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x} |
-| Esri 地形 | https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x} |
-| Esri 灰色 | https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x} |
-| CartoDB 亮色 | https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png |
-| CartoDB 暗色 | https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png |
-| CartoDB Voyager | https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png |
-| Stamen 水彩 | https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg |
-| Stamen Toner | https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png |
-| 天地图矢量 | https://t0.tianditu.gov.cn/vec_w/wmts?...&tk={TIANDITU_TK} |
-| 天地图卫星 | https://t0.tianditu.gov.cn/img_w/wmts?...&tk={TIANDITU_TK} |
-| 天地图标注 | https://t0.tianditu.gov.cn/cia_w/wmts?...&tk={TIANDITU_TK} |`,
+            description: '按稳定 presetId 切换当前 2D/3D 底图。只允许白名单预设，禁止提交 URL、自定义图源或任意 provider 配置。',
             parameters: {
                 type: 'object',
                 properties: {
-                    url: {
+                    presetId: {
                         type: 'string',
-                        description: 'HTTPS XYZ 瓦片 URL 模板，必须以 https:// 开头并包含 {x}、{y}、{z} 占位符。传入后会走 custom 自定义底图并同步为 l=1。',
-                    },
-                    name: {
-                        type: 'string',
-                        description: '图源显示名称，如"高德卫星"、"OSM标准"。仅 url 模式下有效。',
-                        default: '自定义图源',
+                        enum: AGENT_BASEMAP_PRESET_IDS,
+                        description: '项目内置稳定底图预设 ID。',
                     },
                 },
-                required: ['url'],
+                required: ['presetId'],
+                additionalProperties: false,
             },
         },
     },
 ];
 
-// ============================================================
-//  辅助函数
-// ============================================================
-
-/**
- * 构建带工具说明的系统提示词（降级模式使用）
- * 当后端不支持原生 Function Calling 时，通过系统提示词告知 LLM 工具调用格式
- *
- * @returns {string} 系统提示词
- */
 export function buildSystemPromptWithTools() {
-    return `你是一个 WebGIS 地图助手，运行在「WebGIS 3.0」平台上，可以通过调用工具操控地图。用户的请求涉及地图操作时，你必须调用相应工具来完成。
+    const presetLines = AGENT_BASEMAP_PRESETS
+        .map((preset) => `- ${preset.id}: ${preset.label}`)
+        .join('\n');
 
-## 平台简介（用户询问平台功能/特色时据此回答）
+    return `你是 WebGIS 地图助手。涉及地图操作时，必须调用下面的固定白名单工具；不要只描述将要操作。
 
-WebGIS 3.0 是一个全栈在线地理信息平台，主要特色：
-- **2D/3D 双引擎**：OpenLayers 二维地图 + Cesium 三维地球，一键切换，视图状态（位置、缩放、相机姿态）双向同步，支持 URL 分享完整还原。
-- **丰富底图源**：内置天地图、高德、Google、Esri、OSM、CartoDB、Stamen 等 20+ 瓦片图源，支持自定义 XYZ URL 接入。
-- **多格式数据导入**：GeoJSON、KML/KMZ、Shapefile、GLB/GLTF、CZML、3D Tiles（ZIP/文件夹），拖拽即可加载，自动定位到数据范围。
-- **空间分析**：缓冲区、叠加分析、凸包、泰森多边形、空间聚合、几何简化、渔网分析等，后端 Shapely 计算。
-- **路径规划**：驾车与公交路线规划，集成天地图搜索选点。
-- **三维特效**：体积云、大气散射、洪水淹没模拟、地形渲染、风场粒子等 Cesium 高级渲染。
-- **实用工具**：距离/面积测量、坐标拾取（WGS84/GCJ-02 纠偏）、罗盘导航、分享链接、在线底图下载（GeoTIFF 导出）。
-- **账号体系**：邮箱注册登录，访客/注册用户分级 AI 对话配额，管理员后台动态配置 LLM 参数。
+## 当前地图上下文
+请求可能包含 AgentMapContextV1：
+- view=ol 时，ol.zoom 是 2D 缩放级别。
+- view=cesium 时，cesium.cameraHeight/heading/pitch/roll 是 3D 相机状态。
+- source 含 runtime 时，center 和引擎状态来自发送瞬间运行时，应优先于 urlState。
+- urlState 只用于恢复语义或运行时缺失时回退。
+- resultingMapState 是工具完成后采样的实际状态，应优先于目标参数。
+- changesSinceLastTurn 描述上一轮到本轮的字段级变化（view/center/zoom/basemap），用于回答"我刚才做了什么"。
+- recentActions 是本会话内最近几次用户操作的简短摘要（最多 5 条），帮助区分"当前状态"与"用户动作"。
 
-回答平台相关问题时简洁明了；涉及具体操作时引导用户使用对应面板或工具。
+## 工具
+1. set_map_view(view): 切换 ol/cesium。
+2. set_view_center(lng, lat, zoom?, height?, duration?): 移动中心；2D 用 zoom，3D 用 height，3D 也可把 zoom 换算成高度。
+3. set_camera_orientation(heading?, pitch?, roll?, duration?): 仅 Cesium；2D 会明确返回不支持。
+4. zoom_to_extent(bbox, padding?, maxZoom?, duration?): 2D/3D 均支持。
+5. search_and_zoom(query, city?, zoom?): 搜索并在当前引擎定位。
+6. switch_basemap(presetId): 2D/3D 均按稳定预设 ID 切换。
 
-## 可用工具
+## Agent 可用底图预设
+${presetLines}
 
-### 1. zoom_to_extent(bbox, padding?, maxZoom?)
-将地图缩放到指定的经纬度边界框。
-- bbox: [最小经度, 最小纬度, 最大经度, 最大纬度]，WGS84 坐标系
+## 安全约束
+- 绝不生成、传递或请求写入任意 URL。
+- 不调用 set_url、set_query、navigate_to 或未声明的通用命令。
+- switch_basemap 只能传 presetId，不能传 url、模板、token 或 provider 配置。
+- URL 中 lng/lat/z/l/view 的更新由地图运行时现有同步链自动完成。
+- 当前视图不支持的命令应保留工具返回的结构化错误，不要伪称成功。
 
-### 2. search_and_zoom(query, city?, zoom?)
-根据地名搜索并定位地图。搜索结果会自动缩放，无需手动计算 bbox。
-- query: 搜索关键词（地名、地址、POI）
-- city: 可选，限定城市提高精度
-- zoom: 可选，缩放级别 1-22，默认 16（城市 12、街区 16、建筑 19）
-
-### 3. switch_basemap(url, name?) — 【切换底图必调此工具】
-当用户说"切换底图"、"换地图"、"换成XXX"、"用XXX"、"随机换"等任何涉及更换底图的请求时，必须调用此工具。
-- url: HTTPS XYZ 瓦片 URL（必须以 https:// 开头并含 {x},{y},{z}）。这是切换底图的唯一参数通道。
-- name: 可选显示名。
-- 禁止使用 presetId，禁止查询底图列表，禁止使用任何预设底图。传入 url 后前端会切换到 custom 自定义底图，并同步地址栏图层索引 l=1。
-
-常用 XYZ 瓦片 URL（可直接传入 url 参数）：
-| 图源 | URL |
-|------|-----|
-| 高德卫星 | https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z} |
-| 高德路网 | https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z} |
-| 高德标注 | https://wprd01.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7 |
-| 腾讯路网 | https://rt0.map.gtimg.com/tile?z={z}&x={x}&y={y}&type=vector&styleid=0 |
-| OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png |
-| OSM 法国 | https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png |
-| OpenTopoMap | https://a.tile.opentopomap.org/{z}/{x}/{y}.png |
-| Google 路网 | https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z} |
-| Google 卫星 | https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z} |
-| Google 混合 | https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z} |
-| Google 地形 | https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z} |
-| Esri 卫星 | https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x} |
-| Esri 路网 | https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x} |
-| Esri 地形 | https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x} |
-| Esri 灰色 | https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x} |
-| CartoDB 亮色 | https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png |
-| CartoDB 暗色 | https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png |
-| CartoDB Voyager | https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png |
-| Stamen 水彩 | https://stamen-tiles.a.ssl.fastly.net/watercolor/{z}/{x}/{y}.jpg |
-| Stamen Toner | https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png |
-| 天地图矢量 | https://t0.tianditu.gov.cn/vec_w/wmts?...&tk={TIANDITU_TK} |
-| 天地图卫星 | https://t0.tianditu.gov.cn/img_w/wmts?...&tk={TIANDITU_TK} |
-| 天地图标注 | https://t0.tianditu.gov.cn/cia_w/wmts?...&tk={TIANDITU_TK} |
-
-## 调用格式
-需要调用工具时，在回复中包含 JSON 块：
-
+## 降级工具调用格式
 \`\`\`tool_call
-{"name": "工具名", "arguments": {参数}}
+{"name":"工具名","arguments":{}}
 \`\`\`
-
-可一次调用多个工具（每个一个 JSON 块）。工具结果以 [工具结果] 返回，你需根据结果给用户友好回复。
-
-## 工作流指南
-
-### 底图切换
-用户说"切换osm底图" → 直接调 switch_basemap(url="https://tile.openstreetmap.org/{z}/{x}/{y}.png", name="OpenStreetMap")
-用户说"切换到高德卫星" → 直接调 switch_basemap(url="https://webst01.is.autonavi.com/...")
-
-### 位置搜索
-用户说"定位到北京大学" → 直接调 search_and_zoom(query="北京大学")
-用户说"看看北京市的范围" → 调 zoom_to_extent(bbox=[116.0,39.6,116.8,40.3])
-
-## 注意事项
-- 坐标系：WGS84（GPS），经度 -180~180，纬度 -90~90
-- 用户说"放大"/"缩小"但没说区域时 → 询问具体位置
-- **切换底图时必须调用 switch_basemap 工具，不能只回复文字**
-- **switch_basemap 只能传 url，不能传 presetId**
-- **所有底图切换最终都必须走 custom 底图，URL 图层索引必须是 l=1**`;
+可连续输出多个 tool_call 块。工具结果会以 [工具结果] 返回，再据此向用户说明实际结果。`;
 }
 
-/**
- * 构建工具执行结果的消息内容（用于回传给 LLM）
- *
- * @param {string} toolName - 工具名称
- * @param {Object} result - 执行结果
- * @param {boolean} result.success - 是否成功
- * @param {string} result.message - 结果消息
- * @returns {string} 格式化的结果文本
- */
 export function formatToolResultForLLM(toolName, result) {
     const status = result.success ? '成功' : '失败';
-    // 基础信息
     let output = `[工具结果] ${toolName} 执行${status}：${result.message}`;
-    // 附加结构化数据（如搜索结果和底图切换结果），使 LLM 能直接使用
-    const extraKeys = ['results', 'currentBasemap', 'layerName', 'layerId', 'layerIndex', 'url'];
+    const extraKeys = [
+        'code',
+        'command',
+        'view',
+        'supportedViews',
+        'results',
+        'location',
+        'center',
+        'currentBasemap',
+        'layerName',
+        'layerId',
+        'layerIndex',
+        'resultingMapState',
+    ];
     const extras = {};
     for (const key of extraKeys) {
-        if (result[key] !== undefined) {
-            extras[key] = result[key];
-        }
+        if (result[key] !== undefined) extras[key] = result[key];
     }
-    if (Object.keys(extras).length > 0) {
-        output += `\n${JSON.stringify(extras)}`;
-    }
+    if (Object.keys(extras).length > 0) output += `\n${JSON.stringify(extras)}`;
     return output;
 }
 
 /**
- * 从 LLM 文本回复中解析工具调用指令（降级模式）
- *
- * 支持多种 LLM 输出格式：
- * 1. ```tool_call\n{...}\n```
- * 2. ```tool_call {...}```
- * 3. ```json\n{"name": "...", "arguments": {...}}\n````
- * 4. {"name": "search_and_zoom", "arguments": {...}} （裸 JSON）
- *
- * @param {string} text - LLM 回复文本
- * @returns {Array<{name: string, arguments: object}>|null} 解析出的工具调用列表，无则返回 null
+ * Parse tool calls from text fallback output.
  */
 export function parseToolCallsFromText(text) {
     if (!text || typeof text !== 'string') return null;

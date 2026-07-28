@@ -3,121 +3,59 @@
  *
  * 当 LLM 未返回结构化工具调用时，用正则从用户消息中识别 GIS 意图，
  * 兜底生成 search_and_zoom / switch_basemap 工具调用。
- *
- * 输入: 用户原始消息 + 运行时天地图 token
- * 输出: 工具调用对象 { name, arguments } 或 null
+ * Agent 底图回退只返回稳定 presetId，不接受或转发任意 URL。
  */
 
-/** 底图关键词 → XYZ 图源映射（tiandituTk 由调用方注入） */
-function buildBasemapUrlMapping(tiandituTk) {
-    return {
-        '高德卫星': {
-            url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-            name: '高德卫星',
-        },
-        '高德': {
-            url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-            name: '高德卫星',
-        },
-        'amap': {
-            url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-            name: '高德卫星',
-        },
-        '高德路网': {
-            url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-            name: '高德路网',
-        },
-        'osm标准': {
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            name: 'OpenStreetMap',
-        },
-        'carto暗色': {
-            url: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-            name: 'CartoDB 暗色',
-        },
-        'carto亮色': {
-            url: 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-            name: 'CartoDB 亮色',
-        },
-        '谷歌矢量': {
-            url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
-            name: '谷歌矢量',
-        },
-        'google': {
-            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name: '谷歌卫星',
-        },
-        '谷歌': {
-            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name: '谷歌卫星',
-        },
-        '谷歌卫星': {
-            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name: '谷歌卫星',
-        },
-        '卫星': {
-            url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-            name: '谷歌卫星',
-        },
-        '谷歌地形': {
-            url: 'https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-            name: '谷歌地形',
-        },
-        '地形': {
-            url: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-            name: 'OpenTopoMap',
-        },
-        '矢量': {
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            name: 'OpenStreetMap',
-        },
-        'osm': {
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            name: 'OpenStreetMap',
-        },
-        'openstreetmap': {
-            url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            name: 'OpenStreetMap',
-        },
-        '天地图': {
-            url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=img&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={level}&TILEROW={row}&TILECOL={col}&tk=${tiandituTk || ''}`,
-            name: '天地图卫星',
-        },
-        '中国渲染': {
-            url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
-            name: '中国渲染',
-        },
-    };
-}
+/** 底图关键词 → 稳定预设 ID */
+const BASEMAP_PRESET_MAPPING = Object.freeze({
+    '高德卫星': { presetId: 'imagery_amap_preset', name: '高德影像' },
+    '高德影像': { presetId: 'imagery_amap_preset', name: '高德影像' },
+    '高德': { presetId: 'vector_amap_preset', name: '高德地图' },
+    'amap': { presetId: 'vector_amap_preset', name: '高德地图' },
+    '高德路网': { presetId: 'vector_amap_preset', name: '高德地图' },
+    'osm标准': { presetId: 'vector_osm_preset', name: 'OSM标准' },
+    'osm': { presetId: 'vector_osm_preset', name: 'OSM标准' },
+    'openstreetmap': { presetId: 'vector_osm_preset', name: 'OSM标准' },
+    'carto暗色': { presetId: 'vector_carton_dark_preset', name: 'Carto深色' },
+    'carto亮色': { presetId: 'vector_carton_light_preset', name: 'Carto浅色' },
+    '谷歌矢量': { presetId: 'vector_tuxin_preset', name: '图新矢量' },
+    'google': { presetId: 'imagery_google_preset', name: 'Google影像' },
+    '谷歌': { presetId: 'imagery_google_preset', name: 'Google影像' },
+    '谷歌卫星': { presetId: 'imagery_google_preset', name: 'Google影像' },
+    '卫星': { presetId: 'imagery_tianditu_preset', name: '天地图影像' },
+    '地形': { presetId: 'arcgis_topo_preset', name: 'ESRI世界地形' },
+    '矢量': { presetId: 'vector_tianditu_preset', name: '天地图矢量' },
+    '天地图': { presetId: 'imagery_tianditu_preset', name: '天地图影像' },
+    '天地图矢量': { presetId: 'vector_tianditu_preset', name: '天地图矢量' },
+    'esri影像': { presetId: 'arcgis_imagery_preset', name: 'ESRI影像' },
+    'esri街道': { presetId: 'arcgis_street_preset', name: 'ESRI街道' },
+});
 
-/** 搜索定位类意图正则 */
 const SEARCH_PATTERNS = [
     /(?:定位到?|搜索|查找?|去到?|飞到?|缩放到|前往|移动到?|显示)\s*[「"']?(.+?)[」"']?\s*(?:的位置|地方|在哪里|的范围)?$/,
     /^(.+?)(?:在哪里|在哪儿|怎么去|的坐标|的位置)$/,
     /(?:看看|查看)\s*(.+?)$/,
 ];
 
-/** 底图切换类意图正则 */
 const BASEMAP_PATTERNS = [
     /(?:切换到?|换成?|使用|启用|换上|加载)\s*[「"']?(.+?)[」"']?\s*(?:底图|地图|图源|卫星)?$/,
     /(?:底图|地图|图源)\s*(?:切换到?|换成?|使用)\s*[「"']?(.+?)[」"']?$/,
 ];
 
-/** 搜索意图排除词（避免"看看这个"之类误触发） */
 const SEARCH_EXCLUDE_WORDS = ['一下', '一下下', '这个', '那个', '什么', '怎么', '为什么', '地图', '底图'];
 
 /**
- * 从用户消息识别 GIS 意图，生成兜底工具调用
- * @param {string} userMsg - 用户原始消息
- * @param {{ tiandituTk?: string }} [options] - 运行时依赖（天地图 token）
+ * @param {string} userMsg
  * @returns {{ name: string, arguments: Object } | null}
  */
-export function detectGISIntent(userMsg, options = {}) {
+export function detectGISIntent(userMsg) {
     const rawMsg = String(userMsg || '').trim();
     const msg = rawMsg.toLowerCase();
     if (!rawMsg) return null;
 
-    // 1. 搜索定位意图
+    // Never turn pasted URLs into Agent tool calls.
+    if (/https?:\/\/[^\s]+/i.test(rawMsg)) return null;
+
     for (const pattern of SEARCH_PATTERNS) {
         const match = msg.match(pattern);
         if (match && match[1] && match[1].length >= 2) {
@@ -128,32 +66,16 @@ export function detectGISIntent(userMsg, options = {}) {
         }
     }
 
-    // 2. 自定义 XYZ URL 直贴意图
-    const urlMatch = rawMsg.match(/https?:\/\/[^\s]+/i);
-    if (urlMatch) {
-        const url = urlMatch[0];
-        if (url.includes('{x}') || url.includes('{y}') || url.includes('{z}') || url.includes('{0-7}')) {
-            const normalizedUrl = url.replace(/\{0-7\}/, '01');
-            return {
-                name: 'switch_basemap',
-                arguments: { url: normalizedUrl, name: '自定义图源' },
-            };
-        }
-    }
-
-    // 3. 底图关键词切换意图
-    const basemapUrlMapping = buildBasemapUrlMapping(options.tiandituTk);
     for (const pattern of BASEMAP_PATTERNS) {
         const match = msg.match(pattern);
-        if (match && match[1]) {
-            const target = match[1].trim().toLowerCase();
-            for (const [keyword, xyzConfig] of Object.entries(basemapUrlMapping)) {
-                if (target.includes(keyword.toLowerCase())) {
-                    return {
-                        name: 'switch_basemap',
-                        arguments: { url: xyzConfig.url, name: xyzConfig.name },
-                    };
-                }
+        if (!match?.[1]) continue;
+        const target = match[1].trim().toLowerCase();
+        for (const [keyword, preset] of Object.entries(BASEMAP_PRESET_MAPPING)) {
+            if (target.includes(keyword.toLowerCase())) {
+                return {
+                    name: 'switch_basemap',
+                    arguments: { presetId: preset.presetId },
+                };
             }
         }
     }
@@ -161,17 +83,14 @@ export function detectGISIntent(userMsg, options = {}) {
     return null;
 }
 
-/**
- * 工具调用的用户友好显示名
- * @param {string} name - 工具名
- * @param {Object} [args] - 工具参数
- * @returns {string}
- */
 export function getToolDisplayName(name, args = {}) {
     const displayNames = {
+        set_map_view: args.view === 'cesium' ? '切换到 3D 地图' : '切换到 2D 地图',
+        set_view_center: '移动地图中心',
+        set_camera_orientation: '调整 3D 相机姿态',
         zoom_to_extent: '缩放到指定范围',
         search_and_zoom: `定位到 "${args.query || '未知位置'}"`,
-        switch_basemap: `切换到底图：${args.name || '自定义图源'}`,
+        switch_basemap: `切换到底图：${args.presetId || '未知预设'}`,
     };
     return displayNames[name] || `执行工具：${name}`;
 }

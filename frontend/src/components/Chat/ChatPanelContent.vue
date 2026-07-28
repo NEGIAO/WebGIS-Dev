@@ -99,13 +99,13 @@ import ChatInputBar from './ChatInputBar.vue';
 import { useMessage } from '../../composables/useMessage';
 import { useMarkdownRenderer } from '../../composables/useMarkdownRenderer';
 import { createChatAgentConfig } from '../../composables/chat/useChatAgentConfig';
+import { useAgentMapContext } from '../../composables/chat/useAgentMapContext';
 import { createChatSession } from '../../composables/chat/useChatSession';
 import { detectGISIntent, getToolDisplayName } from '../../composables/chat/chatIntentFallback';
 import { createGISCommander } from '../../composables/map/GISCommander';
 import { AgentExecutor } from '../../services/agent/AgentExecutor';
 import { readUserPositionFromCache } from '../../services/userPositionCache';
 import { getGlobalUserLocationContext } from '../../services/userLocationContext';
-import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '../../services/runtimeMapTokens';
 import { AGENT_TOOLS, buildSystemPromptWithTools } from '../../constants/agentToolsSchema';
 import { useChatStore } from '../../stores/useChatStore';
 
@@ -114,11 +114,16 @@ const message = useMessage();
 const chatStore = useChatStore();
 const { ensureMarkdownLibs } = useMarkdownRenderer();
 
-const olMapRef = inject('olMap', ref(null));
-const setCustomBasemapByUrl = inject('setCustomBasemapByUrl', null);
+const agentMapCommandBus = inject('agentMapCommandBus', null);
 
 // ── 会话与配置 ──
 const session = createChatSession();
+const {
+    buildMapContext,
+    buildSettledMapContext,
+    recordMapAction,
+    resetMapContextSession,
+} = useAgentMapContext();
 const config = createChatAgentConfig({
     message,
     onModeChanged: () => session.updateWelcomeIfNeeded(buildWelcome),
@@ -175,15 +180,13 @@ const sendDisabled = computed(() => {
 // ── GIS Commander / Agent 执行器 ──
 const gisCommander = ref(null);
 const agentExecutor = ref(null);
-const runtimeTiandituTk = ref(getRuntimeMapTokensSync().tiandituTk);
 
 function initGISCommander() {
-    if (!olMapRef?.value) return;
+    if (!agentMapCommandBus) return;
 
     try {
         gisCommander.value = createGISCommander({
-            mapInstanceRef: olMapRef,
-            onCustomXYZSwitch: setCustomBasemapByUrl,
+            commandBus: agentMapCommandBus,
         });
 
         agentExecutor.value = new AgentExecutor({
@@ -335,7 +338,26 @@ async function executeToolsAndUpdateUI(toolCalls, assistantMsgIndex) {
 
     messageListRef.value?.scrollToBottom(false);
     const toolResultSummary = AgentExecutor.buildResultSummary(toolResults);
-    return { toolResultSummary };
+
+    // Record successful commands before building the settled snapshot so the
+    // follow-up LLM request sees this turn's recentActions. Command arguments
+    // belong to the original tool calls; adapter results intentionally omit them.
+    toolResults.forEach((tr, idx) => {
+        const toolCall = toolCalls[idx];
+        const command = toolCall?.name || tr?.name;
+        if (tr?.result?.success && command) {
+            recordMapAction({
+                action: command,
+                view: tr.result.view || toolCall?.arguments?.view || null,
+                command,
+                params: toolCall?.arguments || {},
+            });
+        }
+    });
+
+    const resultingMapContext = await buildSettledMapContext();
+
+    return { toolResultSummary, resultingMapContext };
 }
 
 // ── 发送编排 ──
@@ -361,6 +383,7 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
     }
 
     const locationContextText = await buildFirstMessageLocationContext();
+    const mapContext = buildMapContext();
 
     if (!skipUserPush) session.pushUser(userMsg);
     isLoading.value = true;
@@ -377,6 +400,7 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
             message: userMsg,
             history: requestHistory,
             locationContext: locationContextText,
+            mapContext,
             systemPrompt,
             tools: AGENT_TOOLS,
         });
@@ -391,7 +415,7 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
 
         // LLM 未给出工具调用时，正则识别 GIS 意图兜底
         if ((!finalToolCalls || finalToolCalls.length === 0) && agentExecutor.value) {
-            const intentToolCall = detectGISIntent(userMsg, { tiandituTk: runtimeTiandituTk.value });
+            const intentToolCall = detectGISIntent(userMsg);
             if (intentToolCall) {
                 finalToolCalls = [intentToolCall];
                 isIntentFallback = true;
@@ -405,7 +429,10 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
                 list[assistantMsgIndex].content = cleanReply;
             }
 
-            const { toolResultSummary } = await executeToolsAndUpdateUI(finalToolCalls, assistantMsgIndex);
+            const { toolResultSummary, resultingMapContext } = await executeToolsAndUpdateUI(
+                finalToolCalls,
+                assistantMsgIndex,
+            );
             if (seq !== requestSeq) return;
 
             const toolRoundHistory = [
@@ -426,6 +453,7 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
                     message: '请根据上述工具执行结果回复用户。',
                     history: toolRoundHistory.slice(-6),
                     locationContext: '',
+                    mapContext: resultingMapContext,
                     systemPrompt: '',
                     tools: AGENT_TOOLS,
                 });
@@ -517,6 +545,7 @@ function clearHistory() {
     requestSeq += 1;
     isLoading.value = false;
     session.clearAll(buildWelcome);
+    resetMapContextSession();
     message.success('聊天历史已清除');
 }
 
@@ -548,10 +577,7 @@ async function toggleUserConfig() {
 
 // ── 生命周期 ──
 onMounted(async () => {
-    const tokens = await loadRuntimeMapTokens();
-    const nextTiandituTk = String(tokens?.tiandituTk || '').trim();
-    if (nextTiandituTk) runtimeTiandituTk.value = nextTiandituTk;
-
+    resetMapContextSession();
     await config.loadDefaultAIConfig();
     await config.reloadAgentConfig(false);
     await config.loadAvailableModels();
@@ -578,14 +604,15 @@ onBeforeUnmount(() => {
     gisCommander.value?.dispose?.();
 });
 
+// Defensive: if agentMapCommandBus was not yet available during onMounted,
+// retry initialization once it becomes available.
 watch(
-    () => olMapRef?.value,
-    (newMap) => {
-        if (newMap && !gisCommander.value) {
+    () => agentMapCommandBus,
+    (bus) => {
+        if (bus && !gisCommander.value) {
             initGISCommander();
         }
     },
-    { immediate: false },
 );
 </script>
 

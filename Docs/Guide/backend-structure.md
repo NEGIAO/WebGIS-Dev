@@ -36,7 +36,7 @@ backend/
 │   │   ├── quota.py                               # 配额追踪
 │   │   ├── system_config.py                       # 系统配置
 │   │   ├── dependencies.py                        # FastAPI 依赖注入 + EMAIL_BINDING_REQUIRED 拦截
-│   │   ├── oauth.py                               # Google/GitHub OAuth 登录、自动注册与账号绑定服务
+│   │   ├── oauth.py                               # Google/GitHub OAuth 登录、自动注册与账号绑定服务（授权码 + Google OneTap 双通道）
 │   │   └── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置/OAuth）
 │   ├── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）
 │   │   ├── __init__.py                            # 门面 re-export router
@@ -93,6 +93,9 @@ backend/
 │
 ├── data/                                          # 运行时数据目录
 │   └── webgis_auth.db                             # SQLite 数据库（+ WAL/SHM）
+│
+├── tests/                                         # 单元测试
+│   └── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
 │
 ├── app.py                                         # FastAPI 主入口
 ├── Dockerfile                                     # Docker 构建文件

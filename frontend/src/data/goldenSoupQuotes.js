@@ -30,6 +30,16 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
         cn: '我把想念压进压缩包，解压时全是你。',
         en: 'I zip up my longing, and when unzipped, it is all you.',
     },
+    {
+        category: 'Geek Romantic',
+        cn: '你的存在，是我所有异常处理里最温柔的 catch。',
+        en: 'Your existence is the gentlest catch in all my exception handling.',
+    },
+    {
+        category: 'Geek Romantic',
+        cn: '我遍历了所有可能的世界线，只为找到与你交汇的那条。',
+        en: 'I iterated through every possible worldline just to find the one that intersects yours.',
+    },
 
     // [Humorous Satire]
     {
@@ -61,6 +71,26 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
         category: 'Humorous Satire',
         cn: '我的人生就像没写 Readme 的项目，全靠瞎猜。',
         en: "My life is like a project without a Readme; it's all guesswork.",
+    },
+    {
+        category: 'Humorous Satire',
+        cn: '代码能跑就别动，这不是偷懒，这是工程智慧。',
+        en: "If the code works, don't touch it — that's not laziness, it's engineering wisdom.",
+    },
+    {
+        category: 'Humorous Satire',
+        cn: '程序员最讨厌的两件事：写文档，和别人不写文档。',
+        en: 'Programmers hate two things: writing docs, and others not writing docs.',
+    },
+    {
+        category: 'Humorous Satire',
+        cn: '需求文档写得像小说，实现起来像童话，维护起来像恐怖故事。',
+        en: 'Requirements read like novels, implementation like fairy tales, maintenance like horror stories.',
+    },
+    {
+        category: 'Humorous Satire',
+        cn: '我的代码没有 Bug，只是功能超出了设计预期。',
+        en: 'My code has no bugs — it just has features beyond the original design.',
     },
 
     // [Disillusioned]
@@ -116,11 +146,6 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '有些事不是坚持就有结果，比如死掉的链接。',
-        en: "Some things don't yield results through persistence, like dead links.",
-    },
-    {
-        category: 'Disillusioned',
         cn: '世界并没有针对你，它只是根本不在意你。',
         en: "The world isn't targeting you; it simply doesn't care about you at all.",
     },
@@ -146,11 +171,6 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '别谈未来，现在的我也只是在超负荷运转。',
-        en: "Don't talk about the future; even my current self is running at overload.",
-    },
-    {
-        category: 'Disillusioned',
         cn: '有些报错可以修复，有些遗憾只能归档。',
         en: 'Some errors can be fixed; some regrets can only be archived.',
     },
@@ -161,18 +181,8 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '时间带走的不仅是青春，还有对报错的耐心。',
-        en: 'Time takes not only youth, but also patience for error messages.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '生活没有撤销键，只有不停增加的 Readonly。',
         en: 'Life has no Undo; only ever-increasing Readonly status.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '所谓的避风港，不过是延迟了风暴的到达。',
-        en: 'A safe harbor merely delays the arrival of the storm.',
     },
     {
         category: 'Disillusioned',
@@ -181,148 +191,33 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '希望是消耗品，而我早已透支。',
-        en: 'Hope is a consumable, and I am long since overdrawn.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '看窗外的天黑了又亮，代码还是原来的模样。',
-        en: 'Watching the sky turn dark then bright; the code remains unchanged.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '所谓的诗和远方，都被困在了 15 寸的屏幕里。',
-        en: 'What we call poetry and far lands are trapped in a 15-inch screen.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '有些努力只是为了证明：我真的不行。',
-        en: "Some efforts only serve to prove: I really can't do it.",
-    },
-    {
-        category: 'Disillusioned',
-        cn: '在这个充满随机性的世界里，稳定才是一种错觉。',
-        en: 'In this world full of randomness, stability is the true illusion.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '所谓的救赎，不过是换了一个更舒适的牢笼。',
-        en: 'What we call redemption is just switching to a more comfortable cage.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '我以为我在追逐梦想，结果只是被它牵着走。',
         en: 'I thought I was chasing dreams, but I was just being led by them.',
     },
     {
         category: 'Disillusioned',
-        cn: '有些人不是不努力，而是努力了也没用。',
-        en: "Some people are not unmotivated; they just put effort into things that don't work.",
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我以为时间会治愈一切，结果只是让一切变得麻木。',
-        en: 'I thought time would heal everything, but it just makes everything numb.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '生活没有彩蛋，只有不断出现的隐藏 Bug。',
-        en: 'Life has no Easter eggs, only continuously emerging hidden bugs.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '所谓的坚持，不过是对失败的习惯性容忍。',
-        en: 'What we call persistence is just habitual tolerance for failure.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我学会了微笑，因为解释没有预算',
-        en: 'I learned to smile because explanations have no budget.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '有些人不是不在意你，而是根本没有把你放在心上。',
-        en: "Some people don't not care about you; they just never put you in their heart at all.",
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我以为我在创造未来，结果只是被时代淘汰了。',
-        en: 'I thought I was creating the future, but I was just being eliminated by the times.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '有些人不是不爱了，而是根本没爱过。',
-        en: "Some people don't stop loving; they just never loved in the first place.",
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我以为我在追求自由，结果只是被另一个牢笼锁住了。',
-        en: 'I thought I was pursuing freedom, but I was just locked in another cage.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '有些人不是不重要，而是根本没有存在过。',
-        en: 'Some people are not unimportant; they just never existed at all.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我以为我在寻找意义，结果只是被无意义淹没了。',
-        en: 'I thought I was searching for meaning, but I was just drowned in meaninglessness.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '有些人不是不珍惜你，而是根本没有把你当回事。',
-        en: "Some people don't not cherish you; they just never took you seriously at all.",
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我以为我在追逐梦想，结果只是被现实追着跑了。',
-        en: 'I thought I was chasing dreams, but I was just being chased by reality.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '你以为别人赢在天赋，其实他们只是比你更早接受了现实。',
-        en: 'You think others win by talent; they just accepted reality earlier than you did.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '努力不会骗人，但努力的方向会。',
-        en: 'Effort doesn’t lie, but the direction of effort does.',
+        en: 'Effort doesn\'t lie, but the direction of effort does.',
     },
     {
         category: 'Disillusioned',
         cn: '你以为是起点不公平，其实是终点根本不等你。',
-        en: 'You think the start is unfair; the truth is the finish line isn’t waiting for you.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '失败不可怕，可怕的是你连失败的资格都没有。',
-        en: 'Failure isn’t scary; not even qualifying to fail is.',
+        en: 'You think the start is unfair; the truth is the finish line isn\'t waiting for you.',
     },
     {
         category: 'Disillusioned',
         cn: '你不是不优秀，只是你的优秀没人需要。',
-        en: 'You’re not incapable; your capability just isn’t needed.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '世界不是不公平，而是根本没打算公平。',
-        en: 'The world isn’t unfair; it was never meant to be fair.',
+        en: 'You\'re not incapable; your capability just isn\'t needed.',
     },
     {
         category: 'Disillusioned',
         cn: '你以为你在选择，其实只是被筛选。',
-        en: 'You think you’re choosing; you’re just being filtered.',
+        en: 'You think you\'re choosing; you\'re just being filtered.',
     },
     {
         category: 'Disillusioned',
         cn: '有些门不是没敲开，是从一开始就没给你钥匙。',
-        en: 'Some doors weren’t unopened; you were never given a key.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '努力不一定有回报，但不努力，一定很轻松。',
-        en: "Effort doesn't necessarily bring rewards, but not trying is definitely easy.",
+        en: 'Some doors weren\'t unopened; you were never given a key.',
     },
     {
         category: 'Disillusioned',
@@ -341,28 +236,8 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '你以为的逆袭，不过是命运偶尔的施舍，转瞬即逝。',
-        en: 'The counterattack you think is just an occasional alms from fate, fleeting.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '善良没用，你得漂亮，得有钱，得够狠。',
-        en: 'Kindness is useless; you have to be beautiful, rich, and ruthless enough.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '有些人努力，是为了活着；有些人活着，不用努力。',
-        en: 'Some people work hard just to live; some people live without having to work hard.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '我以为熬过去就好了，没想到熬过去，还有更难的。',
-        en: "I thought getting through it would be okay, but I didn't expect that after getting through it, there would be harder things.",
-    },
-    {
-        category: 'Disillusioned',
-        cn: '生活的真相：你越想要什么，就越得不到什么。',
-        en: "The truth of life: the more you want something, the more you can't get it.",
+        en: "I thought getting through it would be okay, but I didn't expect harder things after.",
     },
     {
         category: 'Disillusioned',
@@ -371,18 +246,13 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '你掏心掏肺对待的人，正在背后笑话你的天真。',
-        en: 'The person you treat wholeheartedly is laughing at your naivety behind your back.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '努力改变命运，不过是安慰底层人的自我欺骗。',
         en: 'Working hard to change fate is just self-deception to comfort people at the bottom.',
     },
     {
         category: 'Disillusioned',
-        cn: '我以为我很特别，原来只是芸芸众生里，最普通的炮灰。',
-        en: "I thought I was special, but it turns out I'm just the most ordinary cannon fodder among all living beings.",
+        cn: '我以为我很特别，原来只是芸芸众生里最普通的炮灰。',
+        en: "I thought I was special, but I'm just the most ordinary cannon fodder among all.",
     },
     {
         category: 'Disillusioned',
@@ -392,7 +262,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '你越懂事，越没人疼；越迁就，越受委屈。',
-        en: 'The more sensible you are, the less someone cares about you; the more you accommodate, the more wronged you are.',
+        en: 'The more sensible you are, the less someone cares; the more you accommodate, the more wronged you are.',
     },
     {
         category: 'Disillusioned',
@@ -401,17 +271,12 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '有些人不是不优秀，是优秀错了地方，一文不值。',
-        en: 'Some people are not unexcellent; they are excellent in the wrong place, worth nothing.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '我以为坚持就能看到光，结果只看到了无尽的黑暗。',
         en: 'I thought persistence would let me see the light, but I only saw endless darkness.',
     },
     {
         category: 'Disillusioned',
-        cn: '所谓公平，就是强者制定规则，弱者被迫服从。',
+        cn: '所谓的公平，就是强者制定规则，弱者被迫服从。',
         en: 'The so-called fairness is that the strong make the rules, and the weak are forced to obey.',
     },
     {
@@ -431,7 +296,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '生活的Bug从来不会修复，只会越积越多，压垮你。',
+        cn: '生活的 Bug 从来不会修复，只会越积越多，压垮你。',
         en: "Life's bugs are never fixed; they only accumulate more and more, crushing you.",
     },
     {
@@ -486,11 +351,6 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '有些人不是不珍惜，是根本不懂什么叫珍惜，也不想懂。',
-        en: "Some people don't not cherish; they just don't understand what cherishing is, and don't want to understand.",
-    },
-    {
-        category: 'Disillusioned',
         cn: '自由从来都是奢侈品，你连喘息的资格都没有，何谈自由。',
         en: "Freedom has always been a luxury; you don't even have the right to breathe, let alone freedom.",
     },
@@ -516,12 +376,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '有些人不是不努力，是努力的方向，从一开始就错了。',
-        en: 'Some people are not unmotivated; the direction of their efforts was wrong from the beginning.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '你付出的所有努力，都抵不过别人一句“我有关系”。',
+        cn: '你付出的所有努力，都抵不过别人一句"我有关系"。',
         en: 'All the efforts you put in are not worth others saying "I have connections".',
     },
     {
@@ -556,11 +411,6 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '有些人不是不爱，是爱不起，也配不上。',
-        en: "Some people don't stop loving; they can't afford to love, and don't deserve it.",
-    },
-    {
-        category: 'Disillusioned',
         cn: '你掏心掏肺的付出，最后换来的，都是得寸进尺。',
         en: 'All the wholehearted efforts you give will eventually be met with greed.',
     },
@@ -581,7 +431,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '生活的Bug，从来不会眷顾任何人，你越弱小，它越嚣张。',
+        cn: '生活的 Bug，从来不会眷顾任何人，你越弱小，它越嚣张。',
         en: "Life's bugs never favor anyone; the weaker you are, the more arrogant they are.",
     },
     {
@@ -625,7 +475,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
         en: 'There are no surprises in life, only scares, getting worse every time.',
     },
     {
-        category: 'Disillusoned',
+        category: 'Disillusioned',
         cn: '所谓的坚持，不过是不甘心，不甘心自己的努力白费。',
         en: 'The so-called persistence is just unwillingness, unwillingness that your efforts are in vain.',
     },
@@ -736,7 +586,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '生活的Bug，从来不会给你修复的机会，只会让你一错再错。',
+        cn: '生活的 Bug，从来不会给你修复的机会，只会让你一错再错。',
         en: "Life's bugs never give you a chance to fix them; they only make you make mistakes again and again.",
     },
     {
@@ -871,21 +721,6 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     },
     {
         category: 'Disillusioned',
-        cn: '所谓的希望，不过是让你多熬一会儿，多受一会儿苦。',
-        en: 'The so-called hope is just to let you endure a little longer and suffer a little more.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '我以为时间会给我公平，结果时间只给了我不公，一次又一次。',
-        en: 'I thought time would give me fairness, but time only gave me injustice, again and again.',
-    },
-    {
-        category: 'Disillusioned',
-        cn: '生活没有退路，只有往前走，哪怕前方是万丈深渊，也别无选择。',
-        en: 'Life has no retreat; you can only move forward, even if there is an abyss ahead, you have no choice.',
-    },
-    {
-        category: 'Disillusioned',
         cn: '努力了那么久，最后还是输给了无能为力。',
         en: 'I tried so hard, yet in the end, I lost to powerlessness.',
     },
@@ -917,7 +752,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '表面笑着没事，心里早已溃不成军。',
-        en: 'I smile and say I’m fine, but my heart is already in ruins.',
+        en: 'I smile and say I\'m fine, but my heart is already in ruins.',
     },
     {
         category: 'Disillusioned',
@@ -942,12 +777,12 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '不是不想快乐，是快乐根本绕不开我。',
-        en: 'It’s not that I don’t want happiness, it just never comes to me.',
+        en: 'It\'s not that I don\'t want happiness, it just never comes to me.',
     },
     {
         category: 'Disillusioned',
         cn: '很多事情，我尽力了，也只能这样了。',
-        en: 'For many things, I tried my best, and that’s all there is.',
+        en: 'For many things, I tried my best, and that\'s all there is.',
     },
     {
         category: 'Disillusioned',
@@ -977,7 +812,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '所有的道理我都懂，可情绪就是不听话。',
-        en: 'I know all the truths, but my emotions just won’t listen.',
+        en: 'I know all the truths, but my emotions just won\'t listen.',
     },
     {
         category: 'Disillusioned',
@@ -1042,7 +877,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '生活总是在我快要好起来的时候，给我一巴掌。',
-        en: 'Life always slaps me when I’m about to get better.',
+        en: 'Life always slaps me when I\'m about to get better.',
     },
     {
         category: 'Disillusioned',
@@ -1187,7 +1022,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '我假装无所谓，其实心早已碎了。',
-        en: 'I pretend it doesn’t matter, but my heart is already broken.',
+        en: 'I pretend it doesn\'t matter, but my heart is already broken.',
     },
     {
         category: 'Disillusioned',
@@ -1222,7 +1057,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '不是不想哭，是哭了也没用。',
-        en: 'It’s not that I don’t want to cry, but crying is useless.',
+        en: 'It\'s not that I don\'t want to cry, but crying is useless.',
     },
     {
         category: 'Disillusioned',
@@ -1247,7 +1082,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '我什么都不想争，也什么都不想要。',
-        en: 'I don’t want to fight for anything, nor want anything.',
+        en: 'I don\'t want to fight for anything, nor want anything.',
     },
     {
         category: 'Disillusioned',
@@ -1267,7 +1102,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '我等的不是结果，是慢慢死心的过程。',
-        en: 'I’m not waiting for a result, but for the slow death of hope.',
+        en: 'I\'m not waiting for a result, but for the slow death of hope.',
     },
     {
         category: 'Disillusioned',
@@ -1292,7 +1127,7 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '我努力了，可生活还是不放过我。',
-        en: 'I tried, but life still won’t let me go.',
+        en: 'I tried, but life still won\'t let me go.',
     },
     {
         category: 'Disillusioned',
@@ -1302,12 +1137,12 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '人生这趟车，有人上车，有人下车，没人陪我到终点。',
-        en: 'On life’s train, people come and go; no one stays till the end.',
+        en: 'On life\'s train, people come and go; no one stays till the end.',
     },
     {
         category: 'Disillusioned',
         cn: '我什么都明白，可就是走不出来。',
-        en: 'I understand everything, yet just can’t get out.',
+        en: 'I understand everything, yet just can\'t get out.',
     },
     {
         category: 'Disillusioned',
@@ -1362,8 +1197,9 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
     {
         category: 'Disillusioned',
         cn: '我什么都扛不住了，却还要继续扛。',
-        en: 'I can’t bear it anymore, yet I still have to.',
+        en: 'I can\'t bear it anymore, yet I still have to.',
     },
+
     // [Deeply Relatable]
     {
         category: 'Deeply Relatable',
@@ -1425,7 +1261,28 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
         cn: '我只是累了，连更新状态码的力气都没有。',
         en: "I'm just tired, with no strength left even to update my status code.",
     },
-    // [Sad & Hilarious - 伤感搞笑大补充]
+    {
+        category: 'Deeply Relatable',
+        cn: '关电脑那一刻，才感觉时间真正属于自己。',
+        en: 'Only when I shut down the computer does time feel truly mine.',
+    },
+    {
+        category: 'Deeply Relatable',
+        cn: '我不是社恐，我只是在社交里找不到返回值。',
+        en: "I'm not socially anxious — I just can't find a return value in socializing.",
+    },
+    {
+        category: 'Deeply Relatable',
+        cn: '每天最难的选择不是吃什么，是假装开心还是诚实面对。',
+        en: "The hardest daily choice isn't what to eat — it's pretending to be happy or being honest.",
+    },
+    {
+        category: 'Deeply Relatable',
+        cn: '成年人的体面，是用表情包代替了所有想说的话。',
+        en: 'Adult dignity is replacing everything you want to say with emojis.',
+    },
+
+    // [Sad & Hilarious]
     {
         category: 'Sad & Hilarious',
         cn: '比起单身，我更怕我的 GitHub 绿墙变白。',
@@ -1450,5 +1307,180 @@ export const GOLDEN_SOUP_QUOTES = Object.freeze([
         category: 'Sad & Hilarious',
         cn: '我的心情像现在的汇率，跌得没完没了。',
         en: 'My mood is like the current exchange rate: an endless drop.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '单身的好处是：只有一个 deadline 要担心。',
+        en: 'The perk of being single: only one deadline to worry about.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '后来我发现，我连 Bug 都算不上，顶多是个 TODO。',
+        en: 'Later I realized I\'m not even a bug — at best, a TODO.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的社交生活像个空数组——存在，但什么都没有。',
+        en: 'My social life is like an empty array: exists, but contains nothing.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '二十岁和三十岁的区别：前者相信努力有用，后者知道并不是。',
+        en: 'The difference between 20 and 30: the former believes effort works, the latter knows it doesn\'t.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的人生就像没有单元测试的代码库——充满了意外。',
+        en: 'My life is like a codebase without unit tests: full of surprises.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我以为我在编程，结果程序在编我。',
+        en: 'I thought I was programming, but the program was programming me.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的职业规划从"架构师"降级到"能活着就行"。',
+        en: 'My career plan downgraded from "architect" to "just survive."',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '代码审查教会我的不是写代码，是写注释。',
+        en: 'Code review taught me not how to write code, but how to write comments.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的工作状态像个死锁——谁都不肯先放手。',
+        en: 'My work state is like a deadlock: nobody is willing to let go first.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '成年人的崩溃，从"算了"开始。',
+        en: 'Adult breakdown begins with "forget it."',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '生活就像没有文档的 API，全靠试错。',
+        en: 'Life is like an undocumented API: all trial and error.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的热情像个过期的 session，已经失效了。',
+        en: 'My passion is like an expired session: already invalidated.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我最大的梦想是不需要梦想。',
+        en: 'My biggest dream is not needing dreams.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我努力合群的样子，像个试图融入主流浏览器的 polyfill。',
+        en: 'My attempt to fit in is like a polyfill trying to blend into mainstream browsers.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '社交对我就像手动内存管理——总是出错。',
+        en: 'Socializing to me is like manual memory management: always failing.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的人生目标从"改变世界"降级到"不被世界改变"。',
+        en: 'My life goal downgraded from "change the world" to "not be changed by the world."',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我以为我在追逐梦想，结果只是被 KPI 追着跑。',
+        en: 'I thought I was chasing dreams, but I was just being chased by KPIs.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的存在感像个 404 页面——找不到。',
+        en: 'My sense of existence is like a 404 page: not found.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我就像被注释掉的代码——存在，但不起作用。',
+        en: 'I\'m like commented-out code: present, but not functioning.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的价值像个未定义的变量——undefined。',
+        en: 'My worth is like an undefined variable: undefined.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我努力了，但结果是个 NaN。',
+        en: 'I tried, but the result is NaN.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的期望像个异步回调——永远 pending。',
+        en: 'My expectations are like async callbacks: always pending.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我就像个被废弃的 feature——还在，但没人用。',
+        en: 'I\'m like a deprecated feature: still there, but nobody uses.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的耐心像个耗尽的 pool——空了。',
+        en: 'My patience is like an exhausted pool: empty.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我努力了，但结果是个 timeout。',
+        en: 'I tried, but the result is a timeout.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的权限像个 readonly——不能修改。',
+        en: 'My permissions are like readonly: cannot be modified.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我就像个被忽略的 warning——存在，但没人关心。',
+        en: 'I\'m like an ignored warning: present, but nobody cares.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的未来就像个 legacy system——没人维护了。',
+        en: 'My future is like a legacy system: nobody maintains it anymore.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我努力了，但结果是个 circular dependency。',
+        en: 'I tried, but the result is a circular dependency.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的记忆就像个 expired cookie——过期了。',
+        en: 'My memories are like expired cookies: expired.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我就像个被覆盖的 commit——无法恢复。',
+        en: 'I\'m like an overwritten commit: cannot be restored.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的热情就像个被回收的内存——已经释放了。',
+        en: 'My passion is like garbage-collected memory: already freed.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我努力了，但结果是个 403 Forbidden。',
+        en: 'I tried, but the result is 403 Forbidden.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我的存在就像个 silent error——表面正常，内部崩溃。',
+        en: 'My existence is like a silent error: normal on the surface, collapsed inside.',
+    },
+    {
+        category: 'Sad & Hilarious',
+        cn: '我就像个被 force push 覆盖的分支——消失了。',
+        en: 'I\'m like a branch overwritten by force push: gone.',
     },
 ]);
