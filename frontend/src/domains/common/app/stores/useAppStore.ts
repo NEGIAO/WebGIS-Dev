@@ -10,25 +10,32 @@ export const useAppStore = defineStore('appStore', () => {
 
     let loadingTimeoutId: any = null;
 
-    function showLoading(text: string = '') {
+    function showLoading(text: string = '', options: { timeoutMs?: number } = {}) {
         loading.value = true;
         loadingText.value = String(text || '').trim();
 
         // Clear any existing timeout
         if (loadingTimeoutId !== null) {
             clearTimeout(loadingTimeoutId);
+            loadingTimeoutId = null;
         }
 
-        // Set 15-second fail-safe timeout: auto-hide loading if still active
-        loadingTimeoutId = window.setTimeout(() => {
-            if (loading.value) {
-                console.warn(
-                    '[Loading Timeout] Auto-hiding loading overlay after 15s safety threshold.',
-                );
-                hideLoading();
-            }
-            loadingTimeoutId = null;
-        }, 15000);
+        const timeoutMs = Number.isFinite(options.timeoutMs)
+            ? Math.max(0, Number(options.timeoutMs))
+            : 15000;
+
+        // timeoutMs=0 用于必须等待真实就绪事件的长任务（例如 Cesium 首屏瓦片）。
+        if (timeoutMs > 0) {
+            loadingTimeoutId = window.setTimeout(() => {
+                if (loading.value) {
+                    console.warn(
+                        `[Loading Timeout] Auto-hiding loading overlay after ${timeoutMs}ms safety threshold.`,
+                    );
+                    hideLoading();
+                }
+                loadingTimeoutId = null;
+            }, timeoutMs);
+        }
     }
 
     function hideLoading() {

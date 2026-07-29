@@ -641,7 +641,11 @@ function settleMapCoreLoading(payload = {}) {
     const appStore = useAppStore();
     appStore.markGisInitComplete();
 
-    hideLoading();
+    // 2D 地图始终在后台挂载。当前目标是 Cesium 时，不能由隐藏的 OL 地图
+    // 抢先关闭全局 Loading；此时应交给 Cesium 的真实场景就绪事件收尾。
+    if (!is3DMode.value && !isCesiumLoading.value) {
+        hideLoading();
+    }
 
     if (payload?.isError) {
         const detail = String(payload?.message || '').trim();
@@ -735,7 +739,8 @@ async function ensureCesiumLoaded() {
     if (_cesiumLoadPromise) return _cesiumLoadPromise;
 
     isCesiumLoading.value = true;
-    showLoading(t('loading.cesiumAssets'));
+    // Cesium 首次加载可能超过通用的 15 秒兜底时间，必须等待组件发出 ready/failed。
+    showLoading(t('loading.cesiumAssets'), { timeoutMs: 0 });
     _cesiumLoadPromise = (async () => {
         try {
             const module = await import('@cesium-domain/components/CesiumContainer.vue');
@@ -745,14 +750,26 @@ async function ensureCesiumLoaded() {
         } catch (error) {
             message.error(t('loading.cesiumLoadFailed', { error: error?.message || error }));
             console.error('[ensureCesiumLoaded] Cesium load error:', error);
-            return false;
-        } finally {
             isCesiumLoading.value = false;
             hideLoading();
+            return false;
+        } finally {
             _cesiumLoadPromise = null;
         }
     })();
     return _cesiumLoadPromise;
+}
+
+/** Cesium Viewer、底图/地形和首个稳定渲染帧全部就绪。 */
+function handleCesiumReady() {
+    isCesiumLoading.value = false;
+    hideLoading();
+}
+
+/** Cesium 初始化失败或等待首屏资源超时。 */
+function handleCesiumLoadFailed() {
+    isCesiumLoading.value = false;
+    hideLoading();
 }
 
 /**
@@ -906,6 +923,9 @@ async function setMapView(view, { writeUrl = true } = {}) {
             }
         }
         is3DMode.value = false;
+        // 若 Cesium 仍在启动，切回 OL 时立即结束其 Loading 接力。
+        isCesiumLoading.value = false;
+        hideLoading();
         // 切回 OL 时卸载 CesiumContainer，确保相机 moveEnd URL 监听被清理。
         isCesiumLoaded.value = false;
         CesiumContainer.value = null;
@@ -1476,6 +1496,8 @@ onMounted(async () => {
                     <component
                         :is="CesiumContainer"
                         ref="cesiumContainerRef"
+                        @ready="handleCesiumReady"
+                        @load-failed="handleCesiumLoadFailed"
                         @view-sync="handleViewSync"
                     />
                 </div>
