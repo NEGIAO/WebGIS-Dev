@@ -6,10 +6,10 @@ function resolveAppStore() {
     return useAppStore();
 }
 
-export function showLoading(text = '') {
+export function showLoading(text = '', options = {}) {
     const appStore = resolveAppStore();
     if (!appStore) return;
-    appStore.showLoading(text);
+    appStore.showLoading(text, options);
 }
 
 export function hideLoading() {

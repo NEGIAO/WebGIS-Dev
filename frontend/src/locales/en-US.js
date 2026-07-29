@@ -952,6 +952,7 @@ export default {
             primaryTokenFailRetry: 'Primary token init failed; trying a backup token.',
             ionTokenFailRetry: 'Cesium ion token failed; trying a backup token.',
             tokenPoolExhausted: 'All backup tokens tried; Cesium still failed to initialize.',
+            sceneLoadTimeout: 'Cesium scene load timed out. Check your network and refresh to retry.',
             runtimeLoadFailed: 'Failed to load Cesium runtime',
             initFailed: 'Cesium initialization failed. Check the network environment.',
         },

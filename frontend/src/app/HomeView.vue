@@ -641,7 +641,11 @@ function settleMapCoreLoading(payload = {}) {
     const appStore = useAppStore();
     appStore.markGisInitComplete();
 
-    hideLoading();
+    // 2D 地图始终在后台挂载。当前目标是 Cesium 时，不能由隐藏的 OL 地图
+    // 抢先关闭全局 Loading；此时应交给 Cesium 的真实场景就绪事件收尾。
+    if (!is3DMode.value && !isCesiumLoading.value) {
+        hideLoading();
+    }
 
     if (payload?.isError) {
         const detail = String(payload?.message || '').trim();
@@ -735,7 +739,22 @@ async function ensureCesiumLoaded() {
     if (_cesiumLoadPromise) return _cesiumLoadPromise;
 
     isCesiumLoading.value = true;
-    showLoading(t('loading.cesiumAssets'));
+    // Cesium 首次加载可能超过通用的 15 秒兜底时间，必须等待组件发出 ready/failed。
+    showLoading(t('loading.cesiumAssets'), { timeoutMs: 0 });
+
+    // 安全兜底：组件 mount 失败时 ready/failed 事件永不发出，loading 会卡死。
+    // 设置一个 watchdog，超时后强制清理 loading 状态并提示用户。
+    // 正常路径下 ready/failed 会先触发并将 isCesiumLoading 置 false，watchdog 自然成为 no-op。
+    const watchdogTimer = window.setTimeout(() => {
+        if (!isCesiumLoading.value) return; // 已被正常流程处理
+        console.error('[ensureCesiumLoaded] watchdog timeout — component never emitted ready/load-failed');
+        message.warning(t('loading.cesiumLoadTimeout'), { closable: true });
+        isCesiumLoading.value = false;
+        hideLoading();
+    }, 120000); // 120 秒 = 2 分钟，足够覆盖网络极端情况
+
+    const clearWatchdog = () => window.clearTimeout(watchdogTimer);
+
     _cesiumLoadPromise = (async () => {
         try {
             const module = await import('@cesium-domain/components/CesiumContainer.vue');
@@ -745,14 +764,31 @@ async function ensureCesiumLoaded() {
         } catch (error) {
             message.error(t('loading.cesiumLoadFailed', { error: error?.message || error }));
             console.error('[ensureCesiumLoaded] Cesium load error:', error);
-            return false;
-        } finally {
             isCesiumLoading.value = false;
             hideLoading();
+            clearWatchdog();
+            return false;
+        } finally {
             _cesiumLoadPromise = null;
         }
     })();
     return _cesiumLoadPromise;
+}
+
+/** Cesium Viewer、底图/地形和首个稳定渲染帧全部就绪。 */
+function handleCesiumReady() {
+    // 模式已切换或已被 load-failed 处理过时，忽略过期的 ready 事件
+    if (!isCesiumLoading.value) return;
+    isCesiumLoading.value = false;
+    hideLoading();
+}
+
+/** Cesium 初始化失败或等待首屏资源超时。 */
+function handleCesiumLoadFailed() {
+    // 模式已切换或已被 ready 处理过时，忽略过期的 failed 事件
+    if (!isCesiumLoading.value) return;
+    isCesiumLoading.value = false;
+    hideLoading();
 }
 
 /**
@@ -906,6 +942,9 @@ async function setMapView(view, { writeUrl = true } = {}) {
             }
         }
         is3DMode.value = false;
+        // 若 Cesium 仍在启动，切回 OL 时立即结束其 Loading 接力。
+        isCesiumLoading.value = false;
+        hideLoading();
         // 切回 OL 时卸载 CesiumContainer，确保相机 moveEnd URL 监听被清理。
         isCesiumLoaded.value = false;
         CesiumContainer.value = null;
@@ -1476,6 +1515,8 @@ onMounted(async () => {
                     <component
                         :is="CesiumContainer"
                         ref="cesiumContainerRef"
+                        @ready="handleCesiumReady"
+                        @load-failed="handleCesiumLoadFailed"
                         @view-sync="handleViewSync"
                     />
                 </div>

@@ -1163,6 +1163,7 @@ export default {
             primaryTokenFailRetry: '主 token 初始化失败，正在尝试备用 token。',
             ionTokenFailRetry: 'Cesium ion token 失败，正在尝试备用 token。',
             tokenPoolExhausted: '备用 token 已全部尝试，Cesium 初始化仍失败。',
+            sceneLoadTimeout: 'Cesium 场景加载超时，请检查网络后刷新重试。',
             runtimeLoadFailed: 'Cesium 运行时加载失败',
             initFailed: 'Cesium 初始化失败，请检查网络环境。',
         },

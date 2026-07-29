@@ -174,7 +174,7 @@ let viewer = null;
 let componentUnmounted = false;
 
 const message = useMessage();
-const emit = defineEmits(['view-sync']);
+const emit = defineEmits(['view-sync', 'ready', 'load-failed']);
 
 /** 漫游模式操作提示面板显示状态 */
 const showPlayerGuide = ref(true);
@@ -608,6 +608,93 @@ let bootInProgress = false;
 
 /** token 重试硬上限，防止动态 maxRetryCount 无限增长 */
 const MAX_TOKEN_RETRY = 5;
+/** 当前首屏等待的取消函数，由 onUnmounted 消费 */
+let _cancelInitialSceneWait = null;
+
+/**
+ * 等待 Cesium 首屏真正可见：至少完成两次渲染，且当前视野的地形/影像瓦片已清空队列。
+ * 不能只检查一次 tilesLoaded；Viewer 刚构造时它可能短暂为 true，但首帧请求尚未真正发出。
+ */
+function waitForInitialSceneReady({ timeoutMs = 30000 } = {}) {
+    const activeViewer = viewer;
+    const scene = activeViewer?.scene;
+    const globe = scene?.globe;
+
+    if (!activeViewer || !scene) {
+        return Promise.reject(new Error('Cesium scene is unavailable'));
+    }
+
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        let renderedFrames = 0;
+        let removePostRender = null;
+        let removeTileProgress = null;
+        let timeoutId = null;
+
+        const cleanup = () => {
+            removePostRender?.();
+            removeTileProgress?.();
+            if (timeoutId !== null) window.clearTimeout(timeoutId);
+        };
+
+        const finish = (error = null) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            if (error) reject(error);
+            else resolve();
+        };
+
+        const cancelWait = () => {
+            finish(new Error('Cesium initial scene wait was cancelled'));
+        };
+        // 注册到 onUnmounted 的清理函数，避免模块级全局变量
+        _cancelInitialSceneWait = cancelWait;
+
+        const requestNextFrame = () => {
+            if (componentUnmounted || activeViewer.isDestroyed?.()) {
+                finish(new Error('Cesium component was destroyed before initial render'));
+                return;
+            }
+            scene.requestRender?.();
+        };
+
+        const checkReady = () => {
+            if (componentUnmounted || activeViewer.isDestroyed?.()) {
+                finish(new Error('Cesium component was destroyed before initial render'));
+                return;
+            }
+
+            const tilesLoaded = !globe || globe.tilesLoaded === true;
+            if (renderedFrames >= 2 && tilesLoaded) {
+                finish();
+                return;
+            }
+
+            // requestRenderMode 下主动补帧，避免瓦片完成后没有第二帧触发。
+            if (tilesLoaded && renderedFrames > 0) {
+                window.requestAnimationFrame(requestNextFrame);
+            }
+        };
+
+        removePostRender = scene.postRender.addEventListener(() => {
+            renderedFrames += 1;
+            checkReady();
+        });
+
+        if (globe?.tileLoadProgressEvent) {
+            removeTileProgress = globe.tileLoadProgressEvent.addEventListener((pendingTiles) => {
+                if (pendingTiles === 0) requestNextFrame();
+            });
+        }
+
+        timeoutId = window.setTimeout(() => {
+            finish(new Error(`Cesium initial scene load timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+
+        requestNextFrame();
+    });
+}
 
 async function bootCesium() {
     if (bootInProgress) {
@@ -616,8 +703,10 @@ async function bootCesium() {
     }
     bootInProgress = true;
     componentUnmounted = false;
-    showLoading(t('loading.cesiumScene'));
+    showLoading(t('loading.cesiumScene'), { timeoutMs: 0 });
     console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
+    let bootSucceeded = false;
+    let bootError = null;
     try {
         let retryCount = 0;
         let maxRetryCount = 1;
@@ -692,6 +781,9 @@ async function bootCesium() {
                 // 3) 无条件写回 l：activeBasemap 默认值与初始底图相同时 watch 不触发，强制初始写入避免 URL l 缺失
                 syncBasemapToUrl(activeBasemap.value);
                 if (basemapReady && terrainReady) {
+                    await waitForInitialSceneReady();
+                    if (componentUnmounted) return;
+                    bootSucceeded = true;
                     message.success(t('cesium.toast.basemapTerrainOk'));
                     return;
                 }
@@ -704,6 +796,7 @@ async function bootCesium() {
                     : { switched: false };
                 const switched = switchedTianditu.switched || switchedCesium.switched;
                 if (!switched) {
+                    bootError = new Error('Cesium basemap or terrain failed to initialize');
                     message.error(t('cesium.toast.basemapTerrainFail'), { closable: true });
                     return;
                 }
@@ -720,6 +813,7 @@ async function bootCesium() {
                 });
                 message.warning(t('cesium.toast.primaryTokenFailRetry'), { closable: true });
             } catch (error) {
+                if (componentUnmounted) return;
                 console.error('[Cesium][boot] stage error:', error);
                 const switchedCesium = markRuntimeMapTokenFailed('cesium_ion_token');
                 if (!switchedCesium.switched) throw error;
@@ -730,15 +824,27 @@ async function bootCesium() {
             }
         }
         console.error('[Cesium][boot] exhausted token pool');
+        bootError = new Error('Cesium token pool exhausted');
         message.error(t('cesium.toast.tokenPoolExhausted'), { closable: true });
     } catch (error) {
+        bootError = error instanceof Error ? error : new Error(String(error));
         console.error('[Cesium][boot] FATAL:', error);
-        message.error(t('cesium.toast.runtimeLoadFailed'), error);
-        message.error(t('cesium.toast.initFailed'), { closable: true });
+        // 首屏瓦片加载超时：单独提示，避免与通用 initFailed 混淆
+        if (bootError.message?.includes('timed out after')) {
+            message.warning(t('cesium.toast.sceneLoadTimeout'), { closable: true });
+        } else {
+            message.error(t('cesium.toast.runtimeLoadFailed'), error);
+            message.error(t('cesium.toast.initFailed'), { closable: true });
+        }
     } finally {
         bootInProgress = false;
-        hideLoading();
+        if (!componentUnmounted) hideLoading();
         bootComplete.value = true;
+        if (bootSucceeded) {
+            emit('ready');
+        } else if (!componentUnmounted) {
+            emit('load-failed', { message: bootError?.message || 'Cesium initialization failed' });
+        }
     }
 }
 
@@ -896,6 +1002,8 @@ const {
 
 onUnmounted(() => {
     componentUnmounted = true;
+    _cancelInitialSceneWait?.();
+    _cancelInitialSceneWait = null;
     cesiumReady.value = false;
 
     // 统一图层管理：注销 adapter 并清档（TOC「三维数据」分组随之消失）
