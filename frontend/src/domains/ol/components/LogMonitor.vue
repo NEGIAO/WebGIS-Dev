@@ -1,0 +1,878 @@
+<template>
+    <div class="webgis-log-panel">
+        <div class="panel-header">
+            <div class="status-info">
+                <Terminal
+                    :size="14"
+                    class="header-icon"
+                />
+                <div
+                    v-if="displaySourceLabel === 'REMOTE'"
+                    class="log-type-switcher"
+                >
+                    <button
+                        :class="['type-btn', { active: currentType === 'run' }]"
+                        @click="switchType('run')"
+                    >
+                        RUN
+                    </button>
+                    <button
+                        :class="['type-btn', { active: currentType === 'build' }]"
+                        @click="switchType('build')"
+                    >
+                        BUILD
+                    </button>
+                </div>
+                <span class="title">TERMINAL</span>
+                <div class="divider"></div>
+
+                <div
+                    class="lock-scroll-option"
+                    @click="isLocked = !isLocked"
+                >
+                    <div :class="['custom-checkbox', { checked: isLocked }]">
+                        <div
+                            v-if="isLocked"
+                            class="inner-check"
+                        ></div>
+                    </div>
+                    <span class="lock-text">Lock scroll</span>
+                </div>
+
+                <div class="divider"></div>
+                <span
+                    :class="[
+                        'status-dot',
+                        { active: isConnected, pending: streamDesired && !isConnected },
+                    ]"
+                ></span>
+                <span class="env-hint">{{ displaySourceLabel }}</span>
+                <div class="color-legend-wrap">
+                    <CircleHelp :size="13" class="legend-icon" />
+                    <div class="color-legend">
+                        <div class="legend-title">日志颜色说明</div>
+                        <div class="legend-item"><span class="dot" style="background:#f87171"></span>ERROR / FAILED / 5xx 服务端错误</div>
+                        <div class="legend-item"><span class="dot" style="background:#fbbf24"></span>WARN / 4xx 客户端错误</div>
+                        <div class="legend-item"><span class="dot" style="background:#109942"></span>INFO 普通信息</div>
+                        <div class="legend-item"><span class="dot" style="background:#4ade80"></span>SUCCESS / 2xx 成功</div>
+                        <div class="legend-item"><span class="dot" style="background:#818cf8"></span>[BUILD] 构建流程</div>
+                        <div class="legend-item"><span class="dot" style="background:#1ab142"></span>[RUN] 运行流程</div>
+                    </div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button
+                    type="button"
+                    class="action-btn secondary"
+                    :disabled="logEntries.length === 0"
+                    @click="copyAllLogs"
+                >
+                    <component
+                        :is="isCopiedAll ? Check : Copy"
+                        :size="14"
+                    />
+                    <span class="btn-label">{{ isCopiedAll ? '已复制' : '复制全部' }}</span>
+                </button>
+
+                <button
+                    type="button"
+                    class="action-btn secondary"
+                    :disabled="logEntries.length === 0"
+                    @click="clearLogs"
+                >
+                    <Trash2 :size="14" />
+                    清空
+                </button>
+
+                <button
+                    type="button"
+                    :class="['action-btn', streamDesired ? 'danger' : 'success']"
+                    @click="toggleConnection"
+                >
+                    <component
+                        :is="streamDesired ? Square : Play"
+                        :size="14"
+                    />
+                    {{ streamDesired ? '停止' : '开启' }}
+                </button>
+            </div>
+        </div>
+
+        <div
+            ref="scrollContainer"
+            class="log-viewport"
+        >
+            <!-- key 用稳定自增 id：头部裁剪后 index 整体前移，index key 会导致全列表重 patch -->
+            <div
+                v-for="(log, index) in logEntries"
+                :key="log.id"
+                class="log-line"
+                title="双击复制此行内容"
+                @dblclick="copySingleLine(log.message)"
+            >
+                <span class="line-number">{{ index + 1 }}</span>
+                <span class="timestamp">{{ log.time }}</span>
+                <!-- 优化：改为直接从对象读取预计算好的类名 -->
+                <span :class="['content', log.className]">{{ log.message }}</span>
+            </div>
+            <div
+                v-if="logEntries.length === 0"
+                class="empty-tip"
+            >
+                Waiting for logs...<span class="scan-line"></span>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script setup>
+import { ref, onUnmounted, computed } from 'vue';
+import { Terminal, Play, Square, Trash2, Copy, Check, CircleHelp } from '@lucide/vue';
+import { BACKEND_BASE_URL } from '@/api/backend';
+
+const props = defineProps({
+    maxLines: { type: Number, default: 2500 },
+});
+
+const logEntries = ref([]);
+const isConnected = ref(false);
+const streamDesired = ref(false);
+const isLocked = ref(false); // 控制滚动锁定
+const scrollContainer = ref(null);
+const isCopiedAll = ref(false);
+const currentType = ref('run');
+let eventSource = null;
+/** 断线自动重连定时器（仅 streamDesired=true 时调度） */
+let reconnectTimer = null;
+const RECONNECT_DELAY_MS = 3000;
+
+// 缓冲区优化逻辑
+let logBuffer = [];
+let renderPending = false;
+/** 稳定自增 id：v-for key 用，避免头部裁剪后 index key 全列表重 patch */
+let logSeq = 0;
+
+const logsStreamUrl = computed(() => {
+    const base = String(BACKEND_BASE_URL || '').replace(/\/$/, '');
+    const params = new URLSearchParams({ type: currentType.value });
+    return `${base}/monitor/logs/stream?${params.toString()}`;
+});
+
+// 匹配 HTTP 响应状态码，仅识别 uvicorn/httpx 等标准 HTTP 日志格式：
+//   uvicorn:  INFO: 10.x.x.x:port - "GET /path HTTP/1.1" 400 Bad Request
+//   httpx:    HTTP Request: GET https://... "HTTP/1.1 400 "
+// 使用 (?<="\\s) 限定状态码紧跟在引号+空格之后，避免误匹配时间戳中的数字（如 10:46:19.444）
+const HTTP_STATUS_RE = /(?<="\s)([1-5]\d{2})\b/g;
+
+function getLogClass(msg) {
+    const text = msg.toUpperCase();
+
+    // 1. 优先识别严重错误 (包含 FAILED, ERROR)
+    if (text.includes('ERROR') || text.includes('FAILED')) return 'log-error';
+
+    // 2. 识别 HTTP 错误状态码（4xx / 5xx）—— 优先于 INFO/WARN 关键字
+    const statusMatches = [...msg.matchAll(HTTP_STATUS_RE)];
+    if (statusMatches.length > 0) {
+        const lastCode = Number(statusMatches[statusMatches.length - 1][1]);
+        if (lastCode >= 500) return 'log-error';       // 5xx 服务端错误 → 红色
+        if (lastCode >= 400) return 'log-warning';      // 4xx 客户端错误 → 黄色
+        if (lastCode >= 200 && lastCode < 300) return 'log-success'; // 2xx 成功 → 绿色
+    }
+
+    // 3. 识别通用警告 (WARNING)
+    if (text.includes('WARN')) return 'log-warning';
+
+    // 4. 识别成功状态（非 HTTP 日志的 SUCCESS 关键字）
+    if (text.includes('SUCCESS')) return 'log-success';
+
+    // 5. 业务流程标签
+    if (text.includes('[BUILD]')) return 'log-build';
+    if (text.includes('[RUN]')) return 'log-run';
+    if (text.includes('INFO')) return 'log-info';
+
+    return '';
+}
+
+/**
+ * 核心滚动逻辑：
+ * 只要不是锁定状态，就强制滚动到底部
+ */
+const scrollToBottom = () => {
+    if (scrollContainer.value) {
+        // 直接赋值为当前总高度，确保滚动到底部
+        scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight;
+    }
+};
+
+/**
+ * 缓冲区冲刷逻辑
+ */
+function pushLine(message) {
+    const timeString = new Date().toLocaleTimeString('zh-CN', {
+        hour12: false,
+        timeZone: 'Asia/Shanghai',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+    });
+
+    const text = String(message ?? '');
+    // Object.freeze：Vue 对冻结对象跳过深响应式转换，2500 行日志渲染读取零 proxy 开销
+    // （数组 push 仍触发列表更新；日志条目本身不可变，冻结安全）
+    logBuffer.push(Object.freeze({
+        id: ++logSeq,
+        message: text,
+        time: timeString,
+        className: getLogClass(text),
+    }));
+
+    if (!renderPending) {
+        renderPending = true;
+        requestAnimationFrame(() => {
+            logEntries.value.push(...logBuffer);
+            logBuffer = [];
+
+            // 超限 10% 才批量裁剪：避免高频日志时每帧一次 O(n) 头部搬移
+            const overflow = logEntries.value.length - props.maxLines;
+            if (overflow > props.maxLines * 0.1) {
+                logEntries.value.splice(0, overflow);
+            }
+
+            // 只有在用户没有锁定滚动时，才执行强制滚动
+            if (!isLocked.value) {
+                scrollToBottom();
+            }
+            renderPending = false;
+        });
+    }
+}
+
+function switchType(type) {
+    if (currentType.value === type) return;
+    currentType.value = type;
+    if (streamDesired.value) {
+        closeConnection();
+        openConnection();
+    }
+}
+
+function clearLogs() {
+    logEntries.value = [];
+}
+
+async function copyAllLogs() {
+    if (logEntries.value.length === 0) return;
+    const fullText = logEntries.value.map((log) => `[${log.time}] ${log.message}`).join('\n');
+    try {
+        await navigator.clipboard.writeText(fullText);
+        isCopiedAll.value = true;
+        setTimeout(() => (isCopiedAll.value = false), 2000);
+    } catch (err) {
+        console.error('复制失败:', err);
+    }
+}
+
+async function copySingleLine(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const displaySourceLabel = computed(() => {
+    try {
+        const u = new URL(logsStreamUrl.value);
+        return LOCAL_HOSTNAMES.has(u.hostname) ? 'LOCAL' : 'REMOTE';
+    } catch {
+        return 'UNKNOWN';
+    }
+});
+
+const toggleConnection = () => {
+    if (streamDesired.value) closeConnection();
+    else openConnection();
+};
+
+function clearReconnectTimer() {
+    if (reconnectTimer !== null) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+}
+
+/** 仅断开传输，不改变用户意图（streamDesired），供出错重连复用 */
+function teardownEventSource() {
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+    isConnected.value = false;
+}
+
+function closeConnection() {
+    streamDesired.value = false;
+    clearReconnectTimer();
+    teardownEventSource();
+}
+
+function openConnection() {
+    streamDesired.value = true;
+    clearReconnectTimer();
+    teardownEventSource();
+
+    eventSource = new EventSource(logsStreamUrl.value);
+    eventSource.onopen = () => (isConnected.value = true);
+    eventSource.onmessage = (e) => pushLine(e.data);
+    eventSource.onerror = () => {
+        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+            pushLine('[ERROR] SSE 连接已关闭（网络异常或后端不可用），将自动重连。');
+        }
+        teardownEventSource();
+        if (!streamDesired.value) return;
+        clearReconnectTimer();
+        reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            if (streamDesired.value) openConnection();
+        }, RECONNECT_DELAY_MS);
+    };
+}
+
+onUnmounted(() => {
+    closeConnection();
+    logBuffer = [];
+    renderPending = false;
+});
+</script>
+
+<style scoped>
+/* 保持原本的所有样式 */
+.log-type-switcher {
+    display: flex;
+    background: #27272a;
+    padding: 2px;
+    border-radius: 4px;
+}
+
+.type-btn {
+    padding: 2px 10px;
+    font-size: 10px;
+    border: none;
+    background: transparent;
+    color: #71717a;
+    cursor: pointer;
+    border-radius: 2px;
+    font-weight: 700;
+    transition: all 0.2s;
+}
+
+.type-btn.active {
+    background: #3f3f46;
+    color: #f4f4f5;
+}
+
+.webgis-log-panel {
+    width: 40%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #09090b;
+    color: #e4e4e7;
+    border: 1px solid #27272a;
+    border-radius: 6px;
+    font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.panel-header {
+    background: #18181b;
+    padding: 6px 12px;
+    min-height: 36px;
+    height: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #27272a;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.status-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #a1a1aa;
+}
+
+.divider {
+    width: 1px;
+    height: 14px;
+    background: #3f3f46;
+}
+
+.env-hint {
+    font-size: 10px;
+    background: #27272a;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: #71717a;
+}
+
+.color-legend-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.legend-icon {
+    color: #52525b;
+    transition: color 0.2s;
+}
+
+.color-legend-wrap:hover .legend-icon {
+    color: #a1a1aa;
+}
+
+.color-legend {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #18181b;
+    border: 1px solid #3f3f46;
+    border-radius: 6px;
+    padding: 8px 12px;
+    z-index: var(--z-float);
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.color-legend-wrap:hover .color-legend {
+    display: block;
+}
+
+.legend-title {
+    font-size: 10px;
+    color: #71717a;
+    margin-bottom: 6px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #a1a1aa;
+    padding: 2px 0;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.action-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    /* 防止按钮文字换行 */
+    flex-shrink: 0;
+    /* 防止按钮被压缩 */
+}
+
+.action-btn.secondary {
+    background: transparent;
+    color: #a1a1aa;
+}
+
+.action-btn.secondary:hover {
+    color: #f4f4f5;
+    background: #27272a;
+}
+
+.action-btn.success {
+    background: #166534;
+    color: #bbf7d0;
+}
+
+.action-btn.danger {
+    background: #7f1d1d;
+    color: var(--danger-light);
+}
+
+.log-viewport {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    scrollbar-width: thin;
+    scrollbar-color: #3f3f46 transparent;
+}
+
+.log-line {
+    display: flex;
+    padding: 1px 12px;
+    gap: 12px;
+    line-height: 1.6;
+    font-size: 12px;
+    transition: background 0.1s;
+}
+
+.log-line:hover {
+    background: #18181b;
+}
+
+.line-number {
+    color: #0bb867;
+    width: 24px;
+    text-align: right;
+    user-select: none;
+}
+
+.timestamp {
+    color: #52525b;
+    flex-shrink: 0;
+    font-size: 11px;
+}
+
+.content {
+    word-break: break-all;
+    white-space: pre-wrap;
+    color: #d4d4d8;
+}
+
+.log-error {
+    color: #f87171;
+    font-weight: 500;
+}
+
+.log-warning {
+    color: #fbbf24;
+}
+
+.log-info {
+    color: #109942;
+}
+
+.log-success {
+    color: #4ade80;
+}
+
+.log-build {
+    color: #818cf8;
+    font-weight: 500;
+}
+
+.log-run {
+    color: #1ab142;
+    font-weight: 500;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3f3f46;
+    transition: all 0.3s;
+}
+
+.status-dot.active {
+    background: #22c55e;
+    box-shadow: 0 0 8px #22c55e;
+}
+
+.status-dot.pending {
+    background: #eab308;
+}
+
+/* --- 按照图片新增的 Lock scroll 样式 --- */
+.lock-scroll-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 2px 4px;
+    user-select: none;
+    white-space: nowrap;
+    /* 防止文字换行 */
+}
+
+.custom-checkbox {
+    width: 14px;
+    height: 14px;
+    border: 1px solid #3f3f46;
+    border-radius: 3px;
+    background: #18181b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.custom-checkbox.checked {
+    border-color: #52525b;
+    background: #27272a;
+}
+
+.inner-check {
+    width: 6px;
+    height: 6px;
+    background: #5dce3a;
+    border-radius: 1px;
+}
+
+.lock-text {
+    font-size: 11px;
+    color: #d4d8d6;
+    /* 稍微亮一点，符合图片感观 */
+    font-weight: 500;
+}
+
+.lock-scroll-option:hover .lock-text {
+    color: #ffffff;
+}
+
+.empty-tip {
+    padding: 20px;
+    color: #3f3f46;
+    font-style: italic;
+}
+
+.scan-line {
+    width: 2px;
+    height: 14px;
+    background: #4ade80;
+    display: inline-block;
+    animation: blink 1s infinite;
+    vertical-align: middle;
+}
+
+@keyframes blink {
+    50% {
+        opacity: 0;
+    }
+}
+
+/* 平板横屏适配 (iPad 横屏: 1024px ~ 1366px) */
+@media (min-width: 1024px) and (max-width: 1366px) {
+    .webgis-log-panel {
+        width: 50%;
+        /* iPad 横屏适中宽度 */
+        min-width: 400px;
+        /* 增加最小宽度，确保按钮有足够空间 */
+    }
+
+    .panel-header {
+        padding: 8px 12px;
+        gap: 8px;
+        min-height: 44px;
+        /* 增加最小高度 */
+    }
+
+    .status-info {
+        gap: 10px;
+    }
+
+    .header-actions {
+        gap: 10px;
+        flex-wrap: nowrap;
+        /* 防止按钮换行 */
+    }
+
+    .action-btn {
+        padding: 6px 14px;
+        font-size: 12px;
+        min-height: 34px;
+        /* 增加触摸区域 */
+        white-space: nowrap;
+        /* 防止文字换行 */
+        flex-shrink: 0;
+        /* 防止按钮被压缩 */
+    }
+
+    /* 隐藏 Lock scroll 节省空间 */
+    .lock-scroll-option {
+        display: none;
+    }
+
+    /* 隐藏分隔线节省空间 */
+    .divider {
+        display: none;
+    }
+
+    .log-line {
+        font-size: 12px;
+        gap: 10px;
+        padding: 2px 12px;
+    }
+}
+
+/* 平板竖屏适配 (Pad: 769px ~ 1023px) */
+@media (min-width: 769px) and (max-width: 1023px) {
+    .webgis-log-panel {
+        width: 60%;
+        /* Pad 上比 PC 端更宽，保证日志可读 */
+        min-width: 280px;
+        /* 最小宽度保证 */
+    }
+
+    .panel-header {
+        padding: 6px 8px;
+        gap: 6px;
+        min-height: 36px;
+    }
+
+    .status-info {
+        gap: 6px;
+    }
+
+    .header-actions {
+        gap: 6px;
+    }
+
+    .action-btn {
+        padding: 5px 10px;
+        font-size: 11px;
+        min-height: 30px;
+        /* 保证触摸区域 */
+        white-space: nowrap;
+        /* 防止文字换行 */
+    }
+
+    /* Pad 上隐藏分隔线和 Lock scroll 节省空间 */
+    .divider {
+        display: none;
+    }
+
+    .lock-scroll-option {
+        display: none;
+    }
+
+    .log-line {
+        font-size: 11px;
+        gap: 8px;
+        padding: 1px 8px;
+    }
+
+    .lock-text {
+        font-size: 10px;
+    }
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+    .webgis-log-panel {
+        width: 100%;
+        /* 移动端占满宽度 */
+        height: 35vh;
+        /* 移动端更紧凑，避免与其他面板冲突 */
+        min-height: 200px;
+        /* 最小高度保证基本可用 */
+        border-radius: 0;
+        /* 移动端边缘通常不需要圆角 */
+    }
+
+    .panel-header {
+        height: auto;
+        /* 高度自适应 */
+        flex-direction: column;
+        /* 纵向排列，解决遮挡 */
+        align-items: flex-start;
+        padding: 8px 12px;
+        gap: 10px;
+    }
+
+    .status-info {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        /* 如果状态信息太多，允许换行 */
+        gap: 8px;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+        /* 按钮横向平铺 */
+        gap: 8px;
+    }
+
+    /* 移动端按钮优化：更大的触摸区域 */
+    .action-btn {
+        padding: 8px 12px;
+        flex: 1;
+        /* 让按钮平分宽度 */
+        justify-content: center;
+        font-size: 12px;
+        min-height: 36px;
+        /* 保证触摸区域足够大 */
+    }
+
+    /* 隐藏一些次要的装饰元素，节省空间 */
+    .divider {
+        display: none;
+    }
+
+    .lock-scroll-option {
+        padding: 4px;
+    }
+
+    .lock-text {
+        font-size: 11px;
+    }
+
+    .custom-checkbox {
+        width: 16px;
+        height: 16px;
+    }
+}
+
+/* 针对极窄屏幕（如 iPhone SE）进一步优化 */
+@media (max-width: 380px) {
+    .webgis-log-panel .title {
+        display: none;
+        /* 隐藏 TERMINAL 字样，保留图标 */
+    }
+
+    .webgis-log-panel .color-legend-wrap {
+        display: none;
+    }
+
+    .webgis-log-panel .action-btn .btn-label {
+        display: none;
+        /* 只显示图标，隐藏按钮文字 */
+    }
+
+    .webgis-log-panel .action-btn {
+        padding: 8px;
+        min-width: 36px;
+    }
+}
+</style>

@@ -2,8 +2,8 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
-import { useMessage } from './composables/useMessage';
-import { loadLocaleMessages } from './composables/useLocale';
+import { useMessage } from '@common/shell/useMessage';
+import { loadLocaleMessages } from '@common/app/useLocale';
 import { useUserPreferencesStore } from './stores';
 
 const app = createApp(App);

@@ -1,0 +1,366 @@
+import { h, reactive, render, readonly } from 'vue';
+import Message from '@common/shell/Message.vue';
+// 金句库(约 60KB 源码 / gzip 16KB)改为懒加载:不进入口 chunk,页面 load 后空闲期预取;
+// 数据未就绪时 pickSoupQuote 用 FALLBACK_SOUP 兜底(V3.4.54 加载性能优化)
+
+const MAX_VISIBLE = 3;
+//默认持续时间，单位毫秒
+const DEFAULT_DURATION_MS = 3000;
+const DEFAULT_SOUP_DURATION_MS = 5200;
+const FALLBACK_SOUP = Object.freeze({
+    cn: '今天先不和世界较劲，先和自己和解。',
+    en: 'Do not wrestle with the world today; make peace with yourself first.',
+});
+
+// ===== 金句库懒加载状态 =====
+/** 就绪前为空数组,pickSoupQuote 走 FALLBACK_SOUP */
+let goldenSoupQuotes = [];
+let soupQuotesLoadPromise = null;
+
+/**
+ * 确保金句库已加载(幂等,单飞)。
+ * 首次调用触发动态 import;完成后重置轮询池以纳入全量金句。
+ * @returns {Promise<void>}
+ */
+function ensureSoupQuotesLoaded() {
+    if (!soupQuotesLoadPromise) {
+        soupQuotesLoadPromise = import('@/data/goldenSoupQuotes')
+            .then((mod) => {
+                goldenSoupQuotes = Array.isArray(mod.GOLDEN_SOUP_QUOTES)
+                    ? mod.GOLDEN_SOUP_QUOTES
+                    : [];
+                soupPool = []; // 数据到位后下次取句时重建轮询池
+            })
+            .catch((error) => {
+                console.warn('[useMessage] 金句库加载失败,继续使用兜底文案:', error);
+            });
+    }
+    return soupQuotesLoadPromise;
+}
+
+// 页面 load 后空闲期预取(2.5s 延迟,避开首屏与 GIS 预热的带宽窗口)
+if (typeof window !== 'undefined') {
+    const prefetchSoupQuotes = () => {
+        window.setTimeout(ensureSoupQuotesLoaded, 2500);
+    };
+    if (document.readyState === 'complete') {
+        prefetchSoupQuotes();
+    } else {
+        window.addEventListener('load', prefetchSoupQuotes, { once: true });
+    }
+}
+
+// ===== 方案 A：防抖合并 =====
+const DEDUP_WINDOW_MS = 1000;
+/** key="type|text" → { msgId, count, timer } */
+const dedupCache = new Map();
+
+function getDedupKey(type, text) {
+    return `${type}|${String(text || '')}`;
+}
+
+/** 在所有消息中查找（先 visible 再 queue） */
+function findMessageById(id) {
+    let idx = state.messages.findIndex((m) => m.id === id);
+    if (idx >= 0) return { msg: state.messages[idx], location: 'messages', idx };
+    idx = state.queue.findIndex((m) => m.id === id);
+    if (idx >= 0) return { msg: state.queue[idx], location: 'queue', idx };
+    return null;
+}
+
+// ===== 方案 C：智能 draining =====
+const QUEUE_DRAIN_THRESHOLD = 3;
+const FAST_DURATION_MS = 800;
+/** 快排豁免：error/warning 属重要消息，高压期也至少保留该时长，避免被 800ms 闪过 */
+const FAST_MIN_IMPORTANT_MS = 2500;
+/** 队列硬上限：批量导入等极端 burst 场景防无限积压 */
+const MAX_QUEUE = 8;
+
+function isImportantType(type) {
+    return type === 'error' || type === 'warning';
+}
+
+/**
+ * 高压期压缩消息停留时长（error/warning 豁免至 FAST_MIN_IMPORTANT_MS）。
+ * @param {{ type: string, duration: number }} payload
+ */
+function applyFastDuration(payload) {
+    if (!shouldUseFastDuration()) return;
+    const cap = isImportantType(payload.type)
+        ? Math.max(FAST_DURATION_MS, FAST_MIN_IMPORTANT_MS)
+        : FAST_DURATION_MS;
+    payload.duration = Math.min(
+        Number.isFinite(payload.duration) ? payload.duration : DEFAULT_DURATION_MS,
+        cap,
+    );
+}
+// 额外触发条件：短时间内大量消息涌入
+const RATE_WINDOW_MS = 2000;
+const RATE_THRESHOLD = 5;
+const messageTimestamps = [];
+
+function isHighRate() {
+    const now = Date.now();
+    // 只保留窗口内的记录
+    while (messageTimestamps.length > 0 && messageTimestamps[0] < now - RATE_WINDOW_MS) {
+        messageTimestamps.shift();
+    }
+    return messageTimestamps.length >= RATE_THRESHOLD;
+}
+function markMessageTimestamp() {
+    messageTimestamps.push(Date.now());
+}
+
+function shouldUseFastDuration() {
+    return isHighRate() || state.queue.length >= QUEUE_DRAIN_THRESHOLD;
+}
+
+const state = reactive({
+    messages: [],
+    queue: [],
+});
+
+let seed = 1;
+let hostMounted = false;
+let hostEl = null;
+let soupPool = [];
+let lastSoupIndex = -1;
+
+function nextId() {
+    seed += 1;
+    return `msg_${Date.now()}_${seed}`;
+}
+
+function getDefaultDuration(type, inputDuration) {
+    if (Number.isFinite(inputDuration) && inputDuration >= 0) return inputDuration;
+    if (type === 'soup') return DEFAULT_SOUP_DURATION_MS;
+    return DEFAULT_DURATION_MS;
+}
+
+function refillSoupPool() {
+    const total = goldenSoupQuotes.length;
+    soupPool = Array.from({ length: total }, (_, index) => index);
+
+    for (let i = soupPool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [soupPool[i], soupPool[j]] = [soupPool[j], soupPool[i]];
+    }
+
+    // 轮询一圈后重洗牌时，尽量避免与上一句重复。
+    if (soupPool.length > 1 && soupPool[soupPool.length - 1] === lastSoupIndex) {
+        const swapIndex = Math.floor(Math.random() * (soupPool.length - 1));
+        [soupPool[swapIndex], soupPool[soupPool.length - 1]] = [
+            soupPool[soupPool.length - 1],
+            soupPool[swapIndex],
+        ];
+    }
+}
+
+function pickSoupQuote() {
+    // 触发懒加载(幂等);未就绪的当次先用兜底文案
+    ensureSoupQuotesLoaded();
+    if (goldenSoupQuotes.length === 0) return FALLBACK_SOUP;
+    if (soupPool.length === 0) refillSoupPool();
+
+    const index = soupPool.pop();
+    if (!Number.isInteger(index)) return FALLBACK_SOUP;
+
+    lastSoupIndex = index;
+    return goldenSoupQuotes[index] || FALLBACK_SOUP;
+}
+
+function formatSoupQuote(quote) {
+    const cn = String(quote?.cn || '').trim();
+    const en = String(quote?.en || '').trim();
+
+    if (cn && en) return `${cn}\n${en}`;
+    if (cn) return cn;
+    if (en) return en;
+    return `${FALLBACK_SOUP.cn}\n${FALLBACK_SOUP.en}`;
+}
+
+function flushQueue() {
+    while (state.messages.length < MAX_VISIBLE && state.queue.length > 0) {
+        const next = state.queue.shift();
+        // 方案 C：队列积压或短时大量涌入 → 加速清空（error/warning 豁免至 2.5s）
+        applyFastDuration(next);
+        state.messages.push(next);
+    }
+}
+
+/**
+ * 入队并执行硬上限淘汰：超过 MAX_QUEUE 时优先淘汰最旧的低优先级
+ * （非 error/warning）消息；被淘汰消息触发 onClose 并清理 dedup 缓存。
+ * @param {object} payload
+ */
+function enqueueWithCap(payload) {
+    state.queue.push(payload);
+    if (state.queue.length <= MAX_QUEUE) return;
+
+    let dropIdx = state.queue.findIndex((m) => !isImportantType(m.type));
+    if (dropIdx < 0) dropIdx = 0;
+    const [dropped] = state.queue.splice(dropIdx, 1);
+    if (!dropped) return;
+    cleanDedupCache(dropped.id);
+    if (typeof dropped.onClose === 'function') {
+        try { dropped.onClose(); } catch { /* ignore */ }
+    }
+}
+
+/** 清理 dedupCache 中指定 msgId 的条目 */
+function cleanDedupCache(id) {
+    for (const [key, entry] of dedupCache.entries()) {
+        if (entry.msgId === id) {
+            clearTimeout(entry.timer);
+            dedupCache.delete(key);
+            return;
+        }
+    }
+}
+
+function createMessage(type, text, options = {}) {
+    const normalizedText = String(text || '');
+    const dedupKey = getDedupKey(type, normalizedText);
+
+    // 标记消息速率（在防抖合并之前，因为被合并的消息也应计入速率）
+    markMessageTimestamp();
+
+    // 方案 A：防抖合并 — 1 秒内同 type+text 的消息合并计数
+    const existing = dedupCache.get(dedupKey);
+    if (existing) {
+        // 延长合并窗口
+        clearTimeout(existing.timer);
+        existing.timer = setTimeout(() => {
+            dedupCache.delete(dedupKey);
+        }, DEDUP_WINDOW_MS);
+
+        // 找到并更新已存在的消息。
+        // V3.4.x：不再改写 text 追加"（共N条）"（文本回流且污染原文），
+        // 改由组件按 _dedupCount 渲染图标角标 ×N；motion 侧检测 _dedupCount 变化重启计时。
+        const found = findMessageById(existing.msgId);
+        if (found) {
+            existing.count++;
+            found.msg._dedupCount = existing.count;
+            // 刷新 duration：motion 侧 watcher 检测 _dedupCount 变化后按新 duration 重启
+            found.msg.duration = getDefaultDuration(type, options.duration);
+        }
+
+        return existing.msgId;
+    }
+
+    const payload = {
+        id: nextId(),
+        type,
+        text: normalizedText,
+        duration: getDefaultDuration(type, options.duration),
+        closable: options.closable ?? true,
+        showTitle: options.showTitle ?? true,
+        onClose: options.onClose,
+    };
+
+    // 方案 C：短时大量涌入或队列积压 → 快速闪过（error/warning 豁免至 2.5s）
+    applyFastDuration(payload);
+
+    if (state.messages.length >= MAX_VISIBLE) {
+        enqueueWithCap(payload);
+    } else {
+        state.messages.push(payload);
+    }
+
+    // 注册防抖缓存
+    dedupCache.set(dedupKey, {
+        msgId: payload.id,
+        count: 1,
+        timer: setTimeout(() => {
+            dedupCache.delete(dedupKey);
+        }, DEDUP_WINDOW_MS),
+    });
+
+    return payload.id;
+}
+
+function remove(id) {
+    const found = findMessageById(id);
+    if (!found) return;
+
+    const msg = found.msg;
+    if (typeof msg.onClose === 'function') {
+        msg.onClose();
+    }
+
+    // 从 dedupCache 清理
+    cleanDedupCache(id);
+
+    if (found.location === 'messages') {
+        state.messages.splice(found.idx, 1);
+        flushQueue();
+    } else {
+        state.queue.splice(found.idx, 1);
+    }
+}
+
+function clearAll() {
+    // 清理所有 dedup 定时器
+    for (const entry of dedupCache.values()) {
+        clearTimeout(entry.timer);
+    }
+    dedupCache.clear();
+
+    state.messages = [];
+    state.queue = [];
+}
+
+function ensureMessageHost(position = 'top-right') {
+    // queued 传数组引用（非快照长度）：组件内读 queued.length 保持响应式，
+    // 用于岛底"还有 N 条提示…"徽标，让 MAX_VISIBLE 之外的积压对用户可见。
+    const hostProps = () => ({
+        messages: state.messages,
+        queued: state.queue,
+        position,
+        onClose: remove,
+    });
+
+    if (hostMounted && hostEl) {
+        render(h(Message, hostProps()), hostEl);
+        return;
+    }
+
+    hostEl = document.createElement('div');
+    hostEl.id = 'global-message-host';
+    document.body.appendChild(hostEl);
+    render(h(Message, hostProps()), hostEl);
+    hostMounted = true;
+}
+
+function notifyBatch({ success = 0, failed = 0, warnings = 0, label = '导入任务' } = {}) {
+    const summary = `${label}：成功 ${success}，失败 ${failed}${warnings ? `，警告 ${warnings}` : ''}`;
+    if (failed > 0) {
+        return createMessage('warning', summary, { closable: true, duration: 6000 });
+    }
+    return createMessage('success', summary);
+}
+
+function soup(options = {}) {
+    const quote = pickSoupQuote();
+    const text = formatSoupQuote(quote);
+
+    return createMessage('soup', text, {
+        ...options,
+        showTitle: false,
+    });
+}
+
+export function useMessage() {
+    return {
+        state: readonly(state),
+        ensureMessageHost,
+        remove,
+        clearAll,
+        notifyBatch,
+        soup,
+        success: (text, options) => createMessage('success', text, options),
+        error: (text, options) => createMessage('error', text, options),
+        warning: (text, options) => createMessage('warning', text, options),
+        info: (text, options) => createMessage('info', text, options),
+    };
+}

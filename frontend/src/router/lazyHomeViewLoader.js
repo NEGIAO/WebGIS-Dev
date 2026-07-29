@@ -3,6 +3,6 @@
  * from the register/login entry chunk preload graph.
  */
 export async function loadHomeView() {
-    const mod = await import('../views/HomeView.vue');
+    const mod = await import('../app/HomeView.vue');
     return mod.default;
 }

@@ -1,5 +1,5 @@
-import { useMessage } from '@/composables/useMessage';
-import { parseAmapRectangleToExtent } from '@/utils/amapRectangle';
+import { useMessage } from '@common/shell/useMessage';
+import { parseAmapRectangleToExtent } from '@ol/utils/amapRectangle';
 import backendAPI, { handleApiError } from './backend';
 import { getAmapErrorMessage, getHttpStatusMessage } from './httpStatusMap';
 

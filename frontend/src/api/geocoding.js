@@ -14,10 +14,10 @@
 
 import axios from 'axios';
 import backendAPI, { handleApiError } from './backend';
-import { useMessage } from '@/composables/useMessage';
-import { gcj02ToWgs84, wgs84ToGcj02 } from '@/utils/coordTransform.js';
+import { useMessage } from '@common/shell/useMessage';
+import { gcj02ToWgs84, wgs84ToGcj02 } from '@common/data-import/crs/coordTransform';
 import { getAmapErrorMessage } from './httpStatusMap';
-import { getRuntimeMapTokensSync } from '@/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync } from '@ol/services/runtimeMapTokens';
 import { TIANDITU_API_BASE_URL } from '@/config/publicRuntime';
 
 const AMAP_SUCCESS_STATUS = '1';

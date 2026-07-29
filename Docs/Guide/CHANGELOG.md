@@ -6,6 +6,116 @@
 
 ## 版本记录
 
+### V3.5.0 (2026-07-29) — 前端 domains 架构重构完成（Phase 1~9）
+
+> 🏗️ **架构级大版本**：前端 `src/` 从扁平 `components/`、`composables/`、`stores/`、`services/`、`utils/`、`constants/` 结构迁移至领域驱动三域架构（`domains/ol/`、`domains/cesium/`、`domains/common/`）。
+
+- 📦 **迁移规模**：~160 个文件从旧路径迁入 `domains/` 三域，消费方全量改用 `@ol/`、`@cesium-domain/`、`@common/` alias
+- 🗂️ **领域拆分**：
+  - `domains/ol/`（OpenLayers 2D）：地图核心、底图、图层、绘制、测量、空间分析、路由、搜索、瓦片源
+  - `domains/cesium/`（Cesium 3D）：3D 容器、地形、大气、风场、流体模拟、人物控制器、数据导入
+  - `domains/common/`（跨引擎公共）：Chat、天气、罗盘、用户中心、图层树、数据导入、地图视图、Shell、国际化
+- ⚙️ **vite.config.js**：补齐 `@domains`、`@ol`、`@cesium-domain`、`@common` 4 个 alias 条目
+- 🧹 **旧路径清理**：`components/`（除 Routing/Search 外）、`composables/`、`stores/` 子目录、`utils/` 子目录、`constants/` 子目录、`services/` 子目录均清空删除
+- 🔧 **构建验证**：`✓ built in 23.16s, 3763 modules transformed`
+- 📋 **子任务日志**：
+  - Phase 9 收尾（Routing/Search/views 迁移 + 结构树重建）：[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3500-phase9-final-cleanup.md)
+  - Task 1（composables/map → ol）：[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3490-frontend-domains-phase1-2.md)
+  - Task 2（Layer/ControlsPanel）：[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3497-task2-layer-controls-panel-migration.md)
+  - Task 3（Chat/Weather/Compass/UserCenter）：[日志](../LLM_record/26-07/2026-07-29/2026-07-29-task3-common-domain-migration.md)
+  - Task 4（composables 横切）：[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3498-task4-composables-reorganize.md)
+  - Task 5（stores/services/utils/constants）：[日志](../LLM_record/26-07/2026-07-29/2026-07-29-task5-stores-services-utils-constants.md)
+
+### V3.4.99 (2026-07-29) — 前端 domains 架构 Task 5：stores + services + utils + constants 整理
+
+- 📦 **stores 迁移（14 文件）**：`useAttrStore`、`useLayerStore`、`useFeatureStyleStore` 等迁入 `domains/ol/stores/`；`useWeatherStore` 迁入 `domains/common/weather/stores/`；`useAuthStore`、`useUserPreferencesStore` 迁入 `domains/common/user/stores/`；`useAppStore`、`useThemeStore` 迁入 `domains/common/app/stores/`；`useUrlParamStore` 迁入 `domains/common/url-state/stores/`；`useTOCStore` 迁入 `domains/common/layer-tree/stores/`；`useCompassStore` 迁入 `domains/common/compass/stores/`；barrel `stores/index.ts` 改用 `@ol/stores/`、`@common/*/stores/` alias。
+- 🔧 **services 迁移（13 文件）**：`auth.ts` 迁入 `domains/common/user/services/`；`userLocationContext.ts`、`userPositionCache.ts` 迁入 `domains/common/map-view/services/`；`CompassManager.ts` 迁入 `domains/common/compass/services/`；其余 services 按域归类。
+- 🧩 **utils 迁移（28 文件）**：`coordinateFormatter.ts`、`units.js` 迁入 `domains/common/map-view/`；`pathUtils.ts`、`normalize.ts`、`labelValidator.ts`、`abortManager.ts` 迁入 `domains/common/utils/`；`textDecoder.ts`、`loading.ts` 迁入 `domains/common/` 子目录；`crypto.ts` 迁入 `domains/common/url-state/`；`amapRectangle.ts`、`coordinateInputHandler.ts` 迁入 `domains/ol/utils/`；biz barrel 统一。
+- 🎨 **constants 迁移（5 文件）**：`mapStyles.ts` 迁入 `domains/ol/constants/`；basemap constants 迁入 `domains/ol/basemap/constants/`；barrel `constants/index.js` 改用 `@ol/` alias。
+- 🔗 **消费方 alias 更新（30+ 文件）**：`App.vue`、`router/index.js`、`views/RegisterView.vue`、`views/OAuthCallbackView.vue`、`domains/common/shell/MagicCursor.vue`、`router/lazyHomeViewLoader.js` 等全量改用 `@ol/`、`@common/` alias。
+- ⚙️ **vite.config.js 关键修复**：补齐 `@domains`、`@ol`、`@cesium-domain`、`@common` 4 个 alias 条目（此前仅 `@` 与 `cesium` 在 vite 中生效，IDE 用的 jsconfig alias 不影响构建）。
+- 🧹 **旧目录清理**：`utils/gis/`、`utils/io/`、`utils/biz/`、`utils/echarts/`、`utils/geo/`、`utils/map/`、`utils/ui/`、`utils/url/`、`utils/weather/` 清空删除。
+- 📋 **日志**：详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-task5-stores-services-utils-constants.md)
+
+### V3.4.98 (2026-07-29) — 前端 domains 架构 Task 4：composables 横切整理
+
+- 📦 **Chat composables 迁移（5 文件）**：`chatIntentFallback.js`、`useAgentMapContext.js`、`useChatAgentConfig.js`、`useChatSession.js`、`useAgentConfig.js` → `domains/common/chat/composables/`
+- 🌤️ **Weather composables 迁移（2 文件）**：`useWeatherCharts.js`、`useWeatherData.js` → `domains/common/weather/composables/`
+- 🔐 **Auth composable 迁移（1 文件）**：`useAuthIdentity.js` → `domains/common/user/composables/`
+- ✨ **Magic composables 迁移（6 文件）**：`useDelaunay.js`、`useFluid.js`、`useGravity.js`、`useRingExplosion.js`、`useSingularity.js`、`useWave.js` → `domains/common/components/Magic/`
+- 🐚 **Shell/Utils/App composables 迁移（7 文件）**：`useMessage.js` → `domains/common/shell/`，`useMessageIslandMotion.js` → `domains/common/shell/`，`useLocale.js` → `domains/common/app/`，`useMarkdownRenderer.js` → `domains/common/utils/`，`useErrorHandler.ts` → `domains/common/utils/`，`useUserLocation.js` → `domains/common/map-view/`
+- 📥 **Data Import composables 迁移（4 文件）**：`useSharedResourceLoader.ts` → `domains/common/data-import/`，`useKmzLoader.js` → `domains/common/data-import/`，`useGisLoader.ts` → `domains/common/data-import/`，`useLayerDataImport.js` 内部引用更新
+- 🗺️ **OL composables 迁移（5 文件）**：`useManagedLayerRegistry.js`、`useUserLayerActions.js` → `domains/ol/layer/composables/`，`useStyleEditor.js` → `domains/ol/layer/style/`，`useMapSwipe.ts` → `domains/ol/composables/`，`useTileSourceFactory.ts` → `domains/ol/composables/`
+- 🔗 **消费方 import 更新（~150 处）**：useMessage（34 文件）、useLocale（55 文件）由子 Agent 批量处理；其余 ~20 文件手动更新
+- 🧹 **旧路径清理**：`composables/` 目录（根 + 子目录）完全删除
+- 🔧 **构建错误修复**：修复 Tasks 1-3 遗留的相对路径问题（biz/index.js、useGisLoader.ts、useLayerDataImport.js、useWeatherData.js 等）
+- 📋 **日志**：详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3498-task4-composables-reorganize.md)
+
+### V3.4.97 (2026-07-29) — 前端 domains 架构 Task 2：Layer/ControlsPanel 组件迁移
+
+- 📦 **Layer 组件迁移（4 文件）**：`TOCPanel.vue`、`LayerPanel.vue` → `domains/common/layer-tree/components/`；`LayerControlPanel.vue`、`AttributeTable.vue` → `domains/ol/layer/components/`
+- 🎛️ **ControlsPanel 组件迁移（7 文件）**：`ControlsPanel.vue`、`DrawPanel.vue`、`MeasurePanel.vue`、`SpatialAnalysisPanel.vue`、`LogMonitor.vue`、`AdministrativeDivisionPanel.vue`、`AdministrativeDivisionTreeNode.vue` → `domains/ol/components/`
+- 🔗 **消费方 alias 更新**：`SidePanel.vue`、`HomeView.vue`、`MapContainer.vue` 改用 `@common/`、`@ol/` alias
+- 🧹 **旧路径清理**：`components/Layer/`、`components/ControlsPanel/` 已清空删除
+- 📋 **日志**：详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3497-task2-layer-controls-panel-migration.md)
+
+### V3.4.96 (2026-07-29) — 前端 domains 架构 Phase 9：旧路径清理
+
+- 🗑️ **删除已迁移旧目录**：`components/Shell/`（7 文件）、`components/Common/ExtentPicker.vue`、`components/Map/`（5 文件）、`views/HomeView.vue` + `views/home/`（5 文件）、`composables/tileSource/`（7 文件）均已迁入 domains/，旧路径无外部引用后删除。
+- 🔗 **消费方 alias 收敛**：`App.vue`、`router/lazyHomeViewLoader.js`、`composables/useMessage.js`、`components/Map/MapDownloader.vue`、`components/ControlsPanel/SpatialAnalysisPanel.vue` 改用 `@common/` alias。
+- 📜 **结构树同步**：`frontend-structure.md` 完全重写，删除重复内容、过期 `components/Cesium/` 段落，对齐磁盘实际状态（401/401 ✅）。
+- ⚠️ **版本号顺延**：V3.4.95 已被 Agent 占用（Phase 8 utils/gis 下沉），本次顺延至 V3.4.96。
+- 📋 **日志**：详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3496-frontend-domains-phase9.md)
+
+### V3.4.95 (2026-07-29) — 前端 domains 架构 Phase 8（续）：utils/gis/ 剩余文件下沉
+
+- 📦 **GIS 工具下沉**：`utils/gis/decompressor.ts`、`crs-engine.ts`、`crsAware.js`、`dataDispatcher.js`、`decompressFile.js`、`loadJsZip.ts`、`batchProcessor.js`、`archiveProcessor.js`、`shpPacketBuilder.js` 迁移至 `domains/common/data-import/`。
+- ⏳ **延迟加载下沉**：`deferredGisAssets.js`、`deferredGisWarmupLauncher.js`、`mapRuntimeDeps.js` 迁移至 `domains/common/data-import/`。
+- 🔀 **消费方 import 更新**：`utils/io/index.js`、`utils/geo/index.js`、`composables/useGisLoader.ts`、`domains/common/data-import/parsers/shpParser.ts`、`views/RegisterView.vue` 改用 `@common/data-import/` alias。
+- ⚠️ **版本号顺延**：V3.4.94 已被 Agent A 占用（Cesium 域 stores/utils/constants 下沉），本次顺延至 V3.4.95。
+- 📜 **结构树同步**：`frontend-structure.md` 更新为新领域树。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3495-frontend-domains-phase8-utils.md)
+
+### V3.4.94 (2026-07-29) — 前端 domains 架构 Phase 8：Cesium 域 stores/utils/constants 下沉
+
+- 🏗️ **Cesium stores**：`cesiumLayers.ts`、`cesiumLayerNodeBuilder.ts` 从 `stores/layer/` 迁入 `domains/cesium/stores/`。
+- 📦 **Cesium utils**：`cesiumFxRuntime.js` 从 `utils/echarts/` 迁入 `domains/cesium/utils/`。
+- 📦 **Cesium constants**：`cesiumProviderFactory.ts` 从 `constants/basemap/` 迁入 `domains/cesium/constants/`。
+- 📜 **结构树同步**：`frontend-structure.md` 更新。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3494-frontend-domains-phase8.md)
+
+### V3.4.93 (2026-07-29) — 前端 domains 架构 Phase 7：Data Import / GIS IO 拆分
+
+- 📦 **通用解析器下沉**：`utils/gis/parsers/`（kmlParser、kmlStyleParser、shpParser、dbfParser、tifLoader、amapAoiParser、universalAmapParser）迁移至 `domains/common/data-import/parsers/`。
+- 🔧 **CRS 工具下沉**：`utils/coordTransform.js`、`utils/crsUtils.js` 迁移至 `domains/common/data-import/crs/`。
+- 🗂️ **Data Import composables 下沉**：`composables/dataImport/`（index.js、vectorUtils.js、rasterUtils.js、webglRasterRenderer.js）迁移至 `domains/common/data-import/`。
+- 📥 **OL 数据导入下沉**：`composables/useLayerDataImport.js` 迁移至 `domains/ol/data-import/composables/`。
+- 🔀 **消费方 import 更新**：`utils/geo/index.js`、`utils/gis/crsAware.js`、`utils/io/index.js`、`composables/map/features/useDeferredUserLayerApis.js`、`api/map.js`、`api/backend/location.js`、`api/geocoding.js`、`api/locationSearch.js`、`composables/useUserLocation.js`、`services/DistrictManager.ts`、`domains/ol/components/MapContainer.vue`、`domains/cesium/composables/dataImport/loaders/kmlLoader.js` 改用 `@common/data-import/` alias。
+- 📜 **结构树同步**：`frontend-structure.md` 更新为新领域树。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3493-frontend-domains-phase7.md)
+
+### V3.4.92 (2026-07-29) — 前端 domains 架构 Phase 6：Layer/TOC 拆分
+
+- 🏗️ **layer-tree 领域**：新增 `domains/common/layer-tree/`，迁入图层树协议 / 工厂 / 菜单 / 动作 / 导出 / 选择管理器。
+- 📦 **TOC 组件下沉**：`TOCTreeItem.vue`、`SharedResourceTreeItem.vue`、`LayerPropertiesDialog.vue` 进 `domains/common/layer-tree/components/`。
+- 📜 **结构树同步**：`frontend-structure.md` 更新。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3492-frontend-domains-phase6.md)
+
+### V3.4.91 (2026-07-29) — 前端 domains 架构 Phase 3：Cesium modules/vendors 迁移
+
+- 🌲 **TOC UI/协议/菜单迁入 common**：将 `components/Layer/TOCTreeItem.vue`、`LayerPropertiesDialog.vue`、`SharedResourceTreeItem.vue` 与 `composables/map/toc/` 下的 protocol/factory/actions/menu 全部迁移至 `domains/common/layer-tree/`，通过 `domains/common/index.js` barrel re-export。
+- 🔀 **Cesium TOC 动作分流器下沉**：`cesiumTocActions.js` 迁移至 `domains/cesium/layers/toc-adapters/`，内部 import 改用 `@/` alias。
+- 📦 **消费方 import 更新**：`TOCPanel.vue`、`LayerPanel.vue`、`layerExportService.js` 改用 `@common/layer-tree` 与 `@cesium-domain/layers/toc-adapters/cesiumTocActions` alias；`composables/map/index.js` 移除已迁移 toc 模块 re-export。
+- 📜 **结构树同步**：`frontend-structure.md` 更新为新领域树。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3492-frontend-domains-phase6.md)
+
+### V3.4.98 (2026-07-29) — 前端 domains 架构 Phase 4/5：Common Shell/Home + OL 地图核心迁移
+
+- 🏠 **Common Shell/Home 迁移**：将 `views/HomeView.vue`、`views/home/*`、`components/Shell/*`、`components/Common/*` 迁移至 `domains/common/app/`、`domains/common/shell/`、`domains/common/components/`，并更新 `router/lazyHomeViewLoader.js`、`App.vue`、`useMessage.js`、`SpatialAnalysisPanel.vue`、`MapDownloader.vue` 的 import。
+- 🗺️ **OL 地图核心迁移**：将 `components/Map/*`、`composables/map/basemapSystem.js`、`composables/map/features/useBasemap*.js`、`useBasemapResilience.js`、`useDrawMeasure.js`、`drawingToolRegistry.js`、`drawingGeometryUtils.js`、`useRouteRendering.js`、`routeService.js`、`useSpatialAnalysis.js`、`useStartup*.js`、`useBasemapUrlMapping.js`、`useMapViewUrlState.js`、`composables/tileSource/*`、`utils/map/*`、`basemapLayerFactory.js` 迁移至 `domains/ol/` 下对应子目录，并更新 `MapContainer.vue` 等文件的 import。
+- 📜 **结构树同步**：`frontend-structure.md` 更新为新领域树。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3491-frontend-domains-phase4-5.md)
+
+### V3.4.90 (2026-07-29) — 前端 domains 架构 Phase 1/2：Cesium 入口下沉至领域根目录
+
+- 🏗️ **domains 骨架**：新增 `frontend/src/domains/ol`、`domains/cesium`、`domains/common` 三领域根目录，配置 `@domains`、`@ol`、`@cesium-domain`、`@common` 路径别名。
+- 📦 **Cesium 第一批迁移**：将 `CesiumContainer.vue`、`CesiumToolPanel.vue`、`CesiumAdvancedEffects.vue`、`CesiumDataImportDialog.vue`、`LilGuiControls.vue`、原 `composables/`、原 `terrain/` 迁移至 `domains/cesium/components`、`domains/cesium/composables`、`domains/cesium/providers/terrain`，并更新相关 import。
+- 📜 **结构树同步**：`frontend-structure.md` 更新为新领域树。详见[日志](../LLM_record/26-07/2026-07-29/2026-07-29-v3490-frontend-domains-phase1-2.md)
+
 ### V3.4.89 (2026-07-28) — Cesium/流体 toast + 下载 store lastError i18n
 
 - 🌐 **cesium.toast / fluidToast**：导航选点、底图地形、token 重试/耗尽、流体创建/洪水/清除 zh/en。

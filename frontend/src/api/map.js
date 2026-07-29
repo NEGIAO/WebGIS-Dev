@@ -1,5 +1,5 @@
 import backendAPI from './backend';
-import { parseAmapAoiPayload } from '../utils/gis/parsers/amapAoiParser';
+import { parseAmapAoiPayload } from '@common/data-import/parsers/amapAoiParser';
 import { getAmapErrorMessage } from './httpStatusMap';
 
 export {

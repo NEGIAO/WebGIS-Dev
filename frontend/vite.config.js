@@ -74,6 +74,10 @@ export default defineConfig(({ command, mode }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        '@domains': fileURLToPath(new URL('./src/domains', import.meta.url)),
+        '@ol': fileURLToPath(new URL('./src/domains/ol', import.meta.url)),
+        '@cesium-domain': fileURLToPath(new URL('./src/domains/cesium', import.meta.url)),
+        '@common': fileURLToPath(new URL('./src/domains/common', import.meta.url)),
         // Cesium ESM 垫片：将 `import { ... } from "cesium"` 映射到 window.Cesium（CDN 全局变量）
         // 避免 npm cesium 包与 CDN cesium 产生双实例冲突
         'cesium': fileURLToPath(new URL('./src/cesium-shim.js', import.meta.url))
@@ -169,7 +173,7 @@ export default defineConfig(({ command, mode }) => {
             // Markdown 渲染（仅 AI 聊天使用）
             if (isNodeModulePackage(id, 'marked') || isNodeModulePackage(id, 'dompurify')) return 'vendor-marked';
             // 图标库（tree-shake 后仅保留使用到的图标）
-            if (isNodeModulePackage(id, 'lucide-vue-next')) return 'vendor-lucide';
+            if (isNodeModulePackage(id, '@lucide/vue')) return 'vendor-lucide';
             // 压缩/解码（仅瓦片模块使用）
             if (isNodeModulePackage(id, 'pako') || isNodeModulePackage(id, 'protobufjs') || isNodeModulePackage(id, 'zstd-codec')) return 'vendor-codec';
             // lil-gui 控件（仅 Cesium 面板使用）

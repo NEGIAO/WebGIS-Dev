@@ -11,8 +11,8 @@
  */
 
 import backendAPI from './backend';
-import { useMessage } from '../composables/useMessage';
-import { gcj02ToWgs84 } from '../utils/coordTransform';
+import { useMessage } from '@common/shell/useMessage';
+import { gcj02ToWgs84 } from '@common/data-import/crs/coordTransform';
 import { getAmapErrorMessage, getHttpStatusMessage } from './httpStatusMap';
 
 const AMAP_SUCCESS_STATUS = '1';

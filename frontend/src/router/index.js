@@ -1,8 +1,10 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
-import RegisterView from '../views/RegisterView.vue';
-import { useAuthStore, useAppStore, useUrlParamStore } from '../stores';
-import { hideLoading, showLoading } from '../utils/ui/loading';
-import { translate as t } from '../composables/useLocale';
+import RegisterView from '../app/RegisterView.vue';
+import { useAuthStore } from '@common/user/stores/useAuthStore';
+import { useAppStore } from '@common/app/stores/useAppStore';
+import { useUrlParamStore } from '@common/url-state/stores/useUrlParamStore';
+import { hideLoading, showLoading } from '@common/ui/loading';
+import { translate as t } from '@common/app/useLocale';
 import {
     persistPositionCode,
     persistPositionCodeFromUrl,
@@ -10,7 +12,7 @@ import {
     injectGuestTokenForShareMode,
     getAuthToken,
     getAuthUser,
-} from '../services/auth';
+} from '@common/user/services/auth';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
 
@@ -30,7 +32,7 @@ const router = createRouter({
         {
             path: '/oauth/callback',
             name: 'oauth-callback',
-            component: () => import('../views/OAuthCallbackView.vue'),
+            component: () => import('../app/OAuthCallbackView.vue'),
             meta: { requiresAuth: false, skipAuthCheck: true },
         },
         {
@@ -42,25 +44,25 @@ const router = createRouter({
         {
             path: '/terms',
             name: 'terms',
-            component: () => import('../views/TermsOfService.vue'),
+            component: () => import('../app/TermsOfService.vue'),
             meta: { requiresAuth: false },
         },
         {
             path: '/privacy',
             name: 'privacy',
-            component: () => import('../views/PrivacyPolicy.vue'),
+            component: () => import('../app/PrivacyPolicy.vue'),
             meta: { requiresAuth: false },
         },
         {
             path: '/:pathMatch(.*)*',
             name: 'not-found',
-            component: () => import('../views/NotFoundView.vue'),
+            component: () => import('../app/NotFoundView.vue'),
             meta: { requiresAuth: false },
         },
     ],
 });
 
-import { normalizeBinaryFlag } from '@/utils/normalize';
+import { normalizeBinaryFlag } from '@common/utils/normalize';
 
 function readRouteQueryValue(route, key) {
     const raw = route?.query?.[key];

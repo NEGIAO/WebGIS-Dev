@@ -5,8 +5,8 @@
  *   - backend/weather.js：走后端 FastAPI 的天气代理
  * 消费方经 api/index.js barrel 导入，请勿混用两者。
  */
-import { useMessage } from '@/composables/useMessage';
-import { translate as t } from '@/composables/useLocale';
+import { useMessage } from '@common/shell/useMessage';
+import { translate as t } from '@common/app/useLocale';
 import backendAPI, { handleApiError } from './backend';
 import { getAmapErrorMessage } from './httpStatusMap';
 

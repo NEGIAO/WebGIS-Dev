@@ -1,7 +1,11 @@
 {
     "compilerOptions": {
         "paths": {
-            "@/*": ["./src/*"]
+            "@/*": ["./src/*"],
+            "@domains/*": ["./src/domains/*"],
+            "@ol/*": ["./src/domains/ol/*"],
+            "@cesium-domain/*": ["./src/domains/cesium/*"],
+            "@common/*": ["./src/domains/common/*"]
         },
         "types": ["vite/client"]
     },

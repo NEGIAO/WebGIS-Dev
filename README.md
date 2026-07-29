@@ -67,7 +67,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.4.89），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.0），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -227,9 +227,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.4.89** | 2026-07-28 | CR 残留 i18n：Cesium/流体 toast + 下载 store key 化 + Force L1 `.env` 条文。详见[日志](Docs/LLM_record/26-07/2026-07-28/2026-07-28-v3489-cesium-fluid-download-i18n.md) |
-| **V3.4.88** | 2026-07-28 | useAgentConfig + ApiKeys 面板 i18n：校验/toast + 密钥池/备用/默认 AI 全量 `t()`。详见[日志](Docs/LLM_record/26-07/2026-07-28/2026-07-28-v3488-agent-apikeys-i18n.md) |
-| **V3.4.87** | 2026-07-28 | AttributeTable / MapControlsBar / AOI 弹窗 i18n：`attrTable.*` / `mapControls.*` / `layer.aoi*`。详见[日志](Docs/LLM_record/26-07/2026-07-28/2026-07-28-v3487-attrtable-mapcontrols-aoi-i18n.md) |
+| **V3.5.0** | 2026-07-29 | 前端 domains 架构重构完成（Phase 1~9）。~160 个文件从旧扁平 `components/`、`composables/`、`stores/`、`services/`、`utils/`、`constants/` 迁入 `domains/ol/`、`domains/cesium/`、`domains/common/` 三域，消费方全量改用 `@ol/`、`@cesium-domain/`、`@common/` alias，旧目录清空删除。`vite.config.js` 补齐 4 个 alias 条目。构建通过（3763 modules, 23s）。详见[日志](Docs/LLM_record/26-07/2026-07-29/2026-07-29-task5-stores-services-utils-constants.md) |
+| **V3.4.99** | 2026-07-29 | 前端 domains 架构 Task 5：stores + services + utils + constants 整理。70+ 文件从旧扁平结构迁入 `domains/ol/`、`domains/common/` 新域，全量消费方改用 `@ol/`、`@common/` alias，`vite.config.js` 补齐 4 个 alias 条目。详见[日志](Docs/LLM_record/26-07/2026-07-29/2026-07-29-task5-stores-services-utils-constants.md) |
+| **V3.4.98** | 2026-07-29 | 前端 domains 架构 Task 4：composables 横切整理。25+ composables 文件迁入 `domains/common/`（chat/weather/user/utils/map-view/shell/app）与 `domains/ol/`（layer/composables），消费方改用 `@common/` alias，旧 `composables/` 目录删除。详见[日志](Docs/LLM_record/26-07/2026-07-29/2026-07-29-v3498-task4-composables-reorganize.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -254,6 +254,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.4.89 · 开发中 · 最后更新 2026-07-28</sub>
+<sub>V3.5.0 · 开发中 · 最后更新 2026-07-29</sub>
 
 </div>

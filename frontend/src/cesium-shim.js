@@ -7,8 +7,8 @@
  * ## 加载时序
  * 模块顶层立即注入 <script>（Cesium CDN），暴露 cesiumReady Promise。
  * cesiumRuntime.js 的 loadCesiumRuntime() 内部 `await cesiumReady` 保证
- * Cesium 就位后才继续。cesium-navigation / cesium-wind-layer 源码已内嵌
- * 到 components/Cesium/ 下，模块级构造器已改为惰性 getter。
+ * Cesium 就位后才继续。cesium-navigation / cesium-wind-layer 源码仍在
+ * components/Cesium/ 迁移期 legacy 模块中，模块级构造器已改为惰性 getter。
  *
  * ## 设计要点
  * - CDN 注入在模块求值时同步触发（createElement + appendChild），

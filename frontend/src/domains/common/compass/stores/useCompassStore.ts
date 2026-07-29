@@ -1,0 +1,517 @@
+import { computed, ref } from 'vue';
+import { defineStore } from 'pinia';
+//注意：此处仅仅引用了配置，实际的绘制实现和他们无关，绘制实现完全在CompassManager中，与Vue无关
+import type { FengShuiCompassConfig, Layer } from '@common/compass/svg/types';
+import localThemes from '@common/compass/svg/themes';
+
+export type CompassMode = 'vector' | 'hud';
+
+type SensorPermission = 'unknown' | 'granted' | 'denied' | 'unsupported';
+
+type CompassPosition = {
+    lng: number;
+    lat: number;
+};
+
+/**
+ * 选中宫位的接口定义
+ */
+export interface SelectedPalace {
+    layerIndex: number; // 落在第几层
+    segmentIndex: number; // 落在该层的第几个扇区
+    data: string | string[]; // 宫位的文字内容
+    coord: number[]; // 点击位置的地理坐标 [lon, lat]，用于弹窗定位
+}
+
+type CompassThemeOption = {
+    cid: string;
+    name: string;
+    description?: string;
+};
+
+const DEFAULT_CID = 'ancient-cinnabar';
+
+const DEFAULT_THEME_OPTIONS: CompassThemeOption[] = [
+    { cid: 'ancient-cinnabar', name: 'Ancient Cinnabar' },
+    { cid: 'dark-gold', name: 'Dark Gold' },
+    { cid: 'jade-realm', name: 'Jade Realm' },
+    { cid: 'minimalist', name: 'Minimalist' },
+    { cid: 'cyber-blueprint', name: 'Cyber Blueprint' },
+];
+
+const LOCAL_THEME_INDEX_BY_CID: Record<string, number> = {
+    'ancient-cinnabar': 0,
+    'dark-gold': 2,
+    'jade-realm': 1,
+    minimalist: 4,
+    'cyber-blueprint': 3,
+};
+
+const HUD_MIN_SIZE = 240;
+const HUD_MAX_SIZE = 560;
+const HUD_DEFAULT_SIZE = 340;
+
+function deepClone<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeAngle(value: number): number {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    const compact = numeric % 360;
+    return compact < 0 ? compact + 360 : compact;
+}
+
+function clamp(value: number, minValue: number, maxValue: number): number {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return minValue;
+    return Math.max(minValue, Math.min(maxValue, numeric));
+}
+
+function toLayerArray(data: FengShuiCompassConfig['data']): Layer[] {
+    if (Array.isArray(data)) return deepClone(data);
+    if (data && typeof data === 'object') return [deepClone(data as Layer)];
+    return [];
+}
+
+// 将主题中的大尺寸数值按 HUD 比例压缩，并限制在可读范围内。
+function scaleHudNumber(value: unknown, scale: number, minValue: number, maxValue: number): number {
+    const numeric = Number(value);
+    const source = Number.isFinite(numeric) ? numeric : maxValue;
+    return Math.round(clamp(source * scale, minValue, maxValue));
+}
+
+// 密集分层或 24/60 分宫数据需要更小字号，避免固定屏幕 HUD 中互相挤压。
+function getHudLayerFontLimit(layer: Layer, layerCount: number): number {
+    const segmentCount = Array.isArray(layer?.data) ? layer.data.length : 0;
+    if (segmentCount >= 60) return 6;
+    if (segmentCount >= 24) return 8;
+    if (layerCount >= 8) return 9;
+    return 12;
+}
+
+// 基于 HUD 缩放比例生成每一层的字号配置，保留原始层数据与配色。
+function createHudLayers(data: FengShuiCompassConfig['data'], scale: number): Layer[] {
+    const layers = toLayerArray(data);
+    return layers.map((layer) => {
+        const fontLimit = getHudLayerFontLimit(layer, layers.length);
+        const sourceFontSize = Number(layer.fontSize || 14);
+        return {
+            ...layer,
+            fontSize: Math.round(
+                clamp(
+                    (Number.isFinite(sourceFontSize) ? sourceFontSize : 14) * scale,
+                    5,
+                    fontLimit,
+                ),
+            ),
+        };
+    });
+}
+
+// 生成固定屏幕 HUD 专用配置，避免 800/1000px 主题参数压缩后出现刻度和文字塌陷。
+function createHudRenderConfig(
+    baseConfig: FengShuiCompassConfig,
+    size: number,
+    rotation: number,
+): FengShuiCompassConfig {
+    const sourceWidth = Number(baseConfig?.compassSize?.width || 800);
+    const sourceHeight = Number(baseConfig?.compassSize?.height || 800);
+    const sourceSize = Math.max(Math.min(sourceWidth, sourceHeight), 1);
+    const scale = clamp(size / sourceSize, 0.25, 0.78);
+    const scaleStyle = baseConfig.scaclStyle || {
+        minLineHeight: 10,
+        midLineHeight: 15,
+        maxLineHeight: 20,
+        numberFontSize: 12,
+    };
+
+    return {
+        ...deepClone(baseConfig),
+        compassSize: {
+            ...(baseConfig?.compassSize || {}),
+            width: size,
+            height: size,
+            tianChiRadius: Math.round(clamp(size * 0.055, 10, 24)),
+        },
+        data: createHudLayers(baseConfig.data, scale),
+        rotate: normalizeAngle(rotation),
+        autoFontSize: false,
+        scaclStyle: {
+            ...scaleStyle,
+            minLineHeight: scaleHudNumber(scaleStyle.minLineHeight, scale, 2, 6),
+            midLineHeight: scaleHudNumber(scaleStyle.midLineHeight, scale, 3, 8),
+            maxLineHeight: scaleHudNumber(scaleStyle.maxLineHeight, scale, 4, 10),
+            numberFontSize: scaleHudNumber(scaleStyle.numberFontSize || 12, scale, 6, 10),
+        },
+        tianxinCrossWidth: scaleHudNumber(baseConfig.tianxinCrossWidth || 2, scale, 1, 3),
+        tianxinCrossLengthRatio: clamp(Number(baseConfig?.tianxinCrossLengthRatio || 1 / 3), 0.1, 0.72),
+    } as FengShuiCompassConfig;
+}
+
+function normalizeCompassConfig(
+    rawConfig: Partial<FengShuiCompassConfig> | null | undefined,
+    cid: string,
+    name = '',
+): FengShuiCompassConfig {
+    const fallback = {
+        info: { id: cid, name: name || cid },
+        compassSize: { width: 1000, height: 1000 }, // 罗盘大小
+        data: [], // 图层数据
+        line: {
+            borderColor: '#AAAAAA', // 边框颜色
+            scaleColor: '#AAAAAA', // 刻度颜色
+            scaleHighlightColor: '#FF0000', // 高亮刻度
+        },
+        rotate: 0, // 旋转角度
+        latticeFill: [], // 文字填充色
+        isShowTianxinCross: true, // 显示天心十字线
+        isShowScale: true, // 显示刻度
+        scaclStyle: {
+            minLineHeight: 10, // 刻度短线高度
+            midLineHeight: 20, // 中线高度
+            maxLineHeight: 25, // 长线高度
+            numberFontSize: 15, // 刻度文字大小
+        },
+        tianxinCrossWidth: 2, // 天心线宽度
+        tianxinCrossColor: '#FF0000', // 天心线颜色
+    } as FengShuiCompassConfig;
+
+    const merged = {
+        ...fallback,
+        ...(rawConfig || {}),
+        info: {
+            ...(fallback.info || {}),
+            ...((rawConfig && rawConfig.info) || {}),
+            id: cid,
+            name: String((rawConfig && rawConfig.info && rawConfig.info.name) || name || cid),
+        },
+        compassSize: {
+            ...(fallback.compassSize || {}),
+            ...((rawConfig && rawConfig.compassSize) || {}),
+        },
+        line: {
+            ...(fallback.line || {}),
+            ...((rawConfig && rawConfig.line) || {}),
+        },
+        scaclStyle: {
+            ...(fallback.scaclStyle || {}),
+            ...((rawConfig && rawConfig.scaclStyle) || {}),
+        },
+    } as FengShuiCompassConfig;
+
+    merged.data = toLayerArray(rawConfig?.data || fallback.data);
+    merged.rotate = 0;
+    merged.tianxinCrossWidth = clamp(Number(merged.tianxinCrossWidth || 2), 1, 8);
+    merged.tianxinCrossColor = String(merged.tianxinCrossColor || '#FF0000');
+    merged.tianxinCrossLengthRatio = clamp(
+        Number((rawConfig as any)?.tianxinCrossLengthRatio || 1 / 3),
+        0.1,
+        1,
+    );
+
+    return merged;
+}
+
+function resolveThemeNameByCid(cid: string): string {
+    const matched = DEFAULT_THEME_OPTIONS.find((item) => item.cid === cid);
+    return String(matched?.name || cid || DEFAULT_CID);
+}
+
+function createFallbackConfigByCid(cid: string): FengShuiCompassConfig {
+    const safeCid = String(cid || DEFAULT_CID).trim() || DEFAULT_CID;
+    const index = LOCAL_THEME_INDEX_BY_CID[safeCid] ?? 0;
+    const localTheme =
+        Array.isArray(localThemes) && localThemes[index]
+            ? deepClone(localThemes[index] as FengShuiCompassConfig)
+            : null;
+
+    return normalizeCompassConfig(localTheme, safeCid, resolveThemeNameByCid(safeCid));
+}
+
+function hasValidLonLat(position: CompassPosition): boolean {
+    return (
+        Number.isFinite(Number(position?.lng)) &&
+        Number.isFinite(Number(position?.lat)) &&
+        Number(position.lng) >= -180 &&
+        Number(position.lng) <= 180 &&
+        Number(position.lat) >= -90 &&
+        Number(position.lat) <= 90
+    );
+}
+
+export const useCompassStore = defineStore('compassStore', () => {
+    // ==================== 1. 基础显示状态 ====================
+    const enabled = ref(false);
+    const mode = ref<CompassMode>('vector');
+    const placementMode = ref(false);
+
+    const sensorEnabled = ref(false);
+    const sensorPermission = ref<SensorPermission>('unknown');
+
+    // 默认不设置有效位置，避免未授权时默认渲染/计算带来的性能开销
+    const position = ref<CompassPosition>({
+        lng: Number.NaN,
+        lat: Number.NaN,
+    });
+
+    const rotation = ref(0);
+    const physicalRadiusMeters = ref(1000);
+    const opacity = ref(0.9);
+    const minResolution = ref(99999);
+    const hudSizePx = ref(HUD_DEFAULT_SIZE);
+    const bgColor = ref('#000000'); // 渐变背景基色（黑色默认）
+
+    // ==================== 2. 交互状态 (🔴 新增) ====================
+    // 当前被点击选中的宫位信息
+    const selectedPalace = ref<SelectedPalace | null>(null);
+
+    // ==================== 3. 配置与元数据 ====================
+    const cid = ref(DEFAULT_CID);
+    const themeOptions = ref<CompassThemeOption[]>(deepClone(DEFAULT_THEME_OPTIONS));
+    const config = ref<FengShuiCompassConfig>(createFallbackConfigByCid(DEFAULT_CID));
+    const configRevision = ref(1);
+
+    const isConfigLoading = ref(false);
+    const configError = ref('');
+    const hasFetchedThemeCatalog = ref(false);
+    const hasFetchedLocalConfig = ref(false);
+
+    // ==================== 4. 计算属性 ====================
+    const hasValidPosition = computed(() => hasValidLonLat(position.value));
+    const vectorVisible = computed(() => enabled.value && mode.value === 'vector');
+    const hudVisible = computed(() => enabled.value && mode.value === 'hud');
+
+    const vectorRenderConfig = computed<FengShuiCompassConfig>(() => {
+        return {
+            ...deepClone(config.value),
+            rotate: normalizeAngle(rotation.value),
+            tianxinCrossLengthRatio: clamp(
+                Number(config.value?.tianxinCrossLengthRatio || 1 / 3),
+                0.1,
+                1,
+            ),
+        } as FengShuiCompassConfig;
+    });
+
+    const hudRenderConfig = computed<FengShuiCompassConfig>(() => {
+        const baseConfig = vectorRenderConfig.value;
+        const size = Math.round(clamp(hudSizePx.value, HUD_MIN_SIZE, HUD_MAX_SIZE));
+        // HUD 模式：罗盘固定在屏幕上，设备旋转时罗盘需反向旋转以保持北方指向不变
+        return createHudRenderConfig(baseConfig, size, -rotation.value);
+    });
+
+    const renderCacheToken = computed(
+        () => `${String(cid.value)}:${Number(configRevision.value || 0)}`,
+    );
+
+    // ==================== 5. Actions ====================
+
+    /**
+     * 🔴 新增：设置选中的宫位
+     */
+    function setSelectedPalace(next: SelectedPalace | null): void {
+        selectedPalace.value = next;
+    }
+
+    function bumpConfigRevision(): void {
+        configRevision.value += 1;
+    }
+
+    function setEnabled(next: boolean): void {
+        enabled.value = Boolean(next);
+        if (!enabled.value) {
+            placementMode.value = false;
+            sensorEnabled.value = false;
+            selectedPalace.value = null; // 关闭时清除选中
+        }
+    }
+
+    function setMode(nextMode: CompassMode): void {
+        mode.value = nextMode === 'hud' ? 'hud' : 'vector';
+        if (mode.value !== 'vector') {
+            placementMode.value = false;
+            selectedPalace.value = null; // 切换模式时清理
+        }
+    }
+
+    /**
+     * 🟡 修改：更新位置
+     * 当罗盘位置改变时，通常需要清除之前的选中状态，避免弹窗漂移[cite: 4]
+     */
+    function setPosition(lng: number, lat: number): void {
+        const nextPosition = {
+            lng: Number(lng),
+            lat: Number(lat),
+        };
+        if (!hasValidLonLat(nextPosition)) return;
+
+        position.value = nextPosition;
+        selectedPalace.value = null; // 🔴 关键：移动罗盘后清除高亮和弹窗
+    }
+
+    // --- 以下保持原样 ---
+
+    function setPlacementMode(next: boolean): void {
+        placementMode.value = Boolean(next);
+    }
+
+    function setSensorEnabled(next: boolean): void {
+        sensorEnabled.value = Boolean(next);
+    }
+
+    function setSensorPermission(next: SensorPermission): void {
+        sensorPermission.value = next;
+    }
+
+    function setRotation(nextRotation: number): void {
+        rotation.value = normalizeAngle(nextRotation);
+    }
+
+    function setPhysicalRadiusMeters(nextMeters: number): void {
+        const numeric = Number(nextMeters);
+        if (!Number.isFinite(numeric)) return;
+        physicalRadiusMeters.value = Math.abs(numeric);
+    }
+
+    function setOpacity(nextOpacity: number): void {
+        opacity.value = clamp(Number(nextOpacity), 0.1, 1);
+    }
+
+    function setMinResolution(nextResolution: number): void {
+        minResolution.value = clamp(Number(nextResolution), 0.01, 50000);
+    }
+
+    function setHudSize(nextSize: number): void {
+        hudSizePx.value = clamp(Number(nextSize), HUD_MIN_SIZE, HUD_MAX_SIZE);
+    }
+
+    function setBgColor(nextColor: string): void {
+        bgColor.value = String(nextColor || '#000000');
+    }
+
+    function replaceConfig(
+        nextConfig: Partial<FengShuiCompassConfig> | null | undefined,
+        nextCid?: string,
+        nextName?: string,
+    ): void {
+        const targetCid = String(nextCid || cid.value || DEFAULT_CID).trim() || DEFAULT_CID;
+        const normalized = normalizeCompassConfig(
+            nextConfig,
+            targetCid,
+            String(nextName || resolveThemeNameByCid(targetCid)),
+        );
+        config.value = normalized;
+        cid.value = targetCid;
+        bumpConfigRevision();
+        selectedPalace.value = null; // 配置更换后重置选中
+    }
+
+    async function loadThemeCatalog(): Promise<void> {
+        if (hasFetchedThemeCatalog.value) return;
+        hasFetchedThemeCatalog.value = true;
+        themeOptions.value = deepClone(DEFAULT_THEME_OPTIONS);
+    }
+
+    async function loadConfigByCid(nextCid: string): Promise<void> {
+        const safeCid = String(nextCid || '').trim() || DEFAULT_CID;
+        isConfigLoading.value = true;
+        configError.value = '';
+
+        try {
+            const fallbackConfig = createFallbackConfigByCid(safeCid);
+            replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
+            hasFetchedLocalConfig.value = true;
+        } catch (error: any) {
+            const fallbackConfig = createFallbackConfigByCid(safeCid);
+            replaceConfig(fallbackConfig, safeCid, resolveThemeNameByCid(safeCid));
+            configError.value = String(error?.message || `failed to load local cid: ${safeCid}`);
+        } finally {
+            isConfigLoading.value = false;
+        }
+    }
+
+    async function setCidAndLoad(nextCid: string): Promise<void> {
+        await loadConfigByCid(nextCid);
+    }
+
+    async function ensureConfigLoaded(): Promise<void> {
+        await loadThemeCatalog();
+        if (!hasFetchedLocalConfig.value) {
+            await loadConfigByCid(cid.value || DEFAULT_CID);
+        }
+    }
+
+    async function requestOrientationPermission(): Promise<boolean> {
+        if (typeof window === 'undefined' || typeof DeviceOrientationEvent === 'undefined') {
+            setSensorPermission('unsupported');
+            return false;
+        }
+
+        const requester = (DeviceOrientationEvent as any)?.requestPermission;
+        if (typeof requester !== 'function') {
+            setSensorPermission('granted');
+            return true;
+        }
+
+        try {
+            const result = await requester.call(DeviceOrientationEvent);
+            if (result === 'granted') {
+                setSensorPermission('granted');
+                return true;
+            }
+            setSensorPermission('denied');
+            return false;
+        } catch {
+            setSensorPermission('denied');
+            return false;
+        }
+    }
+
+    return {
+        enabled,
+        mode,
+        placementMode,
+        sensorEnabled,
+        sensorPermission,
+        position,
+        rotation,
+        physicalRadiusMeters,
+        opacity,
+        minResolution,
+        hudSizePx,
+        selectedPalace, // 🔴 暴露状态
+        cid,
+        themeOptions,
+        config,
+        configRevision,
+        isConfigLoading,
+        configError,
+        hasValidPosition,
+        vectorVisible,
+        hudVisible,
+        vectorRenderConfig,
+        hudRenderConfig,
+        renderCacheToken,
+        setEnabled,
+        setMode,
+        setPlacementMode,
+        setSensorEnabled,
+        setSensorPermission,
+        setPosition,
+        setRotation,
+        setPhysicalRadiusMeters,
+        setOpacity,
+        setMinResolution,
+        setHudSize,
+        bgColor,
+        setBgColor,
+        setSelectedPalace, // 🔴 暴露 Action
+        replaceConfig,
+        loadThemeCatalog,
+        loadConfigByCid,
+        setCidAndLoad,
+        ensureConfigLoaded,
+        requestOrientationPermission,
+    };
+});

@@ -11,9 +11,9 @@ import {
     getAuthToken,
     getOrCreateGuestDeviceId,
     readShareModeFromUrl,
-} from '../../services/auth';
+} from '@common/user/services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
-import { useMessage } from '../../composables/useMessage';
+import { useMessage } from '@common/shell/useMessage';
 import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL, BACKEND_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 
 const { error: showError } = useMessage();

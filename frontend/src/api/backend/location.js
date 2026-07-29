@@ -14,8 +14,8 @@
  */
 
 import backendAPI from './client';
-import { useMessage } from '../../composables/useMessage';
-import { wgs84ToGcj02, gcj02ToWgs84 } from '../../utils/coordTransform';
+import { useMessage } from '@common/shell/useMessage';
+import { wgs84ToGcj02, gcj02ToWgs84 } from '@common/data-import/crs/coordTransform';
 
 /**
  * 地理编码 - 地址→坐标（WGS-84）

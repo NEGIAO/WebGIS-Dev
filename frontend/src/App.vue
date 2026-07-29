@@ -46,8 +46,8 @@
 -->
 <script setup>
 import { RouterView } from 'vue-router';
-import GlobalLoading from './components/Shell/GlobalLoading.vue';
-import { useThemeStore } from './stores/useThemeStore';
+import GlobalLoading from '@common/shell/GlobalLoading.vue';
+import { useThemeStore } from '@common/app/stores/useThemeStore';
 
 // 初始化主题（从 localStorage 恢复）
 const themeStore = useThemeStore();
