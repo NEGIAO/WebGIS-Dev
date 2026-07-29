@@ -175,7 +175,6 @@ let componentUnmounted = false;
 
 const message = useMessage();
 const emit = defineEmits(['view-sync', 'ready', 'load-failed']);
-const emit = defineEmits(['view-sync', 'ready', 'load-failed']);
 
 /** 漫游模式操作提示面板显示状态 */
 const showPlayerGuide = ref(true);
@@ -707,8 +706,6 @@ async function bootCesium() {
     showLoading(t('loading.cesiumScene'), { timeoutMs: 0 });
     showLoading(t('loading.cesiumScene'), { timeoutMs: 0 });
     console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
-    let bootSucceeded = false;
-    let bootError = null;
     let bootSucceeded = false;
     let bootError = null;
     try {
