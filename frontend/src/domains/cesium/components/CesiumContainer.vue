@@ -704,7 +704,6 @@ async function bootCesium() {
     bootInProgress = true;
     componentUnmounted = false;
     showLoading(t('loading.cesiumScene'), { timeoutMs: 0 });
-    showLoading(t('loading.cesiumScene'), { timeoutMs: 0 });
     console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
     let bootSucceeded = false;
     let bootError = null;

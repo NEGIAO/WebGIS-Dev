@@ -1520,12 +1520,6 @@ onMounted(async () => {
                         @view-sync="handleViewSync"
                     />
                 </div>
-                <div
-                    v-if="isCesiumLoading && !isAccountPanelFullscreen"
-                    class="cesium-loading"
-                >
-                    {{ t('loading.cesiumOverlay') }}
-                </div>
             </div>
 
             <!-- 日志监控面板 -->
