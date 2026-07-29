@@ -58,7 +58,10 @@
                 v-show="activeTab === 'chat'"
                 class="toolbox-content"
             >
-                <ChatPanelContent @close-chat="$emit('close-chat')" />
+                <ChatPanelContent
+                    v-if="loadedTabs.has('chat')"
+                    @close-chat="$emit('close-chat')"
+                />
             </div>
 
             <!-- 模式 2: 工具箱 -->
@@ -67,6 +70,7 @@
                 class="toolbox-content"
             >
                 <ToolboxPanel
+                    v-if="loadedTabs.has('toolbox')"
                     :user-layers="userLayers"
                     :base-layers="baseLayers"
                     :overview="toolboxOverview"
@@ -109,6 +113,7 @@
                 class="toolbox-content"
             >
                 <BusPlannerPanel
+                    v-if="loadedTabs.has('bus')"
                     :token="tiandituToken"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
@@ -125,6 +130,7 @@
                 class="toolbox-content"
             >
                 <DrivingPlannerPanel
+                    v-if="loadedTabs.has('drive')"
                     :token="tiandituToken"
                     :start-map-point-pick="startBusPointPick"
                     :draw-drive-route-on-map="drawDriveRouteOnMap"
@@ -141,6 +147,7 @@
                 class="toolbox-content"
             >
                 <CompassControlPanel
+                    v-if="loadedTabs.has('compass')"
                     :get-user-location="getUserLocation"
                     @close="$emit('switch-tab', 'info')"
                 />
@@ -151,7 +158,7 @@
                 v-show="activeTab === 'weather'"
                 class="toolbox-content weather-tab-content"
             >
-                <WeatherChartPanel v-if="shouldLoadWeather" />
+                <WeatherChartPanel v-if="loadedTabs.has('weather') && shouldLoadWeather" />
             </div>
 
             <!-- 模式 7: 热点新闻 -->
@@ -273,15 +280,37 @@
  * - 支持折叠/展开
  * - 移动端自适应
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import ChatPanelContent from '@common/chat/components/ChatPanelContent.vue';
-import ToolboxPanel from '@common/layer-tree/components/TOCPanel.vue';
-import BusPlannerPanel from '@ol/routing/components/BusPlannerPanel.vue';
-import DrivingPlannerPanel from '@ol/routing/components/DrivingPlannerPanel.vue';
-import CompassControlPanel from '@common/compass/components/CompassControlPanel.vue';
-import WeatherChartPanel from '@common/weather/components/WeatherChartPanel.vue';
+import {
+    computed,
+    defineAsyncComponent,
+    onMounted,
+    onUnmounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@ol/services/runtimeMapTokens';
 import { useLocale } from '@common/app/useLocale';
+
+// Load non-default tabs on first use; keep them mounted afterward to preserve state.
+const ChatPanelContent = defineAsyncComponent(() =>
+    import('@common/chat/components/ChatPanelContent.vue'),
+);
+const ToolboxPanel = defineAsyncComponent(() =>
+    import('@common/layer-tree/components/TOCPanel.vue'),
+);
+const BusPlannerPanel = defineAsyncComponent(() =>
+    import('@ol/routing/components/BusPlannerPanel.vue'),
+);
+const DrivingPlannerPanel = defineAsyncComponent(() =>
+    import('@ol/routing/components/DrivingPlannerPanel.vue'),
+);
+const CompassControlPanel = defineAsyncComponent(() =>
+    import('@common/compass/components/CompassControlPanel.vue'),
+);
+const WeatherChartPanel = defineAsyncComponent(() =>
+    import('@common/weather/components/WeatherChartPanel.vue'),
+);
 
 const { t } = useLocale();
 
@@ -389,6 +418,15 @@ const props = defineProps({
         default: false,
     },
 });
+
+const loadedTabs = reactive(new Set());
+watch(
+    () => props.activeTab,
+    (tab) => {
+        if (tab && tab !== 'info') loadedTabs.add(tab);
+    },
+    { immediate: true },
+);
 
 const tiandituToken = ref(getRuntimeMapTokensSync().tiandituTk);
 

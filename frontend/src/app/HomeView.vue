@@ -80,9 +80,20 @@ const SidePanelLoading = {
     },
 };
 
-// 异步导入：SidePanel 组件 (优化：延迟加载图片资源)
+// Cache the SidePanel module during idle time without mounting the hidden panel.
+let sidePanelModulePromise = null;
+function loadSidePanelModule() {
+    if (!sidePanelModulePromise) {
+        sidePanelModulePromise = import('@common/shell/SidePanel.vue').catch((error) => {
+            sidePanelModulePromise = null;
+            throw error;
+        });
+    }
+    return sidePanelModulePromise;
+}
+
 const SidePanel = defineAsyncComponent({
-    loader: () => import('@common/shell/SidePanel.vue'),
+    loader: loadSidePanelModule,
     loadingComponent: SidePanelLoading,
     delay: 0,
     timeout: 15000,
@@ -133,7 +144,6 @@ const isMagicMode = ref(false);
 const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
-const sidePanelWarmupScheduled = ref(false);
 const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
 const toolboxTab = ref('layers');
 const userLayers = ref([]);
@@ -280,8 +290,6 @@ provide('setCustomBasemapByUrl', setCustomBasemapByUrl);
 const isMarkModeActive = computed(() => !!mapContainerRef.value?.isReverseGeocodePickMode?.value);
 provide('isMarkModeActive', isMarkModeActive);
 const mapCoreLoadingSettled = ref(false);
-let sidePanelWarmupTimer = null;
-let sidePanelWarmupIdleId = null;
 
 // ========== 访问记录延迟执行标志 ==========
 // 确保 visitLog 不与底图加载竞争网络资源
@@ -649,30 +657,16 @@ function settleMapCoreLoading(payload = {}) {
 function handleMapCoreReady() {
     settleMapCoreLoading();
 
-    // ========== Phase 1: 处理侧边面板预热 ==========
-    // 仅在尚未调度且未加载时，安排空闲预热
-    if (!sidePanelWarmupScheduled.value && !shouldLoadSidePanel.value) {
-        sidePanelWarmupScheduled.value = true;
-
-        const preloadSidePanel = () => {
-            if (!shouldLoadSidePanel.value) {
-                shouldLoadSidePanel.value = true;
-            }
-        };
-
-        const queuePreload = () => {
-            if (typeof window === 'undefined') return;
-            sidePanelWarmupTimer = window.setTimeout(preloadSidePanel, 900);
-        };
-
-        if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-            sidePanelWarmupIdleId = window.requestIdleCallback(queuePreload, { timeout: 2200 });
-        } else {
-            queuePreload();
-        }
+    // ========== 立即挂载 SidePanel（仅显示折叠开关） ==========
+    // 折叠开关需要在首页加载后立即可见，而不是等用户触发后才显示。
+    // 由于 isSidePanelCollapsed 默认为 true，面板本身保持折叠状态；
+    // 子面板（BusPlanner/DrivingPlanner/Compass/Weather）仍为 defineAsyncComponent，
+    // 只有用户点击对应 tab 时才实际加载，不影响首屏性能。
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
     }
 
-    // ========== Phase 2: 处理访问记录（非关键，延后到底图就绪后）==========
+    // ========== 处理访问记录（非关键，延后到底图就绪后） ==========
     // 关键改进：visitLog 不再与底图加载竞争
     // 原本在 HomeView.onMounted() 中立即执行，现在延后到这里
     if (!visitLogScheduled.value) {
@@ -1307,16 +1301,6 @@ function syncVisitPosCodeToUrl(encodedPos, geoPermission = 'unknown') {
  *  若地图从未就绪（用户提前离开），不应标记为初始化完成。 */
 onUnmounted(() => {
     if (typeof window === 'undefined') return;
-
-    if (sidePanelWarmupIdleId !== null && typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(sidePanelWarmupIdleId);
-        sidePanelWarmupIdleId = null;
-    }
-
-    if (sidePanelWarmupTimer !== null) {
-        window.clearTimeout(sidePanelWarmupTimer);
-        sidePanelWarmupTimer = null;
-    }
 
     // 注意：visitLog 可能在组件卸载后才执行
     // 这是可接受的，因为它是非关键任务，只是记录访问信息

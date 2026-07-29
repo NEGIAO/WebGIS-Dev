@@ -28,7 +28,7 @@
     />
 
     <ShallowWaterOverlay
-        v-if="cesiumReady"
+        v-if="cesiumReady && shallowWaterVisible"
         :visible="shallowWaterVisible"
         v-bind="shallowWaterParams"
     />
@@ -111,7 +111,15 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import {
+    computed,
+    defineAsyncComponent,
+    nextTick,
+    onMounted,
+    onUnmounted,
+    ref,
+    watch,
+} from 'vue';
 import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '@/api/backend';
 import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
 import { useMessage } from '@common/shell/useMessage';
@@ -122,7 +130,9 @@ import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
 import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from '@cesium-domain/modules/fluid-simulation/FluidSimulationPanel.vue';
-import ShallowWaterOverlay from '@cesium-domain/modules/shallow-water/ShallowWaterOverlay.vue';
+const ShallowWaterOverlay = defineAsyncComponent(() =>
+    import('@cesium-domain/modules/shallow-water/ShallowWaterOverlay.vue'),
+);
 
 // cesium-navigation 导航控件样式（含高对比度深色主题）
 import '@cesium-domain/vendors/cesium-navigation/styles/cesium-navigation.css';
