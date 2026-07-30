@@ -7,7 +7,15 @@ import globals from 'globals';
 export default [
     // 1. 全局忽略配置
     {
-        ignores: ['dist/**', 'node_modules/**', 'public/**', 'docs/**'],
+        ignores: [
+            'dist/**',
+            'node_modules/**',
+            'public/**',
+            'docs/**',
+            // 第三方/预构建源码由上游维护，不纳入项目源码自动修复。
+            'src/domains/cesium/vendors/**',
+            'src/domains/cesium/modules/wind/index.mjs',
+        ],
     },
 
     // 2. JS 基础推荐
@@ -36,6 +44,7 @@ export default [
             ecmaVersion: 'latest',
             sourceType: 'module',
             globals: {
+                ...globals.browser,
                 __APP_VERSION__: 'readonly', // Vite define 注入，构建时从 README.md 自动提取
             },
         },

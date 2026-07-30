@@ -8,7 +8,7 @@
  * - 新闻侧边栏展示
  * - 鼠标特效
  */
-import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUnmounted, h, nextTick, watch } from 'vue';
+import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '@common/shell/useMessage';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, useMapViewUrlState } from '@ol/url-state/useMapViewUrlState';
@@ -68,17 +68,27 @@ const CesiumContainer = ref(null);
 // CesiumContainer 实例引用：用于在引擎切换时读取 activeBasemap 等状态
 const cesiumContainerRef = ref(null);
 
-const SidePanelLoading = {
-    name: 'SidePanelLoading',
-    setup() {
-        const { t: tLoad } = useLocale();
-        return () =>
-            h('div', { class: 'sidepanel-loading-state' }, [
-                h('div', { class: 'sidepanel-loading-spinner' }),
-                h('span', { class: 'sidepanel-loading-text' }, tLoad('shell.loadingPanel')),
-            ]);
-    },
-};
+/**
+ * 动态导入 CesiumContainer，带重试机制处理 Vite 瞬态模块获取失败。
+ * "Failed to fetch dynamically imported module" 通常是 dev 缓存瞬态错误，
+ * 强制刷新缓存后重试即可成功。
+ */
+async function importCesiumContainerWithRetry(maxRetries = 2) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await import('@cesium-domain/components/CesiumContainer.vue');
+        } catch (error) {
+            const text = String(error?.message || error || '');
+            const isTransientModuleFetchFail = text.includes('Failed to fetch dynamically imported module');
+            // 最后一次重试或非瞬态错误：不再重试
+            if (attempt >= maxRetries || !isTransientModuleFetchFail) {
+                throw error;
+            }
+            // 强制 Vite 刷新缓存：重新请求模块（?v= 破坏浏览器侧缓存）
+            console.warn(`[CesiumContainer] 动态导入瞬态失败，第 ${attempt + 1} 次重试...`);
+        }
+    }
+}
 
 // Cache the SidePanel module during idle time without mounting the hidden panel.
 let sidePanelModulePromise = null;
@@ -94,7 +104,6 @@ function loadSidePanelModule() {
 
 const SidePanel = defineAsyncComponent({
     loader: loadSidePanelModule,
-    loadingComponent: SidePanelLoading,
     delay: 0,
     timeout: 15000,
     onError(error, retry, fail, attempts) {
@@ -757,7 +766,7 @@ async function ensureCesiumLoaded() {
 
     _cesiumLoadPromise = (async () => {
         try {
-            const module = await import('@cesium-domain/components/CesiumContainer.vue');
+            const module = await importCesiumContainerWithRetry();
             CesiumContainer.value = module.default;
             isCesiumLoaded.value = true;
             return true;
@@ -1443,14 +1452,6 @@ onMounted(async () => {
                             @view-sync="handleViewSync"
                         />
                     </template>
-                    <template #fallback>
-                        <div
-                            v-show="!is3DMode && !isAccountPanelFullscreen"
-                            class="map-runtime-loading"
-                        >
-                            {{ t('home.mapCoreLoading') }}
-                        </div>
-                    </template>
                 </Suspense>
 
                 <transition name="query-panel-fade">
@@ -1697,21 +1698,6 @@ onMounted(async () => {
     /* Important for flex items to shrink */
 }
 
-.map-runtime-loading {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-brand-light);
-    background: color-mix(in srgb, var(--bg-brand-light) 90%, transparent);
-    color: var(--brand-accent-dark);
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-}
-
 /* 用户中心面板 (由 HomeView 配置覆盖位置) */
 :deep(.home-account-panel) {
     position: absolute !important;
@@ -1784,19 +1770,6 @@ onMounted(async () => {
 :deep(.ol-zoom) {
     top: 100px !important;
     left: 20px !important;
-}
-
-.cesium-loading {
-    position: absolute;
-    inset: 0;
-    z-index: 20;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.35);
-    color: #fff;
-    font-size: 16px;
-    font-weight: 600;
 }
 
 /* 面板主体：DrawPanel 标准风格 */
@@ -2057,32 +2030,6 @@ onMounted(async () => {
 .panel-placeholder:hover .placeholder-text {
     color: #096dd9;
     text-shadow: 0 2px 4px rgba(24, 144, 255, 0.2);
-}
-
-.sidepanel-loading-state {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: linear-gradient(135deg, rgba(24, 144, 255, 0.08) 0%, rgba(24, 144, 255, 0.18) 100%);
-}
-
-.sidepanel-loading-spinner {
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    border: 2px solid rgba(24, 144, 255, 0.25);
-    border-top-color: var(--info);
-    animation: sidepanel-spin 0.8s linear infinite;
-}
-
-.sidepanel-loading-text {
-    font-size: 12px;
-    color: #096dd9;
-    font-weight: 600;
 }
 
 @keyframes sidepanel-spin {

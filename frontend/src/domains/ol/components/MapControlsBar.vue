@@ -361,7 +361,7 @@ const copyCurrentCoordinate = async () => {
 
         try {
             document.execCommand('copy');
-        } catch (err) {
+        } catch {
             message.error(t('mapControls.copyFailed'));
         }
 
