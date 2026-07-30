@@ -540,6 +540,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useGisLoader } from '@common/data-import/useGisLoader';
+import { useGisDropZone } from '@common/data-import/useGisDropZone';
 import { useSharedResourceLoader } from '@common/data-import/useSharedResourceLoader';
 import { usePositionCodeTool } from '@ol/utils/usePositionCodeTool';
 import {
@@ -617,7 +618,6 @@ const attrStore = useAttrStore();
 const cesiumLayersStore = useCesiumLayersStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
-const isUploadDragging = ref(false);
 const lastScanAttempted = ref(false);
 const coordInputLon = ref('');
 const coordInputLat = ref('');
@@ -642,6 +642,15 @@ const propertiesDialogLayer = ref(null);
 const MB = 1024 * 1024;
 const MAX_FILE_SIZE_MB = 200;
 const tiandituTk = ref(getRuntimeMapTokensSync().tiandituTk);
+const {
+    isDragging: isUploadDragging,
+    handleDragEnter: handleUploadDragEnter,
+    handleDragOver: handleUploadDragOver,
+    handleDragLeave: handleUploadDragLeave,
+    handleDrop: handleUploadDrop,
+} = useGisDropZone({
+    onUpload: (payload) => emit('upload-data', payload),
+});
 
 function normalizeTab(value) {
     const normalized = String(value || '').trim();
@@ -1273,40 +1282,6 @@ function handleDirectoryUpload(event) {
     emit('upload-data', gisLoader.createUploadPayloadFromFolder(files));
 
     event.target.value = '';
-}
-
-function handleUploadDragEnter() {
-    isUploadDragging.value = true;
-}
-
-function handleUploadDragOver() {
-    isUploadDragging.value = true;
-}
-
-function handleUploadDragLeave(event) {
-    if (event.currentTarget === event.target) {
-        isUploadDragging.value = false;
-    }
-}
-
-function handleUploadDrop(event) {
-    isUploadDragging.value = false;
-    const items = Array.from(event.dataTransfer?.items || []);
-
-    const entryItems = items
-        .map((item) =>
-            typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null,
-        )
-        .filter(Boolean);
-
-    if (entryItems.length) {
-        emit('upload-data', gisLoader.createUploadPayloadFromEntries(entryItems));
-        return;
-    }
-
-    const files = Array.from(event.dataTransfer?.files || []);
-    if (!files.length) return;
-    emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
 }
 
 function onDragStart(layerId) {

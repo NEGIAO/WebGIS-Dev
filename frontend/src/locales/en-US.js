@@ -410,6 +410,7 @@ export default {
         title: 'Layer Panel', uploadLayer: 'Upload Layer',
         uploadFile: 'Upload File', uploadFolder: 'Upload Folder',
         uploadTip: 'Supports single file, multiple files, folder upload, or drag & drop',
+        dropToMap: 'Release to import into the 2D map',
         fileSizeLimit: '❗ File size must not exceed {size} MB❗',
         dataFormats: '🔔 Formats: GeoJSON, KML, KMZ, TIF, SHP',
         importStatus: 'Import: {current}/{total}',

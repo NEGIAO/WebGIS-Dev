@@ -6,6 +6,19 @@
 
 ## 版本记录
 
+### V3.5.1 (2026-07-30) — GIS 拖拽导入 Composable 提取 + 2D 地图整图拖拽覆盖层
+
+> 🖱️ **交互增强**：将 TOCPanel 内联拖拽逻辑提取为独立 `useGisDropZone` composable，并在 MapContainer 新增整图拖拽覆盖层，用户拖拽文件到 2D 地图任意位置均可触发导入。
+
+- 📦 **新增 `gisUploadPayload.ts`**：从 `useGisLoader.ts` 提取 `createUploadPayloadsFromFiles`、`createUploadPayloadFromFolder`、`createUploadPayloadFromEntries` 三个载荷构建函数 + `GisDispatchInput` 类型，成为独立 SSOT
+- 🆕 **新增 `useGisDropZone.ts`**：通用 GIS 文件拖拽 composable，封装 `isDragging` 状态 + 四事件处理器（dragEnter/Over/Leave/Drop）+ `hasFileItems` 三重检测（items.kind / types / files.length），避免非文件拖拽误触发
+- 🗺️ **MapContainer 覆盖层**：全屏 overlay（`backdrop-filter` 模糊 + 虚线边框 + SVG 上传图标 + i18n 提示），`gis-upload-dragging` class 触发时 `filter: saturate(0.8)` 视觉反馈
+- 🧹 **TOCPanel 精简**：删除 ~40 行内联拖拽处理函数，改用 `useGisDropZone` composable，净减 ~30 行
+- 🔗 **HomeView 事件链路**：`@upload-data="handleUploadData"` 同时绑定到 MapContainer 和 CesiumToolPanel
+- 🌐 **i18n 新增**：`layer.dropToMap`（中："释放文件，导入到二维地图" / 英："Release to import into the 2D map"）
+- 📄 **新增 Demo**：`Docs/Demo/submergeAnalysis.html`（淹没分析独立演示页，Vue 3 + Cesium CDN，532 行）
+- 📋 **日志**：详见[日志](../LLM_record/26-07/2026-07-30/2026-07-30-gis-dropzone-composable.md)
+
 ### V3.5.0 (2026-07-29) — 前端 domains 架构重构完成（Phase 1~9）
 
 > 🏗️ **架构级大版本**：前端 `src/` 从扁平 `components/`、`composables/`、`stores/`、`services/`、`utils/`、`constants/` 结构迁移至领域驱动三域架构（`domains/ol/`、`domains/cesium/`、`domains/common/`）。

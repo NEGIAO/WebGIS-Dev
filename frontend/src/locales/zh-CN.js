@@ -506,6 +506,7 @@ export default {
         uploadFile: '上传文件',
         uploadFolder: '上传文件夹',
         uploadTip: '支持单文件、多文件、文件夹上传，也可拖拽到此区域',
+        dropToMap: '释放文件，导入到二维地图',
         fileSizeLimit: '❗ 文件大小不超过 {size} MB❗',
         dataFormats: '🔔数据格式：GeoJSON、KML、KMZ、TIF、SHP',
         importStatus: '导入状态：{current}/{total}',

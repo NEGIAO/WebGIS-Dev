@@ -337,6 +337,7 @@ frontend/src/
 │   │   │   ├── decompressor.ts  # 通用解压器
 │   │   │   ├── deferredGisAssets.js  # 延迟 GIS 资源
 │   │   │   ├── deferredGisWarmupLauncher.js  # GIS 预热启动
+│   │   │   ├── gisUploadPayload.ts  # GIS 载荷构建函数 SSOT（createUploadPayloadsFromFiles/Folder/Entries）
 │   │   │   ├── index.js  # 路由与守卫
 │   │   │   ├── loadJsZip.ts  # JSZip 动态加载
 │   │   │   ├── mapRuntimeDeps.js  # OL 运行时依赖
@@ -344,6 +345,7 @@ frontend/src/
 │   │   │   ├── shpPacketBuilder.js  # SHP 包构建
 │   │   │   ├── textDecoder.js  # 文本解码
 │   │   │   ├── tifUtils.js  # TIF 工具
+│   │   │   ├── useGisDropZone.ts  # 通用 GIS 文件拖拽导入 composable（isDragging + 四事件处理器）
 │   │   │   ├── useGisLoader.ts
 │   │   │   ├── useKmzLoader.js
 │   │   │   ├── useSharedResourceLoader.ts

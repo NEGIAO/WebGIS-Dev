@@ -1438,6 +1438,7 @@ onMounted(async () => {
                             @user-layers-change="handleUserLayersChange"
                             @graphics-overview="handleGraphicsOverview"
                             @upload-progress-change="handleUploadProgressChange"
+                            @upload-data="handleUploadData"
                             @base-layers-change="handleBaseLayersChange"
                             @view-sync="handleViewSync"
                         />

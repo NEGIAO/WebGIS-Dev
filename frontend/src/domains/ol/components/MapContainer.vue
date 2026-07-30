@@ -9,13 +9,78 @@
                 compassStore.mode === 'vector' &&
                 compassStore.placementMode,
             'reverse-geocode-pick-mode': isReverseGeocodePickMode,
+            'gis-upload-dragging': isMapUploadDragging,
         }"
+        @dragenter.prevent="handleMapUploadDragEnter"
+        @dragover.prevent="handleMapUploadDragOver"
+        @dragleave.prevent="handleMapUploadDragLeave"
+        @drop.prevent="handleMapUploadDrop"
     >
         <div
             id="map"
             ref="mapRef"
         ></div>
+        <!-- 2D map GIS drag-and-drop import overlay -->
+        <div
+            v-if="isMapUploadDragging"
+            class="gis-upload-overlay"
+            aria-hidden="true"
+        >
+            <div class="gis-upload-shell">
+                <!-- 科幻 HUD 交互圈/图标区 -->
+                <div class="hud-loader">
+                    <svg
+                        class="sci-fi-ring"
+                        viewBox="0 0 100 100"
+                    >
+                        <circle
+                            class="ring-outer"
+                            cx="50"
+                            cy="50"
+                            r="45"
+                        ></circle>
+                        <circle
+                            class="ring-middle"
+                            cx="50"
+                            cy="50"
+                            r="36"
+                        ></circle>
+                    </svg>
 
+                    <!-- 雷达扫光与核心发光 -->
+                    <div class="radar-sweep"></div>
+                    <div class="core-glow"></div>
+
+                    <!-- 上传箭头 Icon -->
+                    <svg
+                        class="gis-upload-overlay-icon"
+                        viewBox="0 0 24 24"
+                        width="30"
+                        height="30"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M12 16V4"></path>
+                        <path d="m7 9 5-5 5 5"></path>
+                        <path d="M20 16.5a3.5 3.5 0 0 1-3.5 3.5h-9A3.5 3.5 0 0 1 4 16.5"></path>
+                    </svg>
+                </div>
+
+                <!-- HUD 切角文字卡片容器 -->
+                <div class="hud-text-container">
+                    <div class="loading-title">
+                        <span class="glitch">{{ t('layer.dropToMap') }}</span>
+                    </div>
+                    <div class="loading-subtitle">
+                        <span class="hud-tag">FORMATS</span>
+                        <span>{{ t('layer.dataFormats') }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- Map Swipe Controller -->
         <MapSwipeController
             v-if="layerStore.swipeConfig.enabled"
@@ -160,6 +225,8 @@ import {
     createAutoTileSourceFromUrl,
 } from '@ol/tile-source/index';
 import { useMessage } from '@common/shell/useMessage';
+import { useLocale } from '@common/app/useLocale';
+import { useGisDropZone } from '@common/data-import/useGisDropZone';
 import { useUserLocation } from '@common/map-view/useUserLocation';
 import { useManagedLayerRegistry } from '@ol/layer/composables/useManagedLayerRegistry';
 import { useMapState } from '@ol/composables/useMapState';
@@ -212,6 +279,7 @@ import FengShuiCompassSvg from '@common/compass/svg/feng-shui-compass-svg.vue';
 import PalaceExplanationPanel from '@common/compass/components/PalaceExplanationPanel.vue';
 
 const message = useMessage();
+const { t } = useLocale();
 const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
 const compassStore = useCompassStore();
@@ -313,7 +381,7 @@ const layerList = ref(
     })),
 );
 const layerInstances = {}; // ⚠️ 非响应式共享可变状态：存储所有底图层实例 (TileLayer/VectorTileLayer)
-                           // 被 30+ composable 直接读写，通过 emit 手动同步外部状态，刻意不使用 reactive 以避免深层响应式追踪的性能开销
+// 被 30+ composable 直接读写，通过 emit 手动同步外部状态，刻意不使用 reactive 以避免深层响应式追踪的性能开销
 
 // ========== 运行时地图 Token 池（via composable：useRuntimeMapTokenPool） ==========
 // monitorLayerTimeout / switchLayerById / emitBaseLayersChangeBatched 声明晚于此处，
@@ -437,10 +505,21 @@ const emit = defineEmits([
     'graphics-overview',
     'base-layers-change',
     'upload-progress-change',
+    'upload-data',
     'map-core-ready',
     'map-core-failed',
     'view-sync',
 ]);
+
+const {
+    isDragging: isMapUploadDragging,
+    handleDragEnter: handleMapUploadDragEnter,
+    handleDragOver: handleMapUploadDragOver,
+    handleDragLeave: handleMapUploadDragLeave,
+    handleDrop: handleMapUploadDrop,
+} = useGisDropZone({
+    onUpload: (payload) => emit('upload-data', payload),
+});
 
 const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
     mapInstance,
@@ -455,7 +534,7 @@ const { detectIPLocale, getCurrentLocation, zoomToUser } = useUserLocation({
 const isAttributeQueryEnabled = ref(true);
 const isReverseGeocodePickMode = ref(false);
 const userDataLayers = []; // ⚠️ 非响应式共享可变状态：用户上传/绘制的图层记录数组
-                           // 被多个 composable 直接修改（push/splice/filter），通过 emitUserLayersChange() 手动同步
+// 被多个 composable 直接修改（push/splice/filter），通过 emitUserLayersChange() 手动同步
 let drawLayerInstance = null;
 const tooltipRef = {
     helpTooltipEl: null,
@@ -1932,6 +2011,255 @@ defineExpose({
 #map {
     width: 100%;
     height: 100%;
+}
+
+/* ==========================================================================
+   GIS Map Drag-and-Drop Overlay - HUD Sci-Fi Theme
+   ========================================================================== */
+
+.gis-upload-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-modal, 1000);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+
+    /* 匹配 Loading 组件的径向渐变背景 */
+    background: radial-gradient(circle at center,
+            rgba(10, 20, 15, 0.75) 0%,
+            rgba(10, 20, 15, 0.5) 40%,
+            transparent 85%);
+
+    /* 科技感觉的虚线边框 */
+    border: 1.5px dashed rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.5);
+    box-shadow: inset 0 0 60px rgba(var(--brand-accent-light-rgb, 16, 185, 129), 0.12);
+
+    /* 引入渐显与放大的过渡效果 */
+    animation: overlay-fade-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.gis-upload-shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.6));
+}
+
+/* --- HUD Loader / Icon 容器 --- */
+.hud-loader {
+    position: relative;
+    width: 96px;
+    height: 96px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    filter: drop-shadow(0 0 15px rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.4));
+}
+
+/* SVG 科技圆环 */
+.sci-fi-ring {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: visible;
+}
+
+.ring-outer {
+    fill: none;
+    stroke: rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.4);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4 12 4;
+    transform-origin: center;
+    animation: rotate-clockwise 15s linear infinite;
+}
+
+.ring-middle {
+    fill: none;
+    stroke: var(--brand-accent-light, #34d399);
+    stroke-width: 2;
+    stroke-dasharray: 40 20 60 20;
+    transform-origin: center;
+    animation: rotate-counter-clockwise 4s cubic-bezier(0.68, -0.15, 0.265, 1.15) infinite;
+    filter: drop-shadow(0 0 8px var(--brand-accent-light, #34d399));
+}
+
+/* 雷达扫光与核心光晕 */
+.radar-sweep {
+    position: absolute;
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 70%, rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.5) 100%);
+    animation: rotate-clockwise 1.8s linear infinite;
+    mask-image: radial-gradient(circle, transparent 40%, black 100%);
+    -webkit-mask-image: radial-gradient(circle, transparent 40%, black 100%);
+}
+
+.core-glow {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--brand-accent-light, #34d399);
+    filter: blur(10px);
+    animation: core-pulse 2s ease-in-out infinite;
+}
+
+/* 居中的 Icon */
+.gis-upload-overlay-icon {
+    position: relative;
+    z-index: 2;
+    color: var(--brand-accent-light, #34d399);
+    filter: drop-shadow(0 0 6px var(--brand-accent-light, #34d399));
+    animation: icon-float 2s ease-in-out infinite alternate;
+}
+
+/* --- HUD 切角卡片容器 --- */
+.hud-text-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(14, 28, 20, 0.75);
+    padding: 16px 32px;
+    border-radius: 4px;
+    border-left: 2px solid var(--brand-accent-light, #34d399);
+    border-right: 2px solid rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.3);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.5),
+        inset 0 0 15px rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.15);
+    position: relative;
+    overflow: hidden;
+    clip-path: polygon(10px 0,
+            100% 0,
+            100% calc(100% - 10px),
+            calc(100% - 10px) 100%,
+            0 100%,
+            0 10px);
+}
+
+/* 顶部扫光线动画 */
+.hud-text-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--brand-accent-light, #34d399), transparent);
+    animation: scan-line 2s linear infinite;
+}
+
+.loading-title {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.8);
+    position: relative;
+}
+
+.loading-subtitle {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #a0ddb6;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 1px;
+    opacity: 0.9;
+}
+
+.hud-tag {
+    font-size: 10px;
+    padding: 1px 4px;
+    background: rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.2);
+    border: 1px solid rgba(var(--brand-accent-light-rgb, 52, 211, 153), 0.4);
+    color: var(--brand-accent-light, #34d399);
+    border-radius: 2px;
+}
+
+/* --- 底图互动变暗 --- */
+.map-container.gis-upload-dragging #map {
+    filter: brightness(0.6) saturate(0.8);
+    transition: filter 0.3s ease;
+}
+
+/* --- Keyframes 关键帧 --- */
+
+@keyframes rotate-clockwise {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes rotate-counter-clockwise {
+    0% {
+        transform: rotate(360deg);
+    }
+
+    100% {
+        transform: rotate(0deg);
+    }
+}
+
+@keyframes core-pulse {
+
+    0%,
+    100% {
+        opacity: 0.4;
+        transform: scale(0.8);
+    }
+
+    50% {
+        opacity: 0.8;
+        transform: scale(1.4);
+    }
+}
+
+@keyframes scan-line {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes icon-float {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(-4px);
+    }
+}
+
+@keyframes overlay-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .compass-hud-wrapper {

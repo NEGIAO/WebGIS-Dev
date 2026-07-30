@@ -14,13 +14,12 @@ import {
     UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '@common/map-view/geo/index';
 import { useMessage } from '@common/shell/useMessage';
-
-type GisDispatchInput = {
-    resources?: Array<File | Blob | any>;
-    content?: unknown;
-    type?: string;
-    name?: string;
-};
+import {
+    createUploadPayloadFromEntries,
+    createUploadPayloadFromFolder,
+    createUploadPayloadsFromFiles,
+    type GisDispatchInput,
+} from '@common/data-import/gisUploadPayload';
 
 type PacketSummary = {
     detectedDatasets: number;
@@ -159,35 +158,6 @@ async function buildShpArchivePayload(
         content: zipped,
         type: 'zip',
         name: `${group.key}.zip`,
-    };
-}
-
-function createUploadPayloadsFromFiles(files: File[]): GisDispatchInput {
-    const normalizedFiles = (files || []).filter(Boolean);
-    const firstName = normalizedFiles[0]
-        ? (normalizedFiles[0] as any).webkitRelativePath || normalizedFiles[0].name
-        : '多文件上传';
-
-    return {
-        resources: normalizedFiles,
-        type: 'directory',
-        name: firstName || '多文件上传',
-    };
-}
-
-function createUploadPayloadFromFolder(files: File[]): GisDispatchInput {
-    return {
-        resources: files || [],
-        type: 'directory',
-        name: files?.[0]?.webkitRelativePath?.split('/')?.[0] || '文件夹上传',
-    };
-}
-
-function createUploadPayloadFromEntries(entries: any[]): GisDispatchInput {
-    return {
-        resources: entries || [],
-        type: 'directory',
-        name: '拖拽导入',
     };
 }
 

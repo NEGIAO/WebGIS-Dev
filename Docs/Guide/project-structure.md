@@ -60,7 +60,7 @@ Docs/
 │
 ├── Architecture/                      # 架构设计文档（八大功能 + 洪水模拟 + 三层配置架构 configuration-three-tier.md）
 │
-├── Demo/                              # 前端静态 Demo 演示页面（16 个独立页面）
+├── Demo/                              # 前端静态 Demo 演示页面（18 个独立页面）
 │   ├── 2dWindField.html               # 2D 风场可视化演示
 │   ├── 3dHeatMap.html                 # 3D 热力图演示
 │   ├── amapRectify.html               # 高德底图纠偏演示
@@ -75,6 +75,8 @@ Docs/
 │   ├── nearGroundBox.html             # 近地面盒体效果演示
 │   ├── odFlyLine.html                 # OD 飞线效果演示
 │   ├── slopeAnaysis.html              # 坡度/坡向分析演示
+│   ├── submergeAnalysis.html          # 淹没分析演示（Vue 3 + Cesium CDN）
+│   ├── underwater-depth-zones.html    # 水下深度区演示
 │   ├── visibilityAnalysis.html        # 通视/可视域分析演示
 │   └── volume_analysis.html           # 体积/方量分析演示
 │
