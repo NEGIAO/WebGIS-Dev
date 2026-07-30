@@ -1,0 +1,28 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 如果 frontend 目录下有 Node 项目，这里会进行检查构建
+      - name: Install & Build Frontend
+        run: |
+          if [ -d "frontend" ]; then
+            cd frontend
+            npm ci || npm install
+            npm run build --if-present
+          fi
