@@ -21,7 +21,7 @@ function parseEnvFile(filePath) {
   const env = {};
   if (!fs.existsSync(filePath)) return env;
   const content = fs.readFileSync(filePath, 'utf-8');
-  for (const rawLine of content.splitlines()) {
+  for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith('#') || !line.includes('=')) continue;
     const eqIdx = line.indexOf('=');
