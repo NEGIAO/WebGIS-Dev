@@ -6,29 +6,50 @@
 
 ---
 
-## 三层模型（必须遵守）
+## 双 env 文件架构（L1 不涉密）
 
-| 层 | 位置 | 放什么 | 安全等级 |
-|----|------|--------|----------|
-| **L1** | 根目录 tracked `.env`（已提交非涉密默认）+ `.env.example`（全集目录） | 不涉密/低密常量、公开 URL、前端 `VITE_*`、公开服务端点/超时 | 最低 |
-| **L2** | 管理员面板 + 数据库 | 常变运营项：地图 token、Agent/LLM Key 与参数、底图、公告 | 较高 |
-| **L3** | Hugging Face Space **Secrets** / 系统环境变量 | 绝密：管理员密码、OAuth secret、SMTP 密码、Supabase Key、监控日志令牌 | 最高 |
+| 文件 | 用途 | git 状态 | 读取时机 | `APP_ENV` | 典型值 |
+|------|------|----------|----------|-----------|--------|
+| **`.env`** | 部署环境（生产基线） | **git 追踪** | `npm run build` + 线上部署 | `production` | 线上 URL（HF Space / GitHub Pages） |
+| **`.env.local`** | 本地开发环境 | **git 追踪** | `npm run dev` + 本地后端启动 | `development` | localhost |
 
-**根目录 `.env` = 已提交 L1 非涉密默认配置**（clone 后即可启动并按部署环境改 URL/端点）。  
-**根目录 `.env.example` = L1+L2+L3 的全集 key 目录 / registry**（所有 key 都出现并带注释）。  
-**已提交文件不得包含 L2/L3 真值。**
-
-### 前端不能读绝密
-
-- 浏览器只使用 `VITE_*` 公开项，或后端 `/api/runtime-config/*` 下发的公开数据。  
-- 禁止 `VITE_SUPER_USER`、`VITE_*_SECRET`、`VITE_TIANDITU_TK` 等。
+**核心规则**：
+- `.env` = 部署环境配置（git 追踪），Vite 在 `npm run build` 时读取，后端在线上部署时读取
+- `.env.local` = 本地开发环境配置（git 追踪），Vite 在 `npm run dev` 时读取，后端在本地开发时读取
+- 后端加载顺序：`.env`（始终）→ `.env.local`（始终存在，本地覆盖生产值）→ `backend/.env`（容器兼容）
+- 前端通过 `selectiveEnvPlugin`（`vite.config.js`）实现按 mode 二选一：production 读 `.env`，development 读 `.env.local`
 
 ### 后端读取
 
-- 统一由 `backend/config` 包加载（**已落地**，V3.4.6）：`catalog.py` 登记全集，`load.py` 提供 `get_settings()` 快照与 `get_str/get_int/get_float/get_bool`，`runtime.py` 提供 L2（system_config）覆盖读取，`public.py` 生成前端安全公开配置。  
-- 业务代码禁止直接 `os.getenv`（仅 `backend/config` 内部允许），CR 时以 `grep os.getenv backend --exclude-dir=config` 为门禁。  
-- 加载顺序：系统环境变量（HF Secrets/Docker 注入，优先） > 根 `.env` > `backend/.env`（兼容）。  
+- 统一由 `backend/config` 包加载：`catalog.py` 登记全集，`load.py` 提供 `get_settings()` 快照与 `get_str/get_int/get_float/get_bool`，`runtime.py` 提供 L2（system_config）覆盖读取，`public.py` 生成前端安全公开配置。
+- 业务代码禁止直接 `os.getenv`（仅 `backend/config` 内部允许），CR 时以 `grep os.getenv backend --exclude-dir=config` 为门禁。
+- 加载顺序：系统环境变量（HF Secrets/Docker 注入，优先） > 根 `.env` > 根 `.env.local` > `backend/.env`（兼容）。
 - 生产 L3 只从环境变量注入（HF Secrets）；启动日志输出脱敏配置摘要与 L3 配置状态。
+- 后端 URL 推导（`BACKEND_PUBLIC_URL` / `FRONTEND_PUBLIC_URL` 留空时）：
+  - `APP_ENV=production` → `https://negiao-webgis.hf.space` / `https://negiao.github.io/WebGIS-Dev`
+  - `APP_ENV=development` → `http://localhost:7860` / `http://localhost:5173`
+
+---
+
+## 三层安全模型（L1 / L2 / L3）
+
+> 所有配置 key 按**安全等级**分层存储，不同层有不同的存储位置、读取方式和可见性约束。
+
+| 层级 | 名称 | 存储位置 | 典型内容 | 谁改 | 可见性约束 |
+|------|------|----------|----------|------|------------|
+| **L1** | 公开常量 | 根 `.env`（部署）+ 根 `.env.local`（本地），均 git 追踪 | URL、端口、超时、`VITE_*` 前端变量、非密默认值 | 开发者 / 部署者 | 完全公开，可进 git，不涉密 |
+| **L2** | 运营密钥 | SQLite（`api_keys` 表 / `system_config` 表） | 天地图 TK、Cesium Ion Token、Agent 主密钥、高德 Key、模型/配额/提示词参数、默认底图、公告 | 运营（登录 `admin` → 用户中心） | 不进 git、不进 HF Secrets；Admin 面板可读写；前端仅接收非密功能布尔 |
+| **L3** | 平台绝密 | HF Space **Secrets**（生产环境变量，本地不提交） | `SUPER_USER`、OAuth Client Secret、`SMTP_PASSWORD`、Supabase Key、`LOG` 监控令牌 | 部署者（仅平台侧） | **严禁进 git / DB / 前端**；Admin 面板只显示「是否已配置」布尔，不回显明文 |
+
+**核心安全规则**：
+
+1. **L1 可落 git**：`.env` 和 `.env.local` 都是 L1 不涉密，全部追踪提交；clone 即可用，无需额外模板复制。
+2. **L2 走 DB 不走 env**：运营密钥（地图 token、Agent Key 等）存储在 SQLite，通过 Admin 面板动态管理，旧 env 兼容兜底但**不再新增 HF Secrets**。
+3. **L3 只进平台 Secrets**：绝密凭证只能以 HF Space Secrets（或生产环境变量）注入，本地开发不提交任何 L3 真值；生产缺 L3 时快速失败 + 精确报错。
+4. **前端永不含 L3**：Vite 只注入 `VITE_` 前缀变量（L1），`VITE_*` 永远不承载 secret；根 `.env` 中的 L3 变量不会泄漏到前端构建产物。
+5. **DB 覆盖 L3 直接抛错**：`runtime.py` 对 catalog 标记为绝密的 key 拒绝从 `system_config` 覆盖，代码层硬约束。
+
+**典型分层示例（邮箱 / LLM）**：见文末「邮箱拆分示例」与「LLM 拆分示例」。
 
 ---
 
@@ -45,24 +66,28 @@
 
 ### 2. 本地最低配置（L1）
 
-`.env` 中确认：
+`.env.local` 中确认（本地开发覆盖）：
 
 ```env
 APP_ENV=development
 BACKEND_PUBLIC_URL=http://localhost:7860
 FRONTEND_PUBLIC_URL=http://localhost:5173
-```
-
-前端 `VITE_*` **同样写在根 `.env`**（Vite 的 envDir 已指向仓库根，无需再维护 frontend/.env.*）：
-
-```env
-VITE_BASE_URL=./
 VITE_BACKEND_URL=http://localhost:7860
 VITE_TILE_PROXY_BASE_URL=http://localhost:7860
 VITE_TILE_PROXY_MODE=fallback
 ```
 
-生产构建读根 `.env.production`（提交 git，clone 必改 `VITE_BACKEND_URL`）。
+`.env` 中确认（部署环境基线）：
+
+```env
+APP_ENV=production
+BACKEND_PUBLIC_URL=https://negiao-webgis.hf.space
+FRONTEND_PUBLIC_URL=https://negiao.github.io/WebGIS-Dev
+VITE_BASE_URL=./
+VITE_BACKEND_URL=https://negiao-webgis.hf.space
+VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
+VITE_TILE_PROXY_MODE=fallback
+```
 
 ### 3. 启动
 
@@ -213,10 +238,10 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 | 文件 | 角色 |
 |------|------|
 | [`.env.example`](../../.env.example) | 全集 key 目录 / registry（L1/L2/L3 均登记，非复制模板） |
-| [`.env`](../../.env) | tracked L1 非涉密默认配置（前后端共用：后端 loader 与 Vite envDir 都读它） |
+| [`.env`](../../.env) | 部署环境配置（git 追踪）：生产基线值，`npm run build` 与线上部署读取 |
+| [`.env.local`](../../.env.local) | 本地开发环境配置（git 追踪）：开发覆盖值，`npm run dev` 与本地后端读取 |
 | `backend/.env` | ignored 后端本地兼容覆盖入口；不要提交 |
-| `.env.production` | 生产构建公开 VITE_*（提交 git，clone 必改 VITE_BACKEND_URL） |
-| `frontend/.env.example` / `.env.production` | 指路存根（Vite 不再读取 frontend 目录 env） |
+| `frontend/.env.example` | 指路存根（Vite 不再读取 frontend 目录 env） |
 | `backend/.env.example` | 后端摘要，指向根清单 |
 | `frontend/src/components/UserCenter/AdminControlPanel.vue` | L2 配置 UI |
 | `backend/config/` | 统一读取入口：catalog 登记 / load L1+L3 / runtime L2 覆盖 / public 公开配置 |

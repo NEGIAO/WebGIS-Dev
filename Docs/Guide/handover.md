@@ -15,8 +15,8 @@
 
 ## 2. 十分钟跑起来
 
-1. clone 后**只看一个文件**：根 [`.env.example`](../../.env.example)（全部配置 key 的唯一权威清单，三层注释）。
-2. Windows 双击 `LocalDev.bat`：自动生成根 `.env`、跑门禁自检、起 Docker 后端 + Vite 前端并开浏览器。
+1. clone 后**只看一个文件**：根 [`.env.example`](../../.env.example)（全部配置 key 的唯一权威清单，分层注释）。
+2. Windows 双击 `LocalDev.bat`：自动生成根 `.env.local`（若缺失）、跑门禁自检、起 Docker 后端 + Vite 前端并开浏览器。
 3. 默认账号：游客 `user/123`；管理员 `admin/123456`（本地 dev；生产密码 = HF Secrets 的 `SUPER_USER`）。
 4. 手动方式与 HF 生产部署 → [configuration.md](configuration.md)（含「HF Secrets 最小集合」复制清单）。
 
@@ -36,12 +36,14 @@
 ### 4.1 三层配置（谁读什么、密钥去哪）
 
 ```text
-L1 根 .env（低密常量+VITE_*）→ 前后端同读一个文件（Vite envDir=仓库根；后端 backend/config loader）
+L1 双 env 文件架构：
+  .env       → 部署环境（git 追踪）：npm run build + 线上部署读取
+  .env.local → 本地开发（git 追踪）：npm run dev + 本地后端读取
 L2 Admin 面板 + SQLite（地图 token 池 / Agent 参数 / 底图 / 公告）→ 运营改，免重启
 L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有后端环境变量可读
 ```
-- 后端**唯一** `os.environ` 读取端：`backend/config/`（catalog 登记表 / load 快照 / runtime L2 覆盖 / public 公开配置）。
-- 前端**唯一** `import.meta.env` 读取端：`src/config/publicRuntime.ts`（基址派生 + 4 个 URL helper）。
+- 后端**唯一** `os.environ` 读取端：`backend/config/`（catalog 登记表 / load 快照 / runtime L2 覆盖 / public 公开配置）。`load.py` 先读 `.env`，再在读 `.env.local`（仅文件存在时，即本地开发）。
+- 前端**唯一** `import.meta.env` 读取端：`src/config/publicRuntime.ts`（基址派生 + 4 个 URL helper）。通过 `selectiveEnvPlugin` 按 mode 二选一：production 读 `.env`，development 读 `.env.local`。
 - **新增配置 key 流程**：先登记根 `.env.example` + `backend/config/catalog.py` → 再写代码 → 跑门禁。
 
 ### 4.2 Cesium 统一图层管理（3D 数据 ↔ TOC）
@@ -101,9 +103,9 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
 
 - **Cesium/OL 对象绝不进 Vue 响应式**（ref/reactive/Pinia state）——深代理会崩性能甚至崩场景。
   模式：元数据进店，句柄用模块级 Map/WeakMap 或 `markRaw`/`toRaw`。
-- **根 `.env` 是前后端共读的**：Vite 只注入 `VITE_` 前缀进浏览器，后端变量不会泄漏；
-  但改 `APP_ENV` 等后端值需**重建容器**（compose environment 段优先于 env_file）。
-- **`.env.production`（仓库根，提交 git）**：clone 用户必改 `VITE_BACKEND_URL`，否则构建产物打到原作者 HF。
+- **根 `.env` 与 `.env.local` 双文件架构**：两个文件都提交 git（L1 不涉密），`.env` = 部署环境，`.env.local` = 本地开发；
+  Vite 通过 `selectiveEnvPlugin` 按 mode 二选一，后端 `load.py` 先读 `.env`、再读 `.env.local`（本地覆盖生产值）。
+  改 `APP_ENV` 等后端值需**重建容器**（compose environment 段优先于 env_file）。
 - **tileset 透明度与材质模式互写 style**：语义为"最后操作生效"，透明度拉回 100% 会清 style 还原。
 - **JSDoc 注释里别写 `*/`**（如 `vis*/limit*`）——会提前终止块注释，ESLint 报 Invalid character。
 - **多会话并行开发时版本号常撞车**：以 CHANGELOG 先占者为准，后完成的任务顺延一号并在日志备注；

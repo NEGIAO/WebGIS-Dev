@@ -78,8 +78,8 @@ webgis_auth.db
 *.sw?
 
 # ========== 本地环境 ==========
-# 根目录 .env 是已提交的 L1 非涉密默认配置；本地私密覆盖仍保持忽略
-.env.local
+# 根目录 .env（生产基线）和 .env.local（本地开发）均为 L1 不涉密配置，都已提交追踪
+# 仅忽略前端本地覆盖与带密钥的 backend 本地文件
 .env.*.local
 frontend/.env.local
 frontend/.env.*.local
@@ -98,7 +98,6 @@ backend/data/
 
 # ========== IDE ==========
 coverage
-*.local
 
 /cypress/videos/
 /cypress/screenshots/

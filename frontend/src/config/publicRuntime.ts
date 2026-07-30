@@ -1,16 +1,19 @@
 /**
  * 前端公开运行时配置（单点基址派生）
  *
- * 三层配置模型的 L1 前端段（见根目录 .env.example）：
- * env 已统一收敛到仓库根目录（vite.config.js envDir=仓库根）——
- * - 本地开发：根目录 .env（已提交的 L1 非涉密默认配置）
- * - 生产构建：根目录 .env.production（clone 用户改成自己的后端域名）
+ * 双 env 文件架构（两个文件都提交 git，L1 不涉密）：
+ *   .env       → 部署环境（npm run build 由 Vite 读取）
+ *   .env.local → 本地开发（npm run dev 由 Vite 读取）
  *
- * 规则：业务代码不得再硬编码后端域名（原作者 HF Space 域名等），
+ * Vite 配置（vite.config.js）通过 selectiveEnvPlugin 实现按 mode 二选一：
+ *   mode=production（npm run build）→ 只读 .env
+ *   mode=development（npm run dev）→ 只读 .env.local
+ *
+ * 规则：业务代码不得再硬编码后端域名，
  * 也不要散落 import.meta.env 读取——统一从本模块取值/拼接。
  *
  * 输入（构建期 env）：
- * - VITE_BACKEND_URL           后端 API 基址（缺省 http://localhost:7860）
+ * - VITE_BACKEND_URL           后端 API 基址
  * - VITE_TILE_PROXY_BASE_URL   瓦片代理基址（缺省同 VITE_BACKEND_URL）
  * - VITE_TILE_PROXY_MODE       fallback | always | off（缺省 fallback）
  * - VITE_*_TIMEOUT_MS          公开请求超时与 CDN 加载超时

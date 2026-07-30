@@ -102,7 +102,7 @@ backend/
 ├── docker-compose.yml                             # Docker Compose 配置
 ├── pyproject.toml                                 # Python 项目依赖
 ├── uv.lock                                        # uv 依赖锁定文件
-├── .env.example                                   # 环境变量模板
+├── .env.example                                   # 后端配置摘要（指向根 .env.example 权威清单；load.py 实际读根 .env + .env.local）
 ├── .dockerignore                                  # Docker 忽略文件
 └── README.md                                      # 本文件
 ```

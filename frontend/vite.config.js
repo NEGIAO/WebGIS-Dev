@@ -1,6 +1,7 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import { visualizer } from 'rollup-plugin-visualizer';
@@ -13,25 +14,99 @@ function isNodeModulePackage(id, pkgName) {
   return id.includes(`/node_modules/${pkgName}/`) || id.includes(`\\node_modules\\${pkgName}\\`);
 }
 
+/**
+ * 解析 .env 文件为 key-value 对象（支持基础单双引号、行尾注释）
+ */
+function parseEnvFile(filePath) {
+  const env = {};
+  if (!fs.existsSync(filePath)) return env;
+  const content = fs.readFileSync(filePath, 'utf-8');
+  for (const rawLine of content.splitlines()) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#') || !line.includes('=')) continue;
+    const eqIdx = line.indexOf('=');
+    const key = line.slice(0, eqIdx).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = line.slice(eqIdx + 1).trim();
+    // 去除行尾注释（未被引号包裹的 #）
+    let quote = '';
+    for (let i = 0; i < value.length; i++) {
+      const ch = value[i];
+      if (ch === '\\') { i++; continue; }
+      if (ch === '"' || ch === "'") {
+        if (!quote) quote = ch;
+        else if (quote === ch) quote = '';
+      } else if (ch === '#' && !quote) {
+        value = value.slice(0, i).trim();
+        break;
+      }
+    }
+    // 去引号
+    if (value.length >= 2 && value[0] === value[value.length - 1] && (value[0] === '"' || value[0] === "'")) {
+      value = value.slice(1, -1);
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+/**
+ * 双 env 文件插件
+ *
+ * 架构（L1 不涉密，两个文件都提交 git）：
+ *   .env       → 部署环境（npm run build 读取）
+ *   .env.local → 本地开发（npm run dev 读取）
+ *
+ * Vite 默认会在所有模式下同时加载 .env + .env.local，
+ * 本插件禁用默认加载，改为按 mode 二选一。
+ */
+function selectiveEnvPlugin() {
+  return {
+    name: 'selective-env',
+    config(config, { mode }) {
+      const envDir = fileURLToPath(new URL('..', import.meta.url));
+      const isProd = mode === 'production';
+      const envFile = isProd ? '.env' : '.env.local';
+      const env = parseEnvFile(path.resolve(envDir, envFile));
+
+      // 仅暴露 VITE_ 前缀变量（与 Vite 原生行为一致）
+      const prefixedEnv = {};
+      for (const [key, value] of Object.entries(env)) {
+        if (key.startsWith('VITE_')) {
+          prefixedEnv[`import.meta.env.${key}`] = JSON.stringify(value);
+        }
+      }
+
+      return {
+        define: {
+          ...(config.define || {}),
+          ...prefixedEnv,
+        },
+      };
+    },
+  };
+}
+
 export default defineConfig(({ command, mode }) => {
   // 环境判断
   const isBuild = command === 'build';
   const isAnalyze = mode === 'analyze';
   const isProductionLikeBuild = isBuild && mode !== 'development';
 
-  // 【三层配置架构】env 统一收敛到仓库根目录：
-  // Vite 从根目录读取 .env / .env.production 等（只暴露 VITE_* 前缀给前端，
-  // 根 .env 中的后端/绝密变量不会进入构建产物）。
-  // 本地开发改根 .env；生产公开值提交在根 .env.production。
+  // 双 env 文件架构（两个文件都提交 git，L1 不涉密）：
+  //   .env       → 部署环境（npm run build 读取）
+  //   .env.local → 本地开发（npm run dev 读取）
   const envDir = fileURLToPath(new URL('..', import.meta.url));
-  const rootEnv = loadEnv(mode, envDir, 'VITE_');
+  const isProd = mode === 'production';
+  const activeEnvFile = isProd ? '.env' : '.env.local';
+  const env = parseEnvFile(path.resolve(envDir, activeEnvFile));
 
   // 刷新 public/ShareData/manifest.json(共享资源清单;dev 与所有 build 脚本统一生效)
   // 替代旧 import.meta.glob 方案,详见 scripts/generate-sharedata-manifest.mjs 头注释
   generateShareDataManifest();
 
-  // 项目基础路径（根 env 优先，其次进程环境变量，最后默认相对路径）
-  const baseUrl = rootEnv.VITE_BASE_URL || process.env.VITE_BASE_URL || './';
+  // 项目基础路径（从当前环境文件读取，缺省相对路径）
+  const baseUrl = env.VITE_BASE_URL || './';
 
   // 从 README.md 提取版本号（构建时自动同步，LLM 更新 README 后无需手动维护 Vue 侧版本）
   const readmePath = fileURLToPath(new URL('../README.md', import.meta.url));
@@ -49,8 +124,11 @@ export default defineConfig(({ command, mode }) => {
   return {
     base: baseUrl,
 
-    // env 文件目录 = 仓库根（.env / .env.production 单一来源）
+    // env 文件目录 = 仓库根
     envDir,
+
+    // 禁用 Vite 默认的 .env 加载（由 selectiveEnvPlugin 替代）
+    envFile: false,
 
     // 构建时注入全局常量 __APP_VERSION__（值从 README.md 自动提取）
     define: {
@@ -60,6 +138,7 @@ export default defineConfig(({ command, mode }) => {
     // 插件配置
     plugins: [
       vue(),
+      selectiveEnvPlugin(),
       command === 'serve' && vueDevTools(),
       isAnalyze && visualizer({
         filename: 'stats.html',

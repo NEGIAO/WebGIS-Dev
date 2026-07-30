@@ -294,7 +294,7 @@ backend/config/
 
 > 落地记录：新增 `src/config/publicRuntime.ts` 单点基址派生（4 个拼接 helper）；
 > basemapConfig/sourceDescriptors 12 处硬编码域名 + tileLifecycle/client.js env 直读全部收敛，src 域名残留 0；
-> 后端挂 `GET /api/config/public`；`.env.production` 补 clone 必改说明。
+> 后端挂 `GET /api/config/public`；`.env` 头部补 clone 必改说明。
 > 详见 `Docs/LLM_record/26-07-26/2026-07-26-frontend-public-config-phase4.md`。
 
 **产出**

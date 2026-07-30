@@ -38,9 +38,9 @@ WebGIS_Dev/
 ├── CheckStructureTree.py              # 结构树漂移门禁（frontend-structure.md ⇄ frontend/src 双向 diff）
 ├── UpdateReadmeTree.py                # README 文件树同步脚本
 ├── docker-compose.yml                 # 前后端容器编排
-├── .env                               # L1 非涉密默认配置（tracked，前后端共用，clone 后可改 URL/端点/超时）
+├── .env                               # 部署环境配置（L1 不涉密，tracked，生产基线：APP_ENV=production、线上 URL）
+├── .env.local                         # 本地开发环境配置（L1 不涉密，tracked，覆盖 .env：APP_ENV=development、localhost URL）
 ├── .env.example                       # 配置全集 registry（L1/L2/L3 权威入口，不再作为复制模板）
-├── .env.production                    # 前端生产构建公开 VITE_*（Vite envDir=根；clone 必改 VITE_BACKEND_URL）
 ├── .gitignore
 ├── LICENSE
 └── README.md                          # 项目门户页

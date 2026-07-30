@@ -104,7 +104,7 @@ if exist "%FRONTEND_DIR%\.env.local" (
     del /q "%FRONTEND_DIR%\.env.local" >nul 2>nul
     echo [OK] Removed legacy frontend\.env.local - Vite now reads root .env only
 )
-echo [OK] Frontend env unified: edit VITE_* in root .env ^(production: root .env.production^)
+echo [OK] Frontend env unified: edit VITE_* in root .env ^(production^) or .env.local ^(dev^)
 echo.
 
 REM ====================================================================

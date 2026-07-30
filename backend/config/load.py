@@ -1,12 +1,19 @@
 """
-WebGIS 后端统一配置加载入口（L1 env + L3 Secrets）。
+WebGIS 后端统一配置加载入口。
 
-分层约定：
-- L1：根目录 .env / .env.example 中登记的低密常量与本地配置；
-- L2：管理员面板 + 数据库存放的运行时配置（见 runtime.py）；
-- L3：Hugging Face Secrets / 系统环境变量中的绝密项。
+双 env 文件架构（两个文件都提交 git，L1 不涉密）：
+  .env       → 部署环境（生产基线：APP_ENV=production、线上 URL）
+  .env.local → 本地开发（覆盖 .env：APP_ENV=development、localhost URL）
 
-规则：业务代码不得再散落 os.getenv；统一从本包读取。
+加载优先级（低 → 高）：
+  .env → .env.local → backend/.env（容器兼容）
+  系统进程环境变量（HF Secrets / Docker 注入）始终最高，永不覆盖。
+
+后端 URL 推导（BACKEND_PUBLIC_URL / FRONTEND_PUBLIC_URL 留空时）：
+  APP_ENV=production  → https://negiao-webgis.hf.space / https://negiao.github.io/WebGIS-Dev
+  APP_ENV=development → http://localhost:7860 / http://localhost:5173
+
+规则：业务代码不得散落 os.getenv；统一从本包读取。
 新增配置 key 必须先登记：根 .env.example + catalog.py。
 """
 
@@ -35,6 +42,7 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = BACKEND_DIR.parent
 ROOT_ENV_FILE = PROJECT_ROOT / ".env"
+ROOT_ENV_LOCAL_FILE = PROJECT_ROOT / ".env.local"
 BACKEND_ENV_FILE = BACKEND_DIR / ".env"
 
 _DEV_ENVS = {"development", "dev", "local", "test"}
@@ -78,12 +86,13 @@ def _parse_env_value(raw_value: str) -> str:
     return value.replace("\\n", "\n")
 
 
-def _load_env_file(path: Path) -> None:
+def _load_env_file(path: Path, *, system_keys: set | None = None) -> None:
     """
     将 .env 文件加载进 os.environ。
 
-    已存在的系统环境变量优先级最高，不会被 .env 覆盖；这保证 HF Secrets / Docker
-    注入值优先于仓库根目录本地配置。
+    规则：
+    - 系统环境变量（system_keys）永不覆盖（保证 HF Secrets / Docker 注入值最高）。
+    - 先加载的文件优先级低，后加载的文件可覆盖先加载文件写入的值。
     """
     if not path.exists() or not path.is_file():
         return
@@ -95,6 +104,7 @@ def _load_env_file(path: Path) -> None:
         logger.warning("配置文件读取失败：%s (%s)", path, exc)
         return
 
+    protected = system_keys if system_keys is not None else set()
     for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -105,15 +115,31 @@ def _load_env_file(path: Path) -> None:
             key = key[len("export "):].strip()
         if not _ENV_KEY_PATTERN.fullmatch(key):
             continue
-        if key in os.environ:
+        if key in protected:
             continue
         os.environ[key] = _parse_env_value(raw_value)
 
 
 def load_project_env() -> None:
-    """按优先级加载项目配置文件：根 .env 优先登记，backend/.env 作兼容补充。"""
-    _load_env_file(ROOT_ENV_FILE)
-    _load_env_file(BACKEND_ENV_FILE)
+    """按环境加载项目配置文件。
+
+    双 env 文件架构（.env = 部署环境，.env.local = 本地开发环境）：
+    - 部署环境（HF Space / Docker / 生产服务器）：只读根 .env（生产基线值）；
+    - 本地开发（开发者机器）：先读根 .env（基线），再读根 .env.local（覆盖为 localhost 等开发值）；
+    - .env.local 与 .env 均为 git 追踪（L1 不涉密），本加载器始终按存在性加载；
+      部署环境若存在 .env.local 会覆盖 .env 值，需通过部署脚本排除 .env.local
+      或 HF Space Variables 显式设置 APP_ENV=production（system_keys 保护优先）；
+    - backend/.env（容器兼容）仅在文件存在时加载，优先级最高（仍低于系统进程环境变量）。
+
+    系统进程环境变量（HF Secrets / Docker 注入）始终最高，永不覆盖。
+    """
+    system_keys = set(os.environ.keys())
+    _load_env_file(ROOT_ENV_FILE, system_keys=system_keys)
+    # .env.local 与 .env 均为 git 追踪（L1 不涉密），存在即加载；
+    # 部署时需通过部署脚本排除 .env.local 或 HF Space Variables 显式覆盖 APP_ENV=production
+    if ROOT_ENV_LOCAL_FILE.exists():
+        _load_env_file(ROOT_ENV_LOCAL_FILE, system_keys=system_keys)
+    _load_env_file(BACKEND_ENV_FILE, system_keys=system_keys)
 
 
 # 兼容旧引用名

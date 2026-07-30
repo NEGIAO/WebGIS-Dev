@@ -42,7 +42,7 @@
 
 1. **禁止 Git 写操作** —— `git commit` / `push` / `stash` / `reset` / `checkout -- ` / `rebase` / 改分支。版本控制决策权 100% 归用户。Agent 只负责把改动准备好并说明清楚。
 2. **禁止在 `/Docs` 之外新建说明类文档** —— 不得在根目录或任意子目录新建临时 README、SUMMARY、NOTES、`*_说明.md`。所有说明统一进 `Docs/LLM_record/` 日志或 `Docs/Guide/`。
-3. **密钥与部署面分级** —— **L3 绝密**（`SUPER_USER`、OAuth secret、SMTP 密码、HF Secrets、生产私钥）禁止写入仓库、禁止在会话中扩散明文。**L1 非密**根 `.env`（公开 URL、超时、非密默认值）可改，但必须与根 `.env.example` + `backend/config/catalog.py` 同步，并跑 `CheckConfigRegistry.py`。`.env.production`、`.github/workflows/`、Dockerfile、HF Space 部署清单仍须谨慎：能只提建议则先提建议；确需改动须在日志写明动机。`.env.example` 属登记表，按第 5 节流程可改。
+3. **密钥与部署面分级** —— **L3 绝密**（`SUPER_USER`、OAuth secret、SMTP 密码、HF Secrets、生产私钥）禁止写入仓库、禁止在会话中扩散明文。**L1 非密**根 `.env`（公开 URL、超时、非密默认值）和根 `.env.local`（本地开发覆盖值，git 追踪）可改，但必须与根 `.env.example` + `backend/config/catalog.py` 同步，并跑 `CheckConfigRegistry.py`。`.github/workflows/`、Dockerfile、HF Space 部署清单仍须谨慎：能只提建议则先提建议；确需改动须在日志写明动机。`.env.example` 属登记表，按第 5 节流程可改。
 4. **禁止删除或重写非本次任务范围的文件** —— 包括历史日志、他人代码、注释掉的备用逻辑。确需清理时先列清单请求批准。
 5. **禁止越权扩大范围** —— 修 A Bug 时发现 B 问题：**记录到 `Docs/TODO/bugfix-optimization-plan.md` 并在交接块中提示**，不得顺手改。
 6. **禁止臆造事实** —— 不得凭印象编写 API 签名、字段名、配置 key、文件路径。**必须先读实际代码确认**。无法确认的一律标注 `⚠️ 未验证` 并在交接块中列为待确认项。

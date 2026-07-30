@@ -99,19 +99,29 @@
 | Docker Desktop | 容器化后端环境（**强制要求**） |
 | LocalDev.bat | Windows 一键启动脚本（推荐） |
 
-### 配置（三层，先看这一处）
+### 配置（双 env 文件架构，先看这一处）
+
+| 文件 | git 状态 | 用途 | 读取时机 | `APP_ENV` |
+|------|----------|------|----------|-----------|
+| **`.env`** | **git 追踪** | 部署环境（生产基线） | `npm run build` + 线上部署 | `production` |
+| **`.env.local`** | **git 追踪** | 本地开发（覆盖 `.env`） | `npm run dev` + 本地后端 | `development` |
+| `.env.example` | git 追踪 | 全集 key 目录（不写真值） | — | — |
+
+**三层密钥分层**（L1/L2/L3）：
 
 | 层 | 放哪里 | 做什么 |
 |----|--------|--------|
-| **L1** | 根目录 tracked [`.env`](.env)（非涉密默认）+ [`.env.example`](.env.example)（全集目录） | 不涉密常量、URL、前端 `VITE_*`、公开服务端点/超时 |
+| **L1** | 根 `.env` / `.env.local`（不涉密） | URL、端口、前端 `VITE_*`、公开服务端点/超时 |
 | **L2** | 管理员面板 + 数据库 | 地图 token、Agent/LLM Key 与参数、底图、公告（常变、动态生效） |
 | **L3** | Hugging Face **Secrets** | 绝密：`SUPER_USER`、OAuth secret、SMTP 密码、Supabase Key、监控令牌 |
 
 说明与检查清单：[Docs/Guide/configuration.md](Docs/Guide/configuration.md) · 执行计划：[configuration-architecture-plan.md](Docs/Guide/configuration-architecture-plan.md)
 
 ```bash
-# 仓库根目录：.env 已随仓库提交，作为 L1 非涉密默认配置
-# 只改 URL/端点/超时等 L1；L2 启动后 admin 配，L3 生产放 HF Secrets
+# 仓库根目录：.env（部署环境）与 .env.local（本地开发）双文件架构
+# 两个文件都提交 git（L1 不涉密）
+# 本地开发：Vite 读 .env.local，后端读 .env.local（覆盖 .env 的 production 值为 localhost）
+# 部署构建：Vite 只读 .env（selectiveEnvPlugin 按 mode 二选一）
 ```
 
 ### 一键启动（推荐）
@@ -119,7 +129,7 @@
 ```bash
 # Windows：双击 LocalDev.bat，脚本自动完成：
 # 1. 检测环境依赖（Node.js / Docker / docker compose）
-# 2. 使用根目录 tracked .env 作为前后端唯一 L1 默认配置（Vite 与后端都从根读取）
+# 2. 本地开发环境：前端 Vite 读 .env.local，后端 load.py 读 .env.local（覆盖为 localhost 开发值）
 # 3. 智能检测 Docker 镜像状态（首次构建 / 代码热重载 / Dockerfile 变更提示）
 # 4. 启动前端开发服务器 → http://localhost:5173
 # 5. 自动打开浏览器

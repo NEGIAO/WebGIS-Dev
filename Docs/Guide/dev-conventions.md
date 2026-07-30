@@ -15,7 +15,7 @@
 4. **文档单一事实来源（原子化）**：版本历史统一在 [`CHANGELOG.md`](CHANGELOG.md)，架构索引统一在根 [README](../../README.md)；三个 README 不重复版本记录、架构表、目录树（仅放链接）。**目录树唯一权威**：[project-structure.md](project-structure.md)（根级 + Docs 树）、[frontend-structure.md](frontend-structure.md)（前端）、[backend-structure.md](backend-structure.md)（后端）——任何文件增删改必须同步更新对应 structure 文件
 5. **版本号 = 每个 L2/L3 任务 +1 修订号**，同日不合并；根 README **三处**（项目简介行 / 版本表首行 / 页脚）必须同步，格式恒为 `V{主}.{次}.{修订}`
 6. **不执行任何 Git 写操作**（`commit` / `push` / `stash` / `reset` / 切分支）—— 版本控制决策权归用户
-7. **不在 `/Docs` 外新建说明类文档**；不改 `.env` / `.env.production` / `.github/workflows/` 等密钥与部署面（只提建议）
+7. **不在 `/Docs` 外新建说明类文档**；不改 `.env` / `.env.local` / `.github/workflows/` 等密钥与部署面（只提建议）
 8. **不臆造、不谎报**：API 签名 / 字段 / 配置 key / 路径必须读代码确认，未确认标 `⚠️ 未验证`；未实机运行不得写"已测试通过"
 9. **新功能必须封装**为独立 `.js` / `.ts` 文件，组件内不堆叠业务逻辑（`MapContainer.vue` 等巨型文件只出不进）
 10. **新增代码必须有注释**（功能 / 参数 / 返回 / 核心逻辑）

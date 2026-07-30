@@ -55,7 +55,7 @@ flowchart TB
     LOAD --> P3
 
     subgraph FE["前端（Vue 3 + Vite）"]
-        ENVF["构建期 env（L1 前端段 · 均在仓库根）<br/>根 .env（本地开发）<br/>根 .env.production（clone 必改）"]
+        ENVF["构建期 env（L1 前端段 · 均在仓库根）<br/>根 .env（npm run build 读取）<br/>根 .env.local（npm run dev 读取）"]
         PRT["src/config/publicRuntime.ts<br/>基址单点派生 + 4 个 URL helper<br/>全 src 唯一 import.meta.env 读取点"]
         CONS["axios client ｜ 底图 12 处 URL + 代理兜底 ｜ 下载超时"]
     end
@@ -70,7 +70,7 @@ flowchart TB
 ```
 
 部署拓扑：GitHub Pages（前端静态产物）⇄ HF Space Docker（后端 :7860，SQLite 持久化于 `/data`）；
-本地：`LocalDev.bat` → vite :5173 ⇄ docker compose :7860（`env_file: ../.env` + 强制 `APP_ENV=development`）。
+本地：`LocalDev.bat` → vite :5173 ⇄ docker compose :7860（后端读 `.env.local` 覆盖为 localhost 开发值）。
 
 ---
 
@@ -78,7 +78,7 @@ flowchart TB
 
 | 层 | 位置 | 放什么 | 谁改 | 生效方式 |
 |----|------|--------|------|----------|
-| **L1** | 根 `.env`（模板 `.env.example`） | URL、端口、TTL、Agent 非密默认、`VITE_*` | 部署者 | 重启 / 重新构建 |
+| **L1** | 根 `.env`（部署环境）+ 根 `.env.local`（本地开发，git 追踪） | URL、端口、TTL、Agent 非密默认、`VITE_*` | 部署者 | 重启 / 重新构建 |
 | **L2** | `system_config` / `api_keys`(+备份池) / `announcements`（SQLite） | 地图 token、高德 Web 服务 Key、Agent 主密钥、Agent 模型/配额/提示词、默认底图、公告、联系方式 | 运营（admin 面板） | 即时（后端动态读取） |
 | **L3** | HF Space Secrets（本地 = 未提交 `.env`） | `SUPER_USER`、OAuth Client Secret、`SMTP_PASSWORD`（账号在 L1，分开存取）、Supabase、`LOG` | 部署者（仅平台侧） | 重启容器 |
 
@@ -96,8 +96,8 @@ flowchart TB
 | `runtime.py` | L2 覆盖读取 `get_effective_str`：`system_config(DB) ▸ L1 env ▸ default`；**catalog 标记为绝密的 key 走 DB 直接抛 `ValueError`** |
 | `public.py` | `build_public_config()`：非密值 + 功能可用布尔（oauth_google/github、email、agent_env_key、amap、supabase），无任何明文 |
 
-L1/L3 加载顺序（`load.py`）：**系统环境变量 ▸ 根 `.env` ▸ `backend/.env` ▸ catalog 默认**。
-系统环境变量优先，保证 HF Secrets / Docker 注入值永远不被仓库文件覆盖。
+L1/L3 加载顺序（`load.py`）：**系统环境变量 ▸ 根 `.env` ▸ 根 `.env.local`（仅文件存在时） ▸ `backend/.env` ▸ catalog 默认**。
+系统环境变量优先，保证 HF Secrets / Docker 注入值永远不被仓库文件覆盖；`.env.local` 与 `.env` 均为 git 追踪（L1 不涉密），部署时需通过部署脚本排除或 HF Space Variables 显式覆盖 `APP_ENV=production`。
 
 约束：除本包外，后端业务代码禁止 `os.getenv` / `os.environ`；新增 key 必须先登记
 根 `.env.example` + `catalog.py` 再写代码（由门禁脚本强制）。
@@ -121,8 +121,9 @@ L1/L3 加载顺序（`load.py`）：**系统环境变量 ▸ 根 `.env` ▸ `bac
 
 ## 5. 前端消费（两条腿）
 
-**构建期**：Vite 的 `envDir` 指向仓库根——本地开发读根 `.env`、生产构建读根
-`.env.production`（clone 用户唯一必改：`VITE_BACKEND_URL`），前端不再维护独立 env 文件；
+**构建期**：Vite 通过 `selectiveEnvPlugin`（`vite.config.js`）按 mode 二选一读取 env 文件——
+`npm run build`（production）读根 `.env`，`npm run dev`（development）读根 `.env.local`；
+前端不再维护独立 env 文件，Vite 原生 `envFile` 已禁用；
 Vite 只把 `VITE_*` 前缀项注入构建产物，根 `.env` 中的后端/绝密变量不会泄漏 →
 `src/config/publicRuntime.ts` 单点派生
 `BACKEND_BASE_URL` / `TILE_PROXY_BASE_URL` / `TILE_PROXY_MODE` / `DOWNLOAD_REQUEST_TIMEOUT_MS`
@@ -145,7 +146,7 @@ sequenceDiagram
 
     Note over HF,APP: 启动期
     APP->>CFG: import（触发 env 加载）
-    HF-->>CFG: 系统环境变量（优先）+ .env 补充
+    HF-->>CFG: 系统环境变量（优先）+ .env / .env.local 补充
     CFG-->>APP: BackendSettings 快照
     APP->>APP: 打印脱敏摘要 + L3 状态（缺项精确报错）
 
@@ -179,7 +180,7 @@ sequenceDiagram
 | V3.4.6 | 阶段 0–2：清单统一 + backend/config 全模块收敛 + OAuth 推导 |
 | V3.4.8 | 阶段 3：L2 对照表 + Admin L3 状态徽章 |
 | V3.4.10 | 阶段 4：前端 publicRuntime 单点 + 硬编码域名清零 + /api/config/public |
-| V3.4.11 | 阶段 5（部分）：compose env_file + LocalDev 自动生成根 .env |
+| V3.4.11 | 阶段 5（部分）：compose env_file + LocalDev 自动生成根 .env.local |
 | V3.4.13 | 阶段 5/6 收官：HF Secrets 最小集合清单 + 门禁脚本 + 过时文档清理 |
 
 ---
