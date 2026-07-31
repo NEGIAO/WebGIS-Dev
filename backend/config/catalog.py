@@ -42,6 +42,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "description": "前端对外基址；空则按 APP_ENV 选 localhost 或 Pages 默认",
     },
     "AUTH_DB_PATH": {"layer": "L1", "default": "", "secret": False, "description": "认证库路径"},
+    "AUTH_DB_JOURNAL_MODE": {
+        "layer": "L1",
+        "default": "DELETE",
+        "secret": False,
+        "description": "认证库日志模式；HF 网络挂载建议 DELETE，避免 WAL/SHM 锁与同步风险",
+    },
     "AUTH_SESSION_EXPIRE_HOURS": {
         "layer": "L1",
         "default": 72,

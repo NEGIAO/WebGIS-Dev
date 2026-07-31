@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from .db import _db_connection, _iso, _safe_execute, _utc_now, AUTH_DB_PATH, backup_auth_db_for_migration
+from utils.sqlite_maintenance import ensure_maintenance_event_table, sync_recovery_manifests
 
 logger = logging.getLogger(__name__)
 
@@ -499,6 +500,16 @@ def init_auth_tables_sync(conn) -> None:
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_expires ON email_verification_codes(expires_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_purpose ON email_verification_codes(purpose)")
 
+    # Persist corruption/recovery audit events. Failed attempts are first written as
+    # JSON manifests and are synchronized here once a usable database is available.
+    ensure_maintenance_event_table(conn)
+    imported_events = sync_recovery_manifests(
+        conn,
+        AUTH_DB_PATH.parent / "recovery_backups",
+    )
+    if imported_events:
+        logger.info("已同步 %d 条数据库损坏/恢复维护记录", imported_events)
+
 
 def _init_auth_storage_sync() -> None:
     """
@@ -506,7 +517,8 @@ def _init_auth_storage_sync() -> None:
     内部调用 init_auth_tables_sync(conn)。
     """
     with _db_connection() as conn:
-        conn.execute("PRAGMA journal_mode=WAL;")
+        # Journal mode is configured centrally by db._try_connect. Re-enabling WAL
+        # here would reintroduce -wal/-shm risks on HF Bucket/NFS/FUSE storage.
         init_auth_tables_sync(conn)
         conn.commit()
 

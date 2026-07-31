@@ -6,6 +6,23 @@
 
 ## 版本记录
 
+### V3.5.2 (2026-07-31) — HF 挂载 SQLite 保守恢复、备份与维护审计
+
+> 🛡️ **数据库可靠性**：针对 Hugging Face Space 重启及 Bucket/NFS/FUSE 网络挂载下 SQLite WAL/SHM 锁与同步风险，重写鉴权库损坏处理流程；原损坏数据始终先归档保留，逻辑恢复失败后以经过校验的空 schema 降级运行，避免整个 auth 子系统持续返回 500。
+
+- 🔍 **只读检测**：使用只读 URI 执行 `PRAGMA quick_check(1)`，避免检测阶段切换 journal mode、创建新库或修改损坏源文件
+- 📦 **时间戳损坏备份**：首次发现损坏即按 UTC 时间创建恢复目录，完整复制主库、`-wal`、`-shm`、`-journal`，记录 SHA256、源文件 mtime、检测/恢复时间、错误和人工恢复说明
+- 🧰 **容器本地重建**：把备份副本复制到 `TemporaryDirectory`，优先执行 `sqlite3 source.db .dump`，只把独立事务行 `ROLLBACK;` 清理为 `COMMIT;` 后导入全新候选库；失败时再尝试 `.recover --ignore-freelist`
+- ✅ **分层校验**：候选库依次检查 `quick_check`、`integrity_check`、外键、必需表、必需列和行数，并在激活前导出经验证的二进制备份与 SQL 备份
+- 🔄 **安全激活与回滚**：候选库先复制到挂载目录 staging 文件并复检，再校验在线源文件指纹未变化，最后 `os.replace` 激活；激活后验证失败会恢复原始备份 bundle
+- 🛟 **空库降级兜底**：`.dump`/`.recover` 均失败时，只在时间戳损坏 bundle 已成功落盘的前提下创建完整空 schema 候选库；校验、备份并原子激活后以 `recovery_degraded_empty` 记录事件，使 auth 接口保持可用，原损坏库仍可人工修复
+- 🧾 **维护审计**：新增 `database_maintenance_events` 表与原子 JSON manifest，同步记录损坏日期、恢复起止时间、恢复方法、校验结果、备份路径、恢复统计和错误信息
+- ⚙️ **网络挂载策略**：默认 `journal_mode=DELETE`、`synchronous=FULL`、`busy_timeout=15000`、`foreign_keys=ON`；新增并登记 `AUTH_DB_JOURNAL_MODE`，删除 schema 初始化阶段强制 WAL 的逻辑
+- 🐳 **运行环境**：Docker 镜像安装 `sqlite3` CLI，确保线上可执行与本地成功流程一致的 `.dump`/重建操作
+- 🧪 **回归覆盖**：`test_sqlite_recovery.py` 覆盖 CRLF SQL 清理、SQL 文本防误替换、事件 UPSERT/manifest 同步、成功恢复、失败保源、备份失败记录、激活失败回滚与安全空库降级
+- 📄 **完整记录**：[2026-07-31 V3.5.2 SQLite 恢复维护日志](../LLM_record/26-07/2026-07-31/2026-07-31-v352-sqlite-recovery.md)
+
+---
 ### V3.5.1 (2026-07-30) — GIS 拖拽导入 Composable 提取 + 2D 地图整图拖拽覆盖层
 
 > 🖱️ **交互增强**：将 TOCPanel 内联拖拽逻辑提取为独立 `useGisDropZone` composable，并在 MapContainer 新增整图拖拽覆盖层，用户拖拽文件到 2D 地图任意位置均可触发导入。

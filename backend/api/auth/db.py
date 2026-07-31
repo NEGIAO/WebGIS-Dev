@@ -13,6 +13,12 @@ from pathlib import Path
 from typing import Optional
 
 from config import get_settings, get_str
+from utils.sqlite_recovery import (
+    SQLiteRecoveryError,
+    is_sqlite_database_corrupted,
+    recover_sqlite_database,
+    validate_sqlite_database,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +68,7 @@ def _resolve_auth_db_path() -> Path:
 
 AUTH_DB_PATH = _resolve_auth_db_path()
 _auth_storage_ready = False
-_recovery_lock = threading.Lock()
-_pending_recovery_data = None  # 存储待导入的恢复数据
+_recovery_lock = threading.RLock()
 _migration_backup_done = False
 
 
@@ -128,447 +133,126 @@ def backup_auth_db_for_migration(reason: str) -> Optional[Path]:
     return None
 
 # ─── 数据库损坏恢复 ───
-def _try_wal_recovery(db_path: Path) -> tuple[bool, dict]:
-    """
-    尝试通过 WAL 文件自动回放恢复数据。
-
-    策略：
-      1. 创建临时空主库（同目录，避免跨设备 move）
-      2. 将原 WAL/SHM **复制**为与临时库同名的文件
-         （SQLite 查找 WAL 的规则固定为 "{db_path}-wal"，必须路径匹配）
-      3. 连接临时库 → SQLite 自动发现同名 WAL → 回放 → 读取数据
-      4. 数据以 dict 返回给调用方（_attempt_db_recovery 步骤3会删掉 db_path，
-         所以这里不做 shutil.move，避免写回后被立即删除）
-
-    返回: (是否成功, 恢复的数据字典)
-    """
-    wal_path = Path(str(db_path) + "-wal")
-    shm_path = Path(str(db_path) + "-shm")
-
-    if not wal_path.exists():
-        logger.info("无 WAL 文件，跳过 WAL 恢复")
-        return False, {}
-
-    logger.info("尝试 WAL 自动回放恢复: 复制 WAL/SHM 到临时路径，让 SQLite 自动回放...")
-
-    import tempfile
-    new_db_path: Optional[Path] = None
-    wal_temp: Optional[Path] = None
-    shm_temp: Optional[Path] = None
-
-    try:
-        # 创建临时主库（同目录，名称随机）
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False, dir=db_path.parent) as tmp:
-            new_db_path = Path(tmp.name)
-
-        # ── 关键修复 ──────────────────────────────────────────────────────────
-        # SQLite 寻找 WAL 时使用固定规则："{主库路径}-wal"
-        # 必须将原 WAL/SHM 复制到与临时库同名的位置，才能触发回放。
-        # 直接保留原 WAL 不动、连接另一个路径的临时库，SQLite 找不到 WAL。
-        # ─────────────────────────────────────────────────────────────────────
-        wal_temp = Path(str(new_db_path) + "-wal")
-        shutil.copy2(str(wal_path), str(wal_temp))
-
-        if shm_path.exists():
-            shm_temp = Path(str(new_db_path) + "-shm")
-            shutil.copy2(str(shm_path), str(shm_temp))
-            logger.info("已复制 WAL+SHM 到临时路径: %s", str(wal_temp))
-        else:
-            logger.info("已复制 WAL 到临时路径: %s", str(wal_temp))
-
-        # 连接临时库，SQLite 发现同名 WAL 并自动回放
-        conn = sqlite3.connect(str(new_db_path), timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL;")
-        conn.execute("SELECT 1;")  # 触发 WAL checkpoint/回放
-
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        ).fetchall()
-
-        recovered_data = {}
-        total_rows = 0
-
-        for table_row in tables:
-            table_name = table_row[0]
-            try:
-                columns = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
-                if not columns:
-                    continue
-                rows = conn.execute(f'SELECT * FROM "{table_name}"').fetchall()
-                if rows:
-                    recovered_data[table_name] = {
-                        'columns': [col[1] for col in columns],
-                        'rows': rows
-                    }
-                    total_rows += len(rows)
-                    logger.info("WAL 恢复表 %s: %d 行", table_name, len(rows))
-            except Exception as e:
-                logger.warning("WAL 恢复表 %s 失败: %s", table_name, str(e))
-
-        conn.close()
-
-        if total_rows > 0:
-            logger.info("WAL 自动回放恢复成功: 共 %d 个表, %d 行数据", len(recovered_data), total_rows)
-            # 不在此处 shutil.move：_attempt_db_recovery 步骤3 会删除 db_path，
-            # move 回去只会被立即删除。数据已在 recovered_data dict 中，
-            # 由 _import_recovered_data 在 schema 重建后写入新库。
-            return True, recovered_data
-        else:
-            logger.warning("WAL 回放后无数据（WAL 可能为空或仅含非数据事务）")
-            return False, {}
-
-    except sqlite3.DatabaseError as e:
-        logger.warning("WAL 自动回放失败 (DatabaseError): %s", str(e))
-    except Exception as e:
-        logger.warning("WAL 自动回放异常: %s", str(e))
-    finally:
-        # 清理所有临时文件（主库 + 临时 WAL/SHM）
-        for tmp_path in (new_db_path, wal_temp, shm_temp):
-            if tmp_path is not None and tmp_path.exists():
-                try:
-                    tmp_path.unlink()
-                except Exception:
-                    pass
-
-    return False, {}
-
-
-def _try_dump_database(db_path: Path) -> dict:
-    """
-    尝试从损坏的数据库中导出数据。
-    返回 {table_name: {'columns': [...], 'rows': [...]}} 的字典，或包含 '_dump_sql' 键的字典。
-
-    使用多种策略尽可能多地恢复数据：
-    1. 优先尝试 sqlite3 .dump 命令（最完整的恢复方式），仅保留含 INSERT 的 dump
-    2. 如果 .dump 无有效数据，使用 Python sqlite3 模块逐表尝试 SELECT（部分恢复）
-    """
-    recovered_data = {}
-    dump_insert_count = 0
-
-    # 策略1：尝试使用 sqlite3 命令行工具的 .dump 命令
-    try:
-        import subprocess
-
-        result = subprocess.run(
-            ['sqlite3', str(db_path), '.dump'],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-
-        # .dump 即使在损坏时也可能返回 exitcode=0，但输出只含错误注释
-        # 必须验证输出中是否包含真正的 INSERT 语句
-        if result.stdout:
-            dump_content = result.stdout
-            dump_insert_count = sum(1 for line in dump_content.splitlines()
-                                    if line.strip().upper().startswith('INSERT '))
-            if dump_insert_count > 0:
-                logger.info("sqlite3 .dump 成功: %d 条 INSERT 语句, 总大小 %d bytes",
-                            dump_insert_count, len(dump_content))
-                recovered_data['_dump_sql'] = dump_content
-                recovered_data['_dump_insert_count'] = dump_insert_count
-            else:
-                logger.warning("sqlite3 .dump 输出无有效 INSERT 语句 (可能完全损坏)")
-        else:
-            logger.warning("sqlite3 .dump 无输出: %s", (result.stderr or '')[:200])
-
-    except FileNotFoundError:
-        logger.warning("sqlite3 命令行工具不可用，将使用 Python sqlite3 模块")
-    except subprocess.TimeoutExpired:
-        logger.warning("sqlite3 .dump 命令超时 (30s)")
-    except Exception as e:
-        logger.warning("sqlite3 .dump 异常: %s", str(e))
-
-    # 策略2：使用 Python sqlite3 模块逐表尝试恢复
-    # 即使 .dump 成功，也执行此步骤作为补充（.dump 可能漏掉部分表）
-    conn = None
-    try:
-        conn = sqlite3.connect(str(db_path), timeout=5)
-        conn.execute("PRAGMA journal_mode=OFF;")  # 避免 WAL 相关问题
-
-        # 获取所有表名
-        tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        ).fetchall()
-
-        # 如果 .dump 已经成功，跳过逐表恢复（避免重复）
-        if dump_insert_count > 0:
-            logger.info("sqlite3 .dump 已成功，跳过 Python 逐表恢复")
-        for table_row in (tables if dump_insert_count == 0 else []):
-            table_name = table_row[0]
-            try:
-                # 获取表结构（quote 表名防止特殊字符）
-                columns = conn.execute(f'PRAGMA table_info("{table_name}")').fetchall()
-                if not columns:
-                    continue
-
-                # 尝试读取数据
-                rows = conn.execute(f'SELECT * FROM "{table_name}"').fetchall()
-                if rows:
-                    recovered_data[table_name] = {
-                        'columns': [col[1] for col in columns],  # 列名
-                        'rows': rows
-                    }
-                    logger.info("表 %s 恢复成功: %d 行", table_name, len(rows))
-                else:
-                    logger.info("表 %s 为空，跳过", table_name)
-
-            except sqlite3.DatabaseError as e:
-                logger.warning("表 %s 读取失败: %s", table_name, str(e))
-                continue
-            except Exception as e:
-                logger.warning("表 %s 恢复异常: %s", table_name, str(e))
-                continue
-
-    except sqlite3.DatabaseError as e:
-        logger.error("数据库连接失败，无法恢复数据: %s", str(e))
-    except Exception as e:
-        logger.error("逐表恢复过程异常: %s", str(e))
-    finally:
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-    return recovered_data
-
-
-def _import_recovered_data(conn: sqlite3.Connection, recovered_data: dict) -> dict:
-    """
-    将恢复的数据导入到新数据库中。
-    支持两种导入模式：
-    1. 如果有 '_dump_sql'，仅提取 INSERT 语句执行（跳过 DDL，因 schema 已由 _ensure_schema 重建）
-    2. 否则逐表导入（使用 INSERT OR IGNORE 避免冲突）
-
-    返回恢复统计信息：{table_name: {'imported': int, 'failed': int, 'error': str}}
-    """
-    stats = {}
-
-    if not recovered_data:
-        logger.warning("没有恢复的数据可导入")
-        return stats
-
-    # 策略1：如果有 dump SQL，仅提取 INSERT 语句执行
-    if '_dump_sql' in recovered_data:
-        dump_sql = recovered_data['_dump_sql']
-        try:
-            # 仅提取 INSERT 语句（跳过 PRAGMA / BEGIN / CREATE TABLE / COMMIT / ROLLBACK 等）
-            insert_statements = [
-                line.strip() for line in dump_sql.splitlines()
-                if line.strip().upper().startswith('INSERT ')
-            ]
-
-            success_count = 0
-            fail_count = 0
-            errors = []
-
-            for stmt in insert_statements:
-                try:
-                    conn.execute(stmt)
-                    success_count += 1
-                except Exception as e:
-                    fail_count += 1
-                    error_msg = str(e)[:100]
-                    if error_msg not in errors:
-                        errors.append(error_msg)
-
-            conn.commit()
-
-            stats['_dump'] = {
-                'imported': success_count,
-                'failed': fail_count,
-                'error': '; '.join(errors) if errors else None
-            }
-
-            if success_count > 0:
-                logger.info("dump 导入成功: %d 行, 失败 %d 行", success_count, fail_count)
-            else:
-                logger.warning("dump 导入失败: %d 条 INSERT 均执行失败, 错误: %s",
-                               fail_count, '; '.join(errors))
-
-            return stats
-
-        except Exception as e:
-            logger.error("执行 dump SQL 失败: %s，回退到逐表导入", str(e), exc_info=True)
-            # 继续尝试逐表导入
-
-    # 策略2：逐表导入
-    for table_name, data in recovered_data.items():
-        if table_name.startswith('_'):  # 跳过元数据键
-            continue
-
-        if not isinstance(data, dict) or 'columns' not in data or 'rows' not in data:
-            continue
-
-        columns = data['columns']
-        rows = data['rows']
-
-        if not rows:
-            stats[table_name] = {'imported': 0, 'failed': 0}
-            continue
-
-        # 构造 INSERT 语句（引用标识符防止特殊字符）
-        placeholders = ', '.join(['?' for _ in columns])
-        col_list = ', '.join(f'"{c}"' for c in columns)
-        insert_sql = f'INSERT OR IGNORE INTO "{table_name}" ({col_list}) VALUES ({placeholders})'
-
-        imported = 0
-        failed = 0
-        errors = []
-
-        for row in rows:
-            try:
-                conn.execute(insert_sql, row)
-                imported += 1
-            except Exception as e:
-                failed += 1
-                error_msg = str(e)[:100]
-                if error_msg not in errors:
-                    errors.append(error_msg)
-
-        stats[table_name] = {
-            'imported': imported,
-            'failed': failed,
-            'error': '; '.join(errors) if errors else None
-        }
-
-        if failed > 0:
-            logger.warning("表 %s 导入部分失败: 成功 %d，失败 %d，错误: %s",
-                           table_name, imported, failed, '; '.join(errors))
-        else:
-            logger.info("表 %s 导入成功: %d 行", table_name, imported)
-
-    try:
-        conn.commit()
-    except Exception as e:
-        logger.error("提交导入数据失败: %s", str(e))
-
-    return stats
+_AUTH_REQUIRED_TABLES = ("users", "sessions", "system_config")
+_AUTH_REQUIRED_COLUMNS = {
+    "users": ("id", "username", "password_hash"),
+    "sessions": ("token", "username"),
+    "system_config": ("key", "value"),
+}
 
 
 def _attempt_db_recovery(db_path: Path) -> bool:
     """
-    数据库损坏恢复：备份损坏文件 → 尝试恢复数据 → 删除损坏文件 → 重置初始化标志。
-    使用 threading.Lock 保证同一进程内只执行一次恢复。
-
-    恢复策略（按优先级）：
-    1. WAL 自动回放恢复（保留 WAL/SHM，新建主库让 SQLite 回放） —— 最完整，保留最近事务
-    2. 优先使用 sqlite3 .dump 命令导出完整 SQL（最完整的恢复方式）
-    3. 如果失败，使用 Python sqlite3 模块逐表尝试 SELECT（部分恢复）
-
-    返回: True 表示恢复成功（有数据被恢复），False 表示恢复失败或无数据
+    Recover from an immutable snapshot. If logical recovery fails after the
+    corrupt bundle is safely archived, activate a verified empty schema so auth
+    endpoints remain available while the original data stays repairable.
     """
     global _auth_storage_ready
 
     with _recovery_lock:
-        # 二次检查：可能另一个线程已完成恢复
         if not db_path.exists():
-            logger.info("数据库文件不存在，跳过恢复")
+            return False
+        if not _db_file_is_corrupted(db_path):
             return False
 
-        timestamp = int(datetime.now(timezone.utc).timestamp())
-        backup_path = db_path.with_suffix(
-            f"{db_path.suffix}.corrupted.{timestamp}"
-        )
+        logger.error("Corrupt auth database detected; starting conservative rebuild: %s", db_path)
 
-        # 步骤1：备份完整的数据库三件套（主库 + WAL + SHM），保留原文件用于恢复尝试
+        from .schema import init_auth_tables_sync
+
+        def initialize_empty_fallback(conn: sqlite3.Connection) -> None:
+            """Create the full auth schema in a container-local fallback candidate."""
+            init_auth_tables_sync(conn)
+
         try:
-            for suffix in ("", "-wal", "-shm"):
-                src = Path(str(db_path) + suffix)
-                if src.exists():
-                    dst = Path(str(backup_path) + suffix)
-                    shutil.copy2(str(src), str(dst))
-                    logger.warning("已备份损坏的数据库文件: %s → %s", str(src), str(dst))
-        except Exception as backup_err:
-            logger.error("备份损坏数据库失败: %s", str(backup_err))
+            result = recover_sqlite_database(
+                db_path,
+                required_tables=_AUTH_REQUIRED_TABLES,
+                required_columns=_AUTH_REQUIRED_COLUMNS,
+                minimum_total_rows=1,
+                require_foreign_key_clean=False,
+                activate=True,
+                empty_fallback_initializer=initialize_empty_fallback,
+            )
+        except SQLiteRecoveryError:
+            _auth_storage_ready = False
+            logger.critical(
+                "Automatic auth DB recovery and verified empty fallback both failed. "
+                "The corrupt archive is retained, but auth cannot start safely: %s",
+                db_path,
+                exc_info=True,
+            )
+            raise
 
-        # 步骤2：按优先级尝试恢复数据
-        recovered_data = {}
-        has_recovered_data = False
-
-        # 策略1：WAL 自动回放恢复（最高优先级，保留最近提交的事务）
-        logger.info("开始尝试 WAL 自动回放恢复...")
-        wal_success, wal_data = _try_wal_recovery(db_path)
-        if wal_success and wal_data:
-            recovered_data = wal_data
-            has_recovered_data = True
-            logger.info("WAL 恢复成功，跳过后续恢复策略")
-
-        # 策略2：sqlite3 .dump / 逐表恢复（仅在 WAL 恢复失败时尝试）
-        if not has_recovered_data:
-            logger.info("WAL 恢复失败或无数据，尝试 sqlite3 dump/逐表恢复...")
-            recovered_data = _try_dump_database(db_path)
-            has_recovered_data = bool(recovered_data)
-
-        if has_recovered_data:
-            if '_dump_sql' in recovered_data:
-                logger.info("成功导出数据库 dump，共 %d 条 INSERT 语句", recovered_data.get('_dump_insert_count', 0))
-            else:
-                table_count = len([k for k in recovered_data.keys() if not k.startswith('_')])
-                total_rows = sum(
-                    len(data.get('rows', []))
-                    for data in recovered_data.values()
-                    if isinstance(data, dict) and 'rows' in data
-                )
-                logger.info("成功恢复 %d 个表的数据，共 %d 行", table_count, total_rows)
-        else:
-            logger.warning("无法从损坏的数据库中恢复任何数据")
-
-        # 步骤3：删除损坏的主文件、WAL 和 SHM（恢复尝试完成后）
-        for suffix in ("", "-wal", "-shm"):
-            target = Path(str(db_path) + suffix)
-            try:
-                if target.exists():
-                    target.unlink()
-                    logger.info("已删除损坏文件: %s", str(target))
-            except Exception as del_err:
-                logger.error("删除损坏文件失败 (%s): %s", str(target), str(del_err))
-
-        # 步骤4：重置初始化标志
         _auth_storage_ready = False
-        logger.warning("数据库损坏恢复完成，等待 schema 重建")
-
-        # 将恢复的数据存储到全局变量，供后续导入使用
-        global _pending_recovery_data
-        if has_recovered_data:
-            _pending_recovery_data = recovered_data
-            logger.info("恢复数据已暂存，等待 schema 重建后导入")
-
-        return has_recovered_data
+        if result.method == "empty_fallback":
+            logger.critical(
+                "Auth DB entered degraded empty mode: users must re-register until the "
+                "archived corrupt DB is repaired. archive=%s binary_backup=%s "
+                "sql_backup=%s manifest=%s",
+                result.snapshot_path,
+                result.binary_backup_path,
+                result.sql_backup_path,
+                result.manifest_path,
+            )
+        else:
+            logger.warning(
+                "Auth DB recovery succeeded: method=%s rows=%d binary_backup=%s "
+                "sql_backup=%s manifest=%s",
+                result.method,
+                result.validation.total_rows,
+                result.binary_backup_path,
+                result.sql_backup_path,
+                result.manifest_path,
+            )
+        return True
 
 
 def _db_file_is_corrupted(db_path: Path) -> bool:
-    """通过 PRAGMA quick_check 快速检测数据库文件是否损坏。"""
-    # """【人工临时修改】强制返回 False，关闭一切全自动恢复和删除逻辑"""
-    # logger.warning("【临时提示】已强行关闭数据库自动损坏检测")
-    # return False
+    """Run read-only quick_check without changing journal mode or creating a DB."""
     try:
-        if not db_path.exists():
-            return False
-        conn = sqlite3.connect(str(db_path), timeout=5)
-        try:
-            result = conn.execute("PRAGMA quick_check(1)").fetchone()
-            is_bad = result is None or str(result[0]).lower() != "ok"
-            if is_bad:
-                logger.warning("quick_check 检测到数据库异常: %s", result)
-            return is_bad
-        finally:
-            conn.close()
-    except sqlite3.DatabaseError:
-        return True
-    except Exception:
-        return False
+        corrupted = is_sqlite_database_corrupted(db_path)
+        if corrupted:
+            logger.warning("quick_check reported corruption: %s", db_path)
+        return corrupted
+    except OSError as exc:
+        logger.error("Database file check failed with a filesystem error: %s", exc)
+        raise
 
 
-# ─── 连接工厂 ───
+def _configured_journal_mode() -> str:
+    """Default to DELETE journal for HF Bucket/NFS/FUSE mounted storage."""
+    mode = (get_str("AUTH_DB_JOURNAL_MODE", "DELETE") or "DELETE").strip().upper()
+    allowed = {"DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"}
+    if mode not in allowed:
+        logger.warning("Invalid AUTH_DB_JOURNAL_MODE=%s; falling back to DELETE", mode)
+        return "DELETE"
+    if mode == "WAL":
+        logger.warning(
+            "WAL is enabled for the auth DB. Use AUTH_DB_JOURNAL_MODE=DELETE on "
+            "network-mounted persistent storage."
+        )
+    return mode
+
+
 def _try_connect(db_path: Path) -> sqlite3.Connection:
-    """尝试连接数据库，执行基本 PRAGMA 设置。"""
+    """Create a connection with conservative settings for mounted storage."""
     conn = sqlite3.connect(str(db_path), timeout=15, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA foreign_keys=ON;")
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=15000;")
+        journal_mode = _configured_journal_mode()
+        actual_row = conn.execute(f"PRAGMA journal_mode={journal_mode};").fetchone()
+        actual_mode = str(actual_row[0]).upper() if actual_row else "UNKNOWN"
+        if actual_mode != journal_mode:
+            raise sqlite3.OperationalError(
+                f"Could not set journal_mode={journal_mode}; SQLite returned {actual_mode}"
+            )
+        conn.execute("PRAGMA synchronous=FULL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
+        return conn
+    except Exception:
+        conn.close()
+        raise
 
 
 def _ensure_schema() -> None:
@@ -599,89 +283,57 @@ def _ensure_schema() -> None:
 
 def _db_connection() -> sqlite3.Connection:
     """
-    创建数据库连接。每次调用创建新连接，支持多线程并发访问。
-    内置损坏自动检测与恢复：
-      1. 检测到 malformed/corrupt → 备份 → 尝试恢复数据 → 删除 → 重建 schema → 导入恢复数据 → 重试
-      2. schema 未初始化 → 重建 → 重试
+    Create an auth DB connection. Initialization and recovery are serialized.
+    Recovery first preserves the corrupt bundle; unrecoverable data degrades to
+    a verified empty schema instead of taking the whole auth subsystem offline.
     """
     global _auth_storage_ready
 
-    # 正常路径：schema 已就绪
     if _auth_storage_ready:
         try:
             return _try_connect(AUTH_DB_PATH)
-        except sqlite3.DatabaseError as e:
-            error_msg = str(e).lower()
-            if "malformed" not in error_msg and "corrupt" not in error_msg:
-                logger.error("数据库连接失败 (path=%s): %s", str(AUTH_DB_PATH), str(e))
+        except sqlite3.DatabaseError as exc:
+            message = str(exc).lower()
+            if "malformed" not in message and "corrupt" not in message:
                 raise
-            # 损坏：进入恢复流程（不 return，继续往下走）
-            logger.error("数据库损坏检测 (path=%s): %s，启动自动恢复...", str(AUTH_DB_PATH), str(e))
+            logger.error("Database connection detected corruption: %s", exc)
             _auth_storage_ready = False
-        except Exception as e:
-            logger.error("数据库连接失败 (path=%s): %s", str(AUTH_DB_PATH), str(e))
-            raise
 
-    # 恢复路径：_auth_storage_ready == False（首次启动或损坏恢复后）
-    # 检测并修复损坏文件（_attempt_db_recovery 内部有锁保护，防止并发恢复）
-    if _db_file_is_corrupted(AUTH_DB_PATH):
-        _attempt_db_recovery(AUTH_DB_PATH)
+    with _recovery_lock:
+        if _auth_storage_ready:
+            return _try_connect(AUTH_DB_PATH)
 
-    # 重建 schema（CREATE TABLE IF NOT EXISTS 天然幂等）
-    try:
+        if _db_file_is_corrupted(AUTH_DB_PATH):
+            _attempt_db_recovery(AUTH_DB_PATH)
+
+        # Missing first-deploy DB, successfully recovered DB, or a deliberately
+        # activated empty fallback reaches here. The fallback is never silent: its
+        # manifest/event/log retain the corruption and degradation details.
         _ensure_schema()
-    except Exception as e:
-        logger.error("数据库 schema 重建失败: %s", str(e), exc_info=True)
-        raise
 
-    # 导入恢复的数据（如果有）
-    global _pending_recovery_data
-    if _pending_recovery_data:
-        logger.info("开始导入恢复的数据...")
-        conn = None
-        try:
-            conn = _try_connect(AUTH_DB_PATH)
-            import_stats = _import_recovered_data(conn, _pending_recovery_data)
-
-            # 统计恢复结果
-            total_imported = sum(
-                stats.get('imported', 0)
-                for stats in import_stats.values()
-                if isinstance(stats, dict)
-            )
-            total_failed = sum(
-                stats.get('failed', 0)
-                for stats in import_stats.values()
-                if isinstance(stats, dict)
+        validation = validate_sqlite_database(
+            AUTH_DB_PATH,
+            required_tables=_AUTH_REQUIRED_TABLES,
+            required_columns=_AUTH_REQUIRED_COLUMNS,
+            minimum_total_rows=0,
+            require_foreign_key_clean=False,
+        )
+        if not validation.valid:
+            _auth_storage_ready = False
+            raise SQLiteRecoveryError(
+                f"Auth database validation failed after initialization: "
+                f"{validation.error or 'unknown error'}"
             )
 
-            if total_imported > 0:
-                logger.info("数据恢复成功: 共导入 %d 行数据，失败 %d 行", total_imported, total_failed)
-            else:
-                logger.warning("数据恢复完成，但没有成功导入任何数据")
-
-        except Exception as import_err:
-            logger.error("导入恢复数据失败: %s", str(import_err), exc_info=True)
-        finally:
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-        # 清除暂存数据
-        _pending_recovery_data = None
-
-    # 所有初始化步骤完成（schema 重建 + 数据恢复导入），标记为就绪
-    _auth_storage_ready = True
-    logger.info("数据库初始化与恢复流程完成，服务就绪: %s", str(AUTH_DB_PATH))
-
-    # 重试连接
-    try:
+        _auth_storage_ready = True
+        logger.info(
+            "Auth DB ready: path=%s journal_mode=%s tables=%d rows=%d",
+            AUTH_DB_PATH,
+            _configured_journal_mode(),
+            len(validation.tables),
+            validation.total_rows,
+        )
         return _try_connect(AUTH_DB_PATH)
-    except sqlite3.DatabaseError as e:
-        logger.error("恢复后仍无法连接数据库 (path=%s): %s", str(AUTH_DB_PATH), str(e))
-        raise
 
 
 def get_auth_db_connection() -> sqlite3.Connection:

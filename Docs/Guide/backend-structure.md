@@ -24,8 +24,8 @@ backend/
 │   ├── auth/                                      # 鉴权模块（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
 │   │   ├── constants.py                           # 常量、角色、邮箱/昵称/密码校验常量
-│   │   ├── db.py                                  # 数据库连接工厂 + 损坏自动恢复 + WAL 清理
-│   │   ├── schema.py                              # DDL 建表与邮箱账号迁移
+│   │   ├── db.py                                  # 保守连接配置、只读损坏检测与自动恢复编排
+│   │   ├── schema.py                              # DDL、邮箱账号迁移与数据库维护事件同步
 │   │   ├── password.py                            # 密码哈希/验证
 │   │   ├── models.py                              # Pydantic 请求模型（邮箱账号/绑定/昵称）
 │   │   ├── user.py                                # 用户 CRUD + 旧 username 兼容键
@@ -71,6 +71,8 @@ backend/
 ├── utils/                                         # 通用工具模块
 │   ├── __init__.py                                # 包初始化
 │   ├── net_guard.py                               # 出站 SSRF 护栏单点（IP 字面量归一/私网判定/DNS 复判/host 白名单），proxy+agent+download_xyz 三面共用
+│   ├── sqlite_maintenance.py                      # database_maintenance_events 表与恢复 JSON manifest 同步
+│   ├── sqlite_recovery.py                         # 时间戳损坏备份、临时重建、校验、staging 激活、回滚与空库降级
 │   └── time_utils.py                              # 北京时间工具 + 整点报时后台任务
 │
 ├── services/                                      # 共享业务服务
@@ -92,13 +94,14 @@ backend/
 │   └── utils.py                                   # 工具函数
 │
 ├── data/                                          # 运行时数据目录
-│   └── webgis_auth.db                             # SQLite 数据库（+ WAL/SHM）
+│   └── webgis_auth.db                             # SQLite 认证库（HF 网络挂载默认 DELETE journal）
 │
 ├── tests/                                         # 单元测试
-│   └── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
+│   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
+│   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │
 ├── app.py                                         # FastAPI 主入口
-├── Dockerfile                                     # Docker 构建文件
+├── Dockerfile                                     # Docker 构建文件（包含 sqlite3 CLI）
 ├── docker-compose.yml                             # Docker Compose 配置
 ├── pyproject.toml                                 # Python 项目依赖
 ├── uv.lock                                        # uv 依赖锁定文件
