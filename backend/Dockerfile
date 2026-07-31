@@ -4,16 +4,21 @@ FROM python:3.12-slim
 # 1. 安装 uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# 2. 安装系统级依赖 (必须在切换 USER 之前，且使用 root 权限)
-# 这些是 GIS 库 (rasterio, GDAL) 运行所必需的底层 C 库
-# 2. 安装系统级依赖 (先换成清华镜像源，再安装)
+# 2. 安装系统级依赖（先换清华镜像源，再安装）
+#    必须在切换 USER 之前，且使用 root 权限
+#    GIS 库 (rasterio, GDAL) 运行所必需的底层 C 库 + tzdata（时区数据）
 RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
     libexpat1 \
     libgdal-dev \
     libgeos-dev \
     libgl1 \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 3. 设置工作目录和用户
 RUN useradd -m -u 1000 user
