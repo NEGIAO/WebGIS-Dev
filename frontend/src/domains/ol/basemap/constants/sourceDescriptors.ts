@@ -34,7 +34,7 @@ export type TileSourceDescriptor = {
     /** 非标准适配器 ID（如 maps-for-free） */
     nonStandardAdapter?: string;
     /** 动态上下文需求：运行时需要替换的占位符 */
-    needsContext?: ('tiandituTk' | 'customUrl' | 'normBase')[];
+    needsContext?: ('tiandituTk' | 'customUrl')[];
     /** WMS 专属参数 */
     wms?: {
         layers: string;
@@ -800,8 +800,7 @@ export const TILE_SOURCE_DESCRIPTORS: TileSourceDescriptor[] = [
         category: 'custom',
         group: '自定义',
         serviceType: 'xyz',
-        url: '{normBase}tiles/{z}/{x}/{y}.png',
-        needsContext: ['normBase'],
+        url: 'https://tiles.negiao.cc.cd/tiles/{z}/{x}/{y}.png',
     },
     {
         id: 'custom',

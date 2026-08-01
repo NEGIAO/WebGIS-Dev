@@ -318,8 +318,6 @@ const handleCloseExplanation = () => {
 // createLayerConfigs：工厂函数，根据参数生成全部底图源配置
 
 // --- 配置常量 ---
-const BASE_URL = import.meta.env.BASE_URL || '/';
-const NORM_BASE = BASE_URL.endsWith('/') ? BASE_URL : `${BASE_URL}/`;
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; // 初始视图位置
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 const APP_DISPLAY_VERSION = __APP_VERSION__; // 应用显示版本号（构建时从 README.md 自动提取，无需手动维护）
@@ -369,7 +367,7 @@ let searchSource, searchLayer;
 
 // ========== 图层配置初始化 ==========
 // 使用 composable 提供的工厂函数而不是直接定义 LAYER_CONFIGS
-const LAYER_CONFIGS = createLayerConfigs(NORM_BASE, TIANDITU_TK);
+const LAYER_CONFIGS = createLayerConfigs(TIANDITU_TK);
 
 // 初始化图层列表状态 (从配置生成)
 const layerList = ref(
@@ -398,7 +396,6 @@ const { hydrateRuntimeMapTokens, retryTiandituLayersWithNextToken } = createRunt
     mapInstanceRef: mapInstance,
     LAYER_CONFIGS,
     layerInstances,
-    NORM_BASE,
     DEFAULT_BASEMAP_PRESET_ID,
     createLayerConfigs,
     resolvePresetLayerIds,
@@ -428,7 +425,6 @@ const {
     resolvePresetLayerIds,
     createBasemapLayerFromSource,
     LAYER_CONFIGS,
-    NORM_BASE,
     TIANDITU_TK: tiandituTk,
     customMapUrl,
     layerInstances,

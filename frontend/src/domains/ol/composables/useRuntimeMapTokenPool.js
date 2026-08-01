@@ -19,7 +19,6 @@ export function createRuntimeMapTokenPool({
     mapInstanceRef,
     LAYER_CONFIGS,
     layerInstances,
-    NORM_BASE,
     DEFAULT_BASEMAP_PRESET_ID,
     createLayerConfigs,
     resolvePresetLayerIds,
@@ -50,7 +49,6 @@ export function createRuntimeMapTokenPool({
         tiandituTkRef.value = nextTiandituTk;
 
         const nextLayerConfigs = createLayerConfigs(
-            NORM_BASE,
             nextTiandituTk,
             customMapUrlRef.value,
         );

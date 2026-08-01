@@ -186,9 +186,9 @@ defineProps({
 });
 
 // ========== 卷帘分析支持的底图 ==========
-// 排除不支持的底图：'custom'（需要customUrl）和'local_tiles_preset'（本地瓦片）
+// 排除不支持的底图：'custom'（需要customUrl）
 const SWIPE_SUPPORTED_BASEMAPS = BASEMAP_OPTIONS.filter(
-    (option) => option.value !== 'custom' && option.value !== 'local_tiles_preset',
+    (option) => option.value !== 'custom',
 );
 
 // ========== Map Swipe 对话框状态 ==========

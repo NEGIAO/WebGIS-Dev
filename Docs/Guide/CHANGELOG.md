@@ -6,6 +6,18 @@
 
 ## 版本记录
 
+### V3.5.3 (2026-08-01) — 自定义瓦片底图简化：移除 normBase 动态上下文注入
+
+> 🧹 **代码清理**：将 `local_tiles` 从动态 `normBase` 上下文注入改为标准静态 URL 图层，清理 8 个文件的冗余代码。
+
+- 🔗 **静态 URL 化**：`sourceDescriptors.ts` 移除 `needsContext: ['normBase']`，直接使用 `https://tiles.negiao.cc.cd/tiles/{z}/{x}/{y}.png`
+- 🏭 **工厂签名简化**：`createLayerConfigs()` 移除 `normBase` 参数，`LayerFactoryContext` 类型清理
+- 🗑️ **死代码删除**：`MapContainer.vue` 移除 `BASE_URL`/`NORM_BASE` 常量定义
+- 🔄 **调用链对齐**：`useBasemapSwipe.js`、`useRuntimeMapTokenPool.js`、`MapDownloader.vue` 全部清理传参
+- 🎛️ **卷帘恢复**：`ControlsPanel.vue` 移除对 `local_tiles_preset` 的特殊排除，现支持卷帘对比
+- 📄 **完整记录**：[2026-08-01 自定义瓦片底图简化日志](../LLM_record/26-08/2026-08-01/2026-08-01-simplify-local-tiles.md)
+
+---
 ### V3.5.2 (2026-07-31) — HF 挂载 SQLite 保守恢复、备份与维护审计
 
 > 🛡️ **数据库可靠性**：针对 Hugging Face Space 重启及 Bucket/NFS/FUSE 网络挂载下 SQLite WAL/SHM 锁与同步风险，重写鉴权库损坏处理流程；原损坏数据始终先归档保留，逻辑恢复失败后以经过校验的空 schema 降级运行，避免整个 auth 子系统持续返回 500。

@@ -57,7 +57,6 @@ export type LayerGroup =
 export type TileSourceInstance = TileSourceLike | OSM | null;
 
 export type LayerFactoryContext = {
-    normBase: string;
     tiandituTk: string;
     customUrl: string;
 };
@@ -1175,8 +1174,12 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '自定义瓦片',
         category: 'custom',
         group: '自定义',
-        createSource: ({ normBase }) =>
-            prioritizeTileSourceRequest(new XYZ({ url: `${normBase}tiles/{z}/{x}/{y}.png` })),
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.negiao.cc.cd/tiles/{z}/{x}/{y}.png',
+                }),
+            ),
     },
     {
         id: 'custom',

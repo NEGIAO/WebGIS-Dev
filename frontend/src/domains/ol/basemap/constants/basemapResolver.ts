@@ -93,18 +93,15 @@ export function getLayerGroup(layerId: string): LayerGroup {
 
 /**
  * 创建底图配置列表（由配置文件集中驱动）
- * @param normBase 基础 URL
  * @param tiandituTk 天地图 Token
  * @param customUrl 自定义 URL
  * @returns 图层配置列表
  */
 export function createLayerConfigs(
-    normBase: string = '/',
     tiandituTk: string = '',
     customUrl: string = '',
 ) {
     const context: LayerFactoryContext = {
-        normBase,
         tiandituTk,
         customUrl,
     };

@@ -336,7 +336,7 @@ function handleClearExtent() {
 
 let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
 const layerConfigVersion = ref(0);
-const layerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
+const layerConfigs = createLayerConfigs(TIANDITU_TK, '');
 let layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
 
 function refreshLayerConfigs(tiandituTk) {
@@ -344,7 +344,7 @@ function refreshLayerConfigs(tiandituTk) {
     if (!nextTiandituTk || nextTiandituTk === TIANDITU_TK) return;
 
     TIANDITU_TK = nextTiandituTk;
-    const nextLayerConfigs = createLayerConfigs('/', TIANDITU_TK, '');
+    const nextLayerConfigs = createLayerConfigs(nextTiandituTk, '');
     layerConfigs.splice(0, layerConfigs.length, ...nextLayerConfigs);
     layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
     layerConfigVersion.value += 1;

@@ -7,7 +7,7 @@ import { ref } from 'vue';
 import { useMapSwipe } from '@ol/composables/useMapSwipe';
 
 const SWIPE_COMPARE_LAYER_PREFIX = '__swipe_compare_layer__';
-const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom', 'local_tiles_preset']);
+const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom']);
 
 /**
  * 创建卷帘分析功能
@@ -17,7 +17,6 @@ const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom', 'local_tiles_preset']);
  * @param {Function} deps.resolvePresetLayerIds - 解析预设图层 ID
  * @param {Function} deps.createBasemapLayerFromSource - 创建底图图层
  * @param {Object} deps.LAYER_CONFIGS - 图层配置列表
- * @param {string} deps.NORM_BASE - 标准化基础 URL
  * @param {string|Function|import('vue').Ref<string>} deps.TIANDITU_TK - 天地图 Token
  * @param {import('vue').Ref} deps.customMapUrl - 自定义地图 URL
  * @param {Object} deps.layerInstances - 图层实例缓存
@@ -32,7 +31,6 @@ export function createBasemapSwipe({
     resolvePresetLayerIds,
     createBasemapLayerFromSource,
     LAYER_CONFIGS,
-    NORM_BASE,
     TIANDITU_TK,
     customMapUrl,
     layerInstances,
@@ -65,7 +63,6 @@ export function createBasemapSwipe({
         if (!layerConfig) return null;
 
         const layerFactoryContext = {
-            normBase: NORM_BASE,
             tiandituTk: getTiandituTk(),
             customUrl: customMapUrl.value || '',
         };
