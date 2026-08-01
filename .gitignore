@@ -10,6 +10,8 @@ dist-ssr
 .cache/
 Docs/Demo/data
 Docs/Demo/textures
+# 瓦片
+frontend/public/tiles/
 
 # ========== 后端依赖与缓存 ==========
 backend/__pycache__/
