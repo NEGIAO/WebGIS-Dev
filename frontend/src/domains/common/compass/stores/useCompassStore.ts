@@ -205,7 +205,7 @@ function normalizeCompassConfig(
     merged.tianxinCrossWidth = clamp(Number(merged.tianxinCrossWidth || 2), 1, 8);
     merged.tianxinCrossColor = String(merged.tianxinCrossColor || '#FF0000');
     merged.tianxinCrossLengthRatio = clamp(
-        Number((rawConfig as any)?.tianxinCrossLengthRatio || 1 / 3),
+        Number(rawConfig?.tianxinCrossLengthRatio || 1 / 3),
         0.1,
         1,
     );
@@ -448,7 +448,8 @@ export const useCompassStore = defineStore('compassStore', () => {
             return false;
         }
 
-        const requester = (DeviceOrientationEvent as any)?.requestPermission;
+        // iOS 13+ 需要显式请求权限（Web API 标准，但 TS DOM lib 未声明）
+        const requester = (DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }).requestPermission;
         if (typeof requester !== 'function') {
             setSensorPermission('granted');
             return true;

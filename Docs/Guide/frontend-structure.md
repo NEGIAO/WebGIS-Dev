@@ -49,6 +49,7 @@ frontend/src/
 │   └── toc-theme.css
 ├── config
 │   └── publicRuntime.ts  # 后端/瓦片代理基址单点派生（VITE_* → URL 拼接 helper，禁止硬编码域名）
+├── cesium.d.ts  # Cesium CDN 模块类型声明（桥接 TypeScript 与 CDN 全局 window.Cesium）
 ├── constants
 │   └── index.js  # 路由与守卫
 ├── data

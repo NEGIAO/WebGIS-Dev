@@ -236,8 +236,21 @@ export class playerController {
     private waitForModelReady(model: Model): Promise<void> {
         if (model.ready) return Promise.resolve();
         return new Promise<void>((resolve, reject) => {
-            const onReady = model.readyEvent.addEventListener(() => { onReady(); onErr(); resolve(); });
-            const onErr = model.errorEvent.addEventListener((e: any) => { onReady(); onErr(); reject(e); });
+            let settled = false;
+            const offReady = model.readyEvent.addEventListener(() => {
+                if (settled) return;
+                settled = true;
+                offReady();
+                offErr();
+                resolve();
+            });
+            const offErr = model.errorEvent.addEventListener(() => {
+                if (settled) return;
+                settled = true;
+                offReady();
+                offErr();
+                reject();
+            });
         });
     }
 
@@ -787,6 +800,9 @@ export class playerController {
         // 销毁移动端控件
         this.mobileControls?.destroy();
         this.mobileControls = null;
+
+        // 清理 debug 图元（静态碰撞体 + 动态物体线框）
+        this.removeDebugPrimitives();
 
         // 清除玩家对象
         if (this.model) { this.viewer.scene.primitives.remove(this.model); this.model = null; }

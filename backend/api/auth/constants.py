@@ -24,8 +24,14 @@ ROLE_REGISTERED = "registered"
 ROLE_ADMIN = "admin"
 
 # ─── 账号常量 ───
-GUEST_USERNAME = "user"
-GUEST_PASSWORD = "123"
+GUEST_USERNAME = get_settings().guest_username or "user"
+GUEST_PASSWORD = get_settings().guest_password
+
+if not GUEST_PASSWORD:
+    logger.warning(
+        "GUEST_PASSWORD 未配置（根 .env / L1 env），访客登录将不可用。"
+        "建议在根 .env.example 中设置 GUEST_PASSWORD 为随机强密码。"
+    )
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD_ENV_NAME = "SUPER_USER"
 MAX_AVATAR_INDEX = 11
@@ -344,8 +350,7 @@ def _extract_token(request: Request) -> str:
     if header_token:
         return header_token
 
-    query_token = str(request.query_params.get("token", "")).strip()
-    return query_token
+    return ""
 
 
 def _normalize_binary_flag(raw_value: Any, fallback: str = "0") -> str:

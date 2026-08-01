@@ -15,7 +15,7 @@
  * @param {Function} options.getCesium - 返回 Cesium 全局对象
  * @param {Object}   options.message   - 消息提示对象（message.success/error）
  */
-import { ref } from 'vue';
+import { ref, onScopeDispose } from 'vue';
 import {
     DEFAULT_PLAYER_MODEL_CONFIG,
     DEFAULT_PHYSICS_CONFIG,
@@ -63,6 +63,9 @@ export function usePlayerController({ getViewer, getCesium, message }) {
 
     let playerInstance = null;
     let preUpdateListener = null;
+    let _renderModeAcquired = false; // 标记 acquireContinuous 是否已调用（与 releaseContinuous 配对）
+    let _navPickHandler = null; // 当前点选模式的 ScreenSpaceEventHandler（防止重复进入）
+    let _navPickTimer = null; // 点选模式超时定时器
     let _onOpenNavDialog = null; // 外部注册的打开导航对话框回调
     let _navSelectionListener = null; // selectedEntity 变更监听器（锁定选中状态）
     let _navPreRenderListener = null; // 导航 HUD 每帧更新监听器（preRender）
@@ -185,6 +188,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
             // 控制器就绪 → 声明连续渲染（与 stopPlayer 的 release 成对；
             // 后续步骤失败走 catch → stopPlayer 归还，不会泄漏计数）
             acquireContinuous(viewer, RENDER_MODE_TAG);
+            _renderModeAcquired = true;
 
             // 接入 Cesium 帧循环（含最低高度保护 + 动态地形碰撞更新）
             const TERRAIN_UPDATE_THRESHOLD = TERRAIN_HALF * 0.6; // 距碰撞中心 60% 时触发更新
@@ -301,8 +305,11 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                 console.warn('[PlayerController] 销毁警告:', error);
             }
             playerInstance = null;
-            // 归还连续渲染计数（仅实例确实存在过才归还，与 acquire 配对）
+        }
+        // 归还连续渲染计数（以 _renderModeAcquired 为标记，与 acquire 严格配对）
+        if (_renderModeAcquired) {
             releaseContinuous(getViewer(), RENDER_MODE_TAG);
+            _renderModeAcquired = false;
         }
 
         // 恢复 Cesium 默认交互
@@ -478,15 +485,30 @@ export function usePlayerController({ getViewer, getCesium, message }) {
      * 进入导航目标点选模式
      * 点击 Cesium 场景设置目标：优先检测数据实体，否则取地形坐标
      * 点选完成后自动退出模式
+     *
+     * 幂等保护：重复调用时先退出上一次的点选模式再重新进入；
+     * 30 秒无操作自动退出，防止 ScreenSpaceEventHandler 泄漏
      */
     function startNavPick() {
         const viewer = getViewer();
         const Cesium = getCesium();
         if (!viewer || !Cesium) return;
 
+        // 幂等保护：已在点选模式时，先清理上一次的 handler
+        if (_navPickHandler) {
+            try { _navPickHandler.destroy(); } catch { /* 忽略 */ }
+            _navPickHandler = null;
+        }
+        if (_navPickTimer) {
+            clearTimeout(_navPickTimer);
+            _navPickTimer = null;
+        }
+
         message?.info?.('点击地图选择导航目标');
 
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        _navPickHandler = handler;
+
         handler.setInputAction((click) => {
             // 优先检测是否点到了数据实体
             const picked = viewer.scene.pick(click.position);
@@ -506,7 +528,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                             _entity: picked.id,
                         };
                         message?.info?.(`导航目标已设置：${picked.id.name || '数据要素'}`);
-                        handler.destroy();
+                        cleanupNavPick();
                         return;
                     }
                 }
@@ -523,8 +545,26 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                     name: '地图选点',
                 });
             }
-            handler.destroy();
+            cleanupNavPick();
         }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        // 30 秒无操作自动退出点选模式
+        _navPickTimer = setTimeout(() => {
+            cleanupNavPick();
+            message?.info?.('点选超时，已退出目标选择');
+        }, 30000);
+    }
+
+    /** 清理点选模式资源（handler + 定时器） */
+    function cleanupNavPick() {
+        if (_navPickHandler) {
+            try { _navPickHandler.destroy(); } catch { /* 忽略 */ }
+            _navPickHandler = null;
+        }
+        if (_navPickTimer) {
+            clearTimeout(_navPickTimer);
+            _navPickTimer = null;
+        }
     }
 
     /**
@@ -534,6 +574,13 @@ export function usePlayerController({ getViewer, getCesium, message }) {
     function getPlayerInstance() {
         return playerInstance;
     }
+
+    // 组件作用域销毁时清理导航监听器，防止僵尸回调
+    onScopeDispose(() => {
+        cleanupNavPick();
+        clearNavTarget();
+        stopPlayer();
+    });
 
     return {
         isActive,
@@ -550,6 +597,7 @@ export function usePlayerController({ getViewer, getCesium, message }) {
         setNavTarget,
         clearNavTarget,
         startNavPick,
+        cleanupNavPick,
         openNavDialog,
         setOpenNavDialogHandler,
     };

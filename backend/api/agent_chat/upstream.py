@@ -462,7 +462,8 @@ async def _call_upstream_chat(
     client = getattr(request.app.state, "http_client", None)
     should_close = False
     if client is None:
-        client = httpx.AsyncClient(follow_redirects=True)
+        # 安全：禁用自动重定向，防止 SSRF-via-redirect（上游被重定向到内网 IP）
+        client = httpx.AsyncClient(follow_redirects=False)
         should_close = True
 
     try:
@@ -771,7 +772,8 @@ async def _call_upstream_models(
     client = getattr(request.app.state, "http_client", None)
     should_close = False
     if client is None:
-        client = httpx.AsyncClient(follow_redirects=True)
+        # 安全：禁用自动重定向，防止 SSRF-via-redirect（上游被重定向到内网 IP）
+        client = httpx.AsyncClient(follow_redirects=False)
         should_close = True
 
     last_status = 0

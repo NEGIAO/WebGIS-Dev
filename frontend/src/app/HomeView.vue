@@ -68,6 +68,9 @@ const CesiumContainer = ref(null);
 // CesiumContainer 实例引用：用于在引擎切换时读取 activeBasemap 等状态
 const cesiumContainerRef = ref(null);
 
+// watchdogTimer 引用：确保组件卸载时可清理，防止内存泄漏
+let activeWatchdogTimer = null;
+
 /**
  * 动态导入 CesiumContainer，带重试机制处理 Vite 瞬态模块获取失败。
  * "Failed to fetch dynamically imported module" 通常是 dev 缓存瞬态错误，
@@ -131,7 +134,6 @@ const locationInfo = reactive({
 
 // UI 状态
 const selectedImage = ref('');
-// const currentNewsIndex = ref(0);
 const is3DMode = ref(getCurrentMapView() === MAP_VIEW_CESIUM);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
@@ -761,8 +763,12 @@ async function ensureCesiumLoaded() {
         isCesiumLoading.value = false;
         hideLoading();
     }, 120000); // 120 秒 = 2 分钟，足够覆盖网络极端情况
+    activeWatchdogTimer = watchdogTimer;
 
-    const clearWatchdog = () => window.clearTimeout(watchdogTimer);
+    const clearWatchdog = () => {
+        window.clearTimeout(watchdogTimer);
+        if (activeWatchdogTimer === watchdogTimer) activeWatchdogTimer = null;
+    };
 
     _cesiumLoadPromise = (async () => {
         try {
@@ -773,12 +779,12 @@ async function ensureCesiumLoaded() {
         } catch (error) {
             message.error(t('loading.cesiumLoadFailed', { error: error?.message || error }));
             console.error('[ensureCesiumLoaded] Cesium load error:', error);
+            _cesiumLoadPromise = null; // 失败时清空，允许下次调用重试
+            return false;
+        } finally {
             isCesiumLoading.value = false;
             hideLoading();
             clearWatchdog();
-            return false;
-        } finally {
-            _cesiumLoadPromise = null;
         }
     })();
     return _cesiumLoadPromise;
@@ -1349,6 +1355,12 @@ function syncVisitPosCodeToUrl(encodedPos, geoPermission = 'unknown') {
  *  若地图从未就绪（用户提前离开），不应标记为初始化完成。 */
 onUnmounted(() => {
     if (typeof window === 'undefined') return;
+
+    // 清理 Cesium 加载 watchdog 定时器，防止内存泄漏
+    if (activeWatchdogTimer) {
+        window.clearTimeout(activeWatchdogTimer);
+        activeWatchdogTimer = null;
+    }
 
     // 注意：visitLog 可能在组件卸载后才执行
     // 这是可接受的，因为它是非关键任务，只是记录访问信息

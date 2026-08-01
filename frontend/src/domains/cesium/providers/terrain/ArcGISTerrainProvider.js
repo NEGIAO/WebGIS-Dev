@@ -52,6 +52,14 @@ function getSharedLercPool() {
     return sharedLercPool;
 }
 
+/** 销毁共享 Worker 池，释放 Worker 线程资源（应在 Cesium 域卸载时调用） */
+export function destroySharedLercPool() {
+    if (sharedLercPool) {
+        sharedLercPool.destroy?.();
+        sharedLercPool = null;
+    }
+}
+
 export default function createArcGISTerrainProvider(Cesium) {
     if (!Cesium) {
         throw new Error('Cesium is required to create ArcGISTerrainProvider.');

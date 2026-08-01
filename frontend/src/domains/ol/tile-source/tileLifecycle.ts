@@ -182,7 +182,14 @@ async function fetchTileAsBlobUrl(
  * 4. 成功后创建 blob URL 赋给 img.src
  */
 export function prioritizeTileSourceRequest<T>(source: T): T {
-    const src = source as any;
+    // OpenLayers tile source 内部接口（set/get 动态属性）
+    interface TileSourceWithInternals {
+        set(key: string, value: unknown): void;
+        get(key: string): unknown;
+        getTileLoadFunction?(): unknown;
+        setTileLoadFunction?(fn: (tile: any, srcUrl: string) => void): void;
+    }
+    const src = source as TileSourceWithInternals;
     if (!src || typeof src.set !== 'function') return source;
 
     const controller = new AbortController();

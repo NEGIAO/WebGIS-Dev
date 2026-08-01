@@ -1,5 +1,17 @@
  
 
+// 天地图 SDK 全局对象（动态加载，TS 无法静态推断）
+interface TiandituMapApi {
+    LngLat: new (lng: number, lat: number) => unknown;
+    Marker: new (lngLat: unknown) => unknown;
+    Polyline: new (points: unknown[]) => unknown;
+}
+declare global {
+    interface Window {
+        T?: TiandituMapApi;
+    }
+}
+
 export interface DriveSegment {
     index: number;
     guide: string;
@@ -114,7 +126,7 @@ export function parseAndDrawDriveRoute(xmlString: string, map: any): DriveDrawRe
 
     const result = parseDriveRouteXml(xmlString);
 
-    const TApi = (globalThis as any).T;
+    const TApi = window.T;
     if (!TApi?.LngLat || !TApi?.Marker || !TApi?.Polyline) {
         throw new Error('天地图 SDK 未就绪，无法绘制');
     }

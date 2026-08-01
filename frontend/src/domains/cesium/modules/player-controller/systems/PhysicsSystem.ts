@@ -55,13 +55,13 @@ export async function initRapier(): Promise<typeof RAPIER> {
 // 物理系统
 export class PhysicsSystem {
     frame: LocalFrame; // 本地坐标系
-    world!: RAPIER.World; // 物理世界
+    world!: RAPIER.World | null; // 物理世界
     private rapier!: typeof RAPIER; // Rapier 模块（实例持有）
 
     // 玩家
-    charController!: RAPIER.KinematicCharacterController; // 玩家角色控制器
-    charBody!: RAPIER.RigidBody; // 玩家胶囊刚体
-    charCollider!: RAPIER.Collider; // 玩家胶囊碰撞体
+    charController!: RAPIER.KinematicCharacterController | null; // 玩家角色控制器
+    charBody!: RAPIER.RigidBody | null; // 玩家胶囊刚体
+    charCollider!: RAPIER.Collider | null; // 玩家胶囊碰撞体
     private shape!: CharacterShapeDesc; // 玩家胶囊形状参数(半径/半高)
 
     // 碰撞体登记
@@ -581,9 +581,12 @@ export class PhysicsSystem {
         // 用 sampleTerrain 指定层级，避免 sampleTerrainMostDetailed 请求过高精度导致瓦片过载
         if (hasTerrain) {
             // 天地图 _bottomLevel=11 时走 level 10，ArcGIS/Cesium 走 level 12
-            const sampleLevel = (provider as any)._bottomLevel
-                ? Math.max(0, (provider as any)._bottomLevel - 1)
-                : Math.min(provider.maximumLevel ?? 12, 12);
+            // 安全访问 Cesium 私有字段：定义显式接口文档化依赖，避免 as any
+            interface TerrainProviderWithBottomLevel { _bottomLevel?: number; maximumLevel?: number }
+            const tp = provider as TerrainProviderWithBottomLevel;
+            const sampleLevel = tp._bottomLevel
+                ? Math.max(0, tp._bottomLevel - 1)
+                : Math.min(tp.maximumLevel ?? 12, 12);
             try {
                 await sampleTerrain(provider, sampleLevel, carts);
             } catch {
@@ -615,9 +618,14 @@ export class PhysicsSystem {
 
     // 销毁物理系统
     destroy() {
+        if (this.world) this.world.free();
+        this.world = null;
+        // 置空所有 handle，防止 use-after-free
+        this.charController = null;
+        this.charBody = null;
+        this.charCollider = null;
         this.staticColliders = [];
         this.kinematicBodies.clear();
         this.physicsObjects = [];
-        if (this.world) this.world.free();
     }
 }

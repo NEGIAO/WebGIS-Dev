@@ -194,7 +194,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
             const result = await apiAuthGetPreferences();
             const payload =
                 result && typeof result === 'object' && 'data' in result
-                    ? (result as any).data
+                    ? (result as { data: unknown }).data
                     : result;
             const remote = normalizePreferences(payload?.preferences || payload || {});
             // 本机 UI 语言与远端不一致时：保留本机（注册页/偏好即时切换的 SSOT），其它字段用远端
@@ -248,7 +248,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
             const result = await apiAuthUpdatePreferences(normalizedPayload);
             const payload =
                 result && typeof result === 'object' && 'data' in result
-                    ? (result as any).data
+                    ? (result as { data: unknown }).data
                     : result;
             const merged = normalizePreferences({
                 ...preferences.value,

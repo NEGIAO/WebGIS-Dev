@@ -16,6 +16,7 @@ import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
 import { useMessage } from '@common/shell/useMessage';
 import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL, BACKEND_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 
+/** useMessage 错误提示函数（模块顶层调用，拦截器仅在请求时触发，此时 Vue 已挂载） */
 const { error: showError } = useMessage();
 
 /** 后端根地址（无尾部斜杠），统一来自 src/config/publicRuntime，供 axios 与 SSE 等共用 */
@@ -25,6 +26,11 @@ const backendURL = BACKEND_BASE_URL;
 
 if (import.meta.env.DEV) {
     console.warn('[Backend] 后端 URL:', backendURL);
+}
+
+// 安全守卫：非 localhost 环境下，拒绝通过 HTTP 发送请求（防止密码等凭证明文传输）
+if (typeof window !== 'undefined' && window.location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(window.location.hostname)) {
+    console.warn('[Backend] 安全警告：当前通过 HTTP 连接后端，凭证将以明文传输。生产环境请启用 HTTPS。');
 }
 
 /**

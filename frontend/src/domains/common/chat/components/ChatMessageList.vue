@@ -238,7 +238,7 @@
  *   - 跨天日期分隔线（历史持久化后跨天可读）、消息入场动画、智能粘底 + 回底悬浮钮
  * 代码块复制按钮与语言徽章由 useMarkdownRenderer 注入。
  */
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import {
     Bot,
     Brain,
@@ -409,6 +409,14 @@ async function copyMessage(msg, index) {
         /* clipboard 不可用时静默忽略 */
     }
 }
+
+// 组件卸载时清理 copiedTimer，防止内存泄漏
+onUnmounted(() => {
+    if (copiedTimer) {
+        clearTimeout(copiedTimer);
+        copiedTimer = null;
+    }
+});
 
 defineExpose({ scrollToBottom });
 </script>

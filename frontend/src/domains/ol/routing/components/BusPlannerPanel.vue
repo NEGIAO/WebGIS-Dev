@@ -535,7 +535,8 @@ async function startTransitPlan() {
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
         const requestUrl = `https://api.tianditu.gov.cn/transit?tk=${encodeURIComponent(tk)}&type=busplan&postStr=${encodedPostStr}`;
-        debugInfo.value.requestUrl = requestUrl;
+        // 不在 debugInfo 中记录含 Token 的 URL，防止 Token 泄露
+        debugInfo.value.requestUrl = `https://api.tianditu.gov.cn/transit?type=busplan`;
 
         const res = await fetch(requestUrl, { method: 'GET' });
         debugInfo.value.status = `http ${res.status}`;

@@ -341,7 +341,7 @@ export function toDistrictLayerNode(meta: any, level: number): any {
                     sourceType: 'district-boundary',
                 },
             },
-        } as any,
+        },
         level,
         'district',
     );

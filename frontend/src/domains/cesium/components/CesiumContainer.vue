@@ -704,7 +704,7 @@ async function bootCesium() {
     bootInProgress = true;
     componentUnmounted = false;
     showLoading(t('loading.cesiumScene'), { timeoutMs: 0 });
-    console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
+    if (import.meta.env.DEV) console.warn('[Cesium][boot] start', { ionTokenPresent: !!getCesiumIonToken(), tiandituPresent: !!getTiandituToken() });
     let bootSucceeded = false;
     let bootError = null;
     try {
@@ -784,9 +784,6 @@ async function bootCesium() {
                     await waitForInitialSceneReady();
                     if (componentUnmounted) return;
                     bootSucceeded = true;
-                    await waitForInitialSceneReady();
-                    if (componentUnmounted) return;
-                    bootSucceeded = true;
                     message.success(t('cesium.toast.basemapTerrainOk'));
                     return;
                 }
@@ -799,7 +796,6 @@ async function bootCesium() {
                     : { switched: false };
                 const switched = switchedTianditu.switched || switchedCesium.switched;
                 if (!switched) {
-                    bootError = new Error('Cesium basemap or terrain failed to initialize');
                     bootError = new Error('Cesium basemap or terrain failed to initialize');
                     message.error(t('cesium.toast.basemapTerrainFail'), { closable: true });
                     return;
@@ -818,7 +814,6 @@ async function bootCesium() {
                 message.warning(t('cesium.toast.primaryTokenFailRetry'), { closable: true });
             } catch (error) {
                 if (componentUnmounted) return;
-                if (componentUnmounted) return;
                 console.error('[Cesium][boot] stage error:', error);
                 const switchedCesium = markRuntimeMapTokenFailed('cesium_ion_token');
                 if (!switchedCesium.switched) throw error;
@@ -830,10 +825,8 @@ async function bootCesium() {
         }
         console.error('[Cesium][boot] exhausted token pool');
         bootError = new Error('Cesium token pool exhausted');
-        bootError = new Error('Cesium token pool exhausted');
         message.error(t('cesium.toast.tokenPoolExhausted'), { closable: true });
     } catch (error) {
-        bootError = error instanceof Error ? error : new Error(String(error));
         bootError = error instanceof Error ? error : new Error(String(error));
         console.error('[Cesium][boot] FATAL:', error);
         // 首屏瓦片加载超时：单独提示，避免与通用 initFailed 混淆
@@ -846,13 +839,7 @@ async function bootCesium() {
     } finally {
         bootInProgress = false;
         if (!componentUnmounted) hideLoading();
-        if (!componentUnmounted) hideLoading();
         bootComplete.value = true;
-        if (bootSucceeded) {
-            emit('ready');
-        } else if (!componentUnmounted) {
-            emit('load-failed', { message: bootError?.message || 'Cesium initialization failed' });
-        }
         if (bootSucceeded) {
             emit('ready');
         } else if (!componentUnmounted) {
@@ -1038,6 +1025,10 @@ onUnmounted(() => {
     modelManager.dispose();
     cameraEnhanced.cleanup();
     heightSampler.cleanup();
+
+    // 清理共享地形 Worker 池（释放 Worker 线程资源）
+    import('../providers/terrain/ArcGISTerrainProvider.js').then((m) => m.destroySharedLercPool?.()).catch(() => {});
+    import('../providers/terrain/GeoTerrainProvider.js').then((m) => m.destroySharedGeoDecodePool?.()).catch(() => {});
 
     // 清理体积云
     if (cloudCleanup) {

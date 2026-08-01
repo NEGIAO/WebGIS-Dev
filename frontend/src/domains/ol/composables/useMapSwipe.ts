@@ -70,11 +70,11 @@ export function useMapSwipe() {
      */
     function attachToLayers(mapInstance: any, layers: any[]) {
         if (!mapInstance || !Array.isArray(layers)) {
-            console.warn('[useMapSwipe] Invalid parameters for attachToLayers');
+            if (import.meta.env.DEV) console.warn('[useMapSwipe] Invalid parameters for attachToLayers');
             return;
         }
 
-        console.warn('[useMapSwipe] attachToLayers called with', layers.length, 'layers');
+        if (import.meta.env.DEV) console.warn('[useMapSwipe] attachToLayers called with', layers.length, 'layers');
 
         // 清除之前的附加
         detachFromLayers();
@@ -82,7 +82,7 @@ export function useMapSwipe() {
         // detachFromLayers 会清空 activeMapInstance，必须在之后重新设置
         activeMapInstance.value = mapInstance;
 
-        console.warn('[useMapSwipe] Swipe handlers will be attached by side (left/right)');
+        if (import.meta.env.DEV) console.warn('[useMapSwipe] Swipe handlers will be attached by side (left/right)');
 
         const descriptors: SwipeLayerDescriptor[] = layers
             .map((item, idx): SwipeLayerDescriptor => {
@@ -101,7 +101,7 @@ export function useMapSwipe() {
             const side: SwipeSide = descriptor.side === 'right' ? 'right' : 'left';
 
             try {
-                console.warn(
+                if (import.meta.env.DEV) console.warn(
                     '[useMapSwipe] Attaching to layer',
                     idx,
                     ':',
@@ -119,14 +119,14 @@ export function useMapSwipe() {
                     layer,
                     handlers: layerHandlers,
                 });
-                console.warn('[useMapSwipe] Successfully attached to layer', idx, 'side:', side);
+                if (import.meta.env.DEV) console.warn('[useMapSwipe] Successfully attached to layer', idx, 'side:', side);
             } catch (error) {
-                console.warn('[useMapSwipe] Error attaching to layer', idx, ':', error);
+                if (import.meta.env.DEV) console.warn('[useMapSwipe] Error attaching to layer', idx, ':', error);
             }
         });
 
         enabled.value = true;
-        console.warn(
+        if (import.meta.env.DEV) console.warn(
             '[useMapSwipe] Swipe enabled with',
             attachedLayers.value.length,
             'attached layers',
@@ -145,14 +145,14 @@ export function useMapSwipe() {
 
                 const ctx = event.context;
                 if (!ctx) {
-                    console.warn('[useMapSwipe] prerender: No context');
+                    if (import.meta.env.DEV) console.warn('[useMapSwipe] prerender: No context');
                     return;
                 }
 
                 // 获取 Canvas 尺寸
                 const canvas = event.context.canvas;
                 if (!canvas) {
-                    console.warn('[useMapSwipe] prerender: No canvas');
+                    if (import.meta.env.DEV) console.warn('[useMapSwipe] prerender: No canvas');
                     return;
                 }
 
@@ -214,7 +214,7 @@ export function useMapSwipe() {
                 try {
                     ctx.restore();
                 } catch (error) {
-                    console.warn('[useMapSwipe] Error restoring Canvas context:', error);
+                    if (import.meta.env.DEV) console.warn('[useMapSwipe] Error restoring Canvas context:', error);
                 }
             },
         };
@@ -230,7 +230,7 @@ export function useMapSwipe() {
                 layer.un('prerender', handlers.prerender);
                 layer.un('postrender', handlers.postrender);
             } catch (error) {
-                console.warn('[useMapSwipe] Error detaching from layer:', error);
+                if (import.meta.env.DEV) console.warn('[useMapSwipe] Error detaching from layer:', error);
             }
         });
 

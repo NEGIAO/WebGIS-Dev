@@ -53,12 +53,18 @@
   - [核心能力](#核心能力)
 - [🚀 快速开始](#-快速开始)
   - [环境要求](#环境要求)
+  - [配置（双 env 文件架构，先看这一处）](#配置双-env-文件架构先看这一处)
   - [一键启动（推荐）](#一键启动推荐)
   - [手动启动（高级用户）](#手动启动高级用户)
 - [📁 项目结构](#-项目结构)
+- [🏗️ 系统架构](#️-系统架构)
+  - [分层架构总览](#分层架构总览)
+  - [域名映射](#域名映射)
 - [🧭 文档导航](#-文档导航)
   - [开发文档](#开发文档)
   - [架构文档](#架构文档)
+    - [系统级架构](#系统级架构)
+    - [功能架构](#功能架构)
 - [📜 版本演进](#-版本演进)
 - [📄 许可证](#-许可证)
 - [👤 作者与托管](#-作者与托管)
@@ -67,7 +73,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.3），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.6），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -195,6 +201,116 @@ docker build -t webgis-backend .
 
 ---
 
+## 🏗️ 系统架构
+
+> 完整架构文档已模块化至 [`Docs/Architecture/`](Docs/Architecture/)：
+> [系统架构总览](Docs/Architecture/system-architecture.md) · [CI/CD 流水线](Docs/Architecture/cicd-pipeline.md) · [部署关系与域名映射](Docs/Architecture/deployment-relationship.md)
+
+### 分层架构总览
+
+```mermaid
+flowchart TB
+    subgraph SRC["📦 源码层"]
+        direction LR
+        REPO_DEV["WebGIS-Dev
+前端 + 后端源码"]
+        REPO_HOME["NEGIAO.github.io
+个人主页仓库"]
+    end
+
+    subgraph CI["⚙️ CI / CD"]
+        direction LR
+        JOB_BUILD["① Build
+npm run build → dist"]
+        JOB_SYNC["② Sync
+dist → 主页仓库WebGIS/目录"]
+        JOB_DEPLOY["③ Deploy
+多平台部署"]
+    end
+
+    subgraph DPL["🚀 部署平台"]
+        direction LR
+        P_GH["GitHub Pages"]
+        P_HF["Hugging Face"]
+        P_CF["Cloudflare"]
+        P_PC["Posit Connect"]
+        P_VC["Vercel"]
+    end
+
+    subgraph RT["🌐 运行时"]
+        direction LR
+        FE_HOME["个人主页
+多域名"]
+        FE_WEBGIS["WebGIS 前端
+多域名"]
+        BE["Docker 后端 API"]
+        R2["瓦片存储
+tiles.negiao.cc.cd"]
+    end
+
+    REPO_DEV --> JOB_BUILD
+    JOB_BUILD --> JOB_SYNC
+    JOB_SYNC --> REPO_HOME
+    JOB_BUILD --> JOB_DEPLOY
+
+    JOB_DEPLOY --> P_GH
+    JOB_DEPLOY --> P_HF
+    REPO_HOME --> P_GH
+    REPO_HOME --> P_CF
+    REPO_HOME --> P_PC
+    REPO_HOME --> P_VC
+
+    P_GH --> FE_HOME
+    P_GH --> FE_WEBGIS
+    P_HF --> FE_WEBGIS
+    P_CF --> FE_HOME
+    P_CF --> FE_WEBGIS
+    P_PC --> FE_HOME
+    P_PC --> FE_WEBGIS
+    P_VC --> FE_HOME
+    P_VC --> FE_WEBGIS
+    P_HF --> BE
+
+    FE_WEBGIS -->|"REST API"| BE
+    FE_WEBGIS -->|"加载自定义瓦片"| R2
+```
+
+### 域名映射
+
+**个人主页：**
+
+| 域名 | 平台 | CDN | 国内访问 |
+|------|------|-----|----------|
+| `negiao.github.io` | GitHub Pages 默认 | ❌ | ⚠️ 不稳定 |
+| `negiao.cloud-ip.cc` | GitHub Pages + 自定义域 | ✅ 可配 | ✅ 可访问 |
+| `negiao.cc.cd` | Cloudflare Pages | ✅ Cloudflare | ❌ 被屏蔽 |
+| `negiao.pages.dev` | Cloudflare Pages 默认 | ✅ Cloudflare | ✅ 流畅 |
+| `negiao-pages.share.connect.posit.cloud` | Posit Connect | ❌ | ✅ 可访问 |
+| `negiao.vercel.app` | Vercel | ❌ | ❌ 不可访问 |
+
+**WebGIS 前端：**
+
+| 域名 | 平台 | 来源 |
+|------|------|------|
+| `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev 仓库根路径 |
+| `negiao.github.io/WebGIS` | GitHub Pages | 主页仓库子目录 |
+| `negiao.cloud-ip.cc/WebGIS-Dev` | GitHub Pages + 自定义域 | 自动跳转 |
+| `webgis.negiao.cc.cd` | Cloudflare Pages | 私有域名挂载 |
+| `webgis-dev.pages.dev` | Cloudflare Pages 默认 | 自动分配 |
+| `negiao-webgis.share.connect.posit.cloud` | Posit Connect | 主页仓库触发 |
+| `negiao-web.static.hf.space` | Hugging Face Static | 直接推送 |
+
+**后端与存储：**
+
+| 组件 | 域名 | 平台 |
+|------|------|------|
+| 后端 API | `negiao-webgis.hf.space` | Hugging Face Docker |
+| 瓦片存储 | `tiles.negiao.cc.cd` | Cloudflare R2 |
+
+> 完整域名清单、部署来源矩阵、平台能力对比见 [deployment-relationship.md](Docs/Architecture/deployment-relationship.md)
+
+---
+
 ## 🧭 文档导航
 
 ### 开发文档
@@ -214,6 +330,16 @@ docker build -t webgis-backend .
 ### 架构文档
 
 八大核心功能的架构说明沉淀于 [`Docs/Architecture/`](Docs/Architecture/)：
+
+#### 系统级架构
+
+| 文档 | 一句话说明 |
+|------|-----------|
+| [系统架构总览](Docs/Architecture/system-architecture.md) | 五层分层架构：源码 → CI/CD → 部署 → 运行时 → 用户 |
+| [CI/CD 流水线](Docs/Architecture/cicd-pipeline.md) | 五 Job 流水线：Build → Sync → Multi-Deploy 详解 |
+| [部署关系与域名映射](Docs/Architecture/deployment-relationship.md) | 域名清单、部署来源矩阵、平台能力对比 |
+
+#### 功能架构
 
 | 功能 | 文档 | 一句话说明 |
 |------|------|-----------|
@@ -237,9 +363,9 @@ docker build -t webgis-backend .
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.3** | 2026-08-01 | 自定义瓦片底图简化：移除 normBase 动态上下文注入，`local_tiles` 改为标准静态 URL 图层，清理 8 文件 ~24 行冗余代码。详见[日志](Docs/LLM_record/26-08/2026-08-01/2026-08-01-simplify-local-tiles.md) |
-| **V3.5.2** | 2026-07-31 | HF 网络挂载 SQLite 保守恢复链路：先按 UTC 时间戳完整备份损坏库及 sidecar，再在容器临时目录通过 `.dump`/`.recover` 重建并多重校验，经 staging 原子激活；新增维护事件表、JSON manifest、失败回滚、逻辑恢复失败后的安全空库降级与 `AUTH_DB_JOURNAL_MODE=DELETE` 默认策略。详见[日志](Docs/LLM_record/26-07/2026-07-31/2026-07-31-v352-sqlite-recovery.md) |
-| **V3.5.1** | 2026-07-30 | GIS 拖拽导入 composable 提取 + 2D 地图整图拖拽覆盖层。新增 `useGisDropZone.ts` + `gisUploadPayload.ts`，TOCPanel 删除 ~40 行内联拖拽逻辑，MapContainer 新增全屏拖拽覆盖层 UI（模糊+虚线边框+i18n 提示）。新增淹没分析 Demo 页。详见[日志](Docs/LLM_record/26-07/2026-07-30/2026-07-30-gis-dropzone-composable.md) |
+| **V3.5.6** | 2026-08-01 | Code Review 修复收尾与配置修正：恢复异常详情始终返回（用户需要看到错误原因）；恢复 `/api/info` 开放（开源项目故意暴露）；移除登录限速（用户明确要求）；修复容器内 `.env` 路径不匹配（`/.env` 挂载对齐 `PROJECT_ROOT=/`）；修复游客密码不一致（前端从 `VITE_GUEST_PASSWORD` 读取，与后端 `.env` 一致）；移除前端硬编码密码兜底；清理 `undefined as any` 和残留 `as any`（PhysicsSystem/AnimationSystem/playerController）。详见[日志](Docs/LLM_record/26-08/2026-08-01/2026-08-01-config-fix-and-cr-final.md) |
+| **V3.5.5** | 2026-08-01 | 架构文档体系建设：新增系统架构总览（五层分层架构图）、CI/CD 流水线详解（五 Job 部署时序）、部署关系与域名映射（域名清单 + 部署来源矩阵 + 平台能力对比）。README 首页嵌入 Mermaid 分层架构图 + 域名映射表，新增「系统架构」章节。详见[日志](Docs/LLM_record/26-08/2026-08-01/2026-08-01-architecture-documentation.md) |
+| **V3.5.4** | 2026-08-01 | 全量 Code Review 修复 166 项问题（12 CRITICAL + 25 HIGH + 50 MEDIUM + 79 LOW）：安全加固（代理 SSRF/认证 Token/访客密码/Markdown XSS/原型链污染/GPU 纹理/API Key/Token 存储/SSRF-redirect/日志级别）；前端内存泄漏（HomeView/MapControlsBar/ChatMessageList/useSingularity/wind/SidePanel）；Race Condition（playerController/CameraSystem/PhysicsSystem/ensureCesiumLoaded）；后端输入校验（sqlite_recovery/location IP）；类型安全（CompassManager/useCompassStore/layerTreeBuilder/decompressor/tileLifecycle/driveXmlParser/useErrorHandler）；死代码清理；MEDIUM 收尾（basemapConfig Token 收口/preferred_model 防护/IPAPI 校验/DEV 门禁）；Bug 修复（wind/client.js/PhysicsSystem/useCesiumLayers/useShallowWater/locationSearch）。详见[日志](Docs/LLM_record/26-08/2026-08-01/2026-08-01-code-review-bug-fixes.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -264,6 +390,6 @@ docker build -t webgis-backend .
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.3 · 开发中 · 最后更新 2026-08-01</sub>
+<sub>V3.5.6 · 开发中 · 最后更新 2026-08-01</sub>
 
 </div>

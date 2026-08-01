@@ -42,6 +42,7 @@ export function useSingularity(canvasRef, options = {}) {
         if (document.getElementById('metaball-goo-filter')) return;
         const svgNS = 'http://www.w3.org/2000/svg';
         const svg = document.createElementNS(svgNS, 'svg');
+        svg.id = 'metaball-goo-svg-container';
         svg.style.position = 'absolute';
         svg.style.width = '0';
         svg.style.height = '0';
@@ -262,6 +263,11 @@ export function useSingularity(canvasRef, options = {}) {
             window.removeEventListener('mouseleave', handleMouseLeave);
             window.removeEventListener('resize', handleResize);
             if (animationId) cancelAnimationFrame(animationId);
+            // 清理注入的 SVG 滤镜元素，防止 DOM 泄漏
+            const svgContainer = document.getElementById('metaball-goo-svg-container');
+            if (svgContainer && svgContainer.parentNode) {
+                svgContainer.parentNode.removeChild(svgContainer);
+            }
         },
         step: () => step(),
         // 允许外部动态更新配置

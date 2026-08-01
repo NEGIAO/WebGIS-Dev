@@ -172,6 +172,7 @@ def _attempt_db_recovery(db_path: Path) -> bool:
                 require_foreign_key_clean=False,
                 activate=True,
                 empty_fallback_initializer=initialize_empty_fallback,
+                allowed_base_dir=db_path.parent,
             )
         except SQLiteRecoveryError:
             _auth_storage_ready = False

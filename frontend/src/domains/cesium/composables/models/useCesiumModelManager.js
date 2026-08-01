@@ -259,16 +259,26 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
                 onReady()
             }
 
-            // 5. 监听错误
+            // 5. 监听错误（保存 disposer 以便 removeModel 清理）
+            let errorDisposer = null
             if (model.errorEvent) {
-                model.errorEvent.addEventListener((error) => {
+                const onErrorHandler = (error) => {
                     const s = modelStore.get(id)
                     if (!s) return
                     s.entry.state = ModelState.ERROR
                     s.entry.errorMessage = error?.message ?? '模型加载异常'
                     syncModels()
                     console.error(`[ModelManager] 模型 "${id}" 错误:`, error)
-                })
+                }
+                model.errorEvent.addEventListener(onErrorHandler)
+                errorDisposer = () => model.errorEvent.removeEventListener(onErrorHandler)
+            }
+
+            // 保存 disposer 到 store，供 removeModel 清理
+            const storeEntry = modelStore.get(id)
+            if (storeEntry) {
+                storeEntry.readyDisposer = () => model.readyEvent?.removeEventListener(onReady)
+                storeEntry.errorDisposer = errorDisposer
             }
 
             syncModels()
@@ -318,6 +328,14 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
         const viewer = getViewer?.()
         const store = modelStore.get(id)
         if (!store) return
+
+        // 清理事件监听器（避免内存泄漏与僵尸回调）
+        if (store.readyDisposer) {
+            try { store.readyDisposer() } catch { /* 忽略 */ }
+        }
+        if (store.errorDisposer) {
+            try { store.errorDisposer() } catch { /* 忽略 */ }
+        }
 
         // 从场景移除
         if (store.primitive && viewer) {

@@ -145,10 +145,11 @@ async def _resolve_http_client(request: Request) -> Tuple[httpx.AsyncClient, boo
         return shared, False
 
     # 启动钩子未执行时兜底。
+    # 安全：禁用自动重定向，防止 SSRF-via-redirect
     return httpx.AsyncClient(
         timeout=HTTP_CLIENT_TIMEOUT,
         limits=HTTP_CLIENT_LIMITS,
-        follow_redirects=True,
+        follow_redirects=False,
     ), True
 
 
@@ -633,7 +634,18 @@ async def proxy_ipapi_country(
     返回：
     - 标准化后的国家、地区、城市信息。
     """
+    import ipaddress
+
     normalized_ip = str(ip or "").strip() or _extract_client_ip(request)
+
+    # 输入校验：验证 IP 格式合法
+    try:
+        ipaddress.ip_address(normalized_ip)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="IP 地址格式不合法",
+        )
 
     result = await ip_geo_service.locate(ip=normalized_ip, prefer_amap=False, use_cache=True)
 

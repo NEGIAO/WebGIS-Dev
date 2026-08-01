@@ -22,6 +22,7 @@ import Style from 'ol/style/Style';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { offset as offsetLonLat } from 'ol/sphere';
 import { unByKey } from 'ol/Observable';
+import type { EventsKey } from 'ol/events';
 import type { useCompassStore } from '@common/compass/stores/useCompassStore';
 import type { FengShuiCompassConfig, Layer } from '@common/compass/svg/types';
 import { readCompassUrlState, writeCompassUrlState } from './urlState';
@@ -33,6 +34,11 @@ type CompassManagerOptions = {
     store: CompassStore;
     mapContainerElement?: HTMLElement | null;
 };
+
+// 扩展 VectorLayer：支持自定义排列样式属性
+interface VectorLayerWithTogetherStyle extends VectorLayer<VectorSource> {
+    togetherStyle?: 'equally' | 'stacked';
+}
 
 // 基础配置尺寸，作为缩放计算的基准
 const BASE_CONFIG_SIZE = 1000;
@@ -239,7 +245,7 @@ export class CompassManager {
 
     // ==================== 事件监听器句柄 ====================
     private stopHandles: WatchStopHandle[] = []; // Vue watch 停止函数集合
-    private viewResolutionKey: unknown = null; // 地图分辨率变化事件监听器 key
+    private viewResolutionKey: EventsKey | null = null; // 地图分辨率变化事件监听器 key (ol EventsKey)
 
     private singleClickHandler: ((event: MouseEvent) => void) | null = null; // 地图点击处理器
     private resizeHandler: (() => void) | null = null; // 窗口缩放处理器
@@ -376,7 +382,7 @@ export class CompassManager {
         }
 
         if (this.viewResolutionKey) {
-            unByKey(this.viewResolutionKey as any);
+            unByKey(this.viewResolutionKey);
             this.viewResolutionKey = null;
         }
 
@@ -1068,7 +1074,8 @@ export class CompassManager {
                             if (rowCount === 0) continue;
 
                             // 读取配置中的排列样式，默认为原有逻辑（垂直堆叠）
-                            const style = (layer as any).togetherStyle;
+                            // 自定义属性：VectorLayer 实例上挂载的扩展配置
+                            const style = (layer as VectorLayerWithTogetherStyle).togetherStyle;
 
                             if (style === 'equally') {
                                 // --- 【横向排列逻辑】 ---

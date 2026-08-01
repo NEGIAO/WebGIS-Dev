@@ -3,14 +3,17 @@ import { apiGetRuntimeMapTokens } from '@/api/backend';
 const EMPTY_RUNTIME_TOKENS = {
     tiandituTk: '',
     cesiumIonToken: '',
+    amapKey: '',
     tiandituTokens: [],
     cesiumIonTokens: [],
+    amapKeys: [],
 };
 
 let cachedTokens = { ...EMPTY_RUNTIME_TOKENS };
 let activeTokenIndexes = {
     tianditu_tk: 0,
     cesium_ion_token: 0,
+    amap_key: 0,
 };
 let hasLoadedRuntimeTokens = false;
 let loadPromise = null;
@@ -22,6 +25,7 @@ function normalizeRuntimeKeyName(keyName) {
         .replace(/^_+/, '');
     if (normalized === 'cesium_ion_token' || normalized === 'cesium') return 'cesium_ion_token';
     if (normalized === 'tianditu_tk' || normalized === 'tianditu') return 'tianditu_tk';
+    if (normalized === 'amap_key' || normalized === 'amap' || normalized === 'gaode') return 'amap_key';
     return '';
 }
 

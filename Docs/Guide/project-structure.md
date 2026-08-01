@@ -58,7 +58,21 @@ Docs/
 │   ├── 26-06/                         # 2026-06 日志（含 06-28 / 06-29 等不规则命名子目录）
 │   └── 26-07/                         # 2026-07 日志（按 YYYY-MM-DD 子目录归档，含 07-27 配置收敛、体积云画质/时间轴与大气修复、07-28 OAuth/云优化、Agent 地图命令总线重构）
 │
-├── Architecture/                      # 架构设计文档（八大功能 + 洪水模拟 + 三层配置架构 configuration-three-tier.md）
+├── Architecture/                      # 架构设计文档
+│   ├── system-architecture.md         # 系统架构总览（五层分层架构：源码→CI/CD→部署→运行时→用户）
+│   ├── cicd-pipeline.md               # CI/CD 流水线详解（五 Job 部署时序）
+│   ├── deployment-relationship.md     # 部署关系与域名映射（域名清单+部署来源矩阵）
+│   ├── ol-cesium-dual-engine.md       # 2D/3D 双引擎：一键切换、视图同步与 URL 分享还原
+│   ├── basemap-source-system.md       # 丰富底图源：20+ 图源、熔断回退、GCJ-02 纠偏
+│   ├── multi-format-data-import.md    # 多格式数据导入：拖拽加载，2D/3D 双管线
+│   ├── spatial-analysis-backend.md    # 空间分析：单端点分发，Shapely 后端 8 算子
+│   ├── route-planning.md              # 路径规划：驾车/公交双管线
+│   ├── cesium-3d-effects.md           # 三维特效：体积云、风场、浅水叠加
+│   ├── utility-tools.md               # 实用工具：测量、坐标拾取、罗盘
+│   ├── account-system-ai-quota.md     # 账号体系：邮箱登录、三级身份、双 AI 配额
+│   ├── cesium-fluid-flood-simulation.md # 洪水淹没模拟：GPU 流体管线
+│   ├── configuration-three-tier.md    # 三层配置架构：L1/L2/L3 全景
+│   └── cesium-unified-layer-management.md # Cesium 统一图层管理
 │
 ├── Demo/                              # 前端静态 Demo 演示页面（18 个独立页面）
 │   ├── 2dWindField.html               # 2D 风场可视化演示

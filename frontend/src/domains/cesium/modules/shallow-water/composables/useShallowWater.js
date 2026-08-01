@@ -58,6 +58,9 @@ export function useShallowWater(options = {}) {
   let boltGroup = null;
   let boltMat = null;
 
+  // 海底地板材质（需在 dispose 中释放纹理）
+  let floorMat = null;
+
   // 时钟
   const clock = new THREE.Clock();
   let frameCount = 0;
@@ -196,7 +199,7 @@ export function useShallowWater(options = {}) {
 
     floorGeo.computeVertexNormals();
 
-    const floorMat = new THREE.MeshStandardMaterial({
+    floorMat = new THREE.MeshStandardMaterial({
       map: makeSandTexture(),
       roughness: 1.0,
       metalness: 0.0,
@@ -497,44 +500,55 @@ export function useShallowWater(options = {}) {
   function animate() {
     animationId = requestAnimationFrame(animate);
 
-    const dt = clock.getDelta();
-    uTime.value += dt;
-    uCaustic.value = currentParams.causticStrength;
+    try {
+      const dt = clock.getDelta();
+      uTime.value += dt;
+      uCaustic.value = currentParams.causticStrength;
 
-    moveCamera(dt);
-    updateLightning();
-    controls.update();
-    camera.updateMatrixWorld();
+      moveCamera(dt);
+      updateLightning();
+      controls.update();
+      camera.updateMatrixWorld();
 
-    water.material.uniforms.invProjection.value.copy(camera.projectionMatrixInverse);
-    water.material.uniforms.camWorld.value.copy(camera.matrixWorld);
+      water.material.uniforms.invProjection.value.copy(camera.projectionMatrixInverse);
+      water.material.uniforms.camWorld.value.copy(camera.matrixWorld);
 
-    water.visible = false;
-    if (needCubeUpdate) {
-      cubeCamera.update(renderer, scene);
-      needCubeUpdate = false;
-    }
+      water.visible = false;
+      if (needCubeUpdate) {
+        cubeCamera.update(renderer, scene);
+        needCubeUpdate = false;
+      }
 
-    cloudDome.visible = false;
-    const boltVis = boltGroup.visible;
-    boltGroup.visible = false;
-    renderer.setRenderTarget(refractionRT);
-    renderer.render(scene, camera);
-    renderer.setRenderTarget(null);
-    cloudDome.visible = true;
-    boltGroup.visible = boltVis;
-    water.visible = true;
+      cloudDome.visible = false;
+      const boltVis = boltGroup.visible;
+      boltGroup.visible = false;
+      renderer.setRenderTarget(refractionRT);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      cloudDome.visible = true;
+      boltGroup.visible = boltVis;
+      water.visible = true;
 
-    renderer.render(scene, camera);
+      renderer.render(scene, camera);
 
-    // 更新 FPS
-    frameCount++;
-    const now = performance.now();
-    if (now - lastFpsTime >= 1000) {
-      fps.value = Math.round(frameCount * 1000 / (now - lastFpsTime));
-      onFpsUpdate?.(fps.value);
-      frameCount = 0;
-      lastFpsTime = now;
+      // 更新 FPS
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        fps.value = Math.round(frameCount * 1000 / (now - lastFpsTime));
+        onFpsUpdate?.(fps.value);
+        frameCount = 0;
+        lastFpsTime = now;
+      }
+    } catch (err) {
+      // 渲染异常时停止循环并通知，防止静默死亡
+      console.error('[ShallowWater] animate loop error:', err);
+      try {
+        pause();
+      } catch {
+        // pause 内部仅 cancelAnimationFrame，此处防御性兜底
+      }
+      onError?.(err);
     }
   }
 
@@ -639,6 +653,14 @@ export function useShallowWater(options = {}) {
     cubeRT?.dispose();
     envRT?.dispose();
     pmrem?.dispose();
+
+    // 释放 Three.js 程序化生成的纹理（material.dispose() 不会自动释放纹理）
+    floorMat?.map?.dispose();
+    water.material?.dispose();
+    cloudDome?.material?.uniforms?.uNoise?.value?.dispose();
+
+    // 释放 lightning bolt 材质
+    boltMat?.dispose();
 
     scene = null;
     camera = null;

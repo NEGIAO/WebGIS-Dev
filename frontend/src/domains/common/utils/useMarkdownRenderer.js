@@ -149,7 +149,7 @@ function buildCustomRenderer() {
                 : '';
 
             // 复制按钮：显示在右上角，hover 时可见
-            const copyBtn = '<button class="code-copy-btn" onclick="__copyCode(this)">Copy</button>';
+            const copyBtn = '<button class="code-copy-btn" data-copy-btn="true">Copy</button>';
 
             // data-lang 属性供 CSS 和复制逻辑使用
             const langAttr = langLabel ? ` data-lang="${escapeHtmlAttr(langLabel)}"` : '';
@@ -275,26 +275,27 @@ async function ensureMarkdownLibs() {
         }
     }
 
-    libsReady.value = !!markedLib.value;
+    libsReady.value = !!markedLib.value && !!dompurifyLib.value;
 }
 
 /**
  * DOMPurify sanitize 配置
- * 允许 target 属性（链接新窗口打开）+ class（hljs 需要）+ onclick（复制按钮）
+ * 允许 target 属性（链接新窗口打开）+ class（hljs 需要）+ data-lang
+ * 注意：不再允许 onclick，复制按钮改用容器事件委托
  */
 const PURIFY_CONFIG = {
-    ADD_ATTR: ['target', 'class', 'onclick', 'data-lang'],
+    ADD_ATTR: ['target', 'class', 'data-lang'],
     ALLOWED_TAGS: [
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         'p', 'br', 'hr',
         'strong', 'em', 'del', 's', 'u', 'mark',
         'a', 'img',
-        'ul', 'ol', 'li', 'input',          // input 用于 GFM 任务列表 checkbox
+        'ul', 'ol', 'li', 'input',
         'blockquote',
-        'pre', 'code', 'span',                // span 用于 hljs token
+        'pre', 'code', 'span',
         'table', 'thead', 'tbody', 'tr', 'th', 'td',
         'div', 'details', 'summary',
-        'button',                             // 复制按钮
+        'button',
     ],
 };
 
@@ -325,7 +326,7 @@ function renderAnswerHtml(rawContent) {
         html = `<div>${escapeHtml(trimmed).replace(/\n/g, '<br/>')}</div>`;
     }
 
-    // XSS 防护
+    // XSS 防护：DOMPurify 不可用时降级为 escapeHtml，绝不返回原始 HTML
     if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
         try {
             return dompurifyLib.value.sanitize(html, PURIFY_CONFIG);
@@ -334,7 +335,7 @@ function renderAnswerHtml(rawContent) {
         }
     }
 
-    return html;
+    return escapeHtml(trimmed).replace(/\n/g, '<br/>');
 }
 
 /**
@@ -350,10 +351,12 @@ function renderThinkHtml(rawContent) {
     if (markedLib.value && typeof markedLib.value.parse === 'function') {
         try {
             const html = markedLib.value.parse(think);
+            // XSS 防护：DOMPurify 可用时消毒，不可用时降级为 escapeHtml
             if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
                 return dompurifyLib.value.sanitize(html, PURIFY_CONFIG);
             }
-            return html;
+            // 安全兜底：DOMPurify 不可用时绝不返回原始 HTML
+            return escapeHtml(think).replace(/\n/g, '<br/>');
         } catch (_e) {
             // fallback
         }
@@ -372,15 +375,17 @@ function hasThinkContent(rawContent) {
 }
 
 /**
- * 注入全局复制函数（只需执行一次）
- * marked 的 onclick 属性需要一个全局可访问的函数
+ * 注入复制按钮事件委托（只需执行一次）
+ * 通过容器 click 事件委托到 [data-copy-btn] 按钮，避免 onclick 属性 XSS
  */
 let copyFnInjected = false;
 function injectGlobalCopyFn() {
     if (copyFnInjected || typeof window === 'undefined') return;
     copyFnInjected = true;
 
-    window.__copyCode = async (btn) => {
+    document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('[data-copy-btn]');
+        if (!btn) return;
         try {
             const pre = btn.closest('pre');
             const codeEl = pre?.querySelector('code');
@@ -395,7 +400,7 @@ function injectGlobalCopyFn() {
         } catch (_e) {
             // clipboard API 失败时静默忽略
         }
-    };
+    });
 }
 
 /**

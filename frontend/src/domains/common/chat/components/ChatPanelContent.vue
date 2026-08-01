@@ -593,7 +593,7 @@ onMounted(async () => {
     try {
         await ensureMarkdownLibs();
     } catch {
-        // ignore
+        // Markdown 库加载失败时使用纯文本渲染兜底（已在渲染层处理）
     }
 
     initGISCommander();

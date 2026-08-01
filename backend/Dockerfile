@@ -1,8 +1,8 @@
 # 使用官方 Python 运行时作为基础镜像
 FROM python:3.12-slim
 
-# 1. 安装 uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# 1. 安装 uv（通过 pip 国内镜像，避免 Docker Hub 拉取失败）
+RUN pip install uv -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 2. 安装系统级依赖（先换清华镜像源，再安装）
 #    必须在切换 USER 之前，且使用 root 权限

@@ -1213,6 +1213,8 @@ void main()
                     this.viewer.scene.primitives.remove(p);
                 }
             });
+            // 先保存引用再清空数组，确保所有 outputTexture 被释放
+            const passesToDispose = [this.mainRenderPass, ...(this.computePasses || [])];
             this.mainRenderPass = null;
             this.computePasses = [];
 
@@ -1232,6 +1234,16 @@ void main()
                 this._heightMap.destroy();
                 this._heightMap = null;
             }
+
+            // 释放正交相机引用（防止内存泄漏）
+            this.heightMapCamera = null;
+
+            // 释放 CustomPrimitive 的 outputTexture（使用预先保存的引用）
+            passesToDispose.forEach((p) => {
+                if (p?.outputTexture && !p.outputTexture.isDestroyed?.()) {
+                    p.outputTexture.destroy();
+                }
+            });
         }
 
         // 纹理拷贝方法：将高度图数据复制到目标 framebuffer

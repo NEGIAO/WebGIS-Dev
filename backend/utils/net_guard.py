@@ -194,9 +194,12 @@ def parse_host_allowlist(raw: Any) -> List[str]:
 
 
 def host_matches_allowlist(hostname: str, allowlist: Sequence[str]) -> bool:
-    """host 是否命中白名单（精确匹配或作为其子域）；白名单为空时恒 True（=未启用）。"""
+    """host 是否命中白名单（精确匹配或作为其子域）。
+
+    安全规则：白名单为空时恒 False（=拒绝所有），必须显式配置白名单才启用代理。
+    """
     if not allowlist:
-        return True
+        return False
     host = normalize_host(hostname)
     if not host:
         return False

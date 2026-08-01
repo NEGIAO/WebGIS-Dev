@@ -143,6 +143,7 @@
 import { computed } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
+import { getRuntimeMapTokensSync } from '@ol/services/runtimeMapTokens';
 
 const message = useMessage();
 const { t } = useLocale();
@@ -216,13 +217,19 @@ async function openOfficialDetail() {
 // ==============================================
 const aoiRequestUrl = computed(() => {
     const id = props.poiId || 'B0IB27UANM';
-    const key = '90f914f28746528ba667377b31c1c629';
-    //key为奥维的，免费额度较大，且不绑定域名，适合测试使用
+    const tokens = getRuntimeMapTokensSync();
+    const key = tokens.amapKey || '';
+    if (!key) return '';
     return `https://restapi.amap.com/v5/aoi/polyline?id=${id}&key=${key}`;
 });
 async function getAoiBoundarySafe() {
     if (!props.poiId) {
         message.warning(t('layer.pleaseInputPoiId'));
+        return;
+    }
+
+    if (!aoiRequestUrl.value) {
+        message.warning('高德 API Key 未配置，请联系管理员');
         return;
     }
 

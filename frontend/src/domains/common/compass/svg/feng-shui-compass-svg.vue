@@ -322,69 +322,8 @@ function rads(degrees: number) {
     return (Math.PI * (degrees + CORRECTION_ANGLE)) / 180;
 }
 
-// 检查层填充
-// function hasLayerFill(layerIndex) {
-//   return props.layerFilt.some(fill => fill[0] === layerIndex);
-// }
-
-// 获取层填充颜色
-// function getLayerFillColor(layerIndex) {
-//   const fill = props.layerFilt.find(fill => fill[0] === layerIndex);
-//   return fill ? fill[1] : 'none';
-// }
-
-// 获取层路径
 // 缓存计算结果
 const cachedResults = new Map();
-
-// 缓存计算函数
-// function memoize(fn) {
-//   return function (...args) {
-//     const key = JSON.stringify(args);
-//     if (!cachedResults.has(key)) {
-//       cachedResults.set(key, fn.apply(this, args));
-//     }
-//     return cachedResults.get(key);
-//   };
-// }
-
-// 优化计算密集型函数
-// const getLayerPath = memoize((layerIndex) => {
-//   const innerRadius = getLayerRadius(layerIndex);
-//   const outerRadius = getLayerRadius(layerIndex + 1);
-//   const layerShape = props.compassData[layerIndex].shape || 'circle';
-
-//   if (layerShape === 'circle') {
-//     return `
-//       M ${centerPoint.value.x + innerRadius * Math.cos(0)} ${centerPoint.value.y + innerRadius * Math.sin(0)}
-//       A ${innerRadius} ${innerRadius} 0 1 1 ${centerPoint.value.x + innerRadius * Math.cos(2 * Math.PI)} ${centerPoint.value.y + innerRadius * Math.sin(2 * Math.PI)}
-//       L ${centerPoint.value.x + outerRadius * Math.cos(2 * Math.PI)} ${centerPoint.value.y + outerRadius * Math.sin(2 * Math.PI)}
-//       A ${outerRadius} ${outerRadius} 0 1 0 ${centerPoint.value.x + outerRadius * Math.cos(0)} ${centerPoint.value.y + outerRadius * Math.sin(0)}
-//       Z
-//     `.trim();
-//   } else {
-//     const sides = props.compassData[layerIndex].data.length;
-//     let path = [];
-
-//     for (let i = 0; i <= sides; i++) {
-//       const angle = (i * 2 * Math.PI) / sides;
-//       const x1 = centerPoint.value.x + innerRadius * Math.cos(angle);
-//       const y1 = centerPoint.value.y + innerRadius * Math.sin(angle);
-//       const x2 = centerPoint.value.x + outerRadius * Math.cos(angle);
-//       const y2 = centerPoint.value.y + outerRadius * Math.sin(angle);
-
-//       if (i === 0) {
-//         path.push(`M ${x1} ${y1}`);
-//         path.push(`L ${x2} ${y2}`);
-//       } else {
-//         path.push(`L ${x2} ${y2}`);
-//       }
-//     }
-
-//     path.push('Z');
-//     return path.join(' ');
-//   }
-// });
 
 // 清理缓存
 onMounted(() => {

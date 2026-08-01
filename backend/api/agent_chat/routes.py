@@ -792,8 +792,16 @@ async def update_user_model_preference(
     username = str(session.get("username") or "")
     preferred_model = _normalize_model(str(payload.get("preferred_model") or ""))
 
-    if not preferred_model:
-        pass
+    # 校验 preferred_model 是否在可用模型列表中（防止任意值注入）
+    if preferred_model:
+        from api.agent_chat.db import _get_system_config_values_sync, CONFIG_KEY_AVAILABLE_MODELS
+        cached_raw = _get_system_config_values_sync([CONFIG_KEY_AVAILABLE_MODELS]).get(CONFIG_KEY_AVAILABLE_MODELS, "")
+        allowed = _normalize_available_models(cached_raw)
+        if allowed and preferred_model not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不支持的模型: {preferred_model}",
+            )
 
     try:
         _ensure_agent_chat_tables_sync()

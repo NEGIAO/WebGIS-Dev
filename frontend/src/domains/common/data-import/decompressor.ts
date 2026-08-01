@@ -51,8 +51,8 @@ function isEntryLike(input: unknown): input is any {
     );
 }
 
-function isBlobLike(input: unknown): input is any {
-    return !!input && typeof input === 'object' && typeof (input as any).arrayBuffer === 'function';
+function isBlobLike(input: unknown): input is Blob {
+    return !!input && typeof input === 'object' && typeof (input as Blob).arrayBuffer === 'function';
 }
 
 async function readEntryFile(entry: any): Promise<File> {
@@ -108,11 +108,18 @@ async function flattenArchive(
         return candidate;
     }
 
-    const entries = Object.values(zip.files).filter((item: any) => !item.dir);
+    // JSZip 条目接口（避免 as any）
+    interface JsZipEntry {
+        name: string;
+        dir: boolean;
+        async(type: 'arraybuffer'): Promise<ArrayBuffer>;
+    }
+
+    const entries = Object.values(zip.files).filter((item: JsZipEntry) => !item.dir);
     for (const entry of entries) {
-        const entryPath = normalizePath((entry as any).name);
+        const entryPath = normalizePath(entry.name);
         const entryExt = extOf(entryPath);
-        const entryBuffer = await (entry as any).async('arraybuffer');
+        const entryBuffer = await entry.async('arraybuffer');
 
         // KMZ 的主 KML 常见文件名为 doc.kml。这里将其映射为“容器基名.kml”，
         // 确保后续 TOC 图层名保持为原始 KMZ 文件名，而不是 doc/乱码名。
@@ -136,9 +143,9 @@ async function flattenArchive(
     return output;
 }
 
-async function flattenFile(file: any, preferredPath = ''): Promise<FlattenedResource[]> {
+async function flattenFile(file: Blob & { webkitRelativePath?: string; name?: string }, preferredPath = ''): Promise<FlattenedResource[]> {
     const path = normalizePath(
-        preferredPath || (file as any).webkitRelativePath || (file as any).name || 'unknown',
+        preferredPath || file.webkitRelativePath || file.name || 'unknown',
     );
     const ext = extOf(path);
     const buffer = await readAsArrayBuffer(file);
@@ -180,7 +187,7 @@ async function flattenEntry(entry: any, basePath = ''): Promise<FlattenedResourc
     return [];
 }
 
-export async function flattenResources(resources: any[]): Promise<FlattenedResource[]> {
+export async function flattenResources(resources: Array<Blob | FileSystemEntry | null | undefined>): Promise<FlattenedResource[]> {
     const output: FlattenedResource[] = [];
 
     for (const resource of resources || []) {
@@ -195,7 +202,7 @@ export async function flattenResources(resources: any[]): Promise<FlattenedResou
         if (isBlobLike(resource)) {
             const flattened = await flattenFile(
                 resource,
-                (resource as any).webkitRelativePath || (resource as any).name || 'unknown',
+                resource.webkitRelativePath || resource.name || 'unknown',
             );
             output.push(...flattened);
         }
@@ -214,7 +221,7 @@ export async function flattenUploadInput(input: {
     }
 
     if (isEntryLike(input?.content)) {
-        return flattenResources([input.content as any]);
+        return flattenResources([input.content]);
     }
 
     if (isBlobLike(input?.content)) {

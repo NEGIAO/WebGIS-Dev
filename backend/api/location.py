@@ -233,7 +233,20 @@ async def ip_locate(
     - 内存缓存（TTL 1小时）
     - 自动选择最优服务
     """
+    import ipaddress
+
     ip = request_data.ip.strip() or get_client_ip(request)
+
+    # 输入校验：验证 IP 格式合法（防止注入/绕过）
+    if request_data.ip.strip():
+        try:
+            ipaddress.ip_address(request_data.ip.strip())
+        except ValueError:
+            return {
+                "code": 400,
+                "data": {"ok": False},
+                "message": "IP 地址格式不合法",
+            }
 
     # 使用统一的 IP 定位服务
     result = await ip_geo_service.locate(

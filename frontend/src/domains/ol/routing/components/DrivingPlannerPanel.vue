@@ -388,7 +388,8 @@ async function startDriveSearch(): Promise<void> {
 
         const encodedPostStr = encodeURIComponent(JSON.stringify(postObj));
         const requestUrl = `https://api.tianditu.gov.cn/drive?tk=${encodeURIComponent(token)}&type=search&postStr=${encodedPostStr}`;
-        debug.requestUrl = requestUrl;
+        // 不在 debugInfo 中记录含 Token 的 URL，防止 Token 泄露
+        debug.requestUrl = `https://api.tianditu.gov.cn/drive?type=search`;
 
         const response = await fetch(requestUrl, { method: 'GET' });
         debug.status = `http ${response.status}`;

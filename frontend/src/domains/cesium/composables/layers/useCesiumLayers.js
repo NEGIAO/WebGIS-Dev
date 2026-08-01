@@ -686,6 +686,7 @@ export function useCesiumLayers({
     async function ensureCesiumWorldTerrainForOsmBuildings() {
         if (activeTerrain.value === 'cesiumWorld') return true;
 
+        // OSM Buildings 需要 Cesium World 地形才能正确显示高度，自动切换
         activeTerrain.value = 'cesiumWorld';
         const switched = await applyTerrain('cesiumWorld');
         if (!switched) {

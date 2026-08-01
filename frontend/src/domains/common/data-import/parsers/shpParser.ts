@@ -353,9 +353,15 @@ function enrichFeaturesWithDbfAttributes(featureCollection: any, dbfData: DbfDat
             const _originalPropsCount = Object.keys(feature.properties || {}).length;
             
             // 保留原有属性，使用 DBF 属性进行补充和覆盖
+            // 过滤危险字段名防止原型链污染（__proto__ / constructor 等）
+            const safeValues: Record<string, any> = Object.create(null);
+            for (const key of Object.keys(dbfRecord.values)) {
+                if (key === '__proto__' || key === 'constructor' || key === '__defineGetter__') continue;
+                safeValues[key] = dbfRecord.values[key];
+            }
             feature.properties = {
                 ...feature.properties,
-                ...dbfRecord.values,
+                ...safeValues,
                 _dbf_fields: dbfData.fields.map(f => f.name),
                 _dbf_encoding: dbfData.encoding,
             };

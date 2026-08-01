@@ -515,10 +515,10 @@ onMounted(() => {
 
     document.addEventListener('click', handleClickOutside);
 
-    // 返回清理函数
-    return () => {
+    // 组件卸载时清理全局事件监听，防止内存泄漏
+    onUnmounted(() => {
         document.removeEventListener('click', handleClickOutside);
-    };
+    });
 });
 
 /**

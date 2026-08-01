@@ -84,13 +84,17 @@ export function detectGISIntent(userMsg) {
 }
 
 export function getToolDisplayName(name, args = {}) {
+    // HTML 实体转义，防止用户输入破坏 DOM 结构
+    const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
     const displayNames = {
         set_map_view: args.view === 'cesium' ? '切换到 3D 地图' : '切换到 2D 地图',
         set_view_center: '移动地图中心',
         set_camera_orientation: '调整 3D 相机姿态',
         zoom_to_extent: '缩放到指定范围',
-        search_and_zoom: `定位到 "${args.query || '未知位置'}"`,
-        switch_basemap: `切换到底图：${args.presetId || '未知预设'}`,
+        search_and_zoom: `定位到 "${escapeHtml(args.query || '未知位置')}"`,
+        switch_basemap: `切换到底图：${escapeHtml(args.presetId || '未知预设')}`,
     };
-    return displayNames[name] || `执行工具：${name}`;
+    return displayNames[name] || `执行工具：${escapeHtml(name)}`;
 }

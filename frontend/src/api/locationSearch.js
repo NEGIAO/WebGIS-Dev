@@ -81,31 +81,32 @@ function parseTiandituResponse(data) {
 }
 
 async function searchWithTianditu({ keywords, page = 1, pageSize = 10, tiandituTk, mapBound, signal }) {
+    if (!tiandituTk) {
+        throw new Error('天地图配置错误：Token 未配置');
+    }
+
+    // 如果没有提供 mapBound，使用全国范围的默认值
+    // mapBound 格式: "minLon,minLat,maxLon,maxLat"
+    const defaultBound = '73.5,18.2,135.0,53.5'; // 中国大约范围
+    const finalMapBound = String(mapBound || '').trim() || defaultBound;
+
+    const postObj = {
+        keyWord: keywords,
+        level: 12,
+        mapBound: finalMapBound,
+        queryType: 1,
+        start: Math.max(0, (page - 1) * pageSize),
+        count: pageSize,
+    };
+
+    const url = `https://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(JSON.stringify(postObj))}&type=query&tk=${encodeURIComponent(tiandituTk)}`;
+
     try {
-        if (!tiandituTk) {
-            throw new Error('天地图 Token 未配置');
-        }
-
-        // 如果没有提供 mapBound，使用全国范围的默认值
-        // mapBound 格式: "minLon,minLat,maxLon,maxLat"
-        const defaultBound = '73.5,18.2,135.0,53.5'; // 中国大约范围
-        const finalMapBound = String(mapBound || '').trim() || defaultBound;
-
-        const postObj = {
-            keyWord: keywords,
-            level: 12,
-            mapBound: finalMapBound,
-            queryType: 1,
-            start: Math.max(0, (page - 1) * pageSize),
-            count: pageSize,
-        };
-
-        const url = `https://api.tianditu.gov.cn/v2/search?postStr=${encodeURIComponent(JSON.stringify(postObj))}&type=query&tk=${encodeURIComponent(tiandituTk)}`;
+        // 天地图 API 支持 CORS，浏览器直接请求（无需走后端代理）
         const res = await fetch(url, { signal });
-
         if (!res.ok) throw new Error(`API Error: ${res.status}`);
-
         const data = await res.json();
+
         const items = parseTiandituResponse(data);
         const total = Number(data?.count ?? items.length);
 
@@ -115,8 +116,7 @@ async function searchWithTianditu({ keywords, page = 1, pageSize = 10, tiandituT
         };
     } catch (error) {
         if (error?.name === 'AbortError') throw error;
-        // 处理天地图搜索错误
-        console.error('Tianditu search error:', error);
+
         const errorMsg = error.message || '搜索失败';
         const httpStatus = error.status || 0;
         const { error: showError } = useMessage();
@@ -125,8 +125,6 @@ async function searchWithTianditu({ keywords, page = 1, pageSize = 10, tiandituT
             showError('天地图配置错误：Token 未配置');
             throw new Error('天地图配置错误：Token 未配置');
         }
-
-        // 使用统一状态码映射
         if ([502, 503, 504].includes(httpStatus)) {
             const msg = `天地图服务暂不可用 [${httpStatus} ${getHttpStatusMessage(httpStatus)}]，请稍后重试`;
             showError(msg);
@@ -137,7 +135,6 @@ async function searchWithTianditu({ keywords, page = 1, pageSize = 10, tiandituT
             showError(msg);
             throw new Error(msg);
         }
-
         if (errorMsg.includes('无法连接')) {
             showError('天地图搜索：网络连接失败，请检查网络设置');
             throw new Error('天地图搜索：网络连接失败，请检查网络设置');
@@ -278,7 +275,7 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10, signal }) {
         const { error: showError3 } = useMessage();
 
         if (error.isQuotaExceeded) {
-            showError3('高德API配额已用完，请升级账户或稍后重试');
+            // 拦截器已提示配额用完，此处仅重新抛出，避免双重 toast
             throw new Error('高德API配额已用完，请升级账户或稍后重试');
         }
 

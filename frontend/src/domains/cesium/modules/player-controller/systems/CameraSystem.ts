@@ -101,12 +101,25 @@ export class CameraSystem {
         const omega = 2 / smoothTime;
         const x = omega * delta;
         const exp = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
-        for (const a of ["x", "y", "z"] as const) {
-            const change = (cur as any)[a] - (dest as any)[a];
-            const temp = (((v as any)[a]) + omega * change) * delta;
-            (v as any)[a] = ((v as any)[a] - omega * temp) * exp;
-            (cur as any)[a] = (dest as any)[a] + (change + temp) * exp;
-        }
+        // 分量级弹簧阻尼（避免字符串属性访问 + as any）
+        const curX = cur.x, curY = cur.y, curZ = cur.z;
+        const destX = dest.x, destY = dest.y, destZ = dest.z;
+        let vX = v.x, vY = v.y, vZ = v.z;
+        const changeX = curX - destX;
+        const tempX = (vX + omega * changeX) * delta;
+        vX = (vX - omega * tempX) * exp;
+        cur.x = destX + (changeX + tempX) * exp;
+        const changeY = curY - destY;
+        const tempY = (vY + omega * changeY) * delta;
+        vY = (vY - omega * tempY) * exp;
+        cur.y = destY + (changeY + tempY) * exp;
+        const changeZ = curZ - destZ;
+        const tempZ = (vZ + omega * changeZ) * delta;
+        vZ = (vZ - omega * tempZ) * exp;
+        cur.z = destZ + (changeZ + tempZ) * exp;
+        v.x = vX;
+        v.y = vY;
+        v.z = vZ;
         return cur;
     }
 

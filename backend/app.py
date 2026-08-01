@@ -236,7 +236,7 @@ async def check_startup_state(request: Request, call_next):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """捕获所有未处理的异常，返回统一错误响应格式"""
+    """捕获所有未处理的异常，返回统一错误响应格式。"""
     error_type = type(exc).__name__
     error_detail = str(exc)[:500]
     logger.error(

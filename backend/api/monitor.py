@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from utils.time_utils import BeijingTimeFormatter
 
-from config import get_bool, get_str
+from config import get_bool, get_settings, get_str
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,8 @@ def _ensure_broadcast_handler() -> None:
     if _handler_attached:
         return
     handler = _LogBroadcastHandler()
-    handler.setLevel(logging.DEBUG)
+    # 安全：日志级别由配置控制，避免生产环境泄露敏感数据
+    handler.setLevel(getattr(logging, get_settings().log_level.upper(), logging.INFO))
     handler.setFormatter(
         BeijingTimeFormatter("%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s")
     )

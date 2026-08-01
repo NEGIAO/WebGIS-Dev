@@ -10,7 +10,7 @@
  * 用法: const session = createChatSession(); 需在 setup 上下文中调用（内部使用 watch）。
  */
 
-import { ref, watch } from 'vue';
+import { ref, watch, onScopeDispose } from 'vue';
 
 /** localStorage 键名：多会话存储（v2） */
 const SESSIONS_STORAGE_KEY = 'chat:sessions:v2';
@@ -146,6 +146,14 @@ export function createChatSession() {
         }, 300);
     }
     watch([sessions, activeSessionId], schedulePersist, { deep: true });
+
+    // 组件作用域销毁时清理持久化定时器
+    onScopeDispose(() => {
+        if (persistTimer) {
+            clearTimeout(persistTimer);
+            persistTimer = null;
+        }
+    });
 
     /** 为消息补充时间戳 */
     function withTime(msg) {

@@ -65,6 +65,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
+import { useLocale } from '@common/app/useLocale';
 import {
     consumePersistedPositionCode,
     injectPositionCodeToPath,
@@ -77,6 +78,7 @@ import { apiAuthCompleteOAuthBind, apiAuthExchangeOAuthLoginTicket } from '../ap
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
+const { t } = useLocale();
 
 // 使用严格的状态机管理: 'loading' | 'success' | 'error'
 const currentState = ref('loading');
@@ -85,12 +87,12 @@ const statusText = ref('正在完成第三方账号授权，请稍候...');
 const cardTitle = computed(() => {
     switch (currentState.value) {
         case 'success':
-            return '授权认证成功';
+            return t('oauth.success');
         case 'error':
-            return '授权认证失败';
+            return t('oauth.error');
         case 'loading':
         default:
-            return '第三方登录处理中';
+            return t('oauth.processing');
     }
 });
 
@@ -122,8 +124,9 @@ onMounted(async () => {
         try {
             await apiAuthCompleteOAuthBind(provider, ticket);
             currentState.value = 'success';
-            statusText.value = `${provider || '第三方'} 账号绑定成功，正在安全跳转...`;
-            message.success(`${provider || '第三方'} 账号绑定成功`);
+            const bindSuccess = t('oauth.bindSuccess', { provider: provider || t('oauth.thirdParty') });
+            statusText.value = bindSuccess;
+            message.success(bindSuccess);
             
             setTimeout(async () => {
                 await router.replace({ name: 'home' });
@@ -146,8 +149,9 @@ onMounted(async () => {
             setAuthSession({ token, user });
             syncUserRoleToUrl(user);
             currentState.value = 'success';
-            statusText.value = `${provider || '第三方'} 验证成功，正在为您准备系统主页...`;
-            message.success(`${provider || '第三方'} 登录成功`);
+            const loginSuccess = t('oauth.loginSuccess', { provider: provider || t('oauth.thirdParty') });
+            statusText.value = loginSuccess;
+            message.success(loginSuccess);
             
             setTimeout(async () => {
                 await router.replace(resolveRedirectTarget());
@@ -155,7 +159,7 @@ onMounted(async () => {
             }, 1000);
         } catch (error) {
             currentState.value = 'error';
-            statusText.value = String(error?.message || '第三方登录凭证兑换失败');
+            statusText.value = String(error?.message || t('oauth.exchangeFailed'));
             message.error(statusText.value);
         }
         return;

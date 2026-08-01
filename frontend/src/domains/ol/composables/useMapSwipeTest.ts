@@ -13,6 +13,17 @@
  */
 
 export function useMapSwipeTest() {
+    // 测试工具仅在开发环境可用，生产构建时 tree-shaking 会移除整个函数体
+    if (!import.meta.env.DEV) {
+        return {
+            setupDualBasemapSwipe: () => false,
+            testSwipePerformance: () => null,
+            testModeToggling: () => null,
+            monitorNetworkRequests: () => undefined,
+            printDebugInfo: () => undefined,
+        };
+    }
+
     /**
      * 设置双底图对比滑块
      * @param mapInstance OpenLayers Map 实例
@@ -21,7 +32,7 @@ export function useMapSwipeTest() {
      */
     function setupDualBasemapSwipe(mapInstance, layerStore, baseMapIds = []) {
         if (!mapInstance || !layerStore) {
-            console.warn('[useMapSwipeTest] Missing required parameters');
+            if (import.meta.env.DEV) console.warn('[useMapSwipeTest] Missing required parameters');
             return false;
         }
 
@@ -35,10 +46,12 @@ export function useMapSwipeTest() {
             // 设置为水平模式
             layerStore.updateSwipeMode('horizontal');
 
-            console.log('[useMapSwipeTest] Dual basemap swipe setup completed');
-            console.log(
-                '[useMapSwipeTest] Network requests should now be visible in DevTools Network tab',
-            );
+            if (import.meta.env.DEV) {
+                console.log('[useMapSwipeTest] Dual basemap swipe setup completed');
+                console.log(
+                    '[useMapSwipeTest] Network requests should now be visible in DevTools Network tab',
+                );
+            }
 
             return true;
         } catch (error) {
@@ -85,7 +98,7 @@ export function useMapSwipeTest() {
             fps: `${(positions.length / (duration / 1000)).toFixed(2)}`,
         };
 
-        console.log('[useMapSwipeTest] Performance metrics:', metrics);
+        if (import.meta.env.DEV) console.log('[useMapSwipeTest] Performance metrics:', metrics);
         return metrics;
     }
 
@@ -94,7 +107,7 @@ export function useMapSwipeTest() {
      */
     function testModeToggling(layerStore, toggleCount = 5) {
         if (!layerStore) {
-            console.warn('[useMapSwipeTest] Missing layerStore');
+            if (import.meta.env.DEV) console.warn('[useMapSwipeTest] Missing layerStore');
             return null;
         }
 
@@ -109,9 +122,11 @@ export function useMapSwipeTest() {
         const endTime = performance.now();
         const duration = endTime - startTime;
 
-        console.log(
-            `[useMapSwipeTest] Mode toggle test completed: ${toggleCount} toggles in ${duration.toFixed(2)}ms`,
-        );
+        if (import.meta.env.DEV) {
+            console.log(
+                `[useMapSwipeTest] Mode toggle test completed: ${toggleCount} toggles in ${duration.toFixed(2)}ms`,
+            );
+        }
         return {
             toggles: toggleCount,
             duration: `${duration.toFixed(2)}ms`,

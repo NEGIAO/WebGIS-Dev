@@ -18,6 +18,14 @@ function getSharedGeoDecodePool() {
     return sharedGeoDecodePool;
 }
 
+/** 销毁共享 Worker 池，释放 Worker 线程资源（应在 Cesium 域卸载时调用） */
+export function destroySharedGeoDecodePool() {
+    if (sharedGeoDecodePool) {
+        sharedGeoDecodePool.destroy?.();
+        sharedGeoDecodePool = null;
+    }
+}
+
 export default function createGeoTerrainProvider(Cesium) {
     if (!Cesium) {
         throw new Error('Cesium is required to create GeoTerrainProvider.');

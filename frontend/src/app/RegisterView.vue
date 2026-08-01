@@ -569,7 +569,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
-import { GOOGLE_OAUTH_CLIENT_ID } from '../config/publicRuntime';
+import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD } from '../config/publicRuntime';
 import {
     apiAuthGoogleOneTap,
     apiAuthLogin,
@@ -718,7 +718,7 @@ function handleOAuthLogin(provider) {
 function _fillGuestAccount() {
     mode.value = 'login';
     username.value = 'user';
-    password.value = '123';
+    password.value = GUEST_PASSWORD;
     setFormState('success', t('auth.guestCredentialsFilled'));
 }
 async function quickGuestLogin() {
@@ -727,10 +727,10 @@ async function quickGuestLogin() {
 
     try {
         const guestDeviceId = getOrCreateGuestDeviceId();
-        // 游客一键登陆：账号 user，密码 123
+        // 游客一键登陆：账号 user，密码从环境变量读取
         const result = await apiAuthLogin({
             username: 'user',
-            password: '123',
+            password: GUEST_PASSWORD,
             guest_device_id: guestDeviceId || undefined,
         });
         const token = String(result?.token || '').trim();

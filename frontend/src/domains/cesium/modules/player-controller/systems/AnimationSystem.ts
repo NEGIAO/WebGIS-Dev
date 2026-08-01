@@ -34,6 +34,9 @@ export class AnimationSystem {
     // === 输入变化检查 ===
     private lastInputHash = ""; // 上一帧输入状态哈希
 
+    // Cesium activeAnimations 事件接口（TS 类型定义不完整，显式声明）
+    private _animRemovedHandler?: (model: Model, animation: ModelAnimation) => void; // animationRemoved 监听器引用
+
     constructor(ctrl: playerController) {
         this.ctrl = ctrl;
     }
@@ -77,10 +80,11 @@ export class AnimationSystem {
             def(mc.jumpAnim as string, "jumping", false, 1.2, true);
         }
 
-        // 监听一次性动画完成事件，推进状态机
-        (model.activeAnimations as any).animationRemoved?.addEventListener?.((_model: any, animation: any) => {
+        // 监听一次性动画完成事件，推进状态机（保存引用以便 reset 时移除）
+        this._animRemovedHandler = (_model, animation) => {
             this.onAnimFinished(animation);
-        });
+        };
+        (model.activeAnimations as unknown as { animationRemoved: { addEventListener: (fn: (model: Model, animation: ModelAnimation) => void) => void; removeEventListener: (fn: (model: Model, animation: ModelAnimation) => void) => void } }).animationRemoved?.addEventListener?.(this._animRemovedHandler);
 
         this.playByName("idle");
     }
@@ -255,6 +259,14 @@ export class AnimationSystem {
 
     // 清空动画状态（切换模型前调用）
     reset() {
+        // 移除 animationRemoved 监听器，防止模型切换时累积
+        if (this.model?.activeAnimations && this._animRemovedHandler) {
+            try {
+                (this.model.activeAnimations as unknown as { animationRemoved: { removeEventListener: (fn: (model: Model, animation: ModelAnimation) => void) => void } }).animationRemoved?.removeEventListener?.(this._animRemovedHandler);
+            } catch { /* ignore */ }
+        }
+        this._animRemovedHandler = undefined;
+
         if (this.model) {
             try { this.model.activeAnimations.removeAll(); } catch { /* model 可能已销毁 */ }
         }

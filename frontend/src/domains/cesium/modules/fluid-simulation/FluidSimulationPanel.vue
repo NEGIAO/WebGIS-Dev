@@ -386,6 +386,8 @@ async function createFluidAtScreenPosition(viewer, Cesium, position) {
     } catch (error) {
         message.error(t('cesium.fluidToast.createFailed'), error);
         message.warning(t('cesium.fluidToast.pipelineUnsupported'), { closable: true });
+        // FluidRenderer 构建失败时恢复场景状态，避免全局设置残留
+        try { restoreScene?.(); } catch { /* ignore */ }
     } finally {
         hideLoading();
     }

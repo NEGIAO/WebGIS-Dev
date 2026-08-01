@@ -90,6 +90,9 @@ export const GOOGLE_OAUTH_CLIENT_ID: string = String(
     import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '',
 ).trim();
 
+/** 游客账号密码（从环境变量读取，避免前端硬编码） */
+export const GUEST_PASSWORD: string = String(import.meta.env.VITE_GUEST_PASSWORD || '').trim();
+
 /**
  * 拼接后端 API URL
  * @param path 以 / 开头的路径，如 /api/config/public

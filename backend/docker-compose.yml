@@ -10,7 +10,7 @@ services:
       # 根目录 .env（L1 本地实值：OAuth 密钥、SMTP 等）挂载进容器，
       # 由 config.load_project_env() 启动时读取；系统环境变量仍优先。
       # 注意：需存在根 .env（LocalDev.bat 会自动生成），重建容器后生效。
-      - ../.env:/app/.env:ro
+      - ../.env:/.env:ro
     environment:
       - PYTHONUNBUFFERED=1
       - APP_ENV=development

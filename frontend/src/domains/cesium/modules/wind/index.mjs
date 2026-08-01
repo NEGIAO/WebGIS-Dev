@@ -719,10 +719,10 @@ var WindParticlesComputing = class {
     updateFrameRate();
     const intervalId = setInterval(updateFrameRate, 1e3);
     this.frameRateMonitor.lowFrameRate.addEventListener((scene, frameRate) => {
-      console.warn(`Low frame rate detected: ${frameRate} FPS`);
+      if (import.meta.env.DEV) console.warn(`Low frame rate detected: ${frameRate} FPS`);
     });
     this.frameRateMonitor.nominalFrameRate.addEventListener((scene, frameRate) => {
-      console.log(`Frame rate returned to normal: ${frameRate} FPS`);
+      if (import.meta.env.DEV) console.log(`Frame rate returned to normal: ${frameRate} FPS`);
     });
     const originalDestroy = this.destroy.bind(this);
     this.destroy = () => {
@@ -892,7 +892,6 @@ var WindParticlesComputing = class {
       const value = array[i] / maxNum;
       result[i] = value;
     }
-    console.log(result);
     return result;
   }
   destroy() {

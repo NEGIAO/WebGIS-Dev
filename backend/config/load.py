@@ -284,6 +284,8 @@ class BackendSettings:
     supabase_url: str
     supabase_key: str
     supabase_visits_table: str
+    guest_username: str
+    guest_password: str
 
     @property
     def is_development(self) -> bool:
@@ -389,6 +391,8 @@ def _build_settings() -> BackendSettings:
         supabase_visits_table=get_str("SUPABASE_VISITS_TABLE", "")
         or get_str("SUPABASE_TABLE_NAME", "")
         or "visit_tracking_events",
+        guest_username=get_str("GUEST_USERNAME", "user"),
+        guest_password=get_str("GUEST_PASSWORD", ""),
     )
 
 

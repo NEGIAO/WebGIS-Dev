@@ -21,7 +21,14 @@ export function useErrorHandler() {
      * @returns 是否为配额错误
      */
     function isQuotaError(error: unknown): boolean {
-        return error instanceof Error && (error as any).isQuotaExceeded === true;
+        return error instanceof Error && (error as QuotaError).isQuotaExceeded === true;
+    }
+
+    /**
+     * 自定义错误接口：携带配额用尽标记
+     */
+    interface QuotaError extends Error {
+        isQuotaExceeded?: boolean;
     }
 
     /**

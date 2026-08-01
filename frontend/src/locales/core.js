@@ -156,6 +156,15 @@ export const coreMessages = {
             displayNameTooLong: '昵称长度不能超过 40 个字符',
             displayNameControlChars: '昵称不能包含控制字符',
         },
+        oauth: {
+            success: '授权认证成功',
+            error: '授权认证失败',
+            processing: '第三方登录处理中',
+            bindSuccess: '{provider} 账号绑定成功，正在安全跳转...',
+            loginSuccess: '{provider} 登录成功，正在为您准备系统主页...',
+            exchangeFailed: '第三方登录凭证兑换失败',
+            thirdParty: '第三方',
+        },
         preferences: {
             language: '界面语言',
             languages: { zh: '简体中文', en: 'English' },
@@ -312,6 +321,15 @@ export const coreMessages = {
             displayNameRequired: 'Please enter a display name',
             displayNameTooLong: 'Display name must be at most 40 characters',
             displayNameControlChars: 'Display name cannot contain control characters',
+        },
+        oauth: {
+            success: 'Authorization successful',
+            error: 'Authorization failed',
+            processing: 'Processing third-party sign-in...',
+            bindSuccess: '{provider} account bound. Redirecting securely...',
+            loginSuccess: '{provider} sign-in successful. Preparing your dashboard...',
+            exchangeFailed: 'Failed to exchange third-party sign-in ticket',
+            thirdParty: 'third-party',
         },
         preferences: {
             language: 'Interface Language',

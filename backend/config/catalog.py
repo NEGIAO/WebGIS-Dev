@@ -451,6 +451,18 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "Supabase 表名兼容",
     },
+    "GUEST_USERNAME": {
+        "layer": "L1",
+        "default": "user",
+        "secret": False,
+        "description": "访客账号用户名（留空则用默认值 user）",
+    },
+    "GUEST_PASSWORD": {
+        "layer": "L1",
+        "default": "",
+        "secret": True,
+        "description": "访客账号密码（建议设为随机强密码，空则访客登录不可用）",
+    },
     # 可选 URL 覆盖（兼容旧部署）
     "GOOGLE_OAUTH_REDIRECT_URI": {
         "layer": "L1",

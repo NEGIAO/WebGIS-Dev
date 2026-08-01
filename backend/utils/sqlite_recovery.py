@@ -749,11 +749,22 @@ def recover_sqlite_database(
     sqlite_cli: Optional[str] = None,
     activate: bool = True,
     empty_fallback_initializer: Optional[EmptyFallbackInitializer] = None,
+    allowed_base_dir: Optional[Path] = None,
 ) -> SQLiteRecoveryResult:
     """Recover from a timestamped backup; all rebuild work runs in local temp storage."""
     db_path = Path(db_path).resolve()
     if not db_path.is_file():
         raise SQLiteRecoveryError(f"database to recover does not exist: {db_path}")
+
+    # 路径遍历防护：确保 db_path 位于允许的基目录内
+    if allowed_base_dir is not None:
+        allowed_base = Path(allowed_base_dir).resolve()
+        try:
+            db_path.relative_to(allowed_base)
+        except ValueError:
+            raise SQLiteRecoveryError(
+                f"database path {db_path} is outside allowed base directory {allowed_base}"
+            )
 
     cli: Optional[str] = None
     cli_error: Optional[SQLiteRecoveryError] = None

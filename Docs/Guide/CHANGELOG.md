@@ -6,6 +6,143 @@
 
 ## 版本记录
 
+### V3.5.6 (2026-08-01) — Code Review 修复收尾与配置修正
+
+> 🔧 **修正 + 收尾**：修正 Code Review 中不符合用户需求的改动（异常详情、/api/info、登录限速）；修复容器配置路径不匹配；修复游客密码不一致；清理残留 `as any` 和硬编码。
+
+#### 修正项（回退 Code Review 中不合理的改动）
+
+- `backend/app.py`：恢复异常详情始终返回（用户需要看到错误原因，不区分环境）
+- `backend/app.py`：恢复 `/api/info` 开放访问（开源项目故意暴露 API 结构）
+- `backend/api/auth/routes.py`：移除登录速率限制（用户明确要求无限次尝试）
+- `backend/api/auth/verification.py`：移除 `check_login_rate_limit()` 和 `record_login_attempt()` 函数
+
+#### Bug 修复
+
+- `backend/docker-compose.yml`：`.env` 挂载路径从 `/app/.env` 改为 `/.env`，对齐容器内 `PROJECT_ROOT=/` 的路径解析（之前容器内读不到任何配置项）
+- `frontend/src/app/RegisterView.vue`：游客密码从环境变量 `VITE_GUEST_PASSWORD` 读取，与后端 `.env` 保持一致（之前前端硬编码 `123`，后端改为 `123456`，导致 401）
+- `.env` / `.env.local` / `.env.example`：新增 `VITE_GUEST_PASSWORD=123456`
+
+#### 类型安全收尾
+
+- `frontend/.../playerController.ts`：移除未使用参数 `e: any`，改为 `() =>`
+- `frontend/.../PhysicsSystem.ts`：`undefined as any` → `null`，类型改为 `RAPIER.World | null` 等
+- `frontend/.../AnimationSystem.ts`：`as any` → `as unknown as { animationRemoved: ... }` 显式事件接口
+
+### V3.5.5 (2026-08-01) — 架构文档体系建设
+
+> 📐 **架构可视化**：新增 3 篇系统级架构文档 + README 首页嵌入 Mermaid 分层架构图与域名映射表。
+
+#### 新增文档
+
+- 📐 [系统架构总览](Architecture/system-architecture.md)：五层分层架构图（源码 → CI/CD → 部署平台 → 运行时 → 用户），五层职责说明，域名全景，数据流总结
+- 📐 [CI/CD 流水线](Architecture/cicd-pipeline.md)：五 Job 详解（Build → deploy-to-self → sync-to-main-repo → deploy-frontend-to-hf → sync-to-huggingface），部署时序图，Secrets 清单
+- 📐 [部署关系与域名映射](Architecture/deployment-relationship.md)：域名清单（前端 7 + 后端 1 + 存储 1），部署来源矩阵，前后端通信链路，平台能力对比，中国大陆访问策略
+
+#### README 更新
+
+- 新增「🏗️ 系统架构」章节，嵌入 Mermaid 分层架构图
+- 新增域名映射表（前端入口 + 后端 API + 瓦片存储）
+- 架构文档导航拆分为「系统级架构」与「功能架构」两组
+- 版本号 V3.5.4 → V3.5.5
+
+### V3.5.4 (2026-08-01) — 全量 Code Review 修复：CRITICAL + HIGH + MEDIUM + LOW 共 166 项问题
+
+> 🛡️ **安全 + 稳定性 + 可维护性**：2026-08-01 全项目 Code Review 后分 8 个 Batch 修复 166 项问题（12 CRITICAL + 25 HIGH + 50 MEDIUM + 79 LOW），覆盖认证系统、代理系统、Markdown 渲染、SHP 解析、流体模拟、API Key 管理、前端内存泄漏、类型安全、组件拆分等。
+
+#### Batch 1：安全加固（CRITICAL + HIGH 安全类）
+
+- 🔒 **代理 SSRF**：`host_matches_allowlist()` 空白名单改为拒绝所有（此前误返回允许所有）
+- 🔒 **异常处理**：全局异常处理器生产环境不再泄露 `error_type`/`detail`
+- 🔒 **认证 Token**：移除 query string 传递方式，仅接受 Header
+- 🔒 **访客密码**：硬编码改为环境变量读取（`GUEST_PASSWORD`），catalog 登记
+- 🔒 **Markdown XSS**：移除 DOMPurify `onclick` 白名单，DOMPurify 失败时 fallback 到 escapeHtml
+- 🔒 **原型链污染**：SHP 解析器过滤 `__proto__`/`constructor` 字段名
+- 🔒 **GPU 纹理**：fluidRuntime.destroy() 修复 outputTexture 泄漏
+- 🔒 **API Key**：高德 Key 移出硬编码，改为动态获取
+- 🔒 **Token 存储**：localStorage → sessionStorage
+- 🔒 **明文传输**：HTTP 环境发送凭证时输出安全警告
+- 🔒 **SSRF via redirect 防护**：`agent_chat/upstream.py` 和 `external_proxy.py` 的 httpx 客户端改为 `follow_redirects=False`
+- 🔒 **API 信息泄露修复**：`app.py` 的 `/api/info` 端点添加环境检查，仅 `APP_ENV=development` 时可用
+- 🔒 **日志级别控制**：`monitor.py` 的日志级别由 `get_settings().log_level` 控制，不再硬编码 DEBUG
+- 🔒 **登录速率限制**：新增 `login_attempts` 表 + `check_login_rate_limit()`/`record_login_attempt()`，同一 IP 5 分钟内最多 10 次登录尝试
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-code-review-critical-fixes.md)
+
+#### Batch 2：前端内存泄漏与定时器
+
+- 🧹 **HomeView watchdogTimer 泄漏**：添加模块级 `activeWatchdogTimer` 变量，`onUnmounted` 时清理
+- 🧹 **MapControlsBar 事件监听修正**：将清理逻辑从 `onMounted` 返回值移到 `onUnmounted` 钩子
+- 🧹 **ChatMessageList copiedTimer 泄漏**：`onUnmounted` 清除复制提示定时器
+- 🧹 **useSingularity SVG 泄漏**：`destroy()` 中移除注入的 SVG 滤镜 DOM 元素
+- 🧹 **wind console.log 性能**：删除打印整个 Float32Array 的调试日志
+- 🧹 **SidePanel fetch 超时**：添加 AbortController 8 秒超时保护
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-frontend-memory-leak-fixes.md)
+
+#### Batch 3：前端 Race Condition 与类型安全
+
+- 🔧 **playerController waitForModelReady 双重决议防护**：变量重命名 offReady/offErr，添加 `settled` 守卫确保只 resolve/reject 一次
+- 🔧 **CameraSystem springTarget 消除 as any**：弹簧阻尼循环改为分量级运算，彻底移除 8 处字符串属性访问 + as any
+- 🔧 **PhysicsSystem _bottomLevel 安全访问**：定义 `TerrainProviderWithBottomLevel` 显式接口声明私有字段依赖
+- 🔧 **ensureCesiumLoaded Promise 锁语义修正**：`_cesiumLoadPromise = null` 从 finally 移入 catch，明确仅失败时清空锁
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-race-condition-type-safety.md)
+
+#### Batch 4：后端输入校验与边界
+
+- 🔒 **sqlite_recovery 路径遍历防护**：`recover_sqlite_database` 新增 `allowed_base_dir` 参数，校验 `db_path` 位于允许目录内
+- 🔒 **location IP 输入验证**：`ip-locate` 接口使用 `ipaddress.ip_address()` 校验 IP 格式，非法格式返回 400
+- 🔒 **确认邮件服务/验证码/CORS 安全**：email_service subject 使用固定映射无注入风险；verification 使用 secrets 模块 + 频率限制；CORS 已配置驱动
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-backend-input-validation.md)
+
+#### Batch 5：前端类型安全（as any 清理）
+
+- 🔧 **CompassManager**：`viewResolutionKey` 类型改为 `EventsKey`，定义 `VectorLayerWithTogetherStyle` 接口
+- 🔧 **useCompassStore**：标准类型访问 + `DeviceOrientationEvent.requestPermission` 显式转换
+- 🔧 **layerTreeBuilder**：移除 `toLayerNode` 返回值上的冗余 `as any`
+- 🔧 **decompressor**：定义 `JsZipEntry` 接口，`isBlobLike` 返回 `input is Blob`
+- 🔧 **tileLifecycle**：定义 `TileSourceWithInternals` 接口替代 `as any`
+- 🔧 **driveXmlParser**：全局声明 `TiandituMapApi` 接口 + `Window.T` 类型
+- 🔧 **useErrorHandler**：定义 `QuotaError extends Error` 接口
+- 🔧 **useUserPreferencesStore/useAuthStore**：`(result as any).data` 改为 `(result as { data: unknown }).data`
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-frontend-type-safety.md)
+
+#### Batch 6：死代码清理 + 杂项 LOW
+
+- 🧹 **HomeView.vue**：移除废弃的 `currentNewsIndex` 变量
+- 🧹 **CompassControlPanel.vue**：移除已完成的 `// TODO:√` 注释块
+- 🧹 **useMapSearchAndCoordinateInput.js**：移除 67 行注释掉的废弃函数旧版本
+- 🧹 **feng-shui-compass-svg.vue**：移除 65 行注释掉的废弃缓存函数
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-dead-code-cleanup.md)
+
+#### Batch 7：剩余 MEDIUM 收尾
+
+- 🔧 **basemapConfig.ts**：第三方 Token 统一收口至 `publicRuntime`（消除散落 `import.meta.env` 读取 + 硬编码 token 字符串），所有 Mapbox/MapTiler/GeoVisEarth URL 改用模板变量
+- 🔧 **agent_chat/routes.py**：`preferred_model` 注入防护 — 后端校验用户偏好模型在可用模型列表内，不在列表则 400
+- 🔧 **external_proxy.py**：`/ipapi/country` 端点添加 `ipaddress.ip_address()` 输入校验
+- 🔧 **useMapSwipeTest.ts**：所有 console.log/warn 添加 `if (import.meta.env.DEV)` 门禁
+- 🔧 **CesiumContainer.vue**：boot 路径 `console.warn` 添加 DEV 门禁
+- 🔧 **ChatPanelContent.vue**：静默 catch 补充注释说明 Markdown 加载失败已有纯文本兜底
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-batch8-final-cleanup.md)
+
+#### Batch 8：代码审查 Bug 修复
+
+- 🐛 **wind/index.mjs**：`lowFrameRate` 事件监听中的 `console.warn` 添加 `if (import.meta.env.DEV)` 门禁，删除 `console.log(result)` 打印整个 Float32Array
+- 🐛 **api/backend/client.js**：恢复同步 useMessage 导入（修复首次 API 错误 toast 丢失 — 异步动态导入导致竞态，首个 API 错误无法提示用户）
+- 🐛 **PhysicsSystem.ts**：移除死代码 `_assertWorld()` 方法
+- 🐛 **useCesiumLayers.js**：恢复地形自动切换（修复 OSM Buildings 开启后地形不自动切换的功能降级）
+- 🐛 **useShallowWater.js**：animate 循环 catch 块内 `pause()` 添加 try/catch 保护
+- 🐛 **locationSearch.js**：天地图搜索恢复原生 `fetch()`（后端无对应代理路由，天地图 API 支持 CORS，原始方案正确）
+
+详见[日志](LLM_record/26-08/2026-08-01/2026-08-01-code-review-bug-fixes.md)
+
+---
+
 ### V3.5.3 (2026-08-01) — 自定义瓦片底图简化：移除 normBase 动态上下文注入
 
 > 🧹 **代码清理**：将 `local_tiles` 从动态 `normBase` 上下文注入改为标准静态 URL 图层，清理 8 个文件的冗余代码。

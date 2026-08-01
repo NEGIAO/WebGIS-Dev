@@ -2,6 +2,8 @@
  * 底图配置文件
  * 集中管理图层源定义和底图预设配置
  * 新增图源:编辑此文件的 LAYER_SOURCE_DEFINITIONS;新增预设:编辑 basemapPresets.ts 的 BASEMAP_PRESETS(V3.4.54 抽离,纯数据零 ol 依赖)
+ *
+ * 第三方 token 统一从 publicRuntime 读取，禁止直接 import.meta.env
  */
 
 import { ref } from 'vue';
@@ -19,8 +21,15 @@ import {
     createXYZSourceFromUrl,
     prioritizeTileSourceRequest,
 } from '@ol/tile-source';
-// 后端/瓦片代理基址统一由 publicRuntime 派生（VITE_TILE_PROXY_BASE_URL / VITE_BACKEND_URL），禁止硬编码域名
-import { backendTilesUrl, gcj2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
+// 后端/瓦片代理基址 + 第三方 Token 统一由 publicRuntime 派生，禁止硬编码域名与直接读取 import.meta.env
+import {
+    backendTilesUrl,
+    gcj2wgsProxyUrl,
+    tileProxyUrl,
+    MAPBOX_ACCESS_TOKEN,
+    MAPTILER_KEY,
+    GEOVISEARTH_TOKEN,
+} from '@/config/publicRuntime';
 
 // ========== 预设目录(已抽离至 basemapPresets.ts,原位 re-export 保持兼容) ==========
 // 抽离原因见 basemapPresets.ts 头注释(切断登录页入口 → ol 的打包链)。
@@ -171,7 +180,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             withSkipHighResTile(
                 prioritizeTileSourceRequest(
                     new XYZ({
-                        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                        url: `https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=${GEOVISEARTH_TOKEN}`,
                     }),
                 ),
             ),
@@ -241,7 +250,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                    url: `https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=${GEOVISEARTH_TOKEN}`,
                 }),
             ),
     },
@@ -327,7 +336,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ'
+                    url: `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=${MAPBOX_ACCESS_TOKEN}`
                 }),
             ),
     },
@@ -349,7 +358,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
                 }),
             ),
     },
@@ -361,7 +370,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}@2x.jpg?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}@2x.jpg?key=${MAPTILER_KEY}`,
                     // HD 瓦片实际尺寸 512×512，叠在 256 瓦片网格上（@2x）。
                     // 显式声明 tilePixelRatio:2，让 OL 按 256 网格缩放还原，
                     // 避免被默认按 256 像素拉伸导致糊化与地理套合错位。
@@ -775,7 +784,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
                 }),
             ),
     },
@@ -787,7 +796,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
                 }),
             ),
     },
@@ -933,7 +942,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/landscape-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/landscape-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
                 }),
             ),
     },
@@ -945,7 +954,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/topo-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/topo-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
                 }),
             ),
     },
@@ -974,7 +983,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                    url: `https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=${GEOVISEARTH_TOKEN}`,
                 }),
             ),
     },
@@ -1010,7 +1019,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                    url: `https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
                 }),
             ),
     },
@@ -1223,7 +1232,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+                    url: `https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=${MAPBOX_ACCESS_TOKEN}`,
                 }),
             ),
     },
@@ -1235,7 +1244,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+                    url: `https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=${MAPBOX_ACCESS_TOKEN}`,
                 }),
             ),
     },
