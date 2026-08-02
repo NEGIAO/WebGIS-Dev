@@ -258,6 +258,7 @@ import {
     readCachedPreferredBasemap,
 } from '@/stores';
 import { CompassManager } from '@common/compass/services/CompassManager';
+import { compassBgVars } from '@common/compass/utils/compassStyleUtils';
 import {
     getRuntimeMapTokensSync,
     loadRuntimeMapTokens,
@@ -284,24 +285,6 @@ const attrStore = useAttrStore();
 const urlParamStore = useUrlParamStore();
 const compassStore = useCompassStore();
 const tocStore = useTOCStore();
-
-/**
- * 将 hex 颜色转换为 CSS 渐变所需的 CSS 变量对象
- * 避免使用 color-mix()（兼容性差），直接计算 rgba 值
- * @param {string} hex - 十六进制颜色值
- * @returns {Object} 包含 --compass-bg-g1/g2/g3 的样式对象
- */
-function compassBgVars(hex) {
-    const h = String(hex || '#000000').replace('#', '');
-    const r = parseInt(h.substring(0, 2), 16) || 0;
-    const g = parseInt(h.substring(2, 4), 16) || 0;
-    const b = parseInt(h.substring(4, 6), 16) || 0;
-    return {
-        '--compass-bg-g1': `rgba(${r},${g},${b},0.45)`,
-        '--compass-bg-g2': `rgba(${r},${g},${b},0.25)`,
-        '--compass-bg-g3': `rgba(${r},${g},${b},0.10)`,
-    };
-}
 const layerStore = useLayerStore();
 
 // 从 compassStore 解构响应式 ref（替代 computed 包装）
@@ -312,7 +295,6 @@ const handleCloseExplanation = () => {
     compassStore.setSelectedPalace(null);
 };
 
-// ========== 底图管理 Composable ==========
 // 集中管理底图配置、底图选项列表、Google 主机选择等逻辑
 // URL_LAYER_OPTIONS：用于 URL 参数中的图层索引映射（与 BASEMAP_OPTIONS 对应）
 // createLayerConfigs：工厂函数，根据参数生成全部底图源配置
@@ -407,6 +389,8 @@ const { hydrateRuntimeMapTokens, retryTiandituLayersWithNextToken } = createRunt
     getEmitBaseLayersChangeBatched: () => emitBaseLayersChangeBatched,
     message,
 });
+
+// ========== 底图管理 Composable ==========
 
 // ========== Map Swipe Setup (via composable) ==========
 const {

@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import { getExtension as _getExtension } from '@common/utils/pathUtils';
 
 /**
@@ -41,7 +42,7 @@ export interface SharedResourceTreeNode {
     fileCount?: number;
 }
 
-const SHARED_RESOURCE_DIR = `${import.meta.env.BASE_URL || '/'}ShareData`.replace(/\/+/g, '/');
+const SHARED_RESOURCE_DIR = `${ASSET_BASE_URL}/ShareData`.replace(/\/+/g, '/');
 const SUPPORTED_EXTENSIONS = [
     'kml',
     'kmz',

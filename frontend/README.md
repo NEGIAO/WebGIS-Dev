@@ -1,4 +1,4 @@
-# WebGIS 前端项目 — V3.4.67
+# WebGIS 前端项目
 
 > 基于 Vue 3 + Vite + OpenLayers + Cesium 的专业级 WebGIS 前端工程
 
@@ -121,14 +121,7 @@ VITE_BASE_URL=/WebGIS-Dev/ npm run build
 
 ### 分层边界
 
-| 层 | 职责 | 禁止 |
-|----|------|------|
-| `components/` | UI 渲染 + 事件 | 业务逻辑 |
-| `composables/` | 编排流程 + 地图动作 | 直接操作 store state |
-| `stores/` | 状态维护 + 派生 | 依赖 OL / Cesium 类 |
-| `utils/` | 纯函数 + 解析 | 副作用 |
-| `services/` | 外部 SDK 集成 | UI 逻辑 |
-| `api/` | 外部服务调用与结果标准化 | 业务逻辑 |
+分层边界（components / composables / stores / utils / services / api 职责与禁止项）统一维护于 [`Docs/Guide/dev-conventions.md`](../Docs/Guide/dev-conventions.md)，本 README 不再重复。
 
 ### 导入约定
 
@@ -162,9 +155,3 @@ npm run build:analyze  # 构建体积分析
 ## 📄 许可证
 
 MIT
-
----
-
-最后更新：2026-07-27
-当前版本：V3.4.67
-说明：体积云演化改为跟随 Cesium 时间轴与时间倍率，云影同步使用仿真时间；后处理链保持地面云影可见的 Aerial → Cloud 顺序。

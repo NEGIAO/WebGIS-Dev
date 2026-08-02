@@ -313,6 +313,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import { DEFAULT_BASEMAP_LAYER_INDEX } from '@/constants';
 // import { hideLoading, showLoading } from '@/utils';
 import {
@@ -375,8 +376,7 @@ const magicMenuHostRef = ref(null);
 const appStore = useAppStore();
 const { logMonitorVisible } = storeToRefs(appStore);
 
-const baseUrl = import.meta.env.BASE_URL || '/';
-const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
 
 // 本组件在 HomeView 懒加载链路中,79.5KB 的 webp 不影响登录页首屏)
 const faviconUrl = `${normalizedBase}images/icon.webp`;

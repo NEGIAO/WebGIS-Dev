@@ -1,6 +1,5 @@
-import { useMessage } from '@common/shell/useMessage';
 import { parseAmapRectangleToExtent } from '@ol/utils/amapRectangle';
-import backendAPI, { handleApiError } from './backend';
+import backendAPI from './backend';
 import { getAmapErrorMessage, getHttpStatusMessage } from './httpStatusMap';
 
 function normalizeText(value) {
@@ -42,7 +41,6 @@ function buildNormalizedResult(raw = {}) {
  * @returns {Promise<{ok:boolean,status:string,requestStatus:string,city:string,province:string,adcode:string,extent:number[]|null,info:string,infocode:string,raw:any,errorMessage?:string}>}
  */
 export async function getIpLocation(ip = '', options = {}) {
-    const message = useMessage();
     const { silent = false } = options || {};
     const normalizedIp = String(ip || '').trim();
 
@@ -58,7 +56,7 @@ export async function getIpLocation(ip = '', options = {}) {
                 ? normalized.info || '未知错误'
                 : getAmapErrorMessage(infocode);
             if (!silent) {
-                message.warning(`IP 定位失败：${reason}`, { closable: true, duration: 5000 });
+                console.warn(`IP 定位失败：${reason}`);
             }
             return {
                 ...normalized,
@@ -71,17 +69,14 @@ export async function getIpLocation(ip = '', options = {}) {
         let errorMessage = '网络异常';
         const httpStatus = error?.status || 0;
         if (error?.isQuotaExceeded) {
-            // 配额用完：使用友好提示
-            handleApiError(error, message, 'IP 定位：API 调用额度已用完');
+            // 配额用完：仅记录日志
+            console.warn('IP 定位：API 调用额度已用完');
             errorMessage = String(error?.message || 'IP 定位：API 调用额度已用完');
         } else {
             errorMessage = error instanceof Error ? error.message : '网络异常';
             const statusTag = httpStatus ? ` [${httpStatus} ${getHttpStatusMessage(httpStatus)}]` : '';
             if (!silent) {
-                message.error(`IP 定位网络异常：${errorMessage}${statusTag}`, {
-                    closable: true,
-                    duration: 6000,
-                });
+                console.warn(`IP 定位网络异常：${errorMessage}${statusTag}`);
             }
         }
 

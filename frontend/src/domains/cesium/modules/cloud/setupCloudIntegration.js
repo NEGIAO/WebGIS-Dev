@@ -10,6 +10,7 @@
  */
 
 import { watch } from 'vue';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import { resolveWebgisCloudAssetPaths } from './assetConfig.js';
 import { applyCloudPanelParams, applyLensFlareParams } from './cloudParamsApply.js';
 import { acquireContinuous, releaseContinuous } from '@cesium-domain/composables/interaction/useCesiumRenderMode.js';
@@ -93,7 +94,7 @@ export function setupCloudIntegration({
           };
         }
 
-        const assetPaths = resolveWebgisCloudAssetPaths(import.meta.env.BASE_URL);
+        const assetPaths = resolveWebgisCloudAssetPaths(ASSET_BASE_URL);
         const initialCloudParams = cloudParams?.value ?? {};
         const instance = await createCloudAtmosphere(viewer, {
           enableGui,

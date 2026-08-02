@@ -45,6 +45,7 @@ async def require_api_access_optional(request: Request) -> Optional[Dict[str, An
         session = await asyncio.to_thread(_get_session_sync, token)
         return session
     except Exception:
+        logger.debug("可选鉴权：会话查询失败", exc_info=True)
         return None
 
 # ==================== 配置 ====================
@@ -64,8 +65,8 @@ class IpLocateRequest(BaseModel):
 
 class ReverseGeocodeRequest(BaseModel):
     """反向地理编码请求"""
-    lng: float = Field(..., description="经度")
-    lat: float = Field(..., description="纬度")
+    lng: float = Field(..., ge=-180, le=180, description="经度 [-180, 180]")
+    lat: float = Field(..., ge=-90, le=90, description="纬度 [-90, 90]")
     prefer_service: str = Field(default="auto", description="优先服务: auto/amap/tianditu/nominatim")
     silent: bool = Field(default=False, description="错误是否静默处理")
 
@@ -118,7 +119,7 @@ def _resolve_amap_key() -> str:
         if candidates:
             return str(candidates[0] or "").strip()
     except Exception:
-        pass
+        logger.debug("读取 L2 高德 key 失败，回退到 env 兜底", exc_info=True)
     return (
         get_str("AMAP_WEB_SERVICE_KEY", "")
         or get_str("AMAP_KEY", "")

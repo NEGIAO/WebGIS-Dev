@@ -5,9 +5,8 @@
  *   - backend/weather.js：走后端 FastAPI 的天气代理
  * 消费方经 api/index.js barrel 导入，请勿混用两者。
  */
-import { useMessage } from '@common/shell/useMessage';
 import { translate as t } from '@common/app/useLocale';
-import backendAPI, { handleApiError } from './backend';
+import backendAPI from './backend';
 import { getAmapErrorMessage } from './httpStatusMap';
 
 const AMAP_SUCCESS_STATUS = '1';
@@ -80,13 +79,12 @@ function normalizeForecast(forecast = {}) {
  * }>} 标准化结果
  */
 export async function getWeather(adcode, type = 'base', options = {}) {
-    const message = useMessage();
     const normalizedAdcode = String(adcode ?? '').trim();
     const normalizedType = type === 'all' ? 'all' : 'base';
 
     if (!/^\d{6}$/.test(normalizedAdcode)) {
         const error = new Error(t('weather.queryFailedAdcode'));
-        message.warning(error.message, { closable: true, duration: 4500 });
+        console.warn(error.message);
         throw error;
     }
 
@@ -141,15 +139,12 @@ export async function getWeather(adcode, type = 'base', options = {}) {
         // AbortError 表示被新请求取代，静默传递（不弹通知）
         if (error?.name === 'AbortError') throw error;
         if (error?.isQuotaExceeded) {
-            // 配额用完：使用友好提示
-            handleApiError(error, message, t('weather.quotaExceeded'));
+            // 配额用完：仅记录日志
+            console.warn(t('weather.quotaExceeded'));
         } else {
             const detail = error instanceof Error ? error.message : t('weather.networkError');
             const statusTag = error?.status ? ` [${error.status}]` : '';
-            message.error(t('weather.queryFailed', { detail: `${detail}${statusTag}` }), {
-                closable: true,
-                duration: 6000,
-            });
+            console.warn(t('weather.queryFailed', { detail: `${detail}${statusTag}` }));
         }
         throw error instanceof Error ? error : new Error(t('weather.queryFailedShort'));
     }

@@ -14,7 +14,6 @@
  */
 
 import backendAPI from './client';
-import { useMessage } from '@common/shell/useMessage';
 import { wgs84ToGcj02, gcj02ToWgs84 } from '@common/data-import/crs/coordTransform';
 
 /**
@@ -190,8 +189,6 @@ export async function apiLocationTrackVisit(options = {}) {
         .catch((error) => {
             // 定位追踪失败不影响正常业务流程，静默处理
             console.warn('[Location Tracking] 访问追踪失败:', error.message);
-            const { warning: showWarning } = useMessage();
-            showWarning(`访问追踪失败: ${error.message || '未知错误'}`);
             return null;
         });
 }

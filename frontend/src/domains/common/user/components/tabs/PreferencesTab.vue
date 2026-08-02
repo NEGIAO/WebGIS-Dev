@@ -6,6 +6,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useLocale } from '@common/app/useLocale';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 
 const LANGUAGE_OPTIONS = Object.freeze([
     { value: 'zh-CN', labelKey: 'preferences.languages.zh' },
@@ -219,8 +220,7 @@ function isDirty(key) {
 }
 
 function getAvatarSrc(avatarIndex) {
-    const base = String(import.meta.env.BASE_URL || '/').trim();
-    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+    const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
     return `${normalizedBase}avatars/avatar-${avatarIndex}.svg`;
 }
 

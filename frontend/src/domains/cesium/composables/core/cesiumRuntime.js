@@ -22,6 +22,7 @@ export const CESIUM_CSS_URL = `${CESIUM_BASE_URL}Widgets/widgets.css`;
  */
 export async function loadCesiumRuntime({ ionToken } = {}) {
     if (!window.Cesium) {
+        // eslint-disable-next-line no-console
         console.info('[Cesium][runtime] 等待 cesium-shim CDN 注入...');
         await cesiumReady;
     }
@@ -35,6 +36,7 @@ export async function loadCesiumRuntime({ ionToken } = {}) {
     }
 
     applyCesiumIonToken(Cesium, ionToken);
+    // eslint-disable-next-line no-console
     console.info('[Cesium][runtime] 就绪', {
         version: Cesium.VERSION || 'unknown',
         ionTokenApplied: !!ionToken,

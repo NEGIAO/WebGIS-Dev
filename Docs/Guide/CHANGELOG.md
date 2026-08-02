@@ -6,6 +6,63 @@
 
 ## 版本记录
 
+### V3.5.8 (2026-08-02) — 暂存区 Review 修复：require() 崩溃 + 容器版本号 + 分层边界
+
+> 🔧 **Bug 修复**：`client.js` 的 `require()` 在纯 ESM 浏览器环境必炸（ReferenceError，错误提示崩溃且吞原始错误），改回静态 import `useMessage`；`_read_app_version()` 在 Docker 容器内读不到根 README（subtree 推送）→ deploy.yml push 前 `cp README.md backend/README.md`（版本号仍 100% 来自根 README，无新配置 key）；删除与 `setStyleTarget` 完全重复的新 action；`browserDownload.ts` 移至 common 域消除 common→ol 反向依赖；新增 `vue-shims.d.ts` 修复 .ts import .vue 的 TS2307。
+
+#### Bug 修复
+
+- `frontend/src/api/backend/client.js`：移除 `require('@common/shell/useMessage')`（纯 ESM 环境 `require` 未定义），改回静态 `import { useMessage }` + 顶层解构（`useMessage.js` 为纯模块级实现，不依赖 `inject`，原顶层调用本就安全）
+- `.github/workflows/deploy.yml`：push backend 前 `cp README.md backend/README.md`，让容器内自带根 README（`_read_app_version()` 原代码零改动，版本号仍 100% 来自根 README，无新配置 key）
+
+#### 分层边界 / 去重
+
+- `frontend/src/domains/ol/stores/useLayerStore.ts`：删除与 `setStyleTarget` 实现完全重复的 `setSelectedEditLayerId`；`TOCPanel.vue` 改回调用既有 `setStyleTarget`
+- `frontend/src/domains/ol/utils/browserDownload.ts` → `frontend/src/domains/common/utils/browserDownload.ts`：消除 common 域 store 对 ol 域 utils 的反向依赖（common→common 平级）；`useDownloadStore.ts` / `MapDownloader.vue` 同步更新 import
+
+#### 类型
+
+- `frontend/src/vue-shims.d.ts`（新建）：`.vue` 模块声明，修复 `useLazyModules.ts` 等 .ts 文件动态 import .vue 的 TS2307（此前项目 .ts 从不直接引 .vue，本次首现）
+
+#### 其他
+
+- `MapContainer.vue`：`useLayerStore()` 声明移至其他 store 声明处（消除模板先于声明使用的隐患风格）
+- `AdministrativeDivisionPanel.vue`：移除 `ASSET_BASE_URL || '/'` 冗余兜底
+- `Docs/Guide/frontend-structure.md`：同步 browserDownload 迁移 + vue-shims.d.ts 新增
+
+### V3.5.7 (2026-08-02) — Code Review 修复：SSOT + 分层边界 + 后端安全
+
+> 🔧 **SSOT + 分层 + 安全**：文档治理（子 README 版本号去同步）；API 层 `useMessage()` 移除；后端静默 except 添加可观测性；Pydantic 输入校验；publicRuntime.ts ASSET_BASE_URL 收口。
+
+#### SSOT 文档治理
+
+- `frontend/README.md`：删除标题版本号 V3.4.67、删除重复分层边界表（改为链接到 dev-conventions.md）、删除尾部版本记录块
+- `backend/README.md`：删除版本号记录行（V3.4.67 → 链接到根 CHANGELOG）
+- `frontend/src/domains/common/compass/svg/types/README.md` → 迁移至 `Docs/Guide/compass-types-note.md`
+
+#### 分层边界：API 层 useMessage() 移除
+
+- `frontend/src/api/geocoding.js` / `ipLocation.js` / `locationSearch.js` / `weather.js`：移除 `useMessage()` import 和调用，改为 `console.warn()`（错误由调用方处理）
+- `frontend/src/api/backend/client.js`：将模块顶层 `useMessage()` 改为延迟加载（首次错误时调用，避免 Vue 未挂载时 inject 失败）
+- `frontend/src/api/backend/location.js`：移除 `useMessage()` import，`apiLocationTrackVisit` catch 块改为 `console.warn()`
+
+#### 配置入口收口
+
+- `frontend/src/config/publicRuntime.ts`：新增 `ASSET_BASE_URL` 常量（派生自 `import.meta.env.BASE_URL`，去除尾部斜杠）
+- 7 个业务文件（RegisterView / setupCloudIntegration / AdministrativeDivisionPanel / TopBar / useSharedResourceLoader / FloatingAccountPanel / PreferencesTab）改为从 `publicRuntime` 导入 `ASSET_BASE_URL`
+
+#### 后端安全：可观测性 + 输入校验
+
+- `backend/api/monitor.py`：热路径（`_fanout_line` / `_LogBroadcastHandler.emit`）添加注释说明防递归；非热路径（`_ensure_broadcast_handler` handler 附加）添加 `logger.debug(exc_info=True)`
+- `backend/api/location.py`：`ReverseGeocodeRequest` 添加 `ge=-180, le=180`（lng）和 `ge=-90, le=90`（lat）；`_resolve_amap_key` 和 `require_api_access_optional` 的静默 except 添加 `logger.debug`
+- `backend/api/agent_chat/routes.py`：`override_base_url` 添加 `Query(max_length=500)`，`override_api_key` 添加 `Query(max_length=200)`
+
+#### 其他
+
+- `backend/app.py`：新增 `_read_app_version()` 从根 README 提取版本号注入 FastAPI（与前端 `__APP_VERSION__` 同源）
+- `Docs/Architecture/account-system-ai-quota.md`：新增 §12「部署约束（多域名认证配置）」
+- `Docs/LLM_record/26-07/26-07-25/2026-07-25-cesium-modules-migration.md`：补充缺失章节（问题分析 / 解决方案 / 性能指标 / 遗留与风险）
+
 ### V3.5.6 (2026-08-01) — Code Review 修复收尾与配置修正
 
 > 🔧 **修正 + 收尾**：修正 Code Review 中不符合用户需求的改动（异常详情、/api/info、登录限速）；修复容器配置路径不匹配；修复游客密码不一致；清理残留 `as any` 和硬编码。

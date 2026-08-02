@@ -248,6 +248,13 @@ jobs:
             # 使用 git subtree 推送 backend 目录到 Hugging Face
             # --force 参数确保覆盖远程分支，使用 :main 映射到 HF space 的 main 分支
             echo "Pushing backend to Hugging Face Spaces..."
+            # subtree split 仅包含 backend/ 目录，根 README.md 不会进入容器。
+            # _read_app_version() 读 backend/../README.md，容器内无此文件会回退 V0.0.0。
+            # 解决：把根 README.md 复制进 backend/ 一并推送，版本号唯一来源仍是根 README。
+            cp README.md backend/README.md
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" `git subtree split --prefix=backend HEAD`:main
+
+            # 恢复 backend/README.md 避免本地 git status 出现无意义改动
+            git checkout -- backend/README.md
 
             echo "Backend deployment to Hugging Face completed ✓"

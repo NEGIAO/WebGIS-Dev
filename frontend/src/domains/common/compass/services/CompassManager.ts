@@ -1075,7 +1075,7 @@ export class CompassManager {
 
                             // 读取配置中的排列样式，默认为原有逻辑（垂直堆叠）
                             // 自定义属性：VectorLayer 实例上挂载的扩展配置
-                            const style = (layer as VectorLayerWithTogetherStyle).togetherStyle;
+                            const style = (layer as unknown as VectorLayerWithTogetherStyle).togetherStyle;
 
                             if (style === 'equally') {
                                 // --- 【横向排列逻辑】 ---

@@ -122,6 +122,8 @@ def init_monitor_log_streaming() -> Literal["local", "hf"]:
 
 
 def _fanout_line(line: str) -> None:
+    # 注意：此函数处于日志广播热路径，except 静默吞没是故意的——
+    # 在 log handler 内部再次 logger.debug() 会导致递归。
     for q in list(_subscribers):
         try:
             q.put_nowait(line)
@@ -133,9 +135,9 @@ def _fanout_line(line: str) -> None:
             try:
                 q.put_nowait(line)
             except Exception:
-                pass
+                pass  # 热路径：静默防递归
         except Exception:
-            pass
+            pass  # 热路径：静默防递归
 
 
 def _schedule_fanout(line: str) -> None:
@@ -162,7 +164,7 @@ class _LogBroadcastHandler(logging.Handler):
                 try:
                     _fanout_line(msg)
                 except Exception:
-                    pass
+                    pass  # 热路径：在 log handler 内部，静默防递归
         except Exception:
             self.handleError(record)
 
@@ -196,11 +198,10 @@ def _ensure_broadcast_handler() -> None:
     for name in common_logger_names:
         try:
             lg = logging.getLogger(name)
-            # Avoid duplicate handler instances
             if not any(isinstance(h, _LogBroadcastHandler) for h in lg.handlers):
                 lg.addHandler(handler)
         except Exception:
-            pass
+            logger.debug("附加日志广播 handler 到 %s 失败", name, exc_info=True)
 
     # Intercept stdout/stderr so that prints and other direct writes are also streamed.
     # Keep originals to avoid disrupting other behavior.

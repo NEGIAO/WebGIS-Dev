@@ -7,7 +7,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from api.auth import normalize_role, require_admin, require_api_access_or_guest, require_login, resolve_quota_subject
 
@@ -626,8 +626,8 @@ async def update_agent_user_config(
 async def get_available_models(
     request: Request,
     session: Dict[str, Any] = Depends(require_api_access_or_guest),
-    override_base_url: Optional[str] = None,
-    override_api_key: Optional[str] = None,
+    override_base_url: Optional[str] = Query(default=None, max_length=500),
+    override_api_key: Optional[str] = Query(default=None, max_length=200),
     use_default_ai: bool = False,
 ) -> Dict[str, Any]:
     """请求上游模型端点并返回"当前账号真实可用"的模型列表。"""

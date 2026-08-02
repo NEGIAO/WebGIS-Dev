@@ -12,4 +12,4 @@
  * 所有原有 import 路径保持不变。
  */
 
-export * from './tileSource/index';
+export * from '../tile-source/index';

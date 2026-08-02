@@ -4,7 +4,7 @@
 interface TiandituMapApi {
     LngLat: new (lng: number, lat: number) => unknown;
     Marker: new (lngLat: unknown) => unknown;
-    Polyline: new (points: unknown[]) => unknown;
+    Polyline: new (points: unknown[], options?: unknown) => unknown;
 }
 declare global {
     interface Window {

@@ -76,7 +76,7 @@
                     <button
                         type="button"
                         class="eco-retry-btn"
-                        @click="tocStore.loadDistrictTree(BASE_URL, true)"
+                        @click="tocStore.loadDistrictTree(ASSET_BASE_URL, true)"
                     >
                         重试
                     </button>
@@ -112,6 +112,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useTOCStore } from '@/stores';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import AdministrativeDivisionTreeNode from './AdministrativeDivisionTreeNode.vue';
 
 const props = defineProps({
@@ -124,8 +125,6 @@ const props = defineProps({
 const emit = defineEmits(['close', 'select']);
 
 const tocStore = useTOCStore();
-
-const BASE_URL = import.meta.env.BASE_URL || '/';
 
 const searchKeyword = ref('');
 const selectedAdcode = ref('');
@@ -189,7 +188,7 @@ watch(
     () => props.visible,
     (nextVisible) => {
         if (!nextVisible) return;
-        void tocStore.loadDistrictTree(BASE_URL);
+        void tocStore.loadDistrictTree(ASSET_BASE_URL);
     },
     { immediate: true },
 );

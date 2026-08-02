@@ -721,7 +721,7 @@ const selectedDrawTool = computed(() => layerStore.selectedDrawTool);
 const selectedEditLayerId = computed({
     get: () => layerStore.selectedEditLayerId,
     set: (value) => {
-        layerStore.selectedEditLayerId = value;
+        layerStore.setStyleTarget(value);
     },
 });
 const drawLayers = computed(() => layerStore.drawLayers);

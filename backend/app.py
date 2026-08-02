@@ -10,7 +10,9 @@ WebGIS Backend - FastAPI 主应用入口
 import asyncio
 import httpx
 import logging
+import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Dict
 
 from config import build_public_config, get_settings, get_str, masked_summary
@@ -159,10 +161,23 @@ async def lifespan(app: FastAPI):
 # ==================== FastAPI 应用初始化 ====================
 
 
+def _read_app_version() -> str:
+    """从仓库根 README.md 提取当前版本号（与前端 __APP_VERSION__ 同源）。"""
+    readme_path = Path(__file__).resolve().parent.parent / "README.md"
+    try:
+        content = readme_path.read_text(encoding="utf-8")
+        match = re.search(r"当前版本[^\d]*(\d+\.\d+\.\d+)", content)
+        if match:
+            return f"V{match[1]}"
+    except Exception:
+        pass
+    return "V0.0.0"
+
+
 app = FastAPI(
     title="WebGIS Backend",
     description="WebGIS 后端 API 服务",
-    version="0.1.0",
+    version=_read_app_version(),
     lifespan=lifespan,
 )
 

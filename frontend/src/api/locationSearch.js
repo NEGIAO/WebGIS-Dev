@@ -11,7 +11,6 @@
  */
 
 import backendAPI from './backend';
-import { useMessage } from '@common/shell/useMessage';
 import { gcj02ToWgs84 } from '@common/data-import/crs/coordTransform';
 import { getAmapErrorMessage, getHttpStatusMessage } from './httpStatusMap';
 
@@ -119,32 +118,31 @@ async function searchWithTianditu({ keywords, page = 1, pageSize = 10, tiandituT
 
         const errorMsg = error.message || '搜索失败';
         const httpStatus = error.status || 0;
-        const { error: showError } = useMessage();
 
         if (errorMsg.includes('Token')) {
-            showError('天地图配置错误：Token 未配置');
+            console.warn('天地图配置错误：Token 未配置');
             throw new Error('天地图配置错误：Token 未配置');
         }
         if ([502, 503, 504].includes(httpStatus)) {
             const msg = `天地图服务暂不可用 [${httpStatus} ${getHttpStatusMessage(httpStatus)}]，请稍后重试`;
-            showError(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
         if (httpStatus >= 400) {
             const msg = `天地图搜索失败 [${httpStatus} ${getHttpStatusMessage(httpStatus)}]: ${errorMsg}`;
-            showError(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
         if (errorMsg.includes('无法连接')) {
-            showError('天地图搜索：网络连接失败，请检查网络设置');
+            console.warn('天地图搜索：网络连接失败，请检查网络设置');
             throw new Error('天地图搜索：网络连接失败，请检查网络设置');
         }
         if (errorMsg.includes('超时')) {
-            showError('天地图搜索：请求超时，请稍后重试');
+            console.warn('天地图搜索：请求超时，请稍后重试');
             throw new Error('天地图搜索：请求超时，请稍后重试');
         }
 
-        showError(`天地图搜索失败: ${errorMsg}`);
+        console.warn(`天地图搜索失败: ${errorMsg}`);
         throw new Error(`天地图搜索失败: ${errorMsg}`);
     }
 }
@@ -184,30 +182,29 @@ async function searchWithNominatim({ keywords, pageSize = 10, page = 1, signal }
         console.error('Nominatim search error:', error);
         const errorMsg = error.message || '搜索失败';
         const httpStatus = error.status || error.originalError?.response?.status || 0;
-        const { error: showError2 } = useMessage();
 
         // 使用统一状态码映射
         if ([502, 503, 504].includes(httpStatus)) {
             const msg = `国际地名服务暂不可用 [${httpStatus} ${getHttpStatusMessage(httpStatus)}]，请稍后重试`;
-            showError2(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
         if (httpStatus >= 400) {
             const msg = `国际地名搜索失败 [${httpStatus} ${getHttpStatusMessage(httpStatus)}]: ${errorMsg}`;
-            showError2(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
 
         if (errorMsg.includes('无法连接')) {
-            showError2('网络连接失败，请检查网络设置');
+            console.warn('网络连接失败，请检查网络设置');
             throw new Error('网络连接失败，请检查网络设置');
         }
         if (errorMsg.includes('超时')) {
-            showError2('搜索超时，请稍后重试');
+            console.warn('搜索超时，请稍后重试');
             throw new Error('搜索超时，请稍后重试');
         }
 
-        showError2(`国际地名搜索失败: ${errorMsg}`);
+        console.warn(`国际地名搜索失败: ${errorMsg}`);
         throw new Error(`国际地名搜索失败: ${errorMsg}`);
     }
 }
@@ -272,7 +269,6 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10, signal }) {
         console.error('Amap search error:', error);
         const errorMsg = error.message || '搜索失败';
         const httpStatus = error.status || error.originalError?.response?.status || 0;
-        const { error: showError3 } = useMessage();
 
         if (error.isQuotaExceeded) {
             // 拦截器已提示配额用完，此处仅重新抛出，避免双重 toast
@@ -282,22 +278,22 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10, signal }) {
         // 使用统一状态码映射处理 HTTP 错误
         if (httpStatus === 401) {
             const msg = `权限不足 [401 ${getHttpStatusMessage(401)}]，请确保已正确配置高德API Key，如问题持续请联系管理员`;
-            showError3(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
         if (httpStatus === 403) {
             const msg = `高德API访问被拒绝 [403 ${getHttpStatusMessage(403)}]，请检查API Key是否有效`;
-            showError3(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
         if (httpStatus === 503) {
             const msg = `高德服务暂不可用 [503 ${getHttpStatusMessage(503)}]，后端可能未配置API Key，请联系管理员`;
-            showError3(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
         if (httpStatus >= 400) {
             const msg = `高德搜索请求失败 [${httpStatus} ${getHttpStatusMessage(httpStatus)}]: ${errorMsg}`;
-            showError3(msg);
+            console.warn(msg);
             throw new Error(msg);
         }
 
@@ -306,16 +302,16 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10, signal }) {
         }
 
         if (errorMsg.includes('无法连接')) {
-            showError3('无法连接到高德服务，请检查网络');
+            console.warn('无法连接到高德服务，请检查网络');
             throw new Error('无法连接到高德服务，请检查网络');
         }
 
         if (errorMsg.includes('超时')) {
-            showError3('搜索请求超时，请稍后重试');
+            console.warn('搜索请求超时，请稍后重试');
             throw new Error('搜索请求超时，请稍后重试');
         }
 
-        showError3(`高德地名搜索失败: ${errorMsg}`);
+        console.warn(`高德地名搜索失败: ${errorMsg}`);
         throw new Error(`高德地名搜索失败: ${errorMsg}`);
     }
 }

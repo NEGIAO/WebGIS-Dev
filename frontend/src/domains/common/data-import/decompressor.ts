@@ -42,7 +42,15 @@ async function readAsArrayBuffer(file: any): Promise<ArrayBuffer> {
     });
 }
 
-function isEntryLike(input: unknown): input is any {
+interface FileSystemLikeEntry {
+    isFile?: boolean;
+    isDirectory?: boolean;
+    name?: string;
+    file?: (resolve: (file: File) => void, reject: (err: unknown) => void) => void;
+    createReader?: () => unknown;
+}
+
+function isEntryLike(input: unknown): input is FileSystemLikeEntry {
     return (
         !!input &&
         typeof input === 'object' &&
@@ -200,9 +208,10 @@ export async function flattenResources(resources: Array<Blob | FileSystemEntry |
         }
 
         if (isBlobLike(resource)) {
+            const blob = resource as Blob & { webkitRelativePath?: string; name?: string };
             const flattened = await flattenFile(
-                resource,
-                resource.webkitRelativePath || resource.name || 'unknown',
+                blob,
+                blob.webkitRelativePath || blob.name || 'unknown',
             );
             output.push(...flattened);
         }
@@ -221,7 +230,7 @@ export async function flattenUploadInput(input: {
     }
 
     if (isEntryLike(input?.content)) {
-        return flattenResources([input.content]);
+        return flattenResources([input.content as FileSystemEntry]);
     }
 
     if (isBlobLike(input?.content)) {

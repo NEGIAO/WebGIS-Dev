@@ -101,6 +101,7 @@ const cesiumReady = new Promise((resolve, reject) => {
             if (settled) return;
             settled = true;
             window.clearTimeout(timer);
+            // eslint-disable-next-line no-console
             console.info(`[cesium-shim] Cesium CDN 加载完成(来源:${candidate.name})`);
             _cesiumReadyResolve();
         };

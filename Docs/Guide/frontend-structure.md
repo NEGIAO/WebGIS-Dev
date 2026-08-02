@@ -33,6 +33,8 @@ frontend/src/
 │   └── weather.js  # 高德天气业务封装（前端直连；与 backend/weather.js 后端代理同名不同义）
 ├── app
 │   ├── HomeView.vue  # 首页（由 lazyHomeViewLoader 加载）
+│   ├── composables
+│   │   └── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑
 │   ├── NotFoundView.vue  # 404 页面（notFound.* i18n）
 │   ├── OAuthCallbackView.vue  # Google/GitHub OAuth 回调会话落地
 │   ├── PrivacyPolicy.vue  # 隐私政策
@@ -50,6 +52,7 @@ frontend/src/
 ├── config
 │   └── publicRuntime.ts  # 后端/瓦片代理基址单点派生（VITE_* → URL 拼接 helper，禁止硬编码域名）
 ├── cesium.d.ts  # Cesium CDN 模块类型声明（桥接 TypeScript 与 CDN 全局 window.Cesium）
+├── vue-shims.d.ts  # .vue 单文件组件模块声明（.ts 动态 import .vue 组件时使用）
 ├── constants
 │   └── index.js  # 路由与守卫
 ├── data
@@ -295,7 +298,6 @@ frontend/src/
 │   │   │   │   │   ├── theme-polygon.ts
 │   │   │   │   │   └── theme-simple.ts
 │   │   │   │   ├── types
-│   │   │   │   │   ├── README.md
 │   │   │   │   │   ├── common.ts
 │   │   │   │   │   ├── compass.ts
 │   │   │   │   │   ├── index.ts  # barrel export
@@ -303,7 +305,8 @@ frontend/src/
 │   │   │   │   └── feng-shui-compass-svg.vue
 │   │   │   └── utils
 │   │   │       ├── explanationLookup.ts  # 罗盘宫位解释查询
-│   │   │       └── themeExplanationMapper.ts  # 主题-解释文件映射
+│   │   │       ├── themeExplanationMapper.ts  # 主题-解释文件映射
+│   │   │       └── compassStyleUtils.ts   # 罗盘背景 CSS 变量工具（纯函数）
 │   │   ├── components
 │   │   │   ├── Magic
 │   │   │   │   ├── useDelaunay.js
@@ -424,10 +427,10 @@ frontend/src/
 │   │   │       └── useUserPreferencesStore.ts  # 用户偏好（语言 SSOT：setLanguagePreference + 本机 key 优先远端）
 │   │   ├── utils
 │   │   │   ├── abortManager.js  # 请求中断管理器
+│   │   │   ├── browserDownload.ts  # 浏览器下载触发工具（Blob / URL 两种模式）
 │   │   │   ├── labelValidator.ts  # 标签校验
 │   │   │   ├── normalize.ts  # 二值标记规范化
 │   │   │   ├── pathUtils.js  # 路径工具
-│   │   │   ├── useErrorHandler.ts
 │   │   │   └── useMarkdownRenderer.js
 │   │   ├── weather
 │   │   │   ├── components
@@ -583,7 +586,6 @@ frontend/src/
 │       │   │   └── index.js  # 路由与守卫
 │       │   ├── amapRectangle.js  # 高德矩形范围解析
 │       │   ├── attributeTableCsv.ts  # 属性表 CSV 导出（RFC4180 转义 + BOM + 下载）
-│       │   ├── featureKey.js  # 要素唯一键生成
 │       │   ├── useCoordinateSystemConversion.js
 │       │   ├── usePositionCodeTool.js
 │       │   └── viewScaleConverter.js  # OL zoom ↔ Cesium height 换算

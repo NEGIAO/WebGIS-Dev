@@ -569,7 +569,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
-import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD } from '../config/publicRuntime';
+import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD, ASSET_BASE_URL } from '../config/publicRuntime';
 import {
     apiAuthGoogleOneTap,
     apiAuthLogin,
@@ -680,8 +680,7 @@ function normalizeUsername(raw) {
 }
 
 function resolvePublicAssetPath(relativePath) {
-    const base = String(import.meta.env.BASE_URL || '/').trim();
-    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+    const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
     const normalizedPath = String(relativePath || '').replace(/^\/+/, '');
     return `${normalizedBase}${normalizedPath}`;
 }

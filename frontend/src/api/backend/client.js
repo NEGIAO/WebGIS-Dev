@@ -13,10 +13,10 @@ import {
     readShareModeFromUrl,
 } from '@common/user/services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
-import { useMessage } from '@common/shell/useMessage';
 import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL, BACKEND_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
+import { useMessage } from '@common/shell/useMessage';
 
-/** useMessage 错误提示函数（模块顶层调用，拦截器仅在请求时触发，此时 Vue 已挂载） */
+/** useMessage 错误提示函数（模块顶层调用安全：useMessage 为纯模块级实现，不依赖组件 inject；注意：若 useMessage.js 未来加入 inject 依赖，需改为延迟加载模式） */
 const { error: showError } = useMessage();
 
 /** 后端根地址（无尾部斜杠），统一来自 src/config/publicRuntime，供 axios 与 SSE 等共用 */

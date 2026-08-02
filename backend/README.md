@@ -59,7 +59,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 后端完整文件树（`backend/` 全部文件及注释）统一维护于 [`Docs/Guide/backend-structure.md`](../Docs/Guide/backend-structure.md)，本 README 不再重复维护，避免多处同步。
 
-> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志；2026-07-27 V3.4.67：后端无代码改动，本次为前端体积云 Cesium 时间轴同步与大气透视链路修复。
+> 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志。
 
 ## 1. 认证系统
 

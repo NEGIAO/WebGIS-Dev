@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import {
     apiAuthChangePassword,
     apiAuthChangeAvatar,
@@ -111,8 +112,7 @@ const preferenceModelOptions = ref([]);
 const isAdmin = computed(() => String(user.value?.role || '') === 'admin');
 
 function resolvePublicAssetPath(relativePath) {
-    const base = String(import.meta.env.BASE_URL || '/').trim();
-    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+    const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
     const normalizedPath = String(relativePath || '').replace(/^\/+/, '');
     return `${normalizedBase}${normalizedPath}`;
 }

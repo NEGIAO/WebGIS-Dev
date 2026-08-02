@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus } from '@/api/download';
+import { triggerBrowserDownload } from '@common/utils/browserDownload';
 
 type DownloadMode = 'native' | 'progressive'; // native: browser native download, progressive: front-end visualization
 
@@ -140,19 +141,6 @@ function buildTaskPayload(
         bbox_crs: String(bboxCrs || 'EPSG:4326').trim() || 'EPSG:4326',
         clip_to_extent: clipToExtent,
     };
-}
-
-function triggerBrowserDownload(blob: Blob, filename: string): void {
-    // Create a temporary anchor to save the blob as a local file.
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.rel = 'noopener';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export const useDownloadStore = defineStore('downloadStore', () => {
@@ -421,6 +409,16 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         return true;
     }
 
+    /** 设置瓦片 URL 模板（供 MapDownloader 选择底图 preset 后写入） */
+    function setTileUrlTemplate(template: string): void {
+        tileUrlTemplate.value = String(template || '').trim();
+    }
+
+    /** 标记文件已下载（记录下载时间戳） */
+    function markDownloaded(): void {
+        downloadedAt.value = Date.now();
+    }
+
     return {
         tileUrlTemplate,
         bbox,
@@ -451,6 +449,8 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         resetTask,
         fetchTaskById,
         applyBboxFromExtent,
+        setTileUrlTemplate,
+        markDownloaded,
         extentSet,
         clearExtent() {
             extentSet.value = false;

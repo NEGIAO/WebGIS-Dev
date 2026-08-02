@@ -28,8 +28,6 @@
  *   await globalAbortManager.fetch('search', url)
  */
 
-import { onUnmounted } from 'vue';
-
 export class AbortManager {
     /**
      * @param {object} [options]
@@ -241,30 +239,3 @@ export const globalAbortManager = new AbortManager({
 
 // ==================== Vue 组合式 API 便捷方法 ====================
 
-/**
- * 在 Vue 组件中创建带自动清理的 AbortManager。
- * 组件卸载时自动 abort 所有请求并清理资源。
- *
- * 注意：必须在 Vue 组件 setup 上下文中调用（即 <script setup> 内）。
- *
- * @returns {AbortManager}
- *
- * @example
- * <script setup>
- * import { useAbortManager } from '@common/utils/abortManager'
- *
- * const abortManager = useAbortManager()
- *
- * async function onSearch(query) {
- *   const data = await abortManager.fetch('search', `/api/search?q=${query}`)
- *   // ...
- * }
- * </script>
- */
-export function useAbortManager() {
-    const manager = new AbortManager();
-
-    onUnmounted(() => manager.dispose());
-
-    return manager;
-}

@@ -304,6 +304,7 @@ import { apiDownloadTaskFile, apiDownloadTaskFileUrl } from '@/api/download';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
+import { triggerBrowserDownload, triggerUrlDownload } from '@common/utils/browserDownload';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '@/constants';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@ol/services/runtimeMapTokens';
 import ExtentPicker from '@common/components/ExtentPicker.vue';
@@ -483,11 +484,6 @@ async function downloadFileToLocal() {
             transferState.value.progress = 100;
         }
 
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-
         // 尝试从 Content-Disposition 提取文件名
         let filename = buildReadableFilename();
         const disposition = String(response?.headers?.['content-disposition'] || '');
@@ -498,14 +494,8 @@ async function downloadFileToLocal() {
                 filename = decodeURIComponent(matches[1].replace(/['"]/g, '').trim());
             }
         }
-        a.download = filename;
 
-        document.body.appendChild(a);
-        a.click();
-
-        // 清理内存
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
+        triggerBrowserDownload(blob, filename);
 
         transferState.value.active = false;
         transferState.value.error = '';
@@ -549,16 +539,11 @@ function triggerNativeDownload() {
         // 构建带 token 的下载 URL
         const downloadUrl = apiDownloadTaskFileUrl(store.taskId, store.downloadToken);
 
-        // 通过创建临时链接并触发点击来启动浏览器原生下载
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        // 通过临时链接触发浏览器原生下载
+        triggerUrlDownload(downloadUrl);
 
         // 记录下载时间
-        store.downloadedAt = Date.now();
+        store.markDownloaded();
         message.success(t('mapDownload.nativeStarted'));
 
         // 停止倒计时（已完成）
@@ -674,7 +659,7 @@ watch(
 watch(selectedPreset, (presetId) => {
     const preset = tilePresets.value.find((item) => item.id === presetId);
     if (preset && preset.template) {
-        store.tileUrlTemplate = preset.template;
+        store.setTileUrlTemplate(preset.template);
     }
 });
 

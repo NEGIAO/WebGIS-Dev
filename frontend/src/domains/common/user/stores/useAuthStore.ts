@@ -68,9 +68,11 @@ export const useAuthStore = defineStore('authStore', () => {
             const result = await withTimeout(apiAuthMe());
             const payload =
                 result && typeof result === 'object' && 'data' in result
-                    ? (result as { data: unknown }).data
+                    ? (result as { data: { user?: AuthUser } | unknown }).data
                     : result;
-            const nextUser = payload?.user;
+            const nextUser = typeof payload === 'object' && payload !== null && 'user' in payload
+                ? (payload as { user?: AuthUser }).user
+                : null;
             user.value = nextUser && typeof nextUser === 'object' ? (nextUser as AuthUser) : null;
             validatedToken.value = token;
             return true;

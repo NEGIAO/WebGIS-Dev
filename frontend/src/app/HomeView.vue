@@ -21,6 +21,7 @@ import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
 import { getLayerCategory, getLayerGroup } from '@ol/basemap/constants/basemapResolver';
 import { createMapCommandBus } from '@common/chat/agent/MapCommandBus';
 import { createCesiumMapCommandAdapter, createOlMapCommandAdapter } from '@common/chat/agent/mapCommandAdapters';
+import { importCesiumContainerWithRetry, loadSidePanelModule } from './composables/useLazyModules';
 
 const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
     urlLayerOptions: URL_LAYER_OPTIONS,
@@ -70,40 +71,6 @@ const cesiumContainerRef = ref(null);
 
 // watchdogTimer 引用：确保组件卸载时可清理，防止内存泄漏
 let activeWatchdogTimer = null;
-
-/**
- * 动态导入 CesiumContainer，带重试机制处理 Vite 瞬态模块获取失败。
- * "Failed to fetch dynamically imported module" 通常是 dev 缓存瞬态错误，
- * 强制刷新缓存后重试即可成功。
- */
-async function importCesiumContainerWithRetry(maxRetries = 2) {
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            return await import('@cesium-domain/components/CesiumContainer.vue');
-        } catch (error) {
-            const text = String(error?.message || error || '');
-            const isTransientModuleFetchFail = text.includes('Failed to fetch dynamically imported module');
-            // 最后一次重试或非瞬态错误：不再重试
-            if (attempt >= maxRetries || !isTransientModuleFetchFail) {
-                throw error;
-            }
-            // 强制 Vite 刷新缓存：重新请求模块（?v= 破坏浏览器侧缓存）
-            console.warn(`[CesiumContainer] 动态导入瞬态失败，第 ${attempt + 1} 次重试...`);
-        }
-    }
-}
-
-// Cache the SidePanel module during idle time without mounting the hidden panel.
-let sidePanelModulePromise = null;
-function loadSidePanelModule() {
-    if (!sidePanelModulePromise) {
-        sidePanelModulePromise = import('@common/shell/SidePanel.vue').catch((error) => {
-            sidePanelModulePromise = null;
-            throw error;
-        });
-    }
-    return sidePanelModulePromise;
-}
 
 const SidePanel = defineAsyncComponent({
     loader: loadSidePanelModule,

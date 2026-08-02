@@ -13,8 +13,7 @@
  */
 
 import axios from 'axios';
-import backendAPI, { handleApiError } from './backend';
-import { useMessage } from '@common/shell/useMessage';
+import backendAPI from './backend';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@common/data-import/crs/coordTransform';
 import { getAmapErrorMessage } from './httpStatusMap';
 import { getRuntimeMapTokensSync } from '@ol/services/runtimeMapTokens';
@@ -170,14 +169,13 @@ export async function reverseGeocodeTianditu({
  * @returns {Promise<{lng:number,lat:number,adcode:string,level:string,formattedAddress:string}>}
  */
 export async function addressToLocation(address, city = '', options = {}) {
-    const message = useMessage();
     const normalizedAddress = String(address || '').trim();
     const silent = !!options?.silent;
 
     if (!normalizedAddress) {
         const error = new Error('地理编码缺少 address 参数');
         if (!silent) {
-            message.warning(error.message, { closable: true, duration: 4500 });
+            console.warn(error.message);
         }
         throw error;
     }
@@ -206,7 +204,7 @@ export async function addressToLocation(address, city = '', options = {}) {
                 ? data?.info || data?.message || '高德地理编码失败'
                 : getAmapErrorMessage(infocode);
             if (!silent) {
-                message.error(`地理编码失败：${reason}`, { closable: true, duration: 5500 });
+                console.warn(`地理编码失败：${reason}`);
             }
             const notifiedError = new Error(
                 `${reason} (status=${status}, infocode=${infocode || 'unknown'})`,
@@ -221,7 +219,7 @@ export async function addressToLocation(address, city = '', options = {}) {
         if (!best || !gcjCoord) {
             const reason = '未找到有效的地址坐标结果';
             if (!silent) {
-                message.warning(`地理编码失败：${reason}`, { closable: true, duration: 4500 });
+                console.warn(`地理编码失败：${reason}`);
             }
             const notifiedError = new Error(reason);
             notifiedError.__notified = !silent;
@@ -242,13 +240,13 @@ export async function addressToLocation(address, city = '', options = {}) {
         };
     } catch (error) {
         if (error?.isQuotaExceeded) {
-            // 配额用完：使用友好提示
-            handleApiError(error, message, '地理编码：API 调用额度已用完');
+            // 配额用完：仅记录日志
+            console.warn('地理编码：API 调用额度已用完');
         } else {
             const detail = error instanceof Error ? error.message : '网络异常';
             const statusTag = error?.status ? ` [${error.status} ${getAmapErrorMessage(error.status) || ''}]` : '';
             if (!error?.__notified && !silent) {
-                message.error(`地理编码请求异常：${detail}${statusTag}`, { closable: true, duration: 6000 });
+                console.warn(`地理编码请求异常：${detail}${statusTag}`);
             }
         }
         throw error instanceof Error ? error : new Error('地理编码失败');
@@ -265,7 +263,6 @@ export async function addressToLocation(address, city = '', options = {}) {
  * @returns {Promise<{formattedAddress:string,province:string,city:string,district:string,township:string,adcode:string,businessAreas:Array<{name:string,id?:string,location?:string}>,provider?:string}>}
  */
 export async function locationToAddress(lng, lat, extensions = 'base', options = {}) {
-    const message = useMessage();
     const wgsLng = Number(lng);
     const wgsLat = Number(lat);
     const silent = !!options?.silent;
@@ -273,7 +270,7 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
     if (!Number.isFinite(wgsLng) || !Number.isFinite(wgsLat)) {
         const error = new Error('逆地理编码缺少有效坐标参数');
         if (!silent) {
-            message.warning(error.message, { closable: true, duration: 4500 });
+            console.warn(error.message);
         }
         throw error;
     }
@@ -304,7 +301,7 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
                 ? data?.info || data?.message || '高德逆地理编码失败'
                 : getAmapErrorMessage(infocode);
             if (!silent) {
-                message.error(`逆地理编码失败：${reason}`, { closable: true, duration: 5500 });
+                console.warn(`逆地理编码失败：${reason}`);
             }
             const notifiedError = new Error(
                 `${reason} (status=${status}, infocode=${infocode || 'unknown'})`,
@@ -340,13 +337,13 @@ export async function locationToAddress(lng, lat, extensions = 'base', options =
         };
     } catch (error) {
         if (error?.isQuotaExceeded) {
-            // 配额用完：使用友好提示
-            handleApiError(error, message, '逆地理编码：API 调用额度已用完');
+            // 配额用完：仅记录日志
+            console.warn('逆地理编码：API 调用额度已用完');
         } else {
             const detail = error instanceof Error ? error.message : '网络异常';
             const statusTag = error?.status ? ` [${error.status} ${getAmapErrorMessage(error.status) || ''}]` : '';
             if (!error?.__notified && !silent) {
-                message.error(`逆地理编码请求异常：${detail}${statusTag}`, { closable: true, duration: 6000 });
+                console.warn(`逆地理编码请求异常：${detail}${statusTag}`);
             }
         }
         throw error instanceof Error ? error : new Error('逆地理编码失败');

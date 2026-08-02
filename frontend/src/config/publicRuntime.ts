@@ -94,6 +94,13 @@ export const GOOGLE_OAUTH_CLIENT_ID: string = String(
 export const GUEST_PASSWORD: string = String(import.meta.env.VITE_GUEST_PASSWORD || '').trim();
 
 /**
+ * 应用基础路径（Vite BASE_URL，即 vite.config.js 的 base 配置）。
+ * 用于拼接静态资源路径（如 ShareData/、CDN 资源等）。
+ * 业务代码不得散落 import.meta.env.BASE_URL，统一从本模块取值。
+ */
+export const ASSET_BASE_URL: string = String(import.meta.env.BASE_URL || '/').replace(/\/+$/, '') || '/';
+
+/**
  * 拼接后端 API URL
  * @param path 以 / 开头的路径，如 /api/config/public
  */

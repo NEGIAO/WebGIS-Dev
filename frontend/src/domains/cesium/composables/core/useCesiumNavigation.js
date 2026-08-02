@@ -56,6 +56,7 @@ export function useCesiumNavigation({ getViewer, getCesium }) {
                 }
             }
 
+            // eslint-disable-next-line no-console
             console.info('[CesiumNavigation] 导航控件已初始化');
         } catch (err) {
             console.warn('[CesiumNavigation] 初始化失败:', err);

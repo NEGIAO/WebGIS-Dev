@@ -339,7 +339,43 @@ def _get_admin_password() -> str:
 - **邮箱绑定拦截**：`requiresEmailBinding` 计算属性为 `true` 时，前端阻止用户进入 AI 对话等功能，引导至邮箱绑定流程。
 - **配额展示**：`ChatPanelContent.vue` 从 `/api/agent/chat/config` 获取当日配额快照并展示剩余次数。
 
-## 12. 局限与升级方向
+## 12. 部署约束（多域名环境下的认证配置）
+
+账号系统跨全部 7 个 WebGIS 前端域名生效，以下约束在新增域名时必须处理：
+
+### 12.1 Google OneTap
+
+- Google OneTap 需在 Google Cloud Console 的 **Authorized JavaScript origins** 中注册每个域名
+- 每新增一个域名必须去控制台添加一次，否则 OneTap 在该域名下静默失效
+- 当前已注册域名：`negiao.github.io`、`negiao.cloud-ip.cc`、`negiao.cc.cd`、`negiao.pages.dev`、`webgis.negiao.cc.cd`、`webgis-dev.pages.dev`、`negiao-web.static.hf.space`
+
+### 12.2 OAuth 回调地址
+
+- Google OAuth 与 GitHub OAuth 的回调地址**唯一绑定**后端 `negiao-webgis.hf.space`
+- 所有域名（无论哪个）的 OAuth 登录最终都跳转到此后端完成认证
+- 后端根据 `BACKEND_PUBLIC_URL`（生产 = `https://negiao-webgis.hf.space`）推导回调地址
+
+### 12.3 邮箱验证
+
+- 使用阿里云 SMTP 推送验证码邮件（`smtpdm.aliyun.com`）
+- 发件人地址与 SMTP 凭证配置在 `.env`，与域名无关
+
+### 12.4 CORS 白名单
+
+- 后端 `CORS_ALLOWED_ORIGINS` 需包含所有前端域名
+- 新增域名时必须同步更新此配置，否则跨域请求被拒绝
+
+### 12.5 新增域名检查清单
+
+| 步骤 | 操作 | 说明 |
+|------|------|------|
+| 1 | Google Cloud Console → Authorized JavaScript origins | 添加新域名（OneTap 生效） |
+| 2 | Google Cloud Console → OAuth 2.0 Client → Authorized redirect URIs | 确认回调地址已包含 |
+| 3 | GitHub Developer Settings → OAuth Apps | 确认回调地址已包含 |
+| 4 | 后端 `.env` → `CORS_ALLOWED_ORIGINS` | 添加新域名 |
+| 5 | 管理员后台 → system_config | 确认 OAuth Client ID 正确 |
+
+## 13. 局限与升级方向
 
 **现有局限：**
 
