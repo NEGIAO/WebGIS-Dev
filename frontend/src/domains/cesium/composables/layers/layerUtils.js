@@ -7,7 +7,7 @@
  */
 
 import { BASEMAP_OPTIONS, resolvePresetLayerIds } from '@ol/basemap/constants/basemapResolver';
-import { getDescriptorById } from '@ol/basemap/constants/sourceDescriptors';
+import { getDescriptorById } from '@ol/basemap/constants/basemapConfig';
 
 // --- 模块级常量 ---
 

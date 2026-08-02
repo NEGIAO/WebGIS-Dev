@@ -178,8 +178,16 @@ Pinia store 管理罗盘全部状态：
 
 `TopBar.vue` 定义分享黑名单：
 
-```javascript
-const SHARE_EXCLUDED_PARAMS = ['ut', 'loc', 'p'];
+```mermaid
+flowchart TD
+    URL(["当前地址栏 URL"]) --> PARSE["解析 hash route 查询参数"]
+    PARSE --> EXCLUDE["删除 SHARE_EXCLUDED_PARAMS"]
+    EXCLUDE -->|"ut = 用户身份"| DEL1["删除"]
+    EXCLUDE -->|"loc = 定位来源"| DEL2["删除"]
+    EXCLUDE -->|"p = GPS 精准位置"| DEL3["删除"]
+    EXCLUDE --> NORM["历史别名 layer → l"]
+    NORM --> APPEND["追加 s=1 分享标记"]
+    APPEND --> ASSEMBLE(["重新组装分享 URL"])
 ```
 
 | 参数 | 含义 |
@@ -229,16 +237,31 @@ const SHARE_EXCLUDED_PARAMS = ['ut', 'loc', 'p'];
 
 ### 7.2 异步任务流程
 
-```
-POST /tasks → 创建任务（SQLite 持久化）→ BackgroundTasks 启动后台处理
-  → _process_download_task()
-    → _normalize_bbox()（统一转 EPSG:4326）
-    → build_geotiff_from_tiles()（瓦片抓取 + 拼接）
-    → clip_geotiff_to_bbox()（可选裁剪）
-    → update_task(status="success")
+```mermaid
+flowchart TD
+    POST(["POST /api/download/tasks"]) --> CREATE["创建任务<br/>SQLite 持久化"]
+    CREATE -->|"BackgroundTasks"| PROCESS["_process_download_task()"]
+    PROCESS --> NORM["_normalize_bbox()<br/>统一转 EPSG:4326"]
+    NORM --> BUILD["build_geotiff_from_tiles()<br/>瓦片抓取 + 拼接"]
+    BUILD --> CLIP{"clip_to_extent?"}
+    CLIP -->|是| CLIP_GEOM["clip_geotiff_to_bbox()<br/>rasterio 裁剪"]
+    CLIP -->|否| DONE
+    CLIP_GEOM --> DONE["update_task(status='success')"]
 ```
 
-任务状态机：`pending → downloading → stitching → success / failed`
+任务状态机：
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: POST /tasks
+    pending --> downloading: 开始抓取
+    downloading --> stitching: 拼接 GeoTIFF
+    stitching --> success: 完成
+    stitching --> failed: 异常
+    downloading --> failed: 异常
+    success --> [*]: TTL 30min 后过期
+    failed --> [*]
+```
 
 任务 TTL 为 30 分钟（`DEFAULT_TASK_TTL_MINUTES`），过期后文件接口返回 410。
 

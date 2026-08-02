@@ -1,13 +1,12 @@
 /**
- * 底图预设目录(纯数据,零 ol 依赖)
+ * 底图预设目录（纯数据，零 OL/Cesium 依赖）
  *
- * 从 basemapConfig.ts 抽离(V3.4.54 加载性能优化):预设 id/label/stack 与
- * URL 图层索引映射是纯常量,供 useUrlParamStore 等入口链路消费;
- * 抽离后登录页入口不再连带打包 OpenLayers(原链:useUrlParamStore →
- * basemapResolver → basemapConfig → ol/source/*)。
+ * 控制不同底图在地图上的显示优先顺序（stack 数组决定叠加层次）。
+ * 从 basemapConfig.ts 抽离（V3.4.54 加载性能优化）：预设 id/label/stack 与
+ * URL 图层索引映射是纯常量，供 useUrlParamStore 等入口链路消费；
+ * 抽离后登录页入口不再连带打包 OpenLayers（原链：useUrlParamStore →
+ * basemapResolver → basemapConfig → ol/source/*）。
  *
- * 新增预设:编辑本文件 BASEMAP_PRESETS;图源定义仍在 basemapConfig.ts 的
- * LAYER_SOURCE_DEFINITIONS(二者通过 stack 中的图层 id 关联)。
  * 本文件禁止 import 任何 ol / cesium / 工厂模块。
  */
 
@@ -198,11 +197,16 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     // 其他与自定义
     { id: 'vector_geoq_gray_preset', label: 'GeoQ灰', stack: ['vector_geoq_gray'] },
     { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
-    { id: 'vector_henu_border_preset', label: '矢量边界', stack: ['vector_henu_border_pbf'] },
 ];
 
+/** 完整 preset 列表，label 带序号前缀（与 URL 参数 l 索引一致，从 0 开始） */
+export const ALL_BASEMAP_PRESETS: BasemapPresetDefinition[] = BASEMAP_PRESETS.map((preset, index) => ({
+    ...preset,
+    label: `${index} ${preset.label}`,
+}));
+
 /**
- * URL 图层选项列表:用于 URL 参数 l 的图层索引映射(与 BASEMAP_PRESETS 同序)。
+ * URL 图层选项列表:用于 URL 参数 l 的图层索引映射(与 ALL_BASEMAP_PRESETS 同序)。
  * 原位于 basemapResolver.ts,随预设数据一并抽离至无 ol 依赖层。
  */
-export const URL_LAYER_OPTIONS = BASEMAP_PRESETS.map((preset) => preset.id);
+export const URL_LAYER_OPTIONS = ALL_BASEMAP_PRESETS.map((preset) => preset.id);

@@ -6,6 +6,47 @@
 
 ## 版本记录
 
+### V3.5.9 (2026-08-02) — 底图配置架构重构：单一真相源 + Cesium 自动派生
+
+> 🏗️ **架构重构**：删除 `sourceDescriptors.ts`（887 行），Cesium 描述符由 `basemapConfig.ts` 的 `getDescriptorById()` / `getAllDescriptorIds()` 自动派生；`basemapPresets.ts` 新增 `ALL_BASEMAP_PRESETS`（label 加序号前缀，与 URL 参数 `l` 索引对齐）；废弃 Google 主机切换机制（`GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl`）彻底删除；`index.ts`/`basemapProviderFactory.ts`/`layerUtils.js` 的 import 路径统一指向 `basemapConfig`。
+
+#### 架构变更
+
+- `frontend/src/domains/ol/basemap/constants/basemapConfig.ts`：
+  - 类型 `LayerSourceDefinition` 新增 `url`、`serviceType`、`maxZoom`、`tilePixelRatio`、`subdomains`、`needsContext`、`wms`、`wmts` 字段（Cesium 派生所需）
+  - 新增 `TileSourceDescriptor` 类型 + `getDescriptorById()` + `getAllDescriptorIds()` 函数（从 `LAYER_SOURCE_DEFINITIONS` 自动派生）
+  - 删除 `GOOGLE_MANUAL_HOST`、`activeGoogleTileHost`、`buildGoogleTileUrl`（废弃机制）
+  - `imagery_gac` URL 改为硬编码 `https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}`
+  - 90 个图层定义补充 `url` + `serviceType` 字段
+
+- `frontend/src/domains/ol/basemap/constants/sourceDescriptors.ts`：**已删除**（功能由 `basemapConfig.ts` 自动派生替代）
+
+- `frontend/src/domains/ol/basemap/constants/basemapPresets.ts`：
+  - 新增 `ALL_BASEMAP_PRESETS`（`BASEMAP_PRESETS` 每条 label 加序号前缀 `"${index} ${label}"`，与 URL 参数 `l` 索引对齐）
+  - `URL_LAYER_OPTIONS` 改为基于 `ALL_BASEMAP_PRESETS`
+
+- `frontend/src/domains/ol/basemap/constants/basemapResolver.ts`：
+  - 改用 `ALL_BASEMAP_PRESETS` 替代 `BASEMAP_PRESETS`
+  - `LAYER_SOURCE_DEFINITIONS` 改为从 `basemapConfig` 导入
+
+- `frontend/src/domains/ol/basemap/constants/index.ts`：
+  - 删除 `GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl` 导出
+  - `TileSourceDescriptor`/`getDescriptorById`/`getAllDescriptorIds` 改为从 `basemapConfig` 导出
+
+- `frontend/src/domains/cesium/constants/basemapProviderFactory.ts`：import 路径从 `sourceDescriptors` 改为 `basemapConfig`
+- `frontend/src/domains/cesium/composables/layers/layerUtils.js`：import 路径从 `sourceDescriptors` 改为 `basemapConfig`
+
+#### 影响范围
+
+- 底图配置：单一真相源，增删改只需维护 `basemapConfig.ts`
+- Cesium 引擎：`getDescriptorById()` 行为不变（仍返回完整描述符），但数据源从手动维护改为自动派生
+- UI 预设下拉：label 加序号前缀（`"0 本地瓦片"`），与 URL `l` 参数索引对齐
+
+#### 兼容性
+
+- `BASEMAP_PRESETS` 仍从 `basemapConfig` re-export（向后兼容），但推荐使用 `ALL_BASEMAP_PRESETS`
+- `getDescriptorById` 接口签名不变，外部调用方零改动
+
 ### V3.5.8 (2026-08-02) — 暂存区 Review 修复：require() 崩溃 + 容器版本号 + 分层边界
 
 > 🔧 **Bug 修复**：`client.js` 的 `require()` 在纯 ESM 浏览器环境必炸（ReferenceError，错误提示崩溃且吞原始错误），改回静态 import `useMessage`；`_read_app_version()` 在 Docker 容器内读不到根 README（subtree 推送）→ deploy.yml push 前 `cp README.md backend/README.md`（版本号仍 100% 来自根 README，无新配置 key）；删除与 `setStyleTarget` 完全重复的新 action；`browserDownload.ts` 移至 common 域消除 common→ol 反向依赖；新增 `vue-shims.d.ts` 修复 .ts import .vue 的 TS2307。

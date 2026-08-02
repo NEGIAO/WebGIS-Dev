@@ -47,22 +47,23 @@
 
 `dispatchGisData(input)` 是 2D 管线的统一入口，接收 `{ content, type, name }` 并返回标准化的 packet 结构：
 
-```javascript
-// 核心路由逻辑（简化）
-const normalizedType = normalizeType(type, name);  // 按扩展名归一化
-const topMagic = detectMagicType(content);          // 魔术字节检测（ZIP/TIFF/JSON/XML）
-
-if (shouldDecompress) {
-    // ZIP/KMZ → decompressBuffer → buildArchivePackets（批量）
-} else if (normalizedType === 'kml') {
-    // 单文件 KML → 解码 + 投影检测 → packet { kind: 'kml' }
-} else if (normalizedType === 'geojson' || normalizedType === 'json') {
-    // GeoJSON → 解析 + 投影检测 → packet { kind: 'geojson' }
-} else if (normalizedType === 'tif' || normalizedType === 'tiff') {
-    // TIFF → Blob URL → packet { kind: 'tiff' }
-} else if (normalizedType === 'shp') {
-    // 单独 .shp → 抛错提示用户按组上传
-}
+```mermaid
+flowchart TD
+    INPUT(["dispatchGisData(input)"]) --> NORM["normalizeType(type, name)<br/>按扩展名归一化"]
+    NORM --> MAGIC["detectMagicType(content)<br/>魔术字节检测"]
+    MAGIC --> DECOMP{"需要解压?<br/>(ZIP/KMZ)"}
+    DECOMP -->|是| ARCHIVE["decompressBuffer<br/>→ buildArchivePackets（批量）"]
+    ARCHIVE --> CLASSIFY["classifyArchiveDatasets<br/>分5组: KML/KMZ/SHP/TIFF/GeoJSON"]
+    CLASSIFY --> GROUP["groupShpEntriesByBaseName<br/>.shp+.dbf+.shx+.prj+.cpg"]
+    GROUP --> PACKETS(["输出 packet[]"])
+    DECOMP -->|否| KML{"type=kml"}
+    KML -->|是| PKML["解码 + 投影检测<br/>→ packet {kind:'kml'}"]
+    KML -->|否| GEOJSON{"type=geojson/json"}
+    GEOJSON -->|是| PGJ["解析 + 投影检测<br/>→ packet {kind:'geojson'}"]
+    GEOJSON -->|否| TIFF{"type=tif/tiff"}
+    TIFF -->|是| PTIF["Blob URL<br/>→ packet {kind:'tiff'}"]
+    TIFF -->|否| SHP{"type=shp"}
+    SHP -->|是| ERR(["抛错: 需按组上传"])
 ```
 
 **归档批处理**（`buildArchivePackets`）：解压后通过 `classifyArchiveDatasets` 将 entries 分类为 KML/KMZ/SHP/TIFF/GeoJSON 五组，SHP 通过 `groupShpEntriesByBaseName` 按同名文件组配对（.shp + .dbf + .shx + .prj + .cpg），每组生成一个 packet。嵌套 KMZ 通过延迟注入的 `_dispatchGisData` 递归处理。
@@ -198,18 +199,15 @@ DBF 编码通过三级检测：CPG 文件内容 → DBF 头部 LDID 字节（0x4
 
 `loadTilesetFromFileMap(fileMap, sourceName)` 实现完整的 blob URL 重写管线：
 
-```javascript
-// Step 1: 所有文件 → blob URL 映射
-for (const [relPath, blob] of Object.entries(fileMap)) {
-    blobUrlMap[normalized] = URL.createObjectURL(blob);
-}
-
-// Step 2: 找出所有 tileset.json（含 root 字段的 JSON）
-// Step 3: 递归重写 content.url → blob URL
-rewriteTilesetContentUrls(json.root, tsDir, blobUrlMap);
-
-// Step 4: 改写后的 JSON 重新序列化为新 blob URL
-// Step 5: Cesium3DTileset.fromUrl(rewrittenBlobUrl)
+```mermaid
+flowchart TD
+    ZIP(["用户上传 ZIP / 文件夹"]) --> MAP["Step 1: 所有文件 → blob URL 映射<br/>{ relPath: blobUrl }"]
+    MAP --> FIND["Step 2: 找出所有 tileset.json<br/>(含 root 字段的 JSON)"]
+    FIND --> REWRITE["Step 3: 递归重写 content.url → blob URL<br/>处理 1.0 单对象 + 1.1 数组"]
+    REWRITE --> RESOLVE["路径解析 resolveTilesetPath<br/>strip 前导斜杠 · 相对路径拼接"]
+    RESOLVE --> SERIALIZE["Step 4: 改写后 JSON → 新 blob URL"]
+    SERIALIZE --> LOAD["Step 5: Cesium3DTileset.fromUrl<br/>(rewrittenBlobUrl)"]
+    LOAD --> RENDER(["3D Tiles 渲染"])
 ```
 
 ### 9.3 content 1.0 / 1.1 兼容

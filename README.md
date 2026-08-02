@@ -65,6 +65,7 @@
   - [架构文档](#架构文档)
     - [系统级架构](#系统级架构)
     - [功能架构](#功能架构)
+    - [架构文档目录](/docs/Architecture/)
 - [📜 版本演进](#-版本演进)
 - [📄 许可证](#-许可证)
 - [👤 作者与托管](#-作者与托管)
@@ -73,9 +74,11 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.8），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.9），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
+>
+> 📐 架构文档统一存放于 [`Docs/Architecture/`](Docs/Architecture/)，使用 Mermaid 流程图 / 时序图 / 状态图描述各子系统的模块关系、数据流向与文件交互，供技术交接与方案审查参考。每篇架构文档聚焦一个功能域，包含设计决策、实现细节与升级方向。
 >
 > 不了解项目全貌？试试 [DeepWiki — 向 LLM 提问本项目](https://deepwiki.com/NEGIAO/WebGIS-Dev) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
@@ -363,9 +366,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.9** | 2026-08-02 | 底图配置架构重构（SSOT）：删除 `sourceDescriptors.ts`（887 行），Cesium 描述符由 `basemapConfig.ts` 的 `getDescriptorById()` 自动派生；`basemapPresets.ts` 新增 `ALL_BASEMAP_PRESETS` 自动兜底未配置底图（`Other: xxx` 前缀）；废弃 Google 主机切换机制删除（`GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl`）；`index.ts`/`basemapProviderFactory.ts`/`layerUtils.js` import 路径统一指向 `basemapConfig`。详见[日志](Docs/LLM_record/26-08/2026-08-02/2026-08-02-basemap-ssot-refactor.md) |
 | **V3.5.8** | 2026-08-02 | 暂存区 Review 修复：`client.js` 移除 `require()`（纯 ESM 浏览器不可用，改回静态 import `useMessage`）；`_read_app_version()` 容器内读不到根 README → deploy.yml `cp README.md backend/README.md`（版本号仍 100% 来自根 README，无新配置 key）；删除重复 action `setSelectedEditLayerId`（复用 `setStyleTarget`）；`browserDownload.ts` 从 ol 域移至 common 域（消除 common→ol 反向依赖）；新增 `vue-shims.d.ts` 修复 .ts import .vue 类型报错。详见[日志](Docs/LLM_record/26-08/2026-08-02/2026-08-02-staged-review-fixes.md) |
 | **V3.5.7** | 2026-08-02 | Code Review 修复（SSOT + 分层边界 + 后端安全）：前端/后端 README 版本号去同步（SSOT）；API 层 `useMessage()` 移除（6 文件改用延迟加载或 console.warn）；后端 monitor/location/routes 静默 except 添加 logger.debug + Pydantic 输入校验（lng/lat 范围、Query max_length）；publicRuntime.ts 新增 ASSET_BASE_URL 收口散落 BASE_URL（7 文件）；compass README 迁移至 Docs/Guide。详见[日志](Docs/LLM_record/26-08/2026-08-02/2026-08-02-code-review-fixes.md) |
-| **V3.5.6** | 2026-08-01 | Code Review 修复收尾与配置修正：恢复异常详情始终返回（用户需要看到错误原因）；恢复 `/api/info` 开放（开源项目故意暴露）；移除登录限速（用户明确要求）；修复容器内 `.env` 路径不匹配（`/.env` 挂载对齐 `PROJECT_ROOT=/`）；修复游客密码不一致（前端从 `VITE_GUEST_PASSWORD` 读取，与后端 `.env` 一致）；移除前端硬编码密码兜底；清理 `undefined as any` 和残留 `as any`（PhysicsSystem/AnimationSystem/playerController）。详见[日志](Docs/LLM_record/26-08/2026-08-01/2026-08-01-config-fix-and-cr-final.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -390,6 +393,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.8 · 开发中 · 最后更新 2026-08-02</sub>
+<sub>V3.5.9 · 开发中 · 最后更新 2026-08-02</sub>
 
 </div>

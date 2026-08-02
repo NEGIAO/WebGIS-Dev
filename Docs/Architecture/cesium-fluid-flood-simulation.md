@@ -35,8 +35,24 @@
 
 模拟状态全部存于 GPU 的 `1024×1024` RGBA 浮点纹理（`_createTextures` 创建 A/B/C/D 四张），对应 `FLUID_HORIZONTAL_SIZE = 10000`（10km×10km）的模拟区域。每个纹素代表一个地面单元：
 
-- **A/C 纹理（水深场）**：`.x` = 归一化地形高程 `[0,1]`，`.y` = 该单元水深
-- **B/D 纹理（流出场）**：`.xyzw` = 分别流向东 / 北 / 西 / 南四个邻居的水量
+```mermaid
+flowchart LR
+    subgraph PING_PONG["乒乓缓冲（ping-pong）"]
+        subgraph DEPTH["水深场"]
+            A["A 纹理<br/>.x=地形高程 .y=水深"]
+            C["C 纹理<br/>.x=地形高程 .y=水深"]
+        end
+        subgraph FLOW["流出场"]
+            B["B 纹理<br/>.xyzw=东/北/西/南流出"]
+            D["D 纹理<br/>.xyzw=东/北/西/南流出"]
+        end
+    end
+
+    A -- "读旧 → 写新" --> C
+    C -- "读旧 → 写新" --> A
+    B -- "读旧 → 写新" --> D
+    D -- "读旧 → 写新" --> B
+```
 
 GPU 不能在同一 pass 里边读边写同一张纹理（反馈环路），必须"读旧状态 → 写新状态"分离，即**乒乓缓冲（ping-pong）**。A/C 互为水深场新旧状态，B/D 互为流出场新旧状态；每帧还做两轮子迭代，因此各需两张。
 
@@ -137,11 +153,15 @@ terrainElevation = clamp((texture(heightMap, uv).r - minHeight) / max(maxHeight 
 
 "洪水上涨"由面板而非 GPU 驱动。`startFloodSimulation` 用 `requestAnimationFrame` 按 `floodSimSpeed`（m/s）线性抬升 `waterLevel`，从当前值涨到区域最大高程；到达最大值后停止并提示。每次抬升触发：
 
-```
-waterLevel 变化 → watch → applyWaterLevelParam()
-  → normalizeWaterLevel()（绝对高程 → [0,1]）
-  → fluidRenderer.setInitialWaterLevel()
-  → 改写 fluidParam.w + resetSimulation()（_frameCount 归零）
+```mermaid
+flowchart TD
+    RAF(["requestAnimationFrame"]) --> INC["waterLevel += floodSimSpeed × dt"]
+    INC --> NORMALIZE["normalizeWaterLevel()<br/>绝对高程 → [0,1]"]
+    NORMALIZE --> SET["fluidRenderer.setInitialWaterLevel()"]
+    SET --> RESET["resetSimulation()<br/>_frameCount 归零 → 浴缸注水"]
+    RESET --> RELAX["汇流松弛<br/>管流模型横向扩散"]
+    RELAX -->|未到最大值| RAF
+    RELAX -->|到达最大值| STOP(["停止并提示"])
 ```
 
 `_frameCount` 归零使 BufferA 在下一帧重新执行浴缸式注水（按新水位重建淹没状态），随后汇流松弛在新状态上继续。因此整个洪水模拟本质是**一串准静态浴缸淹没状态序列**：全局水位逐步抬高 → 低洼处依次被淹 → 管流模型在帧间做横向扩散松弛 → 视觉上呈现水位上涨、淹没范围扩大。

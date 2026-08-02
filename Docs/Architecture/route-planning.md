@@ -35,22 +35,34 @@
 
 驾车与公交共享同一套选点卡片与同一套渲染落地逻辑，但**请求—解析**两段完全独立：
 
-```
-                       ┌─ 地图点选 (startMapPointPick / startBusPointPick)
-起终点输入 ────────────┤
-                       └─ 关键词搜索 (MapPointPickerCard → locationSearch.searchWithTianditu)
+```mermaid
+flowchart TD
+    subgraph INPUT["起终点输入"]
+        PICK["地图点选"]
+        SEARCH["关键词搜索<br/>→ searchWithTianditu"]
+    end
 
-驾车管线: DrivingPlannerPanel.startDriveSearch
-   → fetch drive?type=search (XML)
-   → parseDriveRouteXml (DOMParser)
-   → routeResult { distanceKm, durationText, routelatlon, steps[] }
-   → drawDriveRouteOnMap → buildDriveRouteRenderData → OpenLayers
+    subgraph DRIVE["驾车管线"]
+        D1["DrivingPlannerPanel.startDriveSearch"] --> D2["fetch drive?type=search"]
+        D2 --> D3["parseDriveRouteXml (DOMParser)"]
+        D3 --> D4["routeResult {distanceKm, steps[]}"]
+        D4 --> D5["drawDriveRouteOnMap<br/>→ buildDriveRouteRenderData"]
+    end
 
-公交管线: BusPlannerPanel.startTransitPlan
-   → fetch transit?type=busplan (JSON)
-   → extractLinesFromTransitResponse → normalizeTransitResults
-   → routes[] (候选方案，各含 segments / steps)
-   → drawRouteOnMap → buildBusRouteRenderData → OpenLayers
+    subgraph BUS["公交管线"]
+        B1["BusPlannerPanel.startTransitPlan"] --> B2["fetch transit?type=busplan"]
+        B2 --> B3["extractLinesFromTransitResponse"]
+        B3 --> B4["normalizeTransitResults"]
+        B4 --> B5["routes[] (候选方案)"]
+        B5 --> B6["drawRouteOnMap<br/>→ buildBusRouteRenderData"]
+    end
+
+    PICK --> D1
+    PICK --> B1
+    SEARCH --> D1
+    SEARCH --> B1
+    D5 --> RENDER["OpenLayers 渲染"]
+    B6 --> RENDER
 ```
 
 两个面板都通过 props 接收地图回调（绘制、缩放、预览、清除预览、选点），自身不持有地图实例，做到 UI 编排与地图渲染解耦。

@@ -4,19 +4,19 @@
  */
 
 import type { LayerCategory, LayerGroup, LayerFactoryContext } from './basemapConfig';
+import { LAYER_SOURCE_DEFINITIONS } from './basemapConfig';
 import {
-    LAYER_SOURCE_DEFINITIONS,
-    BASEMAP_PRESETS,
+    ALL_BASEMAP_PRESETS,
     DEFAULT_BASEMAP_PRESET_ID,
-} from './basemapConfig';
+} from './basemapPresets';
 
 // ========== 内部索引 ==========
 const LAYER_SOURCE_MAP = new Map(LAYER_SOURCE_DEFINITIONS.map((item) => [item.id, item]));
-const BASEMAP_PRESET_MAP = new Map(BASEMAP_PRESETS.map((item) => [item.id, item]));
+const BASEMAP_PRESET_MAP = new Map(ALL_BASEMAP_PRESETS.map((item) => [item.id, item]));
 
 // ========== 解析函数 ==========
 function resolveDefaultBasemapLayerIndex(): number {
-    const index = BASEMAP_PRESETS.findIndex((preset) => preset.id === DEFAULT_BASEMAP_PRESET_ID);
+    const index = ALL_BASEMAP_PRESETS.findIndex((preset) => preset.id === DEFAULT_BASEMAP_PRESET_ID);
     return index >= 0 ? index : 0;
 }
 
@@ -47,7 +47,7 @@ const DEFAULT_VISIBLE_LAYER_ID_SET = resolveDefaultVisibleLayerIdSet();
 export { URL_LAYER_OPTIONS } from './basemapPresets';
 
 /** 预设底图选项列表（用于 UI 下拉菜单） */
-export const BASEMAP_OPTIONS = BASEMAP_PRESETS.map((preset) => ({
+export const BASEMAP_OPTIONS = ALL_BASEMAP_PRESETS.map((preset) => ({
     value: preset.id,
     label: preset.label,
 }));

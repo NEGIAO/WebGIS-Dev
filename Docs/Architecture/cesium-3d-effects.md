@@ -82,22 +82,16 @@
 
 三维特效不是孤立组件，而是通过一条统一的参数链路装配进 Cesium 视图：
 
-```
-CesiumToolPanel.vue（UI 卡片/控件）
-        │  handleToolControlChange(moduleId, controlId, value)
-        ▼
-useCesiumToolModules.js（参数总线，集中持有各模块 ref）
-        │  各模块 ref：advancedEffectControls / baseAtmosphereParams /
-        │             atmosphereParams / cloudParams / fluidParams /
-        │             playerParams / shallowWaterVisible+shallowWaterParams
-        ▼
-CesiumContainer.vue（watcher → 调用对应模块 API）
-        ├─ setupCloudIntegration({ viewer, cloudParams, atmosphereParams })  → CloudManager
-        ├─ applyBaseAtmosphereParams / applyAtmosphereParams                 → cesiumAtmosphere.js
-        ├─ useCesiumWind(...)                                                → Wind2D
-        ├─ <CesiumAdvancedEffects :controls="advancedEffectControls">        → 后处理级
-        ├─ <ShallowWaterOverlay v-bind="shallowWaterParams">                 → Three.js 场景
-        └─ <FluidSimulationPanel>                                            → 洪水模拟（独立文档）
+```mermaid
+flowchart TD
+    PANEL["CesiumToolPanel.vue<br/>UI 卡片 / 控件"] -->|"handleToolControlChange<br/>(moduleId, controlId, value)"| BUS["useCesiumToolModules.js<br/>参数总线 · 集中持有各模块 ref"]
+
+    BUS -->|"cloudParams"| CLOUD["setupCloudIntegration<br/>→ CloudManager · 体积云"]
+    BUS -->|"baseAtmosphereParams<br/>atmosphereParams"| ATM["cesiumAtmosphere.js<br/>→ 大气 / 雾 / Bloom"]
+    BUS -->|"cloudParams"| WIND["useCesiumWind.js<br/>→ Wind2D · 风场粒子"]
+    BUS -->|"advancedEffectControls"| FX["CesiumAdvancedEffects.vue<br/>→ 高度雾 / HBAO / 移轴"]
+    BUS -->|"shallowWaterParams"| SW["ShallowWaterOverlay.vue<br/>→ Three.js 浅水场景"]
+    BUS -->|"fluidParams"| FLUID["FluidSimulationPanel<br/>→ 洪水模拟"]
 ```
 
 `useCesiumToolModules.js` 的关键参数对象（默认值，见源码 19–130 行）：
@@ -119,6 +113,18 @@ CesiumContainer.vue（watcher → 调用对应模块 API）
 由于 `PostProcessStage` 不自动注入 `czm_cameraPositionWC` 等内置 uniform，`CloudManager.buildStageUniforms()` 手动以函数式回调传入相机位置、逆投影/逆视图矩阵、太阳方向、椭球半径等（每帧自动同步，无需手动 update）。
 
 ### 5.2 渲染流程（cloudFragment.glsl `main`）
+
+```mermaid
+flowchart TD
+    START(["片元着色器 main"]) --> RAY["射线重建<br/>屏幕 uv → NDC → 世界空间射线"]
+    RAY --> INTERSECT["云层壳体求交<br/>ray-sphere 求 march 起止"]
+    INTERSECT --> DEPTH["深度裁剪<br/>云远端 vs 场景深度 → isCloudOccluded"]
+    DEPTH --> MARCH["主 Ray March 最多 512 步<br/>自适应步长 · jitter 抖动"]
+    MARCH --> DENSITY["密度采样 sampleCloudDensity<br/>shape噪声 + detail + turbulence域扭曲"]
+    DENSITY --> LIGHT["光照积分 computeLighting<br/>二次march + 双HG相位 + 多重散射"]
+    LIGHT --> COMP["合成 applyHaze<br/>低空雾 + 昼夜因子 + alpha blend"]
+    COMP --> OUT(["输出颜色"])
+```
 
 1. **射线重建**：从屏幕 `v_textureCoordinates` 还原 NDC，经 `u_inverseProjection` / `u_inverseView` 重建世界空间射线方向。
 2. **云层壳体求交**：`getCloudLayerIntersections` 把云层当作 `ellipsoidRadii + [minHeight, maxHeight]` 的**球壳**，按相机在云底之下/云顶之上/云层之中三种情况求 ray-sphere 交点，确定 march 起止距离。
@@ -173,9 +179,24 @@ CesiumContainer.vue（watcher → 调用对应模块 API）
 
 `_rebuildParticleResources` 创建两套（ping/pong）：
 
-- **位置纹理**（`particlePositionTextures`，RGBA FLOAT，NEAREST 采样）：`.xyz` = 归一化粒子位置 `[0,1]`，`.w` 打包"年龄 + 归一化速度"；
-- **速度纹理**（`velocityTextures`）：`.xyz` = 采样到的风矢量；
-- 两个 `Framebuffer` 各挂 2 个 color attachment（MRT，`drawBuffers([COLOR_ATTACHMENT0, COLOR_ATTACHMENT1])`）。
+```mermaid
+flowchart LR
+    subgraph PING_PONG["GPGPU 乒乓缓冲"]
+        subgraph POS["位置纹理 RGBA FLOAT"]
+            P1["ping: .xyz=归一化位置[0,1]<br/>.w=年龄+归一化速度"]
+            P2["pong: 同上"]
+        end
+        subgraph VEL["速度纹理"]
+            V1["ping: .xyz=风矢量"]
+            V2["pong: 同上"]
+        end
+    end
+
+    P1 -- "读旧 → 写新" --> P2
+    P2 -- "读旧 → 写新" --> P1
+    V1 -- "读旧 → 写新" --> V2
+    V2 -- "读旧 → 写新" --> V1
+```
 
 粒子数量由 `particleDensity × 数据点数` 决定，纹理边长取 2 的幂（`computeParticleTextureSize`，16~2048）。
 

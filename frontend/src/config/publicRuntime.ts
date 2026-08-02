@@ -80,10 +80,7 @@ export const TIANDITU_API_BASE_URL: string = stripTrailingSlash(String(import.me
 export const TIANDITU_SEARCH_DEFAULT_BOUND: string = String(import.meta.env.VITE_TIANDITU_SEARCH_DEFAULT_BOUND || '73.5,18.2,135.0,53.5');
 export const DISTRICT_BOUNDARY_BASE_URL: string = stripTrailingSlash(String(import.meta.env.VITE_DISTRICT_BOUNDARY_BASE_URL || 'https://geo.datav.aliyun.com/areas_v3/bound'));
 
-/** 公开浏览器侧地图服务 token：为空时调用方应禁用/降级对应 provider */
-export const MAPBOX_ACCESS_TOKEN: string = String(import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '').trim();
-export const MAPTILER_KEY: string = String(import.meta.env.VITE_MAPTILER_KEY || '').trim();
-export const GEOVISEARTH_TOKEN: string = String(import.meta.env.VITE_GEOVISEARTH_TOKEN || '').trim();
+
 
 /** Google OAuth Client ID（公开，供 One Tap / GIS 初始化；空则跳过） */
 export const GOOGLE_OAUTH_CLIENT_ID: string = String(

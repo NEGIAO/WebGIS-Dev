@@ -455,11 +455,10 @@ frontend/src/
 │       │   │   ├── useBasemapStateManagement.js  # 底图状态管理
 │       │   │   └── useBasemapSwipe.js  # 卷帘对比
 │       │   ├── constants
-│       │   │   ├── basemapConfig.ts  # 图源定义（基址经 publicRuntime 派生；预设已抽离 basemapPresets）
-│       │   │   ├── basemapPresets.ts  # 底图预设纯数据（id/label/stack + URL_LAYER_OPTIONS，零 ol 依赖，供登录页入口链安全消费）
-│       │   │   ├── basemapResolver.ts  # 解析逻辑（URL_LAYER_OPTIONS 自 presets re-export）
-│       │   │   ├── index.ts  # barrel export
-│       │   │   └── sourceDescriptors.ts  # 引擎无关图层源描述符（基址经 publicRuntime 派生）
+│       │   │   ├── basemapConfig.ts  # 底图配置唯一真相源（SSOT）：图源定义 + url/serviceType 字段 + getDescriptorById() 自动派生 Cesium 描述符
+│       │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS 自动兜底，零 ol 依赖，供登录页入口链安全消费）
+│       │   │   ├── basemapResolver.ts  # 解析逻辑（使用 ALL_BASEMAP_PRESETS）
+│       │   │   └── index.ts  # barrel export
 │       │   ├── resilience
 │       │   │   └── useBasemapResilience.js  # 底图熔断回退（超时/错误自动切换）
 │       │   └── basemapSystem.js  # 底图系统入口（barrel export）

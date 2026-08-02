@@ -36,20 +36,37 @@
 
 ## 3. 单端点 + operation 分发架构
 
-```
-前端 SpatialAnalysisPanel.vue
-  → emit('analysis', params)
-  → useSpatialAnalysis.runSpatialAnalysis(params)
-    → 序列化 OL Feature 为 GeoJSON（EPSG:4326）
-    → apiSpatialAnalysis(payload)  // POST /api/v1/spatial/analysis
-      → router.py: spatial_analysis()
-        → geojson_features_to_shapely()   // GeoJSON → Shapely 几何
-        → reproject_geoms_to_3857()       // 4326 → 3857
-        → operation 分发 → do_*()         // 在 3857 下计算
-        → reproject_result_to_4326()      // 3857 → 4326
-      → 返回 { code: 200, data: FeatureCollection, message }
-    → geoJSONToFeatures()                 // GeoJSON → OL Feature（EPSG:3857）
-    → createManagedVectorLayer()          // 结果渲染为新图层
+```mermaid
+flowchart TD
+    FE["SpatialAnalysisPanel.vue<br/>emit('analysis', params)"] -->|"params"| COMPOSABLE["useSpatialAnalysis<br/>.runSpatialAnalysis(params)"]
+
+    COMPOSABLE -->|"序列化 OL Feature → GeoJSON (4326)"| API["apiSpatialAnalysis(payload)<br/>POST /api/v1/spatial/analysis"]
+
+    API -->|"request.operation"| ROUTER["router.py: spatial_analysis()"]
+    ROUTER -->|"GeoJSON → Shapely"| G2S["geojson_features_to_shapely()"]
+    G2S -->|"4326 → 3857"| REPROJ_IN["reproject_geoms_to_3857()"]
+    REPROJ_IN -->|"operation 分发"| DISPATCH["if-elif 按 operation 分发"]
+
+    DISPATCH -->|"buffer"| O1["do_buffer()"]
+    DISPATCH -->|"intersection/union/difference"| O2["do_overlay()"]
+    DISPATCH -->|"convexhull"| O3["do_convex_hull()"]
+    DISPATCH -->|"voronoi"| O4["do_voronoi()"]
+    DISPATCH -->|"aggregation"| O5["do_aggregation()"]
+    DISPATCH -->|"simplify"| O6["do_simplify()"]
+    DISPATCH -->|"fishnet"| O7["do_fishnet()"]
+    DISPATCH -->|"multiringbuffer"| O8["do_multi_ring_buffer()"]
+
+    O1 -->|"3857 → 4326"| REPROJ_OUT["reproject_result_to_4326()"]
+    O2 --> REPROJ_OUT
+    O3 --> REPROJ_OUT
+    O4 --> REPROJ_OUT
+    O5 --> REPROJ_OUT
+    O6 --> REPROJ_OUT
+    O7 --> REPROJ_OUT
+    O8 --> REPROJ_OUT
+
+    REPROJ_OUT -->|"返回 FeatureCollection"| RESULT["{ code:200, data: FeatureCollection }"]
+    RESULT -->|"geoJSONToFeatures() → OL Feature (3857)"| RENDER["createManagedVectorLayer()<br/>结果渲染为新图层"]
 ```
 
 路由层 `router.py` 的 `spatial_analysis()` 函数是唯一入口，按 `request.operation.lower().strip()` 做 if-elif 分发。支持的 operation 值：`buffer` / `intersection` / `union` / `difference` / `convexhull` / `voronoi` / `aggregation` / `multiringbuffer` / `simplify` / `fishnet`（共 10 个值，对应前端 8 种工具，其中叠加分析展开为 3 个子操作）。

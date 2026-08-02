@@ -27,7 +27,7 @@
             @click="toggleSelectDropdown"
         >
             <div class="custom-select-trigger">
-                <span>{{ currentLayerLabel }}</span>
+                <span class="preset-label-text"><span class="preset-index">{{ currentLayerLabel.split(' ')[0] }}</span> <span class="preset-name">{{ currentLayerLabel.slice(currentLayerLabel.indexOf(' ') + 1) }}</span></span>
                 <span class="dropdown-arrow" :class="{ 'arrow-up': isSelectDropdownOpen }">▼</span>
             </div>
             <div v-show="isSelectDropdownOpen" class="custom-select-dropdown">
@@ -38,7 +38,8 @@
                     :class="{ 'selected': option.value === selectedLayer }"
                     @click.stop="selectOption(option)"
                 >
-                    {{ option.label }}
+                    <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
+                    <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
                 </div>
             </div>
         </div>
@@ -930,6 +931,16 @@ onBeforeUnmount(() => {
     color: #0f172a;
     cursor: pointer;
     transition: background 0.15s;
+}
+
+.preset-index {
+    color: #10b981;
+    font-weight: 600;
+    margin-right: 6px;
+}
+
+.custom-select-option.selected .preset-index {
+    color: #6ee7b7;
 }
 
 .custom-select-option:hover {

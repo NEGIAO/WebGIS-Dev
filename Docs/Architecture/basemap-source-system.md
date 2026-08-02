@@ -33,6 +33,23 @@
 
 ## 3. 双配置体系
 
+```mermaid
+flowchart LR
+    subgraph DUAL["双配置体系"]
+        OL["LayerSourceDefinition<br/>basemapConfig.ts · OL 专用<br/>含 createSource 工厂函数"]
+        DESC["TileSourceDescriptor<br/>sourceDescriptors.ts · 引擎无关<br/>纯数据描述"]
+    end
+
+    subgraph ENGINES["渲染引擎"]
+        OLE["OpenLayers 2D"]
+        CE["Cesium 3D"]
+    end
+
+    OL -- "id 关联" --> DESC
+    OL --> OLE
+    DESC --> CE
+```
+
 底图源体系维护**两套并行配置**，分别服务于不同渲染引擎：
 
 ### 3.1 LayerSourceDefinition（OL 专用）
@@ -119,18 +136,21 @@ export type BasemapPresetDefinition = {
 
 ### 5.1 工作流程
 
-```
-tileLoadFunction 触发
-  ├─ 检查 epoch（防止过期请求结果被采纳）
-  ├─ 检查 signal.aborted（已中断则标记 TILE_STATE_ERROR）
-  ├─ fetch(srcUrl, { signal, mode:'cors', credentials:'omit' })
-  │    ├─ 成功 → 创建 blob URL → 赋给 img.src
-  │    └─ 失败（CORS / 网络错误）
-  │         ├─ TILE_PROXY_MODE === 'always' → 直接走后端代理
-  │         └─ TILE_PROXY_MODE === 'fallback' → 尝试 /proxy/{srcUrl}
-  │              ├─ 代理成功 → blob URL → img.src
-  │              └─ 代理失败 → markTileAsError
-  └─ 超时（TILE_REQUEST_TIMEOUT_MS = 15000ms）→ markTileAsError
+```mermaid
+flowchart TD
+    START(["tileLoadFunction 触发"]) --> EPOCH{"epoch 过期?"}
+    EPOCH -->|是| DISCARD(["丢弃结果"])
+    EPOCH -->|否| ABORT{"signal.aborted?"}
+    ABORT -->|是| ERR(["标记 TILE_STATE_ERROR"])
+    ABORT -->|否| FETCH["fetch(url, {signal, mode:'cors'})"]
+    FETCH -->|成功| BLOB(["blob URL → img.src"])
+    FETCH -->|失败| PROXY_MODE{TILE_PROXY_MODE}
+    PROXY_MODE -->|always| PROXY["后端 /proxy/{URL}"]
+    PROXY_MODE -->|fallback| PROXY
+    PROXY_MODE -->|off| ERR
+    PROXY -->|成功| BLOB
+    PROXY -->|失败| ERR
+    FETCH -->|超时 15s| ERR
 ```
 
 ### 5.2 为什么用 fetch 而非 img.src
@@ -184,15 +204,15 @@ tileLoadFunction 触发
 
 每个 `layerId` 维护独立的 `FallbackManager` 单例：
 
-```javascript
-const FALLBACK_OPTIONS = ['tianDiTu', 'local'];
+```mermaid
+flowchart TD
+    FAIL(["瓦片连续失败 ≥3 或超时"]) --> SKIP["跳过当前 layerId"]
+    SKIP --> TRY_TDT["尝试 tianDiTu（天地图）"]
+    TRY_TDT -->|成功| OK(["切换成功"])
+    TRY_TDT -->|失败| TRY_LOCAL["尝试 local（本地瓦片）"]
+    TRY_LOCAL -->|成功| OK
+    TRY_LOCAL -->|失败| MANUAL(["提示用户手动切换或刷新"])
 ```
-
-降级逻辑：
-1. 跳过当前失败的 layerId，避免降级到同一个图层
-2. 按顺序尝试 `tianDiTu` → `local`
-3. 所有选项耗尽后提示用户手动切换或刷新
-4. 非默认底图仅通知，不自动降级
 
 ## 7. GCJ-02 火星坐标纠偏
 

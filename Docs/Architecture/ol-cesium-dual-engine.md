@@ -44,6 +44,22 @@
 
 ### 3.1 挂载策略：v-show 常驻 + v-if 懒加载
 
+```mermaid
+flowchart TD
+    subgraph DOM["DOM 渲染策略"]
+        OL["MapContainer<br/>v-show 常驻<br/>OL 始终在 DOM · 3D 时隐藏"]
+        CESIUM["CesiumContainer<br/>v-if 懒加载<br/>仅 is3DMode && isCesiumLoaded 时创建"]
+    end
+
+    subgraph SYNC["状态同步"]
+        OL_HIDE["隐藏的 OL 视图<br/>仍可被 syncViewFromCesium 静默更新"]
+        CESIUM_UNLOAD["切回 OL 时<br/>isCesiumLoaded=false<br/>→ cleanupCameraViewSync"]
+    end
+
+    OL --> OL_HIDE
+    CESIUM --> CESIUM_UNLOAD
+```
+
 `HomeView.vue` 模板对两个容器采用不同的渲染策略（源码注释已固化）：
 
 ```html
@@ -282,6 +298,24 @@ function syncOlFromCesiumPayload(payload = {}) {
 ### 6.3 底图 l 的双向一致性
 
 OL 与 Cesium 通过 `createBasemapUrlMappingFeature` 复用同一套 `getLayerIdByIndex` / `getLayerIndexById`：
+
+```mermaid
+flowchart LR
+    subgraph OL_W["OL 写回"]
+        OL1["useMapState.buildQuery"] -->|"写入 selectedLayer 索引"| URL1["URL 参数 l"]
+    end
+
+    subgraph CESIUM_W["Cesium 写回"]
+        CE1["syncBasemapToUrl(presetId)"] -->|"写入 activeBasemap 索引"| URL2["URL 参数 l"]
+        CE2["syncCameraViewToUrl"] --> URL2
+        CE3["watch(activeBasemap)"] -->|"兜底同步"| URL2
+    end
+
+    subgraph RESTORE["恢复"]
+        URL1 -->|"restoreBasemapFromUrl"| RESTORE_OL["OL 应用底图"]
+        URL2 -->|"优先 URL l<br/>无 l 用管理员默认"| RESTORE_CE["Cesium 应用底图"]
+    end
+```
 
 - OL 写回：`useMapState.buildQuery` 写入当前 `selectedLayer` 对应索引。
 - Cesium 写回：`syncBasemapToUrl(presetId)` / `syncCameraViewToUrl` 写入 `activeBasemap` 对应索引；`watch(activeBasemap)` 兜底其它入口（如 CesiumToolPanel）触发的同步。

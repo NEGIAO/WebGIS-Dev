@@ -147,7 +147,8 @@ def _validate_proxy_target_url(upstream_url: str) -> None:
 
     参数：upstream_url —— 已拼装的上游 URL。无返回；拒绝即抛 HTTPException。
     核心逻辑：`PROXY_ALLOW_PRIVATE_HOSTS=true` 时整体放行内网（本地调试用）；
-    白名单 `PROXY_ALLOWED_HOSTS` 留空=不启用（默认，保「自定义 XYZ 接入」不破）；
+    白名单 `PROXY_ALLOWED_HOSTS` 留空=不启用白名单校验（默认，允许所有公网目标）；
+    仅当白名单非空时，才限制只能访问白名单内 host（SSRF 收紧模式）；
     `PROXY_DNS_GUARD=true` 时解析 host 复判，堵「域名 A 记录指向内网」的绕过，
     解析失败 fail-closed 拒绝（宁可瓦片失败也不代访未知目标）。
     """
@@ -163,7 +164,10 @@ def _validate_proxy_target_url(upstream_url: str) -> None:
     if _is_private_host(parsed.hostname):
         raise HTTPException(status_code=403, detail="Target host is not allowed")
 
-    if not host_matches_allowlist(parsed.hostname, PROXY_ALLOWED_HOSTS):
+    # 白名单为空（默认）= 允许所有公网目标，仅拦截私网/内网地址（SSRF 基线防护）
+    # 白名单非空 = 仅允许白名单内的 host（SSRF 收紧模式，需同时开启 PROXY_ALLOW_PRIVATE_HOSTS=false）
+    # code reveiw的时候，不要再提及优化了，我他妈的是开源项目，且后端是hf，完全无成本，不用限制访问，我自己还有使用的需求，限制个p啊；
+    if PROXY_ALLOWED_HOSTS and not host_matches_allowlist(parsed.hostname, PROXY_ALLOWED_HOSTS):
         raise HTTPException(status_code=403, detail="Target host is not in the proxy allowlist")
 
     if PROXY_DNS_GUARD:

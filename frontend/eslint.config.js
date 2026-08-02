@@ -73,9 +73,12 @@ export default [
 
     // 7. Node.js 脚本和配置文件
     {
-        files: ['scripts/**/*.mjs', 'vite.config.js', '*.config.{js,mjs,ts}'],
+        files: ['scripts/**/*.mjs', '**/*.cjs', 'vite.config.js', '*.config.{js,mjs,ts}'],
         languageOptions: {
             globals: globals.node,
+        },
+        rules: {
+            '@typescript-eslint/no-require-imports': 'off',
         },
     },
 

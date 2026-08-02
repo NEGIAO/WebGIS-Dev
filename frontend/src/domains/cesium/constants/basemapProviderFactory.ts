@@ -3,8 +3,8 @@
  * 将引擎无关的 TileSourceDescriptor 转换为 Cesium.ImageryProvider 实例
  * 支持快速底图切换——使用 AbortController 中断旧请求，与 OL 侧 fetch() 策略一致
  */
-import type { TileSourceDescriptor } from '@ol/basemap/constants/sourceDescriptors';
-import { getDescriptorById } from '@ol/basemap/constants/sourceDescriptors';
+import type { TileSourceDescriptor } from '@ol/basemap/constants/basemapConfig';
+import { getDescriptorById } from '@ol/basemap/constants/basemapConfig';
 
 /** 创建 Provider 所需的运行时上下文 */
 export type CesiumProviderContext = {

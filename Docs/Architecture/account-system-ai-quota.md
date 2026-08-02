@@ -58,6 +58,25 @@
 
 ## 3. 三级身份体系
 
+```mermaid
+flowchart LR
+    subgraph ROLES["三级身份"]
+        GUEST["访客 guest<br/>通用 100/日 · AI 10/日"]
+        REG["注册用户 registered<br/>通用 1000/日 · AI 100/日"]
+        ADMIN["管理员 admin<br/>不限额"]
+    end
+
+    subgraph QUOTA["双配额"]
+        Q_API["api_usage_daily<br/>通用 API 配额"]
+        Q_AI["agent_chat_usage_daily<br/>AI 对话配额"]
+    end
+
+    GUEST --> Q_API
+    GUEST --> Q_AI
+    REG --> Q_API
+    REG --> Q_AI
+```
+
 ### 3.1 角色定义
 
 | 角色 | 常量 | 来源 | 通用 API 日限额 | AI 对话日限额 |
@@ -96,16 +115,23 @@ def normalize_role(raw_role: Optional[str], username: Optional[str]) -> str:
 
 ### 4.1 邮箱注册流程
 
-```
-前端 RegisterView.vue
-  → POST /api/auth/send-code {email, purpose:"register"}
-    → 校验邮箱格式 → 检查邮箱唯一性 → 频率限制（30s/次，10次/天）
-    → 生成 6 位验证码 → 存入 email_verification_codes 表 → SMTP 发送
-  → POST /api/auth/register {email, email_code, password, display_name, avatar_index}
-    → 校验验证码 → 创建 users 记录（username 自动生成）→ 返回用户信息
-```
+```mermaid
+sequenceDiagram
+    participant FE as 前端 RegisterView
+    participant BE as 后端 /api/auth
+    participant DB as SQLite
+    participant SMTP as 邮件服务
 
-注册成功后用户需使用邮箱 + 密码登录。邮箱是唯一登录凭证，`username` 仅为内部标识。
+    FE->>BE: POST /send-code {email, purpose:"register"}
+    BE->>BE: 校验格式 · 邮箱唯一性 · 频率限制(30s/次)
+    BE->>DB: 存储 6 位验证码 → email_verification_codes
+    BE->>SMTP: 发送验证码邮件
+    SMTP-->>FE: 用户收邮件
+    FE->>BE: POST /register {email, code, password, display_name}
+    BE->>DB: 校验验证码 → 创建 users 记录(自动生成 username)
+    BE-->>FE: 200 { user info }
+    Note over FE: 注册成功 → 邮箱+密码登录
+```
 
 ### 4.2 登录分支
 
@@ -128,11 +154,16 @@ def normalize_role(raw_role: Optional[str], username: Optional[str]) -> str:
 
 ### 4.5 依赖注入层级
 
-```
-require_login          → 仅校验 token 有效（或游客降级）
-require_api_access     → require_login + 拒绝 requires_email_binding + 消耗通用 API 配额
-require_api_access_or_guest → 同上，但无 token 时自动创建 guest session（AI 对话等端点使用）
-require_admin          → require_api_access + normalize_role == "admin"
+```mermaid
+flowchart TD
+    LOGIN["require_login<br/>校验 token 有效（或游客降级）"]
+    API["require_api_access<br/>+ 拒绝未绑定邮箱 + 消耗通用配额"]
+    API_GUEST["require_api_access_or_guest<br/>+ 无 token 自动创建 guest session"]
+    ADMIN["require_admin<br/>+ normalize_role == admin"]
+
+    LOGIN --> API
+    LOGIN --> API_GUEST
+    API --> ADMIN
 ```
 
 ## 5. 双配额系统
@@ -180,6 +211,19 @@ require_admin          → require_api_access + normalize_role == "admin"
 | `POST /api/agent/chat/default-proxy` | 不消耗平台配额 | 使用管理员配置的默认 AI Key |
 
 ## 6. AI 模型选取优先级链
+
+```mermaid
+flowchart TD
+    START(["开始：_pick_runtime_model"]) --> P1{"用户个人配置<br/>agent_user_config.model"}
+    P1 -->|有| R1(["model_source = user-config<br/>model_locked = True"])
+    P1 -->|无| P2{"用户偏好<br/>user_preferences<br/>.preferred_agent_model"}
+    P2 -->|有| R2(["model_source = user-preference<br/>model_locked = True"])
+    P2 -->|无| P3{"管理员平台配置<br/>system_config.agent_model"}
+    P3 -->|有| R3(["model_source = provider-config<br/>model_locked = False"])
+    P3 -->|无| P4{"环境变量 AGENT_MODEL"}
+    P4 -->|有| R4(["model_source = env-default<br/>model_locked = False"])
+    P4 -->|无| R5(["model_source = missing<br/>→ 返回 503"])
+```
 
 `_pick_runtime_model`（`agent_chat/utils.py`）决定每次对话使用的模型：
 
@@ -254,16 +298,24 @@ CREATE TABLE IF NOT EXISTS api_key_backups (
 
 ### 8.3 上游调用轮询
 
-`_call_upstream_chat_with_key_candidates` 按候选列表顺序依次尝试：
+```mermaid
+sequenceDiagram
+    participant CHAT as /chat/completions
+    participant UP as _call_upstream_chat_with_key_candidates
+    participant LLM as 上游 LLM API
 
-```python
-for index, api_key in enumerate(candidates):
-    try:
-        return await _call_upstream_chat(...)
-    except HTTPException as exc:
-        if index < len(candidates) - 1 and _is_agent_key_retryable_error(exc):
-            continue  # key 无效或限流 → 尝试下一个
-        raise
+    CHAT->>UP: candidates = [主key, 备用1, 备用2]
+    loop 按候选顺序尝试
+        UP->>LLM: 请求(用 candidates[i])
+        LLM-->>UP: 成功 → 直接返回
+        alt 503 + detail含"key/rate-limit"
+            UP->>UP: _is_agent_key_retryable_error → true
+            Note over UP: continue → 尝试下一个 key
+        else 其他错误（超时/5xx）
+            UP-->>CHAT: 直接抛出，不做轮询
+        end
+    end
+    UP-->>CHAT: 全部候选失败 → 抛出最后一个异常
 ```
 
 仅当错误为 **HTTP 503 且 detail 包含 "key" 或 "rate-limit"** 时才切换到下一个候选 key（`_is_agent_key_retryable_error`）。其他错误（超时、上游 5xx 等）直接抛出，不做轮询。

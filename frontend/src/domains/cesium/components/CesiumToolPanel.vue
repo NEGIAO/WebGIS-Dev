@@ -195,7 +195,10 @@
                                     :title="option.description || option.label"
                                     @click="selectBasemapOption(option)"
                                 >
-                                    <span class="option-card-label">{{ option.label }}</span>
+                                    <span class="option-card-label">
+                                        <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
+                                        <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
+                                    </span>
                                     <Check
                                         v-if="option.value === activeBasemap"
                                         class="option-card-check"
@@ -1645,6 +1648,16 @@ function emitSetMaterial(sourceId, mode) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.option-card .preset-index {
+    color: var(--ctp-green);
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.option-card.active .preset-index {
+    color: #6ee7b7;
 }
 
 .option-card-check {
