@@ -1,23 +1,14 @@
 /**
  * 底图容灾功能库
- * 职责：底图切换验证、加载监测、异常降级策略。
+ * 职责：底图切换验证、加载监测、异常提醒。
+ *
+ * 注意：旧版 FallbackManager 降级链（FALLBACK_OPTIONS / isNotifyOnly / isDefaultBaseLayer）已删除。
+ * 原因：(1) isDefaultBaseLayer 判断恒为 false（图层 ID vs 预设 ID 永不匹配），降级从未生效；
+ *       (2) 瓦片级代理兜底已移至 tileLifecycle.ts（TILE_PROXY_MODE），不在底图层级做降级。
  */
 export function createBasemapResilience({ message, onRuntimeTokenFailure } = {}) {
     // [C4] 追踪所有活跃的超时监测器，支持统一清理
     const activeMonitors = new Map(); // layerId -> { cleanup, layer }
-
-    // [Fix] 持久化 FallbackManager 实例，按 layerId 缓存，避免每次 new 导致降级链重置
-    const fallbackManagers = new Map(); // layerId -> FallbackManager instance
-
-    /**
-     * [Fix] 获取或创建 per-layerId 的 FallbackManager 单例
-     */
-    function getFallbackManager(layerId, isDefaultBaseLayer) {
-        if (!fallbackManagers.has(layerId)) {
-            fallbackManagers.set(layerId, createBaseLayerFallbackManager(layerId, isDefaultBaseLayer));
-        }
-        return fallbackManagers.get(layerId);
-    }
 
     /**
      * 验证底图加载状态
@@ -123,41 +114,10 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
     };
 
     /**
-     * [Fix] FallbackManager：降级选项管理
-     * - 排除当前失败的 layerId，避免降级到同一个图层
-     * - 维护有状态的降级链
+     * 监测底图瓦片加载超时/异常，触发提醒。
+     * 不再执行自动降级（已删除 FallbackManager），仅通知回调。
      */
-    const createBaseLayerFallbackManager = (layerId, isDefaultBaseLayer) => {
-        const FALLBACK_OPTIONS = ['tianDiTu', 'local'];
-
-        let fallbackAttempts = 0;
-        let lastFallbackKey = null;
-
-        return {
-            getNextFallbackOption: () => {
-                // [Fix] 跳过当前失败的 layerId，避免降级到同一个图层
-                while (fallbackAttempts < FALLBACK_OPTIONS.length) {
-                    const option = FALLBACK_OPTIONS[fallbackAttempts];
-                    fallbackAttempts++;
-                    if (option !== layerId) {
-                        lastFallbackKey = option;
-                        return option;
-                    }
-                }
-
-                message?.warning?.(`[底图兜底] ${layerId} 已尝试所有兜底选项`);
-                return null;
-            },
-            getCurrentFallback: () => lastFallbackKey,
-            isNotifyOnly: () => !isDefaultBaseLayer,
-            reset: () => {
-                fallbackAttempts = 0;
-                lastFallbackKey = null;
-            },
-        };
-    };
-
-    const monitorLayerTimeout = (layer, layerId, isDefaultBaseLayer, callbacks = {}) => {
+    const monitorLayerTimeout = (layer, layerId, _isDefaultBaseLayer, callbacks = {}) => {
         const monitorKey = `_isTimeoutMonitored_${layerId}`;
         if (layer.get?.(monitorKey)) return;
         layer.set?.(monitorKey, true);
@@ -176,8 +136,6 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
         let isSwitched = false;
         let hasNotifiedSuccess = false;
 
-        const fallbackManager = getFallbackManager(layerId, isDefaultBaseLayer);
-
         const cleanUp = () => {
             if (activityTimer) {
                 clearTimeout(activityTimer);
@@ -192,43 +150,18 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
             layer.set?.(monitorKey, false);
         };
 
-        const switchToBackup = (reason, triggerCallback) => {
+        const notifyIssue = (reason, triggerCallback) => {
             if (isSwitched) return;
             isSwitched = true;
 
-            message?.warning?.(`[底图降级] ${layerId} - ${reason}`, { duration: 1000 });
+            message?.warning?.(`[底图监测] ${layerId} 可能异常: ${reason}`, { duration: 1000 });
+            message?.info?.('若页面长时间无底图，请尝试切换底图或刷新页面以重新加载。');
 
-            const runtimeTokenHandled = onRuntimeTokenFailure?.({
+            onRuntimeTokenFailure?.({
                 layerId,
                 reason,
-                isDefaultBaseLayer,
                 releaseMonitor: cleanUp,
             });
-            if (runtimeTokenHandled) {
-                return;
-            }
-
-            if (fallbackManager.isNotifyOnly()) {
-                message?.warning?.(`[底图监测] ${layerId} 非默认底图，可能异常: ${reason}`, { duration: 1000 });
-                message?.info?.('若页面长时间无底图，请尝试切换底图或刷新页面以重新加载。');
-                if (triggerCallback) triggerCallback();
-                cleanUp();
-                return;
-            }
-
-            const nextOption = fallbackManager.getNextFallbackOption();
-            if (!nextOption) {
-                message?.error?.(`[底图降级] ${layerId} 所有兜底选项已尝试`);
-                message?.info?.('若切换后仍无底图，请刷新页面或手动选择其他底图。');
-                if (triggerCallback) triggerCallback();
-                cleanUp();
-                return;
-            }
-
-            message?.warning?.(`[底图降级] ${layerId} 已切换至 ${nextOption}`);
-            if (callbacks.onLayerSwitchRequired) {
-                callbacks.onLayerSwitchRequired(nextOption, reason);
-            }
 
             if (triggerCallback) triggerCallback();
             cleanUp();
@@ -238,7 +171,7 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
             if (activityTimer) clearTimeout(activityTimer);
             if (loadingTilesCount > 0) {
                 activityTimer = setTimeout(() => {
-                    switchToBackup(
+                    notifyIssue(
                         `服务无响应（${ACTIVITY_TIMEOUT / 1000}秒无瓦片加载）`,
                         callbacks.onTimeout,
                     );
@@ -280,7 +213,7 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
             totalErrors++;
 
             if (consecutiveErrors >= MAX_ERRORS) {
-                switchToBackup(`服务异常（连续${consecutiveErrors}个瓦片失败）`, callbacks.onError);
+                notifyIssue(`服务异常（连续${consecutiveErrors}个瓦片失败）`, callbacks.onError);
                 return;
             }
 
@@ -317,14 +250,10 @@ export function createBasemapResilience({ message, onRuntimeTokenFailure } = {})
             layer?.set?.(monitorKey, false);
         });
         activeMonitors.clear();
-
-        // [Fix] 清理所有 FallbackManager 实例
-        fallbackManagers.clear();
     }
 
     return {
         validateBaseLayerSwitch,
-        getFallbackManager,
         monitorLayerTimeout,
         disposeAllMonitors,
     };

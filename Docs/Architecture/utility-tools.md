@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：前端 `frontend/src/composables/map/features/useDrawMeasure.js`、`frontend/src/components/Map/MapControlsBar.vue`、`frontend/src/utils/coordinateFormatter.js`、`frontend/src/utils/coordTransform.js`、`frontend/src/services/CompassManager.ts`、`frontend/src/stores/useCompassStore.ts`、`frontend/src/components/Shell/TopBar.vue`；后端 `backend/download_xyz/`、`backend/gcj_rectify/` 模块。
+适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.js`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.js`、`frontend/src/domains/ol/utils/coordTransform.js`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.vue`；后端 `backend/download_xyz/`、`backend/gcj_rectify/` 模块。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"实用工具"功能集合的算法原理、数据结构、前后端交互机制与实现细节，供后续维护、扩展与问题排查时对照。
 
@@ -22,16 +22,16 @@
 
 | 文件 | 职责 |
 |------|------|
-| `frontend/src/composables/map/features/useDrawMeasure.js` | 测量核心：Draw/Snap 交互、ol/sphere 测地线计算、Overlay 提示框 |
-| `frontend/src/components/ControlsPanel/MeasurePanel.vue` | 测量 UI 面板：测距/测面工具选择、清除操作 |
-| `frontend/src/components/Map/MapControlsBar.vue` | 坐标显示控制条：实时坐标、格式切换、坐标编辑跳转、缩放级别 |
-| `frontend/src/utils/coordinateFormatter.js` | 坐标格式化引擎：6 种格式定义、十进制/DMS 互转、坐标解析 |
-| `frontend/src/utils/coordTransform.js` | 前端坐标转换：WGS84 ↔ GCJ-02（国测局偏移算法） |
-| `frontend/src/services/CompassManager.ts` | 罗盘管理器：矢量图层生命周期、Canvas 原生渲染、传感器同步、URL 状态 |
-| `frontend/src/stores/useCompassStore.ts` | 罗盘 Pinia 状态：模式/位置/旋转/主题/宫位选中 |
-| `frontend/src/services/compass/urlState.ts` | 罗盘 URL 状态读写：cs 参数编解码桥接 |
-| `frontend/src/utils/url/crypto.js` | BigInt 位打包编解码：经纬度/半径/相机状态 → Base62 短码 |
-| `frontend/src/components/Shell/TopBar.vue` | 分享链接：私有参数排除、s=1 标记、Native Share / 剪贴板 |
+| `domains/ol/drawing/composables/useDrawMeasure.js` | 测量核心：Draw/Snap 交互、ol/sphere 测地线计算、Overlay 提示框 |
+| `domains/ol/components/ControlsPanel/MeasurePanel.vue` | 测量 UI 面板：测距/测面工具选择、清除操作 |
+| `domains/ol/components/MapControlsBar.vue` | 坐标显示控制条：实时坐标、格式切换、坐标编辑跳转、缩放级别 |
+| `domains/common/map-view/coordinateFormatter.js` | 坐标格式化引擎：6 种格式定义、十进制/DMS 互转、坐标解析 |
+| `domains/ol/utils/coordTransform.js` | 前端坐标转换：WGS84 ↔ GCJ-02（国测局偏移算法） |
+| `domains/common/compass/services/CompassManager.ts` | 罗盘管理器：矢量图层生命周期、Canvas 原生渲染、传感器同步、URL 状态 |
+| `domains/common/compass/stores/useCompassStore.ts` | 罗盘 Pinia 状态：模式/位置/旋转/主题/宫位选中 |
+| `domains/common/compass/services/urlState.ts` | 罗盘 URL 状态读写：cs 参数编解码桥接 |
+| `domains/common/url-state/crypto.js` | BigInt 位打包编解码：经纬度/半径/相机状态 → Base62 短码 |
+| `domains/common/shell/TopBar.vue` | 分享链接：私有参数排除、s=1 标记、Native Share / 剪贴板 |
 | `backend/download_xyz/download.py` | 下载 API 路由：POST /api/download/tasks 异步任务 + token + TTL |
 | `backend/download_xyz/tile_engine.py` | 瓦片引擎：分辨率→层级换算、并发抓取、rasterio GeoTIFF 拼接与裁剪 |
 | `backend/download_xyz/download_task.py` | 任务持久化：SQLModel + SQLite 任务表 CRUD |

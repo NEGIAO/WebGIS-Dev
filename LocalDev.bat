@@ -79,7 +79,7 @@ REM --- Root .env auto-create (L1 local config, key catalog in .env.example) ---
 if not exist "%PROJECT_ROOT%.env" (
     if exist "%PROJECT_ROOT%.env.example" (
         copy /y "%PROJECT_ROOT%.env.example" "%PROJECT_ROOT%.env" >nul
-        echo [OK] Root .env created from .env.example - APP_ENV=development enabled
+        echo [OK] Root .env created from .env.example (deployment baseline; dev mode enabled by docker-compose APP_ENV=development)
     )
 )
 

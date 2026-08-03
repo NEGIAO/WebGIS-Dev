@@ -425,7 +425,7 @@ const { handleLayerContextAction } = useLayerContextMenuActions({
     message,
 });
 
-const { validateBaseLayerSwitch, getFallbackManager, monitorLayerTimeout, disposeAllMonitors } =
+const { validateBaseLayerSwitch, monitorLayerTimeout, disposeAllMonitors } =
     createBasemapResilience({
         message,
         onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
@@ -1070,7 +1070,6 @@ const { bindBasemapSelectionWatcher, resetBasemapChain, dispose: disposeSelectio
     layerInstances,
     syncUrlFromMap: syncUrlFromActiveMap,
     validateBaseLayerSwitch,
-    getFallbackManager,
     onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
     getBasemapOptionLabel,
     message,

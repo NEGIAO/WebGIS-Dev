@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/components/Routing/` 面板模块，及其依赖的 `frontend/src/api/locationSearch.js`、`frontend/src/utils/driveXmlParser.ts`、`frontend/src/utils/transitRouteBuilder.js`、`frontend/src/composables/map/features/useRouteRendering.js`。
+适用范围：`frontend/src/domains/ol/routing/` 面板模块，及其依赖的 `frontend/src/api/locationSearch.js`、`frontend/src/domains/ol/routing/utils/driveXmlParser.ts`、`frontend/src/domains/ol/routing/utils/transitRouteBuilder.js`、`frontend/src/domains/ol/routing/renderers/useRouteRendering.js`。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"路径规划"功能的管线划分、天地图 API 调用、XML/JSON 解析、选点交互、路线渲染与 token/请求取消机制，供后续维护、排错与功能扩展时对照。
 
@@ -21,15 +21,15 @@
 
 | 文件 | 职责 |
 |------|------|
-| `components/Routing/DrivingPlannerPanel.vue` | 驾车面板 + 编排层：起终点状态、策略选择、调用 drive API、调用 XML 解析器、结果展示与步骤交互；内含 `TokenMissingError` |
-| `components/Routing/BusPlannerPanel.vue` | 公交面板 + 编排层：起终点状态、策略选择、调用 transit API、JSON 归一化（`extractLinesFromTransitResponse` / `normalizeTransitResults`）、候选方案与分段步骤展示 |
-| `components/Routing/MapPointPickerCard.vue` | 起终点选点卡片：地图点选按钮 + 关键词搜索下拉（防抖 + `AbortController`），驾车/公交两套主题 |
+| `domains/ol/routing/components/DrivingPlannerPanel.vue` | 驾车面板 + 编排层：起终点状态、策略选择、调用 drive API、调用 XML 解析器、结果展示与步骤交互；内含 `TokenMissingError` |
+| `domains/ol/routing/components/BusPlannerPanel.vue` | 公交面板 + 编排层：起终点状态、策略选择、调用 transit API、JSON 归一化（`extractLinesFromTransitResponse` / `normalizeTransitResults`）、候选方案与分段步骤展示 |
+| `domains/ol/routing/components/MapPointPickerCard.vue` | 起终点选点卡片：地图点选按钮 + 关键词搜索下拉（防抖 + `AbortController`），驾车/公交两套主题 |
 | `api/locationSearch.js` | 地名/POI 搜索模块：`fetchLocationResultsByService` 统一入口，`searchWithTianditu` 调天地图 `v2/search`；声明 WGS-84 坐标契约，透传 `signal` |
-| `utils/driveXmlParser.ts` | 驾车 XML 解析：`parseDriveRouteXml` 提取起终点、总览、分段与整线坐标串 |
-| `utils/transitRouteBuilder.js` | 路线渲染数据构建：`buildBusRouteRenderData` / `buildDriveRouteRenderData` / `buildRouteRenderData` 生成 OpenLayers 要素，`fitExtentToCoverage` 视口适配 |
-| `composables/map/features/useRouteRendering.js` | 路线绘制功能库：`createRouteRenderingFeature` 工厂返回 `drawRouteOnMap`（公交）/ `drawDriveRouteOnMap`（驾车）/ `syncRouteManagedLayer` |
+| `domains/ol/routing/utils/driveXmlParser.ts` | 驾车 XML 解析：`parseDriveRouteXml` 提取起终点、总览、分段与整线坐标串 |
+| `domains/ol/routing/utils/transitRouteBuilder.js` | 路线渲染数据构建：`buildBusRouteRenderData` / `buildDriveRouteRenderData` / `buildRouteRenderData` 生成 OpenLayers 要素，`fitExtentToCoverage` 视口适配 |
+| `domains/ol/routing/renderers/useRouteRendering.js` | 路线绘制功能库：`createRouteRenderingFeature` 工厂返回 `drawRouteOnMap`（公交）/ `drawDriveRouteOnMap`（驾车）/ `syncRouteManagedLayer` |
 
-集成位置：`components/Shell/SidePanel.vue` 在 `activeTab === 'bus'` / `'drive'` 时分别挂载两个面板，并下发 `tiandituToken` 与一组地图回调；`components/Map/MapContainer.vue` 通过 `createRouteRenderingFeature` 创建绘制函数，并以 `ensureRouteBuilderApi` **动态导入** `transitRouteBuilder.js`（按需加载）。
+集成位置：`domains/common/shell/SidePanel.vue` 在 `activeTab === 'bus'` / `'drive'` 时分别挂载两个面板，并下发 `tiandituToken` 与一组地图回调；`domains/ol/components/MapContainer.vue` 通过 `createRouteRenderingFeature` 创建绘制函数，并以 `ensureRouteBuilderApi` **动态导入** `transitRouteBuilder.js`（按需加载）。
 
 ## 3. 两条管线总览
 

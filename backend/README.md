@@ -78,7 +78,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 3. 管理员
 - 用户名：**`admin`**（固定，不是 super_admin）
-- 密码：L3 环境变量 `SUPER_USER`（HF Secrets / 系统环境变量 / 本地忽略的 `backend/.env`）
+- 密码：L3 环境变量 `SUPER_USER`（HF Secrets / 系统环境变量）
 - 本地开发：`APP_ENV=development` 且未设 `SUPER_USER` 时为 `123456`
 - 角色：admin
 - 说明：密码只经统一配置 loader（`backend/config`）读取，不进数据库、不进前端；`admin`/`user` 禁止绑定 OAuth
@@ -436,6 +436,41 @@ uv run uvicorn app:app --reload --port 8000
 - ReDoc: http://localhost:7860/redoc
 
 ## 8. Docker Compose 一键启动（推荐）
+
+### 8.1 Docker 容器文件结构
+
+Docker 启动后，宿主机 `backend/` 目录与容器内 `/app/` 的映射关系如下：
+
+```
+宿主机 (WebGIS-Dev/)                    容器内
+─────────────────────                   ──────
+backend/        ──挂载──►               /app/
+  ├── app.py                            ├── app.py          ← FastAPI 入口
+  ├── api/                              ├── api/            ← 实时同步
+  ├── config/                           ├── config/         ← 实时同步
+  ├── services/                         ├── services/       ← 实时同步
+  ├── utils/                            ├── utils/          ← 实时同步
+  ├── data/                             ├── data/
+  ├── tests/                            ├── tests/
+  ├── pyproject.toml                    ├── pyproject.toml
+  └── uv.lock                           └── uv.lock
+
+.env (根目录)   ──挂载──►               /app/.env          ← 只读
+.env.local(根)  ──挂载──►               /app/.env.local    ← 只读
+
+                                        /app/.venv/        ← 匿名卷（隔离）
+```
+
+**挂载规则说明：**
+
+| 宿主机路径 | 容器内路径 | 模式 | 说明 |
+|---|---|---|---|
+| `backend/` | `/app/` | 读写 | 代码实时同步，配合 `--reload` 自动重启 |
+| `../.env` | `/app/.env` | 只读 `:ro` | 项目根配置，容器内不可改 |
+| `../.env.local` | `/app/.env.local` | 只读 `:ro` | 本地开发覆盖配置 |
+| （匿名卷） | `/app/.venv/` | 读写 | 隔离容器内依赖，不映射宿主机 `.venv` |
+
+> 所有业务代码在容器内 `/app/` 下运行；`uvicorn` 启动命令为 `uv run uvicorn app:app --host 0.0.0.0 --port 7860 --reload`。
 
 ```bash
 # 项目根目录执行

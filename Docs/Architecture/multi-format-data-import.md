@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/utils/gis/`（格式分发与解析）、`frontend/src/composables/useLayerDataImport.js`（2D/OL 导入管线）、`frontend/src/components/Cesium/composables/useCesiumDataImport.js`（3D/Cesium 导入管线）。
+适用范围：`frontend/src/domains/common/data-import/`（格式分发与解析）、`frontend/src/domains/ol/data-import/composables/useLayerDataImport.js`（2D/OL 导入管线）、`frontend/src/domains/cesium/composables/dataImport/useCesiumDataImport.js`（3D/Cesium 导入管线）。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"多格式数据导入"功能的格式分发机制、2D 与 3D 双管线差异、Shapefile 解析、坐标参考转换、3D Tiles blob URL 加载方案及 GLTF 坐标提取等核心实现，供后续维护、格式扩展与 bug 修复时对照。
 
@@ -18,16 +18,16 @@
 
 | 文件 | 职责 |
 |------|------|
-| `utils/gis/dataDispatcher.js` | 格式分发入口：根据扩展名/魔术字节路由到 ZIP/KMZ 解包、KML 解析、GeoJSON 解析、TIFF 打包等流程 |
-| `utils/gis/archiveProcessor.js` | 归档处理：ZIP/KMZ 解包后 SHP 文件分组、资源 Blob URL 管理、批量 packet 构建 |
-| `utils/gis/decompressFile.js` | ZIP 解压（JSZip）+ 魔术字节检测，返回标准化 entry 列表（`{ name, path, extension, buffer }`） |
-| `utils/gis/parsers/shpParser.ts` | Shapefile 解析：`parseShpPartsToGeoJSON` 多策略解析 + DBF 属性增强 + CRS 重投影 |
-| `utils/gis/crs-engine.ts` | proj4 坐标参考引擎：PRJ WKT 识别、EPSG 注册、`reprojectGeoJSON` 逐坐标转换 |
-| `utils/gis/crsAware.js` | 投影感知辅助：`detectGeoJsonProjection`、`detectKmlProjectionHint`、`detectShpProjectionFromPrj` |
-| `composables/useLayerDataImport.js` | 2D/OL 导入主管线（约 1533 行）：矢量要素创建、栅格图层渲染、自动定位 |
-| `composables/useGisLoader.ts` | 2D 管线的分发桥接层：文件夹/ZIP 递归扫描、SHP 分组、调用 `dispatchGisData` |
-| `components/Cesium/composables/useCesiumDataImport.js` | 3D/Cesium 导入主管线（约 1187 行）：DataSource 加载、3D Tiles blob URL 方案、GLTF 坐标提取 |
-| `components/Cesium/CesiumContainer.vue` | 3D 场景容器：拖拽事件监听（`@drop.prevent="onDrop"`）→ 调用 `loadDataFile` |
+| `domains/common/data-import/dataDispatcher.js` | 格式分发入口：根据扩展名/魔术字节路由到 ZIP/KMZ 解包、KML 解析、GeoJSON 解析、TIFF 打包等流程 |
+| `domains/common/data-import/archiveProcessor.js` | 归档处理：ZIP/KMZ 解包后 SHP 文件分组、资源 Blob URL 管理、批量 packet 构建 |
+| `domains/common/data-import/decompressFile.js` | ZIP 解压（JSZip）+ 魔术字节检测，返回标准化 entry 列表（`{ name, path, extension, buffer }`） |
+| `domains/common/data-import/parsers/shpParser.ts` | Shapefile 解析：`parseShpPartsToGeoJSON` 多策略解析 + DBF 属性增强 + CRS 重投影 |
+| `domains/common/data-import/crs-engine.ts` | proj4 坐标参考引擎：PRJ WKT 识别、EPSG 注册、`reprojectGeoJSON` 逐坐标转换 |
+| `domains/common/data-import/crsAware.js` | 投影感知辅助：`detectGeoJsonProjection`、`detectKmlProjectionHint`、`detectShpProjectionFromPrj` |
+| `domains/ol/data-import/composables/useLayerDataImport.js` | 2D/OL 导入主管线（约 1533 行）：矢量要素创建、栅格图层渲染、自动定位 |
+| `domains/ol/data-import/composables/useGisLoader.ts` | 2D 管线的分发桥接层：文件夹/ZIP 递归扫描、SHP 分组、调用 `dispatchGisData` |
+| `domains/cesium/composables/dataImport/useCesiumDataImport.js` | 3D/Cesium 导入主管线（约 1187 行）：DataSource 加载、3D Tiles blob URL 方案、GLTF 坐标提取 |
+| `domains/cesium/components/CesiumContainer.vue` | 3D 场景容器：拖拽事件监听（`@drop.prevent="onDrop"`）→ 调用 `loadDataFile` |
 
 ## 3. 格式支持矩阵
 

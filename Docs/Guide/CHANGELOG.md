@@ -6,6 +6,32 @@
 
 ## 版本记录
 
+### V3.5.10 (2026-08-03) — 默认底图跳过容灾监控
+
+> 🐛 **体验修复**：首屏加载时自定义瓦片（仅覆盖中国区域）大量非中国区域瓦片 404，触发 `[底图监测]`/`[底图降级]` message 轰炸。修复方案：默认预设图层完全跳过容灾监控和切换验证。
+
+#### 问题根因
+
+- `useBasemapLayerBootstrap.js` 中 `isDefaultBaseLayer = item.id === defaultLayerId`，但 `item.id` 是具体图层 ID（如 `custom_China_Blender`），`defaultLayerId` 是预设 ID（如 `custom_China_Blender_preset_2`），两者永不匹配 → 默认底图被当作"非默认"监控
+- 自定义瓦片仅覆盖中国 → 非中国区域瓦片必然 404 → 连续错误触发降级/message 循环
+
+#### 修改内容
+
+- `frontend/src/domains/ol/basemap/composables/useBasemapLayerBootstrap.js`：
+  - 引入 `resolvePresetLayerIds` 解析默认预设包含的具体图层 ID 集合
+  - 属于默认预设的图层不调用 `monitorLayerTimeout`，完全跳过容灾监控
+
+- `frontend/src/domains/ol/basemap/composables/useBasemapSelectionWatcher.js`：
+  - 工厂内部通过 `getActualDefaultLayerId()` 读取管理员 L2 配置的默认预设 ID
+  - `runLayerSwitch` 中通过 `val === getActualDefaultLayerId()` 判断是否为默认预设，跳过 `validateBaseLayerSwitch` 验证，直接静默切换成功
+
+#### 影响范围
+
+- 默认底图（管理员配置）：不再监控、不再验证、不再报错
+- 非默认底图：行为不变，容灾机制完整保留
+
+---
+
 ### V3.5.9 (2026-08-02) — 底图配置架构重构：单一真相源 + Cesium 自动派生
 
 > 🏗️ **架构重构**：删除 `sourceDescriptors.ts`（887 行），Cesium 描述符由 `basemapConfig.ts` 的 `getDescriptorById()` / `getAllDescriptorIds()` 自动派生；`basemapPresets.ts` 新增 `ALL_BASEMAP_PRESETS`（label 加序号前缀，与 URL 参数 `l` 索引对齐）；废弃 Google 主机切换机制（`GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl`）彻底删除；`index.ts`/`basemapProviderFactory.ts`/`layerUtils.js` 的 import 路径统一指向 `basemapConfig`。

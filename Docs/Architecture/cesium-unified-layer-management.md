@@ -23,7 +23,7 @@ Cesium 侧导入的数据（GeoJSON/KML/CZML/SHP/TIF/GLB/3D Tiles）目前只活
 | 能力 | 2D（OL） | Cesium |
 |------|----------|--------|
 | 记录列表 | Pinia store + `layerTreeBuilder.toLayerNode` 节点契约 | `useCesiumDataImport.loadedDataSources`（组件内 ref） |
-| 树形分组 UI | `TOCPanel.vue`（2492 行，capabilities 驱动） | 数据页签卡片平铺列表 |
+| 树形分组 UI | `domains/common/layer-tree/components/TOCPanel.vue`（capabilities 驱动） | 数据页签卡片平铺列表 |
 | 可见性开关 | ✅ | ❌（只能删除） |
 | 不透明度 | ✅ | ❌（仅 tileset 有材质模式） |
 | 定位 / 删除 | ✅ | ✅ `flyToDataSource` / `removeDataSource` |

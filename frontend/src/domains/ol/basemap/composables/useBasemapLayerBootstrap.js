@@ -1,5 +1,6 @@
 import { prioritizeTileSourceRequest } from '@ol/tile-source';
 import { createBasemapLayerFromSource } from './basemapLayerFactory';
+import { resolvePresetLayerIds } from '../constants/basemapResolver';
 
 /**
  * Basemap layer bootstrap feature
@@ -8,6 +9,12 @@ import { createBasemapLayerFromSource } from './basemapLayerFactory';
  * - Initialize base TileLayer instances from layer configs
  * - Attach timeout/error fallback monitoring for visible layers
  * - Keep layerInstances map in sync with layerList order
+ * - Skip resilience monitoring for layers belonging to the runtime default basemap preset
+ *   (admin-configured L2 default basemap; custom tiles only cover China → non-China tile failures are expected noise)
+ *
+ * 注意：默认底图不取 defaultLayerId 参数（静态常量），而取 selectedLayerRef.value（运行时动态值）。
+ *       管理员在 Admin 面板设置的 L2 配置（system_config.default_basemap_index）通过 API 异步获取，
+ *       在 initMap() 之前写入 selectedLayerRef，initializeBasemapLayers() 执行时即可读到。
  */
 export function createBasemapLayerBootstrap({
     layerListRef,
@@ -22,6 +29,13 @@ export function createBasemapLayerBootstrap({
         const list = layerListRef?.value;
         if (!Array.isArray(list)) return [];
 
+        // 从 selectedLayerRef 读取实际的默认底图预设 ID（管理员 L2 配置 / 用户偏好）
+        // fallback 到 defaultLayer_id 参数（静态默认值，仅在 ref 未初始化时使用）
+        const actualDefaultLayerId = selectedLayerRef?.value || defaultLayerId;
+
+        // 解析默认预设包含的具体图层 ID 集合，这些图层不做容灾监控
+        const defaultPresetLayerIds = new Set(resolvePresetLayerIds(actualDefaultLayerId));
+
         list.forEach((item, index) => {
             const config = layerConfigs.find((cfg) => cfg.id === item.id);
             const rawSource = config && item.visible ? config.createSource() : null;
@@ -33,34 +47,14 @@ export function createBasemapLayerBootstrap({
             });
 
             if (item.visible && source) {
-                const isDefaultBaseLayer = item.id === defaultLayerId;
-                monitorLayerTimeout?.(layer, item.id, isDefaultBaseLayer, {
-                    onTimeout: () => {
-                        if (isDefaultBaseLayer) {
-                            message?.warning?.(`${item.id}响应过慢，正在切换备用底图...`);
-                        } else {
-                            message?.warning?.(`${item.id}响应过慢，建议手动切换底图。`);
-                        }
-                    },
-                    onError: () => {
-                        if (isDefaultBaseLayer) {
-                            message?.error?.(`${item.id}服务异常，正在切换备用底图...`);
-                        } else {
-                            message?.error?.(`${item.id}服务异常，建议手动切换底图。`);
-                        }
-                    },
-                    onSuccess: () => {
-                        if (isDefaultBaseLayer) {
-                            message?.success?.(`${item.id}加载成功。`);
-                        }
-                    },
-                    onLayerSwitchRequired: (nextOption, reason) => {
-                        if (selectedLayerRef) {
-                            selectedLayerRef.value = nextOption;
-                        }
-                        message?.info?.(`已切换至${nextOption}底图（${reason}）`);
-                    },
-                });
+                // 仅对非默认预设图层启用容灾监控（默认底图瓦片不完整，报错无意义）
+                if (!defaultPresetLayerIds.has(item.id)) {
+                    monitorLayerTimeout?.(layer, item.id, false, {
+                        onTimeout: () => message?.warning?.(`${item.id}响应过慢，建议手动切换底图。`),
+                        onError: () => message?.error?.(`${item.id}服务异常，建议手动切换底图。`),
+                        onSuccess: () => {},
+                    });
+                }
             }
 
             layerInstances[item.id] = layer;

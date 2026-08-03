@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/constants/basemap/`、`frontend/src/composables/tileSource/`、`frontend/src/composables/map/features/` 及 `backend/api/proxy.py`、`backend/gcj_rectify/` 模块。
+适用范围：`frontend/src/domains/ol/basemap/`、`frontend/src/domains/ol/tile-source/`、`frontend/src/domains/ol/layer/` 及 `backend/api/proxy.py`、`backend/gcj_rectify/` 模块。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"丰富底图源体系"功能的双引擎配置模型、预设栈机制、瓦片请求生命周期、熔断回退策略、GCJ-02 火星坐标纠偏算法、高清瓦片优化及后端代理架构，供后续维护、扩展图源与调参时对照。
 
@@ -18,26 +18,27 @@
 
 | 文件 | 职责 |
 |------|------|
-| `frontend/src/constants/basemap/basemapConfig.ts` | OL 专用图层源定义（`LAYER_SOURCE_DEFINITIONS`）+ 底图预设栈（`BASEMAP_PRESETS`），约 1431 行 |
-| `frontend/src/constants/basemap/sourceDescriptors.ts` | 引擎无关的 `TileSourceDescriptor` 描述符列表（`TILE_SOURCE_DESCRIPTORS`），供 Cesium 侧消费 |
-| `frontend/src/constants/basemap/cesiumProviderFactory.ts` | Cesium 侧 `ImageryProvider` 工厂：将 `TileSourceDescriptor` 转换为 Cesium 渲染实例 |
-| `frontend/src/constants/basemap/basemapResolver.ts` | 底图解析器：预设解析、图层配置生成、UI 选项列表导出 |
-| `frontend/src/composables/tileSource/tileLifecycle.ts` | 瓦片请求生命周期：`prioritizeTileSourceRequest`（fetch + AbortController）、中断管理、代理兜底 |
-| `frontend/src/composables/tileSource/types.ts` | 类型定义与常量（超时、错误状态等） |
-| `frontend/src/composables/map/features/basemapLayerFactory.js` | OL 图层工厂：栅格/矢量瓦片图层创建、高清瓦片 `zDirection` 注入 |
-| `frontend/src/composables/map/features/useTileHDRendering.js` | 高清瓦片渲染全局开关（`tileHDRendering` ref，持久化到 localStorage） |
-| `frontend/src/composables/map/features/useBasemapResilience.js` | 底图容灾：切换验证、加载监测、熔断降级（`createBasemapResilience`） |
+| `frontend/src/domains/ol/basemap/constants/basemapConfig.ts` | **SSOT 唯一真相源**：OL 专用图层源定义（`LAYER_SOURCE_DEFINITIONS`）+ 底图预设栈（`BASEMAP_PRESETS`）+ Cesium 描述符派生（`getDescriptorById()`），约 1431 行 |
+| `frontend/src/domains/ol/basemap/constants/basemapResolver.ts` | 底图解析器：预设解析、图层配置生成、UI 选项列表导出 |
+| `frontend/src/domains/ol/tile-source/tileLifecycle.ts` | 瓦片请求生命周期：`prioritizeTileSourceRequest`（fetch + AbortController）、中断管理、代理兜底 |
+| `frontend/src/domains/ol/tile-source/types.ts` | 类型定义与常量（超时、错误状态等） |
+| `frontend/src/domains/ol/basemap/composables/basemapLayerFactory.js` | OL 图层工厂：栅格/矢量瓦片图层创建、高清瓦片 `zDirection` 注入 |
+| `frontend/src/domains/ol/layer/composables/useTileHDRendering.js` | 高清瓦片渲染全局开关（`tileHDRendering` ref，持久化到 localStorage） |
+| `frontend/src/domains/ol/basemap/resilience/useBasemapResilience.js` | 底图容灾：切换验证、加载监测、熔断降级（`createBasemapResilience`） |
 | `backend/api/proxy.py` | 后端通用流式代理 + GCJ-02 纠偏瓦片路由 |
 | `backend/gcj_rectify/transform.py` | GCJ-02 坐标转换算法（WGS84/GCJ-02/BD-09 互转，牛顿迭代） |
 | `backend/gcj_rectify/rectify.py` | 瓦片级纠偏：像素级重采样合成 WGS84 对齐瓦片 |
 
-## 3. 双配置体系
+## 3. 双引擎配置体系（SSOT 模式）
 
 ```mermaid
 flowchart LR
-    subgraph DUAL["双配置体系"]
+    subgraph SSOT["SSOT 单一真相源"]
         OL["LayerSourceDefinition<br/>basemapConfig.ts · OL 专用<br/>含 createSource 工厂函数"]
-        DESC["TileSourceDescriptor<br/>sourceDescriptors.ts · 引擎无关<br/>纯数据描述"]
+    end
+
+    subgraph DERIVED["Cesium 自动派生"]
+        DESC["getDescriptorById()<br/>basemapConfig.ts · 从 OL 定义<br/>自动派生 TileSourceDescriptor"]
     end
 
     subgraph ENGINES["渲染引擎"]
@@ -50,7 +51,7 @@ flowchart LR
     DESC --> CE
 ```
 
-底图源体系维护**两套并行配置**，分别服务于不同渲染引擎：
+底图源体系采用 **SSOT（单一真相源）** 架构：`basemapConfig.ts` 是唯一配置入口，Cesium 侧的描述符通过 `getDescriptorById()` 从 OL 定义自动派生，无需手动同步。
 
 ### 3.1 LayerSourceDefinition（OL 专用）
 
@@ -69,9 +70,9 @@ export type LayerSourceDefinition = {
 
 `createSource` 内部调用 `prioritizeTileSourceRequest()` 注入 fetch 优先加载策略，并可叠加 `withSkipHighResTile()` 标记注记图层跳过高清优化。
 
-### 3.2 TileSourceDescriptor（引擎无关）
+### 3.2 TileSourceDescriptor（Cesium 自动派生）
 
-定义于 `sourceDescriptors.ts`，纯数据描述，不含任何引擎 API 调用：
+定义于 `basemapConfig.ts` 的 `getDescriptorById(id)` 函数，从 `LAYER_SOURCE_DEFINITIONS` 自动派生引擎无关的纯数据描述：
 
 ```typescript
 export type TileSourceDescriptor = {
@@ -91,15 +92,11 @@ export type TileSourceDescriptor = {
 };
 ```
 
-Cesium 侧通过 `cesiumProviderFactory.ts` 的 `createCesiumImageryProvider()` 将描述符转换为 `UrlTemplateImageryProvider` / `WebMapServiceImageryProvider` / `WebMapTileServiceImageryProvider` / `OpenStreetMapImageryProvider`。
+Cesium 侧通过 `basemapConfig.ts` 的 `getDescriptorById()` 获取描述符后，转换为 `UrlTemplateImageryProvider` / `WebMapServiceImageryProvider` / `WebMapTileServiceImageryProvider` / `OpenStreetMapImageryProvider`。
 
 ### 3.3 同步约束
 
-两套配置通过 `id` 字段关联，**需手动保持同步**。文件头部注释明确标注：
-
-> 新增图源时需同步编辑此文件和 basemapConfig.ts
-
-`sourceDescriptors.ts` 中的 `getDescriptorById(id)` 提供按 ID 快速查找，`basemapResolver.ts` 中的 `LAYER_SOURCE_MAP` 提供 OL 侧索引。
+SSOT 模式下，新增/修改图源只需编辑 `basemapConfig.ts` 一处，Cesium 描述符自动派生，消除手动同步风险。`basemapResolver.ts` 中的 `LAYER_SOURCE_MAP` 提供 OL 侧索引。
 
 ## 4. 预设栈模型
 
@@ -131,7 +128,6 @@ export type BasemapPresetDefinition = {
 当前预设栈共 **60+ 项**，覆盖天地图、图新、Google、高德、Mapbox、Yandex、腾讯、OSM、CartoDB、Stamen、MapTiler、ArcGIS/ESRI、Windy、MFF、GeoQ 等系列。
 
 ## 5. 瓦片请求生命周期
-
 `tileLifecycle.ts` 的 `prioritizeTileSourceRequest(source)` 是 OL 侧所有瓦片源的请求入口，核心策略：**fetch + AbortController 优先，CORS/redirect 失败回退后端代理**。
 
 ### 5.1 工作流程
@@ -320,13 +316,13 @@ HD/@2x 瓦片（如 MapTiler 影像 HD）实际为 512×512 像素叠在 256 网
 }
 ```
 
-Cesium 侧在 `createCesiumImageryProvider` 中检测 `serviceType === 'custom'` 时，直接使用 `ctx.customUrl` 作为瓦片 URL 模板创建 `UrlTemplateImageryProvider`。
+Cesium 侧在检测到 `serviceType === 'custom'` 时，直接使用 `ctx.customUrl` 作为瓦片 URL 模板创建 `UrlTemplateImageryProvider`。
 
 用户只需提供标准 XYZ URL 模板（含 `{z}/{x}/{y}` 占位符），即可同时接入 2D 和 3D 视图。
 
 ## 10. Cesium 侧工厂
 
-`cesiumProviderFactory.ts` 的 `createCesiumImageryProvider(Cesium, descriptor, ctx)` 按 `serviceType` 分发：
+Cesium 侧通过 `basemapConfig.ts` 的 `getDescriptorById()` 获取描述符后，按 `serviceType` 分发创建对应 Provider：
 
 | serviceType | Cesium Provider | 备注 |
 |-------------|-----------------|------|
@@ -367,21 +363,19 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 
 **现有局限：**
 
-1. **双配置手动同步**：`LAYER_SOURCE_DEFINITIONS`（OL）与 `TILE_SOURCE_DESCRIPTORS`（引擎无关）需人工保持一致，新增/修改图源时必须同步编辑两个文件，存在遗漏风险。
-2. **MFF 非标准图源不支持 Cesium**：Maps-for-Free 使用非标准 URL 格式（`z{z}/row{y}/{z}_{x}-{y}.jpg`），Cesium 侧直接返回 null 跳过。
-3. **矢量瓦片（PBF）仅 OL 可用**：Cesium 不支持 PBF 矢量瓦片渲染，`vector-tile` 类型在 3D 视图中不可用。
-4. **纠偏精度与性能权衡**：z ≤ 9 不纠偏（偏差可忽略），z > 9 需拼接多块源瓦片再裁剪，高缩放级别下首次请求延迟较高（依赖文件缓存缓解）。
-5. **熔断阈值固定**：`MAX_ERRORS = 3` 为硬编码，无法按图源质量动态调整（如某些免费图源偶发 404 属正常现象）。
-6. **代理单点**：后端代理部署在 `negiao-webgis.hf.space`（Hugging Face Spaces），存在冷启动延迟和可用性风险。
+1. **MFF 非标准图源不支持 Cesium**：Maps-for-Free 使用非标准 URL 格式（`z{z}/row{y}/{z}_{x}-{y}.jpg`），Cesium 侧直接返回 null 跳过。
+2. **矢量瓦片（PBF）仅 OL 可用**：Cesium 不支持 PBF 矢量瓦片渲染，`vector-tile` 类型在 3D 视图中不可用。
+3. **纠偏精度与性能权衡**：z ≤ 9 不纠偏（偏差可忽略），z > 9 需拼接多块源瓦片再裁剪，高缩放级别下首次请求延迟较高（依赖文件缓存缓解）。
+4. **熔断阈值固定**：`MAX_ERRORS = 3` 为硬编码，无法按图源质量动态调整（如某些免费图源偶发 404 属正常现象）。
+5. **代理单点**：后端代理部署在 `negiao-webgis.hf.space`（Hugging Face Spaces），存在冷启动延迟和可用性风险。
 
 **升级方向：**
 
-1. 引入编译期代码生成：从单一 JSON/YAML 图源清单自动生成 OL `createSource` 和 `TileSourceDescriptor`，消除手动同步成本。
-2. 为 Cesium 实现自定义 `TileCoordinatesImageryProvider`，支持 MFF 等非标准 URL 格式。
-3. 探索 Cesium 3D Tiles / `Cesium3DTileset` 接入矢量瓦片，实现 3D 矢量渲染。
-4. 纠偏缓存引入 Redis / CDN 层，降低首次请求延迟；考虑 WebWorker 前端纠偏减少后端依赖。
-5. 熔断器引入滑动窗口 + 半开状态（circuit breaker pattern），支持自动恢复探测。
-6. 代理层支持多节点负载均衡与故障转移。
+1. 为 Cesium 实现自定义 `TileCoordinatesImageryProvider`，支持 MFF 等非标准 URL 格式。
+2. 探索 Cesium 3D Tiles / `Cesium3DTileset` 接入矢量瓦片，实现 3D 矢量渲染。
+3. 纠偏缓存引入 Redis / CDN 层，降低首次请求延迟；考虑 WebWorker 前端纠偏减少后端依赖。
+4. 熔断器引入滑动窗口 + 半开状态（circuit breaker pattern），支持自动恢复探测。
+5. 代理层支持多节点负载均衡与故障转移。
 
 ## 13. 关键常量速查
 
@@ -398,6 +392,5 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 | `MAX_CONCURRENCY` | 100 | `gcj_rectify/rectify.py` | 纠偏并发获取上限 |
 | `TILE_SIZE` | 256 | `gcj_rectify/utils.py` | 标准瓦片像素尺寸 |
 | `DEFAULT_BASEMAP_PRESET_ID` | `'custom_China_Blender_preset_2'` | `basemapConfig.ts` | 默认底图预设 |
-| `GOOGLE_MANUAL_HOST` | `'gac-geo.googlecnapps.club'` | `basemapConfig.ts` | Google 瓦片手动主机 |
 | `checkTimeoutMs`（默认参数） | 3000 | `useBasemapResilience.js` | 切换验证超时（ms） |
 | `tileHDRendering`（默认值） | `true` | `useTileHDRendering.js` | 高清渲染默认开启 |

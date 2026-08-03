@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src` 下地图引擎切换与视图状态同步相关模块（`views/HomeView.vue`、`components/Map/`、`components/Cesium/`、`composables/`、`utils/map/`、`utils/url/`、`stores/useUrlParamStore.ts`、`router/index.js`）。
+适用范围：`frontend/src` 下地图引擎切换与视图状态同步相关模块（`app/HomeView.vue`、`domains/ol/components/MapContainer.vue`、`domains/cesium/components/CesiumContainer.vue`、`domains/ol/composables/`、`domains/ol/url-state/`、`domains/ol/utils/`、`domains/ol/startup/`、`domains/common/url-state/`、`router/index.js`）。
 
 本文是长期参考文档，说明 WebGIS 3.0 中「OpenLayers 二维地图 + Cesium 三维地球双引擎」的切换机制、视图状态同步算法、URL 参数编码格式、懒加载策略与竞态保护，供后续维护、调试分享链接还原问题与扩展引擎能力时对照。
 
@@ -26,18 +26,18 @@
 
 | 文件 | 职责 |
 |------|------|
-| `views/HomeView.vue` | 双引擎编排层：`setMapView` 切换调度、`ensureCesiumLoaded` 懒加载、`buildCesiumQueryPatchFromOl` / `buildOlQueryPatchFromCesium` 双向参数构建、`latestCesiumOlEquivalent` 缓存、`view-sync` 事件汇聚 |
-| `components/Map/MapContainer.vue` | OL 容器（`v-show` 常驻）：暴露 `getCurrentViewState` / `syncViewFromCesium` / `getOlView` / `getMapSize`，接入启动守卫，发出 `view-sync` |
-| `components/Cesium/CesiumContainer.vue` | Cesium 容器（`v-if` 懒挂载）：构建 Viewer、`restoreCameraFromUrl` 恢复视角、`bindCameraViewSync` 监听相机 moveEnd、发出 `view-sync` |
-| `composables/useMapState.js` | OL 状态管理：URL 同步（`syncUrlFromMap`）、`getCurrentViewState`、`syncViewFromCesium`（含 `suppressNextUrlSync`）、`formatZParam` |
-| `composables/useMapViewUrlState.js` | `view` 参数读写：`getCurrentMapView` / `replaceMapView`，OL→Cesium 时 `z` 兜底为默认相机高度 |
-| `components/Cesium/composables/useCesiumUrlTracking.js` | Cesium 相机 URL 追踪：`parseCameraStateFromUrl` / `restoreCameraFromUrl` / `syncCameraViewToUrl` / 底图 `l` 同步 |
-| `utils/map/viewScaleConverter.js` | OL zoom ↔ Cesium 相机高度精确互转库（`olZoomToCesiumHeight` / `cesiumHeightToOlZoom`） |
-| `utils/url/urlConstants.js` | 共享常量：`MAP_VIEW_OL` / `MAP_VIEW_CESIUM` / `CAMERA_VIEW_PARAM_KEY`（`cv`）/ `normalizeMapView` |
-| `utils/url/urlQueryReader.js` | URL query 统一读取：hash query 优先级高于 `route.query`，提供完整快照 |
-| `utils/url/crypto.js` | Base62 编解码：`encodePos` / `encodeCesiumPoseState`（`p.<base62>`）/ `decodeCesiumCameraState`（兼容旧版完整相机码） |
-| `composables/map/features/useStartupUrlRestoreGuard.js` | 启动期 URL 恢复守卫：分享参数应用前暂停 OL 写回，避免默认视图覆盖 URL |
-| `stores/useUrlParamStore.ts` | URL 参数延迟应用仓库：路由阶段提取、引擎就绪后消费，`z` 按 `view` 双语义校验 |
+| `app/HomeView.vue` | 双引擎编排层：`setMapView` 切换调度、`ensureCesiumLoaded` 懒加载、`buildCesiumQueryPatchFromOl` / `buildOlQueryPatchFromCesium` 双向参数构建、`latestCesiumOlEquivalent` 缓存、`view-sync` 事件汇聚 |
+| `domains/ol/components/MapContainer.vue` | OL 容器（`v-show` 常驻）：暴露 `getCurrentViewState` / `syncViewFromCesium` / `getOlView` / `getMapSize`，接入启动守卫，发出 `view-sync` |
+| `domains/cesium/components/CesiumContainer.vue` | Cesium 容器（`v-if` 懒挂载）：构建 Viewer、`restoreCameraFromUrl` 恢复视角、`bindCameraViewSync` 监听相机 moveEnd、发出 `view-sync` |
+| `domains/ol/composables/useMapState.js` | OL 状态管理：URL 同步（`syncUrlFromMap`）、`getCurrentViewState`、`syncViewFromCesium`（含 `suppressNextUrlSync`）、`formatZParam` |
+| `domains/ol/url-state/useMapViewUrlState.js` | `view` 参数读写：`getCurrentMapView` / `replaceMapView`，OL→Cesium 时 `z` 兜底为默认相机高度 |
+| `domains/cesium/composables/layers/useCesiumUrlTracking.js` | Cesium 相机 URL 追踪：`parseCameraStateFromUrl` / `restoreCameraFromUrl` / `syncCameraViewToUrl` / 底图 `l` 同步 |
+| `domains/ol/utils/viewScaleConverter.js` | OL zoom ↔ Cesium 相机高度精确互转库（`olZoomToCesiumHeight` / `cesiumHeightToOlZoom`） |
+| `domains/common/url-state/urlConstants.js` | 共享常量：`MAP_VIEW_OL` / `MAP_VIEW_CESIUM` / `CAMERA_VIEW_PARAM_KEY`（`cv`）/ `normalizeMapView` |
+| `domains/common/url-state/urlQueryReader.js` | URL query 统一读取：hash query 优先级高于 `route.query`，提供完整快照 |
+| `domains/common/url-state/crypto.js` | Base62 编解码：`encodePos` / `encodeCesiumPoseState`（`p.<base62>`）/ `decodeCesiumCameraState`（兼容旧版完整相机码） |
+| `domains/ol/startup/useStartupUrlRestoreGuard.js` | 启动期 URL 恢复守卫：分享参数应用前暂停 OL 写回，避免默认视图覆盖 URL |
+| `domains/common/url-state/stores/useUrlParamStore.ts` | URL 参数延迟应用仓库：路由阶段提取、引擎就绪后消费，`z` 按 `view` 双语义校验 |
 | `router/index.js` | 全局路由守卫：`beforeEach` 中提取 URL 参数存入 `useUrlParamStore`，分享模式注入访客令牌 |
 
 ## 3. 双引擎切换机制

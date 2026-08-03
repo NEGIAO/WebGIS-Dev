@@ -1,6 +1,10 @@
 """
 后端统一配置入口。
 
+双 env 文件架构（与前端统一，按环境二选一）：
+  .env       → 部署环境（APP_ENV=production 时读取）
+  .env.local → 本地开发（APP_ENV=production 以外时读取）
+
 业务模块应优先：
     from config import get_settings, get_str, get_int, get_float, get_bool
 
@@ -29,7 +33,7 @@ from .load import (
 from .public import build_public_config
 from .runtime import get_effective_str, get_system_config_value
 
-# 启动时加载根目录与 backend 的 .env（不覆盖已有系统环境变量）
+# 启动时加载当前布局对应的 env 文件（不覆盖已有系统环境变量）
 load_project_env()
 
 

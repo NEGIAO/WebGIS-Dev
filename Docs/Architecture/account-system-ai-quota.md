@@ -51,10 +51,10 @@
 | 文件 | 职责 |
 |------|------|
 | `frontend/src/api/backend/client.js` | axios 实例 + 请求拦截器（自动附加 `Authorization: Bearer`、游客 `X-Share-Mode` / `X-Guest-Device-Id`） |
-| `frontend/src/stores/useAuthStore.ts` | Pinia 认证状态：`ensureValidSession` 校验 token、`requiresEmailBinding` 计算属性 |
-| `frontend/src/views/RegisterView.vue` | 注册页面：邮箱 + 验证码 + 密码 + 昵称 |
-| `frontend/src/components/UserCenter/` | 用户中心面板：`FloatingAccountPanel.vue`、`AdminControlPanel.vue`、`ApiKeysManagementPanel.vue` |
-| `frontend/src/components/Chat/ChatPanelContent.vue` | AI 对话面板：配额展示、模型选择、消息收发 |
+| `frontend/src/domains/common/user/stores/useAuthStore.ts` | Pinia 认证状态：`ensureValidSession` 校验 token、`requiresEmailBinding` 计算属性 |
+| `frontend/src/app/RegisterView.vue` | 注册页面：邮箱 + 验证码 + 密码 + 昵称 |
+| `frontend/src/domains/common/user/components/` | 用户中心面板：`FloatingAccountPanel.vue`、`AdminControlPanel.vue`、`ApiKeysManagementPanel.vue` |
+| `frontend/src/domains/common/chat/components/ChatPanelContent.vue` | AI 对话面板：配额展示、模型选择、消息收发 |
 
 ## 3. 三级身份体系
 

@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/components/Cesium/` 下的三维特效相关模块，包括 `Cloud/`（体积云）、`Wind2D.js` + `composables/useCesiumWind.js`（风场粒子）、`ShallowWater/`（热带浅水叠加）、`terrain/`（地形提供者）、`composables/cesiumAtmosphere.js` + `composables/useCesiumBeautify.js` + `CesiumAdvancedEffects.vue`（大气与后处理），以及集成入口 `composables/useCesiumToolModules.js` / `CesiumToolPanel.vue` / `CesiumContainer.vue`。
+适用范围：`frontend/src/domains/cesium/` 下的三维特效相关模块，包括 `modules/cloud/`（体积云）、`modules/wind/Wind2D.js` + `modules/wind/useCesiumWind.js`（风场粒子）、`composables/scene/cesiumAtmosphere.js` + `composables/scene/useCesiumBeautify.js` + `components/CesiumAdvancedEffects.vue`（大气与后处理），以及集成入口 `composables/toolModules/useCesiumToolModules.js` / `components/CesiumToolPanel.vue` / `components/CesiumContainer.vue`。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"三维特效"功能的实现原理、文件组织、GPU 渲染管线与参数集成机制，供后续维护、调参与算法升级时对照。洪水淹没模拟（`FluidSimulation/`）已有独立文档 [`cesium-fluid-flood-simulation.md`](./cesium-fluid-flood-simulation.md)，本文只在 §10 说明它与本组特效的关系，不再展开。
 
@@ -52,31 +52,20 @@
 
 | 文件 | 职责 |
 |------|------|
-| `Cloud/CloudManager.ts` | 体积云核心管理类：创建/销毁 `PostProcessStage`、加载纹理资产、桥接参数到 uniform（约 470 行） |
-| `Cloud/CloudUniforms.ts` | 体积云 uniform 默认值、类型与 `createStageUniforms` 函数式回调映射 |
-| `Cloud/CloudPresets.ts` | 四档质量预设（low/medium/high/ultra）：迭代次数、步长、散射阶数、二次 march 配置 |
-| `Cloud/cloudIntegration.ts` | 集成桥接：`setupCloudIntegration` 将 `cloudParams`/`atmosphereParams` watcher 接到 `CloudManager`；lil-gui 参数定义 |
-| `Cloud/composables/useVolumetricCloud.ts` | Vue 3 Composable 形式的另一套桥接（自动初始化/销毁、参数同步） |
-| `Cloud/index.ts` | 模块统一导出 |
-| `Cloud/shaders/cloudFragment.glsl` | 体积云片元着色器：ray marching 主循环 + 密度/光照/合成（约 635 行） |
-| `Cloud/shaders/cloudVertex.glsl` / `noise.glsl` / `utils.glsl` | 顶点着色器、噪声库、工具函数（注：fragment 中已内联 Perlin/FBM，这些为辅助） |
-| `Cloud/textures/` | `shape.bin`(128³)、`shape_detail.bin`(32³)、`local_weather.png`、`turbulence.png` 噪声/天气纹理 |
-| `Wind2D.js` | 风场粒子主类：WebGL2 GPGPU 乒乓更新 + DrawCommand 箭头绘制（约 1132 行） |
-| `composables/useCesiumWind.js` | 风场 Composable：包装 `Wind2D`，内置 5 层模拟风场数据生成器 |
-| `ShallowWater/ShallowWaterOverlay.vue` | 热带浅水叠加层组件（绝对定位、`z-index:2` 盖在 Cesium canvas 上） |
-| `ShallowWater/composables/useShallowWater.js` | Three.js 场景生命周期：水面/海床/岩石/天空/云穹/闪电/折射反射 RT（约 670 行） |
-| `ShallowWater/shaders/*.glsl.js` | `waterSurface` / `caustics` / `clouds` 三组 GLSL（以 JS 字符串导出） |
-| `ShallowWater/utils/textures.js` | 程序化生成法线图、沙地纹理、云噪声纹理 |
-| `terrain/GeoTerrainProvider.js` | 天地图高度图地形提供者（`CustomHeightmapTerrainProvider` 子类，pako 解压） |
-| `terrain/ArcGISTerrainProvider.js` | ArcGIS 地形增强包装器（补 `availability` / `getTileDataAvailable`） |
-| `terrain/GeoWTFS.js` | **POI 矢量瓦片图层**（GEOPOI protobuf 解析，名为 WFS 实为注记，非地形） |
-| `terrain/util.js` | `loadProto` protobuf 定义加载辅助（4 行） |
-| `composables/cesiumAtmosphere.js` | 配置 Cesium 原生大气/雾/光照/Bloom，并提供状态快照与恢复 |
-| `composables/useCesiumBeautify.js` | 场景美化：HDR + PBR 色调映射 + FXAA + 定向光 + 天空微调 + 分辨率缩放 |
-| `CesiumAdvancedEffects.vue` | "Cinematic FX" 面板：高度雾 / HBAO / 移轴 / 大气+Bloom 四个后处理开关 + FPS 图表 |
-| `composables/useCesiumToolModules.js` | 特效参数总线：集中管理各模块响应式参数与控件定义（约 1078 行） |
-| `CesiumToolPanel.vue` | 工具面板 UI：模块卡片 + 控件渲染（约 1777 行） |
-| `CesiumContainer.vue` | 容器组件：装配上述所有模块、watcher 与清理逻辑 |
+| `modules/cloud/index.js` | 体积云模块统一导出 |
+| `modules/cloud/cloudParamsApply.js` | 体积云参数应用：桥接参数到 uniform |
+| `modules/cloud/cloudQualityPresets.js` | 四档质量预设（low/medium/high/ultra）：迭代次数、步长、散射阶数 |
+| `modules/cloud/setupCloudIntegration.js` | 集成桥接：将 `cloudParams`/`atmosphereParams` watcher 接到云管理器；lil-gui 参数定义 |
+| `modules/cloud/assetConfig.js` | 体积云纹理资产路径配置 |
+| `modules/cloud/lib/` | 体积云核心库：ThreeGeospatial 大气管线、阴影 Pass、着色器加载等 |
+| `modules/wind/Wind2D.js` | 风场粒子主类：WebGL2 GPGPU 乒乓更新 + DrawCommand 箭头绘制（约 1132 行） |
+| `modules/wind/useCesiumWind.js` | 风场 Composable：包装 `Wind2D`，内置 5 层模拟风场数据生成器 |
+| `composables/scene/cesiumAtmosphere.js` | 配置 Cesium 原生大气/雾/光照/Bloom，并提供状态快照与恢复 |
+| `composables/scene/useCesiumBeautify.js` | 场景美化：HDR + PBR 色调映射 + FXAA + 定向光 + 天空微调 + 分辨率缩放 |
+| `components/CesiumAdvancedEffects.vue` | "Cinematic FX" 面板：高度雾 / HBAO / 移轴 / 大气+Bloom 四个后处理开关 + FPS 图表 |
+| `composables/toolModules/useCesiumToolModules.js` | 特效参数总线：集中管理各模块响应式参数与控件定义（约 1078 行） |
+| `components/CesiumToolPanel.vue` | 工具面板 UI：模块卡片 + 控件渲染（约 1777 行） |
+| `components/CesiumContainer.vue` | 容器组件：装配上述所有模块、watcher 与清理逻辑 |
 
 ## 4. 集成与参数总线
 
@@ -86,7 +75,7 @@
 flowchart TD
     PANEL["CesiumToolPanel.vue<br/>UI 卡片 / 控件"] -->|"handleToolControlChange<br/>(moduleId, controlId, value)"| BUS["useCesiumToolModules.js<br/>参数总线 · 集中持有各模块 ref"]
 
-    BUS -->|"cloudParams"| CLOUD["setupCloudIntegration<br/>→ CloudManager · 体积云"]
+    BUS -->|"cloudParams"| CLOUD["setupCloudIntegration<br/>→ 体积云"]
     BUS -->|"baseAtmosphereParams<br/>atmosphereParams"| ATM["cesiumAtmosphere.js<br/>→ 大气 / 雾 / Bloom"]
     BUS -->|"cloudParams"| WIND["useCesiumWind.js<br/>→ Wind2D · 风场粒子"]
     BUS -->|"advancedEffectControls"| FX["CesiumAdvancedEffects.vue<br/>→ 高度雾 / HBAO / 移轴"]

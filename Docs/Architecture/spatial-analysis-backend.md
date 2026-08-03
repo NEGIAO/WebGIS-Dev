@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`backend/api/spatial/` 模块及前端 `frontend/src/components/ControlsPanel/SpatialAnalysisPanel.vue` 调用链。
+适用范围：`backend/api/spatial/` 模块及前端 `frontend/src/domains/ol/components/SpatialAnalysisPanel.vue` 调用链。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"空间分析"功能的后端架构、坐标系策略、8 种分析操作的算法原理与参数、前端调用链路，供后续维护、扩展算子与性能调优时对照。
 
@@ -30,8 +30,8 @@
 | `backend/api/spatial/operations/simplify.py` | 几何简化（Douglas-Peucker 抽稀） |
 | `backend/api/spatial/operations/fishnet.py` | 渔网分析（规则网格生成） |
 | `backend/api/spatial/operations/multi_ring_buffer.py` | 多环缓冲区分析 |
-| `frontend/src/components/ControlsPanel/SpatialAnalysisPanel.vue` | 前端 UI 面板：8 种工具选择、参数输入、事件发射 |
-| `frontend/src/composables/map/features/useSpatialAnalysis.js` | 前端编排层：OL Feature↔GeoJSON 序列化、API 调用、结果图层创建 |
+| `frontend/src/domains/ol/components/SpatialAnalysisPanel.vue` | 前端 UI 面板：8 种工具选择、参数输入、事件发射 |
+| `frontend/src/domains/ol/spatial-analysis/composables/useSpatialAnalysis.js` | 前端编排层：OL Feature↔GeoJSON 序列化、API 调用、结果图层创建 |
 | `frontend/src/api/backend/spatial.js` | Axios 封装：`apiSpatialAnalysis()`，30 秒超时 |
 
 ## 3. 单端点 + operation 分发架构

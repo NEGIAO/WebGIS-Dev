@@ -25,6 +25,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN useradd -m -u 1000 user
 WORKDIR /app
 
+
 # 4. 复制依赖文件（此时还是 root 权限，方便后续 chown）
 COPY pyproject.toml uv.lock* ./
 
@@ -34,7 +35,7 @@ RUN chown -R user:user /app
 USER user
 RUN uv sync --no-cache
 
-# 6. 复制应用代码
+# 6. 复制应用代码（CI 已通过 cp .env backend/.env 注入根配置）
 COPY --chown=user . .
 
 # 7. 暴露端口

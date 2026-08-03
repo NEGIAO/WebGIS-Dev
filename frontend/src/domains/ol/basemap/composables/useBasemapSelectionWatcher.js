@@ -8,7 +8,8 @@ import { abortTileSourceRequests } from '@ol/tile-source/index';
  * - Listen to selected basemap changes
  * - Apply layer switch and URL sync
  * - Validate switched basemap availability
- * - Auto fallback for default basemap when unavailable
+ * - Skip validation/monitoring for the admin's default basemap preset layers
+ *   (custom tiles only cover China; non-China tile failures are expected noise)
  */
 export function createBasemapSelectionWatcher({
     selectedLayerRef,
@@ -20,7 +21,6 @@ export function createBasemapSelectionWatcher({
     layerInstances,
     syncUrlFromMap,
     validateBaseLayerSwitch,
-    getFallbackManager,
     onRuntimeTokenFailure,
     getBasemapOptionLabel,
     message,
@@ -32,11 +32,19 @@ export function createBasemapSelectionWatcher({
     onCircuitReset,
 }) {
     let isAutoSwitchingLayer = false;
-    let switchTimer = null;
+    let _switchTimer = null;
     let switchSeq = 0;
     let watchStopHandle = null; // [C5] 保存 watch 停止句柄
 
     const failureStateMap = new Map();
+
+    /**
+     * 运行时读取实际的默认底图预设 ID（管理员 L2 配置，存入 selectedLayerRef）。
+     * defaultLayerId 参数仅为静态 fallback（初始化前使用）。
+     */
+    function getActualDefaultLayerId() {
+        return selectedLayerRef?.value || defaultLayerId;
+    }
 
     /**
      * [改进] 添加验证追踪机制，防止验证过程中的状态变化
@@ -45,9 +53,9 @@ export function createBasemapSelectionWatcher({
     const ongoingValidations = new Map(); // layerId -> AbortController
 
     function clearSwitchTimer() {
-        if (switchTimer) {
-            clearTimeout(switchTimer);
-            switchTimer = null;
+        if (_switchTimer) {
+            clearTimeout(_switchTimer);
+            _switchTimer = null;
         }
     }
 
@@ -287,7 +295,22 @@ export function createBasemapSelectionWatcher({
         /**
          * [改进] 验证任何情况都要执行，包括自动降级
          * 原来的跳过验证代码已删除
+         * [Fix] 默认预设图层跳过验证（管理员 L2 配置的默认底图使用自定义瓦片，
+         * 仅覆盖中国区域，非中国区域瓦片必然 404，验证无意义且产生大量 message 轰炸）
          */
+        const isDefaultPreset = val === getActualDefaultLayerId();
+        if (isDefaultPreset) {
+            const optionLabel = getBasemapOptionLabel?.(val) || val;
+            if (activeStack.length > 1) {
+                message?.success?.(
+                    `已切换到${optionLabel}组合（${activeStack.join(' + ')}）`,
+                );
+            } else {
+                message?.success?.(`已成功切换到${optionLabel}底图`);
+            }
+            return;
+        }
+
         const switchedLayer = layerInstances?.[val];
         if (!switchedLayer) return;
 
@@ -320,12 +343,12 @@ export function createBasemapSelectionWatcher({
                     return;
                 }
 
-                // Validation failed: mark failure and possibly fallback
+                // Validation failed: mark failure and notify
                 const reason = result?.reason || '未知错误';
                 const runtimeTokenHandled = onRuntimeTokenFailure?.({
                     layerId: val,
                     reason,
-                    isDefaultBaseLayer: val === defaultLayerId,
+                    isDefaultBaseLayer: false,
                 });
                 if (runtimeTokenHandled) {
                     isAutoSwitchingLayer = false;
@@ -333,36 +356,13 @@ export function createBasemapSelectionWatcher({
                 }
 
                 const failCount = markLayerFailure(val);
-                const isDefaultBaseLayer = val === defaultLayerId;
 
                 if (failCount >= circuitBreakThreshold) {
                     message?.error?.('当前网络异常，请尝试手动重试。可点击”重置链路”按钮。');
-                    const fallbackManager = getFallbackManager?.(val, isDefaultBaseLayer);
-                    const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
-                    if (nextFallbackOption && nextFallbackOption !== val) {
-                        isAutoSwitchingLayer = true;
-                        selectedLayerRef.value = nextFallbackOption;
-                        message?.info?.(`已自动切换至${nextFallbackOption}底图`);
-                    }
                     return;
                 }
 
-                if (!isDefaultBaseLayer) {
-                    message?.warning?.(`切换到${val}底图失败：${reason}，请重新选择底图`);
-                    return;
-                }
-
-                // Try fallback chain for default base layer
-                const fallbackManager = getFallbackManager?.(val, true);
-                const nextFallbackOption = fallbackManager?.getNextFallbackOption?.();
-                if (!nextFallbackOption) {
-                    message?.error?.('所有兜底底图均不可用，请检查网络或重新选择底图');
-                    return;
-                }
-
-                isAutoSwitchingLayer = true;
-                selectedLayerRef.value = nextFallbackOption;
-                message?.info?.(`已自动切换至${nextFallbackOption}底图`);
+                message?.warning?.(`切换到${val}底图失败：${reason}，请重新选择底图`);
             } catch { /* ignored */
 
                 controller.abort();

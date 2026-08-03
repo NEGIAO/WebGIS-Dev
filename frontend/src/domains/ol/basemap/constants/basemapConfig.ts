@@ -240,6 +240,38 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 ),
             ),
     },
+    {
+        id: 'label_stamen_toner_lines',
+        name: 'Stamen线划',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                    }),
+                ),
+            ),
+    },
+    {
+        id: 'label_stamen_toner_labels',
+        name: 'Stamen注记',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                    }),
+                ),
+            ),
+    },
 
     // 2、地形图层
     {
@@ -444,6 +476,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                     // 显式声明 tilePixelRatio:2，让 OL 按 256 网格缩放还原，
                     // 避免被默认按 256 像素拉伸导致糊化与地理套合错位。
                     tilePixelRatio: 2,
+                }),
+            ),
+    },
+    {
+        id: 'imagery_alidade_satellite',
+        name: 'Alidade卫星',
+        category: 'imagery',
+        group: '影像',
+        url: 'https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
                 }),
             ),
     },
@@ -933,6 +979,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
+    {
+        id: 'theme_stamen_watercolor',
+        name: 'Stamen水彩',
+        category: 'theme',
+        group: '专题',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
 
     // 7、MFF 专题层
     {
@@ -1131,6 +1191,34 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
+    {
+        id: 'terrain_stamen',
+        name: 'Stamen地形',
+        category: 'terrain',
+        group: '地形',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        id: 'terrain_outdoors',
+        name: 'Stadia户外',
+        category: 'terrain',
+        group: '地形',
+        url: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
 
     // 8、矢量图层
     {
@@ -1284,11 +1372,11 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'Stamen Toner',
         category: 'vector',
         group: '矢量',
-        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png' }),
+                new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d' }),
             ),
     },
     {
@@ -1296,26 +1384,68 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'Alidade Sm',
         category: 'vector',
         group: '矢量',
-        url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png',
+        url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png',
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
                 }),
             ),
     },
     {
-        id: 'vector_geoq_gray',
-        name: 'GeoQ灰(GCJ)',
+        id: 'vector_stamen_toner_background',
+        name: 'Stamen Toner底',
         category: 'vector',
         group: '矢量',
-        url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldGrayMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldGrayMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldGrayMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldGrayMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        id: 'vector_stamen_toner_lite',
+        name: 'Stamen Toner浅',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        id: 'vector_alidade_smooth_dark',
+        name: 'Alidade暗色',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        id: 'vector_osm_bright',
+        name: 'OSM Bright',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
                 }),
             ),
     },

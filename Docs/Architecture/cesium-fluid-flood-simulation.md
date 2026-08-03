@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/components/Cesium/FluidSimulation/` 模块。
+适用范围：`frontend/src/domains/cesium/modules/fluid-simulation/` 模块。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"水体流体 / 洪水淹没模拟"功能的算法原理、数据结构、GPU 渲染管线与交互驱动机制，供后续维护、调参与算法升级时对照。
 
@@ -18,8 +18,8 @@
 
 | 文件 | 职责 |
 |------|------|
-| `FluidSimulationPanel.vue` | UI 面板 + 编排层：地形采样、水位值域计算、洪水动画循环（CPU 侧）、参数映射、场景状态快照/恢复 |
-| `fluidRuntime.js` | GPU 运行时：`FluidRenderer` 类 + 全部 GLSL 着色器 + 自定义绘制命令封装（`CustomPrimitive` / `RenderUtil`）+ 大气雾后处理（`createSkyEffect`） |
+| `domains/cesium/modules/fluid-simulation/FluidSimulationPanel.vue` | UI 面板 + 编排层：地形采样、水位值域计算、洪水动画循环（CPU 侧）、参数映射、场景状态快照/恢复 |
+| `domains/cesium/modules/fluid-simulation/fluidRuntime.js` | GPU 运行时：`FluidRenderer` 类 + 全部 GLSL 着色器 + 自定义绘制命令封装（`CustomPrimitive` / `RenderUtil`）+ 大气雾后处理（`createSkyEffect`） |
 
 `fluidRuntime.js` 通过 `createFluidRuntime(Cesium)` 工厂函数导出 `{ FluidRenderer, createSkyEffect }`，延迟注入 Cesium 依赖，避免模块顶层持有全局 Cesium。
 

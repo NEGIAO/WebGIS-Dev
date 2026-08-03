@@ -128,7 +128,7 @@ Vite 只把 `VITE_*` 前缀项注入构建产物，根 `.env` 中的后端/绝�
 `src/config/publicRuntime.ts` 单点派生
 `BACKEND_BASE_URL` / `TILE_PROXY_BASE_URL` / `TILE_PROXY_MODE` / `DOWNLOAD_REQUEST_TIMEOUT_MS`
 及 `backendUrl/tileProxyUrl/gcj2wgsProxyUrl/backendTilesUrl` 四个 helper。
-axios 基址、`basemapConfig`/`sourceDescriptors` 12 处底图源 URL、瓦片代理兜底、下载超时全部由此拼接；
+axios 基址、`basemapConfig` 12 处底图源 URL、瓦片代理兜底、下载超时全部由此拼接；
 src 内已无任何硬编码部署域名。
 
 **运行期**：`/api/runtime-config/map-tokens` 拿地图 token 池；`/api/config/public` 拿公开配置与功能布尔；

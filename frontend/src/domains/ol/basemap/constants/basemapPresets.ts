@@ -82,6 +82,16 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
     { id: 'vector_alidade_preset', label: '清爽风格', stack: ['vector_alidade'] },
+    { id: 'vector_stamen_toner_background_preset', label: 'Toner背景', stack: ['vector_stamen_toner_background'] },
+    { id: 'vector_stamen_toner_lite_preset', label: 'Toner浅色', stack: ['vector_stamen_toner_lite'] },
+    { id: 'vector_alidade_smooth_dark_preset', label: 'Alidade暗色', stack: ['vector_alidade_smooth_dark'] },
+    { id: 'vector_osm_bright_preset', label: 'OSM Bright', stack: ['vector_osm_bright'] },
+    { id: 'terrain_stamen_preset', label: 'Stamen地形', stack: ['terrain_stamen'] },
+    { id: 'terrain_outdoors_preset', label: 'Stadia户外', stack: ['terrain_outdoors'] },
+    { id: 'theme_stamen_watercolor_preset', label: 'Stamen水彩', stack: ['theme_stamen_watercolor'] },
+    { id: 'imagery_alidade_satellite_preset', label: 'Alidade卫星', stack: ['imagery_alidade_satellite'] },
+    { id: 'label_stamen_toner_lines_preset', label: 'Stamen线划', stack: ['label_stamen_toner_lines'] },
+    { id: 'label_stamen_toner_labels_preset', label: 'Stamen注记', stack: ['label_stamen_toner_labels'] },
 
     // MapTiler 系列
     { id: 'imagery_maptiler_satellite_preset', label: 'MapTiler影像', stack: ['imagery_maptiler_satellite', 'label_tianditu'] },
@@ -195,7 +205,6 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
 
     // 其他与自定义
-    { id: 'vector_geoq_gray_preset', label: 'GeoQ灰', stack: ['vector_geoq_gray'] },
     { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
 ];
 
