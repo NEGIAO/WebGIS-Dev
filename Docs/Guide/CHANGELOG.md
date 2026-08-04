@@ -6,6 +6,93 @@
 
 ## 版本记录
 
+### V3.5.11 (2026-08-04) — Code Review 修复批次 + amap runtime token + 配额可编辑 + 视图切换白屏修复
+
+> 🏗️ **架构 + 修复**：前端分层架构合规化——common→ol 跨层违规从 19 处降至 9 处；后端清理 `agent_token` 兼容名；`amap_key` 加入前端 runtime token 白名单；管理员面板配额从只读升级为可编辑器；修复 2D/3D 切换时 `_cesiumLoadPromise` 未清空导致的白屏。
+
+#### 后端：agent_token 兼容名清理
+
+- `backend/api/agent_chat/constants.py`：删除 `AGENT_API_KEY_LEGACY = "agent_token"`
+- `backend/api/agent_chat/db.py`：删除 legacy 分支（`_get_api_key_row_sync(AGENT_API_KEY_LEGACY)` + candidates 回退逻辑）
+- `backend/config/catalog.py`：删除 `AGENT_TOKEN` 登记项
+- `backend/config/load.py`：`agent_api_key = get_str("AGENT_API_KEY", "")`（移除 `or get_str("AGENT_TOKEN", "")`）
+- `backend/config/public.py`：`agent_env_key` 仅读 `agent_api_key`（移除 `agent_token` 回退）
+- `.env.example`：删除 `# AGENT_TOKEN=` 行 + 注释更新为仅保留 `AGENT_API_KEY`
+
+#### 后端：amap_key 加入 runtime token 白名单
+
+- `backend/api/api_keys_management.py`：`FRONTEND_RUNTIME_KEYS` 新增 `amap_key`；`get_runtime_map_tokens` 响应添加 `amap_key` 字段与 `is_set.amap_key`；注释更新为 "Tianditu, Cesium, and Amap"
+
+#### 后端：配额管理 API 配接
+
+- `backend/api/agent_chat/routes.py`：`admin_get_agent_config` 返回 `chat_quota` 字段（`_get_agent_chat_quota_policy_sync`）；`admin_update_agent_config` 支持 `guest_daily_quota` / `registered_daily_quota`
+- `backend/api/agent_chat/schemas.py`：`AgentConfigUpdateRequest` 新增 `guest_daily_quota` / `registered_daily_quota`（optional int, ge=1, le=100000）
+- `backend/api/agent_chat/db.py`：`_set_agent_provider_config_sync` 处理 `guest_daily_quota` / `registered_daily_quota` → 写入 `system_config` 表
+
+#### 前端：runtimeMapTokens 增强（amap 主备轮换）
+
+- `frontend/src/domains/common/services/runtimeMapTokens.js`：新增 `amapKey/amapKeys` 空值；`normalizeRuntimeKeyName` 支持 `amap_key/amap/gaode` 映射；`normalizeRuntimeTokenPayload` 处理 `pools.amap_key`；`getRuntimeMapTokensSync('amap_key')` 返回主 key
+
+#### 前端：ApiManagementPanel 配额面板可编辑化
+
+- `frontend/src/domains/common/user/components/ApiManagementPanel.vue`：
+  - 配额 tab 从只读升级为可编辑状态机（view → edit → save/cancel）
+  - `loadQuotaConfig` 改调 `apiAdminGetAgentConfig()` → 读取 `chat_quota.guest/registered`
+  - 新增 `saveQuotaConfig` → `apiAdminUpdateAgentConfig({ guest_daily_quota, registered_daily_quota })`
+  - 输入校验：`Number.isFinite + ≥ 1`；前后端双重 clamp（1–100000）
+  - 游客/注册用户双卡片展示 + 编辑/保存/取消按钮 + 说明文案更新
+
+#### 前端：ApiKeysManagementPanel 清理 agent_token
+
+- `frontend/src/domains/common/user/components/ApiKeysManagementPanel.vue`：
+  - `agent_api_key` 状态读取移除 `data.agent_token` 回退
+  - `frontendRuntimeKeyNames` 新增 `amap_key`（纳入前端 runtime 同步管理）
+
+#### 前端：HomeView 视图切换白屏修复
+
+- `frontend/src/app/HomeView.vue`：`setMapView` 切回 OL 时新增 `_cesiumLoadPromise = null`，防止下次切 3D 命中过期 promise 导致白屏
+
+#### 分层架构修复（H7 跨层违规 19→9）
+
+- 纯基础设施迁入 common 域：
+  - `runtimeMapTokens.js`：`ol/services` → `common/services`（仅依赖 `@/api/backend`）；更新 9 个导入方
+  - `viewScaleConverter.js`：`ol/utils` → `common/utils`（纯数学零依赖）；更新 2 个导入方
+  - `basemapPresets.ts`：`ol/basemap/constants` → `common/basemap`（纯数据）；更新 4 个引用方
+- 新增 `common/basemap/basemapOptions.ts`：抽离 `DEFAULT_BASEMAP_LAYER_INDEX` / `BASEMAP_OPTIONS`（re-export `URL_LAYER_OPTIONS`），basemapResolver 改从 common 导入并 re-export；`AdminControlPanel` 改 import common
+- `useTOCStore` 去 OL 依赖：新增 `common/layer-tree/stores/layerRemovalHandler.ts`（回调注册表），`removeLayerMeta` 改调用 `notifyLayerRemoved(id)`；`useFeatureStyleStore`（ol 域）注册回调联动清理高亮
+- `TOCTreeItem` 改直接 import `@common/utils/labelValidator`（该函数本就在 common）
+
+#### 功能修复
+
+- **H8 缩放开关**：`playerController.ts` `setEnableZoom(e)` 改为 `screenSpaceCameraController.enableZoom = e`（此前硬编码 `false`，传 `true` 也无法启用缩放）
+- **GBK DBF 数据丢失**：`dbfParser.ts` `supportedEncodings` 增补 `GBK / GB2312 / CP936`，走原生 TextDecoder 解码（此前 GBK 走 fallback 分支全部替换为 `■` 方块符）
+- **blob URL 内存泄漏**：`tileLifecycle.ts` 在 `img.src = url` 前绑定 `load`/`error` 一次性监听器，成功/失败均 `revokeObjectURL`
+- **日志合规修补**：`2026-08-04-code-review-fix-batch.md` 补 `### 解决方案` 独立章节标题 + Mermaid sequenceDiagram（handler 注册/通知链路）+ 变更清单追加 `Docs/TODO/bugfix-optimization-plan.md`
+
+#### 文档更正
+
+- `2026-08-01-code-review-high-security-fixes.md` 顶部加更正横幅：登录限流与 `/api/info` 门控为同日 `config-fix-and-cr-final.md`（V3.5.5）用户刻意回滚，当前零限流即最终意图
+
+#### 影响范围
+
+- 底图选择 / URL 参数 / 管理面板（basemap 常量迁移，行为不变）
+- TOC 图层移除 → 要素高亮联动（handler 注入，行为等价）
+- DBF 数据导入（GBK 编码中文正确显示）
+- Cesium 玩家滚轮缩放开关
+- 瓦片加载生命周期（内存释放）
+- 高德 amap_key runtime 同步（新增前端直连能力）
+- 配额管理（管理员面板可实时修改，立即生效）
+- 2D/3D 切换稳定性（白屏修复）
+
+#### 延后项（L3 / 存疑，未施工）
+
+- H7 剩余 9 处跨层违规（TOCPanel 7 + SidePanel 2）——随 God 组件拆解 L3
+- `cesium.d.ts` 83 个 any（无官方类型，手写属臆造 API 风险；正确路径为迁移 npm cesium 包）
+- `tsconfig strict:false`（开启暴露大量隐式 any，L3 重构）
+- 罗盘旋转 90° / GPU 资源泄漏（静态读码无法确认，存疑待实机复现）
+
+---
+
 ### V3.5.10 (2026-08-03) — 默认底图跳过容灾监控
 
 > 🐛 **体验修复**：首屏加载时自定义瓦片（仅覆盖中国区域）大量非中国区域瓦片 404，触发 `[底图监测]`/`[底图降级]` message 轰炸。修复方案：默认预设图层完全跳过容灾监控和切换验证。

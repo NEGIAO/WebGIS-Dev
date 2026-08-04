@@ -306,7 +306,7 @@ import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
 import { triggerBrowserDownload, triggerUrlDownload } from '@common/utils/browserDownload';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '@/constants';
-import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@ol/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import ExtentPicker from '@common/components/ExtentPicker.vue';
 
 defineProps({

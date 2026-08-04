@@ -15,7 +15,7 @@ import {
     apiAdminUpdateDefaultBasemapIndex,
     apiAdminUpdateRows,
 } from '@/api/backend';
-import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '@ol/basemap/constants/basemapResolver';
+import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '@common/basemap/basemapOptions';
 
 const message = useMessage();
 const { t } = useLocale();

@@ -1,5 +1,5 @@
 import { fromLonLat, toLonLat } from 'ol/proj';
-import { olZoomToCesiumHeight } from '@ol/utils/viewScaleConverter';
+import { olZoomToCesiumHeight } from '@common/utils/viewScaleConverter';
 import {
     getAgentBasemapPresetLabel,
     isAgentBasemapPresetId,

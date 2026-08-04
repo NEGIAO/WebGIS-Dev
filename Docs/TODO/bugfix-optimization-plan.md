@@ -152,6 +152,24 @@
 ### P3-6 TS 化推进
 - 第一批 stores/ 与 utils/ 纯逻辑层（js:ts=257:85）+ vue-tsc 门禁 advisory 接入。
 
+### P3-7 H7 跨层违规清零 + TOCPanel 拆解（L3 架构级，2026-08-04 V3.5.11 已解 10/19 处）
+- **已解**（V3.5.11）：`runtimeMapTokens`/`viewScaleConverter`/`basemapPresets`+`basemapOptions` 纯数据/纯基础设施迁入 common 域；`useTOCStore` 经 `layerRemovalHandler` 回调解耦 OL 依赖；`isValidLabel` 直连 common。
+- **剩余 9 处**（均为 TOCPanel 双引擎组件 import + SidePanel 懒加载路由 import）：
+  - `TOCPanel.vue` 7 处：`usePositionCodeTool`(ol)、`useStyleEditor`(ol)、`@ol/utils/biz/index`、`AmapAoiInjectDialog`(ol)、`MapDownloader`(ol)、`handleCesiumLayerTreeAction`(cesium)、`useCesiumLayersStore`(cesium)
+  - `SidePanel.vue` 2 处：`BusPlannerPanel`/`DrivingPlannerPanel` 懒加载（ol）
+- **路径**：TOCPanel（2493 行 God 组件）拆解为 OL/Cesium 双 TOC 组件 + 共享 composable，属 L3 架构级，单独立项。
+
+### P3-8 cesium.d.ts 83 个 any → 真类型（L3 依赖变更）
+- Cesium 经 CDN 加载无官方类型；手写 83 个声明属臆造 API 签名风险。
+- 正确路径：迁移至 npm `cesium` 包（自带类型）或引入 `@cesium/engine` + `@cesium/widgets`；涉及 CDN shim 移除、构建配置、全局 `Cesium` 变量清理。L3 依赖变更，单独立项。
+
+### P3-9 tsconfig strict:false → strict:true（L3 大规模重构）
+- 开启 strict 将暴露大量隐式 any（2000+ 行组件普遍）。需分阶段：先 `noImplicitAny:true` 单开，收敛后再全 strict。工作量 1–2 天，单独立项。
+
+### P3-10 存疑缺陷待实机复现（不施工，复现后升级 P 级）
+- **罗盘旋转 90° / 文字倒置**：静态读码无法确认（`CompassManager.drawRadialText` 旋转逻辑为标注做法）；需实机复现后定性。
+- **Cesium GPU 资源泄漏**：wind/fluid 生命周期静态审查为合理管理；需 DevTools 帧缓冲监控实机复现。
+
 ---
 
 ## 建议执行顺序

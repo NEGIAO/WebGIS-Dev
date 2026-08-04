@@ -303,7 +303,7 @@
                 </div>
             </div>
 
-            <!-- 4. 配额配置 -->
+            <!-- 4. AI 聊天配额 -->
             <div
                 v-show="activeTab === 'quota'"
                 id="api-panel-quota"
@@ -312,7 +312,16 @@
                 aria-labelledby="api-tab-quota"
             >
                 <div class="panel-header">
-                    <h2>API 配额配置</h2>
+                    <h2>AI 聊天配额</h2>
+                    <div class="section-actions">
+                        <button
+                            v-if="!editingQuota"
+                            class="btn btn-edit"
+                            @click="startEditQuota"
+                        >
+                            编辑配额
+                        </button>
+                    </div>
                 </div>
 
                 <div
@@ -323,42 +332,81 @@
                 </div>
 
                 <div
+                    v-else-if="editingQuota"
+                    class="edit-form"
+                >
+                    <div class="config-grid">
+                        <label class="config-item">
+                            <span>游客每日限额</span>
+                            <input
+                                v-model.number="quotaDraft.guest_limit"
+                                type="number"
+                                min="1"
+                                max="100000"
+                                class="key-input"
+                            />
+                        </label>
+                        <label class="config-item">
+                            <span>注册用户每日限额</span>
+                            <input
+                                v-model.number="quotaDraft.registered_limit"
+                                type="number"
+                                min="1"
+                                max="100000"
+                                class="key-input"
+                            />
+                        </label>
+                    </div>
+                    <div class="button-group">
+                        <button
+                            class="btn btn-save"
+                            :disabled="savingQuota"
+                            @click="saveQuotaConfig"
+                        >
+                            {{ savingQuota ? '保存中...' : '保存' }}
+                        </button>
+                        <button
+                            class="btn btn-cancel"
+                            @click="cancelEditQuota"
+                        >
+                            取消
+                        </button>
+                    </div>
+                </div>
+
+                <div
                     v-else
                     class="quota-grid"
                 >
-                    <div
-                        v-for="(config, role) in quotaConfig"
-                        :key="role"
-                        class="quota-card"
-                    >
+                    <div class="quota-card">
                         <div class="quota-header">
-                            <h3>{{ getRoleLabel(role) }}</h3>
-                            <span
-                                class="role-badge"
-                                :class="role.toLowerCase()"
-                                >{{ role }}</span
-                            >
+                            <h3>游客</h3>
+                            <span class="role-badge guest">Guest</span>
                         </div>
                         <div class="quota-body">
                             <div class="quota-item">
                                 <label>每日限额：</label>
-                                <span class="quota-value">
-                                    {{
-                                        config.daily_limit === null
-                                            ? '无限制'
-                                            : `${config.daily_limit} 次`
-                                    }}
-                                </span>
+                                <span class="quota-value">{{ chatQuota.guest }} 次</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="quota-card">
+                        <div class="quota-header">
+                            <h3>注册用户</h3>
+                            <span class="role-badge registered">Registered</span>
+                        </div>
+                        <div class="quota-body">
+                            <div class="quota-item">
+                                <label>每日限额：</label>
+                                <span class="quota-value">{{ chatQuota.registered }} 次</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="quota-note">
-                    📝 <strong>说明：</strong> 配额通过后端环境变量配置，如需修改请编辑
-                    <code>GUEST_DAILY_API_QUOTA</code>、<code>REGISTERED_DAILY_API_QUOTA</code>
-                    环境变量后重启后端服务。
-                </div>
+                <p class="quota-note">
+                    📝 <strong>说明：</strong> 控制 AI 对话（Agent Chat）每日调用次数上限，修改后立即生效。
+                </p>
             </div>
 
             <!-- 5. API 密钥管理 -->
@@ -381,7 +429,8 @@ import {
     apiAdminApiUsageByUser,
     apiAdminApiUsageByEndpoint,
     apiAdminApiLogs,
-    apiAdminQuotaConfig,
+    apiAdminGetAgentConfig,
+    apiAdminUpdateAgentConfig,
 } from '@/api/backend';
 import { useMessage } from '@common/shell/useMessage';
 import ApiKeysManagementPanel from './ApiKeysManagementPanel.vue';
@@ -393,7 +442,7 @@ const tabs = [
     { id: 'by-user', icon: '📊', label: '用户统计', desc: '用户维度用量' },
     { id: 'by-endpoint', icon: '🔗', label: '端点统计', desc: '接口热度与耗时' },
     { id: 'logs', icon: '📝', label: '调用日志', desc: '请求明细追踪' },
-    { id: 'quota', icon: '⚙️', label: '配额配置', desc: '角色访问限制' },
+    { id: 'quota', icon: '🤖', label: 'AI 聊天配额', desc: '对话次数限制' },
     { id: 'api-keys', icon: '🔑', label: '密钥管理', desc: '第三方密钥池' },
 ];
 
@@ -424,8 +473,8 @@ const logsFilter = ref({
     offset: 0,
 });
 
-// 配额配置
-const quotaConfig = ref({});
+// AI 聊天配额
+const chatQuota = ref({ guest: 10, registered: 100 });
 const loadingQuota = ref(false);
 
 function formatTime(isoString) {
@@ -463,14 +512,6 @@ function getStatusClass(statusCode) {
     return 'info';
 }
 
-function getRoleLabel(role) {
-    const labels = {
-        guest: '游客',
-        registered: '注册用户',
-        admin: '管理员',
-    };
-    return labels[role] || role;
-}
 
 async function loadUserStats() {
     loadingUserStats.value = true;
@@ -529,12 +570,64 @@ async function nextLogsPage() {
 async function loadQuotaConfig() {
     loadingQuota.value = true;
     try {
-        const result = await apiAdminQuotaConfig();
-        quotaConfig.value = result?.data || {};
+        const result = await apiAdminGetAgentConfig();
+        const src = result?.data?.chat_quota;
+        if (src && typeof src.guest === 'number' && typeof src.registered === 'number') {
+            chatQuota.value = { guest: src.guest, registered: src.registered };
+        } else {
+            chatQuota.value = { guest: 10, registered: 100 };
+        }
     } catch (error) {
-        message.error(`加载配额配置失败: ${error.message}`);
+        console.warn('[ApiManagementPanel] 读取聊天配额失败:', error);
+        message.error(`加载配额失败: ${error.message}`);
     } finally {
         loadingQuota.value = false;
+    }
+}
+
+// 配额可编辑状态
+const editingQuota = ref(false);
+const savingQuota = ref(false);
+const quotaDraft = ref({ guest_limit: 10, registered_limit: 100 });
+
+function startEditQuota() {
+    quotaDraft.value = {
+        guest_limit: chatQuota.value.guest,
+        registered_limit: chatQuota.value.registered,
+    };
+    editingQuota.value = true;
+}
+
+function cancelEditQuota() {
+    editingQuota.value = false;
+}
+
+async function saveQuotaConfig() {
+    const guestLimit = Number(quotaDraft.value.guest_limit);
+    const registeredLimit = Number(quotaDraft.value.registered_limit);
+
+    if (!Number.isFinite(guestLimit) || guestLimit < 1) {
+        message.error('游客每日限额必须 ≥ 1');
+        return;
+    }
+    if (!Number.isFinite(registeredLimit) || registeredLimit < 1) {
+        message.error('注册用户每日限额必须 ≥ 1');
+        return;
+    }
+
+    savingQuota.value = true;
+    try {
+        await apiAdminUpdateAgentConfig({
+            guest_daily_quota: guestLimit,
+            registered_daily_quota: registeredLimit,
+        });
+        message.success('配额配置已保存');
+        editingQuota.value = false;
+        await loadQuotaConfig();
+    } catch (error) {
+        message.error(`保存配额失败: ${error.message}`);
+    } finally {
+        savingQuota.value = false;
     }
 }
 
@@ -1082,6 +1175,38 @@ onMounted(async () => {
     font-weight: 600;
 }
 
+/* 配额编辑表单 */
+.section-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--acc-text-default, #2d5a3a);
+}
+
+.config-item .key-input {
+    max-width: 100%;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
 @media (max-width: 768px) {
     .tabs-nav {
         grid-template-columns: repeat(5, minmax(132px, 1fr));
@@ -1232,5 +1357,57 @@ onMounted(async () => {
     .quota-value {
         font-size: 15px;
     }
+}
+
+/* 配额编辑按钮 */
+.btn-edit {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary);
+    border: 1px solid var(--brand-primary);
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-edit:hover {
+    background: var(--brand-primary);
+    color: white;
+}
+
+.btn-save {
+    background: var(--brand-primary);
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-save:hover {
+    background: var(--brand-primary-dark);
+}
+
+.btn-save:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-cancel {
+    background: var(--border-light, #e0e0e0);
+    color: var(--text-primary, #333);
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-cancel:hover {
+    background: #bdbdbd;
 }
 </style>

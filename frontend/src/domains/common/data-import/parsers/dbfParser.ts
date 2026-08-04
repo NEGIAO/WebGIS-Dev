@@ -154,7 +154,9 @@ function decodeString(buffer: Uint8Array, encoding: string): string {
         const slice = buffer.slice(0, endIndex);
 
         // 对于常见编码，使用 TextDecoder
-        const supportedEncodings = ['UTF-8', 'UTF-16LE', 'UTF-16BE', 'ASCII'];
+        // GBK/GB2312/CP936 均映射到 WHATWG 编码标准的 gbk，浏览器原生支持，
+        // 此前 GBK 走下方 fallback 会把中文全部替换成方块符，造成数据丢失。
+        const supportedEncodings = ['UTF-8', 'UTF-16LE', 'UTF-16BE', 'ASCII', 'GBK', 'GB2312', 'CP936'];
         if (supportedEncodings.includes(encoding)) {
             try {
                 return new TextDecoder(encoding === 'ASCII' ? 'UTF-8' : encoding, { fatal: false }).decode(slice);

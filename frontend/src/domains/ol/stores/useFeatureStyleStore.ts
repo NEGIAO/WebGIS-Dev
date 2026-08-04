@@ -23,6 +23,7 @@
 
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { registerLayerRemovalHandler } from '@common/layer-tree/stores/layerRemovalHandler';
 import {
     buildFeatureKey,
     getFeatureIdFromFeatureKey,
@@ -527,3 +528,13 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
 
 // 重新导出类型供外部消费
 export type { FeatureRef };
+
+// TOC 移除图层时联动清理该图层高亮（跨域解耦：common 的 useTOCStore 不再反向 import 本模块，
+// 改为在本模块注册回调，useTOCStore 通过 notifyLayerRemoved 触发）
+registerLayerRemovalHandler((layerId: string) => {
+    try {
+        useFeatureStyleStore().clearHighlightsByLayer(layerId, null);
+    } catch {
+        // pinia 尚未初始化（模块加载期）→ 忽略；后续图层移除仍会正常触发
+    }
+});

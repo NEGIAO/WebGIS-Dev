@@ -167,7 +167,7 @@ import {
     getRuntimeMapTokensSync,
     loadRuntimeMapTokens,
     markRuntimeMapTokenFailed,
-} from '@ol/services/runtimeMapTokens';
+} from '@common/services/runtimeMapTokens';
 
 let Cesium = null;
 let viewer = null;

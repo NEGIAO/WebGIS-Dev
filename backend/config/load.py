@@ -388,7 +388,7 @@ def _build_settings() -> BackendSettings:
         smtp_port=get_int("SMTP_PORT", 80, minimum=1, maximum=65535),
         smtp_user=get_str("SMTP_USER", ""),
         smtp_password=get_str("SMTP_PASSWORD", ""),
-        agent_api_key=get_str("AGENT_API_KEY", "") or get_str("AGENT_TOKEN", ""),
+        agent_api_key=get_str("AGENT_API_KEY", ""),
         agent_base_url=get_str("AGENT_BASE_URL"),
         agent_model=get_str("AGENT_MODEL", ""),
         agent_timeout_seconds=get_int("AGENT_TIMEOUT_SECONDS", 45, minimum=5, maximum=300),

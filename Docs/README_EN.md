@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitors" />
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="Views" />
   <img src="https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green" alt="Total Clones" />
   <img src="https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue" alt="Unique Cloners" />
   <img src="https://img.shields.io/github/last-commit/negiao/webgis-dev" alt="Last Commit" />
@@ -68,10 +68,9 @@
   - [Architecture Docs](#architecture-docs)
     - [System-Level Architecture](#system-level-architecture)
     - [Feature Architecture](#feature-architecture)
-    - [Architecture Docs Directory](/docs/Architecture/)
 - [📜 Version History](#-version-history)
 - [📄 License](#-license)
-- [👤 Author & Hosting](#-author--hosting)
+- [👤 Author \& Hosting](#-author--hosting)
 
 ---
 

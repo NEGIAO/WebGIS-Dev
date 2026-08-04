@@ -263,7 +263,7 @@ import {
     getRuntimeMapTokensSync,
     loadRuntimeMapTokens,
     markRuntimeMapTokenFailed,
-} from '@ol/services/runtimeMapTokens';
+} from '@common/services/runtimeMapTokens';
 import { apiReverseGeocodeWithFallback } from '@/api';
 import { apiGetRuntimeDefaults } from '@/api/backend';
 

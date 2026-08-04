@@ -41,7 +41,7 @@ def build_public_config() -> Dict[str, Any]:
             "oauth_github": bool(s.github_oauth_client_id and s.github_oauth_client_secret),
             "email_verification": bool(s.smtp_user and s.smtp_password),
             # 兼容旧字段名：值已改为 L2 管理员 key 池是否配置，不再表示 env/HF Secrets。
-            "agent_env_key": bool(_has_l2_key("agent_api_key") or _has_l2_key("agent_token")),
+            "agent_env_key": bool(_has_l2_key("agent_api_key")),
             "amap": bool(_has_l2_key("amap_key")),
             "supabase": bool(s.supabase_url and s.supabase_key),
         },

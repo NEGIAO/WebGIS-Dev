@@ -8,18 +8,13 @@ import { LAYER_SOURCE_DEFINITIONS } from './basemapConfig';
 import {
     ALL_BASEMAP_PRESETS,
     DEFAULT_BASEMAP_PRESET_ID,
-} from './basemapPresets';
+} from '@common/basemap/basemapPresets';
 
 // ========== 内部索引 ==========
 const LAYER_SOURCE_MAP = new Map(LAYER_SOURCE_DEFINITIONS.map((item) => [item.id, item]));
 const BASEMAP_PRESET_MAP = new Map(ALL_BASEMAP_PRESETS.map((item) => [item.id, item]));
 
 // ========== 解析函数 ==========
-function resolveDefaultBasemapLayerIndex(): number {
-    const index = ALL_BASEMAP_PRESETS.findIndex((preset) => preset.id === DEFAULT_BASEMAP_PRESET_ID);
-    return index >= 0 ? index : 0;
-}
-
 function resolveDefaultVisibleLayerIdSet(): Set<string> {
     const preset = BASEMAP_PRESET_MAP.get(String(DEFAULT_BASEMAP_PRESET_ID || ''));
     const stack =
@@ -38,19 +33,10 @@ function resolveDefaultVisibleLayerIdSet(): Set<string> {
     return visibleLayerIdSet;
 }
 
-/** 默认底图在 URL_LAYER_OPTIONS 中的索引 */
-export const DEFAULT_BASEMAP_LAYER_INDEX = resolveDefaultBasemapLayerIndex();
-
 const DEFAULT_VISIBLE_LAYER_ID_SET = resolveDefaultVisibleLayerIdSet();
 
-/** URL 图层选项列表：定义已抽离至 basemapPresets.ts(纯数据层),此处 re-export 保持旧 import 路径兼容 */
-export { URL_LAYER_OPTIONS } from './basemapPresets';
-
-/** 预设底图选项列表（用于 UI 下拉菜单） */
-export const BASEMAP_OPTIONS = ALL_BASEMAP_PRESETS.map((preset) => ({
-    value: preset.id,
-    label: preset.label,
-}));
+/** 纯数据常量已迁至 common 域（@common/basemap/basemapOptions），此处 re-export 保持旧 import 路径兼容 */
+export { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS, BASEMAP_OPTIONS } from '@common/basemap/basemapOptions';
 
 /** 获取一个 option 对应的真实图层堆叠（去重，保序） */
 export function resolvePresetLayerIds(optionId: string): string[] {

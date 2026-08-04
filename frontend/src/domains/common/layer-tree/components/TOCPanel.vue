@@ -561,7 +561,7 @@ import {
     processCoordinateInput,
 } from '@ol/utils/biz/index';
 import { apiAddressGeocode, apiReverseGeocodeWithFallback } from '@/api';
-import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@ol/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import LayerPanel from '@common/layer-tree/components/LayerPanel.vue';
 import SharedResourceTreeItem from '@common/layer-tree/components/SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from '@ol/search/components/AmapAoiInjectDialog.vue';

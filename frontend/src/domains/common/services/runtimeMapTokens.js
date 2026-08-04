@@ -62,6 +62,12 @@ function normalizeRuntimeTokenPayload(payload = {}) {
         ...toTokenArray(pools.cesium_ion_token || pools.cesiumIonToken),
         ...cachedTokens.cesiumIonTokens,
     ]);
+    const amapKeys = normalizeTokenList([
+        data.amap_key,
+        data.amapKey,
+        ...toTokenArray(pools.amap_key || pools.amapKey),
+        ...cachedTokens.amapKeys,
+    ]);
     activeTokenIndexes = {
         tianditu_tk: Math.min(
             activeTokenIndexes.tianditu_tk || 0,
@@ -71,14 +77,20 @@ function normalizeRuntimeTokenPayload(payload = {}) {
             activeTokenIndexes.cesium_ion_token || 0,
             Math.max(cesiumIonTokens.length - 1, 0),
         ),
+        amap_key: Math.min(
+            activeTokenIndexes.amap_key || 0,
+            Math.max(amapKeys.length - 1, 0),
+        ),
     };
 
     return {
         tiandituTk: tiandituTokens[activeTokenIndexes.tianditu_tk] || tiandituTokens[0] || '',
         cesiumIonToken:
             cesiumIonTokens[activeTokenIndexes.cesium_ion_token] || cesiumIonTokens[0] || '',
+        amapKey: amapKeys[activeTokenIndexes.amap_key] || amapKeys[0] || '',
         tiandituTokens,
         cesiumIonTokens,
+        amapKeys,
     };
 }
 
@@ -92,8 +104,12 @@ export function markRuntimeMapTokenFailed(keyName) {
         return { switched: false, tokens: getRuntimeMapTokensSync() };
     }
 
-    const poolKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonTokens' : 'tiandituTokens';
-    const activeKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonToken' : 'tiandituTk';
+    const poolKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonTokens'
+        : normalizedKey === 'amap_key' ? 'amapKeys'
+        : 'tiandituTokens';
+    const activeKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonToken'
+        : normalizedKey === 'amap_key' ? 'amapKey'
+        : 'tiandituTk';
     const tokens = cachedTokens[poolKey] || [];
     if (tokens.length <= 1) {
         return { switched: false, tokens: getRuntimeMapTokensSync() };
@@ -146,6 +162,7 @@ export function clearRuntimeMapTokensCache() {
     activeTokenIndexes = {
         tianditu_tk: 0,
         cesium_ion_token: 0,
+        amap_key: 0,
     };
     hasLoadedRuntimeTokens = false;
     loadPromise = null;

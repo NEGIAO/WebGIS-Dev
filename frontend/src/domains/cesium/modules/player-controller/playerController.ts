@@ -747,8 +747,8 @@ export class playerController {
     setCamLookAtHeightRatio(r: number) { this.cam.lookAtHeightRatio = r; }
     // 设置鼠标模式
     setThirdMouseMode(mode: 0 | 1 | 2 | 3 | 4 | 5) { this.cam.mouseMode = mode; this.cam.setPointerLock(); }
-    // 设置缩放开关
-    setEnableZoom(e: boolean) { this.cam.zoomEnabled = e; this.viewer.scene.screenSpaceCameraController.enableZoom = false; }
+    // 设置缩放开关（同步 Cesium 相机控制器，使 enableZoom=false 时滚轮缩放也被禁用）
+    setEnableZoom(e: boolean) { this.cam.zoomEnabled = e; this.viewer.scene.screenSpaceCameraController.enableZoom = e; }
 
     // --- 相机 ---
     // 切换视角模式

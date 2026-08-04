@@ -1,4 +1,4 @@
-import { BASEMAP_PRESETS, URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapPresets';
+import { BASEMAP_PRESETS, URL_LAYER_OPTIONS } from '@common/basemap/basemapPresets';
 import { decodeCesiumCameraState, decodeCesiumPoseState } from '@common/url-state/crypto';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, normalizeMapView } from '@common/url-state/urlConstants';
 import { getCurrentQuerySnapshot } from '@common/url-state/urlQueryReader';

@@ -576,11 +576,11 @@ import {
     apiAdminGetDefaultAIConfig,
     apiAdminUpdateDefaultAIConfig,
 } from '@/api/backend';
-import { clearRuntimeMapTokensCache } from '@ol/services/runtimeMapTokens';
+import { clearRuntimeMapTokensCache } from '@common/services/runtimeMapTokens';
 
 const message = useMessage();
 const { t, language } = useLocale();
-const frontendRuntimeKeyNames = new Set(['tianditu_tk', 'cesium_ion_token']);
+const frontendRuntimeKeyNames = new Set(['tianditu_tk', 'cesium_ion_token', 'amap_key']);
 
 const managedApiKeys = computed(() => [
     { key: 'amap_key', label: t('apiKeys.amapKey') },
@@ -710,7 +710,7 @@ async function loadKeysStatus() {
         const data = result?.data || {};
         keysStatus.value = {
             amap_key: normalizeKeyStatus(data.amap_key),
-            agent_api_key: normalizeKeyStatus(data.agent_api_key || data.agent_token),
+            agent_api_key: normalizeKeyStatus(data.agent_api_key),
             tianditu_tk: normalizeKeyStatus(data.tianditu_tk),
             cesium_ion_token: normalizeKeyStatus(data.cesium_ion_token),
         };

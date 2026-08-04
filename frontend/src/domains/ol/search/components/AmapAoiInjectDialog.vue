@@ -143,7 +143,7 @@
 import { computed } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
-import { getRuntimeMapTokensSync } from '@ol/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync } from '@common/services/runtimeMapTokens';
 
 const message = useMessage();
 const { t } = useLocale();

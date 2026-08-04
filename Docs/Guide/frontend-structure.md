@@ -254,6 +254,9 @@ frontend/src/
 │   │   │   └── stores/
 │   │   │       ├── useAppStore.ts  # 全局应用状态
 │   │   │       └── useThemeStore.ts  # 主题状态
+│   │   ├── basemap/
+│   │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS + URL_LAYER_OPTIONS，零 ol/cesium 依赖，自 ol 域迁入）
+│   │   │   └── basemapOptions.ts  # 底图选项派生常量（DEFAULT_BASEMAP_LAYER_INDEX / BASEMAP_OPTIONS，自 ol 域 basemapResolver 迁入）
 │   │   ├── chat/
 │   │   │   ├── agent/
 │   │   │   │   ├── AgentExecutor.js  # Agent 响应拦截与工具调用
@@ -384,6 +387,7 @@ frontend/src/
 │   │   │   │   ├── commandDispatcher.js  # 菜单命令分发
 │   │   │   │   └── contextMenu.js  # 右键菜单项构建
 │   │   │   └── stores/
+│   │   │       ├── layerRemovalHandler.ts  # 图层移除回调注册表（跨域解耦：引擎域注册、common 触发）
 │   │   │       └── useTOCStore.ts  # TOC 元数据状态
 │   │   ├── map-view/
 │   │   │   ├── coordinateFormatter.js  # 坐标格式化
@@ -404,6 +408,8 @@ frontend/src/
 │   │   │   ├── TopBar.vue  # 顶栏（Logo + 搜索 + 用户菜单 + 引擎切换）
 │   │   │   ├── useMessage.js
 │   │   │   └── useMessageIslandMotion.js
+│   │   ├── services/
+│   │   │   └── runtimeMapTokens.js  # 运行时地图 token 池（纯基础设施，仅依赖 @/api/backend，自 ol 域迁入）
 │   │   ├── ui/
 │   │   │   ├── index.js  # 路由与守卫
 │   │   │   └── loading.js  # 全局 loading 控制（文案由调用方 t('loading.*')）
@@ -437,7 +443,8 @@ frontend/src/
 │   │   │   ├── labelValidator.ts  # 标签校验
 │   │   │   ├── normalize.ts  # 二值标记规范化
 │   │   │   ├── pathUtils.js  # 路径工具
-│   │   │   └── useMarkdownRenderer.js
+│   │   │   ├── useMarkdownRenderer.js
+│   │   │   └── viewScaleConverter.js  # OL zoom ↔ Cesium height 换算（纯数学零依赖，自 ol 域迁入）
 │   │   └── weather/
 │   │       ├── components/
 │   │       │   ├── WeatherChartPanel.vue
@@ -463,8 +470,7 @@ frontend/src/
 │       │   │   └── useBasemapSwipe.js  # 卷帘对比
 │       │   ├── constants/
 │       │   │   ├── basemapConfig.ts  # 底图配置唯一真相源（SSOT）：图源定义 + url/serviceType 字段 + getDescriptorById() 自动派生 Cesium 描述符
-│       │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS 自动兜底，零 ol 依赖，供登录页入口链安全消费）
-│       │   │   ├── basemapResolver.ts  # 解析逻辑（使用 ALL_BASEMAP_PRESETS）
+│       │   │   ├── basemapResolver.ts  # 解析逻辑（使用 ALL_BASEMAP_PRESETS；DEFAULT_BASEMAP_LAYER_INDEX/BASEMAP_OPTIONS/URL_LAYER_OPTIONS 纯数据常量 re-export 自 common/basemap）
 │       │   │   └── index.ts  # barrel export
 │       │   └── resilience/
 │       │       └── useBasemapResilience.js  # 底图熔断回退（超时/错误自动切换）
@@ -554,8 +560,7 @@ frontend/src/
 │       │   └── utils/
 │       │       └── coordinateInputHandler.js  # 坐标输入处理
 │       ├── services/
-│       │   ├── DistrictManager.ts  # 行政区划管理器
-│       │   └── runtimeMapTokens.js  # 运行时地图 token 池
+│       │   └── DistrictManager.ts  # 行政区划管理器
 │       ├── spatial-analysis/
 │       │   └── composables/
 │       │       ├── useDistrictManager.js
@@ -591,7 +596,6 @@ frontend/src/
 │           ├── attributeTableCsv.ts  # 属性表 CSV 导出（RFC4180 转义 + BOM + 下载）
 │           ├── useCoordinateSystemConversion.js
 │           ├── usePositionCodeTool.js
-│           ├── viewScaleConverter.js  # OL zoom ↔ Cesium height 换算
 │           └── biz/
 │               └── index.js  # 路由与守卫
 ├── locales/

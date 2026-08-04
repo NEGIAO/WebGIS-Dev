@@ -14,7 +14,7 @@ import {
     getGlobalUserLocationContext,
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
 } from '@common/map-view/services/userLocationContext';
-import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@ol/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import { useWeatherStore } from '@common/weather/stores/useWeatherStore';
 import {
     hasRainSignal,

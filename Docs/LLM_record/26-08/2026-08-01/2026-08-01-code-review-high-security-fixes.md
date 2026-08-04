@@ -1,5 +1,11 @@
 # Code Review HIGH 安全修复
 
+> ⚠️ **更正（2026-08-04 全量审查核对）**：本日志第 2 项「H13 /api/info 环境检查」与第 4 项「登录速率限制」已在**当日 19:30** 的 `2026-08-01-config-fix-and-cr-final.md`（V3.5.5）中**按用户决策刻意回滚**：
+> - `/api/info` → 开源项目故意暴露 API 结构，始终开放（移除 404 限制）
+> - 登录限速 → 用户明确要求无限次尝试，移除 `check_login_rate_limit()`/`record_login_attempt()` 及 `login_attempts` 表相关代码
+>
+> 故当前代码**不存在** `login_attempts` 表 / `check_login_rate_limit()` / `/api/info` 环境门控，属**最终意图而非回归**。读者请以本更正与 `config-fix-and-cr-final.md` 为准；本文档「遗留与风险」中的限流 fail-open 说明已失效。
+
 - **日期与时间**：2026-08-01 16:00
 - **任务等级**：L2
 - **问题分析**：

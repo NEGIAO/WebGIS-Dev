@@ -289,7 +289,7 @@ import {
     ref,
     watch,
 } from 'vue';
-import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@ol/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import { useLocale } from '@common/app/useLocale';
 
 // Load non-default tabs on first use; keep them mounted afterward to preserve state.

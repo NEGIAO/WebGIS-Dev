@@ -156,7 +156,7 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
-import { isValidLabel } from '@ol/utils/biz/index';
+import { isValidLabel } from '@common/utils/labelValidator';
 import {
     resolveFolderSelectionState,
     buildContextMenuItems,

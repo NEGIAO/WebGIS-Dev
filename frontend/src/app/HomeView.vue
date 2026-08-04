@@ -12,7 +12,7 @@ import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUn
 import { storeToRefs } from 'pinia';
 import { useMessage } from '@common/shell/useMessage';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, useMapViewUrlState } from '@ol/url-state/useMapViewUrlState';
-import { olZoomToCesiumHeight, cesiumHeightToOlZoom } from '@ol/utils/viewScaleConverter';
+import { olZoomToCesiumHeight, cesiumHeightToOlZoom } from '@common/utils/viewScaleConverter';
 import { encodeCesiumPoseState } from '@common/url-state/crypto';
 import { readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
 import { useRoute } from 'vue-router';
@@ -931,6 +931,7 @@ async function setMapView(view, { writeUrl = true } = {}) {
         isCesiumLoaded.value = false;
         CesiumContainer.value = null;
         cesiumContainerRef.value = null;
+        _cesiumLoadPromise = null;
     }
     return true;
 }

@@ -13,7 +13,6 @@ from api.auth import get_auth_db_connection
 from config import get_settings
 
 from .constants import (
-    AGENT_API_KEY_LEGACY,
     AGENT_API_KEY_PRIMARY,
     AGENT_CHAT_GUEST_DAILY_QUOTA,
     AGENT_CHAT_REGISTERED_DAILY_QUOTA,
@@ -651,22 +650,6 @@ def _resolve_agent_api_key_sync() -> Dict[str, Any]:
             "key_values": candidates,
             "updated_at": str(primary.get("updated_at") or ""),
             "source": "db-primary",
-        }
-
-    legacy = _get_api_key_row_sync(AGENT_API_KEY_LEGACY)
-    if legacy and str(legacy.get("key_value") or "").strip():
-        try:
-            from api.api_keys_management import _get_api_key_candidates_sync
-
-            candidates = _get_api_key_candidates_sync(AGENT_API_KEY_LEGACY)
-        except Exception:
-            candidates = [str(legacy.get("key_value") or "").strip()]
-        return {
-            "key_name": AGENT_API_KEY_LEGACY,
-            "key_value": str(legacy.get("key_value") or "").strip(),
-            "key_values": candidates,
-            "updated_at": str(legacy.get("updated_at") or ""),
-            "source": "db-legacy",
         }
 
     env_key = get_settings().agent_api_key

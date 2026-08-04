@@ -44,8 +44,8 @@ import {
 
 // ========== 预设目录(已抽离至 basemapPresets.ts,原位 re-export 保持兼容) ==========
 // 抽离原因见 basemapPresets.ts 头注释(切断登录页入口 → ol 的打包链)。
-export { BASEMAP_PRESETS, DEFAULT_BASEMAP_PRESET_ID } from './basemapPresets';
-export type { BasemapPresetDefinition } from './basemapPresets';
+export { BASEMAP_PRESETS, DEFAULT_BASEMAP_PRESET_ID } from '@common/basemap/basemapPresets';
+export type { BasemapPresetDefinition } from '@common/basemap/basemapPresets';
 
 
 // ========== 类型定义 ==========

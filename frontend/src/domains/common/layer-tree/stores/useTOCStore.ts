@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { useFeatureStyleStore } from '@ol/stores/useFeatureStyleStore';
+import { notifyLayerRemoved } from './layerRemovalHandler';
 
 export type TOCLayerMetadata = {
     id: string;
@@ -166,16 +166,9 @@ export const useTOCStore = defineStore('tocStore', () => {
             selectedDistrictNodes.value = nextNodes;
         }
 
-        // ★ 联动清理要素高亮 store：TOC 移除图层时同步清除该图层所有高亮数据
-        //    通过延迟引用避免循环依赖（featureStyleStore 不依赖 tocStore）
-        try {
-            const featureStyleStore = useFeatureStyleStore();
-            if (featureStyleStore && typeof featureStyleStore.clearHighlightsByLayer === 'function') {
-                featureStyleStore.clearHighlightsByLayer(id, null);
-            }
-        } catch (error) {
-            console.warn('[useTOCStore] removeLayerMeta → clearHighlightsByLayer failed:', error);
-        }
+        // ★ 联动清理要素高亮：通过注册回调通知引擎域（OL featureStyleStore 在 ol 域
+        //    注册），解除 useTOCStore 对 OL 域的 import 依赖（跨层解耦）。
+        notifyLayerRemoved(id);
     }
 
     function clearLayerMeta(): void {

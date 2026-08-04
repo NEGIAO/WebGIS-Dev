@@ -13,7 +13,6 @@ from config import get_bool, get_float, get_int, get_settings, get_str
 logger = logging.getLogger(__name__)
 
 AGENT_API_KEY_PRIMARY = "agent_api_key"
-AGENT_API_KEY_LEGACY = "agent_token"
 
 AGENT_CHAT_GUEST_DAILY_QUOTA = get_int("AGENT_CHAT_GUEST_DAILY_QUOTA", 10, minimum=1, maximum=1000)
 AGENT_CHAT_REGISTERED_DAILY_QUOTA = get_int("AGENT_CHAT_REGISTERED_DAILY_QUOTA", 100, minimum=1, maximum=10000)

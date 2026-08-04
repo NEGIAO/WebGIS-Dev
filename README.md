@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="visitors" />
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="Views" />
   <img src="https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green" alt="Total Clones" />
   <img src="https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue" alt="Unique Cloners" />
   <img src="https://img.shields.io/github/last-commit/negiao/webgis-dev" alt="Last Commit" />
@@ -60,6 +60,7 @@
   - [配置（双 env 文件架构，先看这一处）](#配置双-env-文件架构先看这一处)
   - [一键启动（推荐）](#一键启动推荐)
   - [手动启动（高级用户）](#手动启动高级用户)
+  - [本地开发镜像（快速获取）](#本地开发镜像快速获取)
 - [📁 项目结构](#-项目结构)
 - [🏗️ 系统架构](#️-系统架构)
   - [分层架构总览](#分层架构总览)
@@ -69,7 +70,6 @@
   - [架构文档](#架构文档)
     - [系统级架构](#系统级架构)
     - [功能架构](#功能架构)
-    - [架构文档目录](/docs/Architecture/)
 - [📜 版本演进](#-版本演进)
 - [📄 许可证](#-许可证)
 - [👤 作者与托管](#-作者与托管)
@@ -78,7 +78,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.10），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.11），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -196,7 +196,15 @@ docker build -t webgis-backend .
 
 </details>
 
----
+### 本地开发镜像（快速获取）
+
+后端 Docker 镜像已托管至 Docker Hub，构建日期 **2026-08-03**，对应前端V3.5.10版本；可直接拉取用于本地开发，无需本地构建：
+
+```bash
+docker pull negiao/webgis_dev:V3.5
+```
+
+> 镜像与 `docker-compose.yml` 中 `HF` 服务的基础镜像一致，适用于 `WebGIS-Dev` 本地开发环境启动。
 
 ## 📁 项目结构
 
@@ -370,9 +378,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.11** | 2026-08-04 | Code Review 修复批次（H7 跨层违规 10/19 处，H8 缩放，GBK DBF，blob URL revoke，H3 日志更正）+ 后端清理 agent_token 兼容名 + amap_key 加入前端 runtime token 白名单 + 管理员面板配额可编辑化（ApiManagementPanel 状态机 + 前后端字段对齐）+ HomeView 2D/3D 切换白屏修复（`_cesiumLoadPromise` 重置）。详见[日志](Docs/LLM_record/26-08/2026-08-04/2026-08-04-code-review-fix-batch.md) |
 | **V3.5.10** | 2026-08-03 | 默认底图跳过容灾监控：`useBasemapLayerBootstrap` 解析默认预设图层集合，跳过 `monitorLayerTimeout` 接入；`useBasemapSelectionWatcher` 跳过默认预设图层的切换验证。修复首屏加载时自定义瓦片（仅覆盖中国）大量瓦片 404 触发 `[底图降级]` message 轰炸的问题。详见[日志](Docs/LLM_record/26-08/2026-08-03/2026-08-03-skip-monitoring-for-default-basemap.md) |
 | **V3.5.9** | 2026-08-02 | 底图配置架构重构（SSOT）：删除 `sourceDescriptors.ts`（887 行），Cesium 描述符由 `basemapConfig.ts` 的 `getDescriptorById()` 自动派生；`basemapPresets.ts` 新增 `ALL_BASEMAP_PRESETS` 自动兜底未配置底图（`Other: xxx` 前缀）；废弃 Google 主机切换机制删除（`GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl`）；`index.ts`/`basemapProviderFactory.ts`/`layerUtils.js` import 路径统一指向 `basemapConfig`。详见[日志](Docs/LLM_record/26-08/2026-08-02/2026-08-02-basemap-ssot-refactor.md) |
-| **V3.5.8** | 2026-08-02 | 暂存区 Review 修复：`client.js` 移除 `require()`（纯 ESM 浏览器不可用，改回静态 import `useMessage`）；`_read_app_version()` 容器内读不到根 README → deploy.yml `cp README.md backend/README.md`（版本号仍 100% 来自根 README，无新配置 key）；删除重复 action `setSelectedEditLayerId`（复用 `setStyleTarget`）；`browserDownload.ts` 从 ol 域移至 common 域（消除 common→ol 反向依赖）；新增 `vue-shims.d.ts` 修复 .ts import .vue 类型报错。详见[日志](Docs/LLM_record/26-08/2026-08-02/2026-08-02-staged-review-fixes.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -397,6 +405,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.10 · 开发中 · 最后更新 2026-08-03</sub>
+<sub>V3.5.11 · 开发中 · 最后更新 2026-08-04</sub>
 
 </div>

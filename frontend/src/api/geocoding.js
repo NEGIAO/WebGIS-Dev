@@ -16,7 +16,7 @@ import axios from 'axios';
 import backendAPI from './backend';
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@common/data-import/crs/coordTransform';
 import { getAmapErrorMessage } from './httpStatusMap';
-import { getRuntimeMapTokensSync } from '@ol/services/runtimeMapTokens';
+import { getRuntimeMapTokensSync } from '@common/services/runtimeMapTokens';
 import { TIANDITU_API_BASE_URL } from '@/config/publicRuntime';
 
 const AMAP_SUCCESS_STATUS = '1';

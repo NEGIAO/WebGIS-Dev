@@ -250,6 +250,10 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
 
                         if (url) {
                             blobUrl = url;
+                            // 成功加载后立即 revoke：图片数据已解码进 img 元素，释放 object URL 不影响显示
+                            img.addEventListener('load', () => {
+                                URL.revokeObjectURL(url);
+                            }, { once: true });
                             img.addEventListener('error', () => {
                                 markTileAsError(tile);
                                 URL.revokeObjectURL(url);

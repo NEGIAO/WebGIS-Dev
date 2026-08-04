@@ -618,12 +618,6 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": True,
         "description": "Agent 主密钥（管理员面板 api_keys.agent_api_key；env 仅旧部署兜底）",
     },
-    "AGENT_TOKEN": {
-        "layer": "L2",
-        "default": "",
-        "secret": True,
-        "description": "Agent 主密钥兼容名（管理员面板 api_keys.agent_token；env 仅旧部署兜底）",
-    },
     "AMAP_WEB_SERVICE_KEY": {
         "layer": "L2",
         "default": "",
