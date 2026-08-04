@@ -188,14 +188,22 @@ async def build_geotiff_from_tiles(
                     for x, y in batch
                 ]
 
-                for task in asyncio.as_completed(tasks):
-                    x, y, tile_bytes = await task
-                    processed_tiles += 1
-                    if tile_bytes:
-                        data, _, _ = _decode_tile(tile_bytes)
-                        _write_tile_array(dst, data, x, y, min_x, min_y, tile_size)
-                        downloaded_tiles += 1
-                    await maybe_report("downloading")
+                try:
+                    for task in asyncio.as_completed(tasks):
+                        x, y, tile_bytes = await task
+                        processed_tiles += 1
+                        if tile_bytes:
+                            data, _, _ = _decode_tile(tile_bytes)
+                            _write_tile_array(dst, data, x, y, min_x, min_y, tile_size)
+                            downloaded_tiles += 1
+                        await maybe_report("downloading")
+                except asyncio.CancelledError:
+                    # 取消时：先取消所有未完成的子任务，避免它们使用已关闭的 client
+                    for task in tasks:
+                        task.cancel()
+                    # 等待所有子任务彻底结束（忽略取消异常）
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                    raise  # 继续向上传播 CancelledError
 
     return {
         "zoom": zoom,
