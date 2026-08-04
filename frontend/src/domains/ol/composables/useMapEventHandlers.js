@@ -33,6 +33,7 @@ import { Point, Polygon } from 'ol/geom';
 import { unByKey } from 'ol/Observable';
 import { normalizeHtmlAttributes } from '@ol/layer/composables/useLayerMetadataNormalization';
 import { getFeatureIdFromFeature } from '@common/data-protocol/featureKey';
+import { tileHDRendering } from '@ol/layer/composables/useTileHDRendering';
 
 export function createMapEventHandlers({
     mapInstanceRef,
@@ -225,7 +226,10 @@ export function createMapEventHandlers({
         // ========== 缩放/中心事件 ==========
         olKeys.push(map.getView().on('change:resolution', () => {
             const zoom = map.getView().getZoom();
-            if (zoom !== undefined) currentZoomRef.value = Math.round(zoom);
+            if (zoom !== undefined) {
+                // 跟随 tileHDRendering 开关：开启→Math.ceil（高清上层），关闭→Math.floor（默认下层）
+                currentZoomRef.value = tileHDRendering.value ? Math.ceil(zoom) : Math.floor(zoom);
+            }
         }));
 
         olKeys.push(map.getView().on('change:center', () => {

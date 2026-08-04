@@ -17,7 +17,8 @@ from typing import Any, Dict
 
 from config import build_public_config, get_settings, get_str, masked_summary
 
-from utils.time_utils import get_beijing_now_str, hourly_chime_task, BeijingTimeFormatter
+from datetime import datetime
+from utils.time_utils import hourly_chime_task
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,15 +41,53 @@ from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 
 # ==================== 日志配置 ====================
-# 使用北京时间 Formatter，确保日志时间统一为北京时间（UTC+8）
-_beijing_formatter = BeijingTimeFormatter(
-    fmt="%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s"
-)
+import threading as _threading
+
 _handler = logging.StreamHandler()
-_handler.setFormatter(_beijing_formatter)
 _log_level = getattr(logging, get_settings().log_level.upper(), logging.INFO)
+
+
+class _SeqFormatter(logging.Formatter):
+    """为每条日志记录前置全局递增序号（线程安全），方便 Docker 日志排序追踪。"""
+    _counter = 0
+    _lock = _threading.Lock()
+
+    def format(self, record: logging.LogRecord) -> str:
+        if not hasattr(record, "seq"):
+            with self._lock:
+                _SeqFormatter._counter += 1
+                record.seq = _SeqFormatter._counter
+        return f"[{record.seq:06d}] {super().format(record)}"
+
+
+_fmt = "%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s"
+
+_handler.setFormatter(_SeqFormatter(_fmt))
 logging.basicConfig(level=_log_level, handlers=[_handler])
 logger = logging.getLogger(__name__)
+# 抑制 APScheduler 的 INFO 日志（每分钟任务运行状态噪音）
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
+
+def _patch_uvicorn_logging_with_seq():
+    """
+    在模块加载时将 uvicorn logger 的 handler 换上 _SeqFormatter，
+    使 uvicorn 自有日志与 app 日志格式一致。
+    """
+    _fmt = "%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s"
+    for _lg_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.asgi"):
+        _lg = logging.getLogger(_lg_name)
+        _seq_formatter = _SeqFormatter(_fmt)
+        for _h in _lg.handlers:
+            _h.setFormatter(_seq_formatter)
+        # 无 handler 时添加一个（uvicorn 自身可能还未配置）
+        if not _lg.handlers:
+            _h = logging.StreamHandler()
+            _h.setFormatter(_seq_formatter)
+            _lg.addHandler(_h)
+
+
+_patch_uvicorn_logging_with_seq()
 
 # ==================== 统一响应模型 ====================
 
@@ -85,7 +124,7 @@ async def lifespan(app: FastAPI):
     替代已废弃的 @app.on_event("startup") / @app.on_event("shutdown")
     """
     # ---- Startup ----
-    logger.info("WebGIS Backend 启动... [北京时间: %s]", get_beijing_now_str())
+    logger.info("WebGIS Backend 启动...")
     # 统一配置脱敏摘要（三层模型：L1 env / L2 Admin+DB / L3 HF Secrets）
     for line in masked_summary():
         logger.info("[配置] %s", line)
@@ -94,7 +133,7 @@ async def lifespan(app: FastAPI):
 
     try:
         await init_auth_storage()
-        logger.info("认证存储初始化成功 [北京时间: %s]", get_beijing_now_str())
+        logger.info("认证存储初始化成功")
     except Exception as e:
         logger.error("认证存储初始化失败: %s", str(e), exc_info=True)
         app.state.startup_error = f"数据库初始化失败: {str(e)}"
@@ -110,7 +149,7 @@ async def lifespan(app: FastAPI):
 
     try:
         init_download_task_db()
-        logger.info("下载任务数据库初始化成功 [北京时间: %s]", get_beijing_now_str())
+        logger.info("下载任务数据库初始化成功")
     except Exception as e:
         logger.error("下载任务数据库初始化失败: %s", str(e), exc_info=True)
 
@@ -120,11 +159,12 @@ async def lifespan(app: FastAPI):
         logger.error("任务调度器启动失败: %s", str(e), exc_info=True)
 
     app.state.http_client = build_http_client()
-    logger.info("HTTP 客户端初始化完成 [北京时间: %s]", get_beijing_now_str())
+    logger.info("HTTP 客户端初始化完成")
 
-    # 启动整点报时后台任务
-    app.state.hourly_chime = asyncio.create_task(hourly_chime_task())
-    logger.info("整点报时后台任务已创建 [北京时间: %s]", get_beijing_now_str())
+    # 启动整点报时后台任务（记录启动时间，报时时展示已运行时长）
+    _startup_time = datetime.now()
+    app.state.hourly_chime = asyncio.create_task(hourly_chime_task(startup_time=_startup_time))
+    logger.info("整点报时后台任务已创建")
 
     if app.state.startup_error:
         logger.warning("应用以降级模式启动: %s", app.state.startup_error)
@@ -133,7 +173,7 @@ async def lifespan(app: FastAPI):
 
     yield
     # ---- Shutdown ----
-    logger.info("WebGIS Backend 关闭... [北京时间: %s]", get_beijing_now_str())
+    logger.info("WebGIS Backend 关闭...")
     # 取消整点报时任务
     chime_task = getattr(app.state, "hourly_chime", None)
     if chime_task is not None:
@@ -142,20 +182,30 @@ async def lifespan(app: FastAPI):
             await chime_task
         except asyncio.CancelledError:
             pass
-        logger.info("整点报时后台任务已停止 [北京时间: %s]", get_beijing_now_str())
+        logger.info("整点报时后台任务已停止")
 
     scheduler = getattr(app.state, "task_scheduler", None)
     if scheduler is not None:
-        shutdown_task_cleanup_scheduler(scheduler)
+        try:
+            scheduler.shutdown(wait=False)
+        except Exception as e:
+            logger.warning("任务调度器关闭异常: %s", e)
+        logger.info("任务调度器已停止")
 
     # 关闭 IP 定位服务（释放连接池，打印缓存统计）
-    from services import ip_geo_service
-    await ip_geo_service.close()
+    try:
+        from services import ip_geo_service
+        await ip_geo_service.close()
+    except Exception as e:
+        logger.warning("IP 定位服务关闭异常: %s", e)
 
-    client = getattr(app.state, "http_client", None)
-    if client is not None:
-        await client.aclose()
-        logger.info("HTTP 客户端已关闭")
+    try:
+        client = getattr(app.state, "http_client", None)
+        if client is not None:
+            await client.aclose()
+            logger.info("HTTP 客户端已关闭")
+    except Exception as e:
+        logger.warning("HTTP 客户端关闭异常: %s", e)
 
 
 # ==================== FastAPI 应用初始化 ====================
@@ -282,60 +332,58 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 # ==================== 路由挂载 ====================
 
-_beijing_time = get_beijing_now_str()
-
 # 挂载瓦片代理路由
 app.include_router(proxy_router)
-logger.info("已注册瓦片代理路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册瓦片代理路由")
 
 # 挂载外部服务代理路由（高德/Nominatim/EPSG/IP）
 app.include_router(external_proxy_router)
-logger.info("已注册外部服务代理路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册外部服务代理路由")
 
 # 挂载认证路由
 app.include_router(auth_router)
-logger.info("已注册认证路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册认证路由")
 
 # 挂载访客统计路由
 app.include_router(statistics_router)
-logger.info("已注册访客统计路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册访客统计路由")
 
 # 挂载位置服务路由
 app.include_router(location_router)
-logger.info("已注册位置服务路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册位置服务路由")
 
 # 挂载管理员路由
 app.include_router(admin_router)
-logger.info("已注册管理员路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册管理员路由")
 
 # 挂载 API 管理路由
 app.include_router(api_management_router)
-logger.info("已注册 API 管理路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册 API 管理路由")
 
 # 挂载 API 密钥管理路由
 app.include_router(api_keys_router)
-logger.info("已注册 API 密钥管理路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册 API 密钥管理路由")
 
 # 挂载前端运行时配置路由
 app.include_router(runtime_config_router)
-logger.info("已注册运行时配置路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册运行时配置路由")
 
 # 挂载 Agent 对话路由
 app.include_router(agent_chat_router)
 app.include_router(agent_chat_admin_router)
-logger.info("已注册 Agent 对话路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册 Agent 对话路由")
 
 # 挂载下载任务路由
 app.include_router(download_router)
-logger.info("已注册下载任务路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册下载任务路由")
 
 # 挂载监控路由
 app.include_router(monitor_router)
-logger.info("已注册监控路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册监控路由")
 
 # 挂载空间分析路由
 app.include_router(spatial_router)
-logger.info("已注册空间分析路由 [北京时间: %s]", _beijing_time)
+logger.info("已注册空间分析路由")
 
 # --- 功能：健康检查 ---
 @app.get("/")

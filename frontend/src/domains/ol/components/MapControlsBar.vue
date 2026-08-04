@@ -130,7 +130,7 @@
             class="zoom-level-display"
             :title="t('mapControls.zoomLevel')"
         >
-            {{ currentZoom }}
+            {{ displayZoom }}
         </div>
         <div class="divider"></div>
         <button
@@ -260,6 +260,17 @@ const displayCoordinateText = computed(() => {
 
 /** 是否可以复制坐标（坐标有效时） */
 const canCopyCoordinate = computed(() => displayCoordinateText.value !== COORDINATE_PLACEHOLDER);
+
+/** 显示的缩放级别：与 alwaysPickFinerZoom 瓦片策略一致
+ *  - 精确整数 zoom → 直接显示
+ *  - 非整数 zoom → Math.ceil，与实际加载的高清瓦片级别一致（如 13.01 → 14） */
+const displayZoom = computed(() => {
+    const z = Number(props.currentZoom);
+    if (!Number.isFinite(z)) return '--';
+    
+    // 无论是 13（整）还是 13.01/13.51（非整），Math.ceil 处理后结果完全一致
+    return Math.ceil(z);
+});
 
 // ========== 坐标编辑函数 ==========
 

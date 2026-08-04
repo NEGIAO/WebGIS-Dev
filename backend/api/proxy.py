@@ -387,12 +387,6 @@ def _resolve_gcj_http_client(request: Request) -> Tuple[httpx.AsyncClient, bool]
 # ==================== 专用海图代理 ====================
 @router.get("/tiles/ships66/{z}/{x}/{y}.png")
 async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depends(_rate_limit_check)):
-    cache_key = f"ships66:{z}/{x}/{y}"
-    cached = _tile_cache.get(cache_key)
-    if cached:
-        logger.info("瓦片缓存命中 [ships66 %d/%d/%d] 当前缓存: %d 条目 / %s", z, x, y, len(_tile_cache._store), _tile_cache._fmt_size())
-        return Response(content=cached.content, media_type=cached.media_type, status_code=cached.status_code)
-
     upstream_url = get_str("SHIPS66_TILE_URL_TEMPLATE").format(z=z, x=x, y=y)
     headers = {
         "User-Agent": PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"],
@@ -441,11 +435,8 @@ async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depen
         if key.lower() not in PROXY_HOP_BY_HOP_HEADERS and key.lower() in PROXY_PASSTHROUGH_HEADERS
     }
 
-    # 缓冲完整响应以支持缓存
     body = await upstream_response.aread()
     media_type = upstream_response.headers.get("content-type", "image/png")
-    _tile_cache.set(cache_key, body, media_type, upstream_response.status_code)
-    logger.info("瓦片缓存写入 [ships66 %d/%d/%d] 大小: %s | 当前缓存: %d 条目 / %s", z, x, y, _tile_cache._fmt_size(), len(_tile_cache._store), _tile_cache._fmt_size())
 
     background = BackgroundTasks()
     background.add_task(upstream_response.aclose)
@@ -543,18 +534,8 @@ async def wgs2gcj_proxy(target_url: str, request: Request, _: None = Depends(_ra
 # ==================== 通用流式代理 ====================
 @router.get("/proxy/{target_url:path}")
 async def universal_stream_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
-    """通用流式代理接口（带内存缓存）"""
+    """通用流式代理接口"""
     upstream_url = _build_proxy_target_url(target_url, request.url.query)
-
-    # 仅对 image/ 内容类型启用缓存（瓦片场景）
-    accept_header = request.headers.get("accept", "")
-    _cacheable = "image/" in accept_header or target_url.endswith((".png", ".jpg", ".jpeg", ".webp"))
-
-    if _cacheable:
-        cached = _tile_cache.get(upstream_url)
-        if cached:
-            logger.info("瓦片缓存命中 [proxy %s] 当前缓存: %d 条目 / %s", upstream_url[:60], len(_tile_cache._store), _tile_cache._fmt_size())
-            return Response(content=cached.content, media_type=cached.media_type, status_code=cached.status_code)
 
     proxy_request_headers = _build_proxy_request_headers(request)
 
@@ -624,20 +605,6 @@ async def universal_stream_proxy(target_url: str, request: Request, _: None = De
         if fallback_client is not None:
             await fallback_client.aclose()
         raise
-
-    # 可缓存：缓冲完整响应后写缓存
-    if _cacheable:
-        body = await upstream_response.aread()
-        media_type = upstream_response.headers.get("content-type", "application/octet-stream")
-        _tile_cache.set(upstream_url, body, media_type, upstream_response.status_code)
-        logger.info("瓦片缓存写入 [proxy %s] 大小: %s | 当前缓存: %d 条目 / %s", upstream_url[:60], _tile_cache._fmt_size(), len(_tile_cache._store), _tile_cache._fmt_size())
-        return Response(
-            content=body,
-            media_type=media_type,
-            status_code=upstream_response.status_code,
-            headers=response_headers,
-            background=background_tasks,
-        )
 
     return StreamingResponse(
         _limited_stream(upstream_response, upstream_url),

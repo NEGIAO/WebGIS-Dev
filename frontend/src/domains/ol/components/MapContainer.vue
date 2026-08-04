@@ -230,7 +230,7 @@ import { useGisDropZone } from '@common/data-import/useGisDropZone';
 import { useUserLocation } from '@common/map-view/useUserLocation';
 import { useManagedLayerRegistry } from '@ol/layer/composables/useManagedLayerRegistry';
 import { useMapState } from '@ol/composables/useMapState';
-import { createBasemapLayerFromSource } from '@ol/basemap/composables/basemapLayerFactory';
+import { createBasemapLayerFromSource, buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
 
 // --- 常量 / 配置 ---
 import {
@@ -1533,11 +1533,13 @@ function initMap() {
             className: 'ol-overviewmap ol-custom-overviewmap',
             layers: [
                 new TileLayer({
-                    source: prioritizeTileSourceRequest(
-                        new XYZ({
-                            url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}`,
-                            maxZoom: 20,
-                        }),
+                    source: buildRasterBasemapSource(
+                        prioritizeTileSourceRequest(
+                            new XYZ({
+                                url: `https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${TIANDITU_TK}`,
+                                maxZoom: 20,
+                            }),
+                        ),
                     ),
                 }),
             ],

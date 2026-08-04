@@ -38,11 +38,11 @@
 - 满员驱逐策略：先清过期，仍满则驱逐最旧条目（近似 LRU）
 - 命中率统计（`stats` 属性：hits / misses / hit_rate / size）
 
-### 2. 4 个端点集成内存缓存
-- `/tiles/ships66/{z}/{x}/{y}`：cache key = `ships66:{z}/{x}/{y}`
+### 2. 2 个纠偏端点集成内存缓存（ships66 / 通用代理不缓存）
 - `/proxy/gcj2wgs/{url}`：cache key = `gcj2wgs:{template.cache_key}:{z}/{x}/{y}`
 - `/proxy/wgs2gcj/{url}`：cache key = `wgs2gcj:{template.cache_key}:{z}/{x}/{y}`
-- `/proxy/{url}`：cache key = 完整 upstream_url（仅对 image/ 内容类型缓存）
+- `/tiles/ships66/{z}/{x}/{y}.png`：纯中转，不缓存（访问概率极低）
+- `/proxy/{url}`：纯流式中转，不缓存（通用代理用途杂，不全是瓦片）
 
 ### 3. 配置登记
 - `catalog.py`：新增 `PROXY_TILE_CACHE_TTL_SECONDS`（默认 300s）、`PROXY_TILE_CACHE_MAX_SIZE`（默认 100000）
@@ -94,7 +94,7 @@
 
 | 文件 | 说明 |
 |---|---|
-| `backend/api/proxy.py` | 新增 `_TileCache` / `_TileCacheEntry`，4 个端点集成缓存 |
+| `backend/api/proxy.py` | 新增 `_TileCache` / `_TileCacheEntry`，仅 gcj2wgs / wgs2gcj 集成缓存；ships66 / 通用代理保持纯中转 |
 | `backend/config/catalog.py` | 新增 2 个配置 key 登记 |
 | `.env.example` | 配置登记 |
 | `.env` | 生产配置（用户已改为 600s/200000 条） |
@@ -103,13 +103,20 @@
 ---
 
 ## 遗留与风险
-1. **通用代理缓存判断逻辑脆弱**（Code Review 发现）：`target_url.endswith((".png", ...))` 对带查询参数的 URL 失效。当前瓦片场景通常无查询参数，影响有限，但后续若前端传 token 等参数会导致缓存漏判。待后续优化。
+1. **纠偏端点双层缓存冗余**：内存+磁盘同时存在，内存缓存主要价值为免纠偏计算（CPU）而非免网络。行为正确但值得记录。
 2. **多 worker 部署时缓存不共享**：当前 HF 单 worker 部署无影响，未来扩展时需注意。
-3. **纠偏端点双层缓存冗余**：内存+磁盘同时存在，内存缓存主要价值为免纠偏计算（CPU）而非免网络。行为正确但值得记录。
+
+---
+
+## 设计决策记录
+
+### 为什么只缓存纠偏端点？
+- `gcj2wgs` / `wgs2gcj`：纠偏一张瓦片需要请求 4 张周边瓦片 + 像素级计算，**缓存命中省的是 CPU**（主要价值）
+- `ships66`：纯中转，访问概率极低，缓存收益几乎为零
+- `/proxy/{url}`：通用代理用途杂（WMTS/ArcGIS/XYZ），不全是瓦片；缓存非瓦片响应（JSON/XML/错误页）会导致意外行为，风险大于收益
 
 ---
 
 ## 下一步建议
-- 部署后观察内存增长曲线，验证缓存实际工作
+- 部署后观察内存增长曲线，验证纠偏缓存实际工作
 - 如需可观测性，可在 `monitor.py` 增加 `/monitor/cache-stats` 端点暴露 `_tile_cache.stats`
-- 缓存判断逻辑优化：改为基于响应 Content-Type 而非请求 URL 扩展名
