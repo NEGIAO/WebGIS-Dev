@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -195,6 +196,20 @@ def get_download_task(task_id: str):
     return _build_status_response(task)
 
 
+@router.post("/tasks/{task_id}/cancel")
+def cancel_download_task(task_id: str):
+    """取消下载任务。前端停止轮询/重置任务时调用，通知后端中止执行。"""
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+    # 已终态的任务无需取消
+    if task.status in ("success", "failed", "expired", "cancelled"):
+        return {"task_id": task_id, "status": task.status, "cancelled": False}
+    update_task(task_id, status="cancelled", message="任务已被用户取消")
+    logger.info("下载任务已取消：%s", task_id)
+    return {"task_id": task_id, "status": "cancelled", "cancelled": True}
+
+
 @router.get("/tasks/{task_id}/file")
 def download_task_file(task_id: str, token: Optional[str] = None):
     """下载任务完成后的 GeoTIFF 文件。"""
@@ -270,12 +285,22 @@ async def _process_download_task(
         payload.resolution_m,
     )
 
+    # === 执行前检查：任务已被取消则直接中止，避免无意义执行 ===
+    existing = get_task(task_id)
+    if existing and existing.status == "cancelled":
+        logger.info("下载任务 %s 已被取消，跳过执行", task_id)
+        return
+
     update_task(task_id, status="downloading", progress=5, message="正在下载瓦片")
 
     progress_state = {"last": 0}
 
     async def report_progress(done: int, total: int, phase: str) -> None:
-        """向任务状态回写进度。"""
+        """向任务状态回写进度，并检查是否已被取消。"""
+        # 每次回写前检查任务是否已被取消，若是则抛异常中止下载
+        task = get_task(task_id)
+        if task and task.status == "cancelled":
+            raise asyncio.CancelledError("任务已被用户取消")
         if total <= 0:
             return
         ratio = done / total
@@ -347,6 +372,14 @@ async def _process_download_task(
             progress=100,
             message=f"Ready{clip_message}",
         )
+    except asyncio.CancelledError:
+        # 用户取消：清理半成品文件
+        logger.info("下载任务 %s 被用户取消，清理半成品文件", task_id)
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
     except Exception as exc:
         logger.exception("下载任务失败：%s | 错误：%s", task_id, str(exc))
         error_msg = str(exc)[:200]
