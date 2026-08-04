@@ -6,6 +6,16 @@
 
 ## 版本记录
 
+### V3.5.12 (2026-08-04) — 代理瓦片内存 TTL 缓存
+
+> 🏗️ **性能优化**：代理模块新增内存 TTL 缓存层（L1），5 分钟 TTL + 容量上限，4 个代理端点全部集成。重复请求在 TTL 窗口内直接返回内存副本，零网络/零纠偏计算。
+
+#### 后端：代理瓦片内存缓存
+
+- `backend/api/proxy.py`：新增 `_TileCacheEntry` dataclass + `_TileCache` 类（TTL 过期惰性淘汰 + 满员批量清理 + 命中率统计）；4 个端点（`/tiles/ships66/`、`/proxy/gcj2wgs/`、`/proxy/wgs2gcj/`、`/proxy/`）全部集成内存缓存
+- `backend/config/catalog.py`：新增 `PROXY_TILE_CACHE_TTL_SECONDS`（默认 300s）、`PROXY_TILE_CACHE_MAX_SIZE`（默认 100000）
+- `.env.example` / `.env` / `.env.local`：同步登记（生产环境用户配置为 600s/200000 条）
+
 ### V3.5.11 (2026-08-04) — Code Review 修复批次 + amap runtime token + 配额可编辑 + 视图切换白屏修复
 
 > 🏗️ **架构 + 修复**：前端分层架构合规化——common→ol 跨层违规从 19 处降至 9 处；后端清理 `agent_token` 兼容名；`amap_key` 加入前端 runtime token 白名单；管理员面板配额从只读升级为可编辑器；修复 2D/3D 切换时 `_cesiumLoadPromise` 未清空导致的白屏。

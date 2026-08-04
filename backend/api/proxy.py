@@ -1,7 +1,8 @@
 import logging
 import time
 from collections import defaultdict
-from typing import AsyncIterator, Dict, List, Tuple
+from dataclasses import dataclass
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -40,6 +41,119 @@ PROXY_HTTP_CONNECT_TIMEOUT_SECONDS = get_int("PROXY_HTTP_CONNECT_TIMEOUT_SECONDS
 PROXY_MAX_CONNECTIONS = get_int("PROXY_MAX_CONNECTIONS", 100, minimum=1, maximum=10000)
 PROXY_MAX_KEEPALIVE_CONNECTIONS = get_int("PROXY_MAX_KEEPALIVE_CONNECTIONS", 20, minimum=0, maximum=10000)
 PROXY_USER_AGENT = get_str("PROXY_USER_AGENT")
+
+# 瓦片内存缓存配置（纯内存，不持久化；HF 16GB ROM 充分利用）
+PROXY_TILE_CACHE_TTL_SECONDS = get_int("PROXY_TILE_CACHE_TTL_SECONDS", 300, minimum=10, maximum=3600)
+PROXY_TILE_CACHE_MAX_SIZE = get_int("PROXY_TILE_CACHE_MAX_SIZE", 100000, minimum=100, maximum=1000000)
+
+
+@dataclass
+class _TileCacheEntry:
+    """单个瓦片缓存条目"""
+    content: bytes          # 响应体字节
+    media_type: str         # Content-Type
+    status_code: int        # HTTP 状态码
+    expire_at: float        # 过期时间戳（time.time() 语义）
+
+
+class _TileCache:
+    """
+    代理瓦片内存 TTL 缓存（纯内存，无持久化）。
+
+    设计目标：5 分钟内重复请求同一瓦片 → 直接内存命中，免网络/免纠偏计算。
+    满员淘汰策略：先清过期，若仍满则驱逐最旧条目（近似 LRU）。
+    """
+
+    def __init__(self, ttl: int = PROXY_TILE_CACHE_TTL_SECONDS, max_size: int = PROXY_TILE_CACHE_MAX_SIZE):
+        self._store: Dict[str, _TileCacheEntry] = {}
+        self._ttl = ttl
+        self._max_size = max_size
+        self._hits = 0
+        self._misses = 0
+        self._bytes_used = 0  # 当前缓存占用的总字节数
+
+    def get(self, key: str) -> Optional[_TileCacheEntry]:
+        """获取缓存；过期或不存在返回 None"""
+        entry = self._store.get(key)
+        if not entry:
+            self._misses += 1
+            return None
+        if entry.expire_at <= time.time():
+            self._store.pop(key, None)
+            self._bytes_used -= len(entry.content)
+            self._misses += 1
+            return None
+        self._hits += 1
+        return entry
+
+    def set(self, key: str, content: bytes, media_type: str, status_code: int = 200) -> None:
+        """写入缓存；满时先清过期，仍满则驱逐最旧"""
+        if not key or not content:
+            return
+
+        # 已存在则先减去旧值
+        existing = self._store.get(key)
+        if existing:
+            self._bytes_used -= len(existing.content)
+
+        if len(self._store) >= self._max_size:
+            self._evict_expired()
+            if len(self._store) >= self._max_size:
+                oldest = next(iter(self._store), None)
+                if oldest:
+                    evicted = self._store.pop(oldest, None)
+                    if evicted:
+                        self._bytes_used -= len(evicted.content)
+
+        self._store[key] = _TileCacheEntry(
+            content=content,
+            media_type=media_type,
+            status_code=status_code,
+            expire_at=time.time() + self._ttl,
+        )
+        self._bytes_used += len(content)
+
+    def _evict_expired(self) -> None:
+        """清理全部过期条目"""
+        now = time.time()
+        expired = [k for k, v in self._store.items() if v.expire_at <= now]
+        for k in expired:
+            entry = self._store.pop(k, None)
+            if entry:
+                self._bytes_used -= len(entry.content)
+
+    def clear(self) -> None:
+        """清空缓存"""
+        self._store.clear()
+        self._hits = 0
+        self._misses = 0
+        self._bytes_used = 0
+
+    @property
+    def stats(self) -> Dict[str, object]:
+        """返回缓存统计信息"""
+        total = self._hits + self._misses
+        return {
+            "size": len(self._store),
+            "max_size": self._max_size,
+            "ttl_seconds": self._ttl,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(self._hits / total, 4) if total > 0 else 0,
+            "bytes_used": self._bytes_used,
+            "mb_used": round(self._bytes_used / (1024 * 1024), 2),
+        }
+
+    def _fmt_size(self) -> str:
+        """返回人类可读的缓存大小"""
+        mb = self._bytes_used / (1024 * 1024)
+        if mb >= 1:
+            return f"{mb:.1f}MB"
+        return f"{self._bytes_used / 1024:.1f}KB"
+
+
+# 全局瓦片内存缓存实例
+_tile_cache = _TileCache()
 
 
 def _get_client_ip(request: Request) -> str:
@@ -273,6 +387,12 @@ def _resolve_gcj_http_client(request: Request) -> Tuple[httpx.AsyncClient, bool]
 # ==================== 专用海图代理 ====================
 @router.get("/tiles/ships66/{z}/{x}/{y}.png")
 async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depends(_rate_limit_check)):
+    cache_key = f"ships66:{z}/{x}/{y}"
+    cached = _tile_cache.get(cache_key)
+    if cached:
+        logger.info("瓦片缓存命中 [ships66 %d/%d/%d] 当前缓存: %d 条目 / %s", z, x, y, len(_tile_cache._store), _tile_cache._fmt_size())
+        return Response(content=cached.content, media_type=cached.media_type, status_code=cached.status_code)
+
     upstream_url = get_str("SHIPS66_TILE_URL_TEMPLATE").format(z=z, x=x, y=y)
     headers = {
         "User-Agent": PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"],
@@ -321,13 +441,20 @@ async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depen
         if key.lower() not in PROXY_HOP_BY_HOP_HEADERS and key.lower() in PROXY_PASSTHROUGH_HEADERS
     }
 
+    # 缓冲完整响应以支持缓存
+    body = await upstream_response.aread()
+    media_type = upstream_response.headers.get("content-type", "image/png")
+    _tile_cache.set(cache_key, body, media_type, upstream_response.status_code)
+    logger.info("瓦片缓存写入 [ships66 %d/%d/%d] 大小: %s | 当前缓存: %d 条目 / %s", z, x, y, _tile_cache._fmt_size(), len(_tile_cache._store), _tile_cache._fmt_size())
+
     background = BackgroundTasks()
     background.add_task(upstream_response.aclose)
     if fallback_client:
         background.add_task(fallback_client.aclose)
 
-    return StreamingResponse(
-        upstream_response.aiter_raw(),
+    return Response(
+        content=body,
+        media_type=media_type,
         status_code=upstream_response.status_code,
         headers=response_headers,
         background=background,
@@ -343,6 +470,12 @@ async def gcj2wgs_proxy(target_url: str, request: Request, _: None = Depends(_ra
         template, xyz = parse_tile_url(upstream_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    cache_key = f"gcj2wgs:{template.cache_key}:{xyz.z}/{xyz.x}/{xyz.y}"
+    cached = _tile_cache.get(cache_key)
+    if cached:
+        logger.info("瓦片缓存命中 [gcj2wgs z=%d/x=%d/y=%d] 当前缓存: %d 条目 / %s", xyz.z, xyz.x, xyz.y, len(_tile_cache._store), _tile_cache._fmt_size())
+        return Response(content=cached.content, media_type=cached.media_type)
 
     cache_dir = _resolve_gcj_cache_dir(request)
     client, should_close = _resolve_gcj_http_client(request)
@@ -363,6 +496,8 @@ async def gcj2wgs_proxy(target_url: str, request: Request, _: None = Depends(_ra
         if should_close:
             await client.aclose()
 
+    _tile_cache.set(cache_key, tile_bytes, "image/png")
+    logger.info("瓦片缓存写入 [gcj2wgs z=%d/x=%d/y=%d] 大小: %s | 当前缓存: %d 条目 / %s", xyz.z, xyz.x, xyz.y, _tile_cache._fmt_size(), len(_tile_cache._store), _tile_cache._fmt_size())
     return Response(content=tile_bytes, media_type="image/png")
 
 
@@ -374,6 +509,12 @@ async def wgs2gcj_proxy(target_url: str, request: Request, _: None = Depends(_ra
         template, xyz = parse_tile_url(upstream_url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    cache_key = f"wgs2gcj:{template.cache_key}:{xyz.z}/{xyz.x}/{xyz.y}"
+    cached = _tile_cache.get(cache_key)
+    if cached:
+        logger.info("瓦片缓存命中 [wgs2gcj z=%d/x=%d/y=%d] 当前缓存: %d 条目 / %s", xyz.z, xyz.x, xyz.y, len(_tile_cache._store), _tile_cache._fmt_size())
+        return Response(content=cached.content, media_type=cached.media_type)
 
     cache_dir = _resolve_gcj_cache_dir(request)
     client, should_close = _resolve_gcj_http_client(request)
@@ -394,14 +535,27 @@ async def wgs2gcj_proxy(target_url: str, request: Request, _: None = Depends(_ra
         if should_close:
             await client.aclose()
 
+    _tile_cache.set(cache_key, tile_bytes, "image/png")
+    logger.info("瓦片缓存写入 [wgs2gcj z=%d/x=%d/y=%d] 大小: %s | 当前缓存: %d 条目 / %s", xyz.z, xyz.x, xyz.y, _tile_cache._fmt_size(), len(_tile_cache._store), _tile_cache._fmt_size())
     return Response(content=tile_bytes, media_type="image/png")
 
 
 # ==================== 通用流式代理 ====================
 @router.get("/proxy/{target_url:path}")
 async def universal_stream_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
-    """通用流式代理接口"""
+    """通用流式代理接口（带内存缓存）"""
     upstream_url = _build_proxy_target_url(target_url, request.url.query)
+
+    # 仅对 image/ 内容类型启用缓存（瓦片场景）
+    accept_header = request.headers.get("accept", "")
+    _cacheable = "image/" in accept_header or target_url.endswith((".png", ".jpg", ".jpeg", ".webp"))
+
+    if _cacheable:
+        cached = _tile_cache.get(upstream_url)
+        if cached:
+            logger.info("瓦片缓存命中 [proxy %s] 当前缓存: %d 条目 / %s", upstream_url[:60], len(_tile_cache._store), _tile_cache._fmt_size())
+            return Response(content=cached.content, media_type=cached.media_type, status_code=cached.status_code)
+
     proxy_request_headers = _build_proxy_request_headers(request)
 
     shared_client = getattr(request.app.state, "http_client", None)
@@ -470,6 +624,20 @@ async def universal_stream_proxy(target_url: str, request: Request, _: None = De
         if fallback_client is not None:
             await fallback_client.aclose()
         raise
+
+    # 可缓存：缓冲完整响应后写缓存
+    if _cacheable:
+        body = await upstream_response.aread()
+        media_type = upstream_response.headers.get("content-type", "application/octet-stream")
+        _tile_cache.set(upstream_url, body, media_type, upstream_response.status_code)
+        logger.info("瓦片缓存写入 [proxy %s] 大小: %s | 当前缓存: %d 条目 / %s", upstream_url[:60], _tile_cache._fmt_size(), len(_tile_cache._store), _tile_cache._fmt_size())
+        return Response(
+            content=body,
+            media_type=media_type,
+            status_code=upstream_response.status_code,
+            headers=response_headers,
+            background=background_tasks,
+        )
 
     return StreamingResponse(
         _limited_stream(upstream_response, upstream_url),

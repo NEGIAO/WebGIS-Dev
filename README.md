@@ -78,7 +78,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.11），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.12），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -378,6 +378,7 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.12** | 2026-08-04 | 代理瓦片内存 TTL 缓存：`backend/api/proxy.py` 新增 `_TileCache` 类（5 分钟 TTL + 容量上限），4 个代理端点（ships66 / gcj2wgs / wgs2gcj / universal）全部集成内存缓存；重复请求在 TTL 窗口内直接返回内存副本，免网络/免纠偏计算。配置 key：`PROXY_TILE_CACHE_TTL_SECONDS` / `PROXY_TILE_CACHE_MAX_SIZE`。详见[日志](Docs/LLM_record/26-08/2026-08-04/2026-08-04-proxy-tile-memory-cache.md) |
 | **V3.5.11** | 2026-08-04 | Code Review 修复批次（H7 跨层违规 10/19 处，H8 缩放，GBK DBF，blob URL revoke，H3 日志更正）+ 后端清理 agent_token 兼容名 + amap_key 加入前端 runtime token 白名单 + 管理员面板配额可编辑化（ApiManagementPanel 状态机 + 前后端字段对齐）+ HomeView 2D/3D 切换白屏修复（`_cesiumLoadPromise` 重置）。详见[日志](Docs/LLM_record/26-08/2026-08-04/2026-08-04-code-review-fix-batch.md) |
 | **V3.5.10** | 2026-08-03 | 默认底图跳过容灾监控：`useBasemapLayerBootstrap` 解析默认预设图层集合，跳过 `monitorLayerTimeout` 接入；`useBasemapSelectionWatcher` 跳过默认预设图层的切换验证。修复首屏加载时自定义瓦片（仅覆盖中国）大量瓦片 404 触发 `[底图降级]` message 轰炸的问题。详见[日志](Docs/LLM_record/26-08/2026-08-03/2026-08-03-skip-monitoring-for-default-basemap.md) |
 | **V3.5.9** | 2026-08-02 | 底图配置架构重构（SSOT）：删除 `sourceDescriptors.ts`（887 行），Cesium 描述符由 `basemapConfig.ts` 的 `getDescriptorById()` 自动派生；`basemapPresets.ts` 新增 `ALL_BASEMAP_PRESETS` 自动兜底未配置底图（`Other: xxx` 前缀）；废弃 Google 主机切换机制删除（`GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl`）；`index.ts`/`basemapProviderFactory.ts`/`layerUtils.js` import 路径统一指向 `basemapConfig`。详见[日志](Docs/LLM_record/26-08/2026-08-02/2026-08-02-basemap-ssot-refactor.md) |
@@ -405,6 +406,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.11 · 开发中 · 最后更新 2026-08-04</sub>
+<sub>V3.5.12 · 开发中 · 最后更新 2026-08-04</sub>
 
 </div>
