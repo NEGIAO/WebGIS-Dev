@@ -371,6 +371,17 @@ tiles.negiao.cc.cd"]
 | Cesium 统一图层管理 | [`cesium-unified-layer-management.md`](Docs/Architecture/cesium-unified-layer-management.md) | 设计评审稿：3D 数据接入统一 TOC 的两步走方案 |
 
 ---
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?type=timeline&repos=NEGIAO%2FWebGIS-Dev">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&theme=dark&legend=top-left&sealed_token=W7zKPU8qyvT6qm2h23vSlhxRaLJ8_2qmPbEEKLjAzCeeyCA7VJlle0EI5c0SsiKQzy0vW6JLBTQ5J5_a62U8j-M8S_tjuZohoPmhufX8GmFzv3IfWaMZ5t6LWTpPCOnOZz1O3KTrx1mi6Gtn3YTl5dKg2Egj7pxjUf8lyeqhGdJziB_RMIRrhk02ThEH" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=W7zKPU8qyvT6qm2h23vSlhxRaLJ8_2qmPbEEKLjAzCeeyCA7VJlle0EI5c0SsiKQzy0vW6JLBTQ5J5_a62U8j-M8S_tjuZohoPmhufX8GmFzv3IfWaMZ5t6LWTpPCOnOZz1O3KTrx1mi6Gtn3YTl5dKg2Egj7pxjUf8lyeqhGdJziB_RMIRrhk02ThEH" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=W7zKPU8qyvT6qm2h23vSlhxRaLJ8_2qmPbEEKLjAzCeeyCA7VJlle0EI5c0SsiKQzy0vW6JLBTQ5J5_a62U8j-M8S_tjuZohoPmhufX8GmFzv3IfWaMZ5t6LWTpPCOnOZz1O3KTrx1mi6Gtn3YTl5dKg2Egj7pxjUf8lyeqhGdJziB_RMIRrhk02ThEH" />
+ </picture>
+</a>
 
 ## 📜 版本演进
 
