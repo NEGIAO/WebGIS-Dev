@@ -41,7 +41,6 @@ SUMMARIZED_DIR_SUFFIXES = (
     "feng-shui-compass-svg/Explanation",
     "feng-shui-compass-svg/themes",
     "feng-shui-compass-svg/types",
-    "cesium-navigation/svgPaths",
     "ShallowWater/shaders",
 )
 

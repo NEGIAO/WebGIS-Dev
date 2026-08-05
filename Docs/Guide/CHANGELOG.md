@@ -6,6 +6,58 @@
 
 ## 版本记录
 
+### V3.5.13 (2026-08-05) — 下载系统综合改动（异步化 + 配额 + 账号绑定 + TTL 动态配置）
+
+> 🏗️ **架构级改动**：下载系统全面升级——移除 download_token（改用会话认证 Blob 下载）；统一 API 配额池（下载消耗=ceil(tile_count/tiles_per_unit)，预扣+多退少补）；任务绑定账号体系（"我的任务"列表）；TTL 从 L1 env 升级为 L2 数据库配置（管理员面板动态可调，基于 updated_at 续命）；前端新增 MyDownloadTasks 组件与过期提示；axios 拦截器增加 blob 错误解析。
+
+#### 后端：下载令牌移除
+
+- `backend/download_xyz/download.py`：删除令牌生成/验证/缓存全部逻辑（`_generate_download_token`、`_validate_download_token`、`_create_download_token_for_task`、`_download_tokens`）；`download_task_file` 端点移除 `token` 参数；`DownloadTaskStatusResponse` 移除 `download_token` 字段
+
+#### 后端：统一 API 配额池
+
+- `backend/api/auth/quota.py`：重构 `_consume_api_quota_sync` 支持 `cost` 参数和 `action` 标识；新增 `estimate_download_cost(tile_count)` 函数；新增 `_refund_api_quota_sync()` 退还配额
+- `backend/download_xyz/download.py`：`create_download_task` 提交前校验配额并预扣估算额度；`_process_download_task` 成功时按实际瓦片数多退少补；失败/取消时全额退还
+- `backend/api/auth/constants.py`：`get_role_daily_quota` 从 L2 system_config 读取配额，fallback 到硬编码常量
+
+#### 后端：TTL 动态配置 + 账号绑定
+
+- `backend/download_xyz/download.py`：新增 `_get_task_ttl_minutes()`（L2 → L1 → 30 三级 fallback）；`_get_expiration()` 基于 `updated_at` 续命；新增 `GET /api/download/tasks` 列表接口
+- `backend/download_xyz/download_task.py`：`DownloadTask` 模型新增 `username`/`tile_count`/`tiles_downloaded`/`estimated_seconds` 字段；新增 `list_active_tasks_by_user()`；新增 SQLite 迁移逻辑（幂等安全）
+- `backend/download_xyz/task_scheduler.py`：清理逻辑修正（仅清理终态任务，动态读取 TTL）
+- `backend/api/admin.py`：新增 `GET/POST /api/admin/config/download-ttl` 和 `GET/POST /api/admin/config/api-quota` 端点
+
+#### 后端：时间估算
+
+- `backend/download_xyz/download.py`：新增 `_estimate_tile_count()` 和 `_estimate_duration()`；`DownloadTaskStatusResponse` 新增 `tile_count`/`tiles_downloaded`/`estimated_total_seconds`/`estimated_remaining_seconds` 字段；新增 `GET /api/download/estimate-tiles` 端点
+
+#### 前端：下载任务 UI
+
+- `frontend/src/api/download.js`：新增 `apiDownloadListMyTasks()` 和 `apiEstimateTileCount()` 函数
+- `frontend/src/domains/common/data-import/stores/useDownloadStore.ts`：新增 `myTasks`/`loadingMyTasks` + `fetchMyTasks()`/`refreshTaskStatus()`；新增 `estimatedTileCount` + `updateEstimatedTileCount()`；删除 `downloadToken`
+- `frontend/src/domains/ol/components/MyDownloadTasks.vue`：**新增**独立「我的任务」组件（任务列表 + 进度条 + 过期提示 + 复制/查看/下载/取消操作）
+- `frontend/src/domains/ol/components/MapDownloader.vue`：重构下载流程（认证 Blob 下载替代 token URL）；新增「我的任务」面板集成；配额实时刷新；blob 错误解析
+
+#### 前端：权限与错误处理
+
+- `frontend/src/api/backend/client.js`：拦截器增加 blob 响应状态码检查；新增 `parseBlobError()` 函数（解析 Blob 中的 JSON 错误）；429 错误增加 `detailCode` 区分（`DOWNLOAD_QUOTA_INSUFFICIENT`）
+
+#### 前端：管理员面板
+
+- `frontend/src/domains/common/user/components/AdminControlPanel.vue`：新增 TTL 配置输入框 + 保存功能
+- `frontend/src/domains/common/user/components/ApiManagementPanel.vue`：配额 tab 从只读升级为可编辑（统一 API 额度池）
+
+#### 前端：公共工具
+
+- `frontend/src/domains/common/utils/clipboard.ts`：**新增** `copyToClipboard` 工具函数
+
+#### i18n + 结构树 + Code Review
+
+- 中英文新增 `mapDownload.*`（myTasks / refreshList / noTasks / expiresIn / remainingApprox 等）；新增 `admin.*`（downloadTtlLabel / downloadTtlSaveSuccess 等）
+- `Docs/Guide/frontend-structure.md`：补录 compass themes/images 下 4 个 PNG 预览图
+- `CheckStructureTree.py`：修复 cesium-navigation/svgPaths 目录的虚假幽灵告警
+- 全项目 Code Review：配置读取合规（无裸 os.getenv / 散落 import.meta.env）、无硬编码密钥、无 console.log 残留
+
 ### V3.5.12 (2026-08-04) — 代理瓦片缓存 + 日志重构 + 下载取消 + 缩放修正 + Star History
 
 > 🏗️ **综合改动**：本次版本合并 5 项独立改动——后端纠偏瓦片新增内存 TTL 缓存；日志系统重构为序号化 + 本地时区；下载任务支持前端取消；地图缩放级别显示与高清渲染开关同步；GitHub 工作流替换为 Star History 图表。

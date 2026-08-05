@@ -305,7 +305,6 @@ Google/GitHub OAuth 一键登录（回调地址自动推导，无需单独配置
 Agent 对话可选配置：
 - Agent 主密钥：登录 admin → 用户中心 → API 密钥管理 → Agent，写入 `agent_api_key`（旧 env `AGENT_API_KEY` 仅兼容存量兜底）
 - Agent 非密默认：`AGENT_BASE_URL=https://api.qnaigc.com/v1`、`AGENT_MODEL=deepseek-V3-0324`
-- Agent 配额默认：`AGENT_CHAT_GUEST_DAILY_QUOTA=10`、`AGENT_CHAT_REGISTERED_DAILY_QUOTA=100`
 - LLM 运行参数：优先用 Admin 面板「LLM 对话参数配置」写入 L2 `system_config`，不要硬编码到 HF Secrets
 
 代理安全可选配置：

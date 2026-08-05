@@ -14,9 +14,6 @@ logger = logging.getLogger(__name__)
 
 AGENT_API_KEY_PRIMARY = "agent_api_key"
 
-AGENT_CHAT_GUEST_DAILY_QUOTA = get_int("AGENT_CHAT_GUEST_DAILY_QUOTA", 10, minimum=1, maximum=1000)
-AGENT_CHAT_REGISTERED_DAILY_QUOTA = get_int("AGENT_CHAT_REGISTERED_DAILY_QUOTA", 100, minimum=1, maximum=10000)
-
 DEFAULT_AGENT_BASE_URL = get_settings().agent_base_url
 DEFAULT_AGENT_MODEL = get_settings().agent_model
 DEFAULT_AGENT_SYSTEM_PROMPT = get_str(
@@ -48,8 +45,6 @@ CONFIG_KEY_MAX_TOKENS = "agent_max_tokens"
 CONFIG_KEY_TEMPERATURE = "agent_temperature"
 CONFIG_KEY_TOP_P = "agent_top_p"
 CONFIG_KEY_EXTRA_BODY = "agent_extra_body"
-CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA = "agent_chat_guest_daily_quota"
-CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA = "agent_chat_registered_daily_quota"
 
 # 默认 AI 专属配置键（管理员配置，前端默认使用的 base_url / model / api_key）
 CONFIG_KEY_DEFAULT_AI_API_KEY = "default_ai_api_key"

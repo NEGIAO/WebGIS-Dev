@@ -6,6 +6,7 @@ import { useAgentConfig } from '@common/chat/composables/useAgentConfig';
 import {
     apiAdminDeleteRows,
     apiAdminGetDefaultBasemapIndex,
+    apiAdminGetDownloadTTL,
     apiAdminGetTableRows,
     apiAdminInsertRow,
     apiAdminListTables,
@@ -13,6 +14,7 @@ import {
     apiAdminPublishAnnouncement,
     apiAdminUpdateContact,
     apiAdminUpdateDefaultBasemapIndex,
+    apiAdminUpdateDownloadTTL,
     apiAdminUpdateRows,
 } from '@/api/backend';
 import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '@common/basemap/basemapOptions';
@@ -67,12 +69,15 @@ const {
     submitting: submittingAgentConfig,
     load: loadAgentConfig,
     save: saveAgentConfig,
-    resetQuota: resetChatQuota,
 } = useAgentConfig();
 
 const defaultBasemapIndex = ref(DEFAULT_BASEMAP_LAYER_INDEX);
 const loadingBasemap = ref(false);
 const submittingBasemap = ref(false);
+
+// 下载任务 TTL 配置（分钟）
+const downloadTtlMinutes = ref(30);
+const loadingDownloadTtl = ref(false);
 
 const basemapOptions = BASEMAP_OPTIONS.map((opt, i) => ({ index: i, label: opt.label }));
 
@@ -104,6 +109,34 @@ async function saveDefaultBasemapIndex() {
 
 function resetDefaultBasemapIndex() {
     defaultBasemapIndex.value = DEFAULT_BASEMAP_LAYER_INDEX;
+}
+
+async function loadDownloadTtl() {
+    loadingDownloadTtl.value = true;
+    try {
+        const result = await apiAdminGetDownloadTTL();
+        const ttl = result?.data?.ttl_minutes;
+        downloadTtlMinutes.value = ttl != null ? ttl : 30;
+    } catch {
+        downloadTtlMinutes.value = 30;
+    } finally {
+        loadingDownloadTtl.value = false;
+    }
+}
+
+async function handleSaveDownloadTtl() {
+    submittingConfig.value = true;
+    try {
+        const ttl = Math.max(1, Math.min(1440, Number(downloadTtlMinutes.value) || 30));
+        await apiAdminUpdateDownloadTTL(ttl);
+        downloadTtlMinutes.value = ttl;
+        message.success(t('admin.downloadTtlSaveSuccess'));
+    } catch (err) {
+        const detail = err?.response?.data?.detail || err?.message || t('admin.unknownError');
+        message.error(t('admin.downloadTtlSaveFailed', { error: detail }));
+    } finally {
+        submittingConfig.value = false;
+    }
 }
 
 const selectedTableMeta = computed(() => {
@@ -350,6 +383,7 @@ onMounted(async () => {
     await loadRows();
     await loadAgentConfig();
     await loadDefaultBasemapIndex();
+    await loadDownloadTtl();
 });
 </script>
 
@@ -448,6 +482,26 @@ onMounted(async () => {
                 @click="handlePublishAnnouncement"
             >
                 {{ t('admin.publishAnnouncement') }}
+            </button>
+
+            <label class="admin-field-label">{{ t('admin.downloadTtlLabel') }}</label>
+            <input
+                v-model.number="downloadTtlMinutes"
+                class="admin-input"
+                type="number"
+                min="1"
+                max="1440"
+                :placeholder="t('admin.downloadTtlPlaceholder')"
+            />
+            <p class="config-hint">{{ t('admin.downloadTtlHint') }}</p>
+
+            <button
+                class="admin-action-btn"
+                type="button"
+                :disabled="submittingConfig"
+                @click="handleSaveDownloadTtl"
+            >
+                {{ t('admin.saveDownloadTtl') }}
             </button>
         </div>
 
@@ -614,29 +668,6 @@ onMounted(async () => {
                     </label>
                 </div>
 
-                <div class="config-row">
-                    <label class="config-field">
-                        <span>{{ t('admin.guestQuota') }}</span>
-                        <input
-                            v-model.number="agentConfigDraft.guest_daily_quota"
-                            class="config-input"
-                            type="number"
-                            min="1"
-                            max="100000"
-                        />
-                    </label>
-                    <label class="config-field">
-                        <span>{{ t('admin.registeredQuota') }}</span>
-                        <input
-                            v-model.number="agentConfigDraft.registered_daily_quota"
-                            class="config-input"
-                            type="number"
-                            min="1"
-                            max="100000"
-                        />
-                    </label>
-                </div>
-
                 <div class="button-group">
                     <button
                         class="btn btn-save"
@@ -649,14 +680,6 @@ onMounted(async () => {
                                 ? t('common.saving')
                                 : t('admin.saveLLMParams')
                         }}
-                    </button>
-                    <button
-                        class="btn btn-edit"
-                        type="button"
-                        :disabled="submittingAgentConfig"
-                        @click="resetChatQuota"
-                    >
-                        {{ t('admin.resetQuota') }}
                     </button>
                     <button
                         class="btn btn-cancel"
@@ -841,6 +864,13 @@ onMounted(async () => {
     font-size: 11px;
     line-height: 1.45;
     color: var(--text-secondary);
+}
+
+.config-hint {
+    margin: 4px 0 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-muted);
 }
 
 .env-status-grid {

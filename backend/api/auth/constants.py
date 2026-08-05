@@ -184,12 +184,25 @@ def resolve_quota_subject(
 
 # ─── 角色配额映射 ───
 def get_role_daily_quota(role: Optional[str]) -> Optional[int]:
+    """从 system_config 读取每日 API 配额，fallback 到硬编码常量。"""
     normalized = normalize_role(role, None)
+    if normalized == ROLE_ADMIN:
+        return None
+    try:
+        from .system_config import _get_system_config_value_sync
+        if normalized == ROLE_GUEST:
+            raw = _get_system_config_value_sync("api_guest_daily_quota", "")
+            return max(1, int(raw)) if raw else max(1, int(GUEST_DAILY_API_QUOTA))
+        if normalized == ROLE_REGISTERED:
+            raw = _get_system_config_value_sync("api_registered_daily_quota", "")
+            return max(1, int(raw)) if raw else max(1, int(REGISTERED_DAILY_API_QUOTA))
+    except (ValueError, TypeError, Exception):
+        pass
     if normalized == ROLE_GUEST:
         return max(1, int(GUEST_DAILY_API_QUOTA))
     if normalized == ROLE_REGISTERED:
         return max(1, int(REGISTERED_DAILY_API_QUOTA))
-    return None  # 管理员不限额
+    return None
 
 
 # ─── 输入规范化函数 ───

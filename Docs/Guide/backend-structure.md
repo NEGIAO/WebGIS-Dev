@@ -32,7 +32,6 @@ backend/
 │   │   ├── __init__.py                            # 门面 re-export
 │   │   ├── constants.py                           # 常量、环境变量
 │   │   ├── db.py                                  # DB schema、config CRUD
-│   │   ├── quota.py                               # 配额管理
 │   │   ├── routes.py                              # 路由处理函数
 │   │   ├── schemas.py                             # Pydantic 模型
 │   │   ├── upstream.py                            # 上游 LLM API 调用

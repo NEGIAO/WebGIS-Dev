@@ -16,6 +16,8 @@ from api.auth import get_auth_db_connection, require_admin
 from api.auth.system_config import (
     _get_default_basemap_index_sync,
     _set_default_basemap_index_sync,
+    _get_system_config_value_sync,
+    _set_system_config_value_sync,
 )
 from config import get_settings
 
@@ -46,6 +48,11 @@ class UpdateContactRequest(BaseModel):
 class UpdateDefaultBasemapIndexRequest(BaseModel):
     """管理员设置全局默认底图索引"""
     index: int = Field(..., ge=0, le=99)
+
+
+class UpdateDownloadTtlRequest(BaseModel):
+    """管理员设置下载任务 TTL（分钟）"""
+    ttl_minutes: int = Field(..., ge=1, le=1440)
 
 
 def _db_connection() -> sqlite3.Connection:
@@ -449,3 +456,60 @@ async def update_default_basemap_index(
         "status": "success",
         "message": f"默认底图索引已更新为 {payload.index}",
     }
+
+
+# ========== 下载任务 TTL 配置 ==========
+
+@router.get("/config/download-ttl")
+async def get_download_ttl(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取下载任务 TTL 配置（分钟）"""
+    minutes = await asyncio.to_thread(
+        _get_system_config_value_sync, "download_task_ttl_minutes", "30"
+    )
+    return {"status": "success", "data": {"ttl_minutes": int(minutes)}}
+
+
+@router.post("/config/download-ttl")
+async def update_download_ttl(
+    payload: UpdateDownloadTtlRequest,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """更新下载任务 TTL（分钟），修改后立即生效"""
+    ttl = int(payload.ttl_minutes)
+    await asyncio.to_thread(
+        _set_system_config_value_sync, "download_task_ttl_minutes", str(ttl)
+    )
+    return {"status": "success", "message": f"下载任务 TTL 已设为 {ttl} 分钟"}
+
+
+# ========== API 配额配置（统一配额池）==========
+
+class UpdateApiQuotaRequest(BaseModel):
+    """管理员设置每日 API 配额"""
+    guest_daily_quota: int = Field(..., ge=1, le=100000)
+    registered_daily_quota: int = Field(..., ge=1, le=100000)
+
+
+@router.get("/config/api-quota")
+async def get_api_quota(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取当前 API 配额配置"""
+    guest = await asyncio.to_thread(_get_system_config_value_sync, "api_guest_daily_quota", "100")
+    registered = await asyncio.to_thread(_get_system_config_value_sync, "api_registered_daily_quota", "1000")
+    return {"status": "success", "data": {"guest_daily_quota": int(guest), "registered_daily_quota": int(registered)}}
+
+
+@router.post("/config/api-quota")
+async def update_api_quota(
+    payload: UpdateApiQuotaRequest,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """更新 API 配额配置，修改后立即生效"""
+    guest = int(payload.guest_daily_quota)
+    registered = int(payload.registered_daily_quota)
+    await asyncio.to_thread(_set_system_config_value_sync, "api_guest_daily_quota", str(guest))
+    await asyncio.to_thread(_set_system_config_value_sync, "api_registered_daily_quota", str(registered))
+    return {"status": "success", "message": f"API 配额已更新（游客 {guest} / 注册用户 {registered}）"}

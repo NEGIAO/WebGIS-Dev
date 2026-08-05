@@ -81,8 +81,13 @@ backendAPI.interceptors.request.use(
 backendAPI.interceptors.response.use(
     (response) => {
         // Keep full response for binary downloads so callers can read headers.
+        // 但仍需检查 HTTP 状态码：401/403 等错误可能以 blob 形式返回（后端 FastAPI 默认行为）。
         if (response?.config?.responseType === 'blob' || response?.config?.responseType === 'arraybuffer') {
-            return response;
+            if (response.status >= 200 && response.status < 300) {
+                return response;
+            }
+            // 错误响应：尝试将 Blob 解析为 JSON 错误信息
+            return parseBlobError(response).then((parsedError) => Promise.reject(parsedError));
         }
 
         // 返回数据中的 data 字段
@@ -158,15 +163,21 @@ backendAPI.interceptors.response.use(
                 return Promise.reject(apiError);
             }
 
-            // ⭐ 特殊处理 429 配额用完（友好提示，不报错）
+            // ⭐ 特殊处理 429 配额用完（含统一 API 配额池的下载额度不足）
             if (status === 429) {
                 isQuotaExceeded = true;
+                // 优先用后端返回的 message（结构化 detail），避免显示"请求过于频繁"误导用户
                 message = detailMsg || getHttpStatusMessage(429);
                 const apiError = new Error(message);
                 apiError.isQuotaExceeded = true;
+                apiError.detailCode = detailCode;
                 apiError.status = status;
                 apiError.statusText = getHttpStatusMessage(status);
                 apiError.originalError = error;
+                // 下载额度不足时标记为 isQuotaInsufficient，便于上层区分提示
+                if (detailCode === 'DOWNLOAD_QUOTA_INSUFFICIENT') {
+                    apiError.isQuotaInsufficient = true;
+                }
                 return Promise.reject(apiError);
             }
         } else if (error.request) {
@@ -198,6 +209,62 @@ backendAPI.interceptors.response.use(
         return Promise.reject(apiError);
     },
 );
+
+/**
+ * 尝试将错误响应的 Blob 解析为 JSON 错误信息。
+ * 后端 FastAPI 返回 401/403 时，若前端请求设置了 responseType: 'blob'，
+ * 响应体是 Blob 而非 JSON，需要手动读取并解析。
+ * @param {import('axios').AxiosResponse} response
+ * @returns {Promise<Error>}
+ */
+async function parseBlobError(response) {
+    const data = response.data;
+    let message = `请求失败 [${response.status}]`;
+    let detailCode = '';
+
+    if (data instanceof Blob && data.type?.includes('application/json')) {
+        try {
+            const text = await data.text();
+            const json = JSON.parse(text);
+            const detail = json?.detail;
+            if (typeof detail === 'string') {
+                message = detail;
+            } else if (detail && typeof detail === 'object') {
+                message = String(detail?.message || detail?.detail || json?.message || '请求失败');
+                detailCode = String(detail?.code || '');
+            } else if (json?.message) {
+                message = json.message;
+            }
+        } catch {
+            // JSON 解析失败，使用状态码兜底
+            message = `请求失败 [${response.status}] ${getHttpStatusMessage(response.status)}`;
+        }
+    } else if (data instanceof Blob) {
+        // 非 JSON Blob（如 HTML 错误页），尝试读取前 200 字符获取更多信息
+        try {
+            const text = await data.text();
+            const snippet = text.slice(0, 200).trim();
+            message = snippet
+                ? `[${response.status}] ${snippet}`
+                : `[${response.status}] ${getHttpStatusMessage(response.status)}`;
+        } catch {
+            message = `[${response.status}] ${getHttpStatusMessage(response.status)}`;
+        }
+    }
+
+    // 注意：不在此处调用 showError，避免与调用方的错误处理重复弹窗。
+    // 调用方可通过 apiError.detailCode / apiError.isGuestInsufficient / apiError.isQuotaInsufficient
+    // 判断错误类型并自行提示用户。
+
+    const apiError = new Error(message);
+    apiError.status = response.status;
+    apiError.statusText = getHttpStatusMessage(response.status);
+    apiError.detailCode = detailCode;
+    apiError.isGuestInsufficient = detailCode === 'GUEST_NO_TOKEN';
+    apiError.isQuotaInsufficient = detailCode === 'DOWNLOAD_QUOTA_INSUFFICIENT';
+    apiError.originalError = { response };
+    return apiError;
+}
 
 /**
  * 错误处理工具函数

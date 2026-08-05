@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus, apiDownloadCancelTask } from '@/api/download';
+import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus, apiDownloadCancelTask, apiDownloadListMyTasks, apiEstimateTileCount } from '@/api/download';
 import { triggerBrowserDownload } from '@common/utils/browserDownload';
 
 type DownloadMode = 'native' | 'progressive'; // native: browser native download, progressive: front-end visualization
@@ -30,7 +30,6 @@ type DownloadTaskResponse = {
     expires_at?: string;
     expires_in_seconds?: number;
     is_expired?: boolean;
-    download_token?: string;
 };
 
 const DEFAULT_TEMPLATE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
@@ -171,9 +170,27 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     const isSubmitting = ref(false);
     const isPolling = ref(false);
     const downloadedAt = ref<number | null>(null);
-    
-    // Download token for native browser downloads
-    const downloadToken = ref('');
+
+    // 估算瓦片数（通过后端 API 计算，与提交时使用相同算法）
+    const estimatedTileCount = ref(0);
+    let estimateTileTimer: number | null = null;
+
+    /** 调用后端 API 更新估算瓦片数 */
+    async function updateEstimatedTileCount(): Promise<void> {
+        const bboxArr = [bbox.value.minLon, bbox.value.minLat, bbox.value.maxLon, bbox.value.maxLat];
+        if (!bboxArr.every(v => typeof v === 'number' && isFinite(v)) || !resolutionM.value) {
+            estimatedTileCount.value = 0;
+            return;
+        }
+        try {
+            const res = await apiEstimateTileCount(bboxArr, resolutionM.value);
+            if (res?.status === 'success') {
+                estimatedTileCount.value = Number(res.tile_count || 0);
+            }
+        } catch {
+            estimatedTileCount.value = 0;
+        }
+    }
 
     let pollTimer: number | null = null;
     let pollInFlight = false;
@@ -208,9 +225,6 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         expiresAt.value = String(payload?.expires_at || '').trim();
         expiresInSeconds.value = Number(payload?.expires_in_seconds ?? 0);
         isExpired.value = payload?.is_expired === true || status.value === 'expired';
-        
-        // Store download token if available (for native browser downloads)
-        downloadToken.value = String(payload?.download_token || '').trim();
     }
 
     function stopPolling(): void {
@@ -239,7 +253,6 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         isExpired.value = false;
         lastError.value = '';
         downloadedAt.value = null;
-        downloadToken.value = '';
         downloadTriggered = false;
     }
 
@@ -280,6 +293,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             const detail = error instanceof Error ? error.message : 'mapDownload.errCreateTask';
             lastError.value = detail;
             status.value = 'failed';
+            // 额度不足时刷新余额显示
+            if (error?.isQuotaInsufficient) {
+                lastError.value = 'mapDownload.quotaInsufficient';
+            }
             console.error('[DownloadStore] submitTask failed:', detail, error);
             return false;
         } finally {
@@ -341,12 +358,9 @@ export const useDownloadStore = defineStore('downloadStore', () => {
                 blob = response.data;
             } else if (response instanceof Blob) {
                 blob = response;
-            } else if (response && typeof response === 'object') {
-                // 如果返回的是对象（错误响应），抛出错误
-                throw new Error(JSON.stringify(response));
             } else {
-                // 尝试转换为 Blob
-                blob = new Blob([response], { type: 'image/tiff' });
+                // 响应不是 Blob（可能是错误对象或未知格式）
+                throw new Error('mapDownload.errInvalidResponse');
             }
 
             // 验证 Blob 有效性
@@ -366,6 +380,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             lastError.value = errorMsg;
             status.value = 'failed';
             console.error('[DownloadStore] downloadResult failed:', errorMsg, error);
+            // 权限不足已由拦截器提示；其他错误在此处提示
+            if (!error?.isGuestInsufficient && !error?.isQuotaExceeded) {
+                console.error('[DownloadStore] download error detail:', error);
+            }
         }
     }
 
@@ -427,6 +445,62 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         downloadedAt.value = Date.now();
     }
 
+    /** 切换到外部任务（从任务列表选中） */
+    function setExternalTask(targetTaskId: string): void {
+        stopPolling();
+        taskId.value = String(targetTaskId || '').trim();
+        status.value = 'idle';
+        progress.value = 0;
+        message.value = '';
+        fileReady.value = false;
+        expiresAt.value = '';
+        expiresInSeconds.value = 0;
+        isExpired.value = false;
+        lastError.value = '';
+        downloadTriggered = false;
+    }
+
+    // 我的任务列表（账号绑定）
+    const myTasks = ref<DownloadTaskResponse[]>([]);
+    const loadingMyTasks = ref(false);
+
+    /** 从后端拉取当前用户的任务列表 */
+    async function fetchMyTasks(): Promise<void> {
+        loadingMyTasks.value = true;
+        try {
+            const response = await apiDownloadListMyTasks();
+            const tasks = response?.tasks;
+            if (Array.isArray(tasks)) {
+                myTasks.value = tasks;
+            } else {
+                myTasks.value = [];
+            }
+        } catch (error) {
+            console.error('[DownloadStore] fetchMyTasks failed:', error);
+            myTasks.value = [];
+            // 权限不足（游客）已由拦截器提示；此处无需重复弹窗
+        } finally {
+            loadingMyTasks.value = false;
+        }
+    }
+
+    /** 刷新单个任务进度（从列表中更新） */
+    async function refreshTaskStatus(taskId: string): Promise<void> {
+        const safeId = String(taskId || '').trim();
+        if (!safeId) return;
+        try {
+            const response = await apiDownloadTaskStatus(safeId);
+            if (response && typeof response === 'object') {
+                const idx = myTasks.value.findIndex(t => t.task_id === safeId);
+                if (idx !== -1) {
+                    myTasks.value[idx] = response;
+                }
+            }
+        } catch (error) {
+            console.error('[DownloadStore] refreshTaskStatus failed:', error);
+        }
+    }
+
     return {
         tileUrlTemplate,
         bbox,
@@ -446,7 +520,8 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         isSubmitting,
         isPolling,
         downloadedAt,
-        downloadToken,
+        estimatedTileCount,
+        updateEstimatedTileCount,
         hasActiveTask,
         isRunning,
         submitTask,
@@ -459,7 +534,12 @@ export const useDownloadStore = defineStore('downloadStore', () => {
         applyBboxFromExtent,
         setTileUrlTemplate,
         markDownloaded,
+        setExternalTask,
         extentSet,
+        myTasks,
+        loadingMyTasks,
+        fetchMyTasks,
+        refreshTaskStatus,
         clearExtent() {
             extentSet.value = false;
             bbox.value = { minLon: 116.2, minLat: 39.8, maxLon: 116.3, maxLat: 39.9 };

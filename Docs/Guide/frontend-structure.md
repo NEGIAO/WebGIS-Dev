@@ -306,7 +306,12 @@ frontend/src/
 │   │   │   │   │   ├── theme-crice.ts
 │   │   │   │   │   ├── theme-dark.ts
 │   │   │   │   │   ├── theme-polygon.ts
-│   │   │   │   │   └── theme-simple.ts
+│   │   │   │   │   ├── theme-simple.ts
+│   │   │   │   │   └── images/
+│   │   │   │   │       ├── theme-compass-preview.png  # 罗盘主题预览图
+│   │   │   │   │       ├── theme-crice.png           # Crice 主题预览图
+│   │   │   │   │       ├── theme-dark-preview.png    # 暗色主题预览图
+│   │   │   │   │       └── theme-polygon-preview.png  # 多边形主题预览图
 │   │   │   │   └── types/
 │   │   │   │       ├── common.ts
 │   │   │   │       ├── compass.ts
@@ -440,6 +445,7 @@ frontend/src/
 │   │   ├── utils/
 │   │   │   ├── abortManager.js  # 请求中断管理器
 │   │   │   ├── browserDownload.ts  # 浏览器下载触发工具（Blob / URL 两种模式）
+│   │   │   ├── clipboard.ts  # 剪贴板工具（复制文本，降级 execCommand）
 │   │   │   ├── labelValidator.ts  # 标签校验
 │   │   │   ├── normalize.ts  # 二值标记规范化
 │   │   │   ├── pathUtils.js  # 路径工具
@@ -483,6 +489,7 @@ frontend/src/
 │       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）
 │       │   ├── MapControlsBar.vue  # 地图控件栏（缩放/旋转/重置）
 │       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）
+│       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）
 │       │   ├── MapEasterEgg.vue  # 地图彩蛋（隐藏交互）
 │       │   ├── MapSwipeController.vue  # 卷帘对比控制器
 │       │   ├── MeasurePanel.vue

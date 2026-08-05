@@ -303,7 +303,7 @@
                 </div>
             </div>
 
-            <!-- 4. AI 聊天配额 -->
+            <!-- 4. API 额度设置 -->
             <div
                 v-show="activeTab === 'quota'"
                 id="api-panel-quota"
@@ -312,14 +312,14 @@
                 aria-labelledby="api-tab-quota"
             >
                 <div class="panel-header">
-                    <h2>AI 聊天配额</h2>
+                    <h2>API 额度设置</h2>
                     <div class="section-actions">
                         <button
                             v-if="!editingQuota"
                             class="btn btn-edit"
                             @click="startEditQuota"
                         >
-                            编辑配额
+                            编辑额度
                         </button>
                     </div>
                 </div>
@@ -386,7 +386,7 @@
                         <div class="quota-body">
                             <div class="quota-item">
                                 <label>每日限额：</label>
-                                <span class="quota-value">{{ chatQuota.guest }} 次</span>
+                                <span class="quota-value">{{ apiQuota.guest }} 次</span>
                             </div>
                         </div>
                     </div>
@@ -398,14 +398,14 @@
                         <div class="quota-body">
                             <div class="quota-item">
                                 <label>每日限额：</label>
-                                <span class="quota-value">{{ chatQuota.registered }} 次</span>
+                                <span class="quota-value">{{ apiQuota.registered }} 次</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <p class="quota-note">
-                    📝 <strong>说明：</strong> 控制 AI 对话（Agent Chat）每日调用次数上限，修改后立即生效。
+                    📝 <strong>说明：</strong> 统一 API 额度池，所有操作（API 调用、AI 对话、地图下载）共享同一每日额度，修改后立即生效。
                 </p>
             </div>
 
@@ -429,8 +429,8 @@ import {
     apiAdminApiUsageByUser,
     apiAdminApiUsageByEndpoint,
     apiAdminApiLogs,
-    apiAdminGetAgentConfig,
-    apiAdminUpdateAgentConfig,
+    apiAdminGetApiQuota,
+    apiAdminUpdateApiQuota,
 } from '@/api/backend';
 import { useMessage } from '@common/shell/useMessage';
 import ApiKeysManagementPanel from './ApiKeysManagementPanel.vue';
@@ -442,7 +442,7 @@ const tabs = [
     { id: 'by-user', icon: '📊', label: '用户统计', desc: '用户维度用量' },
     { id: 'by-endpoint', icon: '🔗', label: '端点统计', desc: '接口热度与耗时' },
     { id: 'logs', icon: '📝', label: '调用日志', desc: '请求明细追踪' },
-    { id: 'quota', icon: '🤖', label: 'AI 聊天配额', desc: '对话次数限制' },
+    { id: 'quota', icon: '⚙️', label: 'API 额度设置', desc: '统一 API 额度池' },
     { id: 'api-keys', icon: '🔑', label: '密钥管理', desc: '第三方密钥池' },
 ];
 
@@ -473,8 +473,8 @@ const logsFilter = ref({
     offset: 0,
 });
 
-// AI 聊天配额
-const chatQuota = ref({ guest: 10, registered: 100 });
+// API 额度设置（统一配额池）
+const apiQuota = ref({ guest: 100, registered: 1000 });
 const loadingQuota = ref(false);
 
 function formatTime(isoString) {
@@ -570,16 +570,16 @@ async function nextLogsPage() {
 async function loadQuotaConfig() {
     loadingQuota.value = true;
     try {
-        const result = await apiAdminGetAgentConfig();
-        const src = result?.data?.chat_quota;
-        if (src && typeof src.guest === 'number' && typeof src.registered === 'number') {
-            chatQuota.value = { guest: src.guest, registered: src.registered };
+        const result = await apiAdminGetApiQuota();
+        const src = result?.data;
+        if (src && typeof src.guest_daily_quota === 'number' && typeof src.registered_daily_quota === 'number') {
+            apiQuota.value = { guest: src.guest_daily_quota, registered: src.registered_daily_quota };
         } else {
-            chatQuota.value = { guest: 10, registered: 100 };
+            apiQuota.value = { guest: 100, registered: 1000 };
         }
     } catch (error) {
-        console.warn('[ApiManagementPanel] 读取聊天配额失败:', error);
-        message.error(`加载配额失败: ${error.message}`);
+        console.warn('[ApiManagementPanel] 读取 API 额度失败:', error);
+        message.error(`加载额度失败: ${error.message}`);
     } finally {
         loadingQuota.value = false;
     }
@@ -588,12 +588,12 @@ async function loadQuotaConfig() {
 // 配额可编辑状态
 const editingQuota = ref(false);
 const savingQuota = ref(false);
-const quotaDraft = ref({ guest_limit: 10, registered_limit: 100 });
+const quotaDraft = ref({ guest_limit: 100, registered_limit: 1000 });
 
 function startEditQuota() {
     quotaDraft.value = {
-        guest_limit: chatQuota.value.guest,
-        registered_limit: chatQuota.value.registered,
+        guest_limit: apiQuota.value.guest,
+        registered_limit: apiQuota.value.registered,
     };
     editingQuota.value = true;
 }
@@ -617,15 +617,12 @@ async function saveQuotaConfig() {
 
     savingQuota.value = true;
     try {
-        await apiAdminUpdateAgentConfig({
-            guest_daily_quota: guestLimit,
-            registered_daily_quota: registeredLimit,
-        });
-        message.success('配额配置已保存');
+        await apiAdminUpdateApiQuota(guestLimit, registeredLimit);
+        message.success('API 额度已保存');
         editingQuota.value = false;
         await loadQuotaConfig();
     } catch (error) {
-        message.error(`保存配额失败: ${error.message}`);
+        message.error(`保存额度失败: ${error.message}`);
     } finally {
         savingQuota.value = false;
     }

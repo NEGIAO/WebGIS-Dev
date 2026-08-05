@@ -347,26 +347,6 @@
                             style="width: auto; margin-top: 8px;"
                         />
                     </label>
-                    <label class="config-item">
-                        <span>{{ t('admin.guestQuota') }}</span>
-                        <input
-                            v-model.number="agentConfigDraft.guest_daily_quota"
-                            type="number"
-                            min="1"
-                            max="100000"
-                            class="key-input"
-                        />
-                    </label>
-                    <label class="config-item">
-                        <span>{{ t('admin.registeredQuota') }}</span>
-                        <input
-                            v-model.number="agentConfigDraft.registered_daily_quota"
-                            type="number"
-                            min="1"
-                            max="100000"
-                            class="key-input"
-                        />
-                    </label>
                     <label class="config-item config-item-full">
                         <span>System Prompt</span>
                         <textarea
@@ -380,7 +360,6 @@
 
                 <div class="button-group">
                     <button class="btn btn-save" @click="saveAgentConfigWrapper">{{ t('apiKeys.saveParams') }}</button>
-                    <button class="btn btn-edit" @click="resetChatQuotaWrapper">{{ t('apiKeys.resetQuota') }}</button>
                     <button class="btn btn-cancel" @click="cancelEditAgentConfig">{{ t('apiKeys.cancel') }}</button>
                 </div>
             </div>
@@ -433,28 +412,11 @@
                         <span>Stream</span>
                         <strong>{{ agentConfig.stream ? t('admin.streamOn') : t('admin.streamOff') }}</strong>
                     </div>
-                    <div class="config-item">
-                        <span>{{ t('admin.guestQuota') }}</span>
-                        <strong>{{ agentQuota.guest }}</strong>
-                    </div>
-                    <div class="config-item">
-                        <span>{{ t('admin.registeredQuota') }}</span>
-                        <strong>{{ agentQuota.registered }}</strong>
-                    </div>
                     <div class="config-item config-item-full">
                         <span>System Prompt</span>
                         <strong>{{ agentConfig.system_prompt || t('apiKeys.notConfigured') }}</strong>
                     </div>
                 </div>
-
-                <p class="config-note">
-                    {{
-                        t('admin.chatQuotaNote', {
-                            guest: agentQuota.guest,
-                            registered: agentQuota.registered,
-                        })
-                    }}
-                </p>
             </div>
         </div>
 
@@ -618,26 +580,11 @@ const {
     loading: agentConfigLoading,
     editingConfig: editingAgentConfig,
     save: saveAgentConfig,
-    resetQuota: resetChatQuota,
     load: loadAgentConfig,
     hydrate: hydrateAgentConfigDraft,
     startEdit: startEditAgentConfig,
     cancelEdit: cancelEditAgentConfig,
 } = useAgentConfig();
-
-const agentQuota = ref({
-    guest: 10,
-    registered: 100,
-});
-
-const hydrateWithQuotaSync = () => {
-    hydrateAgentConfigDraft();
-    const chatQuota = agentConfig.value?.chat_quota || {};
-    agentQuota.value = {
-        guest: Number(chatQuota.guest || 10),
-        registered: Number(chatQuota.registered || 100),
-    };
-};
 
 function flattenProviderToTop() {
     const provider = agentConfig.value?.provider || {};
@@ -646,10 +593,10 @@ function flattenProviderToTop() {
     }
 }
 
-const loadAgentConfigWithQuota = async () => {
+const loadAgentConfigWrapped = async () => {
     await loadAgentConfig();
     flattenProviderToTop();
-    hydrateWithQuotaSync();
+    hydrateAgentConfigDraft();
 };
 
 const defaultAILoading = ref(false);
@@ -737,7 +684,7 @@ function cancelEdit() {
 }
 
 async function loadAgentConfigWrapper() {
-    await loadAgentConfigWithQuota();
+    await loadAgentConfigWrapped();
 }
 
 async function saveAgentConfigWrapper() {
@@ -745,13 +692,8 @@ async function saveAgentConfigWrapper() {
     if (ok) {
         flattenProviderToTop();
         cancelEditAgentConfig();
-        hydrateWithQuotaSync();
+        hydrateAgentConfigDraft();
     }
-}
-
-async function resetChatQuotaWrapper() {
-    await resetChatQuota();
-    flattenProviderToTop();
 }
 
 async function saveKey(keyName) {
@@ -918,7 +860,7 @@ async function saveDefaultAIConfig() {
 
 onMounted(async () => {
     await loadKeysStatus();
-    await loadAgentConfigWithQuota();
+    await loadAgentConfigWrapped();
     await loadDefaultAIConfig();
 });
 </script>

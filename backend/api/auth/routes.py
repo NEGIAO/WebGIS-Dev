@@ -31,7 +31,7 @@ from .constants import (
     normalize_role,
     resolve_quota_subject,
 )
-from .dependencies import require_login
+from .dependencies import require_login, require_admin
 from .models import (
     BindEmailRequest,
     ChangeAvatarRequest,
@@ -1250,4 +1250,34 @@ async def update_user_preferences(
         "status": "success",
         "message": "偏好设置已保存",
         "preferences": preferences,
+    }
+
+
+# ─── 下载配额估算（统一 API 配额池）─────────────────────────────
+
+
+@router.get("/download-quota/estimate")
+async def estimate_download_quota_cost(
+    tile_count: int,
+    session: Dict[str, Any] = Depends(require_login),
+) -> Dict[str, Any]:
+    """估算给定瓦片数所需的 API 配额消耗（基于统一配额池，不消耗）。
+
+    tile_count=0 时仅返回当前配额快照（不计算消耗）。
+    """
+    username = str(session.get("username") or "").strip()
+    if not username:
+        raise HTTPException(status_code=401, detail="登录状态异常")
+    role = str(session.get("role") or "").strip()
+    from .quota import estimate_download_cost, get_user_quota_snapshot_sync
+    cost = estimate_download_cost(tile_count) if tile_count > 0 else 0
+    quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
+    snapshot = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
+    return {
+        "status": "success",
+        "cost": cost,
+        "remaining": snapshot["remaining"],
+        "limit": snapshot["limit"],
+        "used": snapshot["used"],
+        "sufficient": snapshot["remaining"] is None or snapshot["remaining"] >= cost,
     }

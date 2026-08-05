@@ -36,8 +36,6 @@ export const DEFAULT_AGENT_CONFIG = {
     extra_body: JSON.stringify(getDefaultExtraBody(), null, 2),
     stream: true,
     system_prompt: '',
-    guest_daily_quota: 10,
-    registered_daily_quota: 100,
 };
 
 /**
@@ -58,7 +56,6 @@ export function parseAvailableModelsText(rawText) {
 export function hydrateAgentConfigDraft(agentConfig, agentConfigDraft) {
     const cfg = agentConfig || {};
     const provider = cfg.provider || {};
-    const chatQuota = cfg.chat_quota || {};
 
     agentConfigDraft.value = {
         base_url: String(provider.base_url || ''),
@@ -76,8 +73,6 @@ export function hydrateAgentConfigDraft(agentConfig, agentConfigDraft) {
             : JSON.stringify(getDefaultExtraBody(), null, 2),
         stream: Boolean(provider.stream ?? true),
         system_prompt: String(provider.system_prompt || ''),
-        guest_daily_quota: Number(chatQuota.guest ?? 10),
-        registered_daily_quota: Number(chatQuota.registered ?? 100),
     };
 }
 
@@ -86,8 +81,6 @@ export function hydrateAgentConfigDraft(agentConfig, agentConfigDraft) {
  */
 export function buildSavePayload(agentConfigDraft) {
     const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text);
-    const guestDailyQuota = Number(agentConfigDraft.value.guest_daily_quota || 0);
-    const registeredDailyQuota = Number(agentConfigDraft.value.registered_daily_quota || 0);
 
     let extraBodyParsed = {};
     try {
@@ -109,8 +102,6 @@ export function buildSavePayload(agentConfigDraft) {
         top_p: Number(agentConfigDraft.value.top_p ?? 0.95),
         extra_body: extraBodyParsed,
         stream: Boolean(agentConfigDraft.value.stream ?? true),
-        guest_daily_quota: guestDailyQuota,
-        registered_daily_quota: registeredDailyQuota,
         system_prompt: String(agentConfigDraft.value.system_prompt || '').trim(),
     };
 
@@ -129,14 +120,6 @@ export function buildSavePayload(agentConfigDraft) {
 
     if (!payload.model && payload.available_models.length === 0) {
         return { error: t('admin.modelOrListRequired') };
-    }
-
-    if (!Number.isFinite(guestDailyQuota) || guestDailyQuota < 1) {
-        return { error: t('admin.guestQuotaMustBePositive') };
-    }
-
-    if (!Number.isFinite(registeredDailyQuota) || registeredDailyQuota < 1) {
-        return { error: t('admin.registeredQuotaMustBePositive') };
     }
 
     return { payload };
@@ -200,32 +183,6 @@ export async function saveAgentConfig(agentConfig, agentConfigDraft, loadingRef,
 }
 
 /**
- * 重置对话额度（全站破坏性操作：影响所有用户）
- * @param {import('vue').Ref<Object>} agentConfig - 配置状态 ref
- * @param {import('vue').Ref<Object>} agentConfigDraft - 表单草稿 ref
- * @param {import('vue').Ref<boolean>} loadingRef - 加载状态 ref
- * @param {import('vue').Ref<boolean>|null} submittingRef - 提交状态 ref（置位后调用方按钮 :disabled 生效）
- */
-export async function resetChatQuota(agentConfig, agentConfigDraft, loadingRef, submittingRef = null) {
-    const message = useMessage();
-    // 确认 + 再入守卫（V3.4.62 B2）：跨用户破坏操作值得强打断式确认
-    if (submittingRef?.value) return;
-    if (typeof window !== 'undefined' && !window.confirm(t('admin.resetQuotaConfirm'))) {
-        return;
-    }
-    if (submittingRef) submittingRef.value = true;
-    try {
-        await apiAdminUpdateAgentConfig({ reset_chat_quota: true });
-        await loadAgentConfig(agentConfig, agentConfigDraft, loadingRef);
-        message.success(t('admin.resetQuotaSuccess'));
-    } catch (error) {
-        message.error(t('admin.resetQuotaFailed', { error: error.message }));
-    } finally {
-        if (submittingRef) submittingRef.value = false;
-    }
-}
-
-/**
  * 创建 Agent 配置状态和方法的工厂函数
  * 每个组件调用一次获得独立的响应式状态
  */
@@ -248,7 +205,6 @@ export function useAgentConfig() {
         // 方法
         load: () => loadAgentConfig(agentConfig, agentConfigDraft, loading),
         save: () => saveAgentConfig(agentConfig, agentConfigDraft, loading, submitting),
-        resetQuota: () => resetChatQuota(agentConfig, agentConfigDraft, loading, submitting),
         hydrate: () => hydrateAgentConfigDraft(agentConfig.value, agentConfigDraft),
         /** 进入编辑模式，将当前配置填充到草稿 */
         startEdit: () => {

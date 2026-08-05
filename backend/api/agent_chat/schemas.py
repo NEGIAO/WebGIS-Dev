@@ -167,9 +167,6 @@ class AgentConfigUpdateRequest(BaseModel):
     temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     extra_body: Optional[Dict[str, Any]] = Field(default=None, description="上游请求体附加字段")
-    guest_daily_quota: Optional[int] = Field(default=None, ge=1, le=100000)
-    registered_daily_quota: Optional[int] = Field(default=None, ge=1, le=100000)
-    reset_chat_quota: Optional[bool] = Field(default=None)
 
 
 class AgentUserConfigUpdateRequest(BaseModel):

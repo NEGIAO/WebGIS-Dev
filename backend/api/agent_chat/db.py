@@ -14,12 +14,8 @@ from config import get_settings
 
 from .constants import (
     AGENT_API_KEY_PRIMARY,
-    AGENT_CHAT_GUEST_DAILY_QUOTA,
-    AGENT_CHAT_REGISTERED_DAILY_QUOTA,
     CONFIG_KEY_AVAILABLE_MODELS,
     CONFIG_KEY_BASE_URL,
-    CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
-    CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
     CONFIG_KEY_DEFAULT_AI_API_KEY,
     CONFIG_KEY_DEFAULT_AI_BASE_URL,
     CONFIG_KEY_DEFAULT_AI_MODEL,
@@ -109,28 +105,7 @@ def _ensure_agent_chat_tables_sync() -> None:
         with _db_connection() as conn:
             _ensure_system_config_table_sync(conn)
             _ensure_api_keys_table_sync(conn)
-
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS agent_chat_usage_daily (
-                    quota_subject TEXT NOT NULL,
-                    role TEXT NOT NULL,
-                    usage_date TEXT NOT NULL,
-                    calls INTEGER NOT NULL DEFAULT 0,
-                    updated_at TEXT NOT NULL,
-                    PRIMARY KEY (quota_subject, usage_date)
-                )
-                """
-            )
-            conn.execute(
-                """
-                CREATE INDEX IF NOT EXISTS idx_agent_chat_usage_role_date
-                ON agent_chat_usage_daily(role, usage_date)
-                """
-            )
-
-            conn.execute(
-                """
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS agent_user_config (
                     username TEXT PRIMARY KEY,
                     api_key TEXT,
@@ -145,8 +120,7 @@ def _ensure_agent_chat_tables_sync() -> None:
                     updated_at TEXT NOT NULL,
                     updated_by TEXT
                 )
-                """
-            )
+            """)
 
             try:
                 user_cfg_cols = conn.execute("PRAGMA table_info(agent_user_config)").fetchall()
@@ -454,34 +428,6 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
     }
 
 
-def _get_agent_chat_quota_policy_sync() -> Dict[str, Optional[int]]:
-    config_values = _get_system_config_values_sync(
-        [
-            CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
-            CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
-        ]
-    )
-
-    guest_quota = _safe_parse_int(
-        config_values.get(CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA),
-        AGENT_CHAT_GUEST_DAILY_QUOTA,
-        1,
-        100000,
-    )
-    registered_quota = _safe_parse_int(
-        config_values.get(CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA),
-        AGENT_CHAT_REGISTERED_DAILY_QUOTA,
-        1,
-        100000,
-    )
-
-    return {
-        "guest": guest_quota,
-        "registered": registered_quota,
-        "admin": None,
-    }
-
-
 def _delete_system_config_keys_sync(keys: List[str]) -> None:
     normalized_keys = [str(key or "").strip() for key in (keys or []) if str(key or "").strip()]
     if not normalized_keys:
@@ -501,14 +447,6 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
 
     now_iso = _iso_now()
     rows_to_upsert: List[Tuple[str, str, str]] = []
-
-    if bool(updates.get("reset_chat_quota")):
-        _delete_system_config_keys_sync(
-            [
-                CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
-                CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
-            ]
-        )
 
     if "base_url" in updates:
         rows_to_upsert.append((CONFIG_KEY_BASE_URL, _normalize_base_url(str(updates["base_url"])), now_iso))
@@ -564,29 +502,6 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
             (
                 CONFIG_KEY_EXTRA_BODY,
                 json.dumps(extra_body_val, ensure_ascii=False) if extra_body_val is not None else "",
-                now_iso,
-            )
-        )
-    if "guest_daily_quota" in updates:
-        rows_to_upsert.append(
-            (
-                CONFIG_KEY_CHAT_GUEST_DAILY_QUOTA,
-                str(_safe_parse_int(updates["guest_daily_quota"], AGENT_CHAT_GUEST_DAILY_QUOTA, 1, 100000)),
-                now_iso,
-            )
-        )
-    if "registered_daily_quota" in updates:
-        rows_to_upsert.append(
-            (
-                CONFIG_KEY_CHAT_REGISTERED_DAILY_QUOTA,
-                str(
-                    _safe_parse_int(
-                        updates["registered_daily_quota"],
-                        AGENT_CHAT_REGISTERED_DAILY_QUOTA,
-                        1,
-                        100000,
-                    )
-                ),
                 now_iso,
             )
         )

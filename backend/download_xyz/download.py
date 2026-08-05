@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 import math
 import os
 import re
-import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -17,11 +15,19 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from api.auth import require_api_access
+from api.auth.constants import resolve_quota_subject
+from api.auth.quota import (
+    _consume_api_quota_sync,
+    _refund_api_quota_sync,
+    estimate_download_cost,
+    get_user_quota_snapshot_sync,
+)
+from api.auth.system_config import _get_system_config_value_sync
 from config import get_int, get_str
 from utils.net_guard import is_disallowed_host
 
-from .tile_engine import MAX_LATITUDE, WEB_MERCATOR_EXTENT, build_geotiff_from_tiles, clip_geotiff_to_bbox
-from .download_task import DownloadTask, create_task, get_task, update_task
+from .tile_engine import MAX_LATITUDE, MAX_CONCURRENCY, WEB_MERCATOR_EXTENT, bbox4326_to_tile_range, build_geotiff_from_tiles, clip_geotiff_to_bbox, resolution_to_zoom
+from .download_task import DownloadTask, create_task, get_task, update_task, list_active_tasks_by_user
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +35,6 @@ router = APIRouter(prefix="/api/download", tags=["Download"])
 
 DEFAULT_OUTPUT_DIR = get_str("DOWNLOAD_OUTPUT_DIR")
 DEFAULT_TASK_TTL_MINUTES = get_int("DOWNLOAD_TASK_TTL_MINUTES", 30, minimum=1, maximum=24 * 60)
-DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = get_int("DOWNLOAD_TOKEN_LIFETIME_MINUTES", 60, minimum=1, maximum=24 * 60)
-
-# 下载令牌缓存：{token: (task_id, expires_at)}
-_download_tokens: Dict[str, tuple[str, datetime]] = {}
 
 # 下载任务取消标志缓存：{task_id: True}，用于 report_progress 快速检查，避免逐瓦片 DB 查询
 _cancelled_tasks: Dict[str, bool] = {}
@@ -40,7 +42,6 @@ _cancelled_tasks: Dict[str, bool] = {}
 # 下载任务附加元数据缓存：用于生成更可读的下载文件名
 # key 为 task_id，value 为元数据字典，过期后由清理逻辑移除
 _download_task_metadata: Dict[str, dict] = {}
-_METADATA_MAX_SIZE = 500
 
 
 class CreateDownloadTaskRequest(BaseModel):
@@ -64,58 +65,15 @@ class DownloadTaskStatusResponse(BaseModel):
     expires_at: datetime
     expires_in_seconds: int
     is_expired: bool
-    download_token: Optional[str] = None
+    # 新增字段：瓦片数与时间估算
+    tile_count: Optional[int] = None
+    tiles_downloaded: Optional[int] = None
+    estimated_total_seconds: Optional[int] = None
+    estimated_remaining_seconds: Optional[int] = None
 
 
-def _generate_download_token(task_id: str) -> str:
-    """为指定任务生成一个安全的临时下载令牌。"""
-    random_part = secrets.token_urlsafe(32)
-    task_hash = hashlib.sha256(task_id.encode()).hexdigest()[:8]
-    return f"{task_id}_{task_hash}_{random_part}"
-
-
-def _validate_download_token(token: str, task_id: str) -> bool:
-    """校验下载令牌是否存在、匹配且未过期。"""
-    if token not in _download_tokens:
-        return False
-
-    stored_task_id, expires_at = _download_tokens[token]
-    if stored_task_id != task_id:
-        return False
-
-    if datetime.now(timezone.utc) >= expires_at:
-        del _download_tokens[token]
-        return False
-
-    return True
-
-
-def _create_download_token_for_task(
-    task_id: str,
-    lifetime_minutes: int = DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES,
-) -> str:
-    """为某个任务创建并保存一个下载令牌。"""
-    token = _generate_download_token(task_id)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=lifetime_minutes)
-    _download_tokens[token] = (task_id, expires_at)
-
-    # 令牌数量过多时，只清除已过期的令牌，避免活跃令牌被误删
-    if len(_download_tokens) > 1000:
-        now = datetime.now(timezone.utc)
-        expired_keys = [k for k, (_, exp) in _download_tokens.items() if now >= exp]
-        for k in expired_keys:
-            del _download_tokens[k]
-
-    # 元数据缓存超限时，移除最老的一批（按创建时间排序）
-    if len(_download_task_metadata) > _METADATA_MAX_SIZE:
-        sorted_keys = sorted(
-            _download_task_metadata.keys(),
-            key=lambda k: _download_task_metadata[k].get("created_at", datetime.min),
-        )
-        for k in sorted_keys[: len(sorted_keys) // 2]:
-            _download_task_metadata.pop(k, None)
-
-    return token
+class DownloadTaskListResponse(BaseModel):
+    tasks: List[DownloadTaskStatusResponse]
 
 
 @router.post("/tasks", response_model=DownloadTaskStatusResponse)
@@ -146,7 +104,65 @@ async def create_download_task(
 
         task_id = uuid.uuid4().hex
         output_path = os.path.join(DEFAULT_OUTPUT_DIR, f"{task_id}.tif")
-        task = create_task(task_id, file_path=output_path)
+
+        # 绑定当前用户 username
+        current_username = _current_user.get("username") or None
+
+        # 估算瓦片数与下载耗时
+        tile_count = _estimate_tile_count(payload.bbox, payload.resolution_m)
+        estimated_seconds = _estimate_duration(tile_count)
+
+        # 下载配额校验：使用统一 API 配额池，下载消耗 = ceil(tile_count / tiles_per_unit)
+        # 提交时预扣估算额度，任务完成后按实际瓦片数多退少补；失败/取消时退还
+        download_cost = estimate_download_cost(tile_count)
+        user_role = _current_user.get("role") or ""
+        quota_subject = resolve_quota_subject(current_username, user_role, _current_user.get("guest_uid"))
+        quota_snapshot = get_user_quota_snapshot_sync(current_username, user_role, quota_subject)
+        if quota_snapshot["remaining"] is not None and quota_snapshot["remaining"] < download_cost:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "DOWNLOAD_QUOTA_INSUFFICIENT",
+                    "message": f"API 配额不足（需要 {download_cost}，当前剩余 {quota_snapshot['remaining']}）。请联系管理员。",
+                    "cost": download_cost,
+                    "remaining": quota_snapshot["remaining"],
+                    "limit": quota_snapshot["limit"],
+                    "used": quota_snapshot["used"],
+                },
+            )
+
+        # 预扣估算额度（管理员不受配额限制，无需预扣）
+        pre_deducted = 0
+        if quota_snapshot["remaining"] is not None:
+            consume_result = _consume_api_quota_sync(
+                current_username, user_role, quota_subject=quota_subject,
+                cost=download_cost, action="download",
+            )
+            if not consume_result["allowed"]:
+                # 扣减失败（理论上不会发生，因为已校验），回退
+                logger.warning("预扣下载配额失败：用户=%s | 任务=%s", current_username, task_id)
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "code": "DOWNLOAD_QUOTA_INSUFFICIENT",
+                        "message": "配额扣减失败，请稍后重试。",
+                        "cost": download_cost,
+                        "remaining": quota_snapshot["remaining"],
+                    },
+                )
+            pre_deducted = download_cost
+            logger.info(
+                "预扣下载配额：用户=%s | 预扣=%d | 任务=%s | 剩余=%s",
+                current_username, pre_deducted, task_id, consume_result["remaining"],
+            )
+
+        task = create_task(
+            task_id,
+            file_path=output_path,
+            username=current_username,
+            tile_count=tile_count,
+            estimated_seconds=estimated_seconds,
+        )
 
         basemap_id = _extract_basemap_id(payload.tile_url_template)
         readable_filename = _build_readable_filename(
@@ -164,11 +180,14 @@ async def create_download_task(
         }
 
         logger.info(
-            "创建下载任务：%s | 底图：%s | CRS：%s | 分辨率：%s",
+            "创建下载任务：%s | 底图：%s | CRS：%s | 分辨率：%s | 用户：%s | 瓦片数：%d | 预计耗时：%ds",
             task_id,
             payload.tile_url_template[:50],
             crs,
             payload.resolution_m,
+            current_username,
+            tile_count,
+            estimated_seconds,
         )
 
         background_tasks.add_task(
@@ -176,6 +195,11 @@ async def create_download_task(
             task_id,
             payload,
             output_path,
+            current_username,
+            user_role,
+            quota_subject,
+            tile_count,
+            pre_deducted,
         )
 
         return _build_status_response(task)
@@ -190,9 +214,32 @@ async def create_download_task(
         )
 
 
-@router.get("/tasks/{task_id}", response_model=DownloadTaskStatusResponse)
-def get_download_task(task_id: str):
-    """查询任务状态。"""
+@router.get("/estimate-tiles")
+async def estimate_tile_count(
+    bbox: str = "",
+    resolution_m: float = 0,
+    _current_user: dict = Depends(require_api_access),
+):
+    """根据 bbox + 分辨率估算瓦片总数（与任务提交时使用相同算法）。
+
+    bbox 格式："minLon,minLat,maxLon,maxLat"
+    """
+    try:
+        parts = [float(x.strip()) for x in bbox.split(",") if x.strip()]
+        if len(parts) != 4:
+            raise HTTPException(status_code=400, detail="bbox 格式错误，需要 4 个数值：minLon,minLat,maxLon,maxLat")
+        tile_count = _estimate_tile_count(parts, resolution_m)
+        return {"status": "success", "tile_count": tile_count}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"估算失败：{str(exc)[:100]}")
+@router.get("/tasks/{task_id}")
+def get_download_task(
+    task_id: str,
+    _current_user: dict = Depends(require_api_access),
+):
+    """查询任务状态。任何登录用户均可查询。"""
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
@@ -219,27 +266,24 @@ def cancel_download_task(
 
 
 @router.get("/tasks/{task_id}/file")
-def download_task_file(task_id: str, token: Optional[str] = None):
-    """下载任务完成后的 GeoTIFF 文件。"""
+def download_task_file(task_id: str):
+    """下载任务完成后的 GeoTIFF 文件。
+
+    安全模型：仅需有效 task_id 即可下载，无需登录、不校验归属。
+    配额在提交任务时已扣除，下载环节不再校验。
+    """
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
 
-    # 如果传入了令牌，则按浏览器直链下载模式校验
-    if token and not _validate_download_token(token, task_id):
-        logger.warning("任务 %s 的下载令牌无效或已过期", task_id)
-        raise HTTPException(
-            status_code=401,
-            detail="Download token is invalid or expired. Please request a new token.",
-        )
-
     expires_at, _, is_expired = _get_expiration(task)
     if is_expired:
+        ttl_minutes = _get_task_ttl_minutes()
         raise HTTPException(
             status_code=410,
             detail=(
                 f"Task expired on {expires_at.isoformat()}. "
-                f"Tasks are kept for {DEFAULT_TASK_TTL_MINUTES} minutes."
+                f"Tasks are kept for {ttl_minutes} minutes."
             ),
         )
 
@@ -283,8 +327,16 @@ async def _process_download_task(
     task_id: str,
     payload: CreateDownloadTaskRequest,
     output_path: str,
+    current_username: Optional[str] = None,
+    user_role: str = "",
+    quota_subject: Optional[str] = None,
+    estimated_tile_count: int = 0,
+    pre_deducted: int = 0,
 ) -> None:
-    """执行瓦片下载与 GeoTIFF 拼接，并持续更新任务状态。"""
+    """执行瓦片下载与 GeoTIFF 拼接，并持续更新任务状态。
+
+    配额逻辑：提交时已预扣估算额度；任务成功后按实际瓦片数多退少补；失败/取消时退还预扣额度。
+    """
     logger.info(
         "开始执行下载任务：%s | 底图：%s | CRS：%s | 分辨率：%s",
         task_id,
@@ -373,6 +425,10 @@ async def _process_download_task(
                 logger.warning("裁剪失败，保留原始范围：%s", str(clip_exc))
                 clip_message = "（裁剪失败，保留瓦片对齐范围）"
 
+        # 下载成功：记录实际瓦片数（复用已有的 task 对象，避免重复查询）
+        actual_tiles = result.get("downloaded_tiles", existing.tile_count if existing else 0)
+        update_task(task_id, tiles_downloaded=actual_tiles)
+
         update_task(
             task_id,
             status="success",
@@ -380,19 +436,66 @@ async def _process_download_task(
             message=f"Ready{clip_message}",
         )
         _cancelled_tasks.pop(task_id, None)
+
+        # 下载成功：按实际瓦片数多退少补
+        actual_cost = estimate_download_cost(actual_tiles)
+        if actual_cost <= pre_deducted:
+            # 实际消耗 ≤ 预扣：退还差额（实际为 0 时全额退还）
+            refund = pre_deducted - actual_cost
+            if refund > 0:
+                _refund_api_quota_sync(
+                    current_username, user_role, amount=refund, quota_subject=quota_subject,
+                )
+                logger.info(
+                    "下载配额多退少补（退还差额）：用户=%s | 预扣=%d | 实扣=%d | 退还=%d | 任务=%s",
+                    current_username, pre_deducted, actual_cost, refund, task_id,
+                )
+            else:
+                logger.info(
+                    "下载配额扣减完成（预扣=实扣）：用户=%s | 扣除=%d | 任务=%s",
+                    current_username, actual_cost, task_id,
+                )
+        else:
+            # 实际消耗 > 预扣：补扣差额
+            extra = actual_cost - pre_deducted
+            consume_result = _consume_api_quota_sync(
+                current_username, user_role, quota_subject=quota_subject,
+                cost=extra, action="download",
+            )
+            if not consume_result["allowed"]:
+                logger.warning(
+                    "下载配额补扣失败（用户配额已耗尽）：用户=%s | 任务=%s | 应补扣=%d",
+                    current_username, task_id, extra,
+                )
+            else:
+                logger.info(
+                    "下载配额多退少补（补扣差额）：用户=%s | 预扣=%d | 实扣=%d | 补扣=%d | 任务=%s",
+                    current_username, pre_deducted, actual_cost, extra, task_id,
+                )
     except asyncio.CancelledError:
-        # 用户取消：清理半成品文件
+        # 用户取消：清理半成品文件，退还预扣额度
         logger.info("下载任务 %s 被用户取消，清理半成品文件", task_id)
         if output_path and os.path.exists(output_path):
             try:
                 os.remove(output_path)
             except OSError:
                 pass
+        if pre_deducted > 0:
+            _refund_api_quota_sync(
+                current_username, user_role, amount=pre_deducted, quota_subject=quota_subject,
+            )
+            logger.info("下载任务取消，已退还预扣配额：用户=%s | 退还=%d | 任务=%s", current_username, pre_deducted, task_id)
         _cancelled_tasks.pop(task_id, None)
     except Exception as exc:
         logger.exception("下载任务失败：%s | 错误：%s", task_id, str(exc))
         error_msg = str(exc)[:200]
         update_task(task_id, status="failed", progress=0, message=error_msg)
+        # 任务失败：退还预扣额度
+        if pre_deducted > 0:
+            _refund_api_quota_sync(
+                current_username, user_role, amount=pre_deducted, quota_subject=quota_subject,
+            )
+            logger.info("下载任务失败，已退还预扣配额：用户=%s | 退还=%d | 任务=%s", current_username, pre_deducted, task_id)
         _cancelled_tasks.pop(task_id, None)
 
 
@@ -402,9 +505,20 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
     status = "expired" if is_expired else task.status
     file_ready = bool(status == "success" and task.file_path and os.path.exists(task.file_path))
 
-    download_token = None
-    if file_ready:
-        download_token = _create_download_token_for_task(task.id)
+    # 动态修正剩余时间（基于实际速率）
+    # 注意：下载初期（elapsed < 10s 或 progress < 5%）速率不稳定，使用静态估算避免误导
+    estimated_remaining = None
+    now = datetime.now(timezone.utc)
+    if task.status in ("downloading", "stitching") and task.progress > 5:
+        created_at = task.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        elapsed = (now - created_at).total_seconds()
+        if elapsed > 10:
+            rate = task.progress / elapsed  # %/s
+            estimated_remaining = max(0, int((100 - task.progress) / rate))
+    elif task.estimated_seconds and task.status == "pending":
+        estimated_remaining = task.estimated_seconds
 
     return DownloadTaskStatusResponse(
         task_id=task.id,
@@ -417,8 +531,30 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
         expires_at=expires_at,
         expires_in_seconds=expires_in,
         is_expired=is_expired,
-        download_token=download_token,
+        tile_count=task.tile_count,
+        tiles_downloaded=task.tiles_downloaded,
+        estimated_total_seconds=task.estimated_seconds,
+        estimated_remaining_seconds=estimated_remaining,
     )
+
+
+@router.get("/tasks", response_model=DownloadTaskListResponse)
+async def list_my_tasks(
+    _current_user: dict = Depends(require_api_access),
+):
+    """获取当前用户的有效任务列表（自动过滤过期任务）"""
+    username = _current_user.get("username")
+    if not username:
+        raise HTTPException(status_code=401, detail="需要登录")
+    tasks = await asyncio.to_thread(_get_active_tasks_by_user, username)
+    return {"tasks": [_build_status_response(t) for t in tasks]}
+
+
+def _get_active_tasks_by_user(username: str) -> List[DownloadTask]:
+    """获取用户未过期的有效任务"""
+    ttl = _get_task_ttl_minutes()
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl)
+    return list_active_tasks_by_user(username, cutoff)
 
 
 def _validate_tile_template(template: str) -> None:
@@ -520,9 +656,49 @@ def _bbox_3857_to_4326(
     return min_lon, min_lat, max_lon, max_lat
 
 
+def _estimate_tile_count(bbox: List[float], resolution_m: float) -> int:
+    """根据 bbox + 分辨率估算瓦片总数"""
+    if not resolution_m or resolution_m <= 0:
+        return 0
+    zoom = resolution_to_zoom(resolution_m, lat_deg=(bbox[1] + bbox[3]) / 2)
+    min_x, max_x, min_y, max_y = bbox4326_to_tile_range(tuple(bbox), zoom)
+    return (max_x - min_x + 1) * (max_y - min_y + 1)
+
+
+def _estimate_duration(tile_count: int) -> int:
+    """估算下载总耗时（秒）
+
+    模型：
+      - 单瓦片下载耗时 ≈ 0.1s（含网络延迟 + 解码）
+      - 并发数 = 10（MAX_CONCURRENCY）
+      - 安全系数 = 1.5（应对网络波动）
+      - 拼接固定开销 = 30s
+    """
+    download_time = (tile_count / MAX_CONCURRENCY) * 0.1 * 1.5
+    return int(download_time + 30)
+
+
+def _get_task_ttl_minutes() -> int:
+    """从 L2 system_config 读取 TTL，fallback 到 L1 env，最终默认 30 分钟"""
+    raw = _get_system_config_value_sync("download_task_ttl_minutes", "")
+    if raw:
+        try:
+            return max(1, min(1440, int(raw)))
+        except (ValueError, TypeError):
+            pass
+    return DEFAULT_TASK_TTL_MINUTES  # L1 env fallback
+
+
 def _get_expiration(task: DownloadTask) -> tuple[datetime, int, bool]:
-    """计算任务的过期时间、剩余秒数与是否过期。"""
-    expires_at = task.created_at + timedelta(minutes=DEFAULT_TASK_TTL_MINUTES)
+    """计算任务的过期时间、剩余秒数与是否过期。
+
+    使用 updated_at（最后进度回写时间）而非 created_at 作为基准，
+    保证下载中的任务每次回写进度都会续命，只有真正卡死/被遗忘的任务才会过期。
+    TTL 从 L2 system_config 动态读取，管理员面板修改后立即生效。
+    """
+    last_active = task.updated_at if task.updated_at else task.created_at
+    ttl_minutes = _get_task_ttl_minutes()
+    expires_at = last_active + timedelta(minutes=ttl_minutes)
     now = datetime.now(timezone.utc)
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)

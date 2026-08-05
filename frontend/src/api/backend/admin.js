@@ -180,18 +180,6 @@ export async function apiAdminUpdateAgentConfig(payload = {}) {
         safePayload.stream = Boolean(payload.stream);
     if (typeof payload.extra_body !== 'undefined' && payload.extra_body !== null)
         safePayload.extra_body = payload.extra_body;
-    if (typeof payload.guest_daily_quota !== 'undefined' && payload.guest_daily_quota !== null) {
-        safePayload.guest_daily_quota = Number(payload.guest_daily_quota);
-    }
-    if (
-        typeof payload.registered_daily_quota !== 'undefined' &&
-        payload.registered_daily_quota !== null
-    ) {
-        safePayload.registered_daily_quota = Number(payload.registered_daily_quota);
-    }
-    if (payload.reset_chat_quota === true) {
-        safePayload.reset_chat_quota = true;
-    }
 
     return backendAPI.post('/api/admin/agent/config', safePayload);
 }
@@ -206,4 +194,38 @@ export async function apiAdminGetDefaultBasemapIndex() {
 /** 设置全局默认底图索引（对应 BASEMAP_PRESETS 数组下标） */
 export async function apiAdminUpdateDefaultBasemapIndex(index) {
     return backendAPI.post('/api/admin/config/default-basemap-index', { index: Number(index) });
+}
+
+// ==================== 下载任务 TTL 配置 ====================
+
+/** 获取下载任务 TTL 配置（分钟） */
+export async function apiAdminGetDownloadTTL() {
+    return backendAPI.get('/api/admin/config/download-ttl');
+}
+
+/** 更新下载任务 TTL 配置（分钟） */
+export async function apiAdminUpdateDownloadTTL(ttlMinutes) {
+    return backendAPI.post('/api/admin/config/download-ttl', { ttl_minutes: Number(ttlMinutes) });
+}
+
+// ==================== 下载配额估算（统一 API 配额池）===================
+
+/** 估算给定瓦片数的下载配额消耗（不消耗） */
+export async function apiEstimateDownloadCost(tileCount) {
+    return backendAPI.get('/api/auth/download-quota/estimate', { params: { tile_count: tileCount } });
+}
+
+// ==================== API 配额配置（统一配额池）===================
+
+/** 获取当前 API 配额配置 */
+export async function apiAdminGetApiQuota() {
+    return backendAPI.get('/api/admin/config/api-quota');
+}
+
+/** 更新 API 配额配置 */
+export async function apiAdminUpdateApiQuota(guestQuota, registeredQuota) {
+    return backendAPI.post('/api/admin/config/api-quota', {
+        guest_daily_quota: Number(guestQuota),
+        registered_daily_quota: Number(registeredQuota),
+    });
 }

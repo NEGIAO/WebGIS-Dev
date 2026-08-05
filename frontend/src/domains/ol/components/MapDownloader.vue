@@ -1,298 +1,296 @@
 <template>
-    <div
-        v-if="visible"
-        class="map-downloader"
-    >
-        <header class="downloader-header">
-            <div>
-                <div class="header-title">{{ t('mapDownload.title') }}</div>
-                <div class="header-subtitle">{{ t('mapDownload.subtitle') }}</div>
+    <div v-if="visible" class="map-downloader-panel">
+        <!-- 头部区域 -->
+        <header class="panel-header">
+            <div class="header-main">
+                <h3 class="header-title">{{ t('mapDownload.title') }}</h3>
+                <p class="header-subtitle">{{ t('mapDownload.subtitle') }}</p>
             </div>
             <div class="header-actions">
-                <span
-                    class="status-chip"
-                    :class="statusClass"
-                    >{{ statusText }}</span
-                >
-                <button
-                    class="close-btn"
-                    type="button"
-                    @click="emit('close')"
-                >
-                    ×
+                <span class="status-badge" :class="statusClass">
+                    <span class="status-dot"></span>
+                    {{ statusText }}
+                </span>
+                <button class="close-btn" type="button" aria-label="Close" @click="emit('close')">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
             </div>
         </header>
 
-        <section class="downloader-body">
-            <div class="form-row">
-                <label>{{ t('mapDownload.basemapSource') }}</label>
-                <select
-                    v-model="selectedPreset"
-                    class="form-select"
-                >
-                    <option
-                        v-for="preset in tilePresets"
-                        :key="preset.id"
-                        :value="preset.id"
-                        :disabled="!preset.downloadable"
-                    >
-                        {{ preset.label }}
-                    </option>
-                </select>
-                <div
-                    v-if="activePresetHint"
-                    class="field-hint"
-                >
-                    {{ activePresetHint }}
-                </div>
-            </div>
+        <!-- Tab 切换标签页 -->
+        <div class="panel-tabs">
+            <button class="tab-item" :class="{ active: activeTab === 'config' }" @click="activeTab = 'config'">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                任务配置
+            </button>
+            <button class="tab-item" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                我的任务
+            </button>
+        </div>
 
-            <div class="form-row">
-                <label>{{ t('mapDownload.tileUrlTemplate') }}</label>
-                <input
-                    v-model="store.tileUrlTemplate"
-                    class="form-input"
-                    type="text"
-                    :disabled="!isCustomPreset"
-                    placeholder="https://.../{z}/{x}/{y}.png"
-                />
-            </div>
+        <section class="panel-body">
+            <!-- TAB 1: 下载配置（支持拉宽自动分列网格） -->
+            <div v-show="activeTab === 'config'" class="config-container">
+                <!-- 1. 底图与源设置 -->
+                <div class="section-card">
+                    <div class="card-title">底图与数据源</div>
+                    <div class="form-grid single-col">
+                        <div class="form-field">
+                            <label class="field-label">{{ t('mapDownload.basemapSource') }}</label>
+                            <select v-model="selectedPreset" class="form-select">
+                                <option
+                                    v-for="preset in tilePresets"
+                                    :key="preset.id"
+                                    :value="preset.id"
+                                    :disabled="!preset.downloadable"
+                                >
+                                    {{ preset.label }}
+                                </option>
+                            </select>
+                            <span v-if="activePresetHint" class="field-hint warning">{{ activePresetHint }}</span>
+                        </div>
 
-            <div class="form-row form-grid">
-                <div class="form-field">
-                    <label>{{ t('mapDownload.bboxCrs') }}</label>
-                    <select
-                        v-model="store.bboxCrs"
-                        class="form-select"
-                    >
-                        <option value="EPSG:4326">EPSG:4326 (lon/lat)</option>
-                        <!-- <option value="EPSG:3857">EPSG:3857 (meters)</option> -->
-                    </select>
+                        <div v-if="isCustomPreset" class="form-field">
+                            <label class="field-label">{{ t('mapDownload.tileUrlTemplate') }}</label>
+                            <input
+                                v-model="store.tileUrlTemplate"
+                                class="form-input code-font"
+                                type="text"
+                                placeholder="https://.../{z}/{x}/{y}.png"
+                            />
+                        </div>
+                    </div>
                 </div>
-                <div class="form-field">
-                    <label>{{ t('mapDownload.resolutionM') }}</label>
-                    <input
-                        v-model.number="store.resolutionM"
-                        class="form-input"
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                    />
-                </div>
-            </div>
 
-            <!-- 下载模式选择 -->
-            <div class="form-row">
-                <label>{{ t('mapDownload.downloadMode') }}</label>
-                <div class="download-mode-selector">
-                    <label class="mode-option">
-                        <input
-                            v-model="store.downloadMode"
-                            type="radio"
-                            value="native"
+                <!-- 2. 空间与分辨率参数 -->
+                <div class="section-card">
+                    <div class="card-title-row">
+                        <span class="card-title">裁剪与范围 (Extent)</span>
+                        <ExtentPicker
+                            :show-overlay="true"
+                            @extent-change="applyExtentFromPicker"
+                            @extent-clear="handleClearExtent"
                         />
-                        <span class="mode-label">
-                            {{ t('mapDownload.modeNative') }}
-                            <span class="mode-hint">{{ t('mapDownload.modeNativeHint') }}</span>
-                        </span>
+                    </div>
+
+                    <div class="form-grid two-col mb-12">
+                        <div class="form-field">
+                            <label class="field-label">{{ t('mapDownload.bboxCrs') }}</label>
+                            <select v-model="store.bboxCrs" class="form-select">
+                                <option value="EPSG:4326">EPSG:4326 (WGS 84)</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label">{{ t('mapDownload.resolutionM') }} (m)</label>
+                            <input
+                                v-model.number="store.resolutionM"
+                                class="form-input"
+                                type="number"
+                                min="0.1"
+                                step="0.1"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- 空间四至方位阵列 -->
+                    <div class="spatial-compass-grid">
+                        <div class="compass-cell north">
+                            <span class="compass-tag">北 (Max Y)</span>
+                            <input v-model.number="store.bbox.maxLat" class="form-input compass-input" type="number" step="0.000001" />
+                        </div>
+                        <div class="compass-cell west">
+                            <span class="compass-tag">西 (Min X)</span>
+                            <input v-model.number="store.bbox.minLon" class="form-input compass-input" type="number" step="0.000001" />
+                        </div>
+                        <div class="compass-cell center-icon">
+                            <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" opacity="0.3"><path d="M12 2v20M2 12h20"/></svg>
+                        </div>
+                        <div class="compass-cell east">
+                            <span class="compass-tag">东 (Max X)</span>
+                            <input v-model.number="store.bbox.maxLon" class="form-input compass-input" type="number" step="0.000001" />
+                        </div>
+                        <div class="compass-cell south">
+                            <span class="compass-tag">南 (Min Y)</span>
+                            <input v-model.number="store.bbox.minLat" class="form-input compass-input" type="number" step="0.000001" />
+                        </div>
+                    </div>
+
+                    <label class="checkbox-card mt-12">
+                        <input v-model="store.clipToExtent" type="checkbox" />
+                        <div class="checkbox-meta">
+                            <span class="checkbox-title">{{ t('mapDownload.clipToExtent') }}</span>
+                            <span class="checkbox-desc">{{ t('mapDownload.clipToExtentHint') }}</span>
+                        </div>
                     </label>
-                    <label class="mode-option">
-                        <input
-                            v-model="store.downloadMode"
-                            type="radio"
-                            value="progressive"
-                        />
-                        <span class="mode-label">
-                            {{ t('mapDownload.modeProgressive') }}
-                            <span class="mode-hint">{{ t('mapDownload.modeProgressiveHint') }}</span>
-                        </span>
-                    </label>
                 </div>
-            </div>
 
-            <div class="bbox-grid">
-                <div class="form-field">
-                    <label>Min Lon/X</label>
-                    <input
-                        v-model.number="store.bbox.minLon"
-                        class="form-input"
-                        type="number"
-                        step="0.000001"
-                    />
-                </div>
-                <div class="form-field">
-                    <label>Min Lat/Y</label>
-                    <input
-                        v-model.number="store.bbox.minLat"
-                        class="form-input"
-                        type="number"
-                        step="0.000001"
-                    />
-                </div>
-                <div class="form-field">
-                    <label>Max Lon/X</label>
-                    <input
-                        v-model.number="store.bbox.maxLon"
-                        class="form-input"
-                        type="number"
-                        step="0.000001"
-                    />
-                </div>
-                <div class="form-field">
-                    <label>Max Lat/Y</label>
-                    <input
-                        v-model.number="store.bbox.maxLat"
-                        class="form-input"
-                        type="number"
-                        step="0.000001"
-                    />
-                </div>
-            </div>
-
-            <label class="clip-option">
-                <input
-                    v-model="store.clipToExtent"
-                    type="checkbox"
-                />
-                <span class="clip-label">
-                    {{ t('mapDownload.clipToExtent') }}
-                    <span class="mode-hint">{{ t('mapDownload.clipToExtentHint') }}</span>
-                </span>
-            </label>
-
-            <div class="action-row">
-                <ExtentPicker
-                    :show-overlay="true"
-                    @extent-change="applyExtentFromPicker"
-                    @extent-clear="handleClearExtent"
-                />
-            </div>
-
-            <div class="action-row">
-                <button
-                    class="primary-btn"
-                    type="button"
-                    :disabled="store.isSubmitting"
-                    @click="handleSubmit"
-                >
-                    {{ store.isSubmitting ? t('mapDownload.submitting') : t('mapDownload.startDownload') }}
-                </button>
-                <button
-                    class="ghost-btn"
-                    type="button"
-                    :disabled="!store.isPolling"
-                    @click="store.stopPolling"
-                >
-                    {{ t('mapDownload.stopPolling') }}
-                </button>
-                <button
-                    class="ghost-btn"
-                    type="button"
-                    @click="handleReset"
-                >
-                    {{ t('mapDownload.reset') }}
-                </button>
-            </div>
-
-            <!-- 后端生成进度 -->
-            <div class="progress-card">
-                <div class="progress-head">
-                    <span>{{ t('mapDownload.backendProgress') }}</span>
-                    <span class="progress-value">{{ progressLabel }}</span>
-                </div>
-                <div class="progress-track">
-                    <div
-                        class="progress-bar"
-                        :style="{ width: progressWidth }"
-                    ></div>
-                </div>
-                <div class="progress-meta">
-                    <span v-if="store.taskId">{{ t('mapDownload.taskId', { id: store.taskId }) }}</span>
-                    <span v-if="displayStoreMessage">{{ displayStoreMessage }}</span>
-                    <span v-if="expiresHint">{{ expiresHint }}</span>
-                    <span
-                        v-if="displayLastError"
-                        class="error-text"
-                        >{{ displayLastError }}</span
-                    >
-                </div>
-            </div>
-
-            <div
-                v-if="(transferState.active || transferState.total > 0 || transferState.error) && store.downloadMode === 'progressive'"
-                class="progress-card transfer-card"
-            >
-                <div class="progress-head">
-                    <span>{{ t('mapDownload.transferProgress', { time: countdownText }) }}</span>
-                    <span class="progress-value">{{ transferState.progress }}%</span>
-                </div>
-                <div class="progress-track transfer-track">
-                    <div
-                        class="progress-bar transfer-bar"
-                        :style="{ width: transferState.progress + '%' }"
-                    ></div>
-                </div>
-                <div class="progress-meta transfer-meta">
-                    <span v-if="transferState.total > 0">
-                        {{
-                            t('mapDownload.transferred', {
-                                downloaded: formatBytes(transferState.downloaded),
-                                total: formatBytes(transferState.total),
-                            })
-                        }}
-                    </span>
-                    <span v-else-if="transferState.active">
-                        {{
-                            t('mapDownload.transferredComputing', {
-                                downloaded: formatBytes(transferState.downloaded),
-                            })
-                        }}
-                    </span>
-                    <span
-                        v-if="transferState.error"
-                        class="error-text"
-                        >{{ transferState.error }}</span
-                    >
-
-                    <div class="transfer-actions">
-                        <button
-                            v-if="transferState.active"
-                            class="ghost-btn cancel-btn"
-                            type="button"
-                            @click="cancelTransfer"
+                <!-- 3. 下载模式与策略（修改位置） -->
+                <div class="section-card mode-section">
+                    <div class="card-title">{{ t('mapDownload.downloadMode') }}</div>
+                    <div class="mode-cards-grid">
+                        <div
+                            class="mode-card"
+                            :class="{ active: store.downloadMode === 'native' }"
+                            @click="store.downloadMode = 'native'"
                         >
-                            {{ t('mapDownload.cancelDownload') }}
+                            <input
+                                type="radio"
+                                name="download-mode"
+                                value="native"
+                                :checked="store.downloadMode === 'native'"
+                                class="sr-only"
+                                tabindex="-1"
+                            />
+                            <div class="mode-header">
+                                <span class="mode-name">{{ t('mapDownload.modeNative') }}</span>
+                                <span class="radio-indicator"></span>
+                            </div>
+                            <span class="mode-desc">{{ t('mapDownload.modeNativeHint') }}</span>
+                        </div>
+
+                        <div
+                            class="mode-card"
+                            :class="{ active: store.downloadMode === 'progressive' }"
+                            @click="store.downloadMode = 'progressive'"
+                        >
+                            <input
+                                type="radio"
+                                name="download-mode"
+                                value="progressive"
+                                :checked="store.downloadMode === 'progressive'"
+                                class="sr-only"
+                                tabindex="-1"
+                            />
+                            <div class="mode-header">
+                                <span class="mode-name">{{ t('mapDownload.modeProgressive') }}</span>
+                                <span class="radio-indicator"></span>
+                            </div>
+                            <span class="mode-desc">{{ t('mapDownload.modeProgressiveHint') }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 提交与控制栏（占用整行） -->
+                <div class="execution-bar">
+                    <div class="quota-info">
+                        <span v-if="quotaCost !== null && quotaCost > 0" class="quota-badge">
+                            预估消耗: <strong>{{ quotaCost }}</strong> 配额
+                        </span>
+                    </div>
+
+                    <div class="btn-group">
+                        <button class="btn btn-ghost" type="button" @click="handleReset">
+                            {{ t('mapDownload.reset') }}
+                        </button>
+                        <button v-if="store.isPolling" class="btn btn-warning" type="button" @click="store.stopPolling">
+                            {{ t('mapDownload.stopPolling') }}
                         </button>
                         <button
-                            v-if="!transferState.active && (store.status === 'success' || transferState.error)"
-                            class="primary-btn re-download-btn"
+                            class="btn btn-primary"
+                            type="button"
+                            :disabled="store.isSubmitting"
+                            @click="handleSubmit"
+                        >
+                            <span v-if="store.isSubmitting" class="spinner"></span>
+                            {{ store.isSubmitting ? t('mapDownload.submitting') : t('mapDownload.startDownload') }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 后端生成进度（占用整行） -->
+                <div v-if="store.taskId || store.isSubmitting" class="progress-panel">
+                    <div class="progress-header">
+                        <div class="progress-title">
+                            <span>后端处理进度</span>
+                            <span v-if="store.taskId" class="task-tag" @click="copyTaskId(store.taskId)">
+                                ID: {{ store.taskId }}
+                                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                            </span>
+                        </div>
+                        <span class="progress-percent">{{ progressLabel }}</span>
+                    </div>
+
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill" :style="{ width: progressWidth }"></div>
+                    </div>
+
+                    <div class="progress-footer">
+                        <span class="status-msg">{{ displayStoreMessage || expiresHint }}</span>
+                        <span v-if="displayLastError" class="error-msg">{{ displayLastError }}</span>
+
+                        <button
+                            v-if="store.taskId && store.status === 'success' && store.fileReady"
+                            class="btn btn-success btn-sm"
                             type="button"
                             @click="handleRedownload"
                         >
-                            {{ t('mapDownload.redownload') }}
+                            立即下载到本地
                         </button>
+                    </div>
+                </div>
+
+                <!-- 客户端前端传输卡片 (渐进式模式) -->
+                <div
+                    v-if="(transferState.active || transferState.total > 0 || transferState.error) && store.downloadMode === 'progressive'"
+                    class="progress-panel transfer-theme"
+                >
+                    <div class="progress-header">
+                        <div class="progress-title">
+                            <span>前端传输中 ({{ countdownText }})</span>
+                        </div>
+                        <span class="progress-percent">{{ transferState.progress }}%</span>
+                    </div>
+
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill transfer-fill" :style="{ width: transferState.progress + '%' }"></div>
+                    </div>
+
+                    <div class="progress-footer">
+                        <span>
+                            {{ transferState.total > 0 ? `${formatBytes(transferState.downloaded)} / ${formatBytes(transferState.total)}` : '计算传输量...' }}
+                        </span>
+                        <span v-if="transferState.error" class="error-msg">{{ transferState.error }}</span>
+
+                        <div class="btn-group">
+                            <button v-if="transferState.active" class="btn btn-danger btn-sm" type="button" @click="cancelTransfer">
+                                {{ t('mapDownload.cancelDownload') }}
+                            </button>
+                            <button
+                                v-if="!transferState.active && (store.status === 'success' || transferState.error)"
+                                class="btn btn-primary btn-sm"
+                                type="button"
+                                @click="handleRedownload"
+                            >
+                                {{ t('mapDownload.redownload') }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="task-query">
-                <label>{{ t('mapDownload.taskLookup') }}</label>
-                <div class="task-query-row">
-                    <input
-                        v-model.trim="lookupTaskId"
-                        class="form-input"
-                        type="text"
-                        :placeholder="t('mapDownload.taskIdPlaceholder')"
-                    />
-                    <button
-                        class="ghost-btn"
-                        type="button"
-                        @click="handleLookup"
-                    >
-                        {{ t('mapDownload.query') }}
-                    </button>
+            <!-- TAB 2: 历史任务列表 -->
+            <div v-show="activeTab === 'history'" class="history-container">
+                <div class="section-card">
+                    <div class="card-title">{{ t('mapDownload.taskLookup') }}</div>
+                    <div class="task-search-bar">
+                        <input
+                            v-model.trim="lookupTaskId"
+                            class="form-input"
+                            type="text"
+                            :placeholder="t('mapDownload.taskIdPlaceholder')"
+                        />
+                        <button class="btn btn-ghost" type="button" @click="handleLookup">
+                            {{ t('mapDownload.query') }}
+                        </button>
+                    </div>
                 </div>
+
+                <MyDownloadTasks
+                    @download="handleDownloadFromList"
+                    @view="handleViewFromList"
+                    @cancel="handleCancelFromList"
+                />
             </div>
         </section>
     </div>
@@ -300,14 +298,17 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { apiDownloadTaskFile, apiDownloadTaskFileUrl } from '@/api/download';
+import { apiDownloadCancelTask, apiDownloadTaskFile } from '@/api/download';
+import { apiEstimateDownloadCost } from '@/api/backend/admin';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
-import { triggerBrowserDownload, triggerUrlDownload } from '@common/utils/browserDownload';
+import { triggerBrowserDownload } from '@common/utils/browserDownload';
+import { copyToClipboard } from '@common/utils/clipboard';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '@/constants';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import ExtentPicker from '@common/components/ExtentPicker.vue';
+import MyDownloadTasks from './MyDownloadTasks.vue';
 
 defineProps({
     visible: { type: Boolean, default: true },
@@ -318,19 +319,68 @@ const message = useMessage();
 const { t } = useLocale();
 const store = useDownloadStore();
 
-/**
- * 接收 ExtentPicker 的 extent-change 事件，将框选范围应用到 store
- * @param {{ extent: number[] }} param0 - extent 为 [minX, minY, maxX, maxY] 四元组 (EPSG:4326)
- */
+const activeTab = ref('config');
+
+// 下载配额状态
+const quotaRemaining = ref(null);
+const quotaCost = ref(null);
+const quotaChecking = ref(false);
+
+async function loadDownloadQuota() {
+    try {
+        quotaChecking.value = true;
+        const res = await apiEstimateDownloadCost(0);
+        if (res?.status === 'success') {
+            quotaRemaining.value = Number(res.remaining ?? 0);
+        }
+    } catch {
+        quotaRemaining.value = null;
+    } finally {
+        quotaChecking.value = false;
+    }
+}
+
+async function estimateCurrentCost() {
+    const tileCount = store.estimatedTileCount;
+    if (!tileCount || tileCount <= 0) {
+        quotaCost.value = null;
+        return;
+    }
+    quotaChecking.value = true;
+    try {
+        const res = await apiEstimateDownloadCost(tileCount);
+        if (res?.status === 'success') {
+            quotaCost.value = Number(res.cost ?? 0);
+        }
+    } catch {
+        quotaCost.value = null;
+    } finally {
+        quotaChecking.value = false;
+    }
+}
+
+let quotaEstimateTimer = null;
+watch(
+    () => [store.bbox.minLon, store.bbox.minLat, store.bbox.maxLon, store.bbox.maxLat, store.resolutionM],
+    () => {
+        if (quotaEstimateTimer) clearTimeout(quotaEstimateTimer);
+        quotaEstimateTimer = setTimeout(() => {
+            estimateCurrentCost();
+            quotaEstimateTimer = null;
+        }, 300);
+    },
+);
+
+onMounted(() => {
+    loadDownloadQuota();
+});
+
 function applyExtentFromPicker({ extent }) {
     if (extent?.length === 4) {
         store.applyBboxFromExtent(extent, 'EPSG:4326');
     }
 }
 
-/**
- * 接收 ExtentPicker 的 extent-clear 事件，清除已有的范围
- */
 function handleClearExtent() {
     store.clearExtent();
 }
@@ -351,9 +401,8 @@ function refreshLayerConfigs(tiandituTk) {
     layerConfigVersion.value += 1;
 }
 
-/* ----------- 倒计时逻辑 (新增) ----------- */
-// 半小时下载有效期，时间到自动取消下载任务
-const INITIAL_SECONDS = 1800; // 30分钟 = 1800秒
+/* ----------- 倒计时逻辑 ----------- */
+const INITIAL_SECONDS = 1800;
 const timeLeft = ref(INITIAL_SECONDS);
 const timer = ref(null);
 
@@ -365,7 +414,7 @@ const countdownText = computed(() => {
 });
 
 function startCountdown() {
-    stopCountdown(); // 先清除旧的
+    stopCountdown();
     timeLeft.value = INITIAL_SECONDS;
     timer.value = setInterval(() => {
         if (timeLeft.value > 0) {
@@ -382,7 +431,6 @@ function stopCountdown() {
         timer.value = null;
     }
 }
-/* --------------------------------------- */
 
 /* ----------- 文件传输相关状态 ----------- */
 const transferState = ref({
@@ -393,10 +441,8 @@ const transferState = ref({
     error: '',
 });
 const lastTransferredTaskId = ref('');
-
 let abortController = null;
 
-// 格式化字节大小
 function formatBytes(bytes, decimals = 2) {
     if (!bytes) return '0 Bytes';
     const k = 1024;
@@ -406,7 +452,6 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-// 生成可读的文件名：{底图名称}_{分辨率m}_{mm_dd_hh}.tif
 function buildReadableFilename() {
     const activePreset = layerConfigMap.get(selectedPreset.value);
     const presetName = String(activePreset?.label || selectedPreset.value || 'basemap')
@@ -427,20 +472,18 @@ function buildReadableFilename() {
     return `${presetName}_${resolutionPart}_${mm}_${dd}_${hh}.tif`;
 }
 
-// 取消传输
 function cancelTransfer() {
     if (abortController) {
         abortController.abort('UserCancelled');
         abortController = null;
     }
-    stopCountdown(); // 取消下载时停止倒计时
+    stopCountdown();
 }
 
 async function downloadFileToLocal() {
     if (!store.taskId) return;
     cancelTransfer();
 
-    // 开始下载时重置并启动倒计时（仅在 progressive 模式下）
     if (store.downloadMode === 'progressive') {
         startCountdown();
     }
@@ -462,12 +505,8 @@ async function downloadFileToLocal() {
                 transferState.value.progress = progress;
                 const loaded = Number(meta?.loaded || 0);
                 const total = Number(meta?.total || 0);
-                if (loaded > 0) {
-                    transferState.value.downloaded = loaded;
-                }
-                if (total > 0) {
-                    transferState.value.total = total;
-                }
+                if (loaded > 0) transferState.value.downloaded = loaded;
+                if (total > 0) transferState.value.total = total;
             },
             { signal: abortController.signal },
         );
@@ -484,7 +523,6 @@ async function downloadFileToLocal() {
             transferState.value.progress = 100;
         }
 
-        // 尝试从 Content-Disposition 提取文件名
         let filename = buildReadableFilename();
         const disposition = String(response?.headers?.['content-disposition'] || '');
         if (disposition.includes('attachment')) {
@@ -501,32 +539,26 @@ async function downloadFileToLocal() {
         transferState.value.error = '';
         lastTransferredTaskId.value = store.taskId;
         message.success(t('mapDownload.downloadSuccess'));
-        stopCountdown(); // 传输成功后停止
+        stopCountdown();
     } catch (err) {
         const canceledByUser = err?.code === 'ERR_CANCELED';
         if (canceledByUser) {
             transferState.value.error = t('mapDownload.canceledByUser');
         } else {
-            transferState.value.error = t('mapDownload.transferFailedDetail', {
-                msg: err?.message || '',
-            });
+            transferState.value.error = t('mapDownload.transferFailedDetail', { msg: err?.message || '' });
             message.error(t('mapDownload.transferToLocalFailed'));
         }
         transferState.value.active = false;
         transferState.value.progress = 0;
-        stopCountdown(); // 失败后停止
+        stopCountdown();
     } finally {
         abortController = null;
     }
 }
 
-/**
- * 触发浏览器原生下载（使用 download_token）
- * 浏览器接管下载任务，不占用网页内存，大文件更稳定
- */
-function triggerNativeDownload() {
-    if (!store.taskId || !store.downloadToken) {
-        message.error(t('mapDownload.missingToken'));
+async function triggerNativeDownload() {
+    if (!store.taskId) {
+        message.error(t('mapDownload.errNoTaskId'));
         return;
     }
 
@@ -536,22 +568,22 @@ function triggerNativeDownload() {
     }
 
     try {
-        // 构建带 token 的下载 URL
-        const downloadUrl = apiDownloadTaskFileUrl(store.taskId, store.downloadToken);
+        const response = await apiDownloadTaskFile(store.taskId, () => {});
+        const blob = response?.data instanceof Blob ? response.data : response;
 
-        // 通过临时链接触发浏览器原生下载
-        triggerUrlDownload(downloadUrl);
+        if (!blob || blob.size === 0) {
+            throw new Error(t('mapDownload.errEmptyDownload'));
+        }
 
-        // 记录下载时间
+        const filename = `basemap_${store.taskId}.tif`;
+        triggerBrowserDownload(blob, filename);
+
         store.markDownloaded();
         message.success(t('mapDownload.nativeStarted'));
-
-        // 停止倒计时（已完成）
         stopCountdown();
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : t('mapDownload.cannotStartDownload');
         message.error(t('mapDownload.nativeFailed', { msg: errorMsg }));
-        console.error('[MapDownloader] triggerNativeDownload failed:', error);
     }
 }
 
@@ -577,7 +609,6 @@ watch(
         }
     },
 );
-/* ------------------------------------------- */
 
 function extractTileTemplate(source) {
     if (!source) return '';
@@ -596,8 +627,7 @@ function resolvePresetTemplate(presetId) {
     const layerIds = resolvePresetLayerIds(presetId);
     for (const layerId of layerIds) {
         const config = layerConfigMap.get(layerId);
-        if (!config) continue;
-        if (config.category === 'label') continue;
+        if (!config || config.category === 'label') continue;
         try {
             const source = config.createSource?.();
             const template = extractTileTemplate(source);
@@ -622,21 +652,18 @@ const tilePresets = computed(() => {
             downloadable,
             isCustom,
         };
-    }).filter((preset) => preset.downloadable || preset.isCustom);
+    }).filter((preset) => (preset.downloadable || preset.isCustom) && preset.id !== 'local_tiles_preset');
 });
 
 onMounted(async () => {
     const tokens = await loadRuntimeMapTokens();
     refreshLayerConfigs(tokens?.tiandituTk);
+    store.fetchMyTasks();
 });
 
 const selectedPreset = ref('');
-const activePreset = computed(() =>
-    tilePresets.value.find((item) => item.id === selectedPreset.value),
-);
-const isCustomPreset = computed(
-    () => activePreset.value?.isCustom || !activePreset.value?.template,
-);
+const activePreset = computed(() => tilePresets.value.find((item) => item.id === selectedPreset.value));
+const isCustomPreset = computed(() => activePreset.value?.isCustom || !activePreset.value?.template);
 const activePresetHint = computed(() => {
     if (!activePreset.value) return '';
     if (activePreset.value.isCustom) return t('mapDownload.customUrlHint');
@@ -681,13 +708,12 @@ const statusText = computed(() => {
 
 const statusClass = computed(() => {
     if (transferState.value.active) return 'status-transferring';
-    if (transferState.value.error) return 'status-transfer-failed';
+    if (transferState.value.error) return 'status-failed';
     return `status-${store.status}`;
 });
 const progressWidth = computed(() => `${Math.min(100, Math.max(0, store.progress))}%`);
 const progressLabel = computed(() => `${Math.round(store.progress)}%`);
 
-/** store 存 mapDownload.* key；后端原文非 key 时原样展示 */
 function resolveStoreText(raw) {
     const s = String(raw || '').trim();
     if (!s) return '';
@@ -710,10 +736,9 @@ const expiresHint = computed(() => {
 const lookupTaskId = ref('');
 
 async function handleSubmit() {
-    // 提交前重置传输状态和倒计时
     transferState.value = { active: false, downloaded: 0, total: 0, progress: 0, error: '' };
     lastTransferredTaskId.value = '';
-    stopCountdown(); // 重新提交时先重置倒计时
+    stopCountdown();
 
     const ok = await store.submitTask();
     if (ok) {
@@ -722,7 +747,8 @@ async function handleSubmit() {
                 ? t('mapDownload.taskSubmittedClip')
                 : t('mapDownload.taskSubmittedGrid'),
         );
-        // 倒计时将在实际下载开始时根据模式启动
+        // 提交成功后刷新剩余配额显示
+        loadDownloadQuota();
     } else if (store.lastError) {
         message.error(resolveStoreText(store.lastError));
     }
@@ -738,13 +764,8 @@ function handleReset() {
     selectedPreset.value = first?.id || '';
 }
 
-/**
- * 根据用户选择的模式重新下载
- * 在浏览器托管模式下使用原生下载，在前端可视化模式下使用流式下载
- */
 function handleRedownload() {
     if (!store.taskId) return;
-    
     if (store.downloadMode === 'native') {
         triggerNativeDownload();
     } else {
@@ -761,43 +782,96 @@ async function handleLookup() {
     }
 }
 
+async function handleDownloadFromList(task) {
+    store.resetTask();
+    store.setExternalTask(task.task_id);
+    if (store.downloadMode === 'native') {
+        triggerNativeDownload();
+    } else if (task.file_ready) {
+        downloadFileToLocal();
+    } else {
+        message.warning(t('mapDownload.fileNotReady'));
+    }
+}
+
+async function handleViewFromList(task) {
+    lookupTaskId.value = task.task_id || '';
+    activeTab.value = 'config';
+    await handleLookup();
+}
+
+async function handleCancelFromList(task) {
+    await apiDownloadCancelTask(task.task_id);
+    message.success(t('mapDownload.cancelSuccess'));
+    store.fetchMyTasks();
+}
+
+async function copyTaskId(taskId) {
+    const id = String(taskId || '').trim();
+    if (!id) return;
+    await copyToClipboard(id);
+    message.success(t('mapDownload.taskIdCopied'));
+}
+
 onBeforeUnmount(() => {
     store.dispose();
     cancelTransfer();
     stopCountdown();
+    if (quotaEstimateTimer) {
+        clearTimeout(quotaEstimateTimer);
+        quotaEstimateTimer = null;
+    }
 });
 </script>
 
 <style scoped>
-/* 样式部分保持不变，根据需要给 countdownText 所在的 span 加颜色 */
-.map-downloader {
-    border-radius: 14px;
-    border: 1px solid rgba(46, 126, 78, 0.2);
-    background: linear-gradient(180deg, #f6fff8 0%, #eef8f1 100%);
-    box-shadow: 0 16px 34px rgba(33, 94, 63, 0.15);
-    padding: 16px;
+/* 全局变量定义（适配流式拖拽布局） */
+.map-downloader-panel {
+    --panel-bg: #ffffff;
+    --section-bg: #f8fafc;
+    --border-color: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --brand-primary: #10b981;
+    --brand-primary-hover: #059669;
+    --brand-light: #ecfdf5;
+
+    width: 100%;
+    height: 100%;
+    min-width: 320px;
+    box-sizing: border-box;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--text-primary);
 }
 
-.downloader-header {
+/* 头部样式 */
+.panel-header {
+    padding: 16px 20px 12px;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 12px;
+    flex-shrink: 0;
 }
 
 .header-title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
-    color: var(--text-brand-dark);
+    margin: 0;
+    color: var(--text-primary);
 }
 
 .header-subtitle {
     font-size: 12px;
-    color: #4a6d59;
-    margin-top: 4px;
+    color: var(--text-secondary);
+    margin: 2px 0 0 0;
 }
 
 .header-actions {
@@ -806,341 +880,470 @@ onBeforeUnmount(() => {
     gap: 8px;
 }
 
-.status-chip {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(46, 126, 78, 0.12);
-    color: var(--text-brand-dark);
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: var(--text-secondary);
 }
 
-.status-chip.status-success {
-    background: rgba(34, 197, 94, 0.16);
-    color: #0f7a3b;
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
 }
 
-.status-chip.status-failed {
-    background: rgba(239, 68, 68, 0.15);
-    color: #b91c1c;
-}
-
-.status-chip.status-expired {
-    background: rgba(245, 158, 11, 0.16);
-    color: #b45309;
-}
-
-.status-chip.status-transferring {
-    background: rgba(37, 99, 235, 0.16);
-    color: #1d4ed8;
-}
-
-.status-chip.status-transfer-failed {
-    background: rgba(239, 68, 68, 0.15);
-    color: #b91c1c;
-}
+.status-badge.status-success { background: #dcfce7; color: #15803d; }
+.status-badge.status-success .status-dot { background: #22c55e; }
+.status-badge.status-failed { background: #fee2e2; color: #b91c1c; }
+.status-badge.status-failed .status-dot { background: #ef4444; }
+.status-badge.status-transferring { background: #e0f2fe; color: #0369a1; }
+.status-badge.status-transferring .status-dot { background: #0284c7; }
 
 .close-btn {
-    border: none;
     background: transparent;
-    font-size: 20px;
-    color: #3f6b55;
+    border: none;
+    color: var(--text-muted);
     cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    display: inline-flex;
+    transition: all 0.2s;
 }
 
-.downloader-body {
+.close-btn:hover {
+    background: #f1f5f9;
+    color: var(--text-primary);
+}
+
+/* Tab 页签 */
+.panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 20px;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+.tab-item {
+    background: none;
+    border: none;
+    padding: 8px 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.tab-item:hover { color: var(--text-primary); }
+.tab-item.active {
+    color: var(--brand-primary);
+    border-bottom-color: var(--brand-primary);
+    font-weight: 600;
+}
+
+/* 核心内容纵向流体容器 */
+.panel-body {
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* 响应式自适应卡片网格系统 (根据面板宽度自动从 1 列过渡到 2 列) */
+.config-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+/* 让核心状态和执行栏填满单行跨列 */
+.execution-bar, .progress-panel, .mode-section {
+    grid-column: 1 / -1;
+}
+
+.history-container {
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-.form-row {
+/* 配置卡片 */
+.section-card {
+    background: var(--section-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
 }
 
+.card-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.card-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* 表单通用控件 */
 .form-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: 10px;
 }
+
+.form-grid.single-col { grid-template-columns: 1fr; }
+.form-grid.two-col { grid-template-columns: 1fr 1fr; }
 
 .form-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
-.form-row label,
-.form-field label {
+.field-label {
     font-size: 12px;
-    color: var(--text-brand-dark);
-    font-weight: 600;
+    font-weight: 500;
+    color: var(--text-secondary);
 }
 
 .field-hint {
     font-size: 11px;
-    color: var(--text-secondary);
-}
-
-.form-input,
-.form-select {
-    border-radius: 8px;
-    border: 1px solid rgba(31, 106, 63, 0.25);
-    background: rgba(255, 255, 255, 0.92);
-    padding: 8px 10px;
-    font-size: 12px;
-    color: var(--text-brand-dark);
-}
-
-.form-input:disabled {
-    background: rgba(233, 241, 236, 0.7);
     color: var(--text-muted);
 }
 
-.bbox-grid {
+.field-hint.warning { color: #d97706; }
+
+.form-input, .form-select {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    font-size: 12px;
+    color: var(--text-primary);
+    box-sizing: border-box;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-input:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+.code-font { font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace; }
+
+/* 空间四至方位盘 */
+.spatial-compass-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 6px;
+    align-items: center;
+    margin-top: 6px;
 }
 
-/* 下载模式选择器样式 (新增) */
-.download-mode-selector {
+.compass-cell {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    align-items: center;
 }
 
-.mode-option {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    cursor: pointer;
-    user-select: none;
+.compass-cell.north { grid-column: 2; grid-row: 1; }
+.compass-cell.west { grid-column: 1; grid-row: 2; }
+.compass-cell.center-icon { grid-column: 2; grid-row: 2; display: flex; justify-content: center; }
+.compass-cell.east { grid-column: 3; grid-row: 2; }
+.compass-cell.south { grid-column: 2; grid-row: 3; }
+
+.compass-tag {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 2px;
 }
 
-.mode-option input[type="radio"] {
-    margin-top: 3px;
-    cursor: pointer;
-    accent-color: var(--brand-primary-dark);
-}
-
-.mode-label {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 12px;
-    color: var(--text-brand-dark);
-    font-weight: 500;
-}
-
-.mode-hint {
+.compass-input {
+    text-align: center;
     font-size: 11px;
-    color: var(--text-secondary);
-    font-weight: 400;
+    height: 28px;
 }
 
-.clip-option {
+/* Checkbox卡片 */
+.checkbox-card {
     display: flex;
     align-items: flex-start;
     gap: 8px;
     cursor: pointer;
     user-select: none;
-    padding: 8px 10px;
+}
+
+.checkbox-meta { display: flex; flex-direction: column; }
+.checkbox-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.checkbox-desc { font-size: 11px; color: var(--text-muted); }
+
+/* 下载模式卡片 */
+.mode-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.mode-card {
+    border: 1px solid var(--border-color);
+    background: #ffffff;
     border-radius: 8px;
-    border: 1px solid rgba(31, 122, 77, 0.15);
-    background: rgba(255, 255, 255, 0.6);
-}
-
-.clip-option input[type="checkbox"] {
-    margin-top: 2px;
+    padding: 10px;
     cursor: pointer;
-    accent-color: var(--brand-primary-dark);
-}
-
-.clip-label {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    font-size: 12px;
-    color: var(--text-brand-dark);
-    font-weight: 500;
-}
-
-.action-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.primary-btn {
-    border: none;
-    border-radius: 9px;
-    background: var(--brand-primary-dark);
-    color: #fff;
-    font-weight: 700;
-    padding: 8px 14px;
-    cursor: pointer;
-    transition:
-        transform 0.2s ease,
-        box-shadow 0.2s ease;
-}
-
-.primary-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 10px 18px rgba(31, 122, 77, 0.2);
-}
-
-.primary-btn:disabled {
-    background: rgba(31, 122, 77, 0.5);
-    cursor: not-allowed;
-}
-
-.ghost-btn {
-    border: 1px solid rgba(31, 122, 77, 0.3);
-    border-radius: 9px;
-    background: rgba(255, 255, 255, 0.9);
-    color: var(--text-brand-dark);
-    font-weight: 600;
-    padding: 8px 12px;
-    cursor: pointer;
-}
-
-.ghost-btn:disabled {
-    color: #9bb2a5;
-    border-color: rgba(31, 122, 77, 0.15);
-    cursor: not-allowed;
-}
-
-.clear-extent-btn {
-    border-color: rgba(220, 38, 38, 0.3);
-    color: #b91c1c;
-}
-
-.clear-extent-btn:hover {
-    background: rgba(220, 38, 38, 0.08);
-    border-color: rgba(220, 38, 38, 0.5);
-}
-
-.extent-active {
-    color: #0f7a3b;
-    font-weight: 500;
-}
-
-/* 原有的进度条卡片 */
-.progress-card {
-    border-radius: 12px;
-    border: 1px solid rgba(31, 122, 77, 0.16);
-    background: rgba(255, 255, 255, 0.85);
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.progress-head {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: var(--text-brand-dark);
-    font-weight: 700;
-}
-
-.progress-track {
-    height: 8px;
-    border-radius: 999px;
-    background: rgba(31, 122, 77, 0.12);
-    overflow: hidden;
-}
-
-.progress-bar {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
-    transition: width 0.3s ease;
-}
-
-.progress-meta {
+    transition: all 0.2s;
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-size: 12px;
-    color: #4b6d5a;
+    user-select: none;
 }
 
-/* 新增的下载传输 UI 样式 */
-.transfer-card {
-    border-color: rgba(37, 99, 235, 0.2);
-    background: rgba(240, 248, 255, 0.85);
+.mode-card:hover { border-color: var(--brand-primary); }
+
+.mode-card.active {
+    border-color: var(--brand-primary);
+    background: var(--brand-light);
 }
-.transfer-card .progress-head {
-    color: var(--info);
-}
-.transfer-track {
-    background: rgba(37, 99, 235, 0.12);
-}
-.transfer-bar {
-    background: linear-gradient(90deg, #60a5fa 0%, var(--info) 100%);
-}
-.transfer-meta {
-    color: var(--info);
-}
-.transfer-actions {
+
+.mode-header {
     display: flex;
-    gap: 8px;
-    margin-top: 6px;
-}
-.cancel-btn {
-    border-color: rgba(220, 38, 38, 0.4);
-    color: var(--danger);
-    padding: 6px 12px;
-}
-.cancel-btn:hover {
-    background: rgba(220, 38, 38, 0.1);
-}
-.re-download-btn {
-    background: var(--info);
-    padding: 6px 12px;
-    font-size: 12px;
-}
-.re-download-btn:hover {
-    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.2);
+    justify-content: space-between;
+    align-items: center;
 }
 
-.task-query {
+.mode-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+
+.radio-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: #fff;
+}
+
+.mode-card.active .radio-indicator {
+    border-color: var(--brand-primary);
+    background: var(--brand-primary);
+    box-shadow: inset 0 0 0 2px #fff;
+}
+
+.mode-desc { font-size: 11px; color: var(--text-muted); }
+
+/* 控制栏 */
+.execution-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 4px;
+}
+
+.quota-badge { font-size: 12px; color: var(--text-secondary); }
+.quota-badge strong { color: var(--brand-primary-hover); }
+
+.btn-group { display: flex; gap: 8px; }
+
+.btn {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.btn-primary { background: var(--brand-primary); color: #ffffff; }
+.btn-primary:hover { background: var(--brand-primary-hover); }
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+}
+
+.btn-ghost:hover { background: #f1f5f9; color: var(--text-primary); }
+.btn-warning { background: #f59e0b; color: #ffffff; }
+.btn-danger { background: #ef4444; color: #ffffff; }
+.btn-success { background: #10b981; color: #ffffff; }
+
+.btn-sm { height: 26px; padding: 0 8px; font-size: 11px; }
+
+/* 进度反馈卡片 */
+.progress-panel {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-}
-
-.task-query-row {
-    display: flex;
     gap: 8px;
 }
 
-.task-query-row .form-input {
+.progress-panel.transfer-theme {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.task-tag {
+    font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+    font-size: 10px;
+    background: #e2e8f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.progress-bar-track {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--brand-primary);
+    transition: width 0.3s ease;
+}
+
+.progress-bar-fill.transfer-fill { background: #0284c7; }
+
+.progress-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.error-msg { color: #ef4444; font-weight: 500; }
+.task-search-bar { display: flex; gap: 8px; }
+
+/* 隐藏 Radio 默认样式 */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+.mb-12 { margin-bottom: 12px; }
+.mt-12 { margin-top: 12px; }
+
+/* Task Item 单行 UI 样式 */
+:deep(.task-item) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+:deep(.task-item:hover) {
+    border-color: var(--brand-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+:deep(.task-item-info) {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+:deep(.task-item-id) {
+    font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
     flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.error-text {
-    color: var(--danger);
+:deep(.copy-btn) {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: #ffffff;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+:deep(.copy-btn:hover) {
+    background: #f8fafc;
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+:deep(.task-item-status) {
+    flex-shrink: 0;
+    font-size: 11px;
     font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #f1f5f9;
+    color: var(--text-secondary);
 }
 
-@media (max-width: 720px) {
-    .form-grid,
-    .bbox-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .downloader-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .header-actions {
-        align-self: flex-end;
-    }
-}
+:deep(.task-status-success .task-item-status) { background: #dcfce7; color: #15803d; }
+:deep(.task-status-downloading .task-item-status) { background: #e0f2fe; color: #0369a1; }
+:deep(.task-status-failed .task-item-status) { background: #fee2e2; color: #b91c1c; }
 </style>

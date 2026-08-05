@@ -9,30 +9,45 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from sqlmodel import Session, select
 
 from .download_task import DownloadTask, get_engine
+from .download import _get_task_ttl_minutes
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_AGE_HOURS = 0.5
-#半小时自动清理，避免冗余
+# 终态任务集合：只有这些状态的任务才会被清理
+TERMINAL_STATUSES = {"success", "failed", "cancelled", "expired"}
 
 _scheduler: Optional[BackgroundScheduler] = None
 
 
-def cleanup_expired_tasks(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> int:
-    """Delete tasks and files older than max_age_hours and return removed count."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+def cleanup_expired_tasks(batch_size: int = 100) -> int:
+    """Delete terminal tasks older than TTL and return removed count.
+
+    仅清理终态任务（success/failed/cancelled/expired），
+    运行中任务（pending/downloading/stitching）不受影响。
+    TTL 从 L2 system_config 动态读取。
+    分批删除，避免一次性加载大量任务到内存。
+    """
+    ttl_minutes = _get_task_ttl_minutes()
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)
     engine = get_engine()
 
     with Session(engine) as session:
-        # 先轻量判断是否有需要清理的任务，避免无意义的数据库操作
-        # 注：两次查询之间存在理论上的 TOCTOU 窗口，但清理任务允许极小概率的重复扫描，不影响正确性
+        # 仅查询终态且超时的任务（分批）
         pending = session.exec(
-            select(DownloadTask.id).where(DownloadTask.created_at < cutoff).limit(1)
+            select(DownloadTask.id).where(
+                DownloadTask.updated_at < cutoff,
+                DownloadTask.status.in_(TERMINAL_STATUSES),
+            ).limit(1)
         ).first()
         if pending is None:
             return 0
 
-        tasks = list(session.exec(select(DownloadTask).where(DownloadTask.created_at < cutoff)))
+        tasks = list(session.exec(
+            select(DownloadTask).where(
+                DownloadTask.updated_at < cutoff,
+                DownloadTask.status.in_(TERMINAL_STATUSES),
+            ).limit(batch_size)
+        ))
         removed_count = 0
         for task in tasks:
             if task.file_path and os.path.exists(task.file_path):

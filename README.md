@@ -78,7 +78,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.12），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.13），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -388,6 +388,7 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.13** | 2026-08-05 | 下载系统综合改动：①移除 download_token（改用会话认证 Blob 下载）；②统一 API 配额池（下载消耗=ceil(tile_count/tiles_per_unit)，预扣+多退少补）；③下载任务绑定账号（支持"我的任务"列表）；④TTL 动态配置（管理员可调，基于 updated_at 续命）；⑤前端新增 MyDownloadTasks 组件（独立显示过期提示、进度条、任务操作）；⑥ axios 拦截器增加 blob 错误解析（parseBlobError）；⑦结构树漂移修复 + Code Review。详见[日志](Docs/LLM_record/26-08/2026-08-05/2026-08-05-download-quota-system.md) |
 | **V3.5.12** | 2026-08-04 | 综合改动：①代理纠偏瓦片新增内存 TTL 缓存（gcj2wgs/wgs2gcj，命中跳过纠偏计算）；②日志系统重构为序号化 + 本地时区（`_SeqFormatter` + Docker `Asia/Shanghai`）；③下载任务支持前端取消（后端 cancel 端点 + store dispose/reset 联动）；④缩放级别显示与高清渲染开关同步（`tileHDRendering` → `Math.ceil`/`Math.floor`）；⑤GitHub 工作流替换为 Star History 图表。详见[日志](Docs/LLM_record/26-08/2026-08-04/2026-08-04-proxy-tile-memory-cache.md) |
 | **V3.5.11** | 2026-08-04 | Code Review 修复批次（H7 跨层违规 10/19 处，H8 缩放，GBK DBF，blob URL revoke，H3 日志更正）+ 后端清理 agent_token 兼容名 + amap_key 加入前端 runtime token 白名单 + 管理员面板配额可编辑化（ApiManagementPanel 状态机 + 前后端字段对齐）+ HomeView 2D/3D 切换白屏修复（`_cesiumLoadPromise` 重置）。详见[日志](Docs/LLM_record/26-08/2026-08-04/2026-08-04-code-review-fix-batch.md) |
 | **V3.5.10** | 2026-08-03 | 默认底图跳过容灾监控：`useBasemapLayerBootstrap` 解析默认预设图层集合，跳过 `monitorLayerTimeout` 接入；`useBasemapSelectionWatcher` 跳过默认预设图层的切换验证。修复首屏加载时自定义瓦片（仅覆盖中国）大量瓦片 404 触发 `[底图降级]` message 轰炸的问题。详见[日志](Docs/LLM_record/26-08/2026-08-03/2026-08-03-skip-monitoring-for-default-basemap.md) |
@@ -416,6 +417,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.12 · 开发中 · 最后更新 2026-08-05</sub>
+<sub>V3.5.13 · 开发中 · 最后更新 2026-08-05</sub>
 
 </div>

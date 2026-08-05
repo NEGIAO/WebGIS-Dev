@@ -26,19 +26,6 @@ export async function apiDownloadTaskStatus(taskId) {
 const DOWNLOAD_REQUEST_TIMEOUT = DOWNLOAD_REQUEST_TIMEOUT_MS;
 
 /**
- * 下载生成的 GeoTIFF 文件（使用 token，用于原生浏览器下载）
- * @param {string} taskId
- * @param {string} token
- * @returns {Promise<string>} 完整的下载 URL
- */
-export function apiDownloadTaskFileUrl(taskId, token) {
-    const safeId = encodeURIComponent(String(taskId || '').trim());
-    const tokenParam = encodeURIComponent(String(token || '').trim());
-    const baseUrl = backendAPI.defaults.baseURL || '';
-    return `${baseUrl}/api/download/tasks/${safeId}/file?token=${tokenParam}`;
-}
-
-/**
  * 下载生成的 GeoTIFF 文件（使用流式响应，用于前端进度可视化）
  * @param {string} taskId
  * @param {(progress: number, meta?: { loaded: number, total: number }) => void} onProgress
@@ -70,4 +57,23 @@ export async function apiDownloadTaskFile(taskId, onProgress, options = {}) {
 export async function apiDownloadCancelTask(taskId) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
     return backendAPI.post(`/api/download/tasks/${safeId}/cancel`);
+}
+
+/**
+ * 根据 bbox + 分辨率估算瓦片总数（与后端 _estimate_tile_count 使用相同算法）
+ * @param {number[]} bbox [minLon, minLat, maxLon, maxLat]
+ * @param {number} resolutionM 分辨率（米/像素）
+ * @returns {Promise<{ status: string, tile_count: number }>}
+ */
+export async function apiEstimateTileCount(bbox, resolutionM) {
+    const bboxStr = Array.isArray(bbox) ? bbox.join(',') : String(bbox || '');
+    return backendAPI.get('/api/download/estimate-tiles', { params: { bbox: bboxStr, resolution_m: resolutionM } });
+}
+
+/**
+ * 获取当前用户的任务列表（我的任务）
+ * @returns {Promise<any>} 任务列表
+ */
+export async function apiDownloadListMyTasks() {
+    return backendAPI.get('/api/download/tasks');
 }

@@ -1,18 +1,18 @@
 # 账号体系与 AI 配额架构说明
 
-日期：2026-07-21
+日期：2026-08-05
 
 适用范围：`backend/api/auth/`、`backend/api/agent_chat/`、`backend/api/admin.py`、`backend/api/api_keys_management.py` 及 `frontend/src/` 中对应的认证与 AI 对话模块。
 
-本文是长期参考文档，说明 WebGIS 3.0 中"账号体系与 AI 配额"功能的身份模型、注册登录与会话管理、双配额机制、AI 模型选取优先级链、动态配置、备用密钥池与管理员安全加固，供后续维护、权限扩展与配额策略调整时对照。
+本文是长期参考文档，说明 WebGIS 3.0 中"账号体系与 AI 配额"功能的身份模型、注册登录与会话管理、**单池统一配额机制**、AI 模型选取优先级链、动态配置、备用密钥池与管理员安全加固，供后续维护、权限扩展与配额策略调整时对照。
 
 ## 1. 功能定位
 
-本功能为 WebGIS 3.0 提供完整的用户身份管理与 AI 对话资源控制能力：
+本功能为 WebGIS 3.0 提供完整的用户身份管理与 API 资源控制能力：
 
 - **邮箱注册登录**：以邮箱为唯一登录账号，配合 6 位数字验证码完成注册、密码重置与旧账号邮箱绑定迁移。
 - **三级身份体系**：访客（guest）/ 注册用户（registered）/ 管理员（admin），权限逐级递增。
-- **分级 AI 对话配额**：通用 API 配额与 AI 对话配额独立计量，按角色设定每日上限，管理员不限额。
+- **单池统一配额**：全局唯一的 `api_usage_daily` 配额池，搜索、API 调用、LLM 对话、底图下载均消耗同一配额，按角色设定每日上限，管理员不限额。
 - **管理员后台动态配置**：通过 `system_config` 表在线调整 LLM 参数（模型、温度、max_tokens 等）与配额策略，无需重启服务。
 - **备用密钥池**：上游 LLM API Key 支持主 + 备用轮询容灾，单 key 失效时自动切换。
 
@@ -38,7 +38,6 @@
 | `backend/api/auth/preferences.py` | 用户偏好（底图、语言、单位制、首选模型）读写 |
 | `backend/api/auth/system_config.py` | `system_config` 表通用 KV 读写（管理员头像、默认底图索引等） |
 | `backend/api/agent_chat/routes.py` | AI 对话路由：`/chat/completions`、`/chat/proxy`、`/chat/default-proxy`、用户配置、管理员配置 |
-| `backend/api/agent_chat/quota.py` | AI 对话配额：`_check_agent_chat_quota_sync`、`_consume_agent_chat_quota_sync`、快照 |
 | `backend/api/agent_chat/db.py` | Agent 表 schema、`system_config` 配置 CRUD、`_resolve_effective_agent_runtime_sync` 运行时解析 |
 | `backend/api/agent_chat/upstream.py` | 上游 LLM HTTP 调用、`_call_upstream_chat_with_key_candidates` 多 key 轮询 |
 | `backend/api/agent_chat/utils.py` | 纯工具函数：`_pick_runtime_model` 模型选取优先级链 |
@@ -61,29 +60,26 @@
 ```mermaid
 flowchart LR
     subgraph ROLES["三级身份"]
-        GUEST["访客 guest<br/>通用 100/日 · AI 10/日"]
-        REG["注册用户 registered<br/>通用 1000/日 · AI 100/日"]
+        GUEST["访客 guest<br/>100/日"]
+        REG["注册用户 registered<br/>1000/日"]
         ADMIN["管理员 admin<br/>不限额"]
     end
 
-    subgraph QUOTA["双配额"]
-        Q_API["api_usage_daily<br/>通用 API 配额"]
-        Q_AI["agent_chat_usage_daily<br/>AI 对话配额"]
+    subgraph QUOTA["单池统一配额"]
+        Q_API["api_usage_daily<br/>全局唯一配额池"]
     end
 
     GUEST --> Q_API
-    GUEST --> Q_AI
     REG --> Q_API
-    REG --> Q_AI
 ```
 
 ### 3.1 角色定义
 
-| 角色 | 常量 | 来源 | 通用 API 日限额 | AI 对话日限额 |
-|------|------|------|----------------|--------------|
-| 访客 | `ROLE_GUEST = "guest"` | 游客登录（`user/123`）或无 token 自动创建临时 session | 100 次 | 10 次（环境变量 `AGENT_CHAT_GUEST_DAILY_QUOTA`） |
-| 注册用户 | `ROLE_REGISTERED = "registered"` | 邮箱注册 + 验证码 | 1000 次 | 100 次（环境变量 `AGENT_CHAT_REGISTERED_DAILY_QUOTA`） |
-| 管理员 | `ROLE_ADMIN = "admin"` | 用户名 `admin` + `SUPER_USER` 环境变量密码 | 不限 | 不限 |
+| 角色 | 常量 | 来源 | 日限额 |
+|------|------|------|--------|
+| 访客 | `ROLE_GUEST = "guest"` | 游客登录（`user/123`）或无 token 自动创建临时 session | 100 次 |
+| 注册用户 | `ROLE_REGISTERED = "registered"` | 邮箱注册 + 验证码 | 1000 次 |
+| 管理员 | `ROLE_ADMIN = "admin"` | 用户名 `admin` + `SUPER_USER` 环境变量密码 | 不限 |
 
 ### 3.2 `normalize_role` 判定逻辑
 
@@ -166,9 +162,9 @@ flowchart TD
     API --> ADMIN
 ```
 
-## 5. 双配额系统
+## 5. 单池统一配额系统
 
-### 5.1 通用 API 配额（`api_usage_daily`）
+### 5.1 配额池（`api_usage_daily`）
 
 | 字段 | 说明 |
 |------|------|
@@ -184,29 +180,13 @@ flowchart TD
 3. 读取递增后的值，若超限则 `calls - 1` 回滚并返回 `allowed=False`。
 4. 未超限则同步更新 `user_metrics.total_api_calls`。
 
-### 5.2 AI 对话配额（`agent_chat_usage_daily`）
+### 5.2 配额触发点
 
-| 字段 | 说明 |
-|------|------|
-| `quota_subject` | 配额主体 |
-| `role` | 角色 |
-| `usage_date` | UTC 日期 |
-| `calls` | 当日 AI 对话次数 |
-
-消耗逻辑（`_consume_agent_chat_quota_sync`）：
-
-1. 先 `SELECT calls` 预检是否已达上限。
-2. 未超限则 `INSERT ... ON CONFLICT DO UPDATE SET calls = calls + 1`。
-3. 管理员不限额。
-
-**配额策略动态可调**：`_get_agent_chat_daily_limit` 从 `system_config` 表读取 `agent_chat_guest_daily_quota` / `agent_chat_registered_daily_quota`，管理员可通过 `POST /api/admin/agent/config` 在线修改，无需重启。
-
-### 5.3 配额触发点
-
-| 端点 | 配额类型 | 依赖 |
-|------|---------|------|
-| 天气、搜索等通用 API | `api_usage_daily` | `require_api_access` / `require_api_access_or_guest` |
-| `POST /api/agent/chat/completions` | `agent_chat_usage_daily` | 先 `_check_agent_chat_quota_sync` 预检，成功后 `_consume_agent_chat_quota_sync` |
+| 端点 | 消耗量 | 依赖 |
+|------|--------|------|
+| 天气、搜索等通用 API | 1 次 | `require_api_access` / `require_api_access_or_guest` |
+| `POST /api/agent/chat/completions` | 1 次 | `require_api_access_or_guest` → `_consume_api_quota_sync` |
+| `POST /api/download_xyz/submit` | `ceil(tile_count / tiles_per_unit)` | 预扣 + 完成后多退少补 |
 | `POST /api/agent/chat/proxy` | 不消耗平台配额 | 用户个人 Key 模式，仅记录调用日志 |
 | `POST /api/agent/chat/default-proxy` | 不消耗平台配额 | 使用管理员配置的默认 AI Key |
 
@@ -262,8 +242,6 @@ flowchart TD
 | `agent_temperature` | 温度（0.0~2.0） | 环境变量 `AGENT_TEMPERATURE`（默认 1.0） |
 | `agent_top_p` | Top-P（0.0~1.0） | 环境变量 `AGENT_TOP_P`（默认 0.95） |
 | `agent_extra_body` | 额外请求体（JSON） | 默认 `{"chat_template_kwargs":{"enable_thinking":true},"reasoning_budget":16384}` |
-| `agent_chat_guest_daily_quota` | 访客 AI 对话日限额 | 环境变量 `AGENT_CHAT_GUEST_DAILY_QUOTA`（默认 10） |
-| `agent_chat_registered_daily_quota` | 注册用户 AI 对话日限额 | 环境变量 `AGENT_CHAT_REGISTERED_DAILY_QUOTA`（默认 100） |
 | `default_ai_api_key` | 默认 AI 专属 Key | 管理员配置 |
 | `default_ai_base_url` | 默认 AI 专属 Base URL | 管理员配置 |
 | `default_ai_model` | 默认 AI 专属模型 | 管理员配置 |
@@ -372,7 +350,6 @@ def _get_admin_password() -> str:
 | `users` | 用户账号（username, display_name, password_hash, role, avatar_index, email, email_verified） |
 | `sessions` | 登录会话（token, username, role, guest_uid, requires_email_binding, expires_at） |
 | `api_usage_daily` | 通用 API 每日配额计数（PK: username + usage_date） |
-| `agent_chat_usage_daily` | AI 对话每日配额计数（PK: quota_subject + usage_date） |
 | `agent_user_config` | 用户个人 Agent 配置（api_key, base_url, model, temperature 等） |
 | `user_preferences` | 用户偏好（default_basemap, language, unit_system, preferred_agent_model） |
 | `system_config` | 全局 KV 动态配置 |

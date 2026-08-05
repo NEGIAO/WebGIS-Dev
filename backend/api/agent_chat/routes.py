@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from api.auth import normalize_role, require_admin, require_api_access_or_guest, require_login, resolve_quota_subject
+from api.auth.quota import (
+    _consume_api_quota_sync,
+    get_user_quota_snapshot_sync,
+)
 
 from .constants import (
     CONFIG_KEY_AVAILABLE_MODELS,
@@ -25,7 +29,6 @@ from .constants import (
 )
 from .db import (
     _cache_available_models_sync,
-    _get_agent_chat_quota_policy_sync,
     _get_agent_key_status_sync,
     _get_agent_provider_config_sync,
     _get_default_ai_config_sync,
@@ -36,13 +39,7 @@ from .db import (
     _set_default_ai_config_sync,
     _upsert_agent_user_config_sync,
     _db_connection,
-    _ensure_agent_chat_tables_sync,
     _safe_parse_extra_body,
-)
-from .quota import (
-    _check_agent_chat_quota_sync,
-    _consume_agent_chat_quota_sync,
-    _get_agent_chat_quota_snapshot_sync,
 )
 from .schemas import (
     AgentChatProxyRequest,
@@ -86,7 +83,7 @@ async def get_agent_chat_config(
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
-    quota = await asyncio.to_thread(_get_agent_chat_quota_snapshot_sync, username, role, quota_subject)
+    quota = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
 
     return {
         "status": "success",
@@ -127,13 +124,14 @@ async def agent_chat_completions(
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
-    quota_preview = await asyncio.to_thread(_check_agent_chat_quota_sync, username, role, quota_subject)
-    if not bool(quota_preview.get("allowed")):
-        limit = quota_preview.get("limit")
-        used = quota_preview.get("used")
+    # 统一 API 配额校验（cost=1）
+    quota_snapshot = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
+    if quota_snapshot["remaining"] is not None and quota_snapshot["remaining"] <= 0:
+        limit = quota_snapshot["limit"]
+        used = quota_snapshot["used"]
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"今日额度已达上限（{used}/{limit}），请明日再试。",
+            detail=f"今日 API 额度已达上限（{used}/{limit}），请明日再试。",
         )
 
     runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
@@ -239,22 +237,10 @@ async def agent_chat_completions(
                 detail="Agent upstream returned empty content.",
             )
 
-        quota_after = await asyncio.to_thread(_consume_agent_chat_quota_sync, username, role, quota_subject)
-        if not bool(quota_after.get("allowed", True)):
-            quota_snapshot = await asyncio.to_thread(
-                _get_agent_chat_quota_snapshot_sync,
-                username,
-                role,
-                quota_subject,
-            )
-            quota_after = {
-                "allowed": False,
-                "limit": quota_snapshot.get("limit"),
-                "used": quota_snapshot.get("used"),
-                "remaining": quota_snapshot.get("remaining"),
-                "usage_date": quota_snapshot.get("usage_date"),
-                "quota_subject": quota_snapshot.get("quota_subject"),
-            }
+        # 统一 API 配额消耗（cost=1）
+        quota_after = await asyncio.to_thread(
+            _consume_api_quota_sync, username, role, cost=1, action="agent",
+        )
 
         data = {
             "reply": reply,
@@ -303,14 +289,12 @@ async def admin_get_agent_config(
     """管理员读取平台级 Agent 配置、密钥状态和配额策略。"""
     config = await asyncio.to_thread(_get_agent_provider_config_sync)
     key_status = await asyncio.to_thread(_get_agent_key_status_sync)
-    chat_quota = await asyncio.to_thread(_get_agent_chat_quota_policy_sync)
 
     return {
         "status": "success",
         "data": {
             "provider": config,
             "key_status": key_status,
-            "chat_quota": chat_quota,
         },
     }
 
@@ -330,14 +314,12 @@ async def admin_update_agent_config(
         )
 
     saved = await asyncio.to_thread(_set_agent_provider_config_sync, updates)
-    chat_quota = await asyncio.to_thread(_get_agent_chat_quota_policy_sync)
 
     return {
         "status": "success",
         "message": "Agent config updated.",
         "data": {
             "provider": saved,
-            "chat_quota": chat_quota,
         },
     }
 
@@ -804,7 +786,6 @@ async def update_user_model_preference(
             )
 
     try:
-        _ensure_agent_chat_tables_sync()
         with _db_connection() as conn:
             conn.execute(
                 """

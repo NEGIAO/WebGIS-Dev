@@ -114,18 +114,6 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "description": "Agent temperature",
     },
     "AGENT_TOP_P": {"layer": "L1", "default": 0.95, "secret": False, "description": "Agent top_p"},
-    "AGENT_CHAT_GUEST_DAILY_QUOTA": {
-        "layer": "L1",
-        "default": 10,
-        "secret": False,
-        "description": "游客日对话额度默认",
-    },
-    "AGENT_CHAT_REGISTERED_DAILY_QUOTA": {
-        "layer": "L1",
-        "default": 100,
-        "secret": False,
-        "description": "注册用户日对话额度默认",
-    },
     "AGENT_ALLOWED_BASE_URL_HOSTS": {
         "layer": "L1",
         "default": "",
@@ -254,16 +242,28 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "description": "下载任务 GeoTIFF 输出目录",
     },
     "DOWNLOAD_TASK_TTL_MINUTES": {
-        "layer": "L1",
+        "layer": "L2",
         "default": 30,
         "secret": False,
-        "description": "下载任务文件保留分钟数",
+        "description": "下载任务存活分钟数（从最后活动时间起算，管理员面板可调，写入 system_config）",
     },
-    "DOWNLOAD_TOKEN_LIFETIME_MINUTES": {
-        "layer": "L1",
-        "default": 60,
+    "DOWNLOAD_TILES_PER_UNIT": {
+        "layer": "L2",
+        "default": 100,
         "secret": False,
-        "description": "下载直链 token 有效分钟数",
+        "description": "每份额度可下载的瓦片数（管理员面板可调，写入 system_config）",
+    },
+    "API_GUEST_DAILY_QUOTA": {
+        "layer": "L2",
+        "default": 100,
+        "secret": False,
+        "description": "游客每日 API 配额（管理员面板可调，写入 system_config）",
+    },
+    "API_REGISTERED_DAILY_QUOTA": {
+        "layer": "L2",
+        "default": 1000,
+        "secret": False,
+        "description": "注册用户每日 API 配额（管理员面板可调，写入 system_config）",
     },
     "SHIPS66_TILE_URL_TEMPLATE": {
         "layer": "L1",

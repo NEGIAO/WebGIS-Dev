@@ -123,7 +123,10 @@ async def require_api_access(request: Request) -> Dict[str, Any]:
         used = quota.get("used")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"今日 API 调用额度已用完（{used}/{limit}），请明日再试或使用更高权限账号",
+            detail=_auth_error_detail(
+                "QUOTA_EXCEEDED",
+                f"今日 API 调用额度已用完（{used}/{limit}），请明日再试或使用更高权限账号",
+            ),
         )
 
     session["quota"] = quota
