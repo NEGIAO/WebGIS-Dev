@@ -1,0 +1,26 @@
+name: Generate Star History Chart
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天 UTC 时间 0:00（北京时间早上 8点）自动运行一次
+  workflow_dispatch: # 支持手动点击按钮触发运行
+
+jobs:
+  star-history:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate Star History
+        uses: star-history/star-history-action@v1.0.1
+        with:
+          secret-token: ${{ secrets.GITHUB_TOKEN }}
+          image-path: static/image/star-history-light.svg
+          dark-image-path: static/image/star-history-dark.svg
+
+      - name: Commit & Push updated SVG
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update star history chart [skip ci]"
+          file_pattern: "static/image/*.svg"
