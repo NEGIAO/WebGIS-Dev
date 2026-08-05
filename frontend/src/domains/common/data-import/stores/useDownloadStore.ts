@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus } from '@/api/download';
+import { apiDownloadCreateTask, apiDownloadTaskFile, apiDownloadTaskStatus, apiDownloadCancelTask } from '@/api/download';
 import { triggerBrowserDownload } from '@common/utils/browserDownload';
 
 type DownloadMode = 'native' | 'progressive'; // native: browser native download, progressive: front-end visualization
@@ -181,6 +181,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
 
     function dispose(): void {
         stopPolling();
+        // 通知后端取消任务，避免无意义执行
+        if (taskId.value) {
+            apiDownloadCancelTask(taskId.value).catch(() => {});
+        }
     }
 
     const hasActiveTask = computed(() => Boolean(taskId.value));
@@ -219,6 +223,10 @@ export const useDownloadStore = defineStore('downloadStore', () => {
     }
 
     function resetTask(): void {
+        // 通知后端取消任务，避免无意义执行
+        if (taskId.value) {
+            apiDownloadCancelTask(taskId.value).catch(() => {});
+        }
         // Reset task state for a fresh download run.
         stopPolling();
         taskId.value = '';

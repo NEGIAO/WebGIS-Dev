@@ -22,13 +22,18 @@ def cleanup_expired_tasks(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> int:
     """Delete tasks and files older than max_age_hours and return removed count."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
     engine = get_engine()
-    removed_count = 0
 
     with Session(engine) as session:
-        statement = select(DownloadTask).where(DownloadTask.created_at < cutoff)
-        tasks = list(session.exec(statement))
-        if not tasks:
+        # 先轻量判断是否有需要清理的任务，避免无意义的数据库操作
+        # 注：两次查询之间存在理论上的 TOCTOU 窗口，但清理任务允许极小概率的重复扫描，不影响正确性
+        pending = session.exec(
+            select(DownloadTask.id).where(DownloadTask.created_at < cutoff).limit(1)
+        ).first()
+        if pending is None:
             return 0
+
+        tasks = list(session.exec(select(DownloadTask).where(DownloadTask.created_at < cutoff)))
+        removed_count = 0
         for task in tasks:
             if task.file_path and os.path.exists(task.file_path):
                 try:

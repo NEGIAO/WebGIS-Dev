@@ -6,6 +6,47 @@
 
 ## 版本记录
 
+### V3.5.12 (2026-08-04) — 代理瓦片缓存 + 日志重构 + 下载取消 + 缩放修正 + Star History
+
+> 🏗️ **综合改动**：本次版本合并 5 项独立改动——后端纠偏瓦片新增内存 TTL 缓存；日志系统重构为序号化 + 本地时区；下载任务支持前端取消；地图缩放级别显示与高清渲染开关同步；GitHub 工作流替换为 Star History 图表。
+
+#### 后端：代理瓦片内存 TTL 缓存
+
+- `backend/api/proxy.py`：新增 `_TileCacheEntry` dataclass + `_TileCache` 类（TTL 过期惰性淘汰 + 满员批量清理 + 命中率统计）。**仅纠偏端点（`/proxy/gcj2wgs/`、`/proxy/wgs2gcj/`）集成内存缓存**——命中时跳过纠偏计算（省 CPU）；ships66 / 通用代理保持纯中转（设计决策：ships66 访问概率极低；`/proxy/{url}` 用途杂，缓存非瓦片响应风险大于收益）
+- `backend/config/catalog.py`：新增 `PROXY_TILE_CACHE_TTL_SECONDS`（默认 300s）、`PROXY_TILE_CACHE_MAX_SIZE`（默认 100000）
+- `.env.example` / `.env` / `.env.local`：同步登记（生产环境用户配置为 600s/200000 条）
+
+#### 后端：日志系统重构（序号化 + 本地时区）
+
+- `backend/app.py`：删除 `BeijingTimeFormatter`，新增 `_SeqFormatter`（线程安全的全局递增序号 `[000001]` 前缀，方便 Docker 日志排序追踪）；uvicorn logger 同步补丁；shutdown 阶段每个资源独立 try/except 异常隔离
+- `backend/utils/time_utils.py`：`BeijingTimeFormatter` / `get_beijing_now` / `get_beijing_now_str` 全部移除，替换为 `get_local_now()` / `get_local_now_str()`（Docker 容器本地时区 `Asia/Shanghai`）；`hourly_chime_task` 新增 `startup_time` 参数，报时日志展示已运行时长
+- `backend/api/monitor.py`：HF 日志代理新增 `_convert_utc_to_local()` 将 UTC 时间戳转为本地时间；移除 `BeijingTimeFormatter` 改用标准 `logging.Formatter`
+
+#### 后端：下载任务可取消
+
+- `backend/download_xyz/download.py`：新增 `POST /api/download/tasks/{id}/cancel` 端点；`_process_download_task` 执行前检查取消状态；`report_progress` 每次回写前检查取消状态并抛 `CancelledError`；捕获后清理半成品文件
+- `backend/download_xyz/tile_engine.py`：`build_geotiff_from_tiles` 捕获 `CancelledError` 后先取消所有未完成的子任务，等待全部结束再向上传播
+- `backend/download_xyz/task_scheduler.py`：`cleanup_expired_tasks` 新增轻量预判（`SELECT ... LIMIT 1`），无过期任务时跳过全量查询
+- `frontend/src/api/download.js`：新增 `apiDownloadCancelTask(taskId)` 函数
+- `frontend/src/domains/common/data-import/stores/useDownloadStore.ts`：`dispose()` / `resetTask()` 时调用取消端点通知后端中止
+
+#### 前端：缩放级别显示修正
+
+- `frontend/src/domains/ol/components/MapControlsBar.vue`：新增 `displayZoom` 计算属性，统一使用 `Math.ceil(zoom)` 显示，与实际加载的高清瓦片级别一致
+- `frontend/src/domains/ol/composables/useMapEventHandlers.js`：`change:resolution` 回调跟随 `tileHDRendering` 开关——开启时 `Math.ceil`（高清上层），关闭时 `Math.floor`（默认下层）
+- `frontend/src/domains/ol/components/MapContainer.vue`：总览图源包裹 `buildRasterBasemapSource()`，与底图配置 SSOT 对齐
+
+#### 前端：LogMonitor SSE JSON 解析
+
+- `frontend/src/domains/ol/components/LogMonitor.vue`：`onmessage` 新增 JSON 解析分支（后端 SSE data 为 `{"data":"...","timestamp":"..."}` 格式），提取 `data` 字段显示；非 JSON 行保持原样
+
+#### 其他
+
+- `.github/workflows/traffic-counter.yml`：移除原流量统计工作流（151 行），替换为 Star History 图表生成（`seladb/star-history-action`），每日 UTC 0 点自动生成明暗双图
+- `frontend/index.html`：GitHub 链接修正为 `https://github.com/NEGIAO`
+- `frontend/stats.html`：清理构建产物中的注释分隔符
+- `README.md`：新增 Star History 图表章节 + 版本演进表更新
+
 ### V3.5.11 (2026-08-04) — Code Review 修复批次 + amap runtime token + 配额可编辑 + 视图切换白屏修复
 
 > 🏗️ **架构 + 修复**：前端分层架构合规化——common→ol 跨层违规从 19 处降至 9 处；后端清理 `agent_token` 兼容名；`amap_key` 加入前端 runtime token 白名单；管理员面板配额从只读升级为可编辑器；修复 2D/3D 切换时 `_cesiumLoadPromise` 未清空导致的白屏。

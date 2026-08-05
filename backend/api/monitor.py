@@ -9,17 +9,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
-import threading
-from typing import Literal, Set
 import sys
+import threading
+from datetime import datetime
+from typing import Literal, Set
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-
-from utils.time_utils import BeijingTimeFormatter
 
 from config import get_bool, get_settings, get_str
 
@@ -124,6 +124,7 @@ def init_monitor_log_streaming() -> Literal["local", "hf"]:
 def _fanout_line(line: str) -> None:
     # 注意：此函数处于日志广播热路径，except 静默吞没是故意的——
     # 在 log handler 内部再次 logger.debug() 会导致递归。
+    # 序号已在 _SeqFormatter 中添加到 line 上，此处直接透传给订阅者。
     for q in list(_subscribers):
         try:
             q.put_nowait(line)
@@ -177,7 +178,7 @@ def _ensure_broadcast_handler() -> None:
     # 安全：日志级别由配置控制，避免生产环境泄露敏感数据
     handler.setLevel(getattr(logging, get_settings().log_level.upper(), logging.INFO))
     handler.setFormatter(
-        BeijingTimeFormatter("%(asctime)s [北京时间] - %(name)s - %(levelname)s - %(message)s")
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     )
     root = logging.getLogger()
     root.addHandler(handler)
@@ -293,7 +294,7 @@ async def stream_logs(
 
     # 根据前端选择动态切换 HF Endpoint[cite: 4]
     target_url = _hf_build_logs_url() if type == "build" else _hf_run_logs_url()
-    
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "text/event-stream",
@@ -306,12 +307,20 @@ async def stream_logs(
                     if response.status_code == 401:
                         yield "data: [error] Token 校验失败，请检查 Secret 是否为 hf_ 开头\n\n"
                         return
-                    
+
                     async for line in response.aiter_lines():
-                        if line:
-                            # 增加来源标识
-                            label = f"[{type.upper()}] "
-                            yield f"data: {label}{_sse_escape_data(line)}\n\n"
+                        if not line:
+                            continue
+                        # 尝试解析 JSON 并转换顶层 timestamp 为本地时间（Docker 时区）
+                        # 注意：仅处理顶层字段，嵌套 timestamp 不转换（当前 HF 日志格式为扁平结构）
+                        try:
+                            obj = json.loads(line)
+                            if "timestamp" in obj:
+                                obj["timestamp"] = _convert_utc_to_local(obj["timestamp"])
+                            line = json.dumps(obj, ensure_ascii=False)
+                        except json.JSONDecodeError:
+                            pass  # 非 JSON 行保持原样
+                        yield f"data: {_sse_escape_data(line)}\n\n"
         except Exception as e:
             yield f"data: [proxy error] {str(e)}\n\n"
 
@@ -323,6 +332,17 @@ async def stream_logs(
             "X-Accel-Buffering": "no", # 禁用代理缓存，确保日志实时
         }
     )
+
+
+def _convert_utc_to_local(ts_str: str) -> str:
+    """将 ISO UTC 时间戳转为本地时间（Docker 容器时区）"""
+    try:
+        dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        local = dt.astimezone()  # 无参数 = 系统本地时区（Docker 设置为 Asia/Shanghai）
+        return local.isoformat()
+    except Exception:
+        return ts_str
+
 
 async def _local_log_generator():
     q = await _register_subscriber()

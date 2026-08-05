@@ -301,6 +301,18 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "通用代理默认 User-Agent",
     },
+    "PROXY_TILE_CACHE_TTL_SECONDS": {
+        "layer": "L1",
+        "default": 300,
+        "secret": False,
+        "description": "代理瓦片内存缓存 TTL 秒数（默认 300=5 分钟）",
+    },
+    "PROXY_TILE_CACHE_MAX_SIZE": {
+        "layer": "L1",
+        "default": 100000,
+        "secret": False,
+        "description": "代理瓦片内存缓存最大条目数（默认 100000）",
+    },
     "AMAP_REST_ROOT": {
         "layer": "L1",
         "default": "https://restapi.amap.com",

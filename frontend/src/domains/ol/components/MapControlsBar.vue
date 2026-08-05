@@ -130,7 +130,7 @@
             class="zoom-level-display"
             :title="t('mapControls.zoomLevel')"
         >
-            {{ currentZoom }}
+            {{ displayZoom }}
         </div>
         <div class="divider"></div>
         <button
@@ -260,6 +260,18 @@ const displayCoordinateText = computed(() => {
 
 /** 是否可以复制坐标（坐标有效时） */
 const canCopyCoordinate = computed(() => displayCoordinateText.value !== COORDINATE_PLACEHOLDER);
+
+/** 显示的缩放级别：与 alwaysPickFinerZoom 瓦片策略一致
+ *  - useMapEventHandlers 写入 currentZoomRef 时已做取整（HDR开→ceil，HDR关→floor）
+ *  - 此处 displayZoom 对整数值 ceil 结果不变（13→13），仅在外部传入非整数时兜底向上取整
+ *  - 与 useMapEventHandlers.js L231 配合：两者最终一致，不会产生显示偏差 */
+const displayZoom = computed(() => {
+    const z = Number(props.currentZoom);
+    if (!Number.isFinite(z)) return '--';
+
+    // 无论是 13（整）还是 13.01/13.51（非整），Math.ceil 处理后结果完全一致
+    return Math.ceil(z);
+});
 
 // ========== 坐标编辑函数 ==========
 

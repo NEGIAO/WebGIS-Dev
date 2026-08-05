@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
@@ -32,6 +33,9 @@ DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES = get_int("DOWNLOAD_TOKEN_LIFETIME_MINUT
 
 # 下载令牌缓存：{token: (task_id, expires_at)}
 _download_tokens: Dict[str, tuple[str, datetime]] = {}
+
+# 下载任务取消标志缓存：{task_id: True}，用于 report_progress 快速检查，避免逐瓦片 DB 查询
+_cancelled_tasks: Dict[str, bool] = {}
 
 # 下载任务附加元数据缓存：用于生成更可读的下载文件名
 # key 为 task_id，value 为元数据字典，过期后由清理逻辑移除
@@ -195,6 +199,25 @@ def get_download_task(task_id: str):
     return _build_status_response(task)
 
 
+@router.post("/tasks/{task_id}/cancel")
+def cancel_download_task(
+    task_id: str,
+    _current_user: dict = Depends(require_api_access),
+):
+    """取消下载任务。前端停止轮询/重置任务时调用，通知后端中止执行。"""
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task not found: {task_id}")
+    # 已终态的任务无需取消
+    if task.status in ("success", "failed", "expired", "cancelled"):
+        return {"task_id": task_id, "status": task.status, "cancelled": False}
+    # 设置内存取消标志，使 report_progress 无需 DB 查询即可中止
+    _cancelled_tasks[task_id] = True
+    update_task(task_id, status="cancelled", message="任务已被用户取消")
+    logger.info("下载任务已取消：%s", task_id)
+    return {"task_id": task_id, "status": "cancelled", "cancelled": True}
+
+
 @router.get("/tasks/{task_id}/file")
 def download_task_file(task_id: str, token: Optional[str] = None):
     """下载任务完成后的 GeoTIFF 文件。"""
@@ -270,12 +293,21 @@ async def _process_download_task(
         payload.resolution_m,
     )
 
+    # === 执行前检查：任务已被取消则直接中止，避免无意义执行 ===
+    existing = get_task(task_id)
+    if existing and existing.status == "cancelled":
+        logger.info("下载任务 %s 已被取消，跳过执行", task_id)
+        return
+
     update_task(task_id, status="downloading", progress=5, message="正在下载瓦片")
 
     progress_state = {"last": 0}
 
     async def report_progress(done: int, total: int, phase: str) -> None:
-        """向任务状态回写进度。"""
+        """向任务状态回写进度，并检查是否已被取消。"""
+        # 检查内存取消标志，避免逐瓦片 DB 查询
+        if _cancelled_tasks.get(task_id):
+            raise asyncio.CancelledError("任务已被用户取消")
         if total <= 0:
             return
         ratio = done / total
@@ -347,10 +379,21 @@ async def _process_download_task(
             progress=100,
             message=f"Ready{clip_message}",
         )
+        _cancelled_tasks.pop(task_id, None)
+    except asyncio.CancelledError:
+        # 用户取消：清理半成品文件
+        logger.info("下载任务 %s 被用户取消，清理半成品文件", task_id)
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+        _cancelled_tasks.pop(task_id, None)
     except Exception as exc:
         logger.exception("下载任务失败：%s | 错误：%s", task_id, str(exc))
         error_msg = str(exc)[:200]
         update_task(task_id, status="failed", progress=0, message=error_msg)
+        _cancelled_tasks.pop(task_id, None)
 
 
 def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:

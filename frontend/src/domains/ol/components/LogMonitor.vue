@@ -324,7 +324,17 @@ function openConnection() {
 
     eventSource = new EventSource(logsStreamUrl.value);
     eventSource.onopen = () => (isConnected.value = true);
-    eventSource.onmessage = (e) => pushLine(e.data);
+    eventSource.onmessage = (e) => {
+        // 后端 SSE data 为 JSON: {"data":"<日志文本>","timestamp":"ISO8601"}
+        // 需解析后提取 data 字段作为显示文本
+        try {
+            const obj = JSON.parse(e.data);
+            pushLine(obj.data ?? e.data);
+        } catch {
+            // 非 JSON（如本地模式的 "[monitor] source=local" 纯文本）保持原样
+            pushLine(e.data);
+        }
+    };
     eventSource.onerror = () => {
         if (eventSource && eventSource.readyState === EventSource.CLOSED) {
             pushLine('[ERROR] SSE 连接已关闭（网络异常或后端不可用），将自动重连。');

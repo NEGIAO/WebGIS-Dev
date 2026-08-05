@@ -62,3 +62,12 @@ export async function apiDownloadTaskFile(taskId, onProgress, options = {}) {
         },
     });
 }
+
+/**
+ * 取消下载任务（通知后端中止执行，避免无意义消耗）
+ * @param {string} taskId
+ */
+export async function apiDownloadCancelTask(taskId) {
+    const safeId = encodeURIComponent(String(taskId || '').trim());
+    return backendAPI.post(`/api/download/tasks/${safeId}/cancel`);
+}
