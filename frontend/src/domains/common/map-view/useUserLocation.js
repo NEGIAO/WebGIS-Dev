@@ -337,7 +337,8 @@ export function useUserLocation({
                 const errorMsg = error?.message || 'IP 定位请求失败';
                 message.warning(errorMsg);
             }
-            console.error('[zoomToUserCityByIp] 错误:', error);
+            // 上方 message.warning 已提示用户,此处不再重复 console.error
+            // console.error('[zoomToUserCityByIp] 错误:', error);
             return {
                 ok: false,
                 status: '0',
@@ -642,8 +643,9 @@ export function useUserLocation({
                     closable: true,
                     duration: 0,
                 });
-            } else {
-                console.error('[useUserLocation] 定位异常:', error);
+            } else if (!silent) {
+                // console.error('[useUserLocation] 定位异常:', error);
+                message.error(`定位失败: ${error?.message || '未知错误'}`);
             }
             return null;
         }

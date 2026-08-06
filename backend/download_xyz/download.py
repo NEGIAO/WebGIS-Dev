@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -14,7 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from api.auth import require_api_access
+from api.auth import require_login
 from api.auth.constants import resolve_quota_subject
 from api.auth.quota import (
     _consume_api_quota_sync,
@@ -25,11 +26,20 @@ from api.auth.quota import (
 from api.auth.system_config import _get_system_config_value_sync
 from config import get_int, get_str
 from utils.net_guard import is_disallowed_host
-
-from .tile_engine import MAX_LATITUDE, MAX_CONCURRENCY, WEB_MERCATOR_EXTENT, bbox4326_to_tile_range, build_geotiff_from_tiles, clip_geotiff_to_bbox, resolution_to_zoom
 from .download_task import DownloadTask, create_task, get_task, update_task, list_active_tasks_by_user
+from .tile_engine import MAX_CONCURRENCY, MAX_LATITUDE, WEB_MERCATOR_EXTENT, bbox4326_to_tile_range, build_geotiff_from_tiles, clip_geotiff_to_bbox, resolution_to_zoom
 
 logger = logging.getLogger(__name__)
+
+
+def _format_file_size(size_bytes: int) -> str:
+    """将字节数转换为可读的文件大小格式（B/KB/MB/GB/TB）。"""
+    size = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if size < 1024:
+            return f"{size:.2f} {unit}" if unit != "B" else f"{int(size)} {unit}"
+        size /= 1024
+    return f"{size:.2f} TB"
 
 router = APIRouter(prefix="/api/download", tags=["Download"])
 
@@ -52,6 +62,7 @@ class CreateDownloadTaskRequest(BaseModel):
     resolution_m: float = Field(..., gt=0.3, le=1000)
     bbox_crs: str = Field(default="EPSG:4326", min_length=1, max_length=50)
     clip_to_extent: bool = Field(default=False)
+    basemap_name: Optional[str] = Field(default=None, max_length=100, description="前端传入的底图显示名称，用于生成可读文件名")
 
 
 class DownloadTaskStatusResponse(BaseModel):
@@ -70,6 +81,8 @@ class DownloadTaskStatusResponse(BaseModel):
     tiles_downloaded: Optional[int] = None
     estimated_total_seconds: Optional[int] = None
     estimated_remaining_seconds: Optional[int] = None
+    # 底图名称（前端传入，用于显示与文件命名）
+    basemap_name: Optional[str] = None
 
 
 class DownloadTaskListResponse(BaseModel):
@@ -80,7 +93,7 @@ class DownloadTaskListResponse(BaseModel):
 async def create_download_task(
     payload: CreateDownloadTaskRequest,
     background_tasks: BackgroundTasks,
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_login),
 ):
     """创建下载任务，并将异步拼接流程放入后台执行。"""
     try:
@@ -162,6 +175,7 @@ async def create_download_task(
             username=current_username,
             tile_count=tile_count,
             estimated_seconds=estimated_seconds,
+            basemap_name=payload.basemap_name,
         )
 
         basemap_id = _extract_basemap_id(payload.tile_url_template)
@@ -169,6 +183,7 @@ async def create_download_task(
             basemap_id=basemap_id,
             resolution_m=payload.resolution_m,
             created_at=task.created_at,
+            basemap_name=payload.basemap_name,
         )
 
         _download_task_metadata[task_id] = {
@@ -218,7 +233,7 @@ async def create_download_task(
 async def estimate_tile_count(
     bbox: str = "",
     resolution_m: float = 0,
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_login),
 ):
     """根据 bbox + 分辨率估算瓦片总数（与任务提交时使用相同算法）。
 
@@ -237,7 +252,7 @@ async def estimate_tile_count(
 @router.get("/tasks/{task_id}")
 def get_download_task(
     task_id: str,
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_login),
 ):
     """查询任务状态。任何登录用户均可查询。"""
     task = get_task(task_id)
@@ -249,7 +264,7 @@ def get_download_task(
 @router.post("/tasks/{task_id}/cancel")
 def cancel_download_task(
     task_id: str,
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_login),
 ):
     """取消下载任务。前端停止轮询/重置任务时调用，通知后端中止执行。"""
     task = get_task(task_id)
@@ -301,7 +316,7 @@ def download_task_file(task_id: str):
         )
 
     file_size = os.path.getsize(task.file_path)
-    logger.info("下载任务文件：%s | 路径：%s | 大小：%d 字节", task_id, task.file_path, file_size)
+    logger.info("下载任务文件：%s | 路径：%s | 大小：%s", task_id, task.file_path, _format_file_size(file_size))
 
     # 优先使用创建任务时缓存的可读文件名，失败时回退到 task_id
     filename = _build_download_filename(task_id)
@@ -353,24 +368,28 @@ async def _process_download_task(
 
     update_task(task_id, status="downloading", progress=5, message="正在下载瓦片")
 
-    progress_state = {"last": 0}
+    _last_progress_write = 0  # 时间戳节流，避免逐瓦片写 DB
 
     async def report_progress(done: int, total: int, phase: str) -> None:
         """向任务状态回写进度，并检查是否已被取消。"""
+        nonlocal _last_progress_write
         # 检查内存取消标志，避免逐瓦片 DB 查询
         if _cancelled_tasks.get(task_id):
             raise asyncio.CancelledError("任务已被用户取消")
         if total <= 0:
             return
+        # 时间节流：最多每 300ms 写一次 DB（远快于前端 1.5s 轮询，保证实时性）
+        now = time.monotonic()
+        if now - _last_progress_write < 0.3:
+            return
+        _last_progress_write = now
         ratio = done / total
         progress = min(95, max(5, int(ratio * 90) + 5))
-        if progress <= progress_state["last"]:
-            return
-        progress_state["last"] = progress
         update_task(
             task_id,
             status="downloading",
             progress=progress,
+            tiles_downloaded=done,
             message=f"正在下载瓦片 {done}/{total}",
         )
 
@@ -388,6 +407,7 @@ async def _process_download_task(
             payload.resolution_m,
             output_path,
             progress_callback=report_progress,
+            progress_step=0,
         )
 
         logger.info(
@@ -407,7 +427,7 @@ async def _process_download_task(
         if file_size == 0:
             raise ValueError(f"Output file is empty: {output_path}")
 
-        logger.info("输出文件校验通过：%s | 大小：%d 字节", output_path, file_size)
+        logger.info("输出文件校验通过：%s | 大小：%s", output_path, _format_file_size(file_size))
 
         # 按用户选择裁剪到精确范围
         clip_message = ""
@@ -418,8 +438,8 @@ async def _process_download_task(
                 clipped_size = os.path.getsize(output_path)
                 clip_message = "（已裁剪到精确范围）"
                 logger.info(
-                    "裁剪完成：%s | 裁剪前：%d 字节 | 裁剪后：%d 字节",
-                    output_path, file_size, clipped_size,
+                    "裁剪完成：%s | 裁剪前：%s | 裁剪后：%s",
+                    output_path, _format_file_size(file_size), _format_file_size(clipped_size),
                 )
             except Exception as clip_exc:
                 logger.warning("裁剪失败，保留原始范围：%s", str(clip_exc))
@@ -535,12 +555,13 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
         tiles_downloaded=task.tiles_downloaded,
         estimated_total_seconds=task.estimated_seconds,
         estimated_remaining_seconds=estimated_remaining,
+        basemap_name=task.basemap_name,
     )
 
 
 @router.get("/tasks", response_model=DownloadTaskListResponse)
 async def list_my_tasks(
-    _current_user: dict = Depends(require_api_access),
+    _current_user: dict = Depends(require_login),
 ):
     """获取当前用户的有效任务列表（自动过滤过期任务）"""
     username = _current_user.get("username")
@@ -748,10 +769,14 @@ def _build_readable_filename(
     basemap_id: str,
     resolution_m: float,
     created_at: datetime,
+    basemap_name: Optional[str] = None,
 ) -> str:
-    """生成可读的导出文件名。"""
+    """生成可读的导出文件名。优先使用前端传入的显示名称。"""
     timestamp = created_at.strftime("%m_%d_%H")
-    safe_basemap = _sanitize_filename_component(basemap_id)
+    if basemap_name:
+        safe_basemap = _sanitize_filename_component(basemap_name)
+    else:
+        safe_basemap = _sanitize_filename_component(basemap_id)
     safe_resolution = _sanitize_filename_component(_format_resolution_for_filename(resolution_m))
     return f"{safe_basemap}_{safe_resolution}_{timestamp}.tif"
 

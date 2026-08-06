@@ -88,6 +88,12 @@ export async function apiAdminApiUsageByUser(days = 7, limit = 100) {
     });
 }
 
+export async function apiAdminQuotaUsageByUser(days = 7, limit = 100) {
+    return backendAPI.get('/api/admin/api-management/usage/quota-by-user', {
+        params: { days, limit },
+    });
+}
+
 export async function apiAdminApiUsageByEndpoint(days = 7, limit = 50) {
     return backendAPI.get('/api/admin/api-management/usage/by-endpoint', {
         params: { days, limit },
@@ -227,5 +233,19 @@ export async function apiAdminUpdateApiQuota(guestQuota, registeredQuota) {
     return backendAPI.post('/api/admin/config/api-quota', {
         guest_daily_quota: Number(guestQuota),
         registered_daily_quota: Number(registeredQuota),
+    });
+}
+
+// ==================== Agent tokens_per_unit 配置 ====================
+
+/** 获取 Agent tokens_per_unit 配置 */
+export async function apiAdminGetAgentTokensPerUnit() {
+    return backendAPI.get('/api/admin/config/agent-tokens-per-unit');
+}
+
+/** 更新 Agent tokens_per_unit 配置 */
+export async function apiAdminUpdateAgentTokensPerUnit(tokensPerUnit) {
+    return backendAPI.post('/api/admin/config/agent-tokens-per-unit', {
+        tokens_per_unit: Number(tokensPerUnit),
     });
 }

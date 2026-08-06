@@ -60,6 +60,7 @@
             >
                 <ChatPanelContent
                     v-if="loadedTabs.has('chat')"
+                    :active-tab="activeTab"
                     @close-chat="$emit('close-chat')"
                 />
             </div>

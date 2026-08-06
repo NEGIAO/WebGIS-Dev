@@ -33,7 +33,7 @@ function loadTypedArray(url, parser, onLoad, onProgress, onError) {
         onLoad(parser(arrayBuffer));
       } catch (error) {
         if (onError) onError(error);
-        else console.error(error);
+        else { /* console.error(error); 解析失败由 onError/reject 链路上抛 */ }
       }
     },
     onProgress,

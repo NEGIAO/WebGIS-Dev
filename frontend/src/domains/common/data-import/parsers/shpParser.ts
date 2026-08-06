@@ -537,8 +537,9 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
                 `  - 字段数: ${dbfData.fields.length}\n` +
                 `  - 编码: ${dbfData.encoding}`
             );
-        } catch (err: any) {
-            console.error('[SHP] 自定义 DBF 解析失败，将尝试使用 shpjs 属性:', err?.message || err);
+        } catch (_err: any) {
+            // 自定义 DBF 解析失败:回退 shpjs 属性,不阻断导入;以 warning 提示用户
+            message.warning('自定义 DBF 解析失败，已回退使用 shpjs 属性。');
             dbfData = null;
             // 不中断流程，继续使用 shpjs 的属性
         }

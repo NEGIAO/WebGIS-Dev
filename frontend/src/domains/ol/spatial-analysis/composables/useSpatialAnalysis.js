@@ -369,7 +369,8 @@ export function createSpatialAnalysisFeature({
         } catch (error) {
             const detail = error?.response?.data?.detail;
             const errMsg = detail || error?.message || '空间分析请求失败';
-            console.error('[SpatialAnalysis] Error:', error);
+            // 下方 message.error 已提示用户,此处不再重复 console.error
+            // console.error('[SpatialAnalysis] Error:', error);
             message.error(`空间分析失败：${errMsg}`);
         }
     }

@@ -29,6 +29,7 @@ class DownloadTask(SQLModel, table=True):
     tile_count: Optional[int] = Field(default=None)  # 总瓦片数（用于时间估算）
     tiles_downloaded: Optional[int] = Field(default=None)  # 已下载瓦片数（进度细化）
     estimated_seconds: Optional[int] = Field(default=None)  # 预计总耗时（秒）
+    basemap_name: Optional[str] = Field(default=None, max_length=100)  # 前端传入的底图名称（用于显示与文件命名）
     created_at: datetime = Field(default_factory=_utc_now)
     updated_at: datetime = Field(default_factory=_utc_now)
 
@@ -76,6 +77,7 @@ def _migrate_columns() -> None:
                 "tile_count": "INTEGER DEFAULT NULL",
                 "tiles_downloaded": "INTEGER DEFAULT NULL",
                 "estimated_seconds": "INTEGER DEFAULT NULL",
+                "basemap_name": "TEXT DEFAULT NULL",
             }
 
             added = []
@@ -116,6 +118,7 @@ def create_task(
     username: Optional[str] = None,
     tile_count: Optional[int] = None,
     estimated_seconds: Optional[int] = None,
+    basemap_name: Optional[str] = None,
 ) -> DownloadTask:
     """Create a new download task row and return the persisted task."""
     with Session(_engine) as session:
@@ -125,6 +128,7 @@ def create_task(
             username=username,
             tile_count=tile_count,
             estimated_seconds=estimated_seconds,
+            basemap_name=basemap_name,
         )
         session.add(task)
         session.commit()

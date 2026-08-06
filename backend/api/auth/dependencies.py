@@ -134,9 +134,8 @@ async def require_api_access(request: Request) -> Dict[str, Any]:
     return session
 
 
-async def require_api_access_or_guest(request: Request) -> Dict[str, Any]:
-    """与 require_api_access 相同，但无 token 时自动创建 guest session 而非 401。
-    适用于允许游客有限使用的端点（天气、搜索、AI 等）。"""
+async def _authenticate_login_or_guest(request: Request) -> Dict[str, Any]:
+    """认证核心：登录 token 有效则用登录身份，否则自动创建临时 guest session。不消耗配额。"""
     token = _extract_token(request)
     session = None
 
@@ -155,6 +154,14 @@ async def require_api_access_or_guest(request: Request) -> Dict[str, Any]:
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_auth_error_detail("EMAIL_BINDING_REQUIRED", "请先绑定并验证邮箱后再使用完整功能"),
         )
+
+    return session
+
+
+async def require_api_access_or_guest(request: Request) -> Dict[str, Any]:
+    """与 require_api_access 相同，但无 token 时自动创建 guest session 而非 401。
+    适用于允许游客有限使用的端点（天气、搜索、AI 等）。每次调用消耗配额。"""
+    session = await _authenticate_login_or_guest(request)
 
     # 统一走配额检查
     quota = await asyncio.to_thread(
@@ -182,6 +189,12 @@ async def require_api_access_or_guest(request: Request) -> Dict[str, Any]:
     session["quota"] = quota
     session["quota_subject"] = quota.get("quota_subject")
     return session
+
+
+async def require_api_access_or_guest_noconsume(request: Request) -> Dict[str, Any]:
+    """认证但不消耗配额：适用于只读状态查询端点（chat config / models / user-config）。
+    与 require_api_access_or_guest 的唯一差异是不调用 _consume_api_quota_sync。"""
+    return await _authenticate_login_or_guest(request)
 
 
 async def require_admin(request: Request) -> Dict[str, Any]:

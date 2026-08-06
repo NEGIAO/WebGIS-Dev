@@ -513,3 +513,38 @@ async def update_api_quota(
     await asyncio.to_thread(_set_system_config_value_sync, "api_guest_daily_quota", str(guest))
     await asyncio.to_thread(_set_system_config_value_sync, "api_registered_daily_quota", str(registered))
     return {"status": "success", "message": f"API 配额已更新（游客 {guest} / 注册用户 {registered}）"}
+
+
+# ========== Agent tokens_per_unit 配置 ==========
+
+class UpdateAgentTokensPerUnitRequest(BaseModel):
+    """管理员设置 Agent 每额度对应 token 数"""
+    tokens_per_unit: int = Field(..., ge=100, le=100000)
+
+
+@router.get("/config/agent-tokens-per-unit")
+async def get_agent_tokens_per_unit(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取 Agent tokens_per_unit 配置"""
+    raw = await asyncio.to_thread(
+        _get_system_config_value_sync, "agent_tokens_per_unit", "1000"
+    )
+    try:
+        value = int(raw) if raw else 1000
+    except (ValueError, TypeError):
+        value = 1000
+    return {"status": "success", "data": {"tokens_per_unit": value}}
+
+
+@router.post("/config/agent-tokens-per-unit")
+async def update_agent_tokens_per_unit(
+    payload: UpdateAgentTokensPerUnitRequest,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """更新 Agent tokens_per_unit 配置，修改后立即生效"""
+    value = int(payload.tokens_per_unit)
+    await asyncio.to_thread(
+        _set_system_config_value_sync, "agent_tokens_per_unit", str(value)
+    )
+    return {"status": "success", "message": f"Agent tokens_per_unit 已设为 {value}"}

@@ -51,6 +51,25 @@
                             <span v-if="activePresetHint" class="field-hint warning">{{ activePresetHint }}</span>
                         </div>
 
+                        <div class="form-field">
+                            <label class="field-label">
+                                <input
+                                    type="checkbox"
+                                    class="checkbox-inline"
+                                    :checked="useCustomBasemapName"
+                                    @change="onBasemapNameToggle"
+                                />
+                                自定义底图名称
+                            </label>
+                            <input
+                                v-if="useCustomBasemapName"
+                                v-model="store.basemapName"
+                                class="form-input"
+                                type="text"
+                                placeholder="输入底图名称（用于文件命名）"
+                            />
+                        </div>
+
                         <div v-if="isCustomPreset" class="form-field">
                             <label class="field-label">{{ t('mapDownload.tileUrlTemplate') }}</label>
                             <input
@@ -174,8 +193,12 @@
                 <!-- 提交与控制栏（占用整行） -->
                 <div class="execution-bar">
                     <div class="quota-info">
-                        <span v-if="quotaCost !== null && quotaCost > 0" class="quota-badge">
-                            预估消耗: <strong>{{ quotaCost }}</strong> 配额
+                        <span v-if="store.estimatingTiles" class="quota-badge">估算中...</span>
+                        <span v-else-if="store.estimatedTileCount > 0" class="quota-badge">
+                            约 <strong>{{ store.estimatedTileCount }}</strong> 瓦片
+                        </span>
+                        <span v-if="currentQuotaCost !== null && currentQuotaCost > 0" class="quota-badge">
+                            预估消耗: <strong>{{ currentQuotaCost }}</strong> 配额
                         </span>
                     </div>
 
@@ -203,6 +226,10 @@
                     <div class="progress-header">
                         <div class="progress-title">
                             <span>后端处理进度</span>
+                            <span v-if="store.basemapName" class="task-basemap-badge">
+                                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                                {{ store.basemapName }}
+                            </span>
                             <span v-if="store.taskId" class="task-tag" @click="copyTaskId(store.taskId)">
                                 ID: {{ store.taskId }}
                                 <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -213,6 +240,12 @@
 
                     <div class="progress-bar-track">
                         <div class="progress-bar-fill" :style="{ width: progressWidth }"></div>
+                    </div>
+
+                    <div v-if="store.tileCount > 0" class="tile-progress-row">
+                        <span class="tile-progress-text">
+                            瓦片: <strong>{{ store.tilesDownloaded }}</strong> / {{ store.tileCount }}
+                        </span>
                     </div>
 
                     <div class="progress-footer">
@@ -230,7 +263,7 @@
                     </div>
                 </div>
 
-                <!-- 客户端前端传输卡片 (渐进式模式) -->
+                <!-- 客户端前端传输卡片 (仅用户选择 progressive 模式时显示) -->
                 <div
                     v-if="(transferState.active || transferState.total > 0 || transferState.error) && store.downloadMode === 'progressive'"
                     class="progress-panel transfer-theme"
@@ -303,7 +336,8 @@ import { apiEstimateDownloadCost } from '@/api/backend/admin';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
-import { triggerBrowserDownload } from '@common/utils/browserDownload';
+import { triggerBrowserDownload, triggerUrlDownload } from '@common/utils/browserDownload';
+import { BACKEND_BASE_URL } from '@/config/publicRuntime';
 import { copyToClipboard } from '@common/utils/clipboard';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '@/constants';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
@@ -359,15 +393,11 @@ async function estimateCurrentCost() {
     }
 }
 
-let quotaEstimateTimer = null;
+// 配额消耗跟随 estimatedTileCount 变化（而非 bbox 变化），保证时序一致
 watch(
-    () => [store.bbox.minLon, store.bbox.minLat, store.bbox.maxLon, store.bbox.maxLat, store.resolutionM],
+    () => store.estimatedTileCount,
     () => {
-        if (quotaEstimateTimer) clearTimeout(quotaEstimateTimer);
-        quotaEstimateTimer = setTimeout(() => {
-            estimateCurrentCost();
-            quotaEstimateTimer = null;
-        }, 300);
+        estimateCurrentCost();
     },
 );
 
@@ -401,7 +431,31 @@ function refreshLayerConfigs(tiandituTk) {
     layerConfigVersion.value += 1;
 }
 
-/* ----------- 倒计时逻辑 ----------- */
+/**
+ * 构建浏览器托管下载 URL（后端 /file 端点无需登录）
+ */
+function buildDownloadUrl(taskId) {
+    const safeId = encodeURIComponent(String(taskId || '').trim());
+    return `${BACKEND_BASE_URL}/api/download/tasks/${safeId}/file`;
+}
+
+/**
+ * 通过浏览器原生下载文件（Chrome 右上角显示进度，无 Save As 弹窗）
+ * 使用隐藏锚点而非 window.open：避免 watch 等非用户手势上下文被弹窗拦截
+ */
+function browserManagedDownload(taskId) {
+    if (!taskId) {
+        message.error(t('mapDownload.errNoTaskId'));
+        return;
+    }
+    if (store.isExpired) {
+        message.error(t('mapDownload.expiredCannotDownload'));
+        return;
+    }
+    triggerUrlDownload(buildDownloadUrl(taskId));
+}
+
+/* ----------- 前端可视化模式（用户主动选择 progressive 时启用） ----------- */
 const INITIAL_SECONDS = 1800;
 const timeLeft = ref(INITIAL_SECONDS);
 const timer = ref(null);
@@ -432,7 +486,6 @@ function stopCountdown() {
     }
 }
 
-/* ----------- 文件传输相关状态 ----------- */
 const transferState = ref({
     active: false,
     downloaded: 0,
@@ -460,15 +513,12 @@ function buildReadableFilename() {
         .replace(/\s+/g, '_')
         .replace(/_+/g, '_')
         .replace(/^_+|_+$/g, '');
-    
     const resolution = Number(store.resolutionM || 0);
     const resolutionPart = Number.isFinite(resolution) ? `${resolution}m` : '0m';
-    
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
     const hh = String(now.getHours()).padStart(2, '0');
-    
     return `${presetName}_${resolutionPart}_${mm}_${dd}_${hh}.tif`;
 }
 
@@ -483,10 +533,7 @@ function cancelTransfer() {
 async function downloadFileToLocal() {
     if (!store.taskId) return;
     cancelTransfer();
-
-    if (store.downloadMode === 'progressive') {
-        startCountdown();
-    }
+    startCountdown();
 
     transferState.value = {
         active: true,
@@ -556,38 +603,7 @@ async function downloadFileToLocal() {
     }
 }
 
-async function triggerNativeDownload() {
-    if (!store.taskId) {
-        message.error(t('mapDownload.errNoTaskId'));
-        return;
-    }
-
-    if (store.isExpired) {
-        message.error(t('mapDownload.expiredCannotDownload'));
-        return;
-    }
-
-    try {
-        const response = await apiDownloadTaskFile(store.taskId, () => {});
-        const blob = response?.data instanceof Blob ? response.data : response;
-
-        if (!blob || blob.size === 0) {
-            throw new Error(t('mapDownload.errEmptyDownload'));
-        }
-
-        const filename = `basemap_${store.taskId}.tif`;
-        triggerBrowserDownload(blob, filename);
-
-        store.markDownloaded();
-        message.success(t('mapDownload.nativeStarted'));
-        stopCountdown();
-    } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : t('mapDownload.cannotStartDownload');
-        message.error(t('mapDownload.nativeFailed', { msg: errorMsg }));
-    }
-}
-
-// 监听后端状态：当状态变为成功且文件就绪时，根据用户选择的模式自动触发下载
+// 监听后端状态：任务成功后根据用户选择的模式自动触发下载
 watch(
     () => store.status,
     (newStatus) => {
@@ -598,13 +614,10 @@ watch(
             lastTransferredTaskId.value !== store.taskId &&
             !transferState.value.error
         ) {
-            // 根据下载模式选择下载方式
-            if (store.downloadMode === 'native') {
-                // 浏览器托管模式：使用 token 直接下载
-                triggerNativeDownload();
-            } else {
-                // 前端可视化模式：使用流式下载显示进度
+            if (store.downloadMode === 'progressive') {
                 downloadFileToLocal();
+            } else {
+                browserManagedDownload(store.taskId);
             }
         }
     },
@@ -659,9 +672,26 @@ onMounted(async () => {
     const tokens = await loadRuntimeMapTokens();
     refreshLayerConfigs(tokens?.tiandituTk);
     store.fetchMyTasks();
+    store.updateEstimatedTileCount(0);
 });
 
+watch(
+    () => [store.bbox.minLon, store.bbox.minLat, store.bbox.maxLon, store.bbox.maxLat, store.resolutionM],
+    () => {
+        store.updateEstimatedTileCount();
+    },
+);
+
 const selectedPreset = ref('');
+const useCustomBasemapName = ref(false);
+
+function onBasemapNameToggle(event) {
+    useCustomBasemapName.value = event.target.checked;
+    if (!useCustomBasemapName.value) {
+        const preset = tilePresets.value.find((item) => item.id === selectedPreset.value);
+        store.basemapName = preset?.label || '';
+    }
+}
 const activePreset = computed(() => tilePresets.value.find((item) => item.id === selectedPreset.value));
 const isCustomPreset = computed(() => activePreset.value?.isCustom || !activePreset.value?.template);
 const activePresetHint = computed(() => {
@@ -688,6 +718,9 @@ watch(selectedPreset, (presetId) => {
     if (preset && preset.template) {
         store.setTileUrlTemplate(preset.template);
     }
+    if (!useCustomBasemapName.value) {
+        store.basemapName = preset?.label || '';
+    }
 });
 
 const statusText = computed(() => {
@@ -713,6 +746,17 @@ const statusClass = computed(() => {
 });
 const progressWidth = computed(() => `${Math.min(100, Math.max(0, store.progress))}%`);
 const progressLabel = computed(() => `${Math.round(store.progress)}%`);
+
+// 实时配额消耗：下载过程中跟随 tilesDownloaded 变化，空闲时显示后端估算值
+const currentQuotaCost = computed(() => {
+    if (quotaCost.value === null || quotaCost.value <= 0) return null;
+    // 下载中：按实际已处理瓦片比例实时计算（后端最终会按此多退少补）
+    if (store.isRunning && store.tileCount > 0 && store.tilesDownloaded > 0) {
+        const ratio = store.tilesDownloaded / store.tileCount;
+        return Math.max(1, Math.round(quotaCost.value * ratio));
+    }
+    return quotaCost.value;
+});
 
 function resolveStoreText(raw) {
     const s = String(raw || '').trim();
@@ -747,7 +791,6 @@ async function handleSubmit() {
                 ? t('mapDownload.taskSubmittedClip')
                 : t('mapDownload.taskSubmittedGrid'),
         );
-        // 提交成功后刷新剩余配额显示
         loadDownloadQuota();
     } else if (store.lastError) {
         message.error(resolveStoreText(store.lastError));
@@ -766,10 +809,11 @@ function handleReset() {
 
 function handleRedownload() {
     if (!store.taskId) return;
-    if (store.downloadMode === 'native') {
-        triggerNativeDownload();
-    } else {
+    // 默认浏览器托管；若用户选了 progressive 则用前端可视化
+    if (store.downloadMode === 'progressive') {
         downloadFileToLocal();
+    } else {
+        browserManagedDownload(store.taskId);
     }
 }
 
@@ -785,10 +829,13 @@ async function handleLookup() {
 async function handleDownloadFromList(task) {
     store.resetTask();
     store.setExternalTask(task.task_id);
-    if (store.downloadMode === 'native') {
-        triggerNativeDownload();
-    } else if (task.file_ready) {
-        downloadFileToLocal();
+    if (task.file_ready) {
+        // 从列表下载默认浏览器托管；progressive 模式用户用前端可视化
+        if (store.downloadMode === 'progressive') {
+            downloadFileToLocal();
+        } else {
+            browserManagedDownload(task.task_id);
+        }
     } else {
         message.warning(t('mapDownload.fileNotReady'));
     }
@@ -817,10 +864,6 @@ onBeforeUnmount(() => {
     store.dispose();
     cancelTransfer();
     stopCountdown();
-    if (quotaEstimateTimer) {
-        clearTimeout(quotaEstimateTimer);
-        quotaEstimateTimer = null;
-    }
 });
 </script>
 
@@ -1229,6 +1272,34 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+}
+
+.task-basemap-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #6366f1;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 6px;
+}
+
+.tile-progress-row {
+    text-align: center;
+    margin-top: 6px;
+}
+
+.tile-progress-text {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.tile-progress-text strong {
+    color: #334155;
 }
 
 .progress-bar-track {

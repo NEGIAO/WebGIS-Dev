@@ -126,7 +126,8 @@ export function createBasemapSwipe({
             SWIPE_UNSUPPORTED_PRESETS.has(rightBasemapId)
         ) {
             const errorMsg = '不支持的底图类型。卷帘分析仅支持标准在线底图，请选择其他底图选项。';
-            console.error('[enableBasemapSwipe] Error:', errorMsg);
+            // 下方 message.error 已提示用户,此处不再重复 console.error
+            // console.error('[enableBasemapSwipe] Error:', errorMsg);
             message.error(errorMsg);
             throw new Error(errorMsg);
         }
@@ -220,7 +221,8 @@ export function createBasemapSwipe({
 
             return { success: true, message: '已启用卷帘分析对比' };
         } catch (error) {
-            console.error('[enableBasemapSwipe] Error:', error);
+            // 下方 message.error 已提示用户,此处不再重复 console.error
+            // console.error('[enableBasemapSwipe] Error:', error);
             clearSwipeCompareLayers();
             detachSwipeFromLayers();
             layerStore.disableSwipe();

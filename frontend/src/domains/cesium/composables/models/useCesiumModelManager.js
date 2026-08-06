@@ -268,7 +268,8 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
                     s.entry.state = ModelState.ERROR
                     s.entry.errorMessage = error?.message ?? '模型加载异常'
                     syncModels()
-                    console.error(`[ModelManager] 模型 "${id}" 错误:`, error)
+                    // console.error(`[ModelManager] 模型 "${id}" 错误:`, error)
+                    message?.error?.(`模型 "${id}" 加载错误: ${error?.message ?? '未知错误'}`)
                 }
                 model.errorEvent.addEventListener(onErrorHandler)
                 errorDisposer = () => model.errorEvent.removeEventListener(onErrorHandler)
@@ -291,7 +292,7 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
             syncModels()
 
             message?.error?.(`模型加载失败: ${error.message}`)
-            console.error('[ModelManager] addModel error:', error)
+            // console.error('[ModelManager] addModel error:', error)
             return null
         }
     }

@@ -741,6 +741,8 @@ async function bootCesium() {
                 initViewer();
                 console.warn('[Cesium][boot] viewer constructed');
                 setupInteractions();
+                // 3D 视图已渲染出来，此时即可关闭遮罩，后续 token 重试/地形/底图加载不阻塞 UI
+                hideLoading();
 
                 const basemapReady = addBaseImageryLayers();
                 const terrainReady = await initCustomTerrain();
@@ -814,7 +816,8 @@ async function bootCesium() {
                 message.warning(t('cesium.toast.primaryTokenFailRetry'), { closable: true });
             } catch (error) {
                 if (componentUnmounted) return;
-                console.error('[Cesium][boot] stage error:', error);
+                // 该 stage 错误由后续 token 重试 message.warning / FATAL message.error 兜底,此处不重复 console.error
+                // console.error('[Cesium][boot] stage error:', error);
                 const switchedCesium = markRuntimeMapTokenFailed('cesium_ion_token');
                 if (!switchedCesium.switched) throw error;
                 runtimeMapTokens.value = switchedCesium.tokens;
@@ -823,12 +826,14 @@ async function bootCesium() {
                 message.warning(t('cesium.toast.ionTokenFailRetry'), { closable: true });
             }
         }
-        console.error('[Cesium][boot] exhausted token pool');
+        // 下方 message.error(tokenPoolExhausted) 已提示用户,此处不再重复 console.error
+        // console.error('[Cesium][boot] exhausted token pool');
         bootError = new Error('Cesium token pool exhausted');
         message.error(t('cesium.toast.tokenPoolExhausted'), { closable: true });
     } catch (error) {
         bootError = error instanceof Error ? error : new Error(String(error));
-        console.error('[Cesium][boot] FATAL:', error);
+        // 下方按超时/通用分支的 message.warning/error 已提示用户,此处不重复 console.error
+        // console.error('[Cesium][boot] FATAL:', error);
         // 首屏瓦片加载超时：单独提示，避免与通用 initFailed 混淆
         if (bootError.message?.includes('timed out after')) {
             message.warning(t('cesium.toast.sceneLoadTimeout'), { closable: true });
@@ -838,7 +843,6 @@ async function bootCesium() {
         }
     } finally {
         bootInProgress = false;
-        if (!componentUnmounted) hideLoading();
         bootComplete.value = true;
         if (bootSucceeded) {
             emit('ready');
@@ -963,8 +967,9 @@ function initViewer() {
 }
 
 onMounted(() => {
-    bootCesium().catch((err) => {
-        console.error('[Cesium][boot] unhandled rejection:', err);
+    bootCesium().catch((_err) => {
+        // bootCesium 内部 try/catch/finally 已对失败路径 message toast 兜底,此 safety-net 仅注释保留
+        // console.error('[Cesium][boot] unhandled rejection:', err);
     });
 });
 
@@ -1002,6 +1007,7 @@ const {
 
 onUnmounted(() => {
     componentUnmounted = true;
+    hideLoading();
     _cancelInitialSceneWait?.();
     _cancelInitialSceneWait = null;
     cesiumReady.value = false;

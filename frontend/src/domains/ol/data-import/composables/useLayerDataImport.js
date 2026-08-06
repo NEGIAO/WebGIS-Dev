@@ -1034,8 +1034,9 @@ export function useLayerDataImport({
             if (styleResult.errors.length > 0) {
                 console.warn(`[${label}样式] 部分样式应用失败:`, styleResult.errors);
             }
-        } catch (err) {
-            console.error(`[${label}样式] 样式应用异常:`, err);
+        } catch (_err) {
+            // 样式应用异常不阻断图层加载,以 warning 提示用户
+            message.warning(`[${label}样式] 样式应用异常，已回退默认样式`);
         }
 
         // 兜底：清除 extractStyles:false 产生的无效样式，确保图层样式函数能正确接管渲染

@@ -89,7 +89,13 @@ from .quota import _consume_api_quota_sync, get_user_quota_snapshot_sync
 
 # ─── 邮件服务 ───
 from .email_service import check_smtp_configured
-from .dependencies import require_admin, require_api_access, require_api_access_or_guest, require_login
+from .dependencies import (
+    require_admin,
+    require_api_access,
+    require_api_access_or_guest,
+    require_api_access_or_guest_noconsume,
+    require_login,
+)
 
 # ─── 路由 ───
 from .routes import router
@@ -154,6 +160,7 @@ __all__ = [
     "require_login",
     "require_api_access",
     "require_api_access_or_guest",
+    "require_api_access_or_guest_noconsume",
     "require_admin",
     # 路由
     "router",

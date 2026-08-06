@@ -45,7 +45,9 @@ FORBIDDEN_FRONTEND_DOMAIN = re.compile(r"negiao-webgis\.hf\.space")
 
 CONFIG_HELPERS = {"get_str", "get_int", "get_float", "get_bool", "get_effective_str"}
 
-BACKEND_EXCLUDE_DIRS = {"config", "__pycache__", ".venv", "venv", "data", "node_modules"}
+# 后端扫描排除目录：config 包（helper 定义处）、缓存/虚拟环境，以及 tests（单元测试为验证 env 加载
+# 需直接操作 os.environ，属测试写法而非业务代码裸读；B1 规则按「业务代码」意图对齐）
+BACKEND_EXCLUDE_DIRS = {"config", "__pycache__", ".venv", "venv", "data", "node_modules", "tests"}
 
 
 def _iter_backend_py():

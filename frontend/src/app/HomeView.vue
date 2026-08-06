@@ -725,7 +725,7 @@ async function ensureCesiumLoaded() {
     // 正常路径下 ready/failed 会先触发并将 isCesiumLoading 置 false，watchdog 自然成为 no-op。
     const watchdogTimer = window.setTimeout(() => {
         if (!isCesiumLoading.value) return; // 已被正常流程处理
-        console.error('[ensureCesiumLoaded] watchdog timeout — component never emitted ready/load-failed');
+        // console.error('[ensureCesiumLoaded] watchdog timeout — component never emitted ready/load-failed');
         message.warning(t('loading.cesiumLoadTimeout'), { closable: true });
         isCesiumLoading.value = false;
         hideLoading();
@@ -745,7 +745,7 @@ async function ensureCesiumLoaded() {
             return true;
         } catch (error) {
             message.error(t('loading.cesiumLoadFailed', { error: error?.message || error }));
-            console.error('[ensureCesiumLoaded] Cesium load error:', error);
+            // console.error('[ensureCesiumLoaded] Cesium load error:', error);
             _cesiumLoadPromise = null; // 失败时清空，允许下次调用重试
             return false;
         } finally {

@@ -578,9 +578,6 @@ async function startTransitPlan() {
         const rawMessage = err?.message || '';
         const isNetworkError = /failed\s+to\s+fetch/i.test(String(rawMessage));
         const hint = isNetworkError ? t('routing.networkBlocked') : '';
-        if (!isNetworkError) {
-            console.error('[BusPlanner] error:', err);
-        }
         const failText = hint || rawMessage || t('routing.busPlanFailed');
         errorMsg.value = failText;
         routes.value = [];

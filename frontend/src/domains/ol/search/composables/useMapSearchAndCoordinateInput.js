@@ -424,7 +424,8 @@ export function createMapSearchAndCoordinateInputFeature({
 
             message.success?.('解析成功！属性已同步至属性表');
         } catch (error) {
-            console.error('AOI提取失败:', error);
+            // 下方 message.error?.() 已提示用户,此处不再重复 console.error
+            // console.error('AOI提取失败:', error);
             message.error?.(error.message || '解析失败');
         }
     }

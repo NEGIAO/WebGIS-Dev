@@ -9,11 +9,20 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from api.auth import normalize_role, require_admin, require_api_access_or_guest, require_login, resolve_quota_subject
+from api.auth import (
+    normalize_role,
+    require_admin,
+    require_api_access_or_guest_noconsume,
+    require_login,
+    resolve_quota_subject,
+)
 from api.auth.quota import (
     _consume_api_quota_sync,
     get_user_quota_snapshot_sync,
 )
+from api.auth.system_config import _get_system_config_value_sync
+
+from config.load import get_int
 
 from .constants import (
     CONFIG_KEY_AVAILABLE_MODELS,
@@ -72,12 +81,26 @@ from .utils import (
 router = APIRouter(prefix="/api/agent", tags=["agent-chat"])
 admin_router = APIRouter(prefix="/api/admin/agent", tags=["agent-chat-admin"])
 
+def _get_agent_tokens_per_unit() -> int:
+    """实时从 system_config 读取 Agent 每额度对应 token 数（管理员 L2 配置），无记录时回退到 env/catalog 默认。"""
+    try:
+        raw = _get_system_config_value_sync("agent_tokens_per_unit", "")
+        if raw:
+            value = int(raw)
+            if value > 0:
+                return value
+    except Exception:
+        pass
+    # system_config 无记录：回退到 env 变量 / catalog 默认（默认 1000），避免写死
+    return get_int("AGENT_TOKENS_PER_UNIT")
+
 
 @router.get("/chat/config")
 async def get_agent_chat_config(
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """获取当前登录用户的 Agent 服务状态、模型和当日配额快照。"""
+
     username = str(session.get("username") or "")
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
@@ -117,14 +140,14 @@ async def get_agent_chat_config(
 async def agent_chat_completions(
     payload: AgentChatRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """代理用户对话请求到上游 LLM，并执行配额与安全控制。"""
     username = str(session.get("username") or "")
     role = normalize_role(session.get("role"), username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
-    # 统一 API 配额校验（cost=1）
+    # 统一 API 配额预检（只读快照，不消耗；扣费仅在真正成功调用上游之后执行）
     quota_snapshot = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
     if quota_snapshot["remaining"] is not None and quota_snapshot["remaining"] <= 0:
         limit = quota_snapshot["limit"]
@@ -237,9 +260,18 @@ async def agent_chat_completions(
                 detail="Agent upstream returned empty content.",
             )
 
-        # 统一 API 配额消耗（cost=1）
+        # 按 token 消耗折算 API 配额（tokens_per_unit tokens = 1 额度，单次至少扣 1）。
+        # 策略变更：从固定 cost=1 改为按实际 token 消耗折算，更公平地反映不同长度对话的资源消耗。
+        tokens_per_unit = await asyncio.to_thread(_get_agent_tokens_per_unit)
+        usage = upstream_data.get("usage") if isinstance(upstream_data, dict) else None
+        total_tokens = int(usage.get("total_tokens", 0) if isinstance(usage, dict) else 0)
+        agent_cost = max(1, (total_tokens + tokens_per_unit - 1) // tokens_per_unit)
+
+        # 扣费在 upstream 成功后执行。此处不拦截 allowed=False：上游已成功、答案已生成，
+        # 正常交付；超限时 _consume_api_quota_sync 封顶到每日限额（used=limit / remaining=0），
+        # 下一次请求由上方配额预检以 429 拦截，不会再出现「余额不足仍可继续请求」。
         quota_after = await asyncio.to_thread(
-            _consume_api_quota_sync, username, role, cost=1, action="agent",
+            _consume_api_quota_sync, username, role, quota_subject, cost=agent_cost, action="agent",
         )
 
         data = {
@@ -247,7 +279,8 @@ async def agent_chat_completions(
             "model": runtime_model,
             "model_source": str(runtime.get("model_source") or "unknown"),
             "quota": quota_after,
-            "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+            "cost": agent_cost,
+            "usage": usage,
             "api_key_source": str(runtime.get("api_key_source") or "unknown"),
         }
         if tool_calls:
@@ -393,7 +426,7 @@ async def get_default_ai_config(
 async def agent_chat_default_proxy(
     payload: AgentChatRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）。
 
@@ -402,6 +435,17 @@ async def agent_chat_default_proxy(
     """
     username = str(session.get("username") or "anonymous")
     role = normalize_role(session.get("role"), username)
+    quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
+
+    # 统一 API 配额预检（只读快照，不消耗；扣费仅在真正成功调用上游之后执行）
+    quota_snapshot = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
+    if quota_snapshot["remaining"] is not None and quota_snapshot["remaining"] <= 0:
+        limit = quota_snapshot["limit"]
+        used = quota_snapshot["used"]
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"今日 API 额度已达上限（{used}/{limit}），请明日再试。",
+        )
 
     # 从数据库读取管理员配置的默认 AI 配置
     default_config = await asyncio.to_thread(_get_default_ai_config_sync)
@@ -487,11 +531,27 @@ async def agent_chat_default_proxy(
                 detail="Agent upstream returned empty content.",
             )
 
+        # 按 token 消耗折算 API 配额（tokens_per_unit tokens = 1 额度，单次至少扣 1）。
+        # 扣费仅在真正成功调用上游之后执行；上游失败/超时路径不消耗额度。
+        tokens_per_unit = await asyncio.to_thread(_get_agent_tokens_per_unit)
+        usage = upstream_data.get("usage") if isinstance(upstream_data, dict) else None
+        total_tokens = int(usage.get("total_tokens", 0) if isinstance(usage, dict) else 0)
+        agent_cost = max(1, (total_tokens + tokens_per_unit - 1) // tokens_per_unit)
+
+        # 扣费在 upstream 成功后执行。此处不拦截 allowed=False：上游已成功、答案已生成，
+        # 正常交付；超限时 _consume_api_quota_sync 封顶到每日限额（used=limit / remaining=0），
+        # 下一次请求由上方配额预检以 429 拦截，不会再出现「余额不足仍可继续请求」。
+        quota_after = await asyncio.to_thread(
+            _consume_api_quota_sync, username, role, quota_subject, cost=agent_cost, action="agent",
+        )
+
         data = {
             "reply": reply,
             "model": model,
-            "usage": upstream_data.get("usage") if isinstance(upstream_data, dict) else None,
+            "usage": usage,
             "mode": "default-proxy",
+            "quota": quota_after,
+            "cost": agent_cost,
         }
         if tool_calls:
             data["tool_calls"] = tool_calls
@@ -513,7 +573,7 @@ async def agent_chat_default_proxy(
 
 @router.get("/user-config")
 async def get_agent_user_config(
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """读取当前用户的 Agent 配置（个人覆盖 + 生效结果）。"""
     username = str(session.get("username") or "")
@@ -607,7 +667,7 @@ async def update_agent_user_config(
 @router.get("/models")
 async def get_available_models(
     request: Request,
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
     override_base_url: Optional[str] = Query(default=None, max_length=500),
     override_api_key: Optional[str] = Query(default=None, max_length=200),
     use_default_ai: bool = False,
@@ -768,7 +828,7 @@ async def _cache_models_async(models: List[Dict[str, Any]]) -> None:
 @router.patch("/user/preference")
 async def update_user_model_preference(
     payload: Dict[str, Any],
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """保存用户的模型偏好设置到 user_preferences 表。"""
     username = str(session.get("username") or "")
@@ -832,7 +892,7 @@ async def update_user_model_preference(
 async def agent_chat_proxy(
     payload: AgentChatProxyRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_api_access_or_guest),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """用户个人 API Key 代理聊天端点（绕过浏览器 CORS 限制，不消耗平台配额）。"""
     username = str(session.get("username") or "anonymous")

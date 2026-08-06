@@ -129,11 +129,13 @@
 import { ref, onUnmounted, computed } from 'vue';
 import { Terminal, Play, Square, Trash2, Copy, Check, CircleHelp } from '@lucide/vue';
 import { BACKEND_BASE_URL } from '@/api/backend';
+import { useMessage } from '@common/shell/useMessage';
 
 const props = defineProps({
     maxLines: { type: Number, default: 2500 },
 });
 
+const message = useMessage();
 const logEntries = ref([]);
 const isConnected = ref(false);
 const streamDesired = ref(false);
@@ -267,16 +269,17 @@ async function copyAllLogs() {
         await navigator.clipboard.writeText(fullText);
         isCopiedAll.value = true;
         setTimeout(() => (isCopiedAll.value = false), 2000);
-    } catch (err) {
-        console.error('复制失败:', err);
+    } catch (_err) {
+        // 剪贴板写入失败(常见于非安全上下文),以 message 提示用户
+        message.error('复制全部日志失败，请重试');
     }
 }
 
 async function copySingleLine(text) {
     try {
         await navigator.clipboard.writeText(text);
-    } catch (err) {
-        console.error(err);
+    } catch (_err) {
+        message.error('复制日志失败，请重试');
     }
 }
 

@@ -919,7 +919,8 @@ var WindParticlesRendering = class {
     this.viewerParameters = viewerParameters;
     this.computing = computing;
     if (typeof this.options.particlesTextureSize !== "number" || this.options.particlesTextureSize <= 0) {
-      console.error("Invalid particlesTextureSize. Using default value of 256.");
+      // vendored 防御性校验,应用侧 useCesiumWind 恒传合法值;不输出 console.error
+      // console.error("Invalid particlesTextureSize. Using default value of 256.");
       this.options.particlesTextureSize = 256;
     }
     this.colorTable = this.createColorTableTexture();

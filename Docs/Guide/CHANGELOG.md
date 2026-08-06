@@ -6,6 +6,73 @@
 
 ## 版本记录
 
+### V3.5.15 (2026-08-06) — Code Review 整改 · 下载链路修复 · 配额提示 · 后端兜底加固
+
+> 基于暂存区全面 Code Review 的 P1/P2 整改，重点修复下载链路（浏览器托管默认 + 自动下载非弹窗拦截），并加固 Chat 前端配额提示与后端兜底逻辑。详见[日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-v3.5.15-fix-review-and-download.md)。
+
+#### 前端 — 下载链路
+
+- `locales/zh-CN.js` / `en-US.js`：补充缺失的 `mapDownload.quotaInsufficient` 配额不足文案。
+- `data-import/stores/useDownloadStore.ts`：`applyTaskResponse` 回填 `basemap_name`；清理 `markDownloaded` / `downloadedAt` 死代码；`dispose()` 内清除 `estimateTileTimer` 防泄漏。
+- `ol/components/MapDownloader.vue`：`browserManagedDownload` 改用 `triggerUrlDownload`（隐藏锚点），避免 watch 非用户手势上下文下 `window.open` 被 Chrome 弹窗拦截，保证浏览器托管下载在 Chrome 下载栏可见进度；bbox watch 去重双估算（仅保留 `estimatedTileCount` watch 触发配额估算）。
+
+#### 前端 — Chat 配额提示
+
+- `chat/components/ChatPanelContent.vue`：第二轮 LLM 调用 catch 区分 `isQuotaExceeded`（提示 + 刷新配额）与其他错误（静默降级为成功摘要），消除 429 被吞为 false success；`dispatchSend` 开头重置 `lastCallCost`，避免跨请求残留。
+- `chat/composables/useChatAgentConfig.js`：引入 `useLocale`，默认 AI 模式额度耗尽提示由硬编码中文改为 `t('chat.quotaExhaustedHint')` i18n key。
+
+#### 前端 — 杂项
+
+- `map-view/useUserLocation.js`：定位失败 `message.error` 补 `!silent` 门禁，与成功 toast 对称。
+- `user/components/AdminControlPanel.vue`：`handleSaveAgentTokensPerUnit` 加 `loadingAgentTokensPerUnit` 门禁，避免加载与保存竞争。
+- `ol/routing/components/BusPlannerPanel.vue`：删除空 `if (!isNetworkError)` 死条件分支。
+
+#### 后端
+
+- `Dockerfile`：entrypoint 改用 `sudo /usr/sbin/cron` 启动 cron 守护进程，修复非 root `user` 下 `cron` 静默失败（sudoers 规则已存在但未使用）。
+- `api/api_management.py`：`_ensure_api_log_table_sync` 兜底创建 `api_usage_daily` 表，避免该模块先于 auth 初始化时查询报错。
+- `api/agent_chat/routes.py`：`_get_agent_tokens_per_unit` 在 system_config 无记录时回退到 `get_int("AGENT_TOKENS_PER_UNIT")`（env/catalog 默认），移除写死的 `DEFAULT_AGENT_TOKENS_PER_UNIT` 常量。
+
+### V3.5.14 (2026-08-06) — 综合版本：Agent 配额体系 · 配额池统计 · 下载增强 · 保活运维 · 错误处理重构
+
+> 本版本由若干次未标注版本的提交记录 soft reset 后合并整理而成，统一归入单一版本 V3.5.14。核心：Agent Chat 扣费时序修复（仅成功调用按 token 扣额，杜绝双重/失败扣费）；统一配额池超限封顶（不再整单回滚白送）；tokens_per_unit 管理员配置；前端额度展示对齐；配额池按用户统计；下载任务底图名称；HF Space 双向保活；console.error → message 错误处理重构 + 结构化 detail_code 透传。详见[综合日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-v3.5.14-consolidated.md)。
+
+#### 后端
+
+- `api/auth/dependencies.py`：抽出鉴权核心 `_authenticate_login_or_guest`，新增 `require_api_access_or_guest_noconsume`（认证但不消耗配额）；`__init__.py` 导出。
+- `api/auth/quota.py`：超限策略由「整单回滚 + allowed=False」改为「封顶到每日限额」（`calls = daily_limit`，`used=limit / remaining=0`）：本次照常交付、下次请求被配额预检 429 拦截，杜绝「余额不足仍可继续请求」白送。
+- `api/agent_chat/routes.py`：`/chat/completions`、`/chat/default-proxy`、`/chat/proxy` 三功能端点改 noconsume 依赖，保留只读配额预检 + 上游**真正成功后**按 token 折算 `agent_cost` 扣费（`max(1, ceil(total_tokens/tokens_per_unit))`），个人 Key 直连不消耗平台配额；四个只读状态端点（config/user-config/models/update_pref）改 noconsume，消除 require_login 的游客回归；扣费补传 `quota_subject`（修复游客扣费主体错位）；`_get_agent_tokens_per_unit` 异步读 system_config。
+- `api/admin.py`：新增 `GET/POST /api/admin/config/agent-tokens-per-unit` 端点 + `UpdateAgentTokensPerUnitRequest`（ge=100, le=100000）。
+- `api/api_management.py`：新增 `GET /api-management/usage/quota-by-user` 端点 + `_get_quota_usage_by_user_sync`（总消耗/今日消耗/活跃天数/最后使用）。
+- `download_xyz/download.py`：补回 `clip_geotiff_to_bbox` import（消除 NameError 静默失败）；新增 `_format_file_size` 可读文件大小。
+- `download_xyz/download_task.py`：`DownloadTask` 新增 `basemap_name` 列（TEXT，迁移自动补齐）。
+- `api/keepalive.py`：**新增** 双向保活模块——接收端 `POST/GET /api/heartbeat` + `GET /api/keepalive/ping`；asyncio 发送端随机 180~360s 模拟真实用户请求对端，随机 UA 池。
+- `app.py`：全局异常处理器 dict-detail 分支保留业务 `code` → 输出独立 `detail_code` 字段，修复前端 401/403/429 特判失效。
+- `Dockerfile`：uvicorn 增加 `--no-access-log`。
+- `config/catalog.py` / `.env.example`：登记 `AGENT_TOKENS_PER_UNIT`（默认 1000，L2，非密钥）。
+
+#### 前端
+
+- `api/backend/client.js`：错误提取兜底 `data.detail_code` / `data.message`；`parseBlobError` 补 `json?.detail_code`；错误 toast 格式「状态码 + 结构化 message」。
+- `api/backend/admin.js`：`apiAdminGet/UpdateAgentTokensPerUnit`、`apiAdminQuotaUsageByUser`。
+- `chat/useChatAgentConfig.js`：默认 AI 分支加载用户配额/读取响应 `cost`；`quotaExhausted` 仅个人 Key 直连返回 false。
+- `chat/ChatServiceStatus.vue`：默认 AI 模式展示本次消耗/今日额度；`quotaExhausted` 红色警示 + 一次性 warning toast。
+- `chat/ChatPanelContent.vue`：`sendDisabled`/`dispatchSend` 覆盖默认 AI 模式；`lastCallCost` 按后端各轮 `cost` 汇总；切回 chat tab 5s 节流刷新配额。
+- `user/AdminControlPanel.vue`：新增「Agent 配额折算」配置 UI。
+- `user/ApiManagementPanel.vue`：「用户统计」改读 `apiAdminQuotaUsageByUser`（总消耗/今日消耗/活跃天数/最后使用）。
+- `ol/MapDownloader.vue`：自定义底图名称 + 瓦片估算 + 进度显示；`ol/MyDownloadTasks.vue`：底图名称徽标。
+- `search/LocationSearch.vue`：搜索配额条接入 i18n。
+- **console.error → message 重构（65 处）**：无用户提示路径补 `message.error/warning` toast（useStartupViewResolver、auth.js、MagicCursor、LogMonitor、TOCTreeItem、basemapProviderFactory、kmlStyleParser、shpParser、useLayerDataImport、useShallowWater、useCesiumModelManager、useUserLocation 等）；A/B 类与 vendored/GPU 代码仅注释。
+- **ESLint 清理（17 处归零）**：未使用 catch 参数 `^_` 重命名；`useSharedResourceLoader.ts` 删死变量 `message` 并移除无意义 try/catch；`playerController.ts` 移除裸重抛。
+- `locales/zh-CN.js` / `en-US.js`：`agentTokensPerUnit*`、`chat.lastCostLabel/noCostYet`、`search.lastSearch/remaining` 等 key。
+
+#### 文档与门禁
+
+- `Docs/Architecture/keepalive-hf-space.md`：**新增** 双向保活架构（Mermaid）。
+- `CheckConfigRegistry.py`：后端扫描排除目录新增 `tests`（单元测试直接操作 `os.environ` 属测试写法而非业务裸读）。
+
+---
+
 ### V3.5.13 (2026-08-05) — 下载系统综合改动（异步化 + 配额 + 账号绑定 + TTL 动态配置）
 
 > 🏗️ **架构级改动**：下载系统全面升级——移除 download_token（改用会话认证 Blob 下载）；统一 API 配额池（下载消耗=ceil(tile_count/tiles_per_unit)，预扣+多退少补）；任务绑定账号体系（"我的任务"列表）；TTL 从 L1 env 升级为 L2 数据库配置（管理员面板动态可调，基于 updated_at 续命）；前端新增 MyDownloadTasks 组件与过期提示；axios 拦截器增加 blob 错误解析。

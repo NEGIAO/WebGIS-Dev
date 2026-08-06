@@ -852,6 +852,7 @@ import {
     Image,
     Layers,
     Link,
+    LocateFixed,
     MapPin,
     Mountain,
     Navigation,

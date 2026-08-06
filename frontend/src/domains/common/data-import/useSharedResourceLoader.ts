@@ -244,25 +244,20 @@ export function useSharedResourceLoader() {
      * @returns File 对象数组
      */
     async function loadResourceAsFiles(resourcePath: string): Promise<File[]> {
-        try {
-            const fullPath = `${SHARED_RESOURCE_DIR}/${resourcePath}`;
-            const response = await fetch(fullPath);
+        // 失败异常向上抛给调用方(TOCPanel.vue)以 message.error 提示,此处不重复 console.error
+        const fullPath = `${SHARED_RESOURCE_DIR}/${resourcePath}`;
+        const response = await fetch(fullPath);
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-            }
-
-            const buffer = await response.arrayBuffer();
-            const filename = resourcePath.split('/').pop() || 'shared-resource';
-            const contentType = getContentTypeForExtension(getExtension(filename));
-
-            const file = new File([buffer], filename, { type: contentType });
-            return [file];
-        } catch (error) {
-            const message = `Failed to load shared resource: ${String(error)}`;
-            console.error(message, error);
-            throw error;
+        if (!response.ok) {
+            throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
         }
+
+        const buffer = await response.arrayBuffer();
+        const filename = resourcePath.split('/').pop() || 'shared-resource';
+        const contentType = getContentTypeForExtension(getExtension(filename));
+
+        const file = new File([buffer], filename, { type: contentType });
+        return [file];
     }
 
     /**

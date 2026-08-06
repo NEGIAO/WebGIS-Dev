@@ -68,7 +68,7 @@ backendAPI.interceptors.request.use(
         return config;
     },
     (error) => {
-        console.error('[Backend API] 请求错误:', error);
+        // console.error('[Backend API] 请求错误:', error);
         showError(`请求发送失败: ${error.message || '未知错误'}`);
         return Promise.reject(error);
     },
@@ -115,6 +115,8 @@ backendAPI.interceptors.response.use(
         let message = '请求失败，请稍后重试';
         let status = 0;
         let isQuotaExceeded = false;
+        let detailMsg = '';
+        let detailCode = '';
 
         if (error.response) {
             // ---- 服务器响应错误 ----
@@ -123,17 +125,25 @@ backendAPI.interceptors.response.use(
 
             // 从响应体中提取 detail（后端 FastAPI 风格）
             const detail = data?.detail;
-            let detailMsg = '';
-            let detailCode = '';
             if (typeof detail === 'string' && detail.trim()) {
                 detailMsg = detail.trim();
             } else if (detail && typeof detail === 'object') {
-                detailMsg = String(detail?.message || detail?.detail || '').trim() || JSON.stringify(detail);
+                detailMsg = String(detail?.message || detail?.detail || '').trim();
                 detailCode = String(detail?.code || '').trim();
             }
 
+            // 兜底：如果 detail 里没提取到 message，尝试 data?.message（字符串）
+            if (!detailMsg && typeof data?.message === 'string') {
+                detailMsg = data.message.trim();
+            }
+
+            // 兜底：detail 里没提取到 code 时，尝试 data.detail_code（app.py 结构化错误透传的业务 code）
+            if (!detailCode && data?.detail_code) {
+                detailCode = String(data.detail_code).trim();
+            }
+
             // 用状态码映射兜底，确保每个 HTTP 码都有可读描述
-            message = detailMsg || data?.message || buildHttpErrorMessage(status, '', { endpoint: config?.url });
+            message = detailMsg || buildHttpErrorMessage(status, '', { endpoint: config?.url });
 
             if (status === 401) {
                 // 区分会话过期 vs 游客权限不足
@@ -196,14 +206,18 @@ backendAPI.interceptors.response.use(
 
         // 只在非配额用完的情况下输出错误日志
         if (!isQuotaExceeded) {
-            const tag = status ? `[${status} ${getHttpStatusMessage(status)}]` : '[网络错误]';
-            console.error(`[Backend API] ${tag}`, message, error);
-            showError(`${tag} ${message}`, { duration: 6000 });
+            // 用户提示由下方 showError 负责；错误对象保留在 rejected 的 apiError.originalError 便于排查，不输出 console.error
+            // console.error(`[Backend API] ${status ? `[${status} ${getHttpStatusMessage(status)}]` : '[网络错误]'}`, message, error);
+            // 后端已返回结构化 message 时，拼接状态码前缀：「401，登录状态已失效，请重新登录」
+            // 避免直接抛字典原始字符串或仅显示 HTTP 状态描述
+            const toastMsg = detailMsg ? `${status}，${detailMsg}` : (typeof message === 'string' ? message : String(message?.message || JSON.stringify(message)));
+            showError(toastMsg, { duration: 6000 });
         }
 
         const apiError = new Error(message);
         apiError.isQuotaExceeded = isQuotaExceeded;
         apiError.status = status;
+        apiError.detailCode = detailCode;
         apiError.statusText = getHttpStatusMessage(status);
         apiError.originalError = error;
         return Promise.reject(apiError);
@@ -234,6 +248,9 @@ async function parseBlobError(response) {
                 detailCode = String(detail?.code || '');
             } else if (json?.message) {
                 message = json.message;
+            }
+            if (!detailCode && json?.detail_code) {
+                detailCode = String(json.detail_code);
             }
         } catch {
             // JSON 解析失败，使用状态码兜底

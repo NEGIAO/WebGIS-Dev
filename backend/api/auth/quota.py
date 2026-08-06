@@ -93,17 +93,21 @@ def _consume_api_quota_sync(
         ).fetchone()
         current_used = int((dict(row).get("calls") if row else 0) or 0)
 
-        # 如果超限，回滚递增操作
+        # 如果超限：封顶为每日限额，只扣到上限，不做整单回滚。
+        # 原因：整单回滚 + allowed=False 在「先调用后扣费」的 Agent 对话路径上，
+        # 路由层不会拦截返回值（上游已成功、答案已生成），结果余额原封不动、服务白送，
+        # 用户可反复发起超限请求绕过配额。封顶后 used=limit / remaining=0：
+        # 本次请求正常交付，但下一次请求会被各端点的配额预检以 429 拦截。
         if daily_limit is not None and current_used > daily_limit:
             conn.execute(
-                "UPDATE api_usage_daily SET calls = calls - ? WHERE username = ? AND usage_date = ?",
-                (cost, resolved_quota_subject, usage_date),
+                "UPDATE api_usage_daily SET calls = ?, updated_at = ? WHERE username = ? AND usage_date = ?",
+                (daily_limit, now_iso, resolved_quota_subject, usage_date),
             )
             conn.commit()
             return {
                 "allowed": False,
                 "limit": daily_limit,
-                "used": current_used - cost,
+                "used": daily_limit,
                 "remaining": 0,
                 "usage_date": usage_date,
                 "quota_subject": resolved_quota_subject,

@@ -119,7 +119,8 @@ export function setupCloudIntegration({
 
         console.warn('[Cloud] cesium-clouds-atmosphere 管线就绪');
       } catch (err) {
-        console.error('[Cloud] 管线初始化失败：', err);
+        // 用户提示由 watcher catch 内的 msg.error('体积云加载失败') 兜底,此处不重复 console.error
+        // console.error('[Cloud] 管线初始化失败：', err);
         restoreSkyState(viewer, skySnapshot);
         pipeline = null;
         lensFlare = null;

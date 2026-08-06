@@ -74,7 +74,8 @@ const cesiumReady = new Promise((resolve, reject) => {
     function attemptLoad(index) {
         if (index >= CESIUM_CDN_CANDIDATES.length) {
             const err = new Error('[cesium-shim] 所有 Cesium CDN 候选源均加载失败');
-            console.error(err);
+            // 错误由 cesiumReady reject 链路上抛,由 cesiumRuntime/CesiumContainer boot 以 message toast 兜底,此处不再重复 console.error
+            // console.error(err);
             _cesiumReadyReject(err);
             return;
         }

@@ -40,6 +40,7 @@ from download_xyz.task_scheduler import start_task_cleanup_scheduler, shutdown_t
 from download_xyz.download_task import init_download_task_db
 from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
+from api.keepalive import router as keepalive_router, start_keepalive_sender
 
 # ==================== 日志配置 ====================
 
@@ -165,6 +166,9 @@ async def lifespan(app: FastAPI):
     app.state.hourly_chime = asyncio.create_task(hourly_chime_task(startup_time=_startup_time))
     logger.info("整点报时后台任务已创建")
 
+    # 启动 KeepAlive 发送端（每 5 min 主动 ping 对端 New API，保持双方 HF Space 活跃）
+    app.state.keepalive_task = start_keepalive_sender(app)
+
     if app.state.startup_error:
         logger.warning("应用以降级模式启动: %s", app.state.startup_error)
     else:
@@ -257,7 +261,7 @@ async def check_startup_state(request: Request, call_next):
     - 正常路径：init_auth_storage() 仅做一次布尔检查即返回。
     - 降级路径：尝试重新初始化认证存储，恢复成功则继续处理。
     """
-    allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info"}
+    allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info", "/api/heartbeat", "/api/keepalive/ping"}
     if request.url.path in allowlist:
         return await call_next(request)
 
@@ -323,13 +327,32 @@ async def global_exception_handler(request: Request, exc: Exception):
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """将 HTTPException 也包装为统一响应格式"""
+    # 保留原始 detail 结构（可能是字符串或字典），不要 str() 破坏结构化数据
+    detail = exc.detail
+    if isinstance(detail, dict):
+        # detail 是结构化字典（如 {"code": "SESSION_EXPIRED", "message": "..."}）：
+        # 透传 message，并单独保留业务 code（detail_code）供前端差异化处理（会话过期/游客不足/邮箱绑定等）。
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "code": exc.status_code,
+                "detail_code": str(detail.get("code") or ""),
+                "message": detail.get("message", str(detail)),
+                "data": None,
+            },
+        )
+    # detail 是字符串，直接作为 message
     return JSONResponse(
         status_code=exc.status_code,
-        content={"code": exc.status_code, "message": str(exc.detail), "data": None},
+        content={"code": exc.status_code, "message": str(detail), "data": None},
     )
 
 
 # ==================== 路由挂载 ====================
+
+# 挂载 KeepAlive 路由（必须在 proxy 之前，避免被 /api/* 通配拦截）
+app.include_router(keepalive_router)
+logger.info("已注册 KeepAlive 探活路由")
 
 # 挂载瓦片代理路由
 app.include_router(proxy_router)

@@ -551,7 +551,6 @@ export function useCesiumLayers({
         const Cesium = getCesium?.();
         if (!viewer?.scene?.primitives) return null;
         if (googlePhotorealistic3DTileset) {
-            viewer.scene.globe.show = false;
             return googlePhotorealistic3DTileset;
         }
 
@@ -606,9 +605,6 @@ export function useCesiumLayers({
         googlePhotorealistic3DTilesetLoadId += 1;
         googlePhotorealistic3DTilesetLoadPromise = null;
         if (!googlePhotorealistic3DTileset || !viewer?.scene?.primitives) {
-            if (viewer?.scene?.globe) {
-                viewer.scene.globe.show = true;
-            }
             return;
         }
 
@@ -619,7 +615,8 @@ export function useCesiumLayers({
         }
 
         googlePhotorealistic3DTileset = null;
-        if (viewer?.scene?.globe) {
+        // 仅在 OSM Buildings 也未激活时恢复 globe，避免多 Ion 图层并存时渲染闪烁
+        if (viewer?.scene?.globe && !osmBuildingsVisible.value) {
             viewer.scene.globe.show = true;
         }
     }

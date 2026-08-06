@@ -1409,7 +1409,8 @@ async function scanSharedResources() {
         }
     } catch (error) {
         message.error(t('layer.sharedScanFailed', { error: String(error) }));
-        console.error('Error scanning shared resources:', error);
+        // 上方 message.error 已提示用户,此处不再重复 console.error
+        // console.error('Error scanning shared resources:', error);
     }
 }
 
@@ -1442,7 +1443,8 @@ async function loadSharedResource(resource) {
         emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
     } catch (error) {
         message.error(t('layer.sharedLoadError', { error: String(error) }));
-        console.error('Error loading shared resource:', error);
+        // 上方 message.error 已提示用户,此处不再重复 console.error
+        // console.error('Error loading shared resource:', error);
     }
 }
 </script>

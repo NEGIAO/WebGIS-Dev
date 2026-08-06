@@ -195,16 +195,12 @@ export class playerController {
         // 先用 scale=1 加载，ready 后量包围盒算 modelScale，再设最终矩阵
         const modelMatrix = this.frame.composeModelMatrix(this.posEcef, this.yaw);
         const url = this.playerModelConfig.url;
-        try {
-            this.model = await Model.fromGltfAsync({
-                url,
-                modelMatrix,
-                scene: this.viewer.scene,
-            });
-        } catch (e: any) {
-            console.error("加载玩家模型失败:", e);
-            throw e;
-        }
+        // 加载失败异常向上抛给 usePlayerController 的 message?.error?.() 提示,此处不重复 console.error
+        this.model = await Model.fromGltfAsync({
+            url,
+            modelMatrix,
+            scene: this.viewer.scene,
+        });
         this.viewer.scene.primitives.add(this.model);
         await this.waitForModelReady(this.model); // 等待模型 ready 后再注册动画
 

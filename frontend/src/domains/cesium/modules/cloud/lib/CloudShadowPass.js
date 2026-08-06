@@ -280,7 +280,7 @@ export class CloudShadowPass {
         gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
         
         this._fboComplete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
-        if (!this._fboComplete) console.error("CloudShadowPass: FBO 创建失败!");
+        if (!this._fboComplete) { /* console.error("CloudShadowPass: FBO 创建失败!"); */ }
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         this._fbo = fbo;
     }
@@ -784,7 +784,7 @@ void main() {
         gl.shaderSource(vs, this.getVertexShader());
         gl.compileShader(vs);
         if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
-            console.error("CloudShadowPass VS:", gl.getShaderInfoLog(vs));
+            // console.error("CloudShadowPass VS:", gl.getShaderInfoLog(vs));
             gl.deleteShader(vs);
             return;
         }
@@ -792,7 +792,7 @@ void main() {
         gl.shaderSource(fs, this.getFragmentShader());
         gl.compileShader(fs);
         if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
-            console.error("CloudShadowPass FS:", gl.getShaderInfoLog(fs));
+            // console.error("CloudShadowPass FS:", gl.getShaderInfoLog(fs));
             gl.deleteShader(vs);
             gl.deleteShader(fs);
             return;
@@ -802,7 +802,7 @@ void main() {
         gl.attachShader(prog, fs);
         gl.linkProgram(prog);
         if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error("CloudShadowPass link:", gl.getProgramInfoLog(prog));
+            // console.error("CloudShadowPass link:", gl.getProgramInfoLog(prog));
             gl.deleteProgram(prog);
             gl.deleteShader(vs);
             gl.deleteShader(fs);

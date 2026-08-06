@@ -83,7 +83,8 @@ export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
             windParams.value = { ...windParams.value, windEnabled: true };
             message.success('风场加载成功');
         } catch (e) {
-            console.error('[Wind] 风场加载失败:', e);
+            // 下方 message.error 已提示用户,此处不再重复 console.error
+            // console.error('[Wind] 风场加载失败:', e);
             message.error(`风场加载失败: ${e.message || '未知错误'}`);
             clearWind2D();
         }

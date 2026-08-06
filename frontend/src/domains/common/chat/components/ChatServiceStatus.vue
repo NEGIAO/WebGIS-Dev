@@ -26,27 +26,27 @@
             </span>
         </div>
         <div
-            v-if="!config.isDirectMode"
+            v-if="!config.isDirectMode || config.isDefaultAIMode"
+            class="status-line"
+        >
+            <span class="status-label">{{ t('chat.lastCostLabel') }}</span>
+            <span class="status-value cost-value">{{ config.lastCallCost > 0 ? `-${config.lastCallCost}` : t('chat.noCostYet') }}</span>
+        </div>
+        <div
+            v-if="!config.isDirectMode || config.isDefaultAIMode"
             class="status-line"
         >
             <span class="status-label">{{ t('chat.todayQuota') }}</span>
-            <span class="status-value">{{ config.quotaText }}</span>
+            <span :class="['status-value', { 'quota-exhausted': config.quotaExhausted }]">{{ config.quotaText }}</span>
         </div>
         <div
-            v-if="config.isDefaultAIMode"
-            class="status-line"
-        >
-            <span class="status-label">{{ t('chat.quota') }}</span>
-            <span class="status-value status-default-ai">{{ t('chat.adminQuota') }}</span>
-        </div>
-        <div
-            v-else-if="config.isDirectMode"
+            v-if="config.isDirectMode && !config.isDefaultAIMode"
             class="status-line"
         >
             <span class="status-label">{{ t('chat.quota') }}</span>
             <span class="status-value status-direct">{{ t('chat.unlimitedQuota') }}</span>
         </div>
-        <small class="hint">{{ config.statusHint }}</small>
+        <small :class="['hint', { 'hint-exhausted': config.quotaExhausted }]">{{ config.statusHint }}</small>
     </div>
 </template>
 
@@ -55,14 +55,26 @@
  * ChatServiceStatus - 路由模式/服务状态/额度展示条（从 ChatPanelContent 拆出）
  * 纯展示 + 模式切换入口，状态全部来自 useChatAgentConfig 的 reactive 对象。
  */
+import { watch } from 'vue';
+
+import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 
-defineProps({
+const props = defineProps({
     /** createChatAgentConfig 返回的 reactive 配置对象 */
     config: { type: Object, required: true },
 });
 
+const message = useMessage();
 const { t } = useLocale();
+
+// 额度耗尽瞬间弹一次 toast 提醒（仅 false→true 跳变触发，避免反复弹窗）
+watch(
+    () => props.config.quotaExhausted,
+    (exhausted) => {
+        if (exhausted) message.warning(t('chat.quotaExhaustedHint'));
+    },
+);
 </script>
 
 <style scoped>
@@ -104,6 +116,11 @@ const { t } = useLocale();
 
 .status-direct {
     color: #1565c0;
+}
+
+.cost-value {
+    color: var(--brand-primary-dark);
+    font-weight: 700;
 }
 
 .status-proxy {
@@ -192,5 +209,18 @@ const { t } = useLocale();
     font-size: 0.85em;
     margin-top: 4px;
     display: block;
+}
+
+.quota-exhausted,
+.hint-exhausted {
+    color: #c62828;
+}
+
+.quota-exhausted {
+    font-weight: 700;
+}
+
+.hint-exhausted {
+    font-weight: 600;
 }
 </style>

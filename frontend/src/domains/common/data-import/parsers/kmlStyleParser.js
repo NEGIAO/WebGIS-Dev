@@ -13,6 +13,7 @@
  */
 
 import { Fill, Stroke, Style, Icon, Circle as CircleStyle } from 'ol/style';
+import { useMessage } from '@common/shell/useMessage';
 
 /**
  * KML color 格式转换器
@@ -493,6 +494,7 @@ export function applyKmlStylesToFeatures(features, kmlText) {
         failureCount: 0,
         errors: [],
     };
+    const message = useMessage();
 
     if (!Array.isArray(features) || !features.length) {
         return result;
@@ -586,7 +588,8 @@ export function applyKmlStylesToFeatures(features, kmlText) {
         });
 
     } catch (err) {
-        console.error('[kmlStyleParser] 批量样式应用异常', err);
+        // 批量样式应用异常:不阻断图层加载,以 warning 提示用户
+        message.warning('KML 样式批量应用失败，已回退默认样式');
         result.errors.push(err.message);
     }
 

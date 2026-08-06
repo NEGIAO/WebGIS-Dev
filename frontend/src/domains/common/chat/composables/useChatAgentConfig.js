@@ -24,6 +24,7 @@ import {
     apiGetDefaultAIConfig,
 } from '@/api/backend';
 import { readCachedPreferredAgentModel } from '@common/user/stores/useUserPreferencesStore';
+import { useLocale } from '@common/app/useLocale';
 
 /** localStorage 键名：用户选择的模型名称 */
 const MODEL_STORAGE_KEY = 'chat:selectedModel';
@@ -101,6 +102,7 @@ function normalizeQuota(raw) {
  * @returns {Object} reactive 配置对象（含状态 + 方法）
  */
 export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
+    const { t } = useLocale();
     const config = reactive({
         // ── 状态 ──
         userConfigDraft: defaultDraft(),
@@ -110,6 +112,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         modelName: '',
         statusHint: '正在初始化...',
         quota: normalizeQuota({}),
+        lastCallCost: 0,
         userConfigSaving: false,
         isLoadingModels: false,
         modelLoadHint: '',
@@ -126,7 +129,9 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             return `${used}/${limit}（剩余 ${remaining ?? 0}）`;
         }),
         quotaExhausted: computed(() => {
-            if (config.isDirectMode) return false;
+            // 仅个人 Key 直连（用户自己的 Key）不消耗平台配额，永不耗尽；
+            // 默认 AI / 后端代理模式均按 token 扣用户自身额度，须按配额判定
+            if (config.isDirectMode && !config.isDefaultAIMode) return false;
             return Number.isFinite(config.quota.remaining) && Number(config.quota.remaining) <= 0;
         }),
         /** Model 下拉选项：draft.model 不在列表中时追加"当前"兜底项 */
@@ -217,6 +222,19 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     config.serviceReady = true;
                     config.modelName = config.directConfig.model || config.modelName || '未配置';
                     config.statusHint = `默认 AI 模式：使用管理员配置的 ${config.modelName}（经后端代理转发，Key 安全存储在后端）。`;
+
+                    // 默认 AI 模式同样按 token 扣用户自身额度（后端 /chat/default-proxy 成功后折算），
+                    // 因此需实时加载用户自己的配额用于展示，不能再用「管理员无限制」糊弄。
+                    try {
+                        const result = await apiAgentGetChatConfig();
+                        const data = result?.data || result || {};
+                        config.applyQuota(data?.quota);
+                    } catch {
+                        // ignore
+                    }
+                    if (config.quotaExhausted) {
+                        config.statusHint = t('chat.quotaExhaustedHint');
+                    }
                 } else if (config.isDirectMode) {
                     config.serviceReady = true;
                     config.statusHint = '个人 Key 模式：使用个人 API Key 经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。';
@@ -547,13 +565,14 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         /**
          * 调用 LLM API（按当前路由模式选择通道）
          * @param {{ message: string, history: Array, locationContext: string, mapContext?: Object, systemPrompt: string, tools: Array }} payload
-         * @returns {Promise<{ reply: string, usedModel: string, rawData: Object, quota: Object|null }>}
+         * @returns {Promise<{ reply: string, usedModel: string, rawData: Object, quota: Object|null, cost: number }>}
          */
         async callLLM({ message: userMsg, history, locationContext, mapContext, systemPrompt, tools }) {
             let reply = '';
             let usedModel = '';
             let rawData = {};
             let quotaData = null;
+            let callCost = 0;
 
             const enhancedHistory = systemPrompt
                 ? [
@@ -581,6 +600,8 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 rawData = result?.data || result || {};
                 reply = String(rawData?.reply || '').trim();
                 usedModel = String(rawData?.model || dc.model || '');
+                if (rawData?.quota) quotaData = rawData.quota;
+                if (typeof rawData?.cost === 'number') callCost = rawData.cost;
             } else if (config.isDirectMode) {
                 const dc = config.directConfig;
                 const mergedSystemPrompt = systemPrompt
@@ -646,9 +667,10 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 reply = String(rawData?.reply || '').trim();
                 usedModel = String(rawData?.model || '');
                 if (rawData?.quota) quotaData = rawData.quota;
+                if (typeof rawData?.cost === 'number') callCost = rawData.cost;
             }
 
-            return { reply, usedModel, rawData, quota: quotaData };
+            return { reply, usedModel, rawData, quota: quotaData, cost: callCost };
         },
     });
 

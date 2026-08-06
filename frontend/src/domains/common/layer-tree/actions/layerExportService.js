@@ -132,13 +132,15 @@ export function collectFeatureVertices(feature) {
 }
 
 /**
- * 将字节数转换为可读的文件大小格式（B/KB/MB）
+ * 将字节数转换为可读的文件大小格式（B/KB/MB/GB/TB）
  */
 export function formatBytes(bytes) {
     const size = Number(bytes) || 0;
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
-    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+    if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+    if (size < 1024 * 1024 * 1024 * 1024) return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    return `${(size / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`;
 }
 
 /**

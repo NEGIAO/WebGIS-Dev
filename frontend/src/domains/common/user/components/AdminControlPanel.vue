@@ -5,6 +5,7 @@ import { useLocale } from '@common/app/useLocale';
 import { useAgentConfig } from '@common/chat/composables/useAgentConfig';
 import {
     apiAdminDeleteRows,
+    apiAdminGetAgentTokensPerUnit,
     apiAdminGetDefaultBasemapIndex,
     apiAdminGetDownloadTTL,
     apiAdminGetTableRows,
@@ -12,6 +13,7 @@ import {
     apiAdminListTables,
     apiAdminOverview,
     apiAdminPublishAnnouncement,
+    apiAdminUpdateAgentTokensPerUnit,
     apiAdminUpdateContact,
     apiAdminUpdateDefaultBasemapIndex,
     apiAdminUpdateDownloadTTL,
@@ -134,6 +136,39 @@ async function handleSaveDownloadTtl() {
     } catch (err) {
         const detail = err?.response?.data?.detail || err?.message || t('admin.unknownError');
         message.error(t('admin.downloadTtlSaveFailed', { error: detail }));
+    } finally {
+        submittingConfig.value = false;
+    }
+}
+
+// Agent tokens_per_unit 配置
+const agentTokensPerUnit = ref(1000);
+const loadingAgentTokensPerUnit = ref(false);
+
+async function loadAgentTokensPerUnit() {
+    loadingAgentTokensPerUnit.value = true;
+    try {
+        const result = await apiAdminGetAgentTokensPerUnit();
+        const val = result?.data?.tokens_per_unit;
+        agentTokensPerUnit.value = val != null ? val : 1000;
+    } catch {
+        agentTokensPerUnit.value = 1000;
+    } finally {
+        loadingAgentTokensPerUnit.value = false;
+    }
+}
+
+async function handleSaveAgentTokensPerUnit() {
+    if (loadingAgentTokensPerUnit.value) return;
+    submittingConfig.value = true;
+    try {
+        const val = Math.max(100, Math.min(100000, Number(agentTokensPerUnit.value) || 1000));
+        await apiAdminUpdateAgentTokensPerUnit(val);
+        agentTokensPerUnit.value = val;
+        message.success(t('admin.agentTokensPerUnitSaveSuccess'));
+    } catch (err) {
+        const detail = err?.response?.data?.detail || err?.message || t('admin.unknownError');
+        message.error(t('admin.agentTokensPerUnitSaveFailed', { error: detail }));
     } finally {
         submittingConfig.value = false;
     }
@@ -384,6 +419,7 @@ onMounted(async () => {
     await loadAgentConfig();
     await loadDefaultBasemapIndex();
     await loadDownloadTtl();
+    await loadAgentTokensPerUnit();
 });
 </script>
 
@@ -502,6 +538,26 @@ onMounted(async () => {
                 @click="handleSaveDownloadTtl"
             >
                 {{ t('admin.saveDownloadTtl') }}
+            </button>
+
+            <label class="admin-field-label">{{ t('admin.agentTokensPerUnitLabel') }}</label>
+            <input
+                v-model.number="agentTokensPerUnit"
+                class="admin-input"
+                type="number"
+                min="100"
+                max="100000"
+                :placeholder="t('admin.agentTokensPerUnitPlaceholder')"
+            />
+            <p class="config-hint">{{ t('admin.agentTokensPerUnitHint') }}</p>
+
+            <button
+                class="admin-action-btn"
+                type="button"
+                :disabled="submittingConfig"
+                @click="handleSaveAgentTokensPerUnit"
+            >
+                {{ t('admin.saveAgentTokensPerUnit') }}
             </button>
         </div>
 

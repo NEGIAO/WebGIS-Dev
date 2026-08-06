@@ -5,6 +5,7 @@
  */
 
 import { ref, onUnmounted } from 'vue';
+import { useMessage } from '@common/shell/useMessage';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from 'three/addons/objects/Sky.js';
@@ -28,6 +29,7 @@ import {
  */
 export function useShallowWater(options = {}) {
   const { onReady, onError, onFpsUpdate } = options;
+  const message = useMessage();
 
   // 响应式状态
   const isReady = ref(false);
@@ -542,7 +544,8 @@ export function useShallowWater(options = {}) {
       }
     } catch (err) {
       // 渲染异常时停止循环并通知，防止静默死亡
-      console.error('[ShallowWater] animate loop error:', err);
+      // console.error('[ShallowWater] animate loop error:', err);
+      message.error(`浅水渲染异常，已暂停动画: ${err?.message || String(err)}`);
       try {
         pause();
       } catch {

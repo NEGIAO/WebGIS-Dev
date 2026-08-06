@@ -13,6 +13,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useMessage } from '@common/shell/useMessage';
 
 const props = defineProps({
     active: {
@@ -29,6 +30,8 @@ defineEmits(['toggle-active']);
 
 const canvasRef = ref(null);
 const isLoading = ref(false);
+
+const message = useMessage();
 
 let activeEngine = null;
 
@@ -116,8 +119,9 @@ async function switchEffect(effectName) {
         if (activeEngine?.init) {
             activeEngine.init();
         }
-    } catch (error) {
-        console.error('特效加载失败:', error);
+    } catch (_error) {
+        // 特效动态加载失败:特效本身是装饰性增强,以 message 提示用户但不阻断交互
+        message.error('特效加载失败，已跳过');
     }
 }
 

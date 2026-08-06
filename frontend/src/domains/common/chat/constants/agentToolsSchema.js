@@ -93,13 +93,19 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'search_and_zoom',
-            description: '搜索地名、地址或 POI，并在当前 2D/3D 引擎中定位。地理编码只执行一次。',
+            description: '搜索地名、地址或 POI，并在当前 2D/3D 引擎中定位。自动根据地名归属选择地理编码引擎。',
             parameters: {
                 type: 'object',
                 properties: {
                     query: { type: 'string', minLength: 1, description: '地名、地址或 POI。' },
-                    city: { type: 'string', description: '可选城市限定。', default: '' },
+                    city: { type: 'string', description: '可选城市限定（仅 Amap 引擎生效）。', default: '' },
                     zoom: { type: 'number', minimum: 0, maximum: 22, description: '目标缩放级别；3D 会转换为相机高度。', default: 16 },
+                    engine: {
+                        type: 'string',
+                        enum: ['auto', 'amap', 'nominatim'],
+                        description: "地理编码引擎选择。auto（默认）= 国内用高德、国外降级到 Nominatim；amap = 强制高德（仅国内有效）；nominatim = 强制 Nominatim（国际地名推荐）。根据用户意图的地理位置选择：国内地址用 amap 或 auto，国外/国际地址用 nominatim 或 auto。",
+                        default: 'auto',
+                    },
                 },
                 required: ['query'],
                 additionalProperties: false,
@@ -149,7 +155,7 @@ export function buildSystemPromptWithTools() {
 2. set_view_center(lng, lat, zoom?, height?, duration?): 移动中心；2D 用 zoom，3D 用 height，3D 也可把 zoom 换算成高度。
 3. set_camera_orientation(heading?, pitch?, roll?, duration?): 仅 Cesium；2D 会明确返回不支持。
 4. zoom_to_extent(bbox, padding?, maxZoom?, duration?): 2D/3D 均支持。
-5. search_and_zoom(query, city?, zoom?): 搜索并在当前引擎定位。
+5. search_and_zoom(query, city?, zoom?, engine?): 搜索并在当前引擎定位。engine 可选 'auto'（默认，国内高德+国外降级）、'amap'（仅国内）、'nominatim'（国际地名）。根据用户意图的所在地选择引擎。
 6. switch_basemap(presetId): 2D/3D 均按稳定预设 ID 切换。
 
 ## Agent 可用底图预设

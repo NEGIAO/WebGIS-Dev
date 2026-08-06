@@ -460,7 +460,8 @@ async function startDriveSearch(): Promise<void> {
         } else if (/failed\s+to\s+fetch/i.test(rawMessage)) {
             message = t('routing.networkBlocked');
         } else {
-            console.error('[DrivePlanner] error:', e);
+            // 解析/渲染失败已由下方 error.value 内联展示给用户,不重复输出 console.error
+            // console.error('[DrivePlanner] error:', e);
             message = rawMessage || t('routing.navFailed');
         }
 

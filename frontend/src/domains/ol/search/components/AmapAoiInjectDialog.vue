@@ -260,8 +260,9 @@ async function getAoiBoundarySafe() {
             // 失败时也可以把原始错误数据传出去方便调试
             emit('update:jsonText', JSON.stringify(realData, null, 2));
         }
-    } catch (e) {
-        console.error('请求AOI接口出错', e);
+    } catch (_e) {
+        // 下方 message.error 已提示用户,此处不再重复 console.error
+        // console.error('请求AOI接口出错', e);
         message.error(t('layer.aoiRequestFailed'));
     }
 }

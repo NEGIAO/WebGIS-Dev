@@ -111,6 +111,12 @@ import { AGENT_TOOLS, buildSystemPromptWithTools } from '@common/chat/constants/
 import { useChatStore } from '@common/chat/stores/useChatStore';
 
 const emit = defineEmits(['close-chat']);
+
+const props = defineProps({
+    /** 当前激活的 tab，用于检测切回 chat 时刷新实时配额 */
+    activeTab: { type: String, default: 'chat' },
+});
+
 const message = useMessage();
 const { t } = useLocale();
 const chatStore = useChatStore();
@@ -166,16 +172,16 @@ const showUserConfig = ref(false);
 const messageListRef = ref(null);
 
 const inputPlaceholder = computed(() => {
+    if (config.quotaExhausted) return t('chat.placeholderQuotaExhausted');
     if (config.isDefaultAIMode) return t('chat.placeholderDefault');
     if (config.isDirectMode) return t('chat.placeholderDirect');
     if (!config.serviceReady) return t('chat.placeholderNotReady');
-    if (config.quotaExhausted) return t('chat.placeholderQuotaExhausted');
     return t('chat.placeholderGeneral');
 });
 
 const sendDisabled = computed(() => {
     if (isLoading.value) return true;
-    if (config.isDirectMode) return false;
+    if (config.isDirectMode && !config.isDefaultAIMode) return false;
     return !config.serviceReady || config.quotaExhausted;
 });
 
@@ -373,7 +379,7 @@ async function executeToolsAndUpdateUI(toolCalls, assistantMsgIndex) {
 async function dispatchSend(rawText, { skipUserPush = false } = {}) {
     const userMsg = String(rawText || '').trim();
     if (!userMsg || isLoading.value) return;
-    if (!config.isDirectMode && (!config.serviceReady || config.quotaExhausted)) return;
+    if ((!config.isDirectMode || config.isDefaultAIMode) && (!config.serviceReady || config.quotaExhausted)) return;
 
     if (session.pruneHistoryIfNeeded(buildWelcome)) {
         config.statusHint = t('chat.historyTrimmed');
@@ -397,6 +403,10 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
     const assistantMsgIndex = session.pushAssistant('');
     const list = session.messages.value;
 
+    // ── 累计本轮对话各轮次的真实消耗（后端返回的 cost 折算值）──
+    let totalCallCost = 0;
+    config.lastCallCost = 0;
+
     try {
         const systemPrompt = buildSystemPromptWithTools();
 
@@ -410,7 +420,12 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
         });
         if (seq !== requestSeq) return; // 用户已停止，忽略晚到响应
 
-        if (firstRound.quota) config.applyQuota(firstRound.quota);
+        // 立即显示第一轮消耗，让用户第一时间看到反馈；后续轮次在最后用后端 cost 汇总校正。
+        // quota 不在此处更新——避免额度数字在对话过程中乱跳，只在最后统一刷新。
+        if (firstRound.cost) {
+            config.lastCallCost = firstRound.cost;
+            totalCallCost += firstRound.cost;
+        }
         if (firstRound.usedModel) config.modelName = firstRound.usedModel;
 
         const reply = firstRound.reply;
@@ -466,7 +481,8 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
                 });
                 if (seq !== requestSeq) return;
 
-                if (secondRound.quota) config.applyQuota(secondRound.quota);
+                // 累计第二轮消耗（同一轮对话内的多轮 LLM 调用）；quota 仍只在最后统一刷新
+                if (secondRound.cost) totalCallCost += secondRound.cost;
                 if (secondRound.usedModel) config.modelName = secondRound.usedModel;
 
                 if (secondRound.reply) {
@@ -475,16 +491,34 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
                 } else {
                     session.pushAssistant(`✅ ${t('chat.opDone')}：\n${toolResultSummary}`);
                 }
-            } catch {
-                session.pushAssistant(`✅ ${t('chat.opDone')}：\n${toolResultSummary}`);
+            } catch (secondErr) {
+                // 第二轮 LLM 调用失败：区分额度耗尽（提示并刷新）与其他错误（静默降级为成功摘要）
+                if (secondErr?.isQuotaExceeded) {
+                    config.statusHint = t('chat.quotaLimitHint');
+                    await config.reloadAgentConfig(false);
+                } else {
+                    session.pushAssistant(`✅ ${t('chat.opDone')}：\n${toolResultSummary}`);
+                }
             }
         } else {
             // 打字机逐字呈现（非流式后端下的网页版观感）
             await typewriterReveal(assistantMsgIndex, reply || t('chat.emptyReply'), seq);
         }
 
-        if (!config.isDirectMode && config.quotaExhausted) {
+        if ((!config.isDirectMode || config.isDefaultAIMode) && config.quotaExhausted) {
             config.statusHint = t('chat.quotaExhaustedHint');
+        }
+
+        // 发消息完成后，从权威源重新拉取实时配额（与用户中心一致）
+        // 注意：必须用 reloadAgentConfig(false) 直接刷新，不能用 requestQuotaRefresh()——
+        // 后者有 5 秒节流，连续对话时会被跳过，导致 quota 未更新。
+        // 默认 AI 模式（isDirectMode 为真但 isDefaultAIMode）同样按 token 扣用户额度，需一并刷新；
+        // 仅个人 Key 直连（用户自己的 Key）不消耗平台配额，无需刷新。
+        if (!config.isDirectMode || config.isDefaultAIMode) {
+            await config.reloadAgentConfig(false);
+            // 用后端返回的各轮 cost 之和覆盖 lastCallCost（比配额差值更精确：
+            // 并发对话/其他配额操作不会污染本次消耗计算）。
+            config.lastCallCost = Math.max(0, Math.round(totalCallCost));
         }
     } catch (error) {
         if (seq !== requestSeq) return;
@@ -618,6 +652,25 @@ watch(
     (bus) => {
         if (bus && !gisCommander.value) {
             initGISCommander();
+        }
+    },
+);
+
+// 切回 chat tab 时刷新实时配额（用户可能在其他 tab 消耗了额度）
+// 节流：与 dispatchSend 末尾的刷新互斥，避免短时间内重复请求
+let lastQuotaRefreshAt = 0;
+function requestQuotaRefresh() {
+    const now = Date.now();
+    if (now - lastQuotaRefreshAt < 5000) return;
+    lastQuotaRefreshAt = now;
+    config.reloadAgentConfig(false);
+}
+
+watch(
+    () => props.activeTab,
+    (tab) => {
+        if (tab === 'chat' && (!config.isDirectMode || config.isDefaultAIMode)) {
+            requestQuotaRefresh();
         }
     },
 );

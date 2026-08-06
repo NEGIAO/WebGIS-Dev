@@ -58,7 +58,12 @@
                     <span class="task-item-id" :title="task.task_id">
                         {{ task.task_id }}
                     </span>
-                    
+
+                    <span v-if="task.basemap_name" class="task-item-basemap">
+                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                        {{ task.basemap_name }}
+                    </span>
+
                     <button
                         class="icon-btn copy-btn"
                         type="button"
@@ -87,6 +92,9 @@
                     </div>
                     <div class="progress-meta">
                         <span class="progress-num">{{ Math.round(task.progress || 0) }}%</span>
+                        <span v-if="task.tile_count > 0" class="tile-count-text">
+                            {{ task.tiles_downloaded || 0 }}/{{ task.tile_count }}
+                        </span>
                         <span v-if="resolveTaskRemaining(task)" class="remaining-text">
                             {{ resolveTaskRemaining(task) }}
                         </span>
@@ -322,10 +330,28 @@ function resolveTaskRemaining(task) {
     border: 1px solid #e2e8f0;
     padding: 2px 6px;
     border-radius: 4px;
-    
+
     /* 防超长拉变形截断处理 */
     flex: 1;
     min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.task-item-basemap {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #6366f1;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    padding: 2px 8px;
+    border-radius: 10px;
+    max-width: 150px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -418,6 +444,12 @@ function resolveTaskRemaining(task) {
 }
 
 .progress-num { font-weight: 600; }
+
+.tile-count-text {
+    font-size: 10px;
+    color: #6366f1;
+    font-weight: 500;
+}
 
 /* 过期提示 */
 .task-item-expiry {

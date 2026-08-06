@@ -6,6 +6,8 @@
  * - applyDeferredUrlParams：底图稳定后延迟应用 URL 坐标参数（Cesium 模式跳过、
  *   失败也标记已应用防重试），并在完成后释放启动恢复守卫 + 绑定 moveend 写回
  */
+import { useMessage } from '@common/shell/useMessage';
+
 export function createStartupViewResolver({
     mapInstanceRef,
     urlParamStore,
@@ -15,6 +17,7 @@ export function createStartupViewResolver({
     parseUrlToState,
     INITIAL_VIEW,
 }) {
+    const message = useMessage();
     function applyDeferredUrlParams() {
         const finishInitialRestore = () => {
             startupUrlRestoreGuard.markInitialRestoreApplied();
@@ -56,8 +59,9 @@ export function createStartupViewResolver({
             // 释放启动守卫后再绑定 moveend，避免 flyToView 动画产生的首次 moveend 覆盖分享链接。
             urlParamStore.markParamsAsApplied();
             finishInitialRestore();
-        } catch (error) {
-            console.error('[MapContainer] Failed to apply deferred URL params:', error);
+        } catch (_error) {
+            // 分享链接参数应用失败:已标记已应用防重试,此处以 message 提示用户
+            message.error('启动视图参数应用失败，已恢复默认视图');
             urlParamStore.markParamsAsApplied(); // 即使失败也标记已应用，防止重复尝试
             finishInitialRestore();
         }

@@ -157,6 +157,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { isValidLabel } from '@common/utils/labelValidator';
+import { useMessage } from '@common/shell/useMessage';
 import {
     resolveFolderSelectionState,
     buildContextMenuItems,
@@ -172,6 +173,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['action']);
+const message = useMessage();
 const menuVisible = ref(false);
 const menuX = ref(0);
 const menuY = ref(0);
@@ -327,8 +329,9 @@ function handleMenuCommand(key) {
         events.forEach((evt) => {
             emitAction(evt.type, evt.payload || {});
         });
-    } catch (error) {
-        console.error('[TOCTreeItem] 菜单命令执行失败:', error);
+    } catch (_error) {
+        // 右键菜单命令分发失败,以 message 提示用户
+        message.error('菜单命令执行失败，请重试');
     } finally {
         closeContextMenu();
     }

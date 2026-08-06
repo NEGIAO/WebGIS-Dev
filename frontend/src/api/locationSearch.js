@@ -147,7 +147,7 @@ async function searchWithTianditu({ keywords, page = 1, pageSize = 10, tiandituT
     }
 }
 
-async function searchWithNominatim({ keywords, pageSize = 10, page = 1, signal }) {
+export async function searchWithNominatim({ keywords, pageSize = 10, page = 1, signal }) {
     try {
         const data = await backendAPI.get('/api/proxy/search/nominatim', {
             params: {
@@ -179,7 +179,8 @@ async function searchWithNominatim({ keywords, pageSize = 10, page = 1, signal }
     } catch (error) {
         if (error?.name === 'AbortError') throw error;
         // 处理错误并提供详细的错误信息
-        console.error('Nominatim search error:', error);
+        // 错误经 throw 交由调用方(LocationSearch.vue 等)以 message toast 提示,此处不重复 console.error
+        // console.error('Nominatim search error:', error);
         const errorMsg = error.message || '搜索失败';
         const httpStatus = error.status || error.originalError?.response?.status || 0;
 
@@ -266,7 +267,8 @@ async function searchWithAmap({ keywords, page = 1, pageSize = 10, signal }) {
     } catch (error) {
         if (error?.name === 'AbortError') throw error;
         // 处理后端或 API 错误
-        console.error('Amap search error:', error);
+        // 错误经 throw 交由调用方以 message toast 提示,此处不重复 console.error
+        // console.error('Amap search error:', error);
         const errorMsg = error.message || '搜索失败';
         const httpStatus = error.status || error.originalError?.response?.status || 0;
 

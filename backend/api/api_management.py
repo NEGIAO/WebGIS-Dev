@@ -103,6 +103,19 @@ def _ensure_api_log_table_sync() -> None:
             ON api_call_logs(api_endpoint)
             """
         )
+        # api_usage_daily 由 auth/schema.py 主路径创建；此处兜底，避免该模块首次先于 auth 初始化时报错
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS api_usage_daily (
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                usage_date TEXT NOT NULL,
+                calls INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (username, usage_date)
+            )
+            """
+        )
         conn.commit()
 
 
@@ -140,7 +153,7 @@ def _record_api_call_sync(
 def _get_api_usage_by_user_sync(days: int = 7, limit: int = 100) -> List[Dict[str, Any]]:
     """按用户查看 API 调用统计（最近 N 天）"""
     _ensure_api_log_table_sync()
-    
+
     cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
     cutoff_iso = cutoff_time.isoformat()
 
@@ -164,6 +177,40 @@ def _get_api_usage_by_user_sync(days: int = 7, limit: int = 100) -> List[Dict[st
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+def _get_quota_usage_by_user_sync(days: int = 7, limit: int = 100) -> List[Dict[str, Any]]:
+    """按用户查看配额消耗统计（最近 N 天，基于统一配额池 api_usage_daily）"""
+    _ensure_api_log_table_sync()
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_date = cutoff_time.strftime('%Y-%m-%d')
+
+    with _db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                username,
+                role,
+                SUM(calls) as total_cost,
+                SUM(CASE WHEN usage_date = ? THEN calls ELSE 0 END) as today_cost,
+                COUNT(DISTINCT usage_date) as active_days,
+                MAX(updated_at) as last_used_at
+            FROM api_usage_daily
+            WHERE usage_date >= ?
+            GROUP BY username, role
+            ORDER BY total_cost DESC, username ASC
+            LIMIT ?
+            """,
+            (_utc_date_str(), cutoff_date, limit),
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+def _utc_date_str() -> str:
+    """返回 UTC 当天日期字符串 YYYY-MM-DD"""
+    return datetime.now(timezone.utc).strftime('%Y-%m-%d')
 
 
 def _get_api_usage_by_endpoint_sync(days: int = 7, limit: int = 50) -> List[Dict[str, Any]]:
@@ -310,6 +357,22 @@ async def get_api_usage_by_user(
 ) -> Dict[str, Any]:
     """获取所有用户的 API 调用统计（按用户排序）"""
     stats = await asyncio.to_thread(_get_api_usage_by_user_sync, days, limit)
+    return {
+        "status": "success",
+        "data": stats,
+        "period_days": days,
+        "total_records": len(stats),
+    }
+
+
+@router.get("/api-management/usage/quota-by-user")
+async def get_quota_usage_by_user(
+    days: int = Query(7, ge=1, le=90, description="统计天数"),
+    limit: int = Query(100, ge=1, le=500, description="返回用户数"),
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取所有用户的配额消耗统计（基于统一配额池 api_usage_daily）"""
+    stats = await asyncio.to_thread(_get_quota_usage_by_user_sync, days, limit)
     return {
         "status": "success",
         "data": stats,

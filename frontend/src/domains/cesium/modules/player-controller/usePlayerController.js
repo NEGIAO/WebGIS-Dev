@@ -280,7 +280,8 @@ export function usePlayerController({ getViewer, getCesium, message }) {
             isFlying.value = player.getIsFlying();
             message?.success?.('漫游模式已启动（WASD 移动 / V 切视角 / F 飞行）');
         } catch (error) {
-            console.error('[PlayerController] 启动失败:', error);
+            // 下方 message?.error?.() 已提示用户,此处不再重复 console.error
+            // console.error('[PlayerController] 启动失败:', error);
             message?.error?.(`漫游模式启动失败: ${error.message || '未知错误'}`);
             stopPlayer();
         }

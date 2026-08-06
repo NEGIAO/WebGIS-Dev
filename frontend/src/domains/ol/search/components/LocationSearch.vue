@@ -54,6 +54,17 @@
             未找到相关地点
         </div>
 
+        <div
+            v-if="!loading && searched && items.length"
+            class="search-quota-bar"
+        >
+            <span class="quota-label">{{ t('search.lastSearch') }}</span>
+            <span class="quota-cost">{{ lastSearchCost > 0 ? `-${lastSearchCost}` : '—' }}</span>
+            <span class="quota-separator">|</span>
+            <span class="quota-label">{{ t('search.remaining') }}</span>
+            <span class="quota-remaining">{{ quotaRemaining }}</span>
+        </div>
+
         <ul
             v-if="!loading && items.length"
             class="result-list"
@@ -111,9 +122,12 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useLocale } from '@common/app/useLocale';
 import { useMessage } from '@common/shell/useMessage';
+import { isAuthenticated } from '@common/user/services/auth';
 import { Search as SearchIcon } from '@lucide/vue';
 import { globalAbortManager } from '@common/utils/abortManager';
+import { apiAuthMe } from '@/api/backend';
 
 const props = defineProps({
     fetcher: {
@@ -148,6 +162,7 @@ const props = defineProps({
 
 const emit = defineEmits(['select-result']);
 const message = useMessage();
+const { t } = useLocale();
 
 const rootRef = ref(null);
 const keywords = ref('');
@@ -159,6 +174,11 @@ const total = ref(0);
 const service = ref(props.defaultService);
 const showServiceMenu = ref(false);
 let debounceTimer = null;
+
+// 搜索扣费状态：本次消耗由 /me 配额差值实时反推，剩余为当日可用额度
+const lastSearchCost = ref(0);
+const quotaRemaining = ref('—');
+const quotaUsed = ref(null);
 
 const totalPages = computed(() => {
     const totalVal = Number(total.value || 0);
@@ -216,6 +236,9 @@ async function runSearch(targetPage = 1) {
     searched.value = true;
     page.value = targetPage;
 
+    // 搜索前快照当日已用额度，用于最终用差值反推本次搜索的真实消耗
+    const preSearchUsed = quotaUsed.value;
+
     try {
         // 使用 AbortManager：新搜索自动 abort 上一次，释放浏览器连接槽位
         const result = await globalAbortManager.run('location-search', (signal) =>
@@ -233,12 +256,33 @@ async function runSearch(targetPage = 1) {
     } catch (error) {
         // AbortError 表示被新请求取代，静默忽略
         if (error?.name === 'AbortError') return;
-        console.error('location search failed', error);
+        // 下方 message.warning 已提示用户,此处不再重复 console.error
+        // console.error('location search failed', error);
         message.warning('地点搜索失败，请稍后重试');
         items.value = [];
         total.value = 0;
     } finally {
         loading.value = false;
+        await refreshQuota();
+        // 用 /me 配额差值反推本次搜索消耗（搜索与 /me 共用同一配额池）
+        if (preSearchUsed != null && quotaUsed.value != null) {
+            lastSearchCost.value = Math.max(0, quotaUsed.value - preSearchUsed);
+        }
+    }
+}
+
+async function refreshQuota() {
+    // 仅登录用户有 /me 权限；游客直接跳过，避免每次搜索触发 401 GUEST_NO_TOKEN toast 轰炸
+    if (!isAuthenticated()) return;
+    try {
+        const data = await apiAuthMe();
+        const q = data?.quota || {};
+        const remaining = q?.remaining;
+        const used = q?.used;
+        quotaRemaining.value = remaining == null ? '∞' : String(remaining);
+        quotaUsed.value = used == null ? null : Number(used);
+    } catch {
+        // 配额查询失败不影响搜索功能
     }
 }
 
@@ -316,6 +360,8 @@ onMounted(() => {
     } catch { /* localStorage 读取失败 */ }
 
     document.addEventListener('click', handleOutsideClick);
+
+    refreshQuota();
 });
 
 onBeforeUnmount(() => {
@@ -419,6 +465,38 @@ onBeforeUnmount(() => {
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* 搜索扣费状态条 */
+.search-quota-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #5f6d66;
+    background: rgba(232, 246, 238, 0.7);
+    border-radius: 6px;
+}
+
+.quota-label {
+    color: #6d7f73;
+}
+
+.quota-cost {
+    color: #c62828;
+    font-weight: 700;
+}
+
+.quota-separator {
+    color: #c7d3cc;
+    margin: 0 2px;
+}
+
+.quota-remaining {
+    color: #2a3a32;
+    font-weight: 600;
 }
 
 .result-list li {

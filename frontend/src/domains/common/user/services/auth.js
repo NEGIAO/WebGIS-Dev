@@ -4,6 +4,7 @@ const GUEST_DEVICE_ID_KEY = 'webgis_guest_device_id';
 const PENDING_POSITION_CODE_KEY = 'webgis_pending_position_code';
 
 import { normalizeBinaryFlag } from '@common/utils/normalize';
+import { useMessage } from '@common/shell/useMessage';
 
 function readUrlParams() {
     if (typeof window === 'undefined') {
@@ -203,6 +204,7 @@ export function injectPositionCodeToPath(path = '/home', code = '') {
  * @returns {boolean} 是否成功注入（true 表示已注入访客令牌）
  */
 export function injectGuestTokenForShareMode() {
+    const message = useMessage();
     try {
         // 1. 生成或获取访客设备 ID
         const guestDeviceId = getOrCreateGuestDeviceId();
@@ -237,8 +239,9 @@ export function injectGuestTokenForShareMode() {
         });
 
         return true;
-    } catch (error) {
-        console.error('[Auth] Failed to inject guest token:', error);
+    } catch (_error) {
+        // 访客令牌注入失败会导致分享模式无法访问,以 message.error 提示用户
+        message.error('访客模式登录失败，请刷新页面重试');
         return false;
     }
 }

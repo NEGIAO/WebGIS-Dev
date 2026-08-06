@@ -253,6 +253,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "每份额度可下载的瓦片数（管理员面板可调，写入 system_config）",
     },
+    "AGENT_TOKENS_PER_UNIT": {
+        "layer": "L2",
+        "default": 1000,
+        "secret": False,
+        "description": "Agent 对话每多少 tokens 折算 1 个 API 额度（管理员面板可调，写入 system_config）",
+    },
     "API_GUEST_DAILY_QUOTA": {
         "layer": "L2",
         "default": 100,

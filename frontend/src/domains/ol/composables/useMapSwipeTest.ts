@@ -54,8 +54,9 @@ export function useMapSwipeTest() {
             }
 
             return true;
-        } catch (error) {
-            console.error('[useMapSwipeTest] Setup failed:', error);
+        } catch (_error) {
+            // DEV-only 测试工具,失败由调用方依据返回值处理;不输出 console.error
+            // console.error('[useMapSwipeTest] Setup failed:', error);
             return false;
         }
     }

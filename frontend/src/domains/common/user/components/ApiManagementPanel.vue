@@ -24,7 +24,7 @@
 
         <!-- 标签页内容 -->
         <div class="tabs-content">
-            <!-- 1. 用户 API 使用统计 -->
+            <!-- 1. 用户配额消耗统计 -->
             <div
                 v-show="activeTab === 'by-user'"
                 id="api-panel-by-user"
@@ -33,7 +33,7 @@
                 aria-labelledby="api-tab-by-user"
             >
                 <div class="panel-header">
-                    <h2>用户 API 调用统计</h2>
+                    <h2>用户配额消耗统计</h2>
                     <div class="filter-controls">
                         <label>统计天数：</label>
                         <select
@@ -63,10 +63,10 @@
                         <tr>
                             <th scope="col">用户名</th>
                             <th scope="col">角色</th>
-                            <th scope="col">调用次数</th>
+                            <th scope="col">总消耗配额</th>
+                            <th scope="col">今日消耗</th>
                             <th scope="col">活跃天数</th>
-                            <th scope="col">平均响应时间</th>
-                            <th scope="col">最后调用</th>
+                            <th scope="col">最后使用</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -77,7 +77,6 @@
                         >
                             <td class="username">{{ stat.username }}</td>
                             <td>
-                                <!-- String 包裹（V3.4.62 D2）：role 为 null 时 toLowerCase 会抛错并白屏整页 -->
                                 <span
                                     class="role-badge"
                                     :class="String(stat.role || '').toLowerCase()"
@@ -85,10 +84,10 @@
                                     {{ stat.role }}
                                 </span>
                             </td>
-                            <td class="highlight">{{ stat.call_count }}</td>
+                            <td class="highlight">{{ stat.total_cost }}</td>
+                            <td>{{ stat.today_cost }}</td>
                             <td>{{ stat.active_days }}</td>
-                            <td>{{ stat.avg_response_time_ms?.toFixed(2) || 'N/A' }} ms</td>
-                            <td class="timestamp">{{ formatTime(stat.last_called_at) }}</td>
+                            <td class="timestamp">{{ formatTime(stat.last_used_at) }}</td>
                         </tr>
                     </tbody>
                     </table>
@@ -426,10 +425,10 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import {
-    apiAdminApiUsageByUser,
     apiAdminApiUsageByEndpoint,
     apiAdminApiLogs,
     apiAdminGetApiQuota,
+    apiAdminQuotaUsageByUser,
     apiAdminUpdateApiQuota,
 } from '@/api/backend';
 import { useMessage } from '@common/shell/useMessage';
@@ -439,7 +438,7 @@ const message = useMessage();
 
 const activeTab = ref('by-user');
 const tabs = [
-    { id: 'by-user', icon: '📊', label: '用户统计', desc: '用户维度用量' },
+    { id: 'by-user', icon: '📊', label: '配额消耗', desc: '统一配额池用量' },
     { id: 'by-endpoint', icon: '🔗', label: '端点统计', desc: '接口热度与耗时' },
     { id: 'logs', icon: '📝', label: '调用日志', desc: '请求明细追踪' },
     { id: 'quota', icon: '⚙️', label: 'API 额度设置', desc: '统一 API 额度池' },
@@ -516,10 +515,10 @@ function getStatusClass(statusCode) {
 async function loadUserStats() {
     loadingUserStats.value = true;
     try {
-        const result = await apiAdminApiUsageByUser(userStatsFilter.value.days, 100);
+        const result = await apiAdminQuotaUsageByUser(userStatsFilter.value.days, 100);
         userStats.value = result?.data || [];
     } catch (error) {
-        message.error(`加载用户统计失败: ${error.message}`);
+        message.error(`加载配额统计失败: ${error.message}`);
     } finally {
         loadingUserStats.value = false;
     }

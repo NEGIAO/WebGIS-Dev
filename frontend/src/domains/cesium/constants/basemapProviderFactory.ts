@@ -5,6 +5,7 @@
  */
 import type { TileSourceDescriptor } from '@ol/basemap/constants/basemapConfig';
 import { getDescriptorById } from '@ol/basemap/constants/basemapConfig';
+import { useMessage } from '@common/shell/useMessage';
 
 /** 创建 Provider 所需的运行时上下文 */
 export type CesiumProviderContext = {
@@ -331,8 +332,9 @@ export function createCesiumImageryProvider(
         }
 
         return provider;
-    } catch (error) {
-        console.error(`[CesiumProvider] 创建 "${descriptor.id}" 的 ImageryProvider 失败:`, error);
+    } catch (_error) {
+        // 底图 Provider 创建失败:该图层不显示,以 message 提示用户(懒调用避免模块顶层执行)
+        useMessage().error(`底图 "${descriptor.id}" 加载失败`);
         return null;
     }
 }

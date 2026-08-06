@@ -215,7 +215,7 @@ void main() {
         gl.shaderSource(vs, this.getVertexShader());
         gl.compileShader(vs);
         if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
-            console.error("ShadowResolvePass VS:", gl.getShaderInfoLog(vs));
+            // console.error("ShadowResolvePass VS:", gl.getShaderInfoLog(vs));
             gl.deleteShader(vs);
             return;
         }
@@ -223,7 +223,7 @@ void main() {
         gl.shaderSource(fs, this.getFragmentShader());
         gl.compileShader(fs);
         if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
-            console.error("ShadowResolvePass FS:", gl.getShaderInfoLog(fs));
+            // console.error("ShadowResolvePass FS:", gl.getShaderInfoLog(fs));
             gl.deleteShader(vs);
             gl.deleteShader(fs);
             return;
@@ -233,7 +233,7 @@ void main() {
         gl.attachShader(prog, fs);
         gl.linkProgram(prog);
         if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-            console.error("ShadowResolvePass link:", gl.getProgramInfoLog(prog));
+            // console.error("ShadowResolvePass link:", gl.getProgramInfoLog(prog));
             gl.deleteProgram(prog);
             gl.deleteShader(vs);
             gl.deleteShader(fs);

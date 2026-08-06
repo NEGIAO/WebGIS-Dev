@@ -809,19 +809,19 @@ void main() {
 
 // ─── Helper: compile & link GL program ─────────────────────────────────────
 
-function createGLProgram(gl, vsSource, fsSource, label) {
+function createGLProgram(gl, vsSource, fsSource, _label) {
   const vs = gl.createShader(gl.VERTEX_SHADER);
   gl.shaderSource(vs, vsSource);
   gl.compileShader(vs);
-  if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) { console.error(`[${label}] VS:`, gl.getShaderInfoLog(vs)); gl.deleteShader(vs); return null; }
+  if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) { /* console.error(`[${label}] VS:`, gl.getShaderInfoLog(vs)); */ gl.deleteShader(vs); return null; }
   const fs = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(fs, fsSource);
   gl.compileShader(fs);
-  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { console.error(`[${label}] FS:`, gl.getShaderInfoLog(fs)); gl.deleteShader(vs); gl.deleteShader(fs); return null; }
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { /* console.error(`[${label}] FS:`, gl.getShaderInfoLog(fs)); */ gl.deleteShader(vs); gl.deleteShader(fs); return null; }
   const prog = gl.createProgram();
   gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
   gl.deleteShader(vs); gl.deleteShader(fs);
-  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.error(`[${label}] link:`, gl.getProgramInfoLog(prog)); gl.deleteProgram(prog); return null; }
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { /* console.error(`[${label}] link:`, gl.getProgramInfoLog(prog)); */ gl.deleteProgram(prog); return null; }
   return prog;
 }
 
