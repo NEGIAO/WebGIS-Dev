@@ -54,6 +54,13 @@ export function useCesiumLayers({
     let googlePhotorealistic3DTileset = null;
     let googlePhotorealistic3DTilesetLoadPromise = null;
     let googlePhotorealistic3DTilesetLoadId = 0;
+    let customIonTileset = null;
+    let customIonTilesetLoadPromise = null;
+    let customIonTilesetLoadId = 0;
+    let customIonImageryLayer = null;
+    let customIonTerrainProvider = null;
+    const customIonAssetId = ref(readStoredString('cesium_custom_ion_asset_id', '5115505'));
+    const loadedAssetType = ref(null);
     let terrainSwitchId = 0;
     let layerPickerSubscriptions = [];
 
@@ -88,6 +95,7 @@ export function useCesiumLayers({
     const googlePhotorealistic3DTilesVisible = ref(
         readStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, false),
     );
+    const customIon3DTilesVisible = ref(false);
 
     const basemapOptions = computed(() => [
         ...unifiedBasemapOptions.map((option) => {
@@ -142,6 +150,15 @@ export function useCesiumLayers({
             description: 'Google Photorealistic 3D Tiles 倾斜摄影模型',
             active: googlePhotorealistic3DTilesVisible.value,
         },
+        {
+            value: 'custom-ion-3d-tiles',
+            label: '自定义 Ion 3D',
+            description: customIonAssetId.value
+                ? `Ion Asset ID: ${customIonAssetId.value}`
+                : '输入 Cesium Ion Asset ID 加载自定义 3D Tiles',
+            active: customIon3DTilesVisible.value,
+            hasInput: true,
+        },
     ]);
 
     watch(activeBasemap, (value) => {
@@ -176,6 +193,14 @@ export function useCesiumLayers({
     watch(googlePhotorealistic3DTilesVisible, (value) => {
         writeStoredBoolean(GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY, value);
         void syncGooglePhotorealistic3DTilesLayer();
+    });
+
+    watch(customIon3DTilesVisible, () => {
+        void syncCustomIonLayer();
+    });
+
+    watch(customIonAssetId, (value) => {
+        writeStoredString('cesium_custom_ion_asset_id', value);
     });
 
     function createImageryProviderViewModels() {
@@ -415,6 +440,7 @@ export function useCesiumLayers({
         // 同步 Cesium OSM Buildings 与 Google 倾斜摄影
         void syncOsmBuildingsLayer();
         void syncGooglePhotorealistic3DTilesLayer();
+        void syncCustomIonLayer();
         return true;
     }
 
@@ -619,6 +645,263 @@ export function useCesiumLayers({
         if (viewer?.scene?.globe && !osmBuildingsVisible.value) {
             viewer.scene.globe.show = true;
         }
+    }
+
+    // ========== 自定义 Cesium Ion 资源（自动识别影像/地形/3D Tiles）==========
+
+    /**
+     * 通过 Cesium Ion API 查询资产类型。
+     * @returns {Promise<'imagery'|'terrain'|'3dtiles'|null>}
+     */
+    async function syncCustomIonLayer() {
+        const viewer = getViewer?.();
+        if (!viewer?.scene || !getCesium?.()) return;
+
+        if (customIon3DTilesVisible.value) {
+            await ensureCustomIonLayer();
+        } else {
+            clearCustomIonLayer();
+        }
+
+        viewer.scene.requestRender?.();
+    }
+
+    async function ensureCustomIonLayer() {
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        if (!viewer?.scene) return null;
+        if (!customIonAssetId.value.trim()) {
+            message.warning('请先输入 Cesium Ion Asset ID', { closable: true });
+            customIon3DTilesVisible.value = false;
+            return null;
+        }
+
+        const assetId = Number(customIonAssetId.value);
+
+        // 已有缓存的资产类型 → 直接加载
+        if (loadedAssetType.value) {
+            applyCesiumIonToken(Cesium, getCesiumIonToken());
+            if (loadedAssetType.value === 'imagery') return await loadCustomIonImagery(viewer, Cesium, assetId);
+            if (loadedAssetType.value === 'terrain') return await loadCustomIonTerrain(viewer, Cesium, assetId);
+            return await loadCustomIon3DTiles(viewer, Cesium, assetId);
+        }
+
+        // 无缓存 → 依次尝试三种加载器（不依赖 Ion API 预检）
+        applyCesiumIonToken(Cesium, getCesiumIonToken());
+
+        // 优先尝试 3D Tiles（最常见）
+        if (typeof Cesium?.Cesium3DTileset?.fromIonAssetId === 'function') {
+            try {
+                const result = await loadCustomIon3DTiles(viewer, Cesium, assetId);
+                if (result) {
+                    loadedAssetType.value = '3dtiles';
+                    return result;
+                }
+            } catch { /* 不是 3D Tiles，继续尝试 */ }
+        }
+
+        // 尝试地形
+        if (typeof Cesium?.CesiumTerrainProvider?.fromIonAssetId === 'function') {
+            try {
+                const result = await loadCustomIonTerrain(viewer, Cesium, assetId);
+                if (result) {
+                    loadedAssetType.value = 'terrain';
+                    return result;
+                }
+            } catch { /* 不是地形，继续尝试 */ }
+        }
+
+        // 尝试影像
+        if (typeof Cesium?.IonImageryProvider?.fromIonAssetId === 'function') {
+            try {
+                const result = await loadCustomIonImagery(viewer, Cesium, assetId);
+                if (result) {
+                    loadedAssetType.value = 'imagery';
+                    return result;
+                }
+            } catch { /* 也不是影像 */ }
+        }
+
+        message.warning(`Asset ${assetId} 无法加载（不是有效的 3D Tiles / 地形 / 影像，或 Ion 账户未授权）。`, { closable: true });
+        customIon3DTilesVisible.value = false;
+        return null;
+    }
+
+    async function loadCustomIonImagery(viewer, Cesium, assetId) {
+        if (customIonImageryLayer) return customIonImageryLayer;
+        if (customIonTilesetLoadPromise) await customIonTilesetLoadPromise;
+
+        if (typeof Cesium?.IonImageryProvider?.fromIonAssetId !== 'function') {
+            message.warning('当前 Cesium 运行时不支持 IonImageryProvider.fromIonAssetId', { closable: true });
+            customIon3DTilesVisible.value = false;
+            return null;
+        }
+
+        const loadId = ++customIonTilesetLoadId;
+        customIonTilesetLoadPromise = (async () => {
+            const provider = await Cesium.IonImageryProvider.fromIonAssetId(assetId);
+            if (loadId !== customIonTilesetLoadId || !customIon3DTilesVisible.value) return null;
+            customIonImageryLayer = viewer.imageryLayers.addImageryProvider(provider);
+            // 设为半透明叠加，不完全遮挡底图
+            customIonImageryLayer.alpha = 0.7;
+            viewer.scene.requestRender?.();
+            return customIonImageryLayer;
+        })();
+
+        try {
+            const result = await customIonTilesetLoadPromise;
+            if (!result) {
+                if (loadId !== customIonTilesetLoadId) return null;
+                customIon3DTilesVisible.value = false;
+                message.warning(`Ion 影像 (Asset ${assetId}) 加载失败。`, { closable: true });
+                return null;
+            }
+            message.success(`已加载自定义 Ion 影像 (Asset ${assetId})`);
+            return result;
+        } catch (error) {
+            if (loadId !== customIonTilesetLoadId) return null;
+            customIon3DTilesVisible.value = false;
+            message.warning(`Ion 影像 (Asset ${assetId}) 加载失败，已关闭。`, { closable: true });
+            message.error('自定义 Ion 影像初始化失败', error);
+            console.error('[CustomIon] 影像初始化失败', error);
+            return null;
+        } finally {
+            if (loadId === customIonTilesetLoadId) {
+                customIonTilesetLoadPromise = null;
+            }
+        }
+    }
+
+    async function loadCustomIonTerrain(viewer, Cesium, assetId) {
+        if (customIonTerrainProvider) return customIonTerrainProvider;
+        if (customIonTilesetLoadPromise) await customIonTilesetLoadPromise;
+
+        if (typeof Cesium?.CesiumTerrainProvider?.fromIonAssetId !== 'function') {
+            message.warning('当前 Cesium 运行时不支持 CesiumTerrainProvider.fromIonAssetId', { closable: true });
+            customIon3DTilesVisible.value = false;
+            return null;
+        }
+
+        const loadId = ++customIonTilesetLoadId;
+        customIonTilesetLoadPromise = (async () => {
+            const provider = await Cesium.CesiumTerrainProvider.fromIonAssetId(assetId, {
+                requestVertexNormals: true,
+            });
+            if (loadId !== customIonTilesetLoadId || !customIon3DTilesVisible.value) return null;
+            viewer.scene.terrainProvider = provider;
+            customIonTerrainProvider = provider;
+            viewer.scene.requestRender?.();
+            return provider;
+        })();
+
+        try {
+            const result = await customIonTilesetLoadPromise;
+            if (!result) {
+                if (loadId !== customIonTilesetLoadId) return null;
+                customIon3DTilesVisible.value = false;
+                message.warning(`Ion 地形 (Asset ${assetId}) 加载失败。`, { closable: true });
+                return null;
+            }
+            message.success(`已加载自定义 Ion 地形 (Asset ${assetId})`);
+            return result;
+        } catch (error) {
+            if (loadId !== customIonTilesetLoadId) return null;
+            customIon3DTilesVisible.value = false;
+            message.warning(`Ion 地形 (Asset ${assetId}) 加载失败，已关闭。`, { closable: true });
+            message.error('自定义 Ion 地形初始化失败', error);
+            console.error('[CustomIon] 地形初始化失败', error);
+            return null;
+        } finally {
+            if (loadId === customIonTilesetLoadId) {
+                customIonTilesetLoadPromise = null;
+            }
+        }
+    }
+
+    async function loadCustomIon3DTiles(viewer, Cesium, assetId) {
+        if (customIonTileset) return customIonTileset;
+        if (customIonTilesetLoadPromise) return customIonTilesetLoadPromise;
+
+        if (typeof Cesium?.Cesium3DTileset?.fromIonAssetId !== 'function') {
+            message.warning('当前 Cesium 运行时不支持 Cesium3DTileset.fromIonAssetId', { closable: true });
+            customIon3DTilesVisible.value = false;
+            return null;
+        }
+
+        const loadId = ++customIonTilesetLoadId;
+        customIonTilesetLoadPromise = Cesium.Cesium3DTileset.fromIonAssetId(assetId, {
+            maximumScreenSpaceError: 4,
+            enableCollision: true,
+        });
+
+        try {
+            const tileset = await customIonTilesetLoadPromise;
+            if (loadId !== customIonTilesetLoadId || !customIon3DTilesVisible.value) {
+                destroyPrimitive(tileset);
+                return null;
+            }
+
+            customIonTileset = viewer.scene.primitives.add(tileset);
+            // 不隐藏 globe，让 3D Tiles 叠加在底图之上
+            viewer.scene.requestRender?.();
+            message.success(`已加载自定义 Ion 3D Tiles (Asset ${assetId})`);
+            return customIonTileset;
+        } catch (error) {
+            if (loadId !== customIonTilesetLoadId) return null;
+            customIon3DTilesVisible.value = false;
+            message.warning(`Ion 3D Tiles (Asset ${assetId}) 加载失败，已关闭。`, { closable: true });
+            message.error('自定义 Ion 3D Tiles 初始化失败', error);
+            console.error('[CustomIon] 3D Tiles 初始化失败', error);
+            return null;
+        } finally {
+            if (loadId === customIonTilesetLoadId) {
+                customIonTilesetLoadPromise = null;
+            }
+        }
+    }
+
+    function clearCustomIonLayer() {
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        if (!viewer?.scene || !Cesium) return;
+
+        // 清理影像层
+        if (customIonImageryLayer) {
+            try { viewer.imageryLayers.remove(customIonImageryLayer, true); } catch { /* ignore */ }
+            customIonImageryLayer = null;
+        }
+
+        // 清理地形 → 回退默认椭球
+        if (customIonTerrainProvider) {
+            try {
+                viewer.scene.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+            } catch { /* ignore */ }
+            customIonTerrainProvider = null;
+        }
+
+        // 清理 3D Tiles
+        if (customIonTileset) {
+            try { viewer.scene.primitives.remove(customIonTileset); } catch { /* ignore */ }
+            customIonTileset = null;
+            if (viewer?.scene?.globe && !osmBuildingsVisible.value && !googlePhotorealistic3DTilesVisible.value) {
+                viewer.scene.globe.show = true;
+            }
+        }
+
+        // 终止进行中的加载
+        customIonTilesetLoadId += 1;
+        customIonTilesetLoadPromise = null;
+        loadedAssetType.value = null;
+    }
+
+    function handleCustomIonAssetSubmit({ assetId }) {
+        const normalized = String(assetId || '').trim();
+        if (!normalized || !/^\d+$/.test(normalized)) {
+            message.warning('请输入有效的 Cesium Ion Asset ID（纯数字）', { closable: true });
+            return;
+        }
+        customIonAssetId.value = normalized;
+        customIon3DTilesVisible.value = true;
     }
 
     async function ensureOsmBuildingsLayer() {
@@ -972,6 +1255,11 @@ export function useCesiumLayers({
 
         if (overlayId === 'google-photorealistic-3d-tiles') {
             googlePhotorealistic3DTilesVisible.value = Boolean(value);
+            return;
+        }
+
+        if (overlayId === 'custom-ion-3d-tiles') {
+            customIon3DTilesVisible.value = Boolean(value);
         }
     }
 
@@ -1002,6 +1290,7 @@ export function useCesiumLayers({
         clearTdtTextLabelLayer();
         clearOsmBuildingsLayer();
         clearGooglePhotorealistic3DTilesLayer();
+        clearCustomIonLayer();
         unbindLayerPickerStateSync();
     }
 
@@ -1009,6 +1298,7 @@ export function useCesiumLayers({
         activeBasemap,
         activeTerrain,
         customXyzBasemapUrl,
+        customIonAssetId,
         basemapOptions,
         terrainOptions,
         overlayOptions,
@@ -1023,6 +1313,7 @@ export function useCesiumLayers({
         applyTerrain,
         handleOverlayToggle,
         handleCustomBasemapSubmit,
+        handleCustomIonAssetSubmit,
         cleanupLayers,
         // 熔断/降级切换器
         basemapSwitcher,

@@ -23,6 +23,122 @@ export const TILESET_JSON_INDICATOR = 'tileset.json';
 // ============================================================
 
 /**
+ * 安装 blob URL 拦截器（ArrayBuffer）
+ *
+ * 倾斜摄影 .b3dm 内部的 glTF 可能通过相对路径引用外部 .bin / .glb 文件。
+ * 当 .b3dm 通过 blob URL 加载时，相对路径会相对于 blob URL origin 解析而失败。
+ * 此拦截器在 fetch 失败时，尝试从 blobUrlMap 中查找匹配的文件并返回。
+ *
+ * @param {Cesium} Cesium
+ * @param {Object} blobUrlMap - 相对路径 → blob URL 映射
+ * @returns {Function} restore - 恢复原始实现的函数
+ */
+function installBlobUrlInterceptor(Cesium, blobUrlMap) {
+    const Resource = Cesium.Resource;
+    if (!Resource || typeof Resource.fetchArrayBuffer !== 'function') return () => {};
+
+    const originalFetchArrayBuffer = Resource.fetchArrayBuffer.bind(Resource);
+
+    Resource.fetchArrayBuffer = function (options) {
+        const requestUrl = typeof options === 'string' ? options : options?.url || '';
+        return originalFetchArrayBuffer(options).catch((error) => {
+            // 从请求 URL 中提取文件名，尝试在 blobUrlMap 中匹配
+            const fileName = requestUrl.split('/').pop()?.split('?')[0];
+            if (!fileName) throw error;
+
+            // 在 blobUrlMap 中查找同名文件
+            for (const [relPath, blobUrl] of Object.entries(blobUrlMap)) {
+                if (relPath.endsWith('/' + fileName) || relPath === fileName) {
+                    console.warn('[3DTiles][interceptor] ArrayBuffer 重定向:', requestUrl, '→', relPath);
+                    return originalFetchArrayBuffer({ ...options, url: blobUrl });
+                }
+            }
+            console.warn('[3DTiles][interceptor] ArrayBuffer 失败未匹配:', requestUrl, fileName);
+            throw error;
+        });
+    };
+
+    return () => {
+        Resource.fetchArrayBuffer = originalFetchArrayBuffer;
+    };
+}
+
+/**
+ * 安装 blob URL 拦截器（Image）
+ *
+ * 同上，针对纹理图片（.jpg/.png）的加载失败做兜底重定向。
+ *
+ * @param {Cesium} Cesium
+ * @param {Object} blobUrlMap
+ * @returns {Function} restore
+ */
+function installBlobImageInterceptor(Cesium, blobUrlMap) {
+    const Resource = Cesium.Resource;
+    if (!Resource || typeof Resource.fetchImage !== 'function') return () => {};
+
+    const originalFetchImage = Resource.fetchImage.bind(Resource);
+
+    Resource.fetchImage = function (options) {
+        const requestUrl = typeof options === 'string' ? options : options?.url || '';
+        return originalFetchImage(options).catch((error) => {
+            const fileName = requestUrl.split('/').pop()?.split('?')[0];
+            if (!fileName) throw error;
+
+            for (const [relPath, blobUrl] of Object.entries(blobUrlMap)) {
+                if (relPath.endsWith('/' + fileName) || relPath === fileName) {
+                    console.warn('[3DTiles][interceptor] Image 重定向:', requestUrl, '→', relPath);
+                    return originalFetchImage({ ...options, url: blobUrl });
+                }
+            }
+            console.warn('[3DTiles][interceptor] Image 失败未匹配:', requestUrl, fileName);
+            throw error;
+        });
+    };
+
+    return () => {
+        Resource.fetchImage = originalFetchImage;
+    };
+}
+
+/**
+ * 安装全局 fetch 拦截器
+ *
+ * Cesium 的 glTF 解析器在加载 .b3dm 内部的外部纹理时，可能直接调用原生 fetch()，
+ * 而非 Cesium.Resource.fetchArrayBuffer/fetchImage。此拦截器作为最终兜底，
+ * 捕获所有失败的 fetch 请求，尝试从 blobUrlMap 中重定向。
+ *
+ * @param {Object} blobUrlMap
+ * @returns {Function} restore
+ */
+function installBlobFetchInterceptor(blobUrlMap) {
+    const originalFetch = window.fetch.bind(window);
+    if (!originalFetch) return () => {};
+
+    window.fetch = function (input, init) {
+        const url = typeof input === 'string' ? input : input?.url || '';
+        return originalFetch(input, init).then((response) => {
+            // 如果请求成功或者不是 blob URL 请求，直接返回
+            if (response.ok || !url.startsWith('blob:')) return response;
+            // blob URL 404 → 尝试从 fileMap 重定向
+            const fileName = url.split('/').pop()?.split('?')[0];
+            if (fileName) {
+                for (const [relPath, blobUrl] of Object.entries(blobUrlMap)) {
+                    if (relPath.endsWith('/' + fileName) || relPath === fileName) {
+                        console.warn('[3DTiles][fetch-interceptor] 重定向:', url, '→', relPath);
+                        return originalFetch(blobUrl, init);
+                    }
+                }
+            }
+            return response;
+        });
+    };
+
+    return () => {
+        window.fetch = originalFetch;
+    };
+}
+
+/**
  * 在 tileset 目录上下文中解析相对路径
  */
 function resolveTilesetPath(baseDir, relativeUrl) {
@@ -100,14 +216,25 @@ function getTileLevel(path) {
  * 递归读取目录句柄下的所有文件，构建相对路径→File 映射
  */
 async function readDirRecursive(dirHandle, currentPath, fileMap) {
-    for await (const [name, handle] of dirHandle.entries()) {
-        const relPath = currentPath ? `${currentPath}/${name}` : name;
-        if (handle.kind === 'file') {
-            const file = await handle.getFile();
-            fileMap[relPath] = file;
-        } else if (handle.kind === 'directory') {
-            await readDirRecursive(handle, relPath, fileMap);
+    try {
+        for await (const [name, handle] of dirHandle.entries()) {
+            const relPath = currentPath ? `${currentPath}/${name}` : name;
+            try {
+                if (handle.kind === 'file') {
+                    const file = await handle.getFile();
+                    fileMap[relPath] = file;
+                } else if (handle.kind === 'directory') {
+                    await readDirRecursive(handle, relPath, fileMap);
+                }
+            } catch (itemError) {
+                // 单个文件/目录访问失败（句柄过期、权限丢失等），跳过并记录
+                console.warn(`[3DTiles][readDir] 跳过 "${relPath}": ${itemError?.message || itemError}`);
+            }
         }
+    } catch (dirError) {
+        // 目录迭代器本身失败（目录句柄过期等）
+        console.warn(`[3DTiles][readDir] 目录迭代失败 "${currentPath || '(root)'}"：${dirError?.message || dirError}`);
+        throw dirError;
     }
 }
 
@@ -770,6 +897,9 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
 
     const allPaths = Object.keys(blobUrlMap);
     console.warn('[3DTiles][import] 文件总数:', allPaths.length, '路径示例:', allPaths.slice(0, 5));
+    console.warn('[3DTiles][import] 图片文件:', allPaths.filter(p => /\.(jpg|jpeg|png|webp|gif|bmp|ktx2?)$/i.test(p)).slice(0, 10));
+    console.warn('[3DTiles][import] B3DM文件:', allPaths.filter(p => p.endsWith('.b3dm')).slice(0, 5));
+    console.warn('[3DTiles][import] 所有tileset.json:', allPaths.filter(p => p.includes('tileset.json')));
 
     // Step 2: 找出所有候选 tileset JSON 文件
     const tilesetPaths = allPaths.filter((p) => {
@@ -825,9 +955,41 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
     const rootJson = parsedTilesetJson[rootTsPath] || null;
     console.warn('[3DTiles][import] 根 tileset 路径:', rootTsPath, '→ 最终 URL:', tilesetUrl);
 
+    // Step 4.5: 安装 blob URL 资源拦截器
+    // 倾斜摄影数据中，.b3dm 内部的 glTF 可能引用外部纹理文件（.jpg/.png/.bin）。
+    // 当 .b3dm 通过 blob URL 加载时，glTF 内部的相对路径（如 "./textures/0.jpg"）
+    // 会相对于 blob URL 的 origin 解析（blob:http://host/xxx/textures/0.jpg），
+    // 而非相对于 .b3dm 文件在目录中的位置，导致纹理加载失败 → 黑屏。
+    // 解决方案：拦截 fetch + Cesium.Resource，将失败的请求重定向到 blobUrlMap。
+    const _restoreFetch = installBlobFetchInterceptor(blobUrlMap);
+    const _restoreFetchArrayBuffer = installBlobUrlInterceptor(Cesium, blobUrlMap);
+    const _restoreFetchImage = installBlobImageInterceptor(Cesium, blobUrlMap);
+
     // Step 5: 加载
     const tileset = await Cesium.Cesium3DTileset.fromUrl(tilesetUrl);
     console.warn('[3DTiles][import] Cesium3DTileset.fromUrl 完成，boundingSphere:', tileset.boundingSphere);
+
+    // 诊断：监听 tile 加载失败事件
+    if (tileset.tileFailed) {
+        tileset.tileFailed.addEventListener((tileFailed) => {
+            console.error('[3DTiles][tileFailed] 瓦片加载失败:', tileFailed?.message || tileFailed);
+        });
+    }
+
+    // 诊断：监听 tile 加载完成事件
+    if (tileset.tileVisible) {
+        let visibleTileCount = 0;
+        tileset.tileVisible.addEventListener((tile) => {
+            visibleTileCount++;
+            if (visibleTileCount <= 3) {
+                try {
+                    const content = tile.content;
+                    const resourceCount = content?._resources?.length ?? -1;
+                    console.warn(`[3DTiles][tileVisible] tile #${visibleTileCount}: resourceCount=${resourceCount}, hasContent=${!!content}`);
+                } catch (_) { /* ignore */ }
+            }
+        });
+    }
 
     // Step 5.5: 初始贴地（叶子基底采样 × 地形逐点配对 + 死区判定）
     const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
@@ -847,6 +1009,8 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
         tilesetGeo,
         currentBaseHeight,
         terrainFitSamples: baseSamples,
+        // 销毁时恢复全局 fetch + Cesium.Resource 原始实现，释放 blob URL
+        _restoreResourceFetches: [_restoreFetch, _restoreFetchArrayBuffer, _restoreFetchImage],
     };
     loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -857,7 +1021,8 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
 
 /**
  * 加载 tileset.json 文件
- * 优先使用 file:// 路径（Electron/桌面环境），浏览器环境回退到目录选择器。
+ * Electron/桌面环境：通过 file:// 路径加载。
+ * 浏览器环境：file:// 会被 CORS 拦截，直接引导用户选择完整目录。
  */
 export async function loadTilesetJSON({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
@@ -901,8 +1066,8 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
         return record;
     }
 
-    // 浏览器环境：引导用户选择完整目录
-    message.warning('3D Tiles 是目录格式，需要选择包含所有文件的文件夹，即将打开目录选择器…');
+    // 浏览器环境：file:// 会被 CORS 拦截，必须选择完整目录
+    message.warning('浏览器安全策略限制，直接拖入 tileset.json 无法加载子瓦片。即将打开目录选择器，请选择包含 tileset.json 的文件夹。');
 
     const result = await importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId });
     if (!result) {
@@ -1077,7 +1242,7 @@ function buildCustomShader(mode, Cesium, alpha = 1) {
 // ============================================================
 
 /**
- * 加载内置的样例城市 3D Tiles（public/tileset/city/tileset.json）
+ * 加载内置样例 3D Tiles（Cesium Ion 摄影测量模型，asset 5115505）
  * 默认应用白膜贴图材质
  */
 export async function loadSampleTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
@@ -1085,19 +1250,19 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
 
-    const tileset = await Cesium.Cesium3DTileset.fromUrl(
-        './tileset/city/tileset.json',
-        { maximumScreenSpaceError: 10, maximumMemoryUsage: 5120 },
+    const tileset = viewer.scene.primitives.add(
+        await Cesium.Cesium3DTileset.fromIonAssetId(5115505, {
+            maximumScreenSpaceError: 10,
+            maximumMemoryUsage: 5120,
+        }),
     );
 
-    viewer.scene.primitives.add(tileset);
+    // 默认原始材质（保留倾斜摄影原始纹理）
+    applyTilesetMaterial(tileset, 'none', Cesium);
 
-    // 默认白膜贴图材质
-    applyTilesetMaterial(tileset, 'baimo', Cesium);
-
-    // 初始贴地（样例路径：fetch 根 JSON 收集叶子基底采样，失败退化运行时瓦片树）
+    // 初始贴地（Ion 数据：fetch 根 JSON 收集叶子基底采样，失败退化运行时瓦片树）
     const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
-        tileset, viewer, Cesium, rootJsonUrl: './tileset/city/tileset.json', message,
+        tileset, viewer, Cesium, message,
     });
 
     const id = `tileset_${++nextId.current}`;
@@ -1110,7 +1275,7 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         tilesetGeo,
         currentBaseHeight,
         terrainFitSamples: baseSamples,
-        materialMode: 'baimo',
+        materialMode: 'none',
     };
     loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -1203,7 +1368,21 @@ function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loa
 async function importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId }) {
     const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     const fileMap = {};
-    await readDirRecursive(dirHandle, '', fileMap);
+    try {
+        await readDirRecursive(dirHandle, '', fileMap);
+    } catch (dirError) {
+        // 目录迭代器本身失败（句柄过期）：如果已收集到部分文件，继续处理；否则抛出
+        const collected = Object.keys(fileMap).length;
+        if (collected === 0) {
+            throw dirError;
+        }
+        console.warn(`[3DTiles][import] 目录遍历中断，已收集 ${collected} 个文件，继续加载`);
+    }
+    const totalFiles = Object.keys(fileMap).length;
+    if (totalFiles === 0) {
+        throw new Error('未能读取目录中的任何文件，请确认目录非空且包含 tileset.json');
+    }
+    console.warn(`[3DTiles][import] 目录读取完成: ${totalFiles} 个文件`);
     return await loadTilesetFromFileMap({
         fileMap,
         sourceName: dirHandle.name,
@@ -1227,6 +1406,11 @@ export async function importTilesetFromDirectory({ getCesium, getViewer, message
         return await importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId });
     } catch (error) {
         if (error.name === 'AbortError' || error.name === 'SecurityError') {
+            return null;
+        }
+        // NotFoundError（句柄过期）且已收集到部分文件时不视为致命错误
+        if (error.name === 'NotFoundError') {
+            console.warn('[3DTiles][import] File System Access API 句柄过期，部分文件可能未加载');
             return null;
         }
         message.error(`导入 3D Tiles 目录失败: ${error.message || error}`);

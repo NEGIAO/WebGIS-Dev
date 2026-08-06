@@ -455,6 +455,12 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
             if (type === '3dtiles' || type === 'gltf') {
                 viewer.scene.primitives.remove(entity);
+                // 恢复 Cesium.Resource 原始 fetch 实现（由 tilesetLoader 安装的拦截器）
+                if (Array.isArray(record._restoreResourceFetches)) {
+                    for (const restore of record._restoreResourceFetches) {
+                        try { restore(); } catch { /* ignore */ }
+                    }
+                }
             } else if (type === 'tif') {
                 if (entity instanceof Cesium.ImageryLayer) {
                     viewer.imageryLayers.remove(entity);
@@ -499,6 +505,11 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
                 if (type === '3dtiles' || type === 'gltf') {
                     viewer.scene.primitives.remove(entity);
+                    if (Array.isArray(record._restoreResourceFetches)) {
+                        for (const restore of record._restoreResourceFetches) {
+                            try { restore(); } catch { /* ignore */ }
+                        }
+                    }
                 } else if (type === 'tif') {
                     if (Cesium && entity instanceof Cesium.ImageryLayer) {
                         viewer.imageryLayers.remove(entity);

@@ -42,12 +42,14 @@
         :terrain-options="terrainOptions"
         :overlay-options="overlayOptions"
         :custom-basemap-url="customXyzBasemapUrl"
+        :custom-ion-asset-id="customIonAssetId"
         :modules="toolModules"
         :loaded-data-sources="loadedDataSourcesForPanel"
         @module-action="handleToolAction"
         @control-change="handleToolControlChange"
         @overlay-toggle="handleOverlayToggle"
         @custom-basemap-submit="handleCustomBasemapSubmit"
+        @custom-ion-asset-submit="handleCustomIonAssetSubmit"
         @data-import="handleDataImport"
         @data-remove="handleDataRemove"
         @data-clear-all="handleDataClearAll"
@@ -204,6 +206,7 @@ const {
     activeBasemap,
     activeTerrain,
     customXyzBasemapUrl,
+    customIonAssetId,
     basemapOptions,
     terrainOptions,
     overlayOptions,
@@ -216,6 +219,7 @@ const {
     initCustomTerrain,
     handleOverlayToggle,
     handleCustomBasemapSubmit,
+    handleCustomIonAssetSubmit,
     cleanupLayers,
 } = layers;
 

@@ -6,6 +6,23 @@
 
 ## 版本记录
 
+### V3.5.16 (2026-08-07) — 自定义 Cesium Ion 资源 · 默认模型更换 · 本地大目录容错
+
+> 新增自定义 Ion 资源加载 UI（自动识别 imagery/terrain/3D Tiles），默认样例模型更换为河南大学地理环境学院摄影测量数据（Ion asset 5115505，原始材质），修复本地 4351 文件目录 File System Access API 遍历失败的句柄过期问题。详见[日志](Docs/LLM_record/26-08/2026-08-07/2026-08-07-v3.5.16-custom-ion-and-default-model.md)。
+
+#### 前端 — 自定义 Cesium Ion 资源
+- `CesiumToolPanel.vue`：新增自定义 Ion Asset ID 输入 UI（输入框 + 提交按钮 + 当前状态显示）。
+- `useCesiumLayers.js`：`ensureCustomIonLayer()` 三阶段自动识别（3D Tiles → 地形 → 影像），默认值 `'5115505'`，叠加模式（不隐藏底图，影像 alpha=0.7）。
+
+#### 前端 — 默认样例模型
+- `tilesetLoader.js`：`loadSampleTileset` 从本地 `public/tileset/city/tileset.json` 改为 `fromIonAssetId(5115505)`，默认材质 `'none'`（原始纹理）。
+
+#### 前端 — 本地大目录容错
+- `tilesetLoader.js`：`readDirRecursive` 双层 try-catch（单文件失败跳过不中断）；`importTilesetFromDirectoryNative` 部分收集成功时继续加载；`NotFoundError` 不弹窗。
+
+#### 前端 — 纹理加载拦截器（诊断性）
+- `tilesetLoader.js`：新增 `installBlobUrlInterceptor` / `installBlobImageInterceptor` / `installBlobFetchInterceptor`，blob URL 外部引用失败时重定向到 fileMap。
+
 ### V3.5.15 (2026-08-06) — Code Review 整改 · 下载链路修复 · 配额提示 · 后端兜底加固
 
 > 基于暂存区全面 Code Review 的 P1/P2 整改，重点修复下载链路（浏览器托管默认 + 自动下载非弹窗拦截），并加固 Chat 前端配额提示与后端兜底逻辑。详见[日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-v3.5.15-fix-review-and-download.md)。
