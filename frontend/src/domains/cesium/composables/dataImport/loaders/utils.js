@@ -96,11 +96,11 @@ export function flyToEntity(viewer, Cesium, entity, format) {
     try {
         if (format === '3dtiles' && entity.boundingSphere) {
             viewer.flyTo(entity, {
-                duration: 2,
+                duration: 1.5,
                 offset: new Cesium.HeadingPitchRange(
-                    Cesium.Math.toRadians(0),
-                    Cesium.Math.toRadians(-30),
-                    entity.boundingSphere.radius * 2.0,
+                    0,
+                    Cesium.Math.toRadians(-45),
+                    entity.boundingSphere.radius * 3.5,
                 ),
             });
         } else if (format === 'tif') {

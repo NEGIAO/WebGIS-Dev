@@ -45,7 +45,7 @@ screen and (max-height: 420px) {
 
 .navigation-controls {
   position: absolute;
-  right: 30px;
+  right: 41px;
   top: 210px;
   width: 30px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -102,7 +102,7 @@ screen and (max-height: 420px) {
 .compass {
   pointer-events: auto;
   position: absolute;
-  right: 0px;
+  right: 10px;
   top: 100px;
   width: 95px;
   height: 95px;

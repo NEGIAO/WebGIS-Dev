@@ -77,7 +77,10 @@ function normalizeSubdomainRange(url: string): { url: string; subdomains: string
     if (!match) {
         // 检查 {s} 占位符但没有子域名范围
         if (/\{s\}/i.test(url)) {
-            return { url, subdomains: ['a', 'b', 'c'] };
+            // 默认使用数字子域名 t0-t2：天地图/OSM/高德/腾讯等主流瓦片服务均用数字子域格式；
+            // 天地图官方支持 t0-t7 共 8 个子域（负载均衡），此处取前 3 个已足够日常使用；
+            // 字母子域 (a/b/c) 仅 Google 等少数服务使用，不适宜作默认。
+            return { url, subdomains: ['0', '1', '2'] };
         }
         return { url, subdomains: [] };
     }
@@ -98,6 +101,8 @@ function normalizeSubdomainRange(url: string): { url: string; subdomains: string
  * 将 {x},{y},{z},{s} 转换为 Cesium 兼容格式
  * Cesium UrlTemplateImageryProvider 支持: {z}, {x}, {y}, {s}, {reverseY}, {westProjectedX} 等
  * 同时将 OL 风格的 {-y} 转换为 Cesium 的 {reverseY} 处理方式（如果适用）
+ * 同时处理 WMTS 风格大写占位符：{TILEMATRIX}→{z}、{TILEROW}→{y}、{TILECOL}→{x}
+ * 天地图等 WMTS 图源使用大写占位符，Cesium 不识别会导致瓦片请求 URL 中保留字面量而无法加载。
  * @param url URL 模板
  * @returns Cesium 兼容的 URL 模板
  */
@@ -114,6 +119,10 @@ function toCesiumUrlTemplate(url: string): string {
         .replace(/\{s\}/gi, '{s}')
         .replace(/\{subdomains?\}/gi, '{s}')
         .replace(/\{switch:[^}]+\}/gi, '{s}')
+        // WMTS 大写占位符 → Cesium 小写（天地图等 WMTS 图源使用大写，不转换则保留字面量导致 404）
+        .replace(/\{TILEMATRIX\}/gi, '{z}')
+        .replace(/\{TILEROW\}/gi, '{y}')
+        .replace(/\{TILECOL\}/gi, '{x}')
         // OL 风格的 URL 里经常有未被花括号包裹的 % 转义占位符（典型例子：
         // Google apistyle= 里的 %7C / %2C）。Cesium 会按字面输出，
         // 必须把它们解码回原始字符，否则像 ?apistyle=s.e:l|p.v:off,s.t:1|s.e.g|p.v:off

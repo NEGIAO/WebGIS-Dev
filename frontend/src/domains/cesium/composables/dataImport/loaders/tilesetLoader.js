@@ -100,14 +100,25 @@ function getTileLevel(path) {
  * 递归读取目录句柄下的所有文件，构建相对路径→File 映射
  */
 async function readDirRecursive(dirHandle, currentPath, fileMap) {
-    for await (const [name, handle] of dirHandle.entries()) {
-        const relPath = currentPath ? `${currentPath}/${name}` : name;
-        if (handle.kind === 'file') {
-            const file = await handle.getFile();
-            fileMap[relPath] = file;
-        } else if (handle.kind === 'directory') {
-            await readDirRecursive(handle, relPath, fileMap);
+    try {
+        for await (const [name, handle] of dirHandle.entries()) {
+            const relPath = currentPath ? `${currentPath}/${name}` : name;
+            try {
+                if (handle.kind === 'file') {
+                    const file = await handle.getFile();
+                    fileMap[relPath] = file;
+                } else if (handle.kind === 'directory') {
+                    await readDirRecursive(handle, relPath, fileMap);
+                }
+            } catch (itemError) {
+                // 单个文件/目录访问失败（句柄过期、权限丢失等），跳过并记录
+                console.warn(`[3DTiles][readDir] 跳过 "${relPath}": ${itemError?.message || itemError}`);
+            }
         }
+    } catch (dirError) {
+        // 目录迭代器本身失败（目录句柄过期等）
+        console.warn(`[3DTiles][readDir] 目录迭代失败 "${currentPath || '(root)'}"：${dirError?.message || dirError}`);
+        throw dirError;
     }
 }
 
@@ -769,7 +780,9 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
     }
 
     const allPaths = Object.keys(blobUrlMap);
-    console.warn('[3DTiles][import] 文件总数:', allPaths.length, '路径示例:', allPaths.slice(0, 5));
+    console.warn('[3DTiles][import] 文件总数:', allPaths.length,
+        '| tileset.json:', allPaths.filter(p => p.includes('tileset.json')).length,
+        '| b3dm:', allPaths.filter(p => p.endsWith('.b3dm')).length);
 
     // Step 2: 找出所有候选 tileset JSON 文件
     const tilesetPaths = allPaths.filter((p) => {
@@ -857,7 +870,8 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
 
 /**
  * 加载 tileset.json 文件
- * 优先使用 file:// 路径（Electron/桌面环境），浏览器环境回退到目录选择器。
+ * Electron/桌面环境：通过 file:// 路径加载。
+ * 浏览器环境：file:// 会被 CORS 拦截，直接引导用户选择完整目录。
  */
 export async function loadTilesetJSON({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
     const Cesium = getCesium();
@@ -901,8 +915,8 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
         return record;
     }
 
-    // 浏览器环境：引导用户选择完整目录
-    message.warning('3D Tiles 是目录格式，需要选择包含所有文件的文件夹，即将打开目录选择器…');
+    // 浏览器环境：file:// 会被 CORS 拦截，必须选择完整目录
+    message.warning('浏览器安全策略限制，直接拖入 tileset.json 无法加载子瓦片。即将打开目录选择器，请选择包含 tileset.json 的文件夹。');
 
     const result = await importTilesetFromDirectory({ getCesium, getViewer, message, loadedDataSources, nextId });
     if (!result) {
@@ -1077,7 +1091,7 @@ function buildCustomShader(mode, Cesium, alpha = 1) {
 // ============================================================
 
 /**
- * 加载内置的样例城市 3D Tiles（public/tileset/city/tileset.json）
+ * 加载内置样例 3D Tiles（public/tileset/city/tileset.json）
  * 默认应用白膜贴图材质
  */
 export async function loadSampleTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
@@ -1114,7 +1128,14 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
     };
     loadedDataSources.value = [...loadedDataSources.value, record];
 
-    await viewer.zoomTo(tileset);
+    await viewer.flyTo(tileset, {
+        duration: 1.5,
+        offset: new Cesium.HeadingPitchRange(
+            0,
+            Cesium.Math.toRadians(-45),
+            tileset.boundingSphere.radius * 0.4,
+        ),
+    });
     message.success('样例 3D Tiles 加载成功');
     return record;
 }
@@ -1203,7 +1224,21 @@ function importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loa
 async function importTilesetFromDirectoryNative({ getCesium, getViewer, message, loadedDataSources, nextId }) {
     const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
     const fileMap = {};
-    await readDirRecursive(dirHandle, '', fileMap);
+    try {
+        await readDirRecursive(dirHandle, '', fileMap);
+    } catch (dirError) {
+        // 目录迭代器本身失败（句柄过期）：如果已收集到部分文件，继续处理；否则抛出
+        const collected = Object.keys(fileMap).length;
+        if (collected === 0) {
+            throw dirError;
+        }
+        console.warn(`[3DTiles][import] 目录遍历中断，已收集 ${collected} 个文件，继续加载`);
+    }
+    const totalFiles = Object.keys(fileMap).length;
+    if (totalFiles === 0) {
+        throw new Error('未能读取目录中的任何文件，请确认目录非空且包含 tileset.json');
+    }
+    console.warn(`[3DTiles][import] 目录读取完成: ${totalFiles} 个文件`);
     return await loadTilesetFromFileMap({
         fileMap,
         sourceName: dirHandle.name,
@@ -1227,6 +1262,11 @@ export async function importTilesetFromDirectory({ getCesium, getViewer, message
         return await importTilesetFromDirectoryFallback({ getCesium, getViewer, message, loadedDataSources, nextId });
     } catch (error) {
         if (error.name === 'AbortError' || error.name === 'SecurityError') {
+            return null;
+        }
+        // NotFoundError（句柄过期）且已收集到部分文件时不视为致命错误
+        if (error.name === 'NotFoundError') {
+            console.warn('[3DTiles][import] File System Access API 句柄过期，部分文件可能未加载');
             return null;
         }
         message.error(`导入 3D Tiles 目录失败: ${error.message || error}`);

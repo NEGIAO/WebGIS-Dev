@@ -418,6 +418,82 @@
                                             </span>
                                         </div>
                                     </div>
+
+                                    <!-- 自定义 Ion 3D Tiles Asset ID 输入 -->
+                                    <form
+                                        v-if="overlay.hasInput"
+                                        class="custom-ion-asset-editor"
+                                        @submit.prevent="submitCustomIonAsset"
+                                    >
+                                        <div class="custom-ion-asset-input-row">
+                                            <Hash
+                                                class="custom-ion-asset-icon"
+                                                :size="15"
+                                                stroke-width="2"
+                                            />
+                                            <input
+                                                v-model="customIonAssetDraft"
+                                                class="custom-ion-asset-input"
+                                                type="text"
+                                                inputmode="numeric"
+                                                pattern="\d+"
+                                                spellcheck="false"
+                                                placeholder="输入 Ion Asset ID，如 5115505"
+                                            />
+                                            <button
+                                                class="custom-ion-asset-submit"
+                                                type="submit"
+                                                :disabled="!customIonAssetDraft.trim()"
+                                                title="加载自定义 Ion 资源（自动识别 3D Tiles / 影像 / 地形）"
+                                            >
+                                                <Send
+                                                    :size="14"
+                                                    stroke-width="2"
+                                                />
+                                                <span>加载</span>
+                                            </button>
+                                        </div>
+                                        <div class="custom-ion-asset-hint">
+                                            支持 Imagery / Terrain / 3D Tiles，自动识别类型并叠加显示
+                                        </div>
+                                        <div
+                                            v-if="customIonAssetId"
+                                            class="custom-ion-asset-current"
+                                        >
+                                            当前加载: <strong>{{ customIonAssetId }}</strong>
+                                            <template v-if="customIonAssetId === '5115505'">
+                                                （河南大学摄影测量）
+                                            </template>
+                                        </div>
+                                        <!-- 高度 Z 偏移控制 -->
+                                        <div
+                                            v-if="customIonAssetId"
+                                            class="custom-ion-height-offset"
+                                        >
+                                            <label class="height-offset-label">
+                                                高度偏移: <strong>{{ customIonHeightOffset }} m</strong>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                class="height-offset-slider"
+                                                :value="customIonHeightOffset"
+                                                min="-500"
+                                                max="500"
+                                                step="1"
+                                                @input="emit('update:customIonHeightOffset', Number($event.target.value))"
+                                            />
+                                            <div class="height-offset-actions">
+                                                <button
+                                                    type="button"
+                                                    class="height-offset-btn"
+                                                    @click="emit('update:customIonHeightOffset', 0)"
+                                                >
+                                                    重置
+                                                </button>
+                                                <span class="height-offset-hint">范围: -500 ~ +500 m</span>
+                                            </div>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -848,6 +924,7 @@ import {
     FileJson,
     FolderOpen,
     Globe,
+    Hash,
     Home,
     Image,
     Layers,
@@ -883,6 +960,8 @@ const props = defineProps({
     activeBasemap: { type: String, default: '' },
     activeTerrain: { type: String, default: '' },
     customBasemapUrl: { type: String, default: '' },
+    customIonAssetId: { type: String, default: '' },
+    customIonHeightOffset: { type: Number, default: 0 },
     modules: { type: Array, default: () => [] },
     storageKey: { type: String, default: 'cesium_tool_panel_ui' },
     loadedDataSources: { type: Array, default: () => [] },
@@ -954,6 +1033,8 @@ const emit = defineEmits([
     'control-change',
     'overlay-toggle',
     'custom-basemap-submit',
+    'custom-ion-asset-submit',
+    'update:customIonHeightOffset',
     'data-import',
     'data-remove',
     'data-clear-all',
@@ -979,6 +1060,7 @@ const expandedModuleIds = ref(
     new Set(shouldRestoreExpansionState ? storedUiState.expandedModuleIds || [] : []),
 );
 const customBasemapDraft = ref(props.customBasemapUrl || '');
+const customIonAssetDraft = ref(props.customIonAssetId || '');
 const fileInputRef = ref(null);
 
 const supportedFormats =
@@ -1031,6 +1113,15 @@ watch(
     },
 );
 
+watch(
+    () => props.customIonAssetId,
+    (id) => {
+        if (id !== customIonAssetDraft.value) {
+            customIonAssetDraft.value = id || '';
+        }
+    },
+);
+
 function setPanelOpen(value) {
     emit('update:open', value);
 }
@@ -1070,6 +1161,10 @@ function selectBasemapOption(option) {
 
 function submitCustomBasemap() {
     emit('custom-basemap-submit', { url: customBasemapDraft.value });
+}
+
+function submitCustomIonAsset() {
+    emit('custom-ion-asset-submit', { assetId: customIonAssetDraft.value });
 }
 
 function readStoredUiState() {
@@ -1711,6 +1806,124 @@ function emitSetMaterial(sourceId, mode) {
     font-size: 10px;
     color: rgba(var(--ctp-ice-text-rgb), 0.5);
     word-break: break-all;
+}
+
+.custom-ion-asset-editor {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+    border: 1px solid rgba(var(--ctp-ice-rgb), 0.14);
+    border-radius: 7px;
+    padding: 8px;
+    background: rgba(var(--ctp-white-rgb), 0.045);
+}
+
+.custom-ion-asset-input-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+}
+
+.custom-ion-asset-icon {
+    color: rgba(var(--ctp-ice-text-rgb), 0.6);
+}
+
+.custom-ion-asset-input {
+    height: 30px;
+    border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
+    border-radius: 6px;
+    background: rgba(var(--ctp-input-bg-rgb), 0.88);
+    color: var(--ctp-text);
+    padding: 0 8px;
+    font-size: 11px;
+}
+
+.custom-ion-asset-submit {
+    height: 30px;
+    padding: 0 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(var(--ctp-green-alt-rgb), 0.42);
+    border-radius: 6px;
+    background: rgba(var(--ctp-submit-rgb), 0.76);
+    color: var(--ctp-submit-text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.custom-ion-asset-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.custom-ion-asset-hint {
+    font-size: 10px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.4);
+    line-height: 1.4;
+}
+
+.custom-ion-asset-current {
+    font-size: 10px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.5);
+    word-break: break-all;
+}
+
+.custom-ion-asset-current strong {
+    color: rgba(var(--ctp-ice-text-rgb), 0.75);
+}
+
+/* 高度 Z 偏移控制 */
+.custom-ion-height-offset {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: rgba(var(--ctp-ice-text-rgb), 0.05);
+}
+
+.height-offset-label {
+    font-size: 10px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.6);
+}
+
+.height-offset-label strong {
+    color: rgba(var(--ctp-ice-text-rgb), 0.85);
+}
+
+.height-offset-slider {
+    width: 100%;
+    cursor: pointer;
+}
+
+.height-offset-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.height-offset-btn {
+    font-size: 10px;
+    padding: 1px 8px;
+    border: 1px solid rgba(var(--ctp-ice-text-rgb), 0.2);
+    border-radius: 3px;
+    background: transparent;
+    color: rgba(var(--ctp-ice-text-rgb), 0.6);
+    cursor: pointer;
+}
+
+.height-offset-btn:hover {
+    border-color: rgba(var(--ctp-ice-text-rgb), 0.4);
+    color: rgba(var(--ctp-ice-text-rgb), 0.85);
+}
+
+.height-offset-hint {
+    font-size: 9px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.3);
 }
 
 /* 叠加层 (Overlay Card) */

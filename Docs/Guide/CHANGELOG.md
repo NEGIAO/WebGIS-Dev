@@ -6,9 +6,9 @@
 
 ## 版本记录
 
-### V3.5.15 (2026-08-06) — Code Review 整改 · 下载链路修复 · 配额提示 · 后端兜底加固
+### V3.5.15 (2026-08-06 ~ 2026-08-07) — Code Review 整改 · 下载链路 · 配额提示 · 自定义 Ion · 默认模型 · 大目录容错
 
-> 基于暂存区全面 Code Review 的 P1/P2 整改，重点修复下载链路（浏览器托管默认 + 自动下载非弹窗拦截），并加固 Chat 前端配额提示与后端兜底逻辑。详见[日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-v3.5.15-fix-review-and-download.md)。
+> 综合版本：基于暂存区全面 Code Review 的 P1/P2 整改（下载链路、Chat 配额、后端兜底），新增自定义 Cesium Ion 资源加载 UI（自动识别 imagery/terrain/3D Tiles）+ 高度偏移滑块，默认样例模型更换为河南大学摄影测量数据（Ion asset 5115505，原始材质），本地 4351 文件目录 File System Access API 容错，WMTS 大写占位符兼容。详见[日志](Docs/LLM_record/26-08/2026-08-07/2026-08-07-v3.5.15-consolidated.md)。
 
 #### 前端 — 下载链路
 
@@ -32,6 +32,25 @@
 - `Dockerfile`：entrypoint 改用 `sudo /usr/sbin/cron` 启动 cron 守护进程，修复非 root `user` 下 `cron` 静默失败（sudoers 规则已存在但未使用）。
 - `api/api_management.py`：`_ensure_api_log_table_sync` 兜底创建 `api_usage_daily` 表，避免该模块先于 auth 初始化时查询报错。
 - `api/agent_chat/routes.py`：`_get_agent_tokens_per_unit` 在 system_config 无记录时回退到 `get_int("AGENT_TOKENS_PER_UNIT")`（env/catalog 默认），移除写死的 `DEFAULT_AGENT_TOKENS_PER_UNIT` 常量。
+
+#### 前端 — 自定义 Cesium Ion 资源
+- `CesiumToolPanel.vue`：新增自定义 Ion Asset ID 输入 UI（输入框 + 提交按钮 + 当前状态显示 + 高度偏移滑块 -500~+500m）。
+- `useCesiumLayers.js`：`ensureCustomIonLayer()` 三阶段自动识别（3D Tiles → 地形 → 影像），默认值 `'5115505'`，叠加模式（不隐藏底图，影像 alpha=0.7）；`handleCustomIonAssetSubmit` 修复 overlay 已开启时切换 asset 不触发 reload 的 bug；`clearCustomIonLayer` 地形回退改为恢复 `activeTerrain` 对应 Provider。
+
+#### 前端 — 默认样例模型
+- `tilesetLoader.js`：`loadSampleTileset` 从本地 `public/tileset/city/tileset.json` 改为 `fromIonAssetId(5115505)`，默认材质 `'none'`（原始纹理）；补充 `rootJsonUrl` 传入 `fitTilesetToTerrain` 提升贴地精度。
+
+#### 前端 — 本地大目录容错
+- `tilesetLoader.js`：`readDirRecursive` 双层 try-catch（单文件失败跳过不中断）；`importTilesetFromDirectoryNative` 部分收集成功时继续加载；`NotFoundError` 不弹窗；精简诊断日志（4 条 → 1 条汇总）。
+
+#### 前端 — WMTS 兼容
+- `basemapProviderFactory.ts`：WMTS 大写占位符转换（`{TILEMATRIX}`→`{z}`、`{TILEROW}`→`{y}`、`{TILECOL}`→`{x}`）；`{s}` 默认子域名从字母 `['a','b','c']` 改为数字 `['0','1','2']`（适配天地图/OSM/高德等主流服务）。
+
+#### 前端 — Code Review 整改
+- `tilesetLoader.js`：移除诊断性 blob URL 拦截器（`installBlobUrlInterceptor` / `installBlobImageInterceptor` / `installBlobFetchInterceptor`）及全局 `window.fetch` 替换。
+- `useCesiumDataImport.js`：移除已废弃的 `_restoreResourceFetches` 清理逻辑。
+- `useCesiumLayers.js`：移除 `customIonHeightOffset` watch 中冗余的 `originMatrix` 双处设置。
+- `README.md`：修复「作者与托管」标题行尾多余空格。
 
 ### V3.5.14 (2026-08-06) — 综合版本：Agent 配额体系 · 配额池统计 · 下载增强 · 保活运维 · 错误处理重构
 

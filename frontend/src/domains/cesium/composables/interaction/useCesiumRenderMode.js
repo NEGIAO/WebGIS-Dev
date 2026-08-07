@@ -24,7 +24,7 @@
  * true = 计数归零时切入 requestRenderMode 按需渲染（P2 起生效，用户授权开启）；
  * 出现「该动的不动 / 画面不刷新」类回归时，改回 false 即整体回退恒连续渲染。
  */
-export const ENABLE_REQUEST_RENDER_MODE = true;
+export const ENABLE_REQUEST_RENDER_MODE = false;
 
 /**
  * 按需模式下允许的最大模拟时间跳变（秒）。

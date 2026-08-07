@@ -38,16 +38,19 @@
         v-model:open="cesiumToolPanelOpen"
         v-model:active-basemap="activeBasemap"
         v-model:active-terrain="activeTerrain"
+        v-model:custom-ion-height-offset="customIonHeightOffset"
         :basemap-options="basemapOptions"
         :terrain-options="terrainOptions"
         :overlay-options="overlayOptions"
         :custom-basemap-url="customXyzBasemapUrl"
+        :custom-ion-asset-id="customIonAssetId"
         :modules="toolModules"
         :loaded-data-sources="loadedDataSourcesForPanel"
         @module-action="handleToolAction"
         @control-change="handleToolControlChange"
         @overlay-toggle="handleOverlayToggle"
         @custom-basemap-submit="handleCustomBasemapSubmit"
+        @custom-ion-asset-submit="handleCustomIonAssetSubmit"
         @data-import="handleDataImport"
         @data-remove="handleDataRemove"
         @data-clear-all="handleDataClearAll"
@@ -106,7 +109,10 @@
     </div>
 
     <!-- 坐标显示面板（固定右下角，只显示文字） -->
-    <div v-if="bootComplete" class="coordinate-display">{{ activeCoordinateDisplay }}</div>
+    <div
+        v-if="bootComplete"
+        class="coordinate-display"
+    >{{ activeCoordinateDisplay }}</div>
 
 </template>
 
@@ -204,6 +210,8 @@ const {
     activeBasemap,
     activeTerrain,
     customXyzBasemapUrl,
+    customIonAssetId,
+    customIonHeightOffset,
     basemapOptions,
     terrainOptions,
     overlayOptions,
@@ -216,6 +224,7 @@ const {
     initCustomTerrain,
     handleOverlayToggle,
     handleCustomBasemapSubmit,
+    handleCustomIonAssetSubmit,
     cleanupLayers,
 } = layers;
 
@@ -902,7 +911,7 @@ function initViewer() {
     const terrainProviderViewModels = createTerrainProviderViewModels();
     viewer = new mapCtor('cesiumContainer', {
         baseLayerPicker: true,
-        geocoder: Cesium.IonGeocodeProviderType?.GOOGLE || true,
+        geocoder: true,
         homeButton: true,
         infoBox: true,
         selectionIndicator: true,
@@ -1033,8 +1042,8 @@ onUnmounted(() => {
     heightSampler.cleanup();
 
     // 清理共享地形 Worker 池（释放 Worker 线程资源）
-    import('../providers/terrain/ArcGISTerrainProvider.js').then((m) => m.destroySharedLercPool?.()).catch(() => {});
-    import('../providers/terrain/GeoTerrainProvider.js').then((m) => m.destroySharedGeoDecodePool?.()).catch(() => {});
+    import('../providers/terrain/ArcGISTerrainProvider.js').then((m) => m.destroySharedLercPool?.()).catch(() => { });
+    import('../providers/terrain/GeoTerrainProvider.js').then((m) => m.destroySharedGeoDecodePool?.()).catch(() => { });
 
     // 清理体积云
     if (cloudCleanup) {
@@ -1182,7 +1191,7 @@ watch(
 
 @media (max-width: 767px) {
     .coordinate-display {
-        bottom: 18px;
+        bottom: 28px;
         right: 12px;
         max-width: calc(100vw - 24px);
         line-height: 1.6;
@@ -1212,7 +1221,7 @@ watch(
    上不碰工具栏行（约 y≤52），下不碰罗盘（y≥100）；z 用 --z-panel 且
    pointer-events:none，任何侧栏/下拉都盖在它上面，永不遮挡交互 */
 :global(.cesium-performanceDisplay-defaultContainer) {
-    top: 68px !important;
+    top: 50px !important;
     right: 10px !important;
     text-align: right;
     pointer-events: none;
