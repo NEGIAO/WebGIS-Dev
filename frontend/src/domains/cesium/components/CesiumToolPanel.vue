@@ -465,6 +465,34 @@
                                                 （河南大学摄影测量）
                                             </template>
                                         </div>
+                                        <!-- 高度 Z 偏移控制 -->
+                                        <div
+                                            v-if="customIonAssetId"
+                                            class="custom-ion-height-offset"
+                                        >
+                                            <label class="height-offset-label">
+                                                高度偏移: <strong>{{ customIonHeightOffset }} m</strong>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                class="height-offset-slider"
+                                                :value="customIonHeightOffset"
+                                                min="-500"
+                                                max="500"
+                                                step="1"
+                                                @input="emit('update:customIonHeightOffset', Number($event.target.value))"
+                                            />
+                                            <div class="height-offset-actions">
+                                                <button
+                                                    type="button"
+                                                    class="height-offset-btn"
+                                                    @click="emit('update:customIonHeightOffset', 0)"
+                                                >
+                                                    重置
+                                                </button>
+                                                <span class="height-offset-hint">范围: -500 ~ +500 m</span>
+                                            </div>
+                                        </div>
                                     </form>
                                 </div>
                             </div>
@@ -933,6 +961,7 @@ const props = defineProps({
     activeTerrain: { type: String, default: '' },
     customBasemapUrl: { type: String, default: '' },
     customIonAssetId: { type: String, default: '' },
+    customIonHeightOffset: { type: Number, default: 0 },
     modules: { type: Array, default: () => [] },
     storageKey: { type: String, default: 'cesium_tool_panel_ui' },
     loadedDataSources: { type: Array, default: () => [] },
@@ -1005,6 +1034,7 @@ const emit = defineEmits([
     'overlay-toggle',
     'custom-basemap-submit',
     'custom-ion-asset-submit',
+    'update:customIonHeightOffset',
     'data-import',
     'data-remove',
     'data-clear-all',
@@ -1843,6 +1873,57 @@ function emitSetMaterial(sourceId, mode) {
 
 .custom-ion-asset-current strong {
     color: rgba(var(--ctp-ice-text-rgb), 0.75);
+}
+
+/* 高度 Z 偏移控制 */
+.custom-ion-height-offset {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: rgba(var(--ctp-ice-text-rgb), 0.05);
+}
+
+.height-offset-label {
+    font-size: 10px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.6);
+}
+
+.height-offset-label strong {
+    color: rgba(var(--ctp-ice-text-rgb), 0.85);
+}
+
+.height-offset-slider {
+    width: 100%;
+    cursor: pointer;
+}
+
+.height-offset-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.height-offset-btn {
+    font-size: 10px;
+    padding: 1px 8px;
+    border: 1px solid rgba(var(--ctp-ice-text-rgb), 0.2);
+    border-radius: 3px;
+    background: transparent;
+    color: rgba(var(--ctp-ice-text-rgb), 0.6);
+    cursor: pointer;
+}
+
+.height-offset-btn:hover {
+    border-color: rgba(var(--ctp-ice-text-rgb), 0.4);
+    color: rgba(var(--ctp-ice-text-rgb), 0.85);
+}
+
+.height-offset-hint {
+    font-size: 9px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.3);
 }
 
 /* 叠加层 (Overlay Card) */

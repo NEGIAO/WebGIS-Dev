@@ -41,7 +41,9 @@ function installBlobUrlInterceptor(Cesium, blobUrlMap) {
 
     Resource.fetchArrayBuffer = function (options) {
         const requestUrl = typeof options === 'string' ? options : options?.url || '';
-        return originalFetchArrayBuffer(options).catch((error) => {
+        const result = originalFetchArrayBuffer(options);
+        if (!result) return result;
+        return result.catch((error) => {
             // 从请求 URL 中提取文件名，尝试在 blobUrlMap 中匹配
             const fileName = requestUrl.split('/').pop()?.split('?')[0];
             if (!fileName) throw error;
@@ -80,7 +82,9 @@ function installBlobImageInterceptor(Cesium, blobUrlMap) {
 
     Resource.fetchImage = function (options) {
         const requestUrl = typeof options === 'string' ? options : options?.url || '';
-        return originalFetchImage(options).catch((error) => {
+        const result = originalFetchImage(options);
+        if (!result) return result;
+        return result.catch((error) => {
             const fileName = requestUrl.split('/').pop()?.split('?')[0];
             if (!fileName) throw error;
 

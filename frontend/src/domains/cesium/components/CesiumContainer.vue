@@ -38,6 +38,7 @@
         v-model:open="cesiumToolPanelOpen"
         v-model:active-basemap="activeBasemap"
         v-model:active-terrain="activeTerrain"
+        v-model:custom-ion-height-offset="customIonHeightOffset"
         :basemap-options="basemapOptions"
         :terrain-options="terrainOptions"
         :overlay-options="overlayOptions"
@@ -108,7 +109,10 @@
     </div>
 
     <!-- 坐标显示面板（固定右下角，只显示文字） -->
-    <div v-if="bootComplete" class="coordinate-display">{{ activeCoordinateDisplay }}</div>
+    <div
+        v-if="bootComplete"
+        class="coordinate-display"
+    >{{ activeCoordinateDisplay }}</div>
 
 </template>
 
@@ -207,6 +211,7 @@ const {
     activeTerrain,
     customXyzBasemapUrl,
     customIonAssetId,
+    customIonHeightOffset,
     basemapOptions,
     terrainOptions,
     overlayOptions,
@@ -906,7 +911,7 @@ function initViewer() {
     const terrainProviderViewModels = createTerrainProviderViewModels();
     viewer = new mapCtor('cesiumContainer', {
         baseLayerPicker: true,
-        geocoder: Cesium.IonGeocodeProviderType?.GOOGLE || true,
+        geocoder: true,
         homeButton: true,
         infoBox: true,
         selectionIndicator: true,
@@ -1037,8 +1042,8 @@ onUnmounted(() => {
     heightSampler.cleanup();
 
     // 清理共享地形 Worker 池（释放 Worker 线程资源）
-    import('../providers/terrain/ArcGISTerrainProvider.js').then((m) => m.destroySharedLercPool?.()).catch(() => {});
-    import('../providers/terrain/GeoTerrainProvider.js').then((m) => m.destroySharedGeoDecodePool?.()).catch(() => {});
+    import('../providers/terrain/ArcGISTerrainProvider.js').then((m) => m.destroySharedLercPool?.()).catch(() => { });
+    import('../providers/terrain/GeoTerrainProvider.js').then((m) => m.destroySharedGeoDecodePool?.()).catch(() => { });
 
     // 清理体积云
     if (cloudCleanup) {
