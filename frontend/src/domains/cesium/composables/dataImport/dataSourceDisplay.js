@@ -25,10 +25,21 @@ const vectorColorSnapshots = new WeakMap();
  */
 const tilesetAppearanceState = new WeakMap();
 
-function getTilesetState(tileset) {
+/**
+ * 获取 tileset 外观状态，不存在时按 record 当前值初始化（避免默认 'none' 与 UI 脱节）
+ * @param {object} tileset - Cesium3DTileset 实例
+ * @param {object} [record] - loadedDataSources 记录（用于读取初始 materialMode）
+ * @returns {{ mode: string, alpha: number }}
+ */
+function getTilesetState(tileset, record) {
     let state = tilesetAppearanceState.get(tileset);
     if (!state) {
-        state = { mode: 'none', alpha: 1 };
+        // 初值以 record 为准（materialMode 与 opacity）：避免「首次拖拽即回弹」与 UI 脱节
+        const fromRecord = Number(record?.opacity);
+        state = {
+            mode: record?.materialMode || 'none',
+            alpha: Number.isFinite(fromRecord) ? Math.min(1, Math.max(0, fromRecord)) : 1,
+        };
         tilesetAppearanceState.set(tileset, state);
     }
     return state;
@@ -41,9 +52,9 @@ function getTilesetState(tileset) {
  * @param {string} mode - MATERIAL_MODES 的 key
  */
 export function setTilesetMaterialMode(Cesium, record, mode) {
-    const entity = toRaw(record?.entity);
+    const entity = toRaw(record?.tileset || record?.entity);
     if (!Cesium || !entity) return;
-    const state = getTilesetState(entity);
+    const state = getTilesetState(entity, record);
     state.mode = String(mode || 'none');
     applyTilesetMaterial(entity, state.mode, Cesium, state.alpha);
 }
@@ -78,7 +89,7 @@ export function setRecordVisible(Cesium, record, visible) {
  * @param {Function} [onApplied] - 矢量类 rAF 合并应用后的回调（用于补 requestRender）
  */
 export function setRecordOpacity(Cesium, record, opacity, onApplied) {
-    const entity = toRaw(record?.entity);
+    const entity = toRaw(record?.tileset || record?.entity);
     if (!Cesium || !entity) return;
     const alpha = Math.min(1, Math.max(0, Number(opacity) || 0));
 
@@ -93,7 +104,7 @@ export function setRecordOpacity(Cesium, record, opacity, onApplied) {
             break;
         case '3dtiles': {
             // P1-2 单点合成：透明度变化时保留当前材质模式一并重建外观
-            const state = getTilesetState(entity);
+            const state = getTilesetState(entity, record);
             state.alpha = alpha;
             applyTilesetMaterial(entity, state.mode, Cesium, state.alpha);
             break;

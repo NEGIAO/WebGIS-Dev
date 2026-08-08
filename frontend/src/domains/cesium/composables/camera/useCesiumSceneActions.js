@@ -33,36 +33,8 @@ export function useCesiumSceneActions({ getViewer, getCesium, message }) {
         });
     }
 
-    async function loadCustomTileset() {
-        const viewer = getViewer?.();
-        const Cesium = getCesium?.();
-        if (!viewer || !Cesium) return;
-
-        try {
-            const tileset = await Cesium.Cesium3DTileset.fromUrl(
-                'https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/master/1.0/TilesetWithDiscreteLOD/tileset.json',
-            );
-            viewer.scene.primitives.add(tileset);
-            viewer.flyTo(tileset, {
-                duration: 3,
-                offset: new Cesium.HeadingPitchRange(
-                    Cesium.Math.toRadians(0.0),
-                    Cesium.Math.toRadians(-25.0),
-                    tileset.boundingSphere.radius * 2.5,
-                ),
-            });
-        } catch (error) {
-            message.error(`加载模型失败: ${error}`);
-            message.error('加载3D模型失败，可能是网络原因无法访问 GitHub 资源。', {
-                closable: true,
-                duration: 6500,
-            });
-        }
-    }
-
     return {
         flyToHome,
         flyToEverest,
-        loadCustomTileset,
     };
 }

@@ -43,14 +43,14 @@
         :terrain-options="terrainOptions"
         :overlay-options="overlayOptions"
         :custom-basemap-url="customXyzBasemapUrl"
-        :custom-ion-asset-id="customIonAssetId"
+        :custom-ion-tileset-ready="customIonTilesetReady"
         :modules="toolModules"
         :loaded-data-sources="loadedDataSourcesForPanel"
         @module-action="handleToolAction"
         @control-change="handleToolControlChange"
         @overlay-toggle="handleOverlayToggle"
         @custom-basemap-submit="handleCustomBasemapSubmit"
-        @custom-ion-asset-submit="handleCustomIonAssetSubmit"
+        @remote-service-submit="handleRemoteServiceSubmit"
         @data-import="handleDataImport"
         @data-remove="handleDataRemove"
         @data-clear-all="handleDataClearAll"
@@ -60,7 +60,7 @@
         @data-set-height="handleDataSetHeight"
         @import-tileset-zip="handleImportTilesetZip"
         @import-tileset-folder="handleImportTilesetFolder"
-        @import-tileset-sample="handleImportTilesetSample"
+        @import-tileset-sample="(payload) => handleImportTilesetSample(payload)"
         @data-set-material="handleDataSetMaterial"
     />
 
@@ -197,6 +197,17 @@ const getCesium = () => Cesium || window.Cesium;
 const getTiandituToken = () => runtimeMapTokens.value.tiandituTk;
 const getCesiumIonToken = () => runtimeMapTokens.value.cesiumIonToken;
 
+// heightSampler 必须在 dataImport 之前声明（useCesiumDataImport 依赖它）
+const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
+
+// dataImport 必须在 useCesiumLayers 之前声明（远程服务加载需注册数据源）
+const dataImport = useCesiumDataImport({
+    getViewer,
+    getCesium,
+    message,
+    heightSampler,
+});
+
 const layers = useCesiumLayers({
     getViewer,
     getCesium,
@@ -204,14 +215,15 @@ const layers = useCesiumLayers({
     backendBaseUrl: BACKEND_BASE_URL,
     tiandituToken: getTiandituToken,
     cesiumIonToken: getCesiumIonToken,
+    dataImport,
 });
 
 const {
     activeBasemap,
     activeTerrain,
     customXyzBasemapUrl,
-    customIonAssetId,
     customIonHeightOffset,
+    customIonTilesetReady,
     basemapOptions,
     terrainOptions,
     overlayOptions,
@@ -224,7 +236,7 @@ const {
     initCustomTerrain,
     handleOverlayToggle,
     handleCustomBasemapSubmit,
-    handleCustomIonAssetSubmit,
+    handleRemoteServiceSubmit,
     cleanupLayers,
 } = layers;
 
@@ -275,17 +287,9 @@ const wind = useCesiumWind({
 // ==========================================
 const modelManager = useCesiumModelManager({ getViewer, getCesium, message });
 const cameraEnhanced = useCesiumCameraEnhanced({ getViewer, getCesium });
-const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
 
 // B4：相机视域 → 属性表「视图筛选范围」同步（moveEnd 喂 attrStore，3D 模式视图筛选生效）
 const attrViewExtentSync = createCesiumAttrViewExtentSync({ getViewer, getCesium });
-
-const dataImport = useCesiumDataImport({
-    getViewer,
-    getCesium,
-    message,
-    heightSampler,
-});
 
 // ==========================================
 // 统一图层管理：元数据店同步 + 场景操作 adapter
@@ -313,15 +317,26 @@ watch(
 cesiumLayersStore.registerAdapter({
     setVisible(id, visible) {
         const record = findImportRecord(id);
-        if (!record) return;
+        if (!record) {
+            console.warn('[CesiumContainer] setVisible 找不到句柄记录', { id, visible });
+            return;
+        }
         setRecordVisible(getCesium(), record, visible);
         getViewer()?.scene?.requestRender?.();
     },
     setOpacity(id, opacity) {
         const record = findImportRecord(id);
-        if (!record) return;
+        if (!record) {
+            console.warn('[CesiumContainer] setOpacity 找不到句柄记录', { id, opacity });
+            return;
+        }
+        const Cesium = getCesium();
+        if (!Cesium) {
+            console.warn('[CesiumContainer] setOpacity 场景未就绪（Cesium 命名空间缺失）', { id, opacity });
+            return;
+        }
         // 矢量类经 rAF 合并异步应用，onApplied 补一次渲染保证按需渲染模式即时生效
-        setRecordOpacity(getCesium(), record, opacity, () => {
+        setRecordOpacity(Cesium, record, opacity, () => {
             getViewer()?.scene?.requestRender?.();
         });
         getViewer()?.scene?.requestRender?.();
@@ -526,6 +541,258 @@ async function setBasemapById(presetId) {
     return activeBasemap.value === normalizedPresetId;
 }
 
+/**
+ * 根据 adcode 加载行政区边界到 Cesium 场景。
+ * 数据来源与 OL 端一致（阿里云 DataV），坐标同样做 GCJ-02 → WGS-84 转换。
+ * @param {Object} payload
+ * @param {string} payload.adcode - 6 位行政区代码
+ * @param {string} [payload.name] - 行政区名称
+ * @returns {Promise<boolean>} 是否成功加载
+ */
+async function focusDistrictByAdcode(payload = {}) {
+    const adcode = String(payload?.adcode || payload?.value || '').trim();
+    const districtName = String(payload?.name || payload?.label || '').trim() || `行政区-${adcode}`;
+
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) {
+        message.warning('Cesium 尚未初始化');
+        return false;
+    }
+
+    const { gcj02ToWgs84 } = await import('@common/data-import/crs/coordTransform');
+
+    const endpoint = 'https://geo.datav.aliyun.com/areas_v3/bound';
+    const sourceUrl = `${endpoint}/${adcode}.json`;
+
+    try {
+        const response = await fetch(sourceUrl, {
+            method: 'GET',
+            referrerPolicy: 'no-referrer',
+        });
+
+        if (!response.ok) {
+            message.warning(`行政区边界请求失败（${response.status}）`);
+            return false;
+        }
+
+        const rawGeoJSON = await response.json();
+
+        // 递归转换坐标：GCJ-02 → WGS-84
+        function transformCoords(coords) {
+            if (!Array.isArray(coords)) return coords;
+            if (coords.length >= 2 && Number.isFinite(coords[0]) && Number.isFinite(coords[1])) {
+                const [lon, lat] = gcj02ToWgs84(coords[0], coords[1]);
+                return [lon, lat, ...(coords.length > 2 ? coords.slice(2) : [])];
+            }
+            return coords.map(transformCoords);
+        }
+
+        function transformGeometry(geom) {
+            if (!geom || typeof geom !== 'object') return geom;
+            if (geom.type === 'GeometryCollection') {
+                return { ...geom, geometries: (geom.geometries || []).map(transformGeometry) };
+            }
+            if ('coordinates' in geom) {
+                return { ...geom, coordinates: transformCoords(geom.coordinates) };
+            }
+            return geom;
+        }
+
+        const features = Array.isArray(rawGeoJSON?.features)
+            ? rawGeoJSON.features
+            : rawGeoJSON?.type === 'Feature' ? [rawGeoJSON] : [];
+
+        if (!features.length) {
+            message.warning('当前行政区没有可绘制边界要素');
+            return false;
+        }
+
+        const wgs84GeoJSON = {
+            type: 'FeatureCollection',
+            features: features.map((f) => ({
+                ...f,
+                geometry: transformGeometry(f?.geometry),
+            })),
+        };
+
+        const dataSource = await Cesium.GeoJsonDataSource.load(wgs84GeoJSON, {
+            clampToGround: true,
+            stroke: Cesium.Color.fromCssColorString('#21bcff'),
+            fill: Cesium.Color.fromCssColorString('#21bcff').withAlpha(0.15),
+            markerColor: Cesium.Color.fromCssColorString('#21bcff'),
+            markerSize: 24,
+        });
+
+        dataSource.name = districtName;
+        await viewer.dataSources.add(dataSource);
+
+        // 注册到统一数据源管理（可通过 ToolPanel 控制显隐 / 删除）
+        if (dataImport?.registerExternalDataSource) {
+            dataImport.registerExternalDataSource({
+                name: districtName,
+                entity: dataSource,
+                type: 'geojson',
+            });
+        }
+
+        // 飞行定位
+        const entities = dataSource.entities.values;
+        if (entities.length) {
+            await viewer.flyTo(entities, {
+                duration: 1.2,
+                maximumHeight: 50000,
+            });
+        }
+
+        message.success(`已定位到行政区：${districtName}`);
+        return true;
+    } catch (error) {
+        console.error('[Cesium] 行政区加载失败:', error);
+        message.error(`行政区加载失败: ${error?.message || error}`);
+        return false;
+    }
+}
+
+// ========== 逆地理编码标注（地图选点） ==========
+
+/** 标注模式激活标志 */
+const isReverseGeocodePickMode = ref(false);
+/** 选点模式的 ScreenSpaceEventHandler 回调引用（用于注销） */
+let reverseGeocodeClickHandler = null;
+
+/**
+ * 激活 / 退出逆地理编码标注模式。
+ * 激活后，用户在地球上单击一点，系统自动逆地理编码并放置标注点。
+ */
+async function toggleReverseGeocodePick() {
+    if (isReverseGeocodePickMode.value) {
+        // 退出标注模式
+        isReverseGeocodePickMode.value = false;
+        if (reverseGeocodeClickHandler) {
+            reverseGeocodeClickHandler();
+            reverseGeocodeClickHandler = null;
+        }
+        message.info('已退出标注模式');
+        return;
+    }
+
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) {
+        message.warning('Cesium 尚未初始化');
+        return;
+    }
+
+    isReverseGeocodePickMode.value = true;
+    message.info('请在地球上单击一个点，系统将自动逆地理编码并绘制。', {
+        closable: true,
+        duration: 4500,
+    });
+
+    // 动态导入逆地理编码 API
+    const { apiReverseGeocodeWithFallback } = await import('@/api');
+
+    // 注册一次性点击回调
+    const canvas = viewer.scene.canvas;
+    const handler = new Cesium.ScreenSpaceEventHandler(canvas);
+
+    reverseGeocodeClickHandler = handler.setInputAction(async (click) => {
+        // 立即退出选点模式（避免重复触发）
+        isReverseGeocodePickMode.value = false;
+        reverseGeocodeClickHandler = null;
+        handler.destroy();
+
+        try {
+            // 拾取 WGS-84 坐标
+            const cartesian = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+            let lng, lat;
+
+            if (cartesian) {
+                const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+                lng = Cesium.Math.toDegrees(cartographic.longitude);
+                lat = Cesium.Math.toDegrees(cartographic.latitude);
+            } else {
+                // fallback: globe.pick
+                const ray = viewer.camera.getPickRay(click.position);
+                const globePos = viewer.scene.globe.pick(ray, viewer.scene);
+                if (!globePos) {
+                    message.warning('无法获取点击位置的坐标');
+                    return;
+                }
+                const cartographic = Cesium.Cartographic.fromCartesian(globePos);
+                lng = Cesium.Math.toDegrees(cartographic.longitude);
+                lat = Cesium.Math.toDegrees(cartographic.latitude);
+            }
+
+            // 逆地理编码（WGS-84 输入）
+            let reverseResult = null;
+            try {
+                const reverseResponse = await apiReverseGeocodeWithFallback(lng, lat, { silent: true });
+                reverseResult = reverseResponse?.data || null;
+            } catch {
+                reverseResult = null;
+            }
+
+            const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
+            const label = formattedAddress || `标注点_${lng.toFixed(6)}_${lat.toFixed(6)}`;
+
+            // 用 CustomDataSource 包装标注点，便于统一数据源管理
+            const markDataSource = new Cesium.CustomDataSource(label);
+            markDataSource.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(lng, lat, 0),
+                point: {
+                    pixelSize: 12,
+                    color: Cesium.Color.fromCssColorString('#21bcff'),
+                    outlineColor: Cesium.Color.WHITE,
+                    outlineWidth: 2,
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                },
+                label: {
+                    text: label,
+                    font: '600 13px "Microsoft YaHei", sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 3,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    pixelOffset: new Cesium.Cartesian2(0, -16),
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                },
+                // 存储逆地理编码信息供后续查看
+                properties: {
+                    来源: '逆地理编码标注',
+                    地址: formattedAddress || '未解析',
+                    经度: lng,
+                    纬度: lat,
+                    省: String(reverseResult?.province || '').trim() || '未知',
+                    市: String(reverseResult?.city || '').trim() || '未知',
+                    区县: String(reverseResult?.district || '').trim() || '未知',
+                },
+            });
+            await viewer.dataSources.add(markDataSource);
+
+            // 注册到统一数据源管理（可通过 ToolPanel 控制显隐 / 删除）
+            if (dataImport?.registerExternalDataSource) {
+                dataImport.registerExternalDataSource({
+                    name: label,
+                    entity: markDataSource,
+                    type: 'geojson',
+                });
+            }
+
+            if (formattedAddress) {
+                message.success(`逆地理编码成功：${formattedAddress}`);
+            } else {
+                message.info('已放置标注点（逆地理编码未返回结果）');
+            }
+        } catch (error) {
+            console.error('[Cesium] 逆地理编码选点失败:', error);
+            message.warning(`逆地理编码选点失败: ${error?.message || error}`);
+        }
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+}
+
 defineExpose({
     getViewer,
     getCesium,
@@ -537,6 +804,9 @@ defineExpose({
     cameraEnhanced,
     heightSampler,
     playerController,
+    focusDistrictByAdcode,
+    isReverseGeocodePickMode,
+    toggleReverseGeocodePick,
 });
 
 /**

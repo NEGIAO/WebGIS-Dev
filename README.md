@@ -79,7 +79,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.15），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.16），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -398,10 +398,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.15** | 2026-08-06 ~ 2026-08-07 | 下载链路整改（浏览器托管默认 + 自动下载非弹窗拦截、basemap_name 回填、配额文案 i18n、bbox 双估算去重、store 死代码/定时器清理）、Chat 前端配额提示（429 二次轮询判定、lastCallCost 重置、硬编码中文 i18n）、杂项前端（定位静默门禁、管理员 loading 门禁、BusPlanner 死条件）、后端兜底加固（Dockerfile cron sudo、api_usage_daily 表守卫、agent_tokens env 回退）；自定义 Cesium Ion 资源加载 UI（输入框 + 自动识别 imagery/terrain/3D Tiles）+ 高度偏移滑块；默认样例模型更换为河南大学摄影测量数据（Ion asset 5115505，原始材质保留纹理）；本地大目录（4351 文件）File System Access API 容错（跳过过期句柄不中断）；WMTS 大写占位符兼容（{TILEMATRIX}→{z}）+ 子域名默认值改为数字（t0-t2）。详见[日志](Docs/LLM_record/26-08/2026-08-07/2026-08-07-v3.5.15-consolidated.md) |
-| **V3.5.14** | 2026-08-06 | 综合版本：Agent 配额体系（仅成功按 token 扣费、超限封顶、tokens_per_unit 管理员配置、前端额度展示对齐）、配额池按用户统计、下载任务底图名称、HF Space 双向保活运维、console.error→message 错误处理重构 + 结构化 detail_code 透传。详见[日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-v3.5.14-consolidated.md) |
-| **V3.5.13** | 2026-08-05 | 下载系统综合改动：①移除 download_token（改用会话认证 Blob 下载）；②统一 API 配额池（下载消耗=ceil(tile_count/tiles_per_unit)，预扣+多退少补）；③下载任务绑定账号（支持"我的任务"列表）；④TTL 动态配置（管理员可调，基于 updated_at 续命）；⑤前端新增 MyDownloadTasks 组件（独立显示过期提示、进度条、任务操作）；⑥ axios 拦截器增加 blob 错误解析（parseBlobError）；⑦结构树漂移修复 + Code Review。详见[日志](Docs/LLM_record/26-08/2026-08-05/2026-08-05-download-quota-system.md) |
-| **V3.5.12** | 2026-08-04 | 综合改动：①代理纠偏瓦片新增内存 TTL 缓存（gcj2wgs/wgs2gcj，命中跳过纠偏计算）；②日志系统重构为序号化 + 本地时区（`_SeqFormatter` + Docker `Asia/Shanghai`）；③下载任务支持前端取消（后端 cancel 端点 + store dispose/reset 联动）；④缩放级别显示与高清渲染开关同步（`tileHDRendering` → `Math.ceil`/`Math.floor`）；⑤GitHub 工作流替换为 Star History 图表。详见[日志](Docs/LLM_record/26-08/2026-08-04/2026-08-04-proxy-tile-memory-cache.md) |
+| **V3.5.16** | 2026-08-08 | 综合版本：远程 3D 服务加载（Ion/I3S/3D Tiles）+ 数据源统一注册；场景 Tab「加载 3D 模型」→ 下拉菜单（与 Data Tab 同范式）；3D Tiles 材质模式 5 项 Bug 修复（isNaN/硬编码高度/UNLIT/状态脱节/缺默认材质）；数据源透明度链路加固与诊断；HomeView Cesium 感知路由；vite 开发服务器代理配置；.env.local 后端 URL 相对路径化。详见[日志](Docs/LLM_record/26-08/2026-08-08/2026-08-08-scene-tab-3d-model-dropdown.md) |
+| **V3.5.15** | 2026-08-06 ~ 2026-08-07 | Code Review 整改 · 下载链路 · 配额提示 · 自定义 Ion · 默认模型 · 大目录容错。详见[日志](Docs/LLM_record/26-08/2026-08-07/2026-08-07-v3.5.15-consolidated.md) |
+| **V3.5.14** | 2026-08-06 | 前端 Pad 响应式断点适配（1024px）+ 全项目四维度 Code Review。详见[日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-responsive-pad-fix.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -426,6 +425,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.15 · 开发中 · 最后更新 2026-08-07</sub>
+<sub>V3.5.16 · 开发中 · 最后更新 2026-08-08</sub>
 
 </div>

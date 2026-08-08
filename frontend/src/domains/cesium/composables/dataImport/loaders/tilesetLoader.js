@@ -505,7 +505,7 @@ function buildVerticalTranslation(Cesium, lngRad, latRad, offsetMeters) {
  * @returns {Promise<{terrainElevation:Object|null, tilesetGeo:Object, currentBaseHeight:number,
  *   baseSamples:Array}>} baseSamples 存入 record 后供地形切换时 refitTilesetToTerrain 复用
  */
-async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = null, rootJsonUrl = null, message = null }) {
+export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = null, rootJsonUrl = null, message = null }) {
     const carto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
     const lng = Cesium.Math.toDegrees(carto.longitude);
     const lat = Cesium.Math.toDegrees(carto.latitude);
@@ -850,6 +850,9 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
     const id = `tileset_${++nextId.current}`;
     viewer.scene.primitives.add(tileset);
 
+    // 默认白膜贴图材质（与 CesiumToolPanel UI 默认值 'baimo' 一致）
+    applyTilesetMaterial(tileset, 'baimo', Cesium);
+
     const record = {
         id,
         name: sourceName,
@@ -860,6 +863,7 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
         tilesetGeo,
         currentBaseHeight,
         terrainFitSamples: baseSamples,
+        materialMode: 'baimo',
     };
     loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -898,6 +902,9 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
         const id = `tileset_${++nextId.current}`;
         viewer.scene.primitives.add(tileset);
 
+        // 默认白膜贴图材质
+        applyTilesetMaterial(tileset, 'baimo', Cesium);
+
         const record = {
             id,
             name: file.name,
@@ -907,6 +914,7 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
             tilesetGeo,
             currentBaseHeight,
             terrainFitSamples: baseSamples,
+            materialMode: 'baimo',
         };
         loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -981,7 +989,13 @@ export function applyTilesetMaterial(tileset, mode, Cesium, alpha = 1) {
     if (mode === 'heightStyle') {
         tileset.style = buildHeightStyle(Cesium, safeAlpha);
     } else if (mode !== 'none') {
-        tileset.customShader = buildCustomShader(mode, Cesium, safeAlpha);
+        // 高度渐变需要包围球信息来计算动态高度范围
+        const bs = tileset.boundingSphere;
+        const bsInfo = bs ? {
+            centerZ: bs.center.z,
+            radius: bs.radius,
+        } : null;
+        tileset.customShader = buildCustomShader(mode, Cesium, safeAlpha, bsInfo);
     } else if (safeAlpha < 1) {
         // 原始材质 + 半透明：白色乘 alpha 的 style（不改变色相）
         tileset.style = new Cesium.Cesium3DTileStyle({
@@ -995,23 +1009,24 @@ export function applyTilesetMaterial(tileset, mode, Cesium, alpha = 1) {
 function buildHeightStyle(Cesium, alpha = 1) {
     const a = Math.min(1, Math.max(0, alpha)).toFixed(3);
     const tint = (rgb) => `color('rgb(${rgb})', ${a})`;
+    // has_property 兜底：无 height 属性的瓦片集（摄影测量、Ion 数据）统一走默认色
+    const fallback = tint('44, 49, 88');
     return new Cesium.Cesium3DTileStyle({
         color: {
             conditions: [
-                ["${height} === null", tint('44, 49, 88')],
-                ["${height} === undefined", tint('44, 49, 88')],
-                ["isNaN(Number(${height}))", tint('44, 49, 88')],
+                ["!has_property('height')", fallback],
+                ["${height} === null", fallback],
                 ["Number(${height}) >= 130", tint('195, 21, 21')],
                 ["Number(${height}) >= 60", tint('195, 83, 0')],
                 ["Number(${height}) >= 30", tint('73, 52, 140')],
-                ["true", tint('44, 49, 88')],
+                ["true", fallback],
             ],
         },
     });
 }
 
 /** 构建 CustomShader（纯白膜 / 白膜贴图 / 高度渐变；alpha 注入 shader 并按需切半透明渲染通道） */
-function buildCustomShader(mode, Cesium, alpha = 1) {
+function buildCustomShader(mode, Cesium, alpha = 1, bsInfo = null) {
     const a = Math.min(1, Math.max(0, alpha)).toFixed(3);
     // alpha<1 必须显式声明 TRANSLUCENT，否则不透明通道下 material.alpha 不生效
     const translucencyMode = alpha < 1
@@ -1067,16 +1082,28 @@ function buildCustomShader(mode, Cesium, alpha = 1) {
     }
 
     if (mode === 'gradient') {
+        // 动态高度范围：基于包围球计算，适配任意瓦片集
+        // 使用 positionWC（世界坐标 ECEF）的 Z 分量，避免 positionMC 受模型局部坐标系影响
+        let centerZ = 0.0;
+        let range = 200.0;
+        if (bsInfo) {
+            centerZ = bsInfo.centerZ;
+            range = Math.max(bsInfo.radius * 0.6, 10.0);
+        }
+        const bottomZ = (centerZ - range).toFixed(1);
+        const zRange = (range * 2).toFixed(1);
+
         return new Cesium.CustomShader({
+            lightingModel: Cesium.LightingModel.UNLIT,
             translucencyMode,
-            vertexShaderText: `
-                void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {}`,
             fragmentShaderText: `
                 void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
-                    float bottomHeight = 560.0, topHeight = 750.0;
+                    float bottomHeight = ${bottomZ};
+                    float heightRange = ${zRange};
                     float heightRatio = clamp(
-                        (fsInput.attributes.positionMC.z - bottomHeight) / (topHeight - bottomHeight),
+                        (fsInput.attributes.positionWC.z - bottomHeight) / heightRange,
                         0.0, 1.0);
+                    // 绿(低) → 红(高) 渐变
                     material.diffuse = mix(vec3(0.0, 0.8, 0.0), vec3(0.8, 0.0, 0.0), heightRatio);
                     material.alpha = ${a};
                 }`,
@@ -1117,7 +1144,7 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
     const id = `tileset_${++nextId.current}`;
     const record = {
         id,
-        name: '样例城市',
+        name: '腾讯建筑高度',
         type: '3dtiles',
         entity: tileset,
         terrainElevation,
@@ -1137,6 +1164,149 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         ),
     });
     message.success('样例 3D Tiles 加载成功');
+    return record;
+}
+
+/**
+ * 加载 Cesium Ion 样例：河南大学摄影测量数据 (Asset 5115505)
+ */
+export async function loadSampleIonTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+
+    const assetId = 5115505;
+    const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(assetId, {
+        maximumScreenSpaceError: 4,
+        enableCollision: true,
+    });
+
+    viewer.scene.primitives.add(tileset);
+
+    // 贴地 + 注册数据源
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+        tileset, viewer, Cesium, message,
+    });
+
+    const id = `tileset_${++nextId.current}`;
+    const record = {
+        id,
+        name: 'Cesium Ion 河南大学',
+        type: '3dtiles',
+        entity: tileset,
+        terrainElevation,
+        tilesetGeo,
+        currentBaseHeight,
+        terrainFitSamples: baseSamples,
+        materialMode: 'none',
+    };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    // 飞行定位到河南大学
+    await viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(114.302537, 34.813816, 158.50),
+        orientation: {
+            heading: Cesium.Math.toRadians(356.554),
+            pitch: Cesium.Math.toRadians(-28.061),
+            roll: 0,
+        },
+        duration: 1.5,
+    });
+    message.success(`已加载 Cesium Ion 样例 (Asset ${assetId})`);
+    return record;
+}
+
+/**
+ * 加载 Cesium Ion 样例：美国摄影测量数据 (Asset 354759)
+ */
+export async function loadSampleI3sTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+
+    const assetId = 354759;
+    const tileset = await Cesium.Cesium3DTileset.fromIonAssetId(assetId, {
+        maximumScreenSpaceError: 4,
+        enableCollision: true,
+    });
+
+    viewer.scene.primitives.add(tileset);
+
+    // 贴地 + 注册数据源
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+        tileset, viewer, Cesium, message,
+    });
+
+    const id = `tileset_${++nextId.current}`;
+    const record = {
+        id,
+        name: '美国摄影测量数据',
+        type: '3dtiles',
+        entity: tileset,
+        terrainElevation,
+        tilesetGeo,
+        currentBaseHeight,
+        terrainFitSamples: baseSamples,
+        materialMode: 'none',
+    };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    // 飞行定位
+    await viewer.camera.flyTo({
+        destination: tileset.boundingSphere.center,
+        orientation: {
+            heading: Cesium.Math.toRadians(0),
+            pitch: Cesium.Math.toRadians(-45),
+            roll: 0,
+        },
+        duration: 1.5,
+    });
+    message.success(`已加载 Cesium Ion 样例 (Asset ${assetId})`);
+    return record;
+}
+
+/**
+ * 加载 Cesium 官方离散 LOD 样例（TilesetWithDiscreteLOD）
+ * 源自 3d-tiles-samples 仓库，验证 LOD 切换效果
+ */
+export async function loadSampleDiscreteLODTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+
+    const url = 'https://raw.githubusercontent.com/CesiumGS/3d-tiles-samples/master/1.0/TilesetWithDiscreteLOD/tileset.json';
+
+    const tileset = await Cesium.Cesium3DTileset.fromUrl(url);
+    viewer.scene.primitives.add(tileset);
+
+    // 贴地 + 注册数据源
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+        tileset, viewer, Cesium, message,
+    });
+
+    const id = `tileset_${++nextId.current}`;
+    const record = {
+        id,
+        name: '美国Dragon 3d Tiles (离散 LOD)',
+        type: '3dtiles',
+        entity: tileset,
+        terrainElevation,
+        tilesetGeo,
+        currentBaseHeight,
+        terrainFitSamples: baseSamples,
+        materialMode: 'none',
+    };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    await viewer.flyTo(tileset, {
+        duration: 2,
+        offset: new Cesium.HeadingPitchRange(
+            Cesium.Math.toRadians(0.0),
+            Cesium.Math.toRadians(-25.0),
+            tileset.boundingSphere.radius * 2.5,
+        ),
+    });
+    message.success('已加载离散 LOD 样例 (TilesetWithDiscreteLOD)');
     return record;
 }
 

@@ -94,11 +94,20 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /** 设置透明度 0~1（仅 supportsOpacity 类型生效） */
     function setOpacity(id: string, opacity: number): void {
         const record = getRecord(id);
-        if (!record || !record.supportsOpacity) return;
+        if (!record) {
+            console.warn('[cesiumLayers] setOpacity 找不到记录（id 未建档或已销档）', { id });
+            return;
+        }
+        if (!record.supportsOpacity) return;
         const clamped = Math.min(1, Math.max(0, Number(opacity) || 0));
         record.opacity = clamped;
         records.value = [...records.value];
-        adapter?.setOpacity(id, clamped);
+        if (adapter) {
+            adapter.setOpacity(id, clamped);
+        } else {
+            // 容器未挂载/已卸载：只更新元数据并显式暴露（防静默降级）
+            console.warn('[cesiumLayers] setOpacity 场景操作未生效：adapter 未注册', { id, clamped });
+        }
     }
 
     /** 重命名（纯元数据：显示名，卡片与 TOC 同步生效） */

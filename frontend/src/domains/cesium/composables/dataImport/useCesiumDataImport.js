@@ -14,7 +14,7 @@ import { loadSHP } from './loaders/shpLoader.js';
 import { loadGLTF, loadGltfWithCoords } from './loaders/gltfLoader.js';
 import { loadCZML } from './loaders/czmlLoader.js';
 import { loadGeoTIFF } from './loaders/geotiffLoader.js';
-import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
+import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
@@ -559,6 +559,37 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         message.info('已清除所有导入数据');
     }
 
+    /**
+     * 注册外部加载的数据源（如远程服务 Ion/I3S/3D Tiles）到统一数据源列表。
+     * 使远程加载的数据能在数据 Tab 卡片中获得高度、材质、显隐等统一控制。
+     * @param {Object} params
+     * @param {string} params.name - 显示名称
+     * @param {Object} params.entity - Cesium primitive（I3SDataProvider 或 Cesium3DTileset）
+     * @param {Object} [params.tilesetGeo] - 贴地几何信息 { lng, lat, bottomH, initialBaseHeight }
+     * @param {number} [params.currentBaseHeight] - 当前基座海拔
+     * @param {Object} [params.terrainElevation] - 地形高程值域
+     * @param {Array} [params.terrainFitSamples] - 基底采样（地形切换时 refit 复用）
+     * @param {Object} [params.tilesetOverride] - 实际可操作的 tileset（I3S 等复合 primitive 需要）
+     * @returns {string} 数据源 ID
+     */
+    function registerExternalDataSource({ name, entity, type: customType, tilesetGeo, currentBaseHeight, terrainElevation, terrainFitSamples, tilesetOverride }) {
+        const id = `tileset_${++nextId.current}`;
+        const record = {
+            id,
+            name,
+            type: customType || '3dtiles',
+            entity,
+            materialMode: 'none',
+            ...(tilesetOverride ? { tileset: tilesetOverride } : {}),
+            ...(tilesetGeo ? { tilesetGeo } : {}),
+            ...(currentBaseHeight !== undefined ? { currentBaseHeight } : {}),
+            ...(terrainElevation ? { terrainElevation } : {}),
+            ...(terrainFitSamples ? { terrainFitSamples } : {}),
+        };
+        loadedDataSources.value = [...loadedDataSources.value, record];
+        return id;
+    }
+
     function flyToDataSource(id) {
         const viewer = getViewer();
         const Cesium = getCesium();
@@ -612,7 +643,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             Cesium.Math.toRadians(lng), Cesium.Math.toRadians(lat), offset);
         const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
 
-        const tileset = toRaw(record.entity);
+        // I3S 等复合 primitive：优先使用内部 tileset 引用（entity 本身无 modelMatrix）
+        const tileset = toRaw(record.tileset || record.entity);
         tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
         record.currentBaseHeight = targetHeight;
         loadedDataSources.value = [...loadedDataSources.value];
@@ -647,5 +679,9 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         MATERIAL_MODES,
         applyTilesetMaterial,
         loadSampleTileset: () => loadSampleTileset(loaderCtx()),
+        loadSampleIonTileset: () => loadSampleIonTileset(loaderCtx()),
+        loadSampleI3sTileset: () => loadSampleI3sTileset(loaderCtx()),
+        loadSampleDiscreteLODTileset: () => loadSampleDiscreteLODTileset(loaderCtx()),
+        registerExternalDataSource,
     };
 }

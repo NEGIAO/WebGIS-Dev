@@ -181,7 +181,6 @@ export function useCesiumToolModules({
             scene: {
                 home: () => sceneActions.flyToHome?.(),
                 everest: sceneActions.flyToEverest,
-                tileset: sceneActions.loadCustomTileset,
             },
             wind: {
                 load: wind.loadSimulatedWind,

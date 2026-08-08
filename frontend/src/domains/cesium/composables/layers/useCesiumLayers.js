@@ -15,6 +15,7 @@ import {
     abortAllDescriptorRequests,
 } from '@cesium-domain/constants/basemapProviderFactory';
 import { useCesiumBasemapSwitcher } from './useCesiumBasemapSwitcher';
+import { fitTilesetToTerrain } from '../dataImport/loaders/tilesetLoader.js';
 import {
     TDT_SUBDOMAINS,
     TDT_SERVICE_ROOT,
@@ -48,6 +49,7 @@ export function useCesiumLayers({
     backendBaseUrl,
     tiandituToken,
     cesiumIonToken,
+    dataImport,
 }) {
     let tdtBoundaryLayer = null;
     let tdtTextLabelLayer = null;
@@ -58,6 +60,8 @@ export function useCesiumLayers({
     let googlePhotorealistic3DTilesetLoadPromise = null;
     let googlePhotorealistic3DTilesetLoadId = 0;
     let customIonTileset = null;
+    let customIonPrimitive = null;  // 实际加入 scene 的 primitive（I3SDataProvider 或 Cesium3DTileset）
+    let isRemoteServiceLoad = false;  // 标记当前 primitive 是否来自远程服务加载（I3S/3D Tiles URL）
     let customIonTilesetLoadPromise = null;
     let customIonTilesetLoadId = 0;
     let customIonImageryLayer = null;
@@ -81,7 +85,7 @@ export function useCesiumLayers({
     const LEGACY_CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
 
     const activeBasemap = ref(DEFAULT_BASEMAP_PRESET_ID);
-    const activeTerrain = ref('tianditu');
+    const activeTerrain = ref(import.meta.env.DEV ? 'ellipsoid' : 'tianditu');
     // 读取自定义 URL：优先新 key，兼容旧 key
     const customXyzBasemapUrl = ref(
         readStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, '') ||
@@ -154,15 +158,6 @@ export function useCesiumLayers({
             label: 'Google真实3D模型',
             description: 'Google Photorealistic 3D Tiles 倾斜摄影模型',
             active: googlePhotorealistic3DTilesVisible.value,
-        },
-        {
-            value: 'custom-ion-3d-tiles',
-            label: '自定义 Ion 3D',
-            description: customIonAssetId.value
-                ? `Ion Asset ID: ${customIonAssetId.value}`
-                : '输入 Cesium Ion Asset ID 加载自定义 3D Tiles',
-            active: customIon3DTilesVisible.value,
-            hasInput: true,
         },
     ]);
 
@@ -711,6 +706,13 @@ export function useCesiumLayers({
         const viewer = getViewer?.();
         if (!viewer?.scene || !getCesium?.()) return;
 
+        // 远程服务加载的 primitive：直接切换 show 属性，避免销毁重建
+        if (isRemoteServiceLoad && customIonPrimitive) {
+            customIonPrimitive.show = customIon3DTilesVisible.value;
+            viewer.scene.requestRender?.();
+            return;
+        }
+
         if (customIon3DTilesVisible.value) {
             await ensureCustomIonLayer();
         } else {
@@ -745,6 +747,9 @@ export function useCesiumLayers({
         // 无缓存 → 依次尝试三种加载器（不依赖 Ion API 预检）
         applyCesiumIonToken(Cesium, getCesiumIonToken());
 
+        /** 收集各加载器错误，用于最终诊断提示 */
+        const attemptErrors = [];
+
         // 优先尝试 3D Tiles（最常见）
         if (typeof Cesium?.Cesium3DTileset?.fromIonAssetId === 'function') {
             try {
@@ -753,8 +758,8 @@ export function useCesiumLayers({
                     loadedAssetType.value = '3dtiles';
                     return result;
                 }
-            } catch {
-                /* 不是 3D Tiles，继续尝试 */
+            } catch (error) {
+                attemptErrors.push(`3D Tiles: ${error?.message || error}`);
             }
         }
 
@@ -766,8 +771,8 @@ export function useCesiumLayers({
                     loadedAssetType.value = 'terrain';
                     return result;
                 }
-            } catch {
-                /* 不是地形，继续尝试 */
+            } catch (error) {
+                attemptErrors.push(`地形: ${error?.message || error}`);
             }
         }
 
@@ -779,13 +784,24 @@ export function useCesiumLayers({
                     loadedAssetType.value = 'imagery';
                     return result;
                 }
-            } catch {
-                /* 也不是影像 */
+            } catch (error) {
+                attemptErrors.push(`影像: ${error?.message || error}`);
             }
         }
 
+        // 所有加载器均失败 → 输出详细诊断
+        const detail = attemptErrors.length
+            ? `\n\n各加载器错误：\n${attemptErrors.map(e => `  • ${e}`).join('\n')}`
+            : '';
+        console.error(`[ensureCustomIonLayer] Asset ${assetId} 所有加载器均失败:`, attemptErrors);
+
+        // 检测是否为 Ion external imagery 资产（Ion SDK 不支持，需直接用底层瓦片 URL）
+        const isExternalImagery = attemptErrors.some(e => /external imagery/i.test(e));
+        const hint = isExternalImagery
+            ? `\n\n提示：Asset ${assetId} 是 Ion「外部影像」类型（actual=url），Ion SDK 不支持通过 Asset ID 加载。\n请在「自定义 XYZ 底图」中直接输入瓦片 URL（如 WMS/WMTS/XYZ 端点）。`
+            : '';
         message.warning(
-            `Asset ${assetId} 无法加载（不是有效的 3D Tiles / 地形 / 影像，或 Ion 账户未授权）。`,
+            `Asset ${assetId} 无法加载（不是有效的 3D Tiles / 地形 / 影像，或 Ion 账户未授权）。${detail}${hint}`,
             { closable: true },
         );
         customIon3DTilesVisible.value = false;
@@ -824,6 +840,13 @@ export function useCesiumLayers({
                 return null;
             }
             message.success(`已加载自定义 Ion 影像 (Asset ${assetId})`);
+            // 注册到统一数据源列表（获得显隐控制等 UI）
+            if (dataImport?.registerExternalDataSource) {
+                dataImport.registerExternalDataSource({
+                    name: `Ion 影像 Asset ${assetId}`,
+                    entity: customIonImageryLayer,
+                });
+            }
             return result;
         } catch (error) {
             if (loadId !== customIonTilesetLoadId) return null;
@@ -831,7 +854,7 @@ export function useCesiumLayers({
             message.warning(`Ion 影像 (Asset ${assetId}) 加载失败，已关闭。`, { closable: true });
             message.error('自定义 Ion 影像初始化失败', error);
             console.error('[CustomIon] 影像初始化失败', error);
-            return null;
+            throw error;
         } finally {
             if (loadId === customIonTilesetLoadId) {
                 customIonTilesetLoadPromise = null;
@@ -872,6 +895,13 @@ export function useCesiumLayers({
                 return null;
             }
             message.success(`已加载自定义 Ion 地形 (Asset ${assetId})`);
+            // 注册到统一数据源列表（获得显隐控制等 UI）
+            if (dataImport?.registerExternalDataSource) {
+                dataImport.registerExternalDataSource({
+                    name: `Ion 地形 Asset ${assetId}`,
+                    entity: customIonTerrainProvider,
+                });
+            }
             return result;
         } catch (error) {
             if (loadId !== customIonTilesetLoadId) return null;
@@ -879,7 +909,7 @@ export function useCesiumLayers({
             message.warning(`Ion 地形 (Asset ${assetId}) 加载失败，已关闭。`, { closable: true });
             message.error('自定义 Ion 地形初始化失败', error);
             console.error('[CustomIon] 地形初始化失败', error);
-            return null;
+            throw error;
         } finally {
             if (loadId === customIonTilesetLoadId) {
                 customIonTilesetLoadPromise = null;
@@ -913,8 +943,17 @@ export function useCesiumLayers({
             }
 
             customIonTileset = viewer.scene.primitives.add(tileset);
+            customIonPrimitive = customIonTileset;
+            isRemoteServiceLoad = false;
             // 保存原始 modelMatrix 作为高度偏移的基准（Ion tileset 可能自带定位矩阵）
             originMatrix = tileset.modelMatrix.clone();
+            // 注册到统一数据源列表（获得高度滑杆、材质选择、显隐控制等 UI）
+            if (dataImport?.registerExternalDataSource) {
+                dataImport.registerExternalDataSource({
+                    name: `Ion Asset ${assetId}`,
+                    entity: customIonPrimitive,
+                });
+            }
             customIonTilesetReady.value = true;
             // 不隐藏 globe，让 3D Tiles 叠加在底图之上
             viewer.scene.requestRender?.();
@@ -955,7 +994,7 @@ export function useCesiumLayers({
             });
             message.error('自定义 Ion 3D Tiles 初始化失败', error);
             console.error('[CustomIon] 3D Tiles 初始化失败', error);
-            return null;
+            throw error;
         } finally {
             if (loadId === customIonTilesetLoadId) {
                 customIonTilesetLoadPromise = null;
@@ -993,15 +1032,17 @@ export function useCesiumLayers({
             customIonTerrainProvider = null;
         }
 
-        // 清理 3D Tiles
-        if (customIonTileset) {
+        // 清理 3D Tiles / I3S
+        if (customIonPrimitive) {
             try {
-                viewer.scene.primitives.remove(customIonTileset);
+                viewer.scene.primitives.remove(customIonPrimitive);
             } catch {
                 /* ignore */
             }
+            customIonPrimitive = null;
             customIonTileset = null;
             originMatrix = null;
+            isRemoteServiceLoad = false;
             customIonTilesetReady.value = false;
             if (
                 viewer?.scene?.globe &&
@@ -1024,12 +1065,131 @@ export function useCesiumLayers({
             message.warning('请输入有效的 Cesium Ion Asset ID（纯数字）', { closable: true });
             return;
         }
-        // 若 overlay 已开启且 asset ID 变化，先清理旧层再触发 watch 重新加载
-        if (customIon3DTilesVisible.value && customIonAssetId.value !== normalized) {
+        // 已开启时（无论 ID 是否变化）都先清理旧层，确保重复点击同一 ID 也能强制重载。
+        // 注意：若 ID 未变，Vue watch(customIon3DTilesVisible) 不会 fire（值未变），
+        // 所以必须显式调用 ensureCustomIonLayer()，否则只清不加载。
+        if (customIon3DTilesVisible.value) {
             clearCustomIonLayer();
+            if (customIonAssetId.value === normalized) {
+                message.info(`正在重新加载 Cesium Ion 资产 (Asset ${normalized})...`, { closable: true });
+            } else {
+                message.info(`正在切换 Cesium Ion 资产 (Asset ${normalized})...`, { closable: true });
+            }
         }
         customIonAssetId.value = normalized;
         customIon3DTilesVisible.value = true;
+        // 仅在「已开启」场景下主动触发加载（ID 未变时 watch 不会 fire）
+        if (customIon3DTilesVisible.value) {
+            void ensureCustomIonLayer();
+        }
+    }
+
+    /**
+     * 加载远程 URL 类型的 3D 数据（I3S / 3D Tiles 直链）。
+     * Ion 类型不走此函数，由 handleCustomIonAssetSubmit 复用现有自动识别逻辑。
+     */
+    async function loadCustomUrl3DTiles(type, url) {
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        if (!viewer?.scene || !Cesium) return;
+
+        // 已有远程 primitive 时先清理，避免覆盖引用后旧 primitive 变成"幽灵"残留 scene
+        if (customIonPrimitive) {
+            clearCustomIonLayer();
+        }
+
+        const loadId = ++customIonTilesetLoadId;
+        try {
+            let tileset;
+            if (type === 'i3s') {
+                // I3S / ArcGIS Scene Server：使用 I3SDataProvider 加载
+                // I3SDataProvider 本身是 primitive，内部各图层各有一个 _tileset
+                const i3sProvider = await Cesium.I3SDataProvider.fromUrl(url, {
+                    cesium3dTilesetOptions: {
+                        maximumScreenSpaceError: 4,
+                        enableCollision: true,
+                    },
+                });
+                if (loadId !== customIonTilesetLoadId) { destroyPrimitive(i3sProvider); return; }
+
+                customIonPrimitive = viewer.scene.primitives.add(i3sProvider);
+                // 取第一个图层的 tileset 用于高度偏移和飞行定位
+                tileset = i3sProvider.layers?.[0]?._tileset;
+                if (!tileset) {
+                    throw new Error('I3S 数据加载成功但无法获取 tileset 引用');
+                }
+                isRemoteServiceLoad = true;
+            } else {
+                // 3dtiles
+                tileset = await Cesium.Cesium3DTileset.fromUrl(url, {
+                    maximumScreenSpaceError: 4,
+                    enableCollision: true,
+                });
+                if (loadId !== customIonTilesetLoadId) { destroyPrimitive(tileset); return; }
+
+                customIonPrimitive = viewer.scene.primitives.add(tileset);
+                isRemoteServiceLoad = true;
+            }
+            customIonTileset = tileset;
+            // 初始贴地（与数据 Tab 卡片同一几何口径：叶子基底采样 × 地形逐点配对 + 死区判定）
+            const fitResult = await fitTilesetToTerrain({ tileset, viewer, Cesium, message });
+            // 贴地完成后保存原始 matrix 作为高程滑杆的偏移基准
+            originMatrix = tileset.modelMatrix.clone();
+            customIonTilesetReady.value = true;
+            customIon3DTilesVisible.value = true;
+
+            // 注册到统一数据源列表（获得高度滑杆、材质选择、显隐控制等 UI）
+            if (dataImport?.registerExternalDataSource) {
+                const displayName = type === 'i3s'
+                    ? '远程 I3S 数据'
+                    : type === 'ion'
+                        ? `Ion Asset ${url}`
+                        : '远程 3D Tiles';
+                dataImport.registerExternalDataSource({
+                    name: displayName,
+                    entity: customIonPrimitive,
+                    tilesetOverride: type === 'i3s' ? tileset : undefined,
+                    tilesetGeo: fitResult?.tilesetGeo,
+                    currentBaseHeight: fitResult?.currentBaseHeight,
+                    terrainElevation: fitResult?.terrainElevation,
+                    terrainFitSamples: fitResult?.baseSamples,
+                });
+            }
+
+            // 飞行定位
+            const bs = tileset.boundingSphere;
+            await viewer.flyTo(tileset, {
+                duration: 1.5,
+                offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), bs.radius * 3.5),
+            });
+            message.success(`已加载远程 3D 数据（${type === 'i3s' ? 'I3S' : '3D Tiles'}）`);
+        } catch (error) {
+            if (loadId !== customIonTilesetLoadId) return;
+            console.error('[RemoteService] 远程 3D 数据加载失败:', error);
+            message.error(`远程 3D 数据加载失败: ${error?.message || error}`, { closable: true });
+        }
+    }
+
+    /**
+     * 远程服务提交处理器（数据 Tab 新卡片发出）。
+     * - Ion 类型 → 复用现有自动识别逻辑（3D Tiles → 地形 → 影像）
+     * - I3S / 3D Tiles 类型 → 走 loadCustomUrl3DTiles 新路径
+     */
+    function handleRemoteServiceSubmit({ type, url }) {
+        const normalized = String(url || '').trim();
+        if (!normalized) {
+            message.warning('请输入有效的内容', { closable: true });
+            return;
+        }
+        if (type === 'ion') {
+            if (!/^\d+$/.test(normalized)) {
+                message.warning('Ion Asset ID 必须为纯数字', { closable: true });
+                return;
+            }
+            handleCustomIonAssetSubmit({ assetId: normalized });
+            return;
+        }
+        void loadCustomUrl3DTiles(type, normalized);
     }
 
     async function ensureOsmBuildingsLayer() {
@@ -1435,6 +1595,7 @@ export function useCesiumLayers({
         customXyzBasemapUrl,
         customIonAssetId,
         customIonHeightOffset,
+        customIonTilesetReady,
         basemapOptions,
         terrainOptions,
         overlayOptions,
@@ -1450,6 +1611,7 @@ export function useCesiumLayers({
         handleOverlayToggle,
         handleCustomBasemapSubmit,
         handleCustomIonAssetSubmit,
+        handleRemoteServiceSubmit,
         cleanupLayers,
         // 熔断/降级切换器
         basemapSwitcher,

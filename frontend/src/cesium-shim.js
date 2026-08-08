@@ -312,6 +312,11 @@ export const RenderState = createLazyExport('RenderState');
 export const ComputeCommand = createLazyExport('ComputeCommand');
 export const destroyObject = createLazyExport('destroyObject');
 
+// ==========================================
+// 命名导出 — I3S / 远程 3D 服务加载
+// ==========================================
+export const I3SDataProvider = createLazyExport('I3SDataProvider');
+
 // 默认导出：惰性 Proxy 代理完整 Cesium 对象
 // 支持 import Cesium from "cesium"; Cesium.Viewer / Cesium.Cartesian3 等访问
 export default new Proxy({}, {

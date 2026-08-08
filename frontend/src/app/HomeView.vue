@@ -264,8 +264,13 @@ const setCustomBasemapByUrl = (url) => {
 };
 provide('setCustomBasemapByUrl', setCustomBasemapByUrl);
 
-// 标注模式状态：供 ControlsPanel 读取 MapContainer 的选点模式
-const isMarkModeActive = computed(() => !!mapContainerRef.value?.isReverseGeocodePickMode?.value);
+// 标注模式状态：供 ControlsPanel 读取当前视图的选点模式（OL / Cesium 自动切换）
+const isMarkModeActive = computed(() => {
+    if (is3DMode.value) {
+        return !!cesiumContainerRef.value?.isReverseGeocodePickMode?.value;
+    }
+    return !!mapContainerRef.value?.isReverseGeocodePickMode?.value;
+});
 provide('isMarkModeActive', isMarkModeActive);
 const mapCoreLoadingSettled = ref(false);
 
@@ -438,6 +443,18 @@ function handleControlsOpenToolboxTab(tab) {
 function handleControlsMapInteraction(type) {
     const nextType = String(type || '').trim();
     if (!nextType) return;
+
+    // 逆地理编码标注：根据当前视图路由到 OL 或 Cesium
+    if (nextType === 'ReverseGeocodePick') {
+        if (is3DMode.value) {
+            void cesiumContainerRef.value?.toggleReverseGeocodePick?.();
+        } else {
+            mapContainerRef.value?.activateInteraction?.(nextType);
+        }
+        return;
+    }
+
+    // 其余交互仍走 OL
     mapContainerRef.value?.activateInteraction?.(nextType);
 }
 
@@ -493,11 +510,21 @@ async function handleControlsDistrictSelect(payload) {
     }
 
     try {
-        const result = await mapContainerRef.value?.focusDistrictByAdcode?.({
-            adcode,
-            name: districtName,
-            fit: true,
-        });
+        let result;
+
+        // 根据当前视图（URL view 参数 / is3DMode）决定导入到 OL 还是 Cesium
+        if (is3DMode.value) {
+            result = await cesiumContainerRef.value?.focusDistrictByAdcode?.({
+                adcode,
+                name: districtName,
+            });
+        } else {
+            result = await mapContainerRef.value?.focusDistrictByAdcode?.({
+                adcode,
+                name: districtName,
+                fit: true,
+            });
+        }
 
         if (!result) {
             message.warning(t('home.mapNotReady'));

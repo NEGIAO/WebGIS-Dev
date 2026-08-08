@@ -138,6 +138,69 @@
                             />
                             {{ action.label }}
                         </button>
+                        <!-- 加载 3D 模型：样例下拉菜单（场景 Tab 独立样式） -->
+                        <div
+                            ref="sceneSampleDropdownRef"
+                            class="scene-sample-dropdown"
+                        >
+                            <button
+                                class="tool-action"
+                                type="button"
+                                :title="t('cesium.sampleDataTitle')"
+                                @click="sceneSampleMenuOpen = !sceneSampleMenuOpen"
+                            >
+                                <Box
+                                    :size="15"
+                                    stroke-width="2"
+                                />
+                                <span>{{ t('cesium.load3DModel') }}</span>
+                                <ChevronDown
+                                    :size="11"
+                                    stroke-width="2"
+                                    class="scene-sample-chevron"
+                                />
+                            </button>
+                            <Teleport to="body">
+                                <div
+                                    v-show="sceneSampleMenuOpen"
+                                    class="scene-sample-menu"
+                                    :style="sceneSampleMenuStyle"
+                                >
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'city' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <MapPin :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleCity') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'ion' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <Globe :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleIon') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'i3s' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <Building :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleI3s') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'discreteLOD' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <Layers :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleLod') }}</span>
+                                    </button>
+                                </div>
+                            </Teleport>
+                        </div>
                     </div>
                     <div
                         v-else
@@ -418,82 +481,6 @@
                                             </span>
                                         </div>
                                     </div>
-
-                                    <!-- 自定义 Ion 3D Tiles Asset ID 输入 -->
-                                    <form
-                                        v-if="overlay.hasInput"
-                                        class="custom-ion-asset-editor"
-                                        @submit.prevent="submitCustomIonAsset"
-                                    >
-                                        <div class="custom-ion-asset-input-row">
-                                            <Hash
-                                                class="custom-ion-asset-icon"
-                                                :size="15"
-                                                stroke-width="2"
-                                            />
-                                            <input
-                                                v-model="customIonAssetDraft"
-                                                class="custom-ion-asset-input"
-                                                type="text"
-                                                inputmode="numeric"
-                                                pattern="\d+"
-                                                spellcheck="false"
-                                                placeholder="输入 Ion Asset ID，如 5115505"
-                                            />
-                                            <button
-                                                class="custom-ion-asset-submit"
-                                                type="submit"
-                                                :disabled="!customIonAssetDraft.trim()"
-                                                title="加载自定义 Ion 资源（自动识别 3D Tiles / 影像 / 地形）"
-                                            >
-                                                <Send
-                                                    :size="14"
-                                                    stroke-width="2"
-                                                />
-                                                <span>加载</span>
-                                            </button>
-                                        </div>
-                                        <div class="custom-ion-asset-hint">
-                                            支持 Imagery / Terrain / 3D Tiles，自动识别类型并叠加显示
-                                        </div>
-                                        <div
-                                            v-if="customIonAssetId"
-                                            class="custom-ion-asset-current"
-                                        >
-                                            当前加载: <strong>{{ customIonAssetId }}</strong>
-                                            <template v-if="customIonAssetId === '5115505'">
-                                                （河南大学摄影测量）
-                                            </template>
-                                        </div>
-                                        <!-- 高度 Z 偏移控制 -->
-                                        <div
-                                            v-if="customIonAssetId"
-                                            class="custom-ion-height-offset"
-                                        >
-                                            <label class="height-offset-label">
-                                                高度偏移: <strong>{{ customIonHeightOffset }} m</strong>
-                                            </label>
-                                            <input
-                                                type="range"
-                                                class="height-offset-slider"
-                                                :value="customIonHeightOffset"
-                                                min="-500"
-                                                max="500"
-                                                step="1"
-                                                @input="emit('update:customIonHeightOffset', Number($event.target.value))"
-                                            />
-                                            <div class="height-offset-actions">
-                                                <button
-                                                    type="button"
-                                                    class="height-offset-btn"
-                                                    @click="emit('update:customIonHeightOffset', 0)"
-                                                >
-                                                    重置
-                                                </button>
-                                                <span class="height-offset-hint">范围: -500 ~ +500 m</span>
-                                            </div>
-                                        </div>
-                                    </form>
                                 </div>
                             </div>
                         </div>
@@ -558,18 +545,116 @@
                             />
                             <span>{{ t('cesium.folder') }}</span>
                         </button>
-                        <button
-                            class="tool-action mini"
-                            type="button"
-                            :title="t('cesium.sampleDataTitle')"
-                            @click="emit('import-tileset-sample')"
-                        >
-                            <Box
-                                :size="13"
+                        <div ref="sampleDropdownRef" class="sample-dropdown">
+                            <button
+                                class="tool-action mini"
+                                type="button"
+                                :title="t('cesium.sampleDataTitle')"
+                                @click="sampleMenuOpen = !sampleMenuOpen"
+                            >
+                                <Box
+                                    :size="13"
+                                    stroke-width="2"
+                                />
+                                <span>{{ t('cesium.sampleData') }}</span>
+                                <ChevronDown
+                                    :size="11"
+                                    stroke-width="2"
+                                    class="sample-chevron"
+                                />
+                            </button>
+                            <Teleport to="body">
+                                <div
+                                    v-show="sampleMenuOpen"
+                                    class="sample-menu"
+                                    :style="sampleMenuStyle"
+                                >
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'city' }); sampleMenuOpen = false"
+                                    >
+                                        <MapPin :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleCity') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'ion' }); sampleMenuOpen = false"
+                                    >
+                                        <Globe :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleIon') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'i3s' }); sampleMenuOpen = false"
+                                    >
+                                        <Building :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleI3s') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'discreteLOD' }); sampleMenuOpen = false"
+                                    >
+                                        <Layers :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleLod') }}</span>
+                                    </button>
+                                </div>
+                            </Teleport>
+                        </div>
+                    </div>
+
+                    <!-- 远程 3D 服务加载 -->
+                    <div class="remote-service-card">
+                        <div class="remote-service-header">
+                            <Globe
+                                :size="15"
                                 stroke-width="2"
                             />
-                            <span>{{ t('cesium.sampleData') }}</span>
-                        </button>
+                            <span class="remote-service-title">{{ t('cesium.remoteService') }}</span>
+                        </div>
+                        <div class="remote-service-type-row">
+                            <select
+                                v-model="remoteServiceType"
+                                class="remote-service-type-select"
+                                :aria-label="t('cesium.remoteServiceType')"
+                            >
+                                <option value="ion">{{ t('cesium.types.ion') }}</option>
+                                <option value="i3s">{{ t('cesium.types.i3s') }}</option>
+                                <option value="3dtiles">{{ t('cesium.types.tileset') }}</option>
+                            </select>
+                        </div>
+                        <form
+                            class="remote-service-form"
+                            @submit.prevent="submitRemoteService"
+                        >
+                            <div class="remote-service-input-row">
+                                <input
+                                    v-model="remoteServiceUrl"
+                                    class="remote-service-input"
+                                    type="text"
+                                    spellcheck="false"
+                                    :placeholder="t('cesium.remoteServicePlaceholder.' + remoteServiceType)"
+                                />
+                                <button
+                                    class="remote-service-submit"
+                                    type="submit"
+                                    :disabled="!remoteServiceUrl.trim()"
+                                    :title="t('cesium.remoteServiceHint')"
+                                >
+                                    <Send
+                                        :size="14"
+                                        stroke-width="2"
+                                    />
+                                    <span>{{ t('cesium.loadCustomXYZ') }}</span>
+                                </button>
+                            </div>
+                            <div class="remote-service-hint">
+                                {{ t('cesium.remoteServiceHint') }}
+                            </div>
+                        </form>
                     </div>
 
                     <!-- 已加载数据列表 -->
@@ -914,6 +999,7 @@
 import { computed, ref, watch } from 'vue';
 import {
     Box,
+    Building,
     Check,
     ChevronDown,
     Crosshair,
@@ -924,7 +1010,6 @@ import {
     FileJson,
     FolderOpen,
     Globe,
-    Hash,
     Home,
     Image,
     Layers,
@@ -960,9 +1045,10 @@ const props = defineProps({
     activeBasemap: { type: String, default: '' },
     activeTerrain: { type: String, default: '' },
     customBasemapUrl: { type: String, default: '' },
-    customIonAssetId: { type: String, default: '' },
     customIonHeightOffset: { type: Number, default: 0 },
+    customIonTilesetReady: { type: Boolean, default: false },
     modules: { type: Array, default: () => [] },
+    // modules: { type: Array, default: () => [] },
     storageKey: { type: String, default: 'cesium_tool_panel_ui' },
     loadedDataSources: { type: Array, default: () => [] },
 });
@@ -975,10 +1061,15 @@ const localDataSources = ref(Array.isArray(props.loadedDataSources) ? props.load
 const cesiumLayersStore = useCesiumLayersStore();
 
 /** 卡片渲染源：句柄记录（特化字段）+ 元数据（visible/opacity/显示名）合并视图 */
-const displaySources = computed(() => localDataSources.value.map((source) => ({
-    ...source,
-    meta: cesiumLayersStore.getRecord(source.id) || null,
-})));
+const displaySources = computed(() => {
+    // 依赖 tileHeightMap：用户拖动高程滑杆时触发重算，使滑杆位置与实际值同步
+    const heightMap = tileHeightMap.value;
+    return localDataSources.value.map((source) => ({
+        ...source,
+        _height: heightMap[source.id],
+        meta: cesiumLayersStore.getRecord(source.id) || null,
+    }));
+});
 
 /** 当前处于重命名编辑态的数据源 id 与草稿 */
 const renamingSourceId = ref('');
@@ -1033,7 +1124,7 @@ const emit = defineEmits([
     'control-change',
     'overlay-toggle',
     'custom-basemap-submit',
-    'custom-ion-asset-submit',
+    'remote-service-submit',
     'update:customIonHeightOffset',
     'data-import',
     'data-remove',
@@ -1060,8 +1151,52 @@ const expandedModuleIds = ref(
     new Set(shouldRestoreExpansionState ? storedUiState.expandedModuleIds || [] : []),
 );
 const customBasemapDraft = ref(props.customBasemapUrl || '');
-const customIonAssetDraft = ref(props.customIonAssetId || '');
 const fileInputRef = ref(null);
+const sampleDropdownRef = ref(null);
+const sampleMenuOpen = ref(false);
+const sampleMenuStyle = ref({});
+const sceneSampleDropdownRef = ref(null);
+const sceneSampleMenuOpen = ref(false);
+const sceneSampleMenuStyle = ref({});
+
+/** 更新 Data Tab 样例菜单位置（fixed 定位，避免被 .panel-scroll overflow 裁切） */
+watch(sampleMenuOpen, (open) => {
+    if (!open || !sampleDropdownRef.value) return;
+    const rect = sampleDropdownRef.value.getBoundingClientRect();
+    sampleMenuStyle.value = {
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+    };
+});
+
+/** 更新场景 Tab 样例菜单位置（fixed 定位，避免被 .panel-scroll overflow 裁切） */
+watch(sceneSampleMenuOpen, (open) => {
+    if (!open || !sceneSampleDropdownRef.value) return;
+    const rect = sceneSampleDropdownRef.value.getBoundingClientRect();
+    sceneSampleMenuStyle.value = {
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+    };
+});
+
+/** 点击菜单外区域 → 关闭场景 Tab 样例菜单 */
+watch(sceneSampleMenuOpen, (open) => {
+    if (open) {
+        setTimeout(() => document.addEventListener('click', closeSceneSampleMenu), 0);
+    } else {
+        document.removeEventListener('click', closeSceneSampleMenu);
+    }
+});
+
+function closeSceneSampleMenu(e) {
+    if (sceneSampleDropdownRef.value && !sceneSampleDropdownRef.value.contains(e.target)) {
+        sceneSampleMenuOpen.value = false;
+    }
+}
 
 const supportedFormats =
     '.geojson,.json,.kml,.kmz,.shp,.dbf,.shx,.prj,.cpg,.glb,.gltf,.czml,.zip';
@@ -1076,6 +1211,10 @@ const activeModuleCount = computed(() => {
     ).length;
 });
 const activeOverlayCount = computed(() => props.overlayOptions.filter(o => !!o.active).length);
+
+// 远程 3D 服务加载
+const remoteServiceType = ref('ion');
+const remoteServiceUrl = ref('5115505');
 
 const panelTabs = computed(() => [
     { id: 'scene', label: t('cesium.scene'), icon: Navigation },
@@ -1113,14 +1252,12 @@ watch(
     },
 );
 
-watch(
-    () => props.customIonAssetId,
-    (id) => {
-        if (id !== customIonAssetDraft.value) {
-            customIonAssetDraft.value = id || '';
-        }
-    },
-);
+function submitRemoteService() {
+    emit('remote-service-submit', {
+        type: remoteServiceType.value,
+        url: remoteServiceUrl.value.trim(),
+    });
+}
 
 function setPanelOpen(value) {
     emit('update:open', value);
@@ -1161,10 +1298,6 @@ function selectBasemapOption(option) {
 
 function submitCustomBasemap() {
     emit('custom-basemap-submit', { url: customBasemapDraft.value });
-}
-
-function submitCustomIonAsset() {
-    emit('custom-ion-asset-submit', { assetId: customIonAssetDraft.value });
 }
 
 function readStoredUiState() {
@@ -1208,7 +1341,7 @@ function getModuleIcon(moduleId) {
 
 function getActionIcon(moduleId, actionId) {
     const icons = {
-        scene: { home: Home, everest: Mountain, tileset: Box },
+        scene: { home: Home, everest: Mountain },
         wind: { load: Play, clear: Trash2 },
         fluid: { pick: Eye, clear: Trash2 },
         shallowWater: { toggle: Waves },
@@ -1278,14 +1411,15 @@ function emitClearAll() { emit('data-clear-all'); }
 const tileHeightMap = ref({});
 
 function getTilesetHeightRange(source) {
+    // 优先用初始基座高（加载时固定值），避免范围随滑杆值移动导致 thumb 永远在中间
     const baseHeight = Number(
-        source.currentBaseHeight
-        ?? source.tilesetGeo?.initialBaseHeight
+        source.tilesetGeo?.initialBaseHeight
+        ?? source.currentBaseHeight
         ?? source.tilesetGeo?.bottomH,
     );
 
     if (source.terrainElevation) {
-        // 值域并入当前基座高：配准正确的数据基座可能落在地形 [min,max] 之外，
+        // 值域并入初始基座高：配准正确的数据基座可能落在地形 [min,max] 之外，
         // 纯地形值域会让滑杆一碰就把模型拽到错误高度（B 修复：贴地链路配套）
         const lo = Math.min(
             source.terrainElevation.min,
@@ -1307,11 +1441,12 @@ function getTilesetHeightRange(source) {
 }
 
 function getTileHeight(source) {
+    // 优先用 tileHeightMap（用户拖动后的值）：displaySources 浅拷贝不随原始记录变
+    if (source._height !== undefined) {
+        return source._height;
+    }
     if (source.currentBaseHeight !== undefined) {
         return source.currentBaseHeight;
-    }
-    if (tileHeightMap.value[source.id] !== undefined) {
-        return tileHeightMap.value[source.id];
     }
     if (source.terrainElevation?.centerHeight !== undefined) {
         return source.terrainElevation.centerHeight;
@@ -1808,28 +1943,58 @@ function emitSetMaterial(sourceId, mode) {
     word-break: break-all;
 }
 
-.custom-ion-asset-editor {
+/* ========== 远程 3D 服务加载 ========== */
+.remote-service-card {
     display: grid;
-    gap: 6px;
-    margin-top: 8px;
+    gap: 8px;
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.14);
     border-radius: 7px;
-    padding: 8px;
+    padding: 10px;
     background: rgba(var(--ctp-white-rgb), 0.045);
 }
 
-.custom-ion-asset-input-row {
+.remote-service-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: rgba(var(--ctp-ice-text-rgb), 0.75);
+}
+
+.remote-service-title {
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.remote-service-type-row {
+    display: flex;
+    gap: 6px;
+}
+
+.remote-service-type-select {
+    height: 28px;
+    border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
+    border-radius: 6px;
+    background: rgba(var(--ctp-input-bg-rgb), 0.88);
+    color: var(--ctp-text);
+    padding: 0 8px;
+    font-size: 11px;
+    cursor: pointer;
+    flex: 1;
+}
+
+.remote-service-form {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    gap: 6px;
+}
+
+.remote-service-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 7px;
 }
 
-.custom-ion-asset-icon {
-    color: rgba(var(--ctp-ice-text-rgb), 0.6);
-}
-
-.custom-ion-asset-input {
+.remote-service-input {
     height: 30px;
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
     border-radius: 6px;
@@ -1839,7 +2004,11 @@ function emitSetMaterial(sourceId, mode) {
     font-size: 11px;
 }
 
-.custom-ion-asset-submit {
+.remote-service-input::placeholder {
+    color: rgba(var(--ctp-ice-text-rgb), 0.35);
+}
+
+.remote-service-submit {
     height: 30px;
     padding: 0 10px;
     display: inline-flex;
@@ -1854,76 +2023,15 @@ function emitSetMaterial(sourceId, mode) {
     font-weight: 700;
 }
 
-.custom-ion-asset-submit:disabled {
+.remote-service-submit:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.custom-ion-asset-hint {
+.remote-service-hint {
     font-size: 10px;
     color: rgba(var(--ctp-ice-text-rgb), 0.4);
     line-height: 1.4;
-}
-
-.custom-ion-asset-current {
-    font-size: 10px;
-    color: rgba(var(--ctp-ice-text-rgb), 0.5);
-    word-break: break-all;
-}
-
-.custom-ion-asset-current strong {
-    color: rgba(var(--ctp-ice-text-rgb), 0.75);
-}
-
-/* 高度 Z 偏移控制 */
-.custom-ion-height-offset {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-top: 6px;
-    padding: 6px 8px;
-    border-radius: 4px;
-    background: rgba(var(--ctp-ice-text-rgb), 0.05);
-}
-
-.height-offset-label {
-    font-size: 10px;
-    color: rgba(var(--ctp-ice-text-rgb), 0.6);
-}
-
-.height-offset-label strong {
-    color: rgba(var(--ctp-ice-text-rgb), 0.85);
-}
-
-.height-offset-slider {
-    width: 100%;
-    cursor: pointer;
-}
-
-.height-offset-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.height-offset-btn {
-    font-size: 10px;
-    padding: 1px 8px;
-    border: 1px solid rgba(var(--ctp-ice-text-rgb), 0.2);
-    border-radius: 3px;
-    background: transparent;
-    color: rgba(var(--ctp-ice-text-rgb), 0.6);
-    cursor: pointer;
-}
-
-.height-offset-btn:hover {
-    border-color: rgba(var(--ctp-ice-text-rgb), 0.4);
-    color: rgba(var(--ctp-ice-text-rgb), 0.85);
-}
-
-.height-offset-hint {
-    font-size: 9px;
-    color: rgba(var(--ctp-ice-text-rgb), 0.3);
 }
 
 /* 叠加层 (Overlay Card) */
@@ -2184,6 +2292,131 @@ function emitSetMaterial(sourceId, mode) {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
+}
+
+/* 样例数据下拉菜单 */
+.sample-dropdown {
+    position: relative;
+}
+
+.sample-chevron {
+    margin-left: auto;
+    opacity: 0.6;
+    transition: transform 0.15s ease;
+}
+
+.sample-dropdown:has(.sample-menu) .sample-chevron {
+    transform: rotate(180deg);
+}
+
+.sample-menu {
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
+    border-radius: 8px;
+    background: rgba(var(--ctp-surface-rgb, 240, 240, 240), 0.98);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(8px);
+}
+
+.sample-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ctp-text);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+.sample-menu-item:hover {
+    background: rgba(var(--brand-primary-rgb, 47, 154, 87), 0.12);
+    color: var(--brand-primary, #2f9a57);
+}
+
+/* 场景 Tab：加载 3D 模型下拉菜单（独立样式，深色玻璃 + 青色调） */
+.scene-sample-dropdown {
+    position: relative;
+}
+
+.scene-sample-chevron {
+    margin-left: auto;
+    opacity: 0.6;
+    transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scene-sample-dropdown:has(.scene-sample-menu) .scene-sample-chevron {
+    transform: rotate(180deg);
+    opacity: 1;
+    color: var(--ctp-cyan, #67e8f9);
+}
+
+.scene-sample-menu {
+    position: fixed;
+    z-index: var(--z-popover, 1000);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px;
+    border: 1px solid rgba(var(--ctp-cyan-soft-rgb, 103, 232, 249), 0.25);
+    border-radius: 10px;
+    background: rgba(var(--ctp-surface-rgb, 240, 240, 240), 0.96);
+    box-shadow: 0 8px 28px rgba(0, 8, 15, 0.45),
+                0 0 0 1px rgba(var(--ctp-cyan-soft-rgb, 103, 232, 249), 0.08);
+    backdrop-filter: blur(12px);
+    animation: scene-sample-fade-in 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes scene-sample-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.scene-sample-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ctp-text, #eefbf3);
+    font-size: 11px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
+}
+
+.scene-sample-menu-item:hover {
+    background: linear-gradient(
+        90deg,
+        rgba(var(--ctp-cyan-soft-rgb, 103, 232, 249), 0.14) 0%,
+        rgba(var(--ctp-cyan-soft-rgb, 103, 232, 249), 0.04) 100%
+    );
+    color: var(--ctp-cyan, #67e8f9);
+    transform: translateX(2px);
+}
+
+.scene-sample-menu-item:active {
+    transform: translateX(2px) scale(0.98);
 }
 
 /* 统一图层管理：隐藏态卡片降透明呈现（不移除，保留操作入口） */

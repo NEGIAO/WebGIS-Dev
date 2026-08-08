@@ -6,6 +6,66 @@
 
 ## 版本记录
 
+### V3.5.16 (2026-08-08) — 综合版本：远程 3D 服务 · 材质修复 · 透明度诊断 · UI 统一 · 开发体验
+
+> 综合版本：聚合 4 项 L2 任务——远程 3D 服务加载（Ion/I3S/3D Tiles）+ 数据源统一注册；场景 Tab「加载 3D 模型」→ 下拉菜单（与 Data Tab 同范式）；3D Tiles 材质模式 5 项 Bug 修复；数据源透明度链路加固与诊断；以及若干未单独开版本的改动（HomeView Cesium 感知路由、vite 开发服务器代理配置、.env.local 后端 URL 相对路径化）。详见各[日志](LLM_record/26-08/2026-08-08/)。
+
+#### 前端 — 远程 3D 服务加载 + 数据源统一注册
+
+- `cesium-shim.js`：新增 `I3SDataProvider` 垫片导出。
+- `composables/layers/useCesiumLayers.js`：新增 `loadCustomUrl3DTiles(type, url)` 统一处理 Ion/I3S/3D Tiles 三种远程加载；加载成功后调用 `dataImport.registerExternalDataSource()` 注册到统一列表；Ion 影像/地形加载器成功后同样注册到数据源列表；远程加载的 primitive 通过 `isRemoteServiceLoad` 标志走 `show` 属性切换（避免销毁重建）。
+- `composables/dataImport/useCesiumDataImport.js`：新增 `registerExternalDataSource({ name, entity, ... })`，返回唯一 ID；高度偏移操作优先使用 `record.tileset`（I3S 等复合 primitive 的内部 tileset 引用）。
+- `composables/dataImport/loaders/tilesetLoader.js`：新增 `loadSampleIonTileset`（Ion Asset 5115505 河南大学）+ `loadSampleI3sTileset`（Ion Asset 354759 美国摄影测量数据）；`fitTilesetToTerrain` 改为 `export` 供 useCesiumLayers 复用。
+- `composables/dataImport/useCesiumDataOpsHandlers.js`：`handleImportTilesetSample` 按 `payload.type` 分发（city / ion / i3s / discreteLOD）。
+- `components/CesiumToolPanel.vue`：样例数据按钮改为下拉菜单（Teleport + position: fixed 避免 HMR __vnode 错误）；新增「远程 3D 服务」卡片（类型选择 + URL 输入 + 加载按钮）移至数据 Tab；图层 Tab Ion 卡片移除（功能已整合到远程服务卡片）。
+- `components/CesiumContainer.vue`：装配顺序调整（heightSampler → dataImport → useCesiumLayers），修复依赖注入顺序。
+- `locales/zh-CN.js` / `en-US.js`：新增 `sampleDataTitle` / `sampleCity` / `sampleIon` / `sampleI3s` / `remoteService*` i18n key。
+
+#### 前端 — 场景 Tab 3D 模型下拉菜单
+
+- `composables/dataImport/loaders/tilesetLoader.js`：新增 `loadSampleDiscreteLODTileset`，加载 Cesium 官方 TilesetWithDiscreteLOD 样例（GitHub 远程 tileset.json），flyTo 定位。
+- `composables/dataImport/useCesiumDataImport.js`：导入并导出 `loadSampleDiscreteLODTileset`。
+- `components/CesiumToolPanel.vue`：场景 Tab 在 `quick-actions` 中新增「加载 3D 模型」下拉菜单（4 项：city / ion / i3s / discreteLOD），复用 Data Tab 同范式样式。
+- `composables/toolModules/sceneModule.js`：移除 `tileset` 动作定义。
+- `composables/toolModules/useCesiumToolModules.js`：移除 scene.tileset 映射。
+- `composables/camera/useCesiumSceneActions.js`：移除已无调用者的 `loadCustomTileset` 函数。
+- `locales/zh-CN.js` / `en-US.js`：新增 `sampleLod` / `load3DModel` i18n key。
+
+#### 前端 — 3D Tiles 材质模式 5 项 Bug 修复
+
+- `tilesetLoader.js` — `buildHeightStyle`：`isNaN()` 非 3D Tiles Styling 合法函数，替换为 `has_property('height')` 兜底，移除无效 `=== undefined` 检查。
+- `tilesetLoader.js` — `buildCustomShader` (gradient)：硬编码 `bottomHeight=560, topHeight=750` 改为从 `tileset.boundingSphere` 动态计算；`positionMC.z` 改为 `positionWC.z`（世界坐标）；添加 `lightingModel: UNLIT` 使颜色不受光照影响。
+- `tilesetLoader.js` — `applyTilesetMaterial`：向 `buildCustomShader` 传递包围球信息 `bsInfo`。
+- `tilesetLoader.js` — `loadTilesetFromFileMap` / `loadTilesetJSON`：加载时应用默认 `baimo` 材质并设置 `record.materialMode = 'baimo'`，与 UI 默认值一致。
+- `dataSourceDisplay.js` — `getTilesetState`：接受可选 `record` 参数，首次创建状态时从 `record.materialMode` 初始化 mode，alpha 优先读 `record.opacity`，避免透明度操作将材质重置为 `'none'`。
+- `dataSourceDisplay.js` — `setTilesetMaterialMode` / `setRecordOpacity`：传入 `record` 给 `getTilesetState`；实体访问优先使用 `record.tileset`（I3S 等复合 primitive）。
+
+#### 前端 — 数据源透明度链路加固与诊断
+
+- `stores/cesiumLayers.ts` — `setOpacity`：记录缺失 / adapter 未注册时显式 `console.warn`（原静默 return）。
+- `components/CesiumContainer.vue` — adapter `setVisible` / `setOpacity`：句柄记录缺失 / Cesium 命名空间未就绪时显式 `console.warn`。
+- `dataSourceDisplay.js` — `getTilesetState`：初始 alpha 优先读 `record.opacity`（有限数时），与统一图层元数据对齐。
+
+#### 前端 — HomeView Cesium 感知路由
+
+- `app/HomeView.vue`：`isMarkModeActive` 改为根据 `is3DMode` 自动切换 OL/Cesium 容器引用；`handleControlsMapInteraction` 中 `ReverseGeocodePick` 类型根据当前视图路由到 OL 或 Cesium；`handleControlsDistrictSelect` 根据 `is3DMode` 决定调用 OL 或 Cesium 的 `focusDistrictByAdcode`。
+- `components/CesiumContainer.vue`：新增 `focusDistrictByAdcode`（根据 adcode 加载行政区边界到 Cesium 场景，数据源与 OL 端一致）+ `toggleReverseGeocodePick`（逆地理编码标注模式，单击地球自动逆地理编码并放置标注点）；`defineExpose` 暴露这两个方法。
+
+#### 前端 — 开发体验优化
+
+- `vite.config.js`：代码格式化（2-space → 4-space 缩进）；新增 `server.host: '0.0.0.0'`、`server.cors: true`、`/api` 代理到本地 Docker 后端（`http://127.0.0.1:7860`），支持局域网移动端调试。
+- `.env.local`：`VITE_BACKEND_URL` / `VITE_TILE_PROXY_BASE_URL` 从绝对 URL 改为相对路径 `/api`（配合 vite 代理，后端无需再配置跨域）。
+- `composables/layers/useCesiumLayers.js`：`activeTerrain` 默认值改为 `import.meta.env.DEV ? 'ellipsoid' : 'tianditu'`（本地开发不再默认加载天地图地形，提升开发启动速度）。
+
+#### 前端 — 其他
+
+- `frontend/public/images/`：删除 9 个首页图片文件（四楼逃生图/地学楼/地球日活动/地学与环境学院入口/地学与环境学院标志牌/学部大会/楼单侧/年级大会/教育部重点实验室），减小仓库打包体积。
+- `frontend/src/app/HomeView.vue`：首页图片引用同步清理。
+
+#### 杂项
+
+- `.github/traffic.json`：流量统计自动更新（2026-08-05 数据）。
+
 ### V3.5.15 (2026-08-06 ~ 2026-08-07) — Code Review 整改 · 下载链路 · 配额提示 · 自定义 Ion · 默认模型 · 大目录容错
 
 > 综合版本：基于暂存区全面 Code Review 的 P1/P2 整改（下载链路、Chat 配额、后端兜底），新增自定义 Cesium Ion 资源加载 UI（自动识别 imagery/terrain/3D Tiles）+ 高度偏移滑块，默认样例模型更换为河南大学摄影测量数据（Ion asset 5115505，原始材质），本地 4351 文件目录 File System Access API 容错，WMTS 大写占位符兼容。详见[日志](Docs/LLM_record/26-08/2026-08-07/2026-08-07-v3.5.15-consolidated.md)。

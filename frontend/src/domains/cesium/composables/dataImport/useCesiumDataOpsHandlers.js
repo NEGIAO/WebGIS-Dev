@@ -74,12 +74,23 @@ export function createCesiumDataOpsHandlers({
     }
 
     /**
-     * 加载内置样例城市 3D Tiles
+     * 加载样例数据。
+     * @param {Object} [payload]
+     * @param {string} [payload.type] - 'city' | 'ion' | 'i3s'
      */
-    async function handleImportTilesetSample() {
+    async function handleImportTilesetSample(payload) {
         if (isComponentUnmounted()) return;
+        const type = payload?.type || 'city';
         try {
-            await dataImport.loadSampleTileset();
+            if (type === 'ion') {
+                await dataImport.loadSampleIonTileset();
+            } else if (type === 'i3s') {
+                await dataImport.loadSampleI3sTileset();
+            } else if (type === 'discreteLOD') {
+                await dataImport.loadSampleDiscreteLODTileset();
+            } else {
+                await dataImport.loadSampleTileset();
+            }
         } catch {
             // 内部已提示
         }

@@ -9,7 +9,7 @@ import { translate as t } from '@common/app/useLocale';
 
 /**
  * 创建场景导航模块
- * @param {{ flyToHome?: Function, flyToEverest?: Function, loadCustomTileset?: Function }} sceneActions - 场景操作回调
+ * @param {{ flyToHome?: Function, flyToEverest?: Function }} sceneActions - 场景操作回调
  * @returns {{ id: string, title: string, description: string, actions: Array }}
  */
 export function createSceneModule(_sceneActions = {}) {
@@ -20,7 +20,6 @@ export function createSceneModule(_sceneActions = {}) {
         actions: [
             { id: 'home', label: t('cesium.module.scene.home') },
             { id: 'everest', label: t('cesium.module.scene.everest') },
-            { id: 'tileset', label: t('cesium.module.scene.tileset') },
         ],
     };
 }
