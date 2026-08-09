@@ -22,7 +22,7 @@
         "@loaders.gl/gltf": "^4.4.3",
         "@lucide/vue": "^1.27.0",
         "axios": "^1.7.9",
-        "dompurify": "^3.4.11",
+        "dompurify": "^3.4.13",
         "echarts": "^6.0.0",
         "highlight.js": "^11.11.1",
         "jszip": "^3.10.1",
