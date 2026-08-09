@@ -143,8 +143,9 @@ async function readDirRecursive(dirHandle, currentPath, fileMap) {
 //    超 5km 视为坐标系错误不硬修；失败路径一律保持原位 + 提示滑杆。
 // ============================================================
 
-/** 自动贴地死区（米）：基底与地形中位差在此范围内视为数据自身配准正确，不动它 */
-const TERRAIN_FIT_DEADBAND = 2;
+/** 自动贴地死区（米）：基底与地形中位差在此范围内视为数据自身配准正确，不动它。
+ *  为了提高贴地覆合率，默认将死区设为 0，使算法更积极地贴地（如果要保留 2m 死区，可改回 2）。 */
+// (已移除) 自动贴地死区变量：原先用来避免小幅度调整。已改为积极贴地策略，若需恢复可重新定义并在代码中引用。
 
 /** 基底高合理性下限（米，死海以下视为转换器伪值） */
 const MIN_SANE_BASE_HEIGHT = -450;
@@ -549,17 +550,17 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
                 console.warn('[贴地] 基底与地形形态差异较大（MAD=', est.mad.toFixed(1),
                     'm），单一垂直平移取中位最优贴合，局部仍可能悬空/嵌入');
             }
-            if (Math.abs(est.offset) <= TERRAIN_FIT_DEADBAND) {
-                console.warn('[贴地]', est.count, '点配对中位差', est.offset.toFixed(2),
-                    'm（死区内），数据自身配准正确，不调整');
-            } else if (Math.abs(est.offset) > MAX_AUTO_FIT_OFFSET) {
+            if (Math.abs(est.offset) > MAX_AUTO_FIT_OFFSET) {
                 console.warn('[贴地] 修正量', est.offset.toFixed(0), 'm 超出上限，疑似坐标系错误，跳过自动贴地');
                 message?.warning?.('数据与地形高差异常，已按原始位置放置，请检查数据坐标系');
             } else {
+                // 积极贴地：即便偏差小（<= 原先死区），也尝试施加中位数偏移，使模型更贴合地形
                 appliedOffset = est.offset;
                 tileset.modelMatrix = buildVerticalTranslation(
                     Cesium, tileset.boundingSphere.center, appliedOffset,
                 );
+                // 同步更新 _originMatrix 使后续 setTilesetHeight 基于新的基准矩阵（避免累积偏移）
+                tileset._originMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
                 console.warn('[贴地] 中位配准:', est.count, '点, 底部', bottomH.toFixed(1), 'm',
                     est.offset > 0 ? '抬升' : '下沉', Math.abs(est.offset).toFixed(1),
                     'm (MAD=', est.mad.toFixed(1), 'm, 来源:', source, ')');
@@ -623,7 +624,8 @@ export async function refitTilesetToTerrain({ record, tileset, viewer, Cesium })
             console.warn('[贴地] 重贴地: 修正量', est.offset.toFixed(0), 'm 超出上限，疑似坐标系错误，跳过');
             return false;
         }
-        offset = Math.abs(est.offset) <= TERRAIN_FIT_DEADBAND ? 0 : est.offset;
+        // 积极贴地：直接采用中位数偏移（如果需要保留死区逻辑，可将 TERRAIN_FIT_DEADBAND 恢复为 >0）
+        offset = est.offset;
         terrainElevation = est.terrainElevation;
         console.warn('[贴地] 地形切换重贴:', est.count, '点配对, 中位差', est.offset.toFixed(1),
             'm (MAD=', est.mad.toFixed(1), 'm) → 施加', offset.toFixed(1), 'm');
@@ -1172,7 +1174,7 @@ export async function loadSampleBaimoTileset({ getCesium, getViewer, message, lo
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
 
     const tileset = await Cesium.Cesium3DTileset.fromUrl(
-        './tileset/baimo/tileset.json',
+        'https://3dtiles.negiao.cc.cd/baimo/tileset.json',
         { maximumScreenSpaceError: 10, maximumMemoryUsage: 5120 },
     );
 
