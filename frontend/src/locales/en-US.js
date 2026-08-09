@@ -903,6 +903,7 @@ export default {
         sampleData: 'Sample Data',
         sampleDataTitle: 'Select sample data to load',
         sampleCity: 'Sample City 3D Tiles',
+        sampleBaimo: 'Wuhan Building Data',
         sampleIon: 'Cesium Ion Henan Univ (5115505)',
         sampleI3s: 'Henan Univ Geology Building (I3S)',
         sampleLod: 'Discrete LOD Sample (3d-tiles-samples)',

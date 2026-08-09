@@ -1112,6 +1112,7 @@ export default {
         sampleData: '样例数据',
         sampleDataTitle: '选择样例数据加载',
         sampleCity: '镇远市建筑 3D Tiles',
+        sampleBaimo: '武汉建筑数据',
         sampleIon: 'Cesium Ion 河南大学 (5115505)',
         sampleI3s: '美国摄影测量数据',
         sampleLod: '美国Dragon 3D Tiles',

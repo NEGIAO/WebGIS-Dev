@@ -198,6 +198,14 @@
                                         <Layers :size="12" stroke-width="2" />
                                         <span>{{ t('cesium.sampleLod') }}</span>
                                     </button>
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'baimo' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <Building :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleBaimo') }}</span>
+                                    </button>
                                 </div>
                             </Teleport>
                         </div>
@@ -600,6 +608,14 @@
                                     >
                                         <Layers :size="12" stroke-width="2" />
                                         <span>{{ t('cesium.sampleLod') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'baimo' }); sampleMenuOpen = false"
+                                    >
+                                        <Building :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleBaimo') }}</span>
                                     </button>
                                 </div>
                             </Teleport>

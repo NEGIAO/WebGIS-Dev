@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>第一人称漫游</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body,
+      #app,
+      #cesiumContainer {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .lil-gui {
+        top: 10px;
+        left: 10px;
+        z-index: 999;
+      }
+
+      .status-panel {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        z-index: 998;
+        min-width: 260px;
+        padding: 10px 12px;
+        border-radius: 6px;
+        color: #e8f1ff;
+        background: rgba(12, 18, 28, 0.78);
+        font-size: 13px;
+        line-height: 1.7;
+        pointer-events: none;
+      }
+
+      .status-panel .tip {
+        color: #7fd4ff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="cesiumContainer"></div>
+      <div class="status-panel">
+        <div class="tip">{{ statusText }}</div>
+        <div>航点数：{{ stats.pointCount }}</div>
+        <div>路线总长：{{ stats.length }}</div>
+        <div>预计时长：{{ stats.duration }}</div>
+        <div>飞行速度：{{ stats.multiplier }} m/s</div>
+      </div>
+    </div>
+
+    <script type="module">
+      const { createApp } = Vue;
+      import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+
+      // ============================================================
+      // 路线绘制：左键加点，右键结束
+      // ============================================================
+      class RouteDrawer {
+        constructor(viewer, options) {
+          this._viewer = viewer;
+          this._options = options || {};
+          this.positions = [];
+          this.markers = [];
+          this.active = false;
+          this._handler = null;
+          this._line = null;
+          this._movingPosition = null;
+          this._rafId = null;
+          this._pendingPos = null;
+        }
+
+        start() {
+          this.clear();
+          this.active = true;
+
+          let handler = new Cesium.ScreenSpaceEventHandler(
+            this._viewer.scene.canvas,
+          );
+          this._handler = handler;
+
+          handler.setInputAction((click) => {
+            let cartesian = this._pick(click.position);
+            if (!cartesian) return;
+            this.positions.push(cartesian);
+            this._addMarker(cartesian);
+            if (!this._line) this._createLine();
+            this._options.onUpdate &&
+              this._options.onUpdate(this.positions.length);
+          }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+          // 橡皮筋预览，用 rAF 节流拾取
+          handler.setInputAction((movement) => {
+            this._pendingPos = movement.endPosition;
+            if (this._rafId) return;
+            this._rafId = requestAnimationFrame(() => {
+              this._rafId = null;
+              if (!this._pendingPos) return;
+              let cartesian = this._pick(this._pendingPos);
+              this._pendingPos = null;
+              if (cartesian) this._movingPosition = cartesian;
+            });
+          }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+          handler.setInputAction(() => {
+            this.finish();
+          }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+        }
+
+        finish() {
+          if (!this.active) return;
+          this.active = false;
+          this._movingPosition = null;
+          this._destroyHandler();
+          this._options.onFinish &&
+            this._options.onFinish(this.positions.slice());
+        }
+
+        setMarkerShow(show) {
+          this.markers.forEach((m) => (m.show = show));
+        }
+
+        setLineShow(show) {
+          if (this._line) this._line.show = show;
+        }
+
+        clear() {
+          this._destroyHandler();
+          this.active = false;
+          this._movingPosition = null;
+          this.positions = [];
+          if (this._line) {
+            this._viewer.entities.remove(this._line);
+            this._line = null;
+          }
+          this.markers.forEach((m) => this._viewer.entities.remove(m));
+          this.markers = [];
+        }
+
+        // 先用深度缓冲拾取，这样点在楼顶上拿到的是屋顶而不是楼底的地面；
+        // 没命中任何几何体时再退回地表求交。
+        _pick(windowPosition) {
+          let scene = this._viewer.scene;
+          if (scene.pickPositionSupported) {
+            let picked = scene.pickPosition(windowPosition);
+            if (Cesium.defined(picked)) return picked;
+          }
+          let ray = this._viewer.camera.getPickRay(windowPosition);
+          if (!ray) return null;
+          return scene.globe.pick(ray, scene);
+        }
+
+        // 不用 clampToGround：贴地折线配合逐帧变化的 CallbackProperty
+        // 会让 GroundPolylinePrimitive 每帧重建，明显掉帧。
+        // 拾取点本就落在地形面上，直连已足够贴合，穿地部分交给 depthFailMaterial。
+        _createLine() {
+          this._line = this._viewer.entities.add({
+            polyline: {
+              positions: new Cesium.CallbackProperty(() => {
+                let arr = this.positions.slice();
+                if (this.active && this._movingPosition) {
+                  arr.push(this._movingPosition);
+                }
+                return arr.length >= 2 ? arr : undefined;
+              }, false),
+              width: 2,
+              material: new Cesium.PolylineDashMaterialProperty({
+                color: Cesium.Color.CYAN,
+              }),
+              depthFailMaterial: new Cesium.PolylineDashMaterialProperty({
+                color: Cesium.Color.CYAN.withAlpha(0.4),
+              }),
+            },
+          });
+        }
+
+        _addMarker(cartesian) {
+          let marker = this._viewer.entities.add({
+            position: cartesian,
+            point: {
+              pixelSize: 8,
+              color: Cesium.Color.WHITE,
+              outlineColor: Cesium.Color.RED,
+              outlineWidth: 2,
+              disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            },
+          });
+          this.markers.push(marker);
+        }
+
+        _destroyHandler() {
+          if (this._rafId) {
+            cancelAnimationFrame(this._rafId);
+            this._rafId = null;
+          }
+          this._pendingPos = null;
+          if (this._handler) {
+            this._handler.destroy();
+            this._handler = null;
+          }
+        }
+      }
+
+      // ============================================================
+      // 第一人称漫游（移植自 FirstPersonFly.js，见文件末尾注释的修正点）
+      // ============================================================
+      class FirstPersonFly {
+        constructor(viewer) {
+          this._viewer = viewer;
+          this._options = {};
+          this._czmlDataSource = null;
+          this._entity = null;
+          this._orientation = null; // CZML 原始速度朝向，仅供相机使用
+          this._position = null;
+          this._onTickRemove = null;
+          this._flyTime = 0;
+        }
+
+        startFly(cartographicDegrees, options) {
+          this.clean();
+
+          this._options = Object.assign(
+            {
+              distance: 100,
+              heading: 0,
+              pitch: -30,
+              showPath: true,
+              showModel: true,
+              modelUri: "./data/drone.glb",
+              modelScale: 1,
+              modelHeadingOffset: 0,
+              interpolationDegree: 5,
+              flyHeightDelta: 0,
+            },
+            options || {},
+          );
+
+          this._czmlDataSource = new Cesium.CzmlDataSource("first-person-fly");
+          this._viewer.dataSources.add(this._czmlDataSource);
+          this._viewer.clock.multiplier =
+            (options && options.speed) || 30;
+          this._viewer.clock.shouldAnimate = true;
+
+          return this._createCZML(cartographicDegrees);
+        }
+
+        _createCZML(cartographicDegrees) {
+          let degrees = cartographicDegrees || [];
+          let first = degrees[0];
+          let last = degrees[degrees.length - 4];
+          this._flyTime = last - first;
+
+          let startTime = Cesium.JulianDate.fromDate(new Date());
+          let stopTime = Cesium.JulianDate.addSeconds(
+            startTime,
+            this._flyTime,
+            new Cesium.JulianDate(),
+          );
+          let startTimeStr = Cesium.JulianDate.toIso8601(startTime);
+          let stopTimeStr = Cesium.JulianDate.toIso8601(stopTime);
+          let interval = startTimeStr + "/" + stopTimeStr;
+
+          let czml = [
+            {
+              id: "document",
+              name: "first_person_fly",
+              version: "1.0",
+              clock: {
+                interval: interval,
+                currentTime: startTimeStr,
+                // 原版这里写死 10，会让"飞行速度"与实际观感对不上；
+                // 倍速统一交给加速/减速按钮控制。
+                multiplier: 1,
+              },
+            },
+            {
+              id: "first_person_fly",
+              name: "手绘路线漫游",
+              description: "第一人称视角漫游",
+              availability: interval,
+              path: {
+                material: {
+                  polylineDash: {
+                    color: { rgba: [0, 255, 0, 255] },
+                  },
+                },
+                width: 2,
+                show: this._options.showPath,
+              },
+              model: {
+                gltf: this._options.modelUri,
+                scale: this._options.modelScale,
+                minimumPixelSize: 32,
+                maximumScale: 200,
+                show: this._options.showModel,
+              },
+              orientation: {
+                // 自动朝向前进方向
+                velocityReference: "#position",
+              },
+              position: {
+                interpolationAlgorithm: "LAGRANGE",
+                interpolationDegree: this._options.interpolationDegree,
+                epoch: startTimeStr,
+                cartographicDegrees: degrees,
+              },
+            },
+          ];
+
+          return this._czmlDataSource.load(czml).then(() => {
+            let entity = this._czmlDataSource.entities.getById(
+              "first_person_fly",
+            );
+            this._entity = entity;
+            this._position = entity.position;
+            this._orientation = entity.orientation;
+
+            // 模型朝向 = 速度朝向 × 偏移。只改实体上的 orientation，
+            // this._orientation 保持原样，否则相机 heading 会跟着歪。
+            let base = this._orientation;
+            entity.orientation = new Cesium.CallbackProperty((time, result) => {
+              let q = base.getValue(time);
+              if (!q) return undefined;
+              let offset = this._options.modelHeadingOffset || 0;
+              if (!offset) {
+                return Cesium.Quaternion.clone(
+                  q,
+                  result || new Cesium.Quaternion(),
+                );
+              }
+              let offsetQ = Cesium.Quaternion.fromHeadingPitchRoll(
+                new Cesium.HeadingPitchRoll(
+                  Cesium.Math.toRadians(offset),
+                  0,
+                  0,
+                ),
+              );
+              return Cesium.Quaternion.multiply(
+                q,
+                offsetQ,
+                result || new Cesium.Quaternion(),
+              );
+            }, false);
+
+            // 原版还设了 viewer.trackedEntity，会和每帧 lookAt 抢相机控制权，这里不设。
+            this.startTrack();
+            return entity;
+          });
+        }
+
+        _adjust() {
+          if (this._viewer.clock.shouldAnimate !== true) return;
+          if (!this._orientation || !this._position) return;
+
+          let time = this._viewer.clock.currentTime;
+          let ori = this._orientation.getValue(time);
+          let center = this._position.getValue(time);
+          if (!ori || !center) return;
+
+          // 飞行高度动态偏移：由 setFlyHeight() 更新，无需重建 CZML。
+          // 只偏移相机 target，不碰 entity.position（否则会导致 Cesium 渲染崩溃）。
+          let delta = this._options.flyHeightDelta || 0;
+          if (delta !== 0) {
+            let carto = Cesium.Cartographic.fromCartesian(center);
+            carto.height += delta;
+            center = Cesium.Cartesian3.fromRadians(
+              carto.longitude,
+              carto.latitude,
+              carto.height,
+              this._viewer.scene.globe.ellipsoid,
+            );
+          }
+
+          // 四元数 → 三维旋转矩阵 → 四维变换矩阵 → 航向俯仰翻滚
+          let mtx3 = Cesium.Matrix3.fromQuaternion(ori);
+          let mtx4 = Cesium.Matrix4.fromRotationTranslation(mtx3, center);
+          let hpr = Cesium.Transforms.fixedFrameToHeadingPitchRoll(mtx4);
+
+          // 原版写作 `toDegrees(h) + this._options.heading || 90`，
+          // `||` 优先级低于 `+`，heading 传 0 时整个表达式会被吃成 90。
+          let heading = Cesium.Math.toRadians(
+            Cesium.Math.toDegrees(hpr.heading) + (this._options.heading ?? 0),
+          );
+          // 俯仰改为相加（负值俯视），与 Cesium 惯例一致。
+          let pitch = Cesium.Math.toRadians(
+            Cesium.Math.toDegrees(hpr.pitch) + (this._options.pitch ?? -30),
+          );
+          let range = this._options.distance ?? 1.0;
+
+          this._viewer.camera.lookAt(
+            center,
+            new Cesium.HeadingPitchRange(heading, pitch, range),
+          );
+        }
+
+        startTrack() {
+          // 先移除旧监听，否则重复调用会不断叠加。
+          this.stopTrack();
+          this._onTickRemove = this._viewer.clock.onTick.addEventListener(() => {
+            this._adjust();
+          });
+        }
+
+        stopTrack() {
+          if (this._onTickRemove) {
+            this._onTickRemove();
+            this._onTickRemove = null;
+          }
+          // camera.lookAt 会锁定相机参考系，不解锁的话鼠标操作无效。
+          this._viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+        }
+
+        setHeading(heading) {
+          this._options.heading = heading;
+        }
+
+        setPitch(pitch) {
+          this._options.pitch = pitch;
+        }
+
+        setDistance(distance) {
+          this._options.distance = distance;
+        }
+
+        setPathShow(show) {
+          this._options.showPath = show;
+          if (this._entity && this._entity.path) this._entity.path.show = show;
+        }
+
+        setModelShow(show) {
+          this._options.showModel = show;
+          if (this._entity && this._entity.model) {
+            this._entity.model.show = show;
+          }
+        }
+
+        setModelScale(scale) {
+          this._options.modelScale = scale;
+          if (this._entity && this._entity.model) {
+            this._entity.model.scale = scale;
+          }
+        }
+
+        setModelHeadingOffset(offset) {
+          // 由 orientation 的 CallbackProperty 逐帧读取，无需其他动作
+          this._options.modelHeadingOffset = offset;
+        }
+
+        setSpeed(speed) {
+          this._viewer.clock.multiplier = speed;
+        }
+
+        setFlyHeight(delta) {
+          this._options.flyHeightDelta = delta;
+        }
+
+        suspend() {
+          this._viewer.clock.shouldAnimate = !this._viewer.clock.shouldAnimate;
+          return this._viewer.clock.shouldAnimate;
+        }
+
+        speedUp() {
+          this._viewer.clock.multiplier = Math.min(
+            this._viewer.clock.multiplier * 2,
+            256,
+          );
+          return this._viewer.clock.multiplier;
+        }
+
+        speedDown() {
+          this._viewer.clock.multiplier = Math.max(
+            this._viewer.clock.multiplier / 2,
+            0.125,
+          );
+          return this._viewer.clock.multiplier;
+        }
+
+        stop() {
+          this._viewer.clock.shouldAnimate = false;
+          this.stopTrack();
+        }
+
+        clean() {
+          this.stop();
+          if (this._czmlDataSource) {
+            this._viewer.dataSources.remove(this._czmlDataSource, true);
+            this._czmlDataSource = null;
+          }
+          this._entity = null;
+          this._orientation = null;
+          this._position = null;
+          this._viewer.clock.multiplier = 1;
+        }
+      }
+
+      // ============================================================
+      // Vue 应用
+      // ============================================================
+      createApp({
+        // viewer / imageryLayer / drawer / fly / routePositions 刻意不放进 data：
+        // Vue 3 的深度响应式会把 Cartesian3 等 Cesium 对象包成 Proxy，
+        // 流进 Cesium 内部既拖慢热路径，也可能干扰其身份判断。
+        // 未声明在 data 里的 this.xxx 赋值是普通属性，不会被代理。
+        data() {
+          return {
+            statusText: "点击「绘制路线」，左键逐点添加航点，右键结束。",
+            stats: {
+              pointCount: 0,
+              length: "-",
+              duration: "-",
+              multiplier: 1,
+            },
+            params: {
+              // 路线
+              flyHeight: 50,
+              sampleStep: 20,
+              clampToBuildings: true,
+              // 飞行
+              speed: 30,
+              // 视角
+              distance: 100,
+              heading: 0,
+              pitch: -30,
+              track: true,
+              // 模型
+              showModel: true,
+              modelScale: 1,
+              modelHeadingOffset: 0,
+              // 显示
+              showPath: true,
+              showMarkers: true,
+            },
+          };
+        },
+
+        async mounted() {
+          this.routePositions = [];
+          this.tileset = null;
+          this.initMap();
+          await this.load3DTiles();
+          this.drawer = new RouteDrawer(this.viewer, {
+            onUpdate: (count) => {
+              this.stats.pointCount = count;
+              this.statusText =
+                count < 2
+                  ? "继续左键添加航点（至少 2 个），右键结束。"
+                  : "已有 " + count + " 个航点，右键结束绘制。";
+            },
+            onFinish: (positions) => this.onDrawFinish(positions),
+          });
+          this.fly = new FirstPersonFly(this.viewer);
+          this.addlilgui();
+        },
+
+        beforeUnmount() {
+          if (this.drawer) this.drawer.clear();
+          if (this.fly) this.fly.clean();
+          if (this.myLilGui) {
+            this.myLilGui.destroy();
+            this.myLilGui = null;
+          }
+        },
+
+        methods: {
+          initMap() {
+            let viewer = new Cesium.Viewer("cesiumContainer", {
+              baseLayer: false,
+              animation: false,
+              timeline: false,
+              fullscreenButton: false,
+              infoBox: false,
+              geocoder: false,
+              homeButton: false,
+              sceneModePicker: false,
+              baseLayerPicker: false,
+              navigationHelpButton: false,
+              selectionIndicator: false,
+              shouldAnimate: true,
+            });
+
+            window.viewer = viewer;
+            this.viewer = viewer;
+            viewer.scene.debugShowFramesPerSecond = true;
+            viewer.scene.globe.enableLighting = false;
+            viewer.scene.fog.enabled = true;
+            viewer.scene.fog.density = 0.00008;
+            viewer.scene.skyAtmosphere.show = true;
+            viewer.scene.postProcessStages.fxaa.enabled = true;
+            viewer._cesiumWidget._creditContainer.style.display = "none";
+
+            // 刻意不加载世界地形：baimo 白模按椭球高程生产，叠上世界地形会让建筑浮空/沉地。
+            // 仓库里用同一份 tileset 的 point_light / height_limit_analysis /
+            // white_model_material 三个示例同样都没有设 terrainProvider。
+            // 航线的"贴地"改由 scene.sampleHeight 采样表面（含建筑屋顶）实现。
+            viewer.scene.globe.depthTestAgainstTerrain = true;
+
+            this.imageryLayer = viewer.imageryLayers.addImageryProvider(
+              new Cesium.UrlTemplateImageryProvider({
+                url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                maximumLevel: 18,
+              }),
+            );
+
+            this.resetCamera();
+          },
+
+          async load3DTiles() {
+            try {
+              let tileset = await Cesium.Cesium3DTileset.fromUrl(
+                "./data/tileset/baimo/tileset.json",
+                { maximumScreenSpaceError: 16, maximumMemoryUsage: 2048 },
+              );
+              this.tileset = tileset;
+              this.viewer.scene.primitives.add(tileset);
+              this.statusText =
+                "白模加载完成。点击「绘制路线」，左键逐点添加航点，右键结束。";
+            } catch (e) {
+              console.warn("3D Tileset 加载失败：", e.message);
+              this.statusText = "白模加载失败：" + e.message;
+            }
+          },
+
+          // 全览整个白模数据集
+          zoomToTileset() {
+            if (!this.tileset) {
+              this.statusText = "白模尚未加载完成。";
+              return;
+            }
+            this.viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+            this.viewer.zoomTo(this.tileset);
+          },
+
+          addlilgui() {
+            let myLilGui = new GUI();
+            this.myLilGui = myLilGui;
+
+            // ---- 路线绘制 ----
+            let drawFolder = myLilGui.addFolder("路线绘制");
+            drawFolder
+              .add({ draw: () => this.startDraw() }, "draw")
+              .name("绘制路线");
+            drawFolder
+              .add({ clear: () => this.clearAll() }, "clear")
+              .name("清除路线");
+            drawFolder
+              .add(this.params, "flyHeight", 5, 1000, 5)
+              .name("飞行高度 (m)")
+              .listen()
+              .onChange((v) => {
+                if (this.fly && this._baselineFlyHeight != null) {
+                  this.fly.setFlyHeight(v - this._baselineFlyHeight);
+                }
+              });
+            drawFolder
+              .add(this.params, "sampleStep", 5, 200, 5)
+              .name("采样间距 (m)");
+            drawFolder
+              .add(this.params, "clampToBuildings")
+              .name("贴合建筑表面");
+
+            // ---- 飞行控制 ----
+            let flyFolder = myLilGui.addFolder("飞行控制");
+            flyFolder
+              .add(this.params, "speed", 1, 300, 1)
+              .name("飞行速度 (m/s)")
+              .listen()
+              .onChange((v) => {
+                if (this.fly) {
+                  this.fly.setSpeed(v);
+                  this.stats.multiplier = v;
+                }
+              });
+            flyFolder
+              .add({ start: () => this.startFly() }, "start")
+              .name("开始");
+            flyFolder
+              .add({ suspend: () => this.suspend() }, "suspend")
+              .name("暂停/继续");
+            flyFolder
+              .add({ up: () => this.speedUp() }, "up")
+              .name("加速");
+            flyFolder
+              .add({ down: () => this.speedDown() }, "down")
+              .name("减速");
+            flyFolder.add({ stop: () => this.stopFly() }, "stop").name("停止");
+
+            // ---- 视角 ----
+            let viewFolder = myLilGui.addFolder("视角");
+            viewFolder
+              .add(this.params, "distance", 10, 2000, 0.1)
+              .name("距离 (m)")
+              .listen()
+              .onChange((v) => this.fly.setDistance(v));
+            viewFolder
+              .add(this.params, "heading", -180, 180, 1)
+              .name("旋转角 (°)")
+              .listen()
+              .onChange((v) => this.fly.setHeading(v));
+            viewFolder
+              .add(this.params, "pitch", -90, 90, 1)
+              .name("俯仰角 (°)")
+              .listen()
+              .onChange((v) => this.fly.setPitch(v));
+            viewFolder
+              .add(this.params, "track")
+              .name("视角锁定")
+              .listen()
+              .onChange((v) => {
+                if (v) this.fly.startTrack();
+                else this.fly.stopTrack();
+              });
+            viewFolder
+              .add({ first: () => this.applyPreset("first") }, "first")
+              .name("第一人称");
+            viewFolder
+              .add({ third: () => this.applyPreset("third") }, "third")
+              .name("第三人称");
+
+            // ---- 模型 ----
+            let modelFolder = myLilGui.addFolder("模型");
+            modelFolder
+              .add(this.params, "showModel")
+              .name("显示模型")
+              .listen()
+              .onChange((v) => this.fly.setModelShow(v));
+            modelFolder
+              .add(this.params, "modelScale", 0.1, 10, 0.1)
+              .name("模型缩放")
+              .onChange((v) => this.fly.setModelScale(v));
+            modelFolder
+              .add(this.params, "modelHeadingOffset", -180, 180, 1)
+              .name("模型朝向偏移 (°)")
+              .onChange((v) => this.fly.setModelHeadingOffset(v));
+
+            // ---- 显示 ----
+            let showFolder = myLilGui.addFolder("显示");
+            showFolder
+              .add(this.params, "showPath")
+              .name("显示路径")
+              .onChange((v) => this.fly.setPathShow(v));
+            showFolder
+              .add(this.params, "showMarkers")
+              .name("显示航点标记")
+              .onChange((v) => this.drawer.setMarkerShow(v));
+            if (this.tileset) {
+              showFolder.add(this.tileset, "show").name("显示白模");
+            }
+            showFolder.add(this.imageryLayer, "show").name("影像图层显示/隐藏");
+            showFolder
+              .add(this.imageryLayer, "alpha", 0, 1, 0.01)
+              .name("影像图层透明度");
+            showFolder
+              .add({ reset: () => this.resetCamera() }, "reset")
+              .name("定位到城区");
+            showFolder
+              .add({ zoom: () => this.zoomToTileset() }, "zoom")
+              .name("全览白模");
+          },
+
+          // ============================================================
+          // 绘制
+          // ============================================================
+
+          startDraw() {
+            this.fly.clean();
+            this.drawer.start();
+            this._baselineFlyHeight = null;
+            this.routePositions = [];
+            this.stats.pointCount = 0;
+            this.stats.length = "-";
+            this.stats.duration = "-";
+            this.stats.multiplier = this.params.speed;
+            this.statusText = "左键逐点添加航点（至少 2 个），右键结束。";
+          },
+
+          onDrawFinish(positions) {
+            if (positions.length < 2) {
+              this.statusText = "航点少于 2 个，路线无效，请重新绘制。";
+              this.drawer.clear();
+              this.stats.pointCount = 0;
+              return;
+            }
+            this.routePositions = positions;
+            this.drawer.setMarkerShow(this.params.showMarkers);
+            this.statusText = "路线绘制完成，点击「开始」起飞。";
+          },
+
+          // ============================================================
+          // 折线 → 贴地形采样点 → 带时间的 CZML 坐标序列
+          // ============================================================
+
+          resampleRoute(positions) {
+            let step = Math.max(1, this.params.sampleStep);
+            let cartos = positions.map((p) =>
+              Cesium.Cartographic.fromCartesian(p),
+            );
+            let samples = [];
+
+            // sampleHeight 会把绘制留下的标记点和预览线也算作表面，先藏起来
+            let markersWereVisible = this.params.showMarkers;
+            this.drawer.setMarkerShow(false);
+            this.drawer.setLineShow(false);
+
+            try {
+              for (let i = 0; i < cartos.length - 1; i++) {
+                let a = cartos[i];
+                let b = cartos[i + 1];
+                let segLength = Cesium.Cartesian3.distance(
+                  positions[i],
+                  positions[i + 1],
+                );
+                let count = Math.max(1, Math.ceil(segLength / step));
+                // 末点留给下一段的起点，避免重复
+                for (let k = 0; k < count; k++) {
+                  samples.push(this.sampleBetween(a, b, k / count));
+                }
+              }
+              samples.push(this.sampleBetween(cartos[cartos.length - 1], null, 0));
+            } finally {
+              this.drawer.setMarkerShow(markersWereVisible);
+              this.drawer.setLineShow(true);
+            }
+
+            return samples;
+          },
+
+          sampleBetween(a, b, t) {
+            let lon = b ? Cesium.Math.lerp(a.longitude, b.longitude, t) : a.longitude;
+            let lat = b ? Cesium.Math.lerp(a.latitude, b.latitude, t) : a.latitude;
+            let carto = new Cesium.Cartographic(lon, lat);
+            let height = this.sampleSurfaceHeight(carto);
+            if (height === undefined || !isFinite(height)) {
+              // 采样失败（瓦片未加载 / 不支持）时退回两端高程线性插值
+              height = b ? Cesium.Math.lerp(a.height, b.height, t) : a.height;
+            }
+            return {
+              lon: Cesium.Math.toDegrees(lon),
+              lat: Cesium.Math.toDegrees(lat),
+              surfaceHeight: height,
+            };
+          },
+
+          // 开启「贴合建筑表面」时用 scene.sampleHeight，它把 3D Tiles 也算进去，
+          // 无人机才不会从楼里穿过。代价是每次调用要离屏渲染一遍，点多会卡，
+          // 所以留了开关，关掉就退回只看地表的 globe.getHeight。
+          sampleSurfaceHeight(carto) {
+            let scene = this.viewer.scene;
+            if (this.params.clampToBuildings && scene.sampleHeightSupported) {
+              let h = scene.sampleHeight(carto);
+              if (h !== undefined && isFinite(h)) return h;
+            }
+            return scene.globe.getHeight(carto);
+          },
+
+          buildCartographicDegrees(samples) {
+            // CZML 时间 = 累积距离（1m : 1s），飞行速度完全交给 clock.multiplier，
+            // 这样改滑块立即生效，不用重新推算。
+            let flyHeight = this.params.flyHeight;
+            let degrees = [];
+            let elapsed = 0;
+            let total = 0;
+            let prev = null;
+
+            for (let s of samples) {
+              let height = s.surfaceHeight + flyHeight;
+              let current = Cesium.Cartesian3.fromDegrees(s.lon, s.lat, height);
+              if (prev) {
+                let d = Cesium.Cartesian3.distance(prev, current);
+                total += d;
+                elapsed += d; // 1m/s 基准，实际速度 = clock.multiplier
+              }
+              degrees.push(elapsed, s.lon, s.lat, height);
+              prev = current;
+            }
+
+            return { degrees: degrees, length: total, duration: elapsed };
+          },
+
+          // ============================================================
+          // 飞行控制
+          // ============================================================
+
+          startFly() {
+            if (this.drawer.active) {
+              this.statusText = "请先右键结束绘制。";
+              return;
+            }
+            if (this.routePositions.length < 2) {
+              this.statusText = "请先绘制路线（至少 2 个航点）。";
+              return;
+            }
+
+            let samples = this.resampleRoute(this.routePositions);
+            let built = this.buildCartographicDegrees(samples);
+
+            if (!(built.duration > 0)) {
+              this.statusText = "路线长度为 0，无法飞行，请重新绘制。";
+              return;
+            }
+
+            this.stats.length = built.length.toFixed(1) + " m";
+            this.stats.duration = built.duration.toFixed(1) + " s";
+            this.stats.multiplier = 1;
+
+            // LAGRANGE 5 次插值至少要 6 个点，不够则降阶
+            let degree = Math.min(5, Math.max(1, samples.length - 1));
+
+            this.fly
+              .startFly(built.degrees, {
+                distance: this.params.distance,
+                heading: this.params.heading,
+                pitch: this.params.pitch,
+                speed: this.params.speed,
+                flyHeightDelta: 0,
+                showPath: this.params.showPath,
+                showModel: this.params.showModel,
+                modelScale: this.params.modelScale,
+                modelHeadingOffset: this.params.modelHeadingOffset,
+                interpolationDegree: degree,
+              })
+              .then(() => {
+                this.params.track = true;
+                this._baselineFlyHeight = this.params.flyHeight;
+                this.stats.multiplier = this.params.speed;
+                this.statusText =
+                  "漫游中（" + samples.length + " 个采样点）。";
+              })
+              .catch((e) => {
+                console.error(e);
+                this.statusText = "起飞失败：" + e.message;
+              });
+          },
+
+          suspend() {
+            let running = this.fly.suspend();
+            this.statusText = running ? "漫游中。" : "已暂停。";
+          },
+
+          speedUp() {
+            this.params.speed = Math.min(256, this.params.speed * 2);
+            this.fly.setSpeed(this.params.speed);
+            this.stats.multiplier = this.params.speed;
+          },
+
+          speedDown() {
+            this.params.speed = Math.max(0.125, this.params.speed / 2);
+            this.fly.setSpeed(this.params.speed);
+            this.stats.multiplier = this.params.speed;
+          },
+
+          stopFly() {
+            this.fly.stop();
+            this.params.track = false;
+            this.statusText = "已停止，相机已解锁。";
+          },
+
+          clearAll() {
+            this.fly.clean();
+            this.drawer.clear();
+            this.routePositions = [];
+            this._baselineFlyHeight = null;
+            this.params.track = false;
+            this.stats.pointCount = 0;
+            this.stats.length = "-";
+            this.stats.duration = "-";
+            this.stats.multiplier = 1;
+            this.statusText = "已清除，点击「绘制路线」重新开始。";
+          },
+
+          // ============================================================
+          // 视角
+          // ============================================================
+
+          applyPreset(type) {
+            if (type === "first") {
+              this.params.distance = 0.1;
+              this.params.pitch = 0;
+              this.params.showModel = false; // 贴脸时模型会糊满屏幕
+            } else {
+              this.params.distance = 100;
+              this.params.pitch = -30;
+              this.params.showModel = true;
+            }
+            this.fly.setDistance(this.params.distance);
+            this.fly.setPitch(this.params.pitch);
+            this.fly.setModelShow(this.params.showModel);
+          },
+
+          resetCamera() {
+            if (!this.viewer) return;
+            this.viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);
+            // 白模建筑密集区，与 height_limit_analysis.html 的分析范围一致（武汉）
+            this.viewer.camera.setView({
+              destination: Cesium.Cartesian3.fromDegrees(114.3, 30.58, 3000),
+              orientation: {
+                heading: Cesium.Math.toRadians(0),
+                pitch: Cesium.Math.toRadians(-40),
+                roll: 0,
+              },
+            });
+          },
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
