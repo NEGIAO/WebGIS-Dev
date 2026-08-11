@@ -194,3 +194,9 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **`next-sprint-bugfix-and-optimization.md` 残留**:本文自述该文件「已全量并入本文,该文件删除」,但文件仍存在;删除属范围外操作,提请用户执行
 - [ ] `frontend/stats.html`(1.8MB 旧分析产物)与本地 `frontend/dist/` 建议加入 .gitignore(仓库瘦身,CI 全新构建不受影响;用户 2026-07-26 已表态暂不处理,留档备查)
 - [ ] tiles/(307MB PNG)长尾优化候选:WebP 转码/抽稀属大工程,按需加载已成立,收益后置
+- [ ] **V3.5.17 审查遗留（2026-08-11 · 合并关账会话,按 Force_command §2.5 只记不改）· 日志 [2026-08-11-v3.5.17-consolidated-review.md](../LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md)**：
+  - [ ] (优先级高) **Cesium 采样范围未接线**：`request-range-sample` 事件无监听方,滑杆范围回填链路未生效;`sampledRangeMap` 兜底被 -10m 截断(采样范围与滑杆下限耦合设计未完成)。需接线 `emitSetHeight`/`setSampledRange` 并复核设计
+  - [ ] (需用户决策) **baimo 白膜样例 CDN 依赖**：`loadSampleBaimoTileset` 硬编码 `https://3dtiles.negiao.cc.cd/baimo/tileset.json`(个人第三方 CDN 非标准公开源,断供即失效);采样 `rootJsonUrl` 指向工程内不存在的 `./tileset/baimo/tileset.json`(静默降级)。去向:自托管 vs 移除样例入口
+  - [ ] (需设计) **sampledRangeMap 全局共享**：多数据源场景范围互相覆盖(lastRange 覆盖新加载数据源的实际范围)
+  - [ ] (需设计) **模型升降级语义不清**：`/api/agent/chat/completions` + `user_metrics.tier` 既当限额级别又当模型档位,探测时会切换模型(涉数据库结构,L3)
+  - [ ] (清理项) **freeQuota 后 balanceData 语义失效**：默认 AI 免费化后 `quotaData` 恒 null,`ChatPanelContent` 余额展示逻辑失去意义(数据已不返回,展示未清,仅观感问题)

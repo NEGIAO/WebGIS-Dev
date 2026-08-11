@@ -88,6 +88,8 @@ export function createCesiumDataOpsHandlers({
                 await dataImport.loadSampleI3sTileset();
             } else if (type === 'discreteLOD') {
                 await dataImport.loadSampleDiscreteLODTileset();
+            } else if (type === 'baimo') {
+                await dataImport.loadSampleBaimoTileset();
             } else {
                 await dataImport.loadSampleTileset();
             }

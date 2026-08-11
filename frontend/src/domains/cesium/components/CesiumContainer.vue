@@ -272,7 +272,6 @@ const {
 const sceneActions = useCesiumSceneActions({
     getViewer,
     getCesium,
-    message,
 });
 const { flyToHome } = sceneActions;
 

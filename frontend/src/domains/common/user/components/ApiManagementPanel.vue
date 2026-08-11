@@ -35,6 +35,11 @@
                 <div class="panel-header">
                     <h2>用户配额消耗统计</h2>
                     <div class="filter-controls">
+                        <input
+                            v-model="userStatsSearch"
+                            type="text"
+                            placeholder="搜索用户名..."
+                        />
                         <label>统计天数：</label>
                         <select
                             v-model.number="userStatsFilter.days"
@@ -61,17 +66,26 @@
                     <table class="data-table">
                     <thead>
                         <tr>
-                            <th scope="col">用户名</th>
-                            <th scope="col">角色</th>
-                            <th scope="col">总消耗配额</th>
-                            <th scope="col">今日消耗</th>
-                            <th scope="col">活跃天数</th>
-                            <th scope="col">最后使用</th>
+                            <th
+                                v-for="col in userStatsColumns"
+                                :key="col.key"
+                                scope="col"
+                                class="sortable-th"
+                                :class="{ active: sortKey === col.key }"
+                                @click="toggleSort(col.key)"
+                            >
+                                <span class="th-content">
+                                    {{ col.label }}
+                                    <span class="sort-icon" aria-hidden="true">
+                                        {{ sortKey === col.key ? (sortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+                                    </span>
+                                </span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr
-                            v-for="(stat, idx) in userStats"
+                            v-for="(stat, idx) in sortedUserStats"
                             :key="stat.username || idx"
                             class="data-row"
                         >
@@ -109,7 +123,7 @@
                 aria-labelledby="api-tab-by-endpoint"
             >
                 <div class="panel-header">
-                    <h2>API 端点调用统计</h2>
+                    <h2>模型调用统计</h2>
                     <div class="filter-controls">
                         <label>统计天数：</label>
                         <select
@@ -137,22 +151,25 @@
                     <table class="data-table">
                     <thead>
                         <tr>
-                            <th scope="col">API 端点</th>
+                            <th scope="col">Base URL</th>
+                            <th scope="col">模型</th>
                             <th scope="col">调用次数</th>
                             <th scope="col">成功</th>
                             <th scope="col">错误</th>
                             <th scope="col">成功率</th>
                             <th scope="col">平均响应时间</th>
                             <th scope="col">最大/最小响应时间</th>
+                            <th scope="col">最后使用</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr
                             v-for="(stat, idx) in endpointStats"
-                            :key="stat.api_endpoint || idx"
+                            :key="`${stat.base_url}-${stat.model}-${idx}`"
                             class="data-row"
                         >
-                            <td class="endpoint-name">{{ formatEndpoint(stat.api_endpoint) }}</td>
+                            <td class="base-url">{{ stat.base_url }}</td>
+                            <td class="model-name">{{ stat.model }}</td>
                             <td class="highlight">{{ stat.call_count }}</td>
                             <td class="success">{{ stat.success_count }}</td>
                             <td class="error">{{ stat.error_count }}</td>
@@ -164,6 +181,7 @@
                                 {{ stat.max_response_time_ms?.toFixed(0) || 'N/A' }} /
                                 {{ stat.min_response_time_ms?.toFixed(0) || 'N/A' }} ms
                             </td>
+                            <td class="timestamp">{{ formatTime(stat.last_used_at) }}</td>
                         </tr>
                     </tbody>
                     </table>
@@ -423,9 +441,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import {
-    apiAdminApiUsageByEndpoint,
+    apiAdminApiUsageByModel,
     apiAdminApiLogs,
     apiAdminGetApiQuota,
     apiAdminQuotaUsageByUser,
@@ -439,7 +457,7 @@ const message = useMessage();
 const activeTab = ref('by-user');
 const tabs = [
     { id: 'by-user', icon: '📊', label: '配额消耗', desc: '统一配额池用量' },
-    { id: 'by-endpoint', icon: '🔗', label: '端点统计', desc: '接口热度与耗时' },
+    { id: 'by-endpoint', icon: '🔗', label: '模型调用统计', desc: 'Base URL / 模型维度' },
     { id: 'logs', icon: '📝', label: '调用日志', desc: '请求明细追踪' },
     { id: 'quota', icon: '⚙️', label: 'API 额度设置', desc: '统一 API 额度池' },
     { id: 'api-keys', icon: '🔑', label: '密钥管理', desc: '第三方密钥池' },
@@ -455,8 +473,60 @@ function selectTab(tabId) {
 const userStats = ref([]);
 const loadingUserStats = ref(false);
 const userStatsFilter = ref({ days: 7 });
+const userStatsSearch = ref('');
+const sortKey = ref('total_cost');
+const sortDir = ref('desc');
 
-// 端点统计
+const userStatsColumns = [
+    { key: 'username', label: '用户名' },
+    { key: 'role', label: '角色' },
+    { key: 'total_cost', label: '总消耗配额' },
+    { key: 'today_cost', label: '今日消耗' },
+    { key: 'active_days', label: '活跃天数' },
+    { key: 'last_used_at', label: '最后使用' },
+];
+
+function toggleSort(key) {
+    if (sortKey.value === key) {
+        sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortKey.value = key;
+        sortDir.value = 'desc';
+    }
+}
+
+const sortedUserStats = computed(() => {
+    const keyword = userStatsSearch.value.trim().toLowerCase();
+    const list = keyword
+        ? userStats.value.filter((s) => String(s.username || '').toLowerCase().includes(keyword))
+        : [...userStats.value];
+
+    const { key, dir } = { key: sortKey.value, dir: sortDir.value };
+    const multiplier = dir === 'asc' ? 1 : -1;
+
+    return list.sort((a, b) => {
+        let va = a[key];
+        let vb = b[key];
+
+        if (key === 'role') {
+            va = String(va || '').toLowerCase();
+            vb = String(vb || '').toLowerCase();
+            return multiplier * (va < vb ? -1 : va > vb ? 1 : 0);
+        }
+
+        if (key === 'last_used_at') {
+            va = new Date(va).getTime() || 0;
+            vb = new Date(vb).getTime() || 0;
+        } else {
+            va = Number(va) || 0;
+            vb = Number(vb) || 0;
+        }
+
+        return multiplier * (va - vb);
+    });
+});
+
+// 模型调用统计（按 base_url + model 聚合）
 const endpointStats = ref([]);
 const loadingEndpointStats = ref(false);
 const endpointStatsFilter = ref({ days: 7 });
@@ -527,10 +597,10 @@ async function loadUserStats() {
 async function loadEndpointStats() {
     loadingEndpointStats.value = true;
     try {
-        const result = await apiAdminApiUsageByEndpoint(endpointStatsFilter.value.days, 50);
+        const result = await apiAdminApiUsageByModel(endpointStatsFilter.value.days, 50);
         endpointStats.value = result?.data || [];
     } catch (error) {
-        message.error(`加载端点统计失败: ${error.message}`);
+        message.error(`加载模型统计失败: ${error.message}`);
     } finally {
         loadingEndpointStats.value = false;
     }
@@ -910,6 +980,37 @@ onMounted(async () => {
     white-space: nowrap;
 }
 
+.sortable-th {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.sortable-th:hover {
+    background: rgba(var(--brand-primary-rgb), 0.15);
+}
+
+.sortable-th.active {
+    background: rgba(var(--brand-primary-rgb), 0.18);
+    color: var(--brand-primary-dark);
+}
+
+.th-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sort-icon {
+    font-size: 11px;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+
+.sortable-th.active .sort-icon {
+    opacity: 1;
+}
+
 .data-table td {
     padding: 12px;
     border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.1);
@@ -935,6 +1036,20 @@ onMounted(async () => {
     background: rgba(var(--brand-primary-rgb), 0.08);
     padding: 2px 6px;
     border-radius: 4px;
+}
+
+.base-url {
+    font-family: 'Courier New', monospace;
+    color: #555;
+    word-break: break-all;
+    font-size: 12px;
+    max-width: 280px;
+}
+
+.model-name {
+    font-weight: 600;
+    color: var(--acc-text-main, #2c5f3e);
+    white-space: nowrap;
 }
 
 .role-badge {

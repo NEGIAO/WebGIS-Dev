@@ -1505,14 +1505,14 @@ onBeforeUnmount(() => {
 }
 
 .account-panel.is-fullscreen .panel-nav {
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: nowrap;
     padding: 0 14px;
 }
 
 .account-panel.is-fullscreen .nav-tab {
-    flex: 0 1 calc(25% - 6px);
-    padding: 11px 12px;
+    flex: 1 1 0;
+    padding: 11px 8px;
+    font-size: 12.5px;
 }
 
 .account-panel.is-fullscreen .panel-body {

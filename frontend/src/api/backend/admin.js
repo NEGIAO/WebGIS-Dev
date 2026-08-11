@@ -100,6 +100,12 @@ export async function apiAdminApiUsageByEndpoint(days = 7, limit = 50) {
     });
 }
 
+export async function apiAdminApiUsageByModel(days = 7, limit = 50) {
+    return backendAPI.get('/api/admin/api-management/usage/by-model', {
+        params: { days, limit },
+    });
+}
+
 export async function apiAdminApiLogs(limit = 500, offset = 0, username, endpoint, days = 7) {
     const params = { limit, offset, days };
     if (username) params.username = username;

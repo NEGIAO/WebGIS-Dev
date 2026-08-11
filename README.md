@@ -79,7 +79,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.16），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.17），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -398,9 +398,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.17** | 2026-08-11 | 综合版本（暂存区多次改动合并）：默认 AI 免费化（不扣用户额度，前后端一致）；配置面板保存按路由模式隔离（修复管理员模式选模型后污染后端代理配置）；新增个人 Key 模式独立判定（isPersonalMode）；管理面板整段重写（Tab 横向滚动、行内 JSON 编辑、Agent 配置表单）；API 用量按 Base URL+模型统计（新端点 by-model）；Cesium 贴地算法重构（模型中心径向平移、_originMatrix 基准复合、积极贴地、采样式高程范围、最低 -10m 约束）；新增武汉建筑白膜样例与第一人称漫游演示页。详见[合并关账日志](Docs/LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md) |
 | **V3.5.16** | 2026-08-08 | 综合版本：远程 3D 服务加载（Ion/I3S/3D Tiles）+ 数据源统一注册；场景 Tab「加载 3D 模型」→ 下拉菜单（与 Data Tab 同范式）；3D Tiles 材质模式 5 项 Bug 修复（isNaN/硬编码高度/UNLIT/状态脱节/缺默认材质）；数据源透明度链路加固与诊断；HomeView Cesium 感知路由；vite 开发服务器代理配置；.env.local 后端 URL 相对路径化。详见[日志](Docs/LLM_record/26-08/2026-08-08/2026-08-08-scene-tab-3d-model-dropdown.md) |
 | **V3.5.15** | 2026-08-06 ~ 2026-08-07 | Code Review 整改 · 下载链路 · 配额提示 · 自定义 Ion · 默认模型 · 大目录容错。详见[日志](Docs/LLM_record/26-08/2026-08-07/2026-08-07-v3.5.15-consolidated.md) |
-| **V3.5.14** | 2026-08-06 | 前端 Pad 响应式断点适配（1024px）+ 全项目四维度 Code Review。详见[日志](Docs/LLM_record/26-08/2026-08-06/2026-08-06-responsive-pad-fix.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -425,6 +425,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.16 · 开发中 · 最后更新 2026-08-08</sub>
+<sub>V3.5.17 · 开发中 · 最后更新 2026-08-11</sub>
 
 </div>

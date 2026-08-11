@@ -24,7 +24,6 @@ import {
     apiGetDefaultAIConfig,
 } from '@/api/backend';
 import { readCachedPreferredAgentModel } from '@common/user/stores/useUserPreferencesStore';
-import { useLocale } from '@common/app/useLocale';
 
 /** localStorage 键名：用户选择的模型名称 */
 const MODEL_STORAGE_KEY = 'chat:selectedModel';
@@ -102,7 +101,6 @@ function normalizeQuota(raw) {
  * @returns {Object} reactive 配置对象（含状态 + 方法）
  */
 export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
-    const { t } = useLocale();
     const config = reactive({
         // ── 状态 ──
         userConfigDraft: defaultDraft(),
@@ -120,18 +118,29 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         upstreamModels: [],
 
         // ── 计算属性（reactive 内自动解包） ──
+        /**
+         * 是否用户主动配置的个人 Key 模式：
+         * 仅当用户填写/保存了个人 api_key + base_url 时才算，管理员默认 AI 不算。
+         * isDirectMode（内部通道判定）仍包含默认 AI 模式，但展示层必须用 isPersonalMode
+         * 来区分「用户个人 Key」与「管理员路由模式」。
+         */
+        isPersonalMode: false,
         isDirectMode: computed(() => {
-            return config.isDefaultAIMode || !!(config.directConfig.api_key && config.directConfig.base_url);
+            return config.isDefaultAIMode || config.isPersonalMode;
         }),
         quotaText: computed(() => {
+            // 默认 AI 模式使用免费 LLM，不扣用户额度
+            if (config.isDefaultAIMode) return '免费（不扣额度）';
             const { limit, used, remaining } = config.quota;
             if (limit === null) return '管理员无限制';
             return `${used}/${limit}（剩余 ${remaining ?? 0}）`;
         }),
         quotaExhausted: computed(() => {
-            // 仅个人 Key 直连（用户自己的 Key）不消耗平台配额，永不耗尽；
-            // 默认 AI / 后端代理模式均按 token 扣用户自身额度，须按配额判定
-            if (config.isDirectMode && !config.isDefaultAIMode) return false;
+            // 默认 AI 模式使用免费 LLM，不扣用户额度、不受限制；
+            // 个人 Key 直连（用户自己的 Key）不消耗平台配额，永不耗尽；
+            // 仅后端代理模式使用收费 LLM，按 token 扣用户自身额度，须按配额判定
+            if (config.isDefaultAIMode) return false;
+            if (config.isDirectMode) return false;
             return Number.isFinite(config.quota.remaining) && Number(config.quota.remaining) <= 0;
         }),
         /** Model 下拉选项：draft.model 不在列表中时追加"当前"兜底项 */
@@ -160,7 +169,9 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             config.userConfigDraft = {
                 api_key: dc.api_key,
                 base_url: dc.base_url,
-                model: dc.model,
+                // 默认 AI 模式下草稿模型展示用户在该模式的选择（defaultAIModel），
+                // 避免面板重开后显示回管理员默认值、与真实请求模型不一致
+                model: config.isDefaultAIMode && config.defaultAIModel ? config.defaultAIModel : dc.model,
                 system_prompt: dc.system_prompt,
                 timeout_seconds: dc.timeout_seconds,
                 max_tokens: dc.max_tokens,
@@ -198,6 +209,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             if (config.isDirectMode) {
                 const preservedModel = config.directConfig.model;
                 config.isDefaultAIMode = false;
+                config.isPersonalMode = false;
                 config.directConfig = emptyDirectConfig(preservedModel);
                 message.success('已切换为后端代理模式');
             } else {
@@ -220,22 +232,15 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             try {
                 if (config.isDefaultAIMode) {
                     config.serviceReady = true;
-                    config.modelName = config.directConfig.model || config.modelName || '未配置';
-                    config.statusHint = `默认 AI 模式：使用管理员配置的 ${config.modelName}（经后端代理转发，Key 安全存储在后端）。`;
-
-                    // 默认 AI 模式同样按 token 扣用户自身额度（后端 /chat/default-proxy 成功后折算），
-                    // 因此需实时加载用户自己的配额用于展示，不能再用「管理员无限制」糊弄。
-                    try {
-                        const result = await apiAgentGetChatConfig();
-                        const data = result?.data || result || {};
-                        config.applyQuota(data?.quota);
-                    } catch {
-                        // ignore
-                    }
-                    if (config.quotaExhausted) {
-                        config.statusHint = t('chat.quotaExhaustedHint');
-                    }
-                } else if (config.isDirectMode) {
+                    // 实际请求模型 = 用户在默认 AI 模式下的选择（defaultAIModel）优先于管理员默认值
+                    config.modelName =
+                        config.defaultAIModel ||
+                        config.directConfig.model ||
+                        config.modelName ||
+                        '未配置';
+                    // 默认 AI 模式使用免费 LLM，不扣用户额度、不受限制
+                    config.statusHint = `默认 AI 模式：使用管理员配置的 ${config.modelName}（免费，不扣除您的对话额度）。`;
+                } else if (config.isPersonalMode) {
                     config.serviceReady = true;
                     config.statusHint = '个人 Key 模式：使用个人 API Key 经后端代理转发到 LLM 服务，避免浏览器 CORS 限制。';
 
@@ -364,7 +369,15 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     config.modelLoadHint = models.length
                         ? `✅ 已加载 ${models.length} 个模型（默认 AI 模式）`
                         : '未从默认 AI 上游返回可用模型，请检查管理员配置的 Base URL / API Key。';
-                } else if (config.isDirectMode) {
+
+                    // 恢复该模式下用户上次选择的模型（仅当它在上游列表内，避免跨模式误用）
+                    if (!config.defaultAIModel) {
+                        const saved = readSavedModel();
+                        if (saved && models.some((m) => m.id === saved)) {
+                            config.defaultAIModel = saved;
+                        }
+                    }
+                } else if (config.isPersonalMode) {
                     const dc = config.directConfig;
                     const response = await apiAgentListModels({
                         override_base_url: dc.base_url,
@@ -464,6 +477,28 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             try {
                 const personalApiKey = String(config.userConfigDraft.api_key || '').trim();
                 const draftBaseUrl = String(config.userConfigDraft.base_url || '').trim();
+
+                // 默认 AI 模式（管理员 Key）：面板改动只属于该模式——
+                // 模型选择持久化为 defaultAIModel（会话态）+ localStorage + 账号偏好；
+                // 禁止写入后端个人配置（agent_user_config 是「后端代理模式」的配置源，
+                // 写入即造成"管理员模式选的模型变成后端代理模型"的跨模式污染）。
+                if (config.isDefaultAIMode && !personalApiKey) {
+                    config.defaultAIModel = String(config.userConfigDraft.model || '').trim();
+                    if (config.defaultAIModel) {
+                        saveModel(config.defaultAIModel);
+                        try {
+                            await apiAgentSaveModelPreference(config.defaultAIModel);
+                        } catch {
+                            // ignore
+                        }
+                    }
+                    config.userConfigDraft.api_key = '';
+                    await config.reloadAgentConfig(false);
+                    await config.loadAvailableModels();
+                    message.success('已保存默认 AI 模式的模型选择（不影响后端代理配置）');
+                    return;
+                }
+
                 const backendPayload = {
                     model: String(config.userConfigDraft.model || '').trim(),
                     system_prompt: String(config.userConfigDraft.system_prompt || '').trim(),
@@ -480,8 +515,11 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     backendPayload.api_key = personalApiKey;
                     backendPayload.base_url = draftBaseUrl;
                     config.isDefaultAIMode = false;
+                    config.isPersonalMode = true;
                     config.directConfig = { api_key: personalApiKey, ...backendPayload };
                 } else {
+                    // 未填 Key：仅修改模型/参数，仍保持当前路由模式（后端代理），不算个人 Key
+                    config.isPersonalMode = false;
                     config.directConfig = emptyDirectConfig();
                 }
 
@@ -520,6 +558,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
             config.userConfigSaving = true;
             try {
                 config.isDefaultAIMode = false;
+                config.isPersonalMode = false;
                 config.directConfig = emptyDirectConfig();
                 config.userConfigDraft.api_key = '';
 
@@ -543,6 +582,7 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         async resetProviderOverrides() {
             config.userConfigSaving = true;
             try {
+                config.isPersonalMode = false;
                 config.directConfig = emptyDirectConfig();
 
                 try {
@@ -586,12 +626,15 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
 
             if (config.isDefaultAIMode) {
                 const dc = config.directConfig;
+                // 实际请求模型 = 用户在该模式下的选择（defaultAIModel）优先于管理员默认值；
+                // 若只取 dc.model，面板里选的模型不保存（或保存后）都对请求无效——跨链路脱节回归。
+                const finalModel = config.defaultAIModel || dc.model;
                 const result = await apiAgentChatDefaultProxy({
                     message: userMsg,
                     history: enhancedHistory,
                     location_context: locationContext,
                     map_context: mapContext,
-                    override_model: dc.model || undefined,
+                    override_model: finalModel || undefined,
                     override_top_p: dc.top_p,
                     override_extra_body: dc.extra_body,
                     tools,
@@ -599,10 +642,10 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 });
                 rawData = result?.data || result || {};
                 reply = String(rawData?.reply || '').trim();
-                usedModel = String(rawData?.model || dc.model || '');
+                usedModel = String(rawData?.model || finalModel || '');
                 if (rawData?.quota) quotaData = rawData.quota;
                 if (typeof rawData?.cost === 'number') callCost = rawData.cost;
-            } else if (config.isDirectMode) {
+            } else if (config.isPersonalMode) {
                 const dc = config.directConfig;
                 const mergedSystemPrompt = systemPrompt
                     ? dc.system_prompt

@@ -198,6 +198,14 @@
                                         <Layers :size="12" stroke-width="2" />
                                         <span>{{ t('cesium.sampleLod') }}</span>
                                     </button>
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'baimo' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <Building :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleBaimo') }}</span>
+                                    </button>
                                 </div>
                             </Teleport>
                         </div>
@@ -600,6 +608,14 @@
                                     >
                                         <Layers :size="12" stroke-width="2" />
                                         <span>{{ t('cesium.sampleLod') }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'baimo' }); sampleMenuOpen = false"
+                                    >
+                                        <Building :size="12" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleBaimo') }}</span>
                                     </button>
                                 </div>
                             </Teleport>
@@ -1137,6 +1153,8 @@ const emit = defineEmits([
     'import-tileset-folder',
     'import-tileset-sample',
     'data-set-material',
+    // 异步请求：请求拥有 viewer 的上下文对给定 region 进行地形采样并回填 setSampledRange
+    'request-range-sample',
 ]);
 
 const UI_STATE_VERSION = 3;
@@ -1409,9 +1427,77 @@ function emitStretchHeight(id) { emit('data-stretch-height', { id }); }
 function emitClearAll() { emit('data-clear-all'); }
 
 const tileHeightMap = ref({});
+// 采样结果缓存：在采样完成后可通过组件外（拥有 viewer 的上下文）调用 setSampledRange 填充本缓存
+const sampledRangeMap = ref({});
+// 避免重复触发采样请求
+const scheduledSampling = new Set();
+
+function deriveRegionFromSource(source) {
+    const tg = source.tilesetGeo || {};
+    // 常见 region 表示为数组 [west, south, east, north]（度）
+    if (Array.isArray(tg.region) && tg.region.length >= 4) {
+        const [west, south, east, north] = tg.region;
+        return { west, south, east, north };
+    }
+    if (tg.region && typeof tg.region === 'object' && 'west' in tg.region) {
+        const { west, south, east, north } = tg.region;
+        return { west, south, east, north };
+    }
+    // 其他常见字段名：bbox
+    if (Array.isArray(tg.bbox) && tg.bbox.length >= 4) {
+        const [west, south, east, north] = tg.bbox;
+        return { west, south, east, north };
+    }
+    // boundingSphere 退化处理：通过中心经纬度与半径近似一个矩形范围（经度按纬度缩放）
+    if (tg.boundingSphere && tg.boundingSphere.center && tg.boundingSphere.radius) {
+        const c = tg.boundingSphere.center;
+        let lon = null;
+        let lat = null;
+        if (Array.isArray(c) && c.length >= 2) {
+            lon = c[0];
+            lat = c[1];
+        } else if (typeof c === 'object' && ('lon' in c || 'longitude' in c)) {
+            lon = c.lon ?? c.longitude;
+            lat = c.lat ?? c.latitude;
+        }
+        if (Number.isFinite(lon) && Number.isFinite(lat)) {
+            const r = Number(tg.boundingSphere.radius) || 0;
+            const degLat = r / 111000; // 约 111km per degree latitude
+            const degLon = r / (111000 * Math.max(0.0001, Math.cos((lat * Math.PI) / 180)));
+            return { west: lon - degLon, south: lat - degLat, east: lon + degLon, north: lat + degLat };
+        }
+    }
+    return null;
+}
+
+function requestRangeSampleIfNeeded(source) {
+    if (scheduledSampling.has(source.id)) return;
+    const region = deriveRegionFromSource(source);
+    if (!region) return;
+    scheduledSampling.add(source.id);
+    // 发出请求事件，由拥有 Cesium viewer 的上层或 store 触发实际采样并回填 setSampledRange
+    emit('request-range-sample', { id: source.id, region });
+}
+
+function setSampledRange(sourceId, range) {
+    if (!range || typeof range !== 'object') return;
+    // 确保至少满足最小约束 -10
+    const min = Math.max(Number(range.min ?? -Infinity), -10);
+    const max = Number(range.max ?? (min + 1));
+    sampledRangeMap.value = { ...sampledRangeMap.value, [sourceId]: { min, max: Math.max(max, min + 1) } };
+    scheduledSampling.delete(sourceId);
+}
+// 暴露 setSampledRange 以便外部（拥有 viewer 的上下文）调用：在 <script setup> 中使用 defineExpose
+defineExpose({ setSampledRange });
 
 function getTilesetHeightRange(source) {
-    // 优先用初始基座高（加载时固定值），避免范围随滑杆值移动导致 thumb 永远在中间
+    // 优先使用采样缓存结果（如果存在）
+    const cached = sampledRangeMap.value[source.id];
+    if (cached) {
+        return { min: cached.min, max: cached.max };
+    }
+
+    // 备用策略（原有逻辑）：在没有采样结果时使用 terrainElevation 或 baseHeight ±500，并把下界限制为 -10
     const baseHeight = Number(
         source.tilesetGeo?.initialBaseHeight
         ?? source.currentBaseHeight
@@ -1419,45 +1505,59 @@ function getTilesetHeightRange(source) {
     );
 
     if (source.terrainElevation) {
-        // 值域并入初始基座高：配准正确的数据基座可能落在地形 [min,max] 之外，
-        // 纯地形值域会让滑杆一碰就把模型拽到错误高度（B 修复：贴地链路配套）
-        const lo = Math.min(
-            source.terrainElevation.min,
-            Number.isFinite(baseHeight) ? baseHeight : Infinity,
-        ) - 30;
-        const hi = Math.max(
-            source.terrainElevation.max,
-            Number.isFinite(baseHeight) ? baseHeight : -Infinity,
-        ) + 30;
-        return { min: Math.floor(lo), max: Math.ceil(hi) };
+        const lo =
+            Math.min(
+                source.terrainElevation.min,
+                Number.isFinite(baseHeight) ? baseHeight : Infinity,
+            ) - 30;
+        const hi =
+            Math.max(
+                source.terrainElevation.max,
+                Number.isFinite(baseHeight) ? baseHeight : -Infinity,
+            ) + 30;
+        const min = Math.max(Math.floor(lo), -10); // 最低限制 -10m
+        let max = Math.ceil(hi);
+        if (max < min + 1) max = min + 1;
+        // 异步触发更精细的地形采样（采样结果会回填到 sampledRangeMap）
+        requestRangeSampleIfNeeded(source);
+        return { min, max };
     }
 
     if (!Number.isFinite(baseHeight)) return null;
-
-    return {
-        min: Math.floor(baseHeight - 500),
-        max: Math.ceil(baseHeight + 500),
-    };
+    const min = Math.max(Math.floor(baseHeight - 100), -10);
+    let max = Math.ceil(baseHeight + 100);
+    if (max < min + 1) max = min + 1;
+    requestRangeSampleIfNeeded(source);
+    return { min, max };
 }
 
 function getTileHeight(source) {
-    // 优先用 tileHeightMap（用户拖动后的值）：displaySources 浅拷贝不随原始记录变
-    if (source._height !== undefined) {
-        return source._height;
-    }
-    if (source.currentBaseHeight !== undefined) {
-        return source.currentBaseHeight;
-    }
-    if (source.terrainElevation?.centerHeight !== undefined) {
-        return source.terrainElevation.centerHeight;
-    }
+    // 优先用 tileHeightMap（用户拖动后的值）
+    if (source._height !== undefined) return source._height;
+    // 否则优先使用已应用的 currentBaseHeight
+    if (source.currentBaseHeight !== undefined) return source.currentBaseHeight;
+    // 没有已应用偏移时，优先使用 tilesetGeo 中记录的初始基座高（导入时计算得到的 bottomH / initialBaseHeight）
+    const initial = Number(source.tilesetGeo?.initialBaseHeight ?? source.tilesetGeo?.bottomH);
+    if (Number.isFinite(initial)) return initial;
+    // 若存在地形采样中心高度则可用作回退
+    if (source.terrainElevation?.centerHeight !== undefined) return source.terrainElevation.centerHeight;
     return 0;
 }
 
 function emitSetHeight(sourceId, height) {
     const num = Number(height);
-    tileHeightMap.value = { ...tileHeightMap.value, [sourceId]: num };
-    emit('data-set-height', { id: sourceId, height: num });
+    if (!Number.isFinite(num)) return;
+    // 找到对应 source 以便获取范围进行 clamp
+    const source = localDataSources.value.find(s => s.id === sourceId) || null;
+    let final = num;
+    if (source) {
+        const range = getTilesetHeightRange(source);
+        if (range) {
+            final = Math.max(range.min, Math.min(range.max, num));
+        }
+    }
+    tileHeightMap.value = { ...tileHeightMap.value, [sourceId]: final };
+    emit('data-set-height', { id: sourceId, height: final });
 }
 
 function emitSetMaterial(sourceId, mode) {

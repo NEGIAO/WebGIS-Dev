@@ -143,8 +143,9 @@ async function readDirRecursive(dirHandle, currentPath, fileMap) {
 //    超 5km 视为坐标系错误不硬修；失败路径一律保持原位 + 提示滑杆。
 // ============================================================
 
-/** 自动贴地死区（米）：基底与地形中位差在此范围内视为数据自身配准正确，不动它 */
-const TERRAIN_FIT_DEADBAND = 2;
+/** 自动贴地死区（米）：基底与地形中位差在此范围内视为数据自身配准正确，不动它。
+ *  为了提高贴地覆合率，默认将死区设为 0，使算法更积极地贴地（如果要保留 2m 死区，可改回 2）。 */
+// (已移除) 自动贴地死区变量：原先用来避免小幅度调整。已改为积极贴地策略，若需恢复可重新定义并在代码中引用。
 
 /** 基底高合理性下限（米，死海以下视为转换器伪值） */
 const MIN_SANE_BASE_HEIGHT = -450;
@@ -484,11 +485,10 @@ function resolveTilesetBaseHeight(tileset, Cesium, rootJson = null) {
     return { baseHeight: carto.height, reliable: false, source: 'sphere-center' };
 }
 
-/** 构造沿地表法线的垂直平移矩阵（与 setTilesetHeight 手动滑杆同一几何口径） */
-function buildVerticalTranslation(Cesium, lngRad, latRad, offsetMeters) {
-    const origin = Cesium.Cartesian3.fromRadians(lngRad, latRad, 0);
-    const target = Cesium.Cartesian3.fromRadians(lngRad, latRad, offsetMeters);
-    const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
+/** 构造沿模型中心点径向方向（地心→模型中心）的垂直平移矩阵 */
+function buildVerticalTranslation(Cesium, modelCenter, offsetMeters) {
+    const up = Cesium.Cartesian3.normalize(modelCenter, new Cesium.Cartesian3());
+    const translation = Cesium.Cartesian3.multiplyByScalar(up, offsetMeters, new Cesium.Cartesian3());
     return Cesium.Matrix4.fromTranslation(translation);
 }
 
@@ -532,19 +532,14 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
     let terrainElevation = null;
 
     if (!hasRealTerrain) {
-        // 椭球地形：地表即高 0。旧行为"无地形就什么都不做"，带真实海拔的数据会悬空
-        // 数百米——这正是"先导入、后开地形"链路里模型飘在空中的直观来源。
-        // 现在把底部落到 0；用户切换真实地形时由 refitTilesetToTerrain 自动重贴。
-        if (reliable && Math.abs(bottomH) > TERRAIN_FIT_DEADBAND) {
-            appliedOffset = -bottomH;
-            tileset.modelMatrix = buildVerticalTranslation(
-                Cesium, carto.longitude, carto.latitude, appliedOffset,
-            );
-            console.warn('[贴地] 椭球地形: 底部', bottomH.toFixed(1), 'm → 0 m（来源:', source,
-                '），切换真实地形后将自动重贴');
-        } else {
-            console.warn('[贴地] 椭球地形: 底部', bottomH.toFixed(1), 'm（死区内或不可信），不调整');
-        }
+        // 无真实地形时不做任何平移：数据自带海拔即它应该在的位置，椭球 0 ≠ 数据真实海拔，
+        // 强制拉到 0 会让模型偏离真实位置，并污染 modelMatrix 导致后续滑杆坐标系漂移。
+        // 用户切换真实地形时由 refitTilesetToTerrain 自动重贴到正确地表。
+        console.warn('[贴地] 无真实地形，保持数据原始位置（底部海拔', bottomH.toFixed(1), 'm）');
+        // 无真实地形时不做任何平移：数据自带海拔即它应该在的位置，椭球 0 ≠ 数据真实海拔，
+        // 强制拉到 0 会让模型偏离真实位置，并污染 modelMatrix 导致后续滑杆坐标系漂移。
+        // 用户切换真实地形时由 refitTilesetToTerrain 自动重贴到正确地表。
+        console.warn('[贴地] 无真实地形，保持数据原始位置（底部海拔', bottomH.toFixed(1), 'm）');
     } else if (!reliable) {
         console.warn('[贴地] 无可用基底采样，跳过自动贴地，可用高程滑杆手动调整');
         message?.warning?.('无法解析数据基底高度，已按原始位置放置，可用卡片高程滑杆微调');
@@ -559,17 +554,17 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
                 console.warn('[贴地] 基底与地形形态差异较大（MAD=', est.mad.toFixed(1),
                     'm），单一垂直平移取中位最优贴合，局部仍可能悬空/嵌入');
             }
-            if (Math.abs(est.offset) <= TERRAIN_FIT_DEADBAND) {
-                console.warn('[贴地]', est.count, '点配对中位差', est.offset.toFixed(2),
-                    'm（死区内），数据自身配准正确，不调整');
-            } else if (Math.abs(est.offset) > MAX_AUTO_FIT_OFFSET) {
+            if (Math.abs(est.offset) > MAX_AUTO_FIT_OFFSET) {
                 console.warn('[贴地] 修正量', est.offset.toFixed(0), 'm 超出上限，疑似坐标系错误，跳过自动贴地');
                 message?.warning?.('数据与地形高差异常，已按原始位置放置，请检查数据坐标系');
             } else {
+                // 积极贴地：即便偏差小（<= 原先死区），也尝试施加中位数偏移，使模型更贴合地形
                 appliedOffset = est.offset;
                 tileset.modelMatrix = buildVerticalTranslation(
-                    Cesium, carto.longitude, carto.latitude, appliedOffset,
+                    Cesium, tileset.boundingSphere.center, appliedOffset,
                 );
+                // 同步更新 _originMatrix 使后续 setTilesetHeight 基于新的基准矩阵（避免累积偏移）
+                tileset._originMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
                 console.warn('[贴地] 中位配准:', est.count, '点, 底部', bottomH.toFixed(1), 'm',
                     est.offset > 0 ? '抬升' : '下沉', Math.abs(est.offset).toFixed(1),
                     'm (MAD=', est.mad.toFixed(1), 'm, 来源:', source, ')');
@@ -599,7 +594,7 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
  * 因此每次重贴都是相对原始位置的绝对平移——幂等，反复切换地形不累积误差。
  *
  * - 切到真实地形：重新逐点配对 → 中位数配准；
- * - 切回椭球地形：底部落到 0（地表即高 0）；
+ * - 切回椭球地形：保持数据原始位置（椭球 0 ≠ 数据真实海拔，强制归零反而漂移）；
  * - 采样失败/修正量超限：保持当前位置，不做破坏性移动。
  *
  * @param {Object} p
@@ -617,8 +612,6 @@ export async function refitTilesetToTerrain({ record, tileset, viewer, Cesium })
         return false;
     }
 
-    const lonRad = Cesium.Math.toRadians(geo.lng);
-    const latRad = Cesium.Math.toRadians(geo.lat);
     const hasRealTerrain = !!viewer.terrainProvider
         && viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider;
 
@@ -635,18 +628,33 @@ export async function refitTilesetToTerrain({ record, tileset, viewer, Cesium })
             console.warn('[贴地] 重贴地: 修正量', est.offset.toFixed(0), 'm 超出上限，疑似坐标系错误，跳过');
             return false;
         }
-        offset = Math.abs(est.offset) <= TERRAIN_FIT_DEADBAND ? 0 : est.offset;
+        // 积极贴地：直接采用中位数偏移（如果需要保留死区逻辑，可将 TERRAIN_FIT_DEADBAND 恢复为 >0）
+        offset = est.offset;
+        // 积极贴地：直接采用中位数偏移（如果需要保留死区逻辑，可将 TERRAIN_FIT_DEADBAND 恢复为 >0）
+        offset = est.offset;
         terrainElevation = est.terrainElevation;
         console.warn('[贴地] 地形切换重贴:', est.count, '点配对, 中位差', est.offset.toFixed(1),
             'm (MAD=', est.mad.toFixed(1), 'm) → 施加', offset.toFixed(1), 'm');
     } else {
-        offset = Math.abs(geo.bottomH) <= TERRAIN_FIT_DEADBAND ? 0 : -geo.bottomH;
-        console.warn('[贴地] 切回椭球地形: 底部', geo.bottomH.toFixed(1), 'm → 0 m');
+        // 切回椭球地形：保持数据原始位置，不做破坏性移动。
+        // 椭球 0 ≠ 数据真实海拔，强制归零会污染 modelMatrix 导致后续滑杆坐标系漂移。
+        // 同时必须跳过 _originMatrix 重置——否则下次拖动滑杆时会基于 identity 复合偏移，
+        // 导致模型高度跳跃（_originMatrix 应始终基于原始导入位姿，地形切换不改变它）。
+        console.warn('[贴地] 切回椭球地形，保持数据原始位置（底部海拔', geo.bottomH.toFixed(1), 'm）');
+        record.currentBaseHeight = geo.bottomH;
+        geo.initialBaseHeight = geo.bottomH;
+        return true;
     }
 
     tileset.modelMatrix = offset === 0
         ? Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY)
-        : buildVerticalTranslation(Cesium, lonRad, latRad, offset);
+        : buildVerticalTranslation(Cesium, tileset.boundingSphere.center, offset);
+
+    // 同步更新 _originMatrix：setTilesetHeight 左乘平移矩阵时以它为基准，
+    // 地形切换后基准必须刷新，否则下次拖动会基于旧基准复合，产生累积漂移。
+    if (tileset._originMatrix) {
+        tileset._originMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
+    }
 
     record.currentBaseHeight = geo.bottomH + offset;
     geo.initialBaseHeight = record.currentBaseHeight;
@@ -1164,6 +1172,56 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         ),
     });
     message.success('样例 3D Tiles 加载成功');
+    return record;
+}
+
+/**
+ * 加载内置样例 3D Tiles：武汉建筑数据（public/tileset/baimo/tileset.json）
+ * 默认应用白膜贴图材质
+ */
+export async function loadSampleBaimoTileset({ getCesium, getViewer, message, loadedDataSources, nextId }) {
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+
+    const tileset = await Cesium.Cesium3DTileset.fromUrl(
+        'https://3dtiles.negiao.cc.cd/baimo/tileset.json',
+        { maximumScreenSpaceError: 10, maximumMemoryUsage: 5120 },
+    );
+
+    viewer.scene.primitives.add(tileset);
+
+    // 默认白膜贴图材质
+    applyTilesetMaterial(tileset, 'baimo', Cesium);
+
+    // 初始贴地（样例路径：fetch 根 JSON 收集叶子基底采样，失败退化运行时瓦片树）
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+        tileset, viewer, Cesium, rootJsonUrl: './tileset/baimo/tileset.json', message,
+    });
+
+    const id = `tileset_${++nextId.current}`;
+    const record = {
+        id,
+        name: '武汉建筑数据',
+        type: '3dtiles',
+        entity: tileset,
+        terrainElevation,
+        tilesetGeo,
+        currentBaseHeight,
+        terrainFitSamples: baseSamples,
+        materialMode: 'baimo',
+    };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    await viewer.flyTo(tileset, {
+        duration: 1.5,
+        offset: new Cesium.HeadingPitchRange(
+            0,
+            Cesium.Math.toRadians(-45),
+            tileset.boundingSphere.radius * 0.4,
+        ),
+    });
+    message.success('武汉建筑 3D Tiles 加载成功');
     return record;
 }
 

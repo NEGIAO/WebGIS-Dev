@@ -6,6 +6,41 @@
 
 ## 版本记录
 
+### V3.5.17 (2026-08-11) — 综合版本：Agent 模式大改（免费默认 AI + 路由模式隔离）· 管理面板升级 · 模型调用统计 · Cesium 贴地重构
+
+> 暂存区多次不规范改动合并为单一版本（Review + Bug 修复 + 文档合并，详见[合并关账日志](LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md)；其中「配置保存跨模式污染修复」见[专项日志](LLM_record/26-08/2026-08-11/2026-08-11-fix-chatconfig-model-mode-scoped.md)）。
+
+#### 前端 — Agent 对话路由模式重构
+
+- **默认 AI 免费化**（前后端一致）：后端 `/chat/default-proxy` 移除配额预检与按 token 扣费，改为免费服务（`quota: null, cost: 0`）；前端默认 AI 模式不显示消耗、不判定配额耗尽、不拦截发送、状态条显示「免费（不扣额度）」（新增 `chat.freeQuota` i18n）。
+- **个人 Key 模式独立判定**：新增 `isPersonalMode`（仅用户主动填写个人 api_key+base_url 才算），展示层与通道判定解耦，默认 AI 不再被误判为直连。
+- **配置保存按路由模式隔离**（修复跨模式污染）：默认 AI 模式保存模型只写 `defaultAIModel` + localStorage + 账号偏好，不再写入后端个人配置（`agent_user_config`）；不再清空 `directConfig`；状态条展示实际请求模型；`loadAvailableModels` 恢复该模式上次选择；`syncDraftFromDirectConfig` 草稿对齐 `defaultAIModel`。
+- **Review 回归修复**：`callLLM` 默认 AI 分支恢复 `finalModel = defaultAIModel || dc.model`（此前重构后请求永远用管理员默认模型，面板选择失效）；`ChatConfigPanel.pickModel` 恢复按模式写入（默认 AI → defaultAIModel / 个人 Key → directConfig.model）。
+- `ChatServiceStatus.vue`：三模式状态展示重构（默认 AI=免费、个人 Key=不消耗平台配额、代理=消耗+额度）。
+- `ChatPanelContent.vue`：发送/刷新配额/消耗累计的判定全部改为按 `isDefaultAIMode`/`isPersonalMode` 分流。
+
+#### 前端 — 管理控制台升级
+
+- `AdminControlPanel.vue`：整段重写（模板 1403 行）——顶部 Tab 支持拖拽/横向滚动定位；数据表行内 JSON 编辑（替代 window.prompt）；页脚状态指示；`useAgentConfig` 统一装配（Agent 配置表单）。
+
+#### 前端/后端 — API 用量统计
+
+- 后端 `api_management.py`：新增 `/api-management/usage/by-model`（管理员），按 `request_params` 中 base_url+model 维度聚合调用/成功/错误/响应耗时/最后使用时间；三通道（completions/default-proxy/proxy）的 `request_params` 均含 model+base_url。
+- 前端 `api/backend/admin.js` 新增 `apiAdminApiUsageByModel`；`ApiManagementPanel.vue` 端点统计 Tab 改为「模型调用统计」（Base URL/模型列），用户配额表新增用户名搜索 + 表头排序。
+
+#### 前端 — Cesium 贴地链路重构
+
+- `buildVerticalTranslation` 改为按模型中心径向向量平移（弃用经纬度两点相减，修复非标准投影/精度问题）；`setTilesetHeight` 增加 `_originMatrix` 基准复合（首次调整缓存含贴地偏移的基准矩阵，后续左乘平移，避免累积漂移与右乘导致的斜移）。
+- `fitTilesetToTerrain`/`refitTilesetToTerrain`：取消 2m 死区改**积极贴地**（中位偏移直接施加）；椭球地形（无真实地形）不再强制拉回 0 海拔（数据自带海拔即真实位置）；修正量超限仍跳过。
+- `CesiumToolPanel.vue`：高程滑杆范围改造——新增基于采样回填的 `sampledRangeMap`（`request-range-sample` 事件 + `setSampledRange`），兜底策略最小下限 -10m；`emitSetHeight` 按范围 clamp。
+- 新增武汉建筑白膜样例（`loadSampleBaimoTileset`，`3dtiles.negiao.cc.cd/baimo`CDN）+ 场景/数据双菜单入口（`sampleBaimo` i18n）。
+
+#### 文档 / 依赖 / 其他
+
+- 新增演示页 `Docs/Demo/first_person_fly.html`（Vue3 + Cesium 第一人称漫游，纯 CDN 无密钥）。
+- `dompurify` 3.4.11 → 3.4.13（Dependabot）。
+- `floatingaccountpanel.vue`：全屏模式 Tab 导航改 nowrap（修复换行挤压）；`useCesiumSceneActions` 移除未使用的 `message` 参数；`.github/traffic.json` 自动统计更新。
+
 ### V3.5.16 (2026-08-08) — 综合版本：远程 3D 服务 · 材质修复 · 透明度诊断 · UI 统一 · 开发体验
 
 > 综合版本：聚合 4 项 L2 任务——远程 3D 服务加载（Ion/I3S/3D Tiles）+ 数据源统一注册；场景 Tab「加载 3D 模型」→ 下拉菜单（与 Data Tab 同范式）；3D Tiles 材质模式 5 项 Bug 修复；数据源透明度链路加固与诊断；以及若干未单独开版本的改动（HomeView Cesium 感知路由、vite 开发服务器代理配置、.env.local 后端 URL 相对路径化）。详见各[日志](LLM_record/26-08/2026-08-08/)。

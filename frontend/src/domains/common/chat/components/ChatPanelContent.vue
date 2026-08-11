@@ -150,7 +150,7 @@ function buildWelcome() {
             }),
         };
     }
-    if (config.isDirectMode) {
+    if (config.isPersonalMode) {
         return {
             role: 'assistant',
             content: t('chat.welcomeDirect', { url: config.directConfig.base_url }),
@@ -174,14 +174,14 @@ const messageListRef = ref(null);
 const inputPlaceholder = computed(() => {
     if (config.quotaExhausted) return t('chat.placeholderQuotaExhausted');
     if (config.isDefaultAIMode) return t('chat.placeholderDefault');
-    if (config.isDirectMode) return t('chat.placeholderDirect');
+    if (config.isPersonalMode) return t('chat.placeholderDirect');
     if (!config.serviceReady) return t('chat.placeholderNotReady');
     return t('chat.placeholderGeneral');
 });
 
 const sendDisabled = computed(() => {
     if (isLoading.value) return true;
-    if (config.isDirectMode && !config.isDefaultAIMode) return false;
+    if (config.isPersonalMode) return false;
     return !config.serviceReady || config.quotaExhausted;
 });
 
@@ -379,7 +379,8 @@ async function executeToolsAndUpdateUI(toolCalls, assistantMsgIndex) {
 async function dispatchSend(rawText, { skipUserPush = false } = {}) {
     const userMsg = String(rawText || '').trim();
     if (!userMsg || isLoading.value) return;
-    if ((!config.isDirectMode || config.isDefaultAIMode) && (!config.serviceReady || config.quotaExhausted)) return;
+    // 默认 AI / 个人 Key 模式不受配额限制；仅后端代理模式受配额限制
+    if (!config.isDefaultAIMode && !config.isPersonalMode && (!config.serviceReady || config.quotaExhausted)) return;
 
     if (session.pruneHistoryIfNeeded(buildWelcome)) {
         config.statusHint = t('chat.historyTrimmed');
@@ -404,6 +405,7 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
     const list = session.messages.value;
 
     // ── 累计本轮对话各轮次的真实消耗（后端返回的 cost 折算值）──
+    // 默认 AI 模式使用免费 LLM，不扣用户额度，无需累计消耗
     let totalCallCost = 0;
     config.lastCallCost = 0;
 
@@ -422,7 +424,8 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
 
         // 立即显示第一轮消耗，让用户第一时间看到反馈；后续轮次在最后用后端 cost 汇总校正。
         // quota 不在此处更新——避免额度数字在对话过程中乱跳，只在最后统一刷新。
-        if (firstRound.cost) {
+        // 默认 AI 模式使用免费 LLM，不扣用户额度，不显示消耗
+        if (firstRound.cost && !config.isDefaultAIMode) {
             config.lastCallCost = firstRound.cost;
             totalCallCost += firstRound.cost;
         }
@@ -482,7 +485,8 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
                 if (seq !== requestSeq) return;
 
                 // 累计第二轮消耗（同一轮对话内的多轮 LLM 调用）；quota 仍只在最后统一刷新
-                if (secondRound.cost) totalCallCost += secondRound.cost;
+                // 默认 AI 模式使用免费 LLM，不扣用户额度，不累计消耗
+                if (secondRound.cost && !config.isDefaultAIMode) totalCallCost += secondRound.cost;
                 if (secondRound.usedModel) config.modelName = secondRound.usedModel;
 
                 if (secondRound.reply) {
@@ -505,16 +509,17 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
             await typewriterReveal(assistantMsgIndex, reply || t('chat.emptyReply'), seq);
         }
 
-        if ((!config.isDirectMode || config.isDefaultAIMode) && config.quotaExhausted) {
+        if (!config.isDefaultAIMode && !config.isPersonalMode && config.quotaExhausted) {
             config.statusHint = t('chat.quotaExhaustedHint');
         }
 
         // 发消息完成后，从权威源重新拉取实时配额（与用户中心一致）
         // 注意：必须用 reloadAgentConfig(false) 直接刷新，不能用 requestQuotaRefresh()——
         // 后者有 5 秒节流，连续对话时会被跳过，导致 quota 未更新。
-        // 默认 AI 模式（isDirectMode 为真但 isDefaultAIMode）同样按 token 扣用户额度，需一并刷新；
-        // 仅个人 Key 直连（用户自己的 Key）不消耗平台配额，无需刷新。
-        if (!config.isDirectMode || config.isDefaultAIMode) {
+        // 默认 AI 模式使用免费 LLM，不扣用户额度，无需刷新配额；
+        // 仅个人 Key 直连（用户自己的 Key）不消耗平台配额，无需刷新；
+        // 仅后端代理模式使用收费 LLM，按 token 扣用户额度，需刷新配额并显示本次消耗。
+        if (!config.isDefaultAIMode && !config.isPersonalMode) {
             await config.reloadAgentConfig(false);
             // 用后端返回的各轮 cost 之和覆盖 lastCallCost（比配额差值更精确：
             // 并发对话/其他配额操作不会污染本次消耗计算）。
@@ -669,7 +674,9 @@ function requestQuotaRefresh() {
 watch(
     () => props.activeTab,
     (tab) => {
-        if (tab === 'chat' && (!config.isDirectMode || config.isDefaultAIMode)) {
+        // 默认 AI 模式使用免费 LLM，不扣用户额度，无需刷新配额；
+        // 仅后端代理模式使用收费 LLM，切回 chat 时刷新实时配额
+        if (tab === 'chat' && !config.isDefaultAIMode && !config.isPersonalMode) {
             requestQuotaRefresh();
         }
     },

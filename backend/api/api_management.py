@@ -9,6 +9,7 @@ API 管理与调用统计模块 - 仅管理员可访问
 """
 
 import asyncio
+import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -243,6 +244,91 @@ def _get_api_usage_by_endpoint_sync(days: int = 7, limit: int = 50) -> List[Dict
     return [dict(row) for row in rows]
 
 
+def _get_api_usage_by_model_sync(days: int = 7, limit: int = 50) -> List[Dict[str, Any]]:
+    """按 base_url + model 维度聚合调用统计（解析 request_params JSON）"""
+    _ensure_api_log_table_sync()
+
+    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_iso = cutoff_time.isoformat()
+
+    with _db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                api_endpoint,
+                request_params,
+                COUNT(*) as call_count,
+                SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) as success_count,
+                SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as error_count,
+                AVG(CAST(response_time_ms AS FLOAT)) as avg_response_time_ms,
+                MAX(response_time_ms) as max_response_time_ms,
+                MIN(response_time_ms) as min_response_time_ms,
+                MAX(timestamp) as last_used_at
+            FROM api_call_logs
+            WHERE timestamp > ?
+            GROUP BY api_endpoint, request_params
+            ORDER BY call_count DESC
+            LIMIT ?
+            """,
+            (cutoff_iso, limit * 5),
+        ).fetchall()
+
+    # 按 base_url + model 聚合
+    agg: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        rp = {}
+        try:
+            rp = json.loads(row["request_params"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        base_url = str(rp.get("base_url") or "").strip() or "unknown"
+        model = str(rp.get("model") or "").strip() or "unknown"
+        key = f"{base_url}||{model}"
+
+        if key not in agg:
+            agg[key] = {
+                "base_url": base_url,
+                "model": model,
+                "call_count": 0,
+                "success_count": 0,
+                "error_count": 0,
+                "response_time_sum": 0.0,
+                "max_response_time_ms": 0.0,
+                "min_response_time_ms": float("inf"),
+                "last_used_at": "",
+            }
+
+        entry = agg[key]
+        entry["call_count"] += row["call_count"]
+        entry["success_count"] += row["success_count"]
+        entry["error_count"] += row["error_count"]
+        entry["response_time_sum"] += float(row["avg_response_time_ms"] or 0) * row["call_count"]
+        entry["max_response_time_ms"] = max(entry["max_response_time_ms"], row["max_response_time_ms"] or 0)
+        entry["min_response_time_ms"] = min(entry["min_response_time_ms"], row["min_response_time_ms"] or float("inf"))
+        row_last = row["last_used_at"] or ""
+        if row_last > entry["last_used_at"]:
+            entry["last_used_at"] = row_last
+
+    result = []
+    for entry in agg.values():
+        avg_ms = entry["response_time_sum"] / entry["call_count"] if entry["call_count"] > 0 else 0
+        result.append({
+            "base_url": entry["base_url"],
+            "model": entry["model"],
+            "call_count": entry["call_count"],
+            "success_count": entry["success_count"],
+            "error_count": entry["error_count"],
+            "avg_response_time_ms": round(avg_ms, 2),
+            "max_response_time_ms": round(entry["max_response_time_ms"], 2),
+            "min_response_time_ms": round(entry["min_response_time_ms"], 2) if entry["min_response_time_ms"] != float("inf") else 0,
+            "last_used_at": entry["last_used_at"],
+        })
+
+    result.sort(key=lambda x: x["call_count"], reverse=True)
+    return result[:limit]
+
+
 def _get_api_logs_sync(
     limit: int = 500,
     offset: int = 0,
@@ -389,6 +475,22 @@ async def get_api_usage_by_endpoint(
 ) -> Dict[str, Any]:
     """获取所有 API 端点的调用统计"""
     stats = await asyncio.to_thread(_get_api_usage_by_endpoint_sync, days, limit)
+    return {
+        "status": "success",
+        "data": stats,
+        "period_days": days,
+        "total_records": len(stats),
+    }
+
+
+@router.get("/api-management/usage/by-model")
+async def get_api_usage_by_model(
+    days: int = Query(7, ge=1, le=90, description="统计天数"),
+    limit: int = Query(50, ge=1, le=200, description="返回模型数"),
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取按 base_url + model 聚合的调用统计"""
+    stats = await asyncio.to_thread(_get_api_usage_by_model_sync, days, limit)
     return {
         "status": "success",
         "data": stats,

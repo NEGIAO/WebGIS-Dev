@@ -220,6 +220,7 @@ async def agent_chat_completions(
     request_params = json.dumps(
         {
             "model": runtime_model,
+            "base_url": base_url,
             "history_len": len(history_items),
             "quota_subject": quota_subject,
             "api_key_source": runtime.get("api_key_source"),
@@ -435,17 +436,8 @@ async def agent_chat_default_proxy(
     """
     username = str(session.get("username") or "anonymous")
     role = normalize_role(session.get("role"), username)
-    quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
 
-    # 统一 API 配额预检（只读快照，不消耗；扣费仅在真正成功调用上游之后执行）
-    quota_snapshot = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
-    if quota_snapshot["remaining"] is not None and quota_snapshot["remaining"] <= 0:
-        limit = quota_snapshot["limit"]
-        used = quota_snapshot["used"]
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"今日 API 额度已达上限（{used}/{limit}），请明日再试。",
-        )
+    # 默认 AI 模式（管理员配置的免费服务）：不设配额限制，不扣减额度。
 
     # 从数据库读取管理员配置的默认 AI 配置
     default_config = await asyncio.to_thread(_get_default_ai_config_sync)
@@ -531,27 +523,15 @@ async def agent_chat_default_proxy(
                 detail="Agent upstream returned empty content.",
             )
 
-        # 按 token 消耗折算 API 配额（tokens_per_unit tokens = 1 额度，单次至少扣 1）。
-        # 扣费仅在真正成功调用上游之后执行；上游失败/超时路径不消耗额度。
-        tokens_per_unit = await asyncio.to_thread(_get_agent_tokens_per_unit)
+        # 默认 AI 模式：免费服务，不扣减额度，仅记录 usage 供展示
         usage = upstream_data.get("usage") if isinstance(upstream_data, dict) else None
-        total_tokens = int(usage.get("total_tokens", 0) if isinstance(usage, dict) else 0)
-        agent_cost = max(1, (total_tokens + tokens_per_unit - 1) // tokens_per_unit)
-
-        # 扣费在 upstream 成功后执行。此处不拦截 allowed=False：上游已成功、答案已生成，
-        # 正常交付；超限时 _consume_api_quota_sync 封顶到每日限额（used=limit / remaining=0），
-        # 下一次请求由上方配额预检以 429 拦截，不会再出现「余额不足仍可继续请求」。
-        quota_after = await asyncio.to_thread(
-            _consume_api_quota_sync, username, role, quota_subject, cost=agent_cost, action="agent",
-        )
-
         data = {
             "reply": reply,
             "model": model,
             "usage": usage,
             "mode": "default-proxy",
-            "quota": quota_after,
-            "cost": agent_cost,
+            "quota": None,
+            "cost": 0,
         }
         if tool_calls:
             data["tool_calls"] = tool_calls

@@ -14,7 +14,7 @@ import { loadSHP } from './loaders/shpLoader.js';
 import { loadGLTF, loadGltfWithCoords } from './loaders/gltfLoader.js';
 import { loadCZML } from './loaders/czmlLoader.js';
 import { loadGeoTIFF } from './loaders/geotiffLoader.js';
-import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
+import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleBaimoTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
@@ -634,18 +634,32 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             return;
         }
 
-        const { lng, lat, bottomH } = tilesetGeo;
-        const offset = targetHeight - bottomH;
-
-        const origin = Cesium.Cartesian3.fromRadians(
-            Cesium.Math.toRadians(lng), Cesium.Math.toRadians(lat), 0);
-        const target = Cesium.Cartesian3.fromRadians(
-            Cesium.Math.toRadians(lng), Cesium.Math.toRadians(lat), offset);
-        const translation = Cesium.Cartesian3.subtract(target, origin, new Cesium.Cartesian3());
+        const { initialBaseHeight = tilesetGeo.bottomH } = tilesetGeo;
+        const offset = targetHeight - initialBaseHeight;
 
         // I3S 等复合 primitive：优先使用内部 tileset 引用（entity 本身无 modelMatrix）
         const tileset = toRaw(record.tileset || record.entity);
-        tileset.modelMatrix = Cesium.Matrix4.fromTranslation(translation);
+
+        // 垂直平移向量：取模型中心点径向方向（地心→模型中心），乘以偏移量。
+        // 不能用 fromRadians 两点相减——绕经纬度转换有精度损失，且对 Ion 等
+        // 非标准投影数据方向不准；直接用模型中心点坐标归一化才是真·垂直方向。
+        const modelCenter = tileset.boundingSphere.center;
+        const up = Cesium.Cartesian3.normalize(modelCenter, new Cesium.Cartesian3());
+        const translation = Cesium.Cartesian3.multiplyByScalar(up, offset, new Cesium.Cartesian3());
+        const translationMatrix = Cesium.Matrix4.fromTranslation(translation);
+
+        // 首次调整时缓存当前 matrix 作为基准（含加载时的地理参考位姿 + 贴地偏移），
+        // 后续调整始终基于该基准复合，避免多次拖动累积偏移。
+        // 左乘（世界坐标平移），不能右乘——右乘是在模型局部坐标系中平移，
+        // 对 Cesium Ion 等 modelMatrix 含旋转的数据会偏向，导致模型斜移/随镜头漂移。
+        if (!tileset._originMatrix) {
+            tileset._originMatrix = Cesium.Matrix4.clone(tileset.modelMatrix);
+        }
+        tileset.modelMatrix = Cesium.Matrix4.multiply(
+            translationMatrix,
+            tileset._originMatrix,
+            new Cesium.Matrix4(),
+        );
         record.currentBaseHeight = targetHeight;
         loadedDataSources.value = [...loadedDataSources.value];
 
@@ -679,6 +693,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         MATERIAL_MODES,
         applyTilesetMaterial,
         loadSampleTileset: () => loadSampleTileset(loaderCtx()),
+        loadSampleBaimoTileset: () => loadSampleBaimoTileset(loaderCtx()),
         loadSampleIonTileset: () => loadSampleIonTileset(loaderCtx()),
         loadSampleI3sTileset: () => loadSampleI3sTileset(loaderCtx()),
         loadSampleDiscreteLODTileset: () => loadSampleDiscreteLODTileset(loaderCtx()),

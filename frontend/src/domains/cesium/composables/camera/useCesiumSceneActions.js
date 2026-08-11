@@ -1,4 +1,4 @@
-export function useCesiumSceneActions({ getViewer, getCesium, message }) {
+export function useCesiumSceneActions({ getViewer, getCesium }) {
     function flyToHome(param) {
         const viewer = getViewer?.();
         const Cesium = getCesium?.();

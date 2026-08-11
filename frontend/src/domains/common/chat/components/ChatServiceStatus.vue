@@ -3,49 +3,55 @@
         <div class="status-line">
             <span class="status-label">{{ t('chat.routingMode') }}</span>
             <button
-                :class="['mode-toggle-btn', config.isDefaultAIMode ? 'mode-default-ai' : config.isDirectMode ? 'mode-direct' : 'mode-proxy']"
+                :class="['mode-toggle-btn', config.isDefaultAIMode ? 'mode-default-ai' : config.isPersonalMode ? 'mode-direct' : 'mode-proxy']"
                 :title="t('chat.clickToSwitchMode')"
                 @click="config.toggleRoutingMode()"
             >
-                {{ config.isDefaultAIMode ? t('chat.defaultAIMode') : config.isDirectMode ? t('chat.personalKeyMode') : t('chat.backendProxy') }}
+                {{ config.isDefaultAIMode ? t('chat.defaultAIMode') : config.isPersonalMode ? t('chat.personalKeyMode') : t('chat.backendProxy') }}
                 <span class="mode-toggle-hint">{{ t('chat.clickToSwitch') }}</span>
             </button>
         </div>
         <div class="status-line">
             <span class="status-label">{{ t('chat.serviceStatus') }}</span>
             <span :class="['status-value', config.serviceReady ? 'status-ready' : 'status-unready']">
-                {{ config.serviceReady ? (config.isDefaultAIMode ? t('chat.defaultAIReady') : config.isDirectMode ? t('chat.personalAPIReady') : t('chat.serviceReady')) : t('chat.serviceNotReady') }}
+                {{ config.serviceReady ? (config.isDefaultAIMode ? t('chat.defaultAIReady') : config.isPersonalMode ? t('chat.personalAPIReady') : t('chat.serviceReady')) : t('chat.serviceNotReady') }}
             </span>
         </div>
         <div class="status-line">
             <span class="status-label">{{ t('chat.currentModel') }}</span>
             <span class="status-value">{{ config.modelName || t('chat.notConfigured') }}
                 <span v-if="config.isDefaultAIMode" class="model-source-tag default-ai">{{ t('chat.adminConfigured') }}</span>
-                <span v-else-if="config.directConfig.model && config.isDirectMode" class="model-source-tag">{{ t('chat.personalKey') }}</span>
+                <span v-else-if="config.directConfig.model && config.isPersonalMode" class="model-source-tag">{{ t('chat.personalKey') }}</span>
                 <span v-else-if="config.modelName" class="model-source-tag proxy">{{ t('chat.proxy') }}</span>
             </span>
         </div>
+        <!-- 默认 AI 模式：免费 LLM，不扣用户额度、不受限制 -->
         <div
-            v-if="!config.isDirectMode || config.isDefaultAIMode"
+            v-if="config.isDefaultAIMode"
             class="status-line"
         >
-            <span class="status-label">{{ t('chat.lastCostLabel') }}</span>
-            <span class="status-value cost-value">{{ config.lastCallCost > 0 ? `-${config.lastCallCost}` : t('chat.noCostYet') }}</span>
+            <span class="status-label">{{ t('chat.quota') }}</span>
+            <span class="status-value status-default-ai">{{ t('chat.freeQuota') }}</span>
         </div>
+        <!-- 个人 Key 模式：用户自己的 Key，不消耗平台配额 -->
         <div
-            v-if="!config.isDirectMode || config.isDefaultAIMode"
-            class="status-line"
-        >
-            <span class="status-label">{{ t('chat.todayQuota') }}</span>
-            <span :class="['status-value', { 'quota-exhausted': config.quotaExhausted }]">{{ config.quotaText }}</span>
-        </div>
-        <div
-            v-if="config.isDirectMode && !config.isDefaultAIMode"
+            v-else-if="config.isPersonalMode"
             class="status-line"
         >
             <span class="status-label">{{ t('chat.quota') }}</span>
             <span class="status-value status-direct">{{ t('chat.unlimitedQuota') }}</span>
         </div>
+        <!-- 后端代理模式：收费 LLM，实时显示本次消耗 + 今日额度 -->
+        <template v-else>
+            <div class="status-line">
+                <span class="status-label">{{ t('chat.lastCostLabel') }}</span>
+                <span class="status-value cost-value">{{ config.lastCallCost > 0 ? `-${config.lastCallCost}` : t('chat.noCostYet') }}</span>
+            </div>
+            <div class="status-line">
+                <span class="status-label">{{ t('chat.todayQuota') }}</span>
+                <span :class="['status-value', { 'quota-exhausted': config.quotaExhausted }]">{{ config.quotaText }}</span>
+            </div>
+        </template>
         <small :class="['hint', { 'hint-exhausted': config.quotaExhausted }]">{{ config.statusHint }}</small>
     </div>
 </template>

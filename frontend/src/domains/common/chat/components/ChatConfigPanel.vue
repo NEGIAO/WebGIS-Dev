@@ -9,7 +9,7 @@
                 />
                 <span class="cfg-card-title">{{ t('chat.configTitle') }}</span>
                 <span
-                    v-if="config.isDirectMode"
+                    v-if="config.isPersonalMode"
                     class="cfg-badge"
                 >{{ t('chat.personalKeyEnabled') }}</span>
             </div>
@@ -276,9 +276,18 @@ const filteredModels = computed(() => {
     );
 });
 
-/** 从下拉列表选中某个模型并持久化偏好 */
+/** 从下拉列表选中某个模型：写入当前路由模式对应的独立状态并持久化偏好 */
 function pickModel(id) {
     config.userConfigDraft.model = id;
+    // 同步写入当前路由模式对应的独立状态，避免「选了模型但请求仍用旧模型/管理员默认模型」：
+    // 默认 AI → defaultAIModel（该模式的实际请求模型源）；
+    // 个人 Key → directConfig.model（个人 Key 通道的请求模型源）；
+    // 后端代理 → userConfigDraft.model 即权威（上面已写），无需额外动作。
+    if (config.isDefaultAIMode) {
+        config.defaultAIModel = id;
+    } else if (config.isPersonalMode) {
+        config.directConfig.model = id;
+    }
     config.saveModelPreference(id);
     showModelDropdown.value = false;
 }
