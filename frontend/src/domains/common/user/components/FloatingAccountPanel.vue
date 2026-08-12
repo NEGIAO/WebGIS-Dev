@@ -22,6 +22,7 @@ import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRo
 import { BASEMAP_OPTIONS } from '@/constants';
 import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '@/stores';
 import { getUserDisplayName } from '@common/user/composables/useAuthIdentity';
+import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 import { useLocale } from '@common/app/useLocale';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
@@ -35,6 +36,21 @@ const message = useMessage();
 const userPreferencesStore = useUserPreferencesStore();
 const themeStore = useThemeStore();
 const { t } = useLocale();
+
+// SSE 实时统计推送（V3.4.63）：心跳触发后端广播，前端 EventSource 监听更新
+const { connected: _sseConnected, connect: reconnect, disconnect } = useRealtimeStats({
+    onStats: (data) => {
+        if (data) {
+            centerData.value = {
+                ...centerData.value,
+                realtime: {
+                    ...centerData.value.realtime,
+                    ...data,
+                },
+            };
+        }
+    },
+});
 const props = defineProps({
     open: {
         type: Boolean,
@@ -367,6 +383,12 @@ function setOpen(nextValue) {
     if (isOpen.value === normalized) return;
     isOpen.value = normalized;
     emit('update:open', normalized);
+    // SSE：面板打开时连接，关闭时断开
+    if (normalized) {
+        reconnect();
+    } else {
+        disconnect();
+    }
 }
 
 function setFullscreen(nextValue) {
@@ -401,10 +423,13 @@ watch(
         const normalized = Boolean(nextValue);
         if (isOpen.value !== normalized) {
             isOpen.value = normalized;
+            // SSE：受控模式下也同步连接状态
             if (normalized) {
                 loadCenterData({ silent: true });
+                reconnect();
             } else {
                 setFullscreen(false);
+                disconnect();
                 setTimeout(afterPanelClose, 200);
             }
         }
@@ -717,7 +742,7 @@ onMounted(() => {
         centerTimer = window.setInterval(() => {
             loadCenterData({ silent: true });
             refreshRealtimeData({ silent: true });
-        }, 30000);
+        }, 15000);
     }
 
     document.addEventListener('keydown', handleDocumentKeydown);
@@ -1499,7 +1524,27 @@ onBeforeUnmount(() => {
 }
 
 .account-panel.is-fullscreen .panel-header {
-    padding: 16px 22px;
+    padding: 10px 18px;
+    gap: 10px;
+}
+
+.account-panel.is-fullscreen .header-btns {
+    flex-direction: row;
+    gap: 6px;
+}
+
+.account-panel.is-fullscreen .profile-avatar.large {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+}
+
+.account-panel.is-fullscreen .profile-avatar.large img {
+    border-radius: 10px;
+}
+
+.account-panel.is-fullscreen    .profile-name {
+    font-size: 15.5px;
 }
 
 .account-panel.is-fullscreen .panel-nav {

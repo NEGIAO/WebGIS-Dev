@@ -6,8 +6,11 @@ import asyncio
 import json
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
+
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -60,7 +63,7 @@ def _db_connection() -> sqlite3.Connection:
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(_BEIJING_TZ).isoformat()
 
 
 def _validate_identifier(name: str) -> str:

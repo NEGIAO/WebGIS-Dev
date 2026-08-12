@@ -8,8 +8,11 @@
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
+
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 import httpx
 from fastapi import APIRouter, Depends, Request
@@ -354,7 +357,7 @@ async def track_visit(
     """
 
     ip = get_client_ip(request)
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(_BEIJING_TZ).isoformat()
 
     # IP 定位（使用统一服务，带缓存）
     location = await ip_geo_service.locate(ip=ip, prefer_amap=False, use_cache=True)

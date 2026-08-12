@@ -2,6 +2,8 @@
 会话管理：创建、读取、删除会话，用户密码/头像更新。
 """
 
+import asyncio
+import logging
 import secrets
 from datetime import timedelta
 from typing import Any, Dict, Optional
@@ -16,6 +18,8 @@ from .constants import (
 from .db import _db_connection, _iso, _safe_parse_iso, _utc_now
 from .password import _hash_password
 from .user import _ensure_user_metric_row_sync
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_logout_duration_sync(
@@ -135,6 +139,7 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
 
         # 心跳触活（V3.4.60）：节流刷新 last_seen_at，统计侧据此按活跃窗口判在线。
         # 空串经 _safe_parse_iso 得 None → 立即写；写失败不阻断会话验证主流程。
+        # V3.4.63：刷新成功后异步广播到 SSE 客户端（不阻塞鉴权主流程）。
         last_seen = _safe_parse_iso(str(data.get("last_seen_at") or ""))
         if last_seen is None or (now - last_seen).total_seconds() >= SESSION_TOUCH_THROTTLE_SECONDS:
             try:
@@ -145,6 +150,8 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
                 )
                 conn.commit()
                 data["last_seen_at"] = now_iso
+                # SSE 广播：心跳成功后异步推送最新统计快照
+                _trigger_stats_broadcast()
             except Exception:
                 pass  # 心跳属尽力而为，不因统计辅助字段影响鉴权
 
@@ -196,6 +203,35 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
             data["requires_email_binding"] = False
 
         return data
+
+
+def _trigger_stats_broadcast() -> None:
+    """
+    触发实时统计 SSE 广播（V3.4.63）。
+
+    在心跳成功刷新 last_seen_at 后调用，异步计算最新统计并推送到所有 SSE 客户端。
+    使用 asyncio.run_coroutine_threadsafe 从同步上下文桥接到异步事件循环。
+    所有异常静默处理，绝不阻塞鉴权主流程。
+    """
+    try:
+        from api.realtime_stats import get_broadcaster
+
+        broadcaster = get_broadcaster()
+        if broadcaster.client_count == 0:
+            return  # 无客户端连接，跳过计算
+
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            async def _compute_and_broadcast():
+                try:
+                    stats = _get_realtime_global_stats_sync()
+                    await broadcaster.broadcast("online_stats", stats)
+                except Exception:
+                    pass
+
+            asyncio.run_coroutine_threadsafe(_compute_and_broadcast(), loop)
+    except Exception:
+        pass  # SSE 广播为尽力而为，任何异常不影响鉴权
 
 
 def _delete_session_sync(token: str) -> None:

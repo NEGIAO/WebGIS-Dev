@@ -11,6 +11,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 from urllib.parse import quote, urlparse
 
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -528,11 +531,11 @@ def _build_status_response(task: DownloadTask) -> DownloadTaskStatusResponse:
     # 动态修正剩余时间（基于实际速率）
     # 注意：下载初期（elapsed < 10s 或 progress < 5%）速率不稳定，使用静态估算避免误导
     estimated_remaining = None
-    now = datetime.now(timezone.utc)
+    now = datetime.now(_BEIJING_TZ)
     if task.status in ("downloading", "stitching") and task.progress > 5:
         created_at = task.created_at
         if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+            created_at = created_at.replace(tzinfo=_BEIJING_TZ)
         elapsed = (now - created_at).total_seconds()
         if elapsed > 10:
             rate = task.progress / elapsed  # %/s
@@ -574,7 +577,7 @@ async def list_my_tasks(
 def _get_active_tasks_by_user(username: str) -> List[DownloadTask]:
     """获取用户未过期的有效任务"""
     ttl = _get_task_ttl_minutes()
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl)
+    cutoff = datetime.now(_BEIJING_TZ) - timedelta(minutes=ttl)
     return list_active_tasks_by_user(username, cutoff)
 
 
@@ -720,9 +723,9 @@ def _get_expiration(task: DownloadTask) -> tuple[datetime, int, bool]:
     last_active = task.updated_at if task.updated_at else task.created_at
     ttl_minutes = _get_task_ttl_minutes()
     expires_at = last_active + timedelta(minutes=ttl_minutes)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(_BEIJING_TZ)
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=_BEIJING_TZ)
     expires_in = max(0, int((expires_at - now).total_seconds()))
     return expires_at, expires_in, now >= expires_at
 

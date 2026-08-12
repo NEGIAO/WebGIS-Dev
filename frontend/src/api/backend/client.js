@@ -33,6 +33,38 @@ if (typeof window !== 'undefined' && window.location.protocol === 'http:' && !/^
     console.warn('[Backend] 安全警告：当前通过 HTTP 连接后端，凭证将以明文传输。生产环境请启用 HTTPS。');
 }
 
+// ─── 用户公网 IP 获取 & 缓存（V3.4.63）───
+// Docker 环境 request.client.host 是容器网关 IP（如 172.18.0.1），不是用户真实公网 IP。
+// 前端通过 ipify 获取用户公网 IP 并缓存，每次请求通过 X-Client-IP header 传给后端。
+let _cachedPublicIp = null;
+let _ipFetchPromise = null;
+
+async function getPublicIp() {
+    if (_cachedPublicIp) return _cachedPublicIp;
+    if (_ipFetchPromise) return _ipFetchPromise;
+
+    _ipFetchPromise = (async () => {
+        try {
+            const resp = await axios.get('https://api.ipify.org?format=json', { timeout: 5000 });
+            const ip = resp?.data?.ip;
+            if (ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+                _cachedPublicIp = ip;
+                return ip;
+            }
+        } catch {
+            // 获取失败不影响主流程，后端会用 fallback IP
+        }
+        return null;
+    })();
+
+    return _ipFetchPromise;
+}
+
+// 启动时预热（不阻塞）
+void getPublicIp();
+
+export { getPublicIp };
+
 /**
  * 后端 API 客户端实例
  * 自动处理请求/响应拦截
@@ -50,7 +82,7 @@ const backendAPI = axios.create({
  * 用于添加全局请求头、认证信息等
  */
 backendAPI.interceptors.request.use(
-    (config) => {
+    async (config) => {
         const token = getAuthToken();
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -62,6 +94,14 @@ backendAPI.interceptors.request.use(
             const guestDeviceId = getOrCreateGuestDeviceId();
             if (guestDeviceId) {
                 config.headers['X-Guest-Device-Id'] = guestDeviceId;
+            }
+        }
+
+        // 传递用户公网 IP（V3.4.63）：后端在 Docker 环境拿到的 request.client.host 是容器网关 IP
+        if (!config.headers['X-Client-IP']) {
+            const publicIp = await getPublicIp();
+            if (publicIp) {
+                config.headers['X-Client-IP'] = publicIp;
             }
         }
 

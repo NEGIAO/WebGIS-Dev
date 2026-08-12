@@ -15,6 +15,9 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -60,11 +63,11 @@ def _db_connection() -> sqlite3.Connection:
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(_BEIJING_TZ).isoformat()
 
 
 def _utc_date_str() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return datetime.now(_BEIJING_TZ).strftime("%Y-%m-%d")
 
 
 def _ensure_api_log_table_sync() -> None:
@@ -155,7 +158,7 @@ def _get_api_usage_by_user_sync(days: int = 7, limit: int = 100) -> List[Dict[st
     """按用户查看 API 调用统计（最近 N 天）"""
     _ensure_api_log_table_sync()
 
-    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_time = datetime.now(_BEIJING_TZ) - timedelta(days=days)
     cutoff_iso = cutoff_time.isoformat()
 
     with _db_connection() as conn:
@@ -184,7 +187,7 @@ def _get_quota_usage_by_user_sync(days: int = 7, limit: int = 100) -> List[Dict[
     """按用户查看配额消耗统计（最近 N 天，基于统一配额池 api_usage_daily）"""
     _ensure_api_log_table_sync()
 
-    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_time = datetime.now(_BEIJING_TZ) - timedelta(days=days)
     cutoff_date = cutoff_time.strftime('%Y-%m-%d')
 
     with _db_connection() as conn:
@@ -211,14 +214,14 @@ def _get_quota_usage_by_user_sync(days: int = 7, limit: int = 100) -> List[Dict[
 
 def _utc_date_str() -> str:
     """返回 UTC 当天日期字符串 YYYY-MM-DD"""
-    return datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    return datetime.now(_BEIJING_TZ).strftime('%Y-%m-%d')
 
 
 def _get_api_usage_by_endpoint_sync(days: int = 7, limit: int = 50) -> List[Dict[str, Any]]:
     """按 API 端点查看调用统计"""
     _ensure_api_log_table_sync()
     
-    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_time = datetime.now(_BEIJING_TZ) - timedelta(days=days)
     cutoff_iso = cutoff_time.isoformat()
 
     with _db_connection() as conn:
@@ -248,7 +251,7 @@ def _get_api_usage_by_model_sync(days: int = 7, limit: int = 50) -> List[Dict[st
     """按 base_url + model 维度聚合调用统计（解析 request_params JSON）"""
     _ensure_api_log_table_sync()
 
-    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_time = datetime.now(_BEIJING_TZ) - timedelta(days=days)
     cutoff_iso = cutoff_time.isoformat()
 
     with _db_connection() as conn:
@@ -339,7 +342,7 @@ def _get_api_logs_sync(
     """获取 API 调用日志"""
     _ensure_api_log_table_sync()
     
-    cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_time = datetime.now(_BEIJING_TZ) - timedelta(days=days)
     cutoff_iso = cutoff_time.isoformat()
 
     where_clauses = ["timestamp > ?"]

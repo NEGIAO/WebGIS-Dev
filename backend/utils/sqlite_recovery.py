@@ -24,9 +24,12 @@ import subprocess
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 from utils.sqlite_maintenance import record_maintenance_manifest
 
@@ -70,13 +73,13 @@ class SQLiteRecoveryResult:
 
 
 def _utc_stamp(value: Optional[datetime] = None) -> str:
-    return (value or datetime.now(timezone.utc)).astimezone(timezone.utc).strftime(
-        "%Y%m%dT%H%M%S%fZ"
+    return (value or datetime.now(_BEIJING_TZ)).astimezone(_BEIJING_TZ).strftime(
+        "%Y%m%dT%H%M%S%f"
     )
 
 
 def _utc_iso(value: Optional[datetime] = None) -> str:
-    return (value or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat()
+    return (value or datetime.now(_BEIJING_TZ)).astimezone(_BEIJING_TZ).isoformat()
 
 
 def _sha256(path: Path) -> str:
@@ -773,7 +776,7 @@ def recover_sqlite_database(
     except SQLiteRecoveryError as exc:
         cli_error = exc
 
-    detected_dt = datetime.now(timezone.utc)
+    detected_dt = datetime.now(_BEIJING_TZ)
     detected_at = _utc_iso(detected_dt)
     stamp = _utc_stamp(detected_dt)
     event_id = uuid.uuid4().hex

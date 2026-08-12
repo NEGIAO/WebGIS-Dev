@@ -31,10 +31,13 @@ logger = logging.getLogger(__name__)
 # 高德 IP 定位（优先由 L2 api_keys.amap_key 动态读取，env 仅旧部署兜底）
 AMAP_IP_ENDPOINT = get_str("IP_GEO_AMAP_ENDPOINT")
 
-# ip-api.com（免费，无速率限制，支持 HTTPS）
+# ip-api.com（免费，无速率限制，仅 HTTP）
 IP_API_ENDPOINT = get_str("IP_GEO_IP_API_ENDPOINT")
 
-# ipapi.co（免费，有速率限制 30次/分钟）
+# ipwho.is（免费，不屏蔽数据中心 IP，支持 HTTPS）
+IPWHO_ENDPOINT = get_str("IP_GEO_IPWHO_ENDPOINT")
+
+# ipapi.co（有速率限制 30次/分钟）
 IPAPI_ENDPOINT = get_str("IP_GEO_IPAPI_ENDPOINT")
 
 # HTTP 客户端配置
@@ -66,12 +69,27 @@ class IpGeoResult:
     city: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    source: str = "unknown"  # "amap", "ip-api", "ipapi"
+    source: str = "unknown"  # "amap", "ip-api", "ipwho", "ipapi"
 
     @property
     def province(self) -> str:
         """兼容旧代码的 province 字段"""
         return self.region
+
+
+# ─── 私有 IP 检测（V3.4.63）───
+# Docker 容器 IP（172.18.0.1 等）属于私有地址段，任何外部服务都无法定位。
+# 使用标准库 ipaddress 判断，避免无意义的外部请求和 403/超时日志噪音。
+
+
+def _is_private_ip(ip: str) -> bool:
+    """判断是否为私有/保留 IP（无需请求外部服务）"""
+    try:
+        import ipaddress
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved
+    except ValueError:
+        return True  # 非法 IP 格式，视为私有（跳过）
 
 
 # ==================== 缓存实现 ====================
@@ -206,7 +224,7 @@ class IpGeoService:
         Returns:
             IpGeoResult 或 None（所有服务都失败时）
         """
-        if not ip or ip in ("127.0.0.1", "::1", "localhost"):
+        if not ip or _is_private_ip(ip):
             return None
 
         # 1. 检查缓存
@@ -226,13 +244,19 @@ class IpGeoService:
                 _cache.set(ip, result)
                 return result
 
-        # 优先级 2: ip-api.com（免费无限制）
+        # 优先级 2: ipwho.is（免费，HTTPS，不屏蔽数据中心 IP，V3.4.63 升至优先）
+        result = await self._locate_ipwho(ip)
+        if result:
+            _cache.set(ip, result)
+            return result
+
+        # 优先级 3: ip-api.com（免费，仅 HTTP，不稳定，可能返回 502）
         result = await self._locate_ip_api(ip)
         if result:
             _cache.set(ip, result)
             return result
 
-        # 优先级 3: ipapi.co（备用，有速率限制）
+        # 优先级 4: ipapi.co（有速率限制，最后兜底）
         result = await self._locate_ipapi(ip)
         if result:
             _cache.set(ip, result)
@@ -313,6 +337,38 @@ class IpGeoService:
             )
         except Exception as e:
             logger.debug("ip-api.com 定位失败: ip=%s, error=%s", ip, str(e))
+            return None
+
+    async def _locate_ipwho(self, ip: str) -> Optional[IpGeoResult]:
+        """ipwho.is 定位（免费，支持 HTTPS，不屏蔽数据中心 IP）"""
+        try:
+            client = await self._get_client()
+            resp = await client.get(f"{IPWHO_ENDPOINT}/{ip}")
+
+            if resp.status_code != 200:
+                return None
+
+            try:
+                data = resp.json()
+            except ValueError:
+                logger.debug("ipwho.is 返回非 JSON 响应: ip=%s", ip)
+                return None
+
+            if not isinstance(data, dict) or not data.get("success", True):
+                return None
+
+            return IpGeoResult(
+                ip=data.get("ip", ip),
+                country=data.get("country", ""),
+                country_code=data.get("country_code", ""),
+                region=data.get("region", ""),
+                city=data.get("city", ""),
+                latitude=data.get("latitude"),
+                longitude=data.get("longitude"),
+                source="ipwho",
+            )
+        except Exception as e:
+            logger.debug("ipwho.is 定位失败: ip=%s, error=%s", ip, str(e))
             return None
 
     async def _locate_ipapi(self, ip: str) -> Optional[IpGeoResult]:

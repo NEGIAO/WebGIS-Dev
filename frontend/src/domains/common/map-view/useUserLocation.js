@@ -3,6 +3,7 @@ import Point from 'ol/geom/Point';
 import CircleGeom from 'ol/geom/Circle';
 import { fromLonLat } from 'ol/proj';
 import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationReverse } from '@/api';
+import { getPublicIp } from '@/api/backend/client';
 import { useMessage } from '@common/shell/useMessage';
 import { saveUserPositionToCache } from '@common/map-view/services/userPositionCache';
 import { setGlobalUserLocationContext } from '@common/map-view/services/userLocationContext';
@@ -171,6 +172,9 @@ export function useUserLocation({
         const { silent = false } = options || {};
 
         try {
+            // [Fix V3.4.63] 等公网 IP 就绪，避免后端收到私有 IP 返回 400
+            await getPublicIp();
+
             const response = await apiIpCountry('');
             const data = response?.data || {};
             const cc = data.country || data.country_code || data.country_name;
@@ -181,9 +185,9 @@ export function useUserLocation({
             isDomestic.value = isDom;
             return { isDomestic: isDom };
         } catch (e) {
-            const detail = e instanceof Error ? e.message : 'unknown';
+            // 国内外判定是辅助逻辑，失败时静默处理（不弹 toast），避免首屏加载时干扰用户
             if (!silent) {
-                message.warning(`IP locale detect failed: ${detail}`);
+                console.warn('[detectIPLocale] 国内外判定失败:', e instanceof Error ? e.message : 'unknown');
             }
             isDomestic.value = false;
             return { isDomestic: false };
@@ -471,6 +475,11 @@ export function useUserLocation({
         const { signal } = activeLocateController;
 
         try {
+            // [Fix V3.4.63] 确保公网 IP 就绪后再发起定位，避免后端收到 Docker 网关 IP 导致定位失败
+            if (!disableAmapIpLocation) {
+                await getPublicIp();
+            }
+
             // [Fix] GPS 定位：带超时和错误分类
             const gpsTask = getCurrentLocation(true)
                 .then((pos) => ({

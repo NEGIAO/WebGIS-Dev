@@ -3,9 +3,12 @@ Agent Chat 纯工具函数（无数据库、无 HTTP 访问）。
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel
@@ -34,11 +37,11 @@ def _model_dump_compat(payload: BaseModel, *, exclude_none: bool = False, exclud
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(_BEIJING_TZ).isoformat()
 
 
 def _utc_date_str() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return datetime.now(_BEIJING_TZ).strftime("%Y-%m-%d")
 
 
 def _normalize_base_url(value: str) -> str:

@@ -8,7 +8,10 @@ import os
 import shutil
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+# 北京时间时区（UTC+8）
+BEIJING_TZ = timezone(timedelta(hours=8))
 from pathlib import Path
 from typing import Optional
 
@@ -104,7 +107,7 @@ def backup_auth_db_for_migration(reason: str) -> Optional[Path]:
     if _migration_backup_done or not AUTH_DB_PATH.exists():
         return None
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    timestamp = datetime.now(BEIJING_TZ).strftime("%Y%m%d%H%M%S")
     backup_dir = AUTH_DB_PATH.parent / "migration_backups"
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)
@@ -355,20 +358,33 @@ def _safe_execute(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> boo
         return False
 
 
-# ─── 时间工具 ───
+# ─── 时间工具（V3.4.63：UTC → UTC+8 北京时间）───
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    """当前北京时间（UTC+8）"""
+    return datetime.now(BEIJING_TZ)
 
 
 def _iso(dt: datetime) -> str:
-    return dt.astimezone(timezone.utc).isoformat()
+    """格式化为北京时间 ISO 字符串"""
+    return dt.astimezone(BEIJING_TZ).isoformat()
 
 
 def _parse_iso(text: str) -> datetime:
     parsed = datetime.fromisoformat(str(text))
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=BEIJING_TZ)
+    return parsed.astimezone(BEIJING_TZ)
+
+
+def _utc_date_str() -> str:
+    return _utc_now().date().isoformat()
+
+
+def _safe_parse_iso(text: str) -> Optional[datetime]:
+    try:
+        return _parse_iso(text)
+    except Exception:
+        return None
 
 
 def _utc_date_str() -> str:

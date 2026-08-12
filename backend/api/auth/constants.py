@@ -55,12 +55,12 @@ SUPPORTED_UNIT_SYSTEMS = {
 SESSION_EXPIRE_HOURS = get_settings().session_expire_hours
 PASSWORD_HASH_ITERATIONS = get_settings().password_hash_iterations
 
-# ─── 在线判定（V3.4.60，普通常量非配置 key）───
+# ─── 在线判定（V3.4.60，普通常量非配置 key；V3.4.63 节流→15s 适配 SSE 实时推送）───
 # 心跳链路：鉴权单点 _get_session_sync 节流刷新 sessions.last_seen_at，
 # 统计侧以「未过期 且 last_seen_at 落在窗口内」判在线。
-# 约束：ONLINE_WINDOW_MINUTES(300s) ≫ 节流(60s) + 前端最长轮询间隔(30s)，
-# 活跃用户 last_seen_at 滞后上界 60s，不会因节流被误判离线。
-SESSION_TOUCH_THROTTLE_SECONDS = 60  # 距上次触活不足 60s 不写库（防写放大）
+# V3.4.63：节流从 60s → 15s，配合 SSE 广播使在线人数变化更快推送到前端；
+# 约束：ONLINE_WINDOW_MINUTES(300s) ≫ 节流(15s)，活跃用户不会因节流被误判离线。
+SESSION_TOUCH_THROTTLE_SECONDS = 15  # 距上次触活不足 15s 不写库（V3.4.63：适配 SSE 实时推送）
 ONLINE_WINDOW_MINUTES = 5            # 最近 5 分钟内有鉴权请求 = 在线
 
 # ─── OAuth 非密钥常量 ───
@@ -341,14 +341,22 @@ def _validate_password(password: str, field_name: str = "密码") -> None:
 
 # ─── 请求工具函数 ───
 def _extract_client_ip(request: Request) -> str:
+    # 优先级 1: 前端主动上报的公网 IP（V3.4.63，解决 Docker 环境 request.client.host 是容器网关 IP 的问题）
+    client_ip = str(request.headers.get("X-Client-IP", "")).strip()
+    if client_ip:
+        return client_ip
+
+    # 优先级 2: 反向代理设置的 X-Forwarded-For
     forwarded = str(request.headers.get("X-Forwarded-For", "")).strip()
     if forwarded:
         return forwarded.split(",")[0].strip()
 
+    # 优先级 3: 反向代理设置的 X-Real-IP
     real_ip = str(request.headers.get("X-Real-IP", "")).strip()
     if real_ip:
         return real_ip
 
+    # 优先级 4: 直连 IP（Docker 环境下为容器网关 IP，非真实用户 IP）
     return str(getattr(request.client, "host", "unknown") or "unknown")
 
 
@@ -362,6 +370,11 @@ def _extract_token(request: Request) -> str:
     header_token = str(request.headers.get("X-Auth-Token", "")).strip()
     if header_token:
         return header_token
+
+    # SSE（EventSource）不支持自定义 header，允许通过 query param 传 token（V3.4.63）
+    query_token = str(request.query_params.get("token", "")).strip()
+    if query_token:
+        return query_token
 
     return ""
 

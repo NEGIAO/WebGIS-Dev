@@ -1,8 +1,6 @@
-from __future__ import annotations
-
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlmodel import Field, SQLModel, Session, create_engine, select
@@ -14,9 +12,12 @@ logger = logging.getLogger(__name__)
 
 _db_path = get_str("DOWNLOAD_TASK_DB_PATH")
 
+# 北京时间（V3.4.63：UTC → UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
 
 def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(_BEIJING_TZ)
 
 
 class DownloadTask(SQLModel, table=True):
