@@ -253,6 +253,7 @@ import {
     Wrench,
 } from '@lucide/vue';
 import 'highlight.js/styles/github-dark-dimmed.css';
+import 'katex/dist/katex.min.css';
 import { useMarkdownRenderer } from '@common/utils/useMarkdownRenderer';
 import { useLocale } from '@common/app/useLocale';
 
@@ -1003,81 +1004,6 @@ defineExpose({ scrollToBottom });
     font-weight: 500;
 }
 
-.markdown-body pre {
-    background: #22272e;
-    color: #adbac7;
-    padding: 14px;
-    border-radius: 8px;
-    overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.88em;
-    line-height: 1.6;
-    margin: 12px 0;
-    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25);
-    position: relative;
-    border: 1px solid #373e47;
-}
-.markdown-body pre code.hljs {
-    background: transparent;
-    padding: 0;
-    border-radius: 0;
-    font-size: inherit;
-}
-
-.markdown-body pre .code-lang-badge {
-    position: absolute;
-    top: 0;
-    left: 0;
-    background: #373e47;
-    color: #768390;
-    padding: 2px 10px;
-    font-size: 0.72em;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    letter-spacing: 0.04em;
-    text-transform: lowercase;
-    border-radius: 8px 0 6px 0;
-    border-bottom: 1px solid #444c56;
-    border-right: 1px solid #444c56;
-    user-select: none;
-    line-height: 1.6;
-}
-
-.markdown-body pre[data-lang] {
-    padding-top: 30px;
-}
-
-.markdown-body pre .code-copy-btn {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    background: rgba(255, 255, 255, 0.08);
-    color: #768390;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 0.76em;
-    cursor: pointer;
-    transition: all 0.2s;
-    opacity: 0;
-    z-index: 1;
-}
-
-.markdown-body pre:hover .code-copy-btn {
-    opacity: 1;
-}
-
-.markdown-body pre .code-copy-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
-    color: #cdd9e5;
-}
-
-.markdown-body pre .code-copy-btn.copied {
-    background: #347d39;
-    border-color: #347d39;
-    color: #cdd9e5;
-    opacity: 1;
-}
-
 /* highlight.js github-dark-dimmed 主题 token 颜色覆盖 */
 .markdown-body pre .hljs-comment,
 .markdown-body pre .hljs-quote { color: #768390; font-style: italic; }
@@ -1181,5 +1107,109 @@ defineExpose({ scrollToBottom });
     border-radius: 8px;
     margin: 8px 0;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+</style>
+
+<style>
+/* ============================================================
+   代码块样式（非 scoped，供 v-html 注入的 .code-block-wrapper 使用）
+   scoped 选择器会给所有元素加 data-v-xxx，但 v-html 注入的内容
+   无法携带该属性，导致 :deep() 编译出的 [data-v-xxx] 前缀链断裂。
+   因此代码块相关 CSS 必须放在非 scoped 块中。
+   ============================================================ */
+
+.markdown-body .code-block-wrapper {
+    position: relative;
+    margin: 12px 0;
+    border-radius: 8px;
+    border: 1px solid #373e47;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.markdown-body .code-block-wrapper pre {
+    background: #22272e;
+    color: #adbac7;
+    padding: 14px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.88em;
+    line-height: 1.6;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+.markdown-body .code-block-wrapper pre code.hljs {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+}
+
+.markdown-body .code-block-wrapper .code-lang-badge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: #373e47;
+    color: #768390;
+    padding: 2px 10px;
+    font-size: 0.72em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    border-radius: 8px 0 6px 0;
+    border-bottom: 1px solid #444c56;
+    border-right: 1px solid #444c56;
+    user-select: none;
+    line-height: 1.6;
+    z-index: 1;
+}
+
+.markdown-body .code-block-wrapper[data-lang] pre {
+    padding-top: 30px;
+}
+
+/* ========== 代码块复制按钮 ========== */
+.markdown-body .code-block-wrapper .code-copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    color: #768390;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.76em;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: all 0.2s;
+    opacity: 0;
+    z-index: 2;
+    box-sizing: border-box;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.markdown-body .code-block-wrapper:hover .code-copy-btn {
+    opacity: 1;
+}
+
+.markdown-body .code-block-wrapper .code-copy-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    color: #cdd9e5;
+}
+
+.markdown-body .code-block-wrapper .code-copy-btn.copied {
+    background: #347d39;
+    border-color: #347d39;
+    color: #cdd9e5;
+    opacity: 1;
 }
 </style>

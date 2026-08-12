@@ -2,11 +2,12 @@
  * useMarkdownRenderer - Agent 对话 Markdown 渲染 Composable
  *
  * 功能:
- *   1. 懒加载 marked / DOMPurify / highlight.js（首屏零开销）
+ *   1. 懒加载 marked / DOMPurify / katex / highlight.js（首屏零开销）
  *   2. marked v18 GFM 扩展：任务列表、表格、删除线
  *   3. 自定义 renderer：代码块带语言标签 + 复制按钮 + highlight.js 语法高亮
- *   4. Think 块格式化渲染（支持 markdown 嵌套）
- *   5. XSS 防护：DOMPurify sanitize
+ *   4. LaTeX 数学公式渲染：行内 $...$ 与块级 $$...$$（KaTeX）
+ *   5. Think 块格式化渲染（支持 markdown 嵌套）
+ *   6. XSS 防护：DOMPurify sanitize
  *
  * 输入: rawContent (string) - 原始 LLM 回复文本
  * 输出: { renderAnswerHtml, renderThinkHtml, hasThinkContent, ready }
@@ -59,7 +60,100 @@ hljs.registerLanguage('php', php);
 
 const markedLib = ref(null);
 const dompurifyLib = ref(null);
+const katexLib = ref(null);
 const libsReady = ref(false);
+
+// ========== KaTeX 数学公式渲染 ==========
+
+/**
+ * 数学公式占位符前缀（避免 marked 破坏 LaTeX 语法）
+ * 策略：在 marked 解析前将公式替换为占位符，解析后再用 KaTeX 渲染结果回代
+ * 注意：占位符使用纯字母数字，避免 _ 被 marked 解析为 <em>
+ */
+const MATH_PLACEHOLDER_PREFIX = 'MATHPLACEHOLDER';
+
+/**
+ * 创建单次渲染的公式上下文（隔离并发渲染）
+ * @returns {{ nextPlaceholder: () => string, store: Map }}
+ */
+function createMathContext() {
+    let counter = 0;
+    const store = new Map();
+    return {
+        nextPlaceholder() {
+            counter += 1;
+            return `${MATH_PLACEHOLDER_PREFIX}${counter}END`;
+        },
+        store,
+    };
+}
+
+/**
+ * 从 markdown 文本中提取数学公式并替换为占位符
+ * 支持：块级 $$...$$ 和 行内 $...$（转义 \$ 除外）
+ * @param {string} text - 原始 markdown 文本
+ * @param {object} ctx - 公式上下文（createMathContext 返回值）
+ * @returns {string} 提取公式后的文本
+ */
+function extractMathExpressions(text, ctx) {
+    if (!text) return text;
+
+    // 1. 块级公式 $$...$$（非贪婪，支持多行）
+    let result = text.replace(/\$\$([\s\S]*?)\$\$/g, (_match, latex) => {
+        const placeholder = ctx.nextPlaceholder();
+        ctx.store.set(placeholder, { latex: latex.trim(), displayMode: true });
+        return placeholder;
+    });
+
+    // 2. 行内公式 $...$（排除 $$ 和转义 \$）
+    //     规则：$ 后不紧跟 $，内容不含换行，结尾 $ 前不是 $
+    result = result.replace(/(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g, (_match, latex) => {
+        const placeholder = ctx.nextPlaceholder();
+        ctx.store.set(placeholder, { latex: latex.trim(), displayMode: false });
+        return placeholder;
+    });
+
+    return result;
+}
+
+/**
+ * 将占位符替换为 KaTeX 渲染后的 HTML
+ * @param {string} html - marked 解析后的 HTML（含占位符）
+ * @param {object} katex - KaTeX 库实例
+ * @param {Map} mathStore - 公式存储
+ * @returns {string} 替换后的 HTML
+ */
+function renderMathInHtml(html, katex, mathStore) {
+    if (!katex || !mathStore.size) return html;
+
+    let result = html;
+    for (const [placeholder, { latex, displayMode }] of mathStore) {
+        try {
+            const rendered = katex.renderToString(latex, {
+                displayMode,
+                throwOnError: false,
+                strict: false,
+                trust: false,
+            });
+            result = result.split(placeholder).join(rendered);
+            // 也尝试匹配 HTML 实体转义版本（& → &amp; 等）
+            const htmlEscaped = placeholder
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            if (htmlEscaped !== placeholder) {
+                result = result.split(htmlEscaped).join(rendered);
+            }
+        } catch (_e) {
+            // KaTeX 解析失败时回退为原始文本
+            const fallback = displayMode
+                ? `<pre class="math-fallback">$$${latex}$$</pre>`
+                : `<code class="math-fallback">$${latex}$</code>`;
+            result = result.split(placeholder).join(fallback);
+        }
+    }
+    return result;
+}
 
 // highlight.js 语言别名映射（常见缩写 → 正式语言名）
 const HLJS_ALIAS_MAP = {
@@ -154,7 +248,8 @@ function buildCustomRenderer() {
             // data-lang 属性供 CSS 和复制逻辑使用
             const langAttr = langLabel ? ` data-lang="${escapeHtmlAttr(langLabel)}"` : '';
 
-            return `<pre${langAttr}>${langBadge}${copyBtn}<code class="hljs${normalizedLang ? ` language-${normalizedLang}` : ''}">${highlighted}</code></pre>`;
+            // 使用 wrapper div 作为定位容器，避免 pre 的 overflow-x 裁剪绝对定位子元素
+            return `<div class="code-block-wrapper"${langAttr}>${langBadge}${copyBtn}<pre><code class="hljs${normalizedLang ? ` language-${normalizedLang}` : ''}">${highlighted}</code></pre></div>`;
         },
     };
 }
@@ -246,7 +341,7 @@ function parseThinkAndAnswer(rawContent) {
 async function ensureMarkdownLibs() {
     if (libsReady.value) return;
 
-    // marked 已通过静态 import 的 highlight.js 先行加载，这里只需动态加载 marked + dompurify
+    // marked 已通过静态 import 的 highlight.js 先行加载，这里只需动态加载 marked + dompurify + katex
     if (!markedLib.value) {
         try {
             const mod = await import('marked');
@@ -275,6 +370,16 @@ async function ensureMarkdownLibs() {
         }
     }
 
+    // KaTeX 懒加载（数学公式渲染）
+    if (!katexLib.value) {
+        try {
+            const mod = await import('katex');
+            katexLib.value = mod && (mod.default || mod);
+        } catch (_e) {
+            katexLib.value = null;
+        }
+    }
+
     libsReady.value = !!markedLib.value && !!dompurifyLib.value;
 }
 
@@ -282,6 +387,7 @@ async function ensureMarkdownLibs() {
  * DOMPurify sanitize 配置
  * 允许 target 属性（链接新窗口打开）+ class（hljs 需要）+ data-lang
  * 注意：不再允许 onclick，复制按钮改用容器事件委托
+ * KaTeX 渲染在 sanitize 之后执行，故 KaTeX 相关标签需加入白名单
  */
 const PURIFY_CONFIG = {
     ADD_ATTR: ['target', 'class', 'data-lang'],
@@ -296,6 +402,11 @@ const PURIFY_CONFIG = {
         'table', 'thead', 'tbody', 'tr', 'th', 'td',
         'div', 'details', 'summary',
         'button',
+        // KaTeX 输出标签
+        'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub',
+        'mfrac', 'msqrt', 'mroot', 'mover', 'munder', 'munderover',
+        'mtable', 'mtr', 'mtd', 'mspace', 'mtext', 'annotation',
+        'svg', 'path', 'line', 'rect', 'circle', 'polygon',
     ],
 };
 
@@ -317,7 +428,21 @@ function renderAnswerHtml(rawContent) {
         html = trimmed;
     } else if (markedLib.value && typeof markedLib.value.parse === 'function') {
         try {
-            html = markedLib.value.parse(trimmed);
+            // 数学公式提取 → marked 解析 → DOMPurify 消毒 → KaTeX 渲染回代
+            // 顺序：KaTeX 渲染在 sanitize 之后，避免其 output 的 style/mathML 标签被误杀
+            const ctx = createMathContext();
+            const preprocessed = extractMathExpressions(trimmed, ctx);
+            const parsed = markedLib.value.parse(preprocessed);
+            // 先消毒（占位符是纯文本，安全通过）
+            if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
+                html = dompurifyLib.value.sanitize(parsed, PURIFY_CONFIG);
+            } else {
+                html = parsed;
+            }
+            // 再用 KaTeX 渲染数学公式（在 sanitize 之后，避免 KaTeX HTML 被杀）
+            if (katexLib.value) {
+                html = renderMathInHtml(html, katexLib.value, ctx.store);
+            }
         } catch (_e) {
             html = `<div>${escapeHtml(trimmed).replace(/\n/g, '<br/>')}</div>`;
         }
@@ -326,8 +451,8 @@ function renderAnswerHtml(rawContent) {
         html = `<div>${escapeHtml(trimmed).replace(/\n/g, '<br/>')}</div>`;
     }
 
-    // XSS 防护：DOMPurify 不可用时降级为 escapeHtml，绝不返回原始 HTML
-    if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
+    // 非 marked 路径的 XSS 防护
+    if (!html && dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
         try {
             return dompurifyLib.value.sanitize(html, PURIFY_CONFIG);
         } catch (_e) {
@@ -335,7 +460,7 @@ function renderAnswerHtml(rawContent) {
         }
     }
 
-    return escapeHtml(trimmed).replace(/\n/g, '<br/>');
+    return html || escapeHtml(trimmed).replace(/\n/g, '<br/>');
 }
 
 /**
@@ -350,13 +475,22 @@ function renderThinkHtml(rawContent) {
     // Think 内容也支持 markdown 渲染（模型可能在思考中使用列表/代码块）
     if (markedLib.value && typeof markedLib.value.parse === 'function') {
         try {
-            const html = markedLib.value.parse(think);
-            // XSS 防护：DOMPurify 可用时消毒，不可用时降级为 escapeHtml
+            // 数学公式提取 → marked 解析 → DOMPurify 消毒 → KaTeX 渲染回代
+            const ctx = createMathContext();
+            const preprocessed = extractMathExpressions(think, ctx);
+            const parsed = markedLib.value.parse(preprocessed);
+            let html;
+            // 先消毒（占位符是纯文本，安全通过）
             if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
-                return dompurifyLib.value.sanitize(html, PURIFY_CONFIG);
+                html = dompurifyLib.value.sanitize(parsed, PURIFY_CONFIG);
+            } else {
+                html = parsed;
             }
-            // 安全兜底：DOMPurify 不可用时绝不返回原始 HTML
-            return escapeHtml(think).replace(/\n/g, '<br/>');
+            // 再用 KaTeX 渲染数学公式（在 sanitize 之后）
+            if (katexLib.value) {
+                html = renderMathInHtml(html, katexLib.value, ctx.store);
+            }
+            return html || escapeHtml(think).replace(/\n/g, '<br/>');
         } catch (_e) {
             // fallback
         }

@@ -9,6 +9,7 @@
  * - 鼠标特效
  */
 import { ref, reactive, computed, provide, defineAsyncComponent, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { Leaf } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '@common/shell/useMessage';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, useMapViewUrlState } from '@ol/url-state/useMapViewUrlState';
@@ -1473,7 +1474,7 @@ onMounted(async () => {
                         <!-- 头部：使用顶栏主题色 -->
                         <div class="eco-header">
                             <div class="header-content">
-                                <i class="icon-leaf">🍃</i>
+                                <i class="icon-leaf"><Leaf :size="16" /></i>
                                 <span class="eco-title">{{ t('home.attrInfo') }}</span>
                             </div>
                             <button

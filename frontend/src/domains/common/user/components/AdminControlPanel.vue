@@ -1,5 +1,17 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import {
+    Bot,
+    Check,
+    Database,
+    LayoutDashboard,
+    Megaphone,
+    MonitorDot,
+    NotebookPen,
+    Plus,
+    Settings,
+    X,
+} from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useAgentConfig } from '@common/chat/composables/useAgentConfig';
@@ -25,10 +37,10 @@ import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '@common/basemap/ba
 const activeTab = ref('overview');
 
 const tabs = [
-    { id: 'overview', icon: '📊', label: '概览与环境', desc: '系统指标 / 密钥状态', theme: 'emerald' },
-    { id: 'system', icon: '⚙️', label: '系统配置', desc: '公告 / 联系方式 / 限额', theme: 'blue' },
-    { id: 'agent', icon: '🤖', label: '模型与地图', desc: 'LLM 参数 / 默认底图', theme: 'purple' },
-    { id: 'database', icon: '🗄️', label: '数据管理', desc: '表浏览 / 行编辑 / 插入', theme: 'amber' },
+    { id: 'overview', icon: LayoutDashboard, label: '概览与环境', desc: '系统指标 / 密钥状态' },
+    { id: 'system', icon: Settings, label: '系统配置', desc: '公告 / 联系方式 / 限额' },
+    { id: 'agent', icon: Bot, label: '模型与地图', desc: 'LLM 参数 / 默认底图' },
+    { id: 'database', icon: Database, label: '数据管理', desc: '表浏览 / 行编辑 / 插入' },
 ];
 
 function selectTab(tabId) {
@@ -80,6 +92,124 @@ function scrollTabIntoView(tabId) {
 // 行内编辑状态
 const editingRowKey = ref(null);
 const editingJsonText = ref('');
+const editingCell = ref(null);       // "${rowKey}:${columnKey}" — 当前正在编辑的单元格
+const editingCellValue = ref('');   // 单元格编辑中的值
+/** 当前单元格编辑的输入框 DOM 引用（函数 ref，避免 v-for 中 ref 被覆盖） */
+let cellInputElement = null;
+function setCellInputRef(el) {
+    cellInputElement = el;
+}
+
+// 自动聚焦单元格输入框
+watch(editingCell, () => {
+    nextTick(() => {
+        cellInputElement?.focus();
+        cellInputElement?.select();
+    });
+});
+
+// 表格排序与搜索
+const dbSortKey = ref('');
+const dbSortDir = ref('desc');
+const dbSearch = ref('');
+
+/** 过滤后的行数文本 */
+const filteredRowCount = computed(() => {
+    const total = tableRows.value.length;
+    const keyword = dbSearch.value.trim().toLowerCase();
+    if (!keyword) return t('admin.rowCountText', { count: total });
+    const filtered = tableRows.value.filter((row) =>
+        selectedTableMeta.value?.columns?.some((col) =>
+            String(row[col.name] ?? '').toLowerCase().includes(keyword)
+        )
+    ).length;
+    return t('admin.rowCountFiltered', { filtered, total });
+});
+
+/** 搜索过滤 + 排序 */
+const sortedTableRows = computed(() => {
+    const columns = selectedTableMeta.value?.columns || [];
+    let list = [...tableRows.value];
+
+    const keyword = dbSearch.value.trim().toLowerCase();
+    if (keyword) {
+        list = list.filter((row) =>
+            columns.some((col) => String(row[col.name] ?? '').toLowerCase().includes(keyword))
+        );
+    }
+
+    if (columns.length && dbSortKey.value) {
+        const key = dbSortKey.value;
+        const multiplier = dbSortDir.value === 'asc' ? 1 : -1;
+        list.sort((a, b) => {
+            let va = a[key];
+            let vb = b[key];
+            if (typeof va === 'string' && typeof vb === 'string') {
+                return multiplier * (va < vb ? -1 : va > vb ? 1 : 0);
+            }
+            va = Number(va) || 0;
+            vb = Number(vb) || 0;
+            return multiplier * (va - vb);
+        });
+    }
+
+    return list;
+});
+
+/** 切换排序 */
+function toggleDbSort(colName) {
+    if (dbSortKey.value === colName) {
+        dbSortDir.value = dbSortDir.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        dbSortKey.value = colName;
+        dbSortDir.value = 'asc';
+    }
+}
+
+/** 单元格行内编辑 */
+function startEditCell(row, columnKey) {
+    // 互斥：行展开编辑模式下禁止单元格编辑
+    if (editingRowKey.value !== null) return;
+    const rowKey = getRowKey(row);
+    editingCell.value = `${rowKey}:${columnKey}`;
+    editingCellValue.value = String(row[columnKey] ?? '');
+}
+
+function cancelEditCell() {
+    editingCell.value = null;
+    editingCellValue.value = '';
+}
+
+async function saveEditCell(row, columnKey) {
+    if (submittingTable.value) return;
+    const tableName = String(selectedTable.value || '').trim();
+    if (!tableName) return;
+
+    const where = resolveWhere(row);
+    if (!where) {
+        message.warning(t('admin.noLocateKey'));
+        return;
+    }
+
+    submittingTable.value = true;
+    try {
+        // 智能解析：尝试 JSON（对象/数组/数字/布尔），失败则作为字符串
+        let parsed;
+        try {
+            parsed = JSON.parse(editingCellValue.value);
+        } catch {
+            parsed = editingCellValue.value;
+        }
+        await apiAdminUpdateRows(tableName, where, { [columnKey]: parsed });
+        message.success(t('admin.updateSuccess'));
+        cancelEditCell();
+        await loadRows();
+    } catch (error) {
+        message.error(String(error?.message || t('admin.updateFailed')));
+    } finally {
+        submittingTable.value = false;
+    }
+}
 
 const message = useMessage();
 const { t } = useLocale();
@@ -112,7 +242,21 @@ const tableRows = ref([]);
 
 const tableLimit = ref(30);
 const tableOffset = ref(0);
-const insertJsonText = ref('{\n  \n}');
+const insertRowData = ref({});  // 新增行表单数据 { [columnKey]: value }
+const showInsertRow = ref(false);
+
+/** 重置新增行表单 */
+function resetInsertRow() {
+    const data = {};
+    for (const col of selectedTableMeta.value?.columns || []) {
+        data[col.name] = '';
+    }
+    insertRowData.value = data;
+}
+
+watch(selectedTable, () => {
+    resetInsertRow();
+});
 
 const adminContactText = ref('');
 const announcementText = ref('');
@@ -235,8 +379,6 @@ const selectedTableMeta = computed(() => {
     return tables.value.find((item) => item.name === selectedTable.value) || null;
 });
 
-const rowCountText = computed(() => t('admin.rowCountText', { count: tableRows.value.length }));
-
 function parseJsonObject(text, hint) {
     const fallbackHint = hint || t('admin.jsonFormatError');
     try {
@@ -269,6 +411,13 @@ function toEditablePayload(row) {
 
 function getRowKey(row) {
     return String(row.__rowid || row.id || row.token || row.username || JSON.stringify(row));
+}
+
+/** 格式化单元格显示值：对象/数组显示为紧凑 JSON，其他直接转字符串 */
+function formatCellValue(value) {
+    if (value == null) return '-';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
 }
 
 function startEditRow(row) {
@@ -376,11 +525,20 @@ async function handleInsertRow() {
         return;
     }
 
-    let rowPayload = null;
-    try {
-        rowPayload = parseJsonObject(insertJsonText.value, t('admin.addParseFailed'));
-    } catch (error) {
-        message.error(String(error?.message || t('admin.addParseFailed')));
+    // 将表单数据转为 payload：空字符串跳过，非空智能解析
+    const rowPayload = {};
+    for (const col of selectedTableMeta.value?.columns || []) {
+        const raw = String(insertRowData.value[col.name] ?? '').trim();
+        if (!raw) continue;
+        try {
+            rowPayload[col.name] = JSON.parse(raw);
+        } catch {
+            rowPayload[col.name] = raw;
+        }
+    }
+
+    if (Object.keys(rowPayload).length === 0) {
+        message.warning(t('admin.insertEmpty'));
         return;
     }
 
@@ -388,6 +546,7 @@ async function handleInsertRow() {
     try {
         await apiAdminInsertRow(tableName, rowPayload);
         message.success(t('admin.addSuccess'));
+        resetInsertRow();
         await loadRows();
         await loadOverview();
     } catch (error) {
@@ -505,12 +664,12 @@ onMounted(async () => {
                 type="button"
                 role="tab"
                 class="tab-btn"
-                :class="[{ active: activeTab === tab.id }, `theme-${tab.theme}`]"
+                :class="{ active: activeTab === tab.id }"
                 :aria-selected="activeTab === tab.id"
                 :aria-controls="`admin-panel-${tab.id}`"
                 @click="scrollTabIntoView(tab.id); selectTab(tab.id)"
             >
-                <span class="tab-btn__icon" aria-hidden="true">{{ tab.icon }}</span>
+                <component :is="tab.icon" class="tab-btn__icon" :size="18" aria-hidden="true" />
                 <span class="tab-btn__body">
                     <span class="tab-btn__label">{{ tab.label }}</span>
                     <span class="tab-btn__desc">{{ tab.desc }}</span>
@@ -524,7 +683,7 @@ onMounted(async () => {
             <div
                 v-show="activeTab === 'overview'"
                 id="admin-panel-overview"
-                class="tab-panel theme-panel-emerald"
+                class="tab-panel"
                 role="tabpanel"
                 aria-labelledby="admin-tab-overview"
             >
@@ -534,7 +693,7 @@ onMounted(async () => {
 
                 <!-- KPI Grid with Visual Dominance -->
                 <div class="kpi-grid">
-                    <div class="kpi-card highlight-card teal">
+                    <div class="kpi-card">
                         <div class="kpi-icon">
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></svg>
                         </div>
@@ -544,7 +703,7 @@ onMounted(async () => {
                         </div>
                     </div>
 
-                    <div class="kpi-card highlight-card blue">
+                    <div class="kpi-card">
                         <div class="kpi-icon">
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /></svg>
                         </div>
@@ -554,7 +713,7 @@ onMounted(async () => {
                         </div>
                     </div>
 
-                    <div class="kpi-card highlight-card indigo">
+                    <div class="kpi-card">
                         <div class="kpi-icon">
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
                         </div>
@@ -564,7 +723,7 @@ onMounted(async () => {
                         </div>
                     </div>
 
-                    <div class="kpi-card highlight-card purple">
+                    <div class="kpi-card">
                         <div class="kpi-icon">
                             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
                         </div>
@@ -613,7 +772,7 @@ onMounted(async () => {
             <div
                 v-show="activeTab === 'system'"
                 id="admin-panel-system"
-                class="tab-panel theme-panel-blue"
+                class="tab-panel"
                 role="tabpanel"
                 aria-labelledby="admin-tab-system"
             >
@@ -623,7 +782,7 @@ onMounted(async () => {
                     <div class="card accent-top-blue">
                         <div class="card-header">
                             <div>
-                                <h3 class="card-title">📢 运营公告与联系人</h3>
+                                <h3 class="card-title"><Megaphone :size="16" /> 运营公告与联系人</h3>
                                 <p class="card-subtitle">实时更新全局系统顶部广播信息与联系通道</p>
                             </div>
                         </div>
@@ -737,7 +896,7 @@ onMounted(async () => {
             <div
                 v-show="activeTab === 'agent'"
                 id="admin-panel-agent"
-                class="tab-panel theme-panel-purple"
+                class="tab-panel"
                 role="tabpanel"
                 aria-labelledby="admin-tab-agent"
             >
@@ -746,7 +905,7 @@ onMounted(async () => {
                 <div class="card accent-left-purple">
                     <div class="card-header">
                         <div>
-                            <h3 class="card-title">🤖 {{ t('admin.llmConfigTitle') }}</h3>
+                            <h3 class="card-title"><MonitorDot :size="16" /> {{ t('admin.llmConfigTitle') }}</h3>
                             <p class="card-subtitle">{{ t('admin.llmConfigDesc') }}</p>
                         </div>
                         <div v-if="loadingAgentConfig" class="status-indicator">
@@ -896,7 +1055,7 @@ onMounted(async () => {
                 <div class="card accent-left-purple">
                     <div class="card-header">
                         <div>
-                            <h3 class="card-title">🗺️ {{ t('admin.mapDefaultConfig') }}</h3>
+                            <h3 class="card-title"><Globe :size="16" /> {{ t('admin.mapDefaultConfig') }}</h3>
                             <p class="card-subtitle">{{ t('admin.mapDefaultDesc') }}</p>
                         </div>
                         <div v-if="loadingBasemap" class="status-indicator">
@@ -943,7 +1102,7 @@ onMounted(async () => {
             <div
                 v-show="activeTab === 'database'"
                 id="admin-panel-database"
-                class="tab-panel theme-panel-amber"
+                class="tab-panel"
                 role="tabpanel"
                 aria-labelledby="admin-tab-database"
             >
@@ -951,7 +1110,7 @@ onMounted(async () => {
                 <div class="card accent-top-amber">
                     <div class="card-header">
                         <div>
-                            <h3 class="card-title">🗄️ {{ t('admin.dbManagement') }}</h3>
+                            <h3 class="card-title"><Database :size="16" /> {{ t('admin.dbManagement') }}</h3>
                             <p class="card-subtitle">实时查看、动态插入与快速维护数据表记录</p>
                         </div>
                         <div class="header-actions">
@@ -979,7 +1138,13 @@ onMounted(async () => {
                         </div>
 
                         <div class="toolbar-stats">
-                            <span class="badge info">{{ rowCountText }}</span>
+                            <input
+                                v-model="dbSearch"
+                                class="toolbar-search"
+                                type="text"
+                                :placeholder="t('admin.searchRows')"
+                            />
+                            <span class="badge info">{{ filteredRowCount }}</span>
                             <span v-if="selectedTableMeta" class="badge secondary">
                                 {{ t('admin.columnCount', { count: selectedTableMeta.columns?.length || 0 }) }}
                             </span>
@@ -999,68 +1164,108 @@ onMounted(async () => {
                         <div v-if="loadingRows" class="empty-state">
                             <span class="spinner"></span> 正在读取数据表行记录...
                         </div>
-                        <div v-else-if="tableRows.length > 0" class="rows-list">
-                            <div
-                                v-for="row in tableRows"
-                                :key="getRowKey(row)"
-                                :class="['row-card', { 'is-editing': editingRowKey === getRowKey(row) }]"
-                            >
-                                <!-- 行内编辑模式 -->
-                                <div v-if="editingRowKey === getRowKey(row)" class="edit-row-container">
-                                    <div class="edit-row-header">
-                                        <span class="editing-tag">📝 编辑 JSON 记录</span>
-                                    </div>
-                                    <textarea
-                                        v-model="editingJsonText"
-                                        class="form-textarea monospace edit-json-textarea"
-                                        rows="6"
-                                        placeholder="请输入有效 JSON..."
-                                    ></textarea>
-                                    <div class="row-card-actions">
-                                        <button
-                                            class="btn btn-secondary btn-sm"
-                                            type="button"
-                                            :disabled="submittingTable"
-                                            @click="cancelEditRow"
+                        <div v-else-if="sortedTableRows.length > 0" class="data-table-wrapper">
+                            <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th
+                                        v-for="col in selectedTableMeta?.columns"
+                                        :key="col.name"
+                                        scope="col"
+                                        class="sortable-th"
+                                        :class="{ active: dbSortKey === col.name }"
+                                        @click="toggleDbSort(col.name)"
+                                    >
+                                        <span class="th-content">
+                                            {{ col.name }}
+                                            <span class="sort-icon" aria-hidden="true">
+                                                {{ dbSortKey === col.name ? (dbSortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+                                            </span>
+                                        </span>
+                                    </th>
+                                    <th scope="col" class="actions-th">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template v-for="row in sortedTableRows" :key="getRowKey(row)">
+                                    <!-- 正常浏览行 -->
+                                    <tr v-if="editingRowKey !== getRowKey(row)" class="data-row">
+                                        <td
+                                            v-for="col in selectedTableMeta?.columns"
+                                            :key="col.name"
+                                            :class="{ 'cell-editing': editingCell === `${getRowKey(row)}:${col.name}` }"
+                                            @click="startEditCell(row, col.name)"
                                         >
-                                            取消
-                                        </button>
-                                        <button
-                                            class="btn btn-primary btn-sm"
-                                            type="button"
-                                            :disabled="submittingTable"
-                                            @click="saveEditRow(row)"
-                                        >
-                                            保存更新
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- 正常浏览模式 -->
-                                <div v-else class="view-row-container">
-                                    <div class="row-card-body">
-                                        <pre class="json-code">{{ JSON.stringify(row, null, 2) }}</pre>
-                                    </div>
-                                    <div class="row-card-actions">
-                                        <button
-                                            class="btn-text"
-                                            type="button"
-                                            :disabled="submittingTable"
-                                            @click="startEditRow(row)"
-                                        >
-                                            {{ t('admin.edit') }}
-                                        </button>
-                                        <button
-                                            class="btn-text danger"
-                                            type="button"
-                                            :disabled="submittingTable"
-                                            @click="handleDeleteRow(row)"
-                                        >
-                                            {{ t('admin.delete') }}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+                                            <div v-if="editingCell === `${getRowKey(row)}:${col.name}`" class="cell-edit-wrapper" @click.stop>
+                                                <input
+                                                    :ref="setCellInputRef"
+                                                    v-model="editingCellValue"
+                                                    class="cell-edit-input"
+                                                    type="text"
+                                                    @keyup.enter="saveEditCell(row, col.name)"
+                                                    @keyup.esc="cancelEditCell"
+                                                />
+                                                <button class="btn-icon" title="保存" @click="saveEditCell(row, col.name)"><Check :size="14" /></button>
+                                                <button class="btn-icon" title="取消" @click="cancelEditCell"><X :size="14" /></button>
+                                            </div>
+                                            <span v-else class="cell-value">{{ formatCellValue(row[col.name]) }}</span>
+                                        </td>
+                                        <td class="actions-cell">
+                                            <button
+                                                class="btn-text"
+                                                type="button"
+                                                :disabled="submittingTable"
+                                                @click="startEditRow(row)"
+                                            >
+                                                {{ t('admin.edit') }}
+                                            </button>
+                                            <button
+                                                class="btn-text danger"
+                                                type="button"
+                                                :disabled="submittingTable"
+                                                @click="handleDeleteRow(row)"
+                                            >
+                                                {{ t('admin.delete') }}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <!-- 行展开编辑模式 -->
+                                    <tr v-else class="data-row editing-row">
+                                        <td :colspan="(selectedTableMeta?.columns?.length || 0) + 1">
+                                            <div class="edit-row-container">
+                                                <div class="edit-row-header">
+                                                    <span class="editing-tag"><NotebookPen :size="14" /> 编辑 JSON 记录</span>
+                                                </div>
+                                                <textarea
+                                                    v-model="editingJsonText"
+                                                    class="form-textarea monospace edit-json-textarea"
+                                                    rows="6"
+                                                    placeholder="请输入有效 JSON..."
+                                                ></textarea>
+                                                <div class="row-card-actions">
+                                                    <button
+                                                        class="btn btn-secondary btn-sm"
+                                                        type="button"
+                                                        :disabled="submittingTable"
+                                                        @click="cancelEditRow"
+                                                    >
+                                                        取消
+                                                    </button>
+                                                    <button
+                                                        class="btn btn-primary btn-sm"
+                                                        type="button"
+                                                        :disabled="submittingTable"
+                                                        @click="saveEditRow(row)"
+                                                    >
+                                                        保存更新
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                            </table>
                         </div>
                         <div v-else class="empty-state">
                             {{ t('admin.rowsEmpty') }}
@@ -1069,22 +1274,63 @@ onMounted(async () => {
 
                     <!-- Insert Record Section -->
                     <div class="insert-section">
-                        <h4 class="section-subtitle">➕ {{ t('admin.addRowTitle') }}</h4>
-                        <textarea
-                            v-model="insertJsonText"
-                            class="form-textarea monospace"
-                            rows="4"
-                            :placeholder="t('admin.insertJsonExample')"
-                        ></textarea>
-                        <div class="form-actions-right">
+                        <div class="insert-section-header">
+                            <h4 class="section-subtitle"><Plus :size="16" /> {{ t('admin.addRowTitle') }}</h4>
                             <button
-                                class="btn btn-primary"
+                                class="btn-text"
                                 type="button"
-                                :disabled="submittingTable"
-                                @click="handleInsertRow"
+                                @click="showInsertRow = !showInsertRow"
                             >
-                                {{ t('admin.insertToTable') }}
+                                {{ showInsertRow ? '收起' : '展开' }}
                             </button>
+                        </div>
+                        <div v-show="showInsertRow" class="data-table-wrapper">
+                            <table class="data-table insert-table">
+                            <thead>
+                                <tr>
+                                    <th
+                                        v-for="col in selectedTableMeta?.columns"
+                                        :key="col.name"
+                                        scope="col"
+                                    >
+                                        {{ col.name }}
+                                    </th>
+                                    <th scope="col" class="actions-th">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="data-row insert-row">
+                                    <td
+                                        v-for="col in selectedTableMeta?.columns"
+                                        :key="col.name"
+                                    >
+                                        <input
+                                            v-model="insertRowData[col.name]"
+                                            class="insert-input"
+                                            type="text"
+                                            :placeholder="col.type || col.name"
+                                        />
+                                    </td>
+                                    <td class="actions-cell">
+                                        <button
+                                            class="btn-text"
+                                            type="button"
+                                            @click="resetInsertRow"
+                                        >
+                                            清空
+                                        </button>
+                                        <button
+                                            class="btn btn-primary btn-sm"
+                                            type="button"
+                                            :disabled="submittingTable"
+                                            @click="handleInsertRow"
+                                        >
+                                            {{ t('admin.insertToTable') }}
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -1098,120 +1344,75 @@ onMounted(async () => {
    Design Tokens & Modern Color Hierarchy
    ========================================================================== */
 .admin-layout {
-    --brand-color: var(--brand-primary, #059669);
-    --brand-color-dark: var(--brand-primary-dark, #047857);
-    --brand-rgb: var(--brand-primary-rgb, 5, 150, 105);
-
-    --theme-emerald: #10b981;
-    --theme-blue: #3b82f6;
-    --theme-purple: #8b5cf6;
-    --theme-amber: #f59e0b;
-    
-    --bg-base: var(--bg-primary, #f8fafc);
-    --bg-card: var(--bg-secondary, #ffffff);
-    --border-color: var(--border-light, #e2e8f0);
-    
-    --text-main: var(--text-primary, #0f172a);
-    --text-muted: var(--text-secondary, #64748b);
-    --danger-color: var(--danger, #ef4444);
-    
     display: flex;
     flex-direction: column;
     width: 100%;
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
-    background-color: var(--bg-base);
-    color: var(--text-main);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: var(--font-base);
     overflow: hidden;
 }
 
 /* ==========================================================================
-   Tabs Navigation (Enhanced Contrast & Visual Distinctions)
+   Tabs Navigation
    ========================================================================== */
 .tabs-nav {
     display: flex;
     flex-wrap: nowrap;
     gap: 10px;
     padding: 10px;
-    border: 1px solid rgba(var(--brand-rgb), 0.14);
-    border-radius: 20px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
+    border-radius: var(--radius-lg);
     background:
         linear-gradient(135deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.6)),
-        radial-gradient(circle at 10% 0%, rgba(var(--brand-rgb), 0.08), transparent 34%);
+        radial-gradient(circle at 10% 0%, rgba(var(--brand-primary-rgb), 0.08), transparent 34%);
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.03);
     flex-shrink: 0;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: thin;
-    scrollbar-color: rgba(var(--brand-rgb), 0.3) transparent;
+    scrollbar-color: rgba(var(--brand-primary-rgb), 0.3) transparent;
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
 }
 
-.tabs-nav::-webkit-scrollbar {
-    height: 4px;
-}
-
-.tabs-nav::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.tabs-nav::-webkit-scrollbar-thumb {
-    background: rgba(var(--brand-rgb), 0.3);
-    border-radius: 2px;
-}
+.tabs-nav::-webkit-scrollbar { height: 4px; }
+.tabs-nav::-webkit-scrollbar-track { background: transparent; }
+.tabs-nav::-webkit-scrollbar-thumb { background: rgba(var(--brand-primary-rgb), 0.3); border-radius: 2px; }
 
 .tab-btn {
     position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
-    flex: 0 0 auto;
-    min-width: 140px;
+    flex: 1 1 0;
+    min-width: 0;
     min-height: 60px;
-    padding: 10px 12px;
+    padding: 10px 14px;
     border: 1px solid rgba(0, 0, 0, 0.06);
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.7);
-    color: var(--text-muted);
+    color: var(--text-secondary);
     cursor: pointer;
     text-align: left;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-btn:hover {
-    color: var(--text-main);
-    background: #ffffff;
+    color: var(--text-primary);
+    background: var(--bg-primary);
     transform: translateY(-1px);
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
 }
 
-/* Theme Active Accents for Tab Navigation */
-.tab-btn.active.theme-emerald {
-    border-color: rgba(16, 185, 129, 0.4);
-    background: linear-gradient(135deg, #ffffff, #ecfdf5);
-    color: #047857;
-    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.15);
-}
-.tab-btn.active.theme-blue {
-    border-color: rgba(59, 130, 246, 0.4);
-    background: linear-gradient(135deg, #ffffff, #eff6ff);
-    color: #1d4ed8;
-    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.15);
-}
-.tab-btn.active.theme-purple {
-    border-color: rgba(139, 92, 246, 0.4);
-    background: linear-gradient(135deg, #ffffff, #f5f3ff);
-    color: #6d28d9;
-    box-shadow: 0 8px 20px rgba(139, 92, 246, 0.15);
-}
-.tab-btn.active.theme-amber {
-    border-color: rgba(245, 158, 11, 0.4);
-    background: linear-gradient(135deg, #ffffff, #fffbeb);
-    color: #b45309;
-    box-shadow: 0 8px 20px rgba(245, 158, 11, 0.15);
+.tab-btn.active {
+    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: linear-gradient(135deg, var(--bg-primary), rgba(var(--brand-primary-rgb), 0.06));
+    color: var(--brand-primary-dark);
+    box-shadow: 0 8px 20px rgba(var(--brand-primary-rgb), 0.15);
 }
 
 .tab-btn__icon {
@@ -1221,14 +1422,16 @@ onMounted(async () => {
     flex: 0 0 34px;
     width: 34px;
     height: 34px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     background: rgba(0, 0, 0, 0.04);
+    color: var(--text-secondary);
     font-size: 16px;
 }
 
 .tab-btn.active .tab-btn__icon {
-    background: #ffffff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    color: var(--brand-primary);
+    background: var(--bg-primary);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .tab-btn__body {
@@ -1249,7 +1452,7 @@ onMounted(async () => {
 
 .tab-btn__desc {
     overflow: hidden;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 11px;
     line-height: 1.2;
     text-overflow: ellipsis;
@@ -1257,7 +1460,7 @@ onMounted(async () => {
 }
 
 /* ==========================================================================
-   Main Body Scroll Region & Panel Theming
+   Main Body Scroll Region
    ========================================================================== */
 .admin-body {
     flex: 1;
@@ -1273,39 +1476,13 @@ onMounted(async () => {
     width: 100%;
 }
 
-.banner-title-group {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.banner-title-group h2 {
-    margin: 0;
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-main);
-}
-
-.banner-badge {
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    background: #ecfdf5;
-    color: #047857;
-}
-
-.banner-badge.blue { background: #eff6ff; color: #1d4ed8; }
-.banner-badge.purple { background: #f5f3ff; color: #6d28d9; }
-.banner-badge.amber { background: #fffbeb; color: #b45309; }
-
 /* ==========================================================================
-   Card Hierarchy & Accent Top/Left Borders
+   Card Hierarchy
    ========================================================================== */
 .card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
     padding: 18px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
     display: flex;
@@ -1315,10 +1492,11 @@ onMounted(async () => {
     overflow: hidden;
 }
 
-.card.accent-left-emerald { border-left: 4px solid var(--theme-emerald); }
-.card.accent-top-blue { border-top: 3px solid var(--theme-blue); }
-.card.accent-left-purple { border-left: 4px solid var(--theme-purple); }
-.card.accent-top-amber { border-top: 3px solid var(--theme-amber); }
+.card[class*="accent-"] { border-color: var(--border-light); }
+.card.accent-left-emerald,
+.card.accent-left-purple { border-left: 4px solid var(--brand-primary); }
+.card.accent-top-blue,
+.card.accent-top-amber { border-top: 3px solid var(--brand-primary); }
 
 .card-header {
     display: flex;
@@ -1331,26 +1509,34 @@ onMounted(async () => {
     margin: 0;
     font-size: 14px;
     font-weight: 700;
-    color: var(--text-main);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.card-title svg {
+    color: var(--brand-primary);
+    flex-shrink: 0;
 }
 
 .card-subtitle {
     margin: 4px 0 0;
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     line-height: 1.4;
 }
 
 .card-subtitle code {
-    background: var(--bg-base);
+    background: var(--bg-secondary);
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     font-size: 11px;
-    color: var(--brand-color);
+    color: var(--brand-primary);
 }
 
 /* ==========================================================================
-   KPI Cards Grid (Visually Prominent)
+   KPI Cards Grid
    ========================================================================== */
 .kpi-grid {
     display: grid;
@@ -1363,23 +1549,17 @@ onMounted(async () => {
     align-items: center;
     gap: 14px;
     padding: 16px;
-    border-radius: 12px;
-    background: #ffffff;
-    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    border-bottom: 3px solid var(--brand-primary);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-.kpi-card.teal { border-bottom: 3px solid #14b8a6; }
-.kpi-card.teal .kpi-icon { background: rgba(20, 184, 166, 0.12); color: #0d9488; }
-
-.kpi-card.blue { border-bottom: 3px solid #3b82f6; }
-.kpi-card.blue .kpi-icon { background: rgba(59, 130, 246, 0.12); color: #2563eb; }
-
-.kpi-card.indigo { border-bottom: 3px solid #6366f1; }
-.kpi-card.indigo .kpi-icon { background: rgba(99, 102, 241, 0.12); color: #4f46e5; }
-
-.kpi-card.purple { border-bottom: 3px solid #a855f7; }
-.kpi-card.purple .kpi-icon { background: rgba(168, 85, 247, 0.12); color: #9333ea; }
+.kpi-card .kpi-icon {
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-primary-dark);
+}
 
 .kpi-icon {
     display: flex;
@@ -1387,26 +1567,12 @@ onMounted(async () => {
     justify-content: center;
     width: 44px;
     height: 44px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
 }
 
-.kpi-body {
-    display: flex;
-    flex-direction: column;
-}
-
-.kpi-label {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-weight: 500;
-}
-
-.kpi-value {
-    font-size: 22px;
-    font-weight: 800;
-    color: var(--text-main);
-    line-height: 1.2;
-}
+.kpi-body { display: flex; flex-direction: column; }
+.kpi-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.kpi-value { font-size: 22px; font-weight: 800; color: var(--text-primary); line-height: 1.2; }
 
 /* ==========================================================================
    Environment Status Badges Grid
@@ -1422,16 +1588,12 @@ onMounted(async () => {
     align-items: center;
     justify-content: space-between;
     padding: 10px 12px;
-    border-radius: 8px;
-    background: var(--bg-base);
-    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
 }
 
-.env-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-main);
-}
+.env-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
 
 .status-badge {
     display: inline-flex;
@@ -1443,27 +1605,19 @@ onMounted(async () => {
     border-radius: 999px;
 }
 
-.status-badge .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-}
+.status-badge .dot { width: 6px; height: 6px; border-radius: 50%; }
 
 .status-badge.is-configured {
-    background: rgba(16, 185, 129, 0.12);
-    color: #047857;
+    background: rgba(var(--success-rgb), 0.12);
+    color: var(--brand-primary-dark);
 }
-.status-badge.is-configured .dot {
-    background: #10b981;
-}
+.status-badge.is-configured .dot { background: var(--success); }
 
 .status-badge.is-unset {
-    background: #f1f5f9;
-    color: var(--text-muted);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
 }
-.status-badge.is-unset .dot {
-    background: #94a3b8;
-}
+.status-badge.is-unset .dot { background: var(--text-muted); }
 
 /* ==========================================================================
    Section Boxes & Form Layout
@@ -1476,24 +1630,20 @@ onMounted(async () => {
 
 .section-box {
     padding: 12px 14px;
-    background: var(--bg-base);
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
 }
 
 .section-box-tag {
     font-size: 11px;
     font-weight: 700;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.form-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
+.form-stack { display: flex; flex-direction: column; gap: 14px; }
 
 .form-grid-2 {
     display: grid;
@@ -1507,33 +1657,19 @@ onMounted(async () => {
     gap: 10px;
 }
 
-.form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.field-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-main);
-}
-
-.field-hint {
-    margin: 2px 0 0;
-    font-size: 11px;
-    color: var(--text-muted);
-}
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.field-hint { margin: 2px 0 0; font-size: 11px; color: var(--text-secondary); }
 
 .form-input,
 .form-textarea,
 .form-select {
     width: 100%;
     padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-card);
-    color: var(--text-main);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     font-size: 13px;
     box-sizing: border-box;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -1543,24 +1679,17 @@ onMounted(async () => {
 .form-input:focus,
 .form-textarea:focus,
 .form-select:focus {
-    border-color: var(--theme-purple);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.12);
 }
 
-.form-textarea {
-    resize: vertical;
-    min-height: 68px;
-}
-
+.form-textarea { resize: vertical; min-height: 68px; }
 .form-textarea.monospace {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
 }
 
-.field-action-group {
-    display: flex;
-    gap: 8px;
-}
+.field-action-group { display: flex; gap: 8px; }
 
 .form-inline-action {
     display: flex;
@@ -1569,10 +1698,7 @@ onMounted(async () => {
     flex-wrap: wrap;
 }
 
-.inline-buttons {
-    display: flex;
-    gap: 8px;
-}
+.inline-buttons { display: flex; gap: 8px; }
 
 .form-actions-right {
     display: flex;
@@ -1582,14 +1708,11 @@ onMounted(async () => {
 }
 
 .border-top-pt {
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-light);
     padding-top: 12px;
 }
 
-.form-inline-checkbox {
-    display: flex;
-    align-items: center;
-}
+.form-inline-checkbox { display: flex; align-items: center; }
 
 .checkbox-container {
     display: flex;
@@ -1603,7 +1726,7 @@ onMounted(async () => {
 
 .divider {
     border: none;
-    border-top: 1px dashed var(--border-color);
+    border-top: 1px dashed var(--border-light);
     margin: 4px 0;
 }
 
@@ -1616,7 +1739,7 @@ onMounted(async () => {
     justify-content: center;
     gap: 6px;
     padding: 8px 16px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
@@ -1625,68 +1748,54 @@ onMounted(async () => {
     white-space: nowrap;
 }
 
-.btn-primary {
-    background: var(--brand-color);
-    color: #ffffff;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: var(--brand-color-dark);
-}
+.btn-primary { background: var(--brand-primary); color: var(--text-on-brand); }
+.btn-primary:hover:not(:disabled) { background: var(--brand-primary-dark); }
 
 .btn-secondary {
-    background: var(--bg-base);
-    border-color: var(--border-color);
-    color: var(--text-main);
+    background: var(--bg-secondary);
+    border-color: var(--border-light);
+    color: var(--text-primary);
 }
+.btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
 
-.btn-secondary:hover:not(:disabled) {
-    background: #f1f5f9;
-}
-
-.btn-sm {
-    padding: 4px 10px;
-    font-size: 12px;
-}
-
-.btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-icon {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-base);
-    color: var(--text-muted);
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 12px;
     cursor: pointer;
+    transition: all 0.15s ease;
 }
+.btn-icon:hover { background: var(--bg-hover); }
 
 .btn-text {
     background: transparent;
     border: none;
-    color: var(--brand-color);
+    color: var(--brand-primary);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
 }
 
-.btn-text.danger {
-    color: var(--danger-color);
-}
+.btn-text.danger { color: var(--danger); }
 
 .mt-2 { margin-top: 8px; }
 .flex-1 { flex: 1; }
 
 /* ==========================================================================
-   Database Toolbar & Visual Inspector
+   Database Toolbar
    ========================================================================== */
 .db-toolbar {
     display: flex;
@@ -1694,119 +1803,197 @@ onMounted(async () => {
     justify-content: space-between;
     gap: 12px;
     padding: 10px 14px;
-    background: var(--bg-base);
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
     flex-wrap: wrap;
 }
 
-.select-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
+.select-wrapper { display: flex; align-items: center; gap: 8px; }
+.toolbar-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.inline-select { width: auto; min-width: 180px; }
 
-.toolbar-label {
+.toolbar-stats { display: flex; align-items: center; gap: 8px; }
+
+.toolbar-search {
+    padding: 5px 10px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
     font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    width: 180px;
+}
+.toolbar-search:focus {
+    border-color: var(--brand-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.15);
 }
 
-.inline-select {
-    width: auto;
-    min-width: 180px;
-}
+.badge { padding: 3px 8px; border-radius: var(--radius-md); font-size: 11px; font-weight: 600; }
+.badge.info { background: rgba(var(--warning-rgb), 0.15); color: var(--warning); }
+.badge.secondary { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-light); }
 
-.toolbar-stats {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.badge {
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.badge.info { background: rgba(245, 158, 11, 0.15); color: #b45309; }
-.badge.secondary { background: #e2e8f0; color: #475569; }
-
+/* ==========================================================================
+   Rows Container & Data Table
+   ========================================================================== */
 .rows-container {
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    max-height: 400px;
-    overflow-y: auto;
-    background: var(--bg-base);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    max-height: 480px;
+    overflow: auto;
+    background: var(--bg-secondary);
 }
 
-.rows-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px;
+.data-table-wrapper { overflow-x: auto; }
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
 }
 
-.row-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 10px;
-    transition: all 0.2s ease;
+.data-table thead { position: sticky; top: 0; z-index: 1; }
+
+.data-table th {
+    background: var(--bg-primary);
+    border-bottom: 2px solid var(--border-light);
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
 }
 
-.row-card.is-editing {
-    border-color: var(--theme-amber);
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+.data-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: middle;
 }
 
-.view-row-container,
-.edit-row-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+.data-row:hover { background: var(--bg-hover); }
+
+/* 排序表头 */
+.sortable-th { cursor: pointer; user-select: none; }
+.sortable-th:hover { color: var(--text-primary); background: var(--bg-hover); }
+.sortable-th.active { color: var(--brand-primary); }
+
+.th-content { display: inline-flex; align-items: center; gap: 4px; }
+.sort-icon { font-size: 10px; opacity: 0.5; }
+.sortable-th.active .sort-icon { opacity: 1; }
+
+/* 单元格行内编辑 */
+.cell-value {
+    cursor: pointer;
+    display: block;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+}
+.cell-value:hover { background: var(--bg-hover); }
+
+.cell-editing { padding: 0 !important; }
+
+.cell-edit-wrapper { display: flex; align-items: center; gap: 4px; }
+
+.cell-edit-input {
+    flex: 1;
+    min-width: 60px;
+    padding: 4px 6px;
+    border: 1px solid var(--brand-primary);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
 
-.edit-row-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.actions-cell { white-space: nowrap; text-align: right; }
+.actions-th { width: 1%; white-space: nowrap; }
+
+/* 行展开编辑模式 */
+.editing-row td {
+    padding: 12px;
+    background: rgba(var(--brand-primary-rgb), 0.04);
 }
+
+.edit-row-container { display: flex; flex-direction: column; gap: 8px; }
+.edit-row-header { display: flex; align-items: center; justify-content: space-between; }
 
 .editing-tag {
     font-size: 11px;
     font-weight: 700;
-    color: #b45309;
-    background: rgba(245, 158, 11, 0.15);
+    color: var(--brand-primary-dark);
+    background: rgba(var(--brand-primary-rgb), 0.15);
     padding: 2px 6px;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
-.edit-json-textarea {
-    width: 100%;
-    border-color: var(--theme-amber);
+.editing-tag svg {
+    color: var(--brand-primary);
 }
 
-.row-card-body {
-    overflow-x: auto;
-}
-
-.json-code {
-    margin: 0;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
-    color: var(--text-main);
-    white-space: pre-wrap;
-    word-break: break-all;
-}
+.edit-json-textarea { width: 100%; border-color: var(--brand-primary); }
 
 .row-card-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
-    border-top: 1px solid var(--border-color);
-    padding-top: 6px;
+}
+
+/* ===== Insert Section ===== */
+.insert-section {
+    margin-top: 8px;
+    border-top: 1px solid var(--border-light);
+    padding-top: 14px;
+}
+
+.insert-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.insert-table { margin-top: 12px; }
+
+.insert-row td {
+    padding: 4px 6px;
+    background: rgba(var(--brand-primary-rgb), 0.03);
+}
+
+.insert-input {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    box-sizing: border-box;
+}
+.insert-input:focus {
+    border-color: var(--brand-primary);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.15);
+}
+
+.section-subtitle {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.section-subtitle svg {
+    color: var(--brand-primary);
 }
 
 .empty-state {
@@ -1815,24 +2002,8 @@ onMounted(async () => {
     justify-content: center;
     gap: 8px;
     padding: 32px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 13px;
-}
-
-.insert-section {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
-    border-top: 1px solid var(--border-color);
-    padding-top: 14px;
-}
-
-.section-subtitle {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-main);
 }
 
 /* ==========================================================================
@@ -1843,43 +2014,28 @@ onMounted(async () => {
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
 }
 
 .spinner {
     width: 14px;
     height: 14px;
     border: 2px solid rgba(0, 0, 0, 0.1);
-    border-top-color: var(--brand-color);
+    border-top-color: var(--brand-primary);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
 }
 
-.spinning {
-    animation: spin 0.8s linear infinite;
-}
+.spinning { animation: spin 0.8s linear infinite; }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ==========================================================================
    Responsive Adaptations
    ========================================================================== */
 @media (max-width: 768px) {
-    .tabs-nav {
-        gap: 8px;
-        padding: 8px;
-    }
-
-    .tab-btn {
-        min-width: 120px;
-        min-height: 52px;
-        padding: 8px;
-    }
-
-    .tab-btn__desc {
-        display: none;
-    }
+    .tabs-nav { gap: 6px; padding: 8px; }
+    .tab-btn { min-height: 48px; padding: 8px 10px; }
+    .tab-btn__desc { display: none; }
 }
 </style>

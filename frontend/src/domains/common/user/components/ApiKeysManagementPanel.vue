@@ -508,7 +508,7 @@
         </div>
 
         <div class="warning-box">
-            <span class="warning-icon">⚠️</span>
+            <span class="warning-icon"><AlertTriangle :size="16" /></span>
             <div class="warning-content">
                 <p><strong>{{ t('apiKeys.securityTitle') }}</strong></p>
                 <ul>
@@ -526,6 +526,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { AlertTriangle } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useAgentConfig } from '@common/chat/composables/useAgentConfig';
@@ -1357,6 +1358,9 @@ textarea.key-input {
 .warning-icon {
     font-size: 20px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    color: var(--warning);
 }
 
 .warning-content {

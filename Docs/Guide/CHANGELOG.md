@@ -6,6 +6,62 @@
 
 ## 版本记录
 
+### V3.5.18 (2026-08-12) — 综合版本：Emoji→Lucide 图标迁移 · 管理面板数据表格化重构 · KaTeX 数学公式渲染 · 代码审查修复
+
+> 暂存区多次改动合并为单一版本（含 Code Review 修复）。
+
+#### 前端 — Emoji → Lucide 图标迁移
+
+- 12 个 Vue 组件统一将模板中的 emoji 图标替换为 `@lucide/vue` 组件：`AdminControlPanel.vue`、`ApiManagementPanel.vue`、`ApiKeysManagementPanel.vue`、`TOCPanel.vue`、`Message.vue`、`NavTargetPicker.vue`、`PlayerGuidePanel.vue`、`HomeView.vue`、`AdministrativeDivisionPanel.vue`、`MapSwipeController.vue`。
+- 规范写入 `Force_command.md` 第 3 节「实施」：UI 图标统一使用 `@lucide/vue`，禁止使用 emoji。
+
+#### 前端 — AdminControlPanel 数据管理重构
+
+- 数据表展示从行卡片改为**表格**（`.data-table`），支持表头排序（点击切换 asc/desc）+ 关键字搜索过滤。
+- 新增**单元格行内编辑**：点击单元格直接进入编辑态，Enter 保存 / Esc 取消。
+- 新增行展开 JSON 编辑模式（与单元格编辑互斥）。
+- 新增行从 JSON textarea 改为**表单插入**（每列一个 input），支持展开/收起。
+- 图标从 emoji 改为 Lucide 组件（LayoutDashboard/Settings/Bot/Database）。
+
+#### 前端 — ApiManagementPanel 统计增强
+
+- 端点统计表和日志表均新增**表头排序**（通用 `createSortedComputed` 工厂函数）。
+- 图标从 emoji 改为 Lucide 组件（BarChart3/Link2/ScrollText/Settings/KeyRound）。
+
+#### 前端 — Markdown 数学公式渲染
+
+- `useMarkdownRenderer.js` 集成 **KaTeX**：支持行内 `$...$` 与块级 `$$...$$` 公式渲染。
+- 占位符策略：marked 解析前提取公式 → 解析后用 KaTeX 渲染回代（避免 marked 破坏 LaTeX 语法）。
+- **安全修复**：移除 `trust: true` 配置；KaTeX 输出标签加入 DOMPurify 白名单（math/semantics/mrow 等）。
+- **并发修复**：将模块级 `mathStore`/`mathCounter` 改为每次渲染独立的 `createMathContext()`，避免并发渲染时数据互相覆盖。
+- `ChatMessageList.vue`：代码块样式从 scoped 迁移至非 scoped `<style>` 块（v-html 注入的 `.code-block-wrapper` 无法携带 `data-v-xxx` 属性，scoped 选择器链断裂）。
+- `package.json` / `package-lock.json`：新增 `katex@^0.16.11` 依赖。
+
+#### 前端 — 聊天配置按路由模式隔离
+
+- `useChatAgentConfig.js`：localStorage 键名按路由模式隔离（默认 AI / 个人 Key / 代理三套 key），避免跨模式模型误用。
+- 默认 AI 模式保存模型不再写入全局账号偏好（`preferred_agent_model`），避免污染后端代理模式的模型选择。
+
+#### 前端 — 新闻功能降级链路加固
+
+- `SidePanel.vue`：`fetchNews` 直连失败后走代理时，使用**独立 AbortController**（原共享 controller 导致超时窗口不足）。
+- HTTP 非 ok 响应也纳入降级判断（原只有网络错误才降级）。
+
+#### 前端 — Code Review 问题修复
+
+- `AdminControlPanel.vue`：修复 v-for 中 `ref="cellInputRef"` 只引用最后一个元素的问题（改为函数 ref `:ref="setCellInputRef"`）。
+- `AdminControlPanel.vue`：添加单元格编辑与行展开编辑的互斥逻辑（行展开模式下禁止单元格编辑）。
+- `AdminControlPanel.vue`：agent tab 图标从 `Globe` 改为 `Bot`（语义更准确）。
+- `FloatingAccountPanel.vue`：移除点击外部关闭面板的逻辑，改为显式 X 按钮关闭。
+
+#### 文档
+
+- `Force_command.md`：新增「UI 图标规范」条款（禁止使用 emoji，统一使用 Lucide 组件）。
+- 根 `README.md`：三处版本号更新（V3.5.17 → V3.5.18）。
+- `Docs/Guide/CHANGELOG.md`：追加 V3.5.18 完整条目。
+
+---
+
 ### V3.5.17 (2026-08-11) — 综合版本：Agent 模式大改（免费默认 AI + 路由模式隔离）· 管理面板升级 · 模型调用统计 · Cesium 贴地重构
 
 > 暂存区多次不规范改动合并为单一版本（Review + Bug 修复 + 文档合并，详见[合并关账日志](LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md)；其中「配置保存跨模式污染修复」见[专项日志](LLM_record/26-08/2026-08-11/2026-08-11-fix-chatconfig-model-mode-scoped.md)）。

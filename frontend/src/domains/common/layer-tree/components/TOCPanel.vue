@@ -241,7 +241,7 @@
                             :class="{ loading: sharedLoader.isScanning.value }"
                             @click="scanSharedResources"
                         >
-                            <span v-if="!sharedLoader.isScanning.value">📁 {{ t('layer.loadResources') }}</span>
+                            <span v-if="!sharedLoader.isScanning.value"><FolderOpen :size="14" /> {{ t('layer.loadResources') }}</span>
                             <span v-else>⏳ {{ t('layer.scanning') }}</span>
                         </button>
                         <div
@@ -401,7 +401,7 @@
                     class="eco-btn-reverse mt-12"
                     @click="startReverseGeocodePick"
                 >
-                    <span class="icon">📍</span> {{ t('layer.reverseGeocode') }}
+                    <span class="icon"><MapPin :size="14" /></span> {{ t('layer.reverseGeocode') }}
                 </button>
             </div>
 
@@ -537,6 +537,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { FolderOpen, MapPin } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useGisLoader } from '@common/data-import/useGisLoader';
@@ -1569,6 +1570,14 @@ async function loadSharedResource(resource) {
     font-size: 13px;
     cursor: pointer;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.eco-btn-reverse svg {
+    color: var(--toc-btn-reverse-text);
 }
 
 /* 操作按钮行布局 */
@@ -2400,6 +2409,10 @@ async function loadSharedResource(resource) {
     justify-content: center;
     gap: 4px;
     min-height: 34px;
+}
+
+.shared-resource-btn svg {
+    color: var(--toc-primary-dark);
 }
 
 .shared-resource-btn:hover {

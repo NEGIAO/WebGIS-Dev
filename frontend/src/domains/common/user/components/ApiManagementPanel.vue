@@ -14,7 +14,7 @@
                 :aria-controls="`api-panel-${tab.id}`"
                 @click="selectTab(tab.id)"
             >
-                <span class="tab-btn__icon" aria-hidden="true">{{ tab.icon }}</span>
+                <component :is="tab.icon" class="tab-btn__icon" :size="18" aria-hidden="true" />
                 <span class="tab-btn__body">
                     <span class="tab-btn__label">{{ tab.label }}</span>
                     <span class="tab-btn__desc">{{ tab.desc }}</span>
@@ -151,20 +151,26 @@
                     <table class="data-table">
                     <thead>
                         <tr>
-                            <th scope="col">Base URL</th>
-                            <th scope="col">模型</th>
-                            <th scope="col">调用次数</th>
-                            <th scope="col">成功</th>
-                            <th scope="col">错误</th>
-                            <th scope="col">成功率</th>
-                            <th scope="col">平均响应时间</th>
-                            <th scope="col">最大/最小响应时间</th>
-                            <th scope="col">最后使用</th>
+                            <th
+                                v-for="col in endpointStatsColumns"
+                                :key="col.key"
+                                scope="col"
+                                class="sortable-th"
+                                :class="{ active: endpointSortKey === col.key }"
+                                @click="toggleEndpointSort(col.key)"
+                            >
+                                <span class="th-content">
+                                    {{ col.label }}
+                                    <span class="sort-icon" aria-hidden="true">
+                                        {{ endpointSortKey === col.key ? (endpointSortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+                                    </span>
+                                </span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr
-                            v-for="(stat, idx) in endpointStats"
+                            v-for="(stat, idx) in sortedEndpointStats"
                             :key="`${stat.base_url}-${stat.model}-${idx}`"
                             class="data-row"
                         >
@@ -248,17 +254,26 @@
                     <table class="data-table logs-table">
                     <thead>
                         <tr>
-                            <th>时间</th>
-                            <th>用户</th>
-                            <th>角色</th>
-                            <th>API 端点</th>
-                            <th>状态码</th>
-                            <th>响应时间</th>
+                            <th
+                                v-for="col in logsColumns"
+                                :key="col.key"
+                                scope="col"
+                                class="sortable-th"
+                                :class="{ active: logsSortKey === col.key }"
+                                @click="toggleLogsSort(col.key)"
+                            >
+                                <span class="th-content">
+                                    {{ col.label }}
+                                    <span class="sort-icon" aria-hidden="true">
+                                        {{ logsSortKey === col.key ? (logsSortDir === 'asc' ? '▲' : '▼') : '⇅' }}
+                                    </span>
+                                </span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr
-                            v-for="(log, idx) in apiLogs"
+                            v-for="(log, idx) in sortedLogs"
                             :key="idx"
                             class="data-row"
                         >
@@ -422,7 +437,7 @@
                 </div>
 
                 <p class="quota-note">
-                    📝 <strong>说明：</strong> 统一 API 额度池，所有操作（API 调用、AI 对话、地图下载）共享同一每日额度，修改后立即生效。
+                    <Info :size="14" /> <strong>说明：</strong> 统一 API 额度池，所有操作（API 调用、AI 对话、地图下载）共享同一每日额度，修改后立即生效。
                 </p>
             </div>
 
@@ -442,6 +457,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { Info } from '@lucide/vue';
+import {
+    BarChart3,
+    Link2,
+    ScrollText,
+    Settings,
+    KeyRound,
+} from '@lucide/vue';
 import {
     apiAdminApiUsageByModel,
     apiAdminApiLogs,
@@ -456,11 +479,11 @@ const message = useMessage();
 
 const activeTab = ref('by-user');
 const tabs = [
-    { id: 'by-user', icon: '📊', label: '配额消耗', desc: '统一配额池用量' },
-    { id: 'by-endpoint', icon: '🔗', label: '模型调用统计', desc: 'Base URL / 模型维度' },
-    { id: 'logs', icon: '📝', label: '调用日志', desc: '请求明细追踪' },
-    { id: 'quota', icon: '⚙️', label: 'API 额度设置', desc: '统一 API 额度池' },
-    { id: 'api-keys', icon: '🔑', label: '密钥管理', desc: '第三方密钥池' },
+    { id: 'by-user', icon: BarChart3, label: '配额消耗', desc: '统一配额池用量' },
+    { id: 'by-endpoint', icon: Link2, label: '模型调用统计', desc: 'Base URL / 模型维度' },
+    { id: 'logs', icon: ScrollText, label: '调用日志', desc: '请求明细追踪' },
+    { id: 'quota', icon: Settings, label: 'API 额度设置', desc: '统一 API 额度池' },
+    { id: 'api-keys', icon: KeyRound, label: '密钥管理', desc: '第三方密钥池' },
 ];
 
 // 修复：模板 @click="selectTab(tab.id)" 此前未定义该函数，点击 tab 完全无响应
@@ -495,26 +518,55 @@ function toggleSort(key) {
     }
 }
 
+/** 通用排序逻辑工厂：给定源数据 + 排序键/方向，返回排序后列表 */
+function createSortedComputed(source, sortKeyRef, sortDirRef) {
+    return computed(() => {
+        const list = [...source.value];
+        const key = sortKeyRef.value;
+        const dir = sortDirRef.value;
+        const multiplier = dir === 'asc' ? 1 : -1;
+
+        return list.sort((a, b) => {
+            let va = a[key];
+            let vb = b[key];
+
+            // 字符串字段：字典序
+            if (typeof va === 'string' && typeof vb === 'string') {
+                return multiplier * (va < vb ? -1 : va > vb ? 1 : 0);
+            }
+
+            // 时间字段
+            if (key === 'last_used_at' || key === 'timestamp') {
+                va = new Date(va).getTime() || 0;
+                vb = new Date(vb).getTime() || 0;
+            } else {
+                va = Number(va) || 0;
+                vb = Number(vb) || 0;
+            }
+
+            return multiplier * (va - vb);
+        });
+    });
+}
+
 const sortedUserStats = computed(() => {
     const keyword = userStatsSearch.value.trim().toLowerCase();
     const list = keyword
         ? userStats.value.filter((s) => String(s.username || '').toLowerCase().includes(keyword))
         : [...userStats.value];
 
-    const { key, dir } = { key: sortKey.value, dir: sortDir.value };
-    const multiplier = dir === 'asc' ? 1 : -1;
+    const key = sortKey.value;
+    const multiplier = sortDir.value === 'asc' ? 1 : -1;
 
     return list.sort((a, b) => {
         let va = a[key];
         let vb = b[key];
 
-        if (key === 'role') {
-            va = String(va || '').toLowerCase();
-            vb = String(vb || '').toLowerCase();
+        if (typeof va === 'string' && typeof vb === 'string') {
             return multiplier * (va < vb ? -1 : va > vb ? 1 : 0);
         }
 
-        if (key === 'last_used_at') {
+        if (key === 'last_used_at' || key === 'timestamp') {
             va = new Date(va).getTime() || 0;
             vb = new Date(vb).getTime() || 0;
         } else {
@@ -530,6 +582,30 @@ const sortedUserStats = computed(() => {
 const endpointStats = ref([]);
 const loadingEndpointStats = ref(false);
 const endpointStatsFilter = ref({ days: 7 });
+const endpointSortKey = ref('call_count');
+const endpointSortDir = ref('desc');
+
+const endpointStatsColumns = [
+    { key: 'base_url', label: 'Base URL' },
+    { key: 'model', label: '模型' },
+    { key: 'call_count', label: '调用次数' },
+    { key: 'success_count', label: '成功' },
+    { key: 'error_count', label: '错误' },
+    { key: 'avg_response_time_ms', label: '平均响应时间' },
+    { key: 'max_response_time_ms', label: '最大/最小响应时间' },
+    { key: 'last_used_at', label: '最后使用' },
+];
+
+function toggleEndpointSort(key) {
+    if (endpointSortKey.value === key) {
+        endpointSortDir.value = endpointSortDir.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        endpointSortKey.value = key;
+        endpointSortDir.value = 'desc';
+    }
+}
+
+const sortedEndpointStats = createSortedComputed(endpointStats, endpointSortKey, endpointSortDir);
 
 // API 日志
 const apiLogs = ref([]);
@@ -541,6 +617,28 @@ const logsFilter = ref({
     limit: 50,
     offset: 0,
 });
+const logsSortKey = ref('timestamp');
+const logsSortDir = ref('desc');
+
+const logsColumns = [
+    { key: 'timestamp', label: '时间' },
+    { key: 'username', label: '用户' },
+    { key: 'role', label: '角色' },
+    { key: 'api_endpoint', label: 'API 端点' },
+    { key: 'status_code', label: '状态码' },
+    { key: 'response_time_ms', label: '响应时间' },
+];
+
+function toggleLogsSort(key) {
+    if (logsSortKey.value === key) {
+        logsSortDir.value = logsSortDir.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        logsSortKey.value = key;
+        logsSortDir.value = 'desc';
+    }
+}
+
+const sortedLogs = createSortedComputed(apiLogs, logsSortKey, logsSortDir);
 
 // API 额度设置（统一配额池）
 const apiQuota = ref({ guest: 100, registered: 1000 });
@@ -1274,6 +1372,15 @@ onMounted(async () => {
     font-size: 13px;
     line-height: 1.5;
     overflow-wrap: anywhere;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+
+.quota-note svg {
+    color: var(--info, #ffb300);
+    flex-shrink: 0;
+    margin-top: 2px;
 }
 
 .quota-note code {

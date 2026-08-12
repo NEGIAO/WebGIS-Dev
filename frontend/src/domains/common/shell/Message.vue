@@ -30,7 +30,13 @@
                 @click="handleItemClick(item)"
             >
                 <div class="toast-icon-wrap">
-                    <div class="toast-icon">{{ getTypeIcon(item.type) }}</div>
+                    <div class="toast-icon">
+                        <CheckCircle v-if="item.type === 'success'" :size="16" />
+                        <AlertTriangle v-else-if="item.type === 'warning'" :size="16" />
+                        <Soup v-else-if="item.type === 'soup'" :size="16" />
+                        <Info v-else-if="item.type === 'error'" :size="16" />
+                        <Info v-else :size="16" />
+                    </div>
                     <span
                         v-if="(item._dedupCount || 0) > 1"
                         class="toast-count"
@@ -81,6 +87,7 @@
 
 <script setup>
 import { toRef } from 'vue';
+import { AlertTriangle, CheckCircle, Info, Soup } from '@lucide/vue';
 import { useMessageIslandMotion } from '@common/shell/useMessageIslandMotion';
 import { useLocale } from '@common/app/useLocale';
 
@@ -141,13 +148,7 @@ function shouldShowTitle(item) {
     return item?.showTitle !== false && item?.type !== 'soup';
 }
 
-function getTypeIcon(type) {
-    if (type === 'success') return '✓';
-    if (type === 'error') return '!';
-    if (type === 'warning') return '⚠';
-    if (type === 'soup') return '🥣';
-    return 'i';
-}
+// getTypeIcon 已移除，模板中直接使用 Lucide 组件
 
 function getTypeTitle(type) {
     if (type === 'success') return t('message.types.success');

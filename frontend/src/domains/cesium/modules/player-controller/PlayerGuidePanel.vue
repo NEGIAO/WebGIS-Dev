@@ -8,8 +8,8 @@
             <div class="guide-pill">
                 <span class="pill-dot" :class="{ fp: isFirstPerson }" />
                 <span class="pill-label">{{ isFirstPerson ? '第一人称' : '第三人称' }}</span>
-                <span v-if="isFlying" class="pill-fly">✈</span>
-                <button class="pill-close" title="关闭提示" @click="$emit('close')">✕</button>
+                <span v-if="isFlying" class="pill-fly"><Plane :size="12" /></span>
+                <button class="pill-close" title="关闭提示" @click="$emit('close')"><X :size="14" /></button>
             </div>
             <!-- 键位提示条 -->
             <div class="guide-keys">
@@ -29,7 +29,7 @@
                 </span>
                 <span class="key-sep" />
                 <span class="key-group">
-                    <span class="key-mouse">🖱</span><em>旋转</em>
+                    <span class="key-mouse"><Mouse :size="14" /></span><em>旋转</em>
                 </span>
             </div>
         </div>
@@ -37,6 +37,7 @@
 </template>
 
 <script setup>
+import { Plane, Mouse, X } from '@lucide/vue';
 defineProps({
     visible: { type: Boolean, default: false },
     isFirstPerson: { type: Boolean, default: false },

@@ -74,6 +74,7 @@
 遵循 [`Guide/dev-conventions.md`](Guide/dev-conventions.md) 的分层边界（`components` / `composables` / `stores` / `utils` / `services`），并满足：
 
 - **单一职责封装**：独立功能必须落成独立 `.js` / `.ts` 文件。**禁止继续在 `MapContainer.vue` 等既有巨型文件内堆叠业务逻辑**（该文件已 2000+ 行，只出不进）。
+- **UI 图标规范**：Vue 模板中的图标统一使用 `@lucide/vue` 组件（`import { IconName } from '@lucide/vue'`），**禁止使用 emoji 作为图标**（如 📊、🤖、🗄️ 等）。原因：① Lucide 图标支持 currentColor，自动适配主题色与悬停态；② emoji 跨平台渲染不一致（Windows/macOS/移动端字形差异）；③ Lucide 图标可通过 `:size`、`:stroke-width` 等属性精确控制，emoji 无法做到。
 - **类型零报错**：新增 `.ts` 文件必须通过 `tsc --noEmit`，不得引入新的类型错误。
 - **注释义务**：新增函数必须有简洁注释说明「功能 / 参数 / 返回 / 核心逻辑」；同类逻辑函数组织在一起维护。
 - **配置 key 登记前置**：新增任何配置项，顺序恒为 **① 登记根 `.env.example` + `backend/config/catalog.py` → ② 再写读取代码 → ③ 跑 `CheckConfigRegistry.py`**。后端业务代码禁止裸读 `os.getenv`；前端业务代码禁止散落 `import.meta.env.VITE_*`（唯一入口 `src/config/publicRuntime.ts`）。

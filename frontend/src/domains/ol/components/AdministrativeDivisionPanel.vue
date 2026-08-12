@@ -8,7 +8,7 @@
             <!-- 头部：鲜艳绿色背景 -->
             <header class="eco-header">
                 <div class="header-left">
-                    <span class="header-icon">🗺️</span>
+                    <span class="header-icon"><Globe :size="16" /></span>
                     <h3 class="eco-title">行政区划</h3>
                 </div>
                 <button
@@ -30,7 +30,7 @@
                         placeholder="搜索省市区或 adcode..."
                         autocomplete="off"
                     />
-                    <span class="search-icon">🔍</span>
+                    <span class="search-icon"><Search :size="14" /></span>
                 </div>
             </div>
 
@@ -111,6 +111,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { Globe, Search } from '@lucide/vue';
 import { useTOCStore } from '@/stores';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import AdministrativeDivisionTreeNode from './AdministrativeDivisionTreeNode.vue';
@@ -223,6 +224,15 @@ watch(
     color: white;
 }
 
+.header-icon {
+    display: flex;
+    align-items: center;
+}
+
+.header-icon svg {
+    color: white;
+}
+
 .header-left {
     display: flex;
     align-items: center;
@@ -289,7 +299,8 @@ watch(
     right: 12px;
     font-size: 14px;
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 1;
+    color: var(--text-muted, #999);
 }
 
 /* 统计条：浅绿色胶囊样式 */

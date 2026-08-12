@@ -135,7 +135,7 @@
             v-if="showLongPressHint"
             class="long-press-hint"
         >
-            <span class="hint-icon">👆</span>
+            <span class="hint-icon"><Hand :size="16" /></span>
             <span class="hint-text">已激活拖拽</span>
         </div>
 
@@ -151,6 +151,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { Hand } from '@lucide/vue';
 
 /** 长按激活拖拽的延迟时间（毫秒） */
 const LONG_PRESS_DELAY = 300;

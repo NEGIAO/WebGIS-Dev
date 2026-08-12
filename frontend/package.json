@@ -26,6 +26,7 @@
         "echarts": "^6.0.0",
         "highlight.js": "^11.11.1",
         "jszip": "^3.10.1",
+        "katex": "^0.16.11",
         "knockout": "^3.5.3",
         "lil-gui": "^0.21.0",
         "marked": "^18.0.5",

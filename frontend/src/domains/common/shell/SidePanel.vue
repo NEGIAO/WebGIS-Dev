@@ -292,6 +292,7 @@ import {
 } from 'vue';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import { useLocale } from '@common/app/useLocale';
+import { BACKEND_BASE_URL } from '@/config/publicRuntime';
 
 // Load non-default tabs on first use; keep them mounted afterward to preserve state.
 const ChatPanelContent = defineAsyncComponent(() =>
@@ -328,7 +329,8 @@ const newsPlatforms = computed(() =>
     })),
 );
 
-const NEWS_API_BASE = 'https://orz.ai/api/v1/dailynews';
+const NEWS_DIRECT_URL = 'https://news.orz.ai/api/v1/dailynews/';
+const NEWS_API_TARGET = 'news.orz.ai/api/v1/dailynews/';
 const NEWS_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
 
 // ========== 2. Props & Emits ==========
@@ -494,12 +496,29 @@ const currentPlatformLabel = computed(() => {
 async function fetchNews(platform) {
     newsLoading.value = true;
     try {
-        // 添加 8 秒超时，防止请求永久挂起
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const resp = await fetch(`${NEWS_API_BASE}/?platform=${platform}`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        // 先尝试直连，失败（网络错误或 HTTP 非 ok）则走后端代理
+        const url = `${NEWS_DIRECT_URL}?platform=${platform}`;
+        const proxyUrl = `${BACKEND_BASE_URL}/proxy/${NEWS_API_TARGET}?platform=${platform}`;
+        const directController = new AbortController();
+        const directTimeoutId = setTimeout(() => directController.abort(), 8000);
+        let resp;
+        try {
+            resp = await fetch(url, { signal: directController.signal });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        } catch {
+            // 直连失败（网络错误或 HTTP 非 ok），使用独立 controller 走代理
+            clearTimeout(directTimeoutId);
+            const proxyController = new AbortController();
+            const proxyTimeoutId = setTimeout(() => proxyController.abort(), 8000);
+            try {
+                resp = await fetch(proxyUrl, { signal: proxyController.signal });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            } finally {
+                clearTimeout(proxyTimeoutId);
+            }
+        } finally {
+            clearTimeout(directTimeoutId);
+        }
         const json = await resp.json();
         if (json.status === '200' && Array.isArray(json.data)) {
             newsItems.value = json.data.slice(0, 25);

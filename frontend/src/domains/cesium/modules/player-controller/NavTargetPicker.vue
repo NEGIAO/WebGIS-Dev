@@ -53,7 +53,7 @@
                         @click="handleOption('search')"
                     >
                         <div class="nav-option-icon">
-                            <span>🔍</span>
+                            <Search :size="18" />
                         </div>
                         <div class="nav-option-text">
                             <span class="nav-option-label">搜索地点</span>
@@ -67,7 +67,7 @@
                         @click="handleOption('data')"
                     >
                         <div class="nav-option-icon">
-                            <span>📁</span>
+                            <FolderOpen :size="18" />
                         </div>
                         <div class="nav-option-text">
                             <span class="nav-option-label">选择数据要素</span>
@@ -81,7 +81,7 @@
                         @click="handleOption('pick')"
                     >
                         <div class="nav-option-icon">
-                            <span>📍</span>
+                            <MapPin :size="18" />
                         </div>
                         <div class="nav-option-text">
                             <span class="nav-option-label">地图点选</span>
@@ -96,6 +96,7 @@
 </template>
 
 <script setup>
+import { FolderOpen, MapPin, Search } from '@lucide/vue';
 defineProps({
     visible: {
         type: Boolean,
@@ -513,6 +514,7 @@ function handleOption(type) {
     border-radius: 4px;
     background: rgba(0, 210, 255, 0.08);
     border: 1px solid rgba(0, 210, 255, 0.15);
+    color: #00d2ff;
     transition: all 0.2s;
 }
 
@@ -520,6 +522,7 @@ function handleOption(type) {
     background: rgba(0, 210, 255, 0.2);
     border-color: #00e5ff;
     box-shadow: 0 0 8px rgba(0, 210, 255, 0.3);
+    color: #00e5ff;
 }
 
 .nav-option-text {

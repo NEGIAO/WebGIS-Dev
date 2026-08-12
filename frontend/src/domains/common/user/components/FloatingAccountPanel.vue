@@ -559,14 +559,6 @@ function resetPasswordForm() {
     securityTabRef.value?.resetForm();
 }
 
-function handleDocumentClick(event) {
-    if (!isOpen.value) return;
-    const root = event.target?.closest?.('.floating-account-manager');
-    if (!root) {
-        closePanel();
-    }
-}
-
 function handleDocumentKeydown(event) {
     if (event.key !== 'Escape') return;
     // Esc 分级退出：先退全屏，再关面板
@@ -728,7 +720,6 @@ onMounted(() => {
         }, 30000);
     }
 
-    document.addEventListener('pointerdown', handleDocumentClick);
     document.addEventListener('keydown', handleDocumentKeydown);
 });
 
@@ -740,7 +731,6 @@ onBeforeUnmount(() => {
         centerTimer = null;
     }
 
-    document.removeEventListener('pointerdown', handleDocumentClick);
     document.removeEventListener('keydown', handleDocumentKeydown);
 });
 </script>
@@ -833,6 +823,14 @@ onBeforeUnmount(() => {
                             @click="toggleFullscreen"
                         >
                             <i :class="isFullscreen ? 'fas fa-compress-alt' : 'fas fa-expand-alt'"></i>
+                        </button>
+                        <button
+                            type="button"
+                            class="btn-fullscreen"
+                            :title="t('common.close')"
+                            @click="closePanel"
+                        >
+                            <i class="fas fa-times"></i>
                         </button>
                     </div>
                 </div>
