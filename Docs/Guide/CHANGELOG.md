@@ -6,6 +6,35 @@
 
 ## 版本记录
 
+### V3.5.19 (2026-08-12) — 综合版本：实时在线统计体系（心跳模型）· 时区 UTC+8 修正 · IP 定位加固
+
+> 暂存区多轮未提交改动（旧版本号 V3.5.19~27 + V3.4.63 遗留时区/IP 改动）按用户指示合并为单一版本 V3.5.19，代码注释、日志、README/CHANGELOG 全部收敛。
+
+#### 实时在线统计（核心，最终形态 = 心跳模型）
+
+- **心跳模型**：前端每 5s POST `/api/statistics/heartbeat`（身份 = 登录 username / 游客 device_id 派生 uid，同身份多标签去重），后端 15s 窗口内有心跳 = 在线，停心跳（下线/断网/关页）自动剔除，每 15s 广播人数。删除「请求活跃 ∪ SSE 连接保活」双信号、断开宽限、offline 上报等全部补丁。
+- **SSE 推送通道**：一次性短时 ticket 鉴权（`/api/statistics/ticket` → `/api/statistics/stream`），完整 token 不再进 URL；登录与游客均可建立，连接/断开不影响在线判定。
+- **游客接入**：未登录访客恒发 `X-Guest-Device-Id`（sessionStorage 每标签独立），guest allow 放行；`statistics.py` 的 `_merge_online_tracker` 使 center/realtime 轮询与 SSE 广播口径一致（含游客），游客侧在线数真实可见。
+- **前端**：`useRealtimeStats.js` 模块级单例（HomeView 挂载全局启用），5s 心跳 + `visibilitychange` 前台补发 + SSE 消费；心跳定时器幂等（重连不累积，review 修复项）。
+- **鉴权收口**：`_extract_token` 不再接受 query token。
+
+#### 时区修正（V3.4.63 遗留，归并）
+
+- 全站时间由 UTC 改为北京时间（UTC+8）：`auth/db.py`（`_utc_now`/`_iso`/`_parse_iso`/迁移备份命名）、`admin.py`、`api_management.py`、`api_keys_management.py`、`agent_chat/utils.py`、`api/location.py`、`download_xyz/*`、`utils/sqlite_maintenance.py`、`utils/sqlite_recovery.py`；`sessions.last_seen_at` 触活节流 60s→15s 适配实时推送。
+
+#### IP 定位加固（V3.4.63 遗留，归并）
+
+- `_extract_client_ip` 优先信任前端 `X-Client-IP`（前端 ipify 取公网 IP，3s 超时 + 30s 负缓存）；
+- 私有 IP 检测（`_is_private_ip`），Docker 网关/内网 IP 直接跳过定位或返回 400；
+- 定位服务新增 ipwho.is 优先（免费、HTTPS、不屏蔽数据中心 IP）；配置 `IP_GEO_IPWHO_ENDPOINT` 已登记。
+
+#### 其他
+
+- 端点变更：新增 `/api/statistics/heartbeat`、`ticket`、`stream`；删除 `/api/statistics/disconnect`（前后端需同步发布）。
+- 结构树、README、CHANGELOG、综合日志同步。
+
+详见 [综合日志](Docs/LLM_record/26-08/2026-08-12/2026-08-12-v3.5.19-consolidated.md)。
+
 ### V3.5.18 (2026-08-12) — 综合版本：Emoji→Lucide 图标迁移 · 管理面板数据表格化重构 · KaTeX 数学公式渲染 · 代码审查修复
 
 > 暂存区多次改动合并为单一版本（含 Code Review 修复）。

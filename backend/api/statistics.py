@@ -30,6 +30,7 @@ from api.auth import (
     require_login,
     resolve_quota_subject,
 )
+from api.realtime_stats import get_online_tracker
 from services import ip_geo_service
 
 from config import get_settings
@@ -910,6 +911,21 @@ def _get_realtime_global_stats_sync() -> Dict[str, Any]:
     }
 
 
+def _merge_online_tracker(stats: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    将内存实时在线口径（OnlineUserTracker）合并进 DB 口径快照。
+
+    DB 口径（online_users）只统计 sessions 表登录会话，游客
+    （guest_identity_records）不在其内；而游客的在线信号只存在于内存
+    tracker。轮询型端点（center / realtime）合并后，游客侧看到的
+    realtime_online_users 与 SSE 广播口径一致（15s 心跳窗口）。
+    """
+    tracker = get_online_tracker()
+    stats["realtime_online_users"] = tracker.get_online_count()
+    stats["realtime_online_userlist"] = tracker.get_online_users()
+    return stats
+
+
 def _list_all_user_stats_sync(limit: int = 500) -> List[Dict[str, Any]]:
     safe_limit = max(1, min(int(limit), 1000))
 
@@ -1173,7 +1189,7 @@ async def get_center_statistics(
         "user": _build_center_user_payload(session, username, role),
         "quota": quota,
         "self_stats": self_stats,
-        "realtime": realtime,
+        "realtime": _merge_online_tracker(realtime),
         "admin_contact": admin_contact,
         "messages": messages,
         "announcement": announcement,
@@ -1188,7 +1204,7 @@ async def get_realtime_statistics(
     realtime = await asyncio.to_thread(_get_realtime_global_stats_sync)
     return {
         "status": "success",
-        "data": realtime,
+        "data": _merge_online_tracker(realtime),
     }
 
 

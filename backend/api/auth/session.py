@@ -135,6 +135,9 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
 
         # 心跳触活（V3.4.60）：节流刷新 last_seen_at，统计侧据此按活跃窗口判在线。
         # 空串经 _safe_parse_iso 得 None → 立即写；写失败不阻断会话验证主流程。
+        # 每次鉴权请求都标记内存活跃（含心跳与普通请求）。
+        # V3.5.19：SSE 即时推送统一由 realtime_stats.mark_active 在"新用户上线"时触发，
+        # 不再依赖此处的广播桥接（原 get_event_loop 在 worker 线程拿不到运行中循环，静默失效）。
         last_seen = _safe_parse_iso(str(data.get("last_seen_at") or ""))
         if last_seen is None or (now - last_seen).total_seconds() >= SESSION_TOUCH_THROTTLE_SECONDS:
             try:
@@ -147,6 +150,15 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
                 data["last_seen_at"] = now_iso
             except Exception:
                 pass  # 心跳属尽力而为，不因统计辅助字段影响鉴权
+
+        # 每次成功鉴权都标记用户活跃（用于实时在线统计）
+        try:
+            username = str(data.get("username") or "").strip()
+            if username:
+                from api.realtime_stats import mark_user_active
+                mark_user_active(username)
+        except Exception:
+            pass  # 在线统计为辅助功能，任何异常不影响鉴权
 
         old_role = str(data.get("role") or "")
         resolved_role = normalize_role(old_role, str(data.get("username") or ""))

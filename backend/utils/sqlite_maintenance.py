@@ -5,9 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict
+
+# 北京时间（UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +18,7 @@ MAINTENANCE_TABLE = "database_maintenance_events"
 
 
 def _utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(_BEIJING_TZ).isoformat()
 
 
 def _json_text(value: object) -> str:

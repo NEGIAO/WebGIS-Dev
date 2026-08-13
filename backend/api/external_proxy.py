@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from api.auth import require_api_access_or_guest, get_auth_db_connection
 from config import get_int, get_str
 from services import ip_geo_service
+from services.ip_geo import _is_private_ip
 
 AMAP_REST_ROOT = get_str("AMAP_REST_ROOT")
 AMAP_WEB_DETAIL_ROOT = get_str("AMAP_WEB_DETAIL_ENDPOINT")
@@ -645,6 +646,13 @@ async def proxy_ipapi_country(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="IP 地址格式不合法",
+        )
+
+    # 私有 IP 无法定位：Docker 网关、内网 IP 等直接返回 400，避免无意义的外部请求
+    if _is_private_ip(normalized_ip):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无法定位私有/内网 IP 地址",
         )
 
     result = await ip_geo_service.locate(ip=normalized_ip, prefer_amap=False, use_cache=True)

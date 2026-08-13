@@ -55,12 +55,12 @@ SUPPORTED_UNIT_SYSTEMS = {
 SESSION_EXPIRE_HOURS = get_settings().session_expire_hours
 PASSWORD_HASH_ITERATIONS = get_settings().password_hash_iterations
 
-# ─── 在线判定（V3.4.60，普通常量非配置 key）───
+# ─── 在线判定（普通常量非配置 key）───
 # 心跳链路：鉴权单点 _get_session_sync 节流刷新 sessions.last_seen_at，
 # 统计侧以「未过期 且 last_seen_at 落在窗口内」判在线。
-# 约束：ONLINE_WINDOW_MINUTES(300s) ≫ 节流(60s) + 前端最长轮询间隔(30s)，
-# 活跃用户 last_seen_at 滞后上界 60s，不会因节流被误判离线。
-SESSION_TOUCH_THROTTLE_SECONDS = 60  # 距上次触活不足 60s 不写库（防写放大）
+# 节流 15s：配合 SSE 广播使在线人数变化更快推送到前端；
+# 约束：ONLINE_WINDOW_MINUTES(300s) ≫ 节流(15s)，活跃用户不会因节流被误判离线。
+SESSION_TOUCH_THROTTLE_SECONDS = 15  # 距上次触活不足 15s 不写库（适配 SSE 实时推送）
 ONLINE_WINDOW_MINUTES = 5            # 最近 5 分钟内有鉴权请求 = 在线
 
 # ─── OAuth 非密钥常量 ───
@@ -341,18 +341,33 @@ def _validate_password(password: str, field_name: str = "密码") -> None:
 
 # ─── 请求工具函数 ───
 def _extract_client_ip(request: Request) -> str:
+    # 优先级 1: 前端主动上报的公网 IP（解决 Docker 环境 request.client.host 是容器网关 IP 的问题）
+    client_ip = str(request.headers.get("X-Client-IP", "")).strip()
+    if client_ip:
+        return client_ip
+
+    # 优先级 2: 反向代理设置的 X-Forwarded-For
     forwarded = str(request.headers.get("X-Forwarded-For", "")).strip()
     if forwarded:
         return forwarded.split(",")[0].strip()
 
+    # 优先级 3: 反向代理设置的 X-Real-IP
     real_ip = str(request.headers.get("X-Real-IP", "")).strip()
     if real_ip:
         return real_ip
 
+    # 优先级 4: 直连 IP（Docker 环境下为容器网关 IP，非真实用户 IP）
     return str(getattr(request.client, "host", "unknown") or "unknown")
 
 
 def _extract_token(request: Request) -> str:
+    """
+    从请求中提取会话 token（仅接受 Authorization / X-Auth-Token header）。
+
+    注意（V3.5.19）：曾支持 query param 传 token 以适配 SSE，但完整会话 token
+    出现在 URL 会进入代理 access log / 浏览器历史，泄漏面过大；SSE 已改为
+    一次性短时 ticket（见 api/realtime_stats.py），此处不再接受 query token。
+    """
     auth_header = str(request.headers.get("Authorization", "")).strip()
     if auth_header.lower().startswith("bearer "):
         token = auth_header.split(" ", 1)[1].strip()
@@ -376,10 +391,24 @@ def _normalize_binary_flag(raw_value: Any, fallback: str = "0") -> str:
 
 
 def _is_guest_allow_request(request: Request) -> bool:
+    """是否为允许访客放行的请求。
+
+    放行条件（任一）：
+    1. 分享模式标记：URL 参数 s=1 / X-Share-Mode: 1 / X-Guest-Allow: 1
+    2. 携带访客设备身份头 X-Guest-Device-Id（所有未登录访客
+       默认以稳定设备身份访问，纳入在线统计与访客配额体系）
+
+    注意：访客身份仅获得 guest 角色权限（低配额），不影响 admin/注册用户权限。
+    """
     query_share_flag = request.query_params.get("s")
     header_share_flag = request.headers.get("X-Share-Mode") or request.headers.get("X-Guest-Allow")
     normalized = _normalize_binary_flag(query_share_flag or header_share_flag, "0")
-    return normalized == "1"
+    if normalized == "1":
+        return True
+
+    # 带稳定访客设备身份即视为访客请求（前端未登录时恒发送）
+    guest_device_id = _normalize_guest_device_id(request.headers.get("X-Guest-Device-Id"))
+    return bool(guest_device_id)
 
 
 # ─── 管理员密码常量 ───

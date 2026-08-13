@@ -90,6 +90,12 @@ const daysSinceRegister = computed(() => {
     return Math.max(1, Math.ceil((Date.now() - registered.getTime()) / 86400000));
 });
 
+/** 在线用户数：优先显示心跳/SSE 实时口径（15s 窗口）；未推送（undefined/null）时回退 DB 5min 口径 */
+const displayOnlineUsers = computed(() => {
+    const v = props.realtimeStats?.realtime_online_users;
+    return v === null || v === undefined ? (props.realtimeStats?.online_users || 0) : v;
+});
+
 /** 相对时间：刚刚/x 分钟前/x 小时前/昨天/日期 */
 function formatRelativeTime(value) {
     const raw = String(value || '').trim();
@@ -299,7 +305,7 @@ function handleSubmit() {
             <div class="ov-card-title"><i class="fas fa-globe"></i> {{ t('overview.realtime') }}</div>
             <div class="realtime-grid">
                 <div class="realtime-item">
-                    <span class="realtime-num">{{ formatNumber(realtimeStats.online_users) }}</span>
+                    <span class="realtime-num">{{ formatNumber(displayOnlineUsers) }}</span>
                     <span class="realtime-name">{{ t('overview.onlineUsers') }}</span>
                 </div>
                 <div class="realtime-item">

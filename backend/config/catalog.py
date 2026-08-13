@@ -405,9 +405,15 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
     },
     "IP_GEO_IP_API_ENDPOINT": {
         "layer": "L1",
-        "default": "https://ip-api.com/json",
+        "default": "http://ip-api.com/json",
         "secret": False,
-        "description": "ip-api.com 定位端点根地址",
+        "description": "ip-api.com 定位端点根地址（免费版仅支持 HTTP）",
+    },
+    "IP_GEO_IPWHO_ENDPOINT": {
+        "layer": "L1",
+        "default": "https://ipwho.is",
+        "secret": False,
+        "description": "ipwho.is 定位端点（不屏蔽数据中心 IP）",
     },
     "IP_GEO_IPAPI_ENDPOINT": {
         "layer": "L1",

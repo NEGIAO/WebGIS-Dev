@@ -62,6 +62,7 @@ import MagicCursor from '@common/shell/MagicCursor.vue';
 import FloatingAccountPanel from '@common/user/components/FloatingAccountPanel.vue';
 import PersistentAnnouncementBar from '@common/shell/PersistentAnnouncementBar.vue';
 import ResizeHandle from '@common/shell/ResizeHandle.vue';
+import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 // LogMonitor 按需懒加载（仅开发者打开时才加载）
 const LogMonitor = defineAsyncComponent(() => import('@ol/components/LogMonitor.vue'));
 
@@ -1347,6 +1348,11 @@ function syncVisitPosCodeToUrl(encodedPos, geoPermission = 'unknown') {
     }
 }
 
+// ========== 全局实时在线统计 ==========
+// 打开网站即启动 5s 心跳（在线判定）+ SSE 推送通道；
+// 离开页面 stop 心跳与连接 → 后端 15s 窗口过期自动剔除下线。
+const { reconnect: _sseReconnect, disconnect: _sseDisconnect } = useRealtimeStats();
+
 /** 组件卸载：仅清理定时器资源，不强制 settleMapCoreLoading。
  *  若地图从未就绪（用户提前离开），不应标记为初始化完成。 */
 onUnmounted(() => {
@@ -1357,6 +1363,9 @@ onUnmounted(() => {
         window.clearTimeout(activeWatchdogTimer);
         activeWatchdogTimer = null;
     }
+
+    // 全局 SSE 断开（离开页面 = 下线）
+    _sseDisconnect();
 
     // 注意：visitLog 可能在组件卸载后才执行
     // 这是可接受的，因为它是非关键任务，只是记录访问信息
@@ -1369,6 +1378,9 @@ onMounted(async () => {
     // 现在改为在底图核心就绪后执行，确保底图有绝对优先级
     // visitLog 调用已移到 handleMapCoreReady() 中的 executeVisitLogAsync()
     await setMapView(getCurrentMapView(), { writeUrl: false });
+
+    // 全局 SSE 连接（打开网站即在线）
+    _sseReconnect();
 });
 </script>
 

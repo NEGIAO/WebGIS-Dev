@@ -65,13 +65,14 @@
 - [🏗️ 系统架构](#️-系统架构)
   - [分层架构总览](#分层架构总览)
   - [域名映射](#域名映射)
+- [🔁 双向保活机制](#-双向保活机制)
 - [🧭 文档导航](#-文档导航)
   - [开发文档](#开发文档)
   - [架构文档](#架构文档)
     - [系统级架构](#系统级架构)
     - [功能架构](#功能架构)
+- [Star History](#star-history)
 - [📜 版本演进](#-版本演进)
-- [🔁 双向保活机制](Docs/Architecture/keepalive-hf-space.md)
 - [📄 许可证](#-许可证)
 - [👤 作者与托管](#-作者与托管)
 
@@ -79,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.18），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.19），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -398,9 +399,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.18** | 2026-08-12 | 综合版本：Emoji → Lucide 图标迁移（12 个组件）；AdminControlPanel 数据管理表格化重构（排序 + 搜索 + 单元格行内编辑 + 表单插入）；Markdown 数学公式渲染（KaTeX 集成）；代码块样式迁移至非 scoped（修复 v-html 注入兼容性）；聊天配置模型选择按路由模式隔离（避免跨模式污染）；新闻功能直连→代理降级链路加固。详见[合并关账日志](Docs/LLM_record/26-08/2026-08-12/2026-08-12-v3.5.18-consolidated.md) |
-| **V3.5.17** | 2026-08-11 | 综合版本（暂存区多次改动合并）：默认 AI 免费化（不扣用户额度，前后端一致）；配置面板保存按路由模式隔离（修复管理员模式选模型后污染后端代理配置）；新增个人 Key 模式独立判定（isPersonalMode）；管理面板整段重写（Tab 横向滚动、行内 JSON 编辑、Agent 配置表单）；API 用量按 Base URL+模型统计（新端点 by-model）；Cesium 贴地算法重构（模型中心径向平移、_originMatrix 基准复合、积极贴地、采样式高程范围、最低 -10m 约束）；新增武汉建筑白膜样例与第一人称漫游演示页。详见[合并关账日志](Docs/LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md) |
-| **V3.5.16** | 2026-08-08 | 综合版本：远程 3D 服务加载（Ion/I3S/3D Tiles）+ 数据源统一注册；场景 Tab「加载 3D 模型」→ 下拉菜单（与 Data Tab 同范式）；3D Tiles 材质模式 5 项 Bug 修复（isNaN/硬编码高度/UNLIT/状态脱节/缺默认材质）；数据源透明度链路加固与诊断；HomeView Cesium 感知路由；vite 开发服务器代理配置；.env.local 后端 URL 相对路径化。详见[日志](Docs/LLM_record/26-08/2026-08-08/2026-08-08-scene-tab-3d-model-dropdown.md) |
+| **V3.5.19** | 2026-08-12 | 综合版本：实时在线统计体系（**心跳模型**：前端 5s 心跳、后端 15s 窗口自动剔除、每 15s 广播，重塑游客计在线）· 时区 UTC+8 修正 · IP 定位加固（公网 IP 上报/私有 IP 检测/ipwho.is 优先）。详见[日志](Docs/LLM_record/26-08/2026-08-12/2026-08-12-v3.5.19-consolidated.md) |
+| **V3.5.18** | 2026-08-12 | 综合版本：Emoji→Lucide 图标迁移 · 管理面板数据表格化重构 · KaTeX 数学公式渲染 · 代码审查修复。详见[日志](Docs/LLM_record/26-08/2026-08-12/2026-08-12-v3.5.18-consolidated.md) |
+| **V3.5.17** | 2026-08-11 | Agent 模式大改（免费默认 AI + 路由模式隔离）· 管理面板升级 · 模型调用统计 · Cesium 贴地重构。详见[日志](Docs/LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -425,6 +426,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.18 · 开发中 · 最后更新 2026-08-12</sub>
+<sub>V3.5.19 · 开发中 · 最后更新 2026-08-12</sub>
 
 </div>

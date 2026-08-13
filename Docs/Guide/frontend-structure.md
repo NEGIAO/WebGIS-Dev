@@ -436,7 +436,8 @@ frontend/src/
 │   │   │   │       ├── PreferencesTab.vue
 │   │   │   │       └── SecurityTab.vue
 │   │   │   ├── composables/
-│   │   │   │   └── useAuthIdentity.js
+│   │   │   │   ├── useAuthIdentity.js
+│   │   │   │   └── useRealtimeStats.js  # SSE 实时在线统计推送（ticket 鉴权 + 指数退避重连）
 │   │   │   ├── services/
 │   │   │   │   └── auth.js  # 鉴权工具
 │   │   │   └── stores/

@@ -29,6 +29,19 @@ from .user import _get_or_create_guest_username_sync
 logger = logging.getLogger(__name__)
 
 
+# ==================== 活跃追踪辅助 ====================
+
+def _mark_active_safe(session: Dict[str, Any]) -> None:
+    """安全地标记用户活跃（不阻塞认证流程）。"""
+    try:
+        username = str(session.get("username") or "").strip()
+        if username:
+            from api.realtime_stats import mark_user_active
+            mark_user_active(username)
+    except Exception:
+        pass
+
+
 # ==================== 结构化错误 detail ====================
 
 def _auth_error_detail(code: str, message: str) -> Dict[str, Any]:
@@ -70,7 +83,9 @@ async def require_login(request: Request) -> Dict[str, Any]:
     token = _extract_token(request)
     if not token:
         if _is_guest_allow_request(request):
-            return await _build_temporary_guest_session_async(request)
+            session = await _build_temporary_guest_session_async(request)
+            _mark_active_safe(session)
+            return session
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -88,13 +103,16 @@ async def require_login(request: Request) -> Dict[str, Any]:
 
     if session is None:
         if _is_guest_allow_request(request):
-            return await _build_temporary_guest_session_async(request)
+            session = await _build_temporary_guest_session_async(request)
+            _mark_active_safe(session)
+            return session
 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_auth_error_detail("SESSION_EXPIRED", "登录状态已失效，请重新登录"),
         )
 
+    _mark_active_safe(session)
     return session
 
 
@@ -148,6 +166,8 @@ async def _authenticate_login_or_guest(request: Request) -> Dict[str, Any]:
     # 无有效 session 时，自动创建临时 guest session
     if session is None:
         session = await _build_temporary_guest_session_async(request)
+
+    _mark_active_safe(session)
 
     if bool(session.get("requires_email_binding")):
         raise HTTPException(

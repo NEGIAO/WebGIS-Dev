@@ -41,6 +41,7 @@ from download_xyz.download_task import init_download_task_db
 from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 from api.keepalive import router as keepalive_router, start_keepalive_sender
+from api.realtime_stats import init_broadcaster, router as realtime_stats_router, start_periodic_broadcast, stop_periodic_broadcast
 
 # ==================== 日志配置 ====================
 
@@ -169,6 +170,14 @@ async def lifespan(app: FastAPI):
     # 启动 KeepAlive 发送端（每 5 min 主动 ping 对端 New API，保持双方 HF Space 活跃）
     app.state.keepalive_task = start_keepalive_sender(app)
 
+    # 初始化实时统计 SSE 广播管理器
+    app.state.stats_broadcaster = init_broadcaster()
+    logger.info("实时统计 SSE 广播管理器已初始化")
+
+    # 启动定时广播任务（每 15s 推送在线统计到所有 SSE 客户端）
+    start_periodic_broadcast()
+    logger.info("实时统计定时广播已启动")
+
     if app.state.startup_error:
         logger.warning("应用以降级模式启动: %s", app.state.startup_error)
     else:
@@ -209,6 +218,10 @@ async def lifespan(app: FastAPI):
             logger.info("HTTP 客户端已关闭")
     except Exception as e:
         logger.warning("HTTP 客户端关闭异常: %s", e)
+
+    # 停止实时统计定时广播
+    stop_periodic_broadcast()
+    logger.info("实时统计定时广播已停止")
 
 
 # ==================== FastAPI 应用初始化 ====================
@@ -406,6 +419,10 @@ logger.info("已注册监控路由")
 # 挂载空间分析路由
 app.include_router(spatial_router)
 logger.info("已注册空间分析路由")
+
+# 挂载实时统计 SSE 路由
+app.include_router(realtime_stats_router)
+logger.info("已注册实时统计 SSE 路由")
 
 # --- 功能：健康检查 ---
 @app.get("/")

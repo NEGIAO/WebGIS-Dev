@@ -11,6 +11,9 @@ from sqlmodel import Session, select
 from .download_task import DownloadTask, get_engine
 from .download import _get_task_ttl_minutes
 
+# 北京时间（UTC+8）
+_BEIJING_TZ = timezone(timedelta(hours=8))
+
 logger = logging.getLogger(__name__)
 
 # 终态任务集合：只有这些状态的任务才会被清理
@@ -28,7 +31,7 @@ def cleanup_expired_tasks(batch_size: int = 100) -> int:
     分批删除，避免一次性加载大量任务到内存。
     """
     ttl_minutes = _get_task_ttl_minutes()
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=ttl_minutes)
+    cutoff = datetime.now(_BEIJING_TZ) - timedelta(minutes=ttl_minutes)
     engine = get_engine()
 
     with Session(engine) as session:

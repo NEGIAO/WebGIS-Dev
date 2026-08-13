@@ -28,6 +28,7 @@ backend/
 │   ├── monitor.py                                 # 日志监控接口
 │   ├── proxy.py                                   # 通用代理 + GCJ-02 纠偏
 │   ├── statistics.py                              # 访问统计接口
+│   ├── realtime_stats.py                          # 实时在线统计 SSE 推送（内存 tracker + ticket 鉴权 + 定时/即时广播）
 │   ├── agent_chat/                                # AI 对话代理（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
 │   │   ├── constants.py                           # 常量、环境变量

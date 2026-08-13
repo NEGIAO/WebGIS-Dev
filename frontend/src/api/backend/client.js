@@ -33,6 +33,43 @@ if (typeof window !== 'undefined' && window.location.protocol === 'http:' && !/^
     console.warn('[Backend] 安全警告：当前通过 HTTP 连接后端，凭证将以明文传输。生产环境请启用 HTTPS。');
 }
 
+// ─── 用户公网 IP 获取 & 缓存 ───
+// Docker 环境 request.client.host 是容器网关 IP（如 172.18.0.1），不是用户真实公网 IP。
+// 前端通过 ipify 获取用户公网 IP 并缓存，每次请求通过 X-Client-IP header 传给后端。
+// V3.5.19：失败后 30s 负缓存，避免 ipify 不可用时每个请求都空等 3s 超时。
+let _cachedPublicIp = null;
+let _ipFetchPromise = null;
+let _ipFetchFailedAt = 0;
+const IP_FETCH_TIMEOUT_MS = 3000;
+const IP_FETCH_FAIL_COOLDOWN_MS = 30000;
+
+async function getPublicIp() {
+    if (_cachedPublicIp) return _cachedPublicIp;
+    if (_ipFetchPromise) return _ipFetchPromise;
+    if (Date.now() - _ipFetchFailedAt < IP_FETCH_FAIL_COOLDOWN_MS) return null;
+
+    _ipFetchPromise = (async () => {
+        try {
+            const resp = await axios.get('https://api.ipify.org?format=json', { timeout: IP_FETCH_TIMEOUT_MS });
+            const ip = resp?.data?.ip;
+            if (ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
+                _cachedPublicIp = ip;
+                return ip;
+            }
+        } catch {
+            _ipFetchFailedAt = Date.now(); // 失败进入负缓存，短时间内不再重试
+        }
+        return null;
+    })();
+
+    return _ipFetchPromise;
+}
+
+// 启动时预热（不阻塞）
+void getPublicIp();
+
+export { getPublicIp };
+
 /**
  * 后端 API 客户端实例
  * 自动处理请求/响应拦截
@@ -50,18 +87,30 @@ const backendAPI = axios.create({
  * 用于添加全局请求头、认证信息等
  */
 backendAPI.interceptors.request.use(
-    (config) => {
+    async (config) => {
         const token = getAuthToken();
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
 
-        if (!token && readShareModeFromUrl()) {
-            config.headers['X-Share-Mode'] = '1';
-
+        // 未登录访客恒发稳定设备身份（sessionStorage 每标签页独立），
+        // 使后端可识别每个访客客户端并纳入在线统计；分享模式额外带 X-Share-Mode。
+        if (!token) {
             const guestDeviceId = getOrCreateGuestDeviceId();
             if (guestDeviceId) {
                 config.headers['X-Guest-Device-Id'] = guestDeviceId;
+            }
+
+            if (readShareModeFromUrl()) {
+                config.headers['X-Share-Mode'] = '1';
+            }
+        }
+
+        // 传递用户公网 IP：后端在 Docker 环境拿到的 request.client.host 是容器网关 IP
+        if (!config.headers['X-Client-IP']) {
+            const publicIp = await getPublicIp();
+            if (publicIp) {
+                config.headers['X-Client-IP'] = publicIp;
             }
         }
 

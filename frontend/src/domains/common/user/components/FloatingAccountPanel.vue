@@ -22,6 +22,7 @@ import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRo
 import { BASEMAP_OPTIONS } from '@/constants';
 import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '@/stores';
 import { getUserDisplayName } from '@common/user/composables/useAuthIdentity';
+import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 import { useLocale } from '@common/app/useLocale';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
@@ -35,6 +36,22 @@ const message = useMessage();
 const userPreferencesStore = useUserPreferencesStore();
 const themeStore = useThemeStore();
 const { t } = useLocale();
+
+// SSE 实时统计推送：连接由全局 HomeView 管理（打开网站即在线），
+// 本组件只注册 onStats 回调消费数据，不再控制连接生命周期。
+useRealtimeStats({
+    onStats: (data) => {
+        if (data) {
+            centerData.value = {
+                ...centerData.value,
+                realtime: {
+                    ...centerData.value.realtime,
+                    ...data,
+                },
+            };
+        }
+    },
+});
 const props = defineProps({
     open: {
         type: Boolean,
@@ -184,6 +201,11 @@ const basemapPreferenceOptions = computed(() => {
 const selfStats = computed(() => centerData.value?.self_stats || {});
 const quotaInfo = computed(() => centerData.value?.quota || {});
 const realtimeStats = computed(() => centerData.value?.realtime || {});
+/** 在线用户数：优先显示心跳/SSE 实时口径（15s 窗口）；未推送（undefined/null）时回退 DB 5min 口径 */
+const displayOnlineUsers = computed(() => {
+    const v = realtimeStats.value?.realtime_online_users;
+    return v === null || v === undefined ? (realtimeStats.value?.online_users || 0) : v;
+});
 const adminContact = computed(() => String(centerData.value?.admin_contact || '').trim());
 const recentMessages = computed(() => {
     const source = centerData.value?.messages;
@@ -717,7 +739,7 @@ onMounted(() => {
         centerTimer = window.setInterval(() => {
             loadCenterData({ silent: true });
             refreshRealtimeData({ silent: true });
-        }, 30000);
+        }, 15000);
     }
 
     document.addEventListener('keydown', handleDocumentKeydown);
@@ -844,7 +866,7 @@ onBeforeUnmount(() => {
                         <i class="fas fa-stopwatch"></i>{{ t('account.onlineFor', { duration: sessionDurationText }) }}
                     </span>
                     <span class="quick-item">
-                        <i class="fas fa-users"></i>{{ t('account.usersOnline', { count: realtimeStats.online_users || 0 }) }}
+                        <i class="fas fa-users"></i>{{ t('account.usersOnline', { count: displayOnlineUsers }) }}
                     </span>
                 </div>
 
@@ -1499,7 +1521,27 @@ onBeforeUnmount(() => {
 }
 
 .account-panel.is-fullscreen .panel-header {
-    padding: 16px 22px;
+    padding: 10px 18px;
+    gap: 10px;
+}
+
+.account-panel.is-fullscreen .header-btns {
+    flex-direction: row;
+    gap: 6px;
+}
+
+.account-panel.is-fullscreen .profile-avatar.large {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+}
+
+.account-panel.is-fullscreen .profile-avatar.large img {
+    border-radius: 10px;
+}
+
+.account-panel.is-fullscreen    .profile-name {
+    font-size: 15.5px;
 }
 
 .account-panel.is-fullscreen .panel-nav {
