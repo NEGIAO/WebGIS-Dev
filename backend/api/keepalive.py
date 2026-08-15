@@ -139,7 +139,13 @@ async def keepalive_ping():
 # 发送端：asyncio 后台任务，3~6 分钟随机间隔 GET 对端 /api/status
 # ---------------------------------------------------------------------------
 async def _send_keepalive_once(client):
-    """执行一次 GET 探活（对端是 Go 二进制，公开端点只有 /api/status）。"""
+    """执行一次 GET 探活（对端是 Go 二进制，公开端点只有 /api/status）。
+
+    返回：
+      - 2xx 状态码      —— 保活成功
+      - 3xx~5xx 状态码  —— 对端/网关返回错误（如 HF 限流 429）
+      - -1              —— 网络异常/超时
+    """
     url = f"{PEER_URL.rstrip('/')}{PEER_PROBE_PATH}"
     headers = _random_headers()
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -160,6 +166,7 @@ async def _send_keepalive_once(client):
                 ts2,
                 resp.status_code,
             )
+        return resp.status_code
     except Exception as e:
         ts2 = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         logger.error(
@@ -167,6 +174,7 @@ async def _send_keepalive_once(client):
             ts2,
             str(e),
         )
+        return -1
 
 
 async def _send_keepalive_loop(app):
@@ -183,8 +191,12 @@ async def _send_keepalive_loop(app):
         return
 
     while True:
-        await _send_keepalive_once(client)
-        interval = random.randint(180, 360)
+        status = await _send_keepalive_once(client)
+        # 失败退避：429/5xx/网络异常 → 60~120s 快速重试加速自愈；成功 → 180~360s 长间隔
+        if status < 0 or status >= 400:
+            interval = random.randint(60, 120)
+        else:
+            interval = random.randint(180, 360)
         await asyncio.sleep(interval)
 
 

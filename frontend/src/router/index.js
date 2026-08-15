@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import RegisterView from '../app/RegisterView.vue';
+import LandingView from '../app/LandingView.vue';
 import { useAuthStore } from '@common/user/stores/useAuthStore';
 import { useAppStore } from '@common/app/stores/useAppStore';
 import { useUrlParamStore } from '@common/url-state/stores/useUrlParamStore';
@@ -21,7 +22,9 @@ const router = createRouter({
     routes: [
         {
             path: '/',
-            redirect: '/register',
+            name: 'landing',
+            component: LandingView,
+            meta: { requiresAuth: false },
         },
         {
             path: '/register',

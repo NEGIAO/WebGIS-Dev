@@ -609,6 +609,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "SMTP 发件账号（半公开；凭证 SMTP_PASSWORD 属 L3）",
     },
+    "SMTP_REPLY": {
+        "layer": "L3",
+        "default": "",
+        "secret": True,
+        "description": "SMTP 回信地址 Reply-To（HF Secrets；留空则回信到发件账号）",
+    },
     "SMTP_PASSWORD": {"layer": "L3", "default": "", "secret": True, "description": "SMTP 密码"},
     "SUPABASE_URL": {"layer": "L3", "default": "", "secret": True, "description": "Supabase URL"},
     "SUPABASE_KEY": {"layer": "L3", "default": "", "secret": True, "description": "Supabase Key"},

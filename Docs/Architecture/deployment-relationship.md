@@ -72,11 +72,12 @@ Cloudflare R2"]
 | `negiao-pages.share.connect.posit.cloud` | Posit Connect 默认 | 主页仓库触发 | ❌ | ✅ 可访问 |
 | `negiao.vercel.app` | Vercel 默认 | 主页仓库触发 | ❌ | ❌ 不可访问 |
 
-### WebGIS 前端域名（7 个）
+### WebGIS 前端域名（8 个）
 
 | 域名 | 平台 | 部署来源 | 说明 |
 |------|------|----------|------|
-| `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev 仓库直接部署 | 仓库根路径 |
+| `webgis.negiao.cn` | GitHub Pages（正式域名） | WebGIS-Dev 仓库直接部署 | **CNAME → `negiao.github.io/WebGIS-Dev`**，对外主入口 |
+| `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev 仓库直接部署 | 仓库根路径（默认入口） |
 | `negiao.github.io/WebGIS` | GitHub Pages | 主页仓库 `WebGIS/` 子目录 | dist 同步触发 |
 | `negiao.cloud-ip.cc/WebGIS-Dev` | GitHub Pages + 自定义域 | 自动跳转 | 跟随个人主页域名 |
 | `webgis.negiao.cc.cd` | Cloudflare Pages | 主页仓库触发 | 私有域名挂载 |

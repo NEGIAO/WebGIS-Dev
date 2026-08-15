@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 # 主机/端口为 L1（根 .env），账号/密码为 L3（HF Secrets），统一经 config 读取。
 
 
-def _smtp_config() -> tuple[str, int, str, str]:
-    """返回 (host, port, user, password)；读取 get_settings() 快照（进程内 lru_cache，配置变更需重启生效）。"""
+def _smtp_config() -> tuple[str, int, str, str, str]:
+    """返回 (host, port, user, reply, password)；读取 get_settings() 快照（进程内 lru_cache，配置变更需重启生效）。"""
     s = get_settings()
-    return s.smtp_host, s.smtp_port, s.smtp_user, s.smtp_password
+    return s.smtp_host, s.smtp_port, s.smtp_user, s.smtp_reply, s.smtp_password
 
 # 验证码用途中文映射
 _PURPOSE_LABELS = {
@@ -100,7 +100,7 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
     端口 80 明文连接（HF 环境不封锁 80 端口）。
     自动重试：失败后最多重试 2 次（共 3 次），间隔 1s → 2s 指数退避。
     """
-    smtp_host, smtp_port, smtp_user, smtp_password = _smtp_config()
+    smtp_host, smtp_port, smtp_user, smtp_reply, smtp_password = _smtp_config()
     if not smtp_user or not smtp_password:
         logger.error("SMTP 配置不完整：SMTP_USER 或 SMTP_PASSWORD 未设置（L3 HF Secrets）")
         return False
@@ -110,6 +110,9 @@ def _send_email_sync(to_email: str, subject: str, html_body: str) -> bool:
     msg["From"] = formataddr(("WebGIS", smtp_user))
     msg["To"] = to_email
     msg["Subject"] = subject
+    # 回信地址：SMTP_REPLY 配置后写入 Reply-To 头（阿里云 SMTP 不会自动带出，需显式设置）
+    if smtp_reply:
+        msg["Reply-To"] = smtp_reply
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     # 重试参数
@@ -172,7 +175,7 @@ async def send_verification_email(
 
 def check_smtp_configured() -> bool:
     """检查邮件服务配置是否完整（USER、PASSWORD、HOST、PORT 四要素）。"""
-    smtp_host, smtp_port, smtp_user, smtp_password = _smtp_config()
+    smtp_host, smtp_port, smtp_user, smtp_reply, smtp_password = _smtp_config()
     if not smtp_user or not smtp_password:
         return False
     if not smtp_host:

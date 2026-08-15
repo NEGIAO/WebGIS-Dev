@@ -281,6 +281,7 @@ def _get_l3_env_status() -> Dict[str, bool]:
         "google_oauth": bool(s.google_oauth_client_id and s.google_oauth_client_secret),
         "github_oauth": bool(s.github_oauth_client_id and s.github_oauth_client_secret),
         "smtp": bool(s.smtp_user and s.smtp_password),
+        "smtp_reply": bool(s.smtp_reply),
         "supabase": bool(s.supabase_url and s.supabase_key),
     }
 

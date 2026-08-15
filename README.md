@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  🚀 <strong>在线演示</strong>：<a href="https://negiao.github.io/WebGIS-Dev/">NEGIAO's WebGIS-Dev — 欢迎点击体验</a>
+  🚀 <strong>在线演示</strong>：<a href="https://webgis.negiao.cn">NEGIAO's WebGIS-Dev — 欢迎点击体验</a>
 </p>
 
 <p align="center">
@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.19），前端托管于 GitHub Pages，后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.20），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -309,6 +309,7 @@ tiles.negiao.cc.cd"]
 
 | 域名 | 平台 | 来源 |
 |------|------|------|
+| `webgis.negiao.cn` | **正式域名（付费）** | CNAME → GitHub Pages |
 | `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev 仓库根路径 |
 | `negiao.github.io/WebGIS` | GitHub Pages | 主页仓库子目录 |
 | `negiao.cloud-ip.cc/WebGIS-Dev` | GitHub Pages + 自定义域 | 自动跳转 |
@@ -399,9 +400,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.20** | 2026-08-15 | 宣传主页（LandingView）补全：中英文切换、icon.webp 品牌 logo、滚动修复（自持滚动容器）· 注册页 Landing 同源背景（经纬网格+光晕）· **正式域名接入**：webgis.negiao.cn 全链路落档（UI 页脚入口 + README/配置默认值同步）。详见[日志1](Docs/LLM_record/26-08/2026-08-15/2026-08-15-landing-i18n-scroll-background.md) · [日志2](Docs/LLM_record/26-08/2026-08-15/2026-08-15-official-domain-webgis-negiao-cn.md) |
 | **V3.5.19** | 2026-08-12 | 综合版本：实时在线统计体系（**心跳模型**：前端 5s 心跳、后端 15s 窗口自动剔除、每 15s 广播，重塑游客计在线）· 时区 UTC+8 修正 · IP 定位加固（公网 IP 上报/私有 IP 检测/ipwho.is 优先）。详见[日志](Docs/LLM_record/26-08/2026-08-12/2026-08-12-v3.5.19-consolidated.md) |
 | **V3.5.18** | 2026-08-12 | 综合版本：Emoji→Lucide 图标迁移 · 管理面板数据表格化重构 · KaTeX 数学公式渲染 · 代码审查修复。详见[日志](Docs/LLM_record/26-08/2026-08-12/2026-08-12-v3.5.18-consolidated.md) |
-| **V3.5.17** | 2026-08-11 | Agent 模式大改（免费默认 AI + 路由模式隔离）· 管理面板升级 · 模型调用统计 · Cesium 贴地重构。详见[日志](Docs/LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md) |
 
 
 更早版本（V3.3.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -420,12 +421,12 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 <div align="center">
 
-**NEGIAO** — [GitHub](https://github.com/NEGIAO) · [DeepWiki 项目分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
+**NEGIAO** — [GitHub](https://github.com/NEGIAO) · [个人主页](https://www.negiao.cn) · [DeepWiki 项目分析](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
 | 源代码 | 前端部署 | 后端部署 |
 |:------:|:--------:|:--------:|
-| [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
+| [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.19 · 开发中 · 最后更新 2026-08-12</sub>
+<sub>V3.5.20 · 开发中 · 最后更新 2026-08-15</sub>
 
 </div>

@@ -910,6 +910,7 @@ export default {
         envKeys: {
             super_user: 'SUPER_USER 管理员密码',
             smtp: 'SMTP 邮件账号/密码',
+            smtp_reply: 'SMTP_REPLY 回信地址',
         },
         // V3.4.85 接线补键
         unknownError: '未知错误',

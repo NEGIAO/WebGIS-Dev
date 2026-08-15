@@ -38,6 +38,7 @@ frontend/src/
 │       └── weather.js  # 高德天气业务封装（前端直连；与 backend/weather.js 后端代理同名不同义）
 ├── app/
 │   ├── HomeView.vue  # 首页（由 lazyHomeViewLoader 加载）
+│   ├── LandingView.vue  # 根路径宣传主页（全量 i18n + 语言切换，icon.webp 品牌 logo，自持滚动容器）
 │   ├── NotFoundView.vue  # 404 页面（notFound.* i18n）
 │   ├── OAuthCallbackView.vue  # Google/GitHub OAuth 回调会话落地
 │   ├── PrivacyPolicy.vue  # 隐私政策

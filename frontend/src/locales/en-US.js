@@ -720,7 +720,7 @@ export default {
         rowCountText: 'Loaded {count} rows',
         rowCountFiltered: '{filtered} / {total} rows',
         searchRows: 'Search rows...',
-        envKeys: { super_user: 'SUPER_USER admin password', smtp: 'SMTP email/password' },
+        envKeys: { super_user: 'SUPER_USER admin password', smtp: 'SMTP email/password', smtp_reply: 'SMTP_REPLY reply-to address' },
         // V3.4.85 wiring keys
         unknownError: 'Unknown error',
         jsonFormatError: 'Invalid JSON',

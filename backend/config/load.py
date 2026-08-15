@@ -287,6 +287,7 @@ class BackendSettings:
     smtp_host: str
     smtp_port: int
     smtp_user: str
+    smtp_reply: str
     smtp_password: str
     agent_api_key: str
     agent_base_url: str
@@ -387,6 +388,7 @@ def _build_settings() -> BackendSettings:
         smtp_host=get_str("SMTP_HOST", "smtpdm.aliyun.com"),
         smtp_port=get_int("SMTP_PORT", 80, minimum=1, maximum=65535),
         smtp_user=get_str("SMTP_USER", ""),
+        smtp_reply=get_str("SMTP_REPLY", ""),
         smtp_password=get_str("SMTP_PASSWORD", ""),
         agent_api_key=get_str("AGENT_API_KEY", ""),
         agent_base_url=get_str("AGENT_BASE_URL"),
@@ -435,6 +437,7 @@ def masked_summary() -> list[str]:
             ("GOOGLE_OAUTH", s.google_oauth_client_id and s.google_oauth_client_secret),
             ("GITHUB_OAUTH", s.github_oauth_client_id and s.github_oauth_client_secret),
             ("SMTP_PASSWORD", s.smtp_password),
+            ("SMTP_REPLY", s.smtp_reply),
             ("SUPABASE", s.supabase_url and s.supabase_key),
         )
     )

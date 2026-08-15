@@ -6,6 +6,31 @@
 
 ## 版本记录
 
+### V3.5.20 (2026-08-15) — 宣传主页（LandingView）补全：中英文切换 · 品牌 logo · 滚动修复；注册页 Landing 同源背景；正式域名 webgis.negiao.cn 接入
+
+#### 宣传主页（`frontend/src/app/LandingView.vue`）
+
+- **中英文切换**：全量文案迁移至 i18n（新增 `landing.*` 双语键，入 `locales/core.js`——根路径首屏页须随首包同步加载）；导航栏增加与注册页同款「中文 / EN」切换器，走 `useUserPreferencesStore.setLanguagePreference` 全局偏好（与账号中心同开关）。
+- **品牌 logo**：顶部品牌徽章由 FontAwesome 图标替换为 `public/images/icon.webp`（与 TopBar / favicon 同一资源，经 `ASSET_BASE_URL` 解析）。
+- **滚动修复**：根因 `App.vue` 全局 `html, body { overflow: hidden }`（全屏地图布局）裁切了超出视口的内容；`landing-container` 改为 `height: 100dvh + overflow-y: auto` 自持滚动容器，sticky 导航与长页面滚动恢复正常。
+- **结构优化**：9 张功能卡与 Hero 统计条收敛为数据驱动 `v-for`（图标 + i18n key），消除近似模板重复。
+
+#### 注册页（`frontend/src/app/RegisterView.vue`）
+
+- 新增 Landing 同源背景装饰层（`register-bg`：经纬网格 + 品牌色/强调色光晕，与 hero-bg 同一视觉语言），桌面/移动端均生效；卡片 `z-index` 提升以保持可读性。
+
+#### 其他
+
+- 代码无文件增删；结构树补录 `LandingView.vue` 登记（上会话创建时遗漏，门禁拦截后补齐）；`tsc --noEmit` 零报错。
+
+#### 正式域名接入（webgis.negiao.cn 全链路落档）
+
+- **UI 入口**：LandingView 页脚新增「个人主页」（`https://www.negiao.cn`）与「正式站点」（`https://webgis.negiao.cn`）链接，配 `landing.homepage` / `landing.officialSite` 双语键（入 core.js）；注册页品牌徽章同步 Logo 化（`images/icon.webp`，深绿渐变托底）。
+- **配置默认值**：`backend/config/catalog.py` 的 `FRONTEND_URL_PROD` 更新为 `https://webgis.negiao.cn`（OAuth 前端回跳/派生基址随之后移）；根 `.env` 的 `FRONTEND_PUBLIC_URL` 同步。
+- **文档落档**：`README.md` / `Docs/README_EN.md` 在线演示链接、域名拓扑表（新增正式域名行）、托管表前端部署列、作者行（个人主页链接）；`oauth-deployment.md`（Homepage URL + 内建默认值 + 变量示例）、`configuration.md`（部署示例两处）、`deployment-relationship.md`（WebGIS 前端域名表 7→8 行）、`account-system-ai-quota.md`（已注册域名列表 + 域名计数）。
+
+详见 [本次日志](Docs/LLM_record/26-08/2026-08-15/2026-08-15-landing-i18n-scroll-background.md) · [正式域名日志](Docs/LLM_record/26-08/2026-08-15/2026-08-15-official-domain-webgis-negiao-cn.md)。
+
 ### V3.5.19 (2026-08-12) — 综合版本：实时在线统计体系（心跳模型）· 时区 UTC+8 修正 · IP 定位加固
 
 > 暂存区多轮未提交改动（旧版本号 V3.5.19~27 + V3.4.63 遗留时区/IP 改动）按用户指示合并为单一版本 V3.5.19，代码注释、日志、README/CHANGELOG 全部收敛。

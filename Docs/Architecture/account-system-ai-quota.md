@@ -370,13 +370,13 @@ def _get_admin_password() -> str:
 
 ## 12. 部署约束（多域名环境下的认证配置）
 
-账号系统跨全部 7 个 WebGIS 前端域名生效，以下约束在新增域名时必须处理：
+账号系统跨全部 8 个 WebGIS 前端域名生效，以下约束在新增域名时必须处理：
 
 ### 12.1 Google OneTap
 
 - Google OneTap 需在 Google Cloud Console 的 **Authorized JavaScript origins** 中注册每个域名
 - 每新增一个域名必须去控制台添加一次，否则 OneTap 在该域名下静默失效
-- 当前已注册域名：`negiao.github.io`、`negiao.cloud-ip.cc`、`negiao.cc.cd`、`negiao.pages.dev`、`webgis.negiao.cc.cd`、`webgis-dev.pages.dev`、`negiao-web.static.hf.space`
+- 当前已注册域名：`webgis.negiao.cn`（正式域名）、`negiao.github.io`、`negiao.cloud-ip.cc`、`negiao.cc.cd`、`negiao.pages.dev`、`webgis.negiao.cc.cd`、`webgis-dev.pages.dev`、`negiao-web.static.hf.space`
 
 ### 12.2 OAuth 回调地址
 

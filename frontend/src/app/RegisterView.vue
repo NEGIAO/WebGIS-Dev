@@ -1,10 +1,24 @@
 <template>
     <div class="register-container">
+        <!-- 背景装饰层：经纬网格 + 品牌色光晕（与 LandingView hero-bg 同源风格） -->
+        <div
+            class="register-bg"
+            aria-hidden="true"
+        >
+            <div class="register-bg__grid"></div>
+            <div class="register-bg__blob register-bg__blob--1"></div>
+            <div class="register-bg__blob register-bg__blob--2"></div>
+        </div>
+
         <div class="container fade-in">
             <div class="form-header">
                 <div class="brand-row">
                     <div class="brand-badge">
-                        <i class="fas fa-earth-asia"></i>
+                        <img
+                            :src="resolvePublicAssetPath('images/icon.webp')"
+                            alt="NEGIAO's WebGIS"
+                            loading="eager"
+                        />
                     </div>
                     <div class="brand-text">
                         <h1 class="form-title">NEGIAO's WebGIS</h1>
@@ -1455,23 +1469,73 @@ onUnmounted(() => {
 }
 
 .register-container {
+    position: relative;
     font-family: var(--font-base, 'PingFang SC', 'Microsoft YaHei', sans-serif);
     line-height: 1.6;
     color: var(--text-primary);
     background-color: var(--bg-secondary);
-    background-image:
-        radial-gradient(ellipse 70% 55% at 10% -5%, rgba(var(--brand-primary-rgb), 0.1), transparent 60%),
-        radial-gradient(ellipse 55% 45% at 105% 105%, rgba(var(--brand-primary-rgb), 0.08), transparent 60%);
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100dvh;
+    height: 100dvh;
     padding: clamp(10px, 2.6vw, 24px);
     width: 100%;
-    overflow: auto;
+    /* 外层锁定不滚动：滚动完全交给卡片内部 .form-body */
+    overflow: hidden;
+}
+
+/* 背景装饰层：顶网格 + 中央/右下光晕
+   （克制版本：单层网格、光晕大而柔，避免与卡片抢视觉） */
+.register-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.register-bg__grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(var(--brand-primary-rgb), 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.05) 1px, transparent 1px);
+    background-size: 28px 28px;
+    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 15%, transparent 100%);
+    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 15%, transparent 100%);
+}
+
+.register-bg__blob {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* 主光晕：顶部中央对称，大气而不贴边 */
+.register-bg__blob--1 {
+    width: 620px;
+    height: 620px;
+    top: -300px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(var(--brand-primary-rgb), 0.38);
+    filter: blur(130px);
+    opacity: 0.22;
+}
+
+/* 副光晕：右下角弱强调色，微微托底 */
+.register-bg__blob--2 {
+    width: 440px;
+    height: 440px;
+    bottom: -200px;
+    right: -140px;
+    background: rgba(var(--brand-accent-rgb, 87, 184, 97), 0.3);
+    filter: blur(120px);
+    opacity: 0.14;
 }
 
 .container {
+    position: relative;
+    z-index: 1;
     background-color: var(--bg-primary);
     border-radius: 16px;
     box-shadow:
@@ -1479,7 +1543,8 @@ onUnmounted(() => {
         0 24px 60px -16px rgba(20, 45, 25, 0.18);
     width: 100%;
     max-width: 440px;
-    max-height: calc(100dvh - 24px);
+    /* 扣除容器上下 padding（与 .register-container 同式），保证居中时头尾不被裁切 */
+    max-height: calc(100dvh - 2 * clamp(10px, 2.6vw, 24px));
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1567,13 +1632,20 @@ onUnmounted(() => {
     height: 40px;
     flex-shrink: 0;
     border-radius: 12px;
-    background: rgba(255, 255, 255, 0.16);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    /* 绿色头部上白色 logo 需要更深衬托：品牌绿深色渐变 */
+    background: linear-gradient(140deg, var(--brand-primary-dark) 0%, var(--brand-primary-darker) 100%);
+    padding: 6px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 19px;
+}
+
+.brand-badge img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
 }
 
 .brand-text {
@@ -1608,6 +1680,8 @@ onUnmounted(() => {
     padding: clamp(18px, 3.2vw, 28px);
     background-color: var(--bg-primary);
     flex: 1;
+    /* min-height: 0 解除 flex 子项最小内容高限制，确保空间不足时收缩并触发内部滚动 */
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -2257,7 +2331,20 @@ input:disabled {
     .register-container {
         align-items: stretch;
         padding: 0;
-        background-image: none;
+    }
+
+    /* 小屏收窄光晕，避免贴边裁切过重 */
+    .register-bg__blob--1 {
+        width: 480px;
+        height: 480px;
+        top: -240px;
+    }
+
+    .register-bg__blob--2 {
+        width: 340px;
+        height: 340px;
+        bottom: -160px;
+        right: -120px;
     }
 
     .container {

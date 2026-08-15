@@ -134,8 +134,9 @@ GOOGLE_OAUTH_CLIENT_SECRET
 GITHUB_OAUTH_CLIENT_ID
 GITHUB_OAUTH_CLIENT_SECRET
 
-# 邮箱验证码（注册/重置/绑定）—— 账号 SMTP_USER 属 L1（Variables 或代码默认），凭证必进 Secrets
+# 邮箱验证码（注册/重置/绑定）—— 账号 SMTP_USER 属 L1（Variables 或代码默认），凭证与回信地址必进 Secrets
 SMTP_PASSWORD
+SMTP_REPLY
 
 # AI 对话主密钥：不进 HF Secrets；登录 admin 后在 L2 API 密钥管理 → Agent 配置 agent_api_key
 # 高德搜索 / IP 定位：不进 HF Secrets；登录 admin 后在 L2 API 密钥管理 → 高德 配置 amap_key
@@ -200,7 +201,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 | 打开地图（游客） | L1 前端 `VITE_*` + 后端可访问；地图 token 建议 L2 |
 | 日志监控 | L1 `HF_RUN_LOGS_URL/HF_BUILD_LOGS_URL` + L3 `LOG`（本地 local 模式不需要 LOG） |
 | admin 后台 | L3 `SUPER_USER` 或本地 dev 默认密码 |
-| 邮箱注册/重置 | L1 `SMTP_HOST/PORT/USER` + L3 `SMTP_PASSWORD`（账号/凭证分开存取） |
+| 邮箱注册/重置 | L1 `SMTP_HOST/PORT/USER` + L3 `SMTP_PASSWORD`/`SMTP_REPLY`（账号/凭证分开存取；回信地址可选） |
 | Google 登录 | L3 Google Client ID/Secret + `OAUTH_STATE_SECRET`；控制台 redirect |
 | GitHub 登录 | L3 GitHub Client ID/Secret + `OAUTH_STATE_SECRET`；控制台 callback |
 | AI 对话 | L2 `api_keys.agent_api_key` + L2 `system_config.agent_*`（base_url/model/额度/提示词等）；旧 env 仅兼容存量 |
@@ -217,6 +218,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 | `SMTP_HOST` / `SMTP_PORT` | L1 |
 | `SMTP_USER` | L1（发件账号半公开） |
 | `SMTP_PASSWORD` | L3 绝密（凭证单独进 Secrets） |
+| `SMTP_REPLY` | L3 绝密（回信地址 Reply-To，HF Secrets；留空则回信到发件账号） |
 
 ## LLM 拆分示例
 

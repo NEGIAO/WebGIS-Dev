@@ -229,6 +229,7 @@ const L3_STATUS_LABELS = [
     { key: 'google_oauth', label: 'Google OAuth' },
     { key: 'github_oauth', label: 'GitHub OAuth' },
     { key: 'smtp', labelKey: 'admin.envKeys.smtp' },
+    { key: 'smtp_reply', labelKey: 'admin.envKeys.smtp_reply' },
     { key: 'supabase', label: 'Supabase URL/Key' },
 ];
 
