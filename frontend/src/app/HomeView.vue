@@ -987,13 +987,29 @@ async function waitForAgentMapViewReady(view, { timeoutMs = 10000 } = {}) {
 const agentOlMapCommandAdapter = createOlMapCommandAdapter({
     getMap: () => mapContainerRef.value?.mapInstance || null,
     getRuntimeState: captureOlRuntimeState,
-    setBasemap: (presetId) => mapContainerRef.value?.setBaseLayerActive?.(presetId),
+    setBasemap: (params = {}) => {
+        if (!mapContainerRef.value) {
+            return { success: false, message: 'Map container not ready' };
+        }
+        if (params.url) {
+            return mapContainerRef.value.setCustomBasemapByUrl?.(params.url);
+        }
+        return mapContainerRef.value.setBaseLayerActive?.(params.presetId);
+    },
 });
 const agentCesiumMapCommandAdapter = createCesiumMapCommandAdapter({
     getViewer: () => cesiumContainerRef.value?.getViewer?.() || null,
     getCesium: () => cesiumContainerRef.value?.getCesium?.() || null,
     getRuntimeState: () => cesiumContainerRef.value?.getCurrentViewState?.() || { view: MAP_VIEW_CESIUM },
-    setBasemap: (presetId) => cesiumContainerRef.value?.setBasemapById?.(presetId),
+    setBasemap: (params = {}) => {
+        if (!cesiumContainerRef.value) {
+            return { success: false, message: 'Cesium container not ready' };
+        }
+        if (params.url) {
+            return cesiumContainerRef.value.handleCustomBasemapSubmit?.({ url: params.url });
+        }
+        return cesiumContainerRef.value.setBasemapById?.(params.presetId);
+    },
 });
 const agentMapCommandBus = createMapCommandBus({
     getActiveView: () => is3DMode.value ? MAP_VIEW_CESIUM : MAP_VIEW_OL,

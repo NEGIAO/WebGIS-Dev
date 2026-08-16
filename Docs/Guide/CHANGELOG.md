@@ -6,6 +6,47 @@
 
 ## 版本记录
 
+### V3.5.21 (2026-08-16) — 综合版本：管理面板数据表格增强 · Agent 底图能力开放 · CyclOSM 骑行底图 · Landing/注册页 Lucide 迁移
+
+> 2026-08-15 的九个增量（原 V3.5.21–V3.5.29，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.21，分日志收敛为一份综合日志。
+
+#### 一、管理面板数据表格增强（`backend/api/admin.py` + `AdminControlPanel.vue`）
+
+- **分页 + 总数**：rows 接口响应 `data` 扩展为 `{ rows, total }`（COUNT 与 SELECT 共用 WHERE）；前端分页器（上一页/页码/下一页）+ page size（30/100/200/全部，「全部」前端 200 行/次循环拉取）。
+- **跨页搜索**：`search` 参数全列 `LIKE ? ESCAPE` 过滤（`%`/`_`/`\` 转义，参数化防注入）；前端 300ms 防抖回第 1 页；CSV 导出携带搜索词（导出即当前搜索结果）。
+- **跨页排序**：`sort_key`/`sort_dir`，列名命中 `PRAGMA table_info` 真实列集合（白名单防注入，ORDER BY 无法参数化绑定列名），非法回退 `rowid DESC`；切表自动重置。
+- **加载竞态**：请求序号 `rowRequestSeq` 丢弃过期响应（快速翻页/防抖期间旧结果不覆盖新结果）。
+- **行号列 + 浏览区间信息条**：首列连续序号（按页偏移）；sticky 信息条「第 X-Y 行 / 共 N 行」；行展开编辑保留行号列。
+- **搜索命中高亮**：单元格先 HTML 转义再按命中区间包 `<mark>`（防 XSS、大小写不敏感、多段命中）+ 命中整行弱高亮。
+- **CSV 全量导出**：循环拉全量 → UTF-8 BOM CSV → Blob 下载；i18n 新增分页/搜索/区间键（zh-CN / en-US）。
+
+#### 二、Agent 底图能力开放（L3 方案均经用户批准）
+
+- **url 通道**：`switch_basemap` 参数 `presetId | url` 二选一；url 复用 `normalizeCustomXyzUrl` 校验（强制 `{z}/{x}/{y}`、协议 http/https；token 类 query 允许，提示词警示私有密钥可见性）；`HomeView.vue` `setBasemap` 分流注入 OL/Cesium 既有 custom 链。
+- **自主构造公开源**：系统提示词授权按意图自行构造免密钥 XYZ（附 OSM / Esri（{z}/{y}/{x} 倒序提示）/ CARTO / OpenTopoMap 参考 + 失败换源重试指导）。
+- **预设目录全量动态派生**：`agentMapPresets.js` 废除 38 项手写白名单，从 `basemapPresets.ts` 全量派生（76 项、无黑名单），`formatAgentBasemapPresetCatalog()` 按语义分组（天地图/图新/Google/高德/腾讯/Mapbox/Yandex/MapTiler/ESRI/OSM 系/GeoQ/地形/程序槽位/本地瓦片），新增底图零维护同步；token 密钥仍由运行时注入。
+- **回显适配**：`useAgentMapContext.js` / `chatIntentFallback.js` 支持 url 摘要显示（HTML 转义）。
+
+#### 三、CyclOSM 骑行底图
+
+- `basemapConfig.ts` 新增 `vector_cyclosm` 图源（`https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`，xyz + `prioritizeTileSourceRequest`）；`basemapPresets.ts` 注册 `vector_cyclosm_preset`；Cesium 复用通用 xyz 分支（子域自动展开）；Agent 目录自动收录。
+
+#### 四、Landing/注册页 Lucide 迁移与 OneTap 修复
+
+- `LandingView.vue` / `RegisterView.vue` 全部 FontAwesome 图标迁移 `@lucide/vue`（26 + 30 处，含三态图标、`Loader2` + `spin` keyframes）；品牌图标（Google/GitHub/VueJS/Docker）Lucide 无对应保留 FontAwesome（批准例外）；清除 `✅` emoji 前缀；CTA 新增登录方式 pill（`landing.ctaMethods` 等双语键）；Hero 统计「20+」→「70+」（README/core.js 同步）。
+- `initGoogleOneTap` 改 async + `waitForGsi()`（200ms 轮询 / 5s 超时），修复 GSI 脚本慢载时 OneTap 静默失效。
+
+#### 五、`.env` OAuth Client ID 分级调整
+
+- 后端 `GOOGLE_OAUTH_CLIENT_ID` 清空（生产值转 HF Secrets，不入仓）；前端 `VITE_GOOGLE_OAUTH_CLIENT_ID` 更新为新 App ID；两 key 均已在 `.env.example` 与 `catalog.py` 登记。
+
+#### 验证与遗留
+
+- 验证：`vite build` / `tsc --noEmit` / `py_compile admin.py` / 双门禁通过（各原会话 + 整合会话复跑）。
+- 遗留：SQL dump 导出待决策（已记 TODO）；url 通道 token 可见性（用户已接受）；受限源失败靠结构化错误 + 换源兜底；Cesium custom 注入返回 void 无法反馈失败；第三方社区源无 SLA。
+
+详见 [综合日志](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.21-consolidated.md)。
+
 ### V3.5.20 (2026-08-15) — 宣传主页（LandingView）补全：中英文切换 · 品牌 logo · 滚动修复；注册页 Landing 同源背景；正式域名 webgis.negiao.cn 接入
 
 #### 宣传主页（`frontend/src/app/LandingView.vue`）
@@ -30,7 +71,6 @@
 - **文档落档**：`README.md` / `Docs/README_EN.md` 在线演示链接、域名拓扑表（新增正式域名行）、托管表前端部署列、作者行（个人主页链接）；`oauth-deployment.md`（Homepage URL + 内建默认值 + 变量示例）、`configuration.md`（部署示例两处）、`deployment-relationship.md`（WebGIS 前端域名表 7→8 行）、`account-system-ai-quota.md`（已注册域名列表 + 域名计数）。
 
 详见 [本次日志](Docs/LLM_record/26-08/2026-08-15/2026-08-15-landing-i18n-scroll-background.md) · [正式域名日志](Docs/LLM_record/26-08/2026-08-15/2026-08-15-official-domain-webgis-negiao-cn.md)。
-
 ### V3.5.19 (2026-08-12) — 综合版本：实时在线统计体系（心跳模型）· 时区 UTC+8 修正 · IP 定位加固
 
 > 暂存区多轮未提交改动（旧版本号 V3.5.19~27 + V3.4.63 遗留时区/IP 改动）按用户指示合并为单一版本 V3.5.19，代码注释、日志、README/CHANGELOG 全部收敛。

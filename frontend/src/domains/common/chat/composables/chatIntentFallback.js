@@ -94,7 +94,9 @@ export function getToolDisplayName(name, args = {}) {
         set_camera_orientation: '调整 3D 相机姿态',
         zoom_to_extent: '缩放到指定范围',
         search_and_zoom: `定位到 "${escapeHtml(args.query || '未知位置')}"`,
-        switch_basemap: `切换到底图：${escapeHtml(args.presetId || '未知预设')}`,
+        switch_basemap: args.url
+            ? `切换底图：${escapeHtml(args.url)}`
+            : `切换到底图：${escapeHtml(args.presetId || '未知预设')}`,
     };
     return displayNames[name] || `执行工具：${escapeHtml(name)}`;
 }

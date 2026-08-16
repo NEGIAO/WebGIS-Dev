@@ -38,8 +38,8 @@
                         to="/register"
                         class="btn-primary"
                     >
-                        <i class="fas fa-sign-in-alt"></i>
-                        {{ t('landing.navLogin') }}
+                            <LogIn :size="16" />
+                            {{ t('landing.navLogin') }}
                     </router-link>
                 </div>
             </div>
@@ -59,7 +59,7 @@
 
                 <div class="hero-inner">
                     <p class="hero-eyebrow">
-                        <i class="fas fa-map-marked-alt"></i>
+                        <MapPinned :size="16" />
                         {{ t('landing.heroEyebrow') }}
                     </p>
                     <h2 class="hero-title">
@@ -74,7 +74,7 @@
                             to="/register"
                             class="btn-large"
                         >
-                            <i class="fas fa-rocket"></i>
+                            <Rocket :size="18" />
                             {{ t('landing.tryNow') }}
                         </router-link>
                         <a
@@ -121,7 +121,7 @@
                         class="feature-card"
                     >
                         <div class="feature-icon">
-                            <i :class="feature.icon"></i>
+                            <component :is="feature.icon" :size="22" />
                         </div>
                         <h4>{{ feature.title }}</h4>
                         <p>{{ feature.desc }}</p>
@@ -141,15 +141,15 @@
                         Vue 3.5
                     </span>
                     <span class="tech-badge">
-                        <i class="fas fa-map"></i>
+                        <Map :size="16" />
                         OpenLayers 10
                     </span>
                     <span class="tech-badge">
-                        <i class="fas fa-globe"></i>
+                        <Globe :size="16" />
                         Cesium 1.132
                     </span>
                     <span class="tech-badge">
-                        <i class="fas fa-bolt"></i>
+                        <Zap :size="16" />
                         FastAPI
                     </span>
                     <span class="tech-badge">
@@ -161,7 +161,7 @@
                         GitHub Pages
                     </span>
                     <span class="tech-badge">
-                        <i class="fas fa-cloud"></i>
+                        <Cloud :size="16" />
                         Hugging Face
                     </span>
                 </div>
@@ -184,9 +184,16 @@
                         to="/register"
                         class="btn-cta"
                     >
-                        <i class="fas fa-paper-plane"></i>
-                        {{ t('landing.getStarted') }}
+                        <Send :size="16" />
+                            {{ t('landing.getStarted') }}
                     </router-link>
+                    <div class="cta-login-methods">
+                        <span class="cta-methods-label">{{ t('landing.ctaMethods') }}</span>
+                        <span class="cta-method"><i class="fab fa-google"></i>Google</span>
+                        <span class="cta-method"><i class="fab fa-github"></i>GitHub</span>
+                        <span class="cta-method"><Mail :size="14" />{{ t('landing.methodEmail') }}</span>
+                        <span class="cta-method"><UserRound :size="14" />{{ t('landing.methodGuest') }}</span>
+                    </div>
                 </div>
             </section>
         </main>
@@ -216,7 +223,7 @@
                         target="_blank"
                         rel="noopener"
                     >
-                        <i class="fas fa-address-card"></i>
+                        <IdCard :size="16" />
                         {{ t('landing.homepage') }}
                     </a>
                     <span class="divider">|</span>
@@ -225,7 +232,7 @@
                         target="_blank"
                         rel="noopener"
                     >
-                        <i class="fas fa-globe"></i>
+                        <Globe :size="16" />
                         {{ t('landing.officialSite') }}
                     </a>
                 </div>
@@ -239,6 +246,27 @@ import { computed } from 'vue';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
 import { ASSET_BASE_URL } from '../config/publicRuntime';
+import {
+    Bot,
+    ChartArea,
+    Cloud,
+    CloudSun,
+    FileUp,
+    Globe,
+    IdCard,
+    Layers,
+    LogIn,
+    Mail,
+    Map,
+    MapPinned,
+    Rocket,
+    Route,
+    Send,
+    ShieldCheck,
+    UserRound,
+    Wrench,
+    Zap,
+} from '@lucide/vue';
 
 const { t, language } = useLocale();
 const userPreferencesStore = useUserPreferencesStore();
@@ -261,15 +289,15 @@ const logoUrl = `${normalizedBase}images/icon.webp`;
 
 // 核心功能卡片：图标 + i18n key，避免 9 段近似模板重复
 const FEATURES = Object.freeze([
-    { key: 'feature1', icon: 'fas fa-globe-asia' },
-    { key: 'feature2', icon: 'fas fa-layer-group' },
-    { key: 'feature3', icon: 'fas fa-file-import' },
-    { key: 'feature4', icon: 'fas fa-chart-area' },
-    { key: 'feature5', icon: 'fas fa-cloud-sun' },
-    { key: 'feature6', icon: 'fas fa-route' },
-    { key: 'feature7', icon: 'fas fa-robot' },
-    { key: 'feature8', icon: 'fas fa-user-shield' },
-    { key: 'feature9', icon: 'fas fa-tools' },
+    { key: 'feature1', icon: Globe },
+    { key: 'feature2', icon: Layers },
+    { key: 'feature3', icon: FileUp },
+    { key: 'feature4', icon: ChartArea },
+    { key: 'feature5', icon: CloudSun },
+    { key: 'feature6', icon: Route },
+    { key: 'feature7', icon: Bot },
+    { key: 'feature8', icon: ShieldCheck },
+    { key: 'feature9', icon: Wrench },
 ]);
 
 const features = computed(() =>
@@ -283,7 +311,7 @@ const features = computed(() =>
 // Hero 统计条：数值静态、标签走 i18n
 const HERO_STATS = Object.freeze([
     { value: '2D/3D', labelKey: 'landing.statDualEngine' },
-    { value: '20+', labelKey: 'landing.statBasemaps' },
+    { value: '70+', labelKey: 'landing.statBasemaps' },
     { value: '8', labelKey: 'landing.statAnalysis' },
     { value: 'AI', labelKey: 'landing.statAi' },
 ]);
@@ -803,9 +831,9 @@ const heroStats = computed(() =>
     transition: all 0.2s ease;
 }
 
+.tech-badge svg,
 .tech-badge i {
     color: var(--brand-primary);
-    font-size: 0.95rem;
 }
 
 .tech-badge:hover {
@@ -917,6 +945,40 @@ const heroStats = computed(() =>
     filter: brightness(1.06);
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(var(--brand-primary-rgb), 0.45);
+}
+
+/* 登录方式罗列：按钮下方四个 pill 标签 */
+.cta-login-methods {
+    position: relative;
+    margin: 1.6rem auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.cta-methods-label {
+    margin-right: 0.2rem;
+}
+
+.cta-method {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: rgba(var(--brand-primary-rgb), 0.05);
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.cta-method i,
+.cta-method svg {
+    color: var(--brand-primary);
 }
 
 /* ============ 页脚 ============ */

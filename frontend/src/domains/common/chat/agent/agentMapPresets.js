@@ -1,67 +1,18 @@
 /**
- * Stable basemap preset allowlist exposed to the Agent.
+ * Agent 底图预设目录（全量动态派生，无黑名单）
  *
- * Intentionally excluded:
- *   - local_tiles_preset (local tiles, no internet)
- *   - custom (arbitrary URL)
- *   - custom_*_preset (custom server URLs: Mapbox, China Blender)
- *   - google_Backend_Proxy_preset (requires backend proxy)
- *   - Farmland/ship/windy thematic overlays (specialized, not general basemaps)
- *   - Polar/MFF relief (niche use cases)
- *
- * The Agent submits presetId only; project presets own all provider URLs.
+ * 直接派生自 basemapPresets.ts 的 BASEMAP_PRESETS 全量清单（V3.5.28，user 决策）：
+ *   - 新增 / 删除 / 改名 preset 自动同步，零漂移；
+ *   - 不移除任何条目（含 custom 槽位、local_tiles 本地瓦片、google_Backend_Proxy、
+ *     custom_China_Blender 等），切换失败 / 无瓦片由结构化错误与运行时兜底；
+ *   - token 类预设（天地图等）密钥由运行时注入，Agent 只见 presetId，不进对话上下文；
+ *   - url 通道（标准 XYZ 模板）仍独立开放，见 agentToolsSchema.js 安全约束。
  */
-export const AGENT_BASEMAP_PRESETS = Object.freeze([
-    // Tianditu
-    { id: 'imagery_tianditu_preset', label: '天地图影像' },
-    { id: 'vector_tianditu_preset', label: '天地图矢量' },
-    // Tuxin
-    { id: 'imagery_tuxin_preset', label: '图新影像' },
-    { id: 'vector_tuxin_preset', label: '图新矢量' },
-    // Google
-    { id: 'imagery_gac_preset', label: 'Google(gac)' },
-    { id: 'imagery_google_preset', label: 'Google原版' },
-    { id: 'imagery_google_standard_preset', label: 'Google标准' },
-    { id: 'vector_Google_clean_preset', label: 'Google简洁' },
-    // Amap
-    { id: 'imagery_amap_preset', label: '高德影像' },
-    { id: 'vector_amap_preset', label: '高德地图' },
-    // Mapbox
-    { id: 'imagery_mapbox_preset', label: 'Mapbox影像' },
-    // Other imagery
-    { id: 'imagery_yandex_preset', label: 'Yandex卫星' },
-    // Vector
-    { id: 'vector_osm_preset', label: 'OSM标准' },
-    { id: 'vector_carton_light_preset', label: 'Carto浅色' },
-    { id: 'vector_carton_dark_preset', label: 'Carto深色' },
-    { id: 'vector_toner_preset', label: '黑白版画' },
-    { id: 'vector_alidade_preset', label: '清爽风格' },
-    // MapTiler
-    { id: 'imagery_maptiler_satellite_preset', label: 'MapTiler影像' },
-    { id: 'imagery_maptiler_satellite_hd_preset', label: 'MapTiler影像HD' },
-    { id: 'vector_maptiler_streets_preset', label: 'MapTiler街道' },
-    { id: 'terrain_maptiler_landscape_preset', label: 'MapTiler地貌' },
-    { id: 'terrain_maptiler_topo_preset', label: 'MapTiler地形图' },
-    // ArcGIS
-    { id: 'arcgis_imagery_preset', label: 'ESRI影像' },
-    { id: 'arcgis_canvas_dark_preset', label: 'ESRI深灰' },
-    { id: 'arcgis_canvas_light_preset', label: 'ESRI浅灰' },
-    { id: 'arcgis_street_preset', label: 'ESRI街道' },
-    { id: 'arcgis_topo_preset', label: 'ESRI世界地形' },
-    { id: 'arcgis_natgeo_preset', label: '国家地理' },
-    { id: 'arcgis_physical_preset', label: '自然地理' },
-    { id: 'arcgis_ocean_preset', label: 'ESRI海洋' },
-    { id: 'arcgis_terrain_base_preset', label: '地形底色' },
-    // Terrain
-    { id: 'arcgis_elev_hillshade_preset', label: '山体阴影' },
-    { id: 'arcgis_elev_hillshade_dark_preset', label: '深色阴影' },
-    { id: 'terrain_google_preset', label: 'Google山体' },
-    { id: 'terrain_opentopomap_preset', label: '开放地形' },
-    { id: 'terrain_esa_preset', label: '欧空局地形' },
-    // Other
-    { id: 'vector_geoq_gray_preset', label: 'GeoQ灰' },
-    { id: 'vector_geoq_hydro_preset', label: 'GeoQ水' },
-]);
+import { BASEMAP_PRESETS } from '@common/basemap/basemapPresets';
+
+export const AGENT_BASEMAP_PRESETS = Object.freeze(
+    BASEMAP_PRESETS.map((preset) => ({ id: preset.id, label: preset.label })),
+);
 
 export const AGENT_BASEMAP_PRESET_IDS = Object.freeze(
     AGENT_BASEMAP_PRESETS.map((preset) => preset.id),
@@ -78,4 +29,61 @@ export function isAgentBasemapPresetId(value) {
 
 export function getAgentBasemapPresetLabel(value) {
     return AGENT_BASEMAP_PRESET_LABELS.get(String(value || '').trim()) || null;
+}
+
+/**
+ * 按 preset id 语义分组规则（首个命中即归属，顺序即分组优先级）。
+ * @type {Array<{keyword: string, name: string}>}
+ */
+const GROUP_RULES = [
+    { keyword: 'tianditu', name: '天地图' },
+    { keyword: 'tuxin', name: '图新' },
+    { keyword: 'amap', name: '高德' },
+    { keyword: 'tengxun', name: '腾讯' },
+    { keyword: 'mapbox', name: 'Mapbox' },
+    { keyword: 'yandex', name: 'Yandex' },
+    { keyword: 'maptiler', name: 'MapTiler' },
+    { keyword: 'osm', name: 'OSM 系街道' },
+    { keyword: 'carton', name: 'OSM 系街道' },
+    { keyword: 'toner', name: 'OSM 系街道' },
+    { keyword: 'alidade_satellite', name: '其他' },
+    { keyword: 'alidade', name: 'OSM 系街道' },
+    { keyword: 'geoq', name: 'GeoQ' },
+    { keyword: 'terrain', name: '地形' },
+    { keyword: 'hillshade', name: '地形' },
+    { keyword: 'topo', name: '地形' },
+    { keyword: 'topomap', name: '地形' },
+    { keyword: 'esa', name: '地形' },
+    { keyword: 'google', name: 'Google' },
+    { keyword: '_gac', name: 'Google' },
+    { keyword: 'arcgis', name: 'ESRI/ArcGIS' },
+    { keyword: 'custom', name: '程序槽位/自定义' },
+    { keyword: 'local', name: '本地瓦片' },
+];
+
+function matchGroupName(presetId) {
+    // 大小写不敏感匹配（id 中存在 Google 等大写品牌段，敏感匹配会漏归组）
+    const lowerId = String(presetId).toLowerCase();
+    for (const rule of GROUP_RULES) {
+        if (lowerId.includes(rule.keyword)) return rule.name;
+    }
+    return '其他';
+}
+
+/**
+ * 生成按组分类的多行提示词目录文本（组内保持 BASEMAP_PRESETS 原始顺序）。
+ * @returns {string}
+ */
+export function formatAgentBasemapPresetCatalog() {
+    const groups = [];
+    const groupIndex = new Map();
+    for (const preset of AGENT_BASEMAP_PRESETS) {
+        const name = matchGroupName(preset.id);
+        if (!groupIndex.has(name)) {
+            groupIndex.set(name, groups.length);
+            groups.push({ name, lines: [] });
+        }
+        groups[groupIndex.get(name)].lines.push(`- ${preset.id}: ${preset.label}`);
+    }
+    return groups.map(({ name, lines }) => `### ${name}\n${lines.join('\n')}`).join('\n');
 }

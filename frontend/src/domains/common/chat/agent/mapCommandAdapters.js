@@ -1,5 +1,6 @@
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { olZoomToCesiumHeight } from '@common/utils/viewScaleConverter';
+import { normalizeCustomXyzUrl } from '@domains/cesium/composables/layers/layerUtils';
 import {
     getAgentBasemapPresetLabel,
     isAgentBasemapPresetId,
@@ -136,14 +137,32 @@ function captureOlState(map, getRuntimeState) {
     };
 }
 
-function validatePresetId(presetId) {
-    const normalizedPresetId = String(presetId || '').trim();
-    if (!isAgentBasemapPresetId(normalizedPresetId)) {
-        return {
-            error: 'presetId is not in the Agent basemap allowlist; URLs, custom sources, and unknown presets are rejected',
-        };
+/**
+ * 校验底图切换参数：presetId 走白名单，url 走标准 XYZ 模板校验（二选一）
+ * @param {{ presetId?: string, url?: string }} args
+ * @returns {{ error: string } | { presetId: string } | { url: string }}
+ */
+function validateBasemapArg({ presetId, url } = {}) {
+    const urlValue = String(url || '').trim();
+    if (urlValue) {
+        const config = normalizeCustomXyzUrl(urlValue);
+        if (!config.valid) {
+            return { error: `Invalid XYZ tile URL: ${config.message}` };
+        }
+        return { url: config.url };
     }
-    return { presetId: normalizedPresetId };
+
+    const normalizedPresetId = String(presetId || '').trim();
+    if (normalizedPresetId) {
+        if (!isAgentBasemapPresetId(normalizedPresetId)) {
+            return {
+                error: 'presetId is not in the Agent basemap allowlist; provide a standard XYZ tile URL via the url field instead',
+            };
+        }
+        return { presetId: normalizedPresetId };
+    }
+
+    return { error: 'Must provide either an allowlisted presetId or a standard XYZ tile URL template' };
 }
 
 export function createOlMapCommandAdapter({
@@ -263,19 +282,31 @@ export function createOlMapCommandAdapter({
         };
     }
 
-    async function switchBasemap({ presetId: presetIdValue } = {}) {
-        const validated = validatePresetId(presetIdValue);
+    async function switchBasemap({ presetId, url } = {}) {
+        const validated = validateBasemapArg({ presetId, url });
         if (validated.error) return { success: false, code: 'INVALID_BASEMAP_PRESET', message: validated.error };
         if (typeof setBasemap !== 'function') {
             return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: 'OpenLayers basemap switching is not ready' };
         }
-        await setBasemap(validated.presetId);
+        const switched = await setBasemap(validated);
         const resultingMapState = captureState();
+        const isCustomUrl = Boolean(validated.url);
+        if (switched?.success === false) {
+            return {
+                success: false,
+                code: 'BASEMAP_SWITCH_FAILED',
+                message: `OpenLayers failed to switch basemap: ${isCustomUrl ? validated.url : validated.presetId}`,
+                resultingMapState,
+            };
+        }
         return {
             success: true,
             code: 'OK',
-            message: `Switched to preset basemap: ${getAgentBasemapPresetLabel(validated.presetId) || validated.presetId}`,
-            layerId: validated.presetId,
+            message: isCustomUrl
+                ? `Switched to custom XYZ basemap: ${validated.url}`
+                : `Switched to preset basemap: ${getAgentBasemapPresetLabel(validated.presetId) || validated.presetId}`,
+            layerId: isCustomUrl ? 'custom' : validated.presetId,
+            url: isCustomUrl ? validated.url : undefined,
             layerIndex: resultingMapState?.basemap?.index ?? null,
             resultingMapState,
         };
@@ -457,27 +488,31 @@ export function createCesiumMapCommandAdapter({
         };
     }
 
-    async function switchBasemap({ presetId: presetIdValue } = {}) {
-        const validated = validatePresetId(presetIdValue);
+    async function switchBasemap({ presetId, url } = {}) {
+        const validated = validateBasemapArg({ presetId, url });
         if (validated.error) return { success: false, code: 'INVALID_BASEMAP_PRESET', message: validated.error };
         if (typeof setBasemap !== 'function') {
             return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: 'Cesium basemap switching is not ready' };
         }
-        const switched = await setBasemap(validated.presetId);
+        const switched = await setBasemap(validated);
         const resultingMapState = captureState();
+        const isCustomUrl = Boolean(validated.url);
         if (switched === false) {
             return {
                 success: false,
                 code: 'BASEMAP_SWITCH_FAILED',
-                message: `Cesium failed to switch basemap: ${validated.presetId}`,
+                message: `Cesium failed to switch basemap: ${isCustomUrl ? validated.url : validated.presetId}`,
                 resultingMapState,
             };
         }
         return {
             success: true,
             code: 'OK',
-            message: `Switched to preset basemap: ${getAgentBasemapPresetLabel(validated.presetId) || validated.presetId}`,
-            layerId: validated.presetId,
+            message: isCustomUrl
+                ? `Switched to custom XYZ basemap: ${validated.url}`
+                : `Switched to preset basemap: ${getAgentBasemapPresetLabel(validated.presetId) || validated.presetId}`,
+            layerId: isCustomUrl ? 'custom' : validated.presetId,
+            url: isCustomUrl ? validated.url : undefined,
             layerIndex: resultingMapState?.basemap?.index ?? null,
             resultingMapState,
         };

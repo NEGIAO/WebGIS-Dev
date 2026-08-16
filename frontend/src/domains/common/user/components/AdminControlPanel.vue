@@ -113,50 +113,18 @@ const dbSortKey = ref('');
 const dbSortDir = ref('desc');
 const dbSearch = ref('');
 
-/** 过滤后的行数文本 */
+/** 行数文本：无搜索词显示全表总数，有搜索词显示后端过滤后的匹配数 */
 const filteredRowCount = computed(() => {
-    const total = tableRows.value.length;
-    const keyword = dbSearch.value.trim().toLowerCase();
-    if (!keyword) return t('admin.rowCountText', { count: total });
-    const filtered = tableRows.value.filter((row) =>
-        selectedTableMeta.value?.columns?.some((col) =>
-            String(row[col.name] ?? '').toLowerCase().includes(keyword)
-        )
-    ).length;
-    return t('admin.rowCountFiltered', { filtered, total });
+    if (dbSearch.value.trim()) {
+        return t('admin.searchResultCount', { count: tableTotal.value });
+    }
+    return t('admin.rowCountText', { count: tableTotal.value });
 });
 
-/** 搜索过滤 + 排序 */
-const sortedTableRows = computed(() => {
-    const columns = selectedTableMeta.value?.columns || [];
-    let list = [...tableRows.value];
+/** 后端已按 sort_key/sort_dir 与 search 过滤排序，此处仅透传当前页数据 */
+const sortedTableRows = computed(() => tableRows.value);
 
-    const keyword = dbSearch.value.trim().toLowerCase();
-    if (keyword) {
-        list = list.filter((row) =>
-            columns.some((col) => String(row[col.name] ?? '').toLowerCase().includes(keyword))
-        );
-    }
-
-    if (columns.length && dbSortKey.value) {
-        const key = dbSortKey.value;
-        const multiplier = dbSortDir.value === 'asc' ? 1 : -1;
-        list.sort((a, b) => {
-            let va = a[key];
-            let vb = b[key];
-            if (typeof va === 'string' && typeof vb === 'string') {
-                return multiplier * (va < vb ? -1 : va > vb ? 1 : 0);
-            }
-            va = Number(va) || 0;
-            vb = Number(vb) || 0;
-            return multiplier * (va - vb);
-        });
-    }
-
-    return list;
-});
-
-/** 切换排序 */
+/** 切换排序：更新状态后回到第 1 页并触发后端跨页排序 */
 function toggleDbSort(colName) {
     if (dbSortKey.value === colName) {
         dbSortDir.value = dbSortDir.value === 'asc' ? 'desc' : 'asc';
@@ -164,6 +132,8 @@ function toggleDbSort(colName) {
         dbSortKey.value = colName;
         dbSortDir.value = 'asc';
     }
+    tablePage.value = 1;
+    loadRows();
 }
 
 /** 单元格行内编辑 */
@@ -241,8 +211,12 @@ const tables = ref([]);
 const selectedTable = ref('');
 const tableRows = ref([]);
 
-const tableLimit = ref(30);
-const tableOffset = ref(0);
+/** 每页行数：30 / 100 / 200 / 0（0 = All，前端循环拉全量） */
+const tablePageSize = ref(30);
+/** 当前页码（从 1 起；All 模式恒为 1） */
+const tablePage = ref(1);
+/** 当前表全表总行数（后端 COUNT 返回） */
+const tableTotal = ref(0);
 const insertRowData = ref({});  // 新增行表单数据 { [columnKey]: value }
 const showInsertRow = ref(false);
 
@@ -421,6 +395,71 @@ function formatCellValue(value) {
     return String(value);
 }
 
+/** HTML 实体转义（高亮渲染前必须调用，防止搜索词/数据注入 HTML） */
+function escapeHtmlText(value) {
+    return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    })[ch]);
+}
+
+/** 单元格渲染：无搜索词走转义纯文本；命中搜索词则对每段命中包 <mark>（大小写不敏感、Unicode 安全） */
+function highlightCell(row, columnKey) {
+    const raw = row[columnKey];
+    if (raw == null) return '-';
+    const text = formatCellValue(raw);
+    const keyword = dbSearch.value.trim();
+    if (!keyword) return escapeHtmlText(text);
+
+    const kwLower = keyword.toLowerCase();
+    const lower = text.toLowerCase();
+    if (!lower.includes(kwLower)) return escapeHtmlText(text);
+
+    // 构建 lower 索引 → text 索引映射（处理 toLowerCase 长度变化，如 İ→i̇ 一变二）
+    const charMap = new Array(lower.length);
+    let li = 0;
+    let ti = 0;
+    while (li < lower.length && ti < text.length) {
+        const lc = text[ti].toLowerCase();
+        for (let j = 0; j < lc.length && li < lower.length; j++) {
+            charMap[li] = ti;
+            li++;
+        }
+        ti++;
+    }
+    while (li < lower.length) { charMap[li] = text.length; li++; }
+
+    let result = '';
+    let cursor = 0;
+    let idx = lower.indexOf(kwLower, cursor);
+    while (idx !== -1) {
+        const textStart = charMap[idx];
+        const textEnd = charMap[idx + kwLower.length - 1] + 1;
+        result += escapeHtmlText(text.slice(cursor, textStart));
+        result += `<mark class="search-hit">${escapeHtmlText(text.slice(textStart, Math.min(textEnd, text.length)))}</mark>`;
+        cursor = idx + kwLower.length;
+        idx = lower.indexOf(kwLower, cursor);
+    }
+    const textCursor = charMap[cursor] !== undefined ? charMap[cursor] : text.length;
+    result += escapeHtmlText(text.slice(textCursor));
+    return result;
+}
+
+/** 当前行是否命中搜索词（整行弱高亮用） */
+function isRowHit(row) {
+    const keyword = dbSearch.value.trim().toLowerCase();
+    if (!keyword) return false;
+    return (selectedTableMeta.value?.columns || []).some((col) => {
+        // 跳过 null/undefined：formatCellValue 会渲染成占位符 '-'，不应参与搜索命中
+        const value = row[col.name];
+        if (value == null) return false;
+        return formatCellValue(value).toLowerCase().includes(keyword);
+    });
+}
+
 function startEditRow(row) {
     editingRowKey.value = getRowKey(row);
     const editable = toEditablePayload(row);
@@ -497,23 +536,89 @@ async function loadTables() {
     }
 }
 
+/** 分页总页数；All 模式下恒为 1 */
+const totalPages = computed(() => {
+    if (!tablePageSize.value) return 1;
+    return Math.max(1, Math.ceil((tableTotal.value || 0) / tablePageSize.value));
+});
+
+/** 跳转到指定页（自动钳制到合法范围） */
+function goToPage(page) {
+    const target = Math.min(Math.max(1, Number(page) || 1), totalPages.value);
+    if (target === tablePage.value) return;
+    tablePage.value = target;
+    loadRows();
+}
+
+/** 当前浏览的行号区间（1 起）；无数据显示 null */
+const rowRange = computed(() => {
+    const count = tableRows.value.length;
+    if (!count) return null;
+    const start = tablePageSize.value ? (tablePage.value - 1) * tablePageSize.value + 1 : 1;
+    return { start, end: start + count - 1 };
+});
+
+/** 表格首行行号列起始值（配合 v-for index 渲染连续序号） */
+const rowStartIndex = computed(() => rowRange.value?.start || 1);
+
+/** 请求序号：递增捕获，响应返回时比对；过期响应（翻页/搜索竞态）静默丢弃 */
+let rowRequestSeq = 0;
+
 async function loadRows() {
+    const seq = ++rowRequestSeq;
     cancelEditRow();
     const tableName = String(selectedTable.value || '').trim();
     if (!tableName) {
         tableRows.value = [];
+        tableTotal.value = 0;
         return;
     }
 
     loadingRows.value = true;
     try {
-        const result = await apiAdminGetTableRows(tableName, tableLimit.value, tableOffset.value);
-        tableRows.value = Array.isArray(result?.data) ? result.data : [];
+        const keyword = dbSearch.value.trim();
+        const sortKey = dbSortKey.value;
+        const sortDir = dbSortDir.value;
+        if (tablePageSize.value) {
+            // 分页模式：按 (page-1)*size 计算 offset
+            const result = await apiAdminGetTableRows(
+                tableName,
+                tablePageSize.value,
+                (tablePage.value - 1) * tablePageSize.value,
+                keyword,
+                sortKey,
+                sortDir,
+            );
+            if (seq !== rowRequestSeq) return;
+            tableRows.value = Array.isArray(result?.data?.rows) ? result.data.rows : [];
+            tableTotal.value = Number(result?.data?.total ?? tableRows.value.length);
+            // 删行后当前页可能越界（页码 > 总页数且本页为空）：钳到最后一个非空页并重拉一次
+            if (tablePageSize.value && tableRows.value.length === 0 && tablePage.value > 1 && tableTotal.value > 0) {
+                tablePage.value = Math.max(1, Math.ceil(tableTotal.value / tablePageSize.value));
+                await loadRows();
+                return;
+            }
+        } else {
+            // All 模式：以 200 行/次循环拉取全量
+            const all = [];
+            let offset = 0;
+            for (;;) {
+                const result = await apiAdminGetTableRows(tableName, 200, offset, keyword, sortKey, sortDir);
+                if (seq !== rowRequestSeq) return;
+                const page = Array.isArray(result?.data?.rows) ? result.data.rows : [];
+                all.push(...page);
+                tableTotal.value = Number(result?.data?.total ?? all.length);
+                offset += 200;
+                if (page.length === 0 || all.length >= tableTotal.value) break;
+            }
+            tableRows.value = all;
+        }
     } catch (error) {
+        if (seq !== rowRequestSeq) return;
         tableRows.value = [];
         message.error(String(error?.message || t('admin.tableDataLoadFailed')));
     } finally {
-        loadingRows.value = false;
+        if (seq === rowRequestSeq) loadingRows.value = false;
     }
 }
 
@@ -627,9 +732,83 @@ async function handleSaveContact() {
 }
 
 watch(selectedTable, async () => {
-    tableOffset.value = 0;
+    tablePage.value = 1;
+    dbSortKey.value = '';
+    dbSortDir.value = 'desc';
     await loadRows();
 });
+
+watch(tablePageSize, async () => {
+    tablePage.value = 1;
+    await loadRows();
+});
+
+let searchTimer = null;
+/** 搜索词防抖：停止输入 300ms 后回到第 1 页并触发后端过滤查询 */
+watch(dbSearch, () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+        tablePage.value = 1;
+        await loadRows();
+    }, 300);
+});
+
+const exportingCsv = ref(false);
+
+/** 导出全表为 CSV：循环拉全量（携带当前搜索词）→ 转 CSV（UTF-8 BOM）→ Blob 下载 */
+async function exportCsv() {
+    if (exportingCsv.value) return;
+    const tableName = String(selectedTable.value || '').trim();
+    if (!tableName) {
+        message.warning(t('admin.selectTableFirst'));
+        return;
+    }
+
+    exportingCsv.value = true;
+    try {
+        const columns = selectedTableMeta.value?.columns || [];
+        const keyword = dbSearch.value.trim();
+        const sortKey = dbSortKey.value;
+        const sortDir = dbSortDir.value;
+        const all = [];
+        let offset = 0;
+        for (;;) {
+            const result = await apiAdminGetTableRows(tableName, 200, offset, keyword, sortKey, sortDir);
+            const page = Array.isArray(result?.data?.rows) ? result.data.rows : [];
+            all.push(...page);
+            const total = Number(result?.data?.total ?? all.length);
+            offset += 200;
+            if (page.length === 0 || all.length >= total) break;
+        }
+
+        // 对象/数组 JSON 序列化，文本转义引号，首行加 BOM 供 Excel 识别 UTF-8
+        const escapeCsvValue = (value) => {
+            if (value == null) return '';
+            const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+            return `"${text.replace(/"/g, '""').replace(/^(=|\+|-|@)/, "'$1")}"`;
+        };
+        const header = columns.map((col) => escapeCsvValue(col.name)).join(',');
+        const lines = all.map((row) =>
+            columns.map((col) => escapeCsvValue(row[col.name])).join(',')
+        );
+        const csvContent = `\uFEFF${header}\r\n${lines.join('\r\n')}`;
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${tableName}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        message.success(t('admin.exportCsvSuccess', { count: all.length }));
+    } catch (error) {
+        message.error(String(error?.message || t('admin.exportCsvFailed')));
+    } finally {
+        exportingCsv.value = false;
+    }
+}
 
 onMounted(async () => {
     await loadOverview();
@@ -1158,10 +1337,52 @@ onMounted(async () => {
                                 {{ t('admin.refreshRows') }}
                             </button>
                         </div>
+
+                        <div class="toolbar-pager">
+                            <select v-model.number="tablePageSize" class="form-select inline-select page-size-select">
+                                <option :value="30">30</option>
+                                <option :value="100">100</option>
+                                <option :value="200">200</option>
+                                <option :value="0">{{ t('admin.pageSizeAll') }}</option>
+                            </select>
+                            <button
+                                class="btn btn-secondary btn-sm"
+                                type="button"
+                                :disabled="loadingRows || !tablePageSize || tablePage <= 1"
+                                @click="goToPage(tablePage - 1)"
+                            >
+                                {{ t('admin.prevPage') }}
+                            </button>
+                            <span v-if="!loadingRows" class="pager-info">
+                                {{ t('admin.pageInfo', { current: tablePage, total: totalPages }) }}
+                            </span>
+                            <span v-else class="spinner"></span>
+                            <button
+                                class="btn btn-secondary btn-sm"
+                                type="button"
+                                :disabled="loadingRows || !tablePageSize || tablePage >= totalPages"
+                                @click="goToPage(tablePage + 1)"
+                            >
+                                {{ t('admin.nextPage') }}
+                            </button>
+                            <button
+                                class="btn btn-secondary btn-sm"
+                                type="button"
+                                :disabled="exportingCsv || loadingRows"
+                                @click="exportCsv"
+                            >
+                                {{ exportingCsv ? t('admin.exportingCsv') : t('admin.exportCsv') }}
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Rows View Container -->
                     <div class="rows-container">
+                        <div v-if="!loadingRows && rowRange && tableTotal > 0" class="rows-info-bar">
+                            <span class="badge info">
+                                {{ t('admin.rowRange', { ...rowRange, total: tableTotal }) }}
+                            </span>
+                        </div>
                         <div v-if="loadingRows" class="empty-state">
                             <span class="spinner"></span> 正在读取数据表行记录...
                         </div>
@@ -1169,6 +1390,7 @@ onMounted(async () => {
                             <table class="data-table">
                             <thead>
                                 <tr>
+                                    <th scope="col" class="row-index-th">#</th>
                                     <th
                                         v-for="col in selectedTableMeta?.columns"
                                         :key="col.name"
@@ -1188,9 +1410,10 @@ onMounted(async () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <template v-for="row in sortedTableRows" :key="getRowKey(row)">
+                                <template v-for="(row, index) in sortedTableRows" :key="getRowKey(row)">
                                     <!-- 正常浏览行 -->
-                                    <tr v-if="editingRowKey !== getRowKey(row)" class="data-row">
+                                    <tr v-if="editingRowKey !== getRowKey(row)" class="data-row" :class="{ 'row-hit': isRowHit(row) }">
+                                        <td class="row-index-td">{{ rowStartIndex + index }}</td>
                                         <td
                                             v-for="col in selectedTableMeta?.columns"
                                             :key="col.name"
@@ -1209,7 +1432,7 @@ onMounted(async () => {
                                                 <button class="btn-icon" title="保存" @click="saveEditCell(row, col.name)"><Check :size="14" /></button>
                                                 <button class="btn-icon" title="取消" @click="cancelEditCell"><X :size="14" /></button>
                                             </div>
-                                            <span v-else class="cell-value">{{ formatCellValue(row[col.name]) }}</span>
+                                            <span v-else class="cell-value" v-html="highlightCell(row, col.name)"></span>
                                         </td>
                                         <td class="actions-cell">
                                             <button
@@ -1230,8 +1453,9 @@ onMounted(async () => {
                                             </button>
                                         </td>
                                     </tr>
-                                    <!-- 行展开编辑模式 -->
+                                    <!-- 行展开编辑模式（保留行号列，内容列 colspan = 列数 + 操作列） -->
                                     <tr v-else class="data-row editing-row">
+                                        <td class="row-index-td">{{ rowStartIndex + index }}</td>
                                         <td :colspan="(selectedTableMeta?.columns?.length || 0) + 1">
                                             <div class="edit-row-container">
                                                 <div class="edit-row-header">
@@ -1269,7 +1493,7 @@ onMounted(async () => {
                             </table>
                         </div>
                         <div v-else class="empty-state">
-                            {{ t('admin.rowsEmpty') }}
+                            {{ dbSearch.trim() ? t('admin.searchNoMatch') : t('admin.rowsEmpty') }}
                         </div>
                     </div>
 
@@ -1816,6 +2040,10 @@ onMounted(async () => {
 
 .toolbar-stats { display: flex; align-items: center; gap: 8px; }
 
+.toolbar-pager { display: flex; align-items: center; gap: 8px; }
+.page-size-select { min-width: 88px; }
+.pager-info { font-size: 12px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+
 .toolbar-search {
     padding: 5px 10px;
     border: 1px solid var(--border-light);
@@ -1846,6 +2074,31 @@ onMounted(async () => {
     background: var(--bg-secondary);
 }
 
+.rows-info-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
+}
+
+/* 行号列 */
+.row-index-th {
+    width: 46px;
+    text-align: center;
+    color: var(--text-muted);
+}
+.row-index-td {
+    text-align: center;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+}
+
 .data-table-wrapper { overflow-x: auto; }
 
 .data-table {
@@ -1873,6 +2126,18 @@ onMounted(async () => {
 }
 
 .data-row:hover { background: var(--bg-hover); }
+
+/* 搜索命中整行弱高亮 */
+.data-row.row-hit,
+.data-row.row-hit:hover { background: rgba(var(--warning-rgb), 0.07); }
+
+/* 搜索命中单元格片段高亮（v-html 注入内容需 :deep 穿透 scoped） */
+.cell-value :deep(mark.search-hit) {
+    background: rgba(var(--warning-rgb), 0.38);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
 
 /* 排序表头 */
 .sortable-th { cursor: pointer; user-select: none; }

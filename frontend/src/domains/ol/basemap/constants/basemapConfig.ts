@@ -1332,6 +1332,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () => new OSM(),
     },
     {
+        id: 'vector_cyclosm',
+        name: 'CyclOSM骑行',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+                }),
+            ),
+    },
+    {
         id: 'vector_carton_light',
         name: 'CartoDB',
         category: 'vector',

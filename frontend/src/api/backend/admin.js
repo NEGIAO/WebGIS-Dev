@@ -45,9 +45,16 @@ export async function apiAdminListTables() {
     return backendAPI.get('/api/admin/db/tables');
 }
 
-export async function apiAdminGetTableRows(tableName, limit = 30, offset = 0) {
+export async function apiAdminGetTableRows(
+    tableName,
+    limit = 30,
+    offset = 0,
+    search = '',
+    sortKey = '',
+    sortDir = 'desc',
+) {
     return backendAPI.get(`/api/admin/db/table/${encodeURIComponent(tableName)}/rows`, {
-        params: { limit, offset },
+        params: { limit, offset, search, sort_key: sortKey, sort_dir: sortDir },
     });
 }
 

@@ -96,6 +96,7 @@ function summarizeAction(entry) {
         case 'zoom_to_extent':
             return '缩放到指定范围';
         case 'switch_basemap':
+            if (params.url) return `切换底图: ${params.url}`;
             return `切换底图${params.presetId ? `: ${params.presetId}` : ''}`;
         case 'search_and_zoom':
             return `搜索定位${params.query || ''}`;

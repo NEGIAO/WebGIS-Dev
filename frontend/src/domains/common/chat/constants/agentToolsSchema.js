@@ -3,7 +3,7 @@
  * Map mutations are restricted to the fixed MapCommandBus command set.
  */
 
-import { AGENT_BASEMAP_PRESET_IDS, AGENT_BASEMAP_PRESETS } from '@common/chat/agent/agentMapPresets';
+import { AGENT_BASEMAP_PRESET_IDS, formatAgentBasemapPresetCatalog } from '@common/chat/agent/agentMapPresets';
 
 const DURATION_PROPERTY = {
     type: 'number',
@@ -116,17 +116,21 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'switch_basemap',
-            description: '按稳定 presetId 切换当前 2D/3D 底图。只允许白名单预设，禁止提交 URL、自定义图源或任意 provider 配置。',
+            description: '切换当前 2D/3D 底图。二选一传入：presetId（项目内置稳定预设 ID，白名单）或 url（标准 XYZ 瓦片 URL 模板，必须含 {z}/{x}/{y} 占位符，协议仅 http/https，可携带服务所需的 key 参数；禁止其它任意字段）。',
             parameters: {
                 type: 'object',
                 properties: {
                     presetId: {
                         type: 'string',
                         enum: AGENT_BASEMAP_PRESET_IDS,
-                        description: '项目内置稳定底图预设 ID。',
+                        description: '项目内置稳定底图预设 ID（与 url 二选一）。',
+                    },
+                    url: {
+                        type: 'string',
+                        maxLength: 500,
+                        description: '标准 XYZ 瓦片 URL 模板，如 https://tile.openstreetmap.org/{z}/{x}/{y}.png。必须包含 {z}/{x}/{y}，协议仅 http/https（与 presetId 二选一）。',
                     },
                 },
-                required: ['presetId'],
                 additionalProperties: false,
             },
         },
@@ -134,10 +138,6 @@ export const AGENT_TOOLS = [
 ];
 
 export function buildSystemPromptWithTools() {
-    const presetLines = AGENT_BASEMAP_PRESETS
-        .map((preset) => `- ${preset.id}: ${preset.label}`)
-        .join('\n');
-
     return `你是 WebGIS 地图助手。涉及地图操作时，必须调用下面的固定白名单工具；不要只描述将要操作。
 
 ## 当前地图上下文
@@ -156,15 +156,24 @@ export function buildSystemPromptWithTools() {
 3. set_camera_orientation(heading?, pitch?, roll?, duration?): 仅 Cesium；2D 会明确返回不支持。
 4. zoom_to_extent(bbox, padding?, maxZoom?, duration?): 2D/3D 均支持。
 5. search_and_zoom(query, city?, zoom?, engine?): 搜索并在当前引擎定位。engine 可选 'auto'（默认，国内高德+国外降级）、'amap'（仅国内）、'nominatim'（国际地名）。根据用户意图的所在地选择引擎。
-6. switch_basemap(presetId): 2D/3D 均按稳定预设 ID 切换。
+6. switch_basemap(presetId | url): 2D/3D 均支持。presetId 为下方全量目录中的任意可用 id，按用户意图（卫星/街道/地形/暗色/品牌）合理归类选择；用户未提供 URL 时，也可根据需求自行构造公开免密钥的标准 XYZ 瓦片 URL 并传入 url 切换（构造示例见下方参考）。presetId 与 url 二选一，二者都提供时以 url 为准。url 必须含 {z}/{x}/{y} 占位符、协议 http/https。
 
-## Agent 可用底图预设
-${presetLines}
+## 常用公开 XYZ 瓦片源参考（免密钥，可直接构造为 url 参数）
+- OpenStreetMap 标准街道: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+- Esri World Imagery 卫星影像: https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}（注意是 {z}/{y}/{x} 顺序）
+- Esri World Topo 地形: https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}（同上 y/x 倒序）
+- CARTO Positron 明亮简约: https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
+- OpenTopoMap 等高线地形: https://tile.opentopomap.org/{z}/{x}/{y}.png
+用户意图明确但未给 URL 时，优先从上方参考或下方全量目录按其意图选择；若选中的源切换失败或不可用，换一个源重试，不要中途放弃。
+
+## Agent 可用底图预设（全量目录，按组分类）
+以下是项目全部底图预设（含程序槽位与本地瓦片），按意图组分类；切换失败时以工具结果为准并尝试其他预设。
+${formatAgentBasemapPresetCatalog()}
 
 ## 安全约束
-- 绝不生成、传递或请求写入任意 URL。
+- 不构造、传递或请求写入任意私有/付费服务的 URL；switch_basemap 的 url 字段仅限标准 XYZ 瓦片模板（含 {z}/{x}/{y} 占位符，协议 http/https），公开免密钥服务可自主构造。
 - 不调用 set_url、set_query、navigate_to 或未声明的通用命令。
-- switch_basemap 只能传 presetId，不能传 url、模板、token 或 provider 配置。
+- switch_basemap 只接受 presetId（全量目录）或标准 XYZ 模板 url，不能传 token/provider 等其它配置字段；用户提供的私有密钥类 token 不应转述，可提醒用户该 URL 会出现在对话记录中。
 - URL 中 lng/lat/z/l/view 的更新由地图运行时现有同步链自动完成。
 - 当前视图不支持的命令应保留工具返回的结构化错误，不要伪称成功。
 
@@ -191,6 +200,7 @@ export function formatToolResultForLLM(toolName, result) {
         'layerId',
         'layerIndex',
         'resultingMapState',
+        'url',
     ];
     const extras = {};
     for (const key of extraKeys) {

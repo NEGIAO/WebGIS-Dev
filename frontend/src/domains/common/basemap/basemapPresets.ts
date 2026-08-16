@@ -66,6 +66,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'vector_amap_preset', label: '高德地图', stack: ['vector_amap'] },
     { id: 'vector_tengxun_preset', label: '腾讯地图', stack: ['vector_tengxun'] },
     { id: 'vector_osm_preset', label: 'OSM标准', stack: ['vector_osm'] },
+    { id: 'vector_cyclosm_preset', label: 'CyclOSM骑行', stack: ['vector_cyclosm'] },
     { id: 'custom_mapbox_labeled_preset', label: 'Mapbox自定义', stack: ['custom_mapbox_labeled'] },
     {
         id: 'custom_mapbox_unlabeled_preset',

@@ -730,6 +730,20 @@ export default {
         noLocateKeyDelete: 'Current row lacks a locate key, cannot delete',
         rowsEmpty: 'No rows to display for this table',
         insertToTable: 'Insert into current table',
+        // Database pagination & export
+        pageSizeAll: 'All',
+        prevPage: 'Prev',
+        nextPage: 'Next',
+        pageInfo: 'Page {current} / {total}',
+        exportCsv: 'Export CSV',
+        exportingCsv: 'Exporting...',
+        exportCsvSuccess: 'Exported {count} rows',
+        exportCsvFailed: 'Export failed',
+        // Cross-page search (backend WHERE filter)
+        searchResultCount: 'Matched {count} rows',
+        searchNoMatch: 'No rows match the search',
+        // Row index & visible range
+        rowRange: 'Rows {start}-{end} of {total}',
         basemapOptionLabel: '{label} (index {index})',
         modelRandomPlaceholder: 'Leave empty to pick randomly from available_models',
         insertJsonExample: 'e.g. {"username":"demo","content":"hello"}',

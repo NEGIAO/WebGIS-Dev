@@ -100,10 +100,11 @@
                     <div class="form-group">
                         <label for="username">{{ mode === 'login' ? t('auth.usernameLogin') : t('auth.username') }}</label>
                         <div class="input-group">
-                            <i
-                                class="icon fas"
-                                :class="mode === 'login' ? 'fa-envelope' : 'fa-user'"
-                            ></i>
+                            <component
+                                :is="mode === 'login' ? Mail : User"
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 id="username"
                                 v-model="username"
@@ -119,14 +120,14 @@
                             v-if="mode === 'login'"
                             class="hint"
                         >
-                            <i class="fas fa-info-circle"></i>
+                            <Info :size="13" />
                             {{ t('auth.newAccountNote') }}
                         </div>
                         <div
                             v-else
                             class="hint"
                         >
-                            <i class="fas fa-user-plus"></i>
+                            <UserPlus :size="13" />
                             {{ t('auth.nicknameNote') }}
                         </div>
                     </div>
@@ -134,7 +135,10 @@
                     <div class="form-group">
                         <label for="password">{{ t('auth.password') }}</label>
                         <div class="input-group">
-                            <i class="icon fas fa-lock"></i>
+                            <Lock
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 id="password"
                                 v-model="password"
@@ -148,14 +152,14 @@
                             v-if="mode === 'login'"
                             class="hint"
                         >
-                            <i class="fas fa-shield-alt"></i>
+                            <ShieldCheck :size="13" />
                             {{ t('auth.guestNote') }}
                         </div>
                         <div
                             v-else
                             class="hint"
                         >
-                            <i class="fas fa-shield-alt"></i>
+                            <ShieldCheck :size="13" />
                             {{ t('auth.passwordRuleNote') }}
                         </div>
                     </div>
@@ -166,7 +170,10 @@
                     >
                         <label for="confirmPassword">{{ t('auth.confirmPassword') }}</label>
                         <div class="input-group">
-                            <i class="icon fas fa-check-circle"></i>
+                            <CheckCircle2
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 id="confirmPassword"
                                 v-model="confirmPassword"
@@ -184,7 +191,10 @@
                     >
                         <label for="email">{{ t('auth.email') }}</label>
                         <div class="input-group">
-                            <i class="icon fas fa-envelope"></i>
+                            <Mail
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 id="email"
                                 v-model="email"
@@ -198,13 +208,15 @@
                             class="hint username-check"
                             :class="emailCheckStatus"
                         >
-                            <i
-                                :class="emailCheckStatus === 'success'
-                                    ? 'fas fa-check-circle'
+                            <component
+                                :is="emailCheckStatus === 'success'
+                                    ? CheckCircle2
                                     : emailCheckStatus === 'loading'
-                                        ? 'fas fa-spinner fa-spin'
-                                        : 'fas fa-exclamation-circle'"
-                            ></i>
+                                        ? Loader2
+                                        : AlertCircle"
+                                :size="13"
+                                :class="{ spin: emailCheckStatus === 'loading' }"
+                            ></component>
                             {{ emailCheckMessage }}
                         </div>
                     </div>
@@ -216,7 +228,10 @@
                         <label for="emailCode">{{ t('auth.emailCode') }}</label>
                         <div class="email-code-row">
                             <div class="input-group email-code-input">
-                                <i class="icon fas fa-shield-alt"></i>
+                                <ShieldCheck
+                                    class="icon"
+                                    :size="14"
+                                />
                                 <input
                                     id="emailCode"
                                     v-model="emailCode"
@@ -235,11 +250,16 @@
                                 :disabled="isSendingCode || codeCountdown > 0"
                                 @click="handleSendCode"
                             >
-                                <i
-                                    class="fas"
-                                    :class="isSendingCode ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
-                                ></i>
-                                {{ codeCountdown > 0 ? t('auth.codeCountdown', { count: codeCountdown }) : t('auth.sendCode') }}
+                                <Loader2
+                                        v-if="isSendingCode"
+                                        :size="14"
+                                        class="spin"
+                                    />
+                                    <Send
+                                        v-else
+                                        :size="14"
+                                    />
+                                    {{ codeCountdown > 0 ? t('auth.codeCountdown', { count: codeCountdown }) : t('auth.sendCode') }}
                             </button>
                             <button
                                 v-if="!emailVerified && emailCode.length === 6"
@@ -248,17 +268,22 @@
                                 :disabled="isVerifyingCode"
                                 @click="handleVerifyCode"
                             >
-                                <i
-                                    class="fas"
-                                    :class="isVerifyingCode ? 'fa-spinner fa-spin' : 'fa-check'"
-                                ></i>
-                                {{ t('auth.verify') }}
+                                <Loader2
+                                        v-if="isVerifyingCode"
+                                        :size="14"
+                                        class="spin"
+                                    />
+                                    <Check
+                                        v-else
+                                        :size="14"
+                                    />
+                                    {{ t('auth.verify') }}
                             </button>
                             <span
                                 v-if="emailVerified"
                                 class="verified-badge"
                             >
-                                <i class="fas fa-check-circle"></i> {{ t('auth.verified') }}
+                                <CheckCircle2 :size="13" /> {{ t('auth.verified') }}
                             </span>
                         </div>
                     </div>
@@ -302,7 +327,7 @@
                             class="quick-btn guest-login"
                             @click="quickGuestLogin"
                         >
-                            <i class="fas fa-person-hiking"></i>
+                            <Footprints :size="14" />
                             {{ t('auth.guestLogin') }}
                         </button>
                         <button
@@ -311,7 +336,7 @@
                             :disabled="isSubmitting"
                             @click="handleSubmit"
                         >
-                            <i class="fas fa-sign-in-alt"></i>
+                            <LogIn :size="15" />
                             {{ isSubmitting ? t('auth.submitting') : t('auth.confirmLogin') }}
                         </button>
                     </div>
@@ -326,7 +351,7 @@
                             class="forgot-link"
                             @click.prevent="openResetPanel"
                         >
-                            <i class="fas fa-key"></i>
+                            <KeyRound :size="13" />
                             {{ t('auth.forgotPassword') }}
                         </a>
                     </div>
@@ -371,7 +396,7 @@
                     @submit.prevent="handleBindEmailSubmit"
                 >
                     <div class="bind-alert">
-                        <i class="fas fa-envelope-circle-check"></i>
+                        <MailCheck :size="18" />
                         <div>
                             <strong>{{ t('auth.bindEmailTitle') }}</strong>
                             <p>{{ t('auth.bindEmailDesc') }}</p>
@@ -381,7 +406,10 @@
                     <div class="form-group">
                         <label for="bindEmail">{{ t('auth.bindEmail') }}</label>
                         <div class="input-group">
-                            <i class="icon fas fa-envelope"></i>
+                            <Mail
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 id="bindEmail"
                                 v-model="bindEmail"
@@ -396,7 +424,10 @@
                         <label for="bindCode">{{ t('auth.emailCode') }}</label>
                         <div class="email-code-row">
                             <div class="input-group email-code-input">
-                                <i class="icon fas fa-shield-alt"></i>
+                                <ShieldCheck
+                                    class="icon"
+                                    :size="14"
+                                />
                                 <input
                                     id="bindCode"
                                     v-model="bindCode"
@@ -413,10 +444,15 @@
                                 :disabled="isBindingCodeSending || bindCodeCountdown > 0"
                                 @click="handleBindSendCode"
                             >
-                                <i
-                                    class="fas"
-                                    :class="isBindingCodeSending ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
-                                ></i>
+                                <Loader2
+                                    v-if="isBindingCodeSending"
+                                    :size="14"
+                                    class="spin"
+                                />
+                                <Send
+                                    v-else
+                                    :size="14"
+                                />
                                 {{ bindCodeCountdown > 0 ? t('auth.codeCountdown', { count: bindCodeCountdown }) : t('auth.sendCode') }}
                             </button>
                         </div>
@@ -425,7 +461,10 @@
                     <div class="form-group">
                         <label for="bindPassword">{{ t('auth.currentPassword') }}</label>
                         <div class="input-group">
-                            <i class="icon fas fa-lock"></i>
+                            <Lock
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 id="bindPassword"
                                 v-model="bindCurrentPassword"
@@ -467,13 +506,13 @@
             >
                 <div class="reset-panel">
                     <div class="reset-header">
-                        <h3><i class="fas fa-unlock-alt"></i> {{ t('auth.resetPasswordTitle') }}</h3>
+                        <h3><Unlock :size="16" /> {{ t('auth.resetPasswordTitle') }}</h3>
                         <button
                             type="button"
                             class="reset-close"
                             @click="closeResetPanel"
                         >
-                            <i class="fas fa-times"></i>
+                            <X :size="16" />
                         </button>
                     </div>
 
@@ -484,7 +523,10 @@
                     >
                         <p class="reset-desc">{{ t('auth.resetStep1Desc') }}</p>
                         <div class="input-group">
-                            <i class="icon fas fa-envelope"></i>
+                            <Mail
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 v-model="resetEmail"
                                 type="email"
@@ -497,10 +539,15 @@
                             :disabled="isResetSubmitting"
                             @click="handleResetSendCode"
                         >
-                            <i
-                                class="fas"
-                                :class="isResetSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane'"
-                            ></i>
+                            <Loader2
+                                v-if="isResetSubmitting"
+                                :size="14"
+                                class="spin"
+                            />
+                            <Send
+                                v-else
+                                :size="14"
+                            />
                             {{ isResetSubmitting ? t('auth.sendingCode') : t('auth.sendCode') }}
                         </button>
                     </div>
@@ -514,7 +561,10 @@
                             {{ t('auth.resetCodeSentTo') }} <strong>{{ resetEmail }}</strong>
                         </p>
                         <div class="input-group">
-                            <i class="icon fas fa-shield-alt"></i>
+                            <ShieldCheck
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 v-model="resetCode"
                                 type="text"
@@ -525,7 +575,10 @@
                             />
                         </div>
                         <div class="input-group">
-                            <i class="icon fas fa-lock"></i>
+                            <Lock
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 v-model="resetNewPassword"
                                 type="password"
@@ -533,7 +586,10 @@
                             />
                         </div>
                         <div class="input-group">
-                            <i class="icon fas fa-check-circle"></i>
+                            <CheckCircle2
+                                class="icon"
+                                :size="14"
+                            />
                             <input
                                 v-model="resetConfirmPassword"
                                 type="password"
@@ -546,10 +602,15 @@
                             :disabled="isResetSubmitting"
                             @click="handleResetSubmit"
                         >
-                            <i
-                                class="fas"
-                                :class="isResetSubmitting ? 'fa-spinner fa-spin' : 'fa-check'"
-                            ></i>
+                            <Loader2
+                                v-if="isResetSubmitting"
+                                :size="14"
+                                class="spin"
+                            />
+                            <Check
+                                v-else
+                                :size="14"
+                            />
                             {{ isResetSubmitting ? t('auth.submitting') : t('auth.resetPasswordAction') }}
                         </button>
                         <button
@@ -584,6 +645,25 @@ import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
 import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD, ASSET_BASE_URL } from '../config/publicRuntime';
+import {
+    AlertCircle,
+    Check,
+    CheckCircle2,
+    Footprints,
+    Info,
+    KeyRound,
+    Loader2,
+    Lock,
+    LogIn,
+    Mail,
+    MailCheck,
+    Send,
+    ShieldCheck,
+    Unlock,
+    User,
+    UserPlus,
+    X,
+} from '@lucide/vue';
 import {
     apiAuthGoogleOneTap,
     apiAuthLogin,
@@ -1018,7 +1098,7 @@ async function handleVerifyCode() {
         await apiAuthVerifyCode(normalizedEmail, code, 'register');
         emailVerified.value = true;
         emailCheckStatus.value = 'success';
-        emailCheckMessage.value = '✅ ' + t('auth.emailVerifiedSuccess');
+        emailCheckMessage.value = t('auth.emailVerifiedSuccess');
         message.success(t('auth.emailVerifiedSuccess'));
     } catch (error) {
         const detail = String(
@@ -1333,12 +1413,41 @@ async function handleGoogleOneTap(response) {
 }
 
 /**
+ * 等待 Google Identity Services 脚本就绪（GSI 为 async 异步加载，
+ * onMounted 时可能尚未完成，无等待则 OneTap 静默失效）。
+ * @param {number} timeoutMs 最大等待毫秒数，默认 5000
+ * @returns {Promise<boolean>} 就绪返回 true；超时返回 false
+ */
+function waitForGsi(timeoutMs = 5000) {
+    return new Promise((resolve) => {
+        if (window.google?.accounts?.id) {
+            resolve(true);
+            return;
+        }
+        const start = Date.now();
+        const timer = setInterval(() => {
+            if (window.google?.accounts?.id) {
+                clearInterval(timer);
+                resolve(true);
+            } else if (Date.now() - start > timeoutMs) {
+                clearInterval(timer);
+                resolve(false);
+            }
+        }, 200);
+        // 组件卸载时清理 interval，防止 Promise 悬空后仍回调
+        onUnmounted(() => { clearInterval(timer); resolve(false); });
+    });
+}
+
+/**
  * 初始化 Google One Tap / Sign In With Google。
  * 仅在用户未登录时调用，展示 Google 一键登录提示。
+ * 等待 GSI 就绪后 initialize + prompt，避免脚本慢载导致静默失效。
  */
-function initGoogleOneTap() {
-    if (typeof window === 'undefined' || !window.google?.accounts?.id) {
-        console.warn('[Google One Tap] Google Identity Services 脚本未加载');
+async function initGoogleOneTap() {
+    const gsiReady = await waitForGsi();
+    if (!gsiReady) {
+        console.warn('[Google One Tap] Google Identity Services 脚本加载超时，跳过初始化');
         return;
     }
 
@@ -1824,6 +1933,17 @@ label {
 
 .input-group:focus-within .icon {
     color: var(--brand-primary);
+}
+
+/* Lucide 加载态旋转（替代旧 fa-spin） */
+.spin {
+    animation: reg-spin 1s linear infinite;
+}
+
+@keyframes reg-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 input {

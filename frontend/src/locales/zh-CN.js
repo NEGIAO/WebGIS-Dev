@@ -921,6 +921,20 @@ export default {
         noLocateKeyDelete: '当前行缺少可定位键，无法删除',
         rowsEmpty: '当前表暂无可展示数据',
         insertToTable: '新增到当前表',
+        // 数据库分页与导出
+        pageSizeAll: '全部',
+        prevPage: '上一页',
+        nextPage: '下一页',
+        pageInfo: '第 {current} / {total} 页',
+        exportCsv: '导出 CSV',
+        exportingCsv: '导出中...',
+        exportCsvSuccess: '已导出 {count} 行',
+        exportCsvFailed: '导出失败',
+        // 跨页搜索（后端 WHERE 过滤）
+        searchResultCount: '匹配 {count} 行',
+        searchNoMatch: '未找到匹配行',
+        // 行号与浏览区间
+        rowRange: '第 {start}-{end} 行 / 共 {total} 行',
         basemapOptionLabel: '{label}（索引 {index}）',
         modelRandomPlaceholder: '留空则按 available_models 随机调度',
         insertJsonExample: '例如：{"username":"demo","content":"hello"}',

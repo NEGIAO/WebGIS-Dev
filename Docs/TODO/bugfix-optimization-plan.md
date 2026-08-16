@@ -200,3 +200,4 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (需设计) **sampledRangeMap 全局共享**：多数据源场景范围互相覆盖(lastRange 覆盖新加载数据源的实际范围)
   - [ ] (需设计) **模型升降级语义不清**：`/api/agent/chat/completions` + `user_metrics.tier` 既当限额级别又当模型档位,探测时会切换模型(涉数据库结构,L3)
   - [ ] (清理项) **freeQuota 后 balanceData 语义失效**：默认 AI 免费化后 `quotaData` 恒 null,`ChatPanelContent` 余额展示逻辑失去意义(数据已不返回,展示未清,仅观感问题)
+- [ ] **管理面板 SQL dump 导出**（2026-08-15 · V3.5.21 分页/CSV 会话遗留）：管理员「看整表」主线诉求已由分页 + CSV 满足；如需数据库备份格式（CREATE TABLE + INSERT），需后端新增 schema 导出端点（与 SQLite 方言耦合），待用户决策是否立项。

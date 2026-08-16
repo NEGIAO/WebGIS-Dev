@@ -123,18 +123,63 @@ def _list_tables_sync() -> List[Dict[str, Any]]:
     return result
 
 
-def _list_table_rows_sync(table_name: str, limit: int, offset: int) -> List[Dict[str, Any]]:
+def _list_table_rows_sync(
+    table_name: str,
+    limit: int,
+    offset: int,
+    search: str = "",
+    sort_key: str = "",
+    sort_dir: str = "desc",
+) -> Dict[str, Any]:
+    """分页读取表数据，同时返回全表总行数（供前端分页器使用）。
+
+    支持 search 关键词：对所有列做 LIKE 过滤（% / _ / \\ 转义，参数化防注入），
+    COUNT 与 SELECT 共用同一 WHERE，保证总数与分页一致。
+    支持 sort_key / sort_dir 跨页排序：列名必须命中 PRAGMA table_info 真实列集合
+    （白名单防注入，ORDER BY 无法参数化绑定列名），方向仅允许 asc/desc 字面量，
+    未命中或非法时回退 rowid DESC。
+    """
     safe_table = _quote_identifier(table_name)
     safe_limit = max(1, min(int(limit), 200))
     safe_offset = max(0, int(offset))
+    keyword = str(search or "").strip()
 
     with _db_connection() as conn:
+        columns = [
+            str(dict(col).get("name") or "")
+            for col in conn.execute(f"PRAGMA table_info({safe_table})").fetchall()
+        ]
+
+        where_clause = ""
+        params: List[Any] = []
+        if keyword and columns:
+            escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            clauses = [f"{_quote_identifier(col)} LIKE ? ESCAPE '\\'" for col in columns]
+            where_clause = "WHERE " + " OR ".join(clauses)
+            params = [pattern] * len(columns)
+
+        # 跨页排序：白名单校验 + 方向字面量兜底
+        order_clause = "ORDER BY rowid DESC"
+        if sort_key and sort_key in columns:
+            safe_dir = "ASC" if str(sort_dir).lower() == "asc" else "DESC"
+            order_clause = f"ORDER BY {_quote_identifier(sort_key)} {safe_dir}, rowid DESC"
+
+        total = int(
+            conn.execute(
+                f"SELECT COUNT(*) FROM {safe_table} {where_clause}", params
+            ).fetchone()[0]
+        )
         rows = conn.execute(
-            f"SELECT rowid AS __rowid, * FROM {safe_table} ORDER BY rowid DESC LIMIT ? OFFSET ?",
-            (safe_limit, safe_offset),
+            f"SELECT rowid AS __rowid, * FROM {safe_table} {where_clause} "
+            f"{order_clause} LIMIT ? OFFSET ?",
+            (*params, safe_limit, safe_offset),
         ).fetchall()
 
-    return [dict(row) for row in rows]
+    return {
+        "total": total,
+        "rows": [dict(row) for row in rows],
+    }
 
 
 def _build_where_clause(where: Dict[str, Any]) -> Dict[str, Any]:
@@ -337,9 +382,14 @@ async def list_table_rows(
     table_name: str,
     limit: int = Query(default=30, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    search: str = Query(default="", max_length=200),
+    sort_key: str = Query(default="", max_length=100),
+    sort_dir: str = Query(default="desc", max_length=4),
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
-    rows = await asyncio.to_thread(_list_table_rows_sync, table_name, limit, offset)
+    rows = await asyncio.to_thread(
+        _list_table_rows_sync, table_name, limit, offset, search, sort_key, sort_dir
+    )
     return {
         "status": "success",
         "data": rows,
